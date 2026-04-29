@@ -4,6 +4,7 @@ import { buildImageTaskPlan } from "./imageTaskPlanner";
 import type { KnowledgePackManifest, KnowledgeRouteMatch, KnowledgeTaskPurpose } from "./knowledgeTypes";
 import { buildImage2AdapterRequest } from "./providerAdapters/image2Adapter";
 import { buildDefaultProviderRegistry } from "./providerCapabilities";
+import { buildFilesystemWatcherHarnessState } from "./filesystemWatcherHarness";
 import { buildGenerationHealthReports } from "./generationHealth";
 import { buildGenerationHarnessState } from "./generationHarness";
 import { buildShotPromptPlan } from "./promptCompiler";
@@ -210,6 +211,18 @@ export function buildProjectRuntimeState(
     generationHealthReports,
     qaPromotionReports,
   });
+  const filesystemWatcherHarness = buildFilesystemWatcherHarnessState({
+    generatedAt,
+    projectRoot: audit.projectRoot,
+    fileSnapshot: audit.fileSnapshot || [],
+    manifestMatches: taskViews.map((task) => task.manifestMatch),
+    imageTaskPlans,
+    image2AdapterRequests,
+    watcherEvents,
+    generationHealthReports,
+    qaPromotionReports,
+    generationHarness,
+  });
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -273,6 +286,7 @@ export function buildProjectRuntimeState(
     videoExecutionPreview,
     adapterContracts,
     generationHarness,
+    filesystemWatcherHarness,
     storyChanges: {
       transactions: [],
       reflowReports: [],
@@ -366,6 +380,20 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       generationHealthReports: state.imagePipeline.generationHealthReports,
       qaPromotionReports: state.imagePipeline.qaPromotionReports,
     });
+  const filesystemWatcherHarness =
+    state.filesystemWatcherHarness ||
+    buildFilesystemWatcherHarnessState({
+      generatedAt: state.generatedAt,
+      projectRoot: state.project.root,
+      fileSnapshot: state.legacyAudit?.fileSnapshot || [],
+      manifestMatches: state.manifestMatches.reports,
+      imageTaskPlans: state.imagePipeline.imageTaskPlans,
+      image2AdapterRequests: state.imagePipeline.image2AdapterRequests,
+      watcherEvents: state.imagePipeline.watcherEvents,
+      generationHealthReports: state.imagePipeline.generationHealthReports,
+      qaPromotionReports: state.imagePipeline.qaPromotionReports,
+      generationHarness,
+    });
 
   return {
     ...state,
@@ -375,6 +403,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     videoExecutionPreview,
     adapterContracts,
     generationHarness,
+    filesystemWatcherHarness,
   };
 }
 

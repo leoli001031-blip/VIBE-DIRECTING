@@ -178,6 +178,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "GenerationHarnessState",
   },
   {
+    fileName: "filesystem_watcher_harness.schema.json",
+    id: "https://vibecore.local/schemas/filesystem_watcher_harness.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 8.5 derived/static filesystem watcher harness facts with daemon, provider submit, and formal promotion locked off.",
+    typeName: "FilesystemWatcherHarnessState",
+  },
+  {
     fileName: "knowledge_pack.schema.json",
     id: "https://vibecore.local/schemas/knowledge_pack.schema.json",
     version: schemaVersion,

@@ -649,6 +649,22 @@ Phase 6 已实现范围（核心合同）：
 - Watcher 必须继续和 Generation Health Checker、Manifest Matcher、Checkpoint Resume、Generation Harness 连接；`formal_output_promoted` 只能由 promotion gate 写入，不能由文件出现或 worker 自报成功触发。
 - Phase 8.5 不接 Seedance/Jimeng live submit，不新增 text-to-video fallback，不把 local postprocess 扩展成语义修复器。
 
+### Phase 8.5 已实现范围：Filesystem Watcher Harness
+
+- `ProjectRuntimeState.filesystemWatcherHarness` 写入 Phase 8.5 的 derived/static watcher fact layer，只从 `fileSnapshot`、`manifestMatches`、`imageTaskPlans`、`image2AdapterRequests`、`watcherEvents`、`generationHealthReports`、`qaPromotionReports`、`generationHarness` 归纳事实。
+- `monitoredKinds` 和 `monitoredRoots` 固定覆盖 Codex temp generated images、project outputs、reports、videos、audio；每个 root 都是 `derived_static_only`，`daemonStarted=false`，不启动真实 `fs.watch` daemon。
+- 每条 watcher event 被映射成一条 `streams` 记录，保留 `eventType`、`artifactPath`、`expectedOutputPath`、`taskPlanId`、`jobId`、`shotId`，并标注 `artifactClass`、`draftOnly`、`canPromoteFormal`、`canBecomeFutureReference`、`requiresManifestMatch`、`requiresQaPass`。
+- Stream 会连接 Generation Harness：能匹配时写入 `generationHarnessJobId`，不能匹配时写入 `harnessLinkStatus=missing_harness_link` 和原因；同时引用 generation health、QA promotion、manifest match 状态。
+- 硬锁固定为 `watcherCannotPromoteFormal=true`、`workerSelfReportCannotComplete=true`、`tempOutputDraftOnly=true`、`semanticPostprocessForbidden=true`、`liveSubmitAllowed=false`、`providerSubmissionForbidden=true`，并额外固定 `derivedOnly=true`、`fsWatchDaemonEnabled=false`、`daemonStarted=false`。
+- 新增 `schemas/filesystem_watcher_harness.schema.json` 并纳入 `project_runtime_state.schema.json` 与 schema registry；新增 `npm run watcher:test` 覆盖 required field、event stream 纳入、temp/candidate draft-only、promotion gate 来源、禁止锁、Generation Harness linkage、no daemon/live submit。
+
+禁止项：
+
+- Filesystem Watcher Harness 不能启动真实 watcher daemon，不能 move/copy/delete 本地文件，不能提交 provider，不能把 temp/candidate/expected output 自动晋升为 formal。
+- Worker/provider 自报成功只能形成结构化风险事实，不能让任务 complete，也不能作为 formal promotion gate。
+- `canPromoteFormal=true` 只能来自 `qaPromotionReports.canPromoteToFormal=true`；temp candidate、provider-ready derivative、recoverable derivative 永远不能成为 future reference。
+- Phase 8.5 仍不接 Seedance/Jimeng live submit，不新增 text-to-video fallback，不把 local postprocess 用作语义修复器。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

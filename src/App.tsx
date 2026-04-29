@@ -544,6 +544,67 @@ type GenerationHarnessState = {
   summary: GenerationHarnessSummary;
   jobs: GenerationHarnessJob[];
 };
+type FilesystemWatcherSummary = {
+  totalEvents?: number;
+  tempCandidates?: number;
+  expectedOutputs?: number;
+  qaReports?: number;
+  manifestMismatches?: number;
+  blockedEvents?: number;
+  draftOnlyArtifacts?: number;
+  promotableArtifacts?: number;
+  linkedHarnessJobs?: number;
+  missingHarnessLinks?: number;
+  liveSubmitAllowed?: boolean;
+  providerSubmissionForbidden?: boolean;
+};
+type FilesystemWatcherRoot = {
+  id: string;
+  label: string;
+  kind: string;
+  status: string;
+  pathHint?: string;
+  notes: string[];
+};
+type FilesystemWatcherStream = {
+  streamId: string;
+  taskPlanId?: string;
+  jobId?: string;
+  shotId?: string;
+  harnessJobId?: string;
+  eventType: string;
+  status: string;
+  severity: string;
+  artifactClass: string;
+  artifactPath?: string;
+  expectedOutputPath?: string;
+  draftOnly?: boolean;
+  canPromoteFormal?: boolean;
+  canBecomeFutureReference?: boolean;
+  requiresManifestMatch?: boolean;
+  requiresQaPass?: boolean;
+  blockingReasons: string[];
+  notes: string[];
+};
+type FilesystemWatcherLocks = {
+  watcherCannotPromoteFormal?: boolean;
+  workerSelfReportCannotComplete?: boolean;
+  tempOutputDraftOnly?: boolean;
+  semanticPostprocessForbidden?: boolean;
+  liveSubmitAllowed?: boolean;
+  providerSubmissionForbidden?: boolean;
+};
+type FilesystemWatcherHarnessState = {
+  initialized: boolean;
+  hasSummary: boolean;
+  hasMonitoredRoots: boolean;
+  hasStreams: boolean;
+  hasLocks: boolean;
+  summary: FilesystemWatcherSummary;
+  monitoredRoots: FilesystemWatcherRoot[];
+  streams: FilesystemWatcherStream[];
+  locks: FilesystemWatcherLocks;
+};
 const requiredVideoExecutionHardLocks = [
   "no_live_submit",
   "no_fast_model",
@@ -634,6 +695,21 @@ function readStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+function readOptionalNumber(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function readOptionalBoolean(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function readNoteList(value: unknown) {
+  if (typeof value === "string" && value.trim()) return [value];
+  return readStringArray(value);
+}
+
 function normalizeGenerationStage(value: unknown, index: number): GenerationHarnessStage {
   const stage = isRecord(value) ? value : {};
   const blockers = readStringArray(stage.blockers);
@@ -710,6 +786,96 @@ function getGenerationHarness(runtimeState: ProjectRuntimeState): GenerationHarn
       formalReadyJobs: readNumber(summary.formalReadyJobs, readNumber(summary.formalReady, jobs.filter((job) => job.candidateOutput.canPromoteToFormal).length)),
       dryRunOnly: readBoolean(harnessRecord.dryRunOnly, jobs.some((job) => job.dryRunOnly)),
       providerSubmissionForbidden: readBoolean(harnessRecord.providerSubmissionForbidden, jobs.some((job) => job.providerSubmissionForbidden)),
+    },
+  };
+}
+
+function normalizeFilesystemWatcherRoot(value: unknown, index: number): FilesystemWatcherRoot {
+  const root = isRecord(value) ? value : {};
+  const id = readString(root.id, readString(root.rootId, `root-${index + 1}`));
+  const pathHints = readStringArray(root.pathHints);
+  return {
+    id,
+    label: readString(root.label, id),
+    kind: readString(root.kind, "unknown"),
+    status: readString(root.status, root.daemonStarted === false ? "derived only" : "unknown"),
+    pathHint: typeof root.pathHint === "string" ? root.pathHint : pathHints[0],
+    notes: readNoteList(root.notes),
+  };
+}
+
+function normalizeFilesystemWatcherStream(value: unknown, index: number): FilesystemWatcherStream {
+  const stream = isRecord(value) ? value : {};
+  const blockingReasons = readStringArray(stream.blockingReasons).length
+    ? readStringArray(stream.blockingReasons)
+    : readStringArray(stream.blockers);
+  return {
+    streamId: readString(stream.streamId, `stream-${index + 1}`),
+    taskPlanId: typeof stream.taskPlanId === "string" ? stream.taskPlanId : undefined,
+    jobId: typeof stream.jobId === "string" ? stream.jobId : undefined,
+    shotId: typeof stream.shotId === "string" ? stream.shotId : undefined,
+    harnessJobId: typeof stream.harnessJobId === "string"
+      ? stream.harnessJobId
+      : typeof stream.generationHarnessJobId === "string" ? stream.generationHarnessJobId : undefined,
+    eventType: readString(stream.eventType, "unknown"),
+    status: readString(stream.status, readString(stream.harnessLinkStatus, "unknown")),
+    severity: readString(stream.severity, stream.draftOnly === true ? "warning" : "info"),
+    artifactClass: readString(stream.artifactClass, "unknown"),
+    artifactPath: typeof stream.artifactPath === "string" ? stream.artifactPath : undefined,
+    expectedOutputPath: typeof stream.expectedOutputPath === "string" ? stream.expectedOutputPath : undefined,
+    draftOnly: readOptionalBoolean(stream, "draftOnly"),
+    canPromoteFormal: readOptionalBoolean(stream, "canPromoteFormal"),
+    canBecomeFutureReference: readOptionalBoolean(stream, "canBecomeFutureReference"),
+    requiresManifestMatch: readOptionalBoolean(stream, "requiresManifestMatch"),
+    requiresQaPass: readOptionalBoolean(stream, "requiresQaPass"),
+    blockingReasons,
+    notes: readNoteList(stream.notes),
+  };
+}
+
+function getFilesystemWatcherHarness(runtimeState: ProjectRuntimeState): FilesystemWatcherHarnessState {
+  const harness = (runtimeState as Partial<ProjectRuntimeState> & { filesystemWatcherHarness?: unknown }).filesystemWatcherHarness;
+  const initialized = isRecord(harness);
+  const harnessRecord = initialized ? harness as Record<string, unknown> : {};
+  const summaryRecord = initialized && isRecord(harnessRecord.summary) ? harnessRecord.summary : {};
+  const locksRecord = initialized && isRecord(harnessRecord.locks)
+    ? harnessRecord.locks
+    : initialized && isRecord(harnessRecord.hardLocks) ? harnessRecord.hardLocks : {};
+  const hasMonitoredRoots = initialized && Array.isArray(harnessRecord.monitoredRoots);
+  const hasStreams = initialized && Array.isArray(harnessRecord.streams);
+
+  return {
+    initialized,
+    hasSummary: initialized && isRecord(harnessRecord.summary),
+    hasMonitoredRoots,
+    hasStreams,
+    hasLocks: initialized && isRecord(harnessRecord.locks),
+    summary: {
+      totalEvents: readOptionalNumber(summaryRecord, "totalEvents") ?? readOptionalNumber(summaryRecord, "totalStreams"),
+      tempCandidates: readOptionalNumber(summaryRecord, "tempCandidates"),
+      expectedOutputs: readOptionalNumber(summaryRecord, "expectedOutputs"),
+      qaReports: readOptionalNumber(summaryRecord, "qaReports"),
+      manifestMismatches: readOptionalNumber(summaryRecord, "manifestMismatches"),
+      blockedEvents: readOptionalNumber(summaryRecord, "blockedEvents"),
+      draftOnlyArtifacts: readOptionalNumber(summaryRecord, "draftOnlyArtifacts") ?? readOptionalNumber(summaryRecord, "draftOnly"),
+      promotableArtifacts: readOptionalNumber(summaryRecord, "promotableArtifacts") ?? readOptionalNumber(summaryRecord, "promotableFormal"),
+      linkedHarnessJobs: readOptionalNumber(summaryRecord, "linkedHarnessJobs") ??
+        (readOptionalNumber(summaryRecord, "totalStreams") !== undefined && readOptionalNumber(summaryRecord, "missingHarnessLinks") !== undefined
+          ? Number(readOptionalNumber(summaryRecord, "totalStreams")) - Number(readOptionalNumber(summaryRecord, "missingHarnessLinks"))
+          : undefined),
+      missingHarnessLinks: readOptionalNumber(summaryRecord, "missingHarnessLinks"),
+      liveSubmitAllowed: readOptionalBoolean(summaryRecord, "liveSubmitAllowed"),
+      providerSubmissionForbidden: readOptionalBoolean(summaryRecord, "providerSubmissionForbidden"),
+    },
+    monitoredRoots: hasMonitoredRoots ? (harnessRecord.monitoredRoots as unknown[]).map(normalizeFilesystemWatcherRoot) : [],
+    streams: hasStreams ? (harnessRecord.streams as unknown[]).map(normalizeFilesystemWatcherStream) : [],
+    locks: {
+      watcherCannotPromoteFormal: readOptionalBoolean(locksRecord, "watcherCannotPromoteFormal"),
+      workerSelfReportCannotComplete: readOptionalBoolean(locksRecord, "workerSelfReportCannotComplete"),
+      tempOutputDraftOnly: readOptionalBoolean(locksRecord, "tempOutputDraftOnly"),
+      semanticPostprocessForbidden: readOptionalBoolean(locksRecord, "semanticPostprocessForbidden"),
+      liveSubmitAllowed: readOptionalBoolean(locksRecord, "liveSubmitAllowed"),
+      providerSubmissionForbidden: readOptionalBoolean(locksRecord, "providerSubmissionForbidden"),
     },
   };
 }
@@ -1224,6 +1390,152 @@ function GenerationHarnessDiagnostics({ runtimeState }: { runtimeState: ProjectR
         {harness.jobs.length > visibleJobs.length && (
           <small className="muted-copy">Showing {visibleJobs.length} of {harness.jobs.length} generation jobs.</small>
         )}
+      </div>
+    </section>
+  );
+}
+
+function watcherMetricValue(harness: FilesystemWatcherHarnessState, value?: number) {
+  return harness.hasSummary && typeof value === "number" ? `${value}` : "Not initialized";
+}
+
+function watcherMetricDetail(harness: FilesystemWatcherHarnessState, detail: string) {
+  return harness.hasSummary ? detail : "runtimeState.filesystemWatcherHarness.summary missing";
+}
+
+function watcherBooleanLabel(value: boolean | undefined, trueLabel: string, falseLabel: string) {
+  if (typeof value !== "boolean") return "Not initialized";
+  return value ? trueLabel : falseLabel;
+}
+
+function FilesystemWatcherDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const harness = getFilesystemWatcherHarness(runtimeState);
+  const summary = harness.summary;
+  const visibleStreams = harness.streams.slice(0, 8);
+  const rootRows = harness.monitoredRoots.slice(0, 6);
+  const lockRows = [
+    {
+      label: "Watcher cannot promote formal",
+      value: watcherBooleanLabel(harness.locks.watcherCannotPromoteFormal, "locked", "not locked"),
+    },
+    {
+      label: "Temp output draft only",
+      value: watcherBooleanLabel(harness.locks.tempOutputDraftOnly, "draft only", "not locked"),
+    },
+    {
+      label: "No semantic postprocess",
+      value: watcherBooleanLabel(harness.locks.semanticPostprocessForbidden, "forbidden", "not locked"),
+    },
+    {
+      label: "Provider submission",
+      value: watcherBooleanLabel(harness.locks.providerSubmissionForbidden ?? summary.providerSubmissionForbidden, "forbidden", "not locked"),
+    },
+    {
+      label: "Live submit",
+      value: watcherBooleanLabel(harness.locks.liveSubmitAllowed ?? summary.liveSubmitAllowed, "allowed", "not allowed"),
+    },
+  ];
+
+  return (
+    <section className="machine-panel filesystem-watcher-panel">
+      <div className="audit-head">
+        <Database size={17} />
+        <span>Filesystem Watcher Harness</span>
+      </div>
+      <div className="summary-grid filesystem-watcher-metrics">
+        <Metric label="Events" value={watcherMetricValue(harness, summary.totalEvents)} detail={watcherMetricDetail(harness, `${summary.blockedEvents || 0} blocked`)} />
+        <Metric label="Temp/Candidate" value={watcherMetricValue(harness, summary.tempCandidates)} detail={watcherMetricDetail(harness, `${summary.promotableArtifacts || 0} promotable`)} />
+        <Metric label="Expected" value={watcherMetricValue(harness, summary.expectedOutputs)} detail={watcherMetricDetail(harness, "expected output paths")} />
+        <Metric label="QA Reports" value={watcherMetricValue(harness, summary.qaReports)} detail={watcherMetricDetail(harness, "QA evidence files")} />
+        <Metric label="Manifest Mismatch" value={watcherMetricValue(harness, summary.manifestMismatches)} detail={watcherMetricDetail(harness, "manifest gate failures")} />
+        <Metric label="Draft Only" value={watcherMetricValue(harness, summary.draftOnlyArtifacts)} detail={watcherMetricDetail(harness, "cannot become formal automatically")} />
+        <Metric label="Linked Harness" value={watcherMetricValue(harness, summary.linkedHarnessJobs)} detail={watcherMetricDetail(harness, `${summary.missingHarnessLinks || 0} missing link(s)`)} />
+      </div>
+
+      <div className="watcher-lock-strip">
+        {lockRows.map((lock) => (
+          <div key={lock.label}>
+            <span>{lock.label}</span>
+            <StatusPill value={lock.value} />
+          </div>
+        ))}
+      </div>
+
+      {!harness.initialized && (
+        <p className="muted-copy generation-empty-state">Filesystem Watcher Harness not initialized in this runtime state.</p>
+      )}
+
+      <div className="watcher-diagnostics-grid">
+        <div>
+          <h3>Monitored Roots</h3>
+          {!harness.hasMonitoredRoots && <p className="muted-copy">Not initialized</p>}
+          {harness.hasMonitoredRoots && !rootRows.length && <p className="muted-copy">No monitored roots reported.</p>}
+          {Boolean(rootRows.length) && (
+            <div className="watcher-root-table">
+              {rootRows.map((root) => (
+                <div key={root.id} className="watcher-root-row">
+                  <span>
+                    <strong>{root.label}</strong>
+                    <small>{root.id}</small>
+                  </span>
+                  <span>
+                    <StatusPill value={root.status} />
+                    <small>{root.kind}</small>
+                  </span>
+                  <small>{root.pathHint || "No path hint"}</small>
+                  <small>{root.notes.join(" · ") || "No notes"}</small>
+                </div>
+              ))}
+              {harness.monitoredRoots.length > rootRows.length && (
+                <small className="muted-copy watcher-more">Showing {rootRows.length} of {harness.monitoredRoots.length} monitored roots.</small>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <h3>Watcher Streams</h3>
+          {!harness.hasStreams && <p className="muted-copy">Not initialized</p>}
+          {harness.hasStreams && !visibleStreams.length && <p className="muted-copy">No watcher events reported.</p>}
+          {Boolean(visibleStreams.length) && (
+            <div className="watcher-stream-table">
+              {visibleStreams.map((stream) => {
+                const shotTask = stream.shotId || stream.taskPlanId || stream.jobId || "unassigned";
+                const harnessLink = stream.harnessJobId || stream.jobId || "missing";
+                return (
+                  <details key={stream.streamId} className="watcher-stream-row">
+                    <summary>
+                      <span>
+                        <strong>{shotTask}</strong>
+                        <small>{stream.eventType} · {stream.streamId}</small>
+                      </span>
+                      <span>{stream.artifactClass}</span>
+                      <StatusPill value={stream.status} />
+                      <StatusPill value={watcherBooleanLabel(stream.draftOnly, "draft only", "not draft only")} />
+                      <StatusPill value={watcherBooleanLabel(stream.canPromoteFormal, "can promote", "cannot promote")} />
+                      <span>
+                        <strong>{harnessLink}</strong>
+                        <small>{stream.harnessJobId ? "linked" : "missing link"}</small>
+                      </span>
+                    </summary>
+                    <div className="watcher-stream-details">
+                      <small>severity: {stream.severity}</small>
+                      <small>artifact: {stream.artifactPath || "Not initialized"}</small>
+                      <small>expected: {stream.expectedOutputPath || "Not initialized"}</small>
+                      <small>future reference: {watcherBooleanLabel(stream.canBecomeFutureReference, "allowed", "blocked")}</small>
+                      <small>requires manifest: {watcherBooleanLabel(stream.requiresManifestMatch, "yes", "no")}</small>
+                      <small>requires QA: {watcherBooleanLabel(stream.requiresQaPass, "yes", "no")}</small>
+                      <CompactList items={[...stream.blockingReasons, ...stream.notes]} empty="No blocking reasons or notes reported." />
+                    </div>
+                  </details>
+                );
+              })}
+              {harness.streams.length > visibleStreams.length && (
+                <small className="muted-copy watcher-more">Showing {visibleStreams.length} of {harness.streams.length} watcher stream event(s).</small>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -2753,6 +3065,7 @@ function DiagnosticsMode({
       <ProviderDock audit={audit} />
       <ImagePipelineDiagnostics runtimeState={runtimeState} />
       <GenerationHarnessDiagnostics runtimeState={runtimeState} />
+      <FilesystemWatcherDiagnostics runtimeState={runtimeState} />
       <VideoPlanningDiagnostics runtimeState={runtimeState} />
       <VideoExecutionPreviewDiagnostics runtimeState={runtimeState} />
       <AdapterContractDiagnostics runtimeState={runtimeState} />

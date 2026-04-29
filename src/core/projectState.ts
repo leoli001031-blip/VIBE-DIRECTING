@@ -8,6 +8,7 @@ import type {
   AssetReadinessReport,
   AdapterContractState,
   AudioPlanningState,
+  FilesystemWatcherHarnessState,
   GenerationHarnessState,
   AuditIssue,
   GenerationHealthReport,
@@ -172,6 +173,7 @@ export interface ProjectRuntimeState {
   videoExecutionPreview: VideoExecutionPreviewState;
   adapterContracts: AdapterContractState;
   generationHarness: GenerationHarnessState;
+  filesystemWatcherHarness: FilesystemWatcherHarnessState;
   storyChanges: ProjectRuntimeStoryChangeState;
   runtime: ProjectRuntimeEnvironment;
   diagnostics: {

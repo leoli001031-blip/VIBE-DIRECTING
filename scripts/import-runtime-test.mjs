@@ -2004,6 +2004,220 @@ function buildGenerationHarnessState({
   };
 }
 
+const filesystemWatcherMonitoredKinds = [
+  "codex_temp_generated_images",
+  "project_outputs",
+  "reports",
+  "videos",
+  "audio",
+];
+
+const filesystemWatcherHardLocks = {
+  watcherCannotPromoteFormal: true,
+  workerSelfReportCannotComplete: true,
+  tempOutputDraftOnly: true,
+  semanticPostprocessForbidden: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+};
+
+function snapshotPathCount(snapshot) {
+  return Array.isArray(snapshot) ? snapshot.length : Object.keys(snapshot || {}).length;
+}
+
+function watcherArtifactClass(eventType) {
+  if (eventType === "temp_output_detected") return "temp_candidate";
+  if (eventType === "expected_output_detected") return "expected_output";
+  if (eventType === "provider_ready_derivative_detected") return "provider_ready_derivative";
+  if (eventType === "qa_report_detected") return "qa_report";
+  if (eventType === "manifest_mismatch_detected") return "manifest_mismatch";
+  if (eventType === "formal_output_promoted") return "formal_output";
+  if (eventType === "worker_exit_without_expected_output") return "worker_exit_without_expected_output";
+  if (eventType === "postprocess_recoverable") return "postprocess_recoverable";
+  if (eventType === "stall_timeout_reached") return "stall_timeout";
+  if (eventType === "blocked") return "blocked";
+  return "unknown";
+}
+
+function watcherMonitoredKind(pathValue, artifactClass) {
+  const normalized = normalizePathValue(pathValue || "").toLowerCase();
+  if (artifactClass === "temp_candidate" || /(^|\/)(tmp|temp|cache|candidates?|drafts?)(\/|$)/.test(normalized)) {
+    return "codex_temp_generated_images";
+  }
+  if (artifactClass === "qa_report" || artifactClass === "manifest_mismatch" || /(^|\/)reports?(\/|$)/.test(normalized)) return "reports";
+  if (/\.(mp4|mov|m4v|webm)$/i.test(normalized) || /(^|\/)videos?(\/|$)/.test(normalized)) return "videos";
+  if (/\.(wav|mp3|m4a|aac|flac|ogg)$/i.test(normalized) || /(^|\/)audio(\/|$)/.test(normalized)) return "audio";
+  return "project_outputs";
+}
+
+function watcherRequiresManifestMatch(artifactClass) {
+  return !["qa_report", "blocked", "stall_timeout"].includes(artifactClass);
+}
+
+function watcherRequiresQaPass(artifactClass) {
+  return !["qa_report", "manifest_mismatch", "blocked", "stall_timeout", "worker_exit_without_expected_output"].includes(artifactClass);
+}
+
+function watcherDraftOnly(artifactClass, canPromoteFormal) {
+  if (["temp_candidate", "provider_ready_derivative", "postprocess_recoverable"].includes(artifactClass)) return true;
+  if (artifactClass === "formal_output") return false;
+  return !canPromoteFormal;
+}
+
+function watcherCanBecomeFutureReference(artifactClass, canPromoteFormal) {
+  if (["temp_candidate", "provider_ready_derivative", "postprocess_recoverable"].includes(artifactClass)) return false;
+  return artifactClass === "formal_output" && canPromoteFormal;
+}
+
+function buildFilesystemWatcherMonitoredRoots(projectRoot) {
+  const root = projectRoot || "<project-root>";
+  return [
+    {
+      rootId: "codex-temp-generated-images",
+      kind: "codex_temp_generated_images",
+      label: "Codex Temp Generated Images",
+      pathPolicy: "derived_static_only",
+      pathHints: ["<codex-temp>/generated-images", `${root}/tmp`, `${root}/cache`, `${root}/candidates`],
+      daemonStarted: false,
+      notes: ["Derived from fileSnapshot paths and watcherEvents only; Phase 8.5 does not start fs.watch."],
+    },
+    {
+      rootId: "project-outputs",
+      kind: "project_outputs",
+      label: "Project Outputs",
+      pathPolicy: "derived_static_only",
+      pathHints: [`${root}/outputs`, `${root}/02_keyframes`, `${root}/generated`],
+      daemonStarted: false,
+      notes: ["Expected outputs remain candidate artifacts until manifest and QA promotion gates pass."],
+    },
+    {
+      rootId: "reports",
+      kind: "reports",
+      label: "Reports",
+      pathPolicy: "derived_static_only",
+      pathHints: [`${root}/reports`, `${root}/qa`],
+      daemonStarted: false,
+      notes: ["QA and manifest reports are evidence; they cannot move or promote files."],
+    },
+    {
+      rootId: "videos",
+      kind: "videos",
+      label: "Videos",
+      pathPolicy: "derived_static_only",
+      pathHints: [`${root}/videos`, `${root}/renders`],
+      daemonStarted: false,
+      notes: ["Video paths are monitored as static facts while video providers remain parked."],
+    },
+    {
+      rootId: "audio",
+      kind: "audio",
+      label: "Audio",
+      pathPolicy: "derived_static_only",
+      pathHints: [`${root}/audio`, `${root}/voice`],
+      daemonStarted: false,
+      notes: ["Audio paths are planning facts only; no audio provider or local daemon is started."],
+    },
+  ];
+}
+
+function buildFilesystemWatcherHarnessState({
+  generatedAt,
+  projectRoot,
+  fileSnapshot,
+  manifestMatches,
+  imageTaskPlans,
+  image2AdapterRequests,
+  watcherEvents,
+  generationHealthReports,
+  qaPromotionReports,
+  generationHarness,
+}) {
+  const taskPlanById = new Map(imageTaskPlans.map((taskPlan) => [taskPlan.taskPlanId, taskPlan]));
+  const taskPlanByJob = new Map(imageTaskPlans.map((taskPlan) => [taskPlan.jobId, taskPlan]));
+  const healthByTaskPlan = new Map(generationHealthReports.map((report) => [report.taskPlanId, report]));
+  const promotionByTaskPlan = new Map(qaPromotionReports.map((report) => [report.taskPlanId, report]));
+  const harnessByTaskPlan = new Map((generationHarness?.jobs || []).map((job) => [job.taskPlanId, job]));
+  const requestTaskPlanIds = new Set(image2AdapterRequests.map((request) => request.taskPlanId));
+
+  const streams = watcherEvents.map((event) => {
+    const taskPlan = taskPlanById.get(event.taskId) || (event.jobId ? taskPlanByJob.get(event.jobId) : undefined);
+    const taskPlanId = taskPlan?.taskPlanId || event.taskId;
+    const artifactClass = watcherArtifactClass(event.eventType);
+    const promotion = promotionByTaskPlan.get(taskPlanId);
+    const health = healthByTaskPlan.get(taskPlanId);
+    const manifestReport = manifestReportForTaskPlan(taskPlan, manifestMatches || []);
+    const harnessJob = harnessByTaskPlan.get(taskPlanId);
+    const canPromoteFormal =
+      !["temp_candidate", "provider_ready_derivative", "postprocess_recoverable"].includes(artifactClass) &&
+      Boolean(promotion?.canPromoteToFormal);
+    const expectedOutputPath = event.expectedOutputPath || taskPlan?.expectedOutputPath;
+
+    return {
+      streamId: `filesystem_watcher_stream_${event.id}`,
+      sourceEventId: event.id,
+      eventType: event.eventType,
+      artifactPath: event.artifactPath,
+      expectedOutputPath,
+      taskPlanId,
+      jobId: event.jobId || taskPlan?.jobId,
+      shotId: event.shotId || taskPlan?.shotId,
+      artifactClass,
+      monitoredKind: watcherMonitoredKind(event.artifactPath || expectedOutputPath, artifactClass),
+      draftOnly: watcherDraftOnly(artifactClass, canPromoteFormal),
+      canPromoteFormal,
+      canBecomeFutureReference: watcherCanBecomeFutureReference(artifactClass, canPromoteFormal),
+      requiresManifestMatch: watcherRequiresManifestMatch(artifactClass),
+      requiresQaPass: watcherRequiresQaPass(artifactClass),
+      manifestMatchStatus: manifestReport?.status,
+      generationHealthReportId: health?.reportId,
+      qaPromotionReportId: promotion?.reportId,
+      generationHarnessJobId: harnessJob?.harnessJobId,
+      harnessLinkStatus: harnessJob ? "linked" : "missing_harness_link",
+      missingHarnessLinkReason: harnessJob
+        ? undefined
+        : `No generationHarness job matched taskPlanId ${taskPlanId}${event.jobId ? ` or jobId ${event.jobId}` : ""}.`,
+      notes: [
+        ...(event.notes || []),
+        "Phase 8.5 watcher harness is derived/static and does not start a filesystem daemon.",
+        ...(artifactClass === "worker_exit_without_expected_output" || requestTaskPlanIds.has(taskPlanId)
+          ? ["Worker/provider self-report cannot complete or promote a task."]
+          : []),
+      ],
+    };
+  }).sort((left, right) => left.streamId.localeCompare(right.streamId));
+
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt,
+    monitoredKinds: filesystemWatcherMonitoredKinds,
+    monitoredRoots: buildFilesystemWatcherMonitoredRoots(projectRoot),
+    streams,
+    summary: {
+      totalStreams: streams.length,
+      draftOnly: streams.filter((stream) => stream.draftOnly).length,
+      promotableFormal: streams.filter((stream) => stream.canPromoteFormal).length,
+      missingHarnessLinks: streams.filter((stream) => stream.harnessLinkStatus === "missing_harness_link").length,
+      tempCandidates: streams.filter((stream) => stream.artifactClass === "temp_candidate").length,
+      expectedOutputs: streams.filter((stream) => stream.artifactClass === "expected_output").length,
+      qaReports: streams.filter((stream) => stream.artifactClass === "qa_report").length,
+      manifestMismatches: streams.filter((stream) => stream.artifactClass === "manifest_mismatch").length,
+      daemonStarted: false,
+      liveSubmitAllowed: false,
+    },
+    hardLocks: filesystemWatcherHardLocks,
+    derivedOnly: true,
+    fsWatchDaemonEnabled: false,
+    daemonStarted: false,
+    providerSubmissionForbidden: true,
+    liveSubmitAllowed: false,
+    notes: [
+      `Derived from ${snapshotPathCount(fileSnapshot)} file snapshot entries and ${watcherEvents.length} watcher events.`,
+      "No fs.watch daemon, file move/copy/delete, provider submit, or formal promotion is performed by this harness.",
+      "Formal promotion remains owned by qaPromotionReports.canPromoteToFormal and explicit promotion gates.",
+    ],
+  };
+}
+
 function computeSourceIndexHash(index) {
   return hashString(JSON.stringify(canonicalize(index)));
 }
@@ -3792,6 +4006,18 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     generationHealthReports,
     qaPromotionReports,
   });
+  const filesystemWatcherHarness = buildFilesystemWatcherHarnessState({
+    generatedAt,
+    projectRoot: audit.projectRoot,
+    fileSnapshot,
+    manifestMatches: taskViews.map((task) => task.manifestMatch),
+    imageTaskPlans,
+    image2AdapterRequests,
+    watcherEvents,
+    generationHealthReports,
+    qaPromotionReports,
+    generationHarness,
+  });
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -3865,6 +4091,7 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     videoExecutionPreview,
     adapterContracts,
     generationHarness,
+    filesystemWatcherHarness,
     storyChanges: {
       transactions: [],
       reflowReports: [],

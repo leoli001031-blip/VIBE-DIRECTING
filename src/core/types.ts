@@ -757,6 +757,99 @@ export interface WatcherEvent {
   notes: string[];
 }
 
+export type FilesystemWatcherMonitoredKind =
+  | "codex_temp_generated_images"
+  | "project_outputs"
+  | "reports"
+  | "videos"
+  | "audio";
+
+export type FilesystemWatcherArtifactClass =
+  | "temp_candidate"
+  | "expected_output"
+  | "provider_ready_derivative"
+  | "qa_report"
+  | "manifest_mismatch"
+  | "formal_output"
+  | "worker_exit_without_expected_output"
+  | "postprocess_recoverable"
+  | "stall_timeout"
+  | "blocked"
+  | "unknown";
+
+export type FilesystemWatcherHarnessLinkStatus = "linked" | "missing_harness_link";
+
+export interface FilesystemWatcherMonitoredRoot {
+  rootId: string;
+  kind: FilesystemWatcherMonitoredKind;
+  label: string;
+  pathPolicy: "derived_static_only";
+  pathHints: string[];
+  daemonStarted: false;
+  notes: string[];
+}
+
+export interface FilesystemWatcherHarnessHardLocks {
+  watcherCannotPromoteFormal: true;
+  workerSelfReportCannotComplete: true;
+  tempOutputDraftOnly: true;
+  semanticPostprocessForbidden: true;
+  liveSubmitAllowed: false;
+  providerSubmissionForbidden: true;
+}
+
+export interface FilesystemWatcherHarnessStream {
+  streamId: string;
+  sourceEventId: string;
+  eventType: WatcherEventType;
+  artifactPath?: string;
+  expectedOutputPath?: string;
+  taskPlanId: string;
+  jobId?: string;
+  shotId?: string;
+  artifactClass: FilesystemWatcherArtifactClass;
+  monitoredKind: FilesystemWatcherMonitoredKind;
+  draftOnly: boolean;
+  canPromoteFormal: boolean;
+  canBecomeFutureReference: boolean;
+  requiresManifestMatch: boolean;
+  requiresQaPass: boolean;
+  manifestMatchStatus?: string;
+  generationHealthReportId?: string;
+  qaPromotionReportId?: string;
+  generationHarnessJobId?: string;
+  harnessLinkStatus: FilesystemWatcherHarnessLinkStatus;
+  missingHarnessLinkReason?: string;
+  notes: string[];
+}
+
+export interface FilesystemWatcherHarnessState {
+  schemaVersion: string;
+  generatedAt: string;
+  monitoredKinds: FilesystemWatcherMonitoredKind[];
+  monitoredRoots: FilesystemWatcherMonitoredRoot[];
+  streams: FilesystemWatcherHarnessStream[];
+  summary: {
+    totalStreams: number;
+    draftOnly: number;
+    promotableFormal: number;
+    missingHarnessLinks: number;
+    tempCandidates: number;
+    expectedOutputs: number;
+    qaReports: number;
+    manifestMismatches: number;
+    daemonStarted: false;
+    liveSubmitAllowed: false;
+  };
+  hardLocks: FilesystemWatcherHarnessHardLocks;
+  derivedOnly: true;
+  fsWatchDaemonEnabled: false;
+  daemonStarted: false;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  notes: string[];
+}
+
 export type GenerationQaStatus = "missing" | "pending" | "pass" | "fail" | "not_required" | "unknown";
 
 export type GenerationHealthStatus =

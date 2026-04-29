@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/filesystem_watcher_harness.schema.json",
+  "title": "FilesystemWatcherHarnessState",
+  "description": "Phase 8.5 derived/static filesystem watcher harness facts. It does not start a daemon, submit providers, mutate files, or promote formal assets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "monitoredKinds",
+    "monitoredRoots",
+    "streams",
+    "summary",
+    "hardLocks",
+    "derivedOnly",
+    "fsWatchDaemonEnabled",
+    "daemonStarted",
+    "providerSubmissionForbidden",
+    "liveSubmitAllowed",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "monitoredKinds": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/monitoredKind" },
+      "uniqueItems": true,
+      "allOf": [
+        { "contains": { "const": "codex_temp_generated_images" } },
+        { "contains": { "const": "project_outputs" } },
+        { "contains": { "const": "reports" } },
+        { "contains": { "const": "videos" } },
+        { "contains": { "const": "audio" } }
+      ]
+    },
+    "monitoredRoots": {
+      "type": "array",
+      "minItems": 5,
+      "items": { "$ref": "#/$defs/monitoredRoot" }
+    },
+    "streams": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/stream" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalStreams",
+        "draftOnly",
+        "promotableFormal",
+        "missingHarnessLinks",
+        "tempCandidates",
+        "expectedOutputs",
+        "qaReports",
+        "manifestMismatches",
+        "daemonStarted",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "totalStreams": { "type": "integer", "minimum": 0 },
+        "draftOnly": { "type": "integer", "minimum": 0 },
+        "promotableFormal": { "type": "integer", "minimum": 0 },
+        "missingHarnessLinks": { "type": "integer", "minimum": 0 },
+        "tempCandidates": { "type": "integer", "minimum": 0 },
+        "expectedOutputs": { "type": "integer", "minimum": 0 },
+        "qaReports": { "type": "integer", "minimum": 0 },
+        "manifestMismatches": { "type": "integer", "minimum": 0 },
+        "daemonStarted": { "type": "boolean", "const": false },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "derivedOnly": { "type": "boolean", "const": true },
+    "fsWatchDaemonEnabled": { "type": "boolean", "const": false },
+    "daemonStarted": { "type": "boolean", "const": false },
+    "providerSubmissionForbidden": { "type": "boolean", "const": true },
+    "liveSubmitAllowed": { "type": "boolean", "const": false },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "monitoredKind": {
+      "type": "string",
+      "enum": ["codex_temp_generated_images", "project_outputs", "reports", "videos", "audio"]
+    },
+    "artifactClass": {
+      "type": "string",
+      "enum": [
+        "temp_candidate",
+        "expected_output",
+        "provider_ready_derivative",
+        "qa_report",
+        "manifest_mismatch",
+        "formal_output",
+        "worker_exit_without_expected_output",
+        "postprocess_recoverable",
+        "stall_timeout",
+        "blocked",
+        "unknown"
+      ]
+    },
+    "monitoredRoot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rootId", "kind", "label", "pathPolicy", "pathHints", "daemonStarted", "notes"],
+      "properties": {
+        "rootId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "kind": { "$ref": "#/$defs/monitoredKind" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "pathPolicy": { "type": "string", "const": "derived_static_only" },
+        "pathHints": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "daemonStarted": { "type": "boolean", "const": false },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "watcherCannotPromoteFormal",
+        "workerSelfReportCannotComplete",
+        "tempOutputDraftOnly",
+        "semanticPostprocessForbidden",
+        "liveSubmitAllowed",
+        "providerSubmissionForbidden"
+      ],
+      "properties": {
+        "watcherCannotPromoteFormal": { "type": "boolean", "const": true },
+        "workerSelfReportCannotComplete": { "type": "boolean", "const": true },
+        "tempOutputDraftOnly": { "type": "boolean", "const": true },
+        "semanticPostprocessForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true }
+      }
+    },
+    "stream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "streamId",
+        "sourceEventId",
+        "eventType",
+        "taskPlanId",
+        "artifactClass",
+        "monitoredKind",
+        "draftOnly",
+        "canPromoteFormal",
+        "canBecomeFutureReference",
+        "requiresManifestMatch",
+        "requiresQaPass",
+        "harnessLinkStatus",
+        "notes"
+      ],
+      "properties": {
+        "streamId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "sourceEventId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "eventType": {
+          "type": "string",
+          "enum": [
+            "temp_output_detected",
+            "expected_output_detected",
+            "provider_ready_derivative_detected",
+            "qa_report_detected",
+            "manifest_mismatch_detected",
+            "stall_timeout_reached",
+            "worker_exit_without_expected_output",
+            "postprocess_recoverable",
+            "formal_output_promoted",
+            "blocked"
+          ]
+        },
+        "artifactPath": { "type": "string" },
+        "expectedOutputPath": { "type": "string" },
+        "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "jobId": { "type": "string" },
+        "shotId": { "type": "string" },
+        "artifactClass": { "$ref": "#/$defs/artifactClass" },
+        "monitoredKind": { "$ref": "#/$defs/monitoredKind" },
+        "draftOnly": { "type": "boolean" },
+        "canPromoteFormal": { "type": "boolean" },
+        "canBecomeFutureReference": { "type": "boolean" },
+        "requiresManifestMatch": { "type": "boolean" },
+        "requiresQaPass": { "type": "boolean" },
+        "manifestMatchStatus": { "type": "string" },
+        "generationHealthReportId": { "type": "string" },
+        "qaPromotionReportId": { "type": "string" },
+        "generationHarnessJobId": { "type": "string" },
+        "harnessLinkStatus": { "type": "string", "enum": ["linked", "missing_harness_link"] },
+        "missingHarnessLinkReason": { "type": "string" },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
