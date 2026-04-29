@@ -123,6 +123,14 @@ function requireArray(value: Record<string, unknown>, key: string, issues: strin
   if (!Array.isArray(value[key])) issues.push(key);
 }
 
+function arrayIncludes(value: unknown, expected: string) {
+  return Array.isArray(value) && value.includes(expected);
+}
+
+function sameStringSet(left: unknown, right: string[]) {
+  return Array.isArray(left) && left.length === right.length && right.every((item) => left.includes(item));
+}
+
 function assertProjectRuntimeState(value: unknown): asserts value is ProjectRuntimeState {
   const issues: string[] = [];
   if (!isRecord(value)) throw new Error("runtime-state shape invalid: root");
@@ -286,8 +294,30 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   requireArray(adapterContractSummary, "providerAdapters", issues);
   requireArray(adapterContractSummary, "parkedVideoProviders", issues);
   requireArray(adapterContractSummary, "contractViolations", issues);
+  if (adapterContractSummary.liveSubmitAllowed !== providerEnablementSummary.liveSubmitAllowed) {
+    issues.push("adapterContracts.summary.liveSubmitAllowed.crossModule");
+  }
+  if (videoProviderPolicySummary.liveSubmitAllowed !== false || videoExecutionPreview.liveSubmitAllowed !== false) {
+    issues.push("adapterContracts.summary.liveSubmitAllowed.videoLock");
+  }
   if (Array.isArray(adapterContractSummary.contractViolations) && adapterContractSummary.contractViolations.length > 0) {
     issues.push("adapterContracts.summary.contractViolations");
+  }
+  if (Array.isArray(adapterContracts.agentAdapters)) {
+    adapterContracts.agentAdapters.forEach((adapter, index) => {
+      if (!isRecord(adapter)) {
+        issues.push(`adapterContracts.agentAdapters.${index}`);
+        return;
+      }
+      if (adapter.dryRunOnly !== true) issues.push(`adapterContracts.agentAdapters.${index}.dryRunOnly`);
+      if (adapter.readOnly !== true) issues.push(`adapterContracts.agentAdapters.${index}.readOnly`);
+      if (adapter.liveSubmitAllowed !== false) issues.push(`adapterContracts.agentAdapters.${index}.liveSubmitAllowed`);
+      if (adapter.credentialStorage !== false) issues.push(`adapterContracts.agentAdapters.${index}.credentialStorage`);
+      if (adapter.uiBinding !== false) issues.push(`adapterContracts.agentAdapters.${index}.uiBinding`);
+      for (const route of ["ui_binding", "live_submit", "credential_read", "credential_storage", "arbitrary_shell"]) {
+        if (!arrayIncludes(adapter.forbiddenRoutes, route)) issues.push(`adapterContracts.agentAdapters.${index}.forbiddenRoutes.${route}`);
+      }
+    });
   }
   if (Array.isArray(adapterContracts.workerAdapters)) {
     adapterContracts.workerAdapters.forEach((adapter, index) => {
@@ -295,39 +325,74 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
         issues.push(`adapterContracts.workerAdapters.${index}`);
         return;
       }
+      if (adapter.dryRunOnly !== true) issues.push(`adapterContracts.workerAdapters.${index}.dryRunOnly`);
+      if (adapter.readOnly !== true) issues.push(`adapterContracts.workerAdapters.${index}.readOnly`);
       if (adapter.requiredEnvelopeSchema !== "subagent_task_envelope.schema.json") issues.push(`adapterContracts.workerAdapters.${index}.requiredEnvelopeSchema`);
       if (adapter.mustReceiveContextPacket !== true) issues.push(`adapterContracts.workerAdapters.${index}.mustReceiveContextPacket`);
       if (adapter.canBypassEnvelope !== false) issues.push(`adapterContracts.workerAdapters.${index}.canBypassEnvelope`);
       if (adapter.liveSubmitAllowed !== false) issues.push(`adapterContracts.workerAdapters.${index}.liveSubmitAllowed`);
       if (adapter.credentialStorage !== false) issues.push(`adapterContracts.workerAdapters.${index}.credentialStorage`);
+      for (const route of ["freeform_context", "envelope_bypass", "live_submit", "credential_read", "credential_storage"]) {
+        if (!arrayIncludes(adapter.forbiddenRoutes, route)) issues.push(`adapterContracts.workerAdapters.${index}.forbiddenRoutes.${route}`);
+      }
     });
   }
   if (Array.isArray(adapterContracts.providerAdapters)) {
     const providerAdapterIds = adapterContracts.providerAdapters
       .filter((adapter): adapter is Record<string, unknown> => isRecord(adapter))
       .map((adapter) => adapter.id);
-    for (const requiredId of ["image2-provider", "image2-edit-provider", "image2-reference-asset-provider", "seedance2-provider", "jimeng-video"]) {
+    for (const requiredId of ["image2-provider", "image2-edit-provider", "image2-reference-asset-provider", "seedance2-provider", "jimeng-video", "local-postprocess-planned"]) {
       if (!providerAdapterIds.includes(requiredId)) issues.push(`adapterContracts.providerAdapters.${requiredId}`);
+    }
+    const parkedVideoProviderIds = adapterContracts.providerAdapters
+      .filter((adapter): adapter is Record<string, unknown> => isRecord(adapter) && typeof adapter.slot === "string" && adapter.slot.startsWith("video.") && adapter.state === "parked")
+      .map((adapter) => String(adapter.id));
+    if (!sameStringSet(adapterContractSummary.parkedVideoProviders, parkedVideoProviderIds)) {
+      issues.push("adapterContracts.summary.parkedVideoProviders");
+    }
+    if (adapterContractSummary.activeImageProvider !== "image2-provider" || !providerAdapterIds.includes(String(adapterContractSummary.activeImageProvider))) {
+      issues.push("adapterContracts.summary.activeImageProvider");
     }
     adapterContracts.providerAdapters.forEach((adapter, index) => {
       if (!isRecord(adapter)) {
         issues.push(`adapterContracts.providerAdapters.${index}`);
         return;
       }
+      if (adapter.kind !== "provider") issues.push(`adapterContracts.providerAdapters.${index}.kind`);
+      requireArray(adapter, "requiredModes", issues);
       if (adapter.dryRunOnly !== true) issues.push(`adapterContracts.providerAdapters.${index}.dryRunOnly`);
       if (adapter.readOnly !== true) issues.push(`adapterContracts.providerAdapters.${index}.readOnly`);
       if (adapter.liveSubmitAllowed !== false) issues.push(`adapterContracts.providerAdapters.${index}.liveSubmitAllowed`);
       if (adapter.credentialStorage !== false) issues.push(`adapterContracts.providerAdapters.${index}.credentialStorage`);
       if (adapter.providerSubmissionForbidden !== true) issues.push(`adapterContracts.providerAdapters.${index}.providerSubmissionForbidden`);
       if (adapter.arbitraryProviderCommandAllowed !== false) issues.push(`adapterContracts.providerAdapters.${index}.arbitraryProviderCommandAllowed`);
+      if (!["not_required", "not_configured", "not_read"].includes(String(adapter.credentialStatus))) {
+        issues.push(`adapterContracts.providerAdapters.${index}.credentialStatus`);
+      }
+      for (const route of ["live_submit", "credential_read", "credential_storage", "arbitrary_provider_command"]) {
+        if (!arrayIncludes(adapter.forbiddenRoutes, route)) issues.push(`adapterContracts.providerAdapters.${index}.forbiddenRoutes.${route}`);
+      }
       if ((adapter.id === "seedance2-provider" || adapter.id === "jimeng-video") && adapter.state !== "parked") {
         issues.push(`adapterContracts.providerAdapters.${index}.state`);
+      }
+      if ((adapter.id === "seedance2-provider" || adapter.id === "jimeng-video") && (adapter.slot !== "video.i2v" || !arrayIncludes(adapter.requiredModes, "frames2video"))) {
+        issues.push(`adapterContracts.providerAdapters.${index}.videoMode`);
+      }
+      const capabilitySummary = requireRecord(adapter, "capabilitySummary", issues);
+      if ((adapter.id === "seedance2-provider" || adapter.id === "jimeng-video") && capabilitySummary.supportsTextToVideo === true) {
+        issues.push(`adapterContracts.providerAdapters.${index}.supportsTextToVideo`);
       }
       if (adapter.id === "image2-provider" && (adapter.state !== "active" || adapter.slot !== "image.generate")) {
         issues.push(`adapterContracts.providerAdapters.${index}.image2Generate`);
       }
       if (adapter.id === "image2-edit-provider" && (adapter.state !== "active" || adapter.slot !== "image.edit")) {
         issues.push(`adapterContracts.providerAdapters.${index}.image2Edit`);
+      }
+      if (adapter.id === "image2-reference-asset-provider" && (adapter.state !== "active" || adapter.slot !== "image.reference_asset")) {
+        issues.push(`adapterContracts.providerAdapters.${index}.image2ReferenceAsset`);
+      }
+      if (adapter.id === "local-postprocess-planned" && (adapter.state !== "planned" || adapter.slot !== "local.postprocess")) {
+        issues.push(`adapterContracts.providerAdapters.${index}.localPostprocess`);
       }
     });
   }
@@ -362,6 +427,7 @@ type VideoExecutionPreviewState = ProjectRuntimeState["videoExecutionPreview"];
 type VideoExecutionPreviewRow = VideoExecutionPreviewState["previews"][number];
 type VideoReadinessGateState = VideoPlanningState["readinessGates"][number];
 type VideoTaskPlanState = VideoPlanningState["taskPlans"][number];
+type AdapterContractState = ProjectRuntimeState["adapterContracts"];
 const requiredVideoExecutionHardLocks = [
   "no_live_submit",
   "no_fast_model",
@@ -2017,10 +2083,114 @@ function statusLabel(value: string) {
   return value.replace(/_/g, " ");
 }
 
+function boolLockLabel(value: boolean) {
+  return value ? "allowed" : "false / locked";
+}
+
+function AdapterContractDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const contracts: AdapterContractState = runtimeState.adapterContracts;
+  const summary = contracts.summary;
+  const providerContracts = contracts.providerAdapters;
+  const workerContracts = contracts.workerAdapters;
+  const lockedProviderCount = providerContracts.filter((adapter) => adapter.providerSubmissionForbidden).length;
+  const readOnlyCount = providerContracts.filter((adapter) => adapter.readOnly && adapter.dryRunOnly).length;
+
+  return (
+    <section className="machine-panel adapter-contract-diagnostics">
+      <div className="audit-head">
+        <PlugZap size={17} />
+        <span>Adapter Contract Diagnostics</span>
+      </div>
+      <div className="summary-grid">
+        <Metric label="Agent Contracts" value={`${summary.agentAdapters.length}`} detail={summary.agentAdapters.join(", ") || "none"} />
+        <Metric label="Worker Contracts" value={`${summary.workerAdapters.length}`} detail={summary.workerAdapters.join(", ") || "none"} />
+        <Metric label="Provider Contracts" value={`${summary.providerAdapters.length}`} detail={`${readOnlyCount} read-only dry-run · ${lockedProviderCount} provider locked`} />
+        <Metric label="Violations" value={`${summary.contractViolations.length}`} detail="contract validation blockers" />
+      </div>
+      <div className="adapter-contract-locks video-rule-strip">
+        <span>Contract: read-only diagnostics</span>
+        <span>Active image provider: {summary.activeImageProvider || "none"}</span>
+        <span>Parked video providers: {summary.parkedVideoProviders.join(", ") || "none"}</span>
+        <span>liveSubmitAllowed: {boolLockLabel(summary.liveSubmitAllowed)}</span>
+        <span>credentialStorage: {String(summary.credentialStorage)}</span>
+      </div>
+      <div className="adapter-contract-grid">
+        <div>
+          <h3>Provider Contracts</h3>
+          <div className="adapter-contract-list">
+            {providerContracts.map((adapter) => (
+              <div key={adapter.id} className="adapter-contract-row">
+                <div className="row-head">
+                  <strong>{adapter.id}</strong>
+                  <StatusPill value={adapter.state} />
+                </div>
+                <div className="field-grid compact">
+                  <label>Slot</label>
+                  <span>{adapter.slot}</span>
+                  <label>requiredModes</label>
+                  <span>{adapter.requiredModes.join(", ")}</span>
+                  <label>capabilityRefs</label>
+                  <span>{adapter.capabilityRefs.length}</span>
+                  <label>Contract</label>
+                  <span>dryRunOnly {String(adapter.dryRunOnly)} · readOnly {String(adapter.readOnly)}</span>
+                  <label>liveSubmitAllowed</label>
+                  <span>{boolLockLabel(adapter.liveSubmitAllowed)}</span>
+                  <label>Provider</label>
+                  <span>{adapter.providerSubmissionForbidden ? "locked / forbidden" : "allowed"}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <h3>Worker Envelope / Context Packet</h3>
+          <div className="adapter-contract-list">
+            {workerContracts.map((adapter) => (
+              <div key={adapter.id} className="adapter-contract-row">
+                <div className="row-head">
+                  <strong>{adapter.id}</strong>
+                  <StatusPill value={adapter.state} />
+                </div>
+                <div className="field-grid compact">
+                  <label>Envelope</label>
+                  <span>{adapter.requiredEnvelopeSchema}</span>
+                  <label>Context</label>
+                  <span>{adapter.mustReceiveContextPacket ? "required" : "optional"}</span>
+                  <label>Bypass</label>
+                  <span>{adapter.canBypassEnvelope ? "allowed" : "false / locked"}</span>
+                  <label>Read</label>
+                  <span>{adapter.readScopePolicy}</span>
+                  <label>Write</label>
+                  <span>{adapter.writeScopePolicy}</span>
+                  <label>Modes</label>
+                  <span>{adapter.allowedPurposes.join(", ")}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="settings-list adapter-violation-list">
+            <div>
+              <strong>Contract Violations</strong>
+              <small>{summary.contractViolations.length ? `${summary.contractViolations.length} violation(s)` : "none · provider locked · dry-run only"}</small>
+            </div>
+            {summary.contractViolations.slice(0, 4).map((violation) => (
+              <div key={`${violation.adapterId}-${violation.code}`}>
+                <strong>{violation.adapterId}</strong>
+                <small>{violation.severity} · {statusLabel(violation.code)} · {violation.detail}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const runtime = runtimeState.runtime;
   const config = runtime.config;
   const providerSummary = runtime.providerEnablementSummary;
+  const adapterSummary = runtimeState.adapterContracts.summary;
   const tools = runtime.detectionReport.tools;
   const sidecar = config.sidecarPermissions;
   const providerSlots = config.providerEnablement.slots;
@@ -2042,6 +2212,8 @@ function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) 
         <span>{providerSummary.liveSubmitAllowed ? "allowed" : "blocked"}</span>
         <label>Credentials</label>
         <span>{config.credentialStorage.mode}; secrets stored: {config.credentialStorage.storesSecrets ? "yes" : "no"}</span>
+        <label>Contract</label>
+        <span>{adapterSummary.providerAdapters.length} provider contract(s) · read-only · dry-run · provider locked</span>
       </div>
       <div className="settings-group-title">Tools</div>
       <div className="settings-list">
@@ -2078,6 +2250,12 @@ function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) 
       </div>
       <div className="settings-group-title">Provider Adapter Shell</div>
       <div className="settings-list adapter-settings-list">
+        <div className="settings-readonly-note">
+          <strong>Adapter Contract Status</strong>
+          <small>
+            {adapterSummary.activeImageProvider || "no active image provider"} · {adapterSummary.parkedVideoProviders.length} parked video provider(s) · {adapterSummary.contractViolations.length} violation(s)
+          </small>
+        </div>
         {providerAdapters.map((adapter) => (
           <div key={adapter.id}>
             <strong>{adapter.label}</strong>
@@ -2134,6 +2312,7 @@ function DiagnosticsMode({
       <ImagePipelineDiagnostics runtimeState={runtimeState} />
       <VideoPlanningDiagnostics runtimeState={runtimeState} />
       <VideoExecutionPreviewDiagnostics runtimeState={runtimeState} />
+      <AdapterContractDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />
       <section className="machine-panel">

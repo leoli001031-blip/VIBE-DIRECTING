@@ -599,6 +599,14 @@ Phase 6 已实现范围（核心合同）：
 - 新增 `schemas/adapter_contract.schema.json` 并纳入 `project_runtime_state.schema.json` 与 schema registry；`npm run import:test` 会生成同等 adapterContracts 状态，不依赖 TS 编译产物。
 - 新增 `npm run adapter:test`，覆盖 dry-run/read-only、未知 provider slot 禁止、Image2 active/dry-run、Seedance/Jimeng parked、worker/subagent envelope gate、无 credentials、无 live submit、无 arbitrary provider command。
 
+### Phase 8.2 已实现范围：Adapter Contract Diagnostics
+
+- Diagnostics 新增 `Adapter Contract Diagnostics`，只读展示 contract summary、agent/worker/provider contract 数量、active Image2 provider、parked video providers、contract violations。
+- Provider contract 以诊断列表展示 `id`、`state`、`slot`、`requiredModes`、capability refs 数量、dry-run/read-only/provider locked 状态；不展示 provider prompt、payload、密钥、登录或复杂配置参数。
+- Worker contract 展示 envelope schema、context packet required、bypass locked、read/write scope policy；不提供 bypass、freeform context、执行或提交入口。
+- Settings Shell 只加入轻量 read-only 摘要，继续不提供 enable provider、submit live、run adapter、save credentials 等操作。
+- `assertProjectRuntimeState` 追加 adapter contract 硬锁校验：agent/worker/provider 全部必须 dry-run/read-only/no-live/no-credential，Image2 三个 slot 必须分开，Seedance/Jimeng 必须 parked + `video.i2v/frames2video`，local postprocess 只能 planned。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

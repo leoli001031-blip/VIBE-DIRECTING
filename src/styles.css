@@ -1202,6 +1202,13 @@ small {
   margin-top: 12px;
 }
 
+.adapter-contract-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .video-diagnostics-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1210,6 +1217,7 @@ small {
 }
 
 .audio-diagnostics-grid > div,
+.adapter-contract-grid > div,
 .video-diagnostics-grid > div {
   min-width: 0;
   border: 1px solid rgba(236, 231, 223, 0.08);
@@ -1218,10 +1226,42 @@ small {
 }
 
 .audio-diagnostics-grid h3,
+.adapter-contract-grid h3,
 .video-diagnostics-grid h3 {
   margin-bottom: 8px;
   color: #bfb7aa;
   font-size: 12px;
+}
+
+.adapter-contract-locks {
+  margin-top: 12px;
+}
+
+.adapter-contract-list {
+  display: grid;
+  gap: 8px;
+}
+
+.adapter-contract-row {
+  min-width: 0;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 9px;
+}
+
+.adapter-contract-row .field-grid {
+  margin-top: 9px;
+}
+
+.adapter-contract-row strong,
+.adapter-contract-row span,
+.adapter-contract-row small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.adapter-violation-list {
+  margin-top: 8px;
 }
 
 .preview-export-grid > div {
@@ -1467,6 +1507,7 @@ small {
 
   .overview,
   .director-brief,
+  .adapter-contract-grid,
   .audio-diagnostics-grid,
   .video-diagnostics-grid,
   .machine-panel .summary-grid {
