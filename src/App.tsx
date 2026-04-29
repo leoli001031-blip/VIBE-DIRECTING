@@ -144,6 +144,7 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   const runtime = requireRecord(value, "runtime", issues);
   const previewExport = requireRecord(value, "previewExport", issues);
   const audioPlanning = requireRecord(value, "audioPlanning", issues);
+  const videoPlanning = requireRecord(value, "videoPlanning", issues);
   const draftPreview = requireRecord(previewExport, "draftPreview", issues);
   const draftPreviewSummary = requireRecord(draftPreview, "summary", issues);
   const formalPreview = requireRecord(previewExport, "formalPreview", issues);
@@ -196,6 +197,7 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   requireRecord(runtimeConfig, "providerEnablement", issues);
   requireRecord(runtimeConfig, "sidecarPermissions", issues);
   requireRecord(runtimeConfig, "credentialStorage", issues);
+  requireArray(runtimeConfig, "providerAdapterSettings", issues);
   requireArray(runtimeConfig, "voiceSources", issues);
   requireArray(detectionReport, "tools", issues);
   if (typeof detectionReport.generatedAt !== "string") issues.push("runtime.detectionReport.generatedAt");
@@ -206,8 +208,21 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   const audioVoiceSourceRegistry = requireRecord(audioPlanning, "voiceSourceRegistry", issues);
   const audioVideoProviderPolicy = requireRecord(audioPlanning, "videoProviderPolicy", issues);
   const audioExportPackageSummary = requireRecord(audioPlanning, "exportPackageSummary", issues);
+  const videoQueueShell = requireRecord(videoPlanning, "queueShell", issues);
+  const videoQueueCounts = requireRecord(videoQueueShell, "counts", issues);
+  const videoProviderPolicySummary = requireRecord(videoPlanning, "providerPolicySummary", issues);
+  const videoExecutionPreview = requireRecord(value, "videoExecutionPreview", issues);
+  const videoExecutionPreviewSummary = requireRecord(videoExecutionPreview, "summary", issues);
+  const adapterContracts = requireRecord(value, "adapterContracts", issues);
+  const adapterContractSummary = requireRecord(adapterContracts, "summary", issues);
   requireArray(audioPlanning, "providerSlots", issues);
   requireArray(audioPlanning, "notes", issues);
+  requireArray(videoPlanning, "readinessGates", issues);
+  requireArray(videoPlanning, "taskPlans", issues);
+  requireArray(videoPlanning, "notes", issues);
+  requireArray(adapterContracts, "agentAdapters", issues);
+  requireArray(adapterContracts, "workerAdapters", issues);
+  requireArray(adapterContracts, "providerAdapters", issues);
   requireArray(audioPreviewMix, "events", issues);
   if (typeof audioPreviewMix.eventCount !== "number") issues.push("audioPlanning.previewMix.eventCount");
   if (typeof audioPreviewMix.missingOutputPathCount !== "number") issues.push("audioPlanning.previewMix.missingOutputPathCount");
@@ -215,6 +230,107 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   if (typeof audioVoiceSourceRegistry.storesSecrets !== "boolean") issues.push("audioPlanning.voiceSourceRegistry.storesSecrets");
   if (audioVideoProviderPolicy.noBgmForVideoProvider !== true) issues.push("audioPlanning.videoProviderPolicy.noBgmForVideoProvider");
   if (audioExportPackageSummary.status !== "planned") issues.push("audioPlanning.exportPackageSummary.status");
+  if (typeof videoPlanning.schemaVersion !== "string") issues.push("videoPlanning.schemaVersion");
+  if (typeof videoPlanning.generatedAt !== "string") issues.push("videoPlanning.generatedAt");
+  if (typeof videoQueueShell.status !== "string") issues.push("videoPlanning.queueShell.status");
+  if (typeof videoQueueCounts.total !== "number") issues.push("videoPlanning.queueShell.counts.total");
+  if (videoQueueShell.providerSubmissionForbidden !== true) issues.push("videoPlanning.queueShell.providerSubmissionForbidden");
+  if (videoProviderPolicySummary.liveSubmitAllowed !== false) issues.push("videoPlanning.providerPolicySummary.liveSubmitAllowed");
+  if (videoProviderPolicySummary.providerSubmissionForbidden !== true) issues.push("videoPlanning.providerPolicySummary.providerSubmissionForbidden");
+  if (videoProviderPolicySummary.fastModelForbidden !== true) issues.push("videoPlanning.providerPolicySummary.fastModelForbidden");
+  if (videoProviderPolicySummary.vipChannelForbidden !== true) issues.push("videoPlanning.providerPolicySummary.vipChannelForbidden");
+  if (videoProviderPolicySummary.textToVideoForbidden !== true) issues.push("videoPlanning.providerPolicySummary.textToVideoForbidden");
+  if (videoPlanning.providerSubmissionForbidden !== true) issues.push("videoPlanning.providerSubmissionForbidden");
+  if (typeof videoExecutionPreview.schemaVersion !== "string") issues.push("videoExecutionPreview.schemaVersion");
+  if (typeof videoExecutionPreview.generatedAt !== "string") issues.push("videoExecutionPreview.generatedAt");
+  requireArray(videoExecutionPreview, "previews", issues);
+  requireArray(videoExecutionPreview, "notes", issues);
+  for (const key of ["total", "blocked", "parked", "previewReady", "canPreviewPacket", "canExecute"]) {
+    if (typeof videoExecutionPreviewSummary[key] !== "number") issues.push(`videoExecutionPreview.summary.${key}`);
+  }
+  if (videoExecutionPreviewSummary.canExecute !== 0) issues.push("videoExecutionPreview.summary.canExecute");
+  if (videoExecutionPreview.dryRunOnly !== true) issues.push("videoExecutionPreview.dryRunOnly");
+  if (videoExecutionPreview.providerSubmissionForbidden !== true) issues.push("videoExecutionPreview.providerSubmissionForbidden");
+  if (videoExecutionPreview.liveSubmitAllowed !== false) issues.push("videoExecutionPreview.liveSubmitAllowed");
+  if (Array.isArray(videoExecutionPreview.previews)) {
+    videoExecutionPreview.previews.forEach((preview, index) => {
+      if (!isRecord(preview)) {
+        issues.push(`videoExecutionPreview.previews.${index}`);
+        return;
+      }
+      const packet = requireRecord(preview, "subagentPacketPreview", issues);
+      requireArray(preview, "hardLocks", issues);
+      requireArray(preview, "executionOrderPreview", issues);
+      requireArray(preview, "blockers", issues);
+      requireArray(preview, "warnings", issues);
+      requireArray(packet, "requiredReadScopes", issues);
+      requireArray(packet, "forbiddenReadScopes", issues);
+      if (typeof preview.shotId !== "string") issues.push(`videoExecutionPreview.previews.${index}.shotId`);
+      if (typeof preview.status !== "string") issues.push(`videoExecutionPreview.previews.${index}.status`);
+      if (typeof preview.canPreviewPacket !== "boolean") issues.push(`videoExecutionPreview.previews.${index}.canPreviewPacket`);
+      if (preview.canExecute !== false) issues.push(`videoExecutionPreview.previews.${index}.canExecute`);
+      if (preview.dryRunOnly !== true) issues.push(`videoExecutionPreview.previews.${index}.dryRunOnly`);
+      if (preview.providerSubmissionForbidden !== true) issues.push(`videoExecutionPreview.previews.${index}.providerSubmissionForbidden`);
+      if (preview.liveSubmitAllowed !== false) issues.push(`videoExecutionPreview.previews.${index}.liveSubmitAllowed`);
+      const hardLocks = Array.isArray(preview.hardLocks) ? preview.hardLocks : [];
+      requiredVideoExecutionHardLocks.forEach((lock) => {
+        if (!hardLocks.includes(lock)) issues.push(`videoExecutionPreview.previews.${index}.hardLocks.${lock}`);
+      });
+    });
+  }
+  if (typeof adapterContracts.schemaVersion !== "string") issues.push("adapterContracts.schemaVersion");
+  if (adapterContractSummary.liveSubmitAllowed !== false) issues.push("adapterContracts.summary.liveSubmitAllowed");
+  if (adapterContractSummary.credentialStorage !== false) issues.push("adapterContracts.summary.credentialStorage");
+  requireArray(adapterContractSummary, "agentAdapters", issues);
+  requireArray(adapterContractSummary, "workerAdapters", issues);
+  requireArray(adapterContractSummary, "providerAdapters", issues);
+  requireArray(adapterContractSummary, "parkedVideoProviders", issues);
+  requireArray(adapterContractSummary, "contractViolations", issues);
+  if (Array.isArray(adapterContractSummary.contractViolations) && adapterContractSummary.contractViolations.length > 0) {
+    issues.push("adapterContracts.summary.contractViolations");
+  }
+  if (Array.isArray(adapterContracts.workerAdapters)) {
+    adapterContracts.workerAdapters.forEach((adapter, index) => {
+      if (!isRecord(adapter)) {
+        issues.push(`adapterContracts.workerAdapters.${index}`);
+        return;
+      }
+      if (adapter.requiredEnvelopeSchema !== "subagent_task_envelope.schema.json") issues.push(`adapterContracts.workerAdapters.${index}.requiredEnvelopeSchema`);
+      if (adapter.mustReceiveContextPacket !== true) issues.push(`adapterContracts.workerAdapters.${index}.mustReceiveContextPacket`);
+      if (adapter.canBypassEnvelope !== false) issues.push(`adapterContracts.workerAdapters.${index}.canBypassEnvelope`);
+      if (adapter.liveSubmitAllowed !== false) issues.push(`adapterContracts.workerAdapters.${index}.liveSubmitAllowed`);
+      if (adapter.credentialStorage !== false) issues.push(`adapterContracts.workerAdapters.${index}.credentialStorage`);
+    });
+  }
+  if (Array.isArray(adapterContracts.providerAdapters)) {
+    const providerAdapterIds = adapterContracts.providerAdapters
+      .filter((adapter): adapter is Record<string, unknown> => isRecord(adapter))
+      .map((adapter) => adapter.id);
+    for (const requiredId of ["image2-provider", "image2-edit-provider", "image2-reference-asset-provider", "seedance2-provider", "jimeng-video"]) {
+      if (!providerAdapterIds.includes(requiredId)) issues.push(`adapterContracts.providerAdapters.${requiredId}`);
+    }
+    adapterContracts.providerAdapters.forEach((adapter, index) => {
+      if (!isRecord(adapter)) {
+        issues.push(`adapterContracts.providerAdapters.${index}`);
+        return;
+      }
+      if (adapter.dryRunOnly !== true) issues.push(`adapterContracts.providerAdapters.${index}.dryRunOnly`);
+      if (adapter.readOnly !== true) issues.push(`adapterContracts.providerAdapters.${index}.readOnly`);
+      if (adapter.liveSubmitAllowed !== false) issues.push(`adapterContracts.providerAdapters.${index}.liveSubmitAllowed`);
+      if (adapter.credentialStorage !== false) issues.push(`adapterContracts.providerAdapters.${index}.credentialStorage`);
+      if (adapter.providerSubmissionForbidden !== true) issues.push(`adapterContracts.providerAdapters.${index}.providerSubmissionForbidden`);
+      if (adapter.arbitraryProviderCommandAllowed !== false) issues.push(`adapterContracts.providerAdapters.${index}.arbitraryProviderCommandAllowed`);
+      if ((adapter.id === "seedance2-provider" || adapter.id === "jimeng-video") && adapter.state !== "parked") {
+        issues.push(`adapterContracts.providerAdapters.${index}.state`);
+      }
+      if (adapter.id === "image2-provider" && (adapter.state !== "active" || adapter.slot !== "image.generate")) {
+        issues.push(`adapterContracts.providerAdapters.${index}.image2Generate`);
+      }
+      if (adapter.id === "image2-edit-provider" && (adapter.state !== "active" || adapter.slot !== "image.edit")) {
+        issues.push(`adapterContracts.providerAdapters.${index}.image2Edit`);
+      }
+    });
+  }
 
   if (issues.length) throw new Error(`runtime-state shape invalid: ${issues.join(", ")}`);
 }
@@ -241,6 +357,20 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
 }
 
 type ImagePipelineState = ProjectRuntimeState["imagePipeline"];
+type VideoPlanningState = ProjectRuntimeState["videoPlanning"];
+type VideoExecutionPreviewState = ProjectRuntimeState["videoExecutionPreview"];
+type VideoExecutionPreviewRow = VideoExecutionPreviewState["previews"][number];
+type VideoReadinessGateState = VideoPlanningState["readinessGates"][number];
+type VideoTaskPlanState = VideoPlanningState["taskPlans"][number];
+const requiredVideoExecutionHardLocks = [
+  "no_live_submit",
+  "no_fast_model",
+  "no_vip_channel",
+  "no_text_to_video_main_path",
+  "no_bgm_in_video_prompt",
+  "start_end_frames_required",
+  "subagent_must_use_packet",
+] as const;
 
 function emptyImagePipeline(): ImagePipelineState {
   return {
@@ -283,6 +413,143 @@ function getImagePipeline(runtimeState: ProjectRuntimeState): ImagePipelineState
     watcherEvents: pipeline.watcherEvents || [],
     generationHealthReports: pipeline.generationHealthReports || [],
     qaPromotionReports: pipeline.qaPromotionReports || [],
+  };
+}
+
+function emptyVideoPlanning(): VideoPlanningState {
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt: "",
+    readinessGates: [],
+    taskPlans: [],
+    queueShell: {
+      status: "empty",
+      counts: {
+        total: 0,
+        pending: 0,
+        ready: 0,
+        blocked: 0,
+        parked: 0,
+      },
+      concurrency: {
+        placeholder: true,
+        configuredLimit: 0,
+        activeProviderLimit: 0,
+        notes: [],
+      },
+      autoContinuePolicy: {
+        enabled: false,
+        mode: "manual_after_user_enablement",
+        providerSubmissionForbidden: true,
+        notes: [],
+      },
+      longQueueTimeout: {
+        placeholder: true,
+        stallTimeoutSeconds: 0,
+        action: "surface_waiting_state_only",
+        notes: [],
+      },
+      dryRunOnly: true,
+      providerSubmissionForbidden: true,
+      notes: ["Video planning defaults are shown because runtimeState.videoPlanning is unavailable."],
+    },
+    providerPolicySummary: {
+      videoProvidersRemainParked: true,
+      liveSubmitAllowed: false,
+      userEnablementRequired: true,
+      providerSubmissionForbidden: true,
+      fastModelForbidden: true,
+      vipChannelForbidden: true,
+      textToVideoForbidden: true,
+      parkedProviderIds: [],
+      notes: [],
+    },
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+    notes: [],
+  };
+}
+
+function getVideoPlanning(runtimeState: ProjectRuntimeState): VideoPlanningState {
+  const fallback = emptyVideoPlanning();
+  const planning = (runtimeState as Partial<ProjectRuntimeState>).videoPlanning;
+  if (!planning) return fallback;
+  return {
+    ...fallback,
+    ...planning,
+    readinessGates: planning.readinessGates || [],
+    taskPlans: planning.taskPlans || [],
+    queueShell: {
+      ...fallback.queueShell,
+      ...planning.queueShell,
+      counts: {
+        ...fallback.queueShell.counts,
+        ...planning.queueShell?.counts,
+      },
+      concurrency: {
+        ...fallback.queueShell.concurrency,
+        ...planning.queueShell?.concurrency,
+        notes: planning.queueShell?.concurrency?.notes || [],
+      },
+      autoContinuePolicy: {
+        ...fallback.queueShell.autoContinuePolicy,
+        ...planning.queueShell?.autoContinuePolicy,
+        notes: planning.queueShell?.autoContinuePolicy?.notes || [],
+      },
+      longQueueTimeout: {
+        ...fallback.queueShell.longQueueTimeout,
+        ...planning.queueShell?.longQueueTimeout,
+        notes: planning.queueShell?.longQueueTimeout?.notes || [],
+      },
+      notes: planning.queueShell?.notes || [],
+    },
+    providerPolicySummary: {
+      ...fallback.providerPolicySummary,
+      ...planning.providerPolicySummary,
+      parkedProviderIds: planning.providerPolicySummary?.parkedProviderIds || [],
+      notes: planning.providerPolicySummary?.notes || [],
+    },
+    notes: planning.notes || [],
+  };
+}
+
+function emptyVideoExecutionPreview(): VideoExecutionPreviewState {
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt: "",
+    previews: [],
+    summary: {
+      total: 0,
+      blocked: 0,
+      previewReady: 0,
+      parked: 0,
+      canPreviewPacket: 0,
+      canExecute: 0,
+    },
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+    liveSubmitAllowed: false,
+    notes: ["Video execution preview defaults are shown because runtimeState.videoExecutionPreview is unavailable."],
+  };
+}
+
+function getVideoExecutionPreview(runtimeState: ProjectRuntimeState): VideoExecutionPreviewState {
+  const fallback = emptyVideoExecutionPreview();
+  const preview = (runtimeState as Partial<ProjectRuntimeState>).videoExecutionPreview;
+  if (!preview) return fallback;
+  return {
+    ...fallback,
+    ...preview,
+    previews: preview.previews || [],
+    summary: {
+      ...fallback.summary,
+      ...preview.summary,
+      canExecute: 0,
+    },
+    notes: preview.notes || [],
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+    liveSubmitAllowed: false,
   };
 }
 
@@ -516,7 +783,7 @@ function ImagePipelineDiagnostics({ runtimeState }: { runtimeState: ProjectRunti
         <Metric label="Image Task Plans" value={`${pipeline.imageTaskPlans.length}`} detail={`${taskBlocked} blocked · ${taskReady} dry-run ready`} />
       </div>
       <div className="summary-grid pipeline-secondary">
-        <Metric label="Adapter Requests" value={`${pipeline.image2AdapterRequests.length}`} detail={`${dryRunOnly} dry run only · ${liveForbidden} live submit forbidden`} />
+        <Metric label="Adapter Requests" value={`${pipeline.image2AdapterRequests.length}`} detail={`${dryRunOnly} dry run only · ${liveForbidden} live path forbidden`} />
         <Metric label="Watcher Events" value={`${pipeline.watcherEvents.length}`} detail={Object.entries(watcherCounts).map(([key, value]) => `${value} ${statusLabel(key)}`).join(" · ") || "none"} />
         <Metric label="Health Reports" value={`${pipeline.generationHealthReports.length}`} detail={Object.entries(healthCounts).map(([key, value]) => `${value} ${statusLabel(key)}`).join(" · ") || "none"} />
         <Metric label="Promotion Reports" value={`${pipeline.qaPromotionReports.length}`} detail={Object.entries(promotionCounts).map(([key, value]) => `${value} ${statusLabel(key)}`).join(" · ") || "none"} />
@@ -587,7 +854,7 @@ function AudioDiagnosticsPanel({ audioPlanning }: { audioPlanning: AudioPlanning
             <span>{exportSummary.includedInExportProfiles.map(statusLabel).join(", ")}</span>
             <label>Dry Run</label>
             <span>{exportSummary.dryRunOnly ? "true" : "false"}</span>
-            <label>Submit</label>
+            <label>Provider</label>
             <span>{exportSummary.providerSubmissionForbidden ? "forbidden" : "allowed"}</span>
           </div>
           <CompactList
@@ -598,6 +865,134 @@ function AudioDiagnosticsPanel({ audioPlanning }: { audioPlanning: AudioPlanning
             empty="No export package notes."
           />
         </div>
+      </div>
+    </section>
+  );
+}
+
+function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const videoPlanning = getVideoPlanning(runtimeState);
+  const queue = videoPlanning.queueShell;
+  const policy = videoPlanning.providerPolicySummary;
+  const gateCounts = countBy(videoPlanning.readinessGates.map((gate) => gate.status));
+  const planCounts = countBy(videoPlanning.taskPlans.map((plan) => plan.status));
+  const queueCounts = countBy(videoPlanning.taskPlans.map((plan) => plan.queueStatus));
+
+  return (
+    <section className="machine-panel video-planning-diagnostics">
+      <div className="audit-head">
+        <LockKeyhole size={17} />
+        <span>Video Planning</span>
+      </div>
+      <div className="summary-grid">
+        <Metric label="Queue Shell" value={queue.status} detail={`${queue.counts.ready} ready · ${queue.counts.blocked} blocked · ${queue.counts.parked} parked`} />
+        <Metric label="Readiness Gates" value={`${videoPlanning.readinessGates.length}`} detail={`${gateCounts.ready || 0} ready · ${gateCounts.blocked || 0} blocked · ${gateCounts.parked || 0} parked`} />
+        <Metric label="Task Plans" value={`${videoPlanning.taskPlans.length}`} detail={`${planCounts.ready || 0} ready · ${planCounts.blocked || 0} blocked · ${planCounts.parked || 0} parked`} />
+        <Metric label="Provider Lock" value={policy.liveSubmitAllowed ? "unlocked" : "locked"} detail={`${policy.parkedProviderIds.length || 0} parked provider(s)`} />
+      </div>
+      <div className="video-diagnostics-grid">
+        <div>
+          <h3>Queue Shell</h3>
+          <div className="field-grid compact">
+            <label>Total</label>
+            <span>{queue.counts.total}</span>
+            <label>Pending</label>
+            <span>{queue.counts.pending}</span>
+            <label>Concurrency</label>
+            <span>{queue.concurrency.configuredLimit} configured · {queue.concurrency.activeProviderLimit} active</span>
+            <label>Auto</label>
+            <span>{queue.autoContinuePolicy.enabled ? "enabled" : queue.autoContinuePolicy.mode}</span>
+            <label>Timeout</label>
+            <span>{queue.longQueueTimeout.stallTimeoutSeconds}s · {queue.longQueueTimeout.action}</span>
+            <label>Dry Run</label>
+            <span>{queue.dryRunOnly ? "true" : "false"}</span>
+          </div>
+        </div>
+        <div>
+          <h3>Provider Policy</h3>
+          <div className="field-grid compact">
+            <label>Parked</label>
+            <span>{policy.videoProvidersRemainParked ? "true" : "false"}</span>
+            <label>Provider</label>
+            <span>{policy.providerSubmissionForbidden ? "forbidden" : "allowed"}</span>
+            <label>Fast</label>
+            <span>{policy.fastModelForbidden ? "forbidden" : "allowed"}</span>
+            <label>VIP</label>
+            <span>{policy.vipChannelForbidden ? "forbidden" : "allowed"}</span>
+            <label>T2V</label>
+            <span>{policy.textToVideoForbidden ? "forbidden" : "allowed"}</span>
+            <label>Providers</label>
+            <span>{policy.parkedProviderIds.join(", ") || "none listed"}</span>
+          </div>
+        </div>
+        <div>
+          <h3>Task Plan Counts</h3>
+          <CompactList
+            items={[
+              ...Object.entries(queueCounts).map(([status, count]) => `${status}: ${count}`),
+              ...videoPlanning.taskPlans.slice(0, 4).map((plan) => `${plan.shotId} · ${plan.providerId} · ${plan.queueStatus}`),
+            ]}
+            empty="No video task plans."
+          />
+        </div>
+      </div>
+      <div className="pipeline-details">
+        <details>
+          <summary>Queue notes ({queue.notes.length})</summary>
+          <CompactList items={[...queue.notes, ...queue.concurrency.notes, ...queue.autoContinuePolicy.notes, ...queue.longQueueTimeout.notes]} empty="No queue shell notes." />
+        </details>
+        <details>
+          <summary>Policy notes ({policy.notes.length})</summary>
+          <CompactList items={policy.notes} empty="No provider policy notes." />
+        </details>
+      </div>
+    </section>
+  );
+}
+
+function VideoExecutionPreviewDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const executionPreview = getVideoExecutionPreview(runtimeState);
+  const summary = executionPreview.summary;
+  const hardLocks = Array.from(new Set(executionPreview.previews.flatMap((preview) => preview.hardLocks)));
+  const previewRows = executionPreview.previews.slice(0, 6);
+
+  return (
+    <section className="machine-panel video-execution-preview-diagnostics">
+      <div className="audit-head">
+        <FileJson size={17} />
+        <span>Video Execution Preview</span>
+      </div>
+      <div className="summary-grid">
+        <Metric label="Total" value={`${summary.total}`} detail={`${summary.blocked} blocked · ${summary.parked} parked`} />
+        <Metric label="Preview Ready" value={`${summary.previewReady}`} detail={`${summary.canPreviewPacket} packet preview(s)`} />
+        <Metric label="Can Execute" value={`${summary.canExecute}`} detail="dry-run packet surface only" />
+        <Metric label="Hard Locks" value={executionPreview.liveSubmitAllowed ? "unlocked" : "locked"} detail={`${hardLocks.length} lock(s) active`} />
+      </div>
+      <div className="video-preview-locks">
+        <StatusPill value={executionPreview.providerSubmissionForbidden ? "provider forbidden" : "provider allowed"} />
+        <StatusPill value={executionPreview.liveSubmitAllowed ? "live allowed" : "live false"} />
+        <StatusPill value={executionPreview.dryRunOnly ? "dry-run only" : "dry-run off"} />
+        <StatusPill value={summary.canExecute === 0 ? "canExecute 0" : `canExecute ${summary.canExecute}`} />
+      </div>
+      <div className="video-execution-preview-list">
+        {previewRows.map((preview) => (
+          <div key={preview.previewId} className="video-execution-preview-row">
+            <span>{preview.shotId}</span>
+            <StatusPill value={preview.status} />
+            <small>Packet {preview.canPreviewPacket ? "previewable" : "blocked"} · canExecute {String(preview.canExecute)}</small>
+          </div>
+        ))}
+        {!previewRows.length && <p className="muted-copy">No Video Execution Preview rows in this runtime state.</p>}
+      </div>
+      <div className="pipeline-details">
+        <details>
+          <summary>Hard locks ({hardLocks.length})</summary>
+          <CompactList items={hardLocks} empty="No hard locks reported." />
+        </details>
+        <details>
+          <summary>Preview notes ({executionPreview.notes.length})</summary>
+          <CompactList items={executionPreview.notes} empty="No Video Execution Preview notes." />
+        </details>
       </div>
     </section>
   );
@@ -1027,6 +1422,61 @@ function AudioPlanSummaryStrip({ audioPlanning, selectedShot }: { audioPlanning:
   );
 }
 
+function firstVideoBlocker(gate?: VideoReadinessGateState, plan?: VideoTaskPlanState) {
+  return gate?.blockers[0]
+    || plan?.blockers[0]
+    || gate?.checks.find((check) => check.status === "blocked")?.detail
+    || "No selected-shot video blocker.";
+}
+
+function VideoPlanningSummaryStrip({
+  runtimeState,
+  selectedShot,
+}: {
+  runtimeState: ProjectRuntimeState;
+  selectedShot?: ShotRecord;
+}) {
+  const videoPlanning = getVideoPlanning(runtimeState);
+  const queue = videoPlanning.queueShell;
+  const policy = videoPlanning.providerPolicySummary;
+  const selectedGate = selectedShot ? videoPlanning.readinessGates.find((gate) => gate.shotId === selectedShot.id) : undefined;
+  const selectedPlan = selectedShot ? videoPlanning.taskPlans.find((plan) => plan.shotId === selectedShot.id) : undefined;
+  const readyGates = videoPlanning.readinessGates.filter((gate) => gate.status === "ready").length;
+  const blockedGates = videoPlanning.readinessGates.filter((gate) => gate.status === "blocked").length;
+
+  return (
+    <section className="video-plan-summary-strip">
+      <div className="audit-head">
+        <LockKeyhole size={17} />
+        <span>Video Prepare</span>
+      </div>
+      <div className="video-status-grid">
+        <div>
+          <span>Video Readiness</span>
+          <strong>{selectedGate?.status || `${readyGates}/${videoPlanning.readinessGates.length}`}</strong>
+          <small>{blockedGates} blocked gate(s)</small>
+        </div>
+        <div>
+          <span>Queue Shell</span>
+          <strong>{queue.status}</strong>
+          <small>{queue.counts.ready} ready · {queue.counts.parked} parked</small>
+        </div>
+        <div>
+          <span>Provider Lock</span>
+          <strong>{policy.liveSubmitAllowed ? "unlocked" : "locked"}</strong>
+          <small>{policy.parkedProviderIds.join(", ") || "providers parked"}</small>
+        </div>
+        <div>
+          <span>First Blocker</span>
+          <strong>{selectedShot ? selectedShot.id : "project"}</strong>
+          <small>{firstVideoBlocker(selectedGate, selectedPlan)}</small>
+        </div>
+      </div>
+      <small className="muted-copy">Readiness and queue shell only. Provider execution remains locked.</small>
+    </section>
+  );
+}
+
 function DirectorMode({
   audit,
   view,
@@ -1078,6 +1528,7 @@ function DirectorMode({
         <StoryWorkspace audit={audit} view={view} selectedShotId={selectedShotId} onSelectShot={onSelectShot} />
         <div className="director-side">
           <PreviewTimeline view={view} previewExport={runtimeState.previewExport} selectedShotId={selectedShotId} onSelectShot={onSelectShot} />
+          <VideoPlanningSummaryStrip runtimeState={runtimeState} selectedShot={selectedShot} />
           <AudioPlanSummaryStrip audioPlanning={runtimeState.audioPlanning} selectedShot={selectedShot} />
           <ExportProfilesPanel previewExport={runtimeState.previewExport} />
           <DirectorInput runtimeState={runtimeState} shot={selectedShot} asset={selectedAsset} nextStep={view.nextStep} />
@@ -1190,6 +1641,180 @@ function ShotAudioInspector({ audioPlanning, selectedShot }: { audioPlanning: Au
   );
 }
 
+function ruleValue(value: boolean) {
+  return value ? "true" : "false";
+}
+
+function formatFrameRef(ref?: VideoExecutionPreviewRow["subagentPacketPreview"]["startFrameRef"]) {
+  if (!ref) return "missing";
+  const path = ref.path ? ` · ${ref.path}` : "";
+  return `${ref.shotFrameId} · ${ref.present ? "present" : "missing"} · ${ref.source}${path}`;
+}
+
+function ShotExecutionPreviewInspector({
+  runtimeState,
+  selectedShot,
+}: {
+  runtimeState: ProjectRuntimeState;
+  selectedShot?: ShotRecord;
+}) {
+  if (!selectedShot) return <p className="muted-copy">Select a shot to inspect its Video Execution Preview.</p>;
+
+  const executionPreview = getVideoExecutionPreview(runtimeState);
+  const preview = executionPreview.previews.find((item) => item.shotId === selectedShot.id);
+  if (!preview) return <p className="muted-copy">No Video Execution Preview row found for {selectedShot.id}. Packet remains parked.</p>;
+
+  const packet = preview.subagentPacketPreview;
+  const packetLocks = [
+    `providerForbidden=${ruleValue(preview.providerSubmissionForbidden)}`,
+    `liveAllowed=${ruleValue(preview.liveSubmitAllowed)}`,
+    `dryRunOnly=${ruleValue(preview.dryRunOnly)}`,
+    `canPreviewPacket=${ruleValue(preview.canPreviewPacket)}`,
+    `canExecute=${ruleValue(preview.canExecute)}`,
+  ];
+
+  return (
+    <div className="shot-execution-preview-inspector">
+      <div className="field-grid compact">
+        <label>Status</label>
+        <span>{preview.status}</span>
+        <label>Packet</label>
+        <span>{preview.canPreviewPacket ? "previewable" : "blocked"}</span>
+        <label>Can Execute</label>
+        <span>{String(preview.canExecute)}</span>
+        <label>Context</label>
+        <span>{preview.contextLevel}</span>
+        <label>Purpose</label>
+        <span>{preview.subagentPurpose}</span>
+        <label>Provider</label>
+        <span>{preview.providerId} · {preview.providerSlot} / {preview.requiredMode}</span>
+        <label>Start</label>
+        <span>{formatFrameRef(packet.startFrameRef)}</span>
+        <label>End</label>
+        <span>{formatFrameRef(packet.endFrameRef)}</span>
+      </div>
+      <div className="video-rule-strip">
+        {packetLocks.map((rule) => (
+          <span key={rule}>{rule}</span>
+        ))}
+      </div>
+      <div className="video-preview-scope-grid">
+        <div>
+          <h3>Read Scopes</h3>
+          <CompactList items={packet.requiredReadScopes} empty="No read scopes listed." />
+        </div>
+        <div>
+          <h3>Forbidden Scopes</h3>
+          <CompactList items={packet.forbiddenReadScopes} empty="No forbidden scopes listed." />
+        </div>
+      </div>
+      <details className="pipeline-shot-details" open={Boolean(preview.blockers.length)}>
+        <summary>Blockers ({preview.blockers.length}) / warnings ({preview.warnings.length})</summary>
+        <CompactList items={[...preview.blockers.map((item) => `blocker: ${item}`), ...preview.warnings.map((item) => `warning: ${item}`)]} empty="No packet blockers or warnings." />
+      </details>
+      <details className="pipeline-shot-details">
+        <summary>Hard locks ({preview.hardLocks.length})</summary>
+        <CompactList items={preview.hardLocks} empty="No hard locks listed." />
+      </details>
+      <details className="pipeline-shot-details">
+        <summary>Dry-run order preview ({preview.executionOrderPreview.length})</summary>
+        <CompactList items={preview.executionOrderPreview.map((step, index) => `${index + 1}. ${statusLabel(step)}`)} empty="No dry-run order preview." />
+      </details>
+    </div>
+  );
+}
+
+function ShotVideoGateInspector({
+  runtimeState,
+  selectedShot,
+}: {
+  runtimeState: ProjectRuntimeState;
+  selectedShot?: ShotRecord;
+}) {
+  if (!selectedShot) return <p className="muted-copy">Select a shot to inspect its video readiness gate.</p>;
+
+  const videoPlanning = getVideoPlanning(runtimeState);
+  const gate = videoPlanning.readinessGates.find((item) => item.shotId === selectedShot.id);
+  const plan = videoPlanning.taskPlans.find((item) => item.shotId === selectedShot.id);
+
+  if (!gate && !plan) return <p className="muted-copy">No video planning record found for {selectedShot.id}. Provider lock remains active.</p>;
+
+  const derivation = gate?.keyframePairDerivation;
+  const preflight = plan?.preflightFacts;
+  const manifest = plan?.manifestFacts;
+  const hardRules = plan
+    ? [
+      `dryRunOnly=${ruleValue(plan.dryRunOnly)}`,
+      `providerSubmissionForbidden=${ruleValue(plan.providerSubmissionForbidden)}`,
+      `fastModelForbidden=${ruleValue(plan.fastModelForbidden)}`,
+      `vipChannelForbidden=${ruleValue(plan.vipChannelForbidden)}`,
+      `textToVideoForbidden=${ruleValue(plan.textToVideoForbidden)}`,
+      `noBgm=${ruleValue(plan.promptConstraints.some((constraint) => /no\s*bgm/i.test(constraint)))}`,
+      `liveSubmitAllowed=${ruleValue(plan.liveSubmitAllowed)}`,
+    ]
+    : [
+      `dryRunOnly=${ruleValue(gate?.dryRunOnly === true)}`,
+      `providerSubmissionForbidden=${ruleValue(gate?.providerSubmissionForbidden === true)}`,
+      "fastModelForbidden=true",
+      "vipChannelForbidden=true",
+      "textToVideoForbidden=true",
+      "noBgm=true",
+      "liveSubmitAllowed=false",
+    ];
+  const blockers = [
+    ...(gate?.blockers || []).map((item) => `gate: ${item}`),
+    ...(plan?.blockers || []).map((item) => `task: ${item}`),
+    ...(gate?.checks || []).filter((check) => check.status === "blocked").map((check) => `${check.label}: ${check.detail}`),
+  ];
+  const warnings = [
+    ...(gate?.warnings || []).map((item) => `gate: ${item}`),
+    ...(plan?.warnings || []).map((item) => `task: ${item}`),
+    ...(gate?.checks || []).filter((check) => check.status === "warning").map((check) => `${check.label}: ${check.detail}`),
+  ];
+
+  return (
+    <div className="shot-video-gate-inspector">
+      <div className="field-grid compact">
+        <label>Gate</label>
+        <span>{gate ? `${gate.status} · queue ${gate.canEnterQueueShell ? "prepared" : "blocked"}` : "missing"}</span>
+        <label>Task Plan</label>
+        <span>{plan ? `${plan.status} · ${plan.providerId} · ${plan.queueStatus}` : "missing"}</span>
+        <label>Frames</label>
+        <span>{gate ? `start ${gate.startFramePresent ? "present" : "missing"} · end ${gate.endFramePresent ? "present" : "missing"}` : "unknown"}</span>
+        <label>Mode</label>
+        <span>{plan ? `${plan.providerSlot} / ${plan.requiredMode}` : "video.i2v / frames2video"}</span>
+        <label>Pair</label>
+        <span>{derivation ? `${derivation.endDerivationSource} · i2v ${derivation.validForI2vPair ? "valid" : "blocked"}` : "not derived"}</span>
+        <label>Preserve</label>
+        <span>{derivation?.mustPreserve.join(", ") || "none"}</span>
+        <label>Preflight</label>
+        <span>{preflight ? `${preflight.status} · ${preflight.blockerCount} blockers · ${preflight.warningCount} warnings` : "not available"}</span>
+        <label>Manifest</label>
+        <span>{manifest ? `${manifest.status} · missing expected ${manifest.missingExpectedOutput ? "true" : "false"}` : "not available"}</span>
+        <label>Prompt</label>
+        <span>{plan?.promptConstraints.join(", ") || "no bgm provider prompt policy"}</span>
+        <label>Motion</label>
+        <span>{plan?.motionBrief || "not planned"}</span>
+      </div>
+      <div className="video-rule-strip">
+        {hardRules.map((rule) => (
+          <span key={rule}>{rule}</span>
+        ))}
+      </div>
+      <details className="pipeline-shot-details" open={Boolean(blockers.length)}>
+        <summary>Blockers ({blockers.length}) / warnings ({warnings.length})</summary>
+        <CompactList items={[...blockers, ...warnings]} empty="No shot-specific video blockers or warnings." />
+      </details>
+      {gate?.checks.length ? (
+        <details className="pipeline-shot-details">
+          <summary>Gate checks ({gate.checks.length})</summary>
+          <CompactList items={gate.checks.map((check) => `${check.status}: ${check.label} · ${check.detail}`)} empty="No gate checks." />
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 function InspectorMode({
   audit,
   view,
@@ -1263,6 +1888,20 @@ function InspectorMode({
             <span>Phase 4 Image Pipeline</span>
           </div>
           <ShotImagePipelineSummary runtimeState={runtimeState} selectedShot={selectedShot} />
+        </section>
+        <section className="machine-panel">
+          <div className="audit-head">
+            <LockKeyhole size={17} />
+            <span>Video Gate</span>
+          </div>
+          <ShotVideoGateInspector runtimeState={runtimeState} selectedShot={selectedShot} />
+        </section>
+        <section className="machine-panel">
+          <div className="audit-head">
+            <FileJson size={17} />
+            <span>Video Execution Preview</span>
+          </div>
+          <ShotExecutionPreviewInspector runtimeState={runtimeState} selectedShot={selectedShot} />
         </section>
         <section className="machine-panel">
           <div className="audit-head">
@@ -1385,6 +2024,7 @@ function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) 
   const tools = runtime.detectionReport.tools;
   const sidecar = config.sidecarPermissions;
   const providerSlots = config.providerEnablement.slots;
+  const providerAdapters = config.providerAdapterSettings || [];
   const voiceSources = config.voiceSources;
 
   return (
@@ -1398,7 +2038,7 @@ function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) 
         <span>{statusLabel(config.runtimeMode)} / {config.platform}</span>
         <label>Root Policy</label>
         <span>{statusLabel(config.projectRootPolicy.strategy)} · mac {config.projectRootPolicy.macPathStyle} · win {config.projectRootPolicy.windowsPathStyle}</span>
-        <label>Live Submit</label>
+        <label>Live Path</label>
         <span>{providerSummary.liveSubmitAllowed ? "allowed" : "blocked"}</span>
         <label>Credentials</label>
         <span>{config.credentialStorage.mode}; secrets stored: {config.credentialStorage.storesSecrets ? "yes" : "no"}</span>
@@ -1416,7 +2056,7 @@ function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) 
       <div className="settings-list">
         <div>
           <strong>Arbitrary shell</strong>
-          <small>{sidecar.arbitraryShellExecution}; {sidecar.providerLiveSubmit} provider live submit</small>
+          <small>{sidecar.arbitraryShellExecution}; {sidecar.providerLiveSubmit} provider live path</small>
         </div>
         <div>
           <strong>Allowed commands</strong>
@@ -1432,15 +2072,35 @@ function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) 
         {providerSlots.map((slot) => (
           <div key={slot.slot}>
             <strong>{slot.slot}</strong>
-            <small>{slot.state} · live submit {slot.liveSubmitAllowed ? "allowed" : "blocked"} · {(slot.allowedProviders.length ? slot.allowedProviders : ["planned"]).join(", ")}</small>
+            <small>{slot.state} · live path {slot.liveSubmitAllowed ? "allowed" : "blocked"} · {(slot.allowedProviders.length ? slot.allowedProviders : ["planned"]).join(", ")}</small>
           </div>
         ))}
+      </div>
+      <div className="settings-group-title">Provider Adapter Shell</div>
+      <div className="settings-list adapter-settings-list">
+        {providerAdapters.map((adapter) => (
+          <div key={adapter.id}>
+            <strong>{adapter.label}</strong>
+            <small>
+              {adapter.slot} / {adapter.requiredMode} · {adapter.state} · credentials {adapter.credentialStatus}
+            </small>
+            <small>
+              start/end {String(adapter.supports.startEndFrame)} · t2v {String(adapter.supports.textToVideo)} · fast {String(adapter.supports.fastModel)} · VIP {String(adapter.supports.vipChannel)}
+            </small>
+          </div>
+        ))}
+        {!providerAdapters.length && (
+          <div>
+            <strong>No adapters configured</strong>
+            <small>Runtime defaults will provide read-only adapter shells.</small>
+          </div>
+        )}
       </div>
       <div className="settings-group-title">Voice Sources (planned)</div>
       <div className="settings-list">
         <div className="settings-readonly-note">
           <strong>Read-only registry</strong>
-          <small>No credentials stored · no live submit · no API key input in Phase 6.</small>
+          <small>No credentials stored · no live path · no API key input in Phase 6.</small>
         </div>
         {voiceSources.map((source) => (
           <div key={source.id}>
@@ -1472,6 +2132,8 @@ function DiagnosticsMode({
     <div className="diagnostics-layout">
       <ProviderDock audit={audit} />
       <ImagePipelineDiagnostics runtimeState={runtimeState} />
+      <VideoPlanningDiagnostics runtimeState={runtimeState} />
+      <VideoExecutionPreviewDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />
       <section className="machine-panel">
@@ -1625,7 +2287,7 @@ function App() {
           </span>
           <button><FileJson size={16} /> Import Runtime Test</button>
           <button><Gauge size={16} /> Dry Check</button>
-          <button disabled><Play size={16} /> Live Submit Locked</button>
+          <button disabled><Play size={16} /> Provider Locked</button>
         </div>
       </header>
 

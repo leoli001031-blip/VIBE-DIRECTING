@@ -280,6 +280,80 @@ function providerEnablement() {
   };
 }
 
+function providerAdapterSettings() {
+  return [
+    {
+      id: "adapter-openai-image2-codex-cli",
+      label: "OpenAI Image2 via Codex CLI",
+      providerId: "openai-image2-codex-cli",
+      slot: "image.generate",
+      requiredMode: "text2image",
+      state: "active",
+      credentialStatus: "not_required",
+      dryRunOnly: true,
+      liveSubmitAllowed: false,
+      providerSubmissionForbidden: true,
+      supports: {
+        referenceImage: "planned",
+        startEndFrame: false,
+        textToVideo: false,
+        fastModel: false,
+        vipChannel: false,
+        bgmInVideoPrompt: false,
+        cameraControl: "textual",
+      },
+      forbiddenRoutes: ["fast_model", "vip_channel", "text_to_video_main_path", "bgm_in_video_prompt", "live_submit"],
+      notes: ["Image2 is the preferred still-image path; settings expose adapter facts only."],
+    },
+    {
+      id: "adapter-seedance2-provider",
+      label: "Seedance 2 I2V",
+      providerId: "seedance2-provider",
+      slot: "video.i2v",
+      requiredMode: "frames2video",
+      state: "parked",
+      credentialStatus: "not_configured",
+      dryRunOnly: true,
+      liveSubmitAllowed: false,
+      providerSubmissionForbidden: true,
+      supports: {
+        referenceImage: true,
+        startEndFrame: true,
+        textToVideo: "experimental_parked",
+        fastModel: false,
+        vipChannel: false,
+        bgmInVideoPrompt: false,
+        cameraControl: "planned",
+      },
+      forbiddenRoutes: ["fast_model", "vip_channel", "text_to_video_main_path", "bgm_in_video_prompt", "live_submit"],
+      notes: ["Adapter shell only. It can prepare frames-to-video envelopes later, but cannot submit provider tasks in Phase 7.2."],
+    },
+    {
+      id: "adapter-jimeng-video",
+      label: "Jimeng Video",
+      providerId: "jimeng-video",
+      slot: "video.i2v",
+      requiredMode: "frames2video",
+      state: "parked",
+      credentialStatus: "not_configured",
+      dryRunOnly: true,
+      liveSubmitAllowed: false,
+      providerSubmissionForbidden: true,
+      supports: {
+        referenceImage: true,
+        startEndFrame: true,
+        textToVideo: "experimental_parked",
+        fastModel: false,
+        vipChannel: false,
+        bgmInVideoPrompt: false,
+        cameraControl: "planned",
+      },
+      forbiddenRoutes: ["fast_model", "vip_channel", "text_to_video_main_path", "bgm_in_video_prompt", "live_submit"],
+      notes: ["Reserved as a future replaceable video adapter; no VIP or live route is enabled."],
+    },
+  ];
+}
+
 function summarizeProviderEnablement(enablement) {
   return {
     activeImageSlots: enablement.slots.filter((slot) => slot.slot.startsWith("image.") && slot.state === "active").length,
@@ -297,6 +371,7 @@ function buildRuntimeEnvironment(generatedAt) {
   const detectionReport = buildToolDetectionReport(generatedAt);
   const platform = detectionReport.platform;
   const enablement = providerEnablement();
+  const adapterSettings = providerAdapterSettings();
   const config = {
     schemaVersion: "0.1.0",
     runtimeMode: "browser_dev",
@@ -341,6 +416,7 @@ function buildRuntimeEnvironment(generatedAt) {
       git: toolPath("git", "Git", detectionReport, ["Optional diagnostics helper."]),
     },
     providerEnablement: enablement,
+    providerAdapterSettings: adapterSettings,
     sidecarPermissions: {
       arbitraryShellExecution: "blocked",
       providerLiveSubmit: "blocked",
@@ -705,6 +781,271 @@ function buildDefaultProviderRegistry(generatedAt) {
       "Video providers are parked and liveSubmitAllowed is false.",
     ],
   };
+}
+
+const adapterProviderSlots = [
+  "image.generate",
+  "image.edit",
+  "image.reference_asset",
+  "video.i2v",
+  "video.t2v.experimental",
+  "video.extend",
+  "video.edit",
+  "audio.tts",
+  "audio.music",
+  "local.postprocess",
+  "local.workflow",
+];
+
+function adapterCapabilityRefs(capabilities) {
+  return capabilities.map((capability) => capability.id).sort((left, right) => left.localeCompare(right));
+}
+
+function matchingAdapterCapabilities(providerRegistry, providerIds, slot, requiredModes) {
+  return providerRegistry.capabilities.filter(
+    (capability) =>
+      providerIds.includes(capability.providerId) &&
+      capability.slot === slot &&
+      requiredModes.includes(capability.requiredMode),
+  );
+}
+
+function adapterCapabilitySummary(capabilities) {
+  const outputKinds = Array.from(new Set(capabilities.map((capability) => capability.outputKind))).sort();
+  const supportsReferenceImage = capabilities.some((capability) => capability.supports.referenceImage)
+    ? true
+    : capabilities.some((capability) => capability.supports.mask === "planned")
+      ? "planned"
+      : false;
+  const supportsStartEndFrame = capabilities.some((capability) => capability.supports.startEndFrame)
+    ? true
+    : capabilities.some((capability) => capability.supports.cameraControl === "planned")
+      ? "planned"
+      : false;
+  const supportsTextToVideo = capabilities.some((capability) => capability.slot === "video.t2v.experimental")
+    ? "experimental_parked"
+    : false;
+  return { outputKinds, supportsReferenceImage, supportsStartEndFrame, supportsTextToVideo };
+}
+
+function providerAdapterContract(input) {
+  return {
+    kind: "provider",
+    dryRunOnly: true,
+    readOnly: true,
+    liveSubmitAllowed: false,
+    credentialStorage: false,
+    providerSubmissionForbidden: true,
+    arbitraryProviderCommandAllowed: false,
+    ...input,
+  };
+}
+
+function buildAdapterContractState(generatedAt, providerRegistry) {
+  const image2GenerateProviderIds = ["openai-image2-codex-cli"];
+  const image2ApiProviderIds = ["openai-image2-api"];
+  const seedanceProviderIds = ["seedance2-provider"];
+  const jimengProviderIds = ["jimeng-video"];
+  const image2GenerateCapabilities = matchingAdapterCapabilities(providerRegistry, image2GenerateProviderIds, "image.generate", ["text2image"]);
+  const image2EditCapabilities = matchingAdapterCapabilities(providerRegistry, image2ApiProviderIds, "image.edit", ["image2image"]);
+  const image2ReferenceCapabilities = matchingAdapterCapabilities(providerRegistry, image2ApiProviderIds, "image.reference_asset", ["text2image", "image2image"]);
+  const seedanceCapabilities = matchingAdapterCapabilities(providerRegistry, seedanceProviderIds, "video.i2v", ["frames2video"]);
+  const jimengCapabilities = matchingAdapterCapabilities(providerRegistry, jimengProviderIds, "video.i2v", ["frames2video"]);
+  const agentAdapters = [
+    {
+      id: "codex-cli-agent",
+      kind: "agent",
+      label: "Codex CLI Agent",
+      runtimeKind: "codex_cli",
+      state: "active",
+      dryRunOnly: true,
+      readOnly: true,
+      liveSubmitAllowed: false,
+      credentialStatus: "not_required",
+      credentialStorage: false,
+      uiBinding: false,
+      capabilities: {
+        canSpawnSubagents: true,
+        canUseImageRuntime: true,
+        contextPacketRequired: true,
+        supportsThreadHandoff: true,
+        supportsStructuredResult: true,
+      },
+      forbiddenRoutes: ["ui_binding", "live_submit", "credential_read", "credential_storage", "arbitrary_shell"],
+      notes: ["Default agent runtime contract; product logic must depend on capabilities, not Codex-specific identity."],
+    },
+  ];
+  const workerAdapters = [
+    {
+      id: "subagent-worker",
+      kind: "worker",
+      label: "Structured Subagent Worker",
+      state: "active",
+      dryRunOnly: true,
+      readOnly: true,
+      liveSubmitAllowed: false,
+      credentialStatus: "not_required",
+      credentialStorage: false,
+      requiredEnvelopeSchema: "subagent_task_envelope.schema.json",
+      allowedPurposes: [
+        "visual_generation",
+        "visual_audit",
+        "video_generation",
+        "video_audit",
+        "continuity_audit",
+        "regeneration_plan",
+        "story_audit",
+      ],
+      readScopePolicy: "context_packet_only",
+      writeScopePolicy: "declared_outputs_only",
+      mustReceiveContextPacket: true,
+      canBypassEnvelope: false,
+      forbiddenRoutes: ["freeform_context", "envelope_bypass", "live_submit", "credential_read", "credential_storage"],
+      notes: ["Worker/subagent execution must be mediated by subagent_task_envelope and a context packet."],
+    },
+  ];
+  const providerAdapters = [
+    providerAdapterContract({
+      id: "image2-provider",
+      label: "Image2 Generate Provider Contract",
+      providerIds: image2GenerateProviderIds,
+      slot: "image.generate",
+      requiredModes: ["text2image"],
+      state: "active",
+      credentialStatus: "not_required",
+      capabilityRefs: adapterCapabilityRefs(image2GenerateCapabilities),
+      capabilitySummary: adapterCapabilitySummary(image2GenerateCapabilities),
+      forbiddenRoutes: ["live_submit", "credential_read", "credential_storage", "arbitrary_provider_command"],
+      notes: ["Active Image2 text-to-image contract. It mirrors one provider slot/mode and remains dry-run/read-only."],
+    }),
+    providerAdapterContract({
+      id: "image2-edit-provider",
+      label: "Image2 Edit Provider Contract",
+      providerIds: image2ApiProviderIds,
+      slot: "image.edit",
+      requiredModes: ["image2image"],
+      state: "active",
+      credentialStatus: "not_required",
+      capabilityRefs: adapterCapabilityRefs(image2EditCapabilities),
+      capabilitySummary: adapterCapabilitySummary(image2EditCapabilities),
+      forbiddenRoutes: ["live_submit", "credential_read", "credential_storage", "arbitrary_provider_command"],
+      notes: ["Active Image2 image-to-image contract. It cannot fall back to text-to-image."],
+    }),
+    providerAdapterContract({
+      id: "image2-reference-asset-provider",
+      label: "Image2 Reference Asset Provider Contract",
+      providerIds: image2ApiProviderIds,
+      slot: "image.reference_asset",
+      requiredModes: ["text2image", "image2image"],
+      state: "active",
+      credentialStatus: "not_required",
+      capabilityRefs: adapterCapabilityRefs(image2ReferenceCapabilities),
+      capabilitySummary: adapterCapabilitySummary(image2ReferenceCapabilities),
+      forbiddenRoutes: ["live_submit", "credential_read", "credential_storage", "arbitrary_provider_command"],
+      notes: ["Active Image2 reference-asset contract. Text and edit modes stay explicit, never silent fallbacks."],
+    }),
+    providerAdapterContract({
+      id: "seedance2-provider",
+      label: "Seedance 2 Provider Contract",
+      providerIds: seedanceProviderIds,
+      slot: "video.i2v",
+      requiredModes: ["frames2video"],
+      state: "parked",
+      credentialStatus: "not_configured",
+      capabilityRefs: adapterCapabilityRefs(seedanceCapabilities),
+      capabilitySummary: adapterCapabilitySummary(seedanceCapabilities),
+      forbiddenRoutes: ["fast_model", "vip_channel", "text_to_video_main_path", "bgm_in_video_prompt", "live_submit", "credential_read", "credential_storage", "arbitrary_provider_command"],
+      notes: ["Parked video provider contract only; no Seedance submit route is connected."],
+    }),
+    providerAdapterContract({
+      id: "jimeng-video",
+      label: "Jimeng Video Provider Contract",
+      providerIds: jimengProviderIds,
+      slot: "video.i2v",
+      requiredModes: ["frames2video"],
+      state: "parked",
+      credentialStatus: "not_configured",
+      capabilityRefs: adapterCapabilityRefs(jimengCapabilities),
+      capabilitySummary: adapterCapabilitySummary(jimengCapabilities),
+      forbiddenRoutes: ["fast_model", "vip_channel", "text_to_video_main_path", "bgm_in_video_prompt", "live_submit", "credential_read", "credential_storage", "arbitrary_provider_command"],
+      notes: ["Parked future video adapter contract; no Jimeng submit route is connected."],
+    }),
+    providerAdapterContract({
+      id: "local-postprocess-planned",
+      label: "Local Postprocess Planned Contract",
+      providerIds: ["local-postprocess-planned"],
+      slot: "local.postprocess",
+      requiredModes: ["postprocess"],
+      state: "planned",
+      credentialStatus: "not_required",
+      capabilityRefs: [],
+      capabilitySummary: {
+        outputKinds: ["metadata"],
+        supportsReferenceImage: false,
+        supportsStartEndFrame: false,
+        supportsTextToVideo: false,
+      },
+      forbiddenRoutes: ["live_submit", "credential_read", "credential_storage", "arbitrary_provider_command"],
+      notes: ["Planned local workflow slot. It cannot be used as semantic image/video repair."],
+    }),
+  ];
+  const state = {
+    schemaVersion: "0.1.0",
+    generatedAt,
+    agentAdapters,
+    workerAdapters,
+    providerAdapters,
+    summary: {
+      agentAdapters: agentAdapters.map((adapter) => adapter.id),
+      workerAdapters: workerAdapters.map((adapter) => adapter.id),
+      providerAdapters: providerAdapters.map((adapter) => adapter.id),
+      activeImageProvider: "image2-provider",
+      parkedVideoProviders: providerAdapters.filter((adapter) => adapter.slot.startsWith("video.") && adapter.state === "parked").map((adapter) => adapter.id),
+      liveSubmitAllowed: false,
+      credentialStorage: false,
+      contractViolations: [],
+    },
+  };
+  state.summary.contractViolations = validateAdapterContractState(state, providerRegistry);
+  return state;
+}
+
+function validateAdapterContractState(state, providerRegistry = buildDefaultProviderRegistry()) {
+  const violations = [];
+  const capabilitiesById = new Map(providerRegistry.capabilities.map((capability) => [capability.id, capability]));
+  for (const adapter of state.agentAdapters || []) {
+    if (adapter.liveSubmitAllowed !== false) violations.push({ code: "live_submit_allowed", adapterId: adapter.id, severity: "blocker", detail: "Agent adapter cannot allow live submit." });
+    if (adapter.credentialStorage !== false) violations.push({ code: "credential_storage_enabled", adapterId: adapter.id, severity: "blocker", detail: "Agent adapter cannot store credentials." });
+    if (adapter.uiBinding !== false) violations.push({ code: "agent_ui_binding", adapterId: adapter.id, severity: "blocker", detail: "Agent adapter cannot bind to UI." });
+  }
+  for (const adapter of state.workerAdapters || []) {
+    if (adapter.liveSubmitAllowed !== false) violations.push({ code: "live_submit_allowed", adapterId: adapter.id, severity: "blocker", detail: "Worker adapter cannot allow live submit." });
+    if (adapter.credentialStorage !== false) violations.push({ code: "credential_storage_enabled", adapterId: adapter.id, severity: "blocker", detail: "Worker adapter cannot store credentials." });
+    if (adapter.requiredEnvelopeSchema !== "subagent_task_envelope.schema.json" || adapter.canBypassEnvelope !== false) violations.push({ code: "worker_envelope_bypass", adapterId: adapter.id, severity: "blocker", detail: "Worker adapter must use subagent_task_envelope." });
+    if (adapter.mustReceiveContextPacket !== true) violations.push({ code: "worker_context_packet_optional", adapterId: adapter.id, severity: "blocker", detail: "Worker adapter must receive a context packet." });
+  }
+  for (const adapter of state.providerAdapters || []) {
+    if (!adapterProviderSlots.includes(adapter.slot)) violations.push({ code: "unknown_provider_slot", adapterId: adapter.id, severity: "blocker", detail: `${adapter.slot} is not a known provider slot.` });
+    if (adapter.liveSubmitAllowed !== false) violations.push({ code: "live_submit_allowed", adapterId: adapter.id, severity: "blocker", detail: "Provider adapter cannot allow live submit." });
+    if (adapter.credentialStorage !== false) violations.push({ code: "credential_storage_enabled", adapterId: adapter.id, severity: "blocker", detail: "Provider adapter cannot store credentials." });
+    if (adapter.providerSubmissionForbidden !== true) violations.push({ code: "provider_submission_allowed", adapterId: adapter.id, severity: "blocker", detail: "Provider adapter must forbid provider submission." });
+    if (adapter.arbitraryProviderCommandAllowed !== false) violations.push({ code: "arbitrary_provider_command_allowed", adapterId: adapter.id, severity: "blocker", detail: "Provider adapter cannot allow arbitrary provider commands." });
+    const localPlaceholder = adapter.slot.startsWith("local.");
+    if (!localPlaceholder && adapter.capabilityRefs.length === 0) violations.push({ code: "capability_mismatch", adapterId: adapter.id, severity: "blocker", detail: "Provider adapter must reference at least one matching provider capability." });
+    for (const capabilityRef of adapter.capabilityRefs) {
+      const capability = capabilitiesById.get(capabilityRef);
+      if (!capability) {
+        violations.push({ code: "capability_mismatch", adapterId: adapter.id, severity: "blocker", detail: `${capabilityRef} is not registered in provider capabilities.` });
+        continue;
+      }
+      if (!adapter.providerIds.includes(capability.providerId) || capability.slot !== adapter.slot || !adapter.requiredModes.includes(capability.requiredMode)) {
+        violations.push({ code: "capability_mismatch", adapterId: adapter.id, severity: "blocker", detail: `${capabilityRef} does not match providerIds/slot/requiredModes for this adapter contract.` });
+      }
+    }
+    if (adapter.slot.startsWith("video.") && adapter.state !== "parked" && adapter.state !== "planned") violations.push({ code: "video_provider_not_parked", adapterId: adapter.id, severity: "blocker", detail: "Video providers must remain parked or planned." });
+    if (adapter.id === "image2-provider" && (adapter.state !== "active" || adapter.dryRunOnly !== true)) violations.push({ code: "image2_not_active_dry_run", adapterId: adapter.id, severity: "blocker", detail: "Image2 must be active and dry-run only." });
+  }
+  return violations;
 }
 
 function getCapabilityForJob(job, registry) {
@@ -1975,6 +2316,10 @@ function safeAudioId(value) {
   return String(value || "").replace(/[^a-zA-Z0-9_-]+/g, "_");
 }
 
+function safeId(value) {
+  return String(value || "").replace(/[^a-zA-Z0-9_-]+/g, "_");
+}
+
 function defaultVoiceSourceId(voiceSources) {
   const source = (voiceSources || []).find((item) => item.kind === "tts_voice" || item.kind === "voice_library");
   return source?.id || null;
@@ -2154,6 +2499,408 @@ function buildAudioPlanningState({ generatedAt, shots, runtimeConfig, previewEve
       "Phase 6 implements audio planning data contracts only.",
       "TTS and music provider slots remain planned and liveSubmitAllowed=false.",
       "BGM is not mixed into video provider prompts.",
+    ],
+  };
+}
+
+function isParkedState(state) {
+  return ["parked", "planned", "unavailable"].includes(state);
+}
+
+function videoCapabilities(registry) {
+  return (registry.capabilities || []).filter((capability) => capability.slot === "video.i2v");
+}
+
+function selectedVideoProviderId(job, registry) {
+  if (job?.providerId === "jimeng-video") return "jimeng-video";
+  if (job?.providerId === "seedance2-provider") return "seedance2-provider";
+  return registry.defaultProviderBySlot?.["video.i2v"] === "jimeng-video" ? "jimeng-video" : "seedance2-provider";
+}
+
+function selectedVideoCapability(providerId, registry) {
+  return (registry.capabilities || []).find(
+    (capability) =>
+      capability.slot === "video.i2v" &&
+      capability.requiredMode === "frames2video" &&
+      capability.providerId === providerId,
+  ) || videoCapabilities(registry)[0];
+}
+
+function buildVideoFallbackPairDerivation(shot) {
+  const hasFrames = Boolean(
+    shot.startFrame &&
+      shot.endFrame &&
+      !shot.issues.includes("missing_start_frame") &&
+      !shot.issues.includes("missing_end_frame"),
+  );
+  return {
+    shotId: shot.id,
+    startFrameId: shot.startFrame || `${shot.id}:start`,
+    endFrameId: shot.endFrame || `${shot.id}:end`,
+    endDerivationSource: hasFrames ? "start_frame" : "unknown",
+    validForI2vPair: hasFrames && shot.gates.pair === "PASS",
+    exceptionReason: hasFrames ? undefined : "Start or end keyframe is missing from runtime audit.",
+    allowedDelta: ["motion", "micro-expression", "camera movement"],
+    mustPreserve: ["character identity", "scene layout", "style capsule"],
+    mustNotAdd: ["new characters", "unapproved props", "text-to-video fallback"],
+  };
+}
+
+function videoReadinessCheck(id, label, status, required, detail, target) {
+  return { id, label, status, required, detail, target };
+}
+
+function videoRequiredGateCheck(field, value, shotId) {
+  return videoReadinessCheck(
+    `${field}_gate_pass`,
+    `${field} gate PASS`,
+    value === "PASS" ? "pass" : "blocked",
+    true,
+    `${field} gate is ${value}; Phase 7.1 requires PASS before video queue readiness.`,
+    shotId,
+  );
+}
+
+function videoNonRequiredGateCheck(field, value, shotId) {
+  if (value === "FAIL") {
+    return videoReadinessCheck(
+      `${field}_gate_not_fail`,
+      `${field} gate non-blocking`,
+      "blocked",
+      true,
+      `${field} gate is FAIL; only pair/story are required PASS, but FAIL still blocks video readiness.`,
+      shotId,
+    );
+  }
+  const status = value === "UNKNOWN" ? "warning" : value === "N/A" ? "not_applicable" : "pass";
+  return videoReadinessCheck(
+    `${field}_gate_non_blocking`,
+    `${field} gate may be PASS/PARTIAL/N/A`,
+    status,
+    false,
+    `${field} gate is ${value}; Phase 7.1 allows N/A only for identity/scene/prop/style.`,
+    shotId,
+  );
+}
+
+function matchingHardIssues(issues, shot, job) {
+  return (issues || []).filter((issue) => {
+    const target = issue.target || "";
+    const hard = issue.severity === "blocker" || /\bP0\b/i.test(issue.id) || /\bP0\b/i.test(issue.title) || /\bP0\b/i.test(issue.detail);
+    return hard && (!target || target.includes(shot.id) || Boolean(job?.id && target.includes(job.id)));
+  });
+}
+
+function buildVideoReadinessGate(shot, task, capability, audioPlanning, issues) {
+  const derivation = task?.envelope?.keyframePairDerivation || buildVideoFallbackPairDerivation(shot);
+  const startFramePresent = Boolean(shot.startFrame && !shot.issues.includes("missing_start_frame"));
+  const endFramePresent = Boolean(shot.endFrame && !shot.issues.includes("missing_end_frame"));
+  const hardIssues = matchingHardIssues(issues, shot, task?.job);
+  const checks = [
+    videoReadinessCheck("start_frame_present", "start frame present", startFramePresent ? "pass" : "blocked", true, startFramePresent ? "Shot has a start frame reference." : "Shot is missing a start frame reference.", shot.startFrame || shot.id),
+    videoReadinessCheck("end_frame_present", "end frame present", endFramePresent ? "pass" : "blocked", true, endFramePresent ? "Shot has an end frame reference." : "Shot is missing an end frame reference.", shot.endFrame || shot.id),
+    videoReadinessCheck("keyframe_pair_derivation_valid", "keyframe pair derivation valid", derivation.validForI2vPair ? "pass" : "blocked", true, derivation.validForI2vPair ? "Start/end frame derivation is valid for I2V." : "Start/end frame derivation is missing or invalid for I2V.", shot.id),
+    videoRequiredGateCheck("pair", shot.gates.pair, shot.id),
+    videoRequiredGateCheck("story", shot.gates.story, shot.id),
+    videoNonRequiredGateCheck("identity", shot.gates.identity, shot.id),
+    videoNonRequiredGateCheck("scene", shot.gates.scene, shot.id),
+    videoNonRequiredGateCheck("prop", shot.gates.prop, shot.id),
+    videoNonRequiredGateCheck("style", shot.gates.style, shot.id),
+    videoReadinessCheck("no_bgm_for_video_provider", "no BGM for video provider", audioPlanning.videoProviderPolicy.noBgmForVideoProvider ? "pass" : "blocked", true, audioPlanning.videoProviderPolicy.noBgmForVideoProvider ? "Audio planning forbids BGM in video provider prompts." : "Audio planning did not assert noBgmForVideoProvider=true.", shot.id),
+    videoReadinessCheck("video_provider_slot_parked", "video provider slot parked", isParkedState(capability?.executionState) && capability?.liveSubmitAllowed === false ? "pass" : "blocked", true, capability ? `Provider ${capability.providerId} is ${capability.executionState}; liveSubmitAllowed=${capability.liveSubmitAllowed}.` : "No parked video.i2v capability was found.", capability?.providerId),
+    videoReadinessCheck("preflight_facts_present", "preflight facts present", task?.envelope?.preflight ? "pass" : "blocked", true, task?.envelope?.preflight ? `Preflight status is ${task.envelope.preflight.status}.` : "No video task preflight report is available for this shot.", task?.job?.id || shot.id),
+    videoReadinessCheck("preflight_has_no_blockers", "preflight has no blockers", task?.envelope?.preflight && task.envelope.preflight.blockers.length === 0 ? "pass" : "blocked", true, task?.envelope?.preflight ? task.envelope.preflight.blockers.length === 0 ? "Video task preflight has no blockers." : `Video task preflight has ${task.envelope.preflight.blockers.length} blocker(s).` : "No video task preflight report is available for this shot.", task?.job?.id || shot.id),
+    videoReadinessCheck("manifest_facts_present", "manifest facts present", task?.manifestMatch ? "pass" : "blocked", true, task?.manifestMatch ? `Manifest status is ${task.manifestMatch.status}.` : "No video task manifest match report is available for this shot.", task?.job?.id || shot.id),
+    videoReadinessCheck("no_p0_or_blocker", "no P0/blocker", hardIssues.length ? "blocked" : "pass", true, hardIssues.length ? `${hardIssues.length} P0/blocker issue(s) apply to this video task.` : "No matching P0/blocker issue is attached to this shot or video job.", shot.id),
+  ];
+  const blockers = uniqueSorted(checks.filter((item) => item.required && item.status === "blocked").map((item) => item.detail));
+  const warnings = uniqueSorted([
+    ...checks.filter((item) => item.status === "warning").map((item) => item.detail),
+    ...(task?.envelope?.preflight?.warnings || []).map((item) => item.messageForUser),
+  ]);
+  return {
+    gateId: `video_readiness_${safeId(shot.id)}`,
+    shotId: shot.id,
+    status: blockers.length ? "blocked" : "parked",
+    canEnterQueueShell: blockers.length === 0,
+    canSubmitToProvider: false,
+    startFramePresent,
+    endFramePresent,
+    keyframePairDerivation: derivation,
+    allowedNaGateFields: ["identity", "scene", "prop", "style"],
+    checks,
+    blockers,
+    warnings,
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+  };
+}
+
+function videoFrameRef(shotId, kind, pathValue) {
+  return {
+    shotFrameId: pathValue || `${shotId}:${kind}`,
+    path: pathValue,
+    present: Boolean(pathValue),
+    source: pathValue ? "shot_record" : "missing",
+  };
+}
+
+function buildVideoTaskPlan(shot, task, gate, providerId, capability) {
+  const preflight = task?.envelope?.preflight;
+  const providerParked = isParkedState(capability?.executionState);
+  const status = gate.status === "blocked" ? "blocked" : providerParked ? "parked" : "ready";
+  return {
+    schemaVersion: "0.1.0",
+    taskPlanId: `video_task_plan_${safeId(shot.id)}`,
+    jobId: task?.job?.id || `video_${safeId(shot.id)}`,
+    shotId: shot.id,
+    readinessGateId: gate.gateId,
+    providerSlot: "video.i2v",
+    requiredMode: "frames2video",
+    providerId,
+    providerExecutionState: capability?.executionState || "parked",
+    status,
+    queueStatus: status,
+    startFrameRef: videoFrameRef(shot.id, "start", shot.startFrame),
+    endFrameRef: videoFrameRef(shot.id, "end", shot.endFrame),
+    durationSeconds: null,
+    durationPlaceholder: "derive_from_preview_event_or_motion_spec_later",
+    motionBrief: shot.storyFunction ? `Motion should preserve the shot function: ${shot.storyFunction}` : "Motion placeholder reserved for future provider enablement.",
+    promptConstraints: ["no bgm", "start/end frames only", "no text-to-video fallback", "no fast model", "no VIP channel", "preserve character identity, scene layout, and style capsule"],
+    preflightFacts: {
+      taskId: preflight?.taskId,
+      status: preflight?.status || "not_available",
+      blockerCount: preflight?.blockers?.length || 0,
+      warningCount: preflight?.warnings?.length || 0,
+    },
+    manifestFacts: {
+      status: task?.manifestMatch?.status || "not_available",
+      expectedOutputs: task?.taskRun?.expectedOutputs || [],
+      actualOutputs: task?.taskRun?.actualOutputs || [],
+      missingExpectedOutput: task ? task.manifestMatch.status === "missing_expected_output" : true,
+    },
+    blockers: uniqueSorted([...gate.blockers, ...(preflight?.blockers || []).map((item) => item.messageForUser)]),
+    warnings: uniqueSorted([...gate.warnings, ...(task?.queueGate?.warnings || []), "Provider submission is forbidden while video.i2v remains parked."]),
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+    fastModelForbidden: true,
+    vipChannelForbidden: true,
+    textToVideoForbidden: true,
+    liveSubmitAllowed: false,
+  };
+}
+
+function buildVideoQueueShell(taskPlans) {
+  const counts = {
+    total: taskPlans.length,
+    pending: taskPlans.filter((plan) => plan.queueStatus === "pending").length,
+    ready: taskPlans.filter((plan) => plan.queueStatus === "ready").length,
+    blocked: taskPlans.filter((plan) => plan.queueStatus === "blocked").length,
+    parked: taskPlans.filter((plan) => plan.queueStatus === "parked").length,
+  };
+  const status = counts.total === 0 ? "empty" : counts.blocked > 0 && (counts.parked > 0 || counts.ready > 0) ? "blocked_with_ready_gates" : counts.blocked > 0 ? "blocked" : counts.parked > 0 ? "parked" : "ready";
+  return {
+    status,
+    counts,
+    concurrency: {
+      placeholder: true,
+      configuredLimit: 1,
+      activeProviderLimit: 0,
+      notes: ["Concurrency is reserved for Phase 7 provider enablement; parked providers have active limit 0."],
+    },
+    autoContinuePolicy: {
+      enabled: false,
+      mode: "manual_after_user_enablement",
+      providerSubmissionForbidden: true,
+      notes: ["Auto-continue can only be enabled after the user explicitly enables a live video adapter."],
+    },
+    longQueueTimeout: {
+      placeholder: true,
+      stallTimeoutSeconds: 600,
+      action: "surface_waiting_state_only",
+      notes: ["Timeout handling is a queue shell placeholder and never queries Seedance/Jimeng in Phase 7.1."],
+    },
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+    notes: [
+      "Queue shell may display parked/blocked shot readiness, but it cannot submit provider tasks.",
+      "blocked_with_ready_gates is only a queue-level mixed state when at least one shot is blocked and at least one shot is enterable.",
+    ],
+  };
+}
+
+function buildVideoPlanningState({ generatedAt, shots, jobs, taskViews, providerRegistry, audioPlanning, issues }) {
+  const videoTasksByShot = new Map(
+    taskViews
+      .filter((task) => task.job.slot === "video.i2v")
+      .map((task) => [task.shotId || task.envelope.keyframePairDerivation?.shotId || task.job.id, task]),
+  );
+  const readinessGates = [];
+  const taskPlans = [];
+  for (const shot of shots) {
+    const task = videoTasksByShot.get(shot.id);
+    const job = task?.job || jobs.find((item) => item.slot === "video.i2v" && item.id.includes(shot.id));
+    const providerId = selectedVideoProviderId(job, providerRegistry);
+    const capability = selectedVideoCapability(providerId, providerRegistry);
+    const gate = buildVideoReadinessGate(shot, task, capability, audioPlanning, issues);
+    readinessGates.push(gate);
+    taskPlans.push(buildVideoTaskPlan(shot, task, gate, providerId, capability));
+  }
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt,
+    readinessGates,
+    taskPlans,
+    queueShell: buildVideoQueueShell(taskPlans),
+    providerPolicySummary: {
+      videoProvidersRemainParked: true,
+      liveSubmitAllowed: false,
+      userEnablementRequired: true,
+      providerSubmissionForbidden: true,
+      fastModelForbidden: true,
+      vipChannelForbidden: true,
+      textToVideoForbidden: true,
+      parkedProviderIds: uniqueSorted(videoCapabilities(providerRegistry).map((capability) => capability.providerId)),
+      notes: [
+        "Seedance/Jimeng video providers remain parked.",
+        "liveSubmitAllowed=false until a later explicit user enablement flow.",
+        "Fast, VIP, and text-to-video paths are forbidden for the default formal video path.",
+      ],
+    },
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+    notes: [
+      "Phase 7.1 creates video provider readiness and queue-shell contracts only.",
+      "No task is real-submit ready; providerSubmissionForbidden remains true.",
+    ],
+  };
+}
+
+const videoExecutionHardLocks = [
+  "no_live_submit",
+  "no_fast_model",
+  "no_vip_channel",
+  "no_text_to_video_main_path",
+  "no_bgm_in_video_prompt",
+  "start_end_frames_required",
+  "subagent_must_use_packet",
+];
+
+const videoExecutionOrderPreview = [
+  "prepare_subagent_packet",
+  "inspect_readiness_gate",
+  "compile_provider_adapter_payload_placeholder",
+  "wait_for_user_enablement",
+];
+
+function fallbackGateStatus() {
+  return {
+    identity: "UNKNOWN",
+    scene: "UNKNOWN",
+    prop: "UNKNOWN",
+    style: "UNKNOWN",
+    pair: "UNKNOWN",
+    story: "UNKNOWN",
+  };
+}
+
+function videoExecutionPreviewStatus(taskPlan, gate) {
+  if (taskPlan.status === "blocked" || gate?.status === "blocked" || taskPlan.blockers.length > 0 || (gate?.blockers?.length || 0) > 0) {
+    return "blocked";
+  }
+  if (taskPlan.status === "parked" || taskPlan.providerSubmissionForbidden) return "parked";
+  return "preview_ready";
+}
+
+function buildVideoSubagentPacketPreview(shot, taskPlan, gate, videoPlanning) {
+  const keyframePairDerivation = gate?.keyframePairDerivation;
+  return {
+    selectedShot: {
+      shotId: taskPlan.shotId,
+      storyFunction: shot?.storyFunction,
+      gateStatus: shot?.gates || fallbackGateStatus(),
+      taskStatus: taskPlan.status,
+      queueStatus: taskPlan.queueStatus,
+    },
+    startFrameRef: taskPlan.startFrameRef,
+    endFrameRef: taskPlan.endFrameRef,
+    keyframePairDerivation,
+    providerPolicySummary: videoPlanning.providerPolicySummary,
+    requiredReadScopes: [
+      "ProjectRuntimeState.storyFlow.shots",
+      "ProjectRuntimeState.videoPlanning.readinessGates",
+      "ProjectRuntimeState.videoPlanning.taskPlans",
+      "ProjectRuntimeState.videoPlanning.providerPolicySummary",
+      "ProjectRuntimeState.audioPlanning.videoProviderPolicy",
+      "ProjectRuntimeState.sourceIndex",
+    ],
+    forbiddenReadScopes: ["provider_credentials", "api_keys", "live_provider_task_ids", "outside_project_runtime_state", "unapproved_prompt_files"],
+    mustPreserve: keyframePairDerivation?.mustPreserve || ["character identity", "scene layout", "style capsule"],
+    allowedDelta: keyframePairDerivation?.allowedDelta || ["motion", "micro-expression", "camera movement"],
+    mustNotAdd: keyframePairDerivation?.mustNotAdd || ["new characters", "unapproved props", "text-to-video fallback"],
+    expectedOutputContract: {
+      format: "video_execution_preview_v1",
+      requiredFields: ["selectedShot", "startFrameRef", "endFrameRef", "keyframePairDerivation", "providerPolicySummary", "mustPreserve", "allowedDelta", "mustNotAdd"],
+      artifactPolicy: "no_real_prompt_file_no_provider_task",
+      resultScope: "structured_packet_preview_only",
+    },
+    requiredKnowledgeCategories: ["storyflow", "story_function", "camera", "performance", "provider", "qa"],
+  };
+}
+
+function buildVideoExecutionPreviewState({ generatedAt, shots, videoPlanning }) {
+  const shotsById = new Map(shots.map((shot) => [shot.id, shot]));
+  const gatesById = new Map(videoPlanning.readinessGates.map((gate) => [gate.gateId, gate]));
+  const previews = videoPlanning.taskPlans.map((taskPlan) => {
+    const shot = shotsById.get(taskPlan.shotId);
+    const gate = gatesById.get(taskPlan.readinessGateId);
+    const status = videoExecutionPreviewStatus(taskPlan, gate);
+    return {
+      previewId: `video_execution_preview_${safeId(taskPlan.shotId)}`,
+      shotId: taskPlan.shotId,
+      taskPlanId: taskPlan.taskPlanId,
+      readinessGateId: taskPlan.readinessGateId,
+      status,
+      providerId: taskPlan.providerId,
+      providerSlot: "video.i2v",
+      requiredMode: "frames2video",
+      contextLevel: "L2",
+      subagentPurpose: "video_generation",
+      instructionSummary:
+        status === "blocked"
+          ? "Structured packet cannot be prepared until inherited readiness blockers clear."
+          : "Structured packet may be inspected for a future parked I2V worker; provider handoff remains disabled.",
+      subagentPacketPreview: buildVideoSubagentPacketPreview(shot, taskPlan, gate, videoPlanning),
+      executionOrderPreview: videoExecutionOrderPreview,
+      hardLocks: videoExecutionHardLocks,
+      blockers: uniqueSorted([...(gate?.blockers || []), ...taskPlan.blockers]),
+      warnings: uniqueSorted([...(gate?.warnings || []), ...taskPlan.warnings, "Packet preview is read-only and waits for later user enablement before any adapter handoff."]),
+      canPreviewPacket: status !== "blocked",
+      canExecute: false,
+      dryRunOnly: true,
+      providerSubmissionForbidden: true,
+      liveSubmitAllowed: false,
+    };
+  });
+
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt,
+    previews,
+    summary: {
+      total: previews.length,
+      blocked: previews.filter((preview) => preview.status === "blocked").length,
+      previewReady: previews.filter((preview) => preview.status === "preview_ready").length,
+      parked: previews.filter((preview) => preview.status === "parked").length,
+      canPreviewPacket: previews.filter((preview) => preview.canPreviewPacket).length,
+      canExecute: 0,
+    },
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+    liveSubmitAllowed: false,
+    notes: [
+      "Phase 7.3 exposes structured subagent packet previews only.",
+      "No command, provider handoff, or real prompt artifact is created by this state.",
     ],
   };
 }
@@ -2533,6 +3280,21 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     runtimeConfig: runtime.config,
     previewEvents,
   });
+  const videoPlanning = buildVideoPlanningState({
+    generatedAt,
+    shots: audit.shots,
+    jobs: audit.jobs,
+    taskViews,
+    providerRegistry,
+    audioPlanning,
+    issues: audit.issues,
+  });
+  const videoExecutionPreview = buildVideoExecutionPreviewState({
+    generatedAt,
+    shots: audit.shots,
+    videoPlanning,
+  });
+  const adapterContracts = buildAdapterContractState(generatedAt, providerRegistry);
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -2602,6 +3364,9 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     previewEvents,
     previewExport,
     audioPlanning,
+    videoPlanning,
+    videoExecutionPreview,
+    adapterContracts,
     storyChanges: {
       transactions: [],
       reflowReports: [],

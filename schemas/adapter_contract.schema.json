@@ -1,0 +1,312 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/adapter_contract.schema.json",
+  "title": "AdapterContractState",
+  "description": "Dry-run/read-only adapter contracts for agent, worker, provider, and planned local workflow boundaries.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "agentAdapters", "workerAdapters", "providerAdapters", "summary"],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "agentAdapters": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/agentAdapterContract" }
+    },
+    "workerAdapters": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/workerAdapterContract" }
+    },
+    "providerAdapters": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/providerAdapterContract" }
+    },
+    "summary": { "$ref": "#/$defs/adapterContractSummary" }
+  },
+  "$defs": {
+    "credentialStatus": {
+      "type": "string",
+      "enum": ["not_required", "not_configured", "not_read"]
+    },
+    "violation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "adapterId", "severity", "detail"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "live_submit_allowed",
+            "credential_storage_enabled",
+            "provider_submission_allowed",
+            "arbitrary_provider_command_allowed",
+            "unknown_provider_slot",
+            "capability_mismatch",
+            "video_provider_not_parked",
+            "image2_not_active_dry_run",
+            "worker_envelope_bypass",
+            "worker_context_packet_optional",
+            "agent_ui_binding"
+          ]
+        },
+        "adapterId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "severity": { "type": "string", "enum": ["blocker", "warning"] },
+        "detail": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "agentAdapterContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "runtimeKind",
+        "state",
+        "dryRunOnly",
+        "readOnly",
+        "liveSubmitAllowed",
+        "credentialStatus",
+        "credentialStorage",
+        "uiBinding",
+        "capabilities",
+        "forbiddenRoutes",
+        "notes"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "kind": { "const": "agent" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "runtimeKind": { "type": "string", "enum": ["codex_cli", "future_cli", "local_agent", "unknown"] },
+        "state": { "$ref": "common.schema.json#/$defs/providerExecutionState" },
+        "dryRunOnly": { "const": true },
+        "readOnly": { "const": true },
+        "liveSubmitAllowed": { "const": false },
+        "credentialStatus": { "$ref": "#/$defs/credentialStatus" },
+        "credentialStorage": { "const": false },
+        "uiBinding": { "const": false },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "canSpawnSubagents",
+            "canUseImageRuntime",
+            "contextPacketRequired",
+            "supportsThreadHandoff",
+            "supportsStructuredResult"
+          ],
+          "properties": {
+            "canSpawnSubagents": { "type": "boolean" },
+            "canUseImageRuntime": { "type": "boolean" },
+            "contextPacketRequired": { "type": "boolean" },
+            "supportsThreadHandoff": { "type": "boolean" },
+            "supportsStructuredResult": { "type": "boolean" }
+          }
+        },
+        "forbiddenRoutes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["ui_binding", "live_submit", "credential_read", "credential_storage", "arbitrary_shell"]
+          }
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "workerAdapterContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "state",
+        "dryRunOnly",
+        "readOnly",
+        "liveSubmitAllowed",
+        "credentialStatus",
+        "credentialStorage",
+        "requiredEnvelopeSchema",
+        "allowedPurposes",
+        "readScopePolicy",
+        "writeScopePolicy",
+        "mustReceiveContextPacket",
+        "canBypassEnvelope",
+        "forbiddenRoutes",
+        "notes"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "kind": { "const": "worker" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "state": { "$ref": "common.schema.json#/$defs/providerExecutionState" },
+        "dryRunOnly": { "const": true },
+        "readOnly": { "const": true },
+        "liveSubmitAllowed": { "const": false },
+        "credentialStatus": { "$ref": "#/$defs/credentialStatus" },
+        "credentialStorage": { "const": false },
+        "requiredEnvelopeSchema": { "const": "subagent_task_envelope.schema.json" },
+        "allowedPurposes": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/knowledgeTaskPurpose" }
+        },
+        "readScopePolicy": { "type": "string", "enum": ["context_packet_only", "project_readonly"] },
+        "writeScopePolicy": { "type": "string", "enum": ["declared_outputs_only", "no_writes"] },
+        "mustReceiveContextPacket": { "const": true },
+        "canBypassEnvelope": { "const": false },
+        "forbiddenRoutes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["freeform_context", "envelope_bypass", "live_submit", "credential_read", "credential_storage"]
+          }
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "providerAdapterContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "providerIds",
+        "slot",
+        "requiredModes",
+        "state",
+        "dryRunOnly",
+        "readOnly",
+        "liveSubmitAllowed",
+        "credentialStatus",
+        "credentialStorage",
+        "providerSubmissionForbidden",
+        "arbitraryProviderCommandAllowed",
+        "capabilityRefs",
+        "capabilitySummary",
+        "forbiddenRoutes",
+        "notes"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "kind": { "const": "provider" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "slot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+        "requiredModes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common.schema.json#/$defs/requiredMode" }
+        },
+        "state": { "$ref": "common.schema.json#/$defs/providerExecutionState" },
+        "dryRunOnly": { "const": true },
+        "readOnly": { "const": true },
+        "liveSubmitAllowed": { "const": false },
+        "credentialStatus": { "$ref": "#/$defs/credentialStatus" },
+        "credentialStorage": { "const": false },
+        "providerSubmissionForbidden": { "const": true },
+        "arbitraryProviderCommandAllowed": { "const": false },
+        "capabilityRefs": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "capabilitySummary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outputKinds", "supportsReferenceImage", "supportsStartEndFrame", "supportsTextToVideo"],
+          "properties": {
+            "outputKinds": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["image", "video", "audio", "metadata"] }
+            },
+            "supportsReferenceImage": { "type": ["boolean", "string"], "enum": [true, false, "planned"] },
+            "supportsStartEndFrame": { "type": ["boolean", "string"], "enum": [true, false, "planned"] },
+            "supportsTextToVideo": { "type": ["boolean", "string"], "enum": [false, "experimental_parked"] }
+          }
+        },
+        "forbiddenRoutes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "fast_model",
+              "vip_channel",
+              "text_to_video_main_path",
+              "bgm_in_video_prompt",
+              "live_submit",
+              "credential_read",
+              "credential_storage",
+              "arbitrary_provider_command"
+            ]
+          }
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "slot": {
+                "type": "string",
+                "pattern": "^video\\."
+              }
+            },
+            "required": ["slot"]
+          },
+          "then": {
+            "properties": {
+              "state": { "type": "string", "enum": ["parked", "planned"] },
+              "liveSubmitAllowed": { "const": false }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": { "const": "image2-provider" }
+            },
+            "required": ["id"]
+          },
+          "then": {
+            "properties": {
+              "state": { "const": "active" },
+              "dryRunOnly": { "const": true },
+              "liveSubmitAllowed": { "const": false }
+            }
+          }
+        }
+      ]
+    },
+    "adapterContractSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agentAdapters",
+        "workerAdapters",
+        "providerAdapters",
+        "activeImageProvider",
+        "parkedVideoProviders",
+        "liveSubmitAllowed",
+        "credentialStorage",
+        "contractViolations"
+      ],
+      "properties": {
+        "agentAdapters": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" } },
+        "workerAdapters": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" } },
+        "providerAdapters": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" } },
+        "activeImageProvider": { "const": "image2-provider" },
+        "parkedVideoProviders": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" } },
+        "liveSubmitAllowed": { "const": false },
+        "credentialStorage": { "const": false },
+        "contractViolations": { "type": "array", "items": { "$ref": "#/$defs/violation" } }
+      }
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import type {
   ProjectRuntimeEnvironment,
   ProviderEnablementEntry,
+  ProviderAdapterSetting,
   RuntimeConfig,
   RuntimePlatform,
   RuntimeProviderEnablementSummary,
@@ -137,6 +138,80 @@ export function buildProviderEnablement(): RuntimeConfig["providerEnablement"] {
   };
 }
 
+export function buildProviderAdapterSettings(): ProviderAdapterSetting[] {
+  return [
+    {
+      id: "adapter-openai-image2-codex-cli",
+      label: "OpenAI Image2 via Codex CLI",
+      providerId: "openai-image2-codex-cli",
+      slot: "image.generate",
+      requiredMode: "text2image",
+      state: "active",
+      credentialStatus: "not_required",
+      dryRunOnly: true,
+      liveSubmitAllowed: false,
+      providerSubmissionForbidden: true,
+      supports: {
+        referenceImage: "planned",
+        startEndFrame: false,
+        textToVideo: false,
+        fastModel: false,
+        vipChannel: false,
+        bgmInVideoPrompt: false,
+        cameraControl: "textual",
+      },
+      forbiddenRoutes: ["fast_model", "vip_channel", "text_to_video_main_path", "bgm_in_video_prompt", "live_submit"],
+      notes: ["Image2 is the preferred still-image path; settings expose adapter facts only."],
+    },
+    {
+      id: "adapter-seedance2-provider",
+      label: "Seedance 2 I2V",
+      providerId: "seedance2-provider",
+      slot: "video.i2v",
+      requiredMode: "frames2video",
+      state: "parked",
+      credentialStatus: "not_configured",
+      dryRunOnly: true,
+      liveSubmitAllowed: false,
+      providerSubmissionForbidden: true,
+      supports: {
+        referenceImage: true,
+        startEndFrame: true,
+        textToVideo: "experimental_parked",
+        fastModel: false,
+        vipChannel: false,
+        bgmInVideoPrompt: false,
+        cameraControl: "planned",
+      },
+      forbiddenRoutes: ["fast_model", "vip_channel", "text_to_video_main_path", "bgm_in_video_prompt", "live_submit"],
+      notes: ["Adapter shell only. It can prepare frames-to-video envelopes later, but cannot submit provider tasks in Phase 7.2."],
+    },
+    {
+      id: "adapter-jimeng-video",
+      label: "Jimeng Video",
+      providerId: "jimeng-video",
+      slot: "video.i2v",
+      requiredMode: "frames2video",
+      state: "parked",
+      credentialStatus: "not_configured",
+      dryRunOnly: true,
+      liveSubmitAllowed: false,
+      providerSubmissionForbidden: true,
+      supports: {
+        referenceImage: true,
+        startEndFrame: true,
+        textToVideo: "experimental_parked",
+        fastModel: false,
+        vipChannel: false,
+        bgmInVideoPrompt: false,
+        cameraControl: "planned",
+      },
+      forbiddenRoutes: ["fast_model", "vip_channel", "text_to_video_main_path", "bgm_in_video_prompt", "live_submit"],
+      notes: ["Reserved as a future replaceable video adapter; no VIP or live route is enabled."],
+    },
+  ];
+}
+
 function pathStatusFromDetection(tool?: ToolDetectionItem): RuntimeToolPath["status"] {
   if (!tool) return "unknown";
   if (tool.status === "available" && tool.path) return "path";
@@ -175,6 +250,7 @@ export function buildRuntimeConfig(options: {
   const platform = options.platform || options.detectionReport?.platform || "unknown";
   const toolById = new Map((options.detectionReport?.tools || []).map((tool) => [tool.id, tool]));
   const providerEnablement = buildProviderEnablement();
+  const providerAdapterSettings = buildProviderAdapterSettings();
 
   return {
     schemaVersion: runtimeConfigSchemaVersion,
@@ -220,6 +296,7 @@ export function buildRuntimeConfig(options: {
       git: mergeToolPath(defaultToolPaths.git, toolById.get("git")),
     },
     providerEnablement,
+    providerAdapterSettings,
     sidecarPermissions: {
       arbitraryShellExecution: "blocked",
       providerLiveSubmit: "blocked",
@@ -368,6 +445,7 @@ export function ensureRuntimeEnvironment(
         ...runtime.config,
         toolPaths: { ...fallback.config.toolPaths, ...runtime.config.toolPaths },
         providerEnablement: runtime.config.providerEnablement,
+        providerAdapterSettings: runtime.config.providerAdapterSettings || fallback.config.providerAdapterSettings,
         sidecarPermissions: runtime.config.sidecarPermissions || fallback.config.sidecarPermissions,
         credentialStorage: runtime.config.credentialStorage || fallback.config.credentialStorage,
         voiceSources: runtime.config.voiceSources || fallback.config.voiceSources,

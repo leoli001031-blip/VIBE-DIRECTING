@@ -537,6 +537,31 @@ Phase 6 已实现范围（核心合同）：
 - 视频任务可以排队、续跑、显示等待、失败重试。
 - 用户不需要持续点击提交下一条。
 
+### Phase 7.1 已实现范围：Video Provider Readiness / Queue Shell
+
+- `ProjectRuntimeState.videoPlanning` 写入 shot-level video readiness gates、dry-run `VideoTaskPlan`、queue shell summary、provider policy summary。
+- 每个 shot 检查 start/end frame、keyframe pair derivation、pair/story gate、no-BGM policy、parked video provider、manifest/preflight facts、P0/blocker；identity/scene/prop/style 允许 `N/A`，但 `FAIL` 仍阻断。
+- `VideoTaskPlan` 固定 `providerSlot=video.i2v`、`requiredMode=frames2video`、Seedance/Jimeng parked provider path，并强制 `dryRunOnly=true`、`providerSubmissionForbidden=true`、`fastModelForbidden=true`、`vipChannelForbidden=true`、`textToVideoForbidden=true`。
+- Queue shell 只统计 pending/ready/blocked/parked、并发 placeholder、auto-continue placeholder、long queue timeout placeholder；不会提交 Seedance/Jimeng。
+- Provider policy summary 明确 video providers remain parked、`liveSubmitAllowed=false`、后续必须用户显式 enablement。
+
+### Phase 7.2 已实现范围：Adapter Settings Shell / Video Queue Tests
+
+- `RuntimeConfig.providerAdapterSettings` 记录 Image2、Seedance 2、Jimeng 的 read-only adapter shell；只展示 provider/slot/mode/credential/support facts，不保存 API key，不提交 provider。
+- Seedance/Jimeng adapter shell 固定 `slot=video.i2v`、`requiredMode=frames2video`、`state=parked`、`liveSubmitAllowed=false`、`providerSubmissionForbidden=true`。
+- Adapter shell 明确禁止 `fast_model`、`vip_channel`、`text_to_video_main_path`、`bgm_in_video_prompt`、`live_submit`。
+- Settings Shell 只展示 provider adapter readiness，不提供启用、登录、保存密钥或提交入口。
+- 新增 `npm run video:test`，覆盖 empty / blocked / parked / ready / blocked+parked / blocked+ready / blocked+pending 队列状态，并检查 runtime-state 中所有 video task plan 和 adapter shell 的硬锁。
+
+### Phase 7.3 已实现范围：Video Execution Preview / Subagent Packet Preview
+
+- `ProjectRuntimeState.videoExecutionPreview` 从 `videoPlanning.taskPlans` 和 readiness gates 派生一条只读 execution preview；每条 preview 绑定 `shotId`、`taskPlanId`、`readinessGateId`、`providerSlot=video.i2v`、`requiredMode=frames2video`。
+- Preview 状态区分 `blocked`、`preview_ready`、`parked`；blocked task 继承 task/gate blockers 且 `canPreviewPacket=false`，所有 preview 都固定 `canExecute=false`、`dryRunOnly=true`、`providerSubmissionForbidden=true`、`liveSubmitAllowed=false`。
+- `subagentPacketPreview` 是结构化摘要，不是自由 prompt；包含 selected shot、start/end frame refs、keyframe pair derivation、provider policy summary、read scope allow/deny、mustPreserve/allowedDelta/mustNotAdd、expected output contract 和 required knowledge categories。
+- Hard locks 固定包含 `no_live_submit`、`no_fast_model`、`no_vip_channel`、`no_text_to_video_main_path`、`no_bgm_in_video_prompt`、`start_end_frames_required`、`subagent_must_use_packet`。
+- Execution order 只展示未来顺序：`prepare_subagent_packet -> inspect_readiness_gate -> compile_provider_adapter_payload_placeholder -> wait_for_user_enablement`；Phase 7.3 不执行命令、不提交 Seedance/Jimeng、不写真实 prompt 文件。
+- 新增 `schemas/video_execution_preview.schema.json` 并纳入 schema registry 与 `project_runtime_state.schema.json`；`npm run import:test` 会生成 runtime-state 中的 preview，`npm run video:test` 覆盖 preview hard locks、blocked/canExecute 规则和执行暗示禁用。
+
 ## Phase 8：Multi-provider Expansion
 
 目标：让 Vibe Core 能替换 Codex CLI、Image2、视频模型或本地 workflow，而不是重写产品。
@@ -563,6 +588,16 @@ Phase 6 已实现范围（核心合同）：
 
 - Codex CLI 是默认实现，而不是唯一架构。
 - 未来替换 CLI 或模型时，核心项目格式和合同层不需要推翻。
+
+### Phase 8.1 已实现范围：Adapter Contract Skeleton
+
+- `ProjectRuntimeState.adapterContracts` 写入只读/dry-run adapter contract state，覆盖 `codex-cli-agent`、`subagent-worker`、Image2 分 slot 合同（`image2-provider`、`image2-edit-provider`、`image2-reference-asset-provider`）、`seedance2-provider`、`jimeng-video`、`local-postprocess-planned`。
+- AgentAdapter 只声明 agent runtime 能力：subagent、Image2 runtime、context packet、thread handoff、structured result；不绑定 UI，不保存 credentials，不允许 live submit。
+- WorkerAdapter 固定通过 `subagent_task_envelope.schema.json` 和 context packet 执行，声明 allowed purposes、read/write scope policy，并禁止 freeform context / envelope bypass。
+- ProviderAdapter 只声明 provider slot / required mode / capability refs / policy；同一个 provider 能力必须按 slot/mode 对齐，不能把 `image.generate`、`image.edit`、`image.reference_asset` 混成一个可执行入口。Image2 是 active + dry-run only，Seedance/Jimeng video parked，local postprocess planned。
+- Contract summary 提供后续 UI 可直接读取的 adapter id 摘要、active image provider、parked video providers、`liveSubmitAllowed=false`、`credentialStorage=false`、contract violations。
+- 新增 `schemas/adapter_contract.schema.json` 并纳入 `project_runtime_state.schema.json` 与 schema registry；`npm run import:test` 会生成同等 adapterContracts 状态，不依赖 TS 编译产物。
+- 新增 `npm run adapter:test`，覆盖 dry-run/read-only、未知 provider slot 禁止、Image2 active/dry-run、Seedance/Jimeng parked、worker/subagent envelope gate、无 credentials、无 live submit、无 arbitrary provider command。
 
 ## 当前禁止提前做的事
 

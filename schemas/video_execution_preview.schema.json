@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/video_execution_preview.schema.json",
+  "title": "VideoExecutionPreviewState",
+  "description": "Phase 7.3 read-only video execution and subagent packet preview state. It never submits providers or writes real prompt artifacts.",
+  "$defs": {
+    "hardLock": {
+      "type": "string",
+      "enum": [
+        "no_live_submit",
+        "no_fast_model",
+        "no_vip_channel",
+        "no_text_to_video_main_path",
+        "no_bgm_in_video_prompt",
+        "start_end_frames_required",
+        "subagent_must_use_packet"
+      ]
+    },
+    "executionStep": {
+      "type": "string",
+      "enum": [
+        "prepare_subagent_packet",
+        "inspect_readiness_gate",
+        "compile_provider_adapter_payload_placeholder",
+        "wait_for_user_enablement"
+      ]
+    },
+    "selectedShot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shotId", "gateStatus", "taskStatus", "queueStatus"],
+      "properties": {
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "storyFunction": { "type": "string" },
+        "gateStatus": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["identity", "scene", "prop", "style", "pair", "story"],
+          "properties": {
+            "identity": { "$ref": "common.schema.json#/$defs/gateStatus" },
+            "scene": { "$ref": "common.schema.json#/$defs/gateStatus" },
+            "prop": { "$ref": "common.schema.json#/$defs/gateStatus" },
+            "style": { "$ref": "common.schema.json#/$defs/gateStatus" },
+            "pair": { "$ref": "common.schema.json#/$defs/gateStatus" },
+            "story": { "$ref": "common.schema.json#/$defs/gateStatus" }
+          }
+        },
+        "taskStatus": { "type": "string", "enum": ["ready", "blocked", "parked"] },
+        "queueStatus": { "type": "string", "enum": ["pending", "ready", "blocked", "parked"] }
+      }
+    },
+    "expectedOutputContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "requiredFields", "artifactPolicy", "resultScope"],
+      "properties": {
+        "format": { "type": "string", "const": "video_execution_preview_v1" },
+        "requiredFields": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "artifactPolicy": { "type": "string", "const": "no_real_prompt_file_no_provider_task" },
+        "resultScope": { "type": "string", "const": "structured_packet_preview_only" }
+      }
+    },
+    "subagentPacketPreview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selectedShot",
+        "startFrameRef",
+        "endFrameRef",
+        "providerPolicySummary",
+        "requiredReadScopes",
+        "forbiddenReadScopes",
+        "mustPreserve",
+        "allowedDelta",
+        "mustNotAdd",
+        "expectedOutputContract",
+        "requiredKnowledgeCategories"
+      ],
+      "properties": {
+        "selectedShot": { "$ref": "#/$defs/selectedShot" },
+        "startFrameRef": { "$ref": "video_task_plan.schema.json#/$defs/videoFrameRef" },
+        "endFrameRef": { "$ref": "video_task_plan.schema.json#/$defs/videoFrameRef" },
+        "keyframePairDerivation": { "$ref": "keyframe_pair_derivation.schema.json" },
+        "providerPolicySummary": { "$ref": "video_task_plan.schema.json#/$defs/videoProviderPolicySummary" },
+        "requiredReadScopes": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "forbiddenReadScopes": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "mustPreserve": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "allowedDelta": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "mustNotAdd": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "expectedOutputContract": { "$ref": "#/$defs/expectedOutputContract" },
+        "requiredKnowledgeCategories": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/knowledgePackCategory" }
+        }
+      }
+    },
+    "videoExecutionPreview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "previewId",
+        "shotId",
+        "taskPlanId",
+        "readinessGateId",
+        "status",
+        "providerId",
+        "providerSlot",
+        "requiredMode",
+        "contextLevel",
+        "subagentPurpose",
+        "instructionSummary",
+        "subagentPacketPreview",
+        "executionOrderPreview",
+        "hardLocks",
+        "blockers",
+        "warnings",
+        "canPreviewPacket",
+        "canExecute",
+        "dryRunOnly",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "previewId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "readinessGateId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "type": "string", "enum": ["blocked", "preview_ready", "parked"] },
+        "providerId": { "type": "string", "enum": ["seedance2-provider", "jimeng-video"] },
+        "providerSlot": { "type": "string", "const": "video.i2v" },
+        "requiredMode": { "type": "string", "const": "frames2video" },
+        "contextLevel": { "$ref": "common.schema.json#/$defs/contextLevel" },
+        "subagentPurpose": { "type": "string", "const": "video_generation" },
+        "instructionSummary": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "subagentPacketPreview": { "$ref": "#/$defs/subagentPacketPreview" },
+        "executionOrderPreview": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/executionStep" }
+        },
+        "hardLocks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/hardLock" }
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "canPreviewPacket": { "type": "boolean" },
+        "canExecute": { "type": "boolean", "const": false },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "videoExecutionPreviewState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "generatedAt",
+        "previews",
+        "summary",
+        "dryRunOnly",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "notes"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+        "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "previews": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/videoExecutionPreview" }
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "blocked", "previewReady", "parked", "canPreviewPacket", "canExecute"],
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "blocked": { "type": "integer", "minimum": 0 },
+            "previewReady": { "type": "integer", "minimum": 0 },
+            "parked": { "type": "integer", "minimum": 0 },
+            "canPreviewPacket": { "type": "integer", "minimum": 0 },
+            "canExecute": { "type": "integer", "const": 0 }
+          }
+        },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "$ref": "#/$defs/videoExecutionPreviewState"
+}

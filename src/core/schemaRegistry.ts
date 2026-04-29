@@ -122,6 +122,27 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ImageTaskPlan",
   },
   {
+    fileName: "video_task_plan.schema.json",
+    id: "https://vibecore.local/schemas/video_task_plan.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 7.1 parked video readiness gates, dry-run task plans, and queue shell summary.",
+    typeName: "VideoPlanningState",
+  },
+  {
+    fileName: "video_execution_preview.schema.json",
+    id: "https://vibecore.local/schemas/video_execution_preview.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 7.3 read-only video execution preview and structured subagent packet preview.",
+    typeName: "VideoExecutionPreviewState",
+  },
+  {
+    fileName: "adapter_contract.schema.json",
+    id: "https://vibecore.local/schemas/adapter_contract.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 8.1 dry-run adapter contracts for agent, worker, provider, and planned local workflow boundaries.",
+    typeName: "AdapterContractState",
+  },
+  {
     fileName: "image2_adapter_request.schema.json",
     id: "https://vibecore.local/schemas/image2_adapter_request.schema.json",
     version: schemaVersion,

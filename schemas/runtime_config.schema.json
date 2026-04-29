@@ -13,6 +13,7 @@
     "pathRules",
     "toolPaths",
     "providerEnablement",
+    "providerAdapterSettings",
     "sidecarPermissions",
     "credentialStorage",
     "voiceSources"
@@ -73,6 +74,10 @@
       }
     },
     "providerEnablement": { "$ref": "provider_enablement.schema.json" },
+    "providerAdapterSettings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/providerAdapterSetting" }
+    },
     "sidecarPermissions": { "$ref": "sidecar_permission.schema.json" },
     "credentialStorage": {
       "type": "object",
@@ -159,6 +164,74 @@
         "kind": {
           "type": "string",
           "enum": ["tts_voice", "music_source", "voice_library"]
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "providerAdapterSetting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "providerId",
+        "slot",
+        "requiredMode",
+        "state",
+        "credentialStatus",
+        "dryRunOnly",
+        "liveSubmitAllowed",
+        "providerSubmissionForbidden",
+        "supports",
+        "forbiddenRoutes",
+        "notes"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "slot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+        "requiredMode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+        "state": { "$ref": "common.schema.json#/$defs/providerExecutionState" },
+        "credentialStatus": {
+          "type": "string",
+          "enum": ["not_required", "not_configured", "planned_secret_store"]
+        },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "supports": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["referenceImage", "startEndFrame", "textToVideo", "fastModel", "vipChannel", "bgmInVideoPrompt", "cameraControl"],
+          "properties": {
+            "referenceImage": {
+              "anyOf": [{ "type": "boolean" }, { "type": "string", "const": "planned" }]
+            },
+            "startEndFrame": {
+              "anyOf": [{ "type": "boolean" }, { "type": "string", "const": "planned" }]
+            },
+            "textToVideo": {
+              "anyOf": [{ "type": "boolean", "const": false }, { "type": "string", "const": "experimental_parked" }]
+            },
+            "fastModel": { "type": "boolean", "const": false },
+            "vipChannel": { "type": "boolean", "const": false },
+            "bgmInVideoPrompt": { "type": "boolean", "const": false },
+            "cameraControl": {
+              "type": "string",
+              "enum": ["none", "textual", "planned"]
+            }
+          }
+        },
+        "forbiddenRoutes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["fast_model", "vip_channel", "text_to_video_main_path", "bgm_in_video_prompt", "live_submit"]
+          }
         },
         "notes": {
           "type": "array",

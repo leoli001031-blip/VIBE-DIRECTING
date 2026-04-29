@@ -6,6 +6,7 @@ import type { QueueGateResult } from "./taskQueue";
 import type {
   AssetRecord,
   AssetReadinessReport,
+  AdapterContractState,
   AudioPlanningState,
   AuditIssue,
   GenerationHealthReport,
@@ -27,6 +28,8 @@ import type {
   StoryChangeTransaction,
   TaskEnvelope,
   TaskRun,
+  VideoExecutionPreviewState,
+  VideoPlanningState,
   WatcherEvent,
   WorkflowStage,
 } from "./types";
@@ -164,6 +167,9 @@ export interface ProjectRuntimeState {
   previewEvents: PreviewEvent[];
   previewExport: ProjectPreviewExportState;
   audioPlanning: AudioPlanningState;
+  videoPlanning: VideoPlanningState;
+  videoExecutionPreview: VideoExecutionPreviewState;
+  adapterContracts: AdapterContractState;
   storyChanges: ProjectRuntimeStoryChangeState;
   runtime: ProjectRuntimeEnvironment;
   diagnostics: {

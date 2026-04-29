@@ -10,6 +10,9 @@ import { buildQaPromotionReports } from "./qaPromotion";
 import { buildPreviewExportState } from "./previewExport";
 import { buildWatcherEventsFromImagePipeline } from "./watcherEvents";
 import { buildAudioPlanningState } from "./audioPlanning";
+import { buildVideoPlanningState } from "./videoPlanning";
+import { buildVideoExecutionPreviewState } from "./videoExecutionPreview";
+import { buildAdapterContractState } from "./adapterContracts";
 import {
   projectRuntimeCoreStateVersion,
   projectRuntimeStateSchemaVersion,
@@ -176,6 +179,24 @@ export function buildProjectRuntimeState(
     runtimeConfig: runtime.config,
     previewEvents,
   });
+  const videoPlanning = buildVideoPlanningState({
+    generatedAt,
+    shots: audit.shots,
+    jobs: audit.jobs,
+    taskViews,
+    providerRegistry,
+    audioPlanning,
+    issues: audit.issues,
+  });
+  const videoExecutionPreview = buildVideoExecutionPreviewState({
+    generatedAt,
+    shots: audit.shots,
+    videoPlanning,
+  });
+  const adapterContracts = buildAdapterContractState({
+    generatedAt,
+    providerRegistry,
+  });
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -235,6 +256,9 @@ export function buildProjectRuntimeState(
     previewEvents,
     previewExport,
     audioPlanning,
+    videoPlanning,
+    videoExecutionPreview,
+    adapterContracts,
     storyChanges: {
       transactions: [],
       reflowReports: [],
@@ -282,18 +306,46 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     generatedAt: state.generatedAt,
     platform: state.runtime?.config?.platform || state.runtime?.detectionReport?.platform,
   });
+  const audioPlanning =
+    state.audioPlanning ||
+    buildAudioPlanningState({
+      generatedAt: state.generatedAt,
+      shots: state.storyFlow.shots,
+      runtimeConfig: runtime.config,
+      previewEvents: state.previewEvents,
+    });
+  const videoPlanning =
+    state.videoPlanning ||
+    buildVideoPlanningState({
+      generatedAt: state.generatedAt,
+      shots: state.storyFlow.shots,
+      jobs: state.taskRuns.jobs,
+      taskViews: state.taskRuns.taskViews,
+      providerRegistry: state.imagePipeline.providerRegistry,
+      audioPlanning,
+      issues: state.diagnostics.issues,
+    });
+  const videoExecutionPreview =
+    state.videoExecutionPreview ||
+    buildVideoExecutionPreviewState({
+      generatedAt: state.generatedAt,
+      shots: state.storyFlow.shots,
+      videoPlanning,
+    });
+  const adapterContracts =
+    state.adapterContracts ||
+    buildAdapterContractState({
+      generatedAt: state.generatedAt,
+      providerRegistry: state.imagePipeline.providerRegistry,
+    });
 
   return {
     ...state,
     runtime,
-    audioPlanning:
-      state.audioPlanning ||
-      buildAudioPlanningState({
-        generatedAt: state.generatedAt,
-        shots: state.storyFlow.shots,
-        runtimeConfig: runtime.config,
-        previewEvents: state.previewEvents,
-      }),
+    audioPlanning,
+    videoPlanning,
+    videoExecutionPreview,
+    adapterContracts,
   };
 }
 

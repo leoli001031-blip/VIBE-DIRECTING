@@ -98,6 +98,30 @@ export interface ProviderEnablementState {
   slots: ProviderEnablementEntry[];
 }
 
+export interface ProviderAdapterSetting {
+  id: string;
+  label: string;
+  providerId: string;
+  slot: ProviderSlot;
+  requiredMode: RequiredMode;
+  state: ProviderExecutionState;
+  credentialStatus: "not_required" | "not_configured" | "planned_secret_store";
+  dryRunOnly: true;
+  liveSubmitAllowed: false;
+  providerSubmissionForbidden: true;
+  supports: {
+    referenceImage: boolean | "planned";
+    startEndFrame: boolean | "planned";
+    textToVideo: false | "experimental_parked";
+    fastModel: false;
+    vipChannel: false;
+    bgmInVideoPrompt: false;
+    cameraControl: "none" | "textual" | "planned";
+  };
+  forbiddenRoutes: Array<"fast_model" | "vip_channel" | "text_to_video_main_path" | "bgm_in_video_prompt" | "live_submit">;
+  notes: string[];
+}
+
 export interface SidecarAllowedCommand {
   id: string;
   executable: string;
@@ -145,6 +169,7 @@ export interface RuntimeConfig {
     git: RuntimeToolPath;
   };
   providerEnablement: ProviderEnablementState;
+  providerAdapterSettings: ProviderAdapterSetting[];
   sidecarPermissions: SidecarPermissionPolicy;
   credentialStorage: RuntimeCredentialStorage;
   voiceSources: RuntimeVoiceSource[];
@@ -320,6 +345,128 @@ export interface ProviderCapabilityValidationResult {
   capability?: ProviderCapability;
   blockers: string[];
   warnings: string[];
+}
+
+export type AdapterContractKind = "agent" | "worker" | "provider";
+
+export type AdapterCredentialStatus = "not_required" | "not_configured" | "not_read";
+
+export type AdapterContractViolationCode =
+  | "live_submit_allowed"
+  | "credential_storage_enabled"
+  | "provider_submission_allowed"
+  | "arbitrary_provider_command_allowed"
+  | "unknown_provider_slot"
+  | "capability_mismatch"
+  | "video_provider_not_parked"
+  | "image2_not_active_dry_run"
+  | "worker_envelope_bypass"
+  | "worker_context_packet_optional"
+  | "agent_ui_binding";
+
+export interface AdapterContractViolation {
+  code: AdapterContractViolationCode;
+  adapterId: string;
+  severity: "blocker" | "warning";
+  detail: string;
+}
+
+export interface AgentAdapterContract {
+  id: string;
+  kind: "agent";
+  label: string;
+  runtimeKind: "codex_cli" | "future_cli" | "local_agent" | "unknown";
+  state: ProviderExecutionState;
+  dryRunOnly: true;
+  readOnly: true;
+  liveSubmitAllowed: false;
+  credentialStatus: AdapterCredentialStatus;
+  credentialStorage: false;
+  uiBinding: false;
+  capabilities: {
+    canSpawnSubagents: boolean;
+    canUseImageRuntime: boolean;
+    contextPacketRequired: boolean;
+    supportsThreadHandoff: boolean;
+    supportsStructuredResult: boolean;
+  };
+  forbiddenRoutes: Array<"ui_binding" | "live_submit" | "credential_read" | "credential_storage" | "arbitrary_shell">;
+  notes: string[];
+}
+
+export interface WorkerAdapterContract {
+  id: string;
+  kind: "worker";
+  label: string;
+  state: ProviderExecutionState;
+  dryRunOnly: true;
+  readOnly: true;
+  liveSubmitAllowed: false;
+  credentialStatus: AdapterCredentialStatus;
+  credentialStorage: false;
+  requiredEnvelopeSchema: "subagent_task_envelope.schema.json";
+  allowedPurposes: SubagentTaskPurpose[];
+  readScopePolicy: "context_packet_only" | "project_readonly";
+  writeScopePolicy: "declared_outputs_only" | "no_writes";
+  mustReceiveContextPacket: true;
+  canBypassEnvelope: false;
+  forbiddenRoutes: Array<"freeform_context" | "envelope_bypass" | "live_submit" | "credential_read" | "credential_storage">;
+  notes: string[];
+}
+
+export interface ProviderAdapterContract {
+  id: string;
+  kind: "provider";
+  label: string;
+  providerIds: string[];
+  slot: ProviderSlot;
+  requiredModes: RequiredMode[];
+  state: ProviderExecutionState;
+  dryRunOnly: true;
+  readOnly: true;
+  liveSubmitAllowed: false;
+  credentialStatus: AdapterCredentialStatus;
+  credentialStorage: false;
+  providerSubmissionForbidden: true;
+  arbitraryProviderCommandAllowed: false;
+  capabilityRefs: string[];
+  capabilitySummary: {
+    outputKinds: Array<"image" | "video" | "audio" | "metadata">;
+    supportsReferenceImage: boolean | "planned";
+    supportsStartEndFrame: boolean | "planned";
+    supportsTextToVideo: false | "experimental_parked";
+  };
+  forbiddenRoutes: Array<
+    | "fast_model"
+    | "vip_channel"
+    | "text_to_video_main_path"
+    | "bgm_in_video_prompt"
+    | "live_submit"
+    | "credential_read"
+    | "credential_storage"
+    | "arbitrary_provider_command"
+  >;
+  notes: string[];
+}
+
+export interface AdapterContractSummary {
+  agentAdapters: string[];
+  workerAdapters: string[];
+  providerAdapters: string[];
+  activeImageProvider: string;
+  parkedVideoProviders: string[];
+  liveSubmitAllowed: false;
+  credentialStorage: false;
+  contractViolations: AdapterContractViolation[];
+}
+
+export interface AdapterContractState {
+  schemaVersion: string;
+  generatedAt?: string;
+  agentAdapters: AgentAdapterContract[];
+  workerAdapters: WorkerAdapterContract[];
+  providerAdapters: ProviderAdapterContract[];
+  summary: AdapterContractSummary;
 }
 
 export interface AuditIssue {
@@ -678,6 +825,228 @@ export interface KeyframePairDerivation {
   allowedDelta: string[];
   mustPreserve: string[];
   mustNotAdd: string[];
+}
+
+export type VideoReadinessGateStatus = "ready" | "blocked" | "parked";
+
+export type VideoReadinessCheckStatus = "pass" | "blocked" | "warning" | "not_applicable";
+
+export interface VideoReadinessGateCheck {
+  id: string;
+  label: string;
+  status: VideoReadinessCheckStatus;
+  required: boolean;
+  detail: string;
+  target?: string;
+}
+
+export interface VideoReadinessGate {
+  gateId: string;
+  shotId: string;
+  status: VideoReadinessGateStatus;
+  canEnterQueueShell: boolean;
+  canSubmitToProvider: false;
+  startFramePresent: boolean;
+  endFramePresent: boolean;
+  keyframePairDerivation?: KeyframePairDerivation;
+  allowedNaGateFields: Array<keyof Pick<GateSet, "identity" | "scene" | "prop" | "style">>;
+  checks: VideoReadinessGateCheck[];
+  blockers: string[];
+  warnings: string[];
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+}
+
+export interface VideoFrameRef {
+  shotFrameId: string;
+  path?: string;
+  present: boolean;
+  source: "shot_record" | "task_envelope" | "missing";
+}
+
+export interface VideoTaskPlan {
+  schemaVersion: string;
+  taskPlanId: string;
+  jobId: string;
+  shotId: string;
+  readinessGateId: string;
+  providerSlot: "video.i2v";
+  requiredMode: "frames2video";
+  providerId: "seedance2-provider" | "jimeng-video";
+  providerExecutionState: ProviderExecutionState;
+  status: "ready" | "blocked" | "parked";
+  queueStatus: "pending" | "ready" | "blocked" | "parked";
+  startFrameRef: VideoFrameRef;
+  endFrameRef: VideoFrameRef;
+  durationSeconds: number | null;
+  durationPlaceholder: string;
+  motionBrief: string;
+  promptConstraints: string[];
+  preflightFacts: {
+    taskId?: string;
+    status: PreflightReport["status"] | "not_available";
+    blockerCount: number;
+    warningCount: number;
+  };
+  manifestFacts: {
+    status: string;
+    expectedOutputs: string[];
+    actualOutputs: string[];
+    missingExpectedOutput: boolean;
+  };
+  blockers: string[];
+  warnings: string[];
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+  fastModelForbidden: true;
+  vipChannelForbidden: true;
+  textToVideoForbidden: true;
+  liveSubmitAllowed: false;
+}
+
+export interface VideoQueueShellSummary {
+  status: "empty" | "ready" | "blocked" | "parked" | "blocked_with_ready_gates";
+  counts: {
+    total: number;
+    pending: number;
+    ready: number;
+    blocked: number;
+    parked: number;
+  };
+  concurrency: {
+    placeholder: true;
+    configuredLimit: number;
+    activeProviderLimit: 0;
+    notes: string[];
+  };
+  autoContinuePolicy: {
+    enabled: false;
+    mode: "manual_after_user_enablement";
+    providerSubmissionForbidden: true;
+    notes: string[];
+  };
+  longQueueTimeout: {
+    placeholder: true;
+    stallTimeoutSeconds: number;
+    action: "surface_waiting_state_only";
+    notes: string[];
+  };
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+  notes: string[];
+}
+
+export interface VideoProviderPolicySummary {
+  videoProvidersRemainParked: true;
+  liveSubmitAllowed: false;
+  userEnablementRequired: true;
+  providerSubmissionForbidden: true;
+  fastModelForbidden: true;
+  vipChannelForbidden: true;
+  textToVideoForbidden: true;
+  parkedProviderIds: string[];
+  notes: string[];
+}
+
+export interface VideoPlanningState {
+  schemaVersion: string;
+  generatedAt: string;
+  readinessGates: VideoReadinessGate[];
+  taskPlans: VideoTaskPlan[];
+  queueShell: VideoQueueShellSummary;
+  providerPolicySummary: VideoProviderPolicySummary;
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+  notes: string[];
+}
+
+export type VideoExecutionPreviewStatus = "blocked" | "preview_ready" | "parked";
+
+export type VideoExecutionPreviewHardLock =
+  | "no_live_submit"
+  | "no_fast_model"
+  | "no_vip_channel"
+  | "no_text_to_video_main_path"
+  | "no_bgm_in_video_prompt"
+  | "start_end_frames_required"
+  | "subagent_must_use_packet";
+
+export type VideoExecutionPreviewStep =
+  | "prepare_subagent_packet"
+  | "inspect_readiness_gate"
+  | "compile_provider_adapter_payload_placeholder"
+  | "wait_for_user_enablement";
+
+export interface VideoExecutionSelectedShotSummary {
+  shotId: string;
+  storyFunction?: string;
+  gateStatus: GateSet;
+  taskStatus: VideoTaskPlan["status"];
+  queueStatus: VideoTaskPlan["queueStatus"];
+}
+
+export interface VideoExecutionExpectedOutputContract {
+  format: "video_execution_preview_v1";
+  requiredFields: string[];
+  artifactPolicy: "no_real_prompt_file_no_provider_task";
+  resultScope: "structured_packet_preview_only";
+}
+
+export interface VideoSubagentPacketPreview {
+  selectedShot: VideoExecutionSelectedShotSummary;
+  startFrameRef: VideoFrameRef;
+  endFrameRef: VideoFrameRef;
+  keyframePairDerivation?: KeyframePairDerivation;
+  providerPolicySummary: VideoProviderPolicySummary;
+  requiredReadScopes: string[];
+  forbiddenReadScopes: string[];
+  mustPreserve: string[];
+  allowedDelta: string[];
+  mustNotAdd: string[];
+  expectedOutputContract: VideoExecutionExpectedOutputContract;
+  requiredKnowledgeCategories: KnowledgePackCategory[];
+}
+
+export interface VideoExecutionPreview {
+  previewId: string;
+  shotId: string;
+  taskPlanId: string;
+  readinessGateId: string;
+  status: VideoExecutionPreviewStatus;
+  providerId: VideoTaskPlan["providerId"];
+  providerSlot: "video.i2v";
+  requiredMode: "frames2video";
+  contextLevel: ContextLevel;
+  subagentPurpose: "video_generation";
+  instructionSummary: string;
+  subagentPacketPreview: VideoSubagentPacketPreview;
+  executionOrderPreview: VideoExecutionPreviewStep[];
+  hardLocks: VideoExecutionPreviewHardLock[];
+  blockers: string[];
+  warnings: string[];
+  canPreviewPacket: boolean;
+  canExecute: false;
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+}
+
+export interface VideoExecutionPreviewState {
+  schemaVersion: string;
+  generatedAt: string;
+  previews: VideoExecutionPreview[];
+  summary: {
+    total: number;
+    blocked: number;
+    previewReady: number;
+    parked: number;
+    canPreviewPacket: number;
+    canExecute: 0;
+  };
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  notes: string[];
 }
 
 export interface TaskRun {

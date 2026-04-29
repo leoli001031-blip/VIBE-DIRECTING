@@ -1,0 +1,303 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/video_task_plan.schema.json",
+  "title": "VideoPlanningState",
+  "description": "Phase 7.1 dry-run video readiness, task plan, and queue shell contract for parked I2V providers.",
+  "$defs": {
+    "videoReadinessGateCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "status", "required", "detail"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "type": "string", "enum": ["pass", "blocked", "warning", "not_applicable"] },
+        "required": { "type": "boolean" },
+        "detail": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "target": { "type": "string" }
+      }
+    },
+    "videoReadinessGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gateId",
+        "shotId",
+        "status",
+        "canEnterQueueShell",
+        "canSubmitToProvider",
+        "startFramePresent",
+        "endFramePresent",
+        "allowedNaGateFields",
+        "checks",
+        "blockers",
+        "warnings",
+        "dryRunOnly",
+        "providerSubmissionForbidden"
+      ],
+      "properties": {
+        "gateId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "type": "string", "enum": ["ready", "blocked", "parked"] },
+        "canEnterQueueShell": { "type": "boolean" },
+        "canSubmitToProvider": { "type": "boolean", "const": false },
+        "startFramePresent": { "type": "boolean" },
+        "endFramePresent": { "type": "boolean" },
+        "keyframePairDerivation": { "$ref": "keyframe_pair_derivation.schema.json" },
+        "allowedNaGateFields": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["identity", "scene", "prop", "style"] }
+        },
+        "checks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/videoReadinessGateCheck" }
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true }
+      }
+    },
+    "videoFrameRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shotFrameId", "present", "source"],
+      "properties": {
+        "shotFrameId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "path": { "type": "string" },
+        "present": { "type": "boolean" },
+        "source": { "type": "string", "enum": ["shot_record", "task_envelope", "missing"] }
+      }
+    },
+    "videoTaskPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "taskPlanId",
+        "jobId",
+        "shotId",
+        "readinessGateId",
+        "providerSlot",
+        "requiredMode",
+        "providerId",
+        "providerExecutionState",
+        "status",
+        "queueStatus",
+        "startFrameRef",
+        "endFrameRef",
+        "durationSeconds",
+        "durationPlaceholder",
+        "motionBrief",
+        "promptConstraints",
+        "preflightFacts",
+        "manifestFacts",
+        "blockers",
+        "warnings",
+        "dryRunOnly",
+        "providerSubmissionForbidden",
+        "fastModelForbidden",
+        "vipChannelForbidden",
+        "textToVideoForbidden",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+        "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "jobId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "readinessGateId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerSlot": { "type": "string", "const": "video.i2v" },
+        "requiredMode": { "type": "string", "const": "frames2video" },
+        "providerId": { "type": "string", "enum": ["seedance2-provider", "jimeng-video"] },
+        "providerExecutionState": { "$ref": "common.schema.json#/$defs/providerExecutionState" },
+        "status": { "type": "string", "enum": ["ready", "blocked", "parked"] },
+        "queueStatus": { "type": "string", "enum": ["pending", "ready", "blocked", "parked"] },
+        "startFrameRef": { "$ref": "#/$defs/videoFrameRef" },
+        "endFrameRef": { "$ref": "#/$defs/videoFrameRef" },
+        "durationSeconds": { "type": ["number", "null"], "minimum": 0 },
+        "durationPlaceholder": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "motionBrief": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "promptConstraints": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "contains": { "const": "no bgm" }
+        },
+        "preflightFacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "blockerCount", "warningCount"],
+          "properties": {
+            "taskId": { "type": "string" },
+            "status": { "type": "string", "enum": ["pass", "blocked", "warning", "not_available"] },
+            "blockerCount": { "type": "integer", "minimum": 0 },
+            "warningCount": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "manifestFacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "expectedOutputs", "actualOutputs", "missingExpectedOutput"],
+          "properties": {
+            "status": { "type": "string" },
+            "expectedOutputs": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "actualOutputs": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "missingExpectedOutput": { "type": "boolean" }
+          }
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "fastModelForbidden": { "type": "boolean", "const": true },
+        "vipChannelForbidden": { "type": "boolean", "const": true },
+        "textToVideoForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "videoProviderPolicySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "videoProvidersRemainParked",
+        "liveSubmitAllowed",
+        "userEnablementRequired",
+        "providerSubmissionForbidden",
+        "fastModelForbidden",
+        "vipChannelForbidden",
+        "textToVideoForbidden",
+        "parkedProviderIds",
+        "notes"
+      ],
+      "properties": {
+        "videoProvidersRemainParked": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "userEnablementRequired": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "fastModelForbidden": { "type": "boolean", "const": true },
+        "vipChannelForbidden": { "type": "boolean", "const": true },
+        "textToVideoForbidden": { "type": "boolean", "const": true },
+        "parkedProviderIds": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "videoPlanningState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "generatedAt",
+        "readinessGates",
+        "taskPlans",
+        "queueShell",
+        "providerPolicySummary",
+        "dryRunOnly",
+        "providerSubmissionForbidden",
+        "notes"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+        "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "readinessGates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/videoReadinessGate" }
+        },
+        "taskPlans": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/videoTaskPlan" }
+        },
+        "queueShell": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "counts",
+            "concurrency",
+            "autoContinuePolicy",
+            "longQueueTimeout",
+            "dryRunOnly",
+            "providerSubmissionForbidden",
+            "notes"
+          ],
+          "properties": {
+            "status": { "type": "string", "enum": ["empty", "ready", "blocked", "parked", "blocked_with_ready_gates"] },
+            "counts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["total", "pending", "ready", "blocked", "parked"],
+              "properties": {
+                "total": { "type": "integer", "minimum": 0 },
+                "pending": { "type": "integer", "minimum": 0 },
+                "ready": { "type": "integer", "minimum": 0 },
+                "blocked": { "type": "integer", "minimum": 0 },
+                "parked": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "concurrency": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["placeholder", "configuredLimit", "activeProviderLimit", "notes"],
+              "properties": {
+                "placeholder": { "type": "boolean", "const": true },
+                "configuredLimit": { "type": "integer", "minimum": 0 },
+                "activeProviderLimit": { "type": "integer", "const": 0 },
+                "notes": { "type": "array", "items": { "type": "string" } }
+              }
+            },
+            "autoContinuePolicy": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled", "mode", "providerSubmissionForbidden", "notes"],
+              "properties": {
+                "enabled": { "type": "boolean", "const": false },
+                "mode": { "type": "string", "const": "manual_after_user_enablement" },
+                "providerSubmissionForbidden": { "type": "boolean", "const": true },
+                "notes": { "type": "array", "items": { "type": "string" } }
+              }
+            },
+            "longQueueTimeout": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["placeholder", "stallTimeoutSeconds", "action", "notes"],
+              "properties": {
+                "placeholder": { "type": "boolean", "const": true },
+                "stallTimeoutSeconds": { "type": "integer", "minimum": 1 },
+                "action": { "type": "string", "const": "surface_waiting_state_only" },
+                "notes": { "type": "array", "items": { "type": "string" } }
+              }
+            },
+            "dryRunOnly": { "type": "boolean", "const": true },
+            "providerSubmissionForbidden": { "type": "boolean", "const": true },
+            "notes": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "providerPolicySummary": { "$ref": "#/$defs/videoProviderPolicySummary" },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "$ref": "#/$defs/videoPlanningState"
+}
