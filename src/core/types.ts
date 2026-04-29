@@ -267,6 +267,61 @@ export interface ProviderPolicy {
   rules: ProviderRule[];
 }
 
+export type ProviderCapabilityStatus = "supported" | "unsupported" | "planned" | "parked";
+
+export type ProviderControlSupport = "none" | "textual" | "structured" | "planned";
+
+export type ProviderPromptKind =
+  | "start_frame"
+  | "end_frame"
+  | "reference_asset"
+  | "video_parked"
+  | "unknown";
+
+export interface ProviderCapabilitySupport {
+  referenceImage: boolean;
+  imageEdit: boolean;
+  startEndFrame: boolean;
+  bbox: ProviderCapabilityStatus;
+  cameraControl: ProviderControlSupport;
+  controlNet: ProviderCapabilityStatus;
+  mask: ProviderCapabilityStatus;
+  negativePrompt: ProviderCapabilityStatus;
+}
+
+export interface ProviderCapability {
+  id: string;
+  providerId: string;
+  providerName: string;
+  slot: ProviderSlot;
+  requiredMode: RequiredMode;
+  executionState: ProviderExecutionState;
+  liveSubmitAllowed: false;
+  inputKinds: Array<"text" | "image" | "reference_image" | "mask" | "start_frame" | "end_frame" | "video">;
+  outputKind: "image" | "video" | "audio" | "metadata";
+  supports: ProviderCapabilitySupport;
+  maxReferenceImages: number;
+  forbiddenFallbacks: string[];
+  notes: string[];
+}
+
+export interface ProviderRegistry {
+  schemaVersion: string;
+  registryVersion: string;
+  generatedAt?: string;
+  strictImageProvider: "image2_only";
+  defaultProviderBySlot: Partial<Record<ProviderSlot, string>>;
+  capabilities: ProviderCapability[];
+  notes: string[];
+}
+
+export interface ProviderCapabilityValidationResult {
+  valid: boolean;
+  capability?: ProviderCapability;
+  blockers: string[];
+  warnings: string[];
+}
+
 export interface AuditIssue {
   id: string;
   severity: Severity;
@@ -393,6 +448,222 @@ export interface GenerationJob {
   submitId?: string;
   providerTaskId?: string;
   issues: string[];
+}
+
+export type ShotPromptPlanStatus = "draft" | "blocked" | "ready_for_envelope";
+
+export type PromptConflictSeverity = "blocker" | "warning" | "info";
+
+export interface PromptConflict {
+  code: string;
+  severity: PromptConflictSeverity;
+  target?: string;
+  detail: string;
+}
+
+export interface PromptConflictReport {
+  reportId: string;
+  promptPlanId: string;
+  jobId: string;
+  shotId?: string;
+  status: "clear" | "warning" | "blocked";
+  conflicts: PromptConflict[];
+  checkedAt: string;
+}
+
+export interface ShotPromptPlan {
+  promptPlanId: string;
+  promptPlanHash: string;
+  sourceShotSpecHash: string;
+  jobId: string;
+  shotId?: string;
+  providerId: string;
+  providerSlot: ProviderSlot;
+  requiredMode: RequiredMode;
+  promptKind: ProviderPromptKind;
+  sourceIntent: string[];
+  naturalLanguagePolicy: "source_intent_only";
+  mustPreserve: string[];
+  mustAvoid: string[];
+  referenceIds: string[];
+  styleDirectives: string[];
+  adapterWarnings: string[];
+  derivesFromStartFrame?: boolean;
+  status: ShotPromptPlanStatus;
+  blockers: string[];
+  conflictReportId: string;
+  createdAt: string;
+}
+
+export type AssetReadinessStatus = "ready" | "draft_only" | "blocked";
+
+export interface AssetReadinessReport {
+  reportId: string;
+  shotId: string;
+  assetIds: string[];
+  status: AssetReadinessStatus;
+  formalBlocked: boolean;
+  blockers: string[];
+  warnings: string[];
+  safeReferenceIds: string[];
+  unsafeReferenceIds: string[];
+  lockedReferenceIds: string[];
+  candidateReferenceIds: string[];
+  missingReferenceIds: string[];
+  rejectedReferenceIds: string[];
+  tempReferenceIds: string[];
+  failedReferenceIds: string[];
+  checkedAt: string;
+}
+
+export type ImageTaskPlanStatus = "draft" | "blocked" | "ready_for_dry_run" | "ready_for_manual_submit";
+
+export interface ImageTaskEnvelopeSummary {
+  envelopeId: string;
+  providerSlot: ProviderSlot;
+  providerId: string;
+  requiredMode: RequiredMode;
+  sourceIndexHash: string;
+  promptPlanId?: string;
+  promptPlanHash?: string;
+  sourceShotSpecHash?: string;
+  expectedOutputs: string[];
+  preflightStatus: PreflightReport["status"];
+  blockingReasons: string[];
+}
+
+export interface ImageTaskPlan {
+  taskPlanId: string;
+  jobId: string;
+  shotId: string;
+  promptPlanId: string;
+  providerSlot: ProviderSlot;
+  requiredMode: RequiredMode;
+  providerId: string;
+  mode: RequiredMode;
+  status: ImageTaskPlanStatus;
+  expectedOutputPath: string;
+  inputReferenceIds: string[];
+  sourcePromptPlanHash: string;
+  sourceShotSpecHash: string;
+  taskEnvelopeSummary?: ImageTaskEnvelopeSummary;
+  blockers: string[];
+  warnings: string[];
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+}
+
+export type Image2AdapterOperation = "text2image" | "image2image" | "reference_asset";
+
+export interface Image2AdapterPayload {
+  sourceIntent: string[];
+  mustPreserve: string[];
+  mustAvoid: string[];
+  references: Array<{
+    referenceId: string;
+    source: "prompt_plan";
+  }>;
+  outputPath: string;
+}
+
+export interface Image2SubmitPolicy {
+  dry_run_only: true;
+  manual_submit_required: true;
+  live_submit_forbidden: true;
+}
+
+export interface Image2AdapterRequest {
+  requestId: string;
+  taskPlanId: string;
+  adapterId: "image2-dry-run";
+  operation: Image2AdapterOperation;
+  payload: Image2AdapterPayload;
+  submitPolicy: Image2SubmitPolicy;
+  forbiddenFallbacks: string[];
+}
+
+export type WatcherEventType =
+  | "temp_output_detected"
+  | "expected_output_detected"
+  | "provider_ready_derivative_detected"
+  | "qa_report_detected"
+  | "manifest_mismatch_detected"
+  | "stall_timeout_reached"
+  | "worker_exit_without_expected_output"
+  | "postprocess_recoverable"
+  | "formal_output_promoted"
+  | "blocked";
+
+export type WatcherEventStatus = "detected" | "waiting" | "blocked" | "recoverable" | "failed" | "promoted";
+
+export interface WatcherEvent {
+  id: string;
+  eventType: WatcherEventType;
+  taskId: string;
+  jobId?: string;
+  shotId?: string;
+  artifactPath?: string;
+  expectedOutputPath?: string;
+  status: WatcherEventStatus;
+  severity: Severity;
+  createdAt: string;
+  notes: string[];
+}
+
+export type GenerationQaStatus = "missing" | "pending" | "pass" | "fail" | "not_required" | "unknown";
+
+export type GenerationHealthStatus =
+  | "waiting"
+  | "output_detected"
+  | "qa_pending"
+  | "formal_ready"
+  | "blocked"
+  | "failed";
+
+export interface GenerationHealthReport {
+  reportId: string;
+  taskPlanId: string;
+  jobId: string;
+  shotId: string;
+  expectedOutputPath: string;
+  outputExists: boolean;
+  manifestStatus: string;
+  qaStatus: GenerationQaStatus;
+  stalePrompt: boolean;
+  assetReadinessStatus: AssetReadinessStatus | "missing";
+  healthStatus: GenerationHealthStatus;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}
+
+export interface QaPromotionRequiredGates {
+  expectedOutput: boolean;
+  manifestMatch: boolean;
+  promptFresh: boolean;
+  assetReadiness: boolean;
+  qaPass: boolean;
+}
+
+export type QaPromotionStatus =
+  | "candidate"
+  | "blocked"
+  | "qa_pending"
+  | "ready_for_promotion"
+  | "promoted";
+
+export interface QaPromotionReport {
+  reportId: string;
+  taskPlanId: string;
+  jobId: string;
+  shotId: string;
+  candidatePath: string;
+  formalPath: string;
+  promotionStatus: QaPromotionStatus;
+  requiredGates: QaPromotionRequiredGates;
+  blockers: string[];
+  warnings: string[];
+  canPromoteToFormal: boolean;
 }
 
 export interface KeyframePairDerivation {

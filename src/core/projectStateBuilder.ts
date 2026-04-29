@@ -1,5 +1,13 @@
 import { buildRuntimeView, type KnowledgeRouteTestView, type RuntimeView } from "./runtimeView";
+import { buildAssetReadinessReport } from "./assetReadiness";
+import { buildImageTaskPlan } from "./imageTaskPlanner";
 import type { KnowledgePackManifest, KnowledgeRouteMatch, KnowledgeTaskPurpose } from "./knowledgeTypes";
+import { buildImage2AdapterRequest } from "./providerAdapters/image2Adapter";
+import { buildDefaultProviderRegistry } from "./providerCapabilities";
+import { buildGenerationHealthReports } from "./generationHealth";
+import { buildShotPromptPlan } from "./promptCompiler";
+import { buildQaPromotionReports } from "./qaPromotion";
+import { buildWatcherEventsFromImagePipeline } from "./watcherEvents";
 import {
   projectRuntimeCoreStateVersion,
   projectRuntimeStateSchemaVersion,
@@ -88,6 +96,77 @@ export function buildProjectRuntimeState(
   };
   const generatedAt = options.generatedAt || new Date().toISOString();
   const runtime = options.runtime || buildRuntimeEnvironment({ generatedAt });
+  const providerRegistry = buildDefaultProviderRegistry(generatedAt);
+  const promptPlanResults = taskViews.map((task) =>
+    buildShotPromptPlan({
+      job: task.job,
+      shot: view.taskViews.find((item) => item.job.id === task.job.id)?.shot,
+      assets: audit.assets,
+      sourceIndex: view.sourceIndex,
+      providerRegistry,
+      knowledge: knowledgeManifest,
+      createdAt: generatedAt,
+    }),
+  );
+  const assetReadinessReports = audit.shots.map((shot) =>
+    buildAssetReadinessReport({
+      shot,
+      assets: audit.assets,
+      sourceIndex: view.sourceIndex,
+      jobs: audit.jobs,
+      checkedAt: generatedAt,
+    }),
+  );
+  const imageTaskPlans = promptPlanResults.map((result) => {
+    const task = taskViews.find((item) => item.job.id === result.plan.jobId);
+    const readinessReport = result.plan.shotId
+      ? assetReadinessReports.find((report) => report.shotId === result.plan.shotId)
+      : undefined;
+
+    return buildImageTaskPlan({
+      job: task?.job || audit.jobs.find((job) => job.id === result.plan.jobId)!,
+      promptPlan: result.plan,
+      readinessReport,
+      sourceIndex: view.sourceIndex,
+      taskEnvelope: task?.envelope,
+    });
+  });
+  const image2AdapterRequests = imageTaskPlans
+    .filter((taskPlan) =>
+      (taskPlan.status === "ready_for_dry_run" || taskPlan.status === "ready_for_manual_submit") &&
+      (taskPlan.providerSlot === "image.generate" ||
+        taskPlan.providerSlot === "image.edit" ||
+        taskPlan.providerSlot === "image.reference_asset"),
+    )
+    .map((taskPlan) => {
+      const promptPlan = promptPlanResults.find((result) => result.plan.promptPlanId === taskPlan.promptPlanId)?.plan;
+      if (!promptPlan) return undefined;
+      return buildImage2AdapterRequest(taskPlan, promptPlan);
+    })
+    .filter((request): request is NonNullable<typeof request> => Boolean(request));
+  const watcherEvents = buildWatcherEventsFromImagePipeline({
+    imageTaskPlans,
+    adapterRequests: image2AdapterRequests,
+    fileSnapshot: audit.fileSnapshot || [],
+    manifestReports: taskViews.map((task) => task.manifestMatch),
+    createdAt: generatedAt,
+  });
+  const generationHealthReports = buildGenerationHealthReports({
+    imageTaskPlans,
+    fileSnapshot: audit.fileSnapshot || [],
+    manifestReports: taskViews.map((task) => task.manifestMatch),
+    watcherEvents,
+    assetReadinessReports,
+    promptPlans: promptPlanResults.map((result) => result.plan),
+  });
+  const qaPromotionReports = buildQaPromotionReports({
+    imageTaskPlans,
+    fileSnapshot: audit.fileSnapshot || [],
+    manifestReports: taskViews.map((task) => task.manifestMatch),
+    generationHealthReports,
+    assetReadinessReports,
+    promptPlans: promptPlanResults.map((result) => result.plan),
+  });
 
   return {
     schemaVersion: projectRuntimeStateSchemaVersion,
@@ -114,6 +193,17 @@ export function buildProjectRuntimeState(
     manifestMatches: {
       summary: view.manifestSummary,
       reports: taskViews.map((task) => task.manifestMatch),
+    },
+    imagePipeline: {
+      providerRegistry,
+      promptPlans: promptPlanResults.map((result) => result.plan),
+      promptConflictReports: promptPlanResults.map((result) => result.conflictReport),
+      assetReadinessReports,
+      imageTaskPlans,
+      image2AdapterRequests,
+      watcherEvents,
+      generationHealthReports,
+      qaPromotionReports,
     },
     previewEvents: view.previewEvents,
     storyChanges: {

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/provider_registry.schema.json",
+  "title": "ProviderRegistry",
+  "description": "Provider capability matrix for Phase 4 dry-run contracts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "registryVersion", "strictImageProvider", "defaultProviderBySlot", "capabilities", "notes"],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "registryVersion": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "strictImageProvider": { "type": "string", "const": "image2_only" },
+    "defaultProviderBySlot": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "propertyNames": {
+        "$ref": "common.schema.json#/$defs/providerSlot"
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": { "$ref": "provider_capability.schema.json" },
+      "minItems": 1
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

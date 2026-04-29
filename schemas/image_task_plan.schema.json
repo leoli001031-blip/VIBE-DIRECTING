@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/image_task_plan.schema.json",
+  "title": "ImageTaskPlan",
+  "description": "Dry-run bridge from prompt plan and task envelope facts into an Image2 adapter-ready task plan.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "taskPlanId",
+    "jobId",
+    "shotId",
+    "promptPlanId",
+    "providerSlot",
+    "requiredMode",
+    "providerId",
+    "mode",
+    "status",
+    "expectedOutputPath",
+    "inputReferenceIds",
+    "sourcePromptPlanHash",
+    "sourceShotSpecHash",
+    "blockers",
+    "warnings",
+    "dryRunOnly",
+    "providerSubmissionForbidden"
+  ],
+  "properties": {
+    "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "jobId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "promptPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "providerSlot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+    "requiredMode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+    "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "mode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "blocked", "ready_for_dry_run", "ready_for_manual_submit"]
+    },
+    "expectedOutputPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "inputReferenceIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "sourcePromptPlanHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "sourceShotSpecHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "taskEnvelopeSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "envelopeId",
+        "providerSlot",
+        "providerId",
+        "requiredMode",
+        "sourceIndexHash",
+        "expectedOutputs",
+        "preflightStatus",
+        "blockingReasons"
+      ],
+      "properties": {
+        "envelopeId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerSlot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+        "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "requiredMode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+        "sourceIndexHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "promptPlanId": { "type": "string" },
+        "promptPlanHash": { "type": "string" },
+        "sourceShotSpecHash": { "type": "string" },
+        "expectedOutputs": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "preflightStatus": { "$ref": "common.schema.json#/$defs/preflightStatus" },
+        "blockingReasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "dryRunOnly": { "type": "boolean", "const": true },
+    "providerSubmissionForbidden": { "type": "boolean", "const": true }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "providerSlot": { "const": "image.edit" }
+        },
+        "required": ["providerSlot"]
+      },
+      "then": {
+        "properties": {
+          "requiredMode": { "const": "image2image" },
+          "mode": { "const": "image2image" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "providerSlot": { "const": "image.edit" },
+          "requiredMode": { "const": "text2image" }
+        },
+        "required": ["providerSlot", "requiredMode"]
+      },
+      "then": {
+        "properties": {
+          "status": { "enum": ["blocked", "draft"] }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "providerSlot": { "enum": ["video.i2v", "video.t2v.experimental", "video.extend"] }
+        },
+        "required": ["providerSlot"]
+      },
+      "then": {
+        "properties": {
+          "status": { "enum": ["blocked", "draft"] }
+        }
+      }
+    }
+  ]
+}

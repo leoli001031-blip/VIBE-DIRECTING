@@ -5,18 +5,27 @@ import type { StorySectionView, VisualMemorySummary, RuntimeKnowledgeSummary } f
 import type { QueueGateResult } from "./taskQueue";
 import type {
   AssetRecord,
+  AssetReadinessReport,
   AuditIssue,
+  GenerationHealthReport,
   GenerationJob,
+  Image2AdapterRequest,
+  ImageTaskPlan,
   PreviewEvent,
   ProjectAudit,
   ProjectMetrics,
   ProjectRuntimeEnvironment,
   ProjectSourceIndex,
   ProviderPolicy,
+  ProviderRegistry,
+  PromptConflictReport,
+  QaPromotionReport,
   ReflowImpactReport,
+  ShotPromptPlan,
   StoryChangeTransaction,
   TaskEnvelope,
   TaskRun,
+  WatcherEvent,
   WorkflowStage,
 } from "./types";
 
@@ -138,6 +147,17 @@ export interface ProjectRuntimeState {
       recoverable: number;
     };
     reports: ManifestMatchReport[];
+  };
+  imagePipeline: {
+    providerRegistry: ProviderRegistry;
+    promptPlans: ShotPromptPlan[];
+    promptConflictReports: PromptConflictReport[];
+    assetReadinessReports: AssetReadinessReport[];
+    imageTaskPlans: ImageTaskPlan[];
+    image2AdapterRequests: Image2AdapterRequest[];
+    watcherEvents: WatcherEvent[];
+    generationHealthReports: GenerationHealthReport[];
+    qaPromotionReports: QaPromotionReport[];
   };
   previewEvents: PreviewEvent[];
   storyChanges: ProjectRuntimeStoryChangeState;

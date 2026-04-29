@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/qa_promotion_report.schema.json",
+  "title": "QaPromotionReport",
+  "description": "QA promotion shell. Formal promotion is impossible unless every required gate passes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "reportId",
+    "taskPlanId",
+    "jobId",
+    "shotId",
+    "candidatePath",
+    "formalPath",
+    "promotionStatus",
+    "requiredGates",
+    "blockers",
+    "warnings",
+    "canPromoteToFormal"
+  ],
+  "properties": {
+    "reportId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "jobId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "candidatePath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "formalPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "promotionStatus": {
+      "type": "string",
+      "enum": ["candidate", "blocked", "qa_pending", "ready_for_promotion", "promoted"]
+    },
+    "requiredGates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expectedOutput", "manifestMatch", "promptFresh", "assetReadiness", "qaPass"],
+      "properties": {
+        "expectedOutput": { "type": "boolean" },
+        "manifestMatch": { "type": "boolean" },
+        "promptFresh": { "type": "boolean" },
+        "assetReadiness": { "type": "boolean" },
+        "qaPass": { "type": "boolean" }
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "canPromoteToFormal": { "type": "boolean" }
+  }
+}

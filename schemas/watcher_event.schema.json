@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/watcher_event.schema.json",
+  "title": "WatcherEvent",
+  "description": "A filesystem watcher event shell derived from file snapshots and manifest matches. This does not start a watcher process.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "eventType",
+    "taskId",
+    "status",
+    "severity",
+    "createdAt",
+    "notes"
+  ],
+  "properties": {
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "eventType": {
+      "type": "string",
+      "enum": [
+        "temp_output_detected",
+        "expected_output_detected",
+        "provider_ready_derivative_detected",
+        "qa_report_detected",
+        "manifest_mismatch_detected",
+        "stall_timeout_reached",
+        "worker_exit_without_expected_output",
+        "postprocess_recoverable",
+        "formal_output_promoted",
+        "blocked"
+      ]
+    },
+    "taskId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "jobId": { "type": "string" },
+    "shotId": { "type": "string" },
+    "artifactPath": { "type": "string" },
+    "expectedOutputPath": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["detected", "waiting", "blocked", "recoverable", "failed", "promoted"]
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["blocker", "warning", "info"]
+    },
+    "createdAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

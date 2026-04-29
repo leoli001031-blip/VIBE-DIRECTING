@@ -558,6 +558,818 @@ function hashString(value, prefix = "vci") {
   return `${prefix}_${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
+function providerSupport(overrides = {}) {
+  return {
+    referenceImage: false,
+    imageEdit: false,
+    startEndFrame: false,
+    bbox: "unsupported",
+    cameraControl: "none",
+    controlNet: "unsupported",
+    mask: "unsupported",
+    negativePrompt: "supported",
+    ...overrides,
+  };
+}
+
+function providerCapability(input) {
+  return {
+    id: `${input.providerId}:${input.slot}:${input.requiredMode}`,
+    liveSubmitAllowed: false,
+    ...input,
+  };
+}
+
+function buildDefaultProviderRegistry(generatedAt) {
+  const capabilities = [
+    providerCapability({
+      providerId: "openai-image2-codex-cli",
+      providerName: "OpenAI Image2 via Codex CLI",
+      slot: "image.generate",
+      requiredMode: "text2image",
+      executionState: "active",
+      inputKinds: ["text"],
+      outputKind: "image",
+      supports: providerSupport({ cameraControl: "textual" }),
+      maxReferenceImages: 0,
+      forbiddenFallbacks: ["text2image_to_image2image", "image2image_to_text2image"],
+      notes: ["Dry-run contract only. The importer never submits Image2 jobs."],
+    }),
+    providerCapability({
+      providerId: "openai-image2-api",
+      providerName: "OpenAI Image2 API",
+      slot: "image.edit",
+      requiredMode: "image2image",
+      executionState: "active",
+      inputKinds: ["text", "image", "reference_image"],
+      outputKind: "image",
+      supports: providerSupport({
+        referenceImage: true,
+        imageEdit: true,
+        startEndFrame: true,
+        mask: "planned",
+        cameraControl: "textual",
+      }),
+      maxReferenceImages: 4,
+      forbiddenFallbacks: ["image2image_to_text2image", "reference_edit_to_text2image"],
+      notes: ["End-frame edits must derive from the start frame or block; no text-to-image fallback is allowed."],
+    }),
+    providerCapability({
+      providerId: "openai-image2-api",
+      providerName: "OpenAI Image2 API",
+      slot: "image.reference_asset",
+      requiredMode: "text2image",
+      executionState: "active",
+      inputKinds: ["text", "reference_image"],
+      outputKind: "image",
+      supports: providerSupport({ referenceImage: true, cameraControl: "textual" }),
+      maxReferenceImages: 3,
+      forbiddenFallbacks: ["image2image_to_text2image"],
+      notes: ["Reference assets are compiled as source-intent plans before any future Image2 adapter call."],
+    }),
+    providerCapability({
+      providerId: "openai-image2-api",
+      providerName: "OpenAI Image2 API",
+      slot: "image.reference_asset",
+      requiredMode: "image2image",
+      executionState: "active",
+      inputKinds: ["text", "image", "reference_image"],
+      outputKind: "image",
+      supports: providerSupport({
+        referenceImage: true,
+        imageEdit: true,
+        mask: "planned",
+        cameraControl: "textual",
+      }),
+      maxReferenceImages: 4,
+      forbiddenFallbacks: ["image2image_to_text2image", "reference_edit_to_text2image"],
+      notes: ["Reference-image asset edits stay Image2 image-to-image only."],
+    }),
+    providerCapability({
+      providerId: "seedance2-provider",
+      providerName: "Seedance 2 Provider",
+      slot: "video.i2v",
+      requiredMode: "frames2video",
+      executionState: "parked",
+      inputKinds: ["text", "start_frame", "end_frame"],
+      outputKind: "video",
+      supports: providerSupport({ referenceImage: true, startEndFrame: true, cameraControl: "planned" }),
+      maxReferenceImages: 2,
+      forbiddenFallbacks: ["frames2video_to_text2video"],
+      notes: ["Parked capability only; live submit is false for Seedance/Jimeng paths."],
+    }),
+    providerCapability({
+      providerId: "jimeng-video",
+      providerName: "Jimeng Video",
+      slot: "video.i2v",
+      requiredMode: "frames2video",
+      executionState: "parked",
+      inputKinds: ["text", "start_frame", "end_frame"],
+      outputKind: "video",
+      supports: providerSupport({ referenceImage: true, startEndFrame: true, cameraControl: "planned" }),
+      maxReferenceImages: 2,
+      forbiddenFallbacks: ["frames2video_to_text2video"],
+      notes: ["Parked capability only; retained for future adapter selection."],
+    }),
+    providerCapability({
+      providerId: "none",
+      providerName: "Parked text-to-video placeholder",
+      slot: "video.t2v.experimental",
+      requiredMode: "text2video",
+      executionState: "parked",
+      inputKinds: ["text"],
+      outputKind: "video",
+      supports: providerSupport({ cameraControl: "planned" }),
+      maxReferenceImages: 0,
+      forbiddenFallbacks: [],
+      notes: ["Text-to-video is explicitly parked and cannot be used as an image/video fallback."],
+    }),
+  ];
+
+  return {
+    schemaVersion: "0.1.0",
+    registryVersion: "provider-registry/phase-4.0",
+    generatedAt,
+    strictImageProvider: "image2_only",
+    defaultProviderBySlot: {
+      "image.generate": "openai-image2-codex-cli",
+      "image.edit": "openai-image2-api",
+      "image.reference_asset": "openai-image2-api",
+      "video.i2v": "seedance2-provider",
+      "video.t2v.experimental": "none",
+    },
+    capabilities,
+    notes: [
+      "Provider capability matrix is a dry-run contract.",
+      "Image slots are Image2-only; image.edit never falls back to text2image.",
+      "Video providers are parked and liveSubmitAllowed is false.",
+    ],
+  };
+}
+
+function getCapabilityForJob(job, registry) {
+  const byProvider = registry.capabilities.find(
+    (item) => item.slot === job.slot && item.requiredMode === job.requiredMode && item.providerId === job.providerId,
+  );
+  if (byProvider) return byProvider;
+  const defaultProvider = registry.defaultProviderBySlot[job.slot];
+  return registry.capabilities.find(
+    (item) => item.slot === job.slot && item.requiredMode === job.requiredMode && item.providerId === defaultProvider,
+  ) || registry.capabilities.find((item) => item.slot === job.slot && item.requiredMode === job.requiredMode);
+}
+
+function validateJobAgainstCapability(job, registry) {
+  const blockers = [];
+  const warnings = [];
+  const capability = getCapabilityForJob(job, registry);
+  if (!capability) return { valid: false, blockers: [`No provider capability supports ${job.slot}/${job.requiredMode}.`], warnings };
+  if (job.slot === "image.generate" && job.requiredMode !== "text2image") blockers.push("image.generate requires text2image.");
+  if (job.slot === "image.edit" && job.requiredMode !== "image2image") blockers.push("image.edit cannot fall back to text2image.");
+  if (job.slot === "video.i2v" && job.requiredMode !== "frames2video") blockers.push("video.i2v requires frames2video.");
+  if (job.providerId && job.providerId !== "unknown") {
+    const providerMatchesSlot = registry.capabilities.some((item) => item.slot === job.slot && item.providerId === job.providerId);
+    if (!providerMatchesSlot) blockers.push(`${job.providerId} is not registered for ${job.slot}.`);
+  }
+  if ((job.issues || []).some((issue) => /fallback_text|image2image_to_text2image|reference_edit_to_text2image/.test(issue))) {
+    blockers.push("Job carries forbidden image fallback evidence.");
+  }
+  if (["parked", "planned", "unavailable"].includes(capability.executionState)) {
+    warnings.push(`${capability.slot} is ${capability.executionState}; keep this as dry-run contract state.`);
+  }
+  if (job.slot === "image.edit") warnings.push("image.edit fallback to text2image is forbidden by capability.");
+  return { valid: blockers.length === 0, capability, blockers, warnings };
+}
+
+function promptKindForJob(job) {
+  if (job.slot === "image.generate") return "start_frame";
+  if (job.slot === "image.edit") return "end_frame";
+  if (job.slot === "image.reference_asset") return "reference_asset";
+  if (String(job.slot).startsWith("video.")) return "video_parked";
+  return "unknown";
+}
+
+function buildShotPromptPlan(job, shot, assets, sourceIndex, providerRegistry, knowledgeManifest, generatedAt) {
+  const capabilityResult = validateJobAgainstCapability(job, providerRegistry);
+  const promptKind = promptKindForJob(job);
+  const referenceIds = uniqueSorted(job.references || []);
+  const referencedAssets = assets.filter((asset) => referenceIds.includes(asset.path) || referenceIds.includes(asset.id));
+  const sourceShotSpecHash = hashString(JSON.stringify(canonicalize({
+    sourceIndexHash: sourceIndex.sourceIndexHash,
+    shot: shot ? { id: shot.id, title: shot.title, storyFunction: shot.storyFunction, issues: shot.issues } : undefined,
+    job: { id: job.id, slot: job.slot, requiredMode: job.requiredMode, outputPath: job.outputPath, references: job.references },
+  })), "shot_spec");
+  const conflicts = capabilityResult.blockers.map((detail) => ({
+    code: "provider_capability_blocker",
+    severity: "blocker",
+    target: job.id,
+    detail,
+  }));
+  const derivesFromStartFrame = promptKind === "end_frame"
+    ? Boolean(shot?.startFrame && !(shot.issues || []).includes("missing_start_frame"))
+    : undefined;
+  if (promptKind === "end_frame" && !derivesFromStartFrame) {
+    conflicts.push({
+      code: "end_frame_missing_start_derivation",
+      severity: "blocker",
+      target: job.id,
+      detail: "End-frame image.edit must record derivesFromStartFrame=true or stay blocked.",
+    });
+  }
+  for (const asset of referencedAssets) {
+    if (asset.lockedStatus !== "locked" || !asset.safeForFutureReference) {
+      conflicts.push({
+        code: "unsafe_reference_in_prompt_plan",
+        severity: asset.status === "missing" ? "blocker" : "warning",
+        target: asset.id,
+        detail: `${asset.type}:${asset.id} is not a locked future-safe reference.`,
+      });
+    }
+  }
+  const adapterWarnings = [...capabilityResult.warnings];
+  if (promptKind === "video_parked") adapterWarnings.push("Video prompt plan is parked; no Seedance/Jimeng submit is allowed.");
+  const promptPlanId = `prompt_plan_${job.id}`;
+  const conflictReportId = `prompt_conflict_${job.id}`;
+  const blockers = conflicts.filter((conflict) => conflict.severity === "blocker").map((conflict) => conflict.detail);
+  const status = blockers.length ? "blocked" : promptKind === "video_parked" ? "draft" : "ready_for_envelope";
+  const styleDirectives = (knowledgeManifest.packs || [])
+    .filter((pack) => pack.enabled && ["style", "composition", "camera", "lighting", "color", "prompt"].includes(pack.category))
+    .slice(0, 6)
+    .map((pack) => `${pack.category}:${pack.id}@${pack.hash}`);
+  const planWithoutHash = {
+    promptPlanId,
+    sourceShotSpecHash,
+    jobId: job.id,
+    shotId: shot?.id,
+    providerId: capabilityResult.capability?.providerId || job.providerId || "unknown",
+    providerSlot: job.slot,
+    requiredMode: job.requiredMode,
+    promptKind,
+    sourceIntent: [
+      shot?.title ? `shot_title:${shot.title}` : "",
+      shot?.storyFunction ? `story_function:${shot.storyFunction}` : "",
+      job.promptPath ? `prompt_source_path:${job.promptPath}` : "",
+    ].filter(Boolean),
+    naturalLanguagePolicy: "source_intent_only",
+    mustPreserve: [
+      "locked character identity",
+      "locked scene layout",
+      "style capsule",
+      ...(promptKind === "end_frame" ? ["start frame composition"] : []),
+    ],
+    mustAvoid: [
+      "provider or mode fallback",
+      "unlocked candidate as future reference",
+      "natural language patch applied directly to provider prompt",
+      ...(promptKind === "end_frame" ? ["text2image fallback"] : []),
+    ],
+    referenceIds,
+    styleDirectives: styleDirectives.length ? styleDirectives : ["Use only routed knowledge summaries as compiler hints."],
+    adapterWarnings,
+    derivesFromStartFrame,
+    status,
+    blockers,
+    conflictReportId,
+    createdAt: generatedAt,
+  };
+  const plan = {
+    ...planWithoutHash,
+    promptPlanHash: hashString(JSON.stringify(canonicalize(planWithoutHash)), "prompt_plan"),
+  };
+  const conflictReport = {
+    reportId: conflictReportId,
+    promptPlanId,
+    jobId: job.id,
+    shotId: shot?.id,
+    status: conflicts.some((conflict) => conflict.severity === "blocker")
+      ? "blocked"
+      : conflicts.some((conflict) => conflict.severity === "warning")
+        ? "warning"
+        : "clear",
+    conflicts,
+    checkedAt: generatedAt,
+  };
+  return { plan, conflictReport };
+}
+
+function buildAssetReadinessReport(shot, assets, sourceIndex, jobs, generatedAt) {
+  const shotJobs = jobs.filter((job) => job.id.includes(shot.id));
+  const referencedIds = uniqueSorted(shotJobs.flatMap((job) => job.references || []));
+  const sourceLocked = sourceIndex.lockedReferenceIds || [];
+  const sourceCandidate = sourceIndex.candidateReferenceIds || [];
+  const sourceRejected = (sourceIndex.rejectedReferenceIds || []).filter((id) => referencedIds.includes(id));
+  const sourceFailed = (sourceIndex.failedReferenceIds || []).filter((id) => referencedIds.includes(id));
+  const sourceCandidateReferenced = sourceCandidate.filter((id) => referencedIds.includes(id));
+  const knownAssetReferenceIds = new Set(assets.flatMap((asset) => [asset.id, asset.path]).filter(Boolean));
+  const knownSourceReferenceIds = new Set([
+    ...sourceLocked,
+    ...sourceCandidate,
+    ...(sourceIndex.rejectedReferenceIds || []),
+    ...(sourceIndex.failedReferenceIds || []),
+  ]);
+  const missingReferenceIds = referencedIds.filter((id) => !knownAssetReferenceIds.has(id) && !knownSourceReferenceIds.has(id));
+  const referencedAssets = assets.filter((asset) => referencedIds.includes(asset.id) || referencedIds.includes(asset.path));
+  const scopedAssets = referencedIds.length ? referencedAssets : assets;
+  const safeAssets = scopedAssets.filter((asset) =>
+    asset.status !== "missing" &&
+    asset.lockedStatus === "locked" &&
+    asset.safeForFutureReference &&
+    (sourceIndex.lockedReferenceIds.includes(asset.path) || sourceIndex.lockedReferenceIds.includes(asset.id))
+  );
+  const candidateAssets = scopedAssets.filter((asset) => asset.status !== "missing" && asset.lockedStatus !== "locked");
+  const missingAssets = scopedAssets.filter((asset) => asset.status === "missing");
+  const tempAssets = scopedAssets.filter((asset) =>
+    ["candidate", "needs_review"].includes(asset.lockedStatus) ||
+    (asset.issues || []).some((issue) => /temp|candidate|protocol_pass_needs_visual_audit/.test(issue))
+  );
+  const hasLockedScene = scopedAssets.some((asset) => asset.type === "scene" && safeAssets.some((safe) => safe.id === asset.id));
+  const hasLockedCharacter = scopedAssets.some((asset) => asset.type === "character" && safeAssets.some((safe) => safe.id === asset.id));
+  const blockers = [];
+  const warnings = [];
+  if (!hasLockedScene) warnings.push("No locked scene view is available; formal output must stay blocked.");
+  if (!hasLockedCharacter) warnings.push("No locked character reference is available; formal output must stay blocked.");
+  if (missingAssets.length || missingReferenceIds.length) blockers.push(`${missingAssets.length + missingReferenceIds.length} referenced asset(s) are missing.`);
+  if (sourceRejected.length) blockers.push("Rejected references are present in this shot scope.");
+  if (sourceFailed.length) blockers.push("Failed references are present in this shot scope.");
+  if (candidateAssets.length || sourceCandidateReferenced.length || tempAssets.length) warnings.push("Candidate/temp references are draft-only and cannot become future reference authority.");
+  const unsafeReferenceIds = uniqueSorted([
+    ...candidateAssets.map((asset) => asset.id),
+    ...missingAssets.map((asset) => asset.id),
+    ...tempAssets.map((asset) => asset.id),
+    ...sourceCandidateReferenced,
+    ...sourceRejected,
+    ...sourceFailed,
+    ...missingReferenceIds,
+  ]);
+  const formalBlocked = blockers.length > 0 || !hasLockedScene || !hasLockedCharacter || unsafeReferenceIds.length > 0;
+  const status = blockers.length ? "blocked" : formalBlocked ? "draft_only" : "ready";
+  return {
+    reportId: `asset_readiness_${hashString(`${shot.id}:${generatedAt}`, "vci").replace(/^vci_/, "")}`,
+    shotId: shot.id,
+    assetIds: uniqueSorted(scopedAssets.map((asset) => asset.id || asset.path)),
+    status,
+    formalBlocked,
+    blockers,
+    warnings,
+    safeReferenceIds: uniqueSorted(safeAssets.map((asset) => asset.id)),
+    unsafeReferenceIds,
+    lockedReferenceIds: uniqueSorted(safeAssets.map((asset) => asset.id)),
+    candidateReferenceIds: uniqueSorted([...candidateAssets.map((asset) => asset.id), ...sourceCandidateReferenced]),
+    missingReferenceIds: uniqueSorted([...missingAssets.map((asset) => asset.id), ...missingReferenceIds]),
+    rejectedReferenceIds: sourceRejected,
+    tempReferenceIds: uniqueSorted(tempAssets.map((asset) => asset.id)),
+    failedReferenceIds: uniqueSorted([...missingAssets.map((asset) => asset.id), ...sourceFailed]),
+    checkedAt: generatedAt,
+  };
+}
+
+function taskEnvelopeSummary(envelope, promptPlan) {
+  if (!envelope) return undefined;
+  return {
+    envelopeId: envelope.id,
+    providerSlot: envelope.providerSlot,
+    providerId: envelope.providerId,
+    requiredMode: envelope.requiredMode,
+    sourceIndexHash: envelope.sourceIndexHash,
+    promptPlanId: envelope.promptPlanId || promptPlan.promptPlanId,
+    promptPlanHash: envelope.promptPlanHash || promptPlan.promptPlanHash,
+    sourceShotSpecHash: envelope.sourceShotSpecHash || promptPlan.sourceShotSpecHash,
+    expectedOutputs: envelope.expectedOutputs || [],
+    preflightStatus: envelope.preflight?.status || "blocked",
+    blockingReasons: envelope.blockingReasons || [],
+  };
+}
+
+function isImageSlot(job) {
+  return ["image.generate", "image.edit", "image.reference_asset"].includes(job.slot);
+}
+
+function buildImageTaskPlan(job, promptPlan, readinessReport, sourceIndex, taskEnvelope) {
+  const blockers = [];
+  const warnings = [];
+  const expectedOutputPath = job.outputPath || taskEnvelope?.expectedOutputs?.[0] || "missing-output-path";
+
+  if (!isImageSlot(job)) {
+    blockers.push(
+      String(job.slot).startsWith("video.")
+        ? "Video generation is parked for Phase 4 dry-run and must not create an Image2 adapter request."
+        : `${job.slot} is not an Image2 image slot.`,
+    );
+  }
+  if (promptPlan.status === "blocked") blockers.push(...(promptPlan.blockers || []));
+  if (promptPlan.status === "draft") warnings.push("Prompt plan is draft and cannot move beyond dry-run planning.");
+  if (expectedOutputPath === "missing-output-path") blockers.push("Task has no expected output path.");
+  if (!sourceIndex.sourceIndexHash) blockers.push("Source index hash is missing.");
+  if (readinessReport) {
+    blockers.push(...(readinessReport.blockers || []));
+    warnings.push(...(readinessReport.warnings || []));
+    if (readinessReport.formalBlocked) {
+      warnings.push("Asset readiness blocks formal promotion; adapter request remains dry-run only.");
+    }
+  } else {
+    warnings.push("No shot-level asset readiness report was available for this task plan.");
+  }
+
+  const status = blockers.length
+    ? "blocked"
+    : promptPlan.status === "ready_for_envelope" && isImageSlot(job)
+      ? "ready_for_dry_run"
+      : "draft";
+
+  return {
+    taskPlanId: `image_task_plan_${job.id}`,
+    jobId: job.id,
+    shotId: promptPlan.shotId || readinessReport?.shotId || "unscoped",
+    promptPlanId: promptPlan.promptPlanId,
+    providerSlot: promptPlan.providerSlot,
+    requiredMode: promptPlan.requiredMode,
+    providerId: promptPlan.providerId,
+    mode: promptPlan.requiredMode,
+    status,
+    expectedOutputPath,
+    inputReferenceIds: uniqueSorted(promptPlan.referenceIds || []),
+    sourcePromptPlanHash: promptPlan.promptPlanHash,
+    sourceShotSpecHash: promptPlan.sourceShotSpecHash,
+    taskEnvelopeSummary: taskEnvelopeSummary(taskEnvelope, promptPlan),
+    blockers: uniqueSorted(blockers),
+    warnings: uniqueSorted([...warnings, ...(promptPlan.adapterWarnings || [])]),
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+  };
+}
+
+function operationForImage2(taskPlan) {
+  if (taskPlan.providerSlot === "image.reference_asset") return "reference_asset";
+  if (taskPlan.requiredMode === "image2image") return "image2image";
+  return "text2image";
+}
+
+function forbiddenFallbacksForImage2(taskPlan) {
+  const fallbacks = ["provider_or_mode_fallback"];
+  if (taskPlan.requiredMode === "image2image" || taskPlan.providerSlot === "image.edit") {
+    fallbacks.push("image2image_to_text2image");
+  }
+  if (taskPlan.providerSlot === "image.reference_asset" && taskPlan.requiredMode === "image2image") {
+    fallbacks.push("reference_edit_to_text2image");
+  }
+  if (taskPlan.requiredMode === "text2image") fallbacks.push("text2image_to_image2image");
+  return uniqueSorted(fallbacks);
+}
+
+function buildImage2AdapterRequest(taskPlan, promptPlan) {
+  return {
+    requestId: `image2_request_${taskPlan.taskPlanId}`,
+    taskPlanId: taskPlan.taskPlanId,
+    adapterId: "image2-dry-run",
+    operation: operationForImage2(taskPlan),
+    payload: {
+      sourceIntent: promptPlan.sourceIntent || [],
+      mustPreserve: promptPlan.mustPreserve || [],
+      mustAvoid: promptPlan.mustAvoid || [],
+      references: (taskPlan.inputReferenceIds || []).map((referenceId) => ({ referenceId, source: "prompt_plan" })),
+      outputPath: taskPlan.expectedOutputPath,
+    },
+    submitPolicy: {
+      dry_run_only: true,
+      manual_submit_required: true,
+      live_submit_forbidden: true,
+    },
+    forbiddenFallbacks: forbiddenFallbacksForImage2(taskPlan),
+  };
+}
+
+function normalizePathValue(pathValue) {
+  return String(pathValue || "").replace(/\\/g, "/");
+}
+
+function snapshotPaths(snapshot) {
+  if (Array.isArray(snapshot)) {
+    return new Set(snapshot.map((entry) => normalizePathValue(typeof entry === "string" ? entry : entry.path)));
+  }
+  return new Set(Object.keys(snapshot || {}).map(normalizePathValue));
+}
+
+function basename(pathValue) {
+  const parts = normalizePathValue(pathValue).split("/");
+  return parts[parts.length - 1] || pathValue;
+}
+
+function watcherEventId(eventType, taskPlan, artifactPath) {
+  return `watcher_${eventType}_${taskPlan.taskPlanId}_${hashString(artifactPath || taskPlan.expectedOutputPath, "watcher").replace(/^watcher_/, "")}`;
+}
+
+function makeWatcherEvent(eventType, taskPlan, status, severity, createdAt, notes, artifactPath) {
+  return {
+    id: watcherEventId(eventType, taskPlan, artifactPath),
+    eventType,
+    taskId: taskPlan.taskPlanId,
+    jobId: taskPlan.jobId,
+    shotId: taskPlan.shotId,
+    artifactPath,
+    expectedOutputPath: taskPlan.expectedOutputPath,
+    status,
+    severity,
+    createdAt,
+    notes,
+  };
+}
+
+function isTempCandidate(pathValue) {
+  const normalized = normalizePathValue(pathValue);
+  return /(^|\/)(tmp|temp|cache|candidates?|drafts?)(\/|$)/i.test(normalized) || /[_\-.](tmp|temp|candidate|draft)\./i.test(pathValue);
+}
+
+function isQaReportPath(pathValue) {
+  const normalized = normalizePathValue(pathValue);
+  return /(^|\/)(qa|reports?)(\/|$)/i.test(normalized) || /qa|quality|audit/i.test(basename(pathValue));
+}
+
+function matchesTaskPath(pathValue, taskPlan) {
+  const haystack = normalizePathValue(pathValue).toLowerCase();
+  return [taskPlan.taskPlanId, taskPlan.jobId, taskPlan.shotId, basename(taskPlan.expectedOutputPath)]
+    .filter(Boolean)
+    .some((token) => haystack.includes(String(token).toLowerCase()));
+}
+
+function manifestReportForTaskPlan(taskPlan, reports) {
+  return (reports || []).find((report) => report.taskId === taskPlan.jobId || report.taskId === taskPlan.taskPlanId);
+}
+
+function buildWatcherEventsFromImagePipeline({ imageTaskPlans, adapterRequests, fileSnapshot, manifestReports, createdAt }) {
+  const paths = snapshotPaths(fileSnapshot);
+  const normalizedPaths = Array.from(paths);
+  const adapterTaskIds = new Set(adapterRequests.map((request) => request.taskPlanId));
+  const watcherEvents = [];
+
+  for (const taskPlan of imageTaskPlans) {
+    const expectedPath = normalizePathValue(taskPlan.expectedOutputPath);
+    const expectedExists = paths.has(expectedPath);
+    const manifestReport = manifestReportForTaskPlan(taskPlan, manifestReports || []);
+
+    if (taskPlan.status === "blocked" || taskPlan.blockers.length > 0) {
+      watcherEvents.push(
+        makeWatcherEvent(
+          "blocked",
+          taskPlan,
+          "blocked",
+          "blocker",
+          createdAt,
+          taskPlan.blockers.length ? taskPlan.blockers : ["Image task plan is blocked."],
+        ),
+      );
+    }
+
+    if (expectedExists) {
+      watcherEvents.push(
+        makeWatcherEvent(
+          "expected_output_detected",
+          taskPlan,
+          "detected",
+          "info",
+          createdAt,
+          ["Expected output exists in the imported file snapshot."],
+          taskPlan.expectedOutputPath,
+        ),
+      );
+    }
+
+    for (const tempPath of normalizedPaths.filter((item) => item !== expectedPath && isTempCandidate(item) && matchesTaskPath(item, taskPlan))) {
+      watcherEvents.push(
+        makeWatcherEvent("temp_output_detected", taskPlan, "detected", "warning", createdAt, ["Temp or candidate output is draft-only."], tempPath),
+      );
+    }
+
+    for (const candidatePath of normalizedPaths.filter(
+      (item) => item !== expectedPath && !isTempCandidate(item) && !isQaReportPath(item) && matchesTaskPath(item, taskPlan),
+    )) {
+      watcherEvents.push(
+        makeWatcherEvent(
+          "provider_ready_derivative_detected",
+          taskPlan,
+          "detected",
+          "info",
+          createdAt,
+          ["A non-formal derivative exists and still needs manifest/QA gates before promotion."],
+          candidatePath,
+        ),
+      );
+    }
+
+    for (const qaPath of normalizedPaths.filter((item) => isQaReportPath(item) && matchesTaskPath(item, taskPlan))) {
+      watcherEvents.push(makeWatcherEvent("qa_report_detected", taskPlan, "detected", "info", createdAt, ["QA report artifact detected."], qaPath));
+    }
+
+    if (manifestReport?.status === "postprocess_recoverable") {
+      const recoverablePaths = manifestReport.recoverableOutputs.length
+        ? manifestReport.recoverableOutputs
+        : [manifestReport.outputMatches?.[0]?.actualPath].filter(Boolean);
+      for (const recoverablePath of recoverablePaths) {
+        watcherEvents.push(
+          makeWatcherEvent(
+            "postprocess_recoverable",
+            taskPlan,
+            "recoverable",
+            "warning",
+            createdAt,
+            ["Expected output is missing, but a recoverable derivative exists."],
+            recoverablePath,
+          ),
+        );
+      }
+    }
+
+    if (manifestReport && manifestReport.status !== "actual_output_present" && manifestReport.status !== "complete") {
+      watcherEvents.push(
+        makeWatcherEvent(
+          "manifest_mismatch_detected",
+          taskPlan,
+          "failed",
+          expectedExists ? "warning" : "blocker",
+          createdAt,
+          [manifestReport.missingExpectedOutputs.length ? "Manifest still reports missing expected output." : `Manifest status is ${manifestReport.status}.`],
+        ),
+      );
+    }
+
+    if (!expectedExists && adapterTaskIds.has(taskPlan.taskPlanId) && taskPlan.status !== "blocked") {
+      watcherEvents.push(
+        makeWatcherEvent(
+          "worker_exit_without_expected_output",
+          taskPlan,
+          "failed",
+          "warning",
+          createdAt,
+          ["Adapter request exists, but expected output is absent; worker self-report cannot mark the task complete."],
+        ),
+      );
+    }
+  }
+
+  return watcherEvents.sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function hasManifestMatch(status) {
+  return ["actual_output_present", "complete", "matched"].includes(status);
+}
+
+function promptIsStaleForTaskPlan(taskPlan, promptPlan) {
+  if (!promptPlan) return false;
+  return promptPlan.promptPlanHash !== taskPlan.sourcePromptPlanHash || promptPlan.sourceShotSpecHash !== taskPlan.sourceShotSpecHash;
+}
+
+function qaStatusForTaskPlan(taskPlan, outputExists, watcherEvents, qaStatusByOutputPath = {}) {
+  const configured = qaStatusByOutputPath[taskPlan.expectedOutputPath] || qaStatusByOutputPath[normalizePathValue(taskPlan.expectedOutputPath)];
+  if (configured) return configured;
+  if (!outputExists) return "missing";
+  const hasReportEvent = watcherEvents.some(
+    (event) => event.eventType === "qa_report_detected" && (event.taskId === taskPlan.taskPlanId || event.jobId === taskPlan.jobId),
+  );
+  return hasReportEvent ? "pending" : "missing";
+}
+
+function generationHealthStatus({ blocked, outputExists, manifestMatched, stalePrompt, assetReady, qaStatus }) {
+  if (blocked || stalePrompt || (outputExists && !assetReady)) return "blocked";
+  if (!outputExists || !manifestMatched) return "waiting";
+  if (qaStatus === "fail") return "failed";
+  if (["missing", "pending", "unknown"].includes(qaStatus)) return "qa_pending";
+  if (qaStatus === "pass" && assetReady) return "formal_ready";
+  return "output_detected";
+}
+
+function nextActionForHealth(status) {
+  if (status === "formal_ready") return "Ready for QA promotion review.";
+  if (status === "qa_pending") return "Wait for explicit QA pass before formal promotion.";
+  if (status === "waiting") return "Wait for expected output and rerun manifest match.";
+  if (status === "failed") return "Review failing QA and regenerate or repair.";
+  if (status === "blocked") return "Resolve blockers before promotion.";
+  return "Output detected; run QA gate next.";
+}
+
+function buildGenerationHealthReports({ imageTaskPlans, fileSnapshot, manifestReports, watcherEvents = [], assetReadinessReports = [], promptPlans = [], qaStatusByOutputPath = {} }) {
+  const paths = snapshotPaths(fileSnapshot);
+
+  return imageTaskPlans.map((taskPlan) => {
+    const expectedPath = normalizePathValue(taskPlan.expectedOutputPath);
+    const manifestReport = manifestReportForTaskPlan(taskPlan, manifestReports || []);
+    const manifestStatus = manifestReport?.status || (paths.has(expectedPath) ? "actual_output_present" : "missing_expected_output");
+    const outputExists = paths.has(expectedPath) || hasManifestMatch(manifestStatus);
+    const promptPlan = promptPlans.find((plan) => plan.promptPlanId === taskPlan.promptPlanId);
+    const stalePrompt = promptIsStaleForTaskPlan(taskPlan, promptPlan);
+    const readinessReport = assetReadinessReports.find((report) => report.shotId === taskPlan.shotId);
+    const assetReadinessStatus = readinessReport?.status || "missing";
+    const assetReady = Boolean(readinessReport && readinessReport.status === "ready" && !readinessReport.formalBlocked);
+    const qaStatus = qaStatusForTaskPlan(taskPlan, outputExists, watcherEvents, qaStatusByOutputPath);
+    const manifestMatched = hasManifestMatch(manifestStatus);
+    const blockers = uniqueSorted([
+      ...(taskPlan.blockers || []),
+      ...(taskPlan.status === "blocked" ? ["Image task plan is blocked."] : []),
+      ...(outputExists ? [] : ["Expected output is missing from the file snapshot."]),
+      ...(manifestMatched ? [] : [`Manifest status is ${manifestStatus}.`]),
+      ...(stalePrompt ? ["Prompt plan hash differs from the image task plan source hash."] : []),
+      ...(readinessReport && !assetReady ? readinessReport.blockers : []),
+    ]);
+    const warnings = uniqueSorted([
+      ...(taskPlan.warnings || []),
+      ...(readinessReport?.warnings || []),
+      ...(readinessReport ? [] : ["No asset readiness report was available for this task plan."]),
+      ...(["missing", "pending"].includes(qaStatus) ? ["Missing explicit QA pass; worker success cannot promote formal output."] : []),
+    ]);
+    const healthStatus = generationHealthStatus({
+      blocked: taskPlan.status === "blocked" || taskPlan.blockers.length > 0,
+      outputExists,
+      manifestMatched,
+      stalePrompt,
+      assetReady,
+      qaStatus,
+    });
+
+    return {
+      reportId: `generation_health_${taskPlan.taskPlanId}`,
+      taskPlanId: taskPlan.taskPlanId,
+      jobId: taskPlan.jobId,
+      shotId: taskPlan.shotId,
+      expectedOutputPath: taskPlan.expectedOutputPath,
+      outputExists,
+      manifestStatus,
+      qaStatus,
+      stalePrompt,
+      assetReadinessStatus,
+      healthStatus,
+      blockers,
+      warnings,
+      nextAction: nextActionForHealth(healthStatus),
+    };
+  });
+}
+
+function promotionStatusForReport({ allGatesPass, formalAlreadyPromoted, expectedOutput, manifestMatch, promptFresh, assetReadiness, qaPass, qaStatus }) {
+  if (allGatesPass && formalAlreadyPromoted) return "promoted";
+  if (allGatesPass) return "ready_for_promotion";
+  if (expectedOutput && manifestMatch && promptFresh && assetReadiness && !qaPass) return "qa_pending";
+  if (!expectedOutput) return "candidate";
+  return ["pending", "missing"].includes(qaStatus) ? "qa_pending" : "blocked";
+}
+
+function buildQaPromotionReports({ imageTaskPlans, fileSnapshot, manifestReports, generationHealthReports, assetReadinessReports, promptPlans, qaStatusByOutputPath, promotedFormalPaths = [] }) {
+  const healthReports = generationHealthReports || buildGenerationHealthReports({
+    imageTaskPlans,
+    fileSnapshot,
+    manifestReports,
+    assetReadinessReports,
+    promptPlans,
+    qaStatusByOutputPath,
+  });
+  const healthByTaskPlan = new Map(healthReports.map((report) => [report.taskPlanId, report]));
+  const promotedPaths = new Set(promotedFormalPaths.map(normalizePathValue));
+
+  return imageTaskPlans.map((taskPlan) => {
+    const health = healthByTaskPlan.get(taskPlan.taskPlanId);
+    const expectedOutput = Boolean(health?.outputExists);
+    const manifestMatch = hasManifestMatch(health?.manifestStatus || "missing_expected_output");
+    const promptFresh = !health?.stalePrompt;
+    const assetReadiness = health?.assetReadinessStatus === "ready";
+    const qaPass = health?.qaStatus === "pass";
+    const healthClear = health?.healthStatus !== "blocked" && health?.healthStatus !== "failed";
+    const taskPlanClear = taskPlan.status !== "blocked";
+    const requiredGates = { expectedOutput, manifestMatch, promptFresh, assetReadiness, qaPass };
+    const formalPath = taskPlan.expectedOutputPath;
+    const blockers = uniqueSorted([
+      ...(expectedOutput ? [] : ["Expected output is required before formal promotion."]),
+      ...(manifestMatch ? [] : [`Manifest match is required before formal promotion${health?.manifestStatus ? ` (${health.manifestStatus})` : ""}.`]),
+      ...(promptFresh ? [] : ["Prompt must be fresh before formal promotion."]),
+      ...(assetReadiness ? [] : ["Asset readiness must be ready before formal promotion."]),
+      ...(qaPass ? [] : ["Explicit QA pass is required before formal promotion."]),
+      ...(healthClear ? [] : [`Generation health must not be ${health?.healthStatus} before formal promotion.`]),
+      ...(taskPlanClear ? [] : ["Task plan must not be blocked before formal promotion."]),
+      ...(health?.blockers || []),
+    ]);
+    const canPromoteToFormal = Object.values(requiredGates).every(Boolean) && healthClear && taskPlanClear && blockers.length === 0;
+    const warnings = uniqueSorted([...(health?.warnings || []), "Worker or provider self-report is not a formal success gate."]);
+
+    return {
+      reportId: `qa_promotion_${taskPlan.taskPlanId}`,
+      taskPlanId: taskPlan.taskPlanId,
+      jobId: taskPlan.jobId,
+      shotId: taskPlan.shotId,
+      candidatePath: taskPlan.expectedOutputPath,
+      formalPath,
+      promotionStatus: promotionStatusForReport({
+        allGatesPass: canPromoteToFormal,
+        formalAlreadyPromoted: promotedPaths.has(normalizePathValue(formalPath)),
+        expectedOutput,
+        manifestMatch,
+        promptFresh,
+        assetReadiness,
+        qaPass,
+        qaStatus: health?.qaStatus || "unknown",
+      }),
+      requiredGates,
+      blockers,
+      warnings,
+      canPromoteToFormal,
+    };
+  });
+}
+
 function computeSourceIndexHash(index) {
   return hashString(JSON.stringify(canonicalize(index)));
 }
@@ -1166,6 +1978,68 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
   const taskViews = buildTaskStates(audit, sourceIndex, knowledgeSummary, generatedAt);
   const manifestMatches = manifestSummary(taskViews);
   const runtime = buildRuntimeEnvironment(generatedAt);
+  const providerRegistry = buildDefaultProviderRegistry(generatedAt);
+  const promptPlanResults = taskViews.map((task) =>
+    buildShotPromptPlan(
+      task.job,
+      audit.shots.find((shot) => shot.id === task.shotId),
+      audit.assets,
+      sourceIndex,
+      providerRegistry,
+      knowledgeManifest,
+      generatedAt,
+    ),
+  );
+  const assetReadinessReports = audit.shots.map((shot) =>
+    buildAssetReadinessReport(shot, audit.assets, sourceIndex, audit.jobs, generatedAt),
+  );
+  const imageTaskPlans = promptPlanResults.map((result) => {
+    const task = taskViews.find((item) => item.job.id === result.plan.jobId);
+    const readinessReport = result.plan.shotId
+      ? assetReadinessReports.find((report) => report.shotId === result.plan.shotId)
+      : undefined;
+    return buildImageTaskPlan(
+      task?.job || audit.jobs.find((job) => job.id === result.plan.jobId),
+      result.plan,
+      readinessReport,
+      sourceIndex,
+      task?.envelope,
+    );
+  });
+  const image2AdapterRequests = imageTaskPlans
+    .filter((taskPlan) =>
+      ["ready_for_dry_run", "ready_for_manual_submit"].includes(taskPlan.status) &&
+      isImageSlot({ slot: taskPlan.providerSlot })
+    )
+    .map((taskPlan) => {
+      const promptPlan = promptPlanResults.find((result) => result.plan.promptPlanId === taskPlan.promptPlanId)?.plan;
+      return promptPlan ? buildImage2AdapterRequest(taskPlan, promptPlan) : undefined;
+    })
+    .filter(Boolean);
+  const fileSnapshot = audit.fileSnapshot || [];
+  const watcherEvents = buildWatcherEventsFromImagePipeline({
+    imageTaskPlans,
+    adapterRequests: image2AdapterRequests,
+    fileSnapshot,
+    manifestReports: taskViews.map((task) => task.manifestMatch),
+    createdAt: generatedAt,
+  });
+  const generationHealthReports = buildGenerationHealthReports({
+    imageTaskPlans,
+    fileSnapshot,
+    manifestReports: taskViews.map((task) => task.manifestMatch),
+    watcherEvents,
+    assetReadinessReports,
+    promptPlans: promptPlanResults.map((result) => result.plan),
+  });
+  const qaPromotionReports = buildQaPromotionReports({
+    imageTaskPlans,
+    fileSnapshot,
+    manifestReports: taskViews.map((task) => task.manifestMatch),
+    generationHealthReports,
+    assetReadinessReports,
+    promptPlans: promptPlanResults.map((result) => result.plan),
+  });
 
   return {
     schemaVersion: "0.1.0",
@@ -1202,6 +2076,17 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     manifestMatches: {
       summary: manifestMatches,
       reports: taskViews.map((task) => task.manifestMatch),
+    },
+    imagePipeline: {
+      providerRegistry,
+      promptPlans: promptPlanResults.map((result) => result.plan),
+      promptConflictReports: promptPlanResults.map((result) => result.conflictReport),
+      assetReadinessReports,
+      imageTaskPlans,
+      image2AdapterRequests,
+      watcherEvents,
+      generationHealthReports,
+      qaPromotionReports,
     },
     previewEvents: buildPreviewEvents(audit, taskViews),
     storyChanges: {
@@ -1617,7 +2502,8 @@ const audit = {
   state,
   fileSnapshot: [
     ...assetRecords.filter((asset) => asset.status !== "missing").map((asset) => asset.path),
-    ...shotRecords.flatMap((shot) => [shot.startFrame, shot.endFrame, shot.videoPath].filter(Boolean)),
+    ...shotRecords.flatMap((shot) => [shot.startFrame, shot.endFrame, shot.videoPath].filter((pathValue) => pathValue && exists(pathValue))),
+    ...[assetQaPath, keyframeQaPath, videoQaPath].filter((pathValue) => exists(pathValue)),
   ],
   schemaSummary: {
     auditSchemaVersion: "0.3.0",

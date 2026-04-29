@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/image2_adapter_request.schema.json",
+  "title": "Image2AdapterRequest",
+  "description": "Dry-run-only Image2 adapter payload skeleton. It carries source facts, not final provider prompt text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "requestId",
+    "taskPlanId",
+    "adapterId",
+    "operation",
+    "payload",
+    "submitPolicy",
+    "forbiddenFallbacks"
+  ],
+  "properties": {
+    "requestId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "adapterId": { "type": "string", "const": "image2-dry-run" },
+    "operation": {
+      "type": "string",
+      "enum": ["text2image", "image2image", "reference_asset"]
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceIntent", "mustPreserve", "mustAvoid", "references", "outputPath"],
+      "properties": {
+        "sourceIntent": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "mustPreserve": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "mustAvoid": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["referenceId", "source"],
+            "properties": {
+              "referenceId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+              "source": { "type": "string", "const": "prompt_plan" }
+            }
+          }
+        },
+        "outputPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "submitPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dry_run_only", "manual_submit_required", "live_submit_forbidden"],
+      "properties": {
+        "dry_run_only": { "type": "boolean", "const": true },
+        "manual_submit_required": { "type": "boolean", "const": true },
+        "live_submit_forbidden": { "type": "boolean", "const": true }
+      }
+    },
+    "forbiddenFallbacks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "type": "string", "enum": ["provider_or_mode_fallback"] }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "operation": { "const": "image2image" }
+        },
+        "required": ["operation"]
+      },
+      "then": {
+        "properties": {
+          "forbiddenFallbacks": {
+            "contains": { "const": "image2image_to_text2image" }
+          }
+        }
+      }
+    }
+  ]
+}

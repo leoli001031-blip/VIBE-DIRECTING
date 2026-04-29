@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/asset_readiness_report.schema.json",
+  "title": "AssetReadinessReport",
+  "description": "Shot-level reference readiness gate for draft/formal image pipeline use.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "reportId",
+    "shotId",
+    "assetIds",
+    "status",
+    "formalBlocked",
+    "blockers",
+    "warnings",
+    "safeReferenceIds",
+    "unsafeReferenceIds",
+    "lockedReferenceIds",
+    "candidateReferenceIds",
+    "missingReferenceIds",
+    "rejectedReferenceIds",
+    "tempReferenceIds",
+    "failedReferenceIds",
+    "checkedAt"
+  ],
+  "properties": {
+    "reportId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "assetIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "draft_only", "blocked"]
+    },
+    "formalBlocked": { "type": "boolean" },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "safeReferenceIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "unsafeReferenceIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "lockedReferenceIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "candidateReferenceIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "missingReferenceIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "rejectedReferenceIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "tempReferenceIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "failedReferenceIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "checkedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "formalBlocked": { "const": true }
+        },
+        "required": ["formalBlocked"]
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["draft_only", "blocked"]
+          }
+        }
+      }
+    }
+  ]
+}

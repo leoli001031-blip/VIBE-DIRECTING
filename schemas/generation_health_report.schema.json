@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/generation_health_report.schema.json",
+  "title": "GenerationHealthReport",
+  "description": "Generation health shell joining expected output, manifest, QA, prompt freshness, and asset readiness gates.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "reportId",
+    "taskPlanId",
+    "jobId",
+    "shotId",
+    "expectedOutputPath",
+    "outputExists",
+    "manifestStatus",
+    "qaStatus",
+    "stalePrompt",
+    "assetReadinessStatus",
+    "healthStatus",
+    "blockers",
+    "warnings",
+    "nextAction"
+  ],
+  "properties": {
+    "reportId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "jobId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "expectedOutputPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "outputExists": { "type": "boolean" },
+    "manifestStatus": { "type": "string" },
+    "qaStatus": {
+      "type": "string",
+      "enum": ["missing", "pending", "pass", "fail", "not_required", "unknown"]
+    },
+    "stalePrompt": { "type": "boolean" },
+    "assetReadinessStatus": {
+      "type": "string",
+      "enum": ["ready", "draft_only", "blocked", "missing"]
+    },
+    "healthStatus": {
+      "type": "string",
+      "enum": ["waiting", "output_detected", "qa_pending", "formal_ready", "blocked", "failed"]
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "nextAction": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+  }
+}

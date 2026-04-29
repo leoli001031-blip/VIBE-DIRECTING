@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/shot_prompt_plan.schema.json",
+  "title": "ShotPromptPlan",
+  "description": "Prompt compiler skeleton output. Natural language remains source intent only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "promptPlanId",
+    "promptPlanHash",
+    "sourceShotSpecHash",
+    "jobId",
+    "providerId",
+    "providerSlot",
+    "requiredMode",
+    "promptKind",
+    "sourceIntent",
+    "naturalLanguagePolicy",
+    "mustPreserve",
+    "mustAvoid",
+    "referenceIds",
+    "styleDirectives",
+    "adapterWarnings",
+    "status",
+    "blockers",
+    "conflictReportId",
+    "createdAt"
+  ],
+  "properties": {
+    "promptPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "promptPlanHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "sourceShotSpecHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "jobId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "shotId": { "type": "string" },
+    "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "providerSlot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+    "requiredMode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+    "promptKind": {
+      "type": "string",
+      "enum": ["start_frame", "end_frame", "reference_asset", "video_parked", "unknown"]
+    },
+    "sourceIntent": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "naturalLanguagePolicy": { "type": "string", "const": "source_intent_only" },
+    "mustPreserve": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "mustAvoid": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "referenceIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "styleDirectives": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "adapterWarnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "derivesFromStartFrame": { "type": "boolean" },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "blocked", "ready_for_envelope"]
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "conflictReportId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "createdAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "providerSlot": { "const": "image.edit" }
+        },
+        "required": ["providerSlot"]
+      },
+      "then": {
+        "properties": {
+          "requiredMode": { "const": "image2image" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "providerSlot": { "const": "image.edit" },
+          "promptKind": { "const": "end_frame" }
+        },
+        "required": ["providerSlot", "promptKind"]
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": ["derivesFromStartFrame"],
+            "properties": {
+              "derivesFromStartFrame": { "const": true }
+            }
+          },
+          {
+            "properties": {
+              "status": { "const": "blocked" }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

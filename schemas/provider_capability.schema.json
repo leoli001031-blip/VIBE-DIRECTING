@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/provider_capability.schema.json",
+  "title": "ProviderCapability",
+  "description": "Dry-run provider capability contract for one provider/slot/mode combination.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "providerId",
+    "providerName",
+    "slot",
+    "requiredMode",
+    "executionState",
+    "liveSubmitAllowed",
+    "inputKinds",
+    "outputKind",
+    "supports",
+    "maxReferenceImages",
+    "forbiddenFallbacks",
+    "notes"
+  ],
+  "properties": {
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "providerName": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "slot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+    "requiredMode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+    "executionState": { "$ref": "common.schema.json#/$defs/providerExecutionState" },
+    "liveSubmitAllowed": { "type": "boolean", "const": false },
+    "inputKinds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["text", "image", "reference_image", "mask", "start_frame", "end_frame", "video"]
+      }
+    },
+    "outputKind": {
+      "type": "string",
+      "enum": ["image", "video", "audio", "metadata"]
+    },
+    "supports": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["referenceImage", "imageEdit", "startEndFrame", "bbox", "cameraControl", "controlNet", "mask", "negativePrompt"],
+      "properties": {
+        "referenceImage": { "type": "boolean" },
+        "imageEdit": { "type": "boolean" },
+        "startEndFrame": { "type": "boolean" },
+        "bbox": { "$ref": "#/$defs/capabilityStatus" },
+        "cameraControl": {
+          "type": "string",
+          "enum": ["none", "textual", "structured", "planned"]
+        },
+        "controlNet": { "$ref": "#/$defs/capabilityStatus" },
+        "mask": { "$ref": "#/$defs/capabilityStatus" },
+        "negativePrompt": { "$ref": "#/$defs/capabilityStatus" }
+      }
+    },
+    "maxReferenceImages": { "type": "integer", "minimum": 0 },
+    "forbiddenFallbacks": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "capabilityStatus": {
+      "type": "string",
+      "enum": ["supported", "unsupported", "planned", "parked"]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "slot": { "const": "image.edit" }
+        },
+        "required": ["slot"]
+      },
+      "then": {
+        "properties": {
+          "requiredMode": { "const": "image2image" },
+          "liveSubmitAllowed": { "const": false },
+          "supports": {
+            "properties": {
+              "imageEdit": { "const": true }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "slot": {
+            "type": "string",
+            "pattern": "^video\\."
+          }
+        },
+        "required": ["slot"]
+      },
+      "then": {
+        "properties": {
+          "executionState": {
+            "type": "string",
+            "enum": ["parked", "planned"]
+          },
+          "liveSubmitAllowed": { "const": false }
+        }
+      }
+    }
+  ]
+}

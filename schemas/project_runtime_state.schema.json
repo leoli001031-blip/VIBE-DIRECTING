@@ -16,6 +16,7 @@
     "visualMemory",
     "taskRuns",
     "manifestMatches",
+    "imagePipeline",
     "previewEvents",
     "storyChanges",
     "runtime",
@@ -136,6 +137,56 @@
       "properties": {
         "summary": { "type": "object" },
         "reports": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "imagePipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerRegistry",
+        "promptPlans",
+        "promptConflictReports",
+        "assetReadinessReports",
+        "imageTaskPlans",
+        "image2AdapterRequests",
+        "watcherEvents",
+        "generationHealthReports",
+        "qaPromotionReports"
+      ],
+      "properties": {
+        "providerRegistry": { "$ref": "provider_registry.schema.json" },
+        "promptPlans": {
+          "type": "array",
+          "items": { "$ref": "shot_prompt_plan.schema.json" }
+        },
+        "promptConflictReports": {
+          "type": "array",
+          "items": { "$ref": "prompt_conflict_report.schema.json" }
+        },
+        "assetReadinessReports": {
+          "type": "array",
+          "items": { "$ref": "asset_readiness_report.schema.json" }
+        },
+        "imageTaskPlans": {
+          "type": "array",
+          "items": { "$ref": "image_task_plan.schema.json" }
+        },
+        "image2AdapterRequests": {
+          "type": "array",
+          "items": { "$ref": "image2_adapter_request.schema.json" }
+        },
+        "watcherEvents": {
+          "type": "array",
+          "items": { "$ref": "watcher_event.schema.json" }
+        },
+        "generationHealthReports": {
+          "type": "array",
+          "items": { "$ref": "generation_health_report.schema.json" }
+        },
+        "qaPromotionReports": {
+          "type": "array",
+          "items": { "$ref": "qa_promotion_report.schema.json" }
+        }
       }
     },
     "previewEvents": { "type": "array", "items": { "$ref": "preview_event.schema.json" } },

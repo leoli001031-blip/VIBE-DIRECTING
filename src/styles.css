@@ -928,25 +928,35 @@ small {
 
 .code-list,
 .settings-list,
-.route-results {
+.route-results,
+.pipeline-details,
+.compact-list,
+.pipeline-card-list {
   display: grid;
   gap: 8px;
   margin-top: 12px;
 }
 
 .code-list details,
+.pipeline-details details,
+.pipeline-shot-details,
 .settings-list div,
 .route-results div,
+.pipeline-card-list div,
 .category-strip span {
   border: 1px solid rgba(236, 231, 223, 0.08);
   background: rgba(255, 255, 255, 0.03);
 }
 
-.code-list details {
+.code-list details,
+.pipeline-details details,
+.pipeline-shot-details {
   padding: 9px;
 }
 
-.code-list summary {
+.code-list summary,
+.pipeline-details summary,
+.pipeline-shot-details summary {
   cursor: pointer;
   color: #d9d1c4;
   overflow-wrap: anywhere;
@@ -959,6 +969,52 @@ small {
   color: #bfb7aa;
   font-size: 11px;
   white-space: pre-wrap;
+}
+
+.image-pipeline-panel .summary-grid + .summary-grid {
+  margin-top: 8px;
+}
+
+.pipeline-secondary .metric small {
+  line-height: 1.35;
+}
+
+.compact-list small {
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 7px 8px;
+  color: #bfb7aa;
+  overflow-wrap: anywhere;
+}
+
+.shot-pipeline-summary {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.pipeline-card-list {
+  margin-top: 0;
+}
+
+.pipeline-card-list div {
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+}
+
+.pipeline-card-list strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pipeline-card-list small {
+  color: #9d958a;
+  font-size: 11px;
+}
+
+.pipeline-shot-details {
+  margin-top: 2px;
 }
 
 .category-strip {

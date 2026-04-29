@@ -198,6 +198,191 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
   );
 }
 
+type ImagePipelineState = ProjectRuntimeState["imagePipeline"];
+
+function emptyImagePipeline(): ImagePipelineState {
+  return {
+    providerRegistry: {
+      schemaVersion: "0.1.0",
+      registryVersion: "empty",
+      strictImageProvider: "image2_only",
+      defaultProviderBySlot: {},
+      capabilities: [],
+      notes: [],
+    },
+    promptPlans: [],
+    promptConflictReports: [],
+    assetReadinessReports: [],
+    imageTaskPlans: [],
+    image2AdapterRequests: [],
+    watcherEvents: [],
+    generationHealthReports: [],
+    qaPromotionReports: [],
+  };
+}
+
+function getImagePipeline(runtimeState: ProjectRuntimeState): ImagePipelineState {
+  const pipeline = (runtimeState as Partial<ProjectRuntimeState>).imagePipeline;
+  if (!pipeline) return emptyImagePipeline();
+  return {
+    ...emptyImagePipeline(),
+    ...pipeline,
+    providerRegistry: {
+      ...emptyImagePipeline().providerRegistry,
+      ...pipeline.providerRegistry,
+      capabilities: pipeline.providerRegistry?.capabilities || [],
+      notes: pipeline.providerRegistry?.notes || [],
+    },
+    promptPlans: pipeline.promptPlans || [],
+    promptConflictReports: pipeline.promptConflictReports || [],
+    assetReadinessReports: pipeline.assetReadinessReports || [],
+    imageTaskPlans: pipeline.imageTaskPlans || [],
+    image2AdapterRequests: pipeline.image2AdapterRequests || [],
+    watcherEvents: pipeline.watcherEvents || [],
+    generationHealthReports: pipeline.generationHealthReports || [],
+    qaPromotionReports: pipeline.qaPromotionReports || [],
+  };
+}
+
+function countBy<T extends string>(values: T[]): Record<T, number> {
+  return values.reduce((counts, value) => {
+    counts[value] = (counts[value] || 0) + 1;
+    return counts;
+  }, {} as Record<T, number>);
+}
+
+function CompactList({ items, empty = "No blockers or warnings." }: { items: string[]; empty?: string }) {
+  if (!items.length) return <small className="muted-copy">{empty}</small>;
+  return (
+    <div className="compact-list">
+      {items.slice(0, 5).map((item, index) => (
+        <small key={`${item}-${index}`}>{item}</small>
+      ))}
+      {items.length > 5 && <small>+{items.length - 5} more</small>}
+    </div>
+  );
+}
+
+function ImagePipelineDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const pipeline = getImagePipeline(runtimeState);
+  const capabilities = pipeline.providerRegistry.capabilities;
+  const activeImage = capabilities.filter((item) => item.slot.startsWith("image.") && item.executionState === "active").length;
+  const parkedVideo = capabilities.filter((item) => item.slot.startsWith("video.") && item.executionState === "parked").length;
+  const promptBlocked = pipeline.promptPlans.filter((plan) => plan.status === "blocked").length;
+  const promptReady = pipeline.promptPlans.filter((plan) => plan.status === "ready_for_envelope").length;
+  const readinessCounts = countBy(pipeline.assetReadinessReports.map((report) => report.status));
+  const taskBlocked = pipeline.imageTaskPlans.filter((plan) => plan.status === "blocked").length;
+  const taskReady = pipeline.imageTaskPlans.filter((plan) => plan.status === "ready_for_dry_run").length;
+  const dryRunOnly = pipeline.image2AdapterRequests.filter((request) => request.submitPolicy?.dry_run_only).length;
+  const liveForbidden = pipeline.image2AdapterRequests.filter((request) => request.submitPolicy?.live_submit_forbidden).length;
+  const watcherCounts = countBy(pipeline.watcherEvents.map((event) => event.status));
+  const healthCounts = countBy(pipeline.generationHealthReports.map((report) => report.healthStatus));
+  const promotionCounts = countBy(pipeline.qaPromotionReports.map((report) => report.promotionStatus));
+  const blockers = [
+    ...pipeline.promptPlans.flatMap((plan) => plan.blockers.map((blocker) => `${plan.shotId || plan.jobId}: ${blocker}`)),
+    ...pipeline.assetReadinessReports.flatMap((report) => report.blockers.map((blocker) => `${report.shotId}: ${blocker}`)),
+    ...pipeline.imageTaskPlans.flatMap((plan) => plan.blockers.map((blocker) => `${plan.shotId}: ${blocker}`)),
+    ...pipeline.generationHealthReports.flatMap((report) => report.blockers.map((blocker) => `${report.shotId}: ${blocker}`)),
+    ...pipeline.qaPromotionReports.flatMap((report) => report.blockers.map((blocker) => `${report.shotId}: ${blocker}`)),
+  ];
+  const warnings = [
+    ...pipeline.promptPlans.flatMap((plan) => plan.adapterWarnings.map((warning) => `${plan.shotId || plan.jobId}: ${warning}`)),
+    ...pipeline.assetReadinessReports.flatMap((report) => report.warnings.map((warning) => `${report.shotId}: ${warning}`)),
+    ...pipeline.imageTaskPlans.flatMap((plan) => plan.warnings.map((warning) => `${plan.shotId}: ${warning}`)),
+    ...pipeline.generationHealthReports.flatMap((report) => report.warnings.map((warning) => `${report.shotId}: ${warning}`)),
+    ...pipeline.qaPromotionReports.flatMap((report) => report.warnings.map((warning) => `${report.shotId}: ${warning}`)),
+  ];
+
+  return (
+    <section className="machine-panel image-pipeline-panel">
+      <div className="audit-head">
+        <Sparkles size={17} />
+        <span>Image Pipeline</span>
+      </div>
+      <div className="summary-grid">
+        <Metric label="Provider Capabilities" value={`${capabilities.length}`} detail={`${activeImage} active image · ${parkedVideo} parked video`} />
+        <Metric label="Prompt Plans" value={`${pipeline.promptPlans.length}`} detail={`${promptBlocked} blocked · ${promptReady} ready`} />
+        <Metric label="Asset Readiness" value={`${readinessCounts.ready || 0}/${pipeline.assetReadinessReports.length}`} detail={`${readinessCounts.draft_only || 0} draft only · ${readinessCounts.blocked || 0} blocked`} />
+        <Metric label="Image Task Plans" value={`${pipeline.imageTaskPlans.length}`} detail={`${taskBlocked} blocked · ${taskReady} dry-run ready`} />
+      </div>
+      <div className="summary-grid pipeline-secondary">
+        <Metric label="Adapter Requests" value={`${pipeline.image2AdapterRequests.length}`} detail={`${dryRunOnly} dry run only · ${liveForbidden} live submit forbidden`} />
+        <Metric label="Watcher Events" value={`${pipeline.watcherEvents.length}`} detail={Object.entries(watcherCounts).map(([key, value]) => `${value} ${statusLabel(key)}`).join(" · ") || "none"} />
+        <Metric label="Health Reports" value={`${pipeline.generationHealthReports.length}`} detail={Object.entries(healthCounts).map(([key, value]) => `${value} ${statusLabel(key)}`).join(" · ") || "none"} />
+        <Metric label="Promotion Reports" value={`${pipeline.qaPromotionReports.length}`} detail={Object.entries(promotionCounts).map(([key, value]) => `${value} ${statusLabel(key)}`).join(" · ") || "none"} />
+      </div>
+      <div className="pipeline-details">
+        <details>
+          <summary>Blockers ({blockers.length})</summary>
+          <CompactList items={blockers} />
+        </details>
+        <details>
+          <summary>Warnings ({warnings.length})</summary>
+          <CompactList items={warnings} />
+        </details>
+      </div>
+    </section>
+  );
+}
+
+function ShotImagePipelineSummary({
+  runtimeState,
+  selectedShot,
+}: {
+  runtimeState: ProjectRuntimeState;
+  selectedShot?: ShotRecord;
+}) {
+  if (!selectedShot) return <p className="muted-copy">Select a shot to inspect Phase 4 image pipeline state.</p>;
+
+  const pipeline = getImagePipeline(runtimeState);
+  const promptPlans = pipeline.promptPlans.filter((plan) => plan.shotId === selectedShot.id);
+  const readiness = pipeline.assetReadinessReports.find((report) => report.shotId === selectedShot.id);
+  const healthReports = pipeline.generationHealthReports.filter((report) => report.shotId === selectedShot.id);
+  const promotionReports = pipeline.qaPromotionReports.filter((report) => report.shotId === selectedShot.id);
+  const canPromote = promotionReports.filter((report) => report.canPromoteToFormal).length;
+  const cannotPromote = promotionReports.length - canPromote;
+
+  return (
+    <div className="shot-pipeline-summary">
+      <div className="field-grid compact">
+        <label>Prompt Plans</label>
+        <span>{promptPlans.length} total · {promptPlans.filter((plan) => plan.status === "blocked").length} blocked</span>
+        <label>Readiness</label>
+        <span>{readiness ? `${readiness.status} · formal ${readiness.formalBlocked ? "blocked" : "allowed"}` : "missing"}</span>
+        <label>Health</label>
+        <span>{healthReports.map((report) => statusLabel(report.healthStatus)).join(", ") || "none"}</span>
+        <label>Promotion</label>
+        <span>{canPromote} can formal · {cannotPromote} cannot formal</span>
+      </div>
+      <div className="pipeline-card-list">
+        {promptPlans.slice(0, 4).map((plan) => (
+          <div key={plan.promptPlanId}>
+            <div className="row-head">
+              <strong>{plan.promptKind}</strong>
+              <StatusPill value={plan.status} />
+            </div>
+            <small>{plan.providerSlot} / {plan.requiredMode} · refs {plan.referenceIds.length} · preserve {plan.mustPreserve.length} · avoid {plan.mustAvoid.length}</small>
+          </div>
+        ))}
+        {!promptPlans.length && <p className="muted-copy">No prompt plans for this shot.</p>}
+      </div>
+      {(readiness?.blockers.length || readiness?.warnings.length || promotionReports.some((report) => report.blockers.length || report.warnings.length)) && (
+        <details className="pipeline-shot-details">
+          <summary>Shot blockers and warnings</summary>
+          <CompactList
+            items={[
+              ...(readiness?.blockers || []).map((item) => `readiness: ${item}`),
+              ...(readiness?.warnings || []).map((item) => `readiness: ${item}`),
+              ...promotionReports.flatMap((report) => report.blockers.map((item) => `promotion: ${item}`)),
+              ...promotionReports.flatMap((report) => report.warnings.map((item) => `promotion: ${item}`)),
+            ]}
+          />
+        </details>
+      )}
+    </div>
+  );
+}
+
 function Workflow({ stages }: { stages: WorkflowStage[] }) {
   return (
     <div className="workflow">
@@ -609,11 +794,13 @@ function EnvelopePreview({ task }: { task?: TaskRuntimeView }) {
 function InspectorMode({
   audit,
   view,
+  runtimeState,
   selectedShot,
   selectedAsset,
 }: {
   audit: ProjectAudit;
   view: RuntimeView;
+  runtimeState: ProjectRuntimeState;
   selectedShot?: ShotRecord;
   selectedAsset?: AssetRecord;
 }) {
@@ -671,6 +858,13 @@ function InspectorMode({
         )}
       </aside>
       <main className="inspector-main">
+        <section className="machine-panel">
+          <div className="audit-head">
+            <Sparkles size={17} />
+            <span>Phase 4 Image Pipeline</span>
+          </div>
+          <ShotImagePipelineSummary runtimeState={runtimeState} selectedShot={selectedShot} />
+        </section>
         <section className="machine-panel">
           <div className="audit-head">
             <ListChecks size={17} />
@@ -860,6 +1054,7 @@ function DiagnosticsMode({
   return (
     <div className="diagnostics-layout">
       <ProviderDock audit={audit} />
+      <ImagePipelineDiagnostics runtimeState={runtimeState} />
       <section className="machine-panel">
         <div className="audit-head">
           <Gauge size={17} />
@@ -1036,7 +1231,7 @@ function App() {
           onSelectAsset={setSelectedAssetId}
         />
       )}
-      {mode === "inspector" && <InspectorMode audit={audit} view={view} selectedShot={selectedShot} selectedAsset={selectedAsset} />}
+      {mode === "inspector" && <InspectorMode audit={audit} view={view} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />}
       {mode === "diagnostics" && <DiagnosticsMode audit={audit} view={view} runtimeState={runtimeState} intent={knowledgeIntent} onIntentChange={setKnowledgeIntent} />}
 
       {mode !== "director" && (

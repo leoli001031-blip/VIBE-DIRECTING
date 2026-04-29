@@ -400,6 +400,37 @@ Prompt Compiler / Prompt Conflict Checker：
 - 单镜头关键帧闭环：SourceIndex -> Preflight -> TaskEnvelope -> Image2 -> Watcher -> ManifestMatcher -> QA -> formal promotion。
 - 插入新分镜时能复用 locked assets，并正确标记受影响 prompt stale。
 
+### Phase 4.0-4.2：核心合同层完成范围
+
+已完成：
+
+- Provider Capability Matrix：新增 `ProviderRegistry` / `ProviderCapability` 合同与 schema，Image2 图片 slots 只做 dry-run 能力声明，Seedance/Jimeng 视频能力保持 parked，所有 capability 的 `liveSubmitAllowed=false`。
+- Prompt Compiler Skeleton：新增 `ShotPromptPlan` / `PromptConflictReport` 合同与 schema，编译结果只保留 source intent、preserve/avoid/reference/style/adaptor 状态，不把自然语言直接改写成 provider prompt patch。
+- Asset Readiness Gate：新增 `AssetReadinessReport` 合同与 schema，检查 locked、candidate、missing、temp/rejected/failed 污染风险；无 locked scene view 或 locked character 时仅允许 draft/formal blocked。
+- `ProjectRuntimeState.imagePipeline` 汇总 provider registry、prompt plans、prompt conflict reports、asset readiness reports。
+- `import-runtime-test` 生成 Phase 4 dry-run 初始状态，不提交 Image2，不调用 Seedance/Jimeng，不允许 `image.edit` fallback 到 `text2image`。
+
+### Phase 4.3-4.4：Image2 Task Planning Bridge / Adapter Dry-run Contract 完成范围
+
+已完成：
+
+- 新增 `ImageTaskPlan` 合同与 schema，把 `ShotPromptPlan`、`AssetReadinessReport`、`TaskEnvelope` summary 连接成 dry-run task plan。
+- 新增 `Image2AdapterRequest` 合同与 schema，只输出 Image2 adapter payload skeleton/source facts，不编译最终 provider prompt 文本。
+- Image2 adapter request 强制 `dry_run_only/manual_submit_required/live_submit_forbidden`，并在 `image2image` 路径显式禁止 `image2image_to_text2image` fallback。
+- `ProjectRuntimeState.imagePipeline` 追加 `imageTaskPlans` 和 `image2AdapterRequests`。
+- `import-runtime-test` 为图片 jobs 生成 task plans 和 dry-run adapter requests；video jobs 只保留 blocked/parked task plan，不生成 Image2 request。
+
+### Phase 4.5：Watcher Events + Generation Health + QA Promotion Shell 完成范围
+
+已完成：
+
+- 新增 `WatcherEvent` / `GenerationHealthReport` / `QaPromotionReport` 合同与 schema，只从 file snapshot、manifest match、prompt/asset readiness facts 推导状态，不启动真实 watcher，不调用 provider。
+- `buildWatcherEventsFromImagePipeline` 输出 expected output、temp/candidate、manifest mismatch、postprocess recoverable、blocked、worker exit without expected output 等事件 shell。
+- `buildGenerationHealthReports` 合并 expected output、manifest、QA、prompt freshness、asset readiness，输出 waiting / output_detected / qa_pending / formal_ready / blocked / failed。
+- `buildQaPromotionReports` 明确 required gates：expectedOutput、manifestMatch、promptFresh、assetReadiness、qaPass；只有全部通过才允许 `canPromoteToFormal=true`，且不会把 worker self-report success 当成 formal success。
+- `ProjectRuntimeState.imagePipeline` 追加 `watcherEvents`、`generationHealthReports`、`qaPromotionReports`。
+- `import-runtime-test` 基于 `fileSnapshot` / expected outputs 生成 4.5 reports；QA 缺失时只进入 blocked/qa_pending，不会产生 formal promotion。
+
 ## Phase 5：Preview / Export
 
 目标：先做 rough preview 和素材导出，不做重剪辑软件。
