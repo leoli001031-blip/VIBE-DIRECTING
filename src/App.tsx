@@ -658,6 +658,81 @@ type CheckpointResumeHarnessState = {
   hardLocks: CheckpointResumeHardLocks;
   resumeItems: CheckpointResumeItem[];
 };
+const qaHarnessDimensions = [
+  "whole_film",
+  "identity",
+  "scene",
+  "pair",
+  "story",
+  "prop",
+  "style",
+  "motion",
+  "audio",
+] as const;
+type QaHarnessDimension = typeof qaHarnessDimensions[number];
+type QaHarnessSummary = {
+  totalItems?: number;
+  formalEligible?: number;
+  requiresHumanReview?: number;
+  blocked?: number;
+  unknown?: number;
+  failed?: number;
+  partial?: number;
+  dryRunOnly?: boolean;
+  liveSubmitAllowed?: boolean;
+  noFileMutation?: boolean;
+};
+type QaHarnessHardLocks = {
+  dryRunOnly?: boolean;
+  providerSubmissionForbidden?: boolean;
+  liveSubmitAllowed?: boolean;
+  noFileMutation?: boolean;
+  noAutoPromotion?: boolean;
+  semanticRepairForbidden?: boolean;
+  workerSelfReportCannotPassQa?: boolean;
+  overallFirst?: boolean;
+};
+type QaGateRow = {
+  dimension: string;
+  label: string;
+  status: string;
+  severity: string;
+  blockers: string[];
+  warnings: string[];
+  sourceRefs: string[];
+  notes: string[];
+  initialized: boolean;
+};
+type QaHarnessItem = {
+  qaItemId: string;
+  shotId: string;
+  taskPlanId?: string;
+  jobId?: string;
+  harnessJobId?: string;
+  checkpointResumeItemId?: string;
+  formalPromotionEligible?: boolean;
+  requiresHumanReview?: boolean;
+  overallStatus: string;
+  dimensionGates: QaGateRow[];
+  sourceCoverage: string[];
+  blockers: string[];
+  warnings: string[];
+  notes: string[];
+};
+type QaHarnessState = {
+  initialized: boolean;
+  hasSummary: boolean;
+  hasHardLocks: boolean;
+  hasOverall: boolean;
+  hasItems: boolean;
+  schemaVersion: string;
+  generatedAt: string;
+  dimensions: readonly QaHarnessDimension[];
+  summary: QaHarnessSummary;
+  overall: QaGateRow[];
+  items: QaHarnessItem[];
+  hardLocks: QaHarnessHardLocks;
+};
 const requiredVideoExecutionHardLocks = [
   "no_live_submit",
   "no_fast_model",
@@ -1000,6 +1075,214 @@ function getCheckpointResumeHarness(runtimeState: ProjectRuntimeState): Checkpoi
       tempCandidateCannotResumeAsFormal: readOptionalBoolean(hardLocksRecord, "tempCandidateCannotResumeAsFormal"),
     },
     resumeItems: hasResumeItems ? (rawItems as unknown[]).map(normalizeCheckpointResumeItem) : [],
+  };
+}
+
+const qaHarnessDimensionLabels: Record<QaHarnessDimension, string> = {
+  whole_film: "同片感",
+  identity: "identity",
+  scene: "scene",
+  pair: "pair",
+  story: "story",
+  prop: "prop",
+  style: "style",
+  motion: "motion",
+  audio: "audio",
+};
+
+function qaDimensionLabel(dimension: string) {
+  return (qaHarnessDimensions as readonly string[]).includes(dimension)
+    ? qaHarnessDimensionLabels[dimension as QaHarnessDimension]
+    : dimension;
+}
+
+function normalizeQaGateRow(value: unknown, index: number, fallbackDimension?: string): QaGateRow {
+  const gate = isRecord(value) ? value : {};
+  const dimension = readString(gate.dimension, readString(gate.dimensionId, fallbackDimension || `dimension-${index + 1}`));
+  const blockers = readStringArray(gate.blockers).length
+    ? readStringArray(gate.blockers)
+    : readStringArray(gate.blockingReasons);
+  return {
+    dimension,
+    label: readString(gate.label, qaDimensionLabel(dimension)),
+    status: readString(gate.status, "Not initialized"),
+    severity: readString(gate.severity, "unknown"),
+    blockers,
+    warnings: readStringArray(gate.warnings),
+    sourceRefs: readStringArray(gate.sourceRefs).length
+      ? readStringArray(gate.sourceRefs)
+      : readStringArray(gate.refs),
+    notes: readNoteList(gate.notes),
+    initialized: isRecord(value),
+  };
+}
+
+function normalizeQaGateRows(value: unknown): QaGateRow[] {
+  if (Array.isArray(value)) return value.map((row, index) => normalizeQaGateRow(row, index));
+  if (!isRecord(value)) return [];
+  return Object.entries(value).map(([dimension, row], index) => normalizeQaGateRow(row, index, dimension));
+}
+
+function normalizeQaOverallRows(value: unknown): QaGateRow[] {
+  const overall = isRecord(value) && Array.isArray(value.dimensions) ? value.dimensions : value;
+  const rows = normalizeQaGateRows(overall);
+  return qaHarnessDimensions.map((dimension, index) =>
+    rows.find((row) => row.dimension === dimension) || normalizeQaGateRow(undefined, index, dimension),
+  );
+}
+
+function summarizeQaCoverageEntry(value: unknown, index: number, fallbackLabel?: string) {
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return `${fallbackLabel || `source-${index + 1}`}: ${String(value)}`;
+  }
+  if (!isRecord(value)) return "";
+
+  const label = readString(
+    value.label,
+    readString(
+      value.layer,
+      readString(value.dimension, readString(value.dimensionId, readString(value.sourceId, readString(value.id, fallbackLabel || `source-${index + 1}`)))),
+    ),
+  );
+  const status = readString(
+    value.status,
+    readString(value.coverageStatus, typeof value.referenced === "boolean" ? (value.referenced ? "referenced" : "missing") : "unknown"),
+  );
+  const refs = readStringArray(value.sourceRefs).length
+    ? readStringArray(value.sourceRefs)
+    : readStringArray(value.refs);
+  const missingFacts = readStringArray(value.missingFacts).length
+    ? readStringArray(value.missingFacts)
+    : readStringArray(value.missingFactIds);
+  const missingContext = readStringArray(value.missingContext).length
+    ? readStringArray(value.missingContext)
+    : readStringArray(value.missingContextIds);
+  const notes = readNoteList(value.notes);
+  const details = [
+    status,
+    refs.length ? `refs: ${refs.join(", ")}` : "",
+    missingFacts.length ? `missing facts: ${missingFacts.join(", ")}` : "",
+    missingContext.length ? `missing context: ${missingContext.join(", ")}` : "",
+    notes.length ? `notes: ${notes.join(" · ")}` : "",
+  ].filter(Boolean);
+
+  return `${label}: ${details.join(" · ") || "reported"}`;
+}
+
+function normalizeQaSourceCoverage(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((entry, index) => summarizeQaCoverageEntry(entry, index)).filter(Boolean);
+  }
+  if (!isRecord(value)) return [];
+
+  for (const key of ["items", "entries", "sources", "coverage"]) {
+    if (Array.isArray(value[key])) return normalizeQaSourceCoverage(value[key]);
+  }
+
+  return Object.entries(value)
+    .flatMap(([key, entry], index) => {
+      if (Array.isArray(entry)) {
+        return entry.map((nested, nestedIndex) => summarizeQaCoverageEntry(nested, nestedIndex, key));
+      }
+      return [summarizeQaCoverageEntry(entry, index, key)];
+    })
+    .filter(Boolean);
+}
+
+function normalizeQaHarnessItem(value: unknown, index: number): QaHarnessItem {
+  const item = isRecord(value) ? value : {};
+  const dimensionGates = normalizeQaGateRows(Array.isArray(item.dimensionGates) ? item.dimensionGates : item.dimensions);
+  const dimensionBlockers = dimensionGates.flatMap((gate) => gate.blockers);
+  const dimensionWarnings = dimensionGates.flatMap((gate) => gate.warnings);
+  const promotionBlockers = readStringArray(item.formalPromotionBlockedReasons);
+  const blockers = readStringArray(item.blockers).length
+    ? readStringArray(item.blockers)
+    : [...readStringArray(item.blockingReasons), ...promotionBlockers, ...dimensionBlockers];
+  const overallStatus = readString(
+    item.overallStatus,
+    readString(item.status, dimensionGates.some((gate) => gate.status === "FAIL") ? "FAIL" : dimensionGates.some((gate) => gate.status === "UNKNOWN") ? "UNKNOWN" : "PARTIAL"),
+  );
+  return {
+    qaItemId: readString(item.qaItemId, `qa-item-${index + 1}`),
+    shotId: readString(item.shotId, "Not initialized"),
+    taskPlanId: typeof item.taskPlanId === "string" ? item.taskPlanId : undefined,
+    jobId: typeof item.jobId === "string" ? item.jobId : undefined,
+    harnessJobId: typeof item.harnessJobId === "string" ? item.harnessJobId : undefined,
+    checkpointResumeItemId: typeof item.checkpointResumeItemId === "string" ? item.checkpointResumeItemId : undefined,
+    formalPromotionEligible: readOptionalBoolean(item, "formalPromotionEligible"),
+    requiresHumanReview: readOptionalBoolean(item, "requiresHumanReview"),
+    overallStatus,
+    dimensionGates,
+    sourceCoverage: normalizeQaSourceCoverage(item.sourceCoverage),
+    blockers,
+    warnings: [...readStringArray(item.warnings), ...dimensionWarnings],
+    notes: readNoteList(item.notes),
+  };
+}
+
+function countQaItems(items: QaHarnessItem[], predicate: (item: QaHarnessItem) => boolean) {
+  return items.filter(predicate).length;
+}
+
+function qaStatusIncludes(item: QaHarnessItem, value: string) {
+  return item.overallStatus.toLowerCase().includes(value);
+}
+
+function getQaHarness(runtimeState: ProjectRuntimeState): QaHarnessState {
+  const harness = (runtimeState as Partial<ProjectRuntimeState> & { qaHarness?: unknown }).qaHarness;
+  const initialized = isRecord(harness);
+  const harnessRecord = initialized ? harness as Record<string, unknown> : {};
+  const summaryRecord = initialized && isRecord(harnessRecord.summary) ? harnessRecord.summary : {};
+  const hardLocksRecord = initialized && isRecord(harnessRecord.hardLocks) ? harnessRecord.hardLocks : {};
+  const items = initialized && Array.isArray(harnessRecord.items)
+    ? harnessRecord.items.map(normalizeQaHarnessItem)
+    : [];
+
+  return {
+    initialized,
+    hasSummary: initialized && isRecord(harnessRecord.summary),
+    hasHardLocks: initialized && isRecord(harnessRecord.hardLocks),
+    hasOverall: initialized && (Array.isArray(harnessRecord.overall) || isRecord(harnessRecord.overall)),
+    hasItems: initialized && Array.isArray(harnessRecord.items),
+    schemaVersion: readString(harnessRecord.schemaVersion, "Not initialized"),
+    generatedAt: readString(harnessRecord.generatedAt, "Not initialized"),
+    dimensions: qaHarnessDimensions,
+    summary: {
+      totalItems: readOptionalNumber(summaryRecord, "totalItems") ?? items.length,
+      formalEligible: readOptionalNumber(summaryRecord, "formalEligible") ??
+        readOptionalNumber(summaryRecord, "formalPromotionEligible") ??
+        countQaItems(items, (item) => item.formalPromotionEligible === true),
+      requiresHumanReview: readOptionalNumber(summaryRecord, "requiresHumanReview") ??
+        countQaItems(items, (item) => item.requiresHumanReview === true),
+      blocked: readOptionalNumber(summaryRecord, "blocked") ??
+        readOptionalNumber(summaryRecord, "formalPromotionBlocked") ??
+        countQaItems(items, (item) => qaStatusIncludes(item, "block") || item.blockers.length > 0),
+      unknown: readOptionalNumber(summaryRecord, "unknown") ??
+        readOptionalNumber(summaryRecord, "unknownItems") ??
+        countQaItems(items, (item) => qaStatusIncludes(item, "unknown") || qaStatusIncludes(item, "not initialized")),
+      failed: readOptionalNumber(summaryRecord, "failed") ??
+        readOptionalNumber(summaryRecord, "failedItems") ??
+        countQaItems(items, (item) => qaStatusIncludes(item, "fail")),
+      partial: readOptionalNumber(summaryRecord, "partial") ??
+        readOptionalNumber(summaryRecord, "partialItems") ??
+        countQaItems(items, (item) => qaStatusIncludes(item, "partial")),
+      dryRunOnly: readOptionalBoolean(summaryRecord, "dryRunOnly"),
+      liveSubmitAllowed: readOptionalBoolean(summaryRecord, "liveSubmitAllowed"),
+      noFileMutation: readOptionalBoolean(summaryRecord, "noFileMutation"),
+    },
+    overall: normalizeQaOverallRows(harnessRecord.overall),
+    items,
+    hardLocks: {
+      dryRunOnly: readOptionalBoolean(hardLocksRecord, "dryRunOnly"),
+      providerSubmissionForbidden: readOptionalBoolean(hardLocksRecord, "providerSubmissionForbidden"),
+      liveSubmitAllowed: readOptionalBoolean(hardLocksRecord, "liveSubmitAllowed"),
+      noFileMutation: readOptionalBoolean(hardLocksRecord, "noFileMutation"),
+      noAutoPromotion: readOptionalBoolean(hardLocksRecord, "noAutoPromotion"),
+      semanticRepairForbidden: readOptionalBoolean(hardLocksRecord, "semanticRepairForbidden"),
+      workerSelfReportCannotPassQa: readOptionalBoolean(hardLocksRecord, "workerSelfReportCannotPassQa"),
+      overallFirst: readOptionalBoolean(hardLocksRecord, "overallFirst"),
+    },
   };
 }
 
@@ -1773,6 +2056,211 @@ function CheckpointResumeDiagnostics({ runtimeState }: { runtimeState: ProjectRu
           <small className="muted-copy watcher-more">Showing {visibleItems.length} of {harness.resumeItems.length} resume item(s).</small>
         )}
       </div>
+    </section>
+  );
+}
+
+function qaMetricValue(harness: QaHarnessState, value?: number) {
+  return harness.initialized && typeof value === "number" ? `${value}` : "Not initialized";
+}
+
+function qaMetricDetail(harness: QaHarnessState, detail: string) {
+  return harness.initialized ? detail : "runtimeState.qaHarness missing";
+}
+
+function qaLockLabel(value: boolean | undefined, inverse = false) {
+  if (typeof value !== "boolean") return "Not initialized";
+  const locked = inverse ? !value : value;
+  return locked ? "locked" : "not locked";
+}
+
+function qaBooleanLabel(value: boolean | undefined, trueLabel: string, falseLabel: string) {
+  if (typeof value !== "boolean") return "Not initialized";
+  return value ? trueLabel : falseLabel;
+}
+
+function qaGateCompact(gate: QaGateRow) {
+  const details = [
+    gate.severity !== "unknown" ? `severity: ${gate.severity}` : "",
+    `${gate.blockers.length} blockers`,
+    `${gate.warnings.length} warnings`,
+    gate.sourceRefs.length ? `refs: ${gate.sourceRefs.join(", ")}` : "",
+    gate.notes.length ? `notes: ${gate.notes.join(" · ")}` : "",
+  ].filter(Boolean);
+  return `${gate.label}: ${gate.status}${details.length ? ` · ${details.join(" · ")}` : ""}`;
+}
+
+function QaHarnessDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const harness = getQaHarness(runtimeState);
+  const summary = harness.summary;
+  const visibleItems = harness.items.slice(0, 8);
+  const hardLockRows = [
+    {
+      label: "overallFirst",
+      value: qaLockLabel(harness.hardLocks.overallFirst),
+      primary: true,
+    },
+    {
+      label: "noAutoPromotion",
+      value: qaLockLabel(harness.hardLocks.noAutoPromotion),
+      primary: true,
+    },
+    {
+      label: "semanticRepairForbidden",
+      value: qaLockLabel(harness.hardLocks.semanticRepairForbidden),
+      primary: true,
+    },
+    {
+      label: "workerSelfReportCannotPassQa",
+      value: qaLockLabel(harness.hardLocks.workerSelfReportCannotPassQa),
+      primary: true,
+    },
+    {
+      label: "dryRunOnly",
+      value: qaLockLabel(harness.hardLocks.dryRunOnly ?? summary.dryRunOnly),
+    },
+    {
+      label: "providerSubmissionForbidden",
+      value: qaLockLabel(harness.hardLocks.providerSubmissionForbidden),
+    },
+    {
+      label: "liveSubmitAllowed",
+      value: qaLockLabel(harness.hardLocks.liveSubmitAllowed ?? summary.liveSubmitAllowed, true),
+    },
+    {
+      label: "noFileMutation",
+      value: qaLockLabel(harness.hardLocks.noFileMutation ?? summary.noFileMutation),
+    },
+  ];
+
+  return (
+    <section className="machine-panel qa-harness-panel">
+      <div className="audit-head">
+        <ShieldAlert size={17} />
+        <span>QA Harness</span>
+      </div>
+      <div className="qa-harness-meta">
+        <small>schema: {harness.schemaVersion}</small>
+        <small>generated: {harness.generatedAt}</small>
+        <small>{harness.dimensions.length} fixed dimensions</small>
+      </div>
+      <div className="summary-grid qa-harness-metrics">
+        <Metric label="Items" value={qaMetricValue(harness, summary.totalItems)} detail={qaMetricDetail(harness, "QA item count")} />
+        <Metric label="Formal eligible" value={qaMetricValue(harness, summary.formalEligible)} detail={qaMetricDetail(harness, "eligible after QA")} />
+        <Metric label="Human review" value={qaMetricValue(harness, summary.requiresHumanReview)} detail={qaMetricDetail(harness, "requires human decision")} />
+        <Metric label="Blocked" value={qaMetricValue(harness, summary.blocked)} detail={qaMetricDetail(harness, "cannot pass current gate")} />
+        <Metric label="Unknown" value={qaMetricValue(harness, summary.unknown)} detail={qaMetricDetail(harness, "missing facts or context")} />
+        <Metric label="Failed" value={qaMetricValue(harness, summary.failed)} detail={qaMetricDetail(harness, "failed QA checks")} />
+        <Metric label="Partial" value={qaMetricValue(harness, summary.partial)} detail={qaMetricDetail(harness, "partial evidence")} />
+      </div>
+
+      <div className="watcher-lock-strip qa-lock-strip">
+        {hardLockRows.map((lock) => (
+          <div key={lock.label} className={lock.primary ? "qa-lock-primary" : undefined}>
+            <span>{lock.label}</span>
+            <StatusPill value={lock.value} />
+          </div>
+        ))}
+      </div>
+
+      {!harness.initialized && (
+        <p className="muted-copy generation-empty-state">QA Harness not initialized in this runtime state.</p>
+      )}
+
+      {harness.initialized && (
+        <div className="qa-harness-sections">
+          <div className="qa-section-head">
+            <h3>Overall gates</h3>
+            <small>{qaHarnessDimensions.map(qaDimensionLabel).join(" · ")}</small>
+          </div>
+          {!harness.hasOverall && <p className="muted-copy">Not initialized</p>}
+          {harness.hasOverall && (
+            <div className="qa-overall-table">
+              {harness.overall.map((gate) => (
+                <details key={gate.dimension} className="qa-overall-row" open={gate.blockers.length > 0}>
+                  <summary>
+                    <span>
+                      <strong>{gate.label}</strong>
+                      <small>{gate.dimension}</small>
+                    </span>
+                    <StatusPill value={gate.status} />
+                    <span>{gate.severity}</span>
+                    <small>{gate.blockers.length} blockers · {gate.warnings.length} warnings · {gate.sourceRefs.length} refs</small>
+                  </summary>
+                  <div className="qa-gate-details">
+                    <CompactList items={gate.blockers} empty="No blockers reported." />
+                    <CompactList items={gate.warnings} empty="No warnings reported." />
+                    <CompactList items={[...gate.sourceRefs.map((ref) => `source: ${ref}`), ...gate.notes]} empty="No source refs or notes reported." />
+                  </div>
+                </details>
+              ))}
+            </div>
+          )}
+
+          <div className="qa-section-head">
+            <h3>Item details</h3>
+            <small>showing first {visibleItems.length} of {harness.items.length}</small>
+          </div>
+          {!harness.hasItems && <p className="muted-copy">Not initialized</p>}
+          {harness.hasItems && !visibleItems.length && <p className="muted-copy">No QA items reported.</p>}
+          {Boolean(visibleItems.length) && (
+            <div className="qa-item-table">
+              {visibleItems.map((item, index) => {
+                const jobLink = item.harnessJobId || item.jobId || item.checkpointResumeItemId || "Not initialized";
+                return (
+                  <details key={`${item.qaItemId}-${index}`} className="qa-item-row" open={item.blockers.length > 0}>
+                    <summary>
+                      <span>
+                        <strong>{item.shotId}</strong>
+                        <small>{item.qaItemId}</small>
+                      </span>
+                      <StatusPill value={item.overallStatus} />
+                      <StatusPill value={qaBooleanLabel(item.formalPromotionEligible, "formal eligible", "formal blocked")} />
+                      <StatusPill value={qaBooleanLabel(item.requiresHumanReview, "human review", "review clear")} />
+                      <span>
+                        <strong>{jobLink}</strong>
+                        <small>{item.harnessJobId ? "harness job" : "job/checkpoint link"}</small>
+                      </span>
+                      <small>{item.blockers.length} blockers · {item.warnings.length} warnings · {item.sourceCoverage.length} coverage rows</small>
+                    </summary>
+                    <div className="qa-item-details">
+                      <small>task: {item.taskPlanId || "Not initialized"}</small>
+                      <small>job: {item.jobId || "Not initialized"}</small>
+                      <small>harness: {item.harnessJobId || "Not initialized"}</small>
+                      <small>checkpoint: {item.checkpointResumeItemId || "Not initialized"}</small>
+                      <div className="pipeline-details qa-item-detail-sections">
+                        <details>
+                          <summary>sourceCoverage ({item.sourceCoverage.length})</summary>
+                          <CompactList items={item.sourceCoverage} empty="No source coverage reported." />
+                        </details>
+                        <details open={item.blockers.length > 0}>
+                          <summary>Blockers ({item.blockers.length})</summary>
+                          <CompactList items={item.blockers} empty="No blockers reported." />
+                        </details>
+                        <details open={item.warnings.length > 0}>
+                          <summary>Warnings ({item.warnings.length})</summary>
+                          <CompactList items={item.warnings} empty="No warnings reported." />
+                        </details>
+                        <details>
+                          <summary>Dimension gates ({item.dimensionGates.length})</summary>
+                          <CompactList items={item.dimensionGates.map(qaGateCompact)} empty="No dimension gates reported." />
+                        </details>
+                        <details>
+                          <summary>Notes ({item.notes.length})</summary>
+                          <CompactList items={item.notes} empty="No item notes reported." />
+                        </details>
+                      </div>
+                    </div>
+                  </details>
+                );
+              })}
+              {harness.items.length > visibleItems.length && (
+                <small className="muted-copy watcher-more">Showing {visibleItems.length} of {harness.items.length} QA item(s).</small>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }
@@ -3303,6 +3791,7 @@ function DiagnosticsMode({
       <GenerationHarnessDiagnostics runtimeState={runtimeState} />
       <FilesystemWatcherDiagnostics runtimeState={runtimeState} />
       <CheckpointResumeDiagnostics runtimeState={runtimeState} />
+      <QaHarnessDiagnostics runtimeState={runtimeState} />
       <VideoPlanningDiagnostics runtimeState={runtimeState} />
       <VideoExecutionPreviewDiagnostics runtimeState={runtimeState} />
       <AdapterContractDiagnostics runtimeState={runtimeState} />

@@ -25,6 +25,7 @@ import type {
   ProviderPolicy,
   ProviderRegistry,
   PromptConflictReport,
+  QaHarnessState,
   QaPromotionReport,
   ReflowImpactReport,
   ShotPromptPlan,
@@ -176,6 +177,7 @@ export interface ProjectRuntimeState {
   generationHarness: GenerationHarnessState;
   filesystemWatcherHarness: FilesystemWatcherHarnessState;
   checkpointResumeHarness: CheckpointResumeHarnessState;
+  qaHarness: QaHarnessState;
   storyChanges: ProjectRuntimeStoryChangeState;
   runtime: ProjectRuntimeEnvironment;
   diagnostics: {

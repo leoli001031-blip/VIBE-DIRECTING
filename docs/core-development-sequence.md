@@ -682,6 +682,23 @@ Phase 6 已实现范围（核心合同）：
 - 不能在 stale prompt/source hash mismatch 时允许 skip。
 - 不能让 temp/candidate/provider-ready derivative 自动接管为 formal；需要人工 review 或重新生成计划。
 
+### Phase 8.7 已实现范围：QA Harness
+
+- `ProjectRuntimeState.qaHarness` 写入 Phase 8.7 的 plan/fact/diagnostics QA 层，只从 `generationHealthReports`、`qaPromotionReports`、`manifestMatches`、`assetReadinessReports`、`promptPlans`、`promptConflictReports`、`generationHarness`、`filesystemWatcherHarness`、`checkpointResumeHarness`、`videoPlanning`、`audioPlanning`、`storyFlow.shots` 归纳事实。
+- QA 输出固定 `overallFirst=true`：先生成 `overall` sequence verdict，再生成逐 shot `items`。维度顺序固定为 `whole_film`、`identity`、`scene`、`pair`、`story`、`prop`、`style`、`motion`、`audio`。
+- 每个维度使用现有 `GateStatus`：`PASS|PARTIAL|FAIL|N/A|UNKNOWN`，并保留 `severity`、`blockers`、`warnings`、`sourceRefs`、`notes`。没有事实支撑时不能假装 PASS，只能落到 `UNKNOWN`、`PARTIAL` 或 `N/A`。
+- 每个 QA item 至少绑定 `shotId`，并尽量绑定 `taskPlanId`、`jobId`、`harnessJobId`、`checkpointResumeItemId`、`videoTaskPlanId`、`audioPlanId`，方便 Diagnostics 从 QA 结果反查事实链。
+- `formalPromotionEligible=true` 只能在 `qaPromotionReports.canPromoteToFormal=true`、generation health 为 `formal_ready`、manifest match、prompt fresh、asset readiness ready、explicit QA pass 全部满足时出现；8.7 只报告资格，不提升 formal。
+- `requiresHumanReview=true` 会在任何 `UNKNOWN`、`FAIL`、`PARTIAL` 或 blocker 出现时写入；`sourceCoverage` 固定列出所有被引用或缺失的事实层，便于排查 QA 上下文缺口。
+- 新增 `schemas/qa_harness.schema.json` 并纳入 `project_runtime_state.schema.json` 与 schema registry；新增 `npm run qa:test` 覆盖维度顺序、overall-first、硬锁、source coverage、human review、formal promotion eligibility gate。
+
+禁止项：
+
+- QA Harness 不能提交 Image2、Seedance、Jimeng 或任何 provider；不能 move/copy/delete/rename/promote 文件。
+- 不能把 worker/provider 自报成功、file exists、adapter request preview、watcher event 单独解释成 QA PASS。
+- 不能做语义修复，不能用 local postprocess/OpenCV 修人物身份、场景、构图、故事、风格、motion 或 audio 问题。
+- 不能绕过 `qaPromotionReports.canPromoteToFormal`、generation health、manifest match、prompt freshness、asset readiness、explicit QA pass 这些 formal gate。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

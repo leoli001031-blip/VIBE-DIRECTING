@@ -1723,6 +1723,155 @@ small {
   margin-top: 0;
 }
 
+.qa-harness-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.qa-harness-meta small {
+  color: #9d958a;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.qa-harness-panel .qa-harness-metrics {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.qa-harness-panel .metric strong {
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.qa-lock-strip .qa-lock-primary {
+  border-color: rgba(212, 176, 98, 0.2);
+  background: rgba(212, 176, 98, 0.055);
+}
+
+.qa-harness-sections {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.qa-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.qa-section-head h3 {
+  margin: 0;
+  color: #bfb7aa;
+  font-size: 12px;
+}
+
+.qa-section-head small {
+  color: #9d958a;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.qa-overall-table,
+.qa-item-table {
+  display: grid;
+  gap: 8px;
+}
+
+.qa-overall-row,
+.qa-item-row {
+  min-width: 0;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 0;
+}
+
+.qa-overall-row summary,
+.qa-item-row summary {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  color: #d9d1c4;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.qa-overall-row summary {
+  grid-template-columns: minmax(120px, 1fr) auto minmax(90px, 0.55fr) minmax(170px, 1.1fr);
+}
+
+.qa-item-row summary {
+  grid-template-columns: minmax(130px, 1fr) auto auto auto minmax(140px, 0.9fr) minmax(170px, 1fr);
+}
+
+.qa-overall-row summary span,
+.qa-overall-row summary strong,
+.qa-overall-row summary small,
+.qa-item-row summary span,
+.qa-item-row summary strong,
+.qa-item-row summary small,
+.qa-gate-details small,
+.qa-item-details small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.qa-overall-row strong,
+.qa-item-row strong,
+.qa-overall-row small,
+.qa-item-row small {
+  display: block;
+}
+
+.qa-overall-row strong,
+.qa-item-row strong {
+  color: #d9d1c4;
+  font-size: 12px;
+}
+
+.qa-overall-row summary > span:nth-child(3) {
+  color: #bfb7aa;
+  font-size: 12px;
+}
+
+.qa-overall-row small,
+.qa-item-row small,
+.qa-gate-details small,
+.qa-item-details small {
+  color: #9d958a;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.qa-gate-details,
+.qa-item-details {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid rgba(236, 231, 223, 0.08);
+  padding: 9px;
+}
+
+.qa-gate-details {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.qa-item-details {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.qa-gate-details .compact-list,
+.qa-item-detail-sections {
+  margin-top: 0;
+}
+
+.qa-item-detail-sections {
+  grid-column: 1 / -1;
+}
+
 .compact-list small {
   border: 1px solid rgba(236, 231, 223, 0.08);
   background: rgba(255, 255, 255, 0.025);
@@ -1942,6 +2091,8 @@ small {
   .video-diagnostics-grid,
   .watcher-diagnostics-grid,
   .checkpoint-resume-details,
+  .qa-gate-details,
+  .qa-item-details,
   .knowledge-distribution,
   .machine-panel .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2006,9 +2157,15 @@ small {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .qa-harness-panel .qa-harness-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .watcher-root-row,
   .watcher-stream-row summary,
-  .checkpoint-resume-row summary {
+  .checkpoint-resume-row summary,
+  .qa-overall-row summary,
+  .qa-item-row summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -2046,6 +2203,8 @@ small {
   .video-diagnostics-grid,
   .watcher-diagnostics-grid,
   .checkpoint-resume-details,
+  .qa-gate-details,
+  .qa-item-details,
   .knowledge-distribution,
   .machine-panel .summary-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -2073,11 +2232,14 @@ small {
   .generation-harness-panel .generation-harness-metrics,
   .filesystem-watcher-panel .filesystem-watcher-metrics,
   .checkpoint-resume-panel .checkpoint-resume-metrics,
+  .qa-harness-panel .qa-harness-metrics,
   .generation-job-head,
   .candidate-output-summary div,
   .watcher-root-row,
   .watcher-stream-row summary,
   .checkpoint-resume-row summary,
+  .qa-overall-row summary,
+  .qa-item-row summary,
   .watcher-stream-details {
     grid-template-columns: minmax(0, 1fr);
   }

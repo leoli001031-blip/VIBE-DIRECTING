@@ -192,6 +192,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "CheckpointResumeHarnessState",
   },
   {
+    fileName: "qa_harness.schema.json",
+    id: "https://vibecore.local/schemas/qa_harness.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 8.7 plan-only QA harness that emits overall-first sequence diagnostics and shot-level QA facts without provider submission or file mutation.",
+    typeName: "QaHarnessState",
+  },
+  {
     fileName: "knowledge_pack.schema.json",
     id: "https://vibecore.local/schemas/knowledge_pack.schema.json",
     version: schemaVersion,

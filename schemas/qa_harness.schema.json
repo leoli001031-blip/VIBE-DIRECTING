@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/qa_harness.schema.json",
+  "title": "QaHarnessState",
+  "description": "Phase 8.7 plan-only QA harness. It emits overall-first sequence diagnostics and shot-level QA facts without provider submission, file mutation, formal promotion, or semantic repair.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "dimensionOrder",
+    "overall",
+    "items",
+    "summary",
+    "sourceCoverage",
+    "hardLocks",
+    "dryRunOnly",
+    "providerSubmissionForbidden",
+    "liveSubmitAllowed",
+    "noFileMutation",
+    "noAutoPromotion",
+    "planOnly",
+    "diagnosticsOnly",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "dimensionOrder": { "$ref": "#/$defs/dimensionOrder" },
+    "overall": { "$ref": "#/$defs/overallSequence" },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/qaItem" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalItems",
+        "requiresHumanReview",
+        "formalPromotionEligible",
+        "formalPromotionBlocked",
+        "failedItems",
+        "partialItems",
+        "unknownItems",
+        "overallStatus",
+        "overallFirst",
+        "dryRunOnly",
+        "liveSubmitAllowed",
+        "noFileMutation"
+      ],
+      "properties": {
+        "totalItems": { "type": "integer", "minimum": 0 },
+        "requiresHumanReview": { "type": "integer", "minimum": 0 },
+        "formalPromotionEligible": { "type": "integer", "minimum": 0 },
+        "formalPromotionBlocked": { "type": "integer", "minimum": 0 },
+        "failedItems": { "type": "integer", "minimum": 0 },
+        "partialItems": { "type": "integer", "minimum": 0 },
+        "unknownItems": { "type": "integer", "minimum": 0 },
+        "overallStatus": { "$ref": "common.schema.json#/$defs/gateStatus" },
+        "overallFirst": { "type": "boolean", "const": true },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "noFileMutation": { "type": "boolean", "const": true }
+      }
+    },
+    "sourceCoverage": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sourceCoverageEntry" }
+    },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "dryRunOnly": { "type": "boolean", "const": true },
+    "providerSubmissionForbidden": { "type": "boolean", "const": true },
+    "liveSubmitAllowed": { "type": "boolean", "const": false },
+    "noFileMutation": { "type": "boolean", "const": true },
+    "noAutoPromotion": { "type": "boolean", "const": true },
+    "planOnly": { "type": "boolean", "const": true },
+    "diagnosticsOnly": { "type": "boolean", "const": true },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "dimensionId": {
+      "type": "string",
+      "enum": ["whole_film", "identity", "scene", "pair", "story", "prop", "style", "motion", "audio"]
+    },
+    "dimensionOrder": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "prefixItems": [
+        { "const": "whole_film" },
+        { "const": "identity" },
+        { "const": "scene" },
+        { "const": "pair" },
+        { "const": "story" },
+        { "const": "prop" },
+        { "const": "style" },
+        { "const": "motion" },
+        { "const": "audio" }
+      ],
+      "items": false
+    },
+    "sourceLayer": {
+      "type": "string",
+      "enum": [
+        "generationHealthReports",
+        "qaPromotionReports",
+        "manifestMatches",
+        "assetReadinessReports",
+        "promptPlans",
+        "promptConflictReports",
+        "generationHarness",
+        "filesystemWatcherHarness",
+        "checkpointResumeHarness",
+        "videoPlanning",
+        "audioPlanning",
+        "storyFlow.shots"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["blocker", "warning", "info"]
+    },
+    "sourceCoverageEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layer", "referenced", "referenceCount", "sourceRefs", "notes"],
+      "properties": {
+        "layer": { "$ref": "#/$defs/sourceLayer" },
+        "referenced": { "type": "boolean" },
+        "referenceCount": { "type": "integer", "minimum": 0 },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "dimensionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimensionId", "status", "severity", "blockers", "warnings", "sourceRefs", "notes"],
+      "properties": {
+        "dimensionId": { "$ref": "#/$defs/dimensionId" },
+        "status": { "$ref": "common.schema.json#/$defs/gateStatus" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "dimensionResults": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "prefixItems": [
+        { "allOf": [{ "$ref": "#/$defs/dimensionResult" }, { "type": "object", "properties": { "dimensionId": { "const": "whole_film" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/dimensionResult" }, { "type": "object", "properties": { "dimensionId": { "const": "identity" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/dimensionResult" }, { "type": "object", "properties": { "dimensionId": { "const": "scene" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/dimensionResult" }, { "type": "object", "properties": { "dimensionId": { "const": "pair" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/dimensionResult" }, { "type": "object", "properties": { "dimensionId": { "const": "story" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/dimensionResult" }, { "type": "object", "properties": { "dimensionId": { "const": "prop" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/dimensionResult" }, { "type": "object", "properties": { "dimensionId": { "const": "style" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/dimensionResult" }, { "type": "object", "properties": { "dimensionId": { "const": "motion" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/dimensionResult" }, { "type": "object", "properties": { "dimensionId": { "const": "audio" } } }] }
+      ],
+      "items": false
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dryRunOnly",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "noFileMutation",
+        "noAutoPromotion",
+        "semanticRepairForbidden",
+        "workerSelfReportCannotPassQa",
+        "overallFirst"
+      ],
+      "properties": {
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "noAutoPromotion": { "type": "boolean", "const": true },
+        "semanticRepairForbidden": { "type": "boolean", "const": true },
+        "workerSelfReportCannotPassQa": { "type": "boolean", "const": true },
+        "overallFirst": { "type": "boolean", "const": true }
+      }
+    },
+    "overallSequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequenceId",
+        "overallFirst",
+        "dimensions",
+        "status",
+        "severity",
+        "requiresHumanReview",
+        "blockers",
+        "warnings",
+        "sourceCoverage",
+        "notes"
+      ],
+      "properties": {
+        "sequenceId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "overallFirst": { "type": "boolean", "const": true },
+        "dimensions": { "$ref": "#/$defs/dimensionResults" },
+        "status": { "$ref": "common.schema.json#/$defs/gateStatus" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "requiresHumanReview": { "type": "boolean" },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sourceCoverage": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sourceCoverageEntry" }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "qaItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "qaItemId",
+        "shotId",
+        "dimensions",
+        "formalPromotionEligible",
+        "formalPromotionBlockedReasons",
+        "requiresHumanReview",
+        "sourceCoverage",
+        "notes"
+      ],
+      "properties": {
+        "qaItemId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "taskPlanId": { "type": "string" },
+        "jobId": { "type": "string" },
+        "harnessJobId": { "type": "string" },
+        "checkpointResumeItemId": { "type": "string" },
+        "videoTaskPlanId": { "type": "string" },
+        "audioPlanId": { "type": "string" },
+        "dimensions": { "$ref": "#/$defs/dimensionResults" },
+        "formalPromotionEligible": { "type": "boolean" },
+        "formalPromotionBlockedReasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "requiresHumanReview": { "type": "boolean" },
+        "sourceCoverage": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sourceCoverageEntry" }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

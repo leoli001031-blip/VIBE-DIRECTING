@@ -8,6 +8,7 @@ import { buildCheckpointResumeHarnessState } from "./checkpointResumeHarness";
 import { buildFilesystemWatcherHarnessState } from "./filesystemWatcherHarness";
 import { buildGenerationHealthReports } from "./generationHealth";
 import { buildGenerationHarnessState } from "./generationHarness";
+import { buildQaHarnessState } from "./qaHarness";
 import { buildShotPromptPlan } from "./promptCompiler";
 import { buildQaPromotionReports } from "./qaPromotion";
 import { buildPreviewExportState } from "./previewExport";
@@ -234,6 +235,21 @@ export function buildProjectRuntimeState(
     generationHarness,
     filesystemWatcherHarness,
   });
+  const qaHarness = buildQaHarnessState({
+    generatedAt,
+    generationHealthReports,
+    qaPromotionReports,
+    manifestMatches: taskViews.map((task) => task.manifestMatch),
+    assetReadinessReports,
+    promptPlans: promptPlanResults.map((result) => result.plan),
+    promptConflictReports: promptPlanResults.map((result) => result.conflictReport),
+    generationHarness,
+    filesystemWatcherHarness,
+    checkpointResumeHarness,
+    videoPlanning,
+    audioPlanning,
+    storyFlowShots: audit.shots,
+  });
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -299,6 +315,7 @@ export function buildProjectRuntimeState(
     generationHarness,
     filesystemWatcherHarness,
     checkpointResumeHarness,
+    qaHarness,
     storyChanges: {
       transactions: [],
       reflowReports: [],
@@ -418,6 +435,23 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       generationHarness,
       filesystemWatcherHarness,
     });
+  const qaHarness =
+    state.qaHarness ||
+    buildQaHarnessState({
+      generatedAt: state.generatedAt,
+      generationHealthReports: state.imagePipeline.generationHealthReports,
+      qaPromotionReports: state.imagePipeline.qaPromotionReports,
+      manifestMatches: state.manifestMatches.reports,
+      assetReadinessReports: state.imagePipeline.assetReadinessReports,
+      promptPlans: state.imagePipeline.promptPlans,
+      promptConflictReports: state.imagePipeline.promptConflictReports,
+      generationHarness,
+      filesystemWatcherHarness,
+      checkpointResumeHarness,
+      videoPlanning,
+      audioPlanning,
+      storyFlowShots: state.storyFlow.shots,
+    });
 
   return {
     ...state,
@@ -429,6 +463,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     generationHarness,
     filesystemWatcherHarness,
     checkpointResumeHarness,
+    qaHarness,
   };
 }
 

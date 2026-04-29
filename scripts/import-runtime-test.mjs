@@ -2413,6 +2413,543 @@ function buildCheckpointResumeHarnessState({
   };
 }
 
+const qaHarnessDimensionOrder = [
+  "whole_film",
+  "identity",
+  "scene",
+  "pair",
+  "story",
+  "prop",
+  "style",
+  "motion",
+  "audio",
+];
+
+const qaHarnessSourceLayers = [
+  "generationHealthReports",
+  "qaPromotionReports",
+  "manifestMatches",
+  "assetReadinessReports",
+  "promptPlans",
+  "promptConflictReports",
+  "generationHarness",
+  "filesystemWatcherHarness",
+  "checkpointResumeHarness",
+  "videoPlanning",
+  "audioPlanning",
+  "storyFlow.shots",
+];
+
+const qaHarnessHardLocks = {
+  dryRunOnly: true,
+  providerSubmissionForbidden: true,
+  liveSubmitAllowed: false,
+  noFileMutation: true,
+  noAutoPromotion: true,
+  semanticRepairForbidden: true,
+  workerSelfReportCannotPassQa: true,
+  overallFirst: true,
+};
+
+function qaSeverityFor(status, blockers, warnings) {
+  if (status === "FAIL" || blockers.length) return "blocker";
+  if (status === "PARTIAL" || status === "UNKNOWN" || warnings.length) return "warning";
+  return "info";
+}
+
+function qaMakeDimension({ dimensionId, status, blockers = [], warnings = [], sourceRefs = [], notes = [] }) {
+  const uniqueBlockers = uniqueSorted(blockers);
+  const uniqueWarnings = uniqueSorted(warnings);
+  const resolvedStatus = uniqueBlockers.length ? "FAIL" : status;
+  return {
+    dimensionId,
+    status: resolvedStatus,
+    severity: qaSeverityFor(resolvedStatus, uniqueBlockers, uniqueWarnings),
+    blockers: uniqueBlockers,
+    warnings: uniqueWarnings,
+    sourceRefs: uniqueSorted(sourceRefs),
+    notes: uniqueSorted(notes),
+  };
+}
+
+function qaStatusWithWarnings(base, blockers, warnings) {
+  if (blockers.length || base === "FAIL") return "FAIL";
+  if (base === "PASS" && warnings.length) return "PARTIAL";
+  return base;
+}
+
+function qaAggregateStatus(statuses) {
+  if (!statuses.length) return "UNKNOWN";
+  if (statuses.some((status) => status === "FAIL")) return "FAIL";
+  const nonNa = statuses.filter((status) => status !== "N/A");
+  if (!nonNa.length) return "N/A";
+  if (nonNa.every((status) => status === "PASS")) return "PASS";
+  if (nonNa.every((status) => status === "UNKNOWN")) return "UNKNOWN";
+  return "PARTIAL";
+}
+
+function qaCoverageFromRefs(refsByLayer) {
+  return qaHarnessSourceLayers.map((layer) => {
+    const sourceRefs = uniqueSorted(refsByLayer[layer] || []);
+    return {
+      layer,
+      referenced: sourceRefs.length > 0,
+      referenceCount: sourceRefs.length,
+      sourceRefs,
+      notes: sourceRefs.length ? [`Referenced ${sourceRefs.length} ${layer} fact(s).`] : [`No ${layer} fact was linked.`],
+    };
+  });
+}
+
+function qaMergeCoverage(entries) {
+  const refsByLayer = {};
+  for (const entry of entries) {
+    refsByLayer[entry.layer] = [...(refsByLayer[entry.layer] || []), ...(entry.sourceRefs || [])];
+  }
+  return qaCoverageFromRefs(refsByLayer);
+}
+
+function qaManifestRefs(reports) {
+  return reports.map((report) => `manifest_match:${report.taskId}:${report.status}`);
+}
+
+function qaItemsForShot(items, shotId) {
+  return items.filter((item) => item.shotId === shotId);
+}
+
+function qaPromptConflictsForShot(conflictReports, promptPlans) {
+  const promptPlanIds = new Set(promptPlans.map((plan) => plan.promptPlanId));
+  return conflictReports.filter((report) => (report.shotId && promptPlans.some((plan) => plan.shotId === report.shotId)) || promptPlanIds.has(report.promptPlanId));
+}
+
+function qaLinkedManifestReports(reports, healthReports, promotionReports) {
+  const taskIds = new Set([
+    ...healthReports.flatMap((report) => [report.taskPlanId, report.jobId]),
+    ...promotionReports.flatMap((report) => [report.taskPlanId, report.jobId]),
+  ]);
+  return reports.filter((report) => taskIds.has(report.taskId));
+}
+
+function qaReadinessWarnings(readiness) {
+  if (!readiness) return ["No asset readiness report is linked to this shot."];
+  if (readiness.status === "draft_only" || readiness.formalBlocked) {
+    return ["Asset readiness keeps this shot draft-only for formal promotion.", ...(readiness.warnings || [])];
+  }
+  return readiness.warnings || [];
+}
+
+function qaEvaluateReferenceDimension({ dimensionId, shot, readiness }) {
+  const base = shot.gates[dimensionId];
+  const readinessBlockers = readiness && readiness.status === "blocked" && base !== "N/A"
+    ? readiness.blockers?.length
+      ? readiness.blockers
+      : ["Asset readiness is blocked for this shot."]
+    : [];
+  const blockers = [
+    ...(base === "FAIL" ? [`Story Flow ${dimensionId} gate is FAIL.`] : []),
+    ...readinessBlockers,
+  ];
+  const warnings = [
+    ...(base === "UNKNOWN" ? [`Story Flow ${dimensionId} gate is UNKNOWN.`] : []),
+    ...(base === "PARTIAL" ? [`Story Flow ${dimensionId} gate is PARTIAL.`] : []),
+    ...(base === "N/A" ? [] : qaReadinessWarnings(readiness)),
+  ];
+
+  return qaMakeDimension({
+    dimensionId,
+    status: base === "N/A" ? "N/A" : qaStatusWithWarnings(base, blockers, warnings),
+    blockers,
+    warnings,
+    sourceRefs: [
+      `storyFlow.shots:${shot.id}`,
+      readiness?.reportId || "",
+      ...(readiness?.safeReferenceIds || []),
+      ...(readiness?.missingReferenceIds || []),
+    ],
+    notes: [`Uses Story Flow ${dimensionId} gate and shot-level asset readiness facts.`],
+  });
+}
+
+function qaEvaluatePairDimension({ shot, videoGate }) {
+  const base = shot.gates.pair;
+  const pairBlockedChecks = videoGate?.checks?.filter((check) => check.status === "blocked" && /pair|frame|derivation/i.test(`${check.id} ${check.label}`)) || [];
+  const blockers = [
+    ...(base === "FAIL" ? ["Story Flow pair gate is FAIL."] : []),
+    ...pairBlockedChecks.map((check) => check.detail),
+    ...(!shot.startFrame ? ["Shot is missing a start frame reference."] : []),
+    ...(!shot.endFrame ? ["Shot is missing an end frame reference."] : []),
+  ];
+  const warnings = [
+    ...(base === "UNKNOWN" ? ["Story Flow pair gate is UNKNOWN."] : []),
+    ...(base === "PARTIAL" ? ["Story Flow pair gate is PARTIAL."] : []),
+    ...(videoGate ? [] : ["No video readiness gate is linked to this shot."]),
+  ];
+  return qaMakeDimension({
+    dimensionId: "pair",
+    status: qaStatusWithWarnings(base, blockers, warnings),
+    blockers,
+    warnings,
+    sourceRefs: [`storyFlow.shots:${shot.id}`, videoGate?.gateId || ""],
+    notes: ["Pair QA combines Story Flow pair gate, start/end frame presence, and video readiness derivation facts."],
+  });
+}
+
+function qaEvaluateStoryDimension({ shot, promptPlans, conflictReports }) {
+  const base = shot.gates.story;
+  const conflictBlockers = conflictReports.flatMap((report) =>
+    (report.conflicts || []).filter((conflict) => conflict.severity === "blocker").map((conflict) => conflict.detail),
+  );
+  const conflictWarnings = conflictReports.flatMap((report) =>
+    (report.conflicts || []).filter((conflict) => conflict.severity !== "blocker").map((conflict) => conflict.detail),
+  );
+  const blockers = [
+    ...(base === "FAIL" ? ["Story Flow story gate is FAIL."] : []),
+    ...conflictBlockers,
+  ];
+  const warnings = [
+    ...(base === "UNKNOWN" ? ["Story Flow story gate is UNKNOWN."] : []),
+    ...(base === "PARTIAL" ? ["Story Flow story gate is PARTIAL."] : []),
+    ...(shot.storyFunction ? [] : ["Shot storyFunction is missing."]),
+    ...(promptPlans.length ? [] : ["No prompt plan is linked to this shot."]),
+    ...conflictWarnings,
+  ];
+  return qaMakeDimension({
+    dimensionId: "story",
+    status: qaStatusWithWarnings(base, blockers, warnings),
+    blockers,
+    warnings,
+    sourceRefs: [
+      `storyFlow.shots:${shot.id}`,
+      ...promptPlans.map((plan) => plan.promptPlanId),
+      ...conflictReports.map((report) => report.reportId),
+    ],
+    notes: ["Story QA stays diagnostic: prompt conflicts can block, but 8.7 does not rewrite story semantics."],
+  });
+}
+
+function qaEvaluateStyleDimension({ shot, promptPlans, conflictReports, readiness }) {
+  const base = shot.gates.style;
+  const hasStyleDirectives = promptPlans.some((plan) => (plan.styleDirectives || []).length > 0);
+  const conflictBlockers = conflictReports.flatMap((report) =>
+    (report.conflicts || []).filter((conflict) => conflict.severity === "blocker").map((conflict) => conflict.detail),
+  );
+  const conflictWarnings = conflictReports.flatMap((report) =>
+    (report.conflicts || []).filter((conflict) => conflict.severity !== "blocker").map((conflict) => conflict.detail),
+  );
+  const blockers = [
+    ...(base === "FAIL" ? ["Story Flow style gate is FAIL."] : []),
+    ...conflictBlockers,
+  ];
+  const warnings = [
+    ...(base === "UNKNOWN" ? ["Story Flow style gate is UNKNOWN."] : []),
+    ...(base === "PARTIAL" ? ["Story Flow style gate is PARTIAL."] : []),
+    ...(promptPlans.length ? [] : ["No prompt plan is linked to this shot."]),
+    ...(hasStyleDirectives ? [] : ["No style directives are present in linked prompt plans."]),
+    ...(readiness?.formalBlocked ? ["Asset readiness blocks formal style reference promotion."] : []),
+    ...conflictWarnings,
+  ];
+  return qaMakeDimension({
+    dimensionId: "style",
+    status: qaStatusWithWarnings(base, blockers, warnings),
+    blockers,
+    warnings,
+    sourceRefs: [
+      `storyFlow.shots:${shot.id}`,
+      readiness?.reportId || "",
+      ...promptPlans.flatMap((plan) => [plan.promptPlanId, ...(plan.styleDirectives || [])]),
+      ...conflictReports.map((report) => report.reportId),
+    ],
+    notes: ["Style QA uses Story Flow style gate plus prompt style directives and conflict reports."],
+  });
+}
+
+function qaEvaluateMotionDimension({ shot, videoTaskPlan, videoGate }) {
+  if (!videoTaskPlan) {
+    return qaMakeDimension({
+      dimensionId: "motion",
+      status: "UNKNOWN",
+      warnings: ["No video task plan is linked to this shot."],
+      sourceRefs: [`storyFlow.shots:${shot.id}`],
+      notes: ["Motion QA needs video planning facts; no provider submit or semantic inspection is run by 8.7."],
+    });
+  }
+  const blockers = videoTaskPlan.status === "blocked" ? videoTaskPlan.blockers || [] : [];
+  const warnings = [
+    ...(videoTaskPlan.warnings || []),
+    ...(videoTaskPlan.status === "parked" ? ["Video provider remains parked; motion output is not explicitly QA-passed."] : []),
+    ...(videoTaskPlan.status === "ready" ? ["Video task is only a plan; no motion output QA pass is recorded by 8.7."] : []),
+  ];
+  const status = blockers.length ? "FAIL" : videoTaskPlan.status === "parked" || videoTaskPlan.status === "ready" ? "PARTIAL" : "UNKNOWN";
+  return qaMakeDimension({
+    dimensionId: "motion",
+    status,
+    blockers,
+    warnings,
+    sourceRefs: [videoTaskPlan.taskPlanId, videoGate?.gateId || ""],
+    notes: ["Motion QA is derived from video planning/readiness only; Seedance/Jimeng submit remains forbidden."],
+  });
+}
+
+function qaEvaluateAudioDimension({ shot, audioPlan }) {
+  const audioPlanId = `audio_plan_${safeId(shot.id)}`;
+  if (!audioPlan) {
+    return qaMakeDimension({
+      dimensionId: "audio",
+      status: "UNKNOWN",
+      warnings: ["No audio plan is linked to this shot."],
+      sourceRefs: [`storyFlow.shots:${shot.id}`],
+      notes: ["Audio QA needs audio planning facts; no audio provider is called by 8.7."],
+    });
+  }
+  const base = audioPlan.outputPath ? audioPlan.audioQaStatus : "UNKNOWN";
+  const blockers = base === "FAIL" ? ["Audio plan QA status is FAIL."] : [];
+  const warnings = [
+    ...(audioPlan.outputPath ? [] : ["Audio plan has no outputPath; audio QA cannot pass from planning facts only."]),
+    ...(base === "PARTIAL" ? ["Audio plan QA status is PARTIAL."] : []),
+    ...(base === "UNKNOWN" ? ["Audio plan QA status is UNKNOWN."] : []),
+  ];
+  return qaMakeDimension({
+    dimensionId: "audio",
+    status: qaStatusWithWarnings(base, blockers, warnings),
+    blockers,
+    warnings,
+    sourceRefs: [audioPlanId, audioPlan.outputPath || ""],
+    notes: ["Audio QA uses audioPlanning shot plan facts only; TTS/music providers remain forbidden."],
+  });
+}
+
+function qaFormalPromotionGate({ promotion, health, manifest, readiness }) {
+  const manifestStatus = health?.manifestStatus || manifest?.status;
+  const checks = [
+    {
+      pass: promotion.canPromoteToFormal === true,
+      reason: `${promotion.reportId} does not have canPromoteToFormal=true.`,
+    },
+    {
+      pass: health?.healthStatus === "formal_ready",
+      reason: `${health?.reportId || promotion.taskPlanId} generation health is not formal_ready.`,
+    },
+    {
+      pass: hasManifestMatch(manifestStatus),
+      reason: `Manifest status is ${manifestStatus || "missing"}.`,
+    },
+    {
+      pass: health?.stalePrompt === false && promotion.requiredGates?.promptFresh === true,
+      reason: "Prompt freshness gate is not satisfied.",
+    },
+    {
+      pass:
+        health?.assetReadinessStatus === "ready" &&
+        promotion.requiredGates?.assetReadiness === true &&
+        readiness?.status === "ready" &&
+        readiness.formalBlocked === false,
+      reason: "Asset readiness gate is not satisfied.",
+    },
+    {
+      pass: health?.qaStatus === "pass" && promotion.requiredGates?.qaPass === true,
+      reason: "Explicit QA pass is not satisfied.",
+    },
+    {
+      pass: promotion.requiredGates?.expectedOutput === true,
+      reason: "Expected output gate is not satisfied.",
+    },
+    {
+      pass: promotion.requiredGates?.manifestMatch === true,
+      reason: "QA promotion manifestMatch gate is not satisfied.",
+    },
+  ];
+  const reasons = checks.filter((check) => !check.pass).map((check) => check.reason);
+  return { eligible: reasons.length === 0, reasons };
+}
+
+function qaRequiresHumanReview(dimensions, blockingReasons) {
+  return dimensions.some((dimension) => ["UNKNOWN", "FAIL", "PARTIAL"].includes(dimension.status) || (dimension.blockers || []).length > 0) || blockingReasons.length > 0;
+}
+
+function qaBuildItem(input, shot) {
+  const healthReports = qaItemsForShot(input.generationHealthReports, shot.id);
+  const promotionReports = qaItemsForShot(input.qaPromotionReports, shot.id);
+  const scopedManifestReports = qaLinkedManifestReports(input.manifestMatches, healthReports, promotionReports);
+  const readiness = input.assetReadinessReports.find((report) => report.shotId === shot.id);
+  const promptPlans = input.promptPlans.filter((plan) => plan.shotId === shot.id);
+  const conflictReports = qaPromptConflictsForShot(input.promptConflictReports, promptPlans);
+  const generationJobs = input.generationHarness.jobs.filter((job) => job.shotId === shot.id);
+  const watcherStreams = input.filesystemWatcherHarness.streams.filter((stream) => stream.shotId === shot.id);
+  const resumeItems = input.checkpointResumeHarness.items.filter((item) => item.shotId === shot.id);
+  const videoTaskPlan = input.videoPlanning.taskPlans.find((plan) => plan.shotId === shot.id);
+  const videoGate = input.videoPlanning.readinessGates.find((gate) => gate.shotId === shot.id);
+  const audioPlan = input.audioPlanning.shotPlans.find((plan) => plan.shotId === shot.id);
+  const healthByTaskPlan = new Map(healthReports.map((report) => [report.taskPlanId, report]));
+  const manifestByTaskId = new Map(scopedManifestReports.map((report) => [report.taskId, report]));
+  const formalGateResults = promotionReports.map((promotion) =>
+    qaFormalPromotionGate({
+      promotion,
+      health: healthByTaskPlan.get(promotion.taskPlanId),
+      manifest: manifestByTaskId.get(promotion.taskPlanId) || manifestByTaskId.get(promotion.jobId),
+      readiness,
+    }),
+  );
+  const formalPromotionEligible = formalGateResults.length > 0 && formalGateResults.every((result) => result.eligible);
+  const formalPromotionBlockedReasons = formalGateResults.length
+    ? uniqueSorted(formalGateResults.flatMap((result) => result.reasons))
+    : ["No QA promotion report is linked to this shot."];
+  const dimensions = [
+    qaMakeDimension({
+      dimensionId: "whole_film",
+      status: "N/A",
+      sourceRefs: [`storyFlow.shots:${shot.id}`],
+      notes: ["Whole-film QA is emitted in qaHarness.overall before shot/item details."],
+    }),
+    qaEvaluateReferenceDimension({ dimensionId: "identity", shot, readiness }),
+    qaEvaluateReferenceDimension({ dimensionId: "scene", shot, readiness }),
+    qaEvaluatePairDimension({ shot, videoGate }),
+    qaEvaluateStoryDimension({ shot, promptPlans, conflictReports }),
+    qaEvaluateReferenceDimension({ dimensionId: "prop", shot, readiness }),
+    qaEvaluateStyleDimension({ shot, promptPlans, conflictReports, readiness }),
+    qaEvaluateMotionDimension({ shot, videoTaskPlan, videoGate }),
+    qaEvaluateAudioDimension({ shot, audioPlan }),
+  ];
+  const refsByLayer = {
+    generationHealthReports: healthReports.map((report) => report.reportId),
+    qaPromotionReports: promotionReports.map((report) => report.reportId),
+    manifestMatches: qaManifestRefs(scopedManifestReports),
+    assetReadinessReports: readiness ? [readiness.reportId] : [],
+    promptPlans: promptPlans.map((plan) => plan.promptPlanId),
+    promptConflictReports: conflictReports.map((report) => report.reportId),
+    generationHarness: generationJobs.map((job) => job.harnessJobId),
+    filesystemWatcherHarness: watcherStreams.map((stream) => stream.streamId),
+    checkpointResumeHarness: resumeItems.map((item) => item.resumeItemId),
+    videoPlanning: uniqueSorted([videoTaskPlan?.taskPlanId || "", videoGate?.gateId || ""]),
+    audioPlanning: audioPlan ? [`audio_plan_${safeId(shot.id)}`] : [],
+    "storyFlow.shots": [shot.id],
+  };
+  const primaryGenerationJob = generationJobs[0];
+  const primaryResumeItem = resumeItems[0];
+
+  return {
+    qaItemId: `qa_harness_item_${safeId(shot.id)}`,
+    shotId: shot.id,
+    taskPlanId: primaryGenerationJob?.taskPlanId || healthReports[0]?.taskPlanId || promotionReports[0]?.taskPlanId,
+    jobId: primaryGenerationJob?.jobId || healthReports[0]?.jobId || promotionReports[0]?.jobId,
+    harnessJobId: primaryGenerationJob?.harnessJobId,
+    checkpointResumeItemId: primaryResumeItem?.resumeItemId,
+    videoTaskPlanId: videoTaskPlan?.taskPlanId,
+    audioPlanId: audioPlan ? `audio_plan_${safeId(shot.id)}` : undefined,
+    dimensions,
+    formalPromotionEligible,
+    formalPromotionBlockedReasons: formalPromotionEligible ? [] : formalPromotionBlockedReasons,
+    requiresHumanReview: qaRequiresHumanReview(dimensions, formalPromotionEligible ? [] : formalPromotionBlockedReasons),
+    sourceCoverage: qaCoverageFromRefs(refsByLayer),
+    notes: [
+      "Phase 8.7 QA Harness emits diagnostics only; it cannot promote formal files or perform semantic repair.",
+      formalPromotionEligible
+        ? "Formal promotion gates are eligible, but 8.7 still does not promote files."
+        : "Formal promotion remains blocked until promotion, health, manifest, prompt freshness, asset readiness, and explicit QA pass all agree.",
+    ],
+  };
+}
+
+function qaBuildOverall(items) {
+  const dimensions = qaHarnessDimensionOrder.map((dimensionId) => {
+    const scopedStatuses =
+      dimensionId === "whole_film"
+        ? items.flatMap((item) => item.dimensions.filter((dimension) => dimension.dimensionId !== "whole_film").map((dimension) => dimension.status))
+        : items.flatMap((item) => item.dimensions.filter((dimension) => dimension.dimensionId === dimensionId).map((dimension) => dimension.status));
+    const blockers = items.flatMap((item) =>
+      item.dimensions
+        .filter((dimension) => dimensionId === "whole_film" || dimension.dimensionId === dimensionId)
+        .flatMap((dimension) => dimension.blockers || []),
+    );
+    const warnings = items.flatMap((item) =>
+      item.dimensions
+        .filter((dimension) => dimensionId === "whole_film" || dimension.dimensionId === dimensionId)
+        .flatMap((dimension) => dimension.warnings || []),
+    );
+    const sourceRefs = items.flatMap((item) =>
+      item.dimensions
+        .filter((dimension) => dimensionId === "whole_film" || dimension.dimensionId === dimensionId)
+        .flatMap((dimension) => dimension.sourceRefs || []),
+    );
+    const status = qaAggregateStatus(scopedStatuses);
+    return qaMakeDimension({
+      dimensionId,
+      status,
+      blockers,
+      warnings:
+        status === "PARTIAL" && !warnings.length
+          ? [`${dimensionId} has mixed PASS/N/A/UNKNOWN/PARTIAL shot-level facts.`]
+          : warnings,
+      sourceRefs,
+      notes: [
+        dimensionId === "whole_film"
+          ? "Whole-film verdict is aggregated before shot/item detail."
+          : `Aggregated ${dimensionId} verdict from shot-level QA item facts.`,
+      ],
+    });
+  });
+  const status = qaAggregateStatus(dimensions.map((dimension) => dimension.status));
+  const blockers = uniqueSorted(dimensions.flatMap((dimension) => dimension.blockers || []));
+  const warnings = uniqueSorted(dimensions.flatMap((dimension) => dimension.warnings || []));
+  return {
+    sequenceId: "qa_harness_overall_sequence",
+    overallFirst: true,
+    dimensions,
+    status,
+    severity: qaSeverityFor(status, blockers, warnings),
+    requiresHumanReview: qaRequiresHumanReview(dimensions, blockers),
+    blockers,
+    warnings,
+    sourceCoverage: qaMergeCoverage(items.flatMap((item) => item.sourceCoverage)),
+    notes: [
+      "Overall/sequence QA is emitted before shot details by contract.",
+      "Overall verdict is an evidence summary, not a provider execution or semantic repair step.",
+    ],
+  };
+}
+
+function buildQaHarnessState(input) {
+  const items = input.storyFlowShots.map((shot) => qaBuildItem(input, shot)).sort((left, right) => left.qaItemId.localeCompare(right.qaItemId));
+  const overall = qaBuildOverall(items);
+  const failedItems = items.filter((item) => item.dimensions.some((dimension) => dimension.status === "FAIL")).length;
+  const partialItems = items.filter((item) => item.dimensions.some((dimension) => dimension.status === "PARTIAL")).length;
+  const unknownItems = items.filter((item) => item.dimensions.some((dimension) => dimension.status === "UNKNOWN")).length;
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt: input.generatedAt,
+    dimensionOrder: qaHarnessDimensionOrder,
+    overall,
+    items,
+    summary: {
+      totalItems: items.length,
+      requiresHumanReview: items.filter((item) => item.requiresHumanReview).length,
+      formalPromotionEligible: items.filter((item) => item.formalPromotionEligible).length,
+      formalPromotionBlocked: items.filter((item) => !item.formalPromotionEligible).length,
+      failedItems,
+      partialItems,
+      unknownItems,
+      overallStatus: overall.status,
+      overallFirst: true,
+      dryRunOnly: true,
+      liveSubmitAllowed: false,
+      noFileMutation: true,
+    },
+    sourceCoverage: qaMergeCoverage([...items.flatMap((item) => item.sourceCoverage), ...overall.sourceCoverage]),
+    hardLocks: qaHarnessHardLocks,
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+    liveSubmitAllowed: false,
+    noFileMutation: true,
+    noAutoPromotion: true,
+    planOnly: true,
+    diagnosticsOnly: true,
+    notes: [
+      "Phase 8.7 QA Harness combines existing plan/fact/diagnostic layers only.",
+      "It cannot submit providers, mutate files, promote formal outputs, or run semantic repair.",
+      "No worker or provider self-report can pass QA; explicit QA and promotion gates remain required.",
+    ],
+  };
+}
+
 function computeSourceIndexHash(index) {
   return hashString(JSON.stringify(canonicalize(index)));
 }
@@ -4223,6 +4760,21 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     generationHarness,
     filesystemWatcherHarness,
   });
+  const qaHarness = buildQaHarnessState({
+    generatedAt,
+    generationHealthReports,
+    qaPromotionReports,
+    manifestMatches: taskViews.map((task) => task.manifestMatch),
+    assetReadinessReports,
+    promptPlans: promptPlanResults.map((result) => result.plan),
+    promptConflictReports: promptPlanResults.map((result) => result.conflictReport),
+    generationHarness,
+    filesystemWatcherHarness,
+    checkpointResumeHarness,
+    videoPlanning,
+    audioPlanning,
+    storyFlowShots: audit.shots,
+  });
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -4298,6 +4850,7 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     generationHarness,
     filesystemWatcherHarness,
     checkpointResumeHarness,
+    qaHarness,
     storyChanges: {
       transactions: [],
       reflowReports: [],
