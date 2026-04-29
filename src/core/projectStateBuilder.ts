@@ -84,11 +84,12 @@ export function buildProjectRuntimeState(
     ...view.knowledge,
     bindings: toKnowledgeBindings(knowledgeManifest),
   };
+  const generatedAt = options.generatedAt || new Date().toISOString();
 
   return {
     schemaVersion: projectRuntimeStateSchemaVersion,
     coreStateVersion: projectRuntimeCoreStateVersion,
-    generatedAt: options.generatedAt || new Date().toISOString(),
+    generatedAt,
     project: buildProjectSummary(audit),
     sourceIndex: view.sourceIndex,
     sourceIndexSummary: view.sourceIndexSummary,
@@ -112,6 +113,12 @@ export function buildProjectRuntimeState(
       reports: taskViews.map((task) => task.manifestMatch),
     },
     previewEvents: view.previewEvents,
+    storyChanges: {
+      transactions: [],
+      reflowReports: [],
+      pendingConfirmationCount: 0,
+      lastGeneratedAt: generatedAt,
+    },
     diagnostics: {
       issues: audit.issues,
       schemaSummary: audit.schemaSummary,

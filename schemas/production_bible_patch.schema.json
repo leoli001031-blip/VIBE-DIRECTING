@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/production_bible_patch.schema.json",
+  "title": "ProductionBiblePatch",
+  "description": "Dry-run structured patch proposal for production bible facts. It is not a prompt patch and does not mutate files by itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "transactionId",
+    "status",
+    "patchType",
+    "targetIds",
+    "proposedChanges",
+    "requiresUserConfirmation",
+    "warnings",
+    "createdAt"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "transactionId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "status": {
+      "type": "string",
+      "enum": ["dry_run", "pending_confirmation", "approved", "rejected", "applied"]
+    },
+    "patchType": {
+      "type": "string",
+      "enum": ["character", "scene", "style", "voice", "story_rules", "unknown"]
+    },
+    "targetIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "proposedChanges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "operation", "valueSummary"],
+        "properties": {
+          "path": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "operation": {
+            "type": "string",
+            "enum": ["add", "replace", "remove", "move", "review"]
+          },
+          "valueSummary": { "type": "string" }
+        }
+      }
+    },
+    "requiresUserConfirmation": { "type": "boolean" },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "createdAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  }
+}

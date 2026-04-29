@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/reflow_impact_report.schema.json",
+  "title": "ReflowImpactReport",
+  "description": "Dry-run report listing stale artifacts, regeneration plan, and forbidden actions for a story change transaction.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "transactionId",
+    "status",
+    "summary",
+    "affectedScopes",
+    "affectedSectionIds",
+    "affectedShotIds",
+    "affectedAssetIds",
+    "invalidations",
+    "staleArtifactIds",
+    "requiresUserConfirmation",
+    "confirmationReasons",
+    "regenerationPlan",
+    "forbiddenActions",
+    "createdAt"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "transactionId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "status": {
+      "type": "string",
+      "enum": ["dry_run", "pending_confirmation", "ready_for_confirmation", "blocked"]
+    },
+    "summary": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "affectedScopes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["project", "section", "shot", "asset", "voice", "export"]
+      }
+    },
+    "affectedSectionIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "affectedShotIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "affectedAssetIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "invalidations": {
+      "type": "array",
+      "items": { "$ref": "artifact_invalidation.schema.json" }
+    },
+    "staleArtifactIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "requiresUserConfirmation": { "type": "boolean" },
+    "confirmationReasons": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "regenerationPlan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["step", "targetIds", "reason"],
+        "properties": {
+          "step": {
+            "type": "string",
+            "enum": [
+              "rebuild_story_flow",
+              "rebuild_shot_spec",
+              "rebuild_prompt_plan",
+              "regenerate_keyframes",
+              "regenerate_video",
+              "regenerate_audio",
+              "rebuild_preview",
+              "review_assets"
+            ]
+          },
+          "targetIds": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "reason": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "forbiddenActions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["provider_submit", "prompt_patch_from_natural_language", "direct_project_mutation"]
+      }
+    },
+    "createdAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  }
+}

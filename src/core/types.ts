@@ -450,16 +450,170 @@ export interface AudioPlan {
   audioQaStatus: GateStatus;
 }
 
-export interface StoryChangeTransaction {
+export type DirectorIntentType = "story" | "shot" | "asset" | "style" | "voice" | "export" | "unknown";
+
+export type StoryChangeImpactScope = "project" | "section" | "shot" | "asset" | "voice" | "export";
+
+export type StoryChangeOperation =
+  | "insert_shot"
+  | "delete_shot"
+  | "move_shot"
+  | "update_story"
+  | "update_shot"
+  | "update_character"
+  | "update_scene"
+  | "update_style"
+  | "update_dialogue"
+  | "update_narration"
+  | "update_voice"
+  | "lock_asset"
+  | "unlock_asset"
+  | "export_change"
+  | "unknown";
+
+export type StoryChangeStatus = "dry_run" | "pending_confirmation" | "confirmed" | "rejected" | "applied" | "cancelled";
+
+export type StoryChangeConfirmationState = "not_required" | "required" | "pending" | "confirmed" | "rejected";
+
+export type ReflowArtifactType =
+  | "productionBible"
+  | "storyFlow"
+  | "shotSpec"
+  | "shotLayout"
+  | "promptPlan"
+  | "keyframe"
+  | "video"
+  | "audio"
+  | "preview"
+  | "visualMemory"
+  | "spatialMemory"
+  | "voiceMemory"
+  | "styleCapsule"
+  | "asset"
+  | "taskRun"
+  | "qaReport";
+
+export interface DirectorIntentResult {
+  schemaVersion: string;
   id: string;
   userIntent: string;
-  intentType: "story" | "shot" | "asset" | "style" | "voice" | "export" | "unknown";
-  impactScope: "project" | "section" | "shot" | "asset" | "voice" | "export";
+  normalizedIntent: string;
+  intentType: DirectorIntentType;
+  operation: StoryChangeOperation;
+  impactScope: StoryChangeImpactScope;
+  targetIds: string[];
+  confidence: number;
+  requiresUserConfirmation: boolean;
+  confirmationReasons: string[];
+  riskFlags: string[];
+  detectedKeywords: string[];
+  createdAt: string;
+}
+
+export interface ArtifactInvalidation {
+  schemaVersion: string;
+  artifactId: string;
+  artifactType: ReflowArtifactType;
+  targetId?: string;
+  staleReason: string;
+  staleDependencies: string[];
+  requiresRegeneration: boolean;
+  severity: "blocking" | "stale" | "review";
+}
+
+export interface ProductionBiblePatch {
+  schemaVersion: string;
+  id: string;
+  transactionId: string;
+  status: "dry_run" | "pending_confirmation" | "approved" | "rejected" | "applied";
+  patchType: "character" | "scene" | "style" | "voice" | "story_rules" | "unknown";
+  targetIds: string[];
+  proposedChanges: Array<{
+    path: string;
+    operation: "add" | "replace" | "remove" | "move" | "review";
+    valueSummary: string;
+  }>;
+  requiresUserConfirmation: boolean;
+  warnings: string[];
+  createdAt: string;
+}
+
+export interface AssetLockScope {
+  schemaVersion: string;
+  id: string;
+  transactionId?: string;
+  lockLevel: "preserve" | "can_reuse" | "invalidate" | "review";
+  characterIds: string[];
+  sceneIds: string[];
+  propIds: string[];
+  styleIds: string[];
+  voiceIds: string[];
+  shotIds: string[];
+  mustPreserve: string[];
+  canInvalidate: string[];
+  notes: string[];
+}
+
+export interface VoiceChangeTransaction {
+  schemaVersion: string;
+  id: string;
+  userIntent: string;
+  changeType: "dialogue" | "narration" | "voice_source" | "tone" | "timing" | "unknown";
+  targetVoiceIds: string[];
+  targetCharacterIds: string[];
+  targetShotIds: string[];
+  status: StoryChangeStatus;
+  requiresUserConfirmation: boolean;
+  invalidatedArtifactIds: string[];
+  mustPreserve: string[];
+  mustNotAdd: string[];
+  createdAt: string;
+}
+
+export interface StoryChangeTransaction {
+  schemaVersion: string;
+  id: string;
+  userIntent: string;
+  intentType: DirectorIntentType;
+  operation: StoryChangeOperation;
+  impactScope: StoryChangeImpactScope;
   targetIds: string[];
   mustPreserve: string[];
   mustNotAdd: string[];
   invalidatedArtifactIds: string[];
   requiresUserConfirmation: boolean;
+  confirmationState: StoryChangeConfirmationState;
+  confirmationReasons: string[];
+  status: StoryChangeStatus;
+  dryRunOnly: boolean;
+  providerSubmissionForbidden: true;
+  productionBiblePatch?: ProductionBiblePatch;
+  assetLockScope?: AssetLockScope;
+  voiceChangeTransaction?: VoiceChangeTransaction;
+  intentResult?: DirectorIntentResult;
+  createdAt: string;
+}
+
+export interface ReflowImpactReport {
+  schemaVersion: string;
+  id: string;
+  transactionId: string;
+  status: "dry_run" | "pending_confirmation" | "ready_for_confirmation" | "blocked";
+  summary: string;
+  affectedScopes: StoryChangeImpactScope[];
+  affectedSectionIds: string[];
+  affectedShotIds: string[];
+  affectedAssetIds: string[];
+  invalidations: ArtifactInvalidation[];
+  staleArtifactIds: string[];
+  requiresUserConfirmation: boolean;
+  confirmationReasons: string[];
+  regenerationPlan: Array<{
+    step: "rebuild_story_flow" | "rebuild_shot_spec" | "rebuild_prompt_plan" | "regenerate_keyframes" | "regenerate_video" | "regenerate_audio" | "rebuild_preview" | "review_assets";
+    targetIds: string[];
+    reason: string;
+  }>;
+  forbiddenActions: Array<"provider_submit" | "prompt_patch_from_natural_language" | "direct_project_mutation">;
   createdAt: string;
 }
 

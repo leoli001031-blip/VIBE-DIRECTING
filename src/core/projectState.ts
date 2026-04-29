@@ -12,6 +12,8 @@ import type {
   ProjectMetrics,
   ProjectSourceIndex,
   ProviderPolicy,
+  ReflowImpactReport,
+  StoryChangeTransaction,
   TaskEnvelope,
   TaskRun,
   WorkflowStage,
@@ -72,6 +74,13 @@ export interface ProjectRuntimeTaskState {
   nextStep: string;
 }
 
+export interface ProjectRuntimeStoryChangeState {
+  transactions: StoryChangeTransaction[];
+  reflowReports: ReflowImpactReport[];
+  pendingConfirmationCount: number;
+  lastGeneratedAt: string;
+}
+
 export interface ProjectRuntimeState {
   schemaVersion: string;
   coreStateVersion: string;
@@ -130,6 +139,7 @@ export interface ProjectRuntimeState {
     reports: ManifestMatchReport[];
   };
   previewEvents: PreviewEvent[];
+  storyChanges: ProjectRuntimeStoryChangeState;
   diagnostics: {
     issues: AuditIssue[];
     schemaSummary?: ProjectAudit["schemaSummary"];

@@ -17,6 +17,7 @@
     "taskRuns",
     "manifestMatches",
     "previewEvents",
+    "storyChanges",
     "diagnostics",
     "knowledge",
     "stateSource"
@@ -137,6 +138,23 @@
       }
     },
     "previewEvents": { "type": "array", "items": { "$ref": "preview_event.schema.json" } },
+    "storyChanges": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transactions", "reflowReports", "pendingConfirmationCount", "lastGeneratedAt"],
+      "properties": {
+        "transactions": {
+          "type": "array",
+          "items": { "$ref": "story_change_transaction.schema.json" }
+        },
+        "reflowReports": {
+          "type": "array",
+          "items": { "$ref": "reflow_impact_report.schema.json" }
+        },
+        "pendingConfirmationCount": { "type": "integer", "minimum": 0 },
+        "lastGeneratedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+      }
+    },
     "diagnostics": {
       "type": "object",
       "additionalProperties": true,

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/voice_change_transaction.schema.json",
+  "title": "VoiceChangeTransaction",
+  "description": "Structured dry-run voice, dialogue, or narration change contract before audio artifacts are regenerated.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "userIntent",
+    "changeType",
+    "targetVoiceIds",
+    "targetCharacterIds",
+    "targetShotIds",
+    "status",
+    "requiresUserConfirmation",
+    "invalidatedArtifactIds",
+    "mustPreserve",
+    "mustNotAdd",
+    "createdAt"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "userIntent": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "changeType": {
+      "type": "string",
+      "enum": ["dialogue", "narration", "voice_source", "tone", "timing", "unknown"]
+    },
+    "targetVoiceIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "targetCharacterIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "targetShotIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["dry_run", "pending_confirmation", "confirmed", "rejected", "applied", "cancelled"]
+    },
+    "requiresUserConfirmation": { "type": "boolean" },
+    "invalidatedArtifactIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "mustPreserve": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "mustNotAdd": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "createdAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  }
+}

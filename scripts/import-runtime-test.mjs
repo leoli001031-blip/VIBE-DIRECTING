@@ -863,6 +863,12 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
       reports: taskViews.map((task) => task.manifestMatch),
     },
     previewEvents: buildPreviewEvents(audit, taskViews),
+    storyChanges: {
+      transactions: [],
+      reflowReports: [],
+      pendingConfirmationCount: 0,
+      lastGeneratedAt: generatedAt,
+    },
     diagnostics: {
       issues: audit.issues,
       schemaSummary: audit.schemaSummary,

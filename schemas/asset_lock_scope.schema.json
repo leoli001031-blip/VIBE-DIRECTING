@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/asset_lock_scope.schema.json",
+  "title": "AssetLockScope",
+  "description": "Dry-run scope describing which assets must be preserved, reviewed, or invalidated by a story change.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "lockLevel",
+    "characterIds",
+    "sceneIds",
+    "propIds",
+    "styleIds",
+    "voiceIds",
+    "shotIds",
+    "mustPreserve",
+    "canInvalidate",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "transactionId": { "type": "string" },
+    "lockLevel": {
+      "type": "string",
+      "enum": ["preserve", "can_reuse", "invalidate", "review"]
+    },
+    "characterIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "sceneIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "propIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "styleIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "voiceIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "shotIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "mustPreserve": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "canInvalidate": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

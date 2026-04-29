@@ -23,7 +23,16 @@ import {
   Sparkles,
   Wrench,
 } from "lucide-react";
-import type { AssetRecord, AuditIssue, ProjectAudit, ShotRecord, UiMode, WorkflowStage } from "./core/types";
+import type {
+  AssetRecord,
+  AuditIssue,
+  ProjectAudit,
+  ReflowImpactReport,
+  ShotRecord,
+  StoryChangeTransaction,
+  UiMode,
+  WorkflowStage,
+} from "./core/types";
 import type { RuntimeView, TaskRuntimeView } from "./core/runtimeView";
 import type { ProjectRuntimeState } from "./core/projectState";
 import {
@@ -32,6 +41,11 @@ import {
   buildRuntimeViewFromProjectState,
   emptyKnowledgeManifest,
 } from "./core/projectStateBuilder";
+import {
+  buildReflowImpactReport,
+  buildStoryChangeTransaction,
+  describeReflowImpact,
+} from "./core/storyChange";
 import { fallbackAudit } from "./data/fallbackAudit";
 
 const gateNames = ["identity", "scene", "pair", "story", "prop", "style"] as const;
@@ -119,6 +133,7 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   const manifestMatches = requireRecord(value, "manifestMatches", issues);
   const diagnostics = requireRecord(value, "diagnostics", issues);
   const knowledge = requireRecord(value, "knowledge", issues);
+  const storyChanges = requireRecord(value, "storyChanges", issues);
 
   requireRecord(value, "stateSource", issues);
   if (!Object.keys(project).length) issues.push("project.empty");
@@ -136,6 +151,10 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   requireArray(knowledge, "categories", issues);
   requireArray(knowledge, "validationIssues", issues);
   requireArray(knowledge, "bindings", issues);
+  requireArray(storyChanges, "transactions", issues);
+  requireArray(storyChanges, "reflowReports", issues);
+  if (typeof storyChanges.pendingConfirmationCount !== "number") issues.push("storyChanges.pendingConfirmationCount");
+  if (typeof storyChanges.lastGeneratedAt !== "string") issues.push("storyChanges.lastGeneratedAt");
 
   if (issues.length) throw new Error(`runtime-state shape invalid: ${issues.join(", ")}`);
 }
@@ -299,15 +318,64 @@ function StoryWorkspace({
   );
 }
 
-function DirectorInput({ shot, asset, nextStep }: { shot?: ShotRecord; asset?: AssetRecord; nextStep: string }) {
+interface DirectorDryRunResult {
+  transaction: StoryChangeTransaction;
+  report: ReflowImpactReport;
+  summary: string;
+}
+
+function formatPlanStep(step: ReflowImpactReport["regenerationPlan"][number]) {
+  const label = step.step.replace(/_/g, " ");
+  const targets = step.targetIds.length ? step.targetIds.slice(0, 3).join(", ") : "project";
+  const overflow = step.targetIds.length > 3 ? ` +${step.targetIds.length - 3}` : "";
+  return `${label}: ${targets}${overflow}`;
+}
+
+function DirectorInput({
+  runtimeState,
+  shot,
+  asset,
+  nextStep,
+}: {
+  runtimeState: ProjectRuntimeState;
+  shot?: ShotRecord;
+  asset?: AssetRecord;
+  nextStep: string;
+}) {
   const [text, setText] = useState("");
-  const [saved, setSaved] = useState("No command recorded");
+  const [status, setStatus] = useState("No change plan generated yet");
+  const [dryRun, setDryRun] = useState<DirectorDryRunResult | undefined>();
   const selectedContext = shot ? `${shot.id} · ${shot.storyFunction}` : asset ? `${asset.type} · ${asset.name}` : "Project";
   const understanding = shot
     ? `System sees ${shot.status}; video ${shot.videoPath ? "present" : "missing"}; pair gate ${shot.gates.pair}.`
     : asset
       ? `System sees ${asset.status}; reference lock ${asset.lockedStatus}; future reference ${asset.safeForFutureReference ? "allowed" : "not approved"}.`
       : "System is scoped to the whole project.";
+  const previewDisabled = !text.trim();
+
+  function previewChangePlan() {
+    const userIntent = text.trim();
+    if (!userIntent) {
+      setStatus("Add a natural-language change before previewing.");
+      return;
+    }
+
+    const targetIds = [shot?.id, asset?.id].filter((id): id is string => Boolean(id));
+    const transaction = buildStoryChangeTransaction({
+      userIntent,
+      targetIds,
+      context: {
+        selectedShotId: shot?.id,
+        selectedSectionId: shot?.sectionId || shot?.actId,
+        knownAssetIds: runtimeState.visualMemory.assets.map((item) => item.id),
+        knownCharacterIds: runtimeState.visualMemory.assets.filter((item) => item.type === "character").map((item) => item.id),
+        knownSceneIds: runtimeState.visualMemory.assets.filter((item) => item.type === "scene").map((item) => item.id),
+      },
+    });
+    const report = buildReflowImpactReport(transaction, runtimeState);
+    setDryRun({ transaction, report, summary: describeReflowImpact(report) });
+    setStatus("Preview only. No project files changed and no provider task was submitted.");
+  }
 
   return (
     <div className="director-input">
@@ -321,17 +389,52 @@ function DirectorInput({ shot, asset, nextStep }: { shot?: ShotRecord; asset?: A
         <small>{understanding}</small>
         <small>{nextStep}</small>
       </div>
-      <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Describe a change in natural language. This shell records intent only." />
+      <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Describe a change in natural language. This will preview a local dry-run plan only." />
       <button
-        onClick={() => {
-          setSaved(text.trim() ? `Mock command saved for ${selectedContext}` : "No command text");
-          setText("");
-        }}
+        disabled={previewDisabled}
+        onClick={previewChangePlan}
       >
         <Send size={15} />
-        Save Mock Command
+        Preview Change Plan
       </button>
-      <small>{saved}</small>
+      <small>{status}</small>
+      {dryRun && (
+        <section className="change-plan">
+          <div className="change-plan-head">
+            <span>Change Plan</span>
+            <StatusPill value={dryRun.transaction.status} />
+          </div>
+          <div className="field-grid compact">
+            <label>Transaction</label>
+            <span>{dryRun.transaction.id}</span>
+            <label>Operation</label>
+            <span>{dryRun.transaction.operation}</span>
+            <label>Intent</label>
+            <span>{dryRun.transaction.intentType}</span>
+            <label>Scope</label>
+            <span>{dryRun.transaction.impactScope}</span>
+            <label>Confirm</label>
+            <span>{dryRun.transaction.requiresUserConfirmation ? "required" : "not required"}</span>
+            <label>Stale</label>
+            <span>{dryRun.report.staleArtifactIds.length} artifact(s)</span>
+          </div>
+          <p>{dryRun.summary}</p>
+          {dryRun.transaction.confirmationReasons.length > 0 && (
+            <div className="change-plan-note">
+              {dryRun.transaction.confirmationReasons.slice(0, 2).map((reason) => (
+                <small key={reason}>{reason}</small>
+              ))}
+            </div>
+          )}
+          <div className="plan-list">
+            {dryRun.report.regenerationPlan.slice(0, 4).map((step) => (
+              <small key={`${step.step}-${step.targetIds.join("-")}`}>{formatPlanStep(step)}</small>
+            ))}
+            {!dryRun.report.regenerationPlan.length && <small>No regeneration steps resolved for this dry run.</small>}
+          </div>
+          <small className="forbidden-actions">Forbidden: {dryRun.report.forbiddenActions.join(", ")}</small>
+        </section>
+      )}
     </div>
   );
 }
@@ -366,6 +469,7 @@ function PreviewTimeline({ view, selectedShotId, onSelectShot }: { view: Runtime
 function DirectorMode({
   audit,
   view,
+  runtimeState,
   selectedShot,
   selectedAsset,
   selectedShotId,
@@ -375,6 +479,7 @@ function DirectorMode({
 }: {
   audit: ProjectAudit;
   view: RuntimeView;
+  runtimeState: ProjectRuntimeState;
   selectedShot?: ShotRecord;
   selectedAsset?: AssetRecord;
   selectedShotId: string;
@@ -412,7 +517,7 @@ function DirectorMode({
         <StoryWorkspace audit={audit} view={view} selectedShotId={selectedShotId} onSelectShot={onSelectShot} />
         <div className="director-side">
           <PreviewTimeline view={view} selectedShotId={selectedShotId} onSelectShot={onSelectShot} />
-          <DirectorInput shot={selectedShot} asset={selectedAsset} nextStep={view.nextStep} />
+          <DirectorInput runtimeState={runtimeState} shot={selectedShot} asset={selectedAsset} nextStep={view.nextStep} />
         </div>
       </div>
     </>
@@ -663,7 +768,19 @@ function SettingsShell({ audit }: { audit: ProjectAudit }) {
   );
 }
 
-function DiagnosticsMode({ audit, view, intent, onIntentChange }: { audit: ProjectAudit; view: RuntimeView; intent: string; onIntentChange: (value: string) => void }) {
+function DiagnosticsMode({
+  audit,
+  view,
+  runtimeState,
+  intent,
+  onIntentChange,
+}: {
+  audit: ProjectAudit;
+  view: RuntimeView;
+  runtimeState: ProjectRuntimeState;
+  intent: string;
+  onIntentChange: (value: string) => void;
+}) {
   const firstQueueBlocker = view.taskViews.find((task) => task.queueGate.status === "blocked" && task.queueGate.blockers[0])?.queueGate.blockers[0];
 
   return (
@@ -717,6 +834,10 @@ function DiagnosticsMode({ audit, view, intent, onIntentChange }: { audit: Proje
           <span>{view.stateSource?.path || audit.schemaSummary?.coreStateVersion || "runtime audit v0.3 shell"}</span>
           <label>Preview</label>
           <span>{view.previewEvents.filter((event) => event.type === "blocked_placeholder").length} blocked / {view.previewEvents.length} events</span>
+          <label>Story Changes</label>
+          <span>{runtimeState.storyChanges.pendingConfirmationCount} pending / {runtimeState.storyChanges.transactions.length} transaction(s)</span>
+          <label>Reflow</label>
+          <span>{runtimeState.storyChanges.reflowReports.length} report(s)</span>
         </div>
       </section>
       <KnowledgePackManager view={view} intent={intent} onIntentChange={onIntentChange} />
@@ -831,6 +952,7 @@ function App() {
         <DirectorMode
           audit={audit}
           view={view}
+          runtimeState={runtimeState}
           selectedShot={selectedShot}
           selectedAsset={selectedAsset}
           selectedShotId={selectedShotId}
@@ -840,7 +962,7 @@ function App() {
         />
       )}
       {mode === "inspector" && <InspectorMode audit={audit} view={view} selectedShot={selectedShot} selectedAsset={selectedAsset} />}
-      {mode === "diagnostics" && <DiagnosticsMode audit={audit} view={view} intent={knowledgeIntent} onIntentChange={setKnowledgeIntent} />}
+      {mode === "diagnostics" && <DiagnosticsMode audit={audit} view={view} runtimeState={runtimeState} intent={knowledgeIntent} onIntentChange={setKnowledgeIntent} />}
 
       {mode !== "director" && (
         <footer className="policy-note">

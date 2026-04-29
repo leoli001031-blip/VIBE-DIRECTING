@@ -639,6 +639,58 @@ small {
   justify-content: center;
 }
 
+.director-input button:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.change-plan {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(212, 176, 98, 0.22);
+  background: rgba(212, 176, 98, 0.055);
+  padding: 12px;
+}
+
+.change-plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.change-plan-head span {
+  color: #d4b062;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.change-plan p {
+  color: #d9d1c4;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.plan-list,
+.change-plan-note {
+  display: grid;
+  gap: 6px;
+}
+
+.plan-list small,
+.change-plan-note small {
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 7px 8px;
+  color: #bfb7aa;
+  overflow-wrap: anywhere;
+}
+
+.forbidden-actions {
+  overflow-wrap: anywhere;
+}
+
 .policy-note {
   grid-column: 1 / -1;
   display: flex;

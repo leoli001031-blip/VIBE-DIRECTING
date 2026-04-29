@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/artifact_invalidation.schema.json",
+  "title": "ArtifactInvalidation",
+  "description": "A stale artifact marker produced by dry-run reflow before regeneration or QA.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "artifactId",
+    "artifactType",
+    "staleReason",
+    "staleDependencies",
+    "requiresRegeneration",
+    "severity"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "artifactId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "artifactType": {
+      "type": "string",
+      "enum": [
+        "productionBible",
+        "storyFlow",
+        "shotSpec",
+        "shotLayout",
+        "promptPlan",
+        "keyframe",
+        "video",
+        "audio",
+        "preview",
+        "visualMemory",
+        "spatialMemory",
+        "voiceMemory",
+        "styleCapsule",
+        "asset",
+        "taskRun",
+        "qaReport"
+      ]
+    },
+    "targetId": { "type": "string" },
+    "staleReason": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "staleDependencies": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "requiresRegeneration": { "type": "boolean" },
+    "severity": {
+      "type": "string",
+      "enum": ["blocking", "stale", "review"]
+    }
+  }
+}

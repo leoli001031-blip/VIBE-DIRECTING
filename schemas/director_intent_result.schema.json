@@ -1,33 +1,31 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://vibecore.local/schemas/story_change_transaction.schema.json",
-  "title": "StoryChangeTransaction",
-  "description": "A structured transaction created before natural-language story, shot, asset, style, voice, or export changes mutate the project.",
+  "$id": "https://vibecore.local/schemas/director_intent_result.schema.json",
+  "title": "DirectorIntentResult",
+  "description": "Conservative structured classification of director natural-language intent before any project mutation or prompt change.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schemaVersion",
     "id",
     "userIntent",
+    "normalizedIntent",
     "intentType",
     "operation",
     "impactScope",
     "targetIds",
-    "mustPreserve",
-    "mustNotAdd",
-    "invalidatedArtifactIds",
+    "confidence",
     "requiresUserConfirmation",
-    "confirmationState",
     "confirmationReasons",
-    "status",
-    "dryRunOnly",
-    "providerSubmissionForbidden",
+    "riskFlags",
+    "detectedKeywords",
     "createdAt"
   ],
   "properties": {
     "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
     "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
     "userIntent": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "normalizedIntent": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
     "intentType": {
       "type": "string",
       "enum": ["story", "shot", "asset", "style", "voice", "export", "unknown"]
@@ -60,37 +58,20 @@
       "type": "array",
       "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
     },
-    "mustPreserve": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "mustNotAdd": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "invalidatedArtifactIds": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
     "requiresUserConfirmation": { "type": "boolean" },
-    "confirmationState": {
-      "type": "string",
-      "enum": ["not_required", "required", "pending", "confirmed", "rejected"]
-    },
     "confirmationReasons": {
       "type": "array",
       "items": { "type": "string" }
     },
-    "status": {
-      "type": "string",
-      "enum": ["dry_run", "pending_confirmation", "confirmed", "rejected", "applied", "cancelled"]
+    "riskFlags": {
+      "type": "array",
+      "items": { "type": "string" }
     },
-    "dryRunOnly": { "type": "boolean", "const": true },
-    "providerSubmissionForbidden": { "type": "boolean", "const": true },
-    "productionBiblePatch": { "$ref": "production_bible_patch.schema.json" },
-    "assetLockScope": { "$ref": "asset_lock_scope.schema.json" },
-    "voiceChangeTransaction": { "$ref": "voice_change_transaction.schema.json" },
-    "intentResult": { "$ref": "director_intent_result.schema.json" },
+    "detectedKeywords": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
     "createdAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
   }
 }
