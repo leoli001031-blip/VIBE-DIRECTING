@@ -19,6 +19,7 @@
     "imagePipeline",
     "previewEvents",
     "previewExport",
+    "audioPlanning",
     "storyChanges",
     "runtime",
     "diagnostics",
@@ -192,6 +193,7 @@
     },
     "previewEvents": { "type": "array", "items": { "$ref": "preview_event.schema.json" } },
     "previewExport": { "$ref": "preview_plan.schema.json#/$defs/projectPreviewExportState" },
+    "audioPlanning": { "$ref": "audio_plan.schema.json#/$defs/audioPlanningState" },
     "storyChanges": {
       "type": "object",
       "additionalProperties": false,

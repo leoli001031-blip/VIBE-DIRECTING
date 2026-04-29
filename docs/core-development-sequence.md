@@ -501,6 +501,13 @@ Export profiles：
 - 每个 shot 能知道是否有旁白、对白、环境音、BGM 需求。
 - Settings 能预留用户自定义音源。
 
+Phase 6 已实现范围（核心合同）：
+
+- `ProjectRuntimeState.audioPlanning` 作为只读/dry-run 状态树，包含 shot-level `AudioPlan`、voice source registry 摘要、preview mix placeholder、视频 no-bgm policy、audio export package 摘要。
+- 每个 shot 默认生成完整 AudioPlan；`musicAllowed=false`，`outputPath=null` 不视为真实音频成功文件。
+- audio provider slots 保持 `planned` / `liveSubmitAllowed=false` / `providerSubmissionForbidden=true`，不接 TTS/BGM provider，不写真实音频文件。
+- BGM 不进入 video provider；视频侧默认 `noBgmForVideoProvider=true`，环境音/SFX 只作为 audio plan placeholder。
+
 ## Phase 7：Video Provider Enablement
 
 目标：核心链路稳定后，才允许视频 provider 从 parked 进入 user-enabled。

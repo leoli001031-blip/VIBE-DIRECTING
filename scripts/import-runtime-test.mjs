@@ -1971,6 +1971,193 @@ function buildPreviewEvents(audit, taskViews) {
   });
 }
 
+function safeAudioId(value) {
+  return String(value || "").replace(/[^a-zA-Z0-9_-]+/g, "_");
+}
+
+function defaultVoiceSourceId(voiceSources) {
+  const source = (voiceSources || []).find((item) => item.kind === "tts_voice" || item.kind === "voice_library");
+  return source?.id || null;
+}
+
+function audioDurationForShot(shot, previewEvents = []) {
+  const event = previewEvents.find((item) => item.shotId === shot.id);
+  return {
+    startSeconds: event?.startSeconds || 0,
+    durationSeconds: event?.durationSeconds || (shot.videoPath ? 5 : 3),
+  };
+}
+
+function buildShotAudioPlan(shot, runtimeConfig, previewEvents) {
+  const { durationSeconds } = audioDurationForShot(shot, previewEvents);
+
+  return {
+    shotId: shot.id,
+    narrationText: "",
+    dialogueLines: [],
+    voiceSourceId: defaultVoiceSourceId(runtimeConfig.voiceSources),
+    deliveryNotes: "Placeholder delivery notes; edit through a future voice_change_transaction before audio generation.",
+    ambienceBrief: shot.storyFunction
+      ? `Ambience placeholder should support the story function: ${shot.storyFunction}`
+      : "Ambience placeholder reserved for this shot.",
+    bgmProfile: "No BGM for video provider; BGM may be planned here or imported later in post.",
+    musicAllowed: false,
+    targetDurationSeconds: durationSeconds,
+    fadeInSeconds: 0,
+    fadeOutSeconds: 0,
+    outputPath: null,
+    linkedTtsJobId: null,
+    linkedMusicJobId: null,
+    audioQaStatus: "UNKNOWN",
+  };
+}
+
+function buildAudioPreviewEvents(audioPlans, shots, previewEvents) {
+  return audioPlans.flatMap((plan) => {
+    const shot = shots.find((item) => item.id === plan.shotId);
+    const { startSeconds, durationSeconds } = shot
+      ? audioDurationForShot(shot, previewEvents)
+      : { startSeconds: 0, durationSeconds: plan.targetDurationSeconds };
+    const idBase = safeAudioId(plan.shotId);
+    const events = [];
+
+    if (plan.narrationText.trim()) {
+      events.push({
+        id: `audio_${idBase}_narration_placeholder`,
+        mode: "draft_preview",
+        type: "narration_audio",
+        shotId: plan.shotId,
+        startSeconds,
+        durationSeconds,
+        qaStatus: plan.outputPath ? plan.audioQaStatus : "UNKNOWN",
+        sourceTaskId: plan.linkedTtsJobId || undefined,
+      });
+    }
+
+    if (plan.dialogueLines.length) {
+      events.push({
+        id: `audio_${idBase}_dialogue_placeholder`,
+        mode: "draft_preview",
+        type: "dialogue_audio",
+        shotId: plan.shotId,
+        startSeconds,
+        durationSeconds,
+        qaStatus: plan.outputPath ? plan.audioQaStatus : "UNKNOWN",
+        sourceTaskId: plan.linkedTtsJobId || undefined,
+      });
+    }
+
+    if (plan.ambienceBrief.trim()) {
+      events.push({
+        id: `audio_${idBase}_ambience_placeholder`,
+        mode: "draft_preview",
+        type: "ambience_audio",
+        shotId: plan.shotId,
+        startSeconds,
+        durationSeconds,
+        qaStatus: "UNKNOWN",
+      });
+    }
+
+    if (plan.musicAllowed) {
+      events.push({
+        id: `audio_${idBase}_music_placeholder`,
+        mode: "draft_preview",
+        type: "music_audio",
+        shotId: plan.shotId,
+        startSeconds,
+        durationSeconds,
+        qaStatus: plan.linkedMusicJobId && plan.outputPath ? plan.audioQaStatus : "UNKNOWN",
+        sourceTaskId: plan.linkedMusicJobId || undefined,
+      });
+    }
+
+    return events;
+  });
+}
+
+function buildAudioPlanningState({ generatedAt, shots, runtimeConfig, previewEvents }) {
+  const voiceSources = runtimeConfig.voiceSources || [];
+  const shotPlans = shots.map((shot) => buildShotAudioPlan(shot, runtimeConfig, previewEvents));
+  const audioEvents = buildAudioPreviewEvents(shotPlans, shots, previewEvents);
+  const providerSlots = runtimeConfig.providerEnablement.slots
+    .filter((slot) => slot.slot === "audio.tts" || slot.slot === "audio.music")
+    .map((slot) => ({
+      slot: slot.slot,
+      state: slot.state,
+      activeProvider: slot.activeProvider,
+      allowedProviders: slot.allowedProviders,
+      liveSubmitAllowed: false,
+      notes: [
+        ...slot.notes,
+        "Phase 6 keeps audio providers planned/read-only; provider submission is forbidden.",
+      ],
+    }));
+
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt,
+    shotPlans,
+    voiceSourceRegistry: {
+      sourceCount: voiceSources.length,
+      placeholderCount: voiceSources.filter((source) => source.status === "placeholder").length,
+      plannedCount: voiceSources.filter((source) => source.status === "planned").length,
+      unavailableCount: voiceSources.filter((source) => source.status === "unavailable").length,
+      sources: voiceSources,
+      storesSecrets: false,
+      changeTransactionRequired: true,
+      liveSubmitAllowed: false,
+      providerSubmissionForbidden: true,
+      notes: [
+        "Voice source registry is copied from runtime.config.voiceSources.",
+        "No provider credentials, API keys, or sample audio are stored in ProjectRuntimeState.",
+        "Voice changes must be represented by voice_change_transaction before reflow.",
+      ],
+    },
+    previewMix: {
+      planId: "audio_preview_mix_placeholder",
+      generatedFromAudioPlan: true,
+      eventCount: audioEvents.length,
+      missingOutputPathCount: shotPlans.filter((plan) => !plan.outputPath).length,
+      events: audioEvents,
+      notes: [
+        "Audio preview mix is a placeholder derived from AudioPlan; no audio file is rendered.",
+        "Events without mediaPath are not successful files and must remain draft/placeholder material.",
+      ],
+      dryRunOnly: true,
+      providerSubmissionForbidden: true,
+    },
+    videoProviderPolicy: {
+      musicAllowed: false,
+      noBgmForVideoProvider: true,
+      ambienceSfxPlaceholderAllowed: true,
+      bgmHandledBy: "audio_plan_or_post_import",
+      summary: "Video provider prompts default to no BGM; music belongs in audio planning or post import.",
+    },
+    providerSlots,
+    exportPackageSummary: {
+      status: "planned",
+      includedInExportProfiles: ["asset_package", "developer_archive"],
+      plannedCategories: ["audio_plan", "voice_source_registry_summary", "preview_mix_placeholder", "no_bgm_video_policy"],
+      plannedPaths: [],
+      blockedReasons: ["No real narration, dialogue, ambience, or music output files are written in Phase 6."],
+      notes: [
+        "Export/package code can include the audio plan contract without copying generated audio files.",
+        "Developer archive should preserve the plan and policy summary for later provider implementation.",
+      ],
+      dryRunOnly: true,
+      providerSubmissionForbidden: true,
+    },
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+    notes: [
+      "Phase 6 implements audio planning data contracts only.",
+      "TTS and music provider slots remain planned and liveSubmitAllowed=false.",
+      "BGM is not mixed into video provider prompts.",
+    ],
+  };
+}
+
 function previewTotalDuration(events) {
   return events.reduce((max, event) => Math.max(max, event.startSeconds + event.durationSeconds), 0);
 }
@@ -2340,6 +2527,12 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     promptPlans: promptPlanResults.map((result) => result.plan),
   });
   const previewEvents = buildPreviewEvents(audit, taskViews);
+  const audioPlanning = buildAudioPlanningState({
+    generatedAt,
+    shots: audit.shots,
+    runtimeConfig: runtime.config,
+    previewEvents,
+  });
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -2408,6 +2601,7 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     },
     previewEvents,
     previewExport,
+    audioPlanning,
     storyChanges: {
       transactions: [],
       reflowReports: [],

@@ -6,6 +6,7 @@ import type { QueueGateResult } from "./taskQueue";
 import type {
   AssetRecord,
   AssetReadinessReport,
+  AudioPlanningState,
   AuditIssue,
   GenerationHealthReport,
   GenerationJob,
@@ -162,6 +163,7 @@ export interface ProjectRuntimeState {
   };
   previewEvents: PreviewEvent[];
   previewExport: ProjectPreviewExportState;
+  audioPlanning: AudioPlanningState;
   storyChanges: ProjectRuntimeStoryChangeState;
   runtime: ProjectRuntimeEnvironment;
   diagnostics: {

@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 import type {
   AssetRecord,
+  AudioPlan,
+  AudioPlanningState,
   AuditIssue,
   ExportProfile,
   PreviewEvent,
@@ -141,6 +143,7 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   const storyChanges = requireRecord(value, "storyChanges", issues);
   const runtime = requireRecord(value, "runtime", issues);
   const previewExport = requireRecord(value, "previewExport", issues);
+  const audioPlanning = requireRecord(value, "audioPlanning", issues);
   const draftPreview = requireRecord(previewExport, "draftPreview", issues);
   const draftPreviewSummary = requireRecord(draftPreview, "summary", issues);
   const formalPreview = requireRecord(previewExport, "formalPreview", issues);
@@ -170,6 +173,7 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   requireArray(storyChanges, "transactions", issues);
   requireArray(storyChanges, "reflowReports", issues);
   requireArray(previewExport, "exportProfiles", issues);
+  requireArray(audioPlanning, "shotPlans", issues);
   requireArray(draftPreview, "events", issues);
   requireArray(draftPreview, "blockedReasons", issues);
   requireArray(formalPreview, "events", issues);
@@ -196,6 +200,21 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   requireArray(detectionReport, "tools", issues);
   if (typeof detectionReport.generatedAt !== "string") issues.push("runtime.detectionReport.generatedAt");
   if (typeof providerEnablementSummary.liveSubmitAllowed !== "boolean") issues.push("runtime.providerEnablementSummary.liveSubmitAllowed");
+  if (typeof audioPlanning.schemaVersion !== "string") issues.push("audioPlanning.schemaVersion");
+  if (typeof audioPlanning.generatedAt !== "string") issues.push("audioPlanning.generatedAt");
+  const audioPreviewMix = requireRecord(audioPlanning, "previewMix", issues);
+  const audioVoiceSourceRegistry = requireRecord(audioPlanning, "voiceSourceRegistry", issues);
+  const audioVideoProviderPolicy = requireRecord(audioPlanning, "videoProviderPolicy", issues);
+  const audioExportPackageSummary = requireRecord(audioPlanning, "exportPackageSummary", issues);
+  requireArray(audioPlanning, "providerSlots", issues);
+  requireArray(audioPlanning, "notes", issues);
+  requireArray(audioPreviewMix, "events", issues);
+  if (typeof audioPreviewMix.eventCount !== "number") issues.push("audioPlanning.previewMix.eventCount");
+  if (typeof audioPreviewMix.missingOutputPathCount !== "number") issues.push("audioPlanning.previewMix.missingOutputPathCount");
+  if (typeof audioVoiceSourceRegistry.sourceCount !== "number") issues.push("audioPlanning.voiceSourceRegistry.sourceCount");
+  if (typeof audioVoiceSourceRegistry.storesSecrets !== "boolean") issues.push("audioPlanning.voiceSourceRegistry.storesSecrets");
+  if (audioVideoProviderPolicy.noBgmForVideoProvider !== true) issues.push("audioPlanning.videoProviderPolicy.noBgmForVideoProvider");
+  if (audioExportPackageSummary.status !== "planned") issues.push("audioPlanning.exportPackageSummary.status");
 
   if (issues.length) throw new Error(`runtime-state shape invalid: ${issues.join(", ")}`);
 }
@@ -298,6 +317,26 @@ function describePreviewEvent(event?: PreviewEvent) {
   if (!event) return "No draft event for this shot.";
   const label = event.type === "blocked_placeholder" ? "blocked placeholder" : statusLabel(event.type);
   return `${label} · ${formatDuration(event.durationSeconds)} at ${formatDuration(event.startSeconds)} · QA ${event.qaStatus}`;
+}
+
+function findAudioPlan(audioPlanning: AudioPlanningState, shotId?: string) {
+  if (!shotId) return undefined;
+  return audioPlanning.shotPlans.find((plan) => plan.shotId === shotId);
+}
+
+function voiceSourceLabel(audioPlanning: AudioPlanningState, sourceId?: string | null) {
+  if (!sourceId) return "none";
+  return audioPlanning.voiceSourceRegistry.sources.find((source) => source.id === sourceId)?.label || sourceId;
+}
+
+function audioPlanBadges(plan?: AudioPlan) {
+  if (!plan) return ["Audio planned"];
+  return [
+    plan.ambienceBrief.trim() ? "Ambience" : undefined,
+    plan.narrationText.trim() ? "Narration" : undefined,
+    plan.dialogueLines.length ? "Dialogue" : undefined,
+    plan.musicAllowed ? "Music planned" : "No music",
+  ].filter((item): item is string => Boolean(item));
 }
 
 function profileInclusion(
@@ -491,6 +530,74 @@ function ImagePipelineDiagnostics({ runtimeState }: { runtimeState: ProjectRunti
           <summary>Warnings ({warnings.length})</summary>
           <CompactList items={warnings} />
         </details>
+      </div>
+    </section>
+  );
+}
+
+function AudioDiagnosticsPanel({ audioPlanning }: { audioPlanning: AudioPlanningState }) {
+  const plannedSlots = audioPlanning.providerSlots.filter((slot) => slot.state === "planned").length;
+  const liveSlots = audioPlanning.providerSlots.filter((slot) => slot.liveSubmitAllowed).length;
+  const registry = audioPlanning.voiceSourceRegistry;
+  const exportSummary = audioPlanning.exportPackageSummary;
+
+  return (
+    <section className="machine-panel audio-diagnostics-panel">
+      <div className="audit-head">
+        <Radio size={17} />
+        <span>Audio Planning</span>
+      </div>
+      <div className="summary-grid">
+        <Metric label="Shot Plans" value={`${audioPlanning.shotPlans.length}`} detail="AudioPlan contracts" />
+        <Metric label="Preview Mix" value={`${audioPlanning.previewMix.eventCount}`} detail="placeholder event(s)" />
+        <Metric label="Missing Output" value={`${audioPlanning.previewMix.missingOutputPathCount}`} detail="planned audio paths" />
+        <Metric label="Provider Slots" value={`${plannedSlots}/${audioPlanning.providerSlots.length}`} detail={`${liveSlots} live · submit forbidden`} />
+      </div>
+      <div className="audio-diagnostics-grid">
+        <div>
+          <h3>Voice Source Registry</h3>
+          <div className="field-grid compact">
+            <label>Sources</label>
+            <span>{registry.sourceCount}</span>
+            <label>Secrets</label>
+            <span>{registry.storesSecrets ? "stored" : "not stored"}</span>
+            <label>Planned</label>
+            <span>{registry.plannedCount}</span>
+            <label>Live</label>
+            <span>{registry.liveSubmitAllowed ? "allowed" : "false"}</span>
+          </div>
+          <CompactList
+            items={registry.sources.map((source) => `${source.label} · ${source.status} · ${statusLabel(source.kind)}`)}
+            empty="No voice sources registered."
+          />
+        </div>
+        <div>
+          <h3>Audio Provider Slots</h3>
+          <CompactList
+            items={audioPlanning.providerSlots.map((slot) => `${slot.slot} · ${slot.state} · live ${slot.liveSubmitAllowed ? "allowed" : "false"}`)}
+            empty="No audio provider slots planned."
+          />
+        </div>
+        <div>
+          <h3>Export Package Summary</h3>
+          <div className="field-grid compact">
+            <label>Status</label>
+            <span>{exportSummary.status}</span>
+            <label>Profiles</label>
+            <span>{exportSummary.includedInExportProfiles.map(statusLabel).join(", ")}</span>
+            <label>Dry Run</label>
+            <span>{exportSummary.dryRunOnly ? "true" : "false"}</span>
+            <label>Submit</label>
+            <span>{exportSummary.providerSubmissionForbidden ? "forbidden" : "allowed"}</span>
+          </div>
+          <CompactList
+            items={[
+              ...exportSummary.plannedCategories.map((item) => `category: ${item}`),
+              ...exportSummary.blockedReasons.map((item) => `blocked: ${item}`),
+            ]}
+            empty="No export package notes."
+          />
+        </div>
       </div>
     </section>
   );
@@ -882,6 +989,44 @@ function PreviewTimeline({
   );
 }
 
+function AudioPlanSummaryStrip({ audioPlanning, selectedShot }: { audioPlanning: AudioPlanningState; selectedShot?: ShotRecord }) {
+  const selectedPlan = findAudioPlan(audioPlanning, selectedShot?.id);
+  const plannedSlots = audioPlanning.providerSlots.filter((slot) => slot.state === "planned").length;
+  const liveAudioSlots = audioPlanning.providerSlots.filter((slot) => slot.liveSubmitAllowed).length;
+
+  return (
+    <section className="audio-plan-summary-strip">
+      <div className="audit-head">
+        <Radio size={17} />
+        <span>Audio Plan</span>
+      </div>
+      <div className="audio-summary-line">
+        <div>
+          <span>Audio planned</span>
+          <strong>{audioPlanning.shotPlans.length}</strong>
+        </div>
+        <div>
+          <span>Mix placeholders</span>
+          <strong>{audioPlanning.previewMix.eventCount}</strong>
+        </div>
+        <div>
+          <span>No BGM</span>
+          <strong>{audioPlanning.videoProviderPolicy.noBgmForVideoProvider ? "on" : "off"}</strong>
+        </div>
+      </div>
+      <div className="audio-policy-line">
+        <small>Music off for video provider</small>
+        <small>{plannedSlots} audio provider slot(s) planned · {liveAudioSlots} live</small>
+      </div>
+      <div className="audio-badge-row" aria-label="Selected shot audio badges">
+        {audioPlanBadges(selectedPlan).map((badge) => (
+          <span key={badge} className="audio-badge">{badge}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function DirectorMode({
   audit,
   view,
@@ -933,6 +1078,7 @@ function DirectorMode({
         <StoryWorkspace audit={audit} view={view} selectedShotId={selectedShotId} onSelectShot={onSelectShot} />
         <div className="director-side">
           <PreviewTimeline view={view} previewExport={runtimeState.previewExport} selectedShotId={selectedShotId} onSelectShot={onSelectShot} />
+          <AudioPlanSummaryStrip audioPlanning={runtimeState.audioPlanning} selectedShot={selectedShot} />
           <ExportProfilesPanel previewExport={runtimeState.previewExport} />
           <DirectorInput runtimeState={runtimeState} shot={selectedShot} asset={selectedAsset} nextStep={view.nextStep} />
         </div>
@@ -990,6 +1136,56 @@ function EnvelopePreview({ task }: { task?: TaskRuntimeView }) {
           <small key={pack.packId}>{pack.consumer}: {pack.packId} · {pack.injectedSnippetIds.join(", ") || "summary"}</small>
         ))}
       </div>
+    </div>
+  );
+}
+
+function ShotAudioInspector({ audioPlanning, selectedShot }: { audioPlanning: AudioPlanningState; selectedShot?: ShotRecord }) {
+  if (!selectedShot) return <p className="muted-copy">Select a shot to inspect its audio plan.</p>;
+
+  const plan = findAudioPlan(audioPlanning, selectedShot.id);
+  if (!plan) return <p className="muted-copy">No audio plan found for {selectedShot.id}.</p>;
+
+  return (
+    <div className="shot-audio-inspector">
+      <div className="audio-badge-row">
+        {audioPlanBadges(plan).map((badge) => (
+          <span key={badge} className="audio-badge">{badge}</span>
+        ))}
+      </div>
+      <div className="field-grid compact">
+        <label>Narration</label>
+        <span>{plan.narrationText || "none planned"}</span>
+        <label>Dialogue</label>
+        <span>{plan.dialogueLines.length ? `${plan.dialogueLines.length} line(s)` : "none planned"}</span>
+        <label>Voice</label>
+        <span>{voiceSourceLabel(audioPlanning, plan.voiceSourceId)}</span>
+        <label>Delivery</label>
+        <span>{plan.deliveryNotes}</span>
+        <label>Ambience</label>
+        <span>{plan.ambienceBrief}</span>
+        <label>BGM</label>
+        <span>{plan.bgmProfile}</span>
+        <label>Music</label>
+        <span>{plan.musicAllowed ? "allowed in audio plan" : "not allowed for video provider"}</span>
+        <label>Timing</label>
+        <span>{formatDuration(plan.targetDurationSeconds)} · fade {plan.fadeInSeconds || 0}s/{plan.fadeOutSeconds || 0}s</span>
+        <label>Output</label>
+        <span>{plan.outputPath || "missing placeholder output"}</span>
+        <label>Jobs</label>
+        <span>TTS {plan.linkedTtsJobId || "none"} · music {plan.linkedMusicJobId || "none"}</span>
+        <label>QA</label>
+        <span>{plan.audioQaStatus}</span>
+        <label>No BGM</label>
+        <span>{audioPlanning.videoProviderPolicy.summary}</span>
+      </div>
+      {plan.dialogueLines.length > 0 && (
+        <div className="compact-list">
+          {plan.dialogueLines.map((line, index) => (
+            <small key={`${line}-${index}`}>{line}</small>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1074,6 +1270,13 @@ function InspectorMode({
             <span>Preview / Export</span>
           </div>
           <ShotPreviewExportSummary previewExport={runtimeState.previewExport} selectedShot={selectedShot} tasks={selectedTasks} />
+        </section>
+        <section className="machine-panel">
+          <div className="audit-head">
+            <Radio size={17} />
+            <span>Shot Audio Plan</span>
+          </div>
+          <ShotAudioInspector audioPlanning={runtimeState.audioPlanning} selectedShot={selectedShot} />
         </section>
         <section className="machine-panel">
           <div className="audit-head">
@@ -1233,12 +1436,16 @@ function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) 
           </div>
         ))}
       </div>
-      <div className="settings-group-title">Voice Sources</div>
+      <div className="settings-group-title">Voice Sources (planned)</div>
       <div className="settings-list">
+        <div className="settings-readonly-note">
+          <strong>Read-only registry</strong>
+          <small>No credentials stored · no live submit · no API key input in Phase 6.</small>
+        </div>
         {voiceSources.map((source) => (
           <div key={source.id}>
             <strong>{source.label}</strong>
-            <small>{source.status} · {statusLabel(source.kind)}</small>
+            <small>{source.status} · {statusLabel(source.kind)} · planned only</small>
           </div>
         ))}
       </div>
@@ -1265,6 +1472,7 @@ function DiagnosticsMode({
     <div className="diagnostics-layout">
       <ProviderDock audit={audit} />
       <ImagePipelineDiagnostics runtimeState={runtimeState} />
+      <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />
       <section className="machine-panel">
         <div className="audit-head">
@@ -1339,14 +1547,15 @@ function App() {
     async function loadRuntime() {
       try {
         const state = await fetchJson<unknown>("/runtime-state.json");
-        const normalized = normalizeRuntimeState(state);
-        assertProjectRuntimeState(normalized);
-        if (cancelled) return;
-        setRuntimeState(withRuntimeDefaults({
+        const normalized = withRuntimeDefaults(normalizeRuntimeState(state) as ProjectRuntimeState);
+        const runtimeReady = {
           ...normalized,
           stateSource: normalized.stateSource || { kind: "runtime-state", label: "runtime-state", path: "/runtime-state.json" },
-        }));
-        if (normalized.storyFlow?.shots?.[0]) setSelectedShotId(normalized.storyFlow.shots[0].id);
+        } satisfies ProjectRuntimeState;
+        assertProjectRuntimeState(runtimeReady);
+        if (cancelled) return;
+        setRuntimeState(runtimeReady);
+        if (runtimeReady.storyFlow?.shots?.[0]) setSelectedShotId(runtimeReady.storyFlow.shots[0].id);
         return;
       } catch {
         // Fall through to the legacy audit file for Phase 3 compatibility.

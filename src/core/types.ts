@@ -849,20 +849,86 @@ export interface SubagentResult {
 
 export interface AudioPlan {
   shotId: string;
-  narrationText?: string;
+  narrationText: string;
   dialogueLines: string[];
-  voiceSourceId?: string;
-  deliveryNotes?: string;
-  ambienceBrief?: string;
-  bgmProfile?: string;
+  voiceSourceId?: string | null;
+  deliveryNotes: string;
+  ambienceBrief: string;
+  bgmProfile: string;
   musicAllowed: boolean;
-  targetDurationSeconds?: number;
+  targetDurationSeconds: number;
   fadeInSeconds?: number;
   fadeOutSeconds?: number;
-  outputPath?: string;
-  linkedTtsJobId?: string;
-  linkedMusicJobId?: string;
+  outputPath?: string | null;
+  linkedTtsJobId?: string | null;
+  linkedMusicJobId?: string | null;
   audioQaStatus: GateStatus;
+}
+
+export interface AudioVideoProviderPolicySummary {
+  musicAllowed: false;
+  noBgmForVideoProvider: true;
+  ambienceSfxPlaceholderAllowed: true;
+  bgmHandledBy: "audio_plan_or_post_import";
+  summary: string;
+}
+
+export interface AudioVoiceSourceRegistrySummary {
+  sourceCount: number;
+  placeholderCount: number;
+  plannedCount: number;
+  unavailableCount: number;
+  sources: RuntimeVoiceSource[];
+  storesSecrets: false;
+  changeTransactionRequired: true;
+  liveSubmitAllowed: false;
+  providerSubmissionForbidden: true;
+  notes: string[];
+}
+
+export interface AudioProviderSlotSummary {
+  slot: "audio.tts" | "audio.music";
+  state: ProviderExecutionState;
+  liveSubmitAllowed: false;
+  activeProvider?: string;
+  allowedProviders: string[];
+  notes: string[];
+}
+
+export interface AudioPreviewMixPlaceholder {
+  planId: string;
+  generatedFromAudioPlan: true;
+  eventCount: number;
+  missingOutputPathCount: number;
+  events: PreviewEvent[];
+  notes: string[];
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+}
+
+export interface AudioExportPackageSummary {
+  status: "planned";
+  includedInExportProfiles: Array<"asset_package" | "developer_archive">;
+  plannedCategories: string[];
+  plannedPaths: string[];
+  blockedReasons: string[];
+  notes: string[];
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+}
+
+export interface AudioPlanningState {
+  schemaVersion: string;
+  generatedAt: string;
+  shotPlans: AudioPlan[];
+  voiceSourceRegistry: AudioVoiceSourceRegistrySummary;
+  previewMix: AudioPreviewMixPlaceholder;
+  videoProviderPolicy: AudioVideoProviderPolicySummary;
+  providerSlots: AudioProviderSlotSummary[];
+  exportPackageSummary: AudioExportPackageSummary;
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+  notes: string[];
 }
 
 export type DirectorIntentType = "story" | "shot" | "asset" | "style" | "voice" | "export" | "unknown";

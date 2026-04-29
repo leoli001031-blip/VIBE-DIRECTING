@@ -9,6 +9,7 @@ import { buildShotPromptPlan } from "./promptCompiler";
 import { buildQaPromotionReports } from "./qaPromotion";
 import { buildPreviewExportState } from "./previewExport";
 import { buildWatcherEventsFromImagePipeline } from "./watcherEvents";
+import { buildAudioPlanningState } from "./audioPlanning";
 import {
   projectRuntimeCoreStateVersion,
   projectRuntimeStateSchemaVersion,
@@ -169,6 +170,12 @@ export function buildProjectRuntimeState(
     promptPlans: promptPlanResults.map((result) => result.plan),
   });
   const previewEvents = view.previewEvents;
+  const audioPlanning = buildAudioPlanningState({
+    generatedAt,
+    shots: audit.shots,
+    runtimeConfig: runtime.config,
+    previewEvents,
+  });
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -227,6 +234,7 @@ export function buildProjectRuntimeState(
     },
     previewEvents,
     previewExport,
+    audioPlanning,
     storyChanges: {
       transactions: [],
       reflowReports: [],
@@ -270,12 +278,22 @@ export function auditFromProjectRuntimeState(state: ProjectRuntimeState): Projec
 }
 
 export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeState {
+  const runtime = ensureRuntimeEnvironment(state.runtime, {
+    generatedAt: state.generatedAt,
+    platform: state.runtime?.config?.platform || state.runtime?.detectionReport?.platform,
+  });
+
   return {
     ...state,
-    runtime: ensureRuntimeEnvironment(state.runtime, {
-      generatedAt: state.generatedAt,
-      platform: state.runtime?.config?.platform || state.runtime?.detectionReport?.platform,
-    }),
+    runtime,
+    audioPlanning:
+      state.audioPlanning ||
+      buildAudioPlanningState({
+        generatedAt: state.generatedAt,
+        shots: state.storyFlow.shots,
+        runtimeConfig: runtime.config,
+        previewEvents: state.previewEvents,
+      }),
   };
 }
 

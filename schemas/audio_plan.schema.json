@@ -1,0 +1,280 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/audio_plan.schema.json",
+  "title": "AudioPlan",
+  "description": "Dry-run shot-level audio plan and Phase 6 audio planning state. No provider submission or real audio file writing is allowed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "shotId",
+    "narrationText",
+    "dialogueLines",
+    "voiceSourceId",
+    "deliveryNotes",
+    "ambienceBrief",
+    "bgmProfile",
+    "musicAllowed",
+    "targetDurationSeconds",
+    "fadeInSeconds",
+    "fadeOutSeconds",
+    "outputPath",
+    "linkedTtsJobId",
+    "linkedMusicJobId",
+    "audioQaStatus"
+  ],
+  "properties": {
+    "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "narrationText": { "type": "string" },
+    "dialogueLines": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "voiceSourceId": {
+      "type": ["string", "null"]
+    },
+    "deliveryNotes": { "type": "string" },
+    "ambienceBrief": { "type": "string" },
+    "bgmProfile": { "type": "string" },
+    "musicAllowed": {
+      "type": "boolean",
+      "default": false
+    },
+    "targetDurationSeconds": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "fadeInSeconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "fadeOutSeconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "outputPath": {
+      "type": ["string", "null"],
+      "description": "Null means no audio file exists; it must not be treated as successful output."
+    },
+    "linkedTtsJobId": {
+      "type": ["string", "null"]
+    },
+    "linkedMusicJobId": {
+      "type": ["string", "null"]
+    },
+    "audioQaStatus": { "$ref": "common.schema.json#/$defs/gateStatus" }
+  },
+  "$defs": {
+    "runtimeVoiceSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "status", "kind", "notes"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": {
+          "type": "string",
+          "enum": ["placeholder", "planned", "unavailable"]
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["tts_voice", "music_source", "voice_library"]
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "voiceSourceRegistrySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceCount",
+        "placeholderCount",
+        "plannedCount",
+        "unavailableCount",
+        "sources",
+        "storesSecrets",
+        "changeTransactionRequired",
+        "liveSubmitAllowed",
+        "providerSubmissionForbidden",
+        "notes"
+      ],
+      "properties": {
+        "sourceCount": { "type": "integer", "minimum": 0 },
+        "placeholderCount": { "type": "integer", "minimum": 0 },
+        "plannedCount": { "type": "integer", "minimum": 0 },
+        "unavailableCount": { "type": "integer", "minimum": 0 },
+        "sources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/runtimeVoiceSource" }
+        },
+        "storesSecrets": { "type": "boolean", "const": false },
+        "changeTransactionRequired": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "videoProviderPolicySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "musicAllowed",
+        "noBgmForVideoProvider",
+        "ambienceSfxPlaceholderAllowed",
+        "bgmHandledBy",
+        "summary"
+      ],
+      "properties": {
+        "musicAllowed": { "type": "boolean", "const": false },
+        "noBgmForVideoProvider": { "type": "boolean", "const": true },
+        "ambienceSfxPlaceholderAllowed": { "type": "boolean", "const": true },
+        "bgmHandledBy": {
+          "type": "string",
+          "const": "audio_plan_or_post_import"
+        },
+        "summary": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "audioProviderSlotSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "state", "allowedProviders", "liveSubmitAllowed", "notes"],
+      "properties": {
+        "slot": {
+          "type": "string",
+          "enum": ["audio.tts", "audio.music"]
+        },
+        "state": { "$ref": "common.schema.json#/$defs/providerExecutionState" },
+        "activeProvider": { "type": "string" },
+        "allowedProviders": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "previewMixPlaceholder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "planId",
+        "generatedFromAudioPlan",
+        "eventCount",
+        "missingOutputPathCount",
+        "events",
+        "notes",
+        "dryRunOnly",
+        "providerSubmissionForbidden"
+      ],
+      "properties": {
+        "planId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "generatedFromAudioPlan": { "type": "boolean", "const": true },
+        "eventCount": { "type": "integer", "minimum": 0 },
+        "missingOutputPathCount": { "type": "integer", "minimum": 0 },
+        "events": {
+          "type": "array",
+          "items": { "$ref": "preview_event.schema.json" }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true }
+      }
+    },
+    "audioExportPackageSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "includedInExportProfiles",
+        "plannedCategories",
+        "plannedPaths",
+        "blockedReasons",
+        "notes",
+        "dryRunOnly",
+        "providerSubmissionForbidden"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "planned"
+        },
+        "includedInExportProfiles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["asset_package", "developer_archive"]
+          }
+        },
+        "plannedCategories": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "plannedPaths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true }
+      }
+    },
+    "audioPlanningState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "generatedAt",
+        "shotPlans",
+        "voiceSourceRegistry",
+        "previewMix",
+        "videoProviderPolicy",
+        "providerSlots",
+        "exportPackageSummary",
+        "dryRunOnly",
+        "providerSubmissionForbidden",
+        "notes"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+        "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "shotPlans": {
+          "type": "array",
+          "items": { "$ref": "audio_plan.schema.json" }
+        },
+        "voiceSourceRegistry": { "$ref": "#/$defs/voiceSourceRegistrySummary" },
+        "previewMix": { "$ref": "#/$defs/previewMixPlaceholder" },
+        "videoProviderPolicy": { "$ref": "#/$defs/videoProviderPolicySummary" },
+        "providerSlots": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/audioProviderSlotSummary" }
+        },
+        "exportPackageSummary": { "$ref": "#/$defs/audioExportPackageSummary" },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

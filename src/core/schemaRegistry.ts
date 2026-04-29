@@ -52,6 +52,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "RuntimeConfig",
   },
   {
+    fileName: "audio_plan.schema.json",
+    id: "https://vibecore.local/schemas/audio_plan.schema.json",
+    version: schemaVersion,
+    purpose: "Dry-run shot-level audio plan, voice source summary, no-BGM video policy, and preview mix placeholder.",
+    typeName: "AudioPlan",
+  },
+  {
     fileName: "tool_detection_report.schema.json",
     id: "https://vibecore.local/schemas/tool_detection_report.schema.json",
     version: schemaVersion,

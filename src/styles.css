@@ -833,6 +833,7 @@ small {
 }
 
 .preview-timeline,
+.audio-plan-summary-strip,
 .export-profiles-panel,
 .machine-panel {
   min-width: 0;
@@ -874,6 +875,69 @@ small {
   color: #ece7df;
   font-size: 18px;
   line-height: 1.1;
+}
+
+.audio-summary-line {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 12px;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(236, 231, 223, 0.08);
+}
+
+.audio-summary-line div {
+  min-width: 0;
+  min-height: 58px;
+  padding: 9px;
+  background: #171612;
+}
+
+.audio-summary-line span,
+.audio-summary-line strong {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.audio-summary-line span {
+  color: #9d958a;
+  font-size: 11px;
+}
+
+.audio-summary-line strong {
+  margin-top: 7px;
+  color: #ece7df;
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.audio-policy-line {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.audio-policy-line small {
+  overflow-wrap: anywhere;
+}
+
+.audio-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.audio-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 23px;
+  border: 1px solid rgba(212, 176, 98, 0.28);
+  background: rgba(212, 176, 98, 0.075);
+  color: #d9d1c4;
+  padding: 0 8px;
+  font-size: 11px;
 }
 
 .timeline-track {
@@ -969,7 +1033,8 @@ small {
   font-size: 11px;
 }
 
-.shot-preview-export {
+.shot-preview-export,
+.shot-audio-inspector {
   display: grid;
   gap: 10px;
   margin-top: 12px;
@@ -1015,6 +1080,26 @@ small {
 
 .preview-export-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.audio-diagnostics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.audio-diagnostics-grid > div {
+  min-width: 0;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px;
+}
+
+.audio-diagnostics-grid h3 {
+  margin-bottom: 8px;
+  color: #bfb7aa;
+  font-size: 12px;
 }
 
 .preview-export-grid > div {
@@ -1260,6 +1345,7 @@ small {
 
   .overview,
   .director-brief,
+  .audio-diagnostics-grid,
   .machine-panel .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1331,6 +1417,8 @@ small {
   .field-grid.compact,
   .preview-status-grid,
   .preview-export-grid,
+  .audio-summary-line,
+  .audio-diagnostics-grid,
   .machine-panel .summary-grid {
     grid-template-columns: minmax(0, 1fr);
   }
