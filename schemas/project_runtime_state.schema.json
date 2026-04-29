@@ -18,6 +18,7 @@
     "manifestMatches",
     "imagePipeline",
     "previewEvents",
+    "previewExport",
     "storyChanges",
     "runtime",
     "diagnostics",
@@ -190,6 +191,7 @@
       }
     },
     "previewEvents": { "type": "array", "items": { "$ref": "preview_event.schema.json" } },
+    "previewExport": { "$ref": "preview_plan.schema.json#/$defs/projectPreviewExportState" },
     "storyChanges": {
       "type": "object",
       "additionalProperties": false,

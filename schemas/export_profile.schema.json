@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/export_profile.schema.json",
+  "title": "ExportProfile",
+  "description": "Dry-run export profile contract. It plans rough cut, asset package, storyboard table, and developer archive outputs without writing files.",
+  "type": "object",
+  "$defs": {
+    "exportProfileKind": {
+      "type": "string",
+      "enum": ["rough_cut", "asset_package", "storyboard_table", "developer_archive"]
+    },
+    "exportReadinessStatus": {
+      "type": "string",
+      "enum": ["ready", "draft_only", "blocked", "planned"]
+    },
+    "exportPackagePlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "planId",
+        "status",
+        "profiles",
+        "futureTargets",
+        "blockedReasons",
+        "notes",
+        "dryRunOnly",
+        "providerSubmissionForbidden"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+        "planId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "$ref": "#/$defs/exportReadinessStatus" },
+        "profiles": {
+          "type": "array",
+          "items": { "$ref": "#" }
+        },
+        "futureTargets": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dryRunOnly": { "const": true },
+        "providerSubmissionForbidden": { "const": true }
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "profileId",
+    "kind",
+    "label",
+    "readiness",
+    "includedCategories",
+    "includedPaths",
+    "blockedReasons",
+    "notes",
+    "dryRunOnly",
+    "providerSubmissionForbidden"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "profileId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "kind": { "$ref": "#/$defs/exportProfileKind" },
+    "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "readiness": { "$ref": "#/$defs/exportReadinessStatus" },
+    "includedCategories": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "includedPaths": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "blockedReasons": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "futureTargets": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "dryRunOnly": { "const": true },
+    "providerSubmissionForbidden": { "const": true }
+  }
+}

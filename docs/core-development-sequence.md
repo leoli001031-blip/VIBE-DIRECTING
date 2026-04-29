@@ -467,6 +467,15 @@ Export profiles：
 - 用户能快速看节奏和故事走向。
 - 用户能批量导出素材包去外部剪辑软件继续处理。
 
+### Phase 5 Preview / Export 核心合同完成范围
+
+已完成核心合同层，不含 UI 和真实导出：
+
+- 新增 `PreviewPlan` / `ProjectPreviewExportState` / `ExportProfile` / `ExportPackagePlan` 合同与 schema。
+- `ProjectRuntimeState.previewExport` 从 preview events、shots、manifest matches、generation health、QA promotion、task runs 推导 draft preview、formal preview gate、rough cut proxy 和四类 export profile。
+- draft preview 允许 `image_hold`、`video_clip`、`blocked_placeholder`；formal preview 不接收 blocked placeholder，并在 pair QA、video QA proxy、manifest matcher、promotion、P0、unknown gate、video present 任一失败时保持 blocked。
+- export profiles 仅生成 rough cut、asset package、storyboard table、prompt/QA developer archive 的 dry-run package plan；PR / 达芬奇 / 剪映目录和 FCPXML / EDL 只作为 future slots，不写真实文件、不提交 provider。
+
 ## Phase 6：Audio Planning
 
 目标：先做声音规划和占位，不急着接真实 TTS/BGM。

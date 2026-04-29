@@ -7,6 +7,7 @@ import { buildDefaultProviderRegistry } from "./providerCapabilities";
 import { buildGenerationHealthReports } from "./generationHealth";
 import { buildShotPromptPlan } from "./promptCompiler";
 import { buildQaPromotionReports } from "./qaPromotion";
+import { buildPreviewExportState } from "./previewExport";
 import { buildWatcherEventsFromImagePipeline } from "./watcherEvents";
 import {
   projectRuntimeCoreStateVersion,
@@ -167,6 +168,25 @@ export function buildProjectRuntimeState(
     assetReadinessReports,
     promptPlans: promptPlanResults.map((result) => result.plan),
   });
+  const previewEvents = view.previewEvents;
+  const previewExport = buildPreviewExportState({
+    generatedAt,
+    projectRoot: audit.projectRoot,
+    previewEvents,
+    shots: audit.shots,
+    jobs: audit.jobs,
+    taskRuns: taskViews.map((task) => task.taskRun),
+    taskViews: taskViews.map((task) => ({
+      job: task.job,
+      shotId: task.shotId,
+      taskRun: task.taskRun,
+      manifestMatch: task.manifestMatch,
+    })),
+    manifestMatches: taskViews.map((task) => task.manifestMatch),
+    generationHealthReports,
+    qaPromotionReports,
+    issues: audit.issues,
+  });
 
   return {
     schemaVersion: projectRuntimeStateSchemaVersion,
@@ -205,7 +225,8 @@ export function buildProjectRuntimeState(
       generationHealthReports,
       qaPromotionReports,
     },
-    previewEvents: view.previewEvents,
+    previewEvents,
+    previewExport,
     storyChanges: {
       transactions: [],
       reflowReports: [],

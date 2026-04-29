@@ -26,7 +26,10 @@ import {
 import type {
   AssetRecord,
   AuditIssue,
+  ExportProfile,
+  PreviewEvent,
   ProjectAudit,
+  ProjectPreviewExportState,
   ReflowImpactReport,
   ShotRecord,
   StoryChangeTransaction,
@@ -137,6 +140,13 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   const knowledge = requireRecord(value, "knowledge", issues);
   const storyChanges = requireRecord(value, "storyChanges", issues);
   const runtime = requireRecord(value, "runtime", issues);
+  const previewExport = requireRecord(value, "previewExport", issues);
+  const draftPreview = requireRecord(previewExport, "draftPreview", issues);
+  const draftPreviewSummary = requireRecord(draftPreview, "summary", issues);
+  const formalPreview = requireRecord(previewExport, "formalPreview", issues);
+  const formalPreviewGate = requireRecord(previewExport, "formalPreviewGate", issues);
+  const roughCutProxy = requireRecord(previewExport, "roughCutProxy", issues);
+  const exportPackagePlan = requireRecord(previewExport, "exportPackagePlan", issues);
   const runtimeConfig = requireRecord(runtime, "config", issues);
   const detectionReport = requireRecord(runtime, "detectionReport", issues);
   const providerEnablementSummary = requireRecord(runtime, "providerEnablementSummary", issues);
@@ -159,6 +169,19 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   requireArray(knowledge, "bindings", issues);
   requireArray(storyChanges, "transactions", issues);
   requireArray(storyChanges, "reflowReports", issues);
+  requireArray(previewExport, "exportProfiles", issues);
+  requireArray(draftPreview, "events", issues);
+  requireArray(draftPreview, "blockedReasons", issues);
+  requireArray(formalPreview, "events", issues);
+  requireArray(formalPreview, "blockedReasons", issues);
+  requireArray(formalPreviewGate, "blockedReasons", issues);
+  requireRecord(formalPreviewGate, "requiredChecks", issues);
+  requireArray(exportPackagePlan, "futureTargets", issues);
+  requireArray(exportPackagePlan, "blockedReasons", issues);
+  requireArray(exportPackagePlan, "profiles", issues);
+  if (typeof draftPreviewSummary.eventCount !== "number") issues.push("previewExport.draftPreview.summary.eventCount");
+  if (typeof draftPreviewSummary.blockedPlaceholderCount !== "number") issues.push("previewExport.draftPreview.summary.blockedPlaceholderCount");
+  if (typeof roughCutProxy.totalDurationSeconds !== "number") issues.push("previewExport.roughCutProxy.totalDurationSeconds");
   if (typeof storyChanges.pendingConfirmationCount !== "number") issues.push("storyChanges.pendingConfirmationCount");
   if (typeof storyChanges.lastGeneratedAt !== "string") issues.push("storyChanges.lastGeneratedAt");
   if (typeof runtimeConfig.runtimeMode !== "string") issues.push("runtime.config.runtimeMode");
@@ -260,6 +283,154 @@ function CompactList({ items, empty = "No blockers or warnings." }: { items: str
       ))}
       {items.length > 5 && <small>+{items.length - 5} more</small>}
     </div>
+  );
+}
+
+function formatDuration(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0s";
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.round(seconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${remainder}`;
+}
+
+function describePreviewEvent(event?: PreviewEvent) {
+  if (!event) return "No draft event for this shot.";
+  const label = event.type === "blocked_placeholder" ? "blocked placeholder" : statusLabel(event.type);
+  return `${label} · ${formatDuration(event.durationSeconds)} at ${formatDuration(event.startSeconds)} · QA ${event.qaStatus}`;
+}
+
+function profileInclusion(
+  profile: ExportProfile,
+  previewExport: ProjectPreviewExportState,
+  shot: ShotRecord,
+  tasks: TaskRuntimeView[],
+) {
+  const draftEvent = previewExport.draftPreview.events.find((event) => event.shotId === shot.id);
+  const formalEvent = previewExport.formalPreview.events.find((event) => event.shotId === shot.id);
+  const taskPaths = tasks.flatMap((task) => [
+    task.job.promptPath,
+    task.job.outputPath,
+    ...task.taskRun.expectedOutputs,
+    ...task.taskRun.actualOutputs,
+  ]);
+  const shotPaths = [shot.startFrame, shot.endFrame, shot.videoPath, ...taskPaths].filter((path): path is string => Boolean(path));
+  const includedPathCount = shotPaths.filter((path) => profile.includedPaths.includes(path)).length;
+
+  if (profile.kind === "rough_cut") {
+    return formalEvent
+      ? "includes via formal preview event"
+      : draftEvent
+        ? "includes via draft proxy event"
+        : "not included";
+  }
+  if (profile.kind === "storyboard_table") return "includes shot row";
+  if (profile.kind === "asset_package") return includedPathCount ? `includes ${includedPathCount} shot asset path(s)` : "not included";
+  if (profile.kind === "developer_archive") return includedPathCount ? `includes ${includedPathCount} task/prompt path(s)` : "not included";
+  return "not included";
+}
+
+function ExportProfilesPanel({ previewExport }: { previewExport: ProjectPreviewExportState }) {
+  return (
+    <section className="export-profiles-panel">
+      <div className="audit-head">
+        <FileJson size={17} />
+        <span>Export Profiles</span>
+      </div>
+      <div className="export-profile-list">
+        {previewExport.exportProfiles.map((profile) => (
+          <button key={profile.profileId} className="export-profile-row" disabled title="Dry-run plan only. Export is not wired in this UI.">
+            <span>
+              <strong>{profile.label}</strong>
+              <small>{statusLabel(profile.kind)} · {profile.includedPaths.length} path(s)</small>
+            </span>
+            <StatusPill value={profile.readiness} />
+          </button>
+        ))}
+      </div>
+      <small className="muted-copy">Plan only. No files are written or submitted.</small>
+    </section>
+  );
+}
+
+function ShotPreviewExportSummary({
+  previewExport,
+  selectedShot,
+  tasks,
+}: {
+  previewExport: ProjectPreviewExportState;
+  selectedShot?: ShotRecord;
+  tasks: TaskRuntimeView[];
+}) {
+  if (!selectedShot) return <p className="muted-copy">Select a shot to inspect preview and export planning.</p>;
+
+  const draftEvent = previewExport.draftPreview.events.find((event) => event.shotId === selectedShot.id);
+  const formalReasons = previewExport.formalPreviewGate.blockedReasons.filter((reason) => reason.includes(selectedShot.id));
+  const formalState = formalReasons.length ? "blocked" : previewExport.formalPreviewGate.status;
+
+  return (
+    <div className="shot-preview-export">
+      <div className="field-grid compact">
+        <label>Draft</label>
+        <span>{describePreviewEvent(draftEvent)}</span>
+        <label>Formal Gate</label>
+        <span>{formalState}</span>
+        <label>Proxy</label>
+        <span>{previewExport.roughCutProxy.proxyOnly ? "rough proxy only" : "unknown"}</span>
+        <label>Duration</label>
+        <span>{formatDuration(draftEvent?.durationSeconds || 0)}</span>
+      </div>
+      <div className="profile-inclusion-list">
+        {previewExport.exportProfiles.map((profile) => (
+          <div key={profile.profileId}>
+            <span>{profile.label}</span>
+            <small>{profileInclusion(profile, previewExport, selectedShot, tasks)}</small>
+          </div>
+        ))}
+      </div>
+      <details className="pipeline-shot-details">
+        <summary>Formal blocked reasons ({formalReasons.length})</summary>
+        <CompactList items={formalReasons.slice(0, 4)} empty="No shot-specific formal blocker." />
+      </details>
+    </div>
+  );
+}
+
+function PreviewExportDiagnostics({ previewExport }: { previewExport: ProjectPreviewExportState }) {
+  const gateChecks = Object.entries(previewExport.formalPreviewGate.requiredChecks);
+
+  return (
+    <section className="machine-panel preview-export-diagnostics">
+      <div className="audit-head">
+        <Play size={17} />
+        <span>Preview / Export</span>
+      </div>
+      <div className="summary-grid">
+        <Metric label="Formal Gate" value={previewExport.formalPreviewGate.status} detail={`${gateChecks.filter(([, passed]) => !passed).length} failed check(s)`} />
+        <Metric label="Blocked Reasons" value={`${previewExport.formalPreviewGate.blockedReasons.length}`} detail="formal preview eligibility" />
+        <Metric label="Package" value={previewExport.exportPackagePlan.status} detail={`${previewExport.exportProfiles.length} dry-run profile(s)`} />
+        <Metric label="Future Targets" value={`${previewExport.exportPackagePlan.futureTargets.length}`} detail="reserved export slots" />
+      </div>
+      <div className="preview-export-grid">
+        <div className="check-list">
+          <h3>Formal Gate Checks</h3>
+          {gateChecks.map(([check, passed]) => (
+            <div key={check}>
+              <span>{statusLabel(check)}</span>
+              <StatusPill value={passed ? "PASS" : "blocked"} />
+            </div>
+          ))}
+        </div>
+        <div>
+          <h3>Blocked Reasons</h3>
+          <CompactList items={previewExport.formalPreviewGate.blockedReasons} empty="Formal preview gate is eligible." />
+        </div>
+        <div>
+          <h3>Export Package Targets</h3>
+          <CompactList items={previewExport.exportPackagePlan.futureTargets.map((target) => `${target} · ${previewExport.exportPackagePlan.status}`)} empty="No future package targets planned." />
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -653,14 +824,44 @@ function DirectorInput({
   );
 }
 
-function PreviewTimeline({ view, selectedShotId, onSelectShot }: { view: RuntimeView; selectedShotId: string; onSelectShot: (id: string) => void }) {
+function PreviewTimeline({
+  view,
+  previewExport,
+  selectedShotId,
+  onSelectShot,
+}: {
+  view: RuntimeView;
+  previewExport: ProjectPreviewExportState;
+  selectedShotId: string;
+  onSelectShot: (id: string) => void;
+}) {
   const total = Math.max(1, view.previewEvents.reduce((max, event) => Math.max(max, event.startSeconds + event.durationSeconds), 0));
+  const draftSummary = previewExport.draftPreview.summary;
+  const proxy = previewExport.roughCutProxy;
 
   return (
     <section className="preview-timeline">
       <div className="audit-head">
         <Play size={17} />
         <span>Preview</span>
+      </div>
+      <div className="preview-status-grid">
+        <div>
+          <span>Draft Events</span>
+          <strong>{draftSummary.eventCount}</strong>
+        </div>
+        <div>
+          <span>Blocked</span>
+          <strong>{draftSummary.blockedPlaceholderCount}</strong>
+        </div>
+        <div>
+          <span>Formal Gate</span>
+          <strong>{previewExport.formalPreviewGate.status}</strong>
+        </div>
+        <div>
+          <span>Proxy Duration</span>
+          <strong>{formatDuration(proxy.totalDurationSeconds)}</strong>
+        </div>
       </div>
       <div className="timeline-track">
         {view.previewEvents.map((event) => (
@@ -676,6 +877,7 @@ function PreviewTimeline({ view, selectedShotId, onSelectShot }: { view: Runtime
           </button>
         ))}
       </div>
+      <small className="muted-copy">Rough preview/status only. Formal preview is represented as gate eligibility.</small>
     </section>
   );
 }
@@ -730,7 +932,8 @@ function DirectorMode({
         <VisualMemoryPanel audit={audit} view={view} selectedAsset={selectedAssetId} onSelectAsset={onSelectAsset} />
         <StoryWorkspace audit={audit} view={view} selectedShotId={selectedShotId} onSelectShot={onSelectShot} />
         <div className="director-side">
-          <PreviewTimeline view={view} selectedShotId={selectedShotId} onSelectShot={onSelectShot} />
+          <PreviewTimeline view={view} previewExport={runtimeState.previewExport} selectedShotId={selectedShotId} onSelectShot={onSelectShot} />
+          <ExportProfilesPanel previewExport={runtimeState.previewExport} />
           <DirectorInput runtimeState={runtimeState} shot={selectedShot} asset={selectedAsset} nextStep={view.nextStep} />
         </div>
       </div>
@@ -864,6 +1067,13 @@ function InspectorMode({
             <span>Phase 4 Image Pipeline</span>
           </div>
           <ShotImagePipelineSummary runtimeState={runtimeState} selectedShot={selectedShot} />
+        </section>
+        <section className="machine-panel">
+          <div className="audit-head">
+            <Play size={17} />
+            <span>Preview / Export</span>
+          </div>
+          <ShotPreviewExportSummary previewExport={runtimeState.previewExport} selectedShot={selectedShot} tasks={selectedTasks} />
         </section>
         <section className="machine-panel">
           <div className="audit-head">
@@ -1055,6 +1265,7 @@ function DiagnosticsMode({
     <div className="diagnostics-layout">
       <ProviderDock audit={audit} />
       <ImagePipelineDiagnostics runtimeState={runtimeState} />
+      <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />
       <section className="machine-panel">
         <div className="audit-head">
           <Gauge size={17} />

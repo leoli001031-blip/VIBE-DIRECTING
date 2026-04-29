@@ -14,6 +14,7 @@ import type {
   PreviewEvent,
   ProjectAudit,
   ProjectMetrics,
+  ProjectPreviewExportState,
   ProjectRuntimeEnvironment,
   ProjectSourceIndex,
   ProviderPolicy,
@@ -160,6 +161,7 @@ export interface ProjectRuntimeState {
     qaPromotionReports: QaPromotionReport[];
   };
   previewEvents: PreviewEvent[];
+  previewExport: ProjectPreviewExportState;
   storyChanges: ProjectRuntimeStoryChangeState;
   runtime: ProjectRuntimeEnvironment;
   diagnostics: {

@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/preview_plan.schema.json",
+  "title": "PreviewPlan",
+  "description": "Draft/formal preview plan and formal preview gate contract. It is dry-run/read-only and never submits providers.",
+  "type": "object",
+  "$defs": {
+    "previewPlanStatus": {
+      "type": "string",
+      "enum": ["ready", "draft_only", "blocked"]
+    },
+    "previewPlanSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "status",
+        "eventCount",
+        "videoClipCount",
+        "imageHoldCount",
+        "blockedPlaceholderCount",
+        "totalDurationSeconds",
+        "blockedShotIds",
+        "blockedReasons"
+      ],
+      "properties": {
+        "mode": { "$ref": "common.schema.json#/$defs/previewMode" },
+        "status": { "$ref": "#/$defs/previewPlanStatus" },
+        "eventCount": { "type": "integer", "minimum": 0 },
+        "videoClipCount": { "type": "integer", "minimum": 0 },
+        "imageHoldCount": { "type": "integer", "minimum": 0 },
+        "blockedPlaceholderCount": { "type": "integer", "minimum": 0 },
+        "totalDurationSeconds": { "type": "number", "minimum": 0 },
+        "blockedShotIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "formalPreviewGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "requiredChecks", "blockedReasons"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pass", "blocked"]
+        },
+        "requiredChecks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "noBlockedMaterial",
+            "pairQaPass",
+            "videoQaPass",
+            "manifestMatched",
+            "promotionPassed",
+            "noP0Issues",
+            "noUnknownGate",
+            "videoPresent"
+          ],
+          "properties": {
+            "noBlockedMaterial": { "type": "boolean" },
+            "pairQaPass": { "type": "boolean" },
+            "videoQaPass": { "type": "boolean" },
+            "manifestMatched": { "type": "boolean" },
+            "promotionPassed": { "type": "boolean" },
+            "noP0Issues": { "type": "boolean" },
+            "noUnknownGate": { "type": "boolean" },
+            "videoPresent": { "type": "boolean" }
+          }
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "roughCutProxyPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "sourcePreviewPlanId", "totalDurationSeconds", "eventCount", "proxyOnly", "notes"],
+      "properties": {
+        "status": { "$ref": "#/$defs/previewPlanStatus" },
+        "sourcePreviewPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "totalDurationSeconds": { "type": "number", "minimum": 0 },
+        "eventCount": { "type": "integer", "minimum": 0 },
+        "proxyOnly": { "const": true },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "projectPreviewExportState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "generatedAt",
+        "draftPreview",
+        "formalPreview",
+        "formalPreviewGate",
+        "roughCutProxy",
+        "exportProfiles",
+        "exportPackagePlan"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+        "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "draftPreview": { "$ref": "#" },
+        "formalPreview": { "$ref": "#" },
+        "formalPreviewGate": { "$ref": "#/$defs/formalPreviewGate" },
+        "roughCutProxy": { "$ref": "#/$defs/roughCutProxyPlan" },
+        "exportProfiles": {
+          "type": "array",
+          "items": { "$ref": "export_profile.schema.json" }
+        },
+        "exportPackagePlan": { "$ref": "export_profile.schema.json#/$defs/exportPackagePlan" }
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "planId",
+    "mode",
+    "status",
+    "summary",
+    "events",
+    "blockedReasons",
+    "dryRunOnly",
+    "providerSubmissionForbidden"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "planId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "mode": { "$ref": "common.schema.json#/$defs/previewMode" },
+    "status": { "$ref": "#/$defs/previewPlanStatus" },
+    "summary": { "$ref": "#/$defs/previewPlanSummary" },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "preview_event.schema.json" }
+    },
+    "blockedReasons": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "dryRunOnly": { "const": true },
+    "providerSubmissionForbidden": { "const": true }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "mode": { "const": "formal_preview" } },
+        "required": ["mode"]
+      },
+      "then": {
+        "properties": {
+          "events": {
+            "items": {
+              "not": {
+                "properties": { "type": { "const": "blocked_placeholder" } },
+                "required": ["type"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

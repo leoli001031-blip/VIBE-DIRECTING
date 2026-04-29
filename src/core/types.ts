@@ -1032,16 +1032,120 @@ export interface ReflowImpactReport {
   createdAt: string;
 }
 
+export type PreviewEventType =
+  | "image_hold"
+  | "video_clip"
+  | "narration_audio"
+  | "dialogue_audio"
+  | "ambience_audio"
+  | "music_audio"
+  | "gap"
+  | "blocked_placeholder";
+
 export interface PreviewEvent {
   id: string;
   mode: PreviewMode;
-  type: "image_hold" | "video_clip" | "narration_audio" | "dialogue_audio" | "ambience_audio" | "music_audio" | "gap" | "blocked_placeholder";
+  type: PreviewEventType;
   shotId?: string;
   startSeconds: number;
   durationSeconds: number;
   mediaPath?: string;
   qaStatus: GateStatus;
   sourceTaskId?: string;
+}
+
+export type PreviewPlanStatus = "ready" | "draft_only" | "blocked";
+
+export interface PreviewPlanSummary {
+  mode: PreviewMode;
+  status: PreviewPlanStatus;
+  eventCount: number;
+  videoClipCount: number;
+  imageHoldCount: number;
+  blockedPlaceholderCount: number;
+  totalDurationSeconds: number;
+  blockedShotIds: string[];
+  blockedReasons: string[];
+}
+
+export interface PreviewPlan {
+  schemaVersion: string;
+  planId: string;
+  mode: PreviewMode;
+  status: PreviewPlanStatus;
+  summary: PreviewPlanSummary;
+  events: PreviewEvent[];
+  blockedReasons: string[];
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+}
+
+export interface FormalPreviewRequiredChecks {
+  noBlockedMaterial: boolean;
+  pairQaPass: boolean;
+  videoQaPass: boolean;
+  manifestMatched: boolean;
+  promotionPassed: boolean;
+  noP0Issues: boolean;
+  noUnknownGate: boolean;
+  videoPresent: boolean;
+}
+
+export interface FormalPreviewGate {
+  status: "pass" | "blocked";
+  requiredChecks: FormalPreviewRequiredChecks;
+  blockedReasons: string[];
+}
+
+export interface RoughCutProxyPlan {
+  status: PreviewPlanStatus;
+  sourcePreviewPlanId: string;
+  totalDurationSeconds: number;
+  eventCount: number;
+  proxyOnly: true;
+  notes: string[];
+}
+
+export type ExportProfileKind = "rough_cut" | "asset_package" | "storyboard_table" | "developer_archive";
+
+export type ExportReadinessStatus = "ready" | "draft_only" | "blocked" | "planned";
+
+export interface ExportProfile {
+  schemaVersion: string;
+  profileId: string;
+  kind: ExportProfileKind;
+  label: string;
+  readiness: ExportReadinessStatus;
+  includedCategories: string[];
+  includedPaths: string[];
+  blockedReasons: string[];
+  notes: string[];
+  futureTargets?: string[];
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+}
+
+export interface ExportPackagePlan {
+  schemaVersion: string;
+  planId: string;
+  status: ExportReadinessStatus;
+  profiles: ExportProfile[];
+  futureTargets: string[];
+  blockedReasons: string[];
+  notes: string[];
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+}
+
+export interface ProjectPreviewExportState {
+  schemaVersion: string;
+  generatedAt: string;
+  draftPreview: PreviewPlan;
+  formalPreview: PreviewPlan;
+  formalPreviewGate: FormalPreviewGate;
+  roughCutProxy: RoughCutProxyPlan;
+  exportProfiles: ExportProfile[];
+  exportPackagePlan: ExportPackagePlan;
 }
 
 export interface WorkflowStage {

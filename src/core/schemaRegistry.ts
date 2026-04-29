@@ -31,6 +31,20 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ProjectRuntimeState",
   },
   {
+    fileName: "preview_plan.schema.json",
+    id: "https://vibecore.local/schemas/preview_plan.schema.json",
+    version: schemaVersion,
+    purpose: "Draft/formal preview plan and formal preview gate contract.",
+    typeName: "PreviewPlan",
+  },
+  {
+    fileName: "export_profile.schema.json",
+    id: "https://vibecore.local/schemas/export_profile.schema.json",
+    version: schemaVersion,
+    purpose: "Dry-run export profile and package plan contract for rough cut, asset package, storyboard table, and developer archive.",
+    typeName: "ExportProfile",
+  },
+  {
     fileName: "runtime_config.schema.json",
     id: "https://vibecore.local/schemas/runtime_config.schema.json",
     version: schemaVersion,
