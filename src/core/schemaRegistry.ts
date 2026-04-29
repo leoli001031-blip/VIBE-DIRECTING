@@ -199,6 +199,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "QaHarnessState",
   },
   {
+    fileName: "tool_runtime_harness.schema.json",
+    id: "https://vibecore.local/schemas/tool_runtime_harness.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 8.8 diagnostics-only tool runtime harness for CLI/runtime/media/path readiness with installs, credentials, sidecars, shell execution, and provider submission locked off.",
+    typeName: "ToolRuntimeHarnessState",
+  },
+  {
     fileName: "knowledge_pack.schema.json",
     id: "https://vibecore.local/schemas/knowledge_pack.schema.json",
     version: schemaVersion,

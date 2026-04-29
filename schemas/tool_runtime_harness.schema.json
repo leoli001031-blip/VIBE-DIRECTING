@@ -1,0 +1,380 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/tool_runtime_harness.schema.json",
+  "title": "ToolRuntimeHarnessState",
+  "description": "Phase 8.8 diagnostics-only runtime tool harness. It reports CLI/runtime/media/path readiness facts without installing software, mutating system settings, reading or writing credentials, executing arbitrary shell commands, starting sidecar daemons, or submitting providers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "toolCategories",
+    "checks",
+    "summary",
+    "pathPolicy",
+    "platformCompatibility",
+    "sourceCoverage",
+    "hardLocks",
+    "dryRunOnly",
+    "diagnosticsOnly",
+    "noInstall",
+    "noCredentialRead",
+    "noCredentialWrite",
+    "noSystemSettingsMutation",
+    "arbitraryShellExecutionBlocked",
+    "sidecarDaemonDisabled",
+    "providerSubmissionForbidden",
+    "liveSubmitAllowed",
+    "platformPathAbstractionRequired",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "toolCategories": { "$ref": "#/$defs/toolCategories" },
+    "checks": {
+      "type": "array",
+      "minItems": 9,
+      "items": { "$ref": "#/$defs/checkRow" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalChecks",
+        "ready",
+        "missing",
+        "planned",
+        "blocked",
+        "unknown",
+        "missingBlockers",
+        "optionalMissing",
+        "blockerCount",
+        "warningCount",
+        "dryRunOnly",
+        "diagnosticsOnly",
+        "canExecuteNow",
+        "liveSubmitAllowed",
+        "providerSubmissionForbidden",
+        "arbitraryShellExecutionBlocked"
+      ],
+      "properties": {
+        "totalChecks": { "type": "integer", "minimum": 0 },
+        "ready": { "type": "integer", "minimum": 0 },
+        "missing": { "type": "integer", "minimum": 0 },
+        "planned": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "unknown": { "type": "integer", "minimum": 0 },
+        "missingBlockers": { "type": "integer", "minimum": 0 },
+        "optionalMissing": { "type": "integer", "minimum": 0 },
+        "blockerCount": { "type": "integer", "minimum": 0 },
+        "warningCount": { "type": "integer", "minimum": 0 },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "diagnosticsOnly": { "type": "boolean", "const": true },
+        "canExecuteNow": { "type": "boolean", "const": false },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "arbitraryShellExecutionBlocked": { "type": "boolean", "const": true }
+      }
+    },
+    "pathPolicy": { "$ref": "#/$defs/pathPolicy" },
+    "platformCompatibility": { "$ref": "#/$defs/platformCompatibility" },
+    "sourceCoverage": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sourceCoverageEntry" }
+    },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "dryRunOnly": { "type": "boolean", "const": true },
+    "diagnosticsOnly": { "type": "boolean", "const": true },
+    "noInstall": { "type": "boolean", "const": true },
+    "noCredentialRead": { "type": "boolean", "const": true },
+    "noCredentialWrite": { "type": "boolean", "const": true },
+    "noSystemSettingsMutation": { "type": "boolean", "const": true },
+    "arbitraryShellExecutionBlocked": { "type": "boolean", "const": true },
+    "sidecarDaemonDisabled": { "type": "boolean", "const": true },
+    "providerSubmissionForbidden": { "type": "boolean", "const": true },
+    "liveSubmitAllowed": { "type": "boolean", "const": false },
+    "platformPathAbstractionRequired": { "type": "boolean", "const": true },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "category": {
+      "type": "string",
+      "enum": [
+        "agent_cli",
+        "node_runtime",
+        "rust_runtime_or_app_shell",
+        "media_binary",
+        "image_tool",
+        "python_optional",
+        "provider_cli_optional",
+        "vcs_optional",
+        "package_manager"
+      ]
+    },
+    "toolCategories": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "prefixItems": [
+        { "const": "agent_cli" },
+        { "const": "node_runtime" },
+        { "const": "rust_runtime_or_app_shell" },
+        { "const": "media_binary" },
+        { "const": "image_tool" },
+        { "const": "python_optional" },
+        { "const": "provider_cli_optional" },
+        { "const": "vcs_optional" },
+        { "const": "package_manager" }
+      ],
+      "items": false
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "missing", "planned", "blocked", "unknown"]
+    },
+    "pathStatus": {
+      "type": "string",
+      "enum": ["path", "missing", "unknown", "planned", "blocked"]
+    },
+    "executionMode": {
+      "type": "string",
+      "const": "diagnostic_only"
+    },
+    "pathStyle": {
+      "type": "string",
+      "enum": ["posix", "win32", "project-root-relative"]
+    },
+    "platformSupportStatus": {
+      "type": "string",
+      "enum": ["supported", "planned", "unknown", "unsupported"]
+    },
+    "sourceLayer": {
+      "type": "string",
+      "enum": [
+        "runtime.config",
+        "runtime.detectionReport",
+        "runtime.providerEnablementSummary",
+        "adapterContracts",
+        "generationHarness",
+        "filesystemWatcherHarness",
+        "checkpointResumeHarness",
+        "qaHarness"
+      ]
+    },
+    "platformSupport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["darwin", "win32", "linux", "pathStyles", "notes"],
+      "properties": {
+        "darwin": { "$ref": "#/$defs/platformSupportStatus" },
+        "win32": { "$ref": "#/$defs/platformSupportStatus" },
+        "linux": { "$ref": "#/$defs/platformSupportStatus" },
+        "pathStyles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pathStyle" },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "checkRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkId",
+        "category",
+        "label",
+        "requiredFor",
+        "status",
+        "pathStatus",
+        "platformSupport",
+        "canExecuteNow",
+        "executionMode",
+        "missingIsBlocker",
+        "blockers",
+        "warnings",
+        "sourceRefs",
+        "notes"
+      ],
+      "properties": {
+        "checkId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "category": { "$ref": "#/$defs/category" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "requiredFor": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "status": { "$ref": "#/$defs/status" },
+        "pathStatus": { "$ref": "#/$defs/pathStatus" },
+        "path": { "type": "string" },
+        "version": { "type": "string" },
+        "platformSupport": { "$ref": "#/$defs/platformSupport" },
+        "canExecuteNow": { "type": "boolean", "const": false },
+        "executionMode": { "type": "string", "const": "diagnostic_only" },
+        "missingIsBlocker": { "type": "boolean" },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "pathPolicyEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policyId", "platform", "pathStyle", "required", "sourceRefs", "notes"],
+      "properties": {
+        "policyId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "platform": {
+          "anyOf": [
+            { "$ref": "tool_detection_report.schema.json#/$defs/runtimePlatform" },
+            { "type": "string", "const": "all" }
+          ]
+        },
+        "pathStyle": { "$ref": "#/$defs/pathStyle" },
+        "required": { "type": "boolean" },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "pathPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platformPathAbstractionRequired",
+        "projectRootRelativeRequired",
+        "hardcodedShellPathForbidden",
+        "shellProfilePathLookupForbidden",
+        "pathResolverRequired",
+        "policies",
+        "sourceRefs",
+        "notes"
+      ],
+      "properties": {
+        "platformPathAbstractionRequired": { "type": "boolean", "const": true },
+        "projectRootRelativeRequired": { "type": "boolean", "const": true },
+        "hardcodedShellPathForbidden": { "type": "boolean", "const": true },
+        "shellProfilePathLookupForbidden": { "type": "boolean", "const": true },
+        "pathResolverRequired": { "type": "boolean", "const": true },
+        "policies": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "$ref": "#/$defs/pathPolicyEntry" }
+        },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "platformCompatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "currentPlatform",
+        "darwinPathStyle",
+        "win32PathStyle",
+        "projectRootRelative",
+        "hardcodedShellPathForbidden",
+        "sourceRefs",
+        "notes"
+      ],
+      "properties": {
+        "currentPlatform": { "$ref": "tool_detection_report.schema.json#/$defs/runtimePlatform" },
+        "darwinPathStyle": { "type": "string", "const": "posix" },
+        "win32PathStyle": { "type": "string", "const": "win32" },
+        "projectRootRelative": { "type": "boolean", "const": true },
+        "hardcodedShellPathForbidden": { "type": "boolean", "const": true },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "sourceCoverageEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layer", "referenced", "referenceCount", "sourceRefs", "notes"],
+      "properties": {
+        "layer": { "$ref": "#/$defs/sourceLayer" },
+        "referenced": { "type": "boolean" },
+        "referenceCount": { "type": "integer", "minimum": 0 },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dryRunOnly",
+        "diagnosticsOnly",
+        "noInstall",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "noSystemSettingsMutation",
+        "arbitraryShellExecutionBlocked",
+        "sidecarDaemonDisabled",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "platformPathAbstractionRequired"
+      ],
+      "properties": {
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "diagnosticsOnly": { "type": "boolean", "const": true },
+        "noInstall": { "type": "boolean", "const": true },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "noSystemSettingsMutation": { "type": "boolean", "const": true },
+        "arbitraryShellExecutionBlocked": { "type": "boolean", "const": true },
+        "sidecarDaemonDisabled": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "platformPathAbstractionRequired": { "type": "boolean", "const": true }
+      }
+    }
+  }
+}

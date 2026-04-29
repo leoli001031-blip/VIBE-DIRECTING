@@ -27,6 +27,7 @@
     "filesystemWatcherHarness",
     "checkpointResumeHarness",
     "qaHarness",
+    "toolRuntimeHarness",
     "storyChanges",
     "runtime",
     "diagnostics",
@@ -208,6 +209,7 @@
     "filesystemWatcherHarness": { "$ref": "filesystem_watcher_harness.schema.json" },
     "checkpointResumeHarness": { "$ref": "checkpoint_resume_harness.schema.json" },
     "qaHarness": { "$ref": "qa_harness.schema.json" },
+    "toolRuntimeHarness": { "$ref": "tool_runtime_harness.schema.json" },
     "storyChanges": {
       "type": "object",
       "additionalProperties": false,

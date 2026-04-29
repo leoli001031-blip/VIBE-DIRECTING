@@ -699,6 +699,24 @@ Phase 6 已实现范围（核心合同）：
 - 不能做语义修复，不能用 local postprocess/OpenCV 修人物身份、场景、构图、故事、风格、motion 或 audio 问题。
 - 不能绕过 `qaPromotionReports.canPromoteToFormal`、generation health、manifest match、prompt freshness、asset readiness、explicit QA pass 这些 formal gate。
 
+### Phase 8.8 已实现范围：Tool Runtime Harness
+
+- `ProjectRuntimeState.toolRuntimeHarness` 写入 Phase 8.8 的 top-level runtime diagnostics 层，只从 `runtime.config`、`runtime.detectionReport`、`runtime.providerEnablementSummary`、`adapterContracts`、`generationHarness`、`filesystemWatcherHarness`、`checkpointResumeHarness`、`qaHarness` 归纳工具和路径事实。
+- 固定 tool categories 覆盖 `agent_cli`、`node_runtime`、`rust_runtime_or_app_shell`、`media_binary`、`image_tool`、`python_optional`、`provider_cli_optional`、`vcs_optional`、`package_manager`；每条 check row 都保留 `checkId`、`category`、`label`、`requiredFor`、`status`、`pathStatus`、`platformSupport`、`canExecuteNow=false`、`executionMode=diagnostic_only`、`missingIsBlocker`、`blockers`、`warnings`、`sourceRefs`、`notes`。
+- `runtime.detectionReport.tools` 是 Codex CLI、Node/npm/git、FFmpeg/FFprobe、Image2 runtime 等已有事实的来源；ImageMagick/system image tool、Python、Rust/app shell、provider CLI 没有检测事实时只输出 planned/missing/optional diagnostics，不假装可用。
+- Hard locks 固定 `dryRunOnly=true`、`diagnosticsOnly=true`、`noInstall=true`、`noCredentialRead=true`、`noCredentialWrite=true`、`noSystemSettingsMutation=true`、`arbitraryShellExecutionBlocked=true`、`sidecarDaemonDisabled=true`、`providerSubmissionForbidden=true`、`liveSubmitAllowed=false`、`platformPathAbstractionRequired=true`。
+- Path policy 固定要求 macOS 使用 POSIX、Windows 使用 Win32、项目 artifacts 优先 project-root-relative；工具路径只能来自 runtime config / detection report，不能写死 shell-only path 或依赖 shell profile。
+- `sourceCoverage` 固定列出 runtime config、detection report、provider enablement summary、adapter contracts、generation / watcher / resume / QA harnesses 的 source refs，便于 Diagnostics 反查每条工具诊断来自哪里。
+- 新增 `schemas/tool_runtime_harness.schema.json` 并纳入 `project_runtime_state.schema.json` 与 schema registry；新增 `npm run tool-runtime:test` 覆盖 category 全量、hard locks、path policy、source coverage、schema registry 和 import runtime-state 生成。
+
+禁止项：
+
+- Tool Runtime Harness 不能安装、下载、升级或修复任何软件；不能修改 PATH、shell profile、系统设置或 app 权限。
+- 不能读取、写入、显示或迁移 credentials；provider credential store 仍只能是 placeholder/planned fact。
+- 不能执行任意 shell，不能启动真实 sidecar daemon，不能把 allowed command policy 解释成已经可以执行。
+- 不能提交 Image2、Seedance、Jimeng 或任何 provider；provider CLI optional 只代表未来可诊断事实，不代表 live submit unlock。
+- 不能把 optional missing 当 blocker；也不能把 planned/unknown tool 当 available。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

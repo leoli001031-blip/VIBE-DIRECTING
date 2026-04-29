@@ -1872,6 +1872,130 @@ small {
   grid-column: 1 / -1;
 }
 
+.tool-runtime-panel .tool-runtime-metrics {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.tool-runtime-panel .metric strong {
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.tool-runtime-lock-strip div {
+  border-color: rgba(212, 176, 98, 0.18);
+  background: rgba(212, 176, 98, 0.045);
+}
+
+.tool-runtime-sections {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.tool-runtime-policy-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 8px;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(236, 231, 223, 0.08);
+}
+
+.tool-runtime-policy-grid div {
+  min-width: 0;
+  min-height: 72px;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  background: #171612;
+  padding: 10px;
+}
+
+.tool-runtime-policy-grid span,
+.tool-runtime-policy-grid strong,
+.tool-runtime-policy-grid small,
+.tool-runtime-row summary span,
+.tool-runtime-row summary strong,
+.tool-runtime-row summary small,
+.tool-runtime-check-details small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tool-runtime-policy-grid span {
+  color: #9d958a;
+  font-size: 11px;
+}
+
+.tool-runtime-policy-grid strong {
+  color: #d9d1c4;
+  font-size: 12px;
+}
+
+.tool-runtime-policy-grid small {
+  color: #9d958a;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.tool-runtime-policy-details {
+  margin-top: 8px;
+}
+
+.tool-runtime-check-table {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tool-runtime-row {
+  min-width: 0;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 0;
+}
+
+.tool-runtime-row summary {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.15fr) auto auto minmax(150px, 1fr) minmax(150px, 1fr) minmax(130px, 0.8fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  color: #d9d1c4;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.tool-runtime-row strong,
+.tool-runtime-row small {
+  display: block;
+}
+
+.tool-runtime-row strong {
+  color: #d9d1c4;
+  font-size: 12px;
+}
+
+.tool-runtime-row small,
+.tool-runtime-check-details small {
+  color: #9d958a;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.tool-runtime-check-details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  border-top: 1px solid rgba(236, 231, 223, 0.08);
+  padding: 9px;
+}
+
+.tool-runtime-detail-sections {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
 .compact-list small {
   border: 1px solid rgba(236, 231, 223, 0.08);
   background: rgba(255, 255, 255, 0.025);
@@ -2093,6 +2217,8 @@ small {
   .checkpoint-resume-details,
   .qa-gate-details,
   .qa-item-details,
+  .tool-runtime-policy-grid,
+  .tool-runtime-check-details,
   .knowledge-distribution,
   .machine-panel .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2161,11 +2287,16 @@ small {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .tool-runtime-panel .tool-runtime-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .watcher-root-row,
   .watcher-stream-row summary,
   .checkpoint-resume-row summary,
   .qa-overall-row summary,
-  .qa-item-row summary {
+  .qa-item-row summary,
+  .tool-runtime-row summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -2205,6 +2336,8 @@ small {
   .checkpoint-resume-details,
   .qa-gate-details,
   .qa-item-details,
+  .tool-runtime-policy-grid,
+  .tool-runtime-check-details,
   .knowledge-distribution,
   .machine-panel .summary-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -2233,6 +2366,7 @@ small {
   .filesystem-watcher-panel .filesystem-watcher-metrics,
   .checkpoint-resume-panel .checkpoint-resume-metrics,
   .qa-harness-panel .qa-harness-metrics,
+  .tool-runtime-panel .tool-runtime-metrics,
   .generation-job-head,
   .candidate-output-summary div,
   .watcher-root-row,
@@ -2240,6 +2374,7 @@ small {
   .checkpoint-resume-row summary,
   .qa-overall-row summary,
   .qa-item-row summary,
+  .tool-runtime-row summary,
   .watcher-stream-details {
     grid-template-columns: minmax(0, 1fr);
   }

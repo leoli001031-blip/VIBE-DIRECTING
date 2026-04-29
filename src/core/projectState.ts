@@ -32,6 +32,7 @@ import type {
   StoryChangeTransaction,
   TaskEnvelope,
   TaskRun,
+  ToolRuntimeHarnessState,
   VideoExecutionPreviewState,
   VideoPlanningState,
   WatcherEvent,
@@ -178,6 +179,7 @@ export interface ProjectRuntimeState {
   filesystemWatcherHarness: FilesystemWatcherHarnessState;
   checkpointResumeHarness: CheckpointResumeHarnessState;
   qaHarness: QaHarnessState;
+  toolRuntimeHarness: ToolRuntimeHarnessState;
   storyChanges: ProjectRuntimeStoryChangeState;
   runtime: ProjectRuntimeEnvironment;
   diagnostics: {

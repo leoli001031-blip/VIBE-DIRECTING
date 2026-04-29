@@ -733,6 +733,72 @@ type QaHarnessState = {
   items: QaHarnessItem[];
   hardLocks: QaHarnessHardLocks;
 };
+type ToolRuntimeHarnessSummary = {
+  totalChecks?: number;
+  ready?: number;
+  missing?: number;
+  planned?: number;
+  blocked?: number;
+  unknown?: number;
+  requiredMissing?: number;
+  optionalMissing?: number;
+  dryRunOnly?: boolean;
+  liveSubmitAllowed?: boolean;
+};
+type ToolRuntimeHarnessCheck = {
+  checkId: string;
+  category: string;
+  label: string;
+  requiredFor: string[];
+  status: string;
+  pathStatus: string;
+  path?: string;
+  version?: string;
+  platformSupport: string[];
+  canExecuteNow?: boolean;
+  executionMode: string;
+  missingIsBlocker?: boolean;
+  blockers: string[];
+  warnings: string[];
+  sourceRefs: string[];
+  notes: string[];
+};
+type ToolRuntimePathPolicy = {
+  platformPathAbstractionRequired?: boolean;
+  macPathStyle: string;
+  windowsPathStyle: string;
+  projectRootRelativeRequired?: boolean;
+  allowedRoots: string[];
+  blockers: string[];
+  warnings: string[];
+  notes: string[];
+};
+type ToolRuntimeHardLocks = {
+  dryRunOnly?: boolean;
+  diagnosticsOnly?: boolean;
+  noInstall?: boolean;
+  noCredentialRead?: boolean;
+  noCredentialWrite?: boolean;
+  noSystemSettingsMutation?: boolean;
+  arbitraryShellExecutionBlocked?: boolean;
+  sidecarDaemonDisabled?: boolean;
+  providerSubmissionForbidden?: boolean;
+  liveSubmitAllowed?: boolean;
+  platformPathAbstractionRequired?: boolean;
+};
+type ToolRuntimeHarnessState = {
+  initialized: boolean;
+  hasSummary: boolean;
+  hasChecks: boolean;
+  hasPathPolicy: boolean;
+  hasHardLocks: boolean;
+  schemaVersion: string;
+  generatedAt: string;
+  summary: ToolRuntimeHarnessSummary;
+  checks: ToolRuntimeHarnessCheck[];
+  pathPolicy: ToolRuntimePathPolicy;
+  hardLocks: ToolRuntimeHardLocks;
+};
 const requiredVideoExecutionHardLocks = [
   "no_live_submit",
   "no_fast_model",
@@ -836,6 +902,30 @@ function readOptionalBoolean(record: Record<string, unknown>, key: string) {
 function readNoteList(value: unknown) {
   if (typeof value === "string" && value.trim()) return [value];
   return readStringArray(value);
+}
+
+function formatHarnessValue(value: unknown, fallbackLabel = "value"): string {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (!isRecord(value)) return "";
+
+  const label = readString(
+    value.label,
+    readString(value.id, readString(value.name, fallbackLabel)),
+  );
+  const status = readString(value.status, readString(value.value, ""));
+  const detail = readString(value.detail, readString(value.path, ""));
+  return [label, status, detail].filter(Boolean).join(" / ");
+}
+
+function readDisplayList(value: unknown, fallbackLabel = "value") {
+  if (Array.isArray(value)) {
+    return value
+      .map((item, index) => formatHarnessValue(item, `${fallbackLabel}-${index + 1}`))
+      .filter(Boolean);
+  }
+  const single = formatHarnessValue(value, fallbackLabel);
+  return single ? [single] : [];
 }
 
 function normalizeGenerationStage(value: unknown, index: number): GenerationHarnessStage {
@@ -1282,6 +1372,143 @@ function getQaHarness(runtimeState: ProjectRuntimeState): QaHarnessState {
       semanticRepairForbidden: readOptionalBoolean(hardLocksRecord, "semanticRepairForbidden"),
       workerSelfReportCannotPassQa: readOptionalBoolean(hardLocksRecord, "workerSelfReportCannotPassQa"),
       overallFirst: readOptionalBoolean(hardLocksRecord, "overallFirst"),
+    },
+  };
+}
+
+function normalizeToolRuntimeCheck(value: unknown, index: number): ToolRuntimeHarnessCheck {
+  const check = isRecord(value) ? value : {};
+  const checkId = readString(check.checkId, readString(check.id, `tool-check-${index + 1}`));
+  const path = typeof check.path === "string" ? check.path : undefined;
+  const blockers = readDisplayList(check.blockers).length
+    ? readDisplayList(check.blockers)
+    : readDisplayList(check.blockingReasons);
+
+  return {
+    checkId,
+    category: readString(check.category, "unknown"),
+    label: readString(check.label, checkId),
+    requiredFor: readDisplayList(check.requiredFor, "required-for"),
+    status: readString(check.status, "unknown"),
+    pathStatus: readString(check.pathStatus, path ? "reported" : "unknown"),
+    path,
+    version: typeof check.version === "string" ? check.version : undefined,
+    platformSupport: normalizeToolRuntimePlatformSupport(check.platformSupport),
+    canExecuteNow: readOptionalBoolean(check, "canExecuteNow"),
+    executionMode: readString(check.executionMode, "diagnostics_only"),
+    missingIsBlocker: readOptionalBoolean(check, "missingIsBlocker"),
+    blockers,
+    warnings: readDisplayList(check.warnings),
+    sourceRefs: readDisplayList(check.sourceRefs).length
+      ? readDisplayList(check.sourceRefs)
+      : readDisplayList(check.refs),
+    notes: readDisplayList(check.notes),
+  };
+}
+
+function normalizeToolRuntimePlatformSupport(value: unknown): string[] {
+  if (!isRecord(value)) return readDisplayList(value, "platform");
+  const pathStyles = readDisplayList(value.pathStyles, "path-style");
+  return [
+    `darwin: ${readString(value.darwin, "unknown")}`,
+    `win32: ${readString(value.win32, "unknown")}`,
+    `linux: ${readString(value.linux, "unknown")}`,
+    pathStyles.length ? `paths: ${pathStyles.join(", ")}` : "",
+  ].filter(Boolean);
+}
+
+function normalizeToolRuntimePathPolicy(value: unknown, runtimeState: ProjectRuntimeState): ToolRuntimePathPolicy {
+  const policy = isRecord(value) ? value : {};
+  const policyRows = Array.isArray(policy.policies) ? policy.policies.filter(isRecord) : [];
+  const policyPathStyle = (platform: string) =>
+    readString(policyRows.find((row) => readString(row.platform, "") === platform)?.pathStyle, "");
+  const runtimeRootPolicy = runtimeState.runtime?.config?.projectRootPolicy;
+  const allowedRoots = readDisplayList(policy.allowedRoots, "root").length
+    ? readDisplayList(policy.allowedRoots, "root")
+    : readDisplayList(runtimeRootPolicy?.allowedRoots, "root");
+  return {
+    platformPathAbstractionRequired: readOptionalBoolean(policy, "platformPathAbstractionRequired"),
+    macPathStyle: readString(policy.macPathStyle, policyPathStyle("darwin") || runtimeRootPolicy?.macPathStyle || "Not initialized"),
+    windowsPathStyle: readString(policy.windowsPathStyle, policyPathStyle("win32") || runtimeRootPolicy?.windowsPathStyle || "Not initialized"),
+    projectRootRelativeRequired: readOptionalBoolean(policy, "projectRootRelativeRequired"),
+    allowedRoots,
+    blockers: readDisplayList(policy.blockers),
+    warnings: readDisplayList(policy.warnings),
+    notes: [
+      ...readDisplayList(policy.notes),
+      ...policyRows.map((row) =>
+        `${readString(row.policyId, "path-policy")}: ${readString(row.platform, "unknown")} / ${readString(row.pathStyle, "unknown")}`,
+      ),
+    ],
+  };
+}
+
+function toolRuntimeStatusIncludes(check: ToolRuntimeHarnessCheck, value: string) {
+  const needle = value.toLowerCase();
+  return check.status.toLowerCase().includes(needle) || check.pathStatus.toLowerCase().includes(needle);
+}
+
+function getToolRuntimeHarness(runtimeState: ProjectRuntimeState): ToolRuntimeHarnessState {
+  const harness = (runtimeState as Partial<ProjectRuntimeState> & { toolRuntimeHarness?: unknown }).toolRuntimeHarness;
+  const initialized = isRecord(harness);
+  const harnessRecord = initialized ? harness as Record<string, unknown> : {};
+  const summaryRecord = initialized && isRecord(harnessRecord.summary) ? harnessRecord.summary : {};
+  const pathPolicyRecord = initialized && isRecord(harnessRecord.pathPolicy) ? harnessRecord.pathPolicy : {};
+  const hardLocksRecord = initialized && isRecord(harnessRecord.hardLocks) ? harnessRecord.hardLocks : {};
+  const hasChecks = initialized && Array.isArray(harnessRecord.checks);
+  const checks = hasChecks ? (harnessRecord.checks as unknown[]).map(normalizeToolRuntimeCheck) : [];
+  const pathPolicy = normalizeToolRuntimePathPolicy(pathPolicyRecord, runtimeState);
+  const missingChecks = checks.filter((check) => toolRuntimeStatusIncludes(check, "missing"));
+  const blockedChecks = checks.filter((check) =>
+    toolRuntimeStatusIncludes(check, "blocked") ||
+    check.blockers.length > 0 ||
+    check.missingIsBlocker === true,
+  );
+  const unknownChecks = checks.filter((check) =>
+    toolRuntimeStatusIncludes(check, "unknown") ||
+    toolRuntimeStatusIncludes(check, "not initialized"),
+  );
+
+  return {
+    initialized,
+    hasSummary: initialized && isRecord(harnessRecord.summary),
+    hasChecks,
+    hasPathPolicy: initialized && isRecord(harnessRecord.pathPolicy),
+    hasHardLocks: initialized && isRecord(harnessRecord.hardLocks),
+    schemaVersion: readString(harnessRecord.schemaVersion, "Not initialized"),
+    generatedAt: readString(harnessRecord.generatedAt, "Not initialized"),
+    summary: {
+      totalChecks: readOptionalNumber(summaryRecord, "totalChecks") ?? checks.length,
+      ready: readOptionalNumber(summaryRecord, "ready") ??
+        checks.filter((check) => toolRuntimeStatusIncludes(check, "ready")).length,
+      missing: readOptionalNumber(summaryRecord, "missing") ?? missingChecks.length,
+      planned: readOptionalNumber(summaryRecord, "planned") ??
+        checks.filter((check) => toolRuntimeStatusIncludes(check, "planned")).length,
+      blocked: readOptionalNumber(summaryRecord, "blocked") ?? blockedChecks.length,
+      unknown: readOptionalNumber(summaryRecord, "unknown") ?? unknownChecks.length,
+      requiredMissing: readOptionalNumber(summaryRecord, "requiredMissing") ??
+        readOptionalNumber(summaryRecord, "missingBlockers") ??
+        missingChecks.filter((check) => check.missingIsBlocker === true).length,
+      optionalMissing: readOptionalNumber(summaryRecord, "optionalMissing") ??
+        missingChecks.filter((check) => check.missingIsBlocker !== true).length,
+      dryRunOnly: readOptionalBoolean(summaryRecord, "dryRunOnly"),
+      liveSubmitAllowed: readOptionalBoolean(summaryRecord, "liveSubmitAllowed"),
+    },
+    checks,
+    pathPolicy,
+    hardLocks: {
+      dryRunOnly: readOptionalBoolean(hardLocksRecord, "dryRunOnly") ?? readOptionalBoolean(summaryRecord, "dryRunOnly"),
+      diagnosticsOnly: readOptionalBoolean(hardLocksRecord, "diagnosticsOnly"),
+      noInstall: readOptionalBoolean(hardLocksRecord, "noInstall"),
+      noCredentialRead: readOptionalBoolean(hardLocksRecord, "noCredentialRead"),
+      noCredentialWrite: readOptionalBoolean(hardLocksRecord, "noCredentialWrite"),
+      noSystemSettingsMutation: readOptionalBoolean(hardLocksRecord, "noSystemSettingsMutation"),
+      arbitraryShellExecutionBlocked: readOptionalBoolean(hardLocksRecord, "arbitraryShellExecutionBlocked"),
+      sidecarDaemonDisabled: readOptionalBoolean(hardLocksRecord, "sidecarDaemonDisabled"),
+      providerSubmissionForbidden: readOptionalBoolean(hardLocksRecord, "providerSubmissionForbidden"),
+      liveSubmitAllowed: readOptionalBoolean(hardLocksRecord, "liveSubmitAllowed") ?? readOptionalBoolean(summaryRecord, "liveSubmitAllowed"),
+      platformPathAbstractionRequired: readOptionalBoolean(hardLocksRecord, "platformPathAbstractionRequired") ??
+        pathPolicy.platformPathAbstractionRequired,
     },
   };
 }
@@ -2259,6 +2486,211 @@ function QaHarnessDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeSt
               )}
             </div>
           )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function toolRuntimeMetricValue(harness: ToolRuntimeHarnessState, value?: number) {
+  return harness.initialized && typeof value === "number" ? `${value}` : "Not initialized";
+}
+
+function toolRuntimeMetricDetail(harness: ToolRuntimeHarnessState, detail: string) {
+  return harness.initialized ? detail : "runtimeState.toolRuntimeHarness missing";
+}
+
+function toolRuntimeLockLabel(value: boolean | undefined) {
+  if (typeof value !== "boolean") return "Not initialized";
+  return value ? "locked" : "not locked";
+}
+
+function toolRuntimeRequiredLabel(value: boolean | undefined) {
+  if (typeof value !== "boolean") return "Not initialized";
+  return value ? "required" : "not required";
+}
+
+function toolRuntimeBooleanLabel(value: boolean | undefined, trueLabel: string, falseLabel: string) {
+  if (typeof value !== "boolean") return "Not initialized";
+  return value ? trueLabel : falseLabel;
+}
+
+function ToolRuntimeHarnessDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const harness = getToolRuntimeHarness(runtimeState);
+  const summary = harness.summary;
+  const visibleChecks = harness.checks.slice(0, 8);
+  const optionalMissing = typeof summary.optionalMissing === "number" ? summary.optionalMissing : 0;
+  const lockRows = [
+    { label: "noInstall", value: toolRuntimeLockLabel(harness.hardLocks.noInstall) },
+    { label: "noCredentialRead", value: toolRuntimeLockLabel(harness.hardLocks.noCredentialRead) },
+    { label: "arbitraryShellExecutionBlocked", value: toolRuntimeLockLabel(harness.hardLocks.arbitraryShellExecutionBlocked) },
+    { label: "sidecarDaemonDisabled", value: toolRuntimeLockLabel(harness.hardLocks.sidecarDaemonDisabled) },
+    { label: "providerSubmissionForbidden", value: toolRuntimeLockLabel(harness.hardLocks.providerSubmissionForbidden) },
+    { label: "platformPathAbstractionRequired", value: toolRuntimeRequiredLabel(harness.hardLocks.platformPathAbstractionRequired) },
+  ];
+  const pathPolicyRows = [
+    {
+      label: "mac posix",
+      value: harness.pathPolicy.macPathStyle,
+      detail: toolRuntimeRequiredLabel(harness.pathPolicy.platformPathAbstractionRequired),
+    },
+    {
+      label: "win32",
+      value: harness.pathPolicy.windowsPathStyle,
+      detail: `${harness.pathPolicy.allowedRoots.length} allowed root(s)`,
+    },
+    {
+      label: "project-relative",
+      value: toolRuntimeRequiredLabel(harness.pathPolicy.projectRootRelativeRequired),
+      detail: "project root policy",
+    },
+    {
+      label: "allowed roots",
+      value: harness.pathPolicy.allowedRoots.join(", ") || "Not initialized",
+      detail: `${harness.pathPolicy.blockers.length} blockers / ${harness.pathPolicy.warnings.length} warnings`,
+    },
+  ];
+
+  return (
+    <section className="machine-panel tool-runtime-panel">
+      <div className="audit-head">
+        <Wrench size={17} />
+        <span>Tool Runtime Harness</span>
+      </div>
+      <div className="qa-harness-meta">
+        <small>schema: {harness.schemaVersion}</small>
+        <small>generated: {harness.generatedAt}</small>
+        <small>{harness.hasSummary ? "summary reported" : "summary Not initialized"}</small>
+        <small>{harness.hasHardLocks ? "hard locks reported" : "hard locks Not initialized"}</small>
+      </div>
+
+      <div className="summary-grid tool-runtime-metrics">
+        <Metric label="Checks" value={toolRuntimeMetricValue(harness, summary.totalChecks)} detail={toolRuntimeMetricDetail(harness, "tool readiness checks")} />
+        <Metric label="Ready" value={toolRuntimeMetricValue(harness, summary.ready)} detail={toolRuntimeMetricDetail(harness, "diagnostic ready")} />
+        <Metric label="Missing" value={toolRuntimeMetricValue(harness, summary.missing)} detail={toolRuntimeMetricDetail(harness, "required + optional")} />
+        <Metric label="Planned" value={toolRuntimeMetricValue(harness, summary.planned)} detail={toolRuntimeMetricDetail(harness, "planned slots")} />
+        <Metric label="Blocked" value={toolRuntimeMetricValue(harness, summary.blocked)} detail={toolRuntimeMetricDetail(harness, "cannot execute now")} />
+        <Metric label="Unknown" value={toolRuntimeMetricValue(harness, summary.unknown)} detail={toolRuntimeMetricDetail(harness, "missing facts")} />
+        <Metric label="Required missing" value={toolRuntimeMetricValue(harness, summary.requiredMissing)} detail={toolRuntimeMetricDetail(harness, `${optionalMissing} optional missing`)} />
+      </div>
+
+      <div className="watcher-lock-strip tool-runtime-lock-strip">
+        {lockRows.map((lock) => (
+          <div key={lock.label}>
+            <span>{lock.label}</span>
+            <StatusPill value={lock.value} />
+          </div>
+        ))}
+      </div>
+
+      {!harness.initialized && (
+        <p className="muted-copy generation-empty-state">Tool Runtime Harness not initialized in this runtime state.</p>
+      )}
+
+      {harness.initialized && (
+        <div className="tool-runtime-sections">
+          <div>
+            <div className="qa-section-head">
+              <h3>Path policy</h3>
+              <small>{harness.hasPathPolicy ? "platform path abstraction" : "Not initialized"}</small>
+            </div>
+            {!harness.hasPathPolicy && <p className="muted-copy">Not initialized</p>}
+            {harness.hasPathPolicy && (
+              <>
+                <div className="tool-runtime-policy-grid">
+                  {pathPolicyRows.map((row) => (
+                    <div key={row.label}>
+                      <span>{row.label}</span>
+                      <strong>{row.value}</strong>
+                      <small>{row.detail}</small>
+                    </div>
+                  ))}
+                </div>
+                <div className="pipeline-details tool-runtime-policy-details">
+                  <details open={harness.pathPolicy.blockers.length > 0}>
+                    <summary>Policy blockers ({harness.pathPolicy.blockers.length})</summary>
+                    <CompactList items={harness.pathPolicy.blockers} empty="No path policy blockers reported." />
+                  </details>
+                  <details open={harness.pathPolicy.warnings.length > 0}>
+                    <summary>Policy warnings ({harness.pathPolicy.warnings.length})</summary>
+                    <CompactList items={harness.pathPolicy.warnings} empty="No path policy warnings reported." />
+                  </details>
+                  <details>
+                    <summary>Policy notes ({harness.pathPolicy.notes.length})</summary>
+                    <CompactList items={harness.pathPolicy.notes} empty="No path policy notes reported." />
+                  </details>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div>
+            <div className="qa-section-head">
+              <h3>Tool checks</h3>
+              <small>showing first {visibleChecks.length} of {harness.checks.length}</small>
+            </div>
+            {!harness.hasChecks && <p className="muted-copy">Not initialized</p>}
+            {harness.hasChecks && !visibleChecks.length && <p className="muted-copy">No tool runtime checks reported.</p>}
+            {Boolean(visibleChecks.length) && (
+              <div className="tool-runtime-check-table">
+                {visibleChecks.map((check, index) => {
+                  const requiredFor = check.requiredFor.join(", ") || "Not initialized";
+                  const platformSupport = check.platformSupport.join(", ") || "Not initialized";
+                  return (
+                    <details key={`${check.checkId}-${index}`} className="tool-runtime-row" open={check.blockers.length > 0}>
+                      <summary>
+                        <span>
+                          <strong>{check.label}</strong>
+                          <small>{check.checkId}</small>
+                          <small>{check.category}</small>
+                        </span>
+                        <StatusPill value={check.status} />
+                        <StatusPill value={check.pathStatus} />
+                        <span>
+                          <strong>{check.path || "No path"}</strong>
+                          <small>{check.version ? `version ${check.version}` : "version Not initialized"}</small>
+                        </span>
+                        <span>
+                          <strong>{requiredFor}</strong>
+                          <small>{platformSupport}</small>
+                        </span>
+                        <small>
+                          {toolRuntimeBooleanLabel(check.canExecuteNow, "canExecute true", "canExecute false")} / {check.executionMode}
+                        </small>
+                      </summary>
+                      <div className="tool-runtime-check-details">
+                        <small>category: {check.category}</small>
+                        <small>requiredFor: {requiredFor}</small>
+                        <small>platformSupport: {platformSupport}</small>
+                        <small>missingIsBlocker: {toolRuntimeBooleanLabel(check.missingIsBlocker, "true", "false")}</small>
+                        <div className="pipeline-details tool-runtime-detail-sections">
+                          <details open={check.blockers.length > 0}>
+                            <summary>Blockers ({check.blockers.length})</summary>
+                            <CompactList items={check.blockers} empty="No blockers reported." />
+                          </details>
+                          <details open={check.warnings.length > 0}>
+                            <summary>Warnings ({check.warnings.length})</summary>
+                            <CompactList items={check.warnings} empty="No warnings reported." />
+                          </details>
+                          <details>
+                            <summary>Source refs ({check.sourceRefs.length})</summary>
+                            <CompactList items={check.sourceRefs} empty="No source refs reported." />
+                          </details>
+                          <details>
+                            <summary>Notes ({check.notes.length})</summary>
+                            <CompactList items={check.notes} empty="No notes reported." />
+                          </details>
+                        </div>
+                      </div>
+                    </details>
+                  );
+                })}
+                {harness.checks.length > visibleChecks.length && (
+                  <small className="muted-copy watcher-more">Showing {visibleChecks.length} of {harness.checks.length} tool runtime check(s).</small>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </section>
@@ -3792,6 +4224,7 @@ function DiagnosticsMode({
       <FilesystemWatcherDiagnostics runtimeState={runtimeState} />
       <CheckpointResumeDiagnostics runtimeState={runtimeState} />
       <QaHarnessDiagnostics runtimeState={runtimeState} />
+      <ToolRuntimeHarnessDiagnostics runtimeState={runtimeState} />
       <VideoPlanningDiagnostics runtimeState={runtimeState} />
       <VideoExecutionPreviewDiagnostics runtimeState={runtimeState} />
       <AdapterContractDiagnostics runtimeState={runtimeState} />

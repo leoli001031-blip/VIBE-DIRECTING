@@ -206,6 +206,157 @@ export interface ProjectRuntimeEnvironment {
   providerEnablementSummary: RuntimeProviderEnablementSummary;
 }
 
+export type ToolRuntimeHarnessCategory =
+  | "agent_cli"
+  | "node_runtime"
+  | "rust_runtime_or_app_shell"
+  | "media_binary"
+  | "image_tool"
+  | "python_optional"
+  | "provider_cli_optional"
+  | "vcs_optional"
+  | "package_manager";
+
+export type ToolRuntimeHarnessStatus = "ready" | "missing" | "planned" | "blocked" | "unknown";
+
+export type ToolRuntimeHarnessPathStatus = "path" | "missing" | "unknown" | "planned" | "blocked";
+
+export type ToolRuntimeHarnessExecutionMode = "diagnostic_only";
+
+export type ToolRuntimeHarnessPathStyle = "posix" | "win32" | "project-root-relative";
+
+export type ToolRuntimeHarnessPlatformSupportStatus = "supported" | "planned" | "unknown" | "unsupported";
+
+export type ToolRuntimeHarnessSourceLayer =
+  | "runtime.config"
+  | "runtime.detectionReport"
+  | "runtime.providerEnablementSummary"
+  | "adapterContracts"
+  | "generationHarness"
+  | "filesystemWatcherHarness"
+  | "checkpointResumeHarness"
+  | "qaHarness";
+
+export interface ToolRuntimeHarnessHardLocks {
+  dryRunOnly: true;
+  diagnosticsOnly: true;
+  noInstall: true;
+  noCredentialRead: true;
+  noCredentialWrite: true;
+  noSystemSettingsMutation: true;
+  arbitraryShellExecutionBlocked: true;
+  sidecarDaemonDisabled: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  platformPathAbstractionRequired: true;
+}
+
+export interface ToolRuntimeHarnessPlatformSupport {
+  darwin: ToolRuntimeHarnessPlatformSupportStatus;
+  win32: ToolRuntimeHarnessPlatformSupportStatus;
+  linux: ToolRuntimeHarnessPlatformSupportStatus;
+  pathStyles: ToolRuntimeHarnessPathStyle[];
+  notes: string[];
+}
+
+export interface ToolRuntimeHarnessCheckRow {
+  checkId: string;
+  category: ToolRuntimeHarnessCategory;
+  label: string;
+  requiredFor: string[];
+  status: ToolRuntimeHarnessStatus;
+  pathStatus: ToolRuntimeHarnessPathStatus;
+  path?: string;
+  version?: string;
+  platformSupport: ToolRuntimeHarnessPlatformSupport;
+  canExecuteNow: false;
+  executionMode: ToolRuntimeHarnessExecutionMode;
+  missingIsBlocker: boolean;
+  blockers: string[];
+  warnings: string[];
+  sourceRefs: string[];
+  notes: string[];
+}
+
+export interface ToolRuntimeHarnessPathPolicyEntry {
+  policyId: string;
+  platform: RuntimePlatform | "all";
+  pathStyle: ToolRuntimeHarnessPathStyle;
+  required: boolean;
+  sourceRefs: string[];
+  notes: string[];
+}
+
+export interface ToolRuntimeHarnessPathPolicy {
+  platformPathAbstractionRequired: true;
+  projectRootRelativeRequired: true;
+  hardcodedShellPathForbidden: true;
+  shellProfilePathLookupForbidden: true;
+  pathResolverRequired: true;
+  policies: ToolRuntimeHarnessPathPolicyEntry[];
+  sourceRefs: string[];
+  notes: string[];
+}
+
+export interface ToolRuntimeHarnessPlatformCompatibility {
+  currentPlatform: RuntimePlatform;
+  darwinPathStyle: "posix";
+  win32PathStyle: "win32";
+  projectRootRelative: true;
+  hardcodedShellPathForbidden: true;
+  sourceRefs: string[];
+  notes: string[];
+}
+
+export interface ToolRuntimeHarnessSourceCoverageEntry {
+  layer: ToolRuntimeHarnessSourceLayer;
+  referenced: boolean;
+  referenceCount: number;
+  sourceRefs: string[];
+  notes: string[];
+}
+
+export interface ToolRuntimeHarnessState {
+  schemaVersion: string;
+  generatedAt: string;
+  toolCategories: ToolRuntimeHarnessCategory[];
+  checks: ToolRuntimeHarnessCheckRow[];
+  summary: {
+    totalChecks: number;
+    ready: number;
+    missing: number;
+    planned: number;
+    blocked: number;
+    unknown: number;
+    missingBlockers: number;
+    optionalMissing: number;
+    blockerCount: number;
+    warningCount: number;
+    dryRunOnly: true;
+    diagnosticsOnly: true;
+    canExecuteNow: false;
+    liveSubmitAllowed: false;
+    providerSubmissionForbidden: true;
+    arbitraryShellExecutionBlocked: true;
+  };
+  pathPolicy: ToolRuntimeHarnessPathPolicy;
+  platformCompatibility: ToolRuntimeHarnessPlatformCompatibility;
+  sourceCoverage: ToolRuntimeHarnessSourceCoverageEntry[];
+  hardLocks: ToolRuntimeHarnessHardLocks;
+  dryRunOnly: true;
+  diagnosticsOnly: true;
+  noInstall: true;
+  noCredentialRead: true;
+  noCredentialWrite: true;
+  noSystemSettingsMutation: true;
+  arbitraryShellExecutionBlocked: true;
+  sidecarDaemonDisabled: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  platformPathAbstractionRequired: true;
+  notes: string[];
+}
+
 export type ReferenceRole =
   | "identity_authority"
   | "scene_layout_authority"

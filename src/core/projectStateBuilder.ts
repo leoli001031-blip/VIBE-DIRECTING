@@ -9,6 +9,7 @@ import { buildFilesystemWatcherHarnessState } from "./filesystemWatcherHarness";
 import { buildGenerationHealthReports } from "./generationHealth";
 import { buildGenerationHarnessState } from "./generationHarness";
 import { buildQaHarnessState } from "./qaHarness";
+import { buildToolRuntimeHarnessState } from "./toolRuntimeHarness";
 import { buildShotPromptPlan } from "./promptCompiler";
 import { buildQaPromotionReports } from "./qaPromotion";
 import { buildPreviewExportState } from "./previewExport";
@@ -250,6 +251,15 @@ export function buildProjectRuntimeState(
     audioPlanning,
     storyFlowShots: audit.shots,
   });
+  const toolRuntimeHarness = buildToolRuntimeHarnessState({
+    generatedAt,
+    runtime,
+    adapterContracts,
+    generationHarness,
+    filesystemWatcherHarness,
+    checkpointResumeHarness,
+    qaHarness,
+  });
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -316,6 +326,7 @@ export function buildProjectRuntimeState(
     filesystemWatcherHarness,
     checkpointResumeHarness,
     qaHarness,
+    toolRuntimeHarness,
     storyChanges: {
       transactions: [],
       reflowReports: [],
@@ -452,6 +463,17 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       audioPlanning,
       storyFlowShots: state.storyFlow.shots,
     });
+  const toolRuntimeHarness =
+    state.toolRuntimeHarness ||
+    buildToolRuntimeHarnessState({
+      generatedAt: state.generatedAt,
+      runtime,
+      adapterContracts,
+      generationHarness,
+      filesystemWatcherHarness,
+      checkpointResumeHarness,
+      qaHarness,
+    });
 
   return {
     ...state,
@@ -464,6 +486,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     filesystemWatcherHarness,
     checkpointResumeHarness,
     qaHarness,
+    toolRuntimeHarness,
   };
 }
 
