@@ -206,6 +206,20 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ToolRuntimeHarnessState",
   },
   {
+    fileName: "generation_health_checker.schema.json",
+    id: "https://vibecore.local/schemas/generation_health_checker.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 8.9 diagnostics-only generation health checker fact layer for expected output, manifest metadata, QA coverage, and exit/artifact consistency.",
+    typeName: "GenerationHealthCheckerState",
+  },
+  {
+    fileName: "prompt_conflict_checker.schema.json",
+    id: "https://vibecore.local/schemas/prompt_conflict_checker.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 8.10 diagnostics-only prompt conflict checker for Story Flow, Shot Layout, end-frame derivation, and locked Visual Memory facts.",
+    typeName: "PromptConflictCheckerState",
+  },
+  {
     fileName: "knowledge_pack.schema.json",
     id: "https://vibecore.local/schemas/knowledge_pack.schema.json",
     version: schemaVersion,

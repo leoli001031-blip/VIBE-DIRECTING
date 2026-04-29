@@ -1223,6 +1223,95 @@ export interface GenerationHealthReport {
   nextAction: string;
 }
 
+export type GenerationHealthCheckerItemStatus =
+  | "verified_success"
+  | "qa_missing"
+  | "waiting"
+  | "postprocess_recoverable"
+  | "worker_exit_without_expected_output"
+  | "artifact_state_mismatch"
+  | "blocked";
+
+export type GenerationHealthCheckerFactStatus =
+  | "pass"
+  | "missing"
+  | "mismatch"
+  | "pending"
+  | "recoverable"
+  | "not_available";
+
+export interface GenerationHealthCheckerFact {
+  factId: string;
+  label: string;
+  status: GenerationHealthCheckerFactStatus;
+  required: boolean;
+  sourceRefs: string[];
+  notes: string[];
+}
+
+export interface GenerationHealthCheckerItem {
+  checkerItemId: string;
+  taskPlanId: string;
+  jobId: string;
+  shotId: string;
+  expectedOutputPath: string;
+  status: GenerationHealthCheckerItemStatus;
+  expectedOutputExists: boolean;
+  tempOutputExists: boolean;
+  postprocessRecoverable: boolean;
+  manifestStatus: string;
+  manifestMatched: boolean;
+  hashVerified: boolean;
+  dimensionsVerified: boolean;
+  readabilityVerified: boolean;
+  qaCovered: boolean;
+  workerReportedSuccess: boolean;
+  exitArtifactConsistent: boolean;
+  artifactStatusConsistent: boolean;
+  facts: GenerationHealthCheckerFact[];
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}
+
+export interface GenerationHealthCheckerHardLocks {
+  dryRunOnly: true;
+  diagnosticsOnly: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  workerSelfReportCannotComplete: true;
+  expectedOutputRequired: true;
+  manifestMetadataRequired: true;
+  qaCoverageRequired: true;
+  noFileMutation: true;
+}
+
+export interface GenerationHealthCheckerState {
+  schemaVersion: string;
+  generatedAt: string;
+  items: GenerationHealthCheckerItem[];
+  summary: {
+    totalItems: number;
+    verifiedSuccess: number;
+    qaMissing: number;
+    waiting: number;
+    postprocessRecoverable: number;
+    workerExitWithoutExpectedOutput: number;
+    artifactStateMismatch: number;
+    blocked: number;
+    dryRunOnly: true;
+    diagnosticsOnly: true;
+    liveSubmitAllowed: false;
+  };
+  hardLocks: GenerationHealthCheckerHardLocks;
+  dryRunOnly: true;
+  diagnosticsOnly: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  noFileMutation: true;
+  notes: string[];
+}
+
 export interface QaPromotionRequiredGates {
   expectedOutput: boolean;
   manifestMatch: boolean;
@@ -1363,6 +1452,82 @@ export interface GenerationHarnessState {
   forbiddenActions: GenerationHarnessForbiddenAction[];
   postprocessPolicy: GenerationHarnessPostprocessPolicy;
   dryRunOnly: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  notes: string[];
+}
+
+export type PromptConflictCheckerConflictCode =
+  | "story_flow_stale_function"
+  | "garage_front_door_conflict"
+  | "fixed_camera_movement_conflict"
+  | "independent_end_frame_conflict"
+  | "visual_memory_locked_outfit_conflict"
+  | "visual_memory_locked_scene_conflict"
+  | "visual_memory_locked_style_conflict"
+  | "compiler_conflict_report_blocker";
+
+export interface PromptConflictCheckerConflict {
+  code: PromptConflictCheckerConflictCode;
+  severity: PromptConflictSeverity;
+  target: string;
+  structuredFact: string;
+  promptEvidence: string;
+  detail: string;
+  requiredResolution: {
+    updateShotSpec: boolean;
+    updateShotLayout: boolean;
+    updateShotPromptPlan: boolean;
+    recompileRequired: true;
+  };
+  sourceRefs: string[];
+}
+
+export interface PromptConflictCheckerItem {
+  checkerItemId: string;
+  promptPlanId: string;
+  jobId: string;
+  shotId?: string;
+  status: "clear" | "warning" | "blocked";
+  conflictReportId?: string;
+  promptPlanHash: string;
+  sourceShotSpecHash: string;
+  conflicts: PromptConflictCheckerConflict[];
+  blockers: string[];
+  warnings: string[];
+  sourceRefs: string[];
+  nextAction: string;
+}
+
+export interface PromptConflictCheckerHardLocks {
+  dryRunOnly: true;
+  diagnosticsOnly: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  agentPromiseCannotResolveConflict: true;
+  requiresStructuredPlanUpdate: true;
+  recompileRequiredAfterConflict: true;
+  noPromptBypass: true;
+}
+
+export interface PromptConflictCheckerState {
+  schemaVersion: string;
+  generatedAt: string;
+  items: PromptConflictCheckerItem[];
+  summary: {
+    totalItems: number;
+    clear: number;
+    warning: number;
+    blocked: number;
+    conflicts: number;
+    recompileRequired: number;
+    dryRunOnly: true;
+    diagnosticsOnly: true;
+    liveSubmitAllowed: false;
+  };
+  hardLocks: PromptConflictCheckerHardLocks;
+  dryRunOnly: true;
+  diagnosticsOnly: true;
   providerSubmissionForbidden: true;
   liveSubmitAllowed: false;
   notes: string[];

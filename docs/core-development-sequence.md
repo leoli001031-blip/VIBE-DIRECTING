@@ -717,6 +717,34 @@ Phase 6 已实现范围（核心合同）：
 - 不能提交 Image2、Seedance、Jimeng 或任何 provider；provider CLI optional 只代表未来可诊断事实，不代表 live submit unlock。
 - 不能把 optional missing 当 blocker；也不能把 planned/unknown tool 当 available。
 
+### Phase 8.9 已实现范围：Generation Health Checker
+
+- `ProjectRuntimeState.generationHealthChecker` 写入 Phase 8.9 的 top-level diagnostics fact layer，只从 `imageTaskPlans`、`generationHealthReports`、`manifestMatches`、`watcherEvents`、`taskRuns`、`jobs`、`fileSnapshot` 归纳生成健康事实。
+- 每个 item 固定输出 expected output、manifest/hash/dimensions/readability、QA coverage、worker exit/artifact consistency、temp recovery 五类事实；worker/job 自报成功只能作为一致性输入，不能单独让任务成功。
+- item status 显式区分 `verified_success`、`qa_missing`、`waiting`、`postprocess_recoverable`、`worker_exit_without_expected_output`、`artifact_state_mismatch`、`blocked`；如果 temp/candidate 已存在但 expected output 后处理失败，必须落到 `postprocess_recoverable`。
+- Hard locks 固定 `dryRunOnly=true`、`diagnosticsOnly=true`、`providerSubmissionForbidden=true`、`liveSubmitAllowed=false`、`workerSelfReportCannotComplete=true`、`expectedOutputRequired=true`、`manifestMetadataRequired=true`、`qaCoverageRequired=true`、`noFileMutation=true`。
+- 新增 `schemas/generation_health_checker.schema.json` 并纳入 `project_runtime_state.schema.json` 与 schema registry；新增 `npm run generation-health:test` 覆盖 recoverable、worker exit without expected output、QA coverage missing、schema registry 和 import runtime-state 生成。
+
+禁止项：
+
+- Generation Health Checker 不能连接真实 provider，不能读 provider credentials，不能生图，不能修复或移动文件。
+- 不能把 worker stdout、退出、job.status=success、providerStatus=success 当作完成事实；必须和 expected output、manifest metadata、QA coverage、artifact consistency 同时成立。
+- 不能把 temp/candidate 当 formal，也不能自动 promote formal。
+
+### Phase 8.10 已实现范围：Prompt Conflict Checker
+
+- `ProjectRuntimeState.promptConflictChecker` 写入 Phase 8.10 的 top-level prompt fact layer，只从 `promptPlans`、`promptConflictReports`、`storyFlow.shots`、`visualMemory.assets`、`jobs` 归纳结构化冲突。
+- 检查覆盖 Story Flow 旧功能、garage door vs front door、fixed camera vs 大幅运动、end frame 默认从 start 派生、Visual Memory locked outfit/scene/style 与 prompt 冲突，并保留每条冲突的 `structuredFact`、`promptEvidence`、`sourceRefs`。
+- 每条冲突都带 `requiredResolution`，固定要求更新 `Shot Prompt Plan` 并 `recompileRequired=true`；Story Flow / Shot Layout 类冲突会进一步标记需要更新 Shot Spec 或 Shot Layout。
+- Hard locks 固定 `dryRunOnly=true`、`diagnosticsOnly=true`、`providerSubmissionForbidden=true`、`liveSubmitAllowed=false`、`agentPromiseCannotResolveConflict=true`、`requiresStructuredPlanUpdate=true`、`recompileRequiredAfterConflict=true`、`noPromptBypass=true`。
+- 新增 `schemas/prompt_conflict_checker.schema.json` 并纳入 `project_runtime_state.schema.json` 与 schema registry；新增 `npm run prompt-conflict:test` 覆盖 Story Flow stale、front/garage、fixed-camera movement、independent end frame、locked outfit、schema registry 和 import runtime-state 生成。
+
+禁止项：
+
+- Prompt Conflict Checker 不能用 agent 口头承诺、自由文本补丁或 provider prompt 临时改写来消除冲突。
+- 冲突存在时必须更新 Shot Spec / Shot Layout / Shot Prompt Plan 并重新编译；不能绕过 Shot Prompt Plan 直接生成。
+- 不能连接真实 provider，不能提交 Image2、Seedance、Jimeng 或任何外部服务。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

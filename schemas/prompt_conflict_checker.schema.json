@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/prompt_conflict_checker.schema.json",
+  "title": "PromptConflictCheckerState",
+  "description": "Phase 8.10 diagnostics-only prompt conflict checker. It blocks generation when prompt plans conflict with Story Flow, Shot Layout, end-frame derivation defaults, or locked Visual Memory facts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "items",
+    "summary",
+    "hardLocks",
+    "dryRunOnly",
+    "diagnosticsOnly",
+    "providerSubmissionForbidden",
+    "liveSubmitAllowed",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/checkerItem" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalItems",
+        "clear",
+        "warning",
+        "blocked",
+        "conflicts",
+        "recompileRequired",
+        "dryRunOnly",
+        "diagnosticsOnly",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "totalItems": { "type": "integer", "minimum": 0 },
+        "clear": { "type": "integer", "minimum": 0 },
+        "warning": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "conflicts": { "type": "integer", "minimum": 0 },
+        "recompileRequired": { "type": "integer", "minimum": 0 },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "diagnosticsOnly": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "dryRunOnly": { "type": "boolean", "const": true },
+    "diagnosticsOnly": { "type": "boolean", "const": true },
+    "providerSubmissionForbidden": { "type": "boolean", "const": true },
+    "liveSubmitAllowed": { "type": "boolean", "const": false },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "status": {
+      "type": "string",
+      "enum": ["clear", "warning", "blocked"]
+    },
+    "conflictCode": {
+      "type": "string",
+      "enum": [
+        "story_flow_stale_function",
+        "garage_front_door_conflict",
+        "fixed_camera_movement_conflict",
+        "independent_end_frame_conflict",
+        "visual_memory_locked_outfit_conflict",
+        "visual_memory_locked_scene_conflict",
+        "visual_memory_locked_style_conflict",
+        "compiler_conflict_report_blocker"
+      ]
+    },
+    "requiredResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["updateShotSpec", "updateShotLayout", "updateShotPromptPlan", "recompileRequired"],
+      "properties": {
+        "updateShotSpec": { "type": "boolean" },
+        "updateShotLayout": { "type": "boolean" },
+        "updateShotPromptPlan": { "type": "boolean", "const": true },
+        "recompileRequired": { "type": "boolean", "const": true }
+      }
+    },
+    "conflict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "severity",
+        "target",
+        "structuredFact",
+        "promptEvidence",
+        "detail",
+        "requiredResolution",
+        "sourceRefs"
+      ],
+      "properties": {
+        "code": { "$ref": "#/$defs/conflictCode" },
+        "severity": {
+          "type": "string",
+          "enum": ["blocker", "warning", "info"]
+        },
+        "target": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "structuredFact": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "promptEvidence": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "detail": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "requiredResolution": { "$ref": "#/$defs/requiredResolution" },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "checkerItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkerItemId",
+        "promptPlanId",
+        "jobId",
+        "status",
+        "conflictReportId",
+        "promptPlanHash",
+        "sourceShotSpecHash",
+        "conflicts",
+        "blockers",
+        "warnings",
+        "sourceRefs",
+        "nextAction"
+      ],
+      "properties": {
+        "checkerItemId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "promptPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "jobId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "shotId": { "type": "string" },
+        "status": { "$ref": "#/$defs/status" },
+        "conflictReportId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "promptPlanHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "sourceShotSpecHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "conflicts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/conflict" }
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "nextAction": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dryRunOnly",
+        "diagnosticsOnly",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "agentPromiseCannotResolveConflict",
+        "requiresStructuredPlanUpdate",
+        "recompileRequiredAfterConflict",
+        "noPromptBypass"
+      ],
+      "properties": {
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "diagnosticsOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "agentPromiseCannotResolveConflict": { "type": "boolean", "const": true },
+        "requiresStructuredPlanUpdate": { "type": "boolean", "const": true },
+        "recompileRequiredAfterConflict": { "type": "boolean", "const": true },
+        "noPromptBypass": { "type": "boolean", "const": true }
+      }
+    }
+  }
+}

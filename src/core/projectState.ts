@@ -10,6 +10,7 @@ import type {
   AudioPlanningState,
   CheckpointResumeHarnessState,
   FilesystemWatcherHarnessState,
+  GenerationHealthCheckerState,
   GenerationHarnessState,
   AuditIssue,
   GenerationHealthReport,
@@ -24,6 +25,7 @@ import type {
   ProjectSourceIndex,
   ProviderPolicy,
   ProviderRegistry,
+  PromptConflictCheckerState,
   PromptConflictReport,
   QaHarnessState,
   QaPromotionReport,
@@ -180,6 +182,8 @@ export interface ProjectRuntimeState {
   checkpointResumeHarness: CheckpointResumeHarnessState;
   qaHarness: QaHarnessState;
   toolRuntimeHarness: ToolRuntimeHarnessState;
+  generationHealthChecker: GenerationHealthCheckerState;
+  promptConflictChecker: PromptConflictCheckerState;
   storyChanges: ProjectRuntimeStoryChangeState;
   runtime: ProjectRuntimeEnvironment;
   diagnostics: {

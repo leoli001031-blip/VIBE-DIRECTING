@@ -1017,6 +1017,14 @@ Health Checker 检查：
 
 如果 worker 后处理失败但临时图已生成，状态应为 `postprocess_recoverable`，而不是简单失败。
 
+Phase 8.9 core 实现：
+
+- `generationHealthChecker` 是 runtime-state 顶层 diagnostics harness，不接真实 provider、不生图、不修改文件。
+- 输入只来自 `imageTaskPlans`、`generationHealthReports`、`manifestMatches`、`watcherEvents`、`taskRuns`、`jobs`、`fileSnapshot`。
+- 输出逐任务事实链：expected output、manifest/hash/dimensions/readability、QA coverage、worker exit/artifact consistency、temp recovery。
+- 状态包括 `verified_success`、`qa_missing`、`waiting`、`postprocess_recoverable`、`worker_exit_without_expected_output`、`artifact_state_mismatch`、`blocked`。
+- schema 为 `schemas/generation_health_checker.schema.json`，已纳入 `project_runtime_state.schema.json` 和 schema registry；测试命令为 `npm run generation-health:test`。
+
 ### 8.10 Prompt Conflict Checker
 
 生成前必须检查 prompt 与当前结构化事实是否冲突。
@@ -1030,6 +1038,14 @@ Health Checker 检查：
 - Visual Memory 里角色服装已锁定，但 prompt 写了另一套衣服。
 
 冲突不能靠 Agent 口头承诺解决，必须更新 Shot Spec / Shot Layout / Shot Prompt Plan 后重新编译。
+
+Phase 8.10 core 实现：
+
+- `promptConflictChecker` 是 runtime-state 顶层 diagnostics harness，不提交 provider、不把自由文本 prompt 直接送生成。
+- 输入只来自 `promptPlans`、`promptConflictReports`、`storyFlow.shots`、`visualMemory.assets`、`jobs`。
+- 检查 Story Flow 旧功能、garage/front door、fixed camera vs 大幅运动、independent end frame、Visual Memory locked outfit/scene/style 冲突。
+- 每条冲突输出 `structuredFact`、`promptEvidence`、`sourceRefs` 和 `requiredResolution`；冲突必须更新 Shot Spec / Shot Layout / Shot Prompt Plan 并重新编译，agent promise 不能解除。
+- schema 为 `schemas/prompt_conflict_checker.schema.json`，已纳入 `project_runtime_state.schema.json` 和 schema registry；测试命令为 `npm run prompt-conflict:test`。
 
 ## 9. Agent 架构
 

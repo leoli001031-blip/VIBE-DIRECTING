@@ -498,6 +498,33 @@ type VideoExecutionPreviewRow = VideoExecutionPreviewState["previews"][number];
 type VideoReadinessGateState = VideoPlanningState["readinessGates"][number];
 type VideoTaskPlanState = VideoPlanningState["taskPlans"][number];
 type AdapterContractState = ProjectRuntimeState["adapterContracts"];
+type CheckerFactRow = {
+  id: string;
+  label: string;
+  status: string;
+  detail: string;
+  sourceRefs: string[];
+};
+type GenerationHealthCheckerState = {
+  initialized: boolean;
+  reportCount: number;
+  factChainSummary: CheckerFactRow[];
+  postprocessRecoverable: number;
+  workerSelfReportMismatch: number;
+  qaCoverageMissing: number;
+  blockers: string[];
+  warnings: string[];
+};
+type PromptConflictCheckerState = {
+  initialized: boolean;
+  reportCount: number;
+  conflictCount: number;
+  blockingConflicts: number;
+  needsRecompile: number;
+  structuredSourcesToUpdate: string[];
+  blockers: string[];
+  warnings: string[];
+};
 type GenerationHarnessStage = {
   id: string;
   label: string;
@@ -926,6 +953,132 @@ function readDisplayList(value: unknown, fallbackLabel = "value") {
   }
   const single = formatHarnessValue(value, fallbackLabel);
   return single ? [single] : [];
+}
+
+function readRuntimeExtension(runtimeState: ProjectRuntimeState, keys: string[]): Record<string, unknown> {
+  const root = runtimeState as unknown as Record<string, unknown>;
+  for (const key of keys) {
+    if (isRecord(root[key])) return root[key];
+  }
+
+  const pipeline = isRecord(root.imagePipeline) ? root.imagePipeline : {};
+  for (const key of keys) {
+    if (isRecord(pipeline[key])) return pipeline[key];
+  }
+
+  return {};
+}
+
+function readCount(record: Record<string, unknown>, keys: string[], fallback = 0) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (Array.isArray(value)) return value.length;
+  }
+  return fallback;
+}
+
+function readCheckerFacts(value: unknown, fallback: CheckerFactRow[]) {
+  if (!Array.isArray(value)) return fallback;
+  const rows = value
+    .map((item, index): CheckerFactRow | undefined => {
+      const row = isRecord(item) ? item : {};
+      const id = readString(row.id, readString(row.factId, `fact-${index + 1}`));
+      const label = readString(row.label, readString(row.name, id));
+      const status = readString(row.status, readString(row.healthStatus, "unknown"));
+      const detail = readString(row.detail, readString(row.summary, readString(row.nextAction, "No fact detail reported.")));
+      const sourceRefs = readStringArray(row.sourceRefs).length
+        ? readStringArray(row.sourceRefs)
+        : readStringArray(row.sources);
+      return { id, label, status, detail, sourceRefs };
+    })
+    .filter((item): item is CheckerFactRow => Boolean(item));
+  return rows.length ? rows : fallback;
+}
+
+function getGenerationHealthChecker(runtimeState: ProjectRuntimeState): GenerationHealthCheckerState {
+  const pipeline = getImagePipeline(runtimeState);
+  const checker = readRuntimeExtension(runtimeState, [
+    "generationHealthChecker",
+    "generationHealthCheck",
+    "generationHealthDiagnostics",
+  ]);
+  const summary = isRecord(checker.summary) ? checker.summary : checker;
+  const reports = pipeline.generationHealthReports;
+  const reportDerivedFacts = reports.slice(0, 5).map((report): CheckerFactRow => ({
+    id: report.reportId,
+    label: report.shotId || report.taskPlanId,
+    status: report.healthStatus || "unknown",
+    detail: [
+      `manifest ${report.manifestStatus || "unknown"}`,
+      `qa ${report.qaStatus || "unknown"}`,
+      report.outputExists ? "output present" : "output missing",
+      report.stalePrompt ? "stale prompt" : undefined,
+    ].filter(Boolean).join(" · "),
+    sourceRefs: [report.taskPlanId, report.jobId].filter(Boolean),
+  }));
+  const factSource = checker.factChainSummary ?? checker.factChain ?? checker.facts ?? checker.factRows;
+  const postprocessRecoverableFallback = reports.filter((report) => (
+    report.healthStatus === "failed" ||
+    report.warnings.some((warning) => warning.toLowerCase().includes("recoverable")) ||
+    report.blockers.some((blocker) => blocker.toLowerCase().includes("postprocess"))
+  )).length;
+  const workerMismatchFallback = reports.filter((report) => (
+    report.warnings.some((warning) => warning.toLowerCase().includes("worker") && warning.toLowerCase().includes("mismatch")) ||
+    report.blockers.some((blocker) => blocker.toLowerCase().includes("worker") && blocker.toLowerCase().includes("mismatch"))
+  )).length;
+  const qaMissingFallback = reports.filter((report) => report.qaStatus === "missing" || report.qaStatus === "unknown").length;
+
+  return {
+    initialized: Object.keys(checker).length > 0 || reports.length > 0,
+    reportCount: readCount(summary, ["reportCount", "totalReports", "total"], reports.length),
+    factChainSummary: readCheckerFacts(factSource, reportDerivedFacts),
+    postprocessRecoverable: readCount(summary, ["postprocessRecoverable", "postprocess_recoverable", "recoverablePostprocess"], postprocessRecoverableFallback),
+    workerSelfReportMismatch: readCount(summary, ["workerSelfReportMismatch", "worker_self_report_mismatch", "selfReportMismatch"], workerMismatchFallback),
+    qaCoverageMissing: readCount(summary, ["qaCoverageMissing", "qa_coverage_missing", "missingQaCoverage"], qaMissingFallback),
+    blockers: readStringArray(checker.blockers),
+    warnings: readStringArray(checker.warnings),
+  };
+}
+
+function getPromptConflictChecker(runtimeState: ProjectRuntimeState): PromptConflictCheckerState {
+  const pipeline = getImagePipeline(runtimeState);
+  const checker = readRuntimeExtension(runtimeState, [
+    "promptConflictChecker",
+    "promptConflictCheck",
+    "promptConflictDiagnostics",
+  ]);
+  const summary = isRecord(checker.summary) ? checker.summary : checker;
+  const reports = pipeline.promptConflictReports;
+  const conflicts = reports.flatMap((report) => report.conflicts || []);
+  const blockingFallback = conflicts.filter((conflict) => conflict.severity === "blocker").length;
+  const needsRecompileReports = reports.filter((report) => {
+    const raw = report as unknown as Record<string, unknown>;
+    return readBoolean(raw.needsRecompile, false) ||
+      readBoolean(raw.needs_recompile, false) ||
+      report.conflicts.some((conflict) => conflict.code.toLowerCase().includes("recompile"));
+  }).length;
+  const sourceCandidates = [
+    checker.structuredSourcesToUpdate,
+    checker.structured_sources_to_update,
+    checker.sourcesToUpdate,
+    summary.structuredSourcesToUpdate,
+    summary.structured_sources_to_update,
+  ];
+  const structuredSourcesToUpdate = sourceCandidates.reduce<string[]>((acc, value) => (
+    acc.length ? acc : readDisplayList(value, "source")
+  ), []);
+
+  return {
+    initialized: Object.keys(checker).length > 0 || reports.length > 0,
+    reportCount: readCount(summary, ["reportCount", "totalReports", "total"], reports.length),
+    conflictCount: readCount(summary, ["conflictCount", "totalConflicts", "conflicts"], conflicts.length),
+    blockingConflicts: readCount(summary, ["blockingConflicts", "blocking_conflicts", "blockers"], blockingFallback),
+    needsRecompile: readCount(summary, ["needsRecompile", "needs_recompile", "recompileNeeded"], needsRecompileReports),
+    structuredSourcesToUpdate,
+    blockers: readStringArray(checker.blockers),
+    warnings: readStringArray(checker.warnings),
+  };
 }
 
 function normalizeGenerationStage(value: unknown, index: number): GenerationHarnessStage {
@@ -1893,6 +2046,91 @@ function ImagePipelineDiagnostics({ runtimeState }: { runtimeState: ProjectRunti
         <details>
           <summary>Warnings ({warnings.length})</summary>
           <CompactList items={warnings} />
+        </details>
+      </div>
+    </section>
+  );
+}
+
+function GenerationHealthCheckerDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const checker = getGenerationHealthChecker(runtimeState);
+  const visibleFacts = checker.factChainSummary.slice(0, 6);
+
+  return (
+    <section className="machine-panel health-checker-panel">
+      <div className="audit-head">
+        <ListChecks size={17} />
+        <span>Generation Health Checker</span>
+      </div>
+      <div className="summary-grid checker-metrics">
+        <Metric label="Reports" value={`${checker.reportCount}`} detail={checker.initialized ? "fact chain coverage" : "Not initialized"} />
+        <Metric label="Postprocess Recoverable" value={`${checker.postprocessRecoverable}`} detail="recoverable only; no semantic repair" />
+        <Metric label="Worker Mismatch" value={`${checker.workerSelfReportMismatch}`} detail="self-report differs from evidence" />
+        <Metric label="QA Coverage Missing" value={`${checker.qaCoverageMissing}`} detail="missing explicit QA signal" />
+      </div>
+      {!checker.initialized && (
+        <p className="muted-copy generation-empty-state">Generation Health Checker runtime field not initialized; showing defaults.</p>
+      )}
+      <div className="checker-fact-table">
+        {visibleFacts.map((fact) => (
+          <div key={fact.id} className="checker-fact-row">
+            <div>
+              <strong>{fact.label}</strong>
+              <small>{fact.sourceRefs.join(" · ") || fact.id}</small>
+            </div>
+            <StatusPill value={fact.status} />
+            <small>{fact.detail}</small>
+          </div>
+        ))}
+        {checker.initialized && !visibleFacts.length && <p className="muted-copy">No fact chain rows reported.</p>}
+      </div>
+      <div className="pipeline-details checker-details">
+        <details open={Boolean(checker.blockers.length)}>
+          <summary>Blockers ({checker.blockers.length})</summary>
+          <CompactList items={checker.blockers} empty="No health checker blockers reported." />
+        </details>
+        <details>
+          <summary>Warnings ({checker.warnings.length})</summary>
+          <CompactList items={checker.warnings} empty="No health checker warnings reported." />
+        </details>
+      </div>
+    </section>
+  );
+}
+
+function PromptConflictCheckerDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const checker = getPromptConflictChecker(runtimeState);
+
+  return (
+    <section className="machine-panel prompt-conflict-panel">
+      <div className="audit-head">
+        <ShieldAlert size={17} />
+        <span>Prompt Conflict Checker</span>
+      </div>
+      <div className="summary-grid checker-metrics">
+        <Metric label="Reports" value={`${checker.reportCount}`} detail={checker.initialized ? "prompt plans checked" : "Not initialized"} />
+        <Metric label="Conflicts" value={`${checker.conflictCount}`} detail="all severities" />
+        <Metric label="Blocking" value={`${checker.blockingConflicts}`} detail="blocks envelope readiness" />
+        <Metric label="Needs Recompile" value={`${checker.needsRecompile}`} detail="structured source drift" />
+      </div>
+      {!checker.initialized && (
+        <p className="muted-copy generation-empty-state">Prompt Conflict Checker runtime field not initialized; showing defaults.</p>
+      )}
+      <div className="structured-source-strip">
+        <span>Structured sources to update</span>
+        <CompactList items={checker.structuredSourcesToUpdate.slice(0, 8)} empty="No structured source updates reported." />
+        {checker.structuredSourcesToUpdate.length > 8 && (
+          <small className="muted-copy">Showing 8 of {checker.structuredSourcesToUpdate.length} source update(s).</small>
+        )}
+      </div>
+      <div className="pipeline-details checker-details">
+        <details open={Boolean(checker.blockers.length)}>
+          <summary>Blockers ({checker.blockers.length})</summary>
+          <CompactList items={checker.blockers} empty="No conflict checker blockers reported." />
+        </details>
+        <details>
+          <summary>Warnings ({checker.warnings.length})</summary>
+          <CompactList items={checker.warnings} empty="No conflict checker warnings reported." />
         </details>
       </div>
     </section>
@@ -4220,6 +4458,8 @@ function DiagnosticsMode({
     <div className="diagnostics-layout">
       <ProviderDock audit={audit} />
       <ImagePipelineDiagnostics runtimeState={runtimeState} />
+      <GenerationHealthCheckerDiagnostics runtimeState={runtimeState} />
+      <PromptConflictCheckerDiagnostics runtimeState={runtimeState} />
       <GenerationHarnessDiagnostics runtimeState={runtimeState} />
       <FilesystemWatcherDiagnostics runtimeState={runtimeState} />
       <CheckpointResumeDiagnostics runtimeState={runtimeState} />

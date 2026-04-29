@@ -28,6 +28,8 @@
     "checkpointResumeHarness",
     "qaHarness",
     "toolRuntimeHarness",
+    "generationHealthChecker",
+    "promptConflictChecker",
     "storyChanges",
     "runtime",
     "diagnostics",
@@ -210,6 +212,8 @@
     "checkpointResumeHarness": { "$ref": "checkpoint_resume_harness.schema.json" },
     "qaHarness": { "$ref": "qa_harness.schema.json" },
     "toolRuntimeHarness": { "$ref": "tool_runtime_harness.schema.json" },
+    "generationHealthChecker": { "$ref": "generation_health_checker.schema.json" },
+    "promptConflictChecker": { "$ref": "prompt_conflict_checker.schema.json" },
     "storyChanges": {
       "type": "object",
       "additionalProperties": false,

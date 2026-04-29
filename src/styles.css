@@ -1996,6 +1996,75 @@ small {
   margin-top: 0;
 }
 
+.checker-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.health-checker-panel .metric strong,
+.prompt-conflict-panel .metric strong {
+  font-size: 22px;
+  overflow-wrap: anywhere;
+}
+
+.checker-fact-table {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.checker-fact-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) auto minmax(220px, 1.35fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 8px;
+}
+
+.checker-fact-row strong,
+.checker-fact-row small,
+.structured-source-strip span,
+.structured-source-strip small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checker-fact-row strong,
+.checker-fact-row small {
+  display: block;
+}
+
+.checker-fact-row strong {
+  color: #d9d1c4;
+  font-size: 12px;
+}
+
+.checker-fact-row small,
+.structured-source-strip span {
+  color: #9d958a;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.structured-source-strip {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.structured-source-strip .compact-list {
+  margin-top: 0;
+}
+
+.checker-details {
+  margin-top: 10px;
+}
+
 .compact-list small {
   border: 1px solid rgba(236, 231, 223, 0.08);
   background: rgba(255, 255, 255, 0.025);
@@ -2287,6 +2356,10 @@ small {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .checker-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .tool-runtime-panel .tool-runtime-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2296,6 +2369,7 @@ small {
   .checkpoint-resume-row summary,
   .qa-overall-row summary,
   .qa-item-row summary,
+  .checker-fact-row,
   .tool-runtime-row summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2338,6 +2412,8 @@ small {
   .qa-item-details,
   .tool-runtime-policy-grid,
   .tool-runtime-check-details,
+  .checker-metrics,
+  .checker-fact-row,
   .knowledge-distribution,
   .machine-panel .summary-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -2366,6 +2442,7 @@ small {
   .filesystem-watcher-panel .filesystem-watcher-metrics,
   .checkpoint-resume-panel .checkpoint-resume-metrics,
   .qa-harness-panel .qa-harness-metrics,
+  .checker-metrics,
   .tool-runtime-panel .tool-runtime-metrics,
   .generation-job-head,
   .candidate-output-summary div,
@@ -2374,6 +2451,7 @@ small {
   .checkpoint-resume-row summary,
   .qa-overall-row summary,
   .qa-item-row summary,
+  .checker-fact-row,
   .tool-runtime-row summary,
   .watcher-stream-details {
     grid-template-columns: minmax(0, 1fr);

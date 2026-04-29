@@ -1197,6 +1197,269 @@ function buildShotPromptPlan(job, shot, assets, sourceIndex, providerRegistry, i
   return { plan, conflictReport };
 }
 
+const promptCheckerCameraMovementPattern = /\b(push(?:\s|-)?in|pull(?:\s|-)?back|dolly|truck|crane|orbit|whip\s*pan|zoom|sweeping|large\s+camera\s+move|dramatic\s+camera)\b/i;
+const promptCheckerFrontDoorPattern = /\bfront\s+door\b/i;
+const promptCheckerGaragePattern = /\bgarage(?:\s+door)?\b/i;
+const promptCheckerColorWords = ["black", "blue", "brown", "cream", "green", "grey", "gray", "orange", "purple", "red", "silver", "white", "yellow"];
+
+function normalizePromptCheckerText(value) {
+  return String(value || "").toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function promptCheckerPromptText(plan) {
+  return normalizePromptCheckerText([
+    ...(plan.sourceIntent || []),
+    ...(plan.mustPreserve || []),
+    ...(plan.mustAvoid || []),
+    ...(plan.styleDirectives || []),
+    ...(plan.adapterWarnings || []),
+  ].join(" "));
+}
+
+function promptCheckerShotText(shot) {
+  if (!shot) return "";
+  return normalizePromptCheckerText([shot.id, shot.title, shot.storyFunction, ...(shot.issues || [])].join(" "));
+}
+
+function promptCheckerReferencedAssets(plan, assets) {
+  const refs = new Set((plan.referenceIds || []).map(normalizePromptCheckerText));
+  return assets.filter((asset) => refs.has(normalizePromptCheckerText(asset.id)) || refs.has(normalizePromptCheckerText(asset.path)));
+}
+
+function promptCheckerLockedText(assets) {
+  return normalizePromptCheckerText(
+    assets
+      .filter((asset) => asset.lockedStatus === "locked")
+      .map((asset) => [asset.id, asset.name, asset.type, ...(asset.issues || [])].join(" "))
+      .join(" "),
+  );
+}
+
+function promptCheckerSourceRefs(plan, report, shot, assets = []) {
+  return uniqueSorted([
+    plan.promptPlanId,
+    plan.promptPlanHash,
+    plan.sourceShotSpecHash,
+    report?.reportId || "",
+    shot?.id || "",
+    ...assets.map((asset) => asset.id),
+  ]);
+}
+
+function promptCheckerResolutionFor(code) {
+  return {
+    updateShotSpec: code === "story_flow_stale_function" || code === "garage_front_door_conflict",
+    updateShotLayout: code === "fixed_camera_movement_conflict" || code === "garage_front_door_conflict",
+    updateShotPromptPlan: true,
+    recompileRequired: true,
+  };
+}
+
+function makePromptCheckerConflict({ code, target, structuredFact, promptEvidence, detail, sourceRefs }) {
+  return {
+    code,
+    severity: "blocker",
+    target,
+    structuredFact,
+    promptEvidence,
+    detail,
+    requiredResolution: promptCheckerResolutionFor(code),
+    sourceRefs: uniqueSorted(sourceRefs),
+  };
+}
+
+function promptCheckerStoryFunctionFromPrompt(text) {
+  const match = text.match(/story function\s*:\s*([^|;]+)/i) || text.match(/story_function\s*:\s*([^|;]+)/i);
+  return match?.[1] ? normalizePromptCheckerText(match[1]) : undefined;
+}
+
+function promptCheckerContainsFixedCameraFact(text) {
+  return /\b(fixed camera|locked camera|static camera|tripod|no camera movement)\b/i.test(text);
+}
+
+function promptCheckerColorConflict(lockedText, text) {
+  const lockedColors = promptCheckerColorWords.filter((color) => new RegExp(`\\b${color}\\b`, "i").test(lockedText));
+  const promptColors = promptCheckerColorWords.filter((color) => new RegExp(`\\b${color}\\b`, "i").test(text));
+  return lockedColors.length > 0 && promptColors.some((color) => !lockedColors.includes(color));
+}
+
+function promptCheckerOutfitConflict(lockedText, text) {
+  if (!/\b(outfit|costume|clothes|coat|dress|jacket|uniform)\b/i.test(`${lockedText} ${text}`)) return false;
+  return /\b(new|different|changed|replace|alternate)\s+(outfit|costume|clothes)\b/i.test(text) || promptCheckerColorConflict(lockedText, text);
+}
+
+function promptCheckerStyleConflict(lockedText, text) {
+  const styleTokens = ["monochrome", "noir", "watercolor", "anime", "photoreal", "cinematic", "pixel art", "pastel"];
+  const lockedStyles = styleTokens.filter((token) => lockedText.includes(token));
+  const promptStyles = styleTokens.filter((token) => text.includes(token));
+  return lockedStyles.length > 0 && promptStyles.some((token) => !lockedStyles.includes(token));
+}
+
+function buildPromptCheckerConflicts(plan, report, shot, assets) {
+  const text = promptCheckerPromptText(plan);
+  const shotText = promptCheckerShotText(shot);
+  const lockedRefs = promptCheckerReferencedAssets(plan, assets).filter((asset) => asset.lockedStatus === "locked");
+  const lockedText = promptCheckerLockedText(lockedRefs);
+  const refs = promptCheckerSourceRefs(plan, report, shot, lockedRefs);
+  const conflicts = [];
+  const promptStoryFunction = promptCheckerStoryFunctionFromPrompt(text);
+  const currentStoryFunction = shot?.storyFunction ? normalizePromptCheckerText(shot.storyFunction) : undefined;
+
+  if (promptStoryFunction && currentStoryFunction && promptStoryFunction !== currentStoryFunction) {
+    conflicts.push(makePromptCheckerConflict({
+      code: "story_flow_stale_function",
+      target: shot?.id || plan.promptPlanId,
+      structuredFact: `storyFunction:${shot?.storyFunction}`,
+      promptEvidence: `promptStoryFunction:${promptStoryFunction}`,
+      detail: "Prompt source intent references an older Story Flow function.",
+      sourceRefs: refs,
+    }));
+  }
+  if ((promptCheckerGaragePattern.test(shotText) || promptCheckerGaragePattern.test(lockedText)) && promptCheckerFrontDoorPattern.test(text)) {
+    conflicts.push(makePromptCheckerConflict({
+      code: "garage_front_door_conflict",
+      target: shot?.id || plan.promptPlanId,
+      structuredFact: "Structured shot/scene fact requires garage door.",
+      promptEvidence: "Prompt references front door.",
+      detail: "Prompt door language conflicts with the current garage-door scene fact.",
+      sourceRefs: refs,
+    }));
+  }
+  if (promptCheckerContainsFixedCameraFact(`${shotText} ${lockedText}`) && promptCheckerCameraMovementPattern.test(text)) {
+    conflicts.push(makePromptCheckerConflict({
+      code: "fixed_camera_movement_conflict",
+      target: shot?.id || plan.promptPlanId,
+      structuredFact: "Shot Layout requires fixed/locked camera.",
+      promptEvidence: "Prompt contains large camera movement.",
+      detail: "Prompt motion conflicts with a fixed camera Shot Layout fact.",
+      sourceRefs: refs,
+    }));
+  }
+  if (plan.promptKind === "end_frame" && plan.derivesFromStartFrame !== true) {
+    conflicts.push(makePromptCheckerConflict({
+      code: "independent_end_frame_conflict",
+      target: plan.promptPlanId,
+      structuredFact: "End frame must derive from the start frame by default.",
+      promptEvidence: `derivesFromStartFrame:${String(plan.derivesFromStartFrame)}`,
+      detail: "End-frame prompt plan is compiled as independent generation instead of start-frame derivation.",
+      sourceRefs: refs,
+    }));
+  }
+  if (promptCheckerOutfitConflict(lockedText, text)) {
+    conflicts.push(makePromptCheckerConflict({
+      code: "visual_memory_locked_outfit_conflict",
+      target: plan.promptPlanId,
+      structuredFact: "Visual Memory has a locked outfit reference.",
+      promptEvidence: "Prompt asks for a different outfit/color.",
+      detail: "Prompt conflicts with locked Visual Memory outfit facts.",
+      sourceRefs: refs,
+    }));
+  }
+  if ((promptCheckerGaragePattern.test(lockedText) && promptCheckerFrontDoorPattern.test(text)) || (/\b(scene|location)\s*:\s*locked\b/i.test(lockedText) && /\bnew location|different scene\b/i.test(text))) {
+    conflicts.push(makePromptCheckerConflict({
+      code: "visual_memory_locked_scene_conflict",
+      target: plan.promptPlanId,
+      structuredFact: "Visual Memory has a locked scene reference.",
+      promptEvidence: "Prompt asks for a conflicting scene/location.",
+      detail: "Prompt conflicts with locked Visual Memory scene facts.",
+      sourceRefs: refs,
+    }));
+  }
+  if (promptCheckerStyleConflict(lockedText, text)) {
+    conflicts.push(makePromptCheckerConflict({
+      code: "visual_memory_locked_style_conflict",
+      target: plan.promptPlanId,
+      structuredFact: "Visual Memory has a locked style reference.",
+      promptEvidence: "Prompt asks for a different style.",
+      detail: "Prompt conflicts with locked Visual Memory style facts.",
+      sourceRefs: refs,
+    }));
+  }
+  for (const compilerConflict of report?.conflicts || []) {
+    if (compilerConflict.severity === "blocker") {
+      conflicts.push(makePromptCheckerConflict({
+        code: "compiler_conflict_report_blocker",
+        target: compilerConflict.target || plan.promptPlanId,
+        structuredFact: "Compiler conflict report already blocks this prompt plan.",
+        promptEvidence: compilerConflict.detail,
+        detail: compilerConflict.detail,
+        sourceRefs: refs,
+      }));
+    }
+  }
+  return conflicts;
+}
+
+function buildPromptConflictCheckerState({ generatedAt, promptPlans, promptConflictReports, shots, assets }) {
+  const reportsByPlan = new Map(promptConflictReports.map((report) => [report.promptPlanId, report]));
+  const shotsById = new Map(shots.map((shot) => [shot.id, shot]));
+  const items = promptPlans.map((plan) => {
+    const report = reportsByPlan.get(plan.promptPlanId);
+    const shot = plan.shotId ? shotsById.get(plan.shotId) : undefined;
+    const scopedAssets = promptCheckerReferencedAssets(plan, assets);
+    const conflicts = buildPromptCheckerConflicts(plan, report, shot, assets);
+    const status = conflicts.some((conflict) => conflict.severity === "blocker") ? "blocked" : report?.status === "warning" ? "warning" : "clear";
+    return {
+      checkerItemId: `prompt_conflict_checker_${plan.promptPlanId}`,
+      promptPlanId: plan.promptPlanId,
+      jobId: plan.jobId,
+      shotId: plan.shotId,
+      status,
+      conflictReportId: report?.reportId || plan.conflictReportId,
+      promptPlanHash: plan.promptPlanHash,
+      sourceShotSpecHash: plan.sourceShotSpecHash,
+      conflicts,
+      blockers: uniqueSorted(conflicts.filter((conflict) => conflict.severity === "blocker").map((conflict) => conflict.detail)),
+      warnings: uniqueSorted([
+        ...conflicts.filter((conflict) => conflict.severity === "warning").map((conflict) => conflict.detail),
+        ...(report?.status === "warning" ? report.conflicts.map((conflict) => conflict.detail) : []),
+      ]),
+      sourceRefs: promptCheckerSourceRefs(plan, report, shot, scopedAssets),
+      nextAction: status === "blocked"
+        ? "Update Shot Spec, Shot Layout, or Shot Prompt Plan and recompile before generation."
+        : status === "warning"
+          ? "Review compiler warnings before turning this plan into a generation task."
+          : "No structured prompt conflict detected.",
+    };
+  });
+
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt,
+    items,
+    summary: {
+      totalItems: items.length,
+      clear: items.filter((item) => item.status === "clear").length,
+      warning: items.filter((item) => item.status === "warning").length,
+      blocked: items.filter((item) => item.status === "blocked").length,
+      conflicts: items.reduce((total, item) => total + item.conflicts.length, 0),
+      recompileRequired: items.filter((item) => item.conflicts.some((conflict) => conflict.requiredResolution.recompileRequired)).length,
+      dryRunOnly: true,
+      diagnosticsOnly: true,
+      liveSubmitAllowed: false,
+    },
+    hardLocks: {
+      dryRunOnly: true,
+      diagnosticsOnly: true,
+      providerSubmissionForbidden: true,
+      liveSubmitAllowed: false,
+      agentPromiseCannotResolveConflict: true,
+      requiresStructuredPlanUpdate: true,
+      recompileRequiredAfterConflict: true,
+      noPromptBypass: true,
+    },
+    dryRunOnly: true,
+    diagnosticsOnly: true,
+    providerSubmissionForbidden: true,
+    liveSubmitAllowed: false,
+    notes: [
+      "Phase 8.10 Prompt Conflict Checker blocks structured fact conflicts before generation.",
+      "Agent promises cannot resolve conflicts; Shot Spec, Shot Layout, or Shot Prompt Plan must be updated and recompiled.",
+      "The checker is diagnostics-only and never submits provider work.",
+    ],
+  };
+}
+
 function buildAssetReadinessReport(shot, assets, sourceIndex, jobs, generatedAt) {
   const shotJobs = jobs.filter((job) => job.id.includes(shot.id));
   const referencedIds = uniqueSorted(shotJobs.flatMap((job) => job.references || []));
@@ -1723,6 +1986,245 @@ function buildQaPromotionReports({ imageTaskPlans, fileSnapshot, manifestReports
       canPromoteToFormal,
     };
   });
+}
+
+const healthCheckerMatchedManifestStatuses = new Set(["actual_output_present", "complete", "matched"]);
+const healthCheckerSuccessStatuses = new Set(["success", "succeeded", "completed"]);
+
+function snapshotMetadataMap(snapshot = []) {
+  if (Array.isArray(snapshot)) {
+    return new Map(snapshot.map((entry) => {
+      if (typeof entry === "string") return [normalizePathValue(entry), {}];
+      const { path: entryPath, ...metadata } = entry;
+      return [normalizePathValue(entryPath), metadata];
+    }));
+  }
+  return new Map(Object.entries(snapshot).map(([entryPath, metadata]) => [normalizePathValue(entryPath), metadata === true ? {} : metadata]));
+}
+
+function checkerManifestForTaskPlan(taskPlan, reports = []) {
+  return reports.find((report) => report.taskId === taskPlan.taskPlanId || report.taskId === taskPlan.jobId);
+}
+
+function checkerHealthForTaskPlan(taskPlan, reports = []) {
+  return reports.find((report) => report.taskPlanId === taskPlan.taskPlanId || report.jobId === taskPlan.jobId);
+}
+
+function checkerScopedEvents(taskPlan, watcherEvents = []) {
+  return watcherEvents.filter((event) => event.taskId === taskPlan.taskPlanId || event.jobId === taskPlan.jobId);
+}
+
+function healthCheckerFact({ factId, label, status, required, sourceRefs = [], notes = [] }) {
+  return {
+    factId,
+    label,
+    status,
+    required,
+    sourceRefs: uniqueSorted(sourceRefs),
+    notes: uniqueSorted(notes),
+  };
+}
+
+function healthCheckerHasDimensions(metadata) {
+  return Boolean(metadata?.dimensions || (typeof metadata?.width === "number" && typeof metadata?.height === "number"));
+}
+
+function healthCheckerReadable(metadata, exists) {
+  if (!exists) return false;
+  if (metadata?.readable === false) return false;
+  if (typeof metadata?.sizeBytes === "number") return metadata.sizeBytes > 0;
+  return metadata !== undefined;
+}
+
+function generationHealthCheckerStatus(input) {
+  if (input.taskBlocked || input.health?.healthStatus === "blocked" || input.health?.healthStatus === "failed") return "blocked";
+  if (input.postprocessRecoverable) return "postprocess_recoverable";
+  if (input.workerExitWithoutOutput) return "worker_exit_without_expected_output";
+  if (!input.outputExists) return "waiting";
+  if (!input.manifestMatched || !input.hashVerified || !input.dimensionsVerified || !input.readabilityVerified || !input.exitArtifactConsistent) {
+    return "artifact_state_mismatch";
+  }
+  if (!input.qaCovered) return "qa_missing";
+  return "verified_success";
+}
+
+function generationHealthCheckerNextAction(status) {
+  if (status === "verified_success") return "All structured health facts agree; manual promotion gates may inspect this candidate.";
+  if (status === "qa_missing") return "Attach explicit QA coverage for the expected output before promotion.";
+  if (status === "postprocess_recoverable") return "Recover the temp/candidate artifact through mechanical postprocess, then rerun manifest and QA checks.";
+  if (status === "worker_exit_without_expected_output") return "Treat worker completion as untrusted and rerun or repair until expected output exists.";
+  if (status === "artifact_state_mismatch") return "Refresh manifest metadata/hash/dimensions/readability facts and resolve mismatched artifact state.";
+  if (status === "blocked") return "Resolve upstream generation blockers before health can pass.";
+  return "Wait for expected output and manifest facts.";
+}
+
+function buildGenerationHealthCheckerState({ generatedAt, imageTaskPlans, generationHealthReports, manifestMatches, watcherEvents, taskRuns = [], jobs = [], fileSnapshot = [] }) {
+  const metadataByPath = snapshotMetadataMap(fileSnapshot);
+  const items = imageTaskPlans.map((taskPlan) => {
+    const expectedPath = normalizePathValue(taskPlan.expectedOutputPath);
+    const metadata = metadataByPath.get(expectedPath);
+    const health = checkerHealthForTaskPlan(taskPlan, generationHealthReports);
+    const manifest = checkerManifestForTaskPlan(taskPlan, manifestMatches);
+    const scopedEvents = checkerScopedEvents(taskPlan, watcherEvents);
+    const taskRun = taskRuns.find((run) => run.taskId === taskPlan.jobId || run.taskId === taskPlan.taskPlanId);
+    const job = jobs.find((item) => item.id === taskPlan.jobId);
+    const expectedOutputExists = Boolean(
+      metadata ||
+      health?.outputExists ||
+      (manifest?.actualOutputsPresent || []).map(normalizePathValue).includes(expectedPath),
+    );
+    const manifestStatus = manifest?.status || health?.manifestStatus || "missing_expected_output";
+    const manifestMatched = healthCheckerMatchedManifestStatuses.has(manifestStatus);
+    const tempEvents = scopedEvents.filter((event) => ["temp_output_detected", "provider_ready_derivative_detected"].includes(event.eventType));
+    const tempOutputExists = tempEvents.length > 0 || Boolean(manifest?.recoverableOutputs?.length);
+    const postprocessRecoverable = manifestStatus === "postprocess_recoverable" || scopedEvents.some((event) => event.eventType === "postprocess_recoverable");
+    const workerReportedSuccess = Boolean(
+      healthCheckerSuccessStatuses.has(job?.status) ||
+      healthCheckerSuccessStatuses.has(taskRun?.localStatus) ||
+      healthCheckerSuccessStatuses.has(taskRun?.providerStatus),
+    );
+    const workerExitWithoutOutput = !expectedOutputExists && (
+      workerReportedSuccess ||
+      scopedEvents.some((event) => event.eventType === "worker_exit_without_expected_output")
+    );
+    const qaCovered = health?.qaStatus === "pass";
+    const hashVerified = Boolean(metadata?.hash) || manifestMatched;
+    const dimensionsVerified = healthCheckerHasDimensions(metadata) || manifestMatched;
+    const readabilityVerified = healthCheckerReadable(metadata, expectedOutputExists) || manifestMatched;
+    const exitArtifactConsistent = !(workerReportedSuccess && !expectedOutputExists);
+    const artifactStatusConsistent = expectedOutputExists === manifestMatched || postprocessRecoverable || manifestStatus === "missing_expected_output";
+    const status = generationHealthCheckerStatus({
+      taskBlocked: taskPlan.status === "blocked" || taskPlan.blockers.length > 0,
+      health,
+      outputExists: expectedOutputExists,
+      manifestMatched,
+      qaCovered,
+      hashVerified,
+      dimensionsVerified,
+      readabilityVerified,
+      postprocessRecoverable,
+      workerExitWithoutOutput,
+      exitArtifactConsistent,
+    });
+    const facts = [
+      healthCheckerFact({
+        factId: "expected_output",
+        label: "Expected output exists",
+        status: expectedOutputExists ? "pass" : "missing",
+        required: true,
+        sourceRefs: [taskPlan.expectedOutputPath, health?.reportId || ""],
+      }),
+      healthCheckerFact({
+        factId: "manifest_match",
+        label: "Manifest/hash/dimensions/readability match",
+        status: manifestMatched ? "pass" : postprocessRecoverable ? "recoverable" : "mismatch",
+        required: true,
+        sourceRefs: [manifest?.taskId || "", health?.reportId || ""],
+        notes: [
+          `manifestStatus:${manifestStatus}`,
+          hashVerified ? "hash:verified_or_manifest_matched" : "hash:missing",
+          dimensionsVerified ? "dimensions:verified_or_manifest_matched" : "dimensions:missing",
+          readabilityVerified ? "readability:verified_or_manifest_matched" : "readability:missing",
+        ],
+      }),
+      healthCheckerFact({
+        factId: "qa_coverage",
+        label: "QA coverage for output",
+        status: qaCovered ? "pass" : health?.qaStatus === "pending" ? "pending" : "missing",
+        required: true,
+        sourceRefs: [health?.reportId || "", ...scopedEvents.filter((event) => event.eventType === "qa_report_detected").map((event) => event.id)],
+      }),
+      healthCheckerFact({
+        factId: "exit_artifact_consistency",
+        label: "Worker exit/artifact status consistency",
+        status: exitArtifactConsistent && artifactStatusConsistent ? "pass" : "mismatch",
+        required: true,
+        sourceRefs: [job?.id || "", taskRun?.taskId || "", ...scopedEvents.map((event) => event.id)],
+        notes: [workerReportedSuccess ? "worker_reported_success:true" : "worker_reported_success:false"],
+      }),
+      healthCheckerFact({
+        factId: "temp_recovery",
+        label: "Temp candidate recovery state",
+        status: postprocessRecoverable ? "recoverable" : tempOutputExists ? "pending" : "not_available",
+        required: false,
+        sourceRefs: [...tempEvents.map((event) => event.id), ...(manifest?.recoverableOutputs || [])],
+      }),
+    ];
+
+    return {
+      checkerItemId: `generation_health_checker_${taskPlan.taskPlanId}`,
+      taskPlanId: taskPlan.taskPlanId,
+      jobId: taskPlan.jobId,
+      shotId: taskPlan.shotId,
+      expectedOutputPath: taskPlan.expectedOutputPath,
+      status,
+      expectedOutputExists,
+      tempOutputExists,
+      postprocessRecoverable,
+      manifestStatus,
+      manifestMatched,
+      hashVerified,
+      dimensionsVerified,
+      readabilityVerified,
+      qaCovered,
+      workerReportedSuccess,
+      exitArtifactConsistent,
+      artifactStatusConsistent,
+      facts,
+      blockers: uniqueSorted([
+        ...(taskPlan.blockers || []),
+        ...(status === "worker_exit_without_expected_output" ? ["Worker reported completion or exited, but expected output is missing."] : []),
+        ...(status === "artifact_state_mismatch" ? ["Expected output, manifest metadata, readability, or exit status facts disagree."] : []),
+        ...(status === "blocked" ? ["Generation task is blocked by upstream facts."] : []),
+      ]),
+      warnings: uniqueSorted([
+        ...(taskPlan.warnings || []),
+        ...(status === "qa_missing" ? ["QA coverage is missing; worker self-report cannot complete generation."] : []),
+        ...(postprocessRecoverable ? ["Temp output exists but expected output postprocess failed; status is recoverable, not success."] : []),
+      ]),
+      nextAction: generationHealthCheckerNextAction(status),
+    };
+  });
+
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt,
+    items,
+    summary: {
+      totalItems: items.length,
+      verifiedSuccess: items.filter((item) => item.status === "verified_success").length,
+      qaMissing: items.filter((item) => item.status === "qa_missing").length,
+      waiting: items.filter((item) => item.status === "waiting").length,
+      postprocessRecoverable: items.filter((item) => item.status === "postprocess_recoverable").length,
+      workerExitWithoutExpectedOutput: items.filter((item) => item.status === "worker_exit_without_expected_output").length,
+      artifactStateMismatch: items.filter((item) => item.status === "artifact_state_mismatch").length,
+      blocked: items.filter((item) => item.status === "blocked").length,
+      dryRunOnly: true,
+      diagnosticsOnly: true,
+      liveSubmitAllowed: false,
+    },
+    hardLocks: {
+      dryRunOnly: true,
+      diagnosticsOnly: true,
+      providerSubmissionForbidden: true,
+      liveSubmitAllowed: false,
+      workerSelfReportCannotComplete: true,
+      expectedOutputRequired: true,
+      manifestMetadataRequired: true,
+      qaCoverageRequired: true,
+      noFileMutation: true,
+    },
+    dryRunOnly: true,
+    diagnosticsOnly: true,
+    providerSubmissionForbidden: true,
+    liveSubmitAllowed: false,
+    noFileMutation: true,
+    notes: [
+      "Phase 8.9 Generation Health Checker is a structured fact layer; worker self-report never marks success.",
+      "Success requires expected output, manifest metadata/hash/dimensions/readability, QA coverage, and exit/artifact consistency.",
+      "Temp output plus postprocess failure is surfaced as postprocess_recoverable.",
+    ],
+  };
 }
 
 const generationHarnessForbiddenActions = [
@@ -5258,6 +5760,24 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     checkpointResumeHarness,
     qaHarness,
   });
+  const generationHealthChecker = buildGenerationHealthCheckerState({
+    generatedAt,
+    imageTaskPlans,
+    generationHealthReports,
+    manifestMatches: taskViews.map((task) => task.manifestMatch),
+    watcherEvents,
+    taskRuns: taskViews.map((task) => task.taskRun),
+    jobs: audit.jobs,
+    fileSnapshot,
+  });
+  const promptConflictChecker = buildPromptConflictCheckerState({
+    generatedAt,
+    promptPlans: promptPlanResults.map((result) => result.plan),
+    promptConflictReports: promptPlanResults.map((result) => result.conflictReport),
+    shots: audit.shots,
+    assets: audit.assets,
+    jobs: audit.jobs,
+  });
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -5335,6 +5855,8 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     checkpointResumeHarness,
     qaHarness,
     toolRuntimeHarness,
+    generationHealthChecker,
+    promptConflictChecker,
     storyChanges: {
       transactions: [],
       reflowReports: [],

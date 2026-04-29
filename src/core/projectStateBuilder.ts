@@ -7,7 +7,9 @@ import { buildDefaultProviderRegistry } from "./providerCapabilities";
 import { buildCheckpointResumeHarnessState } from "./checkpointResumeHarness";
 import { buildFilesystemWatcherHarnessState } from "./filesystemWatcherHarness";
 import { buildGenerationHealthReports } from "./generationHealth";
+import { buildGenerationHealthCheckerState } from "./generationHealthChecker";
 import { buildGenerationHarnessState } from "./generationHarness";
+import { buildPromptConflictCheckerState } from "./promptConflictChecker";
 import { buildQaHarnessState } from "./qaHarness";
 import { buildToolRuntimeHarnessState } from "./toolRuntimeHarness";
 import { buildShotPromptPlan } from "./promptCompiler";
@@ -260,6 +262,24 @@ export function buildProjectRuntimeState(
     checkpointResumeHarness,
     qaHarness,
   });
+  const generationHealthChecker = buildGenerationHealthCheckerState({
+    generatedAt,
+    imageTaskPlans,
+    generationHealthReports,
+    manifestMatches: taskViews.map((task) => task.manifestMatch),
+    watcherEvents,
+    taskRuns: taskViews.map((task) => task.taskRun),
+    jobs: audit.jobs,
+    fileSnapshot: audit.fileSnapshot || [],
+  });
+  const promptConflictChecker = buildPromptConflictCheckerState({
+    generatedAt,
+    promptPlans: promptPlanResults.map((result) => result.plan),
+    promptConflictReports: promptPlanResults.map((result) => result.conflictReport),
+    shots: audit.shots,
+    assets: audit.assets,
+    jobs: audit.jobs,
+  });
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -327,6 +347,8 @@ export function buildProjectRuntimeState(
     checkpointResumeHarness,
     qaHarness,
     toolRuntimeHarness,
+    generationHealthChecker,
+    promptConflictChecker,
     storyChanges: {
       transactions: [],
       reflowReports: [],
@@ -474,6 +496,28 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       checkpointResumeHarness,
       qaHarness,
     });
+  const generationHealthChecker =
+    state.generationHealthChecker ||
+    buildGenerationHealthCheckerState({
+      generatedAt: state.generatedAt,
+      imageTaskPlans: state.imagePipeline.imageTaskPlans,
+      generationHealthReports: state.imagePipeline.generationHealthReports,
+      manifestMatches: state.manifestMatches.reports,
+      watcherEvents: state.imagePipeline.watcherEvents,
+      taskRuns: state.taskRuns.runs,
+      jobs: state.taskRuns.jobs,
+      fileSnapshot: state.legacyAudit?.fileSnapshot || [],
+    });
+  const promptConflictChecker =
+    state.promptConflictChecker ||
+    buildPromptConflictCheckerState({
+      generatedAt: state.generatedAt,
+      promptPlans: state.imagePipeline.promptPlans,
+      promptConflictReports: state.imagePipeline.promptConflictReports,
+      shots: state.storyFlow.shots,
+      assets: state.visualMemory.assets,
+      jobs: state.taskRuns.jobs,
+    });
 
   return {
     ...state,
@@ -487,6 +531,8 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     checkpointResumeHarness,
     qaHarness,
     toolRuntimeHarness,
+    generationHealthChecker,
+    promptConflictChecker,
   };
 }
 

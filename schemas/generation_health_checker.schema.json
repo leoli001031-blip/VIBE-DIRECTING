@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/generation_health_checker.schema.json",
+  "title": "GenerationHealthCheckerState",
+  "description": "Phase 8.9 diagnostics-only generation health checker fact layer. It verifies generation success from expected outputs, manifest/hash/dimensions/readability facts, QA coverage, and worker exit/artifact consistency instead of worker self-report.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "items",
+    "summary",
+    "hardLocks",
+    "dryRunOnly",
+    "diagnosticsOnly",
+    "providerSubmissionForbidden",
+    "liveSubmitAllowed",
+    "noFileMutation",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/checkerItem" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalItems",
+        "verifiedSuccess",
+        "qaMissing",
+        "waiting",
+        "postprocessRecoverable",
+        "workerExitWithoutExpectedOutput",
+        "artifactStateMismatch",
+        "blocked",
+        "dryRunOnly",
+        "diagnosticsOnly",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "totalItems": { "type": "integer", "minimum": 0 },
+        "verifiedSuccess": { "type": "integer", "minimum": 0 },
+        "qaMissing": { "type": "integer", "minimum": 0 },
+        "waiting": { "type": "integer", "minimum": 0 },
+        "postprocessRecoverable": { "type": "integer", "minimum": 0 },
+        "workerExitWithoutExpectedOutput": { "type": "integer", "minimum": 0 },
+        "artifactStateMismatch": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "diagnosticsOnly": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "dryRunOnly": { "type": "boolean", "const": true },
+    "diagnosticsOnly": { "type": "boolean", "const": true },
+    "providerSubmissionForbidden": { "type": "boolean", "const": true },
+    "liveSubmitAllowed": { "type": "boolean", "const": false },
+    "noFileMutation": { "type": "boolean", "const": true },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "itemStatus": {
+      "type": "string",
+      "enum": [
+        "verified_success",
+        "qa_missing",
+        "waiting",
+        "postprocess_recoverable",
+        "worker_exit_without_expected_output",
+        "artifact_state_mismatch",
+        "blocked"
+      ]
+    },
+    "factStatus": {
+      "type": "string",
+      "enum": ["pass", "missing", "mismatch", "pending", "recoverable", "not_available"]
+    },
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["factId", "label", "status", "required", "sourceRefs", "notes"],
+      "properties": {
+        "factId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "$ref": "#/$defs/factStatus" },
+        "required": { "type": "boolean" },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "checkerItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkerItemId",
+        "taskPlanId",
+        "jobId",
+        "shotId",
+        "expectedOutputPath",
+        "status",
+        "expectedOutputExists",
+        "tempOutputExists",
+        "postprocessRecoverable",
+        "manifestStatus",
+        "manifestMatched",
+        "hashVerified",
+        "dimensionsVerified",
+        "readabilityVerified",
+        "qaCovered",
+        "workerReportedSuccess",
+        "exitArtifactConsistent",
+        "artifactStatusConsistent",
+        "facts",
+        "blockers",
+        "warnings",
+        "nextAction"
+      ],
+      "properties": {
+        "checkerItemId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "jobId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "expectedOutputPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "$ref": "#/$defs/itemStatus" },
+        "expectedOutputExists": { "type": "boolean" },
+        "tempOutputExists": { "type": "boolean" },
+        "postprocessRecoverable": { "type": "boolean" },
+        "manifestStatus": { "type": "string" },
+        "manifestMatched": { "type": "boolean" },
+        "hashVerified": { "type": "boolean" },
+        "dimensionsVerified": { "type": "boolean" },
+        "readabilityVerified": { "type": "boolean" },
+        "qaCovered": { "type": "boolean" },
+        "workerReportedSuccess": { "type": "boolean" },
+        "exitArtifactConsistent": { "type": "boolean" },
+        "artifactStatusConsistent": { "type": "boolean" },
+        "facts": {
+          "type": "array",
+          "minItems": 5,
+          "items": { "$ref": "#/$defs/fact" }
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "nextAction": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dryRunOnly",
+        "diagnosticsOnly",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "workerSelfReportCannotComplete",
+        "expectedOutputRequired",
+        "manifestMetadataRequired",
+        "qaCoverageRequired",
+        "noFileMutation"
+      ],
+      "properties": {
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "diagnosticsOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "workerSelfReportCannotComplete": { "type": "boolean", "const": true },
+        "expectedOutputRequired": { "type": "boolean", "const": true },
+        "manifestMetadataRequired": { "type": "boolean", "const": true },
+        "qaCoverageRequired": { "type": "boolean", "const": true },
+        "noFileMutation": { "type": "boolean", "const": true }
+      }
+    }
+  }
+}
