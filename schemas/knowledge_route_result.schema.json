@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/knowledge_route_result.schema.json",
+  "title": "KnowledgeRouteResult",
+  "description": "Deterministic routing result from intent/task/provider inputs to candidate knowledge packs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["routeId", "taskPurpose", "contextLevel", "inputHash", "matches", "warnings", "createdAt"],
+  "properties": {
+    "routeId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "taskId": { "type": "string" },
+    "taskPurpose": { "$ref": "common.schema.json#/$defs/knowledgeTaskPurpose" },
+    "providerSlot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+    "contextLevel": { "$ref": "common.schema.json#/$defs/contextLevel" },
+    "inputHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "matches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "packId",
+          "version",
+          "hash",
+          "category",
+          "reason",
+          "consumer",
+          "score",
+          "matchedTerms",
+          "matchedSnippetIds"
+        ],
+        "properties": {
+          "packId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "version": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "hash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "category": { "$ref": "common.schema.json#/$defs/knowledgePackCategory" },
+          "reason": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "consumer": { "$ref": "common.schema.json#/$defs/knowledgePackConsumer" },
+          "score": { "type": "number" },
+          "matchedTerms": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "matchedSnippetIds": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "injectedKnowledgePacks": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectionRecord" }
+    },
+    "injectedKnowledgeSnippetIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "notInjected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["packId", "reason"],
+        "properties": {
+          "packId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "reason": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "createdAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  }
+}

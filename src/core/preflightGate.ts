@@ -1,9 +1,11 @@
 import { getProviderRule, validateProviderJob } from "./providerPolicy";
+import { assertReferenceAllowed } from "./sourceIndex";
 import type {
   GenerationJob,
   KeyframePairDerivation,
   PreflightBlocker,
   PreflightReport,
+  PreflightScope,
   ProjectSourceIndex,
   ReferenceAuthority,
 } from "./types";
@@ -23,6 +25,7 @@ export interface PreflightInput {
   keyframePairDerivation?: KeyframePairDerivation;
   promptHash?: string;
   expectedOutputs?: string[];
+  preflightScope?: PreflightScope;
   checkedAt?: string;
 }
 
@@ -33,6 +36,7 @@ function providerIssueCode(issueId: string, jobId: string): string {
 
 export function buildPreflightReport(input: PreflightInput): PreflightReport {
   const { job, references, sourceIndex, keyframePairDerivation } = input;
+  const preflightScope = input.preflightScope || "formal_execution";
   const blockers: PreflightBlocker[] = [];
   const warnings: PreflightBlocker[] = [];
   const providerIssues = validateProviderJob(job);
@@ -42,12 +46,21 @@ export function buildPreflightReport(input: PreflightInput): PreflightReport {
     blockers.push(blocker(providerIssueCode(issue.id, job.id), issue.title, issue.detail, issue.target));
   }
 
-  if (!sourceIndex) {
+  if (!sourceIndex && preflightScope === "formal_execution") {
+    blockers.push(
+      blocker(
+        "missing_source_index",
+        "当前任务没有绑定项目事实索引，不能作为正式执行任务提交。",
+        "ProjectSourceIndex is missing; provider/execution tasks require source-index binding.",
+        job.id,
+      ),
+    );
+  } else if (!sourceIndex) {
     warnings.push(
       warning(
         "missing_source_index",
-        "当前任务还没有绑定项目事实索引，只能作为开发导入检查。",
-        "ProjectSourceIndex is missing; task cannot be treated as a production-ready job.",
+        preflightScope === "import_only" ? "导入流程没有绑定项目事实索引，仅记录提示。" : "开发预览没有绑定项目事实索引，仅作为预览提示。",
+        `ProjectSourceIndex is missing in ${preflightScope}; this scope does not block on source-index binding.`,
         job.id,
       ),
     );
@@ -76,6 +89,27 @@ export function buildPreflightReport(input: PreflightInput): PreflightReport {
   }
 
   for (const reference of references) {
+    if (sourceIndex) {
+      const mode = reference.allowedUse.includes("prompt_reference")
+        ? "prompt_reference"
+        : reference.allowedUse.includes("future_reference")
+          ? "future_reference"
+          : "draft_preview";
+
+      try {
+        assertReferenceAllowed(sourceIndex, reference.id, mode);
+      } catch (error) {
+        blockers.push(
+          blocker(
+            "source_index_reference_mismatch",
+            "任务引用不在当前项目事实索引中，或已经过期/失败/废弃。",
+            error instanceof Error ? error.message : `${reference.id} failed SourceIndex validation.`,
+            reference.id,
+          ),
+        );
+      }
+    }
+
     if (reference.lockedStatus === "rejected" || reference.referenceRole === "rejected_case") {
       blockers.push(
         blocker(
@@ -137,6 +171,7 @@ export function buildPreflightReport(input: PreflightInput): PreflightReport {
   const status = blockers.length ? "blocked" : warnings.length ? "warning" : "pass";
   return {
     taskId: job.id,
+    preflightScope,
     status,
     blockers,
     warnings,

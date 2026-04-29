@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/knowledge_pack_test_case.schema.json",
+  "title": "KnowledgePackTestCase",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "userIntent", "taskPurpose", "expectedPackIds", "forbiddenPackIds"],
+  "properties": {
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "userIntent": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "taskPurpose": { "$ref": "common.schema.json#/$defs/knowledgeTaskPurpose" },
+    "providerSlot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+    "expectedPackIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "forbiddenPackIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    }
+  }
+}

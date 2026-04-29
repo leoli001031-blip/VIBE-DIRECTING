@@ -20,6 +20,10 @@
     "references",
     "qaChecklist",
     "preflight",
+    "injectedKnowledgePacks",
+    "injectedKnowledgeSnippetIds",
+    "injectedKnowledgeSnippets",
+    "routeWarnings",
     "blockingReasons"
   ],
   "properties": {
@@ -61,6 +65,34 @@
     },
     "preflight": { "$ref": "preflight_report.schema.json" },
     "keyframePairDerivation": { "$ref": "keyframe_pair_derivation.schema.json" },
+    "knowledgeRouteResultId": { "type": "string" },
+    "contextBudgetId": { "type": "string" },
+    "injectedKnowledgePacks": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectionRecord" }
+    },
+    "injectedKnowledgeSnippetIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "injectedKnowledgeSnippets": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectedSnippet" }
+    },
+    "knowledgeInputHash": { "type": "string" },
+    "knowledgeManifestHash": { "type": "string" },
+    "policyBinding": { "type": "string" },
+    "routeWarnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "nonOverridableGateHashes": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "promptPlanId": { "type": "string" },
+    "promptPlanHash": { "type": "string" },
+    "sourceShotSpecHash": { "type": "string" },
     "outputPath": { "type": "string" },
     "blockingReasons": {
       "type": "array",

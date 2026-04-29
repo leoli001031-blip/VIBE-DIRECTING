@@ -16,6 +16,19 @@
     "forbiddenReferences",
     "providerPolicySummary",
     "taskEnvelope",
+    "injectedKnowledgePacks",
+    "injectedKnowledgeSnippetIds",
+    "injectedKnowledgeSnippets",
+    "routeWarnings",
+    "forbiddenKnowledgePacks",
+    "requiredKnowledgeCategories",
+    "qaPackBindings",
+    "allowedReadScopes",
+    "disallowedReadScopes",
+    "sourceIndexRequired",
+    "mustInspectNeighborShotIds",
+    "authorityPriority",
+    "resultMustReferencePackHashes",
     "qaChecklist",
     "mustPreserve",
     "allowedDelta",
@@ -114,6 +127,69 @@
       "minItems": 1
     },
     "taskEnvelope": { "$ref": "task_envelope.schema.json" },
+    "knowledgeRouteResultId": { "type": "string" },
+    "contextBudgetId": { "type": "string" },
+    "injectedKnowledgePacks": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectionRecord" }
+    },
+    "injectedKnowledgeSnippetIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "injectedKnowledgeSnippets": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectedSnippet" }
+    },
+    "knowledgeInputHash": { "type": "string" },
+    "knowledgeManifestHash": { "type": "string" },
+    "policyBinding": { "type": "string" },
+    "nonOverridableGateHashes": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "routeWarnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "forbiddenKnowledgePacks": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "requiredKnowledgeCategories": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/knowledgePackCategory" }
+    },
+    "qaPackBindings": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "hash"],
+        "properties": {
+          "version": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "hash": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "allowedReadScopes": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "disallowedReadScopes": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "sourceIndexRequired": { "const": true },
+    "mustInspectNeighborShotIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "authorityPriority": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "resultMustReferencePackHashes": { "type": "boolean" },
     "qaChecklist": {
       "type": "array",
       "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },

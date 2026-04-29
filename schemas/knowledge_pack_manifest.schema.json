@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/knowledge_pack_manifest.schema.json",
+  "title": "KnowledgePackManifest",
+  "description": "The project-wide manifest for imported and user-managed knowledge packs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "manifestVersion", "generatedAt", "knowledgeLibraryRoot", "manifestHash", "packs"],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "manifestVersion": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "knowledgeLibraryRoot": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "manifestHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "packs": {
+      "type": "array",
+      "items": { "$ref": "knowledge_pack.schema.json" }
+    }
+  }
+}

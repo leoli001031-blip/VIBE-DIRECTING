@@ -5,10 +5,11 @@
   "description": "The hard gate report required before a task can become ready_to_submit.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["taskId", "status", "blockers", "warnings", "checkedAt"],
+  "required": ["taskId", "preflightScope", "status", "blockers", "warnings", "checkedAt"],
   "properties": {
     "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
     "taskId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "preflightScope": { "$ref": "common.schema.json#/$defs/preflightScope" },
     "status": { "$ref": "common.schema.json#/$defs/preflightStatus" },
     "blockers": {
       "type": "array",

@@ -64,6 +64,48 @@
       "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
       "uniqueItems": true
     },
+    "knowledgeLibraryRoot": { "type": "string" },
+    "activeKnowledgePackIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "uniqueItems": true
+    },
+    "disabledKnowledgePackIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "uniqueItems": true
+    },
+    "knowledgeManifestHash": { "type": "string" },
+    "packVersionBindings": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "hash"],
+        "properties": {
+          "version": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "hash": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "knowledgeRouteHistory": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["routeId", "packIds", "inputHash", "createdAt"],
+        "properties": {
+          "routeId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "taskId": { "type": "string" },
+          "packIds": {
+            "type": "array",
+            "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+          },
+          "inputHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "createdAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+        }
+      }
+    },
     "updatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
   }
 }

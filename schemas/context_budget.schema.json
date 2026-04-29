@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/context_budget.schema.json",
+  "title": "ContextBudgetResult",
+  "description": "The bounded knowledge snippets selected from a route result for one task context.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "budgetId",
+    "routeId",
+    "contextLevel",
+    "maxInjectionTokens",
+    "usedTokens",
+    "injectedKnowledgePacks",
+    "injectedSnippets",
+    "warnings",
+    "createdAt"
+  ],
+  "properties": {
+    "budgetId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "routeId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "contextLevel": { "$ref": "common.schema.json#/$defs/contextLevel" },
+    "maxInjectionTokens": { "type": "integer", "minimum": 1 },
+    "usedTokens": { "type": "integer", "minimum": 0 },
+    "injectedKnowledgePacks": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectionRecord" }
+    },
+    "injectedSnippets": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectedSnippet" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "createdAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  }
+}

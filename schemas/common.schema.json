@@ -89,6 +89,108 @@
       "type": "string",
       "enum": ["L0", "L1", "L2", "L3"]
     },
+    "knowledgePackType": {
+      "type": "string",
+      "enum": ["system_builtin", "user_custom", "project_local", "external_imported"]
+    },
+    "knowledgePackConsumer": {
+      "type": "string",
+      "enum": ["agent_context", "subagent_context", "prompt_compiler", "qa_gate", "inspector", "diagnostics"]
+    },
+    "knowledgePackCategory": {
+      "type": "string",
+      "enum": [
+        "script",
+        "storyflow",
+        "story_function",
+        "style",
+        "composition",
+        "camera",
+        "lighting",
+        "color",
+        "lens_focus",
+        "performance",
+        "prompt",
+        "provider",
+        "qa",
+        "audio",
+        "agent"
+      ]
+    },
+    "knowledgePackTrustLevel": {
+      "type": "string",
+      "enum": ["trusted", "verified", "unverified", "experimental"]
+    },
+    "knowledgeTaskPurpose": {
+      "type": "string",
+      "enum": [
+        "script",
+        "asset",
+        "keyframe",
+        "edit",
+        "i2v",
+        "video",
+        "audio",
+        "qa",
+        "audit",
+        "export",
+        "unknown",
+        "visual_generation",
+        "visual_audit",
+        "video_generation",
+        "video_audit",
+        "continuity_audit",
+        "regeneration_plan",
+        "story_audit"
+      ]
+    },
+    "knowledgeInjectionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "packId",
+        "version",
+        "hash",
+        "category",
+        "reason",
+        "consumer",
+        "injectedSnippetIds",
+        "summaryHash",
+        "truncated"
+      ],
+      "properties": {
+        "packId": { "$ref": "#/$defs/nonEmptyString" },
+        "version": { "$ref": "#/$defs/nonEmptyString" },
+        "hash": { "$ref": "#/$defs/nonEmptyString" },
+        "category": { "$ref": "#/$defs/knowledgePackCategory" },
+        "reason": { "$ref": "#/$defs/nonEmptyString" },
+        "consumer": { "$ref": "#/$defs/knowledgePackConsumer" },
+        "injectedSnippetIds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "summaryHash": { "$ref": "#/$defs/nonEmptyString" },
+        "truncated": { "type": "boolean" },
+        "truncationReason": { "type": "string" }
+      }
+    },
+    "knowledgeInjectedSnippet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packId", "snippetId", "title", "content", "tokenEstimate"],
+      "properties": {
+        "packId": { "$ref": "#/$defs/nonEmptyString" },
+        "snippetId": { "$ref": "#/$defs/nonEmptyString" },
+        "title": { "$ref": "#/$defs/nonEmptyString" },
+        "content": { "$ref": "#/$defs/nonEmptyString" },
+        "tokenEstimate": { "type": "integer", "minimum": 1 },
+        "hash": { "type": "string" }
+      }
+    },
+    "preflightScope": {
+      "type": "string",
+      "enum": ["formal_execution", "dev_preview", "import_only"]
+    },
     "previewMode": {
       "type": "string",
       "enum": ["draft_preview", "formal_preview"]

@@ -1,3 +1,5 @@
+import type { KnowledgeInjectedSnippet, KnowledgeInjectionRecord, KnowledgePackCategory } from "./knowledgeTypes";
+
 export type Severity = "blocker" | "warning" | "info";
 
 export type GateStatus = "PASS" | "PARTIAL" | "FAIL" | "N/A" | "UNKNOWN";
@@ -186,6 +188,18 @@ export interface ProjectSourceIndex {
   failedReferenceIds: string[];
   confirmedDecisionIds: string[];
   staleArtifactIds: string[];
+  knowledgeLibraryRoot?: string;
+  activeKnowledgePackIds?: string[];
+  disabledKnowledgePackIds?: string[];
+  knowledgeManifestHash?: string;
+  packVersionBindings?: Record<string, { version: string; hash: string }>;
+  knowledgeRouteHistory?: Array<{
+    routeId: string;
+    taskId?: string;
+    packIds: string[];
+    inputHash: string;
+    createdAt: string;
+  }>;
   updatedAt: string;
 }
 
@@ -275,11 +289,14 @@ export interface PreflightBlocker {
 
 export interface PreflightReport {
   taskId: string;
+  preflightScope: PreflightScope;
   status: "pass" | "blocked" | "warning";
   blockers: PreflightBlocker[];
   warnings: PreflightBlocker[];
   checkedAt: string;
 }
+
+export type PreflightScope = "formal_execution" | "dev_preview" | "import_only";
 
 export interface TaskEnvelope {
   id: string;
@@ -299,6 +316,19 @@ export interface TaskEnvelope {
   qaChecklist: string[];
   preflight: PreflightReport;
   keyframePairDerivation?: KeyframePairDerivation;
+  knowledgeRouteResultId?: string;
+  contextBudgetId?: string;
+  injectedKnowledgePacks: KnowledgeInjectionRecord[];
+  injectedKnowledgeSnippetIds: string[];
+  injectedKnowledgeSnippets: KnowledgeInjectedSnippet[];
+  knowledgeInputHash?: string;
+  knowledgeManifestHash?: string;
+  policyBinding?: string;
+  routeWarnings: string[];
+  nonOverridableGateHashes?: Record<string, string>;
+  promptPlanId?: string;
+  promptPlanHash?: string;
+  sourceShotSpecHash?: string;
   outputPath?: string;
   blockingReasons: string[];
 }
@@ -350,6 +380,25 @@ export interface SubagentTaskEnvelope {
   shotLayout?: ShotLayoutContext;
   providerPolicySummary: string[];
   taskEnvelope: TaskEnvelope;
+  knowledgeRouteResultId?: string;
+  contextBudgetId?: string;
+  injectedKnowledgePacks: KnowledgeInjectionRecord[];
+  injectedKnowledgeSnippetIds: string[];
+  injectedKnowledgeSnippets: KnowledgeInjectedSnippet[];
+  knowledgeInputHash?: string;
+  knowledgeManifestHash?: string;
+  policyBinding?: string;
+  nonOverridableGateHashes?: Record<string, string>;
+  routeWarnings: string[];
+  forbiddenKnowledgePacks: string[];
+  requiredKnowledgeCategories: KnowledgePackCategory[];
+  qaPackBindings: Record<string, { version: string; hash: string }>;
+  allowedReadScopes: string[];
+  disallowedReadScopes: string[];
+  sourceIndexRequired: true;
+  mustInspectNeighborShotIds: string[];
+  authorityPriority: string[];
+  resultMustReferencePackHashes: boolean;
   qaChecklist: string[];
   mustPreserve: string[];
   allowedDelta: string[];

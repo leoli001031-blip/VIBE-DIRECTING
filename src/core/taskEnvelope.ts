@@ -1,15 +1,18 @@
 import { defaultProviderPolicy } from "./providerPolicy";
 import { buildPreflightReport } from "./preflightGate";
+import { buildNonOverridableGateHashes, buildPolicyBinding } from "./envelopeValidator";
 import type {
   AuditIssue,
   ContextLevel,
   GenerationJob,
   KeyframePairDerivation,
+  PreflightScope,
   ProjectSourceIndex,
   ReferenceAuthority,
   ShotRecord,
   TaskEnvelope,
 } from "./types";
+import type { ContextBudgetResult, KnowledgeInjectedSnippet, KnowledgeInjectionRecord, KnowledgeRouteResult } from "./knowledgeTypes";
 
 function purposeFromSlot(slot: GenerationJob["slot"]): TaskEnvelope["purpose"] {
   if (slot.startsWith("image.reference_asset")) return "asset";
@@ -41,6 +44,18 @@ export interface TaskEnvelopeOptions {
   promptHash?: string;
   dependencies?: string[];
   expectedOutputs?: string[];
+  knowledgeRouteResult?: KnowledgeRouteResult;
+  contextBudget?: ContextBudgetResult;
+  injectedKnowledgePacks?: KnowledgeInjectionRecord[];
+  injectedKnowledgeSnippetIds?: string[];
+  injectedKnowledgeSnippets?: KnowledgeInjectedSnippet[];
+  routeWarnings?: string[];
+  preflightScope?: PreflightScope;
+  policyBinding?: string;
+  nonOverridableGateHashes?: Record<string, string>;
+  promptPlanId?: string;
+  promptPlanHash?: string;
+  sourceShotSpecHash?: string;
 }
 
 export function buildTaskEnvelope(
@@ -62,6 +77,7 @@ export function buildTaskEnvelope(
     keyframePairDerivation: options.keyframePairDerivation,
     promptHash: options.promptHash,
     expectedOutputs,
+    preflightScope: options.preflightScope,
   });
 
   const hardRules = [
@@ -79,7 +95,19 @@ export function buildTaskEnvelope(
     hardRules.push("No BGM in generated video; sound effects may be handled later.");
   }
 
-  return {
+  const injectedKnowledgePacks = options.injectedKnowledgePacks || options.contextBudget?.injectedKnowledgePacks || [];
+  const injectedKnowledgeSnippetIds =
+    options.injectedKnowledgeSnippetIds ||
+    options.contextBudget?.injectedSnippets.map((snippet) => `${snippet.packId}:${snippet.snippetId}`) ||
+    [];
+  const injectedKnowledgeSnippets = options.injectedKnowledgeSnippets || options.contextBudget?.injectedSnippets || [];
+  const routeWarnings = [
+    ...(options.routeWarnings || []),
+    ...(options.knowledgeRouteResult?.warnings || []),
+    ...(options.contextBudget?.warnings || []),
+  ];
+
+  const envelope: TaskEnvelope = {
     id: job.id,
     purpose: purposeFromSlot(job.slot),
     providerSlot: job.slot,
@@ -97,7 +125,28 @@ export function buildTaskEnvelope(
     qaChecklist: ["identity_gate", "scene_gate", "pair_gate", "story_gate", "prop_gate", "style_gate"],
     preflight,
     keyframePairDerivation: options.keyframePairDerivation,
+    knowledgeRouteResultId: options.knowledgeRouteResult?.routeId,
+    contextBudgetId: options.contextBudget?.budgetId,
+    injectedKnowledgePacks,
+    injectedKnowledgeSnippetIds,
+    injectedKnowledgeSnippets,
+    knowledgeInputHash: options.knowledgeRouteResult?.inputHash,
+    knowledgeManifestHash: options.sourceIndex?.knowledgeManifestHash,
+    policyBinding: options.policyBinding,
+    routeWarnings,
+    nonOverridableGateHashes: options.nonOverridableGateHashes,
+    promptPlanId: options.promptPlanId,
+    promptPlanHash: options.promptPlanHash,
+    sourceShotSpecHash: options.sourceShotSpecHash,
     outputPath: job.outputPath,
     blockingReasons: [...blockingReasons, ...preflight.blockers.map((item) => item.messageForUser)],
+  };
+
+  const policyBinding = envelope.policyBinding || buildPolicyBinding(envelope);
+
+  return {
+    ...envelope,
+    policyBinding,
+    nonOverridableGateHashes: envelope.nonOverridableGateHashes || buildNonOverridableGateHashes({ ...envelope, policyBinding }),
   };
 }

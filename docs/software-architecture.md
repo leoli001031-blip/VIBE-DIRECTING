@@ -822,21 +822,113 @@ Harness 是后台工程脚手架，不是用户可见功能。
 
 Context Harness 的产物不是一段自由文本，而是标准化 `Subagent Task Envelope`。主 Agent 不允许在正式任务中临时口头转述上下文。
 
-### 8.3 Skill Injection Harness
+### 8.3 Knowledge Router / Skill Injection Harness
 
-不全量注入所有知识库。
+不全量注入所有知识库。前期收集的风格、分镜、运镜、构图、脚本、prompt、provider、QA 和 audio 资料，必须作为可索引、可版本化、可按任务注入的 Knowledge Packs，而不是常驻塞进 Agent 上下文。
 
-按任务注入：
+Knowledge Library 必须迁入 Vibe Core，而不是长期依赖外部资料文件夹。推荐路径是 `resources/knowledge/`；未来如果需要拆成独立包，可以迁到 `packages/knowledge/`。项目必须维护 `knowledge_pack_manifest.json`，记录每个 pack 的 id、version、hash、路径、适用任务、依赖和更新时间。旧 `/Users/lichenhao/Desktop/Vibe Director/knowledge` 资料只能作为导入源，导入后要锁定版本/hash。
 
-- script
-- style
-- composition
-- camera
-- lighting
-- prompt
-- provider
-- QA
-- audio
+Knowledge Pack 是 Vibe Core 的正式扩展机制。用户后续应该能够在前端添加风格包、运镜包、分镜包、构图包、prompt 包、QA 包或项目专用规则包；系统通过 manifest、hash、router 和 context budget 控制它们进入 Agent / subagent / Prompt Compiler / QA Gate 的方式。
+
+P0 工程对象：
+
+- `schemas/knowledge_pack.schema.json`
+- `schemas/knowledge_pack_manifest.schema.json`
+- `schemas/knowledge_route_result.schema.json`
+- `schemas/context_budget.schema.json`
+- `src/core/knowledgeTypes.ts`
+- `src/core/knowledgeLibrary.ts`
+- `src/core/knowledgeRouter.ts`
+- `src/core/contextBudgeter.ts`
+- `src/core/knowledgeManifest.ts`
+
+Knowledge Pack 类型：
+
+- `system_builtin`：系统内置包，随 Vibe Core 发布，默认可信，但仍然必须有 version/hash。
+- `user_custom`：用户个人知识包，跨项目可用，例如个人风格偏好、常用运镜、prompt 写法。
+- `project_local`：项目专用知识包，只在当前项目生效，例如世界观、视觉规则、角色表演规则。
+- `external_imported`：外部导入包，默认需要验证、冲突检查和用户确认后才能启用。
+
+Knowledge Pack 影响范围：
+
+- 可以影响创作建议。
+- 可以影响 Prompt Compiler 的素材选择、风格表达、镜头语言和 provider prompt 编译。
+- 可以影响 QA Gate 的检查项、风格对照和失败解释。
+- 可以给 subagent 提供领域知识和验收清单。
+- 不能覆盖 provider policy。
+- 不能覆盖 Preflight Gate。
+- 不能覆盖 Reference Authority。
+- 不能覆盖 Keyframe Pair Derivation。
+- 不能覆盖 QA Gate 的硬阻断。
+- 不能把 rejected / temp / failed reference 提升成正式参考。
+- 不能把 parked / planned / unavailable provider 提升成可真实提交 provider。
+
+第一批 Knowledge Packs：
+
+- `script/storyflow`
+- `story function / 分镜`
+- `style`
+- `composition`
+- `camera`
+- `lighting / color`
+- `prompt`
+- `provider`
+- `QA`
+- `audio`
+
+Knowledge Router 输入：
+
+- 用户自然语言意图。
+- 当前 Story Flow / Shot Spec / Shot Layout。
+- 当前 provider slot。
+- 当前风险等级和 QA blockers。
+- 当前任务目的：script、asset、keyframe、edit、i2v、audio、QA、export。
+
+Knowledge Router 输出：
+
+```yaml
+knowledge_route_result:
+  route_id: kr_shot_A1_03_style_camera_v001
+  task_id: keyframe_A1_03_start
+  injected_knowledge_packs:
+    - pack_id: style/core-style-packs.md
+      version_hash: sha256:...
+      reason: style_intent
+      consumer: prompt_compiler
+    - pack_id: camera/core-camera-movement.md
+      version_hash: sha256:...
+      reason: camera_motion
+      consumer: subagent_qa
+  warnings: []
+```
+
+接入规则：
+
+- Project Source Index 记录当前 knowledge library 根目录、pack id、version/hash 和项目绑定版本。
+- TaskEnvelope / SubagentTaskEnvelope 记录 `injectedKnowledgePacks` 或等价字段。
+- Prompt Compiler 只能使用被 Router 注入的相关包来编译 prompt。
+- QA Gate 使用同一批或兼容版本的包反向检查结果。
+- 如果生成和 QA 使用的 pack hash 不一致，必须标记 `qa_pack_version_mismatch`。
+- UI 默认不展示知识包细节，只在 Inspector / Diagnostics 显示注入摘要。
+
+Knowledge Pack Manager 是前端后续能力：
+
+- 导入知识包。
+- 新建知识包。
+- 启用 / 禁用知识包。
+- 查看 pack version、hash、依赖、适用任务、适用 provider、适用项目范围。
+- 测试路由，查看一句自然语言修改会命中哪些 pack。
+- 查看任务使用历史，追踪某个任务使用了哪些 pack、哪些版本、哪些注入片段。
+- 冲突检测，例如两个 style pack 对纹理、色彩、画幅、镜头运动提出冲突要求。
+- 外部导入包验证，通过后才能从 `external_imported` 进入可用状态。
+
+轻量化规则：
+
+- 每个 pack 必须声明 `maxInjectionTokens`。
+- 维护 pack summary cache，长包默认注入摘要、命中条目和少量必要示例。
+- 维护 route cache，同一项目版本、同一任务意图和同一输入 hash 不重复路由。
+- QA Gate 优先通过 pack hash/version 反查知识包，不重新把整包塞进 Agent。
+- route result 必须记录实际注入片段、摘要 hash、截断原因和未注入原因。
 
 ### 8.4 Generation Harness
 
@@ -866,6 +958,8 @@ Shot Spec
 - audio。
 
 临时图可以立即显示，但不能变成正式参考。
+
+Watcher 不只是“看到文件出现”。它必须和 Generation Health Checker、Manifest Matcher、Checkpoint Resume 连在一起，输出结构化事件：`temp_output_detected`、`expected_output_detected`、`qa_report_detected`、`manifest_mismatch_detected`、`stall_timeout_reached`、`worker_exit_without_expected_output`、`formal_output_promoted`。worker 自报成功不等于任务成功；只有 expected output、manifest match、QA coverage 都满足，素材才能进入 formal。
 
 ### 8.6 Checkpoint Resume Harness
 
@@ -1408,6 +1502,12 @@ Preview 是 rough preview，不是剪辑器。
 - TTS providers。
 - Music providers。
 - Voice Sources。
+- Knowledge Pack Manager：
+  - 导入 / 新建 Knowledge Pack。
+  - 启用 / 禁用 `user_custom`、`project_local`、`external_imported`。
+  - 查看 version、hash、依赖、适用任务和最近任务使用历史。
+  - 测试路由和冲突检测。
+  - 提示用户：Knowledge Pack 不能覆盖 provider policy、preflight、reference authority、keyframe pair derivation 和 QA gate。
 - Project storage path。
 - FFmpeg path。
 - Concurrency。
@@ -1789,80 +1889,129 @@ TypeScript/Node core: schema, queue, prompt compiler, provider registry, manifes
 
 ## 19. 开发路线
 
-### Phase 0：当前 Web 原型
+详细执行顺序以 `docs/core-development-sequence.md` 为准。本节只保留架构级路线。
 
-已完成：
+### Phase 0.5：Development Harness
 
-- React/Vite app。
-- runtime audit import。
-- provider policy display。
-- Visual Memory / Shot Board / Director Panel。
-- task envelope preview。
+- 开发任务包模板。
+- subagent 写入范围、输入资料、禁止事项、验证命令。
+- 主 agent 集成 review checklist。
 
-### Phase 1：桌面壳和本地项目
+### Phase 1：Contract Layer
 
-- 引入 Tauri。
-- 打开/创建 project.vibe。
-- 本地 Project Store。
-- schema 目录。
-- provider registry。
-- runtime tool detection。
+- schema。
+- ProjectSourceIndex。
+- ReferenceAuthority。
+- PreflightGate。
+- TaskEnvelope / SubagentTaskEnvelope。
+- TaskRun / ManifestMatcher。
+- Provider hard gate。
 
-### Phase 2：Orchestrator MVP
+### Phase 2：Project Format + Domain Schemas
 
-- task queue。
-- task envelope export。
-- watcher。
-- checkpoint/resume。
-- Codex CLI adapter stub。
-- provider parked/active policy。
+- `project.vibe`。
+- Production Bible。
+- Story Flow。
+- Shot Spec / Shot Layout / Shot Prompt Plan。
+- Style Capsule。
+- Visual / Spatial / Voice Memory。
+- Scene Asset Pack / Asset Readiness。
 
-### Phase 3：Story/Asset/Shot 数据链
+### Phase 2.2：Watcher / Health Checker / Checkpoint
 
-- Production Bible editor。
-- Story Flow editor。
-- Visual Memory CRUD。
-- Spatial Memory / Shot Layout。
-- Shot Prompt Plan。
-- stale reflow。
+- filesystem watcher。
+- generated image cache watcher。
+- generation health checker。
+- checkpoint resume。
+- task-owned temp folder。
+- final promotion pipeline。
 
-### Phase 4：Image2 生产链
+### Phase 2.5：Knowledge Library + Router + Context Budgeter
+
+- `resources/knowledge/`。
+- `knowledge_pack_manifest.json`。
+- Knowledge Pack P0 objects：
+  - `schemas/knowledge_pack.schema.json`
+  - `schemas/knowledge_pack_manifest.schema.json`
+  - `schemas/knowledge_route_result.schema.json`
+  - `schemas/context_budget.schema.json`
+  - `src/core/knowledgeTypes.ts`
+  - `src/core/knowledgeLibrary.ts`
+  - `src/core/knowledgeRouter.ts`
+  - `src/core/contextBudgeter.ts`
+  - `src/core/knowledgeManifest.ts`
+- Pack types：`system_builtin`、`user_custom`、`project_local`、`external_imported`。
+- Knowledge Router。
+- Context Budgeter L0-L3。
+- Summary cache、route cache、`maxInjectionTokens` 和命中条目注入。
+- Knowledge Pack Manager 进入前端规划。
+- prompt conflict checker。
+
+### Phase 3：UI Connects Real Core State
+
+- Director mode。
+- Inspector。
+- Diagnostics。
+- real SourceIndex / TaskRun / ManifestMatcher / Preflight state。
+
+### Phase 3.5：Story Change Transaction / Reflow
+
+- director intent result。
+- story change transaction。
+- production bible patch。
+- reflow impact report。
+- artifact invalidation。
+
+### Phase 3.8：Tauri Runtime Spike + Settings Shell
+
+- Tauri shell。
+- Mac/Windows path abstraction。
+- sidecar permissions。
+- runtime config。
+- credential storage。
+- provider/tool detection。
+
+### Phase 4：Image2 Adapter + Prompt Compiler + Asset Readiness
 
 - Image2 adapter。
-- asset reference generation。
-- start frame generation。
+- prompt compiler。
+- asset readiness gate。
+- start frame。
 - end frame edit from start。
 - QA packet generator。
-- contact sheets。
 
-### Phase 5：Preview 和 Export
+### Phase 5：Preview / Export
 
-- timeline preview。
-- FFmpeg rough cut。
-- audio placeholder。
-- batch export。
+- draft/formal preview。
+- image hold。
+- blocked placeholder。
+- current shot highlight。
+- export profiles。
 
-### Phase 6：Audio
+### Phase 6：Audio Planning
 
-- Voice Sources settings。
-- TTS adapter。
-- BGM provider/import。
-- preview mix。
+- Audio Plan。
+- Voice Memory。
+- voice source registry。
+- TTS/BGM provider slot。
+- preview mix placeholder。
 
-### Phase 7：Video Provider
+### Phase 7：Video Provider Enablement
 
-- Seedance / Jimeng adapter 从 parked 改为 user-enabled。
+- Seedance / Jimeng user enablement。
+- no bgm video prompt。
 - queue concurrency。
-- provider-ready derivative。
-- frames2video。
 - video QA。
+- long queue handling。
 
-### Phase 8：多 Provider 扩展
+### Phase 8：Multi-provider Expansion
 
-- future image API。
-- future video API。
+- AgentAdapter。
+- WorkerAdapter。
+- ProviderAdapter。
+- future image/video API。
 - local workflow。
-- provider onboarding checklist。
+- adapter contract tests。
 
 ## 20. 当前必须避免的架构错误
 

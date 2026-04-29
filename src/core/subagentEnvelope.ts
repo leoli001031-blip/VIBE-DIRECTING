@@ -1,5 +1,6 @@
 import type {
   ContextLevel,
+  GateSet,
   NeighborShotContext,
   ReferenceAuthority,
   ShotLayoutContext,
@@ -8,6 +9,9 @@ import type {
   SubagentTaskPurpose,
   TaskEnvelope,
 } from "./types";
+import { buildNonOverridableGateHashes, buildPolicyBinding } from "./envelopeValidator";
+import type { ContextBudgetResult, KnowledgeInjectedSnippet, KnowledgeInjectionRecord, KnowledgeRouteResult } from "./knowledgeTypes";
+import type { KnowledgePackCategory } from "./knowledgeTypes";
 
 const defaultOutputContract: SubagentOutputContract = {
   format: "subagent_result_v1",
@@ -47,6 +51,21 @@ export interface BuildSubagentEnvelopeInput {
   mustPreserve?: string[];
   allowedDelta?: string[];
   mustNotAdd?: string[];
+  knowledgeRouteResult?: KnowledgeRouteResult;
+  contextBudget?: ContextBudgetResult;
+  injectedKnowledgePacks?: KnowledgeInjectionRecord[];
+  injectedKnowledgeSnippetIds?: string[];
+  injectedKnowledgeSnippets?: KnowledgeInjectedSnippet[];
+  routeWarnings?: string[];
+  forbiddenKnowledgePacks?: string[];
+  requiredKnowledgeCategories?: KnowledgePackCategory[];
+  qaPackBindings?: Record<string, { version: string; hash: string }>;
+  policyBinding?: string;
+  nonOverridableGateHashes?: Record<string, string>;
+  allowedReadScopes?: string[];
+  disallowedReadScopes?: string[];
+  mustInspectNeighborShotIds?: string[];
+  authorityPriority?: Array<keyof GateSet | "source_index" | "provider_policy" | "preflight">;
 }
 
 export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): SubagentTaskEnvelope {
@@ -64,8 +83,14 @@ export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): Su
   const layoutMustPreserve = input.shotLayout?.mustPreserve || [];
   const layoutAllowedDelta = input.shotLayout?.allowedDelta || [];
   const layoutMustNotAdd = input.shotLayout?.mustNotAdd || [];
+  const injectedKnowledgePacks = input.injectedKnowledgePacks || input.contextBudget?.injectedKnowledgePacks || input.taskEnvelope.injectedKnowledgePacks;
+  const injectedKnowledgeSnippetIds =
+    input.injectedKnowledgeSnippetIds ||
+    input.contextBudget?.injectedSnippets.map((snippet) => `${snippet.packId}:${snippet.snippetId}`) ||
+    input.taskEnvelope.injectedKnowledgeSnippetIds;
+  const injectedKnowledgeSnippets = input.injectedKnowledgeSnippets || input.contextBudget?.injectedSnippets || input.taskEnvelope.injectedKnowledgeSnippets;
 
-  return {
+  const envelope: SubagentTaskEnvelope = {
     id: input.id,
     parentTaskId: input.parentTaskId,
     purpose: input.purpose,
@@ -87,11 +112,48 @@ export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): Su
         `mode=${input.taskEnvelope.requiredMode}`,
       ],
     taskEnvelope: input.taskEnvelope,
+    knowledgeRouteResultId: input.knowledgeRouteResult?.routeId || input.taskEnvelope.knowledgeRouteResultId,
+    contextBudgetId: input.contextBudget?.budgetId || input.taskEnvelope.contextBudgetId,
+    injectedKnowledgePacks,
+    injectedKnowledgeSnippetIds,
+    injectedKnowledgeSnippets,
+    knowledgeInputHash: input.knowledgeRouteResult?.inputHash || input.taskEnvelope.knowledgeInputHash,
+    knowledgeManifestHash: input.taskEnvelope.knowledgeManifestHash,
+    policyBinding: input.policyBinding,
+    nonOverridableGateHashes: input.nonOverridableGateHashes,
+    routeWarnings: [
+      ...(input.routeWarnings || []),
+      ...(input.knowledgeRouteResult?.warnings || []),
+      ...(input.contextBudget?.warnings || []),
+      ...input.taskEnvelope.routeWarnings,
+    ],
+    forbiddenKnowledgePacks: input.forbiddenKnowledgePacks || [],
+    requiredKnowledgeCategories: input.requiredKnowledgeCategories || [],
+    qaPackBindings:
+      input.qaPackBindings ||
+      Object.fromEntries(
+        injectedKnowledgePacks
+          .filter((pack) => pack.consumer === "qa_gate")
+          .map((pack) => [pack.packId, { version: pack.version, hash: pack.hash }]),
+      ),
+    allowedReadScopes: input.allowedReadScopes || ["task_envelope", "locked_references", "injected_knowledge_snippets"],
+    disallowedReadScopes: input.disallowedReadScopes || ["unrouted_knowledge_library", "rejected_references", "failed_artifacts"],
+    sourceIndexRequired: true,
+    mustInspectNeighborShotIds: input.mustInspectNeighborShotIds || (input.neighborShots || []).map((shot) => shot.shotId),
+    authorityPriority: input.authorityPriority || ["source_index", "provider_policy", "preflight", "identity", "scene", "pair", "story", "prop", "style"],
+    resultMustReferencePackHashes: true,
     qaChecklist: input.taskEnvelope.qaChecklist,
     mustPreserve: [...new Set([...layoutMustPreserve, ...(input.mustPreserve || [])])],
     allowedDelta: [...new Set([...layoutAllowedDelta, ...(input.allowedDelta || [])])],
     mustNotAdd: [...new Set([...layoutMustNotAdd, ...(input.mustNotAdd || [])])],
     expectedOutputContract: defaultOutputContract,
   };
-}
 
+  const policyBinding = envelope.policyBinding || buildPolicyBinding(envelope.taskEnvelope);
+
+  return {
+    ...envelope,
+    policyBinding,
+    nonOverridableGateHashes: envelope.nonOverridableGateHashes || buildNonOverridableGateHashes(envelope.taskEnvelope),
+  };
+}

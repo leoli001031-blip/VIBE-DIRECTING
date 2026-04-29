@@ -1,0 +1,378 @@
+[
+  {
+    "id": "router-map-01",
+    "userIntent": "更压抑 / 窒息 / 孤独",
+    "taskPurpose": "keyframe",
+    "expectedPackIds": [
+      "style/core-style-packs",
+      "composition/core-composition",
+      "lighting/core-lighting",
+      "color/core-color",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-02",
+    "userIntent": "冷一点 / 克制 / 现实",
+    "taskPurpose": "keyframe",
+    "expectedPackIds": [
+      "style/core-style-packs",
+      "lighting/core-lighting",
+      "color/core-color"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-03",
+    "userIntent": "暖一点 / 有一点希望",
+    "taskPurpose": "keyframe",
+    "expectedPackIds": [
+      "style/core-style-packs",
+      "lighting/core-lighting",
+      "color/core-color",
+      "performance/core-performance"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-04",
+    "userIntent": "黑色电影 / 悬疑 / 犯罪片",
+    "taskPurpose": "keyframe",
+    "expectedPackIds": [
+      "style/core-style-packs",
+      "lighting/core-lighting",
+      "composition/core-composition"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-05",
+    "userIntent": "像纪录片 / 真实现场",
+    "taskPurpose": "keyframe",
+    "expectedPackIds": [
+      "style/core-style-packs",
+      "camera/core-camera-movement",
+      "lighting/core-lighting"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-06",
+    "userIntent": "梦 / 回忆 / 不真实但不奇幻",
+    "taskPurpose": "keyframe",
+    "expectedPackIds": [
+      "style/core-style-packs",
+      "color/core-color",
+      "lens-focus/core-lens-focus"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-07",
+    "userIntent": "更高级 / 品牌短片",
+    "taskPurpose": "keyframe",
+    "expectedPackIds": [
+      "style/core-style-packs",
+      "lighting/core-lighting",
+      "composition/core-composition"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-08",
+    "userIntent": "复古 / VHS / 监控感",
+    "taskPurpose": "keyframe",
+    "expectedPackIds": [
+      "style/core-style-packs",
+      "color/core-color",
+      "camera/core-camera-movement"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-09",
+    "userIntent": "科幻但克制 / 巨物感",
+    "taskPurpose": "keyframe",
+    "expectedPackIds": [
+      "style/core-style-packs",
+      "composition/core-composition",
+      "lens-focus/core-lens-focus"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-10",
+    "userIntent": "我有一个想法 / 帮我整理故事",
+    "taskPurpose": "script",
+    "expectedPackIds": [
+      "script/core-script-writing",
+      "script/short-film-structures",
+      "script/script-to-storyflow",
+      "script/script-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-11",
+    "userIntent": "故事有点乱 / 帮我理顺",
+    "taskPurpose": "script",
+    "expectedPackIds": [
+      "script/core-script-writing",
+      "script/script-to-storyflow",
+      "script/script-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-12",
+    "userIntent": "帮我写短片脚本",
+    "taskPurpose": "script",
+    "expectedPackIds": [
+      "script/core-script-writing",
+      "script/short-film-structures",
+      "script/scene-and-dialogue"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-13",
+    "userIntent": "这段对白怎么改",
+    "taskPurpose": "script",
+    "expectedPackIds": [
+      "script/scene-and-dialogue",
+      "script/script-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-14",
+    "userIntent": "这个故事能不能分镜",
+    "taskPurpose": "script",
+    "expectedPackIds": [
+      "script/script-to-storyflow",
+      "script/script-qa",
+      "story-function/core-shot-functions"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-15",
+    "userIntent": "想做悬疑 / 发现异常",
+    "taskPurpose": "script",
+    "expectedPackIds": [
+      "script/short-film-structures",
+      "script/core-script-writing"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-16",
+    "userIntent": "想做两个人的关系片段",
+    "taskPurpose": "script",
+    "expectedPackIds": [
+      "script/short-film-structures",
+      "script/scene-and-dialogue"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-17",
+    "userIntent": "想做记忆 / 梦 / 回忆",
+    "taskPurpose": "script",
+    "expectedPackIds": [
+      "script/short-film-structures",
+      "style/core-style-packs"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-18",
+    "userIntent": "想做 AI / 屏幕 / 科幻",
+    "taskPurpose": "script",
+    "expectedPackIds": [
+      "script/short-film-structures",
+      "style/core-style-packs"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-19",
+    "userIntent": "镜头别动",
+    "taskPurpose": "i2v",
+    "expectedPackIds": [
+      "camera/core-camera-movement",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-20",
+    "userIntent": "慢慢靠近",
+    "taskPurpose": "i2v",
+    "expectedPackIds": [
+      "camera/core-camera-movement",
+      "lens-focus/core-lens-focus",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-21",
+    "userIntent": "慢慢远离",
+    "taskPurpose": "i2v",
+    "expectedPackIds": [
+      "camera/core-camera-movement",
+      "composition/core-composition"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-22",
+    "userIntent": "跟着她走",
+    "taskPurpose": "i2v",
+    "expectedPackIds": [
+      "camera/core-camera-movement",
+      "story-function/core-shot-functions"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-23",
+    "userIntent": "从手看到脸",
+    "taskPurpose": "i2v",
+    "expectedPackIds": [
+      "camera/core-camera-movement",
+      "lens-focus/core-lens-focus"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-24",
+    "userIntent": "展示整个场景",
+    "taskPurpose": "i2v",
+    "expectedPackIds": [
+      "camera/core-camera-movement",
+      "composition/core-composition"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-25",
+    "userIntent": "从旁边滑过去露出东西",
+    "taskPurpose": "i2v",
+    "expectedPackIds": [
+      "camera/core-camera-movement",
+      "composition/core-composition"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-26",
+    "userIntent": "手持一点",
+    "taskPurpose": "i2v",
+    "expectedPackIds": [
+      "camera/core-camera-movement",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-27",
+    "userIntent": "Image 2 关键帧",
+    "taskPurpose": "keyframe",
+    "expectedPackIds": [
+      "prompt/core-prompt-templates"
+    ],
+    "forbiddenPackIds": [],
+    "providerSlot": "image.generate"
+  },
+  {
+    "id": "router-map-28",
+    "userIntent": "Image 2 编辑",
+    "taskPurpose": "keyframe",
+    "expectedPackIds": [
+      "prompt/core-prompt-templates",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": [],
+    "providerSlot": "image.edit"
+  },
+  {
+    "id": "router-map-29",
+    "userIntent": "Seedance 2.0 图生视频",
+    "taskPurpose": "i2v",
+    "expectedPackIds": [
+      "camera/core-camera-movement",
+      "prompt/core-prompt-templates",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": [],
+    "providerSlot": "video.i2v"
+  },
+  {
+    "id": "router-map-30",
+    "userIntent": "判断 Image 2 / Seedance / 其他模型能不能做",
+    "taskPurpose": "qa",
+    "expectedPackIds": [
+      "provider/model-capability-matrix",
+      "provider/image2-provider-pack",
+      "provider/seedance2-provider-pack"
+    ],
+    "forbiddenPackIds": [],
+    "providerSlot": "image.generate"
+  },
+  {
+    "id": "router-map-31",
+    "userIntent": "新增 OpenAI 视频模型 / 即梦 / Runway / ComfyUI 等模型",
+    "taskPurpose": "i2v",
+    "expectedPackIds": [
+      "provider/provider-api-extension-slots",
+      "provider/provider-onboarding-research-checklist",
+      "provider/model-capability-matrix"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-32",
+    "userIntent": "故事理顺补全",
+    "taskPurpose": "keyframe",
+    "expectedPackIds": [
+      "script/core-script-writing",
+      "script/script-to-storyflow",
+      "script/script-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-33",
+    "userIntent": "脚本转分镜",
+    "taskPurpose": "keyframe",
+    "expectedPackIds": [
+      "script/script-to-storyflow",
+      "story-function/core-shot-functions",
+      "composition/core-composition"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-34",
+    "userIntent": "风格 QA",
+    "taskPurpose": "qa",
+    "expectedPackIds": [
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-35",
+    "userIntent": "连续性 QA",
+    "taskPurpose": "qa",
+    "expectedPackIds": [
+      "qa/core-qa",
+      "story-function/core-shot-functions",
+      "composition/core-composition"
+    ],
+    "forbiddenPackIds": []
+  }
+]

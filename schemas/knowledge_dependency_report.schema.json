@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/knowledge_dependency_report.schema.json",
+  "title": "KnowledgeDependencyReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["packId", "missingDependencies", "conflicts", "warnings"],
+  "properties": {
+    "packId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "missingDependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["packId"],
+        "properties": {
+          "packId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "version": { "type": "string" },
+          "optional": { "type": "boolean" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["packId", "reason"],
+        "properties": {
+          "packId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "reason": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

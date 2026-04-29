@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/knowledge_import_report.schema.json",
+  "title": "KnowledgeImportReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceRoot",
+    "targetRoot",
+    "manifestPath",
+    "importedPackCount",
+    "skippedFiles",
+    "warnings",
+    "manifestHash",
+    "generatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "sourceRoot": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "targetRoot": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "manifestPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "importedPackCount": { "type": "integer", "minimum": 0 },
+    "skippedFiles": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "manifestHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  }
+}

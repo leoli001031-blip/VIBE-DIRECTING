@@ -286,7 +286,7 @@ function EnvelopePreview({ audit, shot }: { audit: ProjectAudit; shot?: ShotReco
   const job = shot ? audit.jobs.find((item) => item.id.includes(shot.id)) : undefined;
   if (!job) return <p className="muted-copy">Select a shot to preview its standardized task envelope.</p>;
 
-  const envelope = buildTaskEnvelope(job, shot, audit.issues);
+  const envelope = buildTaskEnvelope(job, shot, audit.issues, { preflightScope: "dev_preview" });
   return (
     <div className="envelope-preview">
       <div className="field-grid compact">
