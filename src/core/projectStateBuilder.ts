@@ -9,6 +9,7 @@ import {
   type ProjectRuntimeTaskState,
   type RuntimeStateSource,
 } from "./projectState";
+import { buildRuntimeEnvironment, ensureRuntimeEnvironment } from "./runtimeConfig";
 import type { ProjectAudit, ProviderSlot } from "./types";
 
 export const emptyKnowledgeManifest: KnowledgePackManifest = {
@@ -25,6 +26,7 @@ export interface ProjectRuntimeStateBuildOptions {
   knowledgeTestIntent?: string;
   generatedAt?: string;
   stateSource?: RuntimeStateSource;
+  runtime?: ProjectRuntimeState["runtime"];
 }
 
 function toKnowledgeBindings(manifest: KnowledgePackManifest): KnowledgeBindingSummary[] {
@@ -85,6 +87,7 @@ export function buildProjectRuntimeState(
     bindings: toKnowledgeBindings(knowledgeManifest),
   };
   const generatedAt = options.generatedAt || new Date().toISOString();
+  const runtime = options.runtime || buildRuntimeEnvironment({ generatedAt });
 
   return {
     schemaVersion: projectRuntimeStateSchemaVersion,
@@ -119,6 +122,7 @@ export function buildProjectRuntimeState(
       pendingConfirmationCount: 0,
       lastGeneratedAt: generatedAt,
     },
+    runtime,
     diagnostics: {
       issues: audit.issues,
       schemaSummary: audit.schemaSummary,
@@ -151,6 +155,16 @@ export function auditFromProjectRuntimeState(state: ProjectRuntimeState): Projec
     jobs: state.taskRuns.jobs,
     issues: state.diagnostics.issues,
     contactSheets: state.project.contactSheets,
+  };
+}
+
+export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeState {
+  return {
+    ...state,
+    runtime: ensureRuntimeEnvironment(state.runtime, {
+      generatedAt: state.generatedAt,
+      platform: state.runtime?.config?.platform || state.runtime?.detectionReport?.platform,
+    }),
   };
 }
 

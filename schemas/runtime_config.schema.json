@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/runtime_config.schema.json",
+  "title": "RuntimeConfig",
+  "description": "Read-only runtime configuration facts for path abstraction, tool paths, provider enablement, sidecar permissions, credential placeholders, and voice source placeholders.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runtimeMode",
+    "platform",
+    "projectRootPolicy",
+    "pathRules",
+    "toolPaths",
+    "providerEnablement",
+    "sidecarPermissions",
+    "credentialStorage",
+    "voiceSources"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "runtimeMode": {
+      "type": "string",
+      "enum": ["browser_dev", "tauri_planned", "tauri_desktop", "electron_fallback_planned"]
+    },
+    "platform": { "$ref": "tool_detection_report.schema.json#/$defs/runtimePlatform" },
+    "projectRootPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "allowedRoots", "macPathStyle", "windowsPathStyle", "notes"],
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["project_root_relative"]
+        },
+        "allowedRoots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["project_root", "user_selected_import", "app_config", "temp_dir"]
+          }
+        },
+        "macPathStyle": {
+          "type": "string",
+          "enum": ["posix"]
+        },
+        "windowsPathStyle": {
+          "type": "string",
+          "enum": ["win32"]
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "pathRules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/runtimePathRule" }
+    },
+    "toolPaths": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["codexCli", "image2Runtime", "ffmpeg", "ffprobe", "node", "npm", "git"],
+      "properties": {
+        "codexCli": { "$ref": "#/$defs/runtimeToolPath" },
+        "image2Runtime": { "$ref": "#/$defs/runtimeToolPath" },
+        "ffmpeg": { "$ref": "#/$defs/runtimeToolPath" },
+        "ffprobe": { "$ref": "#/$defs/runtimeToolPath" },
+        "node": { "$ref": "#/$defs/runtimeToolPath" },
+        "npm": { "$ref": "#/$defs/runtimeToolPath" },
+        "git": { "$ref": "#/$defs/runtimeToolPath" }
+      }
+    },
+    "providerEnablement": { "$ref": "provider_enablement.schema.json" },
+    "sidecarPermissions": { "$ref": "sidecar_permission.schema.json" },
+    "credentialStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "storesSecrets", "plannedStores", "notes"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["placeholder", "planned"]
+        },
+        "storesSecrets": {
+          "type": "boolean",
+          "const": false
+        },
+        "plannedStores": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["macos_keychain", "windows_credential_manager", "local_encrypted_store"]
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "voiceSources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/runtimeVoiceSource" }
+    }
+  },
+  "$defs": {
+    "runtimePathStatus": {
+      "type": "string",
+      "enum": ["path", "unknown", "planned", "blocked"]
+    },
+    "runtimePathRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "platform", "rule"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "platform": {
+          "anyOf": [
+            { "$ref": "tool_detection_report.schema.json#/$defs/runtimePlatform" },
+            { "type": "string", "enum": ["all"] }
+          ]
+        },
+        "rule": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "example": { "type": "string" }
+      }
+    },
+    "runtimeToolPath": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "status", "source", "notes"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "$ref": "#/$defs/runtimePathStatus" },
+        "path": { "type": "string" },
+        "source": {
+          "type": "string",
+          "enum": ["detected", "configured", "placeholder", "planned"]
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "runtimeVoiceSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "status", "kind", "notes"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": {
+          "type": "string",
+          "enum": ["placeholder", "planned", "unavailable"]
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["tts_voice", "music_source", "voice_library"]
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

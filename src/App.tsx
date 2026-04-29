@@ -40,7 +40,9 @@ import {
   buildProjectRuntimeState,
   buildRuntimeViewFromProjectState,
   emptyKnowledgeManifest,
+  withRuntimeDefaults,
 } from "./core/projectStateBuilder";
+import { ensureRuntimeEnvironment } from "./core/runtimeConfig";
 import {
   buildReflowImpactReport,
   buildStoryChangeTransaction,
@@ -134,6 +136,10 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   const diagnostics = requireRecord(value, "diagnostics", issues);
   const knowledge = requireRecord(value, "knowledge", issues);
   const storyChanges = requireRecord(value, "storyChanges", issues);
+  const runtime = requireRecord(value, "runtime", issues);
+  const runtimeConfig = requireRecord(runtime, "config", issues);
+  const detectionReport = requireRecord(runtime, "detectionReport", issues);
+  const providerEnablementSummary = requireRecord(runtime, "providerEnablementSummary", issues);
 
   requireRecord(value, "stateSource", issues);
   if (!Object.keys(project).length) issues.push("project.empty");
@@ -155,8 +161,31 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   requireArray(storyChanges, "reflowReports", issues);
   if (typeof storyChanges.pendingConfirmationCount !== "number") issues.push("storyChanges.pendingConfirmationCount");
   if (typeof storyChanges.lastGeneratedAt !== "string") issues.push("storyChanges.lastGeneratedAt");
+  if (typeof runtimeConfig.runtimeMode !== "string") issues.push("runtime.config.runtimeMode");
+  if (typeof runtimeConfig.platform !== "string") issues.push("runtime.config.platform");
+  requireRecord(runtimeConfig, "projectRootPolicy", issues);
+  requireArray(runtimeConfig, "pathRules", issues);
+  requireRecord(runtimeConfig, "toolPaths", issues);
+  requireRecord(runtimeConfig, "providerEnablement", issues);
+  requireRecord(runtimeConfig, "sidecarPermissions", issues);
+  requireRecord(runtimeConfig, "credentialStorage", issues);
+  requireArray(runtimeConfig, "voiceSources", issues);
+  requireArray(detectionReport, "tools", issues);
+  if (typeof detectionReport.generatedAt !== "string") issues.push("runtime.detectionReport.generatedAt");
+  if (typeof providerEnablementSummary.liveSubmitAllowed !== "boolean") issues.push("runtime.providerEnablementSummary.liveSubmitAllowed");
 
   if (issues.length) throw new Error(`runtime-state shape invalid: ${issues.join(", ")}`);
+}
+
+function normalizeRuntimeState(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  return {
+    ...value,
+    runtime: ensureRuntimeEnvironment(
+      isRecord(value.runtime) ? value.runtime : undefined,
+      { generatedAt: typeof value.generatedAt === "string" ? value.generatedAt : undefined },
+    ),
+  };
 }
 
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
@@ -738,17 +767,18 @@ function KnowledgePackManager({ view, intent, onIntentChange }: { view: RuntimeV
   );
 }
 
-function SettingsShell({ audit }: { audit: ProjectAudit }) {
-  const settingsRows = [
-    ["Provider Registry", `${audit.providerPolicy.rules.length} slots registered`],
-    ["Image2 active", "Codex CLI/API placeholder; image slots active"],
-    ["Seedance parked", "Video provider cannot submit live tasks"],
-    ["Codex CLI runtime", "placeholder: path and session adapter pending"],
-    ["Image2 runtime", "placeholder: adapter selection pending"],
-    ["FFmpeg", "placeholder: local detection pending"],
-    ["TTS / Music", "placeholder: providers planned"],
-    ["Voice Sources", "placeholder: user voice library planned"],
-  ];
+function statusLabel(value: string) {
+  return value.replace(/_/g, " ");
+}
+
+function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const runtime = runtimeState.runtime;
+  const config = runtime.config;
+  const providerSummary = runtime.providerEnablementSummary;
+  const tools = runtime.detectionReport.tools;
+  const sidecar = config.sidecarPermissions;
+  const providerSlots = config.providerEnablement.slots;
+  const voiceSources = config.voiceSources;
 
   return (
     <section className="machine-panel settings-shell">
@@ -756,11 +786,55 @@ function SettingsShell({ audit }: { audit: ProjectAudit }) {
         <Settings size={17} />
         <span>Settings Shell</span>
       </div>
+      <div className="field-grid compact runtime-facts">
+        <label>Runtime</label>
+        <span>{statusLabel(config.runtimeMode)} / {config.platform}</span>
+        <label>Root Policy</label>
+        <span>{statusLabel(config.projectRootPolicy.strategy)} · mac {config.projectRootPolicy.macPathStyle} · win {config.projectRootPolicy.windowsPathStyle}</span>
+        <label>Live Submit</label>
+        <span>{providerSummary.liveSubmitAllowed ? "allowed" : "blocked"}</span>
+        <label>Credentials</label>
+        <span>{config.credentialStorage.mode}; secrets stored: {config.credentialStorage.storesSecrets ? "yes" : "no"}</span>
+      </div>
+      <div className="settings-group-title">Tools</div>
       <div className="settings-list">
-        {settingsRows.map(([label, detail]) => (
-          <div key={label}>
-            <strong>{label}</strong>
-            <small>{detail}</small>
+        {tools.map((tool) => (
+          <div key={tool.id}>
+            <strong>{tool.label}</strong>
+            <small>{statusLabel(tool.status)}{tool.path ? ` · ${tool.path}` : ""}{tool.version ? ` · ${tool.version}` : ""}</small>
+          </div>
+        ))}
+      </div>
+      <div className="settings-group-title">Sidecar Policy</div>
+      <div className="settings-list">
+        <div>
+          <strong>Arbitrary shell</strong>
+          <small>{sidecar.arbitraryShellExecution}; {sidecar.providerLiveSubmit} provider live submit</small>
+        </div>
+        <div>
+          <strong>Allowed commands</strong>
+          <small>{sidecar.allowedCommands.map((command) => command.executable).join(", ") || "none"}</small>
+        </div>
+        <div>
+          <strong>Filesystem scope</strong>
+          <small>{sidecar.filesystemScope.map(statusLabel).join(", ")}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Provider Enablement</div>
+      <div className="settings-list">
+        {providerSlots.map((slot) => (
+          <div key={slot.slot}>
+            <strong>{slot.slot}</strong>
+            <small>{slot.state} · live submit {slot.liveSubmitAllowed ? "allowed" : "blocked"} · {(slot.allowedProviders.length ? slot.allowedProviders : ["planned"]).join(", ")}</small>
+          </div>
+        ))}
+      </div>
+      <div className="settings-group-title">Voice Sources</div>
+      <div className="settings-list">
+        {voiceSources.map((source) => (
+          <div key={source.id}>
+            <strong>{source.label}</strong>
+            <small>{source.status} · {statusLabel(source.kind)}</small>
           </div>
         ))}
       </div>
@@ -841,7 +915,7 @@ function DiagnosticsMode({
         </div>
       </section>
       <KnowledgePackManager view={view} intent={intent} onIntentChange={onIntentChange} />
-      <SettingsShell audit={audit} />
+      <SettingsShell runtimeState={runtimeState} />
     </div>
   );
 }
@@ -859,13 +933,14 @@ function App() {
     async function loadRuntime() {
       try {
         const state = await fetchJson<unknown>("/runtime-state.json");
-        assertProjectRuntimeState(state);
+        const normalized = normalizeRuntimeState(state);
+        assertProjectRuntimeState(normalized);
         if (cancelled) return;
-        setRuntimeState({
-          ...state,
-          stateSource: state.stateSource || { kind: "runtime-state", label: "runtime-state", path: "/runtime-state.json" },
-        });
-        if (state.storyFlow?.shots?.[0]) setSelectedShotId(state.storyFlow.shots[0].id);
+        setRuntimeState(withRuntimeDefaults({
+          ...normalized,
+          stateSource: normalized.stateSource || { kind: "runtime-state", label: "runtime-state", path: "/runtime-state.json" },
+        }));
+        if (normalized.storyFlow?.shots?.[0]) setSelectedShotId(normalized.storyFlow.shots[0].id);
         return;
       } catch {
         // Fall through to the legacy audit file for Phase 3 compatibility.

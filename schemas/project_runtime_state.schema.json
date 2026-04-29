@@ -18,6 +18,7 @@
     "manifestMatches",
     "previewEvents",
     "storyChanges",
+    "runtime",
     "diagnostics",
     "knowledge",
     "stateSource"
@@ -153,6 +154,16 @@
         },
         "pendingConfirmationCount": { "type": "integer", "minimum": 0 },
         "lastGeneratedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["config", "detectionReport", "providerEnablementSummary"],
+      "properties": {
+        "config": { "$ref": "runtime_config.schema.json" },
+        "detectionReport": { "$ref": "tool_detection_report.schema.json" },
+        "providerEnablementSummary": { "$ref": "provider_enablement.schema.json#/$defs/providerEnablementSummary" }
       }
     },
     "diagnostics": {

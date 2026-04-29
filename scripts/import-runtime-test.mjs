@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import YAML from "yaml";
 
 const DEFAULT_ROOT =
@@ -56,6 +57,345 @@ const policy = {
     },
   ],
 };
+
+function runtimePlatform() {
+  if (["darwin", "win32", "linux"].includes(process.platform)) return process.platform;
+  return "unknown";
+}
+
+function safeSpawn(command, args) {
+  try {
+    return spawnSync(command, args, {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 2500,
+      maxBuffer: 1024 * 64,
+    });
+  } catch (error) {
+    return { status: 1, error };
+  }
+}
+
+function firstOutputLine(result) {
+  return String(result?.stdout || result?.stderr || "").split(/\r?\n/).map((line) => line.trim()).find(Boolean);
+}
+
+function resolveCommand(command, platform) {
+  const resolver = platform === "win32" ? "where" : "which";
+  const result = safeSpawn(resolver, [command]);
+  if (result.status !== 0) return undefined;
+  return firstOutputLine(result);
+}
+
+function detectCommand({ id, command, label, kind, requiredFor, versionArgs = ["--version"], planned = false, notes = [] }, platform) {
+  if (planned) {
+    return {
+      id,
+      label,
+      kind,
+      requiredFor,
+      status: "planned",
+      notes,
+    };
+  }
+
+  const resolvedPath = resolveCommand(command, platform);
+  if (!resolvedPath) {
+    return {
+      id,
+      label,
+      kind,
+      requiredFor,
+      status: "missing",
+      notes: [...notes, "Command was not found by local path detection."],
+    };
+  }
+
+  const versionResult = safeSpawn(resolvedPath, versionArgs);
+  const versionLine = versionResult.status === 0 ? firstOutputLine(versionResult) : undefined;
+  return {
+    id,
+    label,
+    kind,
+    requiredFor,
+    status: "available",
+    path: resolvedPath,
+    version: versionLine,
+    notes,
+  };
+}
+
+function buildToolDetectionReport(generatedAt) {
+  const platform = runtimePlatform();
+  const tools = [
+    detectCommand({
+      id: "node",
+      command: "node",
+      label: "Node.js",
+      kind: "node_runtime",
+      requiredFor: ["TypeScript/Node core", "import runtime test"],
+      notes: ["Detected with local path lookup and --version only."],
+    }, platform),
+    detectCommand({
+      id: "npm",
+      command: "npm",
+      label: "npm",
+      kind: "package_manager",
+      requiredFor: ["development scripts"],
+      notes: ["Diagnostics only; no package installation is performed."],
+    }, platform),
+    detectCommand({
+      id: "git",
+      command: "git",
+      label: "Git",
+      kind: "vcs",
+      requiredFor: ["diagnostics"],
+      notes: ["Optional local diagnostic helper."],
+    }, platform),
+    detectCommand({
+      id: "ffmpeg",
+      command: "ffmpeg",
+      label: "FFmpeg",
+      kind: "media_binary",
+      requiredFor: ["preview/export health checks"],
+      versionArgs: ["-version"],
+      notes: ["Detected for media diagnostics only."],
+    }, platform),
+    detectCommand({
+      id: "ffprobe",
+      command: "ffprobe",
+      label: "FFprobe",
+      kind: "media_binary",
+      requiredFor: ["media metadata checks"],
+      versionArgs: ["-version"],
+      notes: ["Detected for media metadata diagnostics only."],
+    }, platform),
+    detectCommand({
+      id: "codex",
+      command: "codex",
+      label: "Codex CLI",
+      kind: "agent_cli",
+      requiredFor: ["agent task sidecar"],
+      notes: ["Detected only; the importer does not start a Codex session."],
+    }, platform),
+    detectCommand({
+      id: "image2-runtime",
+      command: "image2",
+      label: "Image2 Runtime",
+      kind: "image_runtime",
+      requiredFor: ["Image2 provider planning"],
+      planned: true,
+      notes: ["Adapter detection is planned; no provider submit is performed."],
+    }, platform),
+  ];
+
+  return { generatedAt, platform, tools };
+}
+
+function pathStatusFromTool(tool) {
+  if (!tool) return "unknown";
+  if (tool.status === "available" && tool.path) return "path";
+  if (tool.status === "planned") return "planned";
+  if (tool.status === "blocked") return "blocked";
+  return "unknown";
+}
+
+function toolPath(id, label, detectionReport, fallbackNotes = []) {
+  const tool = detectionReport.tools.find((item) => item.id === id);
+  return {
+    id,
+    label,
+    status: pathStatusFromTool(tool),
+    path: tool?.path,
+    source: tool?.status === "available" ? "detected" : tool?.status === "planned" ? "planned" : "placeholder",
+    notes: [...fallbackNotes, ...(tool?.notes || [])],
+  };
+}
+
+function providerEnablement() {
+  return {
+    strictImageProvider: "image2_only",
+    slots: [
+      {
+        slot: "image.generate",
+        state: "active",
+        activeProvider: "openai-image2-codex-cli",
+        allowedProviders: ["openai-image2-codex-cli", "openai-image2-api"],
+        forbiddenProviders: ["dreamina", "jimeng", "seedream", "seedance"],
+        liveSubmitAllowed: false,
+        notes: ["Image generation slot is active for Image2 only; settings are read-only."],
+      },
+      {
+        slot: "image.edit",
+        state: "active",
+        activeProvider: "openai-image2-api",
+        allowedProviders: ["openai-image2-codex-cli", "openai-image2-api"],
+        forbiddenProviders: ["dreamina", "jimeng", "seedream", "seedance"],
+        liveSubmitAllowed: false,
+        notes: ["Image edit slot remains Image2-only; no fallback to text-to-image."],
+      },
+      {
+        slot: "image.reference_asset",
+        state: "active",
+        activeProvider: "openai-image2-api",
+        allowedProviders: ["openai-image2-codex-cli", "openai-image2-api"],
+        forbiddenProviders: ["dreamina", "jimeng", "seedream", "seedance"],
+        liveSubmitAllowed: false,
+        notes: ["Reference assets can be planned against Image2 only."],
+      },
+      {
+        slot: "video.i2v",
+        state: "parked",
+        activeProvider: "seedance2-provider",
+        allowedProviders: ["seedance2-provider", "dreamina-seedance2", "jimeng-video"],
+        forbiddenProviders: [],
+        liveSubmitAllowed: false,
+        notes: ["Seedance/Jimeng stay parked and cannot be activated from settings."],
+      },
+      {
+        slot: "video.t2v.experimental",
+        state: "parked",
+        allowedProviders: ["seedance2-provider", "jimeng-video"],
+        forbiddenProviders: [],
+        liveSubmitAllowed: false,
+        notes: ["Text-to-video fallback remains parked."],
+      },
+      {
+        slot: "audio.tts",
+        state: "planned",
+        allowedProviders: [],
+        forbiddenProviders: [],
+        liveSubmitAllowed: false,
+        notes: ["Voice and narration providers are planned placeholders."],
+      },
+      {
+        slot: "audio.music",
+        state: "planned",
+        allowedProviders: [],
+        forbiddenProviders: [],
+        liveSubmitAllowed: false,
+        notes: ["Music providers are planned placeholders."],
+      },
+    ],
+  };
+}
+
+function summarizeProviderEnablement(enablement) {
+  return {
+    activeImageSlots: enablement.slots.filter((slot) => slot.slot.startsWith("image.") && slot.state === "active").length,
+    parkedVideoSlots: enablement.slots.filter((slot) => slot.slot.startsWith("video.") && slot.state === "parked").length,
+    plannedAudioSlots: enablement.slots.filter((slot) => slot.slot.startsWith("audio.") && slot.state === "planned").length,
+    liveSubmitAllowed: enablement.slots.some((slot) => slot.liveSubmitAllowed),
+    notes: [
+      "Settings exposes provider enablement as read-only runtime facts.",
+      "Image slots are active for Image2 only; video remains parked and audio remains planned.",
+    ],
+  };
+}
+
+function buildRuntimeEnvironment(generatedAt) {
+  const detectionReport = buildToolDetectionReport(generatedAt);
+  const platform = detectionReport.platform;
+  const enablement = providerEnablement();
+  const config = {
+    schemaVersion: "0.1.0",
+    runtimeMode: "browser_dev",
+    platform,
+    projectRootPolicy: {
+      strategy: "project_root_relative",
+      allowedRoots: ["project_root", "user_selected_import", "app_config", "temp_dir"],
+      macPathStyle: "posix",
+      windowsPathStyle: "win32",
+      notes: [
+        "Persist project-relative paths where possible.",
+        "Resolve absolute paths through a platform-aware runtime path resolver before sidecar execution.",
+      ],
+    },
+    pathRules: [
+      {
+        id: "mac-posix-project-root",
+        platform: "darwin",
+        rule: "Use POSIX paths under the selected project root.",
+        example: "/Users/name/project/02_keyframes/start.png",
+      },
+      {
+        id: "windows-win32-project-root",
+        platform: "win32",
+        rule: "Use Win32 paths through the runtime resolver; do not persist shell-specific Git Bash paths.",
+        example: "C:\\Users\\name\\project\\02_keyframes\\start.png",
+      },
+      {
+        id: "portable-project-relative",
+        platform: "all",
+        rule: "Prefer project-relative artifact references in schemas and manifests.",
+        example: "02_keyframes/start/A1_01_start.png",
+      },
+    ],
+    toolPaths: {
+      codexCli: toolPath("codex", "Codex CLI", detectionReport, ["No Codex session is started by import-runtime-test."]),
+      image2Runtime: toolPath("image2-runtime", "Image2 Runtime", detectionReport, ["Image2 adapter detection is planned."]),
+      ffmpeg: toolPath("ffmpeg", "FFmpeg", detectionReport, ["Used for local media health checks."]),
+      ffprobe: toolPath("ffprobe", "FFprobe", detectionReport, ["Used for local media metadata checks."]),
+      node: toolPath("node", "Node.js", detectionReport, ["TypeScript/Node remains the orchestration core."]),
+      npm: toolPath("npm", "npm", detectionReport, ["Diagnostics only; no npm install is performed."]),
+      git: toolPath("git", "Git", detectionReport, ["Optional diagnostics helper."]),
+    },
+    providerEnablement: enablement,
+    sidecarPermissions: {
+      arbitraryShellExecution: "blocked",
+      providerLiveSubmit: "blocked",
+      filesystemScope: ["project_root", "user_selected_import", "app_config", "temp_dir"],
+      allowedCommands: [
+        {
+          id: "codex-cli-dry-agent-task",
+          executable: "codex",
+          allowedArgs: ["run", "--json", "--project"],
+          requiredFor: ["agent planning", "dry diagnostics"],
+          notes: ["Planned sidecar command shape; arguments must be compiled from task envelopes."],
+        },
+        {
+          id: "ffmpeg-inspect",
+          executable: "ffmpeg",
+          allowedArgs: ["-version", "-i", "-hide_banner"],
+          requiredFor: ["media health checks"],
+          notes: ["No arbitrary shell string execution."],
+        },
+        {
+          id: "ffprobe-inspect",
+          executable: "ffprobe",
+          allowedArgs: ["-version", "-show_streams", "-show_format", "-of", "json"],
+          requiredFor: ["media metadata checks"],
+          notes: ["Read-only media inspection command."],
+        },
+      ],
+      notes: [
+        "Frontend settings cannot execute commands.",
+        "Live provider submission remains blocked for this minimal Phase 3.8 safety version.",
+      ],
+    },
+    credentialStorage: {
+      mode: "placeholder",
+      storesSecrets: false,
+      plannedStores: ["macos_keychain", "windows_credential_manager", "local_encrypted_store"],
+      notes: ["No API key or provider token is read, written, or displayed by Phase 3.8 settings."],
+    },
+    voiceSources: [
+      {
+        id: "voice-registry-placeholder",
+        label: "Voice Source Registry",
+        status: "placeholder",
+        kind: "voice_library",
+        notes: ["Reserved for future user voice library metadata; no audio provider is active."],
+      },
+    ],
+  };
+
+  return {
+    config,
+    detectionReport,
+    providerEnablementSummary: summarizeProviderEnablement(enablement),
+  };
+}
 
 function readJson(file, fallback = {}) {
   try {
@@ -825,6 +1165,7 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
   const knowledgeSummary = buildKnowledgeSummary(knowledgeManifest);
   const taskViews = buildTaskStates(audit, sourceIndex, knowledgeSummary, generatedAt);
   const manifestMatches = manifestSummary(taskViews);
+  const runtime = buildRuntimeEnvironment(generatedAt);
 
   return {
     schemaVersion: "0.1.0",
@@ -869,6 +1210,7 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
       pendingConfirmationCount: 0,
       lastGeneratedAt: generatedAt,
     },
+    runtime,
     diagnostics: {
       issues: audit.issues,
       schemaSummary: audit.schemaSummary,

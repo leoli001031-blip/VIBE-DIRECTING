@@ -37,6 +37,150 @@ export type ProviderExecutionState =
   | "parked"
   | "planned";
 
+export type RuntimeMode =
+  | "browser_dev"
+  | "tauri_planned"
+  | "tauri_desktop"
+  | "electron_fallback_planned";
+
+export type RuntimePlatform = "darwin" | "win32" | "linux" | "unknown";
+
+export type RuntimePathStatus = "path" | "unknown" | "planned" | "blocked";
+
+export type ToolDetectionStatus = "available" | "missing" | "planned" | "blocked" | "unknown";
+
+export type RuntimeToolKind =
+  | "agent_cli"
+  | "image_runtime"
+  | "media_binary"
+  | "node_runtime"
+  | "package_manager"
+  | "vcs"
+  | "planned_provider"
+  | "unknown";
+
+export interface RuntimePathRule {
+  id: string;
+  platform: RuntimePlatform | "all";
+  rule: string;
+  example?: string;
+}
+
+export interface RuntimeProjectRootPolicy {
+  strategy: "project_root_relative";
+  allowedRoots: Array<"project_root" | "user_selected_import" | "app_config" | "temp_dir">;
+  macPathStyle: "posix";
+  windowsPathStyle: "win32";
+  notes: string[];
+}
+
+export interface RuntimeToolPath {
+  id: string;
+  label: string;
+  status: RuntimePathStatus;
+  path?: string;
+  source: "detected" | "configured" | "placeholder" | "planned";
+  notes: string[];
+}
+
+export interface ProviderEnablementEntry {
+  slot: ProviderSlot;
+  state: ProviderExecutionState;
+  activeProvider?: string;
+  allowedProviders: string[];
+  forbiddenProviders: string[];
+  liveSubmitAllowed: boolean;
+  notes: string[];
+}
+
+export interface ProviderEnablementState {
+  strictImageProvider: "image2_only";
+  slots: ProviderEnablementEntry[];
+}
+
+export interface SidecarAllowedCommand {
+  id: string;
+  executable: string;
+  allowedArgs: string[];
+  requiredFor: string[];
+  notes: string[];
+}
+
+export interface SidecarPermissionPolicy {
+  arbitraryShellExecution: "blocked";
+  providerLiveSubmit: "blocked";
+  filesystemScope: Array<"project_root" | "user_selected_import" | "app_config" | "temp_dir">;
+  allowedCommands: SidecarAllowedCommand[];
+  notes: string[];
+}
+
+export interface RuntimeCredentialStorage {
+  mode: "placeholder" | "planned";
+  storesSecrets: false;
+  plannedStores: Array<"macos_keychain" | "windows_credential_manager" | "local_encrypted_store">;
+  notes: string[];
+}
+
+export interface RuntimeVoiceSource {
+  id: string;
+  label: string;
+  status: "placeholder" | "planned" | "unavailable";
+  kind: "tts_voice" | "music_source" | "voice_library";
+  notes: string[];
+}
+
+export interface RuntimeConfig {
+  schemaVersion: string;
+  runtimeMode: RuntimeMode;
+  platform: RuntimePlatform;
+  projectRootPolicy: RuntimeProjectRootPolicy;
+  pathRules: RuntimePathRule[];
+  toolPaths: {
+    codexCli: RuntimeToolPath;
+    image2Runtime: RuntimeToolPath;
+    ffmpeg: RuntimeToolPath;
+    ffprobe: RuntimeToolPath;
+    node: RuntimeToolPath;
+    npm: RuntimeToolPath;
+    git: RuntimeToolPath;
+  };
+  providerEnablement: ProviderEnablementState;
+  sidecarPermissions: SidecarPermissionPolicy;
+  credentialStorage: RuntimeCredentialStorage;
+  voiceSources: RuntimeVoiceSource[];
+}
+
+export interface ToolDetectionItem {
+  id: string;
+  label: string;
+  kind: RuntimeToolKind;
+  requiredFor: string[];
+  status: ToolDetectionStatus;
+  path?: string;
+  version?: string;
+  notes: string[];
+}
+
+export interface ToolDetectionReport {
+  generatedAt: string;
+  platform: RuntimePlatform;
+  tools: ToolDetectionItem[];
+}
+
+export interface RuntimeProviderEnablementSummary {
+  activeImageSlots: number;
+  parkedVideoSlots: number;
+  plannedAudioSlots: number;
+  liveSubmitAllowed: boolean;
+  notes: string[];
+}
+
+export interface ProjectRuntimeEnvironment {
+  config: RuntimeConfig;
+  detectionReport: ToolDetectionReport;
+  providerEnablementSummary: RuntimeProviderEnablementSummary;
+}
+
 export type ReferenceRole =
   | "identity_authority"
   | "scene_layout_authority"

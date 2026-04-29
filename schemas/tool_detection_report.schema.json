@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/tool_detection_report.schema.json",
+  "title": "ToolDetectionReport",
+  "description": "Read-only local tool detection report generated without downloads, installs, credential reads, or provider submission.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["generatedAt", "platform", "tools"],
+  "properties": {
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "platform": { "$ref": "#/$defs/runtimePlatform" },
+    "tools": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/toolDetectionItem" }
+    }
+  },
+  "$defs": {
+    "runtimePlatform": {
+      "type": "string",
+      "enum": ["darwin", "win32", "linux", "unknown"]
+    },
+    "toolDetectionStatus": {
+      "type": "string",
+      "enum": ["available", "missing", "planned", "blocked", "unknown"]
+    },
+    "runtimeToolKind": {
+      "type": "string",
+      "enum": [
+        "agent_cli",
+        "image_runtime",
+        "media_binary",
+        "node_runtime",
+        "package_manager",
+        "vcs",
+        "planned_provider",
+        "unknown"
+      ]
+    },
+    "toolDetectionItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "kind", "requiredFor", "status", "notes"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "kind": { "$ref": "#/$defs/runtimeToolKind" },
+        "requiredFor": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "status": { "$ref": "#/$defs/toolDetectionStatus" },
+        "path": { "type": "string" },
+        "version": { "type": "string" },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

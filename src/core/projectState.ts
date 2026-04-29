@@ -10,6 +10,7 @@ import type {
   PreviewEvent,
   ProjectAudit,
   ProjectMetrics,
+  ProjectRuntimeEnvironment,
   ProjectSourceIndex,
   ProviderPolicy,
   ReflowImpactReport,
@@ -140,6 +141,7 @@ export interface ProjectRuntimeState {
   };
   previewEvents: PreviewEvent[];
   storyChanges: ProjectRuntimeStoryChangeState;
+  runtime: ProjectRuntimeEnvironment;
   diagnostics: {
     issues: AuditIssue[];
     schemaSummary?: ProjectAudit["schemaSummary"];

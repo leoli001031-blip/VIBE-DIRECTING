@@ -357,6 +357,15 @@ Prompt Compiler / Prompt Conflict Checker：
 - sidecar 只有白名单命令和参数。
 - Settings 能显示工具是否可用，但不自动提交真实 provider 任务。
 
+### Phase 3.8.1：最小安全 runtime/settings shell
+
+完成范围：
+
+- `ProjectRuntimeState.runtime` 记录只读 RuntimeConfig、ToolDetectionReport、provider enablement summary。
+- import runtime test 只用本机 `which/where` 与版本命令检测 Node/npm/git/FFmpeg/FFprobe/Codex，不安装、不下载、不读取凭证、不提交 provider。
+- Settings Shell 只在 Diagnostics 中展示 runtime facts、tool detection、sidecar policy、provider enablement、voice source placeholder。
+- Image2 slots 可显示为 active；Seedance/Jimeng video slots 仍 parked；audio 仍 planned。
+
 ## Phase 4：Image2 Adapter + Prompt Compiler + Asset Readiness
 
 目标：只接图片链路，不碰视频真实提交。

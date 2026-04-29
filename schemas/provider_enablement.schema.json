@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/provider_enablement.schema.json",
+  "title": "ProviderEnablementState",
+  "description": "Read-only provider enablement plan. Image2 slots may be active, video remains parked, and audio remains planned.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["strictImageProvider", "slots"],
+  "properties": {
+    "strictImageProvider": {
+      "type": "string",
+      "const": "image2_only"
+    },
+    "slots": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/providerEnablementEntry" }
+    }
+  },
+  "$defs": {
+    "providerEnablementEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "state", "allowedProviders", "forbiddenProviders", "liveSubmitAllowed", "notes"],
+      "properties": {
+        "slot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+        "state": { "$ref": "common.schema.json#/$defs/providerExecutionState" },
+        "activeProvider": { "type": "string" },
+        "allowedProviders": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "forbiddenProviders": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "slot": {
+                "type": "string",
+                "pattern": "^image\\."
+              }
+            },
+            "required": ["slot"]
+          },
+          "then": {
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": ["active", "parked", "planned", "available", "unavailable"]
+              },
+              "liveSubmitAllowed": { "const": false }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "slot": {
+                "type": "string",
+                "pattern": "^video\\."
+              }
+            },
+            "required": ["slot"]
+          },
+          "then": {
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": ["parked", "planned"]
+              },
+              "liveSubmitAllowed": { "const": false }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "slot": {
+                "type": "string",
+                "pattern": "^audio\\."
+              }
+            },
+            "required": ["slot"]
+          },
+          "then": {
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": ["planned", "parked"]
+              },
+              "liveSubmitAllowed": { "const": false }
+            }
+          }
+        }
+      ]
+    },
+    "providerEnablementSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["activeImageSlots", "parkedVideoSlots", "plannedAudioSlots", "liveSubmitAllowed", "notes"],
+      "properties": {
+        "activeImageSlots": { "type": "integer", "minimum": 0 },
+        "parkedVideoSlots": { "type": "integer", "minimum": 0 },
+        "plannedAudioSlots": { "type": "integer", "minimum": 0 },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
