@@ -25,6 +25,7 @@
     "adapterContracts",
     "generationHarness",
     "filesystemWatcherHarness",
+    "checkpointResumeHarness",
     "storyChanges",
     "runtime",
     "diagnostics",
@@ -204,6 +205,7 @@
     "adapterContracts": { "$ref": "adapter_contract.schema.json" },
     "generationHarness": { "$ref": "generation_harness.schema.json" },
     "filesystemWatcherHarness": { "$ref": "filesystem_watcher_harness.schema.json" },
+    "checkpointResumeHarness": { "$ref": "checkpoint_resume_harness.schema.json" },
     "storyChanges": {
       "type": "object",
       "additionalProperties": false,

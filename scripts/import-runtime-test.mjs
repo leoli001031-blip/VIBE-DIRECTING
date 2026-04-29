@@ -2218,6 +2218,201 @@ function buildFilesystemWatcherHarnessState({
   };
 }
 
+const checkpointResumeHarnessHardLocks = {
+  dryRunOnly: true,
+  providerSubmissionForbidden: true,
+  liveSubmitAllowed: false,
+  noFileMutation: true,
+  noAutoSkipWithoutQa: true,
+  workerSelfReportCannotComplete: true,
+  tempCandidateCannotResumeAsFormal: true,
+};
+
+function checkpointSnapshotPaths(snapshot) {
+  if (Array.isArray(snapshot)) {
+    return new Set(snapshot.map((entry) => normalizePathValue(typeof entry === "string" ? entry : entry.path)));
+  }
+  return new Set(Object.keys(snapshot || {}).map(normalizePathValue));
+}
+
+function checkpointHasManifestMatch(status) {
+  return ["actual_output_present", "complete", "matched"].includes(status);
+}
+
+function checkpointSourceHashMismatch(taskPlan) {
+  return Boolean(
+    taskPlan.taskEnvelopeSummary &&
+      ((taskPlan.taskEnvelopeSummary.promptPlanHash &&
+        taskPlan.taskEnvelopeSummary.promptPlanHash !== taskPlan.sourcePromptPlanHash) ||
+        (taskPlan.taskEnvelopeSummary.sourceShotSpecHash &&
+          taskPlan.taskEnvelopeSummary.sourceShotSpecHash !== taskPlan.sourceShotSpecHash)),
+  );
+}
+
+function checkpointResumeStatus({ skipAllowed, manualReviewRequired, rerunAllowed, blocked }) {
+  if (skipAllowed) return "skip_ready";
+  if (blocked) return "blocked";
+  if (manualReviewRequired) return "manual_review_required";
+  if (rerunAllowed) return "rerun_required";
+  return "waiting";
+}
+
+function checkpointResumeDecision({ skipAllowed, staleSource, expectedOutputExists, hasTempOrDerivative, canPromoteToFormal, blocked }) {
+  if (skipAllowed) return "skip_existing_formal";
+  if (staleSource) return "rerun_stale_source";
+  if (!expectedOutputExists) return "rerun_missing_expected_output";
+  if (hasTempOrDerivative) return "manual_review_temp_or_derivative";
+  if (canPromoteToFormal) return "manual_promote_or_review_candidate";
+  if (blocked) return "blocked_by_generation_gate";
+  return "wait_for_qa_or_promotion";
+}
+
+function buildCheckpointResumeHarnessState({
+  generatedAt,
+  fileSnapshot,
+  manifestMatches,
+  imageTaskPlans,
+  generationHealthReports,
+  qaPromotionReports,
+  generationHarness,
+  filesystemWatcherHarness,
+}) {
+  const paths = checkpointSnapshotPaths(fileSnapshot || []);
+  const healthByTaskPlan = new Map(generationHealthReports.map((report) => [report.taskPlanId, report]));
+  const promotionByTaskPlan = new Map(qaPromotionReports.map((report) => [report.taskPlanId, report]));
+  const generationJobByTaskPlan = new Map((generationHarness?.jobs || []).map((job) => [job.taskPlanId, job]));
+  const streamsByTaskPlan = new Map();
+
+  for (const stream of filesystemWatcherHarness?.streams || []) {
+    const scoped = streamsByTaskPlan.get(stream.taskPlanId) || [];
+    scoped.push(stream);
+    streamsByTaskPlan.set(stream.taskPlanId, scoped);
+  }
+
+  const items = imageTaskPlans.map((taskPlan) => {
+    const health = healthByTaskPlan.get(taskPlan.taskPlanId);
+    const promotion = promotionByTaskPlan.get(taskPlan.taskPlanId);
+    const manifestReport = manifestReportForTaskPlan(taskPlan, manifestMatches || []);
+    const generationJob = generationJobByTaskPlan.get(taskPlan.taskPlanId);
+    const watcherStreams = streamsByTaskPlan.get(taskPlan.taskPlanId) || [];
+    const watcherStreamIds = uniqueSorted(watcherStreams.map((stream) => stream.streamId));
+    const candidatePath = promotion?.candidatePath || generationJob?.candidateOutput?.candidatePath || taskPlan.expectedOutputPath;
+    const formalPath = promotion?.formalPath || generationJob?.candidateOutput?.formalPath;
+    const expectedOutputPath = taskPlan.expectedOutputPath;
+    const expectedOutputExists = Boolean(health?.outputExists) || paths.has(normalizePathValue(expectedOutputPath));
+    const candidatePathExists = Boolean(candidatePath && paths.has(normalizePathValue(candidatePath)));
+    const formalPathExists = Boolean(formalPath && paths.has(normalizePathValue(formalPath)));
+    const manifestStatus = health?.manifestStatus || manifestReport?.status || "missing_expected_output";
+    const manifestMatched = checkpointHasManifestMatch(manifestStatus);
+    const qaStatus = health?.qaStatus || "unknown";
+    const staleSource = Boolean(health?.stalePrompt) || checkpointSourceHashMismatch(taskPlan);
+    const hasTempOrDerivative = watcherStreams.some((stream) =>
+      ["temp_candidate", "provider_ready_derivative", "postprocess_recoverable"].includes(stream.artifactClass),
+    );
+    const workerSelfReportOnly = watcherStreams.some((stream) => stream.artifactClass === "worker_exit_without_expected_output");
+    const canPromoteToFormal = Boolean(promotion?.canPromoteToFormal);
+    const blockedByGate = taskPlan.status === "blocked" || health?.healthStatus === "blocked" || health?.healthStatus === "failed";
+    const formalGatePassed = canPromoteToFormal && manifestMatched && qaStatus === "pass" && !staleSource;
+    const skipAllowed = formalGatePassed && formalPathExists && !hasTempOrDerivative;
+    const missingExpectedOutput = !expectedOutputExists;
+    const rerunAllowed = !skipAllowed && (missingExpectedOutput || staleSource || health?.healthStatus === "failed" || workerSelfReportOnly);
+    const manualReviewRequired =
+      !skipAllowed &&
+      (hasTempOrDerivative ||
+        (expectedOutputExists && !formalPathExists) ||
+        (expectedOutputExists && (!manifestMatched || qaStatus !== "pass" || !canPromoteToFormal)));
+    const blockingReasons = uniqueSorted([
+      ...(taskPlan.status === "blocked" ? ["Image task plan is blocked."] : []),
+      ...(missingExpectedOutput ? ["Expected output is missing; resume plan may only propose a dry-run rerun."] : []),
+      ...(manifestMatched ? [] : [`Manifest status is ${manifestStatus}; skip is blocked.`]),
+      ...(qaStatus === "pass" ? [] : [`QA status is ${qaStatus}; skip requires explicit QA pass.`]),
+      ...(canPromoteToFormal ? [] : ["QA promotion gate has not set canPromoteToFormal=true."]),
+      ...(staleSource ? ["Prompt or source hash mismatch blocks skip."] : []),
+      ...(hasTempOrDerivative ? ["Temp/candidate/provider-ready derivatives require manual review or rerun; they cannot resume as formal."] : []),
+      ...(workerSelfReportOnly ? ["Worker/provider self-report cannot complete a task."] : []),
+      ...(formalGatePassed && !formalPathExists ? ["Formal path is not present in the file snapshot; automatic skip is blocked."] : []),
+      ...(health?.blockers || []),
+      ...(promotion?.blockers || []),
+    ]);
+    const resumeStatus = checkpointResumeStatus({
+      skipAllowed,
+      manualReviewRequired,
+      rerunAllowed,
+      blocked: blockedByGate && !rerunAllowed && !manualReviewRequired,
+    });
+    const resumeDecision = checkpointResumeDecision({
+      skipAllowed,
+      staleSource,
+      expectedOutputExists,
+      hasTempOrDerivative,
+      canPromoteToFormal,
+      blocked: blockedByGate,
+    });
+
+    return {
+      resumeItemId: `checkpoint_resume_${taskPlan.taskPlanId}`,
+      taskPlanId: taskPlan.taskPlanId,
+      jobId: taskPlan.jobId,
+      shotId: taskPlan.shotId,
+      harnessJobId: generationJob?.harnessJobId,
+      expectedOutputPath,
+      candidatePath,
+      formalPath,
+      candidatePathExists,
+      formalPathExists,
+      expectedOutputExists,
+      manifestStatus,
+      healthStatus: health?.healthStatus || "missing",
+      qaStatus,
+      promotionStatus: promotion?.promotionStatus,
+      canPromoteToFormal,
+      watcherStreamIds,
+      resumeStatus,
+      resumeDecision,
+      skipAllowed,
+      rerunAllowed,
+      manualReviewRequired,
+      blockingReasons,
+      notes: uniqueSorted([
+        "Phase 8.6 Checkpoint Resume Harness emits a plan only; it does not skip, rerun, move, delete, copy, or submit.",
+        ...(formalGatePassed
+          ? ["Manifest, QA, and promotion gates pass; skip still requires an existing formal path."]
+          : ["File existence, expected-output detection, and worker self-report are not completion gates."]),
+      ]),
+    };
+  }).sort((left, right) => left.resumeItemId.localeCompare(right.resumeItemId));
+
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt,
+    items,
+    summary: {
+      totalItems: items.length,
+      skipAllowed: items.filter((item) => item.skipAllowed).length,
+      rerunAllowed: items.filter((item) => item.rerunAllowed).length,
+      manualReviewRequired: items.filter((item) => item.manualReviewRequired).length,
+      blocked: items.filter((item) => item.resumeStatus === "blocked").length,
+      missingExpectedOutput: items.filter((item) => !item.expectedOutputExists).length,
+      linkedWatcherStreams: items.reduce((count, item) => count + item.watcherStreamIds.length, 0),
+      linkedGenerationHarnessJobs: items.filter((item) => item.harnessJobId).length,
+      dryRunOnly: true,
+      liveSubmitAllowed: false,
+      noFileMutation: true,
+    },
+    hardLocks: checkpointResumeHarnessHardLocks,
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+    liveSubmitAllowed: false,
+    noFileMutation: true,
+    planOnly: true,
+    notes: [
+      `Derived from ${imageTaskPlans.length} image task plans, ${snapshotPathCount(fileSnapshot || [])} file snapshot entries, ${(generationHarness?.jobs || []).length} generation harness jobs, and ${(filesystemWatcherHarness?.streams || []).length} watcher streams.`,
+      "Skip is allowed only for existing formal outputs that also pass manifest, explicit QA, and promotion gates.",
+      "Missing expected outputs produce rerun-allowed dry-run plans only; no provider submission is performed.",
+    ],
+  };
+}
+
 function computeSourceIndexHash(index) {
   return hashString(JSON.stringify(canonicalize(index)));
 }
@@ -4018,6 +4213,16 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     qaPromotionReports,
     generationHarness,
   });
+  const checkpointResumeHarness = buildCheckpointResumeHarnessState({
+    generatedAt,
+    fileSnapshot,
+    manifestMatches: taskViews.map((task) => task.manifestMatch),
+    imageTaskPlans,
+    generationHealthReports,
+    qaPromotionReports,
+    generationHarness,
+    filesystemWatcherHarness,
+  });
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -4092,6 +4297,7 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     adapterContracts,
     generationHarness,
     filesystemWatcherHarness,
+    checkpointResumeHarness,
     storyChanges: {
       transactions: [],
       reflowReports: [],

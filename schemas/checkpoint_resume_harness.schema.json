@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/checkpoint_resume_harness.schema.json",
+  "title": "CheckpointResumeHarnessState",
+  "description": "Phase 8.6 dry-run checkpoint resume plan. It derives skip, rerun, and manual-review decisions without provider submission or file mutation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "items",
+    "summary",
+    "hardLocks",
+    "dryRunOnly",
+    "providerSubmissionForbidden",
+    "liveSubmitAllowed",
+    "noFileMutation",
+    "planOnly",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/resumeItem" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalItems",
+        "skipAllowed",
+        "rerunAllowed",
+        "manualReviewRequired",
+        "blocked",
+        "missingExpectedOutput",
+        "linkedWatcherStreams",
+        "linkedGenerationHarnessJobs",
+        "dryRunOnly",
+        "liveSubmitAllowed",
+        "noFileMutation"
+      ],
+      "properties": {
+        "totalItems": { "type": "integer", "minimum": 0 },
+        "skipAllowed": { "type": "integer", "minimum": 0 },
+        "rerunAllowed": { "type": "integer", "minimum": 0 },
+        "manualReviewRequired": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "missingExpectedOutput": { "type": "integer", "minimum": 0 },
+        "linkedWatcherStreams": { "type": "integer", "minimum": 0 },
+        "linkedGenerationHarnessJobs": { "type": "integer", "minimum": 0 },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "noFileMutation": { "type": "boolean", "const": true }
+      }
+    },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "dryRunOnly": { "type": "boolean", "const": true },
+    "providerSubmissionForbidden": { "type": "boolean", "const": true },
+    "liveSubmitAllowed": { "type": "boolean", "const": false },
+    "noFileMutation": { "type": "boolean", "const": true },
+    "planOnly": { "type": "boolean", "const": true },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "resumeStatus": {
+      "type": "string",
+      "enum": ["skip_ready", "manual_review_required", "rerun_required", "blocked", "waiting"]
+    },
+    "resumeDecision": {
+      "type": "string",
+      "enum": [
+        "skip_existing_formal",
+        "manual_promote_or_review_candidate",
+        "manual_review_temp_or_derivative",
+        "rerun_missing_expected_output",
+        "rerun_stale_source",
+        "blocked_by_generation_gate",
+        "wait_for_qa_or_promotion"
+      ]
+    },
+    "healthStatus": {
+      "type": "string",
+      "enum": ["waiting", "output_detected", "qa_pending", "formal_ready", "blocked", "failed", "missing"]
+    },
+    "qaStatus": {
+      "type": "string",
+      "enum": ["missing", "pending", "pass", "fail", "not_required", "unknown"]
+    },
+    "promotionStatus": {
+      "type": "string",
+      "enum": ["candidate", "blocked", "qa_pending", "ready_for_promotion", "promoted"]
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dryRunOnly",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "noFileMutation",
+        "noAutoSkipWithoutQa",
+        "workerSelfReportCannotComplete",
+        "tempCandidateCannotResumeAsFormal"
+      ],
+      "properties": {
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "noAutoSkipWithoutQa": { "type": "boolean", "const": true },
+        "workerSelfReportCannotComplete": { "type": "boolean", "const": true },
+        "tempCandidateCannotResumeAsFormal": { "type": "boolean", "const": true }
+      }
+    },
+    "resumeItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resumeItemId",
+        "taskPlanId",
+        "jobId",
+        "shotId",
+        "expectedOutputPath",
+        "candidatePathExists",
+        "formalPathExists",
+        "expectedOutputExists",
+        "manifestStatus",
+        "healthStatus",
+        "qaStatus",
+        "canPromoteToFormal",
+        "watcherStreamIds",
+        "resumeStatus",
+        "resumeDecision",
+        "skipAllowed",
+        "rerunAllowed",
+        "manualReviewRequired",
+        "blockingReasons",
+        "notes"
+      ],
+      "properties": {
+        "resumeItemId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "jobId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "harnessJobId": { "type": "string" },
+        "expectedOutputPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "candidatePath": { "type": "string" },
+        "formalPath": { "type": "string" },
+        "candidatePathExists": { "type": "boolean" },
+        "formalPathExists": { "type": "boolean" },
+        "expectedOutputExists": { "type": "boolean" },
+        "manifestStatus": { "type": "string" },
+        "healthStatus": { "$ref": "#/$defs/healthStatus" },
+        "qaStatus": { "$ref": "#/$defs/qaStatus" },
+        "promotionStatus": { "$ref": "#/$defs/promotionStatus" },
+        "canPromoteToFormal": { "type": "boolean" },
+        "watcherStreamIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "resumeStatus": { "$ref": "#/$defs/resumeStatus" },
+        "resumeDecision": { "$ref": "#/$defs/resumeDecision" },
+        "skipAllowed": { "type": "boolean" },
+        "rerunAllowed": { "type": "boolean" },
+        "manualReviewRequired": { "type": "boolean" },
+        "blockingReasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -185,6 +185,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "FilesystemWatcherHarnessState",
   },
   {
+    fileName: "checkpoint_resume_harness.schema.json",
+    id: "https://vibecore.local/schemas/checkpoint_resume_harness.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 8.6 dry-run checkpoint resume plan derived from manifest, file snapshot, generation, and watcher harness facts.",
+    typeName: "CheckpointResumeHarnessState",
+  },
+  {
     fileName: "knowledge_pack.schema.json",
     id: "https://vibecore.local/schemas/knowledge_pack.schema.json",
     version: schemaVersion,

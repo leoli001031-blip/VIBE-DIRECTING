@@ -665,6 +665,23 @@ Phase 6 已实现范围（核心合同）：
 - `canPromoteFormal=true` 只能来自 `qaPromotionReports.canPromoteToFormal=true`；temp candidate、provider-ready derivative、recoverable derivative 永远不能成为 future reference。
 - Phase 8.5 仍不接 Seedance/Jimeng live submit，不新增 text-to-video fallback，不把 local postprocess 用作语义修复器。
 
+### Phase 8.6 已实现范围：Checkpoint Resume Harness
+
+- `ProjectRuntimeState.checkpointResumeHarness` 写入 Phase 8.6 的 dry-run resume plan，只从 `manifestMatches`、`fileSnapshot`、`imageTaskPlans`、`generationHealthReports`、`qaPromotionReports`、`generationHarness`、`filesystemWatcherHarness` 归纳逐 job 恢复状态。
+- 每个 resume item 保留 `taskPlanId`、`jobId`、`shotId`、`harnessJobId`、`expectedOutputPath`、`candidatePath`、`formalPath`、manifest / health / QA / promotion 状态、关联 watcher stream ids，以及 `resumeStatus`、`resumeDecision`、`skipAllowed`、`rerunAllowed`、`manualReviewRequired`、`blockingReasons`。
+- `skipAllowed=true` 只允许出现在已存在 formal path 且 manifest match、QA pass、`qaPromotionReports.canPromoteToFormal=true`、prompt/source hash 新鲜的 item 上；expected output 存在、worker 自报、watcher 检测都不能单独完成任务。
+- temp candidate、provider-ready derivative、postprocess recoverable derivative 永远不能作为 formal resume；它们只能进入 `manualReviewRequired=true` 或 `rerunAllowed=true` 的 dry-run 计划。
+- 缺 expected output 会写成 `rerunAllowed=true`，但只代表计划建议；Phase 8.6 不启动 worker、不提交 provider、不改写文件。
+- 硬锁固定为 `dryRunOnly=true`、`providerSubmissionForbidden=true`、`liveSubmitAllowed=false`、`noFileMutation=true`、`noAutoSkipWithoutQa=true`、`workerSelfReportCannotComplete=true`、`tempCandidateCannotResumeAsFormal=true`，并额外固定 `planOnly=true`。
+- 新增 `schemas/checkpoint_resume_harness.schema.json` 并纳入 `project_runtime_state.schema.json` 与 schema registry；新增 `npm run resume:test` 覆盖 required field、imageTaskPlan 全覆盖、skip gate、temp/candidate 禁 skip、missing output rerun、硬锁、watcher stream linkage、Generation Harness linkage。
+
+禁止项：
+
+- Checkpoint Resume Harness 不能真实 skip、rerun、move、copy、delete、rename、promote formal 或提交 provider；它只生成恢复计划。
+- 不能把 `expected_output_detected`、file exists、worker/provider self-report、adapter request preview 解释为 complete。
+- 不能在 stale prompt/source hash mismatch 时允许 skip。
+- 不能让 temp/candidate/provider-ready derivative 自动接管为 formal；需要人工 review 或重新生成计划。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

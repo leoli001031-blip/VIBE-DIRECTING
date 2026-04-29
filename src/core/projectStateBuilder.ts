@@ -4,6 +4,7 @@ import { buildImageTaskPlan } from "./imageTaskPlanner";
 import type { KnowledgePackManifest, KnowledgeRouteMatch, KnowledgeTaskPurpose } from "./knowledgeTypes";
 import { buildImage2AdapterRequest } from "./providerAdapters/image2Adapter";
 import { buildDefaultProviderRegistry } from "./providerCapabilities";
+import { buildCheckpointResumeHarnessState } from "./checkpointResumeHarness";
 import { buildFilesystemWatcherHarnessState } from "./filesystemWatcherHarness";
 import { buildGenerationHealthReports } from "./generationHealth";
 import { buildGenerationHarnessState } from "./generationHarness";
@@ -223,6 +224,16 @@ export function buildProjectRuntimeState(
     qaPromotionReports,
     generationHarness,
   });
+  const checkpointResumeHarness = buildCheckpointResumeHarnessState({
+    generatedAt,
+    fileSnapshot: audit.fileSnapshot || [],
+    manifestMatches: taskViews.map((task) => task.manifestMatch),
+    imageTaskPlans,
+    generationHealthReports,
+    qaPromotionReports,
+    generationHarness,
+    filesystemWatcherHarness,
+  });
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -287,6 +298,7 @@ export function buildProjectRuntimeState(
     adapterContracts,
     generationHarness,
     filesystemWatcherHarness,
+    checkpointResumeHarness,
     storyChanges: {
       transactions: [],
       reflowReports: [],
@@ -394,6 +406,18 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       qaPromotionReports: state.imagePipeline.qaPromotionReports,
       generationHarness,
     });
+  const checkpointResumeHarness =
+    state.checkpointResumeHarness ||
+    buildCheckpointResumeHarnessState({
+      generatedAt: state.generatedAt,
+      fileSnapshot: state.legacyAudit?.fileSnapshot || [],
+      manifestMatches: state.manifestMatches.reports,
+      imageTaskPlans: state.imagePipeline.imageTaskPlans,
+      generationHealthReports: state.imagePipeline.generationHealthReports,
+      qaPromotionReports: state.imagePipeline.qaPromotionReports,
+      generationHarness,
+      filesystemWatcherHarness,
+    });
 
   return {
     ...state,
@@ -404,6 +428,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     adapterContracts,
     generationHarness,
     filesystemWatcherHarness,
+    checkpointResumeHarness,
   };
 }
 

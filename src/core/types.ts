@@ -850,6 +850,85 @@ export interface FilesystemWatcherHarnessState {
   notes: string[];
 }
 
+export type CheckpointResumeStatus =
+  | "skip_ready"
+  | "manual_review_required"
+  | "rerun_required"
+  | "blocked"
+  | "waiting";
+
+export type CheckpointResumeDecision =
+  | "skip_existing_formal"
+  | "manual_promote_or_review_candidate"
+  | "manual_review_temp_or_derivative"
+  | "rerun_missing_expected_output"
+  | "rerun_stale_source"
+  | "blocked_by_generation_gate"
+  | "wait_for_qa_or_promotion";
+
+export interface CheckpointResumeHarnessHardLocks {
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  noFileMutation: true;
+  noAutoSkipWithoutQa: true;
+  workerSelfReportCannotComplete: true;
+  tempCandidateCannotResumeAsFormal: true;
+}
+
+export interface CheckpointResumeHarnessItem {
+  resumeItemId: string;
+  taskPlanId: string;
+  jobId: string;
+  shotId: string;
+  harnessJobId?: string;
+  expectedOutputPath: string;
+  candidatePath?: string;
+  formalPath?: string;
+  candidatePathExists: boolean;
+  formalPathExists: boolean;
+  expectedOutputExists: boolean;
+  manifestStatus: string;
+  healthStatus: GenerationHealthStatus | "missing";
+  qaStatus: GenerationQaStatus;
+  promotionStatus?: QaPromotionStatus;
+  canPromoteToFormal: boolean;
+  watcherStreamIds: string[];
+  resumeStatus: CheckpointResumeStatus;
+  resumeDecision: CheckpointResumeDecision;
+  skipAllowed: boolean;
+  rerunAllowed: boolean;
+  manualReviewRequired: boolean;
+  blockingReasons: string[];
+  notes: string[];
+}
+
+export interface CheckpointResumeHarnessState {
+  schemaVersion: string;
+  generatedAt: string;
+  items: CheckpointResumeHarnessItem[];
+  summary: {
+    totalItems: number;
+    skipAllowed: number;
+    rerunAllowed: number;
+    manualReviewRequired: number;
+    blocked: number;
+    missingExpectedOutput: number;
+    linkedWatcherStreams: number;
+    linkedGenerationHarnessJobs: number;
+    dryRunOnly: true;
+    liveSubmitAllowed: false;
+    noFileMutation: true;
+  };
+  hardLocks: CheckpointResumeHarnessHardLocks;
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  noFileMutation: true;
+  planOnly: true;
+  notes: string[];
+}
+
 export type GenerationQaStatus = "missing" | "pending" | "pass" | "fail" | "not_required" | "unknown";
 
 export type GenerationHealthStatus =

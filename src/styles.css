@@ -1378,7 +1378,16 @@ small {
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
+.checkpoint-resume-panel .checkpoint-resume-metrics {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
 .filesystem-watcher-panel .metric strong {
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.checkpoint-resume-panel .metric strong {
   font-size: 20px;
   overflow-wrap: anywhere;
 }
@@ -1641,6 +1650,79 @@ small {
   margin-top: 2px;
 }
 
+.checkpoint-resume-table {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.checkpoint-resume-row {
+  min-width: 0;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 0;
+}
+
+.checkpoint-resume-row summary {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) auto auto minmax(220px, 1.25fr) minmax(140px, 0.9fr) minmax(110px, 0.85fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  color: #d9d1c4;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.checkpoint-resume-row summary span,
+.checkpoint-resume-row summary strong,
+.checkpoint-resume-row summary small,
+.checkpoint-resume-details small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checkpoint-resume-row strong,
+.checkpoint-resume-row small {
+  display: block;
+}
+
+.checkpoint-resume-row strong {
+  color: #d9d1c4;
+  font-size: 12px;
+}
+
+.checkpoint-resume-row small,
+.checkpoint-resume-details small {
+  color: #9d958a;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.checkpoint-flag-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.checkpoint-gate-group {
+  display: grid;
+  gap: 2px;
+}
+
+.checkpoint-resume-details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  border-top: 1px solid rgba(236, 231, 223, 0.08);
+  padding: 9px;
+}
+
+.checkpoint-resume-details .compact-list {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
 .compact-list small {
   border: 1px solid rgba(236, 231, 223, 0.08);
   background: rgba(255, 255, 255, 0.025);
@@ -1859,6 +1941,7 @@ small {
   .audio-diagnostics-grid,
   .video-diagnostics-grid,
   .watcher-diagnostics-grid,
+  .checkpoint-resume-details,
   .knowledge-distribution,
   .machine-panel .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1919,8 +2002,13 @@ small {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .checkpoint-resume-panel .checkpoint-resume-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .watcher-root-row,
-  .watcher-stream-row summary {
+  .watcher-stream-row summary,
+  .checkpoint-resume-row summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1957,6 +2045,7 @@ small {
   .video-status-grid,
   .video-diagnostics-grid,
   .watcher-diagnostics-grid,
+  .checkpoint-resume-details,
   .knowledge-distribution,
   .machine-panel .summary-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -1983,10 +2072,12 @@ small {
 
   .generation-harness-panel .generation-harness-metrics,
   .filesystem-watcher-panel .filesystem-watcher-metrics,
+  .checkpoint-resume-panel .checkpoint-resume-metrics,
   .generation-job-head,
   .candidate-output-summary div,
   .watcher-root-row,
   .watcher-stream-row summary,
+  .checkpoint-resume-row summary,
   .watcher-stream-details {
     grid-template-columns: minmax(0, 1fr);
   }
