@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/story_change_transaction.schema.json",
+  "title": "StoryChangeTransaction",
+  "description": "A structured transaction created before natural-language story, shot, asset, style, voice, or export changes mutate the project.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "userIntent",
+    "intentType",
+    "impactScope",
+    "targetIds",
+    "mustPreserve",
+    "mustNotAdd",
+    "invalidatedArtifactIds",
+    "requiresUserConfirmation",
+    "createdAt"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "userIntent": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "intentType": {
+      "type": "string",
+      "enum": ["story", "shot", "asset", "style", "voice", "export", "unknown"]
+    },
+    "impactScope": {
+      "type": "string",
+      "enum": ["project", "section", "shot", "asset", "voice", "export"]
+    },
+    "targetIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "mustPreserve": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "mustNotAdd": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "invalidatedArtifactIds": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "requiresUserConfirmation": { "type": "boolean" },
+    "createdAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  }
+}

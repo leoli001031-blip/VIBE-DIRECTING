@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/keyframe_pair_derivation.schema.json",
+  "title": "KeyframePairDerivation",
+  "description": "Proof that an end frame is derived from the start frame or has an explicit exception.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "shotId",
+    "startFrameId",
+    "endFrameId",
+    "endDerivationSource",
+    "validForI2vPair",
+    "allowedDelta",
+    "mustPreserve",
+    "mustNotAdd"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "startFrameId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "endFrameId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "startFrameHash": { "type": "string" },
+    "endFrameHash": { "type": "string" },
+    "endDerivationSource": {
+      "type": "string",
+      "enum": ["start_frame", "independent_exception", "unknown"]
+    },
+    "validForI2vPair": { "type": "boolean" },
+    "exceptionReason": { "type": "string" },
+    "allowedDelta": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "mustPreserve": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "mustNotAdd": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "endDerivationSource": { "const": "unknown" }
+        },
+        "required": ["endDerivationSource"]
+      },
+      "then": {
+        "properties": {
+          "validForI2vPair": { "const": false }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "endDerivationSource": { "const": "independent_exception" }
+        },
+        "required": ["endDerivationSource"]
+      },
+      "then": {
+        "required": ["exceptionReason"]
+      }
+    }
+  ]
+}

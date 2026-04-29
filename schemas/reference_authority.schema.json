@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/reference_authority.schema.json",
+  "title": "ReferenceAuthority",
+  "description": "A typed reference record that declares what an image or asset is allowed to control.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "path",
+    "referenceRole",
+    "authorityScope",
+    "polarity",
+    "lockedStatus",
+    "allowedUse",
+    "canPromoteToFormal",
+    "canUseAsFutureReference"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "path": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "hash": { "type": "string" },
+    "version": { "type": "string" },
+    "referenceRole": { "$ref": "common.schema.json#/$defs/referenceRole" },
+    "authorityScope": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "uniqueItems": true
+    },
+    "polarity": { "$ref": "common.schema.json#/$defs/referencePolarity" },
+    "lockedStatus": { "$ref": "common.schema.json#/$defs/lockedStatus" },
+    "allowedUse": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/allowedUse" },
+      "uniqueItems": true
+    },
+    "canPromoteToFormal": { "type": "boolean" },
+    "canUseAsFutureReference": { "type": "boolean" },
+    "rejectedReason": { "type": "string" },
+    "contaminationReason": { "type": "string" },
+    "sourceTaskId": { "type": "string" },
+    "qaReportId": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "referenceRole": { "enum": ["negative_case", "rejected_case", "temp_candidate"] }
+        },
+        "required": ["referenceRole"]
+      },
+      "then": {
+        "properties": {
+          "canUseAsFutureReference": { "const": false }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "lockedStatus": { "const": "rejected" }
+        },
+        "required": ["lockedStatus"]
+      },
+      "then": {
+        "properties": {
+          "polarity": { "const": "negative" },
+          "canPromoteToFormal": { "const": false },
+          "canUseAsFutureReference": { "const": false }
+        }
+      }
+    }
+  ]
+}

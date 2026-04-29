@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/task_run.schema.json",
+  "title": "TaskRun",
+  "description": "The local queue state for one task run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "taskId",
+    "localStatus",
+    "providerStatus",
+    "providerId",
+    "retryCount",
+    "stallTimeoutSeconds",
+    "tempDirs",
+    "expectedOutputs",
+    "actualOutputs"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "taskId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "localStatus": { "$ref": "common.schema.json#/$defs/localTaskStatus" },
+    "providerStatus": { "$ref": "common.schema.json#/$defs/providerTaskStatus" },
+    "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "codexSessionId": { "type": "string" },
+    "submitId": { "type": "string" },
+    "retryCount": { "type": "integer", "minimum": 0 },
+    "backoffUntil": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "stallTimeoutSeconds": { "type": "integer", "minimum": 1 },
+    "tempDirs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "expectedOutputs": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "actualOutputs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "lastEventAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "localStatus": { "const": "ready_to_submit" } },
+        "required": ["localStatus"]
+      },
+      "then": {
+        "properties": {
+          "expectedOutputs": { "minItems": 1 }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/subagent_task_envelope.schema.json",
+  "title": "SubagentTaskEnvelope",
+  "description": "The standardized context packet sent to subagents instead of ad hoc chat text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "parentTaskId",
+    "purpose",
+    "contextLevel",
+    "sourceIndexHash",
+    "neighborShots",
+    "lockedReferences",
+    "forbiddenReferences",
+    "providerPolicySummary",
+    "taskEnvelope",
+    "qaChecklist",
+    "mustPreserve",
+    "allowedDelta",
+    "mustNotAdd",
+    "expectedOutputContract"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "parentTaskId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "purpose": {
+      "type": "string",
+      "enum": [
+        "visual_generation",
+        "visual_audit",
+        "video_generation",
+        "video_audit",
+        "continuity_audit",
+        "regeneration_plan",
+        "story_audit"
+      ]
+    },
+    "contextLevel": { "$ref": "common.schema.json#/$defs/contextLevel" },
+    "sourceIndexHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "sectionId": { "type": "string" },
+    "shotId": { "type": "string" },
+    "storyFunction": { "type": "string" },
+    "userIntent": { "type": "string" },
+    "neighborShots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["shotId", "position", "storyFunction", "summary", "continuityNotes"],
+        "properties": {
+          "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "position": {
+            "type": "string",
+            "enum": ["previous", "next", "same_section", "anchor"]
+          },
+          "storyFunction": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "summary": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "approvedFramePath": { "type": "string" },
+          "continuityNotes": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "lockedReferences": {
+      "type": "array",
+      "items": { "$ref": "reference_authority.schema.json" }
+    },
+    "forbiddenReferences": {
+      "type": "array",
+      "items": { "$ref": "reference_authority.schema.json" }
+    },
+    "shotLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shotId", "worldPositions", "anchors", "mustPreserve", "allowedDelta", "mustNotAdd"],
+      "properties": {
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "sectionId": { "type": "string" },
+        "sceneId": { "type": "string" },
+        "viewId": { "type": "string" },
+        "camera": { "type": "string" },
+        "subjectPosition": { "type": "string" },
+        "worldPositions": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "anchors": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "movement": { "type": "string" },
+        "mustPreserve": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "allowedDelta": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "mustNotAdd": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "providerPolicySummary": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "minItems": 1
+    },
+    "taskEnvelope": { "$ref": "task_envelope.schema.json" },
+    "qaChecklist": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "minItems": 1
+    },
+    "mustPreserve": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "allowedDelta": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "mustNotAdd": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "expectedOutputContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "requiredFields", "severityLevels", "gateFields"],
+      "properties": {
+        "format": { "const": "subagent_result_v1" },
+        "requiredFields": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "minItems": 1
+        },
+        "severityLevels": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["P0", "P1", "P2"] },
+          "minItems": 3
+        },
+        "gateFields": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["identity", "scene", "pair", "story", "prop", "style"] },
+          "minItems": 6
+        }
+      }
+    }
+  }
+}

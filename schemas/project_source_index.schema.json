@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/project_source_index.schema.json",
+  "title": "ProjectSourceIndex",
+  "description": "The project-local current-facts index used before old chats, global search, or historical folders.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "projectId",
+    "projectVersion",
+    "sourceIndexHash",
+    "currentPromptHashes",
+    "lockedReferenceIds",
+    "candidateReferenceIds",
+    "rejectedReferenceIds",
+    "failedReferenceIds",
+    "confirmedDecisionIds",
+    "staleArtifactIds",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "projectId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "projectVersion": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "sourceIndexHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "currentProductionBibleId": { "type": "string" },
+    "currentStoryFlowId": { "type": "string" },
+    "currentShotSpecId": { "type": "string" },
+    "currentVisualMemoryId": { "type": "string" },
+    "currentSpatialMemoryId": { "type": "string" },
+    "currentStyleCapsuleId": { "type": "string" },
+    "currentVoiceMemoryId": { "type": "string" },
+    "currentPromptHashes": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "lockedReferenceIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "uniqueItems": true
+    },
+    "candidateReferenceIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "uniqueItems": true
+    },
+    "rejectedReferenceIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "uniqueItems": true
+    },
+    "failedReferenceIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "uniqueItems": true
+    },
+    "confirmedDecisionIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "uniqueItems": true
+    },
+    "staleArtifactIds": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "uniqueItems": true
+    },
+    "updatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  }
+}

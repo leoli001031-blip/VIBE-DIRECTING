@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/manifest_matcher.schema.json",
+  "title": "ManifestMatcherReport",
+  "description": "A deterministic report that decides whether expected files, hashes, derivatives, and QA coverage exist.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "taskId",
+    "status",
+    "expectedOutputs",
+    "actualOutputs",
+    "matchedOutputs",
+    "missingOutputs",
+    "tempOutputs",
+    "hashMismatches",
+    "qaCoverage",
+    "providerReadyDerivativeExists",
+    "checkedAt",
+    "issues"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "taskId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "status": {
+      "type": "string",
+      "enum": ["matched", "partial", "missing", "blocked"]
+    },
+    "expectedOutputs": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "actualOutputs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "matchedOutputs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "missingOutputs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "tempOutputs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "hashMismatches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "expectedHash", "actualHash"],
+        "properties": {
+          "path": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "expectedHash": { "type": "string" },
+          "actualHash": { "type": "string" }
+        }
+      }
+    },
+    "qaCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredReportIds", "presentReportIds", "missingReportIds"],
+      "properties": {
+        "requiredReportIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "presentReportIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "missingReportIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "providerReadyDerivativeExists": { "type": "boolean" },
+    "checkedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "issues": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/preflightBlocker" }
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/preflight_report.schema.json",
+  "title": "PreflightReport",
+  "description": "The hard gate report required before a task can become ready_to_submit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["taskId", "status", "blockers", "warnings", "checkedAt"],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "taskId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "status": { "$ref": "common.schema.json#/$defs/preflightStatus" },
+    "blockers": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/preflightBlocker" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/preflightBlocker" }
+    },
+    "checkedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "blocked" } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "blockers": { "minItems": 1 }
+        }
+      }
+    }
+  ]
+}

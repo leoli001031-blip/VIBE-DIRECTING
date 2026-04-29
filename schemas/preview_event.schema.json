@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/preview_event.schema.json",
+  "title": "PreviewEvent",
+  "description": "A draft or formal preview timeline event.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "mode", "type", "startSeconds", "durationSeconds", "qaStatus"],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "mode": { "$ref": "common.schema.json#/$defs/previewMode" },
+    "type": {
+      "type": "string",
+      "enum": [
+        "image_hold",
+        "video_clip",
+        "narration_audio",
+        "dialogue_audio",
+        "ambience_audio",
+        "music_audio",
+        "gap",
+        "blocked_placeholder"
+      ]
+    },
+    "shotId": { "type": "string" },
+    "startSeconds": { "type": "number", "minimum": 0 },
+    "durationSeconds": { "type": "number", "exclusiveMinimum": 0 },
+    "mediaPath": { "type": "string" },
+    "qaStatus": { "$ref": "common.schema.json#/$defs/gateStatus" },
+    "sourceTaskId": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "mode": { "const": "formal_preview" } },
+        "required": ["mode"]
+      },
+      "then": {
+        "not": {
+          "properties": { "type": { "const": "blocked_placeholder" } },
+          "required": ["type"]
+        }
+      }
+    }
+  ]
+}

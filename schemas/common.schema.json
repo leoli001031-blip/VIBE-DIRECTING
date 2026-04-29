@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/common.schema.json",
+  "title": "Vibe Core Common Schema Definitions",
+  "type": "object",
+  "$defs": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^0\\.1\\.\\d+$"
+    },
+    "isoDateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "gateStatus": {
+      "type": "string",
+      "enum": ["PASS", "PARTIAL", "FAIL", "N/A", "UNKNOWN"]
+    },
+    "providerSlot": {
+      "type": "string",
+      "enum": [
+        "image.generate",
+        "image.edit",
+        "image.reference_asset",
+        "video.i2v",
+        "video.t2v.experimental",
+        "video.extend",
+        "video.edit",
+        "audio.tts",
+        "audio.music",
+        "local.postprocess",
+        "local.workflow"
+      ]
+    },
+    "requiredMode": {
+      "type": "string",
+      "enum": [
+        "text2image",
+        "image2image",
+        "frames2video",
+        "text2video",
+        "video2video",
+        "tts",
+        "music",
+        "postprocess",
+        "import_only",
+        "not_applicable"
+      ]
+    },
+    "providerExecutionState": {
+      "type": "string",
+      "enum": ["unavailable", "available", "enabled", "active", "parked", "planned"]
+    },
+    "referenceRole": {
+      "type": "string",
+      "enum": [
+        "identity_authority",
+        "scene_layout_authority",
+        "style_authority",
+        "prop_authority",
+        "negative_case",
+        "rejected_case",
+        "temp_candidate"
+      ]
+    },
+    "referencePolarity": {
+      "type": "string",
+      "enum": ["positive", "negative"]
+    },
+    "lockedStatus": {
+      "type": "string",
+      "enum": ["locked", "candidate", "needs_review", "not_generated", "rejected"]
+    },
+    "allowedUse": {
+      "type": "string",
+      "enum": [
+        "prompt_reference",
+        "future_reference",
+        "draft_preview",
+        "formal_output",
+        "negative_prompt"
+      ]
+    },
+    "contextLevel": {
+      "type": "string",
+      "enum": ["L0", "L1", "L2", "L3"]
+    },
+    "previewMode": {
+      "type": "string",
+      "enum": ["draft_preview", "formal_preview"]
+    },
+    "preflightStatus": {
+      "type": "string",
+      "enum": ["pass", "blocked", "warning"]
+    },
+    "preflightBlocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "messageForUser", "technicalDetail"],
+      "properties": {
+        "code": { "$ref": "#/$defs/nonEmptyString" },
+        "messageForUser": { "$ref": "#/$defs/nonEmptyString" },
+        "technicalDetail": { "$ref": "#/$defs/nonEmptyString" },
+        "target": { "type": "string" }
+      }
+    },
+    "gateSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "scene", "pair", "story", "prop", "style"],
+      "properties": {
+        "identity": { "$ref": "#/$defs/gateStatus" },
+        "scene": { "$ref": "#/$defs/gateStatus" },
+        "pair": { "$ref": "#/$defs/gateStatus" },
+        "story": { "$ref": "#/$defs/gateStatus" },
+        "prop": { "$ref": "#/$defs/gateStatus" },
+        "style": { "$ref": "#/$defs/gateStatus" }
+      }
+    },
+    "localTaskStatus": {
+      "type": "string",
+      "enum": [
+        "pending_local",
+        "ready_to_submit",
+        "submitted",
+        "connection_retrying",
+        "generating",
+        "temp_candidate_available",
+        "postprocess_pending",
+        "qa_pending",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "parked"
+      ]
+    },
+    "providerTaskStatus": {
+      "type": "string",
+      "enum": [
+        "not_submitted",
+        "querying",
+        "queueing",
+        "generating",
+        "success",
+        "fail",
+        "unknown"
+      ]
+    }
+  }
+}

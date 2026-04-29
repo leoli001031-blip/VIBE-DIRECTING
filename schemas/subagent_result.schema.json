@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/subagent_result.schema.json",
+  "title": "SubagentResult",
+  "description": "The only accepted result format from formal subagent work.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "taskId",
+    "status",
+    "inspectedFiles",
+    "gates",
+    "overallVisualVerdict",
+    "styleQa",
+    "motionQa",
+    "continuityQa",
+    "referenceUseDecision",
+    "issues",
+    "requiredFixes",
+    "approvedFor",
+    "rejectedFor",
+    "summaryForMainAgent"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "taskId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "status": {
+      "type": "string",
+      "enum": ["pass", "fail", "partial"]
+    },
+    "inspectedFiles": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "gates": { "$ref": "common.schema.json#/$defs/gateSet" },
+    "overallVisualVerdict": { "$ref": "common.schema.json#/$defs/gateStatus" },
+    "styleQa": { "$ref": "common.schema.json#/$defs/gateStatus" },
+    "motionQa": { "$ref": "common.schema.json#/$defs/gateStatus" },
+    "continuityQa": { "$ref": "common.schema.json#/$defs/gateStatus" },
+    "referenceUseDecision": {
+      "type": "string",
+      "enum": ["approve_formal", "draft_only", "reject_future_reference", "needs_regenerate"]
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "code", "target", "recommendation"],
+        "properties": {
+          "severity": { "type": "string", "enum": ["P0", "P1", "P2"] },
+          "code": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "target": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "recommendation": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "requiredFixes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "approvedFor": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "rejectedFor": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "summaryForMainAgent": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+  }
+}

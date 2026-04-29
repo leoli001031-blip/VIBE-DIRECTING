@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+
+# Local/generated runtime imports
+public/runtime-audit.json
+public/media/
+
+# Future local project outputs
+*.vibe/preview/
+*.vibe/exports/
+*.vibe/reports/contact_sheets/
+*.vibe/manifests/task_events.jsonl
+

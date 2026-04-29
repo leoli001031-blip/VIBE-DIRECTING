@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/task_envelope.schema.json",
+  "title": "TaskEnvelope",
+  "description": "The execution contract for one provider or worker task. Preflight is mandatory.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "purpose",
+    "providerSlot",
+    "providerId",
+    "executionState",
+    "requiredMode",
+    "sourceIndexHash",
+    "dependencies",
+    "contextLevel",
+    "expectedOutputs",
+    "hardRules",
+    "references",
+    "qaChecklist",
+    "preflight",
+    "blockingReasons"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "purpose": {
+      "type": "string",
+      "enum": ["asset", "keyframe", "video", "audit", "unknown"]
+    },
+    "providerSlot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+    "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "executionState": { "$ref": "common.schema.json#/$defs/providerExecutionState" },
+    "requiredMode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+    "storyFunction": { "type": "string" },
+    "sourceIndexHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "promptHash": { "type": "string" },
+    "dependencies": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "contextLevel": { "$ref": "common.schema.json#/$defs/contextLevel" },
+    "expectedOutputs": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "hardRules": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "minItems": 1
+    },
+    "references": {
+      "type": "array",
+      "items": { "$ref": "reference_authority.schema.json" }
+    },
+    "qaChecklist": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "minItems": 1
+    },
+    "preflight": { "$ref": "preflight_report.schema.json" },
+    "keyframePairDerivation": { "$ref": "keyframe_pair_derivation.schema.json" },
+    "outputPath": { "type": "string" },
+    "blockingReasons": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "providerSlot": { "const": "video.i2v" }
+        },
+        "required": ["providerSlot"]
+      },
+      "then": {
+        "required": ["keyframePairDerivation"]
+      }
+    }
+  ]
+}
