@@ -23,14 +23,25 @@ import {
   Sparkles,
   Wrench,
 } from "lucide-react";
-import knowledgeManifestJson from "../resources/knowledge_pack_manifest.json";
 import type { AssetRecord, AuditIssue, ProjectAudit, ShotRecord, UiMode, WorkflowStage } from "./core/types";
-import type { KnowledgePackManifest } from "./core/knowledgeTypes";
-import { buildRuntimeView, type RuntimeView, type TaskRuntimeView } from "./core/runtimeView";
+import type { RuntimeView, TaskRuntimeView } from "./core/runtimeView";
+import type { ProjectRuntimeState } from "./core/projectState";
+import {
+  auditFromProjectRuntimeState,
+  buildProjectRuntimeState,
+  buildRuntimeViewFromProjectState,
+  emptyKnowledgeManifest,
+} from "./core/projectStateBuilder";
 import { fallbackAudit } from "./data/fallbackAudit";
 
-const knowledgeManifest = knowledgeManifestJson as KnowledgePackManifest;
 const gateNames = ["identity", "scene", "pair", "story", "prop", "style"] as const;
+const fallbackRuntimeState = buildProjectRuntimeState(fallbackAudit, emptyKnowledgeManifest, {
+  stateSource: {
+    kind: "fallback-audit",
+    label: "fallbackAudit",
+    note: "Bundled fallback data; runtime-state.json and runtime-audit.json were unavailable.",
+  },
+});
 
 function gateClass(value: string) {
   if (value === "PASS") return "gate pass";
@@ -70,6 +81,63 @@ function StatusPill({ value }: { value: string }) {
       ? "good"
       : "neutral";
   return <span className={`pill ${tone}`}>{value}</span>;
+}
+
+async function fetchJson<T>(path: string): Promise<T> {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`Failed to load ${path}: ${response.status}`);
+  return response.json() as Promise<T>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function requireRecord(value: Record<string, unknown>, key: string, issues: string[]) {
+  if (!isRecord(value[key])) issues.push(key);
+  return isRecord(value[key]) ? value[key] : {};
+}
+
+function requireArray(value: Record<string, unknown>, key: string, issues: string[]) {
+  if (!Array.isArray(value[key])) issues.push(key);
+}
+
+function assertProjectRuntimeState(value: unknown): asserts value is ProjectRuntimeState {
+  const issues: string[] = [];
+  if (!isRecord(value)) throw new Error("runtime-state shape invalid: root");
+
+  for (const key of ["schemaVersion", "coreStateVersion"]) {
+    if (typeof value[key] !== "string") issues.push(key);
+  }
+
+  const project = requireRecord(value, "project", issues);
+  const sourceIndex = requireRecord(value, "sourceIndex", issues);
+  const sourceIndexSummary = requireRecord(value, "sourceIndexSummary", issues);
+  const storyFlow = requireRecord(value, "storyFlow", issues);
+  const visualMemory = requireRecord(value, "visualMemory", issues);
+  const taskRuns = requireRecord(value, "taskRuns", issues);
+  const manifestMatches = requireRecord(value, "manifestMatches", issues);
+  const diagnostics = requireRecord(value, "diagnostics", issues);
+  const knowledge = requireRecord(value, "knowledge", issues);
+
+  requireRecord(value, "stateSource", issues);
+  if (!Object.keys(project).length) issues.push("project.empty");
+  if (!Object.keys(sourceIndex).length) issues.push("sourceIndex.empty");
+  if (!Object.keys(sourceIndexSummary).length) issues.push("sourceIndexSummary.empty");
+  requireArray(storyFlow, "sections", issues);
+  requireArray(storyFlow, "shots", issues);
+  requireArray(visualMemory, "assets", issues);
+  requireArray(taskRuns, "jobs", issues);
+  requireArray(taskRuns, "runs", issues);
+  requireArray(taskRuns, "taskViews", issues);
+  requireArray(manifestMatches, "reports", issues);
+  requireArray(value, "previewEvents", issues);
+  requireArray(diagnostics, "issues", issues);
+  requireArray(knowledge, "categories", issues);
+  requireArray(knowledge, "validationIssues", issues);
+  requireArray(knowledge, "bindings", issues);
+
+  if (issues.length) throw new Error(`runtime-state shape invalid: ${issues.join(", ")}`);
 }
 
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
@@ -314,7 +382,14 @@ function DirectorMode({
   onSelectShot: (id: string) => void;
   onSelectAsset: (id: string) => void;
 }) {
-  const firstBlocker = view.preflightSummary.blockers[0];
+  const selectedShotBlocker = selectedShot
+    ? view.taskViews.find((task) => task.shot?.id === selectedShot.id && task.queueGate.status === "blocked" && task.queueGate.blockers[0])?.queueGate.blockers[0]
+    : undefined;
+  const firstQueueBlocker = view.taskViews.find((task) => task.queueGate.status === "blocked" && task.queueGate.blockers[0])?.queueGate.blockers[0];
+  const blockingReason = selectedShotBlocker
+    || firstQueueBlocker
+    || view.preflightSummary.blockers[0]?.messageForUser
+    || "No preflight blocker in the selected runtime view.";
 
   return (
     <>
@@ -329,7 +404,7 @@ function DirectorMode({
         </div>
         <div>
           <h2>Blocking Reason</h2>
-          <p>{firstBlocker?.messageForUser || "No preflight blocker in the selected runtime view."}</p>
+          <p>{blockingReason}</p>
         </div>
       </section>
       <div className="director-layout">
@@ -589,6 +664,8 @@ function SettingsShell({ audit }: { audit: ProjectAudit }) {
 }
 
 function DiagnosticsMode({ audit, view, intent, onIntentChange }: { audit: ProjectAudit; view: RuntimeView; intent: string; onIntentChange: (value: string) => void }) {
+  const firstQueueBlocker = view.taskViews.find((task) => task.queueGate.status === "blocked" && task.queueGate.blockers[0])?.queueGate.blockers[0];
+
   return (
     <div className="diagnostics-layout">
       <ProviderDock audit={audit} />
@@ -610,6 +687,9 @@ function DiagnosticsMode({ audit, view, intent, onIntentChange }: { audit: Proje
           <ShieldAlert size={17} />
           <span>Preflight Blockers</span>
         </div>
+        {!view.preflightSummary.blockers.length && firstQueueBlocker && (
+          <p className="muted-copy">Queue policy blocker: {firstQueueBlocker}</p>
+        )}
         <div className="code-list">
           {view.preflightSummary.blockers.slice(0, 12).map((blocker, index) => (
             <details key={`${blocker.code}-${index}`}>
@@ -631,12 +711,14 @@ function DiagnosticsMode({ audit, view, intent, onIntentChange }: { audit: Proje
           <span>{view.sourceIndexSummary.lockedReferenceCount} locked / {view.sourceIndexSummary.candidateReferenceCount} candidates</span>
           <label>Outputs</label>
           <span>{view.manifestSummary.present} present / {view.manifestSummary.missing} missing / {view.manifestSummary.recoverable} recoverable</span>
-        <label>Schema</label>
-        <span>{audit.schemaSummary?.coreStateVersion || "runtime audit v0.3 shell"}</span>
+          <label>State Source</label>
+          <span>{view.stateSource?.label || "runtime-state"}</span>
+          <label>Schema</label>
+          <span>{view.stateSource?.path || audit.schemaSummary?.coreStateVersion || "runtime audit v0.3 shell"}</span>
           <label>Preview</label>
           <span>{view.previewEvents.filter((event) => event.type === "blocked_placeholder").length} blocked / {view.previewEvents.length} events</span>
-      </div>
-    </section>
+        </div>
+      </section>
       <KnowledgePackManager view={view} intent={intent} onIntentChange={onIntentChange} />
       <SettingsShell audit={audit} />
     </div>
@@ -644,25 +726,62 @@ function DiagnosticsMode({ audit, view, intent, onIntentChange }: { audit: Proje
 }
 
 function App() {
-  const [audit, setAudit] = useState<ProjectAudit>(fallbackAudit);
+  const [runtimeState, setRuntimeState] = useState<ProjectRuntimeState>(fallbackRuntimeState);
   const [mode, setMode] = useState<UiMode>("director");
   const [selectedShotId, setSelectedShotId] = useState("A1_01");
   const [selectedAssetId, setSelectedAssetId] = useState<string | undefined>();
   const [knowledgeIntent, setKnowledgeIntent] = useState("这一镜头更压抑一点，慢慢推近角色");
 
   useEffect(() => {
-    fetch("/runtime-audit.json")
-      .then((response) => (response.ok ? response.json() : fallbackAudit))
-      .then((data) => {
-        setAudit(data);
-        if (data.shots?.[0]) setSelectedShotId(data.shots[0].id);
-      })
-      .catch(() => setAudit(fallbackAudit));
+    let cancelled = false;
+
+    async function loadRuntime() {
+      try {
+        const state = await fetchJson<unknown>("/runtime-state.json");
+        assertProjectRuntimeState(state);
+        if (cancelled) return;
+        setRuntimeState({
+          ...state,
+          stateSource: state.stateSource || { kind: "runtime-state", label: "runtime-state", path: "/runtime-state.json" },
+        });
+        if (state.storyFlow?.shots?.[0]) setSelectedShotId(state.storyFlow.shots[0].id);
+        return;
+      } catch {
+        // Fall through to the legacy audit file for Phase 3 compatibility.
+      }
+
+      try {
+        const auditData = await fetchJson<ProjectAudit>("/runtime-audit.json");
+        if (cancelled) return;
+        const state = buildProjectRuntimeState(auditData, emptyKnowledgeManifest, {
+          stateSource: {
+            kind: "runtime-audit-fallback",
+            label: "runtime-audit fallback",
+            path: "/runtime-audit.json",
+            note: "Derived in browser from the legacy audit file without bundling the full knowledge manifest.",
+            sourceImportedAt: auditData.importedAt,
+          },
+        });
+        setRuntimeState(state);
+        if (auditData.shots?.[0]) setSelectedShotId(auditData.shots[0].id);
+        return;
+      } catch {
+        if (cancelled) return;
+        setRuntimeState(fallbackRuntimeState);
+        if (fallbackRuntimeState.storyFlow.shots[0]) setSelectedShotId(fallbackRuntimeState.storyFlow.shots[0].id);
+      }
+    }
+
+    loadRuntime();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  const audit = useMemo(() => auditFromProjectRuntimeState(runtimeState), [runtimeState]);
   const view = useMemo(
-    () => buildRuntimeView(audit, knowledgeManifest, { selectedShotId, knowledgeTestIntent: knowledgeIntent }),
-    [audit, selectedShotId, knowledgeIntent],
+    () => buildRuntimeViewFromProjectState(runtimeState, { selectedShotId, knowledgeTestIntent: knowledgeIntent }),
+    [runtimeState, selectedShotId, knowledgeIntent],
   );
   const selectedShot = useMemo(() => audit.shots.find((shot) => shot.id === selectedShotId), [audit.shots, selectedShotId]);
   const selectedAsset = useMemo(() => audit.assets.find((asset) => asset.id === selectedAssetId), [audit.assets, selectedAssetId]);
@@ -689,6 +808,10 @@ function App() {
           ))}
         </div>
         <div className="top-actions">
+          <span className="state-source">
+            <Database size={15} />
+            {view.stateSource?.label || "runtime-state"}
+          </span>
           <button><FileJson size={16} /> Import Runtime Test</button>
           <button><Gauge size={16} /> Dry Check</button>
           <button disabled><Play size={16} /> Live Submit Locked</button>

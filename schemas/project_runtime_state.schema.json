@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/project_runtime_state.schema.json",
+  "title": "ProjectRuntimeState",
+  "description": "The first-class runtime state file consumed by the Vibe Core director desk.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "coreStateVersion",
+    "generatedAt",
+    "project",
+    "sourceIndex",
+    "sourceIndexSummary",
+    "storyFlow",
+    "visualMemory",
+    "taskRuns",
+    "manifestMatches",
+    "previewEvents",
+    "diagnostics",
+    "knowledge",
+    "stateSource"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "coreStateVersion": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "project": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["title", "root", "sourceTask", "state", "importedAt", "metrics", "providerPolicy", "workflow", "contactSheets"],
+      "properties": {
+        "title": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "root": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "sourceTask": { "type": "string" },
+        "state": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "importedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "metrics": { "type": "object" },
+        "providerPolicy": { "type": "object" },
+        "workflow": { "type": "array", "items": { "type": "object" } },
+        "contactSheets": { "type": "object" }
+      }
+    },
+    "sourceIndex": { "$ref": "project_source_index.schema.json" },
+    "sourceIndexSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "projectVersion",
+        "sourceIndexHash",
+        "currentSourceCount",
+        "promptHashCount",
+        "lockedReferenceCount",
+        "candidateReferenceCount",
+        "rejectedReferenceCount",
+        "failedReferenceCount",
+        "confirmedDecisionCount",
+        "staleArtifactCount",
+        "updatedAt",
+        "isProductionReady",
+        "blockingReferenceCount"
+      ],
+      "properties": {
+        "projectId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "projectVersion": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "sourceIndexHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "currentSourceCount": { "type": "integer", "minimum": 0 },
+        "promptHashCount": { "type": "integer", "minimum": 0 },
+        "lockedReferenceCount": { "type": "integer", "minimum": 0 },
+        "candidateReferenceCount": { "type": "integer", "minimum": 0 },
+        "rejectedReferenceCount": { "type": "integer", "minimum": 0 },
+        "failedReferenceCount": { "type": "integer", "minimum": 0 },
+        "confirmedDecisionCount": { "type": "integer", "minimum": 0 },
+        "staleArtifactCount": { "type": "integer", "minimum": 0 },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "isProductionReady": { "type": "boolean" },
+        "blockingReferenceCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "storyFlow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sections", "shots"],
+      "properties": {
+        "sections": { "type": "array", "items": { "type": "object" } },
+        "shots": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "visualMemory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "assets"],
+      "properties": {
+        "summary": { "type": "object" },
+        "assets": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "taskRuns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jobs", "runs", "taskViews", "queueSummary", "preflightSummary"],
+      "properties": {
+        "jobs": { "type": "array", "items": { "type": "object" } },
+        "runs": { "type": "array", "items": { "$ref": "task_run.schema.json" } },
+        "taskViews": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["job", "envelope", "taskRun", "queueGate", "manifestMatch", "validator", "routeResult", "contextBudget", "nextStep"],
+            "properties": {
+              "job": { "type": "object" },
+              "shotId": { "type": "string" },
+              "envelope": { "$ref": "task_envelope.schema.json" },
+              "taskRun": { "$ref": "task_run.schema.json" },
+              "queueGate": { "type": "object" },
+              "manifestMatch": { "type": "object" },
+              "validator": { "type": "object" },
+              "routeResult": { "$ref": "knowledge_route_result.schema.json" },
+              "contextBudget": { "$ref": "context_budget.schema.json" },
+              "nextStep": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+            }
+          }
+        },
+        "queueSummary": { "type": "object" },
+        "preflightSummary": { "type": "object" }
+      }
+    },
+    "manifestMatches": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "reports"],
+      "properties": {
+        "summary": { "type": "object" },
+        "reports": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "previewEvents": { "type": "array", "items": { "$ref": "preview_event.schema.json" } },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["issues", "generatedBy"],
+      "properties": {
+        "issues": { "type": "array", "items": { "type": "object" } },
+        "schemaSummary": { "type": "object" },
+        "generatedBy": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "knowledge": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["packCount", "enabledCount", "categories", "manifestHash", "manifestVersion", "validationIssues", "bindings"],
+      "properties": {
+        "packCount": { "type": "integer", "minimum": 0 },
+        "enabledCount": { "type": "integer", "minimum": 0 },
+        "categories": { "type": "array", "items": { "type": "object" } },
+        "manifestHash": { "type": "string" },
+        "manifestVersion": { "type": "string" },
+        "validationIssues": { "type": "array", "items": { "type": "string" } },
+        "bindings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["packId", "version", "hash", "category", "title", "summary", "tags", "enabled", "maxInjectionTokens"],
+            "properties": {
+              "packId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+              "version": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+              "hash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+              "category": { "$ref": "common.schema.json#/$defs/knowledgePackCategory" },
+              "title": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+              "summary": { "type": "string" },
+              "tags": { "type": "array", "items": { "type": "string" } },
+              "enabled": { "type": "boolean" },
+              "maxInjectionTokens": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    },
+    "stateSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "label"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["runtime-state", "runtime-audit-fallback", "fallback-audit"] },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "path": { "type": "string" },
+        "sourceAuditPath": { "type": "string" },
+        "sourceImportedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "note": { "type": "string" }
+      }
+    },
+    "legacyAudit": {
+      "type": "object",
+      "description": "Optional debug-only legacy snapshot. UI state must be rebuilt from the first-class ProjectRuntimeState fields."
+    }
+  }
+}

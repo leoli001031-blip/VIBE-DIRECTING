@@ -247,6 +247,7 @@ export interface GenerationJob {
   promptPath?: string;
   references: string[];
   submitId?: string;
+  providerTaskId?: string;
   issues: string[];
 }
 
@@ -271,6 +272,7 @@ export interface TaskRun {
   providerId: string;
   codexSessionId?: string;
   submitId?: string;
+  providerTaskId?: string;
   retryCount: number;
   backoffUntil?: string;
   stallTimeoutSeconds: number;

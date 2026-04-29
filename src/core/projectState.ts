@@ -1,0 +1,142 @@
+import type { EnvelopeValidationResult } from "./envelopeValidator";
+import type { ContextBudgetResult, KnowledgePackCategory, KnowledgeRouteResult } from "./knowledgeTypes";
+import type { ManifestMatchReport } from "./manifestMatcher";
+import type { StorySectionView, VisualMemorySummary, RuntimeKnowledgeSummary } from "./runtimeView";
+import type { QueueGateResult } from "./taskQueue";
+import type {
+  AssetRecord,
+  AuditIssue,
+  GenerationJob,
+  PreviewEvent,
+  ProjectAudit,
+  ProjectMetrics,
+  ProjectSourceIndex,
+  ProviderPolicy,
+  TaskEnvelope,
+  TaskRun,
+  WorkflowStage,
+} from "./types";
+
+export const projectRuntimeStateSchemaVersion = "0.1.0";
+export const projectRuntimeCoreStateVersion = "project-runtime-state/0.1.0";
+
+export type RuntimeStateSourceKind = "runtime-state" | "runtime-audit-fallback" | "fallback-audit";
+
+export interface RuntimeStateSource {
+  kind: RuntimeStateSourceKind;
+  label: string;
+  path?: string;
+  sourceAuditPath?: string;
+  sourceImportedAt?: string;
+  note?: string;
+}
+
+export interface ProjectSummary {
+  title: string;
+  root: string;
+  sourceTask: string;
+  state: string;
+  importedAt: string;
+  metrics: ProjectMetrics;
+  providerPolicy: ProviderPolicy;
+  workflow: WorkflowStage[];
+  contactSheets: ProjectAudit["contactSheets"];
+}
+
+export interface KnowledgeBindingSummary {
+  packId: string;
+  version: string;
+  hash: string;
+  category: KnowledgePackCategory;
+  title: string;
+  summary: string;
+  tags: string[];
+  enabled: boolean;
+  maxInjectionTokens: number;
+}
+
+export interface ProjectRuntimeKnowledgeSummary extends RuntimeKnowledgeSummary {
+  bindings: KnowledgeBindingSummary[];
+}
+
+export interface ProjectRuntimeTaskState {
+  job: GenerationJob;
+  shotId?: string;
+  envelope: TaskEnvelope;
+  taskRun: TaskRun;
+  queueGate: QueueGateResult;
+  manifestMatch: ManifestMatchReport;
+  validator: EnvelopeValidationResult;
+  routeResult: KnowledgeRouteResult;
+  contextBudget: ContextBudgetResult;
+  nextStep: string;
+}
+
+export interface ProjectRuntimeState {
+  schemaVersion: string;
+  coreStateVersion: string;
+  generatedAt: string;
+  project: ProjectSummary;
+  sourceIndex: ProjectSourceIndex;
+  sourceIndexSummary: {
+    projectId: string;
+    projectVersion: string;
+    sourceIndexHash: string;
+    currentSourceCount: number;
+    promptHashCount: number;
+    lockedReferenceCount: number;
+    candidateReferenceCount: number;
+    rejectedReferenceCount: number;
+    failedReferenceCount: number;
+    confirmedDecisionCount: number;
+    staleArtifactCount: number;
+    updatedAt: string;
+    isProductionReady: boolean;
+    blockingReferenceCount: number;
+  };
+  storyFlow: {
+    sections: StorySectionView[];
+    shots: ProjectAudit["shots"];
+  };
+  visualMemory: {
+    summary: VisualMemorySummary;
+    assets: AssetRecord[];
+  };
+  taskRuns: {
+    jobs: GenerationJob[];
+    runs: TaskRun[];
+    taskViews: ProjectRuntimeTaskState[];
+    queueSummary: {
+      total: number;
+      ready: number;
+      blocked: number;
+      parked: number;
+      succeeded: number;
+      missingOutputs: number;
+    };
+    preflightSummary: {
+      blocked: number;
+      warnings: number;
+      blockers: ProjectRuntimeTaskState["envelope"]["preflight"]["blockers"];
+    };
+  };
+  manifestMatches: {
+    summary: {
+      complete: number;
+      present: number;
+      missing: number;
+      recoverable: number;
+    };
+    reports: ManifestMatchReport[];
+  };
+  previewEvents: PreviewEvent[];
+  diagnostics: {
+    issues: AuditIssue[];
+    schemaSummary?: ProjectAudit["schemaSummary"];
+    generatedBy: string;
+  };
+  knowledge: ProjectRuntimeKnowledgeSummary;
+  stateSource: RuntimeStateSource;
+  /** Optional debug-only legacy snapshot. UI state is rebuilt from first-class fields. */
+  legacyAudit?: ProjectAudit;
+}

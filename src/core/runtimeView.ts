@@ -99,6 +99,14 @@ export interface RuntimeView {
   };
   knowledge: RuntimeKnowledgeSummary;
   nextStep: string;
+  stateSource?: {
+    kind: string;
+    label: string;
+    path?: string;
+    sourceAuditPath?: string;
+    sourceImportedAt?: string;
+    note?: string;
+  };
 }
 
 interface RuntimeViewOptions {

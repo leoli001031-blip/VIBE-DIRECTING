@@ -159,6 +159,21 @@ export function validateProviderJob(job: GenerationJob): AuditIssue[] {
   const issues: AuditIssue[] = [];
 
   if (rule.executionState === "parked" || rule.executionState === "planned" || rule.executionState === "unavailable") {
+    const submitTraceFields = [
+      job.submitId ? "submitId" : undefined,
+      job.providerTaskId ? "providerTaskId" : undefined,
+    ].filter(Boolean);
+    if (submitTraceFields.length) {
+      issues.push(
+        makeProviderIssue(
+          job,
+          "parked-provider-submit-trace",
+          "Parked provider submit trace is blocked",
+          `${job.id} is ${rule.executionState}, but carries ${submitTraceFields.join(", ")}.`,
+          "Strip historical/live provider identifiers before exposing this task as runtime state.",
+        ),
+      );
+    }
     if (isLiveStatus(job)) {
       issues.push(
         makeProviderIssue(

@@ -24,6 +24,7 @@
     "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
     "codexSessionId": { "type": "string" },
     "submitId": { "type": "string" },
+    "providerTaskId": { "type": "string" },
     "retryCount": { "type": "integer", "minimum": 0 },
     "backoffUntil": { "$ref": "common.schema.json#/$defs/isoDateTime" },
     "stallTimeoutSeconds": { "type": "integer", "minimum": 1 },

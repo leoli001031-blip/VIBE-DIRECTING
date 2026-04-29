@@ -24,6 +24,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ProjectSourceIndex",
   },
   {
+    fileName: "project_runtime_state.schema.json",
+    id: "https://vibecore.local/schemas/project_runtime_state.schema.json",
+    version: schemaVersion,
+    purpose: "First-class runtime state file consumed by the director desk.",
+    typeName: "ProjectRuntimeState",
+  },
+  {
     fileName: "knowledge_pack.schema.json",
     id: "https://vibecore.local/schemas/knowledge_pack.schema.json",
     version: schemaVersion,

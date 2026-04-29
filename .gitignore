@@ -5,6 +5,7 @@ dist/
 
 # Local/generated runtime imports
 public/runtime-audit.json
+public/runtime-state.json
 public/media/
 
 # Future local project outputs
@@ -12,4 +13,3 @@ public/media/
 *.vibe/exports/
 *.vibe/reports/contact_sheets/
 *.vibe/manifests/task_events.jsonl
-

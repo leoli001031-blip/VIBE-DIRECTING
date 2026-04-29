@@ -87,6 +87,19 @@ small {
   gap: 8px;
 }
 
+.state-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  border: 1px solid rgba(212, 176, 98, 0.24);
+  background: rgba(212, 176, 98, 0.09);
+  color: #d4b062;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .top-actions button,
 .director-input button,
 .tabs button {

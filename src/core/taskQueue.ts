@@ -162,8 +162,11 @@ export function createTaskRunFromEnvelope(envelope: TaskEnvelope): TaskRun {
 }
 
 export function parkTaskRun(taskRun: TaskRun, reason: string): ParkedTaskRun {
+  const parkedTaskRun = { ...taskRun };
+  delete parkedTaskRun.submitId;
+  delete parkedTaskRun.providerTaskId;
   return {
-    ...taskRun,
+    ...parkedTaskRun,
     localStatus: "parked",
     providerStatus: "not_submitted",
     parkedReason: reason,
