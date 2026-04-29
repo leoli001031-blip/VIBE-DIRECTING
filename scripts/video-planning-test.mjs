@@ -116,6 +116,14 @@ for (const taskPlan of videoPlanning.taskPlans) {
   }
   assert(JSON.stringify(preview.executionOrderPreview) === JSON.stringify(expectedOrder), `${preview.previewId} execution order drifted`);
   assert(preview.subagentPacketPreview, `${preview.previewId} missing structured packet preview`);
+  assert(preview.subagentTaskEnvelope, `${preview.previewId} missing standard subagent task envelope`);
+  assert(preview.subagentTaskEnvelope.parentTaskId === taskPlan.jobId, `${preview.previewId} subagent envelope parent mismatch`);
+  assert(preview.subagentTaskEnvelope.purpose === "video_generation", `${preview.previewId} subagent envelope purpose mismatch`);
+  assert(preview.subagentTaskEnvelope.sourceIndexRequired === true, `${preview.previewId} subagent envelope must require source index`);
+  assert(preview.subagentTaskEnvelope.resultMustReferencePackHashes === true, `${preview.previewId} subagent result must reference pack hashes`);
+  assert(preview.subagentTaskEnvelope.allowedReadScopes.includes("injected_knowledge_snippets"), `${preview.previewId} must allow only injected knowledge snippets`);
+  assert(preview.subagentTaskEnvelope.disallowedReadScopes.includes("unrouted_knowledge_library"), `${preview.previewId} must forbid unrouted knowledge library`);
+  assert(preview.subagentTaskEnvelope.injectedKnowledgePacks.length > 0, `${preview.previewId} missing injected knowledge packs`);
   assert(preview.subagentPacketPreview.selectedShot.shotId === taskPlan.shotId, `${preview.previewId} selected shot mismatch`);
   assert(preview.subagentPacketPreview.startFrameRef.shotFrameId === taskPlan.startFrameRef.shotFrameId, `${preview.previewId} start frame mismatch`);
   assert(preview.subagentPacketPreview.endFrameRef.shotFrameId === taskPlan.endFrameRef.shotFrameId, `${preview.previewId} end frame mismatch`);

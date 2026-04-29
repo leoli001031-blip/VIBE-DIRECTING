@@ -109,7 +109,7 @@ export function buildProjectRuntimeState(
       assets: audit.assets,
       sourceIndex: view.sourceIndex,
       providerRegistry,
-      knowledge: knowledgeManifest,
+      injectedKnowledgePacks: task.envelope.injectedKnowledgePacks,
       createdAt: generatedAt,
     }),
   );
@@ -192,6 +192,7 @@ export function buildProjectRuntimeState(
     generatedAt,
     shots: audit.shots,
     videoPlanning,
+    taskViews,
   });
   const adapterContracts = buildAdapterContractState({
     generatedAt,
@@ -331,6 +332,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       generatedAt: state.generatedAt,
       shots: state.storyFlow.shots,
       videoPlanning,
+      taskViews: state.taskRuns.taskViews,
     });
   const adapterContracts =
     state.adapterContracts ||

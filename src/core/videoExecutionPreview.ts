@@ -1,6 +1,9 @@
+import { buildSubagentTaskEnvelope } from "./subagentEnvelope";
 import type {
   GateSet,
   ShotRecord,
+  SubagentTaskEnvelope,
+  TaskEnvelope,
   VideoExecutionPreview,
   VideoExecutionPreviewHardLock,
   VideoExecutionPreviewState,
@@ -17,6 +20,11 @@ export interface BuildVideoExecutionPreviewStateInput {
   generatedAt: string;
   shots: ShotRecord[];
   videoPlanning: VideoPlanningState;
+  taskViews: Array<{
+    job: { id: string };
+    shotId?: string;
+    envelope: TaskEnvelope;
+  }>;
 }
 
 const hardLocks: VideoExecutionPreviewHardLock[] = [
@@ -120,13 +128,63 @@ function buildPacketPreview(input: {
   };
 }
 
+function buildStandardSubagentEnvelope(input: {
+  shot?: ShotRecord;
+  taskEnvelope: TaskEnvelope;
+  taskPlan: VideoTaskPlan;
+  gate?: VideoReadinessGate;
+  videoPlanning: VideoPlanningState;
+}): SubagentTaskEnvelope {
+  const { shot, taskEnvelope, taskPlan, gate, videoPlanning } = input;
+  const keyframePairDerivation = gate?.keyframePairDerivation;
+
+  return buildSubagentTaskEnvelope({
+    id: `subagent_video_${safeId(taskPlan.shotId)}`,
+    parentTaskId: taskEnvelope.id,
+    purpose: "video_generation",
+    taskEnvelope,
+    contextLevel: "L2",
+    sectionId: shot?.sectionId,
+    shotId: taskPlan.shotId,
+    storyFunction: shot?.storyFunction,
+    userIntent: taskPlan.motionBrief,
+    providerPolicySummary: [
+      `slot=${taskPlan.providerSlot}`,
+      `provider=${taskPlan.providerId}`,
+      `state=${taskPlan.providerExecutionState}`,
+      `mode=${taskPlan.requiredMode}`,
+      ...videoPlanning.providerPolicySummary.notes,
+    ],
+    mustPreserve: keyframePairDerivation?.mustPreserve || ["character identity", "scene layout", "style capsule"],
+    allowedDelta: keyframePairDerivation?.allowedDelta || ["motion", "micro-expression", "camera movement"],
+    mustNotAdd: keyframePairDerivation?.mustNotAdd || ["new characters", "unapproved props", "text-to-video fallback"],
+    requiredKnowledgeCategories: ["storyflow", "story_function", "camera", "performance", "provider", "qa"],
+    allowedReadScopes: [
+      "task_envelope",
+      "locked_references",
+      "injected_knowledge_snippets",
+      "video_readiness_gate",
+      "keyframe_pair_derivation",
+    ],
+    disallowedReadScopes: [
+      "unrouted_knowledge_library",
+      "rejected_references",
+      "failed_artifacts",
+      "provider_credentials",
+      "api_keys",
+      "live_provider_task_ids",
+    ],
+  });
+}
+
 function buildPreview(input: {
   shot?: ShotRecord;
   taskPlan: VideoTaskPlan;
   gate?: VideoReadinessGate;
   videoPlanning: VideoPlanningState;
+  taskEnvelope: TaskEnvelope;
 }): VideoExecutionPreview {
-  const { shot, taskPlan, gate, videoPlanning } = input;
+  const { shot, taskPlan, gate, videoPlanning, taskEnvelope } = input;
   const status = previewStatus(taskPlan, gate);
   const blockers = uniqueSorted([...(gate?.blockers || []), ...taskPlan.blockers]);
   const warnings = uniqueSorted([
@@ -151,6 +209,7 @@ function buildPreview(input: {
         ? "Structured packet cannot be prepared until inherited readiness blockers clear."
         : "Structured packet may be inspected for a future parked I2V worker; provider handoff remains disabled.",
     subagentPacketPreview: buildPacketPreview({ shot, taskPlan, gate, videoPlanning }),
+    subagentTaskEnvelope: buildStandardSubagentEnvelope({ shot, taskEnvelope, taskPlan, gate, videoPlanning }),
     executionOrderPreview,
     hardLocks,
     blockers,
@@ -166,14 +225,19 @@ function buildPreview(input: {
 export function buildVideoExecutionPreviewState(input: BuildVideoExecutionPreviewStateInput): VideoExecutionPreviewState {
   const shotsById = new Map(input.shots.map((shot) => [shot.id, shot]));
   const gatesById = new Map(input.videoPlanning.readinessGates.map((gate) => [gate.gateId, gate]));
-  const previews = input.videoPlanning.taskPlans.map((taskPlan) =>
-    buildPreview({
+  const tasksByJobId = new Map(input.taskViews.map((task) => [task.job.id, task]));
+  const previews = input.videoPlanning.taskPlans.flatMap((taskPlan) => {
+    const task = tasksByJobId.get(taskPlan.jobId);
+    if (!task) return [];
+
+    return buildPreview({
       shot: shotsById.get(taskPlan.shotId),
       taskPlan,
       gate: gatesById.get(taskPlan.readinessGateId),
       videoPlanning: input.videoPlanning,
-    }),
-  );
+      taskEnvelope: task.envelope,
+    });
+  });
 
   return {
     schemaVersion: videoExecutionPreviewSchemaVersion,

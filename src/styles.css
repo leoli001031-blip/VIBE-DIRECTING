@@ -1419,6 +1419,30 @@ small {
   margin-top: 12px;
 }
 
+.knowledge-distribution {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.knowledge-distribution > div {
+  min-width: 0;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 9px;
+}
+
+.knowledge-distribution small,
+.knowledge-task-head small {
+  color: #9d958a;
+  font-size: 11px;
+}
+
+.knowledge-distribution .category-strip {
+  margin-top: 7px;
+}
+
 .category-strip span {
   padding: 6px 8px;
   color: #bfb7aa;
@@ -1451,6 +1475,26 @@ small {
   padding: 9px;
 }
 
+.route-results .route-result-header,
+.route-results .route-budget-line {
+  grid-template-columns: minmax(110px, 0.7fr) minmax(160px, 1fr) minmax(170px, 1fr);
+  align-items: center;
+  border-color: rgba(212, 176, 98, 0.18);
+  background: rgba(212, 176, 98, 0.045);
+}
+
+.route-results .route-match-row {
+  grid-template-columns: minmax(120px, 0.8fr) minmax(180px, 1.2fr) minmax(120px, 0.8fr);
+  align-items: center;
+}
+
+.route-results strong,
+.route-results span,
+.route-results small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .route-results span,
 .settings-list small,
 .route-results small {
@@ -1461,6 +1505,43 @@ small {
 .route-results p {
   color: #d4b062;
   font-size: 12px;
+}
+
+.knowledge-task-table {
+  display: grid;
+  gap: 1px;
+  margin-top: 12px;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(236, 231, 223, 0.08);
+}
+
+.knowledge-task-head,
+.knowledge-task-row {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 8px 9px;
+}
+
+.knowledge-task-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  color: #d9d1c4;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.knowledge-task-row {
+  grid-template-columns: minmax(190px, 1.4fr) minmax(120px, 0.8fr) 54px 86px 92px auto;
+  color: #bfb7aa;
+  font-size: 12px;
+}
+
+.knowledge-task-row strong,
+.knowledge-task-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .runtime-facts {
@@ -1510,6 +1591,7 @@ small {
   .adapter-contract-grid,
   .audio-diagnostics-grid,
   .video-diagnostics-grid,
+  .knowledge-distribution,
   .machine-panel .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1542,6 +1624,14 @@ small {
   .director-side,
   .director-side .director-input {
     width: 100%;
+  }
+
+  .knowledge-task-row {
+    grid-template-columns: minmax(180px, 1.3fr) minmax(120px, 0.8fr) 54px 86px auto;
+  }
+
+  .knowledge-task-row span:nth-of-type(4) {
+    display: none;
   }
 
   .director-input {
@@ -1585,8 +1675,20 @@ small {
   .audio-diagnostics-grid,
   .video-status-grid,
   .video-diagnostics-grid,
+  .knowledge-distribution,
   .machine-panel .summary-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .route-results .route-result-header,
+  .route-results .route-budget-line,
+  .route-results .route-match-row,
+  .knowledge-task-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .knowledge-task-row span:nth-of-type(4) {
+    display: inline;
   }
 
   .field-grid {

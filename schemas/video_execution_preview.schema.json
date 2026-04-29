@@ -128,6 +128,7 @@
         "subagentPurpose",
         "instructionSummary",
         "subagentPacketPreview",
+        "subagentTaskEnvelope",
         "executionOrderPreview",
         "hardLocks",
         "blockers",
@@ -151,6 +152,7 @@
         "subagentPurpose": { "type": "string", "const": "video_generation" },
         "instructionSummary": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
         "subagentPacketPreview": { "$ref": "#/$defs/subagentPacketPreview" },
+        "subagentTaskEnvelope": { "$ref": "subagent_task_envelope.schema.json" },
         "executionOrderPreview": {
           "type": "array",
           "items": { "$ref": "#/$defs/executionStep" }

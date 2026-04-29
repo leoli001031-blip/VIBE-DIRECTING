@@ -607,6 +607,24 @@ Phase 6 已实现范围（核心合同）：
 - Settings Shell 只加入轻量 read-only 摘要，继续不提供 enable provider、submit live、run adapter、save credentials 等操作。
 - `assertProjectRuntimeState` 追加 adapter contract 硬锁校验：agent/worker/provider 全部必须 dry-run/read-only/no-live/no-credential，Image2 三个 slot 必须分开，Seedance/Jimeng 必须 parked + `video.i2v/frames2video`，local postprocess 只能 planned。
 
+### Phase 8.3 已实现范围：Knowledge Router / Skill Injection Harness
+
+- 新增 `npm run knowledge:test`，只读验证 `resources/knowledge_pack_manifest.json` 和 `resources/knowledge/router_test_cases.json`；测试不连接真实 provider、不提交任务、不导入外部资料。
+- 测试覆盖 enabled knowledge pack 的 `version`、`hash`、`path`、`maxInjectionTokens`，并要求 enabled `external_imported` pack 必须是 verified/trusted 且带 verification report。
+- 测试按当前 `knowledgeRouter` 的最小路由逻辑验证每个 router case：`expectedPackIds` 必须命中，`forbiddenPackIds` 不能命中。
+- 测试复刻 `contextBudgeter` 的预算注入规则，验证总注入预算不超过 L1 harness budget，单个 pack 不超过自身 `maxInjectionTokens`。
+- 测试扫描结构化 route/budget 结果，禁止出现 live submit、provider unlock、provider/preflight/QA/policy/envelope bypass 等危险语义。
+- `PromptCompiler` 改为只读取当前 `TaskEnvelope` 已注入的 knowledge pack 记录，不再从全量 manifest 自行挑选风格/构图/运镜资料。
+- `VideoExecutionPreview` 绑定完整 `SubagentTaskEnvelope` 只读预览，展示未来 video worker 会收到的标准 context packet、injected knowledge、read scope 和 QA pack hash 要求；仍不创建真实 prompt 文件或 provider task。
+- Diagnostics 中 `Skill Injection Harness / Knowledge Router` 只展示 route result、context budget、task packet 注入摘要和 warnings，不展示完整知识包正文或 provider payload。
+
+禁止项：
+
+- Knowledge Pack 不能覆盖 provider policy、preflight、reference authority、keyframe pair derivation 或 QA 硬阻断。
+- Knowledge Router 不能把整库塞给 agent；只允许按任务、provider slot、用户意图和预算注入命中小包。
+- Skill Injection Harness 不能变成用户主界面的复杂 prompt/资料面板；前端只可在 Inspector / Diagnostics 摘要展示。
+- Phase 8.3 仍不接真实 provider，不启用 Seedance/Jimeng live submit，不提供 provider unlock、bypass 或 credential 写入入口。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

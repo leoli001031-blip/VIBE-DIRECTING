@@ -267,12 +267,17 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
         return;
       }
       const packet = requireRecord(preview, "subagentPacketPreview", issues);
+      const subagentEnvelope = requireRecord(preview, "subagentTaskEnvelope", issues);
       requireArray(preview, "hardLocks", issues);
       requireArray(preview, "executionOrderPreview", issues);
       requireArray(preview, "blockers", issues);
       requireArray(preview, "warnings", issues);
       requireArray(packet, "requiredReadScopes", issues);
       requireArray(packet, "forbiddenReadScopes", issues);
+      requireArray(subagentEnvelope, "injectedKnowledgePacks", issues);
+      requireArray(subagentEnvelope, "injectedKnowledgeSnippets", issues);
+      requireArray(subagentEnvelope, "allowedReadScopes", issues);
+      requireArray(subagentEnvelope, "disallowedReadScopes", issues);
       if (typeof preview.shotId !== "string") issues.push(`videoExecutionPreview.previews.${index}.shotId`);
       if (typeof preview.status !== "string") issues.push(`videoExecutionPreview.previews.${index}.status`);
       if (typeof preview.canPreviewPacket !== "boolean") issues.push(`videoExecutionPreview.previews.${index}.canPreviewPacket`);
@@ -280,6 +285,8 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
       if (preview.dryRunOnly !== true) issues.push(`videoExecutionPreview.previews.${index}.dryRunOnly`);
       if (preview.providerSubmissionForbidden !== true) issues.push(`videoExecutionPreview.previews.${index}.providerSubmissionForbidden`);
       if (preview.liveSubmitAllowed !== false) issues.push(`videoExecutionPreview.previews.${index}.liveSubmitAllowed`);
+      if (subagentEnvelope.sourceIndexRequired !== true) issues.push(`videoExecutionPreview.previews.${index}.subagentTaskEnvelope.sourceIndexRequired`);
+      if (subagentEnvelope.resultMustReferencePackHashes !== true) issues.push(`videoExecutionPreview.previews.${index}.subagentTaskEnvelope.resultMustReferencePackHashes`);
       const hardLocks = Array.isArray(preview.hardLocks) ? preview.hardLocks : [];
       requiredVideoExecutionHardLocks.forEach((lock) => {
         if (!hardLocks.includes(lock)) issues.push(`videoExecutionPreview.previews.${index}.hardLocks.${lock}`);
@@ -1045,7 +1052,7 @@ function VideoExecutionPreviewDiagnostics({ runtimeState }: { runtimeState: Proj
           <div key={preview.previewId} className="video-execution-preview-row">
             <span>{preview.shotId}</span>
             <StatusPill value={preview.status} />
-            <small>Packet {preview.canPreviewPacket ? "previewable" : "blocked"} · canExecute {String(preview.canExecute)}</small>
+            <small>Packet {preview.canPreviewPacket ? "previewable" : "blocked"} · {preview.subagentTaskEnvelope.injectedKnowledgePacks.length} injected pack(s) · canExecute {String(preview.canExecute)}</small>
           </div>
         ))}
         {!previewRows.length && <p className="muted-copy">No Video Execution Preview rows in this runtime state.</p>}
@@ -2040,23 +2047,73 @@ function ProviderDock({ audit }: { audit: ProjectAudit }) {
   );
 }
 
+function topCounts(values: string[], limit = 4) {
+  const counts = values.reduce<Record<string, number>>((next, value) => {
+    next[value] = (next[value] || 0) + 1;
+    return next;
+  }, {});
+
+  return Object.entries(counts)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, limit);
+}
+
+function uniqueCount(values: string[]) {
+  return new Set(values.filter(Boolean)).size;
+}
+
+function taskKnowledgeWarnings(task: TaskRuntimeView) {
+  return Array.from(new Set([
+    ...task.routeResult.warnings,
+    ...task.contextBudget.warnings,
+    ...task.envelope.routeWarnings,
+  ].filter(Boolean)));
+}
+
 function KnowledgePackManager({ view, intent, onIntentChange }: { view: RuntimeView; intent: string; onIntentChange: (value: string) => void }) {
   const routeTest = view.knowledge.routeTest;
+  const totalInjectedPacks = view.taskViews.reduce((count, task) => count + task.envelope.injectedKnowledgePacks.length, 0);
+  const uniqueInjectedPacks = uniqueCount(view.taskViews.flatMap((task) => task.envelope.injectedKnowledgePacks.map((pack) => pack.packId)));
+  const totalTasks = view.taskViews.length;
+  const usedTokens = view.taskViews.map((task) => task.contextBudget.usedTokens);
+  const averageTokens = totalTasks ? Math.round(usedTokens.reduce((sum, value) => sum + value, 0) / totalTasks) : 0;
+  const highestTokens = usedTokens.length ? Math.max(...usedTokens) : 0;
+  const tasksWithWarnings = view.taskViews.filter((task) => taskKnowledgeWarnings(task).length).length;
+  const categoryCounts = topCounts(view.taskViews.flatMap((task) => task.envelope.injectedKnowledgePacks.map((pack) => pack.category)));
+  const consumerCounts = topCounts(view.taskViews.flatMap((task) => task.envelope.injectedKnowledgePacks.map((pack) => pack.consumer)));
+  const taskRows = view.taskViews.slice(0, 8);
+  const routeWarnings = routeTest ? Array.from(new Set([...routeTest.routeResult.warnings, ...routeTest.contextBudget.warnings])) : [];
+  const routeSnippetCount = routeTest?.contextBudget.injectedSnippets.length || 0;
+
   return (
     <section className="machine-panel knowledge-manager">
       <div className="audit-head">
         <Database size={17} />
-        <span>Knowledge Pack Manager</span>
+        <span>Skill Injection Harness / Knowledge Router</span>
       </div>
       <div className="summary-grid">
-        <Metric label="Packs" value={`${view.knowledge.enabledCount}/${view.knowledge.packCount}`} detail="enabled / total" />
-        <Metric label="Categories" value={`${view.knowledge.categories.length}`} detail="manifest categories" />
-        <Metric label="Manifest" value={view.knowledge.manifestVersion} detail={view.knowledge.manifestHash} />
+        <Metric label="Manifest Packs" value={`${view.knowledge.enabledCount}/${view.knowledge.packCount}`} detail="enabled / total" />
+        <Metric label="Injected Packs" value={`${totalInjectedPacks}`} detail={`${uniqueInjectedPacks} unique across tasks`} />
+        <Metric label="Context Tokens" value={`${averageTokens}/${highestTokens}`} detail="avg / peak used" />
+        <Metric label="Warnings" value={`${tasksWithWarnings}`} detail="task packet(s) flagged" />
       </div>
-      <div className="category-strip">
-        {view.knowledge.categories.map((item) => (
-          <span key={item.category}>{item.category}: {item.enabled}/{item.count}</span>
-        ))}
+      <div className="knowledge-distribution">
+        <div>
+          <small>Category distribution</small>
+          <div className="category-strip">
+            {categoryCounts.length
+              ? categoryCounts.map(([category, count]) => <span key={category}>{category}: {count}</span>)
+              : <span>none: 0</span>}
+          </div>
+        </div>
+        <div>
+          <small>Consumer distribution</small>
+          <div className="category-strip">
+            {consumerCounts.length
+              ? consumerCounts.map(([consumer, count]) => <span key={consumer}>{consumer}: {count}</span>)
+              : <span>none: 0</span>}
+          </div>
+        </div>
       </div>
       <div className="route-tester">
         <Search size={16} />
@@ -2064,17 +2121,48 @@ function KnowledgePackManager({ view, intent, onIntentChange }: { view: RuntimeV
       </div>
       {routeTest && (
         <div className="route-results">
-          <small>consumer / pack / snippet / score</small>
+          <div className="route-result-header">
+            <span>route result</span>
+            <strong>{routeTest.routeResult.taskPurpose} · {routeTest.routeResult.contextLevel}</strong>
+            <small>{routeTest.routeResult.matches.length} matched pack(s) · {routeSnippetCount} injected snippet(s)</small>
+          </div>
+          <div className="route-budget-line">
+            <span>Context budget</span>
+            <strong>{routeTest.contextBudget.usedTokens}/{routeTest.contextBudget.maxInjectionTokens} tokens</strong>
+            <small>{routeTest.contextBudget.injectedKnowledgePacks.length} pack injection record(s)</small>
+          </div>
           {routeTest.routeResult.matches.slice(0, 8).map((match) => (
-            <div key={match.packId}>
-              <span>{match.consumer}</span>
+            <div key={match.packId} className="route-match-row">
+              <span>{match.consumer} / {match.category}</span>
               <strong>{match.packId}</strong>
-              <small>{match.matchedSnippetIds.join(", ") || "summary"} · {match.score}</small>
+              <small>score {match.score} · snippets {match.matchedSnippetIds.length}</small>
             </div>
           ))}
-          <p>Budget: {routeTest.contextBudget.usedTokens}/{routeTest.contextBudget.maxInjectionTokens} tokens</p>
+          <details className="pipeline-shot-details" open={Boolean(routeWarnings.length)}>
+            <summary>Warnings ({routeWarnings.length})</summary>
+            <CompactList items={routeWarnings} empty="No router or budget warnings." />
+          </details>
         </div>
       )}
+      <div className="knowledge-task-table">
+        <div className="knowledge-task-head">
+          <span>Task packet summaries</span>
+          <small>{taskRows.length}/{view.taskViews.length} shown</small>
+        </div>
+        {taskRows.map((task) => {
+          const warnings = taskKnowledgeWarnings(task);
+          return (
+            <div key={task.job.id} className="knowledge-task-row">
+              <strong>{task.job.id}</strong>
+              <span>{task.job.slot}</span>
+              <span>{task.envelope.contextLevel}</span>
+              <span>{task.envelope.injectedKnowledgePacks.length} pack(s)</span>
+              <span>{task.contextBudget.usedTokens}/{task.contextBudget.maxInjectionTokens}</span>
+              <StatusPill value={warnings.length ? `${warnings.length} warning(s)` : "stable"} />
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }

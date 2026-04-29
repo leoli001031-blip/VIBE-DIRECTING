@@ -1,6 +1,6 @@
 import { stableKnowledgeHash } from "./knowledgeManifest";
 import { buildDefaultProviderRegistry, validateJobAgainstCapability } from "./providerCapabilities";
-import type { KnowledgePackManifest } from "./knowledgeTypes";
+import type { KnowledgeInjectionRecord } from "./knowledgeTypes";
 import type {
   AssetRecord,
   GenerationJob,
@@ -42,12 +42,13 @@ function assetLabel(asset: AssetRecord): string {
   return `${asset.type}:${asset.id}`;
 }
 
-function styleDirectivesFromKnowledge(knowledge?: KnowledgePackManifest): string[] {
-  if (!knowledge) return ["Use only routed knowledge summaries as compiler hints."];
-  return (knowledge.packs || [])
-    .filter((pack) => pack.enabled && ["style", "composition", "camera", "lighting", "color", "prompt"].includes(pack.category))
+function styleDirectivesFromInjectedKnowledge(injectedKnowledgePacks: KnowledgeInjectionRecord[] = []): string[] {
+  const directives = injectedKnowledgePacks
+    .filter((pack) => ["style", "composition", "camera", "lighting", "color", "prompt"].includes(pack.category))
     .slice(0, 6)
-    .map((pack) => `${pack.category}:${pack.id}@${pack.hash}`);
+    .map((pack) => `${pack.consumer}:${pack.category}:${pack.packId}@${pack.hash}`);
+
+  return directives.length ? directives : ["Use only routed knowledge summaries as compiler hints."];
 }
 
 function reportStatus(conflicts: PromptConflict[]): PromptConflictReport["status"] {
@@ -62,7 +63,7 @@ export interface BuildShotPromptPlanInput {
   assets: AssetRecord[];
   sourceIndex: ProjectSourceIndex;
   providerRegistry?: ProviderRegistry;
-  knowledge?: KnowledgePackManifest;
+  injectedKnowledgePacks?: KnowledgeInjectionRecord[];
   createdAt?: string;
 }
 
@@ -184,7 +185,7 @@ export function buildShotPromptPlan(input: BuildShotPromptPlanInput): BuildShotP
       ...(promptKind === "end_frame" ? ["text2image fallback"] : []),
     ],
     referenceIds,
-    styleDirectives: styleDirectivesFromKnowledge(input.knowledge),
+    styleDirectives: styleDirectivesFromInjectedKnowledge(input.injectedKnowledgePacks),
     adapterWarnings,
     derivesFromStartFrame,
     status,

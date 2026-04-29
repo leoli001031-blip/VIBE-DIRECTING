@@ -1020,6 +1020,7 @@ export interface VideoExecutionPreview {
   subagentPurpose: "video_generation";
   instructionSummary: string;
   subagentPacketPreview: VideoSubagentPacketPreview;
+  subagentTaskEnvelope: SubagentTaskEnvelope;
   executionOrderPreview: VideoExecutionPreviewStep[];
   hardLocks: VideoExecutionPreviewHardLock[];
   blockers: string[];

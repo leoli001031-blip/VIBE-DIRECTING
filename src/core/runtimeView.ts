@@ -1,4 +1,4 @@
-import { buildContextBudget } from "./contextBudgeter";
+import { attachBudgetToRouteResult, buildContextBudget } from "./contextBudgeter";
 import { validateTaskEnvelope, type EnvelopeValidationResult } from "./envelopeValidator";
 import { selectAvailableKnowledgePacks } from "./knowledgeLibrary";
 import { normalizeKnowledgeManifest, validateKnowledgeManifest } from "./knowledgeManifest";
@@ -303,11 +303,12 @@ function buildTaskViews(audit: ProjectAudit, sourceIndex: ProjectSourceIndex, ma
       availablePacks,
     });
     const contextBudget = buildContextBudget({ routeResult, availablePacks, maxInjectionTokens: 900 });
+    const routedContext = attachBudgetToRouteResult(routeResult, contextBudget);
     const envelope = buildTaskEnvelope(job, shot, audit.issues, {
       sourceIndex,
       references: job.references.map((path) => referenceFromPath(path, sourceIndex)),
       keyframePairDerivation: buildKeyframePairDerivation(job, shot),
-      knowledgeRouteResult: routeResult,
+      knowledgeRouteResult: routedContext,
       contextBudget,
       preflightScope: "formal_execution",
     });
@@ -323,7 +324,7 @@ function buildTaskViews(audit: ProjectAudit, sourceIndex: ProjectSourceIndex, ma
       queueGate,
       manifestMatch,
       validator,
-      routeResult,
+      routeResult: routedContext,
       contextBudget,
       nextStep: "",
     };
@@ -414,6 +415,7 @@ function buildKnowledgeSummary(
       })
     : undefined;
   const contextBudget = routeResult ? buildContextBudget({ routeResult, availablePacks, maxInjectionTokens: 700 }) : undefined;
+  const routedContext = routeResult && contextBudget ? attachBudgetToRouteResult(routeResult, contextBudget) : undefined;
 
   return {
     packCount: manifest.packs.length,
@@ -422,7 +424,7 @@ function buildKnowledgeSummary(
     manifestHash: manifest.manifestHash,
     manifestVersion: manifest.manifestVersion,
     validationIssues: validateKnowledgeManifest(manifest),
-    routeTest: trimmedIntent && routeResult && contextBudget ? { intent: trimmedIntent, routeResult, contextBudget } : undefined,
+    routeTest: trimmedIntent && routedContext && contextBudget ? { intent: trimmedIntent, routeResult: routedContext, contextBudget } : undefined,
   };
 }
 

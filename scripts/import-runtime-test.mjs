@@ -1089,7 +1089,16 @@ function promptKindForJob(job) {
   return "unknown";
 }
 
-function buildShotPromptPlan(job, shot, assets, sourceIndex, providerRegistry, knowledgeManifest, generatedAt) {
+function styleDirectivesFromInjectedKnowledge(injectedKnowledgePacks = []) {
+  const directives = injectedKnowledgePacks
+    .filter((pack) => ["style", "composition", "camera", "lighting", "color", "prompt"].includes(pack.category))
+    .slice(0, 6)
+    .map((pack) => `${pack.consumer}:${pack.category}:${pack.packId}@${pack.hash}`);
+
+  return directives.length ? directives : ["Use only routed knowledge summaries as compiler hints."];
+}
+
+function buildShotPromptPlan(job, shot, assets, sourceIndex, providerRegistry, injectedKnowledgePacks, generatedAt) {
   const capabilityResult = validateJobAgainstCapability(job, providerRegistry);
   const promptKind = promptKindForJob(job);
   const referenceIds = uniqueSorted(job.references || []);
@@ -1132,10 +1141,6 @@ function buildShotPromptPlan(job, shot, assets, sourceIndex, providerRegistry, k
   const conflictReportId = `prompt_conflict_${job.id}`;
   const blockers = conflicts.filter((conflict) => conflict.severity === "blocker").map((conflict) => conflict.detail);
   const status = blockers.length ? "blocked" : promptKind === "video_parked" ? "draft" : "ready_for_envelope";
-  const styleDirectives = (knowledgeManifest.packs || [])
-    .filter((pack) => pack.enabled && ["style", "composition", "camera", "lighting", "color", "prompt"].includes(pack.category))
-    .slice(0, 6)
-    .map((pack) => `${pack.category}:${pack.id}@${pack.hash}`);
   const planWithoutHash = {
     promptPlanId,
     sourceShotSpecHash,
@@ -1164,7 +1169,7 @@ function buildShotPromptPlan(job, shot, assets, sourceIndex, providerRegistry, k
       ...(promptKind === "end_frame" ? ["text2image fallback"] : []),
     ],
     referenceIds,
-    styleDirectives: styleDirectives.length ? styleDirectives : ["Use only routed knowledge summaries as compiler hints."],
+    styleDirectives: styleDirectivesFromInjectedKnowledge(injectedKnowledgePacks),
     adapterWarnings,
     derivesFromStartFrame,
     status,
@@ -1905,7 +1910,36 @@ function buildKnowledgeSummary(knowledgeManifest) {
   };
 }
 
-function matchKnowledgeBindings(job, knowledgeSummary) {
+function estimateKnowledgeTokens(value) {
+  return Math.max(1, Math.ceil(String(value || "").length / 4));
+}
+
+function trimKnowledgeToBudget(content, maxTokens) {
+  const maxChars = Math.max(1, maxTokens * 4);
+  return String(content || "").length <= maxChars ? String(content || "") : String(content || "").slice(0, maxChars).trimEnd();
+}
+
+function summarySnippetForPack(pack) {
+  return {
+    id: "summary",
+    title: `${pack.title} Summary`,
+    content: pack.summary,
+    keywords: pack.tags || [],
+    hash: hashString(pack.summary || pack.id, "vck"),
+    tokenEstimate: estimateKnowledgeTokens(pack.summary),
+  };
+}
+
+function snippetsForKnowledgeMatch(pack, match) {
+  const byId = new Map((pack.snippets || []).map((snippet) => [snippet.id, snippet]));
+  const matched = (match.matchedSnippetIds || []).map((snippetId) => byId.get(snippetId)).filter(Boolean);
+
+  if (matched.length) return matched;
+  if ((pack.snippets || []).length) return pack.snippets.slice(0, 1);
+  return [summarySnippetForPack(pack)];
+}
+
+function matchKnowledgeBindings(job, knowledgeManifest) {
   const purpose = knowledgePurposeFromSlot(job.slot);
   const preferredCategories = {
     asset: ["style", "prompt", "qa", "provider"],
@@ -1916,25 +1950,103 @@ function matchKnowledgeBindings(job, knowledgeSummary) {
     unknown: ["agent", "qa"],
   }[purpose] || ["qa"];
 
-  return knowledgeSummary.bindings
-    .filter((binding) => binding.enabled && preferredCategories.includes(binding.category))
+  return (knowledgeManifest.packs || [])
+    .filter((pack) => pack.enabled && preferredCategories.includes(pack.category))
     .slice(0, 4)
-    .map((binding, index) => ({
-      packId: binding.packId,
-      version: binding.version,
-      hash: binding.hash,
-      category: binding.category,
+    .map((pack, index) => ({
+      packId: pack.id,
+      version: pack.version,
+      hash: pack.hash,
+      category: pack.category,
       reason: `Bound through ProjectRuntimeState for ${purpose} task.`,
       consumer: index % 2 === 0 ? "prompt_compiler" : "qa_gate",
       score: Math.max(1, preferredCategories.length - index),
-      matchedTerms: [purpose, binding.category].filter(Boolean),
-      matchedSnippetIds: [],
+      matchedTerms: [purpose, pack.category].filter(Boolean),
+      matchedSnippetIds: (pack.snippets || []).slice(0, 2).map((snippet) => snippet.id),
     }));
 }
 
-function buildRouteAndBudget(job, knowledgeSummary, generatedAt) {
-  const matches = matchKnowledgeBindings(job, knowledgeSummary);
+function buildRouteAndBudget(job, knowledgeManifest, generatedAt) {
+  const matches = matchKnowledgeBindings(job, knowledgeManifest);
   const routeId = `route_${hashString(job.id, "vck")}`;
+  const maxInjectionTokens = 900;
+  const packById = new Map((knowledgeManifest.packs || []).map((pack) => [pack.id, pack]));
+  const injectedKnowledgePacks = [];
+  const injectedSnippets = [];
+  let usedTokens = 0;
+
+  for (const match of matches) {
+    const pack = packById.get(match.packId);
+    if (!pack) continue;
+
+    const perPackLimit = Math.min(pack.maxInjectionTokens || 600, maxInjectionTokens - usedTokens);
+    const selectedSnippetIds = [];
+    let packTokens = 0;
+    let truncated = false;
+    let truncationReason;
+
+    if (perPackLimit <= 0) {
+      injectedKnowledgePacks.push({
+        packId: pack.id,
+        version: pack.version,
+        hash: pack.hash,
+        category: pack.category,
+        reason: match.reason,
+        consumer: match.consumer,
+        injectedSnippetIds: [],
+        summaryHash: hashString(pack.summary || pack.id, "vck"),
+        truncated: true,
+        truncationReason: "global_context_budget_exhausted",
+      });
+      continue;
+    }
+
+    for (const snippet of snippetsForKnowledgeMatch(pack, match)) {
+      const remainingGlobal = maxInjectionTokens - usedTokens;
+      const remainingPack = perPackLimit - packTokens;
+      const remaining = Math.min(remainingGlobal, remainingPack);
+      const tokenEstimate = snippet.tokenEstimate || estimateKnowledgeTokens(snippet.content);
+
+      if (remaining <= 0) {
+        truncated = true;
+        truncationReason = packTokens >= perPackLimit ? "pack_max_injection_tokens_exhausted" : "global_context_budget_exhausted";
+        break;
+      }
+
+      const injectedTokenEstimate = Math.min(tokenEstimate, remaining);
+      selectedSnippetIds.push(snippet.id);
+      injectedSnippets.push({
+        packId: pack.id,
+        snippetId: snippet.id,
+        title: snippet.title,
+        content: tokenEstimate > remaining ? trimKnowledgeToBudget(snippet.content, remaining) : snippet.content,
+        tokenEstimate: injectedTokenEstimate,
+        hash: snippet.hash,
+      });
+      usedTokens += injectedTokenEstimate;
+      packTokens += injectedTokenEstimate;
+
+      if (tokenEstimate > remaining) {
+        truncated = true;
+        truncationReason = packTokens >= perPackLimit ? "pack_max_injection_tokens_exhausted" : "global_context_budget_exhausted";
+        break;
+      }
+    }
+
+    injectedKnowledgePacks.push({
+      packId: pack.id,
+      version: pack.version,
+      hash: pack.hash,
+      category: pack.category,
+      reason: match.reason,
+      consumer: match.consumer,
+      injectedSnippetIds: selectedSnippetIds,
+      summaryHash: hashString(pack.summary || pack.id, "vck"),
+      truncated,
+      truncationReason,
+    });
+  }
+
   const routeResult = {
     routeId,
     taskId: job.id,
@@ -1943,6 +2055,9 @@ function buildRouteAndBudget(job, knowledgeSummary, generatedAt) {
     contextLevel: "L1",
     inputHash: hashString(`${job.id}:${job.slot}`, "vck"),
     matches,
+    injectedKnowledgePacks,
+    injectedKnowledgeSnippetIds: injectedSnippets.map((snippet) => `${snippet.packId}:${snippet.snippetId}`),
+    notInjected: (knowledgeManifest.packs || []).filter((pack) => !pack.enabled).map((pack) => ({ packId: pack.id, reason: "pack_disabled" })),
     warnings: matches.length ? [] : ["No enabled knowledge pack matched this imported task."],
     createdAt: generatedAt,
   };
@@ -1950,20 +2065,10 @@ function buildRouteAndBudget(job, knowledgeSummary, generatedAt) {
     budgetId: `${routeId}_budget`,
     routeId,
     contextLevel: "L1",
-    maxInjectionTokens: 900,
-    usedTokens: 0,
-    injectedKnowledgePacks: matches.map((match) => ({
-      packId: match.packId,
-      version: match.version,
-      hash: match.hash,
-      category: match.category,
-      reason: match.reason,
-      consumer: match.consumer,
-      injectedSnippetIds: [],
-      summaryHash: match.hash,
-      truncated: false,
-    })),
-    injectedSnippets: [],
+    maxInjectionTokens,
+    usedTokens,
+    injectedKnowledgePacks,
+    injectedSnippets,
     warnings: routeResult.warnings,
     createdAt: generatedAt,
   };
@@ -2027,12 +2132,12 @@ function buildPreflight(job, shot, references, sourceIndex, expectedOutputs, key
   };
 }
 
-function buildEnvelope(job, shot, auditIssues, sourceIndex, knowledgeSummary, generatedAt) {
+function buildEnvelope(job, shot, auditIssues, sourceIndex, knowledgeManifest, generatedAt) {
   const rule = policy.rules.find((item) => item.slot === job.slot);
   const expectedOutputs = job.outputPath ? [job.outputPath] : [];
   const references = (job.references || []).map((referencePath) => referenceFromPath(referencePath, sourceIndex));
   const keyframePairDerivation = buildKeyframePairDerivation(job, shot);
-  const { routeResult, contextBudget } = buildRouteAndBudget(job, knowledgeSummary, generatedAt);
+  const { routeResult, contextBudget } = buildRouteAndBudget(job, knowledgeManifest, generatedAt);
   const preflight = buildPreflight(job, shot, references, sourceIndex, expectedOutputs, keyframePairDerivation, generatedAt);
   const blockingReasons = [
     ...auditIssues.filter((issue) => issue.severity === "blocker" && (!issue.target || issue.target === job.id || String(issue.target).includes(job.id))).map((issue) => issue.title),
@@ -2071,8 +2176,8 @@ function buildEnvelope(job, shot, auditIssues, sourceIndex, knowledgeSummary, ge
       knowledgeRouteResultId: routeResult.routeId,
       contextBudgetId: contextBudget.budgetId,
       injectedKnowledgePacks: contextBudget.injectedKnowledgePacks,
-      injectedKnowledgeSnippetIds: [],
-      injectedKnowledgeSnippets: [],
+      injectedKnowledgeSnippetIds: contextBudget.injectedSnippets.map((snippet) => `${snippet.packId}:${snippet.snippetId}`),
+      injectedKnowledgeSnippets: contextBudget.injectedSnippets,
       knowledgeInputHash: routeResult.inputHash,
       knowledgeManifestHash: sourceIndex.knowledgeManifestHash,
       policyBinding: hashString(`${job.id}:${job.slot}:${job.providerId}`, "policy"),
@@ -2207,11 +2312,11 @@ function validateEnvelope(envelope) {
   };
 }
 
-function buildTaskStates(audit, sourceIndex, knowledgeSummary, generatedAt) {
+function buildTaskStates(audit, sourceIndex, knowledgeManifest, generatedAt) {
   const snapshotPaths = new Set(audit.fileSnapshot || []);
   return audit.jobs.map((job) => {
     const shot = audit.shots.find((item) => job.id.includes(item.id));
-    const { envelope, routeResult, contextBudget } = buildEnvelope(job, shot, audit.issues, sourceIndex, knowledgeSummary, generatedAt);
+    const { envelope, routeResult, contextBudget } = buildEnvelope(job, shot, audit.issues, sourceIndex, knowledgeManifest, generatedAt);
     const queueGate = queueGateForEnvelope(envelope);
     const taskRun = buildTaskRun(envelope, queueGate, generatedAt);
     const manifestMatch = buildManifestMatch(taskRun, snapshotPaths);
@@ -2848,10 +2953,101 @@ function buildVideoSubagentPacketPreview(shot, taskPlan, gate, videoPlanning) {
   };
 }
 
-function buildVideoExecutionPreviewState({ generatedAt, shots, videoPlanning }) {
+function buildVideoSubagentTaskEnvelope(shot, task, taskPlan, gate, videoPlanning) {
+  const keyframePairDerivation = gate?.keyframePairDerivation;
+  const taskEnvelope = task.envelope;
+  const injectedKnowledgePacks = taskEnvelope.injectedKnowledgePacks || [];
+  const lockedReferences = (taskEnvelope.references || []).filter(
+    (reference) => reference.lockedStatus === "locked" && reference.polarity === "positive" && reference.canUseAsFutureReference,
+  );
+  const forbiddenReferences = (taskEnvelope.references || []).filter(
+    (reference) =>
+      reference.lockedStatus === "rejected" ||
+      reference.polarity === "negative" ||
+      reference.referenceRole === "temp_candidate" ||
+      !reference.canUseAsFutureReference,
+  );
+
+  return {
+    id: `subagent_video_${safeId(taskPlan.shotId)}`,
+    parentTaskId: taskEnvelope.id,
+    purpose: "video_generation",
+    contextLevel: "L2",
+    sourceIndexHash: taskEnvelope.sourceIndexHash,
+    sectionId: shot?.sectionId,
+    shotId: taskPlan.shotId,
+    storyFunction: shot?.storyFunction || taskEnvelope.storyFunction,
+    userIntent: taskPlan.motionBrief,
+    neighborShots: [],
+    lockedReferences,
+    forbiddenReferences,
+    providerPolicySummary: [
+      `slot=${taskPlan.providerSlot}`,
+      `provider=${taskPlan.providerId}`,
+      `state=${taskPlan.providerExecutionState}`,
+      `mode=${taskPlan.requiredMode}`,
+      ...videoPlanning.providerPolicySummary.notes,
+    ],
+    taskEnvelope,
+    knowledgeRouteResultId: taskEnvelope.knowledgeRouteResultId,
+    contextBudgetId: taskEnvelope.contextBudgetId,
+    injectedKnowledgePacks,
+    injectedKnowledgeSnippetIds: taskEnvelope.injectedKnowledgeSnippetIds || [],
+    injectedKnowledgeSnippets: taskEnvelope.injectedKnowledgeSnippets || [],
+    knowledgeInputHash: taskEnvelope.knowledgeInputHash,
+    knowledgeManifestHash: taskEnvelope.knowledgeManifestHash,
+    policyBinding: taskEnvelope.policyBinding,
+    nonOverridableGateHashes: taskEnvelope.nonOverridableGateHashes,
+    routeWarnings: taskEnvelope.routeWarnings || [],
+    forbiddenKnowledgePacks: [],
+    requiredKnowledgeCategories: ["storyflow", "story_function", "camera", "performance", "provider", "qa"],
+    qaPackBindings: Object.fromEntries(
+      injectedKnowledgePacks
+        .filter((pack) => pack.consumer === "qa_gate")
+        .map((pack) => [pack.packId, { version: pack.version, hash: pack.hash }]),
+    ),
+    allowedReadScopes: ["task_envelope", "locked_references", "injected_knowledge_snippets", "video_readiness_gate", "keyframe_pair_derivation"],
+    disallowedReadScopes: ["unrouted_knowledge_library", "rejected_references", "failed_artifacts", "provider_credentials", "api_keys", "live_provider_task_ids"],
+    sourceIndexRequired: true,
+    mustInspectNeighborShotIds: [],
+    authorityPriority: ["source_index", "provider_policy", "preflight", "identity", "scene", "pair", "story", "prop", "style"],
+    resultMustReferencePackHashes: true,
+    qaChecklist: taskEnvelope.qaChecklist,
+    mustPreserve: keyframePairDerivation?.mustPreserve || ["character identity", "scene layout", "style capsule"],
+    allowedDelta: keyframePairDerivation?.allowedDelta || ["motion", "micro-expression", "camera movement"],
+    mustNotAdd: keyframePairDerivation?.mustNotAdd || ["new characters", "unapproved props", "text-to-video fallback"],
+    expectedOutputContract: {
+      format: "subagent_result_v1",
+      requiredFields: [
+        "taskId",
+        "status",
+        "inspectedFiles",
+        "gates",
+        "overallVisualVerdict",
+        "styleQa",
+        "motionQa",
+        "continuityQa",
+        "referenceUseDecision",
+        "issues",
+        "requiredFixes",
+        "approvedFor",
+        "rejectedFor",
+        "summaryForMainAgent",
+      ],
+      severityLevels: ["P0", "P1", "P2"],
+      gateFields: ["identity", "scene", "pair", "story", "prop", "style"],
+    },
+  };
+}
+
+function buildVideoExecutionPreviewState({ generatedAt, shots, videoPlanning, taskViews }) {
   const shotsById = new Map(shots.map((shot) => [shot.id, shot]));
   const gatesById = new Map(videoPlanning.readinessGates.map((gate) => [gate.gateId, gate]));
-  const previews = videoPlanning.taskPlans.map((taskPlan) => {
+  const tasksByJobId = new Map(taskViews.map((task) => [task.job.id, task]));
+  const previews = videoPlanning.taskPlans.flatMap((taskPlan) => {
+    const task = tasksByJobId.get(taskPlan.jobId);
+    if (!task) return [];
+
     const shot = shotsById.get(taskPlan.shotId);
     const gate = gatesById.get(taskPlan.readinessGateId);
     const status = videoExecutionPreviewStatus(taskPlan, gate);
@@ -2871,6 +3067,7 @@ function buildVideoExecutionPreviewState({ generatedAt, shots, videoPlanning }) 
           ? "Structured packet cannot be prepared until inherited readiness blockers clear."
           : "Structured packet may be inspected for a future parked I2V worker; provider handoff remains disabled.",
       subagentPacketPreview: buildVideoSubagentPacketPreview(shot, taskPlan, gate, videoPlanning),
+      subagentTaskEnvelope: buildVideoSubagentTaskEnvelope(shot, task, taskPlan, gate, videoPlanning),
       executionOrderPreview: videoExecutionOrderPreview,
       hardLocks: videoExecutionHardLocks,
       blockers: uniqueSorted([...(gate?.blockers || []), ...taskPlan.blockers]),
@@ -3208,7 +3405,7 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
   const sourceIndex = buildSourceIndex(audit, knowledgeManifest);
   const sourceIndexSummary = summarizeSourceIndex(sourceIndex);
   const knowledgeSummary = buildKnowledgeSummary(knowledgeManifest);
-  const taskViews = buildTaskStates(audit, sourceIndex, knowledgeSummary, generatedAt);
+  const taskViews = buildTaskStates(audit, sourceIndex, knowledgeManifest, generatedAt);
   const manifestMatches = manifestSummary(taskViews);
   const runtime = buildRuntimeEnvironment(generatedAt);
   const providerRegistry = buildDefaultProviderRegistry(generatedAt);
@@ -3219,7 +3416,7 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
       audit.assets,
       sourceIndex,
       providerRegistry,
-      knowledgeManifest,
+      task.envelope.injectedKnowledgePacks,
       generatedAt,
     ),
   );
@@ -3293,6 +3490,7 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     generatedAt,
     shots: audit.shots,
     videoPlanning,
+    taskViews,
   });
   const adapterContracts = buildAdapterContractState(generatedAt, providerRegistry);
   const previewExport = buildPreviewExportState({
