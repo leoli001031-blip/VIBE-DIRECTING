@@ -219,7 +219,7 @@ export interface AssetRecord {
 
 export interface ShotRecord {
   id: string;
-  actId: "A1" | "A2" | "unknown";
+  actId: string;
   sectionId?: string;
   title: string;
   storyFunction: string;
@@ -498,6 +498,13 @@ export interface ProjectAudit {
   projectRoot: string;
   sourceTask: string;
   state: string;
+  sourceIndex?: ProjectSourceIndex;
+  fileSnapshot?: string[];
+  schemaSummary?: {
+    auditSchemaVersion?: string;
+    coreStateVersion?: string;
+    notes?: string[];
+  };
   metrics: ProjectMetrics;
   providerPolicy: ProviderPolicy;
   workflow: WorkflowStage[];

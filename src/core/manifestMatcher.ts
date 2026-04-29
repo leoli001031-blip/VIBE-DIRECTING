@@ -101,10 +101,11 @@ function outputExists(path: string, snapshotPaths: Set<string>): boolean {
 export function matchTaskRunOutputs(taskRun: TaskRun, fsSnapshot: FileSnapshot): ManifestMatchReport {
   const snapshotPaths = normalizeSnapshot(fsSnapshot);
   const missingExpectedOutputs: string[] = [];
-  const actualOutputsPresent = taskRun.actualOutputs.filter((path) => snapshotPaths.has(path)).sort();
+  const actualOutputsPresent = new Set(taskRun.actualOutputs.filter((path) => snapshotPaths.has(path)));
   const recoverableOutputs: string[] = [];
   const outputMatches = taskRun.expectedOutputs.map((expectedPath): OutputMatch => {
     if (outputExists(expectedPath, snapshotPaths)) {
+      actualOutputsPresent.add(expectedPath);
       return {
         expectedPath,
         status: "actual_output_present",
@@ -152,7 +153,7 @@ export function matchTaskRunOutputs(taskRun: TaskRun, fsSnapshot: FileSnapshot):
     expectedOutputCount: taskRun.expectedOutputs.length,
     presentOutputCount,
     missingExpectedOutputs,
-    actualOutputsPresent,
+    actualOutputsPresent: Array.from(actualOutputsPresent).sort(),
     recoverableOutputs: uniqueRecoverableOutputs,
     outputMatches,
   };

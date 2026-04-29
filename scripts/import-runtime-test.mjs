@@ -159,6 +159,17 @@ function slotForAsset(asset) {
   return "image.reference_asset";
 }
 
+function actIdForShot(shot) {
+  if (shot.act_id) return String(shot.act_id);
+  if (shot.actId) return String(shot.actId);
+  const match = /^([A-Za-z]+\d+)/.exec(String(shot.shot_id || ""));
+  return match?.[1] || "unknown";
+}
+
+function sectionIdForShot(shot) {
+  return shot.section_id || shot.sectionId || shot.sequence_id || shot.scene_id || actIdForShot(shot);
+}
+
 function assetJobId(asset) {
   if (asset.type === "character") return `asset_character_${asset.character_id}`;
   if (asset.type === "prop") return `asset_prop_${asset.prop_id || asset.asset_id?.replace(/_master$/, "")}`;
@@ -205,7 +216,7 @@ function collectJobs(manifestAssets, shots, generated, events) {
       jobs.push({
         id,
         slot: kind === "start" ? "image.generate" : "image.edit",
-        requiredMode: "image2image",
+        requiredMode: kind === "start" ? "text2image" : "image2image",
         providerId: providerIdForJob(id, events),
         status: entry?.status === "generated" || entry?.status === "exists" ? "success" : "planned",
         outputPath: path.join(root, "02_keyframes", kind, `${shot.shot_id}_${kind}.png`),
@@ -244,7 +255,23 @@ function validateJobs(jobs, events) {
   for (const job of jobs) {
     const rule = policy.rules.find((item) => item.slot === job.slot);
     if (!rule) continue;
-    if (rule.executionState === "parked") continue;
+    if (["parked", "planned", "unavailable"].includes(rule.executionState)) {
+      if (["submitted", "querying", "success"].includes(job.status)) {
+        issues.push(
+          makeIssue(
+            `parked-live-${job.id}`,
+            "blocker",
+            "provider_policy",
+            "Parked provider produced a live task",
+            `${job.id} is ${job.status}, but ${job.slot} is ${rule.executionState}.`,
+            "Do not submit or advance this provider path until Settings explicitly enables the adapter.",
+            job.id,
+          ),
+        );
+        job.issues.push("parked_provider_live_task");
+      }
+      continue;
+    }
     if (rule.forbiddenProviders.includes(job.providerId)) {
       issues.push(
         makeIssue(
@@ -354,7 +381,8 @@ const shotRecords = shotsSpec.map((shot) => {
       : "ready";
   return {
     id: shot.shot_id,
-    actId: shot.shot_id?.startsWith("A1") ? "A1" : shot.shot_id?.startsWith("A2") ? "A2" : "unknown",
+    actId: actIdForShot(shot),
+    sectionId: sectionIdForShot(shot),
     title: `${shot.scene_id || "Scene"} / ${shot.view_id || "View"}`,
     storyFunction: shot.story_function || "Missing story function",
     startFrame: startPath,
@@ -473,6 +501,18 @@ const audit = {
   projectRoot: root,
   sourceTask: manifest?.generation_manifest?.source_documents?.task || "",
   state,
+  fileSnapshot: [
+    ...assetRecords.filter((asset) => asset.status !== "missing").map((asset) => asset.path),
+    ...shotRecords.flatMap((shot) => [shot.startFrame, shot.endFrame, shot.videoPath].filter(Boolean)),
+  ],
+  schemaSummary: {
+    auditSchemaVersion: "0.3.0",
+    coreStateVersion: "runtime-view-derived-from-audit",
+    notes: [
+      "TaskRun, manifest match, preflight, knowledge route, and preview events are derived by src/core/runtimeView.ts.",
+      "Parked provider tasks are never submitted by this importer.",
+    ],
+  },
   metrics,
   providerPolicy: policy,
   workflow,

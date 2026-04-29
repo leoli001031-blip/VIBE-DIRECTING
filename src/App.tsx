@@ -4,23 +4,32 @@ import {
   Boxes,
   CheckCircle2,
   Clapperboard,
+  Database,
+  Eye,
   FileJson,
   Gauge,
   Layers3,
+  ListChecks,
   LockKeyhole,
   PauseCircle,
   Play,
   PlugZap,
   Radio,
   RefreshCw,
+  Search,
   Send,
+  Settings,
   ShieldAlert,
   Sparkles,
+  Wrench,
 } from "lucide-react";
-import type { AssetRecord, AuditIssue, ProjectAudit, ShotRecord, WorkflowStage } from "./core/types";
-import { buildTaskEnvelope } from "./core/taskEnvelope";
+import knowledgeManifestJson from "../resources/knowledge_pack_manifest.json";
+import type { AssetRecord, AuditIssue, ProjectAudit, ShotRecord, UiMode, WorkflowStage } from "./core/types";
+import type { KnowledgePackManifest } from "./core/knowledgeTypes";
+import { buildRuntimeView, type RuntimeView, type TaskRuntimeView } from "./core/runtimeView";
 import { fallbackAudit } from "./data/fallbackAudit";
 
+const knowledgeManifest = knowledgeManifestJson as KnowledgePackManifest;
 const gateNames = ["identity", "scene", "pair", "story", "prop", "style"] as const;
 
 function gateClass(value: string) {
@@ -49,11 +58,17 @@ function groupAssets(assets: AssetRecord[]) {
     Characters: assets.filter((asset) => asset.type === "character"),
     Scenes: assets.filter((asset) => asset.type === "scene"),
     Props: assets.filter((asset) => asset.type === "prop"),
+    Style: assets.filter((asset) => asset.type === "style"),
+    Other: assets.filter((asset) => !["character", "scene", "prop", "style"].includes(asset.type)),
   };
 }
 
 function StatusPill({ value }: { value: string }) {
-  const tone = value.includes("blocked") || value.includes("missing") || value === "blocker" ? "danger" : value.includes("ready") || value.includes("done") || value === "PASS" ? "good" : "neutral";
+  const tone = value.includes("blocked") || value.includes("missing") || value === "blocker" || value === "failed"
+    ? "danger"
+    : value.includes("ready") || value.includes("done") || value === "PASS" || value === "success"
+      ? "good"
+      : "neutral";
   return <span className={`pill ${tone}`}>{value}</span>;
 }
 
@@ -64,183 +79,6 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
       <strong>{value}</strong>
       <small>{detail}</small>
     </div>
-  );
-}
-
-function AssetPanel({ assets, selectedAsset, onSelectAsset }: { assets: AssetRecord[]; selectedAsset?: string; onSelectAsset: (id: string) => void }) {
-  const groups = groupAssets(assets);
-  return (
-    <aside className="asset-panel">
-      <div className="panel-title">
-        <Boxes size={17} />
-        <span>Visual Memory</span>
-      </div>
-      {Object.entries(groups).map(([group, items]) => (
-        <section key={group} className="asset-group">
-          <h3>{group}</h3>
-          <div className="asset-list">
-            {items.map((asset) => (
-              <button
-                key={asset.id}
-                className={`asset-row ${selectedAsset === asset.id ? "selected" : ""}`}
-                onClick={() => onSelectAsset(asset.id)}
-              >
-                <span className="asset-name">{asset.name}</span>
-                <span className={`dot ${asset.issues.length ? "warn" : asset.status === "missing" ? "bad" : "ok"}`} />
-                <small>{asset.lockedStatus}</small>
-              </button>
-            ))}
-          </div>
-        </section>
-      ))}
-    </aside>
-  );
-}
-
-function ShotCard({ shot, selected, onClick }: { shot: ShotRecord; selected: boolean; onClick: () => void }) {
-  return (
-    <button className={`shot-card ${selected ? "selected" : ""}`} onClick={onClick}>
-      <div className="shot-top">
-        <strong>{shot.id}</strong>
-        <StatusPill value={shot.status} />
-      </div>
-      <p>{shot.storyFunction}</p>
-      <div className="shot-media">
-        <div>
-          <span>Start</span>
-          <small>{shot.startFrame ? "present" : "missing"}</small>
-        </div>
-        <div>
-          <span>End</span>
-          <small>{shot.endFrame ? "present" : "missing"}</small>
-        </div>
-        <div>
-          <span>Video</span>
-          <small>{shot.videoPath ? "ready" : "missing"}</small>
-        </div>
-      </div>
-      <div className="gate-row">
-        {gateNames.map((name) => (
-          <span key={name} className={gateClass(shot.gates[name])} title={`${name}: ${shot.gates[name]}`}>
-            {name[0]}
-          </span>
-        ))}
-      </div>
-    </button>
-  );
-}
-
-function ShotWorkspace({ audit, selectedShotId, onSelectShot }: { audit: ProjectAudit; selectedShotId: string; onSelectShot: (id: string) => void }) {
-  const [tab, setTab] = useState<"A1" | "A2" | "All">("A1");
-  const shots = tab === "All" ? audit.shots : audit.shots.filter((shot) => shot.actId === tab);
-  return (
-    <main className="workspace">
-      <div className="tabs">
-        {(["A1", "A2", "All"] as const).map((item) => (
-          <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>
-            {item === "A1" ? "Act I" : item === "A2" ? "Act II" : "All Shots"}
-          </button>
-        ))}
-      </div>
-      <div className="shot-grid">
-        {shots.map((shot) => (
-          <ShotCard key={shot.id} shot={shot} selected={selectedShotId === shot.id} onClick={() => onSelectShot(shot.id)} />
-        ))}
-      </div>
-      <div className="contact-strip">
-        <div>
-          <h3>Asset Contact Sheet</h3>
-          {audit.contactSheets.assets ? <img src={audit.contactSheets.assets} alt="Asset contact sheet" /> : <div className="empty-media">No asset contact sheet</div>}
-        </div>
-        <div>
-          <h3>Keyframe Contact Sheet</h3>
-          {audit.contactSheets.keyframes ? <img src={audit.contactSheets.keyframes} alt="Keyframe contact sheet" /> : <div className="empty-media">No keyframe contact sheet</div>}
-        </div>
-      </div>
-    </main>
-  );
-}
-
-function Inspector({ audit, shot, asset }: { audit: ProjectAudit; shot?: ShotRecord; asset?: AssetRecord }) {
-  const shotJobs = shot ? audit.jobs.filter((job) => job.id.includes(shot.id)) : [];
-  const relatedIssues = audit.issues.filter((issue) => !shot || issue.target?.includes(shot.id) || issue.type === "provider_policy" || issue.type === "fallback" || issue.type === "missing_output");
-  return (
-    <aside className="inspector">
-      <div className="panel-title">
-        <Clapperboard size={17} />
-        <span>Director Panel</span>
-      </div>
-      {shot && (
-        <section className="inspector-section">
-          <div className="selected-line">Selected {shot.id}</div>
-          <h2>{shot.storyFunction}</h2>
-          <div className="field-grid">
-            <label>Act</label>
-            <span>{shot.actId}</span>
-            <label>Status</label>
-            <span>{shot.status}</span>
-            <label>Video</label>
-            <span>{shot.videoPath ? "ready" : "blocked"}</span>
-          </div>
-          <div className="gate-table">
-            {gateNames.map((name) => (
-              <div key={name}>
-                <span>{name}</span>
-                <b className={gateClass(shot.gates[name])}>{shot.gates[name]}</b>
-              </div>
-            ))}
-          </div>
-          <div className="path-list">
-            <small>{shot.startFrame}</small>
-            <small>{shot.endFrame}</small>
-          </div>
-        </section>
-      )}
-      {asset && (
-        <section className="inspector-section">
-          <div className="selected-line">Asset {asset.type}</div>
-          <h2>{asset.name}</h2>
-          <div className="field-grid">
-            <label>Status</label>
-            <span>{asset.status}</span>
-            <label>Lock</label>
-            <span>{asset.lockedStatus}</span>
-            <label>Provider</label>
-            <span>{asset.providerId || "unknown"}</span>
-          </div>
-          <div className="path-list">
-            <small>{asset.path}</small>
-          </div>
-        </section>
-      )}
-      <section className="inspector-section">
-        <h3>Dry-run Tasks</h3>
-        {shotJobs.length ? (
-          <div className="job-list">
-            {shotJobs.map((job) => (
-              <div key={job.id} className="job-row">
-                <span>{job.id}</span>
-                <small>{job.slot} / {job.requiredMode}</small>
-                <StatusPill value={job.status} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="muted-copy">Select a shot to inspect generated task envelopes.</p>
-        )}
-      </section>
-      <section className="inspector-section">
-        <h3>Blocking Reasons</h3>
-        <div className="issue-list">
-          {relatedIssues.slice(0, 6).map((issue) => (
-            <div key={issue.id} className={issueTone(issue)}>
-              <strong>{issue.title}</strong>
-              <p>{issue.detail}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-    </aside>
   );
 }
 
@@ -258,76 +96,167 @@ function Workflow({ stages }: { stages: WorkflowStage[] }) {
   );
 }
 
-function ProviderDock({ audit }: { audit: ProjectAudit }) {
+function VisualMemoryPanel({
+  audit,
+  view,
+  selectedAsset,
+  onSelectAsset,
+}: {
+  audit: ProjectAudit;
+  view: RuntimeView;
+  selectedAsset?: string;
+  onSelectAsset: (id: string) => void;
+}) {
+  const groups = groupAssets(audit.assets);
   return (
-    <section className="provider-dock">
-      <div className="provider-title">
-        <PlugZap size={16} />
-        <span>Provider Policy</span>
+    <aside className="asset-panel">
+      <div className="panel-title">
+        <Boxes size={17} />
+        <span>Visual Memory</span>
       </div>
-      {audit.providerPolicy.rules.map((rule) => (
-        <div key={rule.slot} className={`provider-rule ${rule.executionState}`}>
-          <div>
-            <strong>{rule.slot}</strong>
-            <small>{rule.activeProvider}</small>
+      <div className="memory-summary">
+        <strong>{view.visualMemory.existing}/{view.visualMemory.total || audit.metrics.expectedAssets}</strong>
+        <span>assets present</span>
+        <small>{view.visualMemory.needsReview} need review · {view.visualMemory.missing} missing</small>
+      </div>
+      {Object.entries(groups).filter(([, items]) => items.length).map(([group, items]) => (
+        <section key={group} className="asset-group">
+          <h3>{group}</h3>
+          <div className="asset-list">
+            {items.map((asset) => (
+              <button
+                key={asset.id}
+                className={`asset-row ${selectedAsset === asset.id ? "selected" : ""}`}
+                onClick={() => onSelectAsset(asset.id)}
+              >
+                <span className="asset-name">{asset.name}</span>
+                <span className={`dot ${asset.status === "missing" ? "bad" : asset.issues.length ? "warn" : "ok"}`} />
+                <small>{asset.lockedStatus}</small>
+              </button>
+            ))}
           </div>
-          <StatusPill value={rule.executionState} />
-        </div>
+        </section>
       ))}
-      <div className="provider-note">
-        <PauseCircle size={15} />
-        <span>Jimeng/Seedance is parked for now: build envelopes and queues, do not submit live jobs.</span>
-      </div>
-    </section>
+    </aside>
   );
 }
 
-function EnvelopePreview({ audit, shot }: { audit: ProjectAudit; shot?: ShotRecord }) {
-  const job = shot ? audit.jobs.find((item) => item.id.includes(shot.id)) : undefined;
-  if (!job) return <p className="muted-copy">Select a shot to preview its standardized task envelope.</p>;
-
-  const envelope = buildTaskEnvelope(job, shot, audit.issues, { preflightScope: "dev_preview" });
+function ShotCard({ shot, selected, taskCount, onClick }: { shot: ShotRecord; selected: boolean; taskCount: number; onClick: () => void }) {
   return (
-    <div className="envelope-preview">
-      <div className="field-grid compact">
-        <label>Slot</label>
-        <span>{envelope.providerSlot}</span>
-        <label>Mode</label>
-        <span>{envelope.requiredMode}</span>
-        <label>Provider</label>
-        <span>{envelope.providerId}</span>
-        <label>State</label>
-        <span>{envelope.executionState}</span>
-        <label>Preflight</label>
-        <span>{envelope.preflight.status}</span>
-        <label>Blockers</label>
-        <span>{envelope.preflight.blockers.length}</span>
+    <button className={`shot-card ${selected ? "selected" : ""}`} onClick={onClick}>
+      <div className="shot-top">
+        <strong>{shot.id}</strong>
+        <StatusPill value={shot.status} />
       </div>
-      <div className="rule-list">
-        {envelope.hardRules.map((rule) => (
-          <small key={rule}>{rule}</small>
-        ))}
-        {envelope.preflight.blockers.slice(0, 3).map((item) => (
-          <small key={item.code}>{item.messageForUser}</small>
+      <p>{shot.storyFunction}</p>
+      <div className="shot-media">
+        <div>
+          <span>Start</span>
+          <small>{shot.startFrame && !shot.issues.includes("missing_start_frame") ? "present" : "missing"}</small>
+        </div>
+        <div>
+          <span>End</span>
+          <small>{shot.endFrame && !shot.issues.includes("missing_end_frame") ? "present" : "missing"}</small>
+        </div>
+        <div>
+          <span>Queue</span>
+          <small>{taskCount} tasks</small>
+        </div>
+      </div>
+      <div className="gate-row">
+        {gateNames.map((name) => (
+          <span key={name} className={gateClass(shot.gates[name])} title={`${name}: ${shot.gates[name]}`}>
+            {name[0]}
+          </span>
         ))}
       </div>
-    </div>
+    </button>
   );
 }
 
-function DirectorInput() {
+function StoryWorkspace({
+  audit,
+  view,
+  selectedShotId,
+  onSelectShot,
+}: {
+  audit: ProjectAudit;
+  view: RuntimeView;
+  selectedShotId: string;
+  onSelectShot: (id: string) => void;
+}) {
+  const [tab, setTab] = useState("all");
+  const activeSection = view.storySections.find((section) => section.id === tab);
+  const shots = tab === "all" || !activeSection ? audit.shots : audit.shots.filter((shot) => activeSection.shotIds.includes(shot.id));
+
+  useEffect(() => {
+    if (tab !== "all" && !view.storySections.some((section) => section.id === tab)) setTab("all");
+  }, [tab, view.storySections]);
+
+  return (
+    <main className="workspace">
+      <div className="tabs">
+        <button className={tab === "all" ? "active" : ""} onClick={() => setTab("all")}>
+          All Shots
+        </button>
+        {view.storySections.map((section) => (
+          <button key={section.id} className={tab === section.id ? "active" : ""} onClick={() => setTab(section.id)}>
+            {section.label}
+            <small>{section.shotCount}</small>
+          </button>
+        ))}
+      </div>
+      <div className="shot-grid">
+        {shots.map((shot) => (
+          <ShotCard
+            key={shot.id}
+            shot={shot}
+            selected={selectedShotId === shot.id}
+            taskCount={view.taskViews.filter((task) => task.shot?.id === shot.id).length}
+            onClick={() => onSelectShot(shot.id)}
+          />
+        ))}
+      </div>
+      <div className="contact-strip">
+        <div>
+          <h3>Asset Contact Sheet</h3>
+          {audit.contactSheets.assets ? <img src={audit.contactSheets.assets} alt="Asset contact sheet" /> : <div className="empty-media">No asset contact sheet</div>}
+        </div>
+        <div>
+          <h3>Keyframe Contact Sheet</h3>
+          {audit.contactSheets.keyframes ? <img src={audit.contactSheets.keyframes} alt="Keyframe contact sheet" /> : <div className="empty-media">No keyframe contact sheet</div>}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function DirectorInput({ shot, asset, nextStep }: { shot?: ShotRecord; asset?: AssetRecord; nextStep: string }) {
   const [text, setText] = useState("");
   const [saved, setSaved] = useState("No command recorded");
+  const selectedContext = shot ? `${shot.id} · ${shot.storyFunction}` : asset ? `${asset.type} · ${asset.name}` : "Project";
+  const understanding = shot
+    ? `System sees ${shot.status}; video ${shot.videoPath ? "present" : "missing"}; pair gate ${shot.gates.pair}.`
+    : asset
+      ? `System sees ${asset.status}; reference lock ${asset.lockedStatus}; future reference ${asset.safeForFutureReference ? "allowed" : "not approved"}.`
+      : "System is scoped to the whole project.";
+
   return (
     <div className="director-input">
       <div className="input-header">
         <Sparkles size={16} />
         <span>Director Input</span>
       </div>
-      <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Describe a change. This first build records intent only; it does not call a model." />
+      <div className="context-chip">
+        <span>Selected</span>
+        <strong>{selectedContext}</strong>
+        <small>{understanding}</small>
+        <small>{nextStep}</small>
+      </div>
+      <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Describe a change in natural language. This shell records intent only." />
       <button
         onClick={() => {
-          setSaved(text.trim() ? `Mock command saved: ${text.trim()}` : "No command text");
+          setSaved(text.trim() ? `Mock command saved for ${selectedContext}` : "No command text");
           setText("");
         }}
       >
@@ -339,10 +268,387 @@ function DirectorInput() {
   );
 }
 
+function PreviewTimeline({ view, selectedShotId, onSelectShot }: { view: RuntimeView; selectedShotId: string; onSelectShot: (id: string) => void }) {
+  const total = Math.max(1, view.previewEvents.reduce((max, event) => Math.max(max, event.startSeconds + event.durationSeconds), 0));
+
+  return (
+    <section className="preview-timeline">
+      <div className="audit-head">
+        <Play size={17} />
+        <span>Preview</span>
+      </div>
+      <div className="timeline-track">
+        {view.previewEvents.map((event) => (
+          <button
+            key={event.id}
+            className={`timeline-event ${event.type} ${event.shotId === selectedShotId ? "selected" : ""}`}
+            style={{ width: `${Math.max(7, (event.durationSeconds / total) * 100)}%` }}
+            onClick={() => event.shotId && onSelectShot(event.shotId)}
+            title={`${event.shotId || "gap"} · ${event.type} · ${event.qaStatus}`}
+          >
+            <span>{event.shotId}</span>
+            <small>{event.type === "blocked_placeholder" ? "blocked" : event.type.replace("_", " ")}</small>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DirectorMode({
+  audit,
+  view,
+  selectedShot,
+  selectedAsset,
+  selectedShotId,
+  selectedAssetId,
+  onSelectShot,
+  onSelectAsset,
+}: {
+  audit: ProjectAudit;
+  view: RuntimeView;
+  selectedShot?: ShotRecord;
+  selectedAsset?: AssetRecord;
+  selectedShotId: string;
+  selectedAssetId?: string;
+  onSelectShot: (id: string) => void;
+  onSelectAsset: (id: string) => void;
+}) {
+  const firstBlocker = view.preflightSummary.blockers[0];
+
+  return (
+    <>
+      <section className="director-brief">
+        <div>
+          <h2>Next Step</h2>
+          <p>{view.nextStep}</p>
+        </div>
+        <div>
+          <h2>Queue</h2>
+          <p>{view.queueSummary.ready} ready · {view.queueSummary.blocked} blocked · {view.queueSummary.parked} parked</p>
+        </div>
+        <div>
+          <h2>Blocking Reason</h2>
+          <p>{firstBlocker?.messageForUser || "No preflight blocker in the selected runtime view."}</p>
+        </div>
+      </section>
+      <div className="director-layout">
+        <VisualMemoryPanel audit={audit} view={view} selectedAsset={selectedAssetId} onSelectAsset={onSelectAsset} />
+        <StoryWorkspace audit={audit} view={view} selectedShotId={selectedShotId} onSelectShot={onSelectShot} />
+        <div className="director-side">
+          <PreviewTimeline view={view} selectedShotId={selectedShotId} onSelectShot={onSelectShot} />
+          <DirectorInput shot={selectedShot} asset={selectedAsset} nextStep={view.nextStep} />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function TaskRows({ tasks, compact = false }: { tasks: TaskRuntimeView[]; compact?: boolean }) {
+  if (!tasks.length) return <p className="muted-copy">No task runs for this selection.</p>;
+  return (
+    <div className="job-list">
+      {tasks.map((task) => (
+        <div key={task.job.id} className="job-row">
+          <div className="row-head">
+            <span>{task.job.id}</span>
+            <StatusPill value={task.queueGate.status} />
+          </div>
+          <small>{task.job.slot} / {task.job.requiredMode}</small>
+          {!compact && <p>{task.nextStep}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EnvelopePreview({ task }: { task?: TaskRuntimeView }) {
+  if (!task) return <p className="muted-copy">Select a shot to preview its standardized task envelope.</p>;
+
+  return (
+    <div className="envelope-preview">
+      <div className="field-grid compact">
+        <label>Slot</label>
+        <span>{task.envelope.providerSlot}</span>
+        <label>Provider</label>
+        <span>{task.envelope.providerId}</span>
+        <label>Scope</label>
+        <span>{task.envelope.preflight.preflightScope}</span>
+        <label>Status</label>
+        <span>{task.envelope.preflight.status}</span>
+        <label>Blockers</label>
+        <span>{task.envelope.preflight.blockers.length}</span>
+        <label>Warnings</label>
+        <span>{task.envelope.preflight.warnings.length}</span>
+        <label>Knowledge</label>
+        <span>{task.envelope.injectedKnowledgePacks.length} packs / {task.contextBudget.usedTokens} tokens</span>
+        <label>Validator</label>
+        <span>{task.validator.valid ? "valid" : task.validator.issues.join(", ")}</span>
+      </div>
+      <div className="rule-list">
+        {task.envelope.preflight.blockers.slice(0, 4).map((item, index) => (
+          <small key={`${item.code}-${item.target || "task"}-${index}`}>{item.code}: {item.messageForUser}</small>
+        ))}
+        {task.envelope.injectedKnowledgePacks.slice(0, 4).map((pack) => (
+          <small key={pack.packId}>{pack.consumer}: {pack.packId} · {pack.injectedSnippetIds.join(", ") || "summary"}</small>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InspectorMode({
+  audit,
+  view,
+  selectedShot,
+  selectedAsset,
+}: {
+  audit: ProjectAudit;
+  view: RuntimeView;
+  selectedShot?: ShotRecord;
+  selectedAsset?: AssetRecord;
+}) {
+  const selectedTasks = selectedShot ? view.taskViews.filter((task) => task.shot?.id === selectedShot.id) : [];
+  const primaryTask = selectedTasks.find((task) => task.job.slot === "video.i2v") || selectedTasks[0];
+  const relatedIssues = audit.issues.filter((issue) => !selectedShot || issue.target?.includes(selectedShot.id) || issue.type === "provider_policy" || issue.type === "fallback" || issue.type === "missing_output");
+
+  return (
+    <div className="inspector-layout">
+      <aside className="inspector">
+        <div className="panel-title">
+          <Clapperboard size={17} />
+          <span>Inspector</span>
+        </div>
+        {selectedShot && (
+          <section className="inspector-section">
+            <div className="selected-line">Selected {selectedShot.id}</div>
+            <h2>{selectedShot.storyFunction}</h2>
+            <div className="field-grid">
+              <label>Act</label>
+              <span>{selectedShot.actId}</span>
+              <label>Section</label>
+              <span>{selectedShot.sectionId || "none"}</span>
+              <label>Status</label>
+              <span>{selectedShot.status}</span>
+              <label>Video</label>
+              <span>{selectedShot.videoPath ? "ready" : "blocked"}</span>
+            </div>
+            <div className="gate-table">
+              {gateNames.map((name) => (
+                <div key={name}>
+                  <span>{name}</span>
+                  <b className={gateClass(selectedShot.gates[name])}>{selectedShot.gates[name]}</b>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+        {selectedAsset && (
+          <section className="inspector-section">
+            <div className="selected-line">Asset {selectedAsset.type}</div>
+            <h2>{selectedAsset.name}</h2>
+            <div className="field-grid">
+              <label>Status</label>
+              <span>{selectedAsset.status}</span>
+              <label>Lock</label>
+              <span>{selectedAsset.lockedStatus}</span>
+              <label>Provider</label>
+              <span>{selectedAsset.providerId || "unknown"}</span>
+            </div>
+            <div className="path-list">
+              <small>{selectedAsset.path}</small>
+            </div>
+          </section>
+        )}
+      </aside>
+      <main className="inspector-main">
+        <section className="machine-panel">
+          <div className="audit-head">
+            <ListChecks size={17} />
+            <span>Task Runs</span>
+          </div>
+          <TaskRows tasks={selectedTasks} />
+        </section>
+        <section className="machine-panel">
+          <div className="audit-head">
+            <FileJson size={17} />
+            <span>Task Envelope Preview</span>
+          </div>
+          <EnvelopePreview task={primaryTask} />
+        </section>
+        <section className="machine-panel">
+          <div className="audit-head">
+            <AlertTriangle size={17} />
+            <span>Blocking Reasons</span>
+          </div>
+          <div className="issue-list">
+            {relatedIssues.slice(0, 8).map((issue) => (
+              <div key={issue.id} className={issueTone(issue)}>
+                <strong>{issue.title}</strong>
+                <p>{issue.detail}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function ProviderDock({ audit }: { audit: ProjectAudit }) {
+  return (
+    <section className="provider-dock">
+      <div className="provider-title">
+        <PlugZap size={16} />
+        <span>Provider Policy</span>
+      </div>
+      {audit.providerPolicy.rules.slice(0, 6).map((rule) => (
+        <div key={rule.slot} className={`provider-rule ${rule.executionState}`}>
+          <div>
+            <strong>{rule.slot}</strong>
+            <small>{rule.activeProvider}</small>
+          </div>
+          <StatusPill value={rule.executionState} />
+        </div>
+      ))}
+      <div className="provider-note">
+        <PauseCircle size={15} />
+        <span>Seedance/Jimeng stays parked. This UI builds envelopes and dry checks only.</span>
+      </div>
+    </section>
+  );
+}
+
+function KnowledgePackManager({ view, intent, onIntentChange }: { view: RuntimeView; intent: string; onIntentChange: (value: string) => void }) {
+  const routeTest = view.knowledge.routeTest;
+  return (
+    <section className="machine-panel knowledge-manager">
+      <div className="audit-head">
+        <Database size={17} />
+        <span>Knowledge Pack Manager</span>
+      </div>
+      <div className="summary-grid">
+        <Metric label="Packs" value={`${view.knowledge.enabledCount}/${view.knowledge.packCount}`} detail="enabled / total" />
+        <Metric label="Categories" value={`${view.knowledge.categories.length}`} detail="manifest categories" />
+        <Metric label="Manifest" value={view.knowledge.manifestVersion} detail={view.knowledge.manifestHash} />
+      </div>
+      <div className="category-strip">
+        {view.knowledge.categories.map((item) => (
+          <span key={item.category}>{item.category}: {item.enabled}/{item.count}</span>
+        ))}
+      </div>
+      <div className="route-tester">
+        <Search size={16} />
+        <input value={intent} onChange={(event) => onIntentChange(event.target.value)} placeholder="Test route: e.g. 这一镜头更压抑，慢慢推近角色" />
+      </div>
+      {routeTest && (
+        <div className="route-results">
+          <small>consumer / pack / snippet / score</small>
+          {routeTest.routeResult.matches.slice(0, 8).map((match) => (
+            <div key={match.packId}>
+              <span>{match.consumer}</span>
+              <strong>{match.packId}</strong>
+              <small>{match.matchedSnippetIds.join(", ") || "summary"} · {match.score}</small>
+            </div>
+          ))}
+          <p>Budget: {routeTest.contextBudget.usedTokens}/{routeTest.contextBudget.maxInjectionTokens} tokens</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SettingsShell({ audit }: { audit: ProjectAudit }) {
+  const settingsRows = [
+    ["Provider Registry", `${audit.providerPolicy.rules.length} slots registered`],
+    ["Image2 active", "Codex CLI/API placeholder; image slots active"],
+    ["Seedance parked", "Video provider cannot submit live tasks"],
+    ["Codex CLI runtime", "placeholder: path and session adapter pending"],
+    ["Image2 runtime", "placeholder: adapter selection pending"],
+    ["FFmpeg", "placeholder: local detection pending"],
+    ["TTS / Music", "placeholder: providers planned"],
+    ["Voice Sources", "placeholder: user voice library planned"],
+  ];
+
+  return (
+    <section className="machine-panel settings-shell">
+      <div className="audit-head">
+        <Settings size={17} />
+        <span>Settings Shell</span>
+      </div>
+      <div className="settings-list">
+        {settingsRows.map(([label, detail]) => (
+          <div key={label}>
+            <strong>{label}</strong>
+            <small>{detail}</small>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DiagnosticsMode({ audit, view, intent, onIntentChange }: { audit: ProjectAudit; view: RuntimeView; intent: string; onIntentChange: (value: string) => void }) {
+  return (
+    <div className="diagnostics-layout">
+      <ProviderDock audit={audit} />
+      <section className="machine-panel">
+        <div className="audit-head">
+          <Gauge size={17} />
+          <span>Queue / Task Runs</span>
+        </div>
+        <div className="summary-grid">
+          <Metric label="Total" value={`${view.queueSummary.total}`} detail="derived task runs" />
+          <Metric label="Ready" value={`${view.queueSummary.ready}`} detail="can enter dry queue" />
+          <Metric label="Blocked" value={`${view.queueSummary.blocked}`} detail="preflight/policy" />
+          <Metric label="Parked" value={`${view.queueSummary.parked}`} detail="provider disabled" />
+        </div>
+        <TaskRows tasks={view.taskViews.slice(0, 12)} compact />
+      </section>
+      <section className="machine-panel">
+        <div className="audit-head">
+          <ShieldAlert size={17} />
+          <span>Preflight Blockers</span>
+        </div>
+        <div className="code-list">
+          {view.preflightSummary.blockers.slice(0, 12).map((blocker, index) => (
+            <details key={`${blocker.code}-${index}`}>
+              <summary>{blocker.code} · {blocker.messageForUser}</summary>
+              <pre>{JSON.stringify(blocker, null, 2)}</pre>
+            </details>
+          ))}
+        </div>
+      </section>
+      <section className="machine-panel">
+        <div className="audit-head">
+          <Layers3 size={17} />
+          <span>Manifest Matcher / Source Index</span>
+        </div>
+        <div className="field-grid compact">
+          <label>Source</label>
+          <span>{view.sourceIndexSummary.sourceIndexHash}</span>
+          <label>Refs</label>
+          <span>{view.sourceIndexSummary.lockedReferenceCount} locked / {view.sourceIndexSummary.candidateReferenceCount} candidates</span>
+          <label>Outputs</label>
+          <span>{view.manifestSummary.present} present / {view.manifestSummary.missing} missing / {view.manifestSummary.recoverable} recoverable</span>
+        <label>Schema</label>
+        <span>{audit.schemaSummary?.coreStateVersion || "runtime audit v0.3 shell"}</span>
+          <label>Preview</label>
+          <span>{view.previewEvents.filter((event) => event.type === "blocked_placeholder").length} blocked / {view.previewEvents.length} events</span>
+      </div>
+    </section>
+      <KnowledgePackManager view={view} intent={intent} onIntentChange={onIntentChange} />
+      <SettingsShell audit={audit} />
+    </div>
+  );
+}
+
 function App() {
   const [audit, setAudit] = useState<ProjectAudit>(fallbackAudit);
+  const [mode, setMode] = useState<UiMode>("director");
   const [selectedShotId, setSelectedShotId] = useState("A1_01");
   const [selectedAssetId, setSelectedAssetId] = useState<string | undefined>();
+  const [knowledgeIntent, setKnowledgeIntent] = useState("这一镜头更压抑一点，慢慢推近角色");
 
   useEffect(() => {
     fetch("/runtime-audit.json")
@@ -354,6 +660,10 @@ function App() {
       .catch(() => setAudit(fallbackAudit));
   }, []);
 
+  const view = useMemo(
+    () => buildRuntimeView(audit, knowledgeManifest, { selectedShotId, knowledgeTestIntent: knowledgeIntent }),
+    [audit, selectedShotId, knowledgeIntent],
+  );
   const selectedShot = useMemo(() => audit.shots.find((shot) => shot.id === selectedShotId), [audit.shots, selectedShotId]);
   const selectedAsset = useMemo(() => audit.assets.find((asset) => asset.id === selectedAssetId), [audit.assets, selectedAssetId]);
   const blockers = audit.issues.filter((issue) => issue.severity === "blocker");
@@ -362,64 +672,59 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand">
-          <div className="mark">VD</div>
+          <div className="mark">VC</div>
           <div>
-            <h1>Vibe Director Studio</h1>
+            <h1>Vibe Core</h1>
             <p>{audit.projectTitle} · {audit.state}</p>
           </div>
         </div>
+        <div className="mode-switch">
+          {(["director", "inspector", "diagnostics"] as const).map((item) => (
+            <button key={item} className={mode === item ? "active" : ""} onClick={() => setMode(item)}>
+              {item === "director" && <Eye size={16} />}
+              {item === "inspector" && <FileJson size={16} />}
+              {item === "diagnostics" && <Wrench size={16} />}
+              {item}
+            </button>
+          ))}
+        </div>
         <div className="top-actions">
           <button><FileJson size={16} /> Import Runtime Test</button>
-          <button><Gauge size={16} /> Run Dry Check</button>
-          <button><Play size={16} /> Mock Generate</button>
+          <button><Gauge size={16} /> Dry Check</button>
+          <button disabled><Play size={16} /> Live Submit Locked</button>
         </div>
       </header>
 
       <section className="overview">
-        <Metric label="Assets" value={`${audit.metrics.existingAssets}/${audit.metrics.expectedAssets}`} detail="protocol imported" />
-        <Metric label="Keyframes" value={`${audit.metrics.existingKeyframes}/${audit.metrics.expectedKeyframes}`} detail="start/end pairs" />
-        <Metric label="Videos" value={`${audit.metrics.existingVideos}/${audit.metrics.expectedVideos}`} detail="clips found" />
-        <Metric label="Blockers" value={`${blockers.length}`} detail="policy/state gates" />
+        <Metric label="Story Flow" value={`${audit.shots.length}`} detail={`${view.storySections.length} section(s)`} />
+        <Metric label="Visual Memory" value={`${view.visualMemory.existing}/${view.visualMemory.total || audit.metrics.expectedAssets}`} detail="real assets indexed" />
+        <Metric label="Queue" value={`${view.queueSummary.ready}/${view.queueSummary.total}`} detail={`${view.queueSummary.blocked} blocked · ${view.queueSummary.parked} parked`} />
+        <Metric label="Blockers" value={`${blockers.length + view.preflightSummary.blocked}`} detail={view.nextStep} />
       </section>
 
-      <Workflow stages={audit.workflow} />
-      <ProviderDock audit={audit} />
+      {mode !== "director" && audit.workflow.length > 0 && <Workflow stages={audit.workflow} />}
 
-      <div className="main-layout">
-        <AssetPanel assets={audit.assets} selectedAsset={selectedAssetId} onSelectAsset={setSelectedAssetId} />
-        <ShotWorkspace audit={audit} selectedShotId={selectedShotId} onSelectShot={setSelectedShotId} />
-        <Inspector audit={audit} shot={selectedShot} asset={selectedAsset} />
-      </div>
+      {mode === "director" && (
+        <DirectorMode
+          audit={audit}
+          view={view}
+          selectedShot={selectedShot}
+          selectedAsset={selectedAsset}
+          selectedShotId={selectedShotId}
+          selectedAssetId={selectedAssetId}
+          onSelectShot={setSelectedShotId}
+          onSelectAsset={setSelectedAssetId}
+        />
+      )}
+      {mode === "inspector" && <InspectorMode audit={audit} view={view} selectedShot={selectedShot} selectedAsset={selectedAsset} />}
+      {mode === "diagnostics" && <DiagnosticsMode audit={audit} view={view} intent={knowledgeIntent} onIntentChange={setKnowledgeIntent} />}
 
-      <footer className="bottom-panel">
-        <div className="audit-head">
-          <Layers3 size={17} />
-          <span>Audit Log</span>
-        </div>
-        <div className="audit-list">
-          {audit.issues.map((issue) => (
-            <div key={issue.id} className={issueTone(issue)}>
-              <AlertTriangle size={15} />
-              <div>
-                <strong>{issue.title}</strong>
-                <p>{issue.recommendation}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="envelope-panel">
-          <div className="audit-head">
-            <FileJson size={17} />
-            <span>Task Envelope</span>
-          </div>
-          <EnvelopePreview audit={audit} shot={selectedShot} />
-        </div>
-        <DirectorInput />
-        <div className="policy-note">
+      {mode !== "director" && (
+        <footer className="policy-note">
           <LockKeyhole size={16} />
-          <span>Image policy: Image2 only. Required image-to-image tasks cannot fall back to text-to-image.</span>
-        </div>
-      </footer>
+          <span>Hard lock: provider policy, preflight, reference authority, keyframe pair derivation, and QA gates cannot be overridden by Knowledge Packs or natural-language input.</span>
+        </footer>
+      )}
     </div>
   );
 }
