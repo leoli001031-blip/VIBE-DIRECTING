@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/generation_harness.schema.json",
+  "title": "GenerationHarnessState",
+  "description": "Phase 8.4 dry-run generation harness state machine from shot spec through QA gate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "jobs",
+    "summary",
+    "forbiddenActions",
+    "postprocessPolicy",
+    "dryRunOnly",
+    "providerSubmissionForbidden",
+    "liveSubmitAllowed",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "jobs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/generationHarnessJob" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "blocked", "waiting", "qaPending", "formalReady", "canPromoteToFormal", "liveSubmitAllowed"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "waiting": { "type": "integer", "minimum": 0 },
+        "qaPending": { "type": "integer", "minimum": 0 },
+        "formalReady": { "type": "integer", "minimum": 0 },
+        "canPromoteToFormal": { "type": "integer", "minimum": 0 },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "forbiddenActions": { "$ref": "#/$defs/forbiddenActions" },
+    "postprocessPolicy": { "$ref": "#/$defs/postprocessPolicy" },
+    "dryRunOnly": { "type": "boolean", "const": true },
+    "providerSubmissionForbidden": { "type": "boolean", "const": true },
+    "liveSubmitAllowed": { "type": "boolean", "const": false },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "stageId": {
+      "type": "string",
+      "enum": [
+        "shot_spec",
+        "visual_memory",
+        "spatial_memory",
+        "shot_layout",
+        "style_capsule",
+        "shot_prompt_plan",
+        "provider_capability_check",
+        "provider_request_preview",
+        "candidate_output",
+        "qa_gate"
+      ]
+    },
+    "stageStatus": {
+      "type": "string",
+      "enum": ["pass", "warning", "blocked", "waiting"]
+    },
+    "forbiddenAction": {
+      "type": "string",
+      "enum": [
+        "live_submit",
+        "provider_unlock",
+        "prompt_bypass",
+        "candidate_auto_promote",
+        "semantic_postprocess_repair",
+        "text_to_video_fallback"
+      ]
+    },
+    "forbiddenActions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/forbiddenAction" },
+      "contains": { "const": "live_submit" },
+      "allOf": [
+        { "contains": { "const": "provider_unlock" } },
+        { "contains": { "const": "prompt_bypass" } },
+        { "contains": { "const": "candidate_auto_promote" } },
+        { "contains": { "const": "semantic_postprocess_repair" } },
+        { "contains": { "const": "text_to_video_fallback" } }
+      ],
+      "uniqueItems": true
+    },
+    "candidateOutputStatus": {
+      "type": "string",
+      "enum": ["missing", "candidate", "qa_pending", "formal_ready", "blocked"]
+    },
+    "postprocessPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowedLocalOperations",
+        "semanticRepairAllowed",
+        "openCvSemanticRepairAllowed",
+        "localPostprocessCanChangeMeaning",
+        "localPostprocessCanPromoteFormal",
+        "notes"
+      ],
+      "properties": {
+        "allowedLocalOperations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["resize", "format_convert", "thumbnail_preview", "metadata_probe", "manifest_match"]
+          },
+          "uniqueItems": true
+        },
+        "semanticRepairAllowed": { "type": "boolean", "const": false },
+        "openCvSemanticRepairAllowed": { "type": "boolean", "const": false },
+        "localPostprocessCanChangeMeaning": { "type": "boolean", "const": false },
+        "localPostprocessCanPromoteFormal": { "type": "boolean", "const": false },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stageId", "label", "status", "sourceRefs", "blockers", "warnings"],
+      "properties": {
+        "stageId": { "$ref": "#/$defs/stageId" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "$ref": "#/$defs/stageStatus" },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "providerRequestPreview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outputPath",
+        "dryRunOnly",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "liveSubmitForbidden",
+        "forbiddenFallbacks"
+      ],
+      "properties": {
+        "requestId": { "type": "string" },
+        "adapterId": { "type": "string" },
+        "operation": { "type": "string", "enum": ["text2image", "image2image", "reference_asset"] },
+        "outputPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "liveSubmitForbidden": { "type": "boolean", "const": true },
+        "forbiddenFallbacks": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "candidateOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "candidatePath",
+        "formalPath",
+        "expectedOutputPath",
+        "outputExists",
+        "manifestStatus",
+        "qaStatus",
+        "canPromoteToFormal",
+        "formalPromotionRequiresExplicitQa",
+        "autoPromoteToFormal"
+      ],
+      "properties": {
+        "status": { "$ref": "#/$defs/candidateOutputStatus" },
+        "candidatePath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "formalPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "expectedOutputPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "outputExists": { "type": "boolean" },
+        "manifestStatus": { "type": "string" },
+        "qaStatus": {
+          "type": "string",
+          "enum": ["missing", "pending", "pass", "fail", "not_required", "unknown"]
+        },
+        "promotionStatus": {
+          "type": "string",
+          "enum": ["candidate", "blocked", "qa_pending", "ready_for_promotion", "promoted"]
+        },
+        "canPromoteToFormal": { "type": "boolean" },
+        "formalPromotionRequiresExplicitQa": { "type": "boolean", "const": true },
+        "autoPromoteToFormal": { "type": "boolean", "const": false }
+      }
+    },
+    "generationHarnessJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harnessJobId",
+        "jobId",
+        "shotId",
+        "taskPlanId",
+        "promptPlanId",
+        "providerId",
+        "providerSlot",
+        "requiredMode",
+        "dryRunOnly",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "forbiddenActions",
+        "stages",
+        "providerRequestPreview",
+        "candidateOutput",
+        "postprocessPolicy",
+        "blockers",
+        "warnings",
+        "nextAction"
+      ],
+      "properties": {
+        "harnessJobId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "jobId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "promptPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerSlot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+        "requiredMode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "forbiddenActions": { "$ref": "#/$defs/forbiddenActions" },
+        "stages": {
+          "type": "array",
+          "minItems": 10,
+          "maxItems": 10,
+          "prefixItems": [
+            { "allOf": [{ "$ref": "#/$defs/stage" }, { "type": "object", "properties": { "stageId": { "const": "shot_spec" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/stage" }, { "type": "object", "properties": { "stageId": { "const": "visual_memory" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/stage" }, { "type": "object", "properties": { "stageId": { "const": "spatial_memory" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/stage" }, { "type": "object", "properties": { "stageId": { "const": "shot_layout" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/stage" }, { "type": "object", "properties": { "stageId": { "const": "style_capsule" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/stage" }, { "type": "object", "properties": { "stageId": { "const": "shot_prompt_plan" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/stage" }, { "type": "object", "properties": { "stageId": { "const": "provider_capability_check" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/stage" }, { "type": "object", "properties": { "stageId": { "const": "provider_request_preview" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/stage" }, { "type": "object", "properties": { "stageId": { "const": "candidate_output" } } }] },
+            { "allOf": [{ "$ref": "#/$defs/stage" }, { "type": "object", "properties": { "stageId": { "const": "qa_gate" } } }] }
+          ],
+          "items": false,
+          "allOf": [
+            { "contains": { "type": "object", "properties": { "stageId": { "const": "shot_spec" } }, "required": ["stageId"] } },
+            { "contains": { "type": "object", "properties": { "stageId": { "const": "visual_memory" } }, "required": ["stageId"] } },
+            { "contains": { "type": "object", "properties": { "stageId": { "const": "spatial_memory" } }, "required": ["stageId"] } },
+            { "contains": { "type": "object", "properties": { "stageId": { "const": "shot_layout" } }, "required": ["stageId"] } },
+            { "contains": { "type": "object", "properties": { "stageId": { "const": "style_capsule" } }, "required": ["stageId"] } },
+            { "contains": { "type": "object", "properties": { "stageId": { "const": "shot_prompt_plan" } }, "required": ["stageId"] } },
+            { "contains": { "type": "object", "properties": { "stageId": { "const": "provider_capability_check" } }, "required": ["stageId"] } },
+            { "contains": { "type": "object", "properties": { "stageId": { "const": "provider_request_preview" } }, "required": ["stageId"] } },
+            { "contains": { "type": "object", "properties": { "stageId": { "const": "candidate_output" } }, "required": ["stageId"] } },
+            { "contains": { "type": "object", "properties": { "stageId": { "const": "qa_gate" } }, "required": ["stageId"] } }
+          ]
+        },
+        "providerRequestPreview": { "$ref": "#/$defs/providerRequestPreview" },
+        "candidateOutput": { "$ref": "#/$defs/candidateOutput" },
+        "postprocessPolicy": { "$ref": "#/$defs/postprocessPolicy" },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "nextAction": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    }
+  }
+}

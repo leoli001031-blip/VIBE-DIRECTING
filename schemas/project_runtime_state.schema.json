@@ -23,6 +23,7 @@
     "videoPlanning",
     "videoExecutionPreview",
     "adapterContracts",
+    "generationHarness",
     "storyChanges",
     "runtime",
     "diagnostics",
@@ -200,6 +201,7 @@
     "videoPlanning": { "$ref": "video_task_plan.schema.json#/$defs/videoPlanningState" },
     "videoExecutionPreview": { "$ref": "video_execution_preview.schema.json#/$defs/videoExecutionPreviewState" },
     "adapterContracts": { "$ref": "adapter_contract.schema.json" },
+    "generationHarness": { "$ref": "generation_harness.schema.json" },
     "storyChanges": {
       "type": "object",
       "additionalProperties": false,

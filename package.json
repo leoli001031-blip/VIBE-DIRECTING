@@ -8,6 +8,7 @@
     "knowledge:test": "node scripts/knowledge-router-test.mjs",
     "video:test": "node scripts/video-planning-test.mjs",
     "adapter:test": "node scripts/adapter-contract-test.mjs",
+    "generation:test": "node scripts/generation-harness-test.mjs",
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1"

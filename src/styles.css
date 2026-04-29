@@ -1370,6 +1370,129 @@ small {
   margin-top: 8px;
 }
 
+.generation-harness-panel .generation-harness-metrics {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.generation-lock-strip,
+.generation-job-locks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.generation-lock-strip {
+  margin-top: 10px;
+}
+
+.generation-lock-strip small {
+  color: #9d958a;
+  font-size: 11px;
+}
+
+.generation-empty-state {
+  margin-top: 12px;
+}
+
+.generation-job-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.generation-job-row {
+  min-width: 0;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 10px;
+}
+
+.generation-job-head,
+.candidate-output-summary div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.generation-job-head strong,
+.candidate-output-summary span {
+  color: #d9d1c4;
+  font-size: 12px;
+}
+
+.generation-job-head small,
+.candidate-output-summary small {
+  display: block;
+  margin-top: 4px;
+  color: #9d958a;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.generation-stage-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 1px;
+  margin-top: 10px;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(236, 231, 223, 0.08);
+}
+
+.generation-stage {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  min-height: 54px;
+  padding: 8px;
+  background: #1a1915;
+  border-top: 2px solid rgba(236, 231, 223, 0.14);
+}
+
+.generation-stage strong,
+.generation-stage small,
+.generation-stage em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.generation-stage strong {
+  color: #d9d1c4;
+  font-size: 11px;
+}
+
+.generation-stage small,
+.generation-stage em {
+  color: #9d958a;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.generation-stage.stage-good {
+  border-top-color: rgba(168, 214, 163, 0.58);
+}
+
+.generation-stage.stage-danger {
+  border-top-color: rgba(255, 154, 138, 0.64);
+}
+
+.generation-stage.stage-pending {
+  border-top-color: rgba(212, 176, 98, 0.62);
+}
+
+.candidate-output-summary {
+  margin-top: 10px;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 8px;
+}
+
+.generation-job-locks,
+.generation-job-details {
+  margin-top: 9px;
+}
+
 .pipeline-secondary .metric small {
   line-height: 1.35;
 }
@@ -1642,6 +1765,10 @@ small {
     padding-left: 0;
     padding-top: 14px;
   }
+
+  .generation-harness-panel .generation-harness-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -1697,6 +1824,18 @@ small {
 
   .metric strong {
     font-size: 22px;
+  }
+
+  .generation-harness-panel .generation-harness-metrics,
+  .generation-job-head,
+  .candidate-output-summary div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .generation-job-head,
+  .candidate-output-summary div {
+    display: grid;
+    align-items: flex-start;
   }
 
   .shot-card {

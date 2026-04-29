@@ -25,6 +25,19 @@ function hasManifestMatch(status: string): boolean {
   return ["actual_output_present", "complete", "matched"].includes(status);
 }
 
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, "/");
+}
+
+function formalPathForCandidate(candidatePath: string): string {
+  const normalized = normalizePath(candidatePath);
+  const parts = normalized.split("/");
+  const fileName = parts.pop() || "formal-output";
+  const directory = parts.join("/");
+  const formalDirectory = directory ? `${directory}/formal` : "formal";
+  return `${formalDirectory}/${fileName}`;
+}
+
 function promotionStatus(input: {
   allGatesPass: boolean;
   formalAlreadyPromoted: boolean;
@@ -72,7 +85,8 @@ export function buildQaPromotionReports(input: BuildQaPromotionReportsInput): Qa
       assetReadiness,
       qaPass,
     };
-    const formalPath = taskPlan.expectedOutputPath;
+    const candidatePath = taskPlan.expectedOutputPath;
+    const formalPath = formalPathForCandidate(candidatePath);
     const blockers = [
       ...(expectedOutput ? [] : ["Expected output is required before formal promotion."]),
       ...(manifestMatch ? [] : [`Manifest match is required before formal promotion${health?.manifestStatus ? ` (${health.manifestStatus})` : ""}.`]),
@@ -95,11 +109,11 @@ export function buildQaPromotionReports(input: BuildQaPromotionReportsInput): Qa
       taskPlanId: taskPlan.taskPlanId,
       jobId: taskPlan.jobId,
       shotId: taskPlan.shotId,
-      candidatePath: taskPlan.expectedOutputPath,
+      candidatePath,
       formalPath,
       promotionStatus: promotionStatus({
         allGatesPass: canPromoteToFormal,
-        formalAlreadyPromoted: promotedPaths.has(formalPath.replace(/\\/g, "/")),
+        formalAlreadyPromoted: promotedPaths.has(normalizePath(formalPath)),
         expectedOutput,
         manifestMatch,
         promptFresh,

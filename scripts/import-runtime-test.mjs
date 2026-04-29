@@ -1655,6 +1655,14 @@ function promotionStatusForReport({ allGatesPass, formalAlreadyPromoted, expecte
   return ["pending", "missing"].includes(qaStatus) ? "qa_pending" : "blocked";
 }
 
+function formalPathForCandidate(candidatePath) {
+  const normalized = normalizePathValue(candidatePath);
+  const parts = normalized.split("/");
+  const fileName = parts.pop() || "formal-output";
+  const directory = parts.join("/");
+  return `${directory ? `${directory}/` : ""}formal/${fileName}`;
+}
+
 function buildQaPromotionReports({ imageTaskPlans, fileSnapshot, manifestReports, generationHealthReports, assetReadinessReports, promptPlans, qaStatusByOutputPath, promotedFormalPaths = [] }) {
   const healthReports = generationHealthReports || buildGenerationHealthReports({
     imageTaskPlans,
@@ -1677,7 +1685,8 @@ function buildQaPromotionReports({ imageTaskPlans, fileSnapshot, manifestReports
     const healthClear = health?.healthStatus !== "blocked" && health?.healthStatus !== "failed";
     const taskPlanClear = taskPlan.status !== "blocked";
     const requiredGates = { expectedOutput, manifestMatch, promptFresh, assetReadiness, qaPass };
-    const formalPath = taskPlan.expectedOutputPath;
+    const candidatePath = taskPlan.expectedOutputPath;
+    const formalPath = formalPathForCandidate(candidatePath);
     const blockers = uniqueSorted([
       ...(expectedOutput ? [] : ["Expected output is required before formal promotion."]),
       ...(manifestMatch ? [] : [`Manifest match is required before formal promotion${health?.manifestStatus ? ` (${health.manifestStatus})` : ""}.`]),
@@ -1696,7 +1705,7 @@ function buildQaPromotionReports({ imageTaskPlans, fileSnapshot, manifestReports
       taskPlanId: taskPlan.taskPlanId,
       jobId: taskPlan.jobId,
       shotId: taskPlan.shotId,
-      candidatePath: taskPlan.expectedOutputPath,
+      candidatePath,
       formalPath,
       promotionStatus: promotionStatusForReport({
         allGatesPass: canPromoteToFormal,
@@ -1714,6 +1723,285 @@ function buildQaPromotionReports({ imageTaskPlans, fileSnapshot, manifestReports
       canPromoteToFormal,
     };
   });
+}
+
+const generationHarnessForbiddenActions = [
+  "live_submit",
+  "provider_unlock",
+  "prompt_bypass",
+  "candidate_auto_promote",
+  "semantic_postprocess_repair",
+  "text_to_video_fallback",
+];
+
+const generationHarnessPostprocessPolicy = {
+  allowedLocalOperations: ["format_convert", "manifest_match", "metadata_probe", "resize", "thumbnail_preview"],
+  semanticRepairAllowed: false,
+  openCvSemanticRepairAllowed: false,
+  localPostprocessCanChangeMeaning: false,
+  localPostprocessCanPromoteFormal: false,
+  notes: [
+    "Local postprocess is limited to mechanical size, format, preview, metadata, and manifest checks.",
+    "Semantic repair must be expressed as a new prompt/QA cycle, not OpenCV or local image manipulation.",
+  ],
+};
+
+function harnessStageStatus(blockers, warnings, waiting = false) {
+  if (blockers.length) return "blocked";
+  if (waiting) return "waiting";
+  if (warnings.length) return "warning";
+  return "pass";
+}
+
+function makeHarnessStage({ stageId, label, sourceRefs = [], blockers = [], warnings = [], waiting = false }) {
+  const uniqueBlockers = uniqueSorted(blockers);
+  const uniqueWarnings = uniqueSorted(warnings);
+  return {
+    stageId,
+    label,
+    status: harnessStageStatus(uniqueBlockers, uniqueWarnings, waiting),
+    sourceRefs: uniqueSorted(sourceRefs),
+    blockers: uniqueBlockers,
+    warnings: uniqueWarnings,
+  };
+}
+
+function formalPathForHarnessCandidate(candidatePath) {
+  const normalized = normalizePathValue(candidatePath);
+  const parts = normalized.split("/");
+  const fileName = parts.pop() || "formal-output";
+  const directory = parts.join("/");
+  return `${directory ? `${directory}/` : ""}formal/${fileName}`;
+}
+
+function harnessRequestPreview(taskPlan, request) {
+  return {
+    requestId: request?.requestId,
+    adapterId: request?.adapterId,
+    operation: request?.operation,
+    outputPath: request?.payload?.outputPath || taskPlan.expectedOutputPath,
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+    liveSubmitAllowed: false,
+    liveSubmitForbidden: true,
+    forbiddenFallbacks: uniqueSorted([
+      ...(request?.forbiddenFallbacks || []),
+      "provider_or_mode_fallback",
+      "text_to_video_fallback",
+    ]),
+  };
+}
+
+function harnessCandidateStatus(taskPlan, health, promotion) {
+  if (promotion?.canPromoteToFormal) return "formal_ready";
+  if (taskPlan.status === "blocked" || health?.healthStatus === "blocked" || health?.healthStatus === "failed") return "blocked";
+  if (!health?.outputExists) return "missing";
+  if (promotion?.promotionStatus === "qa_pending" || health.qaStatus === "pending" || health.qaStatus === "missing") return "qa_pending";
+  return "candidate";
+}
+
+function harnessNextAction(status, health, promotion) {
+  if (status === "formal_ready") return "Explicit QA, health, and promotion gates pass; formal promotion can be requested manually.";
+  if (status === "qa_pending") return "Wait for explicit QA pass before formal promotion.";
+  if (status === "missing") return "Wait for expected candidate output and manifest match.";
+  if (status === "blocked") return "Resolve harness blockers before any provider request or promotion.";
+  return promotion?.blockers?.[0] || health?.nextAction || "Candidate exists; run QA gate next.";
+}
+
+function buildHarnessStages({ taskPlan, promptPlan, conflictReport, readinessReport, adapterRequest, healthReport, promotionReport, watcherEvents }) {
+  const readinessBlockers = readinessReport?.blockers || [];
+  const readinessWarnings = readinessReport?.warnings || [];
+  const conflictBlockers = conflictReport?.conflicts?.filter((conflict) => conflict.severity === "blocker").map((conflict) => conflict.detail) || [];
+  const conflictWarnings = conflictReport?.conflicts?.filter((conflict) => conflict.severity !== "blocker").map((conflict) => conflict.detail) || [];
+  const hasWatcherCandidate = watcherEvents.some((event) =>
+    ["temp_output_detected", "expected_output_detected", "provider_ready_derivative_detected"].includes(event.eventType),
+  );
+
+  return [
+    makeHarnessStage({
+      stageId: "shot_spec",
+      label: "Shot Spec",
+      sourceRefs: [taskPlan.sourceShotSpecHash, promptPlan?.sourceShotSpecHash || ""],
+      blockers: promptPlan ? [] : ["Shot prompt plan is missing, so the source shot spec cannot be audited."],
+    }),
+    makeHarnessStage({
+      stageId: "visual_memory",
+      label: "Visual Memory",
+      sourceRefs: readinessReport ? [readinessReport.reportId, ...(readinessReport.safeReferenceIds || [])] : [],
+      blockers: readinessReport ? readinessBlockers : ["Asset readiness report is missing."],
+      warnings: readinessReport ? readinessWarnings : [],
+    }),
+    makeHarnessStage({
+      stageId: "spatial_memory",
+      label: "Spatial Memory",
+      sourceRefs: readinessReport ? [readinessReport.reportId, ...(readinessReport.lockedReferenceIds || [])] : [],
+      blockers: readinessReport?.status === "blocked" ? readinessBlockers : [],
+      warnings: readinessReport ? readinessWarnings : ["No shot-level spatial readiness evidence was available."],
+    }),
+    makeHarnessStage({
+      stageId: "shot_layout",
+      label: "Shot Layout",
+      sourceRefs: [taskPlan.taskEnvelopeSummary?.envelopeId || "", taskPlan.sourceShotSpecHash],
+      blockers: taskPlan.taskEnvelopeSummary ? [] : ["Task envelope summary is missing."],
+      warnings: taskPlan.taskEnvelopeSummary?.preflightStatus === "warning" ? ["Task envelope preflight has warnings."] : [],
+    }),
+    makeHarnessStage({
+      stageId: "style_capsule",
+      label: "Style Capsule",
+      sourceRefs: promptPlan?.styleDirectives || [],
+      blockers: promptPlan ? [] : ["Prompt plan is missing style capsule directives."],
+      warnings: promptPlan && promptPlan.styleDirectives.length === 0 ? ["No style capsule directives were routed into the prompt plan."] : [],
+    }),
+    makeHarnessStage({
+      stageId: "shot_prompt_plan",
+      label: "Shot Prompt Plan",
+      sourceRefs: [taskPlan.promptPlanId, promptPlan?.promptPlanHash || "", conflictReport?.reportId || ""],
+      blockers: uniqueSorted([...(promptPlan?.blockers || []), ...conflictBlockers]),
+      warnings: conflictWarnings,
+    }),
+    makeHarnessStage({
+      stageId: "provider_capability_check",
+      label: "Provider Capability Check",
+      sourceRefs: [taskPlan.providerId, taskPlan.providerSlot, taskPlan.requiredMode],
+      blockers: [
+        ...(taskPlan.blockers || []),
+        ...(isImageSlot({ slot: taskPlan.providerSlot }) ? [] : ["Only Image2 image slots can reach the Phase 8.4 harness request preview."]),
+      ],
+      warnings: taskPlan.warnings || [],
+    }),
+    makeHarnessStage({
+      stageId: "provider_request_preview",
+      label: "Provider Request Preview",
+      sourceRefs: [adapterRequest?.requestId || ""],
+      blockers: adapterRequest
+        ? []
+        : ["ready_for_dry_run", "ready_for_manual_submit"].includes(taskPlan.status)
+          ? ["Ready task plan is missing an Image2 dry-run adapter request preview."]
+          : [],
+      warnings: adapterRequest ? [] : ["No provider request preview is emitted while upstream gates are draft or blocked."],
+      waiting: !adapterRequest && taskPlan.status !== "blocked",
+    }),
+    makeHarnessStage({
+      stageId: "candidate_output",
+      label: "Candidate Output",
+      sourceRefs: [
+        taskPlan.expectedOutputPath,
+        healthReport?.reportId || "",
+        ...watcherEvents.map((event) => event.id),
+      ],
+      blockers: healthReport?.healthStatus === "blocked" || healthReport?.healthStatus === "failed" ? healthReport.blockers : [],
+      warnings: [
+        ...(healthReport?.warnings || []),
+        ...(hasWatcherCandidate ? [] : ["No watcher event has confirmed a candidate output yet."]),
+      ],
+      waiting: !healthReport?.outputExists,
+    }),
+    makeHarnessStage({
+      stageId: "qa_gate",
+      label: "QA Gate",
+      sourceRefs: [promotionReport?.reportId || "", healthReport?.reportId || ""],
+      blockers: promotionReport?.canPromoteToFormal ? [] : promotionReport?.blockers || ["QA promotion report is missing."],
+      warnings: promotionReport?.warnings || [],
+      waiting: healthReport?.qaStatus === "pending" || healthReport?.qaStatus === "missing",
+    }),
+  ];
+}
+
+function buildGenerationHarnessState({
+  generatedAt,
+  imageTaskPlans,
+  promptPlans,
+  promptConflictReports,
+  assetReadinessReports,
+  image2AdapterRequests,
+  watcherEvents,
+  generationHealthReports,
+  qaPromotionReports,
+}) {
+  const promptById = new Map(promptPlans.map((plan) => [plan.promptPlanId, plan]));
+  const conflictByPlanId = new Map(promptConflictReports.map((report) => [report.promptPlanId, report]));
+  const readinessByShot = new Map(assetReadinessReports.map((report) => [report.shotId, report]));
+  const requestByTaskPlan = new Map(image2AdapterRequests.map((request) => [request.taskPlanId, request]));
+  const healthByTaskPlan = new Map(generationHealthReports.map((report) => [report.taskPlanId, report]));
+  const promotionByTaskPlan = new Map(qaPromotionReports.map((report) => [report.taskPlanId, report]));
+
+  const jobs = imageTaskPlans.map((taskPlan) => {
+    const promptPlan = promptById.get(taskPlan.promptPlanId);
+    const healthReport = healthByTaskPlan.get(taskPlan.taskPlanId);
+    const promotionReport = promotionByTaskPlan.get(taskPlan.taskPlanId);
+    const scopedWatcherEvents = watcherEvents.filter((event) => event.taskId === taskPlan.taskPlanId || event.jobId === taskPlan.jobId);
+    const adapterRequest = requestByTaskPlan.get(taskPlan.taskPlanId);
+    const stages = buildHarnessStages({
+      taskPlan,
+      promptPlan,
+      conflictReport: conflictByPlanId.get(taskPlan.promptPlanId),
+      readinessReport: readinessByShot.get(taskPlan.shotId),
+      adapterRequest,
+      healthReport,
+      promotionReport,
+      watcherEvents: scopedWatcherEvents,
+    });
+    const status = harnessCandidateStatus(taskPlan, healthReport, promotionReport);
+
+    return {
+      harnessJobId: `generation_harness_${taskPlan.taskPlanId}`,
+      jobId: taskPlan.jobId,
+      shotId: taskPlan.shotId,
+      taskPlanId: taskPlan.taskPlanId,
+      promptPlanId: taskPlan.promptPlanId,
+      providerId: taskPlan.providerId,
+      providerSlot: taskPlan.providerSlot,
+      requiredMode: taskPlan.requiredMode,
+      dryRunOnly: true,
+      providerSubmissionForbidden: true,
+      liveSubmitAllowed: false,
+      forbiddenActions: generationHarnessForbiddenActions,
+      stages,
+      providerRequestPreview: harnessRequestPreview(taskPlan, adapterRequest),
+      candidateOutput: {
+        status,
+        candidatePath: promotionReport?.candidatePath || taskPlan.expectedOutputPath,
+        formalPath: promotionReport?.formalPath || formalPathForHarnessCandidate(taskPlan.expectedOutputPath),
+        expectedOutputPath: taskPlan.expectedOutputPath,
+        outputExists: Boolean(healthReport?.outputExists),
+        manifestStatus: healthReport?.manifestStatus || "missing_expected_output",
+        qaStatus: healthReport?.qaStatus || "unknown",
+        promotionStatus: promotionReport?.promotionStatus,
+        canPromoteToFormal: Boolean(promotionReport?.canPromoteToFormal),
+        formalPromotionRequiresExplicitQa: true,
+        autoPromoteToFormal: false,
+      },
+      postprocessPolicy: generationHarnessPostprocessPolicy,
+      blockers: uniqueSorted(stages.flatMap((stage) => stage.blockers || [])),
+      warnings: uniqueSorted(stages.flatMap((stage) => stage.warnings || [])),
+      nextAction: harnessNextAction(status, healthReport, promotionReport),
+    };
+  });
+
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt,
+    jobs,
+    summary: {
+      total: jobs.length,
+      blocked: jobs.filter((job) => job.candidateOutput.status === "blocked").length,
+      waiting: jobs.filter((job) => job.candidateOutput.status === "missing").length,
+      qaPending: jobs.filter((job) => job.candidateOutput.status === "qa_pending").length,
+      formalReady: jobs.filter((job) => job.candidateOutput.status === "formal_ready").length,
+      canPromoteToFormal: jobs.filter((job) => job.candidateOutput.canPromoteToFormal).length,
+      liveSubmitAllowed: false,
+    },
+    forbiddenActions: generationHarnessForbiddenActions,
+    postprocessPolicy: generationHarnessPostprocessPolicy,
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+    liveSubmitAllowed: false,
+    notes: [
+      "Phase 8.4 Generation Harness is a hard dry-run audit chain.",
+      "Provider request previews are diagnostics only and cannot submit Image2, Seedance, Jimeng, or text-to-video jobs.",
+      "Candidate output never auto-promotes to formal; QA and promotion gates must pass explicitly.",
+    ],
+  };
 }
 
 function computeSourceIndexHash(index) {
@@ -3493,6 +3781,17 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     taskViews,
   });
   const adapterContracts = buildAdapterContractState(generatedAt, providerRegistry);
+  const generationHarness = buildGenerationHarnessState({
+    generatedAt,
+    imageTaskPlans,
+    promptPlans: promptPlanResults.map((result) => result.plan),
+    promptConflictReports: promptPlanResults.map((result) => result.conflictReport),
+    assetReadinessReports,
+    image2AdapterRequests,
+    watcherEvents,
+    generationHealthReports,
+    qaPromotionReports,
+  });
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -3565,6 +3864,7 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     videoPlanning,
     videoExecutionPreview,
     adapterContracts,
+    generationHarness,
     storyChanges: {
       transactions: [],
       reflowReports: [],

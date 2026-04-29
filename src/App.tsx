@@ -223,6 +223,9 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   const videoExecutionPreviewSummary = requireRecord(videoExecutionPreview, "summary", issues);
   const adapterContracts = requireRecord(value, "adapterContracts", issues);
   const adapterContractSummary = requireRecord(adapterContracts, "summary", issues);
+  const generationHarness = requireRecord(value, "generationHarness", issues);
+  const generationHarnessSummary = requireRecord(generationHarness, "summary", issues);
+  const generationPostprocessPolicy = requireRecord(generationHarness, "postprocessPolicy", issues);
   requireArray(audioPlanning, "providerSlots", issues);
   requireArray(audioPlanning, "notes", issues);
   requireArray(videoPlanning, "readinessGates", issues);
@@ -231,6 +234,9 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   requireArray(adapterContracts, "agentAdapters", issues);
   requireArray(adapterContracts, "workerAdapters", issues);
   requireArray(adapterContracts, "providerAdapters", issues);
+  requireArray(generationHarness, "jobs", issues);
+  requireArray(generationHarness, "forbiddenActions", issues);
+  requireArray(generationHarness, "notes", issues);
   requireArray(audioPreviewMix, "events", issues);
   if (typeof audioPreviewMix.eventCount !== "number") issues.push("audioPlanning.previewMix.eventCount");
   if (typeof audioPreviewMix.missingOutputPathCount !== "number") issues.push("audioPlanning.previewMix.missingOutputPathCount");
@@ -403,6 +409,63 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
       }
     });
   }
+  if (typeof generationHarness.schemaVersion !== "string") issues.push("generationHarness.schemaVersion");
+  if (typeof generationHarness.generatedAt !== "string") issues.push("generationHarness.generatedAt");
+  for (const key of ["total", "blocked", "waiting", "qaPending", "formalReady", "canPromoteToFormal"]) {
+    if (typeof generationHarnessSummary[key] !== "number") issues.push(`generationHarness.summary.${key}`);
+  }
+  if (generationHarnessSummary.liveSubmitAllowed !== false) issues.push("generationHarness.summary.liveSubmitAllowed");
+  if (generationHarness.dryRunOnly !== true) issues.push("generationHarness.dryRunOnly");
+  if (generationHarness.providerSubmissionForbidden !== true) issues.push("generationHarness.providerSubmissionForbidden");
+  if (generationHarness.liveSubmitAllowed !== false) issues.push("generationHarness.liveSubmitAllowed");
+  if (generationPostprocessPolicy.semanticRepairAllowed !== false) issues.push("generationHarness.postprocessPolicy.semanticRepairAllowed");
+  if (generationPostprocessPolicy.openCvSemanticRepairAllowed !== false) issues.push("generationHarness.postprocessPolicy.openCvSemanticRepairAllowed");
+  if (generationPostprocessPolicy.localPostprocessCanChangeMeaning !== false) issues.push("generationHarness.postprocessPolicy.localPostprocessCanChangeMeaning");
+  if (generationPostprocessPolicy.localPostprocessCanPromoteFormal !== false) issues.push("generationHarness.postprocessPolicy.localPostprocessCanPromoteFormal");
+  requiredGenerationHarnessForbiddenActions.forEach((action) => {
+    if (!arrayIncludes(generationHarness.forbiddenActions, action)) issues.push(`generationHarness.forbiddenActions.${action}`);
+  });
+  if (Array.isArray(generationHarness.jobs)) {
+    generationHarness.jobs.forEach((job, index) => {
+      if (!isRecord(job)) {
+        issues.push(`generationHarness.jobs.${index}`);
+        return;
+      }
+      const requestPreview = requireRecord(job, "providerRequestPreview", issues);
+      const candidateOutput = requireRecord(job, "candidateOutput", issues);
+      const jobPostprocessPolicy = requireRecord(job, "postprocessPolicy", issues);
+      requireArray(job, "forbiddenActions", issues);
+      requireArray(job, "stages", issues);
+      requireArray(job, "blockers", issues);
+      requireArray(job, "warnings", issues);
+      if (job.dryRunOnly !== true) issues.push(`generationHarness.jobs.${index}.dryRunOnly`);
+      if (job.providerSubmissionForbidden !== true) issues.push(`generationHarness.jobs.${index}.providerSubmissionForbidden`);
+      if (job.liveSubmitAllowed !== false) issues.push(`generationHarness.jobs.${index}.liveSubmitAllowed`);
+      requiredGenerationHarnessForbiddenActions.forEach((action) => {
+        if (!arrayIncludes(job.forbiddenActions, action)) issues.push(`generationHarness.jobs.${index}.forbiddenActions.${action}`);
+      });
+      if (requestPreview.dryRunOnly !== true) issues.push(`generationHarness.jobs.${index}.providerRequestPreview.dryRunOnly`);
+      if (requestPreview.providerSubmissionForbidden !== true) issues.push(`generationHarness.jobs.${index}.providerRequestPreview.providerSubmissionForbidden`);
+      if (requestPreview.liveSubmitAllowed !== false) issues.push(`generationHarness.jobs.${index}.providerRequestPreview.liveSubmitAllowed`);
+      if (requestPreview.liveSubmitForbidden !== true) issues.push(`generationHarness.jobs.${index}.providerRequestPreview.liveSubmitForbidden`);
+      if (candidateOutput.formalPromotionRequiresExplicitQa !== true) issues.push(`generationHarness.jobs.${index}.candidateOutput.formalPromotionRequiresExplicitQa`);
+      if (candidateOutput.autoPromoteToFormal !== false) issues.push(`generationHarness.jobs.${index}.candidateOutput.autoPromoteToFormal`);
+      if (candidateOutput.candidatePath && candidateOutput.formalPath && candidateOutput.candidatePath === candidateOutput.formalPath) {
+        issues.push(`generationHarness.jobs.${index}.candidateOutput.pathSeparation`);
+      }
+      if (candidateOutput.canPromoteToFormal === true && (candidateOutput.status !== "formal_ready" || candidateOutput.qaStatus !== "pass")) {
+        issues.push(`generationHarness.jobs.${index}.candidateOutput.formalGate`);
+      }
+      if (jobPostprocessPolicy.semanticRepairAllowed !== false) issues.push(`generationHarness.jobs.${index}.postprocessPolicy.semanticRepairAllowed`);
+      if (jobPostprocessPolicy.openCvSemanticRepairAllowed !== false) issues.push(`generationHarness.jobs.${index}.postprocessPolicy.openCvSemanticRepairAllowed`);
+      const stageIds = Array.isArray(job.stages)
+        ? job.stages.filter((stage): stage is Record<string, unknown> => isRecord(stage)).map((stage) => stage.stageId)
+        : [];
+      requiredGenerationHarnessStages.forEach((stageId, stageIndex) => {
+        if (stageIds[stageIndex] !== stageId) issues.push(`generationHarness.jobs.${index}.stages.${stageId}`);
+      });
+    });
+  }
 
   if (issues.length) throw new Error(`runtime-state shape invalid: ${issues.join(", ")}`);
 }
@@ -435,6 +498,52 @@ type VideoExecutionPreviewRow = VideoExecutionPreviewState["previews"][number];
 type VideoReadinessGateState = VideoPlanningState["readinessGates"][number];
 type VideoTaskPlanState = VideoPlanningState["taskPlans"][number];
 type AdapterContractState = ProjectRuntimeState["adapterContracts"];
+type GenerationHarnessStage = {
+  id: string;
+  label: string;
+  status: string;
+  detail?: string;
+};
+type GenerationHarnessCandidateOutput = {
+  status: string;
+  candidatePath?: string;
+  formalPath?: string;
+  expectedOutputPath?: string;
+  manifestStatus?: string;
+  healthStatus?: string;
+  qaStatus?: string;
+  canPromoteToFormal: boolean;
+};
+type GenerationHarnessJob = {
+  jobId: string;
+  shotId: string;
+  taskPlanId?: string;
+  providerSlot: string;
+  chainStatus: string;
+  blockingReasons: string[];
+  stages: GenerationHarnessStage[];
+  candidateOutput: GenerationHarnessCandidateOutput;
+  postprocessPolicy?: string;
+  forbiddenActions: string[];
+  dryRunOnly: boolean;
+  providerSubmissionForbidden: boolean;
+  liveSubmitAllowed: boolean;
+};
+type GenerationHarnessSummary = {
+  totalJobs: number;
+  blockedJobs: number;
+  readyJobs: number;
+  waitingForOutputJobs: number;
+  qaPendingJobs: number;
+  formalReadyJobs: number;
+  dryRunOnly: boolean;
+  providerSubmissionForbidden: boolean;
+};
+type GenerationHarnessState = {
+  initialized: boolean;
+  summary: GenerationHarnessSummary;
+  jobs: GenerationHarnessJob[];
+};
 const requiredVideoExecutionHardLocks = [
   "no_live_submit",
   "no_fast_model",
@@ -443,6 +552,26 @@ const requiredVideoExecutionHardLocks = [
   "no_bgm_in_video_prompt",
   "start_end_frames_required",
   "subagent_must_use_packet",
+] as const;
+const requiredGenerationHarnessStages = [
+  "shot_spec",
+  "visual_memory",
+  "spatial_memory",
+  "shot_layout",
+  "style_capsule",
+  "shot_prompt_plan",
+  "provider_capability_check",
+  "provider_request_preview",
+  "candidate_output",
+  "qa_gate",
+] as const;
+const requiredGenerationHarnessForbiddenActions = [
+  "live_submit",
+  "provider_unlock",
+  "prompt_bypass",
+  "candidate_auto_promote",
+  "semantic_postprocess_repair",
+  "text_to_video_fallback",
 ] as const;
 
 function emptyImagePipeline(): ImagePipelineState {
@@ -486,6 +615,102 @@ function getImagePipeline(runtimeState: ProjectRuntimeState): ImagePipelineState
     watcherEvents: pipeline.watcherEvents || [],
     generationHealthReports: pipeline.generationHealthReports || [],
     qaPromotionReports: pipeline.qaPromotionReports || [],
+  };
+}
+
+function readString(value: unknown, fallback: string) {
+  return typeof value === "string" && value.length ? value : fallback;
+}
+
+function readNumber(value: unknown, fallback: number) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function readBoolean(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function readStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function normalizeGenerationStage(value: unknown, index: number): GenerationHarnessStage {
+  const stage = isRecord(value) ? value : {};
+  const blockers = readStringArray(stage.blockers);
+  const warnings = readStringArray(stage.warnings);
+  const sourceRefs = readStringArray(stage.sourceRefs);
+  const stageId = readString(stage.stageId, readString(stage.id, `stage-${index + 1}`));
+  return {
+    id: stageId,
+    label: readString(stage.label, stageId),
+    status: readString(stage.status, "unknown"),
+    detail: typeof stage.detail === "string"
+      ? stage.detail
+      : `${sourceRefs.length} refs · ${blockers.length} blockers · ${warnings.length} warnings`,
+  };
+}
+
+function normalizeCandidateOutput(value: unknown): GenerationHarnessCandidateOutput {
+  const output = isRecord(value) ? value : {};
+  return {
+    status: readString(output.status, "not_reported"),
+    candidatePath: typeof output.candidatePath === "string" ? output.candidatePath : undefined,
+    formalPath: typeof output.formalPath === "string" ? output.formalPath : undefined,
+    expectedOutputPath: typeof output.expectedOutputPath === "string" ? output.expectedOutputPath : undefined,
+    manifestStatus: typeof output.manifestStatus === "string" ? output.manifestStatus : undefined,
+    healthStatus: typeof output.healthStatus === "string" ? output.healthStatus : undefined,
+    qaStatus: typeof output.qaStatus === "string" ? output.qaStatus : undefined,
+    canPromoteToFormal: readBoolean(output.canPromoteToFormal, false),
+  };
+}
+
+function normalizeGenerationJob(value: unknown, index: number): GenerationHarnessJob {
+  const job = isRecord(value) ? value : {};
+  const stages = Array.isArray(job.stages) ? job.stages.map(normalizeGenerationStage) : [];
+  const candidateOutput = normalizeCandidateOutput(job.candidateOutput);
+  const blockingReasons = readStringArray(job.blockingReasons).length
+    ? readStringArray(job.blockingReasons)
+    : readStringArray(job.blockers);
+  const postprocessPolicy = isRecord(job.postprocessPolicy)
+    ? `semantic repair ${job.postprocessPolicy.semanticRepairAllowed === false ? "locked" : "open"}`
+    : typeof job.postprocessPolicy === "string" ? job.postprocessPolicy : undefined;
+  return {
+    jobId: readString(job.jobId, `job-${index + 1}`),
+    shotId: readString(job.shotId, "unassigned-shot"),
+    taskPlanId: typeof job.taskPlanId === "string" ? job.taskPlanId : undefined,
+    providerSlot: readString(job.providerSlot, "provider.unassigned"),
+    chainStatus: readString(job.chainStatus, candidateOutput.status),
+    blockingReasons,
+    stages,
+    candidateOutput,
+    postprocessPolicy,
+    forbiddenActions: readStringArray(job.forbiddenActions),
+    dryRunOnly: readBoolean(job.dryRunOnly, false),
+    providerSubmissionForbidden: readBoolean(job.providerSubmissionForbidden, false),
+    liveSubmitAllowed: readBoolean(job.liveSubmitAllowed, false),
+  };
+}
+
+function getGenerationHarness(runtimeState: ProjectRuntimeState): GenerationHarnessState {
+  const harness = (runtimeState as Partial<ProjectRuntimeState> & { generationHarness?: unknown }).generationHarness;
+  const initialized = isRecord(harness);
+  const harnessRecord: Record<string, unknown> = initialized ? harness as unknown as Record<string, unknown> : {};
+  const jobs = initialized && Array.isArray(harness.jobs) ? harness.jobs.map(normalizeGenerationJob) : [];
+  const summary: Record<string, unknown> = initialized && isRecord(harness.summary) ? harness.summary : {};
+
+  return {
+    initialized,
+    jobs,
+    summary: {
+      totalJobs: readNumber(summary.totalJobs, readNumber(summary.total, jobs.length)),
+      blockedJobs: readNumber(summary.blockedJobs, readNumber(summary.blocked, jobs.filter((job) => job.blockingReasons.length > 0 || job.chainStatus.includes("blocked")).length)),
+      readyJobs: readNumber(summary.readyJobs, jobs.filter((job) => job.chainStatus === "candidate" || job.chainStatus === "formal_ready").length),
+      waitingForOutputJobs: readNumber(summary.waitingForOutputJobs, readNumber(summary.waiting, jobs.filter((job) => job.chainStatus.includes("missing") || job.chainStatus.includes("waiting")).length)),
+      qaPendingJobs: readNumber(summary.qaPendingJobs, readNumber(summary.qaPending, jobs.filter((job) => job.candidateOutput.qaStatus === "pending" || job.candidateOutput.status.includes("qa")).length)),
+      formalReadyJobs: readNumber(summary.formalReadyJobs, readNumber(summary.formalReady, jobs.filter((job) => job.candidateOutput.canPromoteToFormal).length)),
+      dryRunOnly: readBoolean(harnessRecord.dryRunOnly, jobs.some((job) => job.dryRunOnly)),
+      providerSubmissionForbidden: readBoolean(harnessRecord.providerSubmissionForbidden, jobs.some((job) => job.providerSubmissionForbidden)),
+    },
   };
 }
 
@@ -870,6 +1095,135 @@ function ImagePipelineDiagnostics({ runtimeState }: { runtimeState: ProjectRunti
           <summary>Warnings ({warnings.length})</summary>
           <CompactList items={warnings} />
         </details>
+      </div>
+    </section>
+  );
+}
+
+function GenerationStageStrip({ stages }: { stages: GenerationHarnessStage[] }) {
+  if (!stages.length) return <small className="muted-copy">No stage telemetry reported.</small>;
+
+  return (
+    <div className="generation-stage-strip" aria-label="Generation stage status">
+      {stages.map((stage) => (
+        <span key={stage.id} className={`generation-stage ${generationStageTone(stage.status)}`}>
+          <strong>{stage.label}</strong>
+          <small>{statusLabel(stage.status)}</small>
+          {stage.detail && <em>{stage.detail}</em>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function generationStageTone(status: string) {
+  const normalized = status.toLowerCase();
+  if (normalized.includes("blocked") || normalized.includes("fail") || normalized.includes("missing")) return "stage-danger";
+  if (normalized.includes("ready") || normalized.includes("done") || normalized.includes("pass") || normalized.includes("formal")) return "stage-good";
+  if (normalized.includes("waiting") || normalized.includes("pending") || normalized.includes("qa")) return "stage-pending";
+  return "stage-neutral";
+}
+
+function CandidateOutputSummary({ output }: { output: GenerationHarnessCandidateOutput }) {
+  const details = [
+    output.manifestStatus ? `manifest ${output.manifestStatus}` : undefined,
+    output.healthStatus ? `health ${output.healthStatus}` : undefined,
+    output.qaStatus ? `qa ${output.qaStatus}` : undefined,
+    output.canPromoteToFormal ? "formal promotion ready" : "formal promotion blocked",
+  ].filter((item): item is string => Boolean(item));
+
+  return (
+    <div className="candidate-output-summary">
+      <div>
+        <span>Candidate output</span>
+        <StatusPill value={output.status} />
+      </div>
+      <small>{details.join(" · ") || "No candidate output telemetry."}</small>
+      {output.candidatePath && <small>candidate: {output.candidatePath}</small>}
+      {output.formalPath && <small>formal: {output.formalPath}</small>}
+      {!output.candidatePath && output.expectedOutputPath && <small>{output.expectedOutputPath}</small>}
+    </div>
+  );
+}
+
+function GenerationHarnessDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const harness = getGenerationHarness(runtimeState);
+  const summary = harness.summary;
+  const visibleJobs = harness.jobs.slice(0, 6);
+  const providerLockLabel = harness.initialized
+    ? summary.providerSubmissionForbidden ? "provider submission locked" : "provider submission open"
+    : "provider lock not initialized";
+  const dryRunLabel = harness.initialized
+    ? summary.dryRunOnly ? "dry-run only" : "dry-run off"
+    : "dry-run not initialized";
+  const providerLockValue = !harness.initialized ? "not initialized" : summary.providerSubmissionForbidden || summary.dryRunOnly ? "locked" : "open";
+
+  return (
+    <section className="machine-panel generation-harness-panel">
+      <div className="audit-head">
+        <LockKeyhole size={17} />
+        <span>Generation Harness</span>
+      </div>
+      <div className="summary-grid generation-harness-metrics">
+        <Metric label="Total Jobs" value={`${summary.totalJobs}`} detail={`${summary.readyJobs} ready`} />
+        <Metric label="Blocked" value={`${summary.blockedJobs}`} detail="blocking reasons active" />
+        <Metric label="Waiting" value={`${summary.waitingForOutputJobs}`} detail="candidate output pending" />
+        <Metric label="QA Pending" value={`${summary.qaPendingJobs}`} detail="requires QA decision" />
+        <Metric label="Formal Ready" value={`${summary.formalReadyJobs}`} detail="promotable assets" />
+        <Metric label="Provider Lock" value={providerLockValue} detail={`${providerLockLabel} · ${dryRunLabel}`} />
+      </div>
+
+      <div className="generation-lock-strip">
+        <StatusPill value={providerLockLabel} />
+        <StatusPill value={dryRunLabel} />
+        <small>No live submit controls are exposed in Diagnostics.</small>
+      </div>
+
+      {!harness.initialized && (
+        <p className="muted-copy generation-empty-state">Generation Harness not initialized in this runtime state.</p>
+      )}
+
+      <div className="generation-job-list">
+        {visibleJobs.map((job) => (
+          <div key={job.jobId} className="generation-job-row">
+            <div className="generation-job-head">
+              <div>
+                <strong>{job.shotId}</strong>
+                <small>{job.providerSlot} · {job.taskPlanId || job.jobId}</small>
+              </div>
+              <StatusPill value={job.chainStatus} />
+            </div>
+            <GenerationStageStrip stages={job.stages} />
+            <CandidateOutputSummary output={job.candidateOutput} />
+            <div className="generation-job-locks">
+              <StatusPill value={job.providerSubmissionForbidden ? "provider locked" : "provider open"} />
+              <StatusPill value={job.dryRunOnly ? "dry-run only" : "dry-run off"} />
+              <StatusPill value={job.liveSubmitAllowed ? "live allowed" : "live false"} />
+            </div>
+            <div className="pipeline-details generation-job-details">
+              <details open={Boolean(job.blockingReasons.length)}>
+                <summary>Blocking reasons ({job.blockingReasons.length})</summary>
+                <CompactList items={job.blockingReasons} empty="No blocking reasons reported." />
+              </details>
+              <details>
+                <summary>Forbidden actions ({job.forbiddenActions.length})</summary>
+                <CompactList
+                  items={[
+                    ...job.forbiddenActions,
+                    ...(job.postprocessPolicy ? [`postprocess: ${job.postprocessPolicy}`] : []),
+                  ]}
+                  empty="No forbidden actions reported."
+                />
+              </details>
+            </div>
+          </div>
+        ))}
+        {harness.initialized && !visibleJobs.length && (
+          <p className="muted-copy generation-empty-state">Generation Harness is initialized, but no jobs are currently queued.</p>
+        )}
+        {harness.jobs.length > visibleJobs.length && (
+          <small className="muted-copy">Showing {visibleJobs.length} of {harness.jobs.length} generation jobs.</small>
+        )}
       </div>
     </section>
   );
@@ -2398,6 +2752,7 @@ function DiagnosticsMode({
     <div className="diagnostics-layout">
       <ProviderDock audit={audit} />
       <ImagePipelineDiagnostics runtimeState={runtimeState} />
+      <GenerationHarnessDiagnostics runtimeState={runtimeState} />
       <VideoPlanningDiagnostics runtimeState={runtimeState} />
       <VideoExecutionPreviewDiagnostics runtimeState={runtimeState} />
       <AdapterContractDiagnostics runtimeState={runtimeState} />
@@ -2486,7 +2841,8 @@ function App() {
         setRuntimeState(runtimeReady);
         if (runtimeReady.storyFlow?.shots?.[0]) setSelectedShotId(runtimeReady.storyFlow.shots[0].id);
         return;
-      } catch {
+      } catch (error) {
+        console.warn("Runtime-state load failed; falling back to runtime-audit.json.", error);
         // Fall through to the legacy audit file for Phase 3 compatibility.
       }
 

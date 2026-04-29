@@ -5,6 +5,7 @@ import type { KnowledgePackManifest, KnowledgeRouteMatch, KnowledgeTaskPurpose }
 import { buildImage2AdapterRequest } from "./providerAdapters/image2Adapter";
 import { buildDefaultProviderRegistry } from "./providerCapabilities";
 import { buildGenerationHealthReports } from "./generationHealth";
+import { buildGenerationHarnessState } from "./generationHarness";
 import { buildShotPromptPlan } from "./promptCompiler";
 import { buildQaPromotionReports } from "./qaPromotion";
 import { buildPreviewExportState } from "./previewExport";
@@ -198,6 +199,17 @@ export function buildProjectRuntimeState(
     generatedAt,
     providerRegistry,
   });
+  const generationHarness = buildGenerationHarnessState({
+    generatedAt,
+    imageTaskPlans,
+    promptPlans: promptPlanResults.map((result) => result.plan),
+    promptConflictReports: promptPlanResults.map((result) => result.conflictReport),
+    assetReadinessReports,
+    image2AdapterRequests,
+    watcherEvents,
+    generationHealthReports,
+    qaPromotionReports,
+  });
   const previewExport = buildPreviewExportState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -260,6 +272,7 @@ export function buildProjectRuntimeState(
     videoPlanning,
     videoExecutionPreview,
     adapterContracts,
+    generationHarness,
     storyChanges: {
       transactions: [],
       reflowReports: [],
@@ -340,6 +353,19 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       generatedAt: state.generatedAt,
       providerRegistry: state.imagePipeline.providerRegistry,
     });
+  const generationHarness =
+    state.generationHarness ||
+    buildGenerationHarnessState({
+      generatedAt: state.generatedAt,
+      imageTaskPlans: state.imagePipeline.imageTaskPlans,
+      promptPlans: state.imagePipeline.promptPlans,
+      promptConflictReports: state.imagePipeline.promptConflictReports,
+      assetReadinessReports: state.imagePipeline.assetReadinessReports,
+      image2AdapterRequests: state.imagePipeline.image2AdapterRequests,
+      watcherEvents: state.imagePipeline.watcherEvents,
+      generationHealthReports: state.imagePipeline.generationHealthReports,
+      qaPromotionReports: state.imagePipeline.qaPromotionReports,
+    });
 
   return {
     ...state,
@@ -348,6 +374,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     videoPlanning,
     videoExecutionPreview,
     adapterContracts,
+    generationHarness,
   };
 }
 

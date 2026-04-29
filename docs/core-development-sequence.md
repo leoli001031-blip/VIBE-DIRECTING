@@ -625,6 +625,30 @@ Phase 6 已实现范围（核心合同）：
 - Skill Injection Harness 不能变成用户主界面的复杂 prompt/资料面板；前端只可在 Inspector / Diagnostics 摘要展示。
 - Phase 8.3 仍不接真实 provider，不启用 Seedance/Jimeng live submit，不提供 provider unlock、bypass 或 credential 写入入口。
 
+### Phase 8.4 已实现范围：Generation Harness
+
+- `ProjectRuntimeState.generationHarness` 写入 Phase 8.4 的硬性 dry-run 审计链，把现有 `imagePipeline` 的 `imageTaskPlans`、`promptPlans`、`promptConflictReports`、`assetReadinessReports`、`image2AdapterRequests`、`watcherEvents`、`generationHealthReports`、`qaPromotionReports` 聚合成逐 job 状态机。
+- 每个 harness job 固定覆盖 `shot_spec -> visual_memory -> spatial_memory -> shot_layout -> style_capsule -> shot_prompt_plan -> provider_capability_check -> provider_request_preview -> candidate_output -> qa_gate` 十个 stage，并保留 source refs、blockers、warnings。
+- 每个 harness job 和全局 state 都固定 `dryRunOnly=true`、`providerSubmissionForbidden=true`、`liveSubmitAllowed=false`；provider request 只允许 preview，不提交 Image2、Seedance、Jimeng 或任何 text-to-video fallback。
+- `forbiddenActions` 固定包含 `live_submit`、`provider_unlock`、`prompt_bypass`、`candidate_auto_promote`、`semantic_postprocess_repair`、`text_to_video_fallback`。
+- Candidate output 状态显式区分 `missing`、`candidate`、`qa_pending`、`formal_ready`、`blocked`；`autoPromoteToFormal=false`，只有 health、QA promotion 和显式 QA 全部通过时才设置 `canPromoteToFormal=true`。
+- Postprocess policy 明确本地只允许尺寸、格式、预览缩略图、metadata probe、manifest match 等机械处理；`semanticRepairAllowed=false`，`openCvSemanticRepairAllowed=false`，本地后处理不能改变语义、不能提升 formal。
+- 新增 `schemas/generation_harness.schema.json` 并纳入 `project_runtime_state.schema.json` 与 schema registry；新增 `npm run generation:test` 覆盖 stage 完整性、禁止项、dry-run 锁、candidate/formal gate 和 postprocess policy。
+
+禁止项：
+
+- Generation Harness 不能打开真实 provider submit；不能把 ready request preview 解释成已提交任务。
+- 不能通过 provider unlock、prompt bypass、candidate auto-promote 或 text-to-video fallback 绕过 Shot Prompt Plan / QA Gate。
+- 不能让 OpenCV/local postprocess 承担人物、场景、构图、风格等语义修复；需要语义变化时必须回到 prompt/QA 循环。
+- Worker/provider 自报成功仍不等于任务成功；expected output、manifest match、QA pass、asset readiness 和 promotion gate 必须同时满足。
+
+### Phase 8.5 边界：Filesystem Watcher Harness
+
+- Phase 8.5 继续以结构化 watcher event 为边界，监听 Codex generated images 临时目录、项目 outputs、reports、videos、audio，但 watcher 只产出事实事件，不负责提升素材等级。
+- 临时图和 provider-ready derivative 可以立即显示为 draft/candidate diagnostics，但不能成为 future reference，不能进入 formal，不能绕过 manifest matcher 或 QA promotion。
+- Watcher 必须继续和 Generation Health Checker、Manifest Matcher、Checkpoint Resume、Generation Harness 连接；`formal_output_promoted` 只能由 promotion gate 写入，不能由文件出现或 worker 自报成功触发。
+- Phase 8.5 不接 Seedance/Jimeng live submit，不新增 text-to-video fallback，不把 local postprocess 扩展成语义修复器。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

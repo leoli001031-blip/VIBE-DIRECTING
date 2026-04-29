@@ -813,6 +813,122 @@ export interface QaPromotionReport {
   canPromoteToFormal: boolean;
 }
 
+export type GenerationHarnessStageId =
+  | "shot_spec"
+  | "visual_memory"
+  | "spatial_memory"
+  | "shot_layout"
+  | "style_capsule"
+  | "shot_prompt_plan"
+  | "provider_capability_check"
+  | "provider_request_preview"
+  | "candidate_output"
+  | "qa_gate";
+
+export type GenerationHarnessStageStatus = "pass" | "warning" | "blocked" | "waiting";
+
+export type GenerationHarnessForbiddenAction =
+  | "live_submit"
+  | "provider_unlock"
+  | "prompt_bypass"
+  | "candidate_auto_promote"
+  | "semantic_postprocess_repair"
+  | "text_to_video_fallback";
+
+export type GenerationCandidateOutputStatus =
+  | "missing"
+  | "candidate"
+  | "qa_pending"
+  | "formal_ready"
+  | "blocked";
+
+export interface GenerationHarnessStage {
+  stageId: GenerationHarnessStageId;
+  label: string;
+  status: GenerationHarnessStageStatus;
+  sourceRefs: string[];
+  blockers: string[];
+  warnings: string[];
+}
+
+export interface GenerationHarnessProviderRequestPreview {
+  requestId?: string;
+  adapterId?: string;
+  operation?: Image2AdapterOperation;
+  outputPath: string;
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  liveSubmitForbidden: true;
+  forbiddenFallbacks: string[];
+}
+
+export interface GenerationHarnessCandidateOutput {
+  status: GenerationCandidateOutputStatus;
+  candidatePath: string;
+  formalPath: string;
+  expectedOutputPath: string;
+  outputExists: boolean;
+  manifestStatus: string;
+  qaStatus: GenerationQaStatus;
+  promotionStatus?: QaPromotionStatus;
+  canPromoteToFormal: boolean;
+  formalPromotionRequiresExplicitQa: true;
+  autoPromoteToFormal: false;
+}
+
+export interface GenerationHarnessPostprocessPolicy {
+  allowedLocalOperations: Array<"resize" | "format_convert" | "thumbnail_preview" | "metadata_probe" | "manifest_match">;
+  semanticRepairAllowed: false;
+  openCvSemanticRepairAllowed: false;
+  localPostprocessCanChangeMeaning: false;
+  localPostprocessCanPromoteFormal: false;
+  notes: string[];
+}
+
+export interface GenerationHarnessJob {
+  harnessJobId: string;
+  jobId: string;
+  shotId: string;
+  taskPlanId: string;
+  promptPlanId: string;
+  providerId: string;
+  providerSlot: ProviderSlot;
+  requiredMode: RequiredMode;
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  forbiddenActions: GenerationHarnessForbiddenAction[];
+  stages: GenerationHarnessStage[];
+  providerRequestPreview: GenerationHarnessProviderRequestPreview;
+  candidateOutput: GenerationHarnessCandidateOutput;
+  postprocessPolicy: GenerationHarnessPostprocessPolicy;
+  blockers: string[];
+  warnings: string[];
+  nextAction: string;
+}
+
+export interface GenerationHarnessState {
+  schemaVersion: string;
+  generatedAt: string;
+  jobs: GenerationHarnessJob[];
+  summary: {
+    total: number;
+    blocked: number;
+    waiting: number;
+    qaPending: number;
+    formalReady: number;
+    canPromoteToFormal: number;
+    liveSubmitAllowed: false;
+  };
+  forbiddenActions: GenerationHarnessForbiddenAction[];
+  postprocessPolicy: GenerationHarnessPostprocessPolicy;
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  notes: string[];
+}
+
 export interface KeyframePairDerivation {
   shotId: string;
   startFrameId: string;

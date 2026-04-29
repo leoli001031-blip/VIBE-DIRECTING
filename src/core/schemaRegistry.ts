@@ -171,6 +171,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "QaPromotionReport",
   },
   {
+    fileName: "generation_harness.schema.json",
+    id: "https://vibecore.local/schemas/generation_harness.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 8.4 dry-run generation harness state machine from shot spec through QA gate.",
+    typeName: "GenerationHarnessState",
+  },
+  {
     fileName: "knowledge_pack.schema.json",
     id: "https://vibecore.local/schemas/knowledge_pack.schema.json",
     version: schemaVersion,
