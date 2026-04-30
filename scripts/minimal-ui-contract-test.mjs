@@ -96,7 +96,9 @@ const sequenceDoc = readText(sequenceDocPath);
 const contractDoc = readText(contractDocPath);
 
 const directorMode = findFunctionBody(appSource, "DirectorMode");
+const minimalTopNav = findFunctionBody(appSource, "MinimalTopNav");
 const minimalAgentPanel = findFunctionBody(appSource, "MinimalAgentPanel");
+const minimalProjectPlan = findFunctionBody(appSource, "buildMinimalProjectPlan");
 const diagnosticsMode = findFunctionBody(appSource, "DiagnosticsMode");
 const appBody = findFunctionBody(appSource, "App");
 const failures = [];
@@ -136,6 +138,11 @@ check(
 checkMessage(requireWithin(minimalAgentPanel, /selectedShotId\s*:/, "MinimalAgentPanel selectedShotId workflow selection"));
 checkMessage(requireWithin(minimalAgentPanel, /selectedAssetId\s*:/, "MinimalAgentPanel selectedAssetId workflow selection"));
 checkMessage(requireWithin(minimalAgentPanel, /sectionId\s*:/, "MinimalAgentPanel sectionId workflow selection"));
+
+const phase14ProjectSurface = `${minimalTopNav}\n${minimalProjectPlan}`;
+checkMessage(requireWithin(phase14ProjectSurface, /Project/i, "Phase 14 Project entry in minimal top navigation"));
+checkMessage(requireWithin(phase14ProjectSurface, /project\.vibe/i, "Phase 14 project.vibe entry badge"));
+checkMessage(requireWithin(phase14ProjectSurface, /Plan\s+preview/i, "Phase 14 plan preview badge"));
 
 checkMessage(requireAny(appSource, [/Asset Library/, /function\s+AssetLibrary/, /className="[^"]*asset-library/], "Asset Library main UI naming"));
 checkMessage(requireAny(appSource, [/Preview/, /function\s+PreviewTimeline/, /className="[^"]*preview/], "Preview main UI"));
@@ -177,14 +184,19 @@ check(
   "DiagnosticsMode should remain the primary home for engineering/status terms",
 );
 
-const minimalDirectorSurface = `${directorMode}\n${minimalAgentPanel}`;
+const minimalDirectorSurface = `${directorMode}\n${minimalAgentPanel}\n${minimalTopNav}\n${minimalProjectPlan}`;
 const forbiddenMinimalTerms = [
   ["Queue Shell", /Queue\s+Shell/i],
   ["Provider Lock", /Provider\s+Lock/i],
   ["Task Envelope", /Task\s+Envelope|taskEnvelope/i],
+  ["Runtime cache status", /Runtime\s+cache/i],
+  ["No file mutation", /No\s+file\s+mutation/i],
+  ["File-first facts", /File-first\s+facts/i],
   ["forbiddenActions", /forbiddenActions/i],
   ["manifest", /manifest/i],
   ["schema", /schema/i],
+  ["provider", /provider/i],
+  ["queue", /queue/i],
   ["credential/API key", /credential|API\s*key/i],
 ];
 for (const [term, pattern] of forbiddenMinimalTerms) {

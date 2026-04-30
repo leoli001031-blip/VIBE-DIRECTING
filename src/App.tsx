@@ -44,6 +44,7 @@ import {
   emptyKnowledgeManifest,
   withRuntimeDefaults,
 } from "./core/projectStateBuilder";
+import { buildProjectRuntimePlan } from "./core/projectRuntime";
 import { ensureRuntimeEnvironment } from "./core/runtimeConfig";
 import { buildDirectorWorkflowState, type DirectorWorkflowStatus } from "./core/directorWorkflow";
 import { fallbackAudit } from "./data/fallbackAudit";
@@ -89,6 +90,10 @@ function groupAssets(assets: AssetRecord[]) {
 }
 
 type DirectorView = "story" | "assets" | "preview";
+type MinimalProjectPlan = {
+  entryLabel: string;
+  planLabel: string;
+};
 
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
@@ -142,6 +147,19 @@ function selectedScopeLabel(shot?: ShotRecord, asset?: AssetRecord, sectionLabel
   if (asset) return `Selected ${cleanLabel(asset.name)}`;
   if (sectionLabel) return `Selected ${sectionLabel}`;
   return "Selected project";
+}
+
+function buildMinimalProjectPlan(runtimeState: ProjectRuntimeState): MinimalProjectPlan {
+  const plan = buildProjectRuntimePlan({
+    mode: "open",
+    title: runtimeState.project.title,
+    generatedAt: runtimeState.project.importedAt,
+    sourceOfTruth: "project_files",
+  });
+  return {
+    entryLabel: plan.projectEntry.fileName === "project.vibe" ? "project.vibe" : plan.projectEntry.fileName,
+    planLabel: plan.validation.ok ? "Plan preview" : "Needs review",
+  };
 }
 
 function MediaFrame({
@@ -3462,6 +3480,7 @@ function PreviewTimeline({
 
 function MinimalTopNav({
   projectTitle,
+  projectPlan,
   mode,
   directorView,
   sections,
@@ -3471,6 +3490,7 @@ function MinimalTopNav({
   onOpenDiagnostics,
 }: {
   projectTitle: string;
+  projectPlan: MinimalProjectPlan;
   mode: UiMode;
   directorView: DirectorView;
   sections: RuntimeView["storySections"];
@@ -3482,7 +3502,12 @@ function MinimalTopNav({
   return (
     <header className="minimal-topbar">
       <button className="project-title-button" onClick={() => onOpenDirectorView("story")}>
-        {projectTitle || "Untitled project"}
+        <span className="project-title-text">{projectTitle || "Untitled project"}</span>
+        <span className="project-plan-entry" aria-label="Project plan status">
+          <strong>Project</strong>
+          <span>{projectPlan.entryLabel}</span>
+          <span>{projectPlan.planLabel}</span>
+        </span>
       </button>
       <nav className="minimal-nav" aria-label="Director views">
         <button
@@ -4869,6 +4894,7 @@ function App() {
   const selectedShot = useMemo(() => audit.shots.find((shot) => shot.id === selectedShotId), [audit.shots, selectedShotId]);
   const selectedAsset = useMemo(() => audit.assets.find((asset) => asset.id === selectedAssetId), [audit.assets, selectedAssetId]);
   const blockers = audit.issues.filter((issue) => issue.severity === "blocker");
+  const projectPlan = useMemo(() => buildMinimalProjectPlan(runtimeState), [runtimeState]);
   const resolvedActiveSectionId = activeSectionId
     || view.storySections.find((section) => selectedShot && section.shotIds.includes(selectedShot.id))?.id
     || view.storySections[0]?.id;
@@ -4906,6 +4932,7 @@ function App() {
     <div className={`app-shell minimal-shell ${mode === "director" && directorView === "preview" ? "preview-shell" : ""}`}>
       <MinimalTopNav
         projectTitle={audit.projectTitle}
+        projectPlan={projectPlan}
         mode={mode}
         directorView={directorView}
         sections={view.storySections}

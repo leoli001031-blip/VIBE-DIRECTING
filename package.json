@@ -17,6 +17,7 @@
     "prompt-conflict:test": "node scripts/prompt-conflict-test.mjs",
     "project-file:test": "node scripts/project-file-core-test.mjs",
     "project-store:test": "node scripts/project-store-test.mjs",
+    "project-runtime:test": "node scripts/project-runtime-test.mjs",
     "project-facts:test": "node scripts/project-facts-schema-test.mjs",
     "asset-library:test": "node scripts/asset-library-crud-test.mjs",
     "subagent-runner:test": "node scripts/subagent-runner-test.mjs",

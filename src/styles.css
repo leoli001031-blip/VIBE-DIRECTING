@@ -27,9 +27,9 @@
   top: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: minmax(150px, 240px) minmax(0, 1fr) minmax(104px, auto);
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr) minmax(104px, auto);
   align-items: center;
-  min-height: 76px;
+  min-height: 72px;
   border-bottom: 1px solid rgba(37, 40, 34, 0.12);
   background: rgba(241, 242, 238, 0.9);
   backdrop-filter: blur(18px);
@@ -51,11 +51,76 @@
 }
 
 .project-title-button {
+  display: grid;
+  gap: 5px;
   justify-self: start;
+  width: 100%;
+  overflow: hidden;
   padding: 0 32px;
   font-size: 15px;
   font-weight: 600;
   text-align: left;
+}
+
+.project-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-plan-entry {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  max-width: 100%;
+  overflow: hidden;
+  color: rgba(37, 40, 34, 0.54);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.project-plan-entry strong,
+.project-plan-entry span {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-width: 0;
+}
+
+.project-plan-entry span {
+  position: relative;
+}
+
+.project-plan-entry span::before {
+  display: inline-flex;
+  margin-right: 8px;
+  color: rgba(37, 40, 34, 0.24);
+  content: "/";
+}
+
+.project-plan-entry strong {
+  color: rgba(37, 40, 34, 0.74);
+}
+
+.preview-shell .project-plan-entry {
+  color: rgba(242, 238, 230, 0.48);
+}
+
+.preview-shell .project-plan-entry strong,
+.preview-shell .project-plan-entry span {
+  color: rgba(242, 238, 230, 0.48);
+}
+
+.preview-shell .project-plan-entry strong {
+  color: rgba(242, 238, 230, 0.76);
+}
+
+.preview-shell .project-plan-entry span::before {
+  color: rgba(242, 238, 230, 0.22);
 }
 
 .minimal-nav {
@@ -548,6 +613,10 @@
     padding: 0;
   }
 
+  .project-plan-entry {
+    max-width: min(72vw, 520px);
+  }
+
   .minimal-nav {
     grid-column: 1 / -1;
     grid-row: 2;
@@ -577,6 +646,10 @@
 @media (max-width: 680px) {
   .minimal-director {
     padding: 28px 18px;
+  }
+
+  .project-plan-entry span:nth-of-type(n + 4) {
+    display: none;
   }
 
   .minimal-story-flow h2,

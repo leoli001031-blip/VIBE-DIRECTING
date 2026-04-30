@@ -897,6 +897,13 @@ Phase 9.4 checklist：
 - 该接线只做本地预览计划，不真实提交 provider，不启动 worker，不读取 credential，不写项目文件，也不把 dry-run 结果当作已执行变更。
 - `scripts/minimal-ui-contract-test.mjs` 增加 Phase 13 合同断言：MinimalAgentPanel 必须使用 director workflow，且不能直接调用旧 transaction/reflow builder 或暴露工程词。
 
+### Phase 14 已实现范围：Project Runtime 极简入口
+
+- Director 顶部项目名附近新增极简 Project / Plan 入口，只保留 `Project`、`project.vibe`、Plan preview 这类短状态，不把骨架计划误写成真实项目事实验收。
+- 主 Director path 仍不展示复杂项目管理器，不暴露 provider、manifest、schema、queue、task envelope、credential 等工程细节；这些继续收纳在 Diagnostics。
+- 该入口只是从当前 project state 派生 UI 摘要，不创建、不移动、不改写用户项目文件，不提交 provider，也不把 plan preview 当成已执行变更；runtime cache / no mutation 等工程细节留在 Diagnostics 和 runtime contract。
+- `scripts/minimal-ui-contract-test.mjs` 增加 Phase 14 断言：Project / project.vibe / Plan preview 可以出现在主路径，但复杂工程词不能进入极简 Director surface。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。
