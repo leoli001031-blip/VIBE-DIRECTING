@@ -791,6 +791,23 @@ Phase 6 已实现范围（核心合同）：
 - Phase 9.3 不拉 Codex CLI，不 spawn agent，不执行 shell，不提交 provider，不读 credential，不移动或改写文件。
 - 没有 envelope 的任务不能 ready；只能是 `planned_missing_envelope` 或 `blocked_missing_envelope`。
 
+### Phase 9.4 测试边界：Minimal Director UI Contract
+
+- `npm run minimal-ui:test` 是 Phase 9.4 的轻量静态合同测试，不启动浏览器、不连接 provider、不生成素材，只读取 `src/App.tsx`、`src/styles.css`、`package.json` 和相关文档。
+- Director 主界面必须保留创作入口和轻量工作面：Asset Library、Preview、Selected / Scope、Diagnostics 入口、Story / section tabs。
+- 工程状态词应主要收纳到 Diagnostics：provider、manifest、schema、queue、task envelope、hard lock、forbiddenActions 等不能在 `DirectorMode` 主体附近大量堆叠。
+- Preview / Asset Library 不能退回 contact sheet 图库。`contactSheets` 只能留在 Diagnostics 或明确的诊断路径，不应常驻 Director minimal path。
+- 新增 UI 实现时，先跑 `npm run minimal-ui:test`，再跑必要的 build / runtime 测试；如果合同测试失败，优先判断是 UI 主路径真的变重，还是合同规则需要和新组件命名同步。
+
+Phase 9.4 UI scope：默认 Director 首屏收敛为极简导演台，只覆盖顶栏项目名 / Asset Library / 自适应故事段落 / Preview / Diagnostics 入口、image-first Story Flow、独立 Asset Library、右侧 Selected Edit 自然语言面板、沉浸 Preview MVP。工程 dashboard、provider / manifest / queue / schema 细节继续留在 Inspector 或 Diagnostics，不在主界面重复展示。
+
+Phase 9.4 checklist：
+
+- [x] Director 默认首屏能看见创作对象，而不是工程状态面板。
+- [x] Diagnostics 是工程状态、provider policy、manifest/source index、schema/queue/task envelope 的主要入口。
+- [x] Asset Library 和 Preview 是主界面能力，不是 contact sheet 总览。
+- [x] `minimal-ui:test` 纳入集成验证。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

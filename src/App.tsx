@@ -95,6 +95,87 @@ function groupAssets(assets: AssetRecord[]) {
   };
 }
 
+type DirectorView = "story" | "assets" | "preview";
+
+function toMediaSrc(path?: string) {
+  if (!path) return undefined;
+  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:") || path.startsWith("blob:")) return path;
+  if (path.startsWith("/")) return `/@fs${path}`;
+  return path;
+}
+
+function formatShotNumber(id: string) {
+  const match = id.match(/^A(\d+)_(\d+)$/i);
+  if (!match) return id;
+  return `${Number(match[1])}-${Number(match[2])}`;
+}
+
+function cleanLabel(value: string) {
+  return value
+    .replace(/^asset_/i, "")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const storyFunctionLabels = ["Setup", "Signal", "Choice", "Move", "Reveal", "Test", "Turn", "Decision", "Payoff", "Close"];
+
+function shortStoryFunction(shot: ShotRecord, index: number) {
+  const value = shot.storyFunction.trim();
+  if (/^[A-Za-z][A-Za-z\s-]{1,16}$/.test(value)) return value;
+  return storyFunctionLabels[index % storyFunctionLabels.length];
+}
+
+function shotStatusTone(shot: ShotRecord) {
+  if (shot.status === "blocked" || shot.issues.some((issue) => issue.includes("missing"))) return "bad";
+  if (shot.issues.length || shot.status === "video_missing") return "warn";
+  return "ok";
+}
+
+function assetStatusTone(asset: AssetRecord) {
+  if (asset.status === "missing" || asset.lockedStatus === "not_generated") return "bad";
+  if (asset.lockedStatus === "candidate" || asset.lockedStatus === "needs_review" || asset.issues.length) return "warn";
+  return "ok";
+}
+
+function assetStatusLabel(asset: AssetRecord) {
+  if (asset.lockedStatus === "needs_review") return "review";
+  if (asset.lockedStatus === "not_generated") return "missing";
+  return asset.lockedStatus;
+}
+
+function selectedScopeLabel(shot?: ShotRecord, asset?: AssetRecord, sectionLabel?: string) {
+  if (shot) return `Selected ${formatShotNumber(shot.id)}`;
+  if (asset) return `Selected ${cleanLabel(asset.name)}`;
+  if (sectionLabel) return `Selected ${sectionLabel}`;
+  return "Selected project";
+}
+
+function MediaFrame({
+  src,
+  alt,
+  label,
+  className = "",
+}: {
+  src?: string;
+  alt: string;
+  label: string;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  const mediaSrc = toMediaSrc(src);
+  if (!mediaSrc || failed) {
+    return <div className={`minimal-media-placeholder ${className}`}>{label}</div>;
+  }
+
+  return <img className={className} src={mediaSrc} alt={alt} onError={() => setFailed(true)} />;
+}
+
 function StatusPill({ value }: { value: string }) {
   const tone = value.includes("blocked") || value.includes("missing") || value === "blocker" || value === "failed"
     ? "danger"
@@ -3324,16 +3405,6 @@ function StoryWorkspace({
           />
         ))}
       </div>
-      <div className="contact-strip">
-        <div>
-          <h3>Asset Contact Sheet</h3>
-          {audit.contactSheets.assets ? <img src={audit.contactSheets.assets} alt="Asset contact sheet" /> : <div className="empty-media">No asset contact sheet</div>}
-        </div>
-        <div>
-          <h3>Keyframe Contact Sheet</h3>
-          {audit.contactSheets.keyframes ? <img src={audit.contactSheets.keyframes} alt="Keyframe contact sheet" /> : <div className="empty-media">No keyframe contact sheet</div>}
-        </div>
-      </div>
     </main>
   );
 }
@@ -3517,6 +3588,294 @@ function PreviewTimeline({
   );
 }
 
+function MinimalTopNav({
+  projectTitle,
+  mode,
+  directorView,
+  sections,
+  activeSectionId,
+  onOpenDirectorView,
+  onOpenSection,
+  onOpenDiagnostics,
+}: {
+  projectTitle: string;
+  mode: UiMode;
+  directorView: DirectorView;
+  sections: RuntimeView["storySections"];
+  activeSectionId?: string;
+  onOpenDirectorView: (view: DirectorView) => void;
+  onOpenSection: (sectionId: string) => void;
+  onOpenDiagnostics: () => void;
+}) {
+  return (
+    <header className="minimal-topbar">
+      <button className="project-title-button" onClick={() => onOpenDirectorView("story")}>
+        {projectTitle || "Untitled project"}
+      </button>
+      <nav className="minimal-nav" aria-label="Director views">
+        <button
+          className={mode === "director" && directorView === "assets" ? "active" : ""}
+          onClick={() => onOpenDirectorView("assets")}
+        >
+          Asset Library
+        </button>
+        {sections.map((section) => (
+          <button
+            key={section.id}
+            className={mode === "director" && directorView === "story" && activeSectionId === section.id ? "active" : ""}
+            onClick={() => onOpenSection(section.id)}
+          >
+            {section.label}
+          </button>
+        ))}
+        <button
+          className={mode === "director" && directorView === "preview" ? "active" : ""}
+          onClick={() => onOpenDirectorView("preview")}
+        >
+          Preview
+        </button>
+      </nav>
+      <button className={`diagnostics-link ${mode === "diagnostics" ? "active" : ""}`} onClick={onOpenDiagnostics}>
+        Diagnostics
+      </button>
+    </header>
+  );
+}
+
+function MinimalStoryFlow({
+  sectionLabel,
+  shots,
+  selectedShotId,
+  onSelectShot,
+}: {
+  sectionLabel: string;
+  shots: ShotRecord[];
+  selectedShotId: string;
+  onSelectShot: (id: string) => void;
+}) {
+  return (
+    <main className="minimal-story-flow">
+      <h2>{sectionLabel}</h2>
+      <div className="minimal-shot-grid">
+        {shots.map((shot, index) => (
+          <button
+            key={shot.id}
+            className={`minimal-shot-card ${selectedShotId === shot.id ? "selected" : ""}`}
+            onClick={() => onSelectShot(shot.id)}
+          >
+            <MediaFrame
+              src={shot.startFrame || shot.endFrame}
+              alt={shot.title}
+              label={formatShotNumber(shot.id)}
+              className="minimal-shot-image"
+            />
+            <span className="minimal-shot-caption">
+              <strong>{formatShotNumber(shot.id)}</strong>
+              <span>{shortStoryFunction(shot, index)}</span>
+              <i className={`dot ${shotStatusTone(shot)}`} aria-label={shot.status} />
+            </span>
+          </button>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+function MinimalAssetLibrary({
+  audit,
+  runtimeState,
+  selectedAssetId,
+  onSelectAsset,
+}: {
+  audit: ProjectAudit;
+  runtimeState: ProjectRuntimeState;
+  selectedAssetId?: string;
+  onSelectAsset: (id: string) => void;
+}) {
+  const groups = groupAssets(audit.assets);
+  const voiceSources = runtimeState.audioPlanning.voiceSourceRegistry.sources;
+
+  return (
+    <main className="asset-library-view">
+      <h2>Asset Library</h2>
+      <section className="asset-library-section">
+        <span className="asset-section-label">Characters</span>
+        <div className="asset-feature-grid characters">
+          {groups.Characters.map((asset) => (
+            <button
+              key={asset.id}
+              className={`asset-reference-card ${selectedAssetId === asset.id ? "selected" : ""}`}
+              onClick={() => onSelectAsset(asset.id)}
+            >
+              <MediaFrame src={asset.path} alt={asset.name} label={cleanLabel(asset.name)} className="asset-reference-image" />
+              <span>
+                <strong>{cleanLabel(asset.name)}</strong>
+                <small><i className={`dot ${assetStatusTone(asset)}`} /> {assetStatusLabel(asset)}</small>
+              </span>
+            </button>
+          ))}
+          {!groups.Characters.length && <div className="minimal-empty-line">No character anchors yet</div>}
+        </div>
+      </section>
+      <section className="asset-library-section">
+        <span className="asset-section-label">Scenes</span>
+        <div className="asset-feature-grid scenes">
+          {groups.Scenes.slice(0, 8).map((asset) => (
+            <button
+              key={asset.id}
+              className={`asset-reference-card wide ${selectedAssetId === asset.id ? "selected" : ""}`}
+              onClick={() => onSelectAsset(asset.id)}
+            >
+              <MediaFrame src={asset.path} alt={asset.name} label={cleanLabel(asset.name)} className="asset-reference-image" />
+              <span>
+                <strong>{cleanLabel(asset.name)}</strong>
+                <small><i className={`dot ${assetStatusTone(asset)}`} /> {assetStatusLabel(asset)}</small>
+              </span>
+            </button>
+          ))}
+          {!groups.Scenes.length && <div className="minimal-empty-line">No scene anchors yet</div>}
+        </div>
+      </section>
+      <section className="asset-library-section compact">
+        <span className="asset-section-label">Props / Style / Voice</span>
+        <div className="anchor-list">
+          {[...groups.Props, ...groups.Style].map((asset) => (
+            <button
+              key={asset.id}
+              className={`anchor-row ${selectedAssetId === asset.id ? "selected" : ""}`}
+              onClick={() => onSelectAsset(asset.id)}
+            >
+              <span>{cleanLabel(asset.name)}</span>
+              <small><i className={`dot ${assetStatusTone(asset)}`} /> {assetStatusLabel(asset)}</small>
+            </button>
+          ))}
+          {voiceSources.slice(0, 3).map((source) => (
+            <div key={source.id} className="anchor-row voice">
+              <span>{source.label}</span>
+              <small><i className="dot warn" /> {source.status}</small>
+            </div>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function MinimalPreview({
+  view,
+  selectedShotId,
+  onSelectShot,
+}: {
+  view: RuntimeView;
+  selectedShotId: string;
+  onSelectShot: (id: string) => void;
+}) {
+  const [playing, setPlaying] = useState(false);
+  const events = view.previewEvents.filter((event) => event.type !== "narration_audio" && event.type !== "dialogue_audio" && event.type !== "ambience_audio" && event.type !== "music_audio");
+  const activeEvent = events.find((event) => event.shotId === selectedShotId) || events[0];
+  const total = Math.max(1, events.reduce((max, event) => Math.max(max, event.startSeconds + event.durationSeconds), 0));
+  const activeStart = activeEvent?.startSeconds || 0;
+  const activeEnd = activeStart + (activeEvent?.durationSeconds || 0);
+
+  return (
+    <main className="minimal-preview-view">
+      <section className="preview-stage">
+        <MediaFrame
+          src={activeEvent?.mediaPath}
+          alt={activeEvent?.shotId || "Preview"}
+          label={activeEvent?.shotId ? formatShotNumber(activeEvent.shotId) : "Preview"}
+          className="preview-stage-image"
+        />
+        <button className="preview-play-button" onClick={() => setPlaying((value) => !value)} aria-label={playing ? "Pause" : "Play"}>
+          {playing ? <PauseCircle size={42} /> : <Play size={42} />}
+        </button>
+      </section>
+      <section className="minimal-preview-controls">
+        <div className="preview-ruler">
+          {view.storySections.map((section) => {
+            const firstShotId = section.shotIds[0];
+            const event = events.find((item) => item.shotId === firstShotId);
+            const left = event ? (event.startSeconds / total) * 100 : 0;
+            return (
+              <span key={section.id} style={{ left: `${left}%` }}>
+                {section.label}
+              </span>
+            );
+          })}
+        </div>
+        <div className="preview-line">
+          {events.map((event) => (
+            <button
+              key={event.id}
+              className={`preview-line-event ${event.shotId === selectedShotId ? "selected" : ""}`}
+              style={{
+                left: `${(event.startSeconds / total) * 100}%`,
+                width: `${Math.max(3, (event.durationSeconds / total) * 100)}%`,
+              }}
+              onClick={() => event.shotId && onSelectShot(event.shotId)}
+              aria-label={event.shotId || event.type}
+            />
+          ))}
+        </div>
+        <div className="preview-time-row">
+          <button onClick={() => setPlaying((value) => !value)}>{playing ? <PauseCircle size={17} /> : <Play size={17} />}</button>
+          <span>{formatDuration(activeStart)} / {formatDuration(activeEnd || total)}</span>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function MinimalAgentPanel({
+  runtimeState,
+  shot,
+  asset,
+  sectionLabel,
+}: {
+  runtimeState: ProjectRuntimeState;
+  shot?: ShotRecord;
+  asset?: AssetRecord;
+  sectionLabel?: string;
+}) {
+  const [text, setText] = useState("");
+  const [status, setStatus] = useState("Ready");
+  const scopeLabel = selectedScopeLabel(shot, asset, sectionLabel);
+  const impactLabel = shot ? "1 shot" : asset ? "asset" : sectionLabel ? "section" : "project";
+
+  function prepareChange() {
+    const userIntent = text.trim();
+    if (!userIntent) return;
+    const targetIds = [shot?.id, asset?.id].filter((id): id is string => Boolean(id));
+    const transaction = buildStoryChangeTransaction({
+      userIntent,
+      targetIds,
+      context: {
+        selectedShotId: shot?.id,
+        selectedSectionId: shot?.sectionId || shot?.actId,
+        knownAssetIds: runtimeState.visualMemory.assets.map((item) => item.id),
+        knownCharacterIds: runtimeState.visualMemory.assets.filter((item) => item.type === "character").map((item) => item.id),
+        knownSceneIds: runtimeState.visualMemory.assets.filter((item) => item.type === "scene").map((item) => item.id),
+      },
+    });
+    const report = buildReflowImpactReport(transaction, runtimeState);
+    setStatus(report.regenerationPlan.length ? `Will affect ${impactLabel}` : "No visible change needed");
+    setText("");
+  }
+
+  return (
+    <aside className="minimal-agent-panel">
+      <span>{scopeLabel}</span>
+      <div className="minimal-agent-input">
+        <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Refine selected beat" />
+        <button disabled={!text.trim()} onClick={prepareChange} aria-label="Send edit">
+          <Send size={17} />
+        </button>
+      </div>
+      <small>{status}</small>
+    </aside>
+  );
+}
+
 function AudioPlanSummaryStrip({ audioPlanning, selectedShot }: { audioPlanning: AudioPlanningState; selectedShot?: ShotRecord }) {
   const selectedPlan = findAudioPlan(audioPlanning, selectedShot?.id);
   const plannedSlots = audioPlanning.providerSlots.filter((slot) => slot.state === "planned").length;
@@ -3618,6 +3977,8 @@ function DirectorMode({
   selectedAsset,
   selectedShotId,
   selectedAssetId,
+  directorView,
+  activeSectionId,
   onSelectShot,
   onSelectAsset,
 }: {
@@ -3628,46 +3989,49 @@ function DirectorMode({
   selectedAsset?: AssetRecord;
   selectedShotId: string;
   selectedAssetId?: string;
+  directorView: DirectorView;
+  activeSectionId?: string;
   onSelectShot: (id: string) => void;
   onSelectAsset: (id: string) => void;
 }) {
-  const selectedShotBlocker = selectedShot
-    ? view.taskViews.find((task) => task.shot?.id === selectedShot.id && task.queueGate.status === "blocked" && task.queueGate.blockers[0])?.queueGate.blockers[0]
-    : undefined;
-  const firstQueueBlocker = view.taskViews.find((task) => task.queueGate.status === "blocked" && task.queueGate.blockers[0])?.queueGate.blockers[0];
-  const blockingReason = selectedShotBlocker
-    || firstQueueBlocker
-    || view.preflightSummary.blockers[0]?.messageForUser
-    || "No preflight blocker in the selected runtime view.";
+  const activeSection = view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0];
+  const sectionLabel = activeSection?.label || "Story";
+  const shots = activeSection ? audit.shots.filter((shot) => activeSection.shotIds.includes(shot.id)) : audit.shots;
 
   return (
-    <>
-      <section className="director-brief">
-        <div>
-          <h2>Next Step</h2>
-          <p>{view.nextStep}</p>
-        </div>
-        <div>
-          <h2>Queue</h2>
-          <p>{view.queueSummary.ready} ready · {view.queueSummary.blocked} blocked · {view.queueSummary.parked} parked</p>
-        </div>
-        <div>
-          <h2>Blocking Reason</h2>
-          <p>{blockingReason}</p>
-        </div>
-      </section>
-      <div className="director-layout">
-        <VisualMemoryPanel audit={audit} view={view} selectedAsset={selectedAssetId} onSelectAsset={onSelectAsset} />
-        <StoryWorkspace audit={audit} view={view} selectedShotId={selectedShotId} onSelectShot={onSelectShot} />
-        <div className="director-side">
-          <PreviewTimeline view={view} previewExport={runtimeState.previewExport} selectedShotId={selectedShotId} onSelectShot={onSelectShot} />
-          <VideoPlanningSummaryStrip runtimeState={runtimeState} selectedShot={selectedShot} />
-          <AudioPlanSummaryStrip audioPlanning={runtimeState.audioPlanning} selectedShot={selectedShot} />
-          <ExportProfilesPanel previewExport={runtimeState.previewExport} />
-          <DirectorInput runtimeState={runtimeState} shot={selectedShot} asset={selectedAsset} nextStep={view.nextStep} />
-        </div>
+    <div className={`minimal-director ${directorView}`}>
+      <div className="minimal-director-main">
+        {directorView === "assets" && (
+          <MinimalAssetLibrary
+            audit={audit}
+            runtimeState={runtimeState}
+            selectedAssetId={selectedAssetId}
+            onSelectAsset={onSelectAsset}
+          />
+        )}
+        {directorView === "story" && (
+          <MinimalStoryFlow
+            sectionLabel={sectionLabel}
+            shots={shots}
+            selectedShotId={selectedShotId}
+            onSelectShot={onSelectShot}
+          />
+        )}
+        {directorView === "preview" && (
+          <MinimalPreview
+            view={view}
+            selectedShotId={selectedShotId}
+            onSelectShot={onSelectShot}
+          />
+        )}
       </div>
-    </>
+      <MinimalAgentPanel
+        runtimeState={runtimeState}
+        shot={directorView === "assets" ? undefined : selectedShot}
+        asset={selectedAsset}
+        sectionLabel={sectionLabel}
+      />
+    </div>
   );
 }
 
@@ -4533,6 +4897,8 @@ function DiagnosticsMode({
 function App() {
   const [runtimeState, setRuntimeState] = useState<ProjectRuntimeState>(fallbackRuntimeState);
   const [mode, setMode] = useState<UiMode>("director");
+  const [directorView, setDirectorView] = useState<DirectorView>("story");
+  const [activeSectionId, setActiveSectionId] = useState<string | undefined>();
   const [selectedShotId, setSelectedShotId] = useState("A1_01");
   const [selectedAssetId, setSelectedAssetId] = useState<string | undefined>();
   const [knowledgeIntent, setKnowledgeIntent] = useState("这一镜头更压抑一点，慢慢推近角色");
@@ -4594,44 +4960,60 @@ function App() {
   const selectedShot = useMemo(() => audit.shots.find((shot) => shot.id === selectedShotId), [audit.shots, selectedShotId]);
   const selectedAsset = useMemo(() => audit.assets.find((asset) => asset.id === selectedAssetId), [audit.assets, selectedAssetId]);
   const blockers = audit.issues.filter((issue) => issue.severity === "blocker");
+  const resolvedActiveSectionId = activeSectionId
+    || view.storySections.find((section) => selectedShot && section.shotIds.includes(selectedShot.id))?.id
+    || view.storySections[0]?.id;
+
+  useEffect(() => {
+    if (!view.storySections.length) return;
+    if (!resolvedActiveSectionId || !view.storySections.some((section) => section.id === resolvedActiveSectionId)) {
+      setActiveSectionId(view.storySections[0].id);
+      return;
+    }
+    if (activeSectionId !== resolvedActiveSectionId) setActiveSectionId(resolvedActiveSectionId);
+  }, [activeSectionId, resolvedActiveSectionId, view.storySections]);
+
+  function openDirectorView(nextView: DirectorView) {
+    setMode("director");
+    setDirectorView(nextView);
+  }
+
+  function openSection(sectionId: string) {
+    setMode("director");
+    setDirectorView("story");
+    setActiveSectionId(sectionId);
+    const section = view.storySections.find((item) => item.id === sectionId);
+    const firstShotId = section?.shotIds[0];
+    if (firstShotId) setSelectedShotId(firstShotId);
+  }
+
+  function selectShot(shotId: string) {
+    setSelectedShotId(shotId);
+    const section = view.storySections.find((item) => item.shotIds.includes(shotId));
+    if (section) setActiveSectionId(section.id);
+  }
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <div className="mark">VC</div>
-          <div>
-            <h1>Vibe Core</h1>
-            <p>{audit.projectTitle} · {audit.state}</p>
-          </div>
-        </div>
-        <div className="mode-switch">
-          {(["director", "inspector", "diagnostics"] as const).map((item) => (
-            <button key={item} className={mode === item ? "active" : ""} onClick={() => setMode(item)}>
-              {item === "director" && <Eye size={16} />}
-              {item === "inspector" && <FileJson size={16} />}
-              {item === "diagnostics" && <Wrench size={16} />}
-              {item}
-            </button>
-          ))}
-        </div>
-        <div className="top-actions">
-          <span className="state-source">
-            <Database size={15} />
-            {view.stateSource?.label || "runtime-state"}
-          </span>
-          <button><FileJson size={16} /> Import Runtime Test</button>
-          <button><Gauge size={16} /> Dry Check</button>
-          <button disabled><Play size={16} /> Provider Locked</button>
-        </div>
-      </header>
+    <div className={`app-shell minimal-shell ${mode === "director" && directorView === "preview" ? "preview-shell" : ""}`}>
+      <MinimalTopNav
+        projectTitle={audit.projectTitle}
+        mode={mode}
+        directorView={directorView}
+        sections={view.storySections}
+        activeSectionId={resolvedActiveSectionId}
+        onOpenDirectorView={openDirectorView}
+        onOpenSection={openSection}
+        onOpenDiagnostics={() => setMode("diagnostics")}
+      />
 
-      <section className="overview">
-        <Metric label="Story Flow" value={`${audit.shots.length}`} detail={`${view.storySections.length} section(s)`} />
-        <Metric label="Visual Memory" value={`${view.visualMemory.existing}/${view.visualMemory.total || audit.metrics.expectedAssets}`} detail="real assets indexed" />
-        <Metric label="Queue" value={`${view.queueSummary.ready}/${view.queueSummary.total}`} detail={`${view.queueSummary.blocked} blocked · ${view.queueSummary.parked} parked`} />
-        <Metric label="Blockers" value={`${blockers.length + view.preflightSummary.blocked}`} detail={view.nextStep} />
-      </section>
+      {mode !== "director" && (
+        <section className="overview">
+          <Metric label="Story Flow" value={`${audit.shots.length}`} detail={`${view.storySections.length} section(s)`} />
+          <Metric label="Visual Memory" value={`${view.visualMemory.existing}/${view.visualMemory.total || audit.metrics.expectedAssets}`} detail="real assets indexed" />
+          <Metric label="Queue" value={`${view.queueSummary.ready}/${view.queueSummary.total}`} detail={`${view.queueSummary.blocked} blocked · ${view.queueSummary.parked} parked`} />
+          <Metric label="Blockers" value={`${blockers.length + view.preflightSummary.blocked}`} detail={view.nextStep} />
+        </section>
+      )}
 
       {mode !== "director" && audit.workflow.length > 0 && <Workflow stages={audit.workflow} />}
 
@@ -4644,7 +5026,9 @@ function App() {
           selectedAsset={selectedAsset}
           selectedShotId={selectedShotId}
           selectedAssetId={selectedAssetId}
-          onSelectShot={setSelectedShotId}
+          directorView={directorView}
+          activeSectionId={resolvedActiveSectionId}
+          onSelectShot={selectShot}
           onSelectAsset={setSelectedAssetId}
         />
       )}
