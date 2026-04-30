@@ -16,9 +16,138 @@ export type PhaseRoadmapStatus =
   | "ready_for_adapter_spike"
   | "ready_for_confirmation_gate"
   | "blocked_by_gate";
+export type PhaseRoadmapEvidenceDecisionSource = "typed_evidence" | "legacy_boolean_override" | "missing";
+export type PhaseRoadmapEvidenceStatus =
+  | "ready"
+  | "valid"
+  | "pass"
+  | "passed"
+  | "closed"
+  | "ready_for_confirmation"
+  | "blocked"
+  | "invalid"
+  | "fail"
+  | "failed"
+  | "missing";
+
+export interface PhaseRoadmapProjectFactsIntegrationEvidence {
+  kind?: "project_facts_integration";
+  phase?: "phase20_project_facts_integration";
+  status: "ready" | "blocked";
+  summary?: {
+    blockerCount?: number;
+    blocked?: number;
+    missing?: number;
+  };
+  hardLocks?: {
+    noProviderSubmit?: boolean;
+    noCredentialRead?: boolean;
+    noCredentialWrite?: boolean;
+    noFastVip?: boolean;
+    seedanceJimengVideoParked?: boolean;
+    projectFactsAreProjectLocal?: boolean;
+  };
+  blockers?: string[];
+  warnings?: string[];
+  sourceRef?: string;
+}
+
+export interface PhaseRoadmapSubagentEnvelopeValidatorReceipt {
+  kind?: "subagent_envelope_validator";
+  phase?: "phase_16_subagent_worker_runtime";
+  status?: PhaseRoadmapEvidenceStatus;
+  valid?: boolean;
+  validation?: {
+    ok?: boolean;
+    errors?: string[];
+    warnings?: string[];
+  };
+  validatedEnvelopeRequired?: boolean;
+  structuredResultRequired?: boolean;
+  freeTextWorkerBlocked?: boolean;
+  hardLocks?: {
+    noFreeTextTask?: boolean;
+    noFreeTextWorker?: boolean;
+    validatedEnvelopeRequired?: boolean;
+    structuredResultRequired?: boolean;
+    providerSubmissionForbidden?: boolean;
+    liveSubmitAllowed?: boolean;
+  };
+  issues?: string[];
+  blockers?: string[];
+  warnings?: string[];
+  sourceRef?: string;
+}
+
+export interface PhaseRoadmapProviderLiveGateReceipt {
+  kind?: "provider_live_gate";
+  phase?: "phase_11_provider_adapter_live_gate";
+  status?: PhaseRoadmapEvidenceStatus;
+  confirmationTokenPlaceholderPresent?: boolean;
+  providerPacketComplete?: boolean;
+  forbiddenProviderModesAbsent?: boolean;
+  summary?: {
+    readyForConfirmation?: number;
+    blocked?: number;
+    parked?: number;
+    providerSubmitAllowed?: number;
+    liveSubmitAllowed?: boolean;
+    credentialStorage?: boolean;
+  };
+  hardLocks?: {
+    noProviderSubmit?: boolean;
+    providerSubmissionForbidden?: boolean;
+    liveSubmitAllowed?: boolean;
+    noCredentialRead?: boolean;
+    noCredentialWrite?: boolean;
+    fastModelForbidden?: boolean;
+    vipChannelForbidden?: boolean;
+    textToVideoMainPathForbidden?: boolean;
+    bgmInVideoPromptForbidden?: boolean;
+  };
+  forbiddenActions?: string[];
+  blockers?: string[];
+  warnings?: string[];
+  sourceRef?: string;
+}
+
+export interface PhaseRoadmapClosedLoopReceipt {
+  kind?: "watcher_manifest_qa_closed_loop";
+  status?: PhaseRoadmapEvidenceStatus;
+  closedLoop?: boolean;
+  watcherReady?: boolean;
+  manifestMatcherReady?: boolean;
+  qaReportReady?: boolean;
+  blockers?: string[];
+  warnings?: string[];
+  sourceRef?: string;
+}
+
+export interface PhaseRoadmapRuntimeEvidence {
+  projectFactsIntegration?: PhaseRoadmapProjectFactsIntegrationEvidence;
+  subagentEnvelopeValidator?: PhaseRoadmapSubagentEnvelopeValidatorReceipt;
+  providerLiveGate?: PhaseRoadmapProviderLiveGateReceipt;
+  watcherManifestQaClosedLoop?: PhaseRoadmapClosedLoopReceipt;
+}
+
+export interface PhaseRoadmapEvidenceDecision {
+  evidenceKey:
+    | "projectFactsIntegration"
+    | "subagentEnvelopeValidator"
+    | "providerConfirmationTokenPlaceholder"
+    | "providerEnablementPacket"
+    | "watcherManifestQaClosedLoop"
+    | "forbiddenProviderModesAbsent";
+  source: PhaseRoadmapEvidenceDecisionSource;
+  ready: boolean;
+  blockers: string[];
+  warnings: string[];
+}
 
 export interface PhaseRoadmapRuntimeInput {
   generatedAt?: string;
+  evidence?: PhaseRoadmapRuntimeEvidence;
+  legacyBooleanOverridesAllowed?: boolean;
   projectFactsValidated?: boolean;
   subagentEnvelopeValidatorReady?: boolean;
   knowledgePackManagerReady?: boolean;
@@ -76,6 +205,12 @@ export interface PhaseRoadmapRuntimePlan {
     credentialAccessAllowed: false;
     arbitraryShellAllowed: false;
     freeTextWorkerAllowed: false;
+  };
+  evidenceSummary: {
+    typedEvidenceRequiredForPhase24: true;
+    legacyBooleanOverridesAllowed: boolean;
+    decisions: PhaseRoadmapEvidenceDecision[];
+    notes: string[];
   };
   hardLocks: PhaseRoadmapHardLocks;
   adapterBoundary: {
@@ -154,6 +289,290 @@ function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right));
 }
 
+function readyStatus(status: PhaseRoadmapEvidenceStatus | undefined): boolean {
+  return status === "ready"
+    || status === "valid"
+    || status === "pass"
+    || status === "passed"
+    || status === "closed"
+    || status === "ready_for_confirmation";
+}
+
+function hasProjectFactsEvidence(
+  evidence: PhaseRoadmapProjectFactsIntegrationEvidence | undefined,
+): evidence is PhaseRoadmapProjectFactsIntegrationEvidence {
+  return Boolean(evidence && (evidence.kind === "project_facts_integration" || evidence.phase === "phase20_project_facts_integration"));
+}
+
+function hasEnvelopeValidatorReceipt(
+  receipt: PhaseRoadmapSubagentEnvelopeValidatorReceipt | undefined,
+): receipt is PhaseRoadmapSubagentEnvelopeValidatorReceipt {
+  return Boolean(receipt && (receipt.kind === "subagent_envelope_validator" || receipt.phase === "phase_16_subagent_worker_runtime"));
+}
+
+function hasProviderLiveGateReceipt(
+  receipt: PhaseRoadmapProviderLiveGateReceipt | undefined,
+): receipt is PhaseRoadmapProviderLiveGateReceipt {
+  return Boolean(receipt && (receipt.kind === "provider_live_gate" || receipt.phase === "phase_11_provider_adapter_live_gate"));
+}
+
+function hasClosedLoopReceipt(
+  receipt: PhaseRoadmapClosedLoopReceipt | undefined,
+): receipt is PhaseRoadmapClosedLoopReceipt {
+  return Boolean(receipt && receipt.kind === "watcher_manifest_qa_closed_loop");
+}
+
+function projectFactsEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const evidence = input.evidence?.projectFactsIntegration;
+  const legacyAllowed = input.legacyBooleanOverridesAllowed === true;
+
+  if (hasProjectFactsEvidence(evidence)) {
+    const blockers = uniqueSorted([
+      ...blockedIf(evidence.status !== "ready", "project_facts_not_validated"),
+      ...blockedIf((evidence.summary?.blockerCount ?? 0) !== 0, "project_facts_blockers_present"),
+      ...blockedIf((evidence.summary?.blocked ?? 0) !== 0, "project_facts_blocked_connections_present"),
+      ...blockedIf(evidence.hardLocks?.noProviderSubmit === false, "project_facts_hard_lock_no_provider_submit_missing"),
+      ...blockedIf(evidence.hardLocks?.noCredentialRead === false, "project_facts_hard_lock_no_credential_read_missing"),
+      ...blockedIf(evidence.hardLocks?.noCredentialWrite === false, "project_facts_hard_lock_no_credential_write_missing"),
+      ...blockedIf(evidence.hardLocks?.noFastVip === false, "project_facts_hard_lock_no_fast_vip_missing"),
+      ...blockedIf(evidence.hardLocks?.seedanceJimengVideoParked === false, "project_facts_video_providers_not_parked"),
+      ...blockedIf(evidence.hardLocks?.projectFactsAreProjectLocal === false, "project_facts_not_project_local"),
+      ...(evidence.blockers || []),
+    ]);
+
+    return {
+      evidenceKey: "projectFactsIntegration",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted(evidence.warnings || []),
+    };
+  }
+
+  if (legacyAllowed && input.projectFactsValidated === true) {
+    return {
+      evidenceKey: "projectFactsIntegration",
+      source: "legacy_boolean_override",
+      ready: true,
+      blockers: [],
+      warnings: ["legacy_projectFactsValidated_boolean_override_used"],
+    };
+  }
+
+  return {
+    evidenceKey: "projectFactsIntegration",
+    source: input.projectFactsValidated === undefined ? "missing" : "legacy_boolean_override",
+    ready: false,
+    blockers: uniqueSorted([
+      "project_facts_typed_evidence_missing",
+      ...blockedIf(input.projectFactsValidated !== true, "project_facts_not_validated"),
+    ]),
+    warnings: uniqueSorted([
+      ...blockedIf(input.projectFactsValidated === true, "legacy_projectFactsValidated_boolean_ignored_without_typed_evidence"),
+    ]),
+  };
+}
+
+function envelopeValidatorEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const receipt = input.evidence?.subagentEnvelopeValidator;
+  const legacyAllowed = input.legacyBooleanOverridesAllowed === true;
+
+  if (hasEnvelopeValidatorReceipt(receipt)) {
+    const validationOk = receipt.valid === true || receipt.validation?.ok === true || readyStatus(receipt.status);
+    const validatedEnvelopeRequired = receipt.validatedEnvelopeRequired === true
+      || receipt.hardLocks?.validatedEnvelopeRequired === true;
+    const structuredResultRequired = receipt.structuredResultRequired === true
+      || receipt.hardLocks?.structuredResultRequired === true;
+    const freeTextWorkerBlocked = receipt.freeTextWorkerBlocked === true
+      || receipt.hardLocks?.noFreeTextTask === true
+      || receipt.hardLocks?.noFreeTextWorker === true;
+    const providerStillBlocked = receipt.hardLocks?.providerSubmissionForbidden !== false
+      && receipt.hardLocks?.liveSubmitAllowed !== true;
+    const blockers = uniqueSorted([
+      ...blockedIf(!validationOk, "validated_subagent_task_envelope_gate_missing"),
+      ...blockedIf(!validatedEnvelopeRequired, "validated_subagent_task_envelope_gate_missing"),
+      ...blockedIf(!structuredResultRequired, "structured_subagent_result_gate_missing"),
+      ...blockedIf(!freeTextWorkerBlocked, "free_text_worker_not_blocked"),
+      ...blockedIf(!providerStillBlocked, "subagent_validator_provider_submit_not_blocked"),
+      ...(receipt.issues || []),
+      ...(receipt.blockers || []),
+      ...(receipt.validation?.errors || []),
+    ]);
+
+    return {
+      evidenceKey: "subagentEnvelopeValidator",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted([...(receipt.warnings || []), ...(receipt.validation?.warnings || [])]),
+    };
+  }
+
+  if (legacyAllowed && input.subagentEnvelopeValidatorReady === true) {
+    return {
+      evidenceKey: "subagentEnvelopeValidator",
+      source: "legacy_boolean_override",
+      ready: true,
+      blockers: [],
+      warnings: ["legacy_subagentEnvelopeValidatorReady_boolean_override_used"],
+    };
+  }
+
+  return {
+    evidenceKey: "subagentEnvelopeValidator",
+    source: input.subagentEnvelopeValidatorReady === undefined ? "missing" : "legacy_boolean_override",
+    ready: false,
+    blockers: uniqueSorted([
+      "subagent_envelope_validator_receipt_missing",
+      ...blockedIf(input.subagentEnvelopeValidatorReady !== true, "validated_subagent_task_envelope_gate_missing"),
+    ]),
+    warnings: uniqueSorted([
+      ...blockedIf(
+        input.subagentEnvelopeValidatorReady === true,
+        "legacy_subagentEnvelopeValidatorReady_boolean_ignored_without_typed_receipt",
+      ),
+    ]),
+  };
+}
+
+function providerLiveGateSafetyBlockers(receipt: PhaseRoadmapProviderLiveGateReceipt): string[] {
+  return uniqueSorted([
+    ...blockedIf(receipt.summary?.providerSubmitAllowed !== undefined && receipt.summary.providerSubmitAllowed !== 0, "provider_live_gate_allows_provider_submit"),
+    ...blockedIf(receipt.summary?.liveSubmitAllowed === true, "provider_live_gate_allows_live_submit"),
+    ...blockedIf(receipt.summary?.credentialStorage === true, "provider_live_gate_allows_credential_storage"),
+    ...blockedIf(receipt.hardLocks?.noProviderSubmit === false, "provider_live_gate_no_provider_submit_lock_missing"),
+    ...blockedIf(receipt.hardLocks?.providerSubmissionForbidden === false, "provider_live_gate_submission_forbidden_lock_missing"),
+    ...blockedIf(receipt.hardLocks?.liveSubmitAllowed === true, "provider_live_gate_live_submit_lock_missing"),
+    ...blockedIf(receipt.hardLocks?.noCredentialRead === false, "provider_live_gate_no_credential_read_lock_missing"),
+    ...blockedIf(receipt.hardLocks?.noCredentialWrite === false, "provider_live_gate_no_credential_write_lock_missing"),
+    ...blockedIf(receipt.hardLocks?.fastModelForbidden === false, "provider_live_gate_fast_model_lock_missing"),
+    ...blockedIf(receipt.hardLocks?.vipChannelForbidden === false, "provider_live_gate_vip_channel_lock_missing"),
+    ...blockedIf(receipt.hardLocks?.textToVideoMainPathForbidden === false, "provider_live_gate_text_to_video_lock_missing"),
+    ...blockedIf(receipt.hardLocks?.bgmInVideoPromptForbidden === false, "provider_live_gate_bgm_prompt_lock_missing"),
+    ...(receipt.blockers || []),
+  ]);
+}
+
+function providerConfirmationEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const receipt = input.evidence?.providerLiveGate;
+
+  if (hasProviderLiveGateReceipt(receipt)) {
+    const blockers = uniqueSorted([
+      ...providerLiveGateSafetyBlockers(receipt),
+      ...blockedIf(receipt.confirmationTokenPlaceholderPresent !== true, "user_confirmation_token_placeholder_missing"),
+    ]);
+
+    return {
+      evidenceKey: "providerConfirmationTokenPlaceholder",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted(receipt.warnings || []),
+    };
+  }
+
+  return {
+    evidenceKey: "providerConfirmationTokenPlaceholder",
+    source: input.providerConfirmationTokenPlaceholderPresent === undefined ? "missing" : "legacy_boolean_override",
+    ready: input.providerConfirmationTokenPlaceholderPresent === true,
+    blockers: blockedIf(input.providerConfirmationTokenPlaceholderPresent !== true, "user_confirmation_token_placeholder_missing"),
+    warnings: input.providerConfirmationTokenPlaceholderPresent === true
+      ? ["legacy_providerConfirmationTokenPlaceholderPresent_boolean_used"]
+      : [],
+  };
+}
+
+function providerPacketEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const receipt = input.evidence?.providerLiveGate;
+
+  if (hasProviderLiveGateReceipt(receipt)) {
+    const providerLiveGateReady = readyStatus(receipt.status) || (receipt.summary?.readyForConfirmation ?? 0) > 0;
+    const packetComplete = receipt.providerPacketComplete === true
+      || (receipt.providerPacketComplete === undefined && providerLiveGateReady);
+    const blockers = uniqueSorted([
+      ...providerLiveGateSafetyBlockers(receipt),
+      ...blockedIf(!packetComplete, "provider_enablement_packet_incomplete"),
+    ]);
+
+    return {
+      evidenceKey: "providerEnablementPacket",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted(receipt.warnings || []),
+    };
+  }
+
+  return {
+    evidenceKey: "providerEnablementPacket",
+    source: input.providerPacketComplete === undefined ? "missing" : "legacy_boolean_override",
+    ready: input.providerPacketComplete === true,
+    blockers: blockedIf(input.providerPacketComplete !== true, "provider_enablement_packet_incomplete"),
+    warnings: input.providerPacketComplete === true ? ["legacy_providerPacketComplete_boolean_used"] : [],
+  };
+}
+
+function watcherClosedLoopEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const receipt = input.evidence?.watcherManifestQaClosedLoop;
+
+  if (hasClosedLoopReceipt(receipt)) {
+    const closedLoop = receipt.closedLoop === true
+      || receipt.status === "closed"
+      || (receipt.watcherReady === true && receipt.manifestMatcherReady === true && receipt.qaReportReady === true);
+    const blockers = uniqueSorted([
+      ...blockedIf(!closedLoop, "watcher_manifest_qa_closed_loop_missing"),
+      ...(receipt.blockers || []),
+    ]);
+
+    return {
+      evidenceKey: "watcherManifestQaClosedLoop",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted(receipt.warnings || []),
+    };
+  }
+
+  return {
+    evidenceKey: "watcherManifestQaClosedLoop",
+    source: input.watcherManifestQaClosedLoop === undefined ? "missing" : "legacy_boolean_override",
+    ready: input.watcherManifestQaClosedLoop === true,
+    blockers: blockedIf(input.watcherManifestQaClosedLoop !== true, "watcher_manifest_qa_closed_loop_missing"),
+    warnings: input.watcherManifestQaClosedLoop === true ? ["legacy_watcherManifestQaClosedLoop_boolean_used"] : [],
+  };
+}
+
+function forbiddenProviderModesEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const receipt = input.evidence?.providerLiveGate;
+
+  if (hasProviderLiveGateReceipt(receipt)) {
+    const blockers = uniqueSorted([
+      ...providerLiveGateSafetyBlockers(receipt),
+      ...blockedIf(receipt.forbiddenProviderModesAbsent !== true, "forbidden_provider_mode_or_prompt_present"),
+    ]);
+
+    return {
+      evidenceKey: "forbiddenProviderModesAbsent",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted(receipt.warnings || []),
+    };
+  }
+
+  return {
+    evidenceKey: "forbiddenProviderModesAbsent",
+    source: input.forbiddenProviderModesAbsent === undefined ? "missing" : "legacy_boolean_override",
+    ready: input.forbiddenProviderModesAbsent === true,
+    blockers: blockedIf(input.forbiddenProviderModesAbsent !== true, "forbidden_provider_mode_or_prompt_present"),
+    warnings: input.forbiddenProviderModesAbsent === true ? ["legacy_forbiddenProviderModesAbsent_boolean_used"] : [],
+  };
+}
+
+function evidenceNotes(decisions: PhaseRoadmapEvidenceDecision[]): string[] {
+  return uniqueSorted(decisions.flatMap((decision) => decision.warnings));
+}
+
 function makePhase(input: {
   phaseId: PhaseRoadmapPhaseId;
   phaseNumber: PhaseRoadmapPhasePlan["phaseNumber"];
@@ -195,7 +614,20 @@ function makePhase(input: {
 export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {}): PhaseRoadmapRuntimePlan {
   const generatedAt = input.generatedAt || defaultGeneratedAt;
   const readyPhases = new Set<PhaseRoadmapPhaseId>();
-  const forbiddenProviderModesAbsent = input.forbiddenProviderModesAbsent !== false;
+  const projectFactsDecision = projectFactsEvidenceDecision(input);
+  const envelopeDecision = envelopeValidatorEvidenceDecision(input);
+  const providerConfirmationDecision = providerConfirmationEvidenceDecision(input);
+  const providerPacketDecision = providerPacketEvidenceDecision(input);
+  const watcherClosedLoopDecision = watcherClosedLoopEvidenceDecision(input);
+  const forbiddenProviderModesDecision = forbiddenProviderModesEvidenceDecision(input);
+  const evidenceDecisions = [
+    projectFactsDecision,
+    envelopeDecision,
+    providerConfirmationDecision,
+    providerPacketDecision,
+    watcherClosedLoopDecision,
+    forbiddenProviderModesDecision,
+  ];
 
   const phases: PhaseRoadmapPhasePlan[] = [
     makePhase({
@@ -205,17 +637,26 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       requiredPrecedingPhases: [],
       readyPhases,
       ownBlockers: uniqueSorted([
-        ...blockedIf(!input.projectFactsValidated, "project_facts_not_validated"),
-        ...blockedIf(!input.subagentEnvelopeValidatorReady, "validated_subagent_task_envelope_gate_missing"),
+        ...projectFactsDecision.blockers,
+        ...envelopeDecision.blockers,
       ]),
       readyStatus: "ready_for_implementation",
-      requiredInputs: ["projectFactsValidated", "subagentEnvelopeValidatorReady"],
+      requiredInputs: [
+        "evidence.projectFactsIntegration",
+        "evidence.subagentEnvelopeValidator",
+        "legacy projectFactsValidated/subagentEnvelopeValidatorReady only with explicit override",
+      ],
       acceptanceCriteria: [
         "Formal workers only accept validated SubagentTaskEnvelope packets.",
         "Free text worker starts are blocked before any command plan exists.",
         "Worker results must be structured before handoff.",
       ],
-      notes: ["This phase hardens the runtime boundary; it does not execute providers or mutate project files."],
+      notes: [
+        "This phase hardens the runtime boundary; it does not execute providers or mutate project files.",
+        "Phase 24 requires typed project facts and subagent envelope validator evidence by default.",
+        "Boolean readiness inputs are legacy overrides and are not suitable proof for real Phase 24.",
+        ...evidenceNotes([projectFactsDecision, envelopeDecision]),
+      ],
     }),
     makePhase({
       phaseId: "phase_25_knowledge_pack_manager",
@@ -327,17 +768,17 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       ],
       readyPhases,
       ownBlockers: uniqueSorted([
-        ...blockedIf(!input.providerConfirmationTokenPlaceholderPresent, "user_confirmation_token_placeholder_missing"),
-        ...blockedIf(!input.providerPacketComplete, "provider_enablement_packet_incomplete"),
-        ...blockedIf(!input.watcherManifestQaClosedLoop, "watcher_manifest_qa_closed_loop_missing"),
-        ...blockedIf(!forbiddenProviderModesAbsent, "forbidden_provider_mode_or_prompt_present"),
+        ...providerConfirmationDecision.blockers,
+        ...providerPacketDecision.blockers,
+        ...watcherClosedLoopDecision.blockers,
+        ...forbiddenProviderModesDecision.blockers,
       ]),
       readyStatus: "ready_for_confirmation_gate",
       requiredInputs: [
-        "providerConfirmationTokenPlaceholderPresent",
-        "providerPacketComplete",
-        "watcherManifestQaClosedLoop",
-        "forbiddenProviderModesAbsent",
+        "evidence.providerLiveGate or legacy providerConfirmationTokenPlaceholderPresent",
+        "evidence.providerLiveGate or legacy providerPacketComplete",
+        "evidence.watcherManifestQaClosedLoop or legacy watcherManifestQaClosedLoop",
+        "forbiddenProviderModesAbsent=true from typed receipt or explicit legacy boolean",
       ],
       acceptanceCriteria: [
         "User confirmation token placeholder is present and separate from credentials.",
@@ -346,7 +787,16 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "Fast, VIP, text-to-video, and BGM prompt paths are absent.",
         "Even when ready, this plan still reports canSubmitProvider=false until a later final gate exists.",
       ],
-      notes: ["Phase 30 is an enablement gate plan, not provider execution."],
+      notes: [
+        "Phase 30 is an enablement gate plan, not provider execution.",
+        "forbiddenProviderModesAbsent is fail-closed: omitted or false keeps Phase 30 blocked.",
+        ...evidenceNotes([
+          providerConfirmationDecision,
+          providerPacketDecision,
+          watcherClosedLoopDecision,
+          forbiddenProviderModesDecision,
+        ]),
+      ],
     }),
   ];
 
@@ -363,6 +813,16 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       credentialAccessAllowed: false,
       arbitraryShellAllowed: false,
       freeTextWorkerAllowed: false,
+    },
+    evidenceSummary: {
+      typedEvidenceRequiredForPhase24: true,
+      legacyBooleanOverridesAllowed: input.legacyBooleanOverridesAllowed === true,
+      decisions: evidenceDecisions,
+      notes: [
+        "Builder resolves typed evidence before considering legacy booleans.",
+        "Phase 24 defaults to blocked without project facts integration evidence and a subagent envelope validator receipt.",
+        "Legacy boolean readiness inputs are transitional diagnostics, not proof for real Phase 24.",
+      ],
     },
     hardLocks: phaseRoadmapRuntimeHardLocks,
     adapterBoundary: {

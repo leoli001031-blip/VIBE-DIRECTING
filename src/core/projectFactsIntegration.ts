@@ -21,7 +21,6 @@ export type ProjectFactsSourceOfTruth =
   | "project_store"
   | "asset_library"
   | "voice_source_library"
-  | "runtime_state"
   | "not_connected";
 
 export type ProjectFactsStatus = "connected" | "partial" | "blocked" | "missing";
@@ -220,20 +219,34 @@ function buildProductionBibleFact(input: BuildProjectFactsIntegrationInput): Pro
 }
 
 function buildStoryFlowFact(input: BuildProjectFactsIntegrationInput): ProjectFactConnection {
-  const storyFlow = input.projectStore?.facts.storyFlow || input.storyFlow;
+  const projectStoreStoryFlow = input.projectStore?.facts.storyFlow;
+  const storyFlow = projectStoreStoryFlow || input.storyFlow;
   const shots = storyShots(input);
-  const blockers = hasKeys(storyFlow) ? [] : ["Story Flow is not connected to project-local facts."];
-  const warnings = shots.length ? [] : ["Story Flow has no resolved shots yet."];
+  const hasProjectLocalSource = hasKeys(projectStoreStoryFlow);
+  const hasDerivedInput = hasKeys(input.storyFlow) || Boolean(input.runtimeState?.storyFlow);
+  const blockers = hasProjectLocalSource
+    ? []
+    : [
+        hasDerivedInput
+          ? "Story Flow is only present in direct input/runtime state; connect Project Store story_flow facts before treating it as source-of-truth."
+          : "Story Flow is not connected to project-local facts.",
+      ];
+  const warnings = hasProjectLocalSource && !shots.length ? ["Story Flow has no resolved shots yet."] : [];
   return fact({
     kind: "storyFlow",
     label: "Story Flow",
-    sourceOfTruth: input.projectStore?.facts.storyFlow ? "project_store" : input.runtimeState?.storyFlow ? "runtime_state" : "not_connected",
+    sourceOfTruth: hasProjectLocalSource ? "project_store" : "not_connected",
     path: factPath(input.projectStore, "story_flow"),
-    status: statusFor(blockers, shots.length, Boolean(storyFlow), warnings),
+    status: statusFor(blockers, shots.length, hasProjectLocalSource, warnings),
     recordCount: shots.length,
     blockers,
     warnings,
-    sourceRefs: hasKeys(storyFlow) ? ["projectStore.facts.storyFlow"] : input.runtimeState?.storyFlow ? ["runtimeState.storyFlow"] : [],
+    sourceRefs: hasProjectLocalSource
+      ? ["projectStore.facts.storyFlow"]
+      : [
+          hasKeys(input.storyFlow) ? "directInput.storyFlow" : "",
+          input.runtimeState?.storyFlow ? "runtimeState.storyFlow" : "",
+        ],
   });
 }
 
@@ -270,21 +283,40 @@ function buildShotLayoutFact(input: BuildProjectFactsIntegrationInput): ProjectF
 }
 
 function buildVisualMemoryFact(input: BuildProjectFactsIntegrationInput): ProjectFactConnection {
-  const visualMemory = input.projectStore?.facts.visualMemory || input.visualMemory;
-  const assetCount = input.assetLibrary?.assets.length || arrayFrom(isRecord(visualMemory) ? visualMemory.assets : undefined).length || input.runtimeState?.visualMemory?.assets.length || 0;
-  const hasSource = Boolean(input.assetLibrary || hasKeys(visualMemory) || input.runtimeState?.visualMemory);
-  const blockers = hasSource ? [] : ["Visual Memory is not connected to project-local facts."];
-  const warnings = input.assetLibrary?.referenceAuthorityPolicy.assetLibraryIsGallery === false ? [] : ["Visual Memory should be backed by Asset Library authority, not a gallery."];
+  const projectStoreVisualMemory = input.projectStore?.facts.visualMemory;
+  const projectStoreAssetCount = arrayFrom(isRecord(projectStoreVisualMemory) ? projectStoreVisualMemory.assets : undefined).length;
+  const directAssetCount = arrayFrom(isRecord(input.visualMemory) ? input.visualMemory.assets : undefined).length;
+  const runtimeAssetCount = arrayFrom(input.runtimeState?.visualMemory?.assets).length;
+  const assetCount = input.assetLibrary?.assets.length || projectStoreAssetCount || directAssetCount || runtimeAssetCount;
+  const hasProjectLocalSource = Boolean(input.assetLibrary || hasKeys(projectStoreVisualMemory));
+  const hasDerivedInput = hasKeys(input.visualMemory) || Boolean(input.runtimeState?.visualMemory);
+  const blockers = hasProjectLocalSource
+    ? []
+    : [
+        hasDerivedInput
+          ? "Visual Memory is only present in direct input/runtime state; connect Project Store visual_memory facts or Asset Library before treating it as source-of-truth."
+          : "Visual Memory is not connected to project-local facts.",
+      ];
+  const warnings = hasProjectLocalSource && input.assetLibrary?.referenceAuthorityPolicy.assetLibraryIsGallery !== false
+    ? ["Visual Memory should be backed by Asset Library authority, not a gallery."]
+    : [];
   return fact({
     kind: "visualMemory",
     label: "Visual Memory",
-    sourceOfTruth: input.assetLibrary ? "asset_library" : input.projectStore?.facts.visualMemory ? "project_store" : input.runtimeState?.visualMemory ? "runtime_state" : "not_connected",
+    sourceOfTruth: input.assetLibrary ? "asset_library" : hasKeys(projectStoreVisualMemory) ? "project_store" : "not_connected",
     path: factPath(input.projectStore, "visual_memory") || "visual_memory/visual_memory.vibe.json",
-    status: statusFor(blockers, assetCount, hasSource, warnings),
+    status: statusFor(blockers, assetCount, hasProjectLocalSource, warnings),
     recordCount: assetCount,
     blockers,
     warnings,
-    sourceRefs: input.assetLibrary ? ["assetLibrary.assets"] : hasKeys(visualMemory) ? ["projectStore.facts.visualMemory"] : [],
+    sourceRefs: input.assetLibrary
+      ? ["assetLibrary.assets"]
+      : hasKeys(projectStoreVisualMemory)
+        ? ["projectStore.facts.visualMemory"]
+        : [
+            hasKeys(input.visualMemory) ? "directInput.visualMemory" : "",
+            input.runtimeState?.visualMemory ? "runtimeState.visualMemory" : "",
+          ],
   });
 }
 
@@ -327,8 +359,15 @@ function buildSceneAssetPackFact(input: BuildProjectFactsIntegrationInput): Proj
 }
 
 function buildVoiceMemoryFact(input: BuildProjectFactsIntegrationInput): ProjectFactConnection {
-  const voiceSourceLibrary = input.voiceSourceLibrary || input.runtimeState?.voiceSourceLibrary;
-  const blockers = voiceSourceLibrary ? [] : ["Voice Memory is not connected to Voice Source Library state."];
+  const voiceSourceLibrary = input.voiceSourceLibrary;
+  const hasRuntimeVoiceSourceLibrary = Boolean(input.runtimeState?.voiceSourceLibrary);
+  const blockers = voiceSourceLibrary
+    ? []
+    : [
+        hasRuntimeVoiceSourceLibrary
+          ? "Voice Memory is only present in runtime state; connect Voice Source Library state before treating it as source-of-truth."
+          : "Voice Memory is not connected to Voice Source Library state.",
+      ];
   const warnings = voiceSourceLibrary?.summary.locked ? [] : voiceSourceLibrary ? ["Voice Memory has no locked voice sources yet."] : [];
   return fact({
     kind: "voiceMemory",
@@ -339,7 +378,7 @@ function buildVoiceMemoryFact(input: BuildProjectFactsIntegrationInput): Project
     recordCount: voiceSourceLibrary?.sources.length || 0,
     blockers,
     warnings,
-    sourceRefs: voiceSourceLibrary ? ["voiceSourceLibrary.sources"] : [],
+    sourceRefs: voiceSourceLibrary ? ["voiceSourceLibrary.sources"] : hasRuntimeVoiceSourceLibrary ? ["runtimeState.voiceSourceLibrary"] : [],
   });
 }
 
@@ -400,7 +439,7 @@ function summarize(facts: Record<ProjectFactsKind, ProjectFactConnection>): Proj
     missing: values.filter((item) => item.status === "missing").length,
     blockerCount: values.reduce((total, item) => total + item.blockers.length, 0),
     warningCount: values.reduce((total, item) => total + item.warnings.length, 0),
-    projectLocalFactCount: values.filter((item) => item.sourceOfTruth !== "runtime_state" && item.sourceOfTruth !== "not_connected").length,
+    projectLocalFactCount: values.filter((item) => item.sourceOfTruth !== "not_connected").length,
   };
 }
 

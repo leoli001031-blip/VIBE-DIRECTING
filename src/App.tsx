@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Boxes,
@@ -49,6 +49,13 @@ import { buildDesktopRuntimePlan, type DesktopRuntimePlan } from "./core/desktop
 import { buildSubagentWorkerRuntimePlan, type SubagentWorkerRuntimePlan } from "./core/subagentWorkerRuntime";
 import { ensureRuntimeEnvironment } from "./core/runtimeConfig";
 import { buildDirectorWorkflowState, type DirectorWorkflowStatus } from "./core/directorWorkflow";
+import {
+  buildPreviewPlayerQueue as buildCorePreviewPlayerQueue,
+  getPreviewPlayerActiveItem,
+  getPreviewPlayerTotalDuration,
+  type PreviewQueueItem,
+  type PreviewQueueItemKind,
+} from "./core/previewPlayerQueue";
 import { fallbackAudit } from "./data/fallbackAudit";
 
 const gateNames = ["identity", "scene", "pair", "story", "prop", "style"] as const;
@@ -95,16 +102,6 @@ type DirectorView = "story" | "assets" | "preview";
 type MinimalProjectPlan = {
   entryLabel: string;
   planLabel: string;
-};
-type PreviewQueueItemKind = "image_hold" | "video_clip" | "missing_placeholder";
-type PreviewQueueItem = {
-  id: string;
-  kind: PreviewQueueItemKind;
-  shotId?: string;
-  startSeconds: number;
-  durationSeconds: number;
-  mediaPath?: string;
-  label: string;
 };
 
 type DesktopRuntimeShellView = {
@@ -171,37 +168,23 @@ function selectedScopeLabel(shot?: ShotRecord, asset?: AssetRecord, sectionLabel
   return "Selected project";
 }
 
-function previewQueueLabel(event: PreviewEvent) {
-  if (event.shotId) return formatShotNumber(event.shotId);
-  if (event.type === "video_clip") return "Clip";
-  if (event.type === "blocked_placeholder") return "Missing";
-  return "Hold";
-}
-
 function previewQueueKind(event: PreviewEvent): PreviewQueueItemKind {
-  if (event.type === "video_clip") return "video_clip";
   if (event.type === "blocked_placeholder" || !event.mediaPath) return "missing_placeholder";
+  if (event.type === "video_clip") return "video_clip";
   return "image_hold";
 }
 
 function buildPreviewPlayerQueue(previewExport: ProjectPreviewExportState, shots: ShotRecord[]): PreviewQueueItem[] {
-  const shotOrder = new Map(shots.map((shot, index) => [shot.id, index]));
-  return previewExport.draftPreview.events
-    .filter((event) => event.type === "image_hold" || event.type === "video_clip" || event.type === "blocked_placeholder")
-    .sort((left, right) => {
-      const timeDelta = left.startSeconds - right.startSeconds;
-      if (timeDelta !== 0) return timeDelta;
-      return (shotOrder.get(left.shotId || "") ?? 9999) - (shotOrder.get(right.shotId || "") ?? 9999);
-    })
-    .map((event) => ({
-      id: event.id,
-      kind: previewQueueKind(event),
-      shotId: event.shotId,
-      startSeconds: event.startSeconds,
-      durationSeconds: Math.max(1, event.durationSeconds),
-      mediaPath: event.mediaPath,
-      label: previewQueueLabel(event),
-    }));
+  const draftEvents = previewExport.draftPreview.events.filter(
+    (event) =>
+      event.type === "image_hold" ||
+      event.type === "video_clip" ||
+      (event.type === "blocked_placeholder" && previewQueueKind(event) === "missing_placeholder"),
+  );
+  return buildCorePreviewPlayerQueue(
+    { ...previewExport, draftPreview: { ...previewExport.draftPreview, events: draftEvents } },
+    shots,
+  );
 }
 
 function buildMinimalProjectPlan(runtimeState: ProjectRuntimeState): MinimalProjectPlan {
@@ -3886,12 +3869,115 @@ function MinimalPreview({
   onSelectShot: (id: string) => void;
 }) {
   const [playing, setPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const currentTimeRef = useRef(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const queue = useMemo(() => buildPreviewPlayerQueue(previewExport, shots), [previewExport, shots]);
-  const activeItem = queue.find((item) => item.shotId === selectedShotId) || queue[0];
-  const total = Math.max(1, queue.reduce((max, item) => Math.max(max, item.startSeconds + item.durationSeconds), 0));
-  const activeStart = activeItem?.startSeconds || 0;
-  const activeEnd = activeStart + (activeItem?.durationSeconds || 0);
+  const total = Math.max(1, getPreviewPlayerTotalDuration(queue));
+  const activeItem = getPreviewPlayerActiveItem(queue, currentTime);
   const activeShot = activeItem?.shotId ? shots.find((shot) => shot.id === activeItem.shotId) : undefined;
+  const progress = Math.min(100, Math.max(0, (currentTime / total) * 100));
+
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
+
+  useEffect(() => {
+    if (!queue.length) {
+      setPlaying(false);
+      currentTimeRef.current = 0;
+      setCurrentTime(0);
+      return;
+    }
+    setCurrentTime((time) => {
+      const nextTime = Math.min(Math.max(0, time), total);
+      currentTimeRef.current = nextTime;
+      return nextTime;
+    });
+  }, [queue, total]);
+
+  useEffect(() => {
+    if (!playing || !queue.length) return undefined;
+    let frame = 0;
+    let stopped = false;
+    let previous = performance.now();
+    const tick = (now: number) => {
+      if (stopped) return;
+      const deltaSeconds = Math.max(0, (now - previous) / 1000);
+      previous = now;
+      const nextTime = Math.min(total, currentTimeRef.current + deltaSeconds);
+      currentTimeRef.current = nextTime;
+      setCurrentTime(nextTime);
+      if (nextTime >= total) {
+        setPlaying(false);
+        return;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [playing, queue.length, total]);
+
+  useEffect(() => {
+    const selectedItem = queue.find((item) => item.shotId === selectedShotId);
+    if (!selectedItem) return;
+    setCurrentTime((time) => {
+      const itemAtTime = getPreviewPlayerActiveItem(queue, time);
+      if (playing && itemAtTime?.shotId === selectedShotId) return time;
+      const nextTime = Math.abs(time - selectedItem.startSeconds) < 0.05 ? time : selectedItem.startSeconds;
+      currentTimeRef.current = nextTime;
+      return nextTime;
+    });
+  }, [playing, queue, selectedShotId]);
+
+  useEffect(() => {
+    if (playing && activeItem?.shotId && activeItem.shotId !== selectedShotId) onSelectShot(activeItem.shotId);
+  }, [activeItem?.shotId, onSelectShot, playing, selectedShotId]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || activeItem?.kind !== "video_clip") return;
+    const mediaTime = Math.max(0, currentTime - activeItem.startSeconds);
+    if (Number.isFinite(mediaTime) && Math.abs(video.currentTime - mediaTime) > 0.75) {
+      try {
+        video.currentTime = mediaTime;
+      } catch {
+        // Some browsers reject seeks before metadata is ready.
+      }
+    }
+  }, [activeItem?.id, activeItem?.kind, activeItem?.startSeconds, currentTime]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || activeItem?.kind !== "video_clip") return;
+    if (playing) {
+      void video.play().catch(() => undefined);
+    } else {
+      video.pause();
+    }
+  }, [activeItem?.id, activeItem?.kind, playing]);
+
+  const togglePlaying = () => {
+    if (!queue.length) return;
+    setPlaying((value) => {
+      if (value) return false;
+      setCurrentTime((time) => {
+        const nextTime = time >= total ? 0 : time;
+        currentTimeRef.current = nextTime;
+        return nextTime;
+      });
+      return true;
+    });
+  };
+
+  const selectPreviewItem = (item: PreviewQueueItem) => {
+    currentTimeRef.current = item.startSeconds;
+    setCurrentTime(item.startSeconds);
+    if (item.shotId) onSelectShot(item.shotId);
+  };
 
   return (
     <main className="minimal-preview-view">
@@ -3903,14 +3989,23 @@ function MinimalPreview({
             label={activeItem.label}
             className="preview-stage-image"
           />
+        ) : activeItem?.kind === "video_clip" && activeItem.mediaPath ? (
+          <video
+            key={activeItem.id}
+            ref={videoRef}
+            className="preview-stage-video"
+            src={toMediaSrc(activeItem.mediaPath)}
+            muted
+            playsInline
+          />
         ) : (
           <div className={`preview-stage-card ${activeItem?.kind || "missing_placeholder"}`}>
-            <span>{activeItem?.kind === "video_clip" ? "Clip" : "Missing"}</span>
+            <span>Missing</span>
             <strong>{activeItem?.label || "Preview"}</strong>
             <small>{activeShot ? shortStoryFunction(activeShot, shots.indexOf(activeShot)) : "Hold"}</small>
           </div>
         )}
-        <button className="preview-play-button" onClick={() => setPlaying((value) => !value)} aria-label={playing ? "Pause" : "Play"}>
+        <button className="preview-play-button" onClick={togglePlaying} aria-label={playing ? "Pause" : "Play"}>
           {playing ? <PauseCircle size={42} /> : <Play size={42} />}
         </button>
       </section>
@@ -3935,19 +4030,20 @@ function MinimalPreview({
           {queue.map((item) => (
             <button
               key={item.id}
-              className={`preview-line-event ${item.kind} ${item.shotId === selectedShotId ? "selected" : ""}`}
+              className={`preview-line-event ${item.kind} ${item.id === activeItem?.id ? "selected" : ""}`}
               style={{
                 left: `${(item.startSeconds / total) * 100}%`,
                 width: `${Math.max(3, (item.durationSeconds / total) * 100)}%`,
               }}
-              onClick={() => item.shotId && onSelectShot(item.shotId)}
+              onClick={() => selectPreviewItem(item)}
               aria-label={item.label}
             />
           ))}
+          <span className="preview-line-progress" style={{ left: `${progress}%` }} />
         </div>
         <div className="preview-time-row">
-          <button onClick={() => setPlaying((value) => !value)}>{playing ? <PauseCircle size={17} /> : <Play size={17} />}</button>
-          <span>{formatDuration(activeStart)} / {formatDuration(activeEnd || total)}</span>
+          <button onClick={togglePlaying}>{playing ? <PauseCircle size={17} /> : <Play size={17} />}</button>
+          <span>{formatDuration(currentTime)} / {formatDuration(total)}</span>
         </div>
       </section>
     </main>

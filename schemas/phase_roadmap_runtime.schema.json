@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/phase_roadmap_runtime.schema.json",
+  "title": "PhaseRoadmapRuntimePlan",
+  "description": "Phase 24-30 pure runtime readiness plan. It records evidence-backed gates, fixed hard locks, adapter boundaries, and provider enablement constraints without executing providers, reading credentials, spawning workers, or mutating files outside the explicit export/project IO phase.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "phaseRange",
+    "phases",
+    "summary",
+    "evidenceSummary",
+    "hardLocks",
+    "adapterBoundary",
+    "providerEnablementGate"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "0.1.0" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "phaseRange": { "type": "string", "const": "phase_24_to_30" },
+    "phases": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": { "$ref": "#/$defs/phase" }
+    },
+    "summary": { "$ref": "#/$defs/summary" },
+    "evidenceSummary": { "$ref": "#/$defs/evidenceSummary" },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "adapterBoundary": { "$ref": "#/$defs/adapterBoundary" },
+    "providerEnablementGate": { "$ref": "#/$defs/providerEnablementGate" }
+  },
+  "$defs": {
+    "phaseId": {
+      "type": "string",
+      "enum": [
+        "phase_24_subagent_runtime_gate",
+        "phase_25_knowledge_pack_manager",
+        "phase_26_agent_cli_mock_runner",
+        "phase_27_export_worker_mvp",
+        "phase_28_voice_audio_settings_ui",
+        "phase_29_codex_cli_adapter_spike",
+        "phase_30_provider_enablement_gate"
+      ]
+    },
+    "readiness": {
+      "type": "string",
+      "enum": ["ready", "blocked"]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ready_for_implementation",
+        "ready_for_noop_runner",
+        "ready_for_adapter_spike",
+        "ready_for_confirmation_gate",
+        "blocked_by_gate"
+      ]
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phaseId",
+        "phaseNumber",
+        "title",
+        "readiness",
+        "status",
+        "blockedReasons",
+        "requiredPrecedingPhases",
+        "hardLocks",
+        "requiredInputs",
+        "acceptanceCriteria",
+        "notes"
+      ],
+      "properties": {
+        "phaseId": { "$ref": "#/$defs/phaseId" },
+        "phaseNumber": { "type": "integer", "enum": [24, 25, 26, 27, 28, 29, 30] },
+        "title": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "readiness": { "$ref": "#/$defs/readiness" },
+        "status": { "$ref": "#/$defs/status" },
+        "blockedReasons": { "type": "array", "items": { "type": "string" } },
+        "requiredPrecedingPhases": { "type": "array", "items": { "$ref": "#/$defs/phaseId" } },
+        "hardLocks": { "$ref": "#/$defs/hardLocks" },
+        "requiredInputs": { "type": "array", "items": { "type": "string" } },
+        "acceptanceCriteria": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalPhases",
+        "ready",
+        "blocked",
+        "providerSubmitAllowed",
+        "credentialAccessAllowed",
+        "arbitraryShellAllowed",
+        "freeTextWorkerAllowed"
+      ],
+      "properties": {
+        "totalPhases": { "type": "integer", "const": 7 },
+        "ready": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "blocked": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "providerSubmitAllowed": { "type": "integer", "const": 0 },
+        "credentialAccessAllowed": { "type": "boolean", "const": false },
+        "arbitraryShellAllowed": { "type": "boolean", "const": false },
+        "freeTextWorkerAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "evidenceSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["typedEvidenceRequiredForPhase24", "legacyBooleanOverridesAllowed", "decisions", "notes"],
+      "properties": {
+        "typedEvidenceRequiredForPhase24": { "type": "boolean", "const": true },
+        "legacyBooleanOverridesAllowed": { "type": "boolean" },
+        "decisions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidenceDecision" }
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "evidenceDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidenceKey", "source", "ready", "blockers", "warnings"],
+      "properties": {
+        "evidenceKey": {
+          "type": "string",
+          "enum": [
+            "projectFactsIntegration",
+            "subagentEnvelopeValidator",
+            "providerConfirmationTokenPlaceholder",
+            "providerEnablementPacket",
+            "watcherManifestQaClosedLoop",
+            "forbiddenProviderModesAbsent"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "enum": ["typed_evidence", "legacy_boolean_override", "missing"]
+        },
+        "ready": { "type": "boolean" },
+        "blockers": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "noFreeTextWorker",
+        "validatedEnvelopeRequired",
+        "structuredResultRequired",
+        "noProviderSubmit",
+        "noCredentials",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "noArbitraryShell",
+        "noFileMutationUnlessExplicitExportOrProjectIoPhase",
+        "fileMutationAllowed",
+        "liveSubmitAllowed",
+        "dryRunOnly"
+      ],
+      "properties": {
+        "noFreeTextWorker": { "type": "boolean", "const": true },
+        "validatedEnvelopeRequired": { "type": "boolean", "const": true },
+        "structuredResultRequired": { "type": "boolean", "const": true },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "noCredentials": { "type": "boolean", "const": true },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "noArbitraryShell": { "type": "boolean", "const": true },
+        "noFileMutationUnlessExplicitExportOrProjectIoPhase": { "type": "boolean", "const": true },
+        "fileMutationAllowed": { "type": "boolean" },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "dryRunOnly": { "type": "boolean", "const": true }
+      }
+    },
+    "adapterBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase26", "phase29"],
+      "properties": {
+        "phase26": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["runnerKind", "purpose", "canSpawnCodex", "canResumeCodex", "canSubmitProvider"],
+          "properties": {
+            "runnerKind": { "type": "string", "const": "mock_noop" },
+            "purpose": { "type": "string", "const": "prove_replaceable_runner_contract" },
+            "canSpawnCodex": { "type": "boolean", "const": false },
+            "canResumeCodex": { "type": "boolean", "const": false },
+            "canSubmitProvider": { "type": "boolean", "const": false }
+          }
+        },
+        "phase29": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["runnerKind", "purpose", "requiresPhase26ReplacementProof", "canSubmitProvider"],
+          "properties": {
+            "runnerKind": { "type": "string", "const": "codex_cli_adapter_spike" },
+            "purpose": { "type": "string", "const": "connect_spawn_resume_after_mock_contract_is_proven" },
+            "requiresPhase26ReplacementProof": { "type": "boolean", "const": true },
+            "canSubmitProvider": { "type": "boolean", "const": false }
+          }
+        }
+      }
+    },
+    "providerEnablementGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "userConfirmationTokenPlaceholderRequired",
+        "packetCompleteRequired",
+        "watcherManifestQaClosedLoopRequired",
+        "noFastVipTextToVideoOrBgmPromptRequired",
+        "canSubmitProvider"
+      ],
+      "properties": {
+        "userConfirmationTokenPlaceholderRequired": { "type": "boolean", "const": true },
+        "packetCompleteRequired": { "type": "boolean", "const": true },
+        "watcherManifestQaClosedLoopRequired": { "type": "boolean", "const": true },
+        "noFastVipTextToVideoOrBgmPromptRequired": { "type": "boolean", "const": true },
+        "canSubmitProvider": { "type": "boolean", "const": false }
+      }
+    }
+  }
+}

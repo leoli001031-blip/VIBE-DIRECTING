@@ -45,6 +45,20 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ProjectStoreIoGate",
   },
   {
+    fileName: "project_facts_integration.schema.json",
+    id: "https://vibecore.local/schemas/project_facts_integration.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 20/22 project facts integration receipt requiring project-local facts and keeping runtime-state as derived cache only.",
+    typeName: "ProjectFactsIntegrationState",
+  },
+  {
+    fileName: "phase_roadmap_runtime.schema.json",
+    id: "https://vibecore.local/schemas/phase_roadmap_runtime.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 24-30 typed-evidence runtime roadmap with provider, credential, shell, free-text worker, and live-submit routes locked off.",
+    typeName: "PhaseRoadmapRuntimePlan",
+  },
+  {
     fileName: "production_bible.schema.json",
     id: "https://vibecore.local/schemas/production_bible.schema.json",
     version: schemaVersion,
@@ -428,6 +442,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     version: schemaVersion,
     purpose: "Phase 16 permission-gated subagent worker runtime plan requiring validated envelopes and structured subagent_result_v1 outputs.",
     typeName: "SubagentWorkerRuntimePlan",
+  },
+  {
+    fileName: "subagent_runtime_gate.schema.json",
+    id: "https://vibecore.local/schemas/subagent_runtime_gate.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 24 real subagent runtime gate receipt requiring Project Facts evidence, validated envelope evidence, and worker runtime evidence before permission-gated worker handoff.",
+    typeName: "SubagentRuntimeGateReceipt",
   },
   {
     fileName: "keyframe_pair_derivation.schema.json",

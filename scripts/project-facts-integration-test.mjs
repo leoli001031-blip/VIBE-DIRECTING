@@ -36,6 +36,33 @@ const {
 } = await importTs("src/core/voiceSourceLibrary.ts");
 
 const generatedAt = "2026-05-01T00:00:00.000Z";
+const projectFactsIntegrationSchemaPath = "schemas/project_facts_integration.schema.json";
+assert(fs.existsSync(projectFactsIntegrationSchemaPath), "Project Facts Integration schema file missing");
+const projectFactsIntegrationSchema = JSON.parse(fs.readFileSync(projectFactsIntegrationSchemaPath, "utf8"));
+const schemaRegistrySource = fs.readFileSync("src/core/schemaRegistry.ts", "utf8");
+assert(
+  schemaRegistrySource.includes("project_facts_integration.schema.json") &&
+    schemaRegistrySource.includes("ProjectFactsIntegrationState"),
+  "schema registry must include ProjectFactsIntegrationState",
+);
+assert(
+  projectFactsIntegrationSchema.properties.phase.const === "phase20_project_facts_integration",
+  "Project Facts Integration schema phase const drifted",
+);
+assert(
+  !projectFactsIntegrationSchema.$defs.sourceOfTruth.enum.includes("runtime_state"),
+  "Project Facts Integration sourceOfTruth schema must not include runtime_state",
+);
+assert(
+  projectFactsIntegrationSchema.$defs.hardLocks.properties.runtimeStateIsDerivedCache.const === true,
+  "Project Facts Integration schema must lock runtime state as derived cache",
+);
+
+function assertNoRuntimeSourceOfTruth(state, message) {
+  for (const fact of Object.values(state.facts)) {
+    assert(fact.sourceOfTruth !== "runtime_state", `${message}: ${fact.kind} used runtime_state as source-of-truth`);
+  }
+}
 
 function shotLayout(overrides = {}) {
   return {
@@ -193,6 +220,75 @@ const voiceResult = addVoiceSource(voiceLibrary, {
 assert(voiceResult.validation.ok, `voice source should validate: ${voiceResult.validation.errors.join("; ")}`);
 voiceLibrary = voiceResult.library;
 
+const runtimeOnlyState = buildProjectFactsIntegrationState({
+  generatedAt,
+  runtimeState: {
+    storyFlow: {
+      schemaVersion: "0.1.0",
+      id: "runtime_story_flow",
+      shots: [{ id: "runtime_shot_001" }],
+    },
+    visualMemory: {
+      schemaVersion: "0.1.0",
+      id: "runtime_visual_memory",
+      assets: [{ id: "runtime_asset_001" }],
+    },
+    voiceSourceLibrary: voiceLibrary,
+  },
+});
+assertNoRuntimeSourceOfTruth(runtimeOnlyState, "runtime-only state");
+assert(runtimeOnlyState.facts.storyFlow.status === "blocked", "runtime-only Story Flow must block");
+assert(runtimeOnlyState.facts.storyFlow.sourceOfTruth === "not_connected", "runtime-only Story Flow must not become source-of-truth");
+assert(runtimeOnlyState.facts.storyFlow.blockers.some((blocker) => blocker.includes("direct input/runtime state")), "runtime-only Story Flow blocker detail missing");
+assert(runtimeOnlyState.facts.visualMemory.status === "blocked", "runtime-only Visual Memory must block");
+assert(runtimeOnlyState.facts.visualMemory.sourceOfTruth === "not_connected", "runtime-only Visual Memory must not become source-of-truth");
+assert(runtimeOnlyState.facts.visualMemory.blockers.some((blocker) => blocker.includes("direct input/runtime state")), "runtime-only Visual Memory blocker detail missing");
+assert(runtimeOnlyState.facts.voiceMemory.status === "blocked", "runtime-only Voice Memory must block");
+assert(runtimeOnlyState.facts.voiceMemory.sourceOfTruth === "not_connected", "runtime-only Voice Memory must not become source-of-truth");
+assert(runtimeOnlyState.facts.voiceMemory.blockers.some((blocker) => blocker.includes("runtime state")), "runtime-only Voice Memory blocker detail missing");
+
+const directStoryState = buildProjectFactsIntegrationState({
+  generatedAt,
+  storyFlow: {
+    schemaVersion: "0.1.0",
+    id: "direct_story_flow",
+    shots: [{ id: "direct_shot_001" }],
+  },
+});
+assertNoRuntimeSourceOfTruth(directStoryState, "direct Story Flow state");
+assert(directStoryState.facts.storyFlow.status === "blocked", "direct Story Flow without Project Store must block");
+assert(directStoryState.facts.storyFlow.sourceOfTruth === "not_connected", "direct Story Flow must not claim source-of-truth");
+assert(directStoryState.facts.storyFlow.blockers.some((blocker) => blocker.includes("Project Store story_flow")), "direct Story Flow blocker detail missing");
+
+const directVisualState = buildProjectFactsIntegrationState({
+  generatedAt,
+  visualMemory: {
+    schemaVersion: "0.1.0",
+    id: "direct_visual_memory",
+    assets: [{ id: "direct_asset_001" }],
+  },
+});
+assertNoRuntimeSourceOfTruth(directVisualState, "direct Visual Memory state");
+assert(directVisualState.facts.visualMemory.status === "blocked", "direct Visual Memory without Project Store/Asset Library must block");
+assert(directVisualState.facts.visualMemory.sourceOfTruth === "not_connected", "direct Visual Memory must not claim source-of-truth");
+assert(directVisualState.facts.visualMemory.blockers.some((blocker) => blocker.includes("Asset Library")), "direct Visual Memory blocker detail missing");
+
+const assetOnlyState = buildProjectFactsIntegrationState({
+  generatedAt,
+  assetLibrary,
+});
+assertNoRuntimeSourceOfTruth(assetOnlyState, "asset-library state");
+assert(assetOnlyState.facts.visualMemory.sourceOfTruth === "asset_library", "Asset Library Visual Memory must remain source-of-truth");
+assert(["connected", "partial"].includes(assetOnlyState.facts.visualMemory.status), "Asset Library Visual Memory should remain connected or partial");
+
+const voiceOnlyState = buildProjectFactsIntegrationState({
+  generatedAt,
+  voiceSourceLibrary: voiceLibrary,
+});
+assertNoRuntimeSourceOfTruth(voiceOnlyState, "voice-source-library state");
+assert(voiceOnlyState.facts.voiceMemory.sourceOfTruth === "voice_source_library", "Voice Source Library must remain source-of-truth");
+assert(["connected", "partial"].includes(voiceOnlyState.facts.voiceMemory.status), "Voice Source Library should remain connected or partial");
+
 const blockedState = buildProjectFactsIntegrationState({
   generatedAt,
   projectStore,
@@ -200,13 +296,17 @@ const blockedState = buildProjectFactsIntegrationState({
   voiceSourceLibrary: voiceLibrary,
 });
 
+assertNoRuntimeSourceOfTruth(blockedState, "blocked fixture state");
 assert(blockedState.phase === "phase20_project_facts_integration", "phase id drifted");
 assert(blockedState.status === "blocked", "missing layout/spatial memory should block integration readiness");
 assert(blockedState.facts.productionBible.status === "connected", "fixture Production Bible should connect from Project Store");
 assert(blockedState.facts.storyFlow.recordCount === 1, "Story Flow should count fixture shot");
+assert(blockedState.facts.storyFlow.sourceOfTruth === "project_store", "Story Flow should use Project Store source-of-truth");
 assert(blockedState.facts.shotSpec.status === "connected", "Shot Spec should connect from Project Store");
 assert(blockedState.facts.visualMemory.sourceOfTruth === "asset_library", "Visual Memory should prefer Asset Library source of truth");
+assert(["connected", "partial"].includes(blockedState.facts.visualMemory.status), "Asset Library-backed Visual Memory should remain connected or partial");
 assert(blockedState.facts.voiceMemory.sourceOfTruth === "voice_source_library", "Voice Memory should use Voice Source Library");
+assert(["connected", "partial"].includes(blockedState.facts.voiceMemory.status), "Voice Source Library-backed Voice Memory should remain connected or partial");
 assert(blockedState.facts.shotLayout.status === "blocked", "missing Shot Layout must block");
 assert(blockedState.facts.shotLayout.blockers.some((blocker) => blocker.includes("Shot Layout")), "Shot Layout blocker detail missing");
 assert(blockedState.facts.spatialMemory.status === "blocked", "missing Spatial Memory must block");
@@ -238,6 +338,7 @@ const readyState = buildProjectFactsIntegrationState({
   },
 });
 
+assertNoRuntimeSourceOfTruth(readyState, "ready fixture state");
 assert(readyState.status === "ready", `ready fixture should not block: ${readyState.summary.blockerCount} blockers`);
 assert(readyState.facts.shotLayout.status === "connected", "Shot Layout should connect when layout fixture exists");
 assert(readyState.facts.spatialMemory.status === "connected", "Spatial Memory should connect when world positions exist");

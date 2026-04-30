@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/project_facts_integration.schema.json",
+  "title": "ProjectFactsIntegrationState",
+  "description": "Phase 20/22 dry-run Project Facts Integration state. Runtime state is only a derived cache and is not a source-of-truth for project facts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "phase",
+    "generatedAt",
+    "status",
+    "facts",
+    "visualConsistency",
+    "summary",
+    "hardLocks",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "phase": { "type": "string", "const": "phase20_project_facts_integration" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "status": { "type": "string", "enum": ["ready", "blocked"] },
+    "projectId": { "type": "string" },
+    "facts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "productionBible",
+        "storyFlow",
+        "shotSpec",
+        "shotLayout",
+        "visualMemory",
+        "spatialMemory",
+        "sceneAssetPack",
+        "voiceMemory"
+      ],
+      "properties": {
+        "productionBible": { "$ref": "#/$defs/factConnection" },
+        "storyFlow": { "$ref": "#/$defs/factConnection" },
+        "shotSpec": { "$ref": "#/$defs/factConnection" },
+        "shotLayout": { "$ref": "#/$defs/factConnection" },
+        "visualMemory": { "$ref": "#/$defs/factConnection" },
+        "spatialMemory": { "$ref": "#/$defs/factConnection" },
+        "sceneAssetPack": { "$ref": "#/$defs/factConnection" },
+        "voiceMemory": { "$ref": "#/$defs/factConnection" }
+      }
+    },
+    "visualConsistency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["masterScene", "derivedViews", "worldPosition", "startEndDerivation"],
+      "properties": {
+        "masterScene": { "$ref": "#/$defs/visualSupport" },
+        "derivedViews": { "$ref": "#/$defs/visualSupport" },
+        "worldPosition": { "$ref": "#/$defs/visualSupport" },
+        "startEndDerivation": { "$ref": "#/$defs/visualSupport" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connected",
+        "partial",
+        "blocked",
+        "missing",
+        "blockerCount",
+        "warningCount",
+        "projectLocalFactCount"
+      ],
+      "properties": {
+        "connected": { "type": "integer", "minimum": 0 },
+        "partial": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "missing": { "type": "integer", "minimum": 0 },
+        "blockerCount": { "type": "integer", "minimum": 0 },
+        "warningCount": { "type": "integer", "minimum": 0 },
+        "projectLocalFactCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "factKind": {
+      "type": "string",
+      "enum": [
+        "productionBible",
+        "storyFlow",
+        "shotSpec",
+        "shotLayout",
+        "visualMemory",
+        "spatialMemory",
+        "sceneAssetPack",
+        "voiceMemory"
+      ]
+    },
+    "sourceOfTruth": {
+      "type": "string",
+      "enum": ["project_store", "asset_library", "voice_source_library", "not_connected"]
+    },
+    "factStatus": {
+      "type": "string",
+      "enum": ["connected", "partial", "blocked", "missing"]
+    },
+    "factConnection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "label",
+        "sourceOfTruth",
+        "status",
+        "recordCount",
+        "blockers",
+        "warnings",
+        "sourceRefs"
+      ],
+      "properties": {
+        "kind": { "$ref": "#/$defs/factKind" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "sourceOfTruth": { "$ref": "#/$defs/sourceOfTruth" },
+        "path": { "type": "string" },
+        "status": { "$ref": "#/$defs/factStatus" },
+        "recordCount": { "type": "integer", "minimum": 0 },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "sourceOfTruth": { "const": "not_connected" } },
+            "required": ["sourceOfTruth"]
+          },
+          "then": {
+            "properties": {
+              "status": { "enum": ["blocked", "missing"] }
+            }
+          }
+        }
+      ]
+    },
+    "visualSupportStatus": {
+      "type": "string",
+      "enum": ["structured", "partial", "missing"]
+    },
+    "visualSupport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "blockers", "warnings"],
+      "properties": {
+        "status": { "$ref": "#/$defs/visualSupportStatus" },
+        "supportedPackIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "supportedViewIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "supportedRefs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "supportedShotIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dryRunOnly",
+        "noFileMutation",
+        "noDirectoryCreate",
+        "noProviderSubmit",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "noImageGeneration",
+        "noVideoGeneration",
+        "noTextToVideo",
+        "noFastVip",
+        "image2Preferred",
+        "seedanceJimengVideoParked",
+        "projectFactsAreProjectLocal",
+        "assetLibraryIsNotGallery",
+        "runtimeStateIsDerivedCache"
+      ],
+      "properties": {
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "noDirectoryCreate": { "type": "boolean", "const": true },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "noImageGeneration": { "type": "boolean", "const": true },
+        "noVideoGeneration": { "type": "boolean", "const": true },
+        "noTextToVideo": { "type": "boolean", "const": true },
+        "noFastVip": { "type": "boolean", "const": true },
+        "image2Preferred": { "type": "boolean", "const": true },
+        "seedanceJimengVideoParked": { "type": "boolean", "const": true },
+        "projectFactsAreProjectLocal": { "type": "boolean", "const": true },
+        "assetLibraryIsNotGallery": { "type": "boolean", "const": true },
+        "runtimeStateIsDerivedCache": { "type": "boolean", "const": true }
+      }
+    }
+  }
+}

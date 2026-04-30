@@ -844,10 +844,10 @@ Phase 9.4 checklist：
 ### Phase 20/22 已实现范围：Project Facts Integration
 
 - 新增 `src/core/projectFactsIntegration.ts`，提供 Project Store、Asset Library、Voice Source Library 与 runtime storyFlow / visualMemory / shots 的 pure builder，输出 Production Bible、Story Flow、Shot Spec、Shot Layout、Visual Memory、Spatial Memory、Scene Asset Pack、Voice Memory 的 project-local facts 接入状态。
-- 每类 facts 都输出 `sourceOfTruth`、`path`、`status`、`blockers`、`warnings` 和 `sourceRefs`；runtime-state 只作为 fallback / derived cache，不覆盖 Project Store / Asset Library / Voice Source Library 的 file-first 事实源。
+- 每类 facts 都输出 `sourceOfTruth`、`path`、`status`、`blockers`、`warnings` 和 `sourceRefs`；runtime-state 只作为 derived cache / diagnostic refs，不进入 `sourceOfTruth`，direct input 或 runtime-only Story / Visual / Voice facts 必须保持 blocked / missing，直到接入 Project Store / Asset Library / Voice Source Library。
 - Visual Consistency 接线摘要显式拆出 `masterScene`、`derivedViews`、`worldPosition`、`startEndDerivation`：Scene Asset Pack 已能提供 master/derived view 结构，Shot Layout 与 Spatial Memory 缺失时仍保持 blocker，接入后可升级为 structured。
 - 硬锁继续固定 dry-run / no file mutation / no directory create / no provider submit / no credential / no image/video generation / no text-to-video / no Fast/VIP；Image2 优先，Seedance/Jimeng video parked。
-- 新增 `npm run project-facts-integration:test`，覆盖 fixture Project Store、Visual Memory Asset Library、Voice Source Library、缺 Shot Layout / Spatial Memory blocker、Scene Asset Pack derived view readiness 和 hard lock drift。
+- 新增 `schemas/project_facts_integration.schema.json` 与 `npm run project-facts-integration:test`，覆盖 fixture Project Store、Visual Memory Asset Library、Voice Source Library、runtime/direct-only blocker、缺 Shot Layout / Spatial Memory blocker、Scene Asset Pack derived view readiness 和 hard lock drift。
 
 ### Phase 9.8 已实现范围：Task Envelope Builder
 
@@ -976,9 +976,10 @@ Phase 9.4 checklist：
 - `project.vibe` 写入为 `vibe_project_file`，包含 Project Store snapshot、fact file hash/path/sourceOfTruth 摘要，并固定 `runtimeStateRole=derived_cache`。
 - 写入范围只包含 project facts 和 derived cache：`project.vibe`、Production Bible、Story Flow、Visual Memory、Source Index、shot specs、`runtime-state.json`。路径必须 project-root-relative，禁止绝对路径、父级穿越、用户文件移动和删除。
 - Open mode 从 `project.vibe` 反序列化 Project Store snapshot，并重新走 `validateProjectStoreSnapshot`；runtime-state 仍不能成为项目事实源。
+- Phase 19 hardening 后，executor 会重新校验 gate shape / hard locks / canonical whitelist / directory allowlist / entry contentHash；Open mode 会校验 sidecar JSON 与 `project.vibe.factFiles` hash，runtime-state 只写派生 cache 且拒绝 credential / token / secret 类 key。
 - 新增 `schemas/project_store_io.schema.json` 并纳入 schema registry；schema 固定 `fileMutationScope=project_root_whitelist` 和 hard locks。
 - Hard locks 固定 `projectRootOnly=true`、`whitelistOnly=true`、`noAbsoluteContractPath=true`、`noParentTraversal=true`、`noUserFileMove=true`、`noDelete=true`、`noProviderSubmit=true`、`noImageGeneration=true`、`noVideoGeneration=true`、`noCredentialRead=true`、`noCredentialWrite=true`、`noArbitraryShell=true`、`runtimeStateIsDerivedCache=true`。
-- 新增 `npm run project-store-io:test`，使用 memory adapter 覆盖 create/open/save、runtime cache write、unsafe path fail-closed、schema const 和 registry 接入。
+- 新增 `npm run project-store-io:test`，使用 memory adapter 覆盖 create/open/save、runtime cache write、unsafe path fail-closed、tampered gate、runtime-state secret blocking、malformed/invalid open、sidecar drift、schema const 和 registry 接入。
 
 禁止项：
 
@@ -987,8 +988,8 @@ Phase 9.4 checklist：
 ### Phase 21/23 已实现范围：Minimal UI + Preview Player MVP
 
 - 主 Director surface 继续收敛到 Story Flow、Asset Library、Preview 和右侧 Selected Edit，不把工程控制台信息带回默认创作界面。
-- Preview Player MVP 在 UI 层新增 `buildPreviewPlayerQueue(...)`，从 `previewExport.draftPreview.events` 派生按时间排序的播放队列；`image_hold` 作为画面停留，`video_clip` 作为片段替换，缺失素材映射为 `missing_placeholder`。
-- Preview 页面呈现大画面 preview shell、播放按钮、短时间码、幕刻度和极简时间线；不展示 formal gate、provider、schema、manifest、TaskEnvelope、Image2 Runtime、Voice Source Library 等工程词。
+- Preview Player MVP 将 `buildPreviewPlayerQueue(...)` 收敛到 `src/core/previewPlayerQueue.ts`，从 `previewExport.draftPreview.events` 派生按时间排序的播放队列；`image_hold` 作为画面停留，有 `mediaPath` 的 `video_clip` 作为片段，缺失素材映射为 `missing_placeholder`。
+- Preview 页面呈现大画面 preview shell、播放按钮、短时间码、幕刻度和极简时间线；Play 会推进 current time 并按时间线切换 active shot，点击时间线 item 会 seek/select；不展示 formal gate、provider、schema、manifest、TaskEnvelope、Image2 Runtime、Voice Source Library 等工程词。
 - Asset Library 主界面继续强调一致性资产和 `locked` / `candidate` / `review` 状态，不展示 contact sheet，不把临时输出或诊断对象变成图片墙。
 - 右侧自然语言修改面板保持短状态和少量 badge；详细执行计划、工程锁和诊断字段继续留在 Diagnostics。
 - 新增 `npm run preview-player:test`，并扩展 `npm run minimal-ui:test` 覆盖 Phase 21/23：Preview Player 存在、主界面工程词为 0、Preview Player 文案短且稀疏。
@@ -1006,6 +1007,13 @@ Phase 24-30 先做 lightweight pure runtime plan，不做真实执行。新增 `
 - Phase 28：Voice/Audio Settings UI。只把 voice/audio 设置作为结构化项目事实；BGM prompt 不能进入视频 provider prompt。
 - Phase 29：Codex CLI Adapter Spike。必须先有 Phase 26 replacement proof，再接真实 Codex spawn/resume 的 adapter shape；输入仍是 validated envelope，输出仍是 structured result，provider submit 仍然 blocked。
 - Phase 30：Provider Enablement Gate。必须同时具备 user confirmation token placeholder、complete enablement packet、watcher/manifest/QA closed loop，并确认没有 Fast、VIP、text-to-video 或 BGM prompt 路径；即使 ready，也仍然不能提交 provider，直到后续 final gate 明确允许。
+
+Phase 24 真实 gate 补充：
+
+- 新增 `SubagentRuntimeGateReceipt` 作为 typed evidence：输入必须同时提供 `ProjectFactsIntegrationState` evidence、`SubagentWorkerRuntimePlan` evidence，以及 `SubagentTaskEnvelope` 或 `SubagentWorkerRuntimeSlot` evidence。
+- 只有 project facts 为 `ready`、没有任何 `runtime_state` source-of-truth、Phase16 worker runtime validation 无错误、envelope/slot validation 有效、无 free text、`commandPlan.argumentSource=validated_envelope_only`，并且 provider submit / live submit 均被锁死时，receipt 才能输出 `readiness=ready_for_worker_permission_gate`。
+- 任一 evidence 缺失、任何 blocker、provider submit attempt、hard lock drift、invalid envelope 或 free text worker start 都必须 fail closed：`readiness=blocked`，并在 `blockedReasons` 中保留明确原因。
+- Phase 24 仍然不 spawn、不 shell、不读写 credentials、不提交 provider、不写文件；它只产出结构化 gate receipt，供 PhaseRoadmapRuntime 后续用 `roadmapEvidence` 消费。
 
 统一 hard locks：
 

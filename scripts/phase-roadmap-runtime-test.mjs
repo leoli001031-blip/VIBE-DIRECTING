@@ -32,9 +32,103 @@ function phase(plan, phaseId) {
   return found;
 }
 
+function projectFactsEvidence(overrides = {}) {
+  return {
+    kind: "project_facts_integration",
+    phase: "phase20_project_facts_integration",
+    status: "ready",
+    summary: {
+      blockerCount: 0,
+      blocked: 0,
+      missing: 0,
+    },
+    hardLocks: {
+      noProviderSubmit: true,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      noFastVip: true,
+      seedanceJimengVideoParked: true,
+      projectFactsAreProjectLocal: true,
+    },
+    ...overrides,
+  };
+}
+
+function subagentEnvelopeValidatorReceipt(overrides = {}) {
+  return {
+    kind: "subagent_envelope_validator",
+    status: "ready",
+    valid: true,
+    validatedEnvelopeRequired: true,
+    structuredResultRequired: true,
+    freeTextWorkerBlocked: true,
+    hardLocks: {
+      noFreeTextTask: true,
+      validatedEnvelopeRequired: true,
+      structuredResultRequired: true,
+      providerSubmissionForbidden: true,
+      liveSubmitAllowed: false,
+    },
+    ...overrides,
+  };
+}
+
+function providerLiveGateReceipt(overrides = {}) {
+  return {
+    kind: "provider_live_gate",
+    phase: "phase_11_provider_adapter_live_gate",
+    status: "ready_for_confirmation",
+    confirmationTokenPlaceholderPresent: true,
+    providerPacketComplete: true,
+    forbiddenProviderModesAbsent: true,
+    summary: {
+      readyForConfirmation: 1,
+      blocked: 0,
+      parked: 0,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialStorage: false,
+    },
+    hardLocks: {
+      noProviderSubmit: true,
+      providerSubmissionForbidden: true,
+      liveSubmitAllowed: false,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      fastModelForbidden: true,
+      vipChannelForbidden: true,
+      textToVideoMainPathForbidden: true,
+      bgmInVideoPromptForbidden: true,
+    },
+    ...overrides,
+  };
+}
+
+function watcherManifestQaClosedLoopReceipt(overrides = {}) {
+  return {
+    kind: "watcher_manifest_qa_closed_loop",
+    status: "closed",
+    closedLoop: true,
+    watcherReady: true,
+    manifestMatcherReady: true,
+    qaReportReady: true,
+    ...overrides,
+  };
+}
+
+function typedEvidence(overrides = {}) {
+  return {
+    projectFactsIntegration: projectFactsEvidence(overrides.projectFactsIntegration),
+    subagentEnvelopeValidator: subagentEnvelopeValidatorReceipt(overrides.subagentEnvelopeValidator),
+    providerLiveGate: providerLiveGateReceipt(overrides.providerLiveGate),
+    watcherManifestQaClosedLoop: watcherManifestQaClosedLoopReceipt(overrides.watcherManifestQaClosedLoop),
+  };
+}
+
 function readyInput() {
   return {
     generatedAt: "2026-05-01T00:00:00.000Z",
+    evidence: typedEvidence(),
     projectFactsValidated: true,
     subagentEnvelopeValidatorReady: true,
     knowledgePackManagerReady: true,
@@ -56,6 +150,69 @@ const {
   phaseRoadmapRuntimeHardLocks,
   phaseRoadmapPhaseIds,
 } = await loadPhaseRoadmapRuntime();
+
+const legacyOnlyPhase24 = buildPhaseRoadmapRuntimePlan({
+  generatedAt: "2026-05-01T00:00:00.000Z",
+  projectFactsValidated: true,
+  subagentEnvelopeValidatorReady: true,
+});
+const legacyOnlyPhase24Gate = phase(legacyOnlyPhase24, "phase_24_subagent_runtime_gate");
+assert(legacyOnlyPhase24Gate.readiness === "blocked", "Phase 24 must block when typed evidence is missing");
+assert(
+  legacyOnlyPhase24Gate.blockedReasons.includes("project_facts_typed_evidence_missing"),
+  "Phase 24 must explain missing project facts typed evidence",
+);
+assert(
+  legacyOnlyPhase24Gate.blockedReasons.includes("subagent_envelope_validator_receipt_missing"),
+  "Phase 24 must explain missing subagent validator receipt",
+);
+assert(
+  legacyOnlyPhase24.evidenceSummary.typedEvidenceRequiredForPhase24 === true,
+  "Phase 24 evidence summary must require typed evidence",
+);
+assert(
+  legacyOnlyPhase24.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "projectFactsIntegration" &&
+      decision.source === "legacy_boolean_override" &&
+      decision.ready === false,
+  ),
+  "Phase 24 project facts boolean must be recorded as a blocked legacy override without typed evidence",
+);
+assert(
+  legacyOnlyPhase24Gate.notes.some((note) => note.includes("not suitable proof for real Phase 24")),
+  "Phase 24 notes must call out boolean readiness as legacy-only proof",
+);
+
+const typedPhase24Ready = buildPhaseRoadmapRuntimePlan({
+  generatedAt: "2026-05-01T00:00:00.000Z",
+  evidence: {
+    projectFactsIntegration: projectFactsEvidence(),
+    subagentEnvelopeValidator: subagentEnvelopeValidatorReceipt(),
+  },
+});
+assert(
+  phase(typedPhase24Ready, "phase_24_subagent_runtime_gate").readiness === "ready",
+  "Phase 24 must be ready with typed project facts evidence and a ready validator receipt",
+);
+
+const typedPhase24InvalidValidator = buildPhaseRoadmapRuntimePlan({
+  generatedAt: "2026-05-01T00:00:00.000Z",
+  evidence: {
+    projectFactsIntegration: projectFactsEvidence(),
+    subagentEnvelopeValidator: subagentEnvelopeValidatorReceipt({
+      status: "invalid",
+      valid: false,
+      validation: { ok: false, errors: [] },
+    }),
+  },
+});
+const invalidValidatorPhase24 = phase(typedPhase24InvalidValidator, "phase_24_subagent_runtime_gate");
+assert(invalidValidatorPhase24.readiness === "blocked", "Phase 24 must block if validator receipt is not ready");
+assert(
+  invalidValidatorPhase24.blockedReasons.includes("validated_subagent_task_envelope_gate_missing"),
+  "Phase 24 validator-ready blocker missing",
+);
 
 const blockedBeforeFacts = buildPhaseRoadmapRuntimePlan({
   generatedAt: "2026-05-01T00:00:00.000Z",
@@ -92,6 +249,19 @@ assert(mockRunnerPlan.adapterBoundary.phase26.canSubmitProvider === false, "Phas
 
 const blockedProviderGate = buildPhaseRoadmapRuntimePlan({
   ...readyInput(),
+  evidence: typedEvidence({
+    providerLiveGate: {
+      confirmationTokenPlaceholderPresent: false,
+      forbiddenProviderModesAbsent: false,
+    },
+    watcherManifestQaClosedLoop: {
+      status: "blocked",
+      closedLoop: false,
+      watcherReady: true,
+      manifestMatcherReady: false,
+      qaReportReady: true,
+    },
+  }),
   providerConfirmationTokenPlaceholderPresent: false,
   watcherManifestQaClosedLoop: false,
   forbiddenProviderModesAbsent: false,
@@ -105,6 +275,53 @@ for (const blocker of [
 ]) {
   assert(phase30Blocked.blockedReasons.includes(blocker), `Phase 30 blocker ${blocker} missing`);
 }
+
+const omittedForbiddenProviderModes = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    providerLiveGate: {
+      forbiddenProviderModesAbsent: undefined,
+    },
+  }),
+  forbiddenProviderModesAbsent: undefined,
+});
+assert(
+  phase(omittedForbiddenProviderModes, "phase_30_provider_enablement_gate").blockedReasons.includes(
+    "forbidden_provider_mode_or_prompt_present",
+  ),
+  "Phase 30 must fail closed when forbiddenProviderModesAbsent is omitted",
+);
+
+const falseForbiddenProviderModes = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    providerLiveGate: {
+      forbiddenProviderModesAbsent: false,
+    },
+  }),
+  forbiddenProviderModesAbsent: false,
+});
+assert(
+  phase(falseForbiddenProviderModes, "phase_30_provider_enablement_gate").blockedReasons.includes(
+    "forbidden_provider_mode_or_prompt_present",
+  ),
+  "Phase 30 must fail closed when forbiddenProviderModesAbsent is false",
+);
+
+const trueForbiddenProviderModes = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    providerLiveGate: {
+      forbiddenProviderModesAbsent: true,
+    },
+  }),
+  forbiddenProviderModesAbsent: true,
+});
+assert(
+  phase(trueForbiddenProviderModes, "phase_30_provider_enablement_gate").readiness === "ready",
+  "Phase 30 may pass only when forbiddenProviderModesAbsent is explicitly true and other gates are ready",
+);
+
 assert(
   blockedProviderGate.providerEnablementGate.userConfirmationTokenPlaceholderRequired === true,
   "Phase 30 must require a confirmation token placeholder",
@@ -129,6 +346,10 @@ assert(readyPlan.summary.providerSubmitAllowed === 0, "provider submit must stay
 assert(readyPlan.summary.credentialAccessAllowed === false, "credential access must be false");
 assert(readyPlan.summary.arbitraryShellAllowed === false, "arbitrary shell must be false");
 assert(readyPlan.summary.freeTextWorkerAllowed === false, "free text workers must be false");
+assert(
+  readyPlan.evidenceSummary.decisions.every((decision) => decision.ready === true),
+  "complete typed fixture should make every evidence decision ready",
+);
 assert(phaseRoadmapPhaseIds().length === 7, "phase id list should cover Phase 24-30");
 
 const phase26Ready = phase(readyPlan, "phase_26_agent_cli_mock_runner");
@@ -175,6 +396,67 @@ assert(
 for (const item of readyPlan.phases.filter((phaseItem) => phaseItem.phaseId !== "phase_27_export_worker_mvp")) {
   assert(item.hardLocks.fileMutationAllowed === false, `${item.phaseId} must not allow file mutation`);
 }
+
+const schemaPath = "schemas/phase_roadmap_runtime.schema.json";
+assert(fs.existsSync(schemaPath), "phase roadmap runtime schema file must exist");
+const schema = JSON.parse(fs.readFileSync(schemaPath, "utf8"));
+const schemaRegistrySource = fs.readFileSync("src/core/schemaRegistry.ts", "utf8");
+assert(
+  schemaRegistrySource.includes("phase_roadmap_runtime.schema.json") &&
+    schemaRegistrySource.includes("PhaseRoadmapRuntimePlan"),
+  "schema registry must include PhaseRoadmapRuntimePlan",
+);
+assert(schema.properties.schemaVersion.const === "0.1.0", "schema must pin schemaVersion");
+assert(schema.properties.phaseRange.const === "phase_24_to_30", "schema must pin Phase 24-30 range");
+assert(schema.$defs.summary.properties.totalPhases.const === 7, "schema summary must pin totalPhases=7");
+assert(schema.$defs.summary.properties.providerSubmitAllowed.const === 0, "schema summary must pin providerSubmitAllowed=0");
+assert(schema.$defs.summary.properties.credentialAccessAllowed.const === false, "schema summary must forbid credential access");
+assert(schema.$defs.summary.properties.arbitraryShellAllowed.const === false, "schema summary must forbid arbitrary shell");
+assert(schema.$defs.summary.properties.freeTextWorkerAllowed.const === false, "schema summary must forbid free-text workers");
+assert(schema.$defs.hardLocks.properties.noFreeTextWorker.const === true, "schema hard locks must pin noFreeTextWorker=true");
+assert(schema.$defs.hardLocks.properties.validatedEnvelopeRequired.const === true, "schema hard locks must pin validated envelope");
+assert(schema.$defs.hardLocks.properties.structuredResultRequired.const === true, "schema hard locks must pin structured result");
+assert(schema.$defs.hardLocks.properties.noProviderSubmit.const === true, "schema hard locks must pin no provider submit");
+assert(schema.$defs.hardLocks.properties.noCredentialRead.const === true, "schema hard locks must pin no credential read");
+assert(schema.$defs.hardLocks.properties.noCredentialWrite.const === true, "schema hard locks must pin no credential write");
+assert(schema.$defs.hardLocks.properties.noArbitraryShell.const === true, "schema hard locks must pin no arbitrary shell");
+assert(schema.$defs.hardLocks.properties.liveSubmitAllowed.const === false, "schema hard locks must pin live submit false");
+assert(
+  schema.$defs.adapterBoundary.properties.phase26.properties.runnerKind.const === "mock_noop",
+  "schema adapter boundary must pin Phase 26 mock/no-op",
+);
+assert(
+  schema.$defs.adapterBoundary.properties.phase26.properties.canSubmitProvider.const === false,
+  "schema adapter boundary must block Phase 26 provider submit",
+);
+assert(
+  schema.$defs.adapterBoundary.properties.phase29.properties.runnerKind.const === "codex_cli_adapter_spike",
+  "schema adapter boundary must pin Phase 29 adapter spike",
+);
+assert(
+  schema.$defs.adapterBoundary.properties.phase29.properties.requiresPhase26ReplacementProof.const === true,
+  "schema adapter boundary must require Phase 26 replacement proof",
+);
+assert(
+  schema.$defs.providerEnablementGate.properties.userConfirmationTokenPlaceholderRequired.const === true,
+  "schema provider gate must require confirmation token placeholder",
+);
+assert(
+  schema.$defs.providerEnablementGate.properties.packetCompleteRequired.const === true,
+  "schema provider gate must require complete packet",
+);
+assert(
+  schema.$defs.providerEnablementGate.properties.watcherManifestQaClosedLoopRequired.const === true,
+  "schema provider gate must require watcher/manifest/QA closed loop",
+);
+assert(
+  schema.$defs.providerEnablementGate.properties.noFastVipTextToVideoOrBgmPromptRequired.const === true,
+  "schema provider gate must require forbidden provider modes absent",
+);
+assert(
+  schema.$defs.providerEnablementGate.properties.canSubmitProvider.const === false,
+  "schema provider gate must pin canSubmitProvider=false",
+);
 
 const source = fs.readFileSync("src/core/phaseRoadmapRuntime.ts", "utf8");
 for (const forbiddenCode of ["child_process", "spawn(", "exec(", "fetch(", "XMLHttpRequest", "process.env"]) {
