@@ -353,9 +353,10 @@
 
 .minimal-agent-input {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   border-bottom: 1px solid rgba(37, 40, 34, 0.24);
+  gap: 10px;
 }
 
 .preview-shell .minimal-agent-input {
@@ -384,12 +385,20 @@
 
 .minimal-agent-input button,
 .preview-time-row button {
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
+}
+
+.minimal-agent-input button {
+  min-height: 34px;
+  white-space: nowrap;
+  font-size: 12px;
 }
 
 .minimal-agent-input button:disabled {
@@ -401,6 +410,38 @@
   min-height: 16px;
   color: inherit;
   opacity: 0.62;
+}
+
+.minimal-agent-status {
+  color: rgba(37, 40, 34, 0.84);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.preview-shell .minimal-agent-status {
+  color: rgba(242, 238, 230, 0.82);
+}
+
+.minimal-agent-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.minimal-agent-badges small {
+  min-height: 0;
+  border: 1px solid rgba(37, 40, 34, 0.14);
+  border-radius: 999px;
+  padding: 5px 8px;
+  line-height: 1;
+}
+
+.preview-shell .minimal-agent-badges small {
+  border-color: rgba(242, 238, 230, 0.18);
+}
+
+.minimal-agent-confirm {
+  opacity: 0.78;
 }
 
 .minimal-preview-view {

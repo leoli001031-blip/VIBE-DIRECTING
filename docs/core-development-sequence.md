@@ -890,6 +890,13 @@ Phase 9.4 checklist：
 
 - Phase 12 不复制、移动、写入、渲染或创建任何文件/目录，不生成 FCPXML/EDL/PR/剪映/达芬奇工程文件，不提交 provider。
 
+### Phase 13 已实现范围：Director UI 接入 Dry-run Workflow
+
+- 右侧 Selected Edit / Agent Panel 已接入 `buildDirectorWorkflowState`，从 shot、asset、section selection 生成 UI 可读的 dry-run workflow state。
+- 面板只展示 scope、自然语言输入、状态短句、少量 badge、下一步短句和必要确认提示；transaction id、operation enum、工程队列、provider、manifest、schema、task envelope 等细节继续留在 Diagnostics。
+- 该接线只做本地预览计划，不真实提交 provider，不启动 worker，不读取 credential，不写项目文件，也不把 dry-run 结果当作已执行变更。
+- `scripts/minimal-ui-contract-test.mjs` 增加 Phase 13 合同断言：MinimalAgentPanel 必须使用 director workflow，且不能直接调用旧 transaction/reflow builder 或暴露工程词。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

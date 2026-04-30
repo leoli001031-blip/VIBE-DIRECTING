@@ -25,6 +25,7 @@
     "orchestrator:test": "node scripts/local-orchestrator-test.mjs",
     "minimal-ui:test": "node scripts/minimal-ui-contract-test.mjs",
     "director-edit:test": "node scripts/director-edit-test.mjs",
+    "director-workflow:test": "node scripts/director-workflow-test.mjs",
     "task-packet:test": "node scripts/task-packet-builder-test.mjs",
     "visual-consistency:test": "node scripts/visual-consistency-test.mjs",
     "dry-run-e2e:test": "node scripts/dry-run-production-e2e-test.mjs",

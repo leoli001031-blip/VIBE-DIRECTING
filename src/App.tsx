@@ -17,7 +17,6 @@ import {
   Radio,
   RefreshCw,
   Search,
-  Send,
   Settings,
   ShieldAlert,
   Sparkles,
@@ -32,9 +31,7 @@ import type {
   PreviewEvent,
   ProjectAudit,
   ProjectPreviewExportState,
-  ReflowImpactReport,
   ShotRecord,
-  StoryChangeTransaction,
   UiMode,
   WorkflowStage,
 } from "./core/types";
@@ -48,11 +45,7 @@ import {
   withRuntimeDefaults,
 } from "./core/projectStateBuilder";
 import { ensureRuntimeEnvironment } from "./core/runtimeConfig";
-import {
-  buildReflowImpactReport,
-  buildStoryChangeTransaction,
-  describeReflowImpact,
-} from "./core/storyChange";
+import { buildDirectorWorkflowState, type DirectorWorkflowStatus } from "./core/directorWorkflow";
 import { fallbackAudit } from "./data/fallbackAudit";
 
 const gateNames = ["identity", "scene", "pair", "story", "prop", "style"] as const;
@@ -3409,127 +3402,6 @@ function StoryWorkspace({
   );
 }
 
-interface DirectorDryRunResult {
-  transaction: StoryChangeTransaction;
-  report: ReflowImpactReport;
-  summary: string;
-}
-
-function formatPlanStep(step: ReflowImpactReport["regenerationPlan"][number]) {
-  const label = step.step.replace(/_/g, " ");
-  const targets = step.targetIds.length ? step.targetIds.slice(0, 3).join(", ") : "project";
-  const overflow = step.targetIds.length > 3 ? ` +${step.targetIds.length - 3}` : "";
-  return `${label}: ${targets}${overflow}`;
-}
-
-function DirectorInput({
-  runtimeState,
-  shot,
-  asset,
-  nextStep,
-}: {
-  runtimeState: ProjectRuntimeState;
-  shot?: ShotRecord;
-  asset?: AssetRecord;
-  nextStep: string;
-}) {
-  const [text, setText] = useState("");
-  const [status, setStatus] = useState("No change plan generated yet");
-  const [dryRun, setDryRun] = useState<DirectorDryRunResult | undefined>();
-  const selectedContext = shot ? `${shot.id} · ${shot.storyFunction}` : asset ? `${asset.type} · ${asset.name}` : "Project";
-  const understanding = shot
-    ? `System sees ${shot.status}; video ${shot.videoPath ? "present" : "missing"}; pair gate ${shot.gates.pair}.`
-    : asset
-      ? `System sees ${asset.status}; reference lock ${asset.lockedStatus}; future reference ${asset.safeForFutureReference ? "allowed" : "not approved"}.`
-      : "System is scoped to the whole project.";
-  const previewDisabled = !text.trim();
-
-  function previewChangePlan() {
-    const userIntent = text.trim();
-    if (!userIntent) {
-      setStatus("Add a natural-language change before previewing.");
-      return;
-    }
-
-    const targetIds = [shot?.id, asset?.id].filter((id): id is string => Boolean(id));
-    const transaction = buildStoryChangeTransaction({
-      userIntent,
-      targetIds,
-      context: {
-        selectedShotId: shot?.id,
-        selectedSectionId: shot?.sectionId || shot?.actId,
-        knownAssetIds: runtimeState.visualMemory.assets.map((item) => item.id),
-        knownCharacterIds: runtimeState.visualMemory.assets.filter((item) => item.type === "character").map((item) => item.id),
-        knownSceneIds: runtimeState.visualMemory.assets.filter((item) => item.type === "scene").map((item) => item.id),
-      },
-    });
-    const report = buildReflowImpactReport(transaction, runtimeState);
-    setDryRun({ transaction, report, summary: describeReflowImpact(report) });
-    setStatus("Preview only. No project files changed and no provider task was submitted.");
-  }
-
-  return (
-    <div className="director-input">
-      <div className="input-header">
-        <Sparkles size={16} />
-        <span>Director Input</span>
-      </div>
-      <div className="context-chip">
-        <span>Selected</span>
-        <strong>{selectedContext}</strong>
-        <small>{understanding}</small>
-        <small>{nextStep}</small>
-      </div>
-      <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Describe a change in natural language. This will preview a local dry-run plan only." />
-      <button
-        disabled={previewDisabled}
-        onClick={previewChangePlan}
-      >
-        <Send size={15} />
-        Preview Change Plan
-      </button>
-      <small>{status}</small>
-      {dryRun && (
-        <section className="change-plan">
-          <div className="change-plan-head">
-            <span>Change Plan</span>
-            <StatusPill value={dryRun.transaction.status} />
-          </div>
-          <div className="field-grid compact">
-            <label>Transaction</label>
-            <span>{dryRun.transaction.id}</span>
-            <label>Operation</label>
-            <span>{dryRun.transaction.operation}</span>
-            <label>Intent</label>
-            <span>{dryRun.transaction.intentType}</span>
-            <label>Scope</label>
-            <span>{dryRun.transaction.impactScope}</span>
-            <label>Confirm</label>
-            <span>{dryRun.transaction.requiresUserConfirmation ? "required" : "not required"}</span>
-            <label>Stale</label>
-            <span>{dryRun.report.staleArtifactIds.length} artifact(s)</span>
-          </div>
-          <p>{dryRun.summary}</p>
-          {dryRun.transaction.confirmationReasons.length > 0 && (
-            <div className="change-plan-note">
-              {dryRun.transaction.confirmationReasons.slice(0, 2).map((reason) => (
-                <small key={reason}>{reason}</small>
-              ))}
-            </div>
-          )}
-          <div className="plan-list">
-            {dryRun.report.regenerationPlan.slice(0, 4).map((step) => (
-              <small key={`${step.step}-${step.targetIds.join("-")}`}>{formatPlanStep(step)}</small>
-            ))}
-            {!dryRun.report.regenerationPlan.length && <small>No regeneration steps resolved for this dry run.</small>}
-          </div>
-          <small className="forbidden-actions">Forbidden: {dryRun.report.forbiddenActions.join(", ")}</small>
-        </section>
-      )}
-    </div>
-  );
-}
-
 function PreviewTimeline({
   view,
   previewExport,
@@ -3831,49 +3703,85 @@ function MinimalAgentPanel({
   shot,
   asset,
   sectionLabel,
+  sectionId,
 }: {
   runtimeState: ProjectRuntimeState;
   shot?: ShotRecord;
   asset?: AssetRecord;
   sectionLabel?: string;
+  sectionId?: string;
 }) {
   const [text, setText] = useState("");
   const [status, setStatus] = useState("Ready");
+  const [workflow, setWorkflow] = useState<ReturnType<typeof buildDirectorWorkflowState> | undefined>();
   const scopeLabel = selectedScopeLabel(shot, asset, sectionLabel);
-  const impactLabel = shot ? "1 shot" : asset ? "asset" : sectionLabel ? "section" : "project";
 
   function prepareChange() {
     const userIntent = text.trim();
-    if (!userIntent) return;
-    const targetIds = [shot?.id, asset?.id].filter((id): id is string => Boolean(id));
-    const transaction = buildStoryChangeTransaction({
+    if (!userIntent) {
+      setStatus("Add a change first");
+      return;
+    }
+    const nextWorkflow = buildDirectorWorkflowState({
+      runtimeState,
       userIntent,
-      targetIds,
-      context: {
+      selection: {
         selectedShotId: shot?.id,
-        selectedSectionId: shot?.sectionId || shot?.actId,
-        knownAssetIds: runtimeState.visualMemory.assets.map((item) => item.id),
-        knownCharacterIds: runtimeState.visualMemory.assets.filter((item) => item.type === "character").map((item) => item.id),
-        knownSceneIds: runtimeState.visualMemory.assets.filter((item) => item.type === "scene").map((item) => item.id),
+        selectedAssetId: asset?.id,
+        sectionId: !shot && !asset ? sectionId : undefined,
       },
     });
-    const report = buildReflowImpactReport(transaction, runtimeState);
-    setStatus(report.regenerationPlan.length ? `Will affect ${impactLabel}` : "No visible change needed");
-    setText("");
+    setWorkflow(nextWorkflow);
+    setStatus(workflowStatusLabel(nextWorkflow.status));
   }
+
+  const badges = workflow ? workflowBadgeLabels(workflow).slice(0, 5) : ["Dry-run preview"];
+  const nextStep = workflow ? workflowNextStepLabel(workflow.status) : "Describe a story edit to preview the plan.";
+  const confirmationPrompt = workflow?.confirmationRequired ? "Confirm before this becomes an editable plan." : "";
 
   return (
     <aside className="minimal-agent-panel">
       <span>{scopeLabel}</span>
       <div className="minimal-agent-input">
         <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Refine selected beat" />
-        <button disabled={!text.trim()} onClick={prepareChange} aria-label="Send edit">
-          <Send size={17} />
+        <button disabled={!text.trim()} onClick={prepareChange}>
+          <Eye size={15} />
+          Preview plan
         </button>
       </div>
-      <small>{status}</small>
+      <strong className="minimal-agent-status">{status}</strong>
+      <div className="minimal-agent-badges" aria-label="Plan summary">
+        {badges.map((badge) => (
+          <small key={badge}>{badge}</small>
+        ))}
+      </div>
+      <small>{nextStep}</small>
+      {confirmationPrompt && <small className="minimal-agent-confirm">{confirmationPrompt}</small>}
     </aside>
   );
+}
+
+function workflowStatusLabel(status: DirectorWorkflowStatus) {
+  if (status === "dry_run_ready") return "Ready to review";
+  if (status === "pending_confirmation") return "Needs confirmation";
+  if (status === "blocked_missing_context") return "Needs context";
+  return "Blocked";
+}
+
+function workflowNextStepLabel(status: DirectorWorkflowStatus) {
+  if (status === "dry_run_ready") return "Review the plan before any change.";
+  if (status === "pending_confirmation") return "Confirm the selected edit after review.";
+  if (status === "blocked_missing_context") return "Add the missing selection context.";
+  return "Rewrite this as a story edit.";
+}
+
+function workflowBadgeLabels(workflow: ReturnType<typeof buildDirectorWorkflowState>) {
+  const labels = ["Dry-run preview", workflow.scopeLabel];
+  if (workflow.summary.readyTaskPackets > 0) labels.push(`${workflow.summary.readyTaskPackets} ready step(s)`);
+  if (workflow.summary.blockedTaskPackets > 0) labels.push("Needs context");
+  if (workflow.confirmationRequired) labels.push("Confirm first");
+  if (workflow.summary.exportPackageStatus === "ready") labels.push("Preview ready");
+  return Array.from(new Set(labels));
 }
 
 function AudioPlanSummaryStrip({ audioPlanning, selectedShot }: { audioPlanning: AudioPlanningState; selectedShot?: ShotRecord }) {
@@ -4028,8 +3936,9 @@ function DirectorMode({
       <MinimalAgentPanel
         runtimeState={runtimeState}
         shot={directorView === "assets" ? undefined : selectedShot}
-        asset={selectedAsset}
+        asset={directorView === "assets" ? selectedAsset : undefined}
         sectionLabel={sectionLabel}
+        sectionId={directorView === "story" && !selectedShot ? activeSection?.id : undefined}
       />
     </div>
   );

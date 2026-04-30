@@ -96,6 +96,7 @@ const sequenceDoc = readText(sequenceDocPath);
 const contractDoc = readText(contractDocPath);
 
 const directorMode = findFunctionBody(appSource, "DirectorMode");
+const minimalAgentPanel = findFunctionBody(appSource, "MinimalAgentPanel");
 const diagnosticsMode = findFunctionBody(appSource, "DiagnosticsMode");
 const appBody = findFunctionBody(appSource, "App");
 const failures = [];
@@ -119,9 +120,22 @@ checkMessage(requireWithin(contractDoc, /Minimal Director UI Contract/i, "minima
 checkMessage(requireWithin(contractDoc, /Diagnostics/i, "diagnostics boundary in minimal UI contract doc"));
 
 checkMessage(requireWithin(appSource, /function\s+DirectorMode\s*\(/, "DirectorMode component"));
+checkMessage(requireWithin(appSource, /function\s+MinimalAgentPanel\s*\(/, "MinimalAgentPanel component"));
 checkMessage(requireWithin(appSource, /function\s+DiagnosticsMode\s*\(/, "DiagnosticsMode component"));
 checkMessage(requireWithin(appBody, /mode\s*===\s*"diagnostics"/, "Diagnostics entry in App mode switch/rendering"));
 checkMessage(requireWithin(appBody, /mode\s*===\s*"director"/, "Director mode rendering"));
+checkMessage(requireWithin(minimalAgentPanel, /buildDirectorWorkflowState\s*\(/, "MinimalAgentPanel must use buildDirectorWorkflowState"));
+check(
+  !/buildStoryChangeTransaction\s*\(/.test(minimalAgentPanel),
+  "MinimalAgentPanel must not call buildStoryChangeTransaction directly",
+);
+check(
+  !/buildReflowImpactReport\s*\(/.test(minimalAgentPanel),
+  "MinimalAgentPanel must not call buildReflowImpactReport directly",
+);
+checkMessage(requireWithin(minimalAgentPanel, /selectedShotId\s*:/, "MinimalAgentPanel selectedShotId workflow selection"));
+checkMessage(requireWithin(minimalAgentPanel, /selectedAssetId\s*:/, "MinimalAgentPanel selectedAssetId workflow selection"));
+checkMessage(requireWithin(minimalAgentPanel, /sectionId\s*:/, "MinimalAgentPanel sectionId workflow selection"));
 
 checkMessage(requireAny(appSource, [/Asset Library/, /function\s+AssetLibrary/, /className="[^"]*asset-library/], "Asset Library main UI naming"));
 checkMessage(requireAny(appSource, [/Preview/, /function\s+PreviewTimeline/, /className="[^"]*preview/], "Preview main UI"));
@@ -162,6 +176,20 @@ check(
   diagnosticsTermTotal >= Math.max(4, directorTermTotal),
   "DiagnosticsMode should remain the primary home for engineering/status terms",
 );
+
+const minimalDirectorSurface = `${directorMode}\n${minimalAgentPanel}`;
+const forbiddenMinimalTerms = [
+  ["Queue Shell", /Queue\s+Shell/i],
+  ["Provider Lock", /Provider\s+Lock/i],
+  ["Task Envelope", /Task\s+Envelope|taskEnvelope/i],
+  ["forbiddenActions", /forbiddenActions/i],
+  ["manifest", /manifest/i],
+  ["schema", /schema/i],
+  ["credential/API key", /credential|API\s*key/i],
+];
+for (const [term, pattern] of forbiddenMinimalTerms) {
+  check(!pattern.test(minimalDirectorSurface), `DirectorMode/MinimalAgentPanel must not expose ${term}`);
+}
 
 const appContactSheetCount = countLiteral(appSource, "contactSheets");
 const diagnosticsContactSheetCount = countLiteral(diagnosticsMode, "contactSheets");
