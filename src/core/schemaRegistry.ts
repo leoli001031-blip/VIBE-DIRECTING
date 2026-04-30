@@ -136,6 +136,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "AudioPlan",
   },
   {
+    fileName: "voice_source_library.schema.json",
+    id: "https://vibecore.local/schemas/voice_source_library.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 18 dry-run voice source metadata library for user-added voice, music, and ambience anchors without credentials or provider submission.",
+    typeName: "VoiceSourceLibraryState",
+  },
+  {
     fileName: "tool_detection_report.schema.json",
     id: "https://vibecore.local/schemas/tool_detection_report.schema.json",
     version: schemaVersion,

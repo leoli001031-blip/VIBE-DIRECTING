@@ -946,6 +946,21 @@ Phase 9.4 checklist：
 - 新增 `npm run image-keyframe:test`，覆盖 Image2-only、end-from-start、独立 end frame 阻断、reference 分类、provider/credential/file/shell locks、schema const 和 project runtime schema 接入。
 - `scripts/minimal-ui-contract-test.mjs` 增加 Phase 17 断言：Diagnostics 必须挂载 Image2/keyframe runtime 区块，同时主 Director surface 禁止出现 Image2 runtime、Image2 Asset、Keyframe Runtime、keyframe pair、end-frame derivation、provider locks 等工程词。
 
+### Phase 18 已实现范围：Voice Source Library / Voice Memory
+
+- 新增 `src/core/voiceSourceLibrary.ts` pure builder：管理旁白、角色对白、品牌声线、音乐风格和环境声风格的 project-local metadata library。
+- Voice Source Library 只保存音源事实、用途约束、授权/商用状态、候选/锁定/拒绝状态和文本约束；用户选择的本地 sample path 会被 redacted 为 `user_import:<id>`，不复制 sample audio，不保存绝对路径。
+- 新增 `schemas/voice_source_library.schema.json` 并接入 `ProjectRuntimeState.voiceSourceLibrary`；runtime `voiceSources` 和 `audioPlanning.voiceSourceRegistry` 从该 library 派生，继续保持 dry-run。
+- CRUD 只允许 metadata 级别的 add/update/status change；包含 `apiKey`、token、credential、secret、password、private key 等字段的输入会进入 rejected input，不进入正式 sources。
+- `locked` 音源必须有明确 consent 和 commercial use 状态；未知授权或商用状态会自动降级为 `candidate`，只能 draft-only。
+- Settings / Diagnostics 新增 `Voice Source Library (dry-run)` 摘要，展示 locked/candidate/rejected 和前几条音源；主 Director surface 不展示音源工程细节。
+- Hard locks 固定 `dryRunOnly=true`、`noProviderSubmit=true`、`providerSubmissionForbidden=true`、`liveSubmitAllowed=false`、`noCredentialRead=true`、`noCredentialWrite=true`、`noSecretStorage=true`、`noSampleAudioCopy=true`、`noFileMutation=true`、`noTtsSubmit=true`、`noMusicSubmit=true`、`noBgmInVideoProvider=true`。
+- 新增 `npm run voice-source:test`，覆盖 placeholder seed、locked narrator、unknown 授权降级 candidate、music profile、secret input rejection、status update、runtime export、voice memory export、schema const 和 project runtime schema 接入。
+
+禁止项：
+
+- Phase 18 不接真实 TTS/BGM API，不读取/保存 credentials，不复制音频文件，不提交 provider，不把 BGM 写进视频 provider prompt。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

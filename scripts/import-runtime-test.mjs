@@ -6822,6 +6822,19 @@ const audit = {
   },
 };
 const runtimeState = buildProjectRuntimeState(audit, knowledgeManifest, generatedAt);
+if (!runtimeState.voiceSourceLibrary) {
+  const { buildVoiceSourceLibraryState, toRuntimeVoiceSources } = await importTs("src/core/voiceSourceLibrary.ts");
+  runtimeState.voiceSourceLibrary = buildVoiceSourceLibraryState({
+    generatedAt: runtimeState.generatedAt,
+    runtimeVoiceSources: runtimeState.runtime.config.voiceSources,
+  });
+  runtimeState.runtime.config.voiceSources = toRuntimeVoiceSources(runtimeState.voiceSourceLibrary);
+  runtimeState.audioPlanning.voiceSourceRegistry.sources = runtimeState.runtime.config.voiceSources;
+  runtimeState.audioPlanning.voiceSourceRegistry.sourceCount = runtimeState.runtime.config.voiceSources.length;
+  runtimeState.audioPlanning.voiceSourceRegistry.placeholderCount = runtimeState.runtime.config.voiceSources.filter((source) => source.status === "placeholder").length;
+  runtimeState.audioPlanning.voiceSourceRegistry.plannedCount = runtimeState.runtime.config.voiceSources.filter((source) => source.status === "planned").length;
+  runtimeState.audioPlanning.voiceSourceRegistry.unavailableCount = runtimeState.runtime.config.voiceSources.filter((source) => source.status === "unavailable").length;
+}
 if (!runtimeState.imageKeyframeRuntime) {
   const { buildImageKeyframeRuntimePlan } = await importTs("src/core/imageKeyframeRuntime.ts");
   runtimeState.imageKeyframeRuntime = buildImageKeyframeRuntimePlan({

@@ -3,6 +3,7 @@ import type { ContextBudgetResult, KnowledgePackCategory, KnowledgeRouteResult }
 import type { ManifestMatchReport } from "./manifestMatcher";
 import type { ImageKeyframeRuntimePlan } from "./imageKeyframeRuntime";
 import type { StorySectionView, VisualMemorySummary, RuntimeKnowledgeSummary } from "./runtimeView";
+import type { VoiceSourceLibraryState } from "./voiceSourceLibrary";
 import type { QueueGateResult } from "./taskQueue";
 import type {
   AssetRecord,
@@ -178,6 +179,7 @@ export interface ProjectRuntimeState {
   imageKeyframeRuntime: ImageKeyframeRuntimePlan;
   previewEvents: PreviewEvent[];
   previewExport: ProjectPreviewExportState;
+  voiceSourceLibrary: VoiceSourceLibraryState;
   audioPlanning: AudioPlanningState;
   videoPlanning: VideoPlanningState;
   videoExecutionPreview: VideoExecutionPreviewState;

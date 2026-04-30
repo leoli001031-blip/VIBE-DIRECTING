@@ -308,6 +308,7 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   const storyChanges = requireRecord(value, "storyChanges", issues);
   const runtime = requireRecord(value, "runtime", issues);
   const previewExport = requireRecord(value, "previewExport", issues);
+  const voiceSourceLibrary = requireRecord(value, "voiceSourceLibrary", issues);
   const audioPlanning = requireRecord(value, "audioPlanning", issues);
   const videoPlanning = requireRecord(value, "videoPlanning", issues);
   const draftPreview = requireRecord(previewExport, "draftPreview", issues);
@@ -367,6 +368,50 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   requireArray(detectionReport, "tools", issues);
   if (typeof detectionReport.generatedAt !== "string") issues.push("runtime.detectionReport.generatedAt");
   if (typeof providerEnablementSummary.liveSubmitAllowed !== "boolean") issues.push("runtime.providerEnablementSummary.liveSubmitAllowed");
+  if (typeof voiceSourceLibrary.schemaVersion !== "string") issues.push("voiceSourceLibrary.schemaVersion");
+  if (voiceSourceLibrary.phase !== "phase18_voice_source_library") issues.push("voiceSourceLibrary.phase");
+  if (voiceSourceLibrary.libraryPurpose !== "voice_source_memory") issues.push("voiceSourceLibrary.libraryPurpose");
+  if (voiceSourceLibrary.privateAuthMaterialForbidden !== true) issues.push("voiceSourceLibrary.privateAuthMaterialForbidden");
+  if (voiceSourceLibrary.dryRunOnly !== true) issues.push("voiceSourceLibrary.dryRunOnly");
+  if (voiceSourceLibrary.providerSubmissionForbidden !== true) issues.push("voiceSourceLibrary.providerSubmissionForbidden");
+  if (voiceSourceLibrary.liveSubmitAllowed !== false) issues.push("voiceSourceLibrary.liveSubmitAllowed");
+  requireArray(voiceSourceLibrary, "sources", issues);
+  requireArray(voiceSourceLibrary, "rejectedInputs", issues);
+  requireArray(voiceSourceLibrary, "notes", issues);
+  const voiceSourceSummary = requireRecord(voiceSourceLibrary, "summary", issues);
+  const voiceSourceHardLocks = requireRecord(voiceSourceLibrary, "hardLocks", issues);
+  requiredVoiceSourceHardLocks.forEach(([key, expected]) => {
+    if (voiceSourceHardLocks[key] !== expected) issues.push(`voiceSourceLibrary.hardLocks.${key}`);
+  });
+  for (const key of ["total", "locked", "candidate", "rejected", "futureReferenceReady", "ttsReady"]) {
+    if (typeof voiceSourceSummary[key] !== "number") issues.push(`voiceSourceLibrary.summary.${key}`);
+  }
+  if (voiceSourceSummary.storesSecrets !== false) issues.push("voiceSourceLibrary.summary.storesSecrets");
+  if (voiceSourceSummary.providerSubmitAllowed !== false) issues.push("voiceSourceLibrary.summary.providerSubmitAllowed");
+  if (voiceSourceSummary.liveSubmitAllowed !== false) issues.push("voiceSourceLibrary.summary.liveSubmitAllowed");
+  if (Array.isArray(voiceSourceLibrary.sources)) {
+    voiceSourceLibrary.sources.forEach((source, index) => {
+      if (!isRecord(source)) {
+        issues.push(`voiceSourceLibrary.sources.${index}`);
+        return;
+      }
+      if (typeof source.id !== "string") issues.push(`voiceSourceLibrary.sources.${index}.id`);
+      if (typeof source.displayName !== "string") issues.push(`voiceSourceLibrary.sources.${index}.displayName`);
+      if (typeof source.provider !== "string") issues.push(`voiceSourceLibrary.sources.${index}.provider`);
+      if (typeof source.providerVoiceId !== "string") issues.push(`voiceSourceLibrary.sources.${index}.providerVoiceId`);
+      if (typeof source.role !== "string") issues.push(`voiceSourceLibrary.sources.${index}.role`);
+      if (typeof source.status !== "string") issues.push(`voiceSourceLibrary.sources.${index}.status`);
+      requireArray(source, "textConstraints", issues);
+      requireArray(source, "allowedUse", issues);
+      requireArray(source, "blockers", issues);
+      requireArray(source, "warnings", issues);
+      if (source.storesCredential !== false) issues.push(`voiceSourceLibrary.sources.${index}.storesCredential`);
+      if (source.storesSampleAudioFile !== false) issues.push(`voiceSourceLibrary.sources.${index}.storesSampleAudioFile`);
+      if (source.privateAuthMaterialForbidden !== true) issues.push(`voiceSourceLibrary.sources.${index}.privateAuthMaterialForbidden`);
+      if (source.providerSubmissionForbidden !== true) issues.push(`voiceSourceLibrary.sources.${index}.providerSubmissionForbidden`);
+      if (source.liveSubmitAllowed !== false) issues.push(`voiceSourceLibrary.sources.${index}.liveSubmitAllowed`);
+    });
+  }
   if (typeof audioPlanning.schemaVersion !== "string") issues.push("audioPlanning.schemaVersion");
   if (typeof audioPlanning.generatedAt !== "string") issues.push("audioPlanning.generatedAt");
   const audioPreviewMix = requireRecord(audioPlanning, "previewMix", issues);
@@ -1042,6 +1087,20 @@ const requiredVideoExecutionHardLocks = [
   "no_bgm_in_video_prompt",
   "start_end_frames_required",
   "subagent_must_use_packet",
+] as const;
+const requiredVoiceSourceHardLocks = [
+  ["dryRunOnly", true],
+  ["noProviderSubmit", true],
+  ["providerSubmissionForbidden", true],
+  ["liveSubmitAllowed", false],
+  ["noCredentialRead", true],
+  ["noCredentialWrite", true],
+  ["noSecretStorage", true],
+  ["noSampleAudioCopy", true],
+  ["noFileMutation", true],
+  ["noTtsSubmit", true],
+  ["noMusicSubmit", true],
+  ["noBgmInVideoProvider", true],
 ] as const;
 const requiredGenerationHarnessStages = [
   "shot_spec",
@@ -4757,7 +4816,8 @@ function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) 
   const sidecar = config.sidecarPermissions;
   const providerSlots = config.providerEnablement.slots;
   const providerAdapters = config.providerAdapterSettings || [];
-  const voiceSources = config.voiceSources;
+  const voiceLibrary = runtimeState.voiceSourceLibrary;
+  const voiceSources = voiceLibrary.sources;
   const desktopShell = buildDesktopRuntimeShellView(runtimeState);
 
   return (
@@ -4863,18 +4923,26 @@ function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) 
           </div>
         )}
       </div>
-      <div className="settings-group-title">Voice Sources (planned)</div>
+      <div className="settings-group-title">Voice Source Library (dry-run)</div>
       <div className="settings-list">
         <div className="settings-readonly-note">
-          <strong>Read-only registry</strong>
-          <small>No credentials stored · no live path · no API key input in Phase 6.</small>
+          <strong>{voiceLibrary.summary.locked} locked · {voiceLibrary.summary.candidate} candidate · {voiceLibrary.summary.rejected} rejected</strong>
+          <small>No credentials · no sample copy · no TTS/music submit · no BGM in video provider prompts.</small>
         </div>
-        {voiceSources.map((source) => (
+        {voiceSources.slice(0, 6).map((source) => (
           <div key={source.id}>
-            <strong>{source.label}</strong>
-            <small>{source.status} · {statusLabel(source.kind)} · planned only</small>
+            <strong>{source.displayName}</strong>
+            <small>
+              {source.status} · {statusLabel(source.role)} · {source.provider} · consent {statusLabel(source.consentStatus)} · commercial {statusLabel(source.commercialUseStatus)}
+            </small>
           </div>
         ))}
+        {voiceSources.length > 6 && (
+          <div>
+            <strong>{voiceSources.length - 6} more source(s)</strong>
+            <small>Hidden here to keep Settings compact.</small>
+          </div>
+        )}
       </div>
     </section>
   );

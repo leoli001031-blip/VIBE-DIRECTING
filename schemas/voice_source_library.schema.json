@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/voice_source_library.schema.json",
+  "title": "VoiceSourceLibraryState",
+  "description": "Phase 18 dry-run voice source metadata library for user-added voice, narration, music, and ambience anchors without credentials, sample copying, or provider submission.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "phase",
+    "libraryPurpose",
+    "privateAuthMaterialForbidden",
+    "sources",
+    "rejectedInputs",
+    "summary",
+    "hardLocks",
+    "dryRunOnly",
+    "providerSubmissionForbidden",
+    "liveSubmitAllowed",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "phase": { "type": "string", "const": "phase18_voice_source_library" },
+    "libraryPurpose": { "type": "string", "const": "voice_source_memory" },
+    "privateAuthMaterialForbidden": { "type": "boolean", "const": true },
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/voiceSourceLibraryEntry" }
+    },
+    "rejectedInputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/rejectedInput" }
+    },
+    "summary": { "$ref": "#/$defs/summary" },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "dryRunOnly": { "type": "boolean", "const": true },
+    "providerSubmissionForbidden": { "type": "boolean", "const": true },
+    "liveSubmitAllowed": { "type": "boolean", "const": false },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "voiceSourceRole": {
+      "type": "string",
+      "enum": ["narrator", "character", "brand_voice", "music_profile", "ambience_profile"]
+    },
+    "voiceSourceStatus": {
+      "type": "string",
+      "enum": ["locked", "candidate", "rejected"]
+    },
+    "consentStatus": {
+      "type": "string",
+      "enum": ["user_owned", "licensed", "provider_builtin", "unknown"]
+    },
+    "commercialUseStatus": {
+      "type": "string",
+      "enum": ["allowed", "restricted", "unknown"]
+    },
+    "pathRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "origin", "notes"],
+      "properties": {
+        "path": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "origin": { "type": "string", "enum": ["project_root_relative", "user_selected_import"] },
+        "importId": { "type": "string" },
+        "rawPathRedacted": { "type": "boolean", "const": true },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "voiceSourceLibraryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "displayName",
+        "provider",
+        "providerVoiceId",
+        "language",
+        "role",
+        "consentStatus",
+        "commercialUseStatus",
+        "status",
+        "textConstraints",
+        "allowedUse",
+        "canUseForTtsPlan",
+        "canUseAsFutureReference",
+        "storesCredential",
+        "storesSampleAudioFile",
+        "privateAuthMaterialForbidden",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "blockers",
+        "warnings",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "displayName": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "provider": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerVoiceId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "language": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "role": { "$ref": "#/$defs/voiceSourceRole" },
+        "linkedCharacterId": { "type": "string" },
+        "samplePath": { "$ref": "#/$defs/pathRef" },
+        "consentStatus": { "$ref": "#/$defs/consentStatus" },
+        "commercialUseStatus": { "$ref": "#/$defs/commercialUseStatus" },
+        "status": { "$ref": "#/$defs/voiceSourceStatus" },
+        "textConstraints": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "allowedUse": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["tts_plan", "music_brief", "ambience_brief", "draft_preview", "future_reference"]
+          }
+        },
+        "canUseForTtsPlan": { "type": "boolean" },
+        "canUseAsFutureReference": { "type": "boolean" },
+        "storesCredential": { "type": "boolean", "const": false },
+        "storesSampleAudioFile": { "type": "boolean", "const": false },
+        "privateAuthMaterialForbidden": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "locked" } }, "required": ["status"] },
+          "then": { "properties": { "canUseAsFutureReference": { "const": true } } }
+        },
+        {
+          "if": { "properties": { "status": { "const": "rejected" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "canUseAsFutureReference": { "const": false },
+              "canUseForTtsPlan": { "const": false }
+            }
+          }
+        }
+      ]
+    },
+    "rejectedInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "reason", "blockedAt", "fields"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "reason": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "blockedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "locked",
+        "candidate",
+        "rejected",
+        "narrator",
+        "character",
+        "musicProfile",
+        "ambienceProfile",
+        "futureReferenceReady",
+        "ttsReady",
+        "storesSecrets",
+        "providerSubmitAllowed",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "locked": { "type": "integer", "minimum": 0 },
+        "candidate": { "type": "integer", "minimum": 0 },
+        "rejected": { "type": "integer", "minimum": 0 },
+        "narrator": { "type": "integer", "minimum": 0 },
+        "character": { "type": "integer", "minimum": 0 },
+        "musicProfile": { "type": "integer", "minimum": 0 },
+        "ambienceProfile": { "type": "integer", "minimum": 0 },
+        "futureReferenceReady": { "type": "integer", "minimum": 0 },
+        "ttsReady": { "type": "integer", "minimum": 0 },
+        "storesSecrets": { "type": "boolean", "const": false },
+        "providerSubmitAllowed": { "type": "boolean", "const": false },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dryRunOnly",
+        "noProviderSubmit",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "noSecretStorage",
+        "noSampleAudioCopy",
+        "noFileMutation",
+        "noTtsSubmit",
+        "noMusicSubmit",
+        "noBgmInVideoProvider"
+      ],
+      "properties": {
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "noSecretStorage": { "type": "boolean", "const": true },
+        "noSampleAudioCopy": { "type": "boolean", "const": true },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "noTtsSubmit": { "type": "boolean", "const": true },
+        "noMusicSubmit": { "type": "boolean", "const": true },
+        "noBgmInVideoProvider": { "type": "boolean", "const": true }
+      }
+    }
+  }
+}

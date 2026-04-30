@@ -24,6 +24,7 @@
     "subagent-runner:test": "node scripts/subagent-runner-test.mjs",
     "subagent-worker:test": "node scripts/subagent-worker-runtime-test.mjs",
     "image-keyframe:test": "node scripts/image-keyframe-runtime-test.mjs",
+    "voice-source:test": "node scripts/voice-source-library-test.mjs",
     "provider-live-gate:test": "node scripts/provider-live-gate-test.mjs",
     "export-builder:test": "node scripts/export-builder-test.mjs",
     "orchestrator:test": "node scripts/local-orchestrator-test.mjs",

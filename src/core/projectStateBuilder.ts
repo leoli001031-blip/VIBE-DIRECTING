@@ -2,6 +2,7 @@ import { buildRuntimeView, type KnowledgeRouteTestView, type RuntimeView } from 
 import { buildAssetReadinessReport } from "./assetReadiness";
 import { buildImageTaskPlan } from "./imageTaskPlanner";
 import { buildImageKeyframeRuntimePlan } from "./imageKeyframeRuntime";
+import { buildVoiceSourceLibraryState, toRuntimeVoiceSources } from "./voiceSourceLibrary";
 import type { KnowledgePackManifest, KnowledgeRouteMatch, KnowledgeTaskPurpose } from "./knowledgeTypes";
 import { buildImage2AdapterRequest } from "./providerAdapters/image2Adapter";
 import { buildDefaultProviderRegistry } from "./providerCapabilities";
@@ -110,7 +111,18 @@ export function buildProjectRuntimeState(
     bindings: toKnowledgeBindings(knowledgeManifest),
   };
   const generatedAt = options.generatedAt || new Date().toISOString();
-  const runtime = options.runtime || buildRuntimeEnvironment({ generatedAt });
+  const baseRuntime = options.runtime || buildRuntimeEnvironment({ generatedAt });
+  const voiceSourceLibrary = buildVoiceSourceLibraryState({
+    generatedAt,
+    runtimeVoiceSources: baseRuntime.config.voiceSources,
+  });
+  const runtime = {
+    ...baseRuntime,
+    config: {
+      ...baseRuntime.config,
+      voiceSources: toRuntimeVoiceSources(voiceSourceLibrary),
+    },
+  };
   const projectFileCore = buildProjectFileCoreState({
     generatedAt,
     projectRoot: audit.projectRoot,
@@ -372,6 +384,7 @@ export function buildProjectRuntimeState(
     imageKeyframeRuntime,
     previewEvents,
     previewExport,
+    voiceSourceLibrary,
     audioPlanning,
     videoPlanning,
     videoExecutionPreview,
@@ -431,12 +444,25 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     generatedAt: state.generatedAt,
     platform: state.runtime?.config?.platform || state.runtime?.detectionReport?.platform,
   });
-  const audioPlanning =
+  const voiceSourceLibrary =
+    state.voiceSourceLibrary ||
+    buildVoiceSourceLibraryState({
+      generatedAt: state.generatedAt,
+      runtimeVoiceSources: runtime.config.voiceSources,
+    });
+  const runtimeWithVoiceSources = {
+    ...runtime,
+    config: {
+      ...runtime.config,
+      voiceSources: toRuntimeVoiceSources(voiceSourceLibrary),
+    },
+  };
+  const audioPlanningResolved =
     state.audioPlanning ||
     buildAudioPlanningState({
       generatedAt: state.generatedAt,
       shots: state.storyFlow.shots,
-      runtimeConfig: runtime.config,
+      runtimeConfig: runtimeWithVoiceSources.config,
       previewEvents: state.previewEvents,
     });
   const videoPlanning =
@@ -447,7 +473,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       jobs: state.taskRuns.jobs,
       taskViews: state.taskRuns.taskViews,
       providerRegistry: state.imagePipeline.providerRegistry,
-      audioPlanning,
+      audioPlanning: audioPlanningResolved,
       issues: state.diagnostics.issues,
     });
   const imageKeyframeRuntime =
@@ -531,14 +557,14 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       filesystemWatcherHarness,
       checkpointResumeHarness,
       videoPlanning,
-      audioPlanning,
+      audioPlanning: audioPlanningResolved,
       storyFlowShots: state.storyFlow.shots,
     });
   const toolRuntimeHarness =
     state.toolRuntimeHarness ||
     buildToolRuntimeHarnessState({
       generatedAt: state.generatedAt,
-      runtime,
+      runtime: runtimeWithVoiceSources,
       adapterContracts,
       generationHarness,
       filesystemWatcherHarness,
@@ -585,15 +611,16 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       sourceIndex: state.sourceIndex,
       storyFlow: { shots: state.storyFlow.shots },
       visualMemory: { assets: state.visualMemory.assets },
-      runtime,
+      runtime: runtimeWithVoiceSources,
       audit: state.legacyAudit,
     });
 
   return {
     ...state,
     projectFileCore,
-    runtime,
-    audioPlanning,
+    runtime: runtimeWithVoiceSources,
+    voiceSourceLibrary,
+    audioPlanning: audioPlanningResolved,
     videoPlanning,
     imageKeyframeRuntime,
     videoExecutionPreview,
