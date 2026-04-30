@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/project_store_io.schema.json",
+  "title": "ProjectStoreIoGate",
+  "description": "Phase 19 real Project Store IO gate for project-root-whitelisted project.vibe create/open/save and runtime cache rebuild without provider, credential, arbitrary shell, delete, or user-file move routes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "phase",
+    "mode",
+    "generatedAt",
+    "rootRef",
+    "fileMutationScope",
+    "projectVibeWriteAllowed",
+    "runtimeStateWriteAllowed",
+    "directoryCreateAllowed",
+    "canExecute",
+    "snapshotValidation",
+    "entries",
+    "whitelist",
+    "blockers",
+    "warnings",
+    "hardLocks",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "phase": { "type": "string", "const": "phase19_real_project_store_io_gate" },
+    "mode": { "type": "string", "enum": ["create", "open", "save", "rebuild_cache"] },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "rootRef": { "type": "string", "const": "project_root" },
+    "fileMutationScope": { "type": "string", "const": "project_root_whitelist" },
+    "projectVibeWriteAllowed": { "type": "boolean" },
+    "runtimeStateWriteAllowed": { "type": "boolean" },
+    "directoryCreateAllowed": { "type": "boolean" },
+    "canExecute": { "type": "boolean" },
+    "snapshotValidation": { "type": "object" },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ioEntry" }
+    },
+    "whitelist": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(?![A-Za-z]:[\\\\/])(?!/)(?!//)(?!.*(?:^|/)\\.\\.(?:/|$)).+"
+      }
+    },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "ioEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "operation", "path", "canExecute", "projectRootRelative", "notes"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "role": {
+          "type": "string",
+          "enum": [
+            "project_manifest",
+            "production_bible",
+            "story_flow",
+            "visual_memory",
+            "shot_spec",
+            "source_index",
+            "runtime_state",
+            "project_directory"
+          ]
+        },
+        "operation": { "type": "string", "enum": ["create_directory", "read_file", "write_file"] },
+        "path": {
+          "type": "string",
+          "pattern": "^(?![A-Za-z]:[\\\\/])(?!/)(?!//)(?!.*(?:^|/)\\.\\.(?:/|$)).+"
+        },
+        "content": { "type": "string" },
+        "contentHash": { "type": "string" },
+        "canExecute": { "type": "boolean" },
+        "projectRootRelative": { "type": "boolean", "const": true },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectRootOnly",
+        "whitelistOnly",
+        "noAbsoluteContractPath",
+        "noParentTraversal",
+        "noUserFileMove",
+        "noDelete",
+        "noProviderSubmit",
+        "noImageGeneration",
+        "noVideoGeneration",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "noArbitraryShell",
+        "runtimeStateIsDerivedCache"
+      ],
+      "properties": {
+        "projectRootOnly": { "type": "boolean", "const": true },
+        "whitelistOnly": { "type": "boolean", "const": true },
+        "noAbsoluteContractPath": { "type": "boolean", "const": true },
+        "noParentTraversal": { "type": "boolean", "const": true },
+        "noUserFileMove": { "type": "boolean", "const": true },
+        "noDelete": { "type": "boolean", "const": true },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "noImageGeneration": { "type": "boolean", "const": true },
+        "noVideoGeneration": { "type": "boolean", "const": true },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "noArbitraryShell": { "type": "boolean", "const": true },
+        "runtimeStateIsDerivedCache": { "type": "boolean", "const": true }
+      }
+    }
+  }
+}

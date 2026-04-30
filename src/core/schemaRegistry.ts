@@ -38,6 +38,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ProjectFileCoreState",
   },
   {
+    fileName: "project_store_io.schema.json",
+    id: "https://vibecore.local/schemas/project_store_io.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 19 project-root-whitelisted project.vibe create/open/save IO gate with provider, credential, delete, and arbitrary shell routes locked off.",
+    typeName: "ProjectStoreIoGate",
+  },
+  {
     fileName: "production_bible.schema.json",
     id: "https://vibecore.local/schemas/production_bible.schema.json",
     version: schemaVersion,

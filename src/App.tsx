@@ -96,6 +96,16 @@ type MinimalProjectPlan = {
   entryLabel: string;
   planLabel: string;
 };
+type PreviewQueueItemKind = "image_hold" | "video_clip" | "missing_placeholder";
+type PreviewQueueItem = {
+  id: string;
+  kind: PreviewQueueItemKind;
+  shotId?: string;
+  startSeconds: number;
+  durationSeconds: number;
+  mediaPath?: string;
+  label: string;
+};
 
 type DesktopRuntimeShellView = {
   planStatus: string;
@@ -159,6 +169,39 @@ function selectedScopeLabel(shot?: ShotRecord, asset?: AssetRecord, sectionLabel
   if (asset) return `Selected ${cleanLabel(asset.name)}`;
   if (sectionLabel) return `Selected ${sectionLabel}`;
   return "Selected project";
+}
+
+function previewQueueLabel(event: PreviewEvent) {
+  if (event.shotId) return formatShotNumber(event.shotId);
+  if (event.type === "video_clip") return "Clip";
+  if (event.type === "blocked_placeholder") return "Missing";
+  return "Hold";
+}
+
+function previewQueueKind(event: PreviewEvent): PreviewQueueItemKind {
+  if (event.type === "video_clip") return "video_clip";
+  if (event.type === "blocked_placeholder" || !event.mediaPath) return "missing_placeholder";
+  return "image_hold";
+}
+
+function buildPreviewPlayerQueue(previewExport: ProjectPreviewExportState, shots: ShotRecord[]): PreviewQueueItem[] {
+  const shotOrder = new Map(shots.map((shot, index) => [shot.id, index]));
+  return previewExport.draftPreview.events
+    .filter((event) => event.type === "image_hold" || event.type === "video_clip" || event.type === "blocked_placeholder")
+    .sort((left, right) => {
+      const timeDelta = left.startSeconds - right.startSeconds;
+      if (timeDelta !== 0) return timeDelta;
+      return (shotOrder.get(left.shotId || "") ?? 9999) - (shotOrder.get(right.shotId || "") ?? 9999);
+    })
+    .map((event) => ({
+      id: event.id,
+      kind: previewQueueKind(event),
+      shotId: event.shotId,
+      startSeconds: event.startSeconds,
+      durationSeconds: Math.max(1, event.durationSeconds),
+      mediaPath: event.mediaPath,
+      label: previewQueueLabel(event),
+    }));
 }
 
 function buildMinimalProjectPlan(runtimeState: ProjectRuntimeState): MinimalProjectPlan {
@@ -3755,21 +3798,23 @@ function MinimalStoryFlow({
 
 function MinimalAssetLibrary({
   audit,
-  runtimeState,
   selectedAssetId,
   onSelectAsset,
 }: {
   audit: ProjectAudit;
-  runtimeState: ProjectRuntimeState;
   selectedAssetId?: string;
   onSelectAsset: (id: string) => void;
 }) {
   const groups = groupAssets(audit.assets);
-  const voiceSources = runtimeState.audioPlanning.voiceSourceRegistry.sources;
 
   return (
     <main className="asset-library-view">
       <h2>Asset Library</h2>
+      <div className="asset-status-strip" aria-label="Asset consistency">
+        <span><i className="dot ok" /> locked</span>
+        <span><i className="dot warn" /> candidate</span>
+        <span><i className="dot warn" /> review</span>
+      </div>
       <section className="asset-library-section">
         <span className="asset-section-label">Characters</span>
         <div className="asset-feature-grid characters">
@@ -3809,7 +3854,7 @@ function MinimalAssetLibrary({
         </div>
       </section>
       <section className="asset-library-section compact">
-        <span className="asset-section-label">Props / Style / Voice</span>
+        <span className="asset-section-label">Props / Style</span>
         <div className="anchor-list">
           {[...groups.Props, ...groups.Style].map((asset) => (
             <button
@@ -3821,12 +3866,6 @@ function MinimalAssetLibrary({
               <small><i className={`dot ${assetStatusTone(asset)}`} /> {assetStatusLabel(asset)}</small>
             </button>
           ))}
-          {voiceSources.slice(0, 3).map((source) => (
-            <div key={source.id} className="anchor-row voice">
-              <span>{source.label}</span>
-              <small><i className="dot warn" /> {source.status}</small>
-            </div>
-          ))}
         </div>
       </section>
     </main>
@@ -3834,58 +3873,75 @@ function MinimalAssetLibrary({
 }
 
 function MinimalPreview({
-  view,
+  previewExport,
+  sections,
+  shots,
   selectedShotId,
   onSelectShot,
 }: {
-  view: RuntimeView;
+  previewExport: ProjectPreviewExportState;
+  sections: RuntimeView["storySections"];
+  shots: ShotRecord[];
   selectedShotId: string;
   onSelectShot: (id: string) => void;
 }) {
   const [playing, setPlaying] = useState(false);
-  const events = view.previewEvents.filter((event) => event.type !== "narration_audio" && event.type !== "dialogue_audio" && event.type !== "ambience_audio" && event.type !== "music_audio");
-  const activeEvent = events.find((event) => event.shotId === selectedShotId) || events[0];
-  const total = Math.max(1, events.reduce((max, event) => Math.max(max, event.startSeconds + event.durationSeconds), 0));
-  const activeStart = activeEvent?.startSeconds || 0;
-  const activeEnd = activeStart + (activeEvent?.durationSeconds || 0);
+  const queue = useMemo(() => buildPreviewPlayerQueue(previewExport, shots), [previewExport, shots]);
+  const activeItem = queue.find((item) => item.shotId === selectedShotId) || queue[0];
+  const total = Math.max(1, queue.reduce((max, item) => Math.max(max, item.startSeconds + item.durationSeconds), 0));
+  const activeStart = activeItem?.startSeconds || 0;
+  const activeEnd = activeStart + (activeItem?.durationSeconds || 0);
+  const activeShot = activeItem?.shotId ? shots.find((shot) => shot.id === activeItem.shotId) : undefined;
 
   return (
     <main className="minimal-preview-view">
       <section className="preview-stage">
-        <MediaFrame
-          src={activeEvent?.mediaPath}
-          alt={activeEvent?.shotId || "Preview"}
-          label={activeEvent?.shotId ? formatShotNumber(activeEvent.shotId) : "Preview"}
-          className="preview-stage-image"
-        />
+        {activeItem?.kind === "image_hold" ? (
+          <MediaFrame
+            src={activeItem.mediaPath}
+            alt={activeItem.shotId || "Preview"}
+            label={activeItem.label}
+            className="preview-stage-image"
+          />
+        ) : (
+          <div className={`preview-stage-card ${activeItem?.kind || "missing_placeholder"}`}>
+            <span>{activeItem?.kind === "video_clip" ? "Clip" : "Missing"}</span>
+            <strong>{activeItem?.label || "Preview"}</strong>
+            <small>{activeShot ? shortStoryFunction(activeShot, shots.indexOf(activeShot)) : "Hold"}</small>
+          </div>
+        )}
         <button className="preview-play-button" onClick={() => setPlaying((value) => !value)} aria-label={playing ? "Pause" : "Play"}>
           {playing ? <PauseCircle size={42} /> : <Play size={42} />}
         </button>
       </section>
       <section className="minimal-preview-controls">
         <div className="preview-ruler">
-          {view.storySections.map((section) => {
+          {sections.map((section) => {
             const firstShotId = section.shotIds[0];
-            const event = events.find((item) => item.shotId === firstShotId);
-            const left = event ? (event.startSeconds / total) * 100 : 0;
+            const item = queue.find((candidate) => candidate.shotId === firstShotId);
+            const left = item ? (item.startSeconds / total) * 100 : 0;
             return (
-              <span key={section.id} style={{ left: `${left}%` }}>
+              <span
+                key={section.id}
+                className={left <= 2 ? "edge-start" : left >= 98 ? "edge-end" : undefined}
+                style={{ left: `${left}%` }}
+              >
                 {section.label}
               </span>
             );
           })}
         </div>
         <div className="preview-line">
-          {events.map((event) => (
+          {queue.map((item) => (
             <button
-              key={event.id}
-              className={`preview-line-event ${event.shotId === selectedShotId ? "selected" : ""}`}
+              key={item.id}
+              className={`preview-line-event ${item.kind} ${item.shotId === selectedShotId ? "selected" : ""}`}
               style={{
-                left: `${(event.startSeconds / total) * 100}%`,
-                width: `${Math.max(3, (event.durationSeconds / total) * 100)}%`,
+                left: `${(item.startSeconds / total) * 100}%`,
+                width: `${Math.max(3, (item.durationSeconds / total) * 100)}%`,
               }}
-              onClick={() => event.shotId && onSelectShot(event.shotId)}
-              aria-label={event.shotId || event.type}
+              onClick={() => item.shotId && onSelectShot(item.shotId)}
+              aria-label={item.label}
             />
           ))}
         </div>
@@ -4112,7 +4168,6 @@ function DirectorMode({
         {directorView === "assets" && (
           <MinimalAssetLibrary
             audit={audit}
-            runtimeState={runtimeState}
             selectedAssetId={selectedAssetId}
             onSelectAsset={onSelectAsset}
           />
@@ -4127,7 +4182,9 @@ function DirectorMode({
         )}
         {directorView === "preview" && (
           <MinimalPreview
-            view={view}
+            previewExport={runtimeState.previewExport}
+            sections={view.storySections}
+            shots={audit.shots}
             selectedShotId={selectedShotId}
             onSelectShot={onSelectShot}
           />

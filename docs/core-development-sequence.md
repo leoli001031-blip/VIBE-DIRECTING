@@ -841,6 +841,14 @@ Phase 9.4 checklist：
 - scene reference 会生成 master scene placeholder，并支持 inherited derived view placeholder，保留 master inheritance、camera vector/world position 占位和 text-only recreation 禁止规则。
 - 新增 `npm run asset-library:test` 覆盖主角参考、场景参考、文本约束、locked 状态、禁入 temp/failed/contact sheet/shot output，以及 scene master/derived view placeholder。
 
+### Phase 20/22 已实现范围：Project Facts Integration
+
+- 新增 `src/core/projectFactsIntegration.ts`，提供 Project Store、Asset Library、Voice Source Library 与 runtime storyFlow / visualMemory / shots 的 pure builder，输出 Production Bible、Story Flow、Shot Spec、Shot Layout、Visual Memory、Spatial Memory、Scene Asset Pack、Voice Memory 的 project-local facts 接入状态。
+- 每类 facts 都输出 `sourceOfTruth`、`path`、`status`、`blockers`、`warnings` 和 `sourceRefs`；runtime-state 只作为 fallback / derived cache，不覆盖 Project Store / Asset Library / Voice Source Library 的 file-first 事实源。
+- Visual Consistency 接线摘要显式拆出 `masterScene`、`derivedViews`、`worldPosition`、`startEndDerivation`：Scene Asset Pack 已能提供 master/derived view 结构，Shot Layout 与 Spatial Memory 缺失时仍保持 blocker，接入后可升级为 structured。
+- 硬锁继续固定 dry-run / no file mutation / no directory create / no provider submit / no credential / no image/video generation / no text-to-video / no Fast/VIP；Image2 优先，Seedance/Jimeng video parked。
+- 新增 `npm run project-facts-integration:test`，覆盖 fixture Project Store、Visual Memory Asset Library、Voice Source Library、缺 Shot Layout / Spatial Memory blocker、Scene Asset Pack derived view readiness 和 hard lock drift。
+
 ### Phase 9.8 已实现范围：Task Envelope Builder
 
 - 新增 Task Packet Builder，从 selected shot / selected asset / story change transaction / runtime state 派生 8 类 dry-run subagent packets：`image`、`asset`、`pair_qa`、`scene_qa`、`story_audit`、`video_execution`、`audio`、`export`。
@@ -960,6 +968,61 @@ Phase 9.4 checklist：
 禁止项：
 
 - Phase 18 不接真实 TTS/BGM API，不读取/保存 credentials，不复制音频文件，不提交 provider，不把 BGM 写进视频 provider prompt。
+
+### Phase 19 已实现范围：Real Project Store IO Gate
+
+- 新增 `src/core/projectStoreIo.ts`，在既有 Phase 9.5 memory-only `ProjectStoreSnapshot` 之上增加真实 IO gate：`project.vibe` create/open/save、fact files write/read、runtime-state derived cache write 都必须经过 project-root whitelist。
+- Phase 19 不改变旧 `ProjectStoreSnapshot` 的 dry-run 语义；它新增独立 `ProjectStoreIoGate`，只有 gate validation 通过且 adapter 显式执行时，才允许 project root 内白名单路径写入。
+- `project.vibe` 写入为 `vibe_project_file`，包含 Project Store snapshot、fact file hash/path/sourceOfTruth 摘要，并固定 `runtimeStateRole=derived_cache`。
+- 写入范围只包含 project facts 和 derived cache：`project.vibe`、Production Bible、Story Flow、Visual Memory、Source Index、shot specs、`runtime-state.json`。路径必须 project-root-relative，禁止绝对路径、父级穿越、用户文件移动和删除。
+- Open mode 从 `project.vibe` 反序列化 Project Store snapshot，并重新走 `validateProjectStoreSnapshot`；runtime-state 仍不能成为项目事实源。
+- 新增 `schemas/project_store_io.schema.json` 并纳入 schema registry；schema 固定 `fileMutationScope=project_root_whitelist` 和 hard locks。
+- Hard locks 固定 `projectRootOnly=true`、`whitelistOnly=true`、`noAbsoluteContractPath=true`、`noParentTraversal=true`、`noUserFileMove=true`、`noDelete=true`、`noProviderSubmit=true`、`noImageGeneration=true`、`noVideoGeneration=true`、`noCredentialRead=true`、`noCredentialWrite=true`、`noArbitraryShell=true`、`runtimeStateIsDerivedCache=true`。
+- 新增 `npm run project-store-io:test`，使用 memory adapter 覆盖 create/open/save、runtime cache write、unsafe path fail-closed、schema const 和 registry 接入。
+
+禁止项：
+
+- Phase 19 不提交 provider，不 spawn agent，不读取/写入 credential，不执行任意 shell，不移动/删除用户文件，不写 project root 白名单以外的路径。
+
+### Phase 21/23 已实现范围：Minimal UI + Preview Player MVP
+
+- 主 Director surface 继续收敛到 Story Flow、Asset Library、Preview 和右侧 Selected Edit，不把工程控制台信息带回默认创作界面。
+- Preview Player MVP 在 UI 层新增 `buildPreviewPlayerQueue(...)`，从 `previewExport.draftPreview.events` 派生按时间排序的播放队列；`image_hold` 作为画面停留，`video_clip` 作为片段替换，缺失素材映射为 `missing_placeholder`。
+- Preview 页面呈现大画面 preview shell、播放按钮、短时间码、幕刻度和极简时间线；不展示 formal gate、provider、schema、manifest、TaskEnvelope、Image2 Runtime、Voice Source Library 等工程词。
+- Asset Library 主界面继续强调一致性资产和 `locked` / `candidate` / `review` 状态，不展示 contact sheet，不把临时输出或诊断对象变成图片墙。
+- 右侧自然语言修改面板保持短状态和少量 badge；详细执行计划、工程锁和诊断字段继续留在 Diagnostics。
+- 新增 `npm run preview-player:test`，并扩展 `npm run minimal-ui:test` 覆盖 Phase 21/23：Preview Player 存在、主界面工程词为 0、Preview Player 文案短且稀疏。
+
+### Phase 24-30 Runtime Gate / Adapter Planning
+
+Phase 24-30 先做 lightweight pure runtime plan，不做真实执行。新增 `src/core/phaseRoadmapRuntime.ts`，用于输出每个阶段的 readiness、status、blocked reason、required preceding phases、hard locks 和 acceptance criteria。
+
+阶段顺序：
+
+- Phase 24：Subagent Runtime Gate。只有 project facts 已验证、validated `SubagentTaskEnvelope` gate 存在时才 ready；正式 worker 只能吃 envelope，不能吃自由文本。
+- Phase 25：Knowledge Pack Manager。必须在 Phase 24 ready 之后推进；Knowledge Pack 只能影响路由、上下文和 QA，不得覆盖 provider policy、preflight、reference authority 或 QA gate。
+- Phase 26：Agent/CLI Mock Runner。只做 mock / no-op runner，目标是证明 runner contract 可替换；不 spawn Codex、不 resume Codex、不提交 provider。
+- Phase 27：Export Worker MVP。必须显式声明 export/project IO scope；这是 Phase 24-30 中唯一允许 file mutation 的阶段，而且只能在导出或项目 IO 合同内发生。
+- Phase 28：Voice/Audio Settings UI。只把 voice/audio 设置作为结构化项目事实；BGM prompt 不能进入视频 provider prompt。
+- Phase 29：Codex CLI Adapter Spike。必须先有 Phase 26 replacement proof，再接真实 Codex spawn/resume 的 adapter shape；输入仍是 validated envelope，输出仍是 structured result，provider submit 仍然 blocked。
+- Phase 30：Provider Enablement Gate。必须同时具备 user confirmation token placeholder、complete enablement packet、watcher/manifest/QA closed loop，并确认没有 Fast、VIP、text-to-video 或 BGM prompt 路径；即使 ready，也仍然不能提交 provider，直到后续 final gate 明确允许。
+
+统一 hard locks：
+
+- `noFreeTextWorker=true`。
+- `validatedEnvelopeRequired=true`。
+- `structuredResultRequired=true`。
+- `noProviderSubmit=true`，`liveSubmitAllowed=false`。
+- `noCredentials=true`，禁止 credential read/write。
+- `noArbitraryShell=true`。
+- `noFileMutationUnlessExplicitExportOrProjectIoPhase=true`；除 Phase 27 的显式 export/project IO 例外，其他阶段 `fileMutationAllowed=false`。
+
+Acceptance criteria：
+
+- Phase 24 before project facts validated 必须 blocked，并给出 `project_facts_not_validated`。
+- Phase 26 mock runner 一旦观察到 provider submit attempt 必须 blocked；Phase 26 和 Phase 29 的边界必须清楚记录：先 mock/no-op 证明可替换，再在 Phase 29 探索真实 Codex spawn/resume。
+- Phase 30 缺 user confirmation token placeholder、缺 watcher/manifest/QA closed loop、packet incomplete 或出现 Fast/VIP/text-to-video/BGM prompt 任一项都必须 blocked。
+- 所有阶段都必须 pin hard locks；测试命令为 `npm run phase-roadmap:test`。
 
 ## 当前禁止提前做的事
 

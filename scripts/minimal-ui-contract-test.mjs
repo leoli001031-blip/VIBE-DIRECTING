@@ -98,7 +98,11 @@ const contractDoc = readText(contractDocPath);
 const directorMode = findFunctionBody(appSource, "DirectorMode");
 const minimalTopNav = findFunctionBody(appSource, "MinimalTopNav");
 const minimalAgentPanel = findFunctionBody(appSource, "MinimalAgentPanel");
+const minimalAssetLibrary = findFunctionBody(appSource, "MinimalAssetLibrary");
+const minimalPreview = findFunctionBody(appSource, "MinimalPreview");
 const minimalProjectPlan = findFunctionBody(appSource, "buildMinimalProjectPlan");
+const previewPlayerQueue = findFunctionBody(appSource, "buildPreviewPlayerQueue");
+const previewQueueKind = findFunctionBody(appSource, "previewQueueKind");
 const desktopShellView = findFunctionBody(appSource, "buildDesktopRuntimeShellView");
 const subagentWorkerRuntimeDiagnostics = findFunctionBody(appSource, "SubagentWorkerRuntimeDiagnostics");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
@@ -119,10 +123,16 @@ check(
   packageJson.scripts?.["minimal-ui:test"] === "node scripts/minimal-ui-contract-test.mjs",
   "package.json must expose minimal-ui:test",
 );
+check(
+  packageJson.scripts?.["preview-player:test"] === "node scripts/preview-player-test.mjs",
+  "package.json must expose preview-player:test",
+);
 
 checkMessage(requireWithin(sequenceDoc, /Phase 9\.4/i, "Phase 9.4 entry in docs/core-development-sequence.md"));
 checkMessage(requireWithin(sequenceDoc, /Phase 17/i, "Phase 17 entry in docs/core-development-sequence.md"));
+checkMessage(requireWithin(sequenceDoc, /Phase 21\/23/i, "Phase 21/23 entry in docs/core-development-sequence.md"));
 checkMessage(requireWithin(sequenceDoc, /minimal-ui:test/i, "minimal-ui:test checklist item in docs/core-development-sequence.md"));
+checkMessage(requireWithin(sequenceDoc, /preview-player:test/i, "preview-player:test checklist item in docs/core-development-sequence.md"));
 checkMessage(requireWithin(contractDoc, /Minimal Director UI Contract/i, "minimal director UI contract doc title"));
 checkMessage(requireWithin(contractDoc, /Diagnostics/i, "diagnostics boundary in minimal UI contract doc"));
 
@@ -169,6 +179,13 @@ checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /keyframe pair/i, "
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /end-frame derivation/i, "Phase 17 end-frame derivation diagnostics copy"));
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /provider locks/i, "Phase 17 provider locks diagnostics copy"));
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /closed loop/i, "Phase 17 closed-loop diagnostics copy"));
+checkMessage(requireWithin(previewPlayerQueue, /draftPreview\.events/, "Phase 21/23 Preview Player queue must use previewExport.draftPreview.events"));
+checkMessage(requireWithin(previewPlayerQueue, /image_hold/, "Phase 21/23 Preview Player queue must include image holds"));
+checkMessage(requireWithin(previewPlayerQueue, /video_clip/, "Phase 21/23 Preview Player queue must include video clips"));
+checkMessage(requireWithin(`${previewPlayerQueue}\n${previewQueueKind}`, /missing_placeholder/, "Phase 21/23 Preview Player queue must include missing placeholders"));
+checkMessage(requireWithin(minimalPreview, /buildPreviewPlayerQueue\s*\(/, "Phase 21/23 MinimalPreview must render the Preview Player queue"));
+checkMessage(requireWithin(minimalPreview, /preview-stage-card/, "Phase 21/23 Preview Player needs a large preview shell"));
+checkMessage(requireWithin(stylesSource, /preview-stage-card/, "Phase 21/23 Preview Player stage styling"));
 
 checkMessage(requireAny(appSource, [/Asset Library/, /function\s+AssetLibrary/, /className="[^"]*asset-library/], "Asset Library main UI naming"));
 checkMessage(requireAny(appSource, [/Preview/, /function\s+PreviewTimeline/, /className="[^"]*preview/], "Preview main UI"));
@@ -243,6 +260,29 @@ const forbiddenMinimalTerms = [
 for (const [term, pattern] of forbiddenMinimalTerms) {
   check(!pattern.test(minimalDirectorSurface), `DirectorMode/MinimalAgentPanel must not expose ${term}`);
 }
+
+const phase2123DirectorSurface = [
+  directorMode,
+  minimalTopNav,
+  minimalAgentPanel,
+  minimalAssetLibrary,
+  minimalPreview,
+  minimalProjectPlan,
+].join("\n");
+const phase2123ForbiddenMainTerms = [
+  ["providerSubmissionForbidden", /providerSubmissionForbidden/i],
+  ["schema", /schema/i],
+  ["manifest", /manifest/i],
+  ["TaskEnvelope", /Task\s*Envelope|TaskEnvelope/i],
+  ["Image2 Runtime", /Image2\s+Runtime/i],
+  ["Voice Source Library", /Voice\s+Source\s+Library/i],
+];
+for (const [term, pattern] of phase2123ForbiddenMainTerms) {
+  const count = countPattern(phase2123DirectorSurface, pattern);
+  check(count === 0, `Phase 21/23 main Director surface must expose 0 ${term} term(s), found ${count}`);
+}
+check(!/Formal\s+Gate|Proxy\s+Duration|Draft\s+Events|blockedPlaceholder/i.test(minimalPreview), "Preview Player copy must stay short and not show gate/proxy counters");
+check(/locked/i.test(minimalAssetLibrary) && /candidate/i.test(minimalAssetLibrary) && /review/i.test(minimalAssetLibrary), "Asset Library must keep locked/candidate/review consistency states");
 
 const appContactSheetCount = countLiteral(appSource, "contactSheets");
 const diagnosticsContactSheetCount = countLiteral(diagnosticsMode, "contactSheets");
