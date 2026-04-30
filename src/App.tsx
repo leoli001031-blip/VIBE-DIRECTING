@@ -46,6 +46,7 @@ import {
 } from "./core/projectStateBuilder";
 import { buildProjectRuntimePlan } from "./core/projectRuntime";
 import { buildDesktopRuntimePlan, type DesktopRuntimePlan } from "./core/desktopRuntime";
+import { buildSubagentWorkerRuntimePlan, type SubagentWorkerRuntimePlan } from "./core/subagentWorkerRuntime";
 import { ensureRuntimeEnvironment } from "./core/runtimeConfig";
 import { buildDirectorWorkflowState, type DirectorWorkflowStatus } from "./core/directorWorkflow";
 import { fallbackAudit } from "./data/fallbackAudit";
@@ -215,6 +216,15 @@ function buildDesktopRuntimeShellView(runtimeState: ProjectRuntimeState): Deskto
     credentialVault: `${plan.credentialVaultPlan.mode}; read ${String(plan.credentialVaultPlan.readAllowedNow)}; write ${String(plan.credentialVaultPlan.writeAllowedNow)}; planned vaults ${plannedVaults}`,
     hardLocks: desktopLockSummary(plan.hardLocks),
   };
+}
+
+function buildSubagentWorkerRuntimeView(runtimeState: ProjectRuntimeState): SubagentWorkerRuntimePlan {
+  return buildSubagentWorkerRuntimePlan({
+    generatedAt: runtimeState.generatedAt,
+    envelopes: runtimeState.videoExecutionPreview.previews
+      .map((preview) => preview.subagentTaskEnvelope)
+      .filter(Boolean),
+  });
 }
 
 function MediaFrame({
@@ -4819,6 +4829,48 @@ function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) 
   );
 }
 
+function SubagentWorkerRuntimeDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const plan = buildSubagentWorkerRuntimeView(runtimeState);
+  const visibleSlots = plan.slots.slice(0, 6);
+
+  return (
+    <section className="machine-panel">
+      <div className="audit-head">
+        <ListChecks size={17} />
+        <span>Subagent Worker Runtime</span>
+      </div>
+      <div className="summary-grid">
+        <Metric label="Worker Plans" value={`${plan.summary.totalSlots}`} detail={statusLabel(plan.runtimeMode)} />
+        <Metric label="Permission Gate" value={`${plan.summary.readyForPermissionGate}`} detail="validated envelopes" />
+        <Metric label="Structured Results" value={`${plan.summary.resultAcceptedForHandoff}`} detail={`${plan.summary.resultRejected} rejected`} />
+        <Metric label="Free Text" value={`${plan.summary.freeTextBlocked}`} detail="blocked" />
+      </div>
+      <div className="field-grid compact">
+        <label>Spawn</label>
+        <span>{plan.summary.canSpawnNow} now · permission gated · validated envelope only</span>
+        <label>Project Store</label>
+        <span>{plan.summary.canWriteProjectStoreNow} writes now · structured result required</span>
+        <label>Provider</label>
+        <span>{plan.summary.providerSubmissionForbidden ? "submission forbidden" : "allowed"} · live {String(plan.summary.liveSubmitAllowed)}</span>
+      </div>
+      <div className="settings-list">
+        {visibleSlots.map((slot) => (
+          <div key={slot.workerSlotId}>
+            <strong>{slot.envelopeId || slot.workerSlotId}</strong>
+            <small>{slot.status} · envelope {slot.envelopeValidation.status} · result {slot.resultGate.resultStatus}</small>
+          </div>
+        ))}
+        {!visibleSlots.length && (
+          <div>
+            <strong>No worker plans</strong>
+            <small>Validated SubagentTaskEnvelope packets are required before a worker runtime plan appears.</small>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function DiagnosticsMode({
   audit,
   view,
@@ -4848,6 +4900,7 @@ function DiagnosticsMode({
       <VideoPlanningDiagnostics runtimeState={runtimeState} />
       <VideoExecutionPreviewDiagnostics runtimeState={runtimeState} />
       <AdapterContractDiagnostics runtimeState={runtimeState} />
+      <SubagentWorkerRuntimeDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />
       <section className="machine-panel">

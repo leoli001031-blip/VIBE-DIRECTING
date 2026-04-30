@@ -919,6 +919,17 @@ Phase 9.4 checklist：
 - 新增 `npm run desktop-runtime:test`，覆盖默认 plan valid、raw path redacted、absolute / parent traversal portable path blocked、requested sidecar command not executable、unknown command blocked、credential actions blocked 和 hard locks pinned。
 - `scripts/minimal-ui-contract-test.mjs` 增加 Phase 15 断言：desktop / sidecar / credential / arbitrary shell 等词只能出现在 Diagnostics / Settings Shell，不能进入 minimal Director surface。
 
+### Phase 16 已实现范围：Subagent Worker Runtime
+
+- 新增 `src/core/subagentWorkerRuntime.ts` pure builder：`buildSubagentWorkerRuntimePlan(...)` 把 validated `SubagentTaskEnvelope` 转成 permission-gated worker command plan，但 `canSpawnNow=false`、`canUseShell=false`、`canSubmitProvider=false`。
+- Worker Runtime 明确区分 `blocked_missing_envelope`、`blocked_invalid_envelope`、`blocked_free_text`、`ready_for_permission_gate`、`result_rejected`、`result_accepted_for_handoff`。
+- 自由文本 worker start 永远 blocked；坏 envelope 会保留 validator issue；合法 envelope 只能进入 permission gate，不会从浏览器计划直接 spawn worker。
+- 新增 structured result gate：只有 `subagent_result_v1` 字段完整、taskId 匹配 envelope parent task、gate set 完整、issue severity 只含 P0/P1/P2 时，才会生成 Project Store handoff plan。
+- 即使 result 通过，`canWriteProjectStoreNow=false`；Phase 16 只规划 handoff，不写项目文件、不启动 worker、不提交 provider、不读 credential。
+- 新增 `schemas/subagent_worker_runtime.schema.json` 并纳入 schema registry；schema 用 const 固定 no free text、validated envelope required、structured result required、no spawn、no shell、no provider、no credential、no file mutation、no Project Store write。
+- Diagnostics 新增 `Subagent Worker Runtime` 面板；主 Director surface 不展示 Subagent Worker Runtime、validated envelope、structured result 等工程词。
+- 新增 `npm run subagent-worker:test`，覆盖 ready permission gate、free text block、invalid envelope block、valid result handoff plan、bad result rejection 和 hard locks/schema const。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

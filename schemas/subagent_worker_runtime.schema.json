@@ -1,0 +1,247 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/subagent_worker_runtime.schema.json",
+  "title": "SubagentWorkerRuntimePlan",
+  "description": "Phase 16 plan-only subagent worker runtime contract. It turns validated SubagentTaskEnvelope packets into permission-gated worker plans and only accepts structured subagent_result_v1 outputs, without spawning workers, executing shells, reading credentials, submitting providers, or mutating files.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "phase",
+    "generatedAt",
+    "runtimeMode",
+    "slots",
+    "summary",
+    "hardLocks",
+    "validation",
+    "safetySummary"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "phase": { "type": "string", "const": "phase_16_subagent_worker_runtime" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "runtimeMode": {
+      "type": "string",
+      "enum": ["plan_only", "permission_gated_worker_planned"]
+    },
+    "slots": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/slot" }
+    },
+    "summary": { "$ref": "#/$defs/summary" },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "validation": { "$ref": "#/$defs/validation" },
+    "safetySummary": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "slotStatus": {
+      "type": "string",
+      "enum": [
+        "blocked_missing_envelope",
+        "blocked_invalid_envelope",
+        "blocked_free_text",
+        "ready_for_permission_gate",
+        "result_pending",
+        "result_rejected",
+        "result_accepted_for_handoff"
+      ]
+    },
+    "resultStatus": {
+      "type": "string",
+      "enum": ["missing", "valid", "invalid"]
+    },
+    "commandPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executable",
+        "commandKind",
+        "argumentSource",
+        "envelopeId",
+        "canSpawnNow",
+        "canUseShell",
+        "canSubmitProvider",
+        "expectedResultSchema",
+        "notes"
+      ],
+      "properties": {
+        "executable": { "type": "string", "const": "codex" },
+        "commandKind": { "type": "string", "const": "subagent_worker" },
+        "argumentSource": { "type": "string", "const": "validated_envelope_only" },
+        "envelopeId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "canSpawnNow": { "type": "boolean", "const": false },
+        "canUseShell": { "type": "boolean", "const": false },
+        "canSubmitProvider": { "type": "boolean", "const": false },
+        "expectedResultSchema": { "type": "string", "const": "subagent_result_v1" },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "resultGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resultStatus",
+        "taskIdMatchesEnvelope",
+        "requiredFieldsPresent",
+        "missingRequiredFields",
+        "gateFieldsPresent",
+        "issueSeveritiesAllowed",
+        "canHandoffToProjectStore",
+        "blockers",
+        "warnings"
+      ],
+      "properties": {
+        "resultStatus": { "$ref": "#/$defs/resultStatus" },
+        "candidateResultId": { "type": "string" },
+        "taskIdMatchesEnvelope": { "type": "boolean" },
+        "requiredFieldsPresent": { "type": "array", "items": { "type": "string" } },
+        "missingRequiredFields": { "type": "array", "items": { "type": "string" } },
+        "gateFieldsPresent": { "type": "array", "items": { "type": "string" } },
+        "issueSeveritiesAllowed": { "type": "boolean" },
+        "canHandoffToProjectStore": { "type": "boolean" },
+        "blockers": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workerSlotId",
+        "status",
+        "envelopeValidation",
+        "startRequestIds",
+        "freeTextPromptPresent",
+        "resultGate",
+        "blockedReasons",
+        "handoffPlan",
+        "notes"
+      ],
+      "properties": {
+        "workerSlotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "envelopeId": { "type": "string" },
+        "parentTaskId": { "type": "string" },
+        "shotId": { "type": "string" },
+        "purpose": {
+          "type": "string",
+          "enum": [
+            "visual_generation",
+            "visual_audit",
+            "video_generation",
+            "video_audit",
+            "continuity_audit",
+            "regeneration_plan",
+            "story_audit"
+          ]
+        },
+        "status": { "$ref": "#/$defs/slotStatus" },
+        "envelopeValidation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "issues"],
+          "properties": {
+            "status": { "type": "string", "enum": ["missing", "valid", "invalid"] },
+            "issues": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "startRequestIds": { "type": "array", "items": { "type": "string" } },
+        "freeTextPromptPresent": { "type": "boolean" },
+        "commandPlan": { "$ref": "#/$defs/commandPlan" },
+        "resultGate": { "$ref": "#/$defs/resultGate" },
+        "blockedReasons": { "type": "array", "items": { "type": "string" } },
+        "handoffPlan": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["structuredResultRequired", "projectStorePatchPlanned", "canWriteProjectStoreNow", "notes"],
+          "properties": {
+            "structuredResultRequired": { "type": "boolean", "const": true },
+            "projectStorePatchPlanned": { "type": "boolean" },
+            "canWriteProjectStoreNow": { "type": "boolean", "const": false },
+            "notes": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalSlots",
+        "readyForPermissionGate",
+        "blocked",
+        "resultAcceptedForHandoff",
+        "resultRejected",
+        "freeTextBlocked",
+        "canSpawnNow",
+        "canWriteProjectStoreNow",
+        "structuredResultsRequired",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "totalSlots": { "type": "integer", "minimum": 0 },
+        "readyForPermissionGate": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "resultAcceptedForHandoff": { "type": "integer", "minimum": 0 },
+        "resultRejected": { "type": "integer", "minimum": 0 },
+        "freeTextBlocked": { "type": "integer", "minimum": 0 },
+        "canSpawnNow": { "type": "integer", "const": 0 },
+        "canWriteProjectStoreNow": { "type": "integer", "const": 0 },
+        "structuredResultsRequired": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "noFreeTextTask",
+        "validatedEnvelopeRequired",
+        "structuredResultRequired",
+        "noSpawnWorkerNow",
+        "noSubprocess",
+        "noShellExecution",
+        "noProviderExecution",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "noFileMutation",
+        "noProjectStoreWrite",
+        "noUnscopedRead",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "noFreeTextTask": { "type": "boolean", "const": true },
+        "validatedEnvelopeRequired": { "type": "boolean", "const": true },
+        "structuredResultRequired": { "type": "boolean", "const": true },
+        "noSpawnWorkerNow": { "type": "boolean", "const": true },
+        "noSubprocess": { "type": "boolean", "const": true },
+        "noShellExecution": { "type": "boolean", "const": true },
+        "noProviderExecution": { "type": "boolean", "const": true },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "noProjectStoreWrite": { "type": "boolean", "const": true },
+        "noUnscopedRead": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "errors", "warnings", "checkedAt"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "errors": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "checkedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+      }
+    }
+  }
+}

@@ -100,6 +100,7 @@ const minimalTopNav = findFunctionBody(appSource, "MinimalTopNav");
 const minimalAgentPanel = findFunctionBody(appSource, "MinimalAgentPanel");
 const minimalProjectPlan = findFunctionBody(appSource, "buildMinimalProjectPlan");
 const desktopShellView = findFunctionBody(appSource, "buildDesktopRuntimeShellView");
+const subagentWorkerRuntimeDiagnostics = findFunctionBody(appSource, "SubagentWorkerRuntimeDiagnostics");
 const diagnosticsMode = findFunctionBody(appSource, "DiagnosticsMode");
 const settingsShell = findFunctionBody(appSource, "SettingsShell");
 const appBody = findFunctionBody(appSource, "App");
@@ -155,6 +156,11 @@ checkMessage(requireWithin(settingsShell, /sidecar policy/i, "Phase 15 sidecar p
 checkMessage(requireWithin(settingsShell, /credential vault placeholder/i, "Phase 15 credential vault placeholder row in Settings"));
 checkMessage(requireWithin(settingsShell, /hard locks summary/i, "Phase 15 hard locks summary in Settings"));
 
+checkMessage(requireWithin(subagentWorkerRuntimeDiagnostics, /buildSubagentWorkerRuntimeView\s*\(/, "Phase 16 worker runtime diagnostics must use buildSubagentWorkerRuntimeView"));
+checkMessage(requireWithin(subagentWorkerRuntimeDiagnostics, /Subagent Worker Runtime/i, "Phase 16 Subagent Worker Runtime diagnostics panel"));
+checkMessage(requireWithin(subagentWorkerRuntimeDiagnostics, /validated envelope only/i, "Phase 16 validated-envelope-only diagnostics copy"));
+checkMessage(requireWithin(subagentWorkerRuntimeDiagnostics, /structured result required/i, "Phase 16 structured result diagnostics copy"));
+
 checkMessage(requireAny(appSource, [/Asset Library/, /function\s+AssetLibrary/, /className="[^"]*asset-library/], "Asset Library main UI naming"));
 checkMessage(requireAny(appSource, [/Preview/, /function\s+PreviewTimeline/, /className="[^"]*preview/], "Preview main UI"));
 checkMessage(requireAny(appSource, [/Selected/, /Scope/], "Selected/Scope director context"));
@@ -202,6 +208,9 @@ const forbiddenMinimalTerms = [
   ["Task Envelope", /Task\s+Envelope|taskEnvelope/i],
   ["Desktop Runtime", /Desktop\s+Runtime/i],
   ["Permission Shell", /Permission\s+Shell/i],
+  ["Subagent Worker Runtime", /Subagent\s+Worker\s+Runtime/i],
+  ["validated envelope", /validated\s+envelope/i],
+  ["structured result", /structured\s+result/i],
   ["Tauri", /Tauri/i],
   ["sidecar", /sidecar/i],
   ["arbitrary shell", /arbitrary\s+shell/i],

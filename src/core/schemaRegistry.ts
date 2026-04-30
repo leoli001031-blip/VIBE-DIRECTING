@@ -402,6 +402,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "SubagentResult",
   },
   {
+    fileName: "subagent_worker_runtime.schema.json",
+    id: "https://vibecore.local/schemas/subagent_worker_runtime.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 16 permission-gated subagent worker runtime plan requiring validated envelopes and structured subagent_result_v1 outputs.",
+    typeName: "SubagentWorkerRuntimePlan",
+  },
+  {
     fileName: "keyframe_pair_derivation.schema.json",
     id: "https://vibecore.local/schemas/keyframe_pair_derivation.schema.json",
     version: schemaVersion,
