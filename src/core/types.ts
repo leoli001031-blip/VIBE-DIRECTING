@@ -357,6 +357,250 @@ export interface ToolRuntimeHarnessState {
   notes: string[];
 }
 
+export type ProjectFileCorePathOrigin = "project_root_relative" | "user_selected_import";
+
+export type ProjectFileCoreEntryKind = "file" | "directory";
+
+export type ProjectFileCoreSourceRole =
+  | "project_manifest"
+  | "production_bible"
+  | "story_flow"
+  | "visual_memory"
+  | "shots"
+  | "manifests"
+  | "reports"
+  | "preview"
+  | "exports"
+  | "knowledge"
+  | "settings"
+  | "runtime_state";
+
+export interface ProjectFileCorePathRef {
+  path: string;
+  origin: ProjectFileCorePathOrigin;
+  importedFrom?: "user_selected_import";
+  sourceRef?: string;
+  notes: string[];
+}
+
+export interface ProjectFileCorePlannedEntry {
+  id: string;
+  role: ProjectFileCoreSourceRole;
+  kind: ProjectFileCoreEntryKind;
+  path: string;
+  pathOrigin: "project_root_relative";
+  status: "planned_only";
+  requiredForFileFirstCore: boolean;
+  notes: string[];
+}
+
+export interface ProjectFileCoreSourcePriority {
+  role: ProjectFileCoreSourceRole;
+  priority: number;
+  canonicalPath: string;
+  authority: "planned_project_file" | "project_file_tree" | "derived_cache";
+  runtimeStateMayOverride: false;
+  importedSourceRefs: ProjectFileCorePathRef[];
+  notes: string[];
+}
+
+export interface ProjectFileCoreDerivedCachePolicy {
+  runtimeStateRole: "derived_cache";
+  runtimeStateMayBeRebuilt: true;
+  runtimeStateIsSoleSourceOfTruth: false;
+  rebuildInputs: ProjectFileCoreSourceRole[];
+  cacheKeys: {
+    sourceIndexHash: string;
+    projectVersion: string;
+    generatedAt: string;
+  };
+  invalidationRefs: string[];
+  notes: string[];
+}
+
+export interface ProjectFileCorePathPolicy {
+  allowedOrigins: ProjectFileCorePathOrigin[];
+  projectRootRelativeRequired: true;
+  userSelectedImportAllowed: true;
+  hardcodedAbsolutePathContractForbidden: true;
+  platformSpecificPathContractForbidden: true;
+  pathResolverRequired: true;
+  notes: string[];
+}
+
+export interface ProjectFileCoreHardLocks {
+  dryRunOnly: true;
+  readOnly: true;
+  noFileMutation: true;
+  noUserFileMove: true;
+  noProviderSubmit: true;
+  noImageGeneration: true;
+  noVideoGeneration: true;
+  noArbitraryShell: true;
+  noCredentialRead: true;
+  noCredentialWrite: true;
+  projectVibeWriteAllowed: false;
+  runtimeStateIsDerivedCache: true;
+}
+
+export interface ProjectFileCoreMigrationReadiness {
+  status: "planned_only_ready" | "blocked";
+  readyForDryRunPlanning: boolean;
+  readyForRuntimeDerivation: boolean;
+  readyForProjectVibeWrite: false;
+  blockers: string[];
+  warnings: string[];
+  nextSteps: string[];
+}
+
+export interface ProjectFileCoreState {
+  schemaVersion: string;
+  generatedAt: string;
+  phase: "phase_9_1_minimum_file_first_core";
+  projectFileName: "project.vibe";
+  projectFileStatus: "planned_not_written";
+  projectRoot: {
+    rootRef: "project_root";
+    origin: "user_selected_import";
+    selectedImport?: ProjectFileCorePathRef;
+    notes: string[];
+  };
+  plannedFileTree: ProjectFileCorePlannedEntry[];
+  sourceOfTruthPriority: ProjectFileCoreSourcePriority[];
+  derivedCachePolicy: ProjectFileCoreDerivedCachePolicy;
+  pathPolicy: ProjectFileCorePathPolicy;
+  hardLocks: ProjectFileCoreHardLocks;
+  migrationReadiness: ProjectFileCoreMigrationReadiness;
+  sourceRefs: string[];
+  notes: string[];
+}
+
+export type SubagentRunnerTaskKind =
+  | "image"
+  | "asset"
+  | "pair_qa"
+  | "scene_qa"
+  | "story_audit"
+  | "video_execution"
+  | "audio"
+  | "export";
+
+export type SubagentRunnerSlotStatus =
+  | "planned"
+  | "planned_missing_envelope"
+  | "blocked_missing_envelope"
+  | "blocked_contract_violation";
+
+export type SubagentRunnerEnvelopeStatus = "validated" | "missing" | "invalid";
+
+export interface SubagentRunnerHardLocks {
+  dryRunOnly: true;
+  diagnosticsOnly: true;
+  noFreeTextTask: true;
+  validatedEnvelopeRequired: true;
+  noSpawnAgent: true;
+  noSubprocess: true;
+  noShellExecution: true;
+  noProviderExecution: true;
+  noCredentialRead: true;
+  noFileMutation: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+}
+
+export interface SubagentRunnerPacketRequirement {
+  requirementId:
+    | "source_index_hash"
+    | "provider_policy"
+    | "expected_output_contract"
+    | "acceptance_checklist"
+    | "output_schema"
+    | "forbidden_actions";
+  label: string;
+  required: true;
+  schemaPath: string;
+  notes: string[];
+}
+
+export interface SubagentRunnerRequirementCheck {
+  requirementId: SubagentRunnerPacketRequirement["requirementId"];
+  present: boolean;
+  detail: string;
+}
+
+export interface SubagentRunnerSlot {
+  runnerSlotId: string;
+  taskKind: SubagentRunnerTaskKind;
+  purpose: SubagentTaskPurpose;
+  sourceId: string;
+  envelopeId?: string;
+  parentTaskId?: string;
+  shotId?: string;
+  status: SubagentRunnerSlotStatus;
+  envelopeStatus: SubagentRunnerEnvelopeStatus;
+  canExecute: false;
+  canSpawnAgent: false;
+  freeTextPromptPresent: boolean;
+  requirementChecks: SubagentRunnerRequirementCheck[];
+  blockedReasons: string[];
+  warnings: string[];
+  sourceRefs: string[];
+  notes: string[];
+}
+
+export interface SubagentRunnerCoverageEntry {
+  taskKind: SubagentRunnerTaskKind;
+  expected: true;
+  totalSlots: number;
+  planned: number;
+  plannedMissingEnvelope: number;
+  blockedMissingEnvelope: number;
+  blockedContractViolation: number;
+  sourceRefs: string[];
+  notes: string[];
+}
+
+export interface SubagentRunnerState {
+  schemaVersion: string;
+  generatedAt: string;
+  slots: SubagentRunnerSlot[];
+  coverage: SubagentRunnerCoverageEntry[];
+  summary: {
+    totalSlots: number;
+    planned: number;
+    plannedMissingEnvelope: number;
+    blockedMissingEnvelope: number;
+    blockedContractViolation: number;
+    freeTextBlocked: number;
+    validatedEnvelopes: number;
+    missingEnvelopes: number;
+    invalidEnvelopes: number;
+    canExecute: 0;
+    dryRunOnly: true;
+    diagnosticsOnly: true;
+    noFreeTextTask: true;
+    validatedEnvelopeRequired: true;
+    providerSubmissionForbidden: true;
+    liveSubmitAllowed: false;
+  };
+  hardLocks: SubagentRunnerHardLocks;
+  blockedReasons: string[];
+  packetRequirements: SubagentRunnerPacketRequirement[];
+  dryRunOnly: true;
+  diagnosticsOnly: true;
+  noFreeTextTask: true;
+  validatedEnvelopeRequired: true;
+  noSpawnAgent: true;
+  noSubprocess: true;
+  noShellExecution: true;
+  noProviderExecution: true;
+  noCredentialRead: true;
+  noFileMutation: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  notes: string[];
+}
+
 export type ReferenceRole =
   | "identity_authority"
   | "scene_layout_authority"

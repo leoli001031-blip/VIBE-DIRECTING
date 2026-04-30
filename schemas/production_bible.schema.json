@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/production_bible.schema.json",
+  "title": "ProductionBible",
+  "description": "File-first project source of truth for story, character, scene, prop, style, sound, and reusable asset rules.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "title",
+    "status",
+    "storyPremise",
+    "characters",
+    "scenes",
+    "props",
+    "styleRules",
+    "soundDirection",
+    "reusableAssetRequirements",
+    "keyframePairRequirements",
+    "sourceRefs",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "title": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "ready_for_review", "locked"]
+    },
+    "storyPremise": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "themes": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "characters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/character" }
+    },
+    "scenes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/scene" }
+    },
+    "props": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/prop" }
+    },
+    "styleRules": { "$ref": "#/$defs/styleRules" },
+    "soundDirection": { "$ref": "#/$defs/soundDirection" },
+    "reusableAssetRequirements": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/reusableAssetRequirement" }
+    },
+    "keyframePairRequirements": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/keyframePairRequirement" }
+    },
+    "sourceRefs": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "updatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "$defs": {
+    "status": {
+      "type": "string",
+      "enum": ["planned", "candidate", "locked", "rejected"]
+    },
+    "character": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "storyFunction", "visualContinuity", "voiceContinuity", "status"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "name": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "storyFunction": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "visualContinuity": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "voiceContinuity": { "type": "string" },
+        "requiresLongTermReuse": { "type": "boolean" },
+        "status": { "$ref": "#/$defs/status" }
+      }
+    },
+    "scene": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "storyFunction", "spatialContinuity", "status"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "name": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "storyFunction": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "spatialContinuity": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "requiresSceneAssetPack": { "type": "boolean" },
+        "status": { "$ref": "#/$defs/status" }
+      }
+    },
+    "prop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "storyFunction", "visualDefinition", "status"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "name": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "storyFunction": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "visualDefinition": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "requiresLongTermReuse": { "type": "boolean" },
+        "status": { "$ref": "#/$defs/status" }
+      }
+    },
+    "styleRules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["visualDirection", "visualTaboos", "continuityRules"],
+      "properties": {
+        "visualDirection": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "visualTaboos": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "continuityRules": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "soundDirection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["voiceDirection", "musicDirection", "ambienceDirection"],
+      "properties": {
+        "voiceDirection": { "type": "string" },
+        "musicDirection": { "type": "string" },
+        "ambienceDirection": { "type": "string" }
+      }
+    },
+    "reusableAssetRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetId", "targetType", "reason", "requiredMemory"],
+      "properties": {
+        "targetId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "targetType": {
+          "type": "string",
+          "enum": ["character", "scene", "prop", "style", "voice"]
+        },
+        "reason": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "requiredMemory": {
+          "type": "string",
+          "enum": ["visual_memory", "spatial_memory", "voice_memory", "scene_asset_pack"]
+        }
+      }
+    },
+    "keyframePairRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shotId", "reason", "startEndDerivationRequired"],
+      "properties": {
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "reason": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "startEndDerivationRequired": { "type": "boolean" }
+      }
+    }
+  }
+}

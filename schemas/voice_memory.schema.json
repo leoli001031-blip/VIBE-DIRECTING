@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/voice_memory.schema.json",
+  "title": "VoiceMemory",
+  "description": "Long-term voice source reservations for narrator, character, brand, music, and ambience planning without private provider material.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "privateAuthMaterialForbidden",
+    "voiceSources",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "privateAuthMaterialForbidden": { "type": "boolean", "const": true },
+    "voiceSources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/voiceSource" }
+    },
+    "updatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "$defs": {
+    "voiceSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "displayName",
+        "provider",
+        "providerVoiceId",
+        "language",
+        "role",
+        "consentStatus",
+        "commercialUseStatus",
+        "status",
+        "textConstraints"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "displayName": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "provider": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerVoiceId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "language": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "role": {
+          "type": "string",
+          "enum": ["narrator", "character", "brand_voice", "music_profile", "ambience_profile"]
+        },
+        "linkedCharacterId": { "type": "string" },
+        "samplePath": { "type": "string" },
+        "consentStatus": {
+          "type": "string",
+          "enum": ["user_owned", "licensed", "provider_builtin", "unknown"]
+        },
+        "commercialUseStatus": {
+          "type": "string",
+          "enum": ["allowed", "restricted", "unknown"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["locked", "candidate", "rejected"]
+        },
+        "textConstraints": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    }
+  }
+}

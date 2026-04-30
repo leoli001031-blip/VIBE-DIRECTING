@@ -10,6 +10,7 @@
     "coreStateVersion",
     "generatedAt",
     "project",
+    "projectFileCore",
     "sourceIndex",
     "sourceIndexSummary",
     "storyFlow",
@@ -28,6 +29,7 @@
     "checkpointResumeHarness",
     "qaHarness",
     "toolRuntimeHarness",
+    "subagentRunner",
     "generationHealthChecker",
     "promptConflictChecker",
     "storyChanges",
@@ -56,6 +58,7 @@
         "contactSheets": { "type": "object" }
       }
     },
+    "projectFileCore": { "$ref": "project_file_core.schema.json" },
     "sourceIndex": { "$ref": "project_source_index.schema.json" },
     "sourceIndexSummary": {
       "type": "object",
@@ -212,6 +215,7 @@
     "checkpointResumeHarness": { "$ref": "checkpoint_resume_harness.schema.json" },
     "qaHarness": { "$ref": "qa_harness.schema.json" },
     "toolRuntimeHarness": { "$ref": "tool_runtime_harness.schema.json" },
+    "subagentRunner": { "$ref": "subagent_runner.schema.json" },
     "generationHealthChecker": { "$ref": "generation_health_checker.schema.json" },
     "promptConflictChecker": { "$ref": "prompt_conflict_checker.schema.json" },
     "storyChanges": {

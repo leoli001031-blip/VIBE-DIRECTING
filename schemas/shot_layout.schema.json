@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/shot_layout.schema.json",
+  "title": "ShotLayout",
+  "description": "Spatial and camera contract for a shot, including subject placement, camera placement, axis, and start/end frame derivation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "shotId",
+    "sceneId",
+    "subjectPlacement",
+    "cameraPlacement",
+    "axisAndDirection",
+    "startFrame",
+    "endFrameDerivation",
+    "cameraConstraints",
+    "spatialAnchors",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "sceneId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "subjectPlacement": { "$ref": "#/$defs/subjectPlacement" },
+    "cameraPlacement": { "$ref": "#/$defs/cameraPlacement" },
+    "axisAndDirection": { "$ref": "#/$defs/axisAndDirection" },
+    "startFrame": { "$ref": "#/$defs/frameState" },
+    "endFrameDerivation": { "$ref": "#/$defs/endFrameDerivation" },
+    "cameraConstraints": { "$ref": "#/$defs/cameraConstraints" },
+    "spatialAnchors": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "updatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "$defs": {
+    "vector3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "subjectPlacement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subjectId", "worldPosition", "framePlacement", "blockingIntent"],
+      "properties": {
+        "subjectId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "worldPosition": { "$ref": "#/$defs/vector3" },
+        "framePlacement": {
+          "type": "string",
+          "enum": ["left", "center", "right", "foreground", "midground", "background", "offscreen"]
+        },
+        "blockingIntent": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "cameraPlacement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["worldPosition", "cameraVector", "height", "framing"],
+      "properties": {
+        "worldPosition": { "$ref": "#/$defs/vector3" },
+        "cameraVector": { "$ref": "#/$defs/vector3" },
+        "height": {
+          "type": "string",
+          "enum": ["low", "eye_level", "high", "overhead"]
+        },
+        "framing": {
+          "type": "string",
+          "enum": ["wide", "medium", "close", "insert", "over_the_shoulder", "point_of_view"]
+        }
+      }
+    },
+    "axisAndDirection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["axisId", "screenDirection", "worldDirection", "crossesAxis"],
+      "properties": {
+        "axisId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "screenDirection": {
+          "type": "string",
+          "enum": ["left_to_right", "right_to_left", "toward_camera", "away_from_camera", "static"]
+        },
+        "worldDirection": { "$ref": "#/$defs/vector3" },
+        "crossesAxis": { "type": "boolean" }
+      }
+    },
+    "frameState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "subjectPlacementId", "cameraPlacementId"],
+      "properties": {
+        "description": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "subjectPlacementId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "cameraPlacementId": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "endFrameDerivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["derivesFrom", "derivationMode", "allowedChanges", "forbiddenChanges"],
+      "properties": {
+        "derivesFrom": { "type": "string", "const": "start_frame" },
+        "derivationMode": {
+          "type": "string",
+          "enum": ["same_camera_state_change", "edit_from_start_frame", "single_anchor_static"]
+        },
+        "allowedChanges": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "forbiddenChanges": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "cameraConstraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixedCamera", "movementAllowed", "allowedMovements", "forbiddenMovements"],
+      "properties": {
+        "fixedCamera": { "type": "boolean" },
+        "movementAllowed": {
+          "type": "string",
+          "enum": ["none", "minor_reframe", "pan_tilt_only", "dolly_or_truck_allowed"]
+        },
+        "allowedMovements": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "forbiddenMovements": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    }
+  }
+}

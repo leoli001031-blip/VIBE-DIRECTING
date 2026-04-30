@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/scene_asset_pack.schema.json",
+  "title": "SceneAssetPack",
+  "description": "Master scene and derived view contract with world positions, camera vectors, candidate/rejected status, and explicit master inheritance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "sceneId",
+    "status",
+    "masterScene",
+    "derivedViews",
+    "assetRefs",
+    "readiness",
+    "inheritanceRules",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "sceneId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "status": {
+      "type": "string",
+      "enum": ["locked", "candidate", "rejected"]
+    },
+    "masterScene": { "$ref": "#/$defs/masterScene" },
+    "derivedViews": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/derivedView" }
+    },
+    "assetRefs": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "readiness": {
+      "type": "string",
+      "enum": ["draft_only", "ready_for_formal", "blocked"]
+    },
+    "inheritanceRules": { "$ref": "#/$defs/inheritanceRules" },
+    "updatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "$defs": {
+    "vector3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "masterScene": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "referenceAuthority",
+        "worldCoordinateSystem",
+        "worldAnchors",
+        "cameraVectors",
+        "masterImageRefs",
+        "textConstraints"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": {
+          "type": "string",
+          "enum": ["locked", "candidate", "rejected"]
+        },
+        "referenceAuthority": { "$ref": "reference_authority.schema.json" },
+        "worldCoordinateSystem": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "worldAnchors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/worldAnchor" }
+        },
+        "cameraVectors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/cameraVector" }
+        },
+        "masterImageRefs": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "textConstraints": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "derivedView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "masterSceneId",
+        "inheritsFromMaster",
+        "inheritanceOverrides",
+        "worldPosition",
+        "cameraVector",
+        "viewImageRefs",
+        "derivationEvidence"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": {
+          "type": "string",
+          "enum": ["locked", "candidate", "rejected"]
+        },
+        "masterSceneId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "inheritsFromMaster": { "type": "boolean", "const": true },
+        "inheritanceOverrides": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "worldPosition": { "$ref": "#/$defs/vector3" },
+        "cameraVector": { "$ref": "#/$defs/vector3" },
+        "viewImageRefs": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "derivationEvidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "worldAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "worldPosition"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "worldPosition": { "$ref": "#/$defs/vector3" }
+      }
+    },
+    "cameraVector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "worldPosition", "cameraVector"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "worldPosition": { "$ref": "#/$defs/vector3" },
+        "cameraVector": { "$ref": "#/$defs/vector3" }
+      }
+    },
+    "inheritanceRules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["masterInheritanceRequired", "textOnlyViewRecreationAllowed", "unknownDerivationCanLock"],
+      "properties": {
+        "masterInheritanceRequired": { "type": "boolean", "const": true },
+        "textOnlyViewRecreationAllowed": { "type": "boolean", "const": false },
+        "unknownDerivationCanLock": { "type": "boolean", "const": false }
+      }
+    }
+  }
+}

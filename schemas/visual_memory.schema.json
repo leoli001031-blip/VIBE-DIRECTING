@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/visual_memory.schema.json",
+  "title": "VisualMemory",
+  "description": "Asset consistency memory, not an image gallery. Stores only locked, candidate, or rejected authority records for characters, scenes, props, style, and voice anchors.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "libraryPurpose",
+    "referenceAuthorityPolicy",
+    "v0Compatibility",
+    "assets",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "libraryPurpose": { "type": "string", "const": "asset_consistency_memory" },
+    "referenceAuthorityPolicy": { "$ref": "#/$defs/referenceAuthorityPolicy" },
+    "v0Compatibility": { "$ref": "#/$defs/v0Compatibility" },
+    "assets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/asset" }
+    },
+    "updatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "$defs": {
+    "assetStatus": {
+      "type": "string",
+      "enum": ["locked", "candidate", "rejected"]
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "assetType",
+        "name",
+        "status",
+        "originKind",
+        "referenceAuthority",
+        "textConstraints",
+        "sourceRefs",
+        "usedByShotIds",
+        "canPromoteToFormal",
+        "canUseAsFutureReference"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "assetType": {
+          "type": "string",
+          "enum": ["character", "scene", "prop", "style", "voice_anchor"]
+        },
+        "name": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "$ref": "#/$defs/assetStatus" },
+        "originKind": {
+          "type": "string",
+          "enum": ["user_import", "source_asset", "formal_output", "provider_temp_output", "manual_definition"]
+        },
+        "referenceAuthority": { "$ref": "reference_authority.schema.json" },
+        "mainReferencePath": { "type": "string" },
+        "textConstraints": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "usedByShotIds": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "canPromoteToFormal": { "type": "boolean" },
+        "canUseAsFutureReference": { "type": "boolean" },
+        "rejectedReason": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "originKind": { "const": "provider_temp_output" }
+            },
+            "required": ["originKind"]
+          },
+          "then": {
+            "properties": {
+              "status": { "enum": ["candidate", "rejected"] },
+              "canPromoteToFormal": { "const": false },
+              "canUseAsFutureReference": { "const": false }
+            }
+          }
+        }
+      ]
+    },
+    "referenceAuthorityPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorityRoleRequired",
+        "assetLibraryIsGallery",
+        "tempOutputAutoPromote",
+        "localPostprocessCanSemanticRepair"
+      ],
+      "properties": {
+        "authorityRoleRequired": { "type": "boolean", "const": true },
+        "assetLibraryIsGallery": { "type": "boolean", "const": false },
+        "tempOutputAutoPromote": { "type": "boolean", "const": false },
+        "localPostprocessCanSemanticRepair": { "type": "boolean", "const": false }
+      }
+    },
+    "v0Compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supportsSingleMainCharacterReference",
+        "supportsSingleSceneReference",
+        "requiresTextConstraints",
+        "supportsLockedStatus",
+        "futureExpansion"
+      ],
+      "properties": {
+        "supportsSingleMainCharacterReference": { "type": "boolean", "const": true },
+        "supportsSingleSceneReference": { "type": "boolean", "const": true },
+        "requiresTextConstraints": { "type": "boolean", "const": true },
+        "supportsLockedStatus": { "type": "boolean", "const": true },
+        "futureExpansion": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["three_view_character_refs", "multi_angle_scene_refs", "prop_turnarounds", "style_variant_sets"]
+          }
+        }
+      }
+    }
+  }
+}

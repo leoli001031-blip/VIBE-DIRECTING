@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/story_flow.schema.json",
+  "title": "StoryFlow",
+  "description": "Adaptive story structure contract. Sections are project-defined and are not hard-coded to Act I-IV.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "productionBibleId",
+    "sectionModel",
+    "sections",
+    "shotOrder",
+    "sourceRefs",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "productionBibleId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "sectionModel": { "type": "string", "const": "adaptive" },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/section" }
+    },
+    "shotOrder": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "sourceRefs": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "updatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "$defs": {
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "sectionKind", "sequenceIndex", "storyFunction", "beats", "shots"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "sectionKind": {
+          "type": "string",
+          "enum": ["act", "chapter", "sequence", "emotional_phase", "location_block", "custom"]
+        },
+        "sequenceIndex": { "type": "integer", "minimum": 0 },
+        "storyFunction": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "beats": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/beat" }
+        },
+        "shots": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/flowShot" }
+        }
+      }
+    },
+    "beat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "summary", "emotionalTurn", "sourceRefs"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "summary": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "emotionalTurn": { "type": "string" },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "flowShot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "shotSpecId", "storyFunction", "status"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "shotSpecId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "storyFunction": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": {
+          "type": "string",
+          "enum": ["planned", "draft", "ready", "locked"]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/project_file_core.schema.json",
+  "title": "ProjectFileCoreState",
+  "description": "Phase 9.1 planned project.vibe file-first project core. This schema is dry-run/read-only and treats runtime-state as a derived cache.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "phase",
+    "projectFileName",
+    "projectFileStatus",
+    "projectRoot",
+    "plannedFileTree",
+    "sourceOfTruthPriority",
+    "derivedCachePolicy",
+    "pathPolicy",
+    "hardLocks",
+    "migrationReadiness",
+    "sourceRefs",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "phase": { "type": "string", "const": "phase_9_1_minimum_file_first_core" },
+    "projectFileName": { "type": "string", "const": "project.vibe" },
+    "projectFileStatus": { "type": "string", "const": "planned_not_written" },
+    "projectRoot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rootRef", "origin", "notes"],
+      "properties": {
+        "rootRef": { "type": "string", "const": "project_root" },
+        "origin": { "type": "string", "const": "user_selected_import" },
+        "selectedImport": { "$ref": "#/$defs/pathRef" },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "plannedFileTree": {
+      "type": "array",
+      "minItems": 11,
+      "items": { "$ref": "#/$defs/plannedEntry" }
+    },
+    "sourceOfTruthPriority": {
+      "type": "array",
+      "minItems": 12,
+      "items": { "$ref": "#/$defs/sourcePriority" }
+    },
+    "derivedCachePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtimeStateRole",
+        "runtimeStateMayBeRebuilt",
+        "runtimeStateIsSoleSourceOfTruth",
+        "rebuildInputs",
+        "cacheKeys",
+        "invalidationRefs",
+        "notes"
+      ],
+      "properties": {
+        "runtimeStateRole": { "type": "string", "const": "derived_cache" },
+        "runtimeStateMayBeRebuilt": { "type": "boolean", "const": true },
+        "runtimeStateIsSoleSourceOfTruth": { "type": "boolean", "const": false },
+        "rebuildInputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sourceRole" }
+        },
+        "cacheKeys": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourceIndexHash", "projectVersion", "generatedAt"],
+          "properties": {
+            "sourceIndexHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+            "projectVersion": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+            "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+          }
+        },
+        "invalidationRefs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "pathPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowedOrigins",
+        "projectRootRelativeRequired",
+        "userSelectedImportAllowed",
+        "hardcodedAbsolutePathContractForbidden",
+        "platformSpecificPathContractForbidden",
+        "pathResolverRequired",
+        "notes"
+      ],
+      "properties": {
+        "allowedOrigins": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pathOrigin" },
+          "contains": { "type": "string", "const": "project_root_relative" }
+        },
+        "projectRootRelativeRequired": { "type": "boolean", "const": true },
+        "userSelectedImportAllowed": { "type": "boolean", "const": true },
+        "hardcodedAbsolutePathContractForbidden": { "type": "boolean", "const": true },
+        "platformSpecificPathContractForbidden": { "type": "boolean", "const": true },
+        "pathResolverRequired": { "type": "boolean", "const": true },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "migrationReadiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "readyForDryRunPlanning",
+        "readyForRuntimeDerivation",
+        "readyForProjectVibeWrite",
+        "blockers",
+        "warnings",
+        "nextSteps"
+      ],
+      "properties": {
+        "status": { "type": "string", "enum": ["planned_only_ready", "blocked"] },
+        "readyForDryRunPlanning": { "type": "boolean" },
+        "readyForRuntimeDerivation": { "type": "boolean" },
+        "readyForProjectVibeWrite": { "type": "boolean", "const": false },
+        "blockers": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "nextSteps": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "sourceRefs": { "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "pathOrigin": {
+      "type": "string",
+      "enum": ["project_root_relative", "user_selected_import"]
+    },
+    "sourceRole": {
+      "type": "string",
+      "enum": [
+        "project_manifest",
+        "production_bible",
+        "story_flow",
+        "visual_memory",
+        "shots",
+        "manifests",
+        "reports",
+        "preview",
+        "exports",
+        "knowledge",
+        "settings",
+        "runtime_state"
+      ]
+    },
+    "pathRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "origin", "notes"],
+      "properties": {
+        "path": { "type": "string" },
+        "origin": { "$ref": "#/$defs/pathOrigin" },
+        "importedFrom": { "type": "string", "const": "user_selected_import" },
+        "sourceRef": { "type": "string" },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "plannedEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "kind", "path", "pathOrigin", "status", "requiredForFileFirstCore", "notes"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "role": { "$ref": "#/$defs/sourceRole" },
+        "kind": { "type": "string", "enum": ["file", "directory"] },
+        "path": {
+          "type": "string",
+          "pattern": "^(?![A-Za-z]:[\\\\/])(?!/)(?!//).+"
+        },
+        "pathOrigin": { "type": "string", "const": "project_root_relative" },
+        "status": { "type": "string", "const": "planned_only" },
+        "requiredForFileFirstCore": { "type": "boolean" },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "sourcePriority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "priority", "canonicalPath", "authority", "runtimeStateMayOverride", "importedSourceRefs", "notes"],
+      "properties": {
+        "role": { "$ref": "#/$defs/sourceRole" },
+        "priority": { "type": "integer", "minimum": 1 },
+        "canonicalPath": {
+          "type": "string",
+          "pattern": "^(?![A-Za-z]:[\\\\/])(?!/)(?!//).+"
+        },
+        "authority": {
+          "type": "string",
+          "enum": ["planned_project_file", "project_file_tree", "derived_cache"]
+        },
+        "runtimeStateMayOverride": { "type": "boolean", "const": false },
+        "importedSourceRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pathRef" }
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dryRunOnly",
+        "readOnly",
+        "noFileMutation",
+        "noUserFileMove",
+        "noProviderSubmit",
+        "noImageGeneration",
+        "noVideoGeneration",
+        "noArbitraryShell",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "projectVibeWriteAllowed",
+        "runtimeStateIsDerivedCache"
+      ],
+      "properties": {
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "readOnly": { "type": "boolean", "const": true },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "noUserFileMove": { "type": "boolean", "const": true },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "noImageGeneration": { "type": "boolean", "const": true },
+        "noVideoGeneration": { "type": "boolean", "const": true },
+        "noArbitraryShell": { "type": "boolean", "const": true },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "projectVibeWriteAllowed": { "type": "boolean", "const": false },
+        "runtimeStateIsDerivedCache": { "type": "boolean", "const": true }
+      }
+    }
+  }
+}

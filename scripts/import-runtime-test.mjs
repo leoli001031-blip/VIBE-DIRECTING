@@ -606,6 +606,500 @@ function uniqueSorted(values) {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right));
 }
 
+const projectFileCorePlannedEntries = [
+  ["project_file", "project_manifest", "file", "project.vibe"],
+  ["production_bible", "production_bible", "file", "production_bible/production_bible.vibe.json"],
+  ["story_flow", "story_flow", "file", "story_flow/story_flow.vibe.json"],
+  ["visual_memory", "visual_memory", "directory", "visual_memory"],
+  ["shots", "shots", "directory", "shots"],
+  ["manifests", "manifests", "directory", "manifests"],
+  ["reports", "reports", "directory", "reports"],
+  ["preview", "preview", "directory", "preview"],
+  ["exports", "exports", "directory", "exports"],
+  ["knowledge", "knowledge", "directory", "knowledge"],
+  ["settings", "settings", "directory", "settings"],
+].map(([id, role, kind, plannedPath]) => ({
+  id,
+  role,
+  kind,
+  path: plannedPath,
+  pathOrigin: "project_root_relative",
+  status: "planned_only",
+  requiredForFileFirstCore: true,
+  notes: ["Planned project.vibe file-first path; import-runtime-test does not create, move, or write this project artifact."],
+}));
+
+const projectFileCoreSourcePriorityPlan = [
+  ["project_manifest", "project.vibe", "planned_project_file"],
+  ["production_bible", "production_bible/production_bible.vibe.json", "project_file_tree"],
+  ["story_flow", "story_flow/story_flow.vibe.json", "project_file_tree"],
+  ["visual_memory", "visual_memory/visual_memory.vibe.json", "project_file_tree"],
+  ["shots", "shots/shots.vibe.json", "project_file_tree"],
+  ["manifests", "manifests/project_manifest.vibe.json", "project_file_tree"],
+  ["reports", "reports/runtime_audit.vibe.json", "project_file_tree"],
+  ["preview", "preview/preview_plan.vibe.json", "project_file_tree"],
+  ["exports", "exports/export_profiles.vibe.json", "project_file_tree"],
+  ["knowledge", "knowledge/knowledge_manifest.vibe.json", "project_file_tree"],
+  ["settings", "settings/runtime_settings.vibe.json", "project_file_tree"],
+  ["runtime_state", "runtime-state.json", "derived_cache"],
+];
+
+function normalizeProjectFileCorePath(value) {
+  return String(value || "").replace(/\\/g, "/").replace(/\/+/g, "/");
+}
+
+function isAbsoluteLikePath(value) {
+  return /^(?:[A-Za-z]:[\\/]|\/|\/\/)/.test(String(value || ""));
+}
+
+function toProjectFileCorePathRef(pathValue, projectRoot, sourceRef) {
+  const raw = String(pathValue || "").trim();
+  if (!raw) return undefined;
+  const normalized = normalizeProjectFileCorePath(raw);
+  const root = projectRoot ? normalizeProjectFileCorePath(projectRoot).replace(/\/+$/, "") : "";
+  if (root && normalized === root) {
+    return {
+      path: ".",
+      origin: "user_selected_import",
+      importedFrom: "user_selected_import",
+      sourceRef,
+      notes: ["User-selected import root is evidence only; it is not a portable project-file path contract."],
+    };
+  }
+  if (root && normalized.startsWith(`${root}/`)) {
+    return {
+      path: normalized.slice(root.length + 1),
+      origin: "project_root_relative",
+      importedFrom: "user_selected_import",
+      sourceRef,
+      notes: ["Imported absolute path normalized to project-root-relative form."],
+    };
+  }
+  if (isAbsoluteLikePath(normalized)) {
+    return {
+      path: normalized,
+      origin: "user_selected_import",
+      importedFrom: "user_selected_import",
+      sourceRef,
+      notes: ["External absolute path is allowed only as a user-selected import source."],
+    };
+  }
+  return {
+    path: normalized.replace(/^\/+/, ""),
+    origin: "project_root_relative",
+    sourceRef,
+    notes: ["Path is project-root-relative."],
+  };
+}
+
+function projectFileCoreRefsForRole(input, role) {
+  const refs = [];
+  if (role === "project_manifest") refs.push(toProjectFileCorePathRef(input.projectRoot, input.projectRoot, "audit.projectRoot"));
+  if (role === "production_bible") {
+    refs.push(toProjectFileCorePathRef(input.sourceIndex.currentProductionBibleId, input.projectRoot, "sourceIndex.currentProductionBibleId"));
+    refs.push(toProjectFileCorePathRef(input.sourceTask, input.projectRoot, "audit.sourceTask"));
+  }
+  if (role === "story_flow") {
+    refs.push(toProjectFileCorePathRef(input.sourceIndex.currentStoryFlowId, input.projectRoot, "sourceIndex.currentStoryFlowId"));
+    refs.push(toProjectFileCorePathRef(input.sourceIndex.currentShotSpecId, input.projectRoot, "sourceIndex.currentShotSpecId"));
+  }
+  if (role === "visual_memory") {
+    refs.push(toProjectFileCorePathRef(input.sourceIndex.currentVisualMemoryId, input.projectRoot, "sourceIndex.currentVisualMemoryId"));
+    refs.push(...input.assets.slice(0, 12).map((asset) => toProjectFileCorePathRef(asset.path, input.projectRoot, `visualMemory.assets:${asset.id}`)));
+  }
+  if (role === "shots") {
+    refs.push(...input.shots.slice(0, 12).flatMap((shot) => [
+      toProjectFileCorePathRef(shot.startFrame, input.projectRoot, `storyFlow.shots:${shot.id}.startFrame`),
+      toProjectFileCorePathRef(shot.endFrame, input.projectRoot, `storyFlow.shots:${shot.id}.endFrame`),
+      toProjectFileCorePathRef(shot.videoPath, input.projectRoot, `storyFlow.shots:${shot.id}.videoPath`),
+    ]));
+  }
+  if (role === "knowledge") refs.push(toProjectFileCorePathRef(input.sourceIndex.knowledgeLibraryRoot, input.projectRoot, "sourceIndex.knowledgeLibraryRoot"));
+  if (role === "runtime_state") refs.push(toProjectFileCorePathRef("runtime-state.json", input.projectRoot, "stateSource.path"));
+  return refs.filter(Boolean);
+}
+
+function buildProjectFileCoreState(input) {
+  const blockers = [];
+  if (!input.sourceIndex.sourceIndexHash) blockers.push("sourceIndex.sourceIndexHash is required to key the derived runtime-state cache.");
+  if (!input.sourceIndex.projectId) blockers.push("sourceIndex.projectId is required for project manifest planning.");
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt: input.generatedAt,
+    phase: "phase_9_1_minimum_file_first_core",
+    projectFileName: "project.vibe",
+    projectFileStatus: "planned_not_written",
+    projectRoot: {
+      rootRef: "project_root",
+      origin: "user_selected_import",
+      selectedImport: toProjectFileCorePathRef(input.projectRoot, input.projectRoot, "audit.projectRoot"),
+      notes: ["The imported project root is user-selected input; Phase 9.1 does not write or move anything there."],
+    },
+    plannedFileTree: projectFileCorePlannedEntries,
+    sourceOfTruthPriority: projectFileCoreSourcePriorityPlan.map(([role, canonicalPath, authority], index) => ({
+      role,
+      priority: index + 1,
+      canonicalPath,
+      authority,
+      runtimeStateMayOverride: false,
+      importedSourceRefs: projectFileCoreRefsForRole(input, role),
+      notes: role === "runtime_state"
+        ? ["Runtime-state is a derived cache and cannot override project-file facts."]
+        : ["This role is part of the planned project.vibe file-first source-of-truth chain."],
+    })),
+    derivedCachePolicy: {
+      runtimeStateRole: "derived_cache",
+      runtimeStateMayBeRebuilt: true,
+      runtimeStateIsSoleSourceOfTruth: false,
+      rebuildInputs: [
+        "project_manifest",
+        "production_bible",
+        "story_flow",
+        "visual_memory",
+        "shots",
+        "manifests",
+        "reports",
+        "preview",
+        "exports",
+        "knowledge",
+        "settings",
+      ],
+      cacheKeys: {
+        sourceIndexHash: input.sourceIndex.sourceIndexHash,
+        projectVersion: input.sourceIndex.projectVersion || input.importedAt || input.generatedAt,
+        generatedAt: input.generatedAt,
+      },
+      invalidationRefs: uniqueSorted([
+        input.sourceIndex.sourceIndexHash,
+        ...input.shots.map((shot) => shot.id),
+        ...input.assets.map((asset) => asset.id),
+      ]),
+      notes: ["runtime-state is rebuildable derived cache; project.vibe and the planned tree are the intended fact surface."],
+    },
+    pathPolicy: {
+      allowedOrigins: ["project_root_relative", "user_selected_import"],
+      projectRootRelativeRequired: true,
+      userSelectedImportAllowed: true,
+      hardcodedAbsolutePathContractForbidden: true,
+      platformSpecificPathContractForbidden: true,
+      pathResolverRequired: true,
+      notes: ["Persisted paths must be project-root-relative; absolute paths are import evidence only."],
+    },
+    hardLocks: {
+      dryRunOnly: true,
+      readOnly: true,
+      noFileMutation: true,
+      noUserFileMove: true,
+      noProviderSubmit: true,
+      noImageGeneration: true,
+      noVideoGeneration: true,
+      noArbitraryShell: true,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      projectVibeWriteAllowed: false,
+      runtimeStateIsDerivedCache: true,
+    },
+    migrationReadiness: {
+      status: blockers.length ? "blocked" : "planned_only_ready",
+      readyForDryRunPlanning: blockers.length === 0,
+      readyForRuntimeDerivation: blockers.length === 0,
+      readyForProjectVibeWrite: false,
+      blockers,
+      warnings: ["Phase 9.1 plans project.vibe and the file tree only; it does not write, move, generate, or submit anything."],
+      nextSteps: [
+        "Add an explicit project.vibe writer only after the file contract is approved.",
+        "Keep runtime-state rebuildable from project-file facts as subsequent phases migrate more fields.",
+      ],
+    },
+    sourceRefs: [
+      "audit.projectRoot",
+      "sourceIndex",
+      "storyFlow.shots",
+      "visualMemory.assets",
+      "runtime.config.projectRootPolicy",
+      "runtime.providerEnablementSummary",
+    ],
+    notes: [
+      "project.vibe is planned, not written, in Phase 9.1.",
+      "No provider submit, file mutation, arbitrary shell execution, credential read/write, image generation, or video generation is allowed.",
+    ],
+  };
+}
+
+const subagentRunnerTaskKinds = [
+  "image",
+  "asset",
+  "pair_qa",
+  "scene_qa",
+  "story_audit",
+  "video_execution",
+  "audio",
+  "export",
+];
+
+const subagentRunnerHardLocks = {
+  dryRunOnly: true,
+  diagnosticsOnly: true,
+  noFreeTextTask: true,
+  validatedEnvelopeRequired: true,
+  noSpawnAgent: true,
+  noSubprocess: true,
+  noShellExecution: true,
+  noProviderExecution: true,
+  noCredentialRead: true,
+  noFileMutation: true,
+  providerSubmissionForbidden: true,
+  liveSubmitAllowed: false,
+};
+
+const subagentRunnerPacketRequirements = [
+  ["source_index_hash", "Source Index Hash", "SubagentTaskEnvelope.sourceIndexHash"],
+  ["provider_policy", "Provider Policy", "SubagentTaskEnvelope.providerPolicySummary"],
+  ["expected_output_contract", "Expected Output Contract", "SubagentTaskEnvelope.expectedOutputContract"],
+  ["acceptance_checklist", "Acceptance Checklist", "SubagentTaskEnvelope.qaChecklist"],
+  ["output_schema", "Output Schema", "SubagentTaskEnvelope.expectedOutputContract.format"],
+  ["forbidden_actions", "Forbidden Actions", "SubagentTaskEnvelope.disallowedReadScopes + mustNotAdd + taskEnvelope.hardRules"],
+].map(([requirementId, label, schemaPath]) => ({
+  requirementId,
+  label,
+  required: true,
+  schemaPath,
+  notes: ["Production worker planning requires this field in a validated SubagentTaskEnvelope."],
+}));
+
+function runnerHasItems(value) {
+  return Array.isArray(value) && value.length > 0;
+}
+
+function checkSubagentEnvelopeRequirements(envelope) {
+  return [
+    {
+      requirementId: "source_index_hash",
+      present: Boolean(envelope?.sourceIndexHash),
+      detail: envelope?.sourceIndexHash ? "sourceIndexHash is present." : "sourceIndexHash is missing.",
+    },
+    {
+      requirementId: "provider_policy",
+      present: runnerHasItems(envelope?.providerPolicySummary),
+      detail: runnerHasItems(envelope?.providerPolicySummary) ? "providerPolicySummary is present." : "providerPolicySummary is missing.",
+    },
+    {
+      requirementId: "expected_output_contract",
+      present: Boolean(envelope?.expectedOutputContract && runnerHasItems(envelope.expectedOutputContract.requiredFields)),
+      detail: envelope?.expectedOutputContract ? "expectedOutputContract is present." : "expectedOutputContract is missing.",
+    },
+    {
+      requirementId: "acceptance_checklist",
+      present: runnerHasItems(envelope?.qaChecklist),
+      detail: runnerHasItems(envelope?.qaChecklist) ? "qaChecklist is present." : "qaChecklist is missing.",
+    },
+    {
+      requirementId: "output_schema",
+      present: envelope?.expectedOutputContract?.format === "subagent_result_v1",
+      detail:
+        envelope?.expectedOutputContract?.format === "subagent_result_v1"
+          ? "output schema is subagent_result_v1."
+          : "output schema is missing or unsupported.",
+    },
+    {
+      requirementId: "forbidden_actions",
+      present:
+        runnerHasItems(envelope?.disallowedReadScopes) &&
+        (runnerHasItems(envelope?.mustNotAdd) || runnerHasItems(envelope?.forbiddenReferences) || runnerHasItems(envelope?.taskEnvelope?.hardRules)),
+      detail:
+        runnerHasItems(envelope?.disallowedReadScopes) &&
+        (runnerHasItems(envelope?.mustNotAdd) || runnerHasItems(envelope?.forbiddenReferences) || runnerHasItems(envelope?.taskEnvelope?.hardRules))
+          ? "forbidden read scopes/actions are present."
+          : "forbidden read scopes/actions are incomplete.",
+    },
+  ];
+}
+
+function runnerSafeId(value) {
+  return String(value || "unknown").replace(/[^a-zA-Z0-9_-]+/g, "_");
+}
+
+function subagentRunnerTaskKindForGeneration(job) {
+  return job.providerSlot === "image.reference_asset" ? "asset" : "image";
+}
+
+function makeSubagentRunnerSlot(input) {
+  const checks = checkSubagentEnvelopeRequirements(input.envelope);
+  const envelopeStatus = input.envelope ? (checks.every((check) => check.present) ? "validated" : "invalid") : "missing";
+  const status = input.freeTextPromptPresent
+    ? "blocked_missing_envelope"
+    : envelopeStatus === "validated"
+      ? "planned"
+      : envelopeStatus === "invalid"
+        ? "blocked_contract_violation"
+        : input.blockedWhenMissing
+          ? "blocked_missing_envelope"
+          : "planned_missing_envelope";
+  const blockedReasons = uniqueSorted([
+    ...(input.freeTextPromptPresent ? ["free_text_task_input_forbidden"] : []),
+    ...(status === "planned_missing_envelope" || status === "blocked_missing_envelope" ? ["validated_subagent_task_envelope_required"] : []),
+    ...(status === "blocked_contract_violation" ? checks.filter((check) => !check.present).map((check) => `missing_${check.requirementId}`) : []),
+  ]);
+
+  return {
+    runnerSlotId: input.runnerSlotId,
+    taskKind: input.taskKind,
+    purpose: input.purpose,
+    sourceId: input.sourceId,
+    envelopeId: input.envelope?.id,
+    parentTaskId: input.envelope?.parentTaskId,
+    shotId: input.shotId || input.envelope?.shotId,
+    status,
+    envelopeStatus,
+    canExecute: false,
+    canSpawnAgent: false,
+    freeTextPromptPresent: Boolean(input.freeTextPromptPresent),
+    requirementChecks: checks,
+    blockedReasons,
+    warnings: uniqueSorted(input.warnings || []),
+    sourceRefs: uniqueSorted(input.sourceRefs || []),
+    notes: uniqueSorted([
+      "Subagent Runner 9.3 is diagnostics-only and does not spawn a worker.",
+      ...(input.notes || []),
+    ]),
+  };
+}
+
+function buildSubagentRunnerState(input) {
+  const slots = [
+    ...(input.videoExecutionPreview?.previews || []).map((preview) =>
+      makeSubagentRunnerSlot({
+        runnerSlotId: `subagent_runner_video_${runnerSafeId(preview.previewId)}`,
+        taskKind: "video_execution",
+        purpose: "video_generation",
+        sourceId: preview.previewId,
+        envelope: preview.subagentTaskEnvelope,
+        shotId: preview.shotId,
+        sourceRefs: [
+          `videoExecutionPreview:${preview.previewId}`,
+          `videoExecutionPreview.taskPlan:${preview.taskPlanId}`,
+          `videoExecutionPreview.readinessGate:${preview.readinessGateId}`,
+        ],
+        warnings: preview.warnings,
+        notes: ["Video execution packets are recognized from packet previews."],
+      }),
+    ),
+    ...(input.generationHarness?.jobs || []).map((job) =>
+      makeSubagentRunnerSlot({
+        runnerSlotId: `subagent_runner_generation_${runnerSafeId(job.harnessJobId)}`,
+        taskKind: subagentRunnerTaskKindForGeneration(job),
+        purpose: "visual_generation",
+        sourceId: job.harnessJobId,
+        shotId: job.shotId,
+        sourceRefs: [`generationHarness:${job.harnessJobId}`, `generationHarness.taskPlan:${job.taskPlanId}`],
+        warnings: job.warnings,
+        notes: ["Generation harness facts create future worker coverage, but no SubagentTaskEnvelope exists yet."],
+      }),
+    ),
+    ...(input.qaHarness?.items || []).flatMap((item) => [
+      makeSubagentRunnerSlot({
+        runnerSlotId: `subagent_runner_pair_qa_${runnerSafeId(item.qaItemId)}`,
+        taskKind: "pair_qa",
+        purpose: "continuity_audit",
+        sourceId: `${item.qaItemId}:pair_qa`,
+        shotId: item.shotId,
+        sourceRefs: uniqueSorted([`qaHarness:${item.qaItemId}`, item.videoTaskPlanId || ""]),
+        notes: ["QA harness facts create future audit worker coverage, but no SubagentTaskEnvelope exists yet."],
+      }),
+      makeSubagentRunnerSlot({
+        runnerSlotId: `subagent_runner_scene_qa_${runnerSafeId(item.qaItemId)}`,
+        taskKind: "scene_qa",
+        purpose: "visual_audit",
+        sourceId: `${item.qaItemId}:scene_qa`,
+        shotId: item.shotId,
+        sourceRefs: uniqueSorted([`qaHarness:${item.qaItemId}`, item.harnessJobId || ""]),
+        notes: ["QA harness facts create future audit worker coverage, but no SubagentTaskEnvelope exists yet."],
+      }),
+      makeSubagentRunnerSlot({
+        runnerSlotId: `subagent_runner_story_audit_${runnerSafeId(item.qaItemId)}`,
+        taskKind: "story_audit",
+        purpose: "story_audit",
+        sourceId: `${item.qaItemId}:story_audit`,
+        shotId: item.shotId,
+        sourceRefs: uniqueSorted([`qaHarness:${item.qaItemId}`, item.taskPlanId || ""]),
+        notes: ["QA harness facts create future audit worker coverage, but no SubagentTaskEnvelope exists yet."],
+      }),
+      makeSubagentRunnerSlot({
+        runnerSlotId: `subagent_runner_audio_${runnerSafeId(item.qaItemId)}`,
+        taskKind: "audio",
+        purpose: "continuity_audit",
+        sourceId: `${item.qaItemId}:audio`,
+        shotId: item.shotId,
+        sourceRefs: uniqueSorted([`qaHarness:${item.qaItemId}`, item.audioPlanId || ""]),
+        notes: ["QA harness facts create future audio worker coverage, but no SubagentTaskEnvelope exists yet."],
+      }),
+    ]),
+  ].sort((left, right) => left.runnerSlotId.localeCompare(right.runnerSlotId));
+  const coverage = subagentRunnerTaskKinds.map((taskKind) => {
+    const scoped = slots.filter((slot) => slot.taskKind === taskKind);
+    return {
+      taskKind,
+      expected: true,
+      totalSlots: scoped.length,
+      planned: scoped.filter((slot) => slot.status === "planned").length,
+      plannedMissingEnvelope: scoped.filter((slot) => slot.status === "planned_missing_envelope").length,
+      blockedMissingEnvelope: scoped.filter((slot) => slot.status === "blocked_missing_envelope").length,
+      blockedContractViolation: scoped.filter((slot) => slot.status === "blocked_contract_violation").length,
+      sourceRefs: uniqueSorted(scoped.flatMap((slot) => slot.sourceRefs)),
+      notes: [
+        scoped.length
+          ? `Coverage inferred from ${scoped.length} ${taskKind} slot(s).`
+          : `No current ${taskKind} slots were inferred; future packets remain missing coverage.`,
+      ],
+    };
+  });
+
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt: input.generatedAt,
+    slots,
+    coverage,
+    summary: {
+      totalSlots: slots.length,
+      planned: slots.filter((slot) => slot.status === "planned").length,
+      plannedMissingEnvelope: slots.filter((slot) => slot.status === "planned_missing_envelope").length,
+      blockedMissingEnvelope: slots.filter((slot) => slot.status === "blocked_missing_envelope").length,
+      blockedContractViolation: slots.filter((slot) => slot.status === "blocked_contract_violation").length,
+      freeTextBlocked: slots.filter((slot) => slot.freeTextPromptPresent && slot.status !== "planned").length,
+      validatedEnvelopes: slots.filter((slot) => slot.envelopeStatus === "validated").length,
+      missingEnvelopes: slots.filter((slot) => slot.envelopeStatus === "missing").length,
+      invalidEnvelopes: slots.filter((slot) => slot.envelopeStatus === "invalid").length,
+      canExecute: 0,
+      dryRunOnly: true,
+      diagnosticsOnly: true,
+      noFreeTextTask: true,
+      validatedEnvelopeRequired: true,
+      providerSubmissionForbidden: true,
+      liveSubmitAllowed: false,
+    },
+    hardLocks: subagentRunnerHardLocks,
+    blockedReasons: uniqueSorted(slots.flatMap((slot) => slot.blockedReasons)),
+    packetRequirements: subagentRunnerPacketRequirements,
+    dryRunOnly: true,
+    diagnosticsOnly: true,
+    noFreeTextTask: true,
+    validatedEnvelopeRequired: true,
+    noSpawnAgent: true,
+    noSubprocess: true,
+    noShellExecution: true,
+    noProviderExecution: true,
+    noCredentialRead: true,
+    noFileMutation: true,
+    providerSubmissionForbidden: true,
+    liveSubmitAllowed: false,
+    notes: [
+      "Phase 9.3 Subagent Runner is a plan/diagnostics contract only.",
+      "Production workers must be launched from validated SubagentTaskEnvelope packets, never free-text prompts.",
+      "This state does not call Codex CLI, start subprocesses, execute shell commands, submit providers, read credentials, or move files.",
+    ],
+  };
+}
+
 function canonicalize(value) {
   if (Array.isArray(value)) {
     const items = value.map(canonicalize);
@@ -5618,6 +6112,16 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
   const taskViews = buildTaskStates(audit, sourceIndex, knowledgeManifest, generatedAt);
   const manifestMatches = manifestSummary(taskViews);
   const runtime = buildRuntimeEnvironment(generatedAt);
+  const projectFileCore = buildProjectFileCoreState({
+    generatedAt,
+    projectRoot: audit.projectRoot,
+    importedAt: audit.importedAt,
+    sourceTask: audit.sourceTask,
+    sourceIndex,
+    shots: audit.shots,
+    assets: audit.assets,
+    runtime,
+  });
   const providerRegistry = buildDefaultProviderRegistry(generatedAt);
   const promptPlanResults = taskViews.map((task) =>
     buildShotPromptPlan(
@@ -5760,6 +6264,12 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     checkpointResumeHarness,
     qaHarness,
   });
+  const subagentRunner = buildSubagentRunnerState({
+    generatedAt,
+    videoExecutionPreview,
+    generationHarness,
+    qaHarness,
+  });
   const generationHealthChecker = buildGenerationHealthCheckerState({
     generatedAt,
     imageTaskPlans,
@@ -5812,6 +6322,7 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
       workflow: audit.workflow,
       contactSheets: audit.contactSheets,
     },
+    projectFileCore,
     sourceIndex,
     sourceIndexSummary,
     storyFlow: {
@@ -5855,6 +6366,7 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     checkpointResumeHarness,
     qaHarness,
     toolRuntimeHarness,
+    subagentRunner,
     generationHealthChecker,
     promptConflictChecker,
     storyChanges: {

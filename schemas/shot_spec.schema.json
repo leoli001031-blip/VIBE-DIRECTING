@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/shot_spec.schema.json",
+  "title": "ShotSpec",
+  "description": "Creative-intent source contract for one shot before prompt compilation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "storyFlowId",
+    "shotId",
+    "sectionId",
+    "storyFunction",
+    "action",
+    "emotionalIntent",
+    "targetDurationSeconds",
+    "dialogue",
+    "pairConstraints",
+    "allowedDelta",
+    "forbiddenChanges",
+    "lockedAssetRefs",
+    "layoutId",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "storyFlowId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "sectionId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "storyFunction": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "action": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "emotionalIntent": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "targetDurationSeconds": { "type": "number", "exclusiveMinimum": 0 },
+    "dialogue": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dialogueLine" }
+    },
+    "pairConstraints": { "$ref": "#/$defs/pairConstraints" },
+    "allowedDelta": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "forbiddenChanges": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "lockedAssetRefs": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "layoutId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "sourceRefs": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "updatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "$defs": {
+    "dialogueLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["speakerId", "text", "delivery"],
+      "properties": {
+        "speakerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "text": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "delivery": { "type": "string" }
+      }
+    },
+    "pairConstraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requiresKeyframePair",
+        "startFrameSource",
+        "endFrameSource",
+        "endFrameDerivesFromStart",
+        "splitShotIfDeltaTooLarge"
+      ],
+      "properties": {
+        "requiresKeyframePair": { "type": "boolean" },
+        "startFrameSource": {
+          "type": "string",
+          "enum": ["shot_layout", "locked_reference", "imported_frame"]
+        },
+        "endFrameSource": {
+          "type": "string",
+          "enum": ["derive_from_start_frame", "edit_from_start_frame", "single_anchor_static"]
+        },
+        "endFrameDerivesFromStart": { "type": "boolean", "const": true },
+        "splitShotIfDeltaTooLarge": { "type": "boolean" }
+      }
+    }
+  }
+}

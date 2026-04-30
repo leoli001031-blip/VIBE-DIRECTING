@@ -27,11 +27,13 @@ import type {
   ProviderRegistry,
   PromptConflictCheckerState,
   PromptConflictReport,
+  ProjectFileCoreState,
   QaHarnessState,
   QaPromotionReport,
   ReflowImpactReport,
   ShotPromptPlan,
   StoryChangeTransaction,
+  SubagentRunnerState,
   TaskEnvelope,
   TaskRun,
   ToolRuntimeHarnessState,
@@ -108,6 +110,7 @@ export interface ProjectRuntimeState {
   coreStateVersion: string;
   generatedAt: string;
   project: ProjectSummary;
+  projectFileCore: ProjectFileCoreState;
   sourceIndex: ProjectSourceIndex;
   sourceIndexSummary: {
     projectId: string;
@@ -182,6 +185,7 @@ export interface ProjectRuntimeState {
   checkpointResumeHarness: CheckpointResumeHarnessState;
   qaHarness: QaHarnessState;
   toolRuntimeHarness: ToolRuntimeHarnessState;
+  subagentRunner: SubagentRunnerState;
   generationHealthChecker: GenerationHealthCheckerState;
   promptConflictChecker: PromptConflictCheckerState;
   storyChanges: ProjectRuntimeStoryChangeState;

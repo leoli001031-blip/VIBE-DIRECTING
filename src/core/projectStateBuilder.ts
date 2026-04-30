@@ -12,6 +12,8 @@ import { buildGenerationHarnessState } from "./generationHarness";
 import { buildPromptConflictCheckerState } from "./promptConflictChecker";
 import { buildQaHarnessState } from "./qaHarness";
 import { buildToolRuntimeHarnessState } from "./toolRuntimeHarness";
+import { buildSubagentRunnerState } from "./subagentRunner";
+import { buildProjectFileCoreState } from "./projectFileCore";
 import { buildShotPromptPlan } from "./promptCompiler";
 import { buildQaPromotionReports } from "./qaPromotion";
 import { buildPreviewExportState } from "./previewExport";
@@ -108,6 +110,17 @@ export function buildProjectRuntimeState(
   };
   const generatedAt = options.generatedAt || new Date().toISOString();
   const runtime = options.runtime || buildRuntimeEnvironment({ generatedAt });
+  const projectFileCore = buildProjectFileCoreState({
+    generatedAt,
+    projectRoot: audit.projectRoot,
+    importedAt: audit.importedAt,
+    sourceTask: audit.sourceTask,
+    sourceIndex: view.sourceIndex,
+    storyFlow: { shots: audit.shots },
+    visualMemory: { assets: audit.assets },
+    runtime,
+    audit,
+  });
   const providerRegistry = buildDefaultProviderRegistry(generatedAt);
   const promptPlanResults = taskViews.map((task) =>
     buildShotPromptPlan({
@@ -262,6 +275,12 @@ export function buildProjectRuntimeState(
     checkpointResumeHarness,
     qaHarness,
   });
+  const subagentRunner = buildSubagentRunnerState({
+    generatedAt,
+    videoExecutionPreview,
+    generationHarness,
+    qaHarness,
+  });
   const generationHealthChecker = buildGenerationHealthCheckerState({
     generatedAt,
     imageTaskPlans,
@@ -304,6 +323,7 @@ export function buildProjectRuntimeState(
     coreStateVersion: projectRuntimeCoreStateVersion,
     generatedAt,
     project: buildProjectSummary(audit),
+    projectFileCore,
     sourceIndex: view.sourceIndex,
     sourceIndexSummary: view.sourceIndexSummary,
     storyFlow: {
@@ -347,6 +367,7 @@ export function buildProjectRuntimeState(
     checkpointResumeHarness,
     qaHarness,
     toolRuntimeHarness,
+    subagentRunner,
     generationHealthChecker,
     promptConflictChecker,
     storyChanges: {
@@ -496,6 +517,14 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       checkpointResumeHarness,
       qaHarness,
     });
+  const subagentRunner =
+    state.subagentRunner ||
+    buildSubagentRunnerState({
+      generatedAt: state.generatedAt,
+      videoExecutionPreview,
+      generationHarness,
+      qaHarness,
+    });
   const generationHealthChecker =
     state.generationHealthChecker ||
     buildGenerationHealthCheckerState({
@@ -518,9 +547,23 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       assets: state.visualMemory.assets,
       jobs: state.taskRuns.jobs,
     });
+  const projectFileCore =
+    state.projectFileCore ||
+    buildProjectFileCoreState({
+      generatedAt: state.generatedAt,
+      projectRoot: state.project.root,
+      importedAt: state.project.importedAt,
+      sourceTask: state.project.sourceTask,
+      sourceIndex: state.sourceIndex,
+      storyFlow: { shots: state.storyFlow.shots },
+      visualMemory: { assets: state.visualMemory.assets },
+      runtime,
+      audit: state.legacyAudit,
+    });
 
   return {
     ...state,
+    projectFileCore,
     runtime,
     audioPlanning,
     videoPlanning,
@@ -531,6 +574,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     checkpointResumeHarness,
     qaHarness,
     toolRuntimeHarness,
+    subagentRunner,
     generationHealthChecker,
     promptConflictChecker,
   };

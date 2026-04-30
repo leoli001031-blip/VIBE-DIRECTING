@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/spatial_memory.schema.json",
+  "title": "SpatialMemory",
+  "description": "File-first memory for scene geometry, world positions, camera vectors, subject blocking, axis continuity, and derived view relationships.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "coordinatePolicy",
+    "scenes",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "coordinatePolicy": { "$ref": "#/$defs/coordinatePolicy" },
+    "scenes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/spatialScene" }
+    },
+    "updatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "$defs": {
+    "vector3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "coordinatePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["worldPositionRequired", "cameraVectorRequired", "textOnlyMultiViewAllowed"],
+      "properties": {
+        "worldPositionRequired": { "type": "boolean", "const": true },
+        "cameraVectorRequired": { "type": "boolean", "const": true },
+        "textOnlyMultiViewAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "spatialScene": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "status",
+        "worldAnchors",
+        "cameraVectors",
+        "subjectBlocking",
+        "axisRules",
+        "revealStates",
+        "derivedViewRefs"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "name": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": {
+          "type": "string",
+          "enum": ["locked", "candidate", "rejected"]
+        },
+        "worldAnchors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/worldAnchor" }
+        },
+        "cameraVectors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/cameraVector" }
+        },
+        "subjectBlocking": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/subjectBlocking" }
+        },
+        "axisRules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/axisRule" }
+        },
+        "revealStates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/revealState" }
+        },
+        "derivedViewRefs": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "worldAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "worldPosition"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "worldPosition": { "$ref": "#/$defs/vector3" }
+      }
+    },
+    "cameraVector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "worldPosition", "cameraVector", "usableForShotIds"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "worldPosition": { "$ref": "#/$defs/vector3" },
+        "cameraVector": { "$ref": "#/$defs/vector3" },
+        "usableForShotIds": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "subjectBlocking": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subjectId", "worldPosition", "blockingNote"],
+      "properties": {
+        "subjectId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "worldPosition": { "$ref": "#/$defs/vector3" },
+        "blockingNote": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "axisRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "axisVector", "screenDirectionRule"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "axisVector": { "$ref": "#/$defs/vector3" },
+        "screenDirectionRule": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "revealState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetId", "state"],
+      "properties": {
+        "targetId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "state": {
+          "type": "string",
+          "enum": ["hidden", "partially_revealed", "revealed"]
+        }
+      }
+    }
+  }
+}

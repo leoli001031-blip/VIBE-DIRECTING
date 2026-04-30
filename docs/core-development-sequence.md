@@ -745,6 +745,52 @@ Phase 6 已实现范围（核心合同）：
 - 冲突存在时必须更新 Shot Spec / Shot Layout / Shot Prompt Plan 并重新编译；不能绕过 Shot Prompt Plan 直接生成。
 - 不能连接真实 provider，不能提交 Image2、Seedance、Jimeng 或任何外部服务。
 
+### Phase 9.1 已实现范围：Project File Core
+
+- `ProjectRuntimeState.projectFileCore` 写入 Phase 9.1 的 top-level file-first project core，声明 `project.vibe` 和项目文件夹结构是计划中的事实源；本阶段不真实写入 `project.vibe`，不创建目录，不移动用户文件。
+- `projectFileCore.plannedFileTree` 覆盖 `project.vibe`、project manifest、`production_bible`、`story_flow`、`visual_memory`、`shots`、`manifests`、`reports`、`preview`、`exports`、`knowledge`、`settings` 等规划路径，全部使用 project-root-relative contract。
+- `sourceOfTruthPriority` 明确 runtime-state 只能作为 `derived_cache`，不能覆盖 project manifest / production bible / story flow / visual memory / shots 等 file-first 事实。
+- `derivedCachePolicy` 以 `sourceIndexHash`、project version、generatedAt 作为 cache key，声明 runtime-state 可由项目文件事实重建，逐步从唯一事实源退为 derived cache。
+- `pathPolicy` 固定只允许 `project_root_relative` 或 `user_selected_import`；硬编码 macOS/Windows 绝对路径不能进入可移植合同。
+- Hard locks 固定 `dryRunOnly=true`、`readOnly=true`、`noFileMutation=true`、`noUserFileMove=true`、`noProviderSubmit=true`、`noImageGeneration=true`、`noVideoGeneration=true`、`noArbitraryShell=true`、`noCredentialRead=true`、`noCredentialWrite=true`、`projectVibeWriteAllowed=false`。
+- 新增 `schemas/project_file_core.schema.json` 并纳入 `project_runtime_state.schema.json` 与 schema registry；新增 `npm run project-file:test` 覆盖 required planned paths、runtime-state derived cache、noFileMutation、path abstraction、schema registry 和 runtime schema 接线。
+
+禁止项：
+
+- Project File Core 不能写 `project.vibe`、不能创建或迁移文件夹、不能移动或重命名用户文件。
+- 不能把 runtime-state 当成唯一事实源；它只能是由项目文件事实和 audit/runtime facts 构造出的缓存。
+- 不能提交真实 provider，不能生图生视频，不能执行任意 shell，不能读取或写入 credentials。
+
+### Phase 9.2 已实现范围：Project Fact Schemas
+
+- 新增第一批 file-first 项目事实源合同：`production_bible.schema.json`、`story_flow.schema.json`、`shot_spec.schema.json`、`shot_layout.schema.json`、`visual_memory.schema.json`、`spatial_memory.schema.json`、`voice_memory.schema.json`、`scene_asset_pack.schema.json`。
+- 本阶段只做 schema/docs/test-only，不接真实 provider，不生图生视频，也不让自由文本 prompt 绕过项目事实文件。
+- Visual Memory 明确是资产一致性系统，不是图库；只收 `locked`、`candidate`、`rejected` 的角色、场景、道具、风格、声音锚点，并通过 ReferenceAuthority 声明权限范围。
+- v0.1/v0.3 最低兼容：至少支持 1 张主角参考、1 张场景参考、文本约束和 locked 状态；结构预留三视图、多视角扩展。
+- Scene Asset Pack 必须包含 master scene、derived views、camera vectors/world position、candidate/rejected 状态和 master inheritance；多视角不能只靠文字复述。
+- Shot Layout 必须表达 subject placement、camera placement、axis/direction、start/end frame derivation、fixed camera / camera movement constraints。
+- Story Flow section/act 自适应，不写死 Act I-IV。
+- Voice Memory 只预留音源，不读也不保存敏感 provider auth material。
+- OpenCV/local postprocess 不能承担身份、服装、场景、视角、风格语义修复。
+- 新增 `npm run project-facts:test`，覆盖 schema JSON parse、title/id、关键 required 字段和上述产品硬规则。
+
+未在本阶段做：
+
+- 暂不注册 `schemaRegistry`、不接 `ProjectRuntimeState`、不改 `projectStateBuilder`；这些交由主集成统一接线，避免和 Project File worker 冲突。
+
+### Phase 9.3 已实现范围：Subagent Envelope Runner Skeleton
+
+- `ProjectRuntimeState.subagentRunner` 写入 Phase 9.3 的 dry-run/diagnostics-only runner skeleton，只从 `videoExecutionPreview`、`generationHarness`、`qaHarness` 归纳未来 worker slots 和 coverage。
+- runner 明确表达生产 worker 只能从 validated `SubagentTaskEnvelope` 启动；`noFreeTextTask=true`、`validatedEnvelopeRequired=true`，自由文本请求只能落为 `blocked_missing_envelope`。
+- packet requirements 固定要求 `sourceIndexHash`、`providerPolicySummary`、`expectedOutputContract`、`qaChecklist`、`subagent_result_v1` output schema、forbidden actions/read scopes 完整。
+- coverage 显式区分 `image`、`asset`、`pair_qa`、`scene_qa`、`story_audit`、`video_execution`、`audio`、`export`；现阶段 video packet 可从 Phase 7.3 preview 识别，generation/QA/audio/export 主要标记 planned/missing coverage。
+- 新增 `schemas/subagent_runner.schema.json` 并纳入 `project_runtime_state.schema.json` 与 schema registry；新增 `npm run subagent-runner:test` 覆盖 free text blocked、missing envelope blocked、video packets recognized、provider submit forbidden 和 schema 接入。
+
+禁止项：
+
+- Phase 9.3 不拉 Codex CLI，不 spawn agent，不执行 shell，不提交 provider，不读 credential，不移动或改写文件。
+- 没有 envelope 的任务不能 ready；只能是 `planned_missing_envelope` 或 `blocked_missing_envelope`。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

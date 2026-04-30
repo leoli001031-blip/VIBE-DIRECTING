@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/subagent_runner.schema.json",
+  "title": "SubagentRunnerState",
+  "description": "Phase 9.3 dry-run diagnostics-only Subagent Envelope Runner skeleton. It plans future worker slots from validated SubagentTaskEnvelope packets and never launches agents, shells, providers, credentials, or file moves.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "slots",
+    "coverage",
+    "summary",
+    "hardLocks",
+    "blockedReasons",
+    "packetRequirements",
+    "dryRunOnly",
+    "diagnosticsOnly",
+    "noFreeTextTask",
+    "validatedEnvelopeRequired",
+    "noSpawnAgent",
+    "noSubprocess",
+    "noShellExecution",
+    "noProviderExecution",
+    "noCredentialRead",
+    "noFileMutation",
+    "providerSubmissionForbidden",
+    "liveSubmitAllowed",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "slots": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/slot" }
+    },
+    "coverage": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/coverageEntry" }
+    },
+    "summary": { "$ref": "#/$defs/summary" },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "blockedReasons": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "packetRequirements": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/packetRequirement" }
+    },
+    "dryRunOnly": { "type": "boolean", "const": true },
+    "diagnosticsOnly": { "type": "boolean", "const": true },
+    "noFreeTextTask": { "type": "boolean", "const": true },
+    "validatedEnvelopeRequired": { "type": "boolean", "const": true },
+    "noSpawnAgent": { "type": "boolean", "const": true },
+    "noSubprocess": { "type": "boolean", "const": true },
+    "noShellExecution": { "type": "boolean", "const": true },
+    "noProviderExecution": { "type": "boolean", "const": true },
+    "noCredentialRead": { "type": "boolean", "const": true },
+    "noFileMutation": { "type": "boolean", "const": true },
+    "providerSubmissionForbidden": { "type": "boolean", "const": true },
+    "liveSubmitAllowed": { "type": "boolean", "const": false },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "taskKind": {
+      "type": "string",
+      "enum": ["image", "asset", "pair_qa", "scene_qa", "story_audit", "video_execution", "audio", "export"]
+    },
+    "purpose": {
+      "type": "string",
+      "enum": [
+        "visual_generation",
+        "visual_audit",
+        "video_generation",
+        "video_audit",
+        "continuity_audit",
+        "regeneration_plan",
+        "story_audit"
+      ]
+    },
+    "slotStatus": {
+      "type": "string",
+      "enum": ["planned", "planned_missing_envelope", "blocked_missing_envelope", "blocked_contract_violation"]
+    },
+    "envelopeStatus": {
+      "type": "string",
+      "enum": ["validated", "missing", "invalid"]
+    },
+    "requirementId": {
+      "type": "string",
+      "enum": [
+        "source_index_hash",
+        "provider_policy",
+        "expected_output_contract",
+        "acceptance_checklist",
+        "output_schema",
+        "forbidden_actions"
+      ]
+    },
+    "requirementCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requirementId", "present", "detail"],
+      "properties": {
+        "requirementId": { "$ref": "#/$defs/requirementId" },
+        "present": { "type": "boolean" },
+        "detail": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runnerSlotId",
+        "taskKind",
+        "purpose",
+        "sourceId",
+        "status",
+        "envelopeStatus",
+        "canExecute",
+        "canSpawnAgent",
+        "freeTextPromptPresent",
+        "requirementChecks",
+        "blockedReasons",
+        "warnings",
+        "sourceRefs",
+        "notes"
+      ],
+      "properties": {
+        "runnerSlotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "taskKind": { "$ref": "#/$defs/taskKind" },
+        "purpose": { "$ref": "#/$defs/purpose" },
+        "sourceId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "envelopeId": { "type": "string" },
+        "parentTaskId": { "type": "string" },
+        "shotId": { "type": "string" },
+        "status": { "$ref": "#/$defs/slotStatus" },
+        "envelopeStatus": { "$ref": "#/$defs/envelopeStatus" },
+        "canExecute": { "type": "boolean", "const": false },
+        "canSpawnAgent": { "type": "boolean", "const": false },
+        "freeTextPromptPresent": { "type": "boolean" },
+        "requirementChecks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/requirementCheck" },
+          "minItems": 6
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "coverageEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "taskKind",
+        "expected",
+        "totalSlots",
+        "planned",
+        "plannedMissingEnvelope",
+        "blockedMissingEnvelope",
+        "blockedContractViolation",
+        "sourceRefs",
+        "notes"
+      ],
+      "properties": {
+        "taskKind": { "$ref": "#/$defs/taskKind" },
+        "expected": { "type": "boolean", "const": true },
+        "totalSlots": { "type": "integer", "minimum": 0 },
+        "planned": { "type": "integer", "minimum": 0 },
+        "plannedMissingEnvelope": { "type": "integer", "minimum": 0 },
+        "blockedMissingEnvelope": { "type": "integer", "minimum": 0 },
+        "blockedContractViolation": { "type": "integer", "minimum": 0 },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalSlots",
+        "planned",
+        "plannedMissingEnvelope",
+        "blockedMissingEnvelope",
+        "blockedContractViolation",
+        "freeTextBlocked",
+        "validatedEnvelopes",
+        "missingEnvelopes",
+        "invalidEnvelopes",
+        "canExecute",
+        "dryRunOnly",
+        "diagnosticsOnly",
+        "noFreeTextTask",
+        "validatedEnvelopeRequired",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "totalSlots": { "type": "integer", "minimum": 0 },
+        "planned": { "type": "integer", "minimum": 0 },
+        "plannedMissingEnvelope": { "type": "integer", "minimum": 0 },
+        "blockedMissingEnvelope": { "type": "integer", "minimum": 0 },
+        "blockedContractViolation": { "type": "integer", "minimum": 0 },
+        "freeTextBlocked": { "type": "integer", "minimum": 0 },
+        "validatedEnvelopes": { "type": "integer", "minimum": 0 },
+        "missingEnvelopes": { "type": "integer", "minimum": 0 },
+        "invalidEnvelopes": { "type": "integer", "minimum": 0 },
+        "canExecute": { "type": "integer", "const": 0 },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "diagnosticsOnly": { "type": "boolean", "const": true },
+        "noFreeTextTask": { "type": "boolean", "const": true },
+        "validatedEnvelopeRequired": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dryRunOnly",
+        "diagnosticsOnly",
+        "noFreeTextTask",
+        "validatedEnvelopeRequired",
+        "noSpawnAgent",
+        "noSubprocess",
+        "noShellExecution",
+        "noProviderExecution",
+        "noCredentialRead",
+        "noFileMutation",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "diagnosticsOnly": { "type": "boolean", "const": true },
+        "noFreeTextTask": { "type": "boolean", "const": true },
+        "validatedEnvelopeRequired": { "type": "boolean", "const": true },
+        "noSpawnAgent": { "type": "boolean", "const": true },
+        "noSubprocess": { "type": "boolean", "const": true },
+        "noShellExecution": { "type": "boolean", "const": true },
+        "noProviderExecution": { "type": "boolean", "const": true },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "packetRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requirementId", "label", "required", "schemaPath", "notes"],
+      "properties": {
+        "requirementId": { "$ref": "#/$defs/requirementId" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "required": { "type": "boolean", "const": true },
+        "schemaPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

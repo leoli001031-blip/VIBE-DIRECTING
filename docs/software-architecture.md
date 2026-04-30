@@ -1047,6 +1047,19 @@ Phase 8.10 core 实现：
 - 每条冲突输出 `structuredFact`、`promptEvidence`、`sourceRefs` 和 `requiredResolution`；冲突必须更新 Shot Spec / Shot Layout / Shot Prompt Plan 并重新编译，agent promise 不能解除。
 - schema 为 `schemas/prompt_conflict_checker.schema.json`，已纳入 `project_runtime_state.schema.json` 和 schema registry；测试命令为 `npm run prompt-conflict:test`。
 
+### Phase 9.1 Project File Core
+
+`project.vibe` 是计划中的 file-first 项目入口，而不是 Phase 9.1 会真实写入的文件。当前实现只把它作为 `ProjectRuntimeState.projectFileCore` 的规划事实暴露，帮助 runtime-state 从唯一事实源逐步退为 derived cache。
+
+Phase 9.1 core 实现：
+
+- `projectFileCore.plannedFileTree` 规划 `project.vibe`、project manifest、Production Bible、Story Flow、Visual Memory、Shots、Manifests、Reports、Preview、Exports、Knowledge、Settings 等路径，所有 portable contract 路径都是 project-root-relative。
+- `sourceOfTruthPriority` 把 project manifest / production bible / story flow / visual memory / shots 等项目事实放在 runtime-state 之前；runtime-state 固定为 `derived_cache`，不能覆盖 file-first facts。
+- `derivedCachePolicy` 用 `sourceIndexHash`、project version、generatedAt 标识可重建缓存，明确 runtime-state 不是 sole source of truth。
+- `pathPolicy` 只允许 `project_root_relative` 和 `user_selected_import`；macOS/Windows 绝对路径只能作为用户选择导入证据，不能成为跨平台合同。
+- Hard locks 固定 no provider submit、no file mutation、no user file move、no arbitrary shell、no credential read/write、no image/video generation、`projectVibeWriteAllowed=false`。
+- schema 为 `schemas/project_file_core.schema.json`，已纳入 `project_runtime_state.schema.json` 和 schema registry；测试命令为 `npm run project-file:test`。
+
 ## 9. Agent 架构
 
 ### 9.1 Agent Adapter
@@ -1090,6 +1103,14 @@ interface AgentAdapter {
 - 视频 payload
 - 失败图作为正向参考
 - 未经筛选的完整历史聊天
+
+Phase 9.2 schema scope:
+
+- Production Bible、Story Flow、Shot Spec、Shot Layout、Visual Memory、Spatial Memory、Voice Memory、Scene Asset Pack 先作为 file-first schema 合同落地。
+- 本 scope 只定义 schema、文档和本地合同测试；不接真实 provider、不提交生成、不读取 provider auth material。
+- 主 Agent 后续读取这些事实文件时，必须尊重 Visual Memory 的 ReferenceAuthority、Story Flow 的 adaptive sections、Shot Layout 的 start/end derivation、Scene Asset Pack 的 master inheritance。
+- OpenCV/local postprocess 只能做文件级后处理和检测，不能替代身份、服装、场景、视角、风格语义修复。
+- 当前 schema 尚未注册到 runtime schema registry；主集成需要在 ProjectRuntimeState / ProjectSourceIndex / schemaRegistry 接线时统一处理。
 
 ### 9.3 Subagent / Worker
 
@@ -1149,6 +1170,15 @@ User intent
 - subagent 不能绕过 provider policy。
 - subagent 不能只做单帧判断；至少要输出是否放回故事线成立。
 - 主 Agent 只接收结构化结果和文件路径摘要，不接收大量图片 payload。
+
+Phase 9.3 runner skeleton：
+
+- `subagentRunner` 是 `ProjectRuntimeState` 顶层 dry-run diagnostics 状态，不是真 worker 调度器。
+- 它只从 `videoExecutionPreview`、`generationHarness`、`qaHarness` 归纳未来 worker slots、coverage、blocked reasons 和 packet requirements。
+- hard locks 固定 `noFreeTextTask=true`、`validatedEnvelopeRequired=true`、`noSpawnAgent=true`、`noShellExecution=true`、`noProviderExecution=true`、`noCredentialRead=true`、`noFileMutation=true`、`providerSubmissionForbidden=true`、`liveSubmitAllowed=false`。
+- 未来生产 worker 必须从 validated `SubagentTaskEnvelope` 启动；自由文本 prompt 不能启动 worker，没有 envelope 的任务只能标记 `planned_missing_envelope` 或 `blocked_missing_envelope`。
+- coverage 区分 image、asset、pair QA、scene QA、story audit、video execution、audio、export。Phase 9.3 只识别 video packet preview 中已有的标准 envelope，其余 coverage 保持 planned/missing。
+- schema 为 `schemas/subagent_runner.schema.json`，已纳入 `project_runtime_state.schema.json` 和 schema registry；测试命令为 `npm run subagent-runner:test`。
 
 ### 9.3.1 Subagent Task Envelope Schema
 
@@ -1932,6 +1962,7 @@ TypeScript/Node core: schema, queue, prompt compiler, provider registry, manifes
 - Style Capsule。
 - Visual / Spatial / Voice Memory。
 - Scene Asset Pack / Asset Readiness。
+- Phase 9.2 已将 Production Bible、Story Flow、Shot Spec、Shot Layout、Visual Memory、Spatial Memory、Voice Memory、Scene Asset Pack 补成 schema/docs/test-only 合同，集成到 ProjectRuntimeState 和 schema registry 由后续主集成完成。
 
 ### Phase 2.2：Watcher / Health Checker / Checkpoint
 
