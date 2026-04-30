@@ -45,6 +45,7 @@ import {
   withRuntimeDefaults,
 } from "./core/projectStateBuilder";
 import { buildProjectRuntimePlan } from "./core/projectRuntime";
+import { buildDesktopRuntimePlan, type DesktopRuntimePlan } from "./core/desktopRuntime";
 import { ensureRuntimeEnvironment } from "./core/runtimeConfig";
 import { buildDirectorWorkflowState, type DirectorWorkflowStatus } from "./core/directorWorkflow";
 import { fallbackAudit } from "./data/fallbackAudit";
@@ -93,6 +94,16 @@ type DirectorView = "story" | "assets" | "preview";
 type MinimalProjectPlan = {
   entryLabel: string;
   planLabel: string;
+};
+
+type DesktopRuntimeShellView = {
+  planStatus: string;
+  runtimeMode: string;
+  platformPathPolicy: string;
+  projectPermissionScope: string;
+  sidecarPolicy: string;
+  credentialVault: string;
+  hardLocks: string[];
 };
 
 function toMediaSrc(path?: string) {
@@ -159,6 +170,50 @@ function buildMinimalProjectPlan(runtimeState: ProjectRuntimeState): MinimalProj
   return {
     entryLabel: plan.projectEntry.fileName === "project.vibe" ? "project.vibe" : plan.projectEntry.fileName,
     planLabel: plan.validation.ok ? "Plan preview" : "Needs review",
+  };
+}
+
+function desktopLockSummary(hardLocks: DesktopRuntimePlan["hardLocks"]) {
+  const labels: Partial<Record<keyof DesktopRuntimePlan["hardLocks"], string>> = {
+    noFileMutation: "no user project file mutation",
+    noProviderSubmit: "no provider submit",
+    noCredentialRead: "no credential read",
+    noCredentialWrite: "no credential write",
+    noArbitraryShell: "no arbitrary shell",
+    noSidecarSpawn: "no sidecar execution",
+    liveSubmitAllowed: "live submit disabled",
+  };
+
+  return Object.entries(labels)
+    .filter(([key]) => hardLocks[key as keyof DesktopRuntimePlan["hardLocks"]] === true || key === "liveSubmitAllowed")
+    .map(([key, label]) => key === "liveSubmitAllowed" && hardLocks.liveSubmitAllowed === false ? label : label)
+    .filter((label): label is string => Boolean(label));
+}
+
+function buildDesktopRuntimeShellView(runtimeState: ProjectRuntimeState): DesktopRuntimeShellView {
+  const config = runtimeState.runtime.config;
+  const plan = buildDesktopRuntimePlan({
+    generatedAt: runtimeState.project.importedAt,
+    platform: config.platform,
+    runtimeMode: "tauri_permission_shell_planned",
+    projectRootToken: "user_selected_project_root:unbound",
+    portableProjectPaths: [
+      "project.vibe",
+      "story_flow/story_flow.vibe.json",
+      "visual_memory/visual_memory.vibe.json",
+      "shots/index.vibe.json",
+    ],
+  });
+  const plannedVaults = plan.credentialVaultPlan.plannedStores.map(statusLabel).join(", ") || "not configured";
+
+  return {
+    planStatus: plan.validation.ok ? "dry-run" : "blocked",
+    runtimeMode: `${statusLabel(plan.runtimeMode)} / ${plan.platform}`,
+    platformPathPolicy: `${statusLabel(plan.pathResolverPlan.mode)} · ${plan.pathResolverPlan.resolvers.length} resolver(s) · absolute persistence ${String(plan.pathResolverPlan.hardcodedAbsolutePathPersistenceAllowed)}`,
+    projectPermissionScope: `${statusLabel(plan.projectPermissionScope.scopeKind)} · ${plan.projectPermissionScope.allowedRoots.map(statusLabel).join(", ")}`,
+    sidecarPolicy: `${plan.sidecarAllowlist.status} · ${plan.sidecarAllowlist.arbitraryShell} arbitrary shell · ${plan.sidecarAllowlist.commands.length} allowlisted command(s)`,
+    credentialVault: `${plan.credentialVaultPlan.mode}; read ${String(plan.credentialVaultPlan.readAllowedNow)}; write ${String(plan.credentialVaultPlan.writeAllowedNow)}; planned vaults ${plannedVaults}`,
+    hardLocks: desktopLockSummary(plan.hardLocks),
   };
 }
 
@@ -4642,12 +4697,39 @@ function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) 
   const providerSlots = config.providerEnablement.slots;
   const providerAdapters = config.providerAdapterSettings || [];
   const voiceSources = config.voiceSources;
+  const desktopShell = buildDesktopRuntimeShellView(runtimeState);
 
   return (
     <section className="machine-panel settings-shell">
       <div className="audit-head">
         <Settings size={17} />
         <span>Settings Shell</span>
+      </div>
+      <div className="desktop-runtime-shell">
+        <div className="row-head">
+          <div className="audit-head desktop-runtime-title">
+            <LockKeyhole size={16} />
+            <span>Desktop Runtime / Permission Shell</span>
+          </div>
+          <StatusPill value={desktopShell.planStatus} />
+        </div>
+        <div className="field-grid compact desktop-runtime-grid">
+          <label>runtime mode</label>
+          <span>{desktopShell.runtimeMode}</span>
+          <label>platform/path policy</label>
+          <span>{desktopShell.platformPathPolicy}</span>
+          <label>project permission scope</label>
+          <span>{desktopShell.projectPermissionScope}</span>
+          <label>sidecar policy</label>
+          <span>{desktopShell.sidecarPolicy}</span>
+          <label>credential vault placeholder</label>
+          <span>{desktopShell.credentialVault}</span>
+        </div>
+        <div className="desktop-runtime-locks" aria-label="hard locks summary">
+          {desktopShell.hardLocks.map((lock) => (
+            <span key={lock}>{lock}</span>
+          ))}
+        </div>
       </div>
       <div className="field-grid compact runtime-facts">
         <label>Runtime</label>

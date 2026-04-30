@@ -283,6 +283,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ToolRuntimeHarnessState",
   },
   {
+    fileName: "desktop_runtime_plan.schema.json",
+    id: "https://vibecore.local/schemas/desktop_runtime_plan.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 15 plan-only desktop runtime and permission shell contract with Tauri capability, project-root token, sidecar, credential, install/download, file mutation, and provider submit paths locked off.",
+    typeName: "DesktopRuntimePlan",
+  },
+  {
     fileName: "subagent_runner.schema.json",
     id: "https://vibecore.local/schemas/subagent_runner.schema.json",
     version: schemaVersion,

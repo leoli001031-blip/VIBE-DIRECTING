@@ -904,6 +904,21 @@ Phase 9.4 checklist：
 - 该入口只是从当前 project state 派生 UI 摘要，不创建、不移动、不改写用户项目文件，不提交 provider，也不把 plan preview 当成已执行变更；runtime cache / no mutation 等工程细节留在 Diagnostics 和 runtime contract。
 - `scripts/minimal-ui-contract-test.mjs` 增加 Phase 14 断言：Project / project.vibe / Plan preview 可以出现在主路径，但复杂工程词不能进入极简 Director surface。
 
+### Phase 15 已实现范围：Desktop Runtime / Permission Shell 最小实现
+
+- 新增 `src/core/desktopRuntime.ts` pure builder：`buildDesktopRuntimePlan(...)` 只生成 plan/dry-run permission shell，不依赖浏览器、Tauri、Rust、sidecar、provider 或真实文件系统。
+- Diagnostics / Settings Shell 新增轻量 `Desktop Runtime / Permission Shell` 入口，用于展示 runtime mode、platform/path policy、project permission scope、sidecar policy、credential vault placeholder 和 hard locks summary。
+- Settings 入口通过 `buildDesktopRuntimePlan` 派生显示信息，UI 只消费 permission plan，不直接拼接真实桌面执行逻辑。
+- 项目路径合同固定为 `user_selected_project_root:<token>` + project-root-relative portable paths；raw selected path 只允许 transient 输入并在 plan 中 redacted，不持久化为项目事实。
+- Sidecar allowlist 只表达未来 command shape；即使请求 `codex` / `ffmpeg` / `ffprobe` 命中 allowlist，`requestedCommandExecutableNow=false` 且 `sidecarSpawnAllowedNow=false`，unknown command 直接 blocked。
+- Credential vault 只保留 macOS Keychain / Windows Credential Manager / encrypted fallback placeholder；`read`、`write`、`create_api_key` 请求全部 blocked，不读取、不写入、不创建 API key。
+- 新增 `schemas/desktop_runtime_plan.schema.json` 并纳入 schema registry，hard locks 用 schema `const` 固定 no file mutation / no directory create / no provider submit / no credential read/write / no arbitrary shell / no sidecar spawn / no install / no download / live submit false。
+- 主 Director surface 继续保持极简导演台：Story Flow、Asset Library、Preview、右侧自然语言 Agent Panel 不展示 Tauri、sidecar、credential、arbitrary shell、runtime cache 等工程词。
+- Phase 15 仍是 dry-run / permission plan：不是真实 Tauri desktop app，不执行 sidecar，不读取或写入 credential，不创建 API key，不修改用户项目文件，不提交 provider。
+- Desktop shell 的作用是把未来桌面运行时的权限边界提前显性化：只展示 allowlist、scope 和 hard locks，不给用户暴露任意 shell 或真实执行开关。
+- 新增 `npm run desktop-runtime:test`，覆盖默认 plan valid、raw path redacted、absolute / parent traversal portable path blocked、requested sidecar command not executable、unknown command blocked、credential actions blocked 和 hard locks pinned。
+- `scripts/minimal-ui-contract-test.mjs` 增加 Phase 15 断言：desktop / sidecar / credential / arbitrary shell 等词只能出现在 Diagnostics / Settings Shell，不能进入 minimal Director surface。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

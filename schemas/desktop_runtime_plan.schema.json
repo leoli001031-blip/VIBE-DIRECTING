@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/desktop_runtime_plan.schema.json",
+  "title": "DesktopRuntimePlan",
+  "description": "Phase 15 plan-only desktop runtime and permission shell contract. It records future Tauri capability, path resolver, sidecar allowlist, and credential vault boundaries without executing commands, mutating files, downloading software, reading credentials, or submitting providers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "phase",
+    "generatedAt",
+    "platform",
+    "runtimeMode",
+    "tauriShellPlan",
+    "projectPermissionScope",
+    "pathResolverPlan",
+    "sidecarAllowlist",
+    "credentialVaultPlan",
+    "migrationPlan",
+    "repairPlan",
+    "validation",
+    "hardLocks",
+    "safetySummary"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "phase": { "type": "string", "const": "phase_15_desktop_runtime_permission_shell" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "platform": { "$ref": "#/$defs/platform" },
+    "runtimeMode": { "$ref": "#/$defs/runtimeMode" },
+    "tauriShellPlan": { "$ref": "#/$defs/tauriShellPlan" },
+    "projectPermissionScope": { "$ref": "#/$defs/projectPermissionScope" },
+    "pathResolverPlan": { "$ref": "#/$defs/pathResolverPlan" },
+    "sidecarAllowlist": { "$ref": "#/$defs/sidecarAllowlist" },
+    "credentialVaultPlan": { "$ref": "#/$defs/credentialVaultPlan" },
+    "migrationPlan": { "type": "array", "items": { "$ref": "#/$defs/planItem" } },
+    "repairPlan": { "type": "array", "items": { "$ref": "#/$defs/planItem" } },
+    "validation": { "$ref": "#/$defs/validation" },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "safetySummary": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "platform": {
+      "type": "string",
+      "enum": ["darwin", "win32", "linux", "unknown"]
+    },
+    "runtimeMode": {
+      "type": "string",
+      "enum": ["desktop_plan_only", "tauri_permission_shell_planned"]
+    },
+    "gateStatus": {
+      "type": "string",
+      "enum": ["planned", "disabled", "permission_gated", "blocked"]
+    },
+    "tauriShellPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "capabilities", "notes"],
+      "properties": {
+        "mode": { "type": "string", "const": "tauri_shell_permission_plan" },
+        "capabilities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/tauriCapability" }
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "tauriCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "permissionRequired", "executableNow", "notes"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "$ref": "#/$defs/gateStatus" },
+        "permissionRequired": { "type": "boolean" },
+        "executableNow": { "type": "boolean", "const": false },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "projectPermissionScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scopeKind",
+        "token",
+        "rawPathRedacted",
+        "rawPathPersisted",
+        "allowedRoots",
+        "portableContract",
+        "blockedReasons",
+        "notes"
+      ],
+      "properties": {
+        "scopeKind": { "type": "string", "const": "user_selected_project_root_token" },
+        "token": {
+          "type": "string",
+          "pattern": "^(user_selected_project_root:[A-Za-z0-9_-]+|\\[blocked:invalid_project_root_token\\])$"
+        },
+        "rawPathRedacted": { "type": ["string", "null"] },
+        "rawPathPersisted": { "type": "boolean", "const": false },
+        "allowedRoots": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": { "type": "string", "const": "user_selected_project_root" }
+        },
+        "portableContract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["absolutePathsAllowed", "parentTraversalAllowed", "shellSpecificPathsAllowed"],
+          "properties": {
+            "absolutePathsAllowed": { "type": "boolean", "const": false },
+            "parentTraversalAllowed": { "type": "boolean", "const": false },
+            "shellSpecificPathsAllowed": { "type": "boolean", "const": false }
+          }
+        },
+        "blockedReasons": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "pathResolverPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "selectedPlatform",
+        "resolvers",
+        "portablePaths",
+        "hardcodedAbsolutePathPersistenceAllowed",
+        "notes"
+      ],
+      "properties": {
+        "mode": { "type": "string", "const": "platform_aware_project_root_resolver" },
+        "selectedPlatform": { "$ref": "#/$defs/platform" },
+        "resolvers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pathResolver" }
+        },
+        "portablePaths": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/portablePath" }
+        },
+        "hardcodedAbsolutePathPersistenceAllowed": { "type": "boolean", "const": false },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "pathResolver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "platform", "pathStyle", "status", "persistedInProjectFiles", "notes"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "platform": { "type": "string", "enum": ["darwin", "win32", "all"] },
+        "pathStyle": { "type": "string", "enum": ["posix", "win32", "project-root-relative"] },
+        "status": { "type": "string", "const": "planned" },
+        "persistedInProjectFiles": { "type": "boolean" },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "portablePath": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "status", "redacted"],
+      "properties": {
+        "path": { "type": "string" },
+        "status": { "type": "string", "enum": ["accepted", "blocked"] },
+        "redacted": { "type": "boolean" },
+        "reason": { "type": "string" }
+      }
+    },
+    "sidecarAllowlist": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "status",
+        "sidecarSpawnAllowedNow",
+        "arbitraryShell",
+        "commands",
+        "requestedCommandStatus",
+        "requestedCommandExecutableNow",
+        "blockedReasons",
+        "notes"
+      ],
+      "properties": {
+        "mode": { "type": "string", "const": "controlled_sidecar_allowlist" },
+        "status": { "type": "string", "const": "disabled" },
+        "sidecarSpawnAllowedNow": { "type": "boolean", "const": false },
+        "arbitraryShell": { "type": "string", "const": "forbidden" },
+        "commands": { "type": "array", "items": { "$ref": "#/$defs/sidecarCommand" } },
+        "requestedCommandStatus": {
+          "type": "string",
+          "enum": ["not_requested", "planned_allowlisted", "blocked"]
+        },
+        "requestedCommandExecutableNow": { "type": "boolean", "const": false },
+        "blockedReasons": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "sidecarCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "executable", "status", "argumentSource", "userFreeTextShellAllowed", "liveSubmitAllowed", "notes"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "executable": { "type": "string", "enum": ["codex", "ffmpeg", "ffprobe", "provider-cli"] },
+        "status": { "type": "string", "enum": ["planned", "disabled"] },
+        "argumentSource": { "type": "string", "const": "validated_envelope_only" },
+        "userFreeTextShellAllowed": { "type": "boolean", "const": false },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "credentialVaultPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "plannedStores",
+        "readAllowedNow",
+        "writeAllowedNow",
+        "createApiKeyAllowedNow",
+        "requestedActionStatus",
+        "blockedReasons",
+        "notes"
+      ],
+      "properties": {
+        "mode": { "type": "string", "const": "planned_placeholder" },
+        "plannedStores": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["macos_keychain", "windows_credential_manager", "encrypted_local_fallback"] }
+        },
+        "readAllowedNow": { "type": "boolean", "const": false },
+        "writeAllowedNow": { "type": "boolean", "const": false },
+        "createApiKeyAllowedNow": { "type": "boolean", "const": false },
+        "requestedActionStatus": { "type": "string", "enum": ["not_requested", "blocked"] },
+        "blockedReasons": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "checkedAt", "errors", "warnings"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "checkedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "errors": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "planItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "detail", "action"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "type": "string", "enum": ["ok", "planned", "needed", "blocked"] },
+        "detail": { "type": "string" },
+        "action": { "type": "string" }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "noFileMutation",
+        "noDirectoryCreate",
+        "noUserFileMove",
+        "noProviderSubmit",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "noArbitraryShell",
+        "noSidecarSpawn",
+        "noInstall",
+        "noDownload",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "noFileMutation": { "type": "boolean", "const": true },
+        "noDirectoryCreate": { "type": "boolean", "const": true },
+        "noUserFileMove": { "type": "boolean", "const": true },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "noArbitraryShell": { "type": "boolean", "const": true },
+        "noSidecarSpawn": { "type": "boolean", "const": true },
+        "noInstall": { "type": "boolean", "const": true },
+        "noDownload": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    }
+  }
+}

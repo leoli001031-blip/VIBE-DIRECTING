@@ -99,7 +99,9 @@ const directorMode = findFunctionBody(appSource, "DirectorMode");
 const minimalTopNav = findFunctionBody(appSource, "MinimalTopNav");
 const minimalAgentPanel = findFunctionBody(appSource, "MinimalAgentPanel");
 const minimalProjectPlan = findFunctionBody(appSource, "buildMinimalProjectPlan");
+const desktopShellView = findFunctionBody(appSource, "buildDesktopRuntimeShellView");
 const diagnosticsMode = findFunctionBody(appSource, "DiagnosticsMode");
+const settingsShell = findFunctionBody(appSource, "SettingsShell");
 const appBody = findFunctionBody(appSource, "App");
 const failures = [];
 
@@ -143,6 +145,15 @@ const phase14ProjectSurface = `${minimalTopNav}\n${minimalProjectPlan}`;
 checkMessage(requireWithin(phase14ProjectSurface, /Project/i, "Phase 14 Project entry in minimal top navigation"));
 checkMessage(requireWithin(phase14ProjectSurface, /project\.vibe/i, "Phase 14 project.vibe entry badge"));
 checkMessage(requireWithin(phase14ProjectSurface, /Plan\s+preview/i, "Phase 14 plan preview badge"));
+
+checkMessage(requireWithin(desktopShellView, /buildDesktopRuntimePlan\s*\(/, "Phase 15 Settings shell must use buildDesktopRuntimePlan"));
+checkMessage(requireWithin(settingsShell, /Desktop Runtime\s*\/\s*Permission Shell/i, "Phase 15 Desktop Runtime / Permission Shell in Settings"));
+checkMessage(requireWithin(settingsShell, /runtime mode/i, "Phase 15 runtime mode row in Settings"));
+checkMessage(requireWithin(settingsShell, /platform\/path policy/i, "Phase 15 platform/path policy row in Settings"));
+checkMessage(requireWithin(settingsShell, /project permission scope/i, "Phase 15 project permission scope row in Settings"));
+checkMessage(requireWithin(settingsShell, /sidecar policy/i, "Phase 15 sidecar policy row in Settings"));
+checkMessage(requireWithin(settingsShell, /credential vault placeholder/i, "Phase 15 credential vault placeholder row in Settings"));
+checkMessage(requireWithin(settingsShell, /hard locks summary/i, "Phase 15 hard locks summary in Settings"));
 
 checkMessage(requireAny(appSource, [/Asset Library/, /function\s+AssetLibrary/, /className="[^"]*asset-library/], "Asset Library main UI naming"));
 checkMessage(requireAny(appSource, [/Preview/, /function\s+PreviewTimeline/, /className="[^"]*preview/], "Preview main UI"));
@@ -189,9 +200,15 @@ const forbiddenMinimalTerms = [
   ["Queue Shell", /Queue\s+Shell/i],
   ["Provider Lock", /Provider\s+Lock/i],
   ["Task Envelope", /Task\s+Envelope|taskEnvelope/i],
+  ["Desktop Runtime", /Desktop\s+Runtime/i],
+  ["Permission Shell", /Permission\s+Shell/i],
+  ["Tauri", /Tauri/i],
+  ["sidecar", /sidecar/i],
+  ["arbitrary shell", /arbitrary\s+shell/i],
   ["Runtime cache status", /Runtime\s+cache/i],
   ["No file mutation", /No\s+file\s+mutation/i],
   ["File-first facts", /File-first\s+facts/i],
+  ["credential vault", /credential\s+vault/i],
   ["forbiddenActions", /forbiddenActions/i],
   ["manifest", /manifest/i],
   ["schema", /schema/i],
