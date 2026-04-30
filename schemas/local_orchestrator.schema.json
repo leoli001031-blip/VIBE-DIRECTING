@@ -1,0 +1,408 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/local_orchestrator.schema.json",
+  "title": "LocalOrchestratorState",
+  "description": "Phase 10 dry-run local orchestrator and queue harness. It derives queue, auto-continue, reconnect, stall, QA, and completion facts without daemons, Codex spawn, shell execution, provider submission, or file mutation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "queue",
+    "autoContinuePlan",
+    "summary",
+    "hardLocks",
+    "sourceCoverage",
+    "dryRunOnly",
+    "planOnly",
+    "providerSubmissionForbidden",
+    "liveSubmitAllowed",
+    "noFileMutation",
+    "daemonStarted",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "queue": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/queueItem" }
+    },
+    "autoContinuePlan": { "$ref": "#/$defs/autoContinuePlan" },
+    "summary": { "$ref": "#/$defs/summary" },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "sourceCoverage": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sourceCoverage" }
+    },
+    "dryRunOnly": { "type": "boolean", "const": true },
+    "planOnly": { "type": "boolean", "const": true },
+    "providerSubmissionForbidden": { "type": "boolean", "const": true },
+    "liveSubmitAllowed": { "type": "boolean", "const": false },
+    "noFileMutation": { "type": "boolean", "const": true },
+    "daemonStarted": { "type": "boolean", "const": false },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "queueStatus": {
+      "type": "string",
+      "enum": [
+        "waiting",
+        "ready",
+        "running_planned",
+        "waiting_output",
+        "qa_pending",
+        "needs_review",
+        "failed",
+        "blocked",
+        "complete_verified"
+      ]
+    },
+    "factLayer": {
+      "type": "string",
+      "enum": [
+        "task_packet",
+        "task_envelope",
+        "task_run",
+        "generation_harness",
+        "filesystem_watcher_harness",
+        "checkpoint_resume_harness",
+        "qa_harness",
+        "subagent_runner",
+        "local_orchestrator"
+      ]
+    },
+    "codexActivityState": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "ready_to_start",
+        "running_planned",
+        "waiting_output",
+        "reconnect_planned",
+        "stalled",
+        "manual_review_required",
+        "verified"
+      ]
+    },
+    "completionGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expectedOutputDeclared",
+        "expectedOutputObserved",
+        "manifestMatched",
+        "qaPass",
+        "promotionGatePassed",
+        "formalPromotionEligible",
+        "workerSelfReportPresent",
+        "workerSelfReportOnly",
+        "completeVerified",
+        "blockers"
+      ],
+      "properties": {
+        "expectedOutputDeclared": { "type": "boolean" },
+        "expectedOutputObserved": { "type": "boolean" },
+        "manifestMatched": { "type": "boolean" },
+        "qaPass": { "type": "boolean" },
+        "promotionGatePassed": { "type": "boolean" },
+        "formalPromotionEligible": { "type": "boolean" },
+        "workerSelfReportPresent": { "type": "boolean" },
+        "workerSelfReportOnly": { "type": "boolean" },
+        "completeVerified": { "type": "boolean" },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "codexActivity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "retryCount",
+        "retryBudget",
+        "retriesRemaining",
+        "stallTimeoutSeconds",
+        "stalled",
+        "stallDetectedBy",
+        "manualReviewRequired",
+        "notes"
+      ],
+      "properties": {
+        "state": { "$ref": "#/$defs/codexActivityState" },
+        "codexSessionId": { "type": "string" },
+        "retryCount": { "type": "integer", "minimum": 0 },
+        "retryBudget": { "type": "integer", "minimum": 0 },
+        "retriesRemaining": { "type": "integer", "minimum": 0 },
+        "stallTimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "lastEventAt": { "type": "string" },
+        "backoffUntil": { "type": "string" },
+        "stalled": { "type": "boolean" },
+        "stallDetectedBy": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["timeout", "watcher_event"] },
+          "uniqueItems": true
+        },
+        "manualReviewRequired": { "type": "boolean" },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "factChainEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["factId", "layer", "sourceRef", "status", "detail"],
+      "properties": {
+        "factId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "layer": { "$ref": "#/$defs/factLayer" },
+        "sourceRef": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "detail": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "at": { "type": "string" }
+      }
+    },
+    "autoContinueMarker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eligibleAsNext", "reason"],
+      "properties": {
+        "eligibleAsNext": { "type": "boolean" },
+        "plannedAfterTaskId": { "type": "string" },
+        "waitingForTaskId": { "type": "string" },
+        "reason": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "queueItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "queueItemId",
+        "queueOrder",
+        "queueStatus",
+        "rawQueueStatus",
+        "expectedOutputs",
+        "dependencies",
+        "canExecute",
+        "canSpawnCodex",
+        "dryRunOnly",
+        "planOnly",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "noFileMutation",
+        "completionGate",
+        "codexActivity",
+        "autoContinue",
+        "factChain",
+        "blockers",
+        "warnings",
+        "nextAction",
+        "notes"
+      ],
+      "properties": {
+        "queueItemId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "queueOrder": { "type": "integer", "minimum": 0 },
+        "queueStatus": { "$ref": "#/$defs/queueStatus" },
+        "rawQueueStatus": { "$ref": "#/$defs/queueStatus" },
+        "taskPlanId": { "type": "string" },
+        "jobId": { "type": "string" },
+        "shotId": { "type": "string" },
+        "packetId": { "type": "string" },
+        "envelopeId": { "type": "string" },
+        "runnerSlotId": { "type": "string" },
+        "providerId": { "type": "string" },
+        "expectedOutputs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dependencies": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "canExecute": { "type": "boolean", "const": false },
+        "canSpawnCodex": { "type": "boolean", "const": false },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "planOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "completionGate": { "$ref": "#/$defs/completionGate" },
+        "codexActivity": { "$ref": "#/$defs/codexActivity" },
+        "autoContinue": { "$ref": "#/$defs/autoContinueMarker" },
+        "factChain": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/factChainEntry" }
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "nextAction": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "autoContinueTransition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["afterQueueItemId", "plannedReadyQueueItemId", "reason"],
+      "properties": {
+        "afterQueueItemId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "plannedReadyQueueItemId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "reason": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "autoContinuePlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "mode",
+        "concurrency",
+        "terminalQueueItemIds",
+        "currentQueueItemIds",
+        "nextReadyQueueItemIds",
+        "waitingQueueItemIds",
+        "transitions",
+        "notes"
+      ],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "mode": { "type": "string", "const": "plan_only" },
+        "concurrency": { "type": "integer", "minimum": 1 },
+        "terminalQueueItemIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "currentQueueItemIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "nextReadyQueueItemIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "waitingQueueItemIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "transitions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/autoContinueTransition" }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalItems",
+        "waiting",
+        "ready",
+        "runningPlanned",
+        "waitingOutput",
+        "qaPending",
+        "needsReview",
+        "failed",
+        "blocked",
+        "completeVerified",
+        "manualReviewRequired",
+        "stalled",
+        "workerSelfReportOnly",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "noFileMutation",
+        "daemonStarted"
+      ],
+      "properties": {
+        "totalItems": { "type": "integer", "minimum": 0 },
+        "waiting": { "type": "integer", "minimum": 0 },
+        "ready": { "type": "integer", "minimum": 0 },
+        "runningPlanned": { "type": "integer", "minimum": 0 },
+        "waitingOutput": { "type": "integer", "minimum": 0 },
+        "qaPending": { "type": "integer", "minimum": 0 },
+        "needsReview": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "completeVerified": { "type": "integer", "minimum": 0 },
+        "manualReviewRequired": { "type": "integer", "minimum": 0 },
+        "stalled": { "type": "integer", "minimum": 0 },
+        "workerSelfReportOnly": { "type": "integer", "minimum": 0 },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "daemonStarted": { "type": "boolean", "const": false }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dryRunOnly",
+        "planOnly",
+        "noDaemon",
+        "daemonStarted",
+        "noSpawnCodex",
+        "noSubprocess",
+        "noShellExecution",
+        "noProviderExecution",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "noFileMutation",
+        "noCredentialRead",
+        "workerSelfReportCannotComplete",
+        "expectedOutputRequired",
+        "manifestRequired",
+        "qaGateRequired"
+      ],
+      "properties": {
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "planOnly": { "type": "boolean", "const": true },
+        "noDaemon": { "type": "boolean", "const": true },
+        "daemonStarted": { "type": "boolean", "const": false },
+        "noSpawnCodex": { "type": "boolean", "const": true },
+        "noSubprocess": { "type": "boolean", "const": true },
+        "noShellExecution": { "type": "boolean", "const": true },
+        "noProviderExecution": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "workerSelfReportCannotComplete": { "type": "boolean", "const": true },
+        "expectedOutputRequired": { "type": "boolean", "const": true },
+        "manifestRequired": { "type": "boolean", "const": true },
+        "qaGateRequired": { "type": "boolean", "const": true }
+      }
+    },
+    "sourceCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layer", "referenced", "referenceCount", "sourceRefs"],
+      "properties": {
+        "layer": { "$ref": "#/$defs/factLayer" },
+        "referenced": { "type": "boolean" },
+        "referenceCount": { "type": "integer", "minimum": 0 },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

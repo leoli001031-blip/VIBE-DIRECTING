@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/export_builder.schema.json",
+  "title": "ExportBuilderState",
+  "description": "Phase 12 preview/export builder dry-run package plan. It can plan rough cut, asset package, storyboard table, and prompt/QA developer archive outputs without copying, moving, rendering, or writing files.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "phase",
+    "draftPreview",
+    "formalPreview",
+    "formalPreviewGate",
+    "roughCutProxy",
+    "exportProfiles",
+    "exportPackagePlan",
+    "futureTargets",
+    "fileMutationPlan",
+    "audioPolicy",
+    "dryRunOnly",
+    "noFileMutation",
+    "providerSubmissionForbidden",
+    "liveSubmitAllowed",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "phase": { "const": "phase_12_preview_export_builder" },
+    "draftPreview": { "$ref": "preview_plan.schema.json" },
+    "formalPreview": { "$ref": "preview_plan.schema.json" },
+    "formalPreviewGate": { "$ref": "preview_plan.schema.json#/$defs/formalPreviewGate" },
+    "roughCutProxy": { "$ref": "preview_plan.schema.json#/$defs/roughCutProxyPlan" },
+    "exportProfiles": {
+      "type": "array",
+      "items": { "$ref": "export_profile.schema.json" }
+    },
+    "exportPackagePlan": { "$ref": "export_profile.schema.json#/$defs/exportPackagePlan" },
+    "futureTargets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/futureTarget" }
+    },
+    "fileMutationPlan": { "$ref": "#/$defs/fileMutationPlan" },
+    "audioPolicy": { "$ref": "#/$defs/audioPolicy" },
+    "dryRunOnly": { "const": true },
+    "noFileMutation": { "const": true },
+    "providerSubmissionForbidden": { "const": true },
+    "liveSubmitAllowed": { "const": false },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "futureTargetKind": {
+      "type": "string",
+      "enum": ["fcpxml", "edl", "premiere_pro", "jianying", "davinci_resolve"]
+    },
+    "futureTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "status", "enabled", "writesFile", "notes"],
+      "properties": {
+        "target": { "$ref": "#/$defs/futureTargetKind" },
+        "status": { "const": "future_placeholder" },
+        "enabled": { "const": false },
+        "writesFile": { "const": false },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "fileMutationPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["copyFiles", "moveFiles", "writeFiles", "renderMedia", "createDirectories", "plannedMutations", "notes"],
+      "properties": {
+        "copyFiles": { "const": false },
+        "moveFiles": { "const": false },
+        "writeFiles": { "const": false },
+        "renderMedia": { "const": false },
+        "createDirectories": { "const": false },
+        "plannedMutations": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "audioPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["videoProviderBgmAllowed", "bgmHandledBy", "bgmIncludedInVideoPrompt", "exportCategories", "plannedAudioPaths", "notes"],
+      "properties": {
+        "videoProviderBgmAllowed": { "const": false },
+        "bgmHandledBy": { "const": "audio_plan_or_export_plan" },
+        "bgmIncludedInVideoPrompt": { "const": false },
+        "exportCategories": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "plannedAudioPaths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "properties": {
+        "formalPreview": {
+          "properties": {
+            "mode": { "const": "formal_preview" }
+          }
+        }
+      }
+    }
+  ]
+}

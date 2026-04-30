@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/provider_live_gate.schema.json",
+  "title": "ProviderLiveGateState",
+  "description": "Phase 11 provider adapter live gate readiness and user-confirmation plan. It never submits providers, stores credentials, reads credentials, or creates API keys.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "generatedAt", "phase", "slots", "items", "summary", "hardLocks", "forbiddenActions", "notes"],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "phase": { "const": "phase_11_provider_adapter_live_gate" },
+    "slots": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/slot" }
+    },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/item" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalSlots",
+        "imageSlotsPendingConfirmation",
+        "parkedVideoSlots",
+        "totalItems",
+        "readyForConfirmation",
+        "blocked",
+        "parked",
+        "providerSubmitAllowed",
+        "liveSubmitAllowed",
+        "credentialStorage"
+      ],
+      "properties": {
+        "totalSlots": { "type": "integer", "minimum": 0 },
+        "imageSlotsPendingConfirmation": { "type": "integer", "minimum": 0 },
+        "parkedVideoSlots": { "type": "integer", "minimum": 0 },
+        "totalItems": { "type": "integer", "minimum": 0 },
+        "readyForConfirmation": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "parked": { "type": "integer", "minimum": 0 },
+        "providerSubmitAllowed": { "type": "integer", "const": 0 },
+        "liveSubmitAllowed": { "const": false },
+        "credentialStorage": { "const": false }
+      }
+    },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "forbiddenActions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "provider_submit",
+          "credential_read",
+          "credential_write",
+          "api_key_create",
+          "fast_model",
+          "vip_channel",
+          "text_to_video_main_path",
+          "bgm_in_video_prompt",
+          "arbitrary_provider_command"
+        ]
+      }
+    },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "slotState": {
+      "type": "string",
+      "enum": ["user_enabled_pending_confirmation", "parked", "planned", "blocked"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready_for_confirmation", "blocked", "parked"]
+    },
+    "checkId": {
+      "type": "string",
+      "enum": [
+        "adapter_contract_valid",
+        "provider_capability_present",
+        "envelope_valid",
+        "asset_readiness_ready",
+        "pair_qa_pass",
+        "image2_adapter_request_valid",
+        "user_confirmation_token_placeholder",
+        "video_provider_parked",
+        "no_fast_model",
+        "no_vip_channel",
+        "no_text_to_video_main_path",
+        "no_bgm_in_video_prompt"
+      ]
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkId", "label", "required", "passed"],
+      "properties": {
+        "checkId": { "$ref": "#/$defs/checkId" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "required": { "type": "boolean" },
+        "passed": { "type": "boolean" },
+        "blocker": { "type": "string" },
+        "warning": { "type": "string" },
+        "sourceRef": { "type": "string" }
+      }
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slotId",
+        "adapterId",
+        "providerId",
+        "slot",
+        "requiredModes",
+        "state",
+        "liveSubmitAllowed",
+        "providerSubmissionForbidden",
+        "credentialStorage",
+        "confirmationRequired",
+        "notes"
+      ],
+      "properties": {
+        "slotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "adapterId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "slot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+        "requiredModes": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/requiredMode" }
+        },
+        "state": { "$ref": "#/$defs/slotState" },
+        "liveSubmitAllowed": { "const": false },
+        "providerSubmissionForbidden": { "const": true },
+        "credentialStorage": { "const": false },
+        "confirmationRequired": { "const": true },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gateId",
+        "sourceKind",
+        "sourceId",
+        "providerId",
+        "slot",
+        "requiredMode",
+        "status",
+        "checks",
+        "blockers",
+        "warnings",
+        "canRequestUserConfirmation",
+        "canSubmitProvider",
+        "livePathBlocked",
+        "dryRunOnly",
+        "readOnly",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "credentialStorage",
+        "noCredentialRead",
+        "noCredentialWrite"
+      ],
+      "properties": {
+        "gateId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "sourceKind": { "type": "string", "enum": ["image_task_plan", "video_task_plan", "provider_slot"] },
+        "sourceId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "slot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+        "requiredMode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+        "shotId": { "type": "string" },
+        "status": { "$ref": "#/$defs/status" },
+        "checks": { "type": "array", "items": { "$ref": "#/$defs/check" } },
+        "blockers": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "confirmationTokenId": { "type": "string" },
+        "canRequestUserConfirmation": { "type": "boolean" },
+        "canSubmitProvider": { "const": false },
+        "livePathBlocked": { "type": "boolean" },
+        "dryRunOnly": { "const": true },
+        "readOnly": { "const": true },
+        "providerSubmissionForbidden": { "const": true },
+        "liveSubmitAllowed": { "const": false },
+        "credentialStorage": { "const": false },
+        "noCredentialRead": { "const": true },
+        "noCredentialWrite": { "const": true }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dryRunOnly",
+        "readOnly",
+        "readinessPlanOnly",
+        "confirmationPlanOnly",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "credentialStorage",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "noApiKeyCreation",
+        "noProviderSubmit",
+        "noArbitraryProviderCommand",
+        "fastModelForbidden",
+        "vipChannelForbidden",
+        "textToVideoMainPathForbidden",
+        "bgmInVideoPromptForbidden"
+      ],
+      "properties": {
+        "dryRunOnly": { "const": true },
+        "readOnly": { "const": true },
+        "readinessPlanOnly": { "const": true },
+        "confirmationPlanOnly": { "const": true },
+        "providerSubmissionForbidden": { "const": true },
+        "liveSubmitAllowed": { "const": false },
+        "credentialStorage": { "const": false },
+        "noCredentialRead": { "const": true },
+        "noCredentialWrite": { "const": true },
+        "noApiKeyCreation": { "const": true },
+        "noProviderSubmit": { "const": true },
+        "noArbitraryProviderCommand": { "const": true },
+        "fastModelForbidden": { "const": true },
+        "vipChannelForbidden": { "const": true },
+        "textToVideoMainPathForbidden": { "const": true },
+        "bgmInVideoPromptForbidden": { "const": true }
+      }
+    }
+  }
+}

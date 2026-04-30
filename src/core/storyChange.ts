@@ -19,11 +19,18 @@ export const storyChangeSchemaVersion = "0.1.0";
 export interface DirectorIntentContext {
   targetIds?: string[];
   selectedShotId?: string;
+  selectedShotIds?: string[];
   selectedSectionId?: string;
+  selectedAssetId?: string;
+  selectedAssetIds?: string[];
+  selectedVoiceId?: string;
+  selectedExportId?: string;
+  scopeHint?: StoryChangeImpactScope;
   knownCharacterIds?: string[];
   knownSceneIds?: string[];
   knownAssetIds?: string[];
   knownVoiceIds?: string[];
+  lockedAssetIds?: string[];
 }
 
 export interface BuildStoryChangeTransactionInput {
@@ -57,7 +64,7 @@ const preserveTargets = [
   {
     key: "style",
     mustPreserve: "preserve_visual_style",
-    patterns: [/风格|调性|美术|色彩|质感|style|look|tone|visual language|palette|texture/i],
+    patterns: [/风格|调性|美术|色彩|质感|氛围|情绪|压抑|style|look|tone|mood|atmosphere|visual language|palette|texture/i],
   },
   {
     key: "voice",
@@ -128,6 +135,10 @@ const confirmationRules = [
     pattern: /(音色|音源|配音|声音|voice|tts|narrator|speaker|timbre)/i,
   },
   {
+    reason: "locked asset 变更需要用户确认",
+    pattern: /(locked asset|locked reference|锁定资产|锁定参考|已锁定|解锁|unlock|lock asset)/i,
+  },
+  {
     reason: "结局变更需要用户确认",
     pattern: /(结局|收尾|最后|ending|finale|resolution)/i,
   },
@@ -183,14 +194,17 @@ function classifyOperation(intent: string): { intentType: DirectorIntentType; op
   if (match("style", [/风格|调性|美术|色彩|质感|style|look|palette|texture/i])) {
     return { intentType: "style", operation: "update_style", impactScope: "project", confidence: 0.76, keywords: keywordHits };
   }
+  if (match("style_mood", [/氛围|情绪|压抑|阴郁|沉重|紧张|明亮|轻快|mood|atmosphere|oppressive|somber|tense|brighter/i])) {
+    return { intentType: "style", operation: "update_style", impactScope: "project", confidence: 0.76, keywords: keywordHits };
+  }
+  if (match("asset_lock", [/锁定|解锁|保留资产|锁定资产|锁定参考|locked asset|locked reference|lock|unlock|preserve asset/i])) {
+    return { intentType: "asset", operation: intent.includes("解锁") || /unlock/i.test(intent) ? "unlock_asset" : "lock_asset", impactScope: "asset", confidence: 0.7, keywords: keywordHits };
+  }
   if (match("character", [/角色|人物|主角|反派|身份|character|identity/i])) {
     return { intentType: "asset", operation: "update_character", impactScope: "asset", confidence: 0.73, keywords: keywordHits };
   }
   if (match("scene", [/场景|地点|空间|布景|scene|location|set|spatial/i])) {
     return { intentType: "asset", operation: "update_scene", impactScope: "asset", confidence: 0.73, keywords: keywordHits };
-  }
-  if (match("asset_lock", [/锁定|解锁|保留资产|lock|unlock|preserve asset/i])) {
-    return { intentType: "asset", operation: intent.includes("解锁") || /unlock/i.test(intent) ? "unlock_asset" : "lock_asset", impactScope: "asset", confidence: 0.7, keywords: keywordHits };
   }
   if (match("export", [/导出|格式|分辨率|码率|export|render/i])) {
     return { intentType: "export", operation: "export_change", impactScope: "export", confidence: 0.65, keywords: keywordHits };
@@ -205,8 +219,13 @@ function inferTargetIds(context?: DirectorIntentContext, targetIds: string[] = [
   return unique([
     ...targetIds,
     ...(context?.targetIds || []),
+    ...(context?.selectedShotIds || []),
+    ...(context?.selectedAssetIds || []),
     context?.selectedShotId || "",
     context?.selectedSectionId || "",
+    context?.selectedAssetId || "",
+    context?.selectedVoiceId || "",
+    context?.selectedExportId || "",
   ]);
 }
 
@@ -225,14 +244,22 @@ export function classifyDirectorIntent(userIntent: string, context: DirectorInte
         confidence: 0.42,
         keywords: ["preserve_only"],
       };
+  const impactScope = context.scopeHint || classified.impactScope;
   const confirmationReasons: string[] = confirmationRules
     .filter((rule) => rule.pattern.test(confirmationIntent))
     .map((rule) => rule.reason);
   if (classified.operation === "insert_shot") {
     confirmationReasons.push("插入镜头会影响故事流，需要用户确认");
   }
+  if (["lock_asset", "unlock_asset"].includes(classified.operation)) {
+    confirmationReasons.push("locked asset 变更需要用户确认");
+  }
+  const lockedAssetIds = new Set(context.lockedAssetIds || []);
+  if (targetIds.some((targetId) => lockedAssetIds.has(targetId)) && classified.intentType === "asset") {
+    confirmationReasons.push("目标包含 locked asset，需要用户确认");
+  }
   const riskFlags = unique([
-    classified.impactScope === "project" ? "project_wide_reflow" : "",
+    impactScope === "project" ? "project_wide_reflow" : "",
     ["delete_shot", "move_shot", "insert_shot"].includes(classified.operation) ? "story_flow_reflow" : "",
     classified.intentType === "voice" ? "voice_memory_reflow" : "",
     confirmationReasons.length ? "requires_confirmation" : "",
@@ -247,7 +274,7 @@ export function classifyDirectorIntent(userIntent: string, context: DirectorInte
     normalizedIntent,
     intentType: classified.intentType,
     operation: classified.operation,
-    impactScope: classified.impactScope,
+    impactScope,
     targetIds,
     confidence: classified.confidence,
     requiresUserConfirmation: confirmationReasons.length > 0,
@@ -404,10 +431,17 @@ function targetShots(transaction: StoryChangeTransaction, shots: ShotRecord[]): 
   return transaction.impactScope === "shot" && transaction.targetIds.length ? [] : shots;
 }
 
-function invalidation(artifactType: ReflowArtifactType, targetId: string, reason: string, dependencies: string[] = [], requiresRegeneration = true): ArtifactInvalidation {
+function invalidation(
+  artifactType: ReflowArtifactType,
+  targetId: string,
+  reason: string,
+  dependencies: string[] = [],
+  requiresRegeneration = true,
+  artifactId?: string,
+): ArtifactInvalidation {
   return {
     schemaVersion: storyChangeSchemaVersion,
-    artifactId: `${artifactType}_${targetId}`,
+    artifactId: artifactId || `${artifactType}_${targetId}`,
     artifactType,
     targetId,
     staleReason: reason,
@@ -429,6 +463,29 @@ function addInvalidations(
     for (const type of artifactTypes) {
       items.push(invalidation(type, targetId, reason, dependencies, requiresRegeneration));
     }
+  }
+}
+
+function addShotArtifactInvalidations(
+  items: ArtifactInvalidation[],
+  targetIds: string[],
+  reason: string,
+  dependencies: string[] = [],
+  options: { includeShotSpec?: boolean; includeAudio?: boolean } = {},
+): void {
+  for (const targetId of targetIds.length ? targetIds : ["project"]) {
+    if (options.includeShotSpec !== false) {
+      items.push(invalidation("shotSpec", targetId, reason, dependencies));
+      items.push(invalidation("shotLayout", targetId, reason, dependencies));
+    }
+    items.push(invalidation("promptPlan", targetId, reason, dependencies, true, `shotPromptPlan_${targetId}`));
+    items.push(invalidation("keyframe", targetId, reason, dependencies, true, `startFrame_${targetId}`));
+    items.push(invalidation("keyframe", targetId, reason, dependencies, true, `endFrame_${targetId}`));
+    items.push(invalidation("video", targetId, reason, dependencies));
+    if (options.includeAudio) {
+      items.push(invalidation("audio", targetId, reason, dependencies));
+    }
+    items.push(invalidation("preview", targetId, reason, dependencies));
   }
 }
 
@@ -458,16 +515,16 @@ export function buildReflowImpactReport(
 
   if (["insert_shot", "delete_shot", "move_shot"].includes(transaction.operation)) {
     addInvalidations(invalidations, ["storyFlow"], affectedSectionIds, "Shot insertion, deletion, or movement changes story ordering.", ["director_intent"]);
-    addInvalidations(invalidations, ["shotSpec", "promptPlan", "preview"], targetIds, "Story flow reflow makes downstream shot planning stale.", ["storyFlow"]);
+    addShotArtifactInvalidations(invalidations, targetIds, "Story flow reflow makes downstream shot planning stale.", ["storyFlow"], { includeAudio: true });
   } else if (transaction.operation === "update_shot") {
-    addInvalidations(invalidations, ["promptPlan", "keyframe", "video", "preview"], targetIds, "Local shot change invalidates generated downstream artifacts.", ["shotSpec"]);
+    addShotArtifactInvalidations(invalidations, targetIds, "Local shot change invalidates generated downstream artifacts.", ["shotSpec"], { includeAudio: true });
   } else if (transaction.operation === "update_style") {
     addInvalidations(invalidations, ["styleCapsule"], transaction.targetIds, "Style capsule must be reviewed before prompt planning.", ["productionBible"]);
-    addInvalidations(invalidations, ["promptPlan", "keyframe", "video", "preview"], targetIds, "Style changes affect visual generation artifacts.", ["styleCapsule"]);
+    addShotArtifactInvalidations(invalidations, targetIds, "Style changes affect visual generation artifacts.", ["styleCapsule"], { includeShotSpec: false });
   } else if (["update_character", "update_scene", "update_story"].includes(transaction.operation)) {
     const rootType: ReflowArtifactType = transaction.operation === "update_scene" ? "spatialMemory" : transaction.operation === "update_character" ? "visualMemory" : "productionBible";
     addInvalidations(invalidations, ["productionBible", rootType], transaction.targetIds, "Core story or asset facts require structured review.", ["director_intent"]);
-    addInvalidations(invalidations, ["shotSpec", "promptPlan", "keyframe", "video", "preview"], targetIds, "Core fact changes make shot-level artifacts stale.", ["productionBible"]);
+    addShotArtifactInvalidations(invalidations, targetIds, "Core fact changes make shot-level artifacts stale.", ["productionBible"], { includeAudio: transaction.operation === "update_story" });
   } else if (["update_dialogue", "update_narration", "update_voice"].includes(transaction.operation)) {
     addInvalidations(invalidations, ["voiceMemory", "audio", "preview"], targetIds, "Voice, dialogue, or narration changes require audio reflow.", ["voiceMemory"]);
   } else if (["lock_asset", "unlock_asset"].includes(transaction.operation)) {

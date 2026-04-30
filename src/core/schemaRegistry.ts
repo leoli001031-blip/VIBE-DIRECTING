@@ -108,6 +108,20 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ExportProfile",
   },
   {
+    fileName: "provider_live_gate.schema.json",
+    id: "https://vibecore.local/schemas/provider_live_gate.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 11 provider adapter live gate readiness and user-confirmation plan with provider submission, credentials, fast/VIP/text-to-video, and BGM video prompt paths locked off.",
+    typeName: "ProviderLiveGateState",
+  },
+  {
+    fileName: "export_builder.schema.json",
+    id: "https://vibecore.local/schemas/export_builder.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 12 preview/export builder dry-run package plan with formal preview gate, no file mutation, audio/BGM export policy, and future NLE targets reserved.",
+    typeName: "ExportBuilderState",
+  },
+  {
     fileName: "runtime_config.schema.json",
     id: "https://vibecore.local/schemas/runtime_config.schema.json",
     version: schemaVersion,
@@ -274,6 +288,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     version: schemaVersion,
     purpose: "Phase 9.3 dry-run diagnostics-only Subagent Envelope Runner skeleton requiring validated SubagentTaskEnvelope packets and forbidding free-text worker starts.",
     typeName: "SubagentRunnerState",
+  },
+  {
+    fileName: "local_orchestrator.schema.json",
+    id: "https://vibecore.local/schemas/local_orchestrator.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 10 dry-run local orchestrator and queue harness for plan-only auto-continue, reconnect, stall, QA, and completion facts.",
+    typeName: "LocalOrchestratorState",
   },
   {
     fileName: "generation_health_checker.schema.json",

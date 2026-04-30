@@ -808,6 +808,88 @@ Phase 9.4 checklist：
 - [x] Asset Library 和 Preview 是主界面能力，不是 contact sheet 总览。
 - [x] `minimal-ui:test` 纳入集成验证。
 
+### Phase 9.5 已实现范围：Project Store
+
+- 新增 `src/core/projectStore.ts`，提供本地可测试的 file-first Project Store snapshot 合同；`project.vibe`、project manifest、`story_flow`、`visual_memory`、shot specs、source index、runtime-state cache 都只建模为内存/fixture 结构和 read/write plan。
+- Project Store 只输出 `createProjectStoreSnapshot`、`openProjectStoreSnapshot`、`saveProjectStoreSnapshot`、`applyProjectStorePatch`、`validateProjectStoreSnapshot`、`deriveRuntimeCachePolicy` 等 pure functions，不创建目录、不写 `project.vibe`、不移动或删除用户文件。
+- 路径策略固定为 `project_root_relative` 或 redacted `user_selected_import` token；硬编码 macOS/Windows 绝对路径不能进入 project contract。
+- runtime-state 继续是 `derived_cache`，cache key 由 source index hash、project version、fact hash、generatedAt 推导，不能覆盖 project-file facts。
+- 新增 `npm run project-store:test` 覆盖 create/open/save snapshot、path policy、runtime derived cache、dry-run write plan 和 no file mutation hard lock。
+
+### Phase 9.6 已实现范围：Selected Edit Structured Loop
+
+- 新增 `DirectorEditPlan` dry-run 闭环：Selected Edit 自然语言先归一为 scope selection、`DirectorIntentResult`、`StoryChangeTransaction` 和 `ReflowImpactReport`，不直接生成或修改 provider prompt。
+- scope 基础分类覆盖 `project`、`section`、`shot`、`multi-shot`、`asset`、`voice`、`export`；多镜头范围如 `1-2 到 1-4` 会解析为 shot target set，并把 transaction scope 收敛到 shot-level reflow。
+- reflow 输出继续遵守现有 schema enum，同时用 artifact id 精确表达 `shotPromptPlan`、`startFrame`、`endFrame`；Selected Edit plan 汇总更细的 affected artifacts：`shotSpec`、`shotLayout`、`shotPromptPlan`、`startFrame`、`endFrame`、`video`、`audio`、`preview`、`visualMemory`、`spatialMemory`、`productionBible` 等。
+- 身份、场景、声音、插入分镜和 locked asset 相关变更会标记 confirmation required；prompt bypass/direct provider prompt patch 会进入 `blocked_prompt_bypass`，并固定 forbidden actions。
+- 新增 `npm run director-edit:test` 覆盖多镜头压抑化、插入分镜、角色/场景/声音变更、locked asset confirmation 和 prompt bypass forbidden。
+
+### Phase 9.6 追加已实现范围：Visual Consistency Hard Contracts
+
+- 新增 `src/core/visualConsistency.ts`，提供 Asset Library、Scene Asset Pack、Shot Layout、start/end derivation、postprocess policy 的 pure validation functions。
+- 硬合同覆盖：master scene inheritance、derived view world position / camera vector、locked/candidate/rejected future-reference 权限、temp/failed/contact sheet/shot output 禁止作为 future reference、end frame 默认从 start frame 派生、OpenCV/local postprocess 禁止语义修复。
+- Visual Consistency 只返回内存 report，不读写项目目录、不生成素材、不提交 provider、不改 UI。
+- 新增 `npm run visual-consistency:test`，覆盖通过路径和污染路径：candidate/rejected 权限、contact sheet future reference、derived view inheritance/vector、Shot Layout schema/start-end derivation、OpenCV semantic repair block。
+
+### Phase 9.7 已实现范围：Asset Library CRUD
+
+- 新增 `src/core/assetLibraryCrud.ts`，提供 Asset Library snapshot 的添加、更新、状态标记、Visual Memory 导出和 Scene Asset Pack placeholder 纯函数。
+- Asset Library 继续是资产一致性/引用权威系统，不是图库；角色、场景、道具、风格、voice anchor 的 `locked`、`candidate`、`review`、`rejected`、`missing` 状态会映射为 Visual Memory 可用状态或 missing placeholder。
+- `locked` 才能作为 future reference；`candidate` / `review` 保持 draft-only；`rejected` 保留 negative/rejected authority；`missing` 不序列化为正式 Visual Memory asset。
+- `provider_temp_output`、failed output、shot output、contact sheet 和可疑 temp/cache/candidate 路径会进入 blocked import，不进入正式 Asset Library。
+- scene reference 会生成 master scene placeholder，并支持 inherited derived view placeholder，保留 master inheritance、camera vector/world position 占位和 text-only recreation 禁止规则。
+- 新增 `npm run asset-library:test` 覆盖主角参考、场景参考、文本约束、locked 状态、禁入 temp/failed/contact sheet/shot output，以及 scene master/derived view placeholder。
+
+### Phase 9.8 已实现范围：Task Envelope Builder
+
+- 新增 Task Packet Builder，从 selected shot / selected asset / story change transaction / runtime state 派生 8 类 dry-run subagent packets：`image`、`asset`、`pair_qa`、`scene_qa`、`story_audit`、`video_execution`、`audio`、`export`。
+- ready packet 必须带标准 `SubagentTaskEnvelope`，并显式包含 purpose、story function、previous/next shot、bound assets、mustPreserve、mustAvoid、qaChecklist、expectedOutputContract、allowedReadScope、forbiddenActions、`subagent_result_v1` output schema。
+- 缺 source index、selected shot、前后镜头、bound assets、story change transaction 或 video keyframe pair 等硬上下文时，packet 进入 `blocked_missing_context`；blocked packet 不暴露 envelope，满足 no envelope no ready。
+- builder 固定 `noFreeTextTask=true`、`validatedEnvelopeRequired=true`、`providerSubmissionForbidden=true`、`liveSubmitAllowed=false`；video packet 继承 no fast / no VIP / no text-to-video main path / no BGM in video prompt。
+- 新增 `npm run task-packet:test` 覆盖 8 类 packet、缺前后镜头/资产阻断、video hard locks 和 output schema 要求；仍不 spawn agent、不提交 provider、不写真实 prompt 文件。
+
+### Phase 10 已实现范围：Local Orchestrator / Queue Harness
+
+- 新增 `src/core/localOrchestrator.ts`，把 task packets、TaskEnvelope/TaskRun、Generation Harness、Filesystem Watcher Harness、Checkpoint Resume Harness、QA Harness、Subagent Runner 覆盖成 dry-run/plan-only 队列状态机。
+- 队列状态固定区分 `waiting`、`ready`、`running_planned`、`waiting_output`、`qa_pending`、`needs_review`、`failed`、`blocked`、`complete_verified`；每条 queue item 保留 expected outputs、completion gate、Codex reconnect/stall/retry budget、manual review、auto-continue marker 和 UI 可读 fact chain。
+- Auto-continue 只生成计划：已 `complete_verified` 或 `blocked` 的任务允许下一条可执行任务进入 `ready`，但不会启动 worker、spawn Codex、提交 provider 或改写任何文件。
+- Worker/provider 自报成功只能成为 review fact，不能把任务置为 `complete_verified`；完成必须同时满足 expected output declared/observed、manifest match、explicit QA pass、promotion gate。
+- Hard locks 固定 `dryRunOnly=true`、`planOnly=true`、`noDaemon=true`、`daemonStarted=false`、`noSpawnCodex=true`、`noShellExecution=true`、`providerSubmissionForbidden=true`、`liveSubmitAllowed=false`、`noFileMutation=true`。
+- 新增 `schemas/local_orchestrator.schema.json` 并纳入 schema registry；新增 `npm run orchestrator:test` 覆盖 20-task queue、auto-continue plan、stalled task、worker self-report cannot complete、QA missing blocks、provider submit forbidden、no daemon/file mutation。
+
+### Phase 11 已实现范围：Provider Adapter Live Gate
+
+- 新增 `src/core/providerLiveGate.ts`，只从 provider registry、adapter contracts、Image2 adapter request、asset readiness、pair QA、video planning/execution preview、audio no-BGM policy 和用户确认 token placeholder 归纳 enablement readiness / confirmation plan。
+- Image2 provider slots 可表示 `user_enabled_pending_confirmation`，但 slot 和 gate item 全部固定 `liveSubmitAllowed=false`、`providerSubmissionForbidden=true`、`credentialStorage=false`；ready item 也只能是 `ready_for_confirmation`，不能提交 provider。
+- Seedance/Jimeng video gate 继续默认 `parked`，并固定检查 no fast model、no VIP channel、no text-to-video main path、no BGM in video prompt。
+- live path readiness 必须同时满足 adapter contract、provider capability、envelope valid、asset readiness、pair QA、Image2 dry-run adapter request、user confirmation token placeholder；缺任一项都进入 `blocked`。
+- 新增 `schemas/provider_live_gate.schema.json` 并纳入 schema registry；新增 `npm run provider-live-gate:test` 覆盖 Image2 readiness、Seedance/Jimeng parked、缺用户确认阻断、无 credential read/write/storage、no fast/VIP/t2v/BGM、provider submit forbidden。
+
+禁止项：
+
+- Phase 11 不提交 Image2、Seedance、Jimeng 或任何 provider，不读取/保存 credentials，不创建 API key，不提供 fast/VIP/text-to-video/BGM video prompt 解锁。
+
+### Phase 11 追加已实现范围：Dry-run Production E2E Loop
+
+- 新增 `scripts/dry-run-production-e2e-test.mjs`，以 fixture-only 方式串起 Project Store snapshot、Asset Library anchors、Director Edit plan、Task Packet Builder、Local Orchestrator plan、Provider Live Gate blocked/no-submit、Export Builder dry-run plan。
+- E2E 断言缺 output schema、source hash、asset、neighbor context 任一项时不能进入 formal envelope；缺 QA / manifest / asset readiness 时 formal preview 保持 blocked。
+- Worker/provider self-report success 只能进入 review fact，不能让 Local Orchestrator `complete_verified`；Provider Live Gate 始终 `canSubmitProvider=false`、`liveSubmitAllowed=false`。
+- Export Builder 继续保持 `noFileMutation=true`，blocked material 只能作为 draft placeholder，不进入 formal preview。
+- 新增 `npm run dry-run-e2e:test`；全流程不启动 daemon、不 spawn agent、不读取 credential、不提交 provider、不写真实项目文件。
+
+### Phase 12 已实现范围：Preview / Export Builder
+
+- 新增 `src/core/exportBuilder.ts`，生产 dry-run preview/export package plan：draft preview、formal preview gate、rough cut proxy、四类 export profile、future NLE target placeholder、audio/BGM export policy 和 file mutation hard lock。
+- Draft preview 按 shot duration 生成 `image_hold`，已有 video clip 时替换对应 hold；缺失片段显示 `blocked_placeholder`。Formal preview 只允许通过 gate 的 `video_clip`，不会包含 blocked placeholder。
+- Formal gate 继续要求 no blocked material、pair QA、video QA proxy、manifest match、QA promotion、no P0/blocker、no unknown gate、video present；失败时 formal preview 保持 `blocked`。
+- Export Builder 只规划 `rough_cut`、`asset_package`、`storyboard_table`、`developer_archive` 四类 dry-run profiles；FCPXML、EDL、Premiere Pro、剪映、达芬奇仅作为 disabled future targets。
+- Audio/BGM 只进入 audio plan / export plan；`videoProviderBgmAllowed=false`、`bgmIncludedInVideoPrompt=false`，不混入视频 provider prompt。
+- 新增 `schemas/export_builder.schema.json` 并纳入 schema registry；新增 `npm run export-builder:test` 覆盖四类 dry-run export profiles、formal preview gate、blocked placeholder 不进入 formal、无文件 mutation、future targets 预留、BGM 只进 audio/export plan。
+
+禁止项：
+
+- Phase 12 不复制、移动、写入、渲染或创建任何文件/目录，不生成 FCPXML/EDL/PR/剪映/达芬奇工程文件，不提交 provider。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。
