@@ -1,0 +1,649 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/image_keyframe_runtime.schema.json",
+  "title": "ImageKeyframeRuntimePlan",
+  "description": "Phase 17 dry-run Image2 asset and keyframe runtime plan with start-frame generation, end-frame edit-from-start derivation, Seedance handoff preview, and locked runtime gates.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "phase",
+    "status",
+    "summary",
+    "assetReferencePlanning",
+    "image2StartFramePlans",
+    "image2EndFramePlans",
+    "keyframePairGates",
+    "promotionHandoffPlan",
+    "runtimeLocks",
+    "runtimeLockGates",
+    "blockers",
+    "warnings",
+    "dryRunOnly",
+    "noProviderSubmit",
+    "providerSubmissionForbidden",
+    "liveSubmitAllowed"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "phase": { "type": "string", "const": "phase17_image2_asset_keyframe_runtime" },
+    "status": { "type": "string", "enum": ["ready_for_dry_run", "blocked", "draft_only"] },
+    "summary": { "$ref": "#/$defs/summary" },
+    "assetReferencePlanning": { "$ref": "#/$defs/assetReferencePlanning" },
+    "image2StartFramePlans": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/image2FramePlan" }
+    },
+    "image2EndFramePlans": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/image2EndFramePlan" }
+    },
+    "keyframePairGates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/keyframePairGate" }
+    },
+    "promotionHandoffPlan": { "$ref": "#/$defs/promotionHandoffPlan" },
+    "runtimeLocks": { "$ref": "#/$defs/hardLocks" },
+    "runtimeLockGates": {
+      "type": "array",
+      "minItems": 9,
+      "items": { "$ref": "#/$defs/runtimeLockGate" },
+      "allOf": [
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "noProviderSubmit" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "noCredentialRead" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "noFileMutation" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "noShell" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "noFast" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "noVip" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "noTextToVideo" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "noImage2Fallback" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "noIndependentEndFrame" } }, "required": ["gateId"] } }
+      ]
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "dryRunOnly": { "type": "boolean", "const": true },
+    "noProviderSubmit": { "type": "boolean", "const": true },
+    "providerSubmissionForbidden": { "type": "boolean", "const": true },
+    "liveSubmitAllowed": { "type": "boolean", "const": false }
+  },
+  "$defs": {
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "startFramePlans",
+        "endFramePlans",
+        "keyframePairGates",
+        "readyKeyframePairs",
+        "blockedKeyframePairs",
+        "promotionHandoffItems",
+        "lockedReferences",
+        "candidateReferences",
+        "rejectedReferences",
+        "providerSubmitAllowed",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "startFramePlans": { "type": "integer", "minimum": 0 },
+        "endFramePlans": { "type": "integer", "minimum": 0 },
+        "keyframePairGates": { "type": "integer", "minimum": 0 },
+        "readyKeyframePairs": { "type": "integer", "minimum": 0 },
+        "blockedKeyframePairs": { "type": "integer", "minimum": 0 },
+        "promotionHandoffItems": { "type": "integer", "minimum": 0 },
+        "lockedReferences": { "type": "integer", "minimum": 0 },
+        "candidateReferences": { "type": "integer", "minimum": 0 },
+        "rejectedReferences": { "type": "integer", "minimum": 0 },
+        "providerSubmitAllowed": { "type": "boolean", "const": false },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dryRunOnly",
+        "noProviderSubmit",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "noCredentialRead",
+        "noFileMutation",
+        "noShell",
+        "noFast",
+        "noVip",
+        "noTextToVideo",
+        "noImage2Fallback",
+        "noIndependentEndFrame"
+      ],
+      "properties": {
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "noShell": { "type": "boolean", "const": true },
+        "noFast": { "type": "boolean", "const": true },
+        "noVip": { "type": "boolean", "const": true },
+        "noTextToVideo": { "type": "boolean", "const": true },
+        "noImage2Fallback": { "type": "boolean", "const": true },
+        "noIndependentEndFrame": { "type": "boolean", "const": true }
+      }
+    },
+    "assetReferenceStatus": {
+      "type": "string",
+      "enum": ["locked", "candidate", "rejected", "missing", "failed", "planned"]
+    },
+    "assetReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "referenceId",
+        "assetType",
+        "name",
+        "status",
+        "authority",
+        "usedByPromptPlanIds",
+        "allowedForDraftImage2Reference",
+        "canUseAsFutureReference",
+        "blocksFormalPromotion",
+        "blockers",
+        "warnings"
+      ],
+      "properties": {
+        "referenceId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "assetId": { "type": "string" },
+        "assetType": { "type": "string", "enum": ["character", "scene", "prop", "style", "sound", "unknown"] },
+        "name": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "path": { "type": "string" },
+        "status": { "$ref": "#/$defs/assetReferenceStatus" },
+        "sourceStatus": { "type": "string", "enum": ["exists", "generated", "missing", "planned"] },
+        "lockedStatus": { "type": "string", "enum": ["locked", "candidate", "needs_review", "not_generated"] },
+        "authority": {
+          "type": "string",
+          "enum": ["positive_locked", "draft_candidate", "negative_rejected", "missing_or_failed"]
+        },
+        "usedByPromptPlanIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "allowedForDraftImage2Reference": { "type": "boolean" },
+        "canUseAsFutureReference": { "type": "boolean" },
+        "blocksFormalPromotion": { "type": "boolean" },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "locked" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "canUseAsFutureReference": { "const": true },
+              "authority": { "const": "positive_locked" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "candidate" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "canUseAsFutureReference": { "const": false },
+              "authority": { "const": "draft_candidate" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "rejected" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "canUseAsFutureReference": { "const": false },
+              "authority": { "const": "negative_rejected" }
+            }
+          }
+        }
+      ]
+    },
+    "assetReferencePlanning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "references", "summary", "blockers", "warnings"],
+      "properties": {
+        "policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assetLibraryPurpose",
+            "assetLibraryIsGallery",
+            "lockedAssetsAreConsistencyMemory",
+            "candidateDraftOnly",
+            "rejectedBlocksPositiveReference",
+            "noFileMutation",
+            "noProviderSubmit",
+            "noCredentialRead"
+          ],
+          "properties": {
+            "assetLibraryPurpose": { "type": "string", "const": "asset_consistency_memory" },
+            "assetLibraryIsGallery": { "type": "boolean", "const": false },
+            "lockedAssetsAreConsistencyMemory": { "type": "boolean", "const": true },
+            "candidateDraftOnly": { "type": "boolean", "const": true },
+            "rejectedBlocksPositiveReference": { "type": "boolean", "const": true },
+            "noFileMutation": { "type": "boolean", "const": true },
+            "noProviderSubmit": { "type": "boolean", "const": true },
+            "noCredentialRead": { "type": "boolean", "const": true }
+          }
+        },
+        "references": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/assetReference" }
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "locked", "candidate", "rejected", "missing", "failed", "planned", "draftOnly", "formalBlocked"],
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "locked": { "type": "integer", "minimum": 0 },
+            "candidate": { "type": "integer", "minimum": 0 },
+            "rejected": { "type": "integer", "minimum": 0 },
+            "missing": { "type": "integer", "minimum": 0 },
+            "failed": { "type": "integer", "minimum": 0 },
+            "planned": { "type": "integer", "minimum": 0 },
+            "draftOnly": { "type": "integer", "minimum": 0 },
+            "formalBlocked": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "image2Operation": {
+      "type": "string",
+      "enum": ["text2image", "image2image", "reference_asset"]
+    },
+    "image2Reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["referenceId", "source", "status", "canUseAsFutureReference"],
+      "properties": {
+        "referenceId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "source": { "type": "string", "const": "prompt_plan" },
+        "status": { "$ref": "#/$defs/assetReferenceStatus" },
+        "canUseAsFutureReference": { "type": "boolean" }
+      }
+    },
+    "adapterPreview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requestId", "adapterId", "operation", "payload", "submitPolicy", "forbiddenFallbacks"],
+      "properties": {
+        "requestId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "adapterId": { "type": "string", "const": "image2-dry-run" },
+        "operation": { "$ref": "#/$defs/image2Operation" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourceIntent", "mustPreserve", "mustAvoid", "references", "outputPath"],
+          "properties": {
+            "sourceIntent": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "mustPreserve": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "mustAvoid": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "references": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/image2Reference" }
+            },
+            "outputPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+            "sourceStartFrameId": { "type": "string" }
+          }
+        },
+        "submitPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "dryRunOnly",
+            "noProviderSubmit",
+            "providerSubmissionForbidden",
+            "liveSubmitAllowed",
+            "liveSubmitForbidden",
+            "noCredentialRead"
+          ],
+          "properties": {
+            "dryRunOnly": { "type": "boolean", "const": true },
+            "noProviderSubmit": { "type": "boolean", "const": true },
+            "providerSubmissionForbidden": { "type": "boolean", "const": true },
+            "liveSubmitAllowed": { "type": "boolean", "const": false },
+            "liveSubmitForbidden": { "type": "boolean", "const": true },
+            "noCredentialRead": { "type": "boolean", "const": true }
+          }
+        },
+        "forbiddenFallbacks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "contains": { "const": "provider_or_mode_fallback" },
+          "allOf": [
+            { "contains": { "const": "image2_provider_fallback" } },
+            { "contains": { "const": "text_to_video_fallback" } }
+          ]
+        }
+      }
+    },
+    "image2FramePlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "planId",
+        "frameRole",
+        "taskPlanId",
+        "jobId",
+        "shotId",
+        "promptPlanId",
+        "providerId",
+        "providerSlot",
+        "requiredMode",
+        "image2Operation",
+        "outputPath",
+        "inputReferenceIds",
+        "referenceStatuses",
+        "status",
+        "adapterRequestPreview",
+        "blockers",
+        "warnings",
+        "dryRunOnly",
+        "noProviderSubmit",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "planId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "frameRole": { "type": "string", "enum": ["start_frame", "end_frame", "reference_asset"] },
+        "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "jobId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "promptPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerSlot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+        "requiredMode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+        "image2Operation": { "$ref": "#/$defs/image2Operation" },
+        "outputPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "inputReferenceIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "referenceStatuses": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/image2Reference" }
+        },
+        "status": { "type": "string", "enum": ["ready_for_dry_run", "blocked", "draft"] },
+        "adapterRequestPreview": { "$ref": "#/$defs/adapterPreview" },
+        "endDerivation": { "$ref": "#/$defs/endDerivation" },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "image2EndFramePlan": {
+      "allOf": [
+        { "$ref": "#/$defs/image2FramePlan" },
+        {
+          "type": "object",
+          "properties": {
+            "frameRole": { "const": "end_frame" },
+            "image2Operation": { "const": "image2image" },
+            "providerSlot": { "const": "image.edit" },
+            "requiredMode": { "const": "image2image" },
+            "adapterRequestPreview": {
+              "type": "object",
+              "properties": {
+                "operation": { "const": "image2image" },
+                "forbiddenFallbacks": {
+                  "allOf": [
+                    { "contains": { "const": "image2image_to_text2image" } },
+                    { "contains": { "const": "end_frame_to_independent_text2image" } },
+                    { "contains": { "const": "independent_end_frame_generation" } }
+                  ]
+                }
+              }
+            },
+            "endDerivation": { "$ref": "#/$defs/endDerivation" }
+          },
+          "required": ["endDerivation"]
+        }
+      ]
+    },
+    "endDerivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "derivesFrom",
+        "independentEndFrameForbidden",
+        "noIndependentEndFrame",
+        "allowedDelta",
+        "mustPreserve",
+        "mustNotAdd"
+      ],
+      "properties": {
+        "derivesFrom": { "type": "string", "enum": ["start_frame", "blocked_independent_end_frame", "unknown"] },
+        "sourceStartFrameId": { "type": "string" },
+        "sourceStartFramePlanId": { "type": "string" },
+        "keyframePairGateId": { "type": "string" },
+        "independentEndFrameForbidden": { "type": "boolean", "const": true },
+        "noIndependentEndFrame": { "type": "boolean", "const": true },
+        "allowedDelta": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "mustPreserve": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "mustNotAdd": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "keyframePairGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gateId",
+        "shotId",
+        "status",
+        "endDerivationSource",
+        "validForI2vPair",
+        "validForPromotionHandoff",
+        "noIndependentEndFrame",
+        "blockers",
+        "warnings"
+      ],
+      "properties": {
+        "gateId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "type": "string", "enum": ["pass", "blocked", "warning"] },
+        "startFramePlanId": { "type": "string" },
+        "endFramePlanId": { "type": "string" },
+        "startFrameId": { "type": "string" },
+        "endFrameId": { "type": "string" },
+        "endDerivationSource": { "type": "string", "enum": ["start_frame", "independent_exception", "unknown", "missing"] },
+        "validForI2vPair": { "type": "boolean" },
+        "validForPromotionHandoff": { "type": "boolean" },
+        "noIndependentEndFrame": { "type": "boolean", "const": true },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "endDerivationSource": { "const": "independent_exception" } }, "required": ["endDerivationSource"] },
+          "then": { "properties": { "validForPromotionHandoff": { "const": false } } }
+        },
+        {
+          "if": { "properties": { "endDerivationSource": { "const": "unknown" } }, "required": ["endDerivationSource"] },
+          "then": { "properties": { "validForPromotionHandoff": { "const": false } } }
+        }
+      ]
+    },
+    "promotionHandoffPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "planId",
+        "targetProviderId",
+        "providerSlot",
+        "requiredMode",
+        "providerState",
+        "status",
+        "items",
+        "canSubmitProvider",
+        "noProviderSubmit",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "noFast",
+        "noVip",
+        "noTextToVideo",
+        "notes"
+      ],
+      "properties": {
+        "planId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "targetProviderId": { "type": "string", "const": "seedance2-provider" },
+        "providerSlot": { "type": "string", "const": "video.i2v" },
+        "requiredMode": { "type": "string", "const": "frames2video" },
+        "providerState": { "type": "string", "const": "parked_dry_run_only" },
+        "status": { "type": "string", "enum": ["ready_for_manual_review", "blocked"] },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/promotionHandoffItem" }
+        },
+        "canSubmitProvider": { "type": "boolean", "const": false },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "noFast": { "type": "boolean", "const": true },
+        "noVip": { "type": "boolean", "const": true },
+        "noTextToVideo": { "type": "boolean", "const": true },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "promotionHandoffItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handoffId",
+        "shotId",
+        "status",
+        "targetProviderId",
+        "providerSlot",
+        "requiredMode",
+        "sourceKeyframePairGateId",
+        "canSubmitProvider",
+        "noProviderSubmit",
+        "providerSubmissionForbidden",
+        "liveSubmitAllowed",
+        "fastModeAllowed",
+        "vipChannelAllowed",
+        "textToVideoAllowed",
+        "blockers",
+        "warnings"
+      ],
+      "properties": {
+        "handoffId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "type": "string", "enum": ["ready_for_manual_review", "blocked"] },
+        "targetProviderId": { "type": "string", "const": "seedance2-provider" },
+        "providerSlot": { "type": "string", "const": "video.i2v" },
+        "requiredMode": { "type": "string", "const": "frames2video" },
+        "startFrameId": { "type": "string" },
+        "endFrameId": { "type": "string" },
+        "sourceKeyframePairGateId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "canSubmitProvider": { "type": "boolean", "const": false },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "fastModeAllowed": { "type": "boolean", "const": false },
+        "vipChannelAllowed": { "type": "boolean", "const": false },
+        "textToVideoAllowed": { "type": "boolean", "const": false },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "runtimeLockGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gateId", "status", "locked", "detail", "violations"],
+      "properties": {
+        "gateId": {
+          "type": "string",
+          "enum": [
+            "noProviderSubmit",
+            "noCredentialRead",
+            "noFileMutation",
+            "noShell",
+            "noFast",
+            "noVip",
+            "noTextToVideo",
+            "noImage2Fallback",
+            "noIndependentEndFrame"
+          ]
+        },
+        "status": { "type": "string", "enum": ["pass", "blocked"] },
+        "locked": { "type": "boolean", "const": true },
+        "detail": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "violations": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

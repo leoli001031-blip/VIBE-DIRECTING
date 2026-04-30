@@ -101,6 +101,7 @@ const minimalAgentPanel = findFunctionBody(appSource, "MinimalAgentPanel");
 const minimalProjectPlan = findFunctionBody(appSource, "buildMinimalProjectPlan");
 const desktopShellView = findFunctionBody(appSource, "buildDesktopRuntimeShellView");
 const subagentWorkerRuntimeDiagnostics = findFunctionBody(appSource, "SubagentWorkerRuntimeDiagnostics");
+const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
 const diagnosticsMode = findFunctionBody(appSource, "DiagnosticsMode");
 const settingsShell = findFunctionBody(appSource, "SettingsShell");
 const appBody = findFunctionBody(appSource, "App");
@@ -120,6 +121,7 @@ check(
 );
 
 checkMessage(requireWithin(sequenceDoc, /Phase 9\.4/i, "Phase 9.4 entry in docs/core-development-sequence.md"));
+checkMessage(requireWithin(sequenceDoc, /Phase 17/i, "Phase 17 entry in docs/core-development-sequence.md"));
 checkMessage(requireWithin(sequenceDoc, /minimal-ui:test/i, "minimal-ui:test checklist item in docs/core-development-sequence.md"));
 checkMessage(requireWithin(contractDoc, /Minimal Director UI Contract/i, "minimal director UI contract doc title"));
 checkMessage(requireWithin(contractDoc, /Diagnostics/i, "diagnostics boundary in minimal UI contract doc"));
@@ -160,6 +162,13 @@ checkMessage(requireWithin(subagentWorkerRuntimeDiagnostics, /buildSubagentWorke
 checkMessage(requireWithin(subagentWorkerRuntimeDiagnostics, /Subagent Worker Runtime/i, "Phase 16 Subagent Worker Runtime diagnostics panel"));
 checkMessage(requireWithin(subagentWorkerRuntimeDiagnostics, /validated envelope only/i, "Phase 16 validated-envelope-only diagnostics copy"));
 checkMessage(requireWithin(subagentWorkerRuntimeDiagnostics, /structured result required/i, "Phase 16 structured result diagnostics copy"));
+checkMessage(requireWithin(diagnosticsMode, /Image2KeyframeRuntimeDiagnostics/, "Phase 17 Image2 keyframe runtime diagnostics mounted"));
+checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /Image2 Asset \+ Keyframe Runtime/i, "Phase 17 Image2 Asset + Keyframe Runtime diagnostics panel"));
+checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /Keyframe Runtime/i, "Phase 17 keyframe runtime diagnostics copy"));
+checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /keyframe pair/i, "Phase 17 keyframe pair diagnostics copy"));
+checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /end-frame derivation/i, "Phase 17 end-frame derivation diagnostics copy"));
+checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /provider locks/i, "Phase 17 provider locks diagnostics copy"));
+checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /closed loop/i, "Phase 17 closed-loop diagnostics copy"));
 
 checkMessage(requireAny(appSource, [/Asset Library/, /function\s+AssetLibrary/, /className="[^"]*asset-library/], "Asset Library main UI naming"));
 checkMessage(requireAny(appSource, [/Preview/, /function\s+PreviewTimeline/, /className="[^"]*preview/], "Preview main UI"));
@@ -224,6 +233,12 @@ const forbiddenMinimalTerms = [
   ["provider", /provider/i],
   ["queue", /queue/i],
   ["credential/API key", /credential|API\s*key/i],
+  ["Image2 Asset", /Image2\s+Asset/i],
+  ["Image2 runtime", /Image2\s+runtime/i],
+  ["Keyframe Runtime", /Keyframe\s+Runtime/i],
+  ["keyframe pair", /keyframe\s+pair/i],
+  ["end-frame derivation", /end[-\s]?frame\s+derivation/i],
+  ["provider locks", /provider\s+locks?/i],
 ];
 for (const [term, pattern] of forbiddenMinimalTerms) {
   check(!pattern.test(minimalDirectorSurface), `DirectorMode/MinimalAgentPanel must not expose ${term}`);

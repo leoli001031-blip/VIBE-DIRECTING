@@ -1,6 +1,7 @@
 import { buildRuntimeView, type KnowledgeRouteTestView, type RuntimeView } from "./runtimeView";
 import { buildAssetReadinessReport } from "./assetReadiness";
 import { buildImageTaskPlan } from "./imageTaskPlanner";
+import { buildImageKeyframeRuntimePlan } from "./imageKeyframeRuntime";
 import type { KnowledgePackManifest, KnowledgeRouteMatch, KnowledgeTaskPurpose } from "./knowledgeTypes";
 import { buildImage2AdapterRequest } from "./providerAdapters/image2Adapter";
 import { buildDefaultProviderRegistry } from "./providerCapabilities";
@@ -208,6 +209,18 @@ export function buildProjectRuntimeState(
     audioPlanning,
     issues: audit.issues,
   });
+  const imageKeyframeRuntime = buildImageKeyframeRuntimePlan({
+    generatedAt,
+    sourceIndex: view.sourceIndex,
+    assets: audit.assets,
+    assetReadinessReports,
+    jobs: audit.jobs,
+    promptPlans: promptPlanResults.map((result) => result.plan),
+    imageTaskPlans,
+    keyframePairs: videoPlanning.readinessGates
+      .map((gate) => gate.keyframePairDerivation)
+      .filter((pair): pair is NonNullable<typeof pair> => Boolean(pair)),
+  });
   const videoExecutionPreview = buildVideoExecutionPreviewState({
     generatedAt,
     shots: audit.shots,
@@ -356,6 +369,7 @@ export function buildProjectRuntimeState(
       generationHealthReports,
       qaPromotionReports,
     },
+    imageKeyframeRuntime,
     previewEvents,
     previewExport,
     audioPlanning,
@@ -435,6 +449,20 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       providerRegistry: state.imagePipeline.providerRegistry,
       audioPlanning,
       issues: state.diagnostics.issues,
+    });
+  const imageKeyframeRuntime =
+    state.imageKeyframeRuntime ||
+    buildImageKeyframeRuntimePlan({
+      generatedAt: state.generatedAt,
+      sourceIndex: state.sourceIndex,
+      assets: state.visualMemory.assets,
+      assetReadinessReports: state.imagePipeline.assetReadinessReports,
+      jobs: state.taskRuns.jobs,
+      promptPlans: state.imagePipeline.promptPlans,
+      imageTaskPlans: state.imagePipeline.imageTaskPlans,
+      keyframePairs: videoPlanning.readinessGates
+        .map((gate) => gate.keyframePairDerivation)
+        .filter((pair): pair is NonNullable<typeof pair> => Boolean(pair)),
     });
   const videoExecutionPreview =
     state.videoExecutionPreview ||
@@ -567,6 +595,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     runtime,
     audioPlanning,
     videoPlanning,
+    imageKeyframeRuntime,
     videoExecutionPreview,
     adapterContracts,
     generationHarness,

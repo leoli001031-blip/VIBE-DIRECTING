@@ -383,6 +383,9 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
   const generationHarness = requireRecord(value, "generationHarness", issues);
   const generationHarnessSummary = requireRecord(generationHarness, "summary", issues);
   const generationPostprocessPolicy = requireRecord(generationHarness, "postprocessPolicy", issues);
+  const imageKeyframeRuntime = requireRecord(value, "imageKeyframeRuntime", issues);
+  const imageKeyframeSummary = requireRecord(imageKeyframeRuntime, "summary", issues);
+  const imageKeyframeLocks = requireRecord(imageKeyframeRuntime, "runtimeLocks", issues);
   requireArray(audioPlanning, "providerSlots", issues);
   requireArray(audioPlanning, "notes", issues);
   requireArray(videoPlanning, "readinessGates", issues);
@@ -623,6 +626,35 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
       });
     });
   }
+  if (typeof imageKeyframeRuntime.schemaVersion !== "string") issues.push("imageKeyframeRuntime.schemaVersion");
+  if (imageKeyframeRuntime.phase !== "phase17_image2_asset_keyframe_runtime") issues.push("imageKeyframeRuntime.phase");
+  if (imageKeyframeRuntime.dryRunOnly !== true) issues.push("imageKeyframeRuntime.dryRunOnly");
+  if (imageKeyframeRuntime.noProviderSubmit !== true) issues.push("imageKeyframeRuntime.noProviderSubmit");
+  if (imageKeyframeRuntime.providerSubmissionForbidden !== true) issues.push("imageKeyframeRuntime.providerSubmissionForbidden");
+  if (imageKeyframeRuntime.liveSubmitAllowed !== false) issues.push("imageKeyframeRuntime.liveSubmitAllowed");
+  for (const key of ["startFramePlans", "endFramePlans", "keyframePairGates", "readyKeyframePairs", "blockedKeyframePairs", "promotionHandoffItems", "lockedReferences", "candidateReferences", "rejectedReferences"]) {
+    if (typeof imageKeyframeSummary[key] !== "number") issues.push(`imageKeyframeRuntime.summary.${key}`);
+  }
+  for (const [key, expected] of Object.entries({
+    dryRunOnly: true,
+    noProviderSubmit: true,
+    providerSubmissionForbidden: true,
+    liveSubmitAllowed: false,
+    noCredentialRead: true,
+    noFileMutation: true,
+    noShell: true,
+    noFast: true,
+    noVip: true,
+    noTextToVideo: true,
+    noImage2Fallback: true,
+    noIndependentEndFrame: true,
+  })) {
+    if (imageKeyframeLocks[key] !== expected) issues.push(`imageKeyframeRuntime.runtimeLocks.${key}`);
+  }
+  requireArray(imageKeyframeRuntime, "image2StartFramePlans", issues);
+  requireArray(imageKeyframeRuntime, "image2EndFramePlans", issues);
+  requireArray(imageKeyframeRuntime, "keyframePairGates", issues);
+  requireArray(imageKeyframeRuntime, "runtimeLockGates", issues);
 
   if (issues.length) throw new Error(`runtime-state shape invalid: ${issues.join(", ")}`);
 }
@@ -655,6 +687,25 @@ type VideoExecutionPreviewRow = VideoExecutionPreviewState["previews"][number];
 type VideoReadinessGateState = VideoPlanningState["readinessGates"][number];
 type VideoTaskPlanState = VideoPlanningState["taskPlans"][number];
 type AdapterContractState = ProjectRuntimeState["adapterContracts"];
+type Phase17LoopRow = {
+  label: string;
+  status: string;
+  detail: string;
+};
+type Phase17ImageKeyframeRuntimeSummary = {
+  status: string;
+  assetPlanCount: number;
+  startFramePlanCount: number;
+  endFramePlanCount: number;
+  adapterRequestCount: number;
+  validPairCount: number;
+  pairGateCount: number;
+  closedLoopEvidenceCount: number;
+  providerLockCount: number;
+  rows: Phase17LoopRow[];
+  blockers: string[];
+  warnings: string[];
+};
 type CheckerFactRow = {
   id: string;
   label: string;
@@ -4871,6 +4922,115 @@ function SubagentWorkerRuntimeDiagnostics({ runtimeState }: { runtimeState: Proj
   );
 }
 
+function buildPhase17ImageKeyframeRuntimeSummary(runtimeState: ProjectRuntimeState): Phase17ImageKeyframeRuntimeSummary {
+  const runtimePlan = runtimeState.imageKeyframeRuntime;
+  const pipeline = getImagePipeline(runtimeState);
+  const filesystemWatcher = getFilesystemWatcherHarness(runtimeState);
+  const qaHarness = getQaHarness(runtimeState);
+  const references = runtimePlan.assetReferencePlanning.references;
+  const derivedFromStart = runtimePlan.image2EndFramePlans.filter((plan) => plan.endDerivation.derivesFrom === "start_frame").length;
+  const editRequests = runtimePlan.image2EndFramePlans.filter((plan) => plan.adapterRequestPreview.operation === "image2image").length;
+  const liveForbiddenRequests = [...runtimePlan.image2StartFramePlans, ...runtimePlan.image2EndFramePlans]
+    .filter((plan) => plan.adapterRequestPreview.submitPolicy.liveSubmitForbidden).length;
+  const expectedOutputSignals = pipeline.watcherEvents.filter((event) => (
+    event.eventType === "expected_output_detected" ||
+    event.eventType === "provider_ready_derivative_detected"
+  )).length + (filesystemWatcher.summary.expectedOutputs || 0);
+  const formalReadySignals = pipeline.qaPromotionReports.filter((report) => report.canPromoteToFormal).length + (qaHarness.summary.formalEligible || 0);
+  const closedLoopEvidence = expectedOutputSignals + pipeline.generationHealthReports.length + pipeline.qaPromotionReports.length + formalReadySignals;
+  const providerLockCount = runtimePlan.runtimeLockGates.filter((gate) => gate.status === "pass").length;
+  const blockers = runtimePlan.blockers;
+  const warnings = runtimePlan.warnings;
+  const adapterPreviewCount = runtimePlan.image2StartFramePlans.length + runtimePlan.image2EndFramePlans.length;
+
+  return {
+    status: runtimePlan.status,
+    assetPlanCount: references.length,
+    startFramePlanCount: runtimePlan.summary.startFramePlans,
+    endFramePlanCount: runtimePlan.summary.endFramePlans,
+    adapterRequestCount: adapterPreviewCount,
+    validPairCount: runtimePlan.summary.readyKeyframePairs,
+    pairGateCount: runtimePlan.summary.keyframePairGates,
+    closedLoopEvidenceCount: closedLoopEvidence,
+    providerLockCount,
+    blockers,
+    warnings,
+    rows: [
+      {
+        label: "Asset reference plan",
+        status: `${runtimePlan.summary.lockedReferences} locked`,
+        detail: `${references.length} reference(s) · ${runtimePlan.summary.candidateReferences} candidate · ${runtimePlan.summary.rejectedReferences} rejected`,
+      },
+      {
+        label: "Keyframe runtime plan",
+        status: `${runtimePlan.summary.startFramePlans} start / ${runtimePlan.summary.endFramePlans} end`,
+        detail: `${runtimePlan.image2StartFramePlans.filter((plan) => plan.status === "ready_for_dry_run").length + runtimePlan.image2EndFramePlans.filter((plan) => plan.status === "ready_for_dry_run").length} ready dry-run plan(s)`,
+      },
+      {
+        label: "End-frame derivation",
+        status: `${derivedFromStart}/${runtimePlan.summary.endFramePlans} from start frame`,
+        detail: `${runtimePlan.summary.readyKeyframePairs} valid keyframe pair gate(s) · ${runtimePlan.summary.blockedKeyframePairs} blocked or unknown`,
+      },
+      {
+        label: "Adapter dry-run",
+        status: `${adapterPreviewCount} preview(s)`,
+        detail: `${editRequests} image2image edit request(s) · ${liveForbiddenRequests} live submit forbidden`,
+      },
+      {
+        label: "Closed loop evidence",
+        status: `${closedLoopEvidence} signal(s)`,
+        detail: `${expectedOutputSignals} watcher signal(s) · ${pipeline.generationHealthReports.length} health report(s) · ${formalReadySignals} formal-ready signal(s)`,
+      },
+    ],
+  };
+}
+
+function Image2KeyframeRuntimeDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildPhase17ImageKeyframeRuntimeSummary(runtimeState);
+
+  return (
+    <section className="machine-panel phase17-runtime-panel">
+      <div className="audit-head">
+        <Sparkles size={17} />
+        <span>Image2 Asset + Keyframe Runtime</span>
+      </div>
+      <div className="summary-grid phase17-metrics">
+        <Metric label="Runtime Plan" value={summary.status} detail="Phase 17 Diagnostics only" />
+        <Metric label="Image2 Assets" value={`${summary.assetPlanCount}`} detail="reference asset task plans" />
+        <Metric label="Keyframe Plans" value={`${summary.startFramePlanCount}/${summary.endFramePlanCount}`} detail="start / end frame plans" />
+        <Metric label="Keyframe Pair" value={`${summary.validPairCount}/${summary.pairGateCount}`} detail="valid pair gates" />
+        <Metric label="Closed Loop" value={`${summary.closedLoopEvidenceCount}`} detail="watcher, health, QA evidence" />
+        <Metric label="Provider Locks" value={`${summary.providerLockCount}`} detail="live submit remains disabled" />
+      </div>
+      <div className="phase17-loop-grid" aria-label="Phase 17 Image2 runtime closed loop">
+        {summary.rows.map((row) => (
+          <div key={row.label} className="phase17-loop-row">
+            <strong>{row.label}</strong>
+            <StatusPill value={row.status} />
+            <small>{row.detail}</small>
+          </div>
+        ))}
+      </div>
+      <div className="phase17-rule-strip">
+        <span>Diagnostics-only runtime summary</span>
+        <span>Image2 runtime details stay out of the Director surface</span>
+        <span>End-frame derivation must stay tied to the approved start frame</span>
+        <span>Provider locks remain active</span>
+      </div>
+      <div className="pipeline-details checker-details">
+        <details open={Boolean(summary.blockers.length)}>
+          <summary>Phase 17 blockers ({summary.blockers.length})</summary>
+          <CompactList items={summary.blockers} empty="No Phase 17 blockers reported." />
+        </details>
+        <details>
+          <summary>Phase 17 warnings ({summary.warnings.length})</summary>
+          <CompactList items={summary.warnings} empty="No Phase 17 warnings reported." />
+        </details>
+      </div>
+    </section>
+  );
+}
+
 function DiagnosticsMode({
   audit,
   view,
@@ -4901,6 +5061,7 @@ function DiagnosticsMode({
       <VideoExecutionPreviewDiagnostics runtimeState={runtimeState} />
       <AdapterContractDiagnostics runtimeState={runtimeState} />
       <SubagentWorkerRuntimeDiagnostics runtimeState={runtimeState} />
+      <Image2KeyframeRuntimeDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />
       <section className="machine-panel">

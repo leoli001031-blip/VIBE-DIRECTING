@@ -227,6 +227,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "Image2AdapterRequest",
   },
   {
+    fileName: "image_keyframe_runtime.schema.json",
+    id: "https://vibecore.local/schemas/image_keyframe_runtime.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 17 dry-run Image2 asset/keyframe runtime plan for start-frame generation, edit-from-start end frames, Seedance handoff preview, and runtime hard locks.",
+    typeName: "ImageKeyframeRuntimePlan",
+  },
+  {
     fileName: "watcher_event.schema.json",
     id: "https://vibecore.local/schemas/watcher_event.schema.json",
     version: schemaVersion,

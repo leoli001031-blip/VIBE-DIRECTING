@@ -796,6 +796,7 @@ Phase 6 已实现范围（核心合同）：
 - `npm run minimal-ui:test` 是 Phase 9.4 的轻量静态合同测试，不启动浏览器、不连接 provider、不生成素材，只读取 `src/App.tsx`、`src/styles.css`、`package.json` 和相关文档。
 - Director 主界面必须保留创作入口和轻量工作面：Asset Library、Preview、Selected / Scope、Diagnostics 入口、Story / section tabs。
 - 工程状态词应主要收纳到 Diagnostics：provider、manifest、schema、queue、task envelope、hard lock、forbiddenActions 等不能在 `DirectorMode` 主体附近大量堆叠。
+- Phase 17 追加的 Image2 runtime、Image2 Asset、Keyframe Runtime、keyframe pair、end-frame derivation、provider locks 等词同样只能进入 Diagnostics / 开发视图，不能进入主 Director surface。
 - Preview / Asset Library 不能退回 contact sheet 图库。`contactSheets` 只能留在 Diagnostics 或明确的诊断路径，不应常驻 Director minimal path。
 - 新增 UI 实现时，先跑 `npm run minimal-ui:test`，再跑必要的 build / runtime 测试；如果合同测试失败，优先判断是 UI 主路径真的变重，还是合同规则需要和新组件命名同步。
 
@@ -929,6 +930,21 @@ Phase 9.4 checklist：
 - 新增 `schemas/subagent_worker_runtime.schema.json` 并纳入 schema registry；schema 用 const 固定 no free text、validated envelope required、structured result required、no spawn、no shell、no provider、no credential、no file mutation、no Project Store write。
 - Diagnostics 新增 `Subagent Worker Runtime` 面板；主 Director surface 不展示 Subagent Worker Runtime、validated envelope、structured result 等工程词。
 - 新增 `npm run subagent-worker:test`，覆盖 ready permission gate、free text block、invalid envelope block、valid result handoff plan、bad result rejection 和 hard locks/schema const。
+
+### Phase 17 已实现范围：Image2 Asset + Keyframe Runtime
+
+- 新增 `src/core/imageKeyframeRuntime.ts` pure builder：`buildImageKeyframeRuntimePlan(...)` 从 `imagePipeline`、asset readiness、Image2 task plans、prompt plans、video keyframe pair gates 归纳 Phase 17 dry-run 计划。
+- `ProjectRuntimeState.imageKeyframeRuntime` 成为一等状态，并写入 `project_runtime_state.schema.json`；`import-runtime-test` 会把该计划写入派生 runtime-state。
+- 新增 `schemas/image_keyframe_runtime.schema.json` 并纳入 schema registry；schema 用 const 固定 `dryRunOnly`、`noProviderSubmit`、`providerSubmissionForbidden`、`liveSubmitAllowed=false`、`noCredentialRead`、`noFileMutation`、`noShell`、`noFast`、`noVip`、`noTextToVideo`、`noImage2Fallback`、`noIndependentEndFrame`。
+- Runtime plan 明确区分 locked / candidate / rejected / missing / failed references；candidate 只能 draft-only，rejected / missing / failed 会阻断 formal planning。
+- End frame 必须走 Image2 `image.edit/image2image` 并从 start frame 派生；独立 end frame 或 text2image fallback 会触发 `noIndependentEndFrame` / `noImage2Fallback` gate。
+- Seedance 2.0 只作为 parked handoff preview；可得到 `ready_for_manual_review`，但 `canSubmitProvider=false`，fast/VIP/text-to-video 继续锁死。
+- Diagnostics 新增 `Image2 Asset + Keyframe Runtime` 小型状态摘要，消费 `ProjectRuntimeState.imageKeyframeRuntime`，展示 Image2 资产计划、首帧计划、尾帧计划、adapter dry-run、watcher/health/QA 证据和 provider locks。
+- 该区块只说明 Image2 资产与首尾帧规划闭环，不给主 Director surface 增加新入口；Story Flow、Asset Library、Preview、右侧自然语言 Agent Panel 继续保持创作语言。
+- 首尾帧闭环在开发视图中按 `Asset reference plan -> Keyframe runtime plan -> End-frame derivation -> Adapter dry-run -> Closed loop evidence` 展示；end-frame derivation 仍必须从 approved start frame 派生，keyframe pair gate 未通过时只能停在 blocked/unknown。
+- 当前集成不依赖真实 provider、不提交 Image2、不启动 worker、不读取 credential、不修改项目文件。
+- 新增 `npm run image-keyframe:test`，覆盖 Image2-only、end-from-start、独立 end frame 阻断、reference 分类、provider/credential/file/shell locks、schema const 和 project runtime schema 接入。
+- `scripts/minimal-ui-contract-test.mjs` 增加 Phase 17 断言：Diagnostics 必须挂载 Image2/keyframe runtime 区块，同时主 Director surface 禁止出现 Image2 runtime、Image2 Asset、Keyframe Runtime、keyframe pair、end-frame derivation、provider locks 等工程词。
 
 ## 当前禁止提前做的事
 

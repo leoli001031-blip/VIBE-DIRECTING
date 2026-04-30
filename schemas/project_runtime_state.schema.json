@@ -18,6 +18,7 @@
     "taskRuns",
     "manifestMatches",
     "imagePipeline",
+    "imageKeyframeRuntime",
     "previewEvents",
     "previewExport",
     "audioPlanning",
@@ -204,6 +205,7 @@
         }
       }
     },
+    "imageKeyframeRuntime": { "$ref": "image_keyframe_runtime.schema.json" },
     "previewEvents": { "type": "array", "items": { "$ref": "preview_event.schema.json" } },
     "previewExport": { "$ref": "preview_plan.schema.json#/$defs/projectPreviewExportState" },
     "audioPlanning": { "$ref": "audio_plan.schema.json#/$defs/audioPlanningState" },

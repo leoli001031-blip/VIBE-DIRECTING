@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
+import ts from "typescript";
 import YAML from "yaml";
 
 const DEFAULT_ROOT =
@@ -11,6 +13,20 @@ const mediaDir = path.join(publicDir, "media");
 const outPath = path.join(publicDir, "runtime-audit.json");
 const stateOutPath = path.join(publicDir, "runtime-state.json");
 const knowledgeManifestPath = path.resolve("resources/knowledge_pack_manifest.json");
+
+async function importTs(pathValue) {
+  const source = fs.readFileSync(pathValue, "utf8");
+  const output = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ES2022,
+      target: ts.ScriptTarget.ES2022,
+      importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+    },
+    fileName: pathValue,
+  }).outputText;
+  const encoded = Buffer.from(`${output}\n//# sourceURL=${pathToFileURL(pathValue).href}`).toString("base64");
+  return import(`data:text/javascript;base64,${encoded}`);
+}
 
 const policy = {
   strictImageProvider: "image2_only",
@@ -6806,6 +6822,21 @@ const audit = {
   },
 };
 const runtimeState = buildProjectRuntimeState(audit, knowledgeManifest, generatedAt);
+if (!runtimeState.imageKeyframeRuntime) {
+  const { buildImageKeyframeRuntimePlan } = await importTs("src/core/imageKeyframeRuntime.ts");
+  runtimeState.imageKeyframeRuntime = buildImageKeyframeRuntimePlan({
+    generatedAt: runtimeState.generatedAt,
+    sourceIndex: runtimeState.sourceIndex,
+    assets: audit.assets,
+    assetReadinessReports: runtimeState.imagePipeline.assetReadinessReports,
+    jobs: audit.jobs,
+    promptPlans: runtimeState.imagePipeline.promptPlans,
+    imageTaskPlans: runtimeState.imagePipeline.imageTaskPlans,
+    keyframePairs: runtimeState.videoPlanning.readinessGates
+      .map((gate) => gate.keyframePairDerivation)
+      .filter(Boolean),
+  });
+}
 
 fs.mkdirSync(publicDir, { recursive: true });
 fs.mkdirSync(mediaDir, { recursive: true });

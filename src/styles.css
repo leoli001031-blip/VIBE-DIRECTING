@@ -2656,6 +2656,65 @@ small {
   margin-top: 0;
 }
 
+.phase17-runtime-panel .phase17-metrics {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.phase17-runtime-panel .metric strong {
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.phase17-loop-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.phase17-loop-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) auto minmax(260px, 1.4fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 8px;
+}
+
+.phase17-loop-row strong,
+.phase17-loop-row small,
+.phase17-rule-strip span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.phase17-loop-row strong {
+  color: #d9d1c4;
+  font-size: 12px;
+}
+
+.phase17-loop-row small {
+  color: #9d958a;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.phase17-rule-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.phase17-rule-strip span {
+  border: 1px solid rgba(212, 176, 98, 0.2);
+  background: rgba(212, 176, 98, 0.055);
+  color: #d9d1c4;
+  padding: 6px 8px;
+  font-size: 11px;
+}
+
 .checker-metrics {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -3055,13 +3114,18 @@ small {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .phase17-runtime-panel .phase17-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .watcher-root-row,
   .watcher-stream-row summary,
   .checkpoint-resume-row summary,
   .qa-overall-row summary,
   .qa-item-row summary,
   .checker-fact-row,
-  .tool-runtime-row summary {
+  .tool-runtime-row summary,
+  .phase17-loop-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -3135,6 +3199,7 @@ small {
   .qa-harness-panel .qa-harness-metrics,
   .checker-metrics,
   .tool-runtime-panel .tool-runtime-metrics,
+  .phase17-runtime-panel .phase17-metrics,
   .generation-job-head,
   .candidate-output-summary div,
   .watcher-root-row,
@@ -3144,6 +3209,7 @@ small {
   .qa-item-row summary,
   .checker-fact-row,
   .tool-runtime-row summary,
+  .phase17-loop-row,
   .watcher-stream-details {
     grid-template-columns: minmax(0, 1fr);
   }

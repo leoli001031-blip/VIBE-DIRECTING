@@ -1,6 +1,7 @@
 import type { EnvelopeValidationResult } from "./envelopeValidator";
 import type { ContextBudgetResult, KnowledgePackCategory, KnowledgeRouteResult } from "./knowledgeTypes";
 import type { ManifestMatchReport } from "./manifestMatcher";
+import type { ImageKeyframeRuntimePlan } from "./imageKeyframeRuntime";
 import type { StorySectionView, VisualMemorySummary, RuntimeKnowledgeSummary } from "./runtimeView";
 import type { QueueGateResult } from "./taskQueue";
 import type {
@@ -174,6 +175,7 @@ export interface ProjectRuntimeState {
     generationHealthReports: GenerationHealthReport[];
     qaPromotionReports: QaPromotionReport[];
   };
+  imageKeyframeRuntime: ImageKeyframeRuntimePlan;
   previewEvents: PreviewEvent[];
   previewExport: ProjectPreviewExportState;
   audioPlanning: AudioPlanningState;
