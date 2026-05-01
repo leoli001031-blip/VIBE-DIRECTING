@@ -14,6 +14,10 @@ const outPath = path.join(publicDir, "runtime-audit.json");
 const stateOutPath = path.join(publicDir, "runtime-state.json");
 const knowledgeManifestPath = path.resolve("resources/knowledge_pack_manifest.json");
 
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
 async function importTs(pathValue) {
   const source = fs.readFileSync(pathValue, "utf8");
   const output = ts.transpileModule(source, {
@@ -192,7 +196,8 @@ function buildToolDetectionReport(generatedAt) {
       label: "Codex CLI",
       kind: "agent_cli",
       requiredFor: ["agent task sidecar"],
-      notes: ["Detected only; the importer does not start a Codex session."],
+      planned: true,
+      notes: ["Phase 26 records the adapter placeholder only; the importer does not resolve or start Codex."],
     }, platform),
     detectCommand({
       id: "image2-runtime",
@@ -1112,6 +1117,113 @@ function buildSubagentRunnerState(input) {
       "Phase 9.3 Subagent Runner is a plan/diagnostics contract only.",
       "Production workers must be launched from validated SubagentTaskEnvelope packets, never free-text prompts.",
       "This state does not call Codex CLI, start subprocesses, execute shell commands, submit providers, read credentials, or move files.",
+    ],
+  };
+}
+
+function buildAgentCliMockRunnerState(input) {
+  const validatedEnvelopeIds = uniqueSorted(
+    (input.taskViews || [])
+      .filter((task) => task.validator?.valid === true)
+      .map((task) => task.envelope?.id)
+      .filter(Boolean),
+  );
+  const blockedReasons = uniqueSorted([
+    "subagent_runtime_gate_receipt_missing",
+    "validated_subagent_task_envelope_required",
+    ...(validatedEnvelopeIds.length ? [] : ["mock_runner_validated_envelope_missing"]),
+  ]);
+  const replacementProofReady = false;
+  const envelopeId = validatedEnvelopeIds[0];
+  const noopResult = {
+    resultId: `agent_cli_mock_result_import_${runnerSafeId(envelopeId || "missing_envelope")}`,
+    resultKind: "subagent_result_v1_mock_noop",
+    status: "blocked",
+    envelopeId,
+    sourceRefs: envelopeId ? [`runtimeTaskEnvelope:${envelopeId}`] : [],
+    inspectedFiles: [],
+    gates: {
+      identity: "N/A",
+      scene: "N/A",
+      pair: "N/A",
+      story: "N/A",
+      prop: "N/A",
+      style: "N/A",
+    },
+    overallVisualVerdict: "N/A",
+    styleQa: "N/A",
+    motionQa: "N/A",
+    continuityQa: "N/A",
+    referenceUseDecision: "draft_only",
+    issues: [],
+    requiredFixes: blockedReasons,
+    approvedFor: [],
+    rejectedFor: ["phase_26_mock_runner_replacement_proof"],
+    summaryForMainAgent: "Import runtime records the Phase 26 mock runner boundary only; no agent, provider, shell, credential, or file mutation path is executed.",
+    notRealExecution: true,
+  };
+  const blockedSlot = {
+    runnerSlotId: `agent_cli_mock_runner_import_${runnerSafeId(envelopeId || "missing_envelope")}`,
+    scenarioId: "import_runtime_contract",
+    envelopeId,
+    status: "blocked",
+    blockedReasons,
+    noopResult,
+  };
+
+  return {
+    schemaVersion: "0.1.0",
+    phase: "phase_26_agent_cli_mock_runner",
+    generatedAt: input.generatedAt,
+    runnerKind: "mock_noop",
+    purpose: "prove_replaceable_runner_contract",
+    readiness: "blocked",
+    replacementProofReady,
+    readySlots: [],
+    blockedSlots: [blockedSlot],
+    noopResults: [noopResult],
+    adapterBoundary: {
+      inputContract: "validated_subagent_task_envelope_only",
+      outputContract: "structured_subagent_result_shape_only",
+      runnerContract: "replaceable_agent_cli_adapter",
+      phase26Boundary: "mock_noop_only",
+      phase29Boundary: "codex_cli_adapter_spike_after_replacement_proof",
+      providerSubmitAllowed: false,
+      shellAllowed: false,
+      fileMutationAllowed: false,
+    },
+    hardLocks: {
+      noCodexSpawn: true,
+      noCodexResume: true,
+      noProviderSubmit: true,
+      liveSubmitAllowed: false,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      noShellExecution: true,
+      noFileMutation: true,
+      validatedEnvelopeRequired: true,
+      structuredResultRequired: true,
+      noFreeTextWorker: true,
+      mockOnly: true,
+    },
+    receipt: {
+      receiptId: `agent_cli_mock_runner_import_${runnerSafeId(envelopeId || "missing")}`,
+      phase: "phase_26_agent_cli_mock_runner",
+      runnerKind: "mock_noop",
+      purpose: "prove_replaceable_runner_contract",
+      replacementProofReady,
+      blockedReasons,
+      sourceRefs: envelopeId ? [`runtimeTaskEnvelope:${envelopeId}`] : [],
+    },
+    validation: {
+      ok: false,
+      errors: blockedReasons,
+      warnings: ["Import runtime did not receive a Phase 24 gate receipt or SubagentTaskEnvelope object."],
+      checkedAt: input.generatedAt,
+    },
+    notes: [
+      "Phase 26 is a mock/no-op runner contract proof only.",
+      "Import runtime records the boundary without spawning or resuming Codex, submitting providers, executing shell, reading credentials, or mutating files.",
     ],
   };
 }
@@ -6286,6 +6398,10 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     generationHarness,
     qaHarness,
   });
+  const agentCliMockRunner = buildAgentCliMockRunnerState({
+    generatedAt,
+    taskViews,
+  });
   const generationHealthChecker = buildGenerationHealthCheckerState({
     generatedAt,
     imageTaskPlans,
@@ -6383,6 +6499,7 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     qaHarness,
     toolRuntimeHarness,
     subagentRunner,
+    agentCliMockRunner,
     generationHealthChecker,
     promptConflictChecker,
     storyChanges: {
@@ -6849,6 +6966,27 @@ if (!runtimeState.imageKeyframeRuntime) {
       .map((gate) => gate.keyframePairDerivation)
       .filter(Boolean),
   });
+}
+
+assert(runtimeState.agentCliMockRunner, "runtime-state must include agentCliMockRunner");
+assert(runtimeState.agentCliMockRunner.phase === "phase_26_agent_cli_mock_runner", "agentCliMockRunner must be Phase 26 evidence");
+assert(runtimeState.agentCliMockRunner.runnerKind === "mock_noop", "agentCliMockRunner must stay mock/no-op");
+assert(runtimeState.agentCliMockRunner.purpose === "prove_replaceable_runner_contract", "agentCliMockRunner purpose must prove replaceability");
+assert(runtimeState.agentCliMockRunner.adapterBoundary.providerSubmitAllowed === false, "agentCliMockRunner must not submit providers");
+assert(runtimeState.agentCliMockRunner.adapterBoundary.shellAllowed === false, "agentCliMockRunner must not execute shell");
+assert(runtimeState.agentCliMockRunner.adapterBoundary.fileMutationAllowed === false, "agentCliMockRunner must not mutate files");
+assert(runtimeState.agentCliMockRunner.noopResults.every((result) => result.notRealExecution === true), "agentCliMockRunner results must be marked not real execution");
+assert(!runtimeState.agentCliMockRunner.validation.errors.some((error) => /provider_submit_attempt_blocked|free_text_prompt_attempt_blocked/.test(error)), "agentCliMockRunner must not observe provider submit or free-text attempts");
+for (const key of [
+  "noCodexSpawn",
+  "noCodexResume",
+  "noProviderSubmit",
+  "noShellExecution",
+  "noCredentialRead",
+  "noCredentialWrite",
+  "noFileMutation",
+]) {
+  assert(runtimeState.agentCliMockRunner.hardLocks[key] === true, `agentCliMockRunner hard lock ${key} must be true`);
 }
 
 fs.mkdirSync(publicDir, { recursive: true });

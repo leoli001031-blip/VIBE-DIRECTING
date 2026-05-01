@@ -24,6 +24,7 @@ export type PhaseRoadmapEvidenceStatus =
   | "passed"
   | "closed"
   | "ready_for_confirmation"
+  | "ready_for_replacement_proof"
   | "blocked"
   | "invalid"
   | "fail"
@@ -123,9 +124,91 @@ export interface PhaseRoadmapClosedLoopReceipt {
   sourceRef?: string;
 }
 
+export interface PhaseRoadmapAgentCliMockRunnerEvidence {
+  kind?: "agent_cli_mock_runner";
+  phase?: "phase_26_agent_cli_mock_runner";
+  status?: PhaseRoadmapEvidenceStatus;
+  runnerKind?: "mock_noop";
+  readiness?: "ready_for_replacement_proof" | "ready_for_phase_29_adapter_spike" | "ready" | "blocked";
+  mockRunnerNoopReady?: boolean;
+  replacementProofReady?: boolean;
+  contract?: {
+    inputSource?: "validated_envelope_only" | string;
+    resultKind?: "structured_noop" | string;
+    canReplaceCodexCli?: boolean;
+    canSpawnCodex?: boolean;
+    canResumeCodex?: boolean;
+    canSubmitProvider?: boolean;
+    canExecuteShell?: boolean;
+    canReadCredentials?: boolean;
+    canWriteCredentials?: boolean;
+    canMutateFiles?: boolean;
+  };
+  adapterBoundary?: {
+    providerSubmitAllowed?: boolean;
+    shellAllowed?: boolean;
+    fileMutationAllowed?: boolean;
+  };
+  observations?: {
+    providerSubmitObserved?: boolean;
+    freeTextTaskObserved?: boolean;
+    spawnCodexObserved?: boolean;
+    resumeCodexObserved?: boolean;
+    shellExecutionObserved?: boolean;
+    credentialReadObserved?: boolean;
+    credentialWriteObserved?: boolean;
+    fileMutationObserved?: boolean;
+  };
+  hardLocks?: {
+    mockOnly?: boolean;
+    dryRunOnly?: boolean;
+    noCodexSpawn?: boolean;
+    noCodexResume?: boolean;
+    noSpawnCodex?: boolean;
+    noResumeCodex?: boolean;
+    noProviderSubmit?: boolean;
+    liveSubmitAllowed?: boolean;
+    noFreeTextWorker?: boolean;
+    noFreeTextTask?: boolean;
+    validatedEnvelopeRequired?: boolean;
+    structuredResultRequired?: boolean;
+    noShellExecution?: boolean;
+    noCredentialRead?: boolean;
+    noCredentialWrite?: boolean;
+    noFileMutation?: boolean;
+  };
+  roadmapEvidence?: {
+    phaseId?: "phase_26_agent_cli_mock_runner";
+    mockRunnerNoopReady?: boolean;
+    replacementProofReady?: boolean;
+    providerSubmitObserved?: boolean;
+    freeTextTaskObserved?: boolean;
+    spawnCodexObserved?: boolean;
+    resumeCodexObserved?: boolean;
+    shellExecutionObserved?: boolean;
+    credentialReadObserved?: boolean;
+    credentialWriteObserved?: boolean;
+    fileMutationObserved?: boolean;
+  };
+  receipt?: {
+    replacementProofReady?: boolean;
+    blockedReasons?: string[];
+  };
+  validation?: {
+    ok?: boolean;
+    errors?: string[];
+    warnings?: string[];
+  };
+  blockers?: string[];
+  blockedReasons?: string[];
+  warnings?: string[];
+  sourceRef?: string;
+}
+
 export interface PhaseRoadmapRuntimeEvidence {
   projectFactsIntegration?: PhaseRoadmapProjectFactsIntegrationEvidence;
   subagentEnvelopeValidator?: PhaseRoadmapSubagentEnvelopeValidatorReceipt;
+  agentCliMockRunner?: PhaseRoadmapAgentCliMockRunnerEvidence;
   providerLiveGate?: PhaseRoadmapProviderLiveGateReceipt;
   watcherManifestQaClosedLoop?: PhaseRoadmapClosedLoopReceipt;
 }
@@ -134,6 +217,7 @@ export interface PhaseRoadmapEvidenceDecision {
   evidenceKey:
     | "projectFactsIntegration"
     | "subagentEnvelopeValidator"
+    | "agentCliMockRunner"
     | "providerConfirmationTokenPlaceholder"
     | "providerEnablementPacket"
     | "watcherManifestQaClosedLoop"
@@ -295,7 +379,8 @@ function readyStatus(status: PhaseRoadmapEvidenceStatus | undefined): boolean {
     || status === "pass"
     || status === "passed"
     || status === "closed"
-    || status === "ready_for_confirmation";
+    || status === "ready_for_confirmation"
+    || status === "ready_for_replacement_proof";
 }
 
 function hasProjectFactsEvidence(
@@ -320,6 +405,16 @@ function hasClosedLoopReceipt(
   receipt: PhaseRoadmapClosedLoopReceipt | undefined,
 ): receipt is PhaseRoadmapClosedLoopReceipt {
   return Boolean(receipt && receipt.kind === "watcher_manifest_qa_closed_loop");
+}
+
+function hasAgentCliMockRunnerEvidence(
+  evidence: PhaseRoadmapAgentCliMockRunnerEvidence | undefined,
+): evidence is PhaseRoadmapAgentCliMockRunnerEvidence {
+  return Boolean(evidence && (
+    evidence.kind === "agent_cli_mock_runner" ||
+    evidence.phase === "phase_26_agent_cli_mock_runner" ||
+    evidence.roadmapEvidence?.phaseId === "phase_26_agent_cli_mock_runner"
+  ));
 }
 
 function projectFactsEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
@@ -430,6 +525,124 @@ function envelopeValidatorEvidenceDecision(input: PhaseRoadmapRuntimeInput): Pha
       ...blockedIf(
         input.subagentEnvelopeValidatorReady === true,
         "legacy_subagentEnvelopeValidatorReady_boolean_ignored_without_typed_receipt",
+      ),
+    ]),
+  };
+}
+
+function agentCliMockRunnerEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const evidence = input.evidence?.agentCliMockRunner;
+  const legacyAllowed = input.legacyBooleanOverridesAllowed === true;
+
+  if (hasAgentCliMockRunnerEvidence(evidence)) {
+    const observations = evidence.observations || {};
+    const roadmap = evidence.roadmapEvidence || {};
+    const validationErrors = [
+      ...(evidence.validation?.errors || []),
+      ...(evidence.receipt?.blockedReasons || []),
+      ...(evidence.blockedReasons || []),
+      ...(evidence.blockers || []),
+    ];
+    const noopReady = evidence.runnerKind === "mock_noop"
+      || evidence.mockRunnerNoopReady === true
+      || roadmap.mockRunnerNoopReady === true;
+    const replacementProofReady = evidence.replacementProofReady === true
+      || roadmap.replacementProofReady === true
+      || evidence.receipt?.replacementProofReady === true
+      || evidence.contract?.canReplaceCodexCli === true;
+    const providerSubmitObserved = observations.providerSubmitObserved === true
+      || roadmap.providerSubmitObserved === true
+      || validationErrors.some((error) => /provider[_ ]?submit/i.test(error));
+    const freeTextTaskObserved = observations.freeTextTaskObserved === true
+      || roadmap.freeTextTaskObserved === true
+      || validationErrors.some((error) => /free[_ ]?text/i.test(error));
+    const spawnCodexObserved = observations.spawnCodexObserved === true
+      || roadmap.spawnCodexObserved === true
+      || validationErrors.some((error) => /spawn|codex_spawn/i.test(error));
+    const resumeCodexObserved = observations.resumeCodexObserved === true
+      || roadmap.resumeCodexObserved === true
+      || validationErrors.some((error) => /resume|codex_resume/i.test(error));
+    const shellExecutionObserved = observations.shellExecutionObserved === true
+      || roadmap.shellExecutionObserved === true
+      || validationErrors.some((error) => /shell/i.test(error));
+    const credentialReadObserved = observations.credentialReadObserved === true
+      || roadmap.credentialReadObserved === true
+      || validationErrors.some((error) => /credential.*read|credential_read/i.test(error));
+    const credentialWriteObserved = observations.credentialWriteObserved === true
+      || roadmap.credentialWriteObserved === true
+      || validationErrors.some((error) => /credential.*write|credential_write/i.test(error));
+    const fileMutationObserved = observations.fileMutationObserved === true
+      || roadmap.fileMutationObserved === true
+      || validationErrors.some((error) => /file[_ ]?mutation|writeProject/i.test(error));
+    const blockers = uniqueSorted([
+      ...blockedIf(!noopReady, "mock_noop_runner_contract_missing"),
+      ...blockedIf(!replacementProofReady, "phase_26_replacement_proof_missing"),
+      ...blockedIf(evidence.contract?.inputSource !== undefined && evidence.contract.inputSource !== "validated_envelope_only", "mock_runner_validated_envelope_gate_missing"),
+      ...blockedIf(evidence.contract?.resultKind !== undefined && evidence.contract.resultKind !== "structured_noop", "mock_runner_structured_noop_result_missing"),
+      ...blockedIf(providerSubmitObserved || evidence.contract?.canSubmitProvider === true || evidence.adapterBoundary?.providerSubmitAllowed === true, "mock_runner_attempted_provider_submit"),
+      ...blockedIf(freeTextTaskObserved, "mock_runner_free_text_task_observed"),
+      ...blockedIf(spawnCodexObserved || evidence.contract?.canSpawnCodex === true || evidence.hardLocks?.noCodexSpawn === false, "mock_runner_spawn_codex_observed"),
+      ...blockedIf(resumeCodexObserved || evidence.contract?.canResumeCodex === true || evidence.hardLocks?.noCodexResume === false, "mock_runner_resume_codex_observed"),
+      ...blockedIf(shellExecutionObserved || evidence.contract?.canExecuteShell === true || evidence.adapterBoundary?.shellAllowed === true, "mock_runner_shell_execution_observed"),
+      ...blockedIf(credentialReadObserved || evidence.contract?.canReadCredentials === true, "mock_runner_credential_read_observed"),
+      ...blockedIf(credentialWriteObserved || evidence.contract?.canWriteCredentials === true, "mock_runner_credential_write_observed"),
+      ...blockedIf(fileMutationObserved || evidence.contract?.canMutateFiles === true || evidence.adapterBoundary?.fileMutationAllowed === true, "mock_runner_file_mutation_observed"),
+      ...blockedIf(evidence.hardLocks?.mockOnly === false, "mock_runner_hard_lock_mock_only_missing"),
+      ...blockedIf(evidence.hardLocks?.dryRunOnly === false, "mock_runner_hard_lock_dry_run_missing"),
+      ...blockedIf(evidence.hardLocks?.noSpawnCodex === false || evidence.hardLocks?.noCodexSpawn === false, "mock_runner_hard_lock_no_spawn_codex_missing"),
+      ...blockedIf(evidence.hardLocks?.noResumeCodex === false || evidence.hardLocks?.noCodexResume === false, "mock_runner_hard_lock_no_resume_codex_missing"),
+      ...blockedIf(evidence.hardLocks?.noProviderSubmit === false, "mock_runner_hard_lock_no_provider_submit_missing"),
+      ...blockedIf(evidence.hardLocks?.liveSubmitAllowed === true, "mock_runner_hard_lock_live_submit_missing"),
+      ...blockedIf(evidence.hardLocks?.noFreeTextTask === false || evidence.hardLocks?.noFreeTextWorker === false, "mock_runner_hard_lock_no_free_text_missing"),
+      ...blockedIf(evidence.hardLocks?.validatedEnvelopeRequired === false, "mock_runner_hard_lock_validated_envelope_missing"),
+      ...blockedIf(evidence.hardLocks?.structuredResultRequired === false, "mock_runner_hard_lock_structured_result_missing"),
+      ...blockedIf(evidence.hardLocks?.noShellExecution === false, "mock_runner_hard_lock_no_shell_missing"),
+      ...blockedIf(evidence.hardLocks?.noCredentialRead === false, "mock_runner_hard_lock_no_credential_read_missing"),
+      ...blockedIf(evidence.hardLocks?.noCredentialWrite === false, "mock_runner_hard_lock_no_credential_write_missing"),
+      ...blockedIf(evidence.hardLocks?.noFileMutation === false, "mock_runner_hard_lock_no_file_mutation_missing"),
+      ...validationErrors,
+    ]);
+
+    return {
+      evidenceKey: "agentCliMockRunner",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted(evidence.warnings || []),
+    };
+  }
+
+  if (
+    legacyAllowed &&
+    input.mockRunnerNoopReady === true &&
+    input.replacementProofFromMockRunner === true &&
+    input.mockRunnerProviderSubmitObserved !== true
+  ) {
+    return {
+      evidenceKey: "agentCliMockRunner",
+      source: "legacy_boolean_override",
+      ready: true,
+      blockers: [],
+      warnings: ["legacy_mock_runner_boolean_override_used"],
+    };
+  }
+
+  return {
+    evidenceKey: "agentCliMockRunner",
+    source: input.mockRunnerNoopReady === undefined && input.replacementProofFromMockRunner === undefined
+      ? "missing"
+      : "legacy_boolean_override",
+    ready: false,
+    blockers: uniqueSorted([
+      "agent_cli_mock_runner_typed_evidence_missing",
+      ...blockedIf(input.mockRunnerNoopReady !== true, "mock_noop_runner_contract_missing"),
+      ...blockedIf(input.replacementProofFromMockRunner !== true, "phase_26_replacement_proof_missing"),
+      ...blockedIf(Boolean(input.mockRunnerProviderSubmitObserved), "mock_runner_attempted_provider_submit"),
+    ]),
+    warnings: uniqueSorted([
+      ...blockedIf(
+        input.mockRunnerNoopReady === true || input.replacementProofFromMockRunner === true,
+        "legacy_mock_runner_booleans_ignored_without_typed_evidence",
       ),
     ]),
   };
@@ -616,6 +829,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const readyPhases = new Set<PhaseRoadmapPhaseId>();
   const projectFactsDecision = projectFactsEvidenceDecision(input);
   const envelopeDecision = envelopeValidatorEvidenceDecision(input);
+  const agentCliMockRunnerDecision = agentCliMockRunnerEvidenceDecision(input);
   const providerConfirmationDecision = providerConfirmationEvidenceDecision(input);
   const providerPacketDecision = providerPacketEvidenceDecision(input);
   const watcherClosedLoopDecision = watcherClosedLoopEvidenceDecision(input);
@@ -623,6 +837,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const evidenceDecisions = [
     projectFactsDecision,
     envelopeDecision,
+    agentCliMockRunnerDecision,
     providerConfirmationDecision,
     providerPacketDecision,
     watcherClosedLoopDecision,
@@ -679,18 +894,22 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       title: "Agent/CLI Mock Runner",
       requiredPrecedingPhases: ["phase_24_subagent_runtime_gate", "phase_25_knowledge_pack_manager"],
       readyPhases,
-      ownBlockers: uniqueSorted([
-        ...blockedIf(!input.mockRunnerNoopReady, "mock_noop_runner_contract_missing"),
-        ...blockedIf(Boolean(input.mockRunnerProviderSubmitObserved), "mock_runner_attempted_provider_submit"),
-      ]),
+      ownBlockers: uniqueSorted(agentCliMockRunnerDecision.blockers),
       readyStatus: "ready_for_noop_runner",
-      requiredInputs: ["mockRunnerNoopReady", "mockRunnerProviderSubmitObserved=false"],
+      requiredInputs: [
+        "evidence.agentCliMockRunner",
+        "replacementProofReady=true",
+        "providerSubmit/freeText/spawn/resume/shell/credential/fileMutation observations all false",
+      ],
       acceptanceCriteria: [
         "The runner proves the command/result contract is replaceable without spawning Codex.",
         "The runner returns no-op structured results and never submits providers.",
         "The runner cannot read credentials, run arbitrary shell, or mutate files.",
       ],
-      notes: ["Phase 26 is the replaceability proof, not the real Codex CLI integration."],
+      notes: [
+        "Phase 26 is the replaceability proof, not the real Codex CLI integration.",
+        ...evidenceNotes([agentCliMockRunnerDecision]),
+      ],
     }),
     makePhase({
       phaseId: "phase_27_export_worker_mvp",
@@ -742,11 +961,11 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       ],
       readyPhases,
       ownBlockers: uniqueSorted([
-        ...blockedIf(!input.replacementProofFromMockRunner, "phase_26_replacement_proof_missing"),
+        ...blockedIf(!agentCliMockRunnerDecision.ready, "phase_26_replacement_proof_missing"),
         ...blockedIf(!input.codexCliAdapterDryRunReady, "codex_cli_adapter_dry_run_contract_missing"),
       ]),
       readyStatus: "ready_for_adapter_spike",
-      requiredInputs: ["replacementProofFromMockRunner", "codexCliAdapterDryRunReady"],
+      requiredInputs: ["evidence.agentCliMockRunner.replacementProofReady", "codexCliAdapterDryRunReady"],
       acceptanceCriteria: [
         "Adapter spike may connect spawn/resume shape only after Phase 26 proves replaceability.",
         "Adapter input remains the validated envelope, never a free text task.",

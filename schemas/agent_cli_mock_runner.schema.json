@@ -1,0 +1,283 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/agent_cli_mock_runner.schema.json",
+  "title": "AgentCliMockRunnerState",
+  "description": "Phase 26 mock/no-op Agent/CLI runner contract proof. It consumes a ready SubagentRuntimeGateReceipt plus a validated SubagentTaskEnvelope and emits structured no-op results without spawning Codex, resuming Codex, submitting providers, reading credentials, executing shells, or mutating files.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "phase",
+    "generatedAt",
+    "runnerKind",
+    "purpose",
+    "readiness",
+    "replacementProofReady",
+    "readySlots",
+    "blockedSlots",
+    "noopResults",
+    "adapterBoundary",
+    "hardLocks",
+    "receipt",
+    "validation",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "phase": { "type": "string", "const": "phase_26_agent_cli_mock_runner" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "runnerKind": { "type": "string", "const": "mock_noop" },
+    "purpose": { "type": "string", "const": "prove_replaceable_runner_contract" },
+    "readiness": {
+      "type": "string",
+      "enum": ["ready_for_phase_29_adapter_spike", "blocked"]
+    },
+    "replacementProofReady": { "type": "boolean" },
+    "readySlots": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/slot" }
+    },
+    "blockedSlots": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/slot" }
+    },
+    "noopResults": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/noopResult" }
+    },
+    "adapterBoundary": { "$ref": "#/$defs/adapterBoundary" },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "receipt": { "$ref": "#/$defs/receipt" },
+    "validation": { "$ref": "#/$defs/validation" },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "slotStatus": {
+      "type": "string",
+      "enum": ["ready", "blocked"]
+    },
+    "resultStatus": {
+      "type": "string",
+      "enum": ["planned", "blocked", "noop"]
+    },
+    "gateStatus": {
+      "type": "string",
+      "enum": ["PASS", "PARTIAL", "FAIL", "N/A", "UNKNOWN"]
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "scene", "pair", "story", "prop", "style"],
+      "properties": {
+        "identity": { "$ref": "#/$defs/gateStatus" },
+        "scene": { "$ref": "#/$defs/gateStatus" },
+        "pair": { "$ref": "#/$defs/gateStatus" },
+        "story": { "$ref": "#/$defs/gateStatus" },
+        "prop": { "$ref": "#/$defs/gateStatus" },
+        "style": { "$ref": "#/$defs/gateStatus" }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "code", "target", "recommendation"],
+      "properties": {
+        "severity": { "type": "string", "enum": ["P0", "P1", "P2"] },
+        "code": { "type": "string" },
+        "target": { "type": "string" },
+        "recommendation": { "type": "string" }
+      }
+    },
+    "noopResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resultId",
+        "resultKind",
+        "status",
+        "sourceRefs",
+        "inspectedFiles",
+        "gates",
+        "overallVisualVerdict",
+        "styleQa",
+        "motionQa",
+        "continuityQa",
+        "referenceUseDecision",
+        "issues",
+        "requiredFixes",
+        "approvedFor",
+        "rejectedFor",
+        "summaryForMainAgent",
+        "notRealExecution"
+      ],
+      "properties": {
+        "resultId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "resultKind": { "type": "string", "const": "subagent_result_v1_mock_noop" },
+        "status": { "$ref": "#/$defs/resultStatus" },
+        "envelopeId": { "type": "string" },
+        "taskId": { "type": "string" },
+        "shotId": { "type": "string" },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "inspectedFiles": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "gates": { "$ref": "#/$defs/gates" },
+        "overallVisualVerdict": { "type": "string", "const": "N/A" },
+        "styleQa": { "type": "string", "const": "N/A" },
+        "motionQa": { "type": "string", "const": "N/A" },
+        "continuityQa": { "type": "string", "const": "N/A" },
+        "referenceUseDecision": { "type": "string", "const": "draft_only" },
+        "issues": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/issue" }
+        },
+        "requiredFixes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "approvedFor": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "rejectedFor": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "summaryForMainAgent": { "type": "string" },
+        "notRealExecution": { "type": "boolean", "const": true }
+      }
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runnerSlotId",
+        "scenarioId",
+        "status",
+        "blockedReasons",
+        "noopResult"
+      ],
+      "properties": {
+        "runnerSlotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "scenarioId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "envelopeId": { "type": "string" },
+        "taskId": { "type": "string" },
+        "shotId": { "type": "string" },
+        "status": { "$ref": "#/$defs/slotStatus" },
+        "blockedReasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "noopResult": { "$ref": "#/$defs/noopResult" }
+      }
+    },
+    "adapterBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputContract",
+        "outputContract",
+        "runnerContract",
+        "phase26Boundary",
+        "phase29Boundary",
+        "providerSubmitAllowed",
+        "shellAllowed",
+        "fileMutationAllowed"
+      ],
+      "properties": {
+        "inputContract": { "type": "string", "const": "validated_subagent_task_envelope_only" },
+        "outputContract": { "type": "string", "const": "structured_subagent_result_shape_only" },
+        "runnerContract": { "type": "string", "const": "replaceable_agent_cli_adapter" },
+        "phase26Boundary": { "type": "string", "const": "mock_noop_only" },
+        "phase29Boundary": { "type": "string", "const": "codex_cli_adapter_spike_after_replacement_proof" },
+        "providerSubmitAllowed": { "type": "boolean", "const": false },
+        "shellAllowed": { "type": "boolean", "const": false },
+        "fileMutationAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "noCodexSpawn",
+        "noCodexResume",
+        "noProviderSubmit",
+        "liveSubmitAllowed",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "noShellExecution",
+        "noFileMutation",
+        "validatedEnvelopeRequired",
+        "structuredResultRequired",
+        "noFreeTextWorker",
+        "mockOnly"
+      ],
+      "properties": {
+        "noCodexSpawn": { "type": "boolean", "const": true },
+        "noCodexResume": { "type": "boolean", "const": true },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "noShellExecution": { "type": "boolean", "const": true },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "validatedEnvelopeRequired": { "type": "boolean", "const": true },
+        "structuredResultRequired": { "type": "boolean", "const": true },
+        "noFreeTextWorker": { "type": "boolean", "const": true },
+        "mockOnly": { "type": "boolean", "const": true }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receiptId",
+        "phase",
+        "runnerKind",
+        "purpose",
+        "replacementProofReady",
+        "blockedReasons",
+        "sourceRefs"
+      ],
+      "properties": {
+        "receiptId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "phase": { "type": "string", "const": "phase_26_agent_cli_mock_runner" },
+        "runnerKind": { "type": "string", "const": "mock_noop" },
+        "purpose": { "type": "string", "const": "prove_replaceable_runner_contract" },
+        "replacementProofReady": { "type": "boolean" },
+        "blockedReasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "errors", "warnings", "checkedAt"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "errors": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "checkedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+      }
+    }
+  }
+}

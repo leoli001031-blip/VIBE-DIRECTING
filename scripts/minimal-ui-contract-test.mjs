@@ -105,6 +105,7 @@ const previewPlayerQueue = findFunctionBody(appSource, "buildPreviewPlayerQueue"
 const previewQueueKind = findFunctionBody(appSource, "previewQueueKind");
 const desktopShellView = findFunctionBody(appSource, "buildDesktopRuntimeShellView");
 const subagentWorkerRuntimeDiagnostics = findFunctionBody(appSource, "SubagentWorkerRuntimeDiagnostics");
+const agentCliMockRunnerDiagnostics = findFunctionBody(appSource, "AgentCliMockRunnerDiagnostics");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
 const knowledgeUiSummary = findFunctionBody(appSource, "buildKnowledgeUiSummary");
 const knowledgePackManager = findFunctionBody(appSource, "KnowledgePackManager");
@@ -182,6 +183,13 @@ checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /keyframe pair/i, "
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /end-frame derivation/i, "Phase 17 end-frame derivation diagnostics copy"));
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /provider locks/i, "Phase 17 provider locks diagnostics copy"));
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /closed loop/i, "Phase 17 closed-loop diagnostics copy"));
+checkMessage(requireWithin(diagnosticsMode, /AgentCliMockRunnerDiagnostics/, "Phase 26 Agent/CLI Mock Runner summary mounted in Diagnostics"));
+checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /Agent\/CLI Mock Runner/i, "Phase 26 Agent/CLI Mock Runner diagnostics panel"));
+checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /Runner Kind/i, "Phase 26 runner kind summary"));
+checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /Replacement Proof/i, "Phase 26 replacement proof summary"));
+checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /Readiness/i, "Phase 26 ready/blocked summary"));
+checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /No-op Results/i, "Phase 26 no-op result count summary"));
+checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /phase26-lock-strip/i, "Phase 26 hard locks summary"));
 checkMessage(requireWithin(previewPlayerQueue, /draftPreview\.events/, "Phase 21/23 Preview Player queue must use previewExport.draftPreview.events"));
 checkMessage(requireWithin(previewPlayerQueue, /image_hold/, "Phase 21/23 Preview Player queue must include image holds"));
 checkMessage(requireWithin(previewPlayerQueue, /video_clip/, "Phase 21/23 Preview Player queue must include video clips"));
@@ -287,6 +295,18 @@ for (const [term, pattern] of phase2123ForbiddenMainTerms) {
   const count = countPattern(phase2123DirectorSurface, pattern);
   check(count === 0, `Phase 21/23 main Director surface must expose 0 ${term} term(s), found ${count}`);
 }
+const phase26ForbiddenMainTerms = [
+  ["Agent/CLI Mock Runner", /Agent\/CLI\s+Mock\s+Runner/i],
+  ["Codex spawn", /Codex\s+spawn|spawn\s+Codex/i],
+  ["Codex resume", /Codex\s+resume|resume\s+Codex/i],
+  ["provider submit", /provider\s+submit/i],
+  ["validated envelope", /validated\s+envelope/i],
+  ["replacement proof", /replacement\s+proof/i],
+];
+for (const [term, pattern] of phase26ForbiddenMainTerms) {
+  const count = countPattern(phase2123DirectorSurface, pattern);
+  check(count === 0, `Phase 26 main Director surface must expose 0 ${term} term(s), found ${count}`);
+}
 check(!/Formal\s+Gate|Proxy\s+Duration|Draft\s+Events|blockedPlaceholder/i.test(minimalPreview), "Preview Player copy must stay short and not show gate/proxy counters");
 check(/locked/i.test(minimalAssetLibrary) && /candidate/i.test(minimalAssetLibrary) && /review/i.test(minimalAssetLibrary), "Asset Library must keep locked/candidate/review consistency states");
 
@@ -305,6 +325,8 @@ check(
 
 checkMessage(requireWithin(diagnosticsMode, /KnowledgePackManager/, "Phase 25 Knowledge Pack Manager mounted in Diagnostics"));
 checkMessage(requireWithin(settingsShell, /Knowledge Pack Manager readiness/i, "Phase 25 Knowledge Pack Manager readiness summary in Settings"));
+checkMessage(requireWithin(settingsShell, /Agent\/CLI Mock Runner readiness/i, "Phase 26 Agent/CLI Mock Runner readiness summary in Settings"));
+checkMessage(requireWithin(settingsShell, /adapter boundary mock\/no-op only/i, "Phase 26 adapter boundary summary in Settings"));
 checkMessage(requireWithin(knowledgePackManager, /Enabled/i, "Phase 25 Knowledge summary enabled/total metric"));
 checkMessage(requireWithin(knowledgePackManager, /Injected/i, "Phase 25 Knowledge summary injected/unique metric"));
 checkMessage(requireWithin(knowledgePackManager, /Warnings\s*\/\s*Blockers/i, "Phase 25 Knowledge summary warnings/blockers metric"));
@@ -313,7 +335,20 @@ checkMessage(requireWithin(`${knowledgeUiSummary}\n${knowledgePackManager}`, /Ha
 check(!/route-tester|route-results|knowledge-task-table|Category distribution|Consumer distribution|matched pack|snippet/i.test(knowledgePackManager), "Knowledge Pack Manager must stay summary-only; no route tester, match table, distributions, or snippet details");
 check(!/knowledge-manager|Knowledge\s+Pack|Knowledge\s+Router|Knowledge\s+Library/i.test(phase2123DirectorSurface), "Director main surface must not contain a Knowledge panel or Knowledge engineering copy");
 check(!/route-tester|route-results|knowledge-task-table/i.test(stylesSource), "Knowledge diagnostics CSS must not keep heavy route tester or task-table shells");
-check(!/<button\b[\s\S]{0,240}(Live\s+Submit|Save\s+Credentials|Run\s+Provider)/i.test(appSource), "UI must not expose live submit, save credentials, or run provider button copy");
+const forbiddenButtonCopy = [
+  "Live Submit",
+  "Run Codex",
+  "Spawn Codex",
+  "Resume Codex",
+  "Save Credentials",
+  "Run Provider",
+];
+for (const copy of forbiddenButtonCopy) {
+  check(
+    !new RegExp(`<button\\b[\\s\\S]{0,240}${copy.replace(/\s+/g, "\\s+")}`, "i").test(appSource),
+    `UI must not expose ${copy} button copy`,
+  );
+}
 
 if (failures.length) {
   console.error("Minimal UI contract tests failed:");

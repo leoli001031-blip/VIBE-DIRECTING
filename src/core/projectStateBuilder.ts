@@ -15,6 +15,7 @@ import { buildPromptConflictCheckerState } from "./promptConflictChecker";
 import { buildQaHarnessState } from "./qaHarness";
 import { buildToolRuntimeHarnessState } from "./toolRuntimeHarness";
 import { buildSubagentRunnerState } from "./subagentRunner";
+import { buildAgentCliMockRunnerState } from "./agentCliMockRunner";
 import { buildProjectFileCoreState } from "./projectFileCore";
 import { buildShotPromptPlan } from "./promptCompiler";
 import { buildQaPromotionReports } from "./qaPromotion";
@@ -24,6 +25,8 @@ import { buildAudioPlanningState } from "./audioPlanning";
 import { buildVideoPlanningState } from "./videoPlanning";
 import { buildVideoExecutionPreviewState } from "./videoExecutionPreview";
 import { buildAdapterContractState } from "./adapterContracts";
+import type { SubagentRuntimeGateReceipt } from "./subagentRuntimeGate";
+import type { SubagentWorkerRuntimePlan } from "./subagentWorkerRuntime";
 import {
   projectRuntimeCoreStateVersion,
   projectRuntimeStateSchemaVersion,
@@ -34,7 +37,7 @@ import {
   type RuntimeStateSource,
 } from "./projectState";
 import { buildRuntimeEnvironment, ensureRuntimeEnvironment } from "./runtimeConfig";
-import type { ProjectAudit, ProviderSlot } from "./types";
+import type { ProjectAudit, ProviderSlot, SubagentTaskEnvelope } from "./types";
 
 export const emptyKnowledgeManifest: KnowledgePackManifest = {
   schemaVersion: "0.1.0",
@@ -51,6 +54,10 @@ export interface ProjectRuntimeStateBuildOptions {
   generatedAt?: string;
   stateSource?: RuntimeStateSource;
   runtime?: ProjectRuntimeState["runtime"];
+  agentCliMockRunner?: ProjectRuntimeState["agentCliMockRunner"];
+  subagentRuntimeGateReceipt?: SubagentRuntimeGateReceipt;
+  subagentWorkerRuntimePlan?: SubagentWorkerRuntimePlan;
+  subagentTaskEnvelope?: SubagentTaskEnvelope;
 }
 
 function toKnowledgeBindings(manifest: KnowledgePackManifest): KnowledgeBindingSummary[] {
@@ -306,6 +313,14 @@ export function buildProjectRuntimeState(
     generationHarness,
     qaHarness,
   });
+  const agentCliMockRunner = options.agentCliMockRunner || buildAgentCliMockRunnerState({
+    generatedAt,
+    gateReceipt: options.subagentRuntimeGateReceipt,
+    subagentTaskEnvelope: options.subagentTaskEnvelope,
+    envelopeId: options.subagentTaskEnvelope?.id ||
+      options.subagentRuntimeGateReceipt?.evidence.subject.envelopeId ||
+      options.subagentWorkerRuntimePlan?.slots.find((slot) => slot.envelopeValidation.status === "valid")?.envelopeId,
+  });
   const generationHealthChecker = buildGenerationHealthCheckerState({
     generatedAt,
     imageTaskPlans,
@@ -395,6 +410,7 @@ export function buildProjectRuntimeState(
     qaHarness,
     toolRuntimeHarness,
     subagentRunner,
+    agentCliMockRunner,
     generationHealthChecker,
     promptConflictChecker,
     storyChanges: {
@@ -579,6 +595,12 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       generationHarness,
       qaHarness,
     });
+  const agentCliMockRunner =
+    state.agentCliMockRunner ||
+    buildAgentCliMockRunnerState({
+      generatedAt: state.generatedAt,
+      envelopeId: state.taskRuns.taskViews.find((task) => task.validator.valid)?.envelope.id,
+    });
   const generationHealthChecker =
     state.generationHealthChecker ||
     buildGenerationHealthCheckerState({
@@ -631,6 +653,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     qaHarness,
     toolRuntimeHarness,
     subagentRunner,
+    agentCliMockRunner,
     generationHealthChecker,
     promptConflictChecker,
   };

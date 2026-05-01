@@ -113,6 +113,15 @@ type DesktopRuntimeShellView = {
   hardLocks: string[];
 };
 
+type AgentCliMockRunnerUiSummary = {
+  initialized: boolean;
+  runnerKind: string;
+  replacementProof: string;
+  readiness: string;
+  noopResultCount: number;
+  hardLocks: string[];
+};
+
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
   if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:") || path.startsWith("blob:")) return path;
@@ -1221,6 +1230,98 @@ function readOptionalBoolean(record: Record<string, unknown>, key: string) {
 function readNoteList(value: unknown) {
   if (typeof value === "string" && value.trim()) return [value];
   return readStringArray(value);
+}
+
+function readBooleanLockLabel(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+  expected: boolean,
+) {
+  return record[key] === expected ? label : undefined;
+}
+
+function readReplacementProofLabel(value: unknown) {
+  if (typeof value === "boolean") return value ? "present" : "missing";
+  if (typeof value === "string" && value.length) return statusLabel(value);
+  if (!isRecord(value)) return "missing";
+  const status = readString(value.status, readString(value.result, ""));
+  if (status) return statusLabel(status);
+  const proven = readOptionalBoolean(value, "proven") ?? readOptionalBoolean(value, "ready");
+  return proven ? "present" : "missing";
+}
+
+function phase26ReadinessLabel(status: string, proofLabel: string, providerSubmitObserved?: boolean) {
+  const normalized = status.toLowerCase();
+  if (normalized.includes("ready")) return "ready";
+  if (normalized.includes("blocked") || normalized.includes("missing") || normalized.includes("fail")) return "blocked";
+  return proofLabel === "present" && providerSubmitObserved !== true ? "ready" : "blocked";
+}
+
+function buildAgentCliMockRunnerUiSummary(runtimeState: ProjectRuntimeState): AgentCliMockRunnerUiSummary {
+  const root = (runtimeState as Partial<ProjectRuntimeState> & { agentCliMockRunner?: unknown }).agentCliMockRunner;
+  const initialized = isRecord(root);
+  const rootRecord = initialized ? root as Record<string, unknown> : {};
+  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
+  const hardLocksRecord = initialized && isRecord(rootRecord.hardLocks)
+    ? rootRecord.hardLocks
+    : initialized && isRecord(rootRecord.locks) ? rootRecord.locks : rootRecord;
+  const proofValue = summary.replacementProof
+    ?? rootRecord.replacementProof
+    ?? summary.replacementProofReady
+    ?? rootRecord.replacementProofReady
+    ?? summary.replacementProofFromMockRunner
+    ?? rootRecord.replacementProofFromMockRunner;
+  const replacementProof = readReplacementProofLabel(proofValue);
+  const status = readString(
+    rootRecord.readiness,
+    readString(summary.readiness, readString(rootRecord.status, readString(summary.status, ""))),
+  );
+  const providerSubmitObserved = readOptionalBoolean(summary, "providerSubmitObserved")
+    ?? readOptionalBoolean(rootRecord, "providerSubmitObserved")
+    ?? readOptionalBoolean(summary, "mockRunnerProviderSubmitObserved")
+    ?? readOptionalBoolean(rootRecord, "mockRunnerProviderSubmitObserved");
+  const readiness = !initialized
+    ? "blocked/missing"
+    : phase26ReadinessLabel(status, replacementProof, providerSubmitObserved);
+  const rawNoopResults = summary.noopResults ?? summary.noOpResults ?? rootRecord.noopResults ?? rootRecord.noOpResults ?? rootRecord.results;
+  const noopResultCount = readNumber(
+    summary.noopResultCount,
+    readNumber(
+      summary.noOpResultCount,
+      Array.isArray(rawNoopResults) ? rawNoopResults.length : readNumber(rootRecord.noopResultCount, 0),
+    ),
+  );
+  const hardLocks = [
+    readBooleanLockLabel(hardLocksRecord, "dryRunOnly", "dry-run only", true),
+    readBooleanLockLabel(hardLocksRecord, "diagnosticsOnly", "diagnostics only", true),
+    readBooleanLockLabel(hardLocksRecord, "noSpawnAgent", "no spawn", true),
+    readBooleanLockLabel(hardLocksRecord, "noCodexSpawn", "Codex spawn disabled", true),
+    readBooleanLockLabel(hardLocksRecord, "canSpawnCodex", "Codex spawn disabled", false),
+    readBooleanLockLabel(hardLocksRecord, "noCodexResume", "Codex resume disabled", true),
+    readBooleanLockLabel(hardLocksRecord, "canResumeCodex", "Codex resume disabled", false),
+    readBooleanLockLabel(hardLocksRecord, "noSubprocess", "no subprocess", true),
+    readBooleanLockLabel(hardLocksRecord, "noShellExecution", "no shell execution", true),
+    readBooleanLockLabel(hardLocksRecord, "noProviderExecution", "no provider execution", true),
+    readBooleanLockLabel(hardLocksRecord, "noProviderSubmit", "provider submit blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "canSubmitProvider", "provider submit blocked", false),
+    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noCredentialRead", "no credential read", true),
+    readBooleanLockLabel(hardLocksRecord, "noCredentialWrite", "no credential write", true),
+    readBooleanLockLabel(hardLocksRecord, "noFileMutation", "no file mutation", true),
+    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit disabled", false),
+    readBooleanLockLabel(hardLocksRecord, "structuredResultRequired", "structured result required", true),
+    readBooleanLockLabel(hardLocksRecord, "mockOnly", "mock only", true),
+  ].filter((lock): lock is string => Boolean(lock));
+
+  return {
+    initialized,
+    runnerKind: readString(rootRecord.runnerKind, readString(summary.runnerKind, readString(rootRecord.kind, initialized ? "mock/no-op" : "missing"))),
+    replacementProof,
+    readiness,
+    noopResultCount,
+    hardLocks: Array.from(new Set(hardLocks.length ? hardLocks : ["runner state missing"])),
+  };
 }
 
 function formatHarnessValue(value: unknown, fallbackLabel = "value"): string {
@@ -4906,6 +5007,30 @@ function AdapterContractDiagnostics({ runtimeState }: { runtimeState: ProjectRun
   );
 }
 
+function AgentCliMockRunnerDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildAgentCliMockRunnerUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel phase26-runner-panel">
+      <div className="audit-head">
+        <PlugZap size={17} />
+        <span>Agent/CLI Mock Runner</span>
+      </div>
+      <div className="summary-grid phase26-metrics">
+        <Metric label="Runner Kind" value={summary.runnerKind} detail={summary.initialized ? "Phase 26 mock/no-op" : "blocked/missing"} />
+        <Metric label="Replacement Proof" value={summary.replacementProof} detail="replaceable runner contract" />
+        <Metric label="Readiness" value={summary.readiness} detail="ready/blocked only" />
+        <Metric label="No-op Results" value={`${summary.noopResultCount}`} detail="structured no-op count" />
+      </div>
+      <div className="phase26-lock-strip" aria-label="Phase 26 hard locks">
+        {summary.hardLocks.slice(0, 8).map((lock) => (
+          <span key={lock}>{lock}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeState; view: RuntimeView }) {
   const runtime = runtimeState.runtime;
   const config = runtime.config;
@@ -4919,6 +5044,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const voiceSources = voiceLibrary.sources;
   const desktopShell = buildDesktopRuntimeShellView(runtimeState);
   const knowledgeSummary = buildKnowledgeUiSummary(view);
+  const agentCliMockRunnerSummary = buildAgentCliMockRunnerUiSummary(runtimeState);
 
   return (
     <section className="machine-panel settings-shell">
@@ -5030,6 +5156,13 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
           <small>{knowledgeSummary.enabledTotal} enabled / total · {knowledgeSummary.injectedUnique} injected / unique</small>
           <small>warnings / blockers {knowledgeSummary.warningBlockerCount} · budget {knowledgeSummary.budgetUsed} tokens</small>
           <small>{knowledgeSummary.hardLockReminder}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Agent/CLI Mock Runner</div>
+      <div className="settings-list agent-cli-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Agent/CLI Mock Runner readiness: {agentCliMockRunnerSummary.readiness}</strong>
+          <small>{agentCliMockRunnerSummary.runnerKind} · replacement proof {agentCliMockRunnerSummary.replacementProof} · adapter boundary mock/no-op only · {agentCliMockRunnerSummary.noopResultCount} no-op result(s)</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
@@ -5234,6 +5367,7 @@ function DiagnosticsMode({
       <VideoExecutionPreviewDiagnostics runtimeState={runtimeState} />
       <AdapterContractDiagnostics runtimeState={runtimeState} />
       <SubagentWorkerRuntimeDiagnostics runtimeState={runtimeState} />
+      <AgentCliMockRunnerDiagnostics runtimeState={runtimeState} />
       <Image2KeyframeRuntimeDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />

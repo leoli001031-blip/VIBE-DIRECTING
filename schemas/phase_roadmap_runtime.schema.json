@@ -135,6 +135,7 @@
           "enum": [
             "projectFactsIntegration",
             "subagentEnvelopeValidator",
+            "agentCliMockRunner",
             "providerConfirmationTokenPlaceholder",
             "providerEnablementPacket",
             "watcherManifestQaClosedLoop",

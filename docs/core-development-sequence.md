@@ -1043,6 +1043,16 @@ Acceptance criteria：
 - Settings Shell 只显示 Knowledge Pack Manager readiness 摘要，不提供 live provider submit、credential save、run provider、arbitrary shell 或真实外部导入入口。
 - 新增 `schemas/knowledge_pack_manager.schema.json` 并纳入 schema registry；新增 `npm run knowledge-pack-manager:test`，扩展 `npm run knowledge:test` 和 `npm run minimal-ui:test` 覆盖 Phase 25 路由注入、manager receipt 和极简 UI 合同。
 
+### Phase 26 已实现范围：Agent/CLI Mock Runner
+
+- 新增 `src/core/agentCliMockRunner.ts`，作为 Phase 26 的 mock/no-op runner contract proof；输入必须来自 ready 的 `SubagentRuntimeGateReceipt` 和 validated `SubagentTaskEnvelope`，输出 `subagent_result_v1_mock_noop` 结构化结果。
+- `ProjectRuntimeState.agentCliMockRunner` 成为一等字段，并写入 `project_runtime_state.schema.json`；`buildProjectRuntimeState`、`withRuntimeDefaults` 和 `import-runtime-test` 都能构造 schema-compatible Phase 26 state。
+- 新增 `schemas/agent_cli_mock_runner.schema.json` 并纳入 schema registry；新增 `npm run agent-cli-mock-runner:test`。
+- Phase 26 hard locks 固定：不 spawn Codex、不 resume Codex、不提交 provider、`liveSubmitAllowed=false`、不读写 credential、不执行 shell、不改文件、必须 validated envelope、必须 structured result、禁止 free-text worker、mock only。
+- Fail-closed 条件：缺 Phase24 gate receipt、gate 未 ready、缺 validated envelope、自由文本启动、provider submit attempt、hard lock drift、gate/envelope mismatch 都会让 replacement proof blocked。
+- `phaseRoadmapRuntime` 增加 typed `agentCliMockRunner` evidence；Phase 26 ready 必须有 `replacementProofReady=true` 且没有 provider submit、free text、spawn、resume、shell、credential、file mutation 观测；Phase 29 继续要求 Phase 26 replacement proof。
+- Diagnostics 新增轻量 `Agent/CLI Mock Runner` 摘要，只展示 runner kind、replacement proof、readiness、no-op result count 和 hard locks；Settings 只显示 readiness / adapter boundary 摘要；主 Director surface 不展示 Phase26 工程词或真实执行入口。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

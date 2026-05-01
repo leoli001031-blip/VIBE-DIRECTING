@@ -2920,7 +2920,25 @@ small {
   font-size: 12px;
 }
 
+.phase26-lock-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.phase26-lock-strip span {
+  border: 1px solid rgba(168, 214, 163, 0.24);
+  background: rgba(168, 214, 163, 0.06);
+  color: #cdd9c8;
+  padding: 5px 8px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
 .knowledge-summary-strip span,
+.agent-cli-settings-summary strong,
+.agent-cli-settings-summary small,
 .knowledge-settings-summary strong,
 .knowledge-settings-summary small {
   min-width: 0;
@@ -3078,6 +3096,10 @@ small {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .phase26-runner-panel .phase26-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .phase17-runtime-panel .phase17-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3151,6 +3173,7 @@ small {
   .qa-harness-panel .qa-harness-metrics,
   .checker-metrics,
   .tool-runtime-panel .tool-runtime-metrics,
+  .phase26-runner-panel .phase26-metrics,
   .phase17-runtime-panel .phase17-metrics,
   .generation-job-head,
   .candidate-output-summary div,

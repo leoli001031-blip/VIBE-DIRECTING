@@ -116,10 +116,85 @@ function watcherManifestQaClosedLoopReceipt(overrides = {}) {
   };
 }
 
+function agentCliMockRunnerEvidence(overrides = {}) {
+  const {
+    observations: observationOverrides,
+    contract: contractOverrides,
+    hardLocks: hardLockOverrides,
+    roadmapEvidence: roadmapEvidenceOverrides,
+    ...rest
+  } = overrides;
+  const observations = {
+    providerSubmitObserved: false,
+    freeTextTaskObserved: false,
+    spawnCodexObserved: false,
+    resumeCodexObserved: false,
+    shellExecutionObserved: false,
+    credentialReadObserved: false,
+    credentialWriteObserved: false,
+    fileMutationObserved: false,
+    ...(observationOverrides || {}),
+  };
+  return {
+    kind: "agent_cli_mock_runner",
+    phase: "phase_26_agent_cli_mock_runner",
+    status: "ready_for_replacement_proof",
+    runnerKind: "mock_noop",
+    mockRunnerNoopReady: true,
+    replacementProofReady: true,
+    contract: {
+      inputSource: "validated_envelope_only",
+      resultKind: "structured_noop",
+      canReplaceCodexCli: true,
+      canSpawnCodex: false,
+      canResumeCodex: false,
+      canSubmitProvider: false,
+      canExecuteShell: false,
+      canReadCredentials: false,
+      canWriteCredentials: false,
+      canMutateFiles: false,
+      ...(contractOverrides || {}),
+    },
+    observations,
+    hardLocks: {
+      mockOnly: true,
+      dryRunOnly: true,
+      noSpawnCodex: true,
+      noResumeCodex: true,
+      noProviderSubmit: true,
+      noFreeTextTask: true,
+      validatedEnvelopeRequired: true,
+      structuredResultRequired: true,
+      noShellExecution: true,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      noFileMutation: true,
+      ...(hardLockOverrides || {}),
+    },
+    roadmapEvidence: {
+      phaseId: "phase_26_agent_cli_mock_runner",
+      mockRunnerNoopReady: true,
+      replacementProofReady: true,
+      providerSubmitObserved: observations.providerSubmitObserved,
+      freeTextTaskObserved: observations.freeTextTaskObserved,
+      spawnCodexObserved: observations.spawnCodexObserved,
+      resumeCodexObserved: observations.resumeCodexObserved,
+      shellExecutionObserved: observations.shellExecutionObserved,
+      credentialReadObserved: observations.credentialReadObserved,
+      credentialWriteObserved: observations.credentialWriteObserved,
+      fileMutationObserved: observations.fileMutationObserved,
+      ...(roadmapEvidenceOverrides || {}),
+    },
+    ...rest,
+    observations,
+  };
+}
+
 function typedEvidence(overrides = {}) {
   return {
     projectFactsIntegration: projectFactsEvidence(overrides.projectFactsIntegration),
     subagentEnvelopeValidator: subagentEnvelopeValidatorReceipt(overrides.subagentEnvelopeValidator),
+    agentCliMockRunner: agentCliMockRunnerEvidence(overrides.agentCliMockRunner),
     providerLiveGate: providerLiveGateReceipt(overrides.providerLiveGate),
     watcherManifestQaClosedLoop: watcherManifestQaClosedLoopReceipt(overrides.watcherManifestQaClosedLoop),
   };
@@ -229,23 +304,98 @@ assert(
   "Phase 25 must inherit the Phase 24 preceding-phase gate",
 );
 
-const mockRunnerPlan = buildPhaseRoadmapRuntimePlan({
-  ...readyInput(),
-  mockRunnerProviderSubmitObserved: true,
-});
-const phase26Blocked = phase(mockRunnerPlan, "phase_26_agent_cli_mock_runner");
-assert(phase26Blocked.readiness === "blocked", "Phase 26 must block if mock runner attempts provider submit");
+const typedMockRunnerReady = buildPhaseRoadmapRuntimePlan(readyInput());
 assert(
-  phase26Blocked.blockedReasons.includes("mock_runner_attempted_provider_submit"),
-  "Phase 26 provider-submit blocker missing",
+  phase(typedMockRunnerReady, "phase_26_agent_cli_mock_runner").readiness === "ready",
+  "Phase 26 must be ready when typed mock-runner replacement proof is ready",
+);
+const actualShapeMockRunnerReady = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    agentCliMockRunner: {
+      phase: "phase_26_agent_cli_mock_runner",
+      readiness: "ready_for_phase_29_adapter_spike",
+      replacementProofReady: true,
+      adapterBoundary: {
+        providerSubmitAllowed: false,
+        shellAllowed: false,
+        fileMutationAllowed: false,
+      },
+      hardLocks: {
+        noCodexSpawn: true,
+        noCodexResume: true,
+        noProviderSubmit: true,
+        liveSubmitAllowed: false,
+        noCredentialRead: true,
+        noCredentialWrite: true,
+        noShellExecution: true,
+        noFileMutation: true,
+        validatedEnvelopeRequired: true,
+        structuredResultRequired: true,
+        noFreeTextWorker: true,
+        mockOnly: true,
+      },
+      receipt: {
+        replacementProofReady: true,
+        blockedReasons: [],
+      },
+      validation: {
+        ok: true,
+        errors: [],
+        warnings: [],
+      },
+    },
+  }),
+});
+assert(
+  phase(actualShapeMockRunnerReady, "phase_26_agent_cli_mock_runner").readiness === "ready",
+  "Phase 26 must accept the actual AgentCliMockRunnerState shape as typed evidence",
+);
+
+for (const [observationKey, expectedBlocker] of Object.entries({
+  providerSubmitObserved: "mock_runner_attempted_provider_submit",
+  freeTextTaskObserved: "mock_runner_free_text_task_observed",
+  spawnCodexObserved: "mock_runner_spawn_codex_observed",
+  resumeCodexObserved: "mock_runner_resume_codex_observed",
+})) {
+  const blockedPlan = buildPhaseRoadmapRuntimePlan({
+    ...readyInput(),
+    evidence: typedEvidence({
+      agentCliMockRunner: {
+        observations: { [observationKey]: true },
+        roadmapEvidence: { [observationKey]: true },
+      },
+    }),
+  });
+  const blockedPhase26 = phase(blockedPlan, "phase_26_agent_cli_mock_runner");
+  assert(blockedPhase26.readiness === "blocked", `Phase 26 must block if ${observationKey} is observed`);
+  assert(blockedPhase26.blockedReasons.includes(expectedBlocker), `Phase 26 blocker ${expectedBlocker} missing`);
+}
+
+const phase29WithoutReplacementProof = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    agentCliMockRunner: {
+      replacementProofReady: false,
+      contract: { canReplaceCodexCli: false },
+      roadmapEvidence: { replacementProofReady: false },
+    },
+  }),
+  replacementProofFromMockRunner: false,
+});
+assert(
+  phase(phase29WithoutReplacementProof, "phase_29_codex_cli_adapter_spike").blockedReasons.includes(
+    "phase_26_replacement_proof_missing",
+  ),
+  "Phase 29 must require typed Phase 26 replacement proof",
 );
 assert(
-  mockRunnerPlan.adapterBoundary.phase26.runnerKind === "mock_noop",
+  typedMockRunnerReady.adapterBoundary.phase26.runnerKind === "mock_noop",
   "Phase 26 must be the mock/no-op runner boundary",
 );
-assert(mockRunnerPlan.adapterBoundary.phase26.canSpawnCodex === false, "Phase 26 must not spawn Codex");
-assert(mockRunnerPlan.adapterBoundary.phase26.canResumeCodex === false, "Phase 26 must not resume Codex");
-assert(mockRunnerPlan.adapterBoundary.phase26.canSubmitProvider === false, "Phase 26 must not submit provider");
+assert(typedMockRunnerReady.adapterBoundary.phase26.canSpawnCodex === false, "Phase 26 must not spawn Codex");
+assert(typedMockRunnerReady.adapterBoundary.phase26.canResumeCodex === false, "Phase 26 must not resume Codex");
+assert(typedMockRunnerReady.adapterBoundary.phase26.canSubmitProvider === false, "Phase 26 must not submit provider");
 
 const blockedProviderGate = buildPhaseRoadmapRuntimePlan({
   ...readyInput(),
@@ -413,6 +563,10 @@ assert(schema.$defs.summary.properties.providerSubmitAllowed.const === 0, "schem
 assert(schema.$defs.summary.properties.credentialAccessAllowed.const === false, "schema summary must forbid credential access");
 assert(schema.$defs.summary.properties.arbitraryShellAllowed.const === false, "schema summary must forbid arbitrary shell");
 assert(schema.$defs.summary.properties.freeTextWorkerAllowed.const === false, "schema summary must forbid free-text workers");
+assert(
+  schema.$defs.evidenceDecision.properties.evidenceKey.enum.includes("agentCliMockRunner"),
+  "schema evidence decisions must include typed Agent/CLI mock runner evidence",
+);
 assert(schema.$defs.hardLocks.properties.noFreeTextWorker.const === true, "schema hard locks must pin noFreeTextWorker=true");
 assert(schema.$defs.hardLocks.properties.validatedEnvelopeRequired.const === true, "schema hard locks must pin validated envelope");
 assert(schema.$defs.hardLocks.properties.structuredResultRequired.const === true, "schema hard locks must pin structured result");

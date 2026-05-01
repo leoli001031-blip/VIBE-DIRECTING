@@ -32,6 +32,7 @@
     "qaHarness",
     "toolRuntimeHarness",
     "subagentRunner",
+    "agentCliMockRunner",
     "generationHealthChecker",
     "promptConflictChecker",
     "storyChanges",
@@ -220,6 +221,7 @@
     "qaHarness": { "$ref": "qa_harness.schema.json" },
     "toolRuntimeHarness": { "$ref": "tool_runtime_harness.schema.json" },
     "subagentRunner": { "$ref": "subagent_runner.schema.json" },
+    "agentCliMockRunner": { "$ref": "agent_cli_mock_runner.schema.json" },
     "generationHealthChecker": { "$ref": "generation_health_checker.schema.json" },
     "promptConflictChecker": { "$ref": "prompt_conflict_checker.schema.json" },
     "storyChanges": {

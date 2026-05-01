@@ -5,6 +5,7 @@ import type { ImageKeyframeRuntimePlan } from "./imageKeyframeRuntime";
 import type { StorySectionView, VisualMemorySummary, RuntimeKnowledgeSummary } from "./runtimeView";
 import type { VoiceSourceLibraryState } from "./voiceSourceLibrary";
 import type { QueueGateResult } from "./taskQueue";
+import type { AgentCliMockRunnerState } from "./agentCliMockRunner";
 import type {
   AssetRecord,
   AssetReadinessReport,
@@ -190,6 +191,7 @@ export interface ProjectRuntimeState {
   qaHarness: QaHarnessState;
   toolRuntimeHarness: ToolRuntimeHarnessState;
   subagentRunner: SubagentRunnerState;
+  agentCliMockRunner: AgentCliMockRunnerState;
   generationHealthChecker: GenerationHealthCheckerState;
   promptConflictChecker: PromptConflictCheckerState;
   storyChanges: ProjectRuntimeStoryChangeState;

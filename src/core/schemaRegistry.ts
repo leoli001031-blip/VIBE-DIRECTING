@@ -332,6 +332,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "SubagentRunnerState",
   },
   {
+    fileName: "agent_cli_mock_runner.schema.json",
+    id: "https://vibecore.local/schemas/agent_cli_mock_runner.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 26 mock/no-op Agent/CLI runner replacement proof with Codex spawn, resume, provider submit, shell, credential, and file mutation routes locked off.",
+    typeName: "AgentCliMockRunnerState",
+  },
+  {
     fileName: "local_orchestrator.schema.json",
     id: "https://vibecore.local/schemas/local_orchestrator.schema.json",
     version: schemaVersion,

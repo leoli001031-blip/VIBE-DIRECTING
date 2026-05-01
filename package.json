@@ -26,6 +26,7 @@
     "subagent-runner:test": "node scripts/subagent-runner-test.mjs",
     "subagent-worker:test": "node scripts/subagent-worker-runtime-test.mjs",
     "subagent-runtime-gate:test": "node scripts/subagent-runtime-gate-test.mjs",
+    "agent-cli-mock-runner:test": "node scripts/agent-cli-mock-runner-test.mjs",
     "image-keyframe:test": "node scripts/image-keyframe-runtime-test.mjs",
     "voice-source:test": "node scripts/voice-source-library-test.mjs",
     "project-facts-integration:test": "node scripts/project-facts-integration-test.mjs",
