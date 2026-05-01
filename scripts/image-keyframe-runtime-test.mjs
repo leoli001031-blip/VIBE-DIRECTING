@@ -10,9 +10,9 @@ function readJson(path) {
   return JSON.parse(fs.readFileSync(path, "utf8"));
 }
 
-async function importTs(path) {
+async function importTs(path, rewrites = []) {
   const source = fs.readFileSync(path, "utf8");
-  const output = ts.transpileModule(source, {
+  let output = ts.transpileModule(source, {
     compilerOptions: {
       module: ts.ModuleKind.ES2022,
       target: ts.ScriptTarget.ES2022,
@@ -20,8 +20,23 @@ async function importTs(path) {
     },
     fileName: path,
   }).outputText;
+  for (const [from, to] of rewrites) output = output.replaceAll(from, to);
   const encoded = Buffer.from(`${output}\n//# sourceURL=${pathToFileURL(path).href}`).toString("base64");
   return import(`data:text/javascript;base64,${encoded}`);
+}
+
+async function importImageKeyframeRuntime() {
+  const providerCapabilitiesSource = fs.readFileSync("src/core/providerCapabilities.ts", "utf8");
+  const providerCapabilitiesOutput = ts.transpileModule(providerCapabilitiesSource, {
+    compilerOptions: {
+      module: ts.ModuleKind.ES2022,
+      target: ts.ScriptTarget.ES2022,
+      importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+    },
+    fileName: "src/core/providerCapabilities.ts",
+  }).outputText;
+  const providerCapabilitiesUrl = `data:text/javascript;base64,${Buffer.from(`${providerCapabilitiesOutput}\n//# sourceURL=${pathToFileURL("src/core/providerCapabilities.ts").href}`).toString("base64")}`;
+  return importTs("src/core/imageKeyframeRuntime.ts", [['from "./providerCapabilities";', `from "${providerCapabilitiesUrl}";`]]);
 }
 
 function clone(value) {
@@ -156,7 +171,7 @@ const sourceIndex = {
   updatedAt: generatedAt,
 };
 
-const { buildImageKeyframeRuntimePlan } = await importTs("src/core/imageKeyframeRuntime.ts");
+const { buildImageKeyframeRuntimePlan } = await importImageKeyframeRuntime();
 
 const cleanPlan = buildImageKeyframeRuntimePlan(baseInput());
 assert(cleanPlan.schemaVersion === "0.1.0", "runtime plan schema version drifted");
@@ -181,8 +196,9 @@ assertNoProviderSubmit(cleanPlan);
 const startPlan = cleanPlan.image2StartFramePlans[0];
 assert(startPlan.providerSlot === "image.generate", "start frame must use image.generate");
 assert(startPlan.requiredMode === "text2image", "start frame generate must use text2image");
-assert(startPlan.image2Operation === "text2image", "start frame Image2 operation must be text2image");
-assert(startPlan.adapterRequestPreview.adapterId === "image2-dry-run", "start frame adapter preview must be Image2 dry-run");
+assert(startPlan.image2Operation === "text2image", "start frame operation must be text2image");
+assert(startPlan.adapterRequestPreview.adapterId === "openai-image2-codex-cli-dry-run", "start frame adapter preview must use the registry-selected provider adapter id");
+assert(startPlan.adapterRequestPreview.providerId === startPlan.providerId, "start frame adapter preview must carry resolved provider id");
 assert(startPlan.adapterRequestPreview.submitPolicy.noProviderSubmit === true, "start frame submit policy must forbid provider submit");
 
 const endPlan = cleanPlan.image2EndFramePlans[0];
@@ -200,8 +216,8 @@ assert(gate.status === "pass", `keyframe gate should pass: ${gate.blockers.join(
 assert(gate.endDerivationSource === "start_frame", "keyframe gate must record start_frame derivation");
 assert(gate.validForPromotionHandoff === true, "keyframe gate must be handoff-ready");
 
-assert(cleanPlan.promotionHandoffPlan.targetProviderId === "seedance2-provider", "handoff target must be Seedance 2");
-assert(cleanPlan.promotionHandoffPlan.providerState === "parked_dry_run_only", "Seedance handoff must stay parked");
+assert(cleanPlan.promotionHandoffPlan.targetProviderId === "seedance2-provider", "default handoff target must come from registry config");
+assert(cleanPlan.promotionHandoffPlan.providerState === "parked_dry_run_only", "default video handoff must stay parked");
 assert(cleanPlan.promotionHandoffPlan.canSubmitProvider === false, "handoff cannot submit provider");
 assert(cleanPlan.promotionHandoffPlan.noFast === true, "handoff must forbid fast");
 assert(cleanPlan.promotionHandoffPlan.noVip === true, "handoff must forbid VIP");
@@ -270,8 +286,8 @@ const textToVideoInput = baseInput({
 });
 const textToVideoPlan = buildImageKeyframeRuntimePlan(textToVideoInput);
 assert(byGate(textToVideoPlan, "noTextToVideo").status === "blocked", "text-to-video job must trip noTextToVideo gate");
-assert(textToVideoPlan.image2StartFramePlans.length === 1, "text-to-video job must not create an Image2 start plan");
-assert(textToVideoPlan.image2EndFramePlans.length === 1, "text-to-video job must not create an Image2 end plan");
+assert(textToVideoPlan.image2StartFramePlans.length === 1, "text-to-video job must not create an image start plan");
+assert(textToVideoPlan.image2EndFramePlans.length === 1, "text-to-video job must not create an image end plan");
 
 const submittedInput = clone(baseInput());
 submittedInput.jobs[0].submitId = "provider_submit_should_block";
@@ -302,12 +318,13 @@ assert(schema.properties.providerSubmissionForbidden.const === true, "schema mus
 assert(schema.properties.liveSubmitAllowed.const === false, "schema must pin top-level liveSubmitAllowed=false");
 assert(schema.$defs.assetReferencePlanning.properties.policy.properties.assetLibraryPurpose.const === "asset_consistency_memory", "schema must pin asset library purpose");
 assert(schema.$defs.assetReferencePlanning.properties.policy.properties.assetLibraryIsGallery.const === false, "schema must pin not-gallery policy");
-assert(schema.$defs.adapterPreview.properties.adapterId.const === "image2-dry-run", "schema must pin Image2 dry-run adapter");
+assert(schema.$defs.adapterPreview.properties.adapterId.$ref === "common.schema.json#/$defs/nonEmptyString", "schema must allow registry-selected dry-run adapter id");
+assert(schema.$defs.adapterPreview.properties.providerId.$ref === "common.schema.json#/$defs/nonEmptyString", "schema adapter preview must carry provider id");
 assert(schema.$defs.adapterPreview.properties.submitPolicy.properties.noProviderSubmit.const === true, "schema submitPolicy must forbid provider submit");
 assert(schema.$defs.adapterPreview.properties.submitPolicy.properties.noCredentialRead.const === true, "schema submitPolicy must forbid credential read");
 assert(schema.$defs.endDerivation.properties.noIndependentEndFrame.const === true, "schema must pin no independent end frame");
-assert(schema.$defs.promotionHandoffPlan.properties.targetProviderId.const === "seedance2-provider", "schema must pin Seedance handoff target");
-assert(schema.$defs.promotionHandoffPlan.properties.canSubmitProvider.const === false, "schema must forbid Seedance submit");
+assert(!("const" in schema.$defs.promotionHandoffPlan.properties.targetProviderId), "schema must not pin a named handoff provider");
+assert(schema.$defs.promotionHandoffPlan.properties.canSubmitProvider.const === false, "schema must forbid provider submit");
 assert(schema.$defs.promotionHandoffItem.properties.fastModeAllowed.const === false, "schema must forbid fast handoff item");
 assert(schema.$defs.promotionHandoffItem.properties.vipChannelAllowed.const === false, "schema must forbid VIP handoff item");
 assert(schema.$defs.promotionHandoffItem.properties.textToVideoAllowed.const === false, "schema must forbid text-to-video handoff item");

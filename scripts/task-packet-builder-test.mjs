@@ -6,24 +6,39 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-async function importTs(path) {
+async function importTs(path, rewrites = []) {
   const source = fs.readFileSync(path, "utf8");
-  const output = ts.transpileModule(source, {
+  let output = ts.transpileModule(source, {
     compilerOptions: {
       module: ts.ModuleKind.ES2022,
       target: ts.ScriptTarget.ES2022,
       importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
     },
   }).outputText;
+  for (const [from, to] of rewrites) output = output.replaceAll(from, to);
   const encoded = Buffer.from(`${output}\n//# sourceURL=${pathToFileURL(path).href}`).toString("base64");
   return import(`data:text/javascript;base64,${encoded}`);
 }
 
-const { buildTaskPackets, taskPacketKinds } = await importTs("src/core/taskPacketBuilder.ts");
+async function importTaskPacketBuilder() {
+  const providerCapabilitiesSource = fs.readFileSync("src/core/providerCapabilities.ts", "utf8");
+  const providerCapabilitiesOutput = ts.transpileModule(providerCapabilitiesSource, {
+    compilerOptions: {
+      module: ts.ModuleKind.ES2022,
+      target: ts.ScriptTarget.ES2022,
+      importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+    },
+    fileName: "src/core/providerCapabilities.ts",
+  }).outputText;
+  const providerCapabilitiesUrl = `data:text/javascript;base64,${Buffer.from(`${providerCapabilitiesOutput}\n//# sourceURL=${pathToFileURL("src/core/providerCapabilities.ts").href}`).toString("base64")}`;
+  return importTs("src/core/taskPacketBuilder.ts", [['from "./providerCapabilities";', `from "${providerCapabilitiesUrl}";`]]);
+}
+
+const { buildTaskPackets, taskPacketKinds } = await importTaskPacketBuilder();
 
 const generatedAt = "2026-04-30T00:00:00.000Z";
 
-function shot(id) {
+function shot(id, overrides = {}) {
   return {
     id,
     actId: "A1",
@@ -42,10 +57,11 @@ function shot(id) {
       style: "PASS",
     },
     issues: [],
+    ...overrides,
   };
 }
 
-function asset(id, type = "character") {
+function asset(id, type = "character", overrides = {}) {
   return {
     id,
     type,
@@ -55,6 +71,7 @@ function asset(id, type = "character") {
     lockedStatus: "locked",
     safeForFutureReference: true,
     issues: [],
+    ...overrides,
   };
 }
 
@@ -82,7 +99,12 @@ function runtime(overrides = {}) {
       shots: [shot("1-1"), shot("1-2"), shot("1-3")],
     },
     visualMemory: {
-      assets: [asset("hero_locked"), asset("garage_scene_locked", "scene")],
+      assets: [
+        asset("hero_locked", "character", { usedByShotIds: ["1-2"] }),
+        asset("garage_scene_locked", "scene", { usedByShotIds: ["1-2"] }),
+        asset("villain_locked", "character", { usedByShotIds: ["1-3"] }),
+        asset("global_style_locked", "style"),
+      ],
     },
     videoPlanning: {
       readinessGates: [
@@ -151,12 +173,26 @@ for (const kind of taskPacketKinds) {
   assert(packet.envelopeId === packet.envelope.id, `${kind} envelope id mismatch`);
   assert(packet.hardFields, `${kind} missing hard fields`);
   assert(packet.hardFields.purpose === packet.envelope.purpose, `${kind} purpose must be mirrored into envelope`);
+  assert(packet.hardFields.providerRequirements.slot === packet.envelope.taskEnvelope.providerSlot, `${kind} provider requirement slot must mirror task envelope slot`);
+  assert(packet.hardFields.providerRequirements.requiredMode === packet.envelope.taskEnvelope.requiredMode, `${kind} provider requirement mode must mirror task envelope mode`);
+  assert(packet.envelope.taskEnvelope.providerRequirements.outputKind === packet.hardFields.providerRequirements.outputKind, `${kind} task envelope must carry capability requirements`);
+  assert(packet.envelope.providerPolicySummary.some((item) => item.startsWith("providerSelection=")), `${kind} provider selection source missing`);
+  assert(!packet.envelope.providerPolicySummary.some((item) => item.startsWith("provider=")), `${kind} provider summary must not hard-code provider identity`);
   assert(packet.hardFields.contextCapsule.some((item) => item.startsWith(`task_kind:${kind}`)), `${kind} context capsule missing task kind`);
   assert(packet.hardFields.storyFunction === "story beat 1-2", `${kind} story function missing`);
   assert(packet.hardFields.previousShot.shotId === "1-1", `${kind} previous shot missing`);
   assert(packet.hardFields.nextShot.shotId === "1-3", `${kind} next shot missing`);
   assert(packet.hardFields.beforeAfterShots.length === 2, `${kind} before/after shots must be explicit`);
   assert(packet.hardFields.boundAssets.length > 0, `${kind} bound assets missing`);
+  const boundAssetIds = packet.hardFields.boundAssets.map((item) => item.id);
+  if (kind === "asset") {
+    assert(boundAssetIds.length === 1 && boundAssetIds.includes("hero_locked"), "asset packet must stay scoped to the selected asset");
+  } else {
+    assert(boundAssetIds.includes("hero_locked"), `${kind} must include selected asset scope`);
+    assert(boundAssetIds.includes("garage_scene_locked"), `${kind} must include current shot scene scope`);
+    assert(boundAssetIds.includes("global_style_locked"), `${kind} must include style scope`);
+    assert(!boundAssetIds.includes("villain_locked"), `${kind} must not bind unrelated locked assets`);
+  }
   assert(packet.hardFields.referenceAuthority.some((item) => item.startsWith("locked:")), `${kind} reference authority missing locked refs`);
   assert(packet.hardFields.expectedOutputs.length > 0, `${kind} expected outputs missing`);
   assert(packet.hardFields.mustPreserve.includes("source_index_hash"), `${kind} mustPreserve missing source index`);
@@ -196,6 +232,53 @@ assert(videoPacket.envelope.taskEnvelope.providerSlot === "video.i2v", "video pa
 assert(videoPacket.envelope.taskEnvelope.requiredMode === "frames2video", "video packet must require frames2video");
 assert(videoPacket.envelope.taskEnvelope.keyframePairDerivation.validForI2vPair === true, "video packet must keep keyframe pair derivation");
 
+const customRegistry = {
+  schemaVersion: "0.1.0",
+  registryVersion: "provider-registry/custom-test",
+  strictImageProvider: "registry_default",
+  defaultProviderBySlot: {
+    "image.edit": "custom-image-edit-provider",
+  },
+  capabilities: [
+    {
+      id: "custom-image-edit-provider:image.edit:image2image",
+      providerId: "custom-image-edit-provider",
+      providerName: "Custom Image Edit Provider",
+      slot: "image.edit",
+      requiredMode: "image2image",
+      executionState: "active",
+      liveSubmitAllowed: false,
+      inputKinds: ["text", "image", "reference_image"],
+      outputKind: "image",
+      supports: {
+        referenceImage: true,
+        imageEdit: true,
+        startEndFrame: false,
+        bbox: "unsupported",
+        cameraControl: "textual",
+        controlNet: "unsupported",
+        mask: "planned",
+        negativePrompt: "supported",
+      },
+      maxReferenceImages: 2,
+      forbiddenFallbacks: ["image2image_to_text2image"],
+      notes: ["fixture custom default provider"],
+    },
+  ],
+  notes: ["fixture registry"],
+};
+const customProviderState = buildTaskPackets({
+  runtimeState: runtime(),
+  selectedShotId: "1-2",
+  selectedAssetId: "hero_locked",
+  requestedTaskKinds: ["image_edit"],
+  providerRegistry: customRegistry,
+  generatedAt,
+});
+const customProviderEnvelope = customProviderState.packets[0].envelope.taskEnvelope;
+assert(customProviderEnvelope.providerId === "custom-image-edit-provider", "task packet provider id must be selected from registry default");
+assert(customProviderEnvelope.providerRequirements.slot === "image.edit", "task packet must express image edit slot requirement");
+
 const noNeighborState = buildTaskPackets({
   runtimeState: runtime({ storyFlow: { shots: [shot("solo")] } }),
   selectedShotId: "solo",
@@ -205,11 +288,48 @@ const noNeighborState = buildTaskPackets({
   generatedAt,
 });
 const noNeighborPacket = noNeighborState.packets[0];
-assert(noNeighborPacket.status === "blocked_missing_context", "missing neighbor shots must block packet");
-assert(!noNeighborPacket.envelope, "blocked packet must not expose an envelope");
-assert(noNeighborPacket.missingContext.includes("previous_shot"), "missing previous shot must be explicit");
-assert(noNeighborPacket.missingContext.includes("next_shot"), "missing next shot must be explicit");
-assert(noNeighborState.summary.envelopeReady === 0, "no envelope means not ready");
+assert(noNeighborPacket.status === "ready", "edge shots must use boundary sentinels instead of blocking");
+assert(noNeighborPacket.envelope, "edge shot packet must expose a boundary-aware envelope");
+assert(noNeighborPacket.hardFields.previousShot.shotId.startsWith("boundary_start_"), "missing previous shot must become a start boundary sentinel");
+assert(noNeighborPacket.hardFields.nextShot.shotId.startsWith("boundary_end_"), "missing next shot must become an end boundary sentinel");
+assert(noNeighborPacket.hardFields.previousShot.continuityNotes.includes("boundary_sentinel:start"), "start boundary note missing");
+assert(noNeighborPacket.hardFields.nextShot.continuityNotes.includes("boundary_sentinel:end"), "end boundary note missing");
+assert(noNeighborState.summary.envelopeReady === 1, "boundary sentinels should allow the envelope to be ready");
+
+const crossActState = buildTaskPackets({
+  runtimeState: runtime({
+    storyFlow: {
+      shots: [
+        shot("A1-last", { actId: "A1" }),
+        shot("A2-first", { actId: "A2", sectionId: "section-2" }),
+        shot("A2-second", { actId: "A2", sectionId: "section-2" }),
+      ],
+    },
+  }),
+  selectedShotId: "A2-first",
+  selectedAssetId: "hero_locked",
+  storyChangeTransaction,
+  requestedTaskKinds: ["image"],
+  generatedAt,
+});
+const crossActPacket = crossActState.packets[0];
+assert(crossActPacket.status === "ready", "cross-act boundary should not block packet");
+assert(crossActPacket.hardFields.previousShot.shotId.startsWith("boundary_start_A2"), "cross-act previous shot must become an act boundary anchor");
+assert(crossActPacket.hardFields.previousShot.continuityNotes.some((note) => note.startsWith("cross_act:")), "cross-act boundary note missing");
+
+const scopedShotState = buildTaskPackets({
+  runtimeState: runtime(),
+  selectedShotId: "1-2",
+  storyChangeTransaction,
+  requestedTaskKinds: ["image"],
+  generatedAt,
+});
+const scopedShotAssetIds = scopedShotState.packets[0].hardFields.boundAssets.map((item) => item.id);
+assert(scopedShotState.packets[0].status === "ready", "shot-scoped assets should satisfy bound asset context");
+assert(scopedShotAssetIds.includes("hero_locked"), "shot scope should bind current shot character asset");
+assert(scopedShotAssetIds.includes("garage_scene_locked"), "shot scope should bind current shot scene asset");
+assert(scopedShotAssetIds.includes("global_style_locked"), "shot scope should bind global style asset");
+assert(!scopedShotAssetIds.includes("villain_locked"), "shot scope must exclude unrelated locked assets");
 
 const noAssetState = buildTaskPackets({
   runtimeState: runtime({ visualMemory: { assets: [] } }),
@@ -226,5 +346,5 @@ for (const packet of noAssetState.packets) {
 }
 
 console.log(
-  `Task packet builder tests passed: ${state.summary.ready} ready packets, ${noNeighborPacket.missingContext.length} neighbor blockers, ${noAssetState.packets.length} asset blockers.`,
+  `Task packet builder tests passed: ${state.summary.ready} ready packets, ${noNeighborPacket.hardFields.beforeAfterShots.length} boundary refs, ${noAssetState.packets.length} asset blockers.`,
 );

@@ -37,6 +37,7 @@
     "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
     "executionState": { "$ref": "common.schema.json#/$defs/providerExecutionState" },
     "requiredMode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+    "providerRequirements": { "$ref": "#/$defs/providerCapabilityRequirement" },
     "storyFunction": { "type": "string" },
     "sourceIndexHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
     "promptHash": { "type": "string" },
@@ -111,5 +112,54 @@
         "required": ["keyframePairDerivation"]
       }
     }
-  ]
+  ],
+  "$defs": {
+    "providerCapabilityRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "requiredMode", "inputKinds", "outputKind", "notes"],
+      "properties": {
+        "slot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+        "requiredMode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+        "inputKinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["text", "image", "reference_image", "mask", "start_frame", "end_frame", "video"]
+          }
+        },
+        "outputKind": {
+          "type": "string",
+          "enum": ["image", "video", "audio", "metadata"]
+        },
+        "supports": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "referenceImage": { "type": "boolean" },
+            "imageEdit": { "type": "boolean" },
+            "startEndFrame": { "type": "boolean" },
+            "bbox": { "type": "string", "enum": ["supported", "unsupported", "planned", "parked"] },
+            "cameraControl": { "type": "string", "enum": ["none", "textual", "structured", "planned"] },
+            "controlNet": { "type": "string", "enum": ["supported", "unsupported", "planned", "parked"] },
+            "mask": { "type": "string", "enum": ["supported", "unsupported", "planned", "parked"] },
+            "negativePrompt": { "type": "string", "enum": ["supported", "unsupported", "planned", "parked"] }
+          }
+        },
+        "maxReferenceImages": { "type": "integer", "minimum": 0 },
+        "forbiddenFallbacks": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "executionStates": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/providerExecutionState" }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
 }

@@ -6,6 +6,10 @@ export type ProjectStoreFactRole =
   | "story_flow"
   | "visual_memory"
   | "shot_spec"
+  | "shot_layout"
+  | "spatial_memory"
+  | "scene_asset_pack"
+  | "voice_memory"
   | "source_index"
   | "runtime_state";
 
@@ -124,6 +128,18 @@ export interface ProjectStoreSnapshot {
       path: ProjectStorePathRef;
       value: Record<string, unknown>;
     }>;
+    shotLayouts?: Array<{
+      shotId: string;
+      path: ProjectStorePathRef;
+      value: Record<string, unknown>;
+    }>;
+    spatialMemory?: Record<string, unknown>;
+    sceneAssetPacks?: Array<{
+      packId: string;
+      path: ProjectStorePathRef;
+      value: Record<string, unknown>;
+    }>;
+    voiceMemory?: Record<string, unknown>;
     sourceIndex?: Record<string, unknown>;
   };
   factFiles: ProjectStoreFactFile[];
@@ -149,6 +165,18 @@ export interface CreateProjectStoreSnapshotInput {
     path?: string;
     value: Record<string, unknown>;
   }>;
+  shotLayouts?: Array<{
+    shotId: string;
+    path?: string;
+    value: Record<string, unknown>;
+  }>;
+  spatialMemory?: Record<string, unknown>;
+  sceneAssetPacks?: Array<{
+    packId: string;
+    path?: string;
+    value: Record<string, unknown>;
+  }>;
+  voiceMemory?: Record<string, unknown>;
   sourceIndex?: Record<string, unknown>;
   sourceIndexHash?: string;
 }
@@ -417,6 +445,14 @@ function shotSpecPath(shotId: string): string {
   return `shots/${slug(shotId)}/shot_spec.vibe.json`;
 }
 
+function shotLayoutPath(shotId: string): string {
+  return `shots/${slug(shotId)}/shot_layout.vibe.json`;
+}
+
+function sceneAssetPackPath(packId: string): string {
+  return `visual_memory/scene_asset_packs/${slug(packId)}.vibe.json`;
+}
+
 function rebuildFactFiles(snapshot: ProjectStoreSnapshot): ProjectStoreFactFile[] {
   const factFiles = [
     makeFactFile("project_manifest", "project_manifest", "project.vibe", snapshot.facts.projectManifest),
@@ -432,6 +468,28 @@ function rebuildFactFiles(snapshot: ProjectStoreSnapshot): ProjectStoreFactFile[
       ...makeFactFile("shot_spec", `shot_spec_${slug(shot.shotId)}`, shot.path.path || shotSpecPath(shot.shotId), shot.value),
       path: shot.path,
     });
+  }
+
+  for (const layout of snapshot.facts.shotLayouts || []) {
+    factFiles.push({
+      ...makeFactFile("shot_layout", `shot_layout_${slug(layout.shotId)}`, layout.path.path || shotLayoutPath(layout.shotId), layout.value),
+      path: layout.path,
+    });
+  }
+
+  if (snapshot.facts.spatialMemory) {
+    factFiles.push(makeFactFile("spatial_memory", "spatial_memory", "spatial_memory/spatial_memory.vibe.json", snapshot.facts.spatialMemory));
+  }
+
+  for (const pack of snapshot.facts.sceneAssetPacks || []) {
+    factFiles.push({
+      ...makeFactFile("scene_asset_pack", `scene_asset_pack_${slug(pack.packId)}`, pack.path.path || sceneAssetPackPath(pack.packId), pack.value),
+      path: pack.path,
+    });
+  }
+
+  if (snapshot.facts.voiceMemory) {
+    factFiles.push(makeFactFile("voice_memory", "voice_memory", "voice_memory/voice_memory.vibe.json", snapshot.facts.voiceMemory));
   }
 
   return factFiles;
@@ -465,6 +523,10 @@ function sourceIndexHashFrom(snapshot: ProjectStoreSnapshot): string {
     storyFlow: snapshot.facts.storyFlow,
     visualMemory: snapshot.facts.visualMemory,
     shotSpecs: snapshot.facts.shotSpecs.map((shot) => shot.value),
+    shotLayouts: (snapshot.facts.shotLayouts || []).map((layout) => layout.value),
+    spatialMemory: snapshot.facts.spatialMemory,
+    sceneAssetPacks: (snapshot.facts.sceneAssetPacks || []).map((pack) => pack.value),
+    voiceMemory: snapshot.facts.voiceMemory,
   });
 }
 
@@ -531,6 +593,16 @@ export function createProjectStoreSnapshot(input: CreateProjectStoreSnapshotInpu
     path: createProjectStorePathRef({ path: shot.path || shotSpecPath(shot.shotId), sourceRef: `shotSpecs.${shot.shotId}` }),
     value: clone(shot.value),
   }));
+  const shotLayouts = (input.shotLayouts || []).map((layout) => ({
+    shotId: layout.shotId,
+    path: createProjectStorePathRef({ path: layout.path || shotLayoutPath(layout.shotId), sourceRef: `shotLayouts.${layout.shotId}` }),
+    value: clone(layout.value),
+  }));
+  const sceneAssetPacks = (input.sceneAssetPacks || []).map((pack) => ({
+    packId: pack.packId,
+    path: createProjectStorePathRef({ path: pack.path || sceneAssetPackPath(pack.packId), sourceRef: `sceneAssetPacks.${pack.packId}` }),
+    value: clone(pack.value),
+  }));
   const snapshot: ProjectStoreSnapshot = {
     schemaVersion,
     phase: "phase_9_5_project_store",
@@ -563,6 +635,10 @@ export function createProjectStoreSnapshot(input: CreateProjectStoreSnapshotInpu
       storyFlow: input.storyFlow ? clone(input.storyFlow) : defaultStoryFlow(projectId, generatedAt),
       visualMemory: input.visualMemory ? clone(input.visualMemory) : defaultVisualMemory(projectId, generatedAt),
       shotSpecs,
+      shotLayouts,
+      spatialMemory: input.spatialMemory ? clone(input.spatialMemory) : undefined,
+      sceneAssetPacks,
+      voiceMemory: input.voiceMemory ? clone(input.voiceMemory) : undefined,
       sourceIndex: input.sourceIndex ? { ...clone(input.sourceIndex), sourceIndexHash: input.sourceIndexHash || input.sourceIndex.sourceIndexHash } : undefined,
     },
     factFiles: [],

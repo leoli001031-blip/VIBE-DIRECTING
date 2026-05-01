@@ -29,7 +29,7 @@ export function buildImage2AdapterRequest(taskPlan: ImageTaskPlan, promptPlan: S
   return {
     requestId: `image2_request_${taskPlan.taskPlanId}`,
     taskPlanId: taskPlan.taskPlanId,
-    adapterId: "image2-dry-run",
+    adapterId: `${taskPlan.providerId.replace(/[^a-zA-Z0-9_-]+/g, "_")}-dry-run`,
     operation: operationForPlan(taskPlan),
     payload: {
       sourceIntent: promptPlan.sourceIntent,
@@ -53,7 +53,7 @@ export function buildImage2AdapterRequest(taskPlan: ImageTaskPlan, promptPlan: S
 export function validateImage2AdapterRequest(request: Image2AdapterRequest): Image2AdapterValidationResult {
   const issues: string[] = [];
 
-  if (request.adapterId !== "image2-dry-run") issues.push("adapter_id_must_be_image2_dry_run");
+  if (!request.adapterId) issues.push("adapter_id_missing");
   if (!["text2image", "image2image", "reference_asset"].includes(request.operation)) issues.push("invalid_operation");
   if (!request.submitPolicy?.dry_run_only) issues.push("submit_policy_must_be_dry_run_only");
   if (!request.submitPolicy?.manual_submit_required) issues.push("submit_policy_must_require_manual_submit");

@@ -93,8 +93,10 @@ export interface ProviderEnablementEntry {
   notes: string[];
 }
 
+export type ProviderImagePolicy = "registry_default" | "image2_only";
+
 export interface ProviderEnablementState {
-  strictImageProvider: "image2_only";
+  strictImageProvider: ProviderImagePolicy;
   slots: ProviderEnablementEntry[];
 }
 
@@ -692,7 +694,7 @@ export interface ProviderRule {
 }
 
 export interface ProviderPolicy {
-  strictImageProvider: "image2_only";
+  strictImageProvider: ProviderImagePolicy;
   rules: ProviderRule[];
 }
 
@@ -734,11 +736,31 @@ export interface ProviderCapability {
   notes: string[];
 }
 
+export interface ProviderCapabilityRequirement {
+  slot: ProviderSlot;
+  requiredMode: RequiredMode;
+  inputKinds: ProviderCapability["inputKinds"];
+  outputKind: ProviderCapability["outputKind"];
+  supports?: Partial<ProviderCapabilitySupport>;
+  maxReferenceImages?: number;
+  forbiddenFallbacks?: string[];
+  executionStates?: ProviderExecutionState[];
+  notes: string[];
+}
+
+export interface ProviderSelectionPolicy {
+  strategy: "registry_default";
+  defaultsAreConfiguration: true;
+  taskPacketsCarryRequirements: true;
+  notes: string[];
+}
+
 export interface ProviderRegistry {
   schemaVersion: string;
   registryVersion: string;
   generatedAt?: string;
-  strictImageProvider: "image2_only";
+  strictImageProvider?: ProviderImagePolicy;
+  selectionPolicy?: ProviderSelectionPolicy;
   defaultProviderBySlot: Partial<Record<ProviderSlot, string>>;
   capabilities: ProviderCapability[];
   notes: string[];
@@ -1145,7 +1167,7 @@ export interface Image2SubmitPolicy {
 export interface Image2AdapterRequest {
   requestId: string;
   taskPlanId: string;
-  adapterId: "image2-dry-run";
+  adapterId: string;
   operation: Image2AdapterOperation;
   payload: Image2AdapterPayload;
   submitPolicy: Image2SubmitPolicy;
@@ -1867,7 +1889,7 @@ export interface VideoTaskPlan {
   readinessGateId: string;
   providerSlot: "video.i2v";
   requiredMode: "frames2video";
-  providerId: "seedance2-provider" | "jimeng-video";
+  providerId: string;
   providerExecutionState: ProviderExecutionState;
   status: "ready" | "blocked" | "parked";
   queueStatus: "pending" | "ready" | "blocked" | "parked";
@@ -2087,6 +2109,7 @@ export interface TaskEnvelope {
   providerId: string;
   executionState: ProviderExecutionState;
   requiredMode: RequiredMode;
+  providerRequirements?: ProviderCapabilityRequirement;
   storyFunction?: string;
   sourceIndexHash: string;
   promptHash?: string;

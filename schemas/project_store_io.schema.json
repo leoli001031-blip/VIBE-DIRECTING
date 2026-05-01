@@ -67,6 +67,10 @@
             "story_flow",
             "visual_memory",
             "shot_spec",
+            "shot_layout",
+            "spatial_memory",
+            "scene_asset_pack",
+            "voice_memory",
             "source_index",
             "runtime_state",
             "project_directory"

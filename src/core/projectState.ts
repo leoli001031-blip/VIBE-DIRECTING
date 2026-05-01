@@ -13,6 +13,8 @@ import type { ProviderLiveGateState } from "./providerLiveGate";
 import type { ProviderExecutionPermissionGateState } from "./providerExecutionPermissionGate";
 import type { ProviderActionConfirmationReceiptState } from "./providerActionConfirmationReceipt";
 import type { ProviderExecutionHandoffState } from "./providerExecutionHandoff";
+import type { ExecutionLedgerState } from "./executionLedger";
+import type { RealExecutionGateState } from "./realExecutionGate";
 import type { LocalOrchestratorState } from "./localOrchestrator";
 import type { ProjectFactsIntegrationState } from "./projectFactsIntegration";
 import type {
@@ -201,6 +203,8 @@ export interface ProjectRuntimeState {
   providerExecutionPermissionGate: ProviderExecutionPermissionGateState;
   providerActionConfirmationReceipt: ProviderActionConfirmationReceiptState;
   providerExecutionHandoff: ProviderExecutionHandoffState;
+  executionLedger: ExecutionLedgerState;
+  realExecutionGate: RealExecutionGateState;
   localOrchestrator: LocalOrchestratorState;
   generationHarness: GenerationHarnessState;
   filesystemWatcherHarness: FilesystemWatcherHarnessState;

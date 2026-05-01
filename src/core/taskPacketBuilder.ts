@@ -1,11 +1,14 @@
 import type { ProjectRuntimeState } from "./projectState";
+import { buildDefaultProviderRegistry, buildProviderRequirement, selectCapabilityForRequirement } from "./providerCapabilities";
 import type {
   AssetRecord,
   ContextLevel,
   KeyframePairDerivation,
   NeighborShotContext,
   PreflightBlocker,
-  ProviderExecutionState,
+  ProviderCapabilityRequirement,
+  ProviderPolicy,
+  ProviderRegistry,
   ProviderSlot,
   ReferenceAuthority,
   RequiredMode,
@@ -36,6 +39,7 @@ export type TaskPacketStatus = "ready" | "blocked_missing_context";
 
 export interface TaskPacketHardFields {
   purpose: SubagentTaskPurpose;
+  providerRequirements: ProviderCapabilityRequirement;
   contextCapsule: string[];
   storyFunction: string;
   previousShot: NeighborShotContext;
@@ -98,6 +102,8 @@ export interface BuildTaskPacketsInput {
   selectedAssetId?: string;
   storyChangeTransaction?: StoryChangeTransaction;
   requestedTaskKinds?: TaskPacketKind[];
+  providerRegistry?: ProviderRegistry;
+  providerPolicy?: ProviderPolicy;
   generatedAt?: string;
 }
 
@@ -161,12 +167,31 @@ function selectedShot(runtimeState: ProjectRuntimeState, selectedShotId?: string
   return allShots.find((shot) => shot.id === selectedShotId) || allShots[0];
 }
 
+function boundaryShot(shot: ShotRecord, position: "previous" | "next", adjacentShot?: ShotRecord): NeighborShotContext {
+  const boundaryKind = position === "previous" ? "start" : "end";
+  const actId = shot.actId || "project";
+  const transition = adjacentShot?.actId && adjacentShot.actId !== shot.actId ? `cross_act:${adjacentShot.actId}->${shot.actId}` : "";
+  return {
+    shotId: `boundary_${boundaryKind}_${safeId(actId || shot.id)}`,
+    position,
+    storyFunction: `${boundaryKind}_of_${actId}_act_anchor`,
+    summary: `${boundaryKind} boundary sentinel for ${actId}`,
+    continuityNotes: unique([
+      `boundary_sentinel:${boundaryKind}`,
+      `act_anchor:${actId}`,
+      shot.sectionId ? `section:${shot.sectionId}` : "",
+      transition,
+    ]),
+  };
+}
+
 function neighborShot(shot: ShotRecord | undefined, position: "previous" | "next", runtimeState: ProjectRuntimeState): NeighborShotContext | undefined {
   if (!shot) return undefined;
   const allShots = shots(runtimeState);
   const index = allShots.findIndex((candidate) => candidate.id === shot.id);
   const neighbor = position === "previous" ? allShots[index - 1] : allShots[index + 1];
-  if (!neighbor) return undefined;
+  if (!neighbor) return boundaryShot(shot, position);
+  if (shot.actId && neighbor.actId && shot.actId !== neighbor.actId) return boundaryShot(shot, position, neighbor);
   return {
     shotId: neighbor.id,
     position,
@@ -175,6 +200,85 @@ function neighborShot(shot: ShotRecord | undefined, position: "previous" | "next
     approvedFramePath: neighbor.videoPath || neighbor.endFrame || neighbor.startFrame,
     continuityNotes: unique([`gates:${Object.values(neighbor.gates).join("/")}`, ...neighbor.issues]),
   };
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function stringList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap((item) => stringList(item));
+  const text = stringValue(value);
+  return text ? [text] : [];
+}
+
+function dynamicRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function assetIdMatches(asset: AssetRecord, id: string | undefined): boolean {
+  return Boolean(id && (asset.id === id || asset.path === id));
+}
+
+function assetIsUsable(asset: AssetRecord): boolean {
+  return asset.status !== "missing";
+}
+
+function assetIsLocked(asset: AssetRecord): boolean {
+  return asset.lockedStatus === "locked" && asset.safeForFutureReference && asset.status !== "missing";
+}
+
+function shotScopeTokens(shot: ShotRecord | undefined): string[] {
+  if (!shot) return [];
+  const record = dynamicRecord(shot);
+  return unique([
+    shot.id,
+    shot.actId,
+    shot.sectionId || "",
+    ...stringList(record.sceneId),
+    ...stringList(record.sceneIds),
+    ...stringList(record.styleId),
+    ...stringList(record.styleIds),
+    ...stringList(record.assetId),
+    ...stringList(record.assetIds),
+    ...stringList(record.referenceId),
+    ...stringList(record.referenceIds),
+    ...stringList(record.lockedReferenceIds),
+    ...stringList(record.characterIds),
+    ...stringList(record.propIds),
+  ]);
+}
+
+function assetScopeTokens(asset: AssetRecord): string[] {
+  const record = dynamicRecord(asset);
+  return unique([
+    asset.id,
+    asset.path,
+    asset.name,
+    ...stringList(record.sceneId),
+    ...stringList(record.sceneIds),
+    ...stringList(record.styleId),
+    ...stringList(record.styleIds),
+    ...stringList(record.actId),
+    ...stringList(record.sectionId),
+    ...stringList(record.usedByShotIds),
+    ...stringList(record.sourceRefs),
+  ]);
+}
+
+function assetInShotScope(asset: AssetRecord, shot: ShotRecord | undefined): boolean {
+  const shotTokens = new Set(shotScopeTokens(shot));
+  if (!shotTokens.size) return false;
+  return assetScopeTokens(asset).some((token) => shotTokens.has(token));
+}
+
+function uniqueAssetsById(values: AssetRecord[]): AssetRecord[] {
+  const seen = new Set<string>();
+  return values.filter((asset) => {
+    if (seen.has(asset.id)) return false;
+    seen.add(asset.id);
+    return true;
+  });
 }
 
 function referenceFromAsset(asset: AssetRecord): ReferenceAuthority {
@@ -200,12 +304,16 @@ function referenceFromAsset(asset: AssetRecord): ReferenceAuthority {
   };
 }
 
-function boundAssetsFor(input: BuildTaskPacketsInput, kind: TaskPacketKind): ReferenceAuthority[] {
+function boundAssetsFor(input: BuildTaskPacketsInput, kind: TaskPacketKind, shot: ShotRecord | undefined): ReferenceAuthority[] {
   const allAssets = assets(input.runtimeState);
-  const selectedAssetRefs = allAssets.filter((asset) => asset.id === input.selectedAssetId || asset.path === input.selectedAssetId);
-  const lockedAssets = allAssets.filter((asset) => asset.lockedStatus === "locked" && asset.safeForFutureReference && asset.status !== "missing");
-  const selectedOrLocked = selectedAssetRefs.length ? selectedAssetRefs : lockedAssets;
-  const scoped = kind === "asset" && selectedAssetRefs.length ? selectedAssetRefs : selectedOrLocked;
+  const selectedAssetRefs = allAssets.filter((asset) => assetIdMatches(asset, input.selectedAssetId) && assetIsUsable(asset));
+  const shotScopedAssets = allAssets.filter((asset) => assetIsLocked(asset) && assetInShotScope(asset, shot));
+  const lockedSceneAssets = allAssets.filter((asset) => assetIsLocked(asset) && asset.type === "scene");
+  const implicitSceneScopeAssets = shot && lockedSceneAssets.length === 1 ? lockedSceneAssets : [];
+  const styleScopeAssets = allAssets.filter((asset) => assetIsLocked(asset) && asset.type === "style");
+  const scoped = uniqueAssetsById(
+    kind === "asset" ? selectedAssetRefs : [...selectedAssetRefs, ...shotScopedAssets, ...implicitSceneScopeAssets, ...styleScopeAssets],
+  );
   return scoped.map(referenceFromAsset);
 }
 
@@ -238,23 +346,69 @@ function taskPurposeFor(kind: TaskPacketKind): TaskEnvelope["purpose"] {
   return "audit";
 }
 
-function providerFor(kind: TaskPacketKind): { providerSlot: ProviderSlot; providerId: string; executionState: ProviderExecutionState; requiredMode: RequiredMode } {
+function providerRequirementFor(kind: TaskPacketKind): ProviderCapabilityRequirement {
   if (kind === "image") {
-    return { providerSlot: "image.generate", providerId: "openai-image2-api", executionState: "active", requiredMode: "text2image" };
+    return buildProviderRequirement({
+      slot: "image.generate",
+      requiredMode: "text2image",
+      inputKinds: ["text"],
+      outputKind: "image",
+      notes: ["Keyframe generation requires a registry-selected text-to-image capability."],
+    });
   }
   if (kind === "asset") {
-    return { providerSlot: "image.reference_asset", providerId: "openai-image2-api", executionState: "active", requiredMode: "text2image" };
+    return buildProviderRequirement({
+      slot: "image.reference_asset",
+      requiredMode: "text2image",
+      inputKinds: ["text", "reference_image"],
+      outputKind: "image",
+      supports: { referenceImage: true },
+      maxReferenceImages: 1,
+      notes: ["Reference asset generation requires image output and reference-image support."],
+    });
   }
   if (kind === "start_frame" || kind === "end_frame" || kind === "image_edit") {
-    return { providerSlot: "image.edit", providerId: "openai-image2-api", executionState: "active", requiredMode: "image2image" };
+    return buildProviderRequirement({
+      slot: "image.edit",
+      requiredMode: "image2image",
+      inputKinds: ["text", "image", "reference_image"],
+      outputKind: "image",
+      supports: { imageEdit: true, referenceImage: true },
+      maxReferenceImages: 1,
+      forbiddenFallbacks: ["image2image_to_text2image"],
+      notes: ["Edit and start/end-frame packets require image-to-image capability and forbid text-to-image fallback."],
+    });
   }
   if (kind === "video_execution") {
-    return { providerSlot: "video.i2v", providerId: "seedance2-provider", executionState: "parked", requiredMode: "frames2video" };
+    return buildProviderRequirement({
+      slot: "video.i2v",
+      requiredMode: "frames2video",
+      inputKinds: ["text", "start_frame", "end_frame"],
+      outputKind: "video",
+      supports: { referenceImage: true, startEndFrame: true },
+      executionStates: ["parked", "planned", "unavailable"],
+      forbiddenFallbacks: ["frames2video_to_text2video"],
+      notes: ["Video execution packets require a parked frame-to-video capability selected by registry/policy."],
+    });
   }
   if (kind === "audio") {
-    return { providerSlot: "audio.tts", providerId: "audio-planned-provider", executionState: "planned", requiredMode: "tts" };
+    return buildProviderRequirement({
+      slot: "audio.tts",
+      requiredMode: "tts",
+      inputKinds: ["text"],
+      outputKind: "audio",
+      executionStates: ["planned", "unavailable"],
+      notes: ["Audio packets require a planned TTS capability selected by registry/policy."],
+    });
   }
-  return { providerSlot: "local.workflow", providerId: "subagent-worker", executionState: "planned", requiredMode: "not_applicable" };
+  return buildProviderRequirement({
+    slot: "local.workflow",
+    requiredMode: "not_applicable",
+    inputKinds: ["text"],
+    outputKind: "metadata",
+    executionStates: ["planned", "available", "active"],
+    notes: ["Audit/export packets require local workflow capability rather than a media provider."],
+  });
 }
 
 function qaChecklistFor(kind: TaskPacketKind): string[] {
@@ -466,6 +620,14 @@ function contextLevelFor(kind: TaskPacketKind): ContextLevel {
   return "L1";
 }
 
+function registryFor(input: Pick<BuildTaskPacketsInput, "runtimeState" | "providerRegistry">): ProviderRegistry {
+  return input.providerRegistry || input.runtimeState.imagePipeline?.providerRegistry || buildDefaultProviderRegistry(input.runtimeState.generatedAt);
+}
+
+function policyFor(input: Pick<BuildTaskPacketsInput, "runtimeState" | "providerPolicy">): ProviderPolicy | undefined {
+  return input.providerPolicy || input.runtimeState.project?.providerPolicy;
+}
+
 function makeTaskEnvelope(input: {
   packetId: string;
   kind: TaskPacketKind;
@@ -475,17 +637,21 @@ function makeTaskEnvelope(input: {
   selectedAssetId?: string;
   keyframePair?: KeyframePairDerivation;
   missing: string[];
+  providerRegistry?: ProviderRegistry;
+  providerPolicy?: ProviderPolicy;
 }): TaskEnvelope {
-  const provider = providerFor(input.kind);
+  const providerSelection = selectCapabilityForRequirement(input.hardFields.providerRequirements, registryFor(input), policyFor(input));
   const expectedOutputs = input.hardFields.expectedOutputs;
+  const blockingReasons = unique([...input.missing, ...providerSelection.blockers]);
   const taskId = `task_${input.packetId}`;
   return {
     id: taskId,
     purpose: taskPurposeFor(input.kind),
-    providerSlot: provider.providerSlot,
-    providerId: provider.providerId,
-    executionState: provider.executionState,
-    requiredMode: provider.requiredMode,
+    providerSlot: input.hardFields.providerRequirements.slot,
+    providerId: providerSelection.providerId,
+    executionState: providerSelection.executionState,
+    requiredMode: input.hardFields.providerRequirements.requiredMode,
+    providerRequirements: input.hardFields.providerRequirements,
     storyFunction: input.hardFields.storyFunction,
     sourceIndexHash: sourceIndexHash(input.runtimeState),
     dependencies: unique([input.shot.id, ...(input.hardFields.boundAssets.map((asset) => asset.id))]),
@@ -497,8 +663,8 @@ function makeTaskEnvelope(input: {
     preflight: {
       taskId,
       preflightScope: "formal_execution",
-      status: input.missing.length ? "blocked" : "pass",
-      blockers: preflightBlockers(input.missing),
+      status: blockingReasons.length ? "blocked" : "pass",
+      blockers: preflightBlockers(blockingReasons),
       warnings: [],
       checkedAt: input.runtimeState.generatedAt,
     },
@@ -508,7 +674,7 @@ function makeTaskEnvelope(input: {
     injectedKnowledgeSnippets: [],
     routeWarnings: [],
     outputPath: expectedOutputs[0],
-    blockingReasons: input.missing,
+    blockingReasons,
   };
 }
 
@@ -519,7 +685,10 @@ function makeSubagentEnvelope(input: {
   hardFields: TaskPacketHardFields;
   taskEnvelope: TaskEnvelope;
   runtimeState: ProjectRuntimeState;
+  providerRegistry?: ProviderRegistry;
+  providerPolicy?: ProviderPolicy;
 }): SubagentTaskEnvelope {
+  const providerSelection = selectCapabilityForRequirement(input.hardFields.providerRequirements, registryFor(input), policyFor(input));
   return {
     id: input.packetId,
     parentTaskId: input.taskEnvelope.id,
@@ -537,9 +706,12 @@ function makeSubagentEnvelope(input: {
     providerPolicySummary: unique([
       `taskKind=${input.kind}`,
       `slot=${input.taskEnvelope.providerSlot}`,
-      `provider=${input.taskEnvelope.providerId}`,
-      `state=${input.taskEnvelope.executionState}`,
       `mode=${input.taskEnvelope.requiredMode}`,
+      `capability=${providerSelection.capabilityId || "unresolved"}`,
+      `providerSelection=${providerSelection.selectionSource}`,
+      `providerExecutionState=${input.taskEnvelope.executionState}`,
+      `requiredInputs=${input.hardFields.providerRequirements.inputKinds.join(",")}`,
+      `requiredOutput=${input.hardFields.providerRequirements.outputKind}`,
       `expectedOutputs=${input.taskEnvelope.expectedOutputs.join(",")}`,
       ...input.hardFields.contextCapsule.map((item) => `context:${item}`),
       "noFreeTextTask=true",
@@ -587,7 +759,7 @@ function buildPacket(input: BuildTaskPacketsInput, kind: TaskPacketKind): BuiltT
   const shot = selectedShot(input.runtimeState, input.selectedShotId);
   const previous = neighborShot(shot, "previous", input.runtimeState);
   const next = neighborShot(shot, "next", input.runtimeState);
-  const boundAssets = boundAssetsFor(input, kind);
+  const boundAssets = boundAssetsFor(input, kind, shot);
   const forbidden = forbiddenReferences(input.runtimeState);
   const keyframePair = kind === "video_execution" || kind === "pair_qa" ? videoKeyframePair(input.runtimeState, shot) : undefined;
   const missing = missingContext({
@@ -619,6 +791,7 @@ function buildPacket(input: BuildTaskPacketsInput, kind: TaskPacketKind): BuiltT
 
   const hardFields: TaskPacketHardFields = {
     purpose: purposeFor(kind),
+    providerRequirements: providerRequirementFor(kind),
     contextCapsule: contextCapsuleFor(input, kind, shot, expectedOutputsFor(kind, shot, input.selectedAssetId, input.runtimeState)),
     storyFunction: shot.storyFunction,
     previousShot: previous,
@@ -646,6 +819,8 @@ function buildPacket(input: BuildTaskPacketsInput, kind: TaskPacketKind): BuiltT
     selectedAssetId: input.selectedAssetId,
     keyframePair,
     missing,
+    providerRegistry: input.providerRegistry,
+    providerPolicy: input.providerPolicy,
   });
   const envelope = makeSubagentEnvelope({
     packetId,
@@ -654,6 +829,8 @@ function buildPacket(input: BuildTaskPacketsInput, kind: TaskPacketKind): BuiltT
     hardFields,
     taskEnvelope,
     runtimeState: input.runtimeState,
+    providerRegistry: input.providerRegistry,
+    providerPolicy: input.providerPolicy,
   });
 
   return {

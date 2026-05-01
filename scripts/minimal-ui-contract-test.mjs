@@ -100,6 +100,11 @@ const directorProgressStrip = findFunctionBody(appSource, "DirectorProgressStrip
 const directorProgressStripState = findFunctionBody(appSource, "buildDirectorProgressStripState");
 const minimalTopNav = findFunctionBody(appSource, "MinimalTopNav");
 const minimalAgentPanel = findFunctionBody(appSource, "MinimalAgentPanel");
+const selectedScopeLabel = findFunctionBody(appSource, "selectedScopeLabel");
+const naturalWorkflowScopeLabel = findFunctionBody(appSource, "naturalWorkflowScopeLabel");
+const workflowStatusLabel = findFunctionBody(appSource, "workflowStatusLabel");
+const workflowNextStepLabel = findFunctionBody(appSource, "workflowNextStepLabel");
+const workflowBadgeLabels = findFunctionBody(appSource, "workflowBadgeLabels");
 const minimalAssetLibrary = findFunctionBody(appSource, "MinimalAssetLibrary");
 const minimalPreview = findFunctionBody(appSource, "MinimalPreview");
 const minimalProjectPlan = findFunctionBody(appSource, "buildMinimalProjectPlan");
@@ -126,6 +131,14 @@ const diagnosticsMode = findFunctionBody(appSource, "DiagnosticsMode");
 const settingsShell = findFunctionBody(appSource, "SettingsShell");
 const appBody = findFunctionBody(appSource, "App");
 const failures = [];
+const minimalAgentLanguageSurface = [
+  minimalAgentPanel,
+  selectedScopeLabel,
+  naturalWorkflowScopeLabel,
+  workflowStatusLabel,
+  workflowNextStepLabel,
+  workflowBadgeLabels,
+].join("\n");
 
 function check(condition, message) {
   if (!condition) failures.push(message);
@@ -182,11 +195,27 @@ check(
 checkMessage(requireWithin(minimalAgentPanel, /selectedShotId\s*:/, "MinimalAgentPanel selectedShotId workflow selection"));
 checkMessage(requireWithin(minimalAgentPanel, /selectedAssetId\s*:/, "MinimalAgentPanel selectedAssetId workflow selection"));
 checkMessage(requireWithin(minimalAgentPanel, /sectionId\s*:/, "MinimalAgentPanel sectionId workflow selection"));
+checkMessage(requireWithin(minimalAgentLanguageSurface, /描述你想怎么改\.\.\./, "MinimalAgentPanel natural input placeholder"));
+checkMessage(requireWithin(minimalAgentLanguageSurface, /准备修改/, "MinimalAgentPanel prepare-copy label"));
+checkMessage(requireWithin(minimalAgentLanguageSurface, /等待确认/, "MinimalAgentPanel confirmation-wait label"));
+checkMessage(requireWithin(minimalAgentLanguageSurface, /开始生成/, "MinimalAgentPanel generation starts only after confirmation copy"));
+for (const [term, pattern] of [
+  ["Preview plan", /Preview\s+plan/i],
+  ["Refine selected beat", /Refine\s+selected\s+beat/i],
+  ["Plan preview", /Plan\s+preview/i],
+  ["Ready to review", /Ready\s+to\s+review/i],
+  ["Needs confirmation", /Needs\s+confirmation/i],
+  ["Confirm before", /Confirm\s+before/i],
+  ["provider/credential/shell", /provider|credential|shell/i],
+]) {
+  check(!pattern.test(minimalAgentLanguageSurface), `MinimalAgentPanel must not expose ${term}`);
+}
 
 const phase14ProjectSurface = `${minimalTopNav}\n${minimalProjectPlan}`;
 checkMessage(requireWithin(phase14ProjectSurface, /Project/i, "Phase 14 Project entry in minimal top navigation"));
 checkMessage(requireWithin(phase14ProjectSurface, /project\.vibe/i, "Phase 14 project.vibe entry badge"));
-checkMessage(requireWithin(phase14ProjectSurface, /Plan\s+preview/i, "Phase 14 plan preview badge"));
+checkMessage(requireWithin(phase14ProjectSurface, /Ready/i, "Phase 14 ready badge"));
+check(!/Plan\s+preview/i.test(phase14ProjectSurface), "Minimal top navigation must not expose Plan preview copy");
 
 checkMessage(requireWithin(desktopShellView, /buildDesktopRuntimePlan\s*\(/, "Phase 15 Settings shell must use buildDesktopRuntimePlan"));
 checkMessage(requireWithin(settingsShell, /Desktop Runtime\s*\/\s*Permission Shell/i, "Phase 15 Desktop Runtime / Permission Shell in Settings"));
@@ -310,8 +339,12 @@ checkMessage(requireAny(appSource, [/Preview/, /function\s+PreviewTimeline/, /cl
 checkMessage(requireAny(appSource, [/Selected/, /Scope/], "Selected/Scope director context"));
 checkMessage(requireAny(appSource, [/Story/, /section\.label/, /storySections/, /All Shots/], "Story/section tabs"));
 checkMessage(requireAny(appSource, [/Diagnostics/, /diagnostics/], "Diagnostics entry"));
+for (const label of ["角色主参考", "三视图", "表情", "场景 master", "多视角", "风格锚图", "文本约束"]) {
+  checkMessage(requireWithin(minimalAssetLibrary, new RegExp(label), `Asset Library ${label} slot copy`));
+}
 
 checkMessage(requireAny(stylesSource, [/asset-library/, /\.asset-panel/], "Asset Library styling hook"));
+checkMessage(requireWithin(stylesSource, /asset-slot-strip/, "Asset Library slot strip styling hook"));
 checkMessage(requireAny(stylesSource, [/preview/, /preview-timeline/], "Preview styling hook"));
 checkMessage(requireAny(stylesSource, [/diagnostics/, /diagnostics-layout/], "Diagnostics styling hook"));
 

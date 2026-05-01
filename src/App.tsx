@@ -301,10 +301,10 @@ function assetStatusLabel(asset: AssetRecord) {
 }
 
 function selectedScopeLabel(shot?: ShotRecord, asset?: AssetRecord, sectionLabel?: string) {
-  if (shot) return `Selected ${formatShotNumber(shot.id)}`;
-  if (asset) return `Selected ${cleanLabel(asset.name)}`;
-  if (sectionLabel) return `Selected ${sectionLabel}`;
-  return "Selected project";
+  if (shot) return `正在看 ${formatShotNumber(shot.id)}`;
+  if (asset) return `正在看 ${cleanLabel(asset.name)}`;
+  if (sectionLabel) return `正在看 ${sectionLabel}`;
+  return "正在看整个项目";
 }
 
 function previewQueueKind(event: PreviewEvent): PreviewQueueItemKind {
@@ -335,7 +335,7 @@ function buildMinimalProjectPlan(runtimeState: ProjectRuntimeState): MinimalProj
   });
   return {
     entryLabel: plan.projectEntry.fileName === "project.vibe" ? "project.vibe" : plan.projectEntry.fileName,
-    planLabel: plan.validation.ok ? "Plan preview" : "Needs review",
+    planLabel: plan.validation.ok ? "Ready" : "Review",
   };
 }
 
@@ -5456,6 +5456,15 @@ function MinimalAssetLibrary({
   onSelectAsset: (id: string) => void;
 }) {
   const groups = groupAssets(audit.assets);
+  const slotItems = [
+    { label: "角色主参考", detail: groups.Characters.length ? `${groups.Characters.length} 张` : "待补" },
+    { label: "三视图", detail: groups.Characters.length ? "可补" : "待补" },
+    { label: "表情", detail: groups.Characters.length ? "可补" : "待补" },
+    { label: "场景 master", detail: groups.Scenes.length ? `${groups.Scenes.length} 张` : "待补" },
+    { label: "多视角", detail: groups.Scenes.length ? "可补" : "待补" },
+    { label: "风格锚图", detail: groups.Style.length ? `${groups.Style.length} 张` : "待补" },
+    { label: "文本约束", detail: audit.assets.length ? "跟随参考" : "待补" },
+  ];
 
   return (
     <main className="asset-library-view">
@@ -5465,8 +5474,16 @@ function MinimalAssetLibrary({
         <span><i className="dot warn" /> candidate</span>
         <span><i className="dot warn" /> review</span>
       </div>
+      <div className="asset-slot-strip" aria-label="参考素材槽位">
+        {slotItems.map((item) => (
+          <span key={item.label} className={item.detail === "待补" ? "missing" : undefined}>
+            <strong>{item.label}</strong>
+            <small>{item.detail}</small>
+          </span>
+        ))}
+      </div>
       <section className="asset-library-section">
-        <span className="asset-section-label">Characters</span>
+        <span className="asset-section-label">角色参考</span>
         <div className="asset-feature-grid characters">
           {groups.Characters.map((asset) => (
             <button
@@ -5481,11 +5498,11 @@ function MinimalAssetLibrary({
               </span>
             </button>
           ))}
-          {!groups.Characters.length && <div className="minimal-empty-line">No character anchors yet</div>}
+          {!groups.Characters.length && <div className="minimal-empty-line">还没有角色主参考</div>}
         </div>
       </section>
       <section className="asset-library-section">
-        <span className="asset-section-label">Scenes</span>
+        <span className="asset-section-label">场景 master</span>
         <div className="asset-feature-grid scenes">
           {groups.Scenes.slice(0, 8).map((asset) => (
             <button
@@ -5500,11 +5517,11 @@ function MinimalAssetLibrary({
               </span>
             </button>
           ))}
-          {!groups.Scenes.length && <div className="minimal-empty-line">No scene anchors yet</div>}
+          {!groups.Scenes.length && <div className="minimal-empty-line">还没有场景 master</div>}
         </div>
       </section>
       <section className="asset-library-section compact">
-        <span className="asset-section-label">Props / Style</span>
+        <span className="asset-section-label">道具 / 风格</span>
         <div className="anchor-list">
           {[...groups.Props, ...groups.Style].map((asset) => (
             <button
@@ -5731,14 +5748,14 @@ function MinimalAgentPanel({
   sectionId?: string;
 }) {
   const [text, setText] = useState("");
-  const [status, setStatus] = useState("Ready");
+  const [status, setStatus] = useState("等待描述");
   const [workflow, setWorkflow] = useState<ReturnType<typeof buildDirectorWorkflowState> | undefined>();
   const scopeLabel = selectedScopeLabel(shot, asset, sectionLabel);
 
   function prepareChange() {
     const userIntent = text.trim();
     if (!userIntent) {
-      setStatus("Add a change first");
+      setStatus("先写下想改哪里");
       return;
     }
     const nextWorkflow = buildDirectorWorkflowState({
@@ -5754,22 +5771,22 @@ function MinimalAgentPanel({
     setStatus(workflowStatusLabel(nextWorkflow.status));
   }
 
-  const badges = workflow ? workflowBadgeLabels(workflow).slice(0, 5) : ["Plan preview"];
-  const nextStep = workflow ? workflowNextStepLabel(workflow.status) : "Describe a story edit to preview the plan.";
-  const confirmationPrompt = workflow?.confirmationRequired ? "Confirm before this becomes an editable plan." : "";
+  const badges = workflow ? workflowBadgeLabels(workflow).slice(0, 5) : ["准备修改"];
+  const nextStep = workflow ? workflowNextStepLabel(workflow.status) : "写一句你想调整的画面、角色或节奏。";
+  const confirmationPrompt = workflow?.confirmationRequired ? "确认后再开始生成。" : "";
 
   return (
     <aside className="minimal-agent-panel">
       <span>{scopeLabel}</span>
       <div className="minimal-agent-input">
-        <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Refine selected beat" />
+        <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="描述你想怎么改..." />
         <button disabled={!text.trim()} onClick={prepareChange}>
           <Eye size={15} />
-          Preview plan
+          准备修改
         </button>
       </div>
       <strong className="minimal-agent-status">{status}</strong>
-      <div className="minimal-agent-badges" aria-label="Plan summary">
+      <div className="minimal-agent-badges" aria-label="修改摘要">
         {badges.map((badge) => (
           <small key={badge}>{badge}</small>
         ))}
@@ -5780,26 +5797,36 @@ function MinimalAgentPanel({
   );
 }
 
+function naturalWorkflowScopeLabel(label: string) {
+  return label
+    .replace(/^Multi-shot\s+/i, "多个镜头 ")
+    .replace(/^Shot\s+/i, "镜头 ")
+    .replace(/^Asset\s+/i, "素材 ")
+    .replace(/^Section\s+/i, "段落 ")
+    .replace(/^Export$/i, "导出")
+    .replace(/^Project$/i, "整个项目");
+}
+
 function workflowStatusLabel(status: DirectorWorkflowStatus) {
-  if (status === "dry_run_ready") return "Ready to review";
-  if (status === "pending_confirmation") return "Needs confirmation";
-  if (status === "blocked_missing_context") return "Needs context";
-  return "Blocked";
+  if (status === "dry_run_ready") return "准备修改";
+  if (status === "pending_confirmation") return "等待确认";
+  if (status === "blocked_missing_context") return "需要补充信息";
+  return "暂时不能改";
 }
 
 function workflowNextStepLabel(status: DirectorWorkflowStatus) {
-  if (status === "dry_run_ready") return "Review the plan before any change.";
-  if (status === "pending_confirmation") return "Confirm the selected edit after review.";
-  if (status === "blocked_missing_context") return "Add the missing selection context.";
-  return "Rewrite this as a story edit.";
+  if (status === "dry_run_ready") return "修改方向已准备好，确认后才会继续。";
+  if (status === "pending_confirmation") return "等待确认这次修改，再开始生成。";
+  if (status === "blocked_missing_context") return "补充镜头、角色或参考图后再试。";
+  return "换一种更具体的说法。";
 }
 
 function workflowBadgeLabels(workflow: ReturnType<typeof buildDirectorWorkflowState>) {
-  const labels = ["Plan preview", workflow.scopeLabel];
-  if (workflow.summary.readyTaskPackets > 0) labels.push(`${workflow.summary.readyTaskPackets} ready step(s)`);
-  if (workflow.summary.blockedTaskPackets > 0) labels.push("Needs context");
-  if (workflow.confirmationRequired) labels.push("Confirm first");
-  if (workflow.summary.exportPackageStatus === "ready") labels.push("Preview ready");
+  const labels = ["准备修改", naturalWorkflowScopeLabel(workflow.scopeLabel)];
+  if (workflow.summary.readyTaskPackets > 0) labels.push(`${workflow.summary.readyTaskPackets} 个修改点`);
+  if (workflow.summary.blockedTaskPackets > 0) labels.push("需要补充信息");
+  if (workflow.confirmationRequired) labels.push("等待确认");
+  if (workflow.summary.exportPackageStatus === "ready") labels.push("预览可看");
   return Array.from(new Set(labels));
 }
 

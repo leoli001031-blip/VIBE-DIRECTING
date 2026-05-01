@@ -59,10 +59,10 @@ function videoCapabilities(registry: ProviderRegistry): ProviderCapability[] {
 }
 
 function selectedVideoProviderId(job: GenerationJob | undefined, registry: ProviderRegistry): VideoTaskPlan["providerId"] {
-  if (job?.providerId === "jimeng-video") return "jimeng-video";
-  if (job?.providerId === "seedance2-provider") return "seedance2-provider";
+  if (job?.providerId && videoCapabilities(registry).some((capability) => capability.providerId === job.providerId)) return job.providerId;
   const defaultProvider = registry.defaultProviderBySlot["video.i2v"];
-  return defaultProvider === "jimeng-video" ? "jimeng-video" : "seedance2-provider";
+  if (defaultProvider && videoCapabilities(registry).some((capability) => capability.providerId === defaultProvider)) return defaultProvider;
+  return videoCapabilities(registry)[0]?.providerId || "registry_unresolved";
 }
 
 function selectedVideoCapability(

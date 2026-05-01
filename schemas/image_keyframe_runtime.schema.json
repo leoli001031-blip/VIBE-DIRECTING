@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vibecore.local/schemas/image_keyframe_runtime.schema.json",
   "title": "ImageKeyframeRuntimePlan",
-  "description": "Phase 17 dry-run Image2 asset and keyframe runtime plan with start-frame generation, end-frame edit-from-start derivation, Seedance handoff preview, and locked runtime gates.",
+  "description": "Phase 17 dry-run image asset and keyframe runtime plan with start-frame generation, end-frame edit-from-start derivation, registry-selected I2V handoff preview, and locked runtime gates.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -309,10 +309,14 @@
     "adapterPreview": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["requestId", "adapterId", "operation", "payload", "submitPolicy", "forbiddenFallbacks"],
+      "required": ["requestId", "adapterId", "providerId", "providerSlot", "requiredMode", "operation", "payload", "submitPolicy", "forbiddenFallbacks"],
       "properties": {
         "requestId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
-        "adapterId": { "type": "string", "const": "image2-dry-run" },
+        "adapterId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerSlot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+        "requiredMode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+        "capabilityId": { "type": "string" },
         "operation": { "$ref": "#/$defs/image2Operation" },
         "payload": {
           "type": "object",
@@ -364,7 +368,7 @@
           "items": { "type": "string" },
           "contains": { "const": "provider_or_mode_fallback" },
           "allOf": [
-            { "contains": { "const": "image2_provider_fallback" } },
+            { "contains": { "const": "provider_capability_fallback" } },
             { "contains": { "const": "text_to_video_fallback" } }
           ]
         }
@@ -562,10 +566,20 @@
       ],
       "properties": {
         "planId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
-        "targetProviderId": { "type": "string", "const": "seedance2-provider" },
+        "targetProviderId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
         "providerSlot": { "type": "string", "const": "video.i2v" },
         "requiredMode": { "type": "string", "const": "frames2video" },
-        "providerState": { "type": "string", "const": "parked_dry_run_only" },
+        "providerState": {
+          "type": "string",
+          "enum": [
+            "unavailable_dry_run_only",
+            "available_dry_run_only",
+            "enabled_dry_run_only",
+            "active_dry_run_only",
+            "parked_dry_run_only",
+            "planned_dry_run_only"
+          ]
+        },
         "status": { "type": "string", "enum": ["ready_for_manual_review", "blocked"] },
         "items": {
           "type": "array",
@@ -634,7 +648,7 @@
         "handoffId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
         "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
         "status": { "type": "string", "enum": ["ready_for_manual_review", "blocked"] },
-        "targetProviderId": { "type": "string", "const": "seedance2-provider" },
+        "targetProviderId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
         "providerSlot": { "type": "string", "const": "video.i2v" },
         "requiredMode": { "type": "string", "const": "frames2video" },
         "startFrameId": { "type": "string" },

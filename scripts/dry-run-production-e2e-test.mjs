@@ -28,16 +28,17 @@ function transpile(sourcePath, rewrites = []) {
 async function loadCoreModules() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vibe-dry-run-e2e-"));
   const modules = [
-    "assetLibraryCrud",
-    "projectStore",
-    "taskPacketBuilder",
-    "localOrchestrator",
-    "providerLiveGate",
-    "exportBuilder",
-    "visualConsistency",
+    ["providerCapabilities", []],
+    ["assetLibraryCrud", []],
+    ["projectStore", []],
+    ["taskPacketBuilder", [['from "./providerCapabilities"', 'from "./providerCapabilities.mjs"']]],
+    ["localOrchestrator", []],
+    ["providerLiveGate", []],
+    ["exportBuilder", []],
+    ["visualConsistency", []],
   ];
-  for (const moduleName of modules) {
-    fs.writeFileSync(path.join(tmpDir, `${moduleName}.mjs`), transpile(`src/core/${moduleName}.ts`), "utf8");
+  for (const [moduleName, rewrites] of modules) {
+    fs.writeFileSync(path.join(tmpDir, `${moduleName}.mjs`), transpile(`src/core/${moduleName}.ts`, rewrites), "utf8");
   }
   fs.writeFileSync(path.join(tmpDir, "storyChange.mjs"), transpile("src/core/storyChange.ts"), "utf8");
   fs.writeFileSync(
@@ -47,9 +48,10 @@ async function loadCoreModules() {
   );
 
   const imported = {};
-  for (const moduleName of [...modules, "directorEdit"]) {
+  for (const [moduleName] of modules) {
     imported[moduleName] = await import(pathToFileURL(path.join(tmpDir, `${moduleName}.mjs`)).href);
   }
+  imported.directorEdit = await import(pathToFileURL(path.join(tmpDir, "directorEdit.mjs")).href);
   return imported;
 }
 
@@ -469,9 +471,9 @@ const missingContextState = taskPacketBuilder.buildTaskPackets({
   requestedTaskKinds: ["image"],
   generatedAt,
 });
-assert(missingContextState.packets[0].status === "blocked_missing_context", "missing neighbor context must block task packet");
-assert(missingContextState.packets[0].missingContext.includes("previous_shot"), "missing previous context must be explicit");
-assert(missingContextState.packets[0].missingContext.includes("next_shot"), "missing next context must be explicit");
+assert(missingContextState.packets[0].status === "ready", "edge shot context must use boundary sentinels instead of blocking");
+assert(missingContextState.packets[0].hardFields.previousShot.shotId.startsWith("boundary_start_"), "missing previous context must become a start boundary sentinel");
+assert(missingContextState.packets[0].hardFields.nextShot.shotId.startsWith("boundary_end_"), "missing next context must become an end boundary sentinel");
 
 const readyPackets = packetState.packets.filter((packet) => packet.status === "ready");
 const orchestratorTaskPackets = readyPackets.map((packet, index) => ({

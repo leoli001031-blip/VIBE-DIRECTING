@@ -34,6 +34,8 @@ import { buildProviderLiveGateState, type ProviderLiveGateEnvelopeFact } from ".
 import { buildProviderExecutionPermissionGateState } from "./providerExecutionPermissionGate";
 import { buildProviderActionConfirmationReceiptState } from "./providerActionConfirmationReceipt";
 import { buildProviderExecutionHandoffState } from "./providerExecutionHandoff";
+import { buildExecutionLedgerState, type ExecutionLedgerMode, type ExecutionLedgerOutputSandbox } from "./executionLedger";
+import { buildRealExecutionGateState } from "./realExecutionGate";
 import { buildLocalOrchestratorState, type LocalOrchestratorTaskPacket } from "./localOrchestrator";
 import type { SubagentRuntimeGateReceipt } from "./subagentRuntimeGate";
 import type { SubagentWorkerRuntimePlan } from "./subagentWorkerRuntime";
@@ -67,6 +69,12 @@ export interface ProjectRuntimeStateBuildOptions {
   projectFactsIntegration?: ProjectRuntimeState["projectFactsIntegration"];
   agentCliMockRunner?: ProjectRuntimeState["agentCliMockRunner"];
   codexCliAdapterSpike?: ProjectRuntimeState["codexCliAdapterSpike"];
+  executionLedger?: ProjectRuntimeState["executionLedger"];
+  realExecutionGate?: ProjectRuntimeState["realExecutionGate"];
+  realTestMode?: ExecutionLedgerMode;
+  realTestBatchId?: string;
+  realTestShotIds?: string[];
+  realTestOutputSandbox?: Partial<ExecutionLedgerOutputSandbox>;
   subagentRuntimeGateReceipt?: SubagentRuntimeGateReceipt;
   subagentWorkerRuntimePlan?: SubagentWorkerRuntimePlan;
   subagentTaskEnvelope?: SubagentTaskEnvelope;
@@ -505,6 +513,38 @@ export function buildProjectRuntimeState(
     generatedAt,
     providerActionConfirmationReceipt,
   });
+  const realTestMode = options.realTestMode || "locked";
+  const realTestShotIds = options.realTestShotIds || (options.selectedShotId ? [options.selectedShotId] : []);
+  const realTestProjectId = view.sourceIndex.projectId || audit.projectTitle || "project";
+  const executionLedger = options.executionLedger || buildExecutionLedgerState({
+    generatedAt,
+    mode: realTestMode,
+    projectId: realTestProjectId,
+    batchId: options.realTestBatchId,
+    selectedShotIds: realTestShotIds,
+    outputSandbox: options.realTestOutputSandbox,
+    taskViews,
+    imageTaskPlans,
+    manifestMatches: taskViews.map((task) => task.manifestMatch),
+    qaHarness,
+    generationHarness,
+  });
+  const realExecutionGate = options.realExecutionGate || buildRealExecutionGateState({
+    generatedAt,
+    mode: realTestMode,
+    projectId: realTestProjectId,
+    batchId: options.realTestBatchId,
+    selectedShotIds: realTestShotIds,
+    outputSandbox: executionLedger.outputSandbox,
+    taskViews,
+    imageTaskPlans,
+    manifestMatches: taskViews.map((task) => task.manifestMatch),
+    qaHarness,
+    generationHarness,
+    localOrchestrator,
+    providerExecutionHandoff,
+    executionLedger,
+  });
   const generationHealthChecker = buildGenerationHealthCheckerState({
     generatedAt,
     imageTaskPlans,
@@ -601,6 +641,8 @@ export function buildProjectRuntimeState(
     providerExecutionPermissionGate,
     providerActionConfirmationReceipt,
     providerExecutionHandoff,
+    executionLedger,
+    realExecutionGate,
     localOrchestrator,
     generationHarness,
     filesystemWatcherHarness,
@@ -874,6 +916,36 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       generatedAt: state.generatedAt,
       providerActionConfirmationReceipt,
     });
+  const executionLedger =
+    state.executionLedger ||
+    buildExecutionLedgerState({
+      generatedAt: state.generatedAt,
+      mode: "locked",
+      projectId: state.sourceIndex.projectId || state.project.title || "project",
+      selectedShotIds: [],
+      taskViews: state.taskRuns.taskViews,
+      imageTaskPlans: state.imagePipeline.imageTaskPlans,
+      manifestMatches: state.manifestMatches.reports,
+      qaHarness,
+      generationHarness,
+    });
+  const realExecutionGate =
+    state.realExecutionGate ||
+    buildRealExecutionGateState({
+      generatedAt: state.generatedAt,
+      mode: "locked",
+      projectId: state.sourceIndex.projectId || state.project.title || "project",
+      selectedShotIds: [],
+      outputSandbox: executionLedger.outputSandbox,
+      taskViews: state.taskRuns.taskViews,
+      imageTaskPlans: state.imagePipeline.imageTaskPlans,
+      manifestMatches: state.manifestMatches.reports,
+      qaHarness,
+      generationHarness,
+      localOrchestrator,
+      providerExecutionHandoff,
+      executionLedger,
+    });
   const generationHealthChecker =
     state.generationHealthChecker ||
     buildGenerationHealthCheckerState({
@@ -945,6 +1017,8 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     providerExecutionPermissionGate,
     providerActionConfirmationReceipt,
     providerExecutionHandoff,
+    executionLedger,
+    realExecutionGate,
     localOrchestrator,
     generationHarness,
     filesystemWatcherHarness,

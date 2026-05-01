@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vibecore.local/schemas/image2_adapter_request.schema.json",
   "title": "Image2AdapterRequest",
-  "description": "Dry-run-only Image2 adapter payload skeleton. It carries source facts, not final provider prompt text.",
+  "description": "Dry-run-only image adapter payload skeleton. It carries source facts and the registry-selected adapter id, not final provider prompt text.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,7 +17,7 @@
   "properties": {
     "requestId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
     "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
-    "adapterId": { "type": "string", "const": "image2-dry-run" },
+    "adapterId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
     "operation": {
       "type": "string",
       "enum": ["text2image", "image2image", "reference_asset"]

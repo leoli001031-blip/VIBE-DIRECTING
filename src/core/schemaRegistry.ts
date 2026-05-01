@@ -157,6 +157,20 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ProviderExecutionHandoffState",
   },
   {
+    fileName: "execution_ledger.schema.json",
+    id: "https://vibecore.local/schemas/execution_ledger.schema.json",
+    version: schemaVersion,
+    purpose: "State-only scoped real-test execution ledger requiring selected project, batch, shots, validated envelope, output sandbox, manifest, and QA evidence while keeping actual execution locked.",
+    typeName: "ExecutionLedgerState",
+  },
+  {
+    fileName: "real_execution_gate.schema.json",
+    id: "https://vibecore.local/schemas/real_execution_gate.schema.json",
+    version: schemaVersion,
+    purpose: "Scoped real-test execution gate with default locked hard locks for worker spawn, provider submission, credentials, and file mutation.",
+    typeName: "RealExecutionGateState",
+  },
+  {
     fileName: "export_builder.schema.json",
     id: "https://vibecore.local/schemas/export_builder.schema.json",
     version: schemaVersion,
@@ -230,7 +244,7 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     fileName: "provider_registry.schema.json",
     id: "https://vibecore.local/schemas/provider_registry.schema.json",
     version: schemaVersion,
-    purpose: "Provider capability matrix for Image2-only image slots and parked video slots.",
+    purpose: "Provider capability matrix plus default provider selection config for image/video slots.",
     typeName: "ProviderRegistry",
   },
   {
@@ -286,14 +300,14 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     fileName: "image2_adapter_request.schema.json",
     id: "https://vibecore.local/schemas/image2_adapter_request.schema.json",
     version: schemaVersion,
-    purpose: "Image2 dry-run adapter payload contract with live submit forbidden.",
+    purpose: "Dry-run image adapter payload contract with live submit forbidden and adapter id selected by registry.",
     typeName: "Image2AdapterRequest",
   },
   {
     fileName: "image_keyframe_runtime.schema.json",
     id: "https://vibecore.local/schemas/image_keyframe_runtime.schema.json",
     version: schemaVersion,
-    purpose: "Phase 17 dry-run Image2 asset/keyframe runtime plan for start-frame generation, edit-from-start end frames, Seedance handoff preview, and runtime hard locks.",
+    purpose: "Phase 17 dry-run image asset/keyframe runtime plan for start-frame generation, edit-from-start end frames, registry-selected I2V handoff preview, and runtime hard locks.",
     typeName: "ImageKeyframeRuntimePlan",
   },
   {

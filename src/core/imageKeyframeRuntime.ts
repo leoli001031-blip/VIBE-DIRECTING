@@ -5,10 +5,14 @@ import type {
   ImageTaskPlan,
   KeyframePairDerivation,
   ProjectSourceIndex,
+  ProviderCapability,
+  ProviderExecutionState,
+  ProviderRegistry,
   ProviderSlot,
   RequiredMode,
   ShotPromptPlan,
 } from "./types";
+import { buildDefaultProviderRegistry, buildProviderRequirement, selectCapabilityForRequirement } from "./providerCapabilities";
 
 export const imageKeyframeRuntimeSchemaVersion = "0.1.0";
 export const imageKeyframeRuntimePhase = "phase17_image2_asset_keyframe_runtime";
@@ -97,7 +101,11 @@ export interface Image2RuntimeReference {
 
 export interface Image2RuntimeAdapterPreview {
   requestId: string;
-  adapterId: "image2-dry-run";
+  adapterId: string;
+  providerId: string;
+  providerSlot: ProviderSlot;
+  requiredMode: RequiredMode;
+  capabilityId?: string;
   operation: Image2RuntimeOperation;
   payload: {
     sourceIntent: string[];
@@ -178,7 +186,7 @@ export interface ImageKeyframePromotionHandoffItem {
   handoffId: string;
   shotId: string;
   status: "ready_for_manual_review" | "blocked";
-  targetProviderId: "seedance2-provider";
+  targetProviderId: string;
   providerSlot: "video.i2v";
   requiredMode: "frames2video";
   startFrameId?: string;
@@ -197,10 +205,10 @@ export interface ImageKeyframePromotionHandoffItem {
 
 export interface ImageKeyframePromotionHandoffPlan {
   planId: string;
-  targetProviderId: "seedance2-provider";
+  targetProviderId: string;
   providerSlot: "video.i2v";
   requiredMode: "frames2video";
-  providerState: "parked_dry_run_only";
+  providerState: `${ProviderExecutionState}_dry_run_only`;
   status: "ready_for_manual_review" | "blocked";
   items: ImageKeyframePromotionHandoffItem[];
   canSubmitProvider: false;
@@ -282,6 +290,7 @@ export interface BuildImageKeyframeRuntimePlanInput {
   promptPlans?: ShotPromptPlan[];
   imageTaskPlans?: ImageTaskPlan[];
   keyframePairs?: KeyframePairDerivation[];
+  providerRegistry?: ProviderRegistry;
 }
 
 interface RuntimeTaskSeed {
@@ -321,12 +330,15 @@ const runtimeLocks: ImageKeyframeRuntimeLocks = {
 };
 
 const imageSlots = new Set<ProviderSlot>(["image.generate", "image.edit", "image.reference_asset"]);
-const activeImage2ProviderPattern = /image2/i;
 const fastPattern = /\bfast\b/i;
 const vipPattern = /\bvip\b/i;
 
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right));
+}
+
+function safeId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, "_");
 }
 
 function requiredModeForSlot(slot: ProviderSlot, mode: RequiredMode): RequiredMode {
@@ -628,13 +640,25 @@ function referenceWarningsForPlan(references: Image2RuntimeReference[]): string[
   });
 }
 
-function commonPlanBlockers(seed: RuntimeTaskSeed, job?: GenerationJob): string[] {
+function capabilityForSeed(seed: RuntimeTaskSeed, registry: ProviderRegistry): ProviderCapability | undefined {
+  return registry.capabilities.find(
+    (capability) =>
+      capability.providerId === seed.providerId &&
+      capability.slot === seed.providerSlot &&
+      capability.requiredMode === seed.requiredMode,
+  );
+}
+
+function commonPlanBlockers(seed: RuntimeTaskSeed, registry: ProviderRegistry, job?: GenerationJob): string[] {
   const blockers = [...seed.blockers];
   const policyText = jobPolicyText(job);
+  const capability = capabilityForSeed(seed, registry);
 
-  if (!imageSlots.has(seed.providerSlot)) blockers.push(`${seed.providerSlot} is not an Image2 image slot.`);
-  if (!activeImage2ProviderPattern.test(seed.providerId)) blockers.push(`${seed.providerId} is not an Image2 provider.`);
-  if (isTextToVideo(seed.providerSlot, seed.requiredMode)) blockers.push("Text-to-video is forbidden for Phase 17 Image2 keyframe runtime.");
+  if (!imageSlots.has(seed.providerSlot)) blockers.push(`${seed.providerSlot} is not an image keyframe slot.`);
+  if (!capability) blockers.push(`${seed.providerId} is not registered for ${seed.providerSlot}/${seed.requiredMode}.`);
+  if (capability && capability.outputKind !== "image") blockers.push(`${capability.id} does not provide image output.`);
+  if (capability && capability.liveSubmitAllowed !== false) blockers.push(`${capability.id} must keep liveSubmitAllowed=false for dry-run keyframe planning.`);
+  if (isTextToVideo(seed.providerSlot, seed.requiredMode)) blockers.push("Text-to-video is forbidden for Phase 17 image keyframe runtime.");
   if (isProviderSubmitted(job)) blockers.push("Provider submission state is present; Phase 17 runtime plan must remain dry-run only.");
   if (fastPattern.test(policyText)) blockers.push("Fast model route is forbidden.");
   if (vipPattern.test(policyText)) blockers.push("VIP channel route is forbidden.");
@@ -650,7 +674,7 @@ function operationForStart(seed: RuntimeTaskSeed): Image2RuntimeOperation {
 }
 
 function forbiddenFallbacks(operation: Image2RuntimeOperation, frameRole: ImageKeyframeFrameRole): string[] {
-  const fallbacks = ["provider_or_mode_fallback", "image2_provider_fallback", "text_to_video_fallback"];
+  const fallbacks = ["provider_or_mode_fallback", "provider_capability_fallback", "text_to_video_fallback"];
   if (operation === "image2image") fallbacks.push("image2image_to_text2image");
   if (frameRole === "end_frame") fallbacks.push("end_frame_to_independent_text2image", "independent_end_frame_generation");
   if (frameRole === "reference_asset" && operation === "image2image") fallbacks.push("reference_edit_to_text2image");
@@ -662,11 +686,16 @@ function makeAdapterPreview(input: {
   operation: Image2RuntimeOperation;
   seed: RuntimeTaskSeed;
   references: Image2RuntimeReference[];
+  capabilityId?: string;
   sourceStartFrameId?: string;
 }): Image2RuntimeAdapterPreview {
   return {
     requestId: `image2_runtime_preview_${input.planId}`,
-    adapterId: "image2-dry-run",
+    adapterId: `${safeId(input.seed.providerId)}-dry-run`,
+    providerId: input.seed.providerId,
+    providerSlot: input.seed.providerSlot,
+    requiredMode: input.seed.requiredMode,
+    ...(input.capabilityId ? { capabilityId: input.capabilityId } : {}),
     operation: input.operation,
     payload: {
       sourceIntent: input.seed.sourceIntent,
@@ -698,18 +727,20 @@ function buildStartPlan(
   seed: RuntimeTaskSeed,
   job: GenerationJob | undefined,
   assetPlanning: ImageKeyframeAssetReferencePlanning,
+  registry: ProviderRegistry,
 ): Image2FramePlan {
   const references = referencesForPlan(seed.inputReferenceIds, assetPlanning);
   const operation = operationForStart(seed);
+  const capability = capabilityForSeed(seed, registry);
   const blockers = uniqueSorted([
-    ...commonPlanBlockers(seed, job),
+    ...commonPlanBlockers(seed, registry, job),
     ...referenceBlockersForPlan(references),
-    ...(seed.providerSlot === "image.reference_asset" ? ["Start frame must use Image2 generate or Image2 edit, not reference-asset slot."] : []),
+    ...(seed.providerSlot === "image.reference_asset" ? ["Start frame must use image.generate or image.edit, not reference-asset slot."] : []),
     ...(seed.providerSlot === "image.generate" && seed.requiredMode !== "text2image"
-      ? ["Image2 start-frame generation must use text2image."]
+      ? ["Start-frame generation must use text2image."]
       : []),
     ...(seed.providerSlot === "image.edit" && seed.requiredMode !== "image2image"
-      ? ["Image2 start-frame edit must use image2image and cannot fall back to text2image."]
+      ? ["Start-frame edit must use image2image and cannot fall back to text2image."]
       : []),
   ]);
   const warnings = uniqueSorted([...seed.warnings, ...referenceWarningsForPlan(references)]);
@@ -730,7 +761,7 @@ function buildStartPlan(
     inputReferenceIds: seed.inputReferenceIds,
     referenceStatuses: references,
     status: planStatus(blockers, seed),
-    adapterRequestPreview: makeAdapterPreview({ planId, operation, seed, references }),
+    adapterRequestPreview: makeAdapterPreview({ planId, operation, seed, references, capabilityId: capability?.id }),
     blockers,
     warnings,
     dryRunOnly: true,
@@ -764,9 +795,11 @@ function buildEndPlan(
   assetPlanning: ImageKeyframeAssetReferencePlanning,
   startPlans: Image2FramePlan[],
   keyframePairs: KeyframePairDerivation[],
+  registry: ProviderRegistry,
 ): Image2EndFramePlan {
   const references = referencesForPlan(seed.inputReferenceIds, assetPlanning);
   const { sourceStartFrameId, sourceStartFramePlanId, pair } = sourceStartFrameFor(seed, startPlans, keyframePairs);
+  const capability = capabilityForSeed(seed, registry);
   const independentEndFrame =
     seed.derivesFromStartFrame === false ||
     pair?.endDerivationSource === "independent_exception" ||
@@ -774,9 +807,9 @@ function buildEndPlan(
     seed.providerSlot === "image.generate" ||
     seed.requiredMode === "text2image";
   const blockers = uniqueSorted([
-    ...commonPlanBlockers(seed, job),
+    ...commonPlanBlockers(seed, registry, job),
     ...referenceBlockersForPlan(references),
-    ...(seed.providerSlot !== "image.edit" ? ["End frame must be an Image2 edit-from-start plan on image.edit."] : []),
+    ...(seed.providerSlot !== "image.edit" ? ["End frame must be an edit-from-start plan on image.edit."] : []),
     ...(seed.requiredMode !== "image2image" ? ["End frame must use image2image; independent text-to-image is forbidden."] : []),
     ...(seed.derivesFromStartFrame !== true ? ["End-frame prompt plan must explicitly derive from the start frame."] : []),
     ...(sourceStartFrameId ? [] : ["End-frame edit is missing its source start frame."]),
@@ -806,6 +839,7 @@ function buildEndPlan(
       operation: "image2image",
       seed,
       references,
+      capabilityId: capability?.id,
       sourceStartFrameId,
     }),
     endDerivation: {
@@ -844,8 +878,8 @@ function buildKeyframePairGates(
     const startPlan = startPlans.find((plan) => plan.shotId === shotId);
     const endPlan = endPlans.find((plan) => plan.shotId === shotId);
     const blockers = uniqueSorted([
-      ...(startPlan ? [] : ["Image2 start frame plan is missing."]),
-      ...(endPlan ? [] : ["Image2 end-frame edit-from-start plan is missing."]),
+      ...(startPlan ? [] : ["Image start frame plan is missing."]),
+      ...(endPlan ? [] : ["Image end-frame edit-from-start plan is missing."]),
       ...(pair ? [] : ["Keyframe pair derivation proof is missing."]),
       ...(pair && !pair.startFrameId ? ["Keyframe pair is missing startFrameId."] : []),
       ...(pair && !pair.endFrameId ? ["Keyframe pair is missing endFrameId."] : []),
@@ -881,12 +915,28 @@ function buildKeyframePairGates(
 function buildPromotionHandoffPlan(
   generatedAt: string,
   gates: ImageKeyframePairGate[],
+  registry: ProviderRegistry,
 ): ImageKeyframePromotionHandoffPlan {
+  const providerSelection = selectCapabilityForRequirement(
+    buildProviderRequirement({
+      slot: "video.i2v",
+      requiredMode: "frames2video",
+      inputKinds: ["text", "start_frame", "end_frame"],
+      outputKind: "video",
+      supports: { referenceImage: true, startEndFrame: true },
+      executionStates: ["parked", "planned", "unavailable"],
+      forbiddenFallbacks: ["frames2video_to_text2video"],
+      notes: ["Keyframe pair handoff target is resolved through the provider registry."],
+    }),
+    registry,
+  );
+  const targetProviderId = providerSelection.providerId;
+  const providerState = `${providerSelection.executionState}_dry_run_only` as const;
   const items = gates.map((gate): ImageKeyframePromotionHandoffItem => ({
-    handoffId: `seedance2_i2v_handoff_${gate.shotId}`,
+    handoffId: `i2v_handoff_${safeId(targetProviderId)}_${gate.shotId}`,
     shotId: gate.shotId,
-    status: gate.validForPromotionHandoff ? "ready_for_manual_review" : "blocked",
-    targetProviderId: "seedance2-provider",
+    status: gate.validForPromotionHandoff && providerSelection.blockers.length === 0 ? "ready_for_manual_review" : "blocked",
+    targetProviderId,
     providerSlot: "video.i2v",
     requiredMode: "frames2video",
     ...(gate.startFrameId ? { startFrameId: gate.startFrameId } : {}),
@@ -899,16 +949,21 @@ function buildPromotionHandoffPlan(
     fastModeAllowed: false,
     vipChannelAllowed: false,
     textToVideoAllowed: false,
-    blockers: gate.validForPromotionHandoff ? [] : uniqueSorted(gate.blockers.length ? gate.blockers : ["Keyframe pair gate is not ready for handoff."]),
+    blockers: gate.validForPromotionHandoff && providerSelection.blockers.length === 0
+      ? []
+      : uniqueSorted([
+        ...(gate.validForPromotionHandoff ? [] : gate.blockers.length ? gate.blockers : ["Keyframe pair gate is not ready for handoff."]),
+        ...providerSelection.blockers,
+      ]),
     warnings: gate.warnings,
   }));
 
   return {
-    planId: `seedance2_handoff_${generatedAt.replace(/[^0-9]/g, "").slice(0, 14) || "dry_run"}`,
-    targetProviderId: "seedance2-provider",
+    planId: `i2v_handoff_${safeId(targetProviderId)}_${generatedAt.replace(/[^0-9]/g, "").slice(0, 14) || "dry_run"}`,
+    targetProviderId,
     providerSlot: "video.i2v",
     requiredMode: "frames2video",
-    providerState: "parked_dry_run_only",
+    providerState,
     status: items.every((item) => item.status === "ready_for_manual_review") && items.length > 0 ? "ready_for_manual_review" : "blocked",
     items,
     canSubmitProvider: false,
@@ -919,7 +974,7 @@ function buildPromotionHandoffPlan(
     noVip: true,
     noTextToVideo: true,
     notes: [
-      "Seedance 2.0 handoff is plan-only in Phase 17.",
+      "I2V handoff target is resolved from the provider registry default/policy.",
       "Only derived start/end keyframe pairs can become future I2V handoff candidates.",
       "Fast, VIP, text-to-video, credential reads, and provider submit routes stay locked off.",
     ],
@@ -1079,8 +1134,8 @@ function buildRuntimeLockGates(input: {
     .filter((job) => isTextToVideo(job.slot, job.requiredMode))
     .map((job) => `${job.id} uses text-to-video.`);
   const image2FallbackViolations = [...input.startPlans, ...input.endPlans]
-    .filter((plan) => plan.blockers.some((blocker) => /fallback|not an Image2 provider|must use image2image|must use text2image/i.test(blocker)))
-    .map((plan) => `${plan.planId} violates Image2 slot/mode fallback policy.`);
+    .filter((plan) => plan.blockers.some((blocker) => /fallback|not registered|must use image2image|must use text2image/i.test(blocker)))
+    .map((plan) => `${plan.planId} violates image provider slot/mode fallback policy.`);
   const independentEndFrameViolations = [
     ...input.endPlans
       .filter((plan) => plan.endDerivation.derivesFrom !== "start_frame")
@@ -1098,25 +1153,26 @@ function buildRuntimeLockGates(input: {
     gate("noFast", "Fast model routes are forbidden.", fastViolations),
     gate("noVip", "VIP channels are forbidden.", vipViolations),
     gate("noTextToVideo", "Text-to-video is not an allowed Phase 17 path.", textToVideoViolations),
-    gate("noImage2Fallback", "Image2 slot/mode fallback is forbidden.", image2FallbackViolations),
+    gate("noImage2Fallback", "Image provider slot/mode fallback is forbidden.", image2FallbackViolations),
     gate("noIndependentEndFrame", "End frames must derive from start frames by default.", independentEndFrameViolations),
   ];
 }
 
 export function buildImageKeyframeRuntimePlan(input: BuildImageKeyframeRuntimePlanInput): ImageKeyframeRuntimePlan {
   const generatedAt = input.generatedAt || "1970-01-01T00:00:00.000Z";
+  const providerRegistry = input.providerRegistry || buildDefaultProviderRegistry(generatedAt);
   const jobs = input.jobs || [];
   const assetReferencePlanning = buildAssetReferencePlanning(input);
   const seeds = buildRuntimeTaskSeeds(input);
   const jobById = new Map(jobs.map((job) => [job.id, job]));
   const startSeeds = seeds.filter((seed) => seed.promptKind === "start_frame");
   const endSeeds = seeds.filter((seed) => seed.promptKind === "end_frame");
-  const image2StartFramePlans = startSeeds.map((seed) => buildStartPlan(seed, jobById.get(seed.jobId), assetReferencePlanning));
+  const image2StartFramePlans = startSeeds.map((seed) => buildStartPlan(seed, jobById.get(seed.jobId), assetReferencePlanning, providerRegistry));
   const image2EndFramePlans = endSeeds.map((seed) =>
-    buildEndPlan(seed, jobById.get(seed.jobId), assetReferencePlanning, image2StartFramePlans, input.keyframePairs || []),
+    buildEndPlan(seed, jobById.get(seed.jobId), assetReferencePlanning, image2StartFramePlans, input.keyframePairs || [], providerRegistry),
   );
   const keyframePairGates = buildKeyframePairGates(image2StartFramePlans, image2EndFramePlans, input.keyframePairs || []);
-  const promotionHandoffPlan = buildPromotionHandoffPlan(generatedAt, keyframePairGates);
+  const promotionHandoffPlan = buildPromotionHandoffPlan(generatedAt, keyframePairGates, providerRegistry);
   const runtimeLockGates = buildRuntimeLockGates({
     jobs,
     startPlans: image2StartFramePlans,
@@ -1138,8 +1194,8 @@ export function buildImageKeyframeRuntimePlan(input: BuildImageKeyframeRuntimePl
     ...visualConsistencyGates.flatMap((gateItem) => gateItem.blockers),
     ...promotionHandoffPlan.items.flatMap((item) => item.blockers),
     ...runtimeLockGates.flatMap((gateItem) => gateItem.violations),
-    ...(image2StartFramePlans.length ? [] : ["No Image2 start frame plans were produced."]),
-    ...(image2EndFramePlans.length ? [] : ["No Image2 end-frame edit-from-start plans were produced."]),
+    ...(image2StartFramePlans.length ? [] : ["No image start frame plans were produced."]),
+    ...(image2EndFramePlans.length ? [] : ["No image end-frame edit-from-start plans were produced."]),
   ]);
   const warnings = uniqueSorted([
     ...assetReferencePlanning.warnings,

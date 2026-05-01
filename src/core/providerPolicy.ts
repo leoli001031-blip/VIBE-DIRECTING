@@ -1,7 +1,7 @@
 import type { AuditIssue, GenerationJob, ProviderPolicy, ProviderRule } from "./types";
 
 export const defaultProviderPolicy: ProviderPolicy = {
-  strictImageProvider: "image2_only",
+  strictImageProvider: "registry_default",
   rules: [
     {
       slot: "image.generate",

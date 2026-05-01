@@ -36,7 +36,8 @@ async function loadDirectorWorkflow() {
   const modules = [
     ["storyChange.ts", "storyChange.mjs", []],
     ["directorEdit.ts", "directorEdit.mjs", [['from "./storyChange"', 'from "./storyChange.mjs"']]],
-    ["taskPacketBuilder.ts", "taskPacketBuilder.mjs", []],
+    ["providerCapabilities.ts", "providerCapabilities.mjs", []],
+    ["taskPacketBuilder.ts", "taskPacketBuilder.mjs", [['from "./providerCapabilities"', 'from "./providerCapabilities.mjs"']]],
     ["localOrchestrator.ts", "localOrchestrator.mjs", []],
     ["providerLiveGate.ts", "providerLiveGate.mjs", []],
     ["exportBuilder.ts", "exportBuilder.mjs", []],
@@ -182,6 +183,9 @@ assert(exportWorkflow.visibleBadges.includes("Dry run only"), "workflow must exp
 
 const missingContextRuntime = lockReferenceAssets(clone(runtimeState));
 missingContextRuntime.storyFlow.shots = [missingContextRuntime.storyFlow.shots[0]];
+for (const asset of missingContextRuntime.visualMemory.assets.slice(0, 2)) {
+  asset.usedByShotIds = [missingContextRuntime.storyFlow.shots[0].id];
+}
 const missingContextWorkflow = buildDirectorWorkflowState({
   runtimeState: missingContextRuntime,
   generatedAt,
@@ -189,11 +193,17 @@ const missingContextWorkflow = buildDirectorWorkflowState({
   selection: { selectedShotId: missingContextRuntime.storyFlow.shots[0].id },
 });
 assert(
-  missingContextWorkflow.taskPacketState.packets.some((packet) => packet.status === "blocked_missing_context"),
-  "missing neighbor shot context must block packets",
+  missingContextWorkflow.taskPacketState.packets.every((packet) => !packet.missingContext.includes("previous_shot") && !packet.missingContext.includes("next_shot")),
+  "edge shot context must use boundary sentinels instead of neighbor blockers",
 );
-assert(missingContextWorkflow.summary.blockedTaskPackets > 0, "missing context must be counted");
-assert(missingContextWorkflow.nextActions.some((action) => action.includes("missing")), "missing context must produce readable next action");
+assert(
+  missingContextWorkflow.taskPacketState.packets.some(
+    (packet) =>
+      packet.hardFields?.previousShot.shotId.startsWith("boundary_start_") &&
+      packet.hardFields?.nextShot.shotId.startsWith("boundary_end_"),
+  ),
+  "edge shot workflow must expose boundary-aware packet context",
+);
 
 const noAssetRuntime = clone(runtimeState);
 noAssetRuntime.visualMemory.assets = [];

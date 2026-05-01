@@ -18,9 +18,9 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-async function importTs(pathValue) {
+async function importTs(pathValue, rewrites = []) {
   const source = fs.readFileSync(pathValue, "utf8");
-  const output = ts.transpileModule(source, {
+  let output = ts.transpileModule(source, {
     compilerOptions: {
       module: ts.ModuleKind.ES2022,
       target: ts.ScriptTarget.ES2022,
@@ -28,8 +28,25 @@ async function importTs(pathValue) {
     },
     fileName: pathValue,
   }).outputText;
+  for (const [from, to] of rewrites) {
+    output = output.replaceAll(from, to);
+  }
   const encoded = Buffer.from(`${output}\n//# sourceURL=${pathToFileURL(pathValue).href}`).toString("base64");
   return import(`data:text/javascript;base64,${encoded}`);
+}
+
+async function importImageKeyframeRuntime() {
+  const providerCapabilitiesSource = fs.readFileSync("src/core/providerCapabilities.ts", "utf8");
+  const providerCapabilitiesOutput = ts.transpileModule(providerCapabilitiesSource, {
+    compilerOptions: {
+      module: ts.ModuleKind.ES2022,
+      target: ts.ScriptTarget.ES2022,
+      importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+    },
+    fileName: "src/core/providerCapabilities.ts",
+  }).outputText;
+  const providerCapabilitiesUrl = `data:text/javascript;base64,${Buffer.from(`${providerCapabilitiesOutput}\n//# sourceURL=${pathToFileURL("src/core/providerCapabilities.ts").href}`).toString("base64")}`;
+  return importTs("src/core/imageKeyframeRuntime.ts", [['from "./providerCapabilities";', `from "${providerCapabilitiesUrl}";`]]);
 }
 
 const policy = {
@@ -7145,7 +7162,7 @@ if (!runtimeState.voiceAudioSettings) {
   });
 }
 if (!runtimeState.imageKeyframeRuntime) {
-  const { buildImageKeyframeRuntimePlan } = await importTs("src/core/imageKeyframeRuntime.ts");
+  const { buildImageKeyframeRuntimePlan } = await importImageKeyframeRuntime();
   runtimeState.imageKeyframeRuntime = buildImageKeyframeRuntimePlan({
     generatedAt: runtimeState.generatedAt,
     sourceIndex: runtimeState.sourceIndex,

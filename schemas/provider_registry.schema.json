@@ -2,15 +2,33 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vibecore.local/schemas/provider_registry.schema.json",
   "title": "ProviderRegistry",
-  "description": "Provider capability matrix for Phase 4 dry-run contracts.",
+  "description": "Provider capability matrix and default provider selection configuration for Phase 4 dry-run contracts.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "registryVersion", "strictImageProvider", "defaultProviderBySlot", "capabilities", "notes"],
+  "required": ["schemaVersion", "registryVersion", "defaultProviderBySlot", "capabilities", "notes"],
   "properties": {
     "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
     "registryVersion": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
     "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
-    "strictImageProvider": { "type": "string", "const": "image2_only" },
+    "strictImageProvider": {
+      "type": "string",
+      "enum": ["registry_default", "image2_only"],
+      "description": "Legacy compatibility label only; selection must come from defaultProviderBySlot or policy."
+    },
+    "selectionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "defaultsAreConfiguration", "taskPacketsCarryRequirements", "notes"],
+      "properties": {
+        "strategy": { "type": "string", "const": "registry_default" },
+        "defaultsAreConfiguration": { "type": "boolean", "const": true },
+        "taskPacketsCarryRequirements": { "type": "boolean", "const": true },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
     "defaultProviderBySlot": {
       "type": "object",
       "additionalProperties": {

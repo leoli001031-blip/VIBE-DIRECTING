@@ -139,6 +139,39 @@ const snapshot = projectStore.createProjectStoreSnapshot({
       },
     },
   ],
+  shotLayouts: [
+    {
+      shotId: "shot_001",
+      value: {
+        schemaVersion: "0.1.0",
+        id: "shot_layout_001",
+        shotId: "shot_001",
+        sceneId: "scene_room_locked",
+        spatialAnchors: ["door", "window"],
+      },
+    },
+  ],
+  spatialMemory: {
+    schemaVersion: "0.1.0",
+    id: "spatial_memory_phase_19",
+    anchors: [{ id: "door", label: "Door" }],
+  },
+  sceneAssetPacks: [
+    {
+      packId: "scene_room_locked",
+      value: {
+        schemaVersion: "0.1.0",
+        id: "scene_pack_room",
+        sceneId: "scene_room_locked",
+        status: "locked",
+      },
+    },
+  ],
+  voiceMemory: {
+    schemaVersion: "0.1.0",
+    id: "voice_memory_phase_19",
+    voices: [{ id: "narrator", status: "planned" }],
+  },
   sourceIndex: {
     projectId: "phase_19_project",
     projectVersion: "0.19.0",
@@ -165,10 +198,17 @@ assert(createGate.directoryCreateAllowed === true, "directory creation should be
 assert(createGate.canExecute === true, `create gate should execute: ${createGate.blockers.join("; ")}`);
 assert(createGate.whitelist.includes("project.vibe"), "project.vibe must be whitelisted");
 assert(createGate.whitelist.includes("runtime-state.json"), "runtime-state cache path must be whitelisted");
+assert(createGate.whitelist.includes("shots/shot_001/shot_layout.vibe.json"), "shot_layout sidecar path must be whitelisted");
+assert(createGate.whitelist.includes("spatial_memory/spatial_memory.vibe.json"), "spatial_memory sidecar path must be whitelisted");
+assert(createGate.whitelist.includes("visual_memory/scene_asset_packs/scene_room_locked.vibe.json"), "scene_asset_pack sidecar path must be whitelisted");
+assert(createGate.whitelist.includes("voice_memory/voice_memory.vibe.json"), "voice_memory sidecar path must be whitelisted");
 assert(createGate.whitelist.every((path) => !/^(?:[A-Za-z]:[\\/]|\/|\/\/)/.test(path)), "whitelist must not include absolute paths");
 assert(createGate.entries.some((entry) => entry.operation === "create_directory" && entry.path === "shots/shot_001"), "shot directory must be planned");
 assert(createGate.entries.some((entry) => entry.operation === "write_file" && entry.path === "project.vibe"), "project.vibe write entry missing");
 assert(createGate.entries.some((entry) => entry.operation === "write_file" && entry.path === "runtime-state.json"), "runtime-state cache write entry missing");
+for (const role of ["shot_layout", "spatial_memory", "scene_asset_pack", "voice_memory"]) {
+  assert(createGate.entries.some((entry) => entry.operation === "write_file" && entry.role === role), `${role} write entry missing`);
+}
 
 for (const key of [
   "projectRootOnly",
@@ -195,6 +235,10 @@ assert(adapter.files.has("project.vibe"), "project.vibe should be written throug
 assert(adapter.files.has("story_flow/story_flow.vibe.json"), "story_flow should be written through adapter");
 assert(adapter.files.has("visual_memory/visual_memory.vibe.json"), "visual_memory should be written through adapter");
 assert(adapter.files.has("shots/shot_001/shot_spec.vibe.json"), "shot spec should be written through adapter");
+assert(adapter.files.has("shots/shot_001/shot_layout.vibe.json"), "shot_layout should be written through adapter");
+assert(adapter.files.has("spatial_memory/spatial_memory.vibe.json"), "spatial_memory should be written through adapter");
+assert(adapter.files.has("visual_memory/scene_asset_packs/scene_room_locked.vibe.json"), "scene_asset_pack should be written through adapter");
+assert(adapter.files.has("voice_memory/voice_memory.vibe.json"), "voice_memory should be written through adapter");
 assert(adapter.files.has("runtime-state.json"), "runtime-state derived cache should be written through adapter");
 
 const projectVibe = JSON.parse(adapter.files.get("project.vibe"));

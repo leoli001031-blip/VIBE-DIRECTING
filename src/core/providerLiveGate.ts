@@ -349,7 +349,7 @@ function pairQaPass(taskPlan: ImageTaskPlan, shots: ShotRecord[]): { pass: boole
 function image2RequestValid(request?: Image2AdapterRequest): boolean {
   return Boolean(
     request &&
-      request.adapterId === "image2-dry-run" &&
+      request.adapterId &&
       request.payload.outputPath &&
       Array.isArray(request.payload.sourceIntent) &&
       request.submitPolicy.dry_run_only === true &&

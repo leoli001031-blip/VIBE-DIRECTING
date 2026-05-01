@@ -36,6 +36,8 @@
     "provider-execution-permission-gate:test": "node scripts/provider-execution-permission-gate-test.mjs",
     "provider-action-confirmation-receipt:test": "node scripts/provider-action-confirmation-receipt-test.mjs",
     "provider-execution-handoff:test": "node scripts/provider-execution-handoff-test.mjs",
+    "execution-ledger:test": "node scripts/execution-ledger-test.mjs",
+    "real-execution-gate:test": "node scripts/real-execution-gate-test.mjs",
     "phase-roadmap:test": "node scripts/phase-roadmap-runtime-test.mjs",
     "export-builder:test": "node scripts/export-builder-test.mjs",
     "export-worker:test": "node scripts/export-worker-test.mjs",

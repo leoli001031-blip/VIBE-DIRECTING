@@ -1,8 +1,11 @@
 import type {
   GenerationJob,
   ProviderCapability,
+  ProviderCapabilityRequirement,
   ProviderCapabilitySupport,
   ProviderCapabilityValidationResult,
+  ProviderExecutionState,
+  ProviderPolicy,
   ProviderRegistry,
   ProviderSlot,
   RequiredMode,
@@ -29,6 +32,22 @@ function capability(input: Omit<ProviderCapability, "id" | "liveSubmitAllowed">)
     ...input,
     id: `${input.providerId}:${input.slot}:${input.requiredMode}`,
     liveSubmitAllowed: false,
+  };
+}
+
+function requirement(input: ProviderCapabilityRequirement): ProviderCapabilityRequirement {
+  return input;
+}
+
+function selectionPolicy(): NonNullable<ProviderRegistry["selectionPolicy"]> {
+  return {
+    strategy: "registry_default",
+    defaultsAreConfiguration: true,
+    taskPacketsCarryRequirements: true,
+    notes: [
+      "Provider identity is selected from registry defaults or policy rules.",
+      "Task packets must carry slot, requiredMode, and capability requirements instead of hard-coding provider identity.",
+    ],
   };
 }
 
@@ -144,26 +163,162 @@ export function buildDefaultProviderRegistry(generatedAt?: string): ProviderRegi
       forbiddenFallbacks: [],
       notes: ["Text-to-video is explicitly parked and cannot be used as an image/video fallback."],
     }),
+    capability({
+      providerId: "audio-planned-provider",
+      providerName: "Planned Audio TTS Provider",
+      slot: "audio.tts",
+      requiredMode: "tts",
+      executionState: "planned",
+      inputKinds: ["text"],
+      outputKind: "audio",
+      supports: support(),
+      maxReferenceImages: 0,
+      forbiddenFallbacks: [],
+      notes: ["Planned dry-run audio capability for task packet abstraction only."],
+    }),
+    capability({
+      providerId: "subagent-worker",
+      providerName: "Structured Subagent Worker",
+      slot: "local.workflow",
+      requiredMode: "not_applicable",
+      executionState: "planned",
+      inputKinds: ["text"],
+      outputKind: "metadata",
+      supports: support(),
+      maxReferenceImages: 0,
+      forbiddenFallbacks: [],
+      notes: ["Local workflow capability placeholder for audit/export/task packet envelopes."],
+    }),
   ];
 
   return {
     schemaVersion,
     registryVersion: "provider-registry/phase-4.0",
     generatedAt,
-    strictImageProvider: "image2_only",
+    strictImageProvider: "registry_default",
+    selectionPolicy: selectionPolicy(),
     defaultProviderBySlot: {
       "image.generate": "openai-image2-codex-cli",
       "image.edit": "openai-image2-api",
       "image.reference_asset": "openai-image2-api",
       "video.i2v": "seedance2-provider",
       "video.t2v.experimental": "none",
+      "audio.tts": "audio-planned-provider",
+      "local.workflow": "subagent-worker",
     },
     capabilities,
     notes: [
       "Provider capability matrix is a dry-run contract.",
-      "Image slots are Image2-only; image.edit never falls back to text2image.",
-      "Video providers are parked and liveSubmitAllowed is false.",
+      "Named providers in defaultProviderBySlot are configuration defaults, not architecture constants.",
+      "Image edit never falls back to text2image unless a future registry capability explicitly changes the contract.",
+      "Video providers are parked by default and liveSubmitAllowed is false.",
     ],
+  };
+}
+
+export function buildProviderRequirement(input: {
+  slot: ProviderSlot;
+  requiredMode: RequiredMode;
+  inputKinds: ProviderCapabilityRequirement["inputKinds"];
+  outputKind: ProviderCapabilityRequirement["outputKind"];
+  supports?: ProviderCapabilityRequirement["supports"];
+  maxReferenceImages?: number;
+  forbiddenFallbacks?: string[];
+  executionStates?: ProviderExecutionState[];
+  notes?: string[];
+}): ProviderCapabilityRequirement {
+  return requirement({
+    slot: input.slot,
+    requiredMode: input.requiredMode,
+    inputKinds: input.inputKinds,
+    outputKind: input.outputKind,
+    supports: input.supports,
+    maxReferenceImages: input.maxReferenceImages,
+    forbiddenFallbacks: input.forbiddenFallbacks || [],
+    executionStates: input.executionStates,
+    notes: input.notes || [],
+  });
+}
+
+function supportsRequirement(
+  capabilitySupport: ProviderCapabilitySupport,
+  requiredSupport: ProviderCapabilityRequirement["supports"] = {},
+): boolean {
+  return Object.entries(requiredSupport).every(([key, value]) => {
+    const supportKey = key as keyof ProviderCapabilitySupport;
+    return capabilitySupport[supportKey] === value;
+  });
+}
+
+export function getCapabilitiesForRequirement(
+  requirement: ProviderCapabilityRequirement,
+  registry: ProviderRegistry = buildDefaultProviderRegistry(),
+): ProviderCapability[] {
+  return registry.capabilities.filter((item) => {
+    const inputKindsOk = requirement.inputKinds.every((kind) => item.inputKinds.includes(kind));
+    const executionStateOk = !requirement.executionStates?.length || requirement.executionStates.includes(item.executionState);
+    const maxReferenceImagesOk = requirement.maxReferenceImages === undefined || item.maxReferenceImages >= requirement.maxReferenceImages;
+    const fallbackPolicyOk = (requirement.forbiddenFallbacks || []).every((fallback) => item.forbiddenFallbacks.includes(fallback));
+    return item.slot === requirement.slot
+      && item.requiredMode === requirement.requiredMode
+      && item.outputKind === requirement.outputKind
+      && inputKindsOk
+      && executionStateOk
+      && maxReferenceImagesOk
+      && fallbackPolicyOk
+      && supportsRequirement(item.supports, requirement.supports);
+  });
+}
+
+function ruleForRequirement(requirement: ProviderCapabilityRequirement, policy?: ProviderPolicy) {
+  return policy?.rules.find((rule) => rule.slot === requirement.slot && rule.allowedModes.includes(requirement.requiredMode));
+}
+
+function unique(values: Array<string | undefined>): string[] {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+export function selectCapabilityForRequirement(
+  requirement: ProviderCapabilityRequirement,
+  registry: ProviderRegistry = buildDefaultProviderRegistry(),
+  policy?: ProviderPolicy,
+): {
+  requirement: ProviderCapabilityRequirement;
+  capability?: ProviderCapability;
+  providerId: string;
+  executionState: ProviderExecutionState;
+  capabilityId?: string;
+  selectionSource: "registry_default" | "policy_active_provider" | "first_matching_capability" | "unresolved";
+  blockers: string[];
+  warnings: string[];
+} {
+  const capabilities = getCapabilitiesForRequirement(requirement, registry);
+  const rule = ruleForRequirement(requirement, policy);
+  const preferredProviderIds = unique([
+    registry.defaultProviderBySlot[requirement.slot],
+    rule?.activeProvider,
+  ]);
+  const selectedFromDefault = preferredProviderIds
+    .map((providerId) => capabilities.find((item) => item.providerId === providerId))
+    .find(Boolean);
+  const selected = selectedFromDefault || capabilities[0];
+  const selectionSource = selected
+    ? selected.providerId === registry.defaultProviderBySlot[requirement.slot]
+      ? "registry_default"
+      : selected.providerId === rule?.activeProvider
+        ? "policy_active_provider"
+        : "first_matching_capability"
+    : "unresolved";
+
+  return {
+    requirement,
+    capability: selected,
+    providerId: selected?.providerId || preferredProviderIds[0] || "registry_unresolved",
+    executionState: selected?.executionState || rule?.executionState || "planned",
+    capabilityId: selected?.id,
+    selectionSource,
+    blockers: selected ? [] : [`No provider capability supports ${requirement.slot}/${requirement.requiredMode}.`],
+    warnings: selected && selected.liveSubmitAllowed !== false ? ["Selected provider capability is missing the dry-run liveSubmitAllowed=false lock."] : [],
   };
 }
 

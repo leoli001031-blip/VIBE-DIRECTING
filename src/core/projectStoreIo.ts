@@ -112,6 +112,10 @@ const validEntryRoles: Array<ProjectStoreIoEntry["role"]> = [
   "story_flow",
   "visual_memory",
   "shot_spec",
+  "shot_layout",
+  "spatial_memory",
+  "scene_asset_pack",
+  "voice_memory",
   "source_index",
   "runtime_state",
   "project_directory",
@@ -274,8 +278,18 @@ function factContent(snapshot: ProjectStoreSnapshot, factFile: ProjectStoreFactF
   if (factFile.role === "production_bible") return snapshot.facts.productionBible || {};
   if (factFile.role === "story_flow") return snapshot.facts.storyFlow;
   if (factFile.role === "visual_memory") return snapshot.facts.visualMemory;
+  if (factFile.role === "spatial_memory") return snapshot.facts.spatialMemory || {};
+  if (factFile.role === "voice_memory") return snapshot.facts.voiceMemory || {};
   if (factFile.role === "source_index") return snapshot.facts.sourceIndex || {};
   if (factFile.role === "runtime_state") return runtimeStateFactContent(snapshot);
+  if (factFile.role === "shot_layout") {
+    const layout = (snapshot.facts.shotLayouts || []).find((item) => normalizePath(item.path.path) === normalizePath(factFile.path.path));
+    return layout?.value || {};
+  }
+  if (factFile.role === "scene_asset_pack") {
+    const pack = (snapshot.facts.sceneAssetPacks || []).find((item) => normalizePath(item.path.path) === normalizePath(factFile.path.path));
+    return pack?.value || {};
+  }
   const shot = snapshot.facts.shotSpecs.find((item) => normalizePath(item.path.path) === normalizePath(factFile.path.path));
   return shot?.value || {};
 }
