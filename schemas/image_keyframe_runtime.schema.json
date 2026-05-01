@@ -15,6 +15,7 @@
     "image2StartFramePlans",
     "image2EndFramePlans",
     "keyframePairGates",
+    "visualConsistencyGates",
     "promotionHandoffPlan",
     "runtimeLocks",
     "runtimeLockGates",
@@ -43,6 +44,20 @@
     "keyframePairGates": {
       "type": "array",
       "items": { "$ref": "#/$defs/keyframePairGate" }
+    },
+    "visualConsistencyGates": {
+      "type": "array",
+      "minItems": 7,
+      "items": { "$ref": "#/$defs/visualConsistencyGate" },
+      "allOf": [
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "identity_gate" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "scene_gate" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "pair_gate" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "story_gate" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "prop_gate" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "style_gate" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "motion_gate" } }, "required": ["gateId"] } }
+      ]
     },
     "promotionHandoffPlan": { "$ref": "#/$defs/promotionHandoffPlan" },
     "runtimeLocks": { "$ref": "#/$defs/hardLocks" },
@@ -564,6 +579,31 @@
         "noVip": { "type": "boolean", "const": true },
         "noTextToVideo": { "type": "boolean", "const": true },
         "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "visualConsistencyGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gateId", "status", "detail", "sourceRefs", "blockers", "warnings"],
+      "properties": {
+        "gateId": {
+          "type": "string",
+          "enum": ["identity_gate", "scene_gate", "pair_gate", "story_gate", "prop_gate", "style_gate", "motion_gate"]
+        },
+        "status": { "type": "string", "enum": ["pass", "blocked", "warning"] },
+        "detail": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
           "type": "array",
           "items": { "type": "string" }
         }

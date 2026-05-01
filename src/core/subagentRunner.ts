@@ -30,22 +30,38 @@ export interface SubagentRunnerFreeTextTaskRequest {
 
 export interface BuildSubagentRunnerStateInput {
   generatedAt: string;
+  taskPackets?: SubagentRunnerTaskPacketInput[];
   videoExecutionPreview?: VideoExecutionPreviewState;
   generationHarness?: GenerationHarnessState;
   qaHarness?: QaHarnessState;
   freeTextTaskRequests?: SubagentRunnerFreeTextTaskRequest[];
 }
 
-export const subagentRunnerTaskKinds: SubagentRunnerTaskKind[] = [
+export interface SubagentRunnerTaskPacketInput {
+  packetId: string;
+  taskKind: string;
+  status?: string;
+  envelopeId?: string;
+  envelope?: SubagentTaskEnvelope;
+  missingContext?: string[];
+  blockedReasons?: string[];
+  sourceRefs?: string[];
+}
+
+export const subagentRunnerTaskKinds = [
   "image",
   "asset",
+  "start_frame",
+  "end_frame",
+  "image_edit",
+  "identity_qa",
   "pair_qa",
   "scene_qa",
   "story_audit",
   "video_execution",
   "audio",
   "export",
-];
+] as unknown as SubagentRunnerTaskKind[];
 
 export const subagentRunnerHardLocks: SubagentRunnerHardLocks = {
   dryRunOnly: true,
@@ -62,7 +78,7 @@ export const subagentRunnerHardLocks: SubagentRunnerHardLocks = {
   liveSubmitAllowed: false,
 };
 
-export const subagentRunnerPacketRequirements: SubagentRunnerPacketRequirement[] = [
+export const subagentRunnerPacketRequirements = [
   {
     requirementId: "source_index_hash",
     label: "Source Index Hash",
@@ -76,6 +92,41 @@ export const subagentRunnerPacketRequirements: SubagentRunnerPacketRequirement[]
     required: true,
     schemaPath: "SubagentTaskEnvelope.providerPolicySummary",
     notes: ["Provider slot, mode, and fallback constraints must be present before worker planning."],
+  },
+  {
+    requirementId: "context_capsule",
+    label: "Context Capsule",
+    required: true,
+    schemaPath: "SubagentTaskEnvelope.userIntent + storyFunction + shotId",
+    notes: ["Workers need a stable capsule for task kind, shot, story function, source hash, and expected output."],
+  },
+  {
+    requirementId: "reference_authority",
+    label: "Reference Authority",
+    required: true,
+    schemaPath: "SubagentTaskEnvelope.lockedReferences + forbiddenReferences + authorityPriority",
+    notes: ["Positive and forbidden references must be explicit so the worker cannot infer authority from chat text."],
+  },
+  {
+    requirementId: "before_after_shots",
+    label: "Before/After Shots",
+    required: true,
+    schemaPath: "SubagentTaskEnvelope.neighborShots",
+    notes: ["Continuity-sensitive workers must inspect previous and next shot context."],
+  },
+  {
+    requirementId: "expected_output",
+    label: "Expected Output",
+    required: true,
+    schemaPath: "SubagentTaskEnvelope.taskEnvelope.expectedOutputs",
+    notes: ["Worker self-report cannot complete without a declared output target."],
+  },
+  {
+    requirementId: "hard_negatives",
+    label: "Hard Negatives",
+    required: true,
+    schemaPath: "SubagentTaskEnvelope.mustNotAdd + forbiddenReferences + taskEnvelope.hardRules",
+    notes: ["The envelope must carry explicit negatives and forbidden actions."],
   },
   {
     requirementId: "expected_output_contract",
@@ -105,7 +156,7 @@ export const subagentRunnerPacketRequirements: SubagentRunnerPacketRequirement[]
     schemaPath: "SubagentTaskEnvelope.disallowedReadScopes + mustNotAdd + taskEnvelope.hardRules",
     notes: ["Forbidden reads/actions must be explicit; they cannot be inferred from prose."],
   },
-];
+] as unknown as SubagentRunnerPacketRequirement[];
 
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right));
@@ -118,8 +169,17 @@ function safeId(value: string): string {
 function defaultPurpose(taskKind: SubagentRunnerTaskKind): SubagentTaskPurpose {
   if (taskKind === "video_execution") return "video_generation";
   if (taskKind === "story_audit") return "story_audit";
-  if (taskKind === "pair_qa" || taskKind === "scene_qa") return "continuity_audit";
-  if (taskKind === "image" || taskKind === "asset") return "visual_generation";
+  if (taskKind === "pair_qa" || taskKind === "audio") return "continuity_audit";
+  if (taskKind === "scene_qa" || taskKind === ("identity_qa" as SubagentRunnerTaskKind)) return "visual_audit";
+  if (
+    taskKind === "image" ||
+    taskKind === "asset" ||
+    taskKind === ("start_frame" as SubagentRunnerTaskKind) ||
+    taskKind === ("end_frame" as SubagentRunnerTaskKind) ||
+    taskKind === ("image_edit" as SubagentRunnerTaskKind)
+  ) {
+    return "visual_generation";
+  }
   return "visual_audit";
 }
 
@@ -127,51 +187,68 @@ function hasItems(value: unknown): boolean {
   return Array.isArray(value) && value.length > 0;
 }
 
+function check(
+  requirementId: string,
+  present: boolean,
+  detailWhenPresent: string,
+  detailWhenMissing: string,
+): SubagentRunnerRequirementCheck {
+  return {
+    requirementId: requirementId as SubagentRunnerRequirementCheck["requirementId"],
+    present,
+    detail: present ? detailWhenPresent : detailWhenMissing,
+  };
+}
+
 function checkEnvelopeRequirements(envelope?: SubagentTaskEnvelope): SubagentRunnerRequirementCheck[] {
+  const hasPrevious = Boolean(envelope?.neighborShots?.some((shot) => shot.position === "previous"));
+  const hasNext = Boolean(envelope?.neighborShots?.some((shot) => shot.position === "next"));
+  const hasReferenceAuthority =
+    hasItems(envelope?.lockedReferences) &&
+    hasItems(envelope?.authorityPriority) &&
+    (hasItems(envelope?.forbiddenReferences) || hasItems(envelope?.mustNotAdd) || hasItems(envelope?.taskEnvelope?.hardRules));
+  const hasHardNegatives =
+    hasItems(envelope?.mustNotAdd) ||
+    hasItems(envelope?.forbiddenReferences) ||
+    hasItems(envelope?.taskEnvelope?.hardRules);
+
   return [
-    {
-      requirementId: "source_index_hash",
-      present: Boolean(envelope?.sourceIndexHash),
-      detail: envelope?.sourceIndexHash ? "sourceIndexHash is present." : "sourceIndexHash is missing.",
-    },
-    {
-      requirementId: "provider_policy",
-      present: hasItems(envelope?.providerPolicySummary),
-      detail: hasItems(envelope?.providerPolicySummary)
-        ? "providerPolicySummary is present."
-        : "providerPolicySummary is missing.",
-    },
-    {
-      requirementId: "expected_output_contract",
-      present: Boolean(envelope?.expectedOutputContract && hasItems(envelope.expectedOutputContract.requiredFields)),
-      detail: envelope?.expectedOutputContract
-        ? "expectedOutputContract is present."
-        : "expectedOutputContract is missing.",
-    },
-    {
-      requirementId: "acceptance_checklist",
-      present: hasItems(envelope?.qaChecklist),
-      detail: hasItems(envelope?.qaChecklist) ? "qaChecklist is present." : "qaChecklist is missing.",
-    },
-    {
-      requirementId: "output_schema",
-      present: envelope?.expectedOutputContract?.format === "subagent_result_v1",
-      detail:
-        envelope?.expectedOutputContract?.format === "subagent_result_v1"
-          ? "output schema is subagent_result_v1."
-          : "output schema is missing or unsupported.",
-    },
-    {
-      requirementId: "forbidden_actions",
-      present:
-        hasItems(envelope?.disallowedReadScopes) &&
-        (hasItems(envelope?.mustNotAdd) || hasItems(envelope?.forbiddenReferences) || hasItems(envelope?.taskEnvelope?.hardRules)),
-      detail:
-        hasItems(envelope?.disallowedReadScopes) &&
-        (hasItems(envelope?.mustNotAdd) || hasItems(envelope?.forbiddenReferences) || hasItems(envelope?.taskEnvelope?.hardRules))
-          ? "forbidden read scopes/actions are present."
-          : "forbidden read scopes/actions are incomplete.",
-    },
+    check("source_index_hash", Boolean(envelope?.sourceIndexHash), "sourceIndexHash is present.", "sourceIndexHash is missing."),
+    check("provider_policy", hasItems(envelope?.providerPolicySummary), "providerPolicySummary is present.", "providerPolicySummary is missing."),
+    check(
+      "context_capsule",
+      Boolean(envelope?.userIntent && envelope.storyFunction && envelope.shotId),
+      "context capsule fields are present.",
+      "context capsule is missing userIntent, storyFunction, or shotId.",
+    ),
+    check("reference_authority", hasReferenceAuthority, "reference authority is present.", "reference authority is incomplete."),
+    check("before_after_shots", hasPrevious && hasNext, "previous and next shot context are present.", "previous or next shot context is missing."),
+    check(
+      "expected_output",
+      hasItems(envelope?.taskEnvelope?.expectedOutputs),
+      "expected output target is present.",
+      "expected output target is missing.",
+    ),
+    check("hard_negatives", hasHardNegatives, "hard negatives are present.", "hard negatives are missing."),
+    check(
+      "expected_output_contract",
+      Boolean(envelope?.expectedOutputContract && hasItems(envelope.expectedOutputContract.requiredFields)),
+      "expectedOutputContract is present.",
+      "expectedOutputContract is missing.",
+    ),
+    check("acceptance_checklist", hasItems(envelope?.qaChecklist), "qaChecklist is present.", "qaChecklist is missing."),
+    check(
+      "output_schema",
+      envelope?.expectedOutputContract?.format === "subagent_result_v1",
+      "output schema is subagent_result_v1.",
+      "output schema is missing or unsupported.",
+    ),
+    check(
+      "forbidden_actions",
+      hasItems(envelope?.disallowedReadScopes) && hasHardNegatives,
+      "forbidden read scopes/actions are present.",
+      "forbidden read scopes/actions are incomplete.",
+    ),
   ];
 }
 
@@ -280,6 +357,26 @@ function slotsFromVideo(previews: VideoExecutionPreviewState | undefined): Subag
   );
 }
 
+function slotsFromTaskPackets(taskPackets: SubagentRunnerTaskPacketInput[] | undefined): SubagentRunnerSlot[] {
+  return (taskPackets || []).map((packet) =>
+    makeSlot({
+      runnerSlotId: `subagent_runner_packet_${safeId(packet.packetId)}`,
+      taskKind: packet.taskKind as SubagentRunnerTaskKind,
+      purpose: packet.envelope?.purpose || defaultPurpose(packet.taskKind as SubagentRunnerTaskKind),
+      sourceId: packet.packetId,
+      envelope: packet.envelope,
+      shotId: packet.envelope?.shotId,
+      sourceRefs: uniqueSorted([`taskPacket:${packet.packetId}`, ...(packet.sourceRefs || [])]),
+      warnings: packet.missingContext?.map((field) => `task_packet_missing_context:${field}`),
+      notes: [
+        "Task Packet Builder coverage is the preferred source for Phase38 production worker slots.",
+        ...(packet.blockedReasons || []).map((reason) => `packet_blocker:${reason}`),
+      ],
+      blockedWhenMissing: packet.status === "blocked_missing_context" || Boolean(packet.blockedReasons?.length),
+    }),
+  );
+}
+
 function slotsFromGeneration(generationHarness: GenerationHarnessState | undefined): SubagentRunnerSlot[] {
   return (generationHarness?.jobs || []).map((job) =>
     makeSlot({
@@ -341,6 +438,9 @@ function slotsFromFreeText(requests: SubagentRunnerFreeTextTaskRequest[] | undef
 function buildCoverage(slots: SubagentRunnerSlot[]): SubagentRunnerCoverageEntry[] {
   return subagentRunnerTaskKinds.map((taskKind) => {
     const scoped = slots.filter((slot) => slot.taskKind === taskKind);
+    const missingRequirements = uniqueSorted(
+      scoped.flatMap((slot) => slot.requirementChecks.filter((check) => !check.present).map((check) => check.requirementId)),
+    );
     return {
       taskKind,
       expected: true,
@@ -353,7 +453,11 @@ function buildCoverage(slots: SubagentRunnerSlot[]): SubagentRunnerCoverageEntry
       notes: [
         scoped.length
           ? `Coverage inferred from ${scoped.length} ${taskKind} slot(s).`
-          : `No current ${taskKind} slots were inferred; future packets remain missing coverage.`,
+          : `Coverage gap: no current ${taskKind} SubagentTaskEnvelope packet or planned slot was inferred.`,
+        ...(missingRequirements.length ? [`Coverage gap requirements: ${missingRequirements.join(",")}.`] : []),
+        ...(scoped.length && scoped.every((slot) => slot.envelopeStatus !== "validated")
+          ? [`Coverage gap: ${taskKind} has no validated envelope yet.`]
+          : []),
       ],
     };
   });
@@ -361,6 +465,7 @@ function buildCoverage(slots: SubagentRunnerSlot[]): SubagentRunnerCoverageEntry
 
 export function buildSubagentRunnerState(input: BuildSubagentRunnerStateInput): SubagentRunnerState {
   const slots = [
+    ...slotsFromTaskPackets(input.taskPackets),
     ...slotsFromVideo(input.videoExecutionPreview),
     ...slotsFromGeneration(input.generationHarness),
     ...slotsFromQa(input.qaHarness),

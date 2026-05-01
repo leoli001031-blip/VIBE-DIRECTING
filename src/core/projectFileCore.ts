@@ -61,12 +61,62 @@ const requiredPlannedEntries: ProjectFileCorePlannedEntry[] = [
   {
     id: "visual_memory",
     role: "visual_memory",
-    kind: "directory",
-    path: "visual_memory",
+    kind: "file",
+    path: "visual_memory/visual_memory.vibe.json",
     pathOrigin: "project_root_relative",
     status: "planned_only",
     requiredForFileFirstCore: true,
-    notes: ["Visual memory remains a planned project-root-relative folder; no assets are moved in Phase 9.1."],
+    notes: ["Visual Memory is a first-class asset consistency fact file, not a gallery derived from runtime-state."],
+  },
+  {
+    id: "shot_spec",
+    role: "shot_spec",
+    kind: "directory",
+    path: "shots/shot_specs",
+    pathOrigin: "project_root_relative",
+    status: "planned_only",
+    requiredForFileFirstCore: true,
+    notes: ["Shot specs are project-file facts beneath shots; runtime-state can only cache their resolved view."],
+  },
+  {
+    id: "shot_layout",
+    role: "shot_layout",
+    kind: "directory",
+    path: "shots/shot_layouts",
+    pathOrigin: "project_root_relative",
+    status: "planned_only",
+    requiredForFileFirstCore: true,
+    notes: ["Shot layouts are project-file facts for subject/camera placement and start/end frame derivation."],
+  },
+  {
+    id: "spatial_memory",
+    role: "spatial_memory",
+    kind: "file",
+    path: "spatial_memory/spatial_memory.vibe.json",
+    pathOrigin: "project_root_relative",
+    status: "planned_only",
+    requiredForFileFirstCore: true,
+    notes: ["Spatial Memory is the project-file source for world coordinates, camera vectors, axes, and reveal states."],
+  },
+  {
+    id: "scene_asset_pack",
+    role: "scene_asset_pack",
+    kind: "directory",
+    path: "visual_memory/scene_asset_packs",
+    pathOrigin: "project_root_relative",
+    status: "planned_only",
+    requiredForFileFirstCore: true,
+    notes: ["Scene Asset Packs carry master scene inheritance and derived view facts as project files."],
+  },
+  {
+    id: "voice_memory",
+    role: "voice_memory",
+    kind: "file",
+    path: "voice_memory/voice_memory.vibe.json",
+    pathOrigin: "project_root_relative",
+    status: "planned_only",
+    requiredForFileFirstCore: true,
+    notes: ["Voice Memory stores voice source metadata only; credentials remain outside project facts."],
   },
   {
     id: "shots",
@@ -144,7 +194,12 @@ const sourcePriorityPlan: Array<{ role: ProjectFileCoreSourceRole; canonicalPath
   { role: "project_manifest", canonicalPath: "project.vibe", authority: "planned_project_file" },
   { role: "production_bible", canonicalPath: "production_bible/production_bible.vibe.json", authority: "project_file_tree" },
   { role: "story_flow", canonicalPath: "story_flow/story_flow.vibe.json", authority: "project_file_tree" },
+  { role: "shot_spec", canonicalPath: "shots/*/shot_spec.vibe.json", authority: "project_file_tree" },
+  { role: "shot_layout", canonicalPath: "shots/*/shot_layout.vibe.json", authority: "project_file_tree" },
   { role: "visual_memory", canonicalPath: "visual_memory/visual_memory.vibe.json", authority: "project_file_tree" },
+  { role: "spatial_memory", canonicalPath: "spatial_memory/spatial_memory.vibe.json", authority: "project_file_tree" },
+  { role: "scene_asset_pack", canonicalPath: "visual_memory/scene_asset_packs/*.vibe.json", authority: "project_file_tree" },
+  { role: "voice_memory", canonicalPath: "voice_memory/voice_memory.vibe.json", authority: "project_file_tree" },
   { role: "shots", canonicalPath: "shots/shots.vibe.json", authority: "project_file_tree" },
   { role: "manifests", canonicalPath: "manifests/project_manifest.vibe.json", authority: "project_file_tree" },
   { role: "reports", canonicalPath: "reports/runtime_audit.vibe.json", authority: "project_file_tree" },
@@ -225,9 +280,29 @@ function refsForRole(input: ProjectFileCoreBuildInput, role: ProjectFileCoreSour
     refs.push(toProjectPathRef(input.sourceIndex.currentStoryFlowId, input.projectRoot, "sourceIndex.currentStoryFlowId"));
     refs.push(toProjectPathRef(input.sourceIndex.currentShotSpecId, input.projectRoot, "sourceIndex.currentShotSpecId"));
   }
+  if (role === "shot_spec") {
+    refs.push(toProjectPathRef(input.sourceIndex.currentShotSpecId, input.projectRoot, "sourceIndex.currentShotSpecId"));
+    refs.push(...input.storyFlow.shots.slice(0, 12).map((shot) => toProjectPathRef(`shots/${shot.id}/shot_spec.vibe.json`, input.projectRoot, `storyFlow.shots:${shot.id}.shotSpec`)));
+  }
+  if (role === "shot_layout") {
+    refs.push(...input.storyFlow.shots.slice(0, 12).map((shot) => toProjectPathRef(`shots/${shot.id}/shot_layout.vibe.json`, input.projectRoot, `storyFlow.shots:${shot.id}.shotLayout`)));
+  }
   if (role === "visual_memory") {
     refs.push(toProjectPathRef(input.sourceIndex.currentVisualMemoryId, input.projectRoot, "sourceIndex.currentVisualMemoryId"));
     refs.push(...input.visualMemory.assets.slice(0, 12).map((asset) => toProjectPathRef(asset.path, input.projectRoot, `visualMemory.assets:${asset.id}`)));
+  }
+  if (role === "spatial_memory") {
+    refs.push(toProjectPathRef(input.sourceIndex.currentSpatialMemoryId, input.projectRoot, "sourceIndex.currentSpatialMemoryId"));
+  }
+  if (role === "scene_asset_pack") {
+    refs.push(toProjectPathRef("visual_memory/scene_asset_packs", input.projectRoot, "projectFacts.sceneAssetPack"));
+    refs.push(...input.visualMemory.assets
+      .filter((asset) => asset.type === "scene")
+      .slice(0, 12)
+      .map((asset) => toProjectPathRef(asset.path, input.projectRoot, `visualMemory.sceneAssets:${asset.id}`)));
+  }
+  if (role === "voice_memory") {
+    refs.push(toProjectPathRef(input.sourceIndex.currentVoiceMemoryId, input.projectRoot, "sourceIndex.currentVoiceMemoryId"));
   }
   if (role === "shots") {
     refs.push(...input.storyFlow.shots.slice(0, 12).flatMap((shot) => [
@@ -297,7 +372,12 @@ export function buildProjectFileCoreState(input: ProjectFileCoreBuildInput): Pro
         "project_manifest",
         "production_bible",
         "story_flow",
+        "shot_spec",
+        "shot_layout",
         "visual_memory",
+        "spatial_memory",
+        "scene_asset_pack",
+        "voice_memory",
         "shots",
         "manifests",
         "reports",

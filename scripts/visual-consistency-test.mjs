@@ -194,7 +194,7 @@ function keyframePair(overrides = {}) {
     endFrameId: "outputs/keyframes/S02_end.png",
     endDerivationSource: "start_frame",
     validForI2vPair: true,
-    allowedDelta: ["micro-expression", "camera movement"],
+    allowedDelta: ["micro-expression", "small hand motion"],
     mustPreserve: ["character identity", "scene layout"],
     mustNotAdd: ["new character", "new location"],
     ...overrides,
@@ -226,9 +226,20 @@ const cleanReport = validateVisualConsistency({
 assert(cleanReport.status === "pass", `clean visual consistency report should pass: ${cleanReport.blockers.join("; ")}`);
 assert(cleanReport.hardLocks.derivedViewsMustInheritMasterScene === true, "derived-view hard lock missing");
 assert(cleanReport.hardLocks.endFrameDefaultsToStartFrameDerivation === true, "end-frame derivation hard lock missing");
+assert(cleanReport.hardLocks.sameShotIndependentEndFrameForbidden === true, "same-shot independent end-frame hard lock missing");
+assert(cleanReport.hardLocks.identityScenePairStoryGatesRequired === true, "identity/scene/pair/story gate hard lock missing");
+assert(cleanReport.hardLocks.propStyleMotionChecksRequired === true, "prop/style/motion hard lock missing");
 assert(cleanReport.summary.lockedAssets === 2, "clean fixture should include two locked assets");
 assert(cleanReport.summary.candidateAssets === 1, "clean fixture should include one candidate asset");
 assert(cleanReport.summary.rejectedAssets === 1, "clean fixture should include one rejected asset");
+assert(cleanReport.summary.gateCount === 9, "clean fixture should compile nine visual consistency gates");
+assert(cleanReport.factChain.sequence.join(" > ") === "character_identity > scene_space > shot_layout > start_end_keyframes > video_handoff", "visual fact chain sequence drifted");
+assert(cleanReport.factChain.steps.every((step) => step.status === "pass"), `clean fact chain should pass: ${cleanReport.factChain.blockers.join("; ")}`);
+for (const gateId of ["identity_gate", "scene_gate", "layout_gate", "pair_gate", "story_gate", "prop_gate", "style_gate", "motion_gate", "video_handoff_gate"]) {
+  const gate = cleanReport.gates.find((candidate) => candidate.gateId === gateId);
+  assert(gate, `missing visual consistency gate ${gateId}`);
+  assert(gate.status === "pass", `${gateId} should pass: ${gate.blockers.join("; ")}`);
+}
 
 const assetIssues = validateAssetLibraryHardContracts(library);
 assert(assetIssues.length === 0, `valid asset library should have no hard contract issues: ${assetIssues.map((item) => item.detail).join("; ")}`);
@@ -310,6 +321,10 @@ assert(
   badLayoutIssues.some((item) => item.code === "shot_layout_camera_constraint_violation"),
   "fixed camera with dolly/truck movement must block",
 );
+assert(
+  badLayoutIssues.some((item) => item.code === "motion_gate_violation"),
+  "fixed camera layout must explicitly forbid large motion",
+);
 
 const badDerivationIssues = validateStartEndDerivationHardContracts({
   keyframePairs: [
@@ -325,6 +340,24 @@ assert(
 assert(
   badDerivationIssues.some((item) => item.code === "prompt_end_frame_derivation_violation"),
   "end-frame prompt not derived from start frame must block",
+);
+
+const badMotionReport = validateVisualConsistency({
+  checkedAt: generatedAt,
+  assetLibrary: library,
+  shotLayouts: [shotLayout()],
+  startEndDerivations: {
+    keyframePairs: [keyframePair({ allowedDelta: ["large camera movement"] })],
+    promptPlans: [endPromptPlan()],
+  },
+});
+assert(
+  badMotionReport.issues.some((item) => item.code === "motion_gate_violation" && item.severity === "blocker"),
+  "fixed camera keyframe pair must block large camera motion deltas",
+);
+assert(
+  badMotionReport.gates.find((candidate) => candidate.gateId === "motion_gate").status === "blocked",
+  "motion gate must block fixed-camera keyframe pair motion drift",
 );
 
 const postprocessIssues = validatePostprocessHardContracts([

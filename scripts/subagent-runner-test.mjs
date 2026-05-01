@@ -31,6 +31,7 @@ async function loadSubagentRunner() {
 }
 
 function fixtureTaskEnvelope() {
+  const lockedReference = fixtureReference("hero_identity");
   return {
     id: "task_video_A1_01",
     purpose: "video",
@@ -44,7 +45,7 @@ function fixtureTaskEnvelope() {
     contextLevel: "L2",
     expectedOutputs: ["outputs/video/A1_01.mp4"],
     hardRules: ["no_live_submit", "no_provider_credentials", "no_shell_execution"],
-    references: [],
+    references: [lockedReference],
     qaChecklist: ["identity_gate", "scene_gate", "pair_gate", "story_gate"],
     preflight: {
       taskId: "task_video_A1_01",
@@ -62,6 +63,20 @@ function fixtureTaskEnvelope() {
   };
 }
 
+function fixtureReference(id, role = "identity_authority") {
+  return {
+    id,
+    path: `visual_memory/${id}.png`,
+    referenceRole: role,
+    authorityScope: ["prompt_reference", "future_reference"],
+    polarity: "positive",
+    lockedStatus: "locked",
+    allowedUse: ["prompt_reference", "future_reference", "draft_preview"],
+    canPromoteToFormal: true,
+    canUseAsFutureReference: true,
+  };
+}
+
 function fixtureSubagentEnvelope() {
   const taskEnvelope = fixtureTaskEnvelope();
   return {
@@ -72,8 +87,26 @@ function fixtureSubagentEnvelope() {
     sourceIndexHash: "source_hash_123",
     shotId: "A1_01",
     storyFunction: "test shot",
-    neighborShots: [],
-    lockedReferences: [],
+    userIntent: "task_kind:video_execution | shot:A1_01 | story_function:test shot | expected_output:outputs/video/A1_01.mp4",
+    neighborShots: [
+      {
+        shotId: "A1_00",
+        position: "previous",
+        storyFunction: "setup beat",
+        summary: "Previous continuity anchor",
+        approvedFramePath: "outputs/keyframes/A1_00_end.png",
+        continuityNotes: ["identity:PASS", "scene:PASS"],
+      },
+      {
+        shotId: "A1_02",
+        position: "next",
+        storyFunction: "payoff beat",
+        summary: "Next continuity anchor",
+        approvedFramePath: "outputs/keyframes/A1_02_start.png",
+        continuityNotes: ["identity:PASS", "scene:PASS"],
+      },
+    ],
+    lockedReferences: [fixtureReference("hero_identity")],
     forbiddenReferences: [],
     providerPolicySummary: ["slot=video.i2v", "provider=seedance2-provider", "state=parked", "mode=frames2video"],
     taskEnvelope,
@@ -87,7 +120,7 @@ function fixtureSubagentEnvelope() {
     allowedReadScopes: ["task_envelope", "locked_references", "injected_knowledge_snippets"],
     disallowedReadScopes: ["provider_credentials", "api_keys", "live_provider_task_ids", "unrouted_knowledge_library"],
     sourceIndexRequired: true,
-    mustInspectNeighborShotIds: [],
+    mustInspectNeighborShotIds: ["A1_00", "A1_02"],
     authorityPriority: ["source_index", "provider_policy", "preflight"],
     resultMustReferencePackHashes: true,
     qaChecklist: ["identity_gate", "scene_gate", "pair_gate", "story_gate"],
@@ -218,17 +251,37 @@ assert(
   "missing envelope slots must explain validated envelope requirement",
 );
 
-for (const taskKind of ["image", "asset", "pair_qa", "scene_qa", "story_audit", "video_execution", "audio", "export"]) {
+for (const taskKind of [
+  "image",
+  "asset",
+  "start_frame",
+  "end_frame",
+  "image_edit",
+  "identity_qa",
+  "pair_qa",
+  "scene_qa",
+  "story_audit",
+  "video_execution",
+  "audio",
+  "export",
+]) {
   assert(state.coverage.some((entry) => entry.taskKind === taskKind), `coverage must include ${taskKind}`);
 }
 assert(state.coverage.find((entry) => entry.taskKind === "video_execution").planned === 1, "video execution coverage should recognize validated packet");
 assert(state.coverage.find((entry) => entry.taskKind === "image").plannedMissingEnvelope === 1, "image coverage should be planned_missing_envelope");
 assert(state.coverage.find((entry) => entry.taskKind === "asset").plannedMissingEnvelope === 1, "asset coverage should be planned_missing_envelope");
 assert(state.coverage.find((entry) => entry.taskKind === "export").totalSlots === 0, "export coverage should be present but missing for now");
+assert(state.coverage.find((entry) => entry.taskKind === "start_frame").notes.some((note) => note.includes("Coverage gap")), "start frame coverage gap should be explicit");
+assert(state.coverage.find((entry) => entry.taskKind === "identity_qa").notes.some((note) => note.includes("Coverage gap")), "identity QA coverage gap should be explicit");
 
 const requiredPackets = [
   "source_index_hash",
   "provider_policy",
+  "context_capsule",
+  "reference_authority",
+  "before_after_shots",
+  "expected_output",
+  "hard_negatives",
   "expected_output_contract",
   "acceptance_checklist",
   "output_schema",

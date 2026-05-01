@@ -30,6 +30,10 @@
     "startFrame": { "$ref": "#/$defs/frameState" },
     "endFrameDerivation": { "$ref": "#/$defs/endFrameDerivation" },
     "cameraConstraints": { "$ref": "#/$defs/cameraConstraints" },
+    "visualConsistencyGates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/visualConsistencyGate" }
+    },
     "spatialAnchors": {
       "type": "array",
       "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
@@ -140,6 +144,23 @@
           "type": "array",
           "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
         }
+      }
+    },
+    "visualConsistencyGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gateId", "status", "sourceRefs"],
+      "properties": {
+        "gateId": {
+          "type": "string",
+          "enum": ["identity_gate", "scene_gate", "layout_gate", "pair_gate", "story_gate", "prop_gate", "style_gate", "motion_gate"]
+        },
+        "status": { "$ref": "common.schema.json#/$defs/gateStatus" },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "detail": { "type": "string" }
       }
     }
   }

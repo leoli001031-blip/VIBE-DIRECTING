@@ -302,7 +302,46 @@ assert(
   "completion gate must explain missing QA",
 );
 
-for (const state of [twentyTaskState, autoContinueState, stalledState, selfReportState, qaMissingState]) {
+const coverageGapState = buildLocalOrchestratorState({
+  generatedAt: "2026-04-30T00:00:00.000Z",
+  subagentRunner: {
+    slots: [],
+    coverage: [
+      {
+        taskKind: "start_frame",
+        expected: true,
+        totalSlots: 0,
+        planned: 0,
+        plannedMissingEnvelope: 0,
+        blockedMissingEnvelope: 0,
+        blockedContractViolation: 0,
+        sourceRefs: [],
+        notes: ["Coverage gap: no current start_frame SubagentTaskEnvelope packet or planned slot was inferred."],
+      },
+      {
+        taskKind: "identity_qa",
+        expected: true,
+        totalSlots: 1,
+        planned: 0,
+        plannedMissingEnvelope: 1,
+        blockedMissingEnvelope: 0,
+        blockedContractViolation: 0,
+        sourceRefs: ["qaHarness:identity"],
+        notes: ["Coverage gap: identity_qa has no validated envelope yet."],
+      },
+    ],
+  },
+});
+assert(
+  coverageGapState.notes.some((note) => note.includes("Subagent coverage gap: no start_frame slot")),
+  "orchestrator notes must expose missing task-kind coverage",
+);
+assert(
+  coverageGapState.notes.some((note) => note.includes("identity_qa has no validated planned envelope")),
+  "orchestrator notes must expose missing validated envelope coverage",
+);
+
+for (const state of [twentyTaskState, autoContinueState, stalledState, selfReportState, qaMissingState, coverageGapState]) {
   assert(state.dryRunOnly === true, "orchestrator must be dry-run only");
   assert(state.planOnly === true, "orchestrator must be plan-only");
   assert(state.providerSubmissionForbidden === true, "orchestrator must forbid provider submission");

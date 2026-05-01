@@ -105,7 +105,7 @@ assert(shotEdit.hardLocks.noCredentialAccess === true, "workflow must forbid cre
 assert(shotEdit.hardLocks.noDaemonStart === true, "workflow must forbid daemon start");
 assert(shotEdit.taskPacketState.noFreeTextTask === true, "task packets must hard-lock noFreeTextTask");
 assert(shotEdit.taskPacketState.validatedEnvelopeRequired === true, "task packets must require validated envelopes");
-assert(shotEdit.taskPacketState.packets.length === 8, "shot edit should build all packet classes");
+assert(shotEdit.taskPacketState.packets.length === 12, "shot edit should build all packet classes");
 for (const packet of shotEdit.taskPacketState.packets) {
   assert(packet.noFreeTextTask === true, `${packet.packetId} must forbid free text`);
   assert(packet.canSubmitProvider === false, `${packet.packetId} cannot submit providers`);
@@ -129,7 +129,7 @@ const multiShotEdit = workflow({
 });
 assert(multiShotEdit.editPlan.selection.scopeKind === "multi-shot", "multi-shot selection must become multi-shot scope");
 assert(multiShotEdit.scopeLabel.includes("A1_03"), "multi-shot scope label must include selected shots");
-assert(multiShotEdit.summary.totalTaskPackets === 8, "multi-shot edit should still build readable packet state");
+assert(multiShotEdit.summary.totalTaskPackets === 12, "multi-shot edit should still build readable packet state");
 
 const assetEdit = workflow({
   userIntent: "把这个 locked asset 的服装参考改得更旧一点",

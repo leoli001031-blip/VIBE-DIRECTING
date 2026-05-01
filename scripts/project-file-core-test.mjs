@@ -29,7 +29,12 @@ const requiredRoles = [
   "project_manifest",
   "production_bible",
   "story_flow",
+  "shot_spec",
+  "shot_layout",
   "visual_memory",
+  "spatial_memory",
+  "scene_asset_pack",
+  "voice_memory",
   "shots",
   "manifests",
   "reports",
@@ -116,6 +121,10 @@ assert(projectSchema.required.includes("projectFileCore"), "project runtime sche
 assert(
   projectSchema.properties.projectFileCore.$ref === "project_file_core.schema.json",
   "project runtime schema must reference project_file_core schema",
+);
+assert(
+  projectSchema.properties.projectFactsIntegration.$ref === "project_facts_integration.schema.json",
+  "project runtime schema must reference project_facts_integration schema when present",
 );
 
 const registrySource = fs.readFileSync("src/core/schemaRegistry.ts", "utf8");

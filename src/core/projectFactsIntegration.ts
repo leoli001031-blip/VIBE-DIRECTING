@@ -29,13 +29,29 @@ export type VisualSupportStatus = "structured" | "partial" | "missing";
 export interface ProjectFactConnection {
   kind: ProjectFactsKind;
   label: string;
+  required: true;
   sourceOfTruth: ProjectFactsSourceOfTruth;
   path?: string;
+  sourceHash?: string;
+  sourceHashes: string[];
+  sources: ProjectFactSourceEvidence[];
   status: ProjectFactsStatus;
+  ready: boolean;
+  blocker: boolean;
+  missing: boolean;
   recordCount: number;
   blockers: string[];
   warnings: string[];
   sourceRefs: string[];
+}
+
+export interface ProjectFactSourceEvidence {
+  sourceOfTruth: ProjectFactsSourceOfTruth;
+  ref: string;
+  role?: string;
+  path?: string;
+  hash?: string;
+  derivedCache: false;
 }
 
 export interface ProjectFactsVisualConsistencySupport {
@@ -92,10 +108,14 @@ export interface ProjectFactsIntegrationState {
   facts: Record<ProjectFactsKind, ProjectFactConnection>;
   visualConsistency: ProjectFactsVisualConsistencySupport;
   summary: {
+    ready: number;
+    notReady: number;
     connected: number;
     partial: number;
     blocked: number;
     missing: number;
+    missingSourceCount: number;
+    sourceHashCount: number;
     blockerCount: number;
     warningCount: number;
     projectLocalFactCount: number;
@@ -152,21 +172,96 @@ function hasKeys(value: unknown): boolean {
   return isRecord(value) && Object.keys(value).length > 0;
 }
 
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+    .join(",")}}`;
+}
+
+function stableHash(value: unknown): string {
+  const input = stableStringify(value);
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `vck_${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
 function factPath(projectStore: ProjectStoreSnapshot | undefined, role: ProjectStoreFactFile["role"]): string | undefined {
   return projectStore?.factFiles.find((factFile) => factFile.role === role)?.path.path;
 }
 
+function sourceFromFactFile(sourceOfTruth: ProjectFactsSourceOfTruth, factFile: ProjectStoreFactFile): ProjectFactSourceEvidence {
+  return {
+    sourceOfTruth,
+    ref: `projectStore.factFiles:${factFile.id}`,
+    role: factFile.role,
+    path: factFile.path.path,
+    hash: factFile.hash,
+    derivedCache: false,
+  };
+}
+
+function sourcesForProjectStoreRole(
+  projectStore: ProjectStoreSnapshot | undefined,
+  role: ProjectStoreFactFile["role"],
+): ProjectFactSourceEvidence[] {
+  return (projectStore?.factFiles || [])
+    .filter((factFile) => factFile.role === role && factFile.sourceOfTruth === "project_file")
+    .map((factFile) => sourceFromFactFile("project_store", factFile));
+}
+
+function sourceFromValue(input: {
+  sourceOfTruth: ProjectFactsSourceOfTruth;
+  ref: string;
+  role: string;
+  path?: string;
+  value: unknown;
+}): ProjectFactSourceEvidence {
+  return {
+    sourceOfTruth: input.sourceOfTruth,
+    ref: input.ref,
+    role: input.role,
+    path: input.path,
+    hash: stableHash(input.value),
+    derivedCache: false,
+  };
+}
+
 function fact(
-  input: Omit<ProjectFactConnection, "blockers" | "warnings" | "sourceRefs"> & {
+  input: Omit<
+    ProjectFactConnection,
+    "required" | "sourceHash" | "sourceHashes" | "ready" | "blocker" | "missing" | "blockers" | "warnings" | "sourceRefs" | "sources"
+  > & {
     blockers?: string[];
     warnings?: string[];
     sourceRefs?: string[];
+    sources?: ProjectFactSourceEvidence[];
+    missing?: boolean;
   },
 ): ProjectFactConnection {
+  const blockers = unique(input.blockers || []);
+  const warnings = unique(input.warnings || []);
+  const sources = input.sources || [];
+  const sourceHashes = unique(sources.map((source) => source.hash || ""));
+  const missing = input.missing ?? (input.sourceOfTruth === "not_connected" || sources.length === 0);
+  const ready = input.status === "connected" && blockers.length === 0 && !missing;
   return {
     ...input,
-    blockers: unique(input.blockers || []),
-    warnings: unique(input.warnings || []),
+    required: true,
+    sourceHash: sourceHashes.length ? stableHash(sourceHashes) : undefined,
+    sourceHashes,
+    sources,
+    ready,
+    blocker: blockers.length > 0 || input.status === "blocked",
+    missing,
+    blockers,
+    warnings,
     sourceRefs: unique(input.sourceRefs || []),
   };
 }
@@ -206,6 +301,7 @@ function buildProductionBibleFact(input: BuildProjectFactsIntegrationInput): Pro
   const productionBible = input.projectStore?.facts.productionBible;
   const hasSource = hasKeys(productionBible);
   const blockers = hasSource ? [] : ["Production Bible is not connected to project-local facts yet."];
+  const sources = hasSource ? sourcesForProjectStoreRole(input.projectStore, "production_bible") : [];
   return fact({
     kind: "productionBible",
     label: "Production Bible",
@@ -214,6 +310,7 @@ function buildProductionBibleFact(input: BuildProjectFactsIntegrationInput): Pro
     status: statusFor(blockers, hasSource ? 1 : 0, Boolean(input.projectStore)),
     recordCount: hasSource ? 1 : 0,
     blockers,
+    sources,
     sourceRefs: hasSource ? ["projectStore.facts.productionBible"] : [],
   });
 }
@@ -241,6 +338,7 @@ function buildStoryFlowFact(input: BuildProjectFactsIntegrationInput): ProjectFa
     recordCount: shots.length,
     blockers,
     warnings,
+    sources: hasProjectLocalSource ? sourcesForProjectStoreRole(input.projectStore, "story_flow") : [],
     sourceRefs: hasProjectLocalSource
       ? ["projectStore.facts.storyFlow"]
       : [
@@ -253,6 +351,7 @@ function buildStoryFlowFact(input: BuildProjectFactsIntegrationInput): ProjectFa
 function buildShotSpecFact(input: BuildProjectFactsIntegrationInput): ProjectFactConnection {
   const shotSpecs = input.projectStore?.facts.shotSpecs || [];
   const blockers = shotSpecs.length ? [] : ["Shot Spec project facts are missing."];
+  const sources = shotSpecs.length ? sourcesForProjectStoreRole(input.projectStore, "shot_spec") : [];
   return fact({
     kind: "shotSpec",
     label: "Shot Spec",
@@ -261,6 +360,7 @@ function buildShotSpecFact(input: BuildProjectFactsIntegrationInput): ProjectFac
     status: statusFor(blockers, shotSpecs.length, Boolean(input.projectStore)),
     recordCount: shotSpecs.length,
     blockers,
+    sources,
     sourceRefs: shotSpecs.map((shot) => `projectStore.facts.shotSpecs:${shot.shotId}`),
   });
 }
@@ -278,6 +378,17 @@ function buildShotLayoutFact(input: BuildProjectFactsIntegrationInput): ProjectF
     recordCount: shotLayouts.length,
     blockers,
     warnings,
+    sources: shotLayouts.length
+      ? shotLayouts.map((layout) =>
+          sourceFromValue({
+            sourceOfTruth: "project_store",
+            ref: `shotLayouts:${layout.shotId}`,
+            role: "shot_layout",
+            path: `shots/${layout.shotId}/shot_layout.vibe.json`,
+            value: layout,
+          }),
+        )
+      : [],
     sourceRefs: shotLayouts.map((layout) => `shotLayouts:${layout.shotId}`),
   });
 }
@@ -309,6 +420,19 @@ function buildVisualMemoryFact(input: BuildProjectFactsIntegrationInput): Projec
     recordCount: assetCount,
     blockers,
     warnings,
+    sources: input.assetLibrary
+      ? [
+          sourceFromValue({
+            sourceOfTruth: "asset_library",
+            ref: "assetLibrary.assets",
+            role: "visual_memory",
+            path: "visual_memory/visual_memory.vibe.json",
+            value: input.assetLibrary,
+          }),
+        ]
+      : hasKeys(projectStoreVisualMemory)
+        ? sourcesForProjectStoreRole(input.projectStore, "visual_memory")
+        : [],
     sourceRefs: input.assetLibrary
       ? ["assetLibrary.assets"]
       : hasKeys(projectStoreVisualMemory)
@@ -335,6 +459,17 @@ function buildSpatialMemoryFact(input: BuildProjectFactsIntegrationInput): Proje
     recordCount: anchors.length + worldPositions.length,
     blockers,
     warnings,
+    sources: hasKeys(spatialMemory)
+      ? [
+          sourceFromValue({
+            sourceOfTruth: "project_store",
+            ref: "spatialMemory",
+            role: "spatial_memory",
+            path: "spatial_memory/spatial_memory.vibe.json",
+            value: spatialMemory,
+          }),
+        ]
+      : [],
     sourceRefs: hasKeys(spatialMemory) ? ["spatialMemory"] : [],
   });
 }
@@ -354,6 +489,17 @@ function buildSceneAssetPackFact(input: BuildProjectFactsIntegrationInput): Proj
     recordCount: packs.length,
     blockers,
     warnings,
+    sources: packs.length
+      ? packs.map((pack) =>
+          sourceFromValue({
+            sourceOfTruth: "asset_library",
+            ref: `sceneAssetPacks:${pack.id}`,
+            role: "scene_asset_pack",
+            path: `visual_memory/scene_asset_packs/${pack.id}.vibe.json`,
+            value: pack,
+          }),
+        )
+      : [],
     sourceRefs: packs.map((pack) => `sceneAssetPacks:${pack.id}`),
   });
 }
@@ -378,6 +524,17 @@ function buildVoiceMemoryFact(input: BuildProjectFactsIntegrationInput): Project
     recordCount: voiceSourceLibrary?.sources.length || 0,
     blockers,
     warnings,
+    sources: voiceSourceLibrary
+      ? [
+          sourceFromValue({
+            sourceOfTruth: "voice_source_library",
+            ref: "voiceSourceLibrary.sources",
+            role: "voice_memory",
+            path: "voice_memory/voice_memory.vibe.json",
+            value: voiceSourceLibrary,
+          }),
+        ]
+      : [],
     sourceRefs: voiceSourceLibrary ? ["voiceSourceLibrary.sources"] : hasRuntimeVoiceSourceLibrary ? ["runtimeState.voiceSourceLibrary"] : [],
   });
 }
@@ -433,10 +590,14 @@ function buildVisualConsistencySupport(input: BuildProjectFactsIntegrationInput)
 function summarize(facts: Record<ProjectFactsKind, ProjectFactConnection>): ProjectFactsIntegrationState["summary"] {
   const values = Object.values(facts);
   return {
+    ready: values.filter((item) => item.ready).length,
+    notReady: values.filter((item) => !item.ready).length,
     connected: values.filter((item) => item.status === "connected").length,
     partial: values.filter((item) => item.status === "partial").length,
     blocked: values.filter((item) => item.status === "blocked").length,
     missing: values.filter((item) => item.status === "missing").length,
+    missingSourceCount: values.filter((item) => item.missing).length,
+    sourceHashCount: values.reduce((total, item) => total + item.sourceHashes.length, 0),
     blockerCount: values.reduce((total, item) => total + item.blockers.length, 0),
     warningCount: values.reduce((total, item) => total + item.warnings.length, 0),
     projectLocalFactCount: values.filter((item) => item.sourceOfTruth !== "not_connected").length,
@@ -460,7 +621,7 @@ export function buildProjectFactsIntegrationState(input: BuildProjectFactsIntegr
     schemaVersion: projectFactsIntegrationSchemaVersion,
     phase: projectFactsIntegrationPhase,
     generatedAt: input.generatedAt,
-    status: summary.blockerCount > 0 ? "blocked" : "ready",
+    status: summary.blockerCount > 0 || summary.notReady > 0 ? "blocked" : "ready",
     projectId: input.projectStore?.project.id,
     facts,
     visualConsistency: buildVisualConsistencySupport(input),

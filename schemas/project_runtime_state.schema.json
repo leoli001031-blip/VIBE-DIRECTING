@@ -70,6 +70,7 @@
       }
     },
     "projectFileCore": { "$ref": "project_file_core.schema.json" },
+    "projectFactsIntegration": { "$ref": "project_facts_integration.schema.json" },
     "sourceIndex": { "$ref": "project_source_index.schema.json" },
     "sourceIndexSummary": {
       "type": "object",

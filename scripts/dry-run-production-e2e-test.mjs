@@ -267,7 +267,7 @@ const keyframePair = {
   endFrameId: "outputs/keyframes/S02_end.png",
   endDerivationSource: "start_frame",
   validForI2vPair: true,
-  allowedDelta: ["micro-expression", "camera movement"],
+  allowedDelta: ["micro-expression"],
   mustPreserve: ["character identity", "scene layout", "style capsule"],
   mustNotAdd: ["new character", "new location", "text-to-video fallback"],
 };

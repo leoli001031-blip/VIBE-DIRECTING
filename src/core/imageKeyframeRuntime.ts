@@ -34,6 +34,14 @@ export type ImageKeyframeGateStatus = "pass" | "blocked" | "warning";
 export type ImageKeyframeReferenceStatus = "locked" | "candidate" | "rejected" | "missing" | "failed" | "planned";
 export type ImageKeyframeFrameRole = "start_frame" | "end_frame" | "reference_asset";
 export type Image2RuntimeOperation = "text2image" | "image2image" | "reference_asset";
+export type ImageKeyframeVisualConsistencyGateId =
+  | "identity_gate"
+  | "scene_gate"
+  | "pair_gate"
+  | "story_gate"
+  | "prop_gate"
+  | "style_gate"
+  | "motion_gate";
 
 export interface ImageKeyframeReferencePlan {
   referenceId: string;
@@ -205,6 +213,15 @@ export interface ImageKeyframePromotionHandoffPlan {
   notes: string[];
 }
 
+export interface ImageKeyframeVisualConsistencyGate {
+  gateId: ImageKeyframeVisualConsistencyGateId;
+  status: ImageKeyframeGateStatus;
+  detail: string;
+  sourceRefs: string[];
+  blockers: string[];
+  warnings: string[];
+}
+
 export interface ImageKeyframeRuntimeGate {
   gateId:
     | "noProviderSubmit"
@@ -244,6 +261,7 @@ export interface ImageKeyframeRuntimePlan {
   image2StartFramePlans: Image2FramePlan[];
   image2EndFramePlans: Image2EndFramePlan[];
   keyframePairGates: ImageKeyframePairGate[];
+  visualConsistencyGates: ImageKeyframeVisualConsistencyGate[];
   promotionHandoffPlan: ImageKeyframePromotionHandoffPlan;
   runtimeLocks: ImageKeyframeRuntimeLocks;
   runtimeLockGates: ImageKeyframeRuntimeGate[];
@@ -908,6 +926,126 @@ function buildPromotionHandoffPlan(
   };
 }
 
+function visualGate(input: Omit<ImageKeyframeVisualConsistencyGate, "status" | "blockers" | "warnings" | "sourceRefs"> & {
+  blockers?: string[];
+  warnings?: string[];
+  sourceRefs?: string[];
+}): ImageKeyframeVisualConsistencyGate {
+  const blockers = uniqueSorted(input.blockers || []);
+  const warnings = uniqueSorted(input.warnings || []);
+  return {
+    gateId: input.gateId,
+    status: blockers.length ? "blocked" : warnings.length ? "warning" : "pass",
+    detail: input.detail,
+    sourceRefs: uniqueSorted(input.sourceRefs || []),
+    blockers,
+    warnings,
+  };
+}
+
+function referencedPlans(reference: ImageKeyframeReferencePlan): boolean {
+  return reference.usedByPromptPlanIds.length > 0;
+}
+
+function referencedType(
+  assetPlanning: ImageKeyframeAssetReferencePlanning,
+  assetType: ImageKeyframeReferencePlan["assetType"],
+): ImageKeyframeReferencePlan[] {
+  return assetPlanning.references.filter((reference) => reference.assetType === assetType && referencedPlans(reference));
+}
+
+function referencePlanBlockers(reference: ImageKeyframeReferencePlan): string[] {
+  if (reference.status === "rejected") return [`Reference ${reference.referenceId} is rejected.`];
+  if (reference.status === "missing") return [`Reference ${reference.referenceId} is missing.`];
+  if (reference.status === "failed") return [`Reference ${reference.referenceId} is failed.`];
+  return [];
+}
+
+function referencePlanWarnings(reference: ImageKeyframeReferencePlan): string[] {
+  if (reference.status === "candidate") return [`Reference ${reference.referenceId} is candidate-only and cannot promote to future authority.`];
+  if (reference.status === "planned") return [`Reference ${reference.referenceId} is planned but not locked.`];
+  return [];
+}
+
+function buildVisualConsistencyGates(input: {
+  assetPlanning: ImageKeyframeAssetReferencePlanning;
+  promptPlans: ShotPromptPlan[];
+  pairGates: ImageKeyframePairGate[];
+  endPlans: Image2EndFramePlan[];
+  runtimeLockGates: ImageKeyframeRuntimeGate[];
+}): ImageKeyframeVisualConsistencyGate[] {
+  const characterRefs = referencedType(input.assetPlanning, "character");
+  const sceneRefs = referencedType(input.assetPlanning, "scene");
+  const propRefs = referencedType(input.assetPlanning, "prop");
+  const styleRefs = referencedType(input.assetPlanning, "style");
+  const promptSourceRefs = input.promptPlans.map((plan) => plan.promptPlanId);
+  const noIndependentEndFrameGate = input.runtimeLockGates.find((gateItem) => gateItem.gateId === "noIndependentEndFrame");
+  const noImage2FallbackGate = input.runtimeLockGates.find((gateItem) => gateItem.gateId === "noImage2Fallback");
+
+  return [
+    visualGate({
+      gateId: "identity_gate",
+      detail: "Referenced character identity must come from locked Visual Memory authority.",
+      blockers: [
+        ...(characterRefs.length ? [] : ["No character identity reference is bound to the keyframe plans."]),
+        ...characterRefs.flatMap(referencePlanBlockers),
+      ],
+      warnings: characterRefs.flatMap(referencePlanWarnings),
+      sourceRefs: characterRefs.map((reference) => reference.referenceId),
+    }),
+    visualGate({
+      gateId: "scene_gate",
+      detail: "Referenced scene space must come from locked scene/Scene Asset Pack authority.",
+      blockers: [
+        ...(sceneRefs.length ? [] : ["No scene reference is bound to the keyframe plans."]),
+        ...sceneRefs.flatMap(referencePlanBlockers),
+      ],
+      warnings: sceneRefs.flatMap(referencePlanWarnings),
+      sourceRefs: sceneRefs.map((reference) => reference.referenceId),
+    }),
+    visualGate({
+      gateId: "pair_gate",
+      detail: "Start/end frame pairs must derive end frames from start frames before video handoff.",
+      blockers: input.pairGates.flatMap((gateItem) => gateItem.blockers),
+      warnings: input.pairGates.flatMap((gateItem) => gateItem.warnings),
+      sourceRefs: input.pairGates.map((gateItem) => gateItem.gateId),
+    }),
+    visualGate({
+      gateId: "story_gate",
+      detail: "Prompt plans must be compiled from current story facts before keyframe execution.",
+      blockers: input.promptPlans.flatMap((plan) => (plan.status === "blocked" ? plan.blockers.length ? plan.blockers : [`${plan.promptPlanId} is blocked.`] : [])),
+      warnings: input.promptPlans.flatMap((plan) => (plan.status === "draft" ? [`${plan.promptPlanId} is still draft.`] : [])),
+      sourceRefs: promptSourceRefs,
+    }),
+    visualGate({
+      gateId: "prop_gate",
+      detail: "Referenced props must not be rejected, missing, failed, or unapproved for formal promotion.",
+      blockers: propRefs.flatMap(referencePlanBlockers),
+      warnings: propRefs.flatMap(referencePlanWarnings),
+      sourceRefs: propRefs.map((reference) => reference.referenceId),
+    }),
+    visualGate({
+      gateId: "style_gate",
+      detail: "Referenced style memory must stay locked or remain draft-only.",
+      blockers: styleRefs.flatMap(referencePlanBlockers),
+      warnings: styleRefs.flatMap(referencePlanWarnings),
+      sourceRefs: styleRefs.map((reference) => reference.referenceId),
+    }),
+    visualGate({
+      gateId: "motion_gate",
+      detail: "Runtime cannot replace edit-from-start motion continuity with fallback or independent end frames.",
+      blockers: [
+        ...(noIndependentEndFrameGate?.violations || []),
+        ...(noImage2FallbackGate?.violations || []),
+        ...input.endPlans
+          .filter((plan) => plan.endDerivation.derivesFrom !== "start_frame")
+          .map((plan) => `${plan.planId} is not derived from a start frame.`),
+      ],
+      sourceRefs: input.endPlans.map((plan) => plan.planId),
+    }),
+  ];
+}
+
 function gate(
   gateId: ImageKeyframeRuntimeGate["gateId"],
   detail: string,
@@ -985,11 +1123,19 @@ export function buildImageKeyframeRuntimePlan(input: BuildImageKeyframeRuntimePl
     endPlans: image2EndFramePlans,
     keyframePairs: input.keyframePairs || [],
   });
+  const visualConsistencyGates = buildVisualConsistencyGates({
+    assetPlanning: assetReferencePlanning,
+    promptPlans: input.promptPlans || [],
+    pairGates: keyframePairGates,
+    endPlans: image2EndFramePlans,
+    runtimeLockGates,
+  });
   const blockers = uniqueSorted([
     ...assetReferencePlanning.blockers,
     ...image2StartFramePlans.flatMap((plan) => plan.blockers),
     ...image2EndFramePlans.flatMap((plan) => plan.blockers),
     ...keyframePairGates.flatMap((gateItem) => gateItem.blockers),
+    ...visualConsistencyGates.flatMap((gateItem) => gateItem.blockers),
     ...promotionHandoffPlan.items.flatMap((item) => item.blockers),
     ...runtimeLockGates.flatMap((gateItem) => gateItem.violations),
     ...(image2StartFramePlans.length ? [] : ["No Image2 start frame plans were produced."]),
@@ -1000,6 +1146,7 @@ export function buildImageKeyframeRuntimePlan(input: BuildImageKeyframeRuntimePl
     ...image2StartFramePlans.flatMap((plan) => plan.warnings),
     ...image2EndFramePlans.flatMap((plan) => plan.warnings),
     ...keyframePairGates.flatMap((gateItem) => gateItem.warnings),
+    ...visualConsistencyGates.flatMap((gateItem) => gateItem.warnings),
   ]);
 
   return {
@@ -1024,6 +1171,7 @@ export function buildImageKeyframeRuntimePlan(input: BuildImageKeyframeRuntimePl
     image2StartFramePlans,
     image2EndFramePlans,
     keyframePairGates,
+    visualConsistencyGates,
     promotionHandoffPlan,
     runtimeLocks,
     runtimeLockGates,

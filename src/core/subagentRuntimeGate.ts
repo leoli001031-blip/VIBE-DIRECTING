@@ -412,11 +412,40 @@ function validateSubjectEnvelope(
   };
 }
 
+function hasItems(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0;
+}
+
+function phase38EnvelopeRequirementIssues(envelope: SubagentTaskEnvelope | undefined): string[] {
+  if (!envelope) return ["phase38_envelope_missing"];
+
+  const hasPrevious = envelope.neighborShots.some((shot) => shot.position === "previous");
+  const hasNext = envelope.neighborShots.some((shot) => shot.position === "next");
+  const hasHardNegatives =
+    hasItems(envelope.mustNotAdd) ||
+    hasItems(envelope.forbiddenReferences) ||
+    hasItems(envelope.taskEnvelope.hardRules);
+
+  return uniqueSorted([
+    envelope.userIntent && envelope.storyFunction && envelope.shotId ? "" : "phase38_context_capsule_missing",
+    hasItems(envelope.lockedReferences) && hasItems(envelope.authorityPriority) ? "" : "phase38_reference_authority_missing",
+    hasPrevious && hasNext ? "" : "phase38_before_after_shots_missing",
+    hasItems(envelope.taskEnvelope.expectedOutputs) ? "" : "phase38_expected_output_missing",
+    hasHardNegatives ? "" : "phase38_hard_negatives_missing",
+    hasItems(envelope.qaChecklist) ? "" : "phase38_qa_checklist_missing",
+    envelope.expectedOutputContract?.format === "subagent_result_v1" &&
+    hasItems(envelope.expectedOutputContract.requiredFields)
+      ? ""
+      : "phase38_output_contract_missing",
+  ]);
+}
+
 function evaluateSubject(input: SubagentRuntimeGateInput): SubagentRuntimeGateSubjectEvidence {
   const subject = selectedSubject(input);
   const envelopeValidation = validateSubjectEnvelope(subject.envelope, subject.slot);
   const commandPlan = subject.slot?.commandPlan;
   const envelopeId = subject.envelope?.id || subject.slot?.envelopeId;
+  const phase38Issues = phase38EnvelopeRequirementIssues(subject.envelope);
   const blockers = uniqueSorted([
     ...(subject.source === "missing" ? ["subagent_task_envelope_or_worker_slot_evidence_required"] : []),
     ...(subject.source === "subagent_task_envelope" ? ["worker_runtime_slot_evidence_missing_for_envelope"] : []),
@@ -426,6 +455,7 @@ function evaluateSubject(input: SubagentRuntimeGateInput): SubagentRuntimeGateSu
     ...(subject.envelope && subject.slot?.envelopeId && subject.envelope.id !== subject.slot.envelopeId
       ? ["worker_slot_envelope_id_mismatch"]
       : []),
+    ...phase38Issues,
     ...(subject.slot && subject.slot.status !== "ready_for_permission_gate"
       ? [`worker_slot_not_ready_for_permission_gate:${subject.slot.status}`]
       : []),

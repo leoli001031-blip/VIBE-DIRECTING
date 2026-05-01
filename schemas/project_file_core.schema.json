@@ -40,12 +40,12 @@
     },
     "plannedFileTree": {
       "type": "array",
-      "minItems": 11,
+      "minItems": 16,
       "items": { "$ref": "#/$defs/plannedEntry" }
     },
     "sourceOfTruthPriority": {
       "type": "array",
-      "minItems": 12,
+      "minItems": 17,
       "items": { "$ref": "#/$defs/sourcePriority" }
     },
     "derivedCachePolicy": {
@@ -148,7 +148,12 @@
         "project_manifest",
         "production_bible",
         "story_flow",
+        "shot_spec",
+        "shot_layout",
         "visual_memory",
+        "spatial_memory",
+        "scene_asset_pack",
+        "voice_memory",
         "shots",
         "manifests",
         "reports",

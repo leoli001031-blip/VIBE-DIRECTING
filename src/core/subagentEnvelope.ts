@@ -46,11 +46,14 @@ export interface BuildSubagentEnvelopeInput {
   storyFunction?: string;
   userIntent?: string;
   neighborShots?: NeighborShotContext[];
+  lockedReferences?: ReferenceAuthority[];
+  forbiddenReferences?: ReferenceAuthority[];
   shotLayout?: ShotLayoutContext;
   providerPolicySummary?: string[];
   mustPreserve?: string[];
   allowedDelta?: string[];
   mustNotAdd?: string[];
+  expectedOutputContract?: SubagentOutputContract;
   knowledgeRouteResult?: KnowledgeRouteResult;
   contextBudget?: ContextBudgetResult;
   injectedKnowledgePacks?: KnowledgeInjectionRecord[];
@@ -69,16 +72,20 @@ export interface BuildSubagentEnvelopeInput {
 }
 
 export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): SubagentTaskEnvelope {
-  const lockedReferences: ReferenceAuthority[] = input.taskEnvelope.references.filter(
-    (reference) => reference.lockedStatus === "locked" && reference.polarity === "positive" && reference.canUseAsFutureReference,
-  );
-  const forbiddenReferences: ReferenceAuthority[] = input.taskEnvelope.references.filter(
-    (reference) =>
-      reference.lockedStatus === "rejected" ||
-      reference.polarity === "negative" ||
-      reference.referenceRole === "temp_candidate" ||
-      !reference.canUseAsFutureReference,
-  );
+  const lockedReferences: ReferenceAuthority[] =
+    input.lockedReferences ||
+    input.taskEnvelope.references.filter(
+      (reference) => reference.lockedStatus === "locked" && reference.polarity === "positive" && reference.canUseAsFutureReference,
+    );
+  const forbiddenReferences: ReferenceAuthority[] =
+    input.forbiddenReferences ||
+    input.taskEnvelope.references.filter(
+      (reference) =>
+        reference.lockedStatus === "rejected" ||
+        reference.polarity === "negative" ||
+        reference.referenceRole === "temp_candidate" ||
+        !reference.canUseAsFutureReference,
+    );
 
   const layoutMustPreserve = input.shotLayout?.mustPreserve || [];
   const layoutAllowedDelta = input.shotLayout?.allowedDelta || [];
@@ -99,7 +106,14 @@ export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): Su
     sectionId: input.sectionId,
     shotId: input.shotId,
     storyFunction: input.storyFunction || input.taskEnvelope.storyFunction,
-    userIntent: input.userIntent,
+    userIntent:
+      input.userIntent ||
+      [
+        `shot=${input.shotId || "project"}`,
+        `story=${input.storyFunction || input.taskEnvelope.storyFunction || "unspecified"}`,
+        `source=${input.taskEnvelope.sourceIndexHash}`,
+        `expected=${input.taskEnvelope.expectedOutputs.join(",") || "missing"}`,
+      ].join(" | "),
     neighborShots: input.neighborShots || [],
     lockedReferences,
     forbiddenReferences,
@@ -146,7 +160,7 @@ export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): Su
     mustPreserve: [...new Set([...layoutMustPreserve, ...(input.mustPreserve || [])])],
     allowedDelta: [...new Set([...layoutAllowedDelta, ...(input.allowedDelta || [])])],
     mustNotAdd: [...new Set([...layoutMustNotAdd, ...(input.mustNotAdd || [])])],
-    expectedOutputContract: defaultOutputContract,
+    expectedOutputContract: input.expectedOutputContract || defaultOutputContract,
   };
 
   const policyBinding = envelope.policyBinding || buildPolicyBinding(envelope.taskEnvelope);

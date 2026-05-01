@@ -764,6 +764,10 @@ function warningsFor(record: WorkRecord, gate: LocalOrchestratorCompletionGate, 
     ...(record.resumeItem?.blockingReasons || []).filter((reason) => !record.resumeItem?.skipAllowed),
     ...(record.qaItem?.formalPromotionBlockedReasons || []),
     ...(record.subagentSlot?.warnings || []),
+    ...(record.subagentSlot && record.subagentSlot.envelopeStatus !== "validated"
+      ? [`Subagent coverage gap for ${record.subagentSlot.taskKind}: ${record.subagentSlot.envelopeStatus}.`]
+      : []),
+    ...(record.subagentSlot?.requirementChecks.filter((check) => !check.present).map((check) => `Subagent packet requirement missing: ${check.requirementId}.`) || []),
     ...codexActivity.notes,
     ...gate.blockers.filter((blocker) => blocker !== "Expected output has not been observed yet."),
   ]);
@@ -959,6 +963,16 @@ function sourceCoverage(queue: LocalOrchestratorQueueItem[]): LocalOrchestratorS
   });
 }
 
+function subagentCoverageNotes(input: BuildLocalOrchestratorInput): string[] {
+  return uniqueSorted(
+    (input.subagentRunner?.coverage || []).flatMap((entry) => [
+      entry.totalSlots === 0 ? `Subagent coverage gap: no ${entry.taskKind} slot is visible to the orchestrator.` : "",
+      entry.totalSlots > 0 && entry.planned === 0 ? `Subagent coverage gap: ${entry.taskKind} has no validated planned envelope.` : "",
+      ...entry.notes.filter((note) => note.startsWith("Coverage gap")),
+    ]),
+  );
+}
+
 function buildRecords(input: BuildLocalOrchestratorInput): WorkRecord[] {
   const registry = makeRegistry();
   let order = 0;
@@ -1073,6 +1087,7 @@ export function buildLocalOrchestratorState(input: BuildLocalOrchestratorInput):
     notes: [
       "Phase 10 Local Orchestrator is a dry-run/plan-only queue state machine.",
       "It can show the fact chain that makes a task look active, stalled, QA-pending, blocked, or verified.",
+      ...subagentCoverageNotes(input),
       "It never starts daemons, spawns Codex, executes shell commands, submits providers, reads credentials, or mutates files.",
       `Queue statuses are fixed to ${statusOrder.join(", ")}.`,
     ],

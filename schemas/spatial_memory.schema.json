@@ -16,6 +16,7 @@
     "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
     "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
     "coordinatePolicy": { "$ref": "#/$defs/coordinatePolicy" },
+    "visualConsistencyPolicy": { "$ref": "#/$defs/visualConsistencyPolicy" },
     "scenes": {
       "type": "array",
       "items": { "$ref": "#/$defs/spatialScene" }
@@ -41,6 +42,22 @@
         "worldPositionRequired": { "type": "boolean", "const": true },
         "cameraVectorRequired": { "type": "boolean", "const": true },
         "textOnlyMultiViewAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "visualConsistencyPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "masterSceneInheritanceRequired",
+        "cameraWorldPositionRequired",
+        "subjectWorldPositionRequired",
+        "axisContinuityRequired"
+      ],
+      "properties": {
+        "masterSceneInheritanceRequired": { "type": "boolean", "const": true },
+        "cameraWorldPositionRequired": { "type": "boolean", "const": true },
+        "subjectWorldPositionRequired": { "type": "boolean", "const": true },
+        "axisContinuityRequired": { "type": "boolean", "const": true }
       }
     },
     "spatialScene": {

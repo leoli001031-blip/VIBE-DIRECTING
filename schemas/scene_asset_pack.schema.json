@@ -39,6 +39,7 @@
       "enum": ["draft_only", "ready_for_formal", "blocked"]
     },
     "inheritanceRules": { "$ref": "#/$defs/inheritanceRules" },
+    "visualConsistencyContracts": { "$ref": "#/$defs/visualConsistencyContracts" },
     "updatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
   },
   "$defs": {
@@ -159,6 +160,24 @@
         "masterInheritanceRequired": { "type": "boolean", "const": true },
         "textOnlyViewRecreationAllowed": { "type": "boolean", "const": false },
         "unknownDerivationCanLock": { "type": "boolean", "const": false }
+      }
+    },
+    "visualConsistencyContracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "masterSceneDerivationRequired",
+        "derivedViewsInheritMaster",
+        "derivedViewsRequireCameraVector",
+        "derivedViewsRequireWorldPosition",
+        "textOnlyViewRecreationAllowed"
+      ],
+      "properties": {
+        "masterSceneDerivationRequired": { "type": "boolean", "const": true },
+        "derivedViewsInheritMaster": { "type": "boolean", "const": true },
+        "derivedViewsRequireCameraVector": { "type": "boolean", "const": true },
+        "derivedViewsRequireWorldPosition": { "type": "boolean", "const": true },
+        "textOnlyViewRecreationAllowed": { "type": "boolean", "const": false }
       }
     }
   }

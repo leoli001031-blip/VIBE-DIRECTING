@@ -96,6 +96,8 @@ const sequenceDoc = readText(sequenceDocPath);
 const contractDoc = readText(contractDocPath);
 
 const directorMode = findFunctionBody(appSource, "DirectorMode");
+const directorProgressStrip = findFunctionBody(appSource, "DirectorProgressStrip");
+const directorProgressStripState = findFunctionBody(appSource, "buildDirectorProgressStripState");
 const minimalTopNav = findFunctionBody(appSource, "MinimalTopNav");
 const minimalAgentPanel = findFunctionBody(appSource, "MinimalAgentPanel");
 const minimalAssetLibrary = findFunctionBody(appSource, "MinimalAssetLibrary");
@@ -152,10 +154,22 @@ checkMessage(requireWithin(contractDoc, /Minimal Director UI Contract/i, "minima
 checkMessage(requireWithin(contractDoc, /Diagnostics/i, "diagnostics boundary in minimal UI contract doc"));
 
 checkMessage(requireWithin(appSource, /function\s+DirectorMode\s*\(/, "DirectorMode component"));
+checkMessage(requireWithin(appSource, /function\s+DirectorProgressStrip\s*\(/, "Phase 35 Director progress strip component"));
 checkMessage(requireWithin(appSource, /function\s+MinimalAgentPanel\s*\(/, "MinimalAgentPanel component"));
 checkMessage(requireWithin(appSource, /function\s+DiagnosticsMode\s*\(/, "DiagnosticsMode component"));
 checkMessage(requireWithin(appBody, /mode\s*===\s*"diagnostics"/, "Diagnostics entry in App mode switch/rendering"));
 checkMessage(requireWithin(appBody, /mode\s*===\s*"director"/, "Director mode rendering"));
+checkMessage(requireWithin(directorMode, /DirectorProgressStrip/, "Phase 35 progress strip mounted in DirectorMode"));
+checkMessage(requireWithin(directorProgressStripState, /buildLocalOrchestratorUiSummary\s*\(/, "Phase 35 progress strip must derive from Phase 34 runtime summary"));
+checkMessage(requireWithin(directorProgressStrip, /项目处理进度/, "Phase 35 progress strip accessible label"));
+checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /准备中/, "Phase 35 progress strip preparing label"));
+checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /生成中/, "Phase 35 progress strip working label"));
+checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /等待复核/, "Phase 35 progress strip review label"));
+checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /有阻断/, "Phase 35 progress strip blocked label"));
+checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /已完成/, "Phase 35 progress strip complete label"));
+checkMessage(requireWithin(directorProgressStrip, /director-progress-track/, "Phase 35 progress strip visual track"));
+checkMessage(requireWithin(stylesSource, /\.director-progress-strip/, "Phase 35 progress strip styling"));
+check(!/<button\b/i.test(directorProgressStrip), "Phase 35 progress strip must stay read-only and expose no buttons");
 checkMessage(requireWithin(minimalAgentPanel, /buildDirectorWorkflowState\s*\(/, "MinimalAgentPanel must use buildDirectorWorkflowState"));
 check(
   !/buildStoryChangeTransaction\s*\(/.test(minimalAgentPanel),
@@ -331,7 +345,7 @@ check(
   "DiagnosticsMode should remain the primary home for engineering/status terms",
 );
 
-const minimalDirectorSurface = `${directorMode}\n${minimalAgentPanel}\n${minimalTopNav}\n${minimalProjectPlan}`;
+const minimalDirectorSurface = `${directorMode}\n${directorProgressStrip}\n${minimalAgentPanel}\n${minimalTopNav}\n${minimalProjectPlan}`;
 const forbiddenMinimalTerms = [
   ["Queue Shell", /Queue\s+Shell/i],
   ["Provider Lock", /Provider\s+Lock/i],
@@ -372,6 +386,7 @@ for (const [term, pattern] of forbiddenMinimalTerms) {
 
 const phase2123DirectorSurface = [
   directorMode,
+  directorProgressStrip,
   minimalTopNav,
   minimalAgentPanel,
   minimalAssetLibrary,
@@ -500,6 +515,23 @@ const phase34ForbiddenMainTerms = [
 for (const [term, pattern] of phase34ForbiddenMainTerms) {
   const count = countPattern(phase2123DirectorSurface, pattern);
   check(count === 0, `Phase 34 main Director surface must expose 0 ${term} term(s), found ${count}`);
+}
+const phase35ForbiddenMainTerms = [
+  ["Local Orchestrator", /Local\s+Orchestrator/i],
+  ["TaskEnvelope", /Task\s*Envelope|TaskEnvelope/i],
+  ["manifest", /manifest/i],
+  ["provider submit", /provider\s+submit/i],
+  ["spawn", /spawn/i],
+  ["daemon", /daemon/i],
+  ["credential", /credential/i],
+  ["shell", /shell/i],
+  ["Execute", /\bExecute\b/i],
+  ["Run", /\bRun\b/i],
+  ["Submit", /\bSubmit\b/i],
+];
+for (const [term, pattern] of phase35ForbiddenMainTerms) {
+  const count = countPattern(phase2123DirectorSurface, pattern);
+  check(count === 0, `Phase 35 main Director surface must expose 0 ${term} term(s), found ${count}`);
 }
 check(!/Formal\s+Gate|Proxy\s+Duration|Draft\s+Events|blockedPlaceholder/i.test(minimalPreview), "Preview Player copy must stay short and not show gate/proxy counters");
 check(/locked/i.test(minimalAssetLibrary) && /candidate/i.test(minimalAssetLibrary) && /review/i.test(minimalAssetLibrary), "Asset Library must keep locked/candidate/review consistency states");

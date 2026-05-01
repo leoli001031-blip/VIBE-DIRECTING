@@ -57,6 +57,15 @@ assert(
   projectFactsIntegrationSchema.$defs.hardLocks.properties.runtimeStateIsDerivedCache.const === true,
   "Project Facts Integration schema must lock runtime state as derived cache",
 );
+for (const field of ["ready", "blocker", "missing", "sourceHashes", "sources"]) {
+  assert(
+    projectFactsIntegrationSchema.$defs.factConnection.required.includes(field),
+    `Project Facts Integration factConnection must require ${field}`,
+  );
+}
+for (const field of ["ready", "notReady", "missingSourceCount", "sourceHashCount"]) {
+  assert(projectFactsIntegrationSchema.properties.summary.required.includes(field), `Project Facts Integration summary must require ${field}`);
+}
 
 function assertNoRuntimeSourceOfTruth(state, message) {
   for (const fact of Object.values(state.facts)) {
@@ -238,12 +247,20 @@ const runtimeOnlyState = buildProjectFactsIntegrationState({
 });
 assertNoRuntimeSourceOfTruth(runtimeOnlyState, "runtime-only state");
 assert(runtimeOnlyState.facts.storyFlow.status === "blocked", "runtime-only Story Flow must block");
+assert(runtimeOnlyState.facts.storyFlow.ready === false, "runtime-only Story Flow must not be ready");
+assert(runtimeOnlyState.facts.storyFlow.blocker === true, "runtime-only Story Flow must report blocker=true");
+assert(runtimeOnlyState.facts.storyFlow.missing === true, "runtime-only Story Flow must report missing source");
+assert(runtimeOnlyState.facts.storyFlow.sourceHashes.length === 0, "runtime-only Story Flow must not report a source hash");
 assert(runtimeOnlyState.facts.storyFlow.sourceOfTruth === "not_connected", "runtime-only Story Flow must not become source-of-truth");
 assert(runtimeOnlyState.facts.storyFlow.blockers.some((blocker) => blocker.includes("direct input/runtime state")), "runtime-only Story Flow blocker detail missing");
 assert(runtimeOnlyState.facts.visualMemory.status === "blocked", "runtime-only Visual Memory must block");
+assert(runtimeOnlyState.facts.visualMemory.ready === false, "runtime-only Visual Memory must not be ready");
+assert(runtimeOnlyState.facts.visualMemory.missing === true, "runtime-only Visual Memory must report missing source");
 assert(runtimeOnlyState.facts.visualMemory.sourceOfTruth === "not_connected", "runtime-only Visual Memory must not become source-of-truth");
 assert(runtimeOnlyState.facts.visualMemory.blockers.some((blocker) => blocker.includes("direct input/runtime state")), "runtime-only Visual Memory blocker detail missing");
 assert(runtimeOnlyState.facts.voiceMemory.status === "blocked", "runtime-only Voice Memory must block");
+assert(runtimeOnlyState.facts.voiceMemory.ready === false, "runtime-only Voice Memory must not be ready");
+assert(runtimeOnlyState.facts.voiceMemory.missing === true, "runtime-only Voice Memory must report missing source");
 assert(runtimeOnlyState.facts.voiceMemory.sourceOfTruth === "not_connected", "runtime-only Voice Memory must not become source-of-truth");
 assert(runtimeOnlyState.facts.voiceMemory.blockers.some((blocker) => blocker.includes("runtime state")), "runtime-only Voice Memory blocker detail missing");
 
@@ -300,6 +317,9 @@ assertNoRuntimeSourceOfTruth(blockedState, "blocked fixture state");
 assert(blockedState.phase === "phase20_project_facts_integration", "phase id drifted");
 assert(blockedState.status === "blocked", "missing layout/spatial memory should block integration readiness");
 assert(blockedState.facts.productionBible.status === "connected", "fixture Production Bible should connect from Project Store");
+assert(blockedState.facts.productionBible.ready === true, "fixture Production Bible should be ready");
+assert(blockedState.facts.productionBible.sourceHashes.length > 0, "fixture Production Bible must report source hash");
+assert(blockedState.facts.productionBible.sources.some((source) => source.path === "production_bible/production_bible.vibe.json"), "fixture Production Bible source path missing");
 assert(blockedState.facts.storyFlow.recordCount === 1, "Story Flow should count fixture shot");
 assert(blockedState.facts.storyFlow.sourceOfTruth === "project_store", "Story Flow should use Project Store source-of-truth");
 assert(blockedState.facts.shotSpec.status === "connected", "Shot Spec should connect from Project Store");
@@ -308,6 +328,8 @@ assert(["connected", "partial"].includes(blockedState.facts.visualMemory.status)
 assert(blockedState.facts.voiceMemory.sourceOfTruth === "voice_source_library", "Voice Memory should use Voice Source Library");
 assert(["connected", "partial"].includes(blockedState.facts.voiceMemory.status), "Voice Source Library-backed Voice Memory should remain connected or partial");
 assert(blockedState.facts.shotLayout.status === "blocked", "missing Shot Layout must block");
+assert(blockedState.facts.shotLayout.ready === false, "missing Shot Layout must not be ready");
+assert(blockedState.facts.shotLayout.missing === true, "missing Shot Layout must report missing source");
 assert(blockedState.facts.shotLayout.blockers.some((blocker) => blocker.includes("Shot Layout")), "Shot Layout blocker detail missing");
 assert(blockedState.facts.spatialMemory.status === "blocked", "missing Spatial Memory must block");
 assert(blockedState.visualConsistency.masterScene.status === "structured", "master scene should be structurally supported by Scene Asset Pack");
@@ -340,9 +362,16 @@ const readyState = buildProjectFactsIntegrationState({
 
 assertNoRuntimeSourceOfTruth(readyState, "ready fixture state");
 assert(readyState.status === "ready", `ready fixture should not block: ${readyState.summary.blockerCount} blockers`);
+assert(readyState.summary.ready === 8, "ready fixture should mark all fact families ready");
+assert(readyState.summary.notReady === 0, "ready fixture should have no not-ready fact families");
+assert(readyState.summary.missingSourceCount === 0, "ready fixture should have no missing sources");
+assert(readyState.summary.sourceHashCount >= 8, "ready fixture should report source hashes for all fact families");
 assert(readyState.facts.shotLayout.status === "connected", "Shot Layout should connect when layout fixture exists");
+assert(readyState.facts.shotLayout.sources[0].hash, "Shot Layout source hash missing");
 assert(readyState.facts.spatialMemory.status === "connected", "Spatial Memory should connect when world positions exist");
+assert(readyState.facts.spatialMemory.sources[0].path === "spatial_memory/spatial_memory.vibe.json", "Spatial Memory source path missing");
 assert(readyState.facts.sceneAssetPack.status === "connected", "locked scene pack with derived view should connect");
+assert(readyState.facts.sceneAssetPack.sources[0].path.includes("scene_asset_packs"), "Scene Asset Pack source path missing");
 assert(readyState.visualConsistency.worldPosition.status === "structured", "world position should be structured with scene pack and shot layout");
 assert(readyState.visualConsistency.startEndDerivation.status === "structured", "start-end derivation should be structured from Shot Layout");
 assert(readyState.visualConsistency.startEndDerivation.supportedShotIds.includes("shot_001"), "Shot Layout derivation shot id missing");

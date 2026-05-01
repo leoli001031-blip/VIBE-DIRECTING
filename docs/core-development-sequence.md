@@ -994,9 +994,9 @@ Phase 9.4 checklist：
 - 右侧自然语言修改面板保持短状态和少量 badge；详细执行计划、工程锁和诊断字段继续留在 Diagnostics。
 - 新增 `npm run preview-player:test`，并扩展 `npm run minimal-ui:test` 覆盖 Phase 21/23：Preview Player 存在、主界面工程词为 0、Preview Player 文案短且稀疏。
 
-### Phase 24-34 Runtime Gate / Adapter Planning
+### Phase 24-42 Runtime Gate / Beta Closure Planning
 
-Phase 24-34 先做 lightweight pure runtime plan，不做真实执行。Phase 34 是 runtime integration 目标：把已存在的 Local Orchestrator / Queue Harness 接成 `ProjectRuntimeState.localOrchestrator` 一等事实，仍然保持 plan-only / diagnostics-only。`src/core/phaseRoadmapRuntime.ts` 用于输出每个阶段的 readiness、status、blocked reason、required preceding phases、hard locks 和 acceptance criteria。
+Phase 24-42 先做 lightweight pure runtime plan，不做真实执行。Phase 42 是当前路线的 beta closure 终点；后续不再因为“还差一点”继续无限新增 Phase。Phase 34-42 只把队列可见性、项目文件事实源、视觉一致性、全任务 packet、Knowledge Pack 用户管理、gated worker shell、gated provider closed-loop shell 和 desktop/export beta acceptance 收口成明确验收，不开放默认真实 spawn/provider submit/credential 路径。`src/core/phaseRoadmapRuntime.ts` 用于输出每个阶段的 readiness、status、blocked reason、required preceding phases、hard locks 和 acceptance criteria。
 
 阶段顺序：
 
@@ -1011,6 +1011,14 @@ Phase 24-34 先做 lightweight pure runtime plan，不做真实执行。Phase 34
 - Phase 32：Action-time Confirmation Receipt / Review Shell。消费 Phase 31 typed permission evidence，生成确认回执层的 roadmap evidence 和未来 review shell 计划；默认路径 `confirmedReceiptCount=0`，仍不提交 provider、不 live submit、不读写 credentials、不 spawn worker、不改文件。
 - Phase 33：Provider Execution Handoff / Final Action Gate。消费 Phase 32 typed receipt evidence 和动作时确认 evidence；默认因为 `confirmedReceiptCount=0` 而 blocked。即使 ready，也只是 final handoff review，不提交 provider、不 live submit、不读写 credentials、不 spawn worker、不改文件。
 - Phase 34：Local Orchestrator Runtime Integration。消费 Phase 10 Local Orchestrator / Queue Harness，把长队列、自动续跑计划、reconnect / stall / retry / manual review 状态接成 `ProjectRuntimeState.localOrchestrator` 一等事实；仍不启动 daemon、不 spawn Codex、不提交 provider、不执行 shell、不读写 credential、不改文件。
+- Phase 35：Task Queue Visibility / Progress Strip。主界面只显示简洁任务进度和阻断/复核状态，详细队列仍进 Diagnostics / Settings；不得出现 Run / Submit / Execute 入口。
+- Phase 36：Project File Fact Source。固定 `project.vibe` / project files 是 save/open 与 runtime-state 派生事实源，不再把旧聊天或 runtime cache 当主事实源。
+- Phase 37：Visual Consistency Contract。把 identity、scene、shot layout、spatial memory、keyframe pair derivation、master inheritance QA 固定为正式视觉一致性合同。
+- Phase 38：Full Task Subagent Packet Planner。图片、资产、首尾帧、视频、QA、再生成、故事审计、导出等正式任务都必须走 validated packet，不再由自由文本临时派工。
+- Phase 39：Knowledge Pack User Management。用户可导入、新建、启用/禁用、测试路由和检测冲突；pack 仍不能覆盖 provider policy、preflight、reference authority 或 QA gate。
+- Phase 40：Codex Worker Runtime Gate。真实 Codex Worker Runtime 只做默认关闭的 gated shell；默认不 spawn Codex、不启 daemon、不执行 shell、不读写 credential、不改文件、不提交 provider。
+- Phase 41：Image2 / Seedance Provider Closed-loop Shell。只做 provider execution closed-loop shell：Image2/Seedance 的 watcher / manifest / QA / promotion 闭环合同可见，但默认不提交 provider、不提交 live、不保存/读取 credential、不创建 API key。
+- Phase 42：Export / Desktop / Beta Acceptance。作为 beta closure 终点验收 Mac/Win desktop readiness、project save/open、preview/export、queue visibility、visual consistency、Knowledge Pack、provider gate 和 tests；本路线到 Phase 42 停止增长。
 
 Phase 24 真实 gate 补充：
 
@@ -1038,6 +1046,14 @@ Acceptance criteria：
 - Phase 32 缺 typed receipt evidence、缺 Phase 31 evidence、缺 action-time confirmation receipt plan、`confirmedReceiptCount != 0`、provider/live/credential/automatic-submit/worker/file 任一路径打开、hard lock drift 或 forbidden provider modes 未明确 absent，都必须 blocked。
 - Phase 33 缺 typed handoff evidence、缺 Phase 32 evidence、缺 action-time confirmation evidence、用户未在动作时确认、provider/live/credential/automatic-submit/worker/file 任一路径打开、hard lock drift 或 forbidden provider modes 未明确 absent，都必须 blocked。
 - Phase 34 缺 typed Local Orchestrator evidence、未接入 `ProjectRuntimeState.localOrchestrator`、worker self-report 被当成完成、缺 expected output / manifest / QA / promotion gate 任一项却进入 complete、auto-continue 变成真实执行、reconnect / stall / retry / manual review 状态缺失，或 daemon / Codex spawn / provider submit / live submit / shell / credential / file mutation 任一路径打开，都必须 blocked。
+- Phase 35 缺只读 progress strip / queue summary、把队列明细塞回主界面、出现 Run / Submit / Execute 控件，或触发 worker/provider/file/credential/shell 任一路径，都必须 blocked。
+- Phase 36 缺 project file fact source、save/open contract、runtime-state 从项目文件派生、project-local knowledge scope，或继续把 runtime cache / 旧聊天当事实源，都必须 blocked。
+- Phase 37 缺 identity / scene / shot layout / spatial memory / keyframe pair / master inheritance QA 任一合同，都必须 blocked。
+- Phase 38 任一正式生产任务不能生成 validated packet、缺 expected outputs、缺 injected knowledge trace、缺 source fact trace，或允许 free-text worker，都必须 blocked。
+- Phase 39 用户 pack 管理缺 import/create/enable/disable、版本/hash/依赖、route test、conflict detection，或允许 pack 覆盖硬门禁，都必须 blocked。
+- Phase 40 缺 typed gated worker runtime evidence、默认 gate 打开、实际 Codex spawn / daemon / shell / credential / file mutation / provider submit 任一路径打开，都必须 blocked。
+- Phase 41 缺 Image2/Seedance closed-loop shell、缺 watcher/manifest/QA/promotion 闭环、provider commit 默认不 gated，或真实 provider submit / live submit / credential 任一路径打开，都必须 blocked。
+- Phase 42 缺 Mac/Win desktop readiness、project save/open、preview/export、queue visibility、visual consistency、Knowledge Pack、provider gate 或测试任一 beta acceptance 项，都必须 blocked；`noAdditionalPhasesPlanned=true` 是验收的一部分。
 - 所有阶段都必须 pin hard locks；测试命令为 `npm run phase-roadmap:test`。
 
 ### Phase 30 已实现范围：Provider Enablement Gate
@@ -1085,7 +1101,20 @@ Acceptance criteria：
 - UI 原则：主导演台继续极简，只显示“有任务在进行 / 等待复核 / 有阻断”的短状态或进度条；队列明细、reconnect/stall/retry/manual review、manifest/QA/expected output 只进 Diagnostics / Settings，不加 Run / Submit / Execute 按钮。
 - 验收命令：`npm run orchestrator:test`、`npm run import:test`、`npm run project-runtime:test`、`npm run minimal-ui:test`、`npm run build`。
 - 浏览器验收：主 Director surface 不出现 Local Orchestrator、queue harness、TaskEnvelope、provider submit、spawn、daemon 等工程词；Diagnostics 有只读队列面板，能看到 waiting/ready/running planned/waiting output/QA pending/needs review/blocked/complete verified 摘要。
-- 下一步建议：Phase 35 优先做 `Task Queue Visibility / Progress Strip` 或 `Project Store write confirmation gate`；暂不接真实 provider。前者直接回应用户“前端要看到 Codex 在干活”的需求，后者为后续真实项目写入提供更硬的确认边界。
+- 后续固定：Phase 35-42 已固定为 beta closure 路线，不再继续滚动新增 Phase；暂不接默认真实 provider。
+
+### Phase 35-42 固定范围：Beta Closure
+
+- Phase 35：主界面任务进度条 / queue visibility，只读、短文案、不出现工程执行按钮。
+- Phase 36：项目文件事实源，`project.vibe` / project files 是 save/open 和 runtime 派生的事实源。
+- Phase 37：视觉一致性合同，锁 identity、scene、shot layout、spatial memory、keyframe pair、master inheritance QA。
+- Phase 38：全任务 Subagent Packet Planner，所有正式生产任务必须有 validated packet、expected outputs、source facts 和 knowledge trace。
+- Phase 39：Knowledge Pack 用户管理，支持用户 pack 导入/新建/启停/路由测试/冲突检测，但不能覆盖硬门禁。
+- Phase 40：真实 Codex Worker Runtime 只做默认 gated shell；默认不 spawn、不 daemon、不 shell、不 credential、不文件写、不 provider submit。
+- Phase 41：Image2 / Seedance provider execution closed-loop 只做默认 gated shell；默认不提交 provider、不 live submit、不接 credential、不创建 provider credential。
+- Phase 42：Export / Desktop / Beta Acceptance，验收 Mac/Win desktop readiness、project save/open、preview/export、queue visibility、visual consistency、knowledge pack、provider gate 和 tests。Phase 42 是本轮路线终点。
+
+`PhaseRoadmapRuntime` 已扩展为 `phaseRange=phase_24_to_42`、`totalPhases=19`，新增 `betaClosure.finalPhaseNumber=42` 与 `noAdditionalPhasesPlanned=true`，用于防止 roadmap 继续无界增长。
 
 ### Phase 25 已实现范围：Knowledge Pack Manager
 

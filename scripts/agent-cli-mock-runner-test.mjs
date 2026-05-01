@@ -55,6 +55,7 @@ async function importRuntimeModules() {
 }
 
 function taskEnvelope(id = "task_video_A1_01") {
+  const lockedReference = referenceAuthority("hero_identity");
   return {
     id,
     purpose: "video",
@@ -68,7 +69,7 @@ function taskEnvelope(id = "task_video_A1_01") {
     contextLevel: "L2",
     expectedOutputs: ["outputs/video/A1_01.mp4"],
     hardRules: ["no_live_submit", "no_provider_credentials", "no_shell_execution"],
-    references: [],
+    references: [lockedReference],
     qaChecklist: ["identity_gate", "scene_gate", "pair_gate", "story_gate"],
     preflight: {
       taskId: id,
@@ -86,6 +87,20 @@ function taskEnvelope(id = "task_video_A1_01") {
   };
 }
 
+function referenceAuthority(id, role = "identity_authority") {
+  return {
+    id,
+    path: `visual_memory/${id}.png`,
+    referenceRole: role,
+    authorityScope: ["prompt_reference", "future_reference"],
+    polarity: "positive",
+    lockedStatus: "locked",
+    allowedUse: ["prompt_reference", "future_reference", "draft_preview"],
+    canPromoteToFormal: true,
+    canUseAsFutureReference: true,
+  };
+}
+
 function subagentEnvelope(id = "subagent_video_A1_01", parentTaskId = "task_video_A1_01") {
   return {
     id,
@@ -95,8 +110,26 @@ function subagentEnvelope(id = "subagent_video_A1_01", parentTaskId = "task_vide
     sourceIndexHash: "source_hash_123",
     shotId: "A1_01",
     storyFunction: "test shot",
-    neighborShots: [],
-    lockedReferences: [],
+    userIntent: "task_kind:video_execution | shot:A1_01 | story_function:test shot | expected_output:outputs/video/A1_01.mp4",
+    neighborShots: [
+      {
+        shotId: "A1_00",
+        position: "previous",
+        storyFunction: "setup beat",
+        summary: "Previous continuity anchor",
+        approvedFramePath: "outputs/keyframes/A1_00_end.png",
+        continuityNotes: ["identity:PASS", "scene:PASS"],
+      },
+      {
+        shotId: "A1_02",
+        position: "next",
+        storyFunction: "payoff beat",
+        summary: "Next continuity anchor",
+        approvedFramePath: "outputs/keyframes/A1_02_start.png",
+        continuityNotes: ["identity:PASS", "scene:PASS"],
+      },
+    ],
+    lockedReferences: [referenceAuthority("hero_identity")],
     forbiddenReferences: [],
     providerPolicySummary: ["slot=video.i2v", "provider=seedance2-provider", "state=parked", "mode=frames2video"],
     taskEnvelope: taskEnvelope(parentTaskId),
@@ -110,7 +143,7 @@ function subagentEnvelope(id = "subagent_video_A1_01", parentTaskId = "task_vide
     allowedReadScopes: ["task_envelope", "locked_references", "injected_knowledge_snippets"],
     disallowedReadScopes: ["provider_credentials", "api_keys", "live_provider_task_ids", "unrouted_knowledge_library"],
     sourceIndexRequired: true,
-    mustInspectNeighborShotIds: [],
+    mustInspectNeighborShotIds: ["A1_00", "A1_02"],
     authorityPriority: ["source_index", "provider_policy", "preflight"],
     resultMustReferencePackHashes: true,
     qaChecklist: ["identity_gate", "scene_gate", "pair_gate", "story_gate"],

@@ -931,6 +931,290 @@ function confirmedProviderExecutionHandoffEvidence(overrides = {}) {
   });
 }
 
+function closureHardLocks(overrides = {}) {
+  return {
+    hardLocksPinned: true,
+    dryRunOnly: true,
+    readOnly: true,
+    planOnly: true,
+    diagnosticsOnly: true,
+    noDaemon: true,
+    daemonStarted: false,
+    noSpawnCodex: true,
+    noWorkerSpawn: true,
+    workerSpawnAllowed: false,
+    canSpawnCodex: false,
+    noSubprocess: true,
+    noShellExecution: true,
+    noArbitraryShell: true,
+    arbitraryShellAllowed: false,
+    noProviderSubmit: true,
+    noProviderExecution: true,
+    providerSubmissionForbidden: true,
+    canSubmitProvider: false,
+    providerSubmitAllowed: 0,
+    providerCommitAllowed: false,
+    liveSubmitAllowed: false,
+    noCredentialRead: true,
+    noCredentialWrite: true,
+    credentialAccessAllowed: false,
+    credentialStorage: false,
+    noFileMutation: true,
+    fileMutationAllowed: false,
+    ...(overrides || {}),
+  };
+}
+
+function closureEvidence(phaseId, gates, overrides = {}) {
+  const {
+    hardLocks: hardLockOverrides,
+    observations: observationOverrides,
+    summary: summaryOverrides,
+    gates: gateOverrides,
+    ...rest
+  } = overrides;
+  return {
+    kind: phaseId,
+    phase: phaseId,
+    phaseId,
+    status: "ready",
+    readiness: "ready",
+    ready: true,
+    typedEvidencePresent: true,
+    gates: {
+      ...gates,
+      ...(gateOverrides || {}),
+    },
+    summary: {
+      blockerCount: 0,
+      blocked: 0,
+      missing: 0,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      credentialStorage: false,
+      workerSpawnAllowed: false,
+      fileMutationAllowed: false,
+      daemonStarted: false,
+      ...(summaryOverrides || {}),
+    },
+    hardLocks: closureHardLocks(hardLockOverrides),
+    observations: {
+      daemonStarted: false,
+      spawnCodexObserved: false,
+      workerSpawnObserved: false,
+      subprocessObserved: false,
+      shellExecutionObserved: false,
+      providerSubmitObserved: false,
+      providerExecutionObserved: false,
+      providerCommitObserved: false,
+      liveSubmitObserved: false,
+      credentialReadObserved: false,
+      credentialWriteObserved: false,
+      credentialAccessObserved: false,
+      fileMutationObserved: false,
+      ...(observationOverrides || {}),
+    },
+    blockers: [],
+    warnings: [],
+    ...rest,
+  };
+}
+
+function localOrchestratorRuntimeEvidence(overrides = {}) {
+  const {
+    hardLocks: hardLockOverrides,
+    gates: gateOverrides,
+    queue: queueOverrides,
+    autoContinuePlan: autoContinuePlanOverrides,
+    ...rest
+  } = overrides;
+  return {
+    ...closureEvidence(
+      "phase_34_local_orchestrator_runtime_integration",
+      {
+        projectRuntimeStateLocalOrchestratorPresent: true,
+        autoContinuePlanOnly: true,
+      },
+      {
+        hardLocks: {
+          planOnly: true,
+          noDaemon: true,
+          daemonStarted: false,
+          noSpawnCodex: true,
+          workerSelfReportCannotComplete: true,
+          expectedOutputRequired: true,
+          manifestRequired: true,
+          qaGateRequired: true,
+          ...(hardLockOverrides || {}),
+        },
+        gates: gateOverrides,
+        ...rest,
+      },
+    ),
+    schemaVersion: "0.1.0",
+    queue: queueOverrides || [
+      {
+        queueStatus: "ready",
+        canExecute: false,
+        canSpawnCodex: false,
+        providerSubmissionForbidden: true,
+        liveSubmitAllowed: false,
+        noFileMutation: true,
+        completionGate: {
+          expectedOutputDeclared: true,
+          expectedOutputObserved: false,
+          manifestMatched: false,
+          qaPass: false,
+          promotionGatePassed: false,
+          workerSelfReportOnly: false,
+          completeVerified: false,
+        },
+        codexActivity: {
+          retryBudget: 2,
+          stalled: false,
+          manualReviewRequired: false,
+          state: "ready_to_start",
+        },
+      },
+      {
+        queueStatus: "complete_verified",
+        canExecute: false,
+        canSpawnCodex: false,
+        providerSubmissionForbidden: true,
+        liveSubmitAllowed: false,
+        noFileMutation: true,
+        completionGate: {
+          expectedOutputDeclared: true,
+          expectedOutputObserved: true,
+          manifestMatched: true,
+          qaPass: true,
+          promotionGatePassed: true,
+          workerSelfReportOnly: false,
+          completeVerified: true,
+        },
+        codexActivity: {
+          retryBudget: 2,
+          stalled: false,
+          manualReviewRequired: false,
+          state: "verified",
+        },
+      },
+    ],
+    autoContinuePlan: {
+      mode: "plan_only",
+      nextReadyCount: 1,
+      transitions: [],
+      ...(autoContinuePlanOverrides || {}),
+    },
+    dryRunOnly: true,
+    planOnly: true,
+    providerSubmissionForbidden: true,
+    liveSubmitAllowed: false,
+    noFileMutation: true,
+    daemonStarted: false,
+  };
+}
+
+function taskQueueVisibilityEvidence(overrides = {}) {
+  return closureEvidence("phase_35_task_queue_visibility_progress_strip", {
+    progressStripVisible: true,
+    queueSummaryVisible: true,
+    readOnlyDiagnosticsOnly: true,
+    noRunSubmitExecuteControls: true,
+    consumesLocalOrchestratorSummary: true,
+  }, overrides);
+}
+
+function projectFileFactSourceEvidence(overrides = {}) {
+  return closureEvidence("phase_36_project_file_fact_source", {
+    projectVibeEntryDefined: true,
+    projectFactsAreFileFirst: true,
+    saveOpenContractDefined: true,
+    runtimeStateDerivedFromProjectFiles: true,
+    projectLocalKnowledgePacksScoped: true,
+  }, overrides);
+}
+
+function visualConsistencyContractEvidence(overrides = {}) {
+  return closureEvidence("phase_37_visual_consistency_contract", {
+    identityGateDefined: true,
+    sceneGateDefined: true,
+    shotLayoutGateDefined: true,
+    spatialMemoryGateDefined: true,
+    keyframePairDerivationGateDefined: true,
+    masterInheritanceQaDefined: true,
+  }, overrides);
+}
+
+function subagentPacketPlannerEvidence(overrides = {}) {
+  return closureEvidence("phase_38_full_task_subagent_packet_planner", {
+    allProductionTaskKindsCovered: true,
+    validatedEnvelopeRequired: true,
+    formalTaskRejectsMissingPacket: true,
+    expectedOutputsIncluded: true,
+    knowledgePacksRecorded: true,
+  }, overrides);
+}
+
+function knowledgePackUserManagementEvidence(overrides = {}) {
+  return closureEvidence("phase_39_knowledge_pack_user_management", {
+    userImportCreateEnableDisableReady: true,
+    versionHashDependencyVisible: true,
+    routeTestReady: true,
+    conflictDetectionReady: true,
+    cannotOverrideHardGates: true,
+  }, overrides);
+}
+
+function codexWorkerRuntimeGateEvidence(overrides = {}) {
+  return closureEvidence("phase_40_codex_worker_runtime_gate", {
+    workerRuntimeContractDefined: true,
+    defaultGatedOff: true,
+    validatedEnvelopeOnly: true,
+    structuredResultOnly: true,
+    noActualSpawnByDefault: true,
+  }, {
+    ...overrides,
+    hardLocks: {
+      gatedRuntimeOnly: true,
+      ...(overrides.hardLocks || {}),
+    },
+  });
+}
+
+function providerClosedLoopShellEvidence(overrides = {}) {
+  return closureEvidence("phase_41_provider_closed_loop_shell", {
+    image2ClosedLoopShellDefined: true,
+    seedanceClosedLoopShellDefined: true,
+    watcherManifestQaPromotionRequired: true,
+    providerCommitDefaultGated: true,
+    noActualProviderSubmit: true,
+  }, {
+    ...overrides,
+    hardLocks: {
+      closedLoopShellOnly: true,
+      providerCommitAllowed: false,
+      ...(overrides.hardLocks || {}),
+    },
+  });
+}
+
+function betaAcceptanceEvidence(overrides = {}) {
+  return closureEvidence("phase_42_export_desktop_beta_acceptance", {
+    macDesktopReadiness: true,
+    windowsDesktopReadiness: true,
+    projectSaveOpen: true,
+    previewExport: true,
+    queueVisibility: true,
+    visualConsistency: true,
+    knowledgePackManagement: true,
+    providerGate: true,
+    tests: true,
+    noAdditionalPhasesPlanned: true,
+  }, overrides);
+}
+
 function typedEvidence(overrides = {}) {
   return {
     projectFactsIntegration: projectFactsEvidence(overrides.projectFactsIntegration),
@@ -945,6 +1229,15 @@ function typedEvidence(overrides = {}) {
     providerExecutionHandoff: overrides.providerExecutionHandoff === "confirmed"
       ? confirmedProviderExecutionHandoffEvidence()
       : providerExecutionHandoffEvidence(overrides.providerExecutionHandoff),
+    localOrchestratorRuntime: localOrchestratorRuntimeEvidence(overrides.localOrchestratorRuntime),
+    taskQueueVisibility: taskQueueVisibilityEvidence(overrides.taskQueueVisibility),
+    projectFileFactSource: projectFileFactSourceEvidence(overrides.projectFileFactSource),
+    visualConsistencyContract: visualConsistencyContractEvidence(overrides.visualConsistencyContract),
+    subagentPacketPlanner: subagentPacketPlannerEvidence(overrides.subagentPacketPlanner),
+    knowledgePackUserManagement: knowledgePackUserManagementEvidence(overrides.knowledgePackUserManagement),
+    codexWorkerRuntimeGate: codexWorkerRuntimeGateEvidence(overrides.codexWorkerRuntimeGate),
+    providerClosedLoopShell: providerClosedLoopShellEvidence(overrides.providerClosedLoopShell),
+    betaAcceptance: betaAcceptanceEvidence(overrides.betaAcceptance),
     watcherManifestQaClosedLoop: watcherManifestQaClosedLoopReceipt(overrides.watcherManifestQaClosedLoop),
   };
 }
@@ -974,7 +1267,7 @@ function confirmedPhase33Input(overrides = {}) {
   return {
     ...readyInput(),
     evidence: {
-      ...typedEvidence(),
+      ...typedEvidence(overrides),
       providerExecutionHandoff: confirmedProviderExecutionHandoffEvidence(overrides.providerExecutionHandoff),
     },
   };
@@ -2107,11 +2400,97 @@ assert(
   "Phase 33 plan must not submit provider",
 );
 
+const phase34SelfReportCannotComplete = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  localOrchestratorRuntime: {
+    queue: [
+      {
+        queueStatus: "complete_verified",
+        canExecute: false,
+        canSpawnCodex: false,
+        providerSubmissionForbidden: true,
+        liveSubmitAllowed: false,
+        noFileMutation: true,
+        completionGate: {
+          expectedOutputDeclared: false,
+          expectedOutputObserved: false,
+          manifestMatched: false,
+          qaPass: false,
+          promotionGatePassed: false,
+          workerSelfReportOnly: true,
+          completeVerified: true,
+        },
+        codexActivity: {
+          retryBudget: 2,
+          stalled: false,
+          manualReviewRequired: true,
+          state: "manual_review_required",
+        },
+      },
+    ],
+  },
+}));
+assert(
+  phase(phase34SelfReportCannotComplete, "phase_34_local_orchestrator_runtime_integration").blockedReasons.includes(
+    "local_orchestrator_runtime_completion_gate_not_pinned",
+  ),
+  "Phase 34 must block if a worker self-report can complete without expected output/manifest/QA/promotion gates",
+);
+
+const missingPhase40Evidence = typedEvidence({ providerExecutionHandoff: "confirmed" });
+delete missingPhase40Evidence.codexWorkerRuntimeGate;
+const phase40MissingEvidence = buildPhaseRoadmapRuntimePlan({
+  ...confirmedPhase33Input(),
+  evidence: missingPhase40Evidence,
+  codexWorkerRuntimeGateReady: true,
+});
+assert(
+  phase(phase40MissingEvidence, "phase_40_codex_worker_runtime_gate").blockedReasons.includes(
+    "codex_worker_runtime_gate_typed_evidence_missing",
+  ),
+  "Phase 40 must require typed gated worker runtime evidence",
+);
+
+const phase40SpawnDrift = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  codexWorkerRuntimeGate: {
+    observations: { spawnCodexObserved: true },
+  },
+}));
+assert(
+  phase(phase40SpawnDrift, "phase_40_codex_worker_runtime_gate").blockedReasons.includes(
+    "codex_worker_runtime_gate_spawn_not_blocked",
+  ),
+  "Phase 40 must block actual Codex spawn observations",
+);
+
+const phase41ProviderDrift = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  providerClosedLoopShell: {
+    observations: { providerSubmitObserved: true },
+  },
+}));
+assert(
+  phase(phase41ProviderDrift, "phase_41_provider_closed_loop_shell").blockedReasons.includes(
+    "provider_closed_loop_shell_provider_submit_not_blocked",
+  ),
+  "Phase 41 must block actual provider submit observations",
+);
+
+const phase42MissingWindowsAcceptance = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  betaAcceptance: {
+    gates: { windowsDesktopReadiness: false },
+  },
+}));
+assert(
+  phase(phase42MissingWindowsAcceptance, "phase_42_export_desktop_beta_acceptance").blockedReasons.includes(
+    "beta_acceptance_windows_desktop_missing",
+  ),
+  "Phase 42 beta acceptance must require Windows desktop readiness",
+);
+
 const readyPlan = typedPhase33Ready;
 assert(readyPlan.schemaVersion === "0.1.0", "schema version drifted");
-assert(readyPlan.phaseRange === "phase_24_to_33", "phase range drifted");
-assert(readyPlan.summary.totalPhases === 10, "summary total phase count drifted");
-assert(readyPlan.summary.ready === 10, "all phases should be ready for the confirmed handoff fixture");
+assert(readyPlan.phaseRange === "phase_24_to_42", "phase range drifted");
+assert(readyPlan.summary.totalPhases === 19, "summary total phase count drifted");
+assert(readyPlan.summary.ready === 19, "all phases should be ready for the beta closure fixture");
 assert(readyPlan.summary.blocked === 0, "confirmed handoff fixture should not block");
 assert(readyPlan.summary.providerSubmitAllowed === 0, "provider submit must stay at zero");
 assert(readyPlan.summary.credentialAccessAllowed === false, "credential access must be false");
@@ -2121,23 +2500,46 @@ assert(
   readyPlan.evidenceSummary.decisions.every((decision) => decision.ready === true),
   "complete typed fixture should make every evidence decision ready",
 );
-assert(phaseRoadmapPhaseIds().length === 10, "phase id list should cover Phase 24-33");
+assert(phaseRoadmapPhaseIds().length === 19, "phase id list should cover Phase 24-42");
 
 const phase26Ready = phase(readyPlan, "phase_26_agent_cli_mock_runner");
 const phase29Ready = phase(readyPlan, "phase_29_codex_cli_adapter_spike");
 const phase31Ready = phase(readyPlan, "phase_31_provider_execution_permission_gate");
 const phase32Ready = phase(readyPlan, "phase_32_action_time_confirmation_receipt");
 const phase33Ready = phase(readyPlan, "phase_33_provider_execution_handoff");
+const phase34Ready = phase(readyPlan, "phase_34_local_orchestrator_runtime_integration");
+const phase35Ready = phase(readyPlan, "phase_35_task_queue_visibility_progress_strip");
+const phase40Ready = phase(readyPlan, "phase_40_codex_worker_runtime_gate");
+const phase41Ready = phase(readyPlan, "phase_41_provider_closed_loop_shell");
+const phase42Ready = phase(readyPlan, "phase_42_export_desktop_beta_acceptance");
 assert(phase26Ready.status === "ready_for_noop_runner", "Phase 26 status must describe mock/no-op runner");
 assert(phase29Ready.status === "ready_for_adapter_spike", "Phase 29 status must describe adapter spike");
 assert(phase31Ready.status === "ready_for_final_permission_gate", "Phase 31 status must describe final permission gate");
 assert(phase32Ready.status === "ready_for_receipt_gate", "Phase 32 status must describe receipt gate");
 assert(phase33Ready.status === "ready_for_final_handoff_review", "Phase 33 status must describe final handoff review");
+assert(phase34Ready.status === "ready_for_runtime_integration", "Phase 34 status must describe local orchestrator runtime integration");
+assert(phase35Ready.status === "ready_for_queue_visibility", "Phase 35 status must describe task queue visibility");
+assert(phase40Ready.status === "ready_for_gated_worker_runtime", "Phase 40 status must describe the gated worker runtime shell");
+assert(phase41Ready.status === "ready_for_provider_closed_loop_shell", "Phase 41 status must describe the gated provider closed-loop shell");
+assert(phase42Ready.status === "ready_for_beta_acceptance", "Phase 42 status must describe beta acceptance closure");
 assert(
   readyPlan.adapterBoundary.phase29.requiresPhase26ReplacementProof === true,
   "Phase 29 must require Phase 26 replacement proof",
 );
 assert(readyPlan.adapterBoundary.phase29.canSubmitProvider === false, "Phase 29 must not submit provider");
+assert(readyPlan.betaClosure.finalPhaseNumber === 42, "Phase 42 must be the final beta closure phase");
+assert(readyPlan.betaClosure.noAdditionalPhasesPlanned === true, "roadmap must freeze after Phase 42");
+assert(readyPlan.betaClosure.codexWorkerRuntimeDefaultGated === true, "Phase 40 worker runtime must default gated");
+assert(readyPlan.betaClosure.providerClosedLoopDefaultGated === true, "Phase 41 provider shell must default gated");
+assert(readyPlan.betaClosure.canSpawnCodex === false, "beta closure must not spawn Codex by default");
+assert(readyPlan.betaClosure.canSubmitProvider === false, "beta closure must not submit providers by default");
+assert(readyPlan.betaClosure.providerSubmitAllowed === 0, "beta closure must pin providerSubmitAllowed=0");
+assert(readyPlan.betaClosure.credentialAccessAllowed === false, "beta closure must forbid credentials");
+assert(
+  readyPlan.betaClosure.requiredAcceptanceGates.includes("project_save_open") &&
+    readyPlan.betaClosure.requiredAcceptanceGates.includes("tests"),
+  "beta closure must list project save/open and tests acceptance gates",
+);
 
 for (const [key, expected] of Object.entries({
   noFreeTextWorker: true,
@@ -2184,9 +2586,9 @@ assert(
   "schema registry must include PhaseRoadmapRuntimePlan",
 );
 assert(schema.properties.schemaVersion.const === "0.1.0", "schema must pin schemaVersion");
-assert(schema.properties.phaseRange.const === "phase_24_to_33", "schema must pin Phase 24-33 range");
-assert(schema.properties.phases.minItems === 10, "schema phase list must require 10 phases");
-assert(schema.properties.phases.maxItems === 10, "schema phase list must cap at 10 phases");
+assert(schema.properties.phaseRange.const === "phase_24_to_42", "schema must pin Phase 24-42 range");
+assert(schema.properties.phases.minItems === 19, "schema phase list must require 19 phases");
+assert(schema.properties.phases.maxItems === 19, "schema phase list must cap at 19 phases");
 assert(
   schema.$defs.phaseId.enum.includes("phase_32_action_time_confirmation_receipt"),
   "schema phase id enum must include Phase 32 action confirmation receipt",
@@ -2196,6 +2598,10 @@ assert(
   "schema phase id enum must include Phase 33 provider execution handoff",
 );
 assert(
+  schema.$defs.phaseId.enum.includes("phase_42_export_desktop_beta_acceptance"),
+  "schema phase id enum must include Phase 42 beta acceptance",
+);
+assert(
   schema.$defs.status.enum.includes("ready_for_receipt_gate"),
   "schema status enum must include ready_for_receipt_gate",
 );
@@ -2203,7 +2609,11 @@ assert(
   schema.$defs.status.enum.includes("ready_for_final_handoff_review"),
   "schema status enum must include ready_for_final_handoff_review",
 );
-assert(schema.$defs.summary.properties.totalPhases.const === 10, "schema summary must pin totalPhases=10");
+assert(
+  schema.$defs.status.enum.includes("ready_for_beta_acceptance"),
+  "schema status enum must include ready_for_beta_acceptance",
+);
+assert(schema.$defs.summary.properties.totalPhases.const === 19, "schema summary must pin totalPhases=19");
 assert(schema.$defs.summary.properties.providerSubmitAllowed.const === 0, "schema summary must pin providerSubmitAllowed=0");
 assert(schema.$defs.summary.properties.credentialAccessAllowed.const === false, "schema summary must forbid credential access");
 assert(schema.$defs.summary.properties.arbitraryShellAllowed.const === false, "schema summary must forbid arbitrary shell");
@@ -2231,6 +2641,14 @@ assert(
 assert(
   schema.$defs.evidenceDecision.properties.evidenceKey.enum.includes("providerExecutionHandoff"),
   "schema evidence decisions must include typed provider execution handoff evidence",
+);
+assert(
+  schema.$defs.evidenceDecision.properties.evidenceKey.enum.includes("localOrchestratorRuntime"),
+  "schema evidence decisions must include typed local orchestrator runtime evidence",
+);
+assert(
+  schema.$defs.evidenceDecision.properties.evidenceKey.enum.includes("betaAcceptance"),
+  "schema evidence decisions must include typed beta acceptance evidence",
 );
 assert(schema.$defs.hardLocks.properties.noFreeTextWorker.const === true, "schema hard locks must pin noFreeTextWorker=true");
 assert(schema.$defs.hardLocks.properties.validatedEnvelopeRequired.const === true, "schema hard locks must pin validated envelope");
@@ -2359,6 +2777,30 @@ assert(
 assert(
   schema.$defs.providerExecutionHandoff.properties.fileMutationAllowed.const === false,
   "schema provider execution handoff must keep file mutation blocked",
+);
+assert(
+  schema.properties.betaClosure.$ref === "#/$defs/betaClosure",
+  "schema must include betaClosure policy",
+);
+assert(
+  schema.$defs.betaClosure.properties.finalPhaseNumber.const === 42,
+  "schema beta closure must pin finalPhaseNumber=42",
+);
+assert(
+  schema.$defs.betaClosure.properties.noAdditionalPhasesPlanned.const === true,
+  "schema beta closure must freeze additional phases",
+);
+assert(
+  schema.$defs.betaClosure.properties.canSpawnCodex.const === false,
+  "schema beta closure must forbid Codex spawn",
+);
+assert(
+  schema.$defs.betaClosure.properties.canSubmitProvider.const === false,
+  "schema beta closure must forbid provider submit",
+);
+assert(
+  schema.$defs.betaClosure.properties.providerSubmitAllowed.const === 0,
+  "schema beta closure must pin providerSubmitAllowed=0",
 );
 
 const source = fs.readFileSync("src/core/phaseRoadmapRuntime.ts", "utf8");

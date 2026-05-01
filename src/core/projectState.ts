@@ -14,6 +14,7 @@ import type { ProviderExecutionPermissionGateState } from "./providerExecutionPe
 import type { ProviderActionConfirmationReceiptState } from "./providerActionConfirmationReceipt";
 import type { ProviderExecutionHandoffState } from "./providerExecutionHandoff";
 import type { LocalOrchestratorState } from "./localOrchestrator";
+import type { ProjectFactsIntegrationState } from "./projectFactsIntegration";
 import type {
   AssetRecord,
   AssetReadinessReport,
@@ -122,6 +123,7 @@ export interface ProjectRuntimeState {
   generatedAt: string;
   project: ProjectSummary;
   projectFileCore: ProjectFileCoreState;
+  projectFactsIntegration?: ProjectFactsIntegrationState;
   sourceIndex: ProjectSourceIndex;
   sourceIndexSummary: {
     projectId: string;

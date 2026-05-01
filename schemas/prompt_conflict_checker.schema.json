@@ -72,9 +72,12 @@
         "garage_front_door_conflict",
         "fixed_camera_movement_conflict",
         "independent_end_frame_conflict",
+        "visual_memory_locked_identity_conflict",
         "visual_memory_locked_outfit_conflict",
+        "visual_memory_locked_prop_conflict",
         "visual_memory_locked_scene_conflict",
         "visual_memory_locked_style_conflict",
+        "shot_layout_motion_conflict",
         "compiler_conflict_report_blocker"
       ]
     },

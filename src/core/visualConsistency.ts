@@ -17,6 +17,7 @@ export type VisualConsistencyLayer =
   | "scene_asset_pack"
   | "shot_layout"
   | "start_end_derivation"
+  | "fact_chain"
   | "postprocess";
 
 export type VisualConsistencyIssueCode =
@@ -34,7 +35,50 @@ export type VisualConsistencyIssueCode =
   | "shot_layout_camera_constraint_violation"
   | "keyframe_pair_derivation_violation"
   | "prompt_end_frame_derivation_violation"
+  | "visual_fact_chain_violation"
+  | "identity_gate_violation"
+  | "scene_gate_violation"
+  | "pair_gate_violation"
+  | "story_gate_violation"
+  | "prop_gate_violation"
+  | "style_gate_violation"
+  | "motion_gate_violation"
   | "postprocess_semantic_repair_violation";
+
+export type VisualConsistencyGateId =
+  | "identity_gate"
+  | "scene_gate"
+  | "layout_gate"
+  | "pair_gate"
+  | "story_gate"
+  | "prop_gate"
+  | "style_gate"
+  | "motion_gate"
+  | "video_handoff_gate";
+
+export interface VisualConsistencyGate {
+  gateId: VisualConsistencyGateId;
+  status: "pass" | "warning" | "blocked";
+  layer: VisualConsistencyLayer;
+  target: string;
+  detail: string;
+  blockers: string[];
+  warnings: string[];
+  sourceRefs: string[];
+}
+
+export interface VisualConsistencyFactChainStep {
+  stepId:
+    | "character_identity"
+    | "scene_space"
+    | "shot_layout"
+    | "start_end_keyframes"
+    | "video_handoff";
+  gateIds: VisualConsistencyGateId[];
+  status: "pass" | "warning" | "blocked";
+  detail: string;
+  sourceRefs: string[];
+}
 
 export interface VisualConsistencyIssue {
   code: VisualConsistencyIssueCode;
@@ -66,7 +110,23 @@ export interface VisualConsistencyReport {
     rejectedAssets: number;
     forbiddenFutureReferences: number;
     semanticPostprocessViolations: number;
+    gateCount: number;
+    gateBlockers: number;
+    gateWarnings: number;
   };
+  factChain: {
+    sequence: [
+      "character_identity",
+      "scene_space",
+      "shot_layout",
+      "start_end_keyframes",
+      "video_handoff",
+    ];
+    steps: VisualConsistencyFactChainStep[];
+    blockers: string[];
+    warnings: string[];
+  };
+  gates: VisualConsistencyGate[];
   hardLocks: {
     assetLibraryIsNotGallery: true;
     tempOutputCannotBecomeFutureReference: true;
@@ -75,6 +135,9 @@ export interface VisualConsistencyReport {
     derivedViewsMustInheritMasterScene: true;
     derivedViewsRequireCameraVectorAndWorldPosition: true;
     endFrameDefaultsToStartFrameDerivation: true;
+    sameShotIndependentEndFrameForbidden: true;
+    identityScenePairStoryGatesRequired: true;
+    propStyleMotionChecksRequired: true;
     localPostprocessSemanticRepairForbidden: true;
   };
 }
@@ -155,7 +218,31 @@ const forbiddenPathPattern =
   /(^|\/)(tmp|temp|cache|candidates?|drafts?|failed|failures?|contact[-_ ]?sheets?|shot[-_ ]?outputs?|outputs\/shots)(\/|$)/i;
 const contactSheetPattern = /contact[-_ ]?sheet/i;
 const semanticRepairPattern =
-  /\b(semantic|identity|face|outfit|costume|scene|layout|style|meaning|opencv[_-]?(?:repair|fix|semantic|face))\b/i;
+  /\b(semantic|identity|face|outfit|costume|scene|layout|style|story|camera|prop|motion|meaning|opencv[_-]?(?:repair|fix|semantic|face))\b/i;
+const largeCameraMovementPattern =
+  /\b(camera\s+movement|push(?:\s|-)?in|pull(?:\s|-)?back|dolly|truck|crane|orbit|whip\s*pan|zoom|large\s+camera\s+move|dramatic\s+camera|sweeping)\b/i;
+const allowedLocalPostprocessOperations = new Set([
+  "resize",
+  "format_convert",
+  "thumbnail_preview",
+  "metadata_probe",
+  "manifest_match",
+  "dimension_probe",
+  "hash_probe",
+  "colorspace_convert",
+  "nonsemantic_crop",
+  "letterbox",
+  "light_texture_soften",
+  "mild_denoise",
+]);
+
+const factChainSequence: VisualConsistencyReport["factChain"]["sequence"] = [
+  "character_identity",
+  "scene_space",
+  "shot_layout",
+  "start_end_keyframes",
+  "video_handoff",
+];
 
 const hardLocks: VisualConsistencyReport["hardLocks"] = {
   assetLibraryIsNotGallery: true,
@@ -165,6 +252,9 @@ const hardLocks: VisualConsistencyReport["hardLocks"] = {
   derivedViewsMustInheritMasterScene: true,
   derivedViewsRequireCameraVectorAndWorldPosition: true,
   endFrameDefaultsToStartFrameDerivation: true,
+  sameShotIndependentEndFrameForbidden: true,
+  identityScenePairStoryGatesRequired: true,
+  propStyleMotionChecksRequired: true,
   localPostprocessSemanticRepairForbidden: true,
 };
 
@@ -174,6 +264,31 @@ function issue(input: VisualConsistencyIssue): VisualConsistencyIssue {
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right));
+}
+
+function gate(input: Omit<VisualConsistencyGate, "status" | "blockers" | "warnings" | "sourceRefs"> & {
+  blockers?: string[];
+  warnings?: string[];
+  sourceRefs?: string[];
+}): VisualConsistencyGate {
+  const blockers = unique(input.blockers || []);
+  const warnings = unique(input.warnings || []);
+  return {
+    gateId: input.gateId,
+    status: blockers.length ? "blocked" : warnings.length ? "warning" : "pass",
+    layer: input.layer,
+    target: input.target,
+    detail: input.detail,
+    blockers,
+    warnings,
+    sourceRefs: unique(input.sourceRefs || []),
+  };
+}
+
+function statusFromGates(gates: VisualConsistencyGate[]): VisualConsistencyGate["status"] {
+  if (gates.some((item) => item.status === "blocked")) return "blocked";
+  if (gates.some((item) => item.status === "warning")) return "warning";
+  return "pass";
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -632,6 +747,18 @@ export function validateShotLayoutHardContracts(layout: ShotLayoutContract): Vis
       }),
     );
   }
+  if (!layout.spatialAnchors.length) {
+    issues.push(
+      issue({
+        code: "shot_layout_vector_violation",
+        layer: "shot_layout",
+        severity: "blocker",
+        target: `${layout.id}.spatialAnchors`,
+        detail: "Shot Layout requires spatial anchors so camera/world positions stay bound to the scene.",
+        sourceRefs,
+      }),
+    );
+  }
   if (!isVector3(layout.axisAndDirection.worldDirection)) {
     issues.push(
       issue({
@@ -656,7 +783,15 @@ export function validateShotLayoutHardContracts(layout: ShotLayoutContract): Vis
       }),
     );
   }
-  if (layout.cameraConstraints.fixedCamera && layout.cameraConstraints.movementAllowed === "dolly_or_truck_allowed") {
+  const allowedMotionText = [
+    layout.cameraConstraints.movementAllowed,
+    ...(layout.cameraConstraints.allowedMovements || []),
+    ...(layout.endFrameDerivation.allowedChanges || []),
+  ].join(" ");
+  if (
+    layout.cameraConstraints.fixedCamera &&
+    (layout.cameraConstraints.movementAllowed === "dolly_or_truck_allowed" || largeCameraMovementPattern.test(allowedMotionText))
+  ) {
     issues.push(
       issue({
         code: "shot_layout_camera_constraint_violation",
@@ -664,6 +799,22 @@ export function validateShotLayoutHardContracts(layout: ShotLayoutContract): Vis
         severity: "blocker",
         target: `${layout.id}.cameraConstraints`,
         detail: "Fixed camera layouts cannot allow dolly/truck movement.",
+        sourceRefs,
+      }),
+    );
+  }
+  if (
+    layout.cameraConstraints.fixedCamera &&
+    layout.cameraConstraints.forbiddenMovements &&
+    !layout.cameraConstraints.forbiddenMovements.some((movement) => largeCameraMovementPattern.test(movement))
+  ) {
+    issues.push(
+      issue({
+        code: "motion_gate_violation",
+        layer: "shot_layout",
+        severity: "warning",
+        target: `${layout.id}.cameraConstraints`,
+        detail: "Fixed-camera layouts should explicitly forbid large camera movement in forbiddenMovements.",
         sourceRefs,
       }),
     );
@@ -791,6 +942,19 @@ export function validatePostprocessHardContracts(
       );
     }
     for (const operation of policy.allowedLocalOperations || []) {
+      const normalizedOperation = operation.trim().toLowerCase();
+      if (!allowedLocalPostprocessOperations.has(normalizedOperation)) {
+        issues.push(
+          issue({
+            code: "postprocess_semantic_repair_violation",
+            layer: "postprocess",
+            severity: "blocker",
+            target,
+            detail: `Local postprocess operation is not on the non-semantic allowlist: ${operation}`,
+            sourceRefs: [target],
+          }),
+        );
+      }
       if (semanticRepairPattern.test(operation)) {
         issues.push(
           issue({
@@ -821,6 +985,217 @@ export function validatePostprocessHardContracts(
   return issues;
 }
 
+function referencesAsset(plan: ShotPromptPlan, asset: AssetLibraryAsset): boolean {
+  return plan.referenceIds.includes(asset.id) || Boolean(asset.mainReferencePath && plan.referenceIds.includes(asset.mainReferencePath));
+}
+
+function assetReferenceGateBlockers(
+  promptPlans: ShotPromptPlan[],
+  assets: AssetLibraryAsset[],
+  assetType: AssetLibraryAsset["assetType"],
+): string[] {
+  return promptPlans.flatMap((plan) =>
+    assets
+      .filter((asset) => asset.assetType === assetType && referencesAsset(plan, asset))
+      .flatMap((asset) => {
+        if (asset.status === "rejected") return [`${plan.promptPlanId} references rejected ${assetType} authority ${asset.id}.`];
+        if (asset.status === "missing") return [`${plan.promptPlanId} references missing ${assetType} authority ${asset.id}.`];
+        return [];
+      }),
+  );
+}
+
+function assetReferenceGateWarnings(
+  promptPlans: ShotPromptPlan[],
+  assets: AssetLibraryAsset[],
+  assetType: AssetLibraryAsset["assetType"],
+): string[] {
+  return promptPlans.flatMap((plan) =>
+    assets
+      .filter((asset) => asset.assetType === assetType && referencesAsset(plan, asset))
+      .flatMap((asset) => {
+        if (asset.status === "candidate" || asset.status === "review") {
+          return [`${plan.promptPlanId} references draft-only ${assetType} authority ${asset.id}.`];
+        }
+        return [];
+      }),
+  );
+}
+
+function buildMotionPairIssues(input: ValidateVisualConsistencyInput): VisualConsistencyIssue[] {
+  const fixedShotIds = new Set((input.shotLayouts || []).filter((layout) => layout.cameraConstraints.fixedCamera).map((layout) => layout.shotId));
+
+  return (input.startEndDerivations?.keyframePairs || []).flatMap((pair) => {
+    if (!fixedShotIds.has(pair.shotId)) return [];
+    const motionText = [...pair.allowedDelta, ...pair.mustPreserve, ...pair.mustNotAdd].join(" ");
+    if (!largeCameraMovementPattern.test(motionText)) return [];
+    return [
+      issue({
+        code: "motion_gate_violation",
+        layer: "start_end_derivation",
+        severity: "blocker",
+        target: pair.shotId,
+        detail: "Fixed-camera shots cannot carry keyframe pair deltas that allow large camera movement.",
+        sourceRefs: [pair.shotId, pair.startFrameId, pair.endFrameId],
+      }),
+    ];
+  });
+}
+
+function buildVisualConsistencyGates(input: ValidateVisualConsistencyInput, issues: VisualConsistencyIssue[]): VisualConsistencyGate[] {
+  const assets = input.assetLibrary?.assets || [];
+  const promptPlans = input.startEndDerivations?.promptPlans || [];
+  const lockedCharacters = assets.filter((asset) => asset.assetType === "character" && asset.status === "locked" && assetHasFutureUse(asset));
+  const lockedScenes = assets.filter((asset) => asset.assetType === "scene" && asset.status === "locked" && assetHasFutureUse(asset));
+  const lockedScenePacks = [
+    ...(input.sceneAssetPacks || []),
+    ...(input.assetLibrary?.sceneAssetPacks || []),
+  ].filter((pack) => pack.status === "locked" && pack.readiness === "ready_for_formal");
+  const blockedByCode = (codes: VisualConsistencyIssueCode[]) =>
+    issues.filter((item) => item.severity === "blocker" && codes.includes(item.code)).map((item) => item.detail);
+  const warnedByCode = (codes: VisualConsistencyIssueCode[]) =>
+    issues.filter((item) => item.severity === "warning" && codes.includes(item.code)).map((item) => item.detail);
+
+  return [
+    gate({
+      gateId: "identity_gate",
+      layer: "asset_library",
+      target: input.assetLibrary?.id || "asset_library",
+      detail: "Character identity authority must be locked before formal visual generation.",
+      blockers: [
+        ...(input.assetLibrary && !lockedCharacters.length ? ["No locked character identity authority is available."] : []),
+        ...assetReferenceGateBlockers(promptPlans, assets, "character"),
+        ...blockedByCode(["asset_status_future_reference_violation", "asset_rejected_status_violation"]),
+      ],
+      warnings: assetReferenceGateWarnings(promptPlans, assets, "character"),
+      sourceRefs: [input.assetLibrary?.id || "", ...lockedCharacters.map((asset) => asset.id)],
+    }),
+    gate({
+      gateId: "scene_gate",
+      layer: "scene_asset_pack",
+      target: input.assetLibrary?.id || "scene_asset_pack",
+      detail: "Scene space must flow from locked Scene Asset Pack master scenes and derived views.",
+      blockers: [
+        ...(input.assetLibrary && (!lockedScenes.length || !lockedScenePacks.length)
+          ? ["No locked scene authority and ready Scene Asset Pack are available."]
+          : []),
+        ...assetReferenceGateBlockers(promptPlans, assets, "scene"),
+        ...blockedByCode(["scene_pack_status_violation", "scene_pack_inheritance_violation", "scene_pack_vector_violation", "scene_pack_forbidden_reference"]),
+      ],
+      warnings: assetReferenceGateWarnings(promptPlans, assets, "scene"),
+      sourceRefs: [...lockedScenes.map((asset) => asset.id), ...lockedScenePacks.map((pack) => pack.id)],
+    }),
+    gate({
+      gateId: "layout_gate",
+      layer: "shot_layout",
+      target: "shot_layouts",
+      detail: "Shot Layout must bind subject placement, camera placement, axis, and spatial anchors.",
+      blockers: blockedByCode(["shot_layout_schema_missing", "shot_layout_vector_violation", "shot_layout_camera_constraint_violation"]),
+      warnings: warnedByCode(["motion_gate_violation"]),
+      sourceRefs: (input.shotLayouts || []).map((layout) => layout.id),
+    }),
+    gate({
+      gateId: "pair_gate",
+      layer: "start_end_derivation",
+      target: "keyframe_pairs",
+      detail: "End frames must derive from start frames before any I2V handoff.",
+      blockers: blockedByCode(["keyframe_pair_derivation_violation", "prompt_end_frame_derivation_violation"]),
+      sourceRefs: (input.startEndDerivations?.keyframePairs || []).map((pair) => pair.shotId),
+    }),
+    gate({
+      gateId: "story_gate",
+      layer: "fact_chain",
+      target: "story_flow_prompt_plan",
+      detail: "Prompt plans must not carry blocked or stale Story Flow facts.",
+      blockers: promptPlans.flatMap((plan) => (plan.status === "blocked" ? plan.blockers.length ? plan.blockers : [`${plan.promptPlanId} is blocked.`] : [])),
+      warnings: promptPlans.flatMap((plan) => (plan.status === "draft" ? [`${plan.promptPlanId} is still draft.`] : [])),
+      sourceRefs: promptPlans.map((plan) => plan.promptPlanId),
+    }),
+    gate({
+      gateId: "prop_gate",
+      layer: "asset_library",
+      target: "prop_authority",
+      detail: "Referenced props must not come from rejected, missing, or temp authority.",
+      blockers: assetReferenceGateBlockers(promptPlans, assets, "prop"),
+      warnings: assetReferenceGateWarnings(promptPlans, assets, "prop"),
+      sourceRefs: assets.filter((asset) => asset.assetType === "prop").map((asset) => asset.id),
+    }),
+    gate({
+      gateId: "style_gate",
+      layer: "asset_library",
+      target: "style_authority",
+      detail: "Style references must stay consistent with locked Visual Memory style facts.",
+      blockers: assetReferenceGateBlockers(promptPlans, assets, "style"),
+      warnings: assetReferenceGateWarnings(promptPlans, assets, "style"),
+      sourceRefs: assets.filter((asset) => asset.assetType === "style").map((asset) => asset.id),
+    }),
+    gate({
+      gateId: "motion_gate",
+      layer: "shot_layout",
+      target: "camera_motion",
+      detail: "Motion deltas cannot contradict fixed camera/world-position contracts.",
+      blockers: blockedByCode(["motion_gate_violation", "shot_layout_camera_constraint_violation"]),
+      warnings: warnedByCode(["motion_gate_violation"]),
+      sourceRefs: (input.shotLayouts || []).map((layout) => layout.id),
+    }),
+    gate({
+      gateId: "video_handoff_gate",
+      layer: "start_end_derivation",
+      target: "video_i2v_handoff",
+      detail: "Video handoff must be sourced from a valid start/end keyframe pair.",
+      blockers: (input.startEndDerivations?.keyframePairs || [])
+        .filter((pair) => pair.validForI2vPair !== true || pair.endDerivationSource !== "start_frame")
+        .map((pair) => `${pair.shotId} is not a derived I2V-ready keyframe pair.`),
+      sourceRefs: (input.startEndDerivations?.keyframePairs || []).map((pair) => pair.shotId),
+    }),
+  ];
+}
+
+function buildFactChain(gates: VisualConsistencyGate[]): VisualConsistencyReport["factChain"] {
+  const stepDefs: Array<Omit<VisualConsistencyFactChainStep, "status" | "sourceRefs">> = [
+    {
+      stepId: "character_identity",
+      gateIds: ["identity_gate"],
+      detail: "Character identity authority is the first visual fact.",
+    },
+    {
+      stepId: "scene_space",
+      gateIds: ["scene_gate"],
+      detail: "Scene space inherits from master scene and derived view geometry.",
+    },
+    {
+      stepId: "shot_layout",
+      gateIds: ["layout_gate", "motion_gate"],
+      detail: "Shot Layout locks camera/world position and permitted motion.",
+    },
+    {
+      stepId: "start_end_keyframes",
+      gateIds: ["pair_gate", "story_gate", "prop_gate", "style_gate"],
+      detail: "Start/end keyframes preserve identity, scene, story, prop, and style facts.",
+    },
+    {
+      stepId: "video_handoff",
+      gateIds: ["video_handoff_gate"],
+      detail: "Video generation only receives approved derived keyframe pairs.",
+    },
+  ];
+  const steps = stepDefs.map((step): VisualConsistencyFactChainStep => {
+    const stepGates = gates.filter((gateItem) => step.gateIds.includes(gateItem.gateId));
+    return {
+      ...step,
+      status: statusFromGates(stepGates),
+      sourceRefs: unique(stepGates.flatMap((gateItem) => gateItem.sourceRefs)),
+    };
+  });
+
+  return {
+    sequence: factChainSequence,
+    steps,
+    blockers: unique(gates.flatMap((gateItem) => gateItem.blockers)),
+    warnings: unique(gates.flatMap((gateItem) => gateItem.warnings)),
+  };
+}
+
 export function validateVisualConsistency(input: ValidateVisualConsistencyInput): VisualConsistencyReport {
   const assetLibraryIssues = input.assetLibrary ? validateAssetLibraryHardContracts(input.assetLibrary) : [];
   const scenePackInputs = [
@@ -833,15 +1208,25 @@ export function validateVisualConsistency(input: ValidateVisualConsistencyInput)
     ? validateStartEndDerivationHardContracts(input.startEndDerivations)
     : [];
   const postprocessIssues = validatePostprocessHardContracts(input.postprocessPolicies, input.generationHarnesses);
+  const motionPairIssues = buildMotionPairIssues(input);
   const issues = [
     ...assetLibraryIssues,
     ...explicitScenePackIssues,
     ...shotLayoutIssues,
     ...derivationIssues,
+    ...motionPairIssues,
     ...postprocessIssues,
   ];
-  const blockers = issues.filter((item) => item.severity === "blocker").map((item) => item.detail);
-  const warnings = issues.filter((item) => item.severity === "warning").map((item) => item.detail);
+  const gates = buildVisualConsistencyGates(input, issues);
+  const factChain = buildFactChain(gates);
+  const blockers = [
+    ...issues.filter((item) => item.severity === "blocker").map((item) => item.detail),
+    ...gates.flatMap((gateItem) => gateItem.blockers),
+  ];
+  const warnings = [
+    ...issues.filter((item) => item.severity === "warning").map((item) => item.detail),
+    ...gates.flatMap((gateItem) => gateItem.warnings),
+  ];
   const assets = input.assetLibrary?.assets || [];
 
   return {
@@ -865,7 +1250,12 @@ export function validateVisualConsistency(input: ValidateVisualConsistencyInput)
       rejectedAssets: assets.filter((asset) => asset.status === "rejected").length,
       forbiddenFutureReferences: issues.filter((item) => item.code === "asset_forbidden_future_reference").length,
       semanticPostprocessViolations: issues.filter((item) => item.code === "postprocess_semantic_repair_violation").length,
+      gateCount: gates.length,
+      gateBlockers: gates.filter((gateItem) => gateItem.status === "blocked").length,
+      gateWarnings: gates.filter((gateItem) => gateItem.status === "warning").length,
     },
+    factChain,
+    gates,
     hardLocks,
   };
 }

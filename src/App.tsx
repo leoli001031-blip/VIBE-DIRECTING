@@ -224,12 +224,33 @@ type LocalOrchestratorUiSummary = {
   waitingOutput: number;
   qaPending: number;
   needsReview: number;
+  blocked: number;
+  failed: number;
   stalled: number;
+  completeVerified: number;
   nextReadyCount: number;
   autoContinueMode: string;
   providerFileDaemonLocks: string;
   blockersWarnings: string[];
   hardLocks: string[];
+};
+type DirectorProgressTone = "preparing" | "working" | "review" | "blocked" | "complete";
+type DirectorProgressSegment = {
+  label: string;
+  value: number;
+  tone: DirectorProgressTone;
+};
+type DirectorProgressStripState = {
+  label: string;
+  detail: string;
+  tone: DirectorProgressTone;
+  total: number;
+  preparing: number;
+  working: number;
+  review: number;
+  blocked: number;
+  complete: number;
+  segments: DirectorProgressSegment[];
 };
 
 function toMediaSrc(path?: string) {
@@ -2247,12 +2268,78 @@ function buildLocalOrchestratorUiSummary(runtimeState: ProjectRuntimeState): Loc
     waitingOutput,
     qaPending,
     needsReview,
+    blocked,
+    failed,
     stalled,
+    completeVerified,
     nextReadyCount,
     autoContinueMode: autoContinueMode === "plan_only" ? "plan-only" : statusLabel(autoContinueMode),
     providerFileDaemonLocks: providerLocked && fileLocked && daemonLocked ? "provider/file/daemon locked" : "blocked/missing",
     blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.localOrchestrator"],
     hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.localOrchestrator"],
+  };
+}
+
+function buildDirectorProgressStripState(runtimeState: ProjectRuntimeState): DirectorProgressStripState {
+  const summary = buildLocalOrchestratorUiSummary(runtimeState);
+  const knownPreparing = Math.max(0, summary.ready + summary.waiting);
+  const working = Math.max(0, summary.runningPlanned + summary.waitingOutput);
+  const review = Math.max(0, summary.qaPending + summary.needsReview);
+  const blocked = Math.max(0, summary.blocked + summary.failed + summary.stalled);
+  const complete = Math.max(0, summary.completeVerified);
+  const knownTotal = knownPreparing + working + review + blocked + complete;
+  const preparing = knownPreparing + Math.max(0, summary.queueTotal - knownTotal);
+  const observedTotal = preparing + working + review + blocked + complete;
+  const total = Math.max(summary.queueTotal, observedTotal);
+  const hasItems = summary.initialized && total > 0;
+
+  let tone: DirectorProgressTone = "preparing";
+  let label = "准备中";
+  if (!hasItems) {
+    label = "准备中";
+  } else if (blocked > 0) {
+    tone = "blocked";
+    label = "有阻断";
+  } else if (review > 0) {
+    tone = "review";
+    label = "等待复核";
+  } else if (working > 0) {
+    tone = "working";
+    label = "生成中";
+  } else if (complete === total) {
+    tone = "complete";
+    label = "已完成";
+  }
+
+  const detail = !hasItems
+    ? "等待项目任务"
+    : tone === "blocked"
+      ? `${total} 项 · ${blocked} 项有阻断`
+      : tone === "review"
+        ? `${total} 项 · ${review} 项等待复核`
+        : tone === "working"
+          ? `${total} 项 · ${working} 项生成中`
+          : tone === "complete"
+            ? `${total} 项已完成`
+            : `${total} 项 · ${preparing} 项准备中`;
+
+  return {
+    label,
+    detail,
+    tone,
+    total,
+    preparing,
+    working,
+    review,
+    blocked,
+    complete,
+    segments: [
+      { label: "准备中", value: preparing, tone: "preparing" },
+      { label: "生成中", value: working, tone: "working" },
+      { label: "等待复核", value: review, tone: "review" },
+      { label: "有阻断", value: blocked, tone: "blocked" },
+      { label: "已完成", value: complete, tone: "complete" },
+    ],
   };
 }
 
@@ -5667,7 +5754,7 @@ function MinimalAgentPanel({
     setStatus(workflowStatusLabel(nextWorkflow.status));
   }
 
-  const badges = workflow ? workflowBadgeLabels(workflow).slice(0, 5) : ["Dry-run preview"];
+  const badges = workflow ? workflowBadgeLabels(workflow).slice(0, 5) : ["Plan preview"];
   const nextStep = workflow ? workflowNextStepLabel(workflow.status) : "Describe a story edit to preview the plan.";
   const confirmationPrompt = workflow?.confirmationRequired ? "Confirm before this becomes an editable plan." : "";
 
@@ -5708,12 +5795,43 @@ function workflowNextStepLabel(status: DirectorWorkflowStatus) {
 }
 
 function workflowBadgeLabels(workflow: ReturnType<typeof buildDirectorWorkflowState>) {
-  const labels = ["Dry-run preview", workflow.scopeLabel];
+  const labels = ["Plan preview", workflow.scopeLabel];
   if (workflow.summary.readyTaskPackets > 0) labels.push(`${workflow.summary.readyTaskPackets} ready step(s)`);
   if (workflow.summary.blockedTaskPackets > 0) labels.push("Needs context");
   if (workflow.confirmationRequired) labels.push("Confirm first");
   if (workflow.summary.exportPackageStatus === "ready") labels.push("Preview ready");
   return Array.from(new Set(labels));
+}
+
+function DirectorProgressStrip({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const state = buildDirectorProgressStripState(runtimeState);
+  const visibleSegments = state.segments.filter((segment) => segment.value > 0);
+
+  return (
+    <section className={`director-progress-strip ${state.tone}`} aria-label="项目处理进度">
+      <div className="director-progress-heading">
+        <span>{state.label}</span>
+        <small>{state.detail}</small>
+      </div>
+      <div className="director-progress-track" aria-hidden="true">
+        {visibleSegments.length ? visibleSegments.map((segment) => (
+          <span
+            key={segment.label}
+            className={`director-progress-segment ${segment.tone}`}
+            style={{ flex: `${segment.value} 1 0` }}
+          />
+        )) : <span className="director-progress-segment preparing" style={{ flex: "1 1 0" }} />}
+      </div>
+      <div className="director-progress-counts" aria-label="处理状态">
+        {state.segments.map((segment) => (
+          <span key={segment.label}>
+            {segment.label}
+            <b>{segment.value}</b>
+          </span>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function AudioPlanSummaryStrip({ audioPlanning, selectedShot }: { audioPlanning: AudioPlanningState; selectedShot?: ShotRecord }) {
@@ -5840,6 +5958,7 @@ function DirectorMode({
 
   return (
     <div className={`minimal-director ${directorView}`}>
+      <DirectorProgressStrip runtimeState={runtimeState} />
       <div className="minimal-director-main">
         {directorView === "assets" && (
           <MinimalAssetLibrary

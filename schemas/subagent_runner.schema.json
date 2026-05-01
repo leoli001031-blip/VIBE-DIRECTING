@@ -69,7 +69,20 @@
   "$defs": {
     "taskKind": {
       "type": "string",
-      "enum": ["image", "asset", "pair_qa", "scene_qa", "story_audit", "video_execution", "audio", "export"]
+      "enum": [
+        "image",
+        "asset",
+        "start_frame",
+        "end_frame",
+        "image_edit",
+        "identity_qa",
+        "pair_qa",
+        "scene_qa",
+        "story_audit",
+        "video_execution",
+        "audio",
+        "export"
+      ]
     },
     "purpose": {
       "type": "string",

@@ -365,7 +365,12 @@ export type ProjectFileCoreSourceRole =
   | "project_manifest"
   | "production_bible"
   | "story_flow"
+  | "shot_spec"
+  | "shot_layout"
   | "visual_memory"
+  | "spatial_memory"
+  | "scene_asset_pack"
+  | "voice_memory"
   | "shots"
   | "manifests"
   | "reports"
@@ -478,6 +483,10 @@ export interface ProjectFileCoreState {
 export type SubagentRunnerTaskKind =
   | "image"
   | "asset"
+  | "start_frame"
+  | "end_frame"
+  | "image_edit"
+  | "identity_qa"
   | "pair_qa"
   | "scene_qa"
   | "story_audit"
@@ -1039,12 +1048,31 @@ export interface ShotPromptPlan {
 
 export type AssetReadinessStatus = "ready" | "draft_only" | "blocked";
 
+export type AssetReadinessGateId =
+  | "identity_gate"
+  | "scene_gate"
+  | "pair_gate"
+  | "story_gate"
+  | "prop_gate"
+  | "style_gate";
+
+export interface AssetReadinessGate {
+  gateId: AssetReadinessGateId;
+  status: "pass" | "warning" | "blocked";
+  requiredForFormal: boolean;
+  detail: string;
+  sourceRefs: string[];
+  blockers: string[];
+  warnings: string[];
+}
+
 export interface AssetReadinessReport {
   reportId: string;
   shotId: string;
   assetIds: string[];
   status: AssetReadinessStatus;
   formalBlocked: boolean;
+  gates: AssetReadinessGate[];
   blockers: string[];
   warnings: string[];
   safeReferenceIds: string[];
@@ -1706,9 +1734,12 @@ export type PromptConflictCheckerConflictCode =
   | "garage_front_door_conflict"
   | "fixed_camera_movement_conflict"
   | "independent_end_frame_conflict"
+  | "visual_memory_locked_identity_conflict"
   | "visual_memory_locked_outfit_conflict"
+  | "visual_memory_locked_prop_conflict"
   | "visual_memory_locked_scene_conflict"
   | "visual_memory_locked_style_conflict"
+  | "shot_layout_motion_conflict"
   | "compiler_conflict_report_blocker";
 
 export interface PromptConflictCheckerConflict {

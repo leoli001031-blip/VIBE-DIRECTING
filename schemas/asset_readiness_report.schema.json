@@ -11,6 +11,7 @@
     "assetIds",
     "status",
     "formalBlocked",
+    "gates",
     "blockers",
     "warnings",
     "safeReferenceIds",
@@ -35,6 +36,18 @@
       "enum": ["ready", "draft_only", "blocked"]
     },
     "formalBlocked": { "type": "boolean" },
+    "gates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/readinessGate" },
+      "allOf": [
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "identity_gate" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "scene_gate" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "pair_gate" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "story_gate" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "prop_gate" } }, "required": ["gateId"] } },
+        { "contains": { "type": "object", "properties": { "gateId": { "const": "style_gate" } }, "required": ["gateId"] } }
+      ]
+    },
     "blockers": {
       "type": "array",
       "items": { "type": "string" }
@@ -76,6 +89,34 @@
       "items": { "type": "string" }
     },
     "checkedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+  },
+  "$defs": {
+    "readinessGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gateId", "status", "requiredForFormal", "detail", "sourceRefs", "blockers", "warnings"],
+      "properties": {
+        "gateId": {
+          "type": "string",
+          "enum": ["identity_gate", "scene_gate", "pair_gate", "story_gate", "prop_gate", "style_gate"]
+        },
+        "status": { "type": "string", "enum": ["pass", "warning", "blocked"] },
+        "requiredForFormal": { "type": "boolean" },
+        "detail": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
   },
   "allOf": [
     {

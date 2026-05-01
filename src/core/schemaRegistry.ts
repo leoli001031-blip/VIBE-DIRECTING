@@ -48,7 +48,7 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     fileName: "project_facts_integration.schema.json",
     id: "https://vibecore.local/schemas/project_facts_integration.schema.json",
     version: schemaVersion,
-    purpose: "Phase 20/22 project facts integration receipt requiring project-local facts and keeping runtime-state as derived cache only.",
+    purpose: "Phase 20/22/36 project facts integration receipt requiring project-local facts, ready/blocker/source hash reporting, and keeping runtime-state as derived cache only.",
     typeName: "ProjectFactsIntegrationState",
   },
   {

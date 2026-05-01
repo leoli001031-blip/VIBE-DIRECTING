@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vibecore.local/schemas/phase_roadmap_runtime.schema.json",
   "title": "PhaseRoadmapRuntimePlan",
-  "description": "Phase 24-33 pure runtime readiness plan. It records evidence-backed gates, fixed hard locks, adapter boundaries, provider enablement constraints, the final permission shell, the action-time confirmation receipt review shell, and the final handoff review gate without executing providers, reading credentials, spawning workers, or mutating files outside the explicit export/project IO phase.",
+  "description": "Phase 24-42 pure runtime readiness plan. It records evidence-backed gates, fixed hard locks, adapter boundaries, provider enablement constraints, gated worker/provider shells, and Phase 42 beta acceptance without executing providers, reading credentials, spawning workers, or mutating files outside the explicit export/project IO phase.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,16 +17,17 @@
     "providerEnablementGate",
     "providerExecutionPermissionGate",
     "providerActionConfirmationReceipt",
-    "providerExecutionHandoff"
+    "providerExecutionHandoff",
+    "betaClosure"
   ],
   "properties": {
     "schemaVersion": { "type": "string", "const": "0.1.0" },
     "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
-    "phaseRange": { "type": "string", "const": "phase_24_to_33" },
+    "phaseRange": { "type": "string", "const": "phase_24_to_42" },
     "phases": {
       "type": "array",
-      "minItems": 10,
-      "maxItems": 10,
+      "minItems": 19,
+      "maxItems": 19,
       "items": { "$ref": "#/$defs/phase" }
     },
     "summary": { "$ref": "#/$defs/summary" },
@@ -36,7 +37,8 @@
     "providerEnablementGate": { "$ref": "#/$defs/providerEnablementGate" },
     "providerExecutionPermissionGate": { "$ref": "#/$defs/providerExecutionPermissionGate" },
     "providerActionConfirmationReceipt": { "$ref": "#/$defs/providerActionConfirmationReceipt" },
-    "providerExecutionHandoff": { "$ref": "#/$defs/providerExecutionHandoff" }
+    "providerExecutionHandoff": { "$ref": "#/$defs/providerExecutionHandoff" },
+    "betaClosure": { "$ref": "#/$defs/betaClosure" }
   },
   "$defs": {
     "phaseId": {
@@ -51,7 +53,16 @@
         "phase_30_provider_enablement_gate",
         "phase_31_provider_execution_permission_gate",
         "phase_32_action_time_confirmation_receipt",
-        "phase_33_provider_execution_handoff"
+        "phase_33_provider_execution_handoff",
+        "phase_34_local_orchestrator_runtime_integration",
+        "phase_35_task_queue_visibility_progress_strip",
+        "phase_36_project_file_fact_source",
+        "phase_37_visual_consistency_contract",
+        "phase_38_full_task_subagent_packet_planner",
+        "phase_39_knowledge_pack_user_management",
+        "phase_40_codex_worker_runtime_gate",
+        "phase_41_provider_closed_loop_shell",
+        "phase_42_export_desktop_beta_acceptance"
       ]
     },
     "readiness": {
@@ -68,6 +79,15 @@
         "ready_for_final_permission_gate",
         "ready_for_receipt_gate",
         "ready_for_final_handoff_review",
+        "ready_for_runtime_integration",
+        "ready_for_queue_visibility",
+        "ready_for_project_fact_source",
+        "ready_for_visual_consistency_contract",
+        "ready_for_packet_planner",
+        "ready_for_user_management",
+        "ready_for_gated_worker_runtime",
+        "ready_for_provider_closed_loop_shell",
+        "ready_for_beta_acceptance",
         "blocked_by_gate"
       ]
     },
@@ -89,7 +109,7 @@
       ],
       "properties": {
         "phaseId": { "$ref": "#/$defs/phaseId" },
-        "phaseNumber": { "type": "integer", "enum": [24, 25, 26, 27, 28, 29, 30, 31, 32, 33] },
+        "phaseNumber": { "type": "integer", "enum": [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42] },
         "title": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
         "readiness": { "$ref": "#/$defs/readiness" },
         "status": { "$ref": "#/$defs/status" },
@@ -114,9 +134,9 @@
         "freeTextWorkerAllowed"
       ],
       "properties": {
-        "totalPhases": { "type": "integer", "const": 10 },
-        "ready": { "type": "integer", "minimum": 0, "maximum": 10 },
-        "blocked": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "totalPhases": { "type": "integer", "const": 19 },
+        "ready": { "type": "integer", "minimum": 0, "maximum": 19 },
+        "blocked": { "type": "integer", "minimum": 0, "maximum": 19 },
         "providerSubmitAllowed": { "type": "integer", "const": 0 },
         "credentialAccessAllowed": { "type": "boolean", "const": false },
         "arbitraryShellAllowed": { "type": "boolean", "const": false },
@@ -157,7 +177,16 @@
             "forbiddenProviderModesAbsent",
             "providerExecutionPermissionGate",
             "providerActionConfirmationReceipt",
-            "providerExecutionHandoff"
+            "providerExecutionHandoff",
+            "localOrchestratorRuntime",
+            "taskQueueVisibility",
+            "projectFileFactSource",
+            "visualConsistencyContract",
+            "subagentPacketPlanner",
+            "knowledgePackUserManagement",
+            "codexWorkerRuntimeGate",
+            "providerClosedLoopShell",
+            "betaAcceptance"
           ]
         },
         "source": {
@@ -317,6 +346,42 @@
         "credentialAccessAllowed": { "type": "boolean", "const": false },
         "workerSpawnAllowed": { "type": "boolean", "const": false },
         "fileMutationAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "betaClosure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finalPhaseNumber",
+        "noAdditionalPhasesPlanned",
+        "betaAcceptanceOwnsClosure",
+        "codexWorkerRuntimeDefaultGated",
+        "providerClosedLoopDefaultGated",
+        "canSpawnCodex",
+        "canSubmitProvider",
+        "providerSubmitAllowed",
+        "liveSubmitAllowed",
+        "credentialAccessAllowed",
+        "fileMutationAllowedOutsideExplicitExportOrProjectIo",
+        "requiredAcceptanceGates"
+      ],
+      "properties": {
+        "finalPhaseNumber": { "type": "integer", "const": 42 },
+        "noAdditionalPhasesPlanned": { "type": "boolean", "const": true },
+        "betaAcceptanceOwnsClosure": { "type": "boolean", "const": true },
+        "codexWorkerRuntimeDefaultGated": { "type": "boolean", "const": true },
+        "providerClosedLoopDefaultGated": { "type": "boolean", "const": true },
+        "canSpawnCodex": { "type": "boolean", "const": false },
+        "canSubmitProvider": { "type": "boolean", "const": false },
+        "providerSubmitAllowed": { "type": "integer", "const": 0 },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "credentialAccessAllowed": { "type": "boolean", "const": false },
+        "fileMutationAllowedOutsideExplicitExportOrProjectIo": { "type": "boolean", "const": false },
+        "requiredAcceptanceGates": {
+          "type": "array",
+          "minItems": 9,
+          "items": { "type": "string" }
+        }
       }
     }
   }

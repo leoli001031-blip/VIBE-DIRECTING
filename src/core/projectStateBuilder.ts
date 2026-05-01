@@ -15,10 +15,12 @@ import { buildPromptConflictCheckerState } from "./promptConflictChecker";
 import { buildQaHarnessState } from "./qaHarness";
 import { buildToolRuntimeHarnessState } from "./toolRuntimeHarness";
 import { buildSubagentRunnerState } from "./subagentRunner";
+import { buildTaskPackets, type BuiltTaskPacket } from "./taskPacketBuilder";
 import { buildAgentCliMockRunnerState } from "./agentCliMockRunner";
 import { buildCodexCliAdapterSpikeState } from "./codexCliAdapterSpike";
 import { buildExportWorkerState } from "./exportWorker";
 import { buildProjectFileCoreState } from "./projectFileCore";
+import { buildProjectFactsIntegrationState } from "./projectFactsIntegration";
 import { buildShotPromptPlan } from "./promptCompiler";
 import { buildQaPromotionReports } from "./qaPromotion";
 import { buildPreviewExportState } from "./previewExport";
@@ -62,6 +64,7 @@ export interface ProjectRuntimeStateBuildOptions {
   generatedAt?: string;
   stateSource?: RuntimeStateSource;
   runtime?: ProjectRuntimeState["runtime"];
+  projectFactsIntegration?: ProjectRuntimeState["projectFactsIntegration"];
   agentCliMockRunner?: ProjectRuntimeState["agentCliMockRunner"];
   codexCliAdapterSpike?: ProjectRuntimeState["codexCliAdapterSpike"];
   subagentRuntimeGateReceipt?: SubagentRuntimeGateReceipt;
@@ -146,8 +149,9 @@ function buildProviderLiveGateEnvelopeFacts(
 function buildLocalOrchestratorTaskPackets(
   imageTaskPlans: ProjectRuntimeState["imagePipeline"]["imageTaskPlans"],
   taskViews: ProjectRuntimeTaskState[],
+  subagentTaskPackets: BuiltTaskPacket[] = [],
 ): LocalOrchestratorTaskPacket[] {
-  return imageTaskPlans.map((taskPlan, index) => {
+  const imagePackets = imageTaskPlans.map((taskPlan, index) => {
     const task = taskViews.find(
       (item) =>
         item.job.id === taskPlan.jobId ||
@@ -177,6 +181,30 @@ function buildLocalOrchestratorTaskPackets(
       ],
     };
   });
+  const subagentPackets = subagentTaskPackets.map((packet, index) => ({
+    packetId: packet.packetId,
+    envelopeId: packet.envelopeId,
+    runnerSlotId: `subagent_runner_packet_${packet.packetId.replace(/[^a-zA-Z0-9_-]+/g, "_")}`,
+    taskKind: packet.taskKind,
+    shotId: packet.envelope?.shotId,
+    expectedOutputs: packet.envelope?.taskEnvelope.expectedOutputs || packet.hardFields?.expectedOutputs || [],
+    dependencies: packet.envelope?.taskEnvelope.dependencies || [],
+    priority: imagePackets.length + index,
+    queueOrder: imagePackets.length + index,
+    blocked: packet.status !== "ready",
+    blockers: packet.blockedReasons,
+    warnings: packet.missingContext.map((field) => `missing_context:${field}`),
+    sourceRefs: [
+      `subagentTaskPacket:${packet.packetId}`,
+      ...(packet.envelopeId ? [`subagentTaskEnvelope:${packet.envelopeId}`] : []),
+    ],
+  }));
+
+  return [...imagePackets, ...subagentPackets];
+}
+
+function selectedTaskPacketAssetId(assets: ProjectAudit["assets"]): string | undefined {
+  return assets.find((asset) => asset.lockedStatus === "locked" && asset.safeForFutureReference && asset.status !== "missing")?.id || assets[0]?.id;
 }
 
 export function buildProjectRuntimeState(
@@ -217,6 +245,22 @@ export function buildProjectRuntimeState(
     runtime,
     audit,
   });
+  const projectFactsIntegration =
+    options.projectFactsIntegration ||
+    buildProjectFactsIntegrationState({
+      generatedAt,
+      runtimeState: {
+        storyFlow: {
+          sections: view.storySections,
+          shots: audit.shots,
+        },
+        visualMemory: {
+          summary: view.visualMemory,
+          assets: audit.assets,
+        },
+        voiceSourceLibrary,
+      },
+    });
   const providerRegistry = buildDefaultProviderRegistry(generatedAt);
   const promptPlanResults = taskViews.map((task) =>
     buildShotPromptPlan({
@@ -327,6 +371,19 @@ export function buildProjectRuntimeState(
     videoPlanning,
     taskViews,
   });
+  const taskPacketBuilderState = buildTaskPackets({
+    runtimeState: {
+      generatedAt,
+      sourceIndex: view.sourceIndex,
+      sourceIndexSummary: view.sourceIndex,
+      storyFlow: { shots: audit.shots },
+      visualMemory: { assets: audit.assets },
+      videoPlanning,
+    } as unknown as ProjectRuntimeState,
+    selectedShotId: options.selectedShotId,
+    selectedAssetId: selectedTaskPacketAssetId(audit.assets),
+    generatedAt,
+  });
   const adapterContracts = buildAdapterContractState({
     generatedAt,
     providerRegistry,
@@ -404,13 +461,14 @@ export function buildProjectRuntimeState(
   });
   const subagentRunner = buildSubagentRunnerState({
     generatedAt,
+    taskPackets: taskPacketBuilderState.packets,
     videoExecutionPreview,
     generationHarness,
     qaHarness,
   });
   const localOrchestrator = buildLocalOrchestratorState({
     generatedAt,
-    taskPackets: buildLocalOrchestratorTaskPackets(imageTaskPlans, taskViews),
+    taskPackets: buildLocalOrchestratorTaskPackets(imageTaskPlans, taskViews, taskPacketBuilderState.packets),
     taskEnvelopes: taskViews.map((task) => task.envelope),
     taskRuns: taskViews.map((task) => task.taskRun),
     generationHarness,
@@ -496,6 +554,7 @@ export function buildProjectRuntimeState(
     generatedAt,
     project: buildProjectSummary(audit),
     projectFileCore,
+    projectFactsIntegration,
     sourceIndex: view.sourceIndex,
     sourceIndexSummary: view.sourceIndexSummary,
     storyFlow: {
@@ -750,10 +809,17 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       checkpointResumeHarness,
       qaHarness,
     });
+  const taskPacketBuilderState = buildTaskPackets({
+    runtimeState: state,
+    selectedShotId: undefined,
+    selectedAssetId: selectedTaskPacketAssetId(state.visualMemory.assets),
+    generatedAt: state.generatedAt,
+  });
   const subagentRunner =
     state.subagentRunner ||
     buildSubagentRunnerState({
       generatedAt: state.generatedAt,
+      taskPackets: taskPacketBuilderState.packets,
       videoExecutionPreview,
       generationHarness,
       qaHarness,
@@ -762,7 +828,11 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     state.localOrchestrator ||
     buildLocalOrchestratorState({
       generatedAt: state.generatedAt,
-      taskPackets: buildLocalOrchestratorTaskPackets(state.imagePipeline.imageTaskPlans, state.taskRuns.taskViews),
+      taskPackets: buildLocalOrchestratorTaskPackets(
+        state.imagePipeline.imageTaskPlans,
+        state.taskRuns.taskViews,
+        taskPacketBuilderState.packets,
+      ),
       taskEnvelopes: state.taskRuns.taskViews.map((task) => task.envelope),
       taskRuns: state.taskRuns.taskViews.map((task) => task.taskRun),
       generationHarness,
@@ -839,6 +909,16 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       runtime: runtimeWithVoiceSources,
       audit: state.legacyAudit,
     });
+  const projectFactsIntegration =
+    state.projectFactsIntegration ||
+    buildProjectFactsIntegrationState({
+      generatedAt: state.generatedAt,
+      runtimeState: {
+        storyFlow: state.storyFlow,
+        visualMemory: state.visualMemory,
+        voiceSourceLibrary,
+      },
+    });
   const exportWorker =
     state.exportWorker ||
     buildExportWorkerState({
@@ -851,6 +931,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
   return {
     ...state,
     projectFileCore,
+    projectFactsIntegration,
     runtime: runtimeWithVoiceSources,
     voiceSourceLibrary,
     audioPlanning: audioPlanningResolved,

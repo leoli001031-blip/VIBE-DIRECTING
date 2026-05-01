@@ -26,7 +26,11 @@
       "type": "string",
       "enum": ["start_frame", "independent_exception", "unknown"]
     },
+    "sourceStartFrameRequired": { "type": "boolean", "const": true },
+    "independentEndFrameAllowed": { "type": "boolean", "const": false },
     "validForI2vPair": { "type": "boolean" },
+    "pairGate": { "$ref": "#/$defs/pairGate" },
+    "semanticChecks": { "$ref": "#/$defs/semanticChecks" },
     "exceptionReason": { "type": "string" },
     "allowedDelta": {
       "type": "array",
@@ -39,6 +43,35 @@
     "mustNotAdd": {
       "type": "array",
       "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    }
+  },
+  "$defs": {
+    "pairGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "endFrameDerivesFromStart", "sameShotIndependentEndFrameForbidden"],
+      "properties": {
+        "status": { "$ref": "common.schema.json#/$defs/gateStatus" },
+        "endFrameDerivesFromStart": { "type": "boolean", "const": true },
+        "sameShotIndependentEndFrameForbidden": { "type": "boolean", "const": true },
+        "sourceRefs": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "semanticChecks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "scene", "story", "prop", "style", "motion"],
+      "properties": {
+        "identity": { "$ref": "common.schema.json#/$defs/gateStatus" },
+        "scene": { "$ref": "common.schema.json#/$defs/gateStatus" },
+        "story": { "$ref": "common.schema.json#/$defs/gateStatus" },
+        "prop": { "$ref": "common.schema.json#/$defs/gateStatus" },
+        "style": { "$ref": "common.schema.json#/$defs/gateStatus" },
+        "motion": { "$ref": "common.schema.json#/$defs/gateStatus" }
+      }
     }
   },
   "allOf": [

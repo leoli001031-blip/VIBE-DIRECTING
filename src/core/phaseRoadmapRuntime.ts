@@ -10,7 +10,16 @@ export type PhaseRoadmapPhaseId =
   | "phase_30_provider_enablement_gate"
   | "phase_31_provider_execution_permission_gate"
   | "phase_32_action_time_confirmation_receipt"
-  | "phase_33_provider_execution_handoff";
+  | "phase_33_provider_execution_handoff"
+  | "phase_34_local_orchestrator_runtime_integration"
+  | "phase_35_task_queue_visibility_progress_strip"
+  | "phase_36_project_file_fact_source"
+  | "phase_37_visual_consistency_contract"
+  | "phase_38_full_task_subagent_packet_planner"
+  | "phase_39_knowledge_pack_user_management"
+  | "phase_40_codex_worker_runtime_gate"
+  | "phase_41_provider_closed_loop_shell"
+  | "phase_42_export_desktop_beta_acceptance";
 
 export type PhaseRoadmapReadiness = "ready" | "blocked";
 export type PhaseRoadmapStatus =
@@ -21,6 +30,15 @@ export type PhaseRoadmapStatus =
   | "ready_for_final_permission_gate"
   | "ready_for_receipt_gate"
   | "ready_for_final_handoff_review"
+  | "ready_for_runtime_integration"
+  | "ready_for_queue_visibility"
+  | "ready_for_project_fact_source"
+  | "ready_for_visual_consistency_contract"
+  | "ready_for_packet_planner"
+  | "ready_for_user_management"
+  | "ready_for_gated_worker_runtime"
+  | "ready_for_provider_closed_loop_shell"
+  | "ready_for_beta_acceptance"
   | "blocked_by_gate";
 export type PhaseRoadmapEvidenceDecisionSource = "typed_evidence" | "legacy_boolean_override" | "missing";
 export type PhaseRoadmapEvidenceStatus =
@@ -33,6 +51,15 @@ export type PhaseRoadmapEvidenceStatus =
   | "ready_for_replacement_proof"
   | "ready_for_receipt_gate"
   | "ready_for_final_handoff_review"
+  | "ready_for_runtime_integration"
+  | "ready_for_queue_visibility"
+  | "ready_for_project_fact_source"
+  | "ready_for_visual_consistency_contract"
+  | "ready_for_packet_planner"
+  | "ready_for_user_management"
+  | "ready_for_gated_worker_runtime"
+  | "ready_for_provider_closed_loop_shell"
+  | "ready_for_beta_acceptance"
   | "blocked"
   | "invalid"
   | "fail"
@@ -900,6 +927,143 @@ export interface PhaseRoadmapCodexCliAdapterEvidence {
   sourceRef?: string;
 }
 
+export type PhaseRoadmapClosurePhaseId =
+  | "phase_34_local_orchestrator_runtime_integration"
+  | "phase_35_task_queue_visibility_progress_strip"
+  | "phase_36_project_file_fact_source"
+  | "phase_37_visual_consistency_contract"
+  | "phase_38_full_task_subagent_packet_planner"
+  | "phase_39_knowledge_pack_user_management"
+  | "phase_40_codex_worker_runtime_gate"
+  | "phase_41_provider_closed_loop_shell"
+  | "phase_42_export_desktop_beta_acceptance";
+
+export interface PhaseRoadmapClosureHardLocks {
+  hardLocksPinned?: boolean;
+  dryRunOnly?: boolean;
+  readOnly?: boolean;
+  planOnly?: boolean;
+  diagnosticsOnly?: boolean;
+  reviewOnly?: boolean;
+  defaultGated?: boolean;
+  gatedRuntimeOnly?: boolean;
+  closedLoopShellOnly?: boolean;
+  noDaemon?: boolean;
+  daemonStarted?: boolean;
+  noSpawnCodex?: boolean;
+  noWorkerSpawn?: boolean;
+  workerSpawnAllowed?: boolean;
+  canSpawnCodex?: boolean;
+  noSubprocess?: boolean;
+  noShellExecution?: boolean;
+  noArbitraryShell?: boolean;
+  arbitraryShellAllowed?: boolean;
+  noProviderSubmit?: boolean;
+  noProviderExecution?: boolean;
+  providerSubmissionForbidden?: boolean;
+  canSubmitProvider?: boolean;
+  providerSubmitAllowed?: number | boolean;
+  providerCommitAllowed?: boolean;
+  liveSubmitAllowed?: boolean;
+  noCredentialRead?: boolean;
+  noCredentialWrite?: boolean;
+  credentialAccessAllowed?: boolean;
+  credentialStorage?: boolean;
+  noFileMutation?: boolean;
+  fileMutationAllowed?: boolean;
+  workerSelfReportCannotComplete?: boolean;
+  expectedOutputRequired?: boolean;
+  manifestRequired?: boolean;
+  qaGateRequired?: boolean;
+}
+
+export interface PhaseRoadmapClosureObservations {
+  daemonStarted?: boolean;
+  spawnCodexObserved?: boolean;
+  workerSpawnObserved?: boolean;
+  subprocessObserved?: boolean;
+  shellExecutionObserved?: boolean;
+  providerSubmitObserved?: boolean;
+  providerExecutionObserved?: boolean;
+  providerCommitObserved?: boolean;
+  liveSubmitObserved?: boolean;
+  credentialReadObserved?: boolean;
+  credentialWriteObserved?: boolean;
+  credentialAccessObserved?: boolean;
+  fileMutationObserved?: boolean;
+}
+
+export interface PhaseRoadmapClosureEvidence {
+  kind?: string;
+  phase?: PhaseRoadmapClosurePhaseId;
+  phaseId?: PhaseRoadmapClosurePhaseId;
+  status?: PhaseRoadmapEvidenceStatus;
+  readiness?: PhaseRoadmapReadiness | PhaseRoadmapStatus;
+  ready?: boolean;
+  typedEvidencePresent?: boolean;
+  gates?: Record<string, boolean | number | string | undefined>;
+  summary?: Record<string, boolean | number | string | undefined> & {
+    blockerCount?: number;
+    blocked?: number;
+    missing?: number;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    credentialStorage?: boolean;
+    workerSpawnAllowed?: boolean;
+    fileMutationAllowed?: boolean;
+    daemonStarted?: boolean;
+  };
+  hardLocks?: PhaseRoadmapClosureHardLocks;
+  observations?: PhaseRoadmapClosureObservations;
+  blockers?: string[];
+  blockedReasons?: string[];
+  warnings?: string[];
+  sourceRef?: string;
+}
+
+export interface PhaseRoadmapLocalOrchestratorRuntimeEvidence extends PhaseRoadmapClosureEvidence {
+  schemaVersion?: string;
+  queue?: Array<{
+    queueStatus?: string;
+    canExecute?: boolean;
+    canSpawnCodex?: boolean;
+    providerSubmissionForbidden?: boolean;
+    liveSubmitAllowed?: boolean;
+    noFileMutation?: boolean;
+    completionGate?: {
+      expectedOutputDeclared?: boolean;
+      expectedOutputObserved?: boolean;
+      manifestMatched?: boolean;
+      qaPass?: boolean;
+      promotionGatePassed?: boolean;
+      workerSelfReportOnly?: boolean;
+      completeVerified?: boolean;
+    };
+    codexActivity?: {
+      retryBudget?: number;
+      stalled?: boolean;
+      manualReviewRequired?: boolean;
+      state?: string;
+    };
+  }>;
+  autoContinuePlan?: {
+    mode?: string;
+    nextReadyCount?: number;
+    transitions?: unknown[];
+  };
+  sourceCoverage?: Array<{
+    layer?: string;
+    referenced?: boolean;
+  }>;
+  dryRunOnly?: boolean;
+  planOnly?: boolean;
+  providerSubmissionForbidden?: boolean;
+  liveSubmitAllowed?: boolean;
+  noFileMutation?: boolean;
+  daemonStarted?: boolean;
+}
+
 export interface PhaseRoadmapRuntimeEvidence {
   projectFactsIntegration?: PhaseRoadmapProjectFactsIntegrationEvidence;
   subagentEnvelopeValidator?: PhaseRoadmapSubagentEnvelopeValidatorReceipt;
@@ -912,6 +1076,15 @@ export interface PhaseRoadmapRuntimeEvidence {
   providerExecutionPermissionGate?: PhaseRoadmapProviderExecutionPermissionGateEvidence;
   providerActionConfirmationReceipt?: PhaseRoadmapProviderActionConfirmationReceiptEvidence;
   providerExecutionHandoff?: PhaseRoadmapProviderExecutionHandoffEvidence;
+  localOrchestratorRuntime?: PhaseRoadmapLocalOrchestratorRuntimeEvidence;
+  taskQueueVisibility?: PhaseRoadmapClosureEvidence;
+  projectFileFactSource?: PhaseRoadmapClosureEvidence;
+  visualConsistencyContract?: PhaseRoadmapClosureEvidence;
+  subagentPacketPlanner?: PhaseRoadmapClosureEvidence;
+  knowledgePackUserManagement?: PhaseRoadmapClosureEvidence;
+  codexWorkerRuntimeGate?: PhaseRoadmapClosureEvidence;
+  providerClosedLoopShell?: PhaseRoadmapClosureEvidence;
+  betaAcceptance?: PhaseRoadmapClosureEvidence;
   watcherManifestQaClosedLoop?: PhaseRoadmapClosedLoopReceipt;
 }
 
@@ -929,7 +1102,16 @@ export interface PhaseRoadmapEvidenceDecision {
     | "forbiddenProviderModesAbsent"
     | "providerExecutionPermissionGate"
     | "providerActionConfirmationReceipt"
-    | "providerExecutionHandoff";
+    | "providerExecutionHandoff"
+    | "localOrchestratorRuntime"
+    | "taskQueueVisibility"
+    | "projectFileFactSource"
+    | "visualConsistencyContract"
+    | "subagentPacketPlanner"
+    | "knowledgePackUserManagement"
+    | "codexWorkerRuntimeGate"
+    | "providerClosedLoopShell"
+    | "betaAcceptance";
   source: PhaseRoadmapEvidenceDecisionSource;
   ready: boolean;
   blockers: string[];
@@ -955,6 +1137,16 @@ export interface PhaseRoadmapRuntimeInput {
   forbiddenProviderModesAbsent?: boolean;
   providerExecutionPermissionGateReady?: boolean;
   providerActionConfirmationReceiptReady?: boolean;
+  providerExecutionHandoffReady?: boolean;
+  localOrchestratorRuntimeReady?: boolean;
+  taskQueueVisibilityReady?: boolean;
+  projectFileFactSourceReady?: boolean;
+  visualConsistencyContractReady?: boolean;
+  subagentPacketPlannerReady?: boolean;
+  knowledgePackUserManagementReady?: boolean;
+  codexWorkerRuntimeGateReady?: boolean;
+  providerClosedLoopShellReady?: boolean;
+  betaAcceptanceReady?: boolean;
 }
 
 export interface PhaseRoadmapHardLocks {
@@ -974,7 +1166,7 @@ export interface PhaseRoadmapHardLocks {
 
 export interface PhaseRoadmapPhasePlan {
   phaseId: PhaseRoadmapPhaseId;
-  phaseNumber: 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33;
+  phaseNumber: 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42;
   title: string;
   readiness: PhaseRoadmapReadiness;
   status: PhaseRoadmapStatus;
@@ -989,10 +1181,10 @@ export interface PhaseRoadmapPhasePlan {
 export interface PhaseRoadmapRuntimePlan {
   schemaVersion: "0.1.0";
   generatedAt: string;
-  phaseRange: "phase_24_to_33";
+  phaseRange: "phase_24_to_42";
   phases: PhaseRoadmapPhasePlan[];
   summary: {
-    totalPhases: 10;
+    totalPhases: 19;
     ready: number;
     blocked: number;
     providerSubmitAllowed: 0;
@@ -1058,6 +1250,20 @@ export interface PhaseRoadmapRuntimePlan {
     workerSpawnAllowed: false;
     fileMutationAllowed: false;
   };
+  betaClosure: {
+    finalPhaseNumber: 42;
+    noAdditionalPhasesPlanned: true;
+    betaAcceptanceOwnsClosure: true;
+    codexWorkerRuntimeDefaultGated: true;
+    providerClosedLoopDefaultGated: true;
+    canSpawnCodex: false;
+    canSubmitProvider: false;
+    providerSubmitAllowed: 0;
+    liveSubmitAllowed: false;
+    credentialAccessAllowed: false;
+    fileMutationAllowedOutsideExplicitExportOrProjectIo: false;
+    requiredAcceptanceGates: string[];
+  };
 }
 
 const defaultGeneratedAt = "1970-01-01T00:00:00.000Z";
@@ -1073,6 +1279,15 @@ const phaseIds: PhaseRoadmapPhaseId[] = [
   "phase_31_provider_execution_permission_gate",
   "phase_32_action_time_confirmation_receipt",
   "phase_33_provider_execution_handoff",
+  "phase_34_local_orchestrator_runtime_integration",
+  "phase_35_task_queue_visibility_progress_strip",
+  "phase_36_project_file_fact_source",
+  "phase_37_visual_consistency_contract",
+  "phase_38_full_task_subagent_packet_planner",
+  "phase_39_knowledge_pack_user_management",
+  "phase_40_codex_worker_runtime_gate",
+  "phase_41_provider_closed_loop_shell",
+  "phase_42_export_desktop_beta_acceptance",
 ];
 
 export const phaseRoadmapRuntimeHardLocks: PhaseRoadmapHardLocks = {
@@ -1123,7 +1338,17 @@ function readyStatus(status: PhaseRoadmapEvidenceStatus | undefined): boolean {
     || status === "closed"
     || status === "ready_for_confirmation"
     || status === "ready_for_receipt_gate"
-    || status === "ready_for_replacement_proof";
+    || status === "ready_for_replacement_proof"
+    || status === "ready_for_final_handoff_review"
+    || status === "ready_for_runtime_integration"
+    || status === "ready_for_queue_visibility"
+    || status === "ready_for_project_fact_source"
+    || status === "ready_for_visual_consistency_contract"
+    || status === "ready_for_packet_planner"
+    || status === "ready_for_user_management"
+    || status === "ready_for_gated_worker_runtime"
+    || status === "ready_for_provider_closed_loop_shell"
+    || status === "ready_for_beta_acceptance";
 }
 
 function hasProjectFactsEvidence(
@@ -1223,6 +1448,12 @@ function hasProviderExecutionHandoffEvidence(
     evidence.phase === "phase_33_provider_execution_handoff" ||
     evidence.phase33Evidence?.phaseId === "phase_33_provider_execution_handoff"
   ));
+}
+
+function hasClosureEvidence(
+  evidence: PhaseRoadmapClosureEvidence | undefined,
+): evidence is PhaseRoadmapClosureEvidence {
+  return Boolean(evidence);
 }
 
 function projectFactsEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
@@ -2634,6 +2865,238 @@ function providerExecutionHandoffEvidenceDecision(input: PhaseRoadmapRuntimeInpu
   };
 }
 
+type PhaseRoadmapClosureEvidenceKey =
+  | "taskQueueVisibility"
+  | "projectFileFactSource"
+  | "visualConsistencyContract"
+  | "subagentPacketPlanner"
+  | "knowledgePackUserManagement"
+  | "codexWorkerRuntimeGate"
+  | "providerClosedLoopShell"
+  | "betaAcceptance";
+
+interface PhaseRoadmapRequiredClosureGate {
+  field: string;
+  blocker: string;
+}
+
+interface PhaseRoadmapClosureDecisionConfig {
+  evidenceKey: PhaseRoadmapClosureEvidenceKey;
+  phaseId: PhaseRoadmapClosurePhaseId;
+  missingBlocker: string;
+  safetyPrefix: string;
+  legacyReadyInput?: keyof PhaseRoadmapRuntimeInput;
+  requiredGates: PhaseRoadmapRequiredClosureGate[];
+  requireGatedRuntimeOnly?: boolean;
+  requireClosedLoopShellOnly?: boolean;
+}
+
+function closureValue(evidence: PhaseRoadmapClosureEvidence, field: string): unknown {
+  const record = evidence as unknown as Record<string, unknown>;
+  return evidence.gates?.[field] ?? evidence.summary?.[field] ?? record[field];
+}
+
+function closureGateReady(evidence: PhaseRoadmapClosureEvidence, field: string): boolean {
+  return closureValue(evidence, field) === true;
+}
+
+function closureStatusBlockers(
+  evidence: PhaseRoadmapClosureEvidence,
+  phaseId: PhaseRoadmapClosurePhaseId,
+  prefix: string,
+): string[] {
+  return uniqueSorted([
+    ...blockedIf(evidence.phase !== undefined && evidence.phase !== phaseId, `${prefix}_phase_mismatch`),
+    ...blockedIf(evidence.phaseId !== undefined && evidence.phaseId !== phaseId, `${prefix}_phase_mismatch`),
+    ...blockedIf(evidence.typedEvidencePresent === false, `${prefix}_typed_evidence_missing`),
+    ...blockedIf(evidence.ready === false, `${prefix}_status_not_ready`),
+    ...blockedIf(evidence.status !== undefined && !readyStatus(evidence.status), `${prefix}_status_not_ready`),
+    ...blockedIf(evidence.readiness === "blocked", `${prefix}_status_blocked`),
+    ...blockedIf((evidence.summary?.blockerCount ?? 0) !== 0, `${prefix}_blockers_present`),
+    ...blockedIf((evidence.summary?.blocked ?? 0) !== 0, `${prefix}_blocked_items_present`),
+    ...blockedIf((evidence.summary?.missing ?? 0) !== 0, `${prefix}_missing_items_present`),
+    ...(evidence.blockedReasons || []),
+    ...(evidence.blockers || []),
+  ]);
+}
+
+function closureSafetyBlockers(evidence: PhaseRoadmapClosureEvidence, prefix: string): string[] {
+  const locks = evidence.hardLocks || {};
+  const observations = evidence.observations || {};
+  const summary = evidence.summary || {};
+  const providerSubmitAllowed = locks.providerSubmitAllowed ?? summary.providerSubmitAllowed;
+
+  return uniqueSorted([
+    ...blockedIf(locks.hardLocksPinned === false, `${prefix}_hard_locks_not_pinned`),
+    ...blockedIf(
+      locks.noDaemon === false ||
+        locks.daemonStarted === true ||
+        summary.daemonStarted === true ||
+        observations.daemonStarted === true,
+      `${prefix}_daemon_not_blocked`,
+    ),
+    ...blockedIf(
+      locks.noSpawnCodex === false ||
+        locks.noWorkerSpawn === false ||
+        locks.workerSpawnAllowed === true ||
+        locks.canSpawnCodex === true ||
+        summary.workerSpawnAllowed === true ||
+        observations.spawnCodexObserved === true ||
+        observations.workerSpawnObserved === true ||
+        observations.subprocessObserved === true,
+      `${prefix}_spawn_not_blocked`,
+    ),
+    ...blockedIf(
+      locks.noShellExecution === false ||
+        locks.noArbitraryShell === false ||
+        locks.arbitraryShellAllowed === true ||
+        observations.shellExecutionObserved === true,
+      `${prefix}_shell_not_blocked`,
+    ),
+    ...blockedIf(
+      locks.noProviderSubmit === false ||
+        locks.noProviderExecution === false ||
+        locks.providerSubmissionForbidden === false ||
+        locks.canSubmitProvider === true ||
+        !providerSubmitValueBlocked(providerSubmitAllowed) ||
+        locks.providerCommitAllowed === true ||
+        locks.liveSubmitAllowed === true ||
+        summary.liveSubmitAllowed === true ||
+        observations.providerSubmitObserved === true ||
+        observations.providerExecutionObserved === true ||
+        observations.providerCommitObserved === true ||
+        observations.liveSubmitObserved === true,
+      `${prefix}_provider_submit_not_blocked`,
+    ),
+    ...blockedIf(
+      locks.noCredentialRead === false ||
+        locks.noCredentialWrite === false ||
+        locks.credentialAccessAllowed === true ||
+        locks.credentialStorage === true ||
+        summary.credentialAccessAllowed === true ||
+        summary.credentialStorage === true ||
+        observations.credentialReadObserved === true ||
+        observations.credentialWriteObserved === true ||
+        observations.credentialAccessObserved === true,
+      `${prefix}_credential_access_not_blocked`,
+    ),
+    ...blockedIf(
+      locks.noFileMutation === false ||
+        locks.fileMutationAllowed === true ||
+        summary.fileMutationAllowed === true ||
+        observations.fileMutationObserved === true,
+      `${prefix}_file_mutation_not_blocked`,
+    ),
+  ]);
+}
+
+function phaseClosureEvidenceDecision(
+  input: PhaseRoadmapRuntimeInput,
+  config: PhaseRoadmapClosureDecisionConfig,
+): PhaseRoadmapEvidenceDecision {
+  const evidence = input.evidence?.[config.evidenceKey];
+
+  if (hasClosureEvidence(evidence)) {
+    const requiredGateBlockers = config.requiredGates.flatMap((gate) =>
+      blockedIf(!closureGateReady(evidence, gate.field), gate.blocker),
+    );
+    const blockers = uniqueSorted([
+      ...closureStatusBlockers(evidence, config.phaseId, config.safetyPrefix),
+      ...closureSafetyBlockers(evidence, config.safetyPrefix),
+      ...blockedIf(config.requireGatedRuntimeOnly === true && evidence.hardLocks?.gatedRuntimeOnly !== true, `${config.safetyPrefix}_gated_runtime_only_missing`),
+      ...blockedIf(config.requireClosedLoopShellOnly === true && evidence.hardLocks?.closedLoopShellOnly !== true, `${config.safetyPrefix}_closed_loop_shell_only_missing`),
+      ...requiredGateBlockers,
+    ]);
+
+    return {
+      evidenceKey: config.evidenceKey,
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted(evidence.warnings || []),
+    };
+  }
+
+  const legacyReady = config.legacyReadyInput === undefined ? undefined : input[config.legacyReadyInput];
+  return {
+    evidenceKey: config.evidenceKey,
+    source: legacyReady === undefined ? "missing" : "legacy_boolean_override",
+    ready: false,
+    blockers: [config.missingBlocker],
+    warnings: uniqueSorted([
+      ...blockedIf(legacyReady === true, `legacy_${String(config.legacyReadyInput)}_boolean_ignored_without_typed_evidence`),
+    ]),
+  };
+}
+
+function localOrchestratorRuntimeEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const evidence = input.evidence?.localOrchestratorRuntime;
+
+  if (hasClosureEvidence(evidence)) {
+    const queue = evidence.queue || [];
+    const projectRuntimeStateReady = closureGateReady(evidence, "projectRuntimeStateLocalOrchestratorPresent") ||
+      (evidence.schemaVersion === "0.1.0" && Array.isArray(evidence.queue));
+    const queueLocksPinned = queue.every((item) =>
+      item.canExecute === false &&
+      item.canSpawnCodex === false &&
+      item.providerSubmissionForbidden === true &&
+      item.liveSubmitAllowed === false &&
+      item.noFileMutation === true,
+    );
+    const completionGatePinned = queue.every((item) => {
+      if (item.queueStatus !== "complete_verified" && item.completionGate?.completeVerified !== true) return true;
+      return item.completionGate?.workerSelfReportOnly !== true &&
+        item.completionGate?.expectedOutputDeclared === true &&
+        item.completionGate?.expectedOutputObserved === true &&
+        item.completionGate?.manifestMatched === true &&
+        item.completionGate?.qaPass === true &&
+        item.completionGate?.promotionGatePassed === true;
+    });
+    const autoContinuePlanOnly = evidence.autoContinuePlan?.mode === "plan_only" ||
+      closureGateReady(evidence, "autoContinuePlanOnly");
+    const activityStatesPresent = queue.length > 0 &&
+      queue.every((item) => item.codexActivity !== undefined && typeof item.codexActivity.retryBudget === "number");
+    const blockers = uniqueSorted([
+      ...closureStatusBlockers(evidence, "phase_34_local_orchestrator_runtime_integration", "local_orchestrator_runtime"),
+      ...closureSafetyBlockers(evidence, "local_orchestrator_runtime"),
+      ...blockedIf(!projectRuntimeStateReady, "local_orchestrator_runtime_state_missing"),
+      ...blockedIf(evidence.dryRunOnly !== true || evidence.hardLocks?.dryRunOnly !== true, "local_orchestrator_runtime_dry_run_missing"),
+      ...blockedIf(evidence.planOnly !== true || evidence.hardLocks?.planOnly !== true, "local_orchestrator_runtime_plan_only_missing"),
+      ...blockedIf(evidence.providerSubmissionForbidden !== true, "local_orchestrator_runtime_provider_submit_not_blocked"),
+      ...blockedIf(evidence.liveSubmitAllowed !== false, "local_orchestrator_runtime_provider_submit_not_blocked"),
+      ...blockedIf(evidence.noFileMutation !== true, "local_orchestrator_runtime_file_mutation_not_blocked"),
+      ...blockedIf(evidence.daemonStarted !== false, "local_orchestrator_runtime_daemon_not_blocked"),
+      ...blockedIf(queue.length === 0, "local_orchestrator_runtime_queue_missing"),
+      ...blockedIf(!queueLocksPinned, "local_orchestrator_runtime_queue_locks_not_pinned"),
+      ...blockedIf(!completionGatePinned, "local_orchestrator_runtime_completion_gate_not_pinned"),
+      ...blockedIf(!autoContinuePlanOnly, "local_orchestrator_runtime_auto_continue_not_plan_only"),
+      ...blockedIf(!activityStatesPresent, "local_orchestrator_runtime_activity_states_missing"),
+      ...blockedIf(evidence.hardLocks?.workerSelfReportCannotComplete !== true, "local_orchestrator_runtime_worker_self_report_can_complete"),
+      ...blockedIf(evidence.hardLocks?.expectedOutputRequired !== true, "local_orchestrator_runtime_expected_output_gate_missing"),
+      ...blockedIf(evidence.hardLocks?.manifestRequired !== true, "local_orchestrator_runtime_manifest_gate_missing"),
+      ...blockedIf(evidence.hardLocks?.qaGateRequired !== true, "local_orchestrator_runtime_qa_gate_missing"),
+    ]);
+
+    return {
+      evidenceKey: "localOrchestratorRuntime",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted(evidence.warnings || []),
+    };
+  }
+
+  return {
+    evidenceKey: "localOrchestratorRuntime",
+    source: input.localOrchestratorRuntimeReady === undefined ? "missing" : "legacy_boolean_override",
+    ready: false,
+    blockers: ["local_orchestrator_runtime_typed_evidence_missing"],
+    warnings: uniqueSorted([
+      ...blockedIf(input.localOrchestratorRuntimeReady === true, "legacy_localOrchestratorRuntimeReady_boolean_ignored_without_typed_evidence"),
+    ]),
+  };
+}
+
 function evidenceNotes(decisions: PhaseRoadmapEvidenceDecision[]): string[] {
   return uniqueSorted(decisions.flatMap((decision) => decision.warnings));
 }
@@ -2692,6 +3155,127 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const providerExecutionPermissionDecision = providerExecutionPermissionGateEvidenceDecision(input);
   const providerActionConfirmationReceiptDecision = providerActionConfirmationReceiptEvidenceDecision(input);
   const providerExecutionHandoffDecision = providerExecutionHandoffEvidenceDecision(input);
+  const localOrchestratorRuntimeDecision = localOrchestratorRuntimeEvidenceDecision(input);
+  const taskQueueVisibilityDecision = phaseClosureEvidenceDecision(input, {
+    evidenceKey: "taskQueueVisibility",
+    phaseId: "phase_35_task_queue_visibility_progress_strip",
+    missingBlocker: "task_queue_visibility_typed_evidence_missing",
+    safetyPrefix: "task_queue_visibility",
+    legacyReadyInput: "taskQueueVisibilityReady",
+    requiredGates: [
+      { field: "progressStripVisible", blocker: "task_queue_visibility_progress_strip_missing" },
+      { field: "queueSummaryVisible", blocker: "task_queue_visibility_summary_missing" },
+      { field: "readOnlyDiagnosticsOnly", blocker: "task_queue_visibility_read_only_missing" },
+      { field: "noRunSubmitExecuteControls", blocker: "task_queue_visibility_execute_controls_present" },
+      { field: "consumesLocalOrchestratorSummary", blocker: "task_queue_visibility_local_orchestrator_summary_missing" },
+    ],
+  });
+  const projectFileFactSourceDecision = phaseClosureEvidenceDecision(input, {
+    evidenceKey: "projectFileFactSource",
+    phaseId: "phase_36_project_file_fact_source",
+    missingBlocker: "project_file_fact_source_typed_evidence_missing",
+    safetyPrefix: "project_file_fact_source",
+    legacyReadyInput: "projectFileFactSourceReady",
+    requiredGates: [
+      { field: "projectVibeEntryDefined", blocker: "project_file_fact_source_entry_missing" },
+      { field: "projectFactsAreFileFirst", blocker: "project_file_fact_source_not_file_first" },
+      { field: "saveOpenContractDefined", blocker: "project_file_fact_source_save_open_contract_missing" },
+      { field: "runtimeStateDerivedFromProjectFiles", blocker: "project_file_fact_source_runtime_derivation_missing" },
+      { field: "projectLocalKnowledgePacksScoped", blocker: "project_file_fact_source_knowledge_scope_missing" },
+    ],
+  });
+  const visualConsistencyContractDecision = phaseClosureEvidenceDecision(input, {
+    evidenceKey: "visualConsistencyContract",
+    phaseId: "phase_37_visual_consistency_contract",
+    missingBlocker: "visual_consistency_contract_typed_evidence_missing",
+    safetyPrefix: "visual_consistency_contract",
+    legacyReadyInput: "visualConsistencyContractReady",
+    requiredGates: [
+      { field: "identityGateDefined", blocker: "visual_consistency_identity_gate_missing" },
+      { field: "sceneGateDefined", blocker: "visual_consistency_scene_gate_missing" },
+      { field: "shotLayoutGateDefined", blocker: "visual_consistency_shot_layout_gate_missing" },
+      { field: "spatialMemoryGateDefined", blocker: "visual_consistency_spatial_memory_gate_missing" },
+      { field: "keyframePairDerivationGateDefined", blocker: "visual_consistency_keyframe_pair_gate_missing" },
+      { field: "masterInheritanceQaDefined", blocker: "visual_consistency_master_inheritance_qa_missing" },
+    ],
+  });
+  const subagentPacketPlannerDecision = phaseClosureEvidenceDecision(input, {
+    evidenceKey: "subagentPacketPlanner",
+    phaseId: "phase_38_full_task_subagent_packet_planner",
+    missingBlocker: "subagent_packet_planner_typed_evidence_missing",
+    safetyPrefix: "subagent_packet_planner",
+    legacyReadyInput: "subagentPacketPlannerReady",
+    requiredGates: [
+      { field: "allProductionTaskKindsCovered", blocker: "subagent_packet_planner_task_coverage_missing" },
+      { field: "validatedEnvelopeRequired", blocker: "subagent_packet_planner_validated_envelope_missing" },
+      { field: "formalTaskRejectsMissingPacket", blocker: "subagent_packet_planner_missing_packet_not_blocked" },
+      { field: "expectedOutputsIncluded", blocker: "subagent_packet_planner_expected_outputs_missing" },
+      { field: "knowledgePacksRecorded", blocker: "subagent_packet_planner_knowledge_pack_trace_missing" },
+    ],
+  });
+  const knowledgePackUserManagementDecision = phaseClosureEvidenceDecision(input, {
+    evidenceKey: "knowledgePackUserManagement",
+    phaseId: "phase_39_knowledge_pack_user_management",
+    missingBlocker: "knowledge_pack_user_management_typed_evidence_missing",
+    safetyPrefix: "knowledge_pack_user_management",
+    legacyReadyInput: "knowledgePackUserManagementReady",
+    requiredGates: [
+      { field: "userImportCreateEnableDisableReady", blocker: "knowledge_pack_user_management_crud_missing" },
+      { field: "versionHashDependencyVisible", blocker: "knowledge_pack_user_management_version_hash_missing" },
+      { field: "routeTestReady", blocker: "knowledge_pack_user_management_route_test_missing" },
+      { field: "conflictDetectionReady", blocker: "knowledge_pack_user_management_conflict_detection_missing" },
+      { field: "cannotOverrideHardGates", blocker: "knowledge_pack_user_management_hard_gate_override_possible" },
+    ],
+  });
+  const codexWorkerRuntimeGateDecision = phaseClosureEvidenceDecision(input, {
+    evidenceKey: "codexWorkerRuntimeGate",
+    phaseId: "phase_40_codex_worker_runtime_gate",
+    missingBlocker: "codex_worker_runtime_gate_typed_evidence_missing",
+    safetyPrefix: "codex_worker_runtime_gate",
+    legacyReadyInput: "codexWorkerRuntimeGateReady",
+    requireGatedRuntimeOnly: true,
+    requiredGates: [
+      { field: "workerRuntimeContractDefined", blocker: "codex_worker_runtime_gate_contract_missing" },
+      { field: "defaultGatedOff", blocker: "codex_worker_runtime_gate_default_not_gated" },
+      { field: "validatedEnvelopeOnly", blocker: "codex_worker_runtime_gate_validated_envelope_missing" },
+      { field: "structuredResultOnly", blocker: "codex_worker_runtime_gate_structured_result_missing" },
+      { field: "noActualSpawnByDefault", blocker: "codex_worker_runtime_gate_spawn_not_blocked" },
+    ],
+  });
+  const providerClosedLoopShellDecision = phaseClosureEvidenceDecision(input, {
+    evidenceKey: "providerClosedLoopShell",
+    phaseId: "phase_41_provider_closed_loop_shell",
+    missingBlocker: "provider_closed_loop_shell_typed_evidence_missing",
+    safetyPrefix: "provider_closed_loop_shell",
+    legacyReadyInput: "providerClosedLoopShellReady",
+    requireClosedLoopShellOnly: true,
+    requiredGates: [
+      { field: "image2ClosedLoopShellDefined", blocker: "provider_closed_loop_shell_image2_missing" },
+      { field: "seedanceClosedLoopShellDefined", blocker: "provider_closed_loop_shell_seedance_missing" },
+      { field: "watcherManifestQaPromotionRequired", blocker: "provider_closed_loop_shell_closed_loop_missing" },
+      { field: "providerCommitDefaultGated", blocker: "provider_closed_loop_shell_default_not_gated" },
+      { field: "noActualProviderSubmit", blocker: "provider_closed_loop_shell_provider_submit_not_blocked" },
+    ],
+  });
+  const betaAcceptanceDecision = phaseClosureEvidenceDecision(input, {
+    evidenceKey: "betaAcceptance",
+    phaseId: "phase_42_export_desktop_beta_acceptance",
+    missingBlocker: "beta_acceptance_typed_evidence_missing",
+    safetyPrefix: "beta_acceptance",
+    legacyReadyInput: "betaAcceptanceReady",
+    requiredGates: [
+      { field: "macDesktopReadiness", blocker: "beta_acceptance_mac_desktop_missing" },
+      { field: "windowsDesktopReadiness", blocker: "beta_acceptance_windows_desktop_missing" },
+      { field: "projectSaveOpen", blocker: "beta_acceptance_project_save_open_missing" },
+      { field: "previewExport", blocker: "beta_acceptance_preview_export_missing" },
+      { field: "queueVisibility", blocker: "beta_acceptance_queue_visibility_missing" },
+      { field: "visualConsistency", blocker: "beta_acceptance_visual_consistency_missing" },
+      { field: "knowledgePackManagement", blocker: "beta_acceptance_knowledge_pack_missing" },
+      { field: "providerGate", blocker: "beta_acceptance_provider_gate_missing" },
+      { field: "tests", blocker: "beta_acceptance_tests_missing" },
+      { field: "noAdditionalPhasesPlanned", blocker: "beta_acceptance_phase_freeze_missing" },
+    ],
+  });
   const evidenceDecisions = [
     projectFactsDecision,
     envelopeDecision,
@@ -2706,6 +3290,15 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
     providerExecutionPermissionDecision,
     providerActionConfirmationReceiptDecision,
     providerExecutionHandoffDecision,
+    localOrchestratorRuntimeDecision,
+    taskQueueVisibilityDecision,
+    projectFileFactSourceDecision,
+    visualConsistencyContractDecision,
+    subagentPacketPlannerDecision,
+    knowledgePackUserManagementDecision,
+    codexWorkerRuntimeGateDecision,
+    providerClosedLoopShellDecision,
+    betaAcceptanceDecision,
   ];
 
   const phases: PhaseRoadmapPhasePlan[] = [
@@ -3022,15 +3615,254 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         ...evidenceNotes([providerExecutionHandoffDecision]),
       ],
     }),
+    makePhase({
+      phaseId: "phase_34_local_orchestrator_runtime_integration",
+      phaseNumber: 34,
+      title: "Local Orchestrator Runtime Integration",
+      requiredPrecedingPhases: [
+        "phase_24_subagent_runtime_gate",
+        "phase_25_knowledge_pack_manager",
+        "phase_26_agent_cli_mock_runner",
+        "phase_27_export_worker_mvp",
+        "phase_28_voice_audio_settings_ui",
+        "phase_29_codex_cli_adapter_spike",
+        "phase_30_provider_enablement_gate",
+        "phase_31_provider_execution_permission_gate",
+        "phase_32_action_time_confirmation_receipt",
+        "phase_33_provider_execution_handoff",
+      ],
+      readyPhases,
+      ownBlockers: uniqueSorted(localOrchestratorRuntimeDecision.blockers),
+      readyStatus: "ready_for_runtime_integration",
+      requiredInputs: [
+        "evidence.localOrchestratorRuntime",
+        "ProjectRuntimeState.localOrchestrator present",
+        "queue items with canExecute=false and canSpawnCodex=false",
+        "auto-continue mode=plan_only",
+        "expected output, manifest, QA, and promotion gates pinned",
+      ],
+      acceptanceCriteria: [
+        "Local Orchestrator is a first-class ProjectRuntimeState fact, not a separate test fixture only.",
+        "Queue states cover waiting, ready, running planned, waiting output, QA pending, needs review, failed, blocked, and complete verified.",
+        "Worker self-report cannot complete a task without expected output, manifest, QA, and promotion gates.",
+        "Auto-continue is a plan only and cannot start daemons, spawn Codex, submit providers, execute shell, read credentials, or mutate files.",
+      ],
+      notes: [
+        "Phase 34 makes queue activity observable without creating an execution daemon.",
+        ...evidenceNotes([localOrchestratorRuntimeDecision]),
+      ],
+    }),
+    makePhase({
+      phaseId: "phase_35_task_queue_visibility_progress_strip",
+      phaseNumber: 35,
+      title: "Task Queue Visibility / Progress Strip",
+      requiredPrecedingPhases: [
+        "phase_34_local_orchestrator_runtime_integration",
+      ],
+      readyPhases,
+      ownBlockers: uniqueSorted(taskQueueVisibilityDecision.blockers),
+      readyStatus: "ready_for_queue_visibility",
+      requiredInputs: [
+        "evidence.taskQueueVisibility",
+        "read-only progress strip fed by local orchestrator summary",
+        "no Run/Submit/Execute controls",
+      ],
+      acceptanceCriteria: [
+        "Main surface can show concise task progress without exposing engineering internals.",
+        "Diagnostics or settings can show queue distribution, blockers, retry/stall/manual-review facts, and next planned item.",
+        "Visibility is read-only and cannot trigger worker spawn, provider submit, shell execution, credentials, or file mutation.",
+      ],
+      notes: [
+        "Phase 35 answers the product need that users can see long-running work progressing.",
+        ...evidenceNotes([taskQueueVisibilityDecision]),
+      ],
+    }),
+    makePhase({
+      phaseId: "phase_36_project_file_fact_source",
+      phaseNumber: 36,
+      title: "Project File Fact Source",
+      requiredPrecedingPhases: [
+        "phase_34_local_orchestrator_runtime_integration",
+        "phase_35_task_queue_visibility_progress_strip",
+      ],
+      readyPhases,
+      ownBlockers: uniqueSorted(projectFileFactSourceDecision.blockers),
+      readyStatus: "ready_for_project_fact_source",
+      requiredInputs: [
+        "evidence.projectFileFactSource",
+        "project.vibe entry and save/open contract",
+        "runtime state derived from project files",
+      ],
+      acceptanceCriteria: [
+        "Project files, not runtime cache or chat memory, are the fact source for save/open.",
+        "Project-local knowledge packs and production facts stay scoped to the opened project.",
+        "The roadmap layer still does not write arbitrary files or bypass project IO gates.",
+      ],
+      notes: [
+        "Phase 36 freezes project-file truth as a beta prerequisite.",
+        ...evidenceNotes([projectFileFactSourceDecision]),
+      ],
+    }),
+    makePhase({
+      phaseId: "phase_37_visual_consistency_contract",
+      phaseNumber: 37,
+      title: "Visual Consistency Contract",
+      requiredPrecedingPhases: [
+        "phase_36_project_file_fact_source",
+      ],
+      readyPhases,
+      ownBlockers: uniqueSorted(visualConsistencyContractDecision.blockers),
+      readyStatus: "ready_for_visual_consistency_contract",
+      requiredInputs: [
+        "evidence.visualConsistencyContract",
+        "identity, scene, shot layout, spatial memory, keyframe pair, and master inheritance gates",
+      ],
+      acceptanceCriteria: [
+        "Identity, scene, prop, style, shot layout, spatial memory, and keyframe-pair derivation contracts are explicit.",
+        "Master scene inheritance and visual QA are part of the gate before formal references can propagate.",
+        "Visual consistency packs cannot override provider policy, reference authority, preflight, or QA gates.",
+      ],
+      notes: [
+        "Phase 37 is the visual contract closure point before broader worker/provider shells.",
+        ...evidenceNotes([visualConsistencyContractDecision]),
+      ],
+    }),
+    makePhase({
+      phaseId: "phase_38_full_task_subagent_packet_planner",
+      phaseNumber: 38,
+      title: "Full Task Subagent Packet Planner",
+      requiredPrecedingPhases: [
+        "phase_37_visual_consistency_contract",
+      ],
+      readyPhases,
+      ownBlockers: uniqueSorted(subagentPacketPlannerDecision.blockers),
+      readyStatus: "ready_for_packet_planner",
+      requiredInputs: [
+        "evidence.subagentPacketPlanner",
+        "all production task kinds covered by validated packets",
+        "formal tasks reject missing packets",
+      ],
+      acceptanceCriteria: [
+        "Image, asset, keyframe, video, QA, regeneration, story, and export tasks have packet coverage.",
+        "Formal work cannot start without a validated envelope, expected outputs, injected knowledge records, and source facts.",
+        "Planner output remains a contract and cannot spawn workers or submit providers.",
+      ],
+      notes: [
+        "Phase 38 removes the last free-text subagent planning gap.",
+        ...evidenceNotes([subagentPacketPlannerDecision]),
+      ],
+    }),
+    makePhase({
+      phaseId: "phase_39_knowledge_pack_user_management",
+      phaseNumber: 39,
+      title: "Knowledge Pack User Management",
+      requiredPrecedingPhases: [
+        "phase_38_full_task_subagent_packet_planner",
+      ],
+      readyPhases,
+      ownBlockers: uniqueSorted(knowledgePackUserManagementDecision.blockers),
+      readyStatus: "ready_for_user_management",
+      requiredInputs: [
+        "evidence.knowledgePackUserManagement",
+        "import/create/enable/disable user flows",
+        "version/hash/dependency, route test, and conflict detection facts",
+      ],
+      acceptanceCriteria: [
+        "Users can manage custom and project-local packs without editing built-in hard rules.",
+        "Version, hash, dependency, route-test, and conflict-test facts are visible.",
+        "Knowledge packs cannot make temp/rejected assets formal or enable parked providers.",
+      ],
+      notes: [
+        "Phase 39 completes user-facing Knowledge Pack management before beta.",
+        ...evidenceNotes([knowledgePackUserManagementDecision]),
+      ],
+    }),
+    makePhase({
+      phaseId: "phase_40_codex_worker_runtime_gate",
+      phaseNumber: 40,
+      title: "Codex Worker Runtime Gate",
+      requiredPrecedingPhases: [
+        "phase_39_knowledge_pack_user_management",
+      ],
+      readyPhases,
+      ownBlockers: uniqueSorted(codexWorkerRuntimeGateDecision.blockers),
+      readyStatus: "ready_for_gated_worker_runtime",
+      requiredInputs: [
+        "evidence.codexWorkerRuntimeGate",
+        "gated runtime contract",
+        "defaultGatedOff=true",
+        "noActualSpawnByDefault=true",
+      ],
+      acceptanceCriteria: [
+        "Real Codex worker runtime shape exists only behind a default-off gate.",
+        "Validated envelope input and structured result output remain mandatory.",
+        "The roadmap default cannot spawn Codex, start daemons, execute shell, read/write credentials, submit providers, or mutate files.",
+      ],
+      notes: [
+        "Phase 40 is a gated runtime shell, not live worker execution.",
+        ...evidenceNotes([codexWorkerRuntimeGateDecision]),
+      ],
+    }),
+    makePhase({
+      phaseId: "phase_41_provider_closed_loop_shell",
+      phaseNumber: 41,
+      title: "Image2/Seedance Provider Closed-loop Shell",
+      requiredPrecedingPhases: [
+        "phase_40_codex_worker_runtime_gate",
+      ],
+      readyPhases,
+      ownBlockers: uniqueSorted(providerClosedLoopShellDecision.blockers),
+      readyStatus: "ready_for_provider_closed_loop_shell",
+      requiredInputs: [
+        "evidence.providerClosedLoopShell",
+        "Image2 and Seedance closed-loop shell evidence",
+        "providerCommitDefaultGated=true",
+        "noActualProviderSubmit=true",
+      ],
+      acceptanceCriteria: [
+        "Image2 and Seedance provider execution have closed-loop shell contracts only.",
+        "Watcher, manifest, QA, and promotion gates are mandatory before any future provider commit path can be considered.",
+        "The roadmap default cannot submit providers, live submit, store credentials, read credentials, or create provider credentials.",
+      ],
+      notes: [
+        "Phase 41 is deliberately a provider closed-loop shell and does not submit Image2, Seedance, Jimeng, or any provider.",
+        ...evidenceNotes([providerClosedLoopShellDecision]),
+      ],
+    }),
+    makePhase({
+      phaseId: "phase_42_export_desktop_beta_acceptance",
+      phaseNumber: 42,
+      title: "Export / Desktop / Beta Acceptance",
+      requiredPrecedingPhases: [
+        "phase_41_provider_closed_loop_shell",
+      ],
+      readyPhases,
+      ownBlockers: uniqueSorted(betaAcceptanceDecision.blockers),
+      readyStatus: "ready_for_beta_acceptance",
+      requiredInputs: [
+        "evidence.betaAcceptance",
+        "Mac and Windows desktop readiness",
+        "project save/open, preview/export, queue visibility, visual consistency, knowledge pack, provider gate, and tests",
+      ],
+      acceptanceCriteria: [
+        "Mac desktop readiness and Windows desktop readiness are both accepted.",
+        "Project save/open, preview/export, queue visibility, visual consistency, Knowledge Pack management, provider gate, and tests all pass.",
+        "Beta acceptance is the Phase 42 closure point; no additional phases are planned in this roadmap range.",
+      ],
+      notes: [
+        "Phase 42 freezes the beta closure scope and ends the Phase roadmap growth loop.",
+        ...evidenceNotes([betaAcceptanceDecision]),
+      ],
+    }),
   ];
 
   return {
     schemaVersion: phaseRoadmapRuntimeSchemaVersion,
     generatedAt,
-    phaseRange: "phase_24_to_33",
+    phaseRange: "phase_24_to_42",
     phases,
     summary: {
-      totalPhases: 10,
+      totalPhases: 19,
       ready: phases.filter((phase) => phase.readiness === "ready").length,
       blocked: phases.filter((phase) => phase.readiness === "blocked").length,
       providerSubmitAllowed: 0,
@@ -3046,6 +3878,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "Builder resolves typed evidence before considering legacy booleans.",
         "Phase 24 defaults to blocked without project facts integration evidence and a subagent envelope validator receipt.",
         "Legacy boolean readiness inputs are transitional diagnostics, not proof for real Phase 24.",
+        "Phase 42 is the frozen beta acceptance closure point; this roadmap does not keep adding phases after it.",
       ],
     },
     hardLocks: phaseRoadmapRuntimeHardLocks,
@@ -3099,6 +3932,30 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       credentialAccessAllowed: false,
       workerSpawnAllowed: false,
       fileMutationAllowed: false,
+    },
+    betaClosure: {
+      finalPhaseNumber: 42,
+      noAdditionalPhasesPlanned: true,
+      betaAcceptanceOwnsClosure: true,
+      codexWorkerRuntimeDefaultGated: true,
+      providerClosedLoopDefaultGated: true,
+      canSpawnCodex: false,
+      canSubmitProvider: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      fileMutationAllowedOutsideExplicitExportOrProjectIo: false,
+      requiredAcceptanceGates: [
+        "mac_desktop_readiness",
+        "windows_desktop_readiness",
+        "project_save_open",
+        "preview_export",
+        "queue_visibility",
+        "visual_consistency",
+        "knowledge_pack_management",
+        "provider_gate",
+        "tests",
+      ],
     },
   };
 }

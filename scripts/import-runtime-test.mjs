@@ -631,7 +631,12 @@ const projectFileCorePlannedEntries = [
   ["project_file", "project_manifest", "file", "project.vibe"],
   ["production_bible", "production_bible", "file", "production_bible/production_bible.vibe.json"],
   ["story_flow", "story_flow", "file", "story_flow/story_flow.vibe.json"],
-  ["visual_memory", "visual_memory", "directory", "visual_memory"],
+  ["shot_spec", "shot_spec", "directory", "shots/shot_specs"],
+  ["shot_layout", "shot_layout", "directory", "shots/shot_layouts"],
+  ["visual_memory", "visual_memory", "file", "visual_memory/visual_memory.vibe.json"],
+  ["spatial_memory", "spatial_memory", "file", "spatial_memory/spatial_memory.vibe.json"],
+  ["scene_asset_pack", "scene_asset_pack", "directory", "visual_memory/scene_asset_packs"],
+  ["voice_memory", "voice_memory", "file", "voice_memory/voice_memory.vibe.json"],
   ["shots", "shots", "directory", "shots"],
   ["manifests", "manifests", "directory", "manifests"],
   ["reports", "reports", "directory", "reports"],
@@ -654,7 +659,12 @@ const projectFileCoreSourcePriorityPlan = [
   ["project_manifest", "project.vibe", "planned_project_file"],
   ["production_bible", "production_bible/production_bible.vibe.json", "project_file_tree"],
   ["story_flow", "story_flow/story_flow.vibe.json", "project_file_tree"],
+  ["shot_spec", "shots/*/shot_spec.vibe.json", "project_file_tree"],
+  ["shot_layout", "shots/*/shot_layout.vibe.json", "project_file_tree"],
   ["visual_memory", "visual_memory/visual_memory.vibe.json", "project_file_tree"],
+  ["spatial_memory", "spatial_memory/spatial_memory.vibe.json", "project_file_tree"],
+  ["scene_asset_pack", "visual_memory/scene_asset_packs/*.vibe.json", "project_file_tree"],
+  ["voice_memory", "voice_memory/voice_memory.vibe.json", "project_file_tree"],
   ["shots", "shots/shots.vibe.json", "project_file_tree"],
   ["manifests", "manifests/project_manifest.vibe.json", "project_file_tree"],
   ["reports", "reports/runtime_audit.vibe.json", "project_file_tree"],
@@ -724,10 +734,26 @@ function projectFileCoreRefsForRole(input, role) {
     refs.push(toProjectFileCorePathRef(input.sourceIndex.currentStoryFlowId, input.projectRoot, "sourceIndex.currentStoryFlowId"));
     refs.push(toProjectFileCorePathRef(input.sourceIndex.currentShotSpecId, input.projectRoot, "sourceIndex.currentShotSpecId"));
   }
+  if (role === "shot_spec") {
+    refs.push(toProjectFileCorePathRef(input.sourceIndex.currentShotSpecId, input.projectRoot, "sourceIndex.currentShotSpecId"));
+    refs.push(...input.shots.slice(0, 12).map((shot) => toProjectFileCorePathRef(`shots/${shot.id}/shot_spec.vibe.json`, input.projectRoot, `storyFlow.shots:${shot.id}.shotSpec`)));
+  }
+  if (role === "shot_layout") {
+    refs.push(...input.shots.slice(0, 12).map((shot) => toProjectFileCorePathRef(`shots/${shot.id}/shot_layout.vibe.json`, input.projectRoot, `storyFlow.shots:${shot.id}.shotLayout`)));
+  }
   if (role === "visual_memory") {
     refs.push(toProjectFileCorePathRef(input.sourceIndex.currentVisualMemoryId, input.projectRoot, "sourceIndex.currentVisualMemoryId"));
     refs.push(...input.assets.slice(0, 12).map((asset) => toProjectFileCorePathRef(asset.path, input.projectRoot, `visualMemory.assets:${asset.id}`)));
   }
+  if (role === "spatial_memory") refs.push(toProjectFileCorePathRef(input.sourceIndex.currentSpatialMemoryId, input.projectRoot, "sourceIndex.currentSpatialMemoryId"));
+  if (role === "scene_asset_pack") {
+    refs.push(toProjectFileCorePathRef("visual_memory/scene_asset_packs", input.projectRoot, "projectFacts.sceneAssetPack"));
+    refs.push(...input.assets
+      .filter((asset) => asset.type === "scene")
+      .slice(0, 12)
+      .map((asset) => toProjectFileCorePathRef(asset.path, input.projectRoot, `visualMemory.sceneAssets:${asset.id}`)));
+  }
+  if (role === "voice_memory") refs.push(toProjectFileCorePathRef(input.sourceIndex.currentVoiceMemoryId, input.projectRoot, "sourceIndex.currentVoiceMemoryId"));
   if (role === "shots") {
     refs.push(...input.shots.slice(0, 12).flatMap((shot) => [
       toProjectFileCorePathRef(shot.startFrame, input.projectRoot, `storyFlow.shots:${shot.id}.startFrame`),
@@ -776,7 +802,12 @@ function buildProjectFileCoreState(input) {
         "project_manifest",
         "production_bible",
         "story_flow",
+        "shot_spec",
+        "shot_layout",
         "visual_memory",
+        "spatial_memory",
+        "scene_asset_pack",
+        "voice_memory",
         "shots",
         "manifests",
         "reports",
