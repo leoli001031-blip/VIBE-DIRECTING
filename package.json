@@ -41,6 +41,7 @@
     "real-provider-pilot:test": "node scripts/real-provider-pilot-test.mjs",
     "real-provider-executor:test": "node scripts/real-provider-executor-test.mjs",
     "real-provider-one-shot:test": "node scripts/real-provider-one-shot-test.mjs",
+    "small-project:test": "node scripts/small-project-one-shot-test.mjs",
     "phase-roadmap:test": "node scripts/phase-roadmap-runtime-test.mjs",
     "export-builder:test": "node scripts/export-builder-test.mjs",
     "export-worker:test": "node scripts/export-worker-test.mjs",

@@ -52,7 +52,7 @@ import {
   type RuntimeStateSource,
 } from "./projectState";
 import { buildRuntimeEnvironment, ensureRuntimeEnvironment } from "./runtimeConfig";
-import type { ProjectAudit, ProviderSlot, SubagentTaskEnvelope } from "./types";
+import type { GenerationQaStatus, ProjectAudit, ProviderSlot, SubagentTaskEnvelope } from "./types";
 
 export const emptyKnowledgeManifest: KnowledgePackManifest = {
   schemaVersion: "0.1.0",
@@ -81,6 +81,7 @@ export interface ProjectRuntimeStateBuildOptions {
   realTestBatchId?: string;
   realTestShotIds?: string[];
   realTestOutputSandbox?: Partial<ExecutionLedgerOutputSandbox>;
+  generationQaStatusByOutputPath?: Record<string, GenerationQaStatus>;
   subagentRuntimeGateReceipt?: SubagentRuntimeGateReceipt;
   subagentWorkerRuntimePlan?: SubagentWorkerRuntimePlan;
   subagentTaskEnvelope?: SubagentTaskEnvelope;
@@ -356,6 +357,7 @@ export function buildProjectRuntimeState(
     watcherEvents,
     assetReadinessReports,
     promptPlans: promptPlanResults.map((result) => result.plan),
+    qaStatusByOutputPath: options.generationQaStatusByOutputPath,
   });
   const qaPromotionReports = buildQaPromotionReports({
     imageTaskPlans,
@@ -364,6 +366,7 @@ export function buildProjectRuntimeState(
     generationHealthReports,
     assetReadinessReports,
     promptPlans: promptPlanResults.map((result) => result.plan),
+    qaStatusByOutputPath: options.generationQaStatusByOutputPath,
   });
   const previewEvents = view.previewEvents;
   const audioPlanning = buildAudioPlanningState({
@@ -574,12 +577,15 @@ export function buildProjectRuntimeState(
     generatedAt,
     mode: realTestMode === "scoped_real_test" ? "pilot_review" : "locked",
     projectId: realTestProjectId,
+    projectTitle: audit.projectTitle,
     batchId: options.realTestBatchId,
     selectedShotIds: realTestShotIds,
     maxBatchSize: 3,
     outputSandbox: executionLedger.outputSandbox,
     providerPlan: realProviderPilotProviderPlan(imageTaskPlans),
     expectedImageCount: imageTaskPlans.filter((taskPlan) => taskPlan.providerId.startsWith("openai-image2")).slice(0, 3).length || undefined,
+    taskEnvelopes: taskViews.map((task) => task.envelope),
+    taskPackets: taskPacketBuilderState.packets,
     imageTaskPlans,
     image2AdapterRequests,
     executionLedger,
