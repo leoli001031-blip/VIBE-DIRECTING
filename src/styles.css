@@ -286,6 +286,107 @@
   background: rgba(242, 238, 230, 0.12);
 }
 
+.real-pilot-entry {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(150px, 0.45fr) minmax(180px, 0.55fr) minmax(0, 1.6fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  border-bottom: 1px solid rgba(37, 40, 34, 0.12);
+  padding: 0 0 16px;
+  color: rgba(37, 40, 34, 0.74);
+}
+
+.real-pilot-heading,
+.real-pilot-facts div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.real-pilot-heading span,
+.real-pilot-facts span {
+  color: rgba(37, 40, 34, 0.52);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.real-pilot-heading strong {
+  color: rgba(37, 40, 34, 0.9);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.real-pilot-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.real-pilot-mode-row span {
+  border: 1px solid rgba(37, 40, 34, 0.14);
+  padding: 5px 8px;
+  color: rgba(37, 40, 34, 0.7);
+  font-size: 11px;
+}
+
+.real-pilot-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.real-pilot-facts strong,
+.real-pilot-facts small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.real-pilot-facts strong {
+  color: rgba(37, 40, 34, 0.86);
+  font-size: 13px;
+}
+
+.real-pilot-facts small {
+  color: inherit;
+  font-size: 11px;
+  opacity: 0.62;
+}
+
+.real-pilot-confirm {
+  justify-self: end;
+  min-width: 0;
+  color: rgba(37, 40, 34, 0.72);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.preview-shell .real-pilot-entry {
+  border-color: rgba(242, 238, 230, 0.14);
+  color: rgba(242, 238, 230, 0.68);
+}
+
+.preview-shell .real-pilot-heading span,
+.preview-shell .real-pilot-facts span {
+  color: rgba(242, 238, 230, 0.5);
+}
+
+.preview-shell .real-pilot-heading strong,
+.preview-shell .real-pilot-facts strong,
+.preview-shell .real-pilot-confirm {
+  color: rgba(242, 238, 230, 0.84);
+}
+
+.preview-shell .real-pilot-mode-row span {
+  border-color: rgba(242, 238, 230, 0.16);
+  color: rgba(242, 238, 230, 0.68);
+}
+
 .minimal-story-flow h2,
 .asset-library-view h2 {
   margin: 0 0 36px;
@@ -866,6 +967,15 @@
     justify-content: flex-start;
   }
 
+  .real-pilot-entry {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .real-pilot-confirm {
+    justify-self: start;
+  }
+
   .minimal-agent-panel {
     position: static;
   }
@@ -888,6 +998,10 @@
   .minimal-story-flow h2,
   .asset-library-view h2 {
     font-size: 42px;
+  }
+
+  .real-pilot-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .asset-library-section {
@@ -2944,6 +3058,38 @@ small {
   font-size: 11px;
 }
 
+.real-pilot-diagnostics .real-pilot-diagnostic-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.real-pilot-diagnostic-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.real-pilot-diagnostic-list div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 9px;
+}
+
+.real-pilot-diagnostic-list strong,
+.real-pilot-diagnostic-list small,
+.real-pilot-settings-summary strong,
+.real-pilot-settings-summary small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.real-pilot-diagnostic-list small {
+  color: #9d958a;
+  font-size: 11px;
+}
+
 .checker-metrics {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -3380,6 +3526,11 @@ small {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .real-pilot-diagnostics .real-pilot-diagnostic-metrics,
+  .real-pilot-diagnostic-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .watcher-root-row,
   .watcher-stream-row summary,
   .checkpoint-resume-row summary,
@@ -3438,6 +3589,7 @@ small {
   .phase32-summary-list,
   .phase33-summary-list,
   .phase34-summary-list,
+  .real-pilot-diagnostic-list,
   .machine-panel .summary-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -3465,6 +3617,7 @@ small {
   .phase33-provider-execution-handoff-panel .phase33-metrics,
   .phase34-local-orchestrator-panel .phase34-metrics,
   .phase17-runtime-panel .phase17-metrics,
+  .real-pilot-diagnostics .real-pilot-diagnostic-metrics,
   .generation-job-head,
   .candidate-output-summary div,
   .watcher-root-row,

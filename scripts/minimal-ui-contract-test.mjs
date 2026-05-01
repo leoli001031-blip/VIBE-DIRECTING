@@ -105,6 +105,7 @@ const naturalWorkflowScopeLabel = findFunctionBody(appSource, "naturalWorkflowSc
 const workflowStatusLabel = findFunctionBody(appSource, "workflowStatusLabel");
 const workflowNextStepLabel = findFunctionBody(appSource, "workflowNextStepLabel");
 const workflowBadgeLabels = findFunctionBody(appSource, "workflowBadgeLabels");
+const realPilotDirectorStatus = findFunctionBody(appSource, "RealPilotDirectorStatus");
 const minimalAssetLibrary = findFunctionBody(appSource, "MinimalAssetLibrary");
 const minimalPreview = findFunctionBody(appSource, "MinimalPreview");
 const minimalProjectPlan = findFunctionBody(appSource, "buildMinimalProjectPlan");
@@ -125,6 +126,7 @@ const providerExecutionHandoffUiSummary = findFunctionBody(appSource, "buildProv
 const localOrchestratorDiagnostics = findFunctionBody(appSource, "LocalOrchestratorDiagnostics");
 const localOrchestratorUiSummary = findFunctionBody(appSource, "buildLocalOrchestratorUiSummary");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
+const realPilotDiagnostics = findFunctionBody(appSource, "RealPilotDiagnostics");
 const knowledgeUiSummary = findFunctionBody(appSource, "buildKnowledgeUiSummary");
 const knowledgePackManager = findFunctionBody(appSource, "KnowledgePackManager");
 const diagnosticsMode = findFunctionBody(appSource, "DiagnosticsMode");
@@ -237,6 +239,41 @@ checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /keyframe pair/i, "
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /end-frame derivation/i, "Phase 17 end-frame derivation diagnostics copy"));
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /provider locks/i, "Phase 17 provider locks diagnostics copy"));
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /closed loop/i, "Phase 17 closed-loop diagnostics copy"));
+checkMessage(requireWithin(directorMode, /RealPilotDirectorStatus/, "Phase 43 Real Pilot status mounted in DirectorMode"));
+checkMessage(requireWithin(diagnosticsMode, /RealPilotDiagnostics/, "Phase 43 Real Pilot diagnostics mounted"));
+checkMessage(requireWithin(settingsShell, /Real Pilot\s*\/\s*真实小样/i, "Phase 43 Real Pilot settings status"));
+checkMessage(requireWithin(realPilotDirectorStatus, /真实小样/, "Phase 43 Real Pilot Director status title"));
+checkMessage(requireWithin(realPilotDirectorStatus, /选择镜头/, "Phase 43 Real Pilot selected shots copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /首尾帧/, "Phase 43 Real Pilot start/end frames copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /输出文件夹/, "Phase 43 Real Pilot output folder copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /预计生成/, "Phase 43 Real Pilot estimated generation copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /确认后生成/, "Phase 43 Real Pilot confirmation-before-generation copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /Image2/, "Phase 43 Real Pilot Image2 first copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /Seedance/, "Phase 43 Real Pilot Seedance parked copy"));
+checkMessage(requireWithin(realPilotDiagnostics, /Real Pilot\s*\/\s*真实小样/i, "Phase 43 Real Pilot diagnostics panel"));
+checkMessage(requireWithin(realPilotDiagnostics, /Review Status/i, "Phase 43 Real Pilot diagnostics review status"));
+checkMessage(requireWithin(realPilotDiagnostics, /Start\s*\/\s*End Frames/i, "Phase 43 Real Pilot diagnostics frames summary"));
+check(!/<button\b/i.test(realPilotDirectorStatus), "Phase 43 Real Pilot Director status must stay read-only");
+check(!/<button\b/i.test(realPilotDiagnostics), "Phase 43 Real Pilot diagnostics must not expose executable buttons");
+for (const [term, pattern] of [
+  ["provider", /provider/i],
+  ["credential", /credential/i],
+  ["shell", /shell/i],
+  ["dry-run", /dry[-\s]?run/i],
+  ["submit", /submit/i],
+  ["schema", /schema/i],
+  ["queue", /queue/i],
+  ["task envelope", /task\s*envelope|taskEnvelope/i],
+]) {
+  check(!pattern.test(realPilotDirectorStatus), `Real Pilot Director status must not expose ${term}`);
+}
+for (const [copy, pattern] of [
+  ["direct submit", /direct\s+submit|直接提交/i],
+  ["automatic execution", /automatic\s+execution|自动执行/i],
+  ["auto run", /auto\s+run|自动运行/i],
+]) {
+  check(!pattern.test(`${realPilotDirectorStatus}\n${realPilotDiagnostics}\n${settingsShell}`), `Real Pilot UI must not imply ${copy}`);
+}
 checkMessage(requireWithin(diagnosticsMode, /AgentCliMockRunnerDiagnostics/, "Phase 26 Agent/CLI Mock Runner summary mounted in Diagnostics"));
 checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /Agent\/CLI Mock Runner/i, "Phase 26 Agent/CLI Mock Runner diagnostics panel"));
 checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /Runner Kind/i, "Phase 26 runner kind summary"));
@@ -378,7 +415,7 @@ check(
   "DiagnosticsMode should remain the primary home for engineering/status terms",
 );
 
-const minimalDirectorSurface = `${directorMode}\n${directorProgressStrip}\n${minimalAgentPanel}\n${minimalTopNav}\n${minimalProjectPlan}`;
+const minimalDirectorSurface = `${directorMode}\n${directorProgressStrip}\n${realPilotDirectorStatus}\n${minimalAgentPanel}\n${minimalTopNav}\n${minimalProjectPlan}`;
 const forbiddenMinimalTerms = [
   ["Queue Shell", /Queue\s+Shell/i],
   ["Provider Lock", /Provider\s+Lock/i],
@@ -420,6 +457,7 @@ for (const [term, pattern] of forbiddenMinimalTerms) {
 const phase2123DirectorSurface = [
   directorMode,
   directorProgressStrip,
+  realPilotDirectorStatus,
   minimalTopNav,
   minimalAgentPanel,
   minimalAssetLibrary,

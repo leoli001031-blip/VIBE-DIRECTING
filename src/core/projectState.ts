@@ -15,6 +15,7 @@ import type { ProviderActionConfirmationReceiptState } from "./providerActionCon
 import type { ProviderExecutionHandoffState } from "./providerExecutionHandoff";
 import type { ExecutionLedgerState } from "./executionLedger";
 import type { RealExecutionGateState } from "./realExecutionGate";
+import type { RealProviderPilotState } from "./realProviderPilot";
 import type { LocalOrchestratorState } from "./localOrchestrator";
 import type { ProjectFactsIntegrationState } from "./projectFactsIntegration";
 import type {
@@ -205,6 +206,7 @@ export interface ProjectRuntimeState {
   providerExecutionHandoff: ProviderExecutionHandoffState;
   executionLedger: ExecutionLedgerState;
   realExecutionGate: RealExecutionGateState;
+  realProviderPilot: RealProviderPilotState;
   localOrchestrator: LocalOrchestratorState;
   generationHarness: GenerationHarnessState;
   filesystemWatcherHarness: FilesystemWatcherHarnessState;

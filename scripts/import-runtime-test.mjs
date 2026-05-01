@@ -7266,6 +7266,36 @@ if (!runtimeState.localOrchestrator) {
     options: { autoContinue: true, concurrency: 1, now: runtimeState.generatedAt },
   });
 }
+if (!runtimeState.realProviderPilot) {
+  const { buildRealProviderPilotState } = await importTs("src/core/realProviderPilot.ts");
+  const pilotImageTaskPlan = runtimeState.imagePipeline.imageTaskPlans.find(
+    (taskPlan) =>
+      taskPlan.providerId?.startsWith("openai-image2") &&
+      ["image.generate", "image.edit", "image.reference_asset"].includes(taskPlan.providerSlot),
+  );
+  runtimeState.realProviderPilot = buildRealProviderPilotState({
+    generatedAt: runtimeState.generatedAt,
+    mode: "locked",
+    projectId: runtimeState.sourceIndex.projectId || runtimeState.project.title || "project",
+    maxBatchSize: 3,
+    outputSandbox: runtimeState.executionLedger?.outputSandbox || runtimeState.realExecutionGate?.outputSandbox,
+    providerPlan: pilotImageTaskPlan
+      ? {
+          providerId: pilotImageTaskPlan.providerId,
+          adapterId: `${pilotImageTaskPlan.providerId.replace(/[^a-zA-Z0-9_-]+/g, "_")}-dry-run`,
+          providerSlot: pilotImageTaskPlan.providerSlot,
+          requiredMode: pilotImageTaskPlan.requiredMode,
+          capabilityId: `${pilotImageTaskPlan.providerId}:${pilotImageTaskPlan.providerSlot}:${pilotImageTaskPlan.requiredMode}`,
+          executionState: pilotImageTaskPlan.status === "blocked" ? "unavailable" : "active",
+        }
+      : undefined,
+    expectedImageCount: runtimeState.imagePipeline.imageTaskPlans.filter((taskPlan) => taskPlan.providerId?.startsWith("openai-image2")).slice(0, 3).length || undefined,
+    imageTaskPlans: runtimeState.imagePipeline.imageTaskPlans,
+    image2AdapterRequests: runtimeState.imagePipeline.image2AdapterRequests,
+    executionLedger: runtimeState.executionLedger,
+    realExecutionGate: runtimeState.realExecutionGate,
+  });
+}
 
 assert(runtimeState.providerLiveGate, "runtime-state must include providerLiveGate");
 assert(runtimeState.providerLiveGate.phase === "phase_11_provider_adapter_live_gate", "providerLiveGate must remain the provider live gate evidence source");
@@ -7487,6 +7517,42 @@ for (const key of [
 }
 assert(runtimeState.localOrchestrator.hardLocks.daemonStarted === false, "localOrchestrator daemonStarted hard lock must be false");
 assert(runtimeState.localOrchestrator.hardLocks.liveSubmitAllowed === false, "localOrchestrator live submit hard lock must be false");
+
+assert(runtimeState.realProviderPilot, "runtime-state must include realProviderPilot");
+assert(runtimeState.realProviderPilot.phase === "phase_43_real_provider_pilot", "realProviderPilot must be Phase 43 pilot evidence");
+assert(runtimeState.realProviderPilot.pilotKind === "image2_first_small_batch", "realProviderPilot must stay Image2 First small-batch");
+assert(runtimeState.realProviderPilot.status === "locked", "default import runtime pilot must stay locked");
+assert(runtimeState.realProviderPilot.scopeSummary.maxBatchSize === 3, "realProviderPilot must stay small-batch");
+assert(runtimeState.realProviderPilot.scopeSummary.image2FirstOnly === true, "realProviderPilot must be Image2-only");
+assert(runtimeState.realProviderPilot.scopeSummary.seedanceParkedForFuture === true, "realProviderPilot must keep Seedance parked");
+assert(runtimeState.realProviderPilot.providerPlan.providerId.startsWith("openai-image2"), "realProviderPilot provider must be Image2");
+assert(runtimeState.realProviderPilot.parkedFutureProviderPlans.some((provider) => provider.providerId === "seedance2-provider" && provider.status === "parked_future"), "realProviderPilot must keep Seedance parked future");
+assert(runtimeState.realProviderPilot.providerSubmitAllowed === false, "realProviderPilot must not allow provider submit");
+assert(runtimeState.realProviderPilot.actualExecutionAllowed === false, "realProviderPilot actual execution must be false");
+assert(runtimeState.realProviderPilot.credentialAccessAllowed === false, "realProviderPilot credential access must be false");
+assert(runtimeState.realProviderPilot.canSpawnWorker === false, "realProviderPilot worker spawn must be false");
+assert(runtimeState.realProviderPilot.noFileMutation === true, "realProviderPilot file mutation must stay blocked");
+for (const key of [
+  "dryRunOnly",
+  "reviewOnly",
+  "noProviderSubmit",
+  "noCredentialRead",
+  "noCredentialWrite",
+  "noWorkerSpawn",
+  "noSubprocess",
+  "noShellExecution",
+  "noImage2Execution",
+  "noSeedanceExecution",
+  "noFileMutation",
+]) {
+  assert(runtimeState.realProviderPilot.hardLocks[key] === true, `realProviderPilot hard lock ${key} must be true`);
+}
+assert(runtimeState.realProviderPilot.hardLocks.actualExecutionAllowed === false, "realProviderPilot actual execution lock must be false");
+assert(runtimeState.realProviderPilot.hardLocks.providerSubmitAllowed === 0, "realProviderPilot providerSubmitAllowed lock must be zero");
+assert(runtimeState.realProviderPilot.hardLocks.providerSubmitAllowedBoolean === false, "realProviderPilot provider submit boolean lock must be false");
+assert(runtimeState.realProviderPilot.hardLocks.credentialAccessAllowed === false, "realProviderPilot credential access lock must be false");
+assert(runtimeState.realProviderPilot.hardLocks.canSpawnWorker === false, "realProviderPilot worker spawn lock must be false");
+
 assert(runtimeState.voiceAudioSettings, "runtime-state must include voiceAudioSettings");
 assert(runtimeState.voiceAudioSettings.phase === "phase_28_voice_audio_settings_ui", "voiceAudioSettings must be Phase 28 evidence");
 assert(runtimeState.voiceAudioSettings.scope === "voice_audio_project_facts", "voiceAudioSettings scope must stay project facts only");

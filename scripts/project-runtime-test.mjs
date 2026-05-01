@@ -244,6 +244,7 @@ for (const [key, expected] of Object.entries({
 
 const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
 assert(packageJson.scripts["project-runtime:test"] === "node scripts/project-runtime-test.mjs", "package script project-runtime:test missing");
+assert(packageJson.scripts["real-provider-pilot:test"] === "node scripts/real-provider-pilot-test.mjs", "package script real-provider-pilot:test missing");
 
 console.log(
   `Project Runtime tests passed: ${createPlan.factFiles.length} fact files, ${createPlan.writePlan.length} write plans, cache ${createPlan.runtimeCacheRebuildPlan.cachePolicy.runtimeStateRole}.`,

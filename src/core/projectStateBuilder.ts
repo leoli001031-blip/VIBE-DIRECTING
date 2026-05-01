@@ -36,6 +36,7 @@ import { buildProviderActionConfirmationReceiptState } from "./providerActionCon
 import { buildProviderExecutionHandoffState } from "./providerExecutionHandoff";
 import { buildExecutionLedgerState, type ExecutionLedgerMode, type ExecutionLedgerOutputSandbox } from "./executionLedger";
 import { buildRealExecutionGateState } from "./realExecutionGate";
+import { buildRealProviderPilotState, type RealProviderPilotProviderPlanInput } from "./realProviderPilot";
 import { buildLocalOrchestratorState, type LocalOrchestratorTaskPacket } from "./localOrchestrator";
 import type { SubagentRuntimeGateReceipt } from "./subagentRuntimeGate";
 import type { SubagentWorkerRuntimePlan } from "./subagentWorkerRuntime";
@@ -71,6 +72,7 @@ export interface ProjectRuntimeStateBuildOptions {
   codexCliAdapterSpike?: ProjectRuntimeState["codexCliAdapterSpike"];
   executionLedger?: ProjectRuntimeState["executionLedger"];
   realExecutionGate?: ProjectRuntimeState["realExecutionGate"];
+  realProviderPilot?: ProjectRuntimeState["realProviderPilot"];
   realTestMode?: ExecutionLedgerMode;
   realTestBatchId?: string;
   realTestShotIds?: string[];
@@ -213,6 +215,25 @@ function buildLocalOrchestratorTaskPackets(
 
 function selectedTaskPacketAssetId(assets: ProjectAudit["assets"]): string | undefined {
   return assets.find((asset) => asset.lockedStatus === "locked" && asset.safeForFutureReference && asset.status !== "missing")?.id || assets[0]?.id;
+}
+
+function realProviderPilotProviderPlan(
+  imageTaskPlans: ProjectRuntimeState["imagePipeline"]["imageTaskPlans"],
+): RealProviderPilotProviderPlanInput | undefined {
+  const taskPlan = imageTaskPlans.find(
+    (item) =>
+      item.providerId.startsWith("openai-image2") &&
+      (item.providerSlot === "image.generate" || item.providerSlot === "image.edit" || item.providerSlot === "image.reference_asset"),
+  );
+  if (!taskPlan) return undefined;
+  return {
+    providerId: taskPlan.providerId,
+    adapterId: `${taskPlan.providerId.replace(/[^a-zA-Z0-9_-]+/g, "_")}-dry-run`,
+    providerSlot: taskPlan.providerSlot,
+    requiredMode: taskPlan.requiredMode,
+    capabilityId: `${taskPlan.providerId}:${taskPlan.providerSlot}:${taskPlan.requiredMode}`,
+    executionState: taskPlan.status === "blocked" ? "unavailable" : "active",
+  };
 }
 
 export function buildProjectRuntimeState(
@@ -545,6 +566,21 @@ export function buildProjectRuntimeState(
     providerExecutionHandoff,
     executionLedger,
   });
+  const realProviderPilot = options.realProviderPilot || buildRealProviderPilotState({
+    generatedAt,
+    mode: realTestMode === "scoped_real_test" ? "pilot_review" : "locked",
+    projectId: realTestProjectId,
+    batchId: options.realTestBatchId,
+    selectedShotIds: realTestShotIds,
+    maxBatchSize: 3,
+    outputSandbox: executionLedger.outputSandbox,
+    providerPlan: realProviderPilotProviderPlan(imageTaskPlans),
+    expectedImageCount: imageTaskPlans.filter((taskPlan) => taskPlan.providerId.startsWith("openai-image2")).slice(0, 3).length || undefined,
+    imageTaskPlans,
+    image2AdapterRequests,
+    executionLedger,
+    realExecutionGate,
+  });
   const generationHealthChecker = buildGenerationHealthCheckerState({
     generatedAt,
     imageTaskPlans,
@@ -643,6 +679,7 @@ export function buildProjectRuntimeState(
     providerExecutionHandoff,
     executionLedger,
     realExecutionGate,
+    realProviderPilot,
     localOrchestrator,
     generationHarness,
     filesystemWatcherHarness,
@@ -946,6 +983,22 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       providerExecutionHandoff,
       executionLedger,
     });
+  const realProviderPilot =
+    state.realProviderPilot ||
+    buildRealProviderPilotState({
+      generatedAt: state.generatedAt,
+      mode: "locked",
+      projectId: state.sourceIndex.projectId || state.project.title || "project",
+      selectedShotIds: [],
+      maxBatchSize: 3,
+      outputSandbox: executionLedger.outputSandbox,
+      providerPlan: realProviderPilotProviderPlan(state.imagePipeline.imageTaskPlans),
+      expectedImageCount: state.imagePipeline.imageTaskPlans.filter((taskPlan) => taskPlan.providerId.startsWith("openai-image2")).slice(0, 3).length || undefined,
+      imageTaskPlans: state.imagePipeline.imageTaskPlans,
+      image2AdapterRequests: state.imagePipeline.image2AdapterRequests,
+      executionLedger,
+      realExecutionGate,
+    });
   const generationHealthChecker =
     state.generationHealthChecker ||
     buildGenerationHealthCheckerState({
@@ -1019,6 +1072,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     providerExecutionHandoff,
     executionLedger,
     realExecutionGate,
+    realProviderPilot,
     localOrchestrator,
     generationHarness,
     filesystemWatcherHarness,

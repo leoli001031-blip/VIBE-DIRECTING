@@ -171,6 +171,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "RealExecutionGateState",
   },
   {
+    fileName: "real_provider_pilot.schema.json",
+    id: "https://vibecore.local/schemas/real_provider_pilot.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 43 Image2 First small-batch real provider pilot state with provider submit, credential, worker spawn, file mutation, and Seedance/video routes locked off.",
+    typeName: "RealProviderPilotState",
+  },
+  {
     fileName: "export_builder.schema.json",
     id: "https://vibecore.local/schemas/export_builder.schema.json",
     version: schemaVersion,

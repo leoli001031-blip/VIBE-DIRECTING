@@ -252,6 +252,24 @@ type DirectorProgressStripState = {
   complete: number;
   segments: DirectorProgressSegment[];
 };
+type RealPilotUiSummary = {
+  reviewStatus: string;
+  selectedShotCount: number;
+  selectedShotDetail: string;
+  framePairValue: string;
+  framePairDetail: string;
+  estimatedOutputCount: number;
+  estimatedOutputDetail: string;
+  outputRoot: string;
+  confirmationState: string;
+  image2State: string;
+  seedanceState: string;
+  readyItems: number;
+  blockedItems: number;
+  ledgerEntries: number;
+  blockers: string[];
+  warnings: string[];
+};
 
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
@@ -2340,6 +2358,59 @@ function buildDirectorProgressStripState(runtimeState: ProjectRuntimeState): Dir
       { label: "有阻断", value: blocked, tone: "blocked" },
       { label: "已完成", value: complete, tone: "complete" },
     ],
+  };
+}
+
+function buildRealPilotUiSummary(runtimeState: ProjectRuntimeState, selectedShot?: ShotRecord): RealPilotUiSummary {
+  const gate = runtimeState.realExecutionGate;
+  const ledger = runtimeState.executionLedger;
+  const selectedShotIds = gate.selectedShotIds.length
+    ? gate.selectedShotIds
+    : selectedShot ? [selectedShot.id] : [];
+  const selectedShots = selectedShotIds
+    .map((id) => runtimeState.storyFlow.shots.find((shot) => shot.id === id) || (selectedShot?.id === id ? selectedShot : undefined))
+    .filter((shot): shot is ShotRecord => Boolean(shot));
+  const selectedShotDetail = selectedShotIds.length
+    ? selectedShotIds.map(formatShotNumber).join(", ")
+    : "从故事镜头中选择一小组";
+  const selectedShotCount = selectedShotIds.length;
+  const shotCount = Math.max(1, selectedShots.length);
+  const startFrameCount = selectedShots.filter((shot) => Boolean(shot.startFrame)).length;
+  const endFrameCount = selectedShots.filter((shot) => Boolean(shot.endFrame)).length;
+  const scopedPlans = runtimeState.imagePipeline.imageTaskPlans.filter((plan) => selectedShotIds.includes(plan.shotId));
+  const image2Plans = scopedPlans.filter((plan) =>
+    plan.providerId.toLowerCase().includes("image2") ||
+    ["image.generate", "image.edit", "image.reference_asset"].includes(plan.providerSlot),
+  );
+  const estimatedOutputCount = image2Plans.reduce((sum, plan) => {
+    const envelopeOutputs = plan.taskEnvelopeSummary?.expectedOutputs.length || 0;
+    return sum + Math.max(1, envelopeOutputs || (plan.expectedOutputPath ? 1 : 0));
+  }, 0);
+  const readyItems = gate.summary.readyForScopedRealTestReview;
+  const blockedItems = gate.summary.blocked;
+  const reviewStatus = !selectedShotCount
+    ? "先选择镜头"
+    : readyItems > 0 && blockedItems === 0
+      ? "可审查"
+      : "等待确认";
+
+  return {
+    reviewStatus,
+    selectedShotCount,
+    selectedShotDetail,
+    framePairValue: selectedShotCount ? `${startFrameCount}/${shotCount} · ${endFrameCount}/${shotCount}` : "未选择",
+    framePairDetail: selectedShotCount ? "首帧 / 尾帧" : "选择镜头后检查首尾帧",
+    estimatedOutputCount,
+    estimatedOutputDetail: estimatedOutputCount > 0 ? "Image2 小批量" : "选择后估算",
+    outputRoot: gate.outputSandbox.root || ledger.outputSandbox.root || "待选择输出文件夹",
+    confirmationState: "需要确认",
+    image2State: "Image2 first",
+    seedanceState: "Seedance 暂停/后续",
+    readyItems,
+    blockedItems,
+    ledgerEntries: ledger.summary.totalEntries,
+    blockers: [...gate.items.flatMap((item) => item.blockers), ...ledger.scopeBlockers],
+    warnings: gate.items.flatMap((item) => item.warnings),
   };
 }
 
@@ -5861,6 +5932,43 @@ function DirectorProgressStrip({ runtimeState }: { runtimeState: ProjectRuntimeS
   );
 }
 
+function RealPilotDirectorStatus({ summary }: { summary: RealPilotUiSummary }) {
+  return (
+    <section className="real-pilot-entry" aria-label="真实小样">
+      <div className="real-pilot-heading">
+        <span>真实小样</span>
+        <strong>{summary.reviewStatus}</strong>
+      </div>
+      <div className="real-pilot-mode-row">
+        <span aria-label="Image2 first">{summary.image2State}</span>
+        <span aria-label="Seedance paused">{summary.seedanceState}</span>
+      </div>
+      <div className="real-pilot-facts">
+        <div>
+          <span>选择镜头</span>
+          <strong>{summary.selectedShotCount ? `${summary.selectedShotCount} 个` : "未选择"}</strong>
+          <small>{summary.selectedShotDetail}</small>
+        </div>
+        <div>
+          <span>首尾帧</span>
+          <strong>{summary.framePairValue}</strong>
+          <small>{summary.framePairDetail}</small>
+        </div>
+        <div>
+          <span>预计生成</span>
+          <strong>{summary.estimatedOutputCount || "待估算"}</strong>
+          <small>{summary.estimatedOutputDetail}</small>
+        </div>
+        <div>
+          <span>输出文件夹</span>
+          <strong>{summary.outputRoot}</strong>
+        </div>
+      </div>
+      <small className="real-pilot-confirm">{summary.confirmationState} · 确认后生成</small>
+    </section>
+  );
+}
+
 function AudioPlanSummaryStrip({ audioPlanning, selectedShot }: { audioPlanning: AudioPlanningState; selectedShot?: ShotRecord }) {
   const selectedPlan = findAudioPlan(audioPlanning, selectedShot?.id);
   const plannedSlots = audioPlanning.providerSlots.filter((slot) => slot.state === "planned").length;
@@ -5982,10 +6090,12 @@ function DirectorMode({
   const activeSection = view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0];
   const sectionLabel = activeSection?.label || "Story";
   const shots = activeSection ? audit.shots.filter((shot) => activeSection.shotIds.includes(shot.id)) : audit.shots;
+  const realPilotSummary = buildRealPilotUiSummary(runtimeState, selectedShot);
 
   return (
     <div className={`minimal-director ${directorView}`}>
       <DirectorProgressStrip runtimeState={runtimeState} />
+      <RealPilotDirectorStatus summary={realPilotSummary} />
       <div className="minimal-director-main">
         {directorView === "assets" && (
           <MinimalAssetLibrary
@@ -6749,6 +6859,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const providerActionConfirmationReceiptSummary = buildProviderActionConfirmationReceiptUiSummary(runtimeState);
   const providerExecutionHandoffSummary = buildProviderExecutionHandoffUiSummary(runtimeState);
   const localOrchestratorSummary = buildLocalOrchestratorUiSummary(runtimeState);
+  const realPilotSummary = buildRealPilotUiSummary(runtimeState);
 
   return (
     <section className="machine-panel settings-shell">
@@ -6888,6 +6999,15 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
         <div className="settings-readonly-note">
           <strong>Voice/Audio Settings readiness: {voiceAudioSettingsSummary.readiness}</strong>
           <small>{voiceAudioSettingsSummary.voiceSourceCount} source(s) · {voiceAudioSettingsSummary.audioPlanCount} audio plan(s) · no BGM {voiceAudioSettingsSummary.noBgmPolicy ? "on" : "off"} · provider live {voiceAudioSettingsSummary.providerSlotsLive}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Real Pilot / 真实小样</div>
+      <div className="settings-list real-pilot-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Real Pilot / 真实小样: {realPilotSummary.reviewStatus}</strong>
+          <small>{realPilotSummary.image2State} · {realPilotSummary.seedanceState} · {realPilotSummary.confirmationState}</small>
+          <small>selected shots {realPilotSummary.selectedShotCount} · start/end frames {realPilotSummary.framePairValue} · estimated outputs {realPilotSummary.estimatedOutputCount}</small>
+          <small>output root {realPilotSummary.outputRoot}</small>
         </div>
       </div>
       <div className="settings-group-title">Provider Enablement Gate</div>
@@ -7104,6 +7224,39 @@ function Image2KeyframeRuntimeDiagnostics({ runtimeState }: { runtimeState: Proj
   );
 }
 
+function RealPilotDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildRealPilotUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel real-pilot-diagnostics">
+      <div className="audit-head">
+        <Sparkles size={17} />
+        <span>Real Pilot / 真实小样</span>
+      </div>
+      <div className="summary-grid real-pilot-diagnostic-metrics">
+        <Metric label="Review Status" value={summary.reviewStatus} detail={summary.confirmationState} />
+        <Metric label="Selected Shots" value={`${summary.selectedShotCount}`} detail={summary.selectedShotDetail} />
+        <Metric label="Start / End Frames" value={summary.framePairValue} detail={summary.framePairDetail} />
+        <Metric label="Output Root" value={summary.outputRoot} detail="scoped review folder" />
+        <Metric label="Estimated Outputs" value={`${summary.estimatedOutputCount}`} detail={summary.estimatedOutputDetail} />
+        <Metric label="Image2 First" value={summary.image2State} detail={summary.seedanceState} />
+        <Metric label="Ready / Blocked" value={`${summary.readyItems}/${summary.blockedItems}`} detail="gate item review state" />
+        <Metric label="Ledger Entries" value={`${summary.ledgerEntries}`} detail="state-only record" />
+      </div>
+      <div className="real-pilot-diagnostic-list">
+        <div>
+          <strong>Pilot Boundary</strong>
+          <small>Small Image2 review only; the UI exposes no action button here.</small>
+        </div>
+        <div>
+          <strong>Blockers / warnings</strong>
+          <small>{[...summary.blockers, ...summary.warnings].slice(0, 5).join(" · ") || "none reported"}</small>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function DiagnosticsMode({
   audit,
   view,
@@ -7134,6 +7287,7 @@ function DiagnosticsMode({
       <CodexCliAdapterSpikeDiagnostics runtimeState={runtimeState} />
       <ExportWorkerDiagnostics runtimeState={runtimeState} />
       <Image2KeyframeRuntimeDiagnostics runtimeState={runtimeState} />
+      <RealPilotDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <VoiceAudioSettingsDiagnostics runtimeState={runtimeState} />
       <ProviderEnablementGateDiagnostics runtimeState={runtimeState} />
