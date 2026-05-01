@@ -106,6 +106,7 @@ const previewQueueKind = findFunctionBody(appSource, "previewQueueKind");
 const desktopShellView = findFunctionBody(appSource, "buildDesktopRuntimeShellView");
 const subagentWorkerRuntimeDiagnostics = findFunctionBody(appSource, "SubagentWorkerRuntimeDiagnostics");
 const agentCliMockRunnerDiagnostics = findFunctionBody(appSource, "AgentCliMockRunnerDiagnostics");
+const codexCliAdapterSpikeDiagnostics = findFunctionBody(appSource, "CodexCliAdapterSpikeDiagnostics");
 const exportWorkerDiagnostics = findFunctionBody(appSource, "ExportWorkerDiagnostics");
 const voiceAudioSettingsDiagnostics = findFunctionBody(appSource, "VoiceAudioSettingsDiagnostics");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
@@ -192,6 +193,14 @@ checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /Replacement Proof/i, 
 checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /Readiness/i, "Phase 26 ready/blocked summary"));
 checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /No-op Results/i, "Phase 26 no-op result count summary"));
 checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /phase26-lock-strip/i, "Phase 26 hard locks summary"));
+checkMessage(requireWithin(diagnosticsMode, /CodexCliAdapterSpikeDiagnostics/, "Phase 29 CodexCliAdapterSpikeDiagnostics mounted in Diagnostics"));
+checkMessage(requireWithin(codexCliAdapterSpikeDiagnostics, /Codex CLI Adapter Spike/i, "Phase 29 Codex CLI Adapter Spike diagnostics panel"));
+checkMessage(requireWithin(codexCliAdapterSpikeDiagnostics, /Contract Mode/i, "Phase 29 contract mode summary"));
+checkMessage(requireWithin(codexCliAdapterSpikeDiagnostics, /Replacement Proof/i, "Phase 29 replacement proof summary"));
+checkMessage(requireWithin(codexCliAdapterSpikeDiagnostics, /Input Source/i, "Phase 29 input source summary"));
+checkMessage(requireWithin(codexCliAdapterSpikeDiagnostics, /Spawn\s*\/\s*Resume/i, "Phase 29 spawn/resume shape summary"));
+checkMessage(requireWithin(codexCliAdapterSpikeDiagnostics, /Provider Submit/i, "Phase 29 provider submit summary"));
+checkMessage(requireWithin(codexCliAdapterSpikeDiagnostics, /phase29-lock-strip/i, "Phase 29 hard locks summary"));
 checkMessage(requireWithin(diagnosticsMode, /ExportWorkerDiagnostics/, "Phase 27 ExportWorkerDiagnostics mounted in Diagnostics"));
 checkMessage(requireWithin(exportWorkerDiagnostics, /Export Worker Diagnostics/i, "Phase 27 Export Worker diagnostics panel"));
 checkMessage(requireWithin(exportWorkerDiagnostics, /Readiness/i, "Phase 27 readiness summary"));
@@ -353,6 +362,24 @@ for (const [term, pattern] of phase28ForbiddenMainTerms) {
   const count = countPattern(phase2123DirectorSurface, pattern);
   check(count === 0, `Phase 28 main Director surface must expose 0 ${term} term(s), found ${count}`);
 }
+const phase29ForbiddenMainTerms = [
+  ["Codex CLI Adapter Spike", /Codex\s+CLI\s+Adapter\s+Spike/i],
+  ["Codex CLI Adapter readiness", /Codex\s+CLI\s+Adapter\s+readiness/i],
+  ["Run Codex", /Run\s+Codex/i],
+  ["Spawn Codex", /Spawn\s+Codex/i],
+  ["Resume Codex", /Resume\s+Codex/i],
+  ["Execute CLI", /Execute\s+CLI/i],
+  ["Run CLI", /Run\s+CLI/i],
+  ["Run Adapter", /Run\s+Adapter/i],
+  ["Submit Provider", /Submit\s+Provider/i],
+  ["validated envelope", /validated\s+envelope/i],
+  ["structured result", /structured\s+result/i],
+  ["adapter shape", /adapter\s+shape/i],
+];
+for (const [term, pattern] of phase29ForbiddenMainTerms) {
+  const count = countPattern(phase2123DirectorSurface, pattern);
+  check(count === 0, `Phase 29 main Director surface must expose 0 ${term} term(s), found ${count}`);
+}
 check(!/Formal\s+Gate|Proxy\s+Duration|Draft\s+Events|blockedPlaceholder/i.test(minimalPreview), "Preview Player copy must stay short and not show gate/proxy counters");
 check(/locked/i.test(minimalAssetLibrary) && /candidate/i.test(minimalAssetLibrary) && /review/i.test(minimalAssetLibrary), "Asset Library must keep locked/candidate/review consistency states");
 
@@ -373,6 +400,8 @@ checkMessage(requireWithin(diagnosticsMode, /KnowledgePackManager/, "Phase 25 Kn
 checkMessage(requireWithin(settingsShell, /Knowledge Pack Manager readiness/i, "Phase 25 Knowledge Pack Manager readiness summary in Settings"));
 checkMessage(requireWithin(settingsShell, /Agent\/CLI Mock Runner readiness/i, "Phase 26 Agent/CLI Mock Runner readiness summary in Settings"));
 checkMessage(requireWithin(settingsShell, /adapter boundary mock\/no-op only/i, "Phase 26 adapter boundary summary in Settings"));
+checkMessage(requireWithin(settingsShell, /Codex CLI Adapter readiness/i, "Phase 29 Codex CLI Adapter readiness summary in Settings"));
+checkMessage(requireWithin(settingsShell, /spawn\/resume/i, "Phase 29 spawn/resume settings summary"));
 checkMessage(requireWithin(settingsShell, /Export Worker readiness/i, "Phase 27 Export Worker readiness summary in Settings"));
 checkMessage(requireWithin(settingsShell, /export IO scope/i, "Phase 27 export IO scope summary in Settings"));
 checkMessage(requireWithin(settingsShell, /Voice\/Audio Settings readiness/i, "Phase 28 Voice/Audio Settings readiness summary in Settings"));
@@ -393,8 +422,12 @@ const forbiddenButtonCopy = [
   "Run Codex",
   "Spawn Codex",
   "Resume Codex",
+  "Execute CLI",
+  "Run CLI",
+  "Submit Provider",
   "Save Credentials",
   "Run Provider",
+  "Run Adapter",
   "Export Now",
   "Write Files",
   "Create Directory",
@@ -410,6 +443,8 @@ const forbiddenButtonCopy = [
   "Save API Key",
   "Submit Audio Provider",
   "Write Audio File",
+  "Generate Image",
+  "Generate Video",
 ];
 for (const copy of forbiddenButtonCopy) {
   check(

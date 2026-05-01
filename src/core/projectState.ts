@@ -7,6 +7,7 @@ import type { VoiceSourceLibraryState } from "./voiceSourceLibrary";
 import type { VoiceAudioSettingsState } from "./voiceAudioSettings";
 import type { QueueGateResult } from "./taskQueue";
 import type { AgentCliMockRunnerState } from "./agentCliMockRunner";
+import type { CodexCliAdapterSpikeState } from "./codexCliAdapterSpike";
 import type { ExportWorkerState } from "./exportWorker";
 import type {
   AssetRecord,
@@ -196,6 +197,7 @@ export interface ProjectRuntimeState {
   toolRuntimeHarness: ToolRuntimeHarnessState;
   subagentRunner: SubagentRunnerState;
   agentCliMockRunner: AgentCliMockRunnerState;
+  codexCliAdapterSpike: CodexCliAdapterSpikeState;
   generationHealthChecker: GenerationHealthCheckerState;
   promptConflictChecker: PromptConflictCheckerState;
   storyChanges: ProjectRuntimeStoryChangeState;

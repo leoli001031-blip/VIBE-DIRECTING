@@ -439,11 +439,147 @@ function voiceAudioSettingsEvidence(overrides = {}) {
   };
 }
 
+function codexCliAdapterEvidence(overrides = {}) {
+  const {
+    contract: contractOverrides,
+    adapterBoundary: adapterBoundaryOverrides,
+    observations: observationOverrides,
+    hardLocks: hardLockOverrides,
+    validation: validationOverrides,
+    roadmapEvidence: roadmapEvidenceOverrides,
+    resultContract: resultContractOverrides,
+    executionPolicy: executionPolicyOverrides,
+    ...rest
+  } = overrides;
+  const observations = {
+    providerSubmitObserved: false,
+    credentialReadObserved: false,
+    credentialWriteObserved: false,
+    shellExecutionObserved: false,
+    fileMutationObserved: false,
+    freeTextTaskObserved: false,
+    freeTextWorkerObserved: false,
+    actualSpawnObserved: false,
+    actualResumeObserved: false,
+    unstructuredResultObserved: false,
+    ...(observationOverrides || {}),
+  };
+  return {
+    kind: "codex_cli_adapter_spike",
+    phase: "phase_29_codex_cli_adapter_spike",
+    status: "ready",
+    readiness: "ready_for_adapter_spike",
+    adapterContractReady: true,
+    phase26ReplacementProofReady: true,
+    contract: {
+      inputSource: "validated_envelope_only",
+      resultKind: "structured_result",
+      providerSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      arbitraryShellAllowed: false,
+      fileMutationAllowed: false,
+      freeTextAllowed: false,
+      actualSpawnAllowed: false,
+      actualResumeAllowed: false,
+      spawnResumeMode: "contract_only",
+      ...(contractOverrides || {}),
+    },
+    adapterBoundary: {
+      inputContract: "validated_subagent_task_envelope_only",
+      outputContract: "structured_subagent_result_shape_only",
+      contractMode: "contract_only",
+      providerSubmitAllowed: false,
+      credentialReadAllowed: false,
+      credentialWriteAllowed: false,
+      shellAllowed: false,
+      fileMutationAllowed: false,
+      freeTextTaskAllowed: false,
+      actualSpawnAllowed: false,
+      actualResumeAllowed: false,
+      spawnResumeAvailable: false,
+      ...(adapterBoundaryOverrides || {}),
+    },
+    executionPolicy: {
+      liveSubmitAllowed: false,
+      actualSpawnAllowed: false,
+      actualResumeAllowed: false,
+      providerSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      arbitraryShellAllowed: false,
+      fileMutationAllowed: false,
+      freeTextTaskAllowed: false,
+      ...(executionPolicyOverrides || {}),
+    },
+    resultContract: {
+      structured: true,
+      expectedResultSchema: "subagent_result_v1",
+      freeTextAccepted: false,
+      notRealExecution: true,
+      ...(resultContractOverrides || {}),
+    },
+    observations,
+    hardLocks: {
+      contractOnly: true,
+      dryRunOnly: true,
+      noActualSpawn: true,
+      noActualResume: true,
+      noProviderSubmit: true,
+      liveSubmitAllowed: false,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      noCredentials: true,
+      noArbitraryShell: true,
+      noShellExecution: true,
+      noFileMutation: true,
+      noFreeTextWorker: true,
+      noFreeTextTask: true,
+      validatedEnvelopeRequired: true,
+      structuredResultRequired: true,
+      ...(hardLockOverrides || {}),
+    },
+    roadmapEvidence: {
+      phaseId: "phase_29_codex_cli_adapter_spike",
+      adapterContractReady: true,
+      phase26ReplacementProofReady: true,
+      inputSourceValidatedEnvelopeOnly: true,
+      structuredResultRequired: true,
+      providerSubmitBlocked: true,
+      credentialBlocked: true,
+      arbitraryShellBlocked: true,
+      fileMutationBlocked: true,
+      freeTextBlocked: true,
+      actualSpawnResumeUnavailable: true,
+      hardLocksPinned: true,
+      providerSubmitObserved: observations.providerSubmitObserved,
+      credentialReadObserved: observations.credentialReadObserved,
+      credentialWriteObserved: observations.credentialWriteObserved,
+      shellExecutionObserved: observations.shellExecutionObserved,
+      fileMutationObserved: observations.fileMutationObserved,
+      freeTextTaskObserved: observations.freeTextTaskObserved,
+      freeTextWorkerObserved: observations.freeTextWorkerObserved,
+      actualSpawnObserved: observations.actualSpawnObserved,
+      actualResumeObserved: observations.actualResumeObserved,
+      unstructuredResultObserved: observations.unstructuredResultObserved,
+      ...(roadmapEvidenceOverrides || {}),
+    },
+    validation: {
+      ok: true,
+      hardLocksPinned: true,
+      errors: [],
+      warnings: [],
+      ...(validationOverrides || {}),
+    },
+    ...rest,
+    observations,
+  };
+}
+
 function typedEvidence(overrides = {}) {
   return {
     projectFactsIntegration: projectFactsEvidence(overrides.projectFactsIntegration),
     subagentEnvelopeValidator: subagentEnvelopeValidatorReceipt(overrides.subagentEnvelopeValidator),
     agentCliMockRunner: agentCliMockRunnerEvidence(overrides.agentCliMockRunner),
+    codexCliAdapter: codexCliAdapterEvidence(overrides.codexCliAdapter),
     exportWorker: exportWorkerEvidence(overrides.exportWorker),
     voiceAudioSettings: voiceAudioSettingsEvidence(overrides.voiceAudioSettings),
     providerLiveGate: providerLiveGateReceipt(overrides.providerLiveGate),
@@ -852,6 +988,85 @@ assert(
   ),
   "Phase 29 must require typed Phase 26 replacement proof",
 );
+
+const phase29LegacyBooleanOnly = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: {
+    ...typedEvidence(),
+    codexCliAdapter: undefined,
+    codexCliAdapterSpike: undefined,
+  },
+  codexCliAdapterDryRunReady: true,
+});
+const phase29LegacyOnlyGate = phase(phase29LegacyBooleanOnly, "phase_29_codex_cli_adapter_spike");
+assert(phase29LegacyOnlyGate.readiness === "blocked", "Phase 29 must block legacy boolean-only adapter proof");
+assert(
+  phase29LegacyOnlyGate.blockedReasons.includes("codex_cli_adapter_typed_evidence_missing"),
+  "Phase 29 must require typed Codex adapter evidence",
+);
+assert(
+  phase29LegacyOnlyGate.notes.some((note) => note.includes("legacy_codexCliAdapterDryRunReady_boolean_ignored")),
+  "Phase 29 must report ignored legacy Codex adapter boolean",
+);
+
+for (const [observationKey, expectedBlocker] of Object.entries({
+  providerSubmitObserved: "phase_29_provider_submit_not_blocked",
+  credentialReadObserved: "phase_29_credential_access_not_blocked",
+  shellExecutionObserved: "phase_29_arbitrary_shell_not_blocked",
+  fileMutationObserved: "phase_29_file_mutation_not_blocked",
+  freeTextTaskObserved: "phase_29_free_text_task_not_blocked",
+  actualSpawnObserved: "phase_29_actual_spawn_resume_not_allowed",
+  actualResumeObserved: "phase_29_actual_spawn_resume_not_allowed",
+  unstructuredResultObserved: "phase_29_structured_result_missing",
+})) {
+  const blockedPlan = buildPhaseRoadmapRuntimePlan({
+    ...readyInput(),
+    evidence: typedEvidence({
+      codexCliAdapter: {
+        observations: { [observationKey]: true },
+        roadmapEvidence: { [observationKey]: true },
+      },
+    }),
+  });
+  const blockedPhase29 = phase(blockedPlan, "phase_29_codex_cli_adapter_spike");
+  assert(blockedPhase29.readiness === "blocked", `Phase 29 must block if ${observationKey} is observed`);
+  assert(blockedPhase29.blockedReasons.includes(expectedBlocker), `Phase 29 blocker ${expectedBlocker} missing`);
+}
+
+const phase29UnvalidatedInput = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    codexCliAdapter: {
+      contract: { inputSource: "free_text" },
+      adapterBoundary: { inputContract: "free_text" },
+      roadmapEvidence: { inputSourceValidatedEnvelopeOnly: false },
+    },
+  }),
+});
+assert(
+  phase(phase29UnvalidatedInput, "phase_29_codex_cli_adapter_spike").blockedReasons.includes(
+    "codex_cli_adapter_validated_envelope_only_missing",
+  ),
+  "Phase 29 must block non-envelope adapter input",
+);
+
+const phase29ActualSpawnAllowed = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    codexCliAdapter: {
+      executionPolicy: { actualSpawnAllowed: true },
+      hardLocks: { actualSpawnAllowed: true },
+      roadmapEvidence: { actualSpawnResumeUnavailable: false },
+    },
+  }),
+});
+assert(
+  phase(phase29ActualSpawnAllowed, "phase_29_codex_cli_adapter_spike").blockedReasons.includes(
+    "phase_29_actual_spawn_resume_not_allowed",
+  ),
+  "Phase 29 must block actual Codex spawn/resume enablement",
+);
+
 assert(
   typedMockRunnerReady.adapterBoundary.phase26.runnerKind === "mock_noop",
   "Phase 26 must be the mock/no-op runner boundary",

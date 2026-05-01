@@ -35,6 +35,7 @@
     "toolRuntimeHarness",
     "subagentRunner",
     "agentCliMockRunner",
+    "codexCliAdapterSpike",
     "generationHealthChecker",
     "promptConflictChecker",
     "storyChanges",
@@ -226,6 +227,7 @@
     "toolRuntimeHarness": { "$ref": "tool_runtime_harness.schema.json" },
     "subagentRunner": { "$ref": "subagent_runner.schema.json" },
     "agentCliMockRunner": { "$ref": "agent_cli_mock_runner.schema.json" },
+    "codexCliAdapterSpike": { "$ref": "codex_cli_adapter_spike.schema.json" },
     "generationHealthChecker": { "$ref": "generation_health_checker.schema.json" },
     "promptConflictChecker": { "$ref": "prompt_conflict_checker.schema.json" },
     "storyChanges": {

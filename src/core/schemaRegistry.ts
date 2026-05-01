@@ -353,6 +353,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "AgentCliMockRunnerState",
   },
   {
+    fileName: "codex_cli_adapter_spike.schema.json",
+    id: "https://vibecore.local/schemas/codex_cli_adapter_spike.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 29 Codex CLI adapter contract spike using validated envelopes, structured results, and Phase 26 replacement proof while all live execution routes remain blocked.",
+    typeName: "CodexCliAdapterSpikeState",
+  },
+  {
     fileName: "local_orchestrator.schema.json",
     id: "https://vibecore.local/schemas/local_orchestrator.schema.json",
     version: schemaVersion,

@@ -121,6 +121,19 @@ type AgentCliMockRunnerUiSummary = {
   noopResultCount: number;
   hardLocks: string[];
 };
+type CodexCliAdapterSpikeUiSummary = {
+  initialized: boolean;
+  readiness: string;
+  contractMode: string;
+  replacementProof: string;
+  inputSource: string;
+  spawnResumeShape: string;
+  providerSubmit: string;
+  mutationBoundary: string;
+  blockers: string[];
+  warnings: string[];
+  hardLocks: string[];
+};
 
 type ExportWorkerUiSummary = {
   initialized: boolean;
@@ -1274,7 +1287,11 @@ function readReplacementProofLabel(value: unknown) {
   if (!isRecord(value)) return "missing";
   const status = readString(value.status, readString(value.result, ""));
   if (status) return statusLabel(status);
-  const proven = readOptionalBoolean(value, "proven") ?? readOptionalBoolean(value, "ready");
+  const proven =
+    readOptionalBoolean(value, "proven") ??
+    readOptionalBoolean(value, "ready") ??
+    readOptionalBoolean(value, "replacementProofReady") ??
+    readOptionalBoolean(value, "present");
   return proven ? "present" : "missing";
 }
 
@@ -1671,6 +1688,143 @@ function buildAgentCliMockRunnerUiSummary(runtimeState: ProjectRuntimeState): Ag
     readiness,
     noopResultCount,
     hardLocks: Array.from(new Set(hardLocks.length ? hardLocks : ["runner state missing"])),
+  };
+}
+
+function phase29ReadinessLabel(
+  status: string,
+  initialized: boolean,
+  replacementProof: string,
+  blockers: string[],
+) {
+  if (!initialized) return "blocked/missing";
+  const normalized = status.toLowerCase();
+  if (normalized.includes("ready")) return "ready";
+  if (normalized.includes("planned")) return blockers.length ? "blocked" : "planned";
+  if (normalized.includes("blocked") || normalized.includes("missing") || normalized.includes("fail")) return "blocked";
+  return replacementProof === "present" && !blockers.length ? "planned" : "blocked";
+}
+
+function contractOnlyLabel(value: unknown) {
+  const label = readString(value, "");
+  if (/contract[-_\s]?only/i.test(label)) return "contract-only";
+  if (/dry[-_\s]?run/i.test(label)) return "dry-run";
+  if (/readonly|read[-_\s]?only/i.test(label)) return "read-only";
+  return label ? statusLabel(label) : "contract-only";
+}
+
+function readContractInputSource(records: Record<string, unknown>[]) {
+  const source = readFirstString(records, [
+    "inputSource",
+    "argumentSource",
+    "envelopeSource",
+    "inputContract",
+  ], "");
+  if (/validated.*envelope|validated_envelope_only|validated_subagent_task_envelope_only/i.test(source)) {
+    return "validated envelope only";
+  }
+  return source ? statusLabel(source) : "validated envelope only";
+}
+
+function buildCodexCliAdapterSpikeUiSummary(runtimeState: ProjectRuntimeState): CodexCliAdapterSpikeUiSummary {
+  const root = (runtimeState as Partial<ProjectRuntimeState> & { codexCliAdapterSpike?: unknown }).codexCliAdapterSpike;
+  const initialized = isRecord(root);
+  const rootRecord = initialized ? root as Record<string, unknown> : {};
+  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
+  const inputContract = firstRecordFrom(rootRecord, ["inputContract"]);
+  const resultContract = firstRecordFrom(rootRecord, ["resultContract"]);
+  const executionPolicy = firstRecordFrom(rootRecord, ["executionPolicy"]);
+  const roadmapEvidence = firstRecordFrom(rootRecord, ["roadmapEvidence"]);
+  const contract = firstRecordFrom(rootRecord, ["contract", "adapterContract", "adapterBoundary", "boundary"]);
+  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockStrip"]);
+  const records = [summary, contract, executionPolicy, inputContract, resultContract, roadmapEvidence, rootRecord].filter(isRecord);
+  const phase26 = buildAgentCliMockRunnerUiSummary(runtimeState);
+  const replacementProof = readReplacementProofLabel(
+    summary.phase26ReplacementProof ??
+    rootRecord.phase26ReplacementProof ??
+    summary.replacementProof ??
+    rootRecord.replacementProof ??
+    summary.replacementProofReady ??
+    rootRecord.replacementProofReady ??
+    phase26.replacementProof,
+  );
+  const rawBlockers = [
+    ...readDisplayList(rootRecord.blockers, "blocker"),
+    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
+    ...readDisplayList(summary.blockers, "blocker"),
+    ...readDisplayList(summary.blockedReasons, "blocker"),
+    ...readDisplayList(contract.blockers, "blocker"),
+    ...readDisplayList(rootRecord.validation && isRecord(rootRecord.validation) ? rootRecord.validation.errors : undefined, "blocker"),
+  ];
+  const rawWarnings = [
+    ...readDisplayList(rootRecord.warnings, "warning"),
+    ...readDisplayList(summary.warnings, "warning"),
+    ...readDisplayList(contract.warnings, "warning"),
+    ...readDisplayList(rootRecord.validation && isRecord(rootRecord.validation) ? rootRecord.validation.warnings : undefined, "warning"),
+  ];
+  const blockers = Array.from(new Set(rawBlockers.filter(Boolean)));
+  const warnings = Array.from(new Set(rawWarnings.filter(Boolean)));
+  const modeValue = summary.contractMode ?? rootRecord.contractMode ?? contract.mode ?? rootRecord.executionMode ?? summary.executionMode;
+  const status = readFirstString(records, ["readiness", "status", "state"], "");
+  const spawnExecuted = readFirstBoolean(records, ["spawnExecuted", "spawnCodexObserved", "codexSpawnObserved"]) === true;
+  const resumeExecuted = readFirstBoolean(records, ["resumeExecuted", "resumeCodexObserved", "codexResumeObserved"]) === true;
+  const spawnPlanned = readFirstBoolean(records, ["spawnShapePlanned", "canSpawnCodex", "spawnPlanned"]) !== false;
+  const resumePlanned = readFirstBoolean(records, ["resumeShapePlanned", "canResumeCodex", "resumePlanned"]) !== false;
+  const providerSubmitAllowed = readFirstBoolean(records, [
+    "providerSubmitAllowed",
+    "canSubmitProvider",
+    "liveSubmitAllowed",
+  ]) === true;
+  const credentialReadAllowed = readFirstBoolean(records, ["credentialReadAllowed", "canReadCredentials"]) === true;
+  const credentialWriteAllowed = readFirstBoolean(records, ["credentialWriteAllowed", "canWriteCredentials"]) === true;
+  const shellAllowed = readFirstBoolean(records, ["shellAllowed", "canExecuteShell", "arbitraryShellAllowed"]) === true;
+  const fileMutationAllowed = readFirstBoolean(records, ["fileMutationAllowed", "canMutateFiles"]) === true;
+  const hardLocks = [
+    readBooleanLockLabel(hardLocksRecord, "adapterContractOnly", "contract-only", true),
+    readBooleanLockLabel(hardLocksRecord, "contractOnly", "contract-only", true),
+    readBooleanLockLabel(hardLocksRecord, "dryRunOnly", "dry-run only", true),
+    readBooleanLockLabel(hardLocksRecord, "validatedEnvelopeRequired", "validated envelope only", true),
+    readBooleanLockLabel(hardLocksRecord, "structuredResultRequired", "structured result required", true),
+    readBooleanLockLabel(hardLocksRecord, "spawnResumePlannedOnly", "spawn/resume planned only", true),
+    readBooleanLockLabel(hardLocksRecord, "noActualCodexSpawn", "spawn disabled", true),
+    readBooleanLockLabel(hardLocksRecord, "noActualCodexResume", "resume disabled", true),
+    readBooleanLockLabel(hardLocksRecord, "noProviderSubmit", "provider submit blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit disabled", false),
+    readBooleanLockLabel(hardLocksRecord, "noCredentialAccess", "credential access blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noCredentialRead", "credential read blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noCredentialWrite", "credential write blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noShellExecution", "shell blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noArbitraryShell", "shell blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noFileMutation", "file mutation blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noFreeTextTask", "free text blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noFreeTextWorker", "free text blocked", true),
+  ].filter((lock): lock is string => Boolean(lock));
+  const inferredHardLocks = [
+    "contract-only",
+    "validated envelope only",
+    "spawn/resume planned only",
+    "provider submit blocked",
+    "credential/shell/file mutation blocked",
+    "free text blocked",
+  ];
+
+  return {
+    initialized,
+    readiness: phase29ReadinessLabel(status, initialized, replacementProof, blockers),
+    contractMode: contractOnlyLabel(modeValue),
+    replacementProof,
+    inputSource: readContractInputSource(records),
+    spawnResumeShape: spawnExecuted || resumeExecuted
+      ? "execution observed"
+      : spawnPlanned || resumePlanned ? "planned only / not executed" : "blocked/missing",
+    providerSubmit: providerSubmitAllowed ? "open" : "blocked",
+    mutationBoundary: credentialReadAllowed || credentialWriteAllowed || shellAllowed || fileMutationAllowed
+      ? "open"
+      : "credential/shell/file mutation blocked",
+    blockers: blockers.length ? blockers : initialized ? [] : ["blocked/missing runtimeState.codexCliAdapterSpike"],
+    warnings,
+    hardLocks: Array.from(new Set(hardLocks.length ? hardLocks : inferredHardLocks)),
   };
 }
 
@@ -5450,6 +5604,42 @@ function AgentCliMockRunnerDiagnostics({ runtimeState }: { runtimeState: Project
   );
 }
 
+function CodexCliAdapterSpikeDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildCodexCliAdapterSpikeUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel phase29-codex-adapter-panel">
+      <div className="audit-head">
+        <PlugZap size={17} />
+        <span>Codex CLI Adapter Spike</span>
+      </div>
+      <div className="summary-grid phase29-metrics">
+        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "Phase 29 contract-only" : "blocked/missing"} />
+        <Metric label="Contract Mode" value={summary.contractMode} detail="adapter shape only" />
+        <Metric label="Replacement Proof" value={summary.replacementProof} detail="Phase 26 required" />
+        <Metric label="Input Source" value={summary.inputSource} detail="no free text task" />
+        <Metric label="Spawn / Resume" value={summary.spawnResumeShape} detail="not executed" />
+        <Metric label="Provider Submit" value={summary.providerSubmit} detail="blocked" />
+      </div>
+      <div className="phase29-summary-list">
+        <div>
+          <strong>Boundary</strong>
+          <small>{summary.mutationBoundary}</small>
+        </div>
+        <div>
+          <strong>Blocked / warnings</strong>
+          <small>{[...summary.blockers, ...summary.warnings].slice(0, 4).join(" · ") || "none"}</small>
+        </div>
+      </div>
+      <div className="phase29-lock-strip" aria-label="Phase 29 Codex CLI Adapter Spike hard locks">
+        {summary.hardLocks.slice(0, 8).map((lock) => (
+          <span key={lock}>{lock}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeState; view: RuntimeView }) {
   const runtime = runtimeState.runtime;
   const config = runtime.config;
@@ -5464,6 +5654,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const desktopShell = buildDesktopRuntimeShellView(runtimeState);
   const knowledgeSummary = buildKnowledgeUiSummary(view);
   const agentCliMockRunnerSummary = buildAgentCliMockRunnerUiSummary(runtimeState);
+  const codexCliAdapterSpikeSummary = buildCodexCliAdapterSpikeUiSummary(runtimeState);
   const exportWorkerSummary = buildExportWorkerUiSummary(runtimeState);
   const voiceAudioSettingsSummary = buildVoiceAudioSettingsUiSummary(runtimeState);
 
@@ -5584,6 +5775,13 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
         <div className="settings-readonly-note">
           <strong>Agent/CLI Mock Runner readiness: {agentCliMockRunnerSummary.readiness}</strong>
           <small>{agentCliMockRunnerSummary.runnerKind} · replacement proof {agentCliMockRunnerSummary.replacementProof} · adapter boundary mock/no-op only · {agentCliMockRunnerSummary.noopResultCount} no-op result(s)</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Codex CLI Adapter Spike</div>
+      <div className="settings-list codex-cli-adapter-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Codex CLI Adapter readiness: {codexCliAdapterSpikeSummary.readiness}</strong>
+          <small>{codexCliAdapterSpikeSummary.contractMode} · {codexCliAdapterSpikeSummary.inputSource} · spawn/resume {codexCliAdapterSpikeSummary.spawnResumeShape} · provider submit {codexCliAdapterSpikeSummary.providerSubmit}</small>
         </div>
       </div>
       <div className="settings-group-title">Export Worker</div>
@@ -5803,6 +6001,7 @@ function DiagnosticsMode({
       <AdapterContractDiagnostics runtimeState={runtimeState} />
       <SubagentWorkerRuntimeDiagnostics runtimeState={runtimeState} />
       <AgentCliMockRunnerDiagnostics runtimeState={runtimeState} />
+      <CodexCliAdapterSpikeDiagnostics runtimeState={runtimeState} />
       <ExportWorkerDiagnostics runtimeState={runtimeState} />
       <Image2KeyframeRuntimeDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />

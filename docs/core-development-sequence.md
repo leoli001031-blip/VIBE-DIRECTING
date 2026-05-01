@@ -1071,6 +1071,17 @@ Acceptance criteria：
 - Phase 28 fail-closed：缺 typed evidence、legacy `voiceAudioSettingsReady` 未显式 override、BGM 进入 video prompt、provider/credential/shell/file mutation/sample copy/audio submit/music submit/live submit 任一观测或 allowance、hard lock drift 都会 blocked。
 - Hard locks 固定：dry-run/project-facts-only、不读写 credential、不执行 shell、不改文件、不复制 sample audio、不提交 TTS/music/audio provider、`liveSubmitAllowed=false`、BGM 不进入 video provider prompt。
 
+### Phase 29 已实现范围：Codex CLI Adapter Spike
+
+- `ProjectRuntimeState.codexCliAdapterSpike` 成为一等 Phase 29 状态，从 Phase 26 `agentCliMockRunner` replacement proof 和 validated `SubagentTaskEnvelope` 派生。
+- 本阶段只做 adapter contract / shape spike：记录未来 Codex CLI spawn/resume 的输入、输出和 parser 边界，不真实 spawn Codex、不 resume Codex、不打开 provider submit。
+- 输入合同固定为 `validated_envelope_only`；输出合同固定为 `subagent_result_v1_codex_cli_adapter_spike` / structured `subagent_result_v1`，自由文本任务不被接受。
+- `schemas/codex_cli_adapter_spike.schema.json` 写入 hard locks：`actualSpawnAllowed=false`、`actualResumeAllowed=false`、`providerSubmitAllowed=false`、`liveSubmitAllowed=false`、不读 credential、不 shell、不改文件、不吃 free text。
+- `phaseRoadmapRuntime` 增加 typed `codexCliAdapter` evidence；Phase 29 ready 必须同时有 Phase 26 replacement proof、typed adapter evidence、validated-envelope-only input、structured result、provider/credential/shell/file/free-text/actual spawn/resume 全部 blocked。
+- legacy `codexCliAdapterDryRunReady` 布尔值不能单独让 Phase 29 ready；没有 typed evidence 时会 blocked，并提示 legacy boolean 被忽略。
+- Diagnostics 只显示只读状态：contract-only、replacement proof、validated envelope、planned-only spawn/resume、provider/credential/shell/file/free-text locks。主 Director surface 不展示 CLI 执行入口或工程控制台。
+- 新增 `npm run codex-cli-adapter-spike:test`，并扩展 `npm run phase-roadmap:test` / `npm run minimal-ui:test` 覆盖 Phase 29 contract boundary。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

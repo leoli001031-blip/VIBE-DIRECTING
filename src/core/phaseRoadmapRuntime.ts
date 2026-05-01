@@ -436,10 +436,145 @@ export interface PhaseRoadmapVoiceAudioSettingsEvidence {
   sourceRef?: string;
 }
 
+export interface PhaseRoadmapCodexCliAdapterEvidence {
+  kind?: "codex_cli_adapter_spike";
+  phaseId?: "phase_29_codex_cli_adapter_spike";
+  phase?: "phase_29_codex_cli_adapter_spike";
+  status?: PhaseRoadmapEvidenceStatus;
+  readiness?: "ready_for_adapter_spike" | "ready" | "blocked";
+  adapterContractReady?: boolean;
+  phase26ReplacementProofReady?: boolean;
+  contract?: {
+    inputSource?: "validated_envelope_only" | string;
+    resultKind?: "structured_result" | "structured_subagent_result_shape_only" | string;
+    providerSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    arbitraryShellAllowed?: boolean;
+    shellAllowed?: boolean;
+    fileMutationAllowed?: boolean;
+    freeTextAllowed?: boolean;
+    actualSpawnAllowed?: boolean;
+    actualResumeAllowed?: boolean;
+    spawnResumeMode?: "shape_only" | "contract_only" | "actual_spawn_resume" | string;
+  };
+  adapterBoundary?: {
+    inputContract?: "validated_subagent_task_envelope_only" | "validated_envelope_only" | string;
+    outputContract?: "structured_subagent_result_shape_only" | "structured_result" | string;
+    contractMode?: "contract_only" | "shape_only" | string;
+    providerSubmitAllowed?: boolean;
+    credentialReadAllowed?: boolean;
+    credentialWriteAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    shellAllowed?: boolean;
+    arbitraryShellAllowed?: boolean;
+    fileMutationAllowed?: boolean;
+    freeTextWorkerAllowed?: boolean;
+    freeTextTaskAllowed?: boolean;
+    actualSpawnAllowed?: boolean;
+    actualResumeAllowed?: boolean;
+    spawnResumeAvailable?: boolean;
+  };
+  observations?: {
+    providerSubmitObserved?: boolean;
+    credentialReadObserved?: boolean;
+    credentialWriteObserved?: boolean;
+    shellExecutionObserved?: boolean;
+    fileMutationObserved?: boolean;
+    freeTextTaskObserved?: boolean;
+    freeTextWorkerObserved?: boolean;
+    actualSpawnObserved?: boolean;
+    actualResumeObserved?: boolean;
+    spawnCodexObserved?: boolean;
+    resumeCodexObserved?: boolean;
+    unstructuredResultObserved?: boolean;
+  };
+  hardLocks?: {
+    contractOnly?: boolean;
+    dryRunOnly?: boolean;
+    noActualSpawn?: boolean;
+    noActualResume?: boolean;
+    actualSpawnAllowed?: boolean;
+    actualResumeAllowed?: boolean;
+    noProviderSubmit?: boolean;
+    liveSubmitAllowed?: boolean;
+    noCredentialRead?: boolean;
+    noCredentialWrite?: boolean;
+    noCredentials?: boolean;
+    noArbitraryShell?: boolean;
+    noShellExecution?: boolean;
+    noFileMutation?: boolean;
+    noFreeTextWorker?: boolean;
+    noFreeTextTask?: boolean;
+    validatedEnvelopeRequired?: boolean;
+    structuredResultRequired?: boolean;
+  };
+  roadmapEvidence?: {
+    phaseId?: "phase_29_codex_cli_adapter_spike";
+    adapterContractReady?: boolean;
+    phase26ReplacementProofReady?: boolean;
+    inputSourceValidatedEnvelopeOnly?: boolean;
+    structuredResultRequired?: boolean;
+    providerSubmitBlocked?: boolean;
+    credentialBlocked?: boolean;
+    arbitraryShellBlocked?: boolean;
+    fileMutationBlocked?: boolean;
+    freeTextBlocked?: boolean;
+    actualSpawnResumeUnavailable?: boolean;
+    hardLocksPinned?: boolean;
+    providerSubmitObserved?: boolean;
+    credentialReadObserved?: boolean;
+    credentialWriteObserved?: boolean;
+    shellExecutionObserved?: boolean;
+    fileMutationObserved?: boolean;
+    freeTextTaskObserved?: boolean;
+    freeTextWorkerObserved?: boolean;
+    actualSpawnObserved?: boolean;
+    actualResumeObserved?: boolean;
+    unstructuredResultObserved?: boolean;
+  };
+  inputContract?: {
+    source?: "validated_envelope_only" | string;
+    envelope?: {
+      validationStatus?: "valid" | "invalid" | "missing" | string;
+    };
+  };
+  resultContract?: {
+    structured?: boolean;
+    expectedResultSchema?: string;
+    freeTextAccepted?: boolean;
+    notRealExecution?: boolean;
+  };
+  replacementProof?: {
+    replacementProofReady?: boolean;
+  };
+  executionPolicy?: {
+    liveSubmitAllowed?: boolean;
+    actualSpawnAllowed?: boolean;
+    actualResumeAllowed?: boolean;
+    providerSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    arbitraryShellAllowed?: boolean;
+    fileMutationAllowed?: boolean;
+    freeTextTaskAllowed?: boolean;
+  };
+  validation?: {
+    ok?: boolean;
+    hardLocksPinned?: boolean;
+    errors?: string[];
+    warnings?: string[];
+  };
+  blockers?: string[];
+  blockedReasons?: string[];
+  warnings?: string[];
+  sourceRef?: string;
+}
+
 export interface PhaseRoadmapRuntimeEvidence {
   projectFactsIntegration?: PhaseRoadmapProjectFactsIntegrationEvidence;
   subagentEnvelopeValidator?: PhaseRoadmapSubagentEnvelopeValidatorReceipt;
   agentCliMockRunner?: PhaseRoadmapAgentCliMockRunnerEvidence;
+  codexCliAdapter?: PhaseRoadmapCodexCliAdapterEvidence;
+  codexCliAdapterSpike?: PhaseRoadmapCodexCliAdapterEvidence;
   exportWorker?: PhaseRoadmapExportWorkerEvidence;
   voiceAudioSettings?: PhaseRoadmapVoiceAudioSettingsEvidence;
   providerLiveGate?: PhaseRoadmapProviderLiveGateReceipt;
@@ -451,6 +586,7 @@ export interface PhaseRoadmapEvidenceDecision {
     | "projectFactsIntegration"
     | "subagentEnvelopeValidator"
     | "agentCliMockRunner"
+    | "codexCliAdapter"
     | "exportWorker"
     | "voiceAudioSettings"
     | "providerConfirmationTokenPlaceholder"
@@ -673,6 +809,17 @@ function hasVoiceAudioSettingsEvidence(
     evidence.roadmapEvidence?.phaseId === "phase_28_voice_audio_settings_ui" ||
     evidence.scope === "voice_audio_project_facts" ||
     evidence.purpose === "voice_audio_project_facts"
+  ));
+}
+
+function hasCodexCliAdapterEvidence(
+  evidence: PhaseRoadmapCodexCliAdapterEvidence | undefined,
+): evidence is PhaseRoadmapCodexCliAdapterEvidence {
+  return Boolean(evidence && (
+    evidence.kind === "codex_cli_adapter_spike" ||
+    evidence.phase === "phase_29_codex_cli_adapter_spike" ||
+    evidence.phaseId === "phase_29_codex_cli_adapter_spike" ||
+    evidence.roadmapEvidence?.phaseId === "phase_29_codex_cli_adapter_spike"
   ));
 }
 
@@ -903,6 +1050,160 @@ function agentCliMockRunnerEvidenceDecision(input: PhaseRoadmapRuntimeInput): Ph
         input.mockRunnerNoopReady === true || input.replacementProofFromMockRunner === true,
         "legacy_mock_runner_booleans_ignored_without_typed_evidence",
       ),
+    ]),
+  };
+}
+
+function codexCliAdapterEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const evidence = input.evidence?.codexCliAdapter || input.evidence?.codexCliAdapterSpike;
+  const roadmap = evidence?.roadmapEvidence || {};
+  const observations = evidence?.observations || {};
+
+  if (hasCodexCliAdapterEvidence(evidence)) {
+    const validationErrors = [
+      ...(evidence.validation?.errors || []),
+      ...(evidence.blockedReasons || []),
+      ...(evidence.blockers || []),
+    ];
+    const adapterContractReady = evidence.adapterContractReady === true
+      || roadmap.adapterContractReady === true
+      || evidence.readiness === "ready_for_adapter_spike"
+      || evidence.readiness === "ready"
+      || readyStatus(evidence.status);
+    const phase26ReplacementProofReady = evidence.phase26ReplacementProofReady === true
+      || roadmap.phase26ReplacementProofReady === true
+      || evidence.replacementProof?.replacementProofReady === true;
+    const validatedEnvelopeOnly = evidence.contract?.inputSource === "validated_envelope_only"
+      || evidence.adapterBoundary?.inputContract === "validated_subagent_task_envelope_only"
+      || evidence.adapterBoundary?.inputContract === "validated_envelope_only"
+      || evidence.inputContract?.source === "validated_envelope_only"
+      || roadmap.inputSourceValidatedEnvelopeOnly === true;
+    const structuredResult = evidence.contract?.resultKind === "structured_result"
+      || evidence.contract?.resultKind === "structured_subagent_result_shape_only"
+      || evidence.adapterBoundary?.outputContract === "structured_subagent_result_shape_only"
+      || evidence.adapterBoundary?.outputContract === "structured_result"
+      || evidence.resultContract?.structured === true
+      || roadmap.structuredResultRequired === true;
+    const hardLocksPinned = evidence.validation?.hardLocksPinned !== false
+      && roadmap.hardLocksPinned !== false
+      && evidence.hardLocks?.contractOnly !== false
+      && evidence.hardLocks?.dryRunOnly !== false
+      && evidence.hardLocks?.validatedEnvelopeRequired !== false
+      && evidence.hardLocks?.structuredResultRequired !== false
+      && evidence.hardLocks?.noActualSpawn !== false
+      && evidence.hardLocks?.noActualResume !== false
+      && evidence.hardLocks?.actualSpawnAllowed !== true
+      && evidence.hardLocks?.actualResumeAllowed !== true
+      && evidence.hardLocks?.noProviderSubmit !== false
+      && evidence.hardLocks?.liveSubmitAllowed !== true
+      && evidence.hardLocks?.noCredentialRead !== false
+      && evidence.hardLocks?.noCredentialWrite !== false
+      && evidence.hardLocks?.noCredentials !== false
+      && evidence.hardLocks?.noArbitraryShell !== false
+      && evidence.hardLocks?.noShellExecution !== false
+      && evidence.hardLocks?.noFileMutation !== false
+      && evidence.hardLocks?.noFreeTextWorker !== false
+      && evidence.hardLocks?.noFreeTextTask !== false;
+    const providerSubmitObserved = observations.providerSubmitObserved === true
+      || roadmap.providerSubmitObserved === true
+      || evidence.contract?.providerSubmitAllowed === true
+      || evidence.adapterBoundary?.providerSubmitAllowed === true
+      || evidence.executionPolicy?.providerSubmitAllowed === true
+      || roadmap.providerSubmitBlocked === false
+      || validationErrors.some((error) => /provider[_ ]?submit|live[_ ]?submit/i.test(error));
+    const credentialObserved = observations.credentialReadObserved === true
+      || observations.credentialWriteObserved === true
+      || roadmap.credentialReadObserved === true
+      || roadmap.credentialWriteObserved === true
+      || evidence.contract?.credentialAccessAllowed === true
+      || evidence.adapterBoundary?.credentialReadAllowed === true
+      || evidence.adapterBoundary?.credentialWriteAllowed === true
+      || evidence.adapterBoundary?.credentialAccessAllowed === true
+      || evidence.executionPolicy?.credentialAccessAllowed === true
+      || roadmap.credentialBlocked === false
+      || validationErrors.some((error) => /credential/i.test(error));
+    const shellObserved = observations.shellExecutionObserved === true
+      || roadmap.shellExecutionObserved === true
+      || evidence.contract?.arbitraryShellAllowed === true
+      || evidence.contract?.shellAllowed === true
+      || evidence.adapterBoundary?.shellAllowed === true
+      || evidence.adapterBoundary?.arbitraryShellAllowed === true
+      || evidence.executionPolicy?.arbitraryShellAllowed === true
+      || roadmap.arbitraryShellBlocked === false
+      || validationErrors.some((error) => /shell/i.test(error));
+    const fileMutationObserved = observations.fileMutationObserved === true
+      || roadmap.fileMutationObserved === true
+      || evidence.contract?.fileMutationAllowed === true
+      || evidence.adapterBoundary?.fileMutationAllowed === true
+      || evidence.executionPolicy?.fileMutationAllowed === true
+      || roadmap.fileMutationBlocked === false
+      || validationErrors.some((error) => /file[_ ]?mutation|write_file|writeProject/i.test(error));
+    const freeTextObserved = observations.freeTextTaskObserved === true
+      || observations.freeTextWorkerObserved === true
+      || roadmap.freeTextTaskObserved === true
+      || roadmap.freeTextWorkerObserved === true
+      || evidence.contract?.freeTextAllowed === true
+      || evidence.adapterBoundary?.freeTextTaskAllowed === true
+      || evidence.adapterBoundary?.freeTextWorkerAllowed === true
+      || evidence.executionPolicy?.freeTextTaskAllowed === true
+      || evidence.resultContract?.freeTextAccepted === true
+      || roadmap.freeTextBlocked === false
+      || validationErrors.some((error) => /free[_ ]?text/i.test(error));
+    const actualSpawnResumeObserved = observations.actualSpawnObserved === true
+      || observations.actualResumeObserved === true
+      || observations.spawnCodexObserved === true
+      || observations.resumeCodexObserved === true
+      || roadmap.actualSpawnObserved === true
+      || roadmap.actualResumeObserved === true
+      || evidence.contract?.actualSpawnAllowed === true
+      || evidence.contract?.actualResumeAllowed === true
+      || evidence.contract?.spawnResumeMode === "actual_spawn_resume"
+      || evidence.adapterBoundary?.actualSpawnAllowed === true
+      || evidence.adapterBoundary?.actualResumeAllowed === true
+      || evidence.adapterBoundary?.spawnResumeAvailable === true
+      || evidence.executionPolicy?.actualSpawnAllowed === true
+      || evidence.executionPolicy?.actualResumeAllowed === true
+      || roadmap.actualSpawnResumeUnavailable === false
+      || validationErrors.some((error) => /actual[_ ]?spawn|actual[_ ]?resume|codex[_ ]?spawn|codex[_ ]?resume/i.test(error));
+    const unstructuredResultObserved = observations.unstructuredResultObserved === true
+      || roadmap.unstructuredResultObserved === true
+      || evidence.resultContract?.structured === false
+      || evidence.resultContract?.expectedResultSchema !== undefined && evidence.resultContract.expectedResultSchema !== "subagent_result_v1";
+    const blockers = uniqueSorted([
+      ...blockedIf(!adapterContractReady, "codex_cli_adapter_contract_missing"),
+      ...blockedIf(!phase26ReplacementProofReady, "phase_26_replacement_proof_missing"),
+      ...blockedIf(!validatedEnvelopeOnly, "codex_cli_adapter_validated_envelope_only_missing"),
+      ...blockedIf(!structuredResult, "codex_cli_adapter_structured_result_contract_missing"),
+      ...blockedIf(!hardLocksPinned, "codex_cli_adapter_hard_locks_not_pinned"),
+      ...blockedIf(providerSubmitObserved, "phase_29_provider_submit_not_blocked"),
+      ...blockedIf(credentialObserved, "phase_29_credential_access_not_blocked"),
+      ...blockedIf(shellObserved, "phase_29_arbitrary_shell_not_blocked"),
+      ...blockedIf(fileMutationObserved, "phase_29_file_mutation_not_blocked"),
+      ...blockedIf(freeTextObserved, "phase_29_free_text_task_not_blocked"),
+      ...blockedIf(actualSpawnResumeObserved, "phase_29_actual_spawn_resume_not_allowed"),
+      ...blockedIf(unstructuredResultObserved, "phase_29_structured_result_missing"),
+      ...validationErrors,
+    ]);
+
+    return {
+      evidenceKey: "codexCliAdapter",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted([...(evidence.warnings || []), ...(evidence.validation?.warnings || [])]),
+    };
+  }
+
+  return {
+    evidenceKey: "codexCliAdapter",
+    source: input.codexCliAdapterDryRunReady === undefined ? "missing" : "legacy_boolean_override",
+    ready: false,
+    blockers: uniqueSorted([
+      "codex_cli_adapter_typed_evidence_missing",
+      ...blockedIf(input.codexCliAdapterDryRunReady !== true, "codex_cli_adapter_dry_run_contract_missing"),
+    ]),
+    warnings: uniqueSorted([
+      ...blockedIf(input.codexCliAdapterDryRunReady === true, "legacy_codexCliAdapterDryRunReady_boolean_ignored_without_typed_evidence"),
     ]),
   };
 }
@@ -1414,6 +1715,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const projectFactsDecision = projectFactsEvidenceDecision(input);
   const envelopeDecision = envelopeValidatorEvidenceDecision(input);
   const agentCliMockRunnerDecision = agentCliMockRunnerEvidenceDecision(input);
+  const codexCliAdapterDecision = codexCliAdapterEvidenceDecision(input);
   const exportWorkerDecision = exportWorkerEvidenceDecision(input);
   const voiceAudioSettingsDecision = voiceAudioSettingsEvidenceDecision(input);
   const providerConfirmationDecision = providerConfirmationEvidenceDecision(input);
@@ -1424,6 +1726,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
     projectFactsDecision,
     envelopeDecision,
     agentCliMockRunnerDecision,
+    codexCliAdapterDecision,
     exportWorkerDecision,
     voiceAudioSettingsDecision,
     providerConfirmationDecision,
@@ -1572,16 +1875,27 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       readyPhases,
       ownBlockers: uniqueSorted([
         ...blockedIf(!agentCliMockRunnerDecision.ready, "phase_26_replacement_proof_missing"),
-        ...blockedIf(!input.codexCliAdapterDryRunReady, "codex_cli_adapter_dry_run_contract_missing"),
+        ...codexCliAdapterDecision.blockers,
       ]),
       readyStatus: "ready_for_adapter_spike",
-      requiredInputs: ["evidence.agentCliMockRunner.replacementProofReady", "codexCliAdapterDryRunReady"],
+      requiredInputs: [
+        "evidence.agentCliMockRunner.replacementProofReady",
+        "evidence.codexCliAdapter",
+        "validated-envelope-only input",
+        "structured result contract",
+        "provider/credential/shell/file/free-text/actual-spawn-resume blocked",
+      ],
       acceptanceCriteria: [
-        "Adapter spike may connect spawn/resume shape only after Phase 26 proves replaceability.",
+        "Adapter spike may describe spawn/resume shape only after Phase 26 proves replaceability.",
         "Adapter input remains the validated envelope, never a free text task.",
         "Adapter output remains structured and provider submission remains blocked.",
+        "Actual Codex spawn/resume, credentials, arbitrary shell, and file mutation remain unavailable in Phase 29.",
       ],
-      notes: ["Phase 29 is where real Codex spawn/resume is explored; Phase 26 intentionally does not do that."],
+      notes: [
+        "Phase 29 is a contract-only spike; real Codex spawn/resume execution is still postponed.",
+        "The legacy codexCliAdapterDryRunReady boolean is ignored unless typed evidence is present.",
+        ...evidenceNotes([codexCliAdapterDecision]),
+      ],
     }),
     makePhase({
       phaseId: "phase_30_provider_enablement_gate",

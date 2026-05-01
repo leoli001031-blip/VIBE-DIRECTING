@@ -16,6 +16,7 @@ import { buildQaHarnessState } from "./qaHarness";
 import { buildToolRuntimeHarnessState } from "./toolRuntimeHarness";
 import { buildSubagentRunnerState } from "./subagentRunner";
 import { buildAgentCliMockRunnerState } from "./agentCliMockRunner";
+import { buildCodexCliAdapterSpikeState } from "./codexCliAdapterSpike";
 import { buildExportWorkerState } from "./exportWorker";
 import { buildProjectFileCoreState } from "./projectFileCore";
 import { buildShotPromptPlan } from "./promptCompiler";
@@ -57,6 +58,7 @@ export interface ProjectRuntimeStateBuildOptions {
   stateSource?: RuntimeStateSource;
   runtime?: ProjectRuntimeState["runtime"];
   agentCliMockRunner?: ProjectRuntimeState["agentCliMockRunner"];
+  codexCliAdapterSpike?: ProjectRuntimeState["codexCliAdapterSpike"];
   subagentRuntimeGateReceipt?: SubagentRuntimeGateReceipt;
   subagentWorkerRuntimePlan?: SubagentWorkerRuntimePlan;
   subagentTaskEnvelope?: SubagentTaskEnvelope;
@@ -328,6 +330,12 @@ export function buildProjectRuntimeState(
       options.subagentRuntimeGateReceipt?.evidence.subject.envelopeId ||
       options.subagentWorkerRuntimePlan?.slots.find((slot) => slot.envelopeValidation.status === "valid")?.envelopeId,
   });
+  const codexCliAdapterSpike = options.codexCliAdapterSpike || buildCodexCliAdapterSpikeState({
+    generatedAt,
+    phase26ReplacementProof: agentCliMockRunner,
+    subagentTaskEnvelope: options.subagentTaskEnvelope,
+    envelopeId: options.subagentTaskEnvelope?.id || taskViews.find((task) => task.validator.valid)?.envelope.id,
+  });
   const generationHealthChecker = buildGenerationHealthCheckerState({
     generatedAt,
     imageTaskPlans,
@@ -426,6 +434,7 @@ export function buildProjectRuntimeState(
     toolRuntimeHarness,
     subagentRunner,
     agentCliMockRunner,
+    codexCliAdapterSpike,
     generationHealthChecker,
     promptConflictChecker,
     storyChanges: {
@@ -623,6 +632,13 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       generatedAt: state.generatedAt,
       envelopeId: state.taskRuns.taskViews.find((task) => task.validator.valid)?.envelope.id,
     });
+  const codexCliAdapterSpike =
+    state.codexCliAdapterSpike ||
+    buildCodexCliAdapterSpikeState({
+      generatedAt: state.generatedAt,
+      phase26ReplacementProof: agentCliMockRunner,
+      envelopeId: state.taskRuns.taskViews.find((task) => task.validator.valid)?.envelope.id,
+    });
   const generationHealthChecker =
     state.generationHealthChecker ||
     buildGenerationHealthCheckerState({
@@ -686,6 +702,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     toolRuntimeHarness,
     subagentRunner,
     agentCliMockRunner,
+    codexCliAdapterSpike,
     generationHealthChecker,
     promptConflictChecker,
   };

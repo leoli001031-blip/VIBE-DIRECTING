@@ -1,0 +1,299 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/codex_cli_adapter_spike.schema.json",
+  "title": "CodexCliAdapterSpikeState",
+  "description": "Phase 29 Codex CLI adapter contract spike. It models spawn/resume shape after Phase 26 replacement proof, but never executes Codex, submits providers, reads credentials, runs shells, mutates files, or accepts free text tasks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "phaseId",
+    "mode",
+    "generatedAt",
+    "readiness",
+    "executionPolicy",
+    "inputContract",
+    "adapterShape",
+    "resultContract",
+    "replacementProof",
+    "roadmapEvidence",
+    "hardLocks",
+    "blockers",
+    "warnings",
+    "validation",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "0.1.0" },
+    "phaseId": { "type": "string", "const": "phase_29_codex_cli_adapter_spike" },
+    "mode": { "type": "string", "const": "adapter_contract_spike" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "readiness": { "type": "string", "enum": ["ready", "blocked"] },
+    "executionPolicy": { "$ref": "#/$defs/executionPolicy" },
+    "inputContract": { "$ref": "#/$defs/inputContract" },
+    "adapterShape": { "$ref": "#/$defs/adapterShape" },
+    "resultContract": { "$ref": "#/$defs/resultContract" },
+    "replacementProof": { "$ref": "#/$defs/replacementProof" },
+    "roadmapEvidence": { "$ref": "#/$defs/roadmapEvidence" },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "validation": { "$ref": "#/$defs/validation" },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "executionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "liveSubmitAllowed",
+        "actualSpawnAllowed",
+        "actualResumeAllowed",
+        "providerSubmitAllowed",
+        "credentialAccessAllowed",
+        "arbitraryShellAllowed",
+        "fileMutationAllowed",
+        "freeTextTaskAllowed"
+      ],
+      "properties": {
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "actualSpawnAllowed": { "type": "boolean", "const": false },
+        "actualResumeAllowed": { "type": "boolean", "const": false },
+        "providerSubmitAllowed": { "type": "boolean", "const": false },
+        "credentialAccessAllowed": { "type": "boolean", "const": false },
+        "arbitraryShellAllowed": { "type": "boolean", "const": false },
+        "fileMutationAllowed": { "type": "boolean", "const": false },
+        "freeTextTaskAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "inputContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "envelope", "task", "slot"],
+      "properties": {
+        "source": { "type": "string", "const": "validated_envelope_only" },
+        "envelope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["validationStatus", "validationIssues"],
+          "properties": {
+            "id": { "type": "string" },
+            "validationStatus": { "type": "string", "enum": ["valid", "invalid", "missing"] },
+            "validationIssues": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "task": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "parentTaskId": { "type": "string" },
+            "purpose": { "type": "string" },
+            "contextLevel": { "type": "string" },
+            "sourceIndexHash": { "type": "string" },
+            "expectedResultSchema": { "type": "string" }
+          }
+        },
+        "slot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["providerPolicySummary", "readyRunnerSlotIds"],
+          "properties": {
+            "shotId": { "type": "string" },
+            "providerPolicySummary": { "type": "array", "items": { "type": "string" } },
+            "readyRunnerSlotIds": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "adapterShape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapterKind", "spawn", "resume", "parser"],
+      "properties": {
+        "adapterKind": { "type": "string", "const": "codex_cli_contract_shape" },
+        "spawn": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation", "status", "actualSpawnAllowed", "argumentsSource"],
+          "properties": {
+            "operation": { "type": "string", "const": "codex_cli_spawn" },
+            "status": { "type": "string", "const": "planned_contract_only" },
+            "actualSpawnAllowed": { "type": "boolean", "const": false },
+            "argumentsSource": { "type": "string", "const": "validated_envelope_summary" }
+          }
+        },
+        "resume": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation", "status", "actualResumeAllowed", "resumeTokenSource"],
+          "properties": {
+            "operation": { "type": "string", "const": "codex_cli_resume" },
+            "status": { "type": "string", "const": "planned_contract_only" },
+            "actualResumeAllowed": { "type": "boolean", "const": false },
+            "resumeTokenSource": { "type": "string", "const": "none_in_phase_29" }
+          }
+        },
+        "parser": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "acceptsFreeText", "expectedResultSchema"],
+          "properties": {
+            "source": { "type": "string", "const": "structured_stdout_placeholder" },
+            "acceptsFreeText": { "type": "boolean", "const": false },
+            "expectedResultSchema": { "type": "string", "const": "subagent_result_v1" }
+          }
+        }
+      }
+    },
+    "resultContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resultKind",
+        "status",
+        "structured",
+        "expectedResultSchema",
+        "parserExpectation",
+        "freeTextAccepted",
+        "notRealExecution"
+      ],
+      "properties": {
+        "resultKind": { "type": "string", "const": "subagent_result_v1_codex_cli_adapter_spike" },
+        "status": { "type": "string", "enum": ["planned", "blocked"] },
+        "structured": { "type": "boolean", "const": true },
+        "expectedResultSchema": { "type": "string", "const": "subagent_result_v1" },
+        "parserExpectation": { "type": "string", "const": "parse_structured_result_only" },
+        "freeTextAccepted": { "type": "boolean", "const": false },
+        "notRealExecution": { "type": "boolean", "const": true }
+      }
+    },
+    "replacementProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourcePhase",
+        "present",
+        "replacementProofReady",
+        "readySlotCount",
+        "blockedSlotCount",
+        "noopResultKinds",
+        "boundary",
+        "sourceRefs"
+      ],
+      "properties": {
+        "sourcePhase": { "type": "string", "const": "phase_26_agent_cli_mock_runner" },
+        "present": { "type": "boolean" },
+        "replacementProofReady": { "type": "boolean" },
+        "receiptId": { "type": "string" },
+        "readySlotCount": { "type": "integer", "minimum": 0 },
+        "blockedSlotCount": { "type": "integer", "minimum": 0 },
+        "noopResultKinds": { "type": "array", "items": { "type": "string" } },
+        "boundary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "inputContract": { "type": "string" },
+            "outputContract": { "type": "string" },
+            "runnerContract": { "type": "string" },
+            "phase26Boundary": { "type": "string" },
+            "providerSubmitAllowed": { "type": "boolean" },
+            "shellAllowed": { "type": "boolean" },
+            "fileMutationAllowed": { "type": "boolean" }
+          }
+        },
+        "sourceRefs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "roadmapEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phaseId",
+        "adapterContractReady",
+        "phase26ReplacementProofReady",
+        "inputSourceValidatedEnvelopeOnly",
+        "structuredResultRequired",
+        "providerSubmitBlocked",
+        "credentialBlocked",
+        "arbitraryShellBlocked",
+        "fileMutationBlocked",
+        "freeTextBlocked",
+        "actualSpawnResumeUnavailable",
+        "hardLocksPinned",
+        "providerSubmitObserved",
+        "credentialAccessObserved",
+        "shellExecutionObserved",
+        "fileMutationObserved",
+        "freeTextTaskObserved",
+        "actualSpawnObserved",
+        "actualResumeObserved",
+        "unstructuredResultObserved"
+      ],
+      "properties": {
+        "phaseId": { "type": "string", "const": "phase_29_codex_cli_adapter_spike" },
+        "adapterContractReady": { "type": "boolean" },
+        "phase26ReplacementProofReady": { "type": "boolean" },
+        "inputSourceValidatedEnvelopeOnly": { "type": "boolean" },
+        "structuredResultRequired": { "type": "boolean" },
+        "providerSubmitBlocked": { "type": "boolean" },
+        "credentialBlocked": { "type": "boolean" },
+        "arbitraryShellBlocked": { "type": "boolean" },
+        "fileMutationBlocked": { "type": "boolean" },
+        "freeTextBlocked": { "type": "boolean" },
+        "actualSpawnResumeUnavailable": { "type": "boolean" },
+        "hardLocksPinned": { "type": "boolean" },
+        "providerSubmitObserved": { "type": "boolean" },
+        "credentialAccessObserved": { "type": "boolean" },
+        "shellExecutionObserved": { "type": "boolean" },
+        "fileMutationObserved": { "type": "boolean" },
+        "freeTextTaskObserved": { "type": "boolean" },
+        "actualSpawnObserved": { "type": "boolean" },
+        "actualResumeObserved": { "type": "boolean" },
+        "unstructuredResultObserved": { "type": "boolean" }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase26ReplacementProofRequired",
+        "validatedEnvelopeRequired",
+        "structuredResultRequired",
+        "noActualCodexSpawn",
+        "noActualCodexResume",
+        "noProviderSubmit",
+        "liveSubmitAllowed",
+        "noCredentialAccess",
+        "noArbitraryShell",
+        "noFileMutation",
+        "noFreeTextTask",
+        "adapterContractOnly"
+      ],
+      "properties": {
+        "phase26ReplacementProofRequired": { "type": "boolean", "const": true },
+        "validatedEnvelopeRequired": { "type": "boolean", "const": true },
+        "structuredResultRequired": { "type": "boolean", "const": true },
+        "noActualCodexSpawn": { "type": "boolean", "const": true },
+        "noActualCodexResume": { "type": "boolean", "const": true },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "noCredentialAccess": { "type": "boolean", "const": true },
+        "noArbitraryShell": { "type": "boolean", "const": true },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "noFreeTextTask": { "type": "boolean", "const": true },
+        "adapterContractOnly": { "type": "boolean", "const": true }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "errors", "warnings", "checkedAt"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "errors": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "checkedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+      }
+    }
+  }
+}

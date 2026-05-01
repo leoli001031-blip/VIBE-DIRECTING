@@ -136,6 +136,7 @@
             "projectFactsIntegration",
             "subagentEnvelopeValidator",
             "agentCliMockRunner",
+            "codexCliAdapter",
             "exportWorker",
             "voiceAudioSettings",
             "providerConfirmationTokenPlaceholder",
