@@ -247,7 +247,8 @@ checkMessage(requireWithin(realPilotDirectorStatus, /选择镜头/, "Phase 43 Re
 checkMessage(requireWithin(realPilotDirectorStatus, /首尾帧/, "Phase 43 Real Pilot start/end frames copy"));
 checkMessage(requireWithin(realPilotDirectorStatus, /输出文件夹/, "Phase 43 Real Pilot output folder copy"));
 checkMessage(requireWithin(realPilotDirectorStatus, /预计生成/, "Phase 43 Real Pilot estimated generation copy"));
-checkMessage(requireWithin(realPilotDirectorStatus, /确认后生成/, "Phase 43 Real Pilot confirmation-before-generation copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /确认后进入\s*1-shot\s*测试准备/, "Phase 44 Real Pilot confirmation-before-one-shot-prep copy"));
+check(!/确认后生成/.test(realPilotDirectorStatus), "Phase 44 Real Pilot must not imply immediate generation");
 checkMessage(requireWithin(realPilotDirectorStatus, /Image2/, "Phase 43 Real Pilot Image2 first copy"));
 checkMessage(requireWithin(realPilotDirectorStatus, /Seedance/, "Phase 43 Real Pilot Seedance parked copy"));
 checkMessage(requireWithin(realPilotDiagnostics, /Real Pilot\s*\/\s*真实小样/i, "Phase 43 Real Pilot diagnostics panel"));
@@ -255,11 +256,26 @@ checkMessage(requireWithin(realPilotDiagnostics, /Review Status/i, "Phase 43 Rea
 checkMessage(requireWithin(realPilotDiagnostics, /Start\s*\/\s*End Frames/i, "Phase 43 Real Pilot diagnostics frames summary"));
 check(!/<button\b/i.test(realPilotDirectorStatus), "Phase 43 Real Pilot Director status must stay read-only");
 check(!/<button\b/i.test(realPilotDiagnostics), "Phase 43 Real Pilot diagnostics must not expose executable buttons");
+const phase44ConfirmationSurface = `${realPilotDirectorStatus}\n${realPilotDiagnostics}\n${settingsShell}`;
+checkMessage(requireWithin(realPilotDirectorStatus, /先复核/, "Phase 44 Real Pilot review-first status"));
+checkMessage(requireWithin(realPilotDirectorStatus, /等待确认/, "Phase 44 Real Pilot waiting-confirmation status"));
+checkMessage(requireWithin(realPilotDirectorStatus, /1 个镜头小样/, "Phase 44 Real Pilot one-shot sample copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /0 自动重试/, "Phase 44 Real Pilot no-auto-retry copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /输出文件夹/, "Phase 44 Real Pilot output folder copy"));
+checkMessage(requireWithin(phase44ConfirmationSurface, /执行前确认/, "Phase 44 pre-execution confirmation summary"));
+checkMessage(requireWithin(phase44ConfirmationSurface, /预算上限/, "Phase 44 budget cap summary"));
+checkMessage(requireWithin(phase44ConfirmationSurface, /输出监听/, "Phase 44 output watcher summary"));
+checkMessage(requireWithin(phase44ConfirmationSurface, /请求预览/, "Phase 44 request preview summary"));
 for (const [term, pattern] of [
   ["provider", /provider/i],
   ["credential", /credential/i],
   ["shell", /shell/i],
   ["dry-run", /dry[-\s]?run/i],
+  ["Run", /\bRun\b/i],
+  ["Submit", /\bSubmit\b/i],
+  ["Execute", /\bExecute\b/i],
+  ["API key", /API\s*key/i],
+  ["provider prompt", /provider\s+prompt/i],
   ["submit", /submit/i],
   ["schema", /schema/i],
   ["queue", /queue/i],
@@ -270,9 +286,10 @@ for (const [term, pattern] of [
 for (const [copy, pattern] of [
   ["direct submit", /direct\s+submit|直接提交/i],
   ["automatic execution", /automatic\s+execution|自动执行/i],
+  ["immediate generation", /immediate\s+generation|立即生成/i],
   ["auto run", /auto\s+run|自动运行/i],
 ]) {
-  check(!pattern.test(`${realPilotDirectorStatus}\n${realPilotDiagnostics}\n${settingsShell}`), `Real Pilot UI must not imply ${copy}`);
+  check(!pattern.test(phase44ConfirmationSurface), `Real Pilot UI must not imply ${copy}`);
 }
 checkMessage(requireWithin(diagnosticsMode, /AgentCliMockRunnerDiagnostics/, "Phase 26 Agent/CLI Mock Runner summary mounted in Diagnostics"));
 checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /Agent\/CLI Mock Runner/i, "Phase 26 Agent/CLI Mock Runner diagnostics panel"));
@@ -416,6 +433,29 @@ check(
 );
 
 const minimalDirectorSurface = `${directorMode}\n${directorProgressStrip}\n${realPilotDirectorStatus}\n${minimalAgentPanel}\n${minimalTopNav}\n${minimalProjectPlan}`;
+const minimalDirectorButtonSurface = Array.from(minimalDirectorSurface.matchAll(/<button\b[\s\S]*?<\/button>/gi))
+  .map((match) => match[0])
+  .join("\n");
+for (const [term, pattern] of [
+  ["Run", /\bRun\b/i],
+  ["Submit", /\bSubmit\b/i],
+  ["Execute", /\bExecute\b/i],
+  ["API key", /API\s*key/i],
+  ["credential", /credential/i],
+  ["shell", /shell/i],
+  ["provider prompt", /provider\s+prompt/i],
+  ["automatic execution", /automatic\s+execution|自动执行/i],
+  ["direct submit", /direct\s+submit|直接提交/i],
+  ["immediate generation", /immediate\s+generation|立即生成/i],
+]) {
+  check(!pattern.test(minimalDirectorSurface), `Phase 44 main Director surface must not expose ${term}`);
+}
+for (const copy of ["Run", "Submit", "Execute", "直接提交", "自动执行", "立即生成"]) {
+  check(
+    !new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(minimalDirectorButtonSurface),
+    `Phase 44 main Director surface must not expose dangerous ${copy} button`,
+  );
+}
 const forbiddenMinimalTerms = [
   ["Queue Shell", /Queue\s+Shell/i],
   ["Provider Lock", /Provider\s+Lock/i],

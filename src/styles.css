@@ -290,6 +290,9 @@
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: minmax(150px, 0.45fr) minmax(180px, 0.55fr) minmax(0, 1.6fr) auto;
+  grid-template-areas:
+    "heading modes facts confirm"
+    "phase phase phase phase";
   align-items: center;
   gap: 14px;
   min-width: 0;
@@ -303,6 +306,10 @@
   display: grid;
   gap: 3px;
   min-width: 0;
+}
+
+.real-pilot-heading {
+  grid-area: heading;
 }
 
 .real-pilot-heading span,
@@ -321,6 +328,7 @@
 }
 
 .real-pilot-mode-row {
+  grid-area: modes;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -334,7 +342,24 @@
   font-size: 11px;
 }
 
+.real-pilot-phase44 {
+  grid-area: phase;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.real-pilot-phase44 span {
+  border: 1px solid rgba(37, 40, 34, 0.12);
+  background: rgba(37, 40, 34, 0.035);
+  color: rgba(37, 40, 34, 0.68);
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
 .real-pilot-facts {
+  grid-area: facts;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
@@ -359,6 +384,7 @@
 }
 
 .real-pilot-confirm {
+  grid-area: confirm;
   justify-self: end;
   min-width: 0;
   color: rgba(37, 40, 34, 0.72);
@@ -384,6 +410,12 @@
 
 .preview-shell .real-pilot-mode-row span {
   border-color: rgba(242, 238, 230, 0.16);
+  color: rgba(242, 238, 230, 0.68);
+}
+
+.preview-shell .real-pilot-phase44 span {
+  border-color: rgba(242, 238, 230, 0.14);
+  background: rgba(242, 238, 230, 0.055);
   color: rgba(242, 238, 230, 0.68);
 }
 
@@ -969,6 +1001,12 @@
 
   .real-pilot-entry {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "heading"
+      "modes"
+      "phase"
+      "facts"
+      "confirm";
     gap: 10px;
   }
 

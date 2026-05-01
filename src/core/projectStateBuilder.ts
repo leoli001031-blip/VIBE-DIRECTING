@@ -37,6 +37,7 @@ import { buildProviderExecutionHandoffState } from "./providerExecutionHandoff";
 import { buildExecutionLedgerState, type ExecutionLedgerMode, type ExecutionLedgerOutputSandbox } from "./executionLedger";
 import { buildRealExecutionGateState } from "./realExecutionGate";
 import { buildRealProviderPilotState, type RealProviderPilotProviderPlanInput } from "./realProviderPilot";
+import { buildRealProviderExecutorState } from "./realProviderExecutor";
 import { buildLocalOrchestratorState, type LocalOrchestratorTaskPacket } from "./localOrchestrator";
 import type { SubagentRuntimeGateReceipt } from "./subagentRuntimeGate";
 import type { SubagentWorkerRuntimePlan } from "./subagentWorkerRuntime";
@@ -73,6 +74,7 @@ export interface ProjectRuntimeStateBuildOptions {
   executionLedger?: ProjectRuntimeState["executionLedger"];
   realExecutionGate?: ProjectRuntimeState["realExecutionGate"];
   realProviderPilot?: ProjectRuntimeState["realProviderPilot"];
+  realProviderExecutor?: ProjectRuntimeState["realProviderExecutor"];
   realTestMode?: ExecutionLedgerMode;
   realTestBatchId?: string;
   realTestShotIds?: string[];
@@ -581,6 +583,23 @@ export function buildProjectRuntimeState(
     executionLedger,
     realExecutionGate,
   });
+  const realProviderExecutor = options.realProviderExecutor || buildRealProviderExecutorState({
+    generatedAt,
+    mode: realTestMode === "scoped_real_test" ? "executor_review" : "locked",
+    projectId: realTestProjectId,
+    batchId: options.realTestBatchId,
+    selectedShotIds: realTestShotIds,
+    selectedTaskPlanIds: realProviderPilot.selectedTaskPlanIds,
+    estimatedImageCount: realProviderPilot.scopeSummary.estimatedImageCount,
+    maxImagesPerPilot: 3,
+    realProviderPilot,
+    realExecutionGate,
+    executionLedger,
+    providerExecutionHandoff,
+    outputSandbox: executionLedger.outputSandbox,
+    imageTaskPlans,
+    image2AdapterRequests,
+  });
   const generationHealthChecker = buildGenerationHealthCheckerState({
     generatedAt,
     imageTaskPlans,
@@ -680,6 +699,7 @@ export function buildProjectRuntimeState(
     executionLedger,
     realExecutionGate,
     realProviderPilot,
+    realProviderExecutor,
     localOrchestrator,
     generationHarness,
     filesystemWatcherHarness,
@@ -999,6 +1019,24 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       executionLedger,
       realExecutionGate,
     });
+  const realProviderExecutor =
+    state.realProviderExecutor ||
+    buildRealProviderExecutorState({
+      generatedAt: state.generatedAt,
+      mode: "locked",
+      projectId: state.sourceIndex.projectId || state.project.title || "project",
+      selectedShotIds: [],
+      selectedTaskPlanIds: realProviderPilot.selectedTaskPlanIds,
+      estimatedImageCount: realProviderPilot.scopeSummary.estimatedImageCount,
+      maxImagesPerPilot: 3,
+      realProviderPilot,
+      realExecutionGate,
+      executionLedger,
+      providerExecutionHandoff,
+      outputSandbox: executionLedger.outputSandbox,
+      imageTaskPlans: state.imagePipeline.imageTaskPlans,
+      image2AdapterRequests: state.imagePipeline.image2AdapterRequests,
+    });
   const generationHealthChecker =
     state.generationHealthChecker ||
     buildGenerationHealthCheckerState({
@@ -1073,6 +1111,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     executionLedger,
     realExecutionGate,
     realProviderPilot,
+    realProviderExecutor,
     localOrchestrator,
     generationHarness,
     filesystemWatcherHarness,

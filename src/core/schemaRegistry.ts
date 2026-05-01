@@ -178,6 +178,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "RealProviderPilotState",
   },
   {
+    fileName: "real_provider_executor.schema.json",
+    id: "https://vibecore.local/schemas/real_provider_executor.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 44 real provider executor shell with budget guard, request previews, output watcher bridge plan, action-time confirmation review, and all live routes locked off.",
+    typeName: "RealProviderExecutorState",
+  },
+  {
     fileName: "export_builder.schema.json",
     id: "https://vibecore.local/schemas/export_builder.schema.json",
     version: schemaVersion,

@@ -264,6 +264,11 @@ type RealPilotUiSummary = {
   confirmationState: string;
   image2State: string;
   seedanceState: string;
+  phase44Confirmation: string;
+  phase44BudgetLimit: string;
+  phase44OutputWatcher: string;
+  phase44RequestPreview: string;
+  phase44ScopeDetail: string;
   readyItems: number;
   blockedItems: number;
   ledgerEntries: number;
@@ -2364,6 +2369,33 @@ function buildDirectorProgressStripState(runtimeState: ProjectRuntimeState): Dir
 function buildRealPilotUiSummary(runtimeState: ProjectRuntimeState, selectedShot?: ShotRecord): RealPilotUiSummary {
   const gate = runtimeState.realExecutionGate;
   const ledger = runtimeState.executionLedger;
+  const realProviderExecutor = (runtimeState as ProjectRuntimeState & { realProviderExecutor?: unknown }).realProviderExecutor;
+  const executorRecord = isRecord(realProviderExecutor) ? realProviderExecutor : {};
+  const executorSummary = firstRecordFrom(executorRecord, ["summary", "uiSummary", "statusSummary"]);
+  const confirmationRecord = firstRecordFrom(executorRecord, ["actionTimeConfirmation", "preExecutionConfirmation", "confirmation"]);
+  const budgetRecord = firstRecordFrom(executorRecord, ["budget", "budgetLimit", "budgetCap", "quotaRisk", "quota"]);
+  const outputRecord = firstRecordFrom(executorRecord, ["outputWatcher", "watcher", "output"]);
+  const requestRecord = firstRecordFrom(executorRecord, ["requestPreview", "preview", "request"]);
+  const budgetValue = readFirstString([budgetRecord, executorSummary, executorRecord], [
+    "budgetLimit",
+    "budgetCap",
+    "quotaLimit",
+    "limit",
+    "display",
+  ], "");
+  const budgetRisk = readFirstString([budgetRecord, executorSummary, executorRecord], ["quotaRisk", "risk", "riskLevel"], "");
+  const watcherState = readFirstString([outputRecord, executorSummary, executorRecord], [
+    "watcherState",
+    "outputWatcherState",
+    "status",
+    "state",
+  ], "");
+  const requestPreviewState = readFirstString([requestRecord, executorSummary, executorRecord], [
+    "previewState",
+    "requestPreviewState",
+    "status",
+    "state",
+  ], "");
   const selectedShotIds = gate.selectedShotIds.length
     ? gate.selectedShotIds
     : selectedShot ? [selectedShot.id] : [];
@@ -2406,6 +2438,13 @@ function buildRealPilotUiSummary(runtimeState: ProjectRuntimeState, selectedShot
     confirmationState: "需要确认",
     image2State: "Image2 first",
     seedanceState: "Seedance 暂停/后续",
+    phase44Confirmation: "等待确认",
+    phase44BudgetLimit: budgetValue
+      ? `${statusLabel(budgetValue)}${budgetRisk ? ` · ${statusLabel(budgetRisk)}` : ""}`
+      : "待复核",
+    phase44OutputWatcher: watcherState ? statusLabel(watcherState) : "待连接",
+    phase44RequestPreview: requestPreviewState ? statusLabel(requestPreviewState) : "待复核",
+    phase44ScopeDetail: "1 个镜头小样 · 0 自动重试",
     readyItems,
     blockedItems,
     ledgerEntries: ledger.summary.totalEntries,
@@ -5943,6 +5982,13 @@ function RealPilotDirectorStatus({ summary }: { summary: RealPilotUiSummary }) {
         <span aria-label="Image2 first">{summary.image2State}</span>
         <span aria-label="Seedance paused">{summary.seedanceState}</span>
       </div>
+      <div className="real-pilot-phase44" aria-label="执行前确认">
+        <span>先复核</span>
+        <span>{summary.phase44Confirmation || "等待确认"}</span>
+        <span>1 个镜头小样</span>
+        <span>0 自动重试</span>
+        <span>输出文件夹</span>
+      </div>
       <div className="real-pilot-facts">
         <div>
           <span>选择镜头</span>
@@ -5964,7 +6010,7 @@ function RealPilotDirectorStatus({ summary }: { summary: RealPilotUiSummary }) {
           <strong>{summary.outputRoot}</strong>
         </div>
       </div>
-      <small className="real-pilot-confirm">{summary.confirmationState} · 确认后生成</small>
+      <small className="real-pilot-confirm">{summary.confirmationState} · 确认后进入 1-shot 测试准备</small>
     </section>
   );
 }
@@ -7008,6 +7054,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
           <small>{realPilotSummary.image2State} · {realPilotSummary.seedanceState} · {realPilotSummary.confirmationState}</small>
           <small>selected shots {realPilotSummary.selectedShotCount} · start/end frames {realPilotSummary.framePairValue} · estimated outputs {realPilotSummary.estimatedOutputCount}</small>
           <small>output root {realPilotSummary.outputRoot}</small>
+          <small>执行前确认 {realPilotSummary.phase44Confirmation} · 预算上限 {realPilotSummary.phase44BudgetLimit} · 输出监听 {realPilotSummary.phase44OutputWatcher} · 请求预览 {realPilotSummary.phase44RequestPreview}</small>
         </div>
       </div>
       <div className="settings-group-title">Provider Enablement Gate</div>
@@ -7242,6 +7289,10 @@ function RealPilotDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeSt
         <Metric label="Image2 First" value={summary.image2State} detail={summary.seedanceState} />
         <Metric label="Ready / Blocked" value={`${summary.readyItems}/${summary.blockedItems}`} detail="gate item review state" />
         <Metric label="Ledger Entries" value={`${summary.ledgerEntries}`} detail="state-only record" />
+        <Metric label="执行前确认" value={summary.phase44Confirmation} detail={summary.phase44ScopeDetail} />
+        <Metric label="预算上限" value={summary.phase44BudgetLimit} detail="额度风险复核" />
+        <Metric label="输出监听" value={summary.phase44OutputWatcher} detail={summary.outputRoot} />
+        <Metric label="请求预览" value={summary.phase44RequestPreview} detail="只读摘要" />
       </div>
       <div className="real-pilot-diagnostic-list">
         <div>

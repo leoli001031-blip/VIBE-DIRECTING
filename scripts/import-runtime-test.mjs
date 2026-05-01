@@ -7296,6 +7296,25 @@ if (!runtimeState.realProviderPilot) {
     realExecutionGate: runtimeState.realExecutionGate,
   });
 }
+if (!runtimeState.realProviderExecutor) {
+  const { buildRealProviderExecutorState } = await importTs("src/core/realProviderExecutor.ts");
+  runtimeState.realProviderExecutor = buildRealProviderExecutorState({
+    generatedAt: runtimeState.generatedAt,
+    mode: "locked",
+    projectId: runtimeState.sourceIndex.projectId || runtimeState.project.title || "project",
+    selectedShotIds: [],
+    selectedTaskPlanIds: runtimeState.realProviderPilot?.selectedTaskPlanIds || [],
+    estimatedImageCount: runtimeState.realProviderPilot?.scopeSummary?.estimatedImageCount,
+    maxImagesPerPilot: 3,
+    realProviderPilot: runtimeState.realProviderPilot,
+    realExecutionGate: runtimeState.realExecutionGate,
+    executionLedger: runtimeState.executionLedger,
+    providerExecutionHandoff: runtimeState.providerExecutionHandoff,
+    outputSandbox: runtimeState.executionLedger?.outputSandbox || runtimeState.realExecutionGate?.outputSandbox,
+    imageTaskPlans: runtimeState.imagePipeline.imageTaskPlans,
+    image2AdapterRequests: runtimeState.imagePipeline.image2AdapterRequests,
+  });
+}
 
 assert(runtimeState.providerLiveGate, "runtime-state must include providerLiveGate");
 assert(runtimeState.providerLiveGate.phase === "phase_11_provider_adapter_live_gate", "providerLiveGate must remain the provider live gate evidence source");
@@ -7552,6 +7571,50 @@ assert(runtimeState.realProviderPilot.hardLocks.providerSubmitAllowed === 0, "re
 assert(runtimeState.realProviderPilot.hardLocks.providerSubmitAllowedBoolean === false, "realProviderPilot provider submit boolean lock must be false");
 assert(runtimeState.realProviderPilot.hardLocks.credentialAccessAllowed === false, "realProviderPilot credential access lock must be false");
 assert(runtimeState.realProviderPilot.hardLocks.canSpawnWorker === false, "realProviderPilot worker spawn lock must be false");
+
+assert(runtimeState.realProviderExecutor, "runtime-state must include realProviderExecutor");
+assert(runtimeState.realProviderExecutor.phase === "phase_44_real_provider_executor_shell", "realProviderExecutor must be Phase 44 executor shell evidence");
+assert(runtimeState.realProviderExecutor.mode === "locked", "default import runtime executor must stay locked");
+assert(runtimeState.realProviderExecutor.status === "locked", "default import runtime executor status must stay locked");
+assert(runtimeState.realProviderExecutor.executor.executorEnabled === false, "realProviderExecutor must not enable executor");
+assert(runtimeState.realProviderExecutor.executor.actualExecutionAllowed === false, "realProviderExecutor actual execution must be false");
+assert(runtimeState.realProviderExecutor.executor.providerSubmitAllowed === 0, "realProviderExecutor provider submit count must be zero");
+assert(runtimeState.realProviderExecutor.executor.liveSubmitAllowed === false, "realProviderExecutor live submit must be false");
+assert(runtimeState.realProviderExecutor.executor.credentialAccessAllowed === false, "realProviderExecutor credential access must be false");
+assert(runtimeState.realProviderExecutor.executor.canSpawnWorker === false, "realProviderExecutor worker spawn must be false");
+assert(runtimeState.realProviderExecutor.executor.noFileMutation === true, "realProviderExecutor file mutation must stay blocked");
+assert(runtimeState.realProviderExecutor.budgetGuard.maxImagesPerPilot === 3, "realProviderExecutor budget cap must stay at 3 images");
+assert(runtimeState.realProviderExecutor.quotaConcurrencyRetryPolicy.concurrencyPolicy.maxConcurrency === 1, "realProviderExecutor max concurrency must be one");
+assert(runtimeState.realProviderExecutor.quotaConcurrencyRetryPolicy.retryPolicy.maxAutoRetries === 0, "realProviderExecutor must not allow auto retries");
+assert(runtimeState.realProviderExecutor.outputWatcherBridgePlan.planOnly === true, "realProviderExecutor watcher bridge must stay plan-only");
+assert(runtimeState.realProviderExecutor.outputWatcherBridgePlan.watcherStarted === false, "realProviderExecutor watcher must not start");
+assert(runtimeState.realProviderExecutor.outputWatcherBridgePlan.daemonStarted === false, "realProviderExecutor daemon must not start");
+assert(runtimeState.realProviderExecutor.providerRequestPreviews.every((preview) => preview.liveSubmitAllowed === false && preview.canSubmitProvider === false), "realProviderExecutor previews must not submit");
+assert(runtimeState.realProviderExecutor.parkedProviderPreviews.some((preview) => preview.providerSlot === "video.i2v" && preview.status === "parked"), "realProviderExecutor must keep Seedance/video parked");
+for (const key of [
+  "defaultLocked",
+  "dryRunOnly",
+  "manualSubmitRequired",
+  "liveSubmitForbidden",
+  "requestPreviewOnly",
+  "outputWatcherPlanOnly",
+  "seedanceParked",
+  "videoProvidersParked",
+  "noWorkerSpawn",
+  "noSubprocess",
+  "noShellExecution",
+  "noFileMutation",
+]) {
+  assert(runtimeState.realProviderExecutor.hardLocks[key] === true, `realProviderExecutor hard lock ${key} must be true`);
+}
+assert(runtimeState.realProviderExecutor.hardLocks.executorEnabled === false, "realProviderExecutor executorEnabled lock must be false");
+assert(runtimeState.realProviderExecutor.hardLocks.actualExecutionAllowed === false, "realProviderExecutor actual execution lock must be false");
+assert(runtimeState.realProviderExecutor.hardLocks.providerSubmitAllowed === 0, "realProviderExecutor providerSubmitAllowed lock must be zero");
+assert(runtimeState.realProviderExecutor.hardLocks.providerSubmitAllowedBoolean === false, "realProviderExecutor provider submit boolean lock must be false");
+assert(runtimeState.realProviderExecutor.hardLocks.credentialAccessAllowed === false, "realProviderExecutor credential access lock must be false");
+assert(runtimeState.realProviderExecutor.hardLocks.canSpawnWorker === false, "realProviderExecutor worker spawn lock must be false");
+assert(runtimeState.realProviderExecutor.forbiddenActions.includes("image2_execution"), "realProviderExecutor must forbid Image2 execution in the shell");
+assert(runtimeState.realProviderExecutor.forbiddenActions.includes("seedance_execution"), "realProviderExecutor must forbid Seedance execution in the shell");
 
 assert(runtimeState.voiceAudioSettings, "runtime-state must include voiceAudioSettings");
 assert(runtimeState.voiceAudioSettings.phase === "phase_28_voice_audio_settings_ui", "voiceAudioSettings must be Phase 28 evidence");

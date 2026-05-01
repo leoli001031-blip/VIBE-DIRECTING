@@ -39,6 +39,7 @@
     "execution-ledger:test": "node scripts/execution-ledger-test.mjs",
     "real-execution-gate:test": "node scripts/real-execution-gate-test.mjs",
     "real-provider-pilot:test": "node scripts/real-provider-pilot-test.mjs",
+    "real-provider-executor:test": "node scripts/real-provider-executor-test.mjs",
     "phase-roadmap:test": "node scripts/phase-roadmap-runtime-test.mjs",
     "export-builder:test": "node scripts/export-builder-test.mjs",
     "export-worker:test": "node scripts/export-worker-test.mjs",
