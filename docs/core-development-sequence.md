@@ -994,9 +994,9 @@ Phase 9.4 checklist：
 - 右侧自然语言修改面板保持短状态和少量 badge；详细执行计划、工程锁和诊断字段继续留在 Diagnostics。
 - 新增 `npm run preview-player:test`，并扩展 `npm run minimal-ui:test` 覆盖 Phase 21/23：Preview Player 存在、主界面工程词为 0、Preview Player 文案短且稀疏。
 
-### Phase 24-30 Runtime Gate / Adapter Planning
+### Phase 24-31 Runtime Gate / Adapter Planning
 
-Phase 24-30 先做 lightweight pure runtime plan，不做真实执行。新增 `src/core/phaseRoadmapRuntime.ts`，用于输出每个阶段的 readiness、status、blocked reason、required preceding phases、hard locks 和 acceptance criteria。
+Phase 24-31 先做 lightweight pure runtime plan，不做真实执行。新增 `src/core/phaseRoadmapRuntime.ts`，用于输出每个阶段的 readiness、status、blocked reason、required preceding phases、hard locks 和 acceptance criteria。
 
 阶段顺序：
 
@@ -1007,6 +1007,7 @@ Phase 24-30 先做 lightweight pure runtime plan，不做真实执行。新增 `
 - Phase 28：Voice/Audio Settings UI。只把 voice/audio 设置作为结构化项目事实；BGM prompt 不能进入视频 provider prompt。
 - Phase 29：Codex CLI Adapter Spike。必须先有 Phase 26 replacement proof，再接真实 Codex spawn/resume 的 adapter shape；输入仍是 validated envelope，输出仍是 structured result，provider submit 仍然 blocked。
 - Phase 30：Provider Enablement Gate。必须同时具备 user confirmation token placeholder、complete enablement packet、watcher/manifest/QA closed loop，并确认没有 Fast、VIP、text-to-video 或 BGM prompt 路径；即使 ready，也仍然不能提交 provider，直到后续 final gate 明确允许。
+- Phase 31：Provider Execution Permission Gate。消费 Phase 30 gate item，生成最终动作级确认计划；必须要求 action-time user confirmation，禁止自动提交 provider，继续锁死 worker spawn、credential、file mutation、Fast/VIP/text-to-video/BGM prompt 路径。
 
 Phase 24 真实 gate 补充：
 
@@ -1030,6 +1031,7 @@ Acceptance criteria：
 - Phase 24 before project facts validated 必须 blocked，并给出 `project_facts_not_validated`。
 - Phase 26 mock runner 一旦观察到 provider submit attempt 必须 blocked；Phase 26 和 Phase 29 的边界必须清楚记录：先 mock/no-op 证明可替换，再在 Phase 29 探索真实 Codex spawn/resume。
 - Phase 30 缺 user confirmation token placeholder、缺 watcher/manifest/QA closed loop、packet incomplete 或出现 Fast/VIP/text-to-video/BGM prompt 任一项都必须 blocked。
+- Phase 31 缺 typed permission evidence、缺 Phase 30 gate、action-time confirmation 不强制、automatic submit 未禁止、provider/live/credential/worker/file 任一路径打开，都必须 blocked。
 - 所有阶段都必须 pin hard locks；测试命令为 `npm run phase-roadmap:test`。
 
 ### Phase 30 已实现范围：Provider Enablement Gate
@@ -1039,6 +1041,15 @@ Acceptance criteria：
 - `phase_11_provider_adapter_live_gate` 的 `ProviderLiveGateState` 可以作为 Phase 30 typed evidence：runtime 会从 `summary`、`hardLocks`、`forbiddenActions` 和 `items/checks` 推断 token、packet、forbidden-mode lock 状态；如果存在 `roadmapEvidence` 或 `phase30Evidence`，优先使用这些 typed facts。
 - Safety blocker 继续 fail closed：`providerSubmitAllowed != 0`、`liveSubmitAllowed=true`、`credentialStorage=true`、hard lock drift，以及 Fast/VIP/text-to-video/BGM prompt present 都会阻断 Phase 30。
 - 即使 Phase 30 ready，`providerEnablementGate.canSubmitProvider=false` 仍然固定不变；真实 provider execution 必须等待后续 final permission/execution gate。
+
+### Phase 31 已实现范围：Provider Execution Permission Gate
+
+- 新增 `src/core/providerExecutionPermissionGate.ts`，消费 `ProviderLiveGateState` 和 Codex CLI Adapter Spike lock evidence，生成逐 provider item 的最终确认请求。
+- `ready_for_user_review` 只表示未来 UI 可以弹出确认，不表示已确认；`action_time_user_confirmation` 默认必须存在且 `confirmed=false`，不能被 runtime evidence 预填。
+- Gate 固定输出 `canSubmitProvider=false`、`providerSubmitAllowed=0`、`liveSubmitAllowed=false`、`credentialAccessAllowed=false`、`automaticSubmitAllowed=false`。
+- Hard locks 继续锁死 worker spawn、file mutation、credential read/write/API key creation、arbitrary provider command、Fast/VIP/text-to-video/BGM prompt。
+- `PhaseRoadmapRuntime` 扩展为 Phase 24-31；Phase 31 必须有 typed `providerExecutionPermissionGate` evidence，legacy boolean 不能单独让 Phase 31 ready。
+- Diagnostics 只显示只读摘要；主 Director surface 不出现真实 provider submit、run provider、credential save、worker spawn 或复杂工程控制入口。
 
 ### Phase 25 已实现范围：Knowledge Pack Manager
 

@@ -177,6 +177,20 @@ type ProviderEnablementGateUiSummary = {
   blockersWarnings: string[];
   hardLocks: string[];
 };
+type ProviderExecutionPermissionGateUiSummary = {
+  initialized: boolean;
+  readiness: string;
+  readyForUserReview: number;
+  blocked: number;
+  parked: number;
+  canAskUserToConfirm: number;
+  actionTimeConfirmation: string;
+  automaticSubmit: string;
+  providerSubmit: string;
+  credentialWorkerFileLocks: string;
+  blockersWarnings: string[];
+  hardLocks: string[];
+};
 
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
@@ -1701,6 +1715,102 @@ function buildProviderEnablementGateUiSummary(runtimeState: ProjectRuntimeState)
     credentialLiveShellLocked: credentialLiveShellLocked ? "credential/live submit/shell locked" : "blocked/missing",
     blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.providerLiveGate"],
     hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.providerLiveGate"],
+  };
+}
+
+function providerExecutionPermissionGateReadinessLabel(
+  status: string,
+  initialized: boolean,
+  readyForUserReview: number,
+  blocked: number,
+  parked: number,
+) {
+  if (!initialized) return "blocked/missing";
+  if (blocked > 0) return "blocked";
+  if (readyForUserReview > 0) return "ready_for_user_review";
+  if (parked > 0) return "parked";
+  return status ? statusLabel(status) : "blocked/missing";
+}
+
+function buildProviderExecutionPermissionGateHardLocks(rootRecord: Record<string, unknown>, summary: Record<string, unknown>) {
+  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
+  const explicitHardLocks = firstArrayFrom([rootRecord, summary, hardLocksRecord], ["hardLocks", "locks", "hardLockStrip"])
+    .map((item, index) => formatHarnessValue(item, `hard lock ${index + 1}`))
+    .filter(Boolean);
+  const inferredLocks = [
+    readBooleanLockLabel(hardLocksRecord, "dryRunOnly", "dry-run only", true),
+    readBooleanLockLabel(hardLocksRecord, "readOnly", "read-only", true),
+    readBooleanLockLabel(hardLocksRecord, "reviewPlanOnly", "review plan only", true),
+    readBooleanLockLabel(hardLocksRecord, "actionTimeConfirmationRequired", "action-time confirmation", true),
+    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "canSubmitProvider", "canSubmitProvider=false", false),
+    hardLocksRecord.providerSubmitAllowed === 0 ? "providerSubmitAllowed=0" : undefined,
+    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit locked", false),
+    readBooleanLockLabel(hardLocksRecord, "credentialAccessAllowed", "credential access locked", false),
+    readBooleanLockLabel(hardLocksRecord, "noWorkerSpawn", "worker spawn locked", true),
+    readBooleanLockLabel(hardLocksRecord, "noFileMutation", "file mutation locked", true),
+    readBooleanLockLabel(hardLocksRecord, "fastModelForbidden", "Fast absent", true),
+    readBooleanLockLabel(hardLocksRecord, "vipChannelForbidden", "VIP absent", true),
+    readBooleanLockLabel(hardLocksRecord, "textToVideoMainPathForbidden", "text-to-video absent", true),
+    readBooleanLockLabel(hardLocksRecord, "bgmInVideoPromptForbidden", "BGM prompt absent", true),
+  ].filter((lock): lock is string => Boolean(lock));
+
+  return Array.from(new Set([...explicitHardLocks, ...inferredLocks]));
+}
+
+function buildProviderExecutionPermissionGateUiSummary(runtimeState: ProjectRuntimeState): ProviderExecutionPermissionGateUiSummary {
+  const root = (runtimeState as Partial<ProjectRuntimeState> & { providerExecutionPermissionGate?: unknown }).providerExecutionPermissionGate;
+  const initialized = isRecord(root);
+  const rootRecord = initialized ? root as Record<string, unknown> : {};
+  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
+  const evidence = initialized && isRecord(rootRecord.phase31Evidence) ? rootRecord.phase31Evidence : {};
+  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
+  const records = [summary, evidence, rootRecord, hardLocksRecord].filter(isRecord);
+  const requests = Array.isArray(rootRecord.requests) ? rootRecord.requests : [];
+  const readyForUserReview = readFirstNumber(records, ["readyForUserReview", "ready_for_user_review"])
+    ?? requests.filter((request) => isRecord(request) && request.status === "ready_for_user_review").length;
+  const blocked = readFirstNumber(records, ["blocked"])
+    ?? requests.filter((request) => isRecord(request) && request.status === "blocked").length;
+  const parked = readFirstNumber(records, ["parked"])
+    ?? requests.filter((request) => isRecord(request) && request.status === "parked").length;
+  const canAskUserToConfirm = readFirstNumber(records, ["canAskUserToConfirm"])
+    ?? requests.filter((request) => isRecord(request) && request.canAskUserToConfirm === true).length;
+  const status = readFirstString(records, ["readiness", "status", "state"], "");
+  const actionTimeRequired = readFirstBoolean(records, ["actionTimeUserConfirmationRequired", "actionTimeConfirmationRequired"]);
+  const automaticSubmitAllowed = readFirstBoolean(records, ["automaticSubmitAllowed"]);
+  const automaticSubmitForbidden = readFirstBoolean(records, ["automaticSubmitForbidden"]) ?? automaticSubmitAllowed === false;
+  const providerSubmitAllowed = readFirstNumber(records, ["providerSubmitAllowed"]) ?? (readFirstBoolean(records, ["canSubmitProvider"]) === false ? 0 : undefined);
+  const liveSubmitAllowed = readFirstBoolean(records, ["liveSubmitAllowed"]);
+  const credentialAccessAllowed = readFirstBoolean(records, ["credentialAccessAllowed"]);
+  const workerSpawnLocked = readFirstBoolean(records, ["noWorkerSpawn"]);
+  const fileMutationLocked = readFirstBoolean(records, ["noFileMutation"]);
+  const blockersWarnings = Array.from(new Set([
+    ...readDisplayList(rootRecord.blockers, "blocker"),
+    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
+    ...readDisplayList(summary.blockers, "blocker"),
+    ...readDisplayList(summary.blockedReasons, "blocker"),
+    ...requests.flatMap((request) => isRecord(request) ? readDisplayList(request.blockers, "blocker") : []),
+    ...readDisplayList(rootRecord.warnings, "warning"),
+    ...readDisplayList(summary.warnings, "warning"),
+    ...requests.flatMap((request) => isRecord(request) ? readDisplayList(request.warnings, "warning") : []),
+  ].filter(Boolean)));
+  const hardLocks = buildProviderExecutionPermissionGateHardLocks(rootRecord, summary);
+
+  return {
+    initialized,
+    readiness: providerExecutionPermissionGateReadinessLabel(status, initialized, readyForUserReview, blocked, parked),
+    readyForUserReview,
+    blocked,
+    parked,
+    canAskUserToConfirm,
+    actionTimeConfirmation: actionTimeRequired ? "required" : "blocked/missing",
+    automaticSubmit: automaticSubmitForbidden ? "automatic submit blocked" : "blocked/missing",
+    providerSubmit: providerSubmitAllowed === 0 ? "provider submit blocked" : "blocked/missing",
+    credentialWorkerFileLocks: liveSubmitAllowed === false && credentialAccessAllowed === false && workerSpawnLocked === true && fileMutationLocked === true
+      ? "credential/live/worker/file locked"
+      : "blocked/missing",
+    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.providerExecutionPermissionGate"],
+    hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.providerExecutionPermissionGate"],
   };
 }
 
@@ -4154,6 +4264,42 @@ function ProviderEnablementGateDiagnostics({ runtimeState }: { runtimeState: Pro
   );
 }
 
+function ProviderExecutionPermissionGateDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildProviderExecutionPermissionGateUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel phase31-provider-permission-panel">
+      <div className="audit-head">
+        <ShieldAlert size={17} />
+        <span>Provider Execution Permission Gate</span>
+      </div>
+      <div className="summary-grid phase31-metrics">
+        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "confirmation shell" : "blocked/missing"} />
+        <Metric label="Reviewable" value={`${summary.readyForUserReview}`} detail={`${summary.canAskUserToConfirm} can ask`} />
+        <Metric label="Blocked" value={`${summary.blocked}`} detail={`${summary.parked} parked`} />
+        <Metric label="Action Confirm" value={summary.actionTimeConfirmation} detail="not prefilled" />
+        <Metric label="Auto Submit" value={summary.automaticSubmit} detail="manual gate only" />
+        <Metric label="Provider Submit" value={summary.providerSubmit} detail="0 allowed" />
+      </div>
+      <div className="phase31-summary-list">
+        <div>
+          <strong>Credential / worker / file</strong>
+          <small>{summary.credentialWorkerFileLocks}</small>
+        </div>
+        <div>
+          <strong>Blockers / warnings</strong>
+          <small>{summary.blockersWarnings.length ? summary.blockersWarnings.slice(0, 5).join(" · ") : "none reported"}</small>
+        </div>
+      </div>
+      <div className="phase31-lock-strip" aria-label="Phase 31 Provider Execution Permission Gate hard locks">
+        {summary.hardLocks.slice(0, 10).map((lock) => (
+          <span key={lock}>{lock}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const videoPlanning = getVideoPlanning(runtimeState);
   const queue = videoPlanning.queueShell;
@@ -5877,6 +6023,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const exportWorkerSummary = buildExportWorkerUiSummary(runtimeState);
   const voiceAudioSettingsSummary = buildVoiceAudioSettingsUiSummary(runtimeState);
   const providerEnablementGateSummary = buildProviderEnablementGateUiSummary(runtimeState);
+  const providerExecutionPermissionGateSummary = buildProviderExecutionPermissionGateUiSummary(runtimeState);
 
   return (
     <section className="machine-panel settings-shell">
@@ -6023,6 +6170,13 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
         <div className="settings-readonly-note">
           <strong>Provider Enablement Gate readiness: {providerEnablementGateSummary.readiness}</strong>
           <small>{providerEnablementGateSummary.readyForConfirmation} ready_for_confirmation · {providerEnablementGateSummary.blocked} blocked · {providerEnablementGateSummary.parked} parked · {providerEnablementGateSummary.submitBlocked}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Provider Execution Permission Gate</div>
+      <div className="settings-list provider-execution-permission-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Provider Execution Permission readiness: {providerExecutionPermissionGateSummary.readiness}</strong>
+          <small>{providerExecutionPermissionGateSummary.readyForUserReview} reviewable · {providerExecutionPermissionGateSummary.blocked} blocked · {providerExecutionPermissionGateSummary.providerSubmit} · {providerExecutionPermissionGateSummary.automaticSubmit}</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
@@ -6234,6 +6388,7 @@ function DiagnosticsMode({
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <VoiceAudioSettingsDiagnostics runtimeState={runtimeState} />
       <ProviderEnablementGateDiagnostics runtimeState={runtimeState} />
+      <ProviderExecutionPermissionGateDiagnostics runtimeState={runtimeState} />
       <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />
       <section className="machine-panel">
         <div className="audit-head">

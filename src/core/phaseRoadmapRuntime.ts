@@ -7,7 +7,8 @@ export type PhaseRoadmapPhaseId =
   | "phase_27_export_worker_mvp"
   | "phase_28_voice_audio_settings_ui"
   | "phase_29_codex_cli_adapter_spike"
-  | "phase_30_provider_enablement_gate";
+  | "phase_30_provider_enablement_gate"
+  | "phase_31_provider_execution_permission_gate";
 
 export type PhaseRoadmapReadiness = "ready" | "blocked";
 export type PhaseRoadmapStatus =
@@ -15,6 +16,7 @@ export type PhaseRoadmapStatus =
   | "ready_for_noop_runner"
   | "ready_for_adapter_spike"
   | "ready_for_confirmation_gate"
+  | "ready_for_final_permission_gate"
   | "blocked_by_gate";
 export type PhaseRoadmapEvidenceDecisionSource = "typed_evidence" | "legacy_boolean_override" | "missing";
 export type PhaseRoadmapEvidenceStatus =
@@ -154,6 +156,79 @@ export interface PhaseRoadmapProviderLiveGateItem {
   requiredMode?: string;
   slot?: string;
   confirmationTokenId?: string;
+}
+
+export interface PhaseRoadmapProviderExecutionPermissionGateEvidence {
+  kind?: "provider_execution_permission_gate";
+  phase?: "phase_31_provider_execution_permission_gate";
+  status?: PhaseRoadmapEvidenceStatus;
+  readiness?: "ready_for_final_permission_gate" | "ready" | "blocked";
+  phase31Evidence?: {
+    phaseId?: "phase_31_provider_execution_permission_gate";
+    typedEvidencePresent?: boolean;
+    phase30GateConsumed?: boolean;
+    actionTimeUserConfirmationRequired?: boolean;
+    automaticSubmitForbidden?: boolean;
+    canSubmitProvider?: boolean;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    noWorkerSpawn?: boolean;
+    noFileMutation?: boolean;
+    forbiddenProviderModesAbsent?: boolean;
+  };
+  summary?: {
+    readyForUserReview?: number;
+    blocked?: number;
+    parked?: number;
+    canAskUserToConfirm?: number;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    automaticSubmitAllowed?: boolean;
+  };
+  hardLocks?: {
+    dryRunOnly?: boolean;
+    readOnly?: boolean;
+    reviewPlanOnly?: boolean;
+    actionTimeConfirmationRequired?: boolean;
+    providerSubmissionForbidden?: boolean;
+    canSubmitProvider?: boolean;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    credentialStorage?: boolean;
+    noCredentialRead?: boolean;
+    noCredentialWrite?: boolean;
+    noApiKeyCreation?: boolean;
+    noArbitraryProviderCommand?: boolean;
+    noWorkerSpawn?: boolean;
+    noFileMutation?: boolean;
+    fastModelForbidden?: boolean;
+    vipChannelForbidden?: boolean;
+    textToVideoMainPathForbidden?: boolean;
+    bgmInVideoPromptForbidden?: boolean;
+  };
+  forbiddenActions?: string[];
+  requests?: Array<{
+    status?: string;
+    canAskUserToConfirm?: boolean;
+    actionTimeConfirmationRequired?: boolean;
+    userConfirmedAtActionTime?: boolean;
+    canSubmitProvider?: boolean;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    credentialStorage?: boolean;
+    noWorkerSpawn?: boolean;
+    noFileMutation?: boolean;
+    blockers?: string[];
+    warnings?: string[];
+  }>;
+  blockers?: string[];
+  blockedReasons?: string[];
+  warnings?: string[];
+  sourceRef?: string;
 }
 
 export interface PhaseRoadmapClosedLoopReceipt {
@@ -622,6 +697,7 @@ export interface PhaseRoadmapRuntimeEvidence {
   exportWorker?: PhaseRoadmapExportWorkerEvidence;
   voiceAudioSettings?: PhaseRoadmapVoiceAudioSettingsEvidence;
   providerLiveGate?: PhaseRoadmapProviderLiveGateReceipt;
+  providerExecutionPermissionGate?: PhaseRoadmapProviderExecutionPermissionGateEvidence;
   watcherManifestQaClosedLoop?: PhaseRoadmapClosedLoopReceipt;
 }
 
@@ -636,7 +712,8 @@ export interface PhaseRoadmapEvidenceDecision {
     | "providerConfirmationTokenPlaceholder"
     | "providerEnablementPacket"
     | "watcherManifestQaClosedLoop"
-    | "forbiddenProviderModesAbsent";
+    | "forbiddenProviderModesAbsent"
+    | "providerExecutionPermissionGate";
   source: PhaseRoadmapEvidenceDecisionSource;
   ready: boolean;
   blockers: string[];
@@ -660,6 +737,7 @@ export interface PhaseRoadmapRuntimeInput {
   providerPacketComplete?: boolean;
   watcherManifestQaClosedLoop?: boolean;
   forbiddenProviderModesAbsent?: boolean;
+  providerExecutionPermissionGateReady?: boolean;
 }
 
 export interface PhaseRoadmapHardLocks {
@@ -679,7 +757,7 @@ export interface PhaseRoadmapHardLocks {
 
 export interface PhaseRoadmapPhasePlan {
   phaseId: PhaseRoadmapPhaseId;
-  phaseNumber: 24 | 25 | 26 | 27 | 28 | 29 | 30;
+  phaseNumber: 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31;
   title: string;
   readiness: PhaseRoadmapReadiness;
   status: PhaseRoadmapStatus;
@@ -694,10 +772,10 @@ export interface PhaseRoadmapPhasePlan {
 export interface PhaseRoadmapRuntimePlan {
   schemaVersion: "0.1.0";
   generatedAt: string;
-  phaseRange: "phase_24_to_30";
+  phaseRange: "phase_24_to_31";
   phases: PhaseRoadmapPhasePlan[];
   summary: {
-    totalPhases: 7;
+    totalPhases: 8;
     ready: number;
     blocked: number;
     providerSubmitAllowed: 0;
@@ -734,6 +812,12 @@ export interface PhaseRoadmapRuntimePlan {
     noFastVipTextToVideoOrBgmPromptRequired: true;
     canSubmitProvider: false;
   };
+  providerExecutionPermissionGate: {
+    actionTimeUserConfirmationRequired: true;
+    automaticSubmitForbidden: true;
+    canSubmitProvider: false;
+    providerSubmitAllowed: 0;
+  };
 }
 
 const defaultGeneratedAt = "1970-01-01T00:00:00.000Z";
@@ -746,6 +830,7 @@ const phaseIds: PhaseRoadmapPhaseId[] = [
   "phase_28_voice_audio_settings_ui",
   "phase_29_codex_cli_adapter_spike",
   "phase_30_provider_enablement_gate",
+  "phase_31_provider_execution_permission_gate",
 ];
 
 export const phaseRoadmapRuntimeHardLocks: PhaseRoadmapHardLocks = {
@@ -864,6 +949,16 @@ function hasCodexCliAdapterEvidence(
     evidence.phase === "phase_29_codex_cli_adapter_spike" ||
     evidence.phaseId === "phase_29_codex_cli_adapter_spike" ||
     evidence.roadmapEvidence?.phaseId === "phase_29_codex_cli_adapter_spike"
+  ));
+}
+
+function hasProviderExecutionPermissionGateEvidence(
+  evidence: PhaseRoadmapProviderExecutionPermissionGateEvidence | undefined,
+): evidence is PhaseRoadmapProviderExecutionPermissionGateEvidence {
+  return Boolean(evidence && (
+    evidence.kind === "provider_execution_permission_gate" ||
+    evidence.phase === "phase_31_provider_execution_permission_gate" ||
+    evidence.phase31Evidence?.phaseId === "phase_31_provider_execution_permission_gate"
   ));
 }
 
@@ -1921,6 +2016,96 @@ function forbiddenProviderModesEvidenceDecision(input: PhaseRoadmapRuntimeInput)
   };
 }
 
+function providerSubmitValueBlocked(value: number | boolean | undefined): boolean {
+  return value === undefined || value === 0 || value === false;
+}
+
+function providerExecutionPermissionGateEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const evidence = input.evidence?.providerExecutionPermissionGate;
+
+  if (hasProviderExecutionPermissionGateEvidence(evidence)) {
+    const phase31 = evidence.phase31Evidence || {};
+    const requestBlockers = (evidence.requests || []).flatMap((request) => request.blockers || []);
+    const requestWarnings = (evidence.requests || []).flatMap((request) => request.warnings || []);
+    const providerSubmitAllowed = phase31.providerSubmitAllowed ?? evidence.summary?.providerSubmitAllowed ?? evidence.hardLocks?.providerSubmitAllowed;
+    const hardLocksPinned = evidence.hardLocks
+      ? evidence.hardLocks.dryRunOnly === true
+        && evidence.hardLocks.readOnly === true
+        && evidence.hardLocks.reviewPlanOnly === true
+        && evidence.hardLocks.actionTimeConfirmationRequired === true
+        && evidence.hardLocks.providerSubmissionForbidden === true
+        && evidence.hardLocks.canSubmitProvider === false
+        && evidence.hardLocks.providerSubmitAllowed === 0
+        && evidence.hardLocks.liveSubmitAllowed === false
+        && evidence.hardLocks.credentialAccessAllowed === false
+        && evidence.hardLocks.credentialStorage === false
+        && evidence.hardLocks.noCredentialRead === true
+        && evidence.hardLocks.noCredentialWrite === true
+        && evidence.hardLocks.noApiKeyCreation === true
+        && evidence.hardLocks.noArbitraryProviderCommand === true
+        && evidence.hardLocks.noWorkerSpawn === true
+        && evidence.hardLocks.noFileMutation === true
+        && evidence.hardLocks.fastModelForbidden === true
+        && evidence.hardLocks.vipChannelForbidden === true
+        && evidence.hardLocks.textToVideoMainPathForbidden === true
+        && evidence.hardLocks.bgmInVideoPromptForbidden === true
+      : false;
+    const requestLocksPinned = (evidence.requests || []).every((request) =>
+      request.actionTimeConfirmationRequired !== false
+      && request.userConfirmedAtActionTime !== true
+      && request.canSubmitProvider !== true
+      && providerSubmitValueBlocked(request.providerSubmitAllowed)
+      && request.liveSubmitAllowed !== true
+      && request.credentialAccessAllowed !== true
+      && request.credentialStorage !== true
+      && request.noWorkerSpawn !== false
+      && request.noFileMutation !== false
+    );
+    const providerSubmitObserved = providerSubmitAllowed !== undefined && providerSubmitAllowed !== 0 && providerSubmitAllowed !== false;
+    const blockers = uniqueSorted([
+      ...blockedIf(phase31.typedEvidencePresent !== true, "provider_execution_permission_typed_evidence_missing"),
+      ...blockedIf(phase31.phase30GateConsumed !== true, "provider_execution_permission_phase30_gate_missing"),
+      ...blockedIf(phase31.actionTimeUserConfirmationRequired !== true, "provider_execution_permission_action_time_confirmation_missing"),
+      ...blockedIf(phase31.automaticSubmitForbidden !== true || evidence.summary?.automaticSubmitAllowed === true, "provider_execution_permission_auto_submit_not_forbidden"),
+      ...blockedIf(!hardLocksPinned, "provider_execution_permission_hard_locks_not_pinned"),
+      ...blockedIf(!requestLocksPinned, "provider_execution_permission_request_lock_drift"),
+      ...blockedIf(phase31.canSubmitProvider === true || evidence.hardLocks?.canSubmitProvider === true, "provider_execution_permission_can_submit_provider_true"),
+      ...blockedIf(providerSubmitObserved, "provider_execution_permission_provider_submit_allowed"),
+      ...blockedIf(phase31.liveSubmitAllowed === true || evidence.summary?.liveSubmitAllowed === true || evidence.hardLocks?.liveSubmitAllowed === true, "provider_execution_permission_live_submit_allowed"),
+      ...blockedIf(phase31.credentialAccessAllowed === true || evidence.summary?.credentialAccessAllowed === true || evidence.hardLocks?.credentialAccessAllowed === true, "provider_execution_permission_credential_access_allowed"),
+      ...blockedIf(phase31.noWorkerSpawn !== true || evidence.hardLocks?.noWorkerSpawn !== true, "provider_execution_permission_worker_spawn_not_blocked"),
+      ...blockedIf(phase31.noFileMutation !== true || evidence.hardLocks?.noFileMutation !== true, "provider_execution_permission_file_mutation_not_blocked"),
+      ...blockedIf(phase31.forbiddenProviderModesAbsent !== true, "provider_execution_permission_forbidden_mode_not_absent"),
+      ...(evidence.blockedReasons || []),
+      ...(evidence.blockers || []),
+    ]);
+
+    return {
+      evidenceKey: "providerExecutionPermissionGate",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted([...(evidence.warnings || []), ...requestWarnings, ...requestBlockers]),
+    };
+  }
+
+  return {
+    evidenceKey: "providerExecutionPermissionGate",
+    source: input.providerExecutionPermissionGateReady === undefined ? "missing" : "legacy_boolean_override",
+    ready: false,
+    blockers: uniqueSorted([
+      "provider_execution_permission_typed_evidence_missing",
+      ...blockedIf(input.providerExecutionPermissionGateReady !== true, "provider_execution_permission_gate_missing"),
+    ]),
+    warnings: uniqueSorted([
+      ...blockedIf(
+        input.providerExecutionPermissionGateReady === true,
+        "legacy_providerExecutionPermissionGateReady_boolean_ignored_without_typed_evidence",
+      ),
+    ]),
+  };
+}
+
 function evidenceNotes(decisions: PhaseRoadmapEvidenceDecision[]): string[] {
   return uniqueSorted(decisions.flatMap((decision) => decision.warnings));
 }
@@ -1976,6 +2161,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const providerPacketDecision = providerPacketEvidenceDecision(input);
   const watcherClosedLoopDecision = watcherClosedLoopEvidenceDecision(input);
   const forbiddenProviderModesDecision = forbiddenProviderModesEvidenceDecision(input);
+  const providerExecutionPermissionDecision = providerExecutionPermissionGateEvidenceDecision(input);
   const evidenceDecisions = [
     projectFactsDecision,
     envelopeDecision,
@@ -1987,6 +2173,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
     providerPacketDecision,
     watcherClosedLoopDecision,
     forbiddenProviderModesDecision,
+    providerExecutionPermissionDecision,
   ];
 
   const phases: PhaseRoadmapPhasePlan[] = [
@@ -2195,15 +2382,50 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         ]),
       ],
     }),
+    makePhase({
+      phaseId: "phase_31_provider_execution_permission_gate",
+      phaseNumber: 31,
+      title: "Provider Execution Permission Gate",
+      requiredPrecedingPhases: [
+        "phase_24_subagent_runtime_gate",
+        "phase_25_knowledge_pack_manager",
+        "phase_26_agent_cli_mock_runner",
+        "phase_27_export_worker_mvp",
+        "phase_28_voice_audio_settings_ui",
+        "phase_29_codex_cli_adapter_spike",
+        "phase_30_provider_enablement_gate",
+      ],
+      readyPhases,
+      ownBlockers: uniqueSorted(providerExecutionPermissionDecision.blockers),
+      readyStatus: "ready_for_final_permission_gate",
+      requiredInputs: [
+        "evidence.providerExecutionPermissionGate",
+        "phase31 typed evidence present",
+        "action-time user confirmation required",
+        "automatic submit forbidden",
+        "provider/credential/worker/file routes blocked",
+      ],
+      acceptanceCriteria: [
+        "UI may only show a future confirmation review when Phase 30 has produced a complete gate item.",
+        "Action-time user confirmation is required and cannot be pre-approved by typed evidence alone.",
+        "Automatic provider submit, live submit, credentials, worker spawn, arbitrary provider commands, and file mutation stay blocked.",
+        "Fast, VIP, text-to-video, and BGM-in-video prompt paths remain absent.",
+      ],
+      notes: [
+        "Phase 31 is the final permission shell before any future live provider execution layer.",
+        "It prepares confirmation requests; it does not call Image2, Seedance, Jimeng, Codex, or a sidecar.",
+        ...evidenceNotes([providerExecutionPermissionDecision]),
+      ],
+    }),
   ];
 
   return {
     schemaVersion: phaseRoadmapRuntimeSchemaVersion,
     generatedAt,
-    phaseRange: "phase_24_to_30",
+    phaseRange: "phase_24_to_31",
     phases,
     summary: {
-      totalPhases: 7,
+      totalPhases: 8,
       ready: phases.filter((phase) => phase.readiness === "ready").length,
       blocked: phases.filter((phase) => phase.readiness === "blocked").length,
       providerSubmitAllowed: 0,
@@ -2243,6 +2465,12 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       watcherManifestQaClosedLoopRequired: true,
       noFastVipTextToVideoOrBgmPromptRequired: true,
       canSubmitProvider: false,
+    },
+    providerExecutionPermissionGate: {
+      actionTimeUserConfirmationRequired: true,
+      automaticSubmitForbidden: true,
+      canSubmitProvider: false,
+      providerSubmitAllowed: 0,
     },
   };
 }

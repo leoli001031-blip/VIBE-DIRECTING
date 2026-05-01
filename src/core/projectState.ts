@@ -10,6 +10,7 @@ import type { AgentCliMockRunnerState } from "./agentCliMockRunner";
 import type { CodexCliAdapterSpikeState } from "./codexCliAdapterSpike";
 import type { ExportWorkerState } from "./exportWorker";
 import type { ProviderLiveGateState } from "./providerLiveGate";
+import type { ProviderExecutionPermissionGateState } from "./providerExecutionPermissionGate";
 import type {
   AssetRecord,
   AssetReadinessReport,
@@ -192,6 +193,7 @@ export interface ProjectRuntimeState {
   videoExecutionPreview: VideoExecutionPreviewState;
   adapterContracts: AdapterContractState;
   providerLiveGate: ProviderLiveGateState;
+  providerExecutionPermissionGate: ProviderExecutionPermissionGateState;
   generationHarness: GenerationHarnessState;
   filesystemWatcherHarness: FilesystemWatcherHarnessState;
   checkpointResumeHarness: CheckpointResumeHarnessState;

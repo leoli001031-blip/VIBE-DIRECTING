@@ -29,6 +29,7 @@ import { buildVideoPlanningState } from "./videoPlanning";
 import { buildVideoExecutionPreviewState } from "./videoExecutionPreview";
 import { buildAdapterContractState } from "./adapterContracts";
 import { buildProviderLiveGateState, type ProviderLiveGateEnvelopeFact } from "./providerLiveGate";
+import { buildProviderExecutionPermissionGateState } from "./providerExecutionPermissionGate";
 import type { SubagentRuntimeGateReceipt } from "./subagentRuntimeGate";
 import type { SubagentWorkerRuntimePlan } from "./subagentWorkerRuntime";
 import {
@@ -382,6 +383,11 @@ export function buildProjectRuntimeState(
     subagentTaskEnvelope: options.subagentTaskEnvelope,
     envelopeId: options.subagentTaskEnvelope?.id || taskViews.find((task) => task.validator.valid)?.envelope.id,
   });
+  const providerExecutionPermissionGate = buildProviderExecutionPermissionGateState({
+    generatedAt,
+    providerLiveGate,
+    codexCliAdapterSpike,
+  });
   const generationHealthChecker = buildGenerationHealthCheckerState({
     generatedAt,
     imageTaskPlans,
@@ -474,6 +480,7 @@ export function buildProjectRuntimeState(
     videoExecutionPreview,
     adapterContracts,
     providerLiveGate,
+    providerExecutionPermissionGate,
     generationHarness,
     filesystemWatcherHarness,
     checkpointResumeHarness,
@@ -702,6 +709,13 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       phase26ReplacementProof: agentCliMockRunner,
       envelopeId: state.taskRuns.taskViews.find((task) => task.validator.valid)?.envelope.id,
     });
+  const providerExecutionPermissionGate =
+    state.providerExecutionPermissionGate ||
+    buildProviderExecutionPermissionGateState({
+      generatedAt: state.generatedAt,
+      providerLiveGate,
+      codexCliAdapterSpike,
+    });
   const generationHealthChecker =
     state.generationHealthChecker ||
     buildGenerationHealthCheckerState({
@@ -759,6 +773,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     videoExecutionPreview,
     adapterContracts,
     providerLiveGate,
+    providerExecutionPermissionGate,
     generationHarness,
     filesystemWatcherHarness,
     checkpointResumeHarness,

@@ -574,6 +574,103 @@ function codexCliAdapterEvidence(overrides = {}) {
   };
 }
 
+function providerExecutionPermissionGateEvidence(overrides = {}) {
+  const {
+    phase31Evidence: phase31EvidenceOverrides,
+    summary: summaryOverrides,
+    hardLocks: hardLockOverrides,
+    requests: requestOverrides,
+    ...rest
+  } = overrides;
+  const requests = requestOverrides || [
+    {
+      status: "ready_for_user_review",
+      canAskUserToConfirm: true,
+      actionTimeConfirmationRequired: true,
+      userConfirmedAtActionTime: false,
+      canSubmitProvider: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      credentialStorage: false,
+      noWorkerSpawn: true,
+      noFileMutation: true,
+      blockers: [],
+      warnings: [],
+    },
+  ];
+  return {
+    kind: "provider_execution_permission_gate",
+    phase: "phase_31_provider_execution_permission_gate",
+    status: "ready",
+    readiness: "ready_for_final_permission_gate",
+    phase31Evidence: {
+      phaseId: "phase_31_provider_execution_permission_gate",
+      typedEvidencePresent: true,
+      phase30GateConsumed: true,
+      actionTimeUserConfirmationRequired: true,
+      automaticSubmitForbidden: true,
+      canSubmitProvider: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      noWorkerSpawn: true,
+      noFileMutation: true,
+      forbiddenProviderModesAbsent: true,
+      ...(phase31EvidenceOverrides || {}),
+    },
+    summary: {
+      readyForUserReview: requests.filter((request) => request.status === "ready_for_user_review").length,
+      blocked: requests.filter((request) => request.status === "blocked").length,
+      parked: requests.filter((request) => request.status === "parked").length,
+      canAskUserToConfirm: requests.filter((request) => request.canAskUserToConfirm).length,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      automaticSubmitAllowed: false,
+      ...(summaryOverrides || {}),
+    },
+    hardLocks: {
+      dryRunOnly: true,
+      readOnly: true,
+      reviewPlanOnly: true,
+      actionTimeConfirmationRequired: true,
+      providerSubmissionForbidden: true,
+      canSubmitProvider: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      credentialStorage: false,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      noApiKeyCreation: true,
+      noArbitraryProviderCommand: true,
+      noWorkerSpawn: true,
+      noFileMutation: true,
+      fastModelForbidden: true,
+      vipChannelForbidden: true,
+      textToVideoMainPathForbidden: true,
+      bgmInVideoPromptForbidden: true,
+      ...(hardLockOverrides || {}),
+    },
+    forbiddenActions: [
+      "provider_submit",
+      "credential_read",
+      "credential_write",
+      "api_key_create",
+      "arbitrary_provider_command",
+      "worker_spawn",
+      "file_mutation",
+      "fast_model",
+      "vip_channel",
+      "text_to_video_main_path",
+      "bgm_in_video_prompt",
+    ],
+    requests,
+    ...rest,
+  };
+}
+
 function typedEvidence(overrides = {}) {
   return {
     projectFactsIntegration: projectFactsEvidence(overrides.projectFactsIntegration),
@@ -583,6 +680,7 @@ function typedEvidence(overrides = {}) {
     exportWorker: exportWorkerEvidence(overrides.exportWorker),
     voiceAudioSettings: voiceAudioSettingsEvidence(overrides.voiceAudioSettings),
     providerLiveGate: providerLiveGateReceipt(overrides.providerLiveGate),
+    providerExecutionPermissionGate: providerExecutionPermissionGateEvidence(overrides.providerExecutionPermissionGate),
     watcherManifestQaClosedLoop: watcherManifestQaClosedLoopReceipt(overrides.watcherManifestQaClosedLoop),
   };
 }
@@ -1375,11 +1473,102 @@ assert(
 );
 assert(blockedProviderGate.providerEnablementGate.canSubmitProvider === false, "Phase 30 plan must not submit provider");
 
+const missingProviderExecutionGateEvidence = typedEvidence();
+delete missingProviderExecutionGateEvidence.providerExecutionPermissionGate;
+const legacyOnlyPhase31 = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: missingProviderExecutionGateEvidence,
+  providerExecutionPermissionGateReady: true,
+});
+const legacyOnlyPhase31Gate = phase(legacyOnlyPhase31, "phase_31_provider_execution_permission_gate");
+assert(legacyOnlyPhase31Gate.readiness === "blocked", "Phase 31 must block when typed execution permission evidence is missing");
+assert(
+  legacyOnlyPhase31Gate.blockedReasons.includes("provider_execution_permission_typed_evidence_missing"),
+  "Phase 31 must require typed provider execution permission evidence",
+);
+
+const typedPhase31Ready = buildPhaseRoadmapRuntimePlan(readyInput());
+assert(
+  phase(typedPhase31Ready, "phase_31_provider_execution_permission_gate").readiness === "ready",
+  "Phase 31 must be ready with typed provider execution permission evidence and all locks pinned",
+);
+assert(
+  phase(typedPhase31Ready, "phase_31_provider_execution_permission_gate").status === "ready_for_final_permission_gate",
+  "Phase 31 must report ready_for_final_permission_gate",
+);
+
+for (const [override, expectedBlocker] of [
+  [{ phase31Evidence: { phase30GateConsumed: false } }, "provider_execution_permission_phase30_gate_missing"],
+  [{ phase31Evidence: { actionTimeUserConfirmationRequired: false } }, "provider_execution_permission_action_time_confirmation_missing"],
+  [{ phase31Evidence: { automaticSubmitForbidden: false } }, "provider_execution_permission_auto_submit_not_forbidden"],
+  [{ phase31Evidence: { canSubmitProvider: true } }, "provider_execution_permission_can_submit_provider_true"],
+  [{ phase31Evidence: { providerSubmitAllowed: 1 }, summary: { providerSubmitAllowed: 1 } }, "provider_execution_permission_provider_submit_allowed"],
+  [{ phase31Evidence: { liveSubmitAllowed: true }, summary: { liveSubmitAllowed: true } }, "provider_execution_permission_live_submit_allowed"],
+  [{ phase31Evidence: { credentialAccessAllowed: true }, summary: { credentialAccessAllowed: true } }, "provider_execution_permission_credential_access_allowed"],
+  [{ phase31Evidence: { noWorkerSpawn: false }, hardLocks: { noWorkerSpawn: false } }, "provider_execution_permission_worker_spawn_not_blocked"],
+  [{ phase31Evidence: { noFileMutation: false }, hardLocks: { noFileMutation: false } }, "provider_execution_permission_file_mutation_not_blocked"],
+  [{ phase31Evidence: { forbiddenProviderModesAbsent: false } }, "provider_execution_permission_forbidden_mode_not_absent"],
+]) {
+  const blockedPlan = buildPhaseRoadmapRuntimePlan({
+    ...readyInput(),
+    evidence: typedEvidence({
+      providerExecutionPermissionGate: override,
+    }),
+  });
+  const blockedPhase31 = phase(blockedPlan, "phase_31_provider_execution_permission_gate");
+  assert(blockedPhase31.readiness === "blocked", `Phase 31 must block ${expectedBlocker}`);
+  assert(blockedPhase31.blockedReasons.includes(expectedBlocker), `Phase 31 blocker ${expectedBlocker} missing`);
+}
+
+const phase31RequestDrift = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    providerExecutionPermissionGate: {
+      requests: [
+        {
+          status: "ready_for_user_review",
+          canAskUserToConfirm: true,
+          actionTimeConfirmationRequired: true,
+          userConfirmedAtActionTime: true,
+          canSubmitProvider: true,
+          providerSubmitAllowed: 1,
+          liveSubmitAllowed: true,
+          credentialAccessAllowed: true,
+          credentialStorage: true,
+          noWorkerSpawn: false,
+          noFileMutation: false,
+          blockers: [],
+          warnings: [],
+        },
+      ],
+    },
+  }),
+});
+assert(
+  phase(phase31RequestDrift, "phase_31_provider_execution_permission_gate").blockedReasons.includes(
+    "provider_execution_permission_request_lock_drift",
+  ),
+  "Phase 31 must block request-level lock drift",
+);
+
+assert(
+  typedPhase31Ready.providerExecutionPermissionGate.actionTimeUserConfirmationRequired === true,
+  "Phase 31 plan must require action-time user confirmation",
+);
+assert(
+  typedPhase31Ready.providerExecutionPermissionGate.automaticSubmitForbidden === true,
+  "Phase 31 plan must forbid automatic submit",
+);
+assert(
+  typedPhase31Ready.providerExecutionPermissionGate.canSubmitProvider === false,
+  "Phase 31 plan must not submit provider",
+);
+
 const readyPlan = buildPhaseRoadmapRuntimePlan(readyInput());
 assert(readyPlan.schemaVersion === "0.1.0", "schema version drifted");
-assert(readyPlan.phaseRange === "phase_24_to_30", "phase range drifted");
-assert(readyPlan.summary.totalPhases === 7, "summary total phase count drifted");
-assert(readyPlan.summary.ready === 7, "all phases should be ready for the complete fixture");
+assert(readyPlan.phaseRange === "phase_24_to_31", "phase range drifted");
+assert(readyPlan.summary.totalPhases === 8, "summary total phase count drifted");
+assert(readyPlan.summary.ready === 8, "all phases should be ready for the complete fixture");
 assert(readyPlan.summary.blocked === 0, "complete fixture should not block");
 assert(readyPlan.summary.providerSubmitAllowed === 0, "provider submit must stay at zero");
 assert(readyPlan.summary.credentialAccessAllowed === false, "credential access must be false");
@@ -1389,12 +1578,14 @@ assert(
   readyPlan.evidenceSummary.decisions.every((decision) => decision.ready === true),
   "complete typed fixture should make every evidence decision ready",
 );
-assert(phaseRoadmapPhaseIds().length === 7, "phase id list should cover Phase 24-30");
+assert(phaseRoadmapPhaseIds().length === 8, "phase id list should cover Phase 24-31");
 
 const phase26Ready = phase(readyPlan, "phase_26_agent_cli_mock_runner");
 const phase29Ready = phase(readyPlan, "phase_29_codex_cli_adapter_spike");
+const phase31Ready = phase(readyPlan, "phase_31_provider_execution_permission_gate");
 assert(phase26Ready.status === "ready_for_noop_runner", "Phase 26 status must describe mock/no-op runner");
 assert(phase29Ready.status === "ready_for_adapter_spike", "Phase 29 status must describe adapter spike");
+assert(phase31Ready.status === "ready_for_final_permission_gate", "Phase 31 status must describe final permission gate");
 assert(
   readyPlan.adapterBoundary.phase29.requiresPhase26ReplacementProof === true,
   "Phase 29 must require Phase 26 replacement proof",
@@ -1446,8 +1637,8 @@ assert(
   "schema registry must include PhaseRoadmapRuntimePlan",
 );
 assert(schema.properties.schemaVersion.const === "0.1.0", "schema must pin schemaVersion");
-assert(schema.properties.phaseRange.const === "phase_24_to_30", "schema must pin Phase 24-30 range");
-assert(schema.$defs.summary.properties.totalPhases.const === 7, "schema summary must pin totalPhases=7");
+assert(schema.properties.phaseRange.const === "phase_24_to_31", "schema must pin Phase 24-31 range");
+assert(schema.$defs.summary.properties.totalPhases.const === 8, "schema summary must pin totalPhases=8");
 assert(schema.$defs.summary.properties.providerSubmitAllowed.const === 0, "schema summary must pin providerSubmitAllowed=0");
 assert(schema.$defs.summary.properties.credentialAccessAllowed.const === false, "schema summary must forbid credential access");
 assert(schema.$defs.summary.properties.arbitraryShellAllowed.const === false, "schema summary must forbid arbitrary shell");
@@ -1463,6 +1654,10 @@ assert(
 assert(
   schema.$defs.evidenceDecision.properties.evidenceKey.enum.includes("voiceAudioSettings"),
   "schema evidence decisions must include typed voice/audio settings evidence",
+);
+assert(
+  schema.$defs.evidenceDecision.properties.evidenceKey.enum.includes("providerExecutionPermissionGate"),
+  "schema evidence decisions must include typed provider execution permission evidence",
 );
 assert(schema.$defs.hardLocks.properties.noFreeTextWorker.const === true, "schema hard locks must pin noFreeTextWorker=true");
 assert(schema.$defs.hardLocks.properties.validatedEnvelopeRequired.const === true, "schema hard locks must pin validated envelope");
@@ -1507,6 +1702,22 @@ assert(
 assert(
   schema.$defs.providerEnablementGate.properties.canSubmitProvider.const === false,
   "schema provider gate must pin canSubmitProvider=false",
+);
+assert(
+  schema.$defs.providerExecutionPermissionGate.properties.actionTimeUserConfirmationRequired.const === true,
+  "schema provider execution permission gate must require action-time user confirmation",
+);
+assert(
+  schema.$defs.providerExecutionPermissionGate.properties.automaticSubmitForbidden.const === true,
+  "schema provider execution permission gate must forbid automatic submit",
+);
+assert(
+  schema.$defs.providerExecutionPermissionGate.properties.canSubmitProvider.const === false,
+  "schema provider execution permission gate must pin canSubmitProvider=false",
+);
+assert(
+  schema.$defs.providerExecutionPermissionGate.properties.providerSubmitAllowed.const === 0,
+  "schema provider execution permission gate must pin providerSubmitAllowed=0",
 );
 
 const source = fs.readFileSync("src/core/phaseRoadmapRuntime.ts", "utf8");

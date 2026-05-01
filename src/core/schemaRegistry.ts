@@ -55,7 +55,7 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     fileName: "phase_roadmap_runtime.schema.json",
     id: "https://vibecore.local/schemas/phase_roadmap_runtime.schema.json",
     version: schemaVersion,
-    purpose: "Phase 24-30 typed-evidence runtime roadmap with provider, credential, shell, free-text worker, and live-submit routes locked off.",
+    purpose: "Phase 24-31 typed-evidence runtime roadmap with provider, credential, shell, free-text worker, worker spawn, file mutation, and live-submit routes locked off.",
     typeName: "PhaseRoadmapRuntimePlan",
   },
   {
@@ -134,6 +134,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     version: schemaVersion,
     purpose: "Phase 11 provider adapter live gate readiness and user-confirmation plan with provider submission, credentials, fast/VIP/text-to-video, and BGM video prompt paths locked off.",
     typeName: "ProviderLiveGateState",
+  },
+  {
+    fileName: "provider_execution_permission_gate.schema.json",
+    id: "https://vibecore.local/schemas/provider_execution_permission_gate.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 31 final provider execution permission gate with action-time user confirmation required and provider submission, worker spawn, credentials, and file mutation locked off.",
+    typeName: "ProviderExecutionPermissionGateState",
   },
   {
     fileName: "export_builder.schema.json",

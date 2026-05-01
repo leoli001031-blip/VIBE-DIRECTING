@@ -7152,6 +7152,14 @@ if (!runtimeState.providerLiveGate) {
     confirmationTokens: [],
   });
 }
+if (!runtimeState.providerExecutionPermissionGate) {
+  const { buildProviderExecutionPermissionGateState } = await importTs("src/core/providerExecutionPermissionGate.ts");
+  runtimeState.providerExecutionPermissionGate = buildProviderExecutionPermissionGateState({
+    generatedAt: runtimeState.generatedAt,
+    providerLiveGate: runtimeState.providerLiveGate,
+    codexCliAdapterSpike: runtimeState.codexCliAdapterSpike,
+  });
+}
 
 assert(runtimeState.providerLiveGate, "runtime-state must include providerLiveGate");
 assert(runtimeState.providerLiveGate.phase === "phase_11_provider_adapter_live_gate", "providerLiveGate must remain the provider live gate evidence source");
@@ -7186,6 +7194,45 @@ for (const key of [
 }
 assert(runtimeState.providerLiveGate.hardLocks.liveSubmitAllowed === false, "providerLiveGate live submit hard lock must be false");
 assert(runtimeState.providerLiveGate.hardLocks.credentialStorage === false, "providerLiveGate credential storage hard lock must be false");
+assert(runtimeState.providerExecutionPermissionGate, "runtime-state must include providerExecutionPermissionGate");
+assert(runtimeState.providerExecutionPermissionGate.phase === "phase_31_provider_execution_permission_gate", "providerExecutionPermissionGate must be Phase 31 evidence");
+assert(runtimeState.providerExecutionPermissionGate.summary.providerSubmitAllowed === 0, "providerExecutionPermissionGate must not allow provider submit");
+assert(runtimeState.providerExecutionPermissionGate.summary.liveSubmitAllowed === false, "providerExecutionPermissionGate live submit must be false");
+assert(runtimeState.providerExecutionPermissionGate.summary.credentialAccessAllowed === false, "providerExecutionPermissionGate credential access must be false");
+assert(runtimeState.providerExecutionPermissionGate.summary.automaticSubmitAllowed === false, "providerExecutionPermissionGate automatic submit must be false");
+assert(runtimeState.providerExecutionPermissionGate.phase31Evidence.canSubmitProvider === false, "Phase 31 evidence must keep canSubmitProvider=false");
+assert(runtimeState.providerExecutionPermissionGate.phase31Evidence.providerSubmitAllowed === 0, "Phase 31 evidence must keep providerSubmitAllowed=0");
+assert(runtimeState.providerExecutionPermissionGate.phase31Evidence.liveSubmitAllowed === false, "Phase 31 evidence must keep liveSubmitAllowed=false");
+assert(runtimeState.providerExecutionPermissionGate.phase31Evidence.credentialAccessAllowed === false, "Phase 31 evidence must keep credential access false");
+assert(runtimeState.providerExecutionPermissionGate.phase31Evidence.noWorkerSpawn === true, "Phase 31 evidence must block worker spawn");
+assert(runtimeState.providerExecutionPermissionGate.phase31Evidence.noFileMutation === true, "Phase 31 evidence must block file mutation");
+assert(runtimeState.providerExecutionPermissionGate.requests.every((item) => item.canSubmitProvider === false), "Phase 31 requests must never submit providers");
+assert(runtimeState.providerExecutionPermissionGate.requests.every((item) => item.providerSubmitAllowed === 0), "Phase 31 requests must keep providerSubmitAllowed=0");
+assert(runtimeState.providerExecutionPermissionGate.requests.every((item) => item.userConfirmedAtActionTime === false), "Phase 31 requests must not pre-confirm action-time approval");
+for (const key of [
+  "dryRunOnly",
+  "readOnly",
+  "reviewPlanOnly",
+  "actionTimeConfirmationRequired",
+  "providerSubmissionForbidden",
+  "noCredentialRead",
+  "noCredentialWrite",
+  "noApiKeyCreation",
+  "noArbitraryProviderCommand",
+  "noWorkerSpawn",
+  "noFileMutation",
+  "fastModelForbidden",
+  "vipChannelForbidden",
+  "textToVideoMainPathForbidden",
+  "bgmInVideoPromptForbidden",
+]) {
+  assert(runtimeState.providerExecutionPermissionGate.hardLocks[key] === true, `providerExecutionPermissionGate hard lock ${key} must be true`);
+}
+assert(runtimeState.providerExecutionPermissionGate.hardLocks.canSubmitProvider === false, "providerExecutionPermissionGate canSubmitProvider lock must be false");
+assert(runtimeState.providerExecutionPermissionGate.hardLocks.providerSubmitAllowed === 0, "providerExecutionPermissionGate providerSubmitAllowed lock must be 0");
+assert(runtimeState.providerExecutionPermissionGate.hardLocks.liveSubmitAllowed === false, "providerExecutionPermissionGate live submit hard lock must be false");
+assert(runtimeState.providerExecutionPermissionGate.hardLocks.credentialAccessAllowed === false, "providerExecutionPermissionGate credential access hard lock must be false");
+assert(runtimeState.providerExecutionPermissionGate.hardLocks.credentialStorage === false, "providerExecutionPermissionGate credential storage hard lock must be false");
 assert(runtimeState.voiceAudioSettings, "runtime-state must include voiceAudioSettings");
 assert(runtimeState.voiceAudioSettings.phase === "phase_28_voice_audio_settings_ui", "voiceAudioSettings must be Phase 28 evidence");
 assert(runtimeState.voiceAudioSettings.scope === "voice_audio_project_facts", "voiceAudioSettings scope must stay project facts only");
