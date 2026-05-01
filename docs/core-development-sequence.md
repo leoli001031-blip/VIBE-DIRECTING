@@ -994,9 +994,9 @@ Phase 9.4 checklist：
 - 右侧自然语言修改面板保持短状态和少量 badge；详细执行计划、工程锁和诊断字段继续留在 Diagnostics。
 - 新增 `npm run preview-player:test`，并扩展 `npm run minimal-ui:test` 覆盖 Phase 21/23：Preview Player 存在、主界面工程词为 0、Preview Player 文案短且稀疏。
 
-### Phase 24-33 Runtime Gate / Adapter Planning
+### Phase 24-34 Runtime Gate / Adapter Planning
 
-Phase 24-33 先做 lightweight pure runtime plan，不做真实执行。新增 `src/core/phaseRoadmapRuntime.ts`，用于输出每个阶段的 readiness、status、blocked reason、required preceding phases、hard locks 和 acceptance criteria。
+Phase 24-34 先做 lightweight pure runtime plan，不做真实执行。Phase 34 是 runtime integration 目标：把已存在的 Local Orchestrator / Queue Harness 接成 `ProjectRuntimeState.localOrchestrator` 一等事实，仍然保持 plan-only / diagnostics-only。`src/core/phaseRoadmapRuntime.ts` 用于输出每个阶段的 readiness、status、blocked reason、required preceding phases、hard locks 和 acceptance criteria。
 
 阶段顺序：
 
@@ -1010,6 +1010,7 @@ Phase 24-33 先做 lightweight pure runtime plan，不做真实执行。新增 `
 - Phase 31：Provider Execution Permission Gate。消费 Phase 30 gate item，生成最终动作级确认计划；必须要求 action-time user confirmation，禁止自动提交 provider，继续锁死 worker spawn、credential、file mutation、Fast/VIP/text-to-video/BGM prompt 路径。
 - Phase 32：Action-time Confirmation Receipt / Review Shell。消费 Phase 31 typed permission evidence，生成确认回执层的 roadmap evidence 和未来 review shell 计划；默认路径 `confirmedReceiptCount=0`，仍不提交 provider、不 live submit、不读写 credentials、不 spawn worker、不改文件。
 - Phase 33：Provider Execution Handoff / Final Action Gate。消费 Phase 32 typed receipt evidence 和动作时确认 evidence；默认因为 `confirmedReceiptCount=0` 而 blocked。即使 ready，也只是 final handoff review，不提交 provider、不 live submit、不读写 credentials、不 spawn worker、不改文件。
+- Phase 34：Local Orchestrator Runtime Integration。消费 Phase 10 Local Orchestrator / Queue Harness，把长队列、自动续跑计划、reconnect / stall / retry / manual review 状态接成 `ProjectRuntimeState.localOrchestrator` 一等事实；仍不启动 daemon、不 spawn Codex、不提交 provider、不执行 shell、不读写 credential、不改文件。
 
 Phase 24 真实 gate 补充：
 
@@ -1036,6 +1037,7 @@ Acceptance criteria：
 - Phase 31 缺 typed permission evidence、缺 Phase 30 gate、action-time confirmation 不强制、automatic submit 未禁止、provider/live/credential/worker/file 任一路径打开，都必须 blocked。
 - Phase 32 缺 typed receipt evidence、缺 Phase 31 evidence、缺 action-time confirmation receipt plan、`confirmedReceiptCount != 0`、provider/live/credential/automatic-submit/worker/file 任一路径打开、hard lock drift 或 forbidden provider modes 未明确 absent，都必须 blocked。
 - Phase 33 缺 typed handoff evidence、缺 Phase 32 evidence、缺 action-time confirmation evidence、用户未在动作时确认、provider/live/credential/automatic-submit/worker/file 任一路径打开、hard lock drift 或 forbidden provider modes 未明确 absent，都必须 blocked。
+- Phase 34 缺 typed Local Orchestrator evidence、未接入 `ProjectRuntimeState.localOrchestrator`、worker self-report 被当成完成、缺 expected output / manifest / QA / promotion gate 任一项却进入 complete、auto-continue 变成真实执行、reconnect / stall / retry / manual review 状态缺失，或 daemon / Codex spawn / provider submit / live submit / shell / credential / file mutation 任一路径打开，都必须 blocked。
 - 所有阶段都必须 pin hard locks；测试命令为 `npm run phase-roadmap:test`。
 
 ### Phase 30 已实现范围：Provider Enablement Gate
@@ -1072,6 +1074,18 @@ Acceptance criteria：
 - 默认路径固定缺少动作时确认，因此会 blocked，并给出 `provider_execution_handoff_action_confirmation_missing`；这保证没有用户最终确认时不会进入 handoff review。
 - Safety blocker 继续 fail closed：`providerSubmitAllowed != 0`、`canSubmitProvider=true`、`liveSubmitAllowed=true`、`credentialAccessAllowed=true`、`automaticSubmitAllowed=true`、worker/file route 打开、hard lock drift 或 forbidden provider modes 未明确 absent 都会阻断 Phase 33。
 - 即使 Phase 33 ready，也仍然只表示 final handoff review 已可显示；它不执行真实 provider、不提交 live provider、不读取或保存 credentials、不 spawn worker、不做文件 mutation。
+
+### Phase 34 计划范围：Local Orchestrator Runtime Integration
+
+- 目标：将 Phase 10 已有 `Local Orchestrator / Queue Harness` 从独立 core/test 接成 `ProjectRuntimeState.localOrchestrator` 一等事实，并进入 `project_runtime_state.schema.json`、schema registry、runtime builder/defaults、import fallback 和 Diagnostics 只读面板。
+- 解决的问题：七八分钟短片会一次性排出大量图片/首尾帧/视频/QA/导出任务，用户需要看到 Codex/worker 队列“正在干活”；一条任务完成后应自动规划下一条任务，而不是让用户反复点击。
+- 队列事实必须显式覆盖长队列、auto-continue plan、Codex reconnect attempt / stall / retry budget、manual review、expected outputs、manifest match、QA gate、promotion gate 和 UI 可读 fact chain。
+- Worker/provider self-report 不能单独完成任务；只有 expected output declared/observed、manifest matched、explicit QA pass 和 promotion gate 全部满足时，queue item 才能进入 `complete_verified`。
+- Hard locks 固定：`noDaemon=true`、`daemonStarted=false`、`noSpawnCodex=true`、`noProviderSubmit=true`、`liveSubmitAllowed=false`、`noShellExecution=true`、`noCredentialRead=true`、`noCredentialWrite=true`、`noFileMutation=true`。
+- UI 原则：主导演台继续极简，只显示“有任务在进行 / 等待复核 / 有阻断”的短状态或进度条；队列明细、reconnect/stall/retry/manual review、manifest/QA/expected output 只进 Diagnostics / Settings，不加 Run / Submit / Execute 按钮。
+- 验收命令：`npm run orchestrator:test`、`npm run import:test`、`npm run project-runtime:test`、`npm run minimal-ui:test`、`npm run build`。
+- 浏览器验收：主 Director surface 不出现 Local Orchestrator、queue harness、TaskEnvelope、provider submit、spawn、daemon 等工程词；Diagnostics 有只读队列面板，能看到 waiting/ready/running planned/waiting output/QA pending/needs review/blocked/complete verified 摘要。
+- 下一步建议：Phase 35 优先做 `Task Queue Visibility / Progress Strip` 或 `Project Store write confirmation gate`；暂不接真实 provider。前者直接回应用户“前端要看到 Codex 在干活”的需求，后者为后续真实项目写入提供更硬的确认边界。
 
 ### Phase 25 已实现范围：Knowledge Pack Manager
 

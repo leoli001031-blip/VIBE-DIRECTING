@@ -115,6 +115,8 @@ const providerActionConfirmationReceiptDiagnostics = findFunctionBody(appSource,
 const providerActionConfirmationReceiptUiSummary = findFunctionBody(appSource, "buildProviderActionConfirmationReceiptUiSummary");
 const providerExecutionHandoffDiagnostics = findFunctionBody(appSource, "ProviderExecutionHandoffDiagnostics");
 const providerExecutionHandoffUiSummary = findFunctionBody(appSource, "buildProviderExecutionHandoffUiSummary");
+const localOrchestratorDiagnostics = findFunctionBody(appSource, "LocalOrchestratorDiagnostics");
+const localOrchestratorUiSummary = findFunctionBody(appSource, "buildLocalOrchestratorUiSummary");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
 const knowledgeUiSummary = findFunctionBody(appSource, "buildKnowledgeUiSummary");
 const knowledgePackManager = findFunctionBody(appSource, "KnowledgePackManager");
@@ -264,6 +266,23 @@ checkMessage(requireWithin(`${providerExecutionHandoffDiagnostics}\n${providerEx
 checkMessage(requireWithin(`${providerExecutionHandoffDiagnostics}\n${providerExecutionHandoffUiSummary}`, /provider submit locked/i, "Phase 33 provider submit locked summary"));
 checkMessage(requireWithin(`${providerExecutionHandoffDiagnostics}\n${providerExecutionHandoffUiSummary}`, /credential\/worker\/file locked/i, "Phase 33 credential/worker/file locked summary"));
 checkMessage(requireWithin(providerExecutionHandoffDiagnostics, /phase33-lock-strip/i, "Phase 33 hard lock strip"));
+checkMessage(requireWithin(diagnosticsMode, /LocalOrchestratorDiagnostics/, "Phase 34 LocalOrchestratorDiagnostics mounted in Diagnostics"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /Local Orchestrator\s*\/\s*Auto-continue/i, "Phase 34 Local Orchestrator / Auto-continue diagnostics panel"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /Readiness/i, "Phase 34 readiness summary"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /Queue Total/i, "Phase 34 queue total summary"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /Ready/i, "Phase 34 ready count summary"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /Waiting/i, "Phase 34 waiting count summary"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /Running\s*\/\s*Output/i, "Phase 34 running/waiting-output summary"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /QA Pending/i, "Phase 34 QA pending summary"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /Needs Review|needs review/i, "Phase 34 needs-review summary"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /Stalled/i, "Phase 34 stalled summary"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /Auto-continue/i, "Phase 34 auto-continue next-ready summary"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /Provider\s*\/\s*file\s*\/\s*daemon locks/i, "Phase 34 provider/file/daemon locks summary"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /Blockers\s*\/\s*warnings/i, "Phase 34 blockers/warnings summary"));
+checkMessage(requireWithin(`${localOrchestratorDiagnostics}\n${localOrchestratorUiSummary}`, /localOrchestrator/i, "Phase 34 localOrchestrator fail-soft parser"));
+checkMessage(requireWithin(`${localOrchestratorDiagnostics}\n${localOrchestratorUiSummary}`, /plan-only/i, "Phase 34 plan-only auto-continue summary"));
+checkMessage(requireWithin(`${localOrchestratorDiagnostics}\n${localOrchestratorUiSummary}`, /provider\/file\/daemon locked/i, "Phase 34 provider/file/daemon lock text"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /phase34-lock-strip/i, "Phase 34 hard lock strip"));
 checkMessage(requireWithin(previewPlayerQueue, /draftPreview\.events/, "Phase 21/23 Preview Player queue must use previewExport.draftPreview.events"));
 checkMessage(requireWithin(previewPlayerQueue, /image_hold/, "Phase 21/23 Preview Player queue must include image holds"));
 checkMessage(requireWithin(previewPlayerQueue, /video_clip/, "Phase 21/23 Preview Player queue must include video clips"));
@@ -466,6 +485,22 @@ for (const [term, pattern] of phase33ForbiddenMainTerms) {
   const count = countPattern(phase2123DirectorSurface, pattern);
   check(count === 0, `Phase 33 main Director surface must expose 0 ${term} term(s), found ${count}`);
 }
+const phase34ForbiddenMainTerms = [
+  ["Phase34", /Phase\s*34/i],
+  ["Local Orchestrator", /Local\s+Orchestrator/i],
+  ["auto-continue", /auto[-\s]?continue/i],
+  ["queue machine", /queue\s+machine/i],
+  ["daemon", /daemon/i],
+  ["Codex spawn", /Codex\s+spawn|spawn\s+Codex/i],
+  ["provider submit", /provider\s+submit/i],
+  ["runtimeState.localOrchestrator", /runtimeState\.localOrchestrator|localOrchestrator/i],
+  ["next-ready", /next[-\s]?ready/i],
+  ["waiting output", /waiting\s+output/i],
+];
+for (const [term, pattern] of phase34ForbiddenMainTerms) {
+  const count = countPattern(phase2123DirectorSurface, pattern);
+  check(count === 0, `Phase 34 main Director surface must expose 0 ${term} term(s), found ${count}`);
+}
 check(!/Formal\s+Gate|Proxy\s+Duration|Draft\s+Events|blockedPlaceholder/i.test(minimalPreview), "Preview Player copy must stay short and not show gate/proxy counters");
 check(/locked/i.test(minimalAssetLibrary) && /candidate/i.test(minimalAssetLibrary) && /review/i.test(minimalAssetLibrary), "Asset Library must keep locked/candidate/review consistency states");
 
@@ -507,6 +542,10 @@ checkMessage(requireWithin(settingsShell, /Provider Execution Handoff readiness/
 checkMessage(requireWithin(settingsShell, /handoff\(s\)/i, "Phase 33 handoff count in Settings"));
 checkMessage(requireWithin(`${settingsShell}\n${providerExecutionHandoffUiSummary}`, /provider submit locked/i, "Phase 33 provider submit locked summary in Settings"));
 checkMessage(requireWithin(`${settingsShell}\n${providerExecutionHandoffUiSummary}`, /credential\/worker\/file locked/i, "Phase 33 credential/worker/file locked summary in Settings"));
+checkMessage(requireWithin(settingsShell, /Local Orchestrator:\s*\{localOrchestratorSummary\.readiness\}/i, "Phase 34 Local Orchestrator readiness summary in Settings"));
+checkMessage(requireWithin(settingsShell, /next ready\s*\{localOrchestratorSummary\.nextReadyCount\}/i, "Phase 34 next-ready count in Settings"));
+checkMessage(requireWithin(`${settingsShell}\n${localOrchestratorUiSummary}`, /plan-only/i, "Phase 34 plan-only summary in Settings"));
+checkMessage(requireWithin(`${settingsShell}\n${localOrchestratorUiSummary}`, /provider\/file\/daemon locked/i, "Phase 34 provider/file/daemon locks in Settings"));
 checkMessage(requireWithin(knowledgePackManager, /Enabled/i, "Phase 25 Knowledge summary enabled/total metric"));
 checkMessage(requireWithin(knowledgePackManager, /Injected/i, "Phase 25 Knowledge summary injected/unique metric"));
 checkMessage(requireWithin(knowledgePackManager, /Warnings\s*\/\s*Blockers/i, "Phase 25 Knowledge summary warnings/blockers metric"));
@@ -533,6 +572,10 @@ const forbiddenButtonCopy = [
   "Record Confirmation",
   "Submit Receipt",
   "Review Submit",
+  "Start Daemon",
+  "Continue Now",
+  "Start Orchestrator",
+  "Run Orchestrator",
   "Export Now",
   "Write Files",
   "Create Directory",

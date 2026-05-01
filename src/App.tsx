@@ -214,6 +214,23 @@ type ProviderExecutionHandoffUiSummary = {
   blockersWarnings: string[];
   hardLocks: string[];
 };
+type LocalOrchestratorUiSummary = {
+  initialized: boolean;
+  readiness: string;
+  queueTotal: number;
+  ready: number;
+  waiting: number;
+  runningPlanned: number;
+  waitingOutput: number;
+  qaPending: number;
+  needsReview: number;
+  stalled: number;
+  nextReadyCount: number;
+  autoContinueMode: string;
+  providerFileDaemonLocks: string;
+  blockersWarnings: string[];
+  hardLocks: string[];
+};
 
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
@@ -2101,6 +2118,141 @@ function buildProviderExecutionHandoffUiSummary(runtimeState: ProjectRuntimeStat
     credentialWorkerFileLocked: credentialLocked && workerLocked && fileLocked ? "credential/worker/file locked" : "blocked/missing",
     blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.providerExecutionHandoff"],
     hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.providerExecutionHandoff"],
+  };
+}
+
+function localOrchestratorReadinessLabel(summary: {
+  initialized: boolean;
+  blocked: number;
+  failed: number;
+  needsReview: number;
+  qaPending: number;
+  stalled: number;
+  runningPlanned: number;
+  waitingOutput: number;
+  ready: number;
+  waiting: number;
+  completeVerified: number;
+  queueTotal: number;
+}) {
+  if (!summary.initialized) return "blocked/missing";
+  if (summary.blocked > 0 || summary.failed > 0) return "blocked";
+  if (summary.needsReview > 0) return "needs_review";
+  if (summary.qaPending > 0 || summary.stalled > 0 || summary.runningPlanned > 0 || summary.waitingOutput > 0) return "waiting";
+  if (summary.ready > 0) return "ready";
+  if (summary.waiting > 0) return "waiting";
+  if (summary.queueTotal > 0 && summary.completeVerified === summary.queueTotal) return "complete_verified";
+  return "blocked/missing";
+}
+
+function buildLocalOrchestratorHardLocks(rootRecord: Record<string, unknown>, summary: Record<string, unknown>) {
+  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
+  const explicitHardLocks = firstArrayFrom([rootRecord, summary, hardLocksRecord], ["hardLocks", "locks", "hardLockStrip"])
+    .map((item, index) => formatHarnessValue(item, `hard lock ${index + 1}`))
+    .filter(Boolean);
+  const inferredLocks = [
+    readBooleanLockLabel(hardLocksRecord, "dryRunOnly", "dry-run only", true),
+    readBooleanLockLabel(hardLocksRecord, "planOnly", "plan-only", true),
+    readBooleanLockLabel(hardLocksRecord, "noDaemon", "daemon locked", true),
+    readBooleanLockLabel(hardLocksRecord, "daemonStarted", "daemon not started", false),
+    readBooleanLockLabel(hardLocksRecord, "noSpawnCodex", "Codex spawn locked", true),
+    readBooleanLockLabel(hardLocksRecord, "noSubprocess", "subprocess locked", true),
+    readBooleanLockLabel(hardLocksRecord, "noShellExecution", "shell locked", true),
+    readBooleanLockLabel(hardLocksRecord, "noProviderExecution", "provider execution locked", true),
+    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit locked", false),
+    readBooleanLockLabel(hardLocksRecord, "noFileMutation", "file mutation locked", true),
+    readBooleanLockLabel(hardLocksRecord, "noCredentialRead", "credential read locked", true),
+    readBooleanLockLabel(hardLocksRecord, "expectedOutputRequired", "expected output required", true),
+    readBooleanLockLabel(hardLocksRecord, "manifestRequired", "manifest required", true),
+    readBooleanLockLabel(hardLocksRecord, "qaGateRequired", "QA gate required", true),
+    rootRecord.providerSubmissionForbidden === true || summary.providerSubmissionForbidden === true ? "provider submit blocked" : undefined,
+    rootRecord.noFileMutation === true || summary.noFileMutation === true ? "file mutation locked" : undefined,
+    rootRecord.daemonStarted === false || summary.daemonStarted === false ? "daemon not started" : undefined,
+  ].filter((lock): lock is string => Boolean(lock));
+
+  return Array.from(new Set([...explicitHardLocks, ...inferredLocks]));
+}
+
+function buildLocalOrchestratorUiSummary(runtimeState: ProjectRuntimeState): LocalOrchestratorUiSummary {
+  const root = (runtimeState as Partial<ProjectRuntimeState> & { localOrchestrator?: unknown }).localOrchestrator;
+  const initialized = isRecord(root);
+  const rootRecord = initialized ? root as Record<string, unknown> : {};
+  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
+  const autoContinuePlan = initialized && isRecord(rootRecord.autoContinuePlan) ? rootRecord.autoContinuePlan : {};
+  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
+  const queue = Array.isArray(rootRecord.queue) ? rootRecord.queue : [];
+  const queueRecords = queue.filter(isRecord);
+  const records = [summary, rootRecord, autoContinuePlan, hardLocksRecord].filter(isRecord);
+  const countByStatus = (status: string) => queueRecords.filter((item) => readString(item.queueStatus, "") === status).length;
+  const queueTotal = readFirstNumber(records, ["totalItems", "queueTotal", "total"]) ?? queueRecords.length;
+  const ready = readFirstNumber(records, ["ready"]) ?? countByStatus("ready");
+  const waiting = readFirstNumber(records, ["waiting"]) ?? countByStatus("waiting");
+  const runningPlanned = readFirstNumber(records, ["runningPlanned", "running_planned", "running"]) ?? countByStatus("running_planned");
+  const waitingOutput = readFirstNumber(records, ["waitingOutput", "waiting_output"]) ?? countByStatus("waiting_output");
+  const qaPending = readFirstNumber(records, ["qaPending", "qa_pending"]) ?? countByStatus("qa_pending");
+  const needsReview = readFirstNumber(records, ["needsReview", "needs_review", "manualReviewRequired"]) ?? countByStatus("needs_review");
+  const stalled = readFirstNumber(records, ["stalled"]) ?? queueRecords.filter((item) => {
+    const activity = isRecord(item.codexActivity) ? item.codexActivity : {};
+    return activity.stalled === true;
+  }).length;
+  const blocked = readFirstNumber(records, ["blocked"]) ?? countByStatus("blocked");
+  const failed = readFirstNumber(records, ["failed"]) ?? countByStatus("failed");
+  const completeVerified = readFirstNumber(records, ["completeVerified", "complete_verified"]) ?? countByStatus("complete_verified");
+  const nextReadyIds = firstArrayFrom([autoContinuePlan, summary, rootRecord], ["nextReadyQueueItemIds", "nextReadyIds", "nextReady"]);
+  const nextReadyCount = readFirstNumber([autoContinuePlan, summary, rootRecord].filter(isRecord), [
+    "nextReadyCount",
+    "autoContinueNextReadyCount",
+  ]) ?? nextReadyIds.length;
+  const autoContinueMode = readFirstString([autoContinuePlan, summary, rootRecord].filter(isRecord), [
+    "mode",
+    "autoContinueMode",
+  ], "plan_only");
+  const providerLocked = readFirstBoolean(records, ["providerSubmissionForbidden", "noProviderExecution"]) === true;
+  const fileLocked = readFirstBoolean(records, ["noFileMutation"]) === true;
+  const daemonLocked = readFirstBoolean(records, ["noDaemon"]) === true || readFirstBoolean(records, ["daemonStarted"]) === false;
+  const blockersWarnings = Array.from(new Set([
+    ...readDisplayList(rootRecord.blockers, "blocker"),
+    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
+    ...readDisplayList(summary.blockers, "blocker"),
+    ...readDisplayList(summary.blockedReasons, "blocker"),
+    ...queueRecords.flatMap((item) => readDisplayList(item.blockers, "blocker")),
+    ...readDisplayList(rootRecord.warnings, "warning"),
+    ...readDisplayList(summary.warnings, "warning"),
+    ...queueRecords.flatMap((item) => readDisplayList(item.warnings, "warning")),
+  ].filter(Boolean)));
+  const hardLocks = buildLocalOrchestratorHardLocks(rootRecord, summary);
+  const readinessFacts = {
+    initialized,
+    blocked,
+    failed,
+    needsReview,
+    qaPending,
+    stalled,
+    runningPlanned,
+    waitingOutput,
+    ready,
+    waiting,
+    completeVerified,
+    queueTotal,
+  };
+
+  return {
+    initialized,
+    readiness: localOrchestratorReadinessLabel(readinessFacts),
+    queueTotal,
+    ready,
+    waiting,
+    runningPlanned,
+    waitingOutput,
+    qaPending,
+    needsReview,
+    stalled,
+    nextReadyCount,
+    autoContinueMode: autoContinueMode === "plan_only" ? "plan-only" : statusLabel(autoContinueMode),
+    providerFileDaemonLocks: providerLocked && fileLocked && daemonLocked ? "provider/file/daemon locked" : "blocked/missing",
+    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.localOrchestrator"],
+    hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.localOrchestrator"],
   };
 }
 
@@ -4678,6 +4830,52 @@ function ProviderExecutionHandoffDiagnostics({ runtimeState }: { runtimeState: P
   );
 }
 
+function LocalOrchestratorDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildLocalOrchestratorUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel phase34-local-orchestrator-panel">
+      <div className="audit-head">
+        <Gauge size={17} />
+        <span>Local Orchestrator / Auto-continue</span>
+      </div>
+      <div className="summary-grid phase34-metrics">
+        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "read-only queue state" : "blocked/missing"} />
+        <Metric label="Queue Total" value={`${summary.queueTotal}`} detail="planned items" />
+        <Metric label="Ready" value={`${summary.ready}`} detail={`${summary.nextReadyCount} next-ready`} />
+        <Metric label="Waiting" value={`${summary.waiting}`} detail="held by earlier facts" />
+        <Metric label="Running / Output" value={`${summary.runningPlanned} / ${summary.waitingOutput}`} detail="planned / waiting output" />
+        <Metric label="QA Pending" value={`${summary.qaPending}`} detail={`${summary.needsReview} needs review`} />
+        <Metric label="Stalled" value={`${summary.stalled}`} detail="timeout/watch evidence" />
+        <Metric label="Auto-continue" value={`${summary.nextReadyCount}`} detail={summary.autoContinueMode} />
+      </div>
+      <div className="phase34-summary-list">
+        <div>
+          <strong>Queue state</strong>
+          <small>{summary.queueTotal} total · {summary.ready} ready · {summary.waiting} waiting · {summary.runningPlanned} running planned · {summary.waitingOutput} waiting output</small>
+        </div>
+        <div>
+          <strong>Review gates</strong>
+          <small>{summary.qaPending} QA pending · {summary.needsReview} needs review · {summary.stalled} stalled</small>
+        </div>
+        <div>
+          <strong>Provider / file / daemon locks</strong>
+          <small>{summary.providerFileDaemonLocks}</small>
+        </div>
+        <div>
+          <strong>Blockers / warnings</strong>
+          <small>{summary.blockersWarnings.length ? summary.blockersWarnings.slice(0, 5).join(" · ") : "none reported"}</small>
+        </div>
+      </div>
+      <div className="phase34-lock-strip" aria-label="Phase 34 Local Orchestrator hard locks">
+        {summary.hardLocks.slice(0, 10).map((lock) => (
+          <span key={lock}>{lock}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const videoPlanning = getVideoPlanning(runtimeState);
   const queue = videoPlanning.queueShell;
@@ -6404,6 +6602,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const providerExecutionPermissionGateSummary = buildProviderExecutionPermissionGateUiSummary(runtimeState);
   const providerActionConfirmationReceiptSummary = buildProviderActionConfirmationReceiptUiSummary(runtimeState);
   const providerExecutionHandoffSummary = buildProviderExecutionHandoffUiSummary(runtimeState);
+  const localOrchestratorSummary = buildLocalOrchestratorUiSummary(runtimeState);
 
   return (
     <section className="machine-panel settings-shell">
@@ -6573,6 +6772,14 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
           <strong>Provider Execution Handoff readiness: {providerExecutionHandoffSummary.readiness}</strong>
           <small>{providerExecutionHandoffSummary.handoffCount} handoff(s) · {providerExecutionHandoffSummary.blockedCount} blocked · {providerExecutionHandoffSummary.confirmedCount} confirmed</small>
           <small>{providerExecutionHandoffSummary.providerSubmitLocked} · {providerExecutionHandoffSummary.credentialWorkerFileLocked}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Local Orchestrator</div>
+      <div className="settings-list local-orchestrator-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Local Orchestrator: {localOrchestratorSummary.readiness}</strong>
+          <small>{localOrchestratorSummary.queueTotal} total · {localOrchestratorSummary.ready} ready · {localOrchestratorSummary.waiting} waiting · next ready {localOrchestratorSummary.nextReadyCount}</small>
+          <small>{localOrchestratorSummary.autoContinueMode} · {localOrchestratorSummary.providerFileDaemonLocks}</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
@@ -6787,6 +6994,7 @@ function DiagnosticsMode({
       <ProviderExecutionPermissionGateDiagnostics runtimeState={runtimeState} />
       <ProviderActionConfirmationReceiptDiagnostics runtimeState={runtimeState} />
       <ProviderExecutionHandoffDiagnostics runtimeState={runtimeState} />
+      <LocalOrchestratorDiagnostics runtimeState={runtimeState} />
       <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />
       <section className="machine-panel">
         <div className="audit-head">

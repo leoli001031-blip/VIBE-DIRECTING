@@ -32,6 +32,7 @@ import { buildProviderLiveGateState, type ProviderLiveGateEnvelopeFact } from ".
 import { buildProviderExecutionPermissionGateState } from "./providerExecutionPermissionGate";
 import { buildProviderActionConfirmationReceiptState } from "./providerActionConfirmationReceipt";
 import { buildProviderExecutionHandoffState } from "./providerExecutionHandoff";
+import { buildLocalOrchestratorState, type LocalOrchestratorTaskPacket } from "./localOrchestrator";
 import type { SubagentRuntimeGateReceipt } from "./subagentRuntimeGate";
 import type { SubagentWorkerRuntimePlan } from "./subagentWorkerRuntime";
 import {
@@ -138,6 +139,42 @@ function buildProviderLiveGateEnvelopeFacts(
       valid: Boolean(task?.validator.valid && preflight?.status === "pass" && blockers.length === 0),
       blockers,
       warnings,
+    };
+  });
+}
+
+function buildLocalOrchestratorTaskPackets(
+  imageTaskPlans: ProjectRuntimeState["imagePipeline"]["imageTaskPlans"],
+  taskViews: ProjectRuntimeTaskState[],
+): LocalOrchestratorTaskPacket[] {
+  return imageTaskPlans.map((taskPlan, index) => {
+    const task = taskViews.find(
+      (item) =>
+        item.job.id === taskPlan.jobId ||
+        item.envelope.id === taskPlan.taskEnvelopeSummary?.envelopeId ||
+        item.envelope.preflight.taskId === taskPlan.taskEnvelopeSummary?.envelopeId,
+    );
+
+    return {
+      packetId: `local_orchestrator_packet_${taskPlan.taskPlanId}`,
+      taskPlanId: taskPlan.taskPlanId,
+      jobId: taskPlan.jobId,
+      shotId: taskPlan.shotId,
+      envelopeId: task?.envelope.id || taskPlan.taskEnvelopeSummary?.envelopeId,
+      taskKind: taskPlan.providerSlot,
+      expectedOutputs: [taskPlan.expectedOutputPath],
+      dependencies: task?.envelope.dependencies || [],
+      priority: index,
+      queueOrder: index,
+      blocked: taskPlan.status === "blocked" || Boolean(taskPlan.blockers.length),
+      blockers: taskPlan.blockers,
+      warnings: taskPlan.warnings,
+      sourceRefs: [
+        `imageTaskPlan:${taskPlan.taskPlanId}`,
+        `job:${taskPlan.jobId}`,
+        ...(task?.envelope.id ? [`taskEnvelope:${task.envelope.id}`] : []),
+        ...(task?.taskRun.taskId ? [`taskRun:${task.taskRun.taskId}`] : []),
+      ],
     };
   });
 }
@@ -371,6 +408,18 @@ export function buildProjectRuntimeState(
     generationHarness,
     qaHarness,
   });
+  const localOrchestrator = buildLocalOrchestratorState({
+    generatedAt,
+    taskPackets: buildLocalOrchestratorTaskPackets(imageTaskPlans, taskViews),
+    taskEnvelopes: taskViews.map((task) => task.envelope),
+    taskRuns: taskViews.map((task) => task.taskRun),
+    generationHarness,
+    filesystemWatcherHarness,
+    checkpointResumeHarness,
+    qaHarness,
+    subagentRunner,
+    options: { autoContinue: true, concurrency: 1, now: generatedAt },
+  });
   const agentCliMockRunner = options.agentCliMockRunner || buildAgentCliMockRunnerState({
     generatedAt,
     gateReceipt: options.subagentRuntimeGateReceipt,
@@ -493,6 +542,7 @@ export function buildProjectRuntimeState(
     providerExecutionPermissionGate,
     providerActionConfirmationReceipt,
     providerExecutionHandoff,
+    localOrchestrator,
     generationHarness,
     filesystemWatcherHarness,
     checkpointResumeHarness,
@@ -708,6 +758,20 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       generationHarness,
       qaHarness,
     });
+  const localOrchestrator =
+    state.localOrchestrator ||
+    buildLocalOrchestratorState({
+      generatedAt: state.generatedAt,
+      taskPackets: buildLocalOrchestratorTaskPackets(state.imagePipeline.imageTaskPlans, state.taskRuns.taskViews),
+      taskEnvelopes: state.taskRuns.taskViews.map((task) => task.envelope),
+      taskRuns: state.taskRuns.taskViews.map((task) => task.taskRun),
+      generationHarness,
+      filesystemWatcherHarness,
+      checkpointResumeHarness,
+      qaHarness,
+      subagentRunner,
+      options: { autoContinue: true, concurrency: 1, now: state.generatedAt },
+    });
   const agentCliMockRunner =
     state.agentCliMockRunner ||
     buildAgentCliMockRunnerState({
@@ -800,6 +864,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     providerExecutionPermissionGate,
     providerActionConfirmationReceipt,
     providerExecutionHandoff,
+    localOrchestrator,
     generationHarness,
     filesystemWatcherHarness,
     checkpointResumeHarness,

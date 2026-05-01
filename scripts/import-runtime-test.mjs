@@ -7174,6 +7174,50 @@ if (!runtimeState.providerExecutionHandoff) {
     providerActionConfirmationReceipt: runtimeState.providerActionConfirmationReceipt,
   });
 }
+if (!runtimeState.localOrchestrator) {
+  const { buildLocalOrchestratorState } = await importTs("src/core/localOrchestrator.ts");
+  const taskPackets = runtimeState.imagePipeline.imageTaskPlans.map((taskPlan, index) => {
+    const task = runtimeState.taskRuns.taskViews.find(
+      (item) =>
+        item.job.id === taskPlan.jobId ||
+        item.envelope.id === taskPlan.taskEnvelopeSummary?.envelopeId ||
+        item.envelope.preflight.taskId === taskPlan.taskEnvelopeSummary?.envelopeId,
+    );
+    return {
+      packetId: `local_orchestrator_packet_${taskPlan.taskPlanId}`,
+      taskPlanId: taskPlan.taskPlanId,
+      jobId: taskPlan.jobId,
+      shotId: taskPlan.shotId,
+      envelopeId: task?.envelope.id || taskPlan.taskEnvelopeSummary?.envelopeId,
+      taskKind: taskPlan.providerSlot,
+      expectedOutputs: [taskPlan.expectedOutputPath],
+      dependencies: task?.envelope.dependencies || [],
+      priority: index,
+      queueOrder: index,
+      blocked: taskPlan.status === "blocked" || taskPlan.blockers.length > 0,
+      blockers: taskPlan.blockers,
+      warnings: taskPlan.warnings,
+      sourceRefs: [
+        `imageTaskPlan:${taskPlan.taskPlanId}`,
+        `job:${taskPlan.jobId}`,
+        ...(task?.envelope.id ? [`taskEnvelope:${task.envelope.id}`] : []),
+        ...(task?.taskRun.taskId ? [`taskRun:${task.taskRun.taskId}`] : []),
+      ],
+    };
+  });
+  runtimeState.localOrchestrator = buildLocalOrchestratorState({
+    generatedAt: runtimeState.generatedAt,
+    taskPackets,
+    taskEnvelopes: runtimeState.taskRuns.taskViews.map((task) => task.envelope),
+    taskRuns: runtimeState.taskRuns.taskViews.map((task) => task.taskRun),
+    generationHarness: runtimeState.generationHarness,
+    filesystemWatcherHarness: runtimeState.filesystemWatcherHarness,
+    checkpointResumeHarness: runtimeState.checkpointResumeHarness,
+    qaHarness: runtimeState.qaHarness,
+    subagentRunner: runtimeState.subagentRunner,
+    options: { autoContinue: true, concurrency: 1, now: runtimeState.generatedAt },
+  });
+}
 
 assert(runtimeState.providerLiveGate, "runtime-state must include providerLiveGate");
 assert(runtimeState.providerLiveGate.phase === "phase_11_provider_adapter_live_gate", "providerLiveGate must remain the provider live gate evidence source");
@@ -7361,6 +7405,40 @@ assert(runtimeState.providerExecutionHandoff.hardLocks.credentialAccessAllowed =
 assert(runtimeState.providerExecutionHandoff.hardLocks.automaticSubmitAllowed === false, "providerExecutionHandoff automatic submit hard lock must be false");
 assert(runtimeState.providerExecutionHandoff.hardLocks.canSpawnWorker === false, "providerExecutionHandoff worker spawn hard lock must be false");
 assert(runtimeState.providerExecutionHandoff.hardLocks.fileMutationAllowed === false, "providerExecutionHandoff file mutation hard lock must be false");
+assert(runtimeState.localOrchestrator, "runtime-state must include localOrchestrator");
+assert(runtimeState.localOrchestrator.dryRunOnly === true, "localOrchestrator must be dry-run only");
+assert(runtimeState.localOrchestrator.planOnly === true, "localOrchestrator must be plan-only");
+assert(runtimeState.localOrchestrator.providerSubmissionForbidden === true, "localOrchestrator must forbid provider submission");
+assert(runtimeState.localOrchestrator.liveSubmitAllowed === false, "localOrchestrator live submit must be false");
+assert(runtimeState.localOrchestrator.noFileMutation === true, "localOrchestrator must forbid file mutation");
+assert(runtimeState.localOrchestrator.daemonStarted === false, "localOrchestrator must not start a daemon");
+assert(runtimeState.localOrchestrator.queue.length > 0, "localOrchestrator must derive queue items from runtime task facts");
+assert(runtimeState.localOrchestrator.queue.every((item) => item.canExecute === false), "localOrchestrator queue items must never execute");
+assert(runtimeState.localOrchestrator.queue.every((item) => item.canSpawnCodex === false), "localOrchestrator queue items must never spawn Codex");
+assert(runtimeState.localOrchestrator.queue.every((item) => item.providerSubmissionForbidden === true), "localOrchestrator queue items must forbid provider submission");
+assert(runtimeState.localOrchestrator.queue.every((item) => item.liveSubmitAllowed === false), "localOrchestrator queue items must keep liveSubmitAllowed=false");
+assert(runtimeState.localOrchestrator.queue.every((item) => item.noFileMutation === true), "localOrchestrator queue items must forbid file mutation");
+assert(runtimeState.localOrchestrator.autoContinuePlan.mode === "plan_only", "localOrchestrator auto-continue must stay plan_only");
+for (const key of [
+  "dryRunOnly",
+  "planOnly",
+  "noDaemon",
+  "noSpawnCodex",
+  "noSubprocess",
+  "noShellExecution",
+  "noProviderExecution",
+  "providerSubmissionForbidden",
+  "noFileMutation",
+  "noCredentialRead",
+  "workerSelfReportCannotComplete",
+  "expectedOutputRequired",
+  "manifestRequired",
+  "qaGateRequired",
+]) {
+  assert(runtimeState.localOrchestrator.hardLocks[key] === true, `localOrchestrator hard lock ${key} must be true`);
+}
+assert(runtimeState.localOrchestrator.hardLocks.daemonStarted === false, "localOrchestrator daemonStarted hard lock must be false");
+assert(runtimeState.localOrchestrator.hardLocks.liveSubmitAllowed === false, "localOrchestrator live submit hard lock must be false");
 assert(runtimeState.voiceAudioSettings, "runtime-state must include voiceAudioSettings");
 assert(runtimeState.voiceAudioSettings.phase === "phase_28_voice_audio_settings_ui", "voiceAudioSettings must be Phase 28 evidence");
 assert(runtimeState.voiceAudioSettings.scope === "voice_audio_project_facts", "voiceAudioSettings scope must stay project facts only");

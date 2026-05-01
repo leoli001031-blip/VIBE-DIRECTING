@@ -13,6 +13,7 @@ import type { ProviderLiveGateState } from "./providerLiveGate";
 import type { ProviderExecutionPermissionGateState } from "./providerExecutionPermissionGate";
 import type { ProviderActionConfirmationReceiptState } from "./providerActionConfirmationReceipt";
 import type { ProviderExecutionHandoffState } from "./providerExecutionHandoff";
+import type { LocalOrchestratorState } from "./localOrchestrator";
 import type {
   AssetRecord,
   AssetReadinessReport,
@@ -198,6 +199,7 @@ export interface ProjectRuntimeState {
   providerExecutionPermissionGate: ProviderExecutionPermissionGateState;
   providerActionConfirmationReceipt: ProviderActionConfirmationReceiptState;
   providerExecutionHandoff: ProviderExecutionHandoffState;
+  localOrchestrator: LocalOrchestratorState;
   generationHarness: GenerationHarnessState;
   filesystemWatcherHarness: FilesystemWatcherHarnessState;
   checkpointResumeHarness: CheckpointResumeHarnessState;
