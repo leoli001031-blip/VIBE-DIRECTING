@@ -106,6 +106,8 @@ const previewQueueKind = findFunctionBody(appSource, "previewQueueKind");
 const desktopShellView = findFunctionBody(appSource, "buildDesktopRuntimeShellView");
 const subagentWorkerRuntimeDiagnostics = findFunctionBody(appSource, "SubagentWorkerRuntimeDiagnostics");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
+const knowledgeUiSummary = findFunctionBody(appSource, "buildKnowledgeUiSummary");
+const knowledgePackManager = findFunctionBody(appSource, "KnowledgePackManager");
 const diagnosticsMode = findFunctionBody(appSource, "DiagnosticsMode");
 const settingsShell = findFunctionBody(appSource, "SettingsShell");
 const appBody = findFunctionBody(appSource, "App");
@@ -131,6 +133,7 @@ check(
 checkMessage(requireWithin(sequenceDoc, /Phase 9\.4/i, "Phase 9.4 entry in docs/core-development-sequence.md"));
 checkMessage(requireWithin(sequenceDoc, /Phase 17/i, "Phase 17 entry in docs/core-development-sequence.md"));
 checkMessage(requireWithin(sequenceDoc, /Phase 21\/23/i, "Phase 21/23 entry in docs/core-development-sequence.md"));
+checkMessage(requireWithin(sequenceDoc, /UI 默认不展示术语库，只在 Inspector \/ Diagnostics 显示注入摘要/i, "Knowledge UI summary boundary in docs/core-development-sequence.md"));
 checkMessage(requireWithin(sequenceDoc, /minimal-ui:test/i, "minimal-ui:test checklist item in docs/core-development-sequence.md"));
 checkMessage(requireWithin(sequenceDoc, /preview-player:test/i, "preview-player:test checklist item in docs/core-development-sequence.md"));
 checkMessage(requireWithin(contractDoc, /Minimal Director UI Contract/i, "minimal director UI contract doc title"));
@@ -276,6 +279,9 @@ const phase2123ForbiddenMainTerms = [
   ["TaskEnvelope", /Task\s*Envelope|TaskEnvelope/i],
   ["Image2 Runtime", /Image2\s+Runtime/i],
   ["Voice Source Library", /Voice\s+Source\s+Library/i],
+  ["Knowledge Pack Manager", /Knowledge\s+Pack\s+Manager/i],
+  ["Knowledge Router", /Knowledge\s+Router/i],
+  ["Knowledge Library", /Knowledge\s+Library/i],
 ];
 for (const [term, pattern] of phase2123ForbiddenMainTerms) {
   const count = countPattern(phase2123DirectorSurface, pattern);
@@ -296,6 +302,18 @@ check(
   contactLine === undefined || diagnosticsMode.includes("contactSheets"),
   `contactSheets reference at ${appPath}:${contactLine} is outside Diagnostics`,
 );
+
+checkMessage(requireWithin(diagnosticsMode, /KnowledgePackManager/, "Phase 25 Knowledge Pack Manager mounted in Diagnostics"));
+checkMessage(requireWithin(settingsShell, /Knowledge Pack Manager readiness/i, "Phase 25 Knowledge Pack Manager readiness summary in Settings"));
+checkMessage(requireWithin(knowledgePackManager, /Enabled/i, "Phase 25 Knowledge summary enabled/total metric"));
+checkMessage(requireWithin(knowledgePackManager, /Injected/i, "Phase 25 Knowledge summary injected/unique metric"));
+checkMessage(requireWithin(knowledgePackManager, /Warnings\s*\/\s*Blockers/i, "Phase 25 Knowledge summary warnings/blockers metric"));
+checkMessage(requireWithin(knowledgePackManager, /Budget Used/i, "Phase 25 Knowledge summary budget-used metric"));
+checkMessage(requireWithin(`${knowledgeUiSummary}\n${knowledgePackManager}`, /Hard lock/i, "Phase 25 Knowledge hard-lock reminder"));
+check(!/route-tester|route-results|knowledge-task-table|Category distribution|Consumer distribution|matched pack|snippet/i.test(knowledgePackManager), "Knowledge Pack Manager must stay summary-only; no route tester, match table, distributions, or snippet details");
+check(!/knowledge-manager|Knowledge\s+Pack|Knowledge\s+Router|Knowledge\s+Library/i.test(phase2123DirectorSurface), "Director main surface must not contain a Knowledge panel or Knowledge engineering copy");
+check(!/route-tester|route-results|knowledge-task-table/i.test(stylesSource), "Knowledge diagnostics CSS must not keep heavy route tester or task-table shells");
+check(!/<button\b[\s\S]{0,240}(Live\s+Submit|Save\s+Credentials|Run\s+Provider)/i.test(appSource), "UI must not expose live submit, save credentials, or run provider button copy");
 
 if (failures.length) {
   console.error("Minimal UI contract tests failed:");

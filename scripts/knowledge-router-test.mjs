@@ -108,6 +108,34 @@ function chooseConsumer(category, consumers) {
   return consumers[0] || "agent_context";
 }
 
+function trustedForInjection(pack) {
+  if (pack.trustLevel !== "trusted" && pack.trustLevel !== "verified") return false;
+  if (pack.verificationStatus === "failed") return false;
+  if (pack.type === "external_imported" && pack.verificationStatus !== "verified") return false;
+  return true;
+}
+
+function hasIntentEvidence(match) {
+  return (
+    match.matchedTerms.length > 0 ||
+    match.matchedSnippetIds.length > 0 ||
+    match.reason.includes("intent_keyword") ||
+    match.reason.includes("snippet_keyword")
+  );
+}
+
+function routeApplicabilityIssue(pack, match, routeResult) {
+  const intentEvidence = hasIntentEvidence(match);
+  const providerMismatch = Boolean(
+    routeResult.providerSlot && (pack.applicableProviderSlots || []).length > 0 && !(pack.applicableProviderSlots || []).includes(routeResult.providerSlot),
+  );
+  const purposeMismatch = (pack.applicableTaskPurposes || []).length > 0 && !(pack.applicableTaskPurposes || []).includes(routeResult.taskPurpose);
+
+  if (providerMismatch && !intentEvidence) return "provider_slot_not_applicable";
+  if (purposeMismatch && !intentEvidence && !match.reason.includes("provider_slot")) return "task_purpose_not_applicable";
+  return undefined;
+}
+
 function scorePack(pack, input, intentTokens) {
   let score = 0;
   const matchedTerms = new Set();
@@ -193,7 +221,7 @@ function routeKnowledge(input) {
     .filter((match) => match.score > 0)
     .sort((left, right) => right.score - left.score || left.packId.localeCompare(right.packId));
 
-  return {
+  const routeResult = {
     routeId: `kr_${inputHash.slice(4, 12)}`,
     taskId: input.taskId,
     taskPurpose: input.taskPurpose,
@@ -207,17 +235,13 @@ function routeKnowledge(input) {
     warnings: matches.length ? [] : ["no_knowledge_pack_matched"],
     createdAt: "2026-04-29T00:00:00.000Z",
   };
-}
 
-function snippetForSummary(pack) {
-  return {
-    id: "summary",
-    title: `${pack.title} Summary`,
-    content: pack.summary,
-    keywords: pack.tags || [],
-    hash: stableKnowledgeHash(pack.summary),
-    tokenEstimate: estimateKnowledgeTokens(pack.summary),
-  };
+  const budget = buildContextBudget({
+    routeResult,
+    availablePacks: input.availablePacks,
+    maxInjectionTokens: input.maxInjectionTokens || defaultMaxInjectionTokens,
+  });
+  return attachBudgetToRouteResult(routeResult, budget);
 }
 
 function snippetsForMatch(pack, match) {
@@ -226,7 +250,38 @@ function snippetsForMatch(pack, match) {
 
   if (matched.length) return matched;
   if (pack.snippets?.length) return pack.snippets.slice(0, 1);
-  return [snippetForSummary(pack)];
+  return [];
+}
+
+function snippetContent(snippet) {
+  return String(snippet.summary || snippet.content || "").trim();
+}
+
+function trimToBudget(content, maxTokens) {
+  const maxChars = Math.max(1, maxTokens * 4);
+
+  if (content.length <= maxChars) return content;
+  return content.slice(0, maxChars).trimEnd();
+}
+
+function attachBudgetToRouteResult(routeResult, budget) {
+  const injectedPackIds = new Set(budget.injectedKnowledgePacks.map((pack) => pack.packId));
+  const budgetNotInjected = routeResult.matches
+    .filter((match) => !injectedPackIds.has(match.packId))
+    .map((match) => {
+      const warning = budget.warnings.find((item) => item.startsWith(`not_injected:${match.packId}:`));
+      const reason = warning?.split(":").slice(2).join(":") || "budget_exceeded";
+      return { packId: match.packId, reason };
+    });
+  const notInjectedByPackId = new Map([...(routeResult.notInjected || []), ...budgetNotInjected].map((item) => [item.packId, item]));
+
+  return {
+    ...routeResult,
+    injectedKnowledgePacks: budget.injectedKnowledgePacks,
+    injectedKnowledgeSnippetIds: budget.injectedSnippets.map((snippet) => `${snippet.packId}:${snippet.snippetId}`),
+    notInjected: Array.from(notInjectedByPackId.values()).sort((left, right) => left.packId.localeCompare(right.packId)),
+    warnings: Array.from(new Set([...routeResult.warnings, ...budget.warnings])),
+  };
 }
 
 function buildContextBudget({ routeResult, availablePacks, maxInjectionTokens = defaultMaxInjectionTokens }) {
@@ -243,6 +298,28 @@ function buildContextBudget({ routeResult, availablePacks, maxInjectionTokens = 
       continue;
     }
 
+    if (!pack.enabled) {
+      warnings.push(`not_injected:${pack.id}:disabled`);
+      continue;
+    }
+
+    if (!trustedForInjection(pack)) {
+      warnings.push(`not_injected:${pack.id}:untrusted`);
+      continue;
+    }
+
+    const applicabilityIssue = routeApplicabilityIssue(pack, match, routeResult);
+    if (applicabilityIssue) {
+      warnings.push(`not_injected:${pack.id}:${applicabilityIssue}`);
+      continue;
+    }
+
+    const candidateSnippets = snippetsForMatch(pack, match);
+    if (!candidateSnippets.length) {
+      warnings.push(`not_injected:${pack.id}:missing_snippets`);
+      continue;
+    }
+
     const perPackLimit = Math.min(pack.maxInjectionTokens, maxInjectionTokens - usedTokens);
     const selectedSnippetIds = [];
     let packTokens = 0;
@@ -250,26 +327,18 @@ function buildContextBudget({ routeResult, availablePacks, maxInjectionTokens = 
     let truncationReason;
 
     if (perPackLimit <= 0) {
-      injectedKnowledgePacks.push({
-        packId: pack.id,
-        version: pack.version,
-        hash: pack.hash,
-        category: pack.category,
-        reason: match.reason,
-        consumer: match.consumer,
-        injectedSnippetIds: [],
-        summaryHash: stableKnowledgeHash(pack.summary),
-        truncated: true,
-        truncationReason: "global_context_budget_exhausted",
-      });
+      warnings.push(`not_injected:${pack.id}:budget_exceeded`);
       continue;
     }
 
-    for (const snippet of snippetsForMatch(pack, match)) {
+    for (const snippet of candidateSnippets) {
+      const content = snippetContent(snippet);
+      if (!content) continue;
+
       const remainingGlobal = maxInjectionTokens - usedTokens;
       const remainingPack = perPackLimit - packTokens;
       const remaining = Math.min(remainingGlobal, remainingPack);
-      const tokenEstimate = snippet.tokenEstimate || estimateKnowledgeTokens(snippet.content);
+      const tokenEstimate = Math.max(1, Math.floor(snippet.tokenEstimate || estimateKnowledgeTokens(content)));
 
       if (remaining <= 0) {
         truncated = true;
@@ -278,6 +347,7 @@ function buildContextBudget({ routeResult, availablePacks, maxInjectionTokens = 
       }
 
       const injectedTokenEstimate = Math.min(tokenEstimate, remaining);
+      const injectedContent = tokenEstimate > remaining ? trimToBudget(content, remaining) : content;
       if (tokenEstimate > remaining) {
         truncated = true;
         truncationReason = packTokens + tokenEstimate > perPackLimit ? "pack_max_injection_tokens_exhausted" : "global_context_budget_exhausted";
@@ -288,6 +358,7 @@ function buildContextBudget({ routeResult, availablePacks, maxInjectionTokens = 
         packId: pack.id,
         snippetId: snippet.id,
         title: snippet.title,
+        content: injectedContent,
         tokenEstimate: injectedTokenEstimate,
         hash: snippet.hash,
       });
@@ -295,6 +366,11 @@ function buildContextBudget({ routeResult, availablePacks, maxInjectionTokens = 
       packTokens += injectedTokenEstimate;
 
       if (truncated) break;
+    }
+
+    if (!selectedSnippetIds.length) {
+      warnings.push(`not_injected:${pack.id}:missing_snippets`);
+      continue;
     }
 
     injectedKnowledgePacks.push({
@@ -312,7 +388,13 @@ function buildContextBudget({ routeResult, availablePacks, maxInjectionTokens = 
   }
 
   return {
-    budgetId: `kb_${stableKnowledgeHash(JSON.stringify({ routeId: routeResult.routeId, maxInjectionTokens })).slice(4, 12)}`,
+    budgetId: `kb_${stableKnowledgeHash(
+      JSON.stringify({
+        routeId: routeResult.routeId,
+        maxInjectionTokens,
+        packs: injectedKnowledgePacks.map((pack) => `${pack.packId}:${pack.injectedSnippetIds.join(",")}:${pack.truncated}`),
+      }),
+    ).slice(4, 12)}`,
     routeId: routeResult.routeId,
     contextLevel: routeResult.contextLevel,
     maxInjectionTokens,
@@ -391,6 +473,102 @@ function assertBudgetWithinLimits(budget, packsById, caseId) {
   }
 }
 
+function assertRouteInjectionMatchesBudget(routeResult, budget, caseId) {
+  const budgetPackIds = budget.injectedKnowledgePacks.map((pack) => pack.packId).sort();
+  const routePackIds = (routeResult.injectedKnowledgePacks || []).map((pack) => pack.packId).sort();
+  assert(JSON.stringify(routePackIds) === JSON.stringify(budgetPackIds), `${caseId} route injected packs diverged from context budget`);
+
+  const budgetSnippetIds = budget.injectedSnippets.map((snippet) => `${snippet.packId}:${snippet.snippetId}`).sort();
+  const routeSnippetIds = [...(routeResult.injectedKnowledgeSnippetIds || [])].sort();
+  assert(JSON.stringify(routeSnippetIds) === JSON.stringify(budgetSnippetIds), `${caseId} route injected snippets diverged from context budget`);
+
+  for (const snippet of budget.injectedSnippets) {
+    assert(typeof snippet.content === "string" && snippet.content.length > 0, `${caseId} injected snippet ${snippet.packId}:${snippet.snippetId} is missing bounded content`);
+  }
+}
+
+function makeSyntheticPack(id, overrides = {}) {
+  return {
+    id,
+    version: "0.0.0-test",
+    hash: stableKnowledgeHash(id),
+    path: `resources/knowledge/test/${id}.md`,
+    type: "project_local",
+    category: "style",
+    title: id,
+    summary: `${id} synthetic routing guard`,
+    tags: ["synthetic", "style"],
+    applicableTaskPurposes: ["keyframe"],
+    applicableProviderSlots: [],
+    dependencies: [],
+    conflicts: [],
+    maxInjectionTokens: 12,
+    trustLevel: "trusted",
+    verificationStatus: "not_required",
+    enabled: true,
+    defaultEnabled: true,
+    createdAt: "2026-04-29T00:00:00.000Z",
+    updatedAt: "2026-04-29T00:00:00.000Z",
+    snippets: [
+      {
+        id: "main",
+        title: `${id} Main`,
+        summary: `${id} bounded summary`,
+        content: `${id} bounded summary with extra source record text that must remain under budget.`,
+        keywords: ["synthetic", "style"],
+        hash: stableKnowledgeHash(`${id}:main`),
+        tokenEstimate: 24,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function assertSyntheticInjectionGuards() {
+  const syntheticPacks = [
+    makeSyntheticPack("test/a-tight-injected", { maxInjectionTokens: 6 }),
+    makeSyntheticPack("test/z-budget-exceeded", { maxInjectionTokens: 6 }),
+    makeSyntheticPack("test/disabled", { enabled: false }),
+    makeSyntheticPack("test/untrusted", {
+      trustLevel: "experimental",
+      verificationStatus: "pending",
+    }),
+    makeSyntheticPack("test/missing-snippets", {
+      snippets: [],
+    }),
+    makeSyntheticPack("test/provider-mismatch", {
+      category: "provider",
+      tags: ["provider"],
+      applicableTaskPurposes: ["audio"],
+      applicableProviderSlots: ["audio.tts"],
+    }),
+  ];
+  const routeResult = routeKnowledge({
+    taskId: "synthetic-injection-guards",
+    userIntent: "neutral request",
+    taskPurpose: "keyframe",
+    providerSlot: "image.generate",
+    contextLevel: defaultContextLevel,
+    availablePacks: syntheticPacks,
+    maxInjectionTokens: 6,
+  });
+  const injectedPackIds = new Set((routeResult.injectedKnowledgePacks || []).map((pack) => pack.packId));
+  const notInjectedByPackId = new Map((routeResult.notInjected || []).map((item) => [item.packId, item.reason]));
+
+  assert(injectedPackIds.has("test/a-tight-injected"), "synthetic guard expected tight pack to inject within bounded budget");
+  assert(!injectedPackIds.has("test/z-budget-exceeded"), "synthetic guard injected a pack after global budget was exhausted");
+  assert(!injectedPackIds.has("test/disabled"), "synthetic guard injected a disabled pack");
+  assert(!injectedPackIds.has("test/untrusted"), "synthetic guard injected an untrusted pack");
+  assert(!injectedPackIds.has("test/missing-snippets"), "synthetic guard injected a pack with no snippets");
+  assert(!injectedPackIds.has("test/provider-mismatch"), "synthetic guard injected a provider-incompatible pack");
+  assert(notInjectedByPackId.get("test/disabled") === "pack_disabled", "synthetic guard missing disabled notInjected reason");
+  assert(notInjectedByPackId.get("test/untrusted") === "untrusted", "synthetic guard missing untrusted notInjected reason");
+  assert(notInjectedByPackId.get("test/missing-snippets") === "missing_snippets", "synthetic guard missing missing_snippets notInjected reason");
+  assert(notInjectedByPackId.get("test/provider-mismatch") === "provider_slot_not_applicable", "synthetic guard missing provider mismatch notInjected reason");
+  assert(notInjectedByPackId.get("test/z-budget-exceeded") === "budget_exceeded", "synthetic guard missing budget_exceeded notInjected reason");
+  assert((routeResult.injectedKnowledgeSnippetIds || []).length === 1, "synthetic guard should inject exactly one bounded snippet");
+}
+
 async function main() {
   await Promise.all([fs.access(manifestPath), fs.access(testCasesPath)]);
 
@@ -429,6 +607,15 @@ async function main() {
         maxInjectionTokens: defaultMaxInjectionTokens,
       });
       assertBudgetWithinLimits(budget, packsById, testCase.id);
+      assertRouteInjectionMatchesBudget(routeResult, budget, testCase.id);
+      assert((routeResult.injectedKnowledgePacks || []).length > 0, `${testCase.id} produced no injected knowledge packs`);
+      assert((routeResult.injectedKnowledgeSnippetIds || []).length > 0, `${testCase.id} produced no injected knowledge snippets`);
+
+      const injectedPackIds = new Set((routeResult.injectedKnowledgePacks || []).map((pack) => pack.packId));
+      for (const packId of testCase.forbiddenPackIds) {
+        assert(!injectedPackIds.has(packId), `${testCase.id} forbidden ${packId} was injected`);
+      }
+
       assertNoDangerousResultSemantics(
         {
           routeResult,
@@ -442,6 +629,12 @@ async function main() {
     } catch (error) {
       failures.push(error.message);
     }
+  }
+
+  try {
+    assertSyntheticInjectionGuards();
+  } catch (error) {
+    failures.push(error.message);
   }
 
   if (failures.length) {

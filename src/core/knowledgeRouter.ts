@@ -8,6 +8,7 @@ import type {
 } from "./knowledgeTypes";
 import type { ContextLevel, ProviderSlot } from "./types";
 import { stableKnowledgeHash } from "./knowledgeManifest";
+import { attachKnowledgeBudgetToRouteResult, buildKnowledgeContextBudget } from "./knowledgeContextBudget";
 
 export interface KnowledgeRouterInput {
   taskId?: string;
@@ -17,6 +18,7 @@ export interface KnowledgeRouterInput {
   contextLevel?: ContextLevel;
   availablePacks: KnowledgePack[];
   consumers?: KnowledgePackConsumer[];
+  maxInjectionTokens?: number;
 }
 
 const categoryKeywords: Record<KnowledgePackCategory, string[]> = {
@@ -167,7 +169,7 @@ export function routeKnowledge(input: KnowledgeRouterInput): KnowledgeRouteResul
     .filter((match) => match.score > 0)
     .sort((left, right) => right.score - left.score || left.packId.localeCompare(right.packId));
 
-  return {
+  const routeResult: KnowledgeRouteResult = {
     routeId: `kr_${inputHash.slice(4, 12)}`,
     taskId: input.taskId,
     taskPurpose: input.taskPurpose,
@@ -183,4 +185,12 @@ export function routeKnowledge(input: KnowledgeRouterInput): KnowledgeRouteResul
     warnings: matches.length ? [] : ["no_knowledge_pack_matched"],
     createdAt: new Date().toISOString(),
   };
+
+  const contextBudget = buildKnowledgeContextBudget({
+    routeResult,
+    availablePacks: input.availablePacks,
+    maxInjectionTokens: input.maxInjectionTokens,
+  });
+
+  return attachKnowledgeBudgetToRouteResult(routeResult, contextBudget);
 }

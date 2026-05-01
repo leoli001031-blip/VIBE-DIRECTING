@@ -6,6 +6,7 @@
   "scripts": {
     "import:test": "node scripts/import-runtime-test.mjs",
     "knowledge:test": "node scripts/knowledge-router-test.mjs",
+    "knowledge-pack-manager:test": "node scripts/knowledge-pack-manager-test.mjs",
     "video:test": "node scripts/video-planning-test.mjs",
     "adapter:test": "node scripts/adapter-contract-test.mjs",
     "generation:test": "node scripts/generation-harness-test.mjs",

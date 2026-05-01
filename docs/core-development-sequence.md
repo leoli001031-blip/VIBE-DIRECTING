@@ -1032,6 +1032,17 @@ Acceptance criteria：
 - Phase 30 缺 user confirmation token placeholder、缺 watcher/manifest/QA closed loop、packet incomplete 或出现 Fast/VIP/text-to-video/BGM prompt 任一项都必须 blocked。
 - 所有阶段都必须 pin hard locks；测试命令为 `npm run phase-roadmap:test`。
 
+### Phase 25 已实现范围：Knowledge Pack Manager
+
+- 新增 `src/core/knowledgeContextBudget.ts`，把原本只存在于测试里的 context budget / snippet selection 变成 core 纯函数；`routeKnowledge(...)` 现在会产出 bounded `injectedKnowledgePacks` 和 `injectedKnowledgeSnippetIds`，不再只返回 matches。
+- 新增 `src/core/knowledgePackManager.ts`，从 manifest、route result 和 context budget 生成 manager receipt：enabled/disabled packs、blocked packs、missing dependencies、conflicts、injection-ready summaries、warnings 和 hard locks。
+- Knowledge Pack Manager 只输出 pack/snippet 摘要、hash、token 估算和 snippet id；不输出整库正文，不给 agent/subagent 注入完整资料库。
+- `external_imported` pack 必须 trusted/verified 且 `verificationStatus=verified` 才能进入 injection-ready；disabled、untrusted、unverified、required dependency missing、dependency version mismatch、dependency not injectable、unacknowledged conflict、route/budget binding mismatch 都会被阻断或 warning。
+- Hard locks 固定禁止覆盖 provider policy、preflight、reference authority、keyframe pair derivation、QA gate 和 Phase24 validated envelope；同时禁止 provider submission、credential read/write、arbitrary shell、parked provider policy bypass 和 whole-library injection。
+- Diagnostics 中的 Knowledge Pack Manager 收敛为轻量只读摘要：enabled/total、injected/unique、warnings/blockers、budget used 和 hard-lock reminder；主 Director surface 不展示 Knowledge Pack Manager、Knowledge Router、知识包正文或复杂 prompt/资料面板。
+- Settings Shell 只显示 Knowledge Pack Manager readiness 摘要，不提供 live provider submit、credential save、run provider、arbitrary shell 或真实外部导入入口。
+- 新增 `schemas/knowledge_pack_manager.schema.json` 并纳入 schema registry；新增 `npm run knowledge-pack-manager:test`，扩展 `npm run knowledge:test` 和 `npm run minimal-ui:test` 覆盖 Phase 25 路由注入、manager receipt 和极简 UI 合同。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

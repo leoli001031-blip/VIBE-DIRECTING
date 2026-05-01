@@ -381,6 +381,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ContextBudgetResult",
   },
   {
+    fileName: "knowledge_pack_manager.schema.json",
+    id: "https://vibecore.local/schemas/knowledge_pack_manager.schema.json",
+    version: schemaVersion,
+    purpose: "Pure Knowledge Pack Manager receipt for enabled, blocked, dependency, conflict, and bounded injection-ready pack summaries.",
+    typeName: "KnowledgePackManagerState",
+  },
+  {
     fileName: "knowledge_import_report.schema.json",
     id: "https://vibecore.local/schemas/knowledge_import_report.schema.json",
     version: schemaVersion,

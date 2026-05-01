@@ -1,0 +1,270 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/knowledge_pack_manager.schema.json",
+  "title": "KnowledgePackManagerState",
+  "description": "Pure Knowledge Pack Manager receipt. It normalizes manifest packs, reports enabled/disabled/blocked/conflict/dependency state, and exposes only bounded injection summaries without provider submission, credential, shell, or whole-library injection capability.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "managerId",
+    "generatedAt",
+    "manifestHash",
+    "manifestVersion",
+    "summary",
+    "enabledPacks",
+    "disabledPacks",
+    "blockedPacks",
+    "missingDependencies",
+    "conflicts",
+    "injectionReady",
+    "warnings",
+    "hardLocks"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "0.1.0" },
+    "managerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "manifestHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "manifestVersion": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "routeId": { "type": "string" },
+    "budgetId": { "type": "string" },
+    "summary": { "$ref": "#/$defs/summary" },
+    "enabledPacks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/packRef" }
+    },
+    "disabledPacks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/packRef" }
+    },
+    "blockedPacks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/blockedPack" }
+    },
+    "missingDependencies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/missingDependency" }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/conflict" }
+    },
+    "injectionReady": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/injectionReady" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" }
+  },
+  "$defs": {
+    "blockReason": {
+      "type": "string",
+      "enum": [
+        "pack_disabled",
+        "pack_invalid",
+        "duplicate_pack_id",
+        "external_pack_untrusted",
+        "external_pack_unverified",
+        "missing_required_dependency",
+        "dependency_version_mismatch",
+        "dependency_not_injectable",
+        "conflict_unacknowledged",
+        "route_binding_mismatch",
+        "budget_binding_mismatch"
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "packCount",
+        "enabledCount",
+        "disabledCount",
+        "blockedCount",
+        "conflictCount",
+        "missingDependencyCount",
+        "injectionReadyCount",
+        "warningCount"
+      ],
+      "properties": {
+        "packCount": { "type": "integer", "minimum": 0 },
+        "enabledCount": { "type": "integer", "minimum": 0 },
+        "disabledCount": { "type": "integer", "minimum": 0 },
+        "blockedCount": { "type": "integer", "minimum": 0 },
+        "conflictCount": { "type": "integer", "minimum": 0 },
+        "missingDependencyCount": { "type": "integer", "minimum": 0 },
+        "injectionReadyCount": { "type": "integer", "minimum": 0 },
+        "warningCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "packRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packId", "version", "hash", "category", "title", "enabled"],
+      "properties": {
+        "packId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "version": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "hash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "category": { "$ref": "common.schema.json#/$defs/knowledgePackCategory" },
+        "title": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "blockedPack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packId", "version", "hash", "category", "title", "enabled", "reasons", "details"],
+      "properties": {
+        "packId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "version": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "hash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "category": { "$ref": "common.schema.json#/$defs/knowledgePackCategory" },
+        "title": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "enabled": { "type": "boolean" },
+        "reasons": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/blockReason" },
+          "uniqueItems": true
+        },
+        "details": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "missingDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packId", "dependency", "reason", "blocking"],
+      "properties": {
+        "packId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "dependency": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["packId"],
+          "properties": {
+            "packId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+            "version": { "type": "string" },
+            "optional": { "type": "boolean" },
+            "reason": { "type": "string" }
+          }
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["missing_required_dependency", "dependency_version_mismatch", "dependency_not_injectable", "optional_dependency_missing"]
+        },
+        "blocking": { "type": "boolean" }
+      }
+    },
+    "conflict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packId", "conflict", "acknowledged", "blocking"],
+      "properties": {
+        "packId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "conflict": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["packId", "reason"],
+          "properties": {
+            "packId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+            "reason": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+          }
+        },
+        "acknowledged": { "type": "boolean" },
+        "blocking": { "type": "boolean" }
+      }
+    },
+    "snippetSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snippetId", "title", "summary", "tokenEstimate"],
+      "properties": {
+        "snippetId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "title": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "summary": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "tokenEstimate": { "type": "integer", "minimum": 1 },
+        "hash": { "type": "string" }
+      }
+    },
+    "injectionReady": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "packId",
+        "version",
+        "hash",
+        "category",
+        "title",
+        "summary",
+        "summaryHash",
+        "maxInjectionTokens",
+        "consumer",
+        "reason",
+        "injectedSnippetIds",
+        "snippetSummaries",
+        "tokenEstimate",
+        "truncated"
+      ],
+      "properties": {
+        "packId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "version": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "hash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "category": { "$ref": "common.schema.json#/$defs/knowledgePackCategory" },
+        "title": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "summary": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "summaryHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "maxInjectionTokens": { "type": "integer", "minimum": 1 },
+        "consumer": { "$ref": "common.schema.json#/$defs/knowledgePackConsumer" },
+        "reason": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "injectedSnippetIds": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "snippetSummaries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/snippetSummary" }
+        },
+        "tokenEstimate": { "type": "integer", "minimum": 0 },
+        "truncated": { "type": "boolean" },
+        "truncationReason": { "type": "string" }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerPolicyOverrideForbidden",
+        "preflightOverrideForbidden",
+        "referenceAuthorityOverrideForbidden",
+        "keyframePairDerivationOverrideForbidden",
+        "qaGateOverrideForbidden",
+        "phase24ValidatedEnvelopeRequired",
+        "providerSubmissionForbidden",
+        "credentialReadForbidden",
+        "credentialWriteForbidden",
+        "arbitraryShellExecutionForbidden",
+        "parkedProviderPolicyBypassForbidden",
+        "wholeLibraryInjectionForbidden"
+      ],
+      "properties": {
+        "providerPolicyOverrideForbidden": { "type": "boolean", "const": true },
+        "preflightOverrideForbidden": { "type": "boolean", "const": true },
+        "referenceAuthorityOverrideForbidden": { "type": "boolean", "const": true },
+        "keyframePairDerivationOverrideForbidden": { "type": "boolean", "const": true },
+        "qaGateOverrideForbidden": { "type": "boolean", "const": true },
+        "phase24ValidatedEnvelopeRequired": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "credentialReadForbidden": { "type": "boolean", "const": true },
+        "credentialWriteForbidden": { "type": "boolean", "const": true },
+        "arbitraryShellExecutionForbidden": { "type": "boolean", "const": true },
+        "parkedProviderPolicyBypassForbidden": { "type": "boolean", "const": true },
+        "wholeLibraryInjectionForbidden": { "type": "boolean", "const": true }
+      }
+    }
+  }
+}

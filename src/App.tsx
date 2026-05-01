@@ -16,7 +16,6 @@ import {
   PlugZap,
   Radio,
   RefreshCw,
-  Search,
   Settings,
   ShieldAlert,
   Sparkles,
@@ -4733,17 +4732,6 @@ function ProviderDock({ audit }: { audit: ProjectAudit }) {
   );
 }
 
-function topCounts(values: string[], limit = 4) {
-  const counts = values.reduce<Record<string, number>>((next, value) => {
-    next[value] = (next[value] || 0) + 1;
-    return next;
-  }, {});
-
-  return Object.entries(counts)
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-    .slice(0, limit);
-}
-
 function uniqueCount(values: string[]) {
   return new Set(values.filter(Boolean)).size;
 }
@@ -4756,98 +4744,56 @@ function taskKnowledgeWarnings(task: TaskRuntimeView) {
   ].filter(Boolean)));
 }
 
-function KnowledgePackManager({ view, intent, onIntentChange }: { view: RuntimeView; intent: string; onIntentChange: (value: string) => void }) {
+type KnowledgeUiSummary = {
+  enabledTotal: string;
+  injectedUnique: string;
+  warningBlockerCount: string;
+  budgetUsed: string;
+  readiness: string;
+  hardLockReminder: string;
+};
+
+function buildKnowledgeUiSummary(view: RuntimeView): KnowledgeUiSummary {
   const routeTest = view.knowledge.routeTest;
   const totalInjectedPacks = view.taskViews.reduce((count, task) => count + task.envelope.injectedKnowledgePacks.length, 0);
   const uniqueInjectedPacks = uniqueCount(view.taskViews.flatMap((task) => task.envelope.injectedKnowledgePacks.map((pack) => pack.packId)));
-  const totalTasks = view.taskViews.length;
-  const usedTokens = view.taskViews.map((task) => task.contextBudget.usedTokens);
-  const averageTokens = totalTasks ? Math.round(usedTokens.reduce((sum, value) => sum + value, 0) / totalTasks) : 0;
-  const highestTokens = usedTokens.length ? Math.max(...usedTokens) : 0;
-  const tasksWithWarnings = view.taskViews.filter((task) => taskKnowledgeWarnings(task).length).length;
-  const categoryCounts = topCounts(view.taskViews.flatMap((task) => task.envelope.injectedKnowledgePacks.map((pack) => pack.category)));
-  const consumerCounts = topCounts(view.taskViews.flatMap((task) => task.envelope.injectedKnowledgePacks.map((pack) => pack.consumer)));
-  const taskRows = view.taskViews.slice(0, 8);
+  const usedTokens = view.taskViews.reduce((sum, task) => sum + task.contextBudget.usedTokens, 0);
+  const maxTokens = view.taskViews.reduce((sum, task) => sum + task.contextBudget.maxInjectionTokens, 0);
   const routeWarnings = routeTest ? Array.from(new Set([...routeTest.routeResult.warnings, ...routeTest.contextBudget.warnings])) : [];
-  const routeSnippetCount = routeTest?.contextBudget.injectedSnippets.length || 0;
+  const taskWarnings = view.taskViews.flatMap(taskKnowledgeWarnings);
+  const warningCount = uniqueCount([...taskWarnings, ...routeWarnings]);
+  const blockerCount = view.knowledge.validationIssues.length;
+  const readiness = blockerCount ? "blocked" : warningCount ? "needs review" : "ready";
+
+  return {
+    enabledTotal: `${view.knowledge.enabledCount}/${view.knowledge.packCount}`,
+    injectedUnique: `${totalInjectedPacks}/${uniqueInjectedPacks}`,
+    warningBlockerCount: `${warningCount}/${blockerCount}`,
+    budgetUsed: `${usedTokens}/${maxTokens}`,
+    readiness,
+    hardLockReminder: "Hard lock: provider policy, preflight, reference authority, keyframe pair derivation, and QA gates stay fixed.",
+  };
+}
+
+function KnowledgePackManager({ view }: { view: RuntimeView }) {
+  const summary = buildKnowledgeUiSummary(view);
 
   return (
     <section className="machine-panel knowledge-manager">
       <div className="audit-head">
         <Database size={17} />
-        <span>Skill Injection Harness / Knowledge Router</span>
+        <span>Knowledge Pack Manager</span>
       </div>
       <div className="summary-grid">
-        <Metric label="Manifest Packs" value={`${view.knowledge.enabledCount}/${view.knowledge.packCount}`} detail="enabled / total" />
-        <Metric label="Injected Packs" value={`${totalInjectedPacks}`} detail={`${uniqueInjectedPacks} unique across tasks`} />
-        <Metric label="Context Tokens" value={`${averageTokens}/${highestTokens}`} detail="avg / peak used" />
-        <Metric label="Warnings" value={`${tasksWithWarnings}`} detail="task packet(s) flagged" />
+        <Metric label="Enabled" value={summary.enabledTotal} detail="packs enabled / total" />
+        <Metric label="Injected" value={summary.injectedUnique} detail="records / unique" />
+        <Metric label="Warnings / Blockers" value={summary.warningBlockerCount} detail="router, budget, manifest" />
+        <Metric label="Budget Used" value={summary.budgetUsed} detail="tokens across task packets" />
       </div>
-      <div className="knowledge-distribution">
-        <div>
-          <small>Category distribution</small>
-          <div className="category-strip">
-            {categoryCounts.length
-              ? categoryCounts.map(([category, count]) => <span key={category}>{category}: {count}</span>)
-              : <span>none: 0</span>}
-          </div>
-        </div>
-        <div>
-          <small>Consumer distribution</small>
-          <div className="category-strip">
-            {consumerCounts.length
-              ? consumerCounts.map(([consumer, count]) => <span key={consumer}>{consumer}: {count}</span>)
-              : <span>none: 0</span>}
-          </div>
-        </div>
-      </div>
-      <div className="route-tester">
-        <Search size={16} />
-        <input value={intent} onChange={(event) => onIntentChange(event.target.value)} placeholder="Test route: e.g. 这一镜头更压抑，慢慢推近角色" />
-      </div>
-      {routeTest && (
-        <div className="route-results">
-          <div className="route-result-header">
-            <span>route result</span>
-            <strong>{routeTest.routeResult.taskPurpose} · {routeTest.routeResult.contextLevel}</strong>
-            <small>{routeTest.routeResult.matches.length} matched pack(s) · {routeSnippetCount} injected snippet(s)</small>
-          </div>
-          <div className="route-budget-line">
-            <span>Context budget</span>
-            <strong>{routeTest.contextBudget.usedTokens}/{routeTest.contextBudget.maxInjectionTokens} tokens</strong>
-            <small>{routeTest.contextBudget.injectedKnowledgePacks.length} pack injection record(s)</small>
-          </div>
-          {routeTest.routeResult.matches.slice(0, 8).map((match) => (
-            <div key={match.packId} className="route-match-row">
-              <span>{match.consumer} / {match.category}</span>
-              <strong>{match.packId}</strong>
-              <small>score {match.score} · snippets {match.matchedSnippetIds.length}</small>
-            </div>
-          ))}
-          <details className="pipeline-shot-details" open={Boolean(routeWarnings.length)}>
-            <summary>Warnings ({routeWarnings.length})</summary>
-            <CompactList items={routeWarnings} empty="No router or budget warnings." />
-          </details>
-        </div>
-      )}
-      <div className="knowledge-task-table">
-        <div className="knowledge-task-head">
-          <span>Task packet summaries</span>
-          <small>{taskRows.length}/{view.taskViews.length} shown</small>
-        </div>
-        {taskRows.map((task) => {
-          const warnings = taskKnowledgeWarnings(task);
-          return (
-            <div key={task.job.id} className="knowledge-task-row">
-              <strong>{task.job.id}</strong>
-              <span>{task.job.slot}</span>
-              <span>{task.envelope.contextLevel}</span>
-              <span>{task.envelope.injectedKnowledgePacks.length} pack(s)</span>
-              <span>{task.contextBudget.usedTokens}/{task.contextBudget.maxInjectionTokens}</span>
-              <StatusPill value={warnings.length ? `${warnings.length} warning(s)` : "stable"} />
-            </div>
-          );
-        })}
+      <div className="knowledge-summary-strip">
+        <StatusPill value={summary.readiness} />
+        <span>Read-only Diagnostics summary.</span>
+        <span>{summary.hardLockReminder}</span>
       </div>
     </section>
   );
@@ -4960,7 +4906,7 @@ function AdapterContractDiagnostics({ runtimeState }: { runtimeState: ProjectRun
   );
 }
 
-function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeState; view: RuntimeView }) {
   const runtime = runtimeState.runtime;
   const config = runtime.config;
   const providerSummary = runtime.providerEnablementSummary;
@@ -4972,6 +4918,7 @@ function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) 
   const voiceLibrary = runtimeState.voiceSourceLibrary;
   const voiceSources = voiceLibrary.sources;
   const desktopShell = buildDesktopRuntimeShellView(runtimeState);
+  const knowledgeSummary = buildKnowledgeUiSummary(view);
 
   return (
     <section className="machine-panel settings-shell">
@@ -5075,6 +5022,15 @@ function SettingsShell({ runtimeState }: { runtimeState: ProjectRuntimeState }) 
             <small>Runtime defaults will provide read-only adapter shells.</small>
           </div>
         )}
+      </div>
+      <div className="settings-group-title">Knowledge Pack Manager</div>
+      <div className="settings-list knowledge-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Knowledge Pack Manager readiness: {knowledgeSummary.readiness}</strong>
+          <small>{knowledgeSummary.enabledTotal} enabled / total · {knowledgeSummary.injectedUnique} injected / unique</small>
+          <small>warnings / blockers {knowledgeSummary.warningBlockerCount} · budget {knowledgeSummary.budgetUsed} tokens</small>
+          <small>{knowledgeSummary.hardLockReminder}</small>
+        </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
       <div className="settings-list">
@@ -5256,14 +5212,10 @@ function DiagnosticsMode({
   audit,
   view,
   runtimeState,
-  intent,
-  onIntentChange,
 }: {
   audit: ProjectAudit;
   view: RuntimeView;
   runtimeState: ProjectRuntimeState;
-  intent: string;
-  onIntentChange: (value: string) => void;
 }) {
   const firstQueueBlocker = view.taskViews.find((task) => task.queueGate.status === "blocked" && task.queueGate.blockers[0])?.queueGate.blockers[0];
 
@@ -5339,8 +5291,8 @@ function DiagnosticsMode({
           <span>{runtimeState.storyChanges.reflowReports.length} report(s)</span>
         </div>
       </section>
-      <KnowledgePackManager view={view} intent={intent} onIntentChange={onIntentChange} />
-      <SettingsShell runtimeState={runtimeState} />
+      <KnowledgePackManager view={view} />
+      <SettingsShell runtimeState={runtimeState} view={view} />
     </div>
   );
 }
@@ -5352,7 +5304,6 @@ function App() {
   const [activeSectionId, setActiveSectionId] = useState<string | undefined>();
   const [selectedShotId, setSelectedShotId] = useState("A1_01");
   const [selectedAssetId, setSelectedAssetId] = useState<string | undefined>();
-  const [knowledgeIntent, setKnowledgeIntent] = useState("这一镜头更压抑一点，慢慢推近角色");
 
   useEffect(() => {
     let cancelled = false;
@@ -5405,8 +5356,8 @@ function App() {
 
   const audit = useMemo(() => auditFromProjectRuntimeState(runtimeState), [runtimeState]);
   const view = useMemo(
-    () => buildRuntimeViewFromProjectState(runtimeState, { selectedShotId, knowledgeTestIntent: knowledgeIntent }),
-    [runtimeState, selectedShotId, knowledgeIntent],
+    () => buildRuntimeViewFromProjectState(runtimeState, { selectedShotId }),
+    [runtimeState, selectedShotId],
   );
   const selectedShot = useMemo(() => audit.shots.find((shot) => shot.id === selectedShotId), [audit.shots, selectedShotId]);
   const selectedAsset = useMemo(() => audit.assets.find((asset) => asset.id === selectedAssetId), [audit.assets, selectedAssetId]);
@@ -5486,7 +5437,7 @@ function App() {
         />
       )}
       {mode === "inspector" && <InspectorMode audit={audit} view={view} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />}
-      {mode === "diagnostics" && <DiagnosticsMode audit={audit} view={view} runtimeState={runtimeState} intent={knowledgeIntent} onIntentChange={setKnowledgeIntent} />}
+      {mode === "diagnostics" && <DiagnosticsMode audit={audit} view={view} runtimeState={runtimeState} />}
 
       {mode !== "director" && (
         <footer className="policy-note">
