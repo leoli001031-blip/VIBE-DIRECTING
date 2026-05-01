@@ -1053,6 +1053,15 @@ Acceptance criteria：
 - `phaseRoadmapRuntime` 增加 typed `agentCliMockRunner` evidence；Phase 26 ready 必须有 `replacementProofReady=true` 且没有 provider submit、free text、spawn、resume、shell、credential、file mutation 观测；Phase 29 继续要求 Phase 26 replacement proof。
 - Diagnostics 新增轻量 `Agent/CLI Mock Runner` 摘要，只展示 runner kind、replacement proof、readiness、no-op result count 和 hard locks；Settings 只显示 readiness / adapter boundary 摘要；主 Director surface 不展示 Phase26 工程词或真实执行入口。
 
+### Phase 27 已实现范围：Export Worker MVP Runtime 接线
+
+- `ProjectRuntimeState.exportWorker` 成为一等 Phase 27 状态，从 `previewExport` / Phase 12 Export Builder 的 package plan 派生 controlled export/project IO plan。
+- 默认 `executionMode=plan_only`，只规划 `exports/` 与 `reports/exports/` 下的 project-root-relative entries；不自动执行真实 adapter，不复制/移动用户文件，不删除文件，不渲染媒体，不生成 NLE 工程。
+- `project_runtime_state.schema.json` 引用 `export_worker.schema.json`；schema registry 注册 `ExportWorkerState`；`package.json` 增加 `npm run export-worker:test`。
+- Phase 12 Export Builder 继续保持 dry-run / `noFileMutation=true`；Phase 27 只是在其输出之上增加受控 worker state，不把 Export Builder 放开成任意写文件能力。
+- `phaseRoadmapRuntime` 增加 typed `exportWorker` evidence；Phase 27 ready 必须有 `scope=export_project_io_contract`、路径在 `exports/` 或 `reports/exports/` allowlist 内、hard locks pinned，并且没有 provider、credential、shell、media render、copy/move/delete 或 outside-root 观测。
+- Phase 27 是 Phase 24-30 中唯一 `fileMutationAllowed=true` 的计划项；Phase 30 和其他阶段继续 `fileMutationAllowed=false`，provider submit、credential access、arbitrary shell、free-text worker 仍全局 locked off。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。

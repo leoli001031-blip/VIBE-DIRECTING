@@ -16,6 +16,7 @@ import { buildQaHarnessState } from "./qaHarness";
 import { buildToolRuntimeHarnessState } from "./toolRuntimeHarness";
 import { buildSubagentRunnerState } from "./subagentRunner";
 import { buildAgentCliMockRunnerState } from "./agentCliMockRunner";
+import { buildExportWorkerState } from "./exportWorker";
 import { buildProjectFileCoreState } from "./projectFileCore";
 import { buildShotPromptPlan } from "./promptCompiler";
 import { buildQaPromotionReports } from "./qaPromotion";
@@ -357,6 +358,12 @@ export function buildProjectRuntimeState(
     qaPromotionReports,
     issues: audit.issues,
   });
+  const exportWorker = buildExportWorkerState({
+    source: previewExport,
+    exportRoot: "exports/export-worker",
+    generatedAt,
+    executionMode: "plan_only",
+  });
 
   return {
     schemaVersion: projectRuntimeStateSchemaVersion,
@@ -399,6 +406,7 @@ export function buildProjectRuntimeState(
     imageKeyframeRuntime,
     previewEvents,
     previewExport,
+    exportWorker,
     voiceSourceLibrary,
     audioPlanning,
     videoPlanning,
@@ -636,6 +644,14 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       runtime: runtimeWithVoiceSources,
       audit: state.legacyAudit,
     });
+  const exportWorker =
+    state.exportWorker ||
+    buildExportWorkerState({
+      source: state.previewExport,
+      exportRoot: "exports/export-worker",
+      generatedAt: state.generatedAt,
+      executionMode: "plan_only",
+    });
 
   return {
     ...state,
@@ -645,6 +661,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     audioPlanning: audioPlanningResolved,
     videoPlanning,
     imageKeyframeRuntime,
+    exportWorker,
     videoExecutionPreview,
     adapterContracts,
     generationHarness,

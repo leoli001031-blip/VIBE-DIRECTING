@@ -122,6 +122,17 @@ type AgentCliMockRunnerUiSummary = {
   hardLocks: string[];
 };
 
+type ExportWorkerUiSummary = {
+  initialized: boolean;
+  readiness: string;
+  scope: string;
+  plannedWriteCount: number;
+  plannedWriteSamples: string[];
+  exportRoot: string;
+  blockersWarnings: string[];
+  hardLocks: string[];
+};
+
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
   if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:") || path.startsWith("blob:")) return path;
@@ -1249,6 +1260,151 @@ function readReplacementProofLabel(value: unknown) {
   if (status) return statusLabel(status);
   const proven = readOptionalBoolean(value, "proven") ?? readOptionalBoolean(value, "ready");
   return proven ? "present" : "missing";
+}
+
+function readFirstString(records: Record<string, unknown>[], keys: string[], fallback: string) {
+  for (const record of records) {
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) return value;
+    }
+  }
+  return fallback;
+}
+
+function readFirstNumber(records: Record<string, unknown>[], keys: string[]) {
+  for (const record of records) {
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+      if (Array.isArray(value)) return value.length;
+    }
+  }
+  return undefined;
+}
+
+function firstRecordFrom(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    if (isRecord(record[key])) return record[key];
+  }
+  return {};
+}
+
+function firstArrayFrom(records: Record<string, unknown>[], keys: string[]) {
+  for (const record of records) {
+    for (const key of keys) {
+      const value = record[key];
+      if (Array.isArray(value)) return value;
+    }
+  }
+  return [];
+}
+
+function compactPathLabel(value: unknown, fallback = "blocked/missing") {
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  const normalized = value.replace(/\\/g, "/").replace(/\/+$/g, "");
+  const parts = normalized.split("/").filter(Boolean);
+  if (!parts.length) return normalized || fallback;
+  if (parts.length === 1) return parts[0];
+  return `.../${parts.slice(-2).join("/")}`;
+}
+
+function formatPlannedWriteSample(value: unknown, index: number) {
+  if (typeof value === "string") return compactPathLabel(value, `planned write ${index + 1}`);
+  if (!isRecord(value)) return `planned write ${index + 1}`;
+  const action = readString(value.action, readString(value.kind, readString(value.type, "planned write")));
+  const target = value.targetPath ?? value.path ?? value.relativePath ?? value.destination ?? value.outputPath ?? value.file;
+  const targetLabel = compactPathLabel(target, "");
+  return [statusLabel(action), targetLabel].filter(Boolean).join(" / ") || `planned write ${index + 1}`;
+}
+
+function exportWorkerReadinessLabel(status: string, blockersWarnings: string[], initialized: boolean) {
+  if (!initialized) return "blocked/missing";
+  const normalized = status.toLowerCase();
+  if (normalized.includes("ready")) return "ready";
+  if (normalized.includes("planned")) return "planned";
+  if (normalized.includes("blocked") || normalized.includes("missing") || normalized.includes("fail")) return "blocked";
+  return blockersWarnings.length ? "blocked" : "blocked/missing";
+}
+
+function buildExportWorkerUiSummary(runtimeState: ProjectRuntimeState): ExportWorkerUiSummary {
+  const root = (runtimeState as Partial<ProjectRuntimeState> & { exportWorker?: unknown }).exportWorker;
+  const initialized = isRecord(root);
+  const rootRecord = initialized ? root as Record<string, unknown> : {};
+  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
+  const scopeRecord = firstRecordFrom(rootRecord, ["ioScope", "exportIoScope", "projectIoScope", "scope", "ioContract", "projectIoContract"]);
+  const writePlan = firstRecordFrom(rootRecord, ["writePlan", "plannedWritePlan", "mutationPlan", "exportPlan"]);
+  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockStrip"]);
+  const readableRecords = [rootRecord, summary, scopeRecord, writePlan].filter(isRecord);
+  const rawBlockersWarnings = [
+    ...readDisplayList(rootRecord.blockers, "blocker"),
+    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
+    ...readDisplayList(summary.blockers, "blocker"),
+    ...readDisplayList(summary.blockedReasons, "blocker"),
+    ...readDisplayList(scopeRecord.blockers, "blocker"),
+    ...readDisplayList(scopeRecord.blockedReasons, "blocker"),
+    ...readDisplayList(rootRecord.warnings, "warning"),
+    ...readDisplayList(summary.warnings, "warning"),
+    ...readDisplayList(scopeRecord.warnings, "warning"),
+  ];
+  const blockersWarnings = Array.from(new Set(rawBlockersWarnings.filter(Boolean)));
+  const status = readFirstString(readableRecords, ["readiness", "status", "state"], "");
+  const entries = firstArrayFrom(readableRecords, ["entries"]);
+  const plannedWrites = firstArrayFrom(readableRecords, ["plannedWrites", "writes", "writeIntents", "plannedMutations", "mutations"]);
+  const effectivePlannedWrites = plannedWrites.length
+    ? plannedWrites
+    : entries.filter((entry) => isRecord(entry) && readString(entry.operation, "") === "write_file");
+  const plannedWriteCount = readFirstNumber(readableRecords, [
+    "plannedWriteCount",
+    "plannedWritesCount",
+    "writeCount",
+    "mutationCount",
+    "plannedMutationCount",
+  ]) ?? effectivePlannedWrites.length;
+  const exportRootValue = readFirstString(readableRecords, ["exportRoot", "exportRootPath", "root", "rootPath", "outputRoot"], "");
+  const scope = readFirstString(readableRecords, [
+    "scope",
+    "scopeLabel",
+    "ioScope",
+    "exportIoScope",
+    "projectIoScope",
+    "writeScope",
+    "allowedScope",
+  ], "");
+  const hardLocks = [
+    readBooleanLockLabel(hardLocksRecord, "explicitIoScopeRequired", "explicit IO scope required", true),
+    readBooleanLockLabel(hardLocksRecord, "projectIoContractRequired", "project IO contract required", true),
+    readBooleanLockLabel(hardLocksRecord, "exportProjectIoScopeOnly", "export/project IO scope only", true),
+    readBooleanLockLabel(hardLocksRecord, "outsideScopeBlocked", "outside scope blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "manifestMatchRequired", "manifest match required", true),
+    readBooleanLockLabel(hardLocksRecord, "structuredResultRequired", "structured result required", true),
+    readBooleanLockLabel(hardLocksRecord, "noProviderSubmit", "provider submit blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit disabled", false),
+    readBooleanLockLabel(hardLocksRecord, "noCredentialRead", "no credential read", true),
+    readBooleanLockLabel(hardLocksRecord, "noCredentialWrite", "no credential write", true),
+    readBooleanLockLabel(hardLocksRecord, "noArbitraryShell", "no shell execution", true),
+    readBooleanLockLabel(hardLocksRecord, "arbitraryShellExecutionBlocked", "no shell execution", true),
+    readBooleanLockLabel(hardLocksRecord, "projectRootRelativeOnly", "project root relative only", true),
+    readBooleanLockLabel(hardLocksRecord, "exportScopeOnly", "export scope only", true),
+    readBooleanLockLabel(hardLocksRecord, "noAbsolutePath", "absolute paths blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noParentTraversal", "parent traversal blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noDelete", "delete blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noMove", "move blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noMediaRender", "media render blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noUserFileOverwriteOutsideExport", "outside export overwrite blocked", true),
+  ].filter((lock): lock is string => Boolean(lock));
+
+  return {
+    initialized,
+    readiness: exportWorkerReadinessLabel(status, blockersWarnings, initialized),
+    scope: scope ? statusLabel(scope) : "blocked/missing",
+    plannedWriteCount,
+    plannedWriteSamples: effectivePlannedWrites.slice(0, 4).map(formatPlannedWriteSample),
+    exportRoot: compactPathLabel(exportRootValue),
+    blockersWarnings: blockersWarnings.length ? blockersWarnings : [initialized ? "blocked/missing scope evidence" : "blocked/missing runtimeState.exportWorker"],
+    hardLocks: Array.from(new Set(hardLocks.length ? hardLocks : ["hard locks blocked/missing"])),
+  };
 }
 
 function phase26ReadinessLabel(status: string, proofLabel: string, providerSubmitObserved?: boolean) {
@@ -5007,6 +5163,40 @@ function AdapterContractDiagnostics({ runtimeState }: { runtimeState: ProjectRun
   );
 }
 
+function ExportWorkerDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildExportWorkerUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel phase27-export-worker-panel">
+      <div className="audit-head">
+        <FileJson size={17} />
+        <span>Export Worker Diagnostics</span>
+      </div>
+      <div className="summary-grid phase27-metrics">
+        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "runtimeState.exportWorker" : "blocked/missing"} />
+        <Metric label="Scope" value={summary.scope} detail="export/project IO only" />
+        <Metric label="Planned Writes" value={`${summary.plannedWriteCount}`} detail={summary.plannedWriteCount ? "scoped plan entries" : "blocked/missing"} />
+        <Metric label="Export Root" value={summary.exportRoot} detail="compact root label" />
+      </div>
+      <div className="phase27-summary-list">
+        <div>
+          <strong>Blocked / warnings</strong>
+          <small>{summary.blockersWarnings.slice(0, 4).join(" · ")}</small>
+        </div>
+        <div>
+          <strong>Planned writes</strong>
+          <small>{summary.plannedWriteSamples.length ? summary.plannedWriteSamples.join(" · ") : "blocked/missing"}</small>
+        </div>
+      </div>
+      <div className="phase27-lock-strip" aria-label="Phase 27 hard locks">
+        {summary.hardLocks.slice(0, 8).map((lock) => (
+          <span key={lock}>{lock}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function AgentCliMockRunnerDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const summary = buildAgentCliMockRunnerUiSummary(runtimeState);
 
@@ -5045,6 +5235,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const desktopShell = buildDesktopRuntimeShellView(runtimeState);
   const knowledgeSummary = buildKnowledgeUiSummary(view);
   const agentCliMockRunnerSummary = buildAgentCliMockRunnerUiSummary(runtimeState);
+  const exportWorkerSummary = buildExportWorkerUiSummary(runtimeState);
 
   return (
     <section className="machine-panel settings-shell">
@@ -5163,6 +5354,13 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
         <div className="settings-readonly-note">
           <strong>Agent/CLI Mock Runner readiness: {agentCliMockRunnerSummary.readiness}</strong>
           <small>{agentCliMockRunnerSummary.runnerKind} · replacement proof {agentCliMockRunnerSummary.replacementProof} · adapter boundary mock/no-op only · {agentCliMockRunnerSummary.noopResultCount} no-op result(s)</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Export Worker</div>
+      <div className="settings-list export-worker-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Export Worker readiness: {exportWorkerSummary.readiness}</strong>
+          <small>export IO scope {exportWorkerSummary.scope} · planned writes {exportWorkerSummary.plannedWriteCount} · root {exportWorkerSummary.exportRoot}</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
@@ -5368,6 +5566,7 @@ function DiagnosticsMode({
       <AdapterContractDiagnostics runtimeState={runtimeState} />
       <SubagentWorkerRuntimeDiagnostics runtimeState={runtimeState} />
       <AgentCliMockRunnerDiagnostics runtimeState={runtimeState} />
+      <ExportWorkerDiagnostics runtimeState={runtimeState} />
       <Image2KeyframeRuntimeDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />

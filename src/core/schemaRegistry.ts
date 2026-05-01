@@ -143,6 +143,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ExportBuilderState",
   },
   {
+    fileName: "export_worker.schema.json",
+    id: "https://vibecore.local/schemas/export_worker.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 27 controlled export/project IO worker state layered on the dry-run Export Builder plan with provider, credential, shell, media render, delete, move, and outside-root routes locked off.",
+    typeName: "ExportWorkerState",
+  },
+  {
     fileName: "runtime_config.schema.json",
     id: "https://vibecore.local/schemas/runtime_config.schema.json",
     version: schemaVersion,

@@ -6233,6 +6233,153 @@ function buildPreviewExportState(input) {
   };
 }
 
+function isExportWorkerPathAllowlisted(pathValue) {
+  const normalized = String(pathValue || "").replace(/\\/g, "/");
+  return Boolean(normalized)
+    && !/^(?:[A-Za-z]:[\\/]|\/|\/\/)/.test(normalized)
+    && !normalized.split("/").includes("..")
+    && /^(?:exports|reports\/exports)(?:\/|$)/.test(normalized);
+}
+
+function buildExportWorkerState({ generatedAt, previewExport }) {
+  const exportRoot = "exports/export-worker";
+  const manifestPath = `${exportRoot}/export_manifest.json`;
+  const profileEntries = [
+    ["storyboard_table", "storyboard_table.tsv", "text/tab-separated-values", "storyboard_table"],
+    ["developer_archive", "developer_archive.json", "application/json", "developer_archive"],
+    ["rough_cut_timeline", "rough_cut_timeline.json", "application/json", "rough_cut"],
+    ["asset_package_manifest", "asset_package_manifest.json", "application/json", "asset_package"],
+  ];
+  const documentEntries = profileEntries.map(([kind, fileName, mimeType, profileKind]) => {
+    const content = JSON.stringify({
+      schemaVersion: "0.1.0",
+      kind,
+      generatedAt,
+      profile: previewExport.exportProfiles.find((item) => item.kind === profileKind),
+      providerSubmissionForbidden: true,
+      liveSubmitAllowed: false,
+      renderMedia: false,
+      copyFiles: false,
+      moveFiles: false,
+    }, null, 2) + "\n";
+    return {
+      id: `export_worker_${kind}`,
+      kind,
+      operation: "write_file",
+      path: `${exportRoot}/${fileName}`,
+      content,
+      contentHash: hashString(content, "export_worker"),
+      mimeType,
+      canExecute: false,
+      projectRootRelative: true,
+      notes: ["Planned text manifest write only; no media render, provider submit, shell, credential IO, move, or delete."],
+    };
+  });
+  const manifestContent = JSON.stringify({
+    schemaVersion: "0.1.0",
+    kind: "export_manifest",
+    generatedAt,
+    sourcePackagePlanId: previewExport.exportPackagePlan.planId,
+    files: documentEntries.map((entry) => ({
+      kind: entry.kind,
+      path: entry.path,
+      contentHash: entry.contentHash,
+    })),
+    providerSubmissionForbidden: true,
+    mediaRenderAllowed: false,
+  }, null, 2) + "\n";
+  const writeEntries = [
+    {
+      id: "export_worker_export_manifest",
+      kind: "export_manifest",
+      operation: "write_file",
+      path: manifestPath,
+      content: manifestContent,
+      contentHash: hashString(manifestContent, "export_worker"),
+      mimeType: "application/json",
+      canExecute: false,
+      projectRootRelative: true,
+      notes: ["Manifest write is planned only; adapter execution is not automatic."],
+    },
+    ...documentEntries,
+  ];
+  const directoryEntries = [
+    {
+      id: "export_worker_export_root",
+      kind: "export_directory",
+      operation: "create_directory",
+      path: exportRoot,
+      canExecute: false,
+      projectRootRelative: true,
+      notes: ["Directory creation is planned under the export/project IO contract only."],
+    },
+  ];
+  const entries = [...directoryEntries, ...writeEntries];
+  const blockers = uniqueSorted(entries.filter((entry) => !isExportWorkerPathAllowlisted(entry.path)).map((entry) => `export_worker_path_not_allowlisted:${entry.path}`));
+
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt,
+    phase: "phase_27_export_worker_mvp",
+    scope: "export_project_io_contract",
+    rootRef: "project_root",
+    exportRoot,
+    executionMode: "plan_only",
+    confirmationRequired: true,
+    confirmed: false,
+    readiness: blockers.length ? "blocked" : "planned",
+    canExecute: false,
+    entries,
+    manifest: {
+      manifestId: `export_worker_${hashString(`${generatedAt}:${exportRoot}`, "vci").replace(/^vci_/, "")}`,
+      generatedAt,
+      exportRoot,
+      profileSelection: ["rough_cut", "asset_package", "storyboard_table", "developer_archive"],
+      readiness: blockers.length ? "blocked" : "planned",
+      writeFilesOnly: true,
+      textOnly: true,
+      allowedOperations: ["create_directory", "write_file"],
+      allowedDirectories: directoryEntries.map((entry) => entry.path),
+      allowedWritePaths: writeEntries.map((entry) => entry.path),
+      files: documentEntries.map((entry) => ({
+        kind: entry.kind,
+        path: entry.path,
+        contentHash: entry.contentHash,
+      })),
+      blockedProfileKinds: [],
+      source: {
+        schemaVersion: previewExport.schemaVersion,
+        packagePlanId: previewExport.exportPackagePlan.planId,
+        packageStatus: previewExport.exportPackagePlan.status,
+        formalPreviewStatus: previewExport.formalPreview.status,
+        draftPreviewStatus: previewExport.draftPreview.status,
+      },
+      notes: ["Manifest lists text export artifacts only; no media or NLE files are generated."],
+    },
+    blockers,
+    warnings: ["Import runtime records the Phase 27 export worker plan only; it does not execute the adapter."],
+    hardLocks: {
+      projectRootRelativeOnly: true,
+      exportScopeOnly: true,
+      noAbsolutePath: true,
+      noParentTraversal: true,
+      noDelete: true,
+      noMove: true,
+      noMediaRender: true,
+      noProviderSubmit: true,
+      liveSubmitAllowed: false,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      noArbitraryShell: true,
+      noUserFileOverwriteOutsideExport: true,
+    },
+    notes: [
+      "Export Worker MVP is a controlled Phase 27 IO contract layered on top of Preview Export planning.",
+      "The default runtime state only plans export/report writes; a real adapter must be explicitly gated later.",
+    ],
+  };
+}
+
 function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
   const sourceIndex = buildSourceIndex(audit, knowledgeManifest);
   const sourceIndexSummary = summarizeSourceIndex(sourceIndex);
@@ -6438,6 +6585,11 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     qaPromotionReports,
     issues: audit.issues,
   });
+  const exportWorker = buildExportWorkerState({
+    generatedAt,
+    projectRoot: audit.projectRoot,
+    previewExport,
+  });
 
   return {
     schemaVersion: "0.1.0",
@@ -6489,6 +6641,7 @@ function buildProjectRuntimeState(audit, knowledgeManifest, generatedAt) {
     },
     previewEvents,
     previewExport,
+    exportWorker,
     audioPlanning,
     videoPlanning,
     videoExecutionPreview,
@@ -6988,6 +7141,43 @@ for (const key of [
 ]) {
   assert(runtimeState.agentCliMockRunner.hardLocks[key] === true, `agentCliMockRunner hard lock ${key} must be true`);
 }
+
+assert(runtimeState.exportWorker, "runtime-state must include exportWorker");
+assert(runtimeState.exportWorker.phase === "phase_27_export_worker_mvp", "exportWorker must be Phase 27 evidence");
+assert(runtimeState.exportWorker.scope === "export_project_io_contract", "exportWorker scope must be export_project_io_contract");
+assert(runtimeState.exportWorker.executionMode === "plan_only", "exportWorker must default to plan_only");
+assert(runtimeState.exportWorker.canExecute === false, "exportWorker must not auto-run a real adapter");
+assert(runtimeState.exportWorker.rootRef === "project_root", "exportWorker rootRef must stay project_root");
+assert(runtimeState.exportWorker.exportRoot.startsWith("exports/"), "exportWorker exportRoot must be project-root-relative exports path");
+assert(runtimeState.exportWorker.entries.length > 0, "exportWorker must plan export/report entries");
+for (const entry of runtimeState.exportWorker.entries) {
+  assert(entry.projectRootRelative === true, `exportWorker entry ${entry.id} must be project-root-relative`);
+  assert(/^(exports|reports\/exports)(\/|$)/.test(entry.path), `exportWorker entry ${entry.id} must be under exports/ or reports/exports/`);
+  assert(!/^(?:[A-Za-z]:[\\/]|\/|\/\/)/.test(entry.path), `exportWorker entry ${entry.id} must not be absolute`);
+  assert(!entry.path.split(/[\\/]+/).includes(".."), `exportWorker entry ${entry.id} must not use parent traversal`);
+  assert(["create_directory", "write_file"].includes(entry.operation), `exportWorker entry ${entry.id} operation must be allowlisted`);
+  assert(entry.canExecute === false, `exportWorker entry ${entry.id} must not execute during import-runtime-test`);
+}
+assert(runtimeState.exportWorker.manifest.writeFilesOnly === true, "exportWorker manifest must be write-files-only");
+assert(runtimeState.exportWorker.manifest.textOnly === true, "exportWorker manifest must be text-only");
+assert(runtimeState.exportWorker.manifest.allowedWritePaths.every((entryPath) => /^(exports|reports\/exports)(\/|$)/.test(entryPath)), "exportWorker manifest write paths must stay in export/report roots");
+for (const key of [
+  "projectRootRelativeOnly",
+  "exportScopeOnly",
+  "noAbsolutePath",
+  "noParentTraversal",
+  "noProviderSubmit",
+  "noCredentialRead",
+  "noCredentialWrite",
+  "noArbitraryShell",
+  "noMediaRender",
+  "noMove",
+  "noDelete",
+  "noUserFileOverwriteOutsideExport",
+]) {
+  assert(runtimeState.exportWorker.hardLocks[key] === true, `exportWorker hard lock ${key} must be true`);
+}
+assert(runtimeState.exportWorker.hardLocks.liveSubmitAllowed === false, "exportWorker live submit must be false");
 
 fs.mkdirSync(publicDir, { recursive: true });
 fs.mkdirSync(mediaDir, { recursive: true });

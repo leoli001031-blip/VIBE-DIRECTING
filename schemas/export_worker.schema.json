@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/export_worker.schema.json",
+  "title": "ExportWorkerState",
+  "description": "Phase 27 Export Worker MVP state. It allows only adapter-mediated create_directory and write_file operations for text manifests under project-root-relative exports/ or reports/exports/ paths.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "phase",
+    "scope",
+    "rootRef",
+    "exportRoot",
+    "executionMode",
+    "confirmationRequired",
+    "confirmed",
+    "readiness",
+    "canExecute",
+    "entries",
+    "manifest",
+    "blockers",
+    "warnings",
+    "hardLocks",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "phase": { "type": "string", "const": "phase_27_export_worker_mvp" },
+    "scope": { "type": "string", "const": "export_project_io_contract" },
+    "rootRef": { "type": "string", "const": "project_root" },
+    "exportRoot": { "$ref": "#/$defs/exportPath" },
+    "executionMode": { "type": "string", "enum": ["plan_only", "adapter_execution"] },
+    "confirmationRequired": { "type": "boolean", "const": true },
+    "confirmed": { "type": "boolean" },
+    "readiness": { "$ref": "#/$defs/readiness" },
+    "canExecute": { "type": "boolean" },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entry" }
+    },
+    "manifest": { "$ref": "#/$defs/manifest" },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "readiness": {
+      "type": "string",
+      "enum": ["ready", "planned", "blocked"]
+    },
+    "profileKind": {
+      "type": "string",
+      "enum": ["rough_cut", "asset_package", "storyboard_table", "developer_archive"]
+    },
+    "operation": {
+      "type": "string",
+      "enum": ["create_directory", "write_file"]
+    },
+    "entryKind": {
+      "type": "string",
+      "enum": [
+        "export_directory",
+        "export_manifest",
+        "storyboard_table",
+        "developer_archive",
+        "rough_cut_timeline",
+        "asset_package_manifest"
+      ]
+    },
+    "exportPath": {
+      "type": "string",
+      "pattern": "^(?:exports|exports/.*|reports/exports|reports/exports/.*)$",
+      "not": {
+        "anyOf": [
+          { "pattern": "^(?:[A-Za-z]:[\\\\/]|/|//|~[\\\\/])" },
+          { "pattern": "(?:^|/)\\.\\.(?:/|$)" }
+        ]
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "operation", "path", "canExecute", "projectRootRelative", "notes"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "kind": { "$ref": "#/$defs/entryKind" },
+        "operation": { "$ref": "#/$defs/operation" },
+        "path": { "$ref": "#/$defs/exportPath" },
+        "content": { "type": "string" },
+        "contentHash": { "type": "string" },
+        "mimeType": { "type": "string", "enum": ["application/json", "text/tab-separated-values"] },
+        "canExecute": { "type": "boolean" },
+        "projectRootRelative": { "type": "boolean", "const": true },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "operation": { "const": "write_file" } } },
+          "then": { "required": ["content", "contentHash", "mimeType"] }
+        }
+      ]
+    },
+    "manifestFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path", "contentHash"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["storyboard_table", "developer_archive", "rough_cut_timeline", "asset_package_manifest"]
+        },
+        "path": { "$ref": "#/$defs/exportPath" },
+        "contentHash": { "type": "string" },
+        "profileKind": { "$ref": "#/$defs/profileKind" }
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifestId",
+        "generatedAt",
+        "exportRoot",
+        "profileSelection",
+        "readiness",
+        "writeFilesOnly",
+        "textOnly",
+        "allowedOperations",
+        "allowedDirectories",
+        "allowedWritePaths",
+        "files",
+        "blockedProfileKinds",
+        "source",
+        "notes"
+      ],
+      "properties": {
+        "manifestId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "exportRoot": { "$ref": "#/$defs/exportPath" },
+        "profileSelection": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profileKind" }
+        },
+        "readiness": { "$ref": "#/$defs/readiness" },
+        "writeFilesOnly": { "type": "boolean", "const": true },
+        "textOnly": { "type": "boolean", "const": true },
+        "allowedOperations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/operation" }
+        },
+        "allowedDirectories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/exportPath" }
+        },
+        "allowedWritePaths": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/exportPath" }
+        },
+        "files": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/manifestFile" }
+        },
+        "blockedProfileKinds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profileKind" }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schemaVersion", "packagePlanId", "packageStatus", "formalPreviewStatus", "draftPreviewStatus"],
+          "properties": {
+            "schemaVersion": { "type": "string" },
+            "packagePlanId": { "type": "string" },
+            "packageStatus": { "type": "string", "enum": ["ready", "draft_only", "blocked", "planned"] },
+            "formalPreviewStatus": { "type": "string", "enum": ["ready", "draft_only", "blocked"] },
+            "draftPreviewStatus": { "type": "string", "enum": ["ready", "draft_only", "blocked"] }
+          }
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectRootRelativeOnly",
+        "exportScopeOnly",
+        "noAbsolutePath",
+        "noParentTraversal",
+        "noDelete",
+        "noMove",
+        "noMediaRender",
+        "noProviderSubmit",
+        "liveSubmitAllowed",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "noArbitraryShell",
+        "noUserFileOverwriteOutsideExport"
+      ],
+      "properties": {
+        "projectRootRelativeOnly": { "type": "boolean", "const": true },
+        "exportScopeOnly": { "type": "boolean", "const": true },
+        "noAbsolutePath": { "type": "boolean", "const": true },
+        "noParentTraversal": { "type": "boolean", "const": true },
+        "noDelete": { "type": "boolean", "const": true },
+        "noMove": { "type": "boolean", "const": true },
+        "noMediaRender": { "type": "boolean", "const": true },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "noArbitraryShell": { "type": "boolean", "const": true },
+        "noUserFileOverwriteOutsideExport": { "type": "boolean", "const": true }
+      }
+    }
+  }
+}

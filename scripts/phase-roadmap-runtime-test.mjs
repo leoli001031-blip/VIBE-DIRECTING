@@ -190,11 +190,133 @@ function agentCliMockRunnerEvidence(overrides = {}) {
   };
 }
 
+function exportWorkerEvidence(overrides = {}) {
+  const {
+    ioContract: ioContractOverrides,
+    adapterBoundary: adapterBoundaryOverrides,
+    hardLocks: hardLockOverrides,
+    observations: observationOverrides,
+    validation: validationOverrides,
+    roadmapEvidence: roadmapEvidenceOverrides,
+    summary: summaryOverrides,
+    ...rest
+  } = overrides;
+  const observations = {
+    providerSubmitObserved: false,
+    credentialReadObserved: false,
+    credentialWriteObserved: false,
+    shellExecutionObserved: false,
+    mediaRenderObserved: false,
+    copyObserved: false,
+    moveObserved: false,
+    deleteObserved: false,
+    outsideProjectRootObserved: false,
+    ...(observationOverrides || {}),
+  };
+  return {
+    kind: "export_worker",
+    phase: "phase_27_export_worker_mvp",
+    status: "ready",
+    readiness: "ready_to_plan",
+    executionMode: "plan_only",
+    scope: "export_project_io_contract",
+    ioContract: {
+      scope: "export_project_io_contract",
+      pathMode: "project_root_relative",
+      allowedDirectories: ["exports", "reports/exports"],
+      entries: [
+        {
+          path: "exports/export-worker/package-plan.vibe.json",
+          role: "export",
+          pathOrigin: "project_root_relative",
+          canWrite: true,
+        },
+        {
+          path: "reports/exports/export-worker/export-worker-report.vibe.json",
+          role: "report",
+          pathOrigin: "project_root_relative",
+          canWrite: true,
+        },
+      ],
+      ...(ioContractOverrides || {}),
+    },
+    summary: {
+      plannedEntries: 2,
+      blockedReasons: [],
+      canExecuteAdapterNow: false,
+      providerSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      arbitraryShellAllowed: false,
+      mediaRenderAllowed: false,
+      ...(summaryOverrides || {}),
+    },
+    adapterBoundary: {
+      realAdapterExecutionAllowed: false,
+      providerSubmitAllowed: false,
+      shellAllowed: false,
+      credentialReadAllowed: false,
+      credentialWriteAllowed: false,
+      mediaRenderAllowed: false,
+      copySourceFilesAllowed: false,
+      moveSourceFilesAllowed: false,
+      deleteAllowed: false,
+      outsideProjectRootAllowed: false,
+      ...(adapterBoundaryOverrides || {}),
+    },
+    observations,
+    hardLocks: {
+      exportProjectIoContractOnly: true,
+      defaultPlanOnly: true,
+      pathsProjectRootRelative: true,
+      pathsAllowlisted: true,
+      noAbsolutePaths: true,
+      noParentTraversal: true,
+      noOutsideProjectRoot: true,
+      noProviderSubmit: true,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      noArbitraryShell: true,
+      noMediaRender: true,
+      noCopySourceFiles: true,
+      noMoveSourceFiles: true,
+      noDelete: true,
+      noNleProjectGeneration: true,
+      ...(hardLockOverrides || {}),
+    },
+    validation: {
+      ok: true,
+      pathsAllowlisted: true,
+      hardLocksPinned: true,
+      errors: [],
+      warnings: [],
+      ...(validationOverrides || {}),
+    },
+    roadmapEvidence: {
+      phaseId: "phase_27_export_worker_mvp",
+      scopeReady: true,
+      pathsAllowlisted: true,
+      hardLocksPinned: true,
+      providerSubmitObserved: observations.providerSubmitObserved,
+      credentialReadObserved: observations.credentialReadObserved,
+      credentialWriteObserved: observations.credentialWriteObserved,
+      shellExecutionObserved: observations.shellExecutionObserved,
+      mediaRenderObserved: observations.mediaRenderObserved,
+      moveObserved: observations.moveObserved,
+      deleteObserved: observations.deleteObserved,
+      outsideProjectRootObserved: observations.outsideProjectRootObserved,
+      ...(roadmapEvidenceOverrides || {}),
+    },
+    ...rest,
+    observations,
+  };
+}
+
 function typedEvidence(overrides = {}) {
   return {
     projectFactsIntegration: projectFactsEvidence(overrides.projectFactsIntegration),
     subagentEnvelopeValidator: subagentEnvelopeValidatorReceipt(overrides.subagentEnvelopeValidator),
     agentCliMockRunner: agentCliMockRunnerEvidence(overrides.agentCliMockRunner),
+    exportWorker: exportWorkerEvidence(overrides.exportWorker),
     providerLiveGate: providerLiveGateReceipt(overrides.providerLiveGate),
     watcherManifestQaClosedLoop: watcherManifestQaClosedLoopReceipt(overrides.watcherManifestQaClosedLoop),
   };
@@ -209,7 +331,6 @@ function readyInput() {
     knowledgePackManagerReady: true,
     mockRunnerNoopReady: true,
     mockRunnerProviderSubmitObserved: false,
-    exportWorkerIoScopeReady: true,
     voiceAudioSettingsReady: true,
     replacementProofFromMockRunner: true,
     codexCliAdapterDryRunReady: true,
@@ -351,6 +472,85 @@ assert(
   phase(actualShapeMockRunnerReady, "phase_26_agent_cli_mock_runner").readiness === "ready",
   "Phase 26 must accept the actual AgentCliMockRunnerState shape as typed evidence",
 );
+
+const missingExportWorkerEvidence = typedEvidence();
+delete missingExportWorkerEvidence.exportWorker;
+const legacyOnlyPhase27 = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: missingExportWorkerEvidence,
+  exportWorkerIoScopeReady: true,
+});
+const legacyOnlyPhase27Gate = phase(legacyOnlyPhase27, "phase_27_export_worker_mvp");
+assert(legacyOnlyPhase27Gate.readiness === "blocked", "Phase 27 must block when typed export worker evidence is missing");
+assert(
+  legacyOnlyPhase27Gate.blockedReasons.includes("export_worker_typed_evidence_missing"),
+  "Phase 27 must explain missing typed export worker evidence",
+);
+
+const exportWorkerReadyPlan = buildPhaseRoadmapRuntimePlan(readyInput());
+assert(
+  phase(exportWorkerReadyPlan, "phase_27_export_worker_mvp").readiness === "ready",
+  "Phase 27 must be ready with typed export worker evidence",
+);
+assert(
+  exportWorkerReadyPlan.evidenceSummary.decisions.some(
+    (decision) => decision.evidenceKey === "exportWorker" && decision.source === "typed_evidence" && decision.ready === true,
+  ),
+  "Phase 27 export worker decision must be typed and ready",
+);
+
+const blockedExportWorkerPath = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    exportWorker: {
+      ioContract: {
+        entries: [
+          {
+            path: "../outside/export.json",
+            role: "export",
+            pathOrigin: "project_root_relative",
+            canWrite: true,
+          },
+        ],
+      },
+      validation: {
+        pathsAllowlisted: false,
+        errors: ["outside_project_root_path"],
+      },
+      roadmapEvidence: {
+        pathsAllowlisted: false,
+      },
+    },
+  }),
+});
+assert(
+  phase(blockedExportWorkerPath, "phase_27_export_worker_mvp").blockedReasons.includes("export_worker_paths_not_allowlisted"),
+  "Phase 27 must block paths outside export/report allowlist",
+);
+
+for (const [observationKey, expectedBlocker] of Object.entries({
+  providerSubmitObserved: "export_worker_attempted_provider_submit",
+  credentialReadObserved: "export_worker_credential_read_observed",
+  credentialWriteObserved: "export_worker_credential_write_observed",
+  shellExecutionObserved: "export_worker_shell_execution_observed",
+  mediaRenderObserved: "export_worker_media_render_observed",
+  moveObserved: "export_worker_move_observed",
+  deleteObserved: "export_worker_delete_observed",
+  outsideProjectRootObserved: "export_worker_outside_project_root_observed",
+})) {
+  const blockedPlan = buildPhaseRoadmapRuntimePlan({
+    ...readyInput(),
+    evidence: typedEvidence({
+      exportWorker: {
+        observations: { [observationKey]: true },
+        roadmapEvidence: { [observationKey]: true },
+      },
+    }),
+  });
+  const blockedPhase27 = phase(blockedPlan, "phase_27_export_worker_mvp");
+  assert(blockedPhase27.readiness === "blocked", `Phase 27 must block if ${observationKey} is observed`);
+  assert(blockedPhase27.blockedReasons.includes(expectedBlocker), `Phase 27 blocker ${expectedBlocker} missing`);
+}
 
 for (const [observationKey, expectedBlocker] of Object.entries({
   providerSubmitObserved: "mock_runner_attempted_provider_submit",
@@ -566,6 +766,10 @@ assert(schema.$defs.summary.properties.freeTextWorkerAllowed.const === false, "s
 assert(
   schema.$defs.evidenceDecision.properties.evidenceKey.enum.includes("agentCliMockRunner"),
   "schema evidence decisions must include typed Agent/CLI mock runner evidence",
+);
+assert(
+  schema.$defs.evidenceDecision.properties.evidenceKey.enum.includes("exportWorker"),
+  "schema evidence decisions must include typed export worker evidence",
 );
 assert(schema.$defs.hardLocks.properties.noFreeTextWorker.const === true, "schema hard locks must pin noFreeTextWorker=true");
 assert(schema.$defs.hardLocks.properties.validatedEnvelopeRequired.const === true, "schema hard locks must pin validated envelope");

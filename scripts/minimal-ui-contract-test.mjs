@@ -106,6 +106,7 @@ const previewQueueKind = findFunctionBody(appSource, "previewQueueKind");
 const desktopShellView = findFunctionBody(appSource, "buildDesktopRuntimeShellView");
 const subagentWorkerRuntimeDiagnostics = findFunctionBody(appSource, "SubagentWorkerRuntimeDiagnostics");
 const agentCliMockRunnerDiagnostics = findFunctionBody(appSource, "AgentCliMockRunnerDiagnostics");
+const exportWorkerDiagnostics = findFunctionBody(appSource, "ExportWorkerDiagnostics");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
 const knowledgeUiSummary = findFunctionBody(appSource, "buildKnowledgeUiSummary");
 const knowledgePackManager = findFunctionBody(appSource, "KnowledgePackManager");
@@ -190,6 +191,14 @@ checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /Replacement Proof/i, 
 checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /Readiness/i, "Phase 26 ready/blocked summary"));
 checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /No-op Results/i, "Phase 26 no-op result count summary"));
 checkMessage(requireWithin(agentCliMockRunnerDiagnostics, /phase26-lock-strip/i, "Phase 26 hard locks summary"));
+checkMessage(requireWithin(diagnosticsMode, /ExportWorkerDiagnostics/, "Phase 27 ExportWorkerDiagnostics mounted in Diagnostics"));
+checkMessage(requireWithin(exportWorkerDiagnostics, /Export Worker Diagnostics/i, "Phase 27 Export Worker diagnostics panel"));
+checkMessage(requireWithin(exportWorkerDiagnostics, /Readiness/i, "Phase 27 readiness summary"));
+checkMessage(requireWithin(exportWorkerDiagnostics, /Scope/i, "Phase 27 scope summary"));
+checkMessage(requireWithin(exportWorkerDiagnostics, /Planned Writes/i, "Phase 27 planned writes summary"));
+checkMessage(requireWithin(exportWorkerDiagnostics, /Export Root/i, "Phase 27 export root summary"));
+checkMessage(requireWithin(exportWorkerDiagnostics, /Blocked\s*\/\s*warnings/i, "Phase 27 blockers/warnings summary"));
+checkMessage(requireWithin(exportWorkerDiagnostics, /phase27-lock-strip/i, "Phase 27 hard lock strip"));
 checkMessage(requireWithin(previewPlayerQueue, /draftPreview\.events/, "Phase 21/23 Preview Player queue must use previewExport.draftPreview.events"));
 checkMessage(requireWithin(previewPlayerQueue, /image_hold/, "Phase 21/23 Preview Player queue must include image holds"));
 checkMessage(requireWithin(previewPlayerQueue, /video_clip/, "Phase 21/23 Preview Player queue must include video clips"));
@@ -267,6 +276,11 @@ const forbiddenMinimalTerms = [
   ["keyframe pair", /keyframe\s+pair/i],
   ["end-frame derivation", /end[-\s]?frame\s+derivation/i],
   ["provider locks", /provider\s+locks?/i],
+  ["Export Worker", /Export\s+Worker/i],
+  ["file mutation", /file\s+mutation/i],
+  ["write files", /write\s+files/i],
+  ["export manifest", /export\s+manifest/i],
+  ["project IO contract", /project\s+IO\s+contract/i],
 ];
 for (const [term, pattern] of forbiddenMinimalTerms) {
   check(!pattern.test(minimalDirectorSurface), `DirectorMode/MinimalAgentPanel must not expose ${term}`);
@@ -290,6 +304,11 @@ const phase2123ForbiddenMainTerms = [
   ["Knowledge Pack Manager", /Knowledge\s+Pack\s+Manager/i],
   ["Knowledge Router", /Knowledge\s+Router/i],
   ["Knowledge Library", /Knowledge\s+Library/i],
+  ["Export Worker", /Export\s+Worker/i],
+  ["file mutation", /file\s+mutation/i],
+  ["write files", /write\s+files/i],
+  ["export manifest", /export\s+manifest/i],
+  ["project IO contract", /project\s+IO\s+contract/i],
 ];
 for (const [term, pattern] of phase2123ForbiddenMainTerms) {
   const count = countPattern(phase2123DirectorSurface, pattern);
@@ -327,6 +346,8 @@ checkMessage(requireWithin(diagnosticsMode, /KnowledgePackManager/, "Phase 25 Kn
 checkMessage(requireWithin(settingsShell, /Knowledge Pack Manager readiness/i, "Phase 25 Knowledge Pack Manager readiness summary in Settings"));
 checkMessage(requireWithin(settingsShell, /Agent\/CLI Mock Runner readiness/i, "Phase 26 Agent/CLI Mock Runner readiness summary in Settings"));
 checkMessage(requireWithin(settingsShell, /adapter boundary mock\/no-op only/i, "Phase 26 adapter boundary summary in Settings"));
+checkMessage(requireWithin(settingsShell, /Export Worker readiness/i, "Phase 27 Export Worker readiness summary in Settings"));
+checkMessage(requireWithin(settingsShell, /export IO scope/i, "Phase 27 export IO scope summary in Settings"));
 checkMessage(requireWithin(knowledgePackManager, /Enabled/i, "Phase 25 Knowledge summary enabled/total metric"));
 checkMessage(requireWithin(knowledgePackManager, /Injected/i, "Phase 25 Knowledge summary injected/unique metric"));
 checkMessage(requireWithin(knowledgePackManager, /Warnings\s*\/\s*Blockers/i, "Phase 25 Knowledge summary warnings/blockers metric"));
@@ -342,6 +363,14 @@ const forbiddenButtonCopy = [
   "Resume Codex",
   "Save Credentials",
   "Run Provider",
+  "Export Now",
+  "Write Files",
+  "Create Directory",
+  "Copy Media",
+  "Render Media",
+  "Generate FCPXML",
+  "Open Shell",
+  "Run Export Worker",
 ];
 for (const copy of forbiddenButtonCopy) {
   check(

@@ -2920,20 +2920,50 @@ small {
   font-size: 12px;
 }
 
-.phase26-lock-strip {
+.phase26-lock-strip,
+.phase27-lock-strip {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 12px;
 }
 
-.phase26-lock-strip span {
+.phase26-lock-strip span,
+.phase27-lock-strip span {
   border: 1px solid rgba(168, 214, 163, 0.24);
   background: rgba(168, 214, 163, 0.06);
   color: #cdd9c8;
   padding: 5px 8px;
   font-size: 11px;
   overflow-wrap: anywhere;
+}
+
+.phase27-summary-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.phase27-summary-list div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 9px;
+}
+
+.phase27-summary-list strong,
+.phase27-summary-list small,
+.export-worker-settings-summary strong,
+.export-worker-settings-summary small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.phase27-summary-list small {
+  color: #9d958a;
+  font-size: 11px;
 }
 
 .knowledge-summary-strip span,
@@ -3029,6 +3059,7 @@ small {
   .qa-item-details,
   .tool-runtime-policy-grid,
   .tool-runtime-check-details,
+  .phase27-summary-list,
   .machine-panel .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3155,6 +3186,7 @@ small {
   .tool-runtime-check-details,
   .checker-metrics,
   .checker-fact-row,
+  .phase27-summary-list,
   .machine-panel .summary-grid {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -205,10 +205,118 @@ export interface PhaseRoadmapAgentCliMockRunnerEvidence {
   sourceRef?: string;
 }
 
+export interface PhaseRoadmapExportWorkerEvidence {
+  kind?: "export_worker";
+  phase?: "phase_27_export_worker_mvp";
+  status?: PhaseRoadmapEvidenceStatus;
+  readiness?: "ready_to_plan" | "ready_for_export_project_io" | "ready" | "blocked";
+  scope?: "export_project_io_contract" | string;
+  executionMode?: "plan_only" | string;
+  canExecute?: boolean;
+  entries?: Array<{
+    path?: string;
+    operation?: "create_directory" | "write_file" | string;
+    projectRootRelative?: boolean;
+    canExecute?: boolean;
+  }>;
+  ioContract?: {
+    scope?: "export_project_io_contract" | string;
+    pathMode?: "project_root_relative" | string;
+    allowedDirectories?: string[];
+    entries?: Array<{
+      path?: string;
+      role?: "export" | "report" | string;
+      pathOrigin?: "project_root_relative" | string;
+      canWrite?: boolean;
+    }>;
+  };
+  summary?: {
+    plannedEntries?: number;
+    blockedReasons?: string[];
+    canExecuteAdapterNow?: boolean;
+    providerSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    arbitraryShellAllowed?: boolean;
+    mediaRenderAllowed?: boolean;
+  };
+  adapterBoundary?: {
+    realAdapterExecutionAllowed?: boolean;
+    providerSubmitAllowed?: boolean;
+    shellAllowed?: boolean;
+    credentialReadAllowed?: boolean;
+    credentialWriteAllowed?: boolean;
+    mediaRenderAllowed?: boolean;
+    copySourceFilesAllowed?: boolean;
+    moveSourceFilesAllowed?: boolean;
+    deleteAllowed?: boolean;
+    outsideProjectRootAllowed?: boolean;
+  };
+  hardLocks?: {
+    projectRootRelativeOnly?: boolean;
+    exportScopeOnly?: boolean;
+    noAbsolutePath?: boolean;
+    noParentTraversal?: boolean;
+    noMove?: boolean;
+    noUserFileOverwriteOutsideExport?: boolean;
+    exportProjectIoContractOnly?: boolean;
+    defaultPlanOnly?: boolean;
+    pathsProjectRootRelative?: boolean;
+    pathsAllowlisted?: boolean;
+    noAbsolutePaths?: boolean;
+    noOutsideProjectRoot?: boolean;
+    noProviderSubmit?: boolean;
+    noCredentialRead?: boolean;
+    noCredentialWrite?: boolean;
+    noArbitraryShell?: boolean;
+    noMediaRender?: boolean;
+    noCopySourceFiles?: boolean;
+    noMoveSourceFiles?: boolean;
+    noDelete?: boolean;
+    noNleProjectGeneration?: boolean;
+  };
+  observations?: {
+    providerSubmitObserved?: boolean;
+    credentialReadObserved?: boolean;
+    credentialWriteObserved?: boolean;
+    shellExecutionObserved?: boolean;
+    mediaRenderObserved?: boolean;
+    copyObserved?: boolean;
+    moveObserved?: boolean;
+    deleteObserved?: boolean;
+    outsideProjectRootObserved?: boolean;
+  };
+  validation?: {
+    ok?: boolean;
+    pathsAllowlisted?: boolean;
+    hardLocksPinned?: boolean;
+    errors?: string[];
+    warnings?: string[];
+  };
+  roadmapEvidence?: {
+    phaseId?: "phase_27_export_worker_mvp";
+    scopeReady?: boolean;
+    pathsAllowlisted?: boolean;
+    hardLocksPinned?: boolean;
+    providerSubmitObserved?: boolean;
+    credentialReadObserved?: boolean;
+    credentialWriteObserved?: boolean;
+    shellExecutionObserved?: boolean;
+    mediaRenderObserved?: boolean;
+    moveObserved?: boolean;
+    deleteObserved?: boolean;
+    outsideProjectRootObserved?: boolean;
+  };
+  blockers?: string[];
+  blockedReasons?: string[];
+  warnings?: string[];
+  sourceRef?: string;
+}
+
 export interface PhaseRoadmapRuntimeEvidence {
   projectFactsIntegration?: PhaseRoadmapProjectFactsIntegrationEvidence;
   subagentEnvelopeValidator?: PhaseRoadmapSubagentEnvelopeValidatorReceipt;
   agentCliMockRunner?: PhaseRoadmapAgentCliMockRunnerEvidence;
+  exportWorker?: PhaseRoadmapExportWorkerEvidence;
   providerLiveGate?: PhaseRoadmapProviderLiveGateReceipt;
   watcherManifestQaClosedLoop?: PhaseRoadmapClosedLoopReceipt;
 }
@@ -218,6 +326,7 @@ export interface PhaseRoadmapEvidenceDecision {
     | "projectFactsIntegration"
     | "subagentEnvelopeValidator"
     | "agentCliMockRunner"
+    | "exportWorker"
     | "providerConfirmationTokenPlaceholder"
     | "providerEnablementPacket"
     | "watcherManifestQaClosedLoop"
@@ -414,6 +523,18 @@ function hasAgentCliMockRunnerEvidence(
     evidence.kind === "agent_cli_mock_runner" ||
     evidence.phase === "phase_26_agent_cli_mock_runner" ||
     evidence.roadmapEvidence?.phaseId === "phase_26_agent_cli_mock_runner"
+  ));
+}
+
+function hasExportWorkerEvidence(
+  evidence: PhaseRoadmapExportWorkerEvidence | undefined,
+): evidence is PhaseRoadmapExportWorkerEvidence {
+  return Boolean(evidence && (
+    evidence.kind === "export_worker" ||
+    evidence.phase === "phase_27_export_worker_mvp" ||
+    evidence.roadmapEvidence?.phaseId === "phase_27_export_worker_mvp" ||
+    evidence.scope === "export_project_io_contract" ||
+    evidence.ioContract?.scope === "export_project_io_contract"
   ));
 }
 
@@ -648,6 +769,163 @@ function agentCliMockRunnerEvidenceDecision(input: PhaseRoadmapRuntimeInput): Ph
   };
 }
 
+function isAllowlistedExportWorkerPath(pathValue: string | undefined): boolean {
+  const normalized = String(pathValue || "").replace(/\\/g, "/");
+  return Boolean(normalized)
+    && !/^(?:[A-Za-z]:[\\/]|\/|\/\/)/.test(normalized)
+    && !normalized.split("/").includes("..")
+    && /^(?:exports(?:\/|$)|reports\/exports(?:\/|$))/.test(normalized);
+}
+
+function exportWorkerEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const evidence = input.evidence?.exportWorker;
+  const legacyAllowed = input.legacyBooleanOverridesAllowed === true;
+
+  if (hasExportWorkerEvidence(evidence)) {
+    const observations = evidence.observations || {};
+    const roadmap = evidence.roadmapEvidence || {};
+    const validationErrors = [
+      ...(evidence.validation?.errors || []),
+      ...(evidence.blockedReasons || []),
+      ...(evidence.blockers || []),
+      ...(evidence.summary?.blockedReasons || []),
+    ];
+    const entries: Array<{
+      path?: string;
+      pathOrigin?: string;
+      projectRootRelative?: boolean;
+      canWrite?: boolean;
+    }> = evidence.ioContract?.entries || evidence.entries || [];
+    const scopeReady = evidence.scope === "export_project_io_contract"
+      || evidence.ioContract?.scope === "export_project_io_contract"
+      || roadmap.scopeReady === true;
+    const pathModeReady = evidence.ioContract?.pathMode === undefined
+      || evidence.ioContract.pathMode === "project_root_relative";
+    const entriesAllowlisted = entries.length === 0
+      ? evidence.validation?.pathsAllowlisted === true || roadmap.pathsAllowlisted === true
+      : entries.every((entry) =>
+        (entry.pathOrigin === "project_root_relative" || entry.projectRootRelative === true) &&
+        entry.canWrite !== false &&
+        isAllowlistedExportWorkerPath(entry.path),
+      );
+    const pathsAllowlisted = (evidence.validation?.pathsAllowlisted !== false)
+      && (roadmap.pathsAllowlisted !== false)
+      && pathModeReady
+      && entriesAllowlisted
+      && evidence.hardLocks?.pathsAllowlisted !== false
+      && evidence.hardLocks?.pathsProjectRootRelative !== false;
+    const hardLocksPinned = evidence.validation?.hardLocksPinned !== false
+      && roadmap.hardLocksPinned !== false
+      && evidence.hardLocks?.projectRootRelativeOnly !== false
+      && evidence.hardLocks?.exportScopeOnly !== false
+      && evidence.hardLocks?.noAbsolutePath !== false
+      && evidence.hardLocks?.noParentTraversal !== false
+      && evidence.hardLocks?.noMove !== false
+      && evidence.hardLocks?.noUserFileOverwriteOutsideExport !== false
+      && evidence.hardLocks?.exportProjectIoContractOnly !== false
+      && evidence.hardLocks?.defaultPlanOnly !== false
+      && evidence.hardLocks?.noProviderSubmit !== false
+      && evidence.hardLocks?.noCredentialRead !== false
+      && evidence.hardLocks?.noCredentialWrite !== false
+      && evidence.hardLocks?.noArbitraryShell !== false
+      && evidence.hardLocks?.noMediaRender !== false
+      && evidence.hardLocks?.noCopySourceFiles !== false
+      && evidence.hardLocks?.noMoveSourceFiles !== false
+      && evidence.hardLocks?.noDelete !== false
+      && evidence.hardLocks?.noOutsideProjectRoot !== false
+      && evidence.hardLocks?.noNleProjectGeneration !== false;
+    const providerSubmitObserved = observations.providerSubmitObserved === true
+      || roadmap.providerSubmitObserved === true
+      || evidence.adapterBoundary?.providerSubmitAllowed === true
+      || evidence.summary?.providerSubmitAllowed === true
+      || validationErrors.some((error) => /provider[_ ]?submit/i.test(error));
+    const credentialReadObserved = observations.credentialReadObserved === true
+      || roadmap.credentialReadObserved === true
+      || evidence.adapterBoundary?.credentialReadAllowed === true
+      || validationErrors.some((error) => /credential.*read|credential_read/i.test(error));
+    const credentialWriteObserved = observations.credentialWriteObserved === true
+      || roadmap.credentialWriteObserved === true
+      || evidence.adapterBoundary?.credentialWriteAllowed === true
+      || validationErrors.some((error) => /credential.*write|credential_write/i.test(error));
+    const shellExecutionObserved = observations.shellExecutionObserved === true
+      || roadmap.shellExecutionObserved === true
+      || evidence.adapterBoundary?.shellAllowed === true
+      || evidence.summary?.arbitraryShellAllowed === true
+      || validationErrors.some((error) => /shell/i.test(error));
+    const mediaRenderObserved = observations.mediaRenderObserved === true
+      || roadmap.mediaRenderObserved === true
+      || evidence.adapterBoundary?.mediaRenderAllowed === true
+      || evidence.summary?.mediaRenderAllowed === true
+      || validationErrors.some((error) => /media[_ ]?render|render_media/i.test(error));
+    const copyObserved = observations.copyObserved === true
+      || evidence.adapterBoundary?.copySourceFilesAllowed === true
+      || validationErrors.some((error) => /\bcopy\b|copy_source/i.test(error));
+    const moveObserved = observations.moveObserved === true
+      || roadmap.moveObserved === true
+      || evidence.adapterBoundary?.moveSourceFilesAllowed === true
+      || validationErrors.some((error) => /\bmove\b|move_source/i.test(error));
+    const deleteObserved = observations.deleteObserved === true
+      || roadmap.deleteObserved === true
+      || evidence.adapterBoundary?.deleteAllowed === true
+      || validationErrors.some((error) => /\bdelete\b|unlink|remove_file/i.test(error));
+    const outsideProjectRootObserved = observations.outsideProjectRootObserved === true
+      || roadmap.outsideProjectRootObserved === true
+      || evidence.adapterBoundary?.outsideProjectRootAllowed === true
+      || validationErrors.some((error) => /outside[_ ]?project|outside[_ ]?root/i.test(error));
+    const realAdapterExecutionObserved = evidence.executionMode !== undefined && evidence.executionMode !== "plan_only"
+      || evidence.canExecute === true
+      || evidence.adapterBoundary?.realAdapterExecutionAllowed === true
+      || evidence.summary?.canExecuteAdapterNow === true;
+    const blockers = uniqueSorted([
+      ...blockedIf(!scopeReady, "explicit_export_project_io_scope_missing"),
+      ...blockedIf(!pathsAllowlisted, "export_worker_paths_not_allowlisted"),
+      ...blockedIf(!hardLocksPinned, "export_worker_hard_locks_not_pinned"),
+      ...blockedIf(realAdapterExecutionObserved, "export_worker_real_adapter_execution_enabled"),
+      ...blockedIf(providerSubmitObserved, "export_worker_attempted_provider_submit"),
+      ...blockedIf(credentialReadObserved, "export_worker_credential_read_observed"),
+      ...blockedIf(credentialWriteObserved, "export_worker_credential_write_observed"),
+      ...blockedIf(shellExecutionObserved, "export_worker_shell_execution_observed"),
+      ...blockedIf(mediaRenderObserved, "export_worker_media_render_observed"),
+      ...blockedIf(copyObserved, "export_worker_copy_observed"),
+      ...blockedIf(moveObserved, "export_worker_move_observed"),
+      ...blockedIf(deleteObserved, "export_worker_delete_observed"),
+      ...blockedIf(outsideProjectRootObserved, "export_worker_outside_project_root_observed"),
+      ...validationErrors,
+    ]);
+
+    return {
+      evidenceKey: "exportWorker",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted([...(evidence.warnings || []), ...(evidence.validation?.warnings || [])]),
+    };
+  }
+
+  if (legacyAllowed && input.exportWorkerIoScopeReady === true) {
+    return {
+      evidenceKey: "exportWorker",
+      source: "legacy_boolean_override",
+      ready: true,
+      blockers: [],
+      warnings: ["legacy_exportWorkerIoScopeReady_boolean_override_used"],
+    };
+  }
+
+  return {
+    evidenceKey: "exportWorker",
+    source: input.exportWorkerIoScopeReady === undefined ? "missing" : "legacy_boolean_override",
+    ready: false,
+    blockers: uniqueSorted([
+      "export_worker_typed_evidence_missing",
+      ...blockedIf(input.exportWorkerIoScopeReady !== true, "explicit_export_project_io_scope_missing"),
+    ]),
+    warnings: uniqueSorted([
+      ...blockedIf(input.exportWorkerIoScopeReady === true, "legacy_exportWorkerIoScopeReady_boolean_ignored_without_typed_evidence"),
+    ]),
+  };
+}
+
 function providerLiveGateSafetyBlockers(receipt: PhaseRoadmapProviderLiveGateReceipt): string[] {
   return uniqueSorted([
     ...blockedIf(receipt.summary?.providerSubmitAllowed !== undefined && receipt.summary.providerSubmitAllowed !== 0, "provider_live_gate_allows_provider_submit"),
@@ -830,6 +1108,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const projectFactsDecision = projectFactsEvidenceDecision(input);
   const envelopeDecision = envelopeValidatorEvidenceDecision(input);
   const agentCliMockRunnerDecision = agentCliMockRunnerEvidenceDecision(input);
+  const exportWorkerDecision = exportWorkerEvidenceDecision(input);
   const providerConfirmationDecision = providerConfirmationEvidenceDecision(input);
   const providerPacketDecision = providerPacketEvidenceDecision(input);
   const watcherClosedLoopDecision = watcherClosedLoopEvidenceDecision(input);
@@ -838,6 +1117,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
     projectFactsDecision,
     envelopeDecision,
     agentCliMockRunnerDecision,
+    exportWorkerDecision,
     providerConfirmationDecision,
     providerPacketDecision,
     watcherClosedLoopDecision,
@@ -921,14 +1201,25 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "phase_26_agent_cli_mock_runner",
       ],
       readyPhases,
-      ownBlockers: blockedIf(!input.exportWorkerIoScopeReady, "explicit_export_project_io_scope_missing"),
+      ownBlockers: uniqueSorted(exportWorkerDecision.blockers),
       readyStatus: "ready_for_implementation",
-      requiredInputs: ["exportWorkerIoScopeReady"],
+      requiredInputs: [
+        "evidence.exportWorker",
+        "scope=export_project_io_contract",
+        "paths project-root-relative under exports/ or reports/exports/",
+        "provider/credential/shell/media render/delete/move/outside-root observations all false",
+      ],
       acceptanceCriteria: [
         "File mutation is allowed only inside explicit export/project IO contracts.",
         "Export output still requires manifest matching and structured result reporting.",
+        "Default runtime-state only plans export/report entries; it does not execute a real adapter.",
+        "Provider, credential, shell, media render, delete, move, and outside-project-root routes are blocked.",
       ],
-      notes: ["This is the only Phase 24-30 plan item with fileMutationAllowed=true."],
+      notes: [
+        "This is the only Phase 24-30 plan item with fileMutationAllowed=true.",
+        "Phase 27 is layered on the Phase 12 dry-run Export Builder plan; the builder itself remains noFileMutation.",
+        ...evidenceNotes([exportWorkerDecision]),
+      ],
     }),
     makePhase({
       phaseId: "phase_28_voice_audio_settings_ui",

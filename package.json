@@ -33,6 +33,7 @@
     "provider-live-gate:test": "node scripts/provider-live-gate-test.mjs",
     "phase-roadmap:test": "node scripts/phase-roadmap-runtime-test.mjs",
     "export-builder:test": "node scripts/export-builder-test.mjs",
+    "export-worker:test": "node scripts/export-worker-test.mjs",
     "orchestrator:test": "node scripts/local-orchestrator-test.mjs",
     "minimal-ui:test": "node scripts/minimal-ui-contract-test.mjs",
     "preview-player:test": "node scripts/preview-player-test.mjs",

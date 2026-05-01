@@ -6,6 +6,7 @@ import type { StorySectionView, VisualMemorySummary, RuntimeKnowledgeSummary } f
 import type { VoiceSourceLibraryState } from "./voiceSourceLibrary";
 import type { QueueGateResult } from "./taskQueue";
 import type { AgentCliMockRunnerState } from "./agentCliMockRunner";
+import type { ExportWorkerState } from "./exportWorker";
 import type {
   AssetRecord,
   AssetReadinessReport,
@@ -180,6 +181,7 @@ export interface ProjectRuntimeState {
   imageKeyframeRuntime: ImageKeyframeRuntimePlan;
   previewEvents: PreviewEvent[];
   previewExport: ProjectPreviewExportState;
+  exportWorker: ExportWorkerState;
   voiceSourceLibrary: VoiceSourceLibraryState;
   audioPlanning: AudioPlanningState;
   videoPlanning: VideoPlanningState;
