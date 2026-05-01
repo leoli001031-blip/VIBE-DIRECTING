@@ -105,8 +105,17 @@ const naturalWorkflowScopeLabel = findFunctionBody(appSource, "naturalWorkflowSc
 const workflowStatusLabel = findFunctionBody(appSource, "workflowStatusLabel");
 const workflowNextStepLabel = findFunctionBody(appSource, "workflowNextStepLabel");
 const workflowBadgeLabels = findFunctionBody(appSource, "workflowBadgeLabels");
+const workflowCanConfirm = findFunctionBody(appSource, "workflowCanConfirm");
+const workflowPanelStatusLabel = findFunctionBody(appSource, "workflowPanelStatusLabel");
+const workflowPanelNextStepLabel = findFunctionBody(appSource, "workflowPanelNextStepLabel");
+const workflowPlanFacts = findFunctionBody(appSource, "workflowPlanFacts");
 const realPilotDirectorStatus = findFunctionBody(appSource, "RealPilotDirectorStatus");
+const projectFactsStrip = findFunctionBody(appSource, "ProjectFactsStrip");
+const projectStoreSnapshotForUi = findFunctionBody(appSource, "buildProjectStoreSnapshotForUi");
+const projectFactsUiSummary = findFunctionBody(appSource, "buildProjectFactsUiSummary");
 const minimalAssetLibrary = findFunctionBody(appSource, "MinimalAssetLibrary");
+const assetSourceKindForPath = findFunctionBody(appSource, "assetSourceKindForPath");
+const assetLibraryUserBlockers = findFunctionBody(appSource, "assetLibraryUserBlockers");
 const minimalPreview = findFunctionBody(appSource, "MinimalPreview");
 const minimalProjectPlan = findFunctionBody(appSource, "buildMinimalProjectPlan");
 const previewPlayerQueue = findFunctionBody(appSource, "buildPreviewPlayerQueue");
@@ -140,6 +149,9 @@ const minimalAgentLanguageSurface = [
   workflowStatusLabel,
   workflowNextStepLabel,
   workflowBadgeLabels,
+  workflowPanelStatusLabel,
+  workflowPanelNextStepLabel,
+  workflowPlanFacts,
 ].join("\n");
 
 function check(condition, message) {
@@ -197,10 +209,18 @@ check(
 checkMessage(requireWithin(minimalAgentPanel, /selectedShotId\s*:/, "MinimalAgentPanel selectedShotId workflow selection"));
 checkMessage(requireWithin(minimalAgentPanel, /selectedAssetId\s*:/, "MinimalAgentPanel selectedAssetId workflow selection"));
 checkMessage(requireWithin(minimalAgentPanel, /sectionId\s*:/, "MinimalAgentPanel sectionId workflow selection"));
+checkMessage(requireWithin(minimalAgentPanel, /workflowCanConfirm\s*\(/, "Round 3 MinimalAgentPanel confirmation guard"));
+checkMessage(requireWithin(`${minimalAgentPanel}\n${workflowCanConfirm}`, /dry_run_ready/, "Round 3 confirmation only after dry-run ready"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /描述你想怎么改\.\.\./, "MinimalAgentPanel natural input placeholder"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /准备修改/, "MinimalAgentPanel prepare-copy label"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /等待确认/, "MinimalAgentPanel confirmation-wait label"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /开始生成/, "MinimalAgentPanel generation starts only after confirmation copy"));
+checkMessage(requireWithin(minimalAgentLanguageSurface, /排队中/, "Round 3 queued status label"));
+checkMessage(requireWithin(minimalAgentLanguageSurface, /已计划/, "Round 3 planned status label"));
+checkMessage(requireWithin(minimalAgentLanguageSurface, /待写入项目事实/, "Round 3 pending project facts label"));
+checkMessage(requireWithin(minimalAgentPanel, /确认计划/, "Round 3 confirmation action label"));
+checkMessage(requireWithin(minimalAgentPanel, /minimal-agent-plan/, "Round 3 plan summary surface"));
+checkMessage(requireWithin(minimalAgentPanel, /minimal-agent-steps/, "Round 3 confirmation-to-planned steps"));
 for (const [term, pattern] of [
   ["Preview plan", /Preview\s+plan/i],
   ["Refine selected beat", /Refine\s+selected\s+beat/i],
@@ -397,12 +417,37 @@ checkMessage(requireAny(appSource, [/Preview/, /function\s+PreviewTimeline/, /cl
 checkMessage(requireAny(appSource, [/Selected/, /Scope/], "Selected/Scope director context"));
 checkMessage(requireAny(appSource, [/Story/, /section\.label/, /storySections/, /All Shots/], "Story/section tabs"));
 checkMessage(requireAny(appSource, [/Diagnostics/, /diagnostics/], "Diagnostics entry"));
-for (const label of ["角色主参考", "三视图", "表情", "场景 master", "多视角", "风格锚图", "文本约束"]) {
+checkMessage(requireWithin(projectFactsStrip, /Project Store/, "Round 2 Project Store strip"));
+checkMessage(requireWithin(projectFactsStrip, /runtime-state/, "Round 2 runtime-state label"));
+checkMessage(requireWithin(projectFactsStrip, /derived cache/, "Round 2 runtime-state derived cache copy"));
+checkMessage(requireWithin(projectFactsUiSummary, /不是事实源/, "Round 2 runtime-state not source-of-truth copy"));
+checkMessage(requireWithin(projectFactsStrip, /create/, "Round 2 create plan action"));
+checkMessage(requireWithin(projectFactsStrip, /open/, "Round 2 open plan action"));
+checkMessage(requireWithin(projectFactsStrip, /save/, "Round 2 save plan action"));
+checkMessage(requireWithin(projectStoreSnapshotForUi, /createProjectStoreSnapshot/, "Round 2 Project Store snapshot builder"));
+checkMessage(requireWithin(projectFactsUiSummary, /buildProjectStoreIoGate/, "Round 2 Project Store IO gate builder"));
+checkMessage(requireWithin(projectFactsUiSummary, /saveProjectStoreSnapshot/, "Round 2 Project Store save plan builder"));
+for (const label of ["角色主参考", "场景 master", "风格文本/锚图", "文本约束", "添加并锁定", "添加候选", "needs_review"]) {
   checkMessage(requireWithin(minimalAssetLibrary, new RegExp(label), `Asset Library ${label} slot copy`));
 }
+for (const label of ["type", "authority", "future", "shots"]) {
+  checkMessage(requireWithin(minimalAssetLibrary, new RegExp(label), `Round 2 asset card ${label} field`));
+}
+checkMessage(requireWithin(minimalAssetLibrary, /onAddAsset/, "Round 2 Asset Library add callback"));
+checkMessage(requireWithin(minimalAssetLibrary, /onUpdateAsset/, "Round 2 Asset Library update callback"));
+checkMessage(requireWithin(minimalAssetLibrary, /onMarkAssetStatus/, "Round 2 Asset Library status callback"));
+checkMessage(requireWithin(assetLibraryUserBlockers, /缺主角参考/, "Round 2 missing character blocker"));
+checkMessage(requireWithin(assetLibraryUserBlockers, /缺场景 master/, "Round 2 missing scene blocker"));
+checkMessage(requireWithin(assetLibraryUserBlockers, /不能做正式参考/, "Round 2 candidate cannot formal blocker"));
+checkMessage(requireWithin(assetSourceKindForPath, /contact_sheet/, "Round 2 contact sheet source filter"));
+checkMessage(requireWithin(assetSourceKindForPath, /provider_temp_output/, "Round 2 temp output source filter"));
+checkMessage(requireWithin(assetSourceKindForPath, /failed_output/, "Round 2 failed output source filter"));
+checkMessage(requireWithin(assetSourceKindForPath, /shot_output/, "Round 2 shot output source filter"));
 
 checkMessage(requireAny(stylesSource, [/asset-library/, /\.asset-panel/], "Asset Library styling hook"));
-checkMessage(requireWithin(stylesSource, /asset-slot-strip/, "Asset Library slot strip styling hook"));
+checkMessage(requireWithin(stylesSource, /asset-library-toolbar/, "Round 2 Asset Library toolbar styling hook"));
+checkMessage(requireWithin(stylesSource, /asset-edit-surface/, "Round 2 Asset Library edit styling hook"));
+checkMessage(requireWithin(stylesSource, /project-facts-strip/, "Round 2 Project Store strip styling hook"));
 checkMessage(requireAny(stylesSource, [/preview/, /preview-timeline/], "Preview styling hook"));
 checkMessage(requireAny(stylesSource, [/diagnostics/, /diagnostics-layout/], "Diagnostics styling hook"));
 
@@ -502,6 +547,7 @@ const phase2123DirectorSurface = [
   directorMode,
   directorProgressStrip,
   realPilotDirectorStatus,
+  projectFactsStrip,
   minimalTopNav,
   minimalAgentPanel,
   minimalAssetLibrary,

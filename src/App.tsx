@@ -49,6 +49,30 @@ import { buildSubagentWorkerRuntimePlan, type SubagentWorkerRuntimePlan } from "
 import { ensureRuntimeEnvironment } from "./core/runtimeConfig";
 import { buildDirectorWorkflowState, type DirectorWorkflowStatus } from "./core/directorWorkflow";
 import {
+  addAssetLibraryAsset,
+  createAssetLibrarySnapshot,
+  markAssetLibraryAssetStatus,
+  toVisualMemoryDocument,
+  updateAssetLibraryAsset,
+  validateAssetLibrarySnapshot,
+  type AddAssetLibraryAssetInput,
+  type AssetLibraryAsset,
+  type AssetLibraryAssetType,
+  type AssetLibrarySnapshot,
+  type AssetLibraryStatus,
+  type UpdateAssetLibraryAssetInput,
+} from "./core/assetLibraryCrud";
+import {
+  createProjectStoreSnapshot,
+  saveProjectStoreSnapshot,
+  type ProjectStoreSnapshot,
+} from "./core/projectStore";
+import {
+  buildProjectStoreIoGate,
+  type ProjectStoreIoGate,
+  type ProjectStoreIoMode,
+} from "./core/projectStoreIo";
+import {
   buildPreviewPlayerQueue as buildCorePreviewPlayerQueue,
   getPreviewPlayerActiveItem,
   getPreviewPlayerTotalDuration,
@@ -98,10 +122,27 @@ function groupAssets(assets: AssetRecord[]) {
 }
 
 type DirectorView = "story" | "assets" | "preview";
+type AssetLibraryUiStatus = "locked" | "candidate" | "needs_review" | "rejected";
+type ProjectFactsUiMode = Extract<ProjectStoreIoMode, "create" | "open" | "save">;
 type MinimalProjectPlan = {
   entryLabel: string;
   planLabel: string;
 };
+type ProjectFactsUiSummary = {
+  mode: ProjectFactsUiMode;
+  projectFile: string;
+  factSource: string;
+  runtimeCache: string;
+  planStatus: string;
+  planDetail: string;
+  entryCount: number;
+  writeCount: number;
+  readCount: number;
+  blockers: string[];
+  gate: ProjectStoreIoGate;
+  snapshot: ProjectStoreSnapshot;
+};
+type AgentPlanPhase = "idle" | "review" | "confirmed";
 
 type DesktopRuntimeShellView = {
   planStatus: string;
@@ -327,6 +368,283 @@ function assetStatusLabel(asset: AssetRecord) {
   return asset.lockedStatus;
 }
 
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function splitConstraints(value: string) {
+  return uniqueStrings(value.split(/\n|；|;|,/g));
+}
+
+function safeAssetId(value: string, type: AssetLibraryAssetType) {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 48);
+  return `${type}_${slug || "asset"}_${Date.now().toString(36).slice(-4)}`;
+}
+
+function assetLibraryTypeLabel(type: AssetLibraryAssetType) {
+  if (type === "character") return "角色";
+  if (type === "scene") return "场景";
+  if (type === "style") return "风格";
+  if (type === "voice_anchor") return "音源";
+  return "道具";
+}
+
+function assetLibraryStatusLabel(status: AssetLibraryUiStatus | AssetLibraryStatus) {
+  if (status === "review" || status === "needs_review") return "needs_review";
+  return status;
+}
+
+function uiStatusToAssetLibraryStatus(status: AssetLibraryUiStatus): AssetLibraryStatus {
+  return status === "needs_review" ? "review" : status;
+}
+
+function assetLibraryStatusToUiStatus(status: AssetLibraryStatus): AssetLibraryUiStatus {
+  if (status === "review" || status === "missing") return "needs_review";
+  return status;
+}
+
+function assetRecordTypeToLibraryType(type: AssetRecord["type"]): AssetLibraryAssetType {
+  if (type === "character" || type === "scene" || type === "prop" || type === "style") return type;
+  return "prop";
+}
+
+function assetRecordStatusToLibraryStatus(asset: AssetRecord): AssetLibraryStatus {
+  if (asset.status === "missing" || asset.lockedStatus === "not_generated") return "missing";
+  if (asset.lockedStatus === "locked") return "locked";
+  if (asset.lockedStatus === "needs_review") return "review";
+  return "candidate";
+}
+
+function assetSourceKindForPath(path?: string) {
+  const normalized = (path || "").replace(/\\/g, "/").toLowerCase();
+  if (/contact[-_ ]?sheet/.test(normalized)) return "contact_sheet" as const;
+  if (/(^|\/)(tmp|temp|cache|candidates?|drafts?)(\/|$)/.test(normalized)) return "provider_temp_output" as const;
+  if (/(^|\/)(failed|failures?)(\/|$)/.test(normalized)) return "failed_output" as const;
+  if (/(^|\/)(shot[-_ ]?outputs?|outputs\/shots)(\/|$)/.test(normalized)) return "shot_output" as const;
+  return "source_asset" as const;
+}
+
+function pathOriginForUi(path?: string) {
+  return path && /^(?:[A-Za-z]:[\\/]|\/|\/\/|~[\\/])/.test(path) ? "user_selected_import" as const : "project_root_relative" as const;
+}
+
+function defaultAssetConstraints(type: AssetLibraryAssetType, name: string) {
+  if (type === "character") return [`保持 ${cleanLabel(name)} 的身份、年龄感、发型和服装连续`];
+  if (type === "scene") return [`保持 ${cleanLabel(name)} 的空间布局、主要入口、光源方向和透视关系`];
+  if (type === "style") return [`保持 ${cleanLabel(name)} 的色彩、光比、颗粒和纹理强度一致`];
+  if (type === "voice_anchor") return [`保持 ${cleanLabel(name)} 的音色、语速和情绪区间一致`];
+  return [`保持 ${cleanLabel(name)} 的形状、材质和使用方式一致`];
+}
+
+function linkedShotIdsForAsset(asset: AssetRecord, state: ProjectRuntimeState) {
+  return uniqueStrings(
+    state.taskRuns.jobs
+      .filter((job) => job.references.includes(asset.path) || job.references.includes(asset.id))
+      .flatMap((job) =>
+        state.storyFlow.shots
+          .filter((shot) => job.id.startsWith(`${shot.id}_`) || job.outputPath === shot.startFrame || job.outputPath === shot.endFrame)
+          .map((shot) => shot.id),
+      ),
+  );
+}
+
+function createAssetLibraryFromRuntimeState(state: ProjectRuntimeState): AssetLibrarySnapshot {
+  const generatedAt = state.generatedAt || new Date().toISOString();
+  let library = createAssetLibrarySnapshot({
+    id: `${state.sourceIndex.projectId || "project"}_asset_library`,
+    createdAt: generatedAt,
+  });
+
+  for (const asset of state.visualMemory.assets) {
+    const assetType = assetRecordTypeToLibraryType(asset.type);
+    const result = addAssetLibraryAsset(library, {
+      id: asset.id,
+      assetType,
+      name: asset.name,
+      status: assetRecordStatusToLibraryStatus(asset),
+      sourceKind: assetSourceKindForPath(asset.path),
+      path: asset.status === "missing" ? undefined : asset.path,
+      pathOrigin: pathOriginForUi(asset.path),
+      importId: asset.id,
+      textConstraints: defaultAssetConstraints(assetType, asset.name),
+      sourceRefs: [`runtime.visualMemory.assets:${asset.id}`],
+      usedByShotIds: linkedShotIdsForAsset(asset, state),
+      updatedAt: generatedAt,
+    });
+    library = result.library;
+  }
+
+  return library;
+}
+
+function assetLibraryAssetToRecord(asset: AssetLibraryAsset): AssetRecord {
+  const lockedStatus =
+    asset.referenceAuthority.lockedStatus === "rejected"
+      ? "needs_review"
+      : asset.referenceAuthority.lockedStatus;
+  const status = asset.status === "missing" ? "missing" : asset.sourceKind === "formal_output" ? "generated" : "exists";
+  const type = asset.assetType === "voice_anchor" ? "unknown" : asset.assetType;
+  return {
+    id: asset.id,
+    type,
+    name: asset.name,
+    path: asset.mainReferencePath || asset.sourcePath?.path || asset.referenceAuthority.path,
+    status,
+    lockedStatus,
+    providerId: "asset-library",
+    safeForFutureReference: asset.canUseAsFutureReference,
+    issues: uniqueStrings([
+      ...asset.blockers,
+      ...asset.warnings,
+      ...(asset.status === "rejected" ? [asset.referenceAuthority.rejectedReason || "Rejected by asset authority review."] : []),
+    ]),
+  };
+}
+
+function syncRuntimeStateWithAssetLibrary(state: ProjectRuntimeState, library: AssetLibrarySnapshot): ProjectRuntimeState {
+  const assets = library.assets.map(assetLibraryAssetToRecord);
+  const lockedReferenceIds = assets.filter((asset) => asset.lockedStatus === "locked").map((asset) => asset.id);
+  const candidateReferenceIds = assets.filter((asset) => asset.lockedStatus === "candidate" || asset.lockedStatus === "needs_review").map((asset) => asset.id);
+  const assetTypes = uniqueStrings(assets.map((asset) => asset.type));
+  return {
+    ...state,
+    visualMemory: {
+      ...state.visualMemory,
+      assets,
+      summary: {
+        ...state.visualMemory.summary,
+        existing: assets.filter((asset) => asset.status !== "missing").length,
+        total: assets.length,
+        locked: lockedReferenceIds.length,
+        needsReview: assets.filter((asset) => asset.lockedStatus === "candidate" || asset.lockedStatus === "needs_review").length,
+        missing: assets.filter((asset) => asset.status === "missing" || asset.lockedStatus === "not_generated").length,
+        byType: assetTypes.map((type) => {
+          const typedAssets = assets.filter((asset) => asset.type === type);
+          return {
+            type,
+            total: typedAssets.length,
+            existing: typedAssets.filter((asset) => asset.status !== "missing").length,
+            missing: typedAssets.filter((asset) => asset.status === "missing").length,
+          };
+        }),
+      },
+    },
+    sourceIndex: {
+      ...state.sourceIndex,
+      lockedReferenceIds,
+      candidateReferenceIds,
+      rejectedReferenceIds: library.assets.filter((asset) => asset.status === "rejected").map((asset) => asset.id),
+      updatedAt: library.updatedAt,
+    },
+    sourceIndexSummary: {
+      ...state.sourceIndexSummary,
+      lockedReferenceCount: lockedReferenceIds.length,
+      candidateReferenceCount: candidateReferenceIds.length,
+      rejectedReferenceCount: library.assets.filter((asset) => asset.status === "rejected").length,
+      blockingReferenceCount: assets.filter((asset) => asset.lockedStatus !== "locked").length,
+      updatedAt: library.updatedAt,
+    },
+  };
+}
+
+function assetLibraryUserBlockers(library: AssetLibrarySnapshot) {
+  const validation = validateAssetLibrarySnapshot(library);
+  const lockedCharacters = library.assets.filter((asset) => asset.assetType === "character" && asset.status === "locked");
+  const lockedScenes = library.assets.filter((asset) => asset.assetType === "scene" && asset.status === "locked");
+  const nonLocked = library.assets.filter((asset) => asset.status !== "locked" && asset.status !== "rejected");
+  const noConstraints = library.assets.filter((asset) => !asset.textConstraints.length || asset.blockers.length);
+  return uniqueStrings([
+    ...(lockedCharacters.length ? [] : ["缺主角参考"]),
+    ...(lockedScenes.length ? [] : ["缺场景 master"]),
+    ...nonLocked.map((asset) => `${cleanLabel(asset.name)} 未 locked，不能做正式参考`),
+    ...noConstraints.map((asset) => `${cleanLabel(asset.name)} 缺文本约束`),
+    ...library.blockedImports.map((item) => `${item.sourceKind} 已拦截：${item.reason}`),
+    ...validation.errors,
+  ]);
+}
+
+function buildProjectStoreSnapshotForUi(runtimeState: ProjectRuntimeState, library: AssetLibrarySnapshot) {
+  const visualMemory = toVisualMemoryDocument(library);
+  return createProjectStoreSnapshot({
+    generatedAt: runtimeState.generatedAt,
+    projectId: runtimeState.sourceIndex.projectId,
+    title: runtimeState.project.title,
+    version: runtimeState.sourceIndex.projectVersion,
+    projectManifest: {
+      title: runtimeState.project.title,
+      projectId: runtimeState.sourceIndex.projectId,
+      version: runtimeState.sourceIndex.projectVersion,
+    },
+    storyFlow: {
+      sections: runtimeState.storyFlow.sections,
+      shots: runtimeState.storyFlow.shots.map((shot) => ({
+        id: shot.id,
+        actId: shot.actId,
+        sectionId: shot.sectionId,
+        title: shot.title,
+        storyFunction: shot.storyFunction,
+      })),
+    },
+    visualMemory: visualMemory as unknown as Record<string, unknown>,
+    shotSpecs: runtimeState.storyFlow.shots.map((shot) => ({
+      shotId: shot.id,
+      value: {
+        id: shot.id,
+        title: shot.title,
+        storyFunction: shot.storyFunction,
+        gates: shot.gates,
+      },
+    })),
+    sceneAssetPacks: library.sceneAssetPacks.map((pack) => ({
+      packId: pack.id,
+      value: pack as unknown as Record<string, unknown>,
+    })),
+    sourceIndex: runtimeState.sourceIndex as unknown as Record<string, unknown>,
+    sourceIndexHash: runtimeState.sourceIndex.sourceIndexHash,
+  });
+}
+
+function buildProjectFactsUiSummary(
+  runtimeState: ProjectRuntimeState,
+  library: AssetLibrarySnapshot,
+  mode: ProjectFactsUiMode,
+): ProjectFactsUiSummary {
+  const snapshot = buildProjectStoreSnapshotForUi(runtimeState, library);
+  const savePlan = saveProjectStoreSnapshot(snapshot, runtimeState.generatedAt);
+  const runtimeProbe = { runtimeStateIsSoleSourceOfTruth: false };
+  const createGate = buildProjectStoreIoGate({ mode: "create", snapshot, generatedAt: runtimeState.generatedAt, runtimeState: runtimeProbe });
+  const saveGate = buildProjectStoreIoGate({ mode: "save", snapshot, generatedAt: runtimeState.generatedAt, runtimeState: runtimeProbe });
+  const projectVibeContent = saveGate.entries.find((entry) => entry.operation === "write_file" && entry.path === "project.vibe")?.content;
+  const openGate = buildProjectStoreIoGate({
+    mode: "open",
+    serializedProjectVibe: projectVibeContent,
+    generatedAt: runtimeState.generatedAt,
+    runtimeState: runtimeProbe,
+  });
+  const gates: Record<ProjectFactsUiMode, ProjectStoreIoGate> = { create: createGate, open: openGate, save: saveGate };
+  const gate = gates[mode];
+  const writeCount = gate.entries.filter((entry) => entry.operation === "write_file").length;
+  const readCount = gate.entries.filter((entry) => entry.operation === "read_file").length;
+  return {
+    mode,
+    projectFile: snapshot.projectFile.fileName,
+    factSource: "project files",
+    runtimeCache: `${runtimeState.stateSource?.path || "/runtime-state.json"} = derived cache，不是事实源`,
+    planStatus: gate.canExecute ? "计划可审查" : "需要检查",
+    planDetail: `${savePlan.savePlan.entries.length} 个 project facts · ${writeCount || readCount} 个 ${mode === "open" ? "read" : "write"} plan`,
+    entryCount: gate.entries.length,
+    writeCount,
+    readCount,
+    blockers: gate.blockers,
+    gate,
+    snapshot,
+  };
+}
+
 function selectedScopeLabel(shot?: ShotRecord, asset?: AssetRecord, sectionLabel?: string) {
   if (shot) return `正在看 ${formatShotNumber(shot.id)}`;
   if (asset) return `正在看 ${cleanLabel(asset.name)}`;
@@ -457,6 +775,23 @@ async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(path);
   if (!response.ok) throw new Error(`Failed to load ${path}: ${response.status}`);
   return response.json() as Promise<T>;
+}
+
+function runtimeLoadTarget() {
+  const params = new URLSearchParams(window.location.search);
+  const useSmallDemo = params.get("demo") === "small" || params.get("runtime") === "demo";
+  if (useSmallDemo) {
+    return {
+      statePath: "/demo-runtime-state.json",
+      auditPath: "/demo-runtime-audit.json",
+      label: "demo small runtime",
+    };
+  }
+  return {
+    statePath: "/runtime-state.json",
+    auditPath: "/runtime-audit.json",
+    label: "runtime-state",
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -2308,6 +2643,9 @@ function buildLocalOrchestratorUiSummary(runtimeState: ProjectRuntimeState): Loc
 }
 
 function buildDirectorProgressStripState(runtimeState: ProjectRuntimeState): DirectorProgressStripState {
+  const override = readDirectorProgressOverride(runtimeState);
+  if (override) return override;
+
   const summary = buildLocalOrchestratorUiSummary(runtimeState);
   const knownPreparing = Math.max(0, summary.ready + summary.waiting);
   const working = Math.max(0, summary.runningPlanned + summary.waitingOutput);
@@ -2355,6 +2693,48 @@ function buildDirectorProgressStripState(runtimeState: ProjectRuntimeState): Dir
     detail,
     tone,
     total,
+    preparing,
+    working,
+    review,
+    blocked,
+    complete,
+    segments: [
+      { label: "准备中", value: preparing, tone: "preparing" },
+      { label: "生成中", value: working, tone: "working" },
+      { label: "等待复核", value: review, tone: "review" },
+      { label: "有阻断", value: blocked, tone: "blocked" },
+      { label: "已完成", value: complete, tone: "complete" },
+    ],
+  };
+}
+
+function readDirectorProgressOverride(runtimeState: ProjectRuntimeState): DirectorProgressStripState | undefined {
+  const stateRecord = runtimeState as ProjectRuntimeState & { directorProgress?: unknown; ui?: unknown };
+  const uiRecord = isRecord(stateRecord.ui) ? stateRecord.ui : {};
+  const progressRecord = isRecord(stateRecord.directorProgress)
+    ? stateRecord.directorProgress
+    : isRecord(uiRecord.directorProgress)
+      ? uiRecord.directorProgress
+      : undefined;
+  if (!progressRecord) return undefined;
+
+  const toneCandidate = readString(progressRecord.tone, "preparing");
+  const tone: DirectorProgressTone = ["preparing", "working", "review", "blocked", "complete"].includes(toneCandidate)
+    ? toneCandidate as DirectorProgressTone
+    : "preparing";
+  const total = Math.max(0, readNumber(progressRecord.total, 0));
+  const preparing = Math.max(0, readNumber(progressRecord.preparing, 0));
+  const working = Math.max(0, readNumber(progressRecord.working, 0));
+  const review = Math.max(0, readNumber(progressRecord.review, 0));
+  const blocked = Math.max(0, readNumber(progressRecord.blocked, 0));
+  const complete = Math.max(0, readNumber(progressRecord.complete, 0));
+  const observedTotal = preparing + working + review + blocked + complete;
+
+  return {
+    label: readString(progressRecord.label, statusLabel(tone)),
+    detail: readString(progressRecord.detail, observedTotal ? `${Math.max(total, observedTotal)} 项` : "等待项目任务"),
+    tone,
+    total: Math.max(total, observedTotal),
     preparing,
     working,
     review,
@@ -5586,91 +5966,205 @@ function MinimalStoryFlow({
   );
 }
 
+function ProjectFactsStrip({
+  summary,
+  mode,
+  onModeChange,
+}: {
+  summary: ProjectFactsUiSummary;
+  mode: ProjectFactsUiMode;
+  onModeChange: (mode: ProjectFactsUiMode) => void;
+}) {
+  return (
+    <section className="project-facts-strip" aria-label="Project Store">
+      <div>
+        <span>Project Store</span>
+        <strong>{summary.projectFile}</strong>
+        <small>{summary.factSource}</small>
+      </div>
+      <div>
+        <span>runtime-state</span>
+        <strong>derived cache</strong>
+        <small>{summary.runtimeCache}</small>
+      </div>
+      <div>
+        <span>{summary.mode} plan</span>
+        <strong>{summary.planStatus}</strong>
+        <small>{summary.planDetail}</small>
+      </div>
+      <div className="project-plan-actions" aria-label="Project Store plan mode">
+        {(["create", "open", "save"] as const).map((item) => (
+          <button key={item} className={mode === item ? "active" : ""} onClick={() => onModeChange(item)}>
+            {item}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function MinimalAssetLibrary({
-  audit,
+  library,
   selectedAssetId,
   onSelectAsset,
+  onAddAsset,
+  onUpdateAsset,
+  onMarkAssetStatus,
 }: {
-  audit: ProjectAudit;
+  library: AssetLibrarySnapshot;
   selectedAssetId?: string;
   onSelectAsset: (id: string) => void;
+  onAddAsset: (input: AddAssetLibraryAssetInput) => void;
+  onUpdateAsset: (assetId: string, input: UpdateAssetLibraryAssetInput) => void;
+  onMarkAssetStatus: (assetId: string, status: AssetLibraryUiStatus) => void;
 }) {
-  const groups = groupAssets(audit.assets);
-  const slotItems = [
-    { label: "角色主参考", detail: groups.Characters.length ? `${groups.Characters.length} 张` : "待补" },
-    { label: "三视图", detail: groups.Characters.length ? "可补" : "待补" },
-    { label: "表情", detail: groups.Characters.length ? "可补" : "待补" },
-    { label: "场景 master", detail: groups.Scenes.length ? `${groups.Scenes.length} 张` : "待补" },
-    { label: "多视角", detail: groups.Scenes.length ? "可补" : "待补" },
-    { label: "风格锚图", detail: groups.Style.length ? `${groups.Style.length} 张` : "待补" },
-    { label: "文本约束", detail: audit.assets.length ? "跟随参考" : "待补" },
-  ];
+  const groups = {
+    characters: library.assets.filter((asset) => asset.assetType === "character"),
+    scenes: library.assets.filter((asset) => asset.assetType === "scene"),
+    anchors: library.assets.filter((asset) => asset.assetType === "prop" || asset.assetType === "style" || asset.assetType === "voice_anchor"),
+  };
+  const selectedAsset = library.assets.find((asset) => asset.id === selectedAssetId);
+  const blockers = assetLibraryUserBlockers(library);
+  const [draft, setDraft] = useState<{ assetType: AssetLibraryAssetType; name: string; path: string; constraints: string }>({
+    assetType: "character",
+    name: "",
+    path: "",
+    constraints: "",
+  });
+  const [constraintDraft, setConstraintDraft] = useState("");
+
+  useEffect(() => {
+    setConstraintDraft(selectedAsset?.textConstraints.join("\n") || "");
+  }, [selectedAsset?.id, selectedAsset?.textConstraints]);
+
+  function addDraft(status: AssetLibraryStatus) {
+    const name = draft.name.trim() || `${assetLibraryTypeLabel(draft.assetType)}参考`;
+    const id = safeAssetId(name, draft.assetType);
+    const path = draft.path.trim();
+    const textConstraints = splitConstraints(draft.constraints || defaultAssetConstraints(draft.assetType, name).join("\n"));
+    onAddAsset({
+      id,
+      assetType: draft.assetType,
+      name,
+      status,
+      sourceKind: assetSourceKindForPath(path) === "source_asset" && !path ? "manual_definition" : assetSourceKindForPath(path),
+      path: path || undefined,
+      pathOrigin: pathOriginForUi(path),
+      importId: id,
+      textConstraints,
+      sourceRefs: ["ui.asset_library"],
+      usedByShotIds: [],
+      updatedAt: new Date().toISOString(),
+    });
+    setDraft({ ...draft, name: "", path: "", constraints: "" });
+  }
+
+  function updateSelectedConstraints() {
+    if (!selectedAsset) return;
+    onUpdateAsset(selectedAsset.id, {
+      textConstraints: splitConstraints(constraintDraft),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  function renderAssetCard(asset: AssetLibraryAsset, wide = false) {
+    const record = assetLibraryAssetToRecord(asset);
+    return (
+      <button
+        key={asset.id}
+        className={`asset-reference-card ${wide ? "wide" : ""} ${selectedAssetId === asset.id ? "selected" : ""}`}
+        onClick={() => onSelectAsset(asset.id)}
+      >
+        <MediaFrame src={record.path} alt={asset.name} label={cleanLabel(asset.name)} className="asset-reference-image" />
+        <span>
+          <strong>{cleanLabel(asset.name)}</strong>
+          <small><i className={`dot ${assetStatusTone(record)}`} /> {assetLibraryStatusLabel(asset.status)}</small>
+        </span>
+        <dl className="asset-authority-grid">
+          <div><dt>type</dt><dd>{asset.assetType}</dd></div>
+          <div><dt>authority</dt><dd>{asset.referenceAuthority.referenceRole}</dd></div>
+          <div><dt>future</dt><dd>{asset.canUseAsFutureReference ? "safe" : "draft only"}</dd></div>
+          <div><dt>shots</dt><dd>{asset.usedByShotIds.join(", ") || "unlinked"}</dd></div>
+        </dl>
+        <p>{asset.textConstraints[0] || "缺文本约束"}</p>
+      </button>
+    );
+  }
 
   return (
     <main className="asset-library-view">
-      <h2>Asset Library</h2>
+      <div className="asset-library-heading">
+        <h2>Asset Library</h2>
+        <div className="asset-library-toolbar" aria-label="添加资产">
+          <select value={draft.assetType} onChange={(event) => setDraft({ ...draft, assetType: event.target.value as AssetLibraryAssetType })}>
+            <option value="character">角色主参考</option>
+            <option value="scene">场景 master</option>
+            <option value="style">风格文本/锚图</option>
+            <option value="prop">道具</option>
+          </select>
+          <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="名称" />
+          <input value={draft.path} onChange={(event) => setDraft({ ...draft, path: event.target.value })} placeholder="参考路径或留空" />
+          <textarea value={draft.constraints} onChange={(event) => setDraft({ ...draft, constraints: event.target.value })} placeholder="文本约束" />
+          <button onClick={() => addDraft("locked")}>添加并锁定</button>
+          <button onClick={() => addDraft("candidate")}>添加候选</button>
+        </div>
+      </div>
       <div className="asset-status-strip" aria-label="Asset consistency">
         <span><i className="dot ok" /> locked</span>
         <span><i className="dot warn" /> candidate</span>
-        <span><i className="dot warn" /> review</span>
+        <span><i className="dot warn" /> needs_review</span>
+        <span><i className="dot bad" /> rejected</span>
       </div>
-      <div className="asset-slot-strip" aria-label="参考素材槽位">
-        {slotItems.map((item) => (
-          <span key={item.label} className={item.detail === "待补" ? "missing" : undefined}>
-            <strong>{item.label}</strong>
-            <small>{item.detail}</small>
-          </span>
-        ))}
+      <div className="asset-blocker-strip" aria-label="资产阻断">
+        {blockers.length ? blockers.slice(0, 4).map((item) => <span key={item}>{item}</span>) : <span>角色、场景和风格参考已可用于正式计划</span>}
       </div>
+      {selectedAsset && (
+        <section className="asset-edit-surface" aria-label="资产编辑">
+          <div>
+            <span>已选择</span>
+            <strong>{cleanLabel(selectedAsset.name)}</strong>
+            <small>{selectedAsset.referenceAuthority.referenceRole} · {assetLibraryStatusLabel(selectedAsset.status)}</small>
+          </div>
+          <div className="asset-status-actions">
+            {(["locked", "candidate", "needs_review", "rejected"] as const).map((status) => (
+              <button
+                key={status}
+                className={assetLibraryStatusToUiStatus(selectedAsset.status) === status ? "active" : ""}
+                onClick={() => onMarkAssetStatus(selectedAsset.id, status)}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+          <textarea value={constraintDraft} onChange={(event) => setConstraintDraft(event.target.value)} aria-label="编辑文本约束" />
+          <button onClick={updateSelectedConstraints}>更新约束</button>
+        </section>
+      )}
       <section className="asset-library-section">
         <span className="asset-section-label">角色参考</span>
         <div className="asset-feature-grid characters">
-          {groups.Characters.map((asset) => (
-            <button
-              key={asset.id}
-              className={`asset-reference-card ${selectedAssetId === asset.id ? "selected" : ""}`}
-              onClick={() => onSelectAsset(asset.id)}
-            >
-              <MediaFrame src={asset.path} alt={asset.name} label={cleanLabel(asset.name)} className="asset-reference-image" />
-              <span>
-                <strong>{cleanLabel(asset.name)}</strong>
-                <small><i className={`dot ${assetStatusTone(asset)}`} /> {assetStatusLabel(asset)}</small>
-              </span>
-            </button>
-          ))}
-          {!groups.Characters.length && <div className="minimal-empty-line">还没有角色主参考</div>}
+          {groups.characters.map((asset) => renderAssetCard(asset))}
+          {!groups.characters.length && <div className="minimal-empty-line">还没有角色主参考</div>}
         </div>
       </section>
       <section className="asset-library-section">
         <span className="asset-section-label">场景 master</span>
         <div className="asset-feature-grid scenes">
-          {groups.Scenes.slice(0, 8).map((asset) => (
-            <button
-              key={asset.id}
-              className={`asset-reference-card wide ${selectedAssetId === asset.id ? "selected" : ""}`}
-              onClick={() => onSelectAsset(asset.id)}
-            >
-              <MediaFrame src={asset.path} alt={asset.name} label={cleanLabel(asset.name)} className="asset-reference-image" />
-              <span>
-                <strong>{cleanLabel(asset.name)}</strong>
-                <small><i className={`dot ${assetStatusTone(asset)}`} /> {assetStatusLabel(asset)}</small>
-              </span>
-            </button>
-          ))}
-          {!groups.Scenes.length && <div className="minimal-empty-line">还没有场景 master</div>}
+          {groups.scenes.map((asset) => renderAssetCard(asset, true))}
+          {!groups.scenes.length && <div className="minimal-empty-line">还没有场景 master</div>}
         </div>
       </section>
       <section className="asset-library-section compact">
         <span className="asset-section-label">道具 / 风格</span>
         <div className="anchor-list">
-          {[...groups.Props, ...groups.Style].map((asset) => (
+          {groups.anchors.map((asset) => (
             <button
               key={asset.id}
               className={`anchor-row ${selectedAssetId === asset.id ? "selected" : ""}`}
               onClick={() => onSelectAsset(asset.id)}
             >
               <span>{cleanLabel(asset.name)}</span>
-              <small><i className={`dot ${assetStatusTone(asset)}`} /> {assetStatusLabel(asset)}</small>
+              <small>{asset.referenceAuthority.referenceRole} · {assetLibraryStatusLabel(asset.status)}</small>
             </button>
           ))}
         </div>
@@ -5889,6 +6383,7 @@ function MinimalAgentPanel({
 }) {
   const [text, setText] = useState("");
   const [status, setStatus] = useState("等待描述");
+  const [planPhase, setPlanPhase] = useState<AgentPlanPhase>("idle");
   const [workflow, setWorkflow] = useState<ReturnType<typeof buildDirectorWorkflowState> | undefined>();
   const scopeLabel = selectedScopeLabel(shot, asset, sectionLabel);
 
@@ -5908,12 +6403,20 @@ function MinimalAgentPanel({
       },
     });
     setWorkflow(nextWorkflow);
-    setStatus(workflowStatusLabel(nextWorkflow.status));
+    setPlanPhase("review");
+    setStatus(workflowPanelStatusLabel(nextWorkflow, "review"));
+  }
+
+  function confirmPlan() {
+    if (!workflowCanConfirm(workflow)) return;
+    setPlanPhase("confirmed");
+    setStatus(workflowPanelStatusLabel(workflow, "confirmed"));
   }
 
   const badges = workflow ? workflowBadgeLabels(workflow).slice(0, 5) : ["准备修改"];
-  const nextStep = workflow ? workflowNextStepLabel(workflow.status) : "写一句你想调整的画面、角色或节奏。";
-  const confirmationPrompt = workflow?.confirmationRequired ? "确认后再开始生成。" : "";
+  const nextStep = workflow ? workflowPanelNextStepLabel(workflow, planPhase) : "写一句你想调整的画面、角色或节奏。";
+  const planFacts = workflow ? workflowPlanFacts(workflow) : [];
+  const canConfirm = workflowCanConfirm(workflow);
 
   return (
     <aside className="minimal-agent-panel">
@@ -5931,8 +6434,32 @@ function MinimalAgentPanel({
           <small key={badge}>{badge}</small>
         ))}
       </div>
+      {workflow && (
+        <div className="minimal-agent-plan" aria-label="计划状态">
+          {planFacts.map((item) => (
+            <small key={item.label}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </small>
+          ))}
+        </div>
+      )}
+      {workflow && (
+        <div className="minimal-agent-steps" aria-label="执行状态">
+          <small className={planPhase === "review" || planPhase === "confirmed" ? "is-active" : ""}>等待确认</small>
+          <small className={planPhase === "confirmed" ? "is-active" : ""}>排队中</small>
+          <small className={planPhase === "confirmed" ? "is-active" : ""}>已计划</small>
+        </div>
+      )}
       <small>{nextStep}</small>
-      {confirmationPrompt && <small className="minimal-agent-confirm">{confirmationPrompt}</small>}
+      {workflow && (
+        <div className="minimal-agent-actions">
+          <button disabled={!canConfirm || planPhase === "confirmed"} onClick={confirmPlan}>
+            <CheckCircle2 size={15} />
+            确认计划
+          </button>
+        </div>
+      )}
     </aside>
   );
 }
@@ -5965,9 +6492,46 @@ function workflowBadgeLabels(workflow: ReturnType<typeof buildDirectorWorkflowSt
   const labels = ["准备修改", naturalWorkflowScopeLabel(workflow.scopeLabel)];
   if (workflow.summary.readyTaskPackets > 0) labels.push(`${workflow.summary.readyTaskPackets} 个修改点`);
   if (workflow.summary.blockedTaskPackets > 0) labels.push("需要补充信息");
-  if (workflow.confirmationRequired) labels.push("等待确认");
+  if (workflow.confirmationRequired || workflowCanConfirm(workflow)) labels.push("等待确认");
   if (workflow.summary.exportPackageStatus === "ready") labels.push("预览可看");
   return Array.from(new Set(labels));
+}
+
+function workflowCanConfirm(
+  workflow?: ReturnType<typeof buildDirectorWorkflowState>,
+): workflow is ReturnType<typeof buildDirectorWorkflowState> {
+  return Boolean(workflow && (workflow.status === "dry_run_ready" || workflow.status === "pending_confirmation"));
+}
+
+function workflowPanelStatusLabel(workflow: ReturnType<typeof buildDirectorWorkflowState>, planPhase: AgentPlanPhase) {
+  if (workflow.status === "blocked") return "阻断";
+  if (workflow.status === "blocked_missing_context") return "需要补充信息";
+  if (planPhase === "confirmed") return "排队中";
+  return "等待确认";
+}
+
+function workflowPanelNextStepLabel(workflow: ReturnType<typeof buildDirectorWorkflowState>, planPhase: AgentPlanPhase) {
+  if (workflow.status === "blocked") return "这次修改还不能进入计划。";
+  if (workflow.status === "blocked_missing_context") return workflowNextStepLabel(workflow.status);
+  if (planPhase === "confirmed") return "已计划，等待后续输出与复核。";
+  return "确认后进入本地计划队列。";
+}
+
+function workflowPlanFacts(workflow: ReturnType<typeof buildDirectorWorkflowState>) {
+  return [
+    {
+      label: "修改点",
+      value: `${workflow.summary.readyTaskPackets}/${workflow.summary.totalTaskPackets}`,
+    },
+    {
+      label: "计划队列",
+      value: `${workflow.summary.queueItems}`,
+    },
+    {
+      label: "待写入项目事实",
+      value: workflow.editPlan.transaction.id,
+    },
+  ];
 }
 
 function DirectorProgressStrip({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
@@ -6146,6 +6710,9 @@ function DirectorMode({
   audit,
   view,
   runtimeState,
+  assetLibrary,
+  projectFacts,
+  projectFactsMode,
   selectedShot,
   selectedAsset,
   selectedShotId,
@@ -6154,10 +6721,17 @@ function DirectorMode({
   activeSectionId,
   onSelectShot,
   onSelectAsset,
+  onAddAsset,
+  onUpdateAsset,
+  onMarkAssetStatus,
+  onProjectFactsModeChange,
 }: {
   audit: ProjectAudit;
   view: RuntimeView;
   runtimeState: ProjectRuntimeState;
+  assetLibrary: AssetLibrarySnapshot;
+  projectFacts: ProjectFactsUiSummary;
+  projectFactsMode: ProjectFactsUiMode;
   selectedShot?: ShotRecord;
   selectedAsset?: AssetRecord;
   selectedShotId: string;
@@ -6166,6 +6740,10 @@ function DirectorMode({
   activeSectionId?: string;
   onSelectShot: (id: string) => void;
   onSelectAsset: (id: string) => void;
+  onAddAsset: (input: AddAssetLibraryAssetInput) => void;
+  onUpdateAsset: (assetId: string, input: UpdateAssetLibraryAssetInput) => void;
+  onMarkAssetStatus: (assetId: string, status: AssetLibraryUiStatus) => void;
+  onProjectFactsModeChange: (mode: ProjectFactsUiMode) => void;
 }) {
   const activeSection = view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0];
   const sectionLabel = activeSection?.label || "Story";
@@ -6174,14 +6752,18 @@ function DirectorMode({
 
   return (
     <div className={`minimal-director ${directorView}`}>
+      <ProjectFactsStrip summary={projectFacts} mode={projectFactsMode} onModeChange={onProjectFactsModeChange} />
       <DirectorProgressStrip runtimeState={runtimeState} />
       <RealPilotDirectorStatus summary={realPilotSummary} />
       <div className="minimal-director-main">
         {directorView === "assets" && (
           <MinimalAssetLibrary
-            audit={audit}
+            library={assetLibrary}
             selectedAssetId={selectedAssetId}
             onSelectAsset={onSelectAsset}
+            onAddAsset={onAddAsset}
+            onUpdateAsset={onUpdateAsset}
+            onMarkAssetStatus={onMarkAssetStatus}
           />
         )}
         {directorView === "story" && (
@@ -7446,51 +8028,80 @@ function DiagnosticsMode({
 
 function App() {
   const [runtimeState, setRuntimeState] = useState<ProjectRuntimeState>(fallbackRuntimeState);
+  const [assetLibrary, setAssetLibrary] = useState<AssetLibrarySnapshot>(() => createAssetLibraryFromRuntimeState(fallbackRuntimeState));
+  const [projectFactsMode, setProjectFactsMode] = useState<ProjectFactsUiMode>("save");
   const [mode, setMode] = useState<UiMode>("director");
   const [directorView, setDirectorView] = useState<DirectorView>("story");
   const [activeSectionId, setActiveSectionId] = useState<string | undefined>();
   const [selectedShotId, setSelectedShotId] = useState("A1_01");
   const [selectedAssetId, setSelectedAssetId] = useState<string | undefined>();
 
+  function loadProjectState(nextState: ProjectRuntimeState) {
+    setRuntimeState(nextState);
+    setAssetLibrary(createAssetLibraryFromRuntimeState(nextState));
+  }
+
+  function applyAssetLibraryMutation(nextLibrary: AssetLibrarySnapshot, selectedId?: string) {
+    setAssetLibrary(nextLibrary);
+    setRuntimeState((current) => syncRuntimeStateWithAssetLibrary(current, nextLibrary));
+    if (selectedId) setSelectedAssetId(selectedId);
+  }
+
+  function addAsset(input: AddAssetLibraryAssetInput) {
+    const result = addAssetLibraryAsset(assetLibrary, input);
+    applyAssetLibraryMutation(result.library, result.asset?.id);
+  }
+
+  function updateAsset(assetId: string, input: UpdateAssetLibraryAssetInput) {
+    const result = updateAssetLibraryAsset(assetLibrary, assetId, input);
+    applyAssetLibraryMutation(result.library, result.asset?.id || assetId);
+  }
+
+  function markAssetStatus(assetId: string, status: AssetLibraryUiStatus) {
+    const result = markAssetLibraryAssetStatus(assetLibrary, assetId, uiStatusToAssetLibraryStatus(status), new Date().toISOString());
+    applyAssetLibraryMutation(result.library, result.asset?.id || assetId);
+  }
+
   useEffect(() => {
     let cancelled = false;
+    const loadTarget = runtimeLoadTarget();
 
     async function loadRuntime() {
       try {
-        const state = await fetchJson<unknown>("/runtime-state.json");
+        const state = await fetchJson<unknown>(loadTarget.statePath);
         const normalized = withRuntimeDefaults(normalizeRuntimeState(state) as ProjectRuntimeState);
         const runtimeReady = {
           ...normalized,
-          stateSource: normalized.stateSource || { kind: "runtime-state", label: "runtime-state", path: "/runtime-state.json" },
+          stateSource: normalized.stateSource || { kind: "runtime-state", label: loadTarget.label, path: loadTarget.statePath },
         } satisfies ProjectRuntimeState;
         assertProjectRuntimeState(runtimeReady);
         if (cancelled) return;
-        setRuntimeState(runtimeReady);
+        loadProjectState(runtimeReady);
         if (runtimeReady.storyFlow?.shots?.[0]) setSelectedShotId(runtimeReady.storyFlow.shots[0].id);
         return;
       } catch (error) {
-        console.warn("Runtime-state load failed; falling back to runtime-audit.json.", error);
+        console.warn(`${loadTarget.statePath} load failed; falling back to ${loadTarget.auditPath}.`, error);
         // Fall through to the legacy audit file for Phase 3 compatibility.
       }
 
       try {
-        const auditData = await fetchJson<ProjectAudit>("/runtime-audit.json");
+        const auditData = await fetchJson<ProjectAudit>(loadTarget.auditPath);
         if (cancelled) return;
         const state = buildProjectRuntimeState(auditData, emptyKnowledgeManifest, {
           stateSource: {
             kind: "runtime-audit-fallback",
-            label: "runtime-audit fallback",
-            path: "/runtime-audit.json",
+            label: `${loadTarget.label} audit fallback`,
+            path: loadTarget.auditPath,
             note: "Derived in browser from the legacy audit file without bundling the full knowledge manifest.",
             sourceImportedAt: auditData.importedAt,
           },
         });
-        setRuntimeState(state);
+        loadProjectState(state);
         if (auditData.shots?.[0]) setSelectedShotId(auditData.shots[0].id);
         return;
       } catch {
         if (cancelled) return;
-        setRuntimeState(fallbackRuntimeState);
+        loadProjectState(fallbackRuntimeState);
         if (fallbackRuntimeState.storyFlow.shots[0]) setSelectedShotId(fallbackRuntimeState.storyFlow.shots[0].id);
       }
     }
@@ -7510,6 +8121,10 @@ function App() {
   const selectedAsset = useMemo(() => audit.assets.find((asset) => asset.id === selectedAssetId), [audit.assets, selectedAssetId]);
   const blockers = audit.issues.filter((issue) => issue.severity === "blocker");
   const projectPlan = useMemo(() => buildMinimalProjectPlan(runtimeState), [runtimeState]);
+  const projectFacts = useMemo(
+    () => buildProjectFactsUiSummary(runtimeState, assetLibrary, projectFactsMode),
+    [assetLibrary, projectFactsMode, runtimeState],
+  );
   const resolvedActiveSectionId = activeSectionId
     || view.storySections.find((section) => selectedShot && section.shotIds.includes(selectedShot.id))?.id
     || view.storySections[0]?.id;
@@ -7573,6 +8188,9 @@ function App() {
           audit={audit}
           view={view}
           runtimeState={runtimeState}
+          assetLibrary={assetLibrary}
+          projectFacts={projectFacts}
+          projectFactsMode={projectFactsMode}
           selectedShot={selectedShot}
           selectedAsset={selectedAsset}
           selectedShotId={selectedShotId}
@@ -7581,6 +8199,10 @@ function App() {
           activeSectionId={resolvedActiveSectionId}
           onSelectShot={selectShot}
           onSelectAsset={setSelectedAssetId}
+          onAddAsset={addAsset}
+          onUpdateAsset={updateAsset}
+          onMarkAssetStatus={markAssetStatus}
+          onProjectFactsModeChange={setProjectFactsMode}
         />
       )}
       {mode === "inspector" && <InspectorMode audit={audit} view={view} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />}

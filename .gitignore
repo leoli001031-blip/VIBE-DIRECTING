@@ -6,6 +6,8 @@ dist/
 # Local/generated runtime imports
 public/runtime-audit.json
 public/runtime-state.json
+public/demo-runtime-audit.json
+public/demo-runtime-state.json
 public/media/
 
 # Future local project outputs
