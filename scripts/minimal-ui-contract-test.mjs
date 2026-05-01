@@ -107,6 +107,7 @@ const desktopShellView = findFunctionBody(appSource, "buildDesktopRuntimeShellVi
 const subagentWorkerRuntimeDiagnostics = findFunctionBody(appSource, "SubagentWorkerRuntimeDiagnostics");
 const agentCliMockRunnerDiagnostics = findFunctionBody(appSource, "AgentCliMockRunnerDiagnostics");
 const exportWorkerDiagnostics = findFunctionBody(appSource, "ExportWorkerDiagnostics");
+const voiceAudioSettingsDiagnostics = findFunctionBody(appSource, "VoiceAudioSettingsDiagnostics");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
 const knowledgeUiSummary = findFunctionBody(appSource, "buildKnowledgeUiSummary");
 const knowledgePackManager = findFunctionBody(appSource, "KnowledgePackManager");
@@ -199,6 +200,16 @@ checkMessage(requireWithin(exportWorkerDiagnostics, /Planned Writes/i, "Phase 27
 checkMessage(requireWithin(exportWorkerDiagnostics, /Export Root/i, "Phase 27 export root summary"));
 checkMessage(requireWithin(exportWorkerDiagnostics, /Blocked\s*\/\s*warnings/i, "Phase 27 blockers/warnings summary"));
 checkMessage(requireWithin(exportWorkerDiagnostics, /phase27-lock-strip/i, "Phase 27 hard lock strip"));
+checkMessage(requireWithin(diagnosticsMode, /VoiceAudioSettingsDiagnostics/, "Phase 28 VoiceAudioSettingsDiagnostics mounted in Diagnostics"));
+checkMessage(requireWithin(appSource, /phase_28_voice_audio_settings_ui/, "Phase 28 voiceAudioSettings phase reader"));
+checkMessage(requireWithin(voiceAudioSettingsDiagnostics, /Phase 28 Voice\/Audio Settings/i, "Phase 28 Voice/Audio Settings diagnostics panel"));
+checkMessage(requireWithin(voiceAudioSettingsDiagnostics, /Readiness/i, "Phase 28 readiness summary"));
+checkMessage(requireWithin(voiceAudioSettingsDiagnostics, /Voice Sources/i, "Phase 28 voice sources summary"));
+checkMessage(requireWithin(voiceAudioSettingsDiagnostics, /Audio Plans/i, "Phase 28 audio plans summary"));
+checkMessage(requireWithin(voiceAudioSettingsDiagnostics, /No BGM Policy/i, "Phase 28 no BGM policy summary"));
+checkMessage(requireWithin(voiceAudioSettingsDiagnostics, /Provider Slots/i, "Phase 28 provider slots summary"));
+checkMessage(requireWithin(voiceAudioSettingsDiagnostics, /Blockers\s*\/\s*warnings/i, "Phase 28 blockers/warnings summary"));
+checkMessage(requireWithin(voiceAudioSettingsDiagnostics, /phase28-lock-strip/i, "Phase 28 hard lock strip"));
 checkMessage(requireWithin(previewPlayerQueue, /draftPreview\.events/, "Phase 21/23 Preview Player queue must use previewExport.draftPreview.events"));
 checkMessage(requireWithin(previewPlayerQueue, /image_hold/, "Phase 21/23 Preview Player queue must include image holds"));
 checkMessage(requireWithin(previewPlayerQueue, /video_clip/, "Phase 21/23 Preview Player queue must include video clips"));
@@ -326,6 +337,22 @@ for (const [term, pattern] of phase26ForbiddenMainTerms) {
   const count = countPattern(phase2123DirectorSurface, pattern);
   check(count === 0, `Phase 26 main Director surface must expose 0 ${term} term(s), found ${count}`);
 }
+const phase28ForbiddenMainTerms = [
+  ["Phase 28 Voice/Audio Settings", /Phase\s+28\s+Voice\/Audio\s+Settings/i],
+  ["Voice/Audio Settings", /Voice\/Audio\s+Settings/i],
+  ["Voice/Audio Settings readiness", /Voice\/Audio\s+Settings\s+readiness/i],
+  ["Provider Slots", /Provider\s+Slots/i],
+  ["provider slots planned/live", /provider\s+slots\s+planned\/live/i],
+  ["hard lock strip", /hard\s+lock\s+strip/i],
+  ["TTS submit", /TTS\s+submit/i],
+  ["music submit", /music\s+submit/i],
+  ["audio provider", /audio\s+provider/i],
+  ["provider live", /provider\s+live/i],
+];
+for (const [term, pattern] of phase28ForbiddenMainTerms) {
+  const count = countPattern(phase2123DirectorSurface, pattern);
+  check(count === 0, `Phase 28 main Director surface must expose 0 ${term} term(s), found ${count}`);
+}
 check(!/Formal\s+Gate|Proxy\s+Duration|Draft\s+Events|blockedPlaceholder/i.test(minimalPreview), "Preview Player copy must stay short and not show gate/proxy counters");
 check(/locked/i.test(minimalAssetLibrary) && /candidate/i.test(minimalAssetLibrary) && /review/i.test(minimalAssetLibrary), "Asset Library must keep locked/candidate/review consistency states");
 
@@ -348,6 +375,11 @@ checkMessage(requireWithin(settingsShell, /Agent\/CLI Mock Runner readiness/i, "
 checkMessage(requireWithin(settingsShell, /adapter boundary mock\/no-op only/i, "Phase 26 adapter boundary summary in Settings"));
 checkMessage(requireWithin(settingsShell, /Export Worker readiness/i, "Phase 27 Export Worker readiness summary in Settings"));
 checkMessage(requireWithin(settingsShell, /export IO scope/i, "Phase 27 export IO scope summary in Settings"));
+checkMessage(requireWithin(settingsShell, /Voice\/Audio Settings readiness/i, "Phase 28 Voice/Audio Settings readiness summary in Settings"));
+checkMessage(requireWithin(settingsShell, /source\(s\)/i, "Phase 28 source counts in Settings"));
+checkMessage(requireWithin(settingsShell, /audio plan\(s\)/i, "Phase 28 audio plan counts in Settings"));
+checkMessage(requireWithin(settingsShell, /no BGM/i, "Phase 28 no BGM summary in Settings"));
+checkMessage(requireWithin(settingsShell, /provider live/i, "Phase 28 provider live count in Settings"));
 checkMessage(requireWithin(knowledgePackManager, /Enabled/i, "Phase 25 Knowledge summary enabled/total metric"));
 checkMessage(requireWithin(knowledgePackManager, /Injected/i, "Phase 25 Knowledge summary injected/unique metric"));
 checkMessage(requireWithin(knowledgePackManager, /Warnings\s*\/\s*Blockers/i, "Phase 25 Knowledge summary warnings/blockers metric"));
@@ -371,11 +403,35 @@ const forbiddenButtonCopy = [
   "Generate FCPXML",
   "Open Shell",
   "Run Export Worker",
+  "Generate Audio",
+  "Run TTS",
+  "Generate BGM",
+  "Upload Voice Sample",
+  "Save API Key",
+  "Submit Audio Provider",
+  "Write Audio File",
 ];
 for (const copy of forbiddenButtonCopy) {
   check(
     !new RegExp(`<button\\b[\\s\\S]{0,240}${copy.replace(/\s+/g, "\\s+")}`, "i").test(appSource),
     `UI must not expose ${copy} button copy`,
+  );
+}
+const phase28ForbiddenButtonCopy = [
+  "Generate Audio",
+  "Run TTS",
+  "Generate BGM",
+  "Upload Voice Sample",
+  "Save API Key",
+  "Save Credentials",
+  "Run Provider",
+  "Submit Audio Provider",
+  "Write Audio File",
+];
+for (const copy of phase28ForbiddenButtonCopy) {
+  check(
+    !new RegExp(copy.replace(/\s+/g, "\\s+"), "i").test(appSource),
+    `Phase 28 UI must not expose ${copy} copy`,
   );
 }
 

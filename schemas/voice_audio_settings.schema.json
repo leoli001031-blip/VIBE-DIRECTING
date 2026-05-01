@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/voice_audio_settings.schema.json",
+  "title": "VoiceAudioSettingsState",
+  "description": "Phase 28 settings-only voice/audio project facts derived from Voice Source Library and Audio Planning. No provider submission, credentials, sample copying, file mutation, or BGM video prompt text is allowed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "phase",
+    "scope",
+    "readiness",
+    "voiceSourceSummary",
+    "audioSettingSummary",
+    "videoProviderAudioPolicy",
+    "settingsControls",
+    "hardLocks",
+    "blockers",
+    "warnings",
+    "notes",
+    "settingsOnly",
+    "providerSubmissionForbidden",
+    "liveSubmitAllowed"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "0.1.0" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "phase": { "type": "string", "const": "phase_28_voice_audio_settings_ui" },
+    "scope": { "type": "string", "const": "voice_audio_project_facts" },
+    "readiness": { "$ref": "#/$defs/readiness" },
+    "voiceSourceSummary": { "$ref": "#/$defs/voiceSourceSummary" },
+    "audioSettingSummary": { "$ref": "#/$defs/audioSettingSummary" },
+    "videoProviderAudioPolicy": { "$ref": "#/$defs/videoProviderAudioPolicy" },
+    "settingsControls": { "$ref": "#/$defs/settingsControls" },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "settingsOnly": { "type": "boolean", "const": true },
+    "providerSubmissionForbidden": { "type": "boolean", "const": true },
+    "liveSubmitAllowed": { "type": "boolean", "const": false }
+  },
+  "$defs": {
+    "readiness": {
+      "type": "string",
+      "enum": ["ready", "planned", "blocked"]
+    },
+    "voiceSourceSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "locked",
+        "candidate",
+        "rejected",
+        "narrator",
+        "character",
+        "music",
+        "ambience",
+        "ttsReady",
+        "futureReferenceReady",
+        "rejectedInputCount",
+        "sourceHardLocksOk",
+        "storesSecrets",
+        "providerSubmitAllowed",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "locked": { "type": "integer", "minimum": 0 },
+        "candidate": { "type": "integer", "minimum": 0 },
+        "rejected": { "type": "integer", "minimum": 0 },
+        "narrator": { "type": "integer", "minimum": 0 },
+        "character": { "type": "integer", "minimum": 0 },
+        "music": { "type": "integer", "minimum": 0 },
+        "ambience": { "type": "integer", "minimum": 0 },
+        "ttsReady": { "type": "integer", "minimum": 0 },
+        "futureReferenceReady": { "type": "integer", "minimum": 0 },
+        "rejectedInputCount": { "type": "integer", "minimum": 0 },
+        "sourceHardLocksOk": { "type": "boolean" },
+        "storesSecrets": { "type": "boolean", "const": false },
+        "providerSubmitAllowed": { "type": "boolean", "const": false },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "providerSlotState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "state", "allowedProviderCount", "liveSubmitAllowed"],
+      "properties": {
+        "slot": {
+          "type": "string",
+          "enum": ["audio.tts", "audio.music"]
+        },
+        "state": { "$ref": "common.schema.json#/$defs/providerExecutionState" },
+        "activeProvider": { "type": "string" },
+        "allowedProviderCount": { "type": "integer", "minimum": 0 },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "audioSettingSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shotPlanCount",
+        "previewMixPlaceholderCount",
+        "previewEventCount",
+        "missingOutputCount",
+        "providerSlotStates",
+        "shotPlansWithMusicAllowed",
+        "linkedTtsJobCount",
+        "linkedMusicJobCount"
+      ],
+      "properties": {
+        "shotPlanCount": { "type": "integer", "minimum": 0 },
+        "previewMixPlaceholderCount": { "type": "integer", "minimum": 0 },
+        "previewEventCount": { "type": "integer", "minimum": 0 },
+        "missingOutputCount": { "type": "integer", "minimum": 0 },
+        "providerSlotStates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/providerSlotState" }
+        },
+        "shotPlansWithMusicAllowed": { "type": "integer", "minimum": 0 },
+        "linkedTtsJobCount": { "type": "integer", "minimum": 0 },
+        "linkedMusicJobCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "videoProviderAudioPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "noBgmForVideoProvider",
+        "musicAllowed",
+        "bgmHandledBy",
+        "bgmIncludedInVideoPrompt",
+        "defaultVideoPromptConstraint",
+        "ambienceSfxPlaceholderAllowed"
+      ],
+      "properties": {
+        "noBgmForVideoProvider": { "type": "boolean", "const": true },
+        "musicAllowed": { "type": "boolean", "const": false },
+        "bgmHandledBy": { "type": "string", "const": "audio_plan_or_post_import" },
+        "bgmIncludedInVideoPrompt": { "type": "boolean", "const": false },
+        "defaultVideoPromptConstraint": { "type": "string", "const": "no bgm" },
+        "ambienceSfxPlaceholderAllowed": { "type": "boolean", "const": true }
+      }
+    },
+    "settingsControls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "addVoiceSourceMode",
+        "changeVoiceRequires",
+        "bgmMusicRouting",
+        "ambienceSfxPlaceholderAllowed",
+        "previewMixMode",
+        "credentialsMode",
+        "sampleAudioMode",
+        "fileMutationMode"
+      ],
+      "properties": {
+        "addVoiceSourceMode": { "type": "string", "const": "metadata_only" },
+        "changeVoiceRequires": { "type": "string", "const": "voice_change_transaction" },
+        "bgmMusicRouting": { "type": "string", "const": "audio_plan_or_post_import" },
+        "ambienceSfxPlaceholderAllowed": { "type": "boolean", "const": true },
+        "previewMixMode": { "type": "string", "const": "placeholder_only" },
+        "credentialsMode": { "type": "string", "const": "not_read_or_stored" },
+        "sampleAudioMode": { "type": "string", "const": "metadata_reference_only" },
+        "fileMutationMode": { "type": "string", "const": "blocked" }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "settingsOnly",
+        "noProviderSubmit",
+        "noTtsSubmit",
+        "noMusicSubmit",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "noSecretStorage",
+        "noSampleAudioCopy",
+        "noFileMutation",
+        "noBgmInVideoProvider",
+        "noVideoProviderBgmPrompt",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "settingsOnly": { "type": "boolean", "const": true },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "noTtsSubmit": { "type": "boolean", "const": true },
+        "noMusicSubmit": { "type": "boolean", "const": true },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "noSecretStorage": { "type": "boolean", "const": true },
+        "noSampleAudioCopy": { "type": "boolean", "const": true },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "noBgmInVideoProvider": { "type": "boolean", "const": true },
+        "noVideoProviderBgmPrompt": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    }
+  }
+}

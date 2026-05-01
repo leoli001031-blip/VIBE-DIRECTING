@@ -132,6 +132,22 @@ type ExportWorkerUiSummary = {
   blockersWarnings: string[];
   hardLocks: string[];
 };
+type VoiceAudioSettingsUiSummary = {
+  initialized: boolean;
+  phase: string;
+  readiness: string;
+  voiceSourceCount: number;
+  voiceSourceDetail: string;
+  audioPlanCount: number;
+  audioPlanDetail: string;
+  noBgmPolicy: boolean;
+  noBgmDetail: string;
+  providerSlotsTotal: number;
+  providerSlotsPlanned: number;
+  providerSlotsLive: number;
+  blockersWarnings: string[];
+  hardLocks: string[];
+};
 
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
@@ -1283,6 +1299,16 @@ function readFirstNumber(records: Record<string, unknown>[], keys: string[]) {
   return undefined;
 }
 
+function readFirstBoolean(records: Record<string, unknown>[], keys: string[]) {
+  for (const record of records) {
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === "boolean") return value;
+    }
+  }
+  return undefined;
+}
+
 function firstRecordFrom(record: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     if (isRecord(record[key])) return record[key];
@@ -1316,6 +1342,174 @@ function formatPlannedWriteSample(value: unknown, index: number) {
   const target = value.targetPath ?? value.path ?? value.relativePath ?? value.destination ?? value.outputPath ?? value.file;
   const targetLabel = compactPathLabel(target, "");
   return [statusLabel(action), targetLabel].filter(Boolean).join(" / ") || `planned write ${index + 1}`;
+}
+
+function voiceAudioSettingsReadinessLabel(status: string, initialized: boolean, phase: string) {
+  if (!initialized) return "blocked/missing";
+  if (phase !== "phase_28_voice_audio_settings_ui") return "blocked";
+  const normalized = status.toLowerCase();
+  if (normalized.includes("ready")) return "ready";
+  if (normalized.includes("planned")) return "planned";
+  if (normalized.includes("blocked") || normalized.includes("missing") || normalized.includes("fail")) return "blocked";
+  return status ? statusLabel(status) : "blocked/missing";
+}
+
+function providerSlotState(slot: unknown) {
+  if (!isRecord(slot)) return "";
+  return readString(slot.state, readString(slot.status, ""));
+}
+
+function providerSlotIsLive(slot: unknown) {
+  return isRecord(slot) && slot.liveSubmitAllowed === true;
+}
+
+function buildVoiceAudioHardLocks(
+  rootRecord: Record<string, unknown>,
+  summary: Record<string, unknown>,
+  policy: Record<string, unknown>,
+) {
+  const explicitHardLocks = firstArrayFrom([rootRecord, summary, policy], ["hardLocks", "locks", "hardLockStrip"])
+    .map((item, index) => formatHarnessValue(item, `hard lock ${index + 1}`))
+    .filter(Boolean);
+  const rootLocks = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockStrip", "hardLockSummary"]);
+  const summaryLocks = firstRecordFrom(summary, ["hardLocks", "locks", "hardLockStrip", "hardLockSummary"]);
+  const lockRecords = [rootLocks, summaryLocks, policy, rootRecord, summary];
+  const inferredLocks = [
+    readBooleanLockLabel(rootLocks, "dryRunOnly", "dry-run only", true),
+    readBooleanLockLabel(rootLocks, "readOnly", "read-only", true),
+    readBooleanLockLabel(rootLocks, "diagnosticsOnly", "diagnostics/settings only", true),
+    readBooleanLockLabel(rootLocks, "noTtsSubmit", "TTS submit blocked", true),
+    readBooleanLockLabel(rootLocks, "noMusicSubmit", "music submit blocked", true),
+    readBooleanLockLabel(rootLocks, "noBgmInVideoProvider", "no BGM in video provider", true),
+    readBooleanLockLabel(rootLocks, "noProviderSubmit", "provider submit blocked", true),
+    readBooleanLockLabel(rootLocks, "providerSubmissionForbidden", "provider submit blocked", true),
+    readBooleanLockLabel(rootLocks, "liveSubmitAllowed", "live submit disabled", false),
+    readBooleanLockLabel(rootLocks, "noCredentialRead", "no credential read", true),
+    readBooleanLockLabel(rootLocks, "noCredentialWrite", "no credential write", true),
+    readBooleanLockLabel(rootLocks, "noSecretStorage", "no secret storage", true),
+    readBooleanLockLabel(rootLocks, "noSampleAudioCopy", "no sample audio copy", true),
+    readBooleanLockLabel(rootLocks, "noFileUpload", "no file upload", true),
+    readBooleanLockLabel(rootLocks, "noFileMutation", "no file mutation", true),
+    readBooleanLockLabel(rootLocks, "noProviderRun", "provider run blocked", true),
+    readBooleanLockLabel(summaryLocks, "noTtsSubmit", "TTS submit blocked", true),
+    readBooleanLockLabel(summaryLocks, "noMusicSubmit", "music submit blocked", true),
+    readBooleanLockLabel(summaryLocks, "noBgmInVideoProvider", "no BGM in video provider", true),
+    readBooleanLockLabel(summaryLocks, "providerSubmissionForbidden", "provider submit blocked", true),
+    readBooleanLockLabel(summaryLocks, "liveSubmitAllowed", "live submit disabled", false),
+    readBooleanLockLabel(policy, "noBgmInVideoProvider", "no BGM in video provider", true),
+    readBooleanLockLabel(policy, "noBgmForVideoProvider", "no BGM in video provider", true),
+    readBooleanLockLabel(policy, "providerSubmissionForbidden", "provider submit blocked", true),
+    readBooleanLockLabel(policy, "liveSubmitAllowed", "live submit disabled", false),
+    readFirstBoolean(lockRecords, ["noCredentialRead"]) === true ? "no credential read" : undefined,
+    readFirstBoolean(lockRecords, ["noCredentialWrite"]) === true ? "no credential write" : undefined,
+  ].filter((lock): lock is string => Boolean(lock));
+
+  return Array.from(new Set([...explicitHardLocks, ...inferredLocks]));
+}
+
+function buildVoiceAudioSettingsUiSummary(runtimeState: ProjectRuntimeState): VoiceAudioSettingsUiSummary {
+  const root = (runtimeState as Partial<ProjectRuntimeState> & { voiceAudioSettings?: unknown }).voiceAudioSettings;
+  const initialized = isRecord(root);
+  const rootRecord = initialized ? root as Record<string, unknown> : {};
+  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
+  const voice = firstRecordFrom(rootRecord, ["voiceSourceSummary", "voice", "voiceSummary", "voiceSources", "voiceSourceRegistry"]);
+  const audio = firstRecordFrom(rootRecord, ["audioSettingSummary", "audio", "audioSummary", "audioPlans", "audioPlanning"]);
+  const policy = firstRecordFrom(rootRecord, ["videoProviderAudioPolicy", "policy", "audioPolicy", "providerPolicy", "videoProviderPolicy"]);
+  const providerSlotSummary = firstRecordFrom(rootRecord, ["providerSlots", "providerSlotSummary", "providers", "providerSummary"]);
+  const records = [summary, voice, audio, policy, providerSlotSummary, rootRecord].filter(isRecord);
+  const voiceRecords = [voice, summary, rootRecord].filter(isRecord);
+  const audioRecords = [audio, summary, rootRecord].filter(isRecord);
+  const providerRecords = [providerSlotSummary, audio, policy, summary, rootRecord].filter(isRecord);
+  const phase = readString(rootRecord.phase, initialized ? "missing phase" : "missing");
+  const status = readFirstString([summary, rootRecord], ["readiness", "status", "state"], "");
+  const providerSlotRows = firstArrayFrom(providerRecords, ["providerSlotStates", "providerSlots", "slots", "audioProviderSlots"]);
+  const effectiveProviderSlots = providerSlotRows.length ? providerSlotRows : runtimeState.audioPlanning.providerSlots;
+  const voiceSourceCount = readFirstNumber(voiceRecords, [
+    "voiceSourceCount",
+    "sourceCount",
+    "sources",
+    "voiceSources",
+    "totalSources",
+  ]) ?? runtimeState.audioPlanning.voiceSourceRegistry.sourceCount;
+  const lockedVoiceSourceCount = readFirstNumber(voiceRecords, ["locked", "lockedCount", "lockedSources", "lockedVoiceSources"]);
+  const candidateVoiceSourceCount = readFirstNumber(voiceRecords, ["candidate", "candidateCount", "candidateSources", "candidateVoiceSources"]);
+  const rejectedVoiceSourceCount = readFirstNumber(voiceRecords, ["rejected", "rejectedCount", "rejectedSources", "rejectedVoiceSources"]);
+  const voiceSourceDetail = [
+    lockedVoiceSourceCount !== undefined ? `${lockedVoiceSourceCount} locked` : undefined,
+    candidateVoiceSourceCount !== undefined ? `${candidateVoiceSourceCount} candidate` : undefined,
+    rejectedVoiceSourceCount !== undefined ? `${rejectedVoiceSourceCount} rejected` : undefined,
+  ].filter(Boolean).join(" · ") || `${voiceSourceCount} source(s)`;
+  const audioPlanCount = readFirstNumber(audioRecords, [
+    "audioPlanCount",
+    "planCount",
+    "shotPlanCount",
+    "plans",
+    "audioPlans",
+    "shotPlans",
+  ]) ?? runtimeState.audioPlanning.shotPlans.length;
+  const previewMixCount = readFirstNumber(audioRecords, ["previewMixCount", "mixEventCount", "previewEvents", "events"])
+    ?? runtimeState.audioPlanning.previewMix.eventCount;
+  const audioPlanDetail = `${previewMixCount} preview mix item(s)`;
+  const noBgmPolicy = readFirstBoolean(records, [
+    "noBgmForVideoProvider",
+    "noBgmInVideoProvider",
+    "noBgmPolicy",
+    "noBgm",
+  ]) ?? runtimeState.audioPlanning.videoProviderPolicy.noBgmForVideoProvider;
+  const noBgmDetail = readFirstString([policy, summary, rootRecord], ["policySummary", "noBgmSummary", "detail"], "")
+    || (noBgmPolicy ? "music off for video provider" : "policy not asserted");
+  const providerSlotsTotal = readFirstNumber(providerRecords, [
+    "providerSlotsTotal",
+    "totalProviderSlots",
+    "providerSlotCount",
+    "slotCount",
+    "providerSlots",
+    "slots",
+  ]) ?? effectiveProviderSlots.length;
+  const providerSlotsPlanned = readFirstNumber(providerRecords, [
+    "providerSlotsPlanned",
+    "plannedProviderSlots",
+    "plannedSlots",
+  ]) ?? effectiveProviderSlots.filter((slot) => providerSlotState(slot) === "planned").length;
+  const providerSlotsLive = readFirstNumber(providerRecords, [
+    "providerSlotsLive",
+    "liveProviderSlots",
+    "liveSlots",
+    "providerLiveCount",
+  ]) ?? effectiveProviderSlots.filter(providerSlotIsLive).length;
+  const rawBlockersWarnings = [
+    ...readDisplayList(rootRecord.blockers, "blocker"),
+    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
+    ...readDisplayList(summary.blockers, "blocker"),
+    ...readDisplayList(summary.blockedReasons, "blocker"),
+    ...readDisplayList(voice.blockers, "blocker"),
+    ...readDisplayList(audio.blockers, "blocker"),
+    ...readDisplayList(policy.blockers, "blocker"),
+    ...readDisplayList(rootRecord.warnings, "warning"),
+    ...readDisplayList(summary.warnings, "warning"),
+    ...readDisplayList(voice.warnings, "warning"),
+    ...readDisplayList(audio.warnings, "warning"),
+    ...readDisplayList(policy.warnings, "warning"),
+  ];
+  const blockersWarnings = Array.from(new Set(rawBlockersWarnings.filter(Boolean)));
+  const hardLocks = buildVoiceAudioHardLocks(rootRecord, summary, policy);
+
+  return {
+    initialized,
+    phase,
+    readiness: voiceAudioSettingsReadinessLabel(status, initialized, phase),
+    voiceSourceCount,
+    voiceSourceDetail,
+    audioPlanCount,
+    audioPlanDetail,
+    noBgmPolicy,
+    noBgmDetail,
+    providerSlotsTotal,
+    providerSlotsPlanned,
+    providerSlotsLive,
+    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.voiceAudioSettings"],
+    hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.voiceAudioSettings"],
+  };
 }
 
 function exportWorkerReadinessLabel(status: string, blockersWarnings: string[], initialized: boolean) {
@@ -3552,6 +3746,41 @@ function AudioDiagnosticsPanel({ audioPlanning }: { audioPlanning: AudioPlanning
   );
 }
 
+function VoiceAudioSettingsDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildVoiceAudioSettingsUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel phase28-voice-audio-panel">
+      <div className="audit-head">
+        <Radio size={17} />
+        <span>Phase 28 Voice/Audio Settings</span>
+      </div>
+      <div className="summary-grid phase28-metrics">
+        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "settings summary" : "blocked/missing"} />
+        <Metric label="Voice Sources" value={`${summary.voiceSourceCount}`} detail={summary.voiceSourceDetail} />
+        <Metric label="Audio Plans" value={`${summary.audioPlanCount}`} detail={summary.audioPlanDetail} />
+        <Metric label="No BGM Policy" value={summary.noBgmPolicy ? "on" : "off"} detail={summary.noBgmDetail} />
+        <Metric label="Provider Slots" value={`${summary.providerSlotsPlanned}/${summary.providerSlotsTotal}`} detail={`${summary.providerSlotsLive} live`} />
+      </div>
+      <div className="phase28-summary-list">
+        <div>
+          <strong>Blockers / warnings</strong>
+          <small>{summary.blockersWarnings.length ? summary.blockersWarnings.slice(0, 4).join(" · ") : "none reported"}</small>
+        </div>
+        <div>
+          <strong>Provider slots planned/live</strong>
+          <small>{summary.providerSlotsPlanned} planned · {summary.providerSlotsLive} live · {summary.providerSlotsTotal} total</small>
+        </div>
+      </div>
+      <div className="phase28-lock-strip" aria-label="Phase 28 Voice/Audio Settings hard locks">
+        {summary.hardLocks.slice(0, 8).map((lock) => (
+          <span key={lock}>{lock}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const videoPlanning = getVideoPlanning(runtimeState);
   const queue = videoPlanning.queueShell;
@@ -5236,6 +5465,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const knowledgeSummary = buildKnowledgeUiSummary(view);
   const agentCliMockRunnerSummary = buildAgentCliMockRunnerUiSummary(runtimeState);
   const exportWorkerSummary = buildExportWorkerUiSummary(runtimeState);
+  const voiceAudioSettingsSummary = buildVoiceAudioSettingsUiSummary(runtimeState);
 
   return (
     <section className="machine-panel settings-shell">
@@ -5361,6 +5591,13 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
         <div className="settings-readonly-note">
           <strong>Export Worker readiness: {exportWorkerSummary.readiness}</strong>
           <small>export IO scope {exportWorkerSummary.scope} · planned writes {exportWorkerSummary.plannedWriteCount} · root {exportWorkerSummary.exportRoot}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Voice/Audio Settings</div>
+      <div className="settings-list voice-audio-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Voice/Audio Settings readiness: {voiceAudioSettingsSummary.readiness}</strong>
+          <small>{voiceAudioSettingsSummary.voiceSourceCount} source(s) · {voiceAudioSettingsSummary.audioPlanCount} audio plan(s) · no BGM {voiceAudioSettingsSummary.noBgmPolicy ? "on" : "off"} · provider live {voiceAudioSettingsSummary.providerSlotsLive}</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
@@ -5569,6 +5806,7 @@ function DiagnosticsMode({
       <ExportWorkerDiagnostics runtimeState={runtimeState} />
       <Image2KeyframeRuntimeDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
+      <VoiceAudioSettingsDiagnostics runtimeState={runtimeState} />
       <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />
       <section className="machine-panel">
         <div className="audit-head">

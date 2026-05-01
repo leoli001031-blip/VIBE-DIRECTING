@@ -23,6 +23,7 @@ import { buildQaPromotionReports } from "./qaPromotion";
 import { buildPreviewExportState } from "./previewExport";
 import { buildWatcherEventsFromImagePipeline } from "./watcherEvents";
 import { buildAudioPlanningState } from "./audioPlanning";
+import { buildVoiceAudioSettingsState } from "./voiceAudioSettings";
 import { buildVideoPlanningState } from "./videoPlanning";
 import { buildVideoExecutionPreviewState } from "./videoExecutionPreview";
 import { buildAdapterContractState } from "./adapterContracts";
@@ -220,6 +221,11 @@ export function buildProjectRuntimeState(
     runtimeConfig: runtime.config,
     previewEvents,
   });
+  const voiceAudioSettings = buildVoiceAudioSettingsState({
+    generatedAt,
+    voiceSourceLibrary,
+    audioPlanning,
+  });
   const videoPlanning = buildVideoPlanningState({
     generatedAt,
     shots: audit.shots,
@@ -409,6 +415,7 @@ export function buildProjectRuntimeState(
     exportWorker,
     voiceSourceLibrary,
     audioPlanning,
+    voiceAudioSettings,
     videoPlanning,
     videoExecutionPreview,
     adapterContracts,
@@ -488,6 +495,13 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       shots: state.storyFlow.shots,
       runtimeConfig: runtimeWithVoiceSources.config,
       previewEvents: state.previewEvents,
+    });
+  const voiceAudioSettings =
+    state.voiceAudioSettings ||
+    buildVoiceAudioSettingsState({
+      generatedAt: state.generatedAt,
+      voiceSourceLibrary,
+      audioPlanning: audioPlanningResolved,
     });
   const videoPlanning =
     state.videoPlanning ||
@@ -659,6 +673,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     runtime: runtimeWithVoiceSources,
     voiceSourceLibrary,
     audioPlanning: audioPlanningResolved,
+    voiceAudioSettings,
     videoPlanning,
     imageKeyframeRuntime,
     exportWorker,

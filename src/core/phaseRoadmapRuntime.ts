@@ -312,11 +312,136 @@ export interface PhaseRoadmapExportWorkerEvidence {
   sourceRef?: string;
 }
 
+export interface PhaseRoadmapVoiceAudioSettingsEvidence {
+  kind?: "voice_audio_settings";
+  phase?: "phase_28_voice_audio_settings_ui";
+  status?: PhaseRoadmapEvidenceStatus;
+  readiness?: "ready" | "blocked";
+  scope?: "voice_audio_project_facts" | string;
+  purpose?: "voice_audio_project_facts" | string;
+  settingsOnly?: boolean;
+  providerSubmissionForbidden?: boolean;
+  liveSubmitAllowed?: boolean;
+  noBgmForVideoProvider?: boolean;
+  bgmIncludedInVideoPrompt?: boolean;
+  videoProviderPolicy?: {
+    noBgmForVideoProvider?: boolean;
+    bgmIncludedInVideoPrompt?: boolean;
+    musicAllowed?: boolean;
+  };
+  videoProviderAudioPolicy?: {
+    noBgmForVideoProvider?: boolean;
+    bgmIncludedInVideoPrompt?: boolean;
+    musicAllowed?: boolean;
+  };
+  audioPlanning?: {
+    videoProviderPolicy?: {
+      noBgmForVideoProvider?: boolean;
+      bgmIncludedInVideoPrompt?: boolean;
+      musicAllowed?: boolean;
+    };
+    providerSubmissionForbidden?: boolean;
+    dryRunOnly?: boolean;
+  };
+  summary?: {
+    noBgmForVideoProvider?: boolean;
+    bgmIncludedInVideoPrompt?: boolean;
+    providerSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    arbitraryShellAllowed?: boolean;
+    fileMutationAllowed?: boolean;
+    sampleCopyAllowed?: boolean;
+    audioSubmitAllowed?: boolean;
+    ttsSubmitAllowed?: boolean;
+    musicSubmitAllowed?: boolean;
+    liveSubmitAllowed?: boolean;
+  };
+  adapterBoundary?: {
+    providerSubmitAllowed?: boolean;
+    credentialReadAllowed?: boolean;
+    credentialWriteAllowed?: boolean;
+    shellAllowed?: boolean;
+    arbitraryShellAllowed?: boolean;
+    fileMutationAllowed?: boolean;
+    sampleCopyAllowed?: boolean;
+    copySampleAudioAllowed?: boolean;
+    audioSubmitAllowed?: boolean;
+    ttsSubmitAllowed?: boolean;
+    musicSubmitAllowed?: boolean;
+    liveSubmitAllowed?: boolean;
+  };
+  observations?: {
+    providerSubmitObserved?: boolean;
+    credentialReadObserved?: boolean;
+    credentialWriteObserved?: boolean;
+    shellExecutionObserved?: boolean;
+    fileMutationObserved?: boolean;
+    sampleCopyObserved?: boolean;
+    audioSubmitObserved?: boolean;
+    ttsSubmitObserved?: boolean;
+    musicSubmitObserved?: boolean;
+    liveSubmitObserved?: boolean;
+    bgmIncludedInVideoPrompt?: boolean;
+  };
+  hardLocks?: {
+    settingsOnly?: boolean;
+    projectFactsOnly?: boolean;
+    voiceAudioProjectFactsOnly?: boolean;
+    dryRunOnly?: boolean;
+    noProviderSubmit?: boolean;
+    providerSubmissionForbidden?: boolean;
+    liveSubmitAllowed?: boolean;
+    noCredentialRead?: boolean;
+    noCredentialWrite?: boolean;
+    noSecretStorage?: boolean;
+    noArbitraryShell?: boolean;
+    noShellExecution?: boolean;
+    noFileMutation?: boolean;
+    noSampleAudioCopy?: boolean;
+    noAudioSubmit?: boolean;
+    noTtsSubmit?: boolean;
+    noMusicSubmit?: boolean;
+    noBgmForVideoProvider?: boolean;
+    noBgmInVideoProviderPrompt?: boolean;
+    noBgmInVideoProvider?: boolean;
+    noVideoProviderBgmPrompt?: boolean;
+    bgmIncludedInVideoPrompt?: boolean;
+  };
+  validation?: {
+    ok?: boolean;
+    hardLocksPinned?: boolean;
+    errors?: string[];
+    warnings?: string[];
+  };
+  roadmapEvidence?: {
+    phaseId?: "phase_28_voice_audio_settings_ui";
+    voiceAudioSettingsReady?: boolean;
+    noBgmForVideoProvider?: boolean;
+    bgmIncludedInVideoPrompt?: boolean;
+    hardLocksPinned?: boolean;
+    providerSubmitObserved?: boolean;
+    credentialReadObserved?: boolean;
+    credentialWriteObserved?: boolean;
+    shellExecutionObserved?: boolean;
+    fileMutationObserved?: boolean;
+    sampleCopyObserved?: boolean;
+    audioSubmitObserved?: boolean;
+    ttsSubmitObserved?: boolean;
+    musicSubmitObserved?: boolean;
+    liveSubmitObserved?: boolean;
+  };
+  blockers?: string[];
+  blockedReasons?: string[];
+  warnings?: string[];
+  sourceRef?: string;
+}
+
 export interface PhaseRoadmapRuntimeEvidence {
   projectFactsIntegration?: PhaseRoadmapProjectFactsIntegrationEvidence;
   subagentEnvelopeValidator?: PhaseRoadmapSubagentEnvelopeValidatorReceipt;
   agentCliMockRunner?: PhaseRoadmapAgentCliMockRunnerEvidence;
   exportWorker?: PhaseRoadmapExportWorkerEvidence;
+  voiceAudioSettings?: PhaseRoadmapVoiceAudioSettingsEvidence;
   providerLiveGate?: PhaseRoadmapProviderLiveGateReceipt;
   watcherManifestQaClosedLoop?: PhaseRoadmapClosedLoopReceipt;
 }
@@ -327,6 +452,7 @@ export interface PhaseRoadmapEvidenceDecision {
     | "subagentEnvelopeValidator"
     | "agentCliMockRunner"
     | "exportWorker"
+    | "voiceAudioSettings"
     | "providerConfirmationTokenPlaceholder"
     | "providerEnablementPacket"
     | "watcherManifestQaClosedLoop"
@@ -535,6 +661,18 @@ function hasExportWorkerEvidence(
     evidence.roadmapEvidence?.phaseId === "phase_27_export_worker_mvp" ||
     evidence.scope === "export_project_io_contract" ||
     evidence.ioContract?.scope === "export_project_io_contract"
+  ));
+}
+
+function hasVoiceAudioSettingsEvidence(
+  evidence: PhaseRoadmapVoiceAudioSettingsEvidence | undefined,
+): evidence is PhaseRoadmapVoiceAudioSettingsEvidence {
+  return Boolean(evidence && (
+    evidence.kind === "voice_audio_settings" ||
+    evidence.phase === "phase_28_voice_audio_settings_ui" ||
+    evidence.roadmapEvidence?.phaseId === "phase_28_voice_audio_settings_ui" ||
+    evidence.scope === "voice_audio_project_facts" ||
+    evidence.purpose === "voice_audio_project_facts"
   ));
 }
 
@@ -926,6 +1064,174 @@ function exportWorkerEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoa
   };
 }
 
+function voiceAudioSettingsEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const evidence = input.evidence?.voiceAudioSettings;
+  const legacyAllowed = input.legacyBooleanOverridesAllowed === true;
+
+  if (hasVoiceAudioSettingsEvidence(evidence)) {
+    const observations = evidence.observations || {};
+    const roadmap = evidence.roadmapEvidence || {};
+    const videoProviderPolicy =
+      evidence.videoProviderPolicy ||
+      evidence.videoProviderAudioPolicy ||
+      evidence.audioPlanning?.videoProviderPolicy ||
+      {};
+    const validationErrors = [
+      ...(evidence.validation?.errors || []),
+      ...(evidence.blockedReasons || []),
+      ...(evidence.blockers || []),
+    ];
+    const projectFactsScopeReady = evidence.scope === "voice_audio_project_facts"
+      || evidence.purpose === "voice_audio_project_facts"
+      || roadmap.voiceAudioSettingsReady === true
+      || readyStatus(evidence.status)
+      || evidence.readiness === "ready";
+    const noBgmForVideoProvider = evidence.noBgmForVideoProvider
+      ?? videoProviderPolicy.noBgmForVideoProvider
+      ?? evidence.summary?.noBgmForVideoProvider
+      ?? roadmap.noBgmForVideoProvider;
+    const bgmIncludedInVideoPrompt = evidence.bgmIncludedInVideoPrompt
+      ?? videoProviderPolicy.bgmIncludedInVideoPrompt
+      ?? evidence.summary?.bgmIncludedInVideoPrompt
+      ?? observations.bgmIncludedInVideoPrompt
+      ?? roadmap.bgmIncludedInVideoPrompt;
+    const hardLocks = evidence.hardLocks;
+    const hardLocksPinned = hardLocks
+      ? evidence.settingsOnly !== false
+        && evidence.providerSubmissionForbidden !== false
+        && evidence.liveSubmitAllowed !== true
+        && evidence.validation?.hardLocksPinned !== false
+        && roadmap.hardLocksPinned !== false
+        && hardLocks.settingsOnly !== false
+        && hardLocks.projectFactsOnly !== false
+        && hardLocks.voiceAudioProjectFactsOnly !== false
+        && hardLocks.dryRunOnly !== false
+        && hardLocks.noProviderSubmit !== false
+        && hardLocks.providerSubmissionForbidden !== false
+        && hardLocks.liveSubmitAllowed !== true
+        && hardLocks.noCredentialRead !== false
+        && hardLocks.noCredentialWrite !== false
+        && hardLocks.noSecretStorage !== false
+        && hardLocks.noArbitraryShell !== false
+        && hardLocks.noShellExecution !== false
+        && hardLocks.noFileMutation !== false
+        && hardLocks.noSampleAudioCopy !== false
+        && hardLocks.noAudioSubmit !== false
+        && hardLocks.noTtsSubmit !== false
+        && hardLocks.noMusicSubmit !== false
+        && hardLocks.noBgmForVideoProvider !== false
+        && hardLocks.noBgmInVideoProviderPrompt !== false
+        && hardLocks.noBgmInVideoProvider !== false
+        && hardLocks.noVideoProviderBgmPrompt !== false
+        && hardLocks.bgmIncludedInVideoPrompt !== true
+      : false;
+    const providerSubmitObserved = observations.providerSubmitObserved === true
+      || roadmap.providerSubmitObserved === true
+      || evidence.adapterBoundary?.providerSubmitAllowed === true
+      || evidence.summary?.providerSubmitAllowed === true
+      || evidence.providerSubmissionForbidden === false
+      || validationErrors.some((error) => /provider[_ ]?submit/i.test(error));
+    const credentialReadObserved = observations.credentialReadObserved === true
+      || roadmap.credentialReadObserved === true
+      || evidence.adapterBoundary?.credentialReadAllowed === true
+      || evidence.summary?.credentialAccessAllowed === true
+      || validationErrors.some((error) => /credential.*read|credential_read/i.test(error));
+    const credentialWriteObserved = observations.credentialWriteObserved === true
+      || roadmap.credentialWriteObserved === true
+      || evidence.adapterBoundary?.credentialWriteAllowed === true
+      || evidence.summary?.credentialAccessAllowed === true
+      || validationErrors.some((error) => /credential.*write|credential_write/i.test(error));
+    const shellExecutionObserved = observations.shellExecutionObserved === true
+      || roadmap.shellExecutionObserved === true
+      || evidence.adapterBoundary?.shellAllowed === true
+      || evidence.adapterBoundary?.arbitraryShellAllowed === true
+      || evidence.summary?.arbitraryShellAllowed === true
+      || validationErrors.some((error) => /shell/i.test(error));
+    const fileMutationObserved = observations.fileMutationObserved === true
+      || roadmap.fileMutationObserved === true
+      || evidence.adapterBoundary?.fileMutationAllowed === true
+      || evidence.summary?.fileMutationAllowed === true
+      || validationErrors.some((error) => /file[_ ]?mutation|writeProject/i.test(error));
+    const sampleCopyObserved = observations.sampleCopyObserved === true
+      || roadmap.sampleCopyObserved === true
+      || evidence.adapterBoundary?.sampleCopyAllowed === true
+      || evidence.adapterBoundary?.copySampleAudioAllowed === true
+      || evidence.summary?.sampleCopyAllowed === true
+      || validationErrors.some((error) => /sample.*copy|copy.*sample/i.test(error));
+    const audioSubmitObserved = observations.audioSubmitObserved === true
+      || observations.ttsSubmitObserved === true
+      || roadmap.audioSubmitObserved === true
+      || roadmap.ttsSubmitObserved === true
+      || evidence.adapterBoundary?.audioSubmitAllowed === true
+      || evidence.adapterBoundary?.ttsSubmitAllowed === true
+      || evidence.summary?.audioSubmitAllowed === true
+      || evidence.summary?.ttsSubmitAllowed === true
+      || validationErrors.some((error) => /audio.*submit|tts.*submit/i.test(error));
+    const musicSubmitObserved = observations.musicSubmitObserved === true
+      || roadmap.musicSubmitObserved === true
+      || evidence.adapterBoundary?.musicSubmitAllowed === true
+      || evidence.summary?.musicSubmitAllowed === true
+      || validationErrors.some((error) => /music.*submit|bgm.*submit/i.test(error));
+    const liveSubmitObserved = observations.liveSubmitObserved === true
+      || roadmap.liveSubmitObserved === true
+      || evidence.adapterBoundary?.liveSubmitAllowed === true
+      || evidence.summary?.liveSubmitAllowed === true
+      || evidence.liveSubmitAllowed === true
+      || evidence.hardLocks?.liveSubmitAllowed === true
+      || validationErrors.some((error) => /live.*submit/i.test(error));
+    const blockers = uniqueSorted([
+      ...blockedIf(!projectFactsScopeReady, "voice_audio_settings_project_facts_scope_missing"),
+      ...blockedIf(noBgmForVideoProvider !== true, "voice_audio_settings_no_bgm_video_policy_missing"),
+      ...blockedIf(bgmIncludedInVideoPrompt !== false, "voice_audio_settings_bgm_in_video_prompt_present"),
+      ...blockedIf(!hardLocksPinned, "voice_audio_settings_hard_locks_not_pinned"),
+      ...blockedIf(providerSubmitObserved, "voice_audio_settings_attempted_provider_submit"),
+      ...blockedIf(credentialReadObserved, "voice_audio_settings_credential_read_observed"),
+      ...blockedIf(credentialWriteObserved, "voice_audio_settings_credential_write_observed"),
+      ...blockedIf(shellExecutionObserved, "voice_audio_settings_shell_execution_observed"),
+      ...blockedIf(fileMutationObserved, "voice_audio_settings_file_mutation_observed"),
+      ...blockedIf(sampleCopyObserved, "voice_audio_settings_sample_copy_observed"),
+      ...blockedIf(audioSubmitObserved, "voice_audio_settings_audio_submit_observed"),
+      ...blockedIf(musicSubmitObserved, "voice_audio_settings_music_submit_observed"),
+      ...blockedIf(liveSubmitObserved, "voice_audio_settings_live_submit_observed"),
+      ...validationErrors,
+    ]);
+
+    return {
+      evidenceKey: "voiceAudioSettings",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted([...(evidence.warnings || []), ...(evidence.validation?.warnings || [])]),
+    };
+  }
+
+  if (legacyAllowed && input.voiceAudioSettingsReady === true) {
+    return {
+      evidenceKey: "voiceAudioSettings",
+      source: "legacy_boolean_override",
+      ready: true,
+      blockers: [],
+      warnings: ["legacy_voiceAudioSettingsReady_boolean_override_used"],
+    };
+  }
+
+  return {
+    evidenceKey: "voiceAudioSettings",
+    source: input.voiceAudioSettingsReady === undefined ? "missing" : "legacy_boolean_override",
+    ready: false,
+    blockers: uniqueSorted([
+      "voice_audio_settings_typed_evidence_missing",
+      ...blockedIf(input.voiceAudioSettingsReady !== true, "voice_audio_settings_contract_missing"),
+    ]),
+    warnings: uniqueSorted([
+      ...blockedIf(
+        input.voiceAudioSettingsReady === true,
+        "legacy_voiceAudioSettingsReady_boolean_ignored_without_typed_evidence",
+      ),
+    ]),
+  };
+}
+
 function providerLiveGateSafetyBlockers(receipt: PhaseRoadmapProviderLiveGateReceipt): string[] {
   return uniqueSorted([
     ...blockedIf(receipt.summary?.providerSubmitAllowed !== undefined && receipt.summary.providerSubmitAllowed !== 0, "provider_live_gate_allows_provider_submit"),
@@ -1109,6 +1415,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const envelopeDecision = envelopeValidatorEvidenceDecision(input);
   const agentCliMockRunnerDecision = agentCliMockRunnerEvidenceDecision(input);
   const exportWorkerDecision = exportWorkerEvidenceDecision(input);
+  const voiceAudioSettingsDecision = voiceAudioSettingsEvidenceDecision(input);
   const providerConfirmationDecision = providerConfirmationEvidenceDecision(input);
   const providerPacketDecision = providerPacketEvidenceDecision(input);
   const watcherClosedLoopDecision = watcherClosedLoopEvidenceDecision(input);
@@ -1118,6 +1425,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
     envelopeDecision,
     agentCliMockRunnerDecision,
     exportWorkerDecision,
+    voiceAudioSettingsDecision,
     providerConfirmationDecision,
     providerPacketDecision,
     watcherClosedLoopDecision,
@@ -1232,14 +1540,25 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "phase_27_export_worker_mvp",
       ],
       readyPhases,
-      ownBlockers: blockedIf(!input.voiceAudioSettingsReady, "voice_audio_settings_contract_missing"),
+      ownBlockers: uniqueSorted(voiceAudioSettingsDecision.blockers),
       readyStatus: "ready_for_implementation",
-      requiredInputs: ["voiceAudioSettingsReady"],
+      requiredInputs: [
+        "evidence.voiceAudioSettings",
+        "scope=voice_audio_project_facts",
+        "noBgmForVideoProvider=true",
+        "bgmIncludedInVideoPrompt=false",
+        "provider/credential/shell/file/sample/audio/music/live observations and allowances all false",
+      ],
       acceptanceCriteria: [
         "Voice and audio settings remain structured project facts.",
         "BGM prompt text does not enter provider enablement for video.",
+        "Settings cannot submit TTS/music providers, copy samples, read credentials, execute shell, or mutate files.",
       ],
-      notes: ["This phase prepares settings only; it does not enable audio or video provider submission."],
+      notes: [
+        "This phase prepares settings only; it does not enable audio or video provider submission.",
+        "The legacy voiceAudioSettingsReady boolean is ignored unless explicit legacy overrides are enabled.",
+        ...evidenceNotes([voiceAudioSettingsDecision]),
+      ],
     }),
     makePhase({
       phaseId: "phase_29_codex_cli_adapter_spike",

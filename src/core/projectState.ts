@@ -4,6 +4,7 @@ import type { ManifestMatchReport } from "./manifestMatcher";
 import type { ImageKeyframeRuntimePlan } from "./imageKeyframeRuntime";
 import type { StorySectionView, VisualMemorySummary, RuntimeKnowledgeSummary } from "./runtimeView";
 import type { VoiceSourceLibraryState } from "./voiceSourceLibrary";
+import type { VoiceAudioSettingsState } from "./voiceAudioSettings";
 import type { QueueGateResult } from "./taskQueue";
 import type { AgentCliMockRunnerState } from "./agentCliMockRunner";
 import type { ExportWorkerState } from "./exportWorker";
@@ -184,6 +185,7 @@ export interface ProjectRuntimeState {
   exportWorker: ExportWorkerState;
   voiceSourceLibrary: VoiceSourceLibraryState;
   audioPlanning: AudioPlanningState;
+  voiceAudioSettings: VoiceAudioSettingsState;
   videoPlanning: VideoPlanningState;
   videoExecutionPreview: VideoExecutionPreviewState;
   adapterContracts: AdapterContractState;

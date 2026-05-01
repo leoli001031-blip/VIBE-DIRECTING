@@ -171,6 +171,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "VoiceSourceLibraryState",
   },
   {
+    fileName: "voice_audio_settings.schema.json",
+    id: "https://vibecore.local/schemas/voice_audio_settings.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 28 settings-only voice/audio project facts derived from voice sources and audio planning with provider, credential, sample-copy, file-mutation, and BGM video prompt routes locked off.",
+    typeName: "VoiceAudioSettingsState",
+  },
+  {
     fileName: "tool_detection_report.schema.json",
     id: "https://vibecore.local/schemas/tool_detection_report.schema.json",
     version: schemaVersion,

@@ -311,12 +311,141 @@ function exportWorkerEvidence(overrides = {}) {
   };
 }
 
+function voiceAudioSettingsEvidence(overrides = {}) {
+  const {
+    videoProviderPolicy: videoProviderPolicyOverrides,
+    summary: summaryOverrides,
+    adapterBoundary: adapterBoundaryOverrides,
+    observations: observationOverrides,
+    hardLocks: hardLockOverrides,
+    validation: validationOverrides,
+    roadmapEvidence: roadmapEvidenceOverrides,
+    audioPlanning: audioPlanningOverrides,
+    ...rest
+  } = overrides;
+  const videoProviderPolicy = {
+    musicAllowed: false,
+    noBgmForVideoProvider: true,
+    bgmIncludedInVideoPrompt: false,
+    ...(videoProviderPolicyOverrides || {}),
+  };
+  const observations = {
+    providerSubmitObserved: false,
+    credentialReadObserved: false,
+    credentialWriteObserved: false,
+    shellExecutionObserved: false,
+    fileMutationObserved: false,
+    sampleCopyObserved: false,
+    audioSubmitObserved: false,
+    ttsSubmitObserved: false,
+    musicSubmitObserved: false,
+    liveSubmitObserved: false,
+    bgmIncludedInVideoPrompt: false,
+    ...(observationOverrides || {}),
+  };
+  return {
+    kind: "voice_audio_settings",
+    phase: "phase_28_voice_audio_settings_ui",
+    status: "ready",
+    readiness: "ready",
+    scope: "voice_audio_project_facts",
+    purpose: "voice_audio_project_facts",
+    noBgmForVideoProvider: videoProviderPolicy.noBgmForVideoProvider,
+    bgmIncludedInVideoPrompt: videoProviderPolicy.bgmIncludedInVideoPrompt,
+    videoProviderPolicy,
+    audioPlanning: {
+      videoProviderPolicy,
+      providerSubmissionForbidden: true,
+      dryRunOnly: true,
+      ...(audioPlanningOverrides || {}),
+    },
+    summary: {
+      noBgmForVideoProvider: videoProviderPolicy.noBgmForVideoProvider,
+      bgmIncludedInVideoPrompt: videoProviderPolicy.bgmIncludedInVideoPrompt,
+      providerSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      arbitraryShellAllowed: false,
+      fileMutationAllowed: false,
+      sampleCopyAllowed: false,
+      audioSubmitAllowed: false,
+      ttsSubmitAllowed: false,
+      musicSubmitAllowed: false,
+      liveSubmitAllowed: false,
+      ...(summaryOverrides || {}),
+    },
+    adapterBoundary: {
+      providerSubmitAllowed: false,
+      credentialReadAllowed: false,
+      credentialWriteAllowed: false,
+      shellAllowed: false,
+      fileMutationAllowed: false,
+      sampleCopyAllowed: false,
+      audioSubmitAllowed: false,
+      ttsSubmitAllowed: false,
+      musicSubmitAllowed: false,
+      liveSubmitAllowed: false,
+      ...(adapterBoundaryOverrides || {}),
+    },
+    observations,
+    hardLocks: {
+      projectFactsOnly: true,
+      voiceAudioProjectFactsOnly: true,
+      dryRunOnly: true,
+      noProviderSubmit: true,
+      providerSubmissionForbidden: true,
+      liveSubmitAllowed: false,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      noArbitraryShell: true,
+      noShellExecution: true,
+      noFileMutation: true,
+      noSampleAudioCopy: true,
+      noAudioSubmit: true,
+      noTtsSubmit: true,
+      noMusicSubmit: true,
+      noBgmForVideoProvider: true,
+      noBgmInVideoProviderPrompt: true,
+      bgmIncludedInVideoPrompt: false,
+      ...(hardLockOverrides || {}),
+    },
+    validation: {
+      ok: true,
+      hardLocksPinned: true,
+      errors: [],
+      warnings: [],
+      ...(validationOverrides || {}),
+    },
+    roadmapEvidence: {
+      phaseId: "phase_28_voice_audio_settings_ui",
+      voiceAudioSettingsReady: true,
+      noBgmForVideoProvider: videoProviderPolicy.noBgmForVideoProvider,
+      bgmIncludedInVideoPrompt: videoProviderPolicy.bgmIncludedInVideoPrompt,
+      hardLocksPinned: true,
+      providerSubmitObserved: observations.providerSubmitObserved,
+      credentialReadObserved: observations.credentialReadObserved,
+      credentialWriteObserved: observations.credentialWriteObserved,
+      shellExecutionObserved: observations.shellExecutionObserved,
+      fileMutationObserved: observations.fileMutationObserved,
+      sampleCopyObserved: observations.sampleCopyObserved,
+      audioSubmitObserved: observations.audioSubmitObserved,
+      ttsSubmitObserved: observations.ttsSubmitObserved,
+      musicSubmitObserved: observations.musicSubmitObserved,
+      liveSubmitObserved: observations.liveSubmitObserved,
+      ...(roadmapEvidenceOverrides || {}),
+    },
+    ...rest,
+    videoProviderPolicy,
+    observations,
+  };
+}
+
 function typedEvidence(overrides = {}) {
   return {
     projectFactsIntegration: projectFactsEvidence(overrides.projectFactsIntegration),
     subagentEnvelopeValidator: subagentEnvelopeValidatorReceipt(overrides.subagentEnvelopeValidator),
     agentCliMockRunner: agentCliMockRunnerEvidence(overrides.agentCliMockRunner),
     exportWorker: exportWorkerEvidence(overrides.exportWorker),
+    voiceAudioSettings: voiceAudioSettingsEvidence(overrides.voiceAudioSettings),
     providerLiveGate: providerLiveGateReceipt(overrides.providerLiveGate),
     watcherManifestQaClosedLoop: watcherManifestQaClosedLoopReceipt(overrides.watcherManifestQaClosedLoop),
   };
@@ -552,6 +681,140 @@ for (const [observationKey, expectedBlocker] of Object.entries({
   assert(blockedPhase27.blockedReasons.includes(expectedBlocker), `Phase 27 blocker ${expectedBlocker} missing`);
 }
 
+const missingVoiceAudioSettingsEvidence = typedEvidence();
+delete missingVoiceAudioSettingsEvidence.voiceAudioSettings;
+const legacyOnlyPhase28 = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: missingVoiceAudioSettingsEvidence,
+  voiceAudioSettingsReady: true,
+});
+const legacyOnlyPhase28Gate = phase(legacyOnlyPhase28, "phase_28_voice_audio_settings_ui");
+assert(legacyOnlyPhase28Gate.readiness === "blocked", "Phase 28 must block when typed voice/audio settings evidence is missing");
+assert(
+  legacyOnlyPhase28Gate.blockedReasons.includes("voice_audio_settings_typed_evidence_missing"),
+  "Phase 28 must explain missing typed voice/audio settings evidence",
+);
+assert(
+  legacyOnlyPhase28.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "voiceAudioSettings" &&
+      decision.source === "legacy_boolean_override" &&
+      decision.ready === false,
+  ),
+  "Phase 28 voiceAudioSettingsReady boolean must be ignored without typed evidence",
+);
+
+const voiceAudioSettingsReadyPlan = buildPhaseRoadmapRuntimePlan(readyInput());
+assert(
+  phase(voiceAudioSettingsReadyPlan, "phase_28_voice_audio_settings_ui").readiness === "ready",
+  "Phase 28 must be ready with typed voice/audio settings evidence",
+);
+assert(
+  voiceAudioSettingsReadyPlan.evidenceSummary.decisions.some(
+    (decision) => decision.evidenceKey === "voiceAudioSettings" && decision.source === "typed_evidence" && decision.ready === true,
+  ),
+  "Phase 28 voice/audio settings decision must be typed and ready",
+);
+
+const blockedNoBgmPolicy = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    voiceAudioSettings: {
+      videoProviderPolicy: { noBgmForVideoProvider: false },
+      roadmapEvidence: { noBgmForVideoProvider: false },
+    },
+  }),
+});
+assert(
+  phase(blockedNoBgmPolicy, "phase_28_voice_audio_settings_ui").blockedReasons.includes(
+    "voice_audio_settings_no_bgm_video_policy_missing",
+  ),
+  "Phase 28 must require noBgmForVideoProvider=true",
+);
+
+const blockedBgmPrompt = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    voiceAudioSettings: {
+      videoProviderPolicy: { bgmIncludedInVideoPrompt: true },
+      observations: { bgmIncludedInVideoPrompt: true },
+      roadmapEvidence: { bgmIncludedInVideoPrompt: true },
+    },
+  }),
+});
+assert(
+  phase(blockedBgmPrompt, "phase_28_voice_audio_settings_ui").blockedReasons.includes(
+    "voice_audio_settings_bgm_in_video_prompt_present",
+  ),
+  "Phase 28 must block BGM in video provider prompts",
+);
+
+for (const [observationKey, expectedBlocker] of Object.entries({
+  providerSubmitObserved: "voice_audio_settings_attempted_provider_submit",
+  credentialReadObserved: "voice_audio_settings_credential_read_observed",
+  credentialWriteObserved: "voice_audio_settings_credential_write_observed",
+  shellExecutionObserved: "voice_audio_settings_shell_execution_observed",
+  fileMutationObserved: "voice_audio_settings_file_mutation_observed",
+  sampleCopyObserved: "voice_audio_settings_sample_copy_observed",
+  audioSubmitObserved: "voice_audio_settings_audio_submit_observed",
+  musicSubmitObserved: "voice_audio_settings_music_submit_observed",
+  liveSubmitObserved: "voice_audio_settings_live_submit_observed",
+})) {
+  const blockedPlan = buildPhaseRoadmapRuntimePlan({
+    ...readyInput(),
+    evidence: typedEvidence({
+      voiceAudioSettings: {
+        observations: { [observationKey]: true },
+        roadmapEvidence: { [observationKey]: true },
+      },
+    }),
+  });
+  const blockedPhase28 = phase(blockedPlan, "phase_28_voice_audio_settings_ui");
+  assert(blockedPhase28.readiness === "blocked", `Phase 28 must block if ${observationKey} is observed`);
+  assert(blockedPhase28.blockedReasons.includes(expectedBlocker), `Phase 28 blocker ${expectedBlocker} missing`);
+}
+
+for (const [allowanceKey, expectedBlocker] of Object.entries({
+  providerSubmitAllowed: "voice_audio_settings_attempted_provider_submit",
+  credentialReadAllowed: "voice_audio_settings_credential_read_observed",
+  credentialWriteAllowed: "voice_audio_settings_credential_write_observed",
+  shellAllowed: "voice_audio_settings_shell_execution_observed",
+  fileMutationAllowed: "voice_audio_settings_file_mutation_observed",
+  sampleCopyAllowed: "voice_audio_settings_sample_copy_observed",
+  audioSubmitAllowed: "voice_audio_settings_audio_submit_observed",
+  musicSubmitAllowed: "voice_audio_settings_music_submit_observed",
+  liveSubmitAllowed: "voice_audio_settings_live_submit_observed",
+})) {
+  const blockedPlan = buildPhaseRoadmapRuntimePlan({
+    ...readyInput(),
+    evidence: typedEvidence({
+      voiceAudioSettings: {
+        adapterBoundary: { [allowanceKey]: true },
+      },
+    }),
+  });
+  const blockedPhase28 = phase(blockedPlan, "phase_28_voice_audio_settings_ui");
+  assert(blockedPhase28.readiness === "blocked", `Phase 28 must block if ${allowanceKey} is allowed`);
+  assert(blockedPhase28.blockedReasons.includes(expectedBlocker), `Phase 28 blocker ${expectedBlocker} missing`);
+}
+
+const blockedVoiceAudioHardLock = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    voiceAudioSettings: {
+      hardLocks: { noSampleAudioCopy: false },
+      validation: { hardLocksPinned: false },
+      roadmapEvidence: { hardLocksPinned: false },
+    },
+  }),
+});
+assert(
+  phase(blockedVoiceAudioHardLock, "phase_28_voice_audio_settings_ui").blockedReasons.includes(
+    "voice_audio_settings_hard_locks_not_pinned",
+  ),
+  "Phase 28 must block hard-lock drift",
+);
+
 for (const [observationKey, expectedBlocker] of Object.entries({
   providerSubmitObserved: "mock_runner_attempted_provider_submit",
   freeTextTaskObserved: "mock_runner_free_text_task_observed",
@@ -770,6 +1033,10 @@ assert(
 assert(
   schema.$defs.evidenceDecision.properties.evidenceKey.enum.includes("exportWorker"),
   "schema evidence decisions must include typed export worker evidence",
+);
+assert(
+  schema.$defs.evidenceDecision.properties.evidenceKey.enum.includes("voiceAudioSettings"),
+  "schema evidence decisions must include typed voice/audio settings evidence",
 );
 assert(schema.$defs.hardLocks.properties.noFreeTextWorker.const === true, "schema hard locks must pin noFreeTextWorker=true");
 assert(schema.$defs.hardLocks.properties.validatedEnvelopeRequired.const === true, "schema hard locks must pin validated envelope");

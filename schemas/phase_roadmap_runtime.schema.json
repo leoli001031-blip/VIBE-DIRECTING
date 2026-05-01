@@ -137,6 +137,7 @@
             "subagentEnvelopeValidator",
             "agentCliMockRunner",
             "exportWorker",
+            "voiceAudioSettings",
             "providerConfirmationTokenPlaceholder",
             "providerEnablementPacket",
             "watcherManifestQaClosedLoop",

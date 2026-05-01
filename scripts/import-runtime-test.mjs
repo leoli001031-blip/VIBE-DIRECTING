@@ -7105,6 +7105,14 @@ if (!runtimeState.voiceSourceLibrary) {
   runtimeState.audioPlanning.voiceSourceRegistry.plannedCount = runtimeState.runtime.config.voiceSources.filter((source) => source.status === "planned").length;
   runtimeState.audioPlanning.voiceSourceRegistry.unavailableCount = runtimeState.runtime.config.voiceSources.filter((source) => source.status === "unavailable").length;
 }
+if (!runtimeState.voiceAudioSettings) {
+  const { buildVoiceAudioSettingsState: buildCoreVoiceAudioSettingsState } = await importTs("src/core/voiceAudioSettings.ts");
+  runtimeState.voiceAudioSettings = buildCoreVoiceAudioSettingsState({
+    generatedAt: runtimeState.generatedAt,
+    voiceSourceLibrary: runtimeState.voiceSourceLibrary,
+    audioPlanning: runtimeState.audioPlanning,
+  });
+}
 if (!runtimeState.imageKeyframeRuntime) {
   const { buildImageKeyframeRuntimePlan } = await importTs("src/core/imageKeyframeRuntime.ts");
   runtimeState.imageKeyframeRuntime = buildImageKeyframeRuntimePlan({
@@ -7120,6 +7128,37 @@ if (!runtimeState.imageKeyframeRuntime) {
       .filter(Boolean),
   });
 }
+
+assert(runtimeState.voiceAudioSettings, "runtime-state must include voiceAudioSettings");
+assert(runtimeState.voiceAudioSettings.phase === "phase_28_voice_audio_settings_ui", "voiceAudioSettings must be Phase 28 evidence");
+assert(runtimeState.voiceAudioSettings.scope === "voice_audio_project_facts", "voiceAudioSettings scope must stay project facts only");
+assert(runtimeState.voiceAudioSettings.settingsOnly === true, "voiceAudioSettings must stay settings-only");
+assert(runtimeState.voiceAudioSettings.providerSubmissionForbidden === true, "voiceAudioSettings must forbid provider submission");
+assert(runtimeState.voiceAudioSettings.liveSubmitAllowed === false, "voiceAudioSettings live submit must be false");
+assert(runtimeState.voiceAudioSettings.videoProviderAudioPolicy.noBgmForVideoProvider === true, "voiceAudioSettings must require no BGM for video provider");
+assert(runtimeState.voiceAudioSettings.videoProviderAudioPolicy.bgmIncludedInVideoPrompt === false, "voiceAudioSettings must not include BGM in video prompts");
+assert(runtimeState.voiceAudioSettings.videoProviderAudioPolicy.musicAllowed === false, "voiceAudioSettings video policy must keep musicAllowed=false");
+assert(runtimeState.voiceAudioSettings.settingsControls.addVoiceSourceMode === "metadata_only", "voiceAudioSettings must keep voice source additions metadata-only");
+assert(runtimeState.voiceAudioSettings.settingsControls.credentialsMode === "not_read_or_stored", "voiceAudioSettings must not read or store credentials");
+assert(runtimeState.voiceAudioSettings.settingsControls.sampleAudioMode === "metadata_reference_only", "voiceAudioSettings must not copy sample audio");
+assert(runtimeState.voiceAudioSettings.settingsControls.fileMutationMode === "blocked", "voiceAudioSettings file mutation must stay blocked");
+assert(runtimeState.voiceAudioSettings.blockers.length === 0, "voiceAudioSettings import fixture must not carry blockers");
+for (const key of [
+  "settingsOnly",
+  "noProviderSubmit",
+  "noTtsSubmit",
+  "noMusicSubmit",
+  "noCredentialRead",
+  "noCredentialWrite",
+  "noSecretStorage",
+  "noFileMutation",
+  "noSampleAudioCopy",
+  "noBgmInVideoProvider",
+  "noVideoProviderBgmPrompt",
+]) {
+  assert(runtimeState.voiceAudioSettings.hardLocks[key] === true, `voiceAudioSettings hard lock ${key} must be true`);
+}
+assert(runtimeState.voiceAudioSettings.hardLocks.liveSubmitAllowed === false, "voiceAudioSettings live submit hard lock must be false");
 
 assert(runtimeState.agentCliMockRunner, "runtime-state must include agentCliMockRunner");
 assert(runtimeState.agentCliMockRunner.phase === "phase_26_agent_cli_mock_runner", "agentCliMockRunner must be Phase 26 evidence");

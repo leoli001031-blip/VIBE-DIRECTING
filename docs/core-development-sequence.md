@@ -1062,6 +1062,15 @@ Acceptance criteria：
 - `phaseRoadmapRuntime` 增加 typed `exportWorker` evidence；Phase 27 ready 必须有 `scope=export_project_io_contract`、路径在 `exports/` 或 `reports/exports/` allowlist 内、hard locks pinned，并且没有 provider、credential、shell、media render、copy/move/delete 或 outside-root 观测。
 - Phase 27 是 Phase 24-30 中唯一 `fileMutationAllowed=true` 的计划项；Phase 30 和其他阶段继续 `fileMutationAllowed=false`，provider submit、credential access、arbitrary shell、free-text worker 仍全局 locked off。
 
+### Phase 28 已实现范围：Voice/Audio Settings typed evidence
+
+- `ProjectRuntimeState.voiceAudioSettings` 成为一等 Phase 28 状态，从 `voiceSourceLibrary` 和 `audioPlanning` 派生，只记录 `voice_audio_project_facts`。
+- Phase 28 只结构化 voice/audio settings：音源摘要、shot-level audio planning 摘要、preview mix placeholder 摘要、视频 no-bgm policy 和 roadmap evidence；不启用 TTS、music、video provider 提交。
+- `project_runtime_state.schema.json` 引用 `voice_audio_settings.schema.json`；`buildProjectRuntimeState`、`withRuntimeDefaults` 和 `import-runtime-test` 都能构造 schema-compatible Phase 28 state。
+- `phaseRoadmapRuntime` 增加 typed `voiceAudioSettings` evidence；Phase 28 ready 必须有 `scope/purpose=voice_audio_project_facts`、`noBgmForVideoProvider=true`、`bgmIncludedInVideoPrompt=false`、hard locks pinned。
+- Phase 28 fail-closed：缺 typed evidence、legacy `voiceAudioSettingsReady` 未显式 override、BGM 进入 video prompt、provider/credential/shell/file mutation/sample copy/audio submit/music submit/live submit 任一观测或 allowance、hard lock drift 都会 blocked。
+- Hard locks 固定：dry-run/project-facts-only、不读写 credential、不执行 shell、不改文件、不复制 sample audio、不提交 TTS/music/audio provider、`liveSubmitAllowed=false`、BGM 不进入 video provider prompt。
+
 ## 当前禁止提前做的事
 
 - 不先做精致 UI 抛光。
