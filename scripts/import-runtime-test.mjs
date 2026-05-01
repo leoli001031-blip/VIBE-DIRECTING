@@ -7160,6 +7160,13 @@ if (!runtimeState.providerExecutionPermissionGate) {
     codexCliAdapterSpike: runtimeState.codexCliAdapterSpike,
   });
 }
+if (!runtimeState.providerActionConfirmationReceipt) {
+  const { buildProviderActionConfirmationReceiptState } = await importTs("src/core/providerActionConfirmationReceipt.ts");
+  runtimeState.providerActionConfirmationReceipt = buildProviderActionConfirmationReceiptState({
+    generatedAt: runtimeState.generatedAt,
+    providerExecutionPermissionGate: runtimeState.providerExecutionPermissionGate,
+  });
+}
 
 assert(runtimeState.providerLiveGate, "runtime-state must include providerLiveGate");
 assert(runtimeState.providerLiveGate.phase === "phase_11_provider_adapter_live_gate", "providerLiveGate must remain the provider live gate evidence source");
@@ -7233,6 +7240,60 @@ assert(runtimeState.providerExecutionPermissionGate.hardLocks.providerSubmitAllo
 assert(runtimeState.providerExecutionPermissionGate.hardLocks.liveSubmitAllowed === false, "providerExecutionPermissionGate live submit hard lock must be false");
 assert(runtimeState.providerExecutionPermissionGate.hardLocks.credentialAccessAllowed === false, "providerExecutionPermissionGate credential access hard lock must be false");
 assert(runtimeState.providerExecutionPermissionGate.hardLocks.credentialStorage === false, "providerExecutionPermissionGate credential storage hard lock must be false");
+assert(runtimeState.providerActionConfirmationReceipt, "runtime-state must include providerActionConfirmationReceipt");
+assert(runtimeState.providerActionConfirmationReceipt.phase === "phase_32_action_time_confirmation_receipt", "providerActionConfirmationReceipt must be Phase 32 evidence");
+assert(runtimeState.providerActionConfirmationReceipt.summary.confirmedReceiptCount === 0, "Phase 32 receipts must start unconfirmed");
+assert(runtimeState.providerActionConfirmationReceipt.summary.userConfirmedAtActionTime === false, "Phase 32 must not pre-confirm action-time user approval");
+assert(runtimeState.providerActionConfirmationReceipt.summary.providerSubmitAllowed === 0, "Phase 32 must not allow provider submit");
+assert(runtimeState.providerActionConfirmationReceipt.summary.liveSubmitAllowed === false, "Phase 32 live submit must be false");
+assert(runtimeState.providerActionConfirmationReceipt.summary.credentialAccessAllowed === false, "Phase 32 credential access must be false");
+assert(runtimeState.providerActionConfirmationReceipt.summary.automaticSubmitAllowed === false, "Phase 32 automatic submit must be false");
+assert(runtimeState.providerActionConfirmationReceipt.phase32Evidence.typedEvidencePresent === true, "Phase 32 evidence must be typed");
+assert(runtimeState.providerActionConfirmationReceipt.phase32Evidence.phase31GateConsumed === true, "Phase 32 must consume Phase 31 evidence");
+assert(runtimeState.providerActionConfirmationReceipt.phase32Evidence.confirmedReceiptCount === 0, "Phase 32 typed evidence must start with zero confirmed receipts");
+assert(runtimeState.providerActionConfirmationReceipt.phase32Evidence.actionTimeConfirmationRequired === true, "Phase 32 must require action-time confirmation");
+assert(runtimeState.providerActionConfirmationReceipt.phase32Evidence.finalExecutionGateRequired === true, "Phase 32 must require a later final execution gate");
+assert(runtimeState.providerActionConfirmationReceipt.phase32Evidence.canSubmitProvider === false, "Phase 32 must keep canSubmitProvider=false");
+assert(runtimeState.providerActionConfirmationReceipt.phase32Evidence.providerSubmitAllowed === 0, "Phase 32 evidence must keep providerSubmitAllowed=0");
+assert(runtimeState.providerActionConfirmationReceipt.phase32Evidence.liveSubmitAllowed === false, "Phase 32 evidence must keep liveSubmitAllowed=false");
+assert(runtimeState.providerActionConfirmationReceipt.phase32Evidence.credentialAccessAllowed === false, "Phase 32 evidence must keep credential access false");
+assert(runtimeState.providerActionConfirmationReceipt.phase32Evidence.noWorkerSpawn === true, "Phase 32 evidence must block worker spawn");
+assert(runtimeState.providerActionConfirmationReceipt.phase32Evidence.noFileMutation === true, "Phase 32 evidence must block file mutation");
+assert(runtimeState.providerActionConfirmationReceipt.requests.every((item) => item.confirmationReceiptRequired === true), "Phase 32 requests must require confirmation receipts");
+assert(runtimeState.providerActionConfirmationReceipt.requests.every((item) => item.userConfirmedAtActionTime === false), "Phase 32 requests must not pre-confirm action-time approval");
+assert(runtimeState.providerActionConfirmationReceipt.requests.every((item) => item.confirmedReceiptCount === 0), "Phase 32 requests must start with zero confirmed receipts");
+assert(runtimeState.providerActionConfirmationReceipt.requests.every((item) => item.canSubmitProvider === false), "Phase 32 requests must never submit providers");
+assert(runtimeState.providerActionConfirmationReceipt.requests.every((item) => item.providerSubmitAllowed === 0), "Phase 32 requests must keep providerSubmitAllowed=0");
+assert(runtimeState.providerActionConfirmationReceipt.receipts.every((item) => item.placeholderPresent === true), "Phase 32 receipts must be placeholders");
+assert(runtimeState.providerActionConfirmationReceipt.receipts.every((item) => item.confirmed === false), "Phase 32 receipts must not be confirmed by default");
+assert(runtimeState.providerActionConfirmationReceipt.receipts.every((item) => item.canSubmitProvider === false), "Phase 32 receipts must never submit providers");
+for (const key of [
+  "dryRunOnly",
+  "readOnly",
+  "reviewShellOnly",
+  "receiptPlanOnly",
+  "actionTimeConfirmationRequired",
+  "finalExecutionGateRequired",
+  "providerSubmissionForbidden",
+  "noCredentialRead",
+  "noCredentialWrite",
+  "noApiKeyCreation",
+  "noArbitraryProviderCommand",
+  "noWorkerSpawn",
+  "noFileMutation",
+  "fastModelForbidden",
+  "vipChannelForbidden",
+  "textToVideoMainPathForbidden",
+  "bgmInVideoPromptForbidden",
+]) {
+  assert(runtimeState.providerActionConfirmationReceipt.hardLocks[key] === true, `providerActionConfirmationReceipt hard lock ${key} must be true`);
+}
+assert(runtimeState.providerActionConfirmationReceipt.hardLocks.canSubmitProvider === false, "providerActionConfirmationReceipt canSubmitProvider lock must be false");
+assert(runtimeState.providerActionConfirmationReceipt.hardLocks.providerSubmitAllowed === 0, "providerActionConfirmationReceipt providerSubmitAllowed lock must be 0");
+assert(runtimeState.providerActionConfirmationReceipt.hardLocks.liveSubmitAllowed === false, "providerActionConfirmationReceipt live submit hard lock must be false");
+assert(runtimeState.providerActionConfirmationReceipt.hardLocks.credentialAccessAllowed === false, "providerActionConfirmationReceipt credential access hard lock must be false");
+assert(runtimeState.providerActionConfirmationReceipt.hardLocks.automaticSubmitAllowed === false, "providerActionConfirmationReceipt automatic submit hard lock must be false");
+assert(runtimeState.providerActionConfirmationReceipt.hardLocks.credentialStorage === false, "providerActionConfirmationReceipt credential storage hard lock must be false");
 assert(runtimeState.voiceAudioSettings, "runtime-state must include voiceAudioSettings");
 assert(runtimeState.voiceAudioSettings.phase === "phase_28_voice_audio_settings_ui", "voiceAudioSettings must be Phase 28 evidence");
 assert(runtimeState.voiceAudioSettings.scope === "voice_audio_project_facts", "voiceAudioSettings scope must stay project facts only");

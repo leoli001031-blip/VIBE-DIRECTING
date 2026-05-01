@@ -2925,7 +2925,8 @@ small {
 .phase29-lock-strip,
 .phase28-lock-strip,
 .phase30-lock-strip,
-.phase31-lock-strip {
+.phase31-lock-strip,
+.phase32-lock-strip {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -2937,7 +2938,8 @@ small {
 .phase29-lock-strip span,
 .phase28-lock-strip span,
 .phase30-lock-strip span,
-.phase31-lock-strip span {
+.phase31-lock-strip span,
+.phase32-lock-strip span {
   border: 1px solid rgba(168, 214, 163, 0.24);
   background: rgba(168, 214, 163, 0.06);
   color: #cdd9c8;
@@ -2950,7 +2952,8 @@ small {
 .phase29-summary-list,
 .phase28-summary-list,
 .phase30-summary-list,
-.phase31-summary-list {
+.phase31-summary-list,
+.phase32-summary-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
@@ -2961,7 +2964,8 @@ small {
 .phase29-summary-list div,
 .phase28-summary-list div,
 .phase30-summary-list div,
-.phase31-summary-list div {
+.phase31-summary-list div,
+.phase32-summary-list div {
   display: grid;
   gap: 4px;
   border: 1px solid rgba(236, 231, 223, 0.08);
@@ -2979,6 +2983,8 @@ small {
 .phase30-summary-list small,
 .phase31-summary-list strong,
 .phase31-summary-list small,
+.phase32-summary-list strong,
+.phase32-summary-list small,
 .export-worker-settings-summary strong,
 .export-worker-settings-summary small,
 .codex-cli-adapter-settings-summary strong,
@@ -2988,7 +2994,9 @@ small {
 .provider-enable-gate-settings-summary strong,
 .provider-enable-gate-settings-summary small,
 .provider-execution-permission-settings-summary strong,
-.provider-execution-permission-settings-summary small {
+.provider-execution-permission-settings-summary small,
+.provider-action-confirmation-settings-summary strong,
+.provider-action-confirmation-settings-summary small {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -2997,7 +3005,8 @@ small {
 .phase29-summary-list small,
 .phase28-summary-list small,
 .phase30-summary-list small,
-.phase31-summary-list small {
+.phase31-summary-list small,
+.phase32-summary-list small {
   color: #9d958a;
   font-size: 11px;
 }
@@ -3184,6 +3193,10 @@ small {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .phase32-provider-action-receipt-panel .phase32-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .phase17-runtime-panel .phase17-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3243,6 +3256,7 @@ small {
   .phase28-summary-list,
   .phase30-summary-list,
   .phase31-summary-list,
+  .phase32-summary-list,
   .machine-panel .summary-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -3266,6 +3280,7 @@ small {
   .phase28-voice-audio-panel .phase28-metrics,
   .phase30-provider-gate-panel .phase30-metrics,
   .phase31-provider-permission-panel .phase31-metrics,
+  .phase32-provider-action-receipt-panel .phase32-metrics,
   .phase17-runtime-panel .phase17-metrics,
   .generation-job-head,
   .candidate-output-summary div,

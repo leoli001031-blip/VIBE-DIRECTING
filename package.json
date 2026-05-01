@@ -34,6 +34,7 @@
     "project-facts-integration:test": "node scripts/project-facts-integration-test.mjs",
     "provider-live-gate:test": "node scripts/provider-live-gate-test.mjs",
     "provider-execution-permission-gate:test": "node scripts/provider-execution-permission-gate-test.mjs",
+    "provider-action-confirmation-receipt:test": "node scripts/provider-action-confirmation-receipt-test.mjs",
     "phase-roadmap:test": "node scripts/phase-roadmap-runtime-test.mjs",
     "export-builder:test": "node scripts/export-builder-test.mjs",
     "export-worker:test": "node scripts/export-worker-test.mjs",

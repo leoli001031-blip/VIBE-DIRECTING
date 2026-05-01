@@ -111,6 +111,8 @@ const exportWorkerDiagnostics = findFunctionBody(appSource, "ExportWorkerDiagnos
 const voiceAudioSettingsDiagnostics = findFunctionBody(appSource, "VoiceAudioSettingsDiagnostics");
 const providerEnablementGateDiagnostics = findFunctionBody(appSource, "ProviderEnablementGateDiagnostics");
 const providerEnablementGateUiSummary = findFunctionBody(appSource, "buildProviderEnablementGateUiSummary");
+const providerActionConfirmationReceiptDiagnostics = findFunctionBody(appSource, "ProviderActionConfirmationReceiptDiagnostics");
+const providerActionConfirmationReceiptUiSummary = findFunctionBody(appSource, "buildProviderActionConfirmationReceiptUiSummary");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
 const knowledgeUiSummary = findFunctionBody(appSource, "buildKnowledgeUiSummary");
 const knowledgePackManager = findFunctionBody(appSource, "KnowledgePackManager");
@@ -234,6 +236,19 @@ checkMessage(requireWithin(`${providerEnablementGateDiagnostics}\n${providerEnab
 checkMessage(requireWithin(`${providerEnablementGateDiagnostics}\n${providerEnablementGateUiSummary}`, /credential\/live submit\/shell locked/i, "Phase 30 credential/live submit/shell locks"));
 checkMessage(requireWithin(providerEnablementGateDiagnostics, /Blockers\s*\/\s*warnings/i, "Phase 30 blockers/warnings summary"));
 checkMessage(requireWithin(providerEnablementGateDiagnostics, /phase30-lock-strip/i, "Phase 30 hard lock strip"));
+checkMessage(requireWithin(diagnosticsMode, /ProviderActionConfirmationReceiptDiagnostics/, "Phase 32 ProviderActionConfirmationReceiptDiagnostics mounted in Diagnostics"));
+checkMessage(requireWithin(providerActionConfirmationReceiptDiagnostics, /Provider Action Confirmation Receipt/i, "Phase 32 Provider Action Confirmation Receipt diagnostics panel"));
+checkMessage(requireWithin(providerActionConfirmationReceiptDiagnostics, /Readiness/i, "Phase 32 readiness summary"));
+checkMessage(requireWithin(providerActionConfirmationReceiptDiagnostics, /Ready Receipts/i, "Phase 32 ready receipts summary"));
+checkMessage(requireWithin(providerActionConfirmationReceiptDiagnostics, /Blocked/i, "Phase 32 blocked summary"));
+checkMessage(requireWithin(providerActionConfirmationReceiptDiagnostics, /Confirmed Count/i, "Phase 32 confirmed count summary"));
+checkMessage(requireWithin(providerActionConfirmationReceiptDiagnostics, /Provider Submit/i, "Phase 32 provider submit summary"));
+checkMessage(requireWithin(providerActionConfirmationReceiptDiagnostics, /Credential\s*\/\s*Worker\s*\/\s*File/i, "Phase 32 credential/worker/file lock summary"));
+checkMessage(requireWithin(`${providerActionConfirmationReceiptDiagnostics}\n${providerActionConfirmationReceiptUiSummary}`, /providerActionConfirmationReceipt/i, "Phase 32 providerActionConfirmationReceipt parser"));
+checkMessage(requireWithin(`${providerActionConfirmationReceiptDiagnostics}\n${providerActionConfirmationReceiptUiSummary}`, /Phase\s*32/i, "Phase 32 Diagnostics engineering label"));
+checkMessage(requireWithin(`${providerActionConfirmationReceiptDiagnostics}\n${providerActionConfirmationReceiptUiSummary}`, /provider submit blocked/i, "Phase 32 provider submit blocked summary"));
+checkMessage(requireWithin(`${providerActionConfirmationReceiptDiagnostics}\n${providerActionConfirmationReceiptUiSummary}`, /credential\/worker\/file locked/i, "Phase 32 credential/worker/file locked summary"));
+checkMessage(requireWithin(providerActionConfirmationReceiptDiagnostics, /phase32-lock-strip/i, "Phase 32 hard lock strip"));
 checkMessage(requireWithin(previewPlayerQueue, /draftPreview\.events/, "Phase 21/23 Preview Player queue must use previewExport.draftPreview.events"));
 checkMessage(requireWithin(previewPlayerQueue, /image_hold/, "Phase 21/23 Preview Player queue must include image holds"));
 checkMessage(requireWithin(previewPlayerQueue, /video_clip/, "Phase 21/23 Preview Player queue must include video clips"));
@@ -407,6 +422,19 @@ for (const [term, pattern] of phase30ForbiddenMainTerms) {
   const count = countPattern(phase2123DirectorSurface, pattern);
   check(count === 0, `Phase 30 main Director surface must expose 0 ${term} term(s), found ${count}`);
 }
+const phase32ForbiddenMainTerms = [
+  ["Phase32", /Phase\s*32/i],
+  ["Action-time Confirmation Receipt", /Action[-\s]?time\s+Confirmation\s+Receipt/i],
+  ["Provider Action Confirmation Receipt", /Provider\s+Action\s+Confirmation\s+Receipt/i],
+  ["providerActionConfirmationReceipt", /providerActionConfirmationReceipt/i],
+  ["canSubmitProvider", /canSubmitProvider/i],
+  ["providerSubmitAllowed", /providerSubmitAllowed/i],
+  ["Provider Submit", /Provider\s+Submit/i],
+];
+for (const [term, pattern] of phase32ForbiddenMainTerms) {
+  const count = countPattern(phase2123DirectorSurface, pattern);
+  check(count === 0, `Phase 32 main Director surface must expose 0 ${term} term(s), found ${count}`);
+}
 check(!/Formal\s+Gate|Proxy\s+Duration|Draft\s+Events|blockedPlaceholder/i.test(minimalPreview), "Preview Player copy must stay short and not show gate/proxy counters");
 check(/locked/i.test(minimalAssetLibrary) && /candidate/i.test(minimalAssetLibrary) && /review/i.test(minimalAssetLibrary), "Asset Library must keep locked/candidate/review consistency states");
 
@@ -439,6 +467,11 @@ checkMessage(requireWithin(settingsShell, /provider live/i, "Phase 28 provider l
 checkMessage(requireWithin(settingsShell, /Provider Enablement Gate readiness/i, "Phase 30 Provider Enablement Gate readiness summary in Settings"));
 checkMessage(requireWithin(settingsShell, /ready_for_confirmation/i, "Phase 30 ready_for_confirmation count in Settings"));
 checkMessage(requireWithin(`${settingsShell}\n${providerEnablementGateUiSummary}`, /provider submit blocked/i, "Phase 30 provider submit blocked summary in Settings"));
+checkMessage(requireWithin(settingsShell, /Provider Action Confirmation readiness/i, "Phase 32 Provider Action Confirmation readiness summary in Settings"));
+checkMessage(requireWithin(settingsShell, /ready receipt\(s\)/i, "Phase 32 ready receipt count in Settings"));
+checkMessage(requireWithin(settingsShell, /confirmed/i, "Phase 32 confirmed count in Settings"));
+checkMessage(requireWithin(`${settingsShell}\n${providerActionConfirmationReceiptUiSummary}`, /provider submit blocked/i, "Phase 32 provider submit blocked summary in Settings"));
+checkMessage(requireWithin(`${settingsShell}\n${providerActionConfirmationReceiptUiSummary}`, /credential\/worker\/file locked/i, "Phase 32 credential/worker/file locked summary in Settings"));
 checkMessage(requireWithin(knowledgePackManager, /Enabled/i, "Phase 25 Knowledge summary enabled/total metric"));
 checkMessage(requireWithin(knowledgePackManager, /Injected/i, "Phase 25 Knowledge summary injected/unique metric"));
 checkMessage(requireWithin(knowledgePackManager, /Warnings\s*\/\s*Blockers/i, "Phase 25 Knowledge summary warnings/blockers metric"));
@@ -456,8 +489,15 @@ const forbiddenButtonCopy = [
   "Run CLI",
   "Submit Provider",
   "Save Credentials",
+  "Save Credential",
   "Run Provider",
   "Run Adapter",
+  "Confirm Provider",
+  "Confirm Action",
+  "Confirm Receipt",
+  "Record Confirmation",
+  "Submit Receipt",
+  "Review Submit",
   "Export Now",
   "Write Files",
   "Create Directory",

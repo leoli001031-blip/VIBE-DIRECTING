@@ -191,6 +191,18 @@ type ProviderExecutionPermissionGateUiSummary = {
   blockersWarnings: string[];
   hardLocks: string[];
 };
+type ProviderActionConfirmationReceiptUiSummary = {
+  initialized: boolean;
+  readiness: string;
+  readyReceipts: number;
+  blocked: number;
+  parked: number;
+  confirmedCount: number;
+  providerSubmitBlocked: string;
+  credentialWorkerFileLocked: string;
+  blockersWarnings: string[];
+  hardLocks: string[];
+};
 
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
@@ -1811,6 +1823,137 @@ function buildProviderExecutionPermissionGateUiSummary(runtimeState: ProjectRunt
       : "blocked/missing",
     blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.providerExecutionPermissionGate"],
     hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.providerExecutionPermissionGate"],
+  };
+}
+
+function providerActionConfirmationReceiptReadinessLabel(
+  status: string,
+  initialized: boolean,
+  readyReceipts: number,
+  blocked: number,
+  parked: number,
+  confirmedCount: number,
+) {
+  if (!initialized) return "blocked/missing";
+  const normalized = status.toLowerCase();
+  if (blocked > 0 || normalized.includes("blocked") || normalized.includes("missing") || normalized.includes("fail")) return "blocked";
+  if (confirmedCount > 0 || normalized.includes("confirmed")) return "confirmed";
+  if (readyReceipts > 0 || normalized.includes("ready")) return "ready_receipts";
+  if (parked > 0 || normalized.includes("parked")) return "parked";
+  return status ? statusLabel(status) : "blocked/missing";
+}
+
+function receiptRowIsConfirmed(row: Record<string, unknown>) {
+  if (row.confirmed === true || row.userConfirmedAtActionTime === true || row.confirmedAtActionTime === true) return true;
+  const confirmations = Array.isArray(row.confirmations) ? row.confirmations : [];
+  return confirmations.some((item) => isRecord(item) && item.confirmed === true);
+}
+
+function buildProviderActionConfirmationReceiptHardLocks(rootRecord: Record<string, unknown>, summary: Record<string, unknown>) {
+  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
+  const explicitHardLocks = firstArrayFrom([rootRecord, summary, hardLocksRecord], ["hardLocks", "locks", "hardLockStrip"])
+    .map((item, index) => formatHarnessValue(item, `hard lock ${index + 1}`))
+    .filter(Boolean);
+  const inferredLocks = [
+    readBooleanLockLabel(hardLocksRecord, "dryRunOnly", "dry-run only", true),
+    readBooleanLockLabel(hardLocksRecord, "readOnly", "read-only", true),
+    readBooleanLockLabel(hardLocksRecord, "receiptOnly", "receipt only", true),
+    readBooleanLockLabel(hardLocksRecord, "receiptPlanOnly", "receipt plan only", true),
+    readBooleanLockLabel(hardLocksRecord, "reviewShellOnly", "review shell only", true),
+    readBooleanLockLabel(hardLocksRecord, "actionTimeConfirmationRequired", "action-time confirmation required", true),
+    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noProviderSubmit", "provider submit blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "canSubmitProvider", "canSubmitProvider=false", false),
+    hardLocksRecord.providerSubmitAllowed === 0 ? "providerSubmitAllowed=0" : undefined,
+    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit locked", false),
+    readBooleanLockLabel(hardLocksRecord, "credentialAccessAllowed", "credential access locked", false),
+    readBooleanLockLabel(hardLocksRecord, "noCredentialRead", "credential read locked", true),
+    readBooleanLockLabel(hardLocksRecord, "noCredentialWrite", "credential write locked", true),
+    readBooleanLockLabel(hardLocksRecord, "noWorkerSpawn", "worker spawn locked", true),
+    readBooleanLockLabel(hardLocksRecord, "workerSpawnAllowed", "worker spawn locked", false),
+    readBooleanLockLabel(hardLocksRecord, "noFileMutation", "file mutation locked", true),
+    readBooleanLockLabel(hardLocksRecord, "fileMutationAllowed", "file mutation locked", false),
+  ].filter((lock): lock is string => Boolean(lock));
+
+  return Array.from(new Set([...explicitHardLocks, ...inferredLocks]));
+}
+
+function buildProviderActionConfirmationReceiptUiSummary(runtimeState: ProjectRuntimeState): ProviderActionConfirmationReceiptUiSummary {
+  const root = (runtimeState as Partial<ProjectRuntimeState> & { providerActionConfirmationReceipt?: unknown }).providerActionConfirmationReceipt;
+  const initialized = isRecord(root);
+  const rootRecord = initialized ? root as Record<string, unknown> : {};
+  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
+  const evidence = initialized && isRecord(rootRecord.phase32Evidence) ? rootRecord.phase32Evidence : {};
+  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
+  const records = [summary, evidence, rootRecord, hardLocksRecord].filter(isRecord);
+  const receiptRows = firstArrayFrom([rootRecord, summary], [
+    "receipts",
+    "items",
+    "confirmationReceipts",
+    "actionReceipts",
+    "requests",
+  ]);
+  const receiptRecords = receiptRows.filter(isRecord);
+  const readyReceipts = readFirstNumber(records, [
+    "readyReceipts",
+    "readyReceiptCount",
+    "readyForReceipt",
+    "readyForActionConfirmation",
+    "ready",
+  ]) ?? receiptRecords.filter((row) => /ready/.test(readString(row.status, "").toLowerCase())).length;
+  const blocked = readFirstNumber(records, ["blocked", "blockedReceipts", "blockedReceiptCount"])
+    ?? receiptRecords.filter((row) => readString(row.status, "") === "blocked").length;
+  const parked = readFirstNumber(records, ["parked", "parkedReceipts", "parkedReceiptCount"])
+    ?? receiptRecords.filter((row) => readString(row.status, "") === "parked").length;
+  const confirmedCount = readFirstNumber(records, [
+    "confirmedCount",
+    "confirmedReceiptCount",
+    "confirmedReceipts",
+    "confirmed",
+  ]) ?? receiptRecords.filter(receiptRowIsConfirmed).length;
+  const status = readFirstString(records, ["readiness", "status", "state"], "");
+  const providerSubmitAllowedNumber = readFirstNumber(records, ["providerSubmitAllowed"]);
+  const providerSubmitAllowedBoolean = readFirstBoolean(records, ["providerSubmitAllowed", "canSubmitProvider"]);
+  const providerSubmitBlockedFlag = readFirstBoolean(records, [
+    "providerSubmitBlocked",
+    "providerSubmissionForbidden",
+    "noProviderSubmit",
+  ]);
+  const providerSubmitBlocked = providerSubmitAllowedNumber === 0
+    || providerSubmitAllowedBoolean === false
+    || providerSubmitBlockedFlag === true;
+  const providerSubmitDrift = (providerSubmitAllowedNumber !== undefined && providerSubmitAllowedNumber !== 0)
+    || providerSubmitAllowedBoolean === true
+    || providerSubmitBlockedFlag === false;
+  const credentialLocked = readFirstBoolean(records, ["credentialAccessAllowed", "credentialReadAllowed", "credentialStorage"]) === false
+    || records.some((record) => record.noCredentialRead === true || record.noCredentialWrite === true || record.credentialAccessBlocked === true);
+  const workerLocked = readFirstBoolean(records, ["workerSpawnAllowed", "canSpawnWorker", "workerExecutionAllowed"]) === false
+    || records.some((record) => record.noWorkerSpawn === true || record.workerSpawnBlocked === true);
+  const fileLocked = readFirstBoolean(records, ["fileMutationAllowed", "canMutateFiles", "fileWriteAllowed"]) === false
+    || records.some((record) => record.noFileMutation === true || record.fileMutationBlocked === true);
+  const blockersWarnings = Array.from(new Set([
+    ...readDisplayList(rootRecord.blockers, "blocker"),
+    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
+    ...readDisplayList(summary.blockers, "blocker"),
+    ...readDisplayList(summary.blockedReasons, "blocker"),
+    ...receiptRecords.flatMap((row) => readDisplayList(row.blockers, "blocker")),
+    ...readDisplayList(rootRecord.warnings, "warning"),
+    ...readDisplayList(summary.warnings, "warning"),
+    ...receiptRecords.flatMap((row) => readDisplayList(row.warnings, "warning")),
+  ].filter(Boolean)));
+  const hardLocks = buildProviderActionConfirmationReceiptHardLocks(rootRecord, summary);
+
+  return {
+    initialized,
+    readiness: providerActionConfirmationReceiptReadinessLabel(status, initialized, readyReceipts, blocked, parked, confirmedCount),
+    readyReceipts,
+    blocked,
+    parked,
+    confirmedCount,
+    providerSubmitBlocked: providerSubmitBlocked ? "provider submit blocked" : providerSubmitDrift ? "provider submit drift" : "blocked/missing",
+    credentialWorkerFileLocked: credentialLocked && workerLocked && fileLocked ? "credential/worker/file locked" : "blocked/missing",
+    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.providerActionConfirmationReceipt"],
+    hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.providerActionConfirmationReceipt"],
   };
 }
 
@@ -4300,6 +4443,50 @@ function ProviderExecutionPermissionGateDiagnostics({ runtimeState }: { runtimeS
   );
 }
 
+function ProviderActionConfirmationReceiptDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildProviderActionConfirmationReceiptUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel phase32-provider-action-receipt-panel">
+      <div className="audit-head">
+        <ShieldAlert size={17} />
+        <span>Provider Action Confirmation Receipt</span>
+      </div>
+      <div className="summary-grid phase32-metrics">
+        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "Phase 32 receipt shell" : "blocked/missing"} />
+        <Metric label="Ready Receipts" value={`${summary.readyReceipts}`} detail={`${summary.parked} parked`} />
+        <Metric label="Blocked" value={`${summary.blocked}`} detail="receipt blockers" />
+        <Metric label="Confirmed Count" value={`${summary.confirmedCount}`} detail="action-time confirmations" />
+        <Metric label="Provider Submit" value={summary.providerSubmitBlocked} detail="read-only" />
+        <Metric label="Credential / Worker / File" value={summary.credentialWorkerFileLocked} detail="locked route summary" />
+      </div>
+      <div className="phase32-summary-list">
+        <div>
+          <strong>Receipt status</strong>
+          <small>{summary.readyReceipts} ready receipt(s) · {summary.blocked} blocked · {summary.parked} parked · {summary.confirmedCount} confirmed</small>
+        </div>
+        <div>
+          <strong>Provider submit blocked</strong>
+          <small>{summary.providerSubmitBlocked}</small>
+        </div>
+        <div>
+          <strong>Credential / worker / file locked</strong>
+          <small>{summary.credentialWorkerFileLocked}</small>
+        </div>
+        <div>
+          <strong>Blockers / warnings</strong>
+          <small>{summary.blockersWarnings.length ? summary.blockersWarnings.slice(0, 5).join(" · ") : "none reported"}</small>
+        </div>
+      </div>
+      <div className="phase32-lock-strip" aria-label="Phase 32 Provider Action Confirmation Receipt hard locks">
+        {summary.hardLocks.slice(0, 10).map((lock) => (
+          <span key={lock}>{lock}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const videoPlanning = getVideoPlanning(runtimeState);
   const queue = videoPlanning.queueShell;
@@ -6024,6 +6211,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const voiceAudioSettingsSummary = buildVoiceAudioSettingsUiSummary(runtimeState);
   const providerEnablementGateSummary = buildProviderEnablementGateUiSummary(runtimeState);
   const providerExecutionPermissionGateSummary = buildProviderExecutionPermissionGateUiSummary(runtimeState);
+  const providerActionConfirmationReceiptSummary = buildProviderActionConfirmationReceiptUiSummary(runtimeState);
 
   return (
     <section className="machine-panel settings-shell">
@@ -6177,6 +6365,14 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
         <div className="settings-readonly-note">
           <strong>Provider Execution Permission readiness: {providerExecutionPermissionGateSummary.readiness}</strong>
           <small>{providerExecutionPermissionGateSummary.readyForUserReview} reviewable · {providerExecutionPermissionGateSummary.blocked} blocked · {providerExecutionPermissionGateSummary.providerSubmit} · {providerExecutionPermissionGateSummary.automaticSubmit}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Provider Action Confirmation Receipt</div>
+      <div className="settings-list provider-action-confirmation-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Provider Action Confirmation readiness: {providerActionConfirmationReceiptSummary.readiness}</strong>
+          <small>{providerActionConfirmationReceiptSummary.readyReceipts} ready receipt(s) · {providerActionConfirmationReceiptSummary.blocked} blocked · {providerActionConfirmationReceiptSummary.parked} parked · {providerActionConfirmationReceiptSummary.confirmedCount} confirmed</small>
+          <small>{providerActionConfirmationReceiptSummary.providerSubmitBlocked} · {providerActionConfirmationReceiptSummary.credentialWorkerFileLocked}</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
@@ -6389,6 +6585,7 @@ function DiagnosticsMode({
       <VoiceAudioSettingsDiagnostics runtimeState={runtimeState} />
       <ProviderEnablementGateDiagnostics runtimeState={runtimeState} />
       <ProviderExecutionPermissionGateDiagnostics runtimeState={runtimeState} />
+      <ProviderActionConfirmationReceiptDiagnostics runtimeState={runtimeState} />
       <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />
       <section className="machine-panel">
         <div className="audit-head">

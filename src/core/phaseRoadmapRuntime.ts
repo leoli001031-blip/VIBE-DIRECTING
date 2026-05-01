@@ -8,7 +8,8 @@ export type PhaseRoadmapPhaseId =
   | "phase_28_voice_audio_settings_ui"
   | "phase_29_codex_cli_adapter_spike"
   | "phase_30_provider_enablement_gate"
-  | "phase_31_provider_execution_permission_gate";
+  | "phase_31_provider_execution_permission_gate"
+  | "phase_32_action_time_confirmation_receipt";
 
 export type PhaseRoadmapReadiness = "ready" | "blocked";
 export type PhaseRoadmapStatus =
@@ -17,6 +18,7 @@ export type PhaseRoadmapStatus =
   | "ready_for_adapter_spike"
   | "ready_for_confirmation_gate"
   | "ready_for_final_permission_gate"
+  | "ready_for_receipt_gate"
   | "blocked_by_gate";
 export type PhaseRoadmapEvidenceDecisionSource = "typed_evidence" | "legacy_boolean_override" | "missing";
 export type PhaseRoadmapEvidenceStatus =
@@ -27,6 +29,7 @@ export type PhaseRoadmapEvidenceStatus =
   | "closed"
   | "ready_for_confirmation"
   | "ready_for_replacement_proof"
+  | "ready_for_receipt_gate"
   | "blocked"
   | "invalid"
   | "fail"
@@ -225,6 +228,106 @@ export interface PhaseRoadmapProviderExecutionPermissionGateEvidence {
     blockers?: string[];
     warnings?: string[];
   }>;
+  blockers?: string[];
+  blockedReasons?: string[];
+  warnings?: string[];
+  sourceRef?: string;
+}
+
+export interface PhaseRoadmapProviderActionConfirmationReceiptEvidence {
+  kind?: "provider_action_confirmation_receipt";
+  phase?: "phase_32_action_time_confirmation_receipt";
+  status?: PhaseRoadmapEvidenceStatus;
+  readiness?: "ready_for_receipt_gate" | "ready" | "blocked";
+  phase32Evidence?: {
+    phaseId?: "phase_32_action_time_confirmation_receipt";
+    typedEvidencePresent?: boolean;
+    phase31EvidenceConsumed?: boolean;
+    actionTimeConfirmationReceiptPlanPresent?: boolean;
+    confirmedReceiptCount?: number | boolean;
+    canSubmitProvider?: boolean;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    automaticSubmitAllowed?: boolean;
+    noWorkerSpawn?: boolean;
+    noFileMutation?: boolean;
+    forbiddenProviderModesAbsent?: boolean;
+    hardLocksPinned?: boolean;
+  };
+  summary?: {
+    readyForReceiptReview?: number;
+    receiptPlanCount?: number;
+    confirmedReceiptCount?: number | boolean;
+    blocked?: number;
+    parked?: number;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    automaticSubmitAllowed?: boolean;
+  };
+  hardLocks?: {
+    dryRunOnly?: boolean;
+    readOnly?: boolean;
+    reviewShellOnly?: boolean;
+    receiptPlanOnly?: boolean;
+    actionTimeConfirmationRequired?: boolean;
+    providerSubmissionForbidden?: boolean;
+    automaticSubmitForbidden?: boolean;
+    automaticSubmitAllowed?: boolean;
+    canSubmitProvider?: boolean;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    credentialStorage?: boolean;
+    noCredentialRead?: boolean;
+    noCredentialWrite?: boolean;
+    noApiKeyCreation?: boolean;
+    noArbitraryProviderCommand?: boolean;
+    noWorkerSpawn?: boolean;
+    noFileMutation?: boolean;
+    fastModelForbidden?: boolean;
+    vipChannelForbidden?: boolean;
+    textToVideoMainPathForbidden?: boolean;
+    bgmInVideoPromptForbidden?: boolean;
+  };
+  receipts?: Array<{
+    status?: string;
+    actionTimeConfirmationRequired?: boolean;
+    receiptPlanPresent?: boolean;
+    confirmed?: boolean;
+    userConfirmedAtActionTime?: boolean;
+    canSubmitProvider?: boolean;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    credentialStorage?: boolean;
+    automaticSubmitAllowed?: boolean;
+    noWorkerSpawn?: boolean;
+    noFileMutation?: boolean;
+    forbiddenProviderModesAbsent?: boolean;
+    blockers?: string[];
+    warnings?: string[];
+  }>;
+  requests?: Array<{
+    status?: string;
+    actionTimeConfirmationRequired?: boolean;
+    receiptPlanPresent?: boolean;
+    confirmed?: boolean;
+    userConfirmedAtActionTime?: boolean;
+    canSubmitProvider?: boolean;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    credentialStorage?: boolean;
+    automaticSubmitAllowed?: boolean;
+    noWorkerSpawn?: boolean;
+    noFileMutation?: boolean;
+    forbiddenProviderModesAbsent?: boolean;
+    blockers?: string[];
+    warnings?: string[];
+  }>;
+  forbiddenActions?: string[];
   blockers?: string[];
   blockedReasons?: string[];
   warnings?: string[];
@@ -698,6 +801,7 @@ export interface PhaseRoadmapRuntimeEvidence {
   voiceAudioSettings?: PhaseRoadmapVoiceAudioSettingsEvidence;
   providerLiveGate?: PhaseRoadmapProviderLiveGateReceipt;
   providerExecutionPermissionGate?: PhaseRoadmapProviderExecutionPermissionGateEvidence;
+  providerActionConfirmationReceipt?: PhaseRoadmapProviderActionConfirmationReceiptEvidence;
   watcherManifestQaClosedLoop?: PhaseRoadmapClosedLoopReceipt;
 }
 
@@ -713,7 +817,8 @@ export interface PhaseRoadmapEvidenceDecision {
     | "providerEnablementPacket"
     | "watcherManifestQaClosedLoop"
     | "forbiddenProviderModesAbsent"
-    | "providerExecutionPermissionGate";
+    | "providerExecutionPermissionGate"
+    | "providerActionConfirmationReceipt";
   source: PhaseRoadmapEvidenceDecisionSource;
   ready: boolean;
   blockers: string[];
@@ -738,6 +843,7 @@ export interface PhaseRoadmapRuntimeInput {
   watcherManifestQaClosedLoop?: boolean;
   forbiddenProviderModesAbsent?: boolean;
   providerExecutionPermissionGateReady?: boolean;
+  providerActionConfirmationReceiptReady?: boolean;
 }
 
 export interface PhaseRoadmapHardLocks {
@@ -757,7 +863,7 @@ export interface PhaseRoadmapHardLocks {
 
 export interface PhaseRoadmapPhasePlan {
   phaseId: PhaseRoadmapPhaseId;
-  phaseNumber: 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31;
+  phaseNumber: 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32;
   title: string;
   readiness: PhaseRoadmapReadiness;
   status: PhaseRoadmapStatus;
@@ -772,10 +878,10 @@ export interface PhaseRoadmapPhasePlan {
 export interface PhaseRoadmapRuntimePlan {
   schemaVersion: "0.1.0";
   generatedAt: string;
-  phaseRange: "phase_24_to_31";
+  phaseRange: "phase_24_to_32";
   phases: PhaseRoadmapPhasePlan[];
   summary: {
-    totalPhases: 8;
+    totalPhases: 9;
     ready: number;
     blocked: number;
     providerSubmitAllowed: 0;
@@ -818,6 +924,16 @@ export interface PhaseRoadmapRuntimePlan {
     canSubmitProvider: false;
     providerSubmitAllowed: 0;
   };
+  providerActionConfirmationReceipt: {
+    actionTimeConfirmationReceiptPlanRequired: true;
+    confirmedReceiptCount: 0;
+    reviewShellOnly: true;
+    automaticSubmitForbidden: true;
+    canSubmitProvider: false;
+    providerSubmitAllowed: 0;
+    liveSubmitAllowed: false;
+    credentialAccessAllowed: false;
+  };
 }
 
 const defaultGeneratedAt = "1970-01-01T00:00:00.000Z";
@@ -831,6 +947,7 @@ const phaseIds: PhaseRoadmapPhaseId[] = [
   "phase_29_codex_cli_adapter_spike",
   "phase_30_provider_enablement_gate",
   "phase_31_provider_execution_permission_gate",
+  "phase_32_action_time_confirmation_receipt",
 ];
 
 export const phaseRoadmapRuntimeHardLocks: PhaseRoadmapHardLocks = {
@@ -880,6 +997,7 @@ function readyStatus(status: PhaseRoadmapEvidenceStatus | undefined): boolean {
     || status === "passed"
     || status === "closed"
     || status === "ready_for_confirmation"
+    || status === "ready_for_receipt_gate"
     || status === "ready_for_replacement_proof";
 }
 
@@ -959,6 +1077,16 @@ function hasProviderExecutionPermissionGateEvidence(
     evidence.kind === "provider_execution_permission_gate" ||
     evidence.phase === "phase_31_provider_execution_permission_gate" ||
     evidence.phase31Evidence?.phaseId === "phase_31_provider_execution_permission_gate"
+  ));
+}
+
+function hasProviderActionConfirmationReceiptEvidence(
+  evidence: PhaseRoadmapProviderActionConfirmationReceiptEvidence | undefined,
+): evidence is PhaseRoadmapProviderActionConfirmationReceiptEvidence {
+  return Boolean(evidence && (
+    evidence.kind === "provider_action_confirmation_receipt" ||
+    evidence.phase === "phase_32_action_time_confirmation_receipt" ||
+    evidence.phase32Evidence?.phaseId === "phase_32_action_time_confirmation_receipt"
   ));
 }
 
@@ -2106,6 +2234,138 @@ function providerExecutionPermissionGateEvidenceDecision(input: PhaseRoadmapRunt
   };
 }
 
+function providerActionConfirmationReceiptEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const evidence = input.evidence?.providerActionConfirmationReceipt;
+
+  if (hasProviderActionConfirmationReceiptEvidence(evidence)) {
+    const phase32 = evidence.phase32Evidence || {};
+    const receipts = [...(evidence.receipts || []), ...(evidence.requests || [])];
+    const receiptBlockers = receipts.flatMap((receipt) => receipt.blockers || []);
+    const receiptWarnings = receipts.flatMap((receipt) => receipt.warnings || []);
+    const phase31EvidencePresent = hasProviderExecutionPermissionGateEvidence(input.evidence?.providerExecutionPermissionGate);
+    const receiptPlanPresent = phase32.actionTimeConfirmationReceiptPlanPresent === false
+      ? false
+      : phase32.actionTimeConfirmationReceiptPlanPresent === true
+        || (evidence.summary?.receiptPlanCount ?? 0) > 0
+        || (evidence.summary?.readyForReceiptReview ?? 0) > 0
+        || receipts.some((receipt) =>
+          receipt.receiptPlanPresent === true ||
+          [
+            "ready_for_receipt_review",
+            "ready_for_receipt_gate",
+            "receipt_plan_ready",
+            "review_shell_ready",
+          ].includes(String(receipt.status || "")),
+        );
+    const confirmedReceiptCount = phase32.confirmedReceiptCount ?? evidence.summary?.confirmedReceiptCount;
+    const confirmedReceiptObserved = confirmedReceiptCount !== undefined && confirmedReceiptCount !== 0 && confirmedReceiptCount !== false
+      || receipts.some((receipt) => receipt.confirmed === true || receipt.userConfirmedAtActionTime === true);
+    const providerSubmitAllowed = phase32.providerSubmitAllowed
+      ?? evidence.summary?.providerSubmitAllowed
+      ?? evidence.hardLocks?.providerSubmitAllowed;
+    const hardLocksPinned = evidence.hardLocks
+      ? phase32.hardLocksPinned !== false
+        && evidence.hardLocks.dryRunOnly === true
+        && evidence.hardLocks.readOnly === true
+        && evidence.hardLocks.reviewShellOnly === true
+        && evidence.hardLocks.receiptPlanOnly === true
+        && evidence.hardLocks.actionTimeConfirmationRequired === true
+        && evidence.hardLocks.providerSubmissionForbidden === true
+        && evidence.hardLocks.automaticSubmitForbidden === true
+        && evidence.hardLocks.automaticSubmitAllowed === false
+        && evidence.hardLocks.canSubmitProvider === false
+        && evidence.hardLocks.providerSubmitAllowed === 0
+        && evidence.hardLocks.liveSubmitAllowed === false
+        && evidence.hardLocks.credentialAccessAllowed === false
+        && evidence.hardLocks.credentialStorage === false
+        && evidence.hardLocks.noCredentialRead === true
+        && evidence.hardLocks.noCredentialWrite === true
+        && evidence.hardLocks.noApiKeyCreation === true
+        && evidence.hardLocks.noArbitraryProviderCommand === true
+        && evidence.hardLocks.noWorkerSpawn === true
+        && evidence.hardLocks.noFileMutation === true
+        && evidence.hardLocks.fastModelForbidden === true
+        && evidence.hardLocks.vipChannelForbidden === true
+        && evidence.hardLocks.textToVideoMainPathForbidden === true
+        && evidence.hardLocks.bgmInVideoPromptForbidden === true
+      : false;
+    const receiptLocksPinned = receipts.every((receipt) =>
+      receipt.actionTimeConfirmationRequired !== false
+      && receipt.confirmed !== true
+      && receipt.userConfirmedAtActionTime !== true
+      && receipt.canSubmitProvider !== true
+      && providerSubmitValueBlocked(receipt.providerSubmitAllowed)
+      && receipt.liveSubmitAllowed !== true
+      && receipt.credentialAccessAllowed !== true
+      && receipt.credentialStorage !== true
+      && receipt.automaticSubmitAllowed !== true
+      && receipt.noWorkerSpawn !== false
+      && receipt.noFileMutation !== false
+      && receipt.forbiddenProviderModesAbsent !== false
+    );
+    const blockers = uniqueSorted([
+      ...blockedIf(phase32.typedEvidencePresent !== true, "provider_action_confirmation_receipt_typed_evidence_missing"),
+      ...blockedIf(!phase31EvidencePresent || phase32.phase31EvidenceConsumed !== true, "provider_action_confirmation_receipt_phase31_evidence_missing"),
+      ...blockedIf(!receiptPlanPresent, "provider_action_confirmation_receipt_plan_missing"),
+      ...blockedIf(confirmedReceiptObserved, "provider_action_confirmation_receipt_confirmed_receipts_present"),
+      ...blockedIf(!hardLocksPinned, "provider_action_confirmation_receipt_hard_locks_not_pinned"),
+      ...blockedIf(!receiptLocksPinned, "provider_action_confirmation_receipt_request_lock_drift"),
+      ...blockedIf(
+        phase32.canSubmitProvider === true || evidence.hardLocks?.canSubmitProvider === true || receipts.some((receipt) => receipt.canSubmitProvider === true),
+        "provider_action_confirmation_receipt_can_submit_provider_true",
+      ),
+      ...blockedIf(!providerSubmitValueBlocked(providerSubmitAllowed), "provider_action_confirmation_receipt_provider_submit_allowed"),
+      ...blockedIf(
+        phase32.liveSubmitAllowed === true || evidence.summary?.liveSubmitAllowed === true || evidence.hardLocks?.liveSubmitAllowed === true,
+        "provider_action_confirmation_receipt_live_submit_allowed",
+      ),
+      ...blockedIf(
+        phase32.credentialAccessAllowed === true ||
+          evidence.summary?.credentialAccessAllowed === true ||
+          evidence.hardLocks?.credentialAccessAllowed === true,
+        "provider_action_confirmation_receipt_credential_access_allowed",
+      ),
+      ...blockedIf(
+        phase32.automaticSubmitAllowed === true ||
+          evidence.summary?.automaticSubmitAllowed === true ||
+          evidence.hardLocks?.automaticSubmitAllowed === true ||
+          evidence.hardLocks?.automaticSubmitForbidden === false,
+        "provider_action_confirmation_receipt_auto_submit_allowed",
+      ),
+      ...blockedIf(phase32.noWorkerSpawn !== true || evidence.hardLocks?.noWorkerSpawn !== true, "provider_action_confirmation_receipt_worker_spawn_not_blocked"),
+      ...blockedIf(phase32.noFileMutation !== true || evidence.hardLocks?.noFileMutation !== true, "provider_action_confirmation_receipt_file_mutation_not_blocked"),
+      ...blockedIf(phase32.forbiddenProviderModesAbsent !== true, "provider_action_confirmation_receipt_forbidden_mode_not_absent"),
+      ...(evidence.blockedReasons || []),
+      ...(evidence.blockers || []),
+      ...receiptBlockers,
+    ]);
+
+    return {
+      evidenceKey: "providerActionConfirmationReceipt",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted([...(evidence.warnings || []), ...receiptWarnings]),
+    };
+  }
+
+  return {
+    evidenceKey: "providerActionConfirmationReceipt",
+    source: input.providerActionConfirmationReceiptReady === undefined ? "missing" : "legacy_boolean_override",
+    ready: false,
+    blockers: uniqueSorted([
+      "provider_action_confirmation_receipt_typed_evidence_missing",
+      ...blockedIf(input.providerActionConfirmationReceiptReady !== true, "provider_action_confirmation_receipt_gate_missing"),
+    ]),
+    warnings: uniqueSorted([
+      ...blockedIf(
+        input.providerActionConfirmationReceiptReady === true,
+        "legacy_providerActionConfirmationReceiptReady_boolean_ignored_without_typed_evidence",
+      ),
+    ]),
+  };
+}
+
 function evidenceNotes(decisions: PhaseRoadmapEvidenceDecision[]): string[] {
   return uniqueSorted(decisions.flatMap((decision) => decision.warnings));
 }
@@ -2162,6 +2422,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const watcherClosedLoopDecision = watcherClosedLoopEvidenceDecision(input);
   const forbiddenProviderModesDecision = forbiddenProviderModesEvidenceDecision(input);
   const providerExecutionPermissionDecision = providerExecutionPermissionGateEvidenceDecision(input);
+  const providerActionConfirmationReceiptDecision = providerActionConfirmationReceiptEvidenceDecision(input);
   const evidenceDecisions = [
     projectFactsDecision,
     envelopeDecision,
@@ -2174,6 +2435,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
     watcherClosedLoopDecision,
     forbiddenProviderModesDecision,
     providerExecutionPermissionDecision,
+    providerActionConfirmationReceiptDecision,
   ];
 
   const phases: PhaseRoadmapPhasePlan[] = [
@@ -2268,7 +2530,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "Provider, credential, shell, media render, delete, move, and outside-project-root routes are blocked.",
       ],
       notes: [
-        "This is the only Phase 24-30 plan item with fileMutationAllowed=true.",
+        "This is the only Phase 24-32 plan item with fileMutationAllowed=true.",
         "Phase 27 is layered on the Phase 12 dry-run Export Builder plan; the builder itself remains noFileMutation.",
         ...evidenceNotes([exportWorkerDecision]),
       ],
@@ -2412,9 +2674,45 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "Fast, VIP, text-to-video, and BGM-in-video prompt paths remain absent.",
       ],
       notes: [
-        "Phase 31 is the final permission shell before any future live provider execution layer.",
+        "Phase 31 is the permission shell that Phase 32 consumes before any future live provider execution layer.",
         "It prepares confirmation requests; it does not call Image2, Seedance, Jimeng, Codex, or a sidecar.",
         ...evidenceNotes([providerExecutionPermissionDecision]),
+      ],
+    }),
+    makePhase({
+      phaseId: "phase_32_action_time_confirmation_receipt",
+      phaseNumber: 32,
+      title: "Action-time Confirmation Receipt / Review Shell",
+      requiredPrecedingPhases: [
+        "phase_24_subagent_runtime_gate",
+        "phase_25_knowledge_pack_manager",
+        "phase_26_agent_cli_mock_runner",
+        "phase_27_export_worker_mvp",
+        "phase_28_voice_audio_settings_ui",
+        "phase_29_codex_cli_adapter_spike",
+        "phase_30_provider_enablement_gate",
+        "phase_31_provider_execution_permission_gate",
+      ],
+      readyPhases,
+      ownBlockers: uniqueSorted(providerActionConfirmationReceiptDecision.blockers),
+      readyStatus: "ready_for_receipt_gate",
+      requiredInputs: [
+        "evidence.providerActionConfirmationReceipt",
+        "Phase 31 typed permission evidence consumed",
+        "action-time confirmation receipt plan present",
+        "confirmedReceiptCount=0",
+        "provider/credential/automatic-submit/worker/file routes blocked",
+      ],
+      acceptanceCriteria: [
+        "Receipt evidence can prepare a future review shell from Phase 31 typed confirmation requests.",
+        "Confirmed receipts are not accepted by the roadmap runtime default path.",
+        "Provider submit, live submit, credentials, automatic submit, worker spawn, and file mutation remain blocked.",
+        "Fast, VIP, text-to-video, and BGM-in-video prompt paths remain absent.",
+      ],
+      notes: [
+        "Phase 32 is a receipt/review shell only; it does not submit providers, create credentials, spawn workers, or mutate files.",
+        "Legacy providerActionConfirmationReceiptReady booleans are ignored without typed receipt evidence.",
+        ...evidenceNotes([providerActionConfirmationReceiptDecision]),
       ],
     }),
   ];
@@ -2422,10 +2720,10 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   return {
     schemaVersion: phaseRoadmapRuntimeSchemaVersion,
     generatedAt,
-    phaseRange: "phase_24_to_31",
+    phaseRange: "phase_24_to_32",
     phases,
     summary: {
-      totalPhases: 8,
+      totalPhases: 9,
       ready: phases.filter((phase) => phase.readiness === "ready").length,
       blocked: phases.filter((phase) => phase.readiness === "blocked").length,
       providerSubmitAllowed: 0,
@@ -2471,6 +2769,16 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       automaticSubmitForbidden: true,
       canSubmitProvider: false,
       providerSubmitAllowed: 0,
+    },
+    providerActionConfirmationReceipt: {
+      actionTimeConfirmationReceiptPlanRequired: true,
+      confirmedReceiptCount: 0,
+      reviewShellOnly: true,
+      automaticSubmitForbidden: true,
+      canSubmitProvider: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
     },
   };
 }

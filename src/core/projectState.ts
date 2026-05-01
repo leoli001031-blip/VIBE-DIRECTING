@@ -11,6 +11,7 @@ import type { CodexCliAdapterSpikeState } from "./codexCliAdapterSpike";
 import type { ExportWorkerState } from "./exportWorker";
 import type { ProviderLiveGateState } from "./providerLiveGate";
 import type { ProviderExecutionPermissionGateState } from "./providerExecutionPermissionGate";
+import type { ProviderActionConfirmationReceiptState } from "./providerActionConfirmationReceipt";
 import type {
   AssetRecord,
   AssetReadinessReport,
@@ -194,6 +195,7 @@ export interface ProjectRuntimeState {
   adapterContracts: AdapterContractState;
   providerLiveGate: ProviderLiveGateState;
   providerExecutionPermissionGate: ProviderExecutionPermissionGateState;
+  providerActionConfirmationReceipt: ProviderActionConfirmationReceiptState;
   generationHarness: GenerationHarnessState;
   filesystemWatcherHarness: FilesystemWatcherHarnessState;
   checkpointResumeHarness: CheckpointResumeHarnessState;

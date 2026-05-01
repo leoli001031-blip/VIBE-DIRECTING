@@ -994,9 +994,9 @@ Phase 9.4 checklist：
 - 右侧自然语言修改面板保持短状态和少量 badge；详细执行计划、工程锁和诊断字段继续留在 Diagnostics。
 - 新增 `npm run preview-player:test`，并扩展 `npm run minimal-ui:test` 覆盖 Phase 21/23：Preview Player 存在、主界面工程词为 0、Preview Player 文案短且稀疏。
 
-### Phase 24-31 Runtime Gate / Adapter Planning
+### Phase 24-32 Runtime Gate / Adapter Planning
 
-Phase 24-31 先做 lightweight pure runtime plan，不做真实执行。新增 `src/core/phaseRoadmapRuntime.ts`，用于输出每个阶段的 readiness、status、blocked reason、required preceding phases、hard locks 和 acceptance criteria。
+Phase 24-32 先做 lightweight pure runtime plan，不做真实执行。新增 `src/core/phaseRoadmapRuntime.ts`，用于输出每个阶段的 readiness、status、blocked reason、required preceding phases、hard locks 和 acceptance criteria。
 
 阶段顺序：
 
@@ -1008,6 +1008,7 @@ Phase 24-31 先做 lightweight pure runtime plan，不做真实执行。新增 `
 - Phase 29：Codex CLI Adapter Spike。必须先有 Phase 26 replacement proof，再接真实 Codex spawn/resume 的 adapter shape；输入仍是 validated envelope，输出仍是 structured result，provider submit 仍然 blocked。
 - Phase 30：Provider Enablement Gate。必须同时具备 user confirmation token placeholder、complete enablement packet、watcher/manifest/QA closed loop，并确认没有 Fast、VIP、text-to-video 或 BGM prompt 路径；即使 ready，也仍然不能提交 provider，直到后续 final gate 明确允许。
 - Phase 31：Provider Execution Permission Gate。消费 Phase 30 gate item，生成最终动作级确认计划；必须要求 action-time user confirmation，禁止自动提交 provider，继续锁死 worker spawn、credential、file mutation、Fast/VIP/text-to-video/BGM prompt 路径。
+- Phase 32：Action-time Confirmation Receipt / Review Shell。消费 Phase 31 typed permission evidence，生成确认回执层的 roadmap evidence 和未来 review shell 计划；默认路径 `confirmedReceiptCount=0`，仍不提交 provider、不 live submit、不读写 credentials、不 spawn worker、不改文件。
 
 Phase 24 真实 gate 补充：
 
@@ -1032,6 +1033,7 @@ Acceptance criteria：
 - Phase 26 mock runner 一旦观察到 provider submit attempt 必须 blocked；Phase 26 和 Phase 29 的边界必须清楚记录：先 mock/no-op 证明可替换，再在 Phase 29 探索真实 Codex spawn/resume。
 - Phase 30 缺 user confirmation token placeholder、缺 watcher/manifest/QA closed loop、packet incomplete 或出现 Fast/VIP/text-to-video/BGM prompt 任一项都必须 blocked。
 - Phase 31 缺 typed permission evidence、缺 Phase 30 gate、action-time confirmation 不强制、automatic submit 未禁止、provider/live/credential/worker/file 任一路径打开，都必须 blocked。
+- Phase 32 缺 typed receipt evidence、缺 Phase 31 evidence、缺 action-time confirmation receipt plan、`confirmedReceiptCount != 0`、provider/live/credential/automatic-submit/worker/file 任一路径打开、hard lock drift 或 forbidden provider modes 未明确 absent，都必须 blocked。
 - 所有阶段都必须 pin hard locks；测试命令为 `npm run phase-roadmap:test`。
 
 ### Phase 30 已实现范围：Provider Enablement Gate
@@ -1048,8 +1050,17 @@ Acceptance criteria：
 - `ready_for_user_review` 只表示未来 UI 可以弹出确认，不表示已确认；`action_time_user_confirmation` 默认必须存在且 `confirmed=false`，不能被 runtime evidence 预填。
 - Gate 固定输出 `canSubmitProvider=false`、`providerSubmitAllowed=0`、`liveSubmitAllowed=false`、`credentialAccessAllowed=false`、`automaticSubmitAllowed=false`。
 - Hard locks 继续锁死 worker spawn、file mutation、credential read/write/API key creation、arbitrary provider command、Fast/VIP/text-to-video/BGM prompt。
-- `PhaseRoadmapRuntime` 扩展为 Phase 24-31；Phase 31 必须有 typed `providerExecutionPermissionGate` evidence，legacy boolean 不能单独让 Phase 31 ready。
+- Phase 31 必须有 typed `providerExecutionPermissionGate` evidence，legacy boolean 不能单独让 Phase 31 ready。
 - Diagnostics 只显示只读摘要；主 Director surface 不出现真实 provider submit、run provider、credential save、worker spawn 或复杂工程控制入口。
+
+### Phase 32 已实现范围：Action-time Confirmation Receipt / Review Shell
+
+- `PhaseRoadmapRuntime` 扩展为 Phase 24-32：`phaseRange=phase_24_to_32`，`totalPhases=9`，新增 `phase_32_action_time_confirmation_receipt`，ready status 为 `ready_for_receipt_gate`。
+- 新增 typed `evidence.providerActionConfirmationReceipt` gate，接受未来 state shape：`phase=phase_32_action_time_confirmation_receipt`、`phase32Evidence`、`summary`、`hardLocks`、`receipts` / `requests`、`blockers` / `warnings`。
+- Phase 32 必须消费 Phase 31 typed permission evidence，并且必须有 action-time confirmation receipt plan；legacy boolean 只能作为诊断，不能单独让 Phase 32 ready。
+- 默认路径固定 `confirmedReceiptCount=0`；如果 evidence 预填 confirmed receipt、`userConfirmedAtActionTime=true`、`providerSubmitAllowed != 0`、`canSubmitProvider=true`、`liveSubmitAllowed=true`、`credentialAccessAllowed=true` 或 `automaticSubmitAllowed=true`，runtime 必须 blocked。
+- Hard locks 固定 receipt/review shell only、dry-run/read-only、no provider submit、no live submit、no credential read/write/API key creation、no arbitrary provider command、no worker spawn、no file mutation，并继续要求 Fast/VIP/text-to-video/BGM prompt paths absent。
+- 即使 Phase 32 ready，也仍然不执行真实 provider、不提交 live provider、不读取或保存 credentials、不 spawn worker、不做文件 mutation；它只给后续 UI/review 层提供 roadmap evidence。
 
 ### Phase 25 已实现范围：Knowledge Pack Manager
 

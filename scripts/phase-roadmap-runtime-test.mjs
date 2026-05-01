@@ -671,6 +671,113 @@ function providerExecutionPermissionGateEvidence(overrides = {}) {
   };
 }
 
+function providerActionConfirmationReceiptEvidence(overrides = {}) {
+  const {
+    phase32Evidence: phase32EvidenceOverrides,
+    summary: summaryOverrides,
+    hardLocks: hardLockOverrides,
+    receipts: receiptOverrides,
+    requests: requestOverrides,
+    ...rest
+  } = overrides;
+  const receipts = receiptOverrides || requestOverrides || [
+    {
+      status: "ready_for_receipt_review",
+      actionTimeConfirmationRequired: true,
+      receiptPlanPresent: true,
+      confirmed: false,
+      userConfirmedAtActionTime: false,
+      canSubmitProvider: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      credentialStorage: false,
+      automaticSubmitAllowed: false,
+      noWorkerSpawn: true,
+      noFileMutation: true,
+      forbiddenProviderModesAbsent: true,
+      blockers: [],
+      warnings: [],
+    },
+  ];
+  return {
+    kind: "provider_action_confirmation_receipt",
+    phase: "phase_32_action_time_confirmation_receipt",
+    status: "ready",
+    readiness: "ready_for_receipt_gate",
+    phase32Evidence: {
+      phaseId: "phase_32_action_time_confirmation_receipt",
+      typedEvidencePresent: true,
+      phase31EvidenceConsumed: true,
+      actionTimeConfirmationReceiptPlanPresent: true,
+      confirmedReceiptCount: 0,
+      canSubmitProvider: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      automaticSubmitAllowed: false,
+      noWorkerSpawn: true,
+      noFileMutation: true,
+      forbiddenProviderModesAbsent: true,
+      hardLocksPinned: true,
+      ...(phase32EvidenceOverrides || {}),
+    },
+    summary: {
+      readyForReceiptReview: receipts.filter((receipt) => receipt.status === "ready_for_receipt_review").length,
+      receiptPlanCount: receipts.filter((receipt) => receipt.receiptPlanPresent).length,
+      confirmedReceiptCount: receipts.filter((receipt) => receipt.confirmed || receipt.userConfirmedAtActionTime).length,
+      blocked: receipts.filter((receipt) => receipt.status === "blocked").length,
+      parked: receipts.filter((receipt) => receipt.status === "parked").length,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      automaticSubmitAllowed: false,
+      ...(summaryOverrides || {}),
+    },
+    hardLocks: {
+      dryRunOnly: true,
+      readOnly: true,
+      reviewShellOnly: true,
+      receiptPlanOnly: true,
+      actionTimeConfirmationRequired: true,
+      providerSubmissionForbidden: true,
+      automaticSubmitForbidden: true,
+      automaticSubmitAllowed: false,
+      canSubmitProvider: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      credentialStorage: false,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      noApiKeyCreation: true,
+      noArbitraryProviderCommand: true,
+      noWorkerSpawn: true,
+      noFileMutation: true,
+      fastModelForbidden: true,
+      vipChannelForbidden: true,
+      textToVideoMainPathForbidden: true,
+      bgmInVideoPromptForbidden: true,
+      ...(hardLockOverrides || {}),
+    },
+    forbiddenActions: [
+      "provider_submit",
+      "credential_read",
+      "credential_write",
+      "api_key_create",
+      "arbitrary_provider_command",
+      "worker_spawn",
+      "file_mutation",
+      "fast_model",
+      "vip_channel",
+      "text_to_video_main_path",
+      "bgm_in_video_prompt",
+    ],
+    receipts,
+    ...rest,
+  };
+}
+
 function typedEvidence(overrides = {}) {
   return {
     projectFactsIntegration: projectFactsEvidence(overrides.projectFactsIntegration),
@@ -681,6 +788,7 @@ function typedEvidence(overrides = {}) {
     voiceAudioSettings: voiceAudioSettingsEvidence(overrides.voiceAudioSettings),
     providerLiveGate: providerLiveGateReceipt(overrides.providerLiveGate),
     providerExecutionPermissionGate: providerExecutionPermissionGateEvidence(overrides.providerExecutionPermissionGate),
+    providerActionConfirmationReceipt: providerActionConfirmationReceiptEvidence(overrides.providerActionConfirmationReceipt),
     watcherManifestQaClosedLoop: watcherManifestQaClosedLoopReceipt(overrides.watcherManifestQaClosedLoop),
   };
 }
@@ -701,6 +809,8 @@ function readyInput() {
     providerPacketComplete: true,
     watcherManifestQaClosedLoop: true,
     forbiddenProviderModesAbsent: true,
+    providerExecutionPermissionGateReady: true,
+    providerActionConfirmationReceiptReady: true,
   };
 }
 
@@ -1564,11 +1674,129 @@ assert(
   "Phase 31 plan must not submit provider",
 );
 
+const missingProviderActionReceiptEvidence = typedEvidence();
+delete missingProviderActionReceiptEvidence.providerActionConfirmationReceipt;
+const legacyOnlyPhase32 = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: missingProviderActionReceiptEvidence,
+  providerActionConfirmationReceiptReady: true,
+});
+const legacyOnlyPhase32Gate = phase(legacyOnlyPhase32, "phase_32_action_time_confirmation_receipt");
+assert(legacyOnlyPhase32Gate.readiness === "blocked", "Phase 32 must block when typed action confirmation receipt evidence is missing");
+assert(
+  legacyOnlyPhase32Gate.blockedReasons.includes("provider_action_confirmation_receipt_typed_evidence_missing"),
+  "Phase 32 must require typed provider action confirmation receipt evidence",
+);
+assert(
+  legacyOnlyPhase32.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "providerActionConfirmationReceipt" &&
+      decision.source === "legacy_boolean_override" &&
+      decision.ready === false,
+  ),
+  "Phase 32 legacy boolean must be recorded as blocked without typed evidence",
+);
+
+const typedPhase32Ready = buildPhaseRoadmapRuntimePlan(readyInput());
+assert(
+  phase(typedPhase32Ready, "phase_32_action_time_confirmation_receipt").readiness === "ready",
+  "Phase 32 must be ready with typed action-time confirmation receipt evidence and all locks pinned",
+);
+assert(
+  phase(typedPhase32Ready, "phase_32_action_time_confirmation_receipt").status === "ready_for_receipt_gate",
+  "Phase 32 must report ready_for_receipt_gate",
+);
+
+const missingPhase31ForPhase32Evidence = typedEvidence();
+delete missingPhase31ForPhase32Evidence.providerExecutionPermissionGate;
+const phase32MissingPhase31 = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: missingPhase31ForPhase32Evidence,
+});
+assert(
+  phase(phase32MissingPhase31, "phase_32_action_time_confirmation_receipt").blockedReasons.includes(
+    "provider_action_confirmation_receipt_phase31_evidence_missing",
+  ),
+  "Phase 32 must block when Phase 31 typed evidence is missing",
+);
+
+for (const [override, expectedBlocker] of [
+  [{ phase32Evidence: { phase31EvidenceConsumed: false } }, "provider_action_confirmation_receipt_phase31_evidence_missing"],
+  [{ phase32Evidence: { actionTimeConfirmationReceiptPlanPresent: false }, summary: { receiptPlanCount: 0, readyForReceiptReview: 0 } }, "provider_action_confirmation_receipt_plan_missing"],
+  [{ phase32Evidence: { confirmedReceiptCount: 1 }, summary: { confirmedReceiptCount: 1 } }, "provider_action_confirmation_receipt_confirmed_receipts_present"],
+  [{ phase32Evidence: { providerSubmitAllowed: 1 }, summary: { providerSubmitAllowed: 1 } }, "provider_action_confirmation_receipt_provider_submit_allowed"],
+  [{ phase32Evidence: { canSubmitProvider: true }, hardLocks: { canSubmitProvider: true } }, "provider_action_confirmation_receipt_can_submit_provider_true"],
+  [{ phase32Evidence: { liveSubmitAllowed: true }, summary: { liveSubmitAllowed: true } }, "provider_action_confirmation_receipt_live_submit_allowed"],
+  [{ phase32Evidence: { credentialAccessAllowed: true }, summary: { credentialAccessAllowed: true } }, "provider_action_confirmation_receipt_credential_access_allowed"],
+  [{ phase32Evidence: { automaticSubmitAllowed: true }, summary: { automaticSubmitAllowed: true } }, "provider_action_confirmation_receipt_auto_submit_allowed"],
+  [{ phase32Evidence: { noWorkerSpawn: false }, hardLocks: { noWorkerSpawn: false } }, "provider_action_confirmation_receipt_worker_spawn_not_blocked"],
+  [{ phase32Evidence: { noFileMutation: false }, hardLocks: { noFileMutation: false } }, "provider_action_confirmation_receipt_file_mutation_not_blocked"],
+  [{ phase32Evidence: { forbiddenProviderModesAbsent: false } }, "provider_action_confirmation_receipt_forbidden_mode_not_absent"],
+  [{ phase32Evidence: { hardLocksPinned: false }, hardLocks: { reviewShellOnly: false } }, "provider_action_confirmation_receipt_hard_locks_not_pinned"],
+]) {
+  const blockedPlan = buildPhaseRoadmapRuntimePlan({
+    ...readyInput(),
+    evidence: typedEvidence({
+      providerActionConfirmationReceipt: override,
+    }),
+  });
+  const blockedPhase32 = phase(blockedPlan, "phase_32_action_time_confirmation_receipt");
+  assert(blockedPhase32.readiness === "blocked", `Phase 32 must block ${expectedBlocker}`);
+  assert(blockedPhase32.blockedReasons.includes(expectedBlocker), `Phase 32 blocker ${expectedBlocker} missing`);
+}
+
+const phase32ReceiptDrift = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    providerActionConfirmationReceipt: {
+      receipts: [
+        {
+          status: "ready_for_receipt_review",
+          actionTimeConfirmationRequired: true,
+          receiptPlanPresent: true,
+          confirmed: true,
+          userConfirmedAtActionTime: true,
+          canSubmitProvider: true,
+          providerSubmitAllowed: 1,
+          liveSubmitAllowed: true,
+          credentialAccessAllowed: true,
+          credentialStorage: true,
+          automaticSubmitAllowed: true,
+          noWorkerSpawn: false,
+          noFileMutation: false,
+          forbiddenProviderModesAbsent: false,
+          blockers: [],
+          warnings: [],
+        },
+      ],
+    },
+  }),
+});
+assert(
+  phase(phase32ReceiptDrift, "phase_32_action_time_confirmation_receipt").blockedReasons.includes(
+    "provider_action_confirmation_receipt_request_lock_drift",
+  ),
+  "Phase 32 must block receipt/request-level lock drift",
+);
+
+assert(
+  typedPhase32Ready.providerActionConfirmationReceipt.actionTimeConfirmationReceiptPlanRequired === true,
+  "Phase 32 plan must require an action-time confirmation receipt plan",
+);
+assert(
+  typedPhase32Ready.providerActionConfirmationReceipt.confirmedReceiptCount === 0,
+  "Phase 32 plan must keep confirmed receipt count at zero",
+);
+assert(
+  typedPhase32Ready.providerActionConfirmationReceipt.canSubmitProvider === false,
+  "Phase 32 plan must not submit provider",
+);
+
 const readyPlan = buildPhaseRoadmapRuntimePlan(readyInput());
 assert(readyPlan.schemaVersion === "0.1.0", "schema version drifted");
-assert(readyPlan.phaseRange === "phase_24_to_31", "phase range drifted");
-assert(readyPlan.summary.totalPhases === 8, "summary total phase count drifted");
-assert(readyPlan.summary.ready === 8, "all phases should be ready for the complete fixture");
+assert(readyPlan.phaseRange === "phase_24_to_32", "phase range drifted");
+assert(readyPlan.summary.totalPhases === 9, "summary total phase count drifted");
+assert(readyPlan.summary.ready === 9, "all phases should be ready for the complete fixture");
 assert(readyPlan.summary.blocked === 0, "complete fixture should not block");
 assert(readyPlan.summary.providerSubmitAllowed === 0, "provider submit must stay at zero");
 assert(readyPlan.summary.credentialAccessAllowed === false, "credential access must be false");
@@ -1578,14 +1806,16 @@ assert(
   readyPlan.evidenceSummary.decisions.every((decision) => decision.ready === true),
   "complete typed fixture should make every evidence decision ready",
 );
-assert(phaseRoadmapPhaseIds().length === 8, "phase id list should cover Phase 24-31");
+assert(phaseRoadmapPhaseIds().length === 9, "phase id list should cover Phase 24-32");
 
 const phase26Ready = phase(readyPlan, "phase_26_agent_cli_mock_runner");
 const phase29Ready = phase(readyPlan, "phase_29_codex_cli_adapter_spike");
 const phase31Ready = phase(readyPlan, "phase_31_provider_execution_permission_gate");
+const phase32Ready = phase(readyPlan, "phase_32_action_time_confirmation_receipt");
 assert(phase26Ready.status === "ready_for_noop_runner", "Phase 26 status must describe mock/no-op runner");
 assert(phase29Ready.status === "ready_for_adapter_spike", "Phase 29 status must describe adapter spike");
 assert(phase31Ready.status === "ready_for_final_permission_gate", "Phase 31 status must describe final permission gate");
+assert(phase32Ready.status === "ready_for_receipt_gate", "Phase 32 status must describe receipt gate");
 assert(
   readyPlan.adapterBoundary.phase29.requiresPhase26ReplacementProof === true,
   "Phase 29 must require Phase 26 replacement proof",
@@ -1637,8 +1867,18 @@ assert(
   "schema registry must include PhaseRoadmapRuntimePlan",
 );
 assert(schema.properties.schemaVersion.const === "0.1.0", "schema must pin schemaVersion");
-assert(schema.properties.phaseRange.const === "phase_24_to_31", "schema must pin Phase 24-31 range");
-assert(schema.$defs.summary.properties.totalPhases.const === 8, "schema summary must pin totalPhases=8");
+assert(schema.properties.phaseRange.const === "phase_24_to_32", "schema must pin Phase 24-32 range");
+assert(schema.properties.phases.minItems === 9, "schema phase list must require 9 phases");
+assert(schema.properties.phases.maxItems === 9, "schema phase list must cap at 9 phases");
+assert(
+  schema.$defs.phaseId.enum.includes("phase_32_action_time_confirmation_receipt"),
+  "schema phase id enum must include Phase 32 action confirmation receipt",
+);
+assert(
+  schema.$defs.status.enum.includes("ready_for_receipt_gate"),
+  "schema status enum must include ready_for_receipt_gate",
+);
+assert(schema.$defs.summary.properties.totalPhases.const === 9, "schema summary must pin totalPhases=9");
 assert(schema.$defs.summary.properties.providerSubmitAllowed.const === 0, "schema summary must pin providerSubmitAllowed=0");
 assert(schema.$defs.summary.properties.credentialAccessAllowed.const === false, "schema summary must forbid credential access");
 assert(schema.$defs.summary.properties.arbitraryShellAllowed.const === false, "schema summary must forbid arbitrary shell");
@@ -1658,6 +1898,10 @@ assert(
 assert(
   schema.$defs.evidenceDecision.properties.evidenceKey.enum.includes("providerExecutionPermissionGate"),
   "schema evidence decisions must include typed provider execution permission evidence",
+);
+assert(
+  schema.$defs.evidenceDecision.properties.evidenceKey.enum.includes("providerActionConfirmationReceipt"),
+  "schema evidence decisions must include typed provider action confirmation receipt evidence",
 );
 assert(schema.$defs.hardLocks.properties.noFreeTextWorker.const === true, "schema hard locks must pin noFreeTextWorker=true");
 assert(schema.$defs.hardLocks.properties.validatedEnvelopeRequired.const === true, "schema hard locks must pin validated envelope");
@@ -1718,6 +1962,34 @@ assert(
 assert(
   schema.$defs.providerExecutionPermissionGate.properties.providerSubmitAllowed.const === 0,
   "schema provider execution permission gate must pin providerSubmitAllowed=0",
+);
+assert(
+  schema.$defs.providerActionConfirmationReceipt.properties.actionTimeConfirmationReceiptPlanRequired.const === true,
+  "schema provider action confirmation receipt gate must require an action-time receipt plan",
+);
+assert(
+  schema.$defs.providerActionConfirmationReceipt.properties.confirmedReceiptCount.const === 0,
+  "schema provider action confirmation receipt gate must pin confirmedReceiptCount=0",
+);
+assert(
+  schema.$defs.providerActionConfirmationReceipt.properties.reviewShellOnly.const === true,
+  "schema provider action confirmation receipt gate must remain review-shell-only",
+);
+assert(
+  schema.$defs.providerActionConfirmationReceipt.properties.canSubmitProvider.const === false,
+  "schema provider action confirmation receipt gate must pin canSubmitProvider=false",
+);
+assert(
+  schema.$defs.providerActionConfirmationReceipt.properties.providerSubmitAllowed.const === 0,
+  "schema provider action confirmation receipt gate must pin providerSubmitAllowed=0",
+);
+assert(
+  schema.$defs.providerActionConfirmationReceipt.properties.liveSubmitAllowed.const === false,
+  "schema provider action confirmation receipt gate must pin liveSubmitAllowed=false",
+);
+assert(
+  schema.$defs.providerActionConfirmationReceipt.properties.credentialAccessAllowed.const === false,
+  "schema provider action confirmation receipt gate must pin credentialAccessAllowed=false",
 );
 
 const source = fs.readFileSync("src/core/phaseRoadmapRuntime.ts", "utf8");

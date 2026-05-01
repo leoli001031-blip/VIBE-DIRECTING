@@ -30,6 +30,7 @@ import { buildVideoExecutionPreviewState } from "./videoExecutionPreview";
 import { buildAdapterContractState } from "./adapterContracts";
 import { buildProviderLiveGateState, type ProviderLiveGateEnvelopeFact } from "./providerLiveGate";
 import { buildProviderExecutionPermissionGateState } from "./providerExecutionPermissionGate";
+import { buildProviderActionConfirmationReceiptState } from "./providerActionConfirmationReceipt";
 import type { SubagentRuntimeGateReceipt } from "./subagentRuntimeGate";
 import type { SubagentWorkerRuntimePlan } from "./subagentWorkerRuntime";
 import {
@@ -388,6 +389,10 @@ export function buildProjectRuntimeState(
     providerLiveGate,
     codexCliAdapterSpike,
   });
+  const providerActionConfirmationReceipt = buildProviderActionConfirmationReceiptState({
+    generatedAt,
+    providerExecutionPermissionGate,
+  });
   const generationHealthChecker = buildGenerationHealthCheckerState({
     generatedAt,
     imageTaskPlans,
@@ -481,6 +486,7 @@ export function buildProjectRuntimeState(
     adapterContracts,
     providerLiveGate,
     providerExecutionPermissionGate,
+    providerActionConfirmationReceipt,
     generationHarness,
     filesystemWatcherHarness,
     checkpointResumeHarness,
@@ -716,6 +722,12 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       providerLiveGate,
       codexCliAdapterSpike,
     });
+  const providerActionConfirmationReceipt =
+    state.providerActionConfirmationReceipt ||
+    buildProviderActionConfirmationReceiptState({
+      generatedAt: state.generatedAt,
+      providerExecutionPermissionGate,
+    });
   const generationHealthChecker =
     state.generationHealthChecker ||
     buildGenerationHealthCheckerState({
@@ -774,6 +786,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     adapterContracts,
     providerLiveGate,
     providerExecutionPermissionGate,
+    providerActionConfirmationReceipt,
     generationHarness,
     filesystemWatcherHarness,
     checkpointResumeHarness,
