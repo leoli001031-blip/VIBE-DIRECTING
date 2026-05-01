@@ -994,9 +994,9 @@ Phase 9.4 checklist：
 - 右侧自然语言修改面板保持短状态和少量 badge；详细执行计划、工程锁和诊断字段继续留在 Diagnostics。
 - 新增 `npm run preview-player:test`，并扩展 `npm run minimal-ui:test` 覆盖 Phase 21/23：Preview Player 存在、主界面工程词为 0、Preview Player 文案短且稀疏。
 
-### Phase 24-32 Runtime Gate / Adapter Planning
+### Phase 24-33 Runtime Gate / Adapter Planning
 
-Phase 24-32 先做 lightweight pure runtime plan，不做真实执行。新增 `src/core/phaseRoadmapRuntime.ts`，用于输出每个阶段的 readiness、status、blocked reason、required preceding phases、hard locks 和 acceptance criteria。
+Phase 24-33 先做 lightweight pure runtime plan，不做真实执行。新增 `src/core/phaseRoadmapRuntime.ts`，用于输出每个阶段的 readiness、status、blocked reason、required preceding phases、hard locks 和 acceptance criteria。
 
 阶段顺序：
 
@@ -1009,6 +1009,7 @@ Phase 24-32 先做 lightweight pure runtime plan，不做真实执行。新增 `
 - Phase 30：Provider Enablement Gate。必须同时具备 user confirmation token placeholder、complete enablement packet、watcher/manifest/QA closed loop，并确认没有 Fast、VIP、text-to-video 或 BGM prompt 路径；即使 ready，也仍然不能提交 provider，直到后续 final gate 明确允许。
 - Phase 31：Provider Execution Permission Gate。消费 Phase 30 gate item，生成最终动作级确认计划；必须要求 action-time user confirmation，禁止自动提交 provider，继续锁死 worker spawn、credential、file mutation、Fast/VIP/text-to-video/BGM prompt 路径。
 - Phase 32：Action-time Confirmation Receipt / Review Shell。消费 Phase 31 typed permission evidence，生成确认回执层的 roadmap evidence 和未来 review shell 计划；默认路径 `confirmedReceiptCount=0`，仍不提交 provider、不 live submit、不读写 credentials、不 spawn worker、不改文件。
+- Phase 33：Provider Execution Handoff / Final Action Gate。消费 Phase 32 typed receipt evidence 和动作时确认 evidence；默认因为 `confirmedReceiptCount=0` 而 blocked。即使 ready，也只是 final handoff review，不提交 provider、不 live submit、不读写 credentials、不 spawn worker、不改文件。
 
 Phase 24 真实 gate 补充：
 
@@ -1034,6 +1035,7 @@ Acceptance criteria：
 - Phase 30 缺 user confirmation token placeholder、缺 watcher/manifest/QA closed loop、packet incomplete 或出现 Fast/VIP/text-to-video/BGM prompt 任一项都必须 blocked。
 - Phase 31 缺 typed permission evidence、缺 Phase 30 gate、action-time confirmation 不强制、automatic submit 未禁止、provider/live/credential/worker/file 任一路径打开，都必须 blocked。
 - Phase 32 缺 typed receipt evidence、缺 Phase 31 evidence、缺 action-time confirmation receipt plan、`confirmedReceiptCount != 0`、provider/live/credential/automatic-submit/worker/file 任一路径打开、hard lock drift 或 forbidden provider modes 未明确 absent，都必须 blocked。
+- Phase 33 缺 typed handoff evidence、缺 Phase 32 evidence、缺 action-time confirmation evidence、用户未在动作时确认、provider/live/credential/automatic-submit/worker/file 任一路径打开、hard lock drift 或 forbidden provider modes 未明确 absent，都必须 blocked。
 - 所有阶段都必须 pin hard locks；测试命令为 `npm run phase-roadmap:test`。
 
 ### Phase 30 已实现范围：Provider Enablement Gate
@@ -1061,6 +1063,15 @@ Acceptance criteria：
 - 默认路径固定 `confirmedReceiptCount=0`；如果 evidence 预填 confirmed receipt、`userConfirmedAtActionTime=true`、`providerSubmitAllowed != 0`、`canSubmitProvider=true`、`liveSubmitAllowed=true`、`credentialAccessAllowed=true` 或 `automaticSubmitAllowed=true`，runtime 必须 blocked。
 - Hard locks 固定 receipt/review shell only、dry-run/read-only、no provider submit、no live submit、no credential read/write/API key creation、no arbitrary provider command、no worker spawn、no file mutation，并继续要求 Fast/VIP/text-to-video/BGM prompt paths absent。
 - 即使 Phase 32 ready，也仍然不执行真实 provider、不提交 live provider、不读取或保存 credentials、不 spawn worker、不做文件 mutation；它只给后续 UI/review 层提供 roadmap evidence。
+
+### Phase 33 已实现范围：Provider Execution Handoff / Final Action Gate
+
+- `PhaseRoadmapRuntime` 扩展为 Phase 24-33：`phaseRange=phase_24_to_33`，`totalPhases=10`，新增 `phase_33_provider_execution_handoff`，ready status 为 `ready_for_final_handoff_review`。
+- 新增 typed `evidence.providerExecutionHandoff` gate，接受未来 state shape：`phase=phase_33_provider_execution_handoff`、`phase33Evidence`、`summary`、`hardLocks`、`handoffs` / `requests`、`blockers` / `warnings`。
+- Phase 33 必须消费 Phase 32 typed receipt evidence，并且必须有 action-time confirmation evidence 与 action-time user confirmation；legacy boolean 不能让 Phase 33 ready。
+- 默认路径固定缺少动作时确认，因此会 blocked，并给出 `provider_execution_handoff_action_confirmation_missing`；这保证没有用户最终确认时不会进入 handoff review。
+- Safety blocker 继续 fail closed：`providerSubmitAllowed != 0`、`canSubmitProvider=true`、`liveSubmitAllowed=true`、`credentialAccessAllowed=true`、`automaticSubmitAllowed=true`、worker/file route 打开、hard lock drift 或 forbidden provider modes 未明确 absent 都会阻断 Phase 33。
+- 即使 Phase 33 ready，也仍然只表示 final handoff review 已可显示；它不执行真实 provider、不提交 live provider、不读取或保存 credentials、不 spawn worker、不做文件 mutation。
 
 ### Phase 25 已实现范围：Knowledge Pack Manager
 

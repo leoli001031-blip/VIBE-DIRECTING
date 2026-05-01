@@ -778,6 +778,159 @@ function providerActionConfirmationReceiptEvidence(overrides = {}) {
   };
 }
 
+function providerExecutionHandoffEvidence(overrides = {}) {
+  const {
+    phase33Evidence: phase33EvidenceOverrides,
+    summary: summaryOverrides,
+    hardLocks: hardLockOverrides,
+    handoffs: handoffOverrides,
+    requests: requestOverrides,
+    status = "blocked",
+    readiness = "blocked",
+    ...rest
+  } = overrides;
+  const handoffs = handoffOverrides || requestOverrides || [
+    {
+      status: "blocked",
+      phase32TypedEvidenceConsumed: true,
+      actionTimeConfirmationEvidencePresent: false,
+      confirmed: false,
+      userConfirmedAtActionTime: false,
+      canSubmitProvider: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      credentialStorage: false,
+      automaticSubmitAllowed: false,
+      workerSpawnAllowed: false,
+      fileMutationAllowed: false,
+      noWorkerSpawn: true,
+      noFileMutation: true,
+      forbiddenProviderModesAbsent: true,
+      blockers: [],
+      warnings: [],
+    },
+  ];
+  return {
+    kind: "provider_execution_handoff",
+    phase: "phase_33_provider_execution_handoff",
+    status,
+    readiness,
+    phase33Evidence: {
+      phaseId: "phase_33_provider_execution_handoff",
+      typedEvidencePresent: true,
+      phase32TypedEvidenceConsumed: true,
+      actionTimeConfirmationEvidencePresent: false,
+      userConfirmedAtActionTime: false,
+      confirmedReceiptCount: 0,
+      canSubmitProvider: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      automaticSubmitAllowed: false,
+      noWorkerSpawn: true,
+      noFileMutation: true,
+      forbiddenProviderModesAbsent: true,
+      hardLocksPinned: true,
+      ...(phase33EvidenceOverrides || {}),
+    },
+    summary: {
+      readyForFinalHandoffReview: handoffs.filter((handoff) => handoff.status === "ready_for_final_handoff_review").length,
+      confirmedReceiptCount: handoffs.filter((handoff) => handoff.confirmed || handoff.userConfirmedAtActionTime).length,
+      blocked: handoffs.filter((handoff) => handoff.status === "blocked").length,
+      parked: handoffs.filter((handoff) => handoff.status === "parked").length,
+      canSubmitProvider: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      automaticSubmitAllowed: false,
+      workerSpawnAllowed: false,
+      fileMutationAllowed: false,
+      ...(summaryOverrides || {}),
+    },
+    hardLocks: {
+      dryRunOnly: true,
+      readOnly: true,
+      finalHandoffReviewOnly: true,
+      actionTimeConfirmationRequired: true,
+      providerSubmissionForbidden: true,
+      automaticSubmitForbidden: true,
+      automaticSubmitAllowed: false,
+      canSubmitProvider: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      credentialStorage: false,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      noApiKeyCreation: true,
+      noArbitraryProviderCommand: true,
+      noWorkerSpawn: true,
+      noFileMutation: true,
+      fastModelForbidden: true,
+      vipChannelForbidden: true,
+      textToVideoMainPathForbidden: true,
+      bgmInVideoPromptForbidden: true,
+      ...(hardLockOverrides || {}),
+    },
+    forbiddenActions: [
+      "provider_submit",
+      "credential_read",
+      "credential_write",
+      "api_key_create",
+      "arbitrary_provider_command",
+      "worker_spawn",
+      "file_mutation",
+      "fast_model",
+      "vip_channel",
+      "text_to_video_main_path",
+      "bgm_in_video_prompt",
+    ],
+    handoffs,
+    ...rest,
+  };
+}
+
+function confirmedProviderExecutionHandoffEvidence(overrides = {}) {
+  return providerExecutionHandoffEvidence({
+    status: "ready",
+    readiness: "ready_for_final_handoff_review",
+    phase33Evidence: {
+      actionTimeConfirmationEvidencePresent: true,
+      userConfirmedAtActionTime: true,
+      confirmedReceiptCount: 1,
+    },
+    summary: {
+      readyForFinalHandoffReview: 1,
+      confirmedReceiptCount: 1,
+      blocked: 0,
+    },
+    handoffs: [
+      {
+        status: "ready_for_final_handoff_review",
+        phase32TypedEvidenceConsumed: true,
+        actionTimeConfirmationEvidencePresent: true,
+        confirmed: true,
+        userConfirmedAtActionTime: true,
+        canSubmitProvider: false,
+        providerSubmitAllowed: 0,
+        liveSubmitAllowed: false,
+        credentialAccessAllowed: false,
+        credentialStorage: false,
+        automaticSubmitAllowed: false,
+        workerSpawnAllowed: false,
+        fileMutationAllowed: false,
+        noWorkerSpawn: true,
+        noFileMutation: true,
+        forbiddenProviderModesAbsent: true,
+        blockers: [],
+        warnings: [],
+      },
+    ],
+    ...overrides,
+  });
+}
+
 function typedEvidence(overrides = {}) {
   return {
     projectFactsIntegration: projectFactsEvidence(overrides.projectFactsIntegration),
@@ -789,6 +942,9 @@ function typedEvidence(overrides = {}) {
     providerLiveGate: providerLiveGateReceipt(overrides.providerLiveGate),
     providerExecutionPermissionGate: providerExecutionPermissionGateEvidence(overrides.providerExecutionPermissionGate),
     providerActionConfirmationReceipt: providerActionConfirmationReceiptEvidence(overrides.providerActionConfirmationReceipt),
+    providerExecutionHandoff: overrides.providerExecutionHandoff === "confirmed"
+      ? confirmedProviderExecutionHandoffEvidence()
+      : providerExecutionHandoffEvidence(overrides.providerExecutionHandoff),
     watcherManifestQaClosedLoop: watcherManifestQaClosedLoopReceipt(overrides.watcherManifestQaClosedLoop),
   };
 }
@@ -811,6 +967,16 @@ function readyInput() {
     forbiddenProviderModesAbsent: true,
     providerExecutionPermissionGateReady: true,
     providerActionConfirmationReceiptReady: true,
+  };
+}
+
+function confirmedPhase33Input(overrides = {}) {
+  return {
+    ...readyInput(),
+    evidence: {
+      ...typedEvidence(),
+      providerExecutionHandoff: confirmedProviderExecutionHandoffEvidence(overrides.providerExecutionHandoff),
+    },
   };
 }
 
@@ -1792,12 +1958,161 @@ assert(
   "Phase 32 plan must not submit provider",
 );
 
-const readyPlan = buildPhaseRoadmapRuntimePlan(readyInput());
+const missingProviderExecutionHandoffEvidence = typedEvidence();
+delete missingProviderExecutionHandoffEvidence.providerExecutionHandoff;
+const missingPhase33Evidence = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: missingProviderExecutionHandoffEvidence,
+  providerExecutionHandoffReady: true,
+});
+const missingPhase33Gate = phase(missingPhase33Evidence, "phase_33_provider_execution_handoff");
+assert(missingPhase33Gate.readiness === "blocked", "Phase 33 must block when typed handoff evidence is missing");
+assert(
+  missingPhase33Gate.blockedReasons.includes("provider_execution_handoff_typed_evidence_missing"),
+  "Phase 33 must require typed provider execution handoff evidence",
+);
+assert(
+  missingPhase33Evidence.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "providerExecutionHandoff" &&
+      decision.source === "missing" &&
+      decision.ready === false,
+  ),
+  "Phase 33 must not accept a legacy providerExecutionHandoffReady boolean",
+);
+
+const phase33DefaultBlocked = buildPhaseRoadmapRuntimePlan(readyInput());
+const phase33DefaultGate = phase(phase33DefaultBlocked, "phase_33_provider_execution_handoff");
+assert(
+  phase33DefaultGate.readiness === "blocked",
+  "Phase 33 must block by default while action-time confirmation evidence is missing",
+);
+assert(
+  phase33DefaultGate.blockedReasons.includes("provider_execution_handoff_action_confirmation_missing"),
+  "Phase 33 default blocker must explain missing action-time confirmation evidence",
+);
+
+const missingPhase32ForPhase33Evidence = typedEvidence();
+delete missingPhase32ForPhase33Evidence.providerActionConfirmationReceipt;
+missingPhase32ForPhase33Evidence.providerExecutionHandoff = confirmedProviderExecutionHandoffEvidence();
+const phase33MissingPhase32 = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: missingPhase32ForPhase33Evidence,
+});
+assert(
+  phase(phase33MissingPhase32, "phase_33_provider_execution_handoff").blockedReasons.includes(
+    "provider_execution_handoff_phase32_evidence_missing",
+  ),
+  "Phase 33 must block when Phase 32 typed receipt evidence is missing",
+);
+
+const typedPhase33Ready = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input());
+assert(
+  phase(typedPhase33Ready, "phase_33_provider_execution_handoff").readiness === "ready",
+  "Phase 33 must be ready only with typed handoff evidence and action-time confirmation evidence",
+);
+assert(
+  phase(typedPhase33Ready, "phase_33_provider_execution_handoff").status === "ready_for_final_handoff_review",
+  "Phase 33 must report ready_for_final_handoff_review",
+);
+
+for (const [override, expectedBlocker] of [
+  [{ phase33Evidence: { phase32TypedEvidenceConsumed: false } }, "provider_execution_handoff_phase32_evidence_missing"],
+  [{ status: "blocked", readiness: "blocked" }, "provider_execution_handoff_status_blocked"],
+  [{
+    phase33Evidence: { actionTimeConfirmationEvidencePresent: false, userConfirmedAtActionTime: false, confirmedReceiptCount: 0 },
+    summary: { confirmedReceiptCount: 0 },
+    handoffs: [
+      {
+        status: "blocked",
+        phase32TypedEvidenceConsumed: true,
+        actionTimeConfirmationEvidencePresent: false,
+        confirmed: false,
+        userConfirmedAtActionTime: false,
+        canSubmitProvider: false,
+        providerSubmitAllowed: 0,
+        liveSubmitAllowed: false,
+        credentialAccessAllowed: false,
+        credentialStorage: false,
+        automaticSubmitAllowed: false,
+        workerSpawnAllowed: false,
+        fileMutationAllowed: false,
+        noWorkerSpawn: true,
+        noFileMutation: true,
+        forbiddenProviderModesAbsent: true,
+        blockers: [],
+        warnings: [],
+      },
+    ],
+  }, "provider_execution_handoff_action_confirmation_missing"],
+  [{ phase33Evidence: { providerSubmitAllowed: 1 }, summary: { providerSubmitAllowed: 1 } }, "provider_execution_handoff_provider_submit_allowed"],
+  [{ phase33Evidence: { canSubmitProvider: true }, hardLocks: { canSubmitProvider: true } }, "provider_execution_handoff_can_submit_provider_true"],
+  [{ phase33Evidence: { liveSubmitAllowed: true }, summary: { liveSubmitAllowed: true } }, "provider_execution_handoff_live_submit_allowed"],
+  [{ phase33Evidence: { credentialAccessAllowed: true }, summary: { credentialAccessAllowed: true } }, "provider_execution_handoff_credential_access_allowed"],
+  [{ phase33Evidence: { automaticSubmitAllowed: true }, summary: { automaticSubmitAllowed: true } }, "provider_execution_handoff_auto_submit_allowed"],
+  [{ phase33Evidence: { noWorkerSpawn: false }, hardLocks: { noWorkerSpawn: false } }, "provider_execution_handoff_worker_spawn_not_blocked"],
+  [{ phase33Evidence: { noFileMutation: false }, hardLocks: { noFileMutation: false } }, "provider_execution_handoff_file_mutation_not_blocked"],
+  [{ phase33Evidence: { forbiddenProviderModesAbsent: false } }, "provider_execution_handoff_forbidden_mode_not_absent"],
+  [{ phase33Evidence: { hardLocksPinned: false }, hardLocks: { finalHandoffReviewOnly: false } }, "provider_execution_handoff_hard_locks_not_pinned"],
+]) {
+  const blockedPlan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({ providerExecutionHandoff: override }));
+  const blockedPhase33 = phase(blockedPlan, "phase_33_provider_execution_handoff");
+  assert(blockedPhase33.readiness === "blocked", `Phase 33 must block ${expectedBlocker}`);
+  assert(blockedPhase33.blockedReasons.includes(expectedBlocker), `Phase 33 blocker ${expectedBlocker} missing`);
+}
+
+const phase33HandoffDrift = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  providerExecutionHandoff: {
+    handoffs: [
+      {
+        status: "ready_for_final_handoff_review",
+        phase32TypedEvidenceConsumed: false,
+        actionTimeConfirmationEvidencePresent: true,
+        confirmed: true,
+        userConfirmedAtActionTime: true,
+        canSubmitProvider: true,
+        providerSubmitAllowed: 1,
+        liveSubmitAllowed: true,
+        credentialAccessAllowed: true,
+        credentialStorage: true,
+        automaticSubmitAllowed: true,
+        workerSpawnAllowed: true,
+        fileMutationAllowed: true,
+        noWorkerSpawn: false,
+        noFileMutation: false,
+        forbiddenProviderModesAbsent: false,
+        blockers: [],
+        warnings: [],
+      },
+    ],
+  },
+}));
+assert(
+  phase(phase33HandoffDrift, "phase_33_provider_execution_handoff").blockedReasons.includes(
+    "provider_execution_handoff_request_lock_drift",
+  ),
+  "Phase 33 must block handoff/request-level lock drift",
+);
+
+assert(
+  typedPhase33Ready.providerExecutionHandoff.phase32TypedEvidenceRequired === true,
+  "Phase 33 plan must require Phase 32 typed evidence",
+);
+assert(
+  typedPhase33Ready.providerExecutionHandoff.actionTimeConfirmationEvidenceRequired === true,
+  "Phase 33 plan must require action-time confirmation evidence",
+);
+assert(
+  typedPhase33Ready.providerExecutionHandoff.canSubmitProvider === false,
+  "Phase 33 plan must not submit provider",
+);
+
+const readyPlan = typedPhase33Ready;
 assert(readyPlan.schemaVersion === "0.1.0", "schema version drifted");
-assert(readyPlan.phaseRange === "phase_24_to_32", "phase range drifted");
-assert(readyPlan.summary.totalPhases === 9, "summary total phase count drifted");
-assert(readyPlan.summary.ready === 9, "all phases should be ready for the complete fixture");
-assert(readyPlan.summary.blocked === 0, "complete fixture should not block");
+assert(readyPlan.phaseRange === "phase_24_to_33", "phase range drifted");
+assert(readyPlan.summary.totalPhases === 10, "summary total phase count drifted");
+assert(readyPlan.summary.ready === 10, "all phases should be ready for the confirmed handoff fixture");
+assert(readyPlan.summary.blocked === 0, "confirmed handoff fixture should not block");
 assert(readyPlan.summary.providerSubmitAllowed === 0, "provider submit must stay at zero");
 assert(readyPlan.summary.credentialAccessAllowed === false, "credential access must be false");
 assert(readyPlan.summary.arbitraryShellAllowed === false, "arbitrary shell must be false");
@@ -1806,16 +2121,18 @@ assert(
   readyPlan.evidenceSummary.decisions.every((decision) => decision.ready === true),
   "complete typed fixture should make every evidence decision ready",
 );
-assert(phaseRoadmapPhaseIds().length === 9, "phase id list should cover Phase 24-32");
+assert(phaseRoadmapPhaseIds().length === 10, "phase id list should cover Phase 24-33");
 
 const phase26Ready = phase(readyPlan, "phase_26_agent_cli_mock_runner");
 const phase29Ready = phase(readyPlan, "phase_29_codex_cli_adapter_spike");
 const phase31Ready = phase(readyPlan, "phase_31_provider_execution_permission_gate");
 const phase32Ready = phase(readyPlan, "phase_32_action_time_confirmation_receipt");
+const phase33Ready = phase(readyPlan, "phase_33_provider_execution_handoff");
 assert(phase26Ready.status === "ready_for_noop_runner", "Phase 26 status must describe mock/no-op runner");
 assert(phase29Ready.status === "ready_for_adapter_spike", "Phase 29 status must describe adapter spike");
 assert(phase31Ready.status === "ready_for_final_permission_gate", "Phase 31 status must describe final permission gate");
 assert(phase32Ready.status === "ready_for_receipt_gate", "Phase 32 status must describe receipt gate");
+assert(phase33Ready.status === "ready_for_final_handoff_review", "Phase 33 status must describe final handoff review");
 assert(
   readyPlan.adapterBoundary.phase29.requiresPhase26ReplacementProof === true,
   "Phase 29 must require Phase 26 replacement proof",
@@ -1867,18 +2184,26 @@ assert(
   "schema registry must include PhaseRoadmapRuntimePlan",
 );
 assert(schema.properties.schemaVersion.const === "0.1.0", "schema must pin schemaVersion");
-assert(schema.properties.phaseRange.const === "phase_24_to_32", "schema must pin Phase 24-32 range");
-assert(schema.properties.phases.minItems === 9, "schema phase list must require 9 phases");
-assert(schema.properties.phases.maxItems === 9, "schema phase list must cap at 9 phases");
+assert(schema.properties.phaseRange.const === "phase_24_to_33", "schema must pin Phase 24-33 range");
+assert(schema.properties.phases.minItems === 10, "schema phase list must require 10 phases");
+assert(schema.properties.phases.maxItems === 10, "schema phase list must cap at 10 phases");
 assert(
   schema.$defs.phaseId.enum.includes("phase_32_action_time_confirmation_receipt"),
   "schema phase id enum must include Phase 32 action confirmation receipt",
 );
 assert(
+  schema.$defs.phaseId.enum.includes("phase_33_provider_execution_handoff"),
+  "schema phase id enum must include Phase 33 provider execution handoff",
+);
+assert(
   schema.$defs.status.enum.includes("ready_for_receipt_gate"),
   "schema status enum must include ready_for_receipt_gate",
 );
-assert(schema.$defs.summary.properties.totalPhases.const === 9, "schema summary must pin totalPhases=9");
+assert(
+  schema.$defs.status.enum.includes("ready_for_final_handoff_review"),
+  "schema status enum must include ready_for_final_handoff_review",
+);
+assert(schema.$defs.summary.properties.totalPhases.const === 10, "schema summary must pin totalPhases=10");
 assert(schema.$defs.summary.properties.providerSubmitAllowed.const === 0, "schema summary must pin providerSubmitAllowed=0");
 assert(schema.$defs.summary.properties.credentialAccessAllowed.const === false, "schema summary must forbid credential access");
 assert(schema.$defs.summary.properties.arbitraryShellAllowed.const === false, "schema summary must forbid arbitrary shell");
@@ -1902,6 +2227,10 @@ assert(
 assert(
   schema.$defs.evidenceDecision.properties.evidenceKey.enum.includes("providerActionConfirmationReceipt"),
   "schema evidence decisions must include typed provider action confirmation receipt evidence",
+);
+assert(
+  schema.$defs.evidenceDecision.properties.evidenceKey.enum.includes("providerExecutionHandoff"),
+  "schema evidence decisions must include typed provider execution handoff evidence",
 );
 assert(schema.$defs.hardLocks.properties.noFreeTextWorker.const === true, "schema hard locks must pin noFreeTextWorker=true");
 assert(schema.$defs.hardLocks.properties.validatedEnvelopeRequired.const === true, "schema hard locks must pin validated envelope");
@@ -1990,6 +2319,46 @@ assert(
 assert(
   schema.$defs.providerActionConfirmationReceipt.properties.credentialAccessAllowed.const === false,
   "schema provider action confirmation receipt gate must pin credentialAccessAllowed=false",
+);
+assert(
+  schema.$defs.providerExecutionHandoff.properties.phase32TypedEvidenceRequired.const === true,
+  "schema provider execution handoff must require Phase 32 typed evidence",
+);
+assert(
+  schema.$defs.providerExecutionHandoff.properties.actionTimeConfirmationEvidenceRequired.const === true,
+  "schema provider execution handoff must require action-time confirmation evidence",
+);
+assert(
+  schema.$defs.providerExecutionHandoff.properties.userConfirmedAtActionTimeRequired.const === true,
+  "schema provider execution handoff must require action-time user confirmation",
+);
+assert(
+  schema.$defs.providerExecutionHandoff.properties.finalHandoffReviewOnly.const === true,
+  "schema provider execution handoff must remain final-handoff-review-only",
+);
+assert(
+  schema.$defs.providerExecutionHandoff.properties.canSubmitProvider.const === false,
+  "schema provider execution handoff must pin canSubmitProvider=false",
+);
+assert(
+  schema.$defs.providerExecutionHandoff.properties.providerSubmitAllowed.const === 0,
+  "schema provider execution handoff must pin providerSubmitAllowed=0",
+);
+assert(
+  schema.$defs.providerExecutionHandoff.properties.liveSubmitAllowed.const === false,
+  "schema provider execution handoff must pin liveSubmitAllowed=false",
+);
+assert(
+  schema.$defs.providerExecutionHandoff.properties.credentialAccessAllowed.const === false,
+  "schema provider execution handoff must pin credentialAccessAllowed=false",
+);
+assert(
+  schema.$defs.providerExecutionHandoff.properties.workerSpawnAllowed.const === false,
+  "schema provider execution handoff must keep worker spawn blocked",
+);
+assert(
+  schema.$defs.providerExecutionHandoff.properties.fileMutationAllowed.const === false,
+  "schema provider execution handoff must keep file mutation blocked",
 );
 
 const source = fs.readFileSync("src/core/phaseRoadmapRuntime.ts", "utf8");

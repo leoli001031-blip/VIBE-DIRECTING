@@ -31,6 +31,7 @@ import { buildAdapterContractState } from "./adapterContracts";
 import { buildProviderLiveGateState, type ProviderLiveGateEnvelopeFact } from "./providerLiveGate";
 import { buildProviderExecutionPermissionGateState } from "./providerExecutionPermissionGate";
 import { buildProviderActionConfirmationReceiptState } from "./providerActionConfirmationReceipt";
+import { buildProviderExecutionHandoffState } from "./providerExecutionHandoff";
 import type { SubagentRuntimeGateReceipt } from "./subagentRuntimeGate";
 import type { SubagentWorkerRuntimePlan } from "./subagentWorkerRuntime";
 import {
@@ -393,6 +394,10 @@ export function buildProjectRuntimeState(
     generatedAt,
     providerExecutionPermissionGate,
   });
+  const providerExecutionHandoff = buildProviderExecutionHandoffState({
+    generatedAt,
+    providerActionConfirmationReceipt,
+  });
   const generationHealthChecker = buildGenerationHealthCheckerState({
     generatedAt,
     imageTaskPlans,
@@ -487,6 +492,7 @@ export function buildProjectRuntimeState(
     providerLiveGate,
     providerExecutionPermissionGate,
     providerActionConfirmationReceipt,
+    providerExecutionHandoff,
     generationHarness,
     filesystemWatcherHarness,
     checkpointResumeHarness,
@@ -728,6 +734,12 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       generatedAt: state.generatedAt,
       providerExecutionPermissionGate,
     });
+  const providerExecutionHandoff =
+    state.providerExecutionHandoff ||
+    buildProviderExecutionHandoffState({
+      generatedAt: state.generatedAt,
+      providerActionConfirmationReceipt,
+    });
   const generationHealthChecker =
     state.generationHealthChecker ||
     buildGenerationHealthCheckerState({
@@ -787,6 +799,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     providerLiveGate,
     providerExecutionPermissionGate,
     providerActionConfirmationReceipt,
+    providerExecutionHandoff,
     generationHarness,
     filesystemWatcherHarness,
     checkpointResumeHarness,

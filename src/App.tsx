@@ -203,6 +203,17 @@ type ProviderActionConfirmationReceiptUiSummary = {
   blockersWarnings: string[];
   hardLocks: string[];
 };
+type ProviderExecutionHandoffUiSummary = {
+  initialized: boolean;
+  readiness: string;
+  handoffCount: number;
+  blockedCount: number;
+  confirmedCount: number;
+  providerSubmitLocked: string;
+  credentialWorkerFileLocked: string;
+  blockersWarnings: string[];
+  hardLocks: string[];
+};
 
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
@@ -1954,6 +1965,142 @@ function buildProviderActionConfirmationReceiptUiSummary(runtimeState: ProjectRu
     credentialWorkerFileLocked: credentialLocked && workerLocked && fileLocked ? "credential/worker/file locked" : "blocked/missing",
     blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.providerActionConfirmationReceipt"],
     hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.providerActionConfirmationReceipt"],
+  };
+}
+
+function providerExecutionHandoffReadinessLabel(
+  status: string,
+  initialized: boolean,
+  handoffCount: number,
+  blockedCount: number,
+  confirmedCount: number,
+) {
+  if (!initialized) return "blocked/missing";
+  const normalized = status.toLowerCase();
+  if (blockedCount > 0 || normalized.includes("blocked") || normalized.includes("missing") || normalized.includes("fail")) return "blocked";
+  if (confirmedCount > 0 || normalized.includes("confirmed")) return "confirmed";
+  if (handoffCount > 0 || normalized.includes("ready")) return "ready_for_final_action";
+  return status ? statusLabel(status) : "blocked/missing";
+}
+
+function handoffRowIsConfirmed(row: Record<string, unknown>) {
+  if (row.confirmed === true || row.userConfirmedAtActionTime === true || row.finalActionConfirmed === true) return true;
+  const receipts = Array.isArray(row.receipts) ? row.receipts : [];
+  const confirmations = Array.isArray(row.confirmations) ? row.confirmations : [];
+  return [...receipts, ...confirmations].some((item) => isRecord(item) && item.confirmed === true);
+}
+
+function buildProviderExecutionHandoffHardLocks(rootRecord: Record<string, unknown>, summary: Record<string, unknown>) {
+  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
+  const explicitHardLocks = firstArrayFrom([rootRecord, summary, hardLocksRecord], ["hardLocks", "locks", "hardLockStrip"])
+    .map((item, index) => formatHarnessValue(item, `hard lock ${index + 1}`))
+    .filter(Boolean);
+  const inferredLocks = [
+    readBooleanLockLabel(hardLocksRecord, "dryRunOnly", "dry-run only", true),
+    readBooleanLockLabel(hardLocksRecord, "readOnly", "read-only", true),
+    readBooleanLockLabel(hardLocksRecord, "handoffOnly", "handoff only", true),
+    readBooleanLockLabel(hardLocksRecord, "finalActionGateOnly", "final action gate only", true),
+    readBooleanLockLabel(hardLocksRecord, "actionTimeConfirmationRequired", "action-time confirmation required", true),
+    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit locked", true),
+    readBooleanLockLabel(hardLocksRecord, "noProviderSubmit", "provider submit locked", true),
+    readBooleanLockLabel(hardLocksRecord, "canSubmitProvider", "canSubmitProvider=false", false),
+    hardLocksRecord.providerSubmitAllowed === 0 ? "providerSubmitAllowed=0" : undefined,
+    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit locked", false),
+    readBooleanLockLabel(hardLocksRecord, "credentialAccessAllowed", "credential access locked", false),
+    readBooleanLockLabel(hardLocksRecord, "noCredentialRead", "credential read locked", true),
+    readBooleanLockLabel(hardLocksRecord, "noCredentialWrite", "credential write locked", true),
+    readBooleanLockLabel(hardLocksRecord, "noWorkerSpawn", "worker spawn locked", true),
+    readBooleanLockLabel(hardLocksRecord, "workerSpawnAllowed", "worker spawn locked", false),
+    readBooleanLockLabel(hardLocksRecord, "noFileMutation", "file mutation locked", true),
+    readBooleanLockLabel(hardLocksRecord, "fileMutationAllowed", "file mutation locked", false),
+  ].filter((lock): lock is string => Boolean(lock));
+
+  return Array.from(new Set([...explicitHardLocks, ...inferredLocks]));
+}
+
+function buildProviderExecutionHandoffUiSummary(runtimeState: ProjectRuntimeState): ProviderExecutionHandoffUiSummary {
+  const root = (runtimeState as Partial<ProjectRuntimeState> & { providerExecutionHandoff?: unknown }).providerExecutionHandoff;
+  const initialized = isRecord(root);
+  const rootRecord = initialized ? root as Record<string, unknown> : {};
+  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
+  const evidence = initialized && isRecord(rootRecord.phase33Evidence) ? rootRecord.phase33Evidence : {};
+  const finalActionGate = firstRecordFrom(rootRecord, ["finalActionGate", "handoffGate", "executionHandoffGate"]);
+  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
+  const records = [summary, evidence, finalActionGate, rootRecord, hardLocksRecord].filter(isRecord);
+  const handoffRows = firstArrayFrom([rootRecord, summary, finalActionGate], [
+    "handoffs",
+    "items",
+    "handoffItems",
+    "executionHandoffs",
+    "finalActionRequests",
+    "requests",
+  ]);
+  const handoffRecords = handoffRows.filter(isRecord);
+  const handoffCount = readFirstNumber(records, [
+    "handoffCount",
+    "totalHandoffs",
+    "total",
+    "readyHandoffCount",
+    "readyForFinalAction",
+  ]) ?? handoffRecords.length;
+  const blockedCount = readFirstNumber(records, [
+    "blockedCount",
+    "blocked",
+    "blockedHandoffs",
+    "blockedHandoffCount",
+  ]) ?? handoffRecords.filter((row) => /blocked|missing|fail/.test(readString(row.status, "").toLowerCase())).length;
+  const confirmedCount = readFirstNumber(records, [
+    "confirmedCount",
+    "confirmedHandoffCount",
+    "confirmedHandoffs",
+    "confirmed",
+  ]) ?? handoffRecords.filter(handoffRowIsConfirmed).length;
+  const status = readFirstString(records, ["readiness", "status", "state"], "");
+  const providerSubmitAllowedNumber = readFirstNumber(records, ["providerSubmitAllowed"]);
+  const providerSubmitAllowedBoolean = readFirstBoolean(records, ["providerSubmitAllowed", "canSubmitProvider", "providerSubmitAllowedNow"]);
+  const providerSubmitBlockedFlag = readFirstBoolean(records, [
+    "providerSubmitLocked",
+    "providerSubmitBlocked",
+    "providerSubmissionForbidden",
+    "noProviderSubmit",
+  ]);
+  const providerSubmitLocked = providerSubmitAllowedNumber === 0
+    || providerSubmitAllowedBoolean === false
+    || providerSubmitBlockedFlag === true;
+  const providerSubmitDrift = (providerSubmitAllowedNumber !== undefined && providerSubmitAllowedNumber !== 0)
+    || providerSubmitAllowedBoolean === true
+    || providerSubmitBlockedFlag === false;
+  const credentialLocked = readFirstBoolean(records, ["credentialAccessAllowed", "credentialReadAllowed", "credentialStorage"]) === false
+    || records.some((record) => record.noCredentialRead === true || record.noCredentialWrite === true || record.credentialAccessBlocked === true);
+  const workerLocked = readFirstBoolean(records, ["workerSpawnAllowed", "canSpawnWorker", "workerExecutionAllowed"]) === false
+    || records.some((record) => record.noWorkerSpawn === true || record.workerSpawnBlocked === true);
+  const fileLocked = readFirstBoolean(records, ["fileMutationAllowed", "canMutateFiles", "fileWriteAllowed"]) === false
+    || records.some((record) => record.noFileMutation === true || record.fileMutationBlocked === true);
+  const blockersWarnings = Array.from(new Set([
+    ...readDisplayList(rootRecord.blockers, "blocker"),
+    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
+    ...readDisplayList(summary.blockers, "blocker"),
+    ...readDisplayList(summary.blockedReasons, "blocker"),
+    ...readDisplayList(finalActionGate.blockers, "blocker"),
+    ...readDisplayList(finalActionGate.blockedReasons, "blocker"),
+    ...handoffRecords.flatMap((row) => readDisplayList(row.blockers, "blocker")),
+    ...readDisplayList(rootRecord.warnings, "warning"),
+    ...readDisplayList(summary.warnings, "warning"),
+    ...readDisplayList(finalActionGate.warnings, "warning"),
+    ...handoffRecords.flatMap((row) => readDisplayList(row.warnings, "warning")),
+  ].filter(Boolean)));
+  const hardLocks = buildProviderExecutionHandoffHardLocks(rootRecord, summary);
+
+  return {
+    initialized,
+    readiness: providerExecutionHandoffReadinessLabel(status, initialized, handoffCount, blockedCount, confirmedCount),
+    handoffCount,
+    blockedCount,
+    confirmedCount,
+    providerSubmitLocked: providerSubmitLocked ? "provider submit locked" : providerSubmitDrift ? "provider submit drift" : "blocked/missing",
+    credentialWorkerFileLocked: credentialLocked && workerLocked && fileLocked ? "credential/worker/file locked" : "blocked/missing",
+    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.providerExecutionHandoff"],
+    hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.providerExecutionHandoff"],
   };
 }
 
@@ -4487,6 +4634,50 @@ function ProviderActionConfirmationReceiptDiagnostics({ runtimeState }: { runtim
   );
 }
 
+function ProviderExecutionHandoffDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildProviderExecutionHandoffUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel phase33-provider-execution-handoff-panel">
+      <div className="audit-head">
+        <ShieldAlert size={17} />
+        <span>Provider Execution Handoff</span>
+      </div>
+      <div className="summary-grid phase33-metrics">
+        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "Phase 33 final action gate" : "blocked/missing"} />
+        <Metric label="Handoff Count" value={`${summary.handoffCount}`} detail="handoff rows" />
+        <Metric label="Blocked Count" value={`${summary.blockedCount}`} detail="handoff blockers" />
+        <Metric label="Confirmed Count" value={`${summary.confirmedCount}`} detail="receipt-backed only" />
+        <Metric label="Provider Submit" value={summary.providerSubmitLocked} detail="no live action" />
+        <Metric label="Credential / Worker / File" value={summary.credentialWorkerFileLocked} detail="locked route summary" />
+      </div>
+      <div className="phase33-summary-list">
+        <div>
+          <strong>Final action gate</strong>
+          <small>{summary.handoffCount} handoff(s) · {summary.blockedCount} blocked · {summary.confirmedCount} confirmed</small>
+        </div>
+        <div>
+          <strong>Provider submit locked</strong>
+          <small>{summary.providerSubmitLocked}</small>
+        </div>
+        <div>
+          <strong>Credential / worker / file locked</strong>
+          <small>{summary.credentialWorkerFileLocked}</small>
+        </div>
+        <div>
+          <strong>Blockers / warnings</strong>
+          <small>{summary.blockersWarnings.length ? summary.blockersWarnings.slice(0, 5).join(" · ") : "none reported"}</small>
+        </div>
+      </div>
+      <div className="phase33-lock-strip" aria-label="Phase 33 Provider Execution Handoff hard locks">
+        {summary.hardLocks.slice(0, 10).map((lock) => (
+          <span key={lock}>{lock}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const videoPlanning = getVideoPlanning(runtimeState);
   const queue = videoPlanning.queueShell;
@@ -6212,6 +6403,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const providerEnablementGateSummary = buildProviderEnablementGateUiSummary(runtimeState);
   const providerExecutionPermissionGateSummary = buildProviderExecutionPermissionGateUiSummary(runtimeState);
   const providerActionConfirmationReceiptSummary = buildProviderActionConfirmationReceiptUiSummary(runtimeState);
+  const providerExecutionHandoffSummary = buildProviderExecutionHandoffUiSummary(runtimeState);
 
   return (
     <section className="machine-panel settings-shell">
@@ -6373,6 +6565,14 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
           <strong>Provider Action Confirmation readiness: {providerActionConfirmationReceiptSummary.readiness}</strong>
           <small>{providerActionConfirmationReceiptSummary.readyReceipts} ready receipt(s) · {providerActionConfirmationReceiptSummary.blocked} blocked · {providerActionConfirmationReceiptSummary.parked} parked · {providerActionConfirmationReceiptSummary.confirmedCount} confirmed</small>
           <small>{providerActionConfirmationReceiptSummary.providerSubmitBlocked} · {providerActionConfirmationReceiptSummary.credentialWorkerFileLocked}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Provider Execution Handoff</div>
+      <div className="settings-list provider-execution-handoff-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Provider Execution Handoff readiness: {providerExecutionHandoffSummary.readiness}</strong>
+          <small>{providerExecutionHandoffSummary.handoffCount} handoff(s) · {providerExecutionHandoffSummary.blockedCount} blocked · {providerExecutionHandoffSummary.confirmedCount} confirmed</small>
+          <small>{providerExecutionHandoffSummary.providerSubmitLocked} · {providerExecutionHandoffSummary.credentialWorkerFileLocked}</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
@@ -6586,6 +6786,7 @@ function DiagnosticsMode({
       <ProviderEnablementGateDiagnostics runtimeState={runtimeState} />
       <ProviderExecutionPermissionGateDiagnostics runtimeState={runtimeState} />
       <ProviderActionConfirmationReceiptDiagnostics runtimeState={runtimeState} />
+      <ProviderExecutionHandoffDiagnostics runtimeState={runtimeState} />
       <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />
       <section className="machine-panel">
         <div className="audit-head">

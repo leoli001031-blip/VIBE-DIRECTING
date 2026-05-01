@@ -113,6 +113,8 @@ const providerEnablementGateDiagnostics = findFunctionBody(appSource, "ProviderE
 const providerEnablementGateUiSummary = findFunctionBody(appSource, "buildProviderEnablementGateUiSummary");
 const providerActionConfirmationReceiptDiagnostics = findFunctionBody(appSource, "ProviderActionConfirmationReceiptDiagnostics");
 const providerActionConfirmationReceiptUiSummary = findFunctionBody(appSource, "buildProviderActionConfirmationReceiptUiSummary");
+const providerExecutionHandoffDiagnostics = findFunctionBody(appSource, "ProviderExecutionHandoffDiagnostics");
+const providerExecutionHandoffUiSummary = findFunctionBody(appSource, "buildProviderExecutionHandoffUiSummary");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
 const knowledgeUiSummary = findFunctionBody(appSource, "buildKnowledgeUiSummary");
 const knowledgePackManager = findFunctionBody(appSource, "KnowledgePackManager");
@@ -249,6 +251,19 @@ checkMessage(requireWithin(`${providerActionConfirmationReceiptDiagnostics}\n${p
 checkMessage(requireWithin(`${providerActionConfirmationReceiptDiagnostics}\n${providerActionConfirmationReceiptUiSummary}`, /provider submit blocked/i, "Phase 32 provider submit blocked summary"));
 checkMessage(requireWithin(`${providerActionConfirmationReceiptDiagnostics}\n${providerActionConfirmationReceiptUiSummary}`, /credential\/worker\/file locked/i, "Phase 32 credential/worker/file locked summary"));
 checkMessage(requireWithin(providerActionConfirmationReceiptDiagnostics, /phase32-lock-strip/i, "Phase 32 hard lock strip"));
+checkMessage(requireWithin(diagnosticsMode, /ProviderExecutionHandoffDiagnostics/, "Phase 33 ProviderExecutionHandoffDiagnostics mounted in Diagnostics"));
+checkMessage(requireWithin(providerExecutionHandoffDiagnostics, /Provider Execution Handoff/i, "Phase 33 Provider Execution Handoff diagnostics panel"));
+checkMessage(requireWithin(providerExecutionHandoffDiagnostics, /Readiness/i, "Phase 33 readiness summary"));
+checkMessage(requireWithin(providerExecutionHandoffDiagnostics, /Handoff Count/i, "Phase 33 handoff count summary"));
+checkMessage(requireWithin(providerExecutionHandoffDiagnostics, /Blocked Count/i, "Phase 33 blocked count summary"));
+checkMessage(requireWithin(providerExecutionHandoffDiagnostics, /Confirmed Count/i, "Phase 33 confirmed count summary"));
+checkMessage(requireWithin(providerExecutionHandoffDiagnostics, /Provider Submit/i, "Phase 33 provider submit lock summary"));
+checkMessage(requireWithin(providerExecutionHandoffDiagnostics, /Credential\s*\/\s*Worker\s*\/\s*File/i, "Phase 33 credential/worker/file lock summary"));
+checkMessage(requireWithin(`${providerExecutionHandoffDiagnostics}\n${providerExecutionHandoffUiSummary}`, /providerExecutionHandoff/i, "Phase 33 providerExecutionHandoff parser"));
+checkMessage(requireWithin(`${providerExecutionHandoffDiagnostics}\n${providerExecutionHandoffUiSummary}`, /Final Action Gate/i, "Phase 33 final action gate diagnostics label"));
+checkMessage(requireWithin(`${providerExecutionHandoffDiagnostics}\n${providerExecutionHandoffUiSummary}`, /provider submit locked/i, "Phase 33 provider submit locked summary"));
+checkMessage(requireWithin(`${providerExecutionHandoffDiagnostics}\n${providerExecutionHandoffUiSummary}`, /credential\/worker\/file locked/i, "Phase 33 credential/worker/file locked summary"));
+checkMessage(requireWithin(providerExecutionHandoffDiagnostics, /phase33-lock-strip/i, "Phase 33 hard lock strip"));
 checkMessage(requireWithin(previewPlayerQueue, /draftPreview\.events/, "Phase 21/23 Preview Player queue must use previewExport.draftPreview.events"));
 checkMessage(requireWithin(previewPlayerQueue, /image_hold/, "Phase 21/23 Preview Player queue must include image holds"));
 checkMessage(requireWithin(previewPlayerQueue, /video_clip/, "Phase 21/23 Preview Player queue must include video clips"));
@@ -435,6 +450,22 @@ for (const [term, pattern] of phase32ForbiddenMainTerms) {
   const count = countPattern(phase2123DirectorSurface, pattern);
   check(count === 0, `Phase 32 main Director surface must expose 0 ${term} term(s), found ${count}`);
 }
+const phase33ForbiddenMainTerms = [
+  ["Phase33", /Phase\s*33/i],
+  ["Provider Execution Handoff", /Provider\s+Execution\s+Handoff/i],
+  ["Final Action Gate", /Final\s+Action\s+Gate/i],
+  ["providerExecutionHandoff", /providerExecutionHandoff/i],
+  ["Submit Provider", /Submit\s+Provider/i],
+  ["Confirm Action", /Confirm\s+Action/i],
+  ["Confirm Provider", /Confirm\s+Provider/i],
+  ["Record Confirmation", /Record\s+Confirmation/i],
+  ["provider submit", /provider\s+submit/i],
+  ["canSubmitProvider", /canSubmitProvider/i],
+];
+for (const [term, pattern] of phase33ForbiddenMainTerms) {
+  const count = countPattern(phase2123DirectorSurface, pattern);
+  check(count === 0, `Phase 33 main Director surface must expose 0 ${term} term(s), found ${count}`);
+}
 check(!/Formal\s+Gate|Proxy\s+Duration|Draft\s+Events|blockedPlaceholder/i.test(minimalPreview), "Preview Player copy must stay short and not show gate/proxy counters");
 check(/locked/i.test(minimalAssetLibrary) && /candidate/i.test(minimalAssetLibrary) && /review/i.test(minimalAssetLibrary), "Asset Library must keep locked/candidate/review consistency states");
 
@@ -472,6 +503,10 @@ checkMessage(requireWithin(settingsShell, /ready receipt\(s\)/i, "Phase 32 ready
 checkMessage(requireWithin(settingsShell, /confirmed/i, "Phase 32 confirmed count in Settings"));
 checkMessage(requireWithin(`${settingsShell}\n${providerActionConfirmationReceiptUiSummary}`, /provider submit blocked/i, "Phase 32 provider submit blocked summary in Settings"));
 checkMessage(requireWithin(`${settingsShell}\n${providerActionConfirmationReceiptUiSummary}`, /credential\/worker\/file locked/i, "Phase 32 credential/worker/file locked summary in Settings"));
+checkMessage(requireWithin(settingsShell, /Provider Execution Handoff readiness/i, "Phase 33 Provider Execution Handoff readiness summary in Settings"));
+checkMessage(requireWithin(settingsShell, /handoff\(s\)/i, "Phase 33 handoff count in Settings"));
+checkMessage(requireWithin(`${settingsShell}\n${providerExecutionHandoffUiSummary}`, /provider submit locked/i, "Phase 33 provider submit locked summary in Settings"));
+checkMessage(requireWithin(`${settingsShell}\n${providerExecutionHandoffUiSummary}`, /credential\/worker\/file locked/i, "Phase 33 credential/worker/file locked summary in Settings"));
 checkMessage(requireWithin(knowledgePackManager, /Enabled/i, "Phase 25 Knowledge summary enabled/total metric"));
 checkMessage(requireWithin(knowledgePackManager, /Injected/i, "Phase 25 Knowledge summary injected/unique metric"));
 checkMessage(requireWithin(knowledgePackManager, /Warnings\s*\/\s*Blockers/i, "Phase 25 Knowledge summary warnings/blockers metric"));

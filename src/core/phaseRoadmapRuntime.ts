@@ -9,7 +9,8 @@ export type PhaseRoadmapPhaseId =
   | "phase_29_codex_cli_adapter_spike"
   | "phase_30_provider_enablement_gate"
   | "phase_31_provider_execution_permission_gate"
-  | "phase_32_action_time_confirmation_receipt";
+  | "phase_32_action_time_confirmation_receipt"
+  | "phase_33_provider_execution_handoff";
 
 export type PhaseRoadmapReadiness = "ready" | "blocked";
 export type PhaseRoadmapStatus =
@@ -19,6 +20,7 @@ export type PhaseRoadmapStatus =
   | "ready_for_confirmation_gate"
   | "ready_for_final_permission_gate"
   | "ready_for_receipt_gate"
+  | "ready_for_final_handoff_review"
   | "blocked_by_gate";
 export type PhaseRoadmapEvidenceDecisionSource = "typed_evidence" | "legacy_boolean_override" | "missing";
 export type PhaseRoadmapEvidenceStatus =
@@ -30,6 +32,7 @@ export type PhaseRoadmapEvidenceStatus =
   | "ready_for_confirmation"
   | "ready_for_replacement_proof"
   | "ready_for_receipt_gate"
+  | "ready_for_final_handoff_review"
   | "blocked"
   | "invalid"
   | "fail"
@@ -321,6 +324,112 @@ export interface PhaseRoadmapProviderActionConfirmationReceiptEvidence {
     credentialAccessAllowed?: boolean;
     credentialStorage?: boolean;
     automaticSubmitAllowed?: boolean;
+    noWorkerSpawn?: boolean;
+    noFileMutation?: boolean;
+    forbiddenProviderModesAbsent?: boolean;
+    blockers?: string[];
+    warnings?: string[];
+  }>;
+  forbiddenActions?: string[];
+  blockers?: string[];
+  blockedReasons?: string[];
+  warnings?: string[];
+  sourceRef?: string;
+}
+
+export interface PhaseRoadmapProviderExecutionHandoffEvidence {
+  kind?: "provider_execution_handoff";
+  phase?: "phase_33_provider_execution_handoff";
+  status?: PhaseRoadmapEvidenceStatus;
+  readiness?: "ready_for_final_handoff_review" | "ready" | "blocked";
+  phase33Evidence?: {
+    phaseId?: "phase_33_provider_execution_handoff";
+    typedEvidencePresent?: boolean;
+    phase32TypedEvidenceConsumed?: boolean;
+    actionTimeConfirmationEvidencePresent?: boolean;
+    userConfirmedAtActionTime?: boolean;
+    confirmedReceiptCount?: number | boolean;
+    canSubmitProvider?: boolean;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    automaticSubmitAllowed?: boolean;
+    noWorkerSpawn?: boolean;
+    noFileMutation?: boolean;
+    forbiddenProviderModesAbsent?: boolean;
+    hardLocksPinned?: boolean;
+  };
+  summary?: {
+    readyForFinalHandoffReview?: number;
+    confirmedReceiptCount?: number | boolean;
+    blocked?: number;
+    parked?: number;
+    canSubmitProvider?: boolean;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    automaticSubmitAllowed?: boolean;
+    workerSpawnAllowed?: boolean;
+    fileMutationAllowed?: boolean;
+  };
+  hardLocks?: {
+    dryRunOnly?: boolean;
+    readOnly?: boolean;
+    finalHandoffReviewOnly?: boolean;
+    actionTimeConfirmationRequired?: boolean;
+    providerSubmissionForbidden?: boolean;
+    automaticSubmitForbidden?: boolean;
+    automaticSubmitAllowed?: boolean;
+    canSubmitProvider?: boolean;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    credentialStorage?: boolean;
+    noCredentialRead?: boolean;
+    noCredentialWrite?: boolean;
+    noApiKeyCreation?: boolean;
+    noArbitraryProviderCommand?: boolean;
+    noWorkerSpawn?: boolean;
+    noFileMutation?: boolean;
+    fastModelForbidden?: boolean;
+    vipChannelForbidden?: boolean;
+    textToVideoMainPathForbidden?: boolean;
+    bgmInVideoPromptForbidden?: boolean;
+  };
+  handoffs?: Array<{
+    status?: string;
+    phase32TypedEvidenceConsumed?: boolean;
+    actionTimeConfirmationEvidencePresent?: boolean;
+    confirmed?: boolean;
+    userConfirmedAtActionTime?: boolean;
+    canSubmitProvider?: boolean;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    credentialStorage?: boolean;
+    automaticSubmitAllowed?: boolean;
+    workerSpawnAllowed?: boolean;
+    fileMutationAllowed?: boolean;
+    noWorkerSpawn?: boolean;
+    noFileMutation?: boolean;
+    forbiddenProviderModesAbsent?: boolean;
+    blockers?: string[];
+    warnings?: string[];
+  }>;
+  requests?: Array<{
+    status?: string;
+    phase32TypedEvidenceConsumed?: boolean;
+    actionTimeConfirmationEvidencePresent?: boolean;
+    confirmed?: boolean;
+    userConfirmedAtActionTime?: boolean;
+    canSubmitProvider?: boolean;
+    providerSubmitAllowed?: number | boolean;
+    liveSubmitAllowed?: boolean;
+    credentialAccessAllowed?: boolean;
+    credentialStorage?: boolean;
+    automaticSubmitAllowed?: boolean;
+    workerSpawnAllowed?: boolean;
+    fileMutationAllowed?: boolean;
     noWorkerSpawn?: boolean;
     noFileMutation?: boolean;
     forbiddenProviderModesAbsent?: boolean;
@@ -802,6 +911,7 @@ export interface PhaseRoadmapRuntimeEvidence {
   providerLiveGate?: PhaseRoadmapProviderLiveGateReceipt;
   providerExecutionPermissionGate?: PhaseRoadmapProviderExecutionPermissionGateEvidence;
   providerActionConfirmationReceipt?: PhaseRoadmapProviderActionConfirmationReceiptEvidence;
+  providerExecutionHandoff?: PhaseRoadmapProviderExecutionHandoffEvidence;
   watcherManifestQaClosedLoop?: PhaseRoadmapClosedLoopReceipt;
 }
 
@@ -818,7 +928,8 @@ export interface PhaseRoadmapEvidenceDecision {
     | "watcherManifestQaClosedLoop"
     | "forbiddenProviderModesAbsent"
     | "providerExecutionPermissionGate"
-    | "providerActionConfirmationReceipt";
+    | "providerActionConfirmationReceipt"
+    | "providerExecutionHandoff";
   source: PhaseRoadmapEvidenceDecisionSource;
   ready: boolean;
   blockers: string[];
@@ -863,7 +974,7 @@ export interface PhaseRoadmapHardLocks {
 
 export interface PhaseRoadmapPhasePlan {
   phaseId: PhaseRoadmapPhaseId;
-  phaseNumber: 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32;
+  phaseNumber: 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33;
   title: string;
   readiness: PhaseRoadmapReadiness;
   status: PhaseRoadmapStatus;
@@ -878,10 +989,10 @@ export interface PhaseRoadmapPhasePlan {
 export interface PhaseRoadmapRuntimePlan {
   schemaVersion: "0.1.0";
   generatedAt: string;
-  phaseRange: "phase_24_to_32";
+  phaseRange: "phase_24_to_33";
   phases: PhaseRoadmapPhasePlan[];
   summary: {
-    totalPhases: 9;
+    totalPhases: 10;
     ready: number;
     blocked: number;
     providerSubmitAllowed: 0;
@@ -934,6 +1045,19 @@ export interface PhaseRoadmapRuntimePlan {
     liveSubmitAllowed: false;
     credentialAccessAllowed: false;
   };
+  providerExecutionHandoff: {
+    phase32TypedEvidenceRequired: true;
+    actionTimeConfirmationEvidenceRequired: true;
+    userConfirmedAtActionTimeRequired: true;
+    finalHandoffReviewOnly: true;
+    automaticSubmitForbidden: true;
+    canSubmitProvider: false;
+    providerSubmitAllowed: 0;
+    liveSubmitAllowed: false;
+    credentialAccessAllowed: false;
+    workerSpawnAllowed: false;
+    fileMutationAllowed: false;
+  };
 }
 
 const defaultGeneratedAt = "1970-01-01T00:00:00.000Z";
@@ -948,6 +1072,7 @@ const phaseIds: PhaseRoadmapPhaseId[] = [
   "phase_30_provider_enablement_gate",
   "phase_31_provider_execution_permission_gate",
   "phase_32_action_time_confirmation_receipt",
+  "phase_33_provider_execution_handoff",
 ];
 
 export const phaseRoadmapRuntimeHardLocks: PhaseRoadmapHardLocks = {
@@ -1087,6 +1212,16 @@ function hasProviderActionConfirmationReceiptEvidence(
     evidence.kind === "provider_action_confirmation_receipt" ||
     evidence.phase === "phase_32_action_time_confirmation_receipt" ||
     evidence.phase32Evidence?.phaseId === "phase_32_action_time_confirmation_receipt"
+  ));
+}
+
+function hasProviderExecutionHandoffEvidence(
+  evidence: PhaseRoadmapProviderExecutionHandoffEvidence | undefined,
+): evidence is PhaseRoadmapProviderExecutionHandoffEvidence {
+  return Boolean(evidence && (
+    evidence.kind === "provider_execution_handoff" ||
+    evidence.phase === "phase_33_provider_execution_handoff" ||
+    evidence.phase33Evidence?.phaseId === "phase_33_provider_execution_handoff"
   ));
 }
 
@@ -2366,6 +2501,139 @@ function providerActionConfirmationReceiptEvidenceDecision(input: PhaseRoadmapRu
   };
 }
 
+function providerExecutionHandoffEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const evidence = input.evidence?.providerExecutionHandoff;
+
+  if (hasProviderExecutionHandoffEvidence(evidence)) {
+    const phase33 = evidence.phase33Evidence || {};
+    const handoffs = [...(evidence.handoffs || []), ...(evidence.requests || [])];
+    const handoffBlockers = handoffs.flatMap((handoff) => handoff.blockers || []);
+    const handoffWarnings = handoffs.flatMap((handoff) => handoff.warnings || []);
+    const phase32EvidencePresent = hasProviderActionConfirmationReceiptEvidence(input.evidence?.providerActionConfirmationReceipt);
+    const confirmedReceiptCount = phase33.confirmedReceiptCount ?? evidence.summary?.confirmedReceiptCount;
+    const confirmedReceiptObserved = confirmedReceiptCount !== undefined && confirmedReceiptCount !== 0 && confirmedReceiptCount !== false
+      || handoffs.some((handoff) => handoff.confirmed === true || handoff.userConfirmedAtActionTime === true);
+    const actionTimeConfirmationEvidencePresent = phase33.actionTimeConfirmationEvidencePresent === true
+      || handoffs.some((handoff) =>
+        handoff.actionTimeConfirmationEvidencePresent === true ||
+        handoff.confirmed === true ||
+        handoff.userConfirmedAtActionTime === true,
+      );
+    const userConfirmedAtActionTime = phase33.userConfirmedAtActionTime === true
+      || handoffs.some((handoff) => handoff.userConfirmedAtActionTime === true || handoff.confirmed === true);
+    const providerSubmitAllowed = phase33.providerSubmitAllowed
+      ?? evidence.summary?.providerSubmitAllowed
+      ?? evidence.hardLocks?.providerSubmitAllowed;
+    const hardLocksPinned = evidence.hardLocks
+      ? phase33.hardLocksPinned !== false
+        && evidence.hardLocks.dryRunOnly === true
+        && evidence.hardLocks.readOnly === true
+        && evidence.hardLocks.finalHandoffReviewOnly === true
+        && evidence.hardLocks.actionTimeConfirmationRequired === true
+        && evidence.hardLocks.providerSubmissionForbidden === true
+        && evidence.hardLocks.automaticSubmitForbidden === true
+        && evidence.hardLocks.automaticSubmitAllowed === false
+        && evidence.hardLocks.canSubmitProvider === false
+        && evidence.hardLocks.providerSubmitAllowed === 0
+        && evidence.hardLocks.liveSubmitAllowed === false
+        && evidence.hardLocks.credentialAccessAllowed === false
+        && evidence.hardLocks.credentialStorage === false
+        && evidence.hardLocks.noCredentialRead === true
+        && evidence.hardLocks.noCredentialWrite === true
+        && evidence.hardLocks.noApiKeyCreation === true
+        && evidence.hardLocks.noArbitraryProviderCommand === true
+        && evidence.hardLocks.noWorkerSpawn === true
+        && evidence.hardLocks.noFileMutation === true
+        && evidence.hardLocks.fastModelForbidden === true
+        && evidence.hardLocks.vipChannelForbidden === true
+        && evidence.hardLocks.textToVideoMainPathForbidden === true
+        && evidence.hardLocks.bgmInVideoPromptForbidden === true
+      : false;
+    const handoffLocksPinned = handoffs.every((handoff) =>
+      handoff.phase32TypedEvidenceConsumed !== false
+      && handoff.canSubmitProvider !== true
+      && providerSubmitValueBlocked(handoff.providerSubmitAllowed)
+      && handoff.liveSubmitAllowed !== true
+      && handoff.credentialAccessAllowed !== true
+      && handoff.credentialStorage !== true
+      && handoff.automaticSubmitAllowed !== true
+      && handoff.workerSpawnAllowed !== true
+      && handoff.fileMutationAllowed !== true
+      && handoff.noWorkerSpawn !== false
+      && handoff.noFileMutation !== false
+      && handoff.forbiddenProviderModesAbsent !== false
+    );
+    const blockers = uniqueSorted([
+      ...blockedIf(phase33.typedEvidencePresent !== true, "provider_execution_handoff_typed_evidence_missing"),
+      ...blockedIf(!phase32EvidencePresent || phase33.phase32TypedEvidenceConsumed !== true, "provider_execution_handoff_phase32_evidence_missing"),
+      ...blockedIf(
+        !actionTimeConfirmationEvidencePresent || !userConfirmedAtActionTime || !confirmedReceiptObserved,
+        "provider_execution_handoff_action_confirmation_missing",
+      ),
+      ...blockedIf(evidence.status === "blocked" || evidence.readiness === "blocked", "provider_execution_handoff_status_blocked"),
+      ...blockedIf(!hardLocksPinned, "provider_execution_handoff_hard_locks_not_pinned"),
+      ...blockedIf(!handoffLocksPinned, "provider_execution_handoff_request_lock_drift"),
+      ...blockedIf(
+        phase33.canSubmitProvider === true ||
+          evidence.summary?.canSubmitProvider === true ||
+          evidence.hardLocks?.canSubmitProvider === true ||
+          handoffs.some((handoff) => handoff.canSubmitProvider === true),
+        "provider_execution_handoff_can_submit_provider_true",
+      ),
+      ...blockedIf(!providerSubmitValueBlocked(providerSubmitAllowed), "provider_execution_handoff_provider_submit_allowed"),
+      ...blockedIf(
+        phase33.liveSubmitAllowed === true || evidence.summary?.liveSubmitAllowed === true || evidence.hardLocks?.liveSubmitAllowed === true,
+        "provider_execution_handoff_live_submit_allowed",
+      ),
+      ...blockedIf(
+        phase33.credentialAccessAllowed === true ||
+          evidence.summary?.credentialAccessAllowed === true ||
+          evidence.hardLocks?.credentialAccessAllowed === true,
+        "provider_execution_handoff_credential_access_allowed",
+      ),
+      ...blockedIf(
+        phase33.automaticSubmitAllowed === true ||
+          evidence.summary?.automaticSubmitAllowed === true ||
+          evidence.hardLocks?.automaticSubmitAllowed === true ||
+          evidence.hardLocks?.automaticSubmitForbidden === false,
+        "provider_execution_handoff_auto_submit_allowed",
+      ),
+      ...blockedIf(
+        phase33.noWorkerSpawn !== true ||
+          evidence.summary?.workerSpawnAllowed === true ||
+          evidence.hardLocks?.noWorkerSpawn !== true,
+        "provider_execution_handoff_worker_spawn_not_blocked",
+      ),
+      ...blockedIf(
+        phase33.noFileMutation !== true ||
+          evidence.summary?.fileMutationAllowed === true ||
+          evidence.hardLocks?.noFileMutation !== true,
+        "provider_execution_handoff_file_mutation_not_blocked",
+      ),
+      ...blockedIf(phase33.forbiddenProviderModesAbsent !== true, "provider_execution_handoff_forbidden_mode_not_absent"),
+      ...(evidence.blockedReasons || []),
+      ...(evidence.blockers || []),
+      ...handoffBlockers,
+    ]);
+
+    return {
+      evidenceKey: "providerExecutionHandoff",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted([...(evidence.warnings || []), ...handoffWarnings]),
+    };
+  }
+
+  return {
+    evidenceKey: "providerExecutionHandoff",
+    source: "missing",
+    ready: false,
+    blockers: ["provider_execution_handoff_typed_evidence_missing"],
+    warnings: [],
+  };
+}
+
 function evidenceNotes(decisions: PhaseRoadmapEvidenceDecision[]): string[] {
   return uniqueSorted(decisions.flatMap((decision) => decision.warnings));
 }
@@ -2423,6 +2691,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const forbiddenProviderModesDecision = forbiddenProviderModesEvidenceDecision(input);
   const providerExecutionPermissionDecision = providerExecutionPermissionGateEvidenceDecision(input);
   const providerActionConfirmationReceiptDecision = providerActionConfirmationReceiptEvidenceDecision(input);
+  const providerExecutionHandoffDecision = providerExecutionHandoffEvidenceDecision(input);
   const evidenceDecisions = [
     projectFactsDecision,
     envelopeDecision,
@@ -2436,6 +2705,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
     forbiddenProviderModesDecision,
     providerExecutionPermissionDecision,
     providerActionConfirmationReceiptDecision,
+    providerExecutionHandoffDecision,
   ];
 
   const phases: PhaseRoadmapPhasePlan[] = [
@@ -2530,7 +2800,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "Provider, credential, shell, media render, delete, move, and outside-project-root routes are blocked.",
       ],
       notes: [
-        "This is the only Phase 24-32 plan item with fileMutationAllowed=true.",
+        "This is the only Phase 24-33 plan item with fileMutationAllowed=true.",
         "Phase 27 is layered on the Phase 12 dry-run Export Builder plan; the builder itself remains noFileMutation.",
         ...evidenceNotes([exportWorkerDecision]),
       ],
@@ -2715,15 +2985,52 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         ...evidenceNotes([providerActionConfirmationReceiptDecision]),
       ],
     }),
+    makePhase({
+      phaseId: "phase_33_provider_execution_handoff",
+      phaseNumber: 33,
+      title: "Provider Execution Handoff / Final Action Gate",
+      requiredPrecedingPhases: [
+        "phase_24_subagent_runtime_gate",
+        "phase_25_knowledge_pack_manager",
+        "phase_26_agent_cli_mock_runner",
+        "phase_27_export_worker_mvp",
+        "phase_28_voice_audio_settings_ui",
+        "phase_29_codex_cli_adapter_spike",
+        "phase_30_provider_enablement_gate",
+        "phase_31_provider_execution_permission_gate",
+        "phase_32_action_time_confirmation_receipt",
+      ],
+      readyPhases,
+      ownBlockers: uniqueSorted(providerExecutionHandoffDecision.blockers),
+      readyStatus: "ready_for_final_handoff_review",
+      requiredInputs: [
+        "evidence.providerExecutionHandoff",
+        "Phase 32 typed receipt evidence consumed",
+        "action-time confirmation evidence present",
+        "user confirmation captured at action time",
+        "provider/credential/automatic-submit/worker/file routes blocked",
+      ],
+      acceptanceCriteria: [
+        "Final handoff evidence is structured typed evidence, not a legacy boolean.",
+        "The handoff consumes Phase 32 receipt evidence and requires action-time confirmation evidence before it can be reviewed.",
+        "Provider submit, live submit, credentials, automatic submit, worker spawn, and file mutation remain blocked.",
+        "Fast, VIP, text-to-video, and BGM-in-video prompt paths remain absent.",
+      ],
+      notes: [
+        "Phase 33 is the final handoff review gate only; it still does not execute providers, spawn workers, read credentials, or mutate files.",
+        "Default Phase 32 evidence has confirmedReceiptCount=0, so Phase 33 remains blocked until action-time confirmation evidence exists.",
+        ...evidenceNotes([providerExecutionHandoffDecision]),
+      ],
+    }),
   ];
 
   return {
     schemaVersion: phaseRoadmapRuntimeSchemaVersion,
     generatedAt,
-    phaseRange: "phase_24_to_32",
+    phaseRange: "phase_24_to_33",
     phases,
     summary: {
-      totalPhases: 9,
+      totalPhases: 10,
       ready: phases.filter((phase) => phase.readiness === "ready").length,
       blocked: phases.filter((phase) => phase.readiness === "blocked").length,
       providerSubmitAllowed: 0,
@@ -2779,6 +3086,19 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       providerSubmitAllowed: 0,
       liveSubmitAllowed: false,
       credentialAccessAllowed: false,
+    },
+    providerExecutionHandoff: {
+      phase32TypedEvidenceRequired: true,
+      actionTimeConfirmationEvidenceRequired: true,
+      userConfirmedAtActionTimeRequired: true,
+      finalHandoffReviewOnly: true,
+      automaticSubmitForbidden: true,
+      canSubmitProvider: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      credentialAccessAllowed: false,
+      workerSpawnAllowed: false,
+      fileMutationAllowed: false,
     },
   };
 }

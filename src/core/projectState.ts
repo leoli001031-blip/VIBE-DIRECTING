@@ -12,6 +12,7 @@ import type { ExportWorkerState } from "./exportWorker";
 import type { ProviderLiveGateState } from "./providerLiveGate";
 import type { ProviderExecutionPermissionGateState } from "./providerExecutionPermissionGate";
 import type { ProviderActionConfirmationReceiptState } from "./providerActionConfirmationReceipt";
+import type { ProviderExecutionHandoffState } from "./providerExecutionHandoff";
 import type {
   AssetRecord,
   AssetReadinessReport,
@@ -196,6 +197,7 @@ export interface ProjectRuntimeState {
   providerLiveGate: ProviderLiveGateState;
   providerExecutionPermissionGate: ProviderExecutionPermissionGateState;
   providerActionConfirmationReceipt: ProviderActionConfirmationReceiptState;
+  providerExecutionHandoff: ProviderExecutionHandoffState;
   generationHarness: GenerationHarnessState;
   filesystemWatcherHarness: FilesystemWatcherHarnessState;
   checkpointResumeHarness: CheckpointResumeHarnessState;

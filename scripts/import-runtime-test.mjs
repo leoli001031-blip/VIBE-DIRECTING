@@ -7167,6 +7167,13 @@ if (!runtimeState.providerActionConfirmationReceipt) {
     providerExecutionPermissionGate: runtimeState.providerExecutionPermissionGate,
   });
 }
+if (!runtimeState.providerExecutionHandoff) {
+  const { buildProviderExecutionHandoffState } = await importTs("src/core/providerExecutionHandoff.ts");
+  runtimeState.providerExecutionHandoff = buildProviderExecutionHandoffState({
+    generatedAt: runtimeState.generatedAt,
+    providerActionConfirmationReceipt: runtimeState.providerActionConfirmationReceipt,
+  });
+}
 
 assert(runtimeState.providerLiveGate, "runtime-state must include providerLiveGate");
 assert(runtimeState.providerLiveGate.phase === "phase_11_provider_adapter_live_gate", "providerLiveGate must remain the provider live gate evidence source");
@@ -7294,6 +7301,66 @@ assert(runtimeState.providerActionConfirmationReceipt.hardLocks.liveSubmitAllowe
 assert(runtimeState.providerActionConfirmationReceipt.hardLocks.credentialAccessAllowed === false, "providerActionConfirmationReceipt credential access hard lock must be false");
 assert(runtimeState.providerActionConfirmationReceipt.hardLocks.automaticSubmitAllowed === false, "providerActionConfirmationReceipt automatic submit hard lock must be false");
 assert(runtimeState.providerActionConfirmationReceipt.hardLocks.credentialStorage === false, "providerActionConfirmationReceipt credential storage hard lock must be false");
+assert(runtimeState.providerExecutionHandoff, "runtime-state must include providerExecutionHandoff");
+assert(runtimeState.providerExecutionHandoff.phase === "phase_33_provider_execution_handoff", "providerExecutionHandoff must be Phase 33 evidence");
+assert(runtimeState.providerExecutionHandoff.summary.totalHandoffs === runtimeState.providerActionConfirmationReceipt.requests.length, "Phase 33 must mirror Phase 32 receipt requests into handoff items");
+assert(runtimeState.providerExecutionHandoff.summary.readyForFinalUserHandoffReview === 0, "Phase 33 default import fixture must not be ready for final handoff review");
+assert(runtimeState.providerExecutionHandoff.summary.confirmedReceiptCountObserved === 0, "Phase 33 default import fixture must observe zero confirmed receipts");
+assert(runtimeState.providerExecutionHandoff.summary.userConfirmedAtActionTimeObserved === false, "Phase 33 default import fixture must not observe action-time user confirmation");
+assert(runtimeState.providerExecutionHandoff.summary.providerSubmitAllowed === 0, "Phase 33 must not allow provider submit");
+assert(runtimeState.providerExecutionHandoff.summary.liveSubmitAllowed === false, "Phase 33 live submit must be false");
+assert(runtimeState.providerExecutionHandoff.summary.credentialAccessAllowed === false, "Phase 33 credential access must be false");
+assert(runtimeState.providerExecutionHandoff.summary.automaticSubmitAllowed === false, "Phase 33 automatic submit must be false");
+assert(runtimeState.providerExecutionHandoff.summary.canSpawnWorker === false, "Phase 33 worker spawn must be false");
+assert(runtimeState.providerExecutionHandoff.summary.fileMutationAllowed === false, "Phase 33 file mutation must be false");
+assert(runtimeState.providerExecutionHandoff.summary.handoffPlanOnly === true, "Phase 33 must remain handoff-plan-only");
+assert(runtimeState.providerExecutionHandoff.summary.finalActionGateRequired === true, "Phase 33 must require a final action gate");
+assert(runtimeState.providerExecutionHandoff.phase33Evidence.typedEvidencePresent === true, "Phase 33 evidence must be typed");
+assert(runtimeState.providerExecutionHandoff.phase33Evidence.phase32ReceiptStateConsumed === true, "Phase 33 must consume Phase 32 receipt evidence");
+assert(runtimeState.providerExecutionHandoff.phase33Evidence.confirmedReceiptCountObserved === 0, "Phase 33 typed evidence must observe zero confirmed receipts by default");
+assert(runtimeState.providerExecutionHandoff.phase33Evidence.userConfirmedAtActionTimeObserved === false, "Phase 33 typed evidence must not observe user confirmation by default");
+assert(runtimeState.providerExecutionHandoff.phase33Evidence.allPhase32ProviderRoutesClosed === true, "Phase 33 must observe Phase 32 provider routes still closed");
+assert(runtimeState.providerExecutionHandoff.phase33Evidence.canSubmitProvider === false, "Phase 33 must keep canSubmitProvider=false");
+assert(runtimeState.providerExecutionHandoff.phase33Evidence.providerSubmitAllowed === 0, "Phase 33 evidence must keep providerSubmitAllowed=0");
+assert(runtimeState.providerExecutionHandoff.phase33Evidence.liveSubmitAllowed === false, "Phase 33 evidence must keep liveSubmitAllowed=false");
+assert(runtimeState.providerExecutionHandoff.phase33Evidence.credentialAccessAllowed === false, "Phase 33 evidence must keep credential access false");
+assert(runtimeState.providerExecutionHandoff.phase33Evidence.automaticSubmitAllowed === false, "Phase 33 evidence must keep automatic submit false");
+assert(runtimeState.providerExecutionHandoff.phase33Evidence.canSpawnWorker === false, "Phase 33 evidence must block worker spawn");
+assert(runtimeState.providerExecutionHandoff.phase33Evidence.fileMutationAllowed === false, "Phase 33 evidence must block file mutation");
+assert(runtimeState.providerExecutionHandoff.handoffs.every((item) => item.canSubmitProvider === false), "Phase 33 handoffs must never submit providers");
+assert(runtimeState.providerExecutionHandoff.handoffs.every((item) => item.providerSubmitAllowed === 0), "Phase 33 handoffs must keep providerSubmitAllowed=0");
+assert(runtimeState.providerExecutionHandoff.handoffs.every((item) => item.liveSubmitAllowed === false), "Phase 33 handoffs must keep liveSubmitAllowed=false");
+assert(runtimeState.providerExecutionHandoff.handoffs.every((item) => item.credentialAccessAllowed === false), "Phase 33 handoffs must keep credential access false");
+assert(runtimeState.providerExecutionHandoff.handoffs.every((item) => item.automaticSubmitAllowed === false), "Phase 33 handoffs must keep automatic submit false");
+assert(runtimeState.providerExecutionHandoff.handoffs.every((item) => item.canSpawnWorker === false), "Phase 33 handoffs must block worker spawn");
+assert(runtimeState.providerExecutionHandoff.handoffs.every((item) => item.fileMutationAllowed === false), "Phase 33 handoffs must block file mutation");
+assert(runtimeState.providerExecutionHandoff.handoffs.every((item) => item.receiptConfirmed === false), "Phase 33 default handoffs must not mark receipts confirmed");
+for (const key of [
+  "dryRunOnly",
+  "readOnly",
+  "handoffPlanOnly",
+  "finalActionGateRequired",
+  "noProviderSubmit",
+  "noCredentialRead",
+  "noCredentialWrite",
+  "noApiKeyCreation",
+  "noArbitraryProviderCommand",
+  "noWorkerSpawn",
+  "noFileMutation",
+  "fastModelForbidden",
+  "vipChannelForbidden",
+  "textToVideoMainPathForbidden",
+  "bgmInVideoPromptForbidden",
+]) {
+  assert(runtimeState.providerExecutionHandoff.hardLocks[key] === true, `providerExecutionHandoff hard lock ${key} must be true`);
+}
+assert(runtimeState.providerExecutionHandoff.hardLocks.canSubmitProvider === false, "providerExecutionHandoff canSubmitProvider lock must be false");
+assert(runtimeState.providerExecutionHandoff.hardLocks.providerSubmitAllowed === 0, "providerExecutionHandoff providerSubmitAllowed lock must be 0");
+assert(runtimeState.providerExecutionHandoff.hardLocks.liveSubmitAllowed === false, "providerExecutionHandoff live submit hard lock must be false");
+assert(runtimeState.providerExecutionHandoff.hardLocks.credentialAccessAllowed === false, "providerExecutionHandoff credential access hard lock must be false");
+assert(runtimeState.providerExecutionHandoff.hardLocks.automaticSubmitAllowed === false, "providerExecutionHandoff automatic submit hard lock must be false");
+assert(runtimeState.providerExecutionHandoff.hardLocks.canSpawnWorker === false, "providerExecutionHandoff worker spawn hard lock must be false");
+assert(runtimeState.providerExecutionHandoff.hardLocks.fileMutationAllowed === false, "providerExecutionHandoff file mutation hard lock must be false");
 assert(runtimeState.voiceAudioSettings, "runtime-state must include voiceAudioSettings");
 assert(runtimeState.voiceAudioSettings.phase === "phase_28_voice_audio_settings_ui", "voiceAudioSettings must be Phase 28 evidence");
 assert(runtimeState.voiceAudioSettings.scope === "voice_audio_project_facts", "voiceAudioSettings scope must stay project facts only");
