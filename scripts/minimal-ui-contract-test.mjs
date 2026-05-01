@@ -110,6 +110,7 @@ const workflowPanelStatusLabel = findFunctionBody(appSource, "workflowPanelStatu
 const workflowPanelNextStepLabel = findFunctionBody(appSource, "workflowPanelNextStepLabel");
 const workflowPlanFacts = findFunctionBody(appSource, "workflowPlanFacts");
 const realPilotDirectorStatus = findFunctionBody(appSource, "RealPilotDirectorStatus");
+const oneShotActionPanel = findFunctionBody(appSource, "OneShotActionPanel");
 const projectFactsStrip = findFunctionBody(appSource, "ProjectFactsStrip");
 const projectStoreSnapshotForUi = findFunctionBody(appSource, "buildProjectStoreSnapshotForUi");
 const projectFactsUiSummary = findFunctionBody(appSource, "buildProjectFactsUiSummary");
@@ -271,6 +272,12 @@ checkMessage(requireWithin(realPilotDirectorStatus, /动作确认后才进入单
 check(!/确认后生成/.test(realPilotDirectorStatus), "Phase 44 Real Pilot must not imply immediate generation");
 checkMessage(requireWithin(realPilotDirectorStatus, /Image2/, "Phase 43 Real Pilot Image2 first copy"));
 checkMessage(requireWithin(realPilotDirectorStatus, /Seedance/, "Phase 43 Real Pilot Seedance parked copy"));
+checkMessage(requireWithin(directorMode, /OneShotActionPanel/, "Round 4 one-shot action panel mounted in DirectorMode"));
+checkMessage(requireWithin(oneShotActionPanel, /单次小样/, "Round 4 one-shot action panel title"));
+checkMessage(requireWithin(oneShotActionPanel, /确认单次小样/, "Round 4 action-time confirmation button copy"));
+checkMessage(requireWithin(oneShotActionPanel, /等待文件/, "Round 4 waiting-file user state"));
+checkMessage(requireWithin(oneShotActionPanel, /需要复核/, "Round 4 needs-review user state"));
+checkMessage(requireWithin(oneShotActionPanel, /已记录本次确认/, "Round 4 confirmation receipt user copy"));
 checkMessage(requireWithin(realPilotDiagnostics, /Real Pilot\s*\/\s*真实小样/i, "Phase 43 Real Pilot diagnostics panel"));
 checkMessage(requireWithin(realPilotDiagnostics, /Review Status/i, "Phase 43 Real Pilot diagnostics review status"));
 checkMessage(requireWithin(realPilotDiagnostics, /Start\s*\/\s*End Frames/i, "Phase 43 Real Pilot diagnostics frames summary"));
@@ -481,7 +488,7 @@ check(
   "DiagnosticsMode should remain the primary home for engineering/status terms",
 );
 
-const minimalDirectorSurface = `${directorMode}\n${directorProgressStrip}\n${realPilotDirectorStatus}\n${minimalAgentPanel}\n${minimalTopNav}\n${minimalProjectPlan}`;
+const minimalDirectorSurface = `${directorMode}\n${directorProgressStrip}\n${realPilotDirectorStatus}\n${oneShotActionPanel}\n${minimalAgentPanel}\n${minimalTopNav}\n${minimalProjectPlan}`;
 const minimalDirectorButtonSurface = Array.from(minimalDirectorSurface.matchAll(/<button\b[\s\S]*?<\/button>/gi))
   .map((match) => match[0])
   .join("\n");
@@ -547,6 +554,7 @@ const phase2123DirectorSurface = [
   directorMode,
   directorProgressStrip,
   realPilotDirectorStatus,
+  oneShotActionPanel,
   projectFactsStrip,
   minimalTopNav,
   minimalAgentPanel,

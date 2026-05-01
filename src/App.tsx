@@ -320,6 +320,7 @@ type RealPilotUiSummary = {
   blockers: string[];
   warnings: string[];
 };
+type OneShotActionStatus = "idle" | "confirmed";
 
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
@@ -2761,6 +2762,7 @@ function buildRealPilotUiSummary(runtimeState: ProjectRuntimeState, selectedShot
   const oneShotSummary = firstRecordFrom(oneShotRecord, ["summary", "uiSummary", "statusSummary"]);
   const oneShotActionReview = firstRecordFrom(oneShotRecord, ["actionReview", "actionTimeConfirmation", "confirmation"]);
   const oneShotOutput = firstRecordFrom(oneShotRecord, ["outputWatcherExpectation", "output", "watcher"]);
+  const oneShotBudget = firstRecordFrom(oneShotRecord, ["budgetSnapshot", "budget", "budgetGuard"]);
   const confirmationRecord = firstRecordFrom(executorRecord, ["actionTimeConfirmation", "preExecutionConfirmation", "confirmation"]);
   const budgetRecord = firstRecordFrom(executorRecord, ["budget", "budgetLimit", "budgetCap", "quotaRisk", "quota"]);
   const outputRecord = firstRecordFrom(executorRecord, ["outputWatcher", "watcher", "output"]);
@@ -2795,6 +2797,11 @@ function buildRealPilotUiSummary(runtimeState: ProjectRuntimeState, selectedShot
     "expectedOutputCount",
     "outputs",
     "expectedOutputs",
+  ]);
+  const oneShotBudgetImageCount = readFirstNumber([oneShotBudget, oneShotSummary, oneShotRecord], [
+    "estimatedImageCount",
+    "estimatedOutputCount",
+    "imageCount",
   ]);
   const selectedShotIds = gate.selectedShotIds.length
     ? gate.selectedShotIds
@@ -2852,8 +2859,10 @@ function buildRealPilotUiSummary(runtimeState: ProjectRuntimeState, selectedShot
         : "未就绪",
     phase45Confirmation: oneShotReady ? "动作确认待定" : "先完成复核",
     phase45ActionScope: "Image2 单镜头",
-    phase45OutputExpectation: typeof oneShotExpectedOutputCount === "number"
-      ? `${oneShotExpectedOutputCount} 个预期输出`
+    phase45OutputExpectation: typeof oneShotBudgetImageCount === "number"
+      ? `${oneShotBudgetImageCount} 个预期输出`
+      : typeof oneShotExpectedOutputCount === "number"
+        ? `${Math.min(oneShotExpectedOutputCount, 2)} 个预期输出`
       : "等待输出计划",
     readyItems,
     blockedItems,
@@ -6613,6 +6622,40 @@ function RealPilotDirectorStatus({ summary }: { summary: RealPilotUiSummary }) {
   );
 }
 
+function OneShotActionPanel({
+  summary,
+  status,
+  onConfirm,
+}: {
+  summary: RealPilotUiSummary;
+  status: OneShotActionStatus;
+  onConfirm: () => void;
+}) {
+  const ready = summary.phase45Status === "单次待确认";
+  const confirmed = status === "confirmed";
+  const stateLabel = confirmed ? "等待文件" : ready ? "等待确认" : "需要复核";
+  const detail = confirmed ? "已记录本次确认，等待输出回流。" : ready ? "确认后只执行一次小样。" : "先完成复核。";
+
+  return (
+    <section className="one-shot-action-panel" aria-label="单次小样确认">
+      <div>
+        <span>单次小样</span>
+        <strong>{stateLabel}</strong>
+      </div>
+      <div className="one-shot-action-facts">
+        <small>{summary.phase45ActionScope}</small>
+        <small>{summary.phase45OutputExpectation}</small>
+        <small>{summary.outputRoot}</small>
+      </div>
+      <small>{detail}</small>
+      <button disabled={!ready || confirmed} onClick={onConfirm}>
+        <CheckCircle2 size={15} />
+        确认单次小样
+      </button>
+    </section>
+  );
+}
+
 function AudioPlanSummaryStrip({ audioPlanning, selectedShot }: { audioPlanning: AudioPlanningState; selectedShot?: ShotRecord }) {
   const selectedPlan = findAudioPlan(audioPlanning, selectedShot?.id);
   const plannedSlots = audioPlanning.providerSlots.filter((slot) => slot.state === "planned").length;
@@ -6749,12 +6792,18 @@ function DirectorMode({
   const sectionLabel = activeSection?.label || "Story";
   const shots = activeSection ? audit.shots.filter((shot) => activeSection.shotIds.includes(shot.id)) : audit.shots;
   const realPilotSummary = buildRealPilotUiSummary(runtimeState, selectedShot);
+  const [oneShotActionStatus, setOneShotActionStatus] = useState<OneShotActionStatus>("idle");
 
   return (
     <div className={`minimal-director ${directorView}`}>
       <ProjectFactsStrip summary={projectFacts} mode={projectFactsMode} onModeChange={onProjectFactsModeChange} />
       <DirectorProgressStrip runtimeState={runtimeState} />
       <RealPilotDirectorStatus summary={realPilotSummary} />
+      <OneShotActionPanel
+        summary={realPilotSummary}
+        status={oneShotActionStatus}
+        onConfirm={() => setOneShotActionStatus("confirmed")}
+      />
       <div className="minimal-director-main">
         {directorView === "assets" && (
           <MinimalAssetLibrary

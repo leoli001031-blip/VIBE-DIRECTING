@@ -27,6 +27,40 @@ async function loadModule(sourcePath, exportPath) {
   return import(pathToFileURL(outPath).href);
 }
 
+async function loadModuleGraph(entrySourcePath, entryExportPath, dependencyMap = {}) {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vibe-real-provider-one-shot-graph-"));
+  const writeCompiled = (sourcePath, exportPath, replacements = {}) => {
+    const resolved = path.resolve(sourcePath);
+    const source = fs.readFileSync(resolved, "utf8");
+    const output = ts.transpileModule(source, {
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Node10,
+        isolatedModules: true,
+        importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+      },
+      fileName: resolved,
+    });
+    let code = output.outputText;
+    for (const [from, to] of Object.entries(replacements)) {
+      code = code.replaceAll(from, to);
+    }
+    const outPath = path.join(tmpDir, exportPath);
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    fs.writeFileSync(outPath, code, "utf8");
+  };
+
+  for (const dependency of Object.values(dependencyMap)) {
+    writeCompiled(dependency.sourcePath, dependency.exportPath, dependency.replacements || {});
+  }
+  writeCompiled(entrySourcePath, entryExportPath, Object.fromEntries(
+    Object.entries(dependencyMap).map(([specifier, dependency]) => [specifier, dependency.replacementSpecifier]),
+  ));
+
+  return import(pathToFileURL(path.join(tmpDir, entryExportPath)).href);
+}
+
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
@@ -141,6 +175,23 @@ const { buildRealProviderOneShotTestState, realProviderOneShotTestHardLocks } = 
   "realProviderOneShotTest.mjs",
 );
 
+const { compileImage2OneShotRealCallPayload } = await loadModule(
+  "src/core/providerAdapters/image2Adapter.ts",
+  "image2Adapter.mjs",
+);
+
+const { buildRealProviderOneShotState } = await loadModuleGraph(
+  "src/core/realProviderOneShot.ts",
+  "realProviderOneShot.mjs",
+  {
+    'from "./providerAdapters/image2Adapter"': {
+      sourcePath: "src/core/providerAdapters/image2Adapter.ts",
+      exportPath: "providerAdapters/image2Adapter.mjs",
+      replacementSpecifier: 'from "./providerAdapters/image2Adapter.mjs"',
+    },
+  },
+);
+
 const generatedAt = "2026-05-02T00:00:00.000Z";
 const readyState = buildRealProviderOneShotTestState({
   generatedAt,
@@ -223,6 +274,327 @@ const blockedBudgetState = buildRealProviderOneShotTestState({
 assert(blockedBudgetState.status === "blocked", "blocked budget must block Phase45");
 assert(blockedBudgetState.blockers.includes("Budget guard must pass before action-time confirmation."), "budget blocker missing");
 
+function oneShotActionInput(overrides = {}) {
+  const baseExecutor = executor();
+  const preview = baseExecutor.providerRequestPreviews[0];
+  const adapterRequest = {
+    requestId: "image2_request_S01",
+    taskPlanId: "image_task_plan_S01",
+    adapterId: "openai-image2-api-dry-run",
+    operation: "image2image",
+    payload: {
+      sourceIntent: ["create the reviewed hero keyframe"],
+      mustPreserve: ["hero identity", "locked scene geometry"],
+      mustAvoid: ["style drift", "extra props"],
+      references: [{ referenceId: "hero_locked", source: "prompt_plan" }],
+      outputPath: preview.outputPath,
+    },
+    submitPolicy: {
+      dry_run_only: true,
+      manual_submit_required: true,
+      live_submit_forbidden: true,
+    },
+    forbiddenFallbacks: ["image2image_to_text2image", "provider_or_mode_fallback"],
+  };
+
+  return {
+    generatedAt,
+    selectedShotIds: ["S01"],
+    selectedTaskPlanIds: ["image_task_plan_S01"],
+    requestPreview: preview,
+    adapterRequest,
+    actionConfirmation: {
+      confirmationId: "confirm_S01_round4",
+      confirmedBy: "user",
+      confirmedAt: generatedAt,
+      scope: "single_image2_one_shot",
+      budgetNoticeAccepted: true,
+      sandboxNoticeAccepted: true,
+      oneUseReceipt: true,
+    },
+    credentialGrant: {
+      providerId: "openai-image2-api",
+      credentialRef: "user-authorized:image2:demo",
+      grantScope: "image2_one_shot",
+      authorizedAt: generatedAt,
+      secretMaterialPresent: false,
+    },
+    budgetNotice: {
+      estimatedImageCount: 2,
+      maxImagesAllowed: 2,
+      maxProviderSubmits: 1,
+      budgetNotice: "This action may spend up to two Image2 images from the user's configured provider quota.",
+      quotaNoticeAccepted: true,
+    },
+    sandbox: {
+      root: "real-provider-executor/project_1/batch_A",
+      allowedPrefixes: ["real-provider-executor/project_1/batch_A"],
+      manifestPath: "real-provider-executor/project_1/batch_A/manifest.json",
+      qaReportPath: "real-provider-executor/project_1/batch_A/qa/qa-report.json",
+      outsideRootWriteAllowed: false,
+    },
+    ...overrides,
+  };
+}
+
+const compiled = compileImage2OneShotRealCallPayload({
+  request: oneShotActionInput().adapterRequest,
+  preview: oneShotActionInput().requestPreview,
+  actionConfirmationId: "confirm_S01_round4",
+  credentialRef: "user-authorized:image2:demo",
+  outputSandboxRoot: "real-provider-executor/project_1/batch_A",
+  manifestPath: "real-provider-executor/project_1/batch_A/manifest.json",
+  qaReportPath: "real-provider-executor/project_1/batch_A/qa/qa-report.json",
+  imageCount: 2,
+  budgetNotice: "This action may spend up to two Image2 images from the user's configured provider quota.",
+});
+assert(compiled.issues.length === 0, `compiled payload should not have issues: ${compiled.issues.join(",")}`);
+assert(compiled.payload.providerFamily === "Image2", "compiled payload must target Image2");
+assert(compiled.payload.providerId === "openai-image2-api", "compiled payload must keep the Image2 provider");
+assert(compiled.payload.operation === "image2image", "compiled payload must preserve operation");
+assert(compiled.payload.output.path.endsWith("/shots/S01/result.png"), "compiled payload must preserve output path");
+assert(compiled.payload.executionPolicy.actionTimeConfirmationRequired === true, "compiled payload must require action-time confirmation");
+assert(compiled.payload.executionPolicy.budgetNoticeRequired === true, "compiled payload must require budget notice");
+assert(compiled.payload.executionPolicy.scopedSandboxOnly === true, "compiled payload must require scoped sandbox");
+assert(compiled.payload.executionPolicy.maxProviderSubmits === 1, "compiled payload must allow at most one submit");
+assert(compiled.payload.executionPolicy.maxImages === 2, "compiled payload must cap image count at two");
+assert(compiled.payload.executionPolicy.automaticRetryAllowed === false, "compiled payload must forbid automatic retry");
+assert(compiled.payload.executionPolicy.arbitraryShellAllowed === false, "compiled payload must forbid arbitrary shell");
+assert(compiled.payload.executionPolicy.unauthorizedCredentialAllowed === false, "compiled payload must forbid unauthorized credentials");
+assert(compiled.payload.executionPolicy.fastOrVipAllowed === false, "compiled payload must forbid fast/VIP");
+assert(compiled.payload.executionPolicy.textToVideoFallbackAllowed === false, "compiled payload must forbid text-to-video fallback");
+assert(compiled.payload.executionPolicy.outputMayCompleteFromProviderSelfReport === false, "provider self-report must not complete output");
+
+const actionReady = buildRealProviderOneShotState(oneShotActionInput());
+assert(actionReady.schemaVersion === "0.1.0", "Round 4 action schema version drifted");
+assert(actionReady.phase === "round_4_image2_one_shot_action_layer", "Round 4 action phase drifted");
+assert(actionReady.status === "ready_to_submit", "confirmed one-shot should be ready to submit");
+assert(actionReady.userReadableStatus === "准备调用", "ready status should be user-readable");
+assert(actionReady.summary.canSubmitThisOneShot === true, "ready action should allow one explicit submit");
+assert(actionReady.summary.providerSubmitAllowed === 1, "ready action should allow exactly one submit");
+assert(actionReady.summary.maxProviderSubmits === 1, "ready action max provider submits must be one");
+assert(actionReady.summary.maxAutoRetries === 0, "ready action must forbid auto retries");
+assert(actionReady.summary.automaticRetryAllowed === false, "ready action automatic retry flag must be false");
+assert(actionReady.summary.seedanceOrJimengLiveSubmitAllowed === false, "ready action must forbid Seedance/Jimeng live submit");
+assert(actionReady.summary.fastOrVipAllowed === false, "ready action must forbid fast/VIP");
+assert(actionReady.summary.textToVideoFallbackAllowed === false, "ready action must forbid text-to-video fallback");
+assert(actionReady.summary.outsideSandboxWriteAllowed === false, "ready action must forbid outside sandbox writes");
+assert(actionReady.summary.outputMayCompleteFromProviderSelfReport === false, "ready action must not complete from provider self-report");
+
+const failedCall = buildRealProviderOneShotState(oneShotActionInput({
+  providerReport: {
+    status: "failed",
+    attemptCount: 1,
+    message: "Provider returned quota_exceeded.",
+  },
+}));
+assert(failedCall.status === "provider_call_failed", "provider failure must be visible");
+assert(failedCall.userReadableStatus === "调用失败", "provider failure must use user-readable failure state");
+assert(failedCall.summary.providerSubmitAllowed === 0, "failed call must not leave submit allowance open");
+
+const waitingForFile = buildRealProviderOneShotState(oneShotActionInput({
+  providerReport: {
+    status: "submitted",
+    attemptCount: 1,
+    providerTaskId: "image2_task_123",
+  },
+}));
+assert(waitingForFile.status === "waiting_for_file", "submitted call without output must wait for file");
+assert(waitingForFile.userReadableStatus === "等待文件", "waiting state must be user-readable");
+
+const providerSelfReportOnly = buildRealProviderOneShotState(oneShotActionInput({
+  providerReport: {
+    status: "succeeded",
+    attemptCount: 1,
+    providerTaskId: "image2_task_123",
+    selfReportedComplete: true,
+  },
+}));
+assert(providerSelfReportOnly.status === "output_missing", "provider self-report without watcher/manifest must not complete");
+assert(providerSelfReportOnly.userReadableStatus === "输出缺失", "missing output must be user-readable");
+assert(providerSelfReportOnly.gateEvidence.providerSelfReportIgnoredForCompletion === true, "provider self-report must be ignored for completion");
+
+const outputPath = oneShotActionInput().requestPreview.outputPath;
+const needsReview = buildRealProviderOneShotState(oneShotActionInput({
+  providerReport: {
+    status: "succeeded",
+    attemptCount: 1,
+    providerTaskId: "image2_task_123",
+    selfReportedComplete: true,
+  },
+  watcherEvents: [
+    {
+      id: "watcher_expected_S01",
+      eventType: "expected_output_detected",
+      taskId: "image_task_plan_S01",
+      jobId: "job_S01",
+      shotId: "S01",
+      artifactPath: outputPath,
+      expectedOutputPath: outputPath,
+      status: "detected",
+      severity: "info",
+      createdAt: generatedAt,
+      notes: ["Expected output exists in sandbox."],
+    },
+  ],
+  manifestReports: [
+    {
+      taskId: "image_task_plan_S01",
+      status: "actual_output_present",
+      expectedOutputCount: 1,
+      presentOutputCount: 1,
+      missingExpectedOutputs: [],
+      actualOutputsPresent: [outputPath],
+      recoverableOutputs: [],
+      outputMatches: [],
+    },
+  ],
+  generationHealthReports: [
+    {
+      reportId: "generation_health_image_task_plan_S01",
+      taskPlanId: "image_task_plan_S01",
+      jobId: "job_S01",
+      shotId: "S01",
+      expectedOutputPath: outputPath,
+      outputExists: true,
+      manifestStatus: "actual_output_present",
+      qaStatus: "pending",
+      stalePrompt: false,
+      assetReadinessStatus: "ready",
+      healthStatus: "qa_pending",
+      blockers: [],
+      warnings: ["Missing explicit QA pass."],
+      nextAction: "Wait for explicit QA pass before formal promotion.",
+    },
+  ],
+}));
+assert(needsReview.status === "needs_review", "output without QA pass must need review");
+assert(needsReview.userReadableStatus === "需要复核", "review state must be user-readable");
+assert(needsReview.gateEvidence.watcherExpectedOutputDetected === true, "watcher evidence should be recorded");
+assert(needsReview.gateEvidence.manifestMatched === true, "manifest evidence should be recorded");
+assert(needsReview.gateEvidence.qaPassed === false, "pending QA must not pass");
+
+const formalReady = buildRealProviderOneShotState(oneShotActionInput({
+  providerReport: needsReview.providerReport,
+  watcherEvents: needsReview.gateEvidence.watcherExpectedOutputDetected ? [
+    {
+      id: "watcher_expected_S01",
+      eventType: "expected_output_detected",
+      taskId: "image_task_plan_S01",
+      jobId: "job_S01",
+      shotId: "S01",
+      artifactPath: outputPath,
+      expectedOutputPath: outputPath,
+      status: "detected",
+      severity: "info",
+      createdAt: generatedAt,
+      notes: ["Expected output exists in sandbox."],
+    },
+  ] : [],
+  manifestReports: [
+    {
+      taskId: "image_task_plan_S01",
+      status: "complete",
+      expectedOutputCount: 1,
+      presentOutputCount: 1,
+      missingExpectedOutputs: [],
+      actualOutputsPresent: [outputPath],
+      recoverableOutputs: [],
+      outputMatches: [],
+    },
+  ],
+  generationHealthReports: [
+    {
+      reportId: "generation_health_image_task_plan_S01",
+      taskPlanId: "image_task_plan_S01",
+      jobId: "job_S01",
+      shotId: "S01",
+      expectedOutputPath: outputPath,
+      outputExists: true,
+      manifestStatus: "complete",
+      qaStatus: "pass",
+      stalePrompt: false,
+      assetReadinessStatus: "ready",
+      healthStatus: "formal_ready",
+      blockers: [],
+      warnings: [],
+      nextAction: "Ready for QA promotion review.",
+    },
+  ],
+}));
+assert(formalReady.status === "ready_for_formal_review", "watcher/manifest/QA gates should be required for formal readiness");
+assert(formalReady.gateEvidence.qaPassed === true, "QA pass evidence should be recorded");
+assert(formalReady.summary.providerSubmitAllowed === 0, "formal-ready state must not keep submit allowance open");
+
+const missingConfirmation = buildRealProviderOneShotState(oneShotActionInput({
+  actionConfirmation: undefined,
+}));
+assert(missingConfirmation.status === "blocked", "missing action-time confirmation must block");
+assert(missingConfirmation.blockers.includes("Action-time user confirmation receipt is required."), "missing confirmation blocker missing");
+
+const unsafeCredential = buildRealProviderOneShotState(oneShotActionInput({
+  credentialGrant: {
+    providerId: "openai-image2-api",
+    credentialRef: "raw-secret-would-not-be-accepted",
+    grantScope: "image2_one_shot",
+    authorizedAt: generatedAt,
+    secretMaterialPresent: true,
+  },
+}));
+assert(unsafeCredential.status === "blocked", "raw credential material must block");
+assert(unsafeCredential.blockers.some((blocker) => /credential/i.test(blocker)), "credential blocker missing");
+
+const outsideSandbox = buildRealProviderOneShotState(oneShotActionInput({
+  requestPreview: {
+    ...oneShotActionInput().requestPreview,
+    outputPath: "../outside/result.png",
+  },
+  adapterRequest: {
+    ...oneShotActionInput().adapterRequest,
+    payload: {
+      ...oneShotActionInput().adapterRequest.payload,
+      outputPath: "../outside/result.png",
+    },
+  },
+}));
+assert(outsideSandbox.status === "blocked", "outside sandbox output path must block");
+assert(outsideSandbox.blockers.includes("Output path must stay inside the scoped sandbox."), "outside sandbox blocker missing");
+
+const traversalSandbox = buildRealProviderOneShotState(oneShotActionInput({
+  requestPreview: {
+    ...oneShotActionInput().requestPreview,
+    outputPath: "real-provider-executor/project_1/batch_A/../outside/result.png",
+  },
+  adapterRequest: {
+    ...oneShotActionInput().adapterRequest,
+    payload: {
+      ...oneShotActionInput().adapterRequest.payload,
+      outputPath: "real-provider-executor/project_1/batch_A/../outside/result.png",
+    },
+  },
+}));
+assert(traversalSandbox.status === "blocked", "path traversal output path must block");
+assert(traversalSandbox.blockers.includes("Output path must stay inside the scoped sandbox."), "path traversal blocker missing");
+
+const tooManyImages = buildRealProviderOneShotState(oneShotActionInput({
+  budgetNotice: {
+    ...oneShotActionInput().budgetNotice,
+    estimatedImageCount: 3,
+    maxImagesAllowed: 3,
+  },
+}));
+assert(tooManyImages.status === "blocked", "more than two images must block");
+assert(tooManyImages.blockers.some((blocker) => /one or two Image2 images/.test(blocker)), "image count blocker missing");
+
+const retried = buildRealProviderOneShotState(oneShotActionInput({
+  providerReport: {
+    status: "submitted",
+    attemptCount: 2,
+  },
+}));
+assert(retried.status === "blocked", "automatic retry attempt must block");
+assert(retried.blockers.includes("Automatic retry is forbidden; attempt count cannot exceed one."), "retry blocker missing");
+
 const schema = readJson("schemas/real_provider_one_shot_test.schema.json");
 assert(schema.$id === "https://vibecore.local/schemas/real_provider_one_shot_test.schema.json", "schema id drifted");
 assert(schema.properties.phase.const === "phase_45_one_shot_live_test_gate", "schema phase drifted");
@@ -259,6 +631,11 @@ assert(realProviderOneShotTestHardLocks.maxAutoRetries === 0, "max auto retries 
 const source = fs.readFileSync("src/core/realProviderOneShotTest.ts", "utf8");
 for (const forbiddenCode of ["fetch(", "spawn(", "exec(", "writeFile", "readFile", "process.env"]) {
   assert(!source.includes(forbiddenCode), `realProviderOneShotTest source must not contain ${forbiddenCode}`);
+}
+
+const actionSource = fs.readFileSync("src/core/realProviderOneShot.ts", "utf8");
+for (const forbiddenCode of ["fetch(", "spawn(", "exec(", "writeFile", "readFile", "process.env"]) {
+  assert(!actionSource.includes(forbiddenCode), `realProviderOneShot source must not contain ${forbiddenCode}`);
 }
 
 console.log("real-provider-one-shot tests passed");

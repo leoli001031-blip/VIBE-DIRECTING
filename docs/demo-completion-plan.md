@@ -150,6 +150,8 @@
 
 目标：真正跑通一张 Image2 图片，从动作时确认、provider submit、sandbox output、watcher 回流到 UI。
 
+状态：核心动作层已完成，真实额度调用仍未自动打开。当前已实现“单次小样确认”前端入口、Image2-only one-shot payload 编译、动作时确认 receipt、预算/额度提示、scoped sandbox 校验、无自动重试、无 Fast/VIP/Seedance/Jimeng/text-to-video fallback、以及 watcher/manifest/QA gate 回流状态。真正 provider transport 和 credential vault 仍需下一次明确动作确认后接入。
+
 ### 必做事项
 
 - 在 Phase 43-45 review shell 之后增加真实 one-shot action layer。
