@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/real_provider_one_shot_test.schema.json",
+  "title": "RealProviderOneShotTestState",
+  "description": "Phase 45 one-shot live test gate. It prepares action-time confirmation for one Image2 small sample while provider submission, credentials, workers, and file mutation remain disabled in state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "phase",
+    "mode",
+    "status",
+    "sourceExecutorStatus",
+    "selectedShotIds",
+    "selectedTaskPlanIds",
+    "actionReview",
+    "budgetSnapshot",
+    "outputWatcherExpectation",
+    "blockers",
+    "warnings",
+    "summary",
+    "hardLocks",
+    "forbiddenActions",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "phase": { "const": "phase_45_one_shot_live_test_gate" },
+    "mode": { "type": "string", "enum": ["locked", "one_shot_review"] },
+    "status": { "type": "string", "enum": ["locked", "blocked", "ready_for_action_time_confirmation"] },
+    "sourceExecutorStatus": { "type": "string", "enum": ["locked", "blocked", "review_ready"] },
+    "selectedShotIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "selectedTaskPlanIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "plannedAction": { "$ref": "#/$defs/plannedAction" },
+    "actionReview": { "$ref": "#/$defs/actionReview" },
+    "budgetSnapshot": { "$ref": "#/$defs/budgetSnapshot" },
+    "outputWatcherExpectation": { "$ref": "#/$defs/outputWatcherExpectation" },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "summary": { "$ref": "#/$defs/summary" },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "forbiddenActions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "provider_submit_without_action_confirmation",
+          "automatic_submit",
+          "credential_read",
+          "credential_write",
+          "worker_start",
+          "subprocess",
+          "shell_execution",
+          "file_mutation",
+          "automatic_retry",
+          "seedance_execution",
+          "video_submit"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "providerSlot": {
+      "type": "string",
+      "enum": [
+        "image.generate",
+        "image.edit",
+        "image.reference_asset",
+        "video.i2v",
+        "video.t2v.experimental",
+        "video.extend",
+        "video.edit",
+        "audio.tts",
+        "audio.music",
+        "local.postprocess",
+        "local.workflow"
+      ]
+    },
+    "requiredMode": {
+      "type": "string",
+      "enum": [
+        "text2image",
+        "image2image",
+        "frames2video",
+        "text2video",
+        "video2video",
+        "tts",
+        "music",
+        "postprocess",
+        "import_only",
+        "not_applicable"
+      ]
+    },
+    "plannedAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionId",
+        "providerId",
+        "providerSlot",
+        "requiredMode",
+        "requestPreviewStatus",
+        "dryRunPreviewReviewed",
+        "actualExecutionAllowed",
+        "providerSubmitAllowed",
+        "liveSubmitAllowed",
+        "credentialAccessAllowed",
+        "canSpawnWorker",
+        "noFileMutation"
+      ],
+      "properties": {
+        "actionId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerSlot": { "$ref": "#/$defs/providerSlot" },
+        "requiredMode": { "$ref": "#/$defs/requiredMode" },
+        "operation": { "type": "string", "enum": ["text2image", "image2image", "reference_asset"] },
+        "shotId": { "type": "string" },
+        "taskPlanId": { "type": "string" },
+        "outputPath": { "type": "string" },
+        "requestPreviewId": { "type": "string" },
+        "sourceRequestId": { "type": "string" },
+        "requestPreviewStatus": { "type": "string", "enum": ["preview_ready", "blocked", "parked"] },
+        "dryRunPreviewReviewed": { "type": "boolean" },
+        "actualExecutionAllowed": { "const": false },
+        "providerSubmitAllowed": { "type": "integer", "const": 0 },
+        "liveSubmitAllowed": { "const": false },
+        "credentialAccessAllowed": { "const": false },
+        "canSpawnWorker": { "const": false },
+        "noFileMutation": { "const": true }
+      }
+    },
+    "actionReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "canAskUserForActionTimeConfirmation",
+        "actionTimeConfirmationRequired",
+        "userConfirmedAtActionTime",
+        "confirmationReceiptPresent",
+        "singleUseOnly",
+        "scope",
+        "reviewCopy",
+        "blockers"
+      ],
+      "properties": {
+        "status": { "type": "string", "enum": ["ready", "blocked", "locked"] },
+        "canAskUserForActionTimeConfirmation": { "type": "boolean" },
+        "actionTimeConfirmationRequired": { "const": true },
+        "userConfirmedAtActionTime": { "const": false },
+        "confirmationReceiptPresent": { "const": false },
+        "singleUseOnly": { "const": true },
+        "scope": { "const": "single_image2_one_shot" },
+        "reviewCopy": { "type": "string" },
+        "blockers": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "budgetSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "maxImagesPerPilot", "selectedShotCount", "selectedTaskPlanCount", "blockers"],
+      "properties": {
+        "status": { "type": "string", "enum": ["passed", "blocked"] },
+        "estimatedImageCount": { "type": "integer", "minimum": 1 },
+        "maxImagesPerPilot": { "type": "integer", "minimum": 1 },
+        "selectedShotCount": { "type": "integer", "minimum": 0 },
+        "selectedTaskPlanCount": { "type": "integer", "minimum": 0 },
+        "blockers": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "outputWatcherExpectation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expectedOutputCount",
+        "watcherStarted",
+        "daemonStarted",
+        "planOnly"
+      ],
+      "properties": {
+        "sandboxRoot": { "type": "string" },
+        "expectedOutputCount": { "type": "integer", "minimum": 0 },
+        "manifestPath": { "type": "string" },
+        "qaReportPath": { "type": "string" },
+        "watcherStarted": { "const": false },
+        "daemonStarted": { "const": false },
+        "planOnly": { "const": true }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "readyForActionTimeConfirmation",
+        "canAskUserForActionTimeConfirmation",
+        "userConfirmedAtActionTime",
+        "confirmationReceiptPresent",
+        "actualExecutionAllowed",
+        "providerSubmitAllowed",
+        "liveSubmitAllowed",
+        "credentialAccessAllowed",
+        "workerSpawnsAllowed",
+        "fileMutationsAllowed",
+        "maxConcurrency",
+        "maxAutoRetries"
+      ],
+      "properties": {
+        "readyForActionTimeConfirmation": { "type": "boolean" },
+        "canAskUserForActionTimeConfirmation": { "type": "boolean" },
+        "userConfirmedAtActionTime": { "const": false },
+        "confirmationReceiptPresent": { "const": false },
+        "actualExecutionAllowed": { "const": false },
+        "providerSubmitAllowed": { "type": "integer", "const": 0 },
+        "liveSubmitAllowed": { "const": false },
+        "credentialAccessAllowed": { "const": false },
+        "workerSpawnsAllowed": { "type": "integer", "const": 0 },
+        "fileMutationsAllowed": { "type": "integer", "const": 0 },
+        "maxConcurrency": { "type": "integer", "const": 1 },
+        "maxAutoRetries": { "type": "integer", "const": 0 }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultLocked",
+        "actualExecutionAllowed",
+        "providerSubmitAllowed",
+        "liveSubmitAllowed",
+        "credentialAccessAllowed",
+        "canSpawnWorker",
+        "noSubprocess",
+        "noShellExecution",
+        "noFileMutation",
+        "automaticRetryAllowed",
+        "maxConcurrency",
+        "maxAutoRetries",
+        "singleActionOnly",
+        "oneShotOnly",
+        "image2Only",
+        "seedanceParked",
+        "videoProvidersParked"
+      ],
+      "properties": {
+        "defaultLocked": { "const": true },
+        "actualExecutionAllowed": { "const": false },
+        "providerSubmitAllowed": { "type": "integer", "const": 0 },
+        "liveSubmitAllowed": { "const": false },
+        "credentialAccessAllowed": { "const": false },
+        "canSpawnWorker": { "const": false },
+        "noSubprocess": { "const": true },
+        "noShellExecution": { "const": true },
+        "noFileMutation": { "const": true },
+        "automaticRetryAllowed": { "const": false },
+        "maxConcurrency": { "type": "integer", "const": 1 },
+        "maxAutoRetries": { "type": "integer", "const": 0 },
+        "singleActionOnly": { "const": true },
+        "oneShotOnly": { "const": true },
+        "image2Only": { "const": true },
+        "seedanceParked": { "const": true },
+        "videoProvidersParked": { "const": true }
+      }
+    }
+  }
+}

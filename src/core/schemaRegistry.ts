@@ -185,6 +185,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "RealProviderExecutorState",
   },
   {
+    fileName: "real_provider_one_shot_test.schema.json",
+    id: "https://vibecore.local/schemas/real_provider_one_shot_test.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 45 one-shot Image2 live-test gate that prepares action-time confirmation while keeping provider submission, credentials, workers, and file mutation locked off in state.",
+    typeName: "RealProviderOneShotTestState",
+  },
+  {
     fileName: "export_builder.schema.json",
     id: "https://vibecore.local/schemas/export_builder.schema.json",
     version: schemaVersion,

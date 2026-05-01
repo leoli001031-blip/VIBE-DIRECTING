@@ -7315,6 +7315,14 @@ if (!runtimeState.realProviderExecutor) {
     image2AdapterRequests: runtimeState.imagePipeline.image2AdapterRequests,
   });
 }
+if (!runtimeState.realProviderOneShotTest) {
+  const { buildRealProviderOneShotTestState } = await importTs("src/core/realProviderOneShotTest.ts");
+  runtimeState.realProviderOneShotTest = buildRealProviderOneShotTestState({
+    generatedAt: runtimeState.generatedAt,
+    mode: "locked",
+    realProviderExecutor: runtimeState.realProviderExecutor,
+  });
+}
 
 assert(runtimeState.providerLiveGate, "runtime-state must include providerLiveGate");
 assert(runtimeState.providerLiveGate.phase === "phase_11_provider_adapter_live_gate", "providerLiveGate must remain the provider live gate evidence source");
@@ -7615,6 +7623,44 @@ assert(runtimeState.realProviderExecutor.hardLocks.credentialAccessAllowed === f
 assert(runtimeState.realProviderExecutor.hardLocks.canSpawnWorker === false, "realProviderExecutor worker spawn lock must be false");
 assert(runtimeState.realProviderExecutor.forbiddenActions.includes("image2_execution"), "realProviderExecutor must forbid Image2 execution in the shell");
 assert(runtimeState.realProviderExecutor.forbiddenActions.includes("seedance_execution"), "realProviderExecutor must forbid Seedance execution in the shell");
+
+assert(runtimeState.realProviderOneShotTest, "runtime-state must include realProviderOneShotTest");
+assert(runtimeState.realProviderOneShotTest.phase === "phase_45_one_shot_live_test_gate", "realProviderOneShotTest must be Phase 45 one-shot gate evidence");
+assert(runtimeState.realProviderOneShotTest.mode === "locked", "default import runtime one-shot gate must stay locked");
+assert(runtimeState.realProviderOneShotTest.status === "locked", "default import runtime one-shot gate status must stay locked");
+assert(runtimeState.realProviderOneShotTest.actionReview.actionTimeConfirmationRequired === true, "realProviderOneShotTest must require action-time confirmation");
+assert(runtimeState.realProviderOneShotTest.actionReview.userConfirmedAtActionTime === false, "realProviderOneShotTest must not self-confirm");
+assert(runtimeState.realProviderOneShotTest.actionReview.confirmationReceiptPresent === false, "realProviderOneShotTest must not fabricate receipts");
+assert(runtimeState.realProviderOneShotTest.actionReview.canAskUserForActionTimeConfirmation === false, "locked one-shot gate must not ask for confirmation");
+assert(runtimeState.realProviderOneShotTest.summary.actualExecutionAllowed === false, "realProviderOneShotTest actual execution must be false");
+assert(runtimeState.realProviderOneShotTest.summary.providerSubmitAllowed === 0, "realProviderOneShotTest provider submit allowance must be zero");
+assert(runtimeState.realProviderOneShotTest.summary.liveSubmitAllowed === false, "realProviderOneShotTest live submit must be false");
+assert(runtimeState.realProviderOneShotTest.summary.credentialAccessAllowed === false, "realProviderOneShotTest credential access must be false");
+assert(runtimeState.realProviderOneShotTest.summary.workerSpawnsAllowed === 0, "realProviderOneShotTest worker spawns must be zero");
+assert(runtimeState.realProviderOneShotTest.summary.fileMutationsAllowed === 0, "realProviderOneShotTest file mutations must be zero");
+assert(runtimeState.realProviderOneShotTest.outputWatcherExpectation.planOnly === true, "realProviderOneShotTest output watcher must stay plan-only");
+assert(runtimeState.realProviderOneShotTest.outputWatcherExpectation.watcherStarted === false, "realProviderOneShotTest watcher must not start");
+assert(runtimeState.realProviderOneShotTest.outputWatcherExpectation.daemonStarted === false, "realProviderOneShotTest daemon must not start");
+for (const key of [
+  "defaultLocked",
+  "singleActionOnly",
+  "oneShotOnly",
+  "image2Only",
+  "seedanceParked",
+  "videoProvidersParked",
+  "noSubprocess",
+  "noShellExecution",
+  "noFileMutation",
+]) {
+  assert(runtimeState.realProviderOneShotTest.hardLocks[key] === true, `realProviderOneShotTest hard lock ${key} must be true`);
+}
+assert(runtimeState.realProviderOneShotTest.hardLocks.actualExecutionAllowed === false, "realProviderOneShotTest actual execution lock must be false");
+assert(runtimeState.realProviderOneShotTest.hardLocks.providerSubmitAllowed === 0, "realProviderOneShotTest provider submit lock must be zero");
+assert(runtimeState.realProviderOneShotTest.hardLocks.liveSubmitAllowed === false, "realProviderOneShotTest live submit lock must be false");
+assert(runtimeState.realProviderOneShotTest.hardLocks.credentialAccessAllowed === false, "realProviderOneShotTest credential lock must be false");
+assert(runtimeState.realProviderOneShotTest.hardLocks.canSpawnWorker === false, "realProviderOneShotTest worker lock must be false");
+assert(runtimeState.realProviderOneShotTest.forbiddenActions.includes("provider_submit_without_action_confirmation"), "realProviderOneShotTest must forbid unconfirmed provider submit");
+assert(runtimeState.realProviderOneShotTest.forbiddenActions.includes("seedance_execution"), "realProviderOneShotTest must keep Seedance blocked");
 
 assert(runtimeState.voiceAudioSettings, "runtime-state must include voiceAudioSettings");
 assert(runtimeState.voiceAudioSettings.phase === "phase_28_voice_audio_settings_ui", "voiceAudioSettings must be Phase 28 evidence");

@@ -38,6 +38,7 @@ import { buildExecutionLedgerState, type ExecutionLedgerMode, type ExecutionLedg
 import { buildRealExecutionGateState } from "./realExecutionGate";
 import { buildRealProviderPilotState, type RealProviderPilotProviderPlanInput } from "./realProviderPilot";
 import { buildRealProviderExecutorState } from "./realProviderExecutor";
+import { buildRealProviderOneShotTestState } from "./realProviderOneShotTest";
 import { buildLocalOrchestratorState, type LocalOrchestratorTaskPacket } from "./localOrchestrator";
 import type { SubagentRuntimeGateReceipt } from "./subagentRuntimeGate";
 import type { SubagentWorkerRuntimePlan } from "./subagentWorkerRuntime";
@@ -75,6 +76,7 @@ export interface ProjectRuntimeStateBuildOptions {
   realExecutionGate?: ProjectRuntimeState["realExecutionGate"];
   realProviderPilot?: ProjectRuntimeState["realProviderPilot"];
   realProviderExecutor?: ProjectRuntimeState["realProviderExecutor"];
+  realProviderOneShotTest?: ProjectRuntimeState["realProviderOneShotTest"];
   realTestMode?: ExecutionLedgerMode;
   realTestBatchId?: string;
   realTestShotIds?: string[];
@@ -600,6 +602,11 @@ export function buildProjectRuntimeState(
     imageTaskPlans,
     image2AdapterRequests,
   });
+  const realProviderOneShotTest = options.realProviderOneShotTest || buildRealProviderOneShotTestState({
+    generatedAt,
+    mode: realTestMode === "scoped_real_test" ? "one_shot_review" : "locked",
+    realProviderExecutor,
+  });
   const generationHealthChecker = buildGenerationHealthCheckerState({
     generatedAt,
     imageTaskPlans,
@@ -700,6 +707,7 @@ export function buildProjectRuntimeState(
     realExecutionGate,
     realProviderPilot,
     realProviderExecutor,
+    realProviderOneShotTest,
     localOrchestrator,
     generationHarness,
     filesystemWatcherHarness,
@@ -1037,6 +1045,13 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       imageTaskPlans: state.imagePipeline.imageTaskPlans,
       image2AdapterRequests: state.imagePipeline.image2AdapterRequests,
     });
+  const realProviderOneShotTest =
+    state.realProviderOneShotTest ||
+    buildRealProviderOneShotTestState({
+      generatedAt: state.generatedAt,
+      mode: "locked",
+      realProviderExecutor,
+    });
   const generationHealthChecker =
     state.generationHealthChecker ||
     buildGenerationHealthCheckerState({
@@ -1112,6 +1127,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     realExecutionGate,
     realProviderPilot,
     realProviderExecutor,
+    realProviderOneShotTest,
     localOrchestrator,
     generationHarness,
     filesystemWatcherHarness,

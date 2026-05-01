@@ -247,7 +247,7 @@ checkMessage(requireWithin(realPilotDirectorStatus, /选择镜头/, "Phase 43 Re
 checkMessage(requireWithin(realPilotDirectorStatus, /首尾帧/, "Phase 43 Real Pilot start/end frames copy"));
 checkMessage(requireWithin(realPilotDirectorStatus, /输出文件夹/, "Phase 43 Real Pilot output folder copy"));
 checkMessage(requireWithin(realPilotDirectorStatus, /预计生成/, "Phase 43 Real Pilot estimated generation copy"));
-checkMessage(requireWithin(realPilotDirectorStatus, /确认后进入\s*1-shot\s*测试准备/, "Phase 44 Real Pilot confirmation-before-one-shot-prep copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /动作确认后才进入单次测试/, "Phase 45 Real Pilot action-time-confirmation-before-one-shot copy"));
 check(!/确认后生成/.test(realPilotDirectorStatus), "Phase 44 Real Pilot must not imply immediate generation");
 checkMessage(requireWithin(realPilotDirectorStatus, /Image2/, "Phase 43 Real Pilot Image2 first copy"));
 checkMessage(requireWithin(realPilotDirectorStatus, /Seedance/, "Phase 43 Real Pilot Seedance parked copy"));
@@ -262,10 +262,14 @@ checkMessage(requireWithin(realPilotDirectorStatus, /等待确认/, "Phase 44 Re
 checkMessage(requireWithin(realPilotDirectorStatus, /1 个镜头小样/, "Phase 44 Real Pilot one-shot sample copy"));
 checkMessage(requireWithin(realPilotDirectorStatus, /0 自动重试/, "Phase 44 Real Pilot no-auto-retry copy"));
 checkMessage(requireWithin(realPilotDirectorStatus, /输出文件夹/, "Phase 44 Real Pilot output folder copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /未就绪|单次待确认/, "Phase 45 Real Pilot one-shot readiness copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /不自动生成/, "Phase 45 Real Pilot no-auto-generation copy"));
 checkMessage(requireWithin(phase44ConfirmationSurface, /执行前确认/, "Phase 44 pre-execution confirmation summary"));
 checkMessage(requireWithin(phase44ConfirmationSurface, /预算上限/, "Phase 44 budget cap summary"));
 checkMessage(requireWithin(phase44ConfirmationSurface, /输出监听/, "Phase 44 output watcher summary"));
 checkMessage(requireWithin(phase44ConfirmationSurface, /请求预览/, "Phase 44 request preview summary"));
+checkMessage(requireWithin(phase44ConfirmationSurface, /Phase45/, "Phase 45 one-shot summary"));
+checkMessage(requireWithin(phase44ConfirmationSurface, /动作确认待定|先完成复核/, "Phase 45 action-time confirmation state"));
 for (const [term, pattern] of [
   ["provider", /provider/i],
   ["credential", /credential/i],
