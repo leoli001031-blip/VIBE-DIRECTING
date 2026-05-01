@@ -1032,6 +1032,14 @@ Acceptance criteria：
 - Phase 30 缺 user confirmation token placeholder、缺 watcher/manifest/QA closed loop、packet incomplete 或出现 Fast/VIP/text-to-video/BGM prompt 任一项都必须 blocked。
 - 所有阶段都必须 pin hard locks；测试命令为 `npm run phase-roadmap:test`。
 
+### Phase 30 已实现范围：Provider Enablement Gate
+
+- `PhaseRoadmapRuntime` 现在要求 Phase 30 至少有 typed `evidence.providerLiveGate`；legacy provider booleans 只能作为显式 override 诊断，不能在默认路径单独让 Phase 30 ready。
+- Phase 30 ready 必须同时满足 user confirmation token placeholder、complete provider enablement packet、watcher/manifest/QA closed loop，以及 `forbiddenProviderModesAbsent=true`。
+- `phase_11_provider_adapter_live_gate` 的 `ProviderLiveGateState` 可以作为 Phase 30 typed evidence：runtime 会从 `summary`、`hardLocks`、`forbiddenActions` 和 `items/checks` 推断 token、packet、forbidden-mode lock 状态；如果存在 `roadmapEvidence` 或 `phase30Evidence`，优先使用这些 typed facts。
+- Safety blocker 继续 fail closed：`providerSubmitAllowed != 0`、`liveSubmitAllowed=true`、`credentialStorage=true`、hard lock drift，以及 Fast/VIP/text-to-video/BGM prompt present 都会阻断 Phase 30。
+- 即使 Phase 30 ready，`providerEnablementGate.canSubmitProvider=false` 仍然固定不变；真实 provider execution 必须等待后续 final permission/execution gate。
+
 ### Phase 25 已实现范围：Knowledge Pack Manager
 
 - 新增 `src/core/knowledgeContextBudget.ts`，把原本只存在于测试里的 context budget / snippet selection 变成 core 纯函数；`routeKnowledge(...)` 现在会产出 bounded `injectedKnowledgePacks` 和 `injectedKnowledgeSnippetIds`，不再只返回 matches。

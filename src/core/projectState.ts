@@ -9,6 +9,7 @@ import type { QueueGateResult } from "./taskQueue";
 import type { AgentCliMockRunnerState } from "./agentCliMockRunner";
 import type { CodexCliAdapterSpikeState } from "./codexCliAdapterSpike";
 import type { ExportWorkerState } from "./exportWorker";
+import type { ProviderLiveGateState } from "./providerLiveGate";
 import type {
   AssetRecord,
   AssetReadinessReport,
@@ -190,6 +191,7 @@ export interface ProjectRuntimeState {
   videoPlanning: VideoPlanningState;
   videoExecutionPreview: VideoExecutionPreviewState;
   adapterContracts: AdapterContractState;
+  providerLiveGate: ProviderLiveGateState;
   generationHarness: GenerationHarnessState;
   filesystemWatcherHarness: FilesystemWatcherHarnessState;
   checkpointResumeHarness: CheckpointResumeHarnessState;

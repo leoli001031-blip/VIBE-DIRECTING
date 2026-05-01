@@ -28,6 +28,7 @@ import { buildVoiceAudioSettingsState } from "./voiceAudioSettings";
 import { buildVideoPlanningState } from "./videoPlanning";
 import { buildVideoExecutionPreviewState } from "./videoExecutionPreview";
 import { buildAdapterContractState } from "./adapterContracts";
+import { buildProviderLiveGateState, type ProviderLiveGateEnvelopeFact } from "./providerLiveGate";
 import type { SubagentRuntimeGateReceipt } from "./subagentRuntimeGate";
 import type { SubagentWorkerRuntimePlan } from "./subagentWorkerRuntime";
 import {
@@ -105,6 +106,37 @@ function buildProjectSummary(audit: ProjectAudit): ProjectRuntimeState["project"
     workflow: audit.workflow,
     contactSheets: audit.contactSheets,
   };
+}
+
+function buildProviderLiveGateEnvelopeFacts(
+  taskViews: ProjectRuntimeTaskState[],
+  imageTaskPlans: ProjectRuntimeState["imagePipeline"]["imageTaskPlans"],
+): ProviderLiveGateEnvelopeFact[] {
+  return imageTaskPlans.map((taskPlan) => {
+    const task = taskViews.find(
+      (item) =>
+        item.job.id === taskPlan.jobId ||
+        item.envelope.id === taskPlan.taskEnvelopeSummary?.envelopeId ||
+        item.envelope.preflight.taskId === taskPlan.taskEnvelopeSummary?.envelopeId,
+    );
+    const preflight = task?.envelope.preflight;
+    const blockers = [
+      ...(task?.validator.issues || []),
+      ...(preflight?.blockers || []).map((blocker) => blocker.technicalDetail || blocker.messageForUser || blocker.code),
+    ];
+    const warnings = (preflight?.warnings || []).map(
+      (warning) => warning.technicalDetail || warning.messageForUser || warning.code,
+    );
+
+    return {
+      taskPlanId: taskPlan.taskPlanId,
+      envelopeId: task?.envelope.id || taskPlan.taskEnvelopeSummary?.envelopeId,
+      schemaName: "task_envelope.schema.json",
+      valid: Boolean(task?.validator.valid && preflight?.status === "pass" && blockers.length === 0),
+      blockers,
+      warnings,
+    };
+  });
 }
 
 export function buildProjectRuntimeState(
@@ -258,6 +290,20 @@ export function buildProjectRuntimeState(
   const adapterContracts = buildAdapterContractState({
     generatedAt,
     providerRegistry,
+  });
+  const providerLiveGate = buildProviderLiveGateState({
+    generatedAt,
+    providerRegistry,
+    adapterContracts,
+    imageTaskPlans,
+    image2AdapterRequests,
+    assetReadinessReports,
+    shots: audit.shots,
+    videoPlanning,
+    videoExecutionPreview,
+    audioPlanning,
+    envelopeFacts: buildProviderLiveGateEnvelopeFacts(taskViews, imageTaskPlans),
+    confirmationTokens: [],
   });
   const generationHarness = buildGenerationHarnessState({
     generatedAt,
@@ -427,6 +473,7 @@ export function buildProjectRuntimeState(
     videoPlanning,
     videoExecutionPreview,
     adapterContracts,
+    providerLiveGate,
     generationHarness,
     filesystemWatcherHarness,
     checkpointResumeHarness,
@@ -550,6 +597,22 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     buildAdapterContractState({
       generatedAt: state.generatedAt,
       providerRegistry: state.imagePipeline.providerRegistry,
+    });
+  const providerLiveGate =
+    state.providerLiveGate ||
+    buildProviderLiveGateState({
+      generatedAt: state.generatedAt,
+      providerRegistry: state.imagePipeline.providerRegistry,
+      adapterContracts,
+      imageTaskPlans: state.imagePipeline.imageTaskPlans,
+      image2AdapterRequests: state.imagePipeline.image2AdapterRequests,
+      assetReadinessReports: state.imagePipeline.assetReadinessReports,
+      shots: state.storyFlow.shots,
+      videoPlanning,
+      videoExecutionPreview,
+      audioPlanning: audioPlanningResolved,
+      envelopeFacts: buildProviderLiveGateEnvelopeFacts(state.taskRuns.taskViews, state.imagePipeline.imageTaskPlans),
+      confirmationTokens: [],
     });
   const generationHarness =
     state.generationHarness ||
@@ -695,6 +758,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     exportWorker,
     videoExecutionPreview,
     adapterContracts,
+    providerLiveGate,
     generationHarness,
     filesystemWatcherHarness,
     checkpointResumeHarness,

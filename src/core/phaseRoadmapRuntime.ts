@@ -84,6 +84,8 @@ export interface PhaseRoadmapProviderLiveGateReceipt {
   kind?: "provider_live_gate";
   phase?: "phase_11_provider_adapter_live_gate";
   status?: PhaseRoadmapEvidenceStatus;
+  phase30Evidence?: PhaseRoadmapProviderLiveGatePhase30Evidence;
+  roadmapEvidence?: PhaseRoadmapProviderLiveGatePhase30Evidence;
   confirmationTokenPlaceholderPresent?: boolean;
   providerPacketComplete?: boolean;
   forbiddenProviderModesAbsent?: boolean;
@@ -99,17 +101,59 @@ export interface PhaseRoadmapProviderLiveGateReceipt {
     noProviderSubmit?: boolean;
     providerSubmissionForbidden?: boolean;
     liveSubmitAllowed?: boolean;
+    credentialStorage?: boolean;
     noCredentialRead?: boolean;
     noCredentialWrite?: boolean;
+    noApiKeyCreation?: boolean;
+    noArbitraryProviderCommand?: boolean;
     fastModelForbidden?: boolean;
     vipChannelForbidden?: boolean;
     textToVideoMainPathForbidden?: boolean;
     bgmInVideoPromptForbidden?: boolean;
   };
   forbiddenActions?: string[];
+  items?: PhaseRoadmapProviderLiveGateItem[];
   blockers?: string[];
   warnings?: string[];
   sourceRef?: string;
+}
+
+export interface PhaseRoadmapProviderLiveGatePhase30Evidence {
+  phaseId?: "phase_30_provider_enablement_gate";
+  confirmationTokenPlaceholderPresent?: boolean;
+  providerPacketComplete?: boolean;
+  watcherManifestQaClosedLoop?: boolean;
+  forbiddenProviderModesAbsent?: boolean;
+  providerSubmitAllowed?: number | boolean;
+  liveSubmitAllowed?: boolean;
+  credentialStorage?: boolean;
+  hardLocksPinned?: boolean;
+  fastModelPromptPresent?: boolean;
+  vipPromptPresent?: boolean;
+  textToVideoPromptPresent?: boolean;
+  bgmPromptPresent?: boolean;
+}
+
+export interface PhaseRoadmapProviderLiveGateItem {
+  status?: string;
+  checks?: Array<{
+    checkId?: string;
+    passed?: boolean;
+    blocker?: string;
+    warning?: string;
+  }>;
+  blockers?: string[];
+  warnings?: string[];
+  canRequestUserConfirmation?: boolean;
+  canSubmitProvider?: boolean;
+  providerSubmissionForbidden?: boolean;
+  liveSubmitAllowed?: boolean;
+  credentialStorage?: boolean;
+  noCredentialRead?: boolean;
+  noCredentialWrite?: boolean;
+  requiredMode?: string;
+  slot?: string;
+  confirmationTokenId?: string;
 }
 
 export interface PhaseRoadmapClosedLoopReceipt {
@@ -1533,31 +1577,175 @@ function voiceAudioSettingsEvidenceDecision(input: PhaseRoadmapRuntimeInput): Ph
   };
 }
 
+function providerLiveGatePhase30Evidence(receipt: PhaseRoadmapProviderLiveGateReceipt): PhaseRoadmapProviderLiveGatePhase30Evidence {
+  return {
+    ...(receipt.roadmapEvidence || {}),
+    ...(receipt.phase30Evidence || {}),
+  };
+}
+
+function providerLiveGateChecks(receipt: PhaseRoadmapProviderLiveGateReceipt): Array<{
+  checkId?: string;
+  passed?: boolean;
+  blocker?: string;
+  warning?: string;
+}> {
+  return (receipt.items || []).flatMap((item) => item.checks || []);
+}
+
+function providerLiveGateItemBlockers(receipt: PhaseRoadmapProviderLiveGateReceipt): string[] {
+  return (receipt.items || []).flatMap((item) => item.blockers || []);
+}
+
+function providerLiveGateHasPassedCheck(receipt: PhaseRoadmapProviderLiveGateReceipt, checkId: string): boolean {
+  return providerLiveGateChecks(receipt).some((check) => check.checkId === checkId && check.passed === true);
+}
+
+function providerLiveGateHasFailedCheck(receipt: PhaseRoadmapProviderLiveGateReceipt, checkId: string): boolean {
+  return providerLiveGateChecks(receipt).some((check) => check.checkId === checkId && check.passed === false);
+}
+
+function providerLiveGateHasForbiddenAction(receipt: PhaseRoadmapProviderLiveGateReceipt, action: string): boolean {
+  return (receipt.forbiddenActions || []).includes(action);
+}
+
+function providerLiveGateConfirmationTokenPresent(receipt: PhaseRoadmapProviderLiveGateReceipt): boolean | undefined {
+  const evidence = providerLiveGatePhase30Evidence(receipt);
+  if (evidence.confirmationTokenPlaceholderPresent !== undefined) return evidence.confirmationTokenPlaceholderPresent;
+  if (receipt.confirmationTokenPlaceholderPresent !== undefined) return receipt.confirmationTokenPlaceholderPresent;
+  if ((receipt.items || []).length === 0) return undefined;
+  return providerLiveGateHasPassedCheck(receipt, "user_confirmation_token_placeholder")
+    || (receipt.items || []).some((item) =>
+      item.status === "ready_for_confirmation"
+      && item.canRequestUserConfirmation === true
+      && Boolean(item.confirmationTokenId),
+    );
+}
+
+function providerLiveGatePacketComplete(receipt: PhaseRoadmapProviderLiveGateReceipt): boolean | undefined {
+  const evidence = providerLiveGatePhase30Evidence(receipt);
+  if (evidence.providerPacketComplete !== undefined) return evidence.providerPacketComplete;
+  if (receipt.providerPacketComplete !== undefined) return receipt.providerPacketComplete;
+  if ((receipt.items || []).length === 0) return undefined;
+  const requiredChecks = [
+    "adapter_contract_valid",
+    "provider_capability_present",
+    "envelope_valid",
+    "asset_readiness_ready",
+    "pair_qa_pass",
+    "image2_adapter_request_valid",
+  ];
+  const hasReadyItem = (receipt.summary?.readyForConfirmation ?? 0) > 0
+    || (receipt.items || []).some((item) => item.status === "ready_for_confirmation");
+  const hasBlockedItems = (receipt.summary?.blocked ?? 0) > 0
+    || (receipt.items || []).some((item) => item.status === "blocked");
+  return hasReadyItem && !hasBlockedItems && requiredChecks.every((checkId) => providerLiveGateHasPassedCheck(receipt, checkId));
+}
+
+function providerLiveGateWatcherClosedLoop(receipt: PhaseRoadmapProviderLiveGateReceipt): boolean | undefined {
+  const evidence = providerLiveGatePhase30Evidence(receipt);
+  return evidence.watcherManifestQaClosedLoop;
+}
+
+function providerLiveGateForbiddenModesAbsent(receipt: PhaseRoadmapProviderLiveGateReceipt): boolean | undefined {
+  const evidence = providerLiveGatePhase30Evidence(receipt);
+  if (evidence.forbiddenProviderModesAbsent !== undefined) return evidence.forbiddenProviderModesAbsent;
+  if (receipt.forbiddenProviderModesAbsent !== undefined) return receipt.forbiddenProviderModesAbsent;
+  const hasModeEvidence = receipt.hardLocks !== undefined || receipt.forbiddenActions !== undefined || (receipt.items || []).length > 0;
+  if (!hasModeEvidence) return undefined;
+  const modeLocksPinned = receipt.hardLocks?.fastModelForbidden === true
+    && receipt.hardLocks?.vipChannelForbidden === true
+    && receipt.hardLocks?.textToVideoMainPathForbidden === true
+    && receipt.hardLocks?.bgmInVideoPromptForbidden === true;
+  const modeActionsForbidden = [
+    "fast_model",
+    "vip_channel",
+    "text_to_video_main_path",
+    "bgm_in_video_prompt",
+  ].every((action) => providerLiveGateHasForbiddenAction(receipt, action));
+  const modeChecksPassed = [
+    "no_fast_model",
+    "no_vip_channel",
+    "no_text_to_video_main_path",
+    "no_bgm_in_video_prompt",
+  ].every((checkId) => providerLiveGateHasPassedCheck(receipt, checkId) || !providerLiveGateHasFailedCheck(receipt, checkId));
+  return modeLocksPinned && (modeActionsForbidden || (receipt.forbiddenActions === undefined && (receipt.items || []).length > 0)) && modeChecksPassed;
+}
+
 function providerLiveGateSafetyBlockers(receipt: PhaseRoadmapProviderLiveGateReceipt): string[] {
+  const evidence = providerLiveGatePhase30Evidence(receipt);
+  const itemBlockers = providerLiveGateItemBlockers(receipt);
+  const modeIssueText = [...itemBlockers, ...(receipt.blockers || [])].join("\n");
+  const providerSubmitAllowed = evidence.providerSubmitAllowed ?? receipt.summary?.providerSubmitAllowed;
+  const hardLocksPinned = evidence.hardLocksPinned !== false
+    && receipt.hardLocks?.noProviderSubmit !== false
+    && receipt.hardLocks?.providerSubmissionForbidden !== false
+    && receipt.hardLocks?.liveSubmitAllowed !== true
+    && receipt.hardLocks?.credentialStorage !== true
+    && receipt.hardLocks?.noCredentialRead !== false
+    && receipt.hardLocks?.noCredentialWrite !== false
+    && receipt.hardLocks?.noApiKeyCreation !== false
+    && receipt.hardLocks?.noArbitraryProviderCommand !== false
+    && receipt.hardLocks?.fastModelForbidden !== false
+    && receipt.hardLocks?.vipChannelForbidden !== false
+    && receipt.hardLocks?.textToVideoMainPathForbidden !== false
+    && receipt.hardLocks?.bgmInVideoPromptForbidden !== false
+    && (receipt.items || []).every((item) =>
+      item.canSubmitProvider !== true
+      && item.providerSubmissionForbidden !== false
+      && item.liveSubmitAllowed !== true
+      && item.credentialStorage !== true
+      && item.noCredentialRead !== false
+      && item.noCredentialWrite !== false,
+    );
+  const fastPromptPresent = evidence.fastModelPromptPresent === true
+    || providerLiveGateHasFailedCheck(receipt, "no_fast_model")
+    || /\bfast[_ -]?model\b/i.test(modeIssueText)
+    || (receipt.items || []).some((item) => /fast/i.test(String(item.requiredMode || "")));
+  const vipPromptPresent = evidence.vipPromptPresent === true
+    || providerLiveGateHasFailedCheck(receipt, "no_vip_channel")
+    || /\bvip[_ -]?channel\b/i.test(modeIssueText);
+  const textToVideoPromptPresent = evidence.textToVideoPromptPresent === true
+    || providerLiveGateHasFailedCheck(receipt, "no_text_to_video_main_path")
+    || /text[_ -]?to[_ -]?video|text2video/i.test(modeIssueText)
+    || (receipt.items || []).some((item) => /text[_ -]?to[_ -]?video|text2video/i.test(`${item.requiredMode || ""} ${item.slot || ""}`));
+  const bgmPromptPresent = evidence.bgmPromptPresent === true
+    || providerLiveGateHasFailedCheck(receipt, "no_bgm_in_video_prompt")
+    || /\bbgm\b|background music/i.test(modeIssueText);
+
   return uniqueSorted([
-    ...blockedIf(receipt.summary?.providerSubmitAllowed !== undefined && receipt.summary.providerSubmitAllowed !== 0, "provider_live_gate_allows_provider_submit"),
-    ...blockedIf(receipt.summary?.liveSubmitAllowed === true, "provider_live_gate_allows_live_submit"),
-    ...blockedIf(receipt.summary?.credentialStorage === true, "provider_live_gate_allows_credential_storage"),
+    ...blockedIf(providerSubmitAllowed !== undefined && providerSubmitAllowed !== 0 && providerSubmitAllowed !== false, "provider_live_gate_allows_provider_submit"),
+    ...blockedIf(evidence.liveSubmitAllowed === true || receipt.summary?.liveSubmitAllowed === true, "provider_live_gate_allows_live_submit"),
+    ...blockedIf(evidence.credentialStorage === true || receipt.summary?.credentialStorage === true, "provider_live_gate_allows_credential_storage"),
+    ...blockedIf(!hardLocksPinned, "provider_live_gate_hard_lock_drift"),
     ...blockedIf(receipt.hardLocks?.noProviderSubmit === false, "provider_live_gate_no_provider_submit_lock_missing"),
     ...blockedIf(receipt.hardLocks?.providerSubmissionForbidden === false, "provider_live_gate_submission_forbidden_lock_missing"),
     ...blockedIf(receipt.hardLocks?.liveSubmitAllowed === true, "provider_live_gate_live_submit_lock_missing"),
+    ...blockedIf(receipt.hardLocks?.credentialStorage === true, "provider_live_gate_credential_storage_lock_missing"),
     ...blockedIf(receipt.hardLocks?.noCredentialRead === false, "provider_live_gate_no_credential_read_lock_missing"),
     ...blockedIf(receipt.hardLocks?.noCredentialWrite === false, "provider_live_gate_no_credential_write_lock_missing"),
     ...blockedIf(receipt.hardLocks?.fastModelForbidden === false, "provider_live_gate_fast_model_lock_missing"),
     ...blockedIf(receipt.hardLocks?.vipChannelForbidden === false, "provider_live_gate_vip_channel_lock_missing"),
     ...blockedIf(receipt.hardLocks?.textToVideoMainPathForbidden === false, "provider_live_gate_text_to_video_lock_missing"),
     ...blockedIf(receipt.hardLocks?.bgmInVideoPromptForbidden === false, "provider_live_gate_bgm_prompt_lock_missing"),
+    ...blockedIf(fastPromptPresent, "provider_live_gate_fast_model_prompt_present"),
+    ...blockedIf(vipPromptPresent, "provider_live_gate_vip_channel_prompt_present"),
+    ...blockedIf(textToVideoPromptPresent, "provider_live_gate_text_to_video_prompt_present"),
+    ...blockedIf(bgmPromptPresent, "provider_live_gate_bgm_prompt_present"),
+    ...itemBlockers,
     ...(receipt.blockers || []),
   ]);
 }
 
 function providerConfirmationEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
   const receipt = input.evidence?.providerLiveGate;
+  const legacyAllowed = input.legacyBooleanOverridesAllowed === true;
 
   if (hasProviderLiveGateReceipt(receipt)) {
+    const confirmationTokenPresent = providerLiveGateConfirmationTokenPresent(receipt);
     const blockers = uniqueSorted([
       ...providerLiveGateSafetyBlockers(receipt),
-      ...blockedIf(receipt.confirmationTokenPlaceholderPresent !== true, "user_confirmation_token_placeholder_missing"),
+      ...blockedIf(confirmationTokenPresent !== true, "user_confirmation_token_placeholder_missing"),
     ]);
 
     return {
@@ -1569,27 +1757,42 @@ function providerConfirmationEvidenceDecision(input: PhaseRoadmapRuntimeInput): 
     };
   }
 
+  if (legacyAllowed && input.providerConfirmationTokenPlaceholderPresent === true) {
+    return {
+      evidenceKey: "providerConfirmationTokenPlaceholder",
+      source: "legacy_boolean_override",
+      ready: true,
+      blockers: [],
+      warnings: ["legacy_providerConfirmationTokenPlaceholderPresent_boolean_override_used"],
+    };
+  }
+
   return {
     evidenceKey: "providerConfirmationTokenPlaceholder",
     source: input.providerConfirmationTokenPlaceholderPresent === undefined ? "missing" : "legacy_boolean_override",
-    ready: input.providerConfirmationTokenPlaceholderPresent === true,
-    blockers: blockedIf(input.providerConfirmationTokenPlaceholderPresent !== true, "user_confirmation_token_placeholder_missing"),
-    warnings: input.providerConfirmationTokenPlaceholderPresent === true
-      ? ["legacy_providerConfirmationTokenPlaceholderPresent_boolean_used"]
-      : [],
+    ready: false,
+    blockers: uniqueSorted([
+      "provider_live_gate_typed_evidence_missing",
+      ...blockedIf(input.providerConfirmationTokenPlaceholderPresent !== true, "user_confirmation_token_placeholder_missing"),
+    ]),
+    warnings: uniqueSorted([
+      ...blockedIf(
+        input.providerConfirmationTokenPlaceholderPresent === true,
+        "legacy_providerConfirmationTokenPlaceholderPresent_boolean_ignored_without_typed_evidence",
+      ),
+    ]),
   };
 }
 
 function providerPacketEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
   const receipt = input.evidence?.providerLiveGate;
+  const legacyAllowed = input.legacyBooleanOverridesAllowed === true;
 
   if (hasProviderLiveGateReceipt(receipt)) {
-    const providerLiveGateReady = readyStatus(receipt.status) || (receipt.summary?.readyForConfirmation ?? 0) > 0;
-    const packetComplete = receipt.providerPacketComplete === true
-      || (receipt.providerPacketComplete === undefined && providerLiveGateReady);
+    const packetComplete = providerLiveGatePacketComplete(receipt);
     const blockers = uniqueSorted([
       ...providerLiveGateSafetyBlockers(receipt),
-      ...blockedIf(!packetComplete, "provider_enablement_packet_incomplete"),
+      ...blockedIf(packetComplete !== true, "provider_enablement_packet_incomplete"),
     ]);
 
     return {
@@ -1601,16 +1804,50 @@ function providerPacketEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseR
     };
   }
 
+  if (legacyAllowed && input.providerPacketComplete === true) {
+    return {
+      evidenceKey: "providerEnablementPacket",
+      source: "legacy_boolean_override",
+      ready: true,
+      blockers: [],
+      warnings: ["legacy_providerPacketComplete_boolean_override_used"],
+    };
+  }
+
   return {
     evidenceKey: "providerEnablementPacket",
     source: input.providerPacketComplete === undefined ? "missing" : "legacy_boolean_override",
-    ready: input.providerPacketComplete === true,
-    blockers: blockedIf(input.providerPacketComplete !== true, "provider_enablement_packet_incomplete"),
-    warnings: input.providerPacketComplete === true ? ["legacy_providerPacketComplete_boolean_used"] : [],
+    ready: false,
+    blockers: uniqueSorted([
+      "provider_live_gate_typed_evidence_missing",
+      ...blockedIf(input.providerPacketComplete !== true, "provider_enablement_packet_incomplete"),
+    ]),
+    warnings: uniqueSorted([
+      ...blockedIf(input.providerPacketComplete === true, "legacy_providerPacketComplete_boolean_ignored_without_typed_evidence"),
+    ]),
   };
 }
 
 function watcherClosedLoopEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const providerReceipt = input.evidence?.providerLiveGate;
+  if (hasProviderLiveGateReceipt(providerReceipt)) {
+    const providerWatcherClosedLoop = providerLiveGateWatcherClosedLoop(providerReceipt);
+    if (providerWatcherClosedLoop !== undefined) {
+      const blockers = uniqueSorted([
+        ...providerLiveGateSafetyBlockers(providerReceipt),
+        ...blockedIf(providerWatcherClosedLoop !== true, "watcher_manifest_qa_closed_loop_missing"),
+      ]);
+
+      return {
+        evidenceKey: "watcherManifestQaClosedLoop",
+        source: "typed_evidence",
+        ready: blockers.length === 0,
+        blockers,
+        warnings: uniqueSorted(providerReceipt.warnings || []),
+      };
+    }
+  }
+
   const receipt = input.evidence?.watcherManifestQaClosedLoop;
 
   if (hasClosedLoopReceipt(receipt)) {
@@ -1642,11 +1879,13 @@ function watcherClosedLoopEvidenceDecision(input: PhaseRoadmapRuntimeInput): Pha
 
 function forbiddenProviderModesEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
   const receipt = input.evidence?.providerLiveGate;
+  const legacyAllowed = input.legacyBooleanOverridesAllowed === true;
 
   if (hasProviderLiveGateReceipt(receipt)) {
+    const forbiddenModesAbsent = providerLiveGateForbiddenModesAbsent(receipt);
     const blockers = uniqueSorted([
       ...providerLiveGateSafetyBlockers(receipt),
-      ...blockedIf(receipt.forbiddenProviderModesAbsent !== true, "forbidden_provider_mode_or_prompt_present"),
+      ...blockedIf(forbiddenModesAbsent !== true, "forbidden_provider_mode_or_prompt_present"),
     ]);
 
     return {
@@ -1658,12 +1897,27 @@ function forbiddenProviderModesEvidenceDecision(input: PhaseRoadmapRuntimeInput)
     };
   }
 
+  if (legacyAllowed && input.forbiddenProviderModesAbsent === true) {
+    return {
+      evidenceKey: "forbiddenProviderModesAbsent",
+      source: "legacy_boolean_override",
+      ready: true,
+      blockers: [],
+      warnings: ["legacy_forbiddenProviderModesAbsent_boolean_override_used"],
+    };
+  }
+
   return {
     evidenceKey: "forbiddenProviderModesAbsent",
     source: input.forbiddenProviderModesAbsent === undefined ? "missing" : "legacy_boolean_override",
-    ready: input.forbiddenProviderModesAbsent === true,
-    blockers: blockedIf(input.forbiddenProviderModesAbsent !== true, "forbidden_provider_mode_or_prompt_present"),
-    warnings: input.forbiddenProviderModesAbsent === true ? ["legacy_forbiddenProviderModesAbsent_boolean_used"] : [],
+    ready: false,
+    blockers: uniqueSorted([
+      "provider_live_gate_typed_evidence_missing",
+      ...blockedIf(input.forbiddenProviderModesAbsent !== true, "forbidden_provider_mode_or_prompt_present"),
+    ]),
+    warnings: uniqueSorted([
+      ...blockedIf(input.forbiddenProviderModesAbsent === true, "legacy_forbiddenProviderModesAbsent_boolean_ignored_without_typed_evidence"),
+    ]),
   };
 }
 

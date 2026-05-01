@@ -161,6 +161,22 @@ type VoiceAudioSettingsUiSummary = {
   blockersWarnings: string[];
   hardLocks: string[];
 };
+type ProviderEnablementGateUiSummary = {
+  initialized: boolean;
+  readiness: string;
+  readyForConfirmation: number;
+  blocked: number;
+  parked: number;
+  confirmationTokenStatus: string;
+  packetCompleteStatus: string;
+  closedLoopStatus: string;
+  forbiddenPathsAbsent: string;
+  canSubmitProvider: string;
+  submitBlocked: string;
+  credentialLiveShellLocked: string;
+  blockersWarnings: string[];
+  hardLocks: string[];
+};
 
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
@@ -1526,6 +1542,165 @@ function buildVoiceAudioSettingsUiSummary(runtimeState: ProjectRuntimeState): Vo
     providerSlotsLive,
     blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.voiceAudioSettings"],
     hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.voiceAudioSettings"],
+  };
+}
+
+function providerEnablementGateReadinessLabel(
+  status: string,
+  initialized: boolean,
+  readyForConfirmation: number,
+  blocked: number,
+  parked: number,
+) {
+  if (!initialized) return "blocked/missing";
+  const normalized = status.toLowerCase();
+  if (normalized.includes("ready_for_confirmation") || normalized.includes("ready for confirmation")) return "ready_for_confirmation";
+  if (normalized.includes("blocked") || normalized.includes("missing") || normalized.includes("fail")) return "blocked";
+  if (normalized.includes("parked")) return "parked";
+  if (blocked > 0) return "blocked";
+  if (readyForConfirmation > 0) return "ready_for_confirmation";
+  if (parked > 0) return "parked";
+  return status ? statusLabel(status) : "blocked/missing";
+}
+
+function readProviderEnablementGateChecks(items: unknown[]) {
+  return items.flatMap((item) => isRecord(item) && Array.isArray(item.checks) ? item.checks : []).filter(isRecord);
+}
+
+function checkPassed(checks: Record<string, unknown>[], pattern: RegExp) {
+  const matching = checks.filter((check) => pattern.test(readString(check.checkId, readString(check.label, ""))));
+  if (!matching.length) return undefined;
+  return matching.every((check) => check.passed === true || readString(check.status, "").toLowerCase() === "pass");
+}
+
+function yesNoMissing(value: boolean | undefined, yes: string, no: string) {
+  if (value === true) return yes;
+  if (value === false) return no;
+  return "blocked/missing";
+}
+
+function buildProviderEnablementGateHardLocks(rootRecord: Record<string, unknown>, summary: Record<string, unknown>) {
+  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
+  const summaryLocks = firstRecordFrom(summary, ["hardLocks", "locks", "hardLockSummary"]);
+  const lockRecords = [hardLocksRecord, summaryLocks, rootRecord, summary];
+  const explicitHardLocks = firstArrayFrom([rootRecord, summary, hardLocksRecord], ["hardLocks", "locks", "hardLockStrip"])
+    .map((item, index) => formatHarnessValue(item, `hard lock ${index + 1}`))
+    .filter(Boolean);
+  const inferredLocks = [
+    readBooleanLockLabel(hardLocksRecord, "dryRunOnly", "dry-run only", true),
+    readBooleanLockLabel(hardLocksRecord, "readOnly", "read-only", true),
+    readBooleanLockLabel(hardLocksRecord, "readinessPlanOnly", "readiness plan only", true),
+    readBooleanLockLabel(hardLocksRecord, "confirmationPlanOnly", "confirmation plan only", true),
+    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit blocked", true),
+    readBooleanLockLabel(hardLocksRecord, "noProviderSubmit", "canSubmitProvider=false", true),
+    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit locked", false),
+    readBooleanLockLabel(hardLocksRecord, "credentialStorage", "credential storage locked", false),
+    readBooleanLockLabel(hardLocksRecord, "noCredentialRead", "credential read locked", true),
+    readBooleanLockLabel(hardLocksRecord, "noCredentialWrite", "credential write locked", true),
+    readBooleanLockLabel(hardLocksRecord, "noArbitraryProviderCommand", "shell locked", true),
+    readBooleanLockLabel(hardLocksRecord, "fastModelForbidden", "Fast absent", true),
+    readBooleanLockLabel(hardLocksRecord, "vipChannelForbidden", "VIP absent", true),
+    readBooleanLockLabel(hardLocksRecord, "textToVideoMainPathForbidden", "text-to-video absent", true),
+    readBooleanLockLabel(hardLocksRecord, "bgmInVideoPromptForbidden", "BGM prompt absent", true),
+    readFirstBoolean(lockRecords, ["canSubmitProvider"]) === false ? "canSubmitProvider=false" : undefined,
+  ].filter((lock): lock is string => Boolean(lock));
+
+  return Array.from(new Set([...explicitHardLocks, ...inferredLocks]));
+}
+
+function buildProviderEnablementGateUiSummary(runtimeState: ProjectRuntimeState): ProviderEnablementGateUiSummary {
+  const root = (runtimeState as Partial<ProjectRuntimeState> & { providerLiveGate?: unknown }).providerLiveGate;
+  const initialized = isRecord(root);
+  const rootRecord = initialized ? root as Record<string, unknown> : {};
+  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
+  const items = Array.isArray(rootRecord.items) ? rootRecord.items : [];
+  const checks = readProviderEnablementGateChecks(items);
+  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
+  const records = [summary, rootRecord, hardLocksRecord].filter(isRecord);
+  const readyForConfirmation = readFirstNumber(records, ["readyForConfirmation", "ready_for_confirmation"])
+    ?? items.filter((item) => isRecord(item) && item.status === "ready_for_confirmation").length;
+  const blocked = readFirstNumber(records, ["blocked"])
+    ?? items.filter((item) => isRecord(item) && item.status === "blocked").length;
+  const parked = readFirstNumber(records, ["parked"])
+    ?? items.filter((item) => isRecord(item) && item.status === "parked").length;
+  const status = readFirstString(records, ["readiness", "status", "state"], "");
+  const tokenPresent = readFirstBoolean(records, [
+    "providerConfirmationTokenPlaceholderPresent",
+    "confirmationTokenPlaceholderPresent",
+    "confirmationTokenPresent",
+    "userConfirmationTokenPlaceholderPresent",
+  ]) ?? checkPassed(checks, /user_confirmation_token_placeholder|confirmation/i);
+  const packetComplete = readFirstBoolean(records, [
+    "providerPacketComplete",
+    "packetComplete",
+    "enablementPacketComplete",
+    "completeEnablementPacket",
+  ]) ?? checkPassed(checks, /envelope_valid|packet|enablement/i);
+  const closedLoopSignals = [
+    checkPassed(checks, /asset_readiness|watcher/),
+    checkPassed(checks, /envelope_valid|manifest/),
+    checkPassed(checks, /pair_qa_pass|qa/),
+  ];
+  const inferredClosedLoop = closedLoopSignals.every((signal) => signal !== undefined)
+    ? closedLoopSignals.every((signal) => signal === true)
+    : undefined;
+  const closedLoop = readFirstBoolean(records, [
+    "closedLoopReady",
+    "closedLoopComplete",
+    "closedLoopRequirementMet",
+    "watcherManifestQaClosedLoop",
+  ]) ?? inferredClosedLoop;
+  const forbiddenPathSignals = [
+    hardLocksRecord.fastModelForbidden,
+    hardLocksRecord.vipChannelForbidden,
+    hardLocksRecord.textToVideoMainPathForbidden,
+    hardLocksRecord.bgmInVideoPromptForbidden,
+  ];
+  const inferredForbiddenPathsAbsent = forbiddenPathSignals.every((signal) => typeof signal === "boolean")
+    ? forbiddenPathSignals.every((signal) => signal === true)
+    : undefined;
+  const forbiddenPathsAbsent = readFirstBoolean(records, [
+    "forbiddenProviderModesAbsent",
+    "forbiddenPathsAbsent",
+    "forbiddenModesAbsent",
+  ]) ?? inferredForbiddenPathsAbsent;
+  const canSubmitProvider = readFirstBoolean(records, ["canSubmitProvider"]);
+  const providerSubmitBlocked = readFirstBoolean(records, [
+    "providerSubmissionForbidden",
+    "providerSubmitBlocked",
+    "noProviderSubmit",
+  ]) ?? hardLocksRecord.providerSubmissionForbidden === true;
+  const credentialLiveShellLocked =
+    (readFirstBoolean(records, ["credentialStorage"]) === false || hardLocksRecord.noCredentialRead === true || hardLocksRecord.noCredentialWrite === true)
+    && (readFirstBoolean(records, ["liveSubmitAllowed"]) === false)
+    && (hardLocksRecord.noArbitraryProviderCommand === true || hardLocksRecord.arbitraryShellExecutionBlocked === true);
+  const blockersWarnings = Array.from(new Set([
+    ...readDisplayList(rootRecord.blockers, "blocker"),
+    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
+    ...readDisplayList(summary.blockers, "blocker"),
+    ...readDisplayList(summary.blockedReasons, "blocker"),
+    ...items.flatMap((item) => isRecord(item) ? readDisplayList(item.blockers, "blocker") : []),
+    ...readDisplayList(rootRecord.warnings, "warning"),
+    ...readDisplayList(summary.warnings, "warning"),
+    ...items.flatMap((item) => isRecord(item) ? readDisplayList(item.warnings, "warning") : []),
+  ].filter(Boolean)));
+  const hardLocks = buildProviderEnablementGateHardLocks(rootRecord, summary);
+
+  return {
+    initialized,
+    readiness: providerEnablementGateReadinessLabel(status, initialized, readyForConfirmation, blocked, parked),
+    readyForConfirmation,
+    blocked,
+    parked,
+    confirmationTokenStatus: yesNoMissing(tokenPresent, "placeholder present", "placeholder missing"),
+    packetCompleteStatus: yesNoMissing(packetComplete, "complete", "incomplete"),
+    closedLoopStatus: yesNoMissing(closedLoop, "closed loop satisfied", "closed loop missing"),
+    forbiddenPathsAbsent: yesNoMissing(forbiddenPathsAbsent, "Fast / VIP / text-to-video / BGM prompt absent", "forbidden path present"),
+    canSubmitProvider: canSubmitProvider === false ? "canSubmitProvider=false" : "blocked/missing",
+    submitBlocked: providerSubmitBlocked ? "provider submit blocked" : "blocked/missing",
+    credentialLiveShellLocked: credentialLiveShellLocked ? "credential/live submit/shell locked" : "blocked/missing",
+    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.providerLiveGate"],
+    hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.providerLiveGate"],
   };
 }
 
@@ -3935,6 +4110,50 @@ function VoiceAudioSettingsDiagnostics({ runtimeState }: { runtimeState: Project
   );
 }
 
+function ProviderEnablementGateDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildProviderEnablementGateUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel phase30-provider-gate-panel">
+      <div className="audit-head">
+        <ShieldAlert size={17} />
+        <span>Provider Enablement Gate</span>
+      </div>
+      <div className="summary-grid phase30-metrics">
+        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "read-only status" : "blocked/missing"} />
+        <Metric label="Ready" value={`${summary.readyForConfirmation}`} detail="ready_for_confirmation" />
+        <Metric label="Blocked" value={`${summary.blocked}`} detail={`${summary.parked} parked`} />
+        <Metric label="Token" value={summary.confirmationTokenStatus} detail="confirmation placeholder" />
+        <Metric label="Packet" value={summary.packetCompleteStatus} detail="enablement packet" />
+        <Metric label="Closed Loop" value={summary.closedLoopStatus} detail="watcher / manifest / QA" />
+      </div>
+      <div className="phase30-summary-list">
+        <div>
+          <strong>Forbidden paths absent</strong>
+          <small>{summary.forbiddenPathsAbsent}</small>
+        </div>
+        <div>
+          <strong>Provider submit</strong>
+          <small>{summary.canSubmitProvider} · {summary.submitBlocked}</small>
+        </div>
+        <div>
+          <strong>Credential / live submit / shell</strong>
+          <small>{summary.credentialLiveShellLocked}</small>
+        </div>
+        <div>
+          <strong>Blockers / warnings</strong>
+          <small>{summary.blockersWarnings.length ? summary.blockersWarnings.slice(0, 5).join(" · ") : "none reported"}</small>
+        </div>
+      </div>
+      <div className="phase30-lock-strip" aria-label="Phase 30 Provider Enablement Gate hard locks">
+        {summary.hardLocks.slice(0, 10).map((lock) => (
+          <span key={lock}>{lock}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const videoPlanning = getVideoPlanning(runtimeState);
   const queue = videoPlanning.queueShell;
@@ -5657,6 +5876,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const codexCliAdapterSpikeSummary = buildCodexCliAdapterSpikeUiSummary(runtimeState);
   const exportWorkerSummary = buildExportWorkerUiSummary(runtimeState);
   const voiceAudioSettingsSummary = buildVoiceAudioSettingsUiSummary(runtimeState);
+  const providerEnablementGateSummary = buildProviderEnablementGateUiSummary(runtimeState);
 
   return (
     <section className="machine-panel settings-shell">
@@ -5796,6 +6016,13 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
         <div className="settings-readonly-note">
           <strong>Voice/Audio Settings readiness: {voiceAudioSettingsSummary.readiness}</strong>
           <small>{voiceAudioSettingsSummary.voiceSourceCount} source(s) · {voiceAudioSettingsSummary.audioPlanCount} audio plan(s) · no BGM {voiceAudioSettingsSummary.noBgmPolicy ? "on" : "off"} · provider live {voiceAudioSettingsSummary.providerSlotsLive}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Provider Enablement Gate</div>
+      <div className="settings-list provider-enable-gate-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Provider Enablement Gate readiness: {providerEnablementGateSummary.readiness}</strong>
+          <small>{providerEnablementGateSummary.readyForConfirmation} ready_for_confirmation · {providerEnablementGateSummary.blocked} blocked · {providerEnablementGateSummary.parked} parked · {providerEnablementGateSummary.submitBlocked}</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
@@ -6006,6 +6233,7 @@ function DiagnosticsMode({
       <Image2KeyframeRuntimeDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <VoiceAudioSettingsDiagnostics runtimeState={runtimeState} />
+      <ProviderEnablementGateDiagnostics runtimeState={runtimeState} />
       <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />
       <section className="machine-panel">
         <div className="audit-head">

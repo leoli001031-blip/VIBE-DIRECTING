@@ -7128,7 +7128,64 @@ if (!runtimeState.imageKeyframeRuntime) {
       .filter(Boolean),
   });
 }
+if (!runtimeState.providerLiveGate) {
+  const { buildProviderLiveGateState } = await importTs("src/core/providerLiveGate.ts");
+  runtimeState.providerLiveGate = buildProviderLiveGateState({
+    generatedAt: runtimeState.generatedAt,
+    providerRegistry: runtimeState.imagePipeline.providerRegistry,
+    adapterContracts: runtimeState.adapterContracts,
+    imageTaskPlans: runtimeState.imagePipeline.imageTaskPlans,
+    image2AdapterRequests: runtimeState.imagePipeline.image2AdapterRequests,
+    assetReadinessReports: runtimeState.imagePipeline.assetReadinessReports,
+    shots: runtimeState.storyFlow.shots,
+    videoPlanning: runtimeState.videoPlanning,
+    videoExecutionPreview: runtimeState.videoExecutionPreview,
+    audioPlanning: runtimeState.audioPlanning,
+    envelopeFacts: runtimeState.taskRuns.taskViews.map((task) => ({
+      taskPlanId: task.job.id,
+      envelopeId: task.envelope.id,
+      schemaName: "TaskEnvelope",
+      valid: task.validator.valid,
+      blockers: task.validator.valid ? [] : task.validator.issues,
+      warnings: [],
+    })),
+    confirmationTokens: [],
+  });
+}
 
+assert(runtimeState.providerLiveGate, "runtime-state must include providerLiveGate");
+assert(runtimeState.providerLiveGate.phase === "phase_11_provider_adapter_live_gate", "providerLiveGate must remain the provider live gate evidence source");
+assert(runtimeState.providerLiveGate.summary.providerSubmitAllowed === 0, "providerLiveGate must not allow provider submit");
+assert(runtimeState.providerLiveGate.summary.liveSubmitAllowed === false, "providerLiveGate live submit must be false");
+assert(runtimeState.providerLiveGate.summary.credentialStorage === false, "providerLiveGate credential storage must be false");
+assert(runtimeState.providerLiveGate.phase30Evidence.canSubmitProvider === false, "providerLiveGate Phase 30 evidence must keep canSubmitProvider=false");
+assert(runtimeState.providerLiveGate.phase30Evidence.providerSubmitAllowed === 0, "providerLiveGate Phase 30 evidence must keep providerSubmitAllowed=0");
+assert(runtimeState.providerLiveGate.phase30Evidence.liveSubmitAllowed === false, "providerLiveGate Phase 30 evidence must keep liveSubmitAllowed=false");
+assert(runtimeState.providerLiveGate.phase30Evidence.credentialStorage === false, "providerLiveGate Phase 30 evidence must keep credentialStorage=false");
+assert(runtimeState.providerLiveGate.phase30Evidence.forbiddenProviderModesAbsent === true, "providerLiveGate Phase 30 evidence must keep forbidden modes absent");
+assert(runtimeState.providerLiveGate.items.every((item) => item.canSubmitProvider === false), "providerLiveGate items must never submit providers");
+assert(runtimeState.providerLiveGate.items.every((item) => item.liveSubmitAllowed === false), "providerLiveGate items must keep liveSubmitAllowed=false");
+assert(runtimeState.providerLiveGate.items.every((item) => item.livePathBlocked === true), "providerLiveGate items must keep livePathBlocked=true until a later final gate");
+for (const key of [
+  "dryRunOnly",
+  "readOnly",
+  "readinessPlanOnly",
+  "confirmationPlanOnly",
+  "providerSubmissionForbidden",
+  "noCredentialRead",
+  "noCredentialWrite",
+  "noApiKeyCreation",
+  "noProviderSubmit",
+  "noArbitraryProviderCommand",
+  "fastModelForbidden",
+  "vipChannelForbidden",
+  "textToVideoMainPathForbidden",
+  "bgmInVideoPromptForbidden",
+]) {
+  assert(runtimeState.providerLiveGate.hardLocks[key] === true, `providerLiveGate hard lock ${key} must be true`);
+}
+assert(runtimeState.providerLiveGate.hardLocks.liveSubmitAllowed === false, "providerLiveGate live submit hard lock must be false");
+assert(runtimeState.providerLiveGate.hardLocks.credentialStorage === false, "providerLiveGate credential storage hard lock must be false");
 assert(runtimeState.voiceAudioSettings, "runtime-state must include voiceAudioSettings");
 assert(runtimeState.voiceAudioSettings.phase === "phase_28_voice_audio_settings_ui", "voiceAudioSettings must be Phase 28 evidence");
 assert(runtimeState.voiceAudioSettings.scope === "voice_audio_project_facts", "voiceAudioSettings scope must stay project facts only");

@@ -5,7 +5,7 @@
   "description": "Phase 11 provider adapter live gate readiness and user-confirmation plan. It never submits providers, stores credentials, reads credentials, or creates API keys.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "generatedAt", "phase", "slots", "items", "summary", "hardLocks", "forbiddenActions", "notes"],
+  "required": ["schemaVersion", "generatedAt", "phase", "slots", "items", "summary", "hardLocks", "phase30Evidence", "forbiddenActions", "notes"],
   "properties": {
     "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
     "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
@@ -47,6 +47,7 @@
       }
     },
     "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "phase30Evidence": { "$ref": "#/$defs/phase30Evidence" },
     "forbiddenActions": {
       "type": "array",
       "items": {
@@ -223,6 +224,40 @@
         "noApiKeyCreation": { "const": true },
         "noProviderSubmit": { "const": true },
         "noArbitraryProviderCommand": { "const": true },
+        "fastModelForbidden": { "const": true },
+        "vipChannelForbidden": { "const": true },
+        "textToVideoMainPathForbidden": { "const": true },
+        "bgmInVideoPromptForbidden": { "const": true }
+      }
+    },
+    "phase30Evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "confirmationTokenPlaceholderPresent",
+        "userConfirmationConfirmed",
+        "providerPacketComplete",
+        "watcherManifestQaClosedLoopRequired",
+        "forbiddenProviderModesAbsent",
+        "canSubmitProvider",
+        "providerSubmitAllowed",
+        "credentialStorage",
+        "liveSubmitAllowed",
+        "fastModelForbidden",
+        "vipChannelForbidden",
+        "textToVideoMainPathForbidden",
+        "bgmInVideoPromptForbidden"
+      ],
+      "properties": {
+        "confirmationTokenPlaceholderPresent": { "type": "boolean" },
+        "userConfirmationConfirmed": { "type": "boolean" },
+        "providerPacketComplete": { "type": "boolean" },
+        "watcherManifestQaClosedLoopRequired": { "const": true },
+        "forbiddenProviderModesAbsent": { "type": "boolean" },
+        "canSubmitProvider": { "const": false },
+        "providerSubmitAllowed": { "type": "integer", "const": 0 },
+        "credentialStorage": { "const": false },
+        "liveSubmitAllowed": { "const": false },
         "fastModelForbidden": { "const": true },
         "vipChannelForbidden": { "const": true },
         "textToVideoMainPathForbidden": { "const": true },

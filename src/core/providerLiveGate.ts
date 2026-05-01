@@ -127,6 +127,22 @@ export interface ProviderLiveGateHardLocks {
   bgmInVideoPromptForbidden: true;
 }
 
+export interface ProviderLiveGatePhase30Evidence {
+  confirmationTokenPlaceholderPresent: boolean;
+  userConfirmationConfirmed: boolean;
+  providerPacketComplete: boolean;
+  watcherManifestQaClosedLoopRequired: true;
+  forbiddenProviderModesAbsent: boolean;
+  canSubmitProvider: false;
+  providerSubmitAllowed: 0;
+  credentialStorage: false;
+  liveSubmitAllowed: false;
+  fastModelForbidden: true;
+  vipChannelForbidden: true;
+  textToVideoMainPathForbidden: true;
+  bgmInVideoPromptForbidden: true;
+}
+
 export interface ProviderLiveGateState {
   schemaVersion: string;
   generatedAt: string;
@@ -146,6 +162,7 @@ export interface ProviderLiveGateState {
     credentialStorage: false;
   };
   hardLocks: ProviderLiveGateHardLocks;
+  phase30Evidence: ProviderLiveGatePhase30Evidence;
   forbiddenActions: Array<
     | "provider_submit"
     | "credential_read"
@@ -488,7 +505,7 @@ function buildImageItem(input: {
     confirmationTokenId: token?.tokenId,
     canRequestUserConfirmation: status === "blocked" && blockers.length === 1 && blockers[0].includes("user confirmation token"),
     canSubmitProvider: false,
-    livePathBlocked: status !== "ready_for_confirmation",
+    livePathBlocked: true,
     dryRunOnly: true,
     readOnly: true,
     providerSubmissionForbidden: true,
@@ -586,6 +603,50 @@ function buildVideoItem(input: {
   };
 }
 
+function checkPassed(item: ProviderLiveGateItem, checkId: ProviderLiveGateCheckId): boolean {
+  return item.checks.find((check) => check.checkId === checkId)?.passed === true;
+}
+
+function buildPhase30Evidence(items: ProviderLiveGateItem[], tokens: ProviderLiveGateConfirmationTokenPlaceholder[]): ProviderLiveGatePhase30Evidence {
+  const imageItems = items.filter((item) => item.sourceKind === "image_task_plan");
+  const videoItems = items.filter((item) => item.sourceKind === "video_task_plan");
+  const providerPacketComplete =
+    imageItems.length > 0 &&
+    imageItems.every((item) =>
+      [
+        "adapter_contract_valid",
+        "provider_capability_present",
+        "envelope_valid",
+        "asset_readiness_ready",
+        "pair_qa_pass",
+        "image2_adapter_request_valid",
+      ].every((checkId) => checkPassed(item, checkId as ProviderLiveGateCheckId)),
+    );
+  const forbiddenProviderModesAbsent =
+    videoItems.length === 0 ||
+    videoItems.every((item) =>
+      ["no_fast_model", "no_vip_channel", "no_text_to_video_main_path", "no_bgm_in_video_prompt"].every((checkId) =>
+        checkPassed(item, checkId as ProviderLiveGateCheckId),
+      ),
+    );
+
+  return {
+    confirmationTokenPlaceholderPresent: tokens.some((token) => token.placeholderPresent),
+    userConfirmationConfirmed: tokens.some((token) => token.placeholderPresent && token.confirmedByUser),
+    providerPacketComplete,
+    watcherManifestQaClosedLoopRequired: true,
+    forbiddenProviderModesAbsent,
+    canSubmitProvider: false,
+    providerSubmitAllowed: 0,
+    credentialStorage: false,
+    liveSubmitAllowed: false,
+    fastModelForbidden: true,
+    vipChannelForbidden: true,
+    textToVideoMainPathForbidden: true,
+    bgmInVideoPromptForbidden: true,
+  };
+}
+
 export function buildProviderLiveGateState(input: BuildProviderLiveGateStateInput): ProviderLiveGateState {
   const adapters = providerAdapters(input.adapterContracts);
   const slots = adapters.map(buildSlot);
@@ -611,6 +672,7 @@ export function buildProviderLiveGateState(input: BuildProviderLiveGateStateInpu
     }),
   );
   const items = [...imageItems, ...videoItems];
+  const phase30Evidence = buildPhase30Evidence(items, input.confirmationTokens || []);
 
   return {
     schemaVersion: providerLiveGateSchemaVersion,
@@ -631,6 +693,7 @@ export function buildProviderLiveGateState(input: BuildProviderLiveGateStateInpu
       credentialStorage: false,
     },
     hardLocks,
+    phase30Evidence,
     forbiddenActions,
     notes: [
       "Phase 11 Provider Live Gate is an enablement readiness and confirmation plan only.",

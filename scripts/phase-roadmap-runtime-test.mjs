@@ -1075,6 +1075,116 @@ assert(typedMockRunnerReady.adapterBoundary.phase26.canSpawnCodex === false, "Ph
 assert(typedMockRunnerReady.adapterBoundary.phase26.canResumeCodex === false, "Phase 26 must not resume Codex");
 assert(typedMockRunnerReady.adapterBoundary.phase26.canSubmitProvider === false, "Phase 26 must not submit provider");
 
+const typedPhase30Ready = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    providerLiveGate: {
+      phase30Evidence: {
+        phaseId: "phase_30_provider_enablement_gate",
+        confirmationTokenPlaceholderPresent: true,
+        providerPacketComplete: true,
+        watcherManifestQaClosedLoop: true,
+        forbiddenProviderModesAbsent: true,
+        providerSubmitAllowed: 0,
+        liveSubmitAllowed: false,
+        credentialStorage: false,
+        hardLocksPinned: true,
+      },
+    },
+  }),
+});
+assert(
+  phase(typedPhase30Ready, "phase_30_provider_enablement_gate").readiness === "ready",
+  "Phase 30 must be ready with complete typed providerLiveGate Phase 30 evidence",
+);
+assert(
+  typedPhase30Ready.providerEnablementGate.canSubmitProvider === false,
+  "Phase 30 ready still cannot submit provider",
+);
+
+const providerStateShapePhase30Ready = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    providerLiveGate: {
+      kind: undefined,
+      confirmationTokenPlaceholderPresent: undefined,
+      providerPacketComplete: undefined,
+      forbiddenProviderModesAbsent: undefined,
+      summary: {
+        totalSlots: 1,
+        imageSlotsPendingConfirmation: 1,
+        parkedVideoSlots: 0,
+        totalItems: 1,
+        readyForConfirmation: 1,
+        blocked: 0,
+        parked: 0,
+        providerSubmitAllowed: 0,
+        liveSubmitAllowed: false,
+        credentialStorage: false,
+      },
+      forbiddenActions: [
+        "provider_submit",
+        "credential_read",
+        "credential_write",
+        "api_key_create",
+        "fast_model",
+        "vip_channel",
+        "text_to_video_main_path",
+        "bgm_in_video_prompt",
+        "arbitrary_provider_command",
+      ],
+      items: [
+        {
+          status: "ready_for_confirmation",
+          canRequestUserConfirmation: true,
+          canSubmitProvider: false,
+          confirmationTokenId: "confirmation_token_placeholder:image2",
+          providerSubmissionForbidden: true,
+          liveSubmitAllowed: false,
+          credentialStorage: false,
+          noCredentialRead: true,
+          noCredentialWrite: true,
+          checks: [
+            "adapter_contract_valid",
+            "provider_capability_present",
+            "envelope_valid",
+            "asset_readiness_ready",
+            "pair_qa_pass",
+            "image2_adapter_request_valid",
+            "user_confirmation_token_placeholder",
+          ].map((checkId) => ({ checkId, passed: true })),
+          blockers: [],
+          warnings: [],
+        },
+      ],
+      phase30Evidence: {
+        watcherManifestQaClosedLoop: true,
+      },
+    },
+  }),
+});
+assert(
+  phase(providerStateShapePhase30Ready, "phase_30_provider_enablement_gate").readiness === "ready",
+  "Phase 30 must accept phase_11_provider_adapter_live_gate state shape by inferring summary/hardLocks/forbiddenActions/items",
+);
+
+const typedEvidenceWithoutProviderLiveGate = typedEvidence();
+delete typedEvidenceWithoutProviderLiveGate.providerLiveGate;
+const legacyOnlyProviderGate = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidenceWithoutProviderLiveGate,
+  providerConfirmationTokenPlaceholderPresent: true,
+  providerPacketComplete: true,
+  watcherManifestQaClosedLoop: true,
+  forbiddenProviderModesAbsent: true,
+});
+const legacyOnlyPhase30 = phase(legacyOnlyProviderGate, "phase_30_provider_enablement_gate");
+assert(legacyOnlyPhase30.readiness === "blocked", "Phase 30 must block when only legacy provider booleans are present");
+assert(
+  legacyOnlyPhase30.blockedReasons.includes("provider_live_gate_typed_evidence_missing"),
+  "Phase 30 must explain that typed providerLiveGate evidence is required",
+);
+
 const blockedProviderGate = buildPhaseRoadmapRuntimePlan({
   ...readyInput(),
   evidence: typedEvidence({
@@ -1103,6 +1213,53 @@ for (const blocker of [
 ]) {
   assert(phase30Blocked.blockedReasons.includes(blocker), `Phase 30 blocker ${blocker} missing`);
 }
+
+const missingTokenProviderGate = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    providerLiveGate: {
+      confirmationTokenPlaceholderPresent: false,
+      phase30Evidence: { watcherManifestQaClosedLoop: true },
+    },
+  }),
+});
+assert(
+  phase(missingTokenProviderGate, "phase_30_provider_enablement_gate").blockedReasons.includes(
+    "user_confirmation_token_placeholder_missing",
+  ),
+  "Phase 30 must block when the confirmation token placeholder is missing",
+);
+
+const incompletePacketProviderGate = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    providerLiveGate: {
+      providerPacketComplete: false,
+      phase30Evidence: { watcherManifestQaClosedLoop: true },
+    },
+  }),
+});
+assert(
+  phase(incompletePacketProviderGate, "phase_30_provider_enablement_gate").blockedReasons.includes(
+    "provider_enablement_packet_incomplete",
+  ),
+  "Phase 30 must block when the provider enablement packet is incomplete",
+);
+
+const missingClosedLoopProviderGate = buildPhaseRoadmapRuntimePlan({
+  ...readyInput(),
+  evidence: typedEvidence({
+    providerLiveGate: {
+      phase30Evidence: { watcherManifestQaClosedLoop: false },
+    },
+  }),
+});
+assert(
+  phase(missingClosedLoopProviderGate, "phase_30_provider_enablement_gate").blockedReasons.includes(
+    "watcher_manifest_qa_closed_loop_missing",
+  ),
+  "Phase 30 must block when typed providerLiveGate reports missing watcher/manifest/QA closure",
+);
 
 const omittedForbiddenProviderModes = buildPhaseRoadmapRuntimePlan({
   ...readyInput(),
@@ -1149,6 +1306,60 @@ assert(
   phase(trueForbiddenProviderModes, "phase_30_provider_enablement_gate").readiness === "ready",
   "Phase 30 may pass only when forbiddenProviderModesAbsent is explicitly true and other gates are ready",
 );
+
+for (const [label, providerLiveGate, expectedBlocker] of [
+  [
+    "provider submit",
+    { summary: { providerSubmitAllowed: 1 } },
+    "provider_live_gate_allows_provider_submit",
+  ],
+  [
+    "live submit",
+    { summary: { liveSubmitAllowed: true } },
+    "provider_live_gate_allows_live_submit",
+  ],
+  [
+    "credential storage",
+    { summary: { credentialStorage: true } },
+    "provider_live_gate_allows_credential_storage",
+  ],
+  [
+    "hard lock drift",
+    { hardLocks: { noProviderSubmit: false } },
+    "provider_live_gate_hard_lock_drift",
+  ],
+  [
+    "Fast prompt",
+    { phase30Evidence: { fastModelPromptPresent: true } },
+    "provider_live_gate_fast_model_prompt_present",
+  ],
+  [
+    "VIP prompt",
+    { phase30Evidence: { vipPromptPresent: true } },
+    "provider_live_gate_vip_channel_prompt_present",
+  ],
+  [
+    "text-to-video prompt",
+    { phase30Evidence: { textToVideoPromptPresent: true } },
+    "provider_live_gate_text_to_video_prompt_present",
+  ],
+  [
+    "BGM prompt",
+    { phase30Evidence: { bgmPromptPresent: true } },
+    "provider_live_gate_bgm_prompt_present",
+  ],
+]) {
+  const blockedPlan = buildPhaseRoadmapRuntimePlan({
+    ...readyInput(),
+    evidence: typedEvidence({
+      providerLiveGate,
+    }),
+  });
+  assert(
+    phase(blockedPlan, "phase_30_provider_enablement_gate").blockedReasons.includes(expectedBlocker),
+    `Phase 30 must block when providerLiveGate exposes ${label}`,
+  );
+}
 
 assert(
   blockedProviderGate.providerEnablementGate.userConfirmationTokenPlaceholderRequired === true,
