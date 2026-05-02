@@ -295,6 +295,9 @@ type DirectorProgressStripState = {
 };
 type RealPilotUiSummary = {
   reviewStatus: string;
+  handoffLabel: string;
+  handoffDetail: string;
+  handoffTone: string;
   selectedShotCount: number;
   selectedShotDetail: string;
   framePairValue: string;
@@ -2761,6 +2764,7 @@ function readDirectorProgressOverride(runtimeState: ProjectRuntimeState): Direct
 function buildRealPilotUiSummary(runtimeState: ProjectRuntimeState, selectedShot?: ShotRecord): RealPilotUiSummary {
   const gate = runtimeState.realExecutionGate;
   const ledger = runtimeState.executionLedger;
+  const handoff = runtimeState.providerHandoffStatus;
   const realProviderExecutor = (runtimeState as ProjectRuntimeState & { realProviderExecutor?: unknown }).realProviderExecutor;
   const executorRecord = isRecord(realProviderExecutor) ? realProviderExecutor : {};
   const realProviderOneShotTest = (runtimeState as ProjectRuntimeState & { realProviderOneShotTest?: unknown }).realProviderOneShotTest;
@@ -2842,13 +2846,16 @@ function buildRealPilotUiSummary(runtimeState: ProjectRuntimeState, selectedShot
 
   return {
     reviewStatus,
+    handoffLabel: handoff?.label || "等待确认",
+    handoffDetail: handoff?.detail || "动作确认后继续。",
+    handoffTone: handoff?.status || "waiting_confirmation",
     selectedShotCount,
     selectedShotDetail,
     framePairValue: selectedShotCount ? `${startFrameCount}/${shotCount} · ${endFrameCount}/${shotCount}` : "未选择",
     framePairDetail: selectedShotCount ? "首帧 / 尾帧" : "选择镜头后检查首尾帧",
     estimatedOutputCount,
     estimatedOutputDetail: estimatedOutputCount > 0 ? "Image2 小批量" : "选择后估算",
-    outputRoot: gate.outputSandbox.root || ledger.outputSandbox.root || "待选择输出文件夹",
+    outputRoot: (gate.outputSandbox.root || ledger.outputSandbox.root) ? "已设置" : "待选择",
     confirmationState: "需要确认",
     image2State: "Image2 first",
     seedanceState: "Seedance 暂停/后续",
@@ -6596,6 +6603,11 @@ function RealPilotDirectorStatus({ summary }: { summary: RealPilotUiSummary }) {
       <div className="real-pilot-mode-row">
         <span aria-label="Image2 first">{summary.image2State}</span>
         <span aria-label="Seedance paused">{summary.seedanceState}</span>
+      </div>
+      <div className={`handoff-status-line ${summary.handoffTone}`} aria-label="小样状态">
+        <i aria-hidden="true" />
+        <strong>{summary.handoffLabel}</strong>
+        <small>{summary.handoffDetail}</small>
       </div>
       <div className="real-pilot-phase44" aria-label="执行前确认">
         <span>先复核</span>

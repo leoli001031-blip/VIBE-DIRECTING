@@ -18,6 +18,7 @@ import type { RealExecutionGateState } from "./realExecutionGate";
 import type { RealProviderPilotState } from "./realProviderPilot";
 import type { RealProviderExecutorState } from "./realProviderExecutor";
 import type { RealProviderOneShotTestState } from "./realProviderOneShotTest";
+import type { ProviderHandoffStatusState } from "./providerHandoffStatus";
 import type { LocalOrchestratorState } from "./localOrchestrator";
 import type { ProjectFactsIntegrationState } from "./projectFactsIntegration";
 import type {
@@ -211,6 +212,7 @@ export interface ProjectRuntimeState {
   realProviderPilot: RealProviderPilotState;
   realProviderExecutor: RealProviderExecutorState;
   realProviderOneShotTest: RealProviderOneShotTestState;
+  providerHandoffStatus: ProviderHandoffStatusState;
   localOrchestrator: LocalOrchestratorState;
   generationHarness: GenerationHarnessState;
   filesystemWatcherHarness: FilesystemWatcherHarnessState;

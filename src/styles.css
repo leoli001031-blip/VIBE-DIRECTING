@@ -351,10 +351,10 @@
 .real-pilot-entry {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(150px, 0.45fr) minmax(180px, 0.55fr) minmax(0, 1.6fr) auto;
+  grid-template-columns: minmax(150px, 0.4fr) minmax(180px, 0.48fr) minmax(190px, 0.68fr) minmax(0, 1.25fr) auto;
   grid-template-areas:
-    "heading modes facts confirm"
-    "phase phase phase phase";
+    "heading modes handoff facts confirm"
+    "phase phase phase phase phase";
   align-items: center;
   gap: 14px;
   min-width: 0;
@@ -402,6 +402,48 @@
   padding: 5px 8px;
   color: rgba(37, 40, 34, 0.7);
   font-size: 11px;
+}
+
+.handoff-status-line {
+  grid-area: handoff;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: rgba(37, 40, 34, 0.72);
+}
+
+.handoff-status-line i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #c58b4b;
+}
+
+.handoff-status-line.needs_review i {
+  background: #4f8f72;
+}
+
+.handoff-status-line.blocked i {
+  background: #b15d4f;
+}
+
+.handoff-status-line strong,
+.handoff-status-line small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.handoff-status-line strong {
+  color: rgba(37, 40, 34, 0.88);
+  font-size: 13px;
+}
+
+.handoff-status-line small {
+  color: inherit;
+  font-size: 11px;
+  opacity: 0.64;
 }
 
 .real-pilot-phase44 {
@@ -473,6 +515,14 @@
 .preview-shell .real-pilot-mode-row span {
   border-color: rgba(242, 238, 230, 0.16);
   color: rgba(242, 238, 230, 0.68);
+}
+
+.preview-shell .handoff-status-line {
+  color: rgba(242, 238, 230, 0.68);
+}
+
+.preview-shell .handoff-status-line strong {
+  color: rgba(242, 238, 230, 0.84);
 }
 
 .preview-shell .real-pilot-phase44 span {
@@ -1401,6 +1451,7 @@
     grid-template-areas:
       "heading"
       "modes"
+      "handoff"
       "phase"
       "facts"
       "confirm";

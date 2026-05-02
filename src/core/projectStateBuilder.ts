@@ -39,6 +39,7 @@ import { buildRealExecutionGateState } from "./realExecutionGate";
 import { buildRealProviderPilotState, type RealProviderPilotProviderPlanInput } from "./realProviderPilot";
 import { buildRealProviderExecutorState } from "./realProviderExecutor";
 import { buildRealProviderOneShotTestState } from "./realProviderOneShotTest";
+import { buildProviderHandoffStatus } from "./providerHandoffStatus";
 import { buildLocalOrchestratorState, type LocalOrchestratorTaskPacket } from "./localOrchestrator";
 import type { SubagentRuntimeGateReceipt } from "./subagentRuntimeGate";
 import type { SubagentWorkerRuntimePlan } from "./subagentWorkerRuntime";
@@ -77,6 +78,7 @@ export interface ProjectRuntimeStateBuildOptions {
   realProviderPilot?: ProjectRuntimeState["realProviderPilot"];
   realProviderExecutor?: ProjectRuntimeState["realProviderExecutor"];
   realProviderOneShotTest?: ProjectRuntimeState["realProviderOneShotTest"];
+  providerHandoffStatus?: ProjectRuntimeState["providerHandoffStatus"];
   realTestMode?: ExecutionLedgerMode;
   realTestBatchId?: string;
   realTestShotIds?: string[];
@@ -649,6 +651,19 @@ export function buildProjectRuntimeState(
     qaPromotionReports,
     issues: audit.issues,
   });
+  const providerHandoffStatus = options.providerHandoffStatus || buildProviderHandoffStatus({
+    generatedAt,
+    realProviderOneShotTest,
+    previewExport,
+    imagePipeline: {
+      watcherEvents,
+      generationHealthReports,
+      qaPromotionReports,
+    },
+    manifestMatches: {
+      reports: taskViews.map((task) => task.manifestMatch),
+    },
+  });
   const exportWorker = buildExportWorkerState({
     source: previewExport,
     exportRoot: "exports/export-worker",
@@ -714,6 +729,7 @@ export function buildProjectRuntimeState(
     realProviderPilot,
     realProviderExecutor,
     realProviderOneShotTest,
+    providerHandoffStatus,
     localOrchestrator,
     generationHarness,
     filesystemWatcherHarness,
@@ -1058,6 +1074,19 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       mode: "locked",
       realProviderExecutor,
     });
+  const providerHandoffStatus =
+    state.providerHandoffStatus ||
+    buildProviderHandoffStatus({
+      generatedAt: state.generatedAt,
+      realProviderOneShotTest,
+      previewExport: state.previewExport,
+      imagePipeline: {
+        watcherEvents: state.imagePipeline.watcherEvents,
+        generationHealthReports: state.imagePipeline.generationHealthReports,
+        qaPromotionReports: state.imagePipeline.qaPromotionReports,
+      },
+      manifestMatches: state.manifestMatches,
+    });
   const generationHealthChecker =
     state.generationHealthChecker ||
     buildGenerationHealthCheckerState({
@@ -1134,6 +1163,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     realProviderPilot,
     realProviderExecutor,
     realProviderOneShotTest,
+    providerHandoffStatus,
     localOrchestrator,
     generationHarness,
     filesystemWatcherHarness,
