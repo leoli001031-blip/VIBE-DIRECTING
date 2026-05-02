@@ -79,6 +79,7 @@ import {
   type PreviewQueueItem,
   type PreviewQueueItemKind,
 } from "./core/previewPlayerQueue";
+import { applyPreRealTestClosure } from "./core/preRealTestClosure";
 import { fallbackAudit } from "./data/fallbackAudit";
 
 const gateNames = ["identity", "scene", "pair", "story", "prop", "style"] as const;
@@ -308,15 +309,16 @@ type RealPilotUiSummary = {
   confirmationState: string;
   image2State: string;
   seedanceState: string;
-  phase44Confirmation: string;
-  phase44BudgetLimit: string;
-  phase44OutputWatcher: string;
-  phase44RequestPreview: string;
-  phase44ScopeDetail: string;
-  phase45Status: string;
-  phase45Confirmation: string;
-  phase45ActionScope: string;
-  phase45OutputExpectation: string;
+  preConfirmState: string;
+  preConfirmBudgetLimit: string;
+  preConfirmOutputWatch: string;
+  preConfirmRequestPreview: string;
+  preConfirmScopeDetail: string;
+  oneShotStatus: string;
+  oneShotConfirmation: string;
+  oneShotActionScope: string;
+  oneShotOutputExpectation: string;
+  oneShotConfirmed: boolean;
   readyItems: number;
   blockedItems: number;
   ledgerEntries: number;
@@ -2814,6 +2816,8 @@ function buildRealPilotUiSummary(runtimeState: ProjectRuntimeState, selectedShot
     "estimatedOutputCount",
     "imageCount",
   ]);
+  const handoffStatus = handoff?.status;
+  const confirmedOrReturned = handoffStatus === "waiting_file" || handoffStatus === "needs_review";
   const selectedShotIds = gate.selectedShotIds.length
     ? gate.selectedShotIds
     : selectedShot ? [selectedShot.id] : [];
@@ -2856,28 +2860,39 @@ function buildRealPilotUiSummary(runtimeState: ProjectRuntimeState, selectedShot
     estimatedOutputCount,
     estimatedOutputDetail: estimatedOutputCount > 0 ? "Image2 小批量" : "选择后估算",
     outputRoot: (gate.outputSandbox.root || ledger.outputSandbox.root) ? "已设置" : "待选择",
-    confirmationState: "需要确认",
+    confirmationState: handoffStatus === "needs_review" ? "等待复核" : confirmedOrReturned ? "已确认" : "需要确认",
     image2State: "Image2 first",
     seedanceState: "Seedance 暂停/后续",
-    phase44Confirmation: "等待确认",
-    phase44BudgetLimit: budgetValue
+    preConfirmState: confirmedOrReturned ? "已确认" : "等待确认",
+    preConfirmBudgetLimit: budgetValue
       ? `${statusLabel(budgetValue)}${budgetRisk ? ` · ${statusLabel(budgetRisk)}` : ""}`
       : "待复核",
-    phase44OutputWatcher: watcherState ? statusLabel(watcherState) : "待连接",
-    phase44RequestPreview: requestPreviewState ? statusLabel(requestPreviewState) : "待复核",
-    phase44ScopeDetail: "1 个镜头小样 · 0 自动重试",
-    phase45Status: oneShotReady
-      ? "单次待确认"
-      : oneShotStatus === "blocked"
-        ? "有阻断"
-        : "未就绪",
-    phase45Confirmation: oneShotReady ? "动作确认待定" : "先完成复核",
-    phase45ActionScope: "Image2 单镜头",
-    phase45OutputExpectation: typeof oneShotBudgetImageCount === "number"
+    preConfirmOutputWatch: watcherState ? statusLabel(watcherState) : "待连接",
+    preConfirmRequestPreview: requestPreviewState ? statusLabel(requestPreviewState) : "待复核",
+    preConfirmScopeDetail: "1 个镜头小样 · 0 自动重试",
+    oneShotStatus: handoffStatus === "needs_review"
+      ? "需要复核"
+      : handoffStatus === "waiting_file"
+        ? "等待文件"
+        : oneShotReady
+          ? "单次待确认"
+          : oneShotStatus === "blocked"
+            ? "有阻断"
+            : "未就绪",
+    oneShotConfirmation: handoffStatus === "needs_review"
+      ? "等待复核输出"
+      : handoffStatus === "waiting_file"
+        ? "已记录确认"
+        : oneShotReady
+          ? "动作确认待定"
+          : "先完成复核",
+    oneShotActionScope: "Image2 单镜头",
+    oneShotOutputExpectation: typeof oneShotBudgetImageCount === "number"
       ? `${oneShotBudgetImageCount} 个预期输出`
       : typeof oneShotExpectedOutputCount === "number"
         ? `${Math.min(oneShotExpectedOutputCount, 2)} 个预期输出`
       : "等待输出计划",
+    oneShotConfirmed: confirmedOrReturned,
     readyItems,
     blockedItems,
     ledgerEntries: ledger.summary.totalEntries,
@@ -6609,15 +6624,15 @@ function RealPilotDirectorStatus({ summary }: { summary: RealPilotUiSummary }) {
         <strong>{summary.handoffLabel}</strong>
         <small>{summary.handoffDetail}</small>
       </div>
-      <div className="real-pilot-phase44" aria-label="执行前确认">
+      <div className="real-pilot-preconfirm" aria-label="执行前确认">
         <span>先复核</span>
-        <span>{summary.phase44Confirmation || "等待确认"}</span>
+        <span>{summary.preConfirmState || "等待确认"}</span>
         <span>1 个镜头小样</span>
         <span>0 自动重试</span>
         <span>输出文件夹</span>
-        <span>Phase45</span>
-        <span>{summary.phase45Status || "未就绪"}</span>
-        <span>{summary.phase45Confirmation || "先完成复核"}</span>
+        <span>单次确认</span>
+        <span>{summary.oneShotStatus || "未就绪"}</span>
+        <span>{summary.oneShotConfirmation || "先完成复核"}</span>
         <span>不自动生成</span>
       </div>
       <div className="real-pilot-facts">
@@ -6655,7 +6670,7 @@ function OneShotActionPanel({
   status: OneShotActionStatus;
   onConfirm: () => void;
 }) {
-  const ready = summary.phase45Status === "单次待确认";
+  const ready = summary.oneShotStatus === "单次待确认";
   const confirmed = status === "confirmed";
   const stateLabel = confirmed ? "等待文件" : ready ? "等待确认" : "需要复核";
   const detail = confirmed ? "已记录本次确认，等待输出回流。" : ready ? "确认后只执行一次小样。" : "先完成复核。";
@@ -6667,8 +6682,8 @@ function OneShotActionPanel({
         <strong>{stateLabel}</strong>
       </div>
       <div className="one-shot-action-facts">
-        <small>{summary.phase45ActionScope}</small>
-        <small>{summary.phase45OutputExpectation}</small>
+        <small>{summary.oneShotActionScope}</small>
+        <small>{summary.oneShotOutputExpectation}</small>
         <small>{summary.outputRoot}</small>
       </div>
       <small>{detail}</small>
@@ -6792,6 +6807,7 @@ function DirectorMode({
   onUpdateAsset,
   onMarkAssetStatus,
   onProjectFactsModeChange,
+  onConfirmOneShot,
 }: {
   audit: ProjectAudit;
   view: RuntimeView;
@@ -6811,12 +6827,14 @@ function DirectorMode({
   onUpdateAsset: (assetId: string, input: UpdateAssetLibraryAssetInput) => void;
   onMarkAssetStatus: (assetId: string, status: AssetLibraryUiStatus) => void;
   onProjectFactsModeChange: (mode: ProjectFactsUiMode) => void;
+  onConfirmOneShot: () => void;
 }) {
   const activeSection = view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0];
   const sectionLabel = activeSection?.label || "Story";
   const shots = activeSection ? audit.shots.filter((shot) => activeSection.shotIds.includes(shot.id)) : audit.shots;
   const realPilotSummary = buildRealPilotUiSummary(runtimeState, selectedShot);
-  const [oneShotActionStatus, setOneShotActionStatus] = useState<OneShotActionStatus>("idle");
+  const oneShotActionStatus: OneShotActionStatus =
+    realPilotSummary.oneShotConfirmed ? "confirmed" : "idle";
 
   return (
     <div className={`minimal-director ${directorView}`}>
@@ -6826,7 +6844,7 @@ function DirectorMode({
       <OneShotActionPanel
         summary={realPilotSummary}
         status={oneShotActionStatus}
-        onConfirm={() => setOneShotActionStatus("confirmed")}
+        onConfirm={onConfirmOneShot}
       />
       <div className="minimal-director-main">
         {directorView === "assets" && (
@@ -7743,8 +7761,8 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
           <small>{realPilotSummary.image2State} · {realPilotSummary.seedanceState} · {realPilotSummary.confirmationState}</small>
           <small>selected shots {realPilotSummary.selectedShotCount} · start/end frames {realPilotSummary.framePairValue} · estimated outputs {realPilotSummary.estimatedOutputCount}</small>
           <small>output root {realPilotSummary.outputRoot}</small>
-          <small>执行前确认 {realPilotSummary.phase44Confirmation} · 预算上限 {realPilotSummary.phase44BudgetLimit} · 输出监听 {realPilotSummary.phase44OutputWatcher} · 请求预览 {realPilotSummary.phase44RequestPreview}</small>
-          <small>Phase45 {realPilotSummary.phase45Status} · {realPilotSummary.phase45Confirmation} · {realPilotSummary.phase45ActionScope}</small>
+          <small>执行前确认 {realPilotSummary.preConfirmState} · 预算上限 {realPilotSummary.preConfirmBudgetLimit} · 输出监听 {realPilotSummary.preConfirmOutputWatch} · 请求预览 {realPilotSummary.preConfirmRequestPreview}</small>
+          <small>单次确认 {realPilotSummary.oneShotStatus} · {realPilotSummary.oneShotConfirmation} · {realPilotSummary.oneShotActionScope}</small>
         </div>
       </div>
       <div className="settings-group-title">Provider Enablement Gate</div>
@@ -7979,12 +7997,12 @@ function RealPilotDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeSt
         <Metric label="Image2 First" value={summary.image2State} detail={summary.seedanceState} />
         <Metric label="Ready / Blocked" value={`${summary.readyItems}/${summary.blockedItems}`} detail="gate item review state" />
         <Metric label="Ledger Entries" value={`${summary.ledgerEntries}`} detail="state-only record" />
-        <Metric label="执行前确认" value={summary.phase44Confirmation} detail={summary.phase44ScopeDetail} />
-        <Metric label="预算上限" value={summary.phase44BudgetLimit} detail="额度风险复核" />
-        <Metric label="输出监听" value={summary.phase44OutputWatcher} detail={summary.outputRoot} />
-        <Metric label="请求预览" value={summary.phase44RequestPreview} detail="只读摘要" />
-        <Metric label="Phase45" value={summary.phase45Status} detail={summary.phase45Confirmation} />
-        <Metric label="单次范围" value={summary.phase45ActionScope} detail={summary.phase45OutputExpectation} />
+        <Metric label="执行前确认" value={summary.preConfirmState} detail={summary.preConfirmScopeDetail} />
+        <Metric label="预算上限" value={summary.preConfirmBudgetLimit} detail="额度风险复核" />
+        <Metric label="输出监听" value={summary.preConfirmOutputWatch} detail={summary.outputRoot} />
+        <Metric label="请求预览" value={summary.preConfirmRequestPreview} detail="只读摘要" />
+        <Metric label="单次确认" value={summary.oneShotStatus} detail={summary.oneShotConfirmation} />
+        <Metric label="单次范围" value={summary.oneShotActionScope} detail={summary.oneShotOutputExpectation} />
       </div>
       <div className="real-pilot-diagnostic-list">
         <div>
@@ -8231,6 +8249,10 @@ function App() {
     if (section) setActiveSectionId(section.id);
   }
 
+  function confirmOneShot() {
+    setRuntimeState((current) => applyPreRealTestClosure(current, { generatedAt: new Date().toISOString() }).runtimeState);
+  }
+
   return (
     <div className={`app-shell minimal-shell ${mode === "director" && directorView === "preview" ? "preview-shell" : ""}`}>
       <MinimalTopNav
@@ -8276,6 +8298,7 @@ function App() {
           onUpdateAsset={updateAsset}
           onMarkAssetStatus={markAssetStatus}
           onProjectFactsModeChange={setProjectFactsMode}
+          onConfirmOneShot={confirmOneShot}
         />
       )}
       {mode === "inspector" && <InspectorMode audit={audit} view={view} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />}

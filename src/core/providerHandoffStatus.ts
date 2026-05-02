@@ -109,7 +109,7 @@ function normalizeInput(input: ProviderHandoffStatusInput | RuntimeLike): Provid
 }
 
 function watcherDetected(input: ProviderHandoffStatusInput, result?: RealProviderTransportResult): boolean {
-  if (result?.gateEvidence.watcherExpectedOutputDetected) return true;
+  if (result) return result.gateEvidence.watcherExpectedOutputDetected;
   return Boolean(
     input.imagePipeline?.watcherEvents?.some(
       (event) => event.eventType === "expected_output_detected" && event.status === "detected",
@@ -118,7 +118,7 @@ function watcherDetected(input: ProviderHandoffStatusInput, result?: RealProvide
 }
 
 function manifestMatched(input: ProviderHandoffStatusInput, result?: RealProviderTransportResult): boolean {
-  if (result?.gateEvidence.manifestMatched) return true;
+  if (result) return result.gateEvidence.manifestMatched;
   if (input.manifestMatches?.reports?.some((report) => manifestReadyStatuses.has(report.status))) return true;
   return Boolean(
     input.imagePipeline?.generationHealthReports?.some(
@@ -128,7 +128,7 @@ function manifestMatched(input: ProviderHandoffStatusInput, result?: RealProvide
 }
 
 function qaPassed(input: ProviderHandoffStatusInput, result?: RealProviderTransportResult): boolean {
-  if (result?.gateEvidence.qaPassed) return true;
+  if (result) return result.gateEvidence.qaPassed;
   if (
     input.imagePipeline?.generationHealthReports?.some(
       (report) => report.qaStatus === "pass" && report.healthStatus === "formal_ready",

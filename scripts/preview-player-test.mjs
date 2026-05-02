@@ -269,6 +269,87 @@ assert(previewExportState.demoPackageFacts.projectFactsSnapshot.selectedShotId =
 assert(previewExportState.demoPackageFacts.selectedKeyframes.length === 1, "selected keyframes should narrow to the selected shot when present");
 assert(previewExportState.demoPackageFacts.selectedKeyframes[0].shotId === "S02", "selected keyframes must sync with selected shot");
 
+const returnedOutputPreview = buildPreviewExportState({
+  generatedAt: "2026-05-01T00:00:00.000Z",
+  projectRoot: "/workspace/demo",
+  previewEvents: [],
+  shots: [
+    { ...shot("S10"), startFrame: undefined, endFrame: undefined },
+  ],
+  jobs: [
+    {
+      id: "S10_start_image2",
+      slot: "image.generate",
+      requiredMode: "text2image",
+      providerId: "openai-image2-codex-cli",
+      status: "planned",
+      outputPath: "outputs/expected/S10_start.png",
+      references: [],
+      issues: [],
+    },
+  ],
+  taskRuns: [
+    {
+      taskId: "S10_start_image2",
+      localStatus: "succeeded",
+      providerStatus: "succeeded",
+      providerId: "openai-image2-codex-cli",
+      retryCount: 0,
+      stallTimeoutSeconds: 0,
+      tempDirs: [],
+      expectedOutputs: ["outputs/expected/S10_start.png"],
+      actualOutputs: ["outputs/returned/S10_start.png"],
+    },
+  ],
+  taskViews: [
+    {
+      job: {
+        id: "S10_start_image2",
+        slot: "image.generate",
+        requiredMode: "text2image",
+        providerId: "openai-image2-codex-cli",
+        status: "planned",
+        outputPath: "outputs/expected/S10_start.png",
+        references: [],
+        issues: [],
+      },
+      shotId: "S10",
+      taskRun: {
+        taskId: "S10_start_image2",
+        localStatus: "succeeded",
+        providerStatus: "succeeded",
+        providerId: "openai-image2-codex-cli",
+        retryCount: 0,
+        stallTimeoutSeconds: 0,
+        tempDirs: [],
+        expectedOutputs: ["outputs/expected/S10_start.png"],
+        actualOutputs: ["outputs/returned/S10_start.png"],
+      },
+      manifestMatch: {
+        taskId: "S10_start_image2",
+        status: "complete",
+        expectedOutputCount: 1,
+        presentOutputCount: 1,
+        missingExpectedOutputs: [],
+        actualOutputsPresent: ["outputs/returned/S10_start.png"],
+        recoverableOutputs: [],
+        outputMatches: [],
+      },
+    },
+  ],
+  manifestMatches: [],
+  generationHealthReports: [],
+  qaPromotionReports: [],
+  issues: [],
+});
+assert(returnedOutputPreview.draftPreview.events.length === 1, "returned output preview should have one draft event");
+assert(returnedOutputPreview.draftPreview.events[0].type === "image_hold", "returned output without shot.startFrame must become image_hold");
+assert(
+  returnedOutputPreview.draftPreview.events[0].mediaPath === "outputs/returned/S10_start.png",
+  "returned output image_hold must use actual output path",
+);
+assert(returnedOutputPreview.formalPreview.status === "blocked", "returned output draft preview must not auto-promote formal preview");
+
 const appSource = stripComments(readText("src/App.tsx"));
 const stylesSource = stripComments(readText("src/styles.css"));
 const packageJson = readJson("package.json");

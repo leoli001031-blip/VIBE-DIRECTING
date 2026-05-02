@@ -19,6 +19,11 @@ import type { RealProviderPilotState } from "./realProviderPilot";
 import type { RealProviderExecutorState } from "./realProviderExecutor";
 import type { RealProviderOneShotTestState } from "./realProviderOneShotTest";
 import type { ProviderHandoffStatusState } from "./providerHandoffStatus";
+import type {
+  RealProviderTransportPlan,
+  RealProviderTransportReceipt,
+  RealProviderTransportResult,
+} from "./realProviderTransport";
 import type { LocalOrchestratorState } from "./localOrchestrator";
 import type { ProjectFactsIntegrationState } from "./projectFactsIntegration";
 import type {
@@ -212,6 +217,11 @@ export interface ProjectRuntimeState {
   realProviderPilot: RealProviderPilotState;
   realProviderExecutor: RealProviderExecutorState;
   realProviderOneShotTest: RealProviderOneShotTestState;
+  realProviderTransport?: {
+    plan?: RealProviderTransportPlan;
+    receipt?: RealProviderTransportReceipt;
+    result?: RealProviderTransportResult;
+  };
   providerHandoffStatus: ProviderHandoffStatusState;
   localOrchestrator: LocalOrchestratorState;
   generationHarness: GenerationHarnessState;

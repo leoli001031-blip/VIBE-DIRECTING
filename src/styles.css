@@ -446,7 +446,7 @@
   opacity: 0.64;
 }
 
-.real-pilot-phase44 {
+.real-pilot-preconfirm {
   grid-area: phase;
   display: flex;
   flex-wrap: wrap;
@@ -454,7 +454,7 @@
   min-width: 0;
 }
 
-.real-pilot-phase44 span {
+.real-pilot-preconfirm span {
   border: 1px solid rgba(37, 40, 34, 0.12);
   background: rgba(37, 40, 34, 0.035);
   color: rgba(37, 40, 34, 0.68);
@@ -525,7 +525,7 @@
   color: rgba(242, 238, 230, 0.84);
 }
 
-.preview-shell .real-pilot-phase44 span {
+.preview-shell .real-pilot-preconfirm span {
   border-color: rgba(242, 238, 230, 0.14);
   background: rgba(242, 238, 230, 0.055);
   color: rgba(242, 238, 230, 0.68);

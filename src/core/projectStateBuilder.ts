@@ -78,6 +78,7 @@ export interface ProjectRuntimeStateBuildOptions {
   realProviderPilot?: ProjectRuntimeState["realProviderPilot"];
   realProviderExecutor?: ProjectRuntimeState["realProviderExecutor"];
   realProviderOneShotTest?: ProjectRuntimeState["realProviderOneShotTest"];
+  realProviderTransport?: ProjectRuntimeState["realProviderTransport"];
   providerHandoffStatus?: ProjectRuntimeState["providerHandoffStatus"];
   realTestMode?: ExecutionLedgerMode;
   realTestBatchId?: string;
@@ -615,6 +616,7 @@ export function buildProjectRuntimeState(
     mode: realTestMode === "scoped_real_test" ? "one_shot_review" : "locked",
     realProviderExecutor,
   });
+  const realProviderTransport = options.realProviderTransport;
   const generationHealthChecker = buildGenerationHealthCheckerState({
     generatedAt,
     imageTaskPlans,
@@ -654,6 +656,7 @@ export function buildProjectRuntimeState(
   const providerHandoffStatus = options.providerHandoffStatus || buildProviderHandoffStatus({
     generatedAt,
     realProviderOneShotTest,
+    realProviderTransport,
     previewExport,
     imagePipeline: {
       watcherEvents,
@@ -729,6 +732,7 @@ export function buildProjectRuntimeState(
     realProviderPilot,
     realProviderExecutor,
     realProviderOneShotTest,
+    realProviderTransport,
     providerHandoffStatus,
     localOrchestrator,
     generationHarness,
@@ -1074,19 +1078,22 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       mode: "locked",
       realProviderExecutor,
     });
+  const realProviderTransport = state.realProviderTransport;
   const providerHandoffStatus =
-    state.providerHandoffStatus ||
-    buildProviderHandoffStatus({
-      generatedAt: state.generatedAt,
-      realProviderOneShotTest,
-      previewExport: state.previewExport,
-      imagePipeline: {
-        watcherEvents: state.imagePipeline.watcherEvents,
-        generationHealthReports: state.imagePipeline.generationHealthReports,
-        qaPromotionReports: state.imagePipeline.qaPromotionReports,
-      },
-      manifestMatches: state.manifestMatches,
-    });
+    state.providerHandoffStatus && !realProviderTransport
+      ? state.providerHandoffStatus
+      : buildProviderHandoffStatus({
+          generatedAt: state.generatedAt,
+          realProviderOneShotTest,
+          realProviderTransport,
+          previewExport: state.previewExport,
+          imagePipeline: {
+            watcherEvents: state.imagePipeline.watcherEvents,
+            generationHealthReports: state.imagePipeline.generationHealthReports,
+            qaPromotionReports: state.imagePipeline.qaPromotionReports,
+          },
+          manifestMatches: state.manifestMatches,
+        });
   const generationHealthChecker =
     state.generationHealthChecker ||
     buildGenerationHealthCheckerState({
@@ -1163,6 +1170,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     realProviderPilot,
     realProviderExecutor,
     realProviderOneShotTest,
+    realProviderTransport,
     providerHandoffStatus,
     localOrchestrator,
     generationHarness,

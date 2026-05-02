@@ -303,8 +303,21 @@ checkMessage(requireWithin(phase44ConfirmationSurface, /执行前确认/, "Phase
 checkMessage(requireWithin(phase44ConfirmationSurface, /预算上限/, "Phase 44 budget cap summary"));
 checkMessage(requireWithin(phase44ConfirmationSurface, /输出监听/, "Phase 44 output watcher summary"));
 checkMessage(requireWithin(phase44ConfirmationSurface, /请求预览/, "Phase 44 request preview summary"));
-checkMessage(requireWithin(phase44ConfirmationSurface, /Phase45/, "Phase 45 one-shot summary"));
+checkMessage(requireWithin(phase44ConfirmationSurface, /单次确认/, "one-shot confirmation summary"));
 checkMessage(requireWithin(phase44ConfirmationSurface, /动作确认待定|先完成复核/, "Phase 45 action-time confirmation state"));
+const realPilotOneShotMainSurface = `${realPilotDirectorStatus}\n${oneShotActionPanel}`;
+check(
+  !/Round|Phase44|Phase45/i.test(realPilotOneShotMainSurface),
+  "Real Pilot / one-shot main surface must not expose Round, Phase44, or Phase45",
+);
+for (const [term, pattern] of [
+  ["provider", /provider/i],
+  ["credential", /credential/i],
+  ["shell", /shell/i],
+  ["schema", /schema/i],
+]) {
+  check(!pattern.test(realPilotOneShotMainSurface), `Real Pilot / one-shot main surface must not expose ${term}`);
+}
 for (const [term, pattern] of [
   ["provider", /provider/i],
   ["credential", /credential/i],

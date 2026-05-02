@@ -71,6 +71,7 @@ export async function loadCore() {
     projectStateBuilder: await import(pathToFileURL(path.join(tmpDir, "projectStateBuilder.mjs")).href),
     providerPolicy: await import(pathToFileURL(path.join(tmpDir, "providerPolicy.mjs")).href),
     providerHandoffStatus: await import(pathToFileURL(path.join(tmpDir, "providerHandoffStatus.mjs")).href),
+    preRealTestClosure: await import(pathToFileURL(path.join(tmpDir, "preRealTestClosure.mjs")).href),
   };
 }
 
