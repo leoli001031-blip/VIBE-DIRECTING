@@ -16,6 +16,8 @@ import type {
   RoughCutProxyPlan,
   ShotRecord,
   TaskRun,
+  DemoPackageFacts,
+  DemoPackageMediaStatus,
 } from "./types";
 
 export const exportBuilderSchemaVersion = "0.1.0";
@@ -89,6 +91,10 @@ export interface BuildExportBuilderStateInput {
   audioPlanning?: AudioPlanningState;
   issues?: AuditIssue[];
   defaultImageHoldSeconds?: number;
+  selectedShotId?: string;
+  projectRoot?: string;
+  naturalLanguagePlanSummary?: unknown;
+  oneShotResultSummary?: unknown;
 }
 
 function safeId(value: string): string {
@@ -477,7 +483,7 @@ function buildProfiles(input: BuildExportBuilderStateInput, draftPreview: Previe
       kind: "rough_cut",
       label: "Rough Cut Proxy",
       readiness: roughPaths.length ? (formalPreview.status === "ready" ? "ready" : "draft_only") : "blocked",
-      includedCategories: ["preview_timeline", "image_holds", "video_clips", "missing_placeholders_when_draft"],
+      includedCategories: ["preview_timeline", "image_holds", "video_clips", "missing_placeholders_when_draft", "rough_cut_proxy_plan"],
       includedPaths: roughPaths,
       blockedReasons: roughPaths.length ? [] : ["No preview media paths are available for rough cut planning."],
       notes: ["Dry-run rough cut package plan only; no timeline or media file is rendered."],
@@ -487,7 +493,7 @@ function buildProfiles(input: BuildExportBuilderStateInput, draftPreview: Previe
       kind: "asset_package",
       label: "Asset Package",
       readiness: assetPaths.length ? (formalPreview.status === "ready" ? "ready" : "draft_only") : "blocked",
-      includedCategories: ["keyframes", "videos", "reference_assets", "audio_plan", "bgm_export_plan"],
+      includedCategories: ["selected_keyframes", "keyframes", "videos", "reference_assets", "audio_plan", "bgm_export_plan"],
       includedPaths: assetPaths,
       blockedReasons: assetPaths.length ? [] : ["No assets are available for package planning."],
       notes: ["Asset package is a reference list only; the builder does not copy, move, or create files."],
@@ -497,7 +503,7 @@ function buildProfiles(input: BuildExportBuilderStateInput, draftPreview: Previe
       kind: "storyboard_table",
       label: "Storyboard Table",
       readiness: input.shots.length ? "ready" : "blocked",
-      includedCategories: ["shot_order", "story_function", "duration", "media_status", "gate_summary"],
+      includedCategories: ["storyboard_table", "shot_order", "story_function", "duration", "media_status", "gate_summary", "project_facts_snapshot"],
       includedPaths: [],
       blockedReasons: input.shots.length ? [] : ["No shots are available for storyboard table planning."],
       notes: ["Storyboard table is a dry-run table plan; no CSV, XLSX, or document is written."],
@@ -506,7 +512,7 @@ function buildProfiles(input: BuildExportBuilderStateInput, draftPreview: Previe
       kind: "developer_archive",
       label: "Prompt and QA Developer Archive",
       readiness: archivePaths.length ? "ready" : "blocked",
-      includedCategories: ["prompts", "qa_promotion", "generation_health", "task_runs", "prompt_qa_trace"],
+      includedCategories: ["prompt_request_previews", "prompts", "qa_promotion", "generation_health", "qa_reports", "task_runs", "prompt_qa_trace", "project_facts_snapshot"],
       includedPaths: archivePaths,
       blockedReasons: archivePaths.length ? [] : ["No prompt, task output, or QA paths are available for archive planning."],
       notes: ["Developer archive is a dry-run path manifest and preserves prompt/QA traceability without provider submission."],
@@ -549,12 +555,120 @@ function roughCutProxy(sourcePreview: PreviewPlan): RoughCutProxyPlan {
   };
 }
 
+function mediaStatusForEvent(event?: PreviewEvent): DemoPackageMediaStatus {
+  if (event?.type === "video_clip" && event.mediaPath) return "video";
+  if (event?.type === "image_hold" && event.mediaPath) return "image";
+  return "missing";
+}
+
+function buildDemoPackageFacts(
+  input: BuildExportBuilderStateInput,
+  draftPreview: PreviewPlan,
+  proxy: RoughCutProxyPlan,
+): DemoPackageFacts {
+  const eventByShot = new Map(draftPreview.events.filter((event) => event.shotId).map((event) => [event.shotId || "", event]));
+  const selectedShotId = input.selectedShotId || input.shots[0]?.id;
+  const selectedShotExists = input.shots.some((shot) => shot.id === selectedShotId);
+  const selectedKeyframes = input.shots
+    .filter((shot) => Boolean(shot.startFrame || shot.endFrame))
+    .filter((shot) => !selectedShotId || !selectedShotExists || shot.id === selectedShotId)
+    .map((shot) => ({
+      shotId: shot.id,
+      startFrame: shot.startFrame,
+      endFrame: shot.endFrame,
+      selected: shot.id === selectedShotId,
+      reason: shot.id === selectedShotId ? "selected_shot" as const : "available_keyframe_pair" as const,
+    }));
+
+  return {
+    storyboardRows: input.shots.map((shot) => {
+      const event = eventByShot.get(shot.id);
+      return {
+        shotId: shot.id,
+        actId: shot.actId,
+        sectionId: shot.sectionId,
+        title: shot.title,
+        storyFunction: shot.storyFunction,
+        shotStatus: shot.status,
+        previewEventId: event?.id,
+        previewEventType: event?.type,
+        durationSeconds: event?.durationSeconds || 0,
+        mediaPath: event?.mediaPath,
+        mediaStatus: mediaStatusForEvent(event),
+        gateSummary: shot.gates,
+      };
+    }),
+    selectedKeyframes,
+    promptRequestPreviews: [
+      ...(input.jobs || []).map((job) => {
+        const run = (input.taskRuns || []).find((item) => item.taskId === job.id);
+        return {
+          id: job.id,
+          jobId: job.id,
+          taskId: run?.taskId,
+          slot: job.slot,
+          providerId: job.providerId,
+          requiredMode: job.requiredMode,
+          promptPath: job.promptPath,
+          expectedOutputs: run?.expectedOutputs || (job.outputPath ? [job.outputPath] : []),
+          actualOutputs: run?.actualOutputs || [],
+          dryRunOnly: true as const,
+          providerSubmissionForbidden: true as const,
+        };
+      }),
+      ...(input.taskRuns || [])
+        .filter((run) => !(input.jobs || []).some((job) => job.id === run.taskId))
+        .map((run) => ({
+          id: run.taskId,
+          taskId: run.taskId,
+          providerId: run.providerId,
+          expectedOutputs: run.expectedOutputs,
+          actualOutputs: run.actualOutputs,
+          dryRunOnly: true as const,
+          providerSubmissionForbidden: true as const,
+        })),
+    ],
+    qaReports: [
+      ...(input.generationHealthReports || []).map((report) => ({
+        id: report.reportId,
+        kind: "generation_health" as const,
+        shotId: report.shotId,
+        status: report.healthStatus,
+        blockers: report.blockers,
+        warnings: report.warnings,
+      })),
+      ...(input.qaPromotionReports || []).map((report) => ({
+        id: report.reportId,
+        kind: "qa_promotion" as const,
+        shotId: report.shotId,
+        status: report.promotionStatus,
+        blockers: report.blockers,
+        warnings: report.warnings,
+      })),
+    ],
+    projectFactsSnapshot: {
+      generatedAt: input.generatedAt,
+      projectRoot: input.projectRoot ? "project_root" : undefined,
+      shotCount: input.shots.length,
+      selectedShotId,
+      shotIds: input.shots.map((shot) => shot.id),
+      storySectionIds: uniqueSorted(input.shots.map((shot) => shot.sectionId || "")),
+    },
+    naturalLanguagePlanSummary: input.naturalLanguagePlanSummary,
+    oneShotResultSummary: input.oneShotResultSummary,
+    roughCutProxyPlanIncluded: proxy.eventCount > 0,
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+  };
+}
+
 export function buildExportBuilderState(input: BuildExportBuilderStateInput): ExportBuilderState {
   const draftPreview = buildDraftPreview(input);
   const formalResult = buildFormalPreview(input, draftPreview);
   const exportProfiles = buildProfiles(input, draftPreview, formalResult.preview);
   const exportPackagePlan = buildPackagePlan(exportProfiles);
   const proxySource = formalResult.preview.status === "ready" ? formalResult.preview : draftPreview;
+  const proxy = roughCutProxy(proxySource);
 
   return {
     schemaVersion: exportBuilderSchemaVersion,
@@ -563,9 +677,10 @@ export function buildExportBuilderState(input: BuildExportBuilderStateInput): Ex
     draftPreview,
     formalPreview: formalResult.preview,
     formalPreviewGate: formalResult.gate,
-    roughCutProxy: roughCutProxy(proxySource),
+    roughCutProxy: proxy,
     exportProfiles,
     exportPackagePlan,
+    demoPackageFacts: buildDemoPackageFacts(input, draftPreview, proxy),
     futureTargets: buildFutureTargets(),
     fileMutationPlan: {
       copyFiles: false,

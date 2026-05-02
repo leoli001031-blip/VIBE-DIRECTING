@@ -2534,6 +2534,77 @@ export interface PreviewPlan {
   providerSubmissionForbidden: true;
 }
 
+export type DemoPackageMediaStatus = "video" | "image" | "missing";
+
+export interface DemoPackageStoryboardRow {
+  shotId: string;
+  actId: string;
+  sectionId?: string;
+  title: string;
+  storyFunction: string;
+  shotStatus: ShotRecord["status"];
+  previewEventId?: string;
+  previewEventType?: PreviewEventType;
+  durationSeconds: number;
+  mediaPath?: string;
+  mediaStatus: DemoPackageMediaStatus;
+  gateSummary: GateSet;
+}
+
+export interface DemoPackageKeyframeSelection {
+  shotId: string;
+  startFrame?: string;
+  endFrame?: string;
+  selected: boolean;
+  reason: "selected_shot" | "available_keyframe_pair";
+}
+
+export interface DemoPackagePromptRequestPreview {
+  id: string;
+  shotId?: string;
+  jobId?: string;
+  taskId?: string;
+  slot?: ProviderSlot;
+  providerId?: string;
+  requiredMode?: RequiredMode;
+  promptPath?: string;
+  expectedOutputs: string[];
+  actualOutputs: string[];
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+}
+
+export interface DemoPackageQaReportPreview {
+  id: string;
+  kind: "generation_health" | "qa_promotion";
+  shotId: string;
+  status: string;
+  blockers: string[];
+  warnings: string[];
+}
+
+export interface DemoPackageProjectFactsSnapshot {
+  generatedAt: string;
+  projectRoot?: string;
+  shotCount: number;
+  selectedShotId?: string;
+  shotIds: string[];
+  storySectionIds: string[];
+}
+
+export interface DemoPackageFacts {
+  storyboardRows: DemoPackageStoryboardRow[];
+  selectedKeyframes: DemoPackageKeyframeSelection[];
+  promptRequestPreviews: DemoPackagePromptRequestPreview[];
+  qaReports: DemoPackageQaReportPreview[];
+  projectFactsSnapshot: DemoPackageProjectFactsSnapshot;
+  naturalLanguagePlanSummary?: unknown;
+  oneShotResultSummary?: unknown;
+  roughCutProxyPlanIncluded: boolean;
+  dryRunOnly: true;
+  providerSubmissionForbidden: true;
+}
+
 export interface FormalPreviewRequiredChecks {
   noBlockedMaterial: boolean;
   pairQaPass: boolean;
@@ -2600,6 +2671,7 @@ export interface ProjectPreviewExportState {
   roughCutProxy: RoughCutProxyPlan;
   exportProfiles: ExportProfile[];
   exportPackagePlan: ExportPackagePlan;
+  demoPackageFacts?: DemoPackageFacts;
 }
 
 export interface WorkflowStage {

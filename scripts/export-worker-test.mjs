@@ -160,6 +160,94 @@ const source = {
     proxyOnly: true,
     notes: [],
   },
+  demoPackageFacts: {
+    storyboardRows: [
+      {
+        shotId: "S01",
+        actId: "A1",
+        sectionId: "opening",
+        title: "Shot S01",
+        storyFunction: "Open the demo",
+        shotStatus: "ready",
+        previewEventId: "formal_s01",
+        previewEventType: "video_clip",
+        durationSeconds: 4,
+        mediaPath: "outputs/videos/S01.mp4",
+        mediaStatus: "video",
+        gateSummary: { identity: "PASS", scene: "PASS", pair: "PASS", story: "PASS", prop: "N/A", style: "PASS" },
+      },
+      {
+        shotId: "S02",
+        actId: "A1",
+        sectionId: "opening",
+        title: "Shot S02",
+        storyFunction: "Close the demo",
+        shotStatus: "ready",
+        previewEventId: "formal_s02",
+        previewEventType: "video_clip",
+        durationSeconds: 5,
+        mediaPath: "outputs/videos/S02.mp4",
+        mediaStatus: "video",
+        gateSummary: { identity: "PASS", scene: "PASS", pair: "PASS", story: "PASS", prop: "N/A", style: "PASS" },
+      },
+    ],
+    selectedKeyframes: [
+      {
+        shotId: "S02",
+        startFrame: "outputs/keyframes/S02_start.png",
+        endFrame: "outputs/keyframes/S02_end.png",
+        selected: true,
+        reason: "selected_shot",
+      },
+    ],
+    promptRequestPreviews: [
+      {
+        id: "job_prompt_S02",
+        shotId: "S02",
+        jobId: "job_prompt_S02",
+        taskId: "job_prompt_S02",
+        slot: "image.edit",
+        providerId: "openai-image2-api",
+        requiredMode: "image2image",
+        promptPath: "prompts/S02.md",
+        expectedOutputs: ["outputs/keyframes/S02_end.png"],
+        actualOutputs: ["outputs/keyframes/S02_end.png"],
+        dryRunOnly: true,
+        providerSubmissionForbidden: true,
+      },
+    ],
+    qaReports: [
+      {
+        id: "health_S02",
+        kind: "generation_health",
+        shotId: "S02",
+        status: "formal_ready",
+        blockers: [],
+        warnings: [],
+      },
+      {
+        id: "promotion_S02",
+        kind: "qa_promotion",
+        shotId: "S02",
+        status: "promoted",
+        blockers: [],
+        warnings: [],
+      },
+    ],
+    projectFactsSnapshot: {
+      generatedAt,
+      projectRoot: "project_root",
+      shotCount: 2,
+      selectedShotId: "S02",
+      shotIds: ["S01", "S02"],
+      storySectionIds: ["opening"],
+    },
+    naturalLanguagePlanSummary: { selectedShotId: "S02", planId: "director_plan_S02" },
+    oneShotResultSummary: { taskId: "job_prompt_S02", outputPath: "outputs/keyframes/S02_end.png", providerSubmitted: false },
+    roughCutProxyPlanIncluded: true,
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+  },
   exportProfiles: [
     profile("rough_cut", "ready", ["outputs/videos/S01.mp4", "outputs/videos/S02.mp4"]),
     profile("asset_package", "ready", ["outputs/keyframes/S01_start.png", "outputs/videos/S01.mp4"]),
@@ -248,6 +336,16 @@ for (const entry of executableState.entries.filter((item) => item.operation === 
   assert(entry.path.startsWith("reports/exports/current/"), `${entry.path} must stay in allowlisted export root`);
 }
 assert(adapter.files.size === 5, "only the five allowlisted text manifests should be written");
+const storyboardText = adapter.files.get("reports/exports/current/storyboard_table.tsv");
+assert(storyboardText.includes("story_function") && storyboardText.includes("Open the demo"), "storyboard table must include demo storyboard facts");
+const assetManifest = JSON.parse(adapter.files.get("reports/exports/current/asset_package_manifest.json"));
+assert(assetManifest.selectedKeyframes[0].shotId === "S02", "asset package manifest must include selected keyframes");
+assert(assetManifest.projectFactsSnapshot.selectedShotId === "S02", "asset package manifest must include project facts snapshot");
+const developerManifest = JSON.parse(adapter.files.get("reports/exports/current/developer_archive.json"));
+assert(developerManifest.promptRequestPreviews[0].promptPath === "prompts/S02.md", "developer archive must include prompt/request previews");
+assert(developerManifest.qaReports.length === 2, "developer archive must include QA reports");
+assert(developerManifest.naturalLanguagePlanSummary.planId === "director_plan_S02", "developer archive must include natural-language plan summary");
+assert(developerManifest.oneShotResultSummary.providerSubmitted === false, "developer archive must preserve one-shot dry-run result summary");
 
 const absoluteRoot = exportWorker.buildExportWorkerState({ source, exportRoot: "/tmp/exports/current", generatedAt, executionMode: "adapter_execution", confirmation: true });
 assert(absoluteRoot.readiness === "blocked", "absolute export root must be blocked");
@@ -316,6 +414,11 @@ const enabledFutureTarget = structuredClone(source);
 enabledFutureTarget.futureTargets[0].enabled = true;
 const enabledFutureState = exportWorker.buildExportWorkerState({ source: enabledFutureTarget, exportRoot: "exports/current", generatedAt });
 assert(enabledFutureState.readiness === "blocked", "enabled future NLE target must block");
+const absoluteReferenceSource = structuredClone(source);
+absoluteReferenceSource.exportProfiles[1].includedPaths.push("/tmp/outside.png");
+const absoluteReferenceState = exportWorker.buildExportWorkerState({ source: absoluteReferenceSource, exportRoot: "exports/current", generatedAt });
+assert(absoluteReferenceState.readiness === "blocked", "absolute package reference paths must block export planning");
+assert(absoluteReferenceState.blockers.some((blocker) => blocker.includes("project-root-relative")), "absolute reference path blocker missing");
 assert(!executableState.entries.some((entry) => /\.(fcpxml|edl|prproj|drp|xml)$/i.test(entry.path)), "future NLE files must not be generated");
 
 const schema = readJson("schemas/export_worker.schema.json");

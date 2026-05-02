@@ -12,6 +12,21 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+class MemoryExportAdapter {
+  constructor() {
+    this.files = new Map();
+    this.directories = new Set();
+  }
+
+  mkdir(path) {
+    this.directories.add(path);
+  }
+
+  writeFile(path, content) {
+    this.files.set(path, content);
+  }
+}
+
 function transpile(sourcePath, rewrites = []) {
   let output = ts.transpileModule(fs.readFileSync(sourcePath, "utf8"), {
     compilerOptions: {
@@ -35,6 +50,8 @@ async function loadCoreModules() {
     ["localOrchestrator", []],
     ["providerLiveGate", []],
     ["exportBuilder", []],
+    ["exportWorker", []],
+    ["previewPlayerQueue", []],
     ["visualConsistency", []],
   ];
   for (const [moduleName, rewrites] of modules) {
@@ -63,6 +80,8 @@ const {
   localOrchestrator,
   providerLiveGate,
   exportBuilder,
+  exportWorker,
+  previewPlayerQueue,
   visualConsistency,
 } = await loadCoreModules();
 
@@ -769,7 +788,130 @@ assert(exportState.formalPreview.events.every((event) => event.type !== "blocked
 assert(!exportState.formalPreview.events.some((event) => event.shotId === "S02"), "blocked material must not enter formal preview");
 assert(exportState.draftPreview.events.some((event) => event.type === "blocked_placeholder"), "blocked material can only appear as draft placeholder");
 
-for (const state of [orchestratorState, exportState]) {
+const closureExportState = exportBuilder.buildExportBuilderState({
+  generatedAt,
+  projectRoot: "/Users/example/project",
+  shots: [shots[1]],
+  selectedShotId: "S02",
+  shotMedia: [
+    {
+      shotId: "S02",
+      imagePath: "outputs/keyframes/S02_start.png",
+      videoPath: "outputs/videos/S02.mp4",
+      durationSeconds: 4,
+      manifestMatched: true,
+      promotionPassed: true,
+      videoQaPass: true,
+    },
+  ],
+  jobs: [
+    {
+      id: imageTaskPlan.jobId,
+      slot: "image.edit",
+      requiredMode: "image2image",
+      providerId: "openai-image2-api",
+      status: "success",
+      outputPath: imageTaskPlan.expectedOutputPath,
+      promptPath: "prompts/S02_end.md",
+      references: ["hero_locked", "garage_scene_locked"],
+      issues: [],
+    },
+  ],
+  taskRuns: [
+    {
+      taskId: imageTaskPlan.jobId,
+      localStatus: "succeeded",
+      providerStatus: "success",
+      providerId: "openai-image2-api",
+      retryCount: 0,
+      stallTimeoutSeconds: 600,
+      tempDirs: [],
+      expectedOutputs: [imageTaskPlan.expectedOutputPath],
+      actualOutputs: [imageTaskPlan.expectedOutputPath],
+      lastEventAt: generatedAt,
+    },
+  ],
+  generationHealthReports: [
+    {
+      reportId: "health_S02_ready",
+      taskPlanId: "video_task_S02",
+      jobId: "job_video_S02",
+      shotId: "S02",
+      expectedOutputPath: "outputs/videos/S02.mp4",
+      outputExists: true,
+      manifestStatus: "matched",
+      qaStatus: "pass",
+      stalePrompt: false,
+      assetReadinessStatus: "ready",
+      healthStatus: "formal_ready",
+      blockers: [],
+      warnings: [],
+      nextAction: "ready_for_demo_closure",
+    },
+  ],
+  qaPromotionReports: [
+    {
+      reportId: "promotion_S02_ready",
+      taskPlanId: "video_task_S02",
+      jobId: "job_video_S02",
+      shotId: "S02",
+      candidatePath: "outputs/videos/S02.mp4",
+      formalPath: "outputs/videos/S02.mp4",
+      promotionStatus: "promoted",
+      requiredGates: {
+        expectedOutput: true,
+        manifestMatch: true,
+        promptFresh: true,
+        assetReadiness: true,
+        qaPass: true,
+      },
+      blockers: [],
+      warnings: [],
+      canPromoteToFormal: true,
+    },
+  ],
+  naturalLanguagePlanSummary: {
+    selectedShotId: "S02",
+    status: directorPlan.status,
+    transactionId: directorPlan.transaction.id,
+    providerPromptPatchForbidden: directorPlan.providerPromptPatchForbidden,
+  },
+  oneShotResultSummary: {
+    taskId: imageTaskPlan.jobId,
+    outputPath: imageTaskPlan.expectedOutputPath,
+    providerSubmitted: false,
+    source: "dry_run_one_shot_preview",
+  },
+  defaultImageHoldSeconds: 4,
+});
+assert(closureExportState.demoPackageFacts.projectFactsSnapshot.selectedShotId === "S02", "demo closure must retain selected shot facts");
+assert(closureExportState.demoPackageFacts.selectedKeyframes[0].shotId === "S02", "demo closure must package selected keyframes");
+assert(closureExportState.demoPackageFacts.promptRequestPreviews[0].promptPath === "prompts/S02_end.md", "demo closure must package prompt/request previews");
+assert(closureExportState.demoPackageFacts.qaReports.length === 2, "demo closure must package QA reports");
+assert(closureExportState.demoPackageFacts.naturalLanguagePlanSummary.transactionId === directorPlan.transaction.id, "demo closure must package natural-language plan result");
+assert(closureExportState.demoPackageFacts.oneShotResultSummary.providerSubmitted === false, "demo closure one-shot result must remain dry-run");
+const closureQueue = previewPlayerQueue.buildPreviewPlayerQueue(closureExportState, [shots[1]]);
+assert(closureQueue.length === 1 && closureQueue[0].kind === "video_clip", "demo closure preview queue must play the selected shot video");
+assert(previewPlayerQueue.getPreviewPlayerActiveItem(closureQueue, 0)?.shotId === "S02", "preview active item must sync to selected shot");
+const closureWorkerState = exportWorker.buildExportWorkerState({
+  source: closureExportState,
+  exportRoot: "reports/exports/demo-closure",
+  generatedAt,
+  profileSelection: "all",
+  executionMode: "adapter_execution",
+  confirmation: true,
+});
+assert(closureWorkerState.readiness === "ready", `demo closure export worker should be ready: ${closureWorkerState.blockers.join("; ")}`);
+const closureAdapter = new MemoryExportAdapter();
+const closureWrite = await exportWorker.executeExportWorkerPlan(closureWorkerState, closureAdapter);
+assert(closureWrite.ok, `demo closure export worker should execute against memory adapter: ${closureWrite.errors.join("; ")}`);
+assert(closureAdapter.files.size === 5, "demo closure export package should plan five text outputs");
+const closureDeveloperArchive = JSON.parse(closureAdapter.files.get("reports/exports/demo-closure/developer_archive.json"));
+assert(closureDeveloperArchive.projectFactsSnapshot.selectedShotId === "S02", "developer archive must include project facts snapshot");
+assert(closureDeveloperArchive.promptRequestPreviews[0].providerSubmissionForbidden === true, "request preview must forbid provider submission");
+assert(closureDeveloperArchive.oneShotResultSummary.outputPath === imageTaskPlan.expectedOutputPath, "developer archive must include one-shot result summary");
+
+for (const state of [orchestratorState, exportState, closureExportState]) {
   assert(state.providerSubmissionForbidden === true, "provider submission must be forbidden end-to-end");
   assert(state.liveSubmitAllowed === false, "live submit must be false end-to-end");
   assert(state.noFileMutation === true, "no file mutation must remain true end-to-end");

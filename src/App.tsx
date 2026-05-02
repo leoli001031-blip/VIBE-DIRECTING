@@ -672,6 +672,13 @@ function buildPreviewPlayerQueue(previewExport: ProjectPreviewExportState, shots
   );
 }
 
+function exportStatusLabel(status: string) {
+  if (status === "ready") return "可导出";
+  if (status === "blocked") return "需要补齐";
+  if (status === "draft_only") return "可预览";
+  return "已计划";
+}
+
 function buildMinimalProjectPlan(runtimeState: ProjectRuntimeState): MinimalProjectPlan {
   const plan = buildProjectRuntimePlan({
     mode: "open",
@@ -6204,6 +6211,8 @@ function MinimalPreview({
   const activeItem = getPreviewPlayerActiveItem(queue, currentTime);
   const activeShot = activeItem?.shotId ? shots.find((shot) => shot.id === activeItem.shotId) : undefined;
   const progress = Math.min(100, Math.max(0, (currentTime / total) * 100));
+  const packageStatus = exportStatusLabel(previewExport.exportPackagePlan.status);
+  const packageCount = previewExport.exportProfiles.length;
 
   useEffect(() => {
     currentTimeRef.current = currentTime;
@@ -6372,6 +6381,9 @@ function MinimalPreview({
           <button onClick={togglePlaying}>{playing ? <PauseCircle size={17} /> : <Play size={17} />}</button>
           <span>{formatDuration(currentTime)} / {formatDuration(total)}</span>
         </div>
+        <p className="preview-export-summary" aria-label="Demo package">
+          Demo package · {packageStatus} · {packageCount} 项
+        </p>
       </section>
     </main>
   );

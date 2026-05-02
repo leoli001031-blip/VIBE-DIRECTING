@@ -73,6 +73,21 @@ async function importPreviewPlayerQueue() {
   return import(dataUrl(sourcePath, output.outputText));
 }
 
+async function importPreviewExport() {
+  const sourcePath = "src/core/previewExport.ts";
+  const output = ts.transpileModule(readText(sourcePath), {
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ES2022,
+      moduleResolution: ts.ModuleResolutionKind.Node10,
+      importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+      isolatedModules: true,
+    },
+    fileName: sourcePath,
+  });
+  return import(dataUrl(sourcePath, output.outputText));
+}
+
 function event(overrides) {
   return {
     id: overrides.id,
@@ -194,6 +209,7 @@ const {
   getPreviewPlayerActiveItem,
   getPreviewPlayerTotalDuration,
 } = await importPreviewPlayerQueue();
+const { buildPreviewExportState } = await importPreviewExport();
 
 const shots = [shot("S01"), shot("S02"), shot("S03")];
 const queue = buildPreviewPlayerQueue(
@@ -222,6 +238,36 @@ assert(getPreviewPlayerActiveItem(queue, 0)?.id === "image-first", "active item 
 assert(getPreviewPlayerActiveItem(queue, 4)?.id === "clip-missing", "active item should switch on exact event boundary");
 assert(getPreviewPlayerActiveItem(queue, 8.5)?.id === "video-third", "active item should follow current time");
 assert(getPreviewPlayerActiveItem(queue, 99)?.id === "blocked-fourth", "active item after the end should remain stable");
+
+const previewExportState = buildPreviewExportState({
+  generatedAt: "2026-05-01T00:00:00.000Z",
+  projectRoot: "/workspace/demo",
+  previewEvents: [
+    event({ id: "stale-s01-image", type: "image_hold", shotId: "S01", startSeconds: 99, durationSeconds: 4, mediaPath: "outputs/keyframes/S01_start.png", mode: "draft_preview" }),
+  ],
+  shots: [
+    { ...shot("S01"), startFrame: "outputs/keyframes/S01_start.png", videoPath: "outputs/videos/S01.mp4" },
+    { ...shot("S02"), startFrame: "outputs/keyframes/S02_start.png" },
+    { ...shot("S03"), startFrame: undefined, endFrame: undefined },
+  ],
+  jobs: [],
+  taskRuns: [],
+  taskViews: [],
+  manifestMatches: [],
+  generationHealthReports: [],
+  qaPromotionReports: [],
+  issues: [],
+  selectedShotId: "S02",
+});
+const autoEvents = previewExportState.draftPreview.events;
+assert(autoEvents.map((item) => item.shotId).join(",") === "S01,S02,S03", "preview export must rebuild draft queue in shot order");
+assert(autoEvents[0].type === "video_clip" && autoEvents[0].mediaPath === "outputs/videos/S01.mp4", "existing video must replace a matching image hold");
+assert(autoEvents[1].type === "image_hold" && autoEvents[1].durationSeconds === 3, "image-only shot must become a duration-based image hold");
+assert(autoEvents[2].type === "blocked_placeholder" && !autoEvents[2].mediaPath, "missing shot media must become a minimal placeholder");
+assert(autoEvents[1].startSeconds === autoEvents[0].durationSeconds, "auto preview queue must keep shot timing contiguous");
+assert(previewExportState.demoPackageFacts.projectFactsSnapshot.selectedShotId === "S02", "selected shot fact must be carried with preview/export state");
+assert(previewExportState.demoPackageFacts.selectedKeyframes.length === 1, "selected keyframes should narrow to the selected shot when present");
+assert(previewExportState.demoPackageFacts.selectedKeyframes[0].shotId === "S02", "selected keyframes must sync with selected shot");
 
 const appSource = stripComments(readText("src/App.tsx"));
 const stylesSource = stripComments(readText("src/styles.css"));

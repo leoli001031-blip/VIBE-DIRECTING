@@ -195,6 +195,8 @@
 
 目标：生成结果自动进入 Preview，并能导出一个 demo 包，形成完整演示闭环。
 
+状态：核心闭环已完成。Preview 现在能按 shot 顺序从视频、关键帧和 task outputs 自动生成队列，视频优先、图片按时长 hold、缺失显示占位；Export 生成 storyboard table、selected keyframes、prompt/request previews、QA reports、project facts snapshot 和 rough cut proxy plan 的 plan-only 文本包。真实 provider transport 也已进入 mock/manual 合同层，不自动联网、不读密钥、不写 sandbox 外。
+
 ### 必做事项
 
 - Preview 自动读取已存在图片和视频。

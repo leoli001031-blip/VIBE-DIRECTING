@@ -41,6 +41,7 @@
     "real-provider-pilot:test": "node scripts/real-provider-pilot-test.mjs",
     "real-provider-executor:test": "node scripts/real-provider-executor-test.mjs",
     "real-provider-one-shot:test": "node scripts/real-provider-one-shot-test.mjs",
+    "real-provider-transport:test": "node scripts/real-provider-transport-test.mjs",
     "small-project:test": "node scripts/small-project-one-shot-test.mjs",
     "demo:state": "node scripts/build-demo-runtime-state.mjs",
     "demo:test": "node scripts/build-demo-runtime-state.mjs --check",

@@ -266,6 +266,48 @@ function tsvValue(value: unknown): string {
 }
 
 function storyboardTable(source: ProjectPreviewExportState): string {
+  if (source.demoPackageFacts?.storyboardRows.length) {
+    const rows = source.demoPackageFacts.storyboardRows.map((row) => [
+      row.shotId,
+      row.actId,
+      row.sectionId || "",
+      row.title,
+      row.storyFunction,
+      row.shotStatus,
+      row.previewEventType || "",
+      row.durationSeconds,
+      row.mediaStatus,
+      row.mediaPath || "",
+      row.gateSummary.identity,
+      row.gateSummary.scene,
+      row.gateSummary.pair,
+      row.gateSummary.story,
+      row.gateSummary.prop,
+      row.gateSummary.style,
+    ]);
+    return [
+      [
+        "shot_id",
+        "act_id",
+        "section_id",
+        "title",
+        "story_function",
+        "shot_status",
+        "preview_event_type",
+        "duration_seconds",
+        "media_status",
+        "media_path",
+        "gate_identity",
+        "gate_scene",
+        "gate_pair",
+        "gate_story",
+        "gate_prop",
+        "gate_style",
+      ].join("\t"),
+      ...rows.map((row) => row.map(tsvValue).join("\t")),
+    ].join("\n") + "\n";
+  }
+
   const rows = activePreview(source).events.map((event) => [
     event.shotId || "",
     event.mode,
@@ -293,6 +335,7 @@ function roughCutTimeline(source: ProjectPreviewExportState, generatedAt: string
     events: preview.events,
     renderMedia: false,
     futureNleFilesGenerated: false,
+    roughCutProxyPlanIncluded: source.demoPackageFacts?.roughCutProxyPlanIncluded ?? true,
     notes: ["Text timeline manifest only; no media is rendered and no NLE project file is generated."],
   });
 }
@@ -308,6 +351,8 @@ function assetPackageManifest(source: ProjectPreviewExportState, generatedAt: st
     moveFiles: false,
     packageMedia: false,
     includedPathsAreReferencesOnly: true,
+    selectedKeyframes: source.demoPackageFacts?.selectedKeyframes || [],
+    projectFactsSnapshot: source.demoPackageFacts?.projectFactsSnapshot,
     notes: ["Asset package is a text manifest of project-root-relative references only."],
   });
 }
@@ -321,6 +366,11 @@ function developerArchive(source: ProjectPreviewExportState, generatedAt: string
     formalPreviewGate: source.formalPreviewGate,
     exportPackagePlan: source.exportPackagePlan,
     developerArchiveProfile: source.exportProfiles.find((profile) => profile.kind === "developer_archive"),
+    promptRequestPreviews: source.demoPackageFacts?.promptRequestPreviews || [],
+    qaReports: source.demoPackageFacts?.qaReports || [],
+    projectFactsSnapshot: source.demoPackageFacts?.projectFactsSnapshot,
+    naturalLanguagePlanSummary: source.demoPackageFacts?.naturalLanguagePlanSummary,
+    oneShotResultSummary: source.demoPackageFacts?.oneShotResultSummary,
     futureTargets: Array.isArray(builderLike.futureTargets) ? builderLike.futureTargets : [],
     providerSubmissionForbidden: true,
     liveSubmitAllowed: false,
@@ -418,6 +468,32 @@ function collectCredentialKeyErrors(value: unknown, label = "input"): string[] {
   return uniqueSorted(errors);
 }
 
+function collectReferencePathErrors(source: ProjectPreviewExportState): string[] {
+  const errors: string[] = [];
+  const check = (path: string | undefined, label: string): void => {
+    if (!path) return;
+    if (isUnsafePath(path)) errors.push(`${label} must be project-root-relative and cannot use absolute paths or parent traversal: ${path}`);
+  };
+
+  source.exportProfiles.forEach((profile) => {
+    profile.includedPaths.forEach((path, index) => check(path, `exportProfiles.${profile.kind}.includedPaths[${index}]`));
+  });
+  [...source.draftPreview.events, ...source.formalPreview.events].forEach((event) => {
+    check(event.mediaPath, `previewEvents.${event.id}.mediaPath`);
+  });
+  source.demoPackageFacts?.selectedKeyframes.forEach((keyframe, index) => {
+    check(keyframe.startFrame, `demoPackageFacts.selectedKeyframes[${index}].startFrame`);
+    check(keyframe.endFrame, `demoPackageFacts.selectedKeyframes[${index}].endFrame`);
+  });
+  source.demoPackageFacts?.promptRequestPreviews.forEach((preview, index) => {
+    check(preview.promptPath, `demoPackageFacts.promptRequestPreviews[${index}].promptPath`);
+    preview.expectedOutputs.forEach((path, outputIndex) => check(path, `demoPackageFacts.promptRequestPreviews[${index}].expectedOutputs[${outputIndex}]`));
+    preview.actualOutputs.forEach((path, outputIndex) => check(path, `demoPackageFacts.promptRequestPreviews[${index}].actualOutputs[${outputIndex}]`));
+  });
+
+  return uniqueSorted(errors);
+}
+
 function inputBlockers(input: BuildExportWorkerStateInput, exportRoot: string, selectedKinds: ExportProfileKind[]): string[] {
   const blockers: string[] = [];
   const normalizedRoot = normalizePath(exportRoot);
@@ -461,6 +537,7 @@ function inputBlockers(input: BuildExportWorkerStateInput, exportRoot: string, s
     }
   }
   blockers.push(...collectCredentialKeyErrors(input.source, "source"));
+  blockers.push(...collectReferencePathErrors(input.source));
   return uniqueSorted(blockers);
 }
 

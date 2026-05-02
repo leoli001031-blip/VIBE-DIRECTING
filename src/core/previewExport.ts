@@ -15,6 +15,8 @@ import type {
   ShotRecord,
   TaskRun,
   GenerationJob,
+  DemoPackageFacts,
+  DemoPackageMediaStatus,
 } from "./types";
 
 export const previewExportSchemaVersion = "0.1.0";
@@ -38,6 +40,10 @@ export interface BuildPreviewExportStateInput {
   generationHealthReports: GenerationHealthReport[];
   qaPromotionReports: QaPromotionReport[];
   issues: AuditIssue[];
+  selectedShotId?: string;
+  naturalLanguagePlanSummary?: unknown;
+  oneShotResultSummary?: unknown;
+  defaultImageHoldSeconds?: number;
 }
 
 function uniqueSorted(values: string[]): string[] {
@@ -50,6 +56,130 @@ function totalDuration(events: PreviewEvent[]): number {
 
 function hasManifestMatch(status?: string): boolean {
   return status === "actual_output_present" || status === "complete" || status === "matched";
+}
+
+function safeId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, "_");
+}
+
+function firstPath(values: Array<string | undefined>): string | undefined {
+  return values.find((value) => Boolean(value));
+}
+
+function taskOutputPath(task?: PreviewExportTaskViewFacts): string | undefined {
+  return firstPath([...(task?.taskRun.actualOutputs || []), task?.job.outputPath, ...(task?.taskRun.expectedOutputs || [])]);
+}
+
+function durationForShot(input: BuildPreviewExportStateInput, shot: ShotRecord, fallbackEvents: PreviewEvent[]): number {
+  const event = fallbackEvents.find((item) => item.shotId === shot.id);
+  const duration = event?.durationSeconds || input.defaultImageHoldSeconds || 3;
+  return Number.isFinite(duration) && duration > 0 ? duration : 3;
+}
+
+function imageTaskForShot(input: BuildPreviewExportStateInput, shotId: string): PreviewExportTaskViewFacts | undefined {
+  return input.taskViews.find((task) => task.shotId === shotId && task.job.slot.startsWith("image."));
+}
+
+function videoTaskForShot(input: BuildPreviewExportStateInput, shotId: string): PreviewExportTaskViewFacts | undefined {
+  return input.taskViews.find((task) => task.shotId === shotId && task.job.slot.startsWith("video."));
+}
+
+function imagePathForShot(input: BuildPreviewExportStateInput, shot: ShotRecord, fallbackEvents: PreviewEvent[]): string | undefined {
+  const imageTask = imageTaskForShot(input, shot.id);
+  return firstPath([
+    fallbackEvents.find((event) => event.shotId === shot.id && event.type === "image_hold")?.mediaPath,
+    shot.startFrame,
+    shot.endFrame,
+    taskOutputPath(imageTask),
+  ]);
+}
+
+function videoPathForShot(input: BuildPreviewExportStateInput, shot: ShotRecord, fallbackEvents: PreviewEvent[]): string | undefined {
+  const videoTask = videoTaskForShot(input, shot.id);
+  return firstPath([
+    shot.videoPath,
+    fallbackEvents.find((event) => event.shotId === shot.id && event.type === "video_clip")?.mediaPath,
+    taskOutputPath(videoTask),
+  ]);
+}
+
+function mediaStatusForEvent(event?: PreviewEvent): DemoPackageMediaStatus {
+  if (event?.type === "video_clip" && event.mediaPath) return "video";
+  if (event?.type === "image_hold" && event.mediaPath) return "image";
+  return "missing";
+}
+
+function buildDraftEvents(input: BuildPreviewExportStateInput): { events: PreviewEvent[]; blockedReasons: string[] } {
+  const explicitDraftEvents = input.previewEvents.filter((event) => event.mode === "draft_preview");
+  if (!input.shots.length) {
+    const explicitBlockedReasons = explicitDraftEvents
+      .filter((event) => event.type === "blocked_placeholder")
+      .map((event) => `${event.shotId || event.id}: draft preview contains blocked placeholder.`);
+    return { events: explicitDraftEvents, blockedReasons: explicitBlockedReasons };
+  }
+
+  const events: PreviewEvent[] = [];
+  const blockedReasons: string[] = [];
+  let cursor = 0;
+
+  for (const shot of input.shots) {
+    const durationSeconds = durationForShot(input, shot, explicitDraftEvents);
+    const videoTask = videoTaskForShot(input, shot.id);
+    const imageTask = imageTaskForShot(input, shot.id);
+    const videoPath = videoPathForShot(input, shot, explicitDraftEvents);
+    const imagePath = imagePathForShot(input, shot, explicitDraftEvents);
+
+    if (videoPath) {
+      events.push({
+        id: `draft_${safeId(shot.id)}_video_clip`,
+        mode: "draft_preview",
+        type: "video_clip",
+        shotId: shot.id,
+        startSeconds: cursor,
+        durationSeconds,
+        mediaPath: videoPath,
+        qaStatus: "UNKNOWN",
+        sourceTaskId: videoTask?.job.id,
+      });
+    } else if (imagePath) {
+      events.push({
+        id: `draft_${safeId(shot.id)}_image_hold`,
+        mode: "draft_preview",
+        type: "image_hold",
+        shotId: shot.id,
+        startSeconds: cursor,
+        durationSeconds,
+        mediaPath: imagePath,
+        qaStatus: "UNKNOWN",
+        sourceTaskId: imageTask?.job.id,
+      });
+    } else {
+      const reason = `${shot.id}: missing image hold and video clip.`;
+      blockedReasons.push(reason);
+      events.push({
+        id: `draft_${safeId(shot.id)}_missing_placeholder`,
+        mode: "draft_preview",
+        type: "blocked_placeholder",
+        shotId: shot.id,
+        startSeconds: cursor,
+        durationSeconds,
+        qaStatus: "UNKNOWN",
+      });
+    }
+
+    cursor += durationSeconds;
+  }
+
+  const passthroughEvents = explicitDraftEvents.filter((event) => !event.shotId || !input.shots.some((shot) => shot.id === event.shotId));
+  return {
+    events: [...events, ...passthroughEvents],
+    blockedReasons: uniqueSorted([
+      ...blockedReasons,
+      ...passthroughEvents
+        .filter((event) => event.type === "blocked_placeholder")
+        .map((event) => `${event.shotId || event.id}: draft preview contains blocked placeholder.`),
+    ]),
+  };
 }
 
 function summarizePreview(mode: PreviewPlan["mode"], status: PreviewPlanStatus, events: PreviewEvent[], blockedReasons: string[]): PreviewPlan["summary"] {
@@ -117,7 +247,7 @@ function formalShotReasons(input: BuildPreviewExportStateInput, shot: ShotRecord
   const reasons: string[] = [];
   const videoTask = input.taskViews.find((task) => task.shotId === shot.id && task.job.slot.startsWith("video."));
   const videoManifest = videoTask?.manifestMatch || input.manifestMatches.find((report) => report.taskId === videoTask?.job.id);
-  const videoPath = shot.videoPath || videoTask?.taskRun.expectedOutputs[0];
+  const videoPath = videoPathForShot(input, shot, input.previewEvents);
   const relatedPromotions = input.qaPromotionReports.filter((report) => report.shotId === shot.id);
   const relatedHealth = input.generationHealthReports.filter((report) => report.shotId === shot.id);
   const draftEvent = input.previewEvents.find((event) => event.shotId === shot.id);
@@ -145,7 +275,7 @@ function buildFormalEvents(input: BuildPreviewExportStateInput): { events: Previ
     const draftEvent = input.previewEvents.find((event) => event.shotId === shot.id);
     const durationSeconds = draftEvent?.durationSeconds || (shot.videoPath ? 5 : 3);
     const videoTask = input.taskViews.find((task) => task.shotId === shot.id && task.job.slot.startsWith("video."));
-    const videoPath = shot.videoPath || videoTask?.taskRun.expectedOutputs[0];
+    const videoPath = videoPathForShot(input, shot, input.previewEvents);
     const reasons = formalShotReasons(input, shot);
 
     if (reasons.length === 0 && videoPath) {
@@ -246,7 +376,7 @@ function buildExportProfiles(input: BuildPreviewExportStateInput, draftPreview: 
       kind: "rough_cut",
       label: "Rough Cut Proxy",
       readiness: roughCutBlocked.length ? "blocked" : formalPreview.status === "ready" ? "ready" : "draft_only",
-      includedCategories: ["preview_timeline", "video_clips", "image_holds", "blocked_placeholders_when_draft"],
+      includedCategories: ["preview_timeline", "video_clips", "image_holds", "blocked_placeholders_when_draft", "rough_cut_proxy_plan"],
       includedPaths: roughCutPaths,
       blockedReasons: roughCutBlocked,
       notes: [
@@ -259,7 +389,7 @@ function buildExportProfiles(input: BuildPreviewExportStateInput, draftPreview: 
       kind: "asset_package",
       label: "Asset Package",
       readiness: packagePaths.length ? (formalPreview.status === "ready" ? "ready" : "draft_only") : "blocked",
-      includedCategories: ["keyframes", "videos", "task_outputs", "reference_assets"],
+      includedCategories: ["selected_keyframes", "keyframes", "videos", "task_outputs", "reference_assets"],
       includedPaths: packagePaths,
       blockedReasons: packagePaths.length ? [] : ["No asset or task output paths are available for package planning."],
       notes: [
@@ -272,7 +402,7 @@ function buildExportProfiles(input: BuildPreviewExportStateInput, draftPreview: 
       kind: "storyboard_table",
       label: "Storyboard Table",
       readiness: input.shots.length ? "ready" : "blocked",
-      includedCategories: ["shot_order", "story_function", "preview_event_refs", "gate_summary"],
+      includedCategories: ["storyboard_table", "shot_order", "story_function", "preview_event_refs", "gate_summary", "project_facts_snapshot"],
       includedPaths: [],
       blockedReasons: input.shots.length ? [] : ["No shots are available for storyboard table planning."],
       notes: ["Structured table plan only; no CSV, XLSX, or document is written."],
@@ -281,7 +411,7 @@ function buildExportProfiles(input: BuildPreviewExportStateInput, draftPreview: 
       kind: "developer_archive",
       label: "Prompt and QA Developer Archive",
       readiness: archivePaths.length ? "ready" : "blocked",
-      includedCategories: ["prompts", "manifest_matches", "generation_health", "qa_promotion", "task_runs"],
+      includedCategories: ["prompt_request_previews", "prompts", "manifest_matches", "generation_health", "qa_reports", "qa_promotion", "task_runs", "project_facts_snapshot"],
       includedPaths: archivePaths,
       blockedReasons: archivePaths.length ? [] : ["No prompt, task output, or QA paths are available for archive planning."],
       notes: ["Developer archive plan is read-only and preserves prompt/QA traceability without submitting providers."],
@@ -316,11 +446,117 @@ function buildExportPackagePlan(profiles: ExportProfile[]): ExportPackagePlan {
   };
 }
 
+function jobRunPairs(input: BuildPreviewExportStateInput): Array<{ job?: GenerationJob; run?: TaskRun; shotId?: string }> {
+  const pairs: Array<{ job?: GenerationJob; run?: TaskRun; shotId?: string }> = input.taskViews.map((task) => ({
+    job: task.job,
+    run: task.taskRun,
+    shotId: task.shotId,
+  }));
+  const pairedJobIds = new Set(pairs.map((pair) => pair.job?.id).filter(Boolean));
+  const pairedTaskIds = new Set(pairs.map((pair) => pair.run?.taskId).filter(Boolean));
+
+  pairs.push(
+    ...input.jobs
+      .filter((job) => !pairedJobIds.has(job.id))
+      .map((job) => ({ job, run: input.taskRuns.find((run) => run.taskId === job.id), shotId: undefined })),
+  );
+  pairs.push(
+    ...input.taskRuns
+      .filter((run) => !pairedTaskIds.has(run.taskId))
+      .map((run) => ({ job: input.jobs.find((job) => job.id === run.taskId), run, shotId: undefined })),
+  );
+  return pairs;
+}
+
+function buildDemoPackageFacts(
+  input: BuildPreviewExportStateInput,
+  draftPreview: PreviewPlan,
+  roughCutProxyIncluded: boolean,
+): DemoPackageFacts {
+  const eventByShot = new Map(draftPreview.events.filter((event) => event.shotId).map((event) => [event.shotId || "", event]));
+  const selectedShotId = input.selectedShotId || input.shots[0]?.id;
+  const selectedKeyframes = input.shots
+    .filter((shot) => Boolean(shot.startFrame || shot.endFrame))
+    .filter((shot) => !selectedShotId || shot.id === selectedShotId || !input.shots.some((item) => item.id === selectedShotId))
+    .map((shot) => ({
+      shotId: shot.id,
+      startFrame: shot.startFrame,
+      endFrame: shot.endFrame,
+      selected: shot.id === selectedShotId,
+      reason: shot.id === selectedShotId ? "selected_shot" as const : "available_keyframe_pair" as const,
+    }));
+
+  return {
+    storyboardRows: input.shots.map((shot) => {
+      const event = eventByShot.get(shot.id);
+      return {
+        shotId: shot.id,
+        actId: shot.actId,
+        sectionId: shot.sectionId,
+        title: shot.title,
+        storyFunction: shot.storyFunction,
+        shotStatus: shot.status,
+        previewEventId: event?.id,
+        previewEventType: event?.type,
+        durationSeconds: event?.durationSeconds || 0,
+        mediaPath: event?.mediaPath,
+        mediaStatus: mediaStatusForEvent(event),
+        gateSummary: shot.gates,
+      };
+    }),
+    selectedKeyframes,
+    promptRequestPreviews: jobRunPairs(input).map((pair, index) => ({
+      id: pair.job?.id || pair.run?.taskId || `request_preview_${index + 1}`,
+      shotId: pair.shotId,
+      jobId: pair.job?.id,
+      taskId: pair.run?.taskId,
+      slot: pair.job?.slot,
+      providerId: pair.job?.providerId || pair.run?.providerId,
+      requiredMode: pair.job?.requiredMode,
+      promptPath: pair.job?.promptPath,
+      expectedOutputs: pair.run?.expectedOutputs || (pair.job?.outputPath ? [pair.job.outputPath] : []),
+      actualOutputs: pair.run?.actualOutputs || [],
+      dryRunOnly: true,
+      providerSubmissionForbidden: true,
+    })),
+    qaReports: [
+      ...input.generationHealthReports.map((report) => ({
+        id: report.reportId,
+        kind: "generation_health" as const,
+        shotId: report.shotId,
+        status: report.healthStatus,
+        blockers: report.blockers,
+        warnings: report.warnings,
+      })),
+      ...input.qaPromotionReports.map((report) => ({
+        id: report.reportId,
+        kind: "qa_promotion" as const,
+        shotId: report.shotId,
+        status: report.promotionStatus,
+        blockers: report.blockers,
+        warnings: report.warnings,
+      })),
+    ],
+    projectFactsSnapshot: {
+      generatedAt: input.generatedAt,
+      projectRoot: "project_root",
+      shotCount: input.shots.length,
+      selectedShotId,
+      shotIds: input.shots.map((shot) => shot.id),
+      storySectionIds: uniqueSorted(input.shots.map((shot) => shot.sectionId || "")),
+    },
+    naturalLanguagePlanSummary: input.naturalLanguagePlanSummary,
+    oneShotResultSummary: input.oneShotResultSummary,
+    roughCutProxyPlanIncluded: roughCutProxyIncluded,
+    dryRunOnly: true,
+    providerSubmissionForbidden: true,
+  };
+}
+
 export function buildPreviewExportState(input: BuildPreviewExportStateInput): ProjectPreviewExportState {
-  const draftEvents = input.previewEvents.filter((event) => event.mode === "draft_preview");
-  const draftBlockedReasons = draftEvents
-    .filter((event) => event.type === "blocked_placeholder")
-    .map((event) => `${event.shotId || event.id}: draft preview contains blocked placeholder.`);
+  const draftResult = buildDraftEvents(input);
+  const draftEvents = draftResult.events;
+  const draftBlockedReasons = draftResult.blockedReasons;
   const draftPreview = buildPreviewPlan(
     "draft_preview_plan",
     "draft_preview",
@@ -340,6 +576,17 @@ export function buildPreviewExportState(input: BuildPreviewExportStateInput): Pr
   const exportProfiles = buildExportProfiles(input, draftPreview, formalPreview);
   const exportPackagePlan = buildExportPackagePlan(exportProfiles);
   const proxySourcePreview = formalPreview.status === "ready" ? formalPreview : draftPreview;
+  const roughCutProxy = {
+    status: proxySourcePreview.status,
+    sourcePreviewPlanId: proxySourcePreview.planId,
+    totalDurationSeconds: proxySourcePreview.summary.totalDurationSeconds,
+    eventCount: proxySourcePreview.summary.eventCount,
+    proxyOnly: true as const,
+    notes: [
+      "Rough cut proxy is a timeline plan only; no media file is rendered.",
+      formalPreview.status === "ready" ? "Formal preview is available for proxy planning." : "Formal preview is blocked; proxy uses draft preview events.",
+    ],
+  };
 
   return {
     schemaVersion: previewExportSchemaVersion,
@@ -347,18 +594,9 @@ export function buildPreviewExportState(input: BuildPreviewExportStateInput): Pr
     draftPreview,
     formalPreview,
     formalPreviewGate: formalGate,
-    roughCutProxy: {
-      status: proxySourcePreview.status,
-      sourcePreviewPlanId: proxySourcePreview.planId,
-      totalDurationSeconds: proxySourcePreview.summary.totalDurationSeconds,
-      eventCount: proxySourcePreview.summary.eventCount,
-      proxyOnly: true,
-      notes: [
-        "Rough cut proxy is a timeline plan only; no media file is rendered.",
-        formalPreview.status === "ready" ? "Formal preview is available for proxy planning." : "Formal preview is blocked; proxy uses draft preview events.",
-      ],
-    },
+    roughCutProxy,
     exportProfiles,
     exportPackagePlan,
+    demoPackageFacts: buildDemoPackageFacts(input, draftPreview, roughCutProxy.eventCount > 0),
   };
 }

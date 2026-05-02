@@ -1334,6 +1334,15 @@
   font-size: 14px;
 }
 
+.preview-export-summary {
+  margin: 0;
+  border-top: 1px solid rgba(242, 238, 230, 0.16);
+  padding-top: 16px;
+  color: rgba(242, 238, 230, 0.7);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 16px;
+}
+
 .minimal-shell:not(.preview-shell) .overview,
 .minimal-shell:not(.preview-shell) .workflow,
 .minimal-shell:not(.preview-shell) .inspector,

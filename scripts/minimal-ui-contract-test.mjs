@@ -417,7 +417,11 @@ checkMessage(requireWithin(previewPlayerQueue, /video_clip/, "Phase 21/23 Previe
 checkMessage(requireWithin(`${previewPlayerQueue}\n${previewQueueKind}`, /missing_placeholder/, "Phase 21/23 Preview Player queue must include missing placeholders"));
 checkMessage(requireWithin(minimalPreview, /buildPreviewPlayerQueue\s*\(/, "Phase 21/23 MinimalPreview must render the Preview Player queue"));
 checkMessage(requireWithin(minimalPreview, /preview-stage-card/, "Phase 21/23 Preview Player needs a large preview shell"));
+checkMessage(requireWithin(minimalPreview, /Demo package/, "Round 5 MinimalPreview demo package summary"));
+checkMessage(requireWithin(minimalPreview, /packageStatus/, "Round 5 MinimalPreview package status"));
+checkMessage(requireWithin(minimalPreview, /packageCount/, "Round 5 MinimalPreview package item count"));
 checkMessage(requireWithin(stylesSource, /preview-stage-card/, "Phase 21/23 Preview Player stage styling"));
+checkMessage(requireWithin(stylesSource, /preview-export-summary/, "Round 5 preview export summary styling"));
 
 checkMessage(requireAny(appSource, [/Asset Library/, /function\s+AssetLibrary/, /className="[^"]*asset-library/], "Asset Library main UI naming"));
 checkMessage(requireAny(appSource, [/Preview/, /function\s+PreviewTimeline/, /className="[^"]*preview/], "Preview main UI"));
