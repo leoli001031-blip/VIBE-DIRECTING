@@ -6672,8 +6672,16 @@ function OneShotActionPanel({
 }) {
   const ready = summary.oneShotStatus === "单次待确认";
   const confirmed = status === "confirmed";
-  const stateLabel = confirmed ? "等待文件" : ready ? "等待确认" : "需要复核";
-  const detail = confirmed ? "已记录本次确认，等待输出回流。" : ready ? "确认后只执行一次小样。" : "先完成复核。";
+  const needsReview = summary.oneShotStatus === "需要复核";
+  const waitingFile = summary.oneShotStatus === "等待文件" || confirmed;
+  const stateLabel = needsReview ? "需要复核" : waitingFile ? "等待文件" : ready ? "等待确认" : "需要复核";
+  const detail = needsReview
+    ? "输出已回流，等待人工复核。"
+    : waitingFile
+      ? "已记录本次确认，等待输出回流。"
+      : ready
+        ? "确认后只执行一次小样。"
+        : "先完成复核。";
 
   return (
     <section className="one-shot-action-panel" aria-label="单次小样确认">

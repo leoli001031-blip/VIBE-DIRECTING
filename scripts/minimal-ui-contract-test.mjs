@@ -282,6 +282,8 @@ checkMessage(requireWithin(oneShotActionPanel, /确认单次小样/, "Round 4 ac
 checkMessage(requireWithin(oneShotActionPanel, /等待文件/, "Round 4 waiting-file user state"));
 checkMessage(requireWithin(oneShotActionPanel, /需要复核/, "Round 4 needs-review user state"));
 checkMessage(requireWithin(oneShotActionPanel, /已记录本次确认/, "Round 4 confirmation receipt user copy"));
+checkMessage(requireWithin(oneShotActionPanel, /summary\.oneShotStatus\s*===\s*"需要复核"/, "pre-real-test returned output must surface one-shot review status"));
+checkMessage(requireWithin(oneShotActionPanel, /输出已回流，等待人工复核。/, "pre-real-test returned output review detail"));
 checkMessage(requireWithin(realPilotDiagnostics, /Real Pilot\s*\/\s*真实小样/i, "Phase 43 Real Pilot diagnostics panel"));
 checkMessage(requireWithin(realPilotDiagnostics, /Review Status/i, "Phase 43 Real Pilot diagnostics review status"));
 checkMessage(requireWithin(realPilotDiagnostics, /Start\s*\/\s*End Frames/i, "Phase 43 Real Pilot diagnostics frames summary"));
