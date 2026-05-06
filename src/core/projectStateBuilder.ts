@@ -21,6 +21,7 @@ import { buildCodexCliAdapterSpikeState } from "./codexCliAdapterSpike";
 import { buildExportWorkerState } from "./exportWorker";
 import { buildProjectFileCoreState } from "./projectFileCore";
 import { buildProjectFactsIntegrationState } from "./projectFactsIntegration";
+import { createProjectStoreSnapshot } from "./projectStore";
 import { buildShotPromptPlan } from "./promptCompiler";
 import { buildQaPromotionReports } from "./qaPromotion";
 import { buildPreviewExportState } from "./previewExport";
@@ -282,21 +283,49 @@ export function buildProjectRuntimeState(
     runtime,
     audit,
   });
+  const projectStore = createProjectStoreSnapshot({
+    generatedAt,
+    projectId: view.sourceIndex.projectId || audit.projectTitle || "project",
+    title: audit.projectTitle,
+    version: view.sourceIndex.projectVersion || "0.1.0",
+    storyFlow: {
+      schemaVersion: "0.1.0",
+      id: `${view.sourceIndex.projectId || "project"}_story_flow_runtime_view`,
+      sectionModel: "adaptive",
+      sections: view.storySections,
+      shots: audit.shots,
+      shotOrder: audit.shots.map((shot) => shot.id),
+      sourceRefs: ["projectStateBuilder.runtimeView"],
+      updatedAt: generatedAt,
+    },
+    visualMemory: {
+      schemaVersion: "0.1.0",
+      id: `${view.sourceIndex.projectId || "project"}_visual_memory_runtime_view`,
+      assets: audit.assets,
+      sourceRefs: ["projectStateBuilder.audit.assets"],
+      updatedAt: generatedAt,
+    },
+    shotSpecs: audit.shots.map((shot) => ({
+      shotId: shot.id,
+      value: {
+        schemaVersion: "0.1.0",
+        id: shot.id,
+        storyFunction: shot.storyFunction,
+        startFrame: shot.startFrame,
+        endFrame: shot.endFrame,
+        videoPath: shot.videoPath,
+        sourceRefs: [`projectStateBuilder.audit.shots:${shot.id}`],
+      },
+    })),
+    sourceIndex: view.sourceIndex as unknown as Record<string, unknown>,
+    sourceIndexHash: view.sourceIndex.sourceIndexHash,
+  });
   const projectFactsIntegration =
     options.projectFactsIntegration ||
     buildProjectFactsIntegrationState({
       generatedAt,
-      runtimeState: {
-        storyFlow: {
-          sections: view.storySections,
-          shots: audit.shots,
-        },
-        visualMemory: {
-          summary: view.visualMemory,
-          assets: audit.assets,
-        },
-        voiceSourceLibrary,
-      },
+      projectStore,
+      voiceSourceLibrary,
     });
   const providerRegistry = buildDefaultProviderRegistry(generatedAt);
   const promptPlanResults = taskViews.map((task) =>

@@ -54,6 +54,7 @@ export interface ProjectStoreIoGate {
   directoryCreateAllowed: boolean;
   canExecute: boolean;
   snapshotValidation: ProjectStoreValidationResult;
+  projectFileFactSource: ProjectStoreSnapshot["projectFileFactSource"];
   entries: ProjectStoreIoEntry[];
   whitelist: string[];
   blockers: string[];
@@ -97,13 +98,16 @@ interface ProjectVibeDocument {
     hash: string;
     sourceOfTruth: ProjectStoreFactFile["sourceOfTruth"];
   }>;
+  projectFileFactSource: ProjectStoreSnapshot["projectFileFactSource"];
   runtimeStateRole: "derived_cache";
   updatedAt: string;
 }
 
 const absolutePathPattern = /^(?:[A-Za-z]:[\\/]|\/|\/\/|~[\\/])/;
 const parentTraversalPattern = /(?:^|\/)\.\.(?:\/|$)/;
-const credentialKeyPattern = /(?:credential|token|api_?key|secret|password|auth)/i;
+const credentialKeyPattern = /(?:credential|token|api_?key|secret|password|^auth$|auth_?token)/i;
+const blockedAuthorityPattern = /^(?:runtime_state|runtime-state|runtime_cache|runtime-cache|chat_history|chat-history|old_chat|old-chat|previous_chat|previous-chat|direct_input|direct-input|global_knowledge|global-knowledge|global_knowledge_library|global-knowledge-library)$/i;
+const authorityKeyPattern = /(?:^|_|\b)(?:source_?of_?truth|fact_?authority|source_?authority|authority|project_?facts_?authority)(?:$|_|\b)/i;
 const validModes: ProjectStoreIoMode[] = ["create", "open", "save", "rebuild_cache"];
 const validOperations: ProjectStoreIoOperation[] = ["create_directory", "read_file", "write_file"];
 const validEntryRoles: Array<ProjectStoreIoEntry["role"]> = [
@@ -251,6 +255,30 @@ function collectRuntimeStateSecurityErrors(value: unknown, label = "runtime-stat
   return uniqueSorted(errors);
 }
 
+function collectProjectFactSecurityErrors(value: unknown, label: string): string[] {
+  const errors: string[] = [];
+  const visit = (current: unknown, path: string): void => {
+    if (Array.isArray(current)) {
+      current.forEach((item, index) => visit(item, `${path}[${index}]`));
+      return;
+    }
+    if (!isRecord(current)) return;
+    for (const [key, child] of Object.entries(current)) {
+      const childPath = `${path}.${key}`;
+      const normalizedKey = key.replace(/[-\s]/g, "_");
+      if (credentialKeyPattern.test(normalizedKey) && typeof child !== "boolean") {
+        errors.push(`${childPath} is blocked because project fact files cannot persist credential, token, apiKey, secret, password, or auth keys.`);
+      }
+      if (authorityKeyPattern.test(normalizedKey) && typeof child === "string" && blockedAuthorityPattern.test(child)) {
+        errors.push(`${childPath} is blocked because ${child} cannot be project fact authority.`);
+      }
+      visit(child, childPath);
+    }
+  };
+  visit(value, label);
+  return uniqueSorted(errors);
+}
+
 function runtimeStateFactContent(snapshot: ProjectStoreSnapshot): ProjectStoreSnapshot["runtimeCachePolicy"] {
   return snapshot.runtimeCachePolicy;
 }
@@ -268,6 +296,7 @@ function toProjectVibeDocument(snapshot: ProjectStoreSnapshot, updatedAt: string
       hash: factFile.role === "runtime_state" ? stableHash(runtimeStateFactContent(snapshot)) : factFile.hash,
       sourceOfTruth: factFile.sourceOfTruth,
     })),
+    projectFileFactSource: snapshot.projectFileFactSource,
     runtimeStateRole: "derived_cache",
     updatedAt,
   };
@@ -376,6 +405,9 @@ function openSnapshotFromProjectVibe(serialized: string, checkedAt: string): {
     if (parsed.value.phase !== projectStoreIoPhase) blockers.push("project.vibe phase must match the Project Store IO phase.");
     if (parsed.value.runtimeStateRole !== "derived_cache") blockers.push("project.vibe must mark runtime-state as derived_cache.");
     if (!Array.isArray(parsed.value.factFiles)) blockers.push("project.vibe factFiles must be an array.");
+    if (!isRecord(parsed.value.projectFileFactSource) || parsed.value.projectFileFactSource.receiptKind !== "project_file_fact_source") {
+      blockers.push("project.vibe projectFileFactSource receipt is required.");
+    }
   }
 
   try {
@@ -437,6 +469,14 @@ function validateGateEnvelope(gate: ProjectStoreIoGate): string[] {
   if (typeof gate.directoryCreateAllowed !== "boolean") errors.push("Gate directoryCreateAllowed must be boolean.");
   if (typeof gate.canExecute !== "boolean") errors.push("Gate canExecute must be boolean.");
   if (!Array.isArray(gate.whitelist)) errors.push("Gate whitelist must be an array.");
+  if (!isRecord(gate.projectFileFactSource) || gate.projectFileFactSource.receiptKind !== "project_file_fact_source") {
+    errors.push("Gate projectFileFactSource receipt is required.");
+  } else {
+    if (gate.projectFileFactSource.projectVibeEntry.path !== "project.vibe") errors.push("Gate projectFileFactSource must pin project.vibe.");
+    if (gate.projectFileFactSource.runtimeStateDerivedCache.sourceOfTruth !== "derived_cache") {
+      errors.push("Gate projectFileFactSource must mark runtime-state as derived_cache.");
+    }
+  }
   if (!Array.isArray(gate.entries)) errors.push("Gate entries must be an array.");
   if (!Array.isArray(gate.blockers)) errors.push("Gate blockers must be an array.");
   if (!Array.isArray(gate.warnings)) errors.push("Gate warnings must be an array.");
@@ -533,9 +573,12 @@ function validateGateAgainstCanonicalPlan(
     if (entry.operation === "write_file") {
       if (entry.content !== expected.content) errors.push(`${entry.id || key} content does not match canonical Project Store content.`);
       if (entry.contentHash !== expected.contentHash) errors.push(`${entry.id || key} contentHash does not match canonical Project Store content.`);
+      const parsed = parseJsonSafe(entry.content || "", entry.path);
+      errors.push(...parsed.errors);
+      if (parsed.value) {
+        errors.push(...collectProjectFactSecurityErrors(parsed.value, entry.path));
+      }
       if (entry.role === "runtime_state") {
-        const parsed = parseJsonSafe(entry.content || "", entry.path);
-        errors.push(...parsed.errors);
         if (parsed.value) {
           errors.push(...collectRuntimeStateSecurityErrors(parsed.value, entry.path));
           if (stableHash(parsed.value) !== stableHash(runtimeStateFactContent(snapshot))) {
@@ -591,6 +634,7 @@ export function buildProjectStoreIoGate(input: BuildProjectStoreIoGateInput): Pr
     directoryCreateAllowed: writeAllowed && canExecute,
     canExecute,
     snapshotValidation,
+    projectFileFactSource: snapshot.projectFileFactSource,
     entries,
     whitelist: uniqueSorted(factPaths),
     blockers: uniqueSorted(blockers),
@@ -648,6 +692,7 @@ export async function executeProjectStoreIoGate(
               const parsed = parseJsonSafe(sidecarContent, entry.path);
               errors.push(...parsed.errors);
               if (parsed.value) {
+                errors.push(...collectProjectFactSecurityErrors(parsed.value, entry.path));
                 const expectedHash = expectedHashes.get(entry.path);
                 if (!expectedHash) {
                   errors.push(`${entry.path} is missing from project.vibe factFiles.`);

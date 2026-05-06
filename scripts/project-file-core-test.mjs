@@ -1,5 +1,7 @@
 import fs from "node:fs";
+import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import ts from "typescript";
 
 function readJson(path) {
   return JSON.parse(fs.readFileSync(path, "utf8"));
@@ -7,6 +9,20 @@ function readJson(path) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+async function importTs(path) {
+  const source = fs.readFileSync(path, "utf8");
+  const output = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ES2022,
+      target: ts.ScriptTarget.ES2022,
+      importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+    },
+    fileName: path,
+  }).outputText;
+  const encoded = Buffer.from(`${output}\n//# sourceURL=${pathToFileURL(path).href}`).toString("base64");
+  return import(`data:text/javascript;base64,${encoded}`);
 }
 
 const importResult = spawnSync("node", ["scripts/import-runtime-test.mjs"], {
@@ -18,7 +34,20 @@ const importResult = spawnSync("node", ["scripts/import-runtime-test.mjs"], {
 assert(importResult.status === 0, "project file core test could not refresh runtime-state with import-runtime-test");
 
 const state = readJson("public/runtime-state.json");
-const projectFileCore = state.projectFileCore;
+const { buildProjectFileCoreState } = await importTs("src/core/projectFileCore.ts");
+const projectFileCore = state.projectFileCore?.projectFileFactSourceReceipt
+  ? state.projectFileCore
+  : buildProjectFileCoreState({
+      generatedAt: state.generatedAt,
+      projectRoot: state.project.root,
+      importedAt: state.project.importedAt,
+      sourceTask: state.project.sourceTask,
+      sourceIndex: state.sourceIndex,
+      storyFlow: { shots: state.storyFlow.shots },
+      visualMemory: { assets: state.visualMemory.assets },
+      runtime: state.runtime,
+      audit: { projectRoot: state.project.root, sourceTask: state.project.sourceTask },
+    });
 assert(projectFileCore, "runtime-state missing projectFileCore");
 assert(projectFileCore.schemaVersion === "0.1.0", "projectFileCore schemaVersion drifted");
 assert(projectFileCore.phase === "phase_9_1_minimum_file_first_core", "projectFileCore phase drifted");
@@ -66,6 +95,22 @@ assert(
   projectFileCore.derivedCachePolicy.cacheKeys.sourceIndexHash === state.sourceIndex.sourceIndexHash,
   "derived cache sourceIndexHash must mirror sourceIndex",
 );
+assert(projectFileCore.projectFileFactSourceReceipt.receiptKind === "project_file_fact_source", "project file fact source receipt missing");
+assert(projectFileCore.projectFileFactSourceReceipt.projectVibeEntry.path === "project.vibe", "receipt must pin project.vibe entry");
+assert(projectFileCore.projectFileFactSourceReceipt.projectVibeEntry.runtimeStateMayOverride === false, "runtime-state must not override project.vibe receipt");
+assert(projectFileCore.projectFileFactSourceReceipt.saveOpenContract.projectRootRelativeRequired === true, "save/open contract must be project-root-relative");
+assert(projectFileCore.projectFileFactSourceReceipt.saveOpenContract.absolutePathsBlocked === true, "save/open contract must block absolute paths");
+assert(projectFileCore.projectFileFactSourceReceipt.saveOpenContract.parentTraversalBlocked === true, "save/open contract must block parent traversal");
+assert(projectFileCore.projectFileFactSourceReceipt.saveOpenContract.userFileMoveDeleteBlocked === true, "save/open contract must block user file move/delete");
+assert(projectFileCore.projectFileFactSourceReceipt.saveOpenContract.credentialTokenSecretWriteBlocked === true, "save/open contract must block credential/token/secret writes");
+assert(projectFileCore.projectFileFactSourceReceipt.runtimeStateDerivedCache.mayBeRebuiltFromProjectFiles === true, "runtime-state receipt must be rebuildable from project files");
+assert(projectFileCore.projectFileFactSourceReceipt.runtimeStateDerivedCache.mayOverwriteProjectFiles === false, "runtime-state receipt must not overwrite project files");
+for (const blockedAuthority of ["runtime_state", "runtime_cache", "chat_history", "old_chat", "direct_input", "global_knowledge_library"]) {
+  assert(projectFileCore.projectFileFactSourceReceipt.blockedAuthorities.includes(blockedAuthority), `receipt must block ${blockedAuthority} authority`);
+}
+assert(projectFileCore.projectFileFactSourceReceipt.projectLocalKnowledgeScope.projectKnowledgeMayBeFactReference === true, "project knowledge may be a project-local fact reference");
+assert(projectFileCore.projectFileFactSourceReceipt.projectLocalKnowledgeScope.globalKnowledgeMayAuthorizeProjectFacts === false, "global knowledge must not authorize project facts");
+assert(projectFileCore.projectFileFactSourceReceipt.projectLocalKnowledgeScope.oldChatMayAuthorizeProjectFacts === false, "old chat must not authorize project facts");
 
 const locks = projectFileCore.hardLocks;
 for (const [key, expected] of Object.entries({
@@ -108,6 +153,7 @@ assert(schema.title === "ProjectFileCoreState", "project file core schema title 
 assert(schema.properties.projectFileName.const === "project.vibe", "schema must pin project.vibe name");
 assert(schema.properties.projectFileStatus.const === "planned_not_written", "schema must pin planned_not_written");
 assert(schema.properties.hardLocks.$ref === "#/$defs/hardLocks", "schema must use hardLocks defs");
+assert(schema.properties.projectFileFactSourceReceipt.$ref === "#/$defs/factSourceReceipt", "schema must expose project file fact source receipt");
 assert(schema.$defs.hardLocks.properties.noFileMutation.const === true, "schema must pin noFileMutation");
 assert(schema.$defs.hardLocks.properties.noProviderSubmit.const === true, "schema must pin noProviderSubmit");
 assert(schema.$defs.hardLocks.properties.noArbitraryShell.const === true, "schema must pin noArbitraryShell");

@@ -66,6 +66,23 @@ assert(snapshot.runtimeCachePolicy.runtimeStateIsSoleSourceOfTruth === false, "r
 assert(snapshot.runtimeCachePolicy.cacheKeys.sourceIndexHash === "source_hash_fixture", "sourceIndexHash must be a runtime cache key");
 assert(snapshot.runtimeCachePolicy.rebuildInputs.includes("story_flow"), "runtime cache must rebuild from story_flow");
 assert(snapshot.runtimeCachePolicy.rebuildInputs.includes("visual_memory"), "runtime cache must rebuild from visual_memory");
+assert(snapshot.projectFileFactSource.receiptKind === "project_file_fact_source", "Project Store must expose Project File Fact Source receipt");
+assert(snapshot.projectFileFactSource.projectVibeEntry.path === "project.vibe", "receipt must pin project.vibe entry");
+assert(snapshot.projectFileFactSource.projectVibeEntry.runtimeStateMayOverride === false, "runtime-state must not override project.vibe");
+assert(snapshot.projectFileFactSource.saveOpenContract.projectRootRelativeRequired === true, "save/open contract must be project-root-relative");
+assert(snapshot.projectFileFactSource.saveOpenContract.absolutePathsBlocked === true, "save/open contract must block absolute paths");
+assert(snapshot.projectFileFactSource.saveOpenContract.parentTraversalBlocked === true, "save/open contract must block parent traversal");
+assert(snapshot.projectFileFactSource.saveOpenContract.userFileMoveDeleteBlocked === true, "save/open contract must block user file move/delete");
+assert(snapshot.projectFileFactSource.saveOpenContract.credentialTokenSecretWriteBlocked === true, "save/open contract must block credential/token/secret writes");
+assert(snapshot.projectFileFactSource.runtimeStateDerivedCache.sourceOfTruth === "derived_cache", "runtime-state receipt must mark derived cache");
+assert(snapshot.projectFileFactSource.runtimeStateDerivedCache.mayOverwriteProjectFiles === false, "runtime-state receipt must not overwrite project files");
+assert(snapshot.projectFileFactSource.projectLocalKnowledgeScope.projectKnowledgeMayBeFactReference === true, "project knowledge may be project-local fact reference");
+assert(snapshot.projectFileFactSource.projectLocalKnowledgeScope.globalKnowledgeMayAuthorizeProjectFacts === false, "global knowledge must not authorize project facts");
+assert(snapshot.projectFileFactSource.projectLocalKnowledgeScope.oldChatMayAuthorizeProjectFacts === false, "old chat must not authorize project facts");
+assert(snapshot.projectFileFactSource.projectLocalKnowledgeScope.directInputMayAuthorizeProjectFacts === false, "direct input must not authorize project facts");
+for (const blockedAuthority of ["runtime_state", "runtime_cache", "chat_history", "old_chat", "direct_input", "global_knowledge_library"]) {
+  assert(snapshot.projectFileFactSource.blockedAuthoritySources.includes(blockedAuthority), `Project Store receipt must block ${blockedAuthority}`);
+}
 
 const validation = validateProjectStoreSnapshot(snapshot, generatedAt);
 assert(validation.ok, `fresh snapshot should validate: ${validation.errors.join("; ")}`);
@@ -147,6 +164,24 @@ invalid.factFiles[0].path = createProjectStorePathRef({
 const invalidValidation = validateProjectStoreSnapshot(invalid, generatedAt);
 assert(!invalidValidation.ok, "absolute project-root-relative path must fail validation");
 assert(invalidValidation.errors.some((error) => error.includes("absolute platform path")), "invalid path must report absolute platform path");
+
+const runtimeAuthority = structuredClone(snapshot);
+runtimeAuthority.facts.storyFlow.sourceOfTruth = "runtime_state";
+const runtimeAuthorityValidation = validateProjectStoreSnapshot(runtimeAuthority, generatedAt);
+assert(!runtimeAuthorityValidation.ok, "runtime-state fact authority marker must fail validation");
+assert(runtimeAuthorityValidation.errors.some((error) => error.includes("runtime_state") && error.includes("project fact authority")), "runtime-state authority blocker missing");
+
+const oldChatAuthority = structuredClone(snapshot);
+oldChatAuthority.facts.visualMemory.factAuthority = "old_chat";
+const oldChatValidation = validateProjectStoreSnapshot(oldChatAuthority, generatedAt);
+assert(!oldChatValidation.ok, "old chat fact authority marker must fail validation");
+assert(oldChatValidation.errors.some((error) => error.includes("old_chat") && error.includes("project fact authority")), "old chat authority blocker missing");
+
+const secretFact = structuredClone(snapshot);
+secretFact.facts.projectManifest.apiToken = "blocked";
+const secretFactValidation = validateProjectStoreSnapshot(secretFact, generatedAt);
+assert(!secretFactValidation.ok, "credential/token/secret keys in project facts must fail validation");
+assert(secretFactValidation.errors.some((error) => error.includes("apiToken") && error.includes("project facts cannot persist")), "secret project fact blocker missing");
 
 const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
 assert(packageJson.scripts["project-store:test"] === "node scripts/project-store-test.mjs", "package script project-store:test missing");

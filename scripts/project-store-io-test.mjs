@@ -192,6 +192,12 @@ const createGate = projectStoreIo.buildProjectStoreIoGate({
 
 assert(createGate.phase === "phase19_real_project_store_io_gate", "phase id drifted");
 assert(createGate.fileMutationScope === "project_root_whitelist", "file mutation scope must be project root whitelist");
+assert(createGate.projectFileFactSource.receiptKind === "project_file_fact_source", "IO gate must expose Project File Fact Source receipt");
+assert(createGate.projectFileFactSource.projectVibeEntry.path === "project.vibe", "IO gate receipt must pin project.vibe");
+assert(createGate.projectFileFactSource.runtimeStateDerivedCache.sourceOfTruth === "derived_cache", "IO gate receipt must mark runtime-state derived");
+assert(createGate.projectFileFactSource.runtimeStateDerivedCache.mayOverwriteProjectFiles === false, "IO gate receipt must prevent runtime-state overwrites");
+assert(createGate.projectFileFactSource.projectLocalKnowledgeScope.globalKnowledgeMayAuthorizeProjectFacts === false, "global knowledge must not authorize project facts");
+assert(createGate.projectFileFactSource.blockedAuthoritySources.includes("direct_input"), "IO gate receipt must block direct input authority");
 assert(createGate.projectVibeWriteAllowed === true, "project.vibe write should be allowed by Phase 19 gate");
 assert(createGate.runtimeStateWriteAllowed === true, "runtime-state cache write should be allowed by Phase 19 gate");
 assert(createGate.directoryCreateAllowed === true, "directory creation should be allowed inside project root");
@@ -244,6 +250,7 @@ assert(adapter.files.has("runtime-state.json"), "runtime-state derived cache sho
 const projectVibe = JSON.parse(adapter.files.get("project.vibe"));
 assert(projectVibe.kind === "vibe_project_file", "project.vibe kind must be vibe_project_file");
 assert(projectVibe.runtimeStateRole === "derived_cache", "project.vibe must mark runtime-state as derived cache");
+assert(projectVibe.projectFileFactSource.receiptKind === "project_file_fact_source", "project.vibe must carry fact source receipt");
 assert(projectVibe.projectStoreSnapshot.projectFile.fileName === "project.vibe", "project.vibe must contain project store snapshot");
 
 const openGate = projectStoreIo.buildProjectStoreIoGate({
@@ -312,6 +319,26 @@ assert(blockedRuntimeGate.canExecute === false, "runtime-state sole-source/secre
 const blockedRuntimeResult = await projectStoreIo.executeProjectStoreIoGate(blockedRuntimeGate, new MemoryProjectAdapter());
 assert(!blockedRuntimeResult.ok, "runtime-state sole-source/secret gate must fail execution");
 assert(blockedRuntimeResult.errors.some((error) => error.includes("runtimeStateIsSoleSourceOfTruth") || error.includes("token")), "runtime-state secret/sole-source error missing");
+
+const secretFactSnapshot = structuredClone(snapshot);
+secretFactSnapshot.facts.productionBible.apiToken = "blocked";
+const secretFactGate = projectStoreIo.buildProjectStoreIoGate({
+  mode: "save",
+  snapshot: secretFactSnapshot,
+  generatedAt,
+});
+assert(secretFactGate.canExecute === false, "project fact credential/token/secret content must block gate creation");
+assert(secretFactGate.blockers.some((blocker) => blocker.includes("apiToken") && blocker.includes("project facts cannot persist")), "project fact secret blocker missing");
+
+const directInputAuthoritySnapshot = structuredClone(snapshot);
+directInputAuthoritySnapshot.facts.storyFlow.sourceOfTruth = "direct_input";
+const directInputAuthorityGate = projectStoreIo.buildProjectStoreIoGate({
+  mode: "save",
+  snapshot: directInputAuthoritySnapshot,
+  generatedAt,
+});
+assert(directInputAuthorityGate.canExecute === false, "direct-input fact authority must block gate creation");
+assert(directInputAuthorityGate.blockers.some((blocker) => blocker.includes("direct_input") && blocker.includes("project fact authority")), "direct-input authority blocker missing");
 
 const tamperedRuntimeGate = structuredClone(createGate);
 const runtimeWrite = tamperedRuntimeGate.entries.find((entry) => entry.operation === "write_file" && entry.path === "runtime-state.json");

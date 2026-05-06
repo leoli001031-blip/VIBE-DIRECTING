@@ -17,6 +17,7 @@
     "directoryCreateAllowed",
     "canExecute",
     "snapshotValidation",
+    "projectFileFactSource",
     "entries",
     "whitelist",
     "blockers",
@@ -36,6 +37,7 @@
     "directoryCreateAllowed": { "type": "boolean" },
     "canExecute": { "type": "boolean" },
     "snapshotValidation": { "type": "object" },
+    "projectFileFactSource": { "$ref": "#/$defs/projectFileFactSource" },
     "entries": {
       "type": "array",
       "items": { "$ref": "#/$defs/ioEntry" }
@@ -86,6 +88,63 @@
         "canExecute": { "type": "boolean" },
         "projectRootRelative": { "type": "boolean", "const": true },
         "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "projectFileFactSource": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["receiptKind", "projectVibeEntry", "saveOpenContract", "runtimeStateDerivedCache", "projectLocalKnowledgeScope", "blockedAuthoritySources"],
+      "properties": {
+        "receiptKind": { "type": "string", "const": "project_file_fact_source" },
+        "projectVibeEntry": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["path", "sourceOfTruth", "runtimeStateMayOverride"],
+          "properties": {
+            "path": { "type": "string", "const": "project.vibe" },
+            "sourceOfTruth": { "type": "string", "const": "project_file" },
+            "runtimeStateMayOverride": { "type": "boolean", "const": false }
+          }
+        },
+        "saveOpenContract": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["projectRootRelativeRequired", "absolutePathsBlocked", "parentTraversalBlocked", "userFileMoveDeleteBlocked", "credentialTokenSecretWriteBlocked"],
+          "properties": {
+            "projectRootRelativeRequired": { "type": "boolean", "const": true },
+            "absolutePathsBlocked": { "type": "boolean", "const": true },
+            "parentTraversalBlocked": { "type": "boolean", "const": true },
+            "userFileMoveDeleteBlocked": { "type": "boolean", "const": true },
+            "credentialTokenSecretWriteBlocked": { "type": "boolean", "const": true }
+          }
+        },
+        "runtimeStateDerivedCache": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["path", "sourceOfTruth", "mayBeRebuilt", "mayOverwriteProjectFiles"],
+          "properties": {
+            "path": { "type": "string", "const": "runtime-state.json" },
+            "sourceOfTruth": { "type": "string", "const": "derived_cache" },
+            "mayBeRebuilt": { "type": "boolean", "const": true },
+            "mayOverwriteProjectFiles": { "type": "boolean", "const": false }
+          }
+        },
+        "projectLocalKnowledgeScope": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["projectKnowledgeMayBeFactReference", "globalKnowledgeMayAuthorizeProjectFacts", "oldChatMayAuthorizeProjectFacts", "directInputMayAuthorizeProjectFacts"],
+          "properties": {
+            "projectKnowledgeMayBeFactReference": { "type": "boolean", "const": true },
+            "globalKnowledgeMayAuthorizeProjectFacts": { "type": "boolean", "const": false },
+            "oldChatMayAuthorizeProjectFacts": { "type": "boolean", "const": false },
+            "directInputMayAuthorizeProjectFacts": { "type": "boolean", "const": false }
+          }
+        },
+        "blockedAuthoritySources": {
+          "type": "array",
+          "contains": { "type": "string", "const": "runtime_state" },
+          "items": { "type": "string" }
+        }
       }
     },
     "hardLocks": {

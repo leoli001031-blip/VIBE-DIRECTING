@@ -1000,6 +1000,24 @@ export interface PhaseRoadmapClosureObservations {
   fileRouteOpened?: boolean;
   credentialRouteOpened?: boolean;
   shellRouteOpened?: boolean;
+  runtimeStateAsSourceObserved?: boolean;
+  runtimeStateSourceOfTruthObserved?: boolean;
+  runtimeCacheAsSourceObserved?: boolean;
+  chatMemoryAsSourceObserved?: boolean;
+  legacyChatAsSourceObserved?: boolean;
+  chatHistoryAsSourceObserved?: boolean;
+  directInputAsAuthorityObserved?: boolean;
+  directInputSourceOfTruthObserved?: boolean;
+  freeTextAsAuthorityObserved?: boolean;
+  absolutePathContractObserved?: boolean;
+  absolutePathAllowed?: boolean;
+  parentTraversalObserved?: boolean;
+  parentTraversalAccepted?: boolean;
+  credentialSecretInProjectFileObserved?: boolean;
+  credentialInProjectFileObserved?: boolean;
+  secretInProjectFileObserved?: boolean;
+  globalKnowledgeAsProjectFactObserved?: boolean;
+  globalKnowledgeAuthorityObserved?: boolean;
 }
 
 export interface PhaseRoadmapClosureEvidence {
@@ -3068,6 +3086,114 @@ function closureAnyTrue(evidence: PhaseRoadmapClosureEvidence, fields: string[])
   return fields.some((field) => closureValue(evidence, field) === true);
 }
 
+function closureAnyObservedTrue(evidence: PhaseRoadmapClosureEvidence, fields: string[], sections: string[]): boolean {
+  const observations = evidence.observations as Record<string, unknown> | undefined;
+  return fields.some((field) => {
+    if (closureValue(evidence, field) === true) return true;
+    if (observations?.[field] === true) return true;
+    return sections.some((section) => closureNestedValue(evidence, section, field) === true);
+  });
+}
+
+function projectFileFactSourceEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const decision = phaseClosureEvidenceDecision(input, {
+    evidenceKey: "projectFileFactSource",
+    phaseId: "phase_36_project_file_fact_source",
+    missingBlocker: "project_file_fact_source_typed_evidence_missing",
+    safetyPrefix: "project_file_fact_source",
+    legacyReadyInput: "projectFileFactSourceReady",
+    requiredGates: [
+      { field: "projectVibeEntryDefined", blocker: "project_file_fact_source_entry_missing" },
+      { field: "projectFactsAreFileFirst", blocker: "project_file_fact_source_not_file_first" },
+      { field: "saveOpenContractDefined", blocker: "project_file_fact_source_save_open_contract_missing" },
+      { field: "runtimeStateDerivedFromProjectFiles", blocker: "project_file_fact_source_runtime_derivation_missing" },
+      { field: "projectLocalKnowledgePacksScoped", blocker: "project_file_fact_source_knowledge_scope_missing" },
+    ],
+  });
+  const evidence = input.evidence?.projectFileFactSource;
+  if (!hasClosureEvidence(evidence)) return decision;
+
+  const blockers = uniqueSorted([
+    ...decision.blockers,
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        [
+          "runtimeStateAsSourceObserved",
+          "runtimeStateSourceOfTruthObserved",
+          "runtimeStateIsSoleSourceOfTruth",
+          "runtimeCacheAsSourceObserved",
+        ],
+        ["sourceAuthority", "factAuthority", "runtimeState", "runtimeCache", "saveOpenContract"],
+      ),
+      "project_file_fact_source_runtime_state_as_source_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["chatMemoryAsSourceObserved", "legacyChatAsSourceObserved", "chatHistoryAsSourceObserved"],
+        ["sourceAuthority", "factAuthority", "chatMemory", "legacyChat"],
+      ),
+      "project_file_fact_source_chat_memory_as_source_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["directInputAsAuthorityObserved", "directInputSourceOfTruthObserved", "freeTextAsAuthorityObserved"],
+        ["sourceAuthority", "factAuthority", "directInput", "commandInput"],
+      ),
+      "project_file_fact_source_direct_input_as_authority_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["absolutePathContractObserved", "absolutePathAllowed", "absolutePathProjectFileObserved"],
+        ["pathPolicy", "saveOpenContract", "projectFileContract"],
+      ),
+      "project_file_fact_source_absolute_path_contract_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["parentTraversalObserved", "parentTraversalAccepted", "parentDirectoryTraversalAllowed"],
+        ["pathPolicy", "saveOpenContract", "projectFileContract"],
+      ),
+      "project_file_fact_source_parent_traversal_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        [
+          "credentialSecretInProjectFileObserved",
+          "credentialInProjectFileObserved",
+          "secretInProjectFileObserved",
+          "tokenInProjectFileObserved",
+        ],
+        ["security", "secrets", "projectFileContract", "saveOpenContract"],
+      ),
+      "project_file_fact_source_secret_in_project_file_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        [
+          "globalKnowledgeAsProjectFactObserved",
+          "globalKnowledgeAuthorityObserved",
+          "globalKnowledgePackAsProjectFactObserved",
+        ],
+        ["knowledgeScope", "knowledgePacks", "sourceAuthority", "factAuthority"],
+      ),
+      "project_file_fact_source_global_knowledge_as_project_fact_observed",
+    ),
+  ]);
+
+  return {
+    ...decision,
+    ready: blockers.length === 0,
+    blockers,
+  };
+}
+
 function taskQueueVisibilityEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
   const evidence = input.evidence?.taskQueueVisibility;
 
@@ -3295,20 +3421,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const providerExecutionHandoffDecision = providerExecutionHandoffEvidenceDecision(input);
   const localOrchestratorRuntimeDecision = localOrchestratorRuntimeEvidenceDecision(input);
   const taskQueueVisibilityDecision = taskQueueVisibilityEvidenceDecision(input);
-  const projectFileFactSourceDecision = phaseClosureEvidenceDecision(input, {
-    evidenceKey: "projectFileFactSource",
-    phaseId: "phase_36_project_file_fact_source",
-    missingBlocker: "project_file_fact_source_typed_evidence_missing",
-    safetyPrefix: "project_file_fact_source",
-    legacyReadyInput: "projectFileFactSourceReady",
-    requiredGates: [
-      { field: "projectVibeEntryDefined", blocker: "project_file_fact_source_entry_missing" },
-      { field: "projectFactsAreFileFirst", blocker: "project_file_fact_source_not_file_first" },
-      { field: "saveOpenContractDefined", blocker: "project_file_fact_source_save_open_contract_missing" },
-      { field: "runtimeStateDerivedFromProjectFiles", blocker: "project_file_fact_source_runtime_derivation_missing" },
-      { field: "projectLocalKnowledgePacksScoped", blocker: "project_file_fact_source_knowledge_scope_missing" },
-    ],
-  });
+  const projectFileFactSourceDecision = projectFileFactSourceEvidenceDecision(input);
   const visualConsistencyContractDecision = phaseClosureEvidenceDecision(input, {
     evidenceKey: "visualConsistencyContract",
     phaseId: "phase_37_visual_consistency_contract",

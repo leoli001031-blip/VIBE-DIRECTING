@@ -12,6 +12,7 @@
     "status",
     "facts",
     "visualConsistency",
+    "projectLocalKnowledgeScope",
     "summary",
     "hardLocks",
     "notes"
@@ -57,6 +58,7 @@
         "startEndDerivation": { "$ref": "#/$defs/visualSupport" }
       }
     },
+    "projectLocalKnowledgeScope": { "$ref": "#/$defs/projectLocalKnowledgeScope" },
     "summary": {
       "type": "object",
       "additionalProperties": false,
@@ -71,7 +73,8 @@
         "sourceHashCount",
         "blockerCount",
         "warningCount",
-        "projectLocalFactCount"
+        "projectLocalFactCount",
+        "blockedAuthoritySourceCount"
       ],
       "properties": {
         "ready": { "type": "integer", "minimum": 0 },
@@ -84,7 +87,8 @@
         "sourceHashCount": { "type": "integer", "minimum": 0 },
         "blockerCount": { "type": "integer", "minimum": 0 },
         "warningCount": { "type": "integer", "minimum": 0 },
-        "projectLocalFactCount": { "type": "integer", "minimum": 0 }
+        "projectLocalFactCount": { "type": "integer", "minimum": 0 },
+        "blockedAuthoritySourceCount": { "type": "integer", "minimum": 0 }
       }
     },
     "hardLocks": { "$ref": "#/$defs/hardLocks" },
@@ -110,6 +114,35 @@
     "sourceOfTruth": {
       "type": "string",
       "enum": ["project_store", "asset_library", "voice_source_library", "not_connected"]
+    },
+    "projectLocalKnowledgeScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "projectKnowledgeMayBeFactReference",
+        "globalKnowledgeMayAuthorizeProjectFacts",
+        "oldChatMayAuthorizeProjectFacts",
+        "directInputMayAuthorizeProjectFacts",
+        "runtimeStateMayAuthorizeProjectFacts",
+        "allowedProjectFactAuthorities",
+        "blockedAuthoritySources",
+        "notes"
+      ],
+      "properties": {
+        "scope": { "type": "string", "const": "project_local" },
+        "projectKnowledgeMayBeFactReference": { "type": "boolean", "const": true },
+        "globalKnowledgeMayAuthorizeProjectFacts": { "type": "boolean", "const": false },
+        "oldChatMayAuthorizeProjectFacts": { "type": "boolean", "const": false },
+        "directInputMayAuthorizeProjectFacts": { "type": "boolean", "const": false },
+        "runtimeStateMayAuthorizeProjectFacts": { "type": "boolean", "const": false },
+        "allowedProjectFactAuthorities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sourceOfTruth" }
+        },
+        "blockedAuthoritySources": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
     },
     "factStatus": {
       "type": "string",

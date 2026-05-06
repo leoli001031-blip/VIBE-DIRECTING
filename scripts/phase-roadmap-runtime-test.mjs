@@ -1022,6 +1022,24 @@ function closureEvidence(phaseId, gates, overrides = {}) {
       fileRouteOpened: false,
       credentialRouteOpened: false,
       shellRouteOpened: false,
+      runtimeStateAsSourceObserved: false,
+      runtimeStateSourceOfTruthObserved: false,
+      runtimeCacheAsSourceObserved: false,
+      chatMemoryAsSourceObserved: false,
+      legacyChatAsSourceObserved: false,
+      chatHistoryAsSourceObserved: false,
+      directInputAsAuthorityObserved: false,
+      directInputSourceOfTruthObserved: false,
+      freeTextAsAuthorityObserved: false,
+      absolutePathContractObserved: false,
+      absolutePathAllowed: false,
+      parentTraversalObserved: false,
+      parentTraversalAccepted: false,
+      credentialSecretInProjectFileObserved: false,
+      credentialInProjectFileObserved: false,
+      secretInProjectFileObserved: false,
+      globalKnowledgeAsProjectFactObserved: false,
+      globalKnowledgeAuthorityObserved: false,
       ...(observationOverrides || {}),
     },
     blockers: [],
@@ -2589,6 +2607,101 @@ assert(
     "preceding_phase_not_ready:phase_34_local_orchestrator_runtime_integration",
   ),
   "Phase 35 must block when Phase 34 is not ready",
+);
+
+const phase36TypedReadyPlan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input());
+assert(
+  phase(phase36TypedReadyPlan, "phase_36_project_file_fact_source").readiness === "ready",
+  "Phase 36 must be ready with typed project file fact source evidence",
+);
+assert(
+  phase36TypedReadyPlan.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "projectFileFactSource" &&
+      decision.source === "typed_evidence" &&
+      decision.ready === true,
+  ),
+  "Phase 36 ready must come from typed projectFileFactSource evidence",
+);
+
+const missingPhase36Evidence = typedEvidence({ providerExecutionHandoff: "confirmed" });
+delete missingPhase36Evidence.projectFileFactSource;
+const phase36LegacyOnly = buildPhaseRoadmapRuntimePlan({
+  ...confirmedPhase33Input(),
+  evidence: missingPhase36Evidence,
+  projectFileFactSourceReady: true,
+});
+assert(
+  phase(phase36LegacyOnly, "phase_36_project_file_fact_source").blockedReasons.includes(
+    "project_file_fact_source_typed_evidence_missing",
+  ),
+  "Phase 36 must block legacy-only projectFileFactSourceReady evidence",
+);
+assert(
+  phase36LegacyOnly.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "projectFileFactSource" &&
+      decision.source === "legacy_boolean_override" &&
+      decision.ready === false &&
+      decision.warnings.includes("legacy_projectFileFactSourceReady_boolean_ignored_without_typed_evidence"),
+  ),
+  "Phase 36 legacy boolean must be recorded as ignored without typed evidence",
+);
+
+function assertPhase36Blocks(projectFileFactSource, blocker, message) {
+  const plan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({ projectFileFactSource }));
+  assert(
+    phase(plan, "phase_36_project_file_fact_source").blockedReasons.includes(blocker),
+    message,
+  );
+}
+
+assertPhase36Blocks(
+  { observations: { runtimeStateAsSourceObserved: true } },
+  "project_file_fact_source_runtime_state_as_source_observed",
+  "Phase 36 must block when runtime-state is observed as a fact source",
+);
+assertPhase36Blocks(
+  { observations: { chatMemoryAsSourceObserved: true } },
+  "project_file_fact_source_chat_memory_as_source_observed",
+  "Phase 36 must block when chat memory is observed as a fact source",
+);
+assertPhase36Blocks(
+  { sourceAuthority: { directInputAsAuthorityObserved: true } },
+  "project_file_fact_source_direct_input_as_authority_observed",
+  "Phase 36 must block when direct input is observed as project fact authority",
+);
+assertPhase36Blocks(
+  { pathPolicy: { absolutePathContractObserved: true, parentTraversalObserved: true } },
+  "project_file_fact_source_absolute_path_contract_observed",
+  "Phase 36 must block absolute path project file contracts",
+);
+assertPhase36Blocks(
+  { pathPolicy: { absolutePathContractObserved: true, parentTraversalObserved: true } },
+  "project_file_fact_source_parent_traversal_observed",
+  "Phase 36 must block parent traversal project file contracts",
+);
+assertPhase36Blocks(
+  { security: { credentialSecretInProjectFileObserved: true } },
+  "project_file_fact_source_secret_in_project_file_observed",
+  "Phase 36 must block credential or secret material in project files",
+);
+assertPhase36Blocks(
+  { knowledgeScope: { globalKnowledgeAsProjectFactObserved: true } },
+  "project_file_fact_source_global_knowledge_as_project_fact_observed",
+  "Phase 36 must block global knowledge as project fact authority",
+);
+
+const phase36Phase35Blocked = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  taskQueueVisibility: {
+    directorSurface: { runControlPresent: true },
+  },
+}));
+assert(
+  phase(phase36Phase35Blocked, "phase_36_project_file_fact_source").blockedReasons.includes(
+    "preceding_phase_not_ready:phase_35_task_queue_visibility_progress_strip",
+  ),
+  "Phase 36 must block when Phase 35 is not ready",
 );
 
 const missingPhase40Evidence = typedEvidence({ providerExecutionHandoff: "confirmed" });

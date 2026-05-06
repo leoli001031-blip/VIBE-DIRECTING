@@ -123,6 +123,13 @@ assert(createPlan.validation.ok, `create plan should validate: ${createPlan.vali
 assert(createPlan.projectEntry.fileName === "project.vibe", "project.vibe must be the runtime entry");
 assert(createPlan.projectEntry.sourceOfTruth === "project_file", "project.vibe must be a project-file source");
 assert(createPlan.projectEntry.runtimeStateMayOverride === false, "runtime-state may not override project entry");
+assert(createPlan.snapshot.projectFileFactSource.receiptKind === "project_file_fact_source", "runtime snapshot must carry Project File Fact Source receipt");
+assert(createPlan.snapshot.projectFileFactSource.projectVibeEntry.path === "project.vibe", "runtime snapshot receipt must pin project.vibe");
+assert(createPlan.snapshot.projectFileFactSource.runtimeStateDerivedCache.sourceOfTruth === "derived_cache", "runtime snapshot receipt must mark runtime-state derived");
+assert(createPlan.snapshot.projectFileFactSource.runtimeStateDerivedCache.mayOverwriteProjectFiles === false, "runtime-state must not overwrite project files");
+assert(createPlan.snapshot.projectFileFactSource.projectLocalKnowledgeScope.globalKnowledgeMayAuthorizeProjectFacts === false, "global knowledge must not authorize runtime project facts");
+assert(createPlan.snapshot.projectFileFactSource.projectLocalKnowledgeScope.oldChatMayAuthorizeProjectFacts === false, "old chat must not authorize runtime project facts");
+assert(createPlan.snapshot.projectFileFactSource.projectLocalKnowledgeScope.directInputMayAuthorizeProjectFacts === false, "direct input must not authorize runtime project facts");
 assert(createPlan.factFiles.some((factFile) => factFile.role === "runtime_state" && factFile.sourceOfTruth === "derived_cache"), "runtime-state must be a derived cache fact file");
 assert(createPlan.factFiles.every((factFile) => factFile.role === "runtime_state" || factFile.sourceOfTruth === "project_file"), "project facts must prefer project files");
 assert(createPlan.plannedTree.some((entry) => entry.path.path === "project.vibe" && entry.kind === "file"), "planned tree must contain project.vibe");
@@ -201,6 +208,19 @@ assert(!runtimeStateSourcePlan.validation.ok, "runtime-state cannot be accepted 
 assert(
   runtimeStateSourcePlan.repairPlan.some((item) => item.id === "runtime_state_as_source" && item.status === "blocked"),
   "runtime-state-as-source repair item must block",
+);
+
+const directInputAuthorityPlan = buildProjectRuntimePlan({
+  ...baseInput,
+  storyFlow: {
+    ...storyFlow(),
+    sourceOfTruth: "direct_input",
+  },
+});
+assert(!directInputAuthorityPlan.validation.ok, "direct-input authority embedded in project facts must be rejected");
+assert(
+  directInputAuthorityPlan.validation.errors.some((error) => error.includes("direct_input") && error.includes("project fact authority")),
+  "direct-input authority rejection must be explicit",
 );
 
 const missingSourceIndexPlan = buildProjectRuntimePlan({

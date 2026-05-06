@@ -107,6 +107,17 @@ export interface ProjectFactsIntegrationState {
   projectId?: string;
   facts: Record<ProjectFactsKind, ProjectFactConnection>;
   visualConsistency: ProjectFactsVisualConsistencySupport;
+  projectLocalKnowledgeScope: {
+    scope: "project_local";
+    projectKnowledgeMayBeFactReference: true;
+    globalKnowledgeMayAuthorizeProjectFacts: false;
+    oldChatMayAuthorizeProjectFacts: false;
+    directInputMayAuthorizeProjectFacts: false;
+    runtimeStateMayAuthorizeProjectFacts: false;
+    allowedProjectFactAuthorities: ProjectFactsSourceOfTruth[];
+    blockedAuthoritySources: string[];
+    notes: string[];
+  };
   summary: {
     ready: number;
     notReady: number;
@@ -119,6 +130,7 @@ export interface ProjectFactsIntegrationState {
     blockerCount: number;
     warningCount: number;
     projectLocalFactCount: number;
+    blockedAuthoritySourceCount: number;
   };
   hardLocks: ProjectFactsIntegrationHardLocks;
   notes: string[];
@@ -589,6 +601,12 @@ function buildVisualConsistencySupport(input: BuildProjectFactsIntegrationInput)
 
 function summarize(facts: Record<ProjectFactsKind, ProjectFactConnection>): ProjectFactsIntegrationState["summary"] {
   const values = Object.values(facts);
+  const blockedAuthoritySourceCount = values.reduce(
+    (total, item) =>
+      total +
+      item.sourceRefs.filter((ref) => /(?:runtimeState|directInput|oldChat|previousChat|globalKnowledge|runtimeCache)/i.test(ref)).length,
+    0,
+  );
   return {
     ready: values.filter((item) => item.ready).length,
     notReady: values.filter((item) => !item.ready).length,
@@ -601,6 +619,29 @@ function summarize(facts: Record<ProjectFactsKind, ProjectFactConnection>): Proj
     blockerCount: values.reduce((total, item) => total + item.blockers.length, 0),
     warningCount: values.reduce((total, item) => total + item.warnings.length, 0),
     projectLocalFactCount: values.filter((item) => item.sourceOfTruth !== "not_connected").length,
+    blockedAuthoritySourceCount,
+  };
+}
+
+function buildProjectLocalKnowledgeScope(facts: Record<ProjectFactsKind, ProjectFactConnection>): ProjectFactsIntegrationState["projectLocalKnowledgeScope"] {
+  const blockedAuthoritySources = unique(
+    Object.values(facts).flatMap((factConnection) =>
+      factConnection.sourceRefs.filter((ref) => /(?:runtimeState|directInput|oldChat|previousChat|globalKnowledge|runtimeCache)/i.test(ref)),
+    ),
+  );
+  return {
+    scope: "project_local",
+    projectKnowledgeMayBeFactReference: true,
+    globalKnowledgeMayAuthorizeProjectFacts: false,
+    oldChatMayAuthorizeProjectFacts: false,
+    directInputMayAuthorizeProjectFacts: false,
+    runtimeStateMayAuthorizeProjectFacts: false,
+    allowedProjectFactAuthorities: ["project_store", "asset_library", "voice_source_library"],
+    blockedAuthoritySources,
+    notes: [
+      "Project-local knowledge packs may be cited only when represented by project files or project-local library state.",
+      "Runtime-state, direct input, old chat, runtime cache, and global knowledge are blocked as project fact authority.",
+    ],
   };
 }
 
@@ -625,6 +666,7 @@ export function buildProjectFactsIntegrationState(input: BuildProjectFactsIntegr
     projectId: input.projectStore?.project.id,
     facts,
     visualConsistency: buildVisualConsistencySupport(input),
+    projectLocalKnowledgeScope: buildProjectLocalKnowledgeScope(facts),
     summary,
     hardLocks,
     notes: [
@@ -644,6 +686,14 @@ export function validateProjectFactsIntegrationHardLocks(state: ProjectFactsInte
   }
   if (state.facts.visualMemory.sourceOfTruth === "asset_library" && state.hardLocks.assetLibraryIsNotGallery !== true) {
     errors.push("Asset Library-backed Visual Memory must remain not-gallery.");
+  }
+  if (
+    state.projectLocalKnowledgeScope.globalKnowledgeMayAuthorizeProjectFacts !== false ||
+    state.projectLocalKnowledgeScope.oldChatMayAuthorizeProjectFacts !== false ||
+    state.projectLocalKnowledgeScope.directInputMayAuthorizeProjectFacts !== false ||
+    state.projectLocalKnowledgeScope.runtimeStateMayAuthorizeProjectFacts !== false
+  ) {
+    errors.push("Project-local knowledge scope must block global knowledge, old chat, direct input, and runtime-state as project fact authority.");
   }
   return errors;
 }

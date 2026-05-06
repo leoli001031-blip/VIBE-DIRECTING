@@ -82,6 +82,39 @@ export interface ProjectStoreRuntimeCachePolicy {
   notes: string[];
 }
 
+export interface ProjectStoreFileFactSourceSummary {
+  receiptKind: "project_file_fact_source";
+  projectVibeEntry: {
+    path: "project.vibe";
+    sourceOfTruth: "project_file";
+    saveOpenAuthority: true;
+    runtimeStateMayOverride: false;
+  };
+  saveOpenContract: {
+    projectRootRelativeRequired: true;
+    absolutePathsBlocked: true;
+    parentTraversalBlocked: true;
+    userFileMoveDeleteBlocked: true;
+    credentialTokenSecretWriteBlocked: true;
+  };
+  runtimeStateDerivedCache: {
+    path: "runtime-state.json";
+    sourceOfTruth: "derived_cache";
+    mayBeRebuilt: true;
+    mayOverwriteProjectFiles: false;
+    rebuildInputs: ProjectStoreFactRole[];
+  };
+  projectLocalKnowledgeScope: {
+    projectKnowledgePath: "knowledge/knowledge_manifest.vibe.json";
+    projectKnowledgeMayBeFactReference: true;
+    globalKnowledgeMayAuthorizeProjectFacts: false;
+    oldChatMayAuthorizeProjectFacts: false;
+    directInputMayAuthorizeProjectFacts: false;
+  };
+  blockedAuthoritySources: string[];
+  notes: string[];
+}
+
 export interface ProjectStoreHardLocks {
   dryRunOnly: true;
   inMemoryOnly: true;
@@ -161,6 +194,7 @@ export interface ProjectStoreSnapshot {
     sourceIndex?: Record<string, unknown>;
   };
   factFiles: ProjectStoreFactFile[];
+  projectFileFactSource: ProjectStoreFileFactSourceSummary;
   readWritePlan: ProjectStoreReadWritePlanEntry[];
   runtimeCachePolicy: ProjectStoreRuntimeCachePolicy;
   plannedRuntimePointers?: {
@@ -268,6 +302,9 @@ export interface DeriveRuntimeCachePolicyInput {
 const schemaVersion = "0.1.0";
 const absolutePathPattern = /^(?:[A-Za-z]:[\\/]|\/|\/\/|~[\\/])/;
 const parentTraversalPattern = /(?:^|\/)\.\.(?:\/|$)/;
+const blockedAuthorityPattern = /^(?:runtime_state|runtime-state|runtime_cache|runtime-cache|chat_history|chat-history|old_chat|old-chat|previous_chat|previous-chat|direct_input|direct-input|global_knowledge|global-knowledge|global_knowledge_library|global-knowledge-library)$/i;
+const authorityKeyPattern = /(?:^|_|\b)(?:source_?of_?truth|fact_?authority|source_?authority|authority|project_?facts_?authority)(?:$|_|\b)/i;
+const credentialKeyPattern = /(?:credential|token|api_?key|secret|password|^auth$|auth_?token)/i;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -291,6 +328,34 @@ function isAbsoluteLike(value: string): boolean {
 
 function hasParentTraversal(value: string): boolean {
   return parentTraversalPattern.test(normalizeSlashes(value));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function collectBlockedFactAuthorityErrors(value: unknown, label: string): string[] {
+  const errors: string[] = [];
+  const visit = (current: unknown, path: string): void => {
+    if (Array.isArray(current)) {
+      current.forEach((item, index) => visit(item, `${path}[${index}]`));
+      return;
+    }
+    if (!isRecord(current)) return;
+    for (const [key, child] of Object.entries(current)) {
+      const childPath = `${path}.${key}`;
+      const normalizedKey = key.replace(/[-\s]/g, "_");
+      if (authorityKeyPattern.test(normalizedKey) && typeof child === "string" && blockedAuthorityPattern.test(child)) {
+        errors.push(`${childPath} is blocked: ${child} cannot be project fact authority.`);
+      }
+      if (credentialKeyPattern.test(normalizedKey) && typeof child !== "boolean") {
+        errors.push(`${childPath} is blocked: project facts cannot persist credential, token, apiKey, secret, password, or auth keys.`);
+      }
+      visit(child, childPath);
+    }
+  };
+  visit(value, label);
+  return Array.from(new Set(errors)).sort();
 }
 
 function stableStringify(value: unknown): string {
@@ -538,6 +603,53 @@ function createReadWritePlan(factFiles: ProjectStoreFactFile[]): ProjectStoreRea
   );
 }
 
+function buildProjectFileFactSourceSummary(snapshot: ProjectStoreSnapshot): ProjectStoreFileFactSourceSummary {
+  return {
+    receiptKind: "project_file_fact_source",
+    projectVibeEntry: {
+      path: "project.vibe",
+      sourceOfTruth: "project_file",
+      saveOpenAuthority: true,
+      runtimeStateMayOverride: false,
+    },
+    saveOpenContract: {
+      projectRootRelativeRequired: true,
+      absolutePathsBlocked: true,
+      parentTraversalBlocked: true,
+      userFileMoveDeleteBlocked: true,
+      credentialTokenSecretWriteBlocked: true,
+    },
+    runtimeStateDerivedCache: {
+      path: "runtime-state.json",
+      sourceOfTruth: "derived_cache",
+      mayBeRebuilt: true,
+      mayOverwriteProjectFiles: false,
+      rebuildInputs: snapshot.runtimeCachePolicy.rebuildInputs,
+    },
+    projectLocalKnowledgeScope: {
+      projectKnowledgePath: "knowledge/knowledge_manifest.vibe.json",
+      projectKnowledgeMayBeFactReference: true,
+      globalKnowledgeMayAuthorizeProjectFacts: false,
+      oldChatMayAuthorizeProjectFacts: false,
+      directInputMayAuthorizeProjectFacts: false,
+    },
+    blockedAuthoritySources: [
+      "runtime_state",
+      "runtime_cache",
+      "chat_history",
+      "old_chat",
+      "previous_chat",
+      "direct_input",
+      "global_knowledge_library",
+    ],
+    notes: [
+      "project.vibe and project-root-relative fact files are the save/open authority.",
+      "runtime-state is a rebuildable cache derived from project files and cannot overwrite them.",
+      "Project-local knowledge packs can be referenced only when represented by project files; global knowledge and old chat cannot authorize project facts.",
+    ],
+  };
+}
+
 function sourceIndexHashFrom(snapshot: ProjectStoreSnapshot): string {
   const sourceIndex = snapshot.facts.sourceIndex;
   const explicit = typeof sourceIndex?.sourceIndexHash === "string" ? sourceIndex.sourceIndexHash.trim() : "";
@@ -665,6 +777,7 @@ export function createProjectStoreSnapshot(input: CreateProjectStoreSnapshotInpu
       sourceIndex: input.sourceIndex ? { ...clone(input.sourceIndex), sourceIndexHash: input.sourceIndexHash || input.sourceIndex.sourceIndexHash } : undefined,
     },
     factFiles: [],
+    projectFileFactSource: undefined as unknown as ProjectStoreFileFactSourceSummary,
     readWritePlan: [],
     runtimeCachePolicy: deriveRuntimeCachePolicy({
       generatedAt,
@@ -682,6 +795,7 @@ export function createProjectStoreSnapshot(input: CreateProjectStoreSnapshotInpu
 
   snapshot.factFiles = rebuildFactFiles(snapshot);
   snapshot.runtimeCachePolicy = deriveRuntimeCachePolicy(snapshot);
+  snapshot.projectFileFactSource = buildProjectFileFactSourceSummary(snapshot);
   snapshot.readWritePlan = createReadWritePlan(snapshot.factFiles);
   return snapshot;
 }
@@ -742,6 +856,39 @@ export function validateProjectStoreSnapshot(snapshot: ProjectStoreSnapshot, che
       errors.push("runtime_state fact file must be marked derived_cache.");
     }
   }
+
+  const factSource = snapshot.projectFileFactSource;
+  if (!factSource || factSource.receiptKind !== "project_file_fact_source") {
+    errors.push("projectFileFactSource receipt is required.");
+  } else {
+    if (factSource.projectVibeEntry.path !== "project.vibe" || factSource.projectVibeEntry.sourceOfTruth !== "project_file") {
+      errors.push("projectFileFactSource must pin project.vibe as the project-file save/open authority.");
+    }
+    if (factSource.projectVibeEntry.runtimeStateMayOverride !== false) {
+      errors.push("projectFileFactSource must block runtime-state from overriding project.vibe.");
+    }
+    if (factSource.runtimeStateDerivedCache.sourceOfTruth !== "derived_cache" || factSource.runtimeStateDerivedCache.mayOverwriteProjectFiles !== false) {
+      errors.push("projectFileFactSource must mark runtime-state as derived cache that cannot overwrite project files.");
+    }
+    if (
+      factSource.saveOpenContract.projectRootRelativeRequired !== true ||
+      factSource.saveOpenContract.absolutePathsBlocked !== true ||
+      factSource.saveOpenContract.parentTraversalBlocked !== true ||
+      factSource.saveOpenContract.userFileMoveDeleteBlocked !== true ||
+      factSource.saveOpenContract.credentialTokenSecretWriteBlocked !== true
+    ) {
+      errors.push("projectFileFactSource save/open contract must block absolute paths, parent traversal, user file move/delete, and credential writes.");
+    }
+    if (
+      factSource.projectLocalKnowledgeScope.globalKnowledgeMayAuthorizeProjectFacts !== false ||
+      factSource.projectLocalKnowledgeScope.oldChatMayAuthorizeProjectFacts !== false ||
+      factSource.projectLocalKnowledgeScope.directInputMayAuthorizeProjectFacts !== false
+    ) {
+      errors.push("project-local knowledge scope must not let global knowledge, old chat, or direct input authorize project facts.");
+    }
+  }
+
+  errors.push(...collectBlockedFactAuthorityErrors(snapshot.facts, "facts"));
 
   for (const entry of snapshot.readWritePlan) {
     validatePathRef(entry.path, `readWritePlan.${entry.id}.path`, errors);
@@ -843,6 +990,7 @@ export function applyProjectStorePatch(
   snapshot.mutationLog = [...snapshot.mutationLog, `patch:${patch.id}:operations:${appliedOperationCount}`];
   snapshot.factFiles = rebuildFactFiles(snapshot);
   snapshot.runtimeCachePolicy = deriveRuntimeCachePolicy(snapshot);
+  snapshot.projectFileFactSource = buildProjectFileFactSourceSummary(snapshot);
   snapshot.readWritePlan = createReadWritePlan(snapshot.factFiles);
 
   return {
@@ -859,6 +1007,7 @@ export function saveProjectStoreSnapshot(snapshot: ProjectStoreSnapshot, planned
   nextSnapshot.revision += 1;
   nextSnapshot.factFiles = rebuildFactFiles(nextSnapshot);
   nextSnapshot.runtimeCachePolicy = deriveRuntimeCachePolicy(nextSnapshot);
+  nextSnapshot.projectFileFactSource = buildProjectFileFactSourceSummary(nextSnapshot);
   nextSnapshot.readWritePlan = createReadWritePlan(nextSnapshot.factFiles);
   nextSnapshot.mutationLog = [...nextSnapshot.mutationLog, "save_planned_memory_only"];
 

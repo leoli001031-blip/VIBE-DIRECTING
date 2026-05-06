@@ -66,6 +66,14 @@ for (const field of ["ready", "blocker", "missing", "sourceHashes", "sources"]) 
 for (const field of ["ready", "notReady", "missingSourceCount", "sourceHashCount"]) {
   assert(projectFactsIntegrationSchema.properties.summary.required.includes(field), `Project Facts Integration summary must require ${field}`);
 }
+assert(
+  projectFactsIntegrationSchema.properties.projectLocalKnowledgeScope.$ref === "#/$defs/projectLocalKnowledgeScope",
+  "Project Facts Integration schema must expose project-local knowledge scope",
+);
+assert(
+  projectFactsIntegrationSchema.properties.summary.required.includes("blockedAuthoritySourceCount"),
+  "Project Facts Integration summary must require blockedAuthoritySourceCount",
+);
 
 function assertNoRuntimeSourceOfTruth(state, message) {
   for (const fact of Object.values(state.facts)) {
@@ -253,6 +261,9 @@ assert(runtimeOnlyState.facts.storyFlow.missing === true, "runtime-only Story Fl
 assert(runtimeOnlyState.facts.storyFlow.sourceHashes.length === 0, "runtime-only Story Flow must not report a source hash");
 assert(runtimeOnlyState.facts.storyFlow.sourceOfTruth === "not_connected", "runtime-only Story Flow must not become source-of-truth");
 assert(runtimeOnlyState.facts.storyFlow.blockers.some((blocker) => blocker.includes("direct input/runtime state")), "runtime-only Story Flow blocker detail missing");
+assert(runtimeOnlyState.projectLocalKnowledgeScope.runtimeStateMayAuthorizeProjectFacts === false, "runtime-state must not authorize project facts");
+assert(runtimeOnlyState.projectLocalKnowledgeScope.blockedAuthoritySources.includes("runtimeState.storyFlow"), "runtime Story Flow source ref must be captured as blocked authority");
+assert(runtimeOnlyState.summary.blockedAuthoritySourceCount >= 3, "runtime-only state must count blocked authority source refs");
 assert(runtimeOnlyState.facts.visualMemory.status === "blocked", "runtime-only Visual Memory must block");
 assert(runtimeOnlyState.facts.visualMemory.ready === false, "runtime-only Visual Memory must not be ready");
 assert(runtimeOnlyState.facts.visualMemory.missing === true, "runtime-only Visual Memory must report missing source");
@@ -276,6 +287,8 @@ assertNoRuntimeSourceOfTruth(directStoryState, "direct Story Flow state");
 assert(directStoryState.facts.storyFlow.status === "blocked", "direct Story Flow without Project Store must block");
 assert(directStoryState.facts.storyFlow.sourceOfTruth === "not_connected", "direct Story Flow must not claim source-of-truth");
 assert(directStoryState.facts.storyFlow.blockers.some((blocker) => blocker.includes("Project Store story_flow")), "direct Story Flow blocker detail missing");
+assert(directStoryState.projectLocalKnowledgeScope.directInputMayAuthorizeProjectFacts === false, "direct input must not authorize project facts");
+assert(directStoryState.projectLocalKnowledgeScope.blockedAuthoritySources.includes("directInput.storyFlow"), "direct Story Flow source ref must be captured as blocked authority");
 
 const directVisualState = buildProjectFactsIntegrationState({
   generatedAt,
@@ -376,6 +389,13 @@ assert(readyState.visualConsistency.worldPosition.status === "structured", "worl
 assert(readyState.visualConsistency.startEndDerivation.status === "structured", "start-end derivation should be structured from Shot Layout");
 assert(readyState.visualConsistency.startEndDerivation.supportedShotIds.includes("shot_001"), "Shot Layout derivation shot id missing");
 assert(readyState.summary.projectLocalFactCount >= 8, "all project-local fact families should be represented");
+assert(readyState.projectLocalKnowledgeScope.scope === "project_local", "knowledge scope must be project-local");
+assert(readyState.projectLocalKnowledgeScope.projectKnowledgeMayBeFactReference === true, "project knowledge packs may be project-local fact references");
+assert(readyState.projectLocalKnowledgeScope.globalKnowledgeMayAuthorizeProjectFacts === false, "global knowledge must not authorize project facts");
+assert(readyState.projectLocalKnowledgeScope.oldChatMayAuthorizeProjectFacts === false, "old chat must not authorize project facts");
+assert(readyState.projectLocalKnowledgeScope.directInputMayAuthorizeProjectFacts === false, "direct input must not authorize project facts");
+assert(readyState.projectLocalKnowledgeScope.runtimeStateMayAuthorizeProjectFacts === false, "runtime-state must not authorize project facts");
+assert(readyState.summary.blockedAuthoritySourceCount === 0, "ready project-local state should have no blocked authority refs");
 
 const drifted = structuredClone(readyState);
 drifted.hardLocks.noProviderSubmit = false;

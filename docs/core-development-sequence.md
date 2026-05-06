@@ -1135,6 +1135,16 @@ Acceptance criteria：
 - Fail-closed 条件：Run / Submit / Execute 控件出现、queue detail 泄漏到主 Director surface、worker/provider/file/credential/shell 任一路径打开、缺 local orchestrator summary consumption，都会 blocked。
 - 回归覆盖：`npm run phase-roadmap:test` 覆盖 ready、legacy-only blocked、dangerous controls blocked、queue detail leak blocked、route-open blocked、missing local orchestrator summary blocked 和 Phase 34 dependency blocked。
 
+### Phase 36 已完成记录：Project File Fact Source
+
+- PhaseRoadmapRuntime 现在要求 typed `evidence.projectFileFactSource` 同时证明 `projectVibeEntryDefined`、`projectFactsAreFileFirst`、`saveOpenContractDefined`、`runtimeStateDerivedFromProjectFiles` 和 `projectLocalKnowledgePacksScoped`；legacy `projectFileFactSourceReady` 只能作为 ignored diagnostic，不能单独让 Phase 36 ready。
+- Phase 36 继续依赖 Phase 35 ready；Phase 35 blocked 时，Phase 36 会因 `preceding_phase_not_ready:phase_35_task_queue_visibility_progress_strip` blocked。
+- Fail-closed 条件：runtime-state / runtime cache、旧聊天、direct input、global knowledge 被观察为项目事实源，或 save/open 合同出现绝对路径、父级穿越、project file credential / secret，都必须 blocked。
+- Core fact-source hardening 已接入 Project File Core / Project Store / Project Store IO / Project Facts Integration / runtime plan：`project.vibe` receipt、project fact files、project-root-relative save/open contract、runtime-state derived cache rebuild inputs、project-local knowledge scope 都作为结构化字段输出；runtime-state / runtime cache / old chat / direct input / global knowledge authority marker 和 credential/token/secret project fact content 现在 fail closed。
+- UI gate 保持主 Director surface 极简：`ProjectFactsStrip` 仍不挂载在 default Director，Project Store 视图只把 `project.vibe` / project files 显示为事实源，并标注 runtime-state 是 derived cache、不是事实源。
+- 回归覆盖：`npm run phase-roadmap:test` 覆盖 ready、legacy-only blocked、runtime-state-as-source blocked、chat memory source blocked、direct input authority blocked、unsafe path blocked、secret blocked、global knowledge authority blocked 和 Phase 35 dependency blocked；`npm run minimal-ui:test` 覆盖主界面无项目文件 plan controls 以及 project.vibe / project files / derived cache 文案。
+- Core 回归覆盖：`npm run project-file:test && npm run project-store:test && npm run project-store-io:test && npm run project-facts:test && npm run project-runtime:test`，并额外覆盖 `npm run project-facts-integration:test`。
+
 ### Phase 35-42 固定范围：Beta Closure
 
 - Phase 35：主界面任务进度条 / queue visibility，只读、短文案、不出现工程执行按钮。

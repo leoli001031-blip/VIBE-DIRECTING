@@ -18,6 +18,7 @@
     "pathPolicy",
     "hardLocks",
     "migrationReadiness",
+    "projectFileFactSourceReceipt",
     "sourceRefs",
     "notes"
   ],
@@ -134,6 +135,7 @@
         "nextSteps": { "type": "array", "items": { "type": "string" } }
       }
     },
+    "projectFileFactSourceReceipt": { "$ref": "#/$defs/factSourceReceipt" },
     "sourceRefs": { "type": "array", "items": { "type": "string" } },
     "notes": { "type": "array", "items": { "type": "string" } }
   },
@@ -247,6 +249,111 @@
         "noCredentialWrite": { "type": "boolean", "const": true },
         "projectVibeWriteAllowed": { "type": "boolean", "const": false },
         "runtimeStateIsDerivedCache": { "type": "boolean", "const": true }
+      }
+    },
+    "factSourceReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receiptKind",
+        "projectVibeEntry",
+        "projectFactFiles",
+        "saveOpenContract",
+        "runtimeStateDerivedCache",
+        "blockedAuthorities",
+        "projectLocalKnowledgeScope",
+        "sourceIndexHash"
+      ],
+      "properties": {
+        "receiptKind": { "type": "string", "const": "project_file_fact_source" },
+        "projectVibeEntry": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "role", "authority", "saveOpenContract", "runtimeStateMayOverride"],
+          "properties": {
+            "path": { "type": "string", "const": "project.vibe" },
+            "role": { "type": "string", "const": "project_manifest" },
+            "authority": { "type": "string", "const": "planned_project_file" },
+            "saveOpenContract": { "type": "string", "const": "project_root_relative" },
+            "runtimeStateMayOverride": { "type": "boolean", "const": false }
+          }
+        },
+        "projectFactFiles": {
+          "type": "array",
+          "minItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["role", "canonicalPath", "authority", "projectRootRelative"],
+            "properties": {
+              "role": { "$ref": "#/$defs/sourceRole" },
+              "canonicalPath": {
+                "type": "string",
+                "pattern": "^(?![A-Za-z]:[\\\\/])(?!/)(?!//).+"
+              },
+              "authority": {
+                "type": "string",
+                "enum": ["planned_project_file", "project_file_tree"]
+              },
+              "projectRootRelative": { "type": "boolean", "const": true }
+            }
+          }
+        },
+        "saveOpenContract": { "$ref": "#/$defs/saveOpenContract" },
+        "runtimeStateDerivedCache": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "role", "mayBeRebuiltFromProjectFiles", "mayOverwriteProjectFiles", "rebuildInputs"],
+          "properties": {
+            "path": { "type": "string", "const": "runtime-state.json" },
+            "role": { "type": "string", "const": "derived_cache" },
+            "mayBeRebuiltFromProjectFiles": { "type": "boolean", "const": true },
+            "mayOverwriteProjectFiles": { "type": "boolean", "const": false },
+            "rebuildInputs": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "blockedAuthorities": {
+          "type": "array",
+          "contains": { "type": "string", "const": "runtime_state" },
+          "items": { "type": "string" }
+        },
+        "projectLocalKnowledgeScope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "projectKnowledgePath",
+            "projectKnowledgeMayBeFactReference",
+            "globalKnowledgeMayAuthorizeProjectFacts",
+            "oldChatMayAuthorizeProjectFacts",
+            "notes"
+          ],
+          "properties": {
+            "projectKnowledgePath": { "type": "string", "const": "knowledge/knowledge_manifest.vibe.json" },
+            "projectKnowledgeMayBeFactReference": { "type": "boolean", "const": true },
+            "globalKnowledgeMayAuthorizeProjectFacts": { "type": "boolean", "const": false },
+            "oldChatMayAuthorizeProjectFacts": { "type": "boolean", "const": false },
+            "notes": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "sourceIndexHash": { "type": "string" }
+      }
+    },
+    "saveOpenContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectRootRelativeRequired",
+        "absolutePathsBlocked",
+        "parentTraversalBlocked",
+        "userFileMoveDeleteBlocked",
+        "credentialTokenSecretWriteBlocked"
+      ],
+      "properties": {
+        "projectRootRelativeRequired": { "type": "boolean", "const": true },
+        "absolutePathsBlocked": { "type": "boolean", "const": true },
+        "parentTraversalBlocked": { "type": "boolean", "const": true },
+        "userFileMoveDeleteBlocked": { "type": "boolean", "const": true },
+        "credentialTokenSecretWriteBlocked": { "type": "boolean", "const": true }
       }
     }
   }

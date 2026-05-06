@@ -505,7 +505,10 @@ checkMessage(requireAny(appSource, [/Selected/, /Scope/], "Selected/Scope direct
 checkMessage(requireAny(appSource, [/Story/, /section\.label/, /storySections/, /All Shots/], "Story/section tabs"));
 checkMessage(requireAny(appSource, [/Diagnostics/, /diagnostics/], "Diagnostics entry"));
 check(!/ProjectFactsStrip/.test(directorMode), "Director Clean Mode must not mount ProjectFactsStrip in the default DirectorMode");
+check(!/project-plan-actions|Project Store/.test(directorMode), "Phase 36 main Director surface must not expose project file plan controls");
 checkMessage(requireWithin(projectFactsStrip, /Project Store/, "Round 2 Project Store strip remains available outside the clean surface"));
+checkMessage(requireWithin(`${projectFactsStrip}\n${projectFactsUiSummary}`, /project\.vibe/, "Phase 36 project.vibe fact source copy"));
+checkMessage(requireWithin(`${projectFactsStrip}\n${projectFactsUiSummary}`, /project files/, "Phase 36 project files fact source copy"));
 checkMessage(requireWithin(projectFactsStrip, /runtime-state/, "Round 2 runtime-state label"));
 checkMessage(requireWithin(projectFactsStrip, /derived cache/, "Round 2 runtime-state derived cache copy"));
 checkMessage(requireWithin(projectFactsUiSummary, /不是事实源/, "Round 2 runtime-state not source-of-truth copy"));

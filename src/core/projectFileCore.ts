@@ -335,6 +335,71 @@ function buildSourcePriority(input: ProjectFileCoreBuildInput): ProjectFileCoreS
   }));
 }
 
+function buildProjectFileFactSourceReceipt(input: ProjectFileCoreBuildInput) {
+  return {
+    receiptKind: "project_file_fact_source" as const,
+    projectVibeEntry: {
+      path: "project.vibe",
+      role: "project_manifest",
+      authority: "planned_project_file",
+      saveOpenContract: "project_root_relative",
+      runtimeStateMayOverride: false,
+    },
+    projectFactFiles: sourcePriorityPlan
+      .filter((entry) => entry.role !== "runtime_state")
+      .map((entry) => ({
+        role: entry.role,
+        canonicalPath: entry.canonicalPath,
+        authority: entry.authority,
+        projectRootRelative: true,
+      })),
+    saveOpenContract: {
+      projectRootRelativeRequired: true,
+      absolutePathsBlocked: true,
+      parentTraversalBlocked: true,
+      userFileMoveDeleteBlocked: true,
+      credentialTokenSecretWriteBlocked: true,
+    },
+    runtimeStateDerivedCache: {
+      path: "runtime-state.json",
+      role: "derived_cache",
+      mayBeRebuiltFromProjectFiles: true,
+      mayOverwriteProjectFiles: false,
+      rebuildInputs: [
+        "project.vibe",
+        "production_bible/production_bible.vibe.json",
+        "story_flow/story_flow.vibe.json",
+        "visual_memory/visual_memory.vibe.json",
+        "shots/*/shot_spec.vibe.json",
+        "shots/*/shot_layout.vibe.json",
+        "spatial_memory/spatial_memory.vibe.json",
+        "visual_memory/scene_asset_packs/*.vibe.json",
+        "voice_memory/voice_memory.vibe.json",
+        "manifests/source_index.vibe.json",
+      ],
+    },
+    blockedAuthorities: [
+      "runtime_state",
+      "runtime_cache",
+      "chat_history",
+      "old_chat",
+      "direct_input",
+      "global_knowledge_library",
+    ],
+    projectLocalKnowledgeScope: {
+      projectKnowledgePath: "knowledge/knowledge_manifest.vibe.json",
+      projectKnowledgeMayBeFactReference: true,
+      globalKnowledgeMayAuthorizeProjectFacts: false,
+      oldChatMayAuthorizeProjectFacts: false,
+      notes: [
+        "Project-local knowledge packs can be referenced by project fact files.",
+        "Global knowledge libraries and previous chat history cannot become project fact authority unless imported into project files.",
+      ],
+    },
+    sourceIndexHash: input.sourceIndex.sourceIndexHash,
+  };
+}
+
 export function buildProjectFileCoreState(input: ProjectFileCoreBuildInput): ProjectFileCoreState {
   const blockers: string[] = [];
   if (!input.sourceIndex.sourceIndexHash) blockers.push("sourceIndex.sourceIndexHash is required to key the derived runtime-state cache.");
@@ -350,24 +415,24 @@ export function buildProjectFileCoreState(input: ProjectFileCoreBuildInput): Pro
     "runtime.providerEnablementSummary",
   ]);
 
-  return {
+  const state = {
     schemaVersion: "0.1.0",
     generatedAt: input.generatedAt,
-    phase: "phase_9_1_minimum_file_first_core",
-    projectFileName: "project.vibe",
-    projectFileStatus: "planned_not_written",
+    phase: "phase_9_1_minimum_file_first_core" as const,
+    projectFileName: "project.vibe" as const,
+    projectFileStatus: "planned_not_written" as const,
     projectRoot: {
-      rootRef: "project_root",
-      origin: "user_selected_import",
+      rootRef: "project_root" as const,
+      origin: "user_selected_import" as const,
       selectedImport: importedRoot,
       notes: ["The imported project root is treated as user-selected input; no absolute platform path becomes the portable contract."],
     },
     plannedFileTree: requiredPlannedEntries,
     sourceOfTruthPriority: buildSourcePriority(input),
     derivedCachePolicy: {
-      runtimeStateRole: "derived_cache",
-      runtimeStateMayBeRebuilt: true,
-      runtimeStateIsSoleSourceOfTruth: false,
+      runtimeStateRole: "derived_cache" as const,
+      runtimeStateMayBeRebuilt: true as const,
+      runtimeStateIsSoleSourceOfTruth: false as const,
       rebuildInputs: [
         "project_manifest",
         "production_bible",
@@ -385,7 +450,7 @@ export function buildProjectFileCoreState(input: ProjectFileCoreBuildInput): Pro
         "exports",
         "knowledge",
         "settings",
-      ],
+      ] as ProjectFileCoreSourceRole[],
       cacheKeys: {
         sourceIndexHash: input.sourceIndex.sourceIndexHash,
         projectVersion: input.sourceIndex.projectVersion || input.importedAt || input.generatedAt,
@@ -399,36 +464,36 @@ export function buildProjectFileCoreState(input: ProjectFileCoreBuildInput): Pro
       notes: ["Runtime-state is rebuildable derived cache; project.vibe and planned project files are the intended fact surface."],
     },
     pathPolicy: {
-      allowedOrigins: ["project_root_relative", "user_selected_import"],
-      projectRootRelativeRequired: true,
-      userSelectedImportAllowed: true,
-      hardcodedAbsolutePathContractForbidden: true,
-      platformSpecificPathContractForbidden: true,
-      pathResolverRequired: true,
+      allowedOrigins: ["project_root_relative", "user_selected_import"] as ProjectFileCorePathRef["origin"][],
+      projectRootRelativeRequired: true as const,
+      userSelectedImportAllowed: true as const,
+      hardcodedAbsolutePathContractForbidden: true as const,
+      platformSpecificPathContractForbidden: true as const,
+      pathResolverRequired: true as const,
       notes: [
         "Persisted project paths must be project-root-relative.",
         "Absolute paths are only accepted as user-selected import evidence and must be normalized before becoming project facts.",
       ],
     },
     hardLocks: {
-      dryRunOnly: true,
-      readOnly: true,
-      noFileMutation: true,
-      noUserFileMove: true,
-      noProviderSubmit: true,
-      noImageGeneration: true,
-      noVideoGeneration: true,
-      noArbitraryShell: true,
-      noCredentialRead: true,
-      noCredentialWrite: true,
-      projectVibeWriteAllowed: false,
-      runtimeStateIsDerivedCache: true,
+      dryRunOnly: true as const,
+      readOnly: true as const,
+      noFileMutation: true as const,
+      noUserFileMove: true as const,
+      noProviderSubmit: true as const,
+      noImageGeneration: true as const,
+      noVideoGeneration: true as const,
+      noArbitraryShell: true as const,
+      noCredentialRead: true as const,
+      noCredentialWrite: true as const,
+      projectVibeWriteAllowed: false as const,
+      runtimeStateIsDerivedCache: true as const,
     },
     migrationReadiness: {
-      status: blockers.length ? "blocked" : "planned_only_ready",
+      status: blockers.length ? "blocked" as const : "planned_only_ready" as const,
       readyForDryRunPlanning: blockers.length === 0,
       readyForRuntimeDerivation: blockers.length === 0,
-      readyForProjectVibeWrite: false,
+      readyForProjectVibeWrite: false as const,
       blockers,
       warnings: ["Phase 9.1 plans project.vibe and the file tree only; it does not write, move, generate, or submit anything."],
       nextSteps: [
@@ -436,10 +501,14 @@ export function buildProjectFileCoreState(input: ProjectFileCoreBuildInput): Pro
         "Keep runtime-state rebuildable from project-file facts as subsequent phases migrate more fields.",
       ],
     },
+    projectFileFactSourceReceipt: buildProjectFileFactSourceReceipt(input),
     sourceRefs,
     notes: [
       "project.vibe is the planned file-first project core, not a file written by this phase.",
+      "Project file facts, including project-local knowledge references, are the authority for save/open and runtime cache rebuild.",
+      "Runtime-state, old chat, direct input, runtime cache, and global knowledge cannot authorize project facts.",
       "No provider submit, file mutation, arbitrary shell execution, credential read/write, image generation, or video generation is allowed.",
     ],
   };
+  return state;
 }
