@@ -1544,6 +1544,31 @@ function buildAdapterContractState(generatedAt, providerRegistry) {
       forbiddenRoutes: ["ui_binding", "live_submit", "credential_read", "credential_storage", "arbitrary_shell"],
       notes: ["Default agent runtime contract; product logic must depend on capabilities, not Codex-specific identity."],
     },
+    {
+      id: "codex-app-server-agent",
+      kind: "agent",
+      label: "Codex App Server Agent",
+      runtimeKind: "codex_app_server",
+      state: "planned",
+      dryRunOnly: true,
+      readOnly: true,
+      liveSubmitAllowed: false,
+      credentialStatus: "not_required",
+      credentialStorage: false,
+      uiBinding: false,
+      capabilities: {
+        canSpawnSubagents: true,
+        canUseImageRuntime: true,
+        contextPacketRequired: true,
+        supportsThreadHandoff: true,
+        supportsStructuredResult: true,
+      },
+      forbiddenRoutes: ["ui_binding", "live_submit", "credential_read", "credential_storage", "arbitrary_shell"],
+      notes: [
+        "Planned app-server protocol agent adapter; contract/readiness only, with legacy codex exec --json fallback preserved.",
+        "Transport and method readiness are detailed in codexAppServerAdapter.ts; this generic contract remains dry-run/read-only.",
+      ],
+    },
   ];
   const workerAdapters = [
     {

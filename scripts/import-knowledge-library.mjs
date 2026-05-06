@@ -47,7 +47,7 @@ const taskPurposesByCategory = {
   prompt: ["asset", "keyframe", "edit", "i2v", "video_generation"],
   provider: ["asset", "keyframe", "edit", "i2v", "video", "audio", "export"],
   qa: ["qa", "audit", "visual_audit", "video_audit", "continuity_audit", "regeneration_plan", "story_audit"],
-  audio: ["audio", "video"],
+  audio: ["audio", "video", "video_generation"],
   agent: ["audit", "unknown"],
 };
 

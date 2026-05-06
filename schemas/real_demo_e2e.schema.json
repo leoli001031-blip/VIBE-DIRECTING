@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibe-core.local/schemas/real_demo_e2e.schema.json",
+  "title": "Real Demo E2E Readiness Report",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "phase",
+    "projectId",
+    "runId",
+    "scenarioId",
+    "status",
+    "chain",
+    "projectFacts",
+    "integrity",
+    "completionClaim",
+    "blockers"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "0.1.0" },
+    "generatedAt": { "type": "string" },
+    "phase": { "const": "real_demo_e2e_readiness_harness" },
+    "projectId": { "type": "string" },
+    "runId": { "type": "string" },
+    "scenarioId": { "type": "string" },
+    "status": {
+      "enum": ["ready_for_real_chain_pressure_test", "needs_review", "blocked"]
+    },
+    "declaration": {
+      "enum": ["readiness_harness_only", "actual_provider_observed"]
+    },
+    "chain": {
+      "type": "object",
+      "required": [
+        "generatedByUiAction",
+        "validatedEnvelope",
+        "workerSubagentProvenancePresent",
+        "providerCallObserved",
+        "providerObservationMode",
+        "outputCameFromScopedSandbox",
+        "watcherEventObserved",
+        "manifestMatched",
+        "qaReportObserved",
+        "previewUpdatedFromOutput",
+        "providerSelfReportCompletesTask",
+        "providerSelfReportIgnoredForCompletion",
+        "stages"
+      ],
+      "properties": {
+        "generatedByUiAction": { "type": "boolean" },
+        "validatedEnvelope": { "type": "boolean" },
+        "workerSubagentProvenancePresent": { "type": "boolean" },
+        "providerCallObserved": { "type": "boolean" },
+        "providerObservationMode": {
+          "enum": ["actual_provider_call_observed", "mock_readiness_evidence", "not_observed"]
+        },
+        "outputCameFromScopedSandbox": { "type": "boolean" },
+        "watcherEventObserved": { "type": "boolean" },
+        "manifestMatched": { "type": "boolean" },
+        "qaReportObserved": { "type": "boolean" },
+        "previewUpdatedFromOutput": { "type": "boolean" },
+        "providerSelfReportCompletesTask": { "type": "boolean" },
+        "providerSelfReportIgnoredForCompletion": { "const": true },
+        "stages": { "type": "array" }
+      }
+    },
+    "projectFacts": {
+      "type": "object",
+      "required": [
+        "projectVibePresent",
+        "sourceIndexPresent",
+        "visualMemoryPresent",
+        "shotLayoutPresent",
+        "allRequiredFactsPresent"
+      ],
+      "properties": {
+        "projectVibePresent": { "type": "boolean" },
+        "sourceIndexPresent": { "type": "boolean" },
+        "visualMemoryPresent": { "type": "boolean" },
+        "shotLayoutPresent": { "type": "boolean" },
+        "allRequiredFactsPresent": { "type": "boolean" }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "required": [
+        "manualFileCopyDetected",
+        "fixtureReuseDetected",
+        "simulatedStateDetected",
+        "noManualFileCopy",
+        "noFixtureReuse",
+        "noSimulatedState"
+      ],
+      "properties": {
+        "manualFileCopyDetected": { "type": "boolean" },
+        "fixtureReuseDetected": { "type": "boolean" },
+        "simulatedStateDetected": { "type": "boolean" },
+        "noManualFileCopy": { "type": "boolean" },
+        "noFixtureReuse": { "type": "boolean" },
+        "noSimulatedState": { "type": "boolean" }
+      }
+    },
+    "pressure": {
+      "type": "object",
+      "required": [
+        "totalShots",
+        "realImagePlanCount",
+        "queuedOrParkedCount",
+        "allowedRealImagePlanRange",
+        "pressureRange",
+        "shotPlans",
+        "allShotPlansHaveProvenance",
+        "status",
+        "blockers"
+      ],
+      "properties": {
+        "totalShots": { "type": "number" },
+        "realImagePlanCount": { "type": "number" },
+        "queuedOrParkedCount": { "type": "number" },
+        "allowedRealImagePlanRange": { "type": "string" },
+        "pressureRange": { "type": "string" },
+        "shotPlans": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["shotId", "status"],
+            "properties": {
+              "shotId": { "type": "string" },
+              "status": {
+                "enum": ["real_image_planned", "queued", "parked", "returned"]
+              },
+              "taskPacketId": { "type": "string" },
+              "envelopeId": { "type": "string" },
+              "workerProvenanceId": { "type": "string" },
+              "expectedOutputPath": { "type": "string" }
+            }
+          }
+        },
+        "allShotPlansHaveProvenance": { "type": "boolean" },
+        "status": { "enum": ["ready", "blocked"] },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "required": [
+        "semanticQaStatus",
+        "semanticQaRequired",
+        "p0FindingCount",
+        "p1FindingCount",
+        "p2FindingCount",
+        "gates"
+      ],
+      "properties": {
+        "semanticQaStatus": {
+          "enum": ["pass", "needs_review", "blocked"]
+        },
+        "semanticQaRequired": { "type": "boolean" },
+        "p0FindingCount": { "type": "number" },
+        "p1FindingCount": { "type": "number" },
+        "p2FindingCount": { "type": "number" },
+        "gates": {
+          "type": "array",
+          "items": {
+            "enum": ["identity", "scene", "style", "story", "neighbor", "output"]
+          }
+        }
+      }
+    },
+    "completionClaim": {
+      "type": "object",
+      "required": [
+        "readinessHarnessPassed",
+        "realProviderGenerationCompleted",
+        "realGenerationCompletedClaimAllowed",
+        "note"
+      ],
+      "properties": {
+        "readinessHarnessPassed": { "type": "boolean" },
+        "realProviderGenerationCompleted": { "type": "boolean" },
+        "realGenerationCompletedClaimAllowed": { "type": "boolean" },
+        "note": { "type": "string" }
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

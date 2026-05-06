@@ -3,7 +3,7 @@
   "manifestVersion": "2026.04.29",
   "generatedAt": "2026-04-29T00:00:00.000Z",
   "knowledgeLibraryRoot": "resources/knowledge",
-  "manifestHash": "sha256:e6611d1afc317eb9a83813a38a9c2f6ec73566a62fc9b9cfbf031d6126647a5f",
+  "manifestHash": "sha256:e12655441a7cb7865bde23f5424aaaa6191c0d8326eda072311b5ed2600b737f",
   "packs": [
     {
       "id": "agent/harness-engineering-for-vibe-director",
@@ -212,6 +212,223 @@
           "hash": "sha256:4749fd636c21831555360353d4dc97dbf80c67e3778bdf8b2a478f41e8c699ce",
           "tokenEstimate": 113,
           "sourceHeading": "参考来源"
+        }
+      ]
+    },
+    {
+      "id": "audio/core-audio-planning",
+      "version": "1.0.0",
+      "hash": "sha256:96ec8da685654078cbfbef87c6638245c0dcad86cb9062204e96086a7e077b27",
+      "path": "resources/knowledge/audio/core-audio-planning.md",
+      "type": "external_imported",
+      "category": "audio",
+      "title": "Core Audio Planning Pack",
+      "summary": "更新时间：2026-05-05 用途：给声音规划、音频 subagent 和视频任务提供最小可注入规则。当前只生成计划和 provider slot 预留，不调用真实 TTS、BGM 或混音 API。 - 旁白只写用户故事需要的声轨内容，不替画面解释已经清楚的信息。 - 每条旁白必须绑定 shotId、语言、情绪、语速、入点和出点。",
+      "tags": [
+        "audio",
+        "core",
+        "pack",
+        "planning",
+        "planning.md"
+      ],
+      "applicableTaskPurposes": [
+        "audio",
+        "video",
+        "video_generation"
+      ],
+      "applicableProviderSlots": [
+        "audio.tts",
+        "audio.music",
+        "video.i2v"
+      ],
+      "dependencies": [],
+      "conflicts": [],
+      "maxInjectionTokens": 700,
+      "trustLevel": "verified",
+      "verificationStatus": "verified",
+      "verificationReportId": "knowledge_import_report:deterministic_sha256_copy",
+      "conflictAcknowledged": false,
+      "enabled": true,
+      "defaultEnabled": false,
+      "createdAt": "2026-04-29T00:00:00.000Z",
+      "updatedAt": "2026-04-29T00:00:00.000Z",
+      "sourcePath": "audio/core-audio-planning.md",
+      "snippets": [
+        {
+          "id": "core-audio-planning-pack-01",
+          "title": "Core Audio Planning Pack",
+          "summary": "更新时间：2026-05-05 用途：给声音规划、音频 subagent 和视频任务提供最小可注入规则。当前只生成计划和 provider slot 预留，不调用真实 TTS、BGM 或混音 API。",
+          "content": "# Core Audio Planning Pack\n\n更新时间：2026-05-05\n\n用途：给声音规划、音频 subagent 和视频任务提供最小可注入规则。当前只生成计划和 provider slot 预留，不调用真实 TTS、BGM 或混音 API。",
+          "keywords": [
+            "audio",
+            "core",
+            "pack",
+            "planning",
+            "planning.md"
+          ],
+          "hash": "sha256:3b3d77d30e254772c0a059b54d9cefd38f97c2303fa14c2bb4d55cf7617966d1",
+          "tokenEstimate": 33,
+          "sourceHeading": "Core Audio Planning Pack"
+        },
+        {
+          "id": "1-narration-旁白-02",
+          "title": "1. Narration / 旁白",
+          "summary": "- 旁白只写用户故事需要的声轨内容，不替画面解释已经清楚的信息。 - 每条旁白必须绑定 shotId、语言、情绪、语速、入点和出点。 - 旁白可以是临时文字计划；正式 TTS 前必须绑定授权音源或明确使用系统默认临时音色。",
+          "content": "## 1. Narration / 旁白\n\n- 旁白只写用户故事需要的声轨内容，不替画面解释已经清楚的信息。\n- 每条旁白必须绑定 shotId、语言、情绪、语速、入点和出点。\n- 旁白可以是临时文字计划；正式 TTS 前必须绑定授权音源或明确使用系统默认临时音色。\n- 旁白不得写入视频 prompt 的画面描述里；它属于 audio plan。",
+          "keywords": [
+            "1.",
+            "audio",
+            "core",
+            "narration",
+            "pack",
+            "planning",
+            "planning.md",
+            "旁白"
+          ],
+          "hash": "sha256:d57aaced3d92ab84682cd51296d06b25036a11a566a71b640a6a5c03517725f7",
+          "tokenEstimate": 44,
+          "sourceHeading": "1. Narration / 旁白"
+        },
+        {
+          "id": "2-dialogue-对白-03",
+          "title": "2. Dialogue / 对白",
+          "summary": "- 对白以角色为单位记录 speaker、line、delivery、timing 和 sync note。 - 对白优先表达潜台词和行动目标，避免解释性台词。 - 多角色对白必须标出声源位置或画内/画外状态，方便后续混音和字幕对齐。",
+          "content": "## 2. Dialogue / 对白\n\n- 对白以角色为单位记录 speaker、line、delivery、timing 和 sync note。\n- 对白优先表达潜台词和行动目标，避免解释性台词。\n- 多角色对白必须标出声源位置或画内/画外状态，方便后续混音和字幕对齐。\n- 没有对白时显式记录 no_dialogue，避免 worker 自行补台词。",
+          "keywords": [
+            "2.",
+            "audio",
+            "core",
+            "dialogue",
+            "pack",
+            "planning",
+            "planning.md",
+            "对白"
+          ],
+          "hash": "sha256:77a68579276d2c12d93b557b650ac28a0e0470cded8552db5fb5fa19c530d4a6",
+          "tokenEstimate": 45,
+          "sourceHeading": "2. Dialogue / 对白"
+        },
+        {
+          "id": "3-voice-source-license-音源授权与预留-04",
+          "title": "3. Voice Source License / 音源授权与预留",
+          "summary": "- 每个 voiceSourceId 必须有授权状态：approved、candidate、needs_review 或 placeholder。 - approved 才能进入正式 TTS；candidate/placeholder 只能进入计划和预览说明。 - 不允许从参考视频或临时素材中克隆未授权声音。",
+          "content": "## 3. Voice Source License / 音源授权与预留\n\n- 每个 voiceSourceId 必须有授权状态：approved、candidate、needs_review 或 placeholder。\n- approved 才能进入正式 TTS；candidate/placeholder 只能进入计划和预览说明。\n- 不允许从参考视频或临时素材中克隆未授权声音。\n- provider adapter 只能接收授权后的 voiceSourceId、voicePreset 或 explicit placeholder，不读取凭据。",
+          "keywords": [
+            "3.",
+            "audio",
+            "core",
+            "license",
+            "pack",
+            "planning",
+            "planning.md",
+            "source",
+            "voice",
+            "音源授权与预留"
+          ],
+          "hash": "sha256:3cf21624f687dac253b4ac45b8f3c55f3658ec3dea07b7ec98d358bc0e9dfa53",
+          "tokenEstimate": 70,
+          "sourceHeading": "3. Voice Source License / 音源授权与预留"
+        },
+        {
+          "id": "4-ambience-环境音-05",
+          "title": "4. Ambience / 环境音",
+          "summary": "- 环境音记录 location bed、room tone、weather、crowd、machine hum 等可听背景。 - 环境音只服务空间真实感和节奏，不要抢对白或旁白。 - 每条 ambience cue 需要 loudness intent：silent、low、medium、featured。",
+          "content": "## 4. Ambience / 环境音\n\n- 环境音记录 location bed、room tone、weather、crowd、machine hum 等可听背景。\n- 环境音只服务空间真实感和节奏，不要抢对白或旁白。\n- 每条 ambience cue 需要 loudness intent：silent、low、medium、featured。\n- 没有环境音时显式记录 no_ambience，而不是留空。",
+          "keywords": [
+            "4.",
+            "ambience",
+            "audio",
+            "core",
+            "pack",
+            "planning",
+            "planning.md",
+            "环境音"
+          ],
+          "hash": "sha256:c68ef6a1b1aa451f4fa224d1d20a7a4adcf26b234e12ee77bbbb56b4a7b06f67",
+          "tokenEstimate": 53,
+          "sourceHeading": "4. Ambience / 环境音"
+        },
+        {
+          "id": "5-bgm-brief-配乐说明-06",
+          "title": "5. BGM Brief / 配乐说明",
+          "summary": "- BGM brief 只描述情绪、节奏、乐器倾向、进入/退出点和授权要求。 - BGM provider slot 预留为 audio.music；当前不得调用真实音乐生成 API。 - 需要音乐时输出 music_brief、license_requirement、duration_hint 和 avoid_terms。",
+          "content": "## 5. BGM Brief / 配乐说明\n\n- BGM brief 只描述情绪、节奏、乐器倾向、进入/退出点和授权要求。\n- BGM provider slot 预留为 audio.music；当前不得调用真实音乐生成 API。\n- 需要音乐时输出 music_brief、license_requirement、duration_hint 和 avoid_terms。\n- 不需要音乐时输出 no_bgm，并说明是否保留环境音或对白。",
+          "keywords": [
+            "5.",
+            "audio",
+            "bgm",
+            "brief",
+            "core",
+            "pack",
+            "planning",
+            "planning.md",
+            "配乐说明"
+          ],
+          "hash": "sha256:a5417260526cdaf8a461b1f58a749ab7b08630fe4073f44b0a6187abf8149766",
+          "tokenEstimate": 55,
+          "sourceHeading": "5. BGM Brief / 配乐说明"
+        },
+        {
+          "id": "6-video-prompt-no-bgm-default-07",
+          "title": "6. Video Prompt No BGM Default",
+          "summary": "- 视频生成 prompt 默认 no BGM。 - video.i2v 或 video.t2v.experimental 任务不得把 BGM、配乐、音乐风格写入视频 prompt。 - 需要声音时，先分离到 audio plan；视频 prompt 只保留画面、运动、节奏和静音规则。",
+          "content": "## 6. Video Prompt No BGM Default\n\n- 视频生成 prompt 默认 no BGM。\n- video.i2v 或 video.t2v.experimental 任务不得把 BGM、配乐、音乐风格写入视频 prompt。\n- 需要声音时，先分离到 audio plan；视频 prompt 只保留画面、运动、节奏和静音规则。\n- 如果用户说“不要音乐”“无配乐”“no bgm”，必须命中 audio pack 并在 audio plan 写 no_bgm。",
+          "keywords": [
+            "6.",
+            "audio",
+            "bgm",
+            "core",
+            "default",
+            "no",
+            "pack",
+            "planning",
+            "planning.md",
+            "prompt",
+            "video"
+          ],
+          "hash": "sha256:25061ebec52c5ea1eeab6be9e69afea2dad6e8efbb2119b5973eccb49c3c3d93",
+          "tokenEstimate": 62,
+          "sourceHeading": "6. Video Prompt No BGM Default"
+        },
+        {
+          "id": "7-tts-bgm-provider-slots-08",
+          "title": "7. TTS / BGM Provider Slots",
+          "summary": "- TTS 预留 providerSlot：audio.tts。 - BGM 预留 providerSlot：audio.music。 - 两个 slot 当前只允许 planned 或 unavailable，不允许 live provider submit。",
+          "content": "## 7. TTS / BGM Provider Slots\n\n- TTS 预留 providerSlot：audio.tts。\n- BGM 预留 providerSlot：audio.music。\n- 两个 slot 当前只允许 planned 或 unavailable，不允许 live provider submit。\n- provider request 未来最小字段：taskId、shotId、providerSlot、voiceSourceId 或 musicBriefId、expectedOutputPath、sourceIndexHash、knowledgeRouteResultId、contextBudgetId。",
+          "keywords": [
+            "7.",
+            "audio",
+            "bgm",
+            "core",
+            "pack",
+            "planning",
+            "planning.md",
+            "provider",
+            "slots",
+            "tts"
+          ],
+          "hash": "sha256:f5c72bb840553cd22dcc8db3220da24769838157902e6b6318438c279abc1c74",
+          "tokenEstimate": 80,
+          "sourceHeading": "7. TTS / BGM Provider Slots"
+        },
+        {
+          "id": "8-qa-checklist-09",
+          "title": "8. QA Checklist",
+          "summary": "- voice_source_gate：正式音频是否只使用 approved 音源。 - narration_gate：旁白是否绑定 shotId、timing、语言和情绪。 - dialogue_gate：对白是否绑定 speaker、delivery、sync note，且不解释画面。",
+          "content": "## 8. QA Checklist\n\n- voice_source_gate：正式音频是否只使用 approved 音源。\n- narration_gate：旁白是否绑定 shotId、timing、语言和情绪。\n- dialogue_gate：对白是否绑定 speaker、delivery、sync note，且不解释画面。\n- ambience_gate：环境音是否服务空间而不过载。\n- bgm_gate：BGM brief 是否明确 license requirement；视频 prompt 是否保持 no_bgm。\n- provider_slot_gate：audio.tts/audio.music 只保留为计划，不调用真实 API。",
+          "keywords": [
+            "8.",
+            "audio",
+            "checklist",
+            "core",
+            "pack",
+            "planning",
+            "planning.md",
+            "qa"
+          ],
+          "hash": "sha256:f16894966982c21534b5e6ef8ff94c72968aeee7b70f167c1a7dbc420a23d5fe",
+          "tokenEstimate": 82,
+          "sourceHeading": "8. QA Checklist"
         }
       ]
     },
@@ -1125,12 +1342,12 @@
     {
       "id": "index/router-map",
       "version": "1.0.0",
-      "hash": "sha256:ba3be393d04d8824faf046d3a46ad17e893a58d0b49af1282ec2d61893d5916a",
+      "hash": "sha256:95dba522f021bec3a1e5647b67ad58c60b2bbbff178cd0191cb8b8d212b2ebed",
       "path": "resources/knowledge/index/router-map.md",
       "type": "external_imported",
       "category": "agent",
       "title": "Knowledge Router Map",
-      "summary": "用途：把用户自然语言映射到后台资料包和字段。运行时只注入命中的包。",
+      "summary": "用途：把用户自然语言映射到后台资料包和字段。运行时只注入命中的包。 正式任务路由失败时只能使用最小默认兜底集合中的小包，并继续走 context budget；禁止把整个资料库注入 worker。",
       "tags": [
         "index",
         "knowledge",
@@ -1227,7 +1444,7 @@
           "id": "生成任务-05",
           "title": "生成任务",
           "summary": "",
-          "content": "## 生成任务\n\n| 任务 | 注入资料包 |\n|---|---|\n| Image 2 关键帧 | `prompt/core-prompt-templates.md`, 命中的 style/composition/lighting/color/lens 包 |\n| Image 2 编辑 | `prompt/core-prompt-templates.md`, `qa/core-qa.md` |\n| Seedance 2.0 图生视频 | `camera/core-camera-movement.md`, `prompt/core-prompt-templates.md`, `qa/core-qa.md` |\n| 判断 Image 2 / Seedance / 其他模型能不能做 | `provider/model-capability-matrix.md`, `provider/image2-provider-pack.md`, `provider/seedance2-provider-pack.md` |\n| 当前 Codex CLI 怎么执行生成任务 | `provider/codex-cli-execution-boundary.md`, `provider/model-capability-matrix.md` |\n| 新增 OpenAI 视频模型 / 即梦 / Runway / ComfyUI 等模型 | `provider/provider-api-extension-slots.md`, `provider/provider-onboarding-research-checklist.md`, `provider/model-capability-matrix.md` |\n| 故事理顺补全 | `script/core-script-writing.md`, `script/script-to-storyflow.md`, `script/script-qa.md` |\n| 脚本转分镜 | `script/script-to-storyflow.md`, `story-function/core-shot-functions.md`, `composition/core-composition.md` |\n| 风格 QA | `qa/core-qa.md`, 命中的 style/lighting/color 包 |\n| 连续性 QA | `qa/core-qa.md`, `story-function/core-shot-functions.md`, `composition/core-composition.md` |",
+          "content": "## 生成任务\n\n| 任务 | 注入资料包 |\n|---|---|\n| Image 2 关键帧 | `prompt/core-prompt-templates.md`, 命中的 style/composition/lighting/color/lens 包 |\n| Image 2 编辑 | `prompt/core-prompt-templates.md`, `qa/core-qa.md` |\n| Seedance 2.0 图生视频 | `camera/core-camera-movement.md`, `prompt/core-prompt-templates.md`, `qa/core-qa.md`, `audio/core-audio-planning.md` |\n| 判断 Image 2 / Seedance / 其他模型能不能做 | `provider/model-capability-matrix.md`, `provider/image2-provider-pack.md`, `provider/seedance2-provider-pack.md` |\n| 当前 Codex CLI 怎么执行生成任务 | `provider/codex-cli-execution-boundary.md`, `provider/model-capability-matrix.md` |\n| 新增 OpenAI 视频模型 / 即梦 / Runway / ComfyUI 等模型 | `provider/provider-api-extension-slots.md`, `provider/provider-onboarding-research-checklist.md`, `provider/model-capability-matrix.md` |\n| 故事理顺补全 | `script/core-script-writing.md`, `script/script-to-storyflow.md`, `script/script-qa.md` |\n| 脚本转分镜 | `script/script-to-storyflow.md`, `story-function/core-shot-functions.md`, `composition/core-composition.md` |\n| 风格 QA | `qa/core-qa.md`, 命中的 style/lighting/color 包 |\n| 连续性 QA | `qa/core-qa.md`, `story-function/core-shot-functions.md`, `composition/core-composition.md` |\n| 旁白 / 对白 / 音效规划 | `audio/core-audio-planning.md`, `provider/model-capability-matrix.md`, `qa/core-qa.md` |\n| TTS 音频生成预留 | `audio/core-audio-planning.md`, `provider/provider-api-extension-slots.md`, `provider/model-capability-matrix.md`, `qa/core-qa.md` |\n| BGM brief / 配乐预留 | `audio/core-audio-planning.md`, `provider/provider-api-extension-slots.md`, `provider/model-capability-matrix.md`, `qa/core-qa.md` |\n| 视频不要音乐 / no BGM | `audio/core-audio-planning.md`, `camera/core-camera-movement.md`, `prompt/core-prompt-templates.md`, `qa/core-qa.md` |",
           "keywords": [
             "index",
             "knowledge",
@@ -1236,9 +1453,26 @@
             "router",
             "生成任务"
           ],
-          "hash": "sha256:7f8dd797852a975c3230b07916e1ddc43a5508eedff648c033289e4947c917c4",
-          "tokenEstimate": 284,
+          "hash": "sha256:e18a6f353a01e7b6e9c510ca4be8358dae4aa94673a4b609ef5624a3574b7d98",
+          "tokenEstimate": 430,
           "sourceHeading": "生成任务"
+        },
+        {
+          "id": "最小默认兜底-06",
+          "title": "最小默认兜底",
+          "summary": "正式任务路由失败时只能使用最小默认兜底集合中的小包，并继续走 context budget；禁止把整个资料库注入 worker。",
+          "content": "## 最小默认兜底\n\n正式任务路由失败时只能使用最小默认兜底集合中的小包，并继续走 context budget；禁止把整个资料库注入 worker。\n\n| 任务类型 | 最小兜底包 |\n|---|---|\n| script/storyflow | `script/core-script-writing.md`, `script/script-to-storyflow.md`, `story-function/core-shot-functions.md`, `qa/core-qa.md` |\n| keyframe/asset/edit | `prompt/core-prompt-templates.md`, `style/core-style-packs.md`, `composition/core-composition.md`, `provider/model-capability-matrix.md`, `qa/core-qa.md` |\n| video/i2v | `camera/core-camera-movement.md`, `prompt/core-prompt-templates.md`, `provider/model-capability-matrix.md`, `qa/core-qa.md`, `audio/core-audio-planning.md` |\n| audio | `audio/core-audio-planning.md`, `provider/model-capability-matrix.md`, `qa/core-qa.md` |\n| audit/QA | `qa/core-qa.md`, `story-function/core-shot-functions.md`, `composition/core-composition.md`, `provider/model-capability-matrix.md` |",
+          "keywords": [
+            "index",
+            "knowledge",
+            "map",
+            "map.md",
+            "router",
+            "最小默认兜底"
+          ],
+          "hash": "sha256:883a134a4b0f363f2bc1573f4d5c1affed0d650ce1cad855fefc6dd8bb4a7422",
+          "tokenEstimate": 212,
+          "sourceHeading": "最小默认兜底"
         }
       ]
     },
@@ -3717,7 +3951,7 @@
     {
       "id": "README",
       "version": "1.0.0",
-      "hash": "sha256:a47aae3a30ba97fa2bb82e68d77875600c2c3ac240633086910c4eeb64af0fcf",
+      "hash": "sha256:71339c65c301227b21721bb761bae62a10b2e432f39098161c64d5299ad5a9c7",
       "path": "resources/knowledge/README.md",
       "type": "external_imported",
       "category": "agent",
@@ -3768,7 +4002,7 @@
           "id": "目录-02",
           "title": "目录",
           "summary": "- `style/core-style-packs.md`：常见影视风格和情绪风格。 - `script/core-script-writing.md`：脚本核心原则，把想法整理成可拍故事。 - `script/short-film-structures.md`：短片、自适应结构、悬疑/关系/记忆/AI 结构。",
-          "content": "## 目录\n\n- `style/core-style-packs.md`：常见影视风格和情绪风格。\n- `script/core-script-writing.md`：脚本核心原则，把想法整理成可拍故事。\n- `script/short-film-structures.md`：短片、自适应结构、悬疑/关系/记忆/AI 结构。\n- `script/scene-and-dialogue.md`：场景目标、阻碍、转折、对白和潜台词。\n- `script/script-to-storyflow.md`：从想法/脚本到 Story Flow、Scene、ShotSpec。\n- `script/script-qa.md`：脚本、场景、对白、短片范围和 shot readiness QA。\n- `composition/core-composition.md`：构图语言和空间表达。\n- `lighting/core-lighting.md`：光线类型、情绪、风险。\n- `color/core-color.md`：色彩系统和调色倾向。\n- `camera/core-camera-movement.md`：运镜词库。\n- `lens-focus/core-lens-focus.md`：镜头、透视、景深、焦点。\n- `story-function/core-shot-functions.md`：镜头功能词库。\n- `performance/core-performance.md`：表演姿态和动作词库。\n- `qa/core-qa.md`：风格、运镜、连续性、参考污染 QA。\n- `prompt/core-prompt-templates.md`：Image 2 / Seedance 2.0 prompt 编译模板。\n- `provider/model-capability-matrix.md`：模型能力矩阵，记录每个生成后端能做什么、不能做什么。\n- `provider/image2-provider-pack.md`：Image 2 关键帧和图像编辑后端规则。\n- `provider/seedance2-provider-pack.md`：Seedance 2.0 图生视频后端规则。\n- `provider/provider-onboarding-research-checklist.md`：未来新增模型前必须完成的搜索和验证清单。\n- `provider/provider-api-extension-slots.md`：未来生图、视频、音频和本地工作流的统一 API 口预留。\n- `provider/codex-cli-execution-boundary.md`：Codex CLI 作为执行层和 Image 2 调用路径时的边界。\n- `agent/harness-engineering-for-vibe-director.md`：把长流程 Agent 任务工程化为可观测、可恢复、可复验的后台执行脚手架。\n- `index/router-map.md`：用户自然语言到资料包的路由表。",
+          "content": "## 目录\n\n- `style/core-style-packs.md`：常见影视风格和情绪风格。\n- `script/core-script-writing.md`：脚本核心原则，把想法整理成可拍故事。\n- `script/short-film-structures.md`：短片、自适应结构、悬疑/关系/记忆/AI 结构。\n- `script/scene-and-dialogue.md`：场景目标、阻碍、转折、对白和潜台词。\n- `script/script-to-storyflow.md`：从想法/脚本到 Story Flow、Scene、ShotSpec。\n- `script/script-qa.md`：脚本、场景、对白、短片范围和 shot readiness QA。\n- `composition/core-composition.md`：构图语言和空间表达。\n- `lighting/core-lighting.md`：光线类型、情绪、风险。\n- `color/core-color.md`：色彩系统和调色倾向。\n- `camera/core-camera-movement.md`：运镜词库。\n- `lens-focus/core-lens-focus.md`：镜头、透视、景深、焦点。\n- `story-function/core-shot-functions.md`：镜头功能词库。\n- `performance/core-performance.md`：表演姿态和动作词库。\n- `qa/core-qa.md`：风格、运镜、连续性、参考污染 QA。\n- `prompt/core-prompt-templates.md`：Image 2 / Seedance 2.0 prompt 编译模板。\n- `provider/model-capability-matrix.md`：模型能力矩阵，记录每个生成后端能做什么、不能做什么。\n- `provider/image2-provider-pack.md`：Image 2 关键帧和图像编辑后端规则。\n- `provider/seedance2-provider-pack.md`：Seedance 2.0 图生视频后端规则。\n- `provider/provider-onboarding-research-checklist.md`：未来新增模型前必须完成的搜索和验证清单。\n- `provider/provider-api-extension-slots.md`：未来生图、视频、音频和本地工作流的统一 API 口预留。\n- `provider/codex-cli-execution-boundary.md`：Codex CLI 作为执行层和 Image 2 调用路径时的边界。\n- `audio/core-audio-planning.md`：旁白、对白、音源授权、环境音、BGM brief、视频 no BGM 默认规则，以及 TTS/BGM provider slot 预留。\n- `agent/harness-engineering-for-vibe-director.md`：把长流程 Agent 任务工程化为可观测、可恢复、可复验的后台执行脚手架。\n- `index/router-map.md`：用户自然语言到资料包的路由表。",
           "keywords": [
             "director",
             "knowledge",
@@ -3777,15 +4011,15 @@
             "vibe",
             "目录"
           ],
-          "hash": "sha256:f9393ae36e8aec8ab299ddd2c4111f6b88672cb55d76f4ea0dc0f830ab60797a",
-          "tokenEstimate": 327,
+          "hash": "sha256:ef6e6a0baf239af63c0ca0be0c36b467b414e0991a43949bbeaf08f745de4d3b",
+          "tokenEstimate": 353,
           "sourceHeading": "目录"
         },
         {
           "id": "使用原则-03",
           "title": "使用原则",
           "summary": "1. 不把整库注入 Codex。按用户意图、镜头风险和任务类型选择小包。 2. 用户不需要看到英文术语。UI 只显示自然语言摘要。 3. Prompt Compiler 使用资料包生成结构化 prompt，不允许 subagent 每次自由发挥风格。",
-          "content": "## 使用原则\n\n1. 不把整库注入 Codex。按用户意图、镜头风险和任务类型选择小包。\n2. 用户不需要看到英文术语。UI 只显示自然语言摘要。\n3. Prompt Compiler 使用资料包生成结构化 prompt，不允许 subagent 每次自由发挥风格。\n4. QA 必须使用同一套资料包反向检查结果。\n5. 资料包可以被联网研究更新，但更新结果必须落成结构化条目。\n6. 新增模型或生成平台前，必须先更新 provider 能力矩阵和 onboarding 清单。",
+          "content": "## 使用原则\n\n1. 不把整库注入 Codex。按用户意图、镜头风险和任务类型选择小包。\n2. 用户不需要看到英文术语。UI 只显示自然语言摘要。\n3. Prompt Compiler 使用资料包生成结构化 prompt，不允许 subagent 每次自由发挥风格。\n4. QA 必须使用同一套资料包反向检查结果。\n5. 资料包可以被联网研究更新，但更新结果必须落成结构化条目。\n6. 新增模型或生成平台前，必须先更新 provider 能力矩阵和 onboarding 清单。\n7. 正式 TaskEnvelope / SubagentTaskEnvelope 必须保留非空 knowledge injection trace；路由失败时只允许使用最小默认兜底包，不允许整库注入 worker。",
           "keywords": [
             "director",
             "knowledge",
@@ -3794,8 +4028,8 @@
             "vibe",
             "使用原则"
           ],
-          "hash": "sha256:241730cc59d53b89f6a52c91915a96f07bf2ecf6500ff6cec645493ec572c7b1",
-          "tokenEstimate": 60,
+          "hash": "sha256:89283fcd7b8e26549346e4430f018cb1f79815d62502bb65316c7f8755bc4f77",
+          "tokenEstimate": 88,
           "sourceHeading": "使用原则"
         }
       ]

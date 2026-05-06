@@ -45,6 +45,7 @@ const byId = new Map([
 
 for (const id of [
   "codex-cli-agent",
+  "codex-app-server-agent",
   "subagent-worker",
   "image2-provider",
   "image2-edit-provider",
@@ -71,6 +72,20 @@ assert(agent.uiBinding === false, "agent adapter cannot bind UI");
 assert(agent.capabilities.contextPacketRequired === true, "agent context packet must be required");
 assert(agent.capabilities.canSpawnSubagents === true, "agent must declare subagent capability");
 assert(agent.capabilities.supportsThreadHandoff === true, "agent must declare thread handoff capability");
+
+const appServerAgent = byId.get("codex-app-server-agent");
+assert(appServerAgent.kind === "agent", "codex-app-server-agent must be an agent contract");
+assert(appServerAgent.runtimeKind === "codex_app_server", "codex-app-server-agent must declare app-server runtime kind");
+assert(appServerAgent.state === "planned", "codex-app-server-agent must remain planned");
+assert(appServerAgent.dryRunOnly === true, "codex-app-server-agent must be dry-run only");
+assert(appServerAgent.readOnly === true, "codex-app-server-agent must be read-only");
+assert(appServerAgent.liveSubmitAllowed === false, "codex-app-server-agent must not allow live submit");
+assert(appServerAgent.credentialStorage === false, "codex-app-server-agent must not store credentials");
+assert(appServerAgent.uiBinding === false, "codex-app-server-agent cannot bind UI");
+assert(appServerAgent.capabilities.contextPacketRequired === true, "app-server agent context packet must be required");
+assert(appServerAgent.capabilities.supportsThreadHandoff === true, "app-server agent must declare thread handoff capability");
+assert(appServerAgent.forbiddenRoutes.includes("credential_read"), "app-server agent must forbid credential read");
+assert(appServerAgent.notes.some((note) => note.includes("legacy codex exec --json fallback")), "app-server agent must preserve legacy exec fallback note");
 
 const worker = byId.get("subagent-worker");
 assert(worker.kind === "worker", "subagent-worker must be a worker contract");
@@ -142,6 +157,10 @@ assert(localPost.providerSubmissionForbidden === true, "local postprocess must n
 
 const schema = readJson("schemas/adapter_contract.schema.json");
 assert(schema.title === "AdapterContractState", "adapter contract schema title drifted");
+assert(
+  schema.$defs.agentAdapterContract.properties.runtimeKind.enum.includes("codex_app_server"),
+  "schema must allow codex app-server agent runtime kind",
+);
 assert(schema.$defs.providerAdapterContract.properties.liveSubmitAllowed.const === false, "schema must pin provider live submit false");
 assert(schema.$defs.providerAdapterContract.properties.credentialStorage.const === false, "schema must pin provider credential storage false");
 assert(

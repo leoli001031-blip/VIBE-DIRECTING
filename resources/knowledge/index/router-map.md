@@ -49,7 +49,7 @@
 |---|---|
 | Image 2 关键帧 | `prompt/core-prompt-templates.md`, 命中的 style/composition/lighting/color/lens 包 |
 | Image 2 编辑 | `prompt/core-prompt-templates.md`, `qa/core-qa.md` |
-| Seedance 2.0 图生视频 | `camera/core-camera-movement.md`, `prompt/core-prompt-templates.md`, `qa/core-qa.md` |
+| Seedance 2.0 图生视频 | `camera/core-camera-movement.md`, `prompt/core-prompt-templates.md`, `qa/core-qa.md`, `audio/core-audio-planning.md` |
 | 判断 Image 2 / Seedance / 其他模型能不能做 | `provider/model-capability-matrix.md`, `provider/image2-provider-pack.md`, `provider/seedance2-provider-pack.md` |
 | 当前 Codex CLI 怎么执行生成任务 | `provider/codex-cli-execution-boundary.md`, `provider/model-capability-matrix.md` |
 | 新增 OpenAI 视频模型 / 即梦 / Runway / ComfyUI 等模型 | `provider/provider-api-extension-slots.md`, `provider/provider-onboarding-research-checklist.md`, `provider/model-capability-matrix.md` |
@@ -57,3 +57,19 @@
 | 脚本转分镜 | `script/script-to-storyflow.md`, `story-function/core-shot-functions.md`, `composition/core-composition.md` |
 | 风格 QA | `qa/core-qa.md`, 命中的 style/lighting/color 包 |
 | 连续性 QA | `qa/core-qa.md`, `story-function/core-shot-functions.md`, `composition/core-composition.md` |
+| 旁白 / 对白 / 音效规划 | `audio/core-audio-planning.md`, `provider/model-capability-matrix.md`, `qa/core-qa.md` |
+| TTS 音频生成预留 | `audio/core-audio-planning.md`, `provider/provider-api-extension-slots.md`, `provider/model-capability-matrix.md`, `qa/core-qa.md` |
+| BGM brief / 配乐预留 | `audio/core-audio-planning.md`, `provider/provider-api-extension-slots.md`, `provider/model-capability-matrix.md`, `qa/core-qa.md` |
+| 视频不要音乐 / no BGM | `audio/core-audio-planning.md`, `camera/core-camera-movement.md`, `prompt/core-prompt-templates.md`, `qa/core-qa.md` |
+
+## 最小默认兜底
+
+正式任务路由失败时只能使用最小默认兜底集合中的小包，并继续走 context budget；禁止把整个资料库注入 worker。
+
+| 任务类型 | 最小兜底包 |
+|---|---|
+| script/storyflow | `script/core-script-writing.md`, `script/script-to-storyflow.md`, `story-function/core-shot-functions.md`, `qa/core-qa.md` |
+| keyframe/asset/edit | `prompt/core-prompt-templates.md`, `style/core-style-packs.md`, `composition/core-composition.md`, `provider/model-capability-matrix.md`, `qa/core-qa.md` |
+| video/i2v | `camera/core-camera-movement.md`, `prompt/core-prompt-templates.md`, `provider/model-capability-matrix.md`, `qa/core-qa.md`, `audio/core-audio-planning.md` |
+| audio | `audio/core-audio-planning.md`, `provider/model-capability-matrix.md`, `qa/core-qa.md` |
+| audit/QA | `qa/core-qa.md`, `story-function/core-shot-functions.md`, `composition/core-composition.md`, `provider/model-capability-matrix.md` |

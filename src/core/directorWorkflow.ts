@@ -6,6 +6,7 @@ import {
   type LocalOrchestratorTaskPacket,
 } from "./localOrchestrator";
 import { buildProviderLiveGateState, type ProviderLiveGateState } from "./providerLiveGate";
+import { buildProjectTransactionRuntime, type ProjectTransactionRuntimeState } from "./projectTransaction";
 import type { ProjectRuntimeState } from "./projectState";
 import { buildTaskPackets, type BuiltTaskPacket, type TaskPacketBuilderState, type TaskPacketKind } from "./taskPacketBuilder";
 import type {
@@ -84,6 +85,7 @@ export interface DirectorWorkflowState {
   orchestratorState: LocalOrchestratorState;
   providerGateState: ProviderLiveGateState;
   exportState: ExportBuilderState;
+  transactionRuntime: ProjectTransactionRuntimeState;
   nextActions: string[];
   visibleBadges: string[];
   blockedReasons: string[];
@@ -376,6 +378,19 @@ export function buildDirectorWorkflowState(input: BuildDirectorWorkflowStateInpu
   const blockedReasons = unique([...fatalBlockReasons, ...missingContextReasons]);
   const confirmationRequired = editPlan.confirmationRequired && fatalBlockReasons.length === 0;
   const status = workflowStatus({ blockedReasons, confirmationRequired, taskPacketState });
+  const transactionRuntime = buildProjectTransactionRuntime({
+    workflowState: {
+      generatedAt,
+      status,
+      confirmationRequired,
+      blockedReasons,
+      editPlan,
+      taskPacketState,
+    },
+    runtimeState: input.runtimeState,
+    userConfirmed: false,
+    userEnabled: false,
+  });
 
   return {
     schemaVersion: "0.1.0",
@@ -403,6 +418,7 @@ export function buildDirectorWorkflowState(input: BuildDirectorWorkflowStateInpu
     orchestratorState,
     providerGateState,
     exportState,
+    transactionRuntime,
     nextActions: nextActionsFor(status, editPlan, taskPacketState),
     visibleBadges: visibleBadgesFor({ status, taskPacketState, providerGateState, exportState }),
     blockedReasons,

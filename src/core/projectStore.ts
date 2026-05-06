@@ -48,6 +48,24 @@ export interface ProjectStoreReadWritePlanEntry {
   notes: string[];
 }
 
+export interface ProjectStorePendingTransactionPointer {
+  transactionId: string;
+  transactionType: "project_transaction";
+  status: "pending";
+  source: "director_workflow";
+  noFileMutation: true;
+  notes: string[];
+}
+
+export interface ProjectStoreTaskRunLedgerPointer {
+  ledgerRole: "task_run_ledger";
+  storageMode: "future_sidecar";
+  pointerOnly: true;
+  noFileMutation: true;
+  taskRunIds: string[];
+  notes: string[];
+}
+
 export interface ProjectStoreRuntimeCachePolicy {
   runtimeStateRole: "derived_cache";
   runtimeStateMayBeRebuilt: true;
@@ -145,6 +163,11 @@ export interface ProjectStoreSnapshot {
   factFiles: ProjectStoreFactFile[];
   readWritePlan: ProjectStoreReadWritePlanEntry[];
   runtimeCachePolicy: ProjectStoreRuntimeCachePolicy;
+  plannedRuntimePointers?: {
+    pendingTransactions: ProjectStorePendingTransactionPointer[];
+    taskRunLedger?: ProjectStoreTaskRunLedgerPointer;
+    notes: string[];
+  };
   mutationLog: string[];
   notes: string[];
 }

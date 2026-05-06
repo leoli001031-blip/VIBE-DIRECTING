@@ -31,7 +31,46 @@ async function importTaskPacketBuilder() {
     fileName: "src/core/providerCapabilities.ts",
   }).outputText;
   const providerCapabilitiesUrl = `data:text/javascript;base64,${Buffer.from(`${providerCapabilitiesOutput}\n//# sourceURL=${pathToFileURL("src/core/providerCapabilities.ts").href}`).toString("base64")}`;
-  return importTs("src/core/taskPacketBuilder.ts", [['from "./providerCapabilities";', `from "${providerCapabilitiesUrl}";`]]);
+  const knowledgeManifestUrl = `data:text/javascript;base64,${Buffer.from(`${transpileSource("src/core/knowledgeManifest.ts")}\n//# sourceURL=${pathToFileURL("src/core/knowledgeManifest.ts").href}`).toString("base64")}`;
+  const knowledgeContextBudgetOutput = transpileSource("src/core/knowledgeContextBudget.ts").replaceAll(
+    'from "./knowledgeManifest";',
+    `from "${knowledgeManifestUrl}";`,
+  );
+  const knowledgeContextBudgetUrl = `data:text/javascript;base64,${Buffer.from(`${knowledgeContextBudgetOutput}\n//# sourceURL=${pathToFileURL("src/core/knowledgeContextBudget.ts").href}`).toString("base64")}`;
+  const knowledgeDefaultsOutput = transpileSource("src/core/knowledgeDefaults.ts").replaceAll(
+    'from "./knowledgeManifest";',
+    `from "${knowledgeManifestUrl}";`,
+  );
+  const knowledgeDefaultsUrl = `data:text/javascript;base64,${Buffer.from(`${knowledgeDefaultsOutput}\n//# sourceURL=${pathToFileURL("src/core/knowledgeDefaults.ts").href}`).toString("base64")}`;
+  const knowledgeLibraryOutput = transpileSource("src/core/knowledgeLibrary.ts").replaceAll(
+    'from "./knowledgeManifest";',
+    `from "${knowledgeManifestUrl}";`,
+  );
+  const knowledgeLibraryUrl = `data:text/javascript;base64,${Buffer.from(`${knowledgeLibraryOutput}\n//# sourceURL=${pathToFileURL("src/core/knowledgeLibrary.ts").href}`).toString("base64")}`;
+  const knowledgeRouterOutput = transpileSource("src/core/knowledgeRouter.ts")
+    .replaceAll('from "./knowledgeManifest";', `from "${knowledgeManifestUrl}";`)
+    .replaceAll('from "./knowledgeContextBudget";', `from "${knowledgeContextBudgetUrl}";`);
+  const knowledgeRouterUrl = `data:text/javascript;base64,${Buffer.from(`${knowledgeRouterOutput}\n//# sourceURL=${pathToFileURL("src/core/knowledgeRouter.ts").href}`).toString("base64")}`;
+
+  return importTs("src/core/taskPacketBuilder.ts", [
+    ['from "./providerCapabilities";', `from "${providerCapabilitiesUrl}";`],
+    ['from "./knowledgeContextBudget";', `from "${knowledgeContextBudgetUrl}";`],
+    ['from "./knowledgeDefaults";', `from "${knowledgeDefaultsUrl}";`],
+    ['from "./knowledgeLibrary";', `from "${knowledgeLibraryUrl}";`],
+    ['from "./knowledgeManifest";', `from "${knowledgeManifestUrl}";`],
+    ['from "./knowledgeRouter";', `from "${knowledgeRouterUrl}";`],
+  ]);
+}
+
+function transpileSource(path) {
+  return ts.transpileModule(fs.readFileSync(path, "utf8"), {
+    compilerOptions: {
+      module: ts.ModuleKind.ES2022,
+      target: ts.ScriptTarget.ES2022,
+      importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+    },
+    fileName: path,
+  }).outputText;
 }
 
 const { buildTaskPackets, taskPacketKinds } = await importTaskPacketBuilder();
@@ -208,6 +247,21 @@ for (const kind of taskPacketKinds) {
   assert(packet.envelope.expectedOutputContract.gateFields.length === 6, `${kind} output contract gate fields incomplete`);
   assert(packet.envelope.userIntent.includes(`task_kind:${kind}`), `${kind} envelope context capsule missing from userIntent`);
   assert(packet.envelope.taskEnvelope.expectedOutputs.length > 0, `${kind} envelope expected output missing`);
+  assert(packet.envelope.taskEnvelope.knowledgeRouteResultId, `${kind} task envelope missing knowledge route result id`);
+  assert(packet.envelope.taskEnvelope.contextBudgetId, `${kind} task envelope missing context budget id`);
+  assert(packet.envelope.taskEnvelope.knowledgeInputHash, `${kind} task envelope missing knowledge input hash`);
+  assert(packet.envelope.taskEnvelope.knowledgeManifestHash, `${kind} task envelope missing knowledge manifest hash`);
+  assert(packet.envelope.taskEnvelope.injectedKnowledgePacks.length > 0, `${kind} task envelope must carry injected knowledge packs`);
+  assert(packet.envelope.taskEnvelope.injectedKnowledgeSnippetIds.length > 0, `${kind} task envelope must carry injected knowledge snippet ids`);
+  assert(packet.envelope.taskEnvelope.injectedKnowledgeSnippets.length > 0, `${kind} task envelope must carry injected knowledge snippets`);
+  assert(packet.envelope.knowledgeRouteResultId === packet.envelope.taskEnvelope.knowledgeRouteResultId, `${kind} subagent knowledge route id must mirror task envelope`);
+  assert(packet.envelope.contextBudgetId === packet.envelope.taskEnvelope.contextBudgetId, `${kind} subagent context budget id must mirror task envelope`);
+  assert(packet.envelope.injectedKnowledgePacks.length === packet.envelope.taskEnvelope.injectedKnowledgePacks.length, `${kind} subagent knowledge packs must mirror task envelope`);
+  assert(packet.envelope.injectedKnowledgeSnippetIds.length === packet.envelope.taskEnvelope.injectedKnowledgeSnippetIds.length, `${kind} subagent knowledge snippet ids must mirror task envelope`);
+  assert(packet.envelope.injectedKnowledgeSnippets.length === packet.envelope.taskEnvelope.injectedKnowledgeSnippets.length, `${kind} subagent knowledge snippets must mirror task envelope`);
+  assert(packet.envelope.routeWarnings.some((warning) => warning.includes("knowledge_manifest_missing")), `${kind} should record fallback warning when no manifest is supplied`);
+  assert(packet.envelope.injectedKnowledgePacks.length <= 6, `${kind} must not inject a broad knowledge library`);
+  assert(Object.values(packet.envelope.qaPackBindings).some((binding) => binding.hash), `${kind} must preserve QA pack version/hash binding`);
   assert(packet.envelope.neighborShots.some((shot) => shot.position === "previous"), `${kind} envelope previous shot missing`);
   assert(packet.envelope.neighborShots.some((shot) => shot.position === "next"), `${kind} envelope next shot missing`);
   assert(packet.envelope.lockedReferences.length > 0, `${kind} envelope locked reference authority missing`);
@@ -231,6 +285,18 @@ for (const lock of ["no_fast_model", "no_vip_channel", "no_text_to_video_main_pa
 assert(videoPacket.envelope.taskEnvelope.providerSlot === "video.i2v", "video packet must use video.i2v slot");
 assert(videoPacket.envelope.taskEnvelope.requiredMode === "frames2video", "video packet must require frames2video");
 assert(videoPacket.envelope.taskEnvelope.keyframePairDerivation.validForI2vPair === true, "video packet must keep keyframe pair derivation");
+assert(
+  videoPacket.envelope.taskEnvelope.injectedKnowledgePacks.some((pack) => pack.packId === "audio/core-audio-planning"),
+  "video packet must inject audio pack for default no-BGM separation",
+);
+
+const audioPacket = state.packets.find((packet) => packet.taskKind === "audio");
+assert(audioPacket.envelope.taskEnvelope.purpose === "audio", "audio task envelope purpose must be audio");
+assert(audioPacket.envelope.taskEnvelope.providerSlot === "audio.tts", "audio packet must use audio.tts slot");
+assert(
+  audioPacket.envelope.taskEnvelope.injectedKnowledgePacks.some((pack) => pack.packId === "audio/core-audio-planning"),
+  "audio packet must inject audio planning pack",
+);
 
 const customRegistry = {
   schemaVersion: "0.1.0",

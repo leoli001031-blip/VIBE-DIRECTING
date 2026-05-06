@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/runtime_ingest_shell.schema.json",
+  "title": "RuntimeIngestShell",
+  "description": "Portable ingest shell for worker leases, queue decisions, watcher file facts, app-server notifications, and artifact gate inputs. It does not launch workers, start filesystem daemons, connect app-server transports, submit providers, or promote artifacts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "blockers", "warnings"],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "kind": {
+      "type": "string",
+      "enum": ["worker_lease", "queue", "watcher", "app_server", "artifact_gate"]
+    },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "lease": { "$ref": "#/$defs/lease" },
+    "status": { "$ref": "#/$defs/queueStatus" },
+    "source": { "$ref": "#/$defs/source" },
+    "sourceIntent": { "$ref": "#/$defs/sourceIntent" },
+    "eventType": { "$ref": "#/$defs/fileEventType" },
+    "eventKind": { "$ref": "#/$defs/appServerEventKind" },
+    "threadId": { "type": "string" },
+    "turnId": { "type": "string" },
+    "toolCallId": { "type": "string" },
+    "output": { "$ref": "#/$defs/outputFact" },
+    "providerObservation": { "$ref": "#/$defs/providerObservationFact" },
+    "semanticQa": { "$ref": "#/$defs/semanticQaFact" },
+    "gateInput": { "$ref": "#/$defs/artifactGateInput" },
+    "ledgerEvents": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "string",
+      "enum": ["fs_watch", "app_server_fs_changed", "verify_scan", "manual_recovery", "audit_scan"]
+    },
+    "sourceIntent": {
+      "type": "string",
+      "enum": ["normal", "recovery", "audit"]
+    },
+    "fileEventType": {
+      "type": "string",
+      "enum": ["created", "changed", "settled", "hash_observed", "sidecar_paired"]
+    },
+    "appServerEventKind": {
+      "type": "string",
+      "enum": ["thread", "turn", "toolCall", "fsChanged", "approval", "disconnect", "reconnect"]
+    },
+    "queueStatus": {
+      "type": "string",
+      "enum": ["queued", "parked", "blocked"]
+    },
+    "portablePath": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "anyOf": [
+          { "pattern": "^[A-Za-z]:[\\\\/]" },
+          { "pattern": "^/" },
+          { "pattern": "^//" },
+          { "pattern": "^~[\\\\/]" },
+          { "pattern": "(^|/)\\.\\.(/|$)" }
+        ]
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "liveTransportEnabled",
+        "canLaunchAppServer",
+        "ingestOnly",
+        "fsWatchDaemonEnabled",
+        "providerSubmissionForbidden",
+        "workerSpawnForbidden"
+      ],
+      "properties": {
+        "liveTransportEnabled": { "const": false },
+        "canLaunchAppServer": { "const": false },
+        "ingestOnly": { "const": true },
+        "fsWatchDaemonEnabled": { "const": false },
+        "providerSubmissionForbidden": { "const": true },
+        "workerSpawnForbidden": { "const": true }
+      }
+    },
+    "lease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "leaseId",
+        "workerId",
+        "leasedAt",
+        "expiresAt",
+        "status",
+        "retryBudget",
+        "retryCount",
+        "stallTimeoutSeconds",
+        "resumePolicy"
+      ],
+      "properties": {
+        "owner": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "leaseId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "workerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "threadId": { "type": "string" },
+        "turnId": { "type": "string" },
+        "leasedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "status": {
+          "type": "string",
+          "enum": ["leased", "running", "stalled", "interrupted", "failed", "released"]
+        },
+        "retryBudget": { "type": "integer", "minimum": 0 },
+        "retryCount": { "type": "integer", "minimum": 0 },
+        "stallTimeoutSeconds": { "type": "integer", "minimum": 0 },
+        "resumePolicy": {
+          "type": "string",
+          "enum": ["resume_same_worker", "reassign_allowed", "fail_on_interrupt", "manual_review"]
+        }
+      }
+    },
+    "outputFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "hash"],
+      "properties": {
+        "path": { "$ref": "#/$defs/portablePath" },
+        "hash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "hashAlgorithm": {
+          "type": "string",
+          "enum": ["sha256", "sha1", "md5", "unknown"]
+        },
+        "byteLength": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "providerObservationFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "outputPath": { "$ref": "#/$defs/portablePath" },
+        "outputHash": { "type": "string" },
+        "sidecarPath": { "$ref": "#/$defs/portablePath" },
+        "sidecarHash": { "type": "string" },
+        "threadId": { "type": "string" },
+        "turnId": { "type": "string" },
+        "toolCallId": { "type": "string" },
+        "providerId": { "type": "string" },
+        "observationId": { "type": "string" }
+      }
+    },
+    "semanticQaFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stableFindingIds", "status"],
+      "properties": {
+        "outputPath": { "$ref": "#/$defs/portablePath" },
+        "reviewedOutputHash": { "type": "string" },
+        "sidecarPath": { "$ref": "#/$defs/portablePath" },
+        "sidecarHash": { "type": "string" },
+        "stableFindingIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "pass", "needs_review", "failed"]
+        },
+        "p0FindingCount": { "type": "integer", "minimum": 0 },
+        "p1FindingCount": { "type": "integer", "minimum": 0 },
+        "p2FindingCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "artifactGateInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["taskRunId", "expectedOutputPath", "sandboxAllowedPrefixes"],
+      "properties": {
+        "taskRunId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "envelopeId": { "type": "string" },
+        "expectedOutputPath": { "$ref": "#/$defs/portablePath" },
+        "output": { "$ref": "#/$defs/outputFact" },
+        "providerObservation": { "$ref": "#/$defs/providerObservationFact" },
+        "semanticQa": { "$ref": "#/$defs/semanticQaFact" },
+        "sandboxAllowedPrefixes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/portablePath" },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

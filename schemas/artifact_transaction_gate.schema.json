@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/artifact_transaction_gate.schema.json",
+  "title": "ArtifactTransactionGate",
+  "description": "Hash-bound artifact transaction contract joining output, provider observation sidecar, semantic QA sidecar, sandbox policy, and formal usage gates.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "taskRunId",
+    "expectedOutputPath",
+    "status",
+    "completeVerified",
+    "canUseForPreview",
+    "canUseForExport",
+    "canUseForPromotion",
+    "sandboxAllowedPrefixes",
+    "blockers",
+    "warnings",
+    "trendFeedback"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "taskRunId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "envelopeId": { "type": "string" },
+    "expectedOutputPath": { "$ref": "#/$defs/portablePath" },
+    "status": { "$ref": "#/$defs/status" },
+    "completeVerified": { "type": "boolean" },
+    "canUseForPreview": { "type": "boolean" },
+    "canUseForExport": { "type": "boolean" },
+    "canUseForPromotion": { "type": "boolean" },
+    "output": { "$ref": "#/$defs/outputFact" },
+    "providerObservation": { "$ref": "#/$defs/providerObservationFact" },
+    "semanticQa": { "$ref": "#/$defs/semanticQaFact" },
+    "sandboxAllowedPrefixes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/portablePath" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "trendFeedback": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/trendFeedback" }
+    }
+  },
+  "$defs": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "image_exists_but_provider_observation_missing",
+        "provider_observed_but_qa_pending",
+        "semantic_qa_pending",
+        "sidecar_mismatch",
+        "needs_review",
+        "complete_verified",
+        "blocked"
+      ]
+    },
+    "portablePath": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "anyOf": [
+          { "pattern": "^[A-Za-z]:[\\\\/]" },
+          { "pattern": "^/" },
+          { "pattern": "^//" },
+          { "pattern": "^~[\\\\/]" },
+          { "pattern": "(^|/)\\.\\.(/|$)" }
+        ]
+      }
+    },
+    "outputFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "hash"],
+      "properties": {
+        "path": { "$ref": "#/$defs/portablePath" },
+        "hash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "hashAlgorithm": {
+          "type": "string",
+          "enum": ["sha256", "sha1", "md5", "unknown"]
+        },
+        "byteLength": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "providerObservationFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "outputPath": { "$ref": "#/$defs/portablePath" },
+        "outputHash": { "type": "string" },
+        "sidecarPath": { "$ref": "#/$defs/portablePath" },
+        "sidecarHash": { "type": "string" },
+        "threadId": { "type": "string" },
+        "turnId": { "type": "string" },
+        "toolCallId": { "type": "string" },
+        "providerId": { "type": "string" },
+        "observationId": { "type": "string" }
+      }
+    },
+    "semanticQaFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stableFindingIds", "status"],
+      "properties": {
+        "outputPath": { "$ref": "#/$defs/portablePath" },
+        "reviewedOutputHash": { "type": "string" },
+        "sidecarPath": { "$ref": "#/$defs/portablePath" },
+        "sidecarHash": { "type": "string" },
+        "stableFindingIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "pass", "needs_review", "failed"]
+        },
+        "p0FindingCount": { "type": "integer", "minimum": 0 },
+        "p1FindingCount": { "type": "integer", "minimum": 0 },
+        "p2FindingCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "trendFeedback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "stableFindingIds", "count", "messageForPromptCompiler"],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "const": "P2"
+        },
+        "stableFindingIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "count": { "type": "integer", "minimum": 0 },
+        "messageForPromptCompiler": { "type": "string" }
+      }
+    }
+  }
+}

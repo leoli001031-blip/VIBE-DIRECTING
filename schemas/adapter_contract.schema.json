@@ -80,7 +80,7 @@
         "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
         "kind": { "const": "agent" },
         "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
-        "runtimeKind": { "type": "string", "enum": ["codex_cli", "future_cli", "local_agent", "unknown"] },
+        "runtimeKind": { "type": "string", "enum": ["codex_cli", "codex_app_server", "future_cli", "local_agent", "unknown"] },
         "state": { "$ref": "common.schema.json#/$defs/providerExecutionState" },
         "dryRunOnly": { "const": true },
         "readOnly": { "const": true },

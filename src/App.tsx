@@ -43,11 +43,12 @@ import {
   emptyKnowledgeManifest,
   withRuntimeDefaults,
 } from "./core/projectStateBuilder";
-import { buildProjectRuntimePlan } from "./core/projectRuntime";
 import { buildDesktopRuntimePlan, type DesktopRuntimePlan } from "./core/desktopRuntime";
 import { buildSubagentWorkerRuntimePlan, type SubagentWorkerRuntimePlan } from "./core/subagentWorkerRuntime";
 import { ensureRuntimeEnvironment } from "./core/runtimeConfig";
 import { buildDirectorWorkflowState, type DirectorWorkflowStatus } from "./core/directorWorkflow";
+import { buildMinimalRuntimeProjection, type MinimalRuntimeProjection } from "./core/minimalRuntimeProjection";
+import { buildProjectTransactionRuntime } from "./core/projectTransaction";
 import {
   addAssetLibraryAsset,
   createAssetLibrarySnapshot,
@@ -128,6 +129,8 @@ type ProjectFactsUiMode = Extract<ProjectStoreIoMode, "create" | "open" | "save"
 type MinimalProjectPlan = {
   entryLabel: string;
   planLabel: string;
+  statusLabel: string;
+  progressDots: MinimalRuntimeProjection["progressDots"];
 };
 type ProjectFactsUiSummary = {
   mode: ProjectFactsUiMode;
@@ -400,7 +403,7 @@ function assetLibraryTypeLabel(type: AssetLibraryAssetType) {
 }
 
 function assetLibraryStatusLabel(status: AssetLibraryUiStatus | AssetLibraryStatus) {
-  if (status === "review" || status === "needs_review") return "needs_review";
+  if (status === "review" || status === "needs_review") return "review";
   return status;
 }
 
@@ -651,11 +654,56 @@ function buildProjectFactsUiSummary(
   };
 }
 
-function selectedScopeLabel(shot?: ShotRecord, asset?: AssetRecord, sectionLabel?: string) {
+function selectedScopeLabel(shot?: ShotRecord, asset?: AssetRecord, sectionLabel?: string, selectedShots: ShotRecord[] = []) {
+  if (selectedShots.length > 1) {
+    const labels = selectedShots.slice(0, 4).map((item) => formatShotNumber(item.id));
+    const suffix = selectedShots.length > labels.length ? ` +${selectedShots.length - labels.length}` : "";
+    return `已选择 ${labels.join(", ")}${suffix}`;
+  }
   if (shot) return `正在看 ${formatShotNumber(shot.id)}`;
   if (asset) return `正在看 ${cleanLabel(asset.name)}`;
   if (sectionLabel) return `正在看 ${sectionLabel}`;
   return "正在看整个项目";
+}
+
+type MinimalAgentWorkflow = ReturnType<typeof buildDirectorWorkflowState>;
+
+function confirmedTransactionRuntime(workflow: MinimalAgentWorkflow, runtimeState: ProjectRuntimeState) {
+  return buildProjectTransactionRuntime({
+    workflowState: {
+      generatedAt: workflow.generatedAt,
+      status: workflow.status,
+      confirmationRequired: workflow.confirmationRequired,
+      blockedReasons: workflow.blockedReasons,
+      editPlan: workflow.editPlan,
+      taskPacketState: workflow.taskPacketState,
+    },
+    runtimeState,
+    userConfirmed: true,
+    userEnabled: true,
+  });
+}
+
+function buildAgentPanelProjection(
+  workflow: MinimalAgentWorkflow,
+  runtimeState: ProjectRuntimeState,
+  planPhase: AgentPlanPhase,
+) {
+  return buildMinimalRuntimeProjection({
+    generatedAt: workflow.generatedAt,
+    transactionRuntime: planPhase === "confirmed" ? confirmedTransactionRuntime(workflow, runtimeState) : workflow.transactionRuntime,
+  });
+}
+
+function agentProjectionBadges(projection: MinimalRuntimeProjection, planPhase: AgentPlanPhase) {
+  if (planPhase === "confirmed") return [projection.countSummary, projection.staleSummary].filter(Boolean);
+  return [projection.shortLabel, projection.staleSummary].filter(Boolean);
+}
+
+function agentProjectionNextStep(projection: MinimalRuntimeProjection, planPhase: AgentPlanPhase) {
+  if (planPhase === "confirmed") return `${projection.countSummary}，先等人工复核。`;
+  if (projection.counts.blocked > 0) return "需要补充参考或改得更具体。";
+  return "确认后只会加入计划，后续结果先复核。";
 }
 
 function previewQueueKind(event: PreviewEvent): PreviewQueueItemKind {
@@ -684,16 +732,13 @@ function exportStatusLabel(status: string) {
   return "已计划";
 }
 
-function buildMinimalProjectPlan(runtimeState: ProjectRuntimeState): MinimalProjectPlan {
-  const plan = buildProjectRuntimePlan({
-    mode: "open",
-    title: runtimeState.project.title,
-    generatedAt: runtimeState.project.importedAt,
-    sourceOfTruth: "project_files",
-  });
+function buildMinimalProjectPlan(runtimeState: ProjectRuntimeState, statusLabel = "等待确认", progressDots: MinimalRuntimeProjection["progressDots"] = []): MinimalProjectPlan {
+  const lockedReferences = runtimeState.visualMemory.assets.filter((asset) => asset.lockedStatus === "locked").length;
   return {
-    entryLabel: plan.projectEntry.fileName === "project.vibe" ? "project.vibe" : plan.projectEntry.fileName,
-    planLabel: plan.validation.ok ? "Ready" : "Review",
+    entryLabel: `${runtimeState.storyFlow.shots.length} shots`,
+    planLabel: `${lockedReferences} locked refs`,
+    statusLabel,
+    progressDots,
   };
 }
 
@@ -5930,9 +5975,15 @@ function MinimalTopNav({
       <button className="project-title-button" onClick={() => onOpenDirectorView("story")}>
         <span className="project-title-text">{projectTitle || "Untitled project"}</span>
         <span className="project-plan-entry" aria-label="Project plan status">
-          <strong>Project</strong>
+          <strong>Story</strong>
           <span>{projectPlan.entryLabel}</span>
           <span>{projectPlan.planLabel}</span>
+          <span>{projectPlan.statusLabel}</span>
+        </span>
+        <span className="minimal-state-dots" aria-label={projectPlan.statusLabel}>
+          {projectPlan.progressDots.map((dot) => (
+            <i key={dot.id} className={dot.tone} title={dot.label} />
+          ))}
         </span>
       </button>
       <nav className="minimal-nav" aria-label="Director views">
@@ -5958,8 +6009,9 @@ function MinimalTopNav({
           Preview
         </button>
       </nav>
-      <button className={`diagnostics-link ${mode === "diagnostics" ? "active" : ""}`} onClick={onOpenDiagnostics}>
-        Diagnostics
+      <button className={`diagnostics-link ${mode === "diagnostics" ? "active" : ""}`} onClick={onOpenDiagnostics} aria-label="Diagnostics">
+        <Settings size={18} aria-hidden="true" />
+        <span className="sr-only">Diagnostics</span>
       </button>
     </header>
   );
@@ -5969,13 +6021,16 @@ function MinimalStoryFlow({
   sectionLabel,
   shots,
   selectedShotId,
+  selectedShotIds,
   onSelectShot,
 }: {
   sectionLabel: string;
   shots: ShotRecord[];
   selectedShotId: string;
-  onSelectShot: (id: string) => void;
+  selectedShotIds: string[];
+  onSelectShot: (id: string, additive?: boolean) => void;
 }) {
+  const selectedSet = new Set(selectedShotIds.length ? selectedShotIds : [selectedShotId]);
   return (
     <main className="minimal-story-flow">
       <h2>{sectionLabel}</h2>
@@ -5983,8 +6038,9 @@ function MinimalStoryFlow({
         {shots.map((shot, index) => (
           <button
             key={shot.id}
-            className={`minimal-shot-card ${selectedShotId === shot.id ? "selected" : ""}`}
-            onClick={() => onSelectShot(shot.id)}
+            className={`minimal-shot-card ${selectedSet.has(shot.id) ? "selected" : ""} ${selectedShotId === shot.id ? "primary" : ""}`}
+            onClick={(event) => onSelectShot(shot.id, event.metaKey || event.ctrlKey || event.shiftKey)}
+            aria-pressed={selectedSet.has(shot.id)}
           >
             <MediaFrame
               src={shot.startFrame || shot.endFrame}
@@ -6118,12 +6174,6 @@ function MinimalAssetLibrary({
           <strong>{cleanLabel(asset.name)}</strong>
           <small><i className={`dot ${assetStatusTone(record)}`} /> {assetLibraryStatusLabel(asset.status)}</small>
         </span>
-        <dl className="asset-authority-grid">
-          <div><dt>type</dt><dd>{asset.assetType}</dd></div>
-          <div><dt>authority</dt><dd>{asset.referenceAuthority.referenceRole}</dd></div>
-          <div><dt>future</dt><dd>{asset.canUseAsFutureReference ? "safe" : "draft only"}</dd></div>
-          <div><dt>shots</dt><dd>{asset.usedByShotIds.join(", ") || "unlinked"}</dd></div>
-        </dl>
         <p>{asset.textConstraints[0] || "缺文本约束"}</p>
       </button>
     );
@@ -6132,7 +6182,10 @@ function MinimalAssetLibrary({
   return (
     <main className="asset-library-view">
       <div className="asset-library-heading">
-        <h2>Asset Library</h2>
+        <div>
+          <h2>审核并锁定资产</h2>
+          <small>角色主参考、场景 master、风格锚图</small>
+        </div>
         <div className="asset-library-toolbar" aria-label="添加资产">
           <select value={draft.assetType} onChange={(event) => setDraft({ ...draft, assetType: event.target.value as AssetLibraryAssetType })}>
             <option value="character">角色主参考</option>
@@ -6150,7 +6203,7 @@ function MinimalAssetLibrary({
       <div className="asset-status-strip" aria-label="Asset consistency">
         <span><i className="dot ok" /> locked</span>
         <span><i className="dot warn" /> candidate</span>
-        <span><i className="dot warn" /> needs_review</span>
+        <span><i className="dot warn" /> review</span>
         <span><i className="dot bad" /> rejected</span>
       </div>
       <div className="asset-blocker-strip" aria-label="资产阻断">
@@ -6161,7 +6214,7 @@ function MinimalAssetLibrary({
           <div>
             <span>已选择</span>
             <strong>{cleanLabel(selectedAsset.name)}</strong>
-            <small>{selectedAsset.referenceAuthority.referenceRole} · {assetLibraryStatusLabel(selectedAsset.status)}</small>
+            <small>{assetLibraryStatusLabel(selectedAsset.status)}</small>
           </div>
           <div className="asset-status-actions">
             {(["locked", "candidate", "needs_review", "rejected"] as const).map((status) => (
@@ -6170,7 +6223,7 @@ function MinimalAssetLibrary({
                 className={assetLibraryStatusToUiStatus(selectedAsset.status) === status ? "active" : ""}
                 onClick={() => onMarkAssetStatus(selectedAsset.id, status)}
               >
-                {status}
+                {assetLibraryStatusLabel(status)}
               </button>
             ))}
           </div>
@@ -6202,7 +6255,7 @@ function MinimalAssetLibrary({
               onClick={() => onSelectAsset(asset.id)}
             >
               <span>{cleanLabel(asset.name)}</span>
-              <small>{asset.referenceAuthority.referenceRole} · {assetLibraryStatusLabel(asset.status)}</small>
+              <small>{assetLibraryStatusLabel(asset.status)}</small>
             </button>
           ))}
         </div>
@@ -6229,12 +6282,11 @@ function MinimalPreview({
   const currentTimeRef = useRef(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const queue = useMemo(() => buildPreviewPlayerQueue(previewExport, shots), [previewExport, shots]);
+  const projection = useMemo(() => buildMinimalRuntimeProjection({ previewQueue: queue }), [queue]);
   const total = Math.max(1, getPreviewPlayerTotalDuration(queue));
   const activeItem = getPreviewPlayerActiveItem(queue, currentTime);
   const activeShot = activeItem?.shotId ? shots.find((shot) => shot.id === activeItem.shotId) : undefined;
   const progress = Math.min(100, Math.max(0, (currentTime / total) * 100));
-  const packageStatus = exportStatusLabel(previewExport.exportPackagePlan.status);
-  const packageCount = previewExport.exportProfiles.length;
 
   useEffect(() => {
     currentTimeRef.current = currentTime;
@@ -6403,8 +6455,8 @@ function MinimalPreview({
           <button onClick={togglePlaying}>{playing ? <PauseCircle size={17} /> : <Play size={17} />}</button>
           <span>{formatDuration(currentTime)} / {formatDuration(total)}</span>
         </div>
-        <p className="preview-export-summary" aria-label="Demo package">
-          Demo package · {packageStatus} · {packageCount} 项
+        <p className="preview-export-summary" aria-label="Preview summary">
+          {projection.previewSummary.detail} · {formatDuration(total)}
         </p>
       </section>
     </main>
@@ -6414,12 +6466,14 @@ function MinimalPreview({
 function MinimalAgentPanel({
   runtimeState,
   shot,
+  selectedShots = [],
   asset,
   sectionLabel,
   sectionId,
 }: {
   runtimeState: ProjectRuntimeState;
   shot?: ShotRecord;
+  selectedShots?: ShotRecord[];
   asset?: AssetRecord;
   sectionLabel?: string;
   sectionId?: string;
@@ -6428,7 +6482,9 @@ function MinimalAgentPanel({
   const [status, setStatus] = useState("等待描述");
   const [planPhase, setPlanPhase] = useState<AgentPlanPhase>("idle");
   const [workflow, setWorkflow] = useState<ReturnType<typeof buildDirectorWorkflowState> | undefined>();
-  const scopeLabel = selectedScopeLabel(shot, asset, sectionLabel);
+  const [projection, setProjection] = useState<MinimalRuntimeProjection | undefined>();
+  const scopedShotIds = selectedShots.map((item) => item.id);
+  const scopeLabel = selectedScopeLabel(shot, asset, sectionLabel, selectedShots);
 
   function prepareChange() {
     const userIntent = text.trim();
@@ -6440,25 +6496,29 @@ function MinimalAgentPanel({
       runtimeState,
       userIntent,
       selection: {
-        selectedShotId: shot?.id,
+        selectedShotId: scopedShotIds.length <= 1 ? shot?.id : undefined,
+        selectedShotIds: scopedShotIds.length > 1 ? scopedShotIds : undefined,
         selectedAssetId: asset?.id,
-        sectionId: !shot && !asset ? sectionId : undefined,
+        sectionId: !scopedShotIds.length && !asset ? sectionId : undefined,
       },
     });
+    const nextProjection = buildAgentPanelProjection(nextWorkflow, runtimeState, "review");
     setWorkflow(nextWorkflow);
+    setProjection(nextProjection);
     setPlanPhase("review");
-    setStatus(workflowPanelStatusLabel(nextWorkflow, "review"));
+    setStatus(nextProjection.shortLabel);
   }
 
   function confirmPlan() {
     if (!workflowCanConfirm(workflow)) return;
+    const nextProjection = buildAgentPanelProjection(workflow, runtimeState, "confirmed");
+    setProjection(nextProjection);
     setPlanPhase("confirmed");
-    setStatus(workflowPanelStatusLabel(workflow, "confirmed"));
+    setStatus(nextProjection.shortLabel);
   }
 
-  const badges = workflow ? workflowBadgeLabels(workflow).slice(0, 5) : ["准备修改"];
-  const nextStep = workflow ? workflowPanelNextStepLabel(workflow, planPhase) : "写一句你想调整的画面、角色或节奏。";
-  const planFacts = workflow ? workflowPlanFacts(workflow) : [];
+  const badges = projection ? agentProjectionBadges(projection, planPhase).slice(0, 2) : workflow ? workflowBadgeLabels(workflow).slice(0, 2) : ["准备修改"];
+  const nextStep = projection ? agentProjectionNextStep(projection, planPhase) : workflow ? workflowPanelNextStepLabel(workflow, planPhase) : "写一句你想调整的画面、角色或节奏。";
   const canConfirm = workflowCanConfirm(workflow);
 
   return (
@@ -6472,34 +6532,24 @@ function MinimalAgentPanel({
         </button>
       </div>
       <strong className="minimal-agent-status">{status}</strong>
+      {projection && (
+        <div className="minimal-state-dots agent" aria-label={projection.shortLabel}>
+          {projection.progressDots.map((dot) => (
+            <i key={dot.id} className={dot.tone} title={dot.label} />
+          ))}
+        </div>
+      )}
       <div className="minimal-agent-badges" aria-label="修改摘要">
         {badges.map((badge) => (
           <small key={badge}>{badge}</small>
         ))}
       </div>
-      {workflow && (
-        <div className="minimal-agent-plan" aria-label="计划状态">
-          {planFacts.map((item) => (
-            <small key={item.label}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </small>
-          ))}
-        </div>
-      )}
-      {workflow && (
-        <div className="minimal-agent-steps" aria-label="执行状态">
-          <small className={planPhase === "review" || planPhase === "confirmed" ? "is-active" : ""}>等待确认</small>
-          <small className={planPhase === "confirmed" ? "is-active" : ""}>排队中</small>
-          <small className={planPhase === "confirmed" ? "is-active" : ""}>已计划</small>
-        </div>
-      )}
       <small>{nextStep}</small>
       {workflow && (
         <div className="minimal-agent-actions">
           <button disabled={!canConfirm || planPhase === "confirmed"} onClick={confirmPlan}>
             <CheckCircle2 size={15} />
-            确认计划
+            确认修改
           </button>
         </div>
       )}
@@ -6533,10 +6583,8 @@ function workflowNextStepLabel(status: DirectorWorkflowStatus) {
 
 function workflowBadgeLabels(workflow: ReturnType<typeof buildDirectorWorkflowState>) {
   const labels = ["准备修改", naturalWorkflowScopeLabel(workflow.scopeLabel)];
-  if (workflow.summary.readyTaskPackets > 0) labels.push(`${workflow.summary.readyTaskPackets} 个修改点`);
-  if (workflow.summary.blockedTaskPackets > 0) labels.push("需要补充信息");
-  if (workflow.confirmationRequired || workflowCanConfirm(workflow)) labels.push("等待确认");
-  if (workflow.summary.exportPackageStatus === "ready") labels.push("预览可看");
+  if (workflow.summary.blockedTaskPackets > 0) labels.push("需要补充参考");
+  if (workflow.summary.readyTaskPackets > 0) labels.push(`${workflow.summary.readyTaskPackets} 个画面会受影响`);
   return Array.from(new Set(labels));
 }
 
@@ -6549,30 +6597,26 @@ function workflowCanConfirm(
 function workflowPanelStatusLabel(workflow: ReturnType<typeof buildDirectorWorkflowState>, planPhase: AgentPlanPhase) {
   if (workflow.status === "blocked") return "阻断";
   if (workflow.status === "blocked_missing_context") return "需要补充信息";
-  if (planPhase === "confirmed") return "排队中";
+  if (planPhase === "confirmed") return "已确认";
   return "等待确认";
 }
 
 function workflowPanelNextStepLabel(workflow: ReturnType<typeof buildDirectorWorkflowState>, planPhase: AgentPlanPhase) {
   if (workflow.status === "blocked") return "这次修改还不能进入计划。";
   if (workflow.status === "blocked_missing_context") return workflowNextStepLabel(workflow.status);
-  if (planPhase === "confirmed") return "已计划，等待后续输出与复核。";
-  return "确认后进入本地计划队列。";
+  if (planPhase === "confirmed") return "已确认，后续输出会先进入人工复核。";
+  return "确认后开始生成准备。";
 }
 
 function workflowPlanFacts(workflow: ReturnType<typeof buildDirectorWorkflowState>) {
   return [
     {
-      label: "修改点",
-      value: `${workflow.summary.readyTaskPackets}/${workflow.summary.totalTaskPackets}`,
+      label: "影响画面",
+      value: `${workflow.summary.readyTaskPackets}`,
     },
     {
-      label: "计划队列",
-      value: `${workflow.summary.queueItems}`,
-    },
-    {
-      label: "待写入项目事实",
-      value: workflow.editPlan.transaction.id,
+      label: "状态",
+      value: workflowStatusLabel(workflow.status),
     },
   ];
 }
@@ -6804,8 +6848,10 @@ function DirectorMode({
   projectFacts,
   projectFactsMode,
   selectedShot,
+  selectedShots,
   selectedAsset,
   selectedShotId,
+  selectedShotIds,
   selectedAssetId,
   directorView,
   activeSectionId,
@@ -6824,12 +6870,14 @@ function DirectorMode({
   projectFacts: ProjectFactsUiSummary;
   projectFactsMode: ProjectFactsUiMode;
   selectedShot?: ShotRecord;
+  selectedShots: ShotRecord[];
   selectedAsset?: AssetRecord;
   selectedShotId: string;
+  selectedShotIds: string[];
   selectedAssetId?: string;
   directorView: DirectorView;
   activeSectionId?: string;
-  onSelectShot: (id: string) => void;
+  onSelectShot: (id: string, additive?: boolean) => void;
   onSelectAsset: (id: string) => void;
   onAddAsset: (input: AddAssetLibraryAssetInput) => void;
   onUpdateAsset: (assetId: string, input: UpdateAssetLibraryAssetInput) => void;
@@ -6840,20 +6888,9 @@ function DirectorMode({
   const activeSection = view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0];
   const sectionLabel = activeSection?.label || "Story";
   const shots = activeSection ? audit.shots.filter((shot) => activeSection.shotIds.includes(shot.id)) : audit.shots;
-  const realPilotSummary = buildRealPilotUiSummary(runtimeState, selectedShot);
-  const oneShotActionStatus: OneShotActionStatus =
-    realPilotSummary.oneShotConfirmed ? "confirmed" : "idle";
 
   return (
     <div className={`minimal-director ${directorView}`}>
-      <ProjectFactsStrip summary={projectFacts} mode={projectFactsMode} onModeChange={onProjectFactsModeChange} />
-      <DirectorProgressStrip runtimeState={runtimeState} />
-      <RealPilotDirectorStatus summary={realPilotSummary} />
-      <OneShotActionPanel
-        summary={realPilotSummary}
-        status={oneShotActionStatus}
-        onConfirm={onConfirmOneShot}
-      />
       <div className="minimal-director-main">
         {directorView === "assets" && (
           <MinimalAssetLibrary
@@ -6870,6 +6907,7 @@ function DirectorMode({
             sectionLabel={sectionLabel}
             shots={shots}
             selectedShotId={selectedShotId}
+            selectedShotIds={selectedShotIds}
             onSelectShot={onSelectShot}
           />
         )}
@@ -6886,6 +6924,7 @@ function DirectorMode({
       <MinimalAgentPanel
         runtimeState={runtimeState}
         shot={directorView === "assets" ? undefined : selectedShot}
+        selectedShots={directorView === "story" ? selectedShots : []}
         asset={directorView === "assets" ? selectedAsset : undefined}
         sectionLabel={sectionLabel}
         sectionId={directorView === "story" && !selectedShot ? activeSection?.id : undefined}
@@ -8133,6 +8172,7 @@ function App() {
   const [directorView, setDirectorView] = useState<DirectorView>("story");
   const [activeSectionId, setActiveSectionId] = useState<string | undefined>();
   const [selectedShotId, setSelectedShotId] = useState("A1_01");
+  const [selectedShotIds, setSelectedShotIds] = useState<string[]>(["A1_01"]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | undefined>();
 
   function loadProjectState(nextState: ProjectRuntimeState) {
@@ -8176,7 +8216,10 @@ function App() {
         assertProjectRuntimeState(runtimeReady);
         if (cancelled) return;
         loadProjectState(runtimeReady);
-        if (runtimeReady.storyFlow?.shots?.[0]) setSelectedShotId(runtimeReady.storyFlow.shots[0].id);
+        if (runtimeReady.storyFlow?.shots?.[0]) {
+          setSelectedShotId(runtimeReady.storyFlow.shots[0].id);
+          setSelectedShotIds([runtimeReady.storyFlow.shots[0].id]);
+        }
         return;
       } catch (error) {
         console.warn(`${loadTarget.statePath} load failed; falling back to ${loadTarget.auditPath}.`, error);
@@ -8196,12 +8239,18 @@ function App() {
           },
         });
         loadProjectState(state);
-        if (auditData.shots?.[0]) setSelectedShotId(auditData.shots[0].id);
+        if (auditData.shots?.[0]) {
+          setSelectedShotId(auditData.shots[0].id);
+          setSelectedShotIds([auditData.shots[0].id]);
+        }
         return;
       } catch {
         if (cancelled) return;
         loadProjectState(fallbackRuntimeState);
-        if (fallbackRuntimeState.storyFlow.shots[0]) setSelectedShotId(fallbackRuntimeState.storyFlow.shots[0].id);
+        if (fallbackRuntimeState.storyFlow.shots[0]) {
+          setSelectedShotId(fallbackRuntimeState.storyFlow.shots[0].id);
+          setSelectedShotIds([fallbackRuntimeState.storyFlow.shots[0].id]);
+        }
       }
     }
 
@@ -8217,9 +8266,23 @@ function App() {
     [runtimeState, selectedShotId],
   );
   const selectedShot = useMemo(() => audit.shots.find((shot) => shot.id === selectedShotId), [audit.shots, selectedShotId]);
+  const selectedShots = useMemo(
+    () => selectedShotIds
+      .map((shotId) => audit.shots.find((shot) => shot.id === shotId))
+      .filter((shot): shot is ShotRecord => Boolean(shot)),
+    [audit.shots, selectedShotIds],
+  );
   const selectedAsset = useMemo(() => audit.assets.find((asset) => asset.id === selectedAssetId), [audit.assets, selectedAssetId]);
   const blockers = audit.issues.filter((issue) => issue.severity === "blocker");
-  const projectPlan = useMemo(() => buildMinimalProjectPlan(runtimeState), [runtimeState]);
+  const topRuntimeProjection = useMemo(() => buildMinimalRuntimeProjection({
+    previewQueue: buildPreviewPlayerQueue(runtimeState.previewExport, runtimeState.storyFlow.shots),
+    assetLibrary,
+    generatedAt: runtimeState.generatedAt,
+  }), [assetLibrary, runtimeState.generatedAt, runtimeState.previewExport, runtimeState.storyFlow.shots]);
+  const projectPlan = useMemo(
+    () => buildMinimalProjectPlan(runtimeState, topRuntimeProjection.shortLabel, topRuntimeProjection.progressDots),
+    [runtimeState, topRuntimeProjection.progressDots, topRuntimeProjection.shortLabel],
+  );
   const projectFacts = useMemo(
     () => buildProjectFactsUiSummary(runtimeState, assetLibrary, projectFactsMode),
     [assetLibrary, projectFactsMode, runtimeState],
@@ -8248,11 +8311,22 @@ function App() {
     setActiveSectionId(sectionId);
     const section = view.storySections.find((item) => item.id === sectionId);
     const firstShotId = section?.shotIds[0];
-    if (firstShotId) setSelectedShotId(firstShotId);
+    if (firstShotId) {
+      setSelectedShotId(firstShotId);
+      setSelectedShotIds([firstShotId]);
+    }
   }
 
-  function selectShot(shotId: string) {
-    setSelectedShotId(shotId);
+  function selectShot(shotId: string, additive = false) {
+    const baseSelection = selectedShotIds.length ? selectedShotIds : [selectedShotId];
+    const nextSelection = additive
+      ? baseSelection.includes(shotId)
+        ? baseSelection.filter((id) => id !== shotId)
+        : [...baseSelection, shotId]
+      : [shotId];
+    const normalizedSelection = nextSelection.length ? nextSelection : [shotId];
+    setSelectedShotIds(normalizedSelection);
+    setSelectedShotId(normalizedSelection.includes(shotId) ? shotId : normalizedSelection[0]);
     const section = view.storySections.find((item) => item.shotIds.includes(shotId));
     if (section) setActiveSectionId(section.id);
   }
@@ -8295,8 +8369,10 @@ function App() {
           projectFacts={projectFacts}
           projectFactsMode={projectFactsMode}
           selectedShot={selectedShot}
+          selectedShots={selectedShots}
           selectedAsset={selectedAsset}
           selectedShotId={selectedShotId}
+          selectedShotIds={selectedShotIds}
           selectedAssetId={selectedAssetId}
           directorView={directorView}
           activeSectionId={resolvedActiveSectionId}

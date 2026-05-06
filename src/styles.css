@@ -62,6 +62,15 @@
   text-align: left;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
 .project-title-text {
   min-width: 0;
   overflow: hidden;
@@ -123,6 +132,56 @@
   color: rgba(242, 238, 230, 0.22);
 }
 
+.minimal-state-dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.minimal-state-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(37, 40, 34, 0.18);
+}
+
+.minimal-state-dots i.active {
+  background: #8b7a58;
+}
+
+.minimal-state-dots i.review {
+  background: #c09352;
+}
+
+.minimal-state-dots i.blocked {
+  background: #a85e55;
+}
+
+.minimal-state-dots i.done {
+  background: #5f8a70;
+}
+
+.preview-shell .minimal-state-dots i {
+  background: rgba(242, 238, 230, 0.2);
+}
+
+.preview-shell .minimal-state-dots i.active {
+  background: #d3bc78;
+}
+
+.preview-shell .minimal-state-dots i.review {
+  background: #d49a53;
+}
+
+.preview-shell .minimal-state-dots i.blocked {
+  background: #d56c5d;
+}
+
+.preview-shell .minimal-state-dots i.done {
+  background: #74aa88;
+}
+
 .minimal-nav {
   display: flex;
   justify-content: center;
@@ -164,7 +223,12 @@
 .diagnostics-link {
   justify-self: end;
   margin-right: 24px;
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  padding: 0;
+  color: rgba(37, 40, 34, 0.52);
 }
 
 .minimal-director {
@@ -657,6 +721,10 @@
   outline-offset: 5px;
 }
 
+.minimal-shot-card.primary .minimal-shot-image {
+  outline-color: rgba(37, 40, 34, 0.9);
+}
+
 .minimal-shot-image,
 .asset-reference-image,
 .preview-stage-image,
@@ -729,6 +797,20 @@
   grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1fr);
   gap: clamp(20px, 3vw, 38px);
   align-items: start;
+}
+
+.asset-library-heading > div:first-child {
+  display: grid;
+  gap: 8px;
+}
+
+.asset-library-heading h2 {
+  margin-bottom: 0;
+}
+
+.asset-library-heading small {
+  color: rgba(37, 40, 34, 0.56);
+  font-size: 12px;
 }
 
 .asset-library-toolbar {
@@ -1119,6 +1201,16 @@
 
 .preview-shell .minimal-agent-status {
   color: rgba(242, 238, 230, 0.82);
+}
+
+.minimal-state-dots.agent {
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.minimal-state-dots.agent i {
+  width: 7px;
+  height: 7px;
 }
 
 .minimal-agent-badges {

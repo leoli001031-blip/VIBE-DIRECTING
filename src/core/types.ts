@@ -801,7 +801,7 @@ export interface AgentAdapterContract {
   id: string;
   kind: "agent";
   label: string;
-  runtimeKind: "codex_cli" | "future_cli" | "local_agent" | "unknown";
+  runtimeKind: "codex_cli" | "codex_app_server" | "future_cli" | "local_agent" | "unknown";
   state: ProviderExecutionState;
   dryRunOnly: true;
   readOnly: true;
@@ -2104,7 +2104,7 @@ export type PreflightScope = "formal_execution" | "dev_preview" | "import_only";
 
 export interface TaskEnvelope {
   id: string;
-  purpose: "asset" | "keyframe" | "video" | "audit" | "unknown";
+  purpose: "asset" | "keyframe" | "video" | "audio" | "audit" | "unknown";
   providerSlot: ProviderSlot;
   providerId: string;
   executionState: ProviderExecutionState;

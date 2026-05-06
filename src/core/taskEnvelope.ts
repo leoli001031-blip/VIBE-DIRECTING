@@ -18,6 +18,7 @@ function purposeFromSlot(slot: GenerationJob["slot"]): TaskEnvelope["purpose"] {
   if (slot.startsWith("image.reference_asset")) return "asset";
   if (slot === "image.generate" || slot === "image.edit") return "keyframe";
   if (slot === "video.i2v") return "video";
+  if (slot === "audio.tts" || slot === "audio.music") return "audio";
   return "unknown";
 }
 

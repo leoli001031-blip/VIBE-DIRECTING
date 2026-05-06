@@ -9,6 +9,7 @@ public/runtime-state.json
 public/demo-runtime-audit.json
 public/demo-runtime-state.json
 public/media/
+real-test-sandbox/
 
 # Future local project outputs
 *.vibe/preview/

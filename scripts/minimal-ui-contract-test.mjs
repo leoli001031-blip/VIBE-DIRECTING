@@ -172,6 +172,10 @@ check(
   "package.json must expose preview-player:test",
 );
 check(
+  packageJson.scripts?.["minimal-runtime-projection:test"] === "node scripts/minimal-runtime-projection-test.mjs",
+  "package.json must expose minimal-runtime-projection:test",
+);
+check(
   packageJson.scripts?.["provider-handoff-status:test"] === "node scripts/provider-handoff-status-test.mjs",
   "package.json must expose provider-handoff-status:test",
 );
@@ -191,7 +195,10 @@ checkMessage(requireWithin(appSource, /function\s+MinimalAgentPanel\s*\(/, "Mini
 checkMessage(requireWithin(appSource, /function\s+DiagnosticsMode\s*\(/, "DiagnosticsMode component"));
 checkMessage(requireWithin(appBody, /mode\s*===\s*"diagnostics"/, "Diagnostics entry in App mode switch/rendering"));
 checkMessage(requireWithin(appBody, /mode\s*===\s*"director"/, "Director mode rendering"));
-checkMessage(requireWithin(directorMode, /DirectorProgressStrip/, "Phase 35 progress strip mounted in DirectorMode"));
+check(
+  !/DirectorProgressStrip/.test(directorMode),
+  "Director Clean Mode must not mount DirectorProgressStrip in the default DirectorMode",
+);
 checkMessage(requireWithin(directorProgressStripState, /buildLocalOrchestratorUiSummary\s*\(/, "Phase 35 progress strip must derive from Phase 34 runtime summary"));
 checkMessage(requireWithin(directorProgressStrip, /项目处理进度/, "Phase 35 progress strip accessible label"));
 checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /准备中/, "Phase 35 progress strip preparing label"));
@@ -215,17 +222,21 @@ checkMessage(requireWithin(minimalAgentPanel, /selectedShotId\s*:/, "MinimalAgen
 checkMessage(requireWithin(minimalAgentPanel, /selectedAssetId\s*:/, "MinimalAgentPanel selectedAssetId workflow selection"));
 checkMessage(requireWithin(minimalAgentPanel, /sectionId\s*:/, "MinimalAgentPanel sectionId workflow selection"));
 checkMessage(requireWithin(minimalAgentPanel, /workflowCanConfirm\s*\(/, "Round 3 MinimalAgentPanel confirmation guard"));
+checkMessage(requireWithin(appSource, /buildMinimalRuntimeProjection/, "Round 5 Minimal runtime projection helper import/use"));
+checkMessage(requireWithin(minimalAgentPanel, /buildAgentPanelProjection\s*\(/, "Round 5 MinimalAgentPanel must use creator-facing runtime projection"));
+checkMessage(requireWithin(minimalAgentPanel, /minimal-state-dots/, "Round 5 MinimalAgentPanel must render compact progress dots"));
 checkMessage(requireWithin(`${minimalAgentPanel}\n${workflowCanConfirm}`, /dry_run_ready/, "Round 3 confirmation only after dry-run ready"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /描述你想怎么改\.\.\./, "MinimalAgentPanel natural input placeholder"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /准备修改/, "MinimalAgentPanel prepare-copy label"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /等待确认/, "MinimalAgentPanel confirmation-wait label"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /开始生成/, "MinimalAgentPanel generation starts only after confirmation copy"));
-checkMessage(requireWithin(minimalAgentLanguageSurface, /排队中/, "Round 3 queued status label"));
-checkMessage(requireWithin(minimalAgentLanguageSurface, /已计划/, "Round 3 planned status label"));
-checkMessage(requireWithin(minimalAgentLanguageSurface, /待写入项目事实/, "Round 3 pending project facts label"));
-checkMessage(requireWithin(minimalAgentPanel, /确认计划/, "Round 3 confirmation action label"));
-checkMessage(requireWithin(minimalAgentPanel, /minimal-agent-plan/, "Round 3 plan summary surface"));
-checkMessage(requireWithin(minimalAgentPanel, /minimal-agent-steps/, "Round 3 confirmation-to-planned steps"));
+check(
+  !/排队中|已计划|待写入项目事实|transaction|queueItems/.test(minimalAgentPanel),
+  "Director Clean Mode Agent panel must not expose queue/project-fact implementation copy",
+);
+checkMessage(requireWithin(minimalAgentPanel, /确认修改/, "Director Clean Mode confirmation action label"));
+check(!/minimal-agent-plan/.test(minimalAgentPanel), "Director Clean Mode must not show the engineering plan summary surface");
+check(!/minimal-agent-steps/.test(minimalAgentPanel), "Director Clean Mode must not show stepper chrome in the Agent panel");
 for (const [term, pattern] of [
   ["Preview plan", /Preview\s+plan/i],
   ["Refine selected beat", /Refine\s+selected\s+beat/i],
@@ -239,9 +250,13 @@ for (const [term, pattern] of [
 }
 
 const phase14ProjectSurface = `${minimalTopNav}\n${minimalProjectPlan}`;
-checkMessage(requireWithin(phase14ProjectSurface, /Project/i, "Phase 14 Project entry in minimal top navigation"));
-checkMessage(requireWithin(phase14ProjectSurface, /project\.vibe/i, "Phase 14 project.vibe entry badge"));
-checkMessage(requireWithin(phase14ProjectSurface, /Ready/i, "Phase 14 ready badge"));
+checkMessage(requireWithin(phase14ProjectSurface, /Story/i, "Director Clean Mode story summary in minimal top navigation"));
+checkMessage(requireWithin(phase14ProjectSurface, /shots/i, "Director Clean Mode shot count badge"));
+checkMessage(requireWithin(phase14ProjectSurface, /locked refs/i, "Director Clean Mode locked reference count badge"));
+checkMessage(requireWithin(phase14ProjectSurface, /statusLabel/, "Round 5 top navigation short runtime status"));
+checkMessage(requireWithin(phase14ProjectSurface, /minimal-state-dots/, "Round 5 top navigation compact progress dots"));
+checkMessage(requireWithin(minimalTopNav, /Settings/, "Round 5 Diagnostics entry should be icon-based"));
+check(!/<button\b[^>]*diagnostics-link[\s\S]{0,120}>\s*Diagnostics\s*<\/button>/i.test(minimalTopNav), "Round 5 Diagnostics must not be a prominent text button in the top navigation");
 check(!/Plan\s+preview/i.test(phase14ProjectSurface), "Minimal top navigation must not expose Plan preview copy");
 
 checkMessage(requireWithin(desktopShellView, /buildDesktopRuntimePlan\s*\(/, "Phase 15 Settings shell must use buildDesktopRuntimePlan"));
@@ -264,7 +279,10 @@ checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /keyframe pair/i, "
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /end-frame derivation/i, "Phase 17 end-frame derivation diagnostics copy"));
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /provider locks/i, "Phase 17 provider locks diagnostics copy"));
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /closed loop/i, "Phase 17 closed-loop diagnostics copy"));
-checkMessage(requireWithin(directorMode, /RealPilotDirectorStatus/, "Phase 43 Real Pilot status mounted in DirectorMode"));
+check(
+  !/RealPilotDirectorStatus/.test(directorMode),
+  "Director Clean Mode must not mount RealPilotDirectorStatus in the default DirectorMode",
+);
 checkMessage(requireWithin(diagnosticsMode, /RealPilotDiagnostics/, "Phase 43 Real Pilot diagnostics mounted"));
 checkMessage(requireWithin(settingsShell, /Real Pilot\s*\/\s*真实小样/i, "Phase 43 Real Pilot settings status"));
 checkMessage(requireWithin(realPilotDirectorStatus, /真实小样/, "Phase 43 Real Pilot Director status title"));
@@ -276,7 +294,10 @@ checkMessage(requireWithin(realPilotDirectorStatus, /动作确认后才进入单
 check(!/确认后生成/.test(realPilotDirectorStatus), "Phase 44 Real Pilot must not imply immediate generation");
 checkMessage(requireWithin(realPilotDirectorStatus, /Image2/, "Phase 43 Real Pilot Image2 first copy"));
 checkMessage(requireWithin(realPilotDirectorStatus, /Seedance/, "Phase 43 Real Pilot Seedance parked copy"));
-checkMessage(requireWithin(directorMode, /OneShotActionPanel/, "Round 4 one-shot action panel mounted in DirectorMode"));
+check(
+  !/OneShotActionPanel/.test(directorMode),
+  "Director Clean Mode must not mount OneShotActionPanel in the default DirectorMode",
+);
 checkMessage(requireWithin(oneShotActionPanel, /单次小样/, "Round 4 one-shot action panel title"));
 checkMessage(requireWithin(oneShotActionPanel, /确认单次小样/, "Round 4 action-time confirmation button copy"));
 checkMessage(requireWithin(oneShotActionPanel, /等待文件/, "Round 4 waiting-file user state"));
@@ -448,10 +469,11 @@ checkMessage(requireWithin(previewPlayerQueue, /image_hold/, "Phase 21/23 Previe
 checkMessage(requireWithin(previewPlayerQueue, /video_clip/, "Phase 21/23 Preview Player queue must include video clips"));
 checkMessage(requireWithin(`${previewPlayerQueue}\n${previewQueueKind}`, /missing_placeholder/, "Phase 21/23 Preview Player queue must include missing placeholders"));
 checkMessage(requireWithin(minimalPreview, /buildPreviewPlayerQueue\s*\(/, "Phase 21/23 MinimalPreview must render the Preview Player queue"));
+checkMessage(requireWithin(minimalPreview, /previewSummary\.detail/, "Round 5 MinimalPreview must show a short runtime projection summary"));
 checkMessage(requireWithin(minimalPreview, /preview-stage-card/, "Phase 21/23 Preview Player needs a large preview shell"));
-checkMessage(requireWithin(minimalPreview, /Demo package/, "Round 5 MinimalPreview demo package summary"));
-checkMessage(requireWithin(minimalPreview, /packageStatus/, "Round 5 MinimalPreview package status"));
-checkMessage(requireWithin(minimalPreview, /packageCount/, "Round 5 MinimalPreview package item count"));
+check(!/Demo package/.test(minimalPreview), "Director Clean Mode Preview must not show Demo package copy");
+check(!/packageStatus/.test(minimalPreview), "Director Clean Mode Preview must not keep package status in the main preview");
+check(!/packageCount/.test(minimalPreview), "Director Clean Mode Preview must not keep package count in the main preview");
 checkMessage(requireWithin(stylesSource, /preview-stage-card/, "Phase 21/23 Preview Player stage styling"));
 checkMessage(requireWithin(stylesSource, /preview-export-summary/, "Round 5 preview export summary styling"));
 
@@ -460,7 +482,8 @@ checkMessage(requireAny(appSource, [/Preview/, /function\s+PreviewTimeline/, /cl
 checkMessage(requireAny(appSource, [/Selected/, /Scope/], "Selected/Scope director context"));
 checkMessage(requireAny(appSource, [/Story/, /section\.label/, /storySections/, /All Shots/], "Story/section tabs"));
 checkMessage(requireAny(appSource, [/Diagnostics/, /diagnostics/], "Diagnostics entry"));
-checkMessage(requireWithin(projectFactsStrip, /Project Store/, "Round 2 Project Store strip"));
+check(!/ProjectFactsStrip/.test(directorMode), "Director Clean Mode must not mount ProjectFactsStrip in the default DirectorMode");
+checkMessage(requireWithin(projectFactsStrip, /Project Store/, "Round 2 Project Store strip remains available outside the clean surface"));
 checkMessage(requireWithin(projectFactsStrip, /runtime-state/, "Round 2 runtime-state label"));
 checkMessage(requireWithin(projectFactsStrip, /derived cache/, "Round 2 runtime-state derived cache copy"));
 checkMessage(requireWithin(projectFactsUiSummary, /不是事实源/, "Round 2 runtime-state not source-of-truth copy"));
@@ -470,11 +493,11 @@ checkMessage(requireWithin(projectFactsStrip, /save/, "Round 2 save plan action"
 checkMessage(requireWithin(projectStoreSnapshotForUi, /createProjectStoreSnapshot/, "Round 2 Project Store snapshot builder"));
 checkMessage(requireWithin(projectFactsUiSummary, /buildProjectStoreIoGate/, "Round 2 Project Store IO gate builder"));
 checkMessage(requireWithin(projectFactsUiSummary, /saveProjectStoreSnapshot/, "Round 2 Project Store save plan builder"));
-for (const label of ["角色主参考", "场景 master", "风格文本/锚图", "文本约束", "添加并锁定", "添加候选", "needs_review"]) {
+for (const label of ["审核并锁定资产", "角色主参考", "场景 master", "风格文本/锚图", "文本约束", "添加并锁定", "添加候选", "review"]) {
   checkMessage(requireWithin(minimalAssetLibrary, new RegExp(label), `Asset Library ${label} slot copy`));
 }
 for (const label of ["type", "authority", "future", "shots"]) {
-  checkMessage(requireWithin(minimalAssetLibrary, new RegExp(label), `Round 2 asset card ${label} field`));
+  check(!new RegExp(`<dt>${label}</dt>|>${label}<`).test(minimalAssetLibrary), `Director Clean Mode asset cards must not expose ${label} metadata`);
 }
 checkMessage(requireWithin(minimalAssetLibrary, /onAddAsset/, "Round 2 Asset Library add callback"));
 checkMessage(requireWithin(minimalAssetLibrary, /onUpdateAsset/, "Round 2 Asset Library update callback"));
@@ -516,8 +539,8 @@ const diagnosticsSurface = diagnosticsComponentBodies.join("\n");
 const diagnosticsTermTotal = directorTerms.reduce((sum, [, pattern]) => sum + countPattern(diagnosticsSurface, pattern), 0);
 
 check(
-  directorTermTotal <= 8,
-  `DirectorMode contains too many engineering terms (${directorTermCounts.map(([term, count]) => `${term}:${count}`).join(", ")}); move details behind Diagnostics`,
+  directorTermTotal === 0,
+  `DirectorMode contains engineering terms (${directorTermCounts.map(([term, count]) => `${term}:${count}`).join(", ")}); move details behind Diagnostics`,
 );
 check(
   diagnosticsTermTotal >= Math.max(4, directorTermTotal),
@@ -588,10 +611,6 @@ for (const [term, pattern] of forbiddenMinimalTerms) {
 
 const phase2123DirectorSurface = [
   directorMode,
-  directorProgressStrip,
-  realPilotDirectorStatus,
-  oneShotActionPanel,
-  projectFactsStrip,
   minimalTopNav,
   minimalAgentPanel,
   minimalAssetLibrary,

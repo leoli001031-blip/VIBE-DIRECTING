@@ -6,6 +6,20 @@ Vibe Director Studio is a lightweight director desk between a human creator and 
 
 The first usable version should optimize for control and clarity, not visual polish.
 
+## 2026-05-05 Runtime Truth Layer Update
+
+The product direction remains correct, but the next implementation priority changes from more real generation to runtime truth. The director desk must first prove that a normal user can type a natural-language change and see it become project facts, validated tasks, worker activity, watched artifacts, QA, and preview progress from one durable ledger.
+
+Near-term product rules:
+
+- `project.vibe` is the source of truth; imported runtime state is only a derived cache.
+- TaskRun ledger is the execution source of truth; manifest, reports, preview, and UI progress are projections.
+- The default UI hides Diagnostics as a developer layer and shows creator-readable progress only.
+- Asset Library should feel like reviewing and locking assets, not browsing an output folder.
+- The right Director Panel must apply changes to project facts and task queue transactions.
+- Preview should auto-refresh and show short progress, without prompt/provider/queue details.
+- App-server integration remains a planned live ingest route for thread, turn, fs-watch, and approval facts; it does not replace Vibe Core gates.
+
 ## Current Build Scope
 
 - Import an existing runtime test folder.
@@ -89,4 +103,3 @@ Forbidden behavior:
 7. Add subagent audit packet generator.
 8. Add preview timeline once video files exist.
 9. Add parked Jimeng/Seedance adapter later, with no fast/VIP default and no live submit unless explicitly enabled.
-

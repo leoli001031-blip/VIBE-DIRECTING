@@ -47,6 +47,7 @@ prompt/core-prompt-templates.md
 - `provider/provider-onboarding-research-checklist.md`：未来新增模型前必须完成的搜索和验证清单。
 - `provider/provider-api-extension-slots.md`：未来生图、视频、音频和本地工作流的统一 API 口预留。
 - `provider/codex-cli-execution-boundary.md`：Codex CLI 作为执行层和 Image 2 调用路径时的边界。
+- `audio/core-audio-planning.md`：旁白、对白、音源授权、环境音、BGM brief、视频 no BGM 默认规则，以及 TTS/BGM provider slot 预留。
 - `agent/harness-engineering-for-vibe-director.md`：把长流程 Agent 任务工程化为可观测、可恢复、可复验的后台执行脚手架。
 - `index/router-map.md`：用户自然语言到资料包的路由表。
 
@@ -58,3 +59,4 @@ prompt/core-prompt-templates.md
 4. QA 必须使用同一套资料包反向检查结果。
 5. 资料包可以被联网研究更新，但更新结果必须落成结构化条目。
 6. 新增模型或生成平台前，必须先更新 provider 能力矩阵和 onboarding 清单。
+7. 正式 TaskEnvelope / SubagentTaskEnvelope 必须保留非空 knowledge injection trace；路由失败时只允许使用最小默认兜底包，不允许整库注入 worker。

@@ -4,6 +4,21 @@
 
 这份文件用于约束 Vibe Core 的连续开发顺序。核心原则是：先把项目事实源、任务合同、文件监听、知识注入和门禁做硬，再做 UI 抛光和真实模型调用。
 
+## 2026-05-05 规划更新：Runtime Truth Layer 优先
+
+5/4-5/5 的真实 demo 和软件层审计显示，下一阶段不应继续以“再跑真实生成”为主目标，而应先补齐 Runtime Truth Layer。当前产品方向和极简 UI 骨架成立，但还没有普通用户自然语言生成视频的真实闭环：缺 `project.vibe` 事实源、durable TaskRun runtime、真实 worker / watcher / QA / preview 回流。
+
+接下来 4-6 轮开发优先级调整为：
+
+- P0：TaskRunLedger、append-only runtime event ledger、artifact transaction gate、worker lease、真实 watcher ingest。
+- P0：manifest / report / preview / UI progress 都从 ledger projection 生成，不能继续由各自脚本或 verify-synthesized 状态分裂生成。
+- P1：`project.vibe` 成为事实源；右侧自然语言面板必须落成 transaction、pending facts 和 validated queue task。
+- P1：极简 UI 从 ledger projection 读取短状态，默认隐藏 Diagnostics 明文入口，不展示 prompt / provider / queue / manifest 细节。
+- P2：Knowledge/Skills 做最小默认兜底和按任务注入，补齐 audio pack；Knowledge Manager 后续支持导入、新建、启停、路由测试。
+- P2：Codex app-server 只作为 thread / turn / fs-watch / approval ingest 来源，默认 transport 仍为 off；live ingest 需单独测试后启用。
+
+真实测试重新开启门槛：TaskRunLedger、artifact transaction gate、worker lease、真实 watcher ingest、hash-bound provider observation、hash-bound semantic QA、非空 knowledge injection trace、ledger-driven preview/UI progress 全部有合同测试后，才恢复 Image2 单镜头动作时确认测试。真实视频 provider 继续 parked。
+
 ## 开发执行规则
 
 后续默认由 subagent 执行局部开发，主 agent 负责规划、集成、review 和验证。

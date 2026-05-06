@@ -305,7 +305,8 @@
     "expectedPackIds": [
       "camera/core-camera-movement",
       "prompt/core-prompt-templates",
-      "qa/core-qa"
+      "qa/core-qa",
+      "audio/core-audio-planning"
     ],
     "forbiddenPackIds": [],
     "providerSlot": "video.i2v"
@@ -374,5 +375,56 @@
       "composition/core-composition"
     ],
     "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-36",
+    "userIntent": "旁白 / 对白 / 音效规划",
+    "taskPurpose": "audio",
+    "expectedPackIds": [
+      "audio/core-audio-planning",
+      "provider/model-capability-matrix",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": [],
+    "providerSlot": "audio.tts"
+  },
+  {
+    "id": "router-map-37",
+    "userIntent": "TTS 音频生成预留",
+    "taskPurpose": "audio",
+    "expectedPackIds": [
+      "audio/core-audio-planning",
+      "provider/provider-api-extension-slots",
+      "provider/model-capability-matrix",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": [],
+    "providerSlot": "audio.tts"
+  },
+  {
+    "id": "router-map-38",
+    "userIntent": "BGM brief / 配乐预留",
+    "taskPurpose": "audio",
+    "expectedPackIds": [
+      "audio/core-audio-planning",
+      "provider/provider-api-extension-slots",
+      "provider/model-capability-matrix",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": [],
+    "providerSlot": "audio.music"
+  },
+  {
+    "id": "router-map-39",
+    "userIntent": "视频不要音乐 / no BGM",
+    "taskPurpose": "video",
+    "expectedPackIds": [
+      "audio/core-audio-planning",
+      "camera/core-camera-movement",
+      "prompt/core-prompt-templates",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": [],
+    "providerSlot": "video.i2v"
   }
 ]

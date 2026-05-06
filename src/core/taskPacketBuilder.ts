@@ -1,4 +1,14 @@
 import type { ProjectRuntimeState } from "./projectState";
+import { attachKnowledgeBudgetToRouteResult, buildKnowledgeContextBudget } from "./knowledgeContextBudget";
+import {
+  buildFallbackKnowledgeRouteResult,
+  ensureMinimumDefaultKnowledgePacks,
+  hasNonEmptyKnowledgeTrace,
+} from "./knowledgeDefaults";
+import { selectAvailableKnowledgePacks } from "./knowledgeLibrary";
+import { stableKnowledgeHash } from "./knowledgeManifest";
+import { routeKnowledge } from "./knowledgeRouter";
+import type { ContextBudgetResult, KnowledgePack, KnowledgePackManifest, KnowledgeRouteResult, KnowledgeTaskPurpose } from "./knowledgeTypes";
 import { buildDefaultProviderRegistry, buildProviderRequirement, selectCapabilityForRequirement } from "./providerCapabilities";
 import type {
   AssetRecord,
@@ -104,6 +114,7 @@ export interface BuildTaskPacketsInput {
   requestedTaskKinds?: TaskPacketKind[];
   providerRegistry?: ProviderRegistry;
   providerPolicy?: ProviderPolicy;
+  knowledgeManifest?: KnowledgePackManifest;
   generatedAt?: string;
 }
 
@@ -343,6 +354,18 @@ function taskPurposeFor(kind: TaskPacketKind): TaskEnvelope["purpose"] {
   if (kind === "image" || kind === "start_frame" || kind === "end_frame" || kind === "image_edit") return "keyframe";
   if (kind === "asset") return "asset";
   if (kind === "video_execution") return "video";
+  if (kind === "audio") return "audio";
+  return "audit";
+}
+
+function knowledgeTaskPurposeFor(kind: TaskPacketKind): KnowledgeTaskPurpose {
+  if (kind === "image" || kind === "start_frame" || kind === "end_frame" || kind === "image_edit") return "keyframe";
+  if (kind === "asset") return "asset";
+  if (kind === "video_execution") return "video";
+  if (kind === "audio") return "audio";
+  if (kind === "story_audit") return "story_audit";
+  if (kind === "pair_qa") return "continuity_audit";
+  if (kind === "identity_qa" || kind === "scene_qa") return "visual_audit";
   return "audit";
 }
 
@@ -628,6 +651,188 @@ function policyFor(input: Pick<BuildTaskPacketsInput, "runtimeState" | "provider
   return input.providerPolicy || input.runtimeState.project?.providerPolicy;
 }
 
+function knowledgeManifestHashFor(input: Pick<BuildTaskPacketsInput, "runtimeState" | "knowledgeManifest">): string {
+  return (
+    input.knowledgeManifest?.manifestHash ||
+    input.runtimeState.sourceIndex?.knowledgeManifestHash ||
+    stableKnowledgeHash("minimum_default_knowledge_fallback")
+  );
+}
+
+function availableKnowledgePacksFor(input: Pick<BuildTaskPacketsInput, "runtimeState" | "knowledgeManifest">): KnowledgePack[] {
+  const manifestPacks = input.knowledgeManifest
+    ? selectAvailableKnowledgePacks(input.knowledgeManifest, input.runtimeState.sourceIndex)
+    : [];
+  return ensureMinimumDefaultKnowledgePacks(manifestPacks);
+}
+
+function knowledgeIntentFor(input: {
+  kind: TaskPacketKind;
+  shot: ShotRecord;
+  hardFields: TaskPacketHardFields;
+}): string {
+  return unique([
+    `task_kind:${input.kind}`,
+    `story_function:${input.hardFields.storyFunction}`,
+    input.shot.title || "",
+    ...input.hardFields.contextCapsule,
+    ...input.hardFields.qaChecklist.map((item) => `qa:${item}`),
+    ...input.hardFields.mustPreserve.map((item) => `preserve:${item}`),
+    ...input.hardFields.mustAvoid.map((item) => `avoid:${item}`),
+    input.kind === "audio" ? "audio tts voice narration dialogue ambience bgm no_bgm provider slot audio.tts audio.music" : "",
+    input.kind === "video_execution" ? "video prompt default no_bgm audio plan separated from video prompt" : "",
+  ]).join(" | ");
+}
+
+function knowledgeTraceWarnings(routeResult: KnowledgeRouteResult, contextBudget: ContextBudgetResult): string[] {
+  return unique([
+    ...routeResult.warnings,
+    ...contextBudget.warnings,
+    hasNonEmptyKnowledgeTrace({
+      injectedKnowledgePacks: contextBudget.injectedKnowledgePacks,
+      injectedKnowledgeSnippetIds: contextBudget.injectedSnippets.map((snippet) => `${snippet.packId}:${snippet.snippetId}`),
+      injectedKnowledgeSnippets: contextBudget.injectedSnippets,
+    })
+      ? ""
+      : "knowledge_trace_blocker:empty_injection_trace",
+  ]);
+}
+
+function maxKnowledgeRouteMatchesFor(taskPurpose: KnowledgeTaskPurpose): number {
+  if (taskPurpose === "audio") return 4;
+  if (taskPurpose === "video" || taskPurpose === "i2v" || taskPurpose === "video_generation") return 6;
+  if (taskPurpose === "script" || taskPurpose === "story_audit") return 5;
+  if (taskPurpose === "qa" || taskPurpose === "audit" || taskPurpose === "continuity_audit" || taskPurpose === "visual_audit") return 5;
+  return 6;
+}
+
+function requiredKnowledgeCategoriesFor(taskPurpose: KnowledgeTaskPurpose): string[] {
+  if (taskPurpose === "audio") return ["audio", "provider", "qa"];
+  if (taskPurpose === "video" || taskPurpose === "i2v" || taskPurpose === "video_generation") return ["camera", "prompt", "provider", "qa", "audio"];
+  if (taskPurpose === "script" || taskPurpose === "story_audit") return ["script", "storyflow", "qa"];
+  if (taskPurpose === "qa" || taskPurpose === "audit" || taskPurpose === "continuity_audit" || taskPurpose === "visual_audit") return ["qa"];
+  return ["prompt", "provider", "qa"];
+}
+
+function boundKnowledgeRouteMatches(routeResult: KnowledgeRouteResult, maxMatches: number, taskPurpose: KnowledgeTaskPurpose): KnowledgeRouteResult {
+  const requiredCategories = requiredKnowledgeCategoriesFor(taskPurpose);
+  const hasRequiredCategories = requiredCategories.every((category) => routeResult.matches.some((match) => match.category === category));
+  if (routeResult.matches.length <= maxMatches && hasRequiredCategories) return routeResult;
+  const selected = routeResult.matches.slice(0, maxMatches);
+
+  for (const category of requiredCategories) {
+    if (selected.some((match) => match.category === category)) continue;
+    const requiredMatch = routeResult.matches.find((match) => match.category === category);
+    if (!requiredMatch || selected.some((match) => match.packId === requiredMatch.packId)) continue;
+
+    if (selected.length < maxMatches) {
+      selected.push(requiredMatch);
+      continue;
+    }
+
+    const replaceIndex = Math.max(
+      0,
+      [...selected]
+        .reverse()
+        .findIndex((match) => !requiredCategories.includes(match.category)),
+    );
+    const actualIndex = selected.length - 1 - replaceIndex;
+    selected[actualIndex] = requiredMatch;
+  }
+
+  const selectedByPackId = new Map(selected.map((match) => [match.packId, match]));
+  const boundedMatches = Array.from(selectedByPackId.values()).slice(0, maxMatches);
+
+  return {
+    ...routeResult,
+    matches: boundedMatches,
+    notInjected: unique([
+      ...(routeResult.notInjected || []).map((item) => `${item.packId}:${item.reason}`),
+      ...routeResult.matches
+        .filter((match) => !boundedMatches.some((selectedMatch) => selectedMatch.packId === match.packId))
+        .map((match) => `${match.packId}:bounded_route_limit`),
+    ]).map((item) => {
+      const [packId, ...reason] = item.split(":");
+      return { packId, reason: reason.join(":") || "bounded_route_limit" };
+    }),
+    warnings: unique([...routeResult.warnings, `knowledge_route_bounded:${maxMatches}/${routeResult.matches.length}`]),
+  };
+}
+
+function resolveKnowledgeInjection(input: {
+  packetId: string;
+  kind: TaskPacketKind;
+  shot: ShotRecord;
+  hardFields: TaskPacketHardFields;
+  runtimeState: ProjectRuntimeState;
+  knowledgeManifest?: KnowledgePackManifest;
+}): {
+  routeResult: KnowledgeRouteResult;
+  contextBudget: ContextBudgetResult;
+  routeWarnings: string[];
+  manifestHash: string;
+} {
+  const availablePacks = availableKnowledgePacksFor(input);
+  const taskPurpose = knowledgeTaskPurposeFor(input.kind);
+  const providerSlot = input.hardFields.providerRequirements.slot;
+  const contextLevel = contextLevelFor(input.kind);
+  const userIntent = knowledgeIntentFor(input);
+  const maxInjectionTokens = contextLevel === "L2" ? 1500 : 1000;
+  const unboundedRouteResult = routeKnowledge({
+    taskId: `task_${input.packetId}`,
+    userIntent,
+    taskPurpose,
+    providerSlot,
+    contextLevel,
+    availablePacks,
+    consumers: ["prompt_compiler", "subagent_context", "qa_gate", "diagnostics"],
+    maxInjectionTokens,
+  });
+  const baseRouteResult = boundKnowledgeRouteMatches(unboundedRouteResult, maxKnowledgeRouteMatchesFor(taskPurpose), taskPurpose);
+  const baseBudget = buildKnowledgeContextBudget({
+    routeResult: baseRouteResult,
+    availablePacks,
+    maxInjectionTokens,
+  });
+  let routeResult = attachKnowledgeBudgetToRouteResult(baseRouteResult, baseBudget);
+  let contextBudget = baseBudget;
+  const routeWarnings = input.knowledgeManifest ? [] : ["knowledge_manifest_missing:using_minimum_default_fallback"];
+
+  if (!hasNonEmptyKnowledgeTrace({
+    injectedKnowledgePacks: routeResult.injectedKnowledgePacks,
+    injectedKnowledgeSnippetIds: routeResult.injectedKnowledgeSnippetIds,
+    injectedKnowledgeSnippets: contextBudget.injectedSnippets,
+  })) {
+    const fallbackRoute = buildFallbackKnowledgeRouteResult({
+      taskId: `task_${input.packetId}`,
+      userIntent,
+      taskPurpose,
+      providerSlot,
+      contextLevel,
+      availablePacks,
+      reason: routeResult.warnings.includes("no_knowledge_pack_matched") ? "no_route_match" : "empty_context_budget",
+      createdAt: input.runtimeState.generatedAt,
+    });
+    const fallbackBudget = buildKnowledgeContextBudget({
+      routeResult: fallbackRoute,
+      availablePacks,
+      maxInjectionTokens,
+    });
+    routeResult = attachKnowledgeBudgetToRouteResult(fallbackRoute, fallbackBudget);
+    contextBudget = fallbackBudget;
+    routeWarnings.push(...baseRouteResult.warnings, ...baseBudget.warnings, "knowledge_route_used_minimum_default_fallback");
+  }
+
+  routeWarnings.push(...knowledgeTraceWarnings(routeResult, contextBudget));
+
+  return {
+    routeResult,
+    contextBudget,
+    routeWarnings: unique(routeWarnings),
+    manifestHash: knowledgeManifestHashFor(input),
+  };
+}
+
 function makeTaskEnvelope(input: {
   packetId: string;
   kind: TaskPacketKind;
@@ -639,11 +844,29 @@ function makeTaskEnvelope(input: {
   missing: string[];
   providerRegistry?: ProviderRegistry;
   providerPolicy?: ProviderPolicy;
+  knowledgeManifest?: KnowledgePackManifest;
 }): TaskEnvelope {
   const providerSelection = selectCapabilityForRequirement(input.hardFields.providerRequirements, registryFor(input), policyFor(input));
   const expectedOutputs = input.hardFields.expectedOutputs;
-  const blockingReasons = unique([...input.missing, ...providerSelection.blockers]);
   const taskId = `task_${input.packetId}`;
+  const knowledge = resolveKnowledgeInjection({
+    packetId: input.packetId,
+    kind: input.kind,
+    shot: input.shot,
+    hardFields: input.hardFields,
+    runtimeState: input.runtimeState,
+    knowledgeManifest: input.knowledgeManifest,
+  });
+  const knowledgeTracePresent = hasNonEmptyKnowledgeTrace({
+    injectedKnowledgePacks: knowledge.contextBudget.injectedKnowledgePacks,
+    injectedKnowledgeSnippetIds: knowledge.contextBudget.injectedSnippets.map((snippet) => `${snippet.packId}:${snippet.snippetId}`),
+    injectedKnowledgeSnippets: knowledge.contextBudget.injectedSnippets,
+  });
+  const blockingReasons = unique([
+    ...input.missing,
+    ...providerSelection.blockers,
+    knowledgeTracePresent ? "" : "knowledge_trace_blocker:empty_injection_trace",
+  ]);
   return {
     id: taskId,
     purpose: taskPurposeFor(input.kind),
@@ -669,10 +892,14 @@ function makeTaskEnvelope(input: {
       checkedAt: input.runtimeState.generatedAt,
     },
     keyframePairDerivation: input.kind === "video_execution" || input.kind === "pair_qa" ? input.keyframePair : undefined,
-    injectedKnowledgePacks: [],
-    injectedKnowledgeSnippetIds: [],
-    injectedKnowledgeSnippets: [],
-    routeWarnings: [],
+    knowledgeRouteResultId: knowledge.routeResult.routeId,
+    contextBudgetId: knowledge.contextBudget.budgetId,
+    injectedKnowledgePacks: knowledge.contextBudget.injectedKnowledgePacks,
+    injectedKnowledgeSnippetIds: knowledge.contextBudget.injectedSnippets.map((snippet) => `${snippet.packId}:${snippet.snippetId}`),
+    injectedKnowledgeSnippets: knowledge.contextBudget.injectedSnippets,
+    knowledgeInputHash: knowledge.routeResult.inputHash,
+    knowledgeManifestHash: knowledge.manifestHash,
+    routeWarnings: knowledge.routeWarnings,
     outputPath: expectedOutputs[0],
     blockingReasons,
   };
@@ -719,10 +946,14 @@ function makeSubagentEnvelope(input: {
       "liveSubmitAllowed=false",
     ]),
     taskEnvelope: input.taskEnvelope,
-    injectedKnowledgePacks: [],
-    injectedKnowledgeSnippetIds: [],
-    injectedKnowledgeSnippets: [],
-    routeWarnings: [],
+    knowledgeRouteResultId: input.taskEnvelope.knowledgeRouteResultId,
+    contextBudgetId: input.taskEnvelope.contextBudgetId,
+    injectedKnowledgePacks: input.taskEnvelope.injectedKnowledgePacks,
+    injectedKnowledgeSnippetIds: input.taskEnvelope.injectedKnowledgeSnippetIds,
+    injectedKnowledgeSnippets: input.taskEnvelope.injectedKnowledgeSnippets,
+    knowledgeInputHash: input.taskEnvelope.knowledgeInputHash,
+    knowledgeManifestHash: input.taskEnvelope.knowledgeManifestHash,
+    routeWarnings: input.taskEnvelope.routeWarnings,
     forbiddenKnowledgePacks: [],
     requiredKnowledgeCategories:
       input.kind === "video_execution"
@@ -732,7 +963,11 @@ function makeSubagentEnvelope(input: {
           : input.kind === "scene_qa"
             ? ["storyflow", "composition", "camera", "qa"]
             : ["storyflow", "style", "qa"],
-    qaPackBindings: {},
+    qaPackBindings: Object.fromEntries(
+      input.taskEnvelope.injectedKnowledgePacks
+        .filter((pack) => pack.consumer === "qa_gate")
+        .map((pack) => [pack.packId, { version: pack.version, hash: pack.hash }]),
+    ),
     allowedReadScopes: input.hardFields.allowedReadScope,
     disallowedReadScopes: unique([
       "provider_credentials",
@@ -821,6 +1056,7 @@ function buildPacket(input: BuildTaskPacketsInput, kind: TaskPacketKind): BuiltT
     missing,
     providerRegistry: input.providerRegistry,
     providerPolicy: input.providerPolicy,
+    knowledgeManifest: input.knowledgeManifest,
   });
   const envelope = makeSubagentEnvelope({
     packetId,

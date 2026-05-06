@@ -361,8 +361,11 @@ function check(condition, message) {
 }
 
 check(packageJson.scripts?.["preview-player:test"] === "node scripts/preview-player-test.mjs", "package.json must expose preview-player:test");
+check(packageJson.scripts?.["minimal-runtime-projection:test"] === "node scripts/minimal-runtime-projection-test.mjs", "package.json must expose minimal-runtime-projection:test");
 check(/from "\.\/core\/previewPlayerQueue"/.test(appSource), "MinimalPreview must use the core Preview Player queue helper");
 check(/buildPreviewPlayerQueue\s*\(/.test(previewBody), "MinimalPreview must consume the queue helper");
+check(/buildMinimalRuntimeProjection\s*\(/.test(previewBody), "MinimalPreview must consume the minimal runtime projection helper");
+check(/previewSummary\.detail/.test(previewBody), "MinimalPreview must show a short preview summary");
 check(/currentTime/.test(previewBody) && /requestAnimationFrame/.test(previewBody), "Preview Play must advance currentTime");
 check(/getPreviewPlayerActiveItem\s*\(/.test(previewBody), "MinimalPreview must choose active item by currentTime");
 check(/selectPreviewItem/.test(previewBody) && /setCurrentTime\(item\.startSeconds\)/.test(previewBody), "timeline click must seek currentTime");
