@@ -983,6 +983,9 @@ export interface PhaseRoadmapClosureObservations {
   workerSpawnObserved?: boolean;
   subprocessObserved?: boolean;
   shellExecutionObserved?: boolean;
+  runControlObserved?: boolean;
+  submitControlObserved?: boolean;
+  executeControlObserved?: boolean;
   providerSubmitObserved?: boolean;
   providerExecutionObserved?: boolean;
   providerCommitObserved?: boolean;
@@ -991,6 +994,12 @@ export interface PhaseRoadmapClosureObservations {
   credentialWriteObserved?: boolean;
   credentialAccessObserved?: boolean;
   fileMutationObserved?: boolean;
+  queueDetailsOnDirectorSurfaceObserved?: boolean;
+  workerRouteOpened?: boolean;
+  providerRouteOpened?: boolean;
+  fileRouteOpened?: boolean;
+  credentialRouteOpened?: boolean;
+  shellRouteOpened?: boolean;
 }
 
 export interface PhaseRoadmapClosureEvidence {
@@ -1064,6 +1073,25 @@ export interface PhaseRoadmapLocalOrchestratorRuntimeEvidence extends PhaseRoadm
   daemonStarted?: boolean;
 }
 
+export interface PhaseRoadmapTaskQueueVisibilityEvidence extends PhaseRoadmapClosureEvidence {
+  directorSurface?: {
+    readOnlyProgressStrip?: boolean;
+    queueDetailsVisible?: boolean;
+    queueDetailsOnDirectorSurface?: boolean;
+    runControlPresent?: boolean;
+    submitControlPresent?: boolean;
+    executeControlPresent?: boolean;
+    runSubmitExecuteControlsPresent?: boolean;
+  };
+  routeSafety?: {
+    workerRouteOpened?: boolean;
+    providerRouteOpened?: boolean;
+    fileRouteOpened?: boolean;
+    credentialRouteOpened?: boolean;
+    shellRouteOpened?: boolean;
+  };
+}
+
 export interface PhaseRoadmapRuntimeEvidence {
   projectFactsIntegration?: PhaseRoadmapProjectFactsIntegrationEvidence;
   subagentEnvelopeValidator?: PhaseRoadmapSubagentEnvelopeValidatorReceipt;
@@ -1077,7 +1105,7 @@ export interface PhaseRoadmapRuntimeEvidence {
   providerActionConfirmationReceipt?: PhaseRoadmapProviderActionConfirmationReceiptEvidence;
   providerExecutionHandoff?: PhaseRoadmapProviderExecutionHandoffEvidence;
   localOrchestratorRuntime?: PhaseRoadmapLocalOrchestratorRuntimeEvidence;
-  taskQueueVisibility?: PhaseRoadmapClosureEvidence;
+  taskQueueVisibility?: PhaseRoadmapTaskQueueVisibilityEvidence;
   projectFileFactSource?: PhaseRoadmapClosureEvidence;
   visualConsistencyContract?: PhaseRoadmapClosureEvidence;
   subagentPacketPlanner?: PhaseRoadmapClosureEvidence;
@@ -3029,6 +3057,105 @@ function phaseClosureEvidenceDecision(
   };
 }
 
+function closureNestedValue(evidence: PhaseRoadmapClosureEvidence, section: string, field: string): unknown {
+  const record = evidence as unknown as Record<string, unknown>;
+  const nested = record[section];
+  if (nested === undefined || nested === null || typeof nested !== "object" || Array.isArray(nested)) return undefined;
+  return (nested as Record<string, unknown>)[field];
+}
+
+function closureAnyTrue(evidence: PhaseRoadmapClosureEvidence, fields: string[]): boolean {
+  return fields.some((field) => closureValue(evidence, field) === true);
+}
+
+function taskQueueVisibilityEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const evidence = input.evidence?.taskQueueVisibility;
+
+  if (hasClosureEvidence(evidence)) {
+    const observations = evidence.observations || {};
+    const dangerousControlsPresent =
+      closureAnyTrue(evidence, [
+        "runSubmitExecuteControlsPresent",
+        "runControlPresent",
+        "submitControlPresent",
+        "executeControlPresent",
+      ]) ||
+      closureNestedValue(evidence, "directorSurface", "runSubmitExecuteControlsPresent") === true ||
+      closureNestedValue(evidence, "directorSurface", "runControlPresent") === true ||
+      closureNestedValue(evidence, "directorSurface", "submitControlPresent") === true ||
+      closureNestedValue(evidence, "directorSurface", "executeControlPresent") === true ||
+      observations.runControlObserved === true ||
+      observations.submitControlObserved === true ||
+      observations.executeControlObserved === true;
+    const queueDetailsOnDirectorSurface =
+      closureAnyTrue(evidence, [
+        "queueDetailsOnDirectorSurface",
+        "queueDetailsOnDirectorSurfaceVisible",
+        "queueDetailsVisibleOnDirectorSurface",
+      ]) ||
+      closureNestedValue(evidence, "directorSurface", "queueDetailsVisible") === true ||
+      closureNestedValue(evidence, "directorSurface", "queueDetailsOnDirectorSurface") === true ||
+      observations.queueDetailsOnDirectorSurfaceObserved === true;
+    const workerProviderFileCredentialShellRouteOpened =
+      closureAnyTrue(evidence, [
+        "workerRouteOpened",
+        "providerRouteOpened",
+        "fileRouteOpened",
+        "credentialRouteOpened",
+        "shellRouteOpened",
+      ]) ||
+      closureNestedValue(evidence, "routeSafety", "workerRouteOpened") === true ||
+      closureNestedValue(evidence, "routeSafety", "providerRouteOpened") === true ||
+      closureNestedValue(evidence, "routeSafety", "fileRouteOpened") === true ||
+      closureNestedValue(evidence, "routeSafety", "credentialRouteOpened") === true ||
+      closureNestedValue(evidence, "routeSafety", "shellRouteOpened") === true ||
+      observations.workerRouteOpened === true ||
+      observations.providerRouteOpened === true ||
+      observations.fileRouteOpened === true ||
+      observations.credentialRouteOpened === true ||
+      observations.shellRouteOpened === true;
+    const requiredGateBlockers = [
+      { field: "readOnlyProgressStrip", blocker: "task_queue_visibility_read_only_progress_strip_missing" },
+      { field: "consumesLocalOrchestratorSummary", blocker: "task_queue_visibility_local_orchestrator_summary_missing" },
+      { field: "noQueueDetailsOnDirectorSurface", blocker: "task_queue_visibility_queue_details_on_director_surface" },
+      { field: "noRunSubmitExecuteControls", blocker: "task_queue_visibility_execute_controls_present" },
+      { field: "noWorkerProviderFileCredentialShellRoutes", blocker: "task_queue_visibility_worker_provider_file_credential_shell_route_open" },
+    ].flatMap((gate) => blockedIf(!closureGateReady(evidence, gate.field), gate.blocker));
+    const blockers = uniqueSorted([
+      ...closureStatusBlockers(evidence, "phase_35_task_queue_visibility_progress_strip", "task_queue_visibility"),
+      ...closureSafetyBlockers(evidence, "task_queue_visibility"),
+      ...requiredGateBlockers,
+      ...blockedIf(dangerousControlsPresent, "task_queue_visibility_execute_controls_present"),
+      ...blockedIf(queueDetailsOnDirectorSurface, "task_queue_visibility_queue_details_on_director_surface"),
+      ...blockedIf(
+        workerProviderFileCredentialShellRouteOpened,
+        "task_queue_visibility_worker_provider_file_credential_shell_route_open",
+      ),
+    ]);
+
+    return {
+      evidenceKey: "taskQueueVisibility",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted(evidence.warnings || []),
+    };
+  }
+
+  return {
+    evidenceKey: "taskQueueVisibility",
+    source: input.taskQueueVisibilityReady === undefined ? "missing" : "legacy_boolean_override",
+    ready: false,
+    blockers: ["task_queue_visibility_typed_evidence_missing"],
+    warnings: uniqueSorted([
+      ...blockedIf(
+        input.taskQueueVisibilityReady === true,
+        "legacy_taskQueueVisibilityReady_boolean_ignored_without_typed_evidence",
+      ),
+    ]),
+  };
+}
+
 function localOrchestratorRuntimeEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
   const evidence = input.evidence?.localOrchestratorRuntime;
 
@@ -3167,20 +3294,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const providerActionConfirmationReceiptDecision = providerActionConfirmationReceiptEvidenceDecision(input);
   const providerExecutionHandoffDecision = providerExecutionHandoffEvidenceDecision(input);
   const localOrchestratorRuntimeDecision = localOrchestratorRuntimeEvidenceDecision(input);
-  const taskQueueVisibilityDecision = phaseClosureEvidenceDecision(input, {
-    evidenceKey: "taskQueueVisibility",
-    phaseId: "phase_35_task_queue_visibility_progress_strip",
-    missingBlocker: "task_queue_visibility_typed_evidence_missing",
-    safetyPrefix: "task_queue_visibility",
-    legacyReadyInput: "taskQueueVisibilityReady",
-    requiredGates: [
-      { field: "progressStripVisible", blocker: "task_queue_visibility_progress_strip_missing" },
-      { field: "queueSummaryVisible", blocker: "task_queue_visibility_summary_missing" },
-      { field: "readOnlyDiagnosticsOnly", blocker: "task_queue_visibility_read_only_missing" },
-      { field: "noRunSubmitExecuteControls", blocker: "task_queue_visibility_execute_controls_present" },
-      { field: "consumesLocalOrchestratorSummary", blocker: "task_queue_visibility_local_orchestrator_summary_missing" },
-    ],
-  });
+  const taskQueueVisibilityDecision = taskQueueVisibilityEvidenceDecision(input);
   const projectFileFactSourceDecision = phaseClosureEvidenceDecision(input, {
     evidenceKey: "projectFileFactSource",
     phaseId: "phase_36_project_file_fact_source",
@@ -3675,8 +3789,11 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       readyStatus: "ready_for_queue_visibility",
       requiredInputs: [
         "evidence.taskQueueVisibility",
-        "read-only progress strip fed by local orchestrator summary",
+        "readOnlyProgressStrip",
+        "consumesLocalOrchestratorSummary",
+        "noQueueDetailsOnDirectorSurface",
         "no Run/Submit/Execute controls",
+        "no worker/provider/file/credential/shell routes",
       ],
       acceptanceCriteria: [
         "Main surface can show concise task progress without exposing engineering internals.",

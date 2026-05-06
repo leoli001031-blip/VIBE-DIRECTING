@@ -1005,6 +1005,9 @@ function closureEvidence(phaseId, gates, overrides = {}) {
       workerSpawnObserved: false,
       subprocessObserved: false,
       shellExecutionObserved: false,
+      runControlObserved: false,
+      submitControlObserved: false,
+      executeControlObserved: false,
       providerSubmitObserved: false,
       providerExecutionObserved: false,
       providerCommitObserved: false,
@@ -1013,6 +1016,12 @@ function closureEvidence(phaseId, gates, overrides = {}) {
       credentialWriteObserved: false,
       credentialAccessObserved: false,
       fileMutationObserved: false,
+      queueDetailsOnDirectorSurfaceObserved: false,
+      workerRouteOpened: false,
+      providerRouteOpened: false,
+      fileRouteOpened: false,
+      credentialRouteOpened: false,
+      shellRouteOpened: false,
       ...(observationOverrides || {}),
     },
     blockers: [],
@@ -1118,11 +1127,11 @@ function localOrchestratorRuntimeEvidence(overrides = {}) {
 
 function taskQueueVisibilityEvidence(overrides = {}) {
   return closureEvidence("phase_35_task_queue_visibility_progress_strip", {
-    progressStripVisible: true,
-    queueSummaryVisible: true,
-    readOnlyDiagnosticsOnly: true,
-    noRunSubmitExecuteControls: true,
+    readOnlyProgressStrip: true,
     consumesLocalOrchestratorSummary: true,
+    noQueueDetailsOnDirectorSurface: true,
+    noRunSubmitExecuteControls: true,
+    noWorkerProviderFileCredentialShellRoutes: true,
   }, overrides);
 }
 
@@ -2481,6 +2490,105 @@ assert(
     "local_orchestrator_runtime_activity_states_missing",
   ),
   "Phase 34 must require reconnect/stall/retry/manual-review activity fields in typed evidence",
+);
+
+const phase35TypedReadyPlan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input());
+assert(
+  phase(phase35TypedReadyPlan, "phase_35_task_queue_visibility_progress_strip").readiness === "ready",
+  "Phase 35 must be ready with typed task queue visibility evidence",
+);
+assert(
+  phase35TypedReadyPlan.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "taskQueueVisibility" &&
+      decision.source === "typed_evidence" &&
+      decision.ready === true,
+  ),
+  "Phase 35 ready must come from typed task queue visibility evidence",
+);
+
+const missingPhase35Evidence = typedEvidence({ providerExecutionHandoff: "confirmed" });
+delete missingPhase35Evidence.taskQueueVisibility;
+const phase35LegacyOnly = buildPhaseRoadmapRuntimePlan({
+  ...confirmedPhase33Input(),
+  evidence: missingPhase35Evidence,
+  taskQueueVisibilityReady: true,
+});
+assert(
+  phase(phase35LegacyOnly, "phase_35_task_queue_visibility_progress_strip").blockedReasons.includes(
+    "task_queue_visibility_typed_evidence_missing",
+  ),
+  "Phase 35 must block legacy-only taskQueueVisibilityReady evidence",
+);
+assert(
+  phase35LegacyOnly.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "taskQueueVisibility" &&
+      decision.source === "legacy_boolean_override" &&
+      decision.ready === false &&
+      decision.warnings.includes("legacy_taskQueueVisibilityReady_boolean_ignored_without_typed_evidence"),
+  ),
+  "Phase 35 legacy boolean must be recorded as ignored without typed evidence",
+);
+
+const phase35DangerousControls = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  taskQueueVisibility: {
+    directorSurface: { runControlPresent: true },
+  },
+}));
+assert(
+  phase(phase35DangerousControls, "phase_35_task_queue_visibility_progress_strip").blockedReasons.includes(
+    "task_queue_visibility_execute_controls_present",
+  ),
+  "Phase 35 must block Run/Submit/Execute controls on the Director surface",
+);
+
+const phase35QueueDetailsLeak = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  taskQueueVisibility: {
+    observations: { queueDetailsOnDirectorSurfaceObserved: true },
+  },
+}));
+assert(
+  phase(phase35QueueDetailsLeak, "phase_35_task_queue_visibility_progress_strip").blockedReasons.includes(
+    "task_queue_visibility_queue_details_on_director_surface",
+  ),
+  "Phase 35 must block detailed queue leakage on the main Director surface",
+);
+
+const phase35RouteOpened = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  taskQueueVisibility: {
+    routeSafety: { providerRouteOpened: true },
+  },
+}));
+assert(
+  phase(phase35RouteOpened, "phase_35_task_queue_visibility_progress_strip").blockedReasons.includes(
+    "task_queue_visibility_worker_provider_file_credential_shell_route_open",
+  ),
+  "Phase 35 must block worker/provider/file/credential/shell route opening",
+);
+
+const phase35MissingLocalOrchestratorSummary = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  taskQueueVisibility: {
+    gates: { consumesLocalOrchestratorSummary: false },
+  },
+}));
+assert(
+  phase(phase35MissingLocalOrchestratorSummary, "phase_35_task_queue_visibility_progress_strip").blockedReasons.includes(
+    "task_queue_visibility_local_orchestrator_summary_missing",
+  ),
+  "Phase 35 must block when the progress strip does not consume the local orchestrator summary",
+);
+
+const phase35Phase34Blocked = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  localOrchestratorRuntime: {
+    hardLocks: { noCredentialWrite: false },
+  },
+}));
+assert(
+  phase(phase35Phase34Blocked, "phase_35_task_queue_visibility_progress_strip").blockedReasons.includes(
+    "preceding_phase_not_ready:phase_34_local_orchestrator_runtime_integration",
+  ),
+  "Phase 35 must block when Phase 34 is not ready",
 );
 
 const missingPhase40Evidence = typedEvidence({ providerExecutionHandoff: "confirmed" });

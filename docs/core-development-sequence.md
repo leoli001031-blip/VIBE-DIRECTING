@@ -1128,9 +1128,17 @@ Acceptance criteria：
 - Hard locks 继续 fail-closed：不启动 daemon、不 spawn Codex、不提交 provider、不 live submit、不执行 shell、不读写 credential、不改文件；auto-continue 只允许 `mode=plan_only`。
 - 回归覆盖：`npm run orchestrator:test`、`npm run project-runtime:test`、`npm run import:test`、`npm run phase-roadmap:test`。
 
+### Phase 35 已完成记录：Task Queue Visibility / Progress Strip
+
+- PhaseRoadmapRuntime 现在要求 typed `evidence.taskQueueVisibility` 同时证明 `readOnlyProgressStrip`、`consumesLocalOrchestratorSummary`、`noQueueDetailsOnDirectorSurface`、`noRunSubmitExecuteControls` 和 `noWorkerProviderFileCredentialShellRoutes`；legacy `taskQueueVisibilityReady` 只能作为 ignored diagnostic，不能单独让 Phase 35 ready。
+- Phase 35 继续依赖 Phase 34 ready；Phase 34 blocked 时，Phase 35 会因 `preceding_phase_not_ready:phase_34_local_orchestrator_runtime_integration` blocked。
+- Fail-closed 条件：Run / Submit / Execute 控件出现、queue detail 泄漏到主 Director surface、worker/provider/file/credential/shell 任一路径打开、缺 local orchestrator summary consumption，都会 blocked。
+- 回归覆盖：`npm run phase-roadmap:test` 覆盖 ready、legacy-only blocked、dangerous controls blocked、queue detail leak blocked、route-open blocked、missing local orchestrator summary blocked 和 Phase 34 dependency blocked。
+
 ### Phase 35-42 固定范围：Beta Closure
 
 - Phase 35：主界面任务进度条 / queue visibility，只读、短文案、不出现工程执行按钮。
+- Phase 35 UI 完成记录：主 Director surface 已改为从 `runtimeState.localOrchestrator` 同源摘要派生五段只读进度（准备中 / 生成中 / 等待复核 / 有阻断 / 已完成）；主界面不展示队列明细、不新增按钮，详细队列仍保留在 Diagnostics / Settings；`minimal-ui:test` 覆盖无 Run / Submit / Execute、无工程词和同源摘要要求。
 - Phase 36：项目文件事实源，`project.vibe` / project files 是 save/open 和 runtime 派生的事实源。
 - Phase 37：视觉一致性合同，锁 identity、scene、shot layout、spatial memory、keyframe pair、master inheritance QA。
 - Phase 38：全任务 Subagent Packet Planner，所有正式生产任务必须有 validated packet、expected outputs、source facts 和 knowledge trace。

@@ -2701,9 +2701,6 @@ function buildLocalOrchestratorUiSummary(runtimeState: ProjectRuntimeState): Loc
 }
 
 function buildDirectorProgressStripState(runtimeState: ProjectRuntimeState): DirectorProgressStripState {
-  const override = readDirectorProgressOverride(runtimeState);
-  if (override) return override;
-
   const summary = buildLocalOrchestratorUiSummary(runtimeState);
   const knownPreparing = Math.max(0, summary.ready + summary.waiting);
   const working = Math.max(0, summary.runningPlanned + summary.waitingOutput);
@@ -2735,7 +2732,7 @@ function buildDirectorProgressStripState(runtimeState: ProjectRuntimeState): Dir
   }
 
   const detail = !hasItems
-    ? "等待项目任务"
+    ? "0 项"
     : tone === "blocked"
       ? `${total} 项 · ${blocked} 项有阻断`
       : tone === "review"
@@ -2751,48 +2748,6 @@ function buildDirectorProgressStripState(runtimeState: ProjectRuntimeState): Dir
     detail,
     tone,
     total,
-    preparing,
-    working,
-    review,
-    blocked,
-    complete,
-    segments: [
-      { label: "准备中", value: preparing, tone: "preparing" },
-      { label: "生成中", value: working, tone: "working" },
-      { label: "等待复核", value: review, tone: "review" },
-      { label: "有阻断", value: blocked, tone: "blocked" },
-      { label: "已完成", value: complete, tone: "complete" },
-    ],
-  };
-}
-
-function readDirectorProgressOverride(runtimeState: ProjectRuntimeState): DirectorProgressStripState | undefined {
-  const stateRecord = runtimeState as ProjectRuntimeState & { directorProgress?: unknown; ui?: unknown };
-  const uiRecord = isRecord(stateRecord.ui) ? stateRecord.ui : {};
-  const progressRecord = isRecord(stateRecord.directorProgress)
-    ? stateRecord.directorProgress
-    : isRecord(uiRecord.directorProgress)
-      ? uiRecord.directorProgress
-      : undefined;
-  if (!progressRecord) return undefined;
-
-  const toneCandidate = readString(progressRecord.tone, "preparing");
-  const tone: DirectorProgressTone = ["preparing", "working", "review", "blocked", "complete"].includes(toneCandidate)
-    ? toneCandidate as DirectorProgressTone
-    : "preparing";
-  const total = Math.max(0, readNumber(progressRecord.total, 0));
-  const preparing = Math.max(0, readNumber(progressRecord.preparing, 0));
-  const working = Math.max(0, readNumber(progressRecord.working, 0));
-  const review = Math.max(0, readNumber(progressRecord.review, 0));
-  const blocked = Math.max(0, readNumber(progressRecord.blocked, 0));
-  const complete = Math.max(0, readNumber(progressRecord.complete, 0));
-  const observedTotal = preparing + working + review + blocked + complete;
-
-  return {
-    label: readString(progressRecord.label, statusLabel(tone)),
-    detail: readString(progressRecord.detail, observedTotal ? `${Math.max(total, observedTotal)} 项` : "等待项目任务"),
-    tone,
-    total: Math.max(total, observedTotal),
     preparing,
     working,
     review,
@@ -6629,7 +6584,6 @@ function workflowPlanFacts(workflow: ReturnType<typeof buildDirectorWorkflowStat
 
 function DirectorProgressStrip({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const state = buildDirectorProgressStripState(runtimeState);
-  const visibleSegments = state.segments.filter((segment) => segment.value > 0);
 
   return (
     <section className={`director-progress-strip ${state.tone}`} aria-label="项目处理进度">
@@ -6638,19 +6592,20 @@ function DirectorProgressStrip({ runtimeState }: { runtimeState: ProjectRuntimeS
         <small>{state.detail}</small>
       </div>
       <div className="director-progress-track" aria-hidden="true">
-        {visibleSegments.length ? visibleSegments.map((segment) => (
+        {state.segments.map((segment) => (
           <span
             key={segment.label}
-            className={`director-progress-segment ${segment.tone}`}
-            style={{ flex: `${segment.value} 1 0` }}
+            className={`director-progress-segment ${segment.tone}${segment.value === 0 ? " empty" : ""}`}
+            style={{ flex: segment.value > 0 ? `${segment.value} 1 0` : "0 0 0" }}
           />
-        )) : <span className="director-progress-segment preparing" style={{ flex: "1 1 0" }} />}
+        ))}
       </div>
       <div className="director-progress-counts" aria-label="处理状态">
         {state.segments.map((segment) => (
-          <span key={segment.label}>
+          <span key={segment.label} className={segment.value === 0 ? "is-empty" : undefined}>
+            <i className={`director-progress-dot ${segment.tone}`} aria-hidden="true" />
             {segment.label}
-            <b>{segment.value}</b>
+            <b>{segment.value} 项</b>
           </span>
         ))}
       </div>

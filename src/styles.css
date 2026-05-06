@@ -316,20 +316,22 @@
 .director-progress-strip {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(150px, 0.65fr) minmax(160px, 1fr) auto;
+  grid-template-columns: minmax(96px, auto) minmax(120px, 1fr) auto;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
   border-top: 1px solid rgba(37, 40, 34, 0.1);
   border-bottom: 1px solid rgba(37, 40, 34, 0.12);
-  padding: 9px 0 10px;
+  padding: 7px 0 8px;
   color: rgba(37, 40, 34, 0.76);
 }
 
 .director-progress-heading {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
   min-width: 0;
+  white-space: nowrap;
 }
 
 .director-progress-heading span {
@@ -341,23 +343,27 @@
 .director-progress-heading small {
   min-width: 0;
   color: inherit;
-  font-size: 12px;
+  font-size: 11px;
   opacity: 0.68;
   overflow-wrap: anywhere;
 }
 
 .director-progress-track {
   display: flex;
-  min-width: 120px;
-  height: 4px;
+  min-width: 96px;
+  height: 5px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(37, 40, 34, 0.1);
 }
 
 .director-progress-segment {
-  min-width: 6px;
+  min-width: 5px;
   background: rgba(37, 40, 34, 0.2);
+}
+
+.director-progress-segment.empty {
+  min-width: 0;
 }
 
 .director-progress-segment.preparing {
@@ -384,19 +390,53 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px 12px;
+  gap: 4px 10px;
   min-width: 0;
   color: inherit;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .director-progress-counts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   white-space: nowrap;
   opacity: 0.72;
 }
 
+.director-progress-counts span.is-empty {
+  opacity: 0.42;
+}
+
+.director-progress-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex: 0 0 6px;
+  background: rgba(37, 40, 34, 0.2);
+}
+
+.director-progress-dot.preparing {
+  background: #b9b0a2;
+}
+
+.director-progress-dot.working {
+  background: #8ba995;
+}
+
+.director-progress-dot.review {
+  background: #c39b69;
+}
+
+.director-progress-dot.blocked {
+  background: #9b695f;
+}
+
+.director-progress-dot.complete {
+  background: #5f8170;
+}
+
 .director-progress-counts b {
-  margin-left: 4px;
   color: rgba(37, 40, 34, 0.9);
   font-weight: 700;
 }

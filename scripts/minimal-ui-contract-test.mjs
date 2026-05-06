@@ -200,6 +200,15 @@ check(
   "Director Clean Mode must mount the read-only runtime progress projection",
 );
 checkMessage(requireWithin(directorProgressStripState, /buildLocalOrchestratorUiSummary\s*\(/, "Phase 35 progress strip must derive from Phase 34 runtime summary"));
+check(
+  !/readDirectorProgressOverride|progressRecord|stateRecord\.directorProgress|uiRecord\.directorProgress/.test(directorProgressStripState),
+  "Phase 35 progress strip must not accept UI-only progress overrides",
+);
+checkMessage(requireWithin(directorProgressStripState, /summary\.ready\s*\+\s*summary\.waiting/, "Phase 35 preparing count from local orchestrator summary"));
+checkMessage(requireWithin(directorProgressStripState, /summary\.runningPlanned\s*\+\s*summary\.waitingOutput/, "Phase 35 working count from local orchestrator summary"));
+checkMessage(requireWithin(directorProgressStripState, /summary\.qaPending\s*\+\s*summary\.needsReview/, "Phase 35 review count from local orchestrator summary"));
+checkMessage(requireWithin(directorProgressStripState, /summary\.blocked\s*\+\s*summary\.failed\s*\+\s*summary\.stalled/, "Phase 35 blocked count from local orchestrator summary"));
+checkMessage(requireWithin(directorProgressStripState, /summary\.completeVerified/, "Phase 35 complete count from local orchestrator summary"));
 checkMessage(requireWithin(directorProgressStrip, /项目处理进度/, "Phase 35 progress strip accessible label"));
 checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /准备中/, "Phase 35 progress strip preparing label"));
 checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /生成中/, "Phase 35 progress strip working label"));
@@ -207,6 +216,8 @@ checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripSta
 checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /有阻断/, "Phase 35 progress strip blocked label"));
 checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /已完成/, "Phase 35 progress strip complete label"));
 checkMessage(requireWithin(directorProgressStrip, /director-progress-track/, "Phase 35 progress strip visual track"));
+checkMessage(requireWithin(directorProgressStrip, /state\.segments\.map/, "Phase 35 progress strip must render all five summary segments"));
+checkMessage(requireWithin(directorProgressStrip, /0 0 0/, "Phase 35 zero-value progress segments must not stretch layout"));
 checkMessage(requireWithin(stylesSource, /\.director-progress-strip/, "Phase 35 progress strip styling"));
 check(!/<button\b/i.test(directorProgressStrip), "Phase 35 progress strip must stay read-only and expose no buttons");
 checkMessage(requireWithin(minimalAgentPanel, /buildDirectorWorkflowState\s*\(/, "MinimalAgentPanel must use buildDirectorWorkflowState"));
@@ -573,8 +584,15 @@ for (const [term, pattern] of [
   ["automatic execution", /automatic\s+execution|自动执行/i],
   ["direct submit", /direct\s+submit|直接提交/i],
   ["immediate generation", /immediate\s+generation|立即生成/i],
+  ["queue", /queue/i],
+  ["Local Orchestrator", /Local\s+Orchestrator|LocalOrchestrator/i],
+  ["TaskEnvelope", /Task\s*Envelope|TaskEnvelope/i],
+  ["manifest", /manifest/i],
+  ["spawn", /spawn/i],
+  ["daemon", /daemon/i],
+  ["QA pending", /QA\s+pending/i],
 ]) {
-  check(!pattern.test(minimalDirectorSurface), `Phase 44 main Director surface must not expose ${term}`);
+  check(!pattern.test(minimalDirectorSurface), `main Director surface must not expose ${term}`);
 }
 for (const copy of ["Run", "Submit", "Execute", "直接提交", "自动执行", "立即生成"]) {
   check(
@@ -584,6 +602,7 @@ for (const copy of ["Run", "Submit", "Execute", "直接提交", "自动执行", 
 }
 const forbiddenMinimalTerms = [
   ["Queue Shell", /Queue\s+Shell/i],
+  ["Local Orchestrator", /Local\s+Orchestrator|LocalOrchestrator/i],
   ["Provider Lock", /Provider\s+Lock/i],
   ["Task Envelope", /Task\s+Envelope|taskEnvelope/i],
   ["Desktop Runtime", /Desktop\s+Runtime/i],
@@ -603,6 +622,9 @@ const forbiddenMinimalTerms = [
   ["schema", /schema/i],
   ["provider", /provider/i],
   ["queue", /queue/i],
+  ["spawn", /spawn/i],
+  ["daemon", /daemon/i],
+  ["QA pending", /QA\s+pending/i],
   ["credential/API key", /credential|API\s*key/i],
   ["Image2 Asset", /Image2\s+Asset/i],
   ["Image2 runtime", /Image2\s+runtime/i],
