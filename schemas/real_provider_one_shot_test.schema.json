@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vibecore.local/schemas/real_provider_one_shot_test.schema.json",
   "title": "RealProviderOneShotTestState",
-  "description": "Phase 45 one-shot live test gate. It prepares action-time confirmation for one Image2 small sample while provider submission, credentials, workers, and file mutation remain disabled in state.",
+  "description": "One Creator Loop one-shot real-test gate. It prepares action-time confirmation for one Image2 small sample while provider submission, credentials, workers, and file mutation remain disabled in state.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -27,7 +27,7 @@
   "properties": {
     "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
     "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
-    "phase": { "const": "phase_45_one_shot_live_test_gate" },
+    "phase": { "const": "one_creator_loop_real_test_gate" },
     "mode": { "type": "string", "enum": ["locked", "one_shot_review"] },
     "status": { "type": "string", "enum": ["locked", "blocked", "ready_for_action_time_confirmation"] },
     "sourceExecutorStatus": { "type": "string", "enum": ["locked", "blocked", "review_ready"] },

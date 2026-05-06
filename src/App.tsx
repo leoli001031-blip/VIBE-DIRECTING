@@ -646,6 +646,19 @@ function assetLibraryUserBlockers(library: AssetLibrarySnapshot) {
   ]);
 }
 
+function shortSectionLabel(section: RuntimeView["storySections"][number], index = 0) {
+  const raw = cleanLabel(section.label || section.id || `Section ${index + 1}`);
+  const withoutIdPrefix = raw
+    .replace(/^section[-_\s]*/i, "")
+    .replace(/^act[-_\s]*/i, "");
+  const titleish = withoutIdPrefix
+    .replace(/[-_]+/g, " ")
+    .replace(/\b[a-f0-9]{7,}\b/gi, "")
+    .trim();
+  const label = titleish || `Part ${index + 1}`;
+  return label.length > 14 ? `${label.slice(0, 13).trim()}...` : label;
+}
+
 function buildProjectStoreSnapshotForUi(runtimeState: ProjectRuntimeState, library: AssetLibrarySnapshot) {
   const visualMemory = toVisualMemoryDocument(library);
   return createProjectStoreSnapshot({
@@ -6776,13 +6789,16 @@ function MinimalTopNav({
         >
           Asset Library
         </button>
-        {sections.map((section) => (
+        {sections.map((section, index) => (
           <button
             key={section.id}
             className={mode === "director" && directorView === "story" && activeSectionId === section.id ? "active" : ""}
             onClick={() => onOpenSection(section.id)}
+            title={section.label || section.id}
+            aria-label={`${section.label || section.id} · ${section.shotCount} shots`}
           >
-            {section.label}
+            <span className="minimal-section-label">{shortSectionLabel(section, index)}</span>
+            <small className="minimal-section-count">{section.shotCount}</small>
           </button>
         ))}
         <button
@@ -6816,7 +6832,7 @@ function MinimalStoryFlow({
   const selectedSet = new Set(selectedShotIds.length ? selectedShotIds : [selectedShotId]);
   return (
     <main className="minimal-story-flow">
-      <h2>{sectionLabel}</h2>
+      <h2 title={sectionLabel}>{sectionLabel.length > 24 ? `${sectionLabel.slice(0, 23).trim()}...` : sectionLabel}</h2>
       <div className="minimal-shot-grid">
         {shots.map((shot, index) => (
           <button
@@ -6902,6 +6918,9 @@ function MinimalAssetLibrary({
   };
   const selectedAsset = library.assets.find((asset) => asset.id === selectedAssetId);
   const blockers = assetLibraryUserBlockers(library);
+  const blockerLabel = blockers.length
+    ? `${blockers.length} 项待补参考`
+    : "参考已就绪";
   const [draft, setDraft] = useState<{ assetType: AssetLibraryAssetType; name: string; path: string; constraints: string }>({
     assetType: "character",
     name: "",
@@ -6969,19 +6988,22 @@ function MinimalAssetLibrary({
           <h2>审核并锁定资产</h2>
           <small>角色主参考、场景 master、风格锚图</small>
         </div>
-        <div className="asset-library-toolbar" aria-label="添加资产">
-          <select value={draft.assetType} onChange={(event) => setDraft({ ...draft, assetType: event.target.value as AssetLibraryAssetType })}>
-            <option value="character">角色主参考</option>
-            <option value="scene">场景 master</option>
-            <option value="style">风格文本/锚图</option>
-            <option value="prop">道具</option>
-          </select>
-          <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="名称" />
-          <input value={draft.path} onChange={(event) => setDraft({ ...draft, path: event.target.value })} placeholder="参考路径或留空" />
-          <textarea value={draft.constraints} onChange={(event) => setDraft({ ...draft, constraints: event.target.value })} placeholder="文本约束" />
-          <button onClick={() => addDraft("locked")}>添加并锁定</button>
-          <button onClick={() => addDraft("candidate")}>添加候选</button>
-        </div>
+        <details className="asset-library-add" aria-label="添加资产">
+          <summary>添加资产</summary>
+          <div className="asset-library-toolbar">
+            <select value={draft.assetType} onChange={(event) => setDraft({ ...draft, assetType: event.target.value as AssetLibraryAssetType })}>
+              <option value="character">角色主参考</option>
+              <option value="scene">场景 master</option>
+              <option value="style">风格文本/锚图</option>
+              <option value="prop">道具</option>
+            </select>
+            <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="名称" />
+            <input value={draft.path} onChange={(event) => setDraft({ ...draft, path: event.target.value })} placeholder="参考路径或留空" />
+            <textarea value={draft.constraints} onChange={(event) => setDraft({ ...draft, constraints: event.target.value })} placeholder="文本约束" />
+            <button onClick={() => addDraft("locked")}>锁定</button>
+            <button onClick={() => addDraft("candidate")}>候选</button>
+          </div>
+        </details>
       </div>
       <div className="asset-status-strip" aria-label="Asset consistency">
         <span><i className="dot ok" /> locked</span>
@@ -6990,7 +7012,7 @@ function MinimalAssetLibrary({
         <span><i className="dot bad" /> rejected</span>
       </div>
       <div className="asset-blocker-strip" aria-label="资产阻断">
-        {blockers.length ? blockers.slice(0, 4).map((item) => <span key={item}>{item}</span>) : <span>角色、场景和风格参考已可用于正式计划</span>}
+        <span title={blockers.join(" · ") || blockerLabel}>{blockerLabel}</span>
       </div>
       {selectedAsset && (
         <section className="asset-edit-surface" aria-label="资产编辑">
@@ -7030,17 +7052,9 @@ function MinimalAssetLibrary({
       </section>
       <section className="asset-library-section compact">
         <span className="asset-section-label">道具 / 风格</span>
-        <div className="anchor-list">
-          {groups.anchors.map((asset) => (
-            <button
-              key={asset.id}
-              className={`anchor-row ${selectedAssetId === asset.id ? "selected" : ""}`}
-              onClick={() => onSelectAsset(asset.id)}
-            >
-              <span>{cleanLabel(asset.name)}</span>
-              <small>{assetLibraryStatusLabel(asset.status)}</small>
-            </button>
-          ))}
+        <div className="asset-feature-grid anchors">
+          {groups.anchors.map((asset) => renderAssetCard(asset, asset.assetType === "style"))}
+          {!groups.anchors.length && <div className="minimal-empty-line">还没有道具或风格参考</div>}
         </div>
       </section>
     </main>
@@ -7300,7 +7314,7 @@ function MinimalAgentPanel({
     setStatus(nextProjection.shortLabel);
   }
 
-  const badges = projection ? agentProjectionBadges(projection, planPhase).slice(0, 2) : workflow ? workflowBadgeLabels(workflow).slice(0, 2) : ["准备修改"];
+  const badges = projection ? agentProjectionBadges(projection, planPhase).slice(0, 2) : workflow ? workflowBadgeLabels(workflow).slice(0, 2) : ["先看一下"];
   const nextStep = projection ? agentProjectionNextStep(projection, planPhase) : workflow ? workflowPanelNextStepLabel(workflow, planPhase) : "写一句你想调整的画面、角色或节奏。";
   const canConfirm = workflowCanConfirm(workflow);
 
@@ -7311,7 +7325,7 @@ function MinimalAgentPanel({
         <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="描述你想怎么改..." />
         <button disabled={!text.trim()} onClick={prepareChange}>
           <Eye size={15} />
-          准备修改
+          看看
         </button>
       </div>
       <strong className="minimal-agent-status">{status}</strong>
@@ -7332,7 +7346,7 @@ function MinimalAgentPanel({
         <div className="minimal-agent-actions">
           <button disabled={!canConfirm || planPhase === "confirmed"} onClick={confirmPlan}>
             <CheckCircle2 size={15} />
-            确认修改
+            应用前确认
           </button>
         </div>
       )}
@@ -7351,21 +7365,21 @@ function naturalWorkflowScopeLabel(label: string) {
 }
 
 function workflowStatusLabel(status: DirectorWorkflowStatus) {
-  if (status === "dry_run_ready") return "准备修改";
-  if (status === "pending_confirmation") return "等待确认";
+  if (status === "dry_run_ready") return "可以继续";
+  if (status === "pending_confirmation") return "等你确认";
   if (status === "blocked_missing_context") return "需要补充信息";
   return "暂时不能改";
 }
 
 function workflowNextStepLabel(status: DirectorWorkflowStatus) {
   if (status === "dry_run_ready") return "修改方向已准备好，确认后才会继续。";
-  if (status === "pending_confirmation") return "等待确认这次修改，再开始生成。";
+  if (status === "pending_confirmation") return "等你确认后再继续。";
   if (status === "blocked_missing_context") return "补充镜头、角色或参考图后再试。";
   return "换一种更具体的说法。";
 }
 
 function workflowBadgeLabels(workflow: ReturnType<typeof buildDirectorWorkflowState>) {
-  const labels = ["准备修改", naturalWorkflowScopeLabel(workflow.scopeLabel)];
+  const labels = ["先看一下", naturalWorkflowScopeLabel(workflow.scopeLabel)];
   if (workflow.summary.blockedTaskPackets > 0) labels.push("需要补充参考");
   if (workflow.summary.readyTaskPackets > 0) labels.push(`${workflow.summary.readyTaskPackets} 个画面会受影响`);
   return Array.from(new Set(labels));
@@ -7381,14 +7395,14 @@ function workflowPanelStatusLabel(workflow: ReturnType<typeof buildDirectorWorkf
   if (workflow.status === "blocked") return "阻断";
   if (workflow.status === "blocked_missing_context") return "需要补充信息";
   if (planPhase === "confirmed") return "已确认";
-  return "等待确认";
+  return "等你确认";
 }
 
 function workflowPanelNextStepLabel(workflow: ReturnType<typeof buildDirectorWorkflowState>, planPhase: AgentPlanPhase) {
   if (workflow.status === "blocked") return "这次修改还不能进入计划。";
   if (workflow.status === "blocked_missing_context") return workflowNextStepLabel(workflow.status);
   if (planPhase === "confirmed") return "已确认，后续输出会先进入人工复核。";
-  return "确认后开始生成准备。";
+  return "确认后再继续。";
 }
 
 function workflowPlanFacts(workflow: ReturnType<typeof buildDirectorWorkflowState>) {
@@ -7431,6 +7445,20 @@ function DirectorProgressStrip({ runtimeState }: { runtimeState: ProjectRuntimeS
           </span>
         ))}
       </div>
+    </section>
+  );
+}
+
+function MinimalDirectorStatusDot({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const state = buildDirectorProgressStripState(runtimeState);
+  const activeSegment = state.segments.find((segment) => segment.value > 0 && segment.tone === state.tone)
+    || state.segments.find((segment) => segment.value > 0)
+    || state.segments[0];
+
+  return (
+    <section className={`minimal-director-status ${state.tone}`} aria-label="当前状态">
+      <i className={`director-progress-dot ${activeSegment?.tone || state.tone}`} aria-hidden="true" />
+      <span>{state.label}</span>
     </section>
   );
 }
@@ -7675,7 +7703,7 @@ function DirectorMode({
   return (
     <div className={`minimal-director ${directorView}`}>
       <div className="minimal-director-main">
-        <DirectorProgressStrip runtimeState={runtimeState} />
+        <MinimalDirectorStatusDot runtimeState={runtimeState} />
         {directorView === "assets" && (
           <MinimalAssetLibrary
             library={assetLibrary}
@@ -8925,6 +8953,7 @@ function DiagnosticsMode({
 
   return (
     <div className="diagnostics-layout">
+      <DirectorProgressStrip runtimeState={runtimeState} />
       <ProviderDock audit={audit} />
       <ImagePipelineDiagnostics runtimeState={runtimeState} />
       <GenerationHealthCheckerDiagnostics runtimeState={runtimeState} />

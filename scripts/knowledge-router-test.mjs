@@ -10,19 +10,19 @@ const defaultContextLevel = "L1";
 const defaultMaxInjectionTokens = 1200;
 
 const categoryKeywords = {
-  script: ["script", "story", "dialogue", "beat", "scene", "故事", "脚本", "剧本", "对白", "场景", "整理"],
+  script: ["script", "story", "dialogue", "beat", "scene", "intake", "production bible", "故事", "脚本", "剧本", "对白", "场景", "整理", "新项目"],
   storyflow: ["storyflow", "story flow", "shot spec", "分镜", "故事流", "镜头表", "拆解"],
   story_function: ["establish", "reveal", "react", "payoff", "function", "功能", "转折", "揭示", "反应"],
   style: ["style", "realism", "noir", "dream", "documentary", "高级", "风格", "压抑", "克制", "孤独", "暖", "冷", "复古", "科幻"],
-  composition: ["composition", "frame", "negative space", "symmetry", "scale", "构图", "负空间", "对称", "框", "尺度", "空镜"],
-  camera: ["camera", "movement", "dolly", "pan", "tilt", "tracking", "handheld", "镜头", "运镜", "推", "拉", "横摇", "跟拍", "手持"],
+  composition: ["composition", "frame", "negative space", "symmetry", "scale", "spatial", "world position", "构图", "负空间", "对称", "框", "尺度", "空镜", "空间", "多视角"],
+  camera: ["camera", "movement", "dolly", "pan", "tilt", "tracking", "handheld", "action", "start frame", "end frame", "镜头", "运镜", "推", "拉", "横摇", "跟拍", "手持", "动作"],
   lighting: ["lighting", "light", "low key", "backlight", "practical", "光", "灯", "低调光", "逆光", "柔光", "硬光"],
   color: ["color", "saturation", "palette", "warm", "cool", "颜色", "色彩", "低饱和", "冷暖", "调色"],
   lens_focus: ["lens", "focus", "dof", "wide angle", "telephoto", "焦点", "镜头", "广角", "长焦", "景深", "虚化"],
   performance: ["performance", "gesture", "eye", "posture", "表演", "微表情", "视线", "姿态", "停顿", "犹豫"],
   prompt: ["prompt", "template", "compiler", "提示词", "模板", "编译", "生成"],
   provider: ["provider", "model", "image2", "seedance", "codex", "runway", "comfyui", "模型", "供应商", "即梦"],
-  qa: ["qa", "audit", "check", "gate", "检查", "验收", "污染", "连续性", "失败", "审计"],
+  qa: ["qa", "audit", "check", "gate", "reference", "authority", "locked", "candidate", "检查", "验收", "污染", "连续性", "失败", "审计", "参考", "权威", "锁定"],
   audio: [
     "audio",
     "tts",

@@ -131,7 +131,7 @@ function oneShotActionInput(overrides = {}) {
     requestPreview,
     adapterRequest,
     actionConfirmation: {
-      confirmationId: "confirm_S01_round5",
+      confirmationId: "confirm_S01_real_test_round",
       confirmedBy: "user",
       confirmedAt: generatedAt,
       scope: "single_image2_one_shot",

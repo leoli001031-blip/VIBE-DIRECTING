@@ -68,7 +68,7 @@ function readJson(filePath) {
 function executor(overrides = {}) {
   const root = "real-provider-executor/project_1/batch_A";
   return {
-    phase: "phase_44_real_provider_executor_shell",
+    phase: "real_test_round_executor_shell",
     mode: "executor_review",
     status: "review_ready",
     selectedShotIds: ["S01"],
@@ -200,12 +200,12 @@ const readyState = buildRealProviderOneShotTestState({
 });
 
 assert(readyState.schemaVersion === "0.1.0", "schema version drifted");
-assert(readyState.phase === "phase_45_one_shot_live_test_gate", "phase drifted");
+assert(readyState.phase === "one_creator_loop_real_test_gate", "phase drifted");
 assert(readyState.status === "ready_for_action_time_confirmation", "ready executor should prepare action-time confirmation");
 assert(readyState.summary.readyForActionTimeConfirmation === true, "summary must mark action-time confirmation readiness");
 assert(readyState.actionReview.canAskUserForActionTimeConfirmation === true, "ready state may ask for action-time confirmation");
-assert(readyState.actionReview.userConfirmedAtActionTime === false, "Phase45 state must not self-confirm");
-assert(readyState.actionReview.confirmationReceiptPresent === false, "Phase45 state must not fabricate a confirmation receipt");
+assert(readyState.actionReview.userConfirmedAtActionTime === false, "One Creator Loop state must not self-confirm");
+assert(readyState.actionReview.confirmationReceiptPresent === false, "One Creator Loop state must not fabricate a confirmation receipt");
 assert(readyState.plannedAction.providerId === "openai-image2-api", "planned action must keep Image2 provider");
 assert(readyState.plannedAction.providerSlot === "image.edit", "planned action must keep image slot");
 assert(readyState.plannedAction.requiredMode === "image2image", "planned action must keep Image2 mode");
@@ -242,7 +242,7 @@ const missingExecutorState = buildRealProviderOneShotTestState({
   mode: "one_shot_review",
 });
 assert(missingExecutorState.status === "blocked", "missing executor must block");
-assert(missingExecutorState.blockers.includes("Phase44 Real Provider Executor state is required."), "missing executor blocker missing");
+assert(missingExecutorState.blockers.includes("Real test round executor state is required."), "missing executor blocker missing");
 
 const multiShotState = buildRealProviderOneShotTestState({
   generatedAt,
@@ -271,7 +271,7 @@ const blockedBudgetState = buildRealProviderOneShotTestState({
     },
   }),
 });
-assert(blockedBudgetState.status === "blocked", "blocked budget must block Phase45");
+assert(blockedBudgetState.status === "blocked", "blocked budget must block One Creator Loop");
 assert(blockedBudgetState.blockers.includes("Budget guard must pass before action-time confirmation."), "budget blocker missing");
 
 function oneShotActionInput(overrides = {}) {
@@ -597,7 +597,7 @@ assert(retried.blockers.includes("Automatic retry is forbidden; attempt count ca
 
 const schema = readJson("schemas/real_provider_one_shot_test.schema.json");
 assert(schema.$id === "https://vibecore.local/schemas/real_provider_one_shot_test.schema.json", "schema id drifted");
-assert(schema.properties.phase.const === "phase_45_one_shot_live_test_gate", "schema phase drifted");
+assert(schema.properties.phase.const === "one_creator_loop_real_test_gate", "schema phase drifted");
 assert(schema.properties.forbiddenActions.items.enum.includes("provider_submit_without_action_confirmation"), "schema must forbid unconfirmed provider submit");
 assert(schema.$defs.hardLocks.properties.actualExecutionAllowed.const === false, "schema must hard-lock actual execution");
 assert(schema.$defs.hardLocks.properties.providerSubmitAllowed.const === 0, "schema must hard-lock provider submit");

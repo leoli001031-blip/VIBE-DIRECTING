@@ -125,7 +125,7 @@ export interface RealProviderPilotOutputPlanItem {
 export interface RealProviderPilotState {
   schemaVersion: string;
   generatedAt: string;
-  phase: "phase_43_real_provider_pilot";
+  phase: "post_phase42_real_test_round";
   pilotKind: "image2_first_small_batch";
   mode: RealProviderPilotMode;
   status: RealProviderPilotStatus;
@@ -594,7 +594,7 @@ export function buildRealProviderPilotState(input: BuildRealProviderPilotInput):
   return {
     schemaVersion: realProviderPilotSchemaVersion,
     generatedAt: input.generatedAt,
-    phase: "phase_43_real_provider_pilot",
+    phase: "post_phase42_real_test_round",
     pilotKind: "image2_first_small_batch",
     mode,
     status,
@@ -721,7 +721,7 @@ export function buildRealProviderPilotState(input: BuildRealProviderPilotInput):
     noFileMutation: true,
     dryRunOnly: true,
     notes: [
-      "Phase 43 records the Real Provider Pilot scope as typed state only.",
+      "Post-Phase42 real test round records the Real Provider Pilot scope as typed state only.",
       "review_ready means ready for user review only; it does not open submit, credential, worker, Image2/Seedance execution, or file mutation routes.",
       "The pilot is Image2 First and small-batch; Seedance/video providers stay parked.",
     ],

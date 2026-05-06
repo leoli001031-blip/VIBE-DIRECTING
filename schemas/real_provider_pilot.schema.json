@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vibecore.local/schemas/real_provider_pilot.schema.json",
   "title": "RealProviderPilotState",
-  "description": "Phase 43 Image2 First small-batch real provider pilot review plan. It records scope, output naming, manifest, watcher links, QA gates, confirmations, and cost-risk placeholders while provider submit, credential access, worker spawn, Image2/Seedance execution, and file mutation stay locked.",
+  "description": "Post-Phase42 Image2 First real test round pilot review plan. It records scope, output naming, manifest, watcher links, QA gates, confirmations, and cost-risk placeholders while provider submit, credential access, worker spawn, Image2/Seedance execution, and file mutation stay locked.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -45,7 +45,7 @@
   "properties": {
     "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
     "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
-    "phase": { "type": "string", "enum": ["real_provider_pilot", "phase_43_real_provider_pilot"] },
+    "phase": { "type": "string", "enum": ["real_provider_pilot", "post_phase42_real_test_round"] },
     "pilotKind": { "const": "image2_first_small_batch" },
     "mode": { "type": "string", "enum": ["locked", "pilot_review"] },
     "status": { "type": "string", "enum": ["locked", "blocked", "review_ready"] },

@@ -61,7 +61,7 @@ export interface RealProviderOneShotTestPlannedAction {
 export interface RealProviderOneShotTestState {
   schemaVersion: string;
   generatedAt: string;
-  phase: "phase_45_one_shot_live_test_gate";
+  phase: "one_creator_loop_real_test_gate";
   mode: RealProviderOneShotTestMode;
   status: RealProviderOneShotTestStatus;
   sourceExecutorStatus: RealProviderExecutorState["status"];
@@ -159,10 +159,10 @@ function firstReadyPreview(executor?: RealProviderExecutorState): RealProviderEx
 }
 
 function oneShotBlockers(executor: RealProviderExecutorState | undefined, preview: RealProviderExecutorRequestPreview | undefined): string[] {
-  if (!executor) return ["Phase44 Real Provider Executor state is required."];
+  if (!executor) return ["Real test round executor state is required."];
   return uniqueSorted([
-    executor.mode === "executor_review" ? "" : "Phase45 requires Phase44 executor_review mode.",
-    executor.status === "review_ready" ? "" : "Phase44 executor must be review-ready before a one-shot live test can be prepared.",
+    executor.mode === "executor_review" ? "" : "One Creator Loop requires real_test_round executor_review mode.",
+    executor.status === "review_ready" ? "" : "Real test round executor must be review-ready before a one-shot live test can be prepared.",
     executor.oneShotReadiness.status === "reviewable_not_executable" ? "" : "One-shot readiness must be reviewable-not-executable.",
     executor.budgetGuard.status === "passed" ? "" : "Budget guard must pass before action-time confirmation.",
     executor.budgetGuard.selectedShotCount === 1 ? "" : "One-shot test requires exactly one selected shot.",
@@ -171,9 +171,9 @@ function oneShotBlockers(executor: RealProviderExecutorState | undefined, previe
       : "One-shot test allows no more than two Image2 images.",
     preview ? "" : "A preview-ready Image2 request is required.",
     preview && preview.status !== "preview_ready" ? "The selected Image2 request preview must be preview-ready." : "",
-    executor.summary.actualExecutionAllowed === false ? "" : "Phase44 executor must not already allow actual execution.",
-    executor.summary.providerSubmitAllowed === 0 ? "" : "Phase44 executor must keep provider submit allowance at zero.",
-    executor.summary.liveSubmitAllowed === false ? "" : "Phase44 executor must keep live submit disabled.",
+    executor.summary.actualExecutionAllowed === false ? "" : "Real test round executor must not already allow actual execution.",
+    executor.summary.providerSubmitAllowed === 0 ? "" : "Real test round executor must keep provider submit allowance at zero.",
+    executor.summary.liveSubmitAllowed === false ? "" : "Real test round executor must keep live submit disabled.",
     executor.summary.credentialAccessAllowed === false ? "" : "Credential access must remain closed.",
     executor.summary.workerSpawnsAllowed === 0 ? "" : "Worker spawn routes must remain closed.",
     executor.outputWatcherBridgePlan.planOnly === true ? "" : "Output watcher bridge must still be plan-only.",
@@ -183,7 +183,7 @@ function oneShotBlockers(executor: RealProviderExecutorState | undefined, previe
 function buildPlannedAction(preview: RealProviderExecutorRequestPreview | undefined): RealProviderOneShotTestPlannedAction | undefined {
   if (!preview) return undefined;
   return {
-    actionId: `phase45_one_shot_${safeId(preview.previewId)}`,
+    actionId: `one_creator_loop_${safeId(preview.previewId)}`,
     providerId: preview.providerId,
     providerSlot: preview.providerSlot,
     requiredMode: preview.requiredMode,
@@ -219,7 +219,7 @@ export function buildRealProviderOneShotTestState(input: BuildRealProviderOneSho
   return {
     schemaVersion: realProviderOneShotTestSchemaVersion,
     generatedAt: input.generatedAt,
-    phase: "phase_45_one_shot_live_test_gate",
+    phase: "one_creator_loop_real_test_gate",
     mode,
     status,
     sourceExecutorStatus: executor?.status || "locked",
@@ -236,7 +236,7 @@ export function buildRealProviderOneShotTestState(input: BuildRealProviderOneSho
       scope: "single_image2_one_shot",
       reviewCopy: canAsk
         ? "等待用户动作时确认后，才允许进入一次性 Image2 小样执行步骤。"
-        : "先完成 Phase44 复核、预算、请求预览和输出监听计划。",
+        : "先完成 real test round 复核、预算、请求预览和输出监听计划。",
       blockers,
     },
     budgetSnapshot: {
@@ -259,7 +259,7 @@ export function buildRealProviderOneShotTestState(input: BuildRealProviderOneSho
     blockers,
     warnings: uniqueSorted([
       ...(executor?.warnings || []),
-      "Phase45 prepares the action-time confirmation boundary only; this state does not submit Image2.",
+      "One Creator Loop prepares the action-time confirmation boundary only; this state does not submit Image2.",
       "After user confirmation, the next implementation must create a one-use receipt before any provider call.",
     ]),
     summary: {
@@ -291,7 +291,7 @@ export function buildRealProviderOneShotTestState(input: BuildRealProviderOneSho
       "video_submit",
     ],
     notes: [
-      "Phase45 is the final review gate before a one-shot live Image2 test.",
+      "One Creator Loop is the final review gate before a one-shot live Image2 test.",
       "This state can ask for action-time confirmation, but it never records confirmation by itself.",
       "No provider request, credential read, worker route, output watcher daemon, or file mutation is enabled here.",
     ],

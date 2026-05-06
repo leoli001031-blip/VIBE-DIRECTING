@@ -4032,7 +4032,7 @@ function betaAcceptanceEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseR
     );
     const phaseAfter42Observed = closureAnyObservedTrue(
       evidence,
-      ["phaseAfter42Observed", "phase43Observed", "phase44Observed"],
+      ["phaseAfter42Observed", "postPhase42Observed", "realTestRoundObserved"],
       ["betaClosure", "roadmap"],
     );
     const finalPhaseNumber = closureValue(evidence, "finalPhaseNumber") ?? evidence.summary?.finalPhaseNumber;

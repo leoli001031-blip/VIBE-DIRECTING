@@ -152,7 +152,7 @@ const readyState = buildRealProviderPilotState({
 });
 
 assert(readyState.schemaVersion === "0.1.0", "schema version drifted");
-assert(["real_provider_pilot", "phase_43_real_provider_pilot"].includes(readyState.phase), "phase drifted");
+assert(["real_provider_pilot", "post_phase42_real_test_round"].includes(readyState.phase), "phase drifted");
 assert(readyState.pilotKind === "image2_first_small_batch", "pilot kind drifted");
 assert(readyState.status === "review_ready", "complete Image2 pilot facts should be review-ready");
 assert(readyState.scopeSummary.reviewReadyOnly === true, "review_ready must remain review-only");

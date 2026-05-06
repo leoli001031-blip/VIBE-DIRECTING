@@ -98,6 +98,7 @@ const contractDoc = readText(contractDocPath);
 const directorMode = findFunctionBody(appSource, "DirectorMode");
 const directorProgressStrip = findFunctionBody(appSource, "DirectorProgressStrip");
 const directorProgressStripState = findFunctionBody(appSource, "buildDirectorProgressStripState");
+const minimalDirectorStatusDot = findFunctionBody(appSource, "MinimalDirectorStatusDot");
 const minimalTopNav = findFunctionBody(appSource, "MinimalTopNav");
 const minimalAgentPanel = findFunctionBody(appSource, "MinimalAgentPanel");
 const selectedScopeLabel = findFunctionBody(appSource, "selectedScopeLabel");
@@ -204,14 +205,16 @@ checkMessage(requireWithin(contractDoc, /Diagnostics/i, "diagnostics boundary in
 
 checkMessage(requireWithin(appSource, /function\s+DirectorMode\s*\(/, "DirectorMode component"));
 checkMessage(requireWithin(appSource, /function\s+DirectorProgressStrip\s*\(/, "Phase 35 Director progress strip component"));
+checkMessage(requireWithin(appSource, /function\s+MinimalDirectorStatusDot\s*\(/, "minimal director status dot component"));
 checkMessage(requireWithin(appSource, /function\s+MinimalAgentPanel\s*\(/, "MinimalAgentPanel component"));
 checkMessage(requireWithin(appSource, /function\s+DiagnosticsMode\s*\(/, "DiagnosticsMode component"));
 checkMessage(requireWithin(appBody, /mode\s*===\s*"diagnostics"/, "Diagnostics entry in App mode switch/rendering"));
 checkMessage(requireWithin(appBody, /mode\s*===\s*"director"/, "Director mode rendering"));
-check(
-  /<DirectorProgressStrip\s+runtimeState=\{runtimeState\}\s*\/>/.test(directorMode),
-  "Director Clean Mode must mount the read-only runtime progress projection",
-);
+check(!/<DirectorProgressStrip\s+runtimeState=\{runtimeState\}\s*\/>/.test(directorMode), "Director Clean Mode must not keep the detailed progress strip mounted on the three main pages");
+checkMessage(requireWithin(directorMode, /<MinimalDirectorStatusDot\s+runtimeState=\{runtimeState\}\s*\/>/, "Director Clean Mode compact creator status dot"));
+checkMessage(requireWithin(diagnosticsMode, /<DirectorProgressStrip\s+runtimeState=\{runtimeState\}\s*\/>/, "Diagnostics must keep the detailed runtime progress strip"));
+checkMessage(requireWithin(minimalDirectorStatusDot, /buildDirectorProgressStripState\s*\(/, "compact director status dot derives from runtime progress state"));
+check(!/state\.segments\.map/.test(minimalDirectorStatusDot), "compact director status dot must not render detailed progress counts");
 checkMessage(requireWithin(directorProgressStripState, /buildLocalOrchestratorUiSummary\s*\(/, "Phase 35 progress strip must derive from Phase 34 runtime summary"));
 check(
   !/readDirectorProgressOverride|progressRecord|stateRecord\.directorProgress|uiRecord\.directorProgress/.test(directorProgressStripState),
@@ -246,19 +249,17 @@ checkMessage(requireWithin(minimalAgentPanel, /selectedShotId\s*:/, "MinimalAgen
 checkMessage(requireWithin(minimalAgentPanel, /selectedAssetId\s*:/, "MinimalAgentPanel selectedAssetId workflow selection"));
 checkMessage(requireWithin(minimalAgentPanel, /sectionId\s*:/, "MinimalAgentPanel sectionId workflow selection"));
 checkMessage(requireWithin(minimalAgentPanel, /workflowCanConfirm\s*\(/, "Round 3 MinimalAgentPanel confirmation guard"));
-checkMessage(requireWithin(appSource, /buildMinimalRuntimeProjection/, "Round 5 Minimal runtime projection helper import/use"));
-checkMessage(requireWithin(minimalAgentPanel, /buildAgentPanelProjection\s*\(/, "Round 5 MinimalAgentPanel must use creator-facing runtime projection"));
-checkMessage(requireWithin(minimalAgentPanel, /minimal-state-dots/, "Round 5 MinimalAgentPanel must render compact progress dots"));
+checkMessage(requireWithin(appSource, /buildMinimalRuntimeProjection/, "One Creator Loop minimal runtime projection helper import/use"));
+checkMessage(requireWithin(minimalAgentPanel, /buildAgentPanelProjection\s*\(/, "One Creator Loop MinimalAgentPanel must use creator-facing runtime projection"));
+checkMessage(requireWithin(minimalAgentPanel, /minimal-state-dots/, "One Creator Loop MinimalAgentPanel must render compact progress dots"));
 checkMessage(requireWithin(`${minimalAgentPanel}\n${workflowCanConfirm}`, /dry_run_ready/, "Round 3 confirmation only after dry-run ready"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /描述你想怎么改\.\.\./, "MinimalAgentPanel natural input placeholder"));
-checkMessage(requireWithin(minimalAgentLanguageSurface, /准备修改/, "MinimalAgentPanel prepare-copy label"));
-checkMessage(requireWithin(minimalAgentLanguageSurface, /等待确认/, "MinimalAgentPanel confirmation-wait label"));
-checkMessage(requireWithin(minimalAgentLanguageSurface, /开始生成/, "MinimalAgentPanel generation starts only after confirmation copy"));
+checkMessage(requireWithin(minimalAgentLanguageSurface, /应用前确认/, "MinimalAgentPanel light confirmation label"));
 check(
   !/排队中|已计划|待写入项目事实|transaction|queueItems/.test(minimalAgentPanel),
   "Director Clean Mode Agent panel must not expose queue/project-fact implementation copy",
 );
-checkMessage(requireWithin(minimalAgentPanel, /确认修改/, "Director Clean Mode confirmation action label"));
+check(!/准备修改|确认修改|开始生成/.test(minimalAgentLanguageSurface), "Director Clean Mode Agent panel must avoid heavy prepare/confirm/generate workflow copy");
 check(!/minimal-agent-plan/.test(minimalAgentPanel), "Director Clean Mode must not show the engineering plan summary surface");
 check(!/minimal-agent-steps/.test(minimalAgentPanel), "Director Clean Mode must not show stepper chrome in the Agent panel");
 for (const [term, pattern] of [
@@ -277,11 +278,20 @@ const phase14ProjectSurface = `${minimalTopNav}\n${minimalProjectPlan}`;
 checkMessage(requireWithin(phase14ProjectSurface, /Story/i, "Director Clean Mode story summary in minimal top navigation"));
 checkMessage(requireWithin(phase14ProjectSurface, /shots/i, "Director Clean Mode shot count badge"));
 checkMessage(requireWithin(phase14ProjectSurface, /locked refs/i, "Director Clean Mode locked reference count badge"));
-checkMessage(requireWithin(phase14ProjectSurface, /statusLabel/, "Round 5 top navigation short runtime status"));
-checkMessage(requireWithin(phase14ProjectSurface, /minimal-state-dots/, "Round 5 top navigation compact progress dots"));
-checkMessage(requireWithin(minimalTopNav, /Settings/, "Round 5 Diagnostics entry should be icon-based"));
-check(!/<button\b[^>]*diagnostics-link[\s\S]{0,120}>\s*Diagnostics\s*<\/button>/i.test(minimalTopNav), "Round 5 Diagnostics must not be a prominent text button in the top navigation");
+checkMessage(requireWithin(phase14ProjectSurface, /statusLabel/, "One Creator Loop top navigation short runtime status"));
+checkMessage(requireWithin(phase14ProjectSurface, /minimal-state-dots/, "One Creator Loop top navigation compact progress dots"));
+checkMessage(requireWithin(minimalTopNav, /Settings/, "One Creator Loop Diagnostics entry should be icon-based"));
+checkMessage(requireWithin(minimalTopNav, /shortSectionLabel\s*\(/, "Top navigation story section tabs must use compact section labels"));
+checkMessage(requireWithin(minimalTopNav, /title=\{section\.label\s*\|\|\s*section\.id\}/, "Top navigation must keep full section label in title"));
+checkMessage(requireWithin(stylesSource, /\.minimal-section-label[\s\S]{0,220}text-overflow:\s*ellipsis/, "Top navigation section labels must ellipsize"));
+check(!/<button\b[^>]*diagnostics-link[\s\S]{0,120}>\s*Diagnostics\s*<\/button>/i.test(minimalTopNav), "One Creator Loop Diagnostics must not be a prominent text button in the top navigation");
 check(!/Plan\s+preview/i.test(phase14ProjectSurface), "Minimal top navigation must not expose Plan preview copy");
+
+checkMessage(requireWithin(minimalAssetLibrary, /<details\s+className="asset-library-add"/, "Asset Library add asset form must be collapsed behind a light entry"));
+checkMessage(requireWithin(minimalAssetLibrary, /blockerLabel/, "Asset Library blockers must collapse to a short status"));
+checkMessage(requireWithin(minimalAssetLibrary, /asset-feature-grid anchors/, "Asset Library props/styles must render as image-first asset cards"));
+check(!/blockers\.slice\(0,\s*4\)\.map/.test(minimalAssetLibrary), "Asset Library must not show long blocker chips on the main surface");
+check(!/Queue|queue|gate|provider/.test(findFunctionBody(appSource, "MinimalStoryFlow")), "Story Flow must not expose queue/gate/provider engineering details");
 
 checkMessage(requireWithin(desktopShellView, /buildDesktopRuntimePlan\s*\(/, "Phase 15 Settings shell must use buildDesktopRuntimePlan"));
 checkMessage(requireWithin(settingsShell, /Desktop Runtime\s*\/\s*Permission Shell/i, "Phase 15 Desktop Runtime / Permission Shell in Settings"));
@@ -371,17 +381,17 @@ check(
   !/RealPilotDirectorStatus/.test(directorMode),
   "Director Clean Mode must not mount RealPilotDirectorStatus in the default DirectorMode",
 );
-checkMessage(requireWithin(diagnosticsMode, /RealPilotDiagnostics/, "Phase 43 Real Pilot diagnostics mounted"));
-checkMessage(requireWithin(settingsShell, /Real Pilot\s*\/\s*真实小样/i, "Phase 43 Real Pilot settings status"));
-checkMessage(requireWithin(realPilotDirectorStatus, /真实小样/, "Phase 43 Real Pilot Director status title"));
-checkMessage(requireWithin(realPilotDirectorStatus, /选择镜头/, "Phase 43 Real Pilot selected shots copy"));
-checkMessage(requireWithin(realPilotDirectorStatus, /首尾帧/, "Phase 43 Real Pilot start/end frames copy"));
-checkMessage(requireWithin(realPilotDirectorStatus, /输出文件夹/, "Phase 43 Real Pilot output folder copy"));
-checkMessage(requireWithin(realPilotDirectorStatus, /预计生成/, "Phase 43 Real Pilot estimated generation copy"));
-checkMessage(requireWithin(realPilotDirectorStatus, /动作确认后才进入单次测试/, "Phase 45 Real Pilot action-time-confirmation-before-one-shot copy"));
-check(!/确认后生成/.test(realPilotDirectorStatus), "Phase 44 Real Pilot must not imply immediate generation");
-checkMessage(requireWithin(realPilotDirectorStatus, /Image2/, "Phase 43 Real Pilot Image2 first copy"));
-checkMessage(requireWithin(realPilotDirectorStatus, /Seedance/, "Phase 43 Real Pilot Seedance parked copy"));
+checkMessage(requireWithin(diagnosticsMode, /RealPilotDiagnostics/, "post-Phase42 real test round Real Pilot diagnostics mounted"));
+checkMessage(requireWithin(settingsShell, /Real Pilot\s*\/\s*真实小样/i, "post-Phase42 real test round Real Pilot settings status"));
+checkMessage(requireWithin(realPilotDirectorStatus, /真实小样/, "post-Phase42 real test round Real Pilot Director status title"));
+checkMessage(requireWithin(realPilotDirectorStatus, /选择镜头/, "post-Phase42 real test round Real Pilot selected shots copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /首尾帧/, "post-Phase42 real test round Real Pilot start/end frames copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /输出文件夹/, "post-Phase42 real test round Real Pilot output folder copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /预计生成/, "post-Phase42 real test round Real Pilot estimated generation copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /动作确认后才进入单次测试/, "One Creator Loop Real Pilot action-time-confirmation-before-one-shot copy"));
+check(!/确认后生成/.test(realPilotDirectorStatus), "real test round Real Pilot must not imply immediate generation");
+checkMessage(requireWithin(realPilotDirectorStatus, /Image2/, "post-Phase42 real test round Real Pilot Image2 first copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /Seedance/, "post-Phase42 real test round Real Pilot Seedance parked copy"));
 check(
   !/OneShotActionPanel/.test(directorMode),
   "Director Clean Mode must not mount OneShotActionPanel in the default DirectorMode",
@@ -393,33 +403,33 @@ checkMessage(requireWithin(oneShotActionPanel, /需要复核/, "Round 4 needs-re
 checkMessage(requireWithin(oneShotActionPanel, /已记录本次确认/, "Round 4 confirmation receipt user copy"));
 checkMessage(requireWithin(oneShotActionPanel, /summary\.oneShotStatus\s*===\s*"需要复核"/, "pre-real-test returned output must surface one-shot review status"));
 checkMessage(requireWithin(oneShotActionPanel, /输出已回流，等待人工复核。/, "pre-real-test returned output review detail"));
-checkMessage(requireWithin(realPilotDiagnostics, /Real Pilot\s*\/\s*真实小样/i, "Phase 43 Real Pilot diagnostics panel"));
-checkMessage(requireWithin(realPilotDiagnostics, /Review Status/i, "Phase 43 Real Pilot diagnostics review status"));
-checkMessage(requireWithin(realPilotDiagnostics, /Start\s*\/\s*End Frames/i, "Phase 43 Real Pilot diagnostics frames summary"));
-check(!/<button\b/i.test(realPilotDirectorStatus), "Phase 43 Real Pilot Director status must stay read-only");
-check(!/<button\b/i.test(realPilotDiagnostics), "Phase 43 Real Pilot diagnostics must not expose executable buttons");
-const phase44ConfirmationSurface = `${realPilotDirectorStatus}\n${realPilotDiagnostics}\n${settingsShell}`;
-checkMessage(requireWithin(realPilotDirectorStatus, /先复核/, "Phase 44 Real Pilot review-first status"));
-checkMessage(requireWithin(realPilotDirectorStatus, /等待确认/, "Phase 44 Real Pilot waiting-confirmation status"));
-checkMessage(requireWithin(realPilotDirectorStatus, /1 个镜头小样/, "Phase 44 Real Pilot one-shot sample copy"));
-checkMessage(requireWithin(realPilotDirectorStatus, /0 自动重试/, "Phase 44 Real Pilot no-auto-retry copy"));
-checkMessage(requireWithin(realPilotDirectorStatus, /输出文件夹/, "Phase 44 Real Pilot output folder copy"));
-checkMessage(requireWithin(realPilotDirectorStatus, /未就绪|单次待确认/, "Phase 45 Real Pilot one-shot readiness copy"));
-checkMessage(requireWithin(realPilotDirectorStatus, /不自动生成/, "Phase 45 Real Pilot no-auto-generation copy"));
+checkMessage(requireWithin(realPilotDiagnostics, /Real Pilot\s*\/\s*真实小样/i, "post-Phase42 real test round Real Pilot diagnostics panel"));
+checkMessage(requireWithin(realPilotDiagnostics, /Review Status/i, "post-Phase42 real test round Real Pilot diagnostics review status"));
+checkMessage(requireWithin(realPilotDiagnostics, /Start\s*\/\s*End Frames/i, "post-Phase42 real test round Real Pilot diagnostics frames summary"));
+check(!/<button\b/i.test(realPilotDirectorStatus), "post-Phase42 real test round Real Pilot Director status must stay read-only");
+check(!/<button\b/i.test(realPilotDiagnostics), "post-Phase42 real test round Real Pilot diagnostics must not expose executable buttons");
+const realTestRoundConfirmationSurface = `${realPilotDirectorStatus}\n${realPilotDiagnostics}\n${settingsShell}`;
+checkMessage(requireWithin(realPilotDirectorStatus, /先复核/, "real test round Real Pilot review-first status"));
+checkMessage(requireWithin(realPilotDirectorStatus, /等待确认/, "real test round Real Pilot waiting-confirmation status"));
+checkMessage(requireWithin(realPilotDirectorStatus, /1 个镜头小样/, "real test round Real Pilot one-shot sample copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /0 自动重试/, "real test round Real Pilot no-auto-retry copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /输出文件夹/, "real test round Real Pilot output folder copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /未就绪|单次待确认/, "One Creator Loop Real Pilot one-shot readiness copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /不自动生成/, "One Creator Loop Real Pilot no-auto-generation copy"));
 checkMessage(requireWithin(realPilotDirectorStatus, /handoff-status-line/, "Round 6 visible handoff status line"));
 checkMessage(requireWithin(realPilotDirectorStatus, /小样状态/, "Round 6 accessible handoff status label"));
 checkMessage(requireWithin(realPilotDirectorStatus, /handoffLabel/, "Round 6 handoff short label binding"));
 checkMessage(requireWithin(realPilotDirectorStatus, /handoffDetail/, "Round 6 handoff detail binding"));
-checkMessage(requireWithin(phase44ConfirmationSurface, /执行前确认/, "Phase 44 pre-execution confirmation summary"));
-checkMessage(requireWithin(phase44ConfirmationSurface, /预算上限/, "Phase 44 budget cap summary"));
-checkMessage(requireWithin(phase44ConfirmationSurface, /输出监听/, "Phase 44 output watcher summary"));
-checkMessage(requireWithin(phase44ConfirmationSurface, /请求预览/, "Phase 44 request preview summary"));
-checkMessage(requireWithin(phase44ConfirmationSurface, /单次确认/, "one-shot confirmation summary"));
-checkMessage(requireWithin(phase44ConfirmationSurface, /动作确认待定|先完成复核/, "Phase 45 action-time confirmation state"));
+checkMessage(requireWithin(realTestRoundConfirmationSurface, /执行前确认/, "real test round pre-execution confirmation summary"));
+checkMessage(requireWithin(realTestRoundConfirmationSurface, /预算上限/, "real test round budget cap summary"));
+checkMessage(requireWithin(realTestRoundConfirmationSurface, /输出监听/, "real test round output watcher summary"));
+checkMessage(requireWithin(realTestRoundConfirmationSurface, /请求预览/, "real test round request preview summary"));
+checkMessage(requireWithin(realTestRoundConfirmationSurface, /单次确认/, "one-shot confirmation summary"));
+checkMessage(requireWithin(realTestRoundConfirmationSurface, /动作确认待定|先完成复核/, "One Creator Loop action-time confirmation state"));
 const realPilotOneShotMainSurface = `${realPilotDirectorStatus}\n${oneShotActionPanel}`;
 check(
-  !/Round|Phase44|Phase45/i.test(realPilotOneShotMainSurface),
-  "Real Pilot / one-shot main surface must not expose Round, Phase44, or Phase45",
+  !/roadmap phase|Phase\s*4[3-6]|Round\s*5/i.test(realPilotOneShotMainSurface),
+  "Real Pilot / one-shot main surface must not expose roadmap growth labels",
 );
 for (const [term, pattern] of [
   ["provider", /provider/i],
@@ -452,7 +462,7 @@ for (const [copy, pattern] of [
   ["immediate generation", /immediate\s+generation|立即生成/i],
   ["auto run", /auto\s+run|自动运行/i],
 ]) {
-  check(!pattern.test(phase44ConfirmationSurface), `Real Pilot UI must not imply ${copy}`);
+  check(!pattern.test(realTestRoundConfirmationSurface), `Real Pilot UI must not imply ${copy}`);
 }
 const handoffMinimalSurface = realPilotDirectorStatus;
 for (const [term, pattern] of [
@@ -568,13 +578,13 @@ checkMessage(requireWithin(previewPlayerQueue, /image_hold/, "Phase 21/23 Previe
 checkMessage(requireWithin(previewPlayerQueue, /video_clip/, "Phase 21/23 Preview Player queue must include video clips"));
 checkMessage(requireWithin(`${previewPlayerQueue}\n${previewQueueKind}`, /missing_placeholder/, "Phase 21/23 Preview Player queue must include missing placeholders"));
 checkMessage(requireWithin(minimalPreview, /buildPreviewPlayerQueue\s*\(/, "Phase 21/23 MinimalPreview must render the Preview Player queue"));
-checkMessage(requireWithin(minimalPreview, /previewSummary\.detail/, "Round 5 MinimalPreview must show a short runtime projection summary"));
+checkMessage(requireWithin(minimalPreview, /previewSummary\.detail/, "One Creator Loop MinimalPreview must show a short runtime projection summary"));
 checkMessage(requireWithin(minimalPreview, /preview-stage-card/, "Phase 21/23 Preview Player needs a large preview shell"));
 check(!/Demo package/.test(minimalPreview), "Director Clean Mode Preview must not show Demo package copy");
 check(!/packageStatus/.test(minimalPreview), "Director Clean Mode Preview must not keep package status in the main preview");
 check(!/packageCount/.test(minimalPreview), "Director Clean Mode Preview must not keep package count in the main preview");
 checkMessage(requireWithin(stylesSource, /preview-stage-card/, "Phase 21/23 Preview Player stage styling"));
-checkMessage(requireWithin(stylesSource, /preview-export-summary/, "Round 5 preview export summary styling"));
+checkMessage(requireWithin(stylesSource, /preview-export-summary/, "One Creator Loop preview export summary styling"));
 
 checkMessage(requireAny(appSource, [/Asset Library/, /function\s+AssetLibrary/, /className="[^"]*asset-library/], "Asset Library main UI naming"));
 checkMessage(requireAny(appSource, [/Preview/, /function\s+PreviewTimeline/, /className="[^"]*preview/], "Preview main UI"));
@@ -595,7 +605,7 @@ checkMessage(requireWithin(projectFactsStrip, /save/, "Round 2 save plan action"
 checkMessage(requireWithin(projectStoreSnapshotForUi, /createProjectStoreSnapshot/, "Round 2 Project Store snapshot builder"));
 checkMessage(requireWithin(projectFactsUiSummary, /buildProjectStoreIoGate/, "Round 2 Project Store IO gate builder"));
 checkMessage(requireWithin(projectFactsUiSummary, /saveProjectStoreSnapshot/, "Round 2 Project Store save plan builder"));
-for (const label of ["审核并锁定资产", "角色主参考", "场景 master", "风格文本/锚图", "文本约束", "添加并锁定", "添加候选", "review"]) {
+for (const label of ["审核并锁定资产", "角色主参考", "场景 master", "风格文本/锚图", "文本约束", "锁定", "候选", "review"]) {
   checkMessage(requireWithin(minimalAssetLibrary, new RegExp(label), `Asset Library ${label} slot copy`));
 }
 for (const label of ["type", "authority", "future", "shots"]) {
@@ -681,7 +691,7 @@ for (const [term, pattern] of [
 for (const copy of ["Run", "Submit", "Execute", "直接提交", "自动执行", "立即生成"]) {
   check(
     !new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(minimalDirectorButtonSurface),
-    `Phase 44 main Director surface must not expose dangerous ${copy} button`,
+    `real test round main Director surface must not expose dangerous ${copy} button`,
   );
 }
 const forbiddenMinimalTerms = [

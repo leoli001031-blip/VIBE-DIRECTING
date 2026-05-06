@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vibecore.local/schemas/real_provider_executor.schema.json",
   "title": "RealProviderExecutorState",
-  "description": "Phase 44 Real Provider Executor Shell and Budget Guard. It prepares review-only executor state, budget caps, request previews, action-time confirmation checklist, and output watcher bridge planning while all live execution routes remain disabled.",
+  "description": "Real Test Round Provider Executor Shell and Budget Guard. It prepares review-only executor state, budget caps, request previews, action-time confirmation checklist, and output watcher bridge planning while all live execution routes remain disabled.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -40,7 +40,7 @@
   "properties": {
     "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
     "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
-    "phase": { "const": "phase_44_real_provider_executor_shell" },
+    "phase": { "const": "real_test_round_executor_shell" },
     "mode": { "type": "string", "enum": ["locked", "executor_review"] },
     "status": { "$ref": "#/$defs/status" },
     "projectId": { "type": "string" },

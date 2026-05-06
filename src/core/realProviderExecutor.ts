@@ -176,7 +176,7 @@ export interface RealProviderExecutorOneShotReadiness {
 export interface RealProviderExecutorState {
   schemaVersion: string;
   generatedAt: string;
-  phase: "phase_44_real_provider_executor_shell";
+  phase: "real_test_round_executor_shell";
   mode: RealProviderExecutorMode;
   status: RealProviderExecutorStatus;
   projectId?: string;
@@ -544,7 +544,7 @@ function buildChecklist(input: BuildRealProviderExecutorStateInput, budgetGuard:
   return [
     {
       confirmationId: "review_real_provider_pilot",
-      label: "Review Phase 43 Image2 First pilot scope",
+      label: "Review post-Phase42 Image2 First real test round scope",
       requiredBeforeAnyFutureSubmit: true,
       present: pilotReady,
       satisfied: false,
@@ -766,7 +766,7 @@ export function buildRealProviderExecutorState(input: BuildRealProviderExecutorS
   return {
     schemaVersion: realProviderExecutorSchemaVersion,
     generatedAt: input.generatedAt,
-    phase: "phase_44_real_provider_executor_shell",
+    phase: "real_test_round_executor_shell",
     mode,
     status,
     projectId,
@@ -813,7 +813,7 @@ export function buildRealProviderExecutorState(input: BuildRealProviderExecutorS
     blockers,
     warnings: uniqueSorted([
       ...(input.realProviderPilot?.warnings || []),
-      "Phase 44 is an executor shell only; review-ready never means provider submission is allowed.",
+      "Real test round executor shell only; review-ready never means provider submission is allowed.",
       parkedProviderPreviews.length ? "Seedance/video provider previews are parked." : "",
     ]),
     summary: {
@@ -860,7 +860,7 @@ export function buildRealProviderExecutorState(input: BuildRealProviderExecutorS
     automaticRetryAllowed: false,
     dryRunOnly: true,
     notes: [
-      "Phase 44 builds the Real Provider Executor shell as pure state.",
+      "Real test round builds the Real Provider Executor shell as pure state.",
       "review_ready means ready for user review only and cannot be interpreted as submit permission.",
       "Provider request previews remain dry-run-only, manual-submit-required, live-submit-forbidden, and no-fallback.",
       "Output watcher bridge data is a plan only; no daemon is started, no files are changed, and no output is promoted.",

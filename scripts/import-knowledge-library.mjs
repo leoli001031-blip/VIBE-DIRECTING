@@ -30,6 +30,10 @@ const categoryByDir = new Map([
   ["qa", "qa"],
   ["audio", "audio"],
   ["agent", "agent"],
+  ["visual-memory", "qa"],
+  ["scene-asset-pack", "composition"],
+  ["keyframe-pair", "camera"],
+  ["production-bible", "script"],
   ["index", "agent"],
 ]);
 

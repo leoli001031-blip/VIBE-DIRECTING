@@ -185,7 +185,7 @@
 .minimal-nav {
   display: flex;
   justify-content: center;
-  gap: clamp(16px, 3.2vw, 64px);
+  gap: clamp(10px, 2.4vw, 42px);
   min-width: 0;
   overflow-x: auto;
 }
@@ -194,14 +194,40 @@
 .diagnostics-link {
   position: relative;
   flex: 0 0 auto;
+  min-width: 0;
+  max-width: 132px;
   padding: 0 3px;
   color: rgba(37, 40, 34, 0.7);
   font-size: 15px;
 }
 
+.minimal-nav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.minimal-section-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.minimal-section-count {
+  flex: 0 0 auto;
+  color: rgba(37, 40, 34, 0.42);
+  font-size: 10px;
+}
+
 .preview-shell .minimal-nav button,
 .preview-shell .diagnostics-link {
   color: rgba(242, 238, 230, 0.62);
+}
+
+.preview-shell .minimal-section-count {
+  color: rgba(242, 238, 230, 0.38);
 }
 
 .minimal-nav button.active,
@@ -229,6 +255,22 @@
   width: 44px;
   padding: 0;
   color: rgba(37, 40, 34, 0.52);
+}
+
+.minimal-director-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  justify-self: start;
+  min-width: 0;
+  color: rgba(37, 40, 34, 0.58);
+  font-size: 12px;
+}
+
+.minimal-director-status span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .minimal-director {
@@ -453,6 +495,10 @@
 
 .preview-shell .director-progress-track {
   background: rgba(242, 238, 230, 0.12);
+}
+
+.preview-shell .minimal-director-status {
+  color: rgba(242, 238, 230, 0.54);
 }
 
 .real-pilot-entry {
@@ -865,6 +911,18 @@
   padding-top: 10px;
 }
 
+.asset-library-add {
+  justify-self: end;
+  width: min(100%, 440px);
+  color: rgba(37, 40, 34, 0.68);
+}
+
+.asset-library-add summary {
+  cursor: pointer;
+  text-align: right;
+  font-size: 12px;
+}
+
 .asset-library-toolbar select,
 .asset-library-toolbar input,
 .asset-library-toolbar textarea,
@@ -1041,6 +1099,10 @@
 
 .asset-feature-grid.scenes {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.asset-feature-grid.anchors {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .asset-reference-card {
@@ -1614,6 +1676,15 @@
   .asset-library-heading,
   .asset-edit-surface {
     grid-template-columns: 1fr;
+  }
+
+  .asset-library-add {
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .asset-library-add summary {
+    text-align: left;
   }
 }
 

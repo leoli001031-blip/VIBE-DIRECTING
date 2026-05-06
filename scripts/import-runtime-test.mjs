@@ -7577,7 +7577,7 @@ const localOrchestratorSchema = readJson("schemas/local_orchestrator.schema.json
 assert(localOrchestratorSchema.$defs.hardLocks.properties.noCredentialWrite.const === true, "local orchestrator schema must pin noCredentialWrite=true");
 
 assert(runtimeState.realProviderPilot, "runtime-state must include realProviderPilot");
-assert(runtimeState.realProviderPilot.phase === "phase_43_real_provider_pilot", "realProviderPilot must be Phase 43 pilot evidence");
+assert(runtimeState.realProviderPilot.phase === "post_phase42_real_test_round", "realProviderPilot must be post-Phase42 real test round pilot evidence");
 assert(runtimeState.realProviderPilot.pilotKind === "image2_first_small_batch", "realProviderPilot must stay Image2 First small-batch");
 assert(runtimeState.realProviderPilot.status === "locked", "default import runtime pilot must stay locked");
 assert(runtimeState.realProviderPilot.scopeSummary.maxBatchSize === 3, "realProviderPilot must stay small-batch");
@@ -7612,7 +7612,7 @@ assert(runtimeState.realProviderPilot.hardLocks.credentialAccessAllowed === fals
 assert(runtimeState.realProviderPilot.hardLocks.canSpawnWorker === false, "realProviderPilot worker spawn lock must be false");
 
 assert(runtimeState.realProviderExecutor, "runtime-state must include realProviderExecutor");
-assert(runtimeState.realProviderExecutor.phase === "phase_44_real_provider_executor_shell", "realProviderExecutor must be Phase 44 executor shell evidence");
+assert(runtimeState.realProviderExecutor.phase === "real_test_round_executor_shell", "realProviderExecutor must be real test round executor shell evidence");
 assert(runtimeState.realProviderExecutor.mode === "locked", "default import runtime executor must stay locked");
 assert(runtimeState.realProviderExecutor.status === "locked", "default import runtime executor status must stay locked");
 assert(runtimeState.realProviderExecutor.executor.executorEnabled === false, "realProviderExecutor must not enable executor");
@@ -7656,7 +7656,7 @@ assert(runtimeState.realProviderExecutor.forbiddenActions.includes("image2_execu
 assert(runtimeState.realProviderExecutor.forbiddenActions.includes("seedance_execution"), "realProviderExecutor must forbid Seedance execution in the shell");
 
 assert(runtimeState.realProviderOneShotTest, "runtime-state must include realProviderOneShotTest");
-assert(runtimeState.realProviderOneShotTest.phase === "phase_45_one_shot_live_test_gate", "realProviderOneShotTest must be Phase 45 one-shot gate evidence");
+assert(runtimeState.realProviderOneShotTest.phase === "one_creator_loop_real_test_gate", "realProviderOneShotTest must be One Creator Loop one-shot gate evidence");
 assert(runtimeState.realProviderOneShotTest.mode === "locked", "default import runtime one-shot gate must stay locked");
 assert(runtimeState.realProviderOneShotTest.status === "locked", "default import runtime one-shot gate status must stay locked");
 assert(runtimeState.realProviderOneShotTest.actionReview.actionTimeConfirmationRequired === true, "realProviderOneShotTest must require action-time confirmation");

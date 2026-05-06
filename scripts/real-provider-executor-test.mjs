@@ -109,7 +109,7 @@ function image2Request(overrides = {}) {
 
 function pilot() {
   return {
-    phase: "phase_43_real_provider_pilot",
+    phase: "post_phase42_real_test_round",
     status: "review_ready",
     projectId: "project_1",
     batchId: "batch_A",
@@ -253,7 +253,7 @@ const readyInput = {
 const readyState = buildRealProviderExecutorState(readyInput);
 
 assert(readyState.schemaVersion === "0.1.0", "schema version drifted");
-assert(readyState.phase === "phase_44_real_provider_executor_shell", "phase drifted");
+assert(readyState.phase === "real_test_round_executor_shell", "phase drifted");
 assert(readyState.status === "review_ready", "ready facts should produce review-ready shell state");
 assert(readyState.executor.readyForUserReviewOnly === true, "review_ready must be user-review only");
 assert(readyState.executor.executorEnabled === false, "executor must remain disabled");
@@ -274,7 +274,7 @@ assert(readyState.quotaConcurrencyRetryPolicy.concurrencyPolicy.activeProviderRe
 assert(readyState.quotaConcurrencyRetryPolicy.retryPolicy.maxAutoRetries === 0, "auto retries must be zero");
 assert(readyState.quotaConcurrencyRetryPolicy.retryPolicy.automaticRetryAllowed === false, "automatic retry policy must be false");
 assert(readyState.actionTimeConfirmationChecklist.some((item) => item.confirmationId === "action_time_user_confirmation" && item.present === false), "missing action-time confirmation should be visible");
-assert(readyState.actionTimeConfirmationChecklist.every((item) => item.satisfied === false), "checklist must remain unsatisfied in Phase 44");
+assert(readyState.actionTimeConfirmationChecklist.every((item) => item.satisfied === false), "checklist must remain unsatisfied in the real test round");
 assert(readyState.oneShotReadiness.status === "reviewable_not_executable", "one-shot should be reviewable only");
 assert(readyState.oneShotReadiness.reviewable === true, "one-shot should be reviewable");
 assert(readyState.oneShotReadiness.executable === false, "one-shot must not be executable");
@@ -436,7 +436,7 @@ for (const forbiddenCode of ["fetch(", "spawn(", "exec(", "writeFile", "readFile
 
 const schema = readJson("schemas/real_provider_executor.schema.json");
 assert(schema.title === "RealProviderExecutorState", "schema title drifted");
-assert(schema.properties.phase.const === "phase_44_real_provider_executor_shell", "schema phase drifted");
+assert(schema.properties.phase.const === "real_test_round_executor_shell", "schema phase drifted");
 assert(schema.properties.executorEnabled.const === false, "schema must pin executorEnabled=false");
 assert(schema.properties.actualExecutionAllowed.const === false, "schema must pin actualExecutionAllowed=false");
 assert(schema.properties.providerSubmitAllowed.const === false, "schema must pin providerSubmitAllowed=false");

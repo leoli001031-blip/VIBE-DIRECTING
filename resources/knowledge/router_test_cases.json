@@ -426,5 +426,52 @@
     ],
     "forbiddenPackIds": [],
     "providerSlot": "video.i2v"
+  },
+  {
+    "id": "router-map-40",
+    "userIntent": "新项目 / 普通用户只给了想法",
+    "taskPurpose": "script",
+    "expectedPackIds": [
+      "production-bible/novice-intake",
+      "script/core-script-writing",
+      "script/script-to-storyflow"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-41",
+    "userIntent": "角色 / 场景 / 道具 / 风格 reference QA",
+    "taskPurpose": "visual_audit",
+    "providerSlot": "image.reference_asset",
+    "expectedPackIds": [
+      "visual-memory/reference-authority",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-42",
+    "userIntent": "同一场景多视角 / 空间连续性 QA",
+    "taskPurpose": "continuity_audit",
+    "providerSlot": "video.i2v",
+    "expectedPackIds": [
+      "scene-asset-pack/spatial-continuity",
+      "qa/core-qa",
+      "story-function/core-shot-functions",
+      "composition/core-composition"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-43",
+    "userIntent": "start/end frame 动作连续性 QA",
+    "taskPurpose": "continuity_audit",
+    "providerSlot": "video.i2v",
+    "expectedPackIds": [
+      "keyframe-pair/action-continuity",
+      "qa/core-qa",
+      "camera/core-camera-movement"
+    ],
+    "forbiddenPackIds": []
   }
 ]
