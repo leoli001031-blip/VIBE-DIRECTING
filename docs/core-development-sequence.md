@@ -1116,7 +1116,17 @@ Acceptance criteria：
 - UI 原则：主导演台继续极简，只显示“有任务在进行 / 等待复核 / 有阻断”的短状态或进度条；队列明细、reconnect/stall/retry/manual review、manifest/QA/expected output 只进 Diagnostics / Settings，不加 Run / Submit / Execute 按钮。
 - 验收命令：`npm run orchestrator:test`、`npm run import:test`、`npm run project-runtime:test`、`npm run minimal-ui:test`、`npm run build`。
 - 浏览器验收：主 Director surface 不出现 Local Orchestrator、queue harness、TaskEnvelope、provider submit、spawn、daemon 等工程词；Diagnostics 有只读队列面板，能看到 waiting/ready/running planned/waiting output/QA pending/needs review/blocked/complete verified 摘要。
+- UI 完成记录：主 Director surface 已挂载只读短进度条，进度来自 `runtimeState.localOrchestrator` 同源摘要；Diagnostics / Settings 保留 Local Orchestrator 只读摘要、auto-continue plan-only 和 hard locks，不提供 Run / Submit / Execute 入口。
 - 后续固定：Phase 35-42 已固定为 beta closure 路线，不再继续滚动新增 Phase；暂不接默认真实 provider。
+
+### Phase 34 已完成记录：Local Orchestrator Runtime Integration
+
+- `ProjectRuntimeState.localOrchestrator` 已作为一等字段接入 `project_runtime_state.schema.json`、runtime builder、`withRuntimeDefaults` 和 import fallback；legacy debug snapshot 仍只保留在 `legacyAudit`。
+- Local Orchestrator 从 task packets、TaskEnvelope/TaskRun、Generation Harness、Filesystem Watcher Harness、Checkpoint Resume Harness、QA Harness、Subagent Runner 派生 queue / auto-continue / reconnect / stall / retry / manual review / completion gate fact chain。
+- Completion gate 固定要求 expected output declared/observed、manifest matched、explicit QA pass、promotion gate；worker/provider self-report 只能进入 review fact，不能单独让 queue item 进入 `complete_verified`。
+- PhaseRoadmapRuntime 新增 typed `localOrchestratorRuntime` evidence；Phase 34 ready 必须消费 typed `ProjectRuntimeState.localOrchestrator`，legacy `localOrchestratorRuntimeReady` 布尔值不能单独让它 ready。
+- Hard locks 继续 fail-closed：不启动 daemon、不 spawn Codex、不提交 provider、不 live submit、不执行 shell、不读写 credential、不改文件；auto-continue 只允许 `mode=plan_only`。
+- 回归覆盖：`npm run orchestrator:test`、`npm run project-runtime:test`、`npm run import:test`、`npm run phase-roadmap:test`。
 
 ### Phase 35-42 固定范围：Beta Closure
 

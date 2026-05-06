@@ -7560,6 +7560,7 @@ for (const key of [
   "providerSubmissionForbidden",
   "noFileMutation",
   "noCredentialRead",
+  "noCredentialWrite",
   "workerSelfReportCannotComplete",
   "expectedOutputRequired",
   "manifestRequired",
@@ -7569,6 +7570,11 @@ for (const key of [
 }
 assert(runtimeState.localOrchestrator.hardLocks.daemonStarted === false, "localOrchestrator daemonStarted hard lock must be false");
 assert(runtimeState.localOrchestrator.hardLocks.liveSubmitAllowed === false, "localOrchestrator live submit hard lock must be false");
+const projectRuntimeStateSchema = readJson("schemas/project_runtime_state.schema.json");
+assert(projectRuntimeStateSchema.required.includes("localOrchestrator"), "ProjectRuntimeState schema must require localOrchestrator as a first-class field");
+assert(projectRuntimeStateSchema.properties.localOrchestrator.$ref === "local_orchestrator.schema.json", "ProjectRuntimeState schema must reference local_orchestrator schema");
+const localOrchestratorSchema = readJson("schemas/local_orchestrator.schema.json");
+assert(localOrchestratorSchema.$defs.hardLocks.properties.noCredentialWrite.const === true, "local orchestrator schema must pin noCredentialWrite=true");
 
 assert(runtimeState.realProviderPilot, "runtime-state must include realProviderPilot");
 assert(runtimeState.realProviderPilot.phase === "phase_43_real_provider_pilot", "realProviderPilot must be Phase 43 pilot evidence");

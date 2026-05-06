@@ -356,12 +356,15 @@ for (const state of [twentyTaskState, autoContinueState, stalledState, selfRepor
   assert(state.hardLocks.providerSubmissionForbidden === true, "hard lock providerSubmissionForbidden must be true");
   assert(state.hardLocks.liveSubmitAllowed === false, "hard lock liveSubmitAllowed must be false");
   assert(state.hardLocks.noFileMutation === true, "hard lock noFileMutation must be true");
+  assert(state.hardLocks.noCredentialRead === true, "hard lock noCredentialRead must be true");
+  assert(state.hardLocks.noCredentialWrite === true, "hard lock noCredentialWrite must be true");
   assert(state.hardLocks.workerSelfReportCannotComplete === true, "hard lock workerSelfReportCannotComplete must be true");
 }
 
 assert(localOrchestratorHardLocks.noDaemon === true, "exported hard locks should pin noDaemon");
 assert(localOrchestratorHardLocks.providerSubmissionForbidden === true, "exported hard locks should forbid provider submit");
 assert(localOrchestratorHardLocks.liveSubmitAllowed === false, "exported hard locks should pin liveSubmitAllowed=false");
+assert(localOrchestratorHardLocks.noCredentialWrite === true, "exported hard locks should pin noCredentialWrite");
 assert(
   qaMissingItem.factChain.some((entry) => entry.layer === "generation_harness") &&
     qaMissingItem.factChain.some((entry) => entry.layer === "local_orchestrator"),
@@ -379,6 +382,8 @@ assert(schema.properties.daemonStarted.const === false, "schema must pin daemonS
 assert(schema.$defs.hardLocks.properties.noDaemon.const === true, "schema must pin noDaemon true");
 assert(schema.$defs.hardLocks.properties.noSpawnCodex.const === true, "schema must pin noSpawnCodex true");
 assert(schema.$defs.hardLocks.properties.noShellExecution.const === true, "schema must pin noShellExecution true");
+assert(schema.$defs.hardLocks.properties.noCredentialRead.const === true, "schema must pin noCredentialRead true");
+assert(schema.$defs.hardLocks.properties.noCredentialWrite.const === true, "schema must pin noCredentialWrite true");
 assert(schema.$defs.hardLocks.properties.workerSelfReportCannotComplete.const === true, "schema must pin worker self-report lock");
 assert(schema.$defs.queueStatus.enum.includes("complete_verified"), "schema must include complete_verified queue status");
 assert(schema.$defs.queueStatus.enum.includes("qa_pending"), "schema must include qa_pending queue status");

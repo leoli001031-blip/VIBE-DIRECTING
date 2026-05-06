@@ -245,6 +245,9 @@
 }
 
 .minimal-director-main {
+  display: grid;
+  align-content: start;
+  gap: clamp(18px, 2.4vw, 28px);
   min-width: 0;
 }
 

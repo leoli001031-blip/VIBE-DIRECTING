@@ -5536,6 +5536,8 @@ function LocalOrchestratorDiagnostics({ runtimeState }: { runtimeState: ProjectR
         <Metric label="Waiting" value={`${summary.waiting}`} detail="held by earlier facts" />
         <Metric label="Running / Output" value={`${summary.runningPlanned} / ${summary.waitingOutput}`} detail="planned / waiting output" />
         <Metric label="QA Pending" value={`${summary.qaPending}`} detail={`${summary.needsReview} needs review`} />
+        <Metric label="Blocked" value={`${summary.blocked + summary.failed}`} detail={`${summary.failed} failed`} />
+        <Metric label="Complete Verified" value={`${summary.completeVerified}`} detail="verified complete" />
         <Metric label="Stalled" value={`${summary.stalled}`} detail="timeout/watch evidence" />
         <Metric label="Auto-continue" value={`${summary.nextReadyCount}`} detail={summary.autoContinueMode} />
       </div>
@@ -5547,6 +5549,10 @@ function LocalOrchestratorDiagnostics({ runtimeState }: { runtimeState: ProjectR
         <div>
           <strong>Review gates</strong>
           <small>{summary.qaPending} QA pending · {summary.needsReview} needs review · {summary.stalled} stalled</small>
+        </div>
+        <div>
+          <strong>Resolution</strong>
+          <small>{summary.blocked} blocked · {summary.failed} failed · {summary.completeVerified} complete verified</small>
         </div>
         <div>
           <strong>Provider / file / daemon locks</strong>
@@ -6892,6 +6898,7 @@ function DirectorMode({
   return (
     <div className={`minimal-director ${directorView}`}>
       <div className="minimal-director-main">
+        <DirectorProgressStrip runtimeState={runtimeState} />
         {directorView === "assets" && (
           <MinimalAssetLibrary
             library={assetLibrary}
@@ -7847,7 +7854,10 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
         <div className="settings-readonly-note">
           <strong>Local Orchestrator: {localOrchestratorSummary.readiness}</strong>
           <small>{localOrchestratorSummary.queueTotal} total · {localOrchestratorSummary.ready} ready · {localOrchestratorSummary.waiting} waiting · next ready {localOrchestratorSummary.nextReadyCount}</small>
+          <small>{localOrchestratorSummary.runningPlanned} running planned · {localOrchestratorSummary.waitingOutput} waiting output · {localOrchestratorSummary.qaPending} QA pending · {localOrchestratorSummary.needsReview} needs review</small>
+          <small>{localOrchestratorSummary.blocked} blocked · {localOrchestratorSummary.failed} failed · {localOrchestratorSummary.completeVerified} complete verified</small>
           <small>{localOrchestratorSummary.autoContinueMode} · {localOrchestratorSummary.providerFileDaemonLocks}</small>
+          <small>hard locks {localOrchestratorSummary.hardLocks.length}</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>

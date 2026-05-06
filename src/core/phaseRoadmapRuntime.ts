@@ -3055,13 +3055,23 @@ function localOrchestratorRuntimeEvidenceDecision(input: PhaseRoadmapRuntimeInpu
     const autoContinuePlanOnly = evidence.autoContinuePlan?.mode === "plan_only" ||
       closureGateReady(evidence, "autoContinuePlanOnly");
     const activityStatesPresent = queue.length > 0 &&
-      queue.every((item) => item.codexActivity !== undefined && typeof item.codexActivity.retryBudget === "number");
+      queue.every((item) =>
+        item.codexActivity !== undefined &&
+        typeof item.codexActivity.retryBudget === "number" &&
+        typeof item.codexActivity.state === "string" &&
+        typeof item.codexActivity.stalled === "boolean" &&
+        typeof item.codexActivity.manualReviewRequired === "boolean",
+      );
     const blockers = uniqueSorted([
       ...closureStatusBlockers(evidence, "phase_34_local_orchestrator_runtime_integration", "local_orchestrator_runtime"),
       ...closureSafetyBlockers(evidence, "local_orchestrator_runtime"),
       ...blockedIf(!projectRuntimeStateReady, "local_orchestrator_runtime_state_missing"),
       ...blockedIf(evidence.dryRunOnly !== true || evidence.hardLocks?.dryRunOnly !== true, "local_orchestrator_runtime_dry_run_missing"),
       ...blockedIf(evidence.planOnly !== true || evidence.hardLocks?.planOnly !== true, "local_orchestrator_runtime_plan_only_missing"),
+      ...blockedIf(evidence.hardLocks?.noDaemon !== true || evidence.hardLocks?.daemonStarted !== false, "local_orchestrator_runtime_daemon_not_blocked"),
+      ...blockedIf(evidence.hardLocks?.noSpawnCodex !== true || evidence.hardLocks?.noSubprocess !== true, "local_orchestrator_runtime_spawn_not_blocked"),
+      ...blockedIf(evidence.hardLocks?.noShellExecution !== true, "local_orchestrator_runtime_shell_not_blocked"),
+      ...blockedIf(evidence.hardLocks?.noProviderExecution !== true, "local_orchestrator_runtime_provider_submit_not_blocked"),
       ...blockedIf(evidence.providerSubmissionForbidden !== true, "local_orchestrator_runtime_provider_submit_not_blocked"),
       ...blockedIf(evidence.liveSubmitAllowed !== false, "local_orchestrator_runtime_provider_submit_not_blocked"),
       ...blockedIf(evidence.noFileMutation !== true, "local_orchestrator_runtime_file_mutation_not_blocked"),
@@ -3071,6 +3081,7 @@ function localOrchestratorRuntimeEvidenceDecision(input: PhaseRoadmapRuntimeInpu
       ...blockedIf(!completionGatePinned, "local_orchestrator_runtime_completion_gate_not_pinned"),
       ...blockedIf(!autoContinuePlanOnly, "local_orchestrator_runtime_auto_continue_not_plan_only"),
       ...blockedIf(!activityStatesPresent, "local_orchestrator_runtime_activity_states_missing"),
+      ...blockedIf(evidence.hardLocks?.noCredentialRead !== true || evidence.hardLocks?.noCredentialWrite !== true, "local_orchestrator_runtime_credential_access_not_blocked"),
       ...blockedIf(evidence.hardLocks?.workerSelfReportCannotComplete !== true, "local_orchestrator_runtime_worker_self_report_can_complete"),
       ...blockedIf(evidence.hardLocks?.expectedOutputRequired !== true, "local_orchestrator_runtime_expected_output_gate_missing"),
       ...blockedIf(evidence.hardLocks?.manifestRequired !== true, "local_orchestrator_runtime_manifest_gate_missing"),

@@ -196,8 +196,8 @@ checkMessage(requireWithin(appSource, /function\s+DiagnosticsMode\s*\(/, "Diagno
 checkMessage(requireWithin(appBody, /mode\s*===\s*"diagnostics"/, "Diagnostics entry in App mode switch/rendering"));
 checkMessage(requireWithin(appBody, /mode\s*===\s*"director"/, "Director mode rendering"));
 check(
-  !/DirectorProgressStrip/.test(directorMode),
-  "Director Clean Mode must not mount DirectorProgressStrip in the default DirectorMode",
+  /<DirectorProgressStrip\s+runtimeState=\{runtimeState\}\s*\/>/.test(directorMode),
+  "Director Clean Mode must mount the read-only runtime progress projection",
 );
 checkMessage(requireWithin(directorProgressStripState, /buildLocalOrchestratorUiSummary\s*\(/, "Phase 35 progress strip must derive from Phase 34 runtime summary"));
 checkMessage(requireWithin(directorProgressStrip, /项目处理进度/, "Phase 35 progress strip accessible label"));
@@ -456,14 +456,25 @@ checkMessage(requireWithin(localOrchestratorDiagnostics, /Waiting/i, "Phase 34 w
 checkMessage(requireWithin(localOrchestratorDiagnostics, /Running\s*\/\s*Output/i, "Phase 34 running/waiting-output summary"));
 checkMessage(requireWithin(localOrchestratorDiagnostics, /QA Pending/i, "Phase 34 QA pending summary"));
 checkMessage(requireWithin(localOrchestratorDiagnostics, /Needs Review|needs review/i, "Phase 34 needs-review summary"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /Blocked/i, "Phase 34 blocked summary"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /Complete Verified/i, "Phase 34 complete-verified summary"));
+checkMessage(requireWithin(localOrchestratorDiagnostics, /complete verified/i, "Phase 34 complete verified queue copy"));
 checkMessage(requireWithin(localOrchestratorDiagnostics, /Stalled/i, "Phase 34 stalled summary"));
 checkMessage(requireWithin(localOrchestratorDiagnostics, /Auto-continue/i, "Phase 34 auto-continue next-ready summary"));
 checkMessage(requireWithin(localOrchestratorDiagnostics, /Provider\s*\/\s*file\s*\/\s*daemon locks/i, "Phase 34 provider/file/daemon locks summary"));
 checkMessage(requireWithin(localOrchestratorDiagnostics, /Blockers\s*\/\s*warnings/i, "Phase 34 blockers/warnings summary"));
+checkMessage(requireWithin(settingsShell, /Local Orchestrator/i, "Phase 34 Settings Local Orchestrator summary"));
+checkMessage(requireWithin(settingsShell, /running planned/i, "Phase 34 Settings running planned summary"));
+checkMessage(requireWithin(settingsShell, /waiting output/i, "Phase 34 Settings waiting output summary"));
+checkMessage(requireWithin(settingsShell, /QA pending/i, "Phase 34 Settings QA pending summary"));
+checkMessage(requireWithin(settingsShell, /needs review/i, "Phase 34 Settings needs review summary"));
+checkMessage(requireWithin(settingsShell, /complete verified/i, "Phase 34 Settings complete verified summary"));
+checkMessage(requireWithin(settingsShell, /hard locks/i, "Phase 34 Settings hard locks count"));
 checkMessage(requireWithin(`${localOrchestratorDiagnostics}\n${localOrchestratorUiSummary}`, /localOrchestrator/i, "Phase 34 localOrchestrator fail-soft parser"));
 checkMessage(requireWithin(`${localOrchestratorDiagnostics}\n${localOrchestratorUiSummary}`, /plan-only/i, "Phase 34 plan-only auto-continue summary"));
 checkMessage(requireWithin(`${localOrchestratorDiagnostics}\n${localOrchestratorUiSummary}`, /provider\/file\/daemon locked/i, "Phase 34 provider/file/daemon lock text"));
 checkMessage(requireWithin(localOrchestratorDiagnostics, /phase34-lock-strip/i, "Phase 34 hard lock strip"));
+check(!/<button\b/i.test(localOrchestratorDiagnostics), "Phase 34 Local Orchestrator diagnostics must stay read-only and expose no buttons");
 checkMessage(requireWithin(previewPlayerQueue, /draftPreview\.events/, "Phase 21/23 Preview Player queue must use previewExport.draftPreview.events"));
 checkMessage(requireWithin(previewPlayerQueue, /image_hold/, "Phase 21/23 Preview Player queue must include image holds"));
 checkMessage(requireWithin(previewPlayerQueue, /video_clip/, "Phase 21/23 Preview Player queue must include video clips"));
@@ -727,14 +738,21 @@ for (const [term, pattern] of phase33ForbiddenMainTerms) {
 const phase34ForbiddenMainTerms = [
   ["Phase34", /Phase\s*34/i],
   ["Local Orchestrator", /Local\s+Orchestrator/i],
+  ["queue harness", /queue\s+harness/i],
   ["auto-continue", /auto[-\s]?continue/i],
   ["queue machine", /queue\s+machine/i],
+  ["TaskEnvelope", /Task\s*Envelope|TaskEnvelope/i],
+  ["manifest", /manifest/i],
+  ["QA pending", /QA\s+pending/i],
+  ["running planned", /running\s+planned/i],
   ["daemon", /daemon/i],
   ["Codex spawn", /Codex\s+spawn|spawn\s+Codex/i],
+  ["spawn", /spawn/i],
   ["provider submit", /provider\s+submit/i],
   ["runtimeState.localOrchestrator", /runtimeState\.localOrchestrator|localOrchestrator/i],
   ["next-ready", /next[-\s]?ready/i],
   ["waiting output", /waiting\s+output/i],
+  ["complete verified", /complete\s+verified/i],
 ];
 for (const [term, pattern] of phase34ForbiddenMainTerms) {
   const count = countPattern(phase2123DirectorSurface, pattern);

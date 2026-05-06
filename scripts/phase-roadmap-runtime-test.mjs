@@ -2436,6 +2436,53 @@ assert(
   "Phase 34 must block if a worker self-report can complete without expected output/manifest/QA/promotion gates",
 );
 
+const phase34CredentialWriteDrift = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  localOrchestratorRuntime: {
+    hardLocks: {
+      noCredentialWrite: false,
+    },
+  },
+}));
+assert(
+  phase(phase34CredentialWriteDrift, "phase_34_local_orchestrator_runtime_integration").blockedReasons.includes(
+    "local_orchestrator_runtime_credential_access_not_blocked",
+  ),
+  "Phase 34 must block credential write access drift",
+);
+
+const phase34ActivityStateMissing = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  localOrchestratorRuntime: {
+    queue: [
+      {
+        queueStatus: "ready",
+        canExecute: false,
+        canSpawnCodex: false,
+        providerSubmissionForbidden: true,
+        liveSubmitAllowed: false,
+        noFileMutation: true,
+        completionGate: {
+          expectedOutputDeclared: true,
+          expectedOutputObserved: false,
+          manifestMatched: false,
+          qaPass: false,
+          promotionGatePassed: false,
+          workerSelfReportOnly: false,
+          completeVerified: false,
+        },
+        codexActivity: {
+          retryBudget: 2,
+        },
+      },
+    ],
+  },
+}));
+assert(
+  phase(phase34ActivityStateMissing, "phase_34_local_orchestrator_runtime_integration").blockedReasons.includes(
+    "local_orchestrator_runtime_activity_states_missing",
+  ),
+  "Phase 34 must require reconnect/stall/retry/manual-review activity fields in typed evidence",
+);
+
 const missingPhase40Evidence = typedEvidence({ providerExecutionHandoff: "confirmed" });
 delete missingPhase40Evidence.codexWorkerRuntimeGate;
 const phase40MissingEvidence = buildPhaseRoadmapRuntimePlan({

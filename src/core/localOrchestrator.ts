@@ -194,6 +194,7 @@ export interface LocalOrchestratorHardLocks {
   liveSubmitAllowed: false;
   noFileMutation: true;
   noCredentialRead: true;
+  noCredentialWrite: true;
   workerSelfReportCannotComplete: true;
   expectedOutputRequired: true;
   manifestRequired: true;
@@ -253,6 +254,7 @@ export const localOrchestratorHardLocks: LocalOrchestratorHardLocks = {
   liveSubmitAllowed: false,
   noFileMutation: true,
   noCredentialRead: true,
+  noCredentialWrite: true,
   workerSelfReportCannotComplete: true,
   expectedOutputRequired: true,
   manifestRequired: true,
