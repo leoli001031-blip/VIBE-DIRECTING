@@ -31,6 +31,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ProjectRuntimeState",
   },
   {
+    fileName: "beta_acceptance.schema.json",
+    id: "https://vibecore.local/schemas/beta_acceptance.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 42 final Beta Acceptance runtime receipt for Export / Desktop / Beta Acceptance closure with all provider, worker, credential, shell, API key, file mutation, and additional-phase routes locked off.",
+    typeName: "BetaAcceptanceState",
+  },
+  {
     fileName: "project_file_core.schema.json",
     id: "https://vibecore.local/schemas/project_file_core.schema.json",
     version: schemaVersion,

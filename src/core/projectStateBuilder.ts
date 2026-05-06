@@ -19,6 +19,7 @@ import { buildTaskPackets, type BuiltTaskPacket } from "./taskPacketBuilder";
 import { buildAgentCliMockRunnerState } from "./agentCliMockRunner";
 import { buildCodexCliAdapterSpikeState } from "./codexCliAdapterSpike";
 import { buildCodexWorkerRuntimeGateState } from "./codexWorkerRuntimeGate";
+import { buildBetaAcceptanceState } from "./betaAcceptance";
 import { buildExportWorkerState } from "./exportWorker";
 import { buildProjectFileCoreState } from "./projectFileCore";
 import { buildProjectFactsIntegrationState } from "./projectFactsIntegration";
@@ -77,6 +78,7 @@ export interface ProjectRuntimeStateBuildOptions {
   agentCliMockRunner?: ProjectRuntimeState["agentCliMockRunner"];
   codexCliAdapterSpike?: ProjectRuntimeState["codexCliAdapterSpike"];
   codexWorkerRuntimeGate?: ProjectRuntimeState["codexWorkerRuntimeGate"];
+  betaAcceptance?: ProjectRuntimeState["betaAcceptance"];
   providerClosedLoopShell?: ProjectRuntimeState["providerClosedLoopShell"];
   executionLedger?: ProjectRuntimeState["executionLedger"];
   realExecutionGate?: ProjectRuntimeState["realExecutionGate"];
@@ -726,6 +728,30 @@ export function buildProjectRuntimeState(
     generatedAt,
     executionMode: "plan_only",
   });
+  const betaAcceptance = options.betaAcceptance || buildBetaAcceptanceState({
+    generatedAt,
+    runtimeState: {
+      projectFileCore,
+      projectFactsIntegration,
+      storyFlow: {
+        sections: view.storySections,
+        shots: audit.shots,
+      },
+      visualMemory: {
+        summary: view.visualMemory,
+        assets: audit.assets,
+      },
+      imageKeyframeRuntime,
+      previewExport,
+      exportWorker,
+      providerLiveGate,
+      providerExecutionHandoff,
+      providerClosedLoopShell,
+      localOrchestrator,
+      codexWorkerRuntimeGate,
+      knowledge,
+    },
+  });
 
   return {
     schemaVersion: projectRuntimeStateSchemaVersion,
@@ -798,6 +824,7 @@ export function buildProjectRuntimeState(
     agentCliMockRunner,
     codexCliAdapterSpike,
     codexWorkerRuntimeGate,
+    betaAcceptance,
     generationHealthChecker,
     promptConflictChecker,
     storyChanges: {
@@ -1225,6 +1252,49 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       generatedAt: state.generatedAt,
       executionMode: "plan_only",
     });
+  const betaAcceptance =
+    state.betaAcceptance ||
+    buildBetaAcceptanceState({
+      generatedAt: state.generatedAt,
+      runtimeState: {
+        ...state,
+        projectFileCore,
+        projectFactsIntegration,
+        runtime: runtimeWithVoiceSources,
+        voiceSourceLibrary,
+        audioPlanning: audioPlanningResolved,
+        voiceAudioSettings,
+        videoPlanning,
+        imageKeyframeRuntime,
+        exportWorker,
+        videoExecutionPreview,
+        adapterContracts,
+        providerLiveGate,
+        providerExecutionPermissionGate,
+        providerActionConfirmationReceipt,
+        providerExecutionHandoff,
+        providerClosedLoopShell,
+        executionLedger,
+        realExecutionGate,
+        realProviderPilot,
+        realProviderExecutor,
+        realProviderOneShotTest,
+        realProviderTransport,
+        providerHandoffStatus,
+        localOrchestrator,
+        generationHarness,
+        filesystemWatcherHarness,
+        checkpointResumeHarness,
+        qaHarness,
+        toolRuntimeHarness,
+        subagentRunner,
+        agentCliMockRunner,
+        codexCliAdapterSpike,
+        codexWorkerRuntimeGate,
+        generationHealthChecker,
+        promptConflictChecker,
+      },
+    });
 
   return {
     ...state,
@@ -1261,6 +1331,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     agentCliMockRunner,
     codexCliAdapterSpike,
     codexWorkerRuntimeGate,
+    betaAcceptance,
     generationHealthChecker,
     promptConflictChecker,
   };

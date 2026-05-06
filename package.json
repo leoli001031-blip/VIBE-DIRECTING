@@ -61,6 +61,7 @@
     "small-project:test": "node scripts/small-project-one-shot-test.mjs",
     "demo:state": "node scripts/build-demo-runtime-state.mjs",
     "demo:test": "node scripts/build-demo-runtime-state.mjs --check",
+    "beta-acceptance:test": "node scripts/beta-acceptance-test.mjs",
     "phase-roadmap:test": "node scripts/phase-roadmap-runtime-test.mjs",
     "export-builder:test": "node scripts/export-builder-test.mjs",
     "export-worker:test": "node scripts/export-worker-test.mjs",

@@ -337,6 +337,18 @@ type ProviderClosedLoopShellUiSummary = {
   blockersWarnings: string[];
   requiredGates: string[];
 };
+type BetaAcceptanceUiSummary = {
+  initialized: boolean;
+  readiness: string;
+  desktopStatus: string;
+  projectExportStatus: string;
+  runtimeGateStatus: string;
+  providerStatus: string;
+  testStatus: string;
+  closureStatus: string;
+  blockersWarnings: string[];
+  requiredGates: string[];
+};
 type DirectorProgressTone = "preparing" | "working" | "review" | "blocked" | "complete";
 type DirectorProgressSegment = {
   label: string;
@@ -3181,6 +3193,135 @@ function buildProviderClosedLoopShellUiSummary(runtimeState: ProjectRuntimeState
     promotionStatus: promotionReady ? "promotion gate required" : "missing",
     safetyStatus: defaultOpened || unsafeObserved ? "opened" : safetyLocked ? "closed" : "missing",
     blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing providerClosedLoopShell"],
+    requiredGates,
+  };
+}
+
+function buildBetaAcceptanceUiSummary(runtimeState: ProjectRuntimeState): BetaAcceptanceUiSummary {
+  const root = runtimeState as unknown as Record<string, unknown>;
+  const acceptanceRoot = isRecord(root.betaAcceptance) ? root.betaAcceptance : {};
+  const initialized = isRecord(root.betaAcceptance);
+  const rootRecord = initialized ? acceptanceRoot : {};
+  const gates = firstRecordFrom(rootRecord, ["gates"]);
+  const summary = firstRecordFrom(rootRecord, ["summary"]);
+  const observations = firstRecordFrom(rootRecord, ["observations"]);
+  const betaClosure = firstRecordFrom(rootRecord, ["betaClosure", "roadmap"]);
+  const executionPolicy = firstRecordFrom(rootRecord, ["executionPolicy", "workerPolicy", "providerPolicy"]);
+  const closure = firstRecordFrom(rootRecord, ["closure"]);
+  const hardLocks = firstRecordFrom(rootRecord, ["hardLocks"]);
+  const areas = Array.isArray(rootRecord.areas) ? rootRecord.areas.filter(isRecord) : [];
+  const records = [gates, summary, rootRecord].filter(isRecord);
+  const observedRecords = [observations, betaClosure, executionPolicy, hardLocks, rootRecord].filter(isRecord);
+  const areaByName = (area: string) => areas.find((item) => item.area === area);
+  const areaAccepted = (area: string) => {
+    const item = areaByName(area);
+    return isRecord(item) && item.status === "accepted" && readDisplayList(item.blockers, "blocker").length === 0;
+  };
+  const areaChecked = (area: string, proofKey: string) => {
+    const item = areaByName(area);
+    const proof = isRecord(item?.proof) ? item.proof : {};
+    return areaAccepted(area) && proof[proofKey] === true;
+  };
+  const gateReady = (key: string) => {
+    const explicit = readFirstBoolean(records, [key]);
+    if (explicit !== undefined) return explicit;
+    if (key === "macDesktopReadiness") return areaAccepted("mac_desktop_readiness");
+    if (key === "windowsDesktopReadiness") return areaAccepted("windows_desktop_readiness");
+    if (key === "projectSaveOpen") return areaAccepted("project_save_open");
+    if (key === "previewExport") return areaAccepted("preview_export");
+    if (key === "queueVisibility") return areaAccepted("queue_visibility");
+    if (key === "visualConsistency") return areaAccepted("visual_consistency");
+    if (key === "knowledgePackManagement") return areaAccepted("knowledge_pack_management");
+    if (key === "workerRuntimeGate" || key === "providerClosedLoopShell" || key === "providerGate") {
+      return areaAccepted("worker_provider_gate");
+    }
+    if (key === "tests") return areaAccepted("test_matrix");
+    if (key === "noAdditionalPhasesPlanned") return rootRecord.noAdditionalPhasesPlanned === true || closure.noAdditionalPhasesPlanned === true;
+    if (key === "betaAcceptanceOwnsClosure") return rootRecord.betaAcceptanceOwnsClosure === true || closure.betaAcceptanceOwnsClosure === true;
+    if (key === "finalPhaseNumberLocked") return rootRecord.finalPhaseNumber === 42 || closure.finalPhaseNumber === 42;
+    return false;
+  };
+  const requiredGates = [
+    "macDesktopReadiness",
+    "windowsDesktopReadiness",
+    "projectSaveOpen",
+    "previewExport",
+    "queueVisibility",
+    "visualConsistency",
+    "knowledgePackManagement",
+    "workerRuntimeGate",
+    "providerClosedLoopShell",
+    "providerGate",
+    "tests",
+    "noAdditionalPhasesPlanned",
+    "betaAcceptanceOwnsClosure",
+    "finalPhaseNumberLocked",
+  ];
+  const readyGateCount = requiredGates.filter((key) => gateReady(key)).length;
+  const status = readFirstString(records, ["readiness", "status", "state"], "");
+  const blockersWarnings = Array.from(new Set([
+    ...readDisplayList(rootRecord.blockers, "blocker"),
+    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
+    ...readDisplayList(summary.blockers, "blocker"),
+    ...readDisplayList(summary.blockedReasons, "blocker"),
+    ...areas.flatMap((area) => readDisplayList(area.blockers, "blocker").map((blocker) => `${area.area}:${blocker}`)),
+    ...readDisplayList(rootRecord.warnings, "warning"),
+    ...readDisplayList(summary.warnings, "warning"),
+    ...areas.flatMap((area) => readDisplayList(area.warnings, "warning").map((warning) => `${area.area}:${warning}`)),
+  ].filter(Boolean)));
+  const desktopReady =
+    gateReady("macDesktopReadiness") &&
+    gateReady("windowsDesktopReadiness") &&
+    !["macDesktopMissing", "windowsDesktopMissing"].some((key) => readFirstBoolean(observedRecords, [key]) === true);
+  const projectExportReady =
+    gateReady("projectSaveOpen") &&
+    gateReady("previewExport") &&
+    !["projectSaveOpenMissing", "previewExportMissing"].some((key) => readFirstBoolean(observedRecords, [key]) === true);
+  const runtimeReady =
+    gateReady("queueVisibility") &&
+    gateReady("visualConsistency") &&
+    gateReady("knowledgePackManagement") &&
+    gateReady("workerRuntimeGate");
+  const providerReady =
+    gateReady("providerClosedLoopShell") &&
+    gateReady("providerGate");
+  const unsafeObserved = [
+    "providerSubmitObserved",
+    "liveSubmitObserved",
+    "spawnCodexObserved",
+    "workerSpawnObserved",
+    "subprocessObserved",
+    "shellExecutionObserved",
+    "credentialReadObserved",
+    "credentialWriteObserved",
+    "credentialAccessObserved",
+    "fileMutationObserved",
+    "apiKeyCreatedObserved",
+  ].some((key) => readFirstBoolean(observedRecords, [key]) === true);
+  const closureReady =
+    gateReady("noAdditionalPhasesPlanned") &&
+    gateReady("betaAcceptanceOwnsClosure") &&
+    gateReady("finalPhaseNumberLocked") &&
+    !["additionalPhaseRequested", "phaseAfter42Observed", "finalPhaseNumberNot42"].some((key) =>
+      readFirstBoolean(observedRecords, [key]) === true,
+    );
+  const testMatrixChecked = areaChecked("test_matrix", "packageScriptsChecked") ||
+    readFirstBoolean(records, ["tests"]) === true;
+
+  return {
+    initialized,
+    readiness: initialized
+      ? statusLabel(status || (readyGateCount === requiredGates.length && !blockersWarnings.length ? "ready" : "blocked"))
+      : "blocked/missing",
+    desktopStatus: desktopReady ? "Mac/Windows readiness accepted" : "desktop readiness missing",
+    projectExportStatus: projectExportReady ? "project save/open + preview/export accepted" : "project or export readiness missing",
+    runtimeGateStatus: runtimeReady ? "queue/visual/knowledge/worker gates accepted" : "runtime gate missing",
+    providerStatus: unsafeObserved ? "provider submit/credential/shell observation blocked" : providerReady ? "provider shell + gate accepted" : "provider gate missing",
+    testStatus: gateReady("tests") && testMatrixChecked && readFirstBoolean(observedRecords, ["testsMissing"]) !== true
+      ? "test matrix accepted"
+      : "test matrix missing",
+    closureStatus: closureReady ? "final phase locked at 42" : "closure freeze missing",
+    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing betaAcceptance"],
     requiredGates,
   };
 }
@@ -6175,6 +6316,39 @@ function ProviderClosedLoopShellDiagnostics({ runtimeState }: { runtimeState: Pr
   );
 }
 
+function BetaAcceptanceDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildBetaAcceptanceUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel beta-acceptance-panel">
+      <div className="audit-head">
+        <ListChecks size={17} />
+        <span>Phase 42 Beta Acceptance</span>
+      </div>
+      <div className="summary-grid beta-acceptance-metrics">
+        <Metric label="Readiness" value={summary.readiness} detail="Phase 42 typed evidence" />
+        <Metric label="Mac/Windows" value={summary.desktopStatus} detail="desktop readiness" />
+        <Metric label="Project / Export" value={summary.projectExportStatus} detail="save/open + preview/export" />
+        <Metric label="Runtime Gates" value={summary.runtimeGateStatus} detail="queue, visual, knowledge, worker" />
+        <Metric label="Provider Gate" value={summary.providerStatus} detail="closed-loop shell + provider gate" />
+        <Metric label="Tests" value={summary.testStatus} detail="test matrix" />
+        <Metric label="Closure" value={summary.closureStatus} detail="no additional phases planned" />
+      </div>
+      <div className="phase17-rule-strip">
+        {summary.requiredGates.map((gate) => (
+          <span key={gate}>{gate}</span>
+        ))}
+      </div>
+      <div className="pipeline-details checker-details">
+        <details open={Boolean(summary.blockersWarnings.length)}>
+          <summary>Phase 42 blockers / warnings ({summary.blockersWarnings.length})</summary>
+          <CompactList items={summary.blockersWarnings} empty="No Phase 42 blockers reported." />
+        </details>
+      </div>
+    </section>
+  );
+}
+
 function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const videoPlanning = getVideoPlanning(runtimeState);
   const queue = videoPlanning.queueShell;
@@ -8274,6 +8448,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const knowledgePackUserManagementSummary = buildKnowledgePackUserManagementUiSummary(runtimeState);
   const codexWorkerRuntimeGateSummary = buildCodexWorkerRuntimeGateUiSummary(runtimeState);
   const providerClosedLoopShellSummary = buildProviderClosedLoopShellUiSummary(runtimeState);
+  const betaAcceptanceSummary = buildBetaAcceptanceUiSummary(runtimeState);
   const realPilotSummary = buildRealPilotUiSummary(runtimeState);
 
   return (
@@ -8511,6 +8686,15 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
           <small>{providerClosedLoopShellSummary.shellStatus} · watcher {providerClosedLoopShellSummary.watcherStatus} · manifest {providerClosedLoopShellSummary.manifestStatus}</small>
           <small>{providerClosedLoopShellSummary.qaStatus} · {providerClosedLoopShellSummary.promotionStatus}</small>
           <small>provider submit/live submit/credential/shell safety {providerClosedLoopShellSummary.safetyStatus}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Phase 42 Beta Acceptance</div>
+      <div className="settings-list beta-acceptance-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Phase 42 Beta Acceptance: {betaAcceptanceSummary.readiness}</strong>
+          <small>{betaAcceptanceSummary.desktopStatus} · {betaAcceptanceSummary.projectExportStatus}</small>
+          <small>{betaAcceptanceSummary.runtimeGateStatus} · {betaAcceptanceSummary.providerStatus}</small>
+          <small>{betaAcceptanceSummary.testStatus} · {betaAcceptanceSummary.closureStatus}</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
@@ -8763,6 +8947,7 @@ function DiagnosticsMode({
       <KnowledgePackUserManagementDiagnostics runtimeState={runtimeState} />
       <CodexWorkerRuntimeGateDiagnostics runtimeState={runtimeState} />
       <ProviderClosedLoopShellDiagnostics runtimeState={runtimeState} />
+      <BetaAcceptanceDiagnostics runtimeState={runtimeState} />
       <RealPilotDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <VoiceAudioSettingsDiagnostics runtimeState={runtimeState} />

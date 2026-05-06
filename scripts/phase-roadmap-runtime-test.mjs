@@ -1016,7 +1016,22 @@ function closureEvidence(phaseId, gates, overrides = {}) {
       credentialReadObserved: false,
       credentialWriteObserved: false,
       credentialAccessObserved: false,
+      apiKeyCreatedObserved: false,
       fileMutationObserved: false,
+      macDesktopMissing: false,
+      windowsDesktopMissing: false,
+      projectSaveOpenMissing: false,
+      previewExportMissing: false,
+      queueVisibilityMissing: false,
+      visualConsistencyMissing: false,
+      knowledgePackMissing: false,
+      workerRuntimeGateMissing: false,
+      providerClosedLoopShellMissing: false,
+      providerGateMissing: false,
+      testsMissing: false,
+      additionalPhaseRequested: false,
+      phaseAfter42Observed: false,
+      finalPhaseNumberNot42: false,
       queueDetailsOnDirectorSurfaceObserved: false,
       workerRouteOpened: false,
       providerRouteOpened: false,
@@ -1344,10 +1359,22 @@ function betaAcceptanceEvidence(overrides = {}) {
     queueVisibility: true,
     visualConsistency: true,
     knowledgePackManagement: true,
+    workerRuntimeGate: true,
+    providerClosedLoopShell: true,
     providerGate: true,
     tests: true,
     noAdditionalPhasesPlanned: true,
-  }, overrides);
+    betaAcceptanceOwnsClosure: true,
+    finalPhaseNumberLocked: true,
+  }, {
+    ...overrides,
+    finalPhaseNumber: overrides.finalPhaseNumber ?? 42,
+    summary: {
+      finalPhaseNumber: 42,
+      maxPhaseNumber: 42,
+      ...(overrides.summary || {}),
+    },
+  });
 }
 
 function typedEvidence(overrides = {}) {
@@ -3644,16 +3671,126 @@ assert(
   "Phase 41 must depend on Phase 40 ready",
 );
 
-const phase42MissingWindowsAcceptance = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
-  betaAcceptance: {
-    gates: { windowsDesktopReadiness: false },
+const missingPhase42Evidence = typedEvidence({ providerExecutionHandoff: "confirmed" });
+delete missingPhase42Evidence.betaAcceptance;
+const phase42MissingEvidence = buildPhaseRoadmapRuntimePlan({
+  ...confirmedPhase33Input(),
+  evidence: missingPhase42Evidence,
+  betaAcceptanceReady: true,
+});
+assert(
+  phase(phase42MissingEvidence, "phase_42_export_desktop_beta_acceptance").blockedReasons.includes(
+    "beta_acceptance_typed_evidence_missing",
+  ),
+  "Phase 42 must require typed betaAcceptance evidence",
+);
+assert(
+  phase42MissingEvidence.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "betaAcceptance" &&
+      decision.source === "legacy_boolean_override" &&
+      decision.ready === false &&
+      decision.warnings.includes("legacy_betaAcceptanceReady_boolean_ignored_without_typed_evidence"),
+  ),
+  "Phase 42 legacy betaAcceptanceReady boolean must only be recorded as an ignored warning",
+);
+
+const phase42TypedReadyPlan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input());
+assert(
+  phase(phase42TypedReadyPlan, "phase_42_export_desktop_beta_acceptance").readiness === "ready",
+  "Phase 42 must be ready with complete typed betaAcceptance evidence",
+);
+assert(
+  phase42TypedReadyPlan.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "betaAcceptance" &&
+      decision.source === "typed_evidence" &&
+      decision.ready === true,
+  ),
+  "Phase 42 ready must come from typed betaAcceptance evidence",
+);
+
+function assertPhase42Blocks(betaAcceptance, blocker, message) {
+  const plan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({ betaAcceptance }));
+  assert(
+    phase(plan, "phase_42_export_desktop_beta_acceptance").blockedReasons.includes(blocker),
+    message,
+  );
+}
+
+for (const [gate, blocker] of [
+  ["macDesktopReadiness", "beta_acceptance_mac_desktop_missing"],
+  ["windowsDesktopReadiness", "beta_acceptance_windows_desktop_missing"],
+  ["projectSaveOpen", "beta_acceptance_project_save_open_missing"],
+  ["previewExport", "beta_acceptance_preview_export_missing"],
+  ["queueVisibility", "beta_acceptance_queue_visibility_missing"],
+  ["visualConsistency", "beta_acceptance_visual_consistency_missing"],
+  ["knowledgePackManagement", "beta_acceptance_knowledge_pack_missing"],
+  ["workerRuntimeGate", "beta_acceptance_worker_runtime_gate_missing"],
+  ["providerClosedLoopShell", "beta_acceptance_provider_closed_loop_shell_missing"],
+  ["providerGate", "beta_acceptance_provider_gate_missing"],
+  ["tests", "beta_acceptance_tests_missing"],
+  ["noAdditionalPhasesPlanned", "beta_acceptance_no_additional_phases_planned_missing"],
+  ["betaAcceptanceOwnsClosure", "beta_acceptance_owns_closure_missing"],
+  ["finalPhaseNumberLocked", "beta_acceptance_final_phase_number_not_42"],
+]) {
+  assertPhase42Blocks(
+    { gates: { [gate]: false } },
+    blocker,
+    `Phase 42 must block when ${gate} is missing`,
+  );
+}
+
+for (const [observationKey, expectedBlocker] of Object.entries({
+  macDesktopMissing: "beta_acceptance_mac_desktop_missing",
+  windowsDesktopMissing: "beta_acceptance_windows_desktop_missing",
+  projectSaveOpenMissing: "beta_acceptance_project_save_open_missing",
+  previewExportMissing: "beta_acceptance_preview_export_missing",
+  queueVisibilityMissing: "beta_acceptance_queue_visibility_missing",
+  visualConsistencyMissing: "beta_acceptance_visual_consistency_missing",
+  knowledgePackMissing: "beta_acceptance_knowledge_pack_missing",
+  workerRuntimeGateMissing: "beta_acceptance_worker_runtime_gate_missing",
+  providerClosedLoopShellMissing: "beta_acceptance_provider_closed_loop_shell_missing",
+  providerGateMissing: "beta_acceptance_provider_gate_missing",
+  testsMissing: "beta_acceptance_tests_missing",
+  additionalPhaseRequested: "beta_acceptance_additional_phase_requested",
+  phaseAfter42Observed: "beta_acceptance_phase_after_42_observed",
+  finalPhaseNumberNot42: "beta_acceptance_final_phase_number_not_42",
+  providerSubmitObserved: "beta_acceptance_provider_submit_not_blocked",
+  liveSubmitObserved: "beta_acceptance_live_submit_not_blocked",
+  spawnCodexObserved: "beta_acceptance_worker_spawn_not_blocked",
+  workerSpawnObserved: "beta_acceptance_worker_spawn_not_blocked",
+  subprocessObserved: "beta_acceptance_worker_spawn_not_blocked",
+  shellExecutionObserved: "beta_acceptance_shell_not_blocked",
+  credentialReadObserved: "beta_acceptance_credential_access_not_blocked",
+  credentialWriteObserved: "beta_acceptance_credential_access_not_blocked",
+  credentialAccessObserved: "beta_acceptance_credential_access_not_blocked",
+  fileMutationObserved: "beta_acceptance_file_mutation_not_blocked",
+  apiKeyCreatedObserved: "beta_acceptance_api_key_creation_observed",
+})) {
+  assertPhase42Blocks(
+    { observations: { [observationKey]: true } },
+    expectedBlocker,
+    `Phase 42 must block ${observationKey}`,
+  );
+}
+
+assertPhase42Blocks(
+  { finalPhaseNumber: 43, summary: { finalPhaseNumber: 43 } },
+  "beta_acceptance_final_phase_number_not_42",
+  "Phase 42 must block if the final phase number is not 42",
+);
+
+const phase42Phase41Blocked = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  providerClosedLoopShell: {
+    observations: { liveSubmitObserved: true },
   },
 }));
 assert(
-  phase(phase42MissingWindowsAcceptance, "phase_42_export_desktop_beta_acceptance").blockedReasons.includes(
-    "beta_acceptance_windows_desktop_missing",
+  phase(phase42Phase41Blocked, "phase_42_export_desktop_beta_acceptance").blockedReasons.includes(
+    "preceding_phase_not_ready:phase_41_provider_closed_loop_shell",
   ),
-  "Phase 42 beta acceptance must require Windows desktop readiness",
+  "Phase 42 must depend on Phase 41 ready",
 );
 
 const readyPlan = typedPhase33Ready;
@@ -3699,6 +3836,7 @@ assert(
 assert(readyPlan.adapterBoundary.phase29.canSubmitProvider === false, "Phase 29 must not submit provider");
 assert(readyPlan.betaClosure.finalPhaseNumber === 42, "Phase 42 must be the final beta closure phase");
 assert(readyPlan.betaClosure.noAdditionalPhasesPlanned === true, "roadmap must freeze after Phase 42");
+assert(readyPlan.betaClosure.betaAcceptanceOwnsClosure === true, "Phase 42 beta acceptance must own closure");
 assert(readyPlan.betaClosure.codexWorkerRuntimeDefaultGated === true, "Phase 40 worker runtime must default gated");
 assert(readyPlan.betaClosure.providerClosedLoopDefaultGated === true, "Phase 41 provider shell must default gated");
 assert(readyPlan.betaClosure.canSpawnCodex === false, "beta closure must not spawn Codex by default");
@@ -3707,8 +3845,13 @@ assert(readyPlan.betaClosure.providerSubmitAllowed === 0, "beta closure must pin
 assert(readyPlan.betaClosure.credentialAccessAllowed === false, "beta closure must forbid credentials");
 assert(
   readyPlan.betaClosure.requiredAcceptanceGates.includes("project_save_open") &&
-    readyPlan.betaClosure.requiredAcceptanceGates.includes("tests"),
-  "beta closure must list project save/open and tests acceptance gates",
+    readyPlan.betaClosure.requiredAcceptanceGates.includes("worker_runtime_gate") &&
+    readyPlan.betaClosure.requiredAcceptanceGates.includes("provider_closed_loop_shell") &&
+    readyPlan.betaClosure.requiredAcceptanceGates.includes("tests") &&
+    readyPlan.betaClosure.requiredAcceptanceGates.includes("no_additional_phases_planned") &&
+    readyPlan.betaClosure.requiredAcceptanceGates.includes("beta_acceptance_owns_closure") &&
+    readyPlan.betaClosure.requiredAcceptanceGates.includes("final_phase_number_locked"),
+  "beta closure must list project save/open, runtime, provider shell, tests, and freeze acceptance gates",
 );
 
 for (const [key, expected] of Object.entries({

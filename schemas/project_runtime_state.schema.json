@@ -48,6 +48,7 @@
     "agentCliMockRunner",
     "codexCliAdapterSpike",
     "codexWorkerRuntimeGate",
+    "betaAcceptance",
     "generationHealthChecker",
     "promptConflictChecker",
     "storyChanges",
@@ -253,6 +254,7 @@
     "agentCliMockRunner": { "$ref": "agent_cli_mock_runner.schema.json" },
     "codexCliAdapterSpike": { "$ref": "codex_cli_adapter_spike.schema.json" },
     "codexWorkerRuntimeGate": { "$ref": "codex_worker_runtime_gate.schema.json" },
+    "betaAcceptance": { "$ref": "beta_acceptance.schema.json" },
     "generationHealthChecker": { "$ref": "generation_health_checker.schema.json" },
     "promptConflictChecker": { "$ref": "prompt_conflict_checker.schema.json" },
     "storyChanges": {

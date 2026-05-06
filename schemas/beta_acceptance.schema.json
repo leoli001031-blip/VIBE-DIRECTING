@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/beta_acceptance.schema.json",
+  "title": "BetaAcceptanceState",
+  "description": "Phase 42 Beta Acceptance pure runtime receipt for Export / Desktop / Beta Acceptance closure. It aggregates desktop readiness, project save/open, preview/export, queue visibility, visual consistency, Knowledge Pack management, worker/provider gates, and expected test matrix while keeping all live provider, worker, credential, shell, API key, and file mutation paths locked off.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "phaseId",
+    "generatedAt",
+    "readiness",
+    "finalPhaseNumber",
+    "noAdditionalPhasesPlanned",
+    "betaAcceptanceOwnsClosure",
+    "closure",
+    "hardLocks",
+    "attemptedActions",
+    "desktopPlans",
+    "areas",
+    "testMatrix",
+    "summary",
+    "blockers",
+    "warnings",
+    "validation",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "phaseId": { "type": "string", "const": "phase_42_export_desktop_beta_acceptance" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "readiness": { "type": "string", "enum": ["accepted", "blocked"] },
+    "finalPhaseNumber": { "type": "integer", "const": 42 },
+    "noAdditionalPhasesPlanned": { "type": "boolean", "const": true },
+    "betaAcceptanceOwnsClosure": { "type": "boolean", "const": true },
+    "closure": { "$ref": "#/$defs/closure" },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "attemptedActions": { "$ref": "#/$defs/attemptedActions" },
+    "desktopPlans": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["darwin", "win32"],
+      "properties": {
+        "darwin": { "$ref": "desktop_runtime_plan.schema.json" },
+        "win32": { "$ref": "desktop_runtime_plan.schema.json" }
+      }
+    },
+    "areas": {
+      "type": "array",
+      "minItems": 10,
+      "items": { "$ref": "#/$defs/check" },
+      "contains": { "type": "object", "required": ["area"], "properties": { "area": { "const": "mac_desktop_readiness" } } }
+    },
+    "testMatrix": {
+      "type": "array",
+      "minItems": 16,
+      "items": { "$ref": "#/$defs/testMatrixItem" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requiredAreaCount",
+        "acceptedAreaCount",
+        "blockedAreaCount",
+        "hardLockDriftCount",
+        "attemptedActionBlockCount",
+        "missingScriptCount"
+      ],
+      "properties": {
+        "requiredAreaCount": { "type": "integer", "minimum": 10 },
+        "acceptedAreaCount": { "type": "integer", "minimum": 0 },
+        "blockedAreaCount": { "type": "integer", "minimum": 0 },
+        "hardLockDriftCount": { "type": "integer", "minimum": 0 },
+        "attemptedActionBlockCount": { "type": "integer", "minimum": 0 },
+        "missingScriptCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "validation": { "$ref": "#/$defs/validation" },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "closure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["finalPhaseNumber", "noAdditionalPhasesPlanned", "betaAcceptanceOwnsClosure", "roadmapEndpoint"],
+      "properties": {
+        "finalPhaseNumber": { "type": "integer", "const": 42 },
+        "noAdditionalPhasesPlanned": { "type": "boolean", "const": true },
+        "betaAcceptanceOwnsClosure": { "type": "boolean", "const": true },
+        "roadmapEndpoint": { "type": "string", "const": "Export / Desktop / Beta Acceptance" }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dryRunOnly",
+        "readOnly",
+        "planOnly",
+        "noAdditionalPhasesPlanned",
+        "canSubmitProvider",
+        "providerSubmitAllowed",
+        "liveSubmitAllowed",
+        "canSpawnCodex",
+        "noWorkerSpawn",
+        "noShellExecution",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "credentialAccessAllowed",
+        "credentialStorage",
+        "noFileMutation",
+        "noApiKeyCreation"
+      ],
+      "properties": {
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "readOnly": { "type": "boolean", "const": true },
+        "planOnly": { "type": "boolean", "const": true },
+        "noAdditionalPhasesPlanned": { "type": "boolean", "const": true },
+        "canSubmitProvider": { "type": "boolean", "const": false },
+        "providerSubmitAllowed": { "type": "integer", "const": 0 },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "canSpawnCodex": { "type": "boolean", "const": false },
+        "noWorkerSpawn": { "type": "boolean", "const": true },
+        "noShellExecution": { "type": "boolean", "const": true },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "credentialAccessAllowed": { "type": "boolean", "const": false },
+        "credentialStorage": { "type": "boolean", "const": false },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "noApiKeyCreation": { "type": "boolean", "const": true }
+      }
+    },
+    "attemptedActions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerSubmitAttempted",
+        "liveSubmitAttempted",
+        "spawnCodexAttempted",
+        "shellAttempted",
+        "credentialAttempted",
+        "fileMutationAttempted",
+        "apiKeyCreateAttempted",
+        "extraPhaseRequested"
+      ],
+      "properties": {
+        "providerSubmitAttempted": { "type": "boolean" },
+        "liveSubmitAttempted": { "type": "boolean" },
+        "spawnCodexAttempted": { "type": "boolean" },
+        "shellAttempted": { "type": "boolean" },
+        "credentialAttempted": { "type": "boolean" },
+        "fileMutationAttempted": { "type": "boolean" },
+        "apiKeyCreateAttempted": { "type": "boolean" },
+        "extraPhaseRequested": { "type": "boolean" }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["area", "required", "status", "sourceRefs", "proof", "blockers", "warnings"],
+      "properties": {
+        "area": {
+          "type": "string",
+          "enum": [
+            "mac_desktop_readiness",
+            "windows_desktop_readiness",
+            "project_save_open",
+            "preview_export",
+            "queue_visibility",
+            "visual_consistency",
+            "knowledge_pack_management",
+            "worker_provider_gate",
+            "test_matrix",
+            "roadmap_closure"
+          ]
+        },
+        "required": { "type": "boolean", "const": true },
+        "status": { "type": "string", "enum": ["accepted", "blocked"] },
+        "sourceRefs": { "type": "array", "items": { "type": "string" } },
+        "proof": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              { "type": "boolean" },
+              { "type": "number" },
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ]
+          }
+        },
+        "blockers": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "testMatrixItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["script", "expected", "sourceRef"],
+      "properties": {
+        "script": { "type": "string" },
+        "command": { "type": "string" },
+        "expected": { "type": "string", "const": "must_exist" },
+        "present": { "type": "boolean" },
+        "sourceRef": { "type": "string" }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "status", "errors", "warnings", "checkedAt"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["accepted", "blocked"] },
+        "errors": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "checkedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+      }
+    }
+  }
+}

@@ -1011,7 +1011,7 @@ Phase 9.4 checklist：
 
 ### Phase 24-42 Runtime Gate / Beta Closure Planning
 
-Phase 24-42 先做 lightweight pure runtime plan，不做真实执行。Phase 42 是当前路线的 beta closure 终点；后续不再因为“还差一点”继续无限新增 Phase。Phase 34-42 只把队列可见性、项目文件事实源、视觉一致性、全任务 packet、Knowledge Pack 用户管理、gated worker shell、gated provider closed-loop shell 和 desktop/export beta acceptance 收口成明确验收，不开放默认真实 spawn/provider submit/credential 路径。`src/core/phaseRoadmapRuntime.ts` 用于输出每个阶段的 readiness、status、blocked reason、required preceding phases、hard locks 和 acceptance criteria。
+Phase 24-42 先做 lightweight pure runtime plan，不做真实执行。Phase 42 是当前路线的 beta closure 终点；后续不再因为“还差一点”继续无限新增 Phase，而是进入真实测试、bugfix 和 backlog 排序。Phase 34-42 只把队列可见性、项目文件事实源、视觉一致性、全任务 packet、Knowledge Pack 用户管理、gated worker shell、gated provider closed-loop shell 和 desktop/export beta acceptance 收口成明确验收，不开放默认真实 spawn/provider submit/credential 路径。`src/core/phaseRoadmapRuntime.ts` 用于输出每个阶段的 readiness、status、blocked reason、required preceding phases、hard locks 和 acceptance criteria。
 
 阶段顺序：
 
@@ -1033,7 +1033,7 @@ Phase 24-42 先做 lightweight pure runtime plan，不做真实执行。Phase 42
 - Phase 39：Knowledge Pack User Management。用户可导入、新建、启用/禁用、测试路由和检测冲突；pack 仍不能覆盖 provider policy、preflight、reference authority、keyframe pair derivation、QA gate 或 Phase 38 validated packet。
 - Phase 40：Codex Worker Runtime Gate。真实 Codex Worker Runtime 只做默认关闭的 gated shell；默认不 spawn Codex、不启 daemon、不执行 shell、不读写 credential、不改文件、不提交 provider。
 - Phase 41：Image2 / Seedance Provider Closed-loop Shell。只做 provider execution closed-loop shell：Image2/Seedance 的 watcher / manifest / QA / promotion 闭环合同可见，但默认不提交 provider、不提交 live、不保存/读取 credential、不创建 API key。
-- Phase 42：Export / Desktop / Beta Acceptance。作为 beta closure 终点验收 Mac/Win desktop readiness、project save/open、preview/export、queue visibility、visual consistency、Knowledge Pack、provider gate 和 tests；本路线到 Phase 42 停止增长。
+- Phase 42：Export / Desktop / Beta Acceptance。作为 beta closure 终点验收 Mac/Win desktop readiness、project save/open、preview/export、queue visibility、visual consistency、Knowledge Pack management、worker runtime gate、provider closed-loop shell、provider gate、tests、`noAdditionalPhasesPlanned`、`betaAcceptanceOwnsClosure` 和 `finalPhaseNumberLocked`；本路线到 Phase 42 停止增长。
 
 Phase 24 真实 gate 补充：
 
@@ -1068,7 +1068,7 @@ Acceptance criteria：
 - Phase 39 用户 pack 管理缺 import/create/enable/disable、版本/hash/依赖 checks、route test、conflict detection，或允许 pack 覆盖硬门禁，都必须 blocked；whole-library injection、unverified external import injection、provider submit/credential/shell/file/free-text route、parked provider bypass、temp/rejected/candidate/shot output 转 formal reference 都必须 fail closed。
 - Phase 40 缺 typed gated worker runtime evidence、默认 gate 打开、实际 Codex spawn / daemon / shell / credential / file mutation / provider submit 任一路径打开，都必须 blocked。
 - Phase 41 缺 Image2/Seedance closed-loop shell、缺 watcher/manifest/QA/promotion 闭环、worker self-report 仍可 complete、provider commit 默认不 gated，或真实 provider submit / live submit / credential / file mutation / worker spawn / shell 任一路径打开，或 Fast/VIP/text-to-video main path/BGM in video prompt 出现，都必须 blocked。
-- Phase 42 缺 Mac/Win desktop readiness、project save/open、preview/export、queue visibility、visual consistency、Knowledge Pack、provider gate 或测试任一 beta acceptance 项，都必须 blocked；`noAdditionalPhasesPlanned=true` 是验收的一部分。
+- Phase 42 缺 Mac/Win desktop readiness、project save/open、preview/export、queue visibility、visual consistency、Knowledge Pack management、worker runtime gate、provider closed-loop shell、provider gate、测试、`noAdditionalPhasesPlanned=true`、`betaAcceptanceOwnsClosure=true` 或 `finalPhaseNumberLocked=true` 任一 beta acceptance 项，都必须 blocked；观察到追加 Phase 请求、Phase 42 之后的 Phase、最终 Phase 不是 42、provider/live submit、worker spawn/subprocess、shell execution、credential access、file mutation 或 API key creation，也必须 fail closed。
 - 所有阶段都必须 pin hard locks；测试命令为 `npm run phase-roadmap:test`。
 
 ### Phase 30 已实现范围：Provider Enablement Gate
@@ -1182,7 +1182,7 @@ Acceptance criteria：
 - Phase 39：Knowledge Pack 用户管理，支持用户 pack 导入/新建/启停/路由测试/冲突检测，但不能覆盖硬门禁、provider policy、preflight、reference authority、keyframe pair、QA gate 或 Phase 38 validated packet。
 - Phase 40：真实 Codex Worker Runtime 只做默认 gated shell；默认不 spawn、不 daemon、不 shell、不 credential、不文件写、不 provider submit。
 - Phase 41：Image2 / Seedance provider execution closed-loop 只做默认 gated shell；默认不提交 provider、不 live submit、不接 credential、不创建 provider credential。
-- Phase 42：Export / Desktop / Beta Acceptance，验收 Mac/Win desktop readiness、project save/open、preview/export、queue visibility、visual consistency、knowledge pack、provider gate 和 tests。Phase 42 是本轮路线终点。
+- Phase 42：Export / Desktop / Beta Acceptance，验收 Mac/Win desktop readiness、project save/open、preview/export、queue visibility、visual consistency、knowledge pack management、worker runtime gate、provider closed-loop shell、provider gate、tests 和 closure freeze。Phase 42 是本轮路线终点；后续工作进入真实测试、bugfix 和 backlog 排序，不再继续新增 Phase。
 
 `PhaseRoadmapRuntime` 已扩展为 `phaseRange=phase_24_to_42`、`totalPhases=19`，新增 `betaClosure.finalPhaseNumber=42` 与 `noAdditionalPhasesPlanned=true`，用于防止 roadmap 继续无界增长。
 

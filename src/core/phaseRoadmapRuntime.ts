@@ -1216,6 +1216,55 @@ export interface PhaseRoadmapProviderClosedLoopShellEvidence extends PhaseRoadma
   providerModePolicy?: Record<string, unknown>;
 }
 
+export interface PhaseRoadmapBetaAcceptanceEvidence extends PhaseRoadmapClosureEvidence {
+  phase?: "phase_42_export_desktop_beta_acceptance";
+  phaseId?: "phase_42_export_desktop_beta_acceptance";
+  gates?: PhaseRoadmapClosureEvidence["gates"] & {
+    macDesktopReadiness?: boolean;
+    windowsDesktopReadiness?: boolean;
+    projectSaveOpen?: boolean;
+    previewExport?: boolean;
+    queueVisibility?: boolean;
+    visualConsistency?: boolean;
+    knowledgePackManagement?: boolean;
+    workerRuntimeGate?: boolean;
+    providerClosedLoopShell?: boolean;
+    providerGate?: boolean;
+    tests?: boolean;
+    noAdditionalPhasesPlanned?: boolean;
+    betaAcceptanceOwnsClosure?: boolean;
+    finalPhaseNumberLocked?: boolean;
+  };
+  summary?: PhaseRoadmapClosureEvidence["summary"] & {
+    finalPhaseNumber?: number;
+    maxPhaseNumber?: number;
+  };
+  observations?: PhaseRoadmapClosureObservations & {
+    macDesktopMissing?: boolean;
+    windowsDesktopMissing?: boolean;
+    projectSaveOpenMissing?: boolean;
+    previewExportMissing?: boolean;
+    queueVisibilityMissing?: boolean;
+    visualConsistencyMissing?: boolean;
+    knowledgePackMissing?: boolean;
+    workerRuntimeGateMissing?: boolean;
+    providerClosedLoopShellMissing?: boolean;
+    providerGateMissing?: boolean;
+    testsMissing?: boolean;
+    additionalPhaseRequested?: boolean;
+    phaseAfter42Observed?: boolean;
+    finalPhaseNumberNot42?: boolean;
+    apiKeyCreatedObserved?: boolean;
+  };
+  desktopReadiness?: Record<string, unknown>;
+  projectReadiness?: Record<string, unknown>;
+  exportReadiness?: Record<string, unknown>;
+  betaClosure?: Record<string, unknown>;
+  providerPolicy?: Record<string, unknown>;
+  workerPolicy?: Record<string, unknown>;
+  executionPolicy?: Record<string, unknown>;
+}
+
 export interface PhaseRoadmapRuntimeEvidence {
   projectFactsIntegration?: PhaseRoadmapProjectFactsIntegrationEvidence;
   subagentEnvelopeValidator?: PhaseRoadmapSubagentEnvelopeValidatorReceipt;
@@ -1237,7 +1286,7 @@ export interface PhaseRoadmapRuntimeEvidence {
   knowledgePackUserManagement?: PhaseRoadmapClosureEvidence;
   codexWorkerRuntimeGate?: PhaseRoadmapCodexWorkerRuntimeGateEvidence;
   providerClosedLoopShell?: PhaseRoadmapProviderClosedLoopShellEvidence;
-  betaAcceptance?: PhaseRoadmapClosureEvidence;
+  betaAcceptance?: PhaseRoadmapBetaAcceptanceEvidence;
   watcherManifestQaClosedLoop?: PhaseRoadmapClosedLoopReceipt;
 }
 
@@ -3918,6 +3967,131 @@ function providerClosedLoopShellEvidenceDecision(input: PhaseRoadmapRuntimeInput
   };
 }
 
+function betaAcceptanceEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const evidence = input.evidence?.betaAcceptance;
+
+  if (hasClosureEvidence(evidence)) {
+    const requiredGates = [
+      { field: "macDesktopReadiness", blocker: "beta_acceptance_mac_desktop_missing" },
+      { field: "windowsDesktopReadiness", blocker: "beta_acceptance_windows_desktop_missing" },
+      { field: "projectSaveOpen", blocker: "beta_acceptance_project_save_open_missing" },
+      { field: "previewExport", blocker: "beta_acceptance_preview_export_missing" },
+      { field: "queueVisibility", blocker: "beta_acceptance_queue_visibility_missing" },
+      { field: "visualConsistency", blocker: "beta_acceptance_visual_consistency_missing" },
+      { field: "knowledgePackManagement", blocker: "beta_acceptance_knowledge_pack_missing" },
+      { field: "workerRuntimeGate", blocker: "beta_acceptance_worker_runtime_gate_missing" },
+      { field: "providerClosedLoopShell", blocker: "beta_acceptance_provider_closed_loop_shell_missing" },
+      { field: "providerGate", blocker: "beta_acceptance_provider_gate_missing" },
+      { field: "tests", blocker: "beta_acceptance_tests_missing" },
+      { field: "noAdditionalPhasesPlanned", blocker: "beta_acceptance_no_additional_phases_planned_missing" },
+      { field: "betaAcceptanceOwnsClosure", blocker: "beta_acceptance_owns_closure_missing" },
+      { field: "finalPhaseNumberLocked", blocker: "beta_acceptance_final_phase_number_not_42" },
+    ];
+    const requiredGateBlockers = requiredGates.flatMap((gate) =>
+      blockedIf(!closureGateReady(evidence, gate.field), gate.blocker),
+    );
+    const providerSubmitObserved = closureAnyObservedTrue(
+      evidence,
+      ["providerSubmitObserved", "providerExecutionObserved", "providerCommitObserved"],
+      ["providerPolicy", "executionPolicy", "betaClosure"],
+    );
+    const liveSubmitObserved = closureAnyObservedTrue(
+      evidence,
+      ["liveSubmitObserved", "liveSubmitAllowed"],
+      ["providerPolicy", "executionPolicy", "betaClosure"],
+    );
+    const workerSpawnObserved = closureAnyObservedTrue(
+      evidence,
+      ["spawnCodexObserved", "workerSpawnObserved", "subprocessObserved", "workerSpawnAllowed"],
+      ["workerPolicy", "executionPolicy", "betaClosure"],
+    );
+    const shellExecutionObserved = closureAnyObservedTrue(
+      evidence,
+      ["shellExecutionObserved", "shellExecutionAllowed", "arbitraryShellAllowed"],
+      ["workerPolicy", "executionPolicy", "betaClosure"],
+    );
+    const credentialObserved = closureAnyObservedTrue(
+      evidence,
+      ["credentialReadObserved", "credentialWriteObserved", "credentialAccessObserved"],
+      ["providerPolicy", "executionPolicy", "betaClosure"],
+    );
+    const fileMutationObserved = closureAnyObservedTrue(
+      evidence,
+      ["fileMutationObserved", "fileMutationAllowed"],
+      ["workerPolicy", "executionPolicy", "betaClosure"],
+    );
+    const apiKeyCreatedObserved = closureAnyObservedTrue(
+      evidence,
+      ["apiKeyCreatedObserved", "apiKeyCreated", "apiKeyCreationObserved"],
+      ["providerPolicy", "executionPolicy", "betaClosure"],
+    );
+    const additionalPhaseRequested = closureAnyObservedTrue(
+      evidence,
+      ["additionalPhaseRequested", "newPhaseRequested", "roadmapExtensionRequested"],
+      ["betaClosure", "roadmap"],
+    );
+    const phaseAfter42Observed = closureAnyObservedTrue(
+      evidence,
+      ["phaseAfter42Observed", "phase43Observed", "phase44Observed"],
+      ["betaClosure", "roadmap"],
+    );
+    const finalPhaseNumber = closureValue(evidence, "finalPhaseNumber") ?? evidence.summary?.finalPhaseNumber;
+    const maxPhaseNumber = closureValue(evidence, "maxPhaseNumber") ?? evidence.summary?.maxPhaseNumber;
+    const finalPhaseNumberNot42 =
+      closureAnyObservedTrue(evidence, ["finalPhaseNumberNot42"], ["betaClosure", "roadmap"]) ||
+      (typeof finalPhaseNumber === "number" && finalPhaseNumber !== 42) ||
+      (typeof maxPhaseNumber === "number" && maxPhaseNumber > 42);
+    const observations = (evidence.observations || {}) as NonNullable<PhaseRoadmapBetaAcceptanceEvidence["observations"]>;
+    const blockers = uniqueSorted([
+      ...closureStatusBlockers(evidence, "phase_42_export_desktop_beta_acceptance", "beta_acceptance"),
+      ...closureSafetyBlockers(evidence, "beta_acceptance"),
+      ...requiredGateBlockers,
+      ...blockedIf(observations.macDesktopMissing === true, "beta_acceptance_mac_desktop_missing"),
+      ...blockedIf(observations.windowsDesktopMissing === true, "beta_acceptance_windows_desktop_missing"),
+      ...blockedIf(observations.projectSaveOpenMissing === true, "beta_acceptance_project_save_open_missing"),
+      ...blockedIf(observations.previewExportMissing === true, "beta_acceptance_preview_export_missing"),
+      ...blockedIf(observations.queueVisibilityMissing === true, "beta_acceptance_queue_visibility_missing"),
+      ...blockedIf(observations.visualConsistencyMissing === true, "beta_acceptance_visual_consistency_missing"),
+      ...blockedIf(observations.knowledgePackMissing === true, "beta_acceptance_knowledge_pack_missing"),
+      ...blockedIf(observations.workerRuntimeGateMissing === true, "beta_acceptance_worker_runtime_gate_missing"),
+      ...blockedIf(observations.providerClosedLoopShellMissing === true, "beta_acceptance_provider_closed_loop_shell_missing"),
+      ...blockedIf(observations.providerGateMissing === true, "beta_acceptance_provider_gate_missing"),
+      ...blockedIf(observations.testsMissing === true, "beta_acceptance_tests_missing"),
+      ...blockedIf(additionalPhaseRequested, "beta_acceptance_additional_phase_requested"),
+      ...blockedIf(phaseAfter42Observed, "beta_acceptance_phase_after_42_observed"),
+      ...blockedIf(finalPhaseNumberNot42, "beta_acceptance_final_phase_number_not_42"),
+      ...blockedIf(providerSubmitObserved, "beta_acceptance_provider_submit_not_blocked"),
+      ...blockedIf(liveSubmitObserved, "beta_acceptance_live_submit_not_blocked"),
+      ...blockedIf(workerSpawnObserved, "beta_acceptance_worker_spawn_not_blocked"),
+      ...blockedIf(shellExecutionObserved, "beta_acceptance_shell_not_blocked"),
+      ...blockedIf(credentialObserved, "beta_acceptance_credential_access_not_blocked"),
+      ...blockedIf(fileMutationObserved, "beta_acceptance_file_mutation_not_blocked"),
+      ...blockedIf(apiKeyCreatedObserved, "beta_acceptance_api_key_creation_observed"),
+    ]);
+
+    return {
+      evidenceKey: "betaAcceptance",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted(evidence.warnings || []),
+    };
+  }
+
+  return {
+    evidenceKey: "betaAcceptance",
+    source: input.betaAcceptanceReady === undefined ? "missing" : "legacy_boolean_override",
+    ready: false,
+    blockers: ["beta_acceptance_typed_evidence_missing"],
+    warnings: uniqueSorted([
+      ...blockedIf(
+        input.betaAcceptanceReady === true,
+        "legacy_betaAcceptanceReady_boolean_ignored_without_typed_evidence",
+      ),
+    ]),
+  };
+}
+
 function taskQueueVisibilityEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
   const evidence = input.evidence?.taskQueueVisibility;
 
@@ -4151,25 +4325,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const knowledgePackUserManagementDecision = knowledgePackUserManagementEvidenceDecision(input);
   const codexWorkerRuntimeGateDecision = codexWorkerRuntimeGateEvidenceDecision(input);
   const providerClosedLoopShellDecision = providerClosedLoopShellEvidenceDecision(input);
-  const betaAcceptanceDecision = phaseClosureEvidenceDecision(input, {
-    evidenceKey: "betaAcceptance",
-    phaseId: "phase_42_export_desktop_beta_acceptance",
-    missingBlocker: "beta_acceptance_typed_evidence_missing",
-    safetyPrefix: "beta_acceptance",
-    legacyReadyInput: "betaAcceptanceReady",
-    requiredGates: [
-      { field: "macDesktopReadiness", blocker: "beta_acceptance_mac_desktop_missing" },
-      { field: "windowsDesktopReadiness", blocker: "beta_acceptance_windows_desktop_missing" },
-      { field: "projectSaveOpen", blocker: "beta_acceptance_project_save_open_missing" },
-      { field: "previewExport", blocker: "beta_acceptance_preview_export_missing" },
-      { field: "queueVisibility", blocker: "beta_acceptance_queue_visibility_missing" },
-      { field: "visualConsistency", blocker: "beta_acceptance_visual_consistency_missing" },
-      { field: "knowledgePackManagement", blocker: "beta_acceptance_knowledge_pack_missing" },
-      { field: "providerGate", blocker: "beta_acceptance_provider_gate_missing" },
-      { field: "tests", blocker: "beta_acceptance_tests_missing" },
-      { field: "noAdditionalPhasesPlanned", blocker: "beta_acceptance_phase_freeze_missing" },
-    ],
-  });
+  const betaAcceptanceDecision = betaAcceptanceEvidenceDecision(input);
   const evidenceDecisions = [
     projectFactsDecision,
     envelopeDecision,
@@ -4751,15 +4907,18 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       requiredInputs: [
         "evidence.betaAcceptance",
         "Mac and Windows desktop readiness",
-        "project save/open, preview/export, queue visibility, visual consistency, knowledge pack, provider gate, and tests",
+        "project save/open, preview/export, queue visibility, visual consistency, knowledge pack management, worker runtime gate, provider closed-loop shell, provider gate, and tests",
+        "noAdditionalPhasesPlanned, betaAcceptanceOwnsClosure, and finalPhaseNumberLocked",
       ],
       acceptanceCriteria: [
         "Mac desktop readiness and Windows desktop readiness are both accepted.",
-        "Project save/open, preview/export, queue visibility, visual consistency, Knowledge Pack management, provider gate, and tests all pass.",
+        "Project save/open, preview/export, queue visibility, visual consistency, Knowledge Pack management, worker runtime gate, provider closed-loop shell, provider gate, and tests all pass.",
         "Beta acceptance is the Phase 42 closure point; no additional phases are planned in this roadmap range.",
+        "Phase 42 owns closure, the final phase number is locked at 42, and any phase after 42 fails closed.",
       ],
       notes: [
         "Phase 42 freezes the beta closure scope and ends the Phase roadmap growth loop.",
+        "The legacy betaAcceptanceReady boolean is ignored without typed evidence.",
         ...evidenceNotes([betaAcceptanceDecision]),
       ],
     }),
@@ -4862,8 +5021,13 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "queue_visibility",
         "visual_consistency",
         "knowledge_pack_management",
+        "worker_runtime_gate",
+        "provider_closed_loop_shell",
         "provider_gate",
         "tests",
+        "no_additional_phases_planned",
+        "beta_acceptance_owns_closure",
+        "final_phase_number_locked",
       ],
     },
   };

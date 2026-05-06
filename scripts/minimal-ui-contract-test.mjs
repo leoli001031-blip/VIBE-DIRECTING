@@ -145,6 +145,8 @@ const codexWorkerRuntimeGateDiagnostics = findFunctionBody(appSource, "CodexWork
 const codexWorkerRuntimeGateUiSummary = findFunctionBody(appSource, "buildCodexWorkerRuntimeGateUiSummary");
 const providerClosedLoopShellDiagnostics = findFunctionBody(appSource, "ProviderClosedLoopShellDiagnostics");
 const providerClosedLoopShellUiSummary = findFunctionBody(appSource, "buildProviderClosedLoopShellUiSummary");
+const betaAcceptanceDiagnostics = findFunctionBody(appSource, "BetaAcceptanceDiagnostics");
+const betaAcceptanceUiSummary = findFunctionBody(appSource, "buildBetaAcceptanceUiSummary");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
 const realPilotDiagnostics = findFunctionBody(appSource, "RealPilotDiagnostics");
 const knowledgeUiSummary = findFunctionBody(appSource, "buildKnowledgeUiSummary");
@@ -349,6 +351,22 @@ checkMessage(requireWithin(providerClosedLoopShellUiSummary, /watcherRequired/i,
 checkMessage(requireWithin(providerClosedLoopShellUiSummary, /manifestRequired/i, "Phase 41 manifest typed gate summary"));
 checkMessage(requireWithin(providerClosedLoopShellUiSummary, /qaGateRequired/i, "Phase 41 QA typed gate summary"));
 checkMessage(requireWithin(providerClosedLoopShellUiSummary, /promotionGateRequired/i, "Phase 41 promotion typed gate summary"));
+checkMessage(requireWithin(diagnosticsMode, /BetaAcceptanceDiagnostics/, "Phase 42 Beta Acceptance diagnostics mounted"));
+checkMessage(requireWithin(settingsShell, /Phase 42 Beta Acceptance/i, "Phase 42 Settings read-only beta acceptance summary"));
+checkMessage(requireWithin(betaAcceptanceDiagnostics, /Phase 42 Beta Acceptance/i, "Phase 42 Beta Acceptance diagnostics panel"));
+checkMessage(requireWithin(betaAcceptanceDiagnostics, /Mac\/Windows/i, "Phase 42 Mac/Windows readiness Diagnostics copy"));
+checkMessage(requireWithin(betaAcceptanceDiagnostics, /Project \/ Export/i, "Phase 42 project/export Diagnostics copy"));
+checkMessage(requireWithin(betaAcceptanceDiagnostics, /Runtime Gates/i, "Phase 42 runtime gates Diagnostics copy"));
+checkMessage(requireWithin(betaAcceptanceDiagnostics, /Provider Gate/i, "Phase 42 provider gate Diagnostics copy"));
+checkMessage(requireWithin(betaAcceptanceDiagnostics, /Tests/i, "Phase 42 test matrix Diagnostics copy"));
+checkMessage(requireWithin(betaAcceptanceDiagnostics, /Closure/i, "Phase 42 closure Diagnostics copy"));
+checkMessage(requireWithin(`${betaAcceptanceDiagnostics}\n${betaAcceptanceUiSummary}\n${settingsShell}`, /provider submit\/credential\/shell/i, "Phase 42 provider submit/credential/shell Diagnostics/Settings copy"));
+checkMessage(requireWithin(betaAcceptanceUiSummary, /macDesktopReadiness/i, "Phase 42 Mac typed gate summary"));
+checkMessage(requireWithin(betaAcceptanceUiSummary, /windowsDesktopReadiness/i, "Phase 42 Windows typed gate summary"));
+checkMessage(requireWithin(betaAcceptanceUiSummary, /workerRuntimeGate/i, "Phase 42 worker runtime typed gate summary"));
+checkMessage(requireWithin(betaAcceptanceUiSummary, /providerClosedLoopShell/i, "Phase 42 provider closed-loop typed gate summary"));
+checkMessage(requireWithin(betaAcceptanceUiSummary, /betaAcceptanceOwnsClosure/i, "Phase 42 owns closure typed gate summary"));
+checkMessage(requireWithin(betaAcceptanceUiSummary, /finalPhaseNumberLocked/i, "Phase 42 final phase locked typed gate summary"));
 check(
   !/RealPilotDirectorStatus/.test(directorMode),
   "Director Clean Mode must not mount RealPilotDirectorStatus in the default DirectorMode",
@@ -914,6 +932,21 @@ const phase41ForbiddenMainTerms = [
 for (const [term, pattern] of phase41ForbiddenMainTerms) {
   const count = countPattern(phase2123DirectorSurface, pattern);
   check(count === 0, `Phase 41 main Director surface must expose 0 ${term} term(s), found ${count}`);
+}
+const phase42ForbiddenMainTerms = [
+  ["Phase 42", /Phase\s*42/i],
+  ["Beta Acceptance", /Beta\s+Acceptance/i],
+  ["Mac/Windows readiness", /Mac\/Windows\s+readiness|Mac\s+readiness|Windows\s+readiness/i],
+  ["test matrix", /test\s+matrix/i],
+  ["provider submit", /provider\s+submit/i],
+  ["live submit", /live\s+submit/i],
+  ["credential", /credential/i],
+  ["shell", /shell/i],
+  ["final phase", /final\s+phase/i],
+];
+for (const [term, pattern] of phase42ForbiddenMainTerms) {
+  const count = countPattern(phase2123DirectorSurface, pattern);
+  check(count === 0, `Phase 42 main Director surface must expose 0 ${term} term(s), found ${count}`);
 }
 check(!/Formal\s+Gate|Proxy\s+Duration|Draft\s+Events|blockedPlaceholder/i.test(minimalPreview), "Preview Player copy must stay short and not show gate/proxy counters");
 check(/locked/i.test(minimalAssetLibrary) && /candidate/i.test(minimalAssetLibrary) && /review/i.test(minimalAssetLibrary), "Asset Library must keep locked/candidate/review consistency states");
