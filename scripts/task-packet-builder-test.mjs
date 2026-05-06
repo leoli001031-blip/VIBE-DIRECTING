@@ -200,8 +200,21 @@ const requiredTaskKinds = [
 ];
 assert(state.packets.length === requiredTaskKinds.length, "builder must create all Phase38 task packet classes by default");
 assert(state.summary.ready === requiredTaskKinds.length, `all fixture packets should be ready, got ${state.summary.ready}`);
+assert(state.summary.validatedEnvelopeReady === requiredTaskKinds.length, "all ready packets must have validated envelopes");
+assert(state.plannerReceipt.receiptKind === "phase38_full_task_subagent_packet_planner", "planner receipt kind drifted");
+assert(state.plannerReceipt.status === "pass", `planner receipt should pass: ${state.plannerReceipt.blockedReasons.join("; ")}`);
+assert(state.plannerReceipt.allProductionTaskKindsCovered === true, "planner receipt must cover every formal production task kind");
+assert(state.plannerReceipt.productionTaskKinds.length === requiredTaskKinds.length, "planner receipt production task kind coverage drifted");
+assert(state.plannerReceipt.validatedEnvelopeRequired === true, "planner receipt must require validated envelopes");
+assert(state.plannerReceipt.formalTaskRejectsMissingPacket === true, "planner receipt must reject missing formal packets");
+assert(state.plannerReceipt.expectedOutputsIncluded === true, "planner receipt must include expected outputs");
+assert(state.plannerReceipt.sourceFactTraceRecorded === true, "planner receipt must include source fact trace");
+assert(state.plannerReceipt.knowledgePacksRecorded === true, "planner receipt must include injected knowledge trace");
+assert(state.plannerReceipt.phase37VisualConsistencyTraceRequired === true, "planner receipt must require Phase37 visual trace");
+assert(state.plannerReceipt.noFreeTextWorker === true, "planner receipt must forbid free-text workers");
 for (const kind of requiredTaskKinds) {
   assert(taskPacketKinds.includes(kind), `taskPacketKinds missing Phase38 kind ${kind}`);
+  assert(state.plannerReceipt.coverage.some((item) => item.taskKind === kind && item.status === "covered_ready"), `planner receipt missing ready coverage for ${kind}`);
 }
 
 for (const kind of taskPacketKinds) {
@@ -209,6 +222,17 @@ for (const kind of taskPacketKinds) {
   assert(packet, `missing packet kind ${kind}`);
   assert(packet.status === "ready", `${kind} packet should be ready`);
   assert(packet.envelope, `${kind} packet must include a validated-style envelope when ready`);
+  assert(packet.validationReceipt.status === "pass", `${kind} validation receipt must pass`);
+  for (const [field, value] of Object.entries(packet.validationReceipt.requiredFields)) {
+    assert(value === true, `${kind} validation receipt field ${field} must be true`);
+  }
+  assert(packet.sourceFactTrace.length > 0, `${kind} source fact trace missing`);
+  for (const phase37Gate of ["identity", "scene", "shot_layout", "spatial_memory", "keyframe_pair", "master_inheritance_qa"]) {
+    assert(packet.sourceFactTrace.some((item) => item.startsWith(`phase37_gate:${phase37Gate}:`)), `${kind} missing Phase37 ${phase37Gate} source trace`);
+  }
+  assert(packet.injectedKnowledgeTrace.status === "present", `${kind} injected knowledge trace must be present`);
+  assert(packet.injectedKnowledgeTrace.packIds.length > 0, `${kind} injected knowledge pack trace missing`);
+  assert(packet.injectedKnowledgeTrace.snippetIds.length > 0, `${kind} injected knowledge snippet trace missing`);
   assert(packet.envelopeId === packet.envelope.id, `${kind} envelope id mismatch`);
   assert(packet.hardFields, `${kind} missing hard fields`);
   assert(packet.hardFields.purpose === packet.envelope.purpose, `${kind} purpose must be mirrored into envelope`);
@@ -247,6 +271,11 @@ for (const kind of taskPacketKinds) {
   assert(packet.envelope.expectedOutputContract.gateFields.length === 6, `${kind} output contract gate fields incomplete`);
   assert(packet.envelope.userIntent.includes(`task_kind:${kind}`), `${kind} envelope context capsule missing from userIntent`);
   assert(packet.envelope.taskEnvelope.expectedOutputs.length > 0, `${kind} envelope expected output missing`);
+  assert(packet.envelope.taskEnvelope.sourceFactTrace.length > 0, `${kind} task envelope source fact trace missing`);
+  assert(packet.envelope.sourceFactTrace.length === packet.sourceFactTrace.length, `${kind} subagent source fact trace must mirror packet`);
+  assert(packet.envelope.resultSchema === "subagent_result_v1", `${kind} subagent result schema missing`);
+  assert(packet.envelope.forbiddenActions.includes("no_free_text_task"), `${kind} subagent forbidden actions missing no_free_text_task`);
+  assert(packet.envelope.injectedKnowledgeTrace.status === "present", `${kind} subagent injected knowledge trace must be present`);
   assert(packet.envelope.taskEnvelope.knowledgeRouteResultId, `${kind} task envelope missing knowledge route result id`);
   assert(packet.envelope.taskEnvelope.contextBudgetId, `${kind} task envelope missing context budget id`);
   assert(packet.envelope.taskEnvelope.knowledgeInputHash, `${kind} task envelope missing knowledge input hash`);
@@ -408,6 +437,8 @@ const noAssetState = buildTaskPackets({
 for (const packet of noAssetState.packets) {
   assert(packet.status === "blocked_missing_context", `${packet.taskKind} must block when bound assets are missing`);
   assert(packet.missingContext.includes("bound_assets"), `${packet.taskKind} must report missing bound assets`);
+  assert(packet.validationReceipt.status === "blocked", `${packet.taskKind} missing assets must block validation receipt`);
+  assert(packet.validationReceipt.blockers.includes("blocked_missing_context:bound_assets"), `${packet.taskKind} validation receipt must record bound asset blocker`);
   assert(!packet.envelope, `${packet.taskKind} must not be ready without envelope`);
 }
 

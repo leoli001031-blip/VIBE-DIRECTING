@@ -1018,6 +1018,12 @@ export interface PhaseRoadmapClosureObservations {
   secretInProjectFileObserved?: boolean;
   globalKnowledgeAsProjectFactObserved?: boolean;
   globalKnowledgeAuthorityObserved?: boolean;
+  unvalidatedPacketObserved?: boolean;
+  missingExpectedOutputsObserved?: boolean;
+  missingSourceFactTraceObserved?: boolean;
+  missingKnowledgeTraceObserved?: boolean;
+  freeTextWorkerObserved?: boolean;
+  freeTextTaskObserved?: boolean;
   candidateFutureReferenceObserved?: boolean;
   tempFutureReferenceObserved?: boolean;
   rejectedFutureReferenceObserved?: boolean;
@@ -1137,6 +1143,22 @@ export interface PhaseRoadmapVisualConsistencyContractEvidence extends PhaseRoad
   repairPolicy?: Record<string, unknown>;
 }
 
+export interface PhaseRoadmapFullTaskSubagentPacketPlannerEvidence extends PhaseRoadmapClosureEvidence {
+  taskCoverage?: Record<string, unknown>;
+  packetPolicy?: Record<string, unknown>;
+  outputContract?: Record<string, unknown>;
+  sourceFactTrace?: Record<string, unknown>;
+  knowledgeTrace?: Record<string, unknown>;
+  freeTextPolicy?: Record<string, unknown>;
+  routeSafety?: {
+    workerRouteOpened?: boolean;
+    providerRouteOpened?: boolean;
+    fileRouteOpened?: boolean;
+    credentialRouteOpened?: boolean;
+    shellRouteOpened?: boolean;
+  };
+}
+
 export interface PhaseRoadmapRuntimeEvidence {
   projectFactsIntegration?: PhaseRoadmapProjectFactsIntegrationEvidence;
   subagentEnvelopeValidator?: PhaseRoadmapSubagentEnvelopeValidatorReceipt;
@@ -1153,6 +1175,7 @@ export interface PhaseRoadmapRuntimeEvidence {
   taskQueueVisibility?: PhaseRoadmapTaskQueueVisibilityEvidence;
   projectFileFactSource?: PhaseRoadmapClosureEvidence;
   visualConsistencyContract?: PhaseRoadmapVisualConsistencyContractEvidence;
+  fullTaskSubagentPacketPlanner?: PhaseRoadmapFullTaskSubagentPacketPlannerEvidence;
   subagentPacketPlanner?: PhaseRoadmapClosureEvidence;
   knowledgePackUserManagement?: PhaseRoadmapClosureEvidence;
   codexWorkerRuntimeGate?: PhaseRoadmapClosureEvidence;
@@ -1180,6 +1203,7 @@ export interface PhaseRoadmapEvidenceDecision {
     | "taskQueueVisibility"
     | "projectFileFactSource"
     | "visualConsistencyContract"
+    | "fullTaskSubagentPacketPlanner"
     | "subagentPacketPlanner"
     | "knowledgePackUserManagement"
     | "codexWorkerRuntimeGate"
@@ -2942,7 +2966,7 @@ type PhaseRoadmapClosureEvidenceKey =
   | "taskQueueVisibility"
   | "projectFileFactSource"
   | "visualConsistencyContract"
-  | "subagentPacketPlanner"
+  | "fullTaskSubagentPacketPlanner"
   | "knowledgePackUserManagement"
   | "codexWorkerRuntimeGate"
   | "providerClosedLoopShell"
@@ -3361,6 +3385,99 @@ function visualConsistencyContractEvidenceDecision(input: PhaseRoadmapRuntimeInp
   };
 }
 
+function fullTaskSubagentPacketPlannerEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const decision = phaseClosureEvidenceDecision(input, {
+    evidenceKey: "fullTaskSubagentPacketPlanner",
+    phaseId: "phase_38_full_task_subagent_packet_planner",
+    missingBlocker: "full_task_subagent_packet_planner_typed_evidence_missing",
+    safetyPrefix: "full_task_subagent_packet_planner",
+    legacyReadyInput: "subagentPacketPlannerReady",
+    requiredGates: [
+      { field: "allProductionTaskKindsCovered", blocker: "full_task_subagent_packet_planner_task_kind_coverage_missing" },
+      { field: "validatedPacketsRequired", blocker: "full_task_subagent_packet_planner_validated_packet_required_missing" },
+      { field: "expectedOutputsRequired", blocker: "full_task_subagent_packet_planner_expected_outputs_missing" },
+      { field: "sourceFactTraceRequired", blocker: "full_task_subagent_packet_planner_source_fact_trace_missing" },
+      { field: "knowledgeTraceRequired", blocker: "full_task_subagent_packet_planner_knowledge_trace_missing" },
+      { field: "freeTextWorkerForbidden", blocker: "full_task_subagent_packet_planner_free_text_worker_not_forbidden" },
+    ],
+  });
+  const evidence = input.evidence?.fullTaskSubagentPacketPlanner;
+  if (!hasClosureEvidence(evidence)) return decision;
+
+  const routeOpened =
+    closureAnyObservedTrue(
+      evidence,
+      ["workerRouteOpened", "providerRouteOpened", "fileRouteOpened", "credentialRouteOpened", "shellRouteOpened"],
+      ["routeSafety", "routes", "workflowRoutes", "workerRoutes"],
+    );
+
+  const blockers = uniqueSorted([
+    ...decision.blockers,
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["missingProductionTaskKindCoverage", "productionTaskKindCoverageMissing", "taskKindCoverageMissing"],
+        ["taskCoverage", "coverage", "productionTaskKinds"],
+      ),
+      "full_task_subagent_packet_planner_task_kind_coverage_missing",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["unvalidatedPacketAllowed", "unvalidatedPacketObserved", "formalTaskAcceptsUnvalidatedPacket"],
+        ["packetPolicy", "validation", "formalTaskPolicy"],
+      ),
+      "full_task_subagent_packet_planner_unvalidated_packet_allowed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["missingExpectedOutputsAllowed", "missingExpectedOutputsObserved", "expectedOutputsMissing"],
+        ["outputContract", "expectedOutputs", "formalTaskPolicy"],
+      ),
+      "full_task_subagent_packet_planner_expected_outputs_missing",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["missingSourceFactTraceAllowed", "missingSourceFactTraceObserved", "sourceFactTraceMissing"],
+        ["sourceFactTrace", "sourceFacts", "formalTaskPolicy"],
+      ),
+      "full_task_subagent_packet_planner_source_fact_trace_missing",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["missingKnowledgeTraceAllowed", "missingKnowledgeTraceObserved", "knowledgeTraceMissing"],
+        ["knowledgeTrace", "injectedKnowledge", "formalTaskPolicy"],
+      ),
+      "full_task_subagent_packet_planner_knowledge_trace_missing",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        [
+          "freeTextWorkerAllowed",
+          "freeTextTaskAllowed",
+          "freeTextWorkerObserved",
+          "freeTextTaskObserved",
+          "formalTaskAcceptsFreeText",
+          "workerAcceptsFreeText",
+        ],
+        ["freeTextPolicy", "formalTaskPolicy", "workerPolicy"],
+      ),
+      "full_task_subagent_packet_planner_free_text_worker_or_task_allowed",
+    ),
+    ...blockedIf(routeOpened, "full_task_subagent_packet_planner_worker_provider_file_credential_shell_route_open"),
+  ]);
+
+  return {
+    ...decision,
+    ready: blockers.length === 0,
+    blockers,
+  };
+}
+
 function taskQueueVisibilityEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
   const evidence = input.evidence?.taskQueueVisibility;
 
@@ -3590,20 +3707,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const taskQueueVisibilityDecision = taskQueueVisibilityEvidenceDecision(input);
   const projectFileFactSourceDecision = projectFileFactSourceEvidenceDecision(input);
   const visualConsistencyContractDecision = visualConsistencyContractEvidenceDecision(input);
-  const subagentPacketPlannerDecision = phaseClosureEvidenceDecision(input, {
-    evidenceKey: "subagentPacketPlanner",
-    phaseId: "phase_38_full_task_subagent_packet_planner",
-    missingBlocker: "subagent_packet_planner_typed_evidence_missing",
-    safetyPrefix: "subagent_packet_planner",
-    legacyReadyInput: "subagentPacketPlannerReady",
-    requiredGates: [
-      { field: "allProductionTaskKindsCovered", blocker: "subagent_packet_planner_task_coverage_missing" },
-      { field: "validatedEnvelopeRequired", blocker: "subagent_packet_planner_validated_envelope_missing" },
-      { field: "formalTaskRejectsMissingPacket", blocker: "subagent_packet_planner_missing_packet_not_blocked" },
-      { field: "expectedOutputsIncluded", blocker: "subagent_packet_planner_expected_outputs_missing" },
-      { field: "knowledgePacksRecorded", blocker: "subagent_packet_planner_knowledge_pack_trace_missing" },
-    ],
-  });
+  const fullTaskSubagentPacketPlannerDecision = fullTaskSubagentPacketPlannerEvidenceDecision(input);
   const knowledgePackUserManagementDecision = phaseClosureEvidenceDecision(input, {
     evidenceKey: "knowledgePackUserManagement",
     phaseId: "phase_39_knowledge_pack_user_management",
@@ -3685,7 +3789,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
     taskQueueVisibilityDecision,
     projectFileFactSourceDecision,
     visualConsistencyContractDecision,
-    subagentPacketPlannerDecision,
+    fullTaskSubagentPacketPlannerDecision,
     knowledgePackUserManagementDecision,
     codexWorkerRuntimeGateDecision,
     providerClosedLoopShellDecision,
@@ -4129,12 +4233,12 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "phase_37_visual_consistency_contract",
       ],
       readyPhases,
-      ownBlockers: uniqueSorted(subagentPacketPlannerDecision.blockers),
+      ownBlockers: uniqueSorted(fullTaskSubagentPacketPlannerDecision.blockers),
       readyStatus: "ready_for_packet_planner",
       requiredInputs: [
-        "evidence.subagentPacketPlanner",
+        "evidence.fullTaskSubagentPacketPlanner",
         "all production task kinds covered by validated packets",
-        "formal tasks reject missing packets",
+        "formal tasks reject missing packets, expected outputs, source facts, and knowledge trace",
       ],
       acceptanceCriteria: [
         "Image, asset, keyframe, video, QA, regeneration, story, and export tasks have packet coverage.",
@@ -4143,7 +4247,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       ],
       notes: [
         "Phase 38 removes the last free-text subagent planning gap.",
-        ...evidenceNotes([subagentPacketPlannerDecision]),
+        ...evidenceNotes([fullTaskSubagentPacketPlannerDecision]),
       ],
     }),
     makePhase({

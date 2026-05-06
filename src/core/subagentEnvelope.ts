@@ -69,6 +69,17 @@ export interface BuildSubagentEnvelopeInput {
   disallowedReadScopes?: string[];
   mustInspectNeighborShotIds?: string[];
   authorityPriority?: Array<keyof GateSet | "source_index" | "provider_policy" | "preflight">;
+  sourceFactTrace?: string[];
+  injectedKnowledgeTrace?: {
+    status: "present" | "missing";
+    packIds: string[];
+    snippetIds: string[];
+    snippetCount: number;
+    qaPackBindingIds: string[];
+    warnings: string[];
+  };
+  resultSchema?: "subagent_result_v1";
+  forbiddenActions?: string[];
 }
 
 export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): SubagentTaskEnvelope {
@@ -97,7 +108,13 @@ export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): Su
     input.taskEnvelope.injectedKnowledgeSnippetIds;
   const injectedKnowledgeSnippets = input.injectedKnowledgeSnippets || input.contextBudget?.injectedSnippets || input.taskEnvelope.injectedKnowledgeSnippets;
 
-  const envelope: SubagentTaskEnvelope = {
+  const taskEnvelopeExtras = input.taskEnvelope as TaskEnvelope & { sourceFactTrace?: string[]; forbiddenActions?: string[] };
+  const envelope: SubagentTaskEnvelope & {
+    sourceFactTrace: string[];
+    injectedKnowledgeTrace: NonNullable<BuildSubagentEnvelopeInput["injectedKnowledgeTrace"]>;
+    resultSchema: "subagent_result_v1";
+    forbiddenActions: string[];
+  } = {
     id: input.id,
     parentTaskId: input.parentTaskId,
     purpose: input.purpose,
@@ -161,6 +178,30 @@ export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): Su
     allowedDelta: [...new Set([...layoutAllowedDelta, ...(input.allowedDelta || [])])],
     mustNotAdd: [...new Set([...layoutMustNotAdd, ...(input.mustNotAdd || [])])],
     expectedOutputContract: input.expectedOutputContract || defaultOutputContract,
+    sourceFactTrace: input.sourceFactTrace || taskEnvelopeExtras.sourceFactTrace || [],
+    injectedKnowledgeTrace:
+      input.injectedKnowledgeTrace || {
+        status: injectedKnowledgePacks.length && (injectedKnowledgeSnippetIds.length || injectedKnowledgeSnippets.length) ? "present" : "missing",
+        packIds: injectedKnowledgePacks.map((pack) => pack.packId),
+        snippetIds: injectedKnowledgeSnippetIds,
+        snippetCount: injectedKnowledgeSnippets.length,
+        qaPackBindingIds: Object.keys(
+          input.qaPackBindings ||
+            Object.fromEntries(
+              injectedKnowledgePacks
+                .filter((pack) => pack.consumer === "qa_gate")
+                .map((pack) => [pack.packId, { version: pack.version, hash: pack.hash }]),
+            ),
+        ),
+        warnings: [
+          ...(input.routeWarnings || []),
+          ...(input.knowledgeRouteResult?.warnings || []),
+          ...(input.contextBudget?.warnings || []),
+          ...input.taskEnvelope.routeWarnings,
+        ],
+      },
+    resultSchema: input.resultSchema || "subagent_result_v1",
+    forbiddenActions: input.forbiddenActions || taskEnvelopeExtras.forbiddenActions || [],
   };
 
   const policyBinding = envelope.policyBinding || buildPolicyBinding(envelope.taskEnvelope);

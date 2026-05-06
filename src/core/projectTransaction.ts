@@ -2,7 +2,7 @@ import type { DirectorWorkflowState } from "./directorWorkflow";
 import type { DirectorEditAffectedArtifact, DirectorEditPlan, DirectorEditSelection } from "./directorEdit";
 import type { ProjectRuntimeState } from "./projectState";
 import { ingestQueueDecision, type RuntimeQueueIngestResult } from "./runtimeIngestShell";
-import type { BuiltTaskPacket, TaskPacketBuilderState, TaskPacketKind } from "./taskPacketBuilder";
+import type { BuiltTaskPacket, TaskPacketBuilderState, TaskPacketKind, TaskPacketPlannerReceipt } from "./taskPacketBuilder";
 import type { AppendableTaskRunLedgerEvent } from "./taskRunLedger";
 import type { ProviderExecutionState, StoryChangeTransaction, TaskEnvelope } from "./types";
 
@@ -45,7 +45,25 @@ export interface ProjectTransactionSourceFacts {
   userIntent: string;
   taskEnvelopeIds: string[];
   sourceRefs: string[];
+  packetPlannerReceipt: ProjectPacketPlannerReceiptSummary;
   knowledgeInjectionTrace: ProjectKnowledgeInjectionTraceSummary;
+}
+
+export interface ProjectPacketPlannerReceiptSummary {
+  receiptId: string;
+  status: TaskPacketPlannerReceipt["status"];
+  allProductionTaskKindsCovered: boolean;
+  validatedEnvelopeRequired: true;
+  formalTaskRejectsMissingPacket: true;
+  expectedOutputsIncluded: boolean;
+  sourceFactTraceRecorded: boolean;
+  knowledgePacksRecorded: boolean;
+  phase37VisualConsistencyTraceRequired: true;
+  noFreeTextWorker: true;
+  productionTaskKinds: TaskPacketKind[];
+  readyKinds: TaskPacketKind[];
+  blockedKinds: TaskPacketKind[];
+  blockedReasons: string[];
 }
 
 export interface ProjectKnowledgeInjectionTraceItem {
@@ -294,6 +312,38 @@ function knowledgeTraceSummary(packetState: TaskPacketBuilderState): ProjectKnow
   };
 }
 
+function packetPlannerReceiptSummary(packetState: TaskPacketBuilderState): ProjectPacketPlannerReceiptSummary {
+  const receipt = packetState.plannerReceipt;
+  const packetKinds = packetState.packets.map((packet) => packet.taskKind);
+  const expectedOutputsIncluded = packetState.packets.every((packet) => (packet.envelope?.taskEnvelope.expectedOutputs.length || 0) > 0);
+  const sourceFactTraceRecorded = packetState.packets.every((packet) => packet.sourceFactTrace.length > 0);
+  const knowledgePacksRecorded = packetState.packets.every((packet) => traceItem(packet).status === "present");
+  const allProductionTaskKindsCovered = receipt.productionTaskKinds.every((kind) => packetKinds.includes(kind));
+  const blockedReasons = unique([
+    allProductionTaskKindsCovered ? "" : "formal_task_kind_coverage_missing",
+    expectedOutputsIncluded ? "" : "expected_outputs_missing",
+    sourceFactTraceRecorded ? "" : "source_fact_trace_missing",
+    knowledgePacksRecorded ? "" : "injected_knowledge_trace_missing",
+    ...packetState.packets.flatMap((packet) => packet.blockedReasons),
+  ]);
+  return {
+    receiptId: receipt.receiptId,
+    status: blockedReasons.length ? "blocked" : "pass",
+    allProductionTaskKindsCovered,
+    validatedEnvelopeRequired: true,
+    formalTaskRejectsMissingPacket: true,
+    expectedOutputsIncluded,
+    sourceFactTraceRecorded,
+    knowledgePacksRecorded,
+    phase37VisualConsistencyTraceRequired: true,
+    noFreeTextWorker: true,
+    productionTaskKinds: receipt.productionTaskKinds,
+    readyKinds: packetState.packets.filter((packet) => packet.status === "ready").map((packet) => packet.taskKind),
+    blockedKinds: packetState.packets.filter((packet) => packet.status !== "ready").map((packet) => packet.taskKind),
+    blockedReasons,
+  };
+}
+
 function sourceIndexHashFor(input: BuildProjectTransactionRuntimeInput): string {
   return (
     input.sourceIndexHash ||
@@ -336,6 +386,7 @@ function sourceFacts(input: BuildProjectTransactionRuntimeInput, trace: ProjectK
     userIntent: input.workflowState.editPlan.userIntent,
     taskEnvelopeIds,
     sourceRefs: unique(["director_workflow", input.workflowState.editPlan.id, input.workflowState.editPlan.transaction.id, sourceIndexHash]),
+    packetPlannerReceipt: packetPlannerReceiptSummary(input.workflowState.taskPacketState),
     knowledgeInjectionTrace: trace,
   };
 }
@@ -420,6 +471,11 @@ function validateTaskEnvelopeForQueue(packet: BuiltTaskPacket, userConfirmed: bo
   if (!envelope) return ["validated_task_envelope_missing"];
   const trace = traceItem(packet);
   return unique([
+    packet.validationReceipt.status === "pass" ? "" : "packet_validation_receipt_blocked",
+    packet.validationReceipt.requiredFields.validatedEnvelope ? "" : "validated_task_envelope_missing",
+    packet.validationReceipt.requiredFields.sourceFactTrace ? "" : "source_fact_trace_missing",
+    packet.validationReceipt.requiredFields.phase37VisualConsistencyTrace ? "" : "phase37_visual_consistency_trace_missing",
+    packet.validationReceipt.requiredFields.injectedKnowledgeTrace ? "" : "blocked_missing_knowledge_trace",
     envelope.id ? "" : "task_envelope_id_missing",
     envelope.sourceIndexHash ? "" : "source_index_hash_missing",
     envelope.expectedOutputs.length ? "" : "expected_outputs_missing",

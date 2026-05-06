@@ -16,9 +16,11 @@
     "forbiddenReferences",
     "providerPolicySummary",
     "taskEnvelope",
+    "sourceFactTrace",
     "injectedKnowledgePacks",
     "injectedKnowledgeSnippetIds",
     "injectedKnowledgeSnippets",
+    "injectedKnowledgeTrace",
     "routeWarnings",
     "forbiddenKnowledgePacks",
     "requiredKnowledgeCategories",
@@ -33,7 +35,9 @@
     "mustPreserve",
     "allowedDelta",
     "mustNotAdd",
-    "expectedOutputContract"
+    "expectedOutputContract",
+    "resultSchema",
+    "forbiddenActions"
   ],
   "properties": {
     "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
@@ -127,19 +131,56 @@
       "minItems": 1
     },
     "taskEnvelope": { "$ref": "task_envelope.schema.json" },
+    "sourceFactTrace": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "minItems": 1
+    },
     "knowledgeRouteResultId": { "type": "string" },
     "contextBudgetId": { "type": "string" },
     "injectedKnowledgePacks": {
       "type": "array",
-      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectionRecord" }
+      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectionRecord" },
+      "minItems": 1
     },
     "injectedKnowledgeSnippetIds": {
       "type": "array",
-      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "minItems": 1
     },
     "injectedKnowledgeSnippets": {
       "type": "array",
-      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectedSnippet" }
+      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectedSnippet" },
+      "minItems": 1
+    },
+    "injectedKnowledgeTrace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "packIds", "snippetIds", "snippetCount", "qaPackBindingIds", "warnings"],
+      "properties": {
+        "status": { "type": "string", "enum": ["present", "missing"] },
+        "knowledgeRouteResultId": { "type": "string" },
+        "contextBudgetId": { "type": "string" },
+        "knowledgeInputHash": { "type": "string" },
+        "knowledgeManifestHash": { "type": "string" },
+        "packIds": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "snippetIds": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "snippetCount": { "type": "integer", "minimum": 0 },
+        "qaPackBindingIds": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
     },
     "knowledgeInputHash": { "type": "string" },
     "knowledgeManifestHash": { "type": "string" },
@@ -229,6 +270,12 @@
           "minItems": 6
         }
       }
+    },
+    "resultSchema": { "type": "string", "const": "subagent_result_v1" },
+    "forbiddenActions": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "minItems": 1
     }
   }
 }

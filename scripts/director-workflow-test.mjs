@@ -142,9 +142,21 @@ assert(shotEdit.hardLocks.noDaemonStart === true, "workflow must forbid daemon s
 assert(shotEdit.taskPacketState.noFreeTextTask === true, "task packets must hard-lock noFreeTextTask");
 assert(shotEdit.taskPacketState.validatedEnvelopeRequired === true, "task packets must require validated envelopes");
 assert(shotEdit.taskPacketState.packets.length === 12, "shot edit should build all packet classes");
+assert(["pass", "blocked"].includes(shotEdit.taskPacketState.plannerReceipt.status), "shot edit should expose a Phase38 packet planner receipt");
+assert(shotEdit.taskPacketState.plannerReceipt.allProductionTaskKindsCovered === true, "shot edit planner receipt must cover all production task kinds");
+assert(shotEdit.taskPacketState.plannerReceipt.naturalLanguageMustEnterTransactionOrPacketBuilder === true, "natural language must be routed through transaction/packet builder");
 for (const packet of shotEdit.taskPacketState.packets) {
   assert(packet.noFreeTextTask === true, `${packet.packetId} must forbid free text`);
   assert(packet.canSubmitProvider === false, `${packet.packetId} cannot submit providers`);
+  if (packet.status === "ready") {
+    assert(packet.validationReceipt.status === "pass", `${packet.packetId} must carry a passing validation receipt`);
+    assert(packet.sourceFactTrace.some((item) => item.startsWith("phase37_gate:identity:")), `${packet.packetId} missing identity source trace`);
+    assert(packet.sourceFactTrace.some((item) => item.startsWith("phase37_gate:master_inheritance_qa:")), `${packet.packetId} missing master inheritance QA source trace`);
+    assert(packet.injectedKnowledgeTrace.status === "present", `${packet.packetId} missing injected knowledge trace`);
+  } else {
+    assert(packet.validationReceipt.status === "blocked", `${packet.packetId} blocked packet must carry a blocked validation receipt`);
+    assert(packet.blockedReasons.length > 0, `${packet.packetId} blocked packet must explain why it cannot become formal`);
+  }
 }
 assert(shotEdit.orchestratorState.hardLocks.noDaemon === true, "orchestrator must forbid daemon start");
 assert(shotEdit.orchestratorState.hardLocks.daemonStarted === false, "orchestrator daemonStarted must be false");

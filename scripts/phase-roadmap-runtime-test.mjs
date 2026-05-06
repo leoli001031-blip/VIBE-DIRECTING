@@ -1040,6 +1040,12 @@ function closureEvidence(phaseId, gates, overrides = {}) {
       secretInProjectFileObserved: false,
       globalKnowledgeAsProjectFactObserved: false,
       globalKnowledgeAuthorityObserved: false,
+      unvalidatedPacketObserved: false,
+      missingExpectedOutputsObserved: false,
+      missingSourceFactTraceObserved: false,
+      missingKnowledgeTraceObserved: false,
+      freeTextWorkerObserved: false,
+      freeTextTaskObserved: false,
       candidateFutureReferenceObserved: false,
       tempFutureReferenceObserved: false,
       rejectedFutureReferenceObserved: false,
@@ -1195,13 +1201,14 @@ function visualConsistencyContractEvidence(overrides = {}) {
   }, overrides);
 }
 
-function subagentPacketPlannerEvidence(overrides = {}) {
+function fullTaskSubagentPacketPlannerEvidence(overrides = {}) {
   return closureEvidence("phase_38_full_task_subagent_packet_planner", {
     allProductionTaskKindsCovered: true,
-    validatedEnvelopeRequired: true,
-    formalTaskRejectsMissingPacket: true,
-    expectedOutputsIncluded: true,
-    knowledgePacksRecorded: true,
+    validatedPacketsRequired: true,
+    expectedOutputsRequired: true,
+    sourceFactTraceRequired: true,
+    knowledgeTraceRequired: true,
+    freeTextWorkerForbidden: true,
   }, overrides);
 }
 
@@ -1281,7 +1288,7 @@ function typedEvidence(overrides = {}) {
     taskQueueVisibility: taskQueueVisibilityEvidence(overrides.taskQueueVisibility),
     projectFileFactSource: projectFileFactSourceEvidence(overrides.projectFileFactSource),
     visualConsistencyContract: visualConsistencyContractEvidence(overrides.visualConsistencyContract),
-    subagentPacketPlanner: subagentPacketPlannerEvidence(overrides.subagentPacketPlanner),
+    fullTaskSubagentPacketPlanner: fullTaskSubagentPacketPlannerEvidence(overrides.fullTaskSubagentPacketPlanner),
     knowledgePackUserManagement: knowledgePackUserManagementEvidence(overrides.knowledgePackUserManagement),
     codexWorkerRuntimeGate: codexWorkerRuntimeGateEvidence(overrides.codexWorkerRuntimeGate),
     providerClosedLoopShell: providerClosedLoopShellEvidence(overrides.providerClosedLoopShell),
@@ -2892,6 +2899,123 @@ assert(
     "preceding_phase_not_ready:phase_36_project_file_fact_source",
   ),
   "Phase 37 must block when Phase 36 is not ready",
+);
+
+const phase38TypedReadyPlan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input());
+assert(
+  phase(phase38TypedReadyPlan, "phase_38_full_task_subagent_packet_planner").readiness === "ready",
+  "Phase 38 must be ready with typed fullTaskSubagentPacketPlanner evidence",
+);
+assert(
+  phase38TypedReadyPlan.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "fullTaskSubagentPacketPlanner" &&
+      decision.source === "typed_evidence" &&
+      decision.ready === true,
+  ),
+  "Phase 38 ready must come from typed fullTaskSubagentPacketPlanner evidence",
+);
+
+const missingPhase38Evidence = typedEvidence({ providerExecutionHandoff: "confirmed" });
+delete missingPhase38Evidence.fullTaskSubagentPacketPlanner;
+const phase38LegacyOnly = buildPhaseRoadmapRuntimePlan({
+  ...confirmedPhase33Input(),
+  evidence: missingPhase38Evidence,
+  subagentPacketPlannerReady: true,
+});
+assert(
+  phase(phase38LegacyOnly, "phase_38_full_task_subagent_packet_planner").blockedReasons.includes(
+    "full_task_subagent_packet_planner_typed_evidence_missing",
+  ),
+  "Phase 38 must block legacy-only subagentPacketPlannerReady evidence",
+);
+assert(
+  phase38LegacyOnly.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "fullTaskSubagentPacketPlanner" &&
+      decision.source === "legacy_boolean_override" &&
+      decision.ready === false &&
+      decision.warnings.includes("legacy_subagentPacketPlannerReady_boolean_ignored_without_typed_evidence"),
+  ),
+  "Phase 38 legacy boolean must be recorded as ignored without typed evidence",
+);
+
+function assertPhase38Blocks(fullTaskSubagentPacketPlanner, blocker, message) {
+  const plan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({ fullTaskSubagentPacketPlanner }));
+  assert(
+    phase(plan, "phase_38_full_task_subagent_packet_planner").blockedReasons.includes(blocker),
+    message,
+  );
+}
+
+for (const [gate, blocker] of [
+  ["allProductionTaskKindsCovered", "full_task_subagent_packet_planner_task_kind_coverage_missing"],
+  ["validatedPacketsRequired", "full_task_subagent_packet_planner_validated_packet_required_missing"],
+  ["expectedOutputsRequired", "full_task_subagent_packet_planner_expected_outputs_missing"],
+  ["sourceFactTraceRequired", "full_task_subagent_packet_planner_source_fact_trace_missing"],
+  ["knowledgeTraceRequired", "full_task_subagent_packet_planner_knowledge_trace_missing"],
+  ["freeTextWorkerForbidden", "full_task_subagent_packet_planner_free_text_worker_not_forbidden"],
+]) {
+  assertPhase38Blocks(
+    { gates: { [gate]: false } },
+    blocker,
+    `Phase 38 must block when ${gate} is missing`,
+  );
+}
+
+for (const [fullTaskSubagentPacketPlanner, blocker, message] of [
+  [
+    { taskCoverage: { missingProductionTaskKindCoverage: true } },
+    "full_task_subagent_packet_planner_task_kind_coverage_missing",
+    "Phase 38 must block missing production task kind coverage",
+  ],
+  [
+    { packetPolicy: { unvalidatedPacketAllowed: true } },
+    "full_task_subagent_packet_planner_unvalidated_packet_allowed",
+    "Phase 38 must block unvalidated packets",
+  ],
+  [
+    { outputContract: { missingExpectedOutputsAllowed: true } },
+    "full_task_subagent_packet_planner_expected_outputs_missing",
+    "Phase 38 must block missing expected outputs",
+  ],
+  [
+    { sourceFactTrace: { missingSourceFactTraceAllowed: true } },
+    "full_task_subagent_packet_planner_source_fact_trace_missing",
+    "Phase 38 must block missing source fact trace",
+  ],
+  [
+    { knowledgeTrace: { missingKnowledgeTraceAllowed: true } },
+    "full_task_subagent_packet_planner_knowledge_trace_missing",
+    "Phase 38 must block missing knowledge trace",
+  ],
+  [
+    { freeTextPolicy: { freeTextTaskAllowed: true } },
+    "full_task_subagent_packet_planner_free_text_worker_or_task_allowed",
+    "Phase 38 must block free-text task allowance",
+  ],
+]) {
+  assertPhase38Blocks(fullTaskSubagentPacketPlanner, blocker, message);
+}
+
+for (const routeKey of ["workerRouteOpened", "providerRouteOpened", "fileRouteOpened", "credentialRouteOpened", "shellRouteOpened"]) {
+  assertPhase38Blocks(
+    { routeSafety: { [routeKey]: true } },
+    "full_task_subagent_packet_planner_worker_provider_file_credential_shell_route_open",
+    `Phase 38 must block when ${routeKey} is opened`,
+  );
+}
+
+const phase38Phase37Blocked = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  visualConsistencyContract: {
+    gates: { identityGateDefined: false },
+  },
+}));
+assert(
+  phase(phase38Phase37Blocked, "phase_38_full_task_subagent_packet_planner").blockedReasons.includes(
+    "preceding_phase_not_ready:phase_37_visual_consistency_contract",
+  ),
+  "Phase 38 must block when Phase 37 is not ready",
 );
 
 const missingPhase40Evidence = typedEvidence({ providerExecutionHandoff: "confirmed" });

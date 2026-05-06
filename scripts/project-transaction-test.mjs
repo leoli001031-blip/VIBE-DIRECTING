@@ -236,6 +236,19 @@ function hydrateKnowledge(workflowState) {
     packet.envelope.injectedKnowledgeSnippets = [snippet];
     packet.envelope.knowledgeInputHash = packet.envelope.taskEnvelope.knowledgeInputHash;
     packet.envelope.knowledgeManifestHash = packet.envelope.taskEnvelope.knowledgeManifestHash;
+    packet.injectedKnowledgeTrace = {
+      status: "present",
+      knowledgeRouteResultId: packet.envelope.taskEnvelope.knowledgeRouteResultId,
+      contextBudgetId: packet.envelope.taskEnvelope.contextBudgetId,
+      knowledgeInputHash: packet.envelope.taskEnvelope.knowledgeInputHash,
+      knowledgeManifestHash: packet.envelope.taskEnvelope.knowledgeManifestHash,
+      packIds: [record.packId],
+      snippetIds: packet.envelope.taskEnvelope.injectedKnowledgeSnippetIds,
+      snippetCount: 1,
+      qaPackBindingIds: [],
+      warnings: [],
+    };
+    packet.envelope.injectedKnowledgeTrace = packet.injectedKnowledgeTrace;
   }
   return next;
 }
@@ -258,6 +271,15 @@ function clearKnowledge(workflowState) {
     packet.envelope.injectedKnowledgeSnippets = [];
     packet.envelope.knowledgeInputHash = undefined;
     packet.envelope.knowledgeManifestHash = undefined;
+    packet.injectedKnowledgeTrace = {
+      status: "missing",
+      packIds: [],
+      snippetIds: [],
+      snippetCount: 0,
+      qaPackBindingIds: [],
+      warnings: ["test cleared knowledge trace"],
+    };
+    packet.envelope.injectedKnowledgeTrace = packet.injectedKnowledgeTrace;
   }
   return next;
 }
@@ -296,7 +318,12 @@ const missingTraceRuntime = buildProjectTransactionRuntime({
   userConfirmed: true,
   userEnabled: true,
 });
-assert(missingTraceRuntime.userStatus === "blocked_missing_knowledge_trace", "empty knowledge trace must block formal enqueue");
+assert(
+  missingTraceRuntime.userStatus === "blocked_missing_knowledge_trace",
+  `empty knowledge trace must block formal enqueue, got ${missingTraceRuntime.userStatus} with ${missingTraceRuntime.pendingTransaction.taskEnqueue.items
+    .flatMap((item) => item.validationErrors)
+    .join(";")}`,
+);
 assert(missingTraceRuntime.queueIngestSummary.queued === 0, "empty knowledge trace must not queue any task");
 assert(missingTraceRuntime.queueIngestSummary.blocked === workflowState.taskPacketState.packets.length, "all empty-trace packets should be blocked");
 assert(
@@ -358,6 +385,12 @@ assert(confirmedRuntime.pendingTransaction.sourceFacts.projectVersion === "0.4.0
 assert(confirmedRuntime.pendingTransaction.sourceFacts.sourceIndexHash === "source_hash_tx_123", "source facts must retain sourceIndexHash");
 assert(confirmedRuntime.pendingTransaction.sourceFacts.taskEnvelopeIds.length === hydratedWorkflow.taskPacketState.summary.envelopeReady, "source facts must record task envelope ids");
 assert(confirmedRuntime.pendingTransaction.sourceFacts.knowledgeInjectionTrace.status === "present", "hydrated trace should be present");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.packetPlannerReceipt.receiptId, "source facts must retain packet planner receipt id");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.packetPlannerReceipt.validatedEnvelopeRequired === true, "packet planner receipt must require validated envelopes");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.packetPlannerReceipt.formalTaskRejectsMissingPacket === true, "packet planner receipt must reject missing packets");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.packetPlannerReceipt.sourceFactTraceRecorded === true, "packet planner receipt must record source fact trace");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.packetPlannerReceipt.knowledgePacksRecorded === true, "packet planner receipt must record injected knowledge trace");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.packetPlannerReceipt.phase37VisualConsistencyTraceRequired === true, "packet planner receipt must require Phase37 visual trace");
 assert(confirmedRuntime.pendingTransaction.artifactInvalidation.deleteForbidden === true, "artifact invalidation must never delete files");
 assert(confirmedRuntime.pendingTransaction.artifactInvalidation.changeKinds.includes("character"), "character edits must affect artifact invalidation summary");
 assert(confirmedRuntime.pendingTransaction.artifactInvalidation.changeKinds.includes("scene"), "scene edits must affect artifact invalidation summary");

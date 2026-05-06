@@ -20,9 +20,13 @@
     "references",
     "qaChecklist",
     "preflight",
+    "sourceFactTrace",
     "injectedKnowledgePacks",
     "injectedKnowledgeSnippetIds",
     "injectedKnowledgeSnippets",
+    "resultSchema",
+    "allowedReadScope",
+    "forbiddenActions",
     "routeWarnings",
     "blockingReasons"
   ],
@@ -48,7 +52,8 @@
     "contextLevel": { "$ref": "common.schema.json#/$defs/contextLevel" },
     "expectedOutputs": {
       "type": "array",
-      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "minItems": 1
     },
     "hardRules": {
       "type": "array",
@@ -66,19 +71,27 @@
     },
     "preflight": { "$ref": "preflight_report.schema.json" },
     "keyframePairDerivation": { "$ref": "keyframe_pair_derivation.schema.json" },
+    "sourceFactTrace": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "minItems": 1
+    },
     "knowledgeRouteResultId": { "type": "string" },
     "contextBudgetId": { "type": "string" },
     "injectedKnowledgePacks": {
       "type": "array",
-      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectionRecord" }
+      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectionRecord" },
+      "minItems": 1
     },
     "injectedKnowledgeSnippetIds": {
       "type": "array",
-      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "minItems": 1
     },
     "injectedKnowledgeSnippets": {
       "type": "array",
-      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectedSnippet" }
+      "items": { "$ref": "common.schema.json#/$defs/knowledgeInjectedSnippet" },
+      "minItems": 1
     },
     "knowledgeInputHash": { "type": "string" },
     "knowledgeManifestHash": { "type": "string" },
@@ -94,6 +107,17 @@
     "promptPlanId": { "type": "string" },
     "promptPlanHash": { "type": "string" },
     "sourceShotSpecHash": { "type": "string" },
+    "resultSchema": { "type": "string", "const": "subagent_result_v1" },
+    "allowedReadScope": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "minItems": 1
+    },
+    "forbiddenActions": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "minItems": 1
+    },
     "outputPath": { "type": "string" },
     "blockingReasons": {
       "type": "array",

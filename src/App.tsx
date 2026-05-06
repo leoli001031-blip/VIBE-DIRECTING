@@ -290,6 +290,18 @@ type VisualConsistencyContractUiSummary = {
   blockersWarnings: string[];
   requiredGates: string[];
 };
+type FullTaskSubagentPacketPlannerUiSummary = {
+  initialized: boolean;
+  readiness: string;
+  coverageStatus: string;
+  packetStatus: string;
+  outputStatus: string;
+  traceStatus: string;
+  freeTextStatus: string;
+  routeStatus: string;
+  blockersWarnings: string[];
+  requiredGates: string[];
+};
 type DirectorProgressTone = "preparing" | "working" | "review" | "blocked" | "complete";
 type DirectorProgressSegment = {
   label: string;
@@ -2774,6 +2786,101 @@ function buildVisualConsistencyContractUiSummary(runtimeState: ProjectRuntimeSta
     keyframePairStatus: independentEndFrame ? "independent same-shot end frame blocked" : "keyframe pair derivation tied",
     driftRepairStatus: largeMotionDrift || semanticRepair ? "motion drift or semantic OpenCV repair blocked" : "motion drift and repair policy clear",
     blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing visualConsistencyContract"],
+    requiredGates: gateKeys,
+  };
+}
+
+function buildFullTaskSubagentPacketPlannerUiSummary(runtimeState: ProjectRuntimeState): FullTaskSubagentPacketPlannerUiSummary {
+  const root = runtimeState as unknown as Record<string, unknown>;
+  const plannerRoot = isRecord(root.fullTaskSubagentPacketPlanner)
+    ? root.fullTaskSubagentPacketPlanner
+    : isRecord(root.taskPacketPlanner)
+      ? root.taskPacketPlanner
+      : isRecord(root.subagentPacketPlanner)
+        ? root.subagentPacketPlanner
+        : {};
+  const initialized = isRecord(plannerRoot);
+  const rootRecord = initialized ? plannerRoot : {};
+  const gates = firstRecordFrom(rootRecord, ["gates"]);
+  const summary = firstRecordFrom(rootRecord, ["summary"]);
+  const taskCoverage = firstRecordFrom(rootRecord, ["taskCoverage", "coverage"]);
+  const packetPolicy = firstRecordFrom(rootRecord, ["packetPolicy", "validation"]);
+  const outputContract = firstRecordFrom(rootRecord, ["outputContract", "expectedOutputs"]);
+  const sourceFactTrace = firstRecordFrom(rootRecord, ["sourceFactTrace", "sourceFacts"]);
+  const knowledgeTrace = firstRecordFrom(rootRecord, ["knowledgeTrace", "injectedKnowledge"]);
+  const freeTextPolicy = firstRecordFrom(rootRecord, ["freeTextPolicy", "workerPolicy"]);
+  const routeSafety = firstRecordFrom(rootRecord, ["routeSafety", "routes"]);
+  const records = [gates, summary, rootRecord].filter(isRecord);
+  const gateKeys = [
+    "allProductionTaskKindsCovered",
+    "validatedPacketsRequired",
+    "expectedOutputsRequired",
+    "sourceFactTraceRequired",
+    "knowledgeTraceRequired",
+    "freeTextWorkerForbidden",
+  ];
+  const readyGateCount = gateKeys.filter((key) => readFirstBoolean(records, [key]) === true).length;
+  const status = readFirstString(records, ["readiness", "status", "state"], "");
+  const coveredKinds = firstArrayFrom([taskCoverage, summary, rootRecord].filter(isRecord), [
+    "coveredProductionTaskKinds",
+    "productionTaskKinds",
+    "taskKinds",
+  ]).length;
+  const missingKinds = firstArrayFrom([taskCoverage, summary, rootRecord].filter(isRecord), [
+    "missingProductionTaskKinds",
+    "missingTaskKinds",
+  ]).length;
+  const blockersWarnings = Array.from(new Set([
+    ...readDisplayList(rootRecord.blockers, "blocker"),
+    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
+    ...readDisplayList(summary.blockers, "blocker"),
+    ...readDisplayList(summary.blockedReasons, "blocker"),
+    ...readDisplayList(rootRecord.warnings, "warning"),
+    ...readDisplayList(summary.warnings, "warning"),
+  ].filter(Boolean)));
+  const unvalidatedPacket = readFirstBoolean([packetPolicy, rootRecord].filter(isRecord), [
+    "unvalidatedPacketAllowed",
+    "unvalidatedPacketObserved",
+  ]) === true;
+  const missingExpectedOutputs = readFirstBoolean([outputContract, rootRecord].filter(isRecord), [
+    "missingExpectedOutputsAllowed",
+    "missingExpectedOutputsObserved",
+    "expectedOutputsMissing",
+  ]) === true;
+  const sourceTraceMissing = readFirstBoolean([sourceFactTrace, rootRecord].filter(isRecord), [
+    "missingSourceFactTraceAllowed",
+    "missingSourceFactTraceObserved",
+    "sourceFactTraceMissing",
+  ]) === true;
+  const knowledgeTraceMissing = readFirstBoolean([knowledgeTrace, rootRecord].filter(isRecord), [
+    "missingKnowledgeTraceAllowed",
+    "missingKnowledgeTraceObserved",
+    "knowledgeTraceMissing",
+  ]) === true;
+  const freeTextAllowed = readFirstBoolean([freeTextPolicy, rootRecord].filter(isRecord), [
+    "freeTextWorkerAllowed",
+    "freeTextTaskAllowed",
+    "formalTaskAcceptsFreeText",
+  ]) === true;
+  const routeOpened = ["workerRouteOpened", "providerRouteOpened", "fileRouteOpened", "credentialRouteOpened", "shellRouteOpened"]
+    .some((key) => readFirstBoolean([routeSafety, rootRecord].filter(isRecord), [key]) === true);
+
+  return {
+    initialized,
+    readiness: initialized
+      ? statusLabel(status || (readyGateCount === gateKeys.length && !blockersWarnings.length ? "ready" : "blocked"))
+      : "blocked/missing",
+    coverageStatus: missingKinds > 0
+      ? `${missingKinds} missing task kind(s)`
+      : coveredKinds > 0
+        ? `${coveredKinds} task kind(s) covered`
+        : `${readyGateCount}/${gateKeys.length} typed gate(s)`,
+    packetStatus: unvalidatedPacket ? "unvalidated packet blocked" : "validated packet required",
+    outputStatus: missingExpectedOutputs ? "expected outputs missing" : "expected outputs required",
+    traceStatus: sourceTraceMissing || knowledgeTraceMissing ? "source fact trace / knowledge trace missing" : "source fact trace + knowledge trace required",
+    freeTextStatus: freeTextAllowed ? "free-text worker/task allowed" : "free-text worker/task forbidden",
+    routeStatus: routeOpened ? "worker/provider/file/credential/shell route open" : "worker/provider/file/credential/shell routes closed",
+    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing fullTaskSubagentPacketPlanner"],
     requiredGates: gateKeys,
   };
 }
@@ -5637,6 +5744,39 @@ function VisualConsistencyContractDiagnostics({ runtimeState }: { runtimeState: 
   );
 }
 
+function FullTaskSubagentPacketPlannerDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildFullTaskSubagentPacketPlannerUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel full-task-subagent-packet-planner-panel">
+      <div className="audit-head">
+        <FileJson size={17} />
+        <span>Full Task Subagent Packet Planner</span>
+      </div>
+      <div className="summary-grid full-task-subagent-packet-planner-metrics">
+        <Metric label="Readiness" value={summary.readiness} detail="Phase 38 typed evidence" />
+        <Metric label="Task Coverage" value={summary.coverageStatus} detail="production task kinds" />
+        <Metric label="Validated Packet" value={summary.packetStatus} detail="formal task input contract" />
+        <Metric label="Expected Outputs" value={summary.outputStatus} detail="worker completion contract" />
+        <Metric label="Source / Knowledge Trace" value={summary.traceStatus} detail="source fact trace + knowledge trace" />
+        <Metric label="Free Text" value={summary.freeTextStatus} detail="worker/task route guard" />
+        <Metric label="Routes" value={summary.routeStatus} detail="worker/provider/file/credential/shell" />
+      </div>
+      <div className="phase17-rule-strip">
+        {summary.requiredGates.map((gate) => (
+          <span key={gate}>{gate}</span>
+        ))}
+      </div>
+      <div className="pipeline-details checker-details">
+        <details open={Boolean(summary.blockersWarnings.length)}>
+          <summary>Phase 38 blockers / warnings ({summary.blockersWarnings.length})</summary>
+          <CompactList items={summary.blockersWarnings} empty="No Phase 38 blockers reported." />
+        </details>
+      </div>
+    </section>
+  );
+}
+
 function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const videoPlanning = getVideoPlanning(runtimeState);
   const queue = videoPlanning.queueShell;
@@ -7732,6 +7872,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const providerExecutionHandoffSummary = buildProviderExecutionHandoffUiSummary(runtimeState);
   const localOrchestratorSummary = buildLocalOrchestratorUiSummary(runtimeState);
   const visualConsistencySummary = buildVisualConsistencyContractUiSummary(runtimeState);
+  const fullTaskSubagentPacketPlannerSummary = buildFullTaskSubagentPacketPlannerUiSummary(runtimeState);
   const realPilotSummary = buildRealPilotUiSummary(runtimeState);
 
   return (
@@ -7933,6 +8074,15 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
           <small>{visualConsistencySummary.gateStatus} · shot layout {visualConsistencySummary.shotLayoutStatus}</small>
           <small>{visualConsistencySummary.geometryStatus} · {visualConsistencySummary.keyframePairStatus}</small>
           <small>{visualConsistencySummary.driftRepairStatus}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Full Task Subagent Packet Planner</div>
+      <div className="settings-list full-task-subagent-packet-planner-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Full Task Subagent Packet Planner: {fullTaskSubagentPacketPlannerSummary.readiness}</strong>
+          <small>{fullTaskSubagentPacketPlannerSummary.coverageStatus} · {fullTaskSubagentPacketPlannerSummary.packetStatus}</small>
+          <small>{fullTaskSubagentPacketPlannerSummary.outputStatus} · {fullTaskSubagentPacketPlannerSummary.traceStatus}</small>
+          <small>{fullTaskSubagentPacketPlannerSummary.freeTextStatus} · {fullTaskSubagentPacketPlannerSummary.routeStatus}</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
@@ -8181,6 +8331,7 @@ function DiagnosticsMode({
       <ExportWorkerDiagnostics runtimeState={runtimeState} />
       <Image2KeyframeRuntimeDiagnostics runtimeState={runtimeState} />
       <VisualConsistencyContractDiagnostics runtimeState={runtimeState} />
+      <FullTaskSubagentPacketPlannerDiagnostics runtimeState={runtimeState} />
       <RealPilotDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <VoiceAudioSettingsDiagnostics runtimeState={runtimeState} />

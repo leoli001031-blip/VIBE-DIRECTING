@@ -137,6 +137,8 @@ const localOrchestratorDiagnostics = findFunctionBody(appSource, "LocalOrchestra
 const localOrchestratorUiSummary = findFunctionBody(appSource, "buildLocalOrchestratorUiSummary");
 const visualConsistencyContractDiagnostics = findFunctionBody(appSource, "VisualConsistencyContractDiagnostics");
 const visualConsistencyContractUiSummary = findFunctionBody(appSource, "buildVisualConsistencyContractUiSummary");
+const fullTaskSubagentPacketPlannerDiagnostics = findFunctionBody(appSource, "FullTaskSubagentPacketPlannerDiagnostics");
+const fullTaskSubagentPacketPlannerUiSummary = findFunctionBody(appSource, "buildFullTaskSubagentPacketPlannerUiSummary");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
 const realPilotDiagnostics = findFunctionBody(appSource, "RealPilotDiagnostics");
 const knowledgeUiSummary = findFunctionBody(appSource, "buildKnowledgeUiSummary");
@@ -300,6 +302,14 @@ checkMessage(requireWithin(visualConsistencyContractDiagnostics, /spatial memory
 checkMessage(requireWithin(visualConsistencyContractDiagnostics, /keyframe pair/i, "Phase 37 keyframe pair diagnostics copy"));
 checkMessage(requireWithin(visualConsistencyContractDiagnostics, /master QA/i, "Phase 37 master inheritance QA diagnostics copy"));
 checkMessage(requireWithin(visualConsistencyContractUiSummary, /masterInheritanceQaGateDefined/i, "Phase 37 master inheritance typed gate summary"));
+checkMessage(requireWithin(diagnosticsMode, /FullTaskSubagentPacketPlannerDiagnostics/, "Phase 38 Full Task Subagent Packet Planner diagnostics mounted"));
+checkMessage(requireWithin(settingsShell, /Full Task Subagent Packet Planner/i, "Phase 38 Settings read-only packet planner summary"));
+checkMessage(requireWithin(fullTaskSubagentPacketPlannerDiagnostics, /Full Task Subagent Packet Planner/i, "Phase 38 Full Task Subagent Packet Planner diagnostics panel"));
+checkMessage(requireWithin(fullTaskSubagentPacketPlannerDiagnostics, /Validated Packet/i, "Phase 38 validated packet diagnostics copy"));
+checkMessage(requireWithin(fullTaskSubagentPacketPlannerDiagnostics, /Expected Outputs/i, "Phase 38 expected outputs diagnostics copy"));
+checkMessage(requireWithin(`${fullTaskSubagentPacketPlannerDiagnostics}\n${fullTaskSubagentPacketPlannerUiSummary}`, /source fact trace/i, "Phase 38 source fact trace diagnostics copy"));
+checkMessage(requireWithin(`${fullTaskSubagentPacketPlannerDiagnostics}\n${fullTaskSubagentPacketPlannerUiSummary}`, /knowledge trace/i, "Phase 38 knowledge trace diagnostics copy"));
+checkMessage(requireWithin(`${fullTaskSubagentPacketPlannerDiagnostics}\n${fullTaskSubagentPacketPlannerUiSummary}`, /free-text worker\/task forbidden/i, "Phase 38 free-text worker diagnostics copy"));
 check(
   !/RealPilotDirectorStatus/.test(directorMode),
   "Director Clean Mode must not mount RealPilotDirectorStatus in the default DirectorMode",
@@ -599,7 +609,11 @@ for (const [term, pattern] of [
   ["immediate generation", /immediate\s+generation|立即生成/i],
   ["queue", /queue/i],
   ["Local Orchestrator", /Local\s+Orchestrator|LocalOrchestrator/i],
+  ["Full Task Subagent Packet Planner", /Full\s+Task\s+Subagent\s+Packet\s+Planner/i],
+  ["validated packet", /validated\s+packet/i],
   ["TaskEnvelope", /Task\s*Envelope|TaskEnvelope/i],
+  ["knowledge trace", /knowledge\s+trace/i],
+  ["source fact trace", /source\s+fact\s+trace/i],
   ["manifest", /manifest/i],
   ["spawn", /spawn/i],
   ["daemon", /daemon/i],
@@ -621,7 +635,9 @@ const forbiddenMinimalTerms = [
   ["Desktop Runtime", /Desktop\s+Runtime/i],
   ["Permission Shell", /Permission\s+Shell/i],
   ["Subagent Worker Runtime", /Subagent\s+Worker\s+Runtime/i],
+  ["Full Task Subagent Packet Planner", /Full\s+Task\s+Subagent\s+Packet\s+Planner/i],
   ["validated envelope", /validated\s+envelope/i],
+  ["validated packet", /validated\s+packet/i],
   ["structured result", /structured\s+result/i],
   ["Tauri", /Tauri/i],
   ["sidecar", /sidecar/i],
@@ -649,6 +665,8 @@ const forbiddenMinimalTerms = [
   ["shot layout", /shot\s+layout/i],
   ["spatial memory", /spatial\s+memory/i],
   ["master inheritance QA", /master\s+inheritance\s+QA/i],
+  ["knowledge trace", /knowledge\s+trace/i],
+  ["source fact trace", /source\s+fact\s+trace/i],
   ["Export Worker", /Export\s+Worker/i],
   ["file mutation", /file\s+mutation/i],
   ["write files", /write\s+files/i],
@@ -678,6 +696,10 @@ const phase2123ForbiddenMainTerms = [
   ["Knowledge Router", /Knowledge\s+Router/i],
   ["Knowledge Library", /Knowledge\s+Library/i],
   ["Visual Consistency Contract", /Visual\s+Consistency\s+Contract/i],
+  ["Full Task Subagent Packet Planner", /Full\s+Task\s+Subagent\s+Packet\s+Planner/i],
+  ["validated packet", /validated\s+packet/i],
+  ["knowledge trace", /knowledge\s+trace/i],
+  ["source fact trace", /source\s+fact\s+trace/i],
   ["shot layout", /shot\s+layout/i],
   ["spatial memory", /spatial\s+memory/i],
   ["keyframe pair", /keyframe\s+pair/i],

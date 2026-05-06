@@ -126,6 +126,7 @@
         "userIntent",
         "taskEnvelopeIds",
         "sourceRefs",
+        "packetPlannerReceipt",
         "knowledgeInjectionTrace"
       ],
       "properties": {
@@ -144,7 +145,57 @@
           "type": "array",
           "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
         },
+        "packetPlannerReceipt": { "$ref": "#/$defs/packetPlannerReceipt" },
         "knowledgeInjectionTrace": { "$ref": "#/$defs/knowledgeTrace" }
+      }
+    },
+    "packetPlannerReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receiptId",
+        "status",
+        "allProductionTaskKindsCovered",
+        "validatedEnvelopeRequired",
+        "formalTaskRejectsMissingPacket",
+        "expectedOutputsIncluded",
+        "sourceFactTraceRecorded",
+        "knowledgePacksRecorded",
+        "phase37VisualConsistencyTraceRequired",
+        "noFreeTextWorker",
+        "productionTaskKinds",
+        "readyKinds",
+        "blockedKinds",
+        "blockedReasons"
+      ],
+      "properties": {
+        "receiptId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "status": { "type": "string", "enum": ["pass", "blocked"] },
+        "allProductionTaskKindsCovered": { "type": "boolean" },
+        "validatedEnvelopeRequired": { "type": "boolean", "const": true },
+        "formalTaskRejectsMissingPacket": { "type": "boolean", "const": true },
+        "expectedOutputsIncluded": { "type": "boolean" },
+        "sourceFactTraceRecorded": { "type": "boolean" },
+        "knowledgePacksRecorded": { "type": "boolean" },
+        "phase37VisualConsistencyTraceRequired": { "type": "boolean", "const": true },
+        "noFreeTextWorker": { "type": "boolean", "const": true },
+        "productionTaskKinds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/taskKind" },
+          "minItems": 12
+        },
+        "readyKinds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/taskKind" }
+        },
+        "blockedKinds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/taskKind" }
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
       }
     },
     "knowledgeTrace": {

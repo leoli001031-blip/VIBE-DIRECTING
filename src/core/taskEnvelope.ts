@@ -57,6 +57,10 @@ export interface TaskEnvelopeOptions {
   promptPlanId?: string;
   promptPlanHash?: string;
   sourceShotSpecHash?: string;
+  sourceFactTrace?: string[];
+  resultSchema?: "subagent_result_v1";
+  allowedReadScope?: string[];
+  forbiddenActions?: string[];
 }
 
 export function buildTaskEnvelope(
@@ -108,7 +112,12 @@ export function buildTaskEnvelope(
     ...(options.contextBudget?.warnings || []),
   ];
 
-  const envelope: TaskEnvelope = {
+  const envelope: TaskEnvelope & {
+    sourceFactTrace: string[];
+    resultSchema: "subagent_result_v1";
+    allowedReadScope: string[];
+    forbiddenActions: string[];
+  } = {
     id: job.id,
     purpose: purposeFromSlot(job.slot),
     providerSlot: job.slot,
@@ -139,6 +148,15 @@ export function buildTaskEnvelope(
     promptPlanId: options.promptPlanId,
     promptPlanHash: options.promptPlanHash,
     sourceShotSpecHash: options.sourceShotSpecHash,
+    sourceFactTrace: options.sourceFactTrace || [options.sourceIndex?.sourceIndexHash || "", shot?.id || "", shot?.storyFunction || ""].filter(Boolean),
+    resultSchema: options.resultSchema || "subagent_result_v1",
+    allowedReadScope: options.allowedReadScope || ["task_envelope", "source_index", "locked_references", "injected_knowledge_snippets"],
+    forbiddenActions: options.forbiddenActions || [
+      "no_free_text_task",
+      "provider_submit_forbidden",
+      "provider_credentials_forbidden",
+      "file_mutation_forbidden",
+    ],
     outputPath: job.outputPath,
     blockingReasons: [...blockingReasons, ...preflight.blockers.map((item) => item.messageForUser)],
   };

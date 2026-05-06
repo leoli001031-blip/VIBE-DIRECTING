@@ -508,6 +508,12 @@ const packetState = taskPacketBuilder.buildTaskPackets({
 });
 assert(packetState.summary.ready === packetState.summary.total, "all fixture task packets should be ready");
 assert(packetState.providerSubmissionForbidden === true, "Task Packet Builder must forbid provider submission");
+assert(packetState.plannerReceipt.status === "pass", `Task Packet Builder planner receipt must pass: ${packetState.plannerReceipt.blockedReasons.join("; ")}`);
+assert(packetState.plannerReceipt.allProductionTaskKindsCovered === true, "planner receipt must cover all formal production task kinds");
+assert(packetState.plannerReceipt.expectedOutputsIncluded === true, "planner receipt must cover expected outputs");
+assert(packetState.plannerReceipt.sourceFactTraceRecorded === true, "planner receipt must cover source fact trace");
+assert(packetState.plannerReceipt.knowledgePacksRecorded === true, "planner receipt must cover injected knowledge trace");
+assert(packetState.plannerReceipt.noFreeTextWorker === true, "planner receipt must forbid free-text workers");
 
 function packetCanEnterFormal(packet) {
   return Boolean(
@@ -516,6 +522,10 @@ function packetCanEnterFormal(packet) {
       packet.hardFields?.outputSchema === "subagent_result_v1" &&
       packet.hardFields.expectedOutputContract?.format === "subagent_result_v1" &&
       packet.envelope.sourceIndexHash &&
+      packet.validationReceipt?.status === "pass" &&
+      packet.sourceFactTrace?.some((item) => item.startsWith("phase37_gate:shot_layout:")) &&
+      packet.sourceFactTrace?.some((item) => item.startsWith("phase37_gate:spatial_memory:")) &&
+      packet.injectedKnowledgeTrace?.status === "present" &&
       packet.hardFields.boundAssets?.length &&
       packet.hardFields.previousShot &&
       packet.hardFields.nextShot,

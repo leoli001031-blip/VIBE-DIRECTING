@@ -45,7 +45,43 @@ export type TaskPacketKind =
   | "audio"
   | "export";
 
-export type TaskPacketStatus = "ready" | "blocked_missing_context";
+export type TaskPacketStatus = "ready" | "blocked_missing_context" | "blocked_packet_validation";
+
+export type TaskPacketCoverageStatus = "covered_ready" | "covered_blocked" | "missing";
+
+export interface TaskPacketKnowledgeTrace {
+  status: "present" | "missing";
+  knowledgeRouteResultId?: string;
+  contextBudgetId?: string;
+  knowledgeInputHash?: string;
+  knowledgeManifestHash?: string;
+  packIds: string[];
+  snippetIds: string[];
+  snippetCount: number;
+  qaPackBindingIds: string[];
+  warnings: string[];
+}
+
+export interface TaskPacketValidationReceipt {
+  receiptKind: "phase38_task_packet_validation";
+  status: "pass" | "blocked";
+  envelopeId?: string;
+  taskEnvelopeId?: string;
+  checkedAt: string;
+  requiredFields: {
+    validatedEnvelope: boolean;
+    expectedOutputs: boolean;
+    sourceFactTrace: boolean;
+    injectedKnowledgeTrace: boolean;
+    qaChecklist: boolean;
+    resultSchema: boolean;
+    allowedReadScope: boolean;
+    forbiddenActions: boolean;
+    noFreeTextWorker: boolean;
+    phase37VisualConsistencyTrace: boolean;
+  };
+  blockers: string[];
+}
 
 export interface TaskPacketHardFields {
   purpose: SubagentTaskPurpose;
@@ -76,12 +112,58 @@ export interface BuiltTaskPacket {
   envelopeId?: string;
   envelope?: SubagentTaskEnvelope;
   hardFields?: TaskPacketHardFields;
+  sourceFactTrace: string[];
+  injectedKnowledgeTrace: TaskPacketKnowledgeTrace;
+  validationReceipt: TaskPacketValidationReceipt;
   missingContext: string[];
   blockedReasons: string[];
   noFreeTextTask: true;
   canSubmitProvider: false;
   providerSubmissionForbidden: true;
   liveSubmitAllowed: false;
+}
+
+export interface TaskPacketCoverageItem {
+  taskKind: TaskPacketKind;
+  status: TaskPacketCoverageStatus;
+  packetId?: string;
+  envelopeId?: string;
+  validatedEnvelope: boolean;
+  expectedOutputs: boolean;
+  sourceFactTrace: boolean;
+  injectedKnowledgeTrace: boolean;
+  qaChecklist: boolean;
+  resultSchema: boolean;
+  allowedReadScope: boolean;
+  forbiddenActions: boolean;
+  phase37VisualConsistencyTrace: boolean;
+  noFreeTextTask: boolean;
+  blockedReasons: string[];
+}
+
+export interface TaskPacketPlannerReceipt {
+  receiptKind: "phase38_full_task_subagent_packet_planner";
+  phase: "phase_38_full_task_subagent_packet_planner";
+  receiptId: string;
+  generatedAt: string;
+  status: "pass" | "blocked";
+  allProductionTaskKindsCovered: boolean;
+  productionTaskKinds: TaskPacketKind[];
+  readyKinds: TaskPacketKind[];
+  blockedKinds: TaskPacketKind[];
+  coverage: TaskPacketCoverageItem[];
+  requiredReadyPacketFields: Array<keyof TaskPacketValidationReceipt["requiredFields"]>;
+  validatedEnvelopeRequired: true;
+  formalTaskRejectsMissingPacket: true;
+  expectedOutputsIncluded: boolean;
+  sourceFactTraceRecorded: boolean;
+  knowledgePacksRecorded: boolean;
+  phase37VisualConsistencyTraceRequired: true;
+  noFreeTextWorker: true;
+  naturalLanguageMustEnterTransactionOrPacketBuilder: true;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  blockedReasons: string[];
 }
 
 export interface TaskPacketBuilderState {
@@ -95,10 +177,12 @@ export interface TaskPacketBuilderState {
     ready: number;
     blockedMissingContext: number;
     envelopeReady: number;
+    validatedEnvelopeReady: number;
     noFreeTextTask: true;
     providerSubmissionForbidden: true;
     liveSubmitAllowed: false;
   };
+  plannerReceipt: TaskPacketPlannerReceipt;
   noFreeTextTask: true;
   validatedEnvelopeRequired: true;
   providerSubmissionForbidden: true;
@@ -593,6 +677,79 @@ function sourceIndexHash(runtimeState: ProjectRuntimeState): string {
   return runtimeState.sourceIndex?.sourceIndexHash || runtimeState.sourceIndexSummary?.sourceIndexHash || "";
 }
 
+function phase37VisualConsistencySourceFacts(input: {
+  runtimeState: ProjectRuntimeState;
+  shot: ShotRecord;
+  boundAssets: ReferenceAuthority[];
+  keyframePair?: KeyframePairDerivation;
+}): string[] {
+  const gates = input.shot.gates || {};
+  const sceneAssetIds = input.boundAssets.filter((asset) => asset.referenceRole === "scene_layout_authority").map((asset) => asset.id);
+  const identityAssetIds = input.boundAssets.filter((asset) => asset.referenceRole === "identity_authority").map((asset) => asset.id);
+  const layoutRefs = unique([
+    ...stringList(dynamicRecord(input.shot).shotLayoutId),
+    ...stringList(dynamicRecord(input.shot).shotLayoutIds),
+    input.shot.id,
+  ]);
+  const spatialRefs = unique([
+    ...sceneAssetIds,
+    ...stringList(dynamicRecord(input.runtimeState).spatialMemoryId),
+    sourceIndexHash(input.runtimeState),
+  ]);
+  const pairRefs = unique([
+    input.keyframePair?.shotId || "",
+    input.keyframePair?.startFrameId || input.shot.startFrame || "",
+    input.keyframePair?.endFrameId || input.shot.endFrame || "",
+  ]);
+
+  return unique([
+    `phase37_contract_receipt:visual_consistency_contract:required`,
+    `phase37_gate:identity:${gates.identity || "UNKNOWN"}:${identityAssetIds.join(",") || "locked_identity_reference_required"}`,
+    `phase37_gate:scene:${gates.scene || "UNKNOWN"}:${sceneAssetIds.join(",") || "locked_scene_reference_required"}`,
+    `phase37_gate:shot_layout:${layoutRefs.join(",")}`,
+    `phase37_gate:spatial_memory:${spatialRefs.join(",")}`,
+    `phase37_gate:keyframe_pair:${pairRefs.join(",") || "keyframe_pair_gate_reference_required"}`,
+    `phase37_gate:master_inheritance_qa:${sceneAssetIds.join(",") || input.shot.id}:worker_provider_self_report_cannot_override`,
+  ]);
+}
+
+function sourceFactTraceFor(input: {
+  kind: TaskPacketKind;
+  runtimeState: ProjectRuntimeState;
+  shot: ShotRecord;
+  previous: NeighborShotContext;
+  next: NeighborShotContext;
+  boundAssets: ReferenceAuthority[];
+  forbidden: ReferenceAuthority[];
+  expectedOutputs: string[];
+  keyframePair?: KeyframePairDerivation;
+}): string[] {
+  return unique([
+    `task_kind:${input.kind}`,
+    `source_index:${sourceIndexHash(input.runtimeState)}`,
+    `shot:${input.shot.id}`,
+    `story_function:${input.shot.storyFunction}`,
+    `previous_shot:${input.previous.shotId}`,
+    `next_shot:${input.next.shotId}`,
+    ...input.boundAssets.map((asset) => `locked_reference:${asset.id}:${asset.referenceRole}:${asset.lockedStatus}`),
+    ...input.forbidden.map((asset) => `forbidden_reference:${asset.id}:${asset.referenceRole}:${asset.lockedStatus}`),
+    ...input.expectedOutputs.map((output) => `expected_output:${output}`),
+    ...phase37VisualConsistencySourceFacts(input),
+  ]);
+}
+
+function hasPhase37VisualConsistencyTrace(sourceFactTrace: string[]): boolean {
+  const required = [
+    "phase37_gate:identity:",
+    "phase37_gate:scene:",
+    "phase37_gate:shot_layout:",
+    "phase37_gate:spatial_memory:",
+    "phase37_gate:keyframe_pair:",
+    "phase37_gate:master_inheritance_qa:",
+  ];
+  return required.every((prefix) => sourceFactTrace.some((item) => item.startsWith(prefix)));
+}
+
 function missingContext(input: {
   kind: TaskPacketKind;
   runtimeState: ProjectRuntimeState;
@@ -838,6 +995,7 @@ function makeTaskEnvelope(input: {
   kind: TaskPacketKind;
   shot: ShotRecord;
   hardFields: TaskPacketHardFields;
+  sourceFactTrace: string[];
   runtimeState: ProjectRuntimeState;
   selectedAssetId?: string;
   keyframePair?: KeyframePairDerivation;
@@ -867,7 +1025,12 @@ function makeTaskEnvelope(input: {
     ...providerSelection.blockers,
     knowledgeTracePresent ? "" : "knowledge_trace_blocker:empty_injection_trace",
   ]);
-  return {
+  const envelope: TaskEnvelope & {
+    sourceFactTrace: string[];
+    resultSchema: "subagent_result_v1";
+    allowedReadScope: string[];
+    forbiddenActions: string[];
+  } = {
     id: taskId,
     purpose: taskPurposeFor(input.kind),
     providerSlot: input.hardFields.providerRequirements.slot,
@@ -900,9 +1063,14 @@ function makeTaskEnvelope(input: {
     knowledgeInputHash: knowledge.routeResult.inputHash,
     knowledgeManifestHash: knowledge.manifestHash,
     routeWarnings: knowledge.routeWarnings,
+    sourceFactTrace: input.sourceFactTrace,
+    resultSchema: input.hardFields.outputSchema,
+    allowedReadScope: input.hardFields.allowedReadScope,
+    forbiddenActions: input.hardFields.forbiddenActions,
     outputPath: expectedOutputs[0],
     blockingReasons,
   };
+  return envelope;
 }
 
 function makeSubagentEnvelope(input: {
@@ -910,13 +1078,20 @@ function makeSubagentEnvelope(input: {
   kind: TaskPacketKind;
   shot: ShotRecord;
   hardFields: TaskPacketHardFields;
+  sourceFactTrace: string[];
+  injectedKnowledgeTrace: TaskPacketKnowledgeTrace;
   taskEnvelope: TaskEnvelope;
   runtimeState: ProjectRuntimeState;
   providerRegistry?: ProviderRegistry;
   providerPolicy?: ProviderPolicy;
 }): SubagentTaskEnvelope {
   const providerSelection = selectCapabilityForRequirement(input.hardFields.providerRequirements, registryFor(input), policyFor(input));
-  return {
+  const envelope: SubagentTaskEnvelope & {
+    sourceFactTrace: string[];
+    injectedKnowledgeTrace: TaskPacketKnowledgeTrace;
+    resultSchema: "subagent_result_v1";
+    forbiddenActions: string[];
+  } = {
     id: input.packetId,
     parentTaskId: input.taskEnvelope.id,
     purpose: input.hardFields.purpose,
@@ -987,10 +1162,201 @@ function makeSubagentEnvelope(input: {
     allowedDelta: input.hardFields.allowedDelta,
     mustNotAdd: input.hardFields.mustAvoid,
     expectedOutputContract: input.hardFields.expectedOutputContract,
+    sourceFactTrace: input.sourceFactTrace,
+    injectedKnowledgeTrace: input.injectedKnowledgeTrace,
+    resultSchema: input.hardFields.outputSchema,
+    forbiddenActions: input.hardFields.forbiddenActions,
+  };
+  return envelope;
+}
+
+function knowledgeTraceFor(envelope: SubagentTaskEnvelope | undefined): TaskPacketKnowledgeTrace {
+  const taskEnvelope = envelope?.taskEnvelope;
+  const packIds = unique(taskEnvelope?.injectedKnowledgePacks.map((pack) => pack.packId) || []);
+  const snippetIds = unique(taskEnvelope?.injectedKnowledgeSnippetIds || []);
+  const snippetCount = taskEnvelope?.injectedKnowledgeSnippets.length || 0;
+  const qaPackBindingIds = unique(Object.keys(envelope?.qaPackBindings || {}));
+  const status =
+    taskEnvelope &&
+    hasNonEmptyKnowledgeTrace({
+      injectedKnowledgePacks: taskEnvelope.injectedKnowledgePacks,
+      injectedKnowledgeSnippetIds: taskEnvelope.injectedKnowledgeSnippetIds,
+      injectedKnowledgeSnippets: taskEnvelope.injectedKnowledgeSnippets,
+    })
+      ? "present"
+      : "missing";
+
+  return {
+    status,
+    knowledgeRouteResultId: taskEnvelope?.knowledgeRouteResultId,
+    contextBudgetId: taskEnvelope?.contextBudgetId,
+    knowledgeInputHash: taskEnvelope?.knowledgeInputHash,
+    knowledgeManifestHash: taskEnvelope?.knowledgeManifestHash,
+    packIds,
+    snippetIds,
+    snippetCount,
+    qaPackBindingIds,
+    warnings: envelope?.routeWarnings || [],
+  };
+}
+
+function missingKnowledgeTrace(): TaskPacketKnowledgeTrace {
+  return {
+    status: "missing",
+    packIds: [],
+    snippetIds: [],
+    snippetCount: 0,
+    qaPackBindingIds: [],
+    warnings: ["validated_envelope_missing"],
+  };
+}
+
+function validationReceiptFor(input: {
+  packetId: string;
+  checkedAt: string;
+  envelope?: SubagentTaskEnvelope;
+  hardFields?: TaskPacketHardFields;
+  sourceFactTrace: string[];
+  injectedKnowledgeTrace: TaskPacketKnowledgeTrace;
+  missingContext: string[];
+}): TaskPacketValidationReceipt {
+  const envelope = input.envelope;
+  const taskEnvelope = envelope?.taskEnvelope;
+  const requiredFields: TaskPacketValidationReceipt["requiredFields"] = {
+    validatedEnvelope: Boolean(envelope && taskEnvelope && taskEnvelope.preflight.status === "pass" && taskEnvelope.blockingReasons.length === 0),
+    expectedOutputs: Boolean(input.hardFields?.expectedOutputs.length && taskEnvelope?.expectedOutputs.length),
+    sourceFactTrace: input.sourceFactTrace.length > 0,
+    injectedKnowledgeTrace: input.injectedKnowledgeTrace.status === "present",
+    qaChecklist: Boolean(input.hardFields?.qaChecklist.length && envelope?.qaChecklist.length && taskEnvelope?.qaChecklist.length),
+    resultSchema: input.hardFields?.outputSchema === "subagent_result_v1" && input.hardFields.expectedOutputContract.format === "subagent_result_v1",
+    allowedReadScope: Boolean(input.hardFields?.allowedReadScope.length && envelope?.allowedReadScopes.length),
+    forbiddenActions: Boolean(input.hardFields?.forbiddenActions.length && envelope?.disallowedReadScopes.includes("provider_credentials")),
+    noFreeTextWorker: Boolean(input.hardFields?.forbiddenActions.includes("no_free_text_task") && envelope?.providerPolicySummary.includes("noFreeTextTask=true")),
+    phase37VisualConsistencyTrace: hasPhase37VisualConsistencyTrace(input.sourceFactTrace),
+  };
+  const blockers = unique([
+    ...input.missingContext.map((field) => `blocked_missing_context:${field}`),
+    requiredFields.validatedEnvelope ? "" : "validated_envelope_missing_or_blocked",
+    requiredFields.expectedOutputs ? "" : "expected_outputs_missing",
+    requiredFields.sourceFactTrace ? "" : "source_fact_trace_missing",
+    requiredFields.injectedKnowledgeTrace ? "" : "injected_knowledge_trace_missing",
+    requiredFields.qaChecklist ? "" : "qa_checklist_missing",
+    requiredFields.resultSchema ? "" : "result_schema_missing",
+    requiredFields.allowedReadScope ? "" : "allowed_read_scope_missing",
+    requiredFields.forbiddenActions ? "" : "forbidden_actions_missing",
+    requiredFields.noFreeTextWorker ? "" : "free_text_worker_not_blocked",
+    requiredFields.phase37VisualConsistencyTrace ? "" : "phase37_visual_consistency_trace_missing",
+    ...(taskEnvelope?.blockingReasons.map((reason) => `task_envelope_blocking_reason:${reason}`) || []),
+  ]);
+
+  return {
+    receiptKind: "phase38_task_packet_validation",
+    status: blockers.length ? "blocked" : "pass",
+    envelopeId: envelope?.id,
+    taskEnvelopeId: taskEnvelope?.id,
+    checkedAt: input.checkedAt,
+    requiredFields,
+    blockers,
+  };
+}
+
+const requiredReadyPacketFields: Array<keyof TaskPacketValidationReceipt["requiredFields"]> = [
+  "validatedEnvelope",
+  "expectedOutputs",
+  "sourceFactTrace",
+  "injectedKnowledgeTrace",
+  "qaChecklist",
+  "resultSchema",
+  "allowedReadScope",
+  "forbiddenActions",
+  "noFreeTextWorker",
+  "phase37VisualConsistencyTrace",
+];
+
+function coverageItemFor(kind: TaskPacketKind, packet: BuiltTaskPacket | undefined): TaskPacketCoverageItem {
+  if (!packet) {
+    return {
+      taskKind: kind,
+      status: "missing",
+      validatedEnvelope: false,
+      expectedOutputs: false,
+      sourceFactTrace: false,
+      injectedKnowledgeTrace: false,
+      qaChecklist: false,
+      resultSchema: false,
+      allowedReadScope: false,
+      forbiddenActions: false,
+      phase37VisualConsistencyTrace: false,
+      noFreeTextTask: false,
+      blockedReasons: ["formal_task_packet_missing"],
+    };
+  }
+  return {
+    taskKind: kind,
+    status: packet.status === "ready" ? "covered_ready" : "covered_blocked",
+    packetId: packet.packetId,
+    envelopeId: packet.envelopeId,
+    validatedEnvelope: packet.validationReceipt.requiredFields.validatedEnvelope,
+    expectedOutputs: packet.validationReceipt.requiredFields.expectedOutputs,
+    sourceFactTrace: packet.validationReceipt.requiredFields.sourceFactTrace,
+    injectedKnowledgeTrace: packet.validationReceipt.requiredFields.injectedKnowledgeTrace,
+    qaChecklist: packet.validationReceipt.requiredFields.qaChecklist,
+    resultSchema: packet.validationReceipt.requiredFields.resultSchema,
+    allowedReadScope: packet.validationReceipt.requiredFields.allowedReadScope,
+    forbiddenActions: packet.validationReceipt.requiredFields.forbiddenActions,
+    phase37VisualConsistencyTrace: packet.validationReceipt.requiredFields.phase37VisualConsistencyTrace,
+    noFreeTextTask: packet.noFreeTextTask,
+    blockedReasons: packet.blockedReasons,
+  };
+}
+
+function buildPlannerReceipt(input: {
+  generatedAt: string;
+  packets: BuiltTaskPacket[];
+  requestedTaskKinds: TaskPacketKind[];
+}): TaskPacketPlannerReceipt {
+  const coverage = taskPacketKinds.map((kind) => coverageItemFor(kind, input.packets.find((packet) => packet.taskKind === kind)));
+  const requestedCoverage = coverage.filter((item) => input.requestedTaskKinds.includes(item.taskKind));
+  const allProductionTaskKindsCovered = taskPacketKinds.every((kind) => coverage.some((item) => item.taskKind === kind && item.status !== "missing"));
+  const expectedOutputsIncluded = requestedCoverage.every((item) => item.expectedOutputs);
+  const sourceFactTraceRecorded = requestedCoverage.every((item) => item.sourceFactTrace);
+  const knowledgePacksRecorded = requestedCoverage.every((item) => item.injectedKnowledgeTrace);
+  const blockedReasons = unique([
+    allProductionTaskKindsCovered ? "" : "formal_task_kind_coverage_missing",
+    expectedOutputsIncluded ? "" : "expected_outputs_missing",
+    sourceFactTraceRecorded ? "" : "source_fact_trace_missing",
+    knowledgePacksRecorded ? "" : "injected_knowledge_trace_missing",
+    ...requestedCoverage.flatMap((item) => item.blockedReasons),
+  ]);
+
+  return {
+    receiptKind: "phase38_full_task_subagent_packet_planner",
+    phase: "phase_38_full_task_subagent_packet_planner",
+    receiptId: `phase38_packet_planner_${safeId(input.generatedAt)}`,
+    generatedAt: input.generatedAt,
+    status: blockedReasons.length ? "blocked" : "pass",
+    allProductionTaskKindsCovered,
+    productionTaskKinds: taskPacketKinds,
+    readyKinds: input.packets.filter((packet) => packet.status === "ready").map((packet) => packet.taskKind),
+    blockedKinds: input.packets.filter((packet) => packet.status !== "ready").map((packet) => packet.taskKind),
+    coverage,
+    requiredReadyPacketFields,
+    validatedEnvelopeRequired: true,
+    formalTaskRejectsMissingPacket: true,
+    expectedOutputsIncluded,
+    sourceFactTraceRecorded,
+    knowledgePacksRecorded,
+    phase37VisualConsistencyTraceRequired: true,
+    noFreeTextWorker: true,
+    naturalLanguageMustEnterTransactionOrPacketBuilder: true,
+    providerSubmissionForbidden: true,
+    liveSubmitAllowed: false,
+    blockedReasons,
   };
 }
 
 function buildPacket(input: BuildTaskPacketsInput, kind: TaskPacketKind): BuiltTaskPacket {
+  const checkedAt = input.generatedAt || input.runtimeState.generatedAt;
   const shot = selectedShot(input.runtimeState, input.selectedShotId);
   const previous = neighborShot(shot, "previous", input.runtimeState);
   const next = neighborShot(shot, "next", input.runtimeState);
@@ -1011,10 +1377,20 @@ function buildPacket(input: BuildTaskPacketsInput, kind: TaskPacketKind): BuiltT
   const packetId = `subagent_packet_${kind}_${safeId(shot?.id || input.selectedAssetId || "project")}`;
 
   if (missing.length || !shot || !previous || !next) {
+    const validationReceipt = validationReceiptFor({
+      packetId,
+      checkedAt,
+      sourceFactTrace: [],
+      injectedKnowledgeTrace: missingKnowledgeTrace(),
+      missingContext: missing,
+    });
     return {
       packetId,
       taskKind: kind,
       status: "blocked_missing_context",
+      sourceFactTrace: [],
+      injectedKnowledgeTrace: missingKnowledgeTrace(),
+      validationReceipt,
       missingContext: missing,
       blockedReasons: missing.map((field) => `blocked_missing_context:${field}`),
       noFreeTextTask: true,
@@ -1024,17 +1400,29 @@ function buildPacket(input: BuildTaskPacketsInput, kind: TaskPacketKind): BuiltT
     };
   }
 
+  const expectedOutputs = expectedOutputsFor(kind, shot, input.selectedAssetId, input.runtimeState);
+  const sourceFactTrace = sourceFactTraceFor({
+    kind,
+    runtimeState: input.runtimeState,
+    shot,
+    previous,
+    next,
+    boundAssets,
+    forbidden,
+    expectedOutputs,
+    keyframePair,
+  });
   const hardFields: TaskPacketHardFields = {
     purpose: purposeFor(kind),
     providerRequirements: providerRequirementFor(kind),
-    contextCapsule: contextCapsuleFor(input, kind, shot, expectedOutputsFor(kind, shot, input.selectedAssetId, input.runtimeState)),
+    contextCapsule: contextCapsuleFor(input, kind, shot, expectedOutputs),
     storyFunction: shot.storyFunction,
     previousShot: previous,
     nextShot: next,
     beforeAfterShots: beforeAfterShotsFor(previous, next),
     boundAssets,
     referenceAuthority: referenceAuthorityFor(boundAssets, forbidden),
-    expectedOutputs: expectedOutputsFor(kind, shot, input.selectedAssetId, input.runtimeState),
+    expectedOutputs,
     mustPreserve: mustPreserveFor(input, kind, keyframePair),
     allowedDelta: allowedDeltaFor(kind, keyframePair),
     mustAvoid: mustAvoidFor(input, kind, keyframePair),
@@ -1050,6 +1438,7 @@ function buildPacket(input: BuildTaskPacketsInput, kind: TaskPacketKind): BuiltT
     kind,
     shot,
     hardFields,
+    sourceFactTrace,
     runtimeState: input.runtimeState,
     selectedAssetId: input.selectedAssetId,
     keyframePair,
@@ -1063,21 +1452,41 @@ function buildPacket(input: BuildTaskPacketsInput, kind: TaskPacketKind): BuiltT
     kind,
     shot,
     hardFields,
+    sourceFactTrace,
+    injectedKnowledgeTrace: missingKnowledgeTrace(),
     taskEnvelope,
     runtimeState: input.runtimeState,
     providerRegistry: input.providerRegistry,
     providerPolicy: input.providerPolicy,
   });
+  const injectedKnowledgeTrace = knowledgeTraceFor(envelope);
+  const envelopeWithTrace = {
+    ...envelope,
+    injectedKnowledgeTrace,
+  } as SubagentTaskEnvelope;
+  const validationReceipt = validationReceiptFor({
+    packetId,
+    checkedAt,
+    envelope: envelopeWithTrace,
+    hardFields,
+    sourceFactTrace,
+    injectedKnowledgeTrace,
+    missingContext: [],
+  });
+  const ready = validationReceipt.status === "pass";
 
   return {
     packetId,
     taskKind: kind,
-    status: "ready",
-    envelopeId: envelope.id,
-    envelope,
+    status: ready ? "ready" : "blocked_packet_validation",
+    envelopeId: envelopeWithTrace.id,
+    envelope: envelopeWithTrace,
     hardFields,
+    sourceFactTrace,
+    injectedKnowledgeTrace,
+    validationReceipt,
     missingContext: [],
-    blockedReasons: [],
+    blockedReasons: validationReceipt.blockers,
     noFreeTextTask: true,
     canSubmitProvider: false,
     providerSubmissionForbidden: true,
@@ -1088,10 +1497,12 @@ function buildPacket(input: BuildTaskPacketsInput, kind: TaskPacketKind): BuiltT
 export function buildTaskPackets(input: BuildTaskPacketsInput): TaskPacketBuilderState {
   const requestedTaskKinds = input.requestedTaskKinds || taskPacketKinds;
   const packets = requestedTaskKinds.map((kind) => buildPacket(input, kind));
+  const generatedAt = input.generatedAt || new Date().toISOString();
+  const plannerReceipt = buildPlannerReceipt({ generatedAt, packets, requestedTaskKinds });
 
   return {
     schemaVersion: taskPacketBuilderSchemaVersion,
-    generatedAt: input.generatedAt || new Date().toISOString(),
+    generatedAt,
     selectedShotId: input.selectedShotId,
     selectedAssetId: input.selectedAssetId,
     packets,
@@ -1099,11 +1510,13 @@ export function buildTaskPackets(input: BuildTaskPacketsInput): TaskPacketBuilde
       total: packets.length,
       ready: packets.filter((packet) => packet.status === "ready").length,
       blockedMissingContext: packets.filter((packet) => packet.status === "blocked_missing_context").length,
-      envelopeReady: packets.filter((packet) => packet.envelope).length,
+      envelopeReady: packets.filter((packet) => packet.envelope && packet.validationReceipt.requiredFields.validatedEnvelope).length,
+      validatedEnvelopeReady: packets.filter((packet) => packet.status === "ready" && packet.validationReceipt.requiredFields.validatedEnvelope).length,
       noFreeTextTask: true,
       providerSubmissionForbidden: true,
       liveSubmitAllowed: false,
     },
+    plannerReceipt,
     noFreeTextTask: true,
     validatedEnvelopeRequired: true,
     providerSubmissionForbidden: true,
@@ -1111,6 +1524,7 @@ export function buildTaskPackets(input: BuildTaskPacketsInput): TaskPacketBuilde
     notes: [
       "Phase38 builds dry-run SubagentTaskEnvelope packets for every production task kind.",
       "Every ready packet carries context capsule, reference authority, before/after shots, expected outputs, hard negatives, QA checklist, and subagent_result_v1 contract.",
+      "Phase38 planner receipt records coverage for image, asset, start/end frame, image edit, identity/scene/pair QA, story audit, video execution, audio, and export.",
       "No packet submits a provider, starts a worker, reads credentials, writes prompt files, or accepts free-text task bypass.",
     ],
   };
