@@ -14,6 +14,7 @@ import type { ProviderLiveGateState } from "./providerLiveGate";
 import type { ProviderExecutionPermissionGateState } from "./providerExecutionPermissionGate";
 import type { ProviderActionConfirmationReceiptState } from "./providerActionConfirmationReceipt";
 import type { ProviderExecutionHandoffState } from "./providerExecutionHandoff";
+import type { ProviderClosedLoopShellState } from "./providerClosedLoopShell";
 import type { ExecutionLedgerState } from "./executionLedger";
 import type { RealExecutionGateState } from "./realExecutionGate";
 import type { RealProviderPilotState } from "./realProviderPilot";
@@ -213,6 +214,7 @@ export interface ProjectRuntimeState {
   providerExecutionPermissionGate: ProviderExecutionPermissionGateState;
   providerActionConfirmationReceipt: ProviderActionConfirmationReceiptState;
   providerExecutionHandoff: ProviderExecutionHandoffState;
+  providerClosedLoopShell: ProviderClosedLoopShellState;
   executionLedger: ExecutionLedgerState;
   realExecutionGate: RealExecutionGateState;
   realProviderPilot: RealProviderPilotState;

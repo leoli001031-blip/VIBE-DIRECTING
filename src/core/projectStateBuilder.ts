@@ -36,6 +36,7 @@ import { buildProviderLiveGateState, type ProviderLiveGateEnvelopeFact } from ".
 import { buildProviderExecutionPermissionGateState } from "./providerExecutionPermissionGate";
 import { buildProviderActionConfirmationReceiptState } from "./providerActionConfirmationReceipt";
 import { buildProviderExecutionHandoffState } from "./providerExecutionHandoff";
+import { buildProviderClosedLoopShellState } from "./providerClosedLoopShell";
 import { buildExecutionLedgerState, type ExecutionLedgerMode, type ExecutionLedgerOutputSandbox } from "./executionLedger";
 import { buildRealExecutionGateState } from "./realExecutionGate";
 import { buildRealProviderPilotState, type RealProviderPilotProviderPlanInput } from "./realProviderPilot";
@@ -76,6 +77,7 @@ export interface ProjectRuntimeStateBuildOptions {
   agentCliMockRunner?: ProjectRuntimeState["agentCliMockRunner"];
   codexCliAdapterSpike?: ProjectRuntimeState["codexCliAdapterSpike"];
   codexWorkerRuntimeGate?: ProjectRuntimeState["codexWorkerRuntimeGate"];
+  providerClosedLoopShell?: ProjectRuntimeState["providerClosedLoopShell"];
   executionLedger?: ProjectRuntimeState["executionLedger"];
   realExecutionGate?: ProjectRuntimeState["realExecutionGate"];
   realProviderPilot?: ProjectRuntimeState["realProviderPilot"];
@@ -585,6 +587,16 @@ export function buildProjectRuntimeState(
     generatedAt,
     providerActionConfirmationReceipt,
   });
+  const providerClosedLoopShell = options.providerClosedLoopShell || buildProviderClosedLoopShellState({
+    generatedAt,
+    imageTaskPlans,
+    image2AdapterRequests,
+    videoPlanning,
+    providerLiveGate,
+    watcherEvents,
+    manifestReports: taskViews.map((task) => task.manifestMatch),
+    qaPromotionReports,
+  });
   const realTestMode = options.realTestMode || "locked";
   const realTestShotIds = options.realTestShotIds || (options.selectedShotId ? [options.selectedShotId] : []);
   const realTestProjectId = view.sourceIndex.projectId || audit.projectTitle || "project";
@@ -768,6 +780,7 @@ export function buildProjectRuntimeState(
     providerExecutionPermissionGate,
     providerActionConfirmationReceipt,
     providerExecutionHandoff,
+    providerClosedLoopShell,
     executionLedger,
     realExecutionGate,
     realProviderPilot,
@@ -1060,6 +1073,18 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       generatedAt: state.generatedAt,
       providerActionConfirmationReceipt,
     });
+  const providerClosedLoopShell =
+    state.providerClosedLoopShell ||
+    buildProviderClosedLoopShellState({
+      generatedAt: state.generatedAt,
+      imageTaskPlans: state.imagePipeline.imageTaskPlans,
+      image2AdapterRequests: state.imagePipeline.image2AdapterRequests,
+      videoPlanning,
+      providerLiveGate,
+      watcherEvents: state.imagePipeline.watcherEvents,
+      manifestReports: state.manifestMatches.reports,
+      qaPromotionReports: state.imagePipeline.qaPromotionReports,
+    });
   const executionLedger =
     state.executionLedger ||
     buildExecutionLedgerState({
@@ -1218,6 +1243,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     providerExecutionPermissionGate,
     providerActionConfirmationReceipt,
     providerExecutionHandoff,
+    providerClosedLoopShell,
     executionLedger,
     realExecutionGate,
     realProviderPilot,

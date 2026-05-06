@@ -325,6 +325,18 @@ type CodexWorkerRuntimeGateUiSummary = {
   blockersWarnings: string[];
   requiredGates: string[];
 };
+type ProviderClosedLoopShellUiSummary = {
+  initialized: boolean;
+  readiness: string;
+  shellStatus: string;
+  watcherStatus: string;
+  manifestStatus: string;
+  qaStatus: string;
+  promotionStatus: string;
+  safetyStatus: string;
+  blockersWarnings: string[];
+  requiredGates: string[];
+};
 type DirectorProgressTone = "preparing" | "working" | "review" | "blocked" | "complete";
 type DirectorProgressSegment = {
   label: string;
@@ -3076,6 +3088,99 @@ function buildCodexWorkerRuntimeGateUiSummary(runtimeState: ProjectRuntimeState)
     outputStatus: outputRejected ? "blocked" : readFirstBoolean(records, ["structuredResultOnly"]) === true ? "locked" : "missing",
     executionStatus: executionOpened ? "opened" : executionLocked ? "closed" : "missing",
     blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing codexWorkerRuntimeGate"],
+    requiredGates,
+  };
+}
+
+function buildProviderClosedLoopShellUiSummary(runtimeState: ProjectRuntimeState): ProviderClosedLoopShellUiSummary {
+  const root = runtimeState as unknown as Record<string, unknown>;
+  const shellRoot = isRecord(root.providerClosedLoopShell) ? root.providerClosedLoopShell : {};
+  const initialized = isRecord(root.providerClosedLoopShell);
+  const rootRecord = initialized ? shellRoot : {};
+  const gates = firstRecordFrom(rootRecord, ["gates"]);
+  const summary = firstRecordFrom(rootRecord, ["summary"]);
+  const observations = firstRecordFrom(rootRecord, ["observations"]);
+  const providerShells = firstRecordFrom(rootRecord, ["providerShells"]);
+  const providerCommitGate = firstRecordFrom(rootRecord, ["providerCommitGate"]);
+  const executionPolicy = firstRecordFrom(rootRecord, ["executionPolicy"]);
+  const records = [gates, summary, rootRecord].filter(isRecord);
+  const observedRecords = [observations, providerShells, providerCommitGate, executionPolicy, rootRecord].filter(isRecord);
+  const requiredGates = [
+    "image2ClosedLoopShellDefined",
+    "seedanceClosedLoopShellDefined",
+    "watcherRequired",
+    "manifestRequired",
+    "qaGateRequired",
+    "promotionGateRequired",
+    "workerSelfReportCannotComplete",
+    "providerCommitDefaultGated",
+    "noActualProviderSubmit",
+    "noLiveSubmit",
+    "noCredentialAccess",
+    "noFileMutation",
+    "noWorkerSpawn",
+    "noShellExecution",
+    "forbiddenProviderModesAbsent",
+  ];
+  const readyGateCount = requiredGates.filter((key) => readFirstBoolean(records, [key]) === true).length;
+  const status = readFirstString(records, ["readiness", "status", "state"], "");
+  const blockersWarnings = Array.from(new Set([
+    ...readDisplayList(rootRecord.blockers, "blocker"),
+    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
+    ...readDisplayList(summary.blockers, "blocker"),
+    ...readDisplayList(summary.blockedReasons, "blocker"),
+    ...readDisplayList(rootRecord.warnings, "warning"),
+    ...readDisplayList(summary.warnings, "warning"),
+  ].filter(Boolean)));
+  const image2Ready = readFirstBoolean(records, ["image2ClosedLoopShellDefined"]) === true;
+  const seedanceReady = readFirstBoolean(records, ["seedanceClosedLoopShellDefined"]) === true;
+  const watcherReady = readFirstBoolean(records, ["watcherRequired"]) === true;
+  const manifestReady = readFirstBoolean(records, ["manifestRequired"]) === true;
+  const qaReady = readFirstBoolean(records, ["qaGateRequired"]) === true;
+  const promotionReady = readFirstBoolean(records, ["promotionGateRequired"]) === true;
+  const defaultOpened = readFirstBoolean(observedRecords, ["providerCommitDefaultOn", "defaultGateOpened", "gateDefaultOn"]) === true;
+  const unsafeObserved = [
+    "providerSubmitObserved",
+    "providerExecutionObserved",
+    "providerCommitObserved",
+    "liveSubmitObserved",
+    "credentialReadObserved",
+    "credentialWriteObserved",
+    "credentialAccessObserved",
+    "apiKeyCreatedObserved",
+    "workerSpawnObserved",
+    "subprocessObserved",
+    "shellExecutionObserved",
+    "fileMutationObserved",
+    "fastModelObserved",
+    "vipChannelObserved",
+    "textToVideoMainPathObserved",
+    "bgmInVideoPromptObserved",
+  ].some((key) => readFirstBoolean(observedRecords, [key]) === true);
+  const safetyLocked = [
+    "workerSelfReportCannotComplete",
+    "providerCommitDefaultGated",
+    "noActualProviderSubmit",
+    "noLiveSubmit",
+    "noCredentialAccess",
+    "noFileMutation",
+    "noWorkerSpawn",
+    "noShellExecution",
+    "forbiddenProviderModesAbsent",
+  ].every((key) => readFirstBoolean(records, [key]) === true);
+
+  return {
+    initialized,
+    readiness: initialized
+      ? statusLabel(status || (readyGateCount === requiredGates.length && !blockersWarnings.length ? "ready" : "blocked"))
+      : "blocked/missing",
+    shellStatus: image2Ready && seedanceReady ? "Image2/Seedance defined" : "missing",
+    watcherStatus: watcherReady ? "watcher required" : "missing",
+    manifestStatus: manifestReady ? "manifest required" : "missing",
+    qaStatus: qaReady ? "QA gate required" : "missing",
+    promotionStatus: promotionReady ? "promotion gate required" : "missing",
+    safetyStatus: defaultOpened || unsafeObserved ? "opened" : safetyLocked ? "closed" : "missing",
+    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing providerClosedLoopShell"],
     requiredGates,
   };
 }
@@ -6037,6 +6142,39 @@ function CodexWorkerRuntimeGateDiagnostics({ runtimeState }: { runtimeState: Pro
   );
 }
 
+function ProviderClosedLoopShellDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildProviderClosedLoopShellUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel provider-closed-loop-shell-panel">
+      <div className="audit-head">
+        <LockKeyhole size={17} />
+        <span>Phase 41 Provider Closed-loop Shell</span>
+      </div>
+      <div className="summary-grid provider-closed-loop-shell-metrics">
+        <Metric label="Readiness" value={summary.readiness} detail="Phase 41 typed evidence" />
+        <Metric label="Provider Shells" value={summary.shellStatus} detail="Image2 + Seedance" />
+        <Metric label="Watcher" value={summary.watcherStatus} detail="required" />
+        <Metric label="Manifest" value={summary.manifestStatus} detail="required" />
+        <Metric label="QA Gate" value={summary.qaStatus} detail="required" />
+        <Metric label="Promotion Gate" value={summary.promotionStatus} detail="required" />
+        <Metric label="Safety" value={summary.safetyStatus} detail="provider submit/live submit/credential/shell closed" />
+      </div>
+      <div className="phase17-rule-strip">
+        {summary.requiredGates.map((gate) => (
+          <span key={gate}>{gate}</span>
+        ))}
+      </div>
+      <div className="pipeline-details checker-details">
+        <details open={Boolean(summary.blockersWarnings.length)}>
+          <summary>Phase 41 blockers / warnings ({summary.blockersWarnings.length})</summary>
+          <CompactList items={summary.blockersWarnings} empty="No Phase 41 blockers reported." />
+        </details>
+      </div>
+    </section>
+  );
+}
+
 function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const videoPlanning = getVideoPlanning(runtimeState);
   const queue = videoPlanning.queueShell;
@@ -8135,6 +8273,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const fullTaskSubagentPacketPlannerSummary = buildFullTaskSubagentPacketPlannerUiSummary(runtimeState);
   const knowledgePackUserManagementSummary = buildKnowledgePackUserManagementUiSummary(runtimeState);
   const codexWorkerRuntimeGateSummary = buildCodexWorkerRuntimeGateUiSummary(runtimeState);
+  const providerClosedLoopShellSummary = buildProviderClosedLoopShellUiSummary(runtimeState);
   const realPilotSummary = buildRealPilotUiSummary(runtimeState);
 
   return (
@@ -8363,6 +8502,15 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
           <small>{codexWorkerRuntimeGateSummary.contractStatus} · {codexWorkerRuntimeGateSummary.gateStatus}</small>
           <small>validated envelope {codexWorkerRuntimeGateSummary.inputStatus} · structured result {codexWorkerRuntimeGateSummary.outputStatus}</small>
           <small>spawn/resume/daemon/shell/credential/file/provider submit {codexWorkerRuntimeGateSummary.executionStatus}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Phase 41 Provider Closed-loop Shell</div>
+      <div className="settings-list provider-closed-loop-shell-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Phase 41 Provider Closed-loop Shell: {providerClosedLoopShellSummary.readiness}</strong>
+          <small>{providerClosedLoopShellSummary.shellStatus} · watcher {providerClosedLoopShellSummary.watcherStatus} · manifest {providerClosedLoopShellSummary.manifestStatus}</small>
+          <small>{providerClosedLoopShellSummary.qaStatus} · {providerClosedLoopShellSummary.promotionStatus}</small>
+          <small>provider submit/live submit/credential/shell safety {providerClosedLoopShellSummary.safetyStatus}</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
@@ -8614,6 +8762,7 @@ function DiagnosticsMode({
       <FullTaskSubagentPacketPlannerDiagnostics runtimeState={runtimeState} />
       <KnowledgePackUserManagementDiagnostics runtimeState={runtimeState} />
       <CodexWorkerRuntimeGateDiagnostics runtimeState={runtimeState} />
+      <ProviderClosedLoopShellDiagnostics runtimeState={runtimeState} />
       <RealPilotDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <VoiceAudioSettingsDiagnostics runtimeState={runtimeState} />

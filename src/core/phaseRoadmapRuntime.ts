@@ -1190,6 +1190,32 @@ export interface PhaseRoadmapCodexWorkerRuntimeGateEvidence extends PhaseRoadmap
   executionPolicy?: Record<string, unknown>;
 }
 
+export interface PhaseRoadmapProviderClosedLoopShellEvidence extends PhaseRoadmapClosureEvidence {
+  observations?: PhaseRoadmapClosureObservations & {
+    apiKeyCreatedObserved?: boolean;
+    providerCommitDefaultOn?: boolean;
+    workerSelfReportCompletionAccepted?: boolean;
+    missingExpectedOutputAccepted?: boolean;
+    manifestMissingAccepted?: boolean;
+    qaMissingAccepted?: boolean;
+    promotionWithoutQaObserved?: boolean;
+    fastModelObserved?: boolean;
+    vipChannelObserved?: boolean;
+    textToVideoMainPathObserved?: boolean;
+    bgmInVideoPromptObserved?: boolean;
+  };
+  providerShells?: Record<string, unknown>;
+  watcher?: Record<string, unknown>;
+  manifest?: Record<string, unknown>;
+  qaGate?: Record<string, unknown>;
+  promotionGate?: Record<string, unknown>;
+  providerCommitGate?: Record<string, unknown>;
+  credentialPolicy?: Record<string, unknown>;
+  workerPolicy?: Record<string, unknown>;
+  executionPolicy?: Record<string, unknown>;
+  providerModePolicy?: Record<string, unknown>;
+}
+
 export interface PhaseRoadmapRuntimeEvidence {
   projectFactsIntegration?: PhaseRoadmapProjectFactsIntegrationEvidence;
   subagentEnvelopeValidator?: PhaseRoadmapSubagentEnvelopeValidatorReceipt;
@@ -1210,7 +1236,7 @@ export interface PhaseRoadmapRuntimeEvidence {
   subagentPacketPlanner?: PhaseRoadmapClosureEvidence;
   knowledgePackUserManagement?: PhaseRoadmapClosureEvidence;
   codexWorkerRuntimeGate?: PhaseRoadmapCodexWorkerRuntimeGateEvidence;
-  providerClosedLoopShell?: PhaseRoadmapClosureEvidence;
+  providerClosedLoopShell?: PhaseRoadmapProviderClosedLoopShellEvidence;
   betaAcceptance?: PhaseRoadmapClosureEvidence;
   watcherManifestQaClosedLoop?: PhaseRoadmapClosedLoopReceipt;
 }
@@ -3738,6 +3764,160 @@ function codexWorkerRuntimeGateEvidenceDecision(input: PhaseRoadmapRuntimeInput)
   };
 }
 
+function providerClosedLoopShellEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const evidence = input.evidence?.providerClosedLoopShell;
+
+  if (hasClosureEvidence(evidence)) {
+    const requiredGates = [
+      { field: "image2ClosedLoopShellDefined", blocker: "provider_closed_loop_shell_image2_missing" },
+      { field: "seedanceClosedLoopShellDefined", blocker: "provider_closed_loop_shell_seedance_missing" },
+      { field: "watcherRequired", blocker: "provider_closed_loop_shell_watcher_missing" },
+      { field: "manifestRequired", blocker: "provider_closed_loop_shell_manifest_missing" },
+      { field: "qaGateRequired", blocker: "provider_closed_loop_shell_qa_gate_missing" },
+      { field: "promotionGateRequired", blocker: "provider_closed_loop_shell_promotion_gate_missing" },
+      { field: "workerSelfReportCannotComplete", blocker: "provider_closed_loop_shell_worker_self_report_can_complete" },
+      { field: "providerCommitDefaultGated", blocker: "provider_closed_loop_shell_default_not_gated" },
+      { field: "noActualProviderSubmit", blocker: "provider_closed_loop_shell_provider_submit_not_blocked" },
+      { field: "noLiveSubmit", blocker: "provider_closed_loop_shell_live_submit_not_blocked" },
+      { field: "noCredentialAccess", blocker: "provider_closed_loop_shell_credential_access_not_blocked" },
+      { field: "noFileMutation", blocker: "provider_closed_loop_shell_file_mutation_not_blocked" },
+      { field: "noWorkerSpawn", blocker: "provider_closed_loop_shell_worker_spawn_not_blocked" },
+      { field: "noShellExecution", blocker: "provider_closed_loop_shell_shell_not_blocked" },
+      { field: "forbiddenProviderModesAbsent", blocker: "provider_closed_loop_shell_forbidden_provider_modes_present" },
+    ];
+    const requiredGateBlockers = requiredGates.flatMap((gate) =>
+      blockedIf(!closureGateReady(evidence, gate.field), gate.blocker),
+    );
+    const providerSubmitObserved = closureAnyObservedTrue(
+      evidence,
+      ["providerSubmitObserved", "providerExecutionObserved", "providerCommitObserved"],
+      ["providerShells", "providerCommitGate", "executionPolicy", "providerExecution", "providerSubmit"],
+    );
+    const liveSubmitObserved = closureAnyObservedTrue(
+      evidence,
+      ["liveSubmitObserved", "liveSubmitAllowed"],
+      ["providerShells", "providerCommitGate", "executionPolicy", "liveSubmit"],
+    );
+    const credentialObserved = closureAnyObservedTrue(
+      evidence,
+      [
+        "credentialReadObserved",
+        "credentialWriteObserved",
+        "credentialAccessObserved",
+        "credentialRead",
+        "credentialWrite",
+        "credentialAccess",
+      ],
+      ["credentialPolicy", "credentials", "providerShells", "executionPolicy"],
+    );
+    const apiKeyCreatedObserved = closureAnyObservedTrue(
+      evidence,
+      ["apiKeyCreatedObserved", "apiKeyCreateObserved", "apiKeyCreated", "apiKeyCreationObserved"],
+      ["credentialPolicy", "credentials", "providerShells"],
+    );
+    const workerSpawnObserved = closureAnyObservedTrue(
+      evidence,
+      ["workerSpawnObserved", "subprocessObserved", "spawnCodexObserved", "workerSpawnAllowed"],
+      ["workerPolicy", "executionPolicy", "providerShells"],
+    );
+    const shellExecutionObserved = closureAnyObservedTrue(
+      evidence,
+      ["shellExecutionObserved", "shellExecutionAllowed", "arbitraryShellAllowed"],
+      ["workerPolicy", "executionPolicy", "providerShells"],
+    );
+    const fileMutationObserved = closureAnyObservedTrue(
+      evidence,
+      ["fileMutationObserved", "fileMutationAllowed"],
+      ["workerPolicy", "executionPolicy", "providerShells"],
+    );
+    const defaultGateOpened = closureAnyObservedTrue(
+      evidence,
+      ["providerCommitDefaultOn", "defaultGateOpened", "defaultGateOpen", "gateDefaultOn"],
+      ["providerCommitGate", "executionPolicy", "providerShells"],
+    );
+    const workerSelfReportCompletionAccepted = closureAnyObservedTrue(
+      evidence,
+      ["workerSelfReportCompletionAccepted", "workerSelfReportAccepted", "workerSelfReportCanComplete"],
+      ["promotionGate", "qaGate", "workerPolicy", "completionGate"],
+    );
+    const missingExpectedOutputAccepted = closureAnyObservedTrue(
+      evidence,
+      ["missingExpectedOutputAccepted", "missingExpectedOutputsAccepted", "expectedOutputMissingAccepted"],
+      ["promotionGate", "qaGate", "manifest", "expectedOutput"],
+    );
+    const manifestMissingAccepted = closureAnyObservedTrue(
+      evidence,
+      ["manifestMissingAccepted", "manifestMissingObserved", "missingManifestAccepted"],
+      ["manifest", "promotionGate"],
+    );
+    const qaMissingAccepted = closureAnyObservedTrue(
+      evidence,
+      ["qaMissingAccepted", "qaGateMissingAccepted", "missingQaAccepted"],
+      ["qaGate", "promotionGate"],
+    );
+    const promotionWithoutQaObserved = closureAnyObservedTrue(
+      evidence,
+      ["promotionWithoutQaObserved", "promotionWithoutQaAccepted", "promotionGateWithoutQa"],
+      ["promotionGate", "qaGate"],
+    );
+    const forbiddenProviderModeObserved = closureAnyObservedTrue(
+      evidence,
+      [
+        "fastModelObserved",
+        "vipChannelObserved",
+        "textToVideoMainPathObserved",
+        "bgmInVideoPromptObserved",
+        "fastModelAllowed",
+        "vipChannelAllowed",
+        "textToVideoMainPathAllowed",
+        "bgmInVideoPromptAllowed",
+      ],
+      ["providerModePolicy", "providerShells", "executionPolicy"],
+    );
+    const blockers = uniqueSorted([
+      ...closureStatusBlockers(evidence, "phase_41_provider_closed_loop_shell", "provider_closed_loop_shell"),
+      ...closureSafetyBlockers(evidence, "provider_closed_loop_shell"),
+      ...blockedIf(evidence.hardLocks?.closedLoopShellOnly !== true, "provider_closed_loop_shell_closed_loop_shell_only_missing"),
+      ...requiredGateBlockers,
+      ...blockedIf(providerSubmitObserved, "provider_closed_loop_shell_provider_submit_not_blocked"),
+      ...blockedIf(liveSubmitObserved, "provider_closed_loop_shell_live_submit_not_blocked"),
+      ...blockedIf(credentialObserved, "provider_closed_loop_shell_credential_access_not_blocked"),
+      ...blockedIf(apiKeyCreatedObserved, "provider_closed_loop_shell_api_key_creation_observed"),
+      ...blockedIf(workerSpawnObserved, "provider_closed_loop_shell_worker_spawn_not_blocked"),
+      ...blockedIf(shellExecutionObserved, "provider_closed_loop_shell_shell_not_blocked"),
+      ...blockedIf(fileMutationObserved, "provider_closed_loop_shell_file_mutation_not_blocked"),
+      ...blockedIf(defaultGateOpened, "provider_closed_loop_shell_default_not_gated"),
+      ...blockedIf(workerSelfReportCompletionAccepted, "provider_closed_loop_shell_worker_self_report_can_complete"),
+      ...blockedIf(missingExpectedOutputAccepted, "provider_closed_loop_shell_expected_output_gate_missing"),
+      ...blockedIf(manifestMissingAccepted, "provider_closed_loop_shell_manifest_missing"),
+      ...blockedIf(qaMissingAccepted, "provider_closed_loop_shell_qa_gate_missing"),
+      ...blockedIf(promotionWithoutQaObserved, "provider_closed_loop_shell_promotion_without_qa_observed"),
+      ...blockedIf(forbiddenProviderModeObserved, "provider_closed_loop_shell_forbidden_provider_modes_present"),
+    ]);
+
+    return {
+      evidenceKey: "providerClosedLoopShell",
+      source: "typed_evidence",
+      ready: blockers.length === 0,
+      blockers,
+      warnings: uniqueSorted(evidence.warnings || []),
+    };
+  }
+
+  return {
+    evidenceKey: "providerClosedLoopShell",
+    source: input.providerClosedLoopShellReady === undefined ? "missing" : "legacy_boolean_override",
+    ready: false,
+    blockers: ["provider_closed_loop_shell_typed_evidence_missing"],
+    warnings: uniqueSorted([
+      ...blockedIf(
+        input.providerClosedLoopShellReady === true,
+        "legacy_providerClosedLoopShellReady_boolean_ignored_without_typed_evidence",
+      ),
+    ]),
+  };
+}
+
 function taskQueueVisibilityEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
   const evidence = input.evidence?.taskQueueVisibility;
 
@@ -3970,21 +4150,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const fullTaskSubagentPacketPlannerDecision = fullTaskSubagentPacketPlannerEvidenceDecision(input);
   const knowledgePackUserManagementDecision = knowledgePackUserManagementEvidenceDecision(input);
   const codexWorkerRuntimeGateDecision = codexWorkerRuntimeGateEvidenceDecision(input);
-  const providerClosedLoopShellDecision = phaseClosureEvidenceDecision(input, {
-    evidenceKey: "providerClosedLoopShell",
-    phaseId: "phase_41_provider_closed_loop_shell",
-    missingBlocker: "provider_closed_loop_shell_typed_evidence_missing",
-    safetyPrefix: "provider_closed_loop_shell",
-    legacyReadyInput: "providerClosedLoopShellReady",
-    requireClosedLoopShellOnly: true,
-    requiredGates: [
-      { field: "image2ClosedLoopShellDefined", blocker: "provider_closed_loop_shell_image2_missing" },
-      { field: "seedanceClosedLoopShellDefined", blocker: "provider_closed_loop_shell_seedance_missing" },
-      { field: "watcherManifestQaPromotionRequired", blocker: "provider_closed_loop_shell_closed_loop_missing" },
-      { field: "providerCommitDefaultGated", blocker: "provider_closed_loop_shell_default_not_gated" },
-      { field: "noActualProviderSubmit", blocker: "provider_closed_loop_shell_provider_submit_not_blocked" },
-    ],
-  });
+  const providerClosedLoopShellDecision = providerClosedLoopShellEvidenceDecision(input);
   const betaAcceptanceDecision = phaseClosureEvidenceDecision(input, {
     evidenceKey: "betaAcceptance",
     phaseId: "phase_42_export_desktop_beta_acceptance",
@@ -4554,16 +4720,21 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       requiredInputs: [
         "evidence.providerClosedLoopShell",
         "Image2 and Seedance closed-loop shell evidence",
+        "watcherRequired/manifestRequired/qaGateRequired/promotionGateRequired=true",
+        "workerSelfReportCannotComplete=true",
         "providerCommitDefaultGated=true",
-        "noActualProviderSubmit=true",
+        "noActualProviderSubmit/noLiveSubmit/noCredentialAccess/noFileMutation/noWorkerSpawn/noShellExecution=true",
+        "forbiddenProviderModesAbsent=true",
       ],
       acceptanceCriteria: [
         "Image2 and Seedance provider execution have closed-loop shell contracts only.",
         "Watcher, manifest, QA, and promotion gates are mandatory before any future provider commit path can be considered.",
-        "The roadmap default cannot submit providers, live submit, store credentials, read credentials, or create provider credentials.",
+        "Worker self-report cannot complete a provider task; expected output, manifest, QA, and promotion gates fail closed.",
+        "The roadmap default cannot submit providers, live submit, store credentials, read credentials, create provider credentials, spawn workers, execute shell, or mutate files.",
       ],
       notes: [
         "Phase 41 is deliberately a provider closed-loop shell and does not submit Image2, Seedance, Jimeng, or any provider.",
+        "The legacy providerClosedLoopShellReady boolean is ignored without typed evidence.",
         ...evidenceNotes([providerClosedLoopShellDecision]),
       ],
     }),

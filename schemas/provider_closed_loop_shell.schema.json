@@ -1,0 +1,396 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/provider_closed_loop_shell.schema.json",
+  "title": "ProviderClosedLoopShellState",
+  "description": "Phase 41 Image2 / Seedance provider execution closed-loop shell. It proves provider request preview and adapter payload shape, watcher expected output, manifest match, QA report/check, and promotion gate while provider commit is default gated and all live provider, credential, worker, shell, and file mutation paths remain locked off.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "phaseId",
+    "generatedAt",
+    "readiness",
+    "contract",
+    "providerCommitGate",
+    "hardLocks",
+    "attemptedActions",
+    "shells",
+    "summary",
+    "proof",
+    "blockers",
+    "warnings",
+    "validation",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "phaseId": { "type": "string", "const": "phase_41_provider_closed_loop_shell" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "readiness": { "type": "string", "enum": ["blocked", "ready_gated_shell"] },
+    "contract": { "$ref": "#/$defs/contract" },
+    "providerCommitGate": { "$ref": "#/$defs/providerCommitGate" },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "attemptedActions": { "$ref": "#/$defs/attemptedActions" },
+    "shells": { "$ref": "#/$defs/shells" },
+    "summary": { "$ref": "#/$defs/summary" },
+    "proof": { "$ref": "#/$defs/proof" },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "validation": { "$ref": "#/$defs/validation" },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shellOnly",
+        "closedLoopContractDefined",
+        "image2ShellRequired",
+        "seedanceShellRequired",
+        "providerRequestPreviewRequired",
+        "watcherExpectedOutputRequired",
+        "manifestMatchRequired",
+        "qaReportCheckRequired",
+        "promotionGateRequired",
+        "workerProviderSelfReportCannotComplete",
+        "noActualProviderSubmit"
+      ],
+      "properties": {
+        "shellOnly": { "type": "boolean", "const": true },
+        "closedLoopContractDefined": { "type": "boolean", "const": true },
+        "image2ShellRequired": { "type": "boolean", "const": true },
+        "seedanceShellRequired": { "type": "boolean", "const": true },
+        "providerRequestPreviewRequired": { "type": "boolean", "const": true },
+        "watcherExpectedOutputRequired": { "type": "boolean", "const": true },
+        "manifestMatchRequired": { "type": "boolean", "const": true },
+        "qaReportCheckRequired": { "type": "boolean", "const": true },
+        "promotionGateRequired": { "type": "boolean", "const": true },
+        "workerProviderSelfReportCannotComplete": { "type": "boolean", "const": true },
+        "noActualProviderSubmit": { "type": "boolean", "const": true }
+      }
+    },
+    "providerCommitGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerCommitDefaultGated",
+        "providerCommitAllowed",
+        "canSubmitProvider",
+        "providerSubmitAllowed",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "providerCommitDefaultGated": { "type": "boolean", "const": true },
+        "providerCommitAllowed": { "type": "boolean", "const": false },
+        "canSubmitProvider": { "type": "boolean", "const": false },
+        "providerSubmitAllowed": { "type": "integer", "const": 0 },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "closedLoopShellOnly",
+        "dryRunOnly",
+        "readOnly",
+        "planOnly",
+        "providerSubmissionForbidden",
+        "noActualProviderSubmit",
+        "noLiveSubmit",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "credentialAccessAllowed",
+        "credentialStorage",
+        "noApiKeyCreation",
+        "noWorkerSpawn",
+        "noShellExecution",
+        "noFileMutation",
+        "fastModelForbidden",
+        "vipChannelForbidden",
+        "textToVideoMainPathForbidden",
+        "bgmInVideoPromptForbidden",
+        "workerSelfReportCannotComplete",
+        "expectedOutputRequired",
+        "watcherRequired",
+        "manifestRequired",
+        "qaGateRequired",
+        "promotionGateRequired"
+      ],
+      "properties": {
+        "closedLoopShellOnly": { "type": "boolean", "const": true },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "readOnly": { "type": "boolean", "const": true },
+        "planOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "noActualProviderSubmit": { "type": "boolean", "const": true },
+        "noLiveSubmit": { "type": "boolean", "const": true },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "credentialAccessAllowed": { "type": "boolean", "const": false },
+        "credentialStorage": { "type": "boolean", "const": false },
+        "noApiKeyCreation": { "type": "boolean", "const": true },
+        "noWorkerSpawn": { "type": "boolean", "const": true },
+        "noShellExecution": { "type": "boolean", "const": true },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "fastModelForbidden": { "type": "boolean", "const": true },
+        "vipChannelForbidden": { "type": "boolean", "const": true },
+        "textToVideoMainPathForbidden": { "type": "boolean", "const": true },
+        "bgmInVideoPromptForbidden": { "type": "boolean", "const": true },
+        "workerSelfReportCannotComplete": { "type": "boolean", "const": true },
+        "expectedOutputRequired": { "type": "boolean", "const": true },
+        "watcherRequired": { "type": "boolean", "const": true },
+        "manifestRequired": { "type": "boolean", "const": true },
+        "qaGateRequired": { "type": "boolean", "const": true },
+        "promotionGateRequired": { "type": "boolean", "const": true }
+      }
+    },
+    "attemptedActions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerSubmitAttempted",
+        "liveSubmitAttempted",
+        "credentialReadWriteAttempted",
+        "credentialReadAttempted",
+        "credentialWriteAttempted",
+        "apiKeyCreateAttempted",
+        "workerSpawnAttempted",
+        "shellAttempted",
+        "fileMutationAttempted",
+        "fastModelAttempted",
+        "vipChannelAttempted",
+        "textToVideoAttempted",
+        "bgmInVideoPromptAttempted",
+        "providerCommitAttempted"
+      ],
+      "properties": {
+        "providerSubmitAttempted": { "type": "boolean" },
+        "liveSubmitAttempted": { "type": "boolean" },
+        "credentialReadWriteAttempted": { "type": "boolean" },
+        "credentialReadAttempted": { "type": "boolean" },
+        "credentialWriteAttempted": { "type": "boolean" },
+        "apiKeyCreateAttempted": { "type": "boolean" },
+        "workerSpawnAttempted": { "type": "boolean" },
+        "shellAttempted": { "type": "boolean" },
+        "fileMutationAttempted": { "type": "boolean" },
+        "fastModelAttempted": { "type": "boolean" },
+        "vipChannelAttempted": { "type": "boolean" },
+        "textToVideoAttempted": { "type": "boolean" },
+        "bgmInVideoPromptAttempted": { "type": "boolean" },
+        "providerCommitAttempted": { "type": "boolean" }
+      }
+    },
+    "shells": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image2", "seedance", "jimeng"],
+      "properties": {
+        "image2": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/shellItem" } },
+        "seedance": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/shellItem" } },
+        "jimeng": { "$ref": "#/$defs/shellItem" }
+      }
+    },
+    "shellItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shellId",
+        "providerKind",
+        "sourceKind",
+        "sourceId",
+        "providerId",
+        "providerSlot",
+        "requiredMode",
+        "providerExecutionState",
+        "status",
+        "supportStatus",
+        "requestPreview",
+        "expectedOutputPath",
+        "closedLoopSteps",
+        "closedLoopComplete",
+        "workerProviderSelfReportAccepted",
+        "canCompleteFromSelfReport",
+        "providerCommitDefaultGated",
+        "providerCommitAllowed",
+        "canSubmitProvider",
+        "providerSubmitAllowed",
+        "liveSubmitAllowed",
+        "dryRunOnly",
+        "readOnly",
+        "planOnly",
+        "blockers",
+        "warnings"
+      ],
+      "properties": {
+        "shellId": { "type": "string" },
+        "providerKind": { "type": "string", "enum": ["image2", "seedance", "jimeng"] },
+        "sourceKind": { "type": "string", "enum": ["image_task_plan", "video_task_plan", "provider_summary"] },
+        "sourceId": { "type": "string" },
+        "taskPlanId": { "type": "string" },
+        "jobId": { "type": "string" },
+        "shotId": { "type": "string" },
+        "providerId": { "type": "string" },
+        "providerSlot": { "type": "string" },
+        "requiredMode": { "type": "string" },
+        "providerExecutionState": { "type": "string", "enum": ["active", "parked", "unsupported"] },
+        "status": { "type": "string", "enum": ["blocked", "ready_gated_shell", "parked_unsupported"] },
+        "supportStatus": { "type": "string", "enum": ["defined", "parked_unsupported"] },
+        "requestPreview": { "$ref": "#/$defs/requestPreview" },
+        "expectedOutputPath": { "type": "string" },
+        "closedLoopSteps": {
+          "type": "array",
+          "minItems": 5,
+          "items": { "$ref": "#/$defs/closedLoopStep" }
+        },
+        "closedLoopComplete": { "type": "boolean" },
+        "workerProviderSelfReportAccepted": { "type": "boolean", "const": false },
+        "canCompleteFromSelfReport": { "type": "boolean", "const": false },
+        "providerCommitDefaultGated": { "type": "boolean", "const": true },
+        "providerCommitAllowed": { "type": "boolean", "const": false },
+        "canSubmitProvider": { "type": "boolean", "const": false },
+        "providerSubmitAllowed": { "type": "integer", "const": 0 },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "readOnly": { "type": "boolean", "const": true },
+        "planOnly": { "type": "boolean", "const": true },
+        "blockers": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "requestPreview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["previewDefined", "providerId", "slot", "requiredMode", "operation", "payloadShape", "submitPolicy"],
+      "properties": {
+        "previewDefined": { "type": "boolean" },
+        "providerId": { "type": "string" },
+        "adapterId": { "type": "string" },
+        "slot": { "type": "string" },
+        "requiredMode": { "type": "string" },
+        "operation": { "type": "string" },
+        "payloadShape": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sourceIntent": { "type": "boolean" },
+            "mustPreserve": { "type": "boolean" },
+            "mustAvoid": { "type": "boolean" },
+            "references": { "type": "boolean" },
+            "outputPath": { "type": "string" },
+            "startFramePath": { "type": "string" },
+            "endFramePath": { "type": "string" },
+            "motionBrief": { "type": "boolean" },
+            "durationSeconds": { "type": ["number", "null"] }
+          }
+        },
+        "submitPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "providerCommitDefaultGated",
+            "providerCommitAllowed",
+            "canSubmitProvider",
+            "providerSubmitAllowed",
+            "liveSubmitAllowed",
+            "dryRunOnly",
+            "manualSubmitRequired"
+          ],
+          "properties": {
+            "providerCommitDefaultGated": { "type": "boolean", "const": true },
+            "providerCommitAllowed": { "type": "boolean", "const": false },
+            "canSubmitProvider": { "type": "boolean", "const": false },
+            "providerSubmitAllowed": { "type": "integer", "const": 0 },
+            "liveSubmitAllowed": { "type": "boolean", "const": false },
+            "dryRunOnly": { "type": "boolean", "const": true },
+            "manualSubmitRequired": { "type": "boolean", "const": true }
+          }
+        }
+      }
+    },
+    "closedLoopStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stepId", "required", "status", "detail"],
+      "properties": {
+        "stepId": {
+          "type": "string",
+          "enum": ["provider_request_preview", "watcher_expected_output", "manifest_match", "qa_report_check", "promotion_gate"]
+        },
+        "required": { "type": "boolean", "const": true },
+        "status": { "type": "string", "enum": ["pass", "blocked", "parked"] },
+        "sourceRef": { "type": "string" },
+        "detail": { "type": "string" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "image2ShellDefined",
+        "seedanceShellDefined",
+        "jimengParkedUnsupported",
+        "totalShellItems",
+        "readyGatedShells",
+        "blockedShells",
+        "parkedUnsupportedShells",
+        "providerCommitDefaultGated",
+        "providerCommitAllowed",
+        "canSubmitProvider",
+        "providerSubmitAllowed",
+        "liveSubmitAllowed"
+      ],
+      "properties": {
+        "image2ShellDefined": { "type": "boolean" },
+        "seedanceShellDefined": { "type": "boolean" },
+        "jimengParkedUnsupported": { "type": "boolean", "const": true },
+        "totalShellItems": { "type": "integer", "minimum": 0 },
+        "readyGatedShells": { "type": "integer", "minimum": 0 },
+        "blockedShells": { "type": "integer", "minimum": 0 },
+        "parkedUnsupportedShells": { "type": "integer", "minimum": 0 },
+        "providerCommitDefaultGated": { "type": "boolean", "const": true },
+        "providerCommitAllowed": { "type": "boolean", "const": false },
+        "canSubmitProvider": { "type": "boolean", "const": false },
+        "providerSubmitAllowed": { "type": "integer", "const": 0 },
+        "liveSubmitAllowed": { "type": "boolean", "const": false }
+      }
+    },
+    "proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerRequestPreviewToPayloadShape",
+        "watcherExpectedOutputRequired",
+        "manifestMatchRequired",
+        "qaReportCheckRequired",
+        "promotionGateRequired",
+        "workerProviderSelfReportCannotComplete",
+        "providerCommitDefaultGated",
+        "hardLocksPinned"
+      ],
+      "properties": {
+        "providerRequestPreviewToPayloadShape": { "type": "boolean" },
+        "watcherExpectedOutputRequired": { "type": "boolean" },
+        "manifestMatchRequired": { "type": "boolean" },
+        "qaReportCheckRequired": { "type": "boolean" },
+        "promotionGateRequired": { "type": "boolean" },
+        "workerProviderSelfReportCannotComplete": { "type": "boolean" },
+        "providerCommitDefaultGated": { "type": "boolean" },
+        "hardLocksPinned": { "type": "boolean" }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "status", "errors", "warnings", "checkedAt"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["blocked", "ready_gated_shell"] },
+        "errors": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "checkedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+      }
+    }
+  }
+}

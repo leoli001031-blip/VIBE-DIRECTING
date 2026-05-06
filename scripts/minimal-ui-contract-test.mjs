@@ -143,6 +143,8 @@ const knowledgePackUserManagementDiagnostics = findFunctionBody(appSource, "Know
 const knowledgePackUserManagementUiSummary = findFunctionBody(appSource, "buildKnowledgePackUserManagementUiSummary");
 const codexWorkerRuntimeGateDiagnostics = findFunctionBody(appSource, "CodexWorkerRuntimeGateDiagnostics");
 const codexWorkerRuntimeGateUiSummary = findFunctionBody(appSource, "buildCodexWorkerRuntimeGateUiSummary");
+const providerClosedLoopShellDiagnostics = findFunctionBody(appSource, "ProviderClosedLoopShellDiagnostics");
+const providerClosedLoopShellUiSummary = findFunctionBody(appSource, "buildProviderClosedLoopShellUiSummary");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
 const realPilotDiagnostics = findFunctionBody(appSource, "RealPilotDiagnostics");
 const knowledgeUiSummary = findFunctionBody(appSource, "buildKnowledgeUiSummary");
@@ -333,6 +335,20 @@ checkMessage(requireWithin(`${codexWorkerRuntimeGateDiagnostics}\n${settingsShel
 checkMessage(requireWithin(`${codexWorkerRuntimeGateDiagnostics}\n${settingsShell}`, /structured result/i, "Phase 40 structured result Diagnostics/Settings copy"));
 checkMessage(requireWithin(`${codexWorkerRuntimeGateDiagnostics}\n${settingsShell}`, /spawn\/resume\/daemon\/shell\/credential\/file\/provider/i, "Phase 40 execution path Diagnostics/Settings copy"));
 checkMessage(requireWithin(codexWorkerRuntimeGateUiSummary, /noCodexResumeByDefault/i, "Phase 40 no resume typed gate summary"));
+checkMessage(requireWithin(diagnosticsMode, /ProviderClosedLoopShellDiagnostics/, "Phase 41 Provider Closed-loop Shell diagnostics mounted"));
+checkMessage(requireWithin(settingsShell, /Phase 41 Provider Closed-loop Shell/i, "Phase 41 Settings read-only provider closed-loop shell summary"));
+checkMessage(requireWithin(providerClosedLoopShellDiagnostics, /Phase 41 Provider Closed-loop Shell/i, "Phase 41 Provider Closed-loop Shell diagnostics panel"));
+checkMessage(requireWithin(providerClosedLoopShellDiagnostics, /Watcher/i, "Phase 41 watcher Diagnostics copy"));
+checkMessage(requireWithin(providerClosedLoopShellDiagnostics, /Manifest/i, "Phase 41 manifest Diagnostics copy"));
+checkMessage(requireWithin(providerClosedLoopShellDiagnostics, /QA Gate/i, "Phase 41 QA gate Diagnostics copy"));
+checkMessage(requireWithin(providerClosedLoopShellDiagnostics, /Promotion Gate/i, "Phase 41 promotion gate Diagnostics copy"));
+checkMessage(requireWithin(`${providerClosedLoopShellDiagnostics}\n${providerClosedLoopShellUiSummary}\n${settingsShell}`, /provider submit\/live submit\/credential\/shell/i, "Phase 41 provider/live/credential/shell Diagnostics/Settings copy"));
+checkMessage(requireWithin(providerClosedLoopShellUiSummary, /image2ClosedLoopShellDefined/i, "Phase 41 Image2 typed gate summary"));
+checkMessage(requireWithin(providerClosedLoopShellUiSummary, /seedanceClosedLoopShellDefined/i, "Phase 41 Seedance typed gate summary"));
+checkMessage(requireWithin(providerClosedLoopShellUiSummary, /watcherRequired/i, "Phase 41 watcher typed gate summary"));
+checkMessage(requireWithin(providerClosedLoopShellUiSummary, /manifestRequired/i, "Phase 41 manifest typed gate summary"));
+checkMessage(requireWithin(providerClosedLoopShellUiSummary, /qaGateRequired/i, "Phase 41 QA typed gate summary"));
+checkMessage(requireWithin(providerClosedLoopShellUiSummary, /promotionGateRequired/i, "Phase 41 promotion typed gate summary"));
 check(
   !/RealPilotDirectorStatus/.test(directorMode),
   "Director Clean Mode must not mount RealPilotDirectorStatus in the default DirectorMode",
@@ -882,6 +898,22 @@ const phase40ForbiddenMainTerms = [
 for (const [term, pattern] of phase40ForbiddenMainTerms) {
   const count = countPattern(phase2123DirectorSurface, pattern);
   check(count === 0, `Phase 40 main Director surface must expose 0 ${term} term(s), found ${count}`);
+}
+const phase41ForbiddenMainTerms = [
+  ["Phase 41", /Phase\s*41/i],
+  ["Provider Closed-loop Shell", /Provider\s+Closed[-\s]?loop\s+Shell/i],
+  ["watcher", /watcher/i],
+  ["manifest", /manifest/i],
+  ["QA gate", /QA\s+gate/i],
+  ["promotion gate", /promotion\s+gate/i],
+  ["provider submit", /provider\s+submit/i],
+  ["live submit", /live\s+submit/i],
+  ["credential", /credential/i],
+  ["shell", /shell/i],
+];
+for (const [term, pattern] of phase41ForbiddenMainTerms) {
+  const count = countPattern(phase2123DirectorSurface, pattern);
+  check(count === 0, `Phase 41 main Director surface must expose 0 ${term} term(s), found ${count}`);
 }
 check(!/Formal\s+Gate|Proxy\s+Duration|Draft\s+Events|blockedPlaceholder/i.test(minimalPreview), "Preview Player copy must stay short and not show gate/proxy counters");
 check(/locked/i.test(minimalAssetLibrary) && /candidate/i.test(minimalAssetLibrary) && /review/i.test(minimalAssetLibrary), "Asset Library must keep locked/candidate/review consistency states");

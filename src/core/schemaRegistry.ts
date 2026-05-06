@@ -157,6 +157,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ProviderExecutionHandoffState",
   },
   {
+    fileName: "provider_closed_loop_shell.schema.json",
+    id: "https://vibecore.local/schemas/provider_closed_loop_shell.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 41 Image2 and Seedance provider closed-loop shell proving request preview, watcher, manifest, QA, and promotion gates while provider commit, live submit, credentials, workers, shell, and file mutation stay locked off.",
+    typeName: "ProviderClosedLoopShellState",
+  },
+  {
     fileName: "execution_ledger.schema.json",
     id: "https://vibecore.local/schemas/execution_ledger.schema.json",
     version: schemaVersion,

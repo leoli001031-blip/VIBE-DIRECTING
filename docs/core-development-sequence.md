@@ -1067,7 +1067,7 @@ Acceptance criteria：
 - Phase 38 任一正式生产任务不能生成 validated packet、缺 expected outputs、缺 injected knowledge trace、缺 source fact trace，或允许 free-text worker，都必须 blocked。
 - Phase 39 用户 pack 管理缺 import/create/enable/disable、版本/hash/依赖 checks、route test、conflict detection，或允许 pack 覆盖硬门禁，都必须 blocked；whole-library injection、unverified external import injection、provider submit/credential/shell/file/free-text route、parked provider bypass、temp/rejected/candidate/shot output 转 formal reference 都必须 fail closed。
 - Phase 40 缺 typed gated worker runtime evidence、默认 gate 打开、实际 Codex spawn / daemon / shell / credential / file mutation / provider submit 任一路径打开，都必须 blocked。
-- Phase 41 缺 Image2/Seedance closed-loop shell、缺 watcher/manifest/QA/promotion 闭环、provider commit 默认不 gated，或真实 provider submit / live submit / credential 任一路径打开，都必须 blocked。
+- Phase 41 缺 Image2/Seedance closed-loop shell、缺 watcher/manifest/QA/promotion 闭环、worker self-report 仍可 complete、provider commit 默认不 gated，或真实 provider submit / live submit / credential / file mutation / worker spawn / shell 任一路径打开，或 Fast/VIP/text-to-video main path/BGM in video prompt 出现，都必须 blocked。
 - Phase 42 缺 Mac/Win desktop readiness、project save/open、preview/export、queue visibility、visual consistency、Knowledge Pack、provider gate 或测试任一 beta acceptance 项，都必须 blocked；`noAdditionalPhasesPlanned=true` 是验收的一部分。
 - 所有阶段都必须 pin hard locks；测试命令为 `npm run phase-roadmap:test`。
 
@@ -1165,6 +1165,10 @@ Acceptance criteria：
 - Phase 40 fail-closed 条件：spawn Codex、Codex resume、daemon、subprocess、shell execution、provider submit/execution/live submit、credential read/write/access、file mutation、free-text worker/task、unvalidated envelope accepted、unstructured result accepted、default gate opened/gate default-on 任一观测都必须 blocked。Phase 40 仍只是默认关闭的 gated shell，不实际 spawn Codex/subagent、不启 daemon、不执行 shell、不读写 credential、不改文件、不提交 provider。
 - Phase 40 UI 边界：Phase 40 Codex Worker Runtime Gate 只进入 Diagnostics / Settings 只读摘要；主 Director 极简表面继续不新增 Codex Worker Runtime、validated envelope、structured result、spawn、daemon、shell、credential、provider submit 等工程文本。
 - 回归覆盖：`npm run phase-roadmap:test` 覆盖 Phase 40 typed ready、legacy-only blocked、每项 missing gate blocked、全部 fail-closed 观测和 Phase 39 dependency blocked；`npm run minimal-ui:test` 覆盖 Phase 40 Diagnostics / Settings 摘要以及主 Director surface 禁词。
+- Phase 41 gate/UI 完成记录：`PhaseRoadmapRuntime` 现在只接受 typed `evidence.providerClosedLoopShell` 让 Phase 41 ready；legacy `providerClosedLoopShellReady` 只作为 ignored diagnostic。typed evidence 必须同时证明 Image2/Seedance closed-loop shell、watcherRequired、manifestRequired、qaGateRequired、promotionGateRequired、workerSelfReportCannotComplete、providerCommitDefaultGated、noActualProviderSubmit、noLiveSubmit、noCredentialAccess、noFileMutation、noWorkerSpawn、noShellExecution、forbiddenProviderModesAbsent，并继续依赖 Phase 40 ready。
+- Phase 41 fail-closed 条件：provider submit/execution/commit/live submit、credential read/write/access、API key creation、worker spawn/subprocess、shell execution、file mutation、provider commit default-on/default gate opened、worker self-report completion accepted、missing expected output/manifest/QA accepted、promotion without QA、Fast/VIP/text-to-video main path/BGM in video prompt 任一观测都必须 blocked。Phase 41 仍只是 Image2/Seedance provider closed-loop shell，不执行 provider、不 live submit、不读写 credential、不创建 API key、不启动 worker、不执行 shell、不改文件。
+- Phase 41 UI 边界：Phase 41 Provider Closed-loop Shell 只进入 Diagnostics / Settings 只读摘要；主 Director 极简表面继续不新增 Phase 41、Provider Closed-loop Shell、watcher、manifest、QA gate、promotion gate、provider submit/live submit/credential/shell 等工程文本。
+- 回归覆盖：`npm run phase-roadmap:test` 覆盖 Phase 41 typed ready、legacy-only blocked、每项 missing gate blocked、全部 fail-closed 观测和 Phase 40 dependency blocked；`npm run minimal-ui:test` 覆盖 Phase 41 Diagnostics / Settings 摘要以及主 Director surface 禁词。
 
 ### Phase 35-42 固定范围：Beta Closure
 

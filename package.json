@@ -40,6 +40,7 @@
     "provider-execution-permission-gate:test": "node scripts/provider-execution-permission-gate-test.mjs",
     "provider-action-confirmation-receipt:test": "node scripts/provider-action-confirmation-receipt-test.mjs",
     "provider-execution-handoff:test": "node scripts/provider-execution-handoff-test.mjs",
+    "provider-closed-loop-shell:test": "node scripts/provider-closed-loop-shell-test.mjs",
     "execution-ledger:test": "node scripts/execution-ledger-test.mjs",
     "task-run-ledger:test": "node scripts/task-run-ledger-test.mjs",
     "artifact-transaction:test": "node scripts/artifact-transaction-gate-test.mjs",

@@ -1296,14 +1296,40 @@ function providerClosedLoopShellEvidence(overrides = {}) {
   return closureEvidence("phase_41_provider_closed_loop_shell", {
     image2ClosedLoopShellDefined: true,
     seedanceClosedLoopShellDefined: true,
-    watcherManifestQaPromotionRequired: true,
+    watcherRequired: true,
+    manifestRequired: true,
+    qaGateRequired: true,
+    promotionGateRequired: true,
+    workerSelfReportCannotComplete: true,
     providerCommitDefaultGated: true,
     noActualProviderSubmit: true,
+    noLiveSubmit: true,
+    noCredentialAccess: true,
+    noFileMutation: true,
+    noWorkerSpawn: true,
+    noShellExecution: true,
+    forbiddenProviderModesAbsent: true,
   }, {
     ...overrides,
     hardLocks: {
       closedLoopShellOnly: true,
       providerCommitAllowed: false,
+      workerSelfReportCannotComplete: true,
+      expectedOutputRequired: true,
+      manifestRequired: true,
+      qaGateRequired: true,
+      noProviderSubmit: true,
+      noProviderExecution: true,
+      providerSubmissionForbidden: true,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      credentialAccessAllowed: false,
+      noFileMutation: true,
+      noWorkerSpawn: true,
+      noSubprocess: true,
+      noShellExecution: true,
       ...(overrides.hardLocks || {}),
     },
   });
@@ -3408,6 +3434,77 @@ assert(
   "Phase 40 must block when Phase 39 Knowledge Pack User Management is not ready",
 );
 
+const missingPhase41Evidence = typedEvidence({ providerExecutionHandoff: "confirmed" });
+delete missingPhase41Evidence.providerClosedLoopShell;
+const phase41MissingEvidence = buildPhaseRoadmapRuntimePlan({
+  ...confirmedPhase33Input(),
+  evidence: missingPhase41Evidence,
+  providerClosedLoopShellReady: true,
+});
+assert(
+  phase(phase41MissingEvidence, "phase_41_provider_closed_loop_shell").blockedReasons.includes(
+    "provider_closed_loop_shell_typed_evidence_missing",
+  ),
+  "Phase 41 must require typed provider closed-loop shell evidence",
+);
+assert(
+  phase41MissingEvidence.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "providerClosedLoopShell" &&
+      decision.source === "legacy_boolean_override" &&
+      decision.ready === false &&
+      decision.warnings.includes("legacy_providerClosedLoopShellReady_boolean_ignored_without_typed_evidence"),
+  ),
+  "Phase 41 legacy boolean must be recorded as ignored without typed evidence",
+);
+
+const phase41TypedReadyPlan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input());
+assert(
+  phase(phase41TypedReadyPlan, "phase_41_provider_closed_loop_shell").readiness === "ready",
+  "Phase 41 must be ready with typed providerClosedLoopShell evidence",
+);
+assert(
+  phase41TypedReadyPlan.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "providerClosedLoopShell" &&
+      decision.source === "typed_evidence" &&
+      decision.ready === true,
+  ),
+  "Phase 41 ready must come from typed providerClosedLoopShell evidence",
+);
+
+function assertPhase41Blocks(providerClosedLoopShell, blocker, message) {
+  const plan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({ providerClosedLoopShell }));
+  assert(
+    phase(plan, "phase_41_provider_closed_loop_shell").blockedReasons.includes(blocker),
+    message,
+  );
+}
+
+for (const [gate, blocker] of [
+  ["image2ClosedLoopShellDefined", "provider_closed_loop_shell_image2_missing"],
+  ["seedanceClosedLoopShellDefined", "provider_closed_loop_shell_seedance_missing"],
+  ["watcherRequired", "provider_closed_loop_shell_watcher_missing"],
+  ["manifestRequired", "provider_closed_loop_shell_manifest_missing"],
+  ["qaGateRequired", "provider_closed_loop_shell_qa_gate_missing"],
+  ["promotionGateRequired", "provider_closed_loop_shell_promotion_gate_missing"],
+  ["workerSelfReportCannotComplete", "provider_closed_loop_shell_worker_self_report_can_complete"],
+  ["providerCommitDefaultGated", "provider_closed_loop_shell_default_not_gated"],
+  ["noActualProviderSubmit", "provider_closed_loop_shell_provider_submit_not_blocked"],
+  ["noLiveSubmit", "provider_closed_loop_shell_live_submit_not_blocked"],
+  ["noCredentialAccess", "provider_closed_loop_shell_credential_access_not_blocked"],
+  ["noFileMutation", "provider_closed_loop_shell_file_mutation_not_blocked"],
+  ["noWorkerSpawn", "provider_closed_loop_shell_worker_spawn_not_blocked"],
+  ["noShellExecution", "provider_closed_loop_shell_shell_not_blocked"],
+  ["forbiddenProviderModesAbsent", "provider_closed_loop_shell_forbidden_provider_modes_present"],
+]) {
+  assertPhase41Blocks(
+    { gates: { [gate]: false } },
+    blocker,
+    `Phase 41 must block when ${gate} is missing`,
+  );
+}
+
 const phase41ProviderDrift = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
   providerClosedLoopShell: {
     observations: { providerSubmitObserved: true },
@@ -3418,6 +3515,133 @@ assert(
     "provider_closed_loop_shell_provider_submit_not_blocked",
   ),
   "Phase 41 must block actual provider submit observations",
+);
+
+for (const [providerClosedLoopShell, blocker, message] of [
+  [
+    { observations: { providerExecutionObserved: true } },
+    "provider_closed_loop_shell_provider_submit_not_blocked",
+    "Phase 41 must block provider execution observations",
+  ],
+  [
+    { observations: { providerCommitObserved: true } },
+    "provider_closed_loop_shell_provider_submit_not_blocked",
+    "Phase 41 must block provider commit observations",
+  ],
+  [
+    { observations: { liveSubmitObserved: true } },
+    "provider_closed_loop_shell_live_submit_not_blocked",
+    "Phase 41 must block live submit observations",
+  ],
+  [
+    { observations: { credentialReadObserved: true } },
+    "provider_closed_loop_shell_credential_access_not_blocked",
+    "Phase 41 must block credential read observations",
+  ],
+  [
+    { observations: { credentialWriteObserved: true } },
+    "provider_closed_loop_shell_credential_access_not_blocked",
+    "Phase 41 must block credential write observations",
+  ],
+  [
+    { observations: { credentialAccessObserved: true } },
+    "provider_closed_loop_shell_credential_access_not_blocked",
+    "Phase 41 must block credential access observations",
+  ],
+  [
+    { observations: { apiKeyCreatedObserved: true } },
+    "provider_closed_loop_shell_api_key_creation_observed",
+    "Phase 41 must block API key creation observations",
+  ],
+  [
+    { observations: { workerSpawnObserved: true } },
+    "provider_closed_loop_shell_worker_spawn_not_blocked",
+    "Phase 41 must block worker spawn observations",
+  ],
+  [
+    { observations: { subprocessObserved: true } },
+    "provider_closed_loop_shell_worker_spawn_not_blocked",
+    "Phase 41 must block subprocess observations",
+  ],
+  [
+    { observations: { shellExecutionObserved: true } },
+    "provider_closed_loop_shell_shell_not_blocked",
+    "Phase 41 must block shell execution observations",
+  ],
+  [
+    { observations: { fileMutationObserved: true } },
+    "provider_closed_loop_shell_file_mutation_not_blocked",
+    "Phase 41 must block file mutation observations",
+  ],
+  [
+    { observations: { providerCommitDefaultOn: true } },
+    "provider_closed_loop_shell_default_not_gated",
+    "Phase 41 must block provider commit default-on observations",
+  ],
+  [
+    { observations: { defaultGateOpened: true } },
+    "provider_closed_loop_shell_default_not_gated",
+    "Phase 41 must block default gate opened observations",
+  ],
+  [
+    { observations: { workerSelfReportCompletionAccepted: true } },
+    "provider_closed_loop_shell_worker_self_report_can_complete",
+    "Phase 41 must block worker self-report completion acceptance",
+  ],
+  [
+    { observations: { missingExpectedOutputAccepted: true } },
+    "provider_closed_loop_shell_expected_output_gate_missing",
+    "Phase 41 must block missing expected output acceptance",
+  ],
+  [
+    { observations: { manifestMissingAccepted: true } },
+    "provider_closed_loop_shell_manifest_missing",
+    "Phase 41 must block missing manifest acceptance",
+  ],
+  [
+    { observations: { qaMissingAccepted: true } },
+    "provider_closed_loop_shell_qa_gate_missing",
+    "Phase 41 must block missing QA acceptance",
+  ],
+  [
+    { observations: { promotionWithoutQaObserved: true } },
+    "provider_closed_loop_shell_promotion_without_qa_observed",
+    "Phase 41 must block promotion without QA observations",
+  ],
+  [
+    { observations: { fastModelObserved: true } },
+    "provider_closed_loop_shell_forbidden_provider_modes_present",
+    "Phase 41 must block fast model observations",
+  ],
+  [
+    { observations: { vipChannelObserved: true } },
+    "provider_closed_loop_shell_forbidden_provider_modes_present",
+    "Phase 41 must block VIP channel observations",
+  ],
+  [
+    { observations: { textToVideoMainPathObserved: true } },
+    "provider_closed_loop_shell_forbidden_provider_modes_present",
+    "Phase 41 must block text-to-video main path observations",
+  ],
+  [
+    { observations: { bgmInVideoPromptObserved: true } },
+    "provider_closed_loop_shell_forbidden_provider_modes_present",
+    "Phase 41 must block BGM in video prompt observations",
+  ],
+]) {
+  assertPhase41Blocks(providerClosedLoopShell, blocker, message);
+}
+
+const phase41Phase40Blocked = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  codexWorkerRuntimeGate: {
+    gates: { defaultGatedOff: false },
+  },
+}));
+assert(
+  phase(phase41Phase40Blocked, "phase_41_provider_closed_loop_shell").blockedReasons.includes(
+    "preceding_phase_not_ready:phase_40_codex_worker_runtime_gate",
+  ),
+  "Phase 41 must depend on Phase 40 ready",
 );
 
 const phase42MissingWindowsAcceptance = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
