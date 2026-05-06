@@ -1061,6 +1061,16 @@ function closureEvidence(phaseId, gates, overrides = {}) {
       independentSameShotEndFrameObserved: false,
       largeMotionDriftObserved: false,
       semanticOpenCvRepairObserved: false,
+      hardGateOverrideObserved: false,
+      wholeLibraryInjectionObserved: false,
+      unverifiedExternalImportInjectionObserved: false,
+      parkedProviderBypassObserved: false,
+      tempAssetFormalPromotionObserved: false,
+      rejectedAssetFormalPromotionObserved: false,
+      candidateAssetFormalPromotionObserved: false,
+      shotOutputFormalPromotionObserved: false,
+      freeTextRouteOpened: false,
+      providerSubmitRouteOpened: false,
       ...(observationOverrides || {}),
     },
     blockers: [],
@@ -1214,11 +1224,27 @@ function fullTaskSubagentPacketPlannerEvidence(overrides = {}) {
 
 function knowledgePackUserManagementEvidence(overrides = {}) {
   return closureEvidence("phase_39_knowledge_pack_user_management", {
-    userImportCreateEnableDisableReady: true,
-    versionHashDependencyVisible: true,
+    userImportFlowReady: true,
+    userCreateFlowReady: true,
+    userEnableFlowReady: true,
+    userDisableFlowReady: true,
+    versionCheckReady: true,
+    hashCheckReady: true,
+    dependencyCheckReady: true,
     routeTestReady: true,
     conflictDetectionReady: true,
+    providerPolicyPreserved: true,
+    preflightPreserved: true,
+    referenceAuthorityPreserved: true,
+    keyframePairDerivationPreserved: true,
+    qaGatePreserved: true,
+    phase38ValidatedPacketPreserved: true,
     cannotOverrideHardGates: true,
+    wholeLibraryInjectionForbidden: true,
+    unverifiedExternalImportInjectionForbidden: true,
+    providerCredentialShellFileFreeTextRoutesForbidden: true,
+    parkedProviderBypassForbidden: true,
+    tempRejectedCandidateShotOutputPromotionForbidden: true,
   }, overrides);
 }
 
@@ -3016,6 +3042,160 @@ assert(
     "preceding_phase_not_ready:phase_37_visual_consistency_contract",
   ),
   "Phase 38 must block when Phase 37 is not ready",
+);
+
+const phase39TypedReadyPlan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input());
+assert(
+  phase(phase39TypedReadyPlan, "phase_39_knowledge_pack_user_management").readiness === "ready",
+  "Phase 39 must be ready with typed knowledgePackUserManagement evidence",
+);
+assert(
+  phase39TypedReadyPlan.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "knowledgePackUserManagement" &&
+      decision.source === "typed_evidence" &&
+      decision.ready === true,
+  ),
+  "Phase 39 ready must come from typed knowledgePackUserManagement evidence",
+);
+
+const missingPhase39Evidence = typedEvidence({ providerExecutionHandoff: "confirmed" });
+delete missingPhase39Evidence.knowledgePackUserManagement;
+const phase39LegacyOnly = buildPhaseRoadmapRuntimePlan({
+  ...confirmedPhase33Input(),
+  evidence: missingPhase39Evidence,
+  knowledgePackUserManagementReady: true,
+});
+assert(
+  phase(phase39LegacyOnly, "phase_39_knowledge_pack_user_management").blockedReasons.includes(
+    "knowledge_pack_user_management_typed_evidence_missing",
+  ),
+  "Phase 39 must block legacy-only knowledgePackUserManagementReady evidence",
+);
+assert(
+  phase39LegacyOnly.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "knowledgePackUserManagement" &&
+      decision.source === "legacy_boolean_override" &&
+      decision.ready === false &&
+      decision.warnings.includes("legacy_knowledgePackUserManagementReady_boolean_ignored_without_typed_evidence"),
+  ),
+  "Phase 39 legacy boolean must be recorded as ignored without typed evidence",
+);
+
+function assertPhase39Blocks(knowledgePackUserManagement, blocker, message) {
+  const plan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({ knowledgePackUserManagement }));
+  assert(
+    phase(plan, "phase_39_knowledge_pack_user_management").blockedReasons.includes(blocker),
+    message,
+  );
+}
+
+for (const [gate, blocker] of [
+  ["userImportFlowReady", "knowledge_pack_user_management_import_flow_missing"],
+  ["userCreateFlowReady", "knowledge_pack_user_management_create_flow_missing"],
+  ["userEnableFlowReady", "knowledge_pack_user_management_enable_flow_missing"],
+  ["userDisableFlowReady", "knowledge_pack_user_management_disable_flow_missing"],
+  ["versionCheckReady", "knowledge_pack_user_management_version_check_missing"],
+  ["hashCheckReady", "knowledge_pack_user_management_hash_check_missing"],
+  ["dependencyCheckReady", "knowledge_pack_user_management_dependency_check_missing"],
+  ["routeTestReady", "knowledge_pack_user_management_route_test_missing"],
+  ["conflictDetectionReady", "knowledge_pack_user_management_conflict_detection_missing"],
+  ["providerPolicyPreserved", "knowledge_pack_user_management_provider_policy_override_possible"],
+  ["preflightPreserved", "knowledge_pack_user_management_preflight_override_possible"],
+  ["referenceAuthorityPreserved", "knowledge_pack_user_management_reference_authority_override_possible"],
+  ["keyframePairDerivationPreserved", "knowledge_pack_user_management_keyframe_pair_override_possible"],
+  ["qaGatePreserved", "knowledge_pack_user_management_qa_gate_override_possible"],
+  ["phase38ValidatedPacketPreserved", "knowledge_pack_user_management_validated_packet_override_possible"],
+  ["cannotOverrideHardGates", "knowledge_pack_user_management_hard_gate_override_possible"],
+]) {
+  assertPhase39Blocks(
+    { gates: { [gate]: false } },
+    blocker,
+    `Phase 39 must block when ${gate} is missing`,
+  );
+}
+
+for (const [knowledgePackUserManagement, blocker, message] of [
+  [
+    { observations: { hardGateOverrideObserved: true } },
+    "knowledge_pack_user_management_hard_gate_override_observed",
+    "Phase 39 must block hard gate override observations",
+  ],
+  [
+    { observations: { wholeLibraryInjectionObserved: true } },
+    "knowledge_pack_user_management_whole_library_injection_observed",
+    "Phase 39 must block whole-library injection",
+  ],
+  [
+    { externalImport: { unverifiedExternalImportInjectionObserved: true } },
+    "knowledge_pack_user_management_unverified_external_import_injection_observed",
+    "Phase 39 must block unverified external import injection",
+  ],
+  [
+    { routeSafety: { providerSubmitRouteOpened: true } },
+    "knowledge_pack_user_management_provider_credential_shell_file_free_text_route_open",
+    "Phase 39 must block provider submit routes",
+  ],
+  [
+    { routeSafety: { credentialRouteOpened: true } },
+    "knowledge_pack_user_management_provider_credential_shell_file_free_text_route_open",
+    "Phase 39 must block credential routes",
+  ],
+  [
+    { routeSafety: { shellRouteOpened: true } },
+    "knowledge_pack_user_management_provider_credential_shell_file_free_text_route_open",
+    "Phase 39 must block shell routes",
+  ],
+  [
+    { routeSafety: { fileRouteOpened: true } },
+    "knowledge_pack_user_management_provider_credential_shell_file_free_text_route_open",
+    "Phase 39 must block file routes",
+  ],
+  [
+    { routeSafety: { freeTextRouteOpened: true } },
+    "knowledge_pack_user_management_provider_credential_shell_file_free_text_route_open",
+    "Phase 39 must block free-text routes",
+  ],
+  [
+    { providerPolicy: { parkedProviderBypassObserved: true } },
+    "knowledge_pack_user_management_parked_provider_bypass_observed",
+    "Phase 39 must block parked provider bypass",
+  ],
+  [
+    { assetPromotion: { tempAssetFormalPromotionObserved: true } },
+    "knowledge_pack_user_management_temp_rejected_candidate_shot_output_promotion_observed",
+    "Phase 39 must block temp asset promotion to formal reference",
+  ],
+  [
+    { assetPromotion: { rejectedAssetFormalPromotionObserved: true } },
+    "knowledge_pack_user_management_temp_rejected_candidate_shot_output_promotion_observed",
+    "Phase 39 must block rejected asset promotion to formal reference",
+  ],
+  [
+    { assetPromotion: { candidateAssetFormalPromotionObserved: true } },
+    "knowledge_pack_user_management_temp_rejected_candidate_shot_output_promotion_observed",
+    "Phase 39 must block candidate asset promotion to formal reference",
+  ],
+  [
+    { assetPromotion: { shotOutputFormalPromotionObserved: true } },
+    "knowledge_pack_user_management_temp_rejected_candidate_shot_output_promotion_observed",
+    "Phase 39 must block shot output promotion to formal reference",
+  ],
+]) {
+  assertPhase39Blocks(knowledgePackUserManagement, blocker, message);
+}
+
+const phase39Phase38Blocked = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  fullTaskSubagentPacketPlanner: {
+    packetPolicy: { unvalidatedPacketAllowed: true },
+  },
+}));
+assert(
+  phase(phase39Phase38Blocked, "phase_39_knowledge_pack_user_management").blockedReasons.includes(
+    "preceding_phase_not_ready:phase_38_full_task_subagent_packet_planner",
+  ),
+  "Phase 39 must block when Phase 38 validated packet gate is not ready",
 );
 
 const missingPhase40Evidence = typedEvidence({ providerExecutionHandoff: "confirmed" });

@@ -302,6 +302,18 @@ type FullTaskSubagentPacketPlannerUiSummary = {
   blockersWarnings: string[];
   requiredGates: string[];
 };
+type KnowledgePackUserManagementUiSummary = {
+  initialized: boolean;
+  readiness: string;
+  userFlowStatus: string;
+  checkStatus: string;
+  routeConflictStatus: string;
+  overrideStatus: string;
+  injectionStatus: string;
+  promotionStatus: string;
+  blockersWarnings: string[];
+  requiredGates: string[];
+};
 type DirectorProgressTone = "preparing" | "working" | "review" | "blocked" | "complete";
 type DirectorProgressSegment = {
   label: string;
@@ -2882,6 +2894,98 @@ function buildFullTaskSubagentPacketPlannerUiSummary(runtimeState: ProjectRuntim
     routeStatus: routeOpened ? "worker/provider/file/credential/shell route open" : "worker/provider/file/credential/shell routes closed",
     blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing fullTaskSubagentPacketPlanner"],
     requiredGates: gateKeys,
+  };
+}
+
+function buildKnowledgePackUserManagementUiSummary(runtimeState: ProjectRuntimeState): KnowledgePackUserManagementUiSummary {
+  const root = runtimeState as unknown as Record<string, unknown>;
+  const managerRoot = isRecord(root.knowledgePackUserManagement)
+    ? root.knowledgePackUserManagement
+    : isRecord(root.knowledgePackManager)
+      ? root.knowledgePackManager
+      : {};
+  const initialized = isRecord(managerRoot);
+  const rootRecord = initialized ? managerRoot : {};
+  const gates = firstRecordFrom(rootRecord, ["gates"]);
+  const summary = firstRecordFrom(rootRecord, ["summary"]);
+  const routeSafety = firstRecordFrom(rootRecord, ["routeSafety", "routes"]);
+  const injectionPolicy = firstRecordFrom(rootRecord, ["injectionPolicy", "knowledgeInjection"]);
+  const assetPromotion = firstRecordFrom(rootRecord, ["assetPromotion", "formalReferencePolicy"]);
+  const records = [gates, summary, rootRecord].filter(isRecord);
+  const requiredGates = [
+    "userImportFlowReady",
+    "userCreateFlowReady",
+    "userEnableFlowReady",
+    "userDisableFlowReady",
+    "versionCheckReady",
+    "hashCheckReady",
+    "dependencyCheckReady",
+    "routeTestReady",
+    "conflictDetectionReady",
+    "cannotOverrideHardGates",
+  ];
+  const readyGateCount = requiredGates.filter((key) => readFirstBoolean(records, [key]) === true).length;
+  const status = readFirstString(records, ["readiness", "status", "state"], "");
+  const blockersWarnings = Array.from(new Set([
+    ...readDisplayList(rootRecord.blockers, "blocker"),
+    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
+    ...readDisplayList(summary.blockers, "blocker"),
+    ...readDisplayList(summary.blockedReasons, "blocker"),
+    ...readDisplayList(rootRecord.warnings, "warning"),
+    ...readDisplayList(summary.warnings, "warning"),
+  ].filter(Boolean)));
+  const userFlowsReady = ["userImportFlowReady", "userCreateFlowReady", "userEnableFlowReady", "userDisableFlowReady"]
+    .every((key) => readFirstBoolean(records, [key]) === true);
+  const checksReady = ["versionCheckReady", "hashCheckReady", "dependencyCheckReady"]
+    .every((key) => readFirstBoolean(records, [key]) === true);
+  const routeConflictReady = readFirstBoolean(records, ["routeTestReady"]) === true &&
+    readFirstBoolean(records, ["conflictDetectionReady"]) === true;
+  const routeOpened = [
+    "providerRouteOpened",
+    "providerSubmitRouteOpened",
+    "credentialRouteOpened",
+    "shellRouteOpened",
+    "fileRouteOpened",
+    "freeTextRouteOpened",
+  ].some((key) => readFirstBoolean([routeSafety, rootRecord].filter(isRecord), [key]) === true);
+  const wholeLibraryInjection = readFirstBoolean([injectionPolicy, rootRecord].filter(isRecord), [
+    "wholeLibraryInjectionObserved",
+    "wholeLibraryInjectionAllowed",
+  ]) === true;
+  const unverifiedImportInjection = readFirstBoolean([injectionPolicy, rootRecord].filter(isRecord), [
+    "unverifiedExternalImportInjectionObserved",
+    "unverifiedExternalImportInjectionAllowed",
+  ]) === true;
+  const badPromotion = [
+    "tempAssetFormalPromotionObserved",
+    "rejectedAssetFormalPromotionObserved",
+    "candidateAssetFormalPromotionObserved",
+    "shotOutputFormalPromotionObserved",
+  ].some((key) => readFirstBoolean([assetPromotion, rootRecord].filter(isRecord), [key]) === true);
+
+  return {
+    initialized,
+    readiness: initialized
+      ? statusLabel(status || (readyGateCount === requiredGates.length && !blockersWarnings.length ? "ready" : "blocked"))
+      : "blocked/missing",
+    userFlowStatus: userFlowsReady ? "import/create/enable/disable ready" : "user flows incomplete",
+    checkStatus: checksReady ? "version/hash/dependency checks ready" : "version/hash/dependency checks missing",
+    routeConflictStatus: routeOpened
+      ? "provider/credential/shell/file/free-text route open"
+      : routeConflictReady
+        ? "route test + conflict detection ready"
+        : "route test or conflict detection missing",
+    overrideStatus: readFirstBoolean(records, ["cannotOverrideHardGates"]) === true
+      ? "hard gate override forbidden"
+      : "hard gate override guard missing",
+    injectionStatus: wholeLibraryInjection || unverifiedImportInjection
+      ? "library or unverified import injection blocked"
+      : "scoped verified injection only",
+    promotionStatus: badPromotion
+      ? "informal asset promotion blocked"
+      : "formal references stay gated",
+    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing knowledgePackUserManagement"],
+    requiredGates,
   };
 }
 
@@ -5777,6 +5881,39 @@ function FullTaskSubagentPacketPlannerDiagnostics({ runtimeState }: { runtimeSta
   );
 }
 
+function KnowledgePackUserManagementDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildKnowledgePackUserManagementUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel knowledge-pack-user-management-panel">
+      <div className="audit-head">
+        <FileJson size={17} />
+        <span>Phase 39 Knowledge Pack User Management</span>
+      </div>
+      <div className="summary-grid knowledge-pack-user-management-metrics">
+        <Metric label="Readiness" value={summary.readiness} detail="typed evidence only" />
+        <Metric label="User Flows" value={summary.userFlowStatus} detail="import/create/enable/disable" />
+        <Metric label="Checks" value={summary.checkStatus} detail="version/hash/dependency" />
+        <Metric label="Route / Conflict" value={summary.routeConflictStatus} detail="route test + conflict detection" />
+        <Metric label="Hard Gates" value={summary.overrideStatus} detail="override forbidden" />
+        <Metric label="Injection" value={summary.injectionStatus} detail="scoped verified packs" />
+        <Metric label="References" value={summary.promotionStatus} detail="formal promotion gated" />
+      </div>
+      <div className="phase17-rule-strip">
+        {summary.requiredGates.map((gate) => (
+          <span key={gate}>{gate}</span>
+        ))}
+      </div>
+      <div className="pipeline-details checker-details">
+        <details open={Boolean(summary.blockersWarnings.length)}>
+          <summary>Phase 39 blockers / warnings ({summary.blockersWarnings.length})</summary>
+          <CompactList items={summary.blockersWarnings} empty="No Phase 39 blockers reported." />
+        </details>
+      </div>
+    </section>
+  );
+}
+
 function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const videoPlanning = getVideoPlanning(runtimeState);
   const queue = videoPlanning.queueShell;
@@ -7873,6 +8010,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const localOrchestratorSummary = buildLocalOrchestratorUiSummary(runtimeState);
   const visualConsistencySummary = buildVisualConsistencyContractUiSummary(runtimeState);
   const fullTaskSubagentPacketPlannerSummary = buildFullTaskSubagentPacketPlannerUiSummary(runtimeState);
+  const knowledgePackUserManagementSummary = buildKnowledgePackUserManagementUiSummary(runtimeState);
   const realPilotSummary = buildRealPilotUiSummary(runtimeState);
 
   return (
@@ -8083,6 +8221,15 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
           <small>{fullTaskSubagentPacketPlannerSummary.coverageStatus} · {fullTaskSubagentPacketPlannerSummary.packetStatus}</small>
           <small>{fullTaskSubagentPacketPlannerSummary.outputStatus} · {fullTaskSubagentPacketPlannerSummary.traceStatus}</small>
           <small>{fullTaskSubagentPacketPlannerSummary.freeTextStatus} · {fullTaskSubagentPacketPlannerSummary.routeStatus}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Phase 39 Knowledge Pack User Management</div>
+      <div className="settings-list knowledge-pack-user-management-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Phase 39 Knowledge Pack User Management: {knowledgePackUserManagementSummary.readiness}</strong>
+          <small>{knowledgePackUserManagementSummary.userFlowStatus} · {knowledgePackUserManagementSummary.checkStatus}</small>
+          <small>{knowledgePackUserManagementSummary.routeConflictStatus} · {knowledgePackUserManagementSummary.overrideStatus}</small>
+          <small>{knowledgePackUserManagementSummary.injectionStatus} · {knowledgePackUserManagementSummary.promotionStatus}</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
@@ -8332,6 +8479,7 @@ function DiagnosticsMode({
       <Image2KeyframeRuntimeDiagnostics runtimeState={runtimeState} />
       <VisualConsistencyContractDiagnostics runtimeState={runtimeState} />
       <FullTaskSubagentPacketPlannerDiagnostics runtimeState={runtimeState} />
+      <KnowledgePackUserManagementDiagnostics runtimeState={runtimeState} />
       <RealPilotDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <VoiceAudioSettingsDiagnostics runtimeState={runtimeState} />

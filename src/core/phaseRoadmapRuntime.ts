@@ -975,6 +975,11 @@ export interface PhaseRoadmapClosureHardLocks {
   expectedOutputRequired?: boolean;
   manifestRequired?: boolean;
   qaGateRequired?: boolean;
+  noHardGateOverride?: boolean;
+  noWholeLibraryInjection?: boolean;
+  noUnverifiedExternalImportInjection?: boolean;
+  noParkedProviderBypass?: boolean;
+  noTempRejectedCandidateShotOutputPromotion?: boolean;
 }
 
 export interface PhaseRoadmapClosureObservations {
@@ -1039,6 +1044,16 @@ export interface PhaseRoadmapClosureObservations {
   independentSameShotEndFrameObserved?: boolean;
   largeMotionDriftObserved?: boolean;
   semanticOpenCvRepairObserved?: boolean;
+  hardGateOverrideObserved?: boolean;
+  wholeLibraryInjectionObserved?: boolean;
+  unverifiedExternalImportInjectionObserved?: boolean;
+  parkedProviderBypassObserved?: boolean;
+  tempAssetFormalPromotionObserved?: boolean;
+  rejectedAssetFormalPromotionObserved?: boolean;
+  candidateAssetFormalPromotionObserved?: boolean;
+  shotOutputFormalPromotionObserved?: boolean;
+  freeTextRouteOpened?: boolean;
+  providerSubmitRouteOpened?: boolean;
 }
 
 export interface PhaseRoadmapClosureEvidence {
@@ -3478,6 +3493,166 @@ function fullTaskSubagentPacketPlannerEvidenceDecision(input: PhaseRoadmapRuntim
   };
 }
 
+function knowledgePackUserManagementEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const decision = phaseClosureEvidenceDecision(input, {
+    evidenceKey: "knowledgePackUserManagement",
+    phaseId: "phase_39_knowledge_pack_user_management",
+    missingBlocker: "knowledge_pack_user_management_typed_evidence_missing",
+    safetyPrefix: "knowledge_pack_user_management",
+    legacyReadyInput: "knowledgePackUserManagementReady",
+    requiredGates: [
+      { field: "userImportFlowReady", blocker: "knowledge_pack_user_management_import_flow_missing" },
+      { field: "userCreateFlowReady", blocker: "knowledge_pack_user_management_create_flow_missing" },
+      { field: "userEnableFlowReady", blocker: "knowledge_pack_user_management_enable_flow_missing" },
+      { field: "userDisableFlowReady", blocker: "knowledge_pack_user_management_disable_flow_missing" },
+      { field: "versionCheckReady", blocker: "knowledge_pack_user_management_version_check_missing" },
+      { field: "hashCheckReady", blocker: "knowledge_pack_user_management_hash_check_missing" },
+      { field: "dependencyCheckReady", blocker: "knowledge_pack_user_management_dependency_check_missing" },
+      { field: "routeTestReady", blocker: "knowledge_pack_user_management_route_test_missing" },
+      { field: "conflictDetectionReady", blocker: "knowledge_pack_user_management_conflict_detection_missing" },
+      { field: "providerPolicyPreserved", blocker: "knowledge_pack_user_management_provider_policy_override_possible" },
+      { field: "preflightPreserved", blocker: "knowledge_pack_user_management_preflight_override_possible" },
+      { field: "referenceAuthorityPreserved", blocker: "knowledge_pack_user_management_reference_authority_override_possible" },
+      { field: "keyframePairDerivationPreserved", blocker: "knowledge_pack_user_management_keyframe_pair_override_possible" },
+      { field: "qaGatePreserved", blocker: "knowledge_pack_user_management_qa_gate_override_possible" },
+      { field: "phase38ValidatedPacketPreserved", blocker: "knowledge_pack_user_management_validated_packet_override_possible" },
+      { field: "cannotOverrideHardGates", blocker: "knowledge_pack_user_management_hard_gate_override_possible" },
+      { field: "wholeLibraryInjectionForbidden", blocker: "knowledge_pack_user_management_whole_library_injection_possible" },
+      { field: "unverifiedExternalImportInjectionForbidden", blocker: "knowledge_pack_user_management_unverified_external_import_injection_possible" },
+      { field: "providerCredentialShellFileFreeTextRoutesForbidden", blocker: "knowledge_pack_user_management_provider_credential_shell_file_free_text_route_open" },
+      { field: "parkedProviderBypassForbidden", blocker: "knowledge_pack_user_management_parked_provider_bypass_possible" },
+      { field: "tempRejectedCandidateShotOutputPromotionForbidden", blocker: "knowledge_pack_user_management_temp_rejected_candidate_shot_output_promotion_possible" },
+    ],
+  });
+  const evidence = input.evidence?.knowledgePackUserManagement;
+  if (!hasClosureEvidence(evidence)) return decision;
+
+  const routeOpened = closureAnyObservedTrue(
+    evidence,
+    [
+      "providerRouteOpened",
+      "providerSubmitRouteOpened",
+      "credentialRouteOpened",
+      "shellRouteOpened",
+      "fileRouteOpened",
+      "freeTextRouteOpened",
+      "freeTextTaskObserved",
+      "freeTextWorkerObserved",
+    ],
+    ["routeSafety", "routes", "providerRoutes", "userManagementRoutes", "freeTextPolicy"],
+  );
+
+  const blockers = uniqueSorted([
+    ...decision.blockers,
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["hardGateOverrideObserved", "hardGateOverrideAllowed", "overrideHardGatesAllowed"],
+        ["hardGatePolicy", "overridePolicy", "hardLocks"],
+      ),
+      "knowledge_pack_user_management_hard_gate_override_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["providerPolicyOverrideObserved", "providerPolicyOverrideAllowed", "packOverridesProviderPolicy"],
+        ["providerPolicy", "overridePolicy"],
+      ),
+      "knowledge_pack_user_management_provider_policy_override_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["preflightOverrideObserved", "preflightOverrideAllowed", "packOverridesPreflight"],
+        ["preflight", "preflightGate", "overridePolicy"],
+      ),
+      "knowledge_pack_user_management_preflight_override_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["referenceAuthorityOverrideObserved", "referenceAuthorityOverrideAllowed", "packOverridesReferenceAuthority"],
+        ["referenceAuthority", "overridePolicy"],
+      ),
+      "knowledge_pack_user_management_reference_authority_override_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["keyframePairDerivationOverrideObserved", "keyframePairOverrideObserved", "packOverridesKeyframePairDerivation"],
+        ["keyframePair", "keyframePairDerivation", "overridePolicy"],
+      ),
+      "knowledge_pack_user_management_keyframe_pair_override_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["qaGateOverrideObserved", "qaGateOverrideAllowed", "packOverridesQaGate"],
+        ["qaGate", "qa", "overridePolicy"],
+      ),
+      "knowledge_pack_user_management_qa_gate_override_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["phase38ValidatedPacketOverrideObserved", "validatedPacketOverrideObserved", "unvalidatedPacketAcceptedByPack"],
+        ["phase38", "validatedPacket", "packetPolicy", "overridePolicy"],
+      ),
+      "knowledge_pack_user_management_validated_packet_override_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["wholeLibraryInjectionObserved", "wholeLibraryInjectionAllowed", "injectsWholeLibrary"],
+        ["injectionPolicy", "knowledgeInjection", "routeTest"],
+      ),
+      "knowledge_pack_user_management_whole_library_injection_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        [
+          "unverifiedExternalImportInjectionObserved",
+          "unverifiedExternalImportInjectionAllowed",
+          "externalImportInjectedBeforeVerification",
+        ],
+        ["externalImport", "importPolicy", "injectionPolicy"],
+      ),
+      "knowledge_pack_user_management_unverified_external_import_injection_observed",
+    ),
+    ...blockedIf(routeOpened, "knowledge_pack_user_management_provider_credential_shell_file_free_text_route_open"),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["parkedProviderBypassObserved", "parkedProviderBypassAllowed", "packEnablesParkedProvider"],
+        ["providerPolicy", "parkedProviders", "overridePolicy"],
+      ),
+      "knowledge_pack_user_management_parked_provider_bypass_observed",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        [
+          "tempAssetFormalPromotionObserved",
+          "rejectedAssetFormalPromotionObserved",
+          "candidateAssetFormalPromotionObserved",
+          "shotOutputFormalPromotionObserved",
+          "tempRejectedCandidateShotOutputPromotionObserved",
+          "packPromotesInformalAsset",
+        ],
+        ["assetPromotion", "referenceAuthority", "formalReferencePolicy"],
+      ),
+      "knowledge_pack_user_management_temp_rejected_candidate_shot_output_promotion_observed",
+    ),
+  ]);
+
+  return {
+    ...decision,
+    ready: blockers.length === 0,
+    blockers,
+  };
+}
+
 function taskQueueVisibilityEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
   const evidence = input.evidence?.taskQueueVisibility;
 
@@ -3708,20 +3883,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const projectFileFactSourceDecision = projectFileFactSourceEvidenceDecision(input);
   const visualConsistencyContractDecision = visualConsistencyContractEvidenceDecision(input);
   const fullTaskSubagentPacketPlannerDecision = fullTaskSubagentPacketPlannerEvidenceDecision(input);
-  const knowledgePackUserManagementDecision = phaseClosureEvidenceDecision(input, {
-    evidenceKey: "knowledgePackUserManagement",
-    phaseId: "phase_39_knowledge_pack_user_management",
-    missingBlocker: "knowledge_pack_user_management_typed_evidence_missing",
-    safetyPrefix: "knowledge_pack_user_management",
-    legacyReadyInput: "knowledgePackUserManagementReady",
-    requiredGates: [
-      { field: "userImportCreateEnableDisableReady", blocker: "knowledge_pack_user_management_crud_missing" },
-      { field: "versionHashDependencyVisible", blocker: "knowledge_pack_user_management_version_hash_missing" },
-      { field: "routeTestReady", blocker: "knowledge_pack_user_management_route_test_missing" },
-      { field: "conflictDetectionReady", blocker: "knowledge_pack_user_management_conflict_detection_missing" },
-      { field: "cannotOverrideHardGates", blocker: "knowledge_pack_user_management_hard_gate_override_possible" },
-    ],
-  });
+  const knowledgePackUserManagementDecision = knowledgePackUserManagementEvidenceDecision(input);
   const codexWorkerRuntimeGateDecision = phaseClosureEvidenceDecision(input, {
     evidenceKey: "codexWorkerRuntimeGate",
     phaseId: "phase_40_codex_worker_runtime_gate",
@@ -4263,15 +4425,18 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       requiredInputs: [
         "evidence.knowledgePackUserManagement",
         "import/create/enable/disable user flows",
-        "version/hash/dependency, route test, and conflict detection facts",
+        "version/hash/dependency checks, route test, and conflict detection facts",
+        "provider/preflight/reference/keyframe-pair/QA/validated-packet locks preserved",
       ],
       acceptanceCriteria: [
         "Users can manage custom and project-local packs without editing built-in hard rules.",
-        "Version, hash, dependency, route-test, and conflict-test facts are visible.",
-        "Knowledge packs cannot make temp/rejected assets formal or enable parked providers.",
+        "Version, hash, dependency, route-test, and conflict-test facts are validated before a pack can be enabled.",
+        "Knowledge packs cannot override provider policy, preflight, reference authority, keyframe-pair derivation, QA gates, or Phase 38 validated packets.",
+        "Whole-library injection, unverified external imports, provider/credential/shell/file/free-text routes, parked provider bypass, and temp/rejected/candidate/shot-output promotion all fail closed.",
       ],
       notes: [
         "Phase 39 completes user-facing Knowledge Pack management before beta.",
+        "The legacy knowledgePackUserManagementReady boolean is ignored without typed evidence.",
         ...evidenceNotes([knowledgePackUserManagementDecision]),
       ],
     }),

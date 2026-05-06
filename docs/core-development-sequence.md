@@ -1030,7 +1030,7 @@ Phase 24-42 先做 lightweight pure runtime plan，不做真实执行。Phase 42
 - Phase 36：Project File Fact Source。固定 `project.vibe` / project files 是 save/open 与 runtime-state 派生事实源，不再把旧聊天或 runtime cache 当主事实源。
 - Phase 37：Visual Consistency Contract。把 identity、scene、shot layout、spatial memory、keyframe pair derivation、master inheritance QA 固定为正式视觉一致性合同。
 - Phase 38：Full Task Subagent Packet Planner。图片、资产、首尾帧、视频、QA、再生成、故事审计、导出等正式任务都必须走 validated packet，不再由自由文本临时派工。
-- Phase 39：Knowledge Pack User Management。用户可导入、新建、启用/禁用、测试路由和检测冲突；pack 仍不能覆盖 provider policy、preflight、reference authority 或 QA gate。
+- Phase 39：Knowledge Pack User Management。用户可导入、新建、启用/禁用、测试路由和检测冲突；pack 仍不能覆盖 provider policy、preflight、reference authority、keyframe pair derivation、QA gate 或 Phase 38 validated packet。
 - Phase 40：Codex Worker Runtime Gate。真实 Codex Worker Runtime 只做默认关闭的 gated shell；默认不 spawn Codex、不启 daemon、不执行 shell、不读写 credential、不改文件、不提交 provider。
 - Phase 41：Image2 / Seedance Provider Closed-loop Shell。只做 provider execution closed-loop shell：Image2/Seedance 的 watcher / manifest / QA / promotion 闭环合同可见，但默认不提交 provider、不提交 live、不保存/读取 credential、不创建 API key。
 - Phase 42：Export / Desktop / Beta Acceptance。作为 beta closure 终点验收 Mac/Win desktop readiness、project save/open、preview/export、queue visibility、visual consistency、Knowledge Pack、provider gate 和 tests；本路线到 Phase 42 停止增长。
@@ -1065,7 +1065,7 @@ Acceptance criteria：
 - Phase 36 缺 project file fact source、save/open contract、runtime-state 从项目文件派生、project-local knowledge scope，或继续把 runtime cache / 旧聊天当事实源，都必须 blocked。
 - Phase 37 缺 identity / scene / shot layout / spatial memory / keyframe pair / master inheritance QA 任一合同，都必须 blocked。
 - Phase 38 任一正式生产任务不能生成 validated packet、缺 expected outputs、缺 injected knowledge trace、缺 source fact trace，或允许 free-text worker，都必须 blocked。
-- Phase 39 用户 pack 管理缺 import/create/enable/disable、版本/hash/依赖、route test、conflict detection，或允许 pack 覆盖硬门禁，都必须 blocked。
+- Phase 39 用户 pack 管理缺 import/create/enable/disable、版本/hash/依赖 checks、route test、conflict detection，或允许 pack 覆盖硬门禁，都必须 blocked；whole-library injection、unverified external import injection、provider submit/credential/shell/file/free-text route、parked provider bypass、temp/rejected/candidate/shot output 转 formal reference 都必须 fail closed。
 - Phase 40 缺 typed gated worker runtime evidence、默认 gate 打开、实际 Codex spawn / daemon / shell / credential / file mutation / provider submit 任一路径打开，都必须 blocked。
 - Phase 41 缺 Image2/Seedance closed-loop shell、缺 watcher/manifest/QA/promotion 闭环、provider commit 默认不 gated，或真实 provider submit / live submit / credential 任一路径打开，都必须 blocked。
 - Phase 42 缺 Mac/Win desktop readiness、project save/open、preview/export、queue visibility、visual consistency、Knowledge Pack、provider gate 或测试任一 beta acceptance 项，都必须 blocked；`noAdditionalPhasesPlanned=true` 是验收的一部分。
@@ -1157,6 +1157,10 @@ Acceptance criteria：
 - Phase 38 fail-closed 条件：缺生产任务类型覆盖、允许 unvalidated packet、缺 expected outputs、缺 source fact trace、缺 knowledge trace、允许 free-text worker/task，或 worker/provider/file/credential/shell route 任一路径打开，都必须 blocked。
 - Phase 38 UI 边界：Full Task Subagent Packet Planner、validated packet、source fact trace、knowledge trace 等工程词只进入 Diagnostics / Settings 只读摘要；主 Director surface 继续不展示这些工程词。
 - 回归覆盖：`npm run phase-roadmap:test` 覆盖 Phase 38 ready、legacy-only blocked、每项 missing gate blocked、free-text blocked、route-open blocked 和 Phase 37 dependency blocked；`npm run minimal-ui:test` 覆盖 Phase 38 Diagnostics / Settings 摘要以及主 Director surface 禁词。
+- Phase 39 gate/UI 完成记录：`PhaseRoadmapRuntime` 现在只接受 typed `evidence.knowledgePackUserManagement` 让 Phase 39 ready；legacy `knowledgePackUserManagementReady` 只作为 ignored diagnostic。typed evidence 必须同时证明 import/create/enable/disable 用户流程、version/hash/dependency checks、route test、conflict detection、hard gate override forbidden，并继续依赖 Phase 38 ready。
+- Phase 39 fail-closed 条件：pack 不能覆盖 provider policy、preflight、reference authority、keyframe pair derivation、QA gate 或 Phase 38 validated packet；whole-library injection、unverified external import injection、provider submit/credential/shell/file/free-text route、parked provider bypass、temp/rejected/candidate/shot output 转 formal reference 都必须 blocked。
+- Phase 39 UI 边界：Phase 39 Knowledge Pack User Management 只进入 Diagnostics / Settings 只读摘要；主 Director surface 继续不新增 Knowledge Pack / Router / Library / hash 等工程文本，也不做复杂 prompt/资料面板。
+- 回归覆盖：`npm run phase-roadmap:test` 覆盖 Phase 39 ready、legacy-only blocked、每项 missing gate blocked、hard gate override、whole-library injection、unverified external import injection、危险 route、parked provider bypass、informal asset promotion 和 Phase 38 dependency blocked；`npm run minimal-ui:test` 覆盖 Phase 39 Diagnostics / Settings 摘要以及主 Director surface 禁词。
 
 ### Phase 35-42 固定范围：Beta Closure
 
@@ -1167,7 +1171,7 @@ Acceptance criteria：
 - Phase 37 core 完成记录：`VisualConsistencyReport.contractReceipt` 固定六项正式合同 gate：identity、scene、shot layout、spatial memory、keyframe pair derivation、master inheritance QA。locked character ref + text constraints 是唯一正向 future reference；candidate/temp/rejected/contact sheet/shot output 继续禁止 future reference；derived view 必须继承 master scene 并带 camera vector/world position；Shot Layout 缺 subject/camera/axis/screen direction/spatial anchors 必须 blocked；Spatial Memory 缺世界坐标、轴线或场景状态不能 formal；同镜头 end frame 必须从 approved start frame 派生，独立 end frame、大幅 motion drift、fixed-camera conflict blocked；scene pack/derived views/Shot Layout/keyframe pair 进入 master inheritance QA summary，worker/provider 自报不能覆盖；Local OpenCV/postprocess 继续禁止语义修复。
 - Phase 38：全任务 Subagent Packet Planner，所有正式生产任务必须有 validated packet、expected outputs、source facts 和 knowledge trace。
 - Phase 38 core 完成记录：`TaskPacketBuilderState.plannerReceipt` 固定 image、asset、start_frame、end_frame、image_edit、identity_qa、scene_qa、pair_qa、story_audit、video_execution、audio、export 十二类正式生产任务 coverage；每个 ready packet 必须通过 `phase38_task_packet_validation` receipt，且同时具备 validated SubagentTaskEnvelope、expected outputs、source fact trace、injected knowledge trace、QA checklist、`subagent_result_v1` result schema、allowed read scope、forbidden actions。缺 expected outputs / source facts / knowledge trace / validated envelope 会 fail closed；自然语言只能进入 transaction / packet builder，不允许成为 free-text worker prompt；source fact trace 必须引用 Phase 37 identity、scene、shot layout、spatial memory、keyframe pair、master inheritance QA gate/receipt；planner/transaction 继续禁止真实 worker、provider submit、shell、credential 和 file mutation。
-- Phase 39：Knowledge Pack 用户管理，支持用户 pack 导入/新建/启停/路由测试/冲突检测，但不能覆盖硬门禁。
+- Phase 39：Knowledge Pack 用户管理，支持用户 pack 导入/新建/启停/路由测试/冲突检测，但不能覆盖硬门禁、provider policy、preflight、reference authority、keyframe pair、QA gate 或 Phase 38 validated packet。
 - Phase 40：真实 Codex Worker Runtime 只做默认 gated shell；默认不 spawn、不 daemon、不 shell、不 credential、不文件写、不 provider submit。
 - Phase 41：Image2 / Seedance provider execution closed-loop 只做默认 gated shell；默认不提交 provider、不 live submit、不接 credential、不创建 provider credential。
 - Phase 42：Export / Desktop / Beta Acceptance，验收 Mac/Win desktop readiness、project save/open、preview/export、queue visibility、visual consistency、knowledge pack、provider gate 和 tests。Phase 42 是本轮路线终点。

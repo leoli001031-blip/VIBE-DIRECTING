@@ -99,6 +99,13 @@ function minimalFixture() {
     enabled: false,
     defaultEnabled: false,
   });
+  const enabledUnverifiedExternal = pack({
+    id: "enabled_unverified_external",
+    type: "external_imported",
+    trustLevel: "trusted",
+    verificationStatus: "pending",
+    summary: "Enabled external pack without verified status.",
+  });
   const missingDependency = pack({
     id: "dependency_missing_pack",
     dependencies: [{ packId: "missing_base", version: "1.0.0", reason: "required base style" }],
@@ -109,7 +116,7 @@ function minimalFixture() {
     conflictAcknowledged: false,
   });
   const conflictB = pack({ id: "conflict_b" });
-  const packs = [verified, blockedExternal, missingDependency, conflictA, conflictB];
+  const packs = [verified, blockedExternal, enabledUnverifiedExternal, missingDependency, conflictA, conflictB];
 
   const manifest = {
     schemaVersion: "0.1.0",
@@ -199,6 +206,16 @@ function assertNoCapabilityFields(value) {
     "writeCredentials",
     "runShell",
     "shellCommand",
+    "providerPolicyOverrideAllowed",
+    "preflightOverrideAllowed",
+    "referenceAuthorityOverrideAllowed",
+    "qaGateOverrideAllowed",
+    "freeTextWorkerPrompt",
+    "workerFreeTextRoute",
+    "providerSubmitRoute",
+    "credentialRoute",
+    "shellRoute",
+    "fileMutationRoute",
   ]);
 
   function visit(node, path = []) {
@@ -212,6 +229,16 @@ function assertNoCapabilityFields(value) {
   visit(value);
 }
 
+function assertAllValuesTrue(value, label) {
+  for (const [key, child] of Object.entries(value)) {
+    if (child && typeof child === "object" && !Array.isArray(child)) {
+      assertAllValuesTrue(child, `${label}.${key}`);
+    } else {
+      assert(child === true, `${label}.${key} must be true`);
+    }
+  }
+}
+
 const { buildKnowledgePackManagerState, knowledgePackManagerHardLocks } = await importManager();
 const { manifest, routeResult, contextBudget } = minimalFixture();
 const state = buildKnowledgePackManagerState({
@@ -222,19 +249,27 @@ const state = buildKnowledgePackManagerState({
 });
 
 assert(state.schemaVersion === "0.1.0", "schema version drifted");
-assert(state.summary.packCount === 5, "pack count should include all manifest packs");
-assert(state.summary.enabledCount === 4, "enabled count should include enabled manifest packs");
+assert(state.summary.packCount === 6, "pack count should include all manifest packs");
+assert(state.summary.enabledCount === 5, "enabled count should include enabled manifest packs");
 assert(state.summary.disabledCount === 1, "disabled count should include disabled manifest packs");
 
 const verifiedReady = state.injectionReady.find((item) => item.packId === "verified_style");
 assert(verifiedReady, "verified external pack should enter injection-ready receipt");
 assert(verifiedReady.injectedSnippetIds.includes("verified_style-snip"), "verified pack snippet id should be recorded");
 assert(!JSON.stringify(verifiedReady).includes("full body should never appear"), "manager must not emit full snippet content");
+assert(!JSON.stringify(state).includes("full body should never appear"), "manager output must not emit any full snippet body");
 
 const blockedExternal = findBlocked(state, "blocked_external");
 assert(blockedExternal.reasons.includes("pack_disabled"), "disabled pack must be blocked");
 assert(blockedExternal.reasons.includes("external_pack_untrusted"), "untrusted external pack must be blocked");
 assert(blockedExternal.reasons.includes("external_pack_unverified"), "unverified external pack must be blocked");
+
+const enabledUnverifiedExternal = findBlocked(state, "enabled_unverified_external");
+assert(enabledUnverifiedExternal.reasons.includes("external_pack_unverified"), "enabled but unverified external pack must be blocked");
+assert(
+  !state.injectionReady.some((item) => item.packId === "enabled_unverified_external"),
+  "enabled unverified external pack must not enter injection-ready receipt",
+);
 
 const dependencyMissing = findBlocked(state, "dependency_missing_pack");
 assert(dependencyMissing.reasons.includes("missing_required_dependency"), "missing required dependency must block");
@@ -269,6 +304,40 @@ assert(state.hardLocks.credentialReadForbidden === true, "credential read must b
 assert(state.hardLocks.credentialWriteForbidden === true, "credential write must be forbidden");
 assert(state.hardLocks.arbitraryShellExecutionForbidden === true, "arbitrary shell execution must be forbidden");
 assert(state.hardLocks.parkedProviderPolicyBypassForbidden === true, "parked provider policy bypass must be forbidden");
+assert(state.hardLocks.phase38ValidatedPacketRequired === true, "Phase 38 validated packet must be required");
+assert(state.hardLocks.tempRejectedAssetPromotionForbidden === true, "temp/rejected asset promotion must be forbidden");
+assert(state.hardLocks.candidateAssetPromotionForbidden === true, "candidate asset promotion must be forbidden");
+assert(state.hardLocks.shotOutputAssetPromotionForbidden === true, "shot output asset promotion must be forbidden");
+assert(state.hardLocks.freeTextWorkerForbidden === true, "free-text worker must be forbidden");
+assert(state.hardLocks.parkedProviderEnableForbidden === true, "parked provider enable must be forbidden");
+assert(state.hardLocks.providerSubmitRouteForbidden === true, "provider submit route must be forbidden");
+assert(state.hardLocks.credentialRouteForbidden === true, "credential route must be forbidden");
+assert(state.hardLocks.shellRouteForbidden === true, "shell route must be forbidden");
+assert(state.hardLocks.fileMutationRouteForbidden === true, "file mutation route must be forbidden");
+assert(state.hardLocks.fullBodyOutputForbidden === true, "full body output must be forbidden");
+
+assert(state.userManagement, "userManagement receipt missing");
+assert(state.userManagement.summary.ready === true, "user management summary must be ready");
+assert(state.userManagement.summary.receiptOnly === true, "user management must be receipt-only");
+assert(
+  state.userManagement.summary.outputScope === "pack_snippet_summary_hash_token_id_only",
+  "user management output scope must forbid full library body output",
+);
+assert(state.userManagement.managementReceipt.receiptId.startsWith("kpum_"), "management receipt id missing");
+assertAllValuesTrue(state.userManagement.managementReceipt.capabilities, "userManagement.capabilities");
+assertAllValuesTrue(state.userManagement.managementReceipt.statuses, "userManagement.statuses");
+assertAllValuesTrue(state.userManagement.managementReceipt.checks, "userManagement.checks");
+assert(
+  state.userManagement.managementReceipt.capabilities.importPackDefined === true
+    && state.userManagement.managementReceipt.capabilities.createPackDefined === true
+    && state.userManagement.managementReceipt.capabilities.enablePackDefined === true
+    && state.userManagement.managementReceipt.capabilities.disablePackDefined === true
+    && state.userManagement.managementReceipt.capabilities.routeTestDefined === true
+    && state.userManagement.managementReceipt.capabilities.conflictTestDefined === true
+    && state.userManagement.managementReceipt.capabilities.versionHashDependencyChecksDefined === true
+    && state.userManagement.managementReceipt.capabilities.hardGateOverrideForbidden === true,
+  "management receipt must define all Phase 39 user management capabilities",
+);
 
 assertNoCapabilityFields(state);
 
@@ -276,6 +345,18 @@ const schema = JSON.parse(fs.readFileSync("schemas/knowledge_pack_manager.schema
 const schemaLocks = schema.$defs.hardLocks.properties;
 for (const [key, value] of Object.entries(schemaLocks)) {
   assert(value.const === true, `schema hard lock ${key} must be const true`);
+}
+const schemaCapabilities = schema.$defs.userManagementCapabilities.properties;
+for (const [key, value] of Object.entries(schemaCapabilities)) {
+  assert(value.const === true, `schema user management capability ${key} must be const true`);
+}
+const schemaStatuses = schema.$defs.userManagementStatuses.properties;
+for (const [key, value] of Object.entries(schemaStatuses)) {
+  assert(value.const === true, `schema user management status ${key} must be const true`);
+}
+const schemaChecks = schema.$defs.userManagementChecks.properties;
+for (const [key, value] of Object.entries(schemaChecks)) {
+  assert(value.const === true, `schema user management check ${key} must be const true`);
 }
 
 const registrySource = fs.readFileSync("src/core/schemaRegistry.ts", "utf8");

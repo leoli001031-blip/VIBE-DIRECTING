@@ -139,6 +139,8 @@ const visualConsistencyContractDiagnostics = findFunctionBody(appSource, "Visual
 const visualConsistencyContractUiSummary = findFunctionBody(appSource, "buildVisualConsistencyContractUiSummary");
 const fullTaskSubagentPacketPlannerDiagnostics = findFunctionBody(appSource, "FullTaskSubagentPacketPlannerDiagnostics");
 const fullTaskSubagentPacketPlannerUiSummary = findFunctionBody(appSource, "buildFullTaskSubagentPacketPlannerUiSummary");
+const knowledgePackUserManagementDiagnostics = findFunctionBody(appSource, "KnowledgePackUserManagementDiagnostics");
+const knowledgePackUserManagementUiSummary = findFunctionBody(appSource, "buildKnowledgePackUserManagementUiSummary");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
 const realPilotDiagnostics = findFunctionBody(appSource, "RealPilotDiagnostics");
 const knowledgeUiSummary = findFunctionBody(appSource, "buildKnowledgeUiSummary");
@@ -187,6 +189,7 @@ check(
 checkMessage(requireWithin(sequenceDoc, /Phase 9\.4/i, "Phase 9.4 entry in docs/core-development-sequence.md"));
 checkMessage(requireWithin(sequenceDoc, /Phase 17/i, "Phase 17 entry in docs/core-development-sequence.md"));
 checkMessage(requireWithin(sequenceDoc, /Phase 21\/23/i, "Phase 21/23 entry in docs/core-development-sequence.md"));
+checkMessage(requireWithin(sequenceDoc, /Phase 39：Knowledge Pack User Management/i, "Phase 39 Knowledge Pack User Management entry in docs/core-development-sequence.md"));
 checkMessage(requireWithin(sequenceDoc, /UI 默认不展示术语库，只在 Inspector \/ Diagnostics 显示注入摘要/i, "Knowledge UI summary boundary in docs/core-development-sequence.md"));
 checkMessage(requireWithin(sequenceDoc, /minimal-ui:test/i, "minimal-ui:test checklist item in docs/core-development-sequence.md"));
 checkMessage(requireWithin(sequenceDoc, /preview-player:test/i, "preview-player:test checklist item in docs/core-development-sequence.md"));
@@ -310,6 +313,15 @@ checkMessage(requireWithin(fullTaskSubagentPacketPlannerDiagnostics, /Expected O
 checkMessage(requireWithin(`${fullTaskSubagentPacketPlannerDiagnostics}\n${fullTaskSubagentPacketPlannerUiSummary}`, /source fact trace/i, "Phase 38 source fact trace diagnostics copy"));
 checkMessage(requireWithin(`${fullTaskSubagentPacketPlannerDiagnostics}\n${fullTaskSubagentPacketPlannerUiSummary}`, /knowledge trace/i, "Phase 38 knowledge trace diagnostics copy"));
 checkMessage(requireWithin(`${fullTaskSubagentPacketPlannerDiagnostics}\n${fullTaskSubagentPacketPlannerUiSummary}`, /free-text worker\/task forbidden/i, "Phase 38 free-text worker diagnostics copy"));
+checkMessage(requireWithin(diagnosticsMode, /KnowledgePackUserManagementDiagnostics/, "Phase 39 Knowledge Pack User Management diagnostics mounted"));
+checkMessage(requireWithin(settingsShell, /Phase 39 Knowledge Pack User Management/i, "Phase 39 Settings read-only user management summary"));
+checkMessage(requireWithin(knowledgePackUserManagementDiagnostics, /Phase 39 Knowledge Pack User Management/i, "Phase 39 Knowledge Pack User Management diagnostics panel"));
+checkMessage(requireWithin(knowledgePackUserManagementDiagnostics, /User Flows/i, "Phase 39 user flow diagnostics copy"));
+checkMessage(requireWithin(knowledgePackUserManagementDiagnostics, /Route \/ Conflict/i, "Phase 39 route conflict diagnostics copy"));
+checkMessage(requireWithin(`${knowledgePackUserManagementDiagnostics}\n${knowledgePackUserManagementUiSummary}`, /version\/hash\/dependency/i, "Phase 39 version/hash/dependency diagnostics copy"));
+checkMessage(requireWithin(`${knowledgePackUserManagementDiagnostics}\n${knowledgePackUserManagementUiSummary}`, /hard gate override forbidden/i, "Phase 39 hard gate override forbidden copy"));
+checkMessage(requireWithin(`${knowledgePackUserManagementDiagnostics}\n${knowledgePackUserManagementUiSummary}`, /scoped verified injection only/i, "Phase 39 scoped injection copy"));
+checkMessage(requireWithin(`${knowledgePackUserManagementDiagnostics}\n${knowledgePackUserManagementUiSummary}`, /formal references stay gated/i, "Phase 39 formal reference gate copy"));
 check(
   !/RealPilotDirectorStatus/.test(directorMode),
   "Director Clean Mode must not mount RealPilotDirectorStatus in the default DirectorMode",
@@ -693,8 +705,10 @@ const phase2123ForbiddenMainTerms = [
   ["Image2 Runtime", /Image2\s+Runtime/i],
   ["Voice Source Library", /Voice\s+Source\s+Library/i],
   ["Knowledge Pack Manager", /Knowledge\s+Pack\s+Manager/i],
+  ["Knowledge Pack User Management", /Knowledge\s+Pack\s+User\s+Management/i],
   ["Knowledge Router", /Knowledge\s+Router/i],
   ["Knowledge Library", /Knowledge\s+Library/i],
+  ["hash", /\bhash\b/i],
   ["Visual Consistency Contract", /Visual\s+Consistency\s+Contract/i],
   ["Full Task Subagent Packet Planner", /Full\s+Task\s+Subagent\s+Packet\s+Planner/i],
   ["validated packet", /validated\s+packet/i],

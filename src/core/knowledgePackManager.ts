@@ -28,12 +28,23 @@ export interface KnowledgePackManagerHardLocks {
   keyframePairDerivationOverrideForbidden: true;
   qaGateOverrideForbidden: true;
   phase24ValidatedEnvelopeRequired: true;
+  phase38ValidatedPacketRequired: true;
   providerSubmissionForbidden: true;
+  providerSubmitRouteForbidden: true;
   credentialReadForbidden: true;
   credentialWriteForbidden: true;
+  credentialRouteForbidden: true;
   arbitraryShellExecutionForbidden: true;
+  shellRouteForbidden: true;
+  fileMutationRouteForbidden: true;
+  freeTextWorkerForbidden: true;
   parkedProviderPolicyBypassForbidden: true;
+  parkedProviderEnableForbidden: true;
+  tempRejectedAssetPromotionForbidden: true;
+  candidateAssetPromotionForbidden: true;
+  shotOutputAssetPromotionForbidden: true;
   wholeLibraryInjectionForbidden: true;
+  fullBodyOutputForbidden: true;
 }
 
 export const knowledgePackManagerHardLocks: KnowledgePackManagerHardLocks = {
@@ -43,12 +54,23 @@ export const knowledgePackManagerHardLocks: KnowledgePackManagerHardLocks = {
   keyframePairDerivationOverrideForbidden: true,
   qaGateOverrideForbidden: true,
   phase24ValidatedEnvelopeRequired: true,
+  phase38ValidatedPacketRequired: true,
   providerSubmissionForbidden: true,
+  providerSubmitRouteForbidden: true,
   credentialReadForbidden: true,
   credentialWriteForbidden: true,
+  credentialRouteForbidden: true,
   arbitraryShellExecutionForbidden: true,
+  shellRouteForbidden: true,
+  fileMutationRouteForbidden: true,
+  freeTextWorkerForbidden: true,
   parkedProviderPolicyBypassForbidden: true,
+  parkedProviderEnableForbidden: true,
+  tempRejectedAssetPromotionForbidden: true,
+  candidateAssetPromotionForbidden: true,
+  shotOutputAssetPromotionForbidden: true,
   wholeLibraryInjectionForbidden: true,
+  fullBodyOutputForbidden: true,
 };
 
 export type KnowledgePackBlockReason =
@@ -136,6 +158,77 @@ export interface KnowledgePackManagerSummary {
   warningCount: number;
 }
 
+export interface KnowledgePackUserManagementCapabilities {
+  importPackDefined: true;
+  createPackDefined: true;
+  enablePackDefined: true;
+  disablePackDefined: true;
+  routeTestDefined: true;
+  conflictTestDefined: true;
+  versionHashDependencyChecksDefined: true;
+  hardGateOverrideForbidden: true;
+}
+
+export interface KnowledgePackUserManagementStatuses {
+  importPackReceiptOnly: true;
+  createPackReceiptOnly: true;
+  enablePackReceiptOnly: true;
+  disablePackReceiptOnly: true;
+  routeTestReceiptOnly: true;
+  conflictTestReceiptOnly: true;
+  externalImportRequiresTrustedVerified: true;
+  externalImportRequiresVerificationStatusVerified: true;
+  versionCheckRequired: true;
+  hashCheckRequired: true;
+  dependencyCheckRequired: true;
+  conflictAcknowledgementRequired: true;
+  routingContextQaPromptHintsOnly: true;
+  providerPolicyOverrideForbidden: true;
+  preflightOverrideForbidden: true;
+  referenceAuthorityOverrideForbidden: true;
+  keyframePairDerivationOverrideForbidden: true;
+  qaGateOverrideForbidden: true;
+  phase24ValidatedEnvelopeRequired: true;
+  phase38ValidatedPacketRequired: true;
+  tempRejectedAssetPromotionForbidden: true;
+  parkedProviderEnableForbidden: true;
+  providerSubmitRouteForbidden: true;
+  credentialRouteForbidden: true;
+  shellRouteForbidden: true;
+  fileMutationRouteForbidden: true;
+  freeTextWorkerForbidden: true;
+  boundedSummaryOutputOnly: true;
+}
+
+export interface KnowledgePackUserManagementSummary {
+  ready: true;
+  capabilityCount: number;
+  statusCount: number;
+  receiptOnly: true;
+  outputScope: "pack_snippet_summary_hash_token_id_only";
+}
+
+export interface KnowledgePackUserManagementReceipt {
+  receiptId: string;
+  capabilities: KnowledgePackUserManagementCapabilities;
+  statuses: KnowledgePackUserManagementStatuses;
+  checks: {
+    versionHashDependencyChecksDefined: true;
+    externalImportedTrustedVerifiedRequired: true;
+    externalImportedVerificationStatusVerifiedRequired: true;
+    blockedPackExcludedFromInjection: true;
+    conflictTestBlocksUnacknowledgedConflicts: true;
+    routeTestUsesVersionHashBinding: true;
+    contextBudgetUsesVersionHashBinding: true;
+    fullBodyOutputForbidden: true;
+  };
+}
+
+export interface KnowledgePackUserManagement {
+  summary: KnowledgePackUserManagementSummary;
+  managementReceipt: KnowledgePackUserManagementReceipt;
+}
+
 export interface KnowledgePackManagerState {
   schemaVersion: typeof knowledgePackManagerSchemaVersion;
   managerId: string;
@@ -145,6 +238,7 @@ export interface KnowledgePackManagerState {
   routeId?: string;
   budgetId?: string;
   summary: KnowledgePackManagerSummary;
+  userManagement: KnowledgePackUserManagement;
   enabledPacks: KnowledgePackManagerPackRef[];
   disabledPacks: KnowledgePackManagerPackRef[];
   blockedPacks: KnowledgePackManagerBlockedPack[];
@@ -329,6 +423,83 @@ function uniqueWarnings(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right));
 }
 
+const userManagementCapabilities: KnowledgePackUserManagementCapabilities = {
+  importPackDefined: true,
+  createPackDefined: true,
+  enablePackDefined: true,
+  disablePackDefined: true,
+  routeTestDefined: true,
+  conflictTestDefined: true,
+  versionHashDependencyChecksDefined: true,
+  hardGateOverrideForbidden: true,
+};
+
+const userManagementStatuses: KnowledgePackUserManagementStatuses = {
+  importPackReceiptOnly: true,
+  createPackReceiptOnly: true,
+  enablePackReceiptOnly: true,
+  disablePackReceiptOnly: true,
+  routeTestReceiptOnly: true,
+  conflictTestReceiptOnly: true,
+  externalImportRequiresTrustedVerified: true,
+  externalImportRequiresVerificationStatusVerified: true,
+  versionCheckRequired: true,
+  hashCheckRequired: true,
+  dependencyCheckRequired: true,
+  conflictAcknowledgementRequired: true,
+  routingContextQaPromptHintsOnly: true,
+  providerPolicyOverrideForbidden: true,
+  preflightOverrideForbidden: true,
+  referenceAuthorityOverrideForbidden: true,
+  keyframePairDerivationOverrideForbidden: true,
+  qaGateOverrideForbidden: true,
+  phase24ValidatedEnvelopeRequired: true,
+  phase38ValidatedPacketRequired: true,
+  tempRejectedAssetPromotionForbidden: true,
+  parkedProviderEnableForbidden: true,
+  providerSubmitRouteForbidden: true,
+  credentialRouteForbidden: true,
+  shellRouteForbidden: true,
+  fileMutationRouteForbidden: true,
+  freeTextWorkerForbidden: true,
+  boundedSummaryOutputOnly: true,
+};
+
+function buildUserManagementReceipt(input: {
+  manifestHash: string;
+  manifestVersion: string;
+  routeId?: string;
+  budgetId?: string;
+  managerId: string;
+}): KnowledgePackUserManagement {
+  const receiptId = `kpum_${stableKnowledgeHash(JSON.stringify(input)).slice(4, 12)}`;
+
+  return {
+    summary: {
+      ready: true,
+      capabilityCount: Object.keys(userManagementCapabilities).length,
+      statusCount: Object.keys(userManagementStatuses).length,
+      receiptOnly: true,
+      outputScope: "pack_snippet_summary_hash_token_id_only",
+    },
+    managementReceipt: {
+      receiptId,
+      capabilities: userManagementCapabilities,
+      statuses: userManagementStatuses,
+      checks: {
+        versionHashDependencyChecksDefined: true,
+        externalImportedTrustedVerifiedRequired: true,
+        externalImportedVerificationStatusVerifiedRequired: true,
+        blockedPackExcludedFromInjection: true,
+        conflictTestBlocksUnacknowledgedConflicts: true,
+        routeTestUsesVersionHashBinding: true,
+        contextBudgetUsesVersionHashBinding: true,
+        fullBodyOutputForbidden: true,
+      },
+    },
+  };
+}
+
 export function buildKnowledgePackManagerState(input: KnowledgePackManagerInput): KnowledgePackManagerState {
   const manifest = normalizeKnowledgeManifest(input.manifest);
   const warnings = [...(input.routeResult?.warnings || []), ...(input.contextBudget?.warnings || [])];
@@ -487,6 +658,13 @@ export function buildKnowledgePackManagerState(input: KnowledgePackManagerInput)
       injectionReadyCount: injectionReady.length,
       warningCount: cleanWarnings.length,
     },
+    userManagement: buildUserManagementReceipt({
+      manifestHash: manifest.manifestHash,
+      manifestVersion: manifest.manifestVersion,
+      routeId: input.routeResult?.routeId,
+      budgetId: input.contextBudget?.budgetId,
+      managerId,
+    }),
     enabledPacks,
     disabledPacks,
     blockedPacks,

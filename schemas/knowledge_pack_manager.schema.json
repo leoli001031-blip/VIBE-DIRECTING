@@ -12,6 +12,7 @@
     "manifestHash",
     "manifestVersion",
     "summary",
+    "userManagement",
     "enabledPacks",
     "disabledPacks",
     "blockedPacks",
@@ -30,6 +31,7 @@
     "routeId": { "type": "string" },
     "budgetId": { "type": "string" },
     "summary": { "$ref": "#/$defs/summary" },
+    "userManagement": { "$ref": "#/$defs/userManagement" },
     "enabledPacks": {
       "type": "array",
       "items": { "$ref": "#/$defs/packRef" }
@@ -99,6 +101,150 @@
         "missingDependencyCount": { "type": "integer", "minimum": 0 },
         "injectionReadyCount": { "type": "integer", "minimum": 0 },
         "warningCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "userManagement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "managementReceipt"],
+      "properties": {
+        "summary": { "$ref": "#/$defs/userManagementSummary" },
+        "managementReceipt": { "$ref": "#/$defs/userManagementReceipt" }
+      }
+    },
+    "userManagementSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ready", "capabilityCount", "statusCount", "receiptOnly", "outputScope"],
+      "properties": {
+        "ready": { "type": "boolean", "const": true },
+        "capabilityCount": { "type": "integer", "minimum": 8 },
+        "statusCount": { "type": "integer", "minimum": 1 },
+        "receiptOnly": { "type": "boolean", "const": true },
+        "outputScope": { "type": "string", "const": "pack_snippet_summary_hash_token_id_only" }
+      }
+    },
+    "userManagementReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receiptId", "capabilities", "statuses", "checks"],
+      "properties": {
+        "receiptId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "capabilities": { "$ref": "#/$defs/userManagementCapabilities" },
+        "statuses": { "$ref": "#/$defs/userManagementStatuses" },
+        "checks": { "$ref": "#/$defs/userManagementChecks" }
+      }
+    },
+    "userManagementCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "importPackDefined",
+        "createPackDefined",
+        "enablePackDefined",
+        "disablePackDefined",
+        "routeTestDefined",
+        "conflictTestDefined",
+        "versionHashDependencyChecksDefined",
+        "hardGateOverrideForbidden"
+      ],
+      "properties": {
+        "importPackDefined": { "type": "boolean", "const": true },
+        "createPackDefined": { "type": "boolean", "const": true },
+        "enablePackDefined": { "type": "boolean", "const": true },
+        "disablePackDefined": { "type": "boolean", "const": true },
+        "routeTestDefined": { "type": "boolean", "const": true },
+        "conflictTestDefined": { "type": "boolean", "const": true },
+        "versionHashDependencyChecksDefined": { "type": "boolean", "const": true },
+        "hardGateOverrideForbidden": { "type": "boolean", "const": true }
+      }
+    },
+    "userManagementStatuses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "importPackReceiptOnly",
+        "createPackReceiptOnly",
+        "enablePackReceiptOnly",
+        "disablePackReceiptOnly",
+        "routeTestReceiptOnly",
+        "conflictTestReceiptOnly",
+        "externalImportRequiresTrustedVerified",
+        "externalImportRequiresVerificationStatusVerified",
+        "versionCheckRequired",
+        "hashCheckRequired",
+        "dependencyCheckRequired",
+        "conflictAcknowledgementRequired",
+        "routingContextQaPromptHintsOnly",
+        "providerPolicyOverrideForbidden",
+        "preflightOverrideForbidden",
+        "referenceAuthorityOverrideForbidden",
+        "keyframePairDerivationOverrideForbidden",
+        "qaGateOverrideForbidden",
+        "phase24ValidatedEnvelopeRequired",
+        "phase38ValidatedPacketRequired",
+        "tempRejectedAssetPromotionForbidden",
+        "parkedProviderEnableForbidden",
+        "providerSubmitRouteForbidden",
+        "credentialRouteForbidden",
+        "shellRouteForbidden",
+        "fileMutationRouteForbidden",
+        "freeTextWorkerForbidden",
+        "boundedSummaryOutputOnly"
+      ],
+      "properties": {
+        "importPackReceiptOnly": { "type": "boolean", "const": true },
+        "createPackReceiptOnly": { "type": "boolean", "const": true },
+        "enablePackReceiptOnly": { "type": "boolean", "const": true },
+        "disablePackReceiptOnly": { "type": "boolean", "const": true },
+        "routeTestReceiptOnly": { "type": "boolean", "const": true },
+        "conflictTestReceiptOnly": { "type": "boolean", "const": true },
+        "externalImportRequiresTrustedVerified": { "type": "boolean", "const": true },
+        "externalImportRequiresVerificationStatusVerified": { "type": "boolean", "const": true },
+        "versionCheckRequired": { "type": "boolean", "const": true },
+        "hashCheckRequired": { "type": "boolean", "const": true },
+        "dependencyCheckRequired": { "type": "boolean", "const": true },
+        "conflictAcknowledgementRequired": { "type": "boolean", "const": true },
+        "routingContextQaPromptHintsOnly": { "type": "boolean", "const": true },
+        "providerPolicyOverrideForbidden": { "type": "boolean", "const": true },
+        "preflightOverrideForbidden": { "type": "boolean", "const": true },
+        "referenceAuthorityOverrideForbidden": { "type": "boolean", "const": true },
+        "keyframePairDerivationOverrideForbidden": { "type": "boolean", "const": true },
+        "qaGateOverrideForbidden": { "type": "boolean", "const": true },
+        "phase24ValidatedEnvelopeRequired": { "type": "boolean", "const": true },
+        "phase38ValidatedPacketRequired": { "type": "boolean", "const": true },
+        "tempRejectedAssetPromotionForbidden": { "type": "boolean", "const": true },
+        "parkedProviderEnableForbidden": { "type": "boolean", "const": true },
+        "providerSubmitRouteForbidden": { "type": "boolean", "const": true },
+        "credentialRouteForbidden": { "type": "boolean", "const": true },
+        "shellRouteForbidden": { "type": "boolean", "const": true },
+        "fileMutationRouteForbidden": { "type": "boolean", "const": true },
+        "freeTextWorkerForbidden": { "type": "boolean", "const": true },
+        "boundedSummaryOutputOnly": { "type": "boolean", "const": true }
+      }
+    },
+    "userManagementChecks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "versionHashDependencyChecksDefined",
+        "externalImportedTrustedVerifiedRequired",
+        "externalImportedVerificationStatusVerifiedRequired",
+        "blockedPackExcludedFromInjection",
+        "conflictTestBlocksUnacknowledgedConflicts",
+        "routeTestUsesVersionHashBinding",
+        "contextBudgetUsesVersionHashBinding",
+        "fullBodyOutputForbidden"
+      ],
+      "properties": {
+        "versionHashDependencyChecksDefined": { "type": "boolean", "const": true },
+        "externalImportedTrustedVerifiedRequired": { "type": "boolean", "const": true },
+        "externalImportedVerificationStatusVerifiedRequired": { "type": "boolean", "const": true },
+        "blockedPackExcludedFromInjection": { "type": "boolean", "const": true },
+        "conflictTestBlocksUnacknowledgedConflicts": { "type": "boolean", "const": true },
+        "routeTestUsesVersionHashBinding": { "type": "boolean", "const": true },
+        "contextBudgetUsesVersionHashBinding": { "type": "boolean", "const": true },
+        "fullBodyOutputForbidden": { "type": "boolean", "const": true }
       }
     },
     "packRef": {
@@ -244,12 +390,23 @@
         "keyframePairDerivationOverrideForbidden",
         "qaGateOverrideForbidden",
         "phase24ValidatedEnvelopeRequired",
+        "phase38ValidatedPacketRequired",
         "providerSubmissionForbidden",
+        "providerSubmitRouteForbidden",
         "credentialReadForbidden",
         "credentialWriteForbidden",
+        "credentialRouteForbidden",
         "arbitraryShellExecutionForbidden",
+        "shellRouteForbidden",
+        "fileMutationRouteForbidden",
+        "freeTextWorkerForbidden",
         "parkedProviderPolicyBypassForbidden",
-        "wholeLibraryInjectionForbidden"
+        "parkedProviderEnableForbidden",
+        "tempRejectedAssetPromotionForbidden",
+        "candidateAssetPromotionForbidden",
+        "shotOutputAssetPromotionForbidden",
+        "wholeLibraryInjectionForbidden",
+        "fullBodyOutputForbidden"
       ],
       "properties": {
         "providerPolicyOverrideForbidden": { "type": "boolean", "const": true },
@@ -258,12 +415,23 @@
         "keyframePairDerivationOverrideForbidden": { "type": "boolean", "const": true },
         "qaGateOverrideForbidden": { "type": "boolean", "const": true },
         "phase24ValidatedEnvelopeRequired": { "type": "boolean", "const": true },
+        "phase38ValidatedPacketRequired": { "type": "boolean", "const": true },
         "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "providerSubmitRouteForbidden": { "type": "boolean", "const": true },
         "credentialReadForbidden": { "type": "boolean", "const": true },
         "credentialWriteForbidden": { "type": "boolean", "const": true },
+        "credentialRouteForbidden": { "type": "boolean", "const": true },
         "arbitraryShellExecutionForbidden": { "type": "boolean", "const": true },
+        "shellRouteForbidden": { "type": "boolean", "const": true },
+        "fileMutationRouteForbidden": { "type": "boolean", "const": true },
+        "freeTextWorkerForbidden": { "type": "boolean", "const": true },
         "parkedProviderPolicyBypassForbidden": { "type": "boolean", "const": true },
-        "wholeLibraryInjectionForbidden": { "type": "boolean", "const": true }
+        "parkedProviderEnableForbidden": { "type": "boolean", "const": true },
+        "tempRejectedAssetPromotionForbidden": { "type": "boolean", "const": true },
+        "candidateAssetPromotionForbidden": { "type": "boolean", "const": true },
+        "shotOutputAssetPromotionForbidden": { "type": "boolean", "const": true },
+        "wholeLibraryInjectionForbidden": { "type": "boolean", "const": true },
+        "fullBodyOutputForbidden": { "type": "boolean", "const": true }
       }
     }
   }
