@@ -1002,6 +1002,7 @@ function closureEvidence(phaseId, gates, overrides = {}) {
     observations: {
       daemonStarted: false,
       spawnCodexObserved: false,
+      codexResumeObserved: false,
       workerSpawnObserved: false,
       subprocessObserved: false,
       shellExecutionObserved: false,
@@ -1046,6 +1047,10 @@ function closureEvidence(phaseId, gates, overrides = {}) {
       missingKnowledgeTraceObserved: false,
       freeTextWorkerObserved: false,
       freeTextTaskObserved: false,
+      unvalidatedEnvelopeAccepted: false,
+      unstructuredResultAccepted: false,
+      defaultGateOpened: false,
+      gateDefaultOn: false,
       candidateFutureReferenceObserved: false,
       tempFutureReferenceObserved: false,
       rejectedFutureReferenceObserved: false,
@@ -1255,10 +1260,33 @@ function codexWorkerRuntimeGateEvidence(overrides = {}) {
     validatedEnvelopeOnly: true,
     structuredResultOnly: true,
     noActualSpawnByDefault: true,
+    noDaemonByDefault: true,
+    noShellExecution: true,
+    noCredentialAccess: true,
+    noFileMutation: true,
+    noProviderSubmit: true,
+    noFreeTextWorker: true,
+    noCodexResumeByDefault: true,
   }, {
     ...overrides,
     hardLocks: {
       gatedRuntimeOnly: true,
+      noDaemon: true,
+      daemonStarted: false,
+      noSpawnCodex: true,
+      noSubprocess: true,
+      noCodexResume: true,
+      noShellExecution: true,
+      noProviderSubmit: true,
+      noProviderExecution: true,
+      providerSubmissionForbidden: true,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      credentialAccessAllowed: false,
+      noFileMutation: true,
+      noFreeTextWorker: true,
       ...(overrides.hardLocks || {}),
     },
   });
@@ -3211,6 +3239,60 @@ assert(
   ),
   "Phase 40 must require typed gated worker runtime evidence",
 );
+assert(
+  phase40MissingEvidence.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "codexWorkerRuntimeGate" &&
+      decision.source === "legacy_boolean_override" &&
+      decision.ready === false &&
+      decision.warnings.includes("legacy_codexWorkerRuntimeGateReady_boolean_ignored_without_typed_evidence"),
+  ),
+  "Phase 40 legacy boolean must be recorded as ignored without typed evidence",
+);
+
+const phase40TypedReadyPlan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input());
+assert(
+  phase(phase40TypedReadyPlan, "phase_40_codex_worker_runtime_gate").readiness === "ready",
+  "Phase 40 must be ready with typed codexWorkerRuntimeGate evidence",
+);
+assert(
+  phase40TypedReadyPlan.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "codexWorkerRuntimeGate" &&
+      decision.source === "typed_evidence" &&
+      decision.ready === true,
+  ),
+  "Phase 40 ready must come from typed codexWorkerRuntimeGate evidence",
+);
+
+function assertPhase40Blocks(codexWorkerRuntimeGate, blocker, message) {
+  const plan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({ codexWorkerRuntimeGate }));
+  assert(
+    phase(plan, "phase_40_codex_worker_runtime_gate").blockedReasons.includes(blocker),
+    message,
+  );
+}
+
+for (const [gate, blocker] of [
+  ["workerRuntimeContractDefined", "codex_worker_runtime_gate_contract_missing"],
+  ["defaultGatedOff", "codex_worker_runtime_gate_default_not_gated"],
+  ["validatedEnvelopeOnly", "codex_worker_runtime_gate_validated_envelope_missing"],
+  ["structuredResultOnly", "codex_worker_runtime_gate_structured_result_missing"],
+  ["noActualSpawnByDefault", "codex_worker_runtime_gate_spawn_not_blocked"],
+  ["noDaemonByDefault", "codex_worker_runtime_gate_daemon_not_blocked"],
+  ["noShellExecution", "codex_worker_runtime_gate_shell_not_blocked"],
+  ["noCredentialAccess", "codex_worker_runtime_gate_credential_access_not_blocked"],
+  ["noFileMutation", "codex_worker_runtime_gate_file_mutation_not_blocked"],
+  ["noProviderSubmit", "codex_worker_runtime_gate_provider_submit_not_blocked"],
+  ["noFreeTextWorker", "codex_worker_runtime_gate_free_text_worker_not_blocked"],
+  ["noCodexResumeByDefault", "codex_worker_runtime_gate_resume_not_blocked"],
+]) {
+  assertPhase40Blocks(
+    { gates: { [gate]: false } },
+    blocker,
+    `Phase 40 must block when ${gate} is missing`,
+  );
+}
 
 const phase40SpawnDrift = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
   codexWorkerRuntimeGate: {
@@ -3222,6 +3304,108 @@ assert(
     "codex_worker_runtime_gate_spawn_not_blocked",
   ),
   "Phase 40 must block actual Codex spawn observations",
+);
+
+for (const [codexWorkerRuntimeGate, blocker, message] of [
+  [
+    { observations: { codexResumeObserved: true } },
+    "codex_worker_runtime_gate_resume_not_blocked",
+    "Phase 40 must block Codex resume observations",
+  ],
+  [
+    { observations: { daemonStarted: true } },
+    "codex_worker_runtime_gate_daemon_not_blocked",
+    "Phase 40 must block daemon start observations",
+  ],
+  [
+    { observations: { subprocessObserved: true } },
+    "codex_worker_runtime_gate_spawn_not_blocked",
+    "Phase 40 must block subprocess observations",
+  ],
+  [
+    { observations: { shellExecutionObserved: true } },
+    "codex_worker_runtime_gate_shell_not_blocked",
+    "Phase 40 must block shell execution observations",
+  ],
+  [
+    { observations: { providerSubmitObserved: true } },
+    "codex_worker_runtime_gate_provider_submit_not_blocked",
+    "Phase 40 must block provider submit observations",
+  ],
+  [
+    { observations: { providerExecutionObserved: true } },
+    "codex_worker_runtime_gate_provider_submit_not_blocked",
+    "Phase 40 must block provider execution observations",
+  ],
+  [
+    { observations: { liveSubmitObserved: true } },
+    "codex_worker_runtime_gate_provider_submit_not_blocked",
+    "Phase 40 must block live submit observations",
+  ],
+  [
+    { observations: { credentialReadObserved: true } },
+    "codex_worker_runtime_gate_credential_access_not_blocked",
+    "Phase 40 must block credential read observations",
+  ],
+  [
+    { observations: { credentialWriteObserved: true } },
+    "codex_worker_runtime_gate_credential_access_not_blocked",
+    "Phase 40 must block credential write observations",
+  ],
+  [
+    { observations: { credentialAccessObserved: true } },
+    "codex_worker_runtime_gate_credential_access_not_blocked",
+    "Phase 40 must block credential access observations",
+  ],
+  [
+    { observations: { fileMutationObserved: true } },
+    "codex_worker_runtime_gate_file_mutation_not_blocked",
+    "Phase 40 must block file mutation observations",
+  ],
+  [
+    { observations: { freeTextWorkerObserved: true } },
+    "codex_worker_runtime_gate_free_text_worker_not_blocked",
+    "Phase 40 must block free-text worker observations",
+  ],
+  [
+    { observations: { freeTextTaskObserved: true } },
+    "codex_worker_runtime_gate_free_text_worker_not_blocked",
+    "Phase 40 must block free-text task observations",
+  ],
+  [
+    { observations: { unvalidatedEnvelopeAccepted: true } },
+    "codex_worker_runtime_gate_unvalidated_envelope_accepted",
+    "Phase 40 must block unvalidated envelope acceptance",
+  ],
+  [
+    { observations: { unstructuredResultAccepted: true } },
+    "codex_worker_runtime_gate_unstructured_result_accepted",
+    "Phase 40 must block unstructured result acceptance",
+  ],
+  [
+    { observations: { defaultGateOpened: true } },
+    "codex_worker_runtime_gate_default_not_gated",
+    "Phase 40 must block default gate opened observations",
+  ],
+  [
+    { observations: { gateDefaultOn: true } },
+    "codex_worker_runtime_gate_default_not_gated",
+    "Phase 40 must block gate default-on observations",
+  ],
+]) {
+  assertPhase40Blocks(codexWorkerRuntimeGate, blocker, message);
+}
+
+const phase40Phase39Blocked = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  knowledgePackUserManagement: {
+    gates: { routeTestReady: false },
+  },
+}));
+assert(
+  phase(phase40Phase39Blocked, "phase_40_codex_worker_runtime_gate").blockedReasons.includes(
+    "preceding_phase_not_ready:phase_39_knowledge_pack_user_management",
+  ),
+  "Phase 40 must block when Phase 39 Knowledge Pack User Management is not ready",
 );
 
 const phase41ProviderDrift = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({

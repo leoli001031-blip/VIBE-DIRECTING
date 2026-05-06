@@ -444,6 +444,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "CodexCliAdapterSpikeState",
   },
   {
+    fileName: "codex_worker_runtime_gate.schema.json",
+    id: "https://vibecore.local/schemas/codex_worker_runtime_gate.schema.json",
+    version: schemaVersion,
+    purpose: "Phase 40 Codex Worker Runtime gate shell requiring validated SubagentTaskEnvelope, Phase38 packet evidence, and Phase26 replacement proof while Codex spawn, resume, daemon, shell, provider, credentials, and file mutation stay locked off.",
+    typeName: "CodexWorkerRuntimeGateState",
+  },
+  {
     fileName: "local_orchestrator.schema.json",
     id: "https://vibecore.local/schemas/local_orchestrator.schema.json",
     version: schemaVersion,

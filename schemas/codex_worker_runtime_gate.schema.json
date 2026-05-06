@@ -1,0 +1,306 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/codex_worker_runtime_gate.schema.json",
+  "title": "CodexWorkerRuntimeGateState",
+  "description": "Phase 40 pure Codex Worker Runtime gate shell. It proves that future worker runtime can only enter through validated SubagentTaskEnvelope, Phase38 packet evidence, and Phase26 replacement proof, and can only return structured subagent_result_v1 while all runtime execution paths remain locked off by default.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "phaseId",
+    "generatedAt",
+    "readiness",
+    "contract",
+    "inputGate",
+    "commandPlan",
+    "permissionGate",
+    "resultContract",
+    "hardLocks",
+    "attemptedActions",
+    "proof",
+    "blockers",
+    "warnings",
+    "validation",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "phaseId": { "type": "string", "const": "phase_40_codex_worker_runtime_gate" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "readiness": { "type": "string", "enum": ["blocked", "ready_for_permission_gate"] },
+    "contract": { "$ref": "#/$defs/contract" },
+    "inputGate": { "$ref": "#/$defs/inputGate" },
+    "commandPlan": { "$ref": "#/$defs/commandPlan" },
+    "permissionGate": { "$ref": "#/$defs/permissionGate" },
+    "resultContract": { "$ref": "#/$defs/resultContract" },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "attemptedActions": { "$ref": "#/$defs/attemptedActions" },
+    "proof": { "$ref": "#/$defs/proof" },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "validation": { "$ref": "#/$defs/validation" },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workerRuntimeContractDefined",
+        "defaultGatedOff",
+        "validatedEnvelopeOnly",
+        "phase38PacketRequired",
+        "phase26ReplacementProofRequired",
+        "structuredResultOnly",
+        "noActualSpawnByDefault",
+        "pureReceiptOnly",
+        "notRealExecution"
+      ],
+      "properties": {
+        "workerRuntimeContractDefined": { "type": "boolean", "const": true },
+        "defaultGatedOff": { "type": "boolean", "const": true },
+        "validatedEnvelopeOnly": { "type": "boolean", "const": true },
+        "phase38PacketRequired": { "type": "boolean", "const": true },
+        "phase26ReplacementProofRequired": { "type": "boolean", "const": true },
+        "structuredResultOnly": { "type": "boolean", "const": true },
+        "noActualSpawnByDefault": { "type": "boolean", "const": true },
+        "pureReceiptOnly": { "type": "boolean", "const": true },
+        "notRealExecution": { "type": "boolean", "const": true }
+      }
+    },
+    "inputGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "envelopeValidationStatus",
+        "envelopeValidationIssues",
+        "phase38PacketStatus",
+        "phase38PacketBlockers",
+        "phase26ReplacementProofStatus",
+        "phase26ReplacementProofBlockers"
+      ],
+      "properties": {
+        "source": { "type": "string", "const": "validated_envelope_only" },
+        "envelopeId": { "type": "string" },
+        "parentTaskId": { "type": "string" },
+        "phase38PacketId": { "type": "string" },
+        "phase26ReceiptId": { "type": "string" },
+        "envelopeValidationStatus": { "type": "string", "enum": ["missing", "valid", "invalid"] },
+        "envelopeValidationIssues": { "type": "array", "items": { "type": "string" } },
+        "phase38PacketStatus": { "type": "string", "enum": ["missing", "ready", "blocked", "invalid"] },
+        "phase38PacketBlockers": { "type": "array", "items": { "type": "string" } },
+        "phase26ReplacementProofStatus": { "type": "string", "enum": ["missing", "ready", "blocked", "invalid"] },
+        "phase26ReplacementProofBlockers": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "commandPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "argumentSource",
+        "expectedResultSchema",
+        "canExecuteNow",
+        "canSpawnCodex",
+        "canResumeCodex",
+        "canStartDaemon",
+        "canExecuteShell",
+        "canSubmitProvider",
+        "canReadCredentials",
+        "canWriteCredentials",
+        "canMutateFiles"
+      ],
+      "properties": {
+        "argumentSource": { "type": "string", "const": "validated_envelope_only" },
+        "expectedResultSchema": { "type": "string", "const": "subagent_result_v1" },
+        "canExecuteNow": { "type": "boolean", "const": false },
+        "canSpawnCodex": { "type": "boolean", "const": false },
+        "canResumeCodex": { "type": "boolean", "const": false },
+        "canStartDaemon": { "type": "boolean", "const": false },
+        "canExecuteShell": { "type": "boolean", "const": false },
+        "canSubmitProvider": { "type": "boolean", "const": false },
+        "canReadCredentials": { "type": "boolean", "const": false },
+        "canWriteCredentials": { "type": "boolean", "const": false },
+        "canMutateFiles": { "type": "boolean", "const": false }
+      }
+    },
+    "permissionGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gateKind",
+        "readyForPermissionGate",
+        "actionTimePermissionRequired",
+        "permissionGrantedNow",
+        "canExecuteNow",
+        "canSpawnCodex",
+        "canResumeCodex",
+        "canStartDaemon",
+        "canExecuteShell",
+        "canSubmitProvider",
+        "canReadCredentials",
+        "canWriteCredentials",
+        "canMutateFiles",
+        "blockedReasons"
+      ],
+      "properties": {
+        "gateKind": { "type": "string", "const": "action_time_permission_required" },
+        "readyForPermissionGate": { "type": "boolean" },
+        "actionTimePermissionRequired": { "type": "boolean", "const": true },
+        "permissionGrantedNow": { "type": "boolean", "const": false },
+        "canExecuteNow": { "type": "boolean", "const": false },
+        "canSpawnCodex": { "type": "boolean", "const": false },
+        "canResumeCodex": { "type": "boolean", "const": false },
+        "canStartDaemon": { "type": "boolean", "const": false },
+        "canExecuteShell": { "type": "boolean", "const": false },
+        "canSubmitProvider": { "type": "boolean", "const": false },
+        "canReadCredentials": { "type": "boolean", "const": false },
+        "canWriteCredentials": { "type": "boolean", "const": false },
+        "canMutateFiles": { "type": "boolean", "const": false },
+        "blockedReasons": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "resultContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resultKind",
+        "structured",
+        "expectedResultSchema",
+        "freeTextAccepted",
+        "canReturnFreeTextWorker",
+        "projectStoreHandoffNow"
+      ],
+      "properties": {
+        "resultKind": { "type": "string", "const": "subagent_result_v1" },
+        "structured": { "type": "boolean", "const": true },
+        "expectedResultSchema": { "type": "string", "const": "subagent_result_v1" },
+        "freeTextAccepted": { "type": "boolean", "const": false },
+        "canReturnFreeTextWorker": { "type": "boolean", "const": false },
+        "projectStoreHandoffNow": { "type": "boolean", "const": false }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gatedRuntimeOnly",
+        "defaultGatedOff",
+        "validatedEnvelopeRequired",
+        "structuredResultRequired",
+        "noFreeTextWorker",
+        "noActualSpawnByDefault",
+        "noSpawnCodex",
+        "noCodexResume",
+        "noDaemon",
+        "daemonStarted",
+        "noSubprocess",
+        "noShellExecution",
+        "noProviderSubmit",
+        "noProviderExecution",
+        "providerSubmissionForbidden",
+        "canSubmitProvider",
+        "providerSubmitAllowed",
+        "liveSubmitAllowed",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "credentialAccessAllowed",
+        "credentialStorage",
+        "noFileMutation"
+      ],
+      "properties": {
+        "gatedRuntimeOnly": { "type": "boolean", "const": true },
+        "defaultGatedOff": { "type": "boolean", "const": true },
+        "validatedEnvelopeRequired": { "type": "boolean", "const": true },
+        "structuredResultRequired": { "type": "boolean", "const": true },
+        "noFreeTextWorker": { "type": "boolean", "const": true },
+        "noActualSpawnByDefault": { "type": "boolean", "const": true },
+        "noSpawnCodex": { "type": "boolean", "const": true },
+        "noCodexResume": { "type": "boolean", "const": true },
+        "noDaemon": { "type": "boolean", "const": true },
+        "daemonStarted": { "type": "boolean", "const": false },
+        "noSubprocess": { "type": "boolean", "const": true },
+        "noShellExecution": { "type": "boolean", "const": true },
+        "noProviderSubmit": { "type": "boolean", "const": true },
+        "noProviderExecution": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "canSubmitProvider": { "type": "boolean", "const": false },
+        "providerSubmitAllowed": { "type": "integer", "const": 0 },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "credentialAccessAllowed": { "type": "boolean", "const": false },
+        "credentialStorage": { "type": "boolean", "const": false },
+        "noFileMutation": { "type": "boolean", "const": true }
+      }
+    },
+    "attemptedActions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "freeTextPromptAttempted",
+        "spawnCodexAttempted",
+        "resumeCodexAttempted",
+        "daemonStartAttempted",
+        "shellExecutionAttempted",
+        "providerSubmitAttempted",
+        "credentialReadAttempted",
+        "credentialWriteAttempted",
+        "fileMutationAttempted"
+      ],
+      "properties": {
+        "freeTextPromptAttempted": { "type": "boolean" },
+        "spawnCodexAttempted": { "type": "boolean" },
+        "resumeCodexAttempted": { "type": "boolean" },
+        "daemonStartAttempted": { "type": "boolean" },
+        "shellExecutionAttempted": { "type": "boolean" },
+        "providerSubmitAttempted": { "type": "boolean" },
+        "credentialReadAttempted": { "type": "boolean" },
+        "credentialWriteAttempted": { "type": "boolean" },
+        "fileMutationAttempted": { "type": "boolean" }
+      }
+    },
+    "proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workerRuntimeContractDefined",
+        "defaultGatedOff",
+        "validatedEnvelopeOnly",
+        "phase38PacketValidated",
+        "phase26ReplacementProofReady",
+        "structuredResultOnly",
+        "noActualSpawnByDefault",
+        "noProviderSubmission",
+        "noCredentialAccess",
+        "noFileMutation",
+        "hardLocksPinned"
+      ],
+      "properties": {
+        "workerRuntimeContractDefined": { "type": "boolean" },
+        "defaultGatedOff": { "type": "boolean" },
+        "validatedEnvelopeOnly": { "type": "boolean" },
+        "phase38PacketValidated": { "type": "boolean" },
+        "phase26ReplacementProofReady": { "type": "boolean" },
+        "structuredResultOnly": { "type": "boolean" },
+        "noActualSpawnByDefault": { "type": "boolean" },
+        "noProviderSubmission": { "type": "boolean" },
+        "noCredentialAccess": { "type": "boolean" },
+        "noFileMutation": { "type": "boolean" },
+        "hardLocksPinned": { "type": "boolean" }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "status", "errors", "warnings", "checkedAt"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["blocked", "ready_for_permission_gate"] },
+        "errors": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "checkedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
+      }
+    }
+  }
+}

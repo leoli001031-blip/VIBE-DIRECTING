@@ -18,6 +18,7 @@ import { buildSubagentRunnerState } from "./subagentRunner";
 import { buildTaskPackets, type BuiltTaskPacket } from "./taskPacketBuilder";
 import { buildAgentCliMockRunnerState } from "./agentCliMockRunner";
 import { buildCodexCliAdapterSpikeState } from "./codexCliAdapterSpike";
+import { buildCodexWorkerRuntimeGateState } from "./codexWorkerRuntimeGate";
 import { buildExportWorkerState } from "./exportWorker";
 import { buildProjectFileCoreState } from "./projectFileCore";
 import { buildProjectFactsIntegrationState } from "./projectFactsIntegration";
@@ -74,6 +75,7 @@ export interface ProjectRuntimeStateBuildOptions {
   projectFactsIntegration?: ProjectRuntimeState["projectFactsIntegration"];
   agentCliMockRunner?: ProjectRuntimeState["agentCliMockRunner"];
   codexCliAdapterSpike?: ProjectRuntimeState["codexCliAdapterSpike"];
+  codexWorkerRuntimeGate?: ProjectRuntimeState["codexWorkerRuntimeGate"];
   executionLedger?: ProjectRuntimeState["executionLedger"];
   realExecutionGate?: ProjectRuntimeState["realExecutionGate"];
   realProviderPilot?: ProjectRuntimeState["realProviderPilot"];
@@ -560,6 +562,16 @@ export function buildProjectRuntimeState(
     subagentTaskEnvelope: options.subagentTaskEnvelope,
     envelopeId: options.subagentTaskEnvelope?.id || taskViews.find((task) => task.validator.valid)?.envelope.id,
   });
+  const codexWorkerRuntimePhase38Packet = options.subagentTaskEnvelope
+    ? taskPacketBuilderState.packets.find((packet) => packet.envelopeId === options.subagentTaskEnvelope?.id)
+    : taskPacketBuilderState.packets.find((packet) => packet.status === "ready");
+  const codexWorkerRuntimeGate = options.codexWorkerRuntimeGate || buildCodexWorkerRuntimeGateState({
+    generatedAt,
+    subagentTaskEnvelope: options.subagentTaskEnvelope || codexWorkerRuntimePhase38Packet?.envelope,
+    envelopeId: options.subagentTaskEnvelope?.id || codexWorkerRuntimePhase38Packet?.envelopeId,
+    phase38Packet: codexWorkerRuntimePhase38Packet,
+    phase26ReplacementProof: agentCliMockRunner,
+  });
   const providerExecutionPermissionGate = buildProviderExecutionPermissionGateState({
     generatedAt,
     providerLiveGate,
@@ -772,6 +784,7 @@ export function buildProjectRuntimeState(
     subagentRunner,
     agentCliMockRunner,
     codexCliAdapterSpike,
+    codexWorkerRuntimeGate,
     generationHealthChecker,
     promptConflictChecker,
     storyChanges: {
@@ -1017,6 +1030,17 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       phase26ReplacementProof: agentCliMockRunner,
       envelopeId: state.taskRuns.taskViews.find((task) => task.validator.valid)?.envelope.id,
     });
+  const codexWorkerRuntimePhase38Packet = taskPacketBuilderState.packets.find((packet) => packet.status === "ready");
+  const codexWorkerRuntimeGate =
+    state.codexWorkerRuntimeGate ||
+    buildCodexWorkerRuntimeGateState({
+      generatedAt: state.generatedAt,
+      subagentTaskEnvelope: codexWorkerRuntimePhase38Packet?.envelope,
+      envelopeId: codexWorkerRuntimePhase38Packet?.envelopeId ||
+        state.taskRuns.taskViews.find((task) => task.validator.valid)?.envelope.id,
+      phase38Packet: codexWorkerRuntimePhase38Packet,
+      phase26ReplacementProof: agentCliMockRunner,
+    });
   const providerExecutionPermissionGate =
     state.providerExecutionPermissionGate ||
     buildProviderExecutionPermissionGateState({
@@ -1210,6 +1234,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     subagentRunner,
     agentCliMockRunner,
     codexCliAdapterSpike,
+    codexWorkerRuntimeGate,
     generationHealthChecker,
     promptConflictChecker,
   };

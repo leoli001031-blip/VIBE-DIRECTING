@@ -314,6 +314,17 @@ type KnowledgePackUserManagementUiSummary = {
   blockersWarnings: string[];
   requiredGates: string[];
 };
+type CodexWorkerRuntimeGateUiSummary = {
+  initialized: boolean;
+  readiness: string;
+  contractStatus: string;
+  gateStatus: string;
+  inputStatus: string;
+  outputStatus: string;
+  executionStatus: string;
+  blockersWarnings: string[];
+  requiredGates: string[];
+};
 type DirectorProgressTone = "preparing" | "working" | "review" | "blocked" | "complete";
 type DirectorProgressSegment = {
   label: string;
@@ -2985,6 +2996,86 @@ function buildKnowledgePackUserManagementUiSummary(runtimeState: ProjectRuntimeS
       ? "informal asset promotion blocked"
       : "formal references stay gated",
     blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing knowledgePackUserManagement"],
+    requiredGates,
+  };
+}
+
+function buildCodexWorkerRuntimeGateUiSummary(runtimeState: ProjectRuntimeState): CodexWorkerRuntimeGateUiSummary {
+  const root = runtimeState as unknown as Record<string, unknown>;
+  const gateRoot = isRecord(root.codexWorkerRuntimeGate) ? root.codexWorkerRuntimeGate : {};
+  const initialized = isRecord(root.codexWorkerRuntimeGate);
+  const rootRecord = initialized ? gateRoot : {};
+  const gates = firstRecordFrom(rootRecord, ["gates"]);
+  const summary = firstRecordFrom(rootRecord, ["summary"]);
+  const observations = firstRecordFrom(rootRecord, ["observations"]);
+  const runtimeGate = firstRecordFrom(rootRecord, ["runtimeGate", "executionPolicy"]);
+  const records = [gates, summary, rootRecord].filter(isRecord);
+  const observedRecords = [observations, runtimeGate, rootRecord].filter(isRecord);
+  const requiredGates = [
+    "workerRuntimeContractDefined",
+    "defaultGatedOff",
+    "validatedEnvelopeOnly",
+    "structuredResultOnly",
+    "noActualSpawnByDefault",
+    "noDaemonByDefault",
+    "noShellExecution",
+    "noCredentialAccess",
+    "noFileMutation",
+    "noProviderSubmit",
+    "noFreeTextWorker",
+    "noCodexResumeByDefault",
+  ];
+  const readyGateCount = requiredGates.filter((key) => readFirstBoolean(records, [key]) === true).length;
+  const status = readFirstString(records, ["readiness", "status", "state"], "");
+  const blockersWarnings = Array.from(new Set([
+    ...readDisplayList(rootRecord.blockers, "blocker"),
+    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
+    ...readDisplayList(summary.blockers, "blocker"),
+    ...readDisplayList(summary.blockedReasons, "blocker"),
+    ...readDisplayList(rootRecord.warnings, "warning"),
+    ...readDisplayList(summary.warnings, "warning"),
+  ].filter(Boolean)));
+  const defaultOpened = readFirstBoolean(observedRecords, ["defaultGateOpened", "gateDefaultOn"]) === true;
+  const inputRejected = readFirstBoolean(observedRecords, ["unvalidatedEnvelopeAccepted"]) === true;
+  const outputRejected = readFirstBoolean(observedRecords, ["unstructuredResultAccepted"]) === true;
+  const executionOpened = [
+    "spawnCodexObserved",
+    "codexResumeObserved",
+    "daemonStarted",
+    "subprocessObserved",
+    "shellExecutionObserved",
+    "providerSubmitObserved",
+    "providerExecutionObserved",
+    "liveSubmitObserved",
+    "credentialReadObserved",
+    "credentialWriteObserved",
+    "credentialAccessObserved",
+    "fileMutationObserved",
+    "freeTextWorkerObserved",
+    "freeTextTaskObserved",
+  ].some((key) => readFirstBoolean(observedRecords, [key]) === true);
+  const executionLocked = [
+    "noActualSpawnByDefault",
+    "noDaemonByDefault",
+    "noShellExecution",
+    "noCredentialAccess",
+    "noFileMutation",
+    "noProviderSubmit",
+    "noFreeTextWorker",
+    "noCodexResumeByDefault",
+  ].every((key) => readFirstBoolean(records, [key]) === true);
+
+  return {
+    initialized,
+    readiness: initialized
+      ? statusLabel(status || (readyGateCount === requiredGates.length && !blockersWarnings.length ? "ready" : "blocked"))
+      : "blocked/missing",
+    contractStatus: readFirstBoolean(records, ["workerRuntimeContractDefined"]) === true ? "defined" : "missing",
+    gateStatus: defaultOpened ? "opened" : readFirstBoolean(records, ["defaultGatedOff"]) === true ? "default off" : "missing",
+    inputStatus: inputRejected ? "blocked" : readFirstBoolean(records, ["validatedEnvelopeOnly"]) === true ? "locked" : "missing",
+    outputStatus: outputRejected ? "blocked" : readFirstBoolean(records, ["structuredResultOnly"]) === true ? "locked" : "missing",
+    executionStatus: executionOpened ? "opened" : executionLocked ? "closed" : "missing",
+    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing codexWorkerRuntimeGate"],
     requiredGates,
   };
 }
@@ -5914,6 +6005,38 @@ function KnowledgePackUserManagementDiagnostics({ runtimeState }: { runtimeState
   );
 }
 
+function CodexWorkerRuntimeGateDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildCodexWorkerRuntimeGateUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel codex-worker-runtime-gate-panel">
+      <div className="audit-head">
+        <LockKeyhole size={17} />
+        <span>Phase 40 Codex Worker Runtime Gate</span>
+      </div>
+      <div className="summary-grid codex-worker-runtime-gate-metrics">
+        <Metric label="Readiness" value={summary.readiness} detail="Phase 40 typed evidence" />
+        <Metric label="Runtime Contract" value={summary.contractStatus} detail="worker runtime contract defined" />
+        <Metric label="Default Gate" value={summary.gateStatus} detail="default gated off" />
+        <Metric label="Input" value={summary.inputStatus} detail="validated envelope only" />
+        <Metric label="Output" value={summary.outputStatus} detail="structured result only" />
+        <Metric label="Execution Paths" value={summary.executionStatus} detail="spawn/resume/daemon/shell/credential/file/provider/free-text closed" />
+      </div>
+      <div className="phase17-rule-strip">
+        {summary.requiredGates.map((gate) => (
+          <span key={gate}>{gate}</span>
+        ))}
+      </div>
+      <div className="pipeline-details checker-details">
+        <details open={Boolean(summary.blockersWarnings.length)}>
+          <summary>Phase 40 blockers / warnings ({summary.blockersWarnings.length})</summary>
+          <CompactList items={summary.blockersWarnings} empty="No Phase 40 blockers reported." />
+        </details>
+      </div>
+    </section>
+  );
+}
+
 function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const videoPlanning = getVideoPlanning(runtimeState);
   const queue = videoPlanning.queueShell;
@@ -8011,6 +8134,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const visualConsistencySummary = buildVisualConsistencyContractUiSummary(runtimeState);
   const fullTaskSubagentPacketPlannerSummary = buildFullTaskSubagentPacketPlannerUiSummary(runtimeState);
   const knowledgePackUserManagementSummary = buildKnowledgePackUserManagementUiSummary(runtimeState);
+  const codexWorkerRuntimeGateSummary = buildCodexWorkerRuntimeGateUiSummary(runtimeState);
   const realPilotSummary = buildRealPilotUiSummary(runtimeState);
 
   return (
@@ -8230,6 +8354,15 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
           <small>{knowledgePackUserManagementSummary.userFlowStatus} · {knowledgePackUserManagementSummary.checkStatus}</small>
           <small>{knowledgePackUserManagementSummary.routeConflictStatus} · {knowledgePackUserManagementSummary.overrideStatus}</small>
           <small>{knowledgePackUserManagementSummary.injectionStatus} · {knowledgePackUserManagementSummary.promotionStatus}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Phase 40 Codex Worker Runtime Gate</div>
+      <div className="settings-list codex-worker-runtime-gate-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Phase 40 Codex Worker Runtime Gate: {codexWorkerRuntimeGateSummary.readiness}</strong>
+          <small>{codexWorkerRuntimeGateSummary.contractStatus} · {codexWorkerRuntimeGateSummary.gateStatus}</small>
+          <small>validated envelope {codexWorkerRuntimeGateSummary.inputStatus} · structured result {codexWorkerRuntimeGateSummary.outputStatus}</small>
+          <small>spawn/resume/daemon/shell/credential/file/provider submit {codexWorkerRuntimeGateSummary.executionStatus}</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
@@ -8480,6 +8613,7 @@ function DiagnosticsMode({
       <VisualConsistencyContractDiagnostics runtimeState={runtimeState} />
       <FullTaskSubagentPacketPlannerDiagnostics runtimeState={runtimeState} />
       <KnowledgePackUserManagementDiagnostics runtimeState={runtimeState} />
+      <CodexWorkerRuntimeGateDiagnostics runtimeState={runtimeState} />
       <RealPilotDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <VoiceAudioSettingsDiagnostics runtimeState={runtimeState} />

@@ -955,6 +955,8 @@ export interface PhaseRoadmapClosureHardLocks {
   workerSpawnAllowed?: boolean;
   canSpawnCodex?: boolean;
   noSubprocess?: boolean;
+  noCodexResume?: boolean;
+  codexResumeAllowed?: boolean;
   noShellExecution?: boolean;
   noArbitraryShell?: boolean;
   arbitraryShellAllowed?: boolean;
@@ -971,6 +973,7 @@ export interface PhaseRoadmapClosureHardLocks {
   credentialStorage?: boolean;
   noFileMutation?: boolean;
   fileMutationAllowed?: boolean;
+  noFreeTextWorker?: boolean;
   workerSelfReportCannotComplete?: boolean;
   expectedOutputRequired?: boolean;
   manifestRequired?: boolean;
@@ -985,6 +988,7 @@ export interface PhaseRoadmapClosureHardLocks {
 export interface PhaseRoadmapClosureObservations {
   daemonStarted?: boolean;
   spawnCodexObserved?: boolean;
+  codexResumeObserved?: boolean;
   workerSpawnObserved?: boolean;
   subprocessObserved?: boolean;
   shellExecutionObserved?: boolean;
@@ -1029,6 +1033,10 @@ export interface PhaseRoadmapClosureObservations {
   missingKnowledgeTraceObserved?: boolean;
   freeTextWorkerObserved?: boolean;
   freeTextTaskObserved?: boolean;
+  unvalidatedEnvelopeAccepted?: boolean;
+  unstructuredResultAccepted?: boolean;
+  defaultGateOpened?: boolean;
+  gateDefaultOn?: boolean;
   candidateFutureReferenceObserved?: boolean;
   tempFutureReferenceObserved?: boolean;
   rejectedFutureReferenceObserved?: boolean;
@@ -1174,6 +1182,14 @@ export interface PhaseRoadmapFullTaskSubagentPacketPlannerEvidence extends Phase
   };
 }
 
+export interface PhaseRoadmapCodexWorkerRuntimeGateEvidence extends PhaseRoadmapClosureEvidence {
+  inputContract?: Record<string, unknown>;
+  outputContract?: Record<string, unknown>;
+  runtimeGate?: Record<string, unknown>;
+  routeSafety?: Record<string, unknown>;
+  executionPolicy?: Record<string, unknown>;
+}
+
 export interface PhaseRoadmapRuntimeEvidence {
   projectFactsIntegration?: PhaseRoadmapProjectFactsIntegrationEvidence;
   subagentEnvelopeValidator?: PhaseRoadmapSubagentEnvelopeValidatorReceipt;
@@ -1193,7 +1209,7 @@ export interface PhaseRoadmapRuntimeEvidence {
   fullTaskSubagentPacketPlanner?: PhaseRoadmapFullTaskSubagentPacketPlannerEvidence;
   subagentPacketPlanner?: PhaseRoadmapClosureEvidence;
   knowledgePackUserManagement?: PhaseRoadmapClosureEvidence;
-  codexWorkerRuntimeGate?: PhaseRoadmapClosureEvidence;
+  codexWorkerRuntimeGate?: PhaseRoadmapCodexWorkerRuntimeGateEvidence;
   providerClosedLoopShell?: PhaseRoadmapClosureEvidence;
   betaAcceptance?: PhaseRoadmapClosureEvidence;
   watcherManifestQaClosedLoop?: PhaseRoadmapClosedLoopReceipt;
@@ -3052,8 +3068,10 @@ function closureSafetyBlockers(evidence: PhaseRoadmapClosureEvidence, prefix: st
         locks.noWorkerSpawn === false ||
         locks.workerSpawnAllowed === true ||
         locks.canSpawnCodex === true ||
+        locks.codexResumeAllowed === true ||
         summary.workerSpawnAllowed === true ||
         observations.spawnCodexObserved === true ||
+        observations.codexResumeObserved === true ||
         observations.workerSpawnObserved === true ||
         observations.subprocessObserved === true,
       `${prefix}_spawn_not_blocked`,
@@ -3653,6 +3671,73 @@ function knowledgePackUserManagementEvidenceDecision(input: PhaseRoadmapRuntimeI
   };
 }
 
+function codexWorkerRuntimeGateEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const decision = phaseClosureEvidenceDecision(input, {
+    evidenceKey: "codexWorkerRuntimeGate",
+    phaseId: "phase_40_codex_worker_runtime_gate",
+    missingBlocker: "codex_worker_runtime_gate_typed_evidence_missing",
+    safetyPrefix: "codex_worker_runtime_gate",
+    legacyReadyInput: "codexWorkerRuntimeGateReady",
+    requireGatedRuntimeOnly: true,
+    requiredGates: [
+      { field: "workerRuntimeContractDefined", blocker: "codex_worker_runtime_gate_contract_missing" },
+      { field: "defaultGatedOff", blocker: "codex_worker_runtime_gate_default_not_gated" },
+      { field: "validatedEnvelopeOnly", blocker: "codex_worker_runtime_gate_validated_envelope_missing" },
+      { field: "structuredResultOnly", blocker: "codex_worker_runtime_gate_structured_result_missing" },
+      { field: "noActualSpawnByDefault", blocker: "codex_worker_runtime_gate_spawn_not_blocked" },
+      { field: "noDaemonByDefault", blocker: "codex_worker_runtime_gate_daemon_not_blocked" },
+      { field: "noShellExecution", blocker: "codex_worker_runtime_gate_shell_not_blocked" },
+      { field: "noCredentialAccess", blocker: "codex_worker_runtime_gate_credential_access_not_blocked" },
+      { field: "noFileMutation", blocker: "codex_worker_runtime_gate_file_mutation_not_blocked" },
+      { field: "noProviderSubmit", blocker: "codex_worker_runtime_gate_provider_submit_not_blocked" },
+      { field: "noFreeTextWorker", blocker: "codex_worker_runtime_gate_free_text_worker_not_blocked" },
+      { field: "noCodexResumeByDefault", blocker: "codex_worker_runtime_gate_resume_not_blocked" },
+    ],
+  });
+  const evidence = input.evidence?.codexWorkerRuntimeGate;
+  if (!hasClosureEvidence(evidence)) return decision;
+
+  const freeTextWorkerObserved = closureAnyObservedTrue(
+    evidence,
+    ["freeTextWorkerObserved", "freeTextTaskObserved", "freeTextWorkerAccepted", "freeTextTaskAccepted"],
+    ["runtimeGate", "inputContract", "executionPolicy", "routeSafety"],
+  );
+  const codexResumeObserved = closureAnyObservedTrue(
+    evidence,
+    ["codexResumeObserved", "resumeCodexObserved", "codexResumeAccepted"],
+    ["runtimeGate", "executionPolicy"],
+  );
+  const unvalidatedEnvelopeAccepted = closureAnyObservedTrue(
+    evidence,
+    ["unvalidatedEnvelopeAccepted", "unvalidatedEnvelopeAllowed", "rawEnvelopeAccepted"],
+    ["inputContract", "runtimeGate", "executionPolicy"],
+  );
+  const unstructuredResultAccepted = closureAnyObservedTrue(
+    evidence,
+    ["unstructuredResultAccepted", "unstructuredResultAllowed", "freeTextResultAccepted"],
+    ["outputContract", "runtimeGate", "executionPolicy"],
+  );
+  const defaultGateOpened = closureAnyObservedTrue(
+    evidence,
+    ["defaultGateOpened", "gateDefaultOn", "defaultGatedOn", "defaultGateOpen"],
+    ["runtimeGate", "executionPolicy"],
+  );
+  const blockers = uniqueSorted([
+    ...decision.blockers,
+    ...blockedIf(freeTextWorkerObserved, "codex_worker_runtime_gate_free_text_worker_not_blocked"),
+    ...blockedIf(codexResumeObserved, "codex_worker_runtime_gate_resume_not_blocked"),
+    ...blockedIf(unvalidatedEnvelopeAccepted, "codex_worker_runtime_gate_unvalidated_envelope_accepted"),
+    ...blockedIf(unstructuredResultAccepted, "codex_worker_runtime_gate_unstructured_result_accepted"),
+    ...blockedIf(defaultGateOpened, "codex_worker_runtime_gate_default_not_gated"),
+  ]);
+
+  return {
+    ...decision,
+    ready: blockers.length === 0,
+    blockers,
+  };
+}
+
 function taskQueueVisibilityEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
   const evidence = input.evidence?.taskQueueVisibility;
 
@@ -3884,21 +3969,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const visualConsistencyContractDecision = visualConsistencyContractEvidenceDecision(input);
   const fullTaskSubagentPacketPlannerDecision = fullTaskSubagentPacketPlannerEvidenceDecision(input);
   const knowledgePackUserManagementDecision = knowledgePackUserManagementEvidenceDecision(input);
-  const codexWorkerRuntimeGateDecision = phaseClosureEvidenceDecision(input, {
-    evidenceKey: "codexWorkerRuntimeGate",
-    phaseId: "phase_40_codex_worker_runtime_gate",
-    missingBlocker: "codex_worker_runtime_gate_typed_evidence_missing",
-    safetyPrefix: "codex_worker_runtime_gate",
-    legacyReadyInput: "codexWorkerRuntimeGateReady",
-    requireGatedRuntimeOnly: true,
-    requiredGates: [
-      { field: "workerRuntimeContractDefined", blocker: "codex_worker_runtime_gate_contract_missing" },
-      { field: "defaultGatedOff", blocker: "codex_worker_runtime_gate_default_not_gated" },
-      { field: "validatedEnvelopeOnly", blocker: "codex_worker_runtime_gate_validated_envelope_missing" },
-      { field: "structuredResultOnly", blocker: "codex_worker_runtime_gate_structured_result_missing" },
-      { field: "noActualSpawnByDefault", blocker: "codex_worker_runtime_gate_spawn_not_blocked" },
-    ],
-  });
+  const codexWorkerRuntimeGateDecision = codexWorkerRuntimeGateEvidenceDecision(input);
   const providerClosedLoopShellDecision = phaseClosureEvidenceDecision(input, {
     evidenceKey: "providerClosedLoopShell",
     phaseId: "phase_41_provider_closed_loop_shell",
@@ -4454,15 +4525,19 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "evidence.codexWorkerRuntimeGate",
         "gated runtime contract",
         "defaultGatedOff=true",
+        "validatedEnvelopeOnly=true",
+        "structuredResultOnly=true",
         "noActualSpawnByDefault=true",
+        "noDaemonByDefault/noShellExecution/noCredentialAccess/noFileMutation/noProviderSubmit=true",
       ],
       acceptanceCriteria: [
         "Real Codex worker runtime shape exists only behind a default-off gate.",
         "Validated envelope input and structured result output remain mandatory.",
-        "The roadmap default cannot spawn Codex, start daemons, execute shell, read/write credentials, submit providers, or mutate files.",
+        "The roadmap default cannot spawn or resume Codex, start daemons, execute shell, read/write credentials, submit providers, mutate files, or accept free-text worker tasks.",
       ],
       notes: [
         "Phase 40 is a gated runtime shell, not live worker execution.",
+        "The legacy codexWorkerRuntimeGateReady boolean is ignored without typed evidence.",
         ...evidenceNotes([codexWorkerRuntimeGateDecision]),
       ],
     }),

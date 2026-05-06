@@ -8,6 +8,7 @@ import type { VoiceAudioSettingsState } from "./voiceAudioSettings";
 import type { QueueGateResult } from "./taskQueue";
 import type { AgentCliMockRunnerState } from "./agentCliMockRunner";
 import type { CodexCliAdapterSpikeState } from "./codexCliAdapterSpike";
+import type { CodexWorkerRuntimeGateState } from "./codexWorkerRuntimeGate";
 import type { ExportWorkerState } from "./exportWorker";
 import type { ProviderLiveGateState } from "./providerLiveGate";
 import type { ProviderExecutionPermissionGateState } from "./providerExecutionPermissionGate";
@@ -232,6 +233,7 @@ export interface ProjectRuntimeState {
   subagentRunner: SubagentRunnerState;
   agentCliMockRunner: AgentCliMockRunnerState;
   codexCliAdapterSpike: CodexCliAdapterSpikeState;
+  codexWorkerRuntimeGate: CodexWorkerRuntimeGateState;
   generationHealthChecker: GenerationHealthCheckerState;
   promptConflictChecker: PromptConflictCheckerState;
   storyChanges: ProjectRuntimeStoryChangeState;

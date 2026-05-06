@@ -141,6 +141,8 @@ const fullTaskSubagentPacketPlannerDiagnostics = findFunctionBody(appSource, "Fu
 const fullTaskSubagentPacketPlannerUiSummary = findFunctionBody(appSource, "buildFullTaskSubagentPacketPlannerUiSummary");
 const knowledgePackUserManagementDiagnostics = findFunctionBody(appSource, "KnowledgePackUserManagementDiagnostics");
 const knowledgePackUserManagementUiSummary = findFunctionBody(appSource, "buildKnowledgePackUserManagementUiSummary");
+const codexWorkerRuntimeGateDiagnostics = findFunctionBody(appSource, "CodexWorkerRuntimeGateDiagnostics");
+const codexWorkerRuntimeGateUiSummary = findFunctionBody(appSource, "buildCodexWorkerRuntimeGateUiSummary");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
 const realPilotDiagnostics = findFunctionBody(appSource, "RealPilotDiagnostics");
 const knowledgeUiSummary = findFunctionBody(appSource, "buildKnowledgeUiSummary");
@@ -322,6 +324,15 @@ checkMessage(requireWithin(`${knowledgePackUserManagementDiagnostics}\n${knowled
 checkMessage(requireWithin(`${knowledgePackUserManagementDiagnostics}\n${knowledgePackUserManagementUiSummary}`, /hard gate override forbidden/i, "Phase 39 hard gate override forbidden copy"));
 checkMessage(requireWithin(`${knowledgePackUserManagementDiagnostics}\n${knowledgePackUserManagementUiSummary}`, /scoped verified injection only/i, "Phase 39 scoped injection copy"));
 checkMessage(requireWithin(`${knowledgePackUserManagementDiagnostics}\n${knowledgePackUserManagementUiSummary}`, /formal references stay gated/i, "Phase 39 formal reference gate copy"));
+checkMessage(requireWithin(diagnosticsMode, /CodexWorkerRuntimeGateDiagnostics/, "Phase 40 Codex Worker Runtime Gate diagnostics mounted"));
+checkMessage(requireWithin(settingsShell, /Phase 40 Codex Worker Runtime Gate/i, "Phase 40 Settings read-only worker runtime summary"));
+checkMessage(requireWithin(codexWorkerRuntimeGateDiagnostics, /Phase 40 Codex Worker Runtime Gate/i, "Phase 40 Codex Worker Runtime Gate diagnostics panel"));
+checkMessage(requireWithin(codexWorkerRuntimeGateDiagnostics, /Runtime Contract/i, "Phase 40 runtime contract diagnostics copy"));
+checkMessage(requireWithin(codexWorkerRuntimeGateDiagnostics, /Default Gate/i, "Phase 40 default gate diagnostics copy"));
+checkMessage(requireWithin(`${codexWorkerRuntimeGateDiagnostics}\n${settingsShell}`, /validated envelope/i, "Phase 40 validated envelope Diagnostics/Settings copy"));
+checkMessage(requireWithin(`${codexWorkerRuntimeGateDiagnostics}\n${settingsShell}`, /structured result/i, "Phase 40 structured result Diagnostics/Settings copy"));
+checkMessage(requireWithin(`${codexWorkerRuntimeGateDiagnostics}\n${settingsShell}`, /spawn\/resume\/daemon\/shell\/credential\/file\/provider/i, "Phase 40 execution path Diagnostics/Settings copy"));
+checkMessage(requireWithin(codexWorkerRuntimeGateUiSummary, /noCodexResumeByDefault/i, "Phase 40 no resume typed gate summary"));
 check(
   !/RealPilotDirectorStatus/.test(directorMode),
   "Director Clean Mode must not mount RealPilotDirectorStatus in the default DirectorMode",
@@ -647,6 +658,7 @@ const forbiddenMinimalTerms = [
   ["Desktop Runtime", /Desktop\s+Runtime/i],
   ["Permission Shell", /Permission\s+Shell/i],
   ["Subagent Worker Runtime", /Subagent\s+Worker\s+Runtime/i],
+  ["Codex Worker Runtime", /Codex\s+Worker\s+Runtime/i],
   ["Full Task Subagent Packet Planner", /Full\s+Task\s+Subagent\s+Packet\s+Planner/i],
   ["validated envelope", /validated\s+envelope/i],
   ["validated packet", /validated\s+packet/i],
@@ -706,6 +718,7 @@ const phase2123ForbiddenMainTerms = [
   ["Voice Source Library", /Voice\s+Source\s+Library/i],
   ["Knowledge Pack Manager", /Knowledge\s+Pack\s+Manager/i],
   ["Knowledge Pack User Management", /Knowledge\s+Pack\s+User\s+Management/i],
+  ["Codex Worker Runtime", /Codex\s+Worker\s+Runtime/i],
   ["Knowledge Router", /Knowledge\s+Router/i],
   ["Knowledge Library", /Knowledge\s+Library/i],
   ["hash", /\bhash\b/i],
@@ -854,6 +867,21 @@ const phase35ForbiddenMainTerms = [
 for (const [term, pattern] of phase35ForbiddenMainTerms) {
   const count = countPattern(phase2123DirectorSurface, pattern);
   check(count === 0, `Phase 35 main Director surface must expose 0 ${term} term(s), found ${count}`);
+}
+const phase40ForbiddenMainTerms = [
+  ["Phase 40", /Phase\s*40/i],
+  ["Codex Worker Runtime", /Codex\s+Worker\s+Runtime/i],
+  ["validated envelope", /validated\s+envelope/i],
+  ["structured result", /structured\s+result/i],
+  ["spawn", /spawn/i],
+  ["daemon", /daemon/i],
+  ["shell", /shell/i],
+  ["credential", /credential/i],
+  ["provider submit", /provider\s+submit/i],
+];
+for (const [term, pattern] of phase40ForbiddenMainTerms) {
+  const count = countPattern(phase2123DirectorSurface, pattern);
+  check(count === 0, `Phase 40 main Director surface must expose 0 ${term} term(s), found ${count}`);
 }
 check(!/Formal\s+Gate|Proxy\s+Duration|Draft\s+Events|blockedPlaceholder/i.test(minimalPreview), "Preview Player copy must stay short and not show gate/proxy counters");
 check(/locked/i.test(minimalAssetLibrary) && /candidate/i.test(minimalAssetLibrary) && /review/i.test(minimalAssetLibrary), "Asset Library must keep locked/candidate/review consistency states");
