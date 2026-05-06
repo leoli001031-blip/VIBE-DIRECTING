@@ -16,8 +16,10 @@ export type VisualConsistencyLayer =
   | "asset_library"
   | "scene_asset_pack"
   | "shot_layout"
+  | "spatial_memory"
   | "start_end_derivation"
   | "fact_chain"
+  | "master_inheritance_qa"
   | "postprocess";
 
 export type VisualConsistencyIssueCode =
@@ -30,11 +32,14 @@ export type VisualConsistencyIssueCode =
   | "scene_pack_vector_violation"
   | "scene_pack_forbidden_reference"
   | "shot_layout_schema_missing"
+  | "shot_layout_structured_field_missing"
   | "shot_layout_vector_violation"
   | "shot_layout_end_frame_derivation_violation"
   | "shot_layout_camera_constraint_violation"
+  | "spatial_memory_contract_violation"
   | "keyframe_pair_derivation_violation"
   | "prompt_end_frame_derivation_violation"
+  | "master_inheritance_qa_violation"
   | "visual_fact_chain_violation"
   | "identity_gate_violation"
   | "scene_gate_violation"
@@ -49,12 +54,22 @@ export type VisualConsistencyGateId =
   | "identity_gate"
   | "scene_gate"
   | "layout_gate"
+  | "spatial_memory_gate"
   | "pair_gate"
+  | "master_inheritance_qa_gate"
   | "story_gate"
   | "prop_gate"
   | "style_gate"
   | "motion_gate"
   | "video_handoff_gate";
+
+export type VisualConsistencyContractGateId =
+  | "identity_gate"
+  | "scene_gate"
+  | "shot_layout_gate"
+  | "spatial_memory_gate"
+  | "keyframe_pair_derivation_gate"
+  | "master_inheritance_qa_gate";
 
 export interface VisualConsistencyGate {
   gateId: VisualConsistencyGateId;
@@ -65,6 +80,53 @@ export interface VisualConsistencyGate {
   blockers: string[];
   warnings: string[];
   sourceRefs: string[];
+}
+
+export interface VisualConsistencyContractGate {
+  contractGateId: VisualConsistencyContractGateId;
+  status: "pass" | "warning" | "blocked";
+  formalEligible: boolean;
+  detail: string;
+  blockers: string[];
+  warnings: string[];
+  sourceRefs: string[];
+}
+
+export interface VisualConsistencyContractReceipt {
+  receiptKind: "visual_consistency_contract";
+  phase: "phase37_visual_consistency_contract";
+  status: "pass" | "blocked";
+  formalPlanningAllowed: boolean;
+  gates: {
+    identityGate: VisualConsistencyContractGate;
+    sceneGate: VisualConsistencyContractGate;
+    shotLayoutGate: VisualConsistencyContractGate;
+    spatialMemoryGate: VisualConsistencyContractGate;
+    keyframePairDerivationGate: VisualConsistencyContractGate;
+    masterInheritanceQaGate: VisualConsistencyContractGate;
+  };
+  qaGateSummary: {
+    scenePackIds: string[];
+    derivedViewIds: string[];
+    shotLayoutIds: string[];
+    keyframePairShotIds: string[];
+    workerProviderSelfReportMayOverride: false;
+    blockers: string[];
+    warnings: string[];
+    sourceRefs: string[];
+  };
+  hardLocks: {
+    identityRequiresLockedCharacterReference: true;
+    candidateTempRejectedContactSheetShotOutputCannotBeFutureReference: true;
+    derivedViewsMustInheritMasterScene: true;
+    shotLayoutStructuredFieldsRequired: true;
+    spatialMemoryRequiredForFormal: true;
+    keyframeEndFrameMustDeriveFromApprovedStartFrame: true;
+    independentEndFrameLargeMotionFixedCameraConflictBlocked: true;
+    masterInheritanceQaGateRequired: true;
+    workerProviderSelfReportCannotOverrideQa: true;
+    localOpenCvPostprocessSemanticRepairForbidden: true;
+  };
 }
 
 export interface VisualConsistencyFactChainStep {
@@ -113,6 +175,9 @@ export interface VisualConsistencyReport {
     gateCount: number;
     gateBlockers: number;
     gateWarnings: number;
+    contractGateCount: number;
+    contractGateBlockers: number;
+    contractGateWarnings: number;
   };
   factChain: {
     sequence: [
@@ -127,6 +192,7 @@ export interface VisualConsistencyReport {
     warnings: string[];
   };
   gates: VisualConsistencyGate[];
+  contractReceipt: VisualConsistencyContractReceipt;
   hardLocks: {
     assetLibraryIsNotGallery: true;
     tempOutputCannotBecomeFutureReference: true;
@@ -138,6 +204,10 @@ export interface VisualConsistencyReport {
     sameShotIndependentEndFrameForbidden: true;
     identityScenePairStoryGatesRequired: true;
     propStyleMotionChecksRequired: true;
+    shotLayoutStructuredFieldsRequired: true;
+    spatialMemoryRequiredForFormal: true;
+    masterInheritanceQaGateRequired: true;
+    workerProviderSelfReportCannotOverrideQa: true;
     localPostprocessSemanticRepairForbidden: true;
   };
 }
@@ -188,6 +258,39 @@ export interface ShotLayoutContract {
   updatedAt?: string;
 }
 
+export interface SpatialMemoryContract {
+  schemaVersion?: string;
+  id?: string;
+  coordinatePolicy?: {
+    worldPositionRequired?: boolean;
+    cameraVectorRequired?: boolean;
+    textOnlyMultiViewAllowed?: boolean;
+  };
+  visualConsistencyPolicy?: {
+    masterSceneInheritanceRequired?: boolean;
+    cameraWorldPositionRequired?: boolean;
+    subjectWorldPositionRequired?: boolean;
+    axisContinuityRequired?: boolean;
+  };
+  scenes?: Array<{
+    id?: string;
+    name?: string;
+    status?: string;
+    worldAnchors?: Array<{ id?: string; label?: string; worldPosition?: Vector3 }>;
+    cameraVectors?: Array<{ id?: string; worldPosition?: Vector3; cameraVector?: Vector3 }>;
+    subjectBlocking?: Array<{ subjectId?: string; worldPosition?: Vector3; blockingNote?: string }>;
+    axisRules?: Array<{ id?: string; axisVector?: Vector3; screenDirectionRule?: string }>;
+    revealStates?: Array<{ targetId?: string; state?: string }>;
+    derivedViewRefs?: string[];
+  }>;
+  anchors?: Array<{ id?: string; label?: string; worldPosition?: Vector3 }>;
+  worldPositions?: Array<{ id?: string; worldPosition?: Vector3 }>;
+  cameraVectors?: Array<{ id?: string; worldPosition?: Vector3; cameraVector?: Vector3 }>;
+  axisRules?: Array<{ id?: string; axisVector?: Vector3; screenDirectionRule?: string }>;
+  sceneStates?: Array<{ targetId?: string; state?: string }>;
+  updatedAt?: string;
+}
+
 export interface VisualConsistencyPostprocessPolicy {
   policyId?: string;
   allowedLocalOperations?: string[];
@@ -209,6 +312,7 @@ export interface ValidateVisualConsistencyInput {
   assetLibrary?: AssetLibrarySnapshot;
   sceneAssetPacks?: AssetLibrarySceneAssetPack[];
   shotLayouts?: ShotLayoutContract[];
+  spatialMemory?: SpatialMemoryContract;
   startEndDerivations?: ValidateStartEndDerivationInput;
   postprocessPolicies?: VisualConsistencyPostprocessPolicy[];
   generationHarnesses?: GenerationHarnessState[];
@@ -255,6 +359,10 @@ const hardLocks: VisualConsistencyReport["hardLocks"] = {
   sameShotIndependentEndFrameForbidden: true,
   identityScenePairStoryGatesRequired: true,
   propStyleMotionChecksRequired: true,
+  shotLayoutStructuredFieldsRequired: true,
+  spatialMemoryRequiredForFormal: true,
+  masterInheritanceQaGateRequired: true,
+  workerProviderSelfReportCannotOverrideQa: true,
   localPostprocessSemanticRepairForbidden: true,
 };
 
@@ -723,6 +831,28 @@ export function validateShotLayoutHardContracts(layout: ShotLayoutContract): Vis
       }),
     );
   }
+  if (
+    !layout.subjectPlacement.subjectId ||
+    !layout.subjectPlacement.framePlacement ||
+    !layout.subjectPlacement.blockingIntent ||
+    !layout.cameraPlacement.height ||
+    !layout.cameraPlacement.framing ||
+    !layout.axisAndDirection.axisId ||
+    !layout.axisAndDirection.screenDirection ||
+    !layout.startFrame.subjectPlacementId ||
+    !layout.startFrame.cameraPlacementId
+  ) {
+    issues.push(
+      issue({
+        code: "shot_layout_structured_field_missing",
+        layer: "shot_layout",
+        severity: "blocker",
+        target: layout.id,
+        detail: "Shot Layout must structure subject position, camera placement, axis/screen direction, and frame placement ids.",
+        sourceRefs,
+      }),
+    );
+  }
   if (!isVector3(layout.subjectPlacement.worldPosition)) {
     issues.push(
       issue({
@@ -823,6 +953,143 @@ export function validateShotLayoutHardContracts(layout: ShotLayoutContract): Vis
   return issues;
 }
 
+function spatialMemoryWorldPositionRefs(memory: SpatialMemoryContract | undefined): string[] {
+  if (!memory) return [];
+  return unique([
+    ...(memory.worldPositions || []).filter((item) => isVector3(item.worldPosition)).map((item) => item.id || "world_position"),
+    ...(memory.anchors || []).filter((item) => isVector3(item.worldPosition)).map((item) => item.id || "anchor"),
+    ...(memory.cameraVectors || [])
+      .filter((item) => isVector3(item.worldPosition) && isNonZeroVector(item.cameraVector))
+      .map((item) => item.id || "camera_vector"),
+    ...(memory.scenes || []).flatMap((scene) => [
+      ...(scene.worldAnchors || []).filter((item) => isVector3(item.worldPosition)).map((item) => `${scene.id || "scene"}:${item.id || "anchor"}`),
+      ...(scene.cameraVectors || [])
+        .filter((item) => isVector3(item.worldPosition) && isNonZeroVector(item.cameraVector))
+        .map((item) => `${scene.id || "scene"}:${item.id || "camera_vector"}`),
+      ...(scene.subjectBlocking || [])
+        .filter((item) => isVector3(item.worldPosition))
+        .map((item) => `${scene.id || "scene"}:${item.subjectId || "subject"}`),
+    ]),
+  ]);
+}
+
+function spatialMemoryAxisRefs(memory: SpatialMemoryContract | undefined): string[] {
+  if (!memory) return [];
+  return unique([
+    ...(memory.axisRules || []).filter((item) => isNonZeroVector(item.axisVector) && Boolean(item.screenDirectionRule)).map((item) => item.id || "axis"),
+    ...(memory.scenes || []).flatMap((scene) =>
+      (scene.axisRules || [])
+        .filter((item) => isNonZeroVector(item.axisVector) && Boolean(item.screenDirectionRule))
+        .map((item) => `${scene.id || "scene"}:${item.id || "axis"}`),
+    ),
+  ]);
+}
+
+function spatialMemorySceneStateRefs(memory: SpatialMemoryContract | undefined): string[] {
+  if (!memory) return [];
+  return unique([
+    ...(memory.sceneStates || []).filter((item) => Boolean(item.targetId && item.state)).map((item) => item.targetId || "scene_state"),
+    ...(memory.scenes || []).flatMap((scene) =>
+      (scene.revealStates || [])
+        .filter((item) => Boolean(item.targetId && item.state))
+        .map((item) => `${scene.id || "scene"}:${item.targetId || "state"}`),
+    ),
+  ]);
+}
+
+export function validateSpatialMemoryHardContracts(memory: SpatialMemoryContract | undefined): VisualConsistencyIssue[] {
+  const target = memory?.id || "spatial_memory";
+  const sourceRefs = memory ? [target] : [];
+  const issues: VisualConsistencyIssue[] = [];
+
+  if (!memory) {
+    return [
+      issue({
+        code: "spatial_memory_contract_violation",
+        layer: "spatial_memory",
+        severity: "blocker",
+        target,
+        detail: "Spatial Memory is required before visual planning can become formal.",
+        sourceRefs,
+      }),
+    ];
+  }
+
+  if (
+    memory.coordinatePolicy &&
+    (memory.coordinatePolicy.worldPositionRequired !== true ||
+      memory.coordinatePolicy.cameraVectorRequired !== true ||
+      memory.coordinatePolicy.textOnlyMultiViewAllowed !== false)
+  ) {
+    issues.push(
+      issue({
+        code: "spatial_memory_contract_violation",
+        layer: "spatial_memory",
+        severity: "blocker",
+        target,
+        detail: "Spatial Memory coordinate policy must require world positions/camera vectors and forbid text-only multi-view recreation.",
+        sourceRefs,
+      }),
+    );
+  }
+  if (
+    memory.visualConsistencyPolicy &&
+    (memory.visualConsistencyPolicy.masterSceneInheritanceRequired !== true ||
+      memory.visualConsistencyPolicy.cameraWorldPositionRequired !== true ||
+      memory.visualConsistencyPolicy.subjectWorldPositionRequired !== true ||
+      memory.visualConsistencyPolicy.axisContinuityRequired !== true)
+  ) {
+    issues.push(
+      issue({
+        code: "spatial_memory_contract_violation",
+        layer: "spatial_memory",
+        severity: "blocker",
+        target,
+        detail: "Spatial Memory visual consistency policy must require master inheritance, camera/subject world positions, and axis continuity.",
+        sourceRefs,
+      }),
+    );
+  }
+  if (!spatialMemoryWorldPositionRefs(memory).length) {
+    issues.push(
+      issue({
+        code: "spatial_memory_contract_violation",
+        layer: "spatial_memory",
+        severity: "blocker",
+        target,
+        detail: "Spatial Memory must include finite world coordinate facts for anchors, cameras, or subjects.",
+        sourceRefs,
+      }),
+    );
+  }
+  if (!spatialMemoryAxisRefs(memory).length) {
+    issues.push(
+      issue({
+        code: "spatial_memory_contract_violation",
+        layer: "spatial_memory",
+        severity: "blocker",
+        target,
+        detail: "Spatial Memory must include structured axis/screen-direction facts.",
+        sourceRefs,
+      }),
+    );
+  }
+  if (!spatialMemorySceneStateRefs(memory).length) {
+    issues.push(
+      issue({
+        code: "spatial_memory_contract_violation",
+        layer: "spatial_memory",
+        severity: "blocker",
+        target,
+        detail: "Spatial Memory must include scene state facts before formal visual planning.",
+        sourceRefs,
+      }),
+    );
+  }
+
+  return issues;
+}
+
 export function validateStartEndDerivationHardContracts(input: ValidateStartEndDerivationInput): VisualConsistencyIssue[] {
   const issues: VisualConsistencyIssue[] = [];
   const allowIndependentExceptions = input.allowIndependentExceptions === true;
@@ -854,19 +1121,18 @@ export function validateStartEndDerivationHardContracts(input: ValidateStartEndD
       );
     }
     if (pair.endDerivationSource === "independent_exception") {
-      const exceptionIsExplicit = Boolean(pair.exceptionReason?.trim());
-      if (!allowIndependentExceptions || !exceptionIsExplicit) {
-        issues.push(
-          issue({
-            code: "keyframe_pair_derivation_violation",
-            layer: "start_end_derivation",
-            severity: "blocker",
-            target: pair.shotId,
-            detail: "Independent end-frame generation is not the default path and requires an explicit allowed exception.",
-            sourceRefs,
-          }),
-        );
-      }
+      issues.push(
+        issue({
+          code: "keyframe_pair_derivation_violation",
+          layer: "start_end_derivation",
+          severity: "blocker",
+          target: pair.shotId,
+          detail: allowIndependentExceptions && pair.exceptionReason?.trim()
+            ? "Independent end-frame exceptions are recorded for review but remain blocked from the formal Phase 37 contract."
+            : "Independent end-frame generation is blocked; the same-shot end frame must derive from the approved start frame.",
+          sourceRefs,
+        }),
+      );
     }
     if (pair.endDerivationSource === "start_frame" && !pair.mustPreserve.length) {
       issues.push(
@@ -876,6 +1142,18 @@ export function validateStartEndDerivationHardContracts(input: ValidateStartEndD
           severity: "blocker",
           target: pair.shotId,
           detail: "Start-frame derivation must state what is preserved.",
+          sourceRefs,
+        }),
+      );
+    }
+    if (largeCameraMovementPattern.test([...pair.allowedDelta, ...pair.mustPreserve, ...pair.mustNotAdd].join(" "))) {
+      issues.push(
+        issue({
+          code: "keyframe_pair_derivation_violation",
+          layer: "start_end_derivation",
+          severity: "blocker",
+          target: pair.shotId,
+          detail: "Large motion drift in keyframe pair deltas is blocked from the formal visual consistency contract.",
           sourceRefs,
         }),
       );
@@ -1042,15 +1320,84 @@ function buildMotionPairIssues(input: ValidateVisualConsistencyInput): VisualCon
   });
 }
 
+function allScenePacks(input: ValidateVisualConsistencyInput): AssetLibrarySceneAssetPack[] {
+  return [
+    ...(input.sceneAssetPacks || []),
+    ...(input.assetLibrary?.sceneAssetPacks || []),
+  ];
+}
+
+function buildMasterInheritanceQaIssue(input: ValidateVisualConsistencyInput, issues: VisualConsistencyIssue[]): VisualConsistencyIssue[] {
+  const packs = allScenePacks(input);
+  const derivedViews = packs.flatMap((pack) => pack.derivedViews.map((view) => ({ pack, view })));
+  const shotLayouts = input.shotLayouts || [];
+  const keyframePairs = input.startEndDerivations?.keyframePairs || [];
+  const packSceneIds = new Set(packs.flatMap((pack) => [pack.sceneId, pack.masterScene.id]));
+  const qaBlockers: string[] = [];
+
+  if (!packs.length) qaBlockers.push("Master inheritance QA requires at least one Scene Asset Pack.");
+  if (!derivedViews.length) qaBlockers.push("Master inheritance QA requires derived views tied to the master scene.");
+  if (!shotLayouts.length) qaBlockers.push("Master inheritance QA requires Shot Layout evidence.");
+  if (!keyframePairs.length) qaBlockers.push("Master inheritance QA requires keyframe pair derivation evidence.");
+  for (const layout of shotLayouts) {
+    if (packSceneIds.size && !packSceneIds.has(layout.sceneId)) {
+      qaBlockers.push(`${layout.id} sceneId ${layout.sceneId} is not tied to a Scene Asset Pack master scene.`);
+    }
+  }
+  const inheritedViewIds = new Set(derivedViews.filter(({ view }) => view.inheritsFromMaster).map(({ view }) => view.id));
+  for (const layout of shotLayouts) {
+    for (const anchor of layout.spatialAnchors) {
+      if (/derived|view|camera/i.test(anchor) && !inheritedViewIds.has(anchor)) {
+        qaBlockers.push(`${layout.id} references derived-view-like anchor ${anchor} without matching inherited derived view evidence.`);
+      }
+    }
+  }
+  qaBlockers.push(
+    ...issues
+      .filter((item) =>
+        item.severity === "blocker" &&
+        [
+          "scene_pack_status_violation",
+          "scene_pack_inheritance_violation",
+          "scene_pack_vector_violation",
+          "shot_layout_schema_missing",
+          "shot_layout_structured_field_missing",
+          "shot_layout_vector_violation",
+          "shot_layout_end_frame_derivation_violation",
+          "keyframe_pair_derivation_violation",
+          "prompt_end_frame_derivation_violation",
+          "spatial_memory_contract_violation",
+        ].includes(item.code),
+      )
+      .map((item) => item.detail),
+  );
+
+  if (!qaBlockers.length) return [];
+  return [
+    issue({
+      code: "master_inheritance_qa_violation",
+      layer: "master_inheritance_qa",
+      severity: "blocker",
+      target: "master_inheritance_qa_gate",
+      detail: `Master inheritance QA blocked: ${unique(qaBlockers).join(" ")}`,
+      sourceRefs: unique([
+        ...packs.map((pack) => pack.id),
+        ...derivedViews.map(({ view }) => view.id),
+        ...shotLayouts.map((layout) => layout.id),
+        ...keyframePairs.map((pair) => pair.shotId),
+      ]),
+    }),
+  ];
+}
+
 function buildVisualConsistencyGates(input: ValidateVisualConsistencyInput, issues: VisualConsistencyIssue[]): VisualConsistencyGate[] {
   const assets = input.assetLibrary?.assets || [];
   const promptPlans = input.startEndDerivations?.promptPlans || [];
   const lockedCharacters = assets.filter((asset) => asset.assetType === "character" && asset.status === "locked" && assetHasFutureUse(asset));
   const lockedScenes = assets.filter((asset) => asset.assetType === "scene" && asset.status === "locked" && assetHasFutureUse(asset));
-  const lockedScenePacks = [
-    ...(input.sceneAssetPacks || []),
-    ...(input.assetLibrary?.sceneAssetPacks || []),
-  ].filter((pack) => pack.status === "locked" && pack.readiness === "ready_for_formal");
+  const scenePacks = allScenePacks(input);
+  const lockedScenePacks = scenePacks.filter((pack) => pack.status === "locked" && pack.readiness === "ready_for_formal");
+  const keyframePairs = input.startEndDerivations?.keyframePairs || [];
   const blockedByCode = (codes: VisualConsistencyIssueCode[]) =>
     issues.filter((item) => item.severity === "blocker" && codes.includes(item.code)).map((item) => item.detail);
   const warnedByCode = (codes: VisualConsistencyIssueCode[]) =>
@@ -1063,7 +1410,7 @@ function buildVisualConsistencyGates(input: ValidateVisualConsistencyInput, issu
       target: input.assetLibrary?.id || "asset_library",
       detail: "Character identity authority must be locked before formal visual generation.",
       blockers: [
-        ...(input.assetLibrary && !lockedCharacters.length ? ["No locked character identity authority is available."] : []),
+        ...(!input.assetLibrary || !lockedCharacters.length ? ["No locked character identity authority is available."] : []),
         ...assetReferenceGateBlockers(promptPlans, assets, "character"),
         ...blockedByCode(["asset_status_future_reference_violation", "asset_rejected_status_violation"]),
       ],
@@ -1076,7 +1423,7 @@ function buildVisualConsistencyGates(input: ValidateVisualConsistencyInput, issu
       target: input.assetLibrary?.id || "scene_asset_pack",
       detail: "Scene space must flow from locked Scene Asset Pack master scenes and derived views.",
       blockers: [
-        ...(input.assetLibrary && (!lockedScenes.length || !lockedScenePacks.length)
+        ...(!input.assetLibrary || !lockedScenes.length || !lockedScenePacks.length
           ? ["No locked scene authority and ready Scene Asset Pack are available."]
           : []),
         ...assetReferenceGateBlockers(promptPlans, assets, "scene"),
@@ -1090,17 +1437,49 @@ function buildVisualConsistencyGates(input: ValidateVisualConsistencyInput, issu
       layer: "shot_layout",
       target: "shot_layouts",
       detail: "Shot Layout must bind subject placement, camera placement, axis, and spatial anchors.",
-      blockers: blockedByCode(["shot_layout_schema_missing", "shot_layout_vector_violation", "shot_layout_camera_constraint_violation"]),
+      blockers: [
+        ...(!(input.shotLayouts || []).length ? ["Shot Layout evidence is missing; subject position, camera placement, axis/screen direction, and anchors cannot be formal."] : []),
+        ...blockedByCode(["shot_layout_schema_missing", "shot_layout_structured_field_missing", "shot_layout_vector_violation", "shot_layout_camera_constraint_violation"]),
+      ],
       warnings: warnedByCode(["motion_gate_violation"]),
       sourceRefs: (input.shotLayouts || []).map((layout) => layout.id),
+    }),
+    gate({
+      gateId: "spatial_memory_gate",
+      layer: "spatial_memory",
+      target: input.spatialMemory?.id || "spatial_memory",
+      detail: "Spatial Memory must bind world coordinates, axes, and scene states as project facts.",
+      blockers: blockedByCode(["spatial_memory_contract_violation"]),
+      sourceRefs: [
+        input.spatialMemory?.id || "",
+        ...spatialMemoryWorldPositionRefs(input.spatialMemory),
+        ...spatialMemoryAxisRefs(input.spatialMemory),
+        ...spatialMemorySceneStateRefs(input.spatialMemory),
+      ],
     }),
     gate({
       gateId: "pair_gate",
       layer: "start_end_derivation",
       target: "keyframe_pairs",
       detail: "End frames must derive from start frames before any I2V handoff.",
-      blockers: blockedByCode(["keyframe_pair_derivation_violation", "prompt_end_frame_derivation_violation"]),
-      sourceRefs: (input.startEndDerivations?.keyframePairs || []).map((pair) => pair.shotId),
+      blockers: [
+        ...(!keyframePairs.length ? ["Keyframe pair derivation evidence is missing."] : []),
+        ...blockedByCode(["keyframe_pair_derivation_violation", "prompt_end_frame_derivation_violation"]),
+      ],
+      sourceRefs: keyframePairs.map((pair) => pair.shotId),
+    }),
+    gate({
+      gateId: "master_inheritance_qa_gate",
+      layer: "master_inheritance_qa",
+      target: "master_inheritance_qa",
+      detail: "Scene packs, derived views, Shot Layout, and keyframe pairs must pass QA together; worker/provider self-report cannot override it.",
+      blockers: blockedByCode(["master_inheritance_qa_violation"]),
+      sourceRefs: unique([
+        ...scenePacks.map((pack) => pack.id),
+        ...scenePacks.flatMap((pack) => pack.derivedViews.map((view) => view.id)),
+        ...(input.shotLayouts || []).map((layout) => layout.id),
+        ...keyframePairs.map((pair) => pair.shotId),
+      ]),
     }),
     gate({
       gateId: "story_gate",
@@ -1143,10 +1522,10 @@ function buildVisualConsistencyGates(input: ValidateVisualConsistencyInput, issu
       layer: "start_end_derivation",
       target: "video_i2v_handoff",
       detail: "Video handoff must be sourced from a valid start/end keyframe pair.",
-      blockers: (input.startEndDerivations?.keyframePairs || [])
+      blockers: keyframePairs
         .filter((pair) => pair.validForI2vPair !== true || pair.endDerivationSource !== "start_frame")
         .map((pair) => `${pair.shotId} is not a derived I2V-ready keyframe pair.`),
-      sourceRefs: (input.startEndDerivations?.keyframePairs || []).map((pair) => pair.shotId),
+      sourceRefs: keyframePairs.map((pair) => pair.shotId),
     }),
   ];
 }
@@ -1160,8 +1539,8 @@ function buildFactChain(gates: VisualConsistencyGate[]): VisualConsistencyReport
     },
     {
       stepId: "scene_space",
-      gateIds: ["scene_gate"],
-      detail: "Scene space inherits from master scene and derived view geometry.",
+      gateIds: ["scene_gate", "spatial_memory_gate"],
+      detail: "Scene space inherits from master scene, derived view geometry, and Spatial Memory facts.",
     },
     {
       stepId: "shot_layout",
@@ -1175,8 +1554,8 @@ function buildFactChain(gates: VisualConsistencyGate[]): VisualConsistencyReport
     },
     {
       stepId: "video_handoff",
-      gateIds: ["video_handoff_gate"],
-      detail: "Video generation only receives approved derived keyframe pairs.",
+      gateIds: ["master_inheritance_qa_gate", "video_handoff_gate"],
+      detail: "Video generation only receives QA-approved derived keyframe pairs.",
     },
   ];
   const steps = stepDefs.map((step): VisualConsistencyFactChainStep => {
@@ -1196,28 +1575,130 @@ function buildFactChain(gates: VisualConsistencyGate[]): VisualConsistencyReport
   };
 }
 
+function receiptGate(
+  contractGateId: VisualConsistencyContractGateId,
+  gateItem: VisualConsistencyGate | undefined,
+  detail: string,
+): VisualConsistencyContractGate {
+  const blockers = unique(gateItem?.blockers || []);
+  const warnings = unique(gateItem?.warnings || []);
+  const status = blockers.length ? "blocked" : warnings.length ? "warning" : "pass";
+  return {
+    contractGateId,
+    status,
+    formalEligible: status === "pass",
+    detail,
+    blockers,
+    warnings,
+    sourceRefs: unique(gateItem?.sourceRefs || []),
+  };
+}
+
+function buildVisualConsistencyContractReceipt(gates: VisualConsistencyGate[], input: ValidateVisualConsistencyInput): VisualConsistencyContractReceipt {
+  const findGate = (gateId: VisualConsistencyGateId) => gates.find((candidate) => candidate.gateId === gateId);
+  const scenePacks = allScenePacks(input);
+  const derivedViewIds = scenePacks.flatMap((pack) => pack.derivedViews.map((view) => view.id));
+  const shotLayoutIds = (input.shotLayouts || []).map((layout) => layout.id);
+  const keyframePairShotIds = (input.startEndDerivations?.keyframePairs || []).map((pair) => pair.shotId);
+  const qaGate = findGate("master_inheritance_qa_gate");
+  const receiptGates: VisualConsistencyContractReceipt["gates"] = {
+    identityGate: receiptGate(
+      "identity_gate",
+      findGate("identity_gate"),
+      "Locked character reference plus text constraints are the only positive future identity authority.",
+    ),
+    sceneGate: receiptGate(
+      "scene_gate",
+      findGate("scene_gate"),
+      "Master scene, derived views, camera vectors, and world positions must be inherited from Scene Asset Pack authority.",
+    ),
+    shotLayoutGate: receiptGate(
+      "shot_layout_gate",
+      findGate("layout_gate"),
+      "Subject position, camera placement, axis/screen direction, and spatial anchors must be structured.",
+    ),
+    spatialMemoryGate: receiptGate(
+      "spatial_memory_gate",
+      findGate("spatial_memory_gate"),
+      "World coordinates, axes, and scene states must exist as project-local Spatial Memory facts.",
+    ),
+    keyframePairDerivationGate: receiptGate(
+      "keyframe_pair_derivation_gate",
+      findGate("pair_gate"),
+      "Same-shot end frames must derive from approved start frames; independent end frames, large drift, and fixed-camera conflicts are blocked.",
+    ),
+    masterInheritanceQaGate: receiptGate(
+      "master_inheritance_qa_gate",
+      qaGate,
+      "Scene pack, derived views, Shot Layout, and keyframe pair evidence must pass QA together.",
+    ),
+  };
+  const gateValues = Object.values(receiptGates);
+  const qaBlockers = unique(qaGate?.blockers || []);
+  const qaWarnings = unique(qaGate?.warnings || []);
+
+  return {
+    receiptKind: "visual_consistency_contract",
+    phase: "phase37_visual_consistency_contract",
+    status: gateValues.some((gateItem) => gateItem.status === "blocked") ? "blocked" : "pass",
+    formalPlanningAllowed: gateValues.every((gateItem) => gateItem.formalEligible),
+    gates: receiptGates,
+    qaGateSummary: {
+      scenePackIds: scenePacks.map((pack) => pack.id),
+      derivedViewIds,
+      shotLayoutIds,
+      keyframePairShotIds,
+      workerProviderSelfReportMayOverride: false,
+      blockers: qaBlockers,
+      warnings: qaWarnings,
+      sourceRefs: unique([
+        ...scenePacks.map((pack) => pack.id),
+        ...derivedViewIds,
+        ...shotLayoutIds,
+        ...keyframePairShotIds,
+      ]),
+    },
+    hardLocks: {
+      identityRequiresLockedCharacterReference: true,
+      candidateTempRejectedContactSheetShotOutputCannotBeFutureReference: true,
+      derivedViewsMustInheritMasterScene: true,
+      shotLayoutStructuredFieldsRequired: true,
+      spatialMemoryRequiredForFormal: true,
+      keyframeEndFrameMustDeriveFromApprovedStartFrame: true,
+      independentEndFrameLargeMotionFixedCameraConflictBlocked: true,
+      masterInheritanceQaGateRequired: true,
+      workerProviderSelfReportCannotOverrideQa: true,
+      localOpenCvPostprocessSemanticRepairForbidden: true,
+    },
+  };
+}
+
 export function validateVisualConsistency(input: ValidateVisualConsistencyInput): VisualConsistencyReport {
   const assetLibraryIssues = input.assetLibrary ? validateAssetLibraryHardContracts(input.assetLibrary) : [];
-  const scenePackInputs = [
-    ...(input.sceneAssetPacks || []),
-    ...(input.assetLibrary?.sceneAssetPacks || []),
-  ];
+  const scenePackInputs = allScenePacks(input);
   const explicitScenePackIssues = (input.sceneAssetPacks || []).flatMap(validateSceneAssetPackHardContracts);
   const shotLayoutIssues = (input.shotLayouts || []).flatMap(validateShotLayoutHardContracts);
+  const spatialMemoryIssues = validateSpatialMemoryHardContracts(input.spatialMemory);
   const derivationIssues = input.startEndDerivations
     ? validateStartEndDerivationHardContracts(input.startEndDerivations)
     : [];
   const postprocessIssues = validatePostprocessHardContracts(input.postprocessPolicies, input.generationHarnesses);
   const motionPairIssues = buildMotionPairIssues(input);
-  const issues = [
+  const preQaIssues = [
     ...assetLibraryIssues,
     ...explicitScenePackIssues,
     ...shotLayoutIssues,
+    ...spatialMemoryIssues,
     ...derivationIssues,
     ...motionPairIssues,
     ...postprocessIssues,
   ];
+  const issues = [
+    ...preQaIssues,
+    ...buildMasterInheritanceQaIssue(input, preQaIssues),
+  ];
   const gates = buildVisualConsistencyGates(input, issues);
+  const contractReceipt = buildVisualConsistencyContractReceipt(gates, input);
   const factChain = buildFactChain(gates);
   const blockers = [
     ...issues.filter((item) => item.severity === "blocker").map((item) => item.detail),
@@ -1253,9 +1734,13 @@ export function validateVisualConsistency(input: ValidateVisualConsistencyInput)
       gateCount: gates.length,
       gateBlockers: gates.filter((gateItem) => gateItem.status === "blocked").length,
       gateWarnings: gates.filter((gateItem) => gateItem.status === "warning").length,
+      contractGateCount: Object.keys(contractReceipt.gates).length,
+      contractGateBlockers: Object.values(contractReceipt.gates).filter((gateItem) => gateItem.status === "blocked").length,
+      contractGateWarnings: Object.values(contractReceipt.gates).filter((gateItem) => gateItem.status === "warning").length,
     },
     factChain,
     gates,
+    contractReceipt,
     hardLocks,
   };
 }

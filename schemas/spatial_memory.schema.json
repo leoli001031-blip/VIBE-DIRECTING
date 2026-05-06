@@ -9,6 +9,7 @@
     "schemaVersion",
     "id",
     "coordinatePolicy",
+    "visualConsistencyPolicy",
     "scenes",
     "updatedAt"
   ],
@@ -51,13 +52,17 @@
         "masterSceneInheritanceRequired",
         "cameraWorldPositionRequired",
         "subjectWorldPositionRequired",
-        "axisContinuityRequired"
+        "axisContinuityRequired",
+        "sceneStateFactsRequired",
+        "missingSpatialMemoryBlocksFormal"
       ],
       "properties": {
         "masterSceneInheritanceRequired": { "type": "boolean", "const": true },
         "cameraWorldPositionRequired": { "type": "boolean", "const": true },
         "subjectWorldPositionRequired": { "type": "boolean", "const": true },
-        "axisContinuityRequired": { "type": "boolean", "const": true }
+        "axisContinuityRequired": { "type": "boolean", "const": true },
+        "sceneStateFactsRequired": { "type": "boolean", "const": true },
+        "missingSpatialMemoryBlocksFormal": { "type": "boolean", "const": true }
       }
     },
     "spatialScene": {

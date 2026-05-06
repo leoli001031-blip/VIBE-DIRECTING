@@ -279,6 +279,17 @@ type LocalOrchestratorUiSummary = {
   blockersWarnings: string[];
   hardLocks: string[];
 };
+type VisualConsistencyContractUiSummary = {
+  initialized: boolean;
+  readiness: string;
+  gateStatus: string;
+  geometryStatus: string;
+  shotLayoutStatus: string;
+  keyframePairStatus: string;
+  driftRepairStatus: string;
+  blockersWarnings: string[];
+  requiredGates: string[];
+};
 type DirectorProgressTone = "preparing" | "working" | "review" | "blocked" | "complete";
 type DirectorProgressSegment = {
   label: string;
@@ -2697,6 +2708,73 @@ function buildLocalOrchestratorUiSummary(runtimeState: ProjectRuntimeState): Loc
     providerFileDaemonLocks: providerLocked && fileLocked && daemonLocked ? "provider/file/daemon locked" : "blocked/missing",
     blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.localOrchestrator"],
     hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.localOrchestrator"],
+  };
+}
+
+function buildVisualConsistencyContractUiSummary(runtimeState: ProjectRuntimeState): VisualConsistencyContractUiSummary {
+  const root = runtimeState as unknown as Record<string, unknown>;
+  const contractRoot = isRecord(root.visualConsistencyContract)
+    ? root.visualConsistencyContract
+    : isRecord(root.visualConsistency)
+      ? root.visualConsistency
+      : {};
+  const initialized = isRecord(contractRoot);
+  const rootRecord = initialized ? contractRoot : {};
+  const gates = firstRecordFrom(rootRecord, ["gates"]);
+  const summary = firstRecordFrom(rootRecord, ["summary"]);
+  const geometry = firstRecordFrom(rootRecord, ["cameraGeometry", "sceneAssetPack"]);
+  const shotLayout = firstRecordFrom(rootRecord, ["shotLayout"]);
+  const keyframePair = firstRecordFrom(rootRecord, ["keyframePair", "keyframePairDerivation"]);
+  const motionQa = firstRecordFrom(rootRecord, ["motionQa"]);
+  const repairPolicy = firstRecordFrom(rootRecord, ["repairPolicy"]);
+  const records = [gates, summary, rootRecord].filter(isRecord);
+  const gateKeys = [
+    "identityGateDefined",
+    "sceneGateDefined",
+    "shotLayoutGateDefined",
+    "spatialMemoryGateDefined",
+    "keyframePairDerivationGateDefined",
+    "masterInheritanceQaGateDefined",
+  ];
+  const readyGateCount = gateKeys.filter((key) => readFirstBoolean(records, [key]) === true).length;
+  const status = readFirstString(records, ["readiness", "status", "state"], "");
+  const blockersWarnings = Array.from(new Set([
+    ...readDisplayList(rootRecord.blockers, "blocker"),
+    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
+    ...readDisplayList(summary.blockers, "blocker"),
+    ...readDisplayList(summary.blockedReasons, "blocker"),
+    ...readDisplayList(rootRecord.warnings, "warning"),
+    ...readDisplayList(summary.warnings, "warning"),
+  ].filter(Boolean)));
+  const cameraVectorReady = readFirstBoolean([gates, geometry, shotLayout].filter(isRecord), ["cameraVectorDefined"]) === true;
+  const worldPositionReady = readFirstBoolean([gates, geometry].filter(isRecord), ["worldPositionDefined"]) === true;
+  const shotLayoutPartsReady = ["shotLayoutSubjectDefined", "shotLayoutCameraDefined", "shotLayoutAxisDefined", "shotLayoutAnchorsDefined"]
+    .every((key) => readFirstBoolean([gates, shotLayout].filter(isRecord), [key]) === true);
+  const independentEndFrame = readFirstBoolean([keyframePair, rootRecord].filter(isRecord), [
+    "independentSameShotEndFrameObserved",
+    "independentSameShotEndFrame",
+  ]) === true;
+  const largeMotionDrift = readFirstBoolean([motionQa, rootRecord].filter(isRecord), [
+    "largeMotionDriftObserved",
+    "largeMotionDrift",
+  ]) === true;
+  const semanticRepair = readFirstBoolean([repairPolicy, rootRecord].filter(isRecord), [
+    "semanticOpenCvRepairObserved",
+    "opencvSemanticRepairObserved",
+  ]) === true;
+
+  return {
+    initialized,
+    readiness: initialized
+      ? statusLabel(status || (readyGateCount === gateKeys.length && !blockersWarnings.length ? "ready" : "blocked"))
+      : "blocked/missing",
+    gateStatus: `${readyGateCount}/${gateKeys.length} typed gate(s)`,
+    geometryStatus: cameraVectorReady && worldPositionReady ? "camera vector + world position present" : "camera vector/world position missing",
+    shotLayoutStatus: shotLayoutPartsReady ? "subject/camera/axis/anchors present" : "shot layout incomplete",
+    keyframePairStatus: independentEndFrame ? "independent same-shot end frame blocked" : "keyframe pair derivation tied",
+    driftRepairStatus: largeMotionDrift || semanticRepair ? "motion drift or semantic OpenCV repair blocked" : "motion drift and repair policy clear",
+    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing visualConsistencyContract"],
+    requiredGates: gateKeys,
   };
 }
 
@@ -5527,6 +5605,38 @@ function LocalOrchestratorDiagnostics({ runtimeState }: { runtimeState: ProjectR
   );
 }
 
+function VisualConsistencyContractDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
+  const summary = buildVisualConsistencyContractUiSummary(runtimeState);
+
+  return (
+    <section className="machine-panel visual-consistency-contract-panel">
+      <div className="audit-head">
+        <Eye size={17} />
+        <span>Visual Consistency Contract</span>
+      </div>
+      <div className="summary-grid visual-consistency-contract-metrics">
+        <Metric label="Readiness" value={summary.readiness} detail="Phase 37 typed evidence" />
+        <Metric label="Typed Gates" value={summary.gateStatus} detail="identity/scene/spatial/keyframe/master QA" />
+        <Metric label="Shot Layout" value={summary.shotLayoutStatus} detail="subject/camera/axis/anchors" />
+        <Metric label="Spatial Memory" value={summary.geometryStatus} detail="camera vector/world position" />
+        <Metric label="Keyframe Pair" value={summary.keyframePairStatus} detail="same-shot end frame must derive" />
+        <Metric label="Motion / Repair" value={summary.driftRepairStatus} detail="large drift and semantic OpenCV repair blocked" />
+      </div>
+      <div className="phase17-rule-strip">
+        {summary.requiredGates.map((gate) => (
+          <span key={gate}>{gate}</span>
+        ))}
+      </div>
+      <div className="pipeline-details checker-details">
+        <details open={Boolean(summary.blockersWarnings.length)}>
+          <summary>Phase 37 blockers / warnings ({summary.blockersWarnings.length})</summary>
+          <CompactList items={summary.blockersWarnings} empty="No Phase 37 blockers reported." />
+        </details>
+      </div>
+    </section>
+  );
+}
+
 function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const videoPlanning = getVideoPlanning(runtimeState);
   const queue = videoPlanning.queueShell;
@@ -7621,6 +7731,7 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
   const providerActionConfirmationReceiptSummary = buildProviderActionConfirmationReceiptUiSummary(runtimeState);
   const providerExecutionHandoffSummary = buildProviderExecutionHandoffUiSummary(runtimeState);
   const localOrchestratorSummary = buildLocalOrchestratorUiSummary(runtimeState);
+  const visualConsistencySummary = buildVisualConsistencyContractUiSummary(runtimeState);
   const realPilotSummary = buildRealPilotUiSummary(runtimeState);
 
   return (
@@ -7813,6 +7924,15 @@ function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeSta
           <small>{localOrchestratorSummary.blocked} blocked · {localOrchestratorSummary.failed} failed · {localOrchestratorSummary.completeVerified} complete verified</small>
           <small>{localOrchestratorSummary.autoContinueMode} · {localOrchestratorSummary.providerFileDaemonLocks}</small>
           <small>hard locks {localOrchestratorSummary.hardLocks.length}</small>
+        </div>
+      </div>
+      <div className="settings-group-title">Visual Consistency Contract</div>
+      <div className="settings-list visual-consistency-settings-summary">
+        <div className="settings-readonly-note">
+          <strong>Visual Consistency Contract: {visualConsistencySummary.readiness}</strong>
+          <small>{visualConsistencySummary.gateStatus} · shot layout {visualConsistencySummary.shotLayoutStatus}</small>
+          <small>{visualConsistencySummary.geometryStatus} · {visualConsistencySummary.keyframePairStatus}</small>
+          <small>{visualConsistencySummary.driftRepairStatus}</small>
         </div>
       </div>
       <div className="settings-group-title">Voice Source Library (dry-run)</div>
@@ -8060,6 +8180,7 @@ function DiagnosticsMode({
       <CodexCliAdapterSpikeDiagnostics runtimeState={runtimeState} />
       <ExportWorkerDiagnostics runtimeState={runtimeState} />
       <Image2KeyframeRuntimeDiagnostics runtimeState={runtimeState} />
+      <VisualConsistencyContractDiagnostics runtimeState={runtimeState} />
       <RealPilotDiagnostics runtimeState={runtimeState} />
       <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
       <VoiceAudioSettingsDiagnostics runtimeState={runtimeState} />

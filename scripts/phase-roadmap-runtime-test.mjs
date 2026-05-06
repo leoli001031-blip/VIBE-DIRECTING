@@ -1040,6 +1040,21 @@ function closureEvidence(phaseId, gates, overrides = {}) {
       secretInProjectFileObserved: false,
       globalKnowledgeAsProjectFactObserved: false,
       globalKnowledgeAuthorityObserved: false,
+      candidateFutureReferenceObserved: false,
+      tempFutureReferenceObserved: false,
+      rejectedFutureReferenceObserved: false,
+      contactSheetFutureReferenceObserved: false,
+      shotOutputFutureReferenceObserved: false,
+      derivedViewMissingMasterInheritance: false,
+      cameraVectorMissing: false,
+      worldPositionMissing: false,
+      shotLayoutSubjectMissing: false,
+      shotLayoutCameraMissing: false,
+      shotLayoutAxisMissing: false,
+      shotLayoutAnchorsMissing: false,
+      independentSameShotEndFrameObserved: false,
+      largeMotionDriftObserved: false,
+      semanticOpenCvRepairObserved: false,
       ...(observationOverrides || {}),
     },
     blockers: [],
@@ -1170,7 +1185,13 @@ function visualConsistencyContractEvidence(overrides = {}) {
     shotLayoutGateDefined: true,
     spatialMemoryGateDefined: true,
     keyframePairDerivationGateDefined: true,
-    masterInheritanceQaDefined: true,
+    masterInheritanceQaGateDefined: true,
+    cameraVectorDefined: true,
+    worldPositionDefined: true,
+    shotLayoutSubjectDefined: true,
+    shotLayoutCameraDefined: true,
+    shotLayoutAxisDefined: true,
+    shotLayoutAnchorsDefined: true,
   }, overrides);
 }
 
@@ -2702,6 +2723,175 @@ assert(
     "preceding_phase_not_ready:phase_35_task_queue_visibility_progress_strip",
   ),
   "Phase 36 must block when Phase 35 is not ready",
+);
+
+const phase37TypedReadyPlan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input());
+assert(
+  phase(phase37TypedReadyPlan, "phase_37_visual_consistency_contract").readiness === "ready",
+  "Phase 37 must be ready with typed visual consistency contract evidence",
+);
+assert(
+  phase37TypedReadyPlan.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "visualConsistencyContract" &&
+      decision.source === "typed_evidence" &&
+      decision.ready === true,
+  ),
+  "Phase 37 ready must come from typed visualConsistencyContract evidence",
+);
+
+const missingPhase37Evidence = typedEvidence({ providerExecutionHandoff: "confirmed" });
+delete missingPhase37Evidence.visualConsistencyContract;
+const phase37LegacyOnly = buildPhaseRoadmapRuntimePlan({
+  ...confirmedPhase33Input(),
+  evidence: missingPhase37Evidence,
+  visualConsistencyContractReady: true,
+});
+assert(
+  phase(phase37LegacyOnly, "phase_37_visual_consistency_contract").blockedReasons.includes(
+    "visual_consistency_contract_typed_evidence_missing",
+  ),
+  "Phase 37 must block legacy-only visualConsistencyContractReady evidence",
+);
+assert(
+  phase37LegacyOnly.evidenceSummary.decisions.some(
+    (decision) =>
+      decision.evidenceKey === "visualConsistencyContract" &&
+      decision.source === "legacy_boolean_override" &&
+      decision.ready === false &&
+      decision.warnings.includes("legacy_visualConsistencyContractReady_boolean_ignored_without_typed_evidence"),
+  ),
+  "Phase 37 legacy boolean must be recorded as ignored without typed evidence",
+);
+
+function assertPhase37Blocks(visualConsistencyContract, blocker, message) {
+  const plan = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({ visualConsistencyContract }));
+  assert(
+    phase(plan, "phase_37_visual_consistency_contract").blockedReasons.includes(blocker),
+    message,
+  );
+}
+
+for (const [gate, blocker] of [
+  ["identityGateDefined", "visual_consistency_identity_gate_missing"],
+  ["sceneGateDefined", "visual_consistency_scene_gate_missing"],
+  ["shotLayoutGateDefined", "visual_consistency_shot_layout_gate_missing"],
+  ["spatialMemoryGateDefined", "visual_consistency_spatial_memory_gate_missing"],
+  ["keyframePairDerivationGateDefined", "visual_consistency_keyframe_pair_gate_missing"],
+  ["masterInheritanceQaGateDefined", "visual_consistency_master_inheritance_qa_missing"],
+]) {
+  assertPhase37Blocks(
+    { gates: { [gate]: false } },
+    blocker,
+    `Phase 37 must block when ${gate} is missing`,
+  );
+}
+
+for (const [gate, blocker] of [
+  ["cameraVectorDefined", "visual_consistency_camera_vector_missing"],
+  ["worldPositionDefined", "visual_consistency_world_position_missing"],
+  ["shotLayoutSubjectDefined", "visual_consistency_shot_layout_subject_missing"],
+  ["shotLayoutCameraDefined", "visual_consistency_shot_layout_camera_missing"],
+  ["shotLayoutAxisDefined", "visual_consistency_shot_layout_axis_missing"],
+  ["shotLayoutAnchorsDefined", "visual_consistency_shot_layout_anchors_missing"],
+]) {
+  assertPhase37Blocks(
+    { gates: { [gate]: false } },
+    blocker,
+    `Phase 37 must block when ${gate} is missing`,
+  );
+}
+
+for (const [visualConsistencyContract, blocker, message] of [
+  [
+    { observations: { candidateFutureReferenceObserved: true } },
+    "visual_consistency_future_reference_pollution",
+    "Phase 37 must block candidate assets used as future references",
+  ],
+  [
+    { futureReferences: { tempAsFutureReference: true } },
+    "visual_consistency_future_reference_pollution",
+    "Phase 37 must block temp assets used as future references",
+  ],
+  [
+    { referenceAuthority: { rejectedAsFutureReference: true } },
+    "visual_consistency_future_reference_pollution",
+    "Phase 37 must block rejected assets used as future references",
+  ],
+  [
+    { assetReferences: { contactSheetAsFutureReference: true } },
+    "visual_consistency_future_reference_pollution",
+    "Phase 37 must block contact sheets used as future references",
+  ],
+  [
+    { referenceSelection: { shotOutputAsFutureReference: true } },
+    "visual_consistency_future_reference_pollution",
+    "Phase 37 must block shot outputs used as future references",
+  ],
+  [
+    { derivedViews: { derivedViewMissingMasterInheritance: true } },
+    "visual_consistency_derived_view_master_inheritance_missing",
+    "Phase 37 must block derived views without master inheritance",
+  ],
+  [
+    { cameraGeometry: { cameraVectorMissing: true } },
+    "visual_consistency_camera_vector_missing",
+    "Phase 37 must block missing camera vector evidence",
+  ],
+  [
+    { sceneAssetPack: { worldPositionMissing: true } },
+    "visual_consistency_world_position_missing",
+    "Phase 37 must block missing world position evidence",
+  ],
+  [
+    { shotLayout: { subjectMissing: true } },
+    "visual_consistency_shot_layout_subject_missing",
+    "Phase 37 must block shot layouts missing subject evidence",
+  ],
+  [
+    { shotLayout: { cameraMissing: true } },
+    "visual_consistency_shot_layout_camera_missing",
+    "Phase 37 must block shot layouts missing camera evidence",
+  ],
+  [
+    { shotLayout: { axisMissing: true } },
+    "visual_consistency_shot_layout_axis_missing",
+    "Phase 37 must block shot layouts missing axis evidence",
+  ],
+  [
+    { shotLayout: { anchorsMissing: true } },
+    "visual_consistency_shot_layout_anchors_missing",
+    "Phase 37 must block shot layouts missing anchor evidence",
+  ],
+  [
+    { keyframePair: { independentSameShotEndFrame: true } },
+    "visual_consistency_independent_same_shot_end_frame",
+    "Phase 37 must block independent same-shot end frames",
+  ],
+  [
+    { motionQa: { largeMotionDrift: true } },
+    "visual_consistency_large_motion_drift",
+    "Phase 37 must block large motion drift",
+  ],
+  [
+    { repairPolicy: { semanticOpenCvRepairObserved: true } },
+    "visual_consistency_semantic_opencv_repair",
+    "Phase 37 must block semantic OpenCV repair",
+  ],
+]) {
+  assertPhase37Blocks(visualConsistencyContract, blocker, message);
+}
+
+const phase37Phase36Blocked = buildPhaseRoadmapRuntimePlan(confirmedPhase33Input({
+  projectFileFactSource: {
+    observations: { runtimeStateAsSourceObserved: true },
+  },
+}));
+assert(
+  phase(phase37Phase36Blocked, "phase_37_visual_consistency_contract").blockedReasons.includes(
+    "preceding_phase_not_ready:phase_36_project_file_fact_source",
+  ),
+  "Phase 37 must block when Phase 36 is not ready",
 );
 
 const missingPhase40Evidence = typedEvidence({ providerExecutionHandoff: "confirmed" });

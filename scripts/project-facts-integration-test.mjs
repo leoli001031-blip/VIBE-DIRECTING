@@ -367,8 +367,51 @@ const readyState = buildProjectFactsIntegrationState({
   spatialMemory: {
     schemaVersion: "0.1.0",
     id: "spatial_memory_fixture",
-    anchors: [{ id: "workbench", label: "Workbench" }],
-    worldPositions: [{ id: "hero_main_ref", worldPosition: { x: 0, y: 0, z: 1 } }],
+    coordinatePolicy: {
+      worldPositionRequired: true,
+      cameraVectorRequired: true,
+      textOnlyMultiViewAllowed: false,
+    },
+    visualConsistencyPolicy: {
+      masterSceneInheritanceRequired: true,
+      cameraWorldPositionRequired: true,
+      subjectWorldPositionRequired: true,
+      axisContinuityRequired: true,
+      sceneStateFactsRequired: true,
+      missingSpatialMemoryBlocksFormal: true,
+    },
+    scenes: [
+      {
+        id: "garage_scene_master",
+        name: "Garage",
+        status: "locked",
+        worldAnchors: [{ id: "workbench", label: "Workbench", worldPosition: { x: 0, y: 0, z: 1 } }],
+        cameraVectors: [
+          {
+            id: "garage_camera_A",
+            worldPosition: { x: 0, y: 1.5, z: -3 },
+            cameraVector: { x: 0, y: -0.1, z: 1 },
+            usableForShotIds: ["shot_001"],
+          },
+        ],
+        subjectBlocking: [
+          {
+            subjectId: "hero_main_ref",
+            worldPosition: { x: 0, y: 0, z: 1 },
+            blockingNote: "Hero waits by the workbench.",
+          },
+        ],
+        axisRules: [
+          {
+            id: "garage_axis",
+            axisVector: { x: 1, y: 0, z: 0 },
+            screenDirectionRule: "static screen direction for shot_001",
+          },
+        ],
+        revealStates: [{ targetId: "garage_door", state: "revealed" }],
+        derivedViewRefs: ["garage_reverse_locked"],
+      },
+    ],
     updatedAt: generatedAt,
   },
 });

@@ -135,6 +135,8 @@ const providerExecutionHandoffDiagnostics = findFunctionBody(appSource, "Provide
 const providerExecutionHandoffUiSummary = findFunctionBody(appSource, "buildProviderExecutionHandoffUiSummary");
 const localOrchestratorDiagnostics = findFunctionBody(appSource, "LocalOrchestratorDiagnostics");
 const localOrchestratorUiSummary = findFunctionBody(appSource, "buildLocalOrchestratorUiSummary");
+const visualConsistencyContractDiagnostics = findFunctionBody(appSource, "VisualConsistencyContractDiagnostics");
+const visualConsistencyContractUiSummary = findFunctionBody(appSource, "buildVisualConsistencyContractUiSummary");
 const image2KeyframeRuntimeDiagnostics = findFunctionBody(appSource, "Image2KeyframeRuntimeDiagnostics");
 const realPilotDiagnostics = findFunctionBody(appSource, "RealPilotDiagnostics");
 const knowledgeUiSummary = findFunctionBody(appSource, "buildKnowledgeUiSummary");
@@ -290,6 +292,14 @@ checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /keyframe pair/i, "
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /end-frame derivation/i, "Phase 17 end-frame derivation diagnostics copy"));
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /provider locks/i, "Phase 17 provider locks diagnostics copy"));
 checkMessage(requireWithin(image2KeyframeRuntimeDiagnostics, /closed loop/i, "Phase 17 closed-loop diagnostics copy"));
+checkMessage(requireWithin(diagnosticsMode, /VisualConsistencyContractDiagnostics/, "Phase 37 visual consistency contract diagnostics mounted"));
+checkMessage(requireWithin(settingsShell, /Visual Consistency Contract/i, "Phase 37 visual consistency contract settings summary"));
+checkMessage(requireWithin(visualConsistencyContractDiagnostics, /Visual Consistency Contract/i, "Phase 37 visual consistency contract diagnostics panel"));
+checkMessage(requireWithin(visualConsistencyContractDiagnostics, /shot layout/i, "Phase 37 shot layout diagnostics copy"));
+checkMessage(requireWithin(visualConsistencyContractDiagnostics, /spatial memory/i, "Phase 37 spatial memory diagnostics copy"));
+checkMessage(requireWithin(visualConsistencyContractDiagnostics, /keyframe pair/i, "Phase 37 keyframe pair diagnostics copy"));
+checkMessage(requireWithin(visualConsistencyContractDiagnostics, /master QA/i, "Phase 37 master inheritance QA diagnostics copy"));
+checkMessage(requireWithin(visualConsistencyContractUiSummary, /masterInheritanceQaGateDefined/i, "Phase 37 master inheritance typed gate summary"));
 check(
   !/RealPilotDirectorStatus/.test(directorMode),
   "Director Clean Mode must not mount RealPilotDirectorStatus in the default DirectorMode",
@@ -635,6 +645,10 @@ const forbiddenMinimalTerms = [
   ["keyframe pair", /keyframe\s+pair/i],
   ["end-frame derivation", /end[-\s]?frame\s+derivation/i],
   ["provider locks", /provider\s+locks?/i],
+  ["Visual Consistency Contract", /Visual\s+Consistency\s+Contract/i],
+  ["shot layout", /shot\s+layout/i],
+  ["spatial memory", /spatial\s+memory/i],
+  ["master inheritance QA", /master\s+inheritance\s+QA/i],
   ["Export Worker", /Export\s+Worker/i],
   ["file mutation", /file\s+mutation/i],
   ["write files", /write\s+files/i],
@@ -663,6 +677,11 @@ const phase2123ForbiddenMainTerms = [
   ["Knowledge Pack Manager", /Knowledge\s+Pack\s+Manager/i],
   ["Knowledge Router", /Knowledge\s+Router/i],
   ["Knowledge Library", /Knowledge\s+Library/i],
+  ["Visual Consistency Contract", /Visual\s+Consistency\s+Contract/i],
+  ["shot layout", /shot\s+layout/i],
+  ["spatial memory", /spatial\s+memory/i],
+  ["keyframe pair", /keyframe\s+pair/i],
+  ["master inheritance QA", /master\s+inheritance\s+QA/i],
   ["Export Worker", /Export\s+Worker/i],
   ["file mutation", /file\s+mutation/i],
   ["write files", /write\s+files/i],

@@ -33,6 +33,7 @@ const {
   validateAssetLibraryHardContracts,
   validateSceneAssetPackHardContracts,
   validateShotLayoutHardContracts,
+  validateSpatialMemoryHardContracts,
   validateStartEndDerivationHardContracts,
   validatePostprocessHardContracts,
   validateVisualConsistency,
@@ -160,6 +161,60 @@ function shotLayout(overrides = {}) {
   };
 }
 
+function spatialMemory(overrides = {}) {
+  return {
+    schemaVersion: "0.1.0",
+    id: "spatial_memory_fixture",
+    coordinatePolicy: {
+      worldPositionRequired: true,
+      cameraVectorRequired: true,
+      textOnlyMultiViewAllowed: false,
+    },
+    visualConsistencyPolicy: {
+      masterSceneInheritanceRequired: true,
+      cameraWorldPositionRequired: true,
+      subjectWorldPositionRequired: true,
+      axisContinuityRequired: true,
+      sceneStateFactsRequired: true,
+      missingSpatialMemoryBlocksFormal: true,
+    },
+    scenes: [
+      {
+        id: "garage_scene_locked",
+        name: "Garage",
+        status: "locked",
+        worldAnchors: [{ id: "workbench", label: "Workbench", worldPosition: { x: 0, y: 0, z: 1 } }],
+        cameraVectors: [
+          {
+            id: "garage_camera_A",
+            worldPosition: { x: 0, y: 1.5, z: -3 },
+            cameraVector: { x: 0, y: -0.1, z: 1 },
+            usableForShotIds: ["S02"],
+          },
+        ],
+        subjectBlocking: [
+          {
+            subjectId: "hero_locked",
+            worldPosition: { x: 0, y: 0, z: 1 },
+            blockingNote: "Hero stays at the workbench.",
+          },
+        ],
+        axisRules: [
+          {
+            id: "garage_axis",
+            axisVector: { x: 1, y: 0, z: 0 },
+            screenDirectionRule: "static screen direction for S02",
+          },
+        ],
+        revealStates: [{ targetId: "garage_door", state: "revealed" }],
+        derivedViewRefs: ["garage_reverse_locked"],
+      },
+    ],
+    updatedAt: generatedAt,
+    ...overrides,
+  };
+}
+
 function endPromptPlan(overrides = {}) {
   return {
     promptPlanId: "prompt_S02_end",
@@ -206,6 +261,7 @@ const cleanReport = validateVisualConsistency({
   checkedAt: generatedAt,
   assetLibrary: library,
   shotLayouts: [shotLayout()],
+  spatialMemory: spatialMemory(),
   startEndDerivations: {
     keyframePairs: [keyframePair()],
     promptPlans: [endPromptPlan()],
@@ -229,13 +285,26 @@ assert(cleanReport.hardLocks.endFrameDefaultsToStartFrameDerivation === true, "e
 assert(cleanReport.hardLocks.sameShotIndependentEndFrameForbidden === true, "same-shot independent end-frame hard lock missing");
 assert(cleanReport.hardLocks.identityScenePairStoryGatesRequired === true, "identity/scene/pair/story gate hard lock missing");
 assert(cleanReport.hardLocks.propStyleMotionChecksRequired === true, "prop/style/motion hard lock missing");
+assert(cleanReport.hardLocks.spatialMemoryRequiredForFormal === true, "spatial-memory formal hard lock missing");
+assert(cleanReport.hardLocks.masterInheritanceQaGateRequired === true, "master inheritance QA hard lock missing");
+assert(cleanReport.hardLocks.workerProviderSelfReportCannotOverrideQa === true, "worker/provider self-report override hard lock missing");
 assert(cleanReport.summary.lockedAssets === 2, "clean fixture should include two locked assets");
 assert(cleanReport.summary.candidateAssets === 1, "clean fixture should include one candidate asset");
 assert(cleanReport.summary.rejectedAssets === 1, "clean fixture should include one rejected asset");
-assert(cleanReport.summary.gateCount === 9, "clean fixture should compile nine visual consistency gates");
+assert(cleanReport.summary.gateCount === 11, "clean fixture should compile eleven visual consistency gates");
+assert(cleanReport.summary.contractGateCount === 6, "clean fixture should compile the six Phase 37 contract gates");
+assert(cleanReport.contractReceipt.receiptKind === "visual_consistency_contract", "contract receipt kind drifted");
+assert(cleanReport.contractReceipt.phase === "phase37_visual_consistency_contract", "contract receipt phase drifted");
+assert(cleanReport.contractReceipt.status === "pass", "clean contract receipt should pass");
+assert(cleanReport.contractReceipt.formalPlanningAllowed === true, "clean contract receipt should allow formal planning");
+assert(cleanReport.contractReceipt.qaGateSummary.workerProviderSelfReportMayOverride === false, "worker/provider self-report cannot override QA");
+assert(cleanReport.contractReceipt.qaGateSummary.scenePackIds.includes("scene_asset_pack_garage_scene_locked"), "QA summary must include scene pack");
+assert(cleanReport.contractReceipt.qaGateSummary.derivedViewIds.includes("garage_reverse_locked"), "QA summary must include derived views");
+assert(cleanReport.contractReceipt.qaGateSummary.shotLayoutIds.includes("shot_layout_S02"), "QA summary must include Shot Layout");
+assert(cleanReport.contractReceipt.qaGateSummary.keyframePairShotIds.includes("S02"), "QA summary must include keyframe pair");
 assert(cleanReport.factChain.sequence.join(" > ") === "character_identity > scene_space > shot_layout > start_end_keyframes > video_handoff", "visual fact chain sequence drifted");
 assert(cleanReport.factChain.steps.every((step) => step.status === "pass"), `clean fact chain should pass: ${cleanReport.factChain.blockers.join("; ")}`);
-for (const gateId of ["identity_gate", "scene_gate", "layout_gate", "pair_gate", "story_gate", "prop_gate", "style_gate", "motion_gate", "video_handoff_gate"]) {
+for (const gateId of ["identity_gate", "scene_gate", "layout_gate", "spatial_memory_gate", "pair_gate", "master_inheritance_qa_gate", "story_gate", "prop_gate", "style_gate", "motion_gate", "video_handoff_gate"]) {
   const gate = cleanReport.gates.find((candidate) => candidate.gateId === gateId);
   assert(gate, `missing visual consistency gate ${gateId}`);
   assert(gate.status === "pass", `${gateId} should pass: ${gate.blockers.join("; ")}`);
@@ -292,6 +361,11 @@ assert(
 const badLayoutIssues = validateShotLayoutHardContracts(
   shotLayout({
     schemaVersion: undefined,
+    subjectPlacement: {
+      worldPosition: { x: 0, y: 0, z: 1 },
+      framePlacement: "",
+      blockingIntent: "",
+    },
     endFrameDerivation: {
       derivesFrom: "independent_generation",
       derivationMode: "same_camera_state_change",
@@ -318,6 +392,10 @@ assert(
   "independent end-frame layout must block",
 );
 assert(
+  badLayoutIssues.some((item) => item.code === "shot_layout_structured_field_missing"),
+  "missing structured shot layout fields must block",
+);
+assert(
   badLayoutIssues.some((item) => item.code === "shot_layout_camera_constraint_violation"),
   "fixed camera with dolly/truck movement must block",
 );
@@ -326,16 +404,39 @@ assert(
   "fixed camera layout must explicitly forbid large motion",
 );
 
+const badSpatialIssues = validateSpatialMemoryHardContracts(
+  spatialMemory({
+    scenes: [
+      {
+        id: "garage_scene_locked",
+        name: "Garage",
+        status: "locked",
+        worldAnchors: [],
+        cameraVectors: [],
+        subjectBlocking: [],
+        axisRules: [],
+        revealStates: [],
+        derivedViewRefs: [],
+      },
+    ],
+  }),
+);
+assert(
+  badSpatialIssues.filter((item) => item.code === "spatial_memory_contract_violation").length >= 3,
+  "missing Spatial Memory world/axis/scene-state facts must block",
+);
+
 const badDerivationIssues = validateStartEndDerivationHardContracts({
   keyframePairs: [
     keyframePair({ endDerivationSource: "unknown", validForI2vPair: true }),
     keyframePair({ shotId: "S03", endDerivationSource: "independent_exception", exceptionReason: "" }),
+    keyframePair({ shotId: "S04", allowedDelta: ["large camera movement"] }),
   ],
   promptPlans: [endPromptPlan({ derivesFromStartFrame: false })],
 });
 assert(
-  badDerivationIssues.filter((item) => item.code === "keyframe_pair_derivation_violation").length >= 2,
-  "unknown and unapproved independent keyframe derivations must block",
+  badDerivationIssues.filter((item) => item.code === "keyframe_pair_derivation_violation").length >= 3,
+  "unknown, independent, and large-motion keyframe derivations must block",
 );
 assert(
   badDerivationIssues.some((item) => item.code === "prompt_end_frame_derivation_violation"),
@@ -346,6 +447,7 @@ const badMotionReport = validateVisualConsistency({
   checkedAt: generatedAt,
   assetLibrary: library,
   shotLayouts: [shotLayout()],
+  spatialMemory: spatialMemory(),
   startEndDerivations: {
     keyframePairs: [keyframePair({ allowedDelta: ["large camera movement"] })],
     promptPlans: [endPromptPlan()],

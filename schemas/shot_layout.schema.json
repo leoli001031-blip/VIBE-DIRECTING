@@ -30,12 +30,14 @@
     "startFrame": { "$ref": "#/$defs/frameState" },
     "endFrameDerivation": { "$ref": "#/$defs/endFrameDerivation" },
     "cameraConstraints": { "$ref": "#/$defs/cameraConstraints" },
+    "formalContractPolicy": { "$ref": "#/$defs/formalContractPolicy" },
     "visualConsistencyGates": {
       "type": "array",
       "items": { "$ref": "#/$defs/visualConsistencyGate" }
     },
     "spatialAnchors": {
       "type": "array",
+      "minItems": 1,
       "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
     },
     "updatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" }
@@ -153,7 +155,18 @@
       "properties": {
         "gateId": {
           "type": "string",
-          "enum": ["identity_gate", "scene_gate", "layout_gate", "pair_gate", "story_gate", "prop_gate", "style_gate", "motion_gate"]
+          "enum": [
+            "identity_gate",
+            "scene_gate",
+            "layout_gate",
+            "spatial_memory_gate",
+            "pair_gate",
+            "master_inheritance_qa_gate",
+            "story_gate",
+            "prop_gate",
+            "style_gate",
+            "motion_gate"
+          ]
         },
         "status": { "$ref": "common.schema.json#/$defs/gateStatus" },
         "sourceRefs": {
@@ -161,6 +174,24 @@
           "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
         },
         "detail": { "type": "string" }
+      }
+    },
+    "formalContractPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subjectPositionStructured",
+        "cameraPlacementStructured",
+        "axisScreenDirectionStructured",
+        "spatialAnchorsRequired",
+        "missingStructureBlocksFormal"
+      ],
+      "properties": {
+        "subjectPositionStructured": { "type": "boolean", "const": true },
+        "cameraPlacementStructured": { "type": "boolean", "const": true },
+        "axisScreenDirectionStructured": { "type": "boolean", "const": true },
+        "spatialAnchorsRequired": { "type": "boolean", "const": true },
+        "missingStructureBlocksFormal": { "type": "boolean", "const": true }
       }
     }
   }

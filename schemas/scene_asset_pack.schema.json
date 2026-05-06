@@ -170,14 +170,18 @@
         "derivedViewsInheritMaster",
         "derivedViewsRequireCameraVector",
         "derivedViewsRequireWorldPosition",
-        "textOnlyViewRecreationAllowed"
+        "textOnlyViewRecreationAllowed",
+        "masterInheritanceQaRequired",
+        "workerProviderSelfReportCanOverrideQa"
       ],
       "properties": {
         "masterSceneDerivationRequired": { "type": "boolean", "const": true },
         "derivedViewsInheritMaster": { "type": "boolean", "const": true },
         "derivedViewsRequireCameraVector": { "type": "boolean", "const": true },
         "derivedViewsRequireWorldPosition": { "type": "boolean", "const": true },
-        "textOnlyViewRecreationAllowed": { "type": "boolean", "const": false }
+        "textOnlyViewRecreationAllowed": { "type": "boolean", "const": false },
+        "masterInheritanceQaRequired": { "type": "boolean", "const": true },
+        "workerProviderSelfReportCanOverrideQa": { "type": "boolean", "const": false }
       }
     }
   }

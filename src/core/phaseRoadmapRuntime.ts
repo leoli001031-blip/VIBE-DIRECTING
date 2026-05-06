@@ -1018,6 +1018,21 @@ export interface PhaseRoadmapClosureObservations {
   secretInProjectFileObserved?: boolean;
   globalKnowledgeAsProjectFactObserved?: boolean;
   globalKnowledgeAuthorityObserved?: boolean;
+  candidateFutureReferenceObserved?: boolean;
+  tempFutureReferenceObserved?: boolean;
+  rejectedFutureReferenceObserved?: boolean;
+  contactSheetFutureReferenceObserved?: boolean;
+  shotOutputFutureReferenceObserved?: boolean;
+  derivedViewMissingMasterInheritance?: boolean;
+  cameraVectorMissing?: boolean;
+  worldPositionMissing?: boolean;
+  shotLayoutSubjectMissing?: boolean;
+  shotLayoutCameraMissing?: boolean;
+  shotLayoutAxisMissing?: boolean;
+  shotLayoutAnchorsMissing?: boolean;
+  independentSameShotEndFrameObserved?: boolean;
+  largeMotionDriftObserved?: boolean;
+  semanticOpenCvRepairObserved?: boolean;
 }
 
 export interface PhaseRoadmapClosureEvidence {
@@ -1110,6 +1125,18 @@ export interface PhaseRoadmapTaskQueueVisibilityEvidence extends PhaseRoadmapClo
   };
 }
 
+export interface PhaseRoadmapVisualConsistencyContractEvidence extends PhaseRoadmapClosureEvidence {
+  referenceAuthority?: Record<string, unknown>;
+  futureReferences?: Record<string, unknown>;
+  sceneAssetPack?: Record<string, unknown>;
+  derivedViews?: Record<string, unknown>;
+  cameraGeometry?: Record<string, unknown>;
+  shotLayout?: Record<string, unknown>;
+  keyframePair?: Record<string, unknown>;
+  motionQa?: Record<string, unknown>;
+  repairPolicy?: Record<string, unknown>;
+}
+
 export interface PhaseRoadmapRuntimeEvidence {
   projectFactsIntegration?: PhaseRoadmapProjectFactsIntegrationEvidence;
   subagentEnvelopeValidator?: PhaseRoadmapSubagentEnvelopeValidatorReceipt;
@@ -1125,7 +1152,7 @@ export interface PhaseRoadmapRuntimeEvidence {
   localOrchestratorRuntime?: PhaseRoadmapLocalOrchestratorRuntimeEvidence;
   taskQueueVisibility?: PhaseRoadmapTaskQueueVisibilityEvidence;
   projectFileFactSource?: PhaseRoadmapClosureEvidence;
-  visualConsistencyContract?: PhaseRoadmapClosureEvidence;
+  visualConsistencyContract?: PhaseRoadmapVisualConsistencyContractEvidence;
   subagentPacketPlanner?: PhaseRoadmapClosureEvidence;
   knowledgePackUserManagement?: PhaseRoadmapClosureEvidence;
   codexWorkerRuntimeGate?: PhaseRoadmapClosureEvidence;
@@ -3194,6 +3221,146 @@ function projectFileFactSourceEvidenceDecision(input: PhaseRoadmapRuntimeInput):
   };
 }
 
+function visualConsistencyContractEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const decision = phaseClosureEvidenceDecision(input, {
+    evidenceKey: "visualConsistencyContract",
+    phaseId: "phase_37_visual_consistency_contract",
+    missingBlocker: "visual_consistency_contract_typed_evidence_missing",
+    safetyPrefix: "visual_consistency_contract",
+    legacyReadyInput: "visualConsistencyContractReady",
+    requiredGates: [
+      { field: "identityGateDefined", blocker: "visual_consistency_identity_gate_missing" },
+      { field: "sceneGateDefined", blocker: "visual_consistency_scene_gate_missing" },
+      { field: "shotLayoutGateDefined", blocker: "visual_consistency_shot_layout_gate_missing" },
+      { field: "spatialMemoryGateDefined", blocker: "visual_consistency_spatial_memory_gate_missing" },
+      { field: "keyframePairDerivationGateDefined", blocker: "visual_consistency_keyframe_pair_gate_missing" },
+      { field: "masterInheritanceQaGateDefined", blocker: "visual_consistency_master_inheritance_qa_missing" },
+      { field: "cameraVectorDefined", blocker: "visual_consistency_camera_vector_missing" },
+      { field: "worldPositionDefined", blocker: "visual_consistency_world_position_missing" },
+      { field: "shotLayoutSubjectDefined", blocker: "visual_consistency_shot_layout_subject_missing" },
+      { field: "shotLayoutCameraDefined", blocker: "visual_consistency_shot_layout_camera_missing" },
+      { field: "shotLayoutAxisDefined", blocker: "visual_consistency_shot_layout_axis_missing" },
+      { field: "shotLayoutAnchorsDefined", blocker: "visual_consistency_shot_layout_anchors_missing" },
+    ],
+  });
+  const evidence = input.evidence?.visualConsistencyContract;
+  if (!hasClosureEvidence(evidence)) return decision;
+
+  const blockers = uniqueSorted([
+    ...decision.blockers,
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        [
+          "candidateFutureReferenceObserved",
+          "futureReferenceFromCandidate",
+          "candidateAsFutureReference",
+          "tempFutureReferenceObserved",
+          "futureReferenceFromTemp",
+          "tempAsFutureReference",
+          "rejectedFutureReferenceObserved",
+          "futureReferenceFromRejected",
+          "rejectedAsFutureReference",
+          "contactSheetFutureReferenceObserved",
+          "futureReferenceFromContactSheet",
+          "contactSheetAsFutureReference",
+          "shotOutputFutureReferenceObserved",
+          "futureReferenceFromShotOutput",
+          "shotOutputAsFutureReference",
+        ],
+        ["referenceAuthority", "futureReferences", "references", "assetReferences", "referenceSelection"],
+      ),
+      "visual_consistency_future_reference_pollution",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["derivedViewMissingMasterInheritance", "derivedViewWithoutMasterInheritance", "masterInheritanceMissing"],
+        ["sceneAssetPack", "derivedViews", "masterInheritanceQa"],
+      ),
+      "visual_consistency_derived_view_master_inheritance_missing",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["cameraVectorMissing", "missingCameraVector", "cameraVectorAbsent"],
+        ["sceneAssetPack", "derivedViews", "cameraGeometry", "shotLayout"],
+      ),
+      "visual_consistency_camera_vector_missing",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["worldPositionMissing", "missingWorldPosition", "worldPositionAbsent"],
+        ["sceneAssetPack", "derivedViews", "cameraGeometry", "spatialMemory"],
+      ),
+      "visual_consistency_world_position_missing",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["shotLayoutSubjectMissing", "subjectMissing", "missingSubject"],
+        ["shotLayout"],
+      ),
+      "visual_consistency_shot_layout_subject_missing",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["shotLayoutCameraMissing", "cameraMissing", "missingCamera"],
+        ["shotLayout"],
+      ),
+      "visual_consistency_shot_layout_camera_missing",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["shotLayoutAxisMissing", "axisMissing", "missingAxis"],
+        ["shotLayout"],
+      ),
+      "visual_consistency_shot_layout_axis_missing",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["shotLayoutAnchorsMissing", "anchorsMissing", "missingAnchors"],
+        ["shotLayout"],
+      ),
+      "visual_consistency_shot_layout_anchors_missing",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["independentSameShotEndFrameObserved", "independentSameShotEndFrame", "sameShotEndFrameIndependent"],
+        ["keyframePair", "keyframePairDerivation", "endFrameDerivation"],
+      ),
+      "visual_consistency_independent_same_shot_end_frame",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["largeMotionDriftObserved", "largeMotionDrift", "motionDriftTooLarge"],
+        ["motionQa", "spatialMemory", "keyframePair"],
+      ),
+      "visual_consistency_large_motion_drift",
+    ),
+    ...blockedIf(
+      closureAnyObservedTrue(
+        evidence,
+        ["semanticOpenCvRepairObserved", "semanticOpenCVRepairObserved", "opencvSemanticRepairObserved", "semanticCvRepairObserved"],
+        ["repairPolicy", "opencvRepair", "qaRepair"],
+      ),
+      "visual_consistency_semantic_opencv_repair",
+    ),
+  ]);
+
+  return {
+    ...decision,
+    ready: blockers.length === 0,
+    blockers,
+  };
+}
+
 function taskQueueVisibilityEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
   const evidence = input.evidence?.taskQueueVisibility;
 
@@ -3422,21 +3589,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const localOrchestratorRuntimeDecision = localOrchestratorRuntimeEvidenceDecision(input);
   const taskQueueVisibilityDecision = taskQueueVisibilityEvidenceDecision(input);
   const projectFileFactSourceDecision = projectFileFactSourceEvidenceDecision(input);
-  const visualConsistencyContractDecision = phaseClosureEvidenceDecision(input, {
-    evidenceKey: "visualConsistencyContract",
-    phaseId: "phase_37_visual_consistency_contract",
-    missingBlocker: "visual_consistency_contract_typed_evidence_missing",
-    safetyPrefix: "visual_consistency_contract",
-    legacyReadyInput: "visualConsistencyContractReady",
-    requiredGates: [
-      { field: "identityGateDefined", blocker: "visual_consistency_identity_gate_missing" },
-      { field: "sceneGateDefined", blocker: "visual_consistency_scene_gate_missing" },
-      { field: "shotLayoutGateDefined", blocker: "visual_consistency_shot_layout_gate_missing" },
-      { field: "spatialMemoryGateDefined", blocker: "visual_consistency_spatial_memory_gate_missing" },
-      { field: "keyframePairDerivationGateDefined", blocker: "visual_consistency_keyframe_pair_gate_missing" },
-      { field: "masterInheritanceQaDefined", blocker: "visual_consistency_master_inheritance_qa_missing" },
-    ],
-  });
+  const visualConsistencyContractDecision = visualConsistencyContractEvidenceDecision(input);
   const subagentPacketPlannerDecision = phaseClosureEvidenceDecision(input, {
     evidenceKey: "subagentPacketPlanner",
     phaseId: "phase_38_full_task_subagent_packet_planner",

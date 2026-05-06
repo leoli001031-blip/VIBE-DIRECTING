@@ -19,6 +19,7 @@
     "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
     "libraryPurpose": { "type": "string", "const": "asset_consistency_memory" },
     "referenceAuthorityPolicy": { "$ref": "#/$defs/referenceAuthorityPolicy" },
+    "futureReferencePolicy": { "$ref": "#/$defs/futureReferencePolicy" },
     "v0Compatibility": { "$ref": "#/$defs/v0Compatibility" },
     "assets": {
       "type": "array",
@@ -93,8 +94,59 @@
               "canUseAsFutureReference": { "const": false }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": { "const": "locked" }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "canUseAsFutureReference": { "const": true }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": { "enum": ["candidate", "rejected"] }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "canPromoteToFormal": { "const": false },
+              "canUseAsFutureReference": { "const": false }
+            }
+          }
         }
       ]
+    },
+    "futureReferencePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lockedCharacterReferenceRequired",
+        "textConstraintsRequired",
+        "futureReferenceRequiresLockedAuthority",
+        "candidateCanBeFutureReference",
+        "providerTempCanBeFutureReference",
+        "rejectedCanBeFutureReference",
+        "contactSheetCanBeFutureReference",
+        "shotOutputCanBeFutureReference"
+      ],
+      "properties": {
+        "lockedCharacterReferenceRequired": { "type": "boolean", "const": true },
+        "textConstraintsRequired": { "type": "boolean", "const": true },
+        "futureReferenceRequiresLockedAuthority": { "type": "boolean", "const": true },
+        "candidateCanBeFutureReference": { "type": "boolean", "const": false },
+        "providerTempCanBeFutureReference": { "type": "boolean", "const": false },
+        "rejectedCanBeFutureReference": { "type": "boolean", "const": false },
+        "contactSheetCanBeFutureReference": { "type": "boolean", "const": false },
+        "shotOutputCanBeFutureReference": { "type": "boolean", "const": false }
+      }
     },
     "referenceAuthorityPolicy": {
       "type": "object",

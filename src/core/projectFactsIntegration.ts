@@ -309,6 +309,73 @@ function vectorReady(value: unknown): boolean {
     && Number.isFinite(value.z);
 }
 
+function spatialWorldRefs(spatialMemory: Record<string, unknown> | undefined): string[] {
+  if (!spatialMemory) return [];
+  const scenes = arrayFrom(spatialMemory.scenes).filter(isRecord);
+  return unique([
+    ...arrayFrom(spatialMemory.worldPositions)
+      .filter(isRecord)
+      .filter((item) => vectorReady(item.worldPosition))
+      .map((item) => String(item.id || "world_position")),
+    ...arrayFrom(spatialMemory.anchors)
+      .filter(isRecord)
+      .filter((item) => vectorReady(item.worldPosition))
+      .map((item) => String(item.id || "anchor")),
+    ...arrayFrom(spatialMemory.cameraVectors)
+      .filter(isRecord)
+      .filter((item) => vectorReady(item.worldPosition) && vectorReady(item.cameraVector))
+      .map((item) => String(item.id || "camera_vector")),
+    ...scenes.flatMap((scene) => [
+      ...arrayFrom(scene.worldAnchors)
+        .filter(isRecord)
+        .filter((item) => vectorReady(item.worldPosition))
+        .map((item) => `${String(scene.id || "scene")}:${String(item.id || "anchor")}`),
+      ...arrayFrom(scene.cameraVectors)
+        .filter(isRecord)
+        .filter((item) => vectorReady(item.worldPosition) && vectorReady(item.cameraVector))
+        .map((item) => `${String(scene.id || "scene")}:${String(item.id || "camera_vector")}`),
+      ...arrayFrom(scene.subjectBlocking)
+        .filter(isRecord)
+        .filter((item) => vectorReady(item.worldPosition))
+        .map((item) => `${String(scene.id || "scene")}:${String(item.subjectId || "subject")}`),
+    ]),
+  ]);
+}
+
+function spatialAxisRefs(spatialMemory: Record<string, unknown> | undefined): string[] {
+  if (!spatialMemory) return [];
+  const scenes = arrayFrom(spatialMemory.scenes).filter(isRecord);
+  return unique([
+    ...arrayFrom(spatialMemory.axisRules)
+      .filter(isRecord)
+      .filter((item) => vectorReady(item.axisVector) && typeof item.screenDirectionRule === "string")
+      .map((item) => String(item.id || "axis")),
+    ...scenes.flatMap((scene) =>
+      arrayFrom(scene.axisRules)
+        .filter(isRecord)
+        .filter((item) => vectorReady(item.axisVector) && typeof item.screenDirectionRule === "string")
+        .map((item) => `${String(scene.id || "scene")}:${String(item.id || "axis")}`),
+    ),
+  ]);
+}
+
+function spatialSceneStateRefs(spatialMemory: Record<string, unknown> | undefined): string[] {
+  if (!spatialMemory) return [];
+  const scenes = arrayFrom(spatialMemory.scenes).filter(isRecord);
+  return unique([
+    ...arrayFrom(spatialMemory.sceneStates)
+      .filter(isRecord)
+      .filter((item) => typeof item.targetId === "string" && typeof item.state === "string")
+      .map((item) => String(item.targetId)),
+    ...scenes.flatMap((scene) =>
+      arrayFrom(scene.revealStates)
+        .filter(isRecord)
+        .filter((item) => typeof item.targetId === "string" && typeof item.state === "string")
+        .map((item) => `${String(scene.id || "scene")}:${String(item.targetId)}`),
+    ),
+  ]);
+}
+
 function buildProductionBibleFact(input: BuildProjectFactsIntegrationInput): ProjectFactConnection {
   const productionBible = input.projectStore?.facts.productionBible;
   const hasSource = hasKeys(productionBible);
@@ -458,17 +525,27 @@ function buildVisualMemoryFact(input: BuildProjectFactsIntegrationInput): Projec
 
 function buildSpatialMemoryFact(input: BuildProjectFactsIntegrationInput): ProjectFactConnection {
   const spatialMemory = input.spatialMemory;
-  const anchors = arrayFrom(spatialMemory?.anchors);
-  const worldPositions = arrayFrom(spatialMemory?.worldPositions);
-  const blockers = hasKeys(spatialMemory) ? [] : ["Spatial Memory is not connected; world coordinate facts remain missing."];
-  const warnings = hasKeys(spatialMemory) && !worldPositions.length ? ["Spatial Memory has no structured worldPositions array."] : [];
+  const worldRefs = spatialWorldRefs(spatialMemory);
+  const axisRefs = spatialAxisRefs(spatialMemory);
+  const sceneStateRefs = spatialSceneStateRefs(spatialMemory);
+  const blockers = hasKeys(spatialMemory)
+    ? [
+        ...(!worldRefs.length ? ["Spatial Memory has no structured world coordinate facts."] : []),
+        ...(!axisRefs.length ? ["Spatial Memory has no structured axis/screen-direction facts."] : []),
+        ...(!sceneStateRefs.length ? ["Spatial Memory has no scene state facts."] : []),
+      ]
+    : ["Spatial Memory is not connected; world coordinate, axis, and scene-state facts remain missing."];
+  const recordCount = worldRefs.length + axisRefs.length + sceneStateRefs.length;
+  const warnings = hasKeys(spatialMemory) && !arrayFrom(spatialMemory?.scenes).length
+    ? ["Spatial Memory is connected through legacy root arrays; formal schema should use scenes[]."]
+    : [];
   return fact({
     kind: "spatialMemory",
     label: "Spatial Memory",
     sourceOfTruth: hasKeys(spatialMemory) ? "project_store" : "not_connected",
     path: "spatial_memory/spatial_memory.vibe.json",
-    status: statusFor(blockers, anchors.length + worldPositions.length, hasKeys(spatialMemory), warnings),
-    recordCount: anchors.length + worldPositions.length,
+    status: statusFor(blockers, recordCount, hasKeys(spatialMemory), warnings),
+    recordCount,
     blockers,
     warnings,
     sources: hasKeys(spatialMemory)
@@ -560,6 +637,7 @@ function supportStatus(hasStructured: boolean, hasPartial: boolean): VisualSuppo
 function buildVisualConsistencySupport(input: BuildProjectFactsIntegrationInput): ProjectFactsVisualConsistencySupport {
   const packs = scenePacks(input);
   const shotLayouts = input.shotLayouts || [];
+  const spatialWorldPositionRefs = spatialWorldRefs(input.spatialMemory);
   const packsWithMaster = packs.filter((pack) => Boolean(pack.masterScene?.id && pack.masterScene.masterImageRefs.length));
   const derivedViews = packs.flatMap((pack) => pack.derivedViews.map((view) => ({ pack, view })));
   const structuredViews = derivedViews.filter(({ view }) => view.inheritsFromMaster && vectorReady(view.worldPosition) && vectorReady(view.cameraVector) && view.derivationEvidence.length);
@@ -585,10 +663,24 @@ function buildVisualConsistencySupport(input: BuildProjectFactsIntegrationInput)
       warnings: derivedViews.length && structuredViews.length !== derivedViews.length ? ["Some derived views lack inheritance evidence, world position, or camera vector."] : [],
     },
     worldPosition: {
-      status: supportStatus(packWorldRefs.length > 0 && layoutWorldRefs.length > 0, packWorldRefs.length > 0 || layoutWorldRefs.length > 0),
-      supportedRefs: unique([...packWorldRefs, ...layoutWorldRefs.map((layout) => `shotLayout:${layout.shotId}`)]),
-      blockers: packWorldRefs.length || layoutWorldRefs.length ? [] : ["World position facts are still missing from Spatial Memory / Scene Asset Pack / Shot Layout."],
-      warnings: packWorldRefs.length && !layoutWorldRefs.length ? ["Scene packs have world positions, but Shot Layout world positions are not connected."] : [],
+      status: supportStatus(
+        packWorldRefs.length > 0 && layoutWorldRefs.length > 0 && spatialWorldPositionRefs.length > 0,
+        packWorldRefs.length > 0 || layoutWorldRefs.length > 0 || spatialWorldPositionRefs.length > 0,
+      ),
+      supportedRefs: unique([
+        ...packWorldRefs,
+        ...layoutWorldRefs.map((layout) => `shotLayout:${layout.shotId}`),
+        ...spatialWorldPositionRefs.map((ref) => `spatialMemory:${ref}`),
+      ]),
+      blockers: packWorldRefs.length || layoutWorldRefs.length || spatialWorldPositionRefs.length
+        ? []
+        : ["World position facts are still missing from Spatial Memory / Scene Asset Pack / Shot Layout."],
+      warnings: [
+        ...(packWorldRefs.length && !layoutWorldRefs.length ? ["Scene packs have world positions, but Shot Layout world positions are not connected."] : []),
+        ...(packWorldRefs.length && layoutWorldRefs.length && !spatialWorldPositionRefs.length
+          ? ["Scene packs and Shot Layouts have world positions, but Spatial Memory is not connected as the project fact source."]
+          : []),
+      ],
     },
     startEndDerivation: {
       status: supportStatus(derivationLayouts.length > 0, shotLayouts.length > 0),

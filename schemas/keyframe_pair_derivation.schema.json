@@ -29,6 +29,12 @@
     "sourceStartFrameRequired": { "type": "boolean", "const": true },
     "independentEndFrameAllowed": { "type": "boolean", "const": false },
     "validForI2vPair": { "type": "boolean" },
+    "sourceStartFrameApproval": {
+      "type": "string",
+      "enum": ["approved", "unknown", "rejected"]
+    },
+    "largeMotionDriftBlocked": { "type": "boolean", "const": true },
+    "fixedCameraConflictBlocked": { "type": "boolean", "const": true },
     "pairGate": { "$ref": "#/$defs/pairGate" },
     "semanticChecks": { "$ref": "#/$defs/semanticChecks" },
     "exceptionReason": { "type": "string" },
@@ -49,11 +55,21 @@
     "pairGate": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "endFrameDerivesFromStart", "sameShotIndependentEndFrameForbidden"],
+      "required": [
+        "status",
+        "endFrameDerivesFromStart",
+        "sameShotIndependentEndFrameForbidden",
+        "independentEndFrameBlocked",
+        "largeMotionDriftBlocked",
+        "fixedCameraConflictBlocked"
+      ],
       "properties": {
         "status": { "$ref": "common.schema.json#/$defs/gateStatus" },
         "endFrameDerivesFromStart": { "type": "boolean", "const": true },
         "sameShotIndependentEndFrameForbidden": { "type": "boolean", "const": true },
+        "independentEndFrameBlocked": { "type": "boolean", "const": true },
+        "largeMotionDriftBlocked": { "type": "boolean", "const": true },
+        "fixedCameraConflictBlocked": { "type": "boolean", "const": true },
         "sourceRefs": {
           "type": "array",
           "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
@@ -96,7 +112,23 @@
         "required": ["endDerivationSource"]
       },
       "then": {
-        "required": ["exceptionReason"]
+        "required": ["exceptionReason"],
+        "properties": {
+          "validForI2vPair": { "const": false }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sourceStartFrameApproval": { "enum": ["unknown", "rejected"] }
+        },
+        "required": ["sourceStartFrameApproval"]
+      },
+      "then": {
+        "properties": {
+          "validForI2vPair": { "const": false }
+        }
       }
     }
   ]

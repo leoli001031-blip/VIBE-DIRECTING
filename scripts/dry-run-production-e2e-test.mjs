@@ -42,11 +42,29 @@ function transpile(sourcePath, rewrites = []) {
 
 async function loadCoreModules() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vibe-dry-run-e2e-"));
+  const knowledgeRewrites = [
+    ['from "./knowledgeContextBudget"', 'from "./knowledgeContextBudget.mjs"'],
+    ['from "./knowledgeDefaults"', 'from "./knowledgeDefaults.mjs"'],
+    ['from "./knowledgeLibrary"', 'from "./knowledgeLibrary.mjs"'],
+    ['from "./knowledgeManifest"', 'from "./knowledgeManifest.mjs"'],
+    ['from "./knowledgeRouter"', 'from "./knowledgeRouter.mjs"'],
+  ];
   const modules = [
+    ["knowledgeManifest", []],
+    ["knowledgeContextBudget", [['from "./knowledgeManifest"', 'from "./knowledgeManifest.mjs"']]],
+    ["knowledgeDefaults", [['from "./knowledgeManifest"', 'from "./knowledgeManifest.mjs"']]],
+    ["knowledgeLibrary", [['from "./knowledgeManifest"', 'from "./knowledgeManifest.mjs"']]],
+    ["knowledgeRouter", [
+      ['from "./knowledgeManifest"', 'from "./knowledgeManifest.mjs"'],
+      ['from "./knowledgeContextBudget"', 'from "./knowledgeContextBudget.mjs"'],
+    ]],
     ["providerCapabilities", []],
     ["assetLibraryCrud", []],
     ["projectStore", []],
-    ["taskPacketBuilder", [['from "./providerCapabilities"', 'from "./providerCapabilities.mjs"']]],
+    ["taskPacketBuilder", [
+      ...knowledgeRewrites,
+      ['from "./providerCapabilities"', 'from "./providerCapabilities.mjs"'],
+    ]],
     ["localOrchestrator", []],
     ["providerLiveGate", []],
     ["exportBuilder", []],
@@ -293,6 +311,60 @@ const keyframePair = {
   mustNotAdd: ["new character", "new location", "text-to-video fallback"],
 };
 
+const spatialMemory = {
+  schemaVersion: "0.1.0",
+  id: "spatial_memory_dry_run_e2e",
+  coordinatePolicy: {
+    worldPositionRequired: true,
+    cameraVectorRequired: true,
+    textOnlyMultiViewAllowed: false,
+  },
+  visualConsistencyPolicy: {
+    masterSceneInheritanceRequired: true,
+    cameraWorldPositionRequired: true,
+    subjectWorldPositionRequired: true,
+    axisContinuityRequired: true,
+    sceneStateFactsRequired: true,
+    missingSpatialMemoryBlocksFormal: true,
+  },
+  scenes: [
+    {
+      id: "garage_scene_locked",
+      name: "Garage",
+      status: "locked",
+      worldAnchors: [
+        { id: "garage_door", label: "Garage door", worldPosition: { x: 0, y: 0, z: 4 } },
+        { id: "workbench", label: "Workbench", worldPosition: { x: 0, y: 0, z: 1 } },
+      ],
+      cameraVectors: [
+        {
+          id: "garage_camera_A",
+          worldPosition: { x: 0, y: 1.5, z: -3 },
+          cameraVector: { x: 0, y: -0.1, z: 1 },
+          usableForShotIds: ["S02"],
+        },
+      ],
+      subjectBlocking: [
+        {
+          subjectId: "hero_locked",
+          worldPosition: { x: 0, y: 0, z: 1 },
+          blockingNote: "Hero remains near the workbench.",
+        },
+      ],
+      axisRules: [
+        {
+          id: "garage_axis",
+          axisVector: { x: 1, y: 0, z: 0 },
+          screenDirectionRule: "Keep static screen direction for S02.",
+        },
+      ],
+      revealStates: [{ targetId: "garage_door", state: "revealed" }],
+      derivedViewRefs: ["garage_reverse_locked"],
+    },
+  ],
+  updatedAt: generatedAt,
+};
+
 const runtimeState = {
   generatedAt,
   sourceIndex,
@@ -328,6 +400,7 @@ const runtimeState = {
 const visualReport = visualConsistency.validateVisualConsistency({
   checkedAt: generatedAt,
   assetLibrary: library,
+  spatialMemory,
   shotLayouts: [
     {
       schemaVersion: "0.1.0",

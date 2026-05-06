@@ -1145,12 +1145,22 @@ Acceptance criteria：
 - 回归覆盖：`npm run phase-roadmap:test` 覆盖 ready、legacy-only blocked、runtime-state-as-source blocked、chat memory source blocked、direct input authority blocked、unsafe path blocked、secret blocked、global knowledge authority blocked 和 Phase 35 dependency blocked；`npm run minimal-ui:test` 覆盖主界面无项目文件 plan controls 以及 project.vibe / project files / derived cache 文案。
 - Core 回归覆盖：`npm run project-file:test && npm run project-store:test && npm run project-store-io:test && npm run project-facts:test && npm run project-runtime:test`，并额外覆盖 `npm run project-facts-integration:test`。
 
+### Phase 37 已完成记录：Visual Consistency Contract
+
+- PhaseRoadmapRuntime 现在要求 typed `evidence.visualConsistencyContract`，legacy `visualConsistencyContractReady` 只能作为 ignored diagnostic，不能单独让 Phase 37 ready。
+- Phase 37 typed evidence 必须同时证明 `identityGateDefined`、`sceneGateDefined`、`shotLayoutGateDefined`、`spatialMemoryGateDefined`、`keyframePairDerivationGateDefined` 和 `masterInheritanceQaGateDefined`；同时要求 camera vector、world position，以及 shot layout 的 subject / camera / axis / anchors 子证据。
+- Phase 37 继续依赖 Phase 36 ready；Phase 36 blocked 时，Phase 37 会因 `preceding_phase_not_ready:phase_36_project_file_fact_source` blocked。
+- Fail-closed 条件：candidate / temp / rejected / contact sheet / shot output 被作为 future reference、derived view 缺 master inheritance、缺 camera vector / world position、shot layout 缺 subject / camera / axis / anchors、same-shot end frame 独立生成、large motion drift、semantic OpenCV repair，都必须 blocked。
+- UI gate 保持主 Director surface 极简：Visual Consistency Contract、shot layout、spatial memory、keyframe pair、master inheritance QA 等工程词只进入 Diagnostics / Settings 只读摘要，不进入主 Director surface。
+- 回归覆盖：`npm run phase-roadmap:test` 覆盖 ready、legacy-only blocked、每项 missing gate blocked、污染/漂移/repair blocked 和 Phase 36 dependency blocked；`npm run minimal-ui:test` 覆盖 Phase 37 Diagnostics / Settings 摘要以及主 Director surface 禁词。
+
 ### Phase 35-42 固定范围：Beta Closure
 
 - Phase 35：主界面任务进度条 / queue visibility，只读、短文案、不出现工程执行按钮。
 - Phase 35 UI 完成记录：主 Director surface 已改为从 `runtimeState.localOrchestrator` 同源摘要派生五段只读进度（准备中 / 生成中 / 等待复核 / 有阻断 / 已完成）；主界面不展示队列明细、不新增按钮，详细队列仍保留在 Diagnostics / Settings；`minimal-ui:test` 覆盖无 Run / Submit / Execute、无工程词和同源摘要要求。
 - Phase 36：项目文件事实源，`project.vibe` / project files 是 save/open 和 runtime 派生的事实源。
 - Phase 37：视觉一致性合同，锁 identity、scene、shot layout、spatial memory、keyframe pair、master inheritance QA。
+- Phase 37 core 完成记录：`VisualConsistencyReport.contractReceipt` 固定六项正式合同 gate：identity、scene、shot layout、spatial memory、keyframe pair derivation、master inheritance QA。locked character ref + text constraints 是唯一正向 future reference；candidate/temp/rejected/contact sheet/shot output 继续禁止 future reference；derived view 必须继承 master scene 并带 camera vector/world position；Shot Layout 缺 subject/camera/axis/screen direction/spatial anchors 必须 blocked；Spatial Memory 缺世界坐标、轴线或场景状态不能 formal；同镜头 end frame 必须从 approved start frame 派生，独立 end frame、大幅 motion drift、fixed-camera conflict blocked；scene pack/derived views/Shot Layout/keyframe pair 进入 master inheritance QA summary，worker/provider 自报不能覆盖；Local OpenCV/postprocess 继续禁止语义修复。
 - Phase 38：全任务 Subagent Packet Planner，所有正式生产任务必须有 validated packet、expected outputs、source facts 和 knowledge trace。
 - Phase 39：Knowledge Pack 用户管理，支持用户 pack 导入/新建/启停/路由测试/冲突检测，但不能覆盖硬门禁。
 - Phase 40：真实 Codex Worker Runtime 只做默认 gated shell；默认不 spawn、不 daemon、不 shell、不 credential、不文件写、不 provider submit。
