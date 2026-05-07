@@ -87,6 +87,20 @@ export const subagentRunnerPacketRequirements = [
     notes: ["Production workers must start from current source-index facts, not chat memory."],
   },
   {
+    requirementId: "source_fact_trace",
+    label: "Source Fact Trace",
+    required: true,
+    schemaPath: "SubagentTaskEnvelope.sourceFactTrace + taskEnvelope.sourceFactTrace",
+    notes: ["Runnable worker slots require auditable source facts, not free-text reconstruction."],
+  },
+  {
+    requirementId: "knowledge_injection_trace",
+    label: "Knowledge Injection Trace",
+    required: true,
+    schemaPath: "SubagentTaskEnvelope.injectedKnowledgePacks + injectedKnowledgeSnippetIds",
+    notes: ["Injected knowledge must be hash/pack traced before a worker slot can validate."],
+  },
+  {
     requirementId: "provider_policy",
     label: "Provider Policy",
     required: true,
@@ -187,6 +201,15 @@ function hasItems(value: unknown): boolean {
   return Array.isArray(value) && value.length > 0;
 }
 
+function hasKnowledgeTrace(envelope?: SubagentTaskEnvelope): boolean {
+  return Boolean(
+    hasItems(envelope?.injectedKnowledgePacks) &&
+      (hasItems(envelope?.injectedKnowledgeSnippetIds) || hasItems(envelope?.injectedKnowledgeSnippets)) &&
+      hasItems(envelope?.taskEnvelope?.injectedKnowledgePacks) &&
+      (hasItems(envelope?.taskEnvelope?.injectedKnowledgeSnippetIds) || hasItems(envelope?.taskEnvelope?.injectedKnowledgeSnippets)),
+  );
+}
+
 function check(
   requirementId: string,
   present: boolean,
@@ -214,6 +237,19 @@ function checkEnvelopeRequirements(envelope?: SubagentTaskEnvelope): SubagentRun
 
   return [
     check("source_index_hash", Boolean(envelope?.sourceIndexHash), "sourceIndexHash is present.", "sourceIndexHash is missing."),
+    check(
+      "source_fact_trace",
+      hasItems((envelope as { sourceFactTrace?: string[] } | undefined)?.sourceFactTrace) &&
+        hasItems((envelope?.taskEnvelope as { sourceFactTrace?: string[] } | undefined)?.sourceFactTrace),
+      "source fact trace is present.",
+      "source fact trace is missing.",
+    ),
+    check(
+      "knowledge_injection_trace",
+      hasKnowledgeTrace(envelope),
+      "knowledge injection trace is present.",
+      "knowledge injection trace is missing.",
+    ),
     check("provider_policy", hasItems(envelope?.providerPolicySummary), "providerPolicySummary is present.", "providerPolicySummary is missing."),
     check(
       "context_capsule",
@@ -493,6 +529,7 @@ export function buildSubagentRunnerState(input: BuildSubagentRunnerStateInput): 
       dryRunOnly: true,
       diagnosticsOnly: true,
       noFreeTextTask: true,
+      noFreeTextWorker: true,
       validatedEnvelopeRequired: true,
       providerSubmissionForbidden: true,
       liveSubmitAllowed: false,

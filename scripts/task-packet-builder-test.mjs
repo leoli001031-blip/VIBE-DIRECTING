@@ -212,6 +212,8 @@ assert(state.plannerReceipt.sourceFactTraceRecorded === true, "planner receipt m
 assert(state.plannerReceipt.knowledgePacksRecorded === true, "planner receipt must include injected knowledge trace");
 assert(state.plannerReceipt.phase37VisualConsistencyTraceRequired === true, "planner receipt must require Phase37 visual trace");
 assert(state.plannerReceipt.noFreeTextWorker === true, "planner receipt must forbid free-text workers");
+assert(state.plannerReceipt.providerSubmissionForbidden === true, "planner receipt must forbid provider submission");
+assert(state.plannerReceipt.liveSubmitAllowed === false, "planner receipt live submit must be false");
 for (const kind of requiredTaskKinds) {
   assert(taskPacketKinds.includes(kind), `taskPacketKinds missing Phase38 kind ${kind}`);
   assert(state.plannerReceipt.coverage.some((item) => item.taskKind === kind && item.status === "covered_ready"), `planner receipt missing ready coverage for ${kind}`);
@@ -241,6 +243,10 @@ for (const kind of taskPacketKinds) {
   assert(packet.envelope.taskEnvelope.providerRequirements.outputKind === packet.hardFields.providerRequirements.outputKind, `${kind} task envelope must carry capability requirements`);
   assert(packet.envelope.providerPolicySummary.some((item) => item.startsWith("providerSelection=")), `${kind} provider selection source missing`);
   assert(!packet.envelope.providerPolicySummary.some((item) => item.startsWith("provider=")), `${kind} provider summary must not hard-code provider identity`);
+  assert(packet.envelope.providerPolicySummary.includes("noFreeTextTask=true"), `${kind} provider summary must carry noFreeTextTask=true`);
+  assert(packet.envelope.providerPolicySummary.includes("noFreeTextWorker=true"), `${kind} provider summary must carry noFreeTextWorker=true`);
+  assert(packet.envelope.providerPolicySummary.includes("providerSubmissionForbidden=true"), `${kind} provider summary must carry providerSubmissionForbidden=true`);
+  assert(packet.envelope.providerPolicySummary.includes("liveSubmitAllowed=false"), `${kind} provider summary must carry liveSubmitAllowed=false`);
   assert(packet.hardFields.contextCapsule.some((item) => item.startsWith(`task_kind:${kind}`)), `${kind} context capsule missing task kind`);
   assert(packet.hardFields.storyFunction === "story beat 1-2", `${kind} story function missing`);
   assert(packet.hardFields.previousShot.shotId === "1-1", `${kind} previous shot missing`);
@@ -265,6 +271,7 @@ for (const kind of taskPacketKinds) {
   assert(packet.hardFields.qaChecklist.length > 0, `${kind} qaChecklist missing`);
   assert(packet.hardFields.allowedReadScope.includes("source_index"), `${kind} allowed read scope missing source_index`);
   assert(packet.hardFields.forbiddenActions.includes("no_free_text_task"), `${kind} forbidden actions missing no_free_text_task`);
+  assert(packet.hardFields.forbiddenActions.includes("no_free_text_worker"), `${kind} forbidden actions missing no_free_text_worker`);
   assert(packet.hardFields.outputSchema === "subagent_result_v1", `${kind} output schema drifted`);
   assert(packet.hardFields.expectedOutputContract.format === "subagent_result_v1", `${kind} expected output contract format drifted`);
   assert(packet.envelope.expectedOutputContract.requiredFields.includes("summaryForMainAgent"), `${kind} output contract missing summaryForMainAgent`);

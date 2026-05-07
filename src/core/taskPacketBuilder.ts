@@ -568,6 +568,7 @@ function videoKeyframePair(runtimeState: ProjectRuntimeState, shot: ShotRecord |
 function commonForbiddenActions(kind: TaskPacketKind): string[] {
   return unique([
     "no_free_text_task",
+    "no_free_text_worker",
     "validated_envelope_required",
     "provider_submit_forbidden",
     "live_submit_forbidden",
@@ -1117,6 +1118,7 @@ function makeSubagentEnvelope(input: {
       `expectedOutputs=${input.taskEnvelope.expectedOutputs.join(",")}`,
       ...input.hardFields.contextCapsule.map((item) => `context:${item}`),
       "noFreeTextTask=true",
+      "noFreeTextWorker=true",
       "providerSubmissionForbidden=true",
       "liveSubmitAllowed=false",
     ]),
@@ -1231,7 +1233,10 @@ function validationReceiptFor(input: {
     resultSchema: input.hardFields?.outputSchema === "subagent_result_v1" && input.hardFields.expectedOutputContract.format === "subagent_result_v1",
     allowedReadScope: Boolean(input.hardFields?.allowedReadScope.length && envelope?.allowedReadScopes.length),
     forbiddenActions: Boolean(input.hardFields?.forbiddenActions.length && envelope?.disallowedReadScopes.includes("provider_credentials")),
-    noFreeTextWorker: Boolean(input.hardFields?.forbiddenActions.includes("no_free_text_task") && envelope?.providerPolicySummary.includes("noFreeTextTask=true")),
+    noFreeTextWorker: Boolean(
+      input.hardFields?.forbiddenActions.includes("no_free_text_worker") &&
+        envelope?.providerPolicySummary.includes("noFreeTextWorker=true"),
+    ),
     phase37VisualConsistencyTrace: hasPhase37VisualConsistencyTrace(input.sourceFactTrace),
   };
   const blockers = unique([

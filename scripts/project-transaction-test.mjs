@@ -294,6 +294,29 @@ function readyEnvelopeWorkflow(workflowState) {
   return next;
 }
 
+function mutateFirstQueuedPacket(workflowState, confirmedRuntime, mutate) {
+  const next = clone(workflowState);
+  const queuedItem = confirmedRuntime.pendingTransaction.taskEnqueue.items.find((item) => item.queueStatus === "queued");
+  assert(queuedItem, "fixture must include at least one queued packet for validation mutation tests");
+  const packet = next.taskPacketState.packets.find((candidate) => candidate.packetId === queuedItem.packetId);
+  assert(packet?.envelope?.taskEnvelope, "queued packet must include a task envelope");
+  mutate(packet);
+  return { workflowState: next, packetId: packet.packetId };
+}
+
+function assertPacketMutationBlocks({ workflowState, packetId, expectedError, label }) {
+  const runtime = buildProjectTransactionRuntime({
+    workflowState,
+    runtimeState,
+    userConfirmed: true,
+    userEnabled: true,
+  });
+  const item = runtime.pendingTransaction.taskEnqueue.items.find((candidate) => candidate.packetId === packetId);
+  assert(item, `${label} mutated packet must remain visible in enqueue plan`);
+  assert(item.queueStatus === "blocked", `${label} must block queue validation`);
+  assert(item.validationErrors.includes(expectedError), `${label} must report ${expectedError}`);
+}
+
 const {
   directorWorkflow: { buildDirectorWorkflowState },
   projectTransaction: { buildProjectTransactionRuntime },
@@ -366,6 +389,12 @@ assert(
 assert(
   confirmedRuntime.pendingTransaction.taskEnqueue.items
     .filter((item) => item.queueStatus === "queued")
+    .every((item) => item.providerPolicyStatus === "enabled" && item.providerExecutionState === "active"),
+  "runnable queued route must contain only active/enabled provider-policy tasks",
+);
+assert(
+  confirmedRuntime.pendingTransaction.taskEnqueue.items
+    .filter((item) => item.queueStatus === "queued")
     .every((item) => item.ledgerEvents.some((event) => event.eventType === "task_queued")),
   "queued ingest facts must include task_queued ledger events",
 );
@@ -375,6 +404,39 @@ assert(
     .every((item) => item.ledgerEvents.some((event) => event.eventType === "parked")),
   "parked ingest facts must include parked ledger events",
 );
+
+const missingExpectedOutputs = mutateFirstQueuedPacket(hydratedWorkflow, confirmedRuntime, (packet) => {
+  packet.envelope.taskEnvelope.expectedOutputs = [];
+});
+assertPacketMutationBlocks({
+  workflowState: missingExpectedOutputs.workflowState,
+  packetId: missingExpectedOutputs.packetId,
+  expectedError: "expected_outputs_missing",
+  label: "missing expected outputs",
+});
+
+const missingQaChecklist = mutateFirstQueuedPacket(hydratedWorkflow, confirmedRuntime, (packet) => {
+  packet.envelope.taskEnvelope.qaChecklist = [];
+});
+assertPacketMutationBlocks({
+  workflowState: missingQaChecklist.workflowState,
+  packetId: missingQaChecklist.packetId,
+  expectedError: "qa_checklist_missing",
+  label: "missing QA checklist",
+});
+
+const missingSourceFactTrace = mutateFirstQueuedPacket(hydratedWorkflow, confirmedRuntime, (packet) => {
+  packet.sourceFactTrace = [];
+  packet.envelope.sourceFactTrace = [];
+  packet.envelope.taskEnvelope.sourceFactTrace = [];
+});
+assertPacketMutationBlocks({
+  workflowState: missingSourceFactTrace.workflowState,
+  packetId: missingSourceFactTrace.packetId,
+  expectedError: "source_fact_trace_missing",
+  label: "missing source fact trace",
+});
+
 assert(confirmedRuntime.pendingTransaction.components.some((component) => component.kind === "story_change"), "pending transaction must include story_change component");
 assert(confirmedRuntime.pendingTransaction.components.some((component) => component.kind === "asset_update"), "pending transaction must include asset_update component");
 assert(confirmedRuntime.pendingTransaction.components.some((component) => component.kind === "shot_reflow"), "pending transaction must include shot_reflow component");

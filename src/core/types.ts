@@ -522,7 +522,14 @@ export interface SubagentRunnerHardLocks {
 export interface SubagentRunnerPacketRequirement {
   requirementId:
     | "source_index_hash"
+    | "source_fact_trace"
+    | "knowledge_injection_trace"
     | "provider_policy"
+    | "context_capsule"
+    | "reference_authority"
+    | "before_after_shots"
+    | "expected_output"
+    | "hard_negatives"
     | "expected_output_contract"
     | "acceptance_checklist"
     | "output_schema"
@@ -590,6 +597,7 @@ export interface SubagentRunnerState {
     dryRunOnly: true;
     diagnosticsOnly: true;
     noFreeTextTask: true;
+    noFreeTextWorker: true;
     validatedEnvelopeRequired: true;
     providerSubmissionForbidden: true;
     liveSubmitAllowed: false;
@@ -2158,6 +2166,7 @@ export interface TaskEnvelope {
   knowledgeManifestHash?: string;
   policyBinding?: string;
   routeWarnings: string[];
+  sourceFactTrace?: string[];
   nonOverridableGateHashes?: Record<string, string>;
   promptPlanId?: string;
   promptPlanHash?: string;
@@ -2237,6 +2246,7 @@ export interface SubagentTaskEnvelope {
   allowedDelta: string[];
   mustNotAdd: string[];
   expectedOutputContract: SubagentOutputContract;
+  sourceFactTrace?: string[];
 }
 
 export interface SubagentIssue {

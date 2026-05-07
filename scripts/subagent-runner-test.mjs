@@ -32,6 +32,25 @@ async function loadSubagentRunner() {
 
 function fixtureTaskEnvelope() {
   const lockedReference = fixtureReference("hero_identity");
+  const knowledgePack = {
+    packId: "qa/video-continuity",
+    version: "0.1.0",
+    hash: "hash_video_continuity",
+    category: "qa",
+    reason: "fixture routed QA knowledge",
+    consumer: "qa_gate",
+    injectedSnippetIds: ["snippet_video_continuity"],
+    summaryHash: "summary_video_continuity",
+    truncated: false,
+  };
+  const knowledgeSnippet = {
+    packId: knowledgePack.packId,
+    snippetId: "snippet_video_continuity",
+    title: "Video continuity fixture",
+    content: "Keep identity, scene, pair, and story continuity bounded to approved references.",
+    tokenEstimate: 12,
+    hash: "snippet_hash_video_continuity",
+  };
   return {
     id: "task_video_A1_01",
     purpose: "video",
@@ -55,10 +74,15 @@ function fixtureTaskEnvelope() {
       warnings: [],
       checkedAt: "2026-04-30T00:00:00.000Z",
     },
-    injectedKnowledgePacks: [],
-    injectedKnowledgeSnippetIds: [],
-    injectedKnowledgeSnippets: [],
+    knowledgeRouteResultId: "route_video_A1_01",
+    contextBudgetId: "budget_video_A1_01",
+    injectedKnowledgePacks: [knowledgePack],
+    injectedKnowledgeSnippetIds: [`${knowledgePack.packId}:${knowledgeSnippet.snippetId}`],
+    injectedKnowledgeSnippets: [knowledgeSnippet],
+    knowledgeInputHash: "knowledge_input_video_A1_01",
+    knowledgeManifestHash: "knowledge_manifest_fixture",
     routeWarnings: [],
+    sourceFactTrace: ["source_index:source_hash_123", "phase37_gate:identity:PASS"],
     blockingReasons: [],
   };
 }
@@ -110,9 +134,13 @@ function fixtureSubagentEnvelope() {
     forbiddenReferences: [],
     providerPolicySummary: ["slot=video.i2v", "provider=seedance2-provider", "state=parked", "mode=frames2video"],
     taskEnvelope,
-    injectedKnowledgePacks: [],
-    injectedKnowledgeSnippetIds: [],
-    injectedKnowledgeSnippets: [],
+    knowledgeRouteResultId: taskEnvelope.knowledgeRouteResultId,
+    contextBudgetId: taskEnvelope.contextBudgetId,
+    injectedKnowledgePacks: taskEnvelope.injectedKnowledgePacks,
+    injectedKnowledgeSnippetIds: taskEnvelope.injectedKnowledgeSnippetIds,
+    injectedKnowledgeSnippets: taskEnvelope.injectedKnowledgeSnippets,
+    knowledgeInputHash: taskEnvelope.knowledgeInputHash,
+    knowledgeManifestHash: taskEnvelope.knowledgeManifestHash,
     routeWarnings: [],
     forbiddenKnowledgePacks: [],
     requiredKnowledgeCategories: ["provider", "qa"],
@@ -133,6 +161,7 @@ function fixtureSubagentEnvelope() {
       severityLevels: ["P0", "P1", "P2"],
       gateFields: ["identity", "scene", "pair", "story", "prop", "style"],
     },
+    sourceFactTrace: taskEnvelope.sourceFactTrace,
   };
 }
 
@@ -209,6 +238,10 @@ const freeTextState = buildSubagentRunnerState({
 });
 assert(freeTextState.noFreeTextTask === true, "runner must hard-lock noFreeTextTask=true");
 assert(freeTextState.validatedEnvelopeRequired === true, "runner must require validated envelopes");
+assert(freeTextState.summary.validatedEnvelopeRequired === true, "runner summary must expose validatedEnvelopeRequired=true");
+assert(freeTextState.summary.noFreeTextWorker === true, "runner summary must expose noFreeTextWorker=true");
+assert(freeTextState.summary.providerSubmissionForbidden === true, "runner summary must expose providerSubmissionForbidden=true");
+assert(freeTextState.summary.liveSubmitAllowed === false, "runner summary must expose liveSubmitAllowed=false");
 assert(freeTextState.summary.freeTextBlocked === 1, "free text request must be counted as blocked");
 assert(freeTextState.slots[0].status === "blocked_missing_envelope", "free text task without envelope must be blocked_missing_envelope");
 assert(freeTextState.slots[0].blockedReasons.includes("free_text_task_input_forbidden"), "free text blocker must be explicit");
@@ -239,6 +272,31 @@ assert(videoSlot.envelopeStatus === "validated", "video packet envelope should v
 assert(videoSlot.envelopeId === "subagent_video_A1_01", "video slot must keep envelope id");
 assert(videoSlot.canExecute === false, "video slot cannot execute");
 assert(videoSlot.requirementChecks.every((check) => check.present), "validated envelope must satisfy all packet requirements");
+
+const emptyKnowledgeEnvelope = fixtureSubagentEnvelope();
+emptyKnowledgeEnvelope.injectedKnowledgePacks = [];
+emptyKnowledgeEnvelope.injectedKnowledgeSnippetIds = [];
+emptyKnowledgeEnvelope.injectedKnowledgeSnippets = [];
+emptyKnowledgeEnvelope.taskEnvelope.injectedKnowledgePacks = [];
+emptyKnowledgeEnvelope.taskEnvelope.injectedKnowledgeSnippetIds = [];
+emptyKnowledgeEnvelope.taskEnvelope.injectedKnowledgeSnippets = [];
+const emptyKnowledgeState = buildSubagentRunnerState({
+  generatedAt: "2026-04-30T00:00:00.000Z",
+  taskPackets: [
+    {
+      packetId: "packet_empty_knowledge",
+      taskKind: "video_execution",
+      status: "ready",
+      envelopeId: emptyKnowledgeEnvelope.id,
+      envelope: emptyKnowledgeEnvelope,
+    },
+  ],
+});
+assert(emptyKnowledgeState.slots[0].status === "blocked_contract_violation", "empty knowledge trace envelope must not validate as planned");
+assert(
+  emptyKnowledgeState.slots[0].blockedReasons.includes("missing_knowledge_injection_trace"),
+  "empty knowledge trace envelope must carry missing_knowledge_injection_trace",
+);
 
 const missingEnvelopeSlots = state.slots.filter((slot) => slot.envelopeStatus === "missing");
 assert(missingEnvelopeSlots.length >= 6, "generation and QA-derived coverage should remain missing envelopes");
@@ -276,6 +334,8 @@ assert(state.coverage.find((entry) => entry.taskKind === "identity_qa").notes.so
 
 const requiredPackets = [
   "source_index_hash",
+  "source_fact_trace",
+  "knowledge_injection_trace",
   "provider_policy",
   "context_capsule",
   "reference_authority",
@@ -297,6 +357,7 @@ assert(schema.properties.noFreeTextTask.const === true, "schema must pin noFreeT
 assert(schema.properties.validatedEnvelopeRequired.const === true, "schema must pin validatedEnvelopeRequired=true");
 assert(schema.properties.providerSubmissionForbidden.const === true, "schema must pin provider submission forbidden");
 assert(schema.properties.liveSubmitAllowed.const === false, "schema must pin liveSubmitAllowed=false");
+assert(schema.$defs.summary.properties.noFreeTextWorker.const === true, "schema summary must pin noFreeTextWorker=true");
 assert(schema.$defs.hardLocks.properties.noShellExecution.const === true, "schema must pin no shell execution");
 
 const projectSchema = readJson("schemas/project_runtime_state.schema.json");

@@ -108,7 +108,14 @@
       "type": "string",
       "enum": [
         "source_index_hash",
+        "source_fact_trace",
+        "knowledge_injection_trace",
         "provider_policy",
+        "context_capsule",
+        "reference_authority",
+        "before_after_shots",
+        "expected_output",
+        "hard_negatives",
         "expected_output_contract",
         "acceptance_checklist",
         "output_schema",
@@ -229,6 +236,7 @@
         "dryRunOnly",
         "diagnosticsOnly",
         "noFreeTextTask",
+        "noFreeTextWorker",
         "validatedEnvelopeRequired",
         "providerSubmissionForbidden",
         "liveSubmitAllowed"
@@ -247,6 +255,7 @@
         "dryRunOnly": { "type": "boolean", "const": true },
         "diagnosticsOnly": { "type": "boolean", "const": true },
         "noFreeTextTask": { "type": "boolean", "const": true },
+        "noFreeTextWorker": { "type": "boolean", "const": true },
         "validatedEnvelopeRequired": { "type": "boolean", "const": true },
         "providerSubmissionForbidden": { "type": "boolean", "const": true },
         "liveSubmitAllowed": { "type": "boolean", "const": false }
