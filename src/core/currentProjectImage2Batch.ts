@@ -126,6 +126,53 @@ export interface CurrentProjectImage2BatchLedgerProjection {
   summary: CurrentProjectImage2BatchLedgerSummary;
 }
 
+export interface CurrentProjectImage2BatchRuntimeProjectionItem {
+  taskRunId: string;
+  envelopeId?: string;
+  status: TaskRunLedgerProjection["reportSummary"]["status"];
+  previewStatus: TaskRunLedgerProjection["previewSummary"]["status"];
+  completeVerified: boolean;
+  providerObserved: boolean;
+  qaReviewed: boolean;
+  terminal: boolean;
+  manifestSummary: TaskRunLedgerProjection["manifestSummary"];
+  reportSummary: TaskRunLedgerProjection["reportSummary"];
+  previewSummary: TaskRunLedgerProjection["previewSummary"];
+}
+
+export interface CurrentProjectImage2BatchRuntimeProjectionSummary {
+  total: number;
+  queued: number;
+  parked: number;
+  blocked: number;
+  candidate: number;
+  qaPending: number;
+  needsReview: number;
+  completeVerified: number;
+  providerCalled: false;
+  liveSubmitAllowed: false;
+  noFileMutation: true;
+  workerSpawnForbidden: true;
+  creatorShortStatus: string;
+}
+
+export interface ProjectCurrentProjectImage2BatchRuntimeProjectionInput {
+  schemaVersion: string;
+  projectId: string;
+  runId: string;
+  generatedAt: string;
+  projections: TaskRunLedgerProjection[];
+}
+
+export interface CurrentProjectImage2BatchRuntimeProjection {
+  schemaVersion: string;
+  projectId: string;
+  runId: string;
+  generatedAt: string;
+  summary: CurrentProjectImage2BatchRuntimeProjectionSummary;
+  items: CurrentProjectImage2BatchRuntimeProjectionItem[];
+}
+
 const defaultGeneratedAt = "1970-01-01T00:00:00.000Z";
 const defaultMaxImages = 10;
 const requiredReferenceRoles: CurrentProjectImage2ReferenceRole[] = ["character", "scene", "style"];
@@ -304,6 +351,23 @@ function itemBlockers(
   return uniqueInOrder(blockers);
 }
 
+function creatorShortStatus(
+  summary: Pick<
+    CurrentProjectImage2BatchRuntimeProjectionSummary,
+    "total" | "queued" | "parked" | "candidate" | "qaPending" | "needsReview" | "completeVerified"
+  >,
+): string {
+  if (!summary.total) return "No Image2 items";
+  if (summary.completeVerified === summary.total) return `Image2 ${summary.completeVerified}/${summary.total} complete`;
+  if (summary.needsReview) return `Image2 ${summary.needsReview}/${summary.total} need review`;
+  if (summary.qaPending) return `Image2 ${summary.qaPending}/${summary.total} waiting QA`;
+  if (summary.candidate) return `Image2 ${summary.candidate}/${summary.total} waiting sidecars`;
+  if (summary.parked && !summary.queued) return `Image2 ${summary.parked}/${summary.total} blocked`;
+  if (summary.completeVerified) return `Image2 ${summary.completeVerified}/${summary.total} complete, ${summary.queued} queued`;
+  if (summary.queued === summary.total) return `Image2 ${summary.queued} queued for review`;
+  return `Image2 ${summary.queued} queued, ${summary.parked} blocked`;
+}
+
 export function buildCurrentProjectImage2BatchPlan(input: BuildCurrentProjectImage2BatchPlanInput): CurrentProjectImage2BatchPlan {
   const projectRoot = normalizePath(input.projectRoot);
   const runRoot = normalizePath(input.runRoot || joinPortablePath(projectRoot, "runs", input.runId));
@@ -445,4 +509,73 @@ export function projectCurrentProjectImage2BatchLedgers(plan: CurrentProjectImag
       providerCalled: false,
     },
   };
+}
+
+export function projectCurrentProjectImage2BatchRuntimeProjectionFromLedgerProjections(
+  input: ProjectCurrentProjectImage2BatchRuntimeProjectionInput,
+): CurrentProjectImage2BatchRuntimeProjection {
+  const items = input.projections.map((projection): CurrentProjectImage2BatchRuntimeProjectionItem => ({
+    taskRunId: projection.reportSummary.taskRunId,
+    envelopeId: projection.manifestSummary.envelopeId,
+    status: projection.reportSummary.status,
+    previewStatus: projection.previewSummary.status,
+    completeVerified: projection.reportSummary.completeVerified,
+    providerObserved: projection.reportSummary.providerObserved,
+    qaReviewed: projection.reportSummary.qaReviewed,
+    terminal: projection.reportSummary.terminal,
+    manifestSummary: projection.manifestSummary,
+    reportSummary: projection.reportSummary,
+    previewSummary: projection.previewSummary,
+  }));
+  const statusCounts = items.reduce(
+    (counts, item) => {
+      if (item.status === "queued") counts.queued += 1;
+      if (item.status === "parked") counts.parked += 1;
+      if (item.previewStatus === "candidate") counts.candidate += 1;
+      if (item.previewStatus === "qa_pending") counts.qaPending += 1;
+      if (item.previewStatus === "needs_review") counts.needsReview += 1;
+      if (item.completeVerified) counts.completeVerified += 1;
+      return counts;
+    },
+    { queued: 0, parked: 0, candidate: 0, qaPending: 0, needsReview: 0, completeVerified: 0 },
+  );
+  const summaryDraft = {
+    total: items.length,
+    queued: statusCounts.queued,
+    parked: statusCounts.parked,
+    blocked: statusCounts.parked,
+    candidate: statusCounts.candidate,
+    qaPending: statusCounts.qaPending,
+    needsReview: statusCounts.needsReview,
+    completeVerified: statusCounts.completeVerified,
+  };
+
+  return {
+    schemaVersion: input.schemaVersion,
+    projectId: input.projectId,
+    runId: input.runId,
+    generatedAt: input.generatedAt,
+    summary: {
+      ...summaryDraft,
+      providerCalled: false,
+      liveSubmitAllowed: false,
+      noFileMutation: true,
+      workerSpawnForbidden: true,
+      creatorShortStatus: creatorShortStatus(summaryDraft),
+    },
+    items,
+  };
+}
+
+export function projectCurrentProjectImage2BatchRuntimeProjection(
+  plan: CurrentProjectImage2BatchPlan,
+): CurrentProjectImage2BatchRuntimeProjection {
+  const ledgerProjection = projectCurrentProjectImage2BatchLedgers(plan);
+  return projectCurrentProjectImage2BatchRuntimeProjectionFromLedgerProjections({
+    schemaVersion: plan.schemaVersion,
+    projectId: plan.projectId,
+    runId: plan.runId,
+    generatedAt: plan.generatedAt,
+    projections: ledgerProjection.projections,
+  });
 }
