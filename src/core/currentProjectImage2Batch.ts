@@ -1,3 +1,11 @@
+import {
+  appendTaskRunEvent,
+  createTaskRunLedger,
+  projectTaskRunLedgers,
+  type TaskRunLedger,
+  type TaskRunLedgerProjection,
+} from "./taskRunLedger";
+
 export const currentProjectImage2BatchSchemaVersion = "0.1.0";
 
 export type CurrentProjectImage2BatchStatus = "ready_for_review" | "blocked";
@@ -94,6 +102,28 @@ export interface CurrentProjectImage2BatchPlan {
   items: CurrentProjectImage2BatchPlanItem[];
   blockers: string[];
   uiSummary: CurrentProjectImage2BatchUiSummary;
+}
+
+export interface CurrentProjectImage2BatchLedgerSummary {
+  total: number;
+  queued: number;
+  blocked: number;
+  parked: number;
+  completeVerified: number;
+  providerSubmissionForbidden: true;
+  liveSubmitAllowed: false;
+  noFileMutation: true;
+  workerSpawnForbidden: true;
+  providerCalled: false;
+}
+
+export interface CurrentProjectImage2BatchLedgerProjection {
+  schemaVersion: string;
+  projectId: string;
+  runId: string;
+  ledgers: TaskRunLedger[];
+  projections: TaskRunLedgerProjection[];
+  summary: CurrentProjectImage2BatchLedgerSummary;
 }
 
 const defaultGeneratedAt = "1970-01-01T00:00:00.000Z";
@@ -350,6 +380,69 @@ export function buildCurrentProjectImage2BatchPlan(input: BuildCurrentProjectIma
         status === "ready_for_review"
           ? "Review the dry-run Image2 batch packet before any manual submit."
           : "Resolve blocked shot selection, locked references, or portable run-root paths before review.",
+    },
+  };
+}
+
+export function projectCurrentProjectImage2BatchLedgers(plan: CurrentProjectImage2BatchPlan): CurrentProjectImage2BatchLedgerProjection {
+  const ledgers = plan.items.map((item) => {
+    const preparedNotes = [
+      `packet:${item.packetId}`,
+      `queue_order:${item.queueOrder}`,
+      "provider_submission_forbidden",
+      "live_submit_allowed:false",
+      "no_file_mutation",
+      "worker_spawn_forbidden",
+    ];
+    const baseLedger = createTaskRunLedger({
+      projectId: plan.projectId,
+      taskRunId: item.taskRunId,
+      envelopeId: item.envelopeId,
+      createdAt: plan.generatedAt,
+      expectedOutputs: [item.expectedOutputPath],
+    });
+    const preparedLedger = appendTaskRunEvent(baseLedger, {
+      eventType: "task_prepared",
+      at: plan.generatedAt,
+      reason: "Current project Image2 batch item prepared for dry-run review only.",
+      notes: preparedNotes,
+    });
+
+    if (item.status === "ready_for_review") {
+      return appendTaskRunEvent(preparedLedger, {
+        eventType: "task_queued",
+        at: plan.generatedAt,
+        reason: "Ready for review queue projection; live provider submit remains forbidden.",
+        notes: ["manual_submit_required", "provider_called:false"],
+      });
+    }
+
+    return appendTaskRunEvent(preparedLedger, {
+      eventType: "parked",
+      at: plan.generatedAt,
+      reason: uniqueInOrder([...item.blockers, ...plan.blockers]).join(", ") || "Current project Image2 batch is blocked.",
+      notes: ["blocked_before_provider_submit", "provider_called:false"],
+    });
+  });
+  const batchProjection = projectTaskRunLedgers(ledgers);
+
+  return {
+    schemaVersion: plan.schemaVersion,
+    projectId: plan.projectId,
+    runId: plan.runId,
+    ledgers,
+    projections: batchProjection.projections,
+    summary: {
+      total: batchProjection.total,
+      queued: batchProjection.byStatus.queued,
+      blocked: plan.items.filter((item) => item.status === "blocked").length,
+      parked: batchProjection.byStatus.parked,
+      completeVerified: batchProjection.byStatus.complete_verified,
+      providerSubmissionForbidden: true,
+      liveSubmitAllowed: false,
+      noFileMutation: true,
+      workerSpawnForbidden: true,
+      providerCalled: false,
     },
   };
 }
