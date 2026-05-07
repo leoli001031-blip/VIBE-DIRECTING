@@ -52,6 +52,7 @@
     "real-provider-executor:test": "node scripts/real-provider-executor-test.mjs",
     "real-provider-one-shot:test": "node scripts/real-provider-one-shot-test.mjs",
     "real-provider-transport:test": "node scripts/real-provider-transport-test.mjs",
+    "image-reference-transport:test": "node scripts/image-reference-transport-test.mjs",
     "real-demo-e2e:test": "node scripts/real-demo-e2e-test.mjs",
     "real-demo-e2e-001:prepare": "node scripts/real-demo-e2e-001-prepare.mjs",
     "real-demo-e2e-001:verify": "node scripts/real-demo-e2e-001-verify.mjs",

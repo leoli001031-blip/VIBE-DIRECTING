@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/image_reference_transport.schema.json",
+  "title": "ImageReferenceTransportState",
+  "description": "Pure Image Reference Transport/Handoff gate. It verifies explicit local image input support and source start-frame file facts before any dispatch-ready handoff, while provider submission and live transport remain forbidden.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "phase",
+    "status",
+    "requestId",
+    "taskPlanId",
+    "operation",
+    "requiredSourceStartFrame",
+    "capabilityEvidence",
+    "outputSandbox",
+    "transportPolicy",
+    "blockers",
+    "warnings",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "phase": { "const": "image_reference_transport_handoff" },
+    "status": { "type": "string", "enum": ["dispatch_ready", "blocked"] },
+    "requestId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "operation": { "type": "string", "enum": ["text2image", "image2image", "reference_asset"] },
+    "frameRole": {
+      "type": "string",
+      "enum": ["start_frame", "end_frame", "reference_asset", "video_parked", "unknown"]
+    },
+    "requiredSourceStartFrame": { "type": "boolean" },
+    "sourceStartFrame": { "$ref": "#/$defs/sourceStartFrame" },
+    "capabilityEvidence": { "$ref": "#/$defs/capabilityEvidence" },
+    "outputSandbox": { "$ref": "#/$defs/outputSandbox" },
+    "transportPolicy": { "$ref": "#/$defs/transportPolicy" },
+    "blockers": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "warnings": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "referenceImageInputRole": {
+      "type": "string",
+      "enum": [
+        "source_start_frame",
+        "locked_character_reference",
+        "locked_scene_reference",
+        "locked_style_reference",
+        "locked_prop_reference",
+        "mask",
+        "other"
+      ]
+    },
+    "sourceStartFrame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputId", "path", "hash", "mime", "dimensions", "role", "transportRole"],
+      "properties": {
+        "inputId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "path": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "hash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "mime": { "type": "string", "pattern": "^image/" },
+        "dimensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "type": "integer", "minimum": 1 },
+            "height": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "role": { "const": "source_start_frame" },
+        "transportRole": { "const": "explicit_local_image_reference" }
+      }
+    },
+    "capabilityEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "interfaceKind",
+        "promptOnly",
+        "actionSupportsExplicitImageInput",
+        "appServerImageRuntimeReady",
+        "appServerSupportsExplicitImageInput",
+        "supportedReferenceRoles"
+      ],
+      "properties": {
+        "actionId": { "type": "string" },
+        "providerId": { "type": "string" },
+        "providerSlot": { "type": "string" },
+        "requiredMode": { "type": "string" },
+        "interfaceKind": {
+          "type": "string",
+          "enum": ["prompt_only", "structured_handoff", "explicit_image_input", "unknown"]
+        },
+        "promptOnly": { "type": "boolean" },
+        "actionSupportsExplicitImageInput": { "type": "boolean" },
+        "appServerImageRuntimeReady": { "type": "boolean" },
+        "appServerSupportsExplicitImageInput": { "type": "boolean" },
+        "supportedReferenceRoles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/referenceImageInputRole" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "outputSandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "expectedOutputPath", "scopedSandboxOnly", "outsideRootWriteAllowed"],
+      "properties": {
+        "root": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "expectedOutputPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "manifestPath": { "type": "string" },
+        "qaReportPath": { "type": "string" },
+        "scopedSandboxOnly": { "const": true },
+        "outsideRootWriteAllowed": { "const": false }
+      }
+    },
+    "transportPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handoffOnly",
+        "dispatchSideEffectAllowed",
+        "providerSubmitAllowed",
+        "canSubmitProvider",
+        "liveSubmitAllowed",
+        "externalNetworkIoAllowed",
+        "providerSelfReportCanComplete",
+        "promptOnlyImageEditAllowed",
+        "seedanceOrJimengAllowed",
+        "videoAllowed",
+        "fastOrVipAllowed",
+        "textToVideoAllowed"
+      ],
+      "properties": {
+        "handoffOnly": { "const": true },
+        "dispatchSideEffectAllowed": { "const": false },
+        "providerSubmitAllowed": { "const": 0 },
+        "canSubmitProvider": { "const": false },
+        "liveSubmitAllowed": { "const": false },
+        "externalNetworkIoAllowed": { "const": false },
+        "providerSelfReportCanComplete": { "const": false },
+        "promptOnlyImageEditAllowed": { "const": false },
+        "seedanceOrJimengAllowed": { "const": false },
+        "videoAllowed": { "const": false },
+        "fastOrVipAllowed": { "const": false },
+        "textToVideoAllowed": { "const": false }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "requiredSourceStartFrame": { "const": true }, "status": { "const": "dispatch_ready" } },
+        "required": ["requiredSourceStartFrame", "status"]
+      },
+      "then": {
+        "required": ["sourceStartFrame"],
+        "properties": {
+          "capabilityEvidence": {
+            "properties": {
+              "promptOnly": { "const": false },
+              "actionSupportsExplicitImageInput": { "const": true },
+              "appServerImageRuntimeReady": { "const": true },
+              "appServerSupportsExplicitImageInput": { "const": true }
+            }
+          },
+          "blockers": { "maxItems": 0 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "dispatch_ready" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "transportPolicy": {
+            "properties": {
+              "providerSubmitAllowed": { "const": 0 },
+              "canSubmitProvider": { "const": false },
+              "liveSubmitAllowed": { "const": false },
+              "externalNetworkIoAllowed": { "const": false }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

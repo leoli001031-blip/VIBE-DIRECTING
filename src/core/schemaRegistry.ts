@@ -367,6 +367,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "Image2AdapterRequest",
   },
   {
+    fileName: "image_reference_transport.schema.json",
+    id: "https://vibecore.local/schemas/image_reference_transport.schema.json",
+    version: schemaVersion,
+    purpose: "Pure Image Reference Transport/Handoff gate requiring explicit source start-frame visual input support before dispatch-ready state while provider submission remains forbidden.",
+    typeName: "ImageReferenceTransportState",
+  },
+  {
     fileName: "image_keyframe_runtime.schema.json",
     id: "https://vibecore.local/schemas/image_keyframe_runtime.schema.json",
     version: schemaVersion,
