@@ -14,6 +14,8 @@ export const defaultRuntimeApiBaseUrl = "http://127.0.0.1:8790";
 export const projectRealChainRuntimeBasePath = "/api/runtime";
 export const projectRealChainStatusEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/status`;
 export const projectRealChainRunCheckEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/run-check`;
+export const projectImage2BatchPlanEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-batch/plan`;
+export const projectImage2BatchRunCheckEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-batch/run-check`;
 export const projectRealChainFileEndpoint = `${projectRealChainRuntimeBasePath}/files`;
 export const projectRealChainReportRelativePath =
   "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/reports/image2_start_long_chain_report.json";
@@ -80,6 +82,53 @@ export type ProjectRealChainUiState = {
   message?: string;
 };
 
+export type ProjectImage2BatchUiStatus = "ready_for_review" | "blocked" | "running" | "unavailable";
+
+export type ProjectImage2BatchPlanItem = {
+  shotId: string;
+  taskRunId?: string;
+  packetId?: string;
+  envelopeId?: string;
+  expectedOutputPath?: string;
+  providerObservationPath?: string;
+  semanticQaPath?: string;
+  promptPath?: string;
+  referencePaths: string[];
+  queueOrder: number;
+  blocked: boolean;
+  blockers: string[];
+};
+
+export type ProjectImage2BatchPlanStatus = {
+  uiStatus: ProjectImage2BatchUiStatus;
+  schemaVersion?: string;
+  projectionKind?: string;
+  sourceLabel?: string;
+  sandboxSource?: string;
+  projectId?: string;
+  runId?: string;
+  projectRoot?: string;
+  projectVibePath?: string;
+  reportPath?: string;
+  plannedCount: number;
+  readyCount: number;
+  blockedCount: number;
+  selectedShotIds: string[];
+  nextAction: string;
+  items: ProjectImage2BatchPlanItem[];
+  providerCalled: boolean;
+  prepareRan: boolean;
+  verifyScriptRan: boolean;
+  liveSubmitAllowed: boolean;
+  message?: string;
+};
+
+export type ProjectImage2BatchUiState = {
+  status: ProjectImage2BatchUiStatus;
+  summary?: ProjectImage2BatchPlanStatus;
+  message?: string;
+};
+
 type ProjectRealChainPayload = {
   schemaVersion?: string;
   source?: string;
@@ -141,6 +190,47 @@ type ProjectRealChainPayload = {
   result?: unknown;
 };
 
+type ProjectImage2BatchPayload = {
+  schemaVersion?: string;
+  projectionKind?: string;
+  sourceLabel?: string;
+  sandboxSource?: string;
+  project?: {
+    projectId?: string;
+    runId?: string;
+    projectRoot?: string;
+    projectVibePath?: string;
+  };
+  reportPath?: string;
+  reportRelativePath?: string;
+  providerCalled?: boolean;
+  prepareRan?: boolean;
+  verifyScriptRan?: boolean;
+  liveSubmitAllowed?: boolean;
+  items?: Array<{
+    shotId?: string;
+    taskRunId?: string;
+    packetId?: string;
+    envelopeId?: string;
+    expectedOutputPath?: string;
+    providerObservationPath?: string;
+    semanticQaPath?: string;
+    promptPath?: string;
+    referencePaths?: string[];
+    queueOrder?: number;
+    blocked?: boolean;
+    blockers?: string[];
+  }>;
+  summary?: {
+    plannedCount?: number;
+    readyCount?: number;
+    blockedCount?: number;
+    selectedShotIds?: string[];
+    nextAction?: string;
+  };
+  message?: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -160,6 +250,16 @@ function payloadFromUnknown(payload: unknown): ProjectRealChainPayload | undefin
   }
   if (isRecord(payload.report)) return { ...(payload.report as ProjectRealChainPayload), ...payload } as ProjectRealChainPayload;
   if (isRecord(payload.result)) return { ...(payload.result as ProjectRealChainPayload), ...payload } as ProjectRealChainPayload;
+  return undefined;
+}
+
+function image2BatchPayloadFromUnknown(payload: unknown): ProjectImage2BatchPayload | undefined {
+  if (!isRecord(payload)) return undefined;
+  if (payload.projectionKind === "current_project_image2_batch_prepare_plan" || Array.isArray(payload.items)) {
+    return payload as ProjectImage2BatchPayload;
+  }
+  if (isRecord(payload.report)) return { ...(payload.report as ProjectImage2BatchPayload), ...payload } as ProjectImage2BatchPayload;
+  if (isRecord(payload.result)) return { ...(payload.result as ProjectImage2BatchPayload), ...payload } as ProjectImage2BatchPayload;
   return undefined;
 }
 
@@ -337,6 +437,75 @@ export function deriveProjectRealChainStatus(
   };
 }
 
+export function deriveProjectImage2BatchPlanStatus(
+  payload: unknown,
+): ProjectImage2BatchPlanStatus {
+  const report = image2BatchPayloadFromUnknown(payload);
+  if (!report) {
+    return {
+      uiStatus: "unavailable",
+      plannedCount: 0,
+      readyCount: 0,
+      blockedCount: 0,
+      selectedShotIds: [],
+      nextAction: "Runtime Image2 batch plan is unavailable.",
+      items: [],
+      providerCalled: false,
+      prepareRan: false,
+      verifyScriptRan: false,
+      liveSubmitAllowed: false,
+      message: "Project Image2 batch plan shape was not recognized.",
+    };
+  }
+
+  const items = (report.items || []).map((item, index): ProjectImage2BatchPlanItem => ({
+    shotId: item.shotId || `S${String(index + 1).padStart(2, "0")}`,
+    taskRunId: item.taskRunId,
+    packetId: item.packetId,
+    envelopeId: item.envelopeId,
+    expectedOutputPath: item.expectedOutputPath,
+    providerObservationPath: item.providerObservationPath,
+    semanticQaPath: item.semanticQaPath,
+    promptPath: item.promptPath,
+    referencePaths: stringArray(item.referencePaths),
+    queueOrder: typeof item.queueOrder === "number" ? item.queueOrder : index + 1,
+    blocked: item.blocked === true || stringArray(item.blockers).length > 0,
+    blockers: stringArray(item.blockers),
+  }));
+  const plannedCount = numberOrUndefined(report.summary?.plannedCount) ?? items.length;
+  const blockedCount = numberOrUndefined(report.summary?.blockedCount) ?? items.filter((item) => item.blocked).length;
+  const readyCount = numberOrUndefined(report.summary?.readyCount) ?? Math.max(0, plannedCount - blockedCount);
+  const selectedShotIds = stringArray(report.summary?.selectedShotIds).length
+    ? stringArray(report.summary?.selectedShotIds)
+    : items.map((item) => item.shotId);
+  const uiStatus: ProjectImage2BatchUiStatus = plannedCount > 0 && blockedCount === 0 ? "ready_for_review" : plannedCount > 0 ? "blocked" : "unavailable";
+  const project = report.project || {};
+
+  return {
+    uiStatus,
+    schemaVersion: report.schemaVersion,
+    projectionKind: report.projectionKind,
+    sourceLabel: report.sourceLabel,
+    sandboxSource: report.sandboxSource,
+    projectId: project.projectId,
+    runId: project.runId,
+    projectRoot: project.projectRoot,
+    projectVibePath: project.projectVibePath,
+    reportPath: report.reportRelativePath || report.reportPath,
+    plannedCount,
+    readyCount,
+    blockedCount,
+    selectedShotIds,
+    nextAction: report.summary?.nextAction || "Review the dry-run Image2 batch plan before any manual submit.",
+    items,
+    providerCalled: report.providerCalled === true,
+    prepareRan: report.prepareRan === true,
+    verifyScriptRan: report.verifyScriptRan === true,
+    liveSubmitAllowed: report.liveSubmitAllowed === true,
+    message: report.message,
+  };
+}
+
 async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
   const response = await fetch(toRuntimeUrl(url), init);
   if (!response.ok) throw new Error(`${url} returned ${response.status}`);
@@ -395,6 +564,34 @@ export async function runProjectRealChainCheck(): Promise<ProjectRealChainUiStat
   } catch (endpointError) {
     return fallbackToReport(
       `Runtime project run-check endpoint unavailable; synced report fallback only. ${endpointError instanceof Error ? endpointError.message : ""}`.trim(),
+    );
+  }
+}
+
+async function unavailableImage2BatchState(message: string): Promise<ProjectImage2BatchUiState> {
+  return { status: "unavailable", message };
+}
+
+export async function loadProjectImage2BatchPlan(): Promise<ProjectImage2BatchUiState> {
+  try {
+    const payload = await fetchRuntimeJson(projectImage2BatchPlanEndpoint);
+    const summary = deriveProjectImage2BatchPlanStatus(payload);
+    return { status: summary.uiStatus, summary };
+  } catch (endpointError) {
+    return unavailableImage2BatchState(
+      `Runtime Image2 batch plan endpoint unavailable. ${endpointError instanceof Error ? endpointError.message : ""}`.trim(),
+    );
+  }
+}
+
+export async function runProjectImage2BatchCheck(): Promise<ProjectImage2BatchUiState> {
+  try {
+    const payload = await fetchRuntimeJson(projectImage2BatchRunCheckEndpoint, { method: "POST" });
+    const summary = deriveProjectImage2BatchPlanStatus(payload);
+    return { status: summary.uiStatus, summary };
+  } catch (endpointError) {
+    return unavailableImage2BatchState(
+      `Runtime Image2 batch run-check endpoint unavailable. ${endpointError instanceof Error ? endpointError.message : ""}`.trim(),
     );
   }
 }

@@ -781,6 +781,7 @@
   grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1fr) minmax(160px, 0.42fr);
   grid-template-areas:
     "head tags thumbs"
+    "batch policy thumbs"
     "report report thumbs"
     "message message thumbs";
   align-items: center;
@@ -860,6 +861,71 @@
   font-size: 11px;
 }
 
+.real-demo-005-batch {
+  grid-area: batch;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.real-demo-005-batch > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.real-demo-005-batch span,
+.real-demo-005-batch small {
+  color: rgba(37, 40, 34, 0.52);
+  font-size: 11px;
+}
+
+.real-demo-005-batch strong {
+  color: rgba(37, 40, 34, 0.82);
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.real-demo-005-batch button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  border: 1px solid rgba(37, 40, 34, 0.16);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(37, 40, 34, 0.68);
+  cursor: pointer;
+  padding: 0 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.real-demo-005-batch button:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.real-demo-005-policy {
+  grid-area: policy;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.real-demo-005-policy small {
+  border: 1px solid rgba(37, 40, 34, 0.1);
+  color: rgba(37, 40, 34, 0.58);
+  padding: 4px 7px;
+  font-size: 11px;
+}
+
 .real-demo-005-thumbs {
   grid-area: thumbs;
   display: grid;
@@ -935,18 +1001,28 @@
 }
 
 .preview-shell .real-demo-005-head strong,
-.preview-shell .real-demo-005-head button {
+.preview-shell .real-demo-005-head button,
+.preview-shell .real-demo-005-batch strong,
+.preview-shell .real-demo-005-batch button {
   color: rgba(242, 238, 230, 0.84);
 }
 
 .preview-shell .real-demo-005-head button,
-.preview-shell .real-demo-005-tags small {
+.preview-shell .real-demo-005-batch button,
+.preview-shell .real-demo-005-tags small,
+.preview-shell .real-demo-005-policy small {
   border-color: rgba(242, 238, 230, 0.16);
 }
 
-.preview-shell .real-demo-005-tags small {
+.preview-shell .real-demo-005-tags small,
+.preview-shell .real-demo-005-policy small {
   background: rgba(242, 238, 230, 0.055);
   color: rgba(242, 238, 230, 0.68);
+}
+
+.preview-shell .real-demo-005-batch span,
+.preview-shell .real-demo-005-batch small {
+  color: rgba(242, 238, 230, 0.56);
 }
 
 .minimal-story-flow h2,
@@ -1843,6 +1919,8 @@
     grid-template-areas:
       "head"
       "tags"
+      "batch"
+      "policy"
       "thumbs"
       "report"
       "message";

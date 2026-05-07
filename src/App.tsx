@@ -82,9 +82,12 @@ import {
 } from "./core/previewPlayerQueue";
 import { applyPreRealTestClosure } from "./core/preRealTestClosure";
 import {
+  loadProjectImage2BatchPlan,
   loadProjectRealChainStatus,
   projectRealChainReportRelativePath,
+  runProjectImage2BatchCheck,
   runProjectRealChainCheck,
+  type ProjectImage2BatchUiState,
   type ProjectRealChainPreviewItem,
   type ProjectRealChainUiState,
   type ProjectRealChainUiStatus,
@@ -408,6 +411,7 @@ type RealPilotUiSummary = {
 };
 type OneShotActionStatus = "idle" | "confirmed";
 type ProjectRealChainPanelState = ProjectRealChainUiState;
+type ProjectImage2BatchPanelState = ProjectImage2BatchUiState;
 
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
@@ -7585,18 +7589,32 @@ function projectRealChainVisibleItems(
   return withImage.slice(0, 4);
 }
 
+function projectImage2BatchStatusLabel(state: ProjectImage2BatchPanelState) {
+  if (state.status === "running") return "checking";
+  if (state.status === "ready_for_review") return "ready for review";
+  if (state.status === "blocked") return "blocked";
+  return "unavailable";
+}
+
 function ProjectRealChainPanel({
   state,
+  image2BatchState,
   selectedShotId,
   onRun,
+  onRunImage2Batch,
 }: {
   state: ProjectRealChainPanelState;
+  image2BatchState: ProjectImage2BatchPanelState;
   selectedShotId: string;
   onRun: () => void;
+  onRunImage2Batch: () => void;
 }) {
   const summary = state.summary;
+  const image2Batch = image2BatchState.summary;
   const running = state.status === "running";
+  const image2BatchRunning = image2BatchState.status === "running";
   const status = projectRealChainStatusLabel(state.status);
+  const image2BatchStatus = projectImage2BatchStatusLabel(image2BatchState);
   const reviewShotIds = summary?.reviewShotIds.length ? summary.reviewShotIds.join("/") : "";
   const returnedCount = summary?.returnedImageCount ?? 0;
   const plannedCount = summary?.totalPlannedImages ?? 0;
@@ -7626,6 +7644,29 @@ function ProjectRealChainPanel({
         {summary?.source && <small>{sourceLabel}</small>}
         {summary?.sandboxSource && <small>{summary.sandboxSource}</small>}
       </div>
+      <div className="real-demo-005-batch">
+        <div>
+          <span>Image2 小批量</span>
+          <strong>{image2BatchStatus}</strong>
+          <small>
+            {image2Batch
+              ? `${image2Batch.readyCount}/${image2Batch.plannedCount} 可复核 · ${image2Batch.blockedCount} 阻断`
+              : "等待 runtime projection"}
+          </small>
+        </div>
+        <button disabled={image2BatchRunning} onClick={onRunImage2Batch}>
+          <RefreshCw size={14} />
+          {image2BatchRunning ? "检查中" : "检查准备"}
+        </button>
+      </div>
+      {image2Batch?.selectedShotIds.length ? (
+        <div className="real-demo-005-policy">
+          <small>计划 {image2Batch.selectedShotIds.slice(0, 4).join("/")}{image2Batch.selectedShotIds.length > 4 ? ` +${image2Batch.selectedShotIds.length - 4}` : ""}</small>
+          <small>provider 未提交</small>
+          <small>prepare 未执行</small>
+          <small>live submit off</small>
+        </div>
+      ) : null}
       {visibleItems.length > 0 && (
         <div className="real-demo-005-thumbs" aria-label="当前项目真实链路缩略图">
           {visibleItems.map((item) => (
@@ -7644,6 +7685,7 @@ function ProjectRealChainPanel({
         {summary?.projectId || "current project"} · {summary?.reportPath || projectRealChainReportRelativePath}
       </small>
       {state.message && <small className="real-demo-005-message">{state.message}</small>}
+      {image2BatchState.message && <small className="real-demo-005-message">{image2BatchState.message}</small>}
     </section>
   );
 }
@@ -7755,6 +7797,7 @@ function DirectorMode({
   selectedShotIds,
   selectedAssetId,
   projectRealChainState,
+  projectImage2BatchState,
   directorView,
   activeSectionId,
   onSelectShot,
@@ -7765,6 +7808,7 @@ function DirectorMode({
   onProjectFactsModeChange,
   onConfirmOneShot,
   onRunProjectRealChain,
+  onRunProjectImage2Batch,
 }: {
   audit: ProjectAudit;
   view: RuntimeView;
@@ -7779,6 +7823,7 @@ function DirectorMode({
   selectedShotIds: string[];
   selectedAssetId?: string;
   projectRealChainState: ProjectRealChainPanelState;
+  projectImage2BatchState: ProjectImage2BatchPanelState;
   directorView: DirectorView;
   activeSectionId?: string;
   onSelectShot: (id: string, additive?: boolean) => void;
@@ -7789,18 +7834,23 @@ function DirectorMode({
   onProjectFactsModeChange: (mode: ProjectFactsUiMode) => void;
   onConfirmOneShot: () => void;
   onRunProjectRealChain: () => void;
+  onRunProjectImage2Batch: () => void;
 }) {
   const activeSection = view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0];
   const sectionLabel = activeSection?.label || "Story";
   const shots = activeSection ? audit.shots.filter((shot) => activeSection.shotIds.includes(shot.id)) : audit.shots;
-  const realPilotSummary = buildRealPilotUiSummary(runtimeState, selectedShot);
 
   return (
     <div className={`minimal-director ${directorView}`}>
       <div className="minimal-director-main">
         <MinimalDirectorStatusDot runtimeState={runtimeState} />
-        <RealPilotDirectorStatus summary={realPilotSummary} />
-        <ProjectRealChainPanel state={projectRealChainState} selectedShotId={selectedShotId} onRun={onRunProjectRealChain} />
+        <ProjectRealChainPanel
+          state={projectRealChainState}
+          image2BatchState={projectImage2BatchState}
+          selectedShotId={selectedShotId}
+          onRun={onRunProjectRealChain}
+          onRunImage2Batch={onRunProjectImage2Batch}
+        />
         {directorView === "assets" && (
           <MinimalAssetLibrary
             library={assetLibrary}
@@ -9154,6 +9204,7 @@ function App() {
   const [selectedShotIds, setSelectedShotIds] = useState<string[]>(["A1_01"]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | undefined>();
   const [projectRealChainState, setProjectRealChainState] = useState<ProjectRealChainPanelState>({ status: "unavailable" });
+  const [projectImage2BatchState, setProjectImage2BatchState] = useState<ProjectImage2BatchPanelState>({ status: "unavailable" });
 
   function loadProjectState(nextState: ProjectRuntimeState) {
     setRuntimeState(nextState);
@@ -9245,6 +9296,9 @@ function App() {
     loadProjectRealChainStatus().then((nextState) => {
       if (!cancelled) setProjectRealChainState(nextState);
     });
+    loadProjectImage2BatchPlan().then((nextState) => {
+      if (!cancelled) setProjectImage2BatchState(nextState);
+    });
     return () => {
       cancelled = true;
     };
@@ -9335,6 +9389,16 @@ function App() {
     setProjectRealChainState(nextState);
   }
 
+  async function runProjectImage2Batch() {
+    setProjectImage2BatchState((current) => ({
+      ...current,
+      status: "running",
+      message: "Checking current project Image2 batch readiness through runtime endpoint.",
+    }));
+    const nextState = await runProjectImage2BatchCheck();
+    setProjectImage2BatchState(nextState);
+  }
+
   return (
     <div className={`app-shell minimal-shell ${mode === "director" && directorView === "preview" ? "preview-shell" : ""}`}>
       <MinimalTopNav
@@ -9375,6 +9439,7 @@ function App() {
           selectedShotIds={selectedShotIds}
           selectedAssetId={selectedAssetId}
           projectRealChainState={projectRealChainState}
+          projectImage2BatchState={projectImage2BatchState}
           directorView={directorView}
           activeSectionId={resolvedActiveSectionId}
           onSelectShot={selectShot}
@@ -9385,6 +9450,7 @@ function App() {
           onProjectFactsModeChange={setProjectFactsMode}
           onConfirmOneShot={confirmOneShot}
           onRunProjectRealChain={runProjectRealChain}
+          onRunProjectImage2Batch={runProjectImage2Batch}
         />
       )}
       {mode === "inspector" && <InspectorMode audit={audit} view={view} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />}

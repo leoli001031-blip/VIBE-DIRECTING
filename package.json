@@ -59,6 +59,7 @@
     "runtime-truth-integration:test": "node scripts/runtime-truth-integration-test.mjs",
     "local-runtime-api": "node scripts/local-runtime-api-server.mjs",
     "local-runtime-api:test": "node scripts/local-runtime-api-server-test.mjs",
+    "current-project-image2-batch:test": "node scripts/current-project-image2-batch-test.mjs",
     "real-image2-batch-prepare-check:test": "node scripts/real-image2-batch-prepare-check-test.mjs",
     "real-demo-e2e:test": "node scripts/real-demo-e2e-test.mjs && node scripts/real-demo-e2e-003-long-chain-test.mjs",
     "real-demo-e2e-001:prepare": "node scripts/real-demo-e2e-001-prepare.mjs",

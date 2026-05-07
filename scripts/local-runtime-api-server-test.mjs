@@ -79,6 +79,46 @@ function assertProjectRealChainPayload(payload, label) {
   assert(payload.reportPath === "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/reports/image2_start_long_chain_report.json", `${label} report path should be project relative`);
 }
 
+function assertImage2BatchPlanPayload(payload, label) {
+  assert(payload.ok === true, `${label} should be ok`);
+  assert(payload.projectionKind === "current_project_image2_batch_prepare_plan", `${label} projection kind mismatch`);
+  assert(payload.projectRootMode === "sandbox_fixture_projection", `${label} project root mode mismatch`);
+  assert(payload.project?.projectId === "real_demo_e2e_005_anime_image2_start_frames", `${label} project id mismatch`);
+  assert(payload.submitPolicy?.providerCallAllowed === false, `${label} provider calls must be disallowed`);
+  assert(payload.submitPolicy?.dryRunOnly === true, `${label} should be dry-run only`);
+  assert(payload.submitPolicy?.manualSubmitRequired === true, `${label} should require manual submit`);
+  assert(payload.submitPolicy?.liveSubmitAllowed === false, `${label} live submit must be disallowed`);
+  assert(payload.submitPolicy?.noSeedance === true, `${label} Seedance must be blocked`);
+  assert(payload.submitPolicy?.noJimeng === true, `${label} Jimeng must be blocked`);
+  assert(payload.submitPolicy?.noVideo === true, `${label} video must be blocked`);
+  assert(payload.submitPolicy?.noFast === true, `${label} fast mode must be blocked`);
+  assert(payload.submitPolicy?.noVip === true, `${label} VIP mode must be blocked`);
+  assert(payload.providerCalled === false, `${label} must not call provider`);
+  assert(payload.prepareRan === false, `${label} must not run prepare`);
+  assert(payload.verifyScriptRan === false, `${label} must not run verify script`);
+  assert(payload.liveSubmitAllowed === false, `${label} live submit must not be allowed`);
+  assert(Array.isArray(payload.observations) && payload.observations.length === 8, `${label} observations mismatch`);
+  assert(Array.isArray(payload.items) && payload.items.length === 8, `${label} items mismatch`);
+  assert(Array.isArray(payload.plan?.items) && payload.plan.items.length === 8, `${label} plan items mismatch`);
+  assert(payload.summary?.plannedCount === 8, `${label} planned count mismatch`);
+  assert(payload.summary?.readyCount + payload.summary?.blockedCount === 8, `${label} summary count mismatch`);
+  assert(Array.isArray(payload.summary?.selectedShotIds), `${label} selectedShotIds missing`);
+  assert(payload.summary.selectedShotIds.includes("S01"), `${label} selected shots should include S01`);
+  assert(typeof payload.summary.nextAction === "string" && payload.summary.nextAction.length > 0, `${label} next action missing`);
+
+  const first = payload.items.find((item) => item.shotId === "S01");
+  assert(first?.taskRunId === "task_run_s01_image2_start_real_demo_005", `${label} S01 taskRunId mismatch`);
+  assert(first?.packetId === "task_packet_s01_image2_start_real_demo_005", `${label} S01 packetId mismatch`);
+  assert(first?.envelopeId === "subagent_envelope_s01_image2_start_real_demo_005", `${label} S01 envelopeId mismatch`);
+  assert(first?.expectedOutputPath === "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/outputs/shots/S01/start.png", `${label} S01 expected output mismatch`);
+  assert(first?.providerObservationPath === "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/provider_observations/S01_start_provider_observation.json", `${label} S01 provider observation path mismatch`);
+  assert(first?.semanticQaPath === "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/semantic_qa/S01_start_semantic_qa.json", `${label} S01 semantic QA path mismatch`);
+  assert(first?.promptPath === "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/prompt_requests/S01_start_frame_prompt.md", `${label} S01 prompt path mismatch`);
+  assert(Array.isArray(first?.referencePaths), `${label} S01 referencePaths missing`);
+  assert(first.referencePaths.includes("real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/project/project.vibe"), `${label} S01 referencePaths should include project.vibe`);
+  assert(first.queueOrder === 1, `${label} S01 queue order mismatch`);
+}
+
 const child = spawn(process.execPath, ["scripts/local-runtime-api-server.mjs"], {
   cwd: process.cwd(),
   env: { ...process.env, VIBE_CORE_RUNTIME_API_PORT: "0" },
@@ -87,6 +127,11 @@ const child = spawn(process.execPath, ["scripts/local-runtime-api-server.mjs"], 
 
 try {
   const { baseUrl } = await waitForServer(child);
+  const runtimeStatus = await fetchJson(`${baseUrl}/api/runtime/status`);
+  assert(runtimeStatus.response.status === 200, "GET runtime status should return 200");
+  assert(runtimeStatus.payload.endpoints?.currentProjectImage2BatchPlanEndpoint === "/api/runtime/projects/current/image2-batch/plan", "runtime status should expose image2 batch plan endpoint");
+  assert(runtimeStatus.payload.endpoints?.currentProjectImage2BatchRunCheckEndpoint === "/api/runtime/projects/current/image2-batch/run-check", "runtime status should expose image2 batch run-check endpoint");
+
   const projectStatus = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
   assert(projectStatus.response.status === 200, "GET project real-chain status should return 200");
   assertProjectRealChainPayload(projectStatus.payload, "GET project real-chain status");
@@ -104,6 +149,20 @@ try {
   assert(projectRun.payload.command?.verifyScriptRan === false, "POST project command must not run the 005 verify script");
   assert(projectRun.payload.command?.mode === "read_only_projection_check", "POST project command should be a read-only projection check");
   assert(projectRun.payload.command?.exitCode === 0, "POST project command should pass");
+
+  const image2BatchPlan = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-batch/plan`);
+  assert(image2BatchPlan.response.status === 200, "GET image2 batch plan should return 200");
+  assertImage2BatchPlanPayload(image2BatchPlan.payload, "GET image2 batch plan");
+
+  const image2BatchRunCheck = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-batch/run-check`, { method: "POST" });
+  assert(image2BatchRunCheck.response.status === 200, "POST image2 batch run-check should return 200");
+  assertImage2BatchPlanPayload(image2BatchRunCheck.payload, "POST image2 batch run-check");
+  assert(image2BatchRunCheck.payload.command?.mode === "read_only_image2_batch_plan_check", "POST image2 batch command mode mismatch");
+  assert(image2BatchRunCheck.payload.command?.exitCode === 0, "POST image2 batch command should pass");
+  assert(image2BatchRunCheck.payload.command?.providerCalled === false, "POST image2 batch command must not call provider");
+  assert(image2BatchRunCheck.payload.command?.prepareRan === false, "POST image2 batch command must not run prepare");
+  assert(image2BatchRunCheck.payload.command?.verifyScriptRan === false, "POST image2 batch command must not run verify script");
+  assert(image2BatchRunCheck.payload.command?.liveSubmitAllowed === false, "POST image2 batch command must not allow live submit");
 
   const status = await fetchJson(`${baseUrl}/api/runtime/real-demo-e2e/005/status`);
   assert(status.response.status === 200, "GET status should return 200");

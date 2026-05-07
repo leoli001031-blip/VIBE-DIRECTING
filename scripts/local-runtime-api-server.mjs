@@ -17,6 +17,8 @@ const maxOutputChars = 8000;
 const runtimeBasePath = "/api/runtime";
 const currentProjectStatusEndpoint = `${runtimeBasePath}/projects/current/real-chain/status`;
 const currentProjectRunEndpoint = `${runtimeBasePath}/projects/current/real-chain/run-check`;
+const currentProjectImage2BatchPlanEndpoint = `${runtimeBasePath}/projects/current/image2-batch/plan`;
+const currentProjectImage2BatchRunCheckEndpoint = `${runtimeBasePath}/projects/current/image2-batch/run-check`;
 const realDemo005StatusEndpoint = `${runtimeBasePath}/real-demo-e2e/005/status`;
 const realDemo005RunEndpoint = `${runtimeBasePath}/real-demo-e2e/005/run`;
 const runtimeFileEndpoint = `${runtimeBasePath}/files`;
@@ -37,6 +39,15 @@ function corsHeaders(contentType = "application/json; charset=utf-8") {
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
+}
+
+function readJsonIfPresent(filePath) {
+  if (!existsSync(filePath)) return undefined;
+  try {
+    return readJson(filePath);
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeRelativePath(value) {
@@ -204,6 +215,65 @@ function observationSummary(item) {
   };
 }
 
+function asString(value) {
+  return typeof value === "string" && value.length ? value : undefined;
+}
+
+function uniqueStrings(values) {
+  return [...new Set(values.filter((value) => typeof value === "string" && value.length))];
+}
+
+function image2BatchSubmitPolicy() {
+  return {
+    providerCallAllowed: false,
+    dryRunOnly: true,
+    manualSubmitRequired: true,
+    liveSubmitAllowed: false,
+    noSeedance: true,
+    noJimeng: true,
+    noVideo: true,
+    noFast: true,
+    noVip: true,
+  };
+}
+
+function derivedShotPath(source, shotId, folder, suffix, ext) {
+  return `${source.runRootRelativePath}/${folder}/${shotId}${suffix}.${ext}`;
+}
+
+function image2BatchPlanItem(source, observation, queueOrder, shotPlan = {}) {
+  const shotId = observation.shotId || shotPlan.shotId || `shot_${queueOrder}`;
+  const lowerShotId = String(shotId).toLowerCase();
+  const blockers = Array.isArray(observation.blockers) ? observation.blockers : [];
+  const packetPath = asString(shotPlan.packetPath) || derivedShotPath(source, shotId, "task_packets", "_start_frame_packet", "md");
+  const envelopePath = asString(shotPlan.envelopePath) || derivedShotPath(source, shotId, "subagent_envelopes", "_start_frame_envelope", "json");
+  const shotLayoutPath = derivedShotPath(source, shotId, "project/shot_layouts", "", "json");
+
+  return {
+    shotId,
+    taskRunId: asString(shotPlan.taskRunId) || `task_run_${lowerShotId}_image2_batch_plan_check`,
+    packetId: asString(shotPlan.taskPacketId) || asString(shotPlan.packetId) || `task_packet_${lowerShotId}_image2_batch_plan_check`,
+    envelopeId: asString(shotPlan.envelopeId) || `subagent_envelope_${lowerShotId}_image2_batch_plan_check`,
+    expectedOutputPath: asString(observation.expectedOutputPath) || asString(shotPlan.expectedOutputPath) || `${source.runRootRelativePath}/outputs/shots/${shotId}/start.png`,
+    providerObservationPath: asString(shotPlan.providerObservationPath) || derivedShotPath(source, shotId, "provider_observations", "_start_provider_observation", "json"),
+    semanticQaPath: asString(shotPlan.semanticQaPath) || derivedShotPath(source, shotId, "semantic_qa", "_start_semantic_qa", "json"),
+    promptPath: asString(shotPlan.promptRequestPath) || asString(shotPlan.promptPath) || derivedShotPath(source, shotId, "prompt_requests", "_start_frame_prompt", "md"),
+    referencePaths: uniqueStrings([
+      source.projectVibeRelativePath,
+      shotLayoutPath,
+      `${source.runRootRelativePath}/project/source_index.json`,
+      `${source.runRootRelativePath}/project/story_flow.json`,
+      `${source.runRootRelativePath}/project/visual_memory.json`,
+      packetPath,
+      envelopePath,
+      ...(Array.isArray(shotPlan.referencePaths) ? shotPlan.referencePaths : []),
+    ]),
+    queueOrder,
+    blocked: blockers.length > 0,
+    blockers,
+  };
+}
+
 function unavailableResponse(extra = {}) {
   const source = extra.sourceProject || realDemo005Source();
   return {
@@ -305,6 +375,66 @@ function currentProjectRealChainResponse(extra = {}) {
       productionQaStatus: item.productionQaStatus,
     })),
     nextAction: "review_needed_outputs_before_production_promotion",
+    ...extra,
+  };
+}
+
+function currentProjectImage2BatchPlanResponse(extra = {}) {
+  const source = currentProjectSource();
+  const report = readJsonIfPresent(source.reportPath);
+  const reportObservations = Array.isArray(report?.observations)
+    ? report.observations.map(observationSummary)
+    : [];
+  const selectedObservations = reportObservations.slice(0, 10);
+  const manifest = readJsonIfPresent(path.join(source.runRootPath, "run_manifest.json"));
+  const shotPlans = Array.isArray(manifest?.shotPlans) ? manifest.shotPlans : [];
+  const items = selectedObservations.map((observation, index) => {
+    const shotPlan = shotPlans.find((item) => item?.shotId === observation.shotId) || {};
+    return image2BatchPlanItem(source, observation, index + 1, shotPlan);
+  });
+  const blockedItems = items.filter((item) => item.blocked);
+
+  return {
+    ok: existsSync(source.reportPath),
+    ...runtimePolicy({
+      runMode: "read_only_image2_batch_plan_projection",
+      verifyScriptRan: false,
+      liveSubmitAllowed: false,
+    }),
+    endpoint: currentProjectImage2BatchPlanEndpoint,
+    source: "runtime_endpoint",
+    sourceLabel: source.sourceLabel,
+    sandboxSource: source.sandboxSource,
+    projectionKind: "current_project_image2_batch_prepare_plan",
+    projectRootMode: source.projectRootMode,
+    projectRootRelativePath: source.runRootRelativePath,
+    projectVibeRelativePath: source.projectVibeRelativePath,
+    project: readProjectVibe(source),
+    reportStatus: report?.status || "unavailable",
+    reportPath: source.reportRelativePath,
+    reportRelativePath: source.reportRelativePath,
+    reportUrl: runtimeFileUrl(source.reportRelativePath),
+    observations: selectedObservations,
+    submitPolicy: image2BatchSubmitPolicy(),
+    plan: {
+      mode: "read_only_image2_batch_prepare_check_projection",
+      sourceObservationLimit: 10,
+      items,
+    },
+    items,
+    summary: {
+      plannedCount: items.length,
+      readyCount: items.length - blockedItems.length,
+      blockedCount: blockedItems.length,
+      selectedShotIds: items.map((item) => item.shotId),
+      nextAction: blockedItems.length
+        ? "resolve_blockers_before_manual_image2_batch_prepare"
+        : "manual_review_projection_before_any_prepare_or_provider_submit",
+    },
+    providerCalled: false,
+    prepareRan: false,
+    verifyScriptRan: false,
+    liveSubmitAllowed: false,
     ...extra,
   };
 }
@@ -443,6 +573,24 @@ function handleCurrentProjectRunCheck(res) {
   writeJson(res, payload.ok === false ? 500 : 200, payload);
 }
 
+function handleCurrentProjectImage2BatchRunCheck(res) {
+  const source = currentProjectSource();
+  const payload = currentProjectImage2BatchPlanResponse({
+    running,
+    command: {
+      mode: "read_only_image2_batch_plan_check",
+      exitCode: existsSync(source.reportPath) ? 0 : 1,
+      reportRead: existsSync(source.reportPath),
+      projectVibeRead: existsSync(source.projectVibePath),
+      providerCalled: false,
+      prepareRan: false,
+      verifyScriptRan: false,
+      liveSubmitAllowed: false,
+    },
+  });
+  writeJson(res, payload.ok === false ? 500 : 200, payload);
+}
+
 const server = createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${host}`);
   if (req.method === "OPTIONS") {
@@ -456,6 +604,8 @@ const server = createServer((req, res) => {
         endpoints: {
           currentProjectStatusEndpoint,
           currentProjectRunEndpoint,
+          currentProjectImage2BatchPlanEndpoint,
+          currentProjectImage2BatchRunCheckEndpoint,
           realDemo005StatusEndpoint,
           realDemo005RunEndpoint,
           runtimeFileEndpoint,
@@ -475,6 +625,14 @@ const server = createServer((req, res) => {
   }
   if (req.method === "POST" && url.pathname === currentProjectRunEndpoint) {
     handleCurrentProjectRunCheck(res);
+    return;
+  }
+  if (req.method === "GET" && url.pathname === currentProjectImage2BatchPlanEndpoint) {
+    writeJson(res, 200, currentProjectImage2BatchPlanResponse({ running }));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === currentProjectImage2BatchRunCheckEndpoint) {
+    handleCurrentProjectImage2BatchRunCheck(res);
     return;
   }
   if (req.method === "GET" && (url.pathname === realDemo005StatusEndpoint || url.pathname === legacyStatusEndpoint)) {
