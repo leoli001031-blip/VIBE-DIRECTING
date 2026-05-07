@@ -374,6 +374,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ImageReferenceTransportState",
   },
   {
+    fileName: "image_reference_delivery_receipt.schema.json",
+    id: "https://vibecore.local/schemas/image_reference_delivery_receipt.schema.json",
+    version: schemaVersion,
+    purpose: "Pure source start-frame delivery receipt contract proving image input binding, hash match, and action schema acceptance before one-shot or transport readiness.",
+    typeName: "ImageReferenceDeliveryReceiptState",
+  },
+  {
     fileName: "image_keyframe_runtime.schema.json",
     id: "https://vibecore.local/schemas/image_keyframe_runtime.schema.json",
     version: schemaVersion,

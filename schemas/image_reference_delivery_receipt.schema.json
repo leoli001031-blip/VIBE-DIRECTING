@@ -1,0 +1,302 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/image_reference_delivery_receipt.schema.json",
+  "title": "ImageReferenceDeliveryReceiptState",
+  "description": "Pure software-layer receipt proving an approved source start-frame was delivered as an explicit image input binding shape. It performs no app-server launch, provider submit, network I/O, video action, or filesystem action.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "phase",
+    "status",
+    "receiptId",
+    "requestId",
+    "taskPlanId",
+    "operation",
+    "requiredSourceStartFrame",
+    "verification",
+    "schemaEvidence",
+    "transportPolicy",
+    "deliveryPolicy",
+    "blockers",
+    "warnings",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "phase": { "const": "image_reference_delivery_receipt" },
+    "status": { "type": "string", "enum": ["delivered", "blocked"] },
+    "receiptId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "requestId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "operation": { "type": "string", "enum": ["text2image", "image2image", "reference_asset"] },
+    "frameRole": { "type": "string" },
+    "requiredSourceStartFrame": { "type": "boolean" },
+    "sourceStartFrame": { "$ref": "#/$defs/sourceStartFrame" },
+    "delivery": { "$ref": "#/$defs/delivery" },
+    "verification": { "$ref": "#/$defs/verification" },
+    "schemaEvidence": { "$ref": "#/$defs/schemaEvidence" },
+    "transportPolicy": { "$ref": "#/$defs/transportPolicy" },
+    "deliveryPolicy": { "$ref": "#/$defs/deliveryPolicy" },
+    "blockers": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "warnings": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "sourceStartFrame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputId",
+        "path",
+        "sha256",
+        "hash",
+        "mime",
+        "byteLength",
+        "dimensions",
+        "exists",
+        "readable",
+        "pathScope",
+        "role",
+        "transportRole"
+      ],
+      "properties": {
+        "inputId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "path": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "sha256": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "hash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "mime": { "type": "string", "pattern": "^image/" },
+        "byteLength": { "type": "integer", "minimum": 0 },
+        "dimensions": { "$ref": "#/$defs/dimensions" },
+        "exists": { "type": "boolean" },
+        "readable": { "type": "boolean" },
+        "pathScope": {
+          "type": "string",
+          "enum": ["project", "project_root", "sandbox", "allowed_prefix", "import_scope", "app_server_accessible", "outside_scope", "unknown"]
+        },
+        "role": { "const": "source_start_frame" },
+        "transportRole": { "const": "explicit_local_image_reference" }
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receiptId",
+        "requestId",
+        "taskPlanId",
+        "operation",
+        "deliveredInputKind",
+        "actionSchemaParamName",
+        "acceptedByActionSchema",
+        "deliveredSha256",
+        "promptOnly",
+        "protocol"
+      ],
+      "properties": {
+        "receiptId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "requestId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "taskPlanId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "operation": { "type": "string", "enum": ["text2image", "image2image", "reference_asset"] },
+        "frameRole": { "type": "string" },
+        "deliveredInputKind": {
+          "type": "string",
+          "enum": [
+            "app_server_localImage",
+            "app_server_input_image",
+            "input_image",
+            "local_file",
+            "local_image",
+            "localImage",
+            "image_file",
+            "uploaded_file",
+            "prompt",
+            "prompt_only",
+            "prompt_text_only",
+            "text",
+            "text_only",
+            "unknown"
+          ]
+        },
+        "actionSchemaParamName": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "acceptedByActionSchema": { "type": "boolean" },
+        "deliveredSha256": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "promptOnly": { "type": "boolean" },
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "toolSchemaHash": { "type": "string" },
+        "generatedSchemaVersion": { "type": "string" }
+      }
+    },
+    "protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["threadId", "turnId", "toolCallId"],
+      "properties": {
+        "threadId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "turnId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "toolCallId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "actionId": { "type": "string" },
+        "toolName": { "type": "string" },
+        "toolSchemaHash": { "type": "string" },
+        "generatedSchemaVersion": { "type": "string" }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dispatchReady",
+        "requestMatchedTransport",
+        "sourceReceiptMatchedTransport",
+        "deliveredBytesMatchedSource",
+        "acceptedByActionSchema",
+        "protocolBindingPresent",
+        "explicitImageInput",
+        "promptOnly"
+      ],
+      "properties": {
+        "dispatchReady": { "type": "boolean" },
+        "requestMatchedTransport": { "type": "boolean" },
+        "sourceReceiptMatchedTransport": { "type": "boolean" },
+        "deliveredBytesMatchedSource": { "type": "boolean" },
+        "acceptedByActionSchema": { "type": "boolean" },
+        "protocolBindingPresent": { "type": "boolean" },
+        "explicitImageInput": { "type": "boolean" },
+        "promptOnly": { "type": "boolean" }
+      }
+    },
+    "schemaEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "toolSchemaHash": { "type": "string" },
+        "generatedSchemaVersion": { "type": "string" },
+        "actionSchemaParamName": { "type": "string" }
+      }
+    },
+    "transportPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receiptOnly",
+        "providerSubmitAllowed",
+        "canSubmitProvider",
+        "liveSubmitAllowed",
+        "externalNetworkIoAllowed",
+        "providerSelfReportCanComplete",
+        "promptOnlyImageEditAllowed",
+        "seedanceOrJimengAllowed",
+        "videoAllowed",
+        "fastOrVipAllowed",
+        "textToVideoAllowed"
+      ],
+      "properties": {
+        "receiptOnly": { "const": true },
+        "providerSubmitAllowed": { "const": 0 },
+        "canSubmitProvider": { "const": false },
+        "liveSubmitAllowed": { "const": false },
+        "externalNetworkIoAllowed": { "const": false },
+        "providerSelfReportCanComplete": { "const": false },
+        "promptOnlyImageEditAllowed": { "const": false },
+        "seedanceOrJimengAllowed": { "const": false },
+        "videoAllowed": { "const": false },
+        "fastOrVipAllowed": { "const": false },
+        "textToVideoAllowed": { "const": false }
+      }
+    },
+    "deliveryPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sideEffectAllowed",
+        "providerSubmitAllowed",
+        "liveSubmitAllowed",
+        "externalNetworkIoAllowed",
+        "providerSelfReportCanComplete",
+        "promptOnlyImageEditAllowed",
+        "seedanceOrJimengAllowed",
+        "videoAllowed",
+        "fastOrVipAllowed",
+        "textToVideoAllowed"
+      ],
+      "properties": {
+        "sideEffectAllowed": { "const": false },
+        "providerSubmitAllowed": { "const": 0 },
+        "liveSubmitAllowed": { "const": false },
+        "externalNetworkIoAllowed": { "const": false },
+        "providerSelfReportCanComplete": { "const": false },
+        "promptOnlyImageEditAllowed": { "const": false },
+        "seedanceOrJimengAllowed": { "const": false },
+        "videoAllowed": { "const": false },
+        "fastOrVipAllowed": { "const": false },
+        "textToVideoAllowed": { "const": false }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "delivered" } }, "required": ["status"] },
+      "then": {
+        "required": ["sourceStartFrame", "delivery"],
+        "properties": {
+          "blockers": { "maxItems": 0 },
+          "sourceStartFrame": {
+            "properties": {
+              "byteLength": { "minimum": 1 },
+              "exists": { "const": true },
+              "readable": { "const": true },
+              "pathScope": {
+                "enum": ["project", "project_root", "sandbox", "allowed_prefix", "import_scope", "app_server_accessible"]
+              }
+            }
+          },
+          "delivery": {
+            "properties": {
+              "deliveredInputKind": {
+                "enum": [
+                  "app_server_localImage",
+                  "app_server_input_image",
+                  "input_image",
+                  "local_file",
+                  "local_image",
+                  "localImage",
+                  "image_file",
+                  "uploaded_file"
+                ]
+              },
+              "acceptedByActionSchema": { "const": true },
+              "promptOnly": { "const": false }
+            }
+          },
+          "verification": {
+            "properties": {
+              "dispatchReady": { "const": true },
+              "requestMatchedTransport": { "const": true },
+              "sourceReceiptMatchedTransport": { "const": true },
+              "deliveredBytesMatchedSource": { "const": true },
+              "acceptedByActionSchema": { "const": true },
+              "protocolBindingPresent": { "const": true },
+              "explicitImageInput": { "const": true },
+              "promptOnly": { "const": false }
+            }
+          }
+        },
+        "anyOf": [
+          { "properties": { "schemaEvidence": { "required": ["toolSchemaHash"] } } },
+          { "properties": { "schemaEvidence": { "required": ["generatedSchemaVersion"] } } }
+        ]
+      }
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import { compileImage2OneShotRealCallPayload, type Image2OneShotRealCallPayload } from "./providerAdapters/image2Adapter";
+import type { ImageReferenceDeliveryReceiptState } from "./imageReferenceDeliveryReceipt";
 import type { ImageReferenceTransportState } from "./imageReferenceTransport";
 import type { ManifestMatchReport } from "./manifestMatcher";
 import type { RealProviderExecutorRequestPreview } from "./realProviderExecutor";
@@ -76,6 +77,21 @@ export type RealProviderOneShotImageReferenceTransportEvidence = Pick<
   | "blockers"
 >;
 
+export type RealProviderOneShotImageReferenceDeliveryEvidence = Pick<
+  ImageReferenceDeliveryReceiptState,
+  | "status"
+  | "requestId"
+  | "taskPlanId"
+  | "operation"
+  | "frameRole"
+  | "sourceStartFrame"
+  | "delivery"
+  | "verification"
+  | "transportPolicy"
+  | "deliveryPolicy"
+  | "blockers"
+>;
+
 export interface BuildRealProviderOneShotStateInput {
   generatedAt: string;
   selectedShotIds: string[];
@@ -83,6 +99,7 @@ export interface BuildRealProviderOneShotStateInput {
   requestPreview: RealProviderExecutorRequestPreview;
   adapterRequest: Image2AdapterRequest;
   imageReferenceTransport?: RealProviderOneShotImageReferenceTransportEvidence;
+  imageReferenceDeliveryReceipt?: RealProviderOneShotImageReferenceDeliveryEvidence;
   actionConfirmation?: RealProviderOneShotActionConfirmation;
   credentialGrant?: RealProviderOneShotCredentialGrant;
   budgetNotice: RealProviderOneShotBudgetNotice;
@@ -115,6 +132,8 @@ export interface RealProviderOneShotState {
     qaPassed: boolean;
     imageReferenceTransportDispatchReady: boolean;
     imageReferenceTransportRequestMatched: boolean;
+    imageReferenceDeliveryDelivered: boolean;
+    imageReferenceDeliveryRequestMatched: boolean;
     providerSelfReportIgnoredForCompletion: true;
   };
   blockers: string[];
@@ -235,6 +254,123 @@ function imageReferenceTransportBlockers(input: BuildRealProviderOneShotStateInp
   ]);
 }
 
+function imageReferenceDeliveryMatchesRequest(input: BuildRealProviderOneShotStateInput): boolean {
+  const receipt = input.imageReferenceDeliveryReceipt;
+  if (!receipt) return false;
+  return (
+    receipt.requestId === input.adapterRequest.requestId &&
+    receipt.taskPlanId === input.adapterRequest.taskPlanId &&
+    receipt.operation === input.adapterRequest.operation
+  );
+}
+
+function imageReferenceDeliveryBlockers(input: BuildRealProviderOneShotStateInput): string[] {
+  const request = input.adapterRequest;
+  if (!needsImageReferenceTransport(request)) return [];
+
+  const receipt = input.imageReferenceDeliveryReceipt;
+  const transport = input.imageReferenceTransport;
+  const sourceInput = sourceStartFrameInput(request);
+  const sourcePath = receipt?.sourceStartFrame?.path ? normalizePath(receipt.sourceStartFrame.path) : undefined;
+  const requestedSourcePath = request.payload.sourceStartFrameId ? normalizePath(request.payload.sourceStartFrameId) : undefined;
+  const visualInputPath = sourceInput?.path ? normalizePath(sourceInput.path) : undefined;
+  const transportPath = transport?.sourceStartFrame?.path ? normalizePath(transport.sourceStartFrame.path) : undefined;
+  const policy = receipt?.transportPolicy;
+  const deliveryPolicy = receipt?.deliveryPolicy;
+  const delivery = receipt?.delivery;
+
+  if (!receipt) {
+    return ["Image reference delivery receipt is required for image2image/end-frame one-shot."];
+  }
+
+  return uniqueSorted([
+    receipt.status === "delivered" ? "" : "Image reference delivery receipt must be delivered before one-shot readiness.",
+    imageReferenceDeliveryMatchesRequest(input) ? "" : "Image reference delivery receipt must match the Image2 requestId, taskPlanId, and operation.",
+    receipt.sourceStartFrame?.role === "source_start_frame" ? "" : "Image reference delivery receipt must carry a source_start_frame file receipt.",
+    receipt.sourceStartFrame?.transportRole === "explicit_local_image_reference"
+      ? ""
+      : "Image reference delivery receipt must carry an explicit local image reference.",
+    sourcePath && requestedSourcePath && sourcePath === requestedSourcePath
+      ? ""
+      : "Image reference delivery source frame path must match sourceStartFrameId.",
+    sourcePath && visualInputPath && sourcePath === visualInputPath
+      ? ""
+      : "Image reference delivery source frame path must match the visual reference input.",
+    sourcePath && transportPath && sourcePath === transportPath
+      ? ""
+      : "Image reference delivery source frame path must match Image Reference Transport.",
+    receipt.sourceStartFrame?.inputId && sourceInput?.inputId && receipt.sourceStartFrame.inputId === sourceInput.inputId
+      ? ""
+      : "Image reference delivery inputId must match the visual reference input.",
+    receipt.sourceStartFrame?.inputId &&
+    transport?.sourceStartFrame?.inputId &&
+    receipt.sourceStartFrame.inputId === transport.sourceStartFrame.inputId
+      ? ""
+      : "Image reference delivery inputId must match Image Reference Transport.",
+    receipt.sourceStartFrame?.sha256?.trim() ? "" : "Image reference delivery source_start_frame sha256 is required.",
+    receipt.sourceStartFrame?.byteLength && receipt.sourceStartFrame.byteLength > 0
+      ? ""
+      : "Image reference delivery source_start_frame byteLength is required.",
+    receipt.sourceStartFrame?.exists === true ? "" : "Image reference delivery source_start_frame must exist.",
+    receipt.sourceStartFrame?.readable === true ? "" : "Image reference delivery source_start_frame must be readable.",
+    receipt.sourceStartFrame?.pathScope && receipt.sourceStartFrame.pathScope !== "unknown"
+      ? ""
+      : "Image reference delivery source_start_frame path scope is required.",
+    receipt.sourceStartFrame?.mime?.startsWith("image/") ? "" : "Image reference delivery source_start_frame mime must be an image.",
+    receipt.sourceStartFrame?.dimensions && receipt.sourceStartFrame.dimensions.width > 0 && receipt.sourceStartFrame.dimensions.height > 0
+      ? ""
+      : "Image reference delivery source_start_frame dimensions are required.",
+    receipt.sourceStartFrame?.sha256 && transport?.sourceStartFrame?.hash && receipt.sourceStartFrame.sha256 === transport.sourceStartFrame.hash
+      ? ""
+      : "Image reference delivery sha256 must match Image Reference Transport hash.",
+    receipt.verification?.dispatchReady === true ? "" : "Image reference delivery must verify dispatch_ready transport.",
+    receipt.verification?.sourceReceiptMatchedTransport === true ? "" : "Image reference delivery must verify source receipt matches transport.",
+    receipt.verification?.deliveredBytesMatchedSource === true ? "" : "Image reference delivery must verify delivered bytes match source.",
+    receipt.verification?.acceptedByActionSchema === true ? "" : "Image reference delivery must verify action schema acceptance.",
+    receipt.verification?.protocolBindingPresent === true ? "" : "Image reference delivery must verify protocol binding.",
+    receipt.verification?.explicitImageInput === true ? "" : "Image reference delivery must verify explicit image input.",
+    receipt.verification?.promptOnly === false ? "" : "Image reference delivery must verify promptOnly false.",
+    delivery?.acceptedByActionSchema === true ? "" : "Image reference delivery must be accepted by the action schema.",
+    delivery?.deliveredInputKind &&
+    ["app_server_localImage", "input_image", "local_file", "uploaded_file"].includes(delivery.deliveredInputKind)
+      ? ""
+      : "Image reference delivery must be a visual input, not prompt text.",
+    delivery?.promptOnly === false ? "" : "Image reference delivery promptOnly must be false.",
+    delivery?.actionSchemaParamName?.trim() ? "" : "Image reference delivery action schema parameter is required.",
+    delivery?.deliveredSha256 && receipt.sourceStartFrame?.sha256 && delivery.deliveredSha256 === receipt.sourceStartFrame.sha256
+      ? ""
+      : "Image reference delivery deliveredSha256 must match the source_start_frame sha256.",
+    delivery?.protocol?.threadId?.trim() ? "" : "Image reference delivery threadId is required.",
+    delivery?.protocol?.turnId?.trim() ? "" : "Image reference delivery turnId is required.",
+    delivery?.protocol?.toolCallId?.trim() ? "" : "Image reference delivery toolCallId is required.",
+    delivery?.toolSchemaHash?.trim() || delivery?.generatedSchemaVersion?.trim()
+      ? ""
+      : "Image reference delivery schema evidence is required.",
+    policy?.receiptOnly === true ? "" : "Image reference delivery receipt must remain receipt-only.",
+    policy?.providerSubmitAllowed === 0 ? "" : "Image reference delivery receipt must not allow provider submit.",
+    policy?.canSubmitProvider === false ? "" : "Image reference delivery receipt must not expose provider submit.",
+    policy?.liveSubmitAllowed === false ? "" : "Image reference delivery receipt must forbid live submit.",
+    policy?.externalNetworkIoAllowed === false ? "" : "Image reference delivery receipt must forbid external network I/O.",
+    policy?.promptOnlyImageEditAllowed === false ? "" : "Image reference delivery receipt must forbid prompt-only image edit.",
+    policy?.providerSelfReportCanComplete === false ? "" : "Image reference delivery receipt must not complete from provider self-report.",
+    policy?.seedanceOrJimengAllowed === false ? "" : "Image reference delivery receipt must forbid Seedance/Jimeng.",
+    policy?.videoAllowed === false ? "" : "Image reference delivery receipt must forbid video providers.",
+    policy?.fastOrVipAllowed === false ? "" : "Image reference delivery receipt must forbid Fast/VIP.",
+    policy?.textToVideoAllowed === false ? "" : "Image reference delivery receipt must forbid text-to-video.",
+    deliveryPolicy?.sideEffectAllowed === false ? "" : "Image reference delivery must not allow side effects.",
+    deliveryPolicy?.providerSubmitAllowed === 0 ? "" : "Image reference delivery must not allow provider submit.",
+    deliveryPolicy?.liveSubmitAllowed === false ? "" : "Image reference delivery must forbid live submit.",
+    deliveryPolicy?.externalNetworkIoAllowed === false ? "" : "Image reference delivery must forbid external network I/O.",
+    deliveryPolicy?.promptOnlyImageEditAllowed === false ? "" : "Image reference delivery must forbid prompt-only image edit.",
+    deliveryPolicy?.providerSelfReportCanComplete === false ? "" : "Image reference delivery must not complete from provider self-report.",
+    deliveryPolicy?.seedanceOrJimengAllowed === false ? "" : "Image reference delivery must forbid Seedance/Jimeng.",
+    deliveryPolicy?.videoAllowed === false ? "" : "Image reference delivery must forbid video providers.",
+    deliveryPolicy?.fastOrVipAllowed === false ? "" : "Image reference delivery must forbid Fast/VIP.",
+    deliveryPolicy?.textToVideoAllowed === false ? "" : "Image reference delivery must forbid text-to-video.",
+    ...(receipt.blockers || []).map((blocker) => `Image reference delivery blocker: ${blocker}`),
+  ]);
+}
+
 function matchingManifestReport(input: BuildRealProviderOneShotStateInput): ManifestMatchReport | undefined {
   return (input.manifestReports || []).find(
     (report) =>
@@ -316,6 +452,7 @@ function baseBlockers(input: BuildRealProviderOneShotStateInput): string[] {
     pathInsideSandbox(sandbox.qaReportPath, sandbox) ? "" : "QA report path must stay inside the scoped sandbox.",
     (input.providerReport?.attemptCount || 0) <= 1 ? "" : "Automatic retry is forbidden; attempt count cannot exceed one.",
     ...imageReferenceTransportBlockers(input),
+    ...imageReferenceDeliveryBlockers(input),
   ]);
 }
 
@@ -390,6 +527,8 @@ export function buildRealProviderOneShotState(input: BuildRealProviderOneShotSta
   const watcherDetected = expectedOutputDetected(input, payload?.output.path);
   const transportDispatchReady = !needsImageReferenceTransport(input.adapterRequest) || input.imageReferenceTransport?.status === "dispatch_ready";
   const transportRequestMatched = !needsImageReferenceTransport(input.adapterRequest) || imageReferenceTransportMatchesRequest(input);
+  const deliveryDelivered = !needsImageReferenceTransport(input.adapterRequest) || input.imageReferenceDeliveryReceipt?.status === "delivered";
+  const deliveryRequestMatched = !needsImageReferenceTransport(input.adapterRequest) || imageReferenceDeliveryMatchesRequest(input);
 
   return {
     schemaVersion: realProviderOneShotSchemaVersion,
@@ -413,6 +552,8 @@ export function buildRealProviderOneShotState(input: BuildRealProviderOneShotSta
       qaPassed: health?.qaStatus === "pass" && health.healthStatus === "formal_ready",
       imageReferenceTransportDispatchReady: transportDispatchReady,
       imageReferenceTransportRequestMatched: transportRequestMatched,
+      imageReferenceDeliveryDelivered: deliveryDelivered,
+      imageReferenceDeliveryRequestMatched: deliveryRequestMatched,
       providerSelfReportIgnoredForCompletion: true,
     },
     blockers,
@@ -442,6 +583,7 @@ export function buildRealProviderOneShotState(input: BuildRealProviderOneShotSta
       "This core layer compiles the reviewed Image2 preview into a one-use real-call payload but does not perform network I/O.",
       "Completion can only advance from watcher, manifest, generation health, and QA evidence.",
       "Image2image/end-frame calls require an Image Reference Transport dispatch_ready receipt before provider transport can plan.",
+      "Image2image/end-frame calls require an Image Reference Delivery delivered receipt before one-shot readiness.",
       "A retry must be modeled as a new user-confirmed one-shot action.",
     ],
   };

@@ -21,6 +21,8 @@ import type { RealExecutionGateState } from "./realExecutionGate";
 import type { RealProviderPilotState } from "./realProviderPilot";
 import type { RealProviderExecutorState } from "./realProviderExecutor";
 import type { RealProviderOneShotTestState } from "./realProviderOneShotTest";
+import type { ImageReferenceDeliveryReceiptState } from "./imageReferenceDeliveryReceipt";
+import type { ImageReferenceTransportState } from "./imageReferenceTransport";
 import type { ProviderHandoffStatusState } from "./providerHandoffStatus";
 import type {
   RealProviderTransportPlan,
@@ -200,6 +202,8 @@ export interface ProjectRuntimeState {
     watcherEvents: WatcherEvent[];
     generationHealthReports: GenerationHealthReport[];
     qaPromotionReports: QaPromotionReport[];
+    imageReferenceTransports?: ImageReferenceTransportState[];
+    imageReferenceDeliveryReceipts?: ImageReferenceDeliveryReceiptState[];
   };
   imageKeyframeRuntime: ImageKeyframeRuntimePlan;
   previewEvents: PreviewEvent[];

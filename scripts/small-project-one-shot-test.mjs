@@ -14,6 +14,8 @@ assert(waitingClosure.realProviderTransport.plan.status === "mock_submit_ready",
 assert(waitingClosure.realProviderTransport.receipt.status === "mock_submitted", "closure must create a mock receipt after confirmation");
 assert(waitingClosure.realProviderTransport.result.status === "waiting_for_file", "receipt-only closure should wait for file return");
 assert(waitingClosure.runtimeState.realProviderTransport.receipt.status === "mock_submitted", "runtime must carry transport receipt as first-class state");
+assert(waitingClosure.runtimeState.imagePipeline.imageReferenceTransports.length === 1, "runtime must retain image reference transport evidence");
+assert(waitingClosure.runtimeState.imagePipeline.imageReferenceDeliveryReceipts.length === 0, "text2image runtime must not invent image reference delivery receipt evidence");
 assert(waitingClosure.runtimeState.providerHandoffStatus.status === "waiting_file", "confirmed runtime should bridge to waiting_file");
 assert(waitingClosure.runtimeState.providerHandoffStatus.machineFacts.watcherExpectedOutputDetected === false, "waiting_file must not invent watcher evidence");
 

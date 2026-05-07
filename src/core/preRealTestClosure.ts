@@ -1,4 +1,5 @@
 import { buildPreviewExportState } from "./previewExport";
+import { buildImageReferenceDeliveryReceipt, type ImageReferenceDeliverySourceFacts } from "./imageReferenceDeliveryReceipt";
 import { buildImageReferenceTransport, type SourceStartFrameFileFacts } from "./imageReferenceTransport";
 import { buildProviderHandoffStatus } from "./providerHandoffStatus";
 import type { ProjectRuntimeState } from "./projectState";
@@ -33,6 +34,7 @@ export interface PreRealTestClosureOptions {
   providerSelfReportedComplete?: boolean;
   returnEvidence?: PreRealTestReturnEvidence;
   sourceStartFrameFileFacts?: SourceStartFrameFileFacts;
+  sourceStartFrameDeliveryFacts?: ImageReferenceDeliverySourceFacts;
 }
 
 export interface PreRealTestClosureResult {
@@ -237,6 +239,27 @@ function directorProgressFor(status: ReturnType<typeof buildProviderHandoffStatu
   return undefined;
 }
 
+function sourceStartFrameDeliveryFactsFor(
+  options: PreRealTestClosureOptions,
+  imageReferenceTransport: ReturnType<typeof buildImageReferenceTransport>,
+): ImageReferenceDeliverySourceFacts | undefined {
+  if (options.sourceStartFrameDeliveryFacts) return options.sourceStartFrameDeliveryFacts;
+  const transportSource = imageReferenceTransport.sourceStartFrame;
+  const facts = options.sourceStartFrameFileFacts;
+  if (!transportSource || !facts?.hash || !facts.mime || !facts.dimensions || facts.status !== "available") return undefined;
+  return {
+    inputId: transportSource.inputId,
+    path: transportSource.path,
+    sha256: facts.hash,
+    mime: facts.mime,
+    byteLength: 1,
+    dimensions: facts.dimensions,
+    exists: true,
+    readable: true,
+    pathScope: "sandbox",
+  };
+}
+
 export function applyPreRealTestClosure(
   runtimeState: ProjectRuntimeState,
   options: PreRealTestClosureOptions = {},
@@ -310,6 +333,36 @@ export function applyPreRealTestClosure(
     },
     sourceStartFrameFileFacts: options.sourceStartFrameFileFacts,
   });
+  const needsSourceStartFrameDelivery = request.operation === "image2image" || request.frameRole === "end_frame";
+  const sourceStartFrameDeliveryFacts = needsSourceStartFrameDelivery
+    ? sourceStartFrameDeliveryFactsFor(options, imageReferenceTransport)
+    : undefined;
+  const imageReferenceDeliveryReceipt = needsSourceStartFrameDelivery
+    ? buildImageReferenceDeliveryReceipt({
+        generatedAt,
+        transport: imageReferenceTransport,
+        sourceStartFrameFileFacts: sourceStartFrameDeliveryFacts,
+        delivery: {
+          receiptId: `dry_delivery_receipt_${safeId(request.requestId)}`,
+          requestId: imageReferenceTransport.requestId,
+          taskPlanId: imageReferenceTransport.taskPlanId,
+          operation: imageReferenceTransport.operation,
+          frameRole: imageReferenceTransport.frameRole,
+          deliveredInputKind: "app_server_localImage",
+          actionSchemaParamName: "input_image",
+          acceptedByActionSchema: true,
+          deliveredSha256: sourceStartFrameDeliveryFacts?.sha256 || imageReferenceTransport.sourceStartFrame?.hash || "missing-source-start-frame",
+          promptOnly: false,
+          protocol: {
+            threadId: `dry_thread_${safeId(request.requestId)}`,
+            turnId: `dry_turn_${safeId(request.taskPlanId)}`,
+            toolCallId: `dry_tool_call_${safeId(request.requestId)}`,
+          },
+          toolSchemaHash: `sha256:dry_image_reference_delivery_${safeId(request.requestId)}`,
+          generatedSchemaVersion: "dry_fixture_v0",
+        },
+      })
+    : undefined;
   const oneShotRealCallState = buildRealProviderOneShotState({
     generatedAt,
     selectedShotIds: runtimeState.realProviderOneShotTest.selectedShotIds,
@@ -317,6 +370,7 @@ export function applyPreRealTestClosure(
     requestPreview: image2Preview,
     adapterRequest: request,
     imageReferenceTransport,
+    imageReferenceDeliveryReceipt,
     actionConfirmation,
     credentialGrant,
     budgetNotice: {
@@ -338,6 +392,7 @@ export function applyPreRealTestClosure(
     generatedAt,
     oneShotState: oneShotRealCallState,
     imageReferenceTransport,
+    imageReferenceDeliveryReceipt,
     transportMode: options.transportMode || "mock_dry_run",
     manualTransportAcknowledged: options.manualTransportAcknowledged,
   });
@@ -423,6 +478,16 @@ export function applyPreRealTestClosure(
       watcherEvents,
       generationHealthReports,
       qaPromotionReports,
+      imageReferenceTransports: [
+        ...(runtimeState.imagePipeline.imageReferenceTransports || []),
+        imageReferenceTransport,
+      ],
+      imageReferenceDeliveryReceipts: imageReferenceDeliveryReceipt
+        ? [
+            ...(runtimeState.imagePipeline.imageReferenceDeliveryReceipts || []),
+            imageReferenceDeliveryReceipt,
+          ]
+        : runtimeState.imagePipeline.imageReferenceDeliveryReceipts || [],
     },
     previewExport,
     realProviderTransport,

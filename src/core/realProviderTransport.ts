@@ -1,4 +1,5 @@
 import type { Image2OneShotRealCallPayload } from "./providerAdapters/image2Adapter";
+import type { ImageReferenceDeliveryReceiptState } from "./imageReferenceDeliveryReceipt";
 import type { ImageReferenceTransportState } from "./imageReferenceTransport";
 import type { RealProviderOneShotState, RealProviderOneShotStatus, RealProviderOneShotUserReadableStatus } from "./realProviderOneShot";
 
@@ -9,6 +10,20 @@ export type RealProviderTransportMode = "mock_dry_run" | "manual_real_transport"
 export type RealProviderImageReferenceTransportEvidence = Pick<
   ImageReferenceTransportState,
   "status" | "requestId" | "taskPlanId" | "operation" | "requiredSourceStartFrame" | "sourceStartFrame" | "transportPolicy" | "blockers"
+>;
+
+export type RealProviderImageReferenceDeliveryEvidence = Pick<
+  ImageReferenceDeliveryReceiptState,
+  | "status"
+  | "requestId"
+  | "taskPlanId"
+  | "operation"
+  | "sourceStartFrame"
+  | "delivery"
+  | "verification"
+  | "transportPolicy"
+  | "deliveryPolicy"
+  | "blockers"
 >;
 
 export type RealProviderTransportPlanStatus =
@@ -37,6 +52,7 @@ export interface RealProviderTransportPlanInput {
     "status" | "userReadableStatus" | "summary" | "compiledPayload" | "blockers" | "warnings" | "gateEvidence"
   >;
   imageReferenceTransport?: RealProviderImageReferenceTransportEvidence;
+  imageReferenceDeliveryReceipt?: RealProviderImageReferenceDeliveryEvidence;
   transportMode?: RealProviderTransportMode;
   credentialRef?: string;
   attemptNumber?: number;
@@ -84,6 +100,15 @@ export interface RealProviderTransportPlan {
     mustReturnThroughWatcher: true;
     mustMatchManifest: true;
     mustPassQa: true;
+  };
+  imageReferenceDelivery?: {
+    status: "delivered";
+    deliveredInputKind: string;
+    actionSchemaParamName: string;
+    sourceStartFrameSha256: string;
+    threadId: string;
+    turnId: string;
+    toolCallId: string;
   };
   blockers: string[];
   warnings: string[];
@@ -280,6 +305,125 @@ function imageReferenceTransportBlockers(input: RealProviderTransportPlanInput):
   ]);
 }
 
+function imageReferenceDeliveryBlockers(input: RealProviderTransportPlanInput): string[] {
+  const payload = input.oneShotState.compiledPayload;
+  if (payload?.operation !== "image2image") return [];
+
+  const receipt = input.imageReferenceDeliveryReceipt;
+  const transport = input.imageReferenceTransport;
+  const sourceInput = sourceStartFrameInput(payload);
+  const deliverySource = receipt?.sourceStartFrame;
+  const delivery = receipt?.delivery;
+  const policy = receipt?.transportPolicy;
+  const deliveryPolicy = receipt?.deliveryPolicy;
+  const receiptPath = deliverySource?.path ? normalizePath(deliverySource.path) : undefined;
+  const sourceInputPath = sourceInput?.path ? normalizePath(sourceInput.path) : undefined;
+  const sourceStartFramePath = payload.sourceStartFrameId ? normalizePath(payload.sourceStartFrameId) : undefined;
+  const transportPath = transport?.sourceStartFrame?.path ? normalizePath(transport.sourceStartFrame.path) : undefined;
+
+  if (!receipt) {
+    return ["Image reference delivery receipt is required before image2image transport planning."];
+  }
+
+  return uniqueSorted([
+    receipt.status === "delivered" ? "" : "Image reference delivery receipt must be delivered before image2image transport planning.",
+    receipt.requestId === payload.requestId ? "" : "Image reference delivery receipt requestId must match the compiled payload requestId.",
+    receipt.taskPlanId === payload.taskPlanId ? "" : "Image reference delivery receipt taskPlanId must match the compiled payload taskPlanId.",
+    receipt.operation === "image2image" ? "" : "Image reference delivery receipt operation must be image2image for image2image payloads.",
+    sourceInput ? "" : "Compiled payload source_start_frame visual input is required before image reference delivery planning.",
+    payload.sourceStartFrameId ? "" : "Compiled payload sourceStartFrameId is required before image reference delivery planning.",
+    deliverySource ? "" : "Image reference delivery source_start_frame receipt is required before image2image transport planning.",
+    deliverySource?.role === "source_start_frame" ? "" : "Image reference delivery receipt role must be source_start_frame.",
+    deliverySource?.transportRole === "explicit_local_image_reference" ? "" : "Image reference delivery receipt must be an explicit local image reference.",
+    receiptPath && sourceInputPath && receiptPath === sourceInputPath
+      ? ""
+      : "Image reference delivery receipt path must match the compiled payload source_start_frame input path.",
+    receiptPath && sourceStartFramePath && receiptPath === sourceStartFramePath
+      ? ""
+      : "Image reference delivery receipt path must match the compiled payload sourceStartFrameId.",
+    receiptPath && transportPath && receiptPath === transportPath
+      ? ""
+      : "Image reference delivery receipt path must match Image Reference Transport.",
+    deliverySource?.inputId && sourceInput?.inputId && deliverySource.inputId === sourceInput.inputId
+      ? ""
+      : "Image reference delivery receipt inputId must match the compiled payload source_start_frame inputId.",
+    deliverySource?.inputId && transport?.sourceStartFrame?.inputId && deliverySource.inputId === transport.sourceStartFrame.inputId
+      ? ""
+      : "Image reference delivery receipt inputId must match Image Reference Transport.",
+    deliverySource?.sha256?.trim() ? "" : "Image reference delivery source_start_frame receipt sha256 is required.",
+    deliverySource?.byteLength && deliverySource.byteLength > 0 ? "" : "Image reference delivery source_start_frame receipt byteLength is required.",
+    deliverySource?.exists === true ? "" : "Image reference delivery source_start_frame receipt must exist.",
+    deliverySource?.readable === true ? "" : "Image reference delivery source_start_frame receipt must be readable.",
+    deliverySource?.pathScope && deliverySource.pathScope !== "unknown" ? "" : "Image reference delivery source_start_frame receipt path scope is required.",
+    deliverySource?.mime?.startsWith("image/") ? "" : "Image reference delivery source_start_frame receipt mime must be an image.",
+    deliverySource?.dimensions && deliverySource.dimensions.width > 0 && deliverySource.dimensions.height > 0
+      ? ""
+      : "Image reference delivery source_start_frame receipt dimensions are required.",
+    deliverySource?.sha256 && transport?.sourceStartFrame?.hash && deliverySource.sha256 === transport.sourceStartFrame.hash
+      ? ""
+      : "Image reference delivery sha256 must match Image Reference Transport hash.",
+    receipt.verification?.dispatchReady === true ? "" : "Image reference delivery must verify dispatch_ready transport.",
+    receipt.verification?.sourceReceiptMatchedTransport === true ? "" : "Image reference delivery must verify source receipt matches transport.",
+    receipt.verification?.deliveredBytesMatchedSource === true ? "" : "Image reference delivery must verify delivered bytes match source.",
+    receipt.verification?.acceptedByActionSchema === true ? "" : "Image reference delivery must verify action schema acceptance.",
+    receipt.verification?.protocolBindingPresent === true ? "" : "Image reference delivery must verify protocol binding.",
+    receipt.verification?.explicitImageInput === true ? "" : "Image reference delivery must verify explicit image input.",
+    receipt.verification?.promptOnly === false ? "" : "Image reference delivery must verify promptOnly false.",
+    delivery?.acceptedByActionSchema === true ? "" : "Image reference delivery must be accepted by the action schema before transport planning.",
+    delivery?.deliveredInputKind &&
+    ["app_server_localImage", "input_image", "local_file", "uploaded_file"].includes(delivery.deliveredInputKind)
+      ? ""
+      : "Image reference delivery input kind must be visual before transport planning.",
+    delivery?.promptOnly === false ? "" : "Image reference delivery promptOnly must be false before transport planning.",
+    delivery?.actionSchemaParamName?.trim() ? "" : "Image reference delivery action schema parameter is required before transport planning.",
+    delivery?.deliveredSha256 && deliverySource?.sha256 && delivery.deliveredSha256 === deliverySource.sha256
+      ? ""
+      : "Image reference delivery deliveredSha256 must match the source_start_frame sha256.",
+    delivery?.protocol?.threadId?.trim() ? "" : "Image reference delivery threadId is required before transport planning.",
+    delivery?.protocol?.turnId?.trim() ? "" : "Image reference delivery turnId is required before transport planning.",
+    delivery?.protocol?.toolCallId?.trim() ? "" : "Image reference delivery toolCallId is required before transport planning.",
+    delivery?.toolSchemaHash?.trim() || delivery?.generatedSchemaVersion?.trim()
+      ? ""
+      : "Image reference delivery schema evidence is required before transport planning.",
+    policy?.receiptOnly === true ? "" : "Image reference delivery receipt must remain receipt-only.",
+    policy?.providerSubmitAllowed === 0 ? "" : "Image reference delivery receipt must not allow provider submit.",
+    policy?.canSubmitProvider === false ? "" : "Image reference delivery receipt must not expose provider submit.",
+    policy?.liveSubmitAllowed === false ? "" : "Image reference delivery receipt must forbid live submit.",
+    policy?.externalNetworkIoAllowed === false ? "" : "Image reference delivery receipt must forbid external network I/O.",
+    policy?.promptOnlyImageEditAllowed === false ? "" : "Image reference delivery receipt must forbid prompt-only image edit.",
+    policy?.providerSelfReportCanComplete === false ? "" : "Image reference delivery receipt must not complete from provider self-report.",
+    policy?.seedanceOrJimengAllowed === false ? "" : "Image reference delivery receipt must forbid Seedance/Jimeng.",
+    policy?.videoAllowed === false ? "" : "Image reference delivery receipt must forbid video providers.",
+    policy?.fastOrVipAllowed === false ? "" : "Image reference delivery receipt must forbid Fast/VIP.",
+    policy?.textToVideoAllowed === false ? "" : "Image reference delivery receipt must forbid text-to-video.",
+    deliveryPolicy?.sideEffectAllowed === false ? "" : "Image reference delivery must not allow side effects.",
+    deliveryPolicy?.providerSubmitAllowed === 0 ? "" : "Image reference delivery must not allow provider submit.",
+    deliveryPolicy?.liveSubmitAllowed === false ? "" : "Image reference delivery must forbid live submit.",
+    deliveryPolicy?.externalNetworkIoAllowed === false ? "" : "Image reference delivery must forbid external network I/O.",
+    deliveryPolicy?.promptOnlyImageEditAllowed === false ? "" : "Image reference delivery must forbid prompt-only image edit.",
+    deliveryPolicy?.providerSelfReportCanComplete === false ? "" : "Image reference delivery must not complete from provider self-report.",
+    deliveryPolicy?.seedanceOrJimengAllowed === false ? "" : "Image reference delivery must forbid Seedance/Jimeng.",
+    deliveryPolicy?.videoAllowed === false ? "" : "Image reference delivery must forbid video providers.",
+    deliveryPolicy?.fastOrVipAllowed === false ? "" : "Image reference delivery must forbid Fast/VIP.",
+    deliveryPolicy?.textToVideoAllowed === false ? "" : "Image reference delivery must forbid text-to-video.",
+    ...(receipt.blockers || []).map((blocker) => blocker ? `Image reference delivery blocker: ${blocker}` : ""),
+  ]);
+}
+
+function imageReferenceDeliveryFor(input: RealProviderTransportPlanInput, blockers: string[]): RealProviderTransportPlan["imageReferenceDelivery"] | undefined {
+  const receipt = input.imageReferenceDeliveryReceipt;
+  if (!receipt || blockers.length > 0 || receipt.status !== "delivered" || !receipt.sourceStartFrame || !receipt.delivery) return undefined;
+  return {
+    status: "delivered",
+    deliveredInputKind: receipt.delivery.deliveredInputKind,
+    actionSchemaParamName: receipt.delivery.actionSchemaParamName,
+    sourceStartFrameSha256: receipt.sourceStartFrame.sha256,
+    threadId: receipt.delivery.protocol.threadId,
+    turnId: receipt.delivery.protocol.turnId,
+    toolCallId: receipt.delivery.protocol.toolCallId,
+  };
+}
+
 function planBlockers(input: RealProviderTransportPlanInput, credential: RealProviderTransportPlan["credential"], attemptNumber: number): string[] {
   const oneShotState = input.oneShotState;
   const payload = oneShotState.compiledPayload;
@@ -302,6 +446,7 @@ function planBlockers(input: RealProviderTransportPlanInput, credential: RealPro
     payload?.executionPolicy.scopedSandboxOnly === true ? "" : "Compiled payload must require scoped sandbox output.",
     payload?.executionPolicy.outputMayCompleteFromProviderSelfReport === false ? "" : "Compiled payload must require watcher/manifest/QA completion.",
     ...imageReferenceTransportBlockers(input),
+    ...imageReferenceDeliveryBlockers(input),
   ]);
 }
 
@@ -327,6 +472,7 @@ export function buildRealProviderTransportPlan(input: RealProviderTransportPlanI
   const blockers = planBlockers(input, credential, attemptNumber);
   const status = planStatusFor({ ...input, transportMode }, blockers);
   const payload = blockers.length === 0 ? input.oneShotState.compiledPayload : undefined;
+  const imageReferenceDelivery = imageReferenceDeliveryFor(input, blockers);
 
   return {
     schemaVersion: realProviderTransportSchemaVersion,
@@ -347,6 +493,7 @@ export function buildRealProviderTransportPlan(input: RealProviderTransportPlanI
     },
     transportPolicy: baseTransportPolicy(),
     outputContract: outputContractFor(payload),
+    imageReferenceDelivery,
     blockers,
     warnings: uniqueSorted([
       ...input.oneShotState.warnings,
@@ -356,6 +503,7 @@ export function buildRealProviderTransportPlan(input: RealProviderTransportPlanI
       "Default transport is mock dry-run and creates no provider side effects.",
       "Real provider transport can only be represented as manual/external action states in this core contract.",
       "Image2image transport requires dispatch-ready Image Reference Transport handoff evidence.",
+      "Image2image transport requires delivered Image Reference Delivery receipt evidence.",
       "Outputs must return through watcher, manifest, and QA evidence before completion.",
     ],
   };

@@ -348,6 +348,7 @@ function oneShotActionInput(overrides = {}) {
       },
       blockers: [],
     },
+    imageReferenceDeliveryReceipt: imageReferenceDeliveryReceipt(),
     actionConfirmation: {
       confirmationId: "confirm_S01_round4",
       confirmedBy: "user",
@@ -378,6 +379,80 @@ function oneShotActionInput(overrides = {}) {
       qaReportPath: "real-provider-executor/project_1/batch_A/qa/qa-report.json",
       outsideRootWriteAllowed: false,
     },
+    ...overrides,
+  };
+}
+
+function imageReferenceDeliveryReceipt(overrides = {}) {
+  const sourceStartFramePath = "real-provider-executor/project_1/batch_A/shots/S01/start.png";
+  return {
+    status: "delivered",
+    requestId: "image2_request_S01",
+    taskPlanId: "image_task_plan_S01",
+    operation: "image2image",
+    frameRole: "end_frame",
+    sourceStartFrame: {
+      inputId: "source_start_frame_S01",
+      path: sourceStartFramePath,
+      sha256: "sha256:source-start-frame",
+      mime: "image/png",
+      byteLength: 1024,
+      dimensions: { width: 1280, height: 720 },
+      exists: true,
+      readable: true,
+      pathScope: "sandbox",
+      role: "source_start_frame",
+      transportRole: "explicit_local_image_reference",
+    },
+    delivery: {
+      deliveredInputKind: "app_server_localImage",
+      actionSchemaParamName: "input_image",
+      acceptedByActionSchema: true,
+      deliveredSha256: "sha256:source-start-frame",
+      promptOnly: false,
+      protocol: {
+        threadId: "dry_thread_S01",
+        turnId: "dry_turn_S01",
+        toolCallId: "dry_tool_call_S01",
+      },
+      toolSchemaHash: "sha256:dry-image-action-schema",
+      generatedSchemaVersion: "dry_fixture_v0",
+    },
+    verification: {
+      dispatchReady: true,
+      sourceReceiptMatchedTransport: true,
+      deliveredBytesMatchedSource: true,
+      acceptedByActionSchema: true,
+      protocolBindingPresent: true,
+      explicitImageInput: true,
+      promptOnly: false,
+    },
+    transportPolicy: {
+      receiptOnly: true,
+      providerSubmitAllowed: 0,
+      canSubmitProvider: false,
+      liveSubmitAllowed: false,
+      externalNetworkIoAllowed: false,
+      providerSelfReportCanComplete: false,
+      promptOnlyImageEditAllowed: false,
+      seedanceOrJimengAllowed: false,
+      videoAllowed: false,
+      fastOrVipAllowed: false,
+      textToVideoAllowed: false,
+    },
+    deliveryPolicy: {
+      sideEffectAllowed: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      externalNetworkIoAllowed: false,
+      providerSelfReportCanComplete: false,
+      promptOnlyImageEditAllowed: false,
+      seedanceOrJimengAllowed: false,
+      videoAllowed: false,
+      fastOrVipAllowed: false,
+      textToVideoAllowed: false,
+    },
+    blockers: [],
     ...overrides,
   };
 }
@@ -415,7 +490,7 @@ assert(compiled.payload.executionPolicy.outputMayCompleteFromProviderSelfReport 
 const actionReady = buildRealProviderOneShotState(oneShotActionInput());
 assert(actionReady.schemaVersion === "0.1.0", "Round 4 action schema version drifted");
 assert(actionReady.phase === "round_4_image2_one_shot_action_layer", "Round 4 action phase drifted");
-assert(actionReady.status === "ready_to_submit", "confirmed one-shot should be ready to submit");
+assert(actionReady.status === "ready_to_submit", `confirmed one-shot should be ready to submit: ${actionReady.blockers.join("; ")}`);
 assert(actionReady.userReadableStatus === "准备调用", "ready status should be user-readable");
 assert(actionReady.summary.canSubmitThisOneShot === true, "ready action should allow one explicit submit");
 assert(actionReady.summary.providerSubmitAllowed === 1, "ready action should allow exactly one submit");
@@ -429,6 +504,8 @@ assert(actionReady.summary.outsideSandboxWriteAllowed === false, "ready action m
 assert(actionReady.summary.outputMayCompleteFromProviderSelfReport === false, "ready action must not complete from provider self-report");
 assert(actionReady.gateEvidence.imageReferenceTransportDispatchReady === true, "ready image2image action must carry dispatch-ready transport evidence");
 assert(actionReady.gateEvidence.imageReferenceTransportRequestMatched === true, "ready image2image action must match transport request evidence");
+assert(actionReady.gateEvidence.imageReferenceDeliveryDelivered === true, "ready image2image action must carry delivered image reference receipt");
+assert(actionReady.gateEvidence.imageReferenceDeliveryRequestMatched === true, "ready image2image action must match delivery request evidence");
 
 const missingImageReferenceTransport = buildRealProviderOneShotState(oneShotActionInput({
   imageReferenceTransport: undefined,
@@ -480,6 +557,62 @@ assert(
   "missing image reference transport policy blocker missing",
 );
 
+const missingImageReferenceDeliveryReceipt = buildRealProviderOneShotState(oneShotActionInput({
+  imageReferenceDeliveryReceipt: undefined,
+}));
+assert(missingImageReferenceDeliveryReceipt.status === "blocked", "missing image reference delivery receipt must block image2image one-shot");
+assert(
+  missingImageReferenceDeliveryReceipt.blockers.includes("Image reference delivery receipt is required for image2image/end-frame one-shot."),
+  "missing image reference delivery receipt blocker missing",
+);
+
+const blockedImageReferenceDeliveryReceipt = buildRealProviderOneShotState(oneShotActionInput({
+  imageReferenceDeliveryReceipt: {
+    ...imageReferenceDeliveryReceipt(),
+    status: "blocked",
+    blockers: ["image_reference_delivery_sha256_must_match_source_file"],
+  },
+}));
+assert(blockedImageReferenceDeliveryReceipt.status === "blocked", "blocked image reference delivery receipt must block one-shot");
+assert(
+  blockedImageReferenceDeliveryReceipt.blockers.includes("Image reference delivery receipt must be delivered before one-shot readiness."),
+  "blocked image reference delivery status blocker missing",
+);
+assert(
+  blockedImageReferenceDeliveryReceipt.blockers.includes("Image reference delivery blocker: image_reference_delivery_sha256_must_match_source_file"),
+  "nested image reference delivery blocker missing",
+);
+
+const promptOnlyImageReferenceDeliveryReceipt = buildRealProviderOneShotState(oneShotActionInput({
+  imageReferenceDeliveryReceipt: {
+    ...imageReferenceDeliveryReceipt(),
+    delivery: {
+      ...imageReferenceDeliveryReceipt().delivery,
+      deliveredInputKind: "prompt",
+    },
+  },
+}));
+assert(promptOnlyImageReferenceDeliveryReceipt.status === "blocked", "prompt-only delivery receipt must block one-shot");
+assert(
+  promptOnlyImageReferenceDeliveryReceipt.blockers.includes("Image reference delivery must be a visual input, not prompt text."),
+  "prompt-only delivery blocker missing",
+);
+
+const mismatchedImageReferenceDeliveryReceipt = buildRealProviderOneShotState(oneShotActionInput({
+  imageReferenceDeliveryReceipt: {
+    ...imageReferenceDeliveryReceipt(),
+    sourceStartFrame: {
+      ...imageReferenceDeliveryReceipt().sourceStartFrame,
+      sha256: "sha256:other",
+    },
+  },
+}));
+assert(mismatchedImageReferenceDeliveryReceipt.status === "blocked", "mismatched image reference delivery receipt must block one-shot");
+assert(
+  mismatchedImageReferenceDeliveryReceipt.blockers.includes("Image reference delivery sha256 must match Image Reference Transport hash."),
+  "delivery hash mismatch blocker missing",
+);
+
 const text2imageBase = oneShotActionInput();
 const text2imageReady = buildRealProviderOneShotState({
   ...text2imageBase,
@@ -511,9 +644,11 @@ const text2imageReady = buildRealProviderOneShotState({
     maxImagesAllowed: 1,
   },
   imageReferenceTransport: undefined,
+  imageReferenceDeliveryReceipt: undefined,
 });
 assert(text2imageReady.status === "ready_to_submit", "text2image/start-frame one-shot must not require image reference transport");
 assert(text2imageReady.gateEvidence.imageReferenceTransportDispatchReady === true, "text2image gate evidence should pass when transport is not required");
+assert(text2imageReady.gateEvidence.imageReferenceDeliveryDelivered === true, "text2image delivery evidence should pass when delivery is not required");
 assert(
   !text2imageReady.blockers.some((blocker) => /Image reference transport|source_start_frame/.test(blocker)),
   "text2image/start-frame one-shot should not receive image reference blockers",
