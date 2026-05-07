@@ -81,6 +81,13 @@ import {
   type PreviewQueueItemKind,
 } from "./core/previewPlayerQueue";
 import { applyPreRealTestClosure } from "./core/preRealTestClosure";
+import {
+  realDemoE2e005ReportPath,
+  runRealDemoE2e005UiBridge,
+  type RealDemoE2e005Observation,
+  type RealDemoE2e005UiState,
+  type RealDemoE2e005UiStatus,
+} from "./core/realDemoE2e005UiBridge";
 import { fallbackAudit } from "./data/fallbackAudit";
 
 const gateNames = ["identity", "scene", "pair", "story", "prop", "style"] as const;
@@ -399,6 +406,7 @@ type RealPilotUiSummary = {
   warnings: string[];
 };
 type OneShotActionStatus = "idle" | "confirmed";
+type RealDemoE2e005PanelState = RealDemoE2e005UiState;
 
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
@@ -7558,6 +7566,80 @@ function OneShotActionPanel({
   );
 }
 
+function realDemo005StatusLabel(status: RealDemoE2e005UiStatus) {
+  if (status === "running") return "running";
+  if (status === "preview_ready_with_review") return "preview_ready_with_review";
+  if (status === "production_needs_review") return "production_needs_review";
+  if (status === "blocked") return "blocked";
+  return "unavailable";
+}
+
+function realDemo005VisibleObservations(
+  observations: RealDemoE2e005Observation[],
+  selectedShotId: string,
+) {
+  const withImage = observations.filter((item) => item.imageUrl);
+  const selected = withImage.find((item) => item.shotId === selectedShotId);
+  if (selected) return [selected];
+  return withImage.slice(0, 4);
+}
+
+function RealDemoE2e005Panel({
+  state,
+  selectedShotId,
+  onRun,
+}: {
+  state: RealDemoE2e005PanelState;
+  selectedShotId: string;
+  onRun: () => void;
+}) {
+  const summary = state.summary;
+  const running = state.status === "running";
+  const status = realDemo005StatusLabel(state.status);
+  const reviewOverlayShots = summary?.reviewOverlayShots.length ? summary.reviewOverlayShots.join("/") : "none";
+  const visibleObservations = summary ? realDemo005VisibleObservations(summary.observations, selectedShotId) : [];
+
+  return (
+    <section className={`real-demo-005-panel ${state.status}`} aria-label="005 真实链路小样">
+      <div className="real-demo-005-head">
+        <div>
+          <span>005 Image2</span>
+          <strong>{status}</strong>
+        </div>
+        <button disabled={running} onClick={onRun}>
+          <RefreshCw size={15} />
+          {running ? "同步中" : "运行小样检查"}
+        </button>
+      </div>
+      <div className="real-demo-005-tags">
+        <small>preview {summary?.previewStatus || "unavailable"}</small>
+        <small>production {summary?.productionStatus || "unavailable"}</small>
+        <small>{summary?.shotCount ?? 0} shots</small>
+        <small>review overlay {reviewOverlayShots}</small>
+        {summary?.source && <small>{summary.source === "endpoint" ? "endpoint" : "local report"}</small>}
+      </div>
+      {visibleObservations.length > 0 && (
+        <div className="real-demo-005-thumbs" aria-label="小样缩略图">
+          {visibleObservations.map((item) => (
+            <figure key={item.shotId} className={item.reviewOverlay ? "review-overlay" : undefined}>
+              <img src={item.imageUrl} alt={`${item.shotId} start frame`} />
+              <figcaption>
+                <span>{item.shotId}</span>
+                {item.reviewOverlay && <small>review overlay</small>}
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
+      <small className="real-demo-005-report">
+        <FileJson size={13} />
+        {summary?.reportPath || realDemoE2e005ReportPath}
+      </small>
+      {state.message && <small className="real-demo-005-message">{state.message}</small>}
+    </section>
+  );
+}
+
 function AudioPlanSummaryStrip({ audioPlanning, selectedShot }: { audioPlanning: AudioPlanningState; selectedShot?: ShotRecord }) {
   const selectedPlan = findAudioPlan(audioPlanning, selectedShot?.id);
   const plannedSlots = audioPlanning.providerSlots.filter((slot) => slot.state === "planned").length;
@@ -7664,6 +7746,7 @@ function DirectorMode({
   selectedShotId,
   selectedShotIds,
   selectedAssetId,
+  realDemo005State,
   directorView,
   activeSectionId,
   onSelectShot,
@@ -7673,6 +7756,7 @@ function DirectorMode({
   onMarkAssetStatus,
   onProjectFactsModeChange,
   onConfirmOneShot,
+  onRunRealDemo005,
 }: {
   audit: ProjectAudit;
   view: RuntimeView;
@@ -7686,6 +7770,7 @@ function DirectorMode({
   selectedShotId: string;
   selectedShotIds: string[];
   selectedAssetId?: string;
+  realDemo005State: RealDemoE2e005PanelState;
   directorView: DirectorView;
   activeSectionId?: string;
   onSelectShot: (id: string, additive?: boolean) => void;
@@ -7695,15 +7780,19 @@ function DirectorMode({
   onMarkAssetStatus: (assetId: string, status: AssetLibraryUiStatus) => void;
   onProjectFactsModeChange: (mode: ProjectFactsUiMode) => void;
   onConfirmOneShot: () => void;
+  onRunRealDemo005: () => void;
 }) {
   const activeSection = view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0];
   const sectionLabel = activeSection?.label || "Story";
   const shots = activeSection ? audit.shots.filter((shot) => activeSection.shotIds.includes(shot.id)) : audit.shots;
+  const realPilotSummary = buildRealPilotUiSummary(runtimeState, selectedShot);
 
   return (
     <div className={`minimal-director ${directorView}`}>
       <div className="minimal-director-main">
         <MinimalDirectorStatusDot runtimeState={runtimeState} />
+        <RealPilotDirectorStatus summary={realPilotSummary} />
+        <RealDemoE2e005Panel state={realDemo005State} selectedShotId={selectedShotId} onRun={onRunRealDemo005} />
         {directorView === "assets" && (
           <MinimalAssetLibrary
             library={assetLibrary}
@@ -9056,6 +9145,7 @@ function App() {
   const [selectedShotId, setSelectedShotId] = useState("A1_01");
   const [selectedShotIds, setSelectedShotIds] = useState<string[]>(["A1_01"]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | undefined>();
+  const [realDemo005State, setRealDemo005State] = useState<RealDemoE2e005PanelState>({ status: "unavailable" });
 
   function loadProjectState(nextState: ProjectRuntimeState) {
     setRuntimeState(nextState);
@@ -9217,6 +9307,16 @@ function App() {
     setRuntimeState((current) => applyPreRealTestClosure(current, { generatedAt: new Date().toISOString() }).runtimeState);
   }
 
+  async function runRealDemo005() {
+    setRealDemo005State((current) => ({
+      ...current,
+      status: "running",
+      message: "Posting to local endpoint, then falling back to report sync if unavailable.",
+    }));
+    const nextState = await runRealDemoE2e005UiBridge();
+    setRealDemo005State(nextState);
+  }
+
   return (
     <div className={`app-shell minimal-shell ${mode === "director" && directorView === "preview" ? "preview-shell" : ""}`}>
       <MinimalTopNav
@@ -9256,6 +9356,7 @@ function App() {
           selectedShotId={selectedShotId}
           selectedShotIds={selectedShotIds}
           selectedAssetId={selectedAssetId}
+          realDemo005State={realDemo005State}
           directorView={directorView}
           activeSectionId={resolvedActiveSectionId}
           onSelectShot={selectShot}
@@ -9265,6 +9366,7 @@ function App() {
           onMarkAssetStatus={markAssetStatus}
           onProjectFactsModeChange={setProjectFactsMode}
           onConfirmOneShot={confirmOneShot}
+          onRunRealDemo005={runRealDemo005}
         />
       )}
       {mode === "inspector" && <InspectorMode audit={audit} view={view} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />}

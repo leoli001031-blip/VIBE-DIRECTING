@@ -775,6 +775,180 @@
   border-color: rgba(242, 238, 230, 0.18);
 }
 
+.real-demo-005-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1fr) minmax(160px, 0.42fr);
+  grid-template-areas:
+    "head tags thumbs"
+    "report report thumbs"
+    "message message thumbs";
+  align-items: center;
+  gap: 10px 14px;
+  min-width: 0;
+  border-bottom: 1px solid rgba(37, 40, 34, 0.1);
+  padding: 0 0 16px;
+  color: rgba(37, 40, 34, 0.72);
+}
+
+.real-demo-005-head {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.real-demo-005-head > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.real-demo-005-head span {
+  color: rgba(37, 40, 34, 0.52);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.real-demo-005-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: rgba(37, 40, 34, 0.88);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  font-weight: 400;
+}
+
+.real-demo-005-head button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 1px solid rgba(37, 40, 34, 0.2);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(37, 40, 34, 0.78);
+  cursor: pointer;
+  padding: 0 11px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.real-demo-005-head button:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.real-demo-005-tags {
+  grid-area: tags;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.real-demo-005-tags small {
+  border: 1px solid rgba(37, 40, 34, 0.12);
+  background: rgba(37, 40, 34, 0.035);
+  color: rgba(37, 40, 34, 0.66);
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+.real-demo-005-thumbs {
+  grid-area: thumbs;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.real-demo-005-thumbs figure {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+}
+
+.real-demo-005-thumbs img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: rgba(37, 40, 34, 0.06);
+  object-fit: cover;
+}
+
+.real-demo-005-thumbs figure.review-overlay img {
+  outline: 1px solid rgba(192, 147, 82, 0.92);
+  outline-offset: -1px;
+}
+
+.real-demo-005-thumbs figcaption {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  left: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  color: #f4efe7;
+  font-size: 10px;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
+}
+
+.real-demo-005-thumbs figcaption small {
+  font-size: 10px;
+}
+
+.real-demo-005-report,
+.real-demo-005-message {
+  min-width: 0;
+  color: inherit;
+  font-size: 11px;
+  opacity: 0.64;
+  overflow-wrap: anywhere;
+}
+
+.real-demo-005-report {
+  grid-area: report;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.real-demo-005-message {
+  grid-area: message;
+}
+
+.preview-shell .real-demo-005-panel {
+  border-color: rgba(242, 238, 230, 0.14);
+  color: rgba(242, 238, 230, 0.68);
+}
+
+.preview-shell .real-demo-005-head span {
+  color: rgba(242, 238, 230, 0.5);
+}
+
+.preview-shell .real-demo-005-head strong,
+.preview-shell .real-demo-005-head button {
+  color: rgba(242, 238, 230, 0.84);
+}
+
+.preview-shell .real-demo-005-head button,
+.preview-shell .real-demo-005-tags small {
+  border-color: rgba(242, 238, 230, 0.16);
+}
+
+.preview-shell .real-demo-005-tags small {
+  background: rgba(242, 238, 230, 0.055);
+  color: rgba(242, 238, 230, 0.68);
+}
+
 .minimal-story-flow h2,
 .asset-library-view h2 {
   margin: 0 0 36px;
@@ -1662,6 +1836,20 @@
   .one-shot-action-panel {
     grid-template-columns: 1fr;
     gap: 10px;
+  }
+
+  .real-demo-005-panel {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "head"
+      "tags"
+      "thumbs"
+      "report"
+      "message";
+  }
+
+  .real-demo-005-thumbs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .minimal-agent-panel {
