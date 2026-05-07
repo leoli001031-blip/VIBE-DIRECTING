@@ -12,6 +12,8 @@ declare global {
 
 export const defaultRuntimeApiBaseUrl = "http://127.0.0.1:8790";
 export const realDemoE2e005RuntimeBasePath = "/api/runtime";
+export const currentProjectRealChainStatusEndpoint = `${realDemoE2e005RuntimeBasePath}/projects/current/real-chain/status`;
+export const currentProjectRealChainRunEndpoint = `${realDemoE2e005RuntimeBasePath}/projects/current/real-chain/run-check`;
 export const realDemoE2e005StatusEndpoint = `${realDemoE2e005RuntimeBasePath}/real-demo-e2e/005/status`;
 export const realDemoE2e005RunEndpoint = `${realDemoE2e005RuntimeBasePath}/real-demo-e2e/005/run`;
 export const realDemoE2e005FileEndpoint = `${realDemoE2e005RuntimeBasePath}/files`;
@@ -43,11 +45,26 @@ export type RealDemoE2e005Summary = {
   uiStatus: RealDemoE2e005UiStatus;
   source?: RealDemoE2e005Source;
   endpoint?: string;
+  projectionKind?: string;
+  projectRootMode?: string;
+  projectRootRelativePath?: string;
+  project?: {
+    schemaVersion?: string;
+    projectId?: string;
+    runId?: string;
+    roleIds?: string[];
+    sceneIds?: string[];
+    styleId?: string;
+  };
   generatedAt?: string;
   runId?: string;
   previewStatus: string;
   productionStatus: string;
   shotCount: number;
+  plannedImageCount: number;
+  returnedImageCount: number;
+  needsReviewCount: number;
+  needsReviewShotIds: string[];
   reviewOverlayShots: string[];
   productionNeedsReviewShots: string[];
   observations: RealDemoE2e005Observation[];
@@ -67,12 +84,20 @@ export type RealDemoE2e005UiState = {
 type RealDemoE2e005Report = {
   source?: RealDemoE2e005Source;
   endpoint?: string;
+  projectionKind?: string;
+  projectRootMode?: string;
+  projectRootRelativePath?: string;
+  project?: RealDemoE2e005Summary["project"];
   generatedAt?: string;
   runId?: string;
   status?: string;
   previewStatus?: string;
   productionStatus?: string;
   shotCount?: number;
+  plannedImageCount?: number;
+  returnedImageCount?: number;
+  needsReviewCount?: number;
+  needsReviewShotIds?: string[];
   reviewOverlayShots?: string[];
   productionNeedsReviewShots?: string[];
   reportPath?: string;
@@ -160,6 +185,10 @@ export function deriveRealDemoE2e005Summary(
       observations: [],
       reportPath: realDemoE2e005ReportRelativePath,
       reportUrl: realDemoE2e005FallbackReportUrl,
+      plannedImageCount: 0,
+      returnedImageCount: 0,
+      needsReviewCount: 0,
+      needsReviewShotIds: [],
       providerCalled: false,
       prepareRan: false,
       message: "Report shape was not recognized.",
@@ -201,11 +230,19 @@ export function deriveRealDemoE2e005Summary(
     uiStatus: deriveUiStatus({ ...report, reviewOverlayShots, productionNeedsReviewShots }),
     source: report.source || source,
     endpoint: report.endpoint,
+    projectionKind: report.projectionKind,
+    projectRootMode: report.projectRootMode,
+    projectRootRelativePath: report.projectRootRelativePath,
+    project: report.project,
     generatedAt: report.generatedAt,
-    runId: report.runId,
+    runId: report.runId || report.project?.runId,
     previewStatus: report.previewStatus || report.status || "unavailable",
     productionStatus: report.productionStatus || "unavailable",
     shotCount: typeof report.shotCount === "number" ? report.shotCount : observations.length,
+    plannedImageCount: typeof report.plannedImageCount === "number" ? report.plannedImageCount : typeof report.shotCount === "number" ? report.shotCount : observations.length,
+    returnedImageCount: typeof report.returnedImageCount === "number" ? report.returnedImageCount : observations.filter((item) => item.imageUrl).length,
+    needsReviewCount: typeof report.needsReviewCount === "number" ? report.needsReviewCount : productionNeedsReviewShots.length,
+    needsReviewShotIds: stringArray(report.needsReviewShotIds).length ? stringArray(report.needsReviewShotIds) : productionNeedsReviewShots,
     reviewOverlayShots,
     productionNeedsReviewShots,
     observations,

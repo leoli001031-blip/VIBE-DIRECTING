@@ -82,13 +82,13 @@ import {
 } from "./core/previewPlayerQueue";
 import { applyPreRealTestClosure } from "./core/preRealTestClosure";
 import {
-  loadRealDemoE2e005UiBridgeStatus,
-  realDemoE2e005ReportRelativePath,
-  runRealDemoE2e005UiBridge,
-  type RealDemoE2e005Observation,
-  type RealDemoE2e005UiState,
-  type RealDemoE2e005UiStatus,
-} from "./core/realDemoE2e005UiBridge";
+  loadProjectRealChainStatus,
+  projectRealChainReportRelativePath,
+  runProjectRealChainCheck,
+  type ProjectRealChainPreviewItem,
+  type ProjectRealChainUiState,
+  type ProjectRealChainUiStatus,
+} from "./core/projectRealChainStatus";
 import { fallbackAudit } from "./data/fallbackAudit";
 
 const gateNames = ["identity", "scene", "pair", "story", "prop", "style"] as const;
@@ -407,7 +407,7 @@ type RealPilotUiSummary = {
   warnings: string[];
 };
 type OneShotActionStatus = "idle" | "confirmed";
-type RealDemoE2e005PanelState = RealDemoE2e005UiState;
+type ProjectRealChainPanelState = ProjectRealChainUiState;
 
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
@@ -7567,66 +7567,73 @@ function OneShotActionPanel({
   );
 }
 
-function realDemo005StatusLabel(status: RealDemoE2e005UiStatus) {
+function projectRealChainStatusLabel(status: ProjectRealChainUiStatus) {
   if (status === "running") return "running";
-  if (status === "preview_ready_with_review") return "preview_ready_with_review";
-  if (status === "production_needs_review") return "production_needs_review";
+  if (status === "preview_ready_with_review") return "preview ready";
+  if (status === "production_needs_review") return "needs_review";
   if (status === "blocked") return "blocked";
   return "unavailable";
 }
 
-function realDemo005VisibleObservations(
-  observations: RealDemoE2e005Observation[],
+function projectRealChainVisibleItems(
+  items: ProjectRealChainPreviewItem[],
   selectedShotId: string,
 ) {
-  const withImage = observations.filter((item) => item.imageUrl);
+  const withImage = items.filter((item) => item.imageUrl || item.thumbnailUrl);
   const selected = withImage.find((item) => item.shotId === selectedShotId);
   if (selected) return [selected];
   return withImage.slice(0, 4);
 }
 
-function RealDemoE2e005Panel({
+function ProjectRealChainPanel({
   state,
   selectedShotId,
   onRun,
 }: {
-  state: RealDemoE2e005PanelState;
+  state: ProjectRealChainPanelState;
   selectedShotId: string;
   onRun: () => void;
 }) {
   const summary = state.summary;
   const running = state.status === "running";
-  const status = realDemo005StatusLabel(state.status);
-  const reviewOverlayShots = summary?.reviewOverlayShots.length ? summary.reviewOverlayShots.join("/") : "none";
-  const visibleObservations = summary ? realDemo005VisibleObservations(summary.observations, selectedShotId) : [];
+  const status = projectRealChainStatusLabel(state.status);
+  const reviewShotIds = summary?.reviewShotIds.length ? summary.reviewShotIds.join("/") : "";
+  const returnedCount = summary?.returnedImageCount ?? 0;
+  const plannedCount = summary?.totalPlannedImages ?? 0;
+  const visibleItems = summary ? projectRealChainVisibleItems(summary.previewItems, selectedShotId) : [];
+  const sourceLabel = summary?.sourceLabel || (
+    summary?.source === "runtime_endpoint" ? "runtime endpoint / project projection" : "fallback report"
+  );
 
   return (
-    <section className={`real-demo-005-panel ${state.status}`} aria-label="005 真实链路小样">
+    <section className={`real-demo-005-panel ${state.status}`} aria-label="当前项目真实链路状态">
       <div className="real-demo-005-head">
         <div>
-          <span>005 Image2</span>
+          <span>真实链路</span>
           <strong>{status}</strong>
         </div>
         <button disabled={running} onClick={onRun}>
           <RefreshCw size={15} />
-          {running ? "同步中" : "运行小样检查"}
+          {running ? "同步中" : "运行链路检查"}
         </button>
       </div>
       <div className="real-demo-005-tags">
-        <small>preview {summary?.previewStatus || "unavailable"}</small>
+        <small>当前项目</small>
+        <small>已返回 {returnedCount}/{plannedCount} 张</small>
+        <small>{summary?.needsReviewCount ?? 0} 张需复核{reviewShotIds ? ` ${reviewShotIds}` : ""}</small>
+        <small>preview {summary?.previewStatusLabel || "unavailable"}</small>
         <small>production {summary?.productionStatus || "unavailable"}</small>
-        <small>{summary?.shotCount ?? 0} shots</small>
-        <small>review overlay {reviewOverlayShots}</small>
-        {summary?.source && <small>{summary.source === "runtime_endpoint" ? "runtime endpoint" : "fallback report"}</small>}
+        {summary?.source && <small>{sourceLabel}</small>}
+        {summary?.sandboxSource && <small>{summary.sandboxSource}</small>}
       </div>
-      {visibleObservations.length > 0 && (
-        <div className="real-demo-005-thumbs" aria-label="小样缩略图">
-          {visibleObservations.map((item) => (
-            <figure key={item.shotId} className={item.reviewOverlay ? "review-overlay" : undefined}>
-              <img src={item.imageUrl} alt={`${item.shotId} start frame`} />
+      {visibleItems.length > 0 && (
+        <div className="real-demo-005-thumbs" aria-label="当前项目真实链路缩略图">
+          {visibleItems.map((item) => (
+            <figure key={item.shotId} className={item.reviewRequired ? "review-overlay" : undefined}>
+              <img src={item.thumbnailUrl || item.imageUrl} alt={`${item.shotId} preview`} />
               <figcaption>
                 <span>{item.shotId}</span>
-                {item.reviewOverlay && <small>review overlay</small>}
+                {item.reviewRequired && <small>needs review</small>}
               </figcaption>
             </figure>
           ))}
@@ -7634,7 +7641,7 @@ function RealDemoE2e005Panel({
       )}
       <small className="real-demo-005-report">
         <FileJson size={13} />
-        {summary?.reportPath || realDemoE2e005ReportRelativePath}
+        {summary?.projectId || "current project"} · {summary?.reportPath || projectRealChainReportRelativePath}
       </small>
       {state.message && <small className="real-demo-005-message">{state.message}</small>}
     </section>
@@ -7747,7 +7754,7 @@ function DirectorMode({
   selectedShotId,
   selectedShotIds,
   selectedAssetId,
-  realDemo005State,
+  projectRealChainState,
   directorView,
   activeSectionId,
   onSelectShot,
@@ -7757,7 +7764,7 @@ function DirectorMode({
   onMarkAssetStatus,
   onProjectFactsModeChange,
   onConfirmOneShot,
-  onRunRealDemo005,
+  onRunProjectRealChain,
 }: {
   audit: ProjectAudit;
   view: RuntimeView;
@@ -7771,7 +7778,7 @@ function DirectorMode({
   selectedShotId: string;
   selectedShotIds: string[];
   selectedAssetId?: string;
-  realDemo005State: RealDemoE2e005PanelState;
+  projectRealChainState: ProjectRealChainPanelState;
   directorView: DirectorView;
   activeSectionId?: string;
   onSelectShot: (id: string, additive?: boolean) => void;
@@ -7781,7 +7788,7 @@ function DirectorMode({
   onMarkAssetStatus: (assetId: string, status: AssetLibraryUiStatus) => void;
   onProjectFactsModeChange: (mode: ProjectFactsUiMode) => void;
   onConfirmOneShot: () => void;
-  onRunRealDemo005: () => void;
+  onRunProjectRealChain: () => void;
 }) {
   const activeSection = view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0];
   const sectionLabel = activeSection?.label || "Story";
@@ -7793,7 +7800,7 @@ function DirectorMode({
       <div className="minimal-director-main">
         <MinimalDirectorStatusDot runtimeState={runtimeState} />
         <RealPilotDirectorStatus summary={realPilotSummary} />
-        <RealDemoE2e005Panel state={realDemo005State} selectedShotId={selectedShotId} onRun={onRunRealDemo005} />
+        <ProjectRealChainPanel state={projectRealChainState} selectedShotId={selectedShotId} onRun={onRunProjectRealChain} />
         {directorView === "assets" && (
           <MinimalAssetLibrary
             library={assetLibrary}
@@ -9146,7 +9153,7 @@ function App() {
   const [selectedShotId, setSelectedShotId] = useState("A1_01");
   const [selectedShotIds, setSelectedShotIds] = useState<string[]>(["A1_01"]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | undefined>();
-  const [realDemo005State, setRealDemo005State] = useState<RealDemoE2e005PanelState>({ status: "unavailable" });
+  const [projectRealChainState, setProjectRealChainState] = useState<ProjectRealChainPanelState>({ status: "unavailable" });
 
   function loadProjectState(nextState: ProjectRuntimeState) {
     setRuntimeState(nextState);
@@ -9235,8 +9242,8 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
-    loadRealDemoE2e005UiBridgeStatus().then((nextState) => {
-      if (!cancelled) setRealDemo005State(nextState);
+    loadProjectRealChainStatus().then((nextState) => {
+      if (!cancelled) setProjectRealChainState(nextState);
     });
     return () => {
       cancelled = true;
@@ -9318,14 +9325,14 @@ function App() {
     setRuntimeState((current) => applyPreRealTestClosure(current, { generatedAt: new Date().toISOString() }).runtimeState);
   }
 
-  async function runRealDemo005() {
-    setRealDemo005State((current) => ({
+  async function runProjectRealChain() {
+    setProjectRealChainState((current) => ({
       ...current,
       status: "running",
-      message: "Posting to runtime endpoint, then falling back to report sync if unavailable.",
+      message: "Checking current project real-chain status through runtime endpoint.",
     }));
-    const nextState = await runRealDemoE2e005UiBridge();
-    setRealDemo005State(nextState);
+    const nextState = await runProjectRealChainCheck();
+    setProjectRealChainState(nextState);
   }
 
   return (
@@ -9367,7 +9374,7 @@ function App() {
           selectedShotId={selectedShotId}
           selectedShotIds={selectedShotIds}
           selectedAssetId={selectedAssetId}
-          realDemo005State={realDemo005State}
+          projectRealChainState={projectRealChainState}
           directorView={directorView}
           activeSectionId={resolvedActiveSectionId}
           onSelectShot={selectShot}
@@ -9377,7 +9384,7 @@ function App() {
           onMarkAssetStatus={markAssetStatus}
           onProjectFactsModeChange={setProjectFactsMode}
           onConfirmOneShot={confirmOneShot}
-          onRunRealDemo005={runRealDemo005}
+          onRunProjectRealChain={runProjectRealChain}
         />
       )}
       {mode === "inspector" && <InspectorMode audit={audit} view={view} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />}

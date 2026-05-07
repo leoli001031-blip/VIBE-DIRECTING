@@ -8,12 +8,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const host = process.env.VIBE_CORE_RUNTIME_API_HOST || "127.0.0.1";
 const port = Number(process.env.VIBE_CORE_RUNTIME_API_PORT || 8790);
-const reportRelativePath = "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/reports/image2_start_long_chain_report.json";
-const reportPath = path.join(repoRoot, reportRelativePath);
+const sandboxRunRootRelativePath = "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames";
+const sandboxProjectVibeRelativePath = `${sandboxRunRootRelativePath}/project/project.vibe`;
+const sandboxReportRelativePath = `${sandboxRunRootRelativePath}/reports/image2_start_long_chain_report.json`;
 const verifyScript = path.join(repoRoot, "scripts/real-demo-e2e-005-anime-image2-start-verify.mjs");
 const maxOutputChars = 8000;
 
 const runtimeBasePath = "/api/runtime";
+const currentProjectStatusEndpoint = `${runtimeBasePath}/projects/current/real-chain/status`;
+const currentProjectRunEndpoint = `${runtimeBasePath}/projects/current/real-chain/run-check`;
 const realDemo005StatusEndpoint = `${runtimeBasePath}/real-demo-e2e/005/status`;
 const realDemo005RunEndpoint = `${runtimeBasePath}/real-demo-e2e/005/run`;
 const runtimeFileEndpoint = `${runtimeBasePath}/files`;
@@ -34,6 +37,115 @@ function corsHeaders(contentType = "application/json; charset=utf-8") {
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
+}
+
+function normalizeRelativePath(value) {
+  return value.replace(/\\/g, "/");
+}
+
+function repoRelativePath(filePath) {
+  const relativePath = normalizeRelativePath(path.relative(repoRoot, filePath));
+  if (relativePath === "") return ".";
+  if (relativePath.startsWith("../") || relativePath === ".." || path.isAbsolute(relativePath)) {
+    throw new Error(`Path escapes project root: ${filePath}`);
+  }
+  return relativePath;
+}
+
+function resolveRepoInputPath(inputPath) {
+  const candidate = path.isAbsolute(inputPath)
+    ? path.resolve(inputPath)
+    : path.resolve(repoRoot, inputPath);
+  const rootWithSep = `${repoRoot}${path.sep}`;
+  if (candidate !== repoRoot && !candidate.startsWith(rootWithSep)) {
+    throw new Error(`Path escapes project root: ${inputPath}`);
+  }
+  return candidate;
+}
+
+function firstExistingPath(paths) {
+  return paths.find((filePath) => existsSync(filePath));
+}
+
+function resolveProjectSource(inputPath, options = {}) {
+  const configuredPath = resolveRepoInputPath(inputPath || sandboxRunRootRelativePath);
+  const configuredStats = existsSync(configuredPath) ? statSync(configuredPath) : undefined;
+  const configuredIsProjectVibe = configuredStats?.isFile() && path.basename(configuredPath) === "project.vibe";
+  const runRootPath = configuredIsProjectVibe
+    ? path.basename(path.dirname(configuredPath)) === "project"
+      ? path.dirname(path.dirname(configuredPath))
+      : path.dirname(configuredPath)
+    : configuredPath;
+  const projectVibePath = configuredIsProjectVibe
+    ? configuredPath
+    : firstExistingPath([
+      path.join(runRootPath, "project.vibe"),
+      path.join(runRootPath, "project", "project.vibe"),
+    ]) || path.join(runRootPath, "project", "project.vibe");
+
+  const reportInput = options.reportPath || process.env.VIBE_CORE_CURRENT_PROJECT_REPORT || process.env.VIBE_CORE_PROJECT_REPORT;
+  const reportPath = reportInput
+    ? resolveRepoInputPath(reportInput)
+    : firstExistingPath([
+      path.join(runRootPath, "reports", "image2_start_long_chain_report.json"),
+      path.join(runRootPath, "reports", "real_demo_e2e_report.json"),
+      path.join(runRootPath, "image2_start_long_chain_report.json"),
+    ]) || path.join(runRootPath, "reports", "image2_start_long_chain_report.json");
+
+  const runRootRelativePath = repoRelativePath(runRootPath);
+  return {
+    runRootPath,
+    runRootRelativePath,
+    projectVibePath,
+    projectVibeRelativePath: repoRelativePath(projectVibePath),
+    reportPath,
+    reportRelativePath: repoRelativePath(reportPath),
+    projectRootMode: options.projectRootMode || "configured_project_root",
+    sourceLabel: options.sourceLabel || "runtime endpoint / project projection",
+    sandboxSource: options.sandboxSource,
+  };
+}
+
+function realDemo005Source() {
+  return resolveProjectSource(sandboxRunRootRelativePath, {
+    projectRootMode: "sandbox_fixture_projection",
+    sourceLabel: "runtime endpoint / 005 compatibility",
+    sandboxSource: "005 sandbox",
+  });
+}
+
+function currentProjectSource() {
+  const configuredProjectRoot = process.env.VIBE_CORE_CURRENT_PROJECT_ROOT || process.env.VIBE_CORE_PROJECT_ROOT;
+  if (configuredProjectRoot) {
+    return resolveProjectSource(configuredProjectRoot, {
+      projectRootMode: "configured_project_root",
+      sourceLabel: "runtime endpoint / current project",
+    });
+  }
+  return resolveProjectSource(sandboxRunRootRelativePath, {
+    projectRootMode: "sandbox_fixture_projection",
+    sourceLabel: "runtime endpoint / project projection",
+    sandboxSource: "005 sandbox",
+  });
+}
+
+function readProjectVibe(source) {
+  if (!existsSync(source.projectVibePath)) return undefined;
+  try {
+    const projectVibe = readJson(source.projectVibePath);
+    return {
+      schemaVersion: projectVibe.schemaVersion,
+      projectId: projectVibe.projectId,
+      runId: projectVibe.runId,
+      projectRoot: source.runRootRelativePath,
+      projectVibePath: source.projectVibeRelativePath,
+      roleIds: Array.isArray(projectVibe.roleIds) ? projectVibe.roleIds : [],
+      sceneIds: Array.isArray(projectVibe.sceneIds) ? projectVibe.sceneIds : [],
+      styleId: projectVibe.styleId,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function clip(value) {
@@ -93,6 +205,7 @@ function observationSummary(item) {
 }
 
 function unavailableResponse(extra = {}) {
+  const source = extra.sourceProject || realDemo005Source();
   return {
     ok: false,
     ...runtimePolicy(),
@@ -100,9 +213,9 @@ function unavailableResponse(extra = {}) {
     status: "unavailable",
     previewStatus: "unavailable",
     productionStatus: "unavailable",
-    reportPath,
-    reportRelativePath,
-    reportUrl: runtimeFileUrl(reportRelativePath),
+    reportPath: source.reportPath,
+    reportRelativePath: source.reportRelativePath,
+    reportUrl: runtimeFileUrl(source.reportRelativePath),
     reviewOverlayShots: [],
     productionNeedsReviewShots: [],
     shotCount: 0,
@@ -110,14 +223,15 @@ function unavailableResponse(extra = {}) {
     observations: [],
     message: "005 report is unavailable. The runtime API can only verify an existing prepared report and output set.",
     ...extra,
+    sourceProject: undefined,
   };
 }
 
-function responseFromReport(extra = {}) {
-  if (!existsSync(reportPath)) return unavailableResponse(extra);
+function responseFromReport(extra = {}, source = realDemo005Source()) {
+  if (!existsSync(source.reportPath)) return unavailableResponse({ ...extra, sourceProject: source });
 
   try {
-    const report = readJson(reportPath);
+    const report = readJson(source.reportPath);
     const observations = Array.isArray(report.observations)
       ? report.observations.map(observationSummary)
       : [];
@@ -129,9 +243,9 @@ function responseFromReport(extra = {}) {
       status: report.status || "unavailable",
       previewStatus: report.previewStatus || report.status || "unavailable",
       productionStatus: report.productionStatus || "unavailable",
-      reportPath,
-      reportRelativePath,
-      reportUrl: runtimeFileUrl(reportRelativePath),
+      reportPath: source.reportPath,
+      reportRelativePath: source.reportRelativePath,
+      reportUrl: runtimeFileUrl(source.reportRelativePath),
       reviewOverlayShots: Array.isArray(report.reviewOverlayShots) ? report.reviewOverlayShots : [],
       productionNeedsReviewShots: Array.isArray(report.productionNeedsReviewShots) ? report.productionNeedsReviewShots : [],
       shotCount: report.shotCount || observations.length,
@@ -147,8 +261,52 @@ function responseFromReport(extra = {}) {
       productionStatus: "blocked",
       message: error instanceof Error ? error.message : "005 report could not be parsed.",
       ...extra,
+      sourceProject: source,
     });
   }
+}
+
+function currentProjectRealChainResponse(extra = {}) {
+  const source = currentProjectSource();
+  const payload = responseFromReport(extra, source);
+  const needsReviewShotIds = Array.isArray(payload.productionNeedsReviewShots) && payload.productionNeedsReviewShots.length
+    ? payload.productionNeedsReviewShots
+    : Array.isArray(payload.reviewOverlayShots)
+      ? payload.reviewOverlayShots
+      : [];
+  const observations = Array.isArray(payload.observations) ? payload.observations : [];
+
+  return {
+    ...payload,
+    endpoint: currentProjectStatusEndpoint,
+    source: "runtime_endpoint",
+    sourceLabel: source.sourceLabel,
+    sandboxSource: source.sandboxSource,
+    projectionKind: "project_real_chain_status",
+    projectRootMode: source.projectRootMode,
+    projectRootRelativePath: source.runRootRelativePath,
+    projectVibeRelativePath: source.projectVibeRelativePath,
+    project: readProjectVibe(source),
+    plannedImageCount: Number(payload.shotCount) || observations.length,
+    totalPlannedImages: Number(payload.shotCount) || observations.length,
+    returnedImageCount: observations.filter((item) => typeof item.imageUrl === "string").length,
+    needsReviewCount: needsReviewShotIds.length,
+    needsReviewShotIds,
+    reviewShotIds: needsReviewShotIds,
+    reportPath: source.reportRelativePath,
+    reportRelativePath: source.reportRelativePath,
+    reportUrl: runtimeFileUrl(source.reportRelativePath),
+    previewItems: observations.map((item) => ({
+      shotId: item.shotId,
+      order: item.order,
+      imageUrl: item.imageUrl,
+      reviewOverlay: item.reviewOverlay === true,
+      previewQaStatus: item.previewQaStatus,
+      productionQaStatus: item.productionQaStatus,
+    })),
+    nextAction: "review_needed_outputs_before_production_promotion",
+    ...extra,
+  };
 }
 
 function writeJson(res, statusCode, payload) {
@@ -218,14 +376,17 @@ function runVerify() {
   });
 }
 
-async function handleRun(res) {
+async function handleRun(res, options = {}) {
+  const endpoint = options.endpoint || realDemo005RunEndpoint;
+  const source = options.source || realDemo005Source();
+  const buildResponse = options.buildResponse || ((extra) => responseFromReport(extra, source));
   if (running) {
-    writeJson(res, 409, responseFromReport({
+    writeJson(res, 409, buildResponse({
       ok: false,
-      endpoint: realDemo005RunEndpoint,
+      endpoint,
       status: "running",
       running: true,
-      message: "Real Demo E2E 005 verification is already running.",
+      message: "Real chain verification is already running.",
     }));
     return;
   }
@@ -233,9 +394,9 @@ async function handleRun(res) {
   running = true;
   try {
     const command = await runVerify();
-    const payload = responseFromReport({
+    const payload = buildResponse({
       ok: command.code === 0,
-      endpoint: realDemo005RunEndpoint,
+      endpoint,
       running: false,
       command: {
         command: `${process.execPath} ${path.relative(repoRoot, verifyScript)}`,
@@ -251,18 +412,35 @@ async function handleRun(res) {
     writeJson(res, 500, {
       ok: false,
       ...runtimePolicy(),
-      endpoint: realDemo005RunEndpoint,
+      endpoint,
       status: "blocked",
       previewStatus: "blocked",
       productionStatus: "blocked",
-      reportPath,
-      reportRelativePath,
-      reportUrl: runtimeFileUrl(reportRelativePath),
+      reportPath: source.reportPath,
+      reportRelativePath: source.reportRelativePath,
+      reportUrl: runtimeFileUrl(source.reportRelativePath),
       message: error instanceof Error ? error.message : "Unknown run failure.",
     });
   } finally {
     running = false;
   }
+}
+
+function handleCurrentProjectRunCheck(res) {
+  const source = currentProjectSource();
+  const payload = currentProjectRealChainResponse({
+    running,
+    command: {
+      mode: "read_only_projection_check",
+      exitCode: existsSync(source.reportPath) ? 0 : 1,
+      reportRead: existsSync(source.reportPath),
+      projectVibeRead: existsSync(source.projectVibePath),
+      providerCalled: false,
+      prepareRan: false,
+      verifyScriptRan: false,
+    },
+  });
+  writeJson(res, payload.ok === false ? 500 : 200, payload);
 }
 
 const server = createServer((req, res) => {
@@ -272,11 +450,31 @@ const server = createServer((req, res) => {
     return;
   }
   if (req.method === "GET" && url.pathname === `${runtimeBasePath}/status`) {
-    writeJson(res, 200, { ok: true, ...runtimePolicy({ endpoints: { realDemo005StatusEndpoint, realDemo005RunEndpoint, runtimeFileEndpoint } }), running });
+    writeJson(res, 200, {
+      ok: true,
+      ...runtimePolicy({
+        endpoints: {
+          currentProjectStatusEndpoint,
+          currentProjectRunEndpoint,
+          realDemo005StatusEndpoint,
+          realDemo005RunEndpoint,
+          runtimeFileEndpoint,
+        },
+      }),
+      running,
+    });
     return;
   }
   if (req.method === "GET" && url.pathname === runtimeFileEndpoint) {
     serveRuntimeFile(res, url.searchParams.get("path") || "");
+    return;
+  }
+  if (req.method === "GET" && url.pathname === currentProjectStatusEndpoint) {
+    writeJson(res, 200, currentProjectRealChainResponse({ running }));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === currentProjectRunEndpoint) {
+    handleCurrentProjectRunCheck(res);
     return;
   }
   if (req.method === "GET" && (url.pathname === realDemo005StatusEndpoint || url.pathname === legacyStatusEndpoint)) {
