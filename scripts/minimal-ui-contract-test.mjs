@@ -120,6 +120,7 @@ const assetSourceKindForPath = findFunctionBody(appSource, "assetSourceKindForPa
 const assetLibraryUserBlockers = findFunctionBody(appSource, "assetLibraryUserBlockers");
 const minimalPreview = findFunctionBody(appSource, "MinimalPreview");
 const minimalProjectPlan = findFunctionBody(appSource, "buildMinimalProjectPlan");
+const confirmAgentPlanProjection = findFunctionBody(appSource, "confirmAgentPlanProjection");
 const previewPlayerQueue = findFunctionBody(appSource, "buildPreviewPlayerQueue");
 const previewQueueKind = findFunctionBody(appSource, "previewQueueKind");
 const desktopShellView = findFunctionBody(appSource, "buildDesktopRuntimeShellView");
@@ -251,6 +252,16 @@ checkMessage(requireWithin(minimalAgentPanel, /sectionId\s*:/, "MinimalAgentPane
 checkMessage(requireWithin(minimalAgentPanel, /workflowCanConfirm\s*\(/, "Round 3 MinimalAgentPanel confirmation guard"));
 checkMessage(requireWithin(appSource, /buildMinimalRuntimeProjection/, "One Creator Loop minimal runtime projection helper import/use"));
 checkMessage(requireWithin(minimalAgentPanel, /buildAgentPanelProjection\s*\(/, "One Creator Loop MinimalAgentPanel must use creator-facing runtime projection"));
+checkMessage(requireWithin(appSource, /confirmProjectPendingTransactionForRuntime/, "MinimalAgentPanel confirmation must use project transaction confirmation receipt"));
+checkMessage(requireWithin(minimalAgentPanel, /confirmAgentPlanProjection\s*\(/, "MinimalAgentPanel confirmPlan must use receipt-backed confirmation helper"));
+checkMessage(requireWithin(confirmAgentPlanProjection, /confirmProjectPendingTransactionForRuntime\s*\(/, "receipt-backed confirmation helper must call confirmProjectPendingTransactionForRuntime"));
+checkMessage(requireWithin(confirmAgentPlanProjection, /receipt\.runtimeProjection/, "receipt-backed confirmation helper must project from receipt runtimeProjection"));
+checkMessage(requireWithin(confirmAgentPlanProjection, /receipt\.queuedCount/, "receipt-backed confirmation helper must use receipt counts"));
+checkMessage(requireWithin(confirmAgentPlanProjection, /projectVibeWriteAllowed\s*===\s*false/, "receipt-backed confirmation helper must preserve project.vibe write lock"));
+checkMessage(requireWithin(confirmAgentPlanProjection, /projectVibeWriteExecuted\s*===\s*false/, "receipt-backed confirmation helper must preserve project.vibe execution lock"));
+checkMessage(requireWithin(confirmAgentPlanProjection, /noFileMutation\s*===\s*true/, "receipt-backed confirmation helper must preserve no file mutation lock"));
+checkMessage(requireWithin(confirmAgentPlanProjection, /providerSubmissionForbidden\s*===\s*true/, "receipt-backed confirmation helper must preserve provider submission lock"));
+checkMessage(requireWithin(confirmAgentPlanProjection, /workerSpawnForbidden\s*===\s*true/, "receipt-backed confirmation helper must preserve worker spawn lock"));
 checkMessage(requireWithin(minimalAgentPanel, /minimal-state-dots/, "One Creator Loop MinimalAgentPanel must render compact progress dots"));
 checkMessage(requireWithin(`${minimalAgentPanel}\n${workflowCanConfirm}`, /dry_run_ready/, "Round 3 confirmation only after dry-run ready"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /描述你想怎么改\.\.\./, "MinimalAgentPanel natural input placeholder"));

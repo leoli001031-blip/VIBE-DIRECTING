@@ -48,7 +48,11 @@ import { buildSubagentWorkerRuntimePlan, type SubagentWorkerRuntimePlan } from "
 import { ensureRuntimeEnvironment } from "./core/runtimeConfig";
 import { buildDirectorWorkflowState, type DirectorWorkflowStatus } from "./core/directorWorkflow";
 import { buildMinimalRuntimeProjection, type MinimalRuntimeProjection } from "./core/minimalRuntimeProjection";
-import { buildProjectTransactionRuntime } from "./core/projectTransaction";
+import {
+  buildProjectTransactionRuntime,
+  confirmProjectPendingTransactionForRuntime,
+  type ProjectConfirmedProjectionReceipt,
+} from "./core/projectTransaction";
 import {
   addAssetLibraryAsset,
   createAssetLibrarySnapshot,
@@ -789,6 +793,73 @@ function buildAgentPanelProjection(
     generatedAt: workflow.generatedAt,
     transactionRuntime: planPhase === "confirmed" ? confirmedTransactionRuntime(workflow, runtimeState) : workflow.transactionRuntime,
   });
+}
+
+function agentReceiptStatusLabel(receipt: ProjectConfirmedProjectionReceipt) {
+  if (receipt.status === "blocked_missing_knowledge_trace" || receipt.status === "blocked_queue") return "需更新";
+  if (receipt.status === "blocked_not_confirmed") return "等待复核";
+  if (receipt.parkedCount > 0 && receipt.queuedCount === 0) return "等待复核";
+  return "已加入计划";
+}
+
+function agentReceiptCountSummary(receipt: ProjectConfirmedProjectionReceipt) {
+  const parts = [
+    receipt.queuedCount ? `${receipt.queuedCount} 已加入计划` : "",
+    receipt.parkedCount ? `${receipt.parkedCount} 等待复核` : "",
+    receipt.blockedCount ? `${receipt.blockedCount} 需更新` : "",
+    receipt.staleArtifactCount ? `${receipt.staleArtifactCount} 需更新` : "",
+  ].filter(Boolean);
+  return parts.join(" · ") || agentReceiptStatusLabel(receipt);
+}
+
+function confirmAgentPlanProjection(workflow: MinimalAgentWorkflow, runtimeState: ProjectRuntimeState) {
+  const transactionRuntime = confirmedTransactionRuntime(workflow, runtimeState);
+  const receipt = confirmProjectPendingTransactionForRuntime(transactionRuntime);
+  const hardLocksHeld = receipt.projectVibeWriteAllowed === false
+    && receipt.projectVibeWriteExecuted === false
+    && receipt.noFileMutation === true
+    && receipt.providerSubmissionForbidden === true
+    && receipt.workerSpawnForbidden === true;
+  const baseProjection = buildMinimalRuntimeProjection({
+    generatedAt: receipt.generatedAt,
+    transactionRuntime,
+  });
+  const counts = {
+    queued: receipt.queuedCount,
+    parked: receipt.parkedCount,
+    blocked: receipt.blockedCount,
+    stale: receipt.runtimeProjection.staleArtifactCount,
+  };
+  const shortLabel = hardLocksHeld ? agentReceiptStatusLabel(receipt) : "需更新";
+  const countSummary = agentReceiptCountSummary(receipt);
+
+  return {
+    receipt,
+    projection: {
+      ...baseProjection,
+      generatedAt: receipt.generatedAt,
+      shortLabel,
+      counts,
+      countSummary,
+      staleSummary: counts.stale ? `${counts.stale} 需更新` : "画面保持同步",
+      progressDots: buildMinimalRuntimeProjection({
+        generatedAt: receipt.generatedAt,
+        transactionRuntime: {
+          ...transactionRuntime,
+          userStatus: receipt.runtimeProjection.status,
+          nextUiProjection: {
+            ...transactionRuntime.nextUiProjection,
+            status: receipt.runtimeProjection.status,
+            shortLabel,
+            queuedCount: counts.queued,
+            parkedCount: counts.parked,
+            blockedCount: counts.blocked,
+            staleArtifactCount: counts.stale,
+          },
+        },
+      }).progressDots,
+    },
+  };
 }
 
 function agentProjectionBadges(projection: MinimalRuntimeProjection, planPhase: AgentPlanPhase) {
@@ -7321,7 +7392,7 @@ function MinimalAgentPanel({
 
   function confirmPlan() {
     if (!workflowCanConfirm(workflow)) return;
-    const nextProjection = buildAgentPanelProjection(workflow, runtimeState, "confirmed");
+    const { projection: nextProjection } = confirmAgentPlanProjection(workflow, runtimeState);
     setProjection(nextProjection);
     setPlanPhase("confirmed");
     setStatus(nextProjection.shortLabel);
