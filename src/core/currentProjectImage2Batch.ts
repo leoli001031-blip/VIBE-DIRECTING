@@ -5,6 +5,7 @@ import {
   type TaskRunLedger,
   type TaskRunLedgerProjection,
 } from "./taskRunLedger";
+import type { AssetLibraryAsset, AssetLibrarySnapshot } from "./assetLibraryCrud";
 
 export const currentProjectImage2BatchSchemaVersion = "0.1.0";
 
@@ -52,6 +53,7 @@ export interface BuildCurrentProjectImage2BatchPlanInput {
   shotIds?: string[];
   shots?: Array<string | CurrentProjectImage2ShotInput>;
   references?: CurrentProjectImage2ReferenceSet;
+  assetLibrary?: AssetLibrarySnapshot;
 }
 
 export interface CurrentProjectImage2BatchSubmitPolicy {
@@ -173,6 +175,20 @@ export interface CurrentProjectImage2BatchRuntimeProjection {
   items: CurrentProjectImage2BatchRuntimeProjectionItem[];
 }
 
+export interface CurrentProjectImage2AssetLibraryReferenceSummary {
+  eligibleCount: number;
+  blockedCount: number;
+  warningCount: number;
+  byRole: Record<CurrentProjectImage2ReferenceRole, number>;
+}
+
+export interface CurrentProjectImage2AssetLibraryReferenceReadiness {
+  references: CurrentProjectImage2ReferenceSet;
+  blockers: string[];
+  warnings: string[];
+  summary: CurrentProjectImage2AssetLibraryReferenceSummary;
+}
+
 const defaultGeneratedAt = "1970-01-01T00:00:00.000Z";
 const defaultMaxImages = 10;
 const requiredReferenceRoles: CurrentProjectImage2ReferenceRole[] = ["character", "scene", "style"];
@@ -218,6 +234,103 @@ function uniqueInOrder(values: string[]): string[] {
     result.push(normalized);
   }
   return result;
+}
+
+function mergeReferences(
+  first: CurrentProjectImage2ReferenceSet | undefined,
+  second: CurrentProjectImage2ReferenceSet | undefined,
+): CurrentProjectImage2ReferenceSet | undefined {
+  const result: CurrentProjectImage2ReferenceSet = {};
+  for (const role of requiredReferenceRoles) {
+    const entries = [...referenceList(first?.[role]), ...referenceList(second?.[role])];
+    if (entries.length) result[role] = entries;
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+
+function sourceKindCannotBeFutureReference(sourceKind: string | undefined): boolean {
+  return (
+    sourceKind === "provider_temp_output" ||
+    sourceKind === "failed_output" ||
+    sourceKind === "shot_output" ||
+    sourceKind === "contact_sheet"
+  );
+}
+
+function assetFutureReferenceBlockers(asset: AssetLibraryAsset): string[] {
+  const blockers: string[] = [];
+  const authority = asset.referenceAuthority;
+
+  if (asset.assetType !== "character" && asset.assetType !== "scene" && asset.assetType !== "style") {
+    blockers.push(`asset_library_${asset.id}_unsupported_reference_asset_type`);
+  }
+  if (asset.status !== "locked") blockers.push(`asset_library_${asset.id}_status_${asset.status}_not_locked`);
+  if (sourceKindCannotBeFutureReference(asset.sourceKind)) blockers.push(`asset_library_${asset.id}_${asset.sourceKind}_not_future_reference`);
+  if (!asset.canUseAsFutureReference) blockers.push(`asset_library_${asset.id}_asset_future_reference_forbidden`);
+  if (!authority.canUseAsFutureReference) blockers.push(`asset_library_${asset.id}_authority_future_reference_forbidden`);
+  if (!authority.allowedUse.includes("future_reference")) blockers.push(`asset_library_${asset.id}_authority_missing_future_reference_use`);
+  if (authority.lockedStatus !== "locked") blockers.push(`asset_library_${asset.id}_authority_not_locked`);
+  if (authority.polarity !== "positive") blockers.push(`asset_library_${asset.id}_authority_not_positive`);
+  if (!normalizePath(asset.mainReferencePath || authority.path)) blockers.push(`asset_library_${asset.id}_reference_path_missing`);
+
+  return uniqueInOrder(blockers);
+}
+
+export function buildCurrentProjectImage2ReferencesFromAssetLibrary(
+  library: AssetLibrarySnapshot,
+): CurrentProjectImage2AssetLibraryReferenceReadiness {
+  const references: CurrentProjectImage2ReferenceSet = {};
+  const blockers: string[] = [];
+  const warnings: string[] = [];
+  const byRole: Record<CurrentProjectImage2ReferenceRole, number> = { character: 0, scene: 0, style: 0 };
+  let blockedCount = 0;
+
+  for (const asset of library.assets) {
+    if (asset.assetType !== "character" && asset.assetType !== "scene" && asset.assetType !== "style") continue;
+
+    const assetBlockers = assetFutureReferenceBlockers(asset);
+    if (assetBlockers.length) {
+      blockedCount += 1;
+      warnings.push(...assetBlockers);
+      continue;
+    }
+
+    const role = asset.assetType;
+    const reference = {
+      id: asset.id,
+      path: normalizePath(asset.mainReferencePath || asset.referenceAuthority.path),
+      role,
+      locked: true,
+      lockedStatus: "locked",
+      status: "locked",
+      safeForFutureReference: true,
+    };
+    const existing = referenceList(references[role]);
+    references[role] = [...existing, reference];
+    byRole[role] += 1;
+  }
+
+  for (const role of requiredReferenceRoles) {
+    if (!byRole[role]) blockers.push(`asset_library_missing_locked_${role}_future_reference`);
+  }
+
+  for (const blockedImport of library.blockedImports) {
+    if (sourceKindCannotBeFutureReference(blockedImport.sourceKind)) {
+      warnings.push(`asset_library_blocked_import_${blockedImport.sourceKind}_not_future_reference`);
+    }
+  }
+
+  return {
+    references,
+    blockers: uniqueInOrder(blockers),
+    warnings: uniqueInOrder(warnings),
+    summary: {
+      eligibleCount: byRole.character + byRole.scene + byRole.style,
+      blockedCount,
+      warningCount: uniqueInOrder(warnings).length,
+      byRole,
+    },
+  };
 }
 
 function pathIsPortable(value: string): boolean {
@@ -374,7 +487,8 @@ export function buildCurrentProjectImage2BatchPlan(input: BuildCurrentProjectIma
   const shotIds = selectedShotIds(input);
   const maxImages = input.maxImages ?? defaultMaxImages;
   const shotOverrides = shotById(input.shots);
-  const normalizedReferences = normalizeReferences(input.references);
+  const assetLibraryReferences = input.assetLibrary ? buildCurrentProjectImage2ReferencesFromAssetLibrary(input.assetLibrary) : undefined;
+  const normalizedReferences = normalizeReferences(mergeReferences(assetLibraryReferences?.references, input.references));
   const globalBlockers: string[] = [];
 
   globalBlockers.push(...validatePortablePath("project_root", projectRoot));
@@ -384,6 +498,7 @@ export function buildCurrentProjectImage2BatchPlan(input: BuildCurrentProjectIma
   }
   if (!shotIds.length) globalBlockers.push("no_selected_shots");
   if (shotIds.length > maxImages) globalBlockers.push("selected_shots_exceed_max_images");
+  globalBlockers.push(...(assetLibraryReferences?.blockers || []));
   globalBlockers.push(...normalizedReferences.blockers);
 
   const items = shotIds.map((shotId, index): CurrentProjectImage2BatchPlanItem => {

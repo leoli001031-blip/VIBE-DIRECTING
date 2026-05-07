@@ -24,13 +24,25 @@ async function loadCurrentProjectImage2BatchCore() {
     .sort((left, right) => fs.statSync(right).mtimeMs - fs.statSync(left).mtimeMs);
   const coreDir = created[0] || currentLoadCoreDirs().sort((left, right) => fs.statSync(right).mtimeMs - fs.statSync(left).mtimeMs)[0];
   assert(coreDir, "loadCore did not create a transpiled core directory");
-  return import(pathToFileURL(path.join(coreDir, "currentProjectImage2Batch.mjs")).href);
+  return {
+    image2Batch: await import(pathToFileURL(path.join(coreDir, "currentProjectImage2Batch.mjs")).href),
+    assetLibrary: await import(pathToFileURL(path.join(coreDir, "assetLibraryCrud.mjs")).href),
+  };
 }
 
 const generatedAt = "2026-05-07T04:30:00.000Z";
 const runId = "current_project_image2_batch_001";
 const runRoot = `${smallProjectFixture.projectRoot}/real-test-sandbox/${smallProjectFixture.batchId}`;
-const { buildCurrentProjectImage2BatchPlan } = await loadCurrentProjectImage2BatchCore();
+const {
+  image2Batch: {
+    buildCurrentProjectImage2BatchPlan,
+    buildCurrentProjectImage2ReferencesFromAssetLibrary,
+  },
+  assetLibrary: {
+    addAssetLibraryAsset,
+    createAssetLibrarySnapshot,
+  },
+} = await loadCurrentProjectImage2BatchCore();
 
 function lockedReferences(overrides = {}) {
   return {
@@ -83,6 +95,48 @@ function assertPortable(pathValue, pathLabel) {
   assert(!/(?:^|\/)\.\.(?:\/|$)/.test(pathValue), `${pathLabel} must not contain parent traversal: ${pathValue}`);
 }
 
+function addAsset(library, input) {
+  const result = addAssetLibraryAsset(library, {
+    textConstraints: ["locked asset consistency reference"],
+    updatedAt: generatedAt,
+    ...input,
+  });
+  assert(result.validation.ok, `asset should validate: ${result.validation.errors.join("; ")}`);
+  return result.library;
+}
+
+function lockedAssetLibrary(overrides = {}) {
+  let library = createAssetLibrarySnapshot({ id: "image2_batch_asset_library", createdAt: generatedAt });
+  library = addAsset(library, {
+    id: "hero_locked",
+    assetType: "character",
+    name: "Hero Locked",
+    status: "locked",
+    sourceKind: "source_asset",
+    path: smallProjectFixture.characterPath,
+    ...overrides.character,
+  });
+  library = addAsset(library, {
+    id: "scene_locked",
+    assetType: "scene",
+    name: "Scene Locked",
+    status: "locked",
+    sourceKind: "source_asset",
+    path: smallProjectFixture.scenePath,
+    ...overrides.scene,
+  });
+  library = addAsset(library, {
+    id: "style_locked",
+    assetType: "style",
+    name: "Style Locked",
+    status: "locked",
+    sourceKind: "source_asset",
+    path: smallProjectFixture.stylePath,
+    ...overrides.style,
+  });
+  return library;
+}
+
 const readyPlan = buildCurrentProjectImage2BatchPlan(baseInput());
 assert(readyPlan.schemaVersion === "0.1.0", "schema version drifted");
 assert(readyPlan.generatedAt === generatedAt, "generatedAt should be carried through");
@@ -115,6 +169,98 @@ const missingReferencePlan = buildCurrentProjectImage2BatchPlan(baseInput({
 assert(missingReferencePlan.status === "blocked", "missing locked style reference must block");
 assert(missingReferencePlan.blockers.includes("missing_locked_style_reference"), "missing locked style blocker missing");
 assert(missingReferencePlan.uiSummary.blockedCount === 2, "missing references should block selected shots");
+
+const lockedLibrary = lockedAssetLibrary();
+const assetLibraryProjection = buildCurrentProjectImage2ReferencesFromAssetLibrary(lockedLibrary);
+assert(assetLibraryProjection.blockers.length === 0, `locked library should not block: ${compact(assetLibraryProjection.blockers)}`);
+assert(assetLibraryProjection.summary.eligibleCount === 3, "locked library must expose three Image2 future references");
+assert(assetLibraryProjection.summary.byRole.character === 1, "locked library character summary drifted");
+assert(assetLibraryProjection.summary.byRole.scene === 1, "locked library scene summary drifted");
+assert(assetLibraryProjection.summary.byRole.style === 1, "locked library style summary drifted");
+
+const assetLibraryReadyPlan = buildCurrentProjectImage2BatchPlan(baseInput({
+  references: undefined,
+  assetLibrary: lockedLibrary,
+}));
+assert(assetLibraryReadyPlan.status === "ready_for_review", `locked asset library should make batch ready: ${compact(assetLibraryReadyPlan.blockers)}`);
+for (const item of assetLibraryReadyPlan.items) {
+  assert(item.referencePaths.includes(smallProjectFixture.characterPath), "asset library character reference missing from batch item");
+  assert(item.referencePaths.includes(smallProjectFixture.scenePath), "asset library scene reference missing from batch item");
+  assert(item.referencePaths.includes(smallProjectFixture.stylePath), "asset library style reference missing from batch item");
+}
+
+for (const status of ["review", "candidate"]) {
+  const blockedLibrary = lockedAssetLibrary({ style: { status } });
+  const blockedProjection = buildCurrentProjectImage2ReferencesFromAssetLibrary(blockedLibrary);
+  assert(blockedProjection.blockers.includes("asset_library_missing_locked_style_future_reference"), `${status} style must leave style future reference missing`);
+  assert(
+    blockedProjection.warnings.some((warning) => warning === `asset_library_style_locked_status_${status}_not_locked`),
+    `${status} style must report asset authority blocker`,
+  );
+
+  const blockedFromLibraryPlan = buildCurrentProjectImage2BatchPlan(baseInput({
+    references: undefined,
+    assetLibrary: blockedLibrary,
+  }));
+  assert(blockedFromLibraryPlan.status === "blocked", `${status} style from asset library must block`);
+  assert(blockedFromLibraryPlan.blockers.includes("missing_locked_style_reference"), `${status} style must surface batch missing locked style blocker`);
+  assert(
+    blockedFromLibraryPlan.blockers.includes("asset_library_missing_locked_style_future_reference"),
+    `${status} style must surface asset library style blocker`,
+  );
+}
+
+let rejectedAndBlockedLibrary = lockedAssetLibrary();
+rejectedAndBlockedLibrary = addAsset(rejectedAndBlockedLibrary, {
+  id: "rejected_style_case",
+  assetType: "style",
+  name: "Rejected Style Case",
+  status: "rejected",
+  sourceKind: "source_asset",
+  path: `${smallProjectFixture.projectRoot}/assets/styles/rejected/style.png`,
+});
+const contactSheetAttempt = addAssetLibraryAsset(rejectedAndBlockedLibrary, {
+  id: "contact_sheet_case",
+  assetType: "style",
+  name: "Contact Sheet Case",
+  status: "locked",
+  sourceKind: "contact_sheet",
+  path: "reports/contact_sheets/style.png",
+  textConstraints: ["must be rejected before asset library"],
+  updatedAt: generatedAt,
+});
+assert(contactSheetAttempt.rejected, "contact sheet import must be blocked before entering Asset Library refs");
+rejectedAndBlockedLibrary = contactSheetAttempt.library;
+for (const blockedSourceKind of ["provider_temp_output", "failed_output", "shot_output"]) {
+  const blockedAttempt = addAssetLibraryAsset(rejectedAndBlockedLibrary, {
+    id: `${blockedSourceKind}_case`,
+    assetType: "character",
+    name: blockedSourceKind,
+    status: "locked",
+    sourceKind: blockedSourceKind,
+    path: `outputs/${blockedSourceKind}/case.png`,
+    textConstraints: ["must be rejected before asset library"],
+    updatedAt: generatedAt,
+  });
+  assert(blockedAttempt.rejected, `${blockedSourceKind} import must be blocked before entering Asset Library refs`);
+  rejectedAndBlockedLibrary = blockedAttempt.library;
+}
+const rejectedProjection = buildCurrentProjectImage2ReferencesFromAssetLibrary(rejectedAndBlockedLibrary);
+assert(rejectedProjection.summary.byRole.style === 1, "rejected style must not add an extra style future reference");
+assert(
+  rejectedProjection.warnings.some((warning) => warning === "asset_library_rejected_style_case_status_rejected_not_locked"),
+  "rejected style must be reported as not future-reference eligible",
+);
+assert(
+  rejectedProjection.warnings.some((warning) => warning === "asset_library_blocked_import_contact_sheet_not_future_reference"),
+  "blocked contact sheet import must be reported as not future-reference eligible",
+);
+for (const blockedSourceKind of ["provider_temp_output", "failed_output", "shot_output"]) {
+  assert(
+    rejectedProjection.warnings.some((warning) => warning === `asset_library_blocked_import_${blockedSourceKind}_not_future_reference`),
+    `${blockedSourceKind} blocked import must be reported as not future-reference eligible`,
+  );
+}
 
 const tooManyPlan = buildCurrentProjectImage2BatchPlan(baseInput({
   selectedShotIds: undefined,
