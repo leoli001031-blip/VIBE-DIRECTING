@@ -32,6 +32,7 @@
     "codex-worker-runtime-gate:test": "node scripts/codex-worker-runtime-gate-test.mjs",
     "codex-app-server-adapter:test": "node scripts/codex-app-server-adapter-test.mjs",
     "software-layer-diagnostic:test": "node scripts/software-layer-diagnostic-test.mjs",
+    "software-layer-demo:test": "node scripts/software-layer-demo-test.mjs",
     "image-keyframe:test": "node scripts/image-keyframe-runtime-test.mjs",
     "voice-source:test": "node scripts/voice-source-library-test.mjs",
     "voice-audio-settings:test": "node scripts/voice-audio-settings-test.mjs",
