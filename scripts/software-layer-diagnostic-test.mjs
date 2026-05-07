@@ -112,7 +112,7 @@ const checks = [
   ),
   pass(
     "real_demo_002_final_report_ready",
-    "Real Demo E2E 002 final report is ready",
+    "Real Demo E2E 002 final report state captured",
     `${finalReport.status}; declaration=${finalReport.declaration}`,
   ),
   pass(
@@ -128,6 +128,46 @@ const checks = [
 ];
 
 const issues = [];
+
+if (finalReport.status !== "ready_for_real_chain_pressure_test") {
+  issues.push(issue(
+    "real_demo_002_final_report_not_ready",
+    "P1",
+    "Real Demo E2E 002 final report is not ready",
+    `finalReport.status=${finalReport.status}; blockers=${(finalReport.blockers || []).join("; ") || "none"}`,
+    "Treat this as expected until output return, semantic QA, and preview update facts are all present; diagnostic should report it instead of crashing.",
+  ));
+}
+
+if (outputCount !== realPlans.length || providerObservationCount !== realPlans.length || semanticQaCount !== realPlans.length) {
+  issues.push(issue(
+    "real_demo_002_artifacts_incomplete",
+    "P1",
+    "Real Demo E2E 002 artifact set is incomplete",
+    `outputs=${outputCount}/${realPlans.length}, providerObservations=${providerObservationCount}/${realPlans.length}, semanticQa=${semanticQaCount}/${realPlans.length}`,
+    "Keep the project in blocked/needs-runtime-work until all planned artifacts and sidecars are present.",
+  ));
+}
+
+if ((qaReport.totals.semanticQaCompletedCount || 0) !== realPlans.length) {
+  issues.push(issue(
+    "semantic_qa_not_completed",
+    "P1",
+    "Semantic QA sidecars are present but not completed",
+    `semanticQaCompleted=${qaReport.totals.semanticQaCompletedCount || 0}/${realPlans.length}; overallStatus=${qaReport.overallStatus}`,
+    "Require an actual image-review pass to replace template_pending_image_review sidecars before claiming real-chain readiness.",
+  ));
+}
+
+if (qaReport.totals.p0FindingCount > 0 || qaReport.totals.p1FindingCount > 0) {
+  issues.push(issue(
+    "semantic_qa_blocking_findings_present",
+    "P1",
+    "Semantic QA contains P0/P1 findings",
+    `P0=${qaReport.totals.p0FindingCount}, P1=${qaReport.totals.p1FindingCount}`,
+    "Keep the run out of ready state until P0/P1 findings are resolved or explicitly accepted through review.",
+  ));
+}
 
 if (manifest.status !== "complete_verified" || manifest.declaration !== "actual_provider_observed") {
   issues.push(issue(
@@ -212,12 +252,6 @@ if (appServerRuntimeAdapter?.state !== "active") {
 assert(appServerRuntimeAdapter?.runtimeKind === "codex_app_server", "codex-app-server-agent missing from runtime adapter contracts");
 assert(legacyRuntimeAdapter?.runtimeKind === "codex_cli", "codex-cli-agent fallback missing from runtime adapter contracts");
 assert(appServerAdapter.readiness === "ready", `app-server adapter should be ready: ${appServerAdapter.blockers.join("; ")}`);
-assert(finalReport.status === "ready_for_real_chain_pressure_test", "Real Demo E2E 002 final report should still be ready");
-assert(outputCount === realPlans.length, "All planned real image outputs should exist");
-assert(providerObservationCount === realPlans.length, "All provider observation sidecars should exist");
-assert(semanticQaCount === realPlans.length, "All semantic QA sidecars should exist");
-assert(qaReport.totals.p0FindingCount === 0, "Software-layer diagnostic expects no P0 semantic QA findings");
-assert(qaReport.totals.p1FindingCount === 0, "Software-layer diagnostic expects no P1 semantic QA findings");
 
 const p1Count = issues.filter((item) => item.severity === "P1").length;
 const p2Count = issues.filter((item) => item.severity === "P2").length;

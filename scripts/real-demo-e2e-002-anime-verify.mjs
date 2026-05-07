@@ -57,6 +57,22 @@ function fileInfo(filePath) {
   };
 }
 
+function parseTimestampMs(value) {
+  const ms = Date.parse(value || "");
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function timestampIsCurrent(value, runGeneratedAt) {
+  const valueMs = parseTimestampMs(value);
+  const runMs = parseTimestampMs(runGeneratedAt);
+  if (valueMs === null || runMs === null) return false;
+  return valueMs + 1000 >= runMs;
+}
+
+function fileInfoIsCurrent(info, runGeneratedAt) {
+  return Boolean(info && timestampIsCurrent(info.modifiedAt, runGeneratedAt));
+}
+
 function isScopedOutput(relativePath) {
   const absolute = path.resolve(absPath(relativePath));
   const scopedRoot = path.resolve(path.join(runRoot, "outputs/shots"));
@@ -100,7 +116,7 @@ function dedupeFindings(items) {
   });
 }
 
-function loadObservation(plan) {
+function loadObservation(plan, runGeneratedAt) {
   const observationPath = absPath(plan.providerObservationPath);
   if (!exists(observationPath)) {
     return {
@@ -112,6 +128,7 @@ function loadObservation(plan) {
   }
 
   const observation = readJson(observationPath);
+  const observationInfo = fileInfo(observationPath);
   const blockers = [
     observation.providerObservationMode === "actual_provider_call_observed" ? "" : "providerObservationMode is not actual_provider_call_observed",
     String(observation.provider || "").includes("image2") ? "" : "provider is not image2",
@@ -123,12 +140,14 @@ function loadObservation(plan) {
     observation.providerSelfReportCompletesTask === false ? "" : "provider self-report attempted to complete task",
     observation.manualFileCopyDetected === false ? "" : "manual file copy detected by observation",
     observation.fixtureReuseDetected === false ? "" : "fixture reuse detected by observation",
+    fileInfoIsCurrent(observationInfo, runGeneratedAt) ? "" : "provider observation sidecar is stale for this prepared run",
+    timestampIsCurrent(observation.generatedAt, runGeneratedAt) ? "" : "provider observation generatedAt is stale for this prepared run",
   ].filter(Boolean);
 
-  return { exists: true, valid: blockers.length === 0, observation, blockers };
+  return { exists: true, valid: blockers.length === 0, observation, observationInfo, blockers };
 }
 
-function loadSemanticQa(plan) {
+function loadSemanticQa(plan, runGeneratedAt) {
   const emptyResult = (blocker) => ({
     exists: false,
     completed: false,
@@ -145,6 +164,7 @@ function loadSemanticQa(plan) {
   if (!exists(semanticQaPath)) return emptyResult("semantic QA sidecar missing");
 
   const qa = readJson(semanticQaPath);
+  const semanticQaInfo = fileInfo(semanticQaPath);
   const gateResults = qa.gateResults || {};
   const findings = { P0: [], P1: [], P2: [] };
   const gates = {};
@@ -156,6 +176,8 @@ function loadSemanticQa(plan) {
     qa.envelopeId === plan.envelopeId ? "" : "semantic QA envelopeId mismatch",
     qa.reviewerId && qa.reviewerId !== "FILL_BY_SEMANTIC_QA_REVIEWER" ? "" : "semantic QA reviewerId missing",
     qa.reviewedAt && qa.reviewedAt !== "FILL_BY_SEMANTIC_QA_REVIEWER_ISO_TIME" ? "" : "semantic QA reviewedAt missing",
+    fileInfoIsCurrent(semanticQaInfo, runGeneratedAt) ? "" : "semantic QA sidecar is stale for this prepared run",
+    timestampIsCurrent(qa.reviewedAt, runGeneratedAt) ? "" : "semantic QA reviewedAt is stale for this prepared run",
   ].filter(Boolean);
 
   for (const gateId of requiredSemanticGates) {
@@ -306,8 +328,9 @@ const projectFacts = {
 const outputObservations = realPlans.map((plan) => {
   const outputAbsolutePath = absPath(plan.expectedOutputPath);
   const outputInfo = fileInfo(outputAbsolutePath);
-  const observationResult = loadObservation(plan);
-  const semanticQaResult = loadSemanticQa(plan);
+  const outputCurrent = fileInfoIsCurrent(outputInfo, manifest.generatedAt);
+  const observationResult = loadObservation(plan, manifest.generatedAt);
+  const semanticQaResult = loadSemanticQa(plan, manifest.generatedAt);
   return {
     shotId: plan.shotId,
     taskRunId: plan.taskRunId,
@@ -318,6 +341,7 @@ const outputObservations = realPlans.map((plan) => {
     semanticQaPath: plan.semanticQaPath,
     outputExists: Boolean(outputInfo),
     outputInfo,
+    outputCurrent,
     scopedOutput: isScopedOutput(plan.expectedOutputPath),
     envelopeValid: envelopeIsValid(plan),
     providerObservationExists: observationResult.exists,
@@ -338,7 +362,7 @@ const watcherEvents = {
   generatedAt,
   runId: manifest.runId,
   events: outputObservations
-    .filter((item) => item.outputExists)
+    .filter((item) => item.outputExists && item.outputCurrent)
     .map((item, index) => ({
       eventId: `watcher_event_real_demo_002_anime_${String(index + 1).padStart(2, "0")}`,
       eventType: "expected_output_observed",
@@ -358,7 +382,7 @@ const manifestMatch = {
   generatedAt,
   runId: manifest.runId,
   status: scenarioBlockers.length === 0 &&
-    outputObservations.every((item) => item.outputExists && item.scopedOutput && item.providerObservationValid)
+    outputObservations.every((item) => item.outputExists && item.outputCurrent && item.scopedOutput && item.providerObservationValid)
     ? "matched"
     : "blocked",
   matches: outputObservations.map((item) => ({
@@ -369,10 +393,11 @@ const manifestMatch = {
     outputExists: item.outputExists,
     scopedOutput: item.scopedOutput,
     providerObservationValid: item.providerObservationValid,
-    status: item.outputExists && item.scopedOutput && item.providerObservationValid ? "matched" : "blocked",
+    status: item.outputExists && item.outputCurrent && item.scopedOutput && item.providerObservationValid ? "matched" : "blocked",
     blockers: [
       ...scenarioBlockers,
       item.outputExists ? "" : "expected output missing",
+      item.outputCurrent ? "" : "expected output is stale for this prepared run",
       item.scopedOutput ? "" : "output is outside scoped sandbox",
       item.providerObservationValid ? "" : "provider observation invalid or missing",
       ...item.providerObservationBlockers,
@@ -387,6 +412,7 @@ const qaChecks = outputObservations.map((item) => {
     ...scenarioBlockers,
     item.outputExists ? "" : "expected output missing",
     item.outputInfo?.sizeBytes > 0 ? "" : "output is empty or missing",
+    item.outputCurrent ? "" : "expected output is stale for this prepared run",
     item.scopedOutput ? "" : "output path is not inside real-demo-e2e/002-anime-pressure/outputs/shots",
     item.envelopeValid ? "" : "subagent envelope is incomplete",
     item.providerObservationValid ? "" : "provider observation is incomplete",
@@ -407,6 +433,7 @@ const qaChecks = outputObservations.map((item) => {
     gates: {
       outputExists: item.outputExists,
       nonEmptyFile: Boolean(item.outputInfo?.sizeBytes > 0),
+      outputCurrent: item.outputCurrent,
       scopedSandbox: item.scopedOutput,
       envelopeValid: item.envelopeValid,
       providerObservationValid: item.providerObservationValid,
@@ -442,7 +469,7 @@ const qaReport = {
   checks: qaChecks,
   totals: {
     plannedRealImages: realPlans.length,
-    outputCount: outputObservations.filter((item) => item.outputExists).length,
+    outputCount: outputObservations.filter((item) => item.outputExists && item.outputCurrent).length,
     providerObservationCount: outputObservations.filter((item) => item.providerObservationValid).length,
     semanticQaCompletedCount: outputObservations.filter((item) => item.semanticQaCompleted).length,
     p0FindingCount: outputObservations.reduce((sum, item) => sum + item.semanticQaFindings.P0.length, 0),
@@ -472,9 +499,9 @@ const previewPlan = {
       clipId: `preview_clip_${plan.shotId}`,
       order: index + 1,
       shotId: plan.shotId,
-      mediaType: returned?.outputExists ? "image_hold" : "placeholder",
-      mediaPath: returned?.outputExists ? plan.expectedOutputPath : null,
-      status: returned?.outputExists ? "returned" : plan.status,
+      mediaType: returned?.outputExists && returned?.outputCurrent ? "image_hold" : "placeholder",
+      mediaPath: returned?.outputExists && returned?.outputCurrent ? plan.expectedOutputPath : null,
+      status: returned?.outputExists && returned?.outputCurrent ? "returned" : plan.status,
       durationSeconds: 5,
     };
   }),
@@ -482,11 +509,12 @@ const previewPlan = {
 
 writeJson(path.join(reportsRoot, "preview_plan.json"), previewPlan);
 
-const allOutputsExist = outputObservations.length > 0 && outputObservations.every((item) => item.outputExists);
+const allOutputsExist = outputObservations.length > 0 && outputObservations.every((item) => item.outputExists && item.outputCurrent);
 const allScoped = outputObservations.every((item) => item.scopedOutput);
 const allEnvelopesValid = outputObservations.length > 0 && outputObservations.every((item) => item.envelopeValid);
 const providerObservedAll =
-  outputObservations.length > 0 && outputObservations.every((item) => item.outputExists && item.providerObservationValid);
+  outputObservations.length > 0 &&
+  outputObservations.every((item) => item.outputExists && item.outputCurrent && item.providerObservationValid);
 const semanticQaCompletedAll =
   outputObservations.length > 0 && outputObservations.every((item) => item.semanticQaCompleted);
 const firstValidObservation = outputObservations.find((item) => item.providerObservationValid)?.providerObservation;

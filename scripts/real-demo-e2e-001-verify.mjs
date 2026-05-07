@@ -56,16 +56,33 @@ function fileInfo(filePath) {
   };
 }
 
+function parseTimestampMs(value) {
+  const ms = Date.parse(value || "");
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function timestampIsCurrent(value, runGeneratedAt) {
+  const valueMs = parseTimestampMs(value);
+  const runMs = parseTimestampMs(runGeneratedAt);
+  if (valueMs === null || runMs === null) return false;
+  return valueMs + 1000 >= runMs;
+}
+
+function fileInfoIsCurrent(info, runGeneratedAt) {
+  return Boolean(info && timestampIsCurrent(info.modifiedAt, runGeneratedAt));
+}
+
 function isScopedOutput(relativePath) {
   const absolute = path.resolve(absPath(relativePath));
   const scopedRoot = path.resolve(path.join(runRoot, "outputs/shots"));
   return absolute === scopedRoot || absolute.startsWith(`${scopedRoot}${path.sep}`);
 }
 
-function loadObservation(plan) {
+function loadObservation(plan, runGeneratedAt) {
   const observationPath = absPath(plan.providerObservationPath);
   if (!exists(observationPath)) return { exists: false, valid: false, observation: null, blockers: ["provider observation sidecar missing"] };
   const observation = readJson(observationPath);
+  const observationInfo = fileInfo(observationPath);
   const blockers = [
     observation.providerObservationMode === "actual_provider_call_observed" ? "" : "providerObservationMode is not actual_provider_call_observed",
     String(observation.provider || "").includes("image2") ? "" : "provider is not image2",
@@ -77,8 +94,10 @@ function loadObservation(plan) {
     observation.providerSelfReportCompletesTask === false ? "" : "provider self-report attempted to complete task",
     observation.manualFileCopyDetected === false ? "" : "manual file copy detected by observation",
     observation.fixtureReuseDetected === false ? "" : "fixture reuse detected by observation",
+    fileInfoIsCurrent(observationInfo, runGeneratedAt) ? "" : "provider observation sidecar is stale for this prepared run",
+    timestampIsCurrent(observation.generatedAt, runGeneratedAt) ? "" : "provider observation generatedAt is stale for this prepared run",
   ].filter(Boolean);
-  return { exists: true, valid: blockers.length === 0, observation, blockers };
+  return { exists: true, valid: blockers.length === 0, observation, observationInfo, blockers };
 }
 
 function envelopeIsValid(plan) {
@@ -127,7 +146,8 @@ const projectFacts = {
 const outputObservations = realPlans.map((plan) => {
   const outputAbsolutePath = absPath(plan.expectedOutputPath);
   const outputInfo = fileInfo(outputAbsolutePath);
-  const observationResult = loadObservation(plan);
+  const outputCurrent = fileInfoIsCurrent(outputInfo, manifest.generatedAt);
+  const observationResult = loadObservation(plan, manifest.generatedAt);
   return {
     shotId: plan.shotId,
     taskRunId: plan.taskRunId,
@@ -137,6 +157,7 @@ const outputObservations = realPlans.map((plan) => {
     providerObservationPath: plan.providerObservationPath,
     outputExists: Boolean(outputInfo),
     outputInfo,
+    outputCurrent,
     scopedOutput: isScopedOutput(plan.expectedOutputPath),
     envelopeValid: envelopeIsValid(plan),
     providerObservationExists: observationResult.exists,
@@ -151,7 +172,7 @@ const watcherEvents = {
   generatedAt,
   runId: manifest.runId,
   events: outputObservations
-    .filter((item) => item.outputExists)
+    .filter((item) => item.outputExists && item.outputCurrent)
     .map((item, index) => ({
       eventId: `watcher_event_real_demo_001_${String(index + 1).padStart(2, "0")}`,
       eventType: "expected_output_observed",
@@ -169,7 +190,7 @@ const manifestMatch = {
   schemaVersion: "real_demo_e2e_001_manifest_match_v1",
   generatedAt,
   runId: manifest.runId,
-  status: outputObservations.every((item) => item.outputExists && item.scopedOutput && item.providerObservationValid)
+  status: outputObservations.every((item) => item.outputExists && item.outputCurrent && item.scopedOutput && item.providerObservationValid)
     ? "matched"
     : "blocked",
   matches: outputObservations.map((item) => ({
@@ -178,9 +199,10 @@ const manifestMatch = {
     outputExists: item.outputExists,
     scopedOutput: item.scopedOutput,
     providerObservationValid: item.providerObservationValid,
-    status: item.outputExists && item.scopedOutput && item.providerObservationValid ? "matched" : "blocked",
+    status: item.outputExists && item.outputCurrent && item.scopedOutput && item.providerObservationValid ? "matched" : "blocked",
     blockers: [
       item.outputExists ? "" : "expected output missing",
+      item.outputCurrent ? "" : "expected output is stale for this prepared run",
       item.scopedOutput ? "" : "output is outside scoped sandbox",
       item.providerObservationValid ? "" : "provider observation invalid or missing",
       ...item.providerObservationBlockers,
@@ -199,12 +221,13 @@ const qaReport = {
     "This verify script performs return-path and provenance QA only. It does not perform semantic image critique; a human or visual QA subagent should review identity, scene, and style quality.",
   checks: outputObservations.map((item) => ({
     shotId: item.shotId,
-    status: item.outputExists && item.scopedOutput && item.providerObservationValid
+    status: item.outputExists && item.outputCurrent && item.scopedOutput && item.providerObservationValid
       ? "structural_pass_semantic_needs_review"
       : "blocked",
     gates: {
       outputExists: item.outputExists,
       nonEmptyFile: Boolean(item.outputInfo?.sizeBytes > 0),
+      outputCurrent: item.outputCurrent,
       scopedSandbox: item.scopedOutput,
       envelopeValid: item.envelopeValid,
       providerObservationValid: item.providerObservationValid,
@@ -212,6 +235,7 @@ const qaReport = {
     blockers: [
       item.outputExists ? "" : "expected output missing",
       item.outputInfo?.sizeBytes > 0 ? "" : "output is empty or missing",
+      item.outputCurrent ? "" : "expected output is stale for this prepared run",
       item.scopedOutput ? "" : "output path is not inside real-demo-e2e/001/outputs/shots",
       item.envelopeValid ? "" : "subagent envelope is incomplete",
       item.providerObservationValid ? "" : "provider observation is incomplete",
@@ -237,9 +261,9 @@ const previewPlan = {
       clipId: `preview_clip_${plan.shotId}`,
       order: index + 1,
       shotId: plan.shotId,
-      mediaType: returned?.outputExists ? "image_hold" : "placeholder",
-      mediaPath: returned?.outputExists ? plan.expectedOutputPath : null,
-      status: returned?.outputExists ? "returned" : plan.status,
+      mediaType: returned?.outputExists && returned?.outputCurrent ? "image_hold" : "placeholder",
+      mediaPath: returned?.outputExists && returned?.outputCurrent ? plan.expectedOutputPath : null,
+      status: returned?.outputExists && returned?.outputCurrent ? "returned" : plan.status,
       durationSeconds: 5,
     };
   }),
@@ -247,11 +271,11 @@ const previewPlan = {
 
 writeJson(path.join(reportsRoot, "preview_plan.json"), previewPlan);
 
-const allOutputsExist = outputObservations.length > 0 && outputObservations.every((item) => item.outputExists);
+const allOutputsExist = outputObservations.length > 0 && outputObservations.every((item) => item.outputExists && item.outputCurrent);
 const allScoped = outputObservations.every((item) => item.scopedOutput);
 const allEnvelopesValid = outputObservations.length > 0 && outputObservations.every((item) => item.envelopeValid);
 const providerObservedAll = outputObservations.length > 0 &&
-  outputObservations.every((item) => item.outputExists && item.providerObservationValid);
+  outputObservations.every((item) => item.outputExists && item.outputCurrent && item.providerObservationValid);
 const firstValidObservation = outputObservations.find((item) => item.providerObservationValid)?.providerObservation;
 const anyOutputWithoutObservation = outputObservations.some((item) => item.outputExists && !item.providerObservationValid);
 const providerSelfReportCompletesTask = outputObservations.some((item) => item.providerObservation?.providerSelfReportCompletesTask === true);
