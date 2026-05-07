@@ -82,7 +82,8 @@ import {
 } from "./core/previewPlayerQueue";
 import { applyPreRealTestClosure } from "./core/preRealTestClosure";
 import {
-  realDemoE2e005ReportPath,
+  loadRealDemoE2e005UiBridgeStatus,
+  realDemoE2e005ReportRelativePath,
   runRealDemoE2e005UiBridge,
   type RealDemoE2e005Observation,
   type RealDemoE2e005UiState,
@@ -7616,7 +7617,7 @@ function RealDemoE2e005Panel({
         <small>production {summary?.productionStatus || "unavailable"}</small>
         <small>{summary?.shotCount ?? 0} shots</small>
         <small>review overlay {reviewOverlayShots}</small>
-        {summary?.source && <small>{summary.source === "endpoint" ? "endpoint" : "local report"}</small>}
+        {summary?.source && <small>{summary.source === "runtime_endpoint" ? "runtime endpoint" : "fallback report"}</small>}
       </div>
       {visibleObservations.length > 0 && (
         <div className="real-demo-005-thumbs" aria-label="小样缩略图">
@@ -7633,7 +7634,7 @@ function RealDemoE2e005Panel({
       )}
       <small className="real-demo-005-report">
         <FileJson size={13} />
-        {summary?.reportPath || realDemoE2e005ReportPath}
+        {summary?.reportPath || realDemoE2e005ReportRelativePath}
       </small>
       {state.message && <small className="real-demo-005-message">{state.message}</small>}
     </section>
@@ -9232,6 +9233,16 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    loadRealDemoE2e005UiBridgeStatus().then((nextState) => {
+      if (!cancelled) setRealDemo005State(nextState);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const audit = useMemo(() => auditFromProjectRuntimeState(runtimeState), [runtimeState]);
   const view = useMemo(
     () => buildRuntimeViewFromProjectState(runtimeState, { selectedShotId }),
@@ -9311,7 +9322,7 @@ function App() {
     setRealDemo005State((current) => ({
       ...current,
       status: "running",
-      message: "Posting to local endpoint, then falling back to report sync if unavailable.",
+      message: "Posting to runtime endpoint, then falling back to report sync if unavailable.",
     }));
     const nextState = await runRealDemoE2e005UiBridge();
     setRealDemo005State(nextState);

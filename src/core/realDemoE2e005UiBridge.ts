@@ -1,10 +1,23 @@
-export const realDemoE2e005RunEndpoint = "http://127.0.0.1:8787/api/real-demo-e2e/005/run";
-export const realDemoE2e005ProjectRoot = "/Users/lichenhao/Desktop/vibe core";
-export const realDemoE2e005SandboxRoot =
-  `${realDemoE2e005ProjectRoot}/real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames`;
-export const realDemoE2e005ReportPath =
-  `${realDemoE2e005SandboxRoot}/reports/image2_start_long_chain_report.json`;
-export const realDemoE2e005ReportUrl = toViteFsUrl(realDemoE2e005ReportPath);
+declare global {
+  interface Window {
+    __VIBE_RUNTIME_API_BASE_URL__?: string;
+  }
+
+  interface ImportMeta {
+    env?: {
+      VITE_VIBE_RUNTIME_API_BASE_URL?: string;
+    };
+  }
+}
+
+export const defaultRuntimeApiBaseUrl = "http://127.0.0.1:8790";
+export const realDemoE2e005RuntimeBasePath = "/api/runtime";
+export const realDemoE2e005StatusEndpoint = `${realDemoE2e005RuntimeBasePath}/real-demo-e2e/005/status`;
+export const realDemoE2e005RunEndpoint = `${realDemoE2e005RuntimeBasePath}/real-demo-e2e/005/run`;
+export const realDemoE2e005FileEndpoint = `${realDemoE2e005RuntimeBasePath}/files`;
+export const realDemoE2e005ReportRelativePath =
+  "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/reports/image2_start_long_chain_report.json";
+export const realDemoE2e005FallbackReportUrl = `/${realDemoE2e005ReportRelativePath}`;
 
 export type RealDemoE2e005UiStatus =
   | "running"
@@ -13,7 +26,7 @@ export type RealDemoE2e005UiStatus =
   | "blocked"
   | "unavailable";
 
-export type RealDemoE2e005Source = "endpoint" | "local_report";
+export type RealDemoE2e005Source = "runtime_endpoint" | "fallback_report";
 
 export type RealDemoE2e005Observation = {
   shotId: string;
@@ -29,6 +42,7 @@ export type RealDemoE2e005Observation = {
 export type RealDemoE2e005Summary = {
   uiStatus: RealDemoE2e005UiStatus;
   source?: RealDemoE2e005Source;
+  endpoint?: string;
   generatedAt?: string;
   runId?: string;
   previewStatus: string;
@@ -39,6 +53,8 @@ export type RealDemoE2e005Summary = {
   observations: RealDemoE2e005Observation[];
   reportPath: string;
   reportUrl: string;
+  providerCalled: boolean;
+  prepareRan: boolean;
   message?: string;
 };
 
@@ -49,6 +65,8 @@ export type RealDemoE2e005UiState = {
 };
 
 type RealDemoE2e005Report = {
+  source?: RealDemoE2e005Source;
+  endpoint?: string;
   generatedAt?: string;
   runId?: string;
   status?: string;
@@ -57,16 +75,24 @@ type RealDemoE2e005Report = {
   shotCount?: number;
   reviewOverlayShots?: string[];
   productionNeedsReviewShots?: string[];
+  reportPath?: string;
+  reportRelativePath?: string;
+  reportUrl?: string;
+  providerCalled?: boolean;
+  prepareRan?: boolean;
   observations?: Array<{
     order?: number;
     shotId?: string;
     expectedOutputPath?: string;
+    expectedOutputAbsPath?: string;
+    imageUrl?: string;
     reviewOverlay?: boolean;
     previewQaStatus?: string;
     productionQaStatus?: string;
     blockers?: string[];
   }>;
   blockers?: string[];
+  message?: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -79,19 +105,29 @@ function stringArray(value: unknown): string[] {
 
 function reportFromPayload(payload: unknown): RealDemoE2e005Report | undefined {
   if (!isRecord(payload)) return undefined;
-  if (typeof payload.status === "string" || Array.isArray(payload.observations)) return payload as RealDemoE2e005Report;
-  if (isRecord(payload.report)) return payload.report as RealDemoE2e005Report;
-  if (isRecord(payload.result)) return payload.result as RealDemoE2e005Report;
+  if (typeof payload.status === "string" || Array.isArray(payload.observations)) {
+    return payload as RealDemoE2e005Report;
+  }
+  if (isRecord(payload.report)) return { ...payload.report, ...payload } as RealDemoE2e005Report;
+  if (isRecord(payload.result)) return { ...payload.result, ...payload } as RealDemoE2e005Report;
   return undefined;
 }
 
-function toAbsolutePath(path: string) {
-  if (path.startsWith("/")) return path;
-  return `${realDemoE2e005ProjectRoot}/${path.replace(/^\.?\//, "")}`;
+function runtimeApiBaseUrl() {
+  if (typeof window === "undefined") return "";
+  const configured = window.__VIBE_RUNTIME_API_BASE_URL__ || import.meta.env?.VITE_VIBE_RUNTIME_API_BASE_URL || "";
+  return configured.replace(/\/+$/, "");
 }
 
-function toViteFsUrl(path: string) {
-  return encodeURI(`/@fs${path}`);
+function toRuntimeUrl(path: string) {
+  if (/^(?:https?:|data:|blob:)/.test(path)) return path;
+  const baseUrl = runtimeApiBaseUrl();
+  if (!baseUrl) return path;
+  return path.startsWith("/") ? `${baseUrl}${path}` : `${baseUrl}/${path}`;
+}
+
+function toRuntimeFileUrl(path: string) {
+  return toRuntimeUrl(`${realDemoE2e005FileEndpoint}?path=${encodeURIComponent(path)}`);
 }
 
 function deriveUiStatus(report: RealDemoE2e005Report): RealDemoE2e005UiStatus {
@@ -122,22 +158,32 @@ export function deriveRealDemoE2e005Summary(
       reviewOverlayShots: [],
       productionNeedsReviewShots: [],
       observations: [],
-      reportPath: realDemoE2e005ReportPath,
-      reportUrl: realDemoE2e005ReportUrl,
+      reportPath: realDemoE2e005ReportRelativePath,
+      reportUrl: realDemoE2e005FallbackReportUrl,
+      providerCalled: false,
+      prepareRan: false,
       message: "Report shape was not recognized.",
     };
   }
 
+  const reportRelativePath = report.reportRelativePath || realDemoE2e005ReportRelativePath;
+  const reportPath = report.reportRelativePath || report.reportPath || realDemoE2e005ReportRelativePath;
+  const reportUrl = report.reportUrl ? toRuntimeUrl(report.reportUrl) : toRuntimeFileUrl(reportRelativePath);
+
   const observations = (report.observations || [])
     .filter((item) => typeof item.shotId === "string")
     .map((item, index) => {
-      const expectedOutputAbsPath = item.expectedOutputPath ? toAbsolutePath(item.expectedOutputPath) : undefined;
+      const imageUrl = item.imageUrl
+        ? toRuntimeUrl(item.imageUrl)
+        : item.expectedOutputPath
+          ? toRuntimeFileUrl(item.expectedOutputPath)
+          : undefined;
       return {
         shotId: item.shotId || `S${String(index + 1).padStart(2, "0")}`,
         order: typeof item.order === "number" ? item.order : index + 1,
         expectedOutputPath: item.expectedOutputPath,
-        expectedOutputAbsPath,
-        imageUrl: expectedOutputAbsPath ? toViteFsUrl(expectedOutputAbsPath) : undefined,
+        expectedOutputAbsPath: item.expectedOutputAbsPath,
+        imageUrl,
         reviewOverlay: item.reviewOverlay === true,
         previewQaStatus: item.previewQaStatus,
         productionQaStatus: item.productionQaStatus,
@@ -153,7 +199,8 @@ export function deriveRealDemoE2e005Summary(
 
   return {
     uiStatus: deriveUiStatus({ ...report, reviewOverlayShots, productionNeedsReviewShots }),
-    source,
+    source: report.source || source,
+    endpoint: report.endpoint,
     generatedAt: report.generatedAt,
     runId: report.runId,
     previewStatus: report.previewStatus || report.status || "unavailable",
@@ -162,36 +209,72 @@ export function deriveRealDemoE2e005Summary(
     reviewOverlayShots,
     productionNeedsReviewShots,
     observations,
-    reportPath: realDemoE2e005ReportPath,
-    reportUrl: realDemoE2e005ReportUrl,
+    reportPath,
+    reportUrl,
+    providerCalled: report.providerCalled === true,
+    prepareRan: report.prepareRan === true,
+    message: report.message,
   };
 }
 
 async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
-  const response = await fetch(url, init);
+  const response = await fetch(toRuntimeUrl(url), init);
   if (!response.ok) throw new Error(`${url} returned ${response.status}`);
   return response.json() as Promise<unknown>;
 }
 
-export async function runRealDemoE2e005UiBridge(): Promise<RealDemoE2e005UiState> {
+function isRuntimeEndpointPath(url: string) {
+  return url.startsWith(realDemoE2e005RuntimeBasePath);
+}
+
+async function fetchRuntimeJson(url: string, init?: RequestInit): Promise<unknown> {
   try {
-    const payload = await fetchJson(realDemoE2e005RunEndpoint, { method: "POST" });
-    const summary = deriveRealDemoE2e005Summary(payload, "endpoint");
+    return await fetchJson(url, init);
+  } catch (error) {
+    if (runtimeApiBaseUrl() || !isRuntimeEndpointPath(url)) throw error;
+    const response = await fetch(`${defaultRuntimeApiBaseUrl}${url}`, init);
+    if (!response.ok) throw new Error(`${defaultRuntimeApiBaseUrl}${url} returned ${response.status}`);
+    return response.json() as Promise<unknown>;
+  }
+}
+
+async function fallbackToReport(message: string): Promise<RealDemoE2e005UiState> {
+  try {
+    const payload = await fetchJson(realDemoE2e005FallbackReportUrl);
+    const summary = deriveRealDemoE2e005Summary(payload, "fallback_report");
+    return {
+      status: summary.uiStatus,
+      summary,
+      message,
+    };
+  } catch (reportError) {
+    return {
+      status: "unavailable",
+      message: reportError instanceof Error ? reportError.message : "Runtime API and fallback report are unavailable.",
+    };
+  }
+}
+
+export async function loadRealDemoE2e005UiBridgeStatus(): Promise<RealDemoE2e005UiState> {
+  try {
+    const payload = await fetchRuntimeJson(realDemoE2e005StatusEndpoint);
+    const summary = deriveRealDemoE2e005Summary(payload, "runtime_endpoint");
     return { status: summary.uiStatus, summary };
   } catch (endpointError) {
-    try {
-      const payload = await fetchJson(realDemoE2e005ReportUrl);
-      const summary = deriveRealDemoE2e005Summary(payload, "local_report");
-      return {
-        status: summary.uiStatus,
-        summary,
-        message: `Endpoint unavailable; synced local report. ${endpointError instanceof Error ? endpointError.message : ""}`.trim(),
-      };
-    } catch (reportError) {
-      return {
-        status: "unavailable",
-        message: reportError instanceof Error ? reportError.message : "Local report unavailable.",
-      };
-    }
+    return fallbackToReport(
+      `Runtime endpoint unavailable; attempted report fallback. ${endpointError instanceof Error ? endpointError.message : ""}`.trim(),
+    );
+  }
+}
+
+export async function runRealDemoE2e005UiBridge(): Promise<RealDemoE2e005UiState> {
+  try {
+    const payload = await fetchRuntimeJson(realDemoE2e005RunEndpoint, { method: "POST" });
+    const summary = deriveRealDemoE2e005Summary(payload, "runtime_endpoint");
+    return { status: summary.uiStatus, summary };
+  } catch (endpointError) {
+    return fallbackToReport(
+      `Runtime run endpoint unavailable; synced report fallback only. ${endpointError instanceof Error ? endpointError.message : ""}`.trim(),
+    );
   }
 }
