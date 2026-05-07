@@ -311,6 +311,10 @@
         "requiredMode": { "$ref": "#/$defs/requiredMode" },
         "adapterId": { "type": "string" },
         "operation": { "type": "string", "enum": ["text2image", "image2image", "reference_asset"] },
+        "referenceImageInputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/referenceImageInput" }
+        },
         "outputPath": { "type": "string" },
         "status": { "type": "string", "enum": ["preview_ready", "blocked", "parked"] },
         "blockers": { "type": "array", "items": { "type": "string" } },
@@ -343,6 +347,35 @@
         "credentialAccessAllowed": { "const": false },
         "canSpawnWorker": { "const": false },
         "noFileMutation": { "const": true }
+      }
+    },
+    "referenceImageInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputId", "role", "path", "source", "required", "mustUseAsVisualInput", "status", "notes"],
+      "properties": {
+        "inputId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "role": {
+          "type": "string",
+          "enum": [
+            "source_start_frame",
+            "locked_character_reference",
+            "locked_scene_reference",
+            "locked_style_reference",
+            "locked_prop_reference",
+            "mask",
+            "other"
+          ]
+        },
+        "path": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "source": {
+          "type": "string",
+          "enum": ["approved_start_frame", "locked_asset", "candidate_asset", "task_envelope", "manual_user_input"]
+        },
+        "required": { "const": true },
+        "mustUseAsVisualInput": { "const": true },
+        "status": { "type": "string", "enum": ["available", "planned", "missing", "blocked"] },
+        "notes": { "type": "array", "items": { "type": "string" } }
       }
     },
     "outputWatcherBridgePlan": {

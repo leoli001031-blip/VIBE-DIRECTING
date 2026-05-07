@@ -732,6 +732,7 @@ export interface ProviderCapability {
   outputKind: "image" | "video" | "audio" | "metadata";
   supports: ProviderCapabilitySupport;
   maxReferenceImages: number;
+  referenceImageInputRoles?: Image2ReferenceImageInputRole[];
   forbiddenFallbacks: string[];
   notes: string[];
 }
@@ -861,6 +862,7 @@ export interface ProviderAdapterContract {
     supportsReferenceImage: boolean | "planned";
     supportsStartEndFrame: boolean | "planned";
     supportsTextToVideo: false | "experimental_parked";
+    referenceImageInputRoles?: Image2ReferenceImageInputRole[];
   };
   forbiddenRoutes: Array<
     | "fast_model"
@@ -1062,6 +1064,8 @@ export interface ShotPromptPlan {
   styleDirectives: string[];
   adapterWarnings: string[];
   derivesFromStartFrame?: boolean;
+  sourceStartFrameId?: string;
+  referenceImageInputs: Image2ReferenceImageInput[];
   status: ShotPromptPlanStatus;
   blockers: string[];
   conflictReportId: string;
@@ -1136,6 +1140,7 @@ export interface ImageTaskPlan {
   status: ImageTaskPlanStatus;
   expectedOutputPath: string;
   inputReferenceIds: string[];
+  referenceImageInputs: Image2ReferenceImageInput[];
   sourcePromptPlanHash: string;
   sourceShotSpecHash: string;
   taskEnvelopeSummary?: ImageTaskEnvelopeSummary;
@@ -1147,6 +1152,26 @@ export interface ImageTaskPlan {
 
 export type Image2AdapterOperation = "text2image" | "image2image" | "reference_asset";
 
+export type Image2ReferenceImageInputRole =
+  | "source_start_frame"
+  | "locked_character_reference"
+  | "locked_scene_reference"
+  | "locked_style_reference"
+  | "locked_prop_reference"
+  | "mask"
+  | "other";
+
+export interface Image2ReferenceImageInput {
+  inputId: string;
+  role: Image2ReferenceImageInputRole;
+  path: string;
+  source: "approved_start_frame" | "locked_asset" | "candidate_asset" | "task_envelope" | "manual_user_input";
+  required: true;
+  mustUseAsVisualInput: true;
+  status: "available" | "planned" | "missing" | "blocked";
+  notes: string[];
+}
+
 export interface Image2AdapterPayload {
   sourceIntent: string[];
   mustPreserve: string[];
@@ -1155,6 +1180,8 @@ export interface Image2AdapterPayload {
     referenceId: string;
     source: "prompt_plan";
   }>;
+  referenceImageInputs: Image2ReferenceImageInput[];
+  sourceStartFrameId?: string;
   outputPath: string;
 }
 
@@ -1169,6 +1196,7 @@ export interface Image2AdapterRequest {
   taskPlanId: string;
   adapterId: string;
   operation: Image2AdapterOperation;
+  frameRole?: ProviderPromptKind;
   payload: Image2AdapterPayload;
   submitPolicy: Image2SubmitPolicy;
   forbiddenFallbacks: string[];

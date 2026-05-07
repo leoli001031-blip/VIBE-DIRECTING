@@ -58,6 +58,22 @@
       }
     },
     "maxReferenceImages": { "type": "integer", "minimum": 0 },
+    "referenceImageInputRoles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "source_start_frame",
+          "locked_character_reference",
+          "locked_scene_reference",
+          "locked_style_reference",
+          "locked_prop_reference",
+          "mask",
+          "other"
+        ]
+      },
+      "uniqueItems": true
+    },
     "forbiddenFallbacks": {
       "type": "array",
       "items": { "type": "string" }

@@ -114,6 +114,21 @@ export function buildShotPromptPlan(input: BuildShotPromptPlanInput): BuildShotP
   const derivesFromStartFrame = promptKind === "end_frame"
     ? Boolean(input.shot?.startFrame && !input.shot.issues.includes("missing_start_frame"))
     : undefined;
+  const sourceStartFrameId = promptKind === "end_frame" && derivesFromStartFrame ? input.shot?.startFrame : undefined;
+  const referenceImageInputs = sourceStartFrameId
+    ? [
+        {
+          inputId: `source_start_frame_${input.shot?.id || input.job.id}`,
+          role: "source_start_frame" as const,
+          path: sourceStartFrameId,
+          source: "approved_start_frame" as const,
+          required: true as const,
+          mustUseAsVisualInput: true as const,
+          status: "available" as const,
+          notes: ["End-frame image.edit must receive this approved start frame as an explicit visual input."],
+        },
+      ]
+    : [];
 
   if (promptKind === "end_frame" && !derivesFromStartFrame) {
     conflicts.push({
@@ -188,6 +203,8 @@ export function buildShotPromptPlan(input: BuildShotPromptPlanInput): BuildShotP
     styleDirectives: styleDirectivesFromInjectedKnowledge(input.injectedKnowledgePacks),
     adapterWarnings,
     derivesFromStartFrame,
+    sourceStartFrameId,
+    referenceImageInputs,
     status,
     blockers,
     conflictReportId,

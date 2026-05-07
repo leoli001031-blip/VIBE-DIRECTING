@@ -114,6 +114,19 @@ function oneShotActionInput(overrides = {}) {
       mustPreserve: ["hero identity", "locked scene geometry"],
       mustAvoid: ["style drift", "extra props"],
       references: [{ referenceId: "hero_locked", source: "prompt_plan" }],
+      referenceImageInputs: [
+        {
+          inputId: "source_start_frame_S01",
+          role: "source_start_frame",
+          path: `${sandboxRoot}/shots/S01/start.png`,
+          source: "approved_start_frame",
+          required: true,
+          mustUseAsVisualInput: true,
+          status: "available",
+          notes: ["Transport fixture must carry the approved start frame as an explicit visual input."],
+        },
+      ],
+      sourceStartFrameId: `${sandboxRoot}/shots/S01/start.png`,
       outputPath,
     },
     submitPolicy: {
@@ -121,7 +134,7 @@ function oneShotActionInput(overrides = {}) {
       manual_submit_required: true,
       live_submit_forbidden: true,
     },
-    forbiddenFallbacks: ["image2image_to_text2image", "provider_or_mode_fallback"],
+    forbiddenFallbacks: ["image2image_to_text2image", "independent_end_frame_generation", "provider_or_mode_fallback"],
   };
 
   return {

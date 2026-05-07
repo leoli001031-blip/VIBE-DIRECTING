@@ -71,6 +71,7 @@ function job(id, slot, requiredMode, providerId, outputPath) {
 
 function promptPlan(overrides = {}) {
   const isEnd = overrides.promptKind === "end_frame";
+  const sourceStartFrameId = isEnd ? "outputs/keyframes/S01_start.png" : undefined;
   return {
     promptPlanId: isEnd ? "prompt_S01_end" : "prompt_S01_start",
     promptPlanHash: isEnd ? "prompt_hash_end" : "prompt_hash_start",
@@ -89,6 +90,21 @@ function promptPlan(overrides = {}) {
     styleDirectives: ["same restrained visual style"],
     adapterWarnings: [],
     derivesFromStartFrame: isEnd ? true : undefined,
+    sourceStartFrameId,
+    referenceImageInputs: isEnd
+      ? [
+          {
+            inputId: "source_start_frame_S01",
+            role: "source_start_frame",
+            path: sourceStartFrameId,
+            source: "approved_start_frame",
+            required: true,
+            mustUseAsVisualInput: true,
+            status: "available",
+            notes: ["Fixture source start frame must be passed as an explicit visual input."],
+          },
+        ]
+      : [],
     status: "ready_for_envelope",
     blockers: [],
     conflictReportId: "conflict_clear",
@@ -172,6 +188,7 @@ const sourceIndex = {
 };
 
 const { buildImageKeyframeRuntimePlan } = await importImageKeyframeRuntime();
+const { buildDefaultProviderRegistry } = await importTs("src/core/providerCapabilities.ts");
 
 const cleanPlan = buildImageKeyframeRuntimePlan(baseInput());
 assert(cleanPlan.schemaVersion === "0.1.0", "runtime plan schema version drifted");
@@ -208,6 +225,8 @@ assert(endPlan.image2Operation === "image2image", "end frame operation must be i
 assert(endPlan.endDerivation.derivesFrom === "start_frame", "end frame must derive from start frame");
 assert(endPlan.endDerivation.sourceStartFrameId === "outputs/keyframes/S01_start.png", "end frame source start frame missing");
 assert(endPlan.adapterRequestPreview.payload.sourceStartFrameId === "outputs/keyframes/S01_start.png", "adapter preview must carry source start frame");
+assert(endPlan.referenceImageInputs.some((input) => input.role === "source_start_frame" && input.path === "outputs/keyframes/S01_start.png"), "end frame plan must carry explicit source start visual input");
+assert(endPlan.adapterRequestPreview.payload.referenceImageInputs.some((input) => input.role === "source_start_frame" && input.path === "outputs/keyframes/S01_start.png"), "adapter preview must carry explicit source start visual input");
 assert(endPlan.adapterRequestPreview.forbiddenFallbacks.includes("image2image_to_text2image"), "end frame must forbid image2image fallback");
 assert(endPlan.adapterRequestPreview.forbiddenFallbacks.includes("independent_end_frame_generation"), "end frame must forbid independent generation");
 
@@ -253,6 +272,53 @@ const rejectedPlan = buildImageKeyframeRuntimePlan(rejectedInput);
 assert(rejectedPlan.status === "blocked", "rejected reference should block runtime plan");
 assert(rejectedPlan.assetReferencePlanning.blockers.some((blocker) => blocker.includes("bad_prop_rejected")), "rejected reference blocker missing");
 assert(rejectedPlan.image2StartFramePlans[0].status === "blocked", "rejected start frame plan should block");
+
+const missingSourceInputPlan = buildImageKeyframeRuntimePlan(baseInput({
+  promptPlans: [
+    promptPlan({ promptKind: "start_frame" }),
+    promptPlan({ promptKind: "end_frame", referenceImageInputs: [] }),
+  ],
+}));
+assert(missingSourceInputPlan.status === "blocked", "end frame without explicit source image input must block");
+assert(missingSourceInputPlan.image2EndFramePlans[0].blockers.some((blocker) => /source_start_frame visual input/i.test(blocker)), "missing source_start_frame blocker must be present");
+
+const unavailableSourceInputPlan = buildImageKeyframeRuntimePlan(baseInput({
+  promptPlans: [
+    promptPlan({ promptKind: "start_frame" }),
+    promptPlan({
+      promptKind: "end_frame",
+      referenceImageInputs: [
+        {
+          inputId: "source_start_frame_S01_missing",
+          role: "source_start_frame",
+          path: "outputs/keyframes/S01_start.png",
+          source: "approved_start_frame",
+          required: true,
+          mustUseAsVisualInput: true,
+          status: "missing",
+          notes: ["Fixture missing source should block."],
+        },
+      ],
+    }),
+  ],
+}));
+assert(unavailableSourceInputPlan.status === "blocked", "end frame with unavailable source image input must block");
+assert(unavailableSourceInputPlan.image2EndFramePlans[0].blockers.some((blocker) => /not available as a concrete image input/i.test(blocker)), "unavailable source input blocker must be present");
+
+const providerWithoutSourceStartRole = buildDefaultProviderRegistry(generatedAt);
+providerWithoutSourceStartRole.capabilities = providerWithoutSourceStartRole.capabilities.map((capability) =>
+  capability.providerId === "openai-image2-api" && capability.slot === "image.edit" && capability.requiredMode === "image2image"
+    ? { ...capability, referenceImageInputRoles: [] }
+    : capability,
+);
+const unsupportedReferenceCapabilityPlan = buildImageKeyframeRuntimePlan(baseInput({
+  providerRegistry: providerWithoutSourceStartRole,
+}));
+assert(unsupportedReferenceCapabilityPlan.status === "blocked", "provider without source_start_frame role must block end-frame image2image");
+assert(
+  unsupportedReferenceCapabilityPlan.image2EndFramePlans[0].blockers.some((blocker) => /does not expose required reference-image input capability/i.test(blocker)),
+  "missing provider source_start_frame capability blocker must be present",
+);
 
 const independentInput = baseInput({
   jobs: [

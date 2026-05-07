@@ -363,6 +363,27 @@ function manifestMatched(report: ManifestMatchReport | undefined, expectedOutput
   );
 }
 
+function hasAvailableSourceStartFrameInput(request: Image2AdapterRequest): boolean {
+  return request.payload.referenceImageInputs.some(
+    (input) =>
+      input.role === "source_start_frame" &&
+      input.source === "approved_start_frame" &&
+      input.required === true &&
+      input.mustUseAsVisualInput === true &&
+      input.status === "available" &&
+      Boolean(input.path?.trim()),
+  );
+}
+
+function image2EditContractValid(taskPlan: ImageTaskPlan, request: Image2AdapterRequest): boolean {
+  if (taskPlan.providerSlot !== "image.edit" && request.operation !== "image2image") return true;
+  return request.operation === "image2image" &&
+    taskPlan.requiredMode === "image2image" &&
+    hasAvailableSourceStartFrameInput(request) &&
+    request.forbiddenFallbacks.includes("image2image_to_text2image") &&
+    request.forbiddenFallbacks.includes("independent_end_frame_generation");
+}
+
 function requestPreviewForImage2(taskPlan: ImageTaskPlan, request?: Image2AdapterRequest): ProviderClosedLoopRequestPreview {
   return {
     previewDefined: Boolean(
@@ -372,6 +393,8 @@ function requestPreviewForImage2(taskPlan: ImageTaskPlan, request?: Image2Adapte
         Array.isArray(request.payload.mustPreserve) &&
         Array.isArray(request.payload.mustAvoid) &&
         Array.isArray(request.payload.references) &&
+        Array.isArray(request.payload.referenceImageInputs) &&
+        image2EditContractValid(taskPlan, request) &&
         request.payload.outputPath === taskPlan.expectedOutputPath &&
         request.submitPolicy.dry_run_only === true &&
         request.submitPolicy.manual_submit_required === true &&

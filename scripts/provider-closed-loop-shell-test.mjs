@@ -65,6 +65,19 @@ function image2Request(taskPlan = imageTaskPlan(), overrides = {}) {
       mustPreserve: ["identity", "scene layout"],
       mustAvoid: ["new characters"],
       references: [{ referenceId: "asset_start_S01", source: "prompt_plan" }],
+      referenceImageInputs: [
+        {
+          inputId: "source_start_frame_S01",
+          role: "source_start_frame",
+          path: "outputs/keyframes/S01_start.png",
+          source: "approved_start_frame",
+          required: true,
+          mustUseAsVisualInput: true,
+          status: "available",
+          notes: ["Closed-loop fixture must carry the approved start frame as a visual input."],
+        },
+      ],
+      sourceStartFrameId: "outputs/keyframes/S01_start.png",
       outputPath: taskPlan.expectedOutputPath,
     },
     submitPolicy: {
@@ -72,7 +85,7 @@ function image2Request(taskPlan = imageTaskPlan(), overrides = {}) {
       manual_submit_required: true,
       live_submit_forbidden: true,
     },
-    forbiddenFallbacks: ["image2image_to_text2image"],
+    forbiddenFallbacks: ["image2image_to_text2image", "independent_end_frame_generation"],
     ...overrides,
   };
 }
@@ -363,6 +376,20 @@ assertBlocked(
   "promotion_gate_ready_required",
 );
 assertBlocked(buildProviderClosedLoopShellState(readyInput({ image2AdapterRequests: [] })), "provider_request_preview_required");
+assertBlocked(
+  buildProviderClosedLoopShellState(readyInput({
+    image2AdapterRequests: [
+      image2Request(imageTaskPlan(), {
+        payload: {
+          ...image2Request(imageTaskPlan()).payload,
+          referenceImageInputs: [],
+          sourceStartFrameId: "outputs/keyframes/S01_start.png",
+        },
+      }),
+    ],
+  })),
+  "provider_request_preview_required",
+);
 
 for (const [flag, reason] of [
   ["providerSubmitAttempted", "provider_submit_attempt_blocked"],

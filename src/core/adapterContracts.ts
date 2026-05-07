@@ -59,12 +59,16 @@ function capabilitySummary(capabilities: ProviderCapability[]): ProviderAdapterC
   const supportsTextToVideo = capabilities.some((capability) => capability.slot === "video.t2v.experimental")
     ? "experimental_parked"
     : false;
+  const referenceImageInputRoles = Array.from(
+    new Set(capabilities.flatMap((capability) => capability.referenceImageInputRoles || [])),
+  ).sort((left, right) => left.localeCompare(right));
 
   return {
     outputKinds,
     supportsReferenceImage,
     supportsStartEndFrame,
     supportsTextToVideo,
+    ...(referenceImageInputRoles.length ? { referenceImageInputRoles } : {}),
   };
 }
 

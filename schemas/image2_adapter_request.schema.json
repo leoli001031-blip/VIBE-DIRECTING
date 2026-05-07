@@ -25,7 +25,7 @@
     "payload": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sourceIntent", "mustPreserve", "mustAvoid", "references", "outputPath"],
+      "required": ["sourceIntent", "mustPreserve", "mustAvoid", "references", "referenceImageInputs", "outputPath"],
       "properties": {
         "sourceIntent": {
           "type": "array",
@@ -51,6 +51,11 @@
             }
           }
         },
+        "referenceImageInputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/referenceImageInput" }
+        },
+        "sourceStartFrameId": { "type": "string" },
         "outputPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
       }
     },
@@ -70,6 +75,40 @@
       "contains": { "type": "string", "enum": ["provider_or_mode_fallback"] }
     }
   },
+  "$defs": {
+    "referenceImageInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputId", "role", "path", "source", "required", "mustUseAsVisualInput", "status", "notes"],
+      "properties": {
+        "inputId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "role": {
+          "type": "string",
+          "enum": [
+            "source_start_frame",
+            "locked_character_reference",
+            "locked_scene_reference",
+            "locked_style_reference",
+            "locked_prop_reference",
+            "mask",
+            "other"
+          ]
+        },
+        "path": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "source": {
+          "type": "string",
+          "enum": ["approved_start_frame", "locked_asset", "candidate_asset", "task_envelope", "manual_user_input"]
+        },
+        "required": { "type": "boolean", "const": true },
+        "mustUseAsVisualInput": { "type": "boolean", "const": true },
+        "status": { "type": "string", "enum": ["available", "planned", "missing", "blocked"] },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  },
   "allOf": [
     {
       "if": {
@@ -80,6 +119,23 @@
       },
       "then": {
         "properties": {
+          "payload": {
+            "properties": {
+              "referenceImageInputs": {
+                "contains": {
+                  "type": "object",
+                  "properties": {
+                    "role": { "const": "source_start_frame" },
+                    "source": { "const": "approved_start_frame" },
+                    "required": { "const": true },
+                    "mustUseAsVisualInput": { "const": true },
+                    "status": { "const": "available" }
+                  },
+                  "required": ["role", "path", "source", "required", "mustUseAsVisualInput", "status"]
+                }
+              }
+            }
+          },
           "forbiddenFallbacks": {
             "contains": { "const": "image2image_to_text2image" }
           }

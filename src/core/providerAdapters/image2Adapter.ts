@@ -1,4 +1,12 @@
-import type { Image2AdapterOperation, Image2AdapterRequest, ImageTaskPlan, ProviderSlot, RequiredMode, ShotPromptPlan } from "../types";
+import type {
+  Image2AdapterOperation,
+  Image2AdapterRequest,
+  Image2ReferenceImageInput,
+  ImageTaskPlan,
+  ProviderSlot,
+  RequiredMode,
+  ShotPromptPlan,
+} from "../types";
 
 export interface Image2AdapterValidationResult {
   valid: boolean;
@@ -55,6 +63,8 @@ export interface Image2OneShotRealCallPayload {
     referenceId: string;
     source: "prompt_plan";
   }>;
+  referenceImageInputs: Image2ReferenceImageInput[];
+  sourceStartFrameId?: string;
   output: {
     path: string;
     sandboxRoot: string;
@@ -94,7 +104,7 @@ function operationForPlan(taskPlan: ImageTaskPlan): Image2AdapterOperation {
 function forbiddenFallbacksForPlan(taskPlan: ImageTaskPlan): string[] {
   const fallbacks = ["provider_or_mode_fallback"];
   if (taskPlan.requiredMode === "image2image" || taskPlan.providerSlot === "image.edit") {
-    fallbacks.push("image2image_to_text2image");
+    fallbacks.push("image2image_to_text2image", "independent_end_frame_generation");
   }
   if (taskPlan.providerSlot === "image.reference_asset" && taskPlan.requiredMode === "image2image") {
     fallbacks.push("reference_edit_to_text2image");
@@ -105,12 +115,26 @@ function forbiddenFallbacksForPlan(taskPlan: ImageTaskPlan): string[] {
   return Array.from(new Set(fallbacks)).sort((left, right) => left.localeCompare(right));
 }
 
+function sourceStartFrameInput(inputs: Image2ReferenceImageInput[] = []): Image2ReferenceImageInput | undefined {
+  return inputs.find(
+    (input) =>
+      input.role === "source_start_frame" &&
+      input.required === true &&
+      input.mustUseAsVisualInput === true &&
+      input.status === "available" &&
+      Boolean(input.path?.trim()),
+  );
+}
+
 export function buildImage2AdapterRequest(taskPlan: ImageTaskPlan, promptPlan: ShotPromptPlan): Image2AdapterRequest {
+  const referenceImageInputs = taskPlan.referenceImageInputs || promptPlan.referenceImageInputs || [];
+  const startFrameInput = sourceStartFrameInput(referenceImageInputs);
   return {
     requestId: `image2_request_${taskPlan.taskPlanId}`,
     taskPlanId: taskPlan.taskPlanId,
     adapterId: `${taskPlan.providerId.replace(/[^a-zA-Z0-9_-]+/g, "_")}-dry-run`,
     operation: operationForPlan(taskPlan),
+    frameRole: promptPlan.promptKind,
     payload: {
       sourceIntent: promptPlan.sourceIntent,
       mustPreserve: promptPlan.mustPreserve,
@@ -119,6 +143,8 @@ export function buildImage2AdapterRequest(taskPlan: ImageTaskPlan, promptPlan: S
         referenceId,
         source: "prompt_plan",
       })),
+      referenceImageInputs,
+      ...(startFrameInput ? { sourceStartFrameId: startFrameInput.path } : {}),
       outputPath: taskPlan.expectedOutputPath,
     },
     submitPolicy: {
@@ -144,6 +170,18 @@ export function validateImage2AdapterRequest(request: Image2AdapterRequest): Ima
 
   if (request.operation === "image2image" && !request.forbiddenFallbacks.includes("image2image_to_text2image")) {
     issues.push("image2image_to_text2image_fallback_must_be_forbidden");
+  }
+  if (request.operation === "image2image" && !request.forbiddenFallbacks.includes("independent_end_frame_generation")) {
+    issues.push("independent_end_frame_generation_must_be_forbidden");
+  }
+  if (request.operation === "image2image") {
+    const referenceImageInputs = request.payload?.referenceImageInputs || [];
+    const startFrameInput = sourceStartFrameInput(referenceImageInputs);
+    if (!Array.isArray(request.payload?.referenceImageInputs)) issues.push("payload_reference_image_inputs_missing");
+    if (!startFrameInput) issues.push("source_start_frame_visual_input_required");
+    if (startFrameInput && request.payload.sourceStartFrameId && startFrameInput.path !== request.payload.sourceStartFrameId) {
+      issues.push("source_start_frame_id_mismatch");
+    }
   }
 
   return {
@@ -198,6 +236,8 @@ export function compileImage2OneShotRealCallPayload(
       mustPreserve: input.request.payload.mustPreserve,
       mustAvoid: input.request.payload.mustAvoid,
       references: input.request.payload.references,
+      referenceImageInputs: input.request.payload.referenceImageInputs || [],
+      ...(input.request.payload.sourceStartFrameId ? { sourceStartFrameId: input.request.payload.sourceStartFrameId } : {}),
       output: {
         path: outputPath,
         sandboxRoot: input.outputSandboxRoot,

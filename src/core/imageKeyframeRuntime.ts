@@ -11,6 +11,7 @@ import type {
   ProviderSlot,
   RequiredMode,
   ShotPromptPlan,
+  Image2ReferenceImageInput,
 } from "./types";
 import { buildDefaultProviderRegistry, buildProviderRequirement, selectCapabilityForRequirement } from "./providerCapabilities";
 
@@ -46,6 +47,8 @@ export type ImageKeyframeVisualConsistencyGateId =
   | "prop_gate"
   | "style_gate"
   | "motion_gate";
+
+export type Image2RuntimeVisualReferenceInput = Image2ReferenceImageInput;
 
 export interface ImageKeyframeReferencePlan {
   referenceId: string;
@@ -112,6 +115,7 @@ export interface Image2RuntimeAdapterPreview {
     mustPreserve: string[];
     mustAvoid: string[];
     references: Image2RuntimeReference[];
+    referenceImageInputs: Image2RuntimeVisualReferenceInput[];
     outputPath: string;
     sourceStartFrameId?: string;
   };
@@ -139,6 +143,7 @@ export interface Image2FramePlan {
   image2Operation: Image2RuntimeOperation;
   outputPath: string;
   inputReferenceIds: string[];
+  referenceImageInputs: Image2RuntimeVisualReferenceInput[];
   referenceStatuses: Image2RuntimeReference[];
   status: ImageKeyframePlanStatus;
   adapterRequestPreview: Image2RuntimeAdapterPreview;
@@ -307,6 +312,8 @@ interface RuntimeTaskSeed {
   sourceIntent: string[];
   mustPreserve: string[];
   mustAvoid: string[];
+  referenceImageInputs: Image2RuntimeVisualReferenceInput[];
+  referenceImageInputsDeclared: boolean;
   derivesFromStartFrame?: boolean;
   promptStatus?: ShotPromptPlan["status"];
   jobStatus?: GenerationJob["status"];
@@ -546,6 +553,8 @@ function seedFromPromptPlan(
 ): RuntimeTaskSeed {
   const kind = promptKind(plan, taskPlan);
   const shotId = plan.shotId || taskPlan?.shotId || "unscoped";
+  const taskPlanDeclaresReferenceInputs = Boolean(taskPlan && Object.prototype.hasOwnProperty.call(taskPlan, "referenceImageInputs"));
+  const promptPlanDeclaresReferenceInputs = Object.prototype.hasOwnProperty.call(plan, "referenceImageInputs");
   return {
     taskPlanId: taskPlan?.taskPlanId || `image_keyframe_task_${plan.promptPlanId}`,
     jobId: plan.jobId,
@@ -560,6 +569,8 @@ function seedFromPromptPlan(
     sourceIntent: plan.sourceIntent,
     mustPreserve: plan.mustPreserve,
     mustAvoid: plan.mustAvoid,
+    referenceImageInputs: taskPlan?.referenceImageInputs || plan.referenceImageInputs || [],
+    referenceImageInputsDeclared: taskPlanDeclaresReferenceInputs || promptPlanDeclaresReferenceInputs,
     derivesFromStartFrame: plan.derivesFromStartFrame,
     promptStatus: plan.status,
     jobStatus: job?.status,
@@ -584,6 +595,8 @@ function seedFromTaskPlan(taskPlan: ImageTaskPlan, job: GenerationJob | undefine
     sourceIntent: [],
     mustPreserve: [],
     mustAvoid: [],
+    referenceImageInputs: taskPlan.referenceImageInputs || [],
+    referenceImageInputsDeclared: Object.prototype.hasOwnProperty.call(taskPlan, "referenceImageInputs"),
     jobStatus: job?.status,
     blockers: uniqueSorted(taskPlan.blockers),
     warnings: uniqueSorted(taskPlan.warnings),
@@ -649,6 +662,55 @@ function capabilityForSeed(seed: RuntimeTaskSeed, registry: ProviderRegistry): P
   );
 }
 
+function referenceInputAvailable(input: Image2RuntimeVisualReferenceInput): boolean {
+  return input.required === true &&
+    input.mustUseAsVisualInput === true &&
+    input.status === "available" &&
+    Boolean(input.path?.trim());
+}
+
+function visualReferenceInputsForEnd(seed: RuntimeTaskSeed, sourceStartFrameId?: string): Image2RuntimeVisualReferenceInput[] {
+  const seededInputs = seed.referenceImageInputs || [];
+  return uniqueImageReferenceInputs(
+    seededInputs.filter((input) => input.role !== "source_start_frame" || !sourceStartFrameId || input.path === sourceStartFrameId),
+  );
+}
+
+function uniqueImageReferenceInputs(inputs: Image2RuntimeVisualReferenceInput[]): Image2RuntimeVisualReferenceInput[] {
+  const seen = new Set<string>();
+  return inputs.filter((input) => {
+    const key = `${input.role}:${input.path}:${input.inputId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function sourceStartFrameInputBlockers(input: {
+  capability?: ProviderCapability;
+  referenceImageInputs: Image2RuntimeVisualReferenceInput[];
+  sourceStartFrameId?: string;
+}): string[] {
+  const sourceInputs = input.referenceImageInputs.filter((item) => item.role === "source_start_frame");
+  const availableSourceInputs = sourceInputs.filter(referenceInputAvailable);
+  const capabilityInputRoles = input.capability?.referenceImageInputRoles || [];
+
+  return [
+    ...(input.capability?.supports.referenceImage === true &&
+      input.capability.supports.imageEdit === true &&
+      input.capability.maxReferenceImages > 0 &&
+      input.capability.inputKinds.some((kind) => kind === "image" || kind === "reference_image") &&
+      capabilityInputRoles.includes("source_start_frame")
+      ? []
+      : [`${input.capability?.id || "selected provider"} does not expose required reference-image input capability for end-frame image2image.`]),
+    ...(input.sourceStartFrameId ? [] : ["End-frame edit is missing its source start frame."]),
+    ...(sourceInputs.length ? [] : ["End-frame image2image request is missing required source_start_frame visual input."]),
+    ...(sourceInputs.length && !availableSourceInputs.length
+      ? ["End-frame source_start_frame visual input is not available as a concrete image input."]
+      : []),
+  ];
+}
+
 function commonPlanBlockers(seed: RuntimeTaskSeed, registry: ProviderRegistry, job?: GenerationJob): string[] {
   const blockers = [...seed.blockers];
   const policyText = jobPolicyText(job);
@@ -688,6 +750,7 @@ function makeAdapterPreview(input: {
   references: Image2RuntimeReference[];
   capabilityId?: string;
   sourceStartFrameId?: string;
+  referenceImageInputs?: Image2RuntimeVisualReferenceInput[];
 }): Image2RuntimeAdapterPreview {
   return {
     requestId: `image2_runtime_preview_${input.planId}`,
@@ -702,6 +765,7 @@ function makeAdapterPreview(input: {
       mustPreserve: input.seed.mustPreserve,
       mustAvoid: input.seed.mustAvoid,
       references: input.references,
+      referenceImageInputs: input.referenceImageInputs || [],
       outputPath: input.seed.outputPath,
       ...(input.sourceStartFrameId ? { sourceStartFrameId: input.sourceStartFrameId } : {}),
     },
@@ -759,6 +823,7 @@ function buildStartPlan(
     image2Operation: operation,
     outputPath: seed.outputPath,
     inputReferenceIds: seed.inputReferenceIds,
+    referenceImageInputs: seed.referenceImageInputs,
     referenceStatuses: references,
     status: planStatus(blockers, seed),
     adapterRequestPreview: makeAdapterPreview({ planId, operation, seed, references, capabilityId: capability?.id }),
@@ -800,6 +865,7 @@ function buildEndPlan(
   const references = referencesForPlan(seed.inputReferenceIds, assetPlanning);
   const { sourceStartFrameId, sourceStartFramePlanId, pair } = sourceStartFrameFor(seed, startPlans, keyframePairs);
   const capability = capabilityForSeed(seed, registry);
+  const referenceImageInputs = visualReferenceInputsForEnd(seed, sourceStartFrameId);
   const independentEndFrame =
     seed.derivesFromStartFrame === false ||
     pair?.endDerivationSource === "independent_exception" ||
@@ -812,7 +878,7 @@ function buildEndPlan(
     ...(seed.providerSlot !== "image.edit" ? ["End frame must be an edit-from-start plan on image.edit."] : []),
     ...(seed.requiredMode !== "image2image" ? ["End frame must use image2image; independent text-to-image is forbidden."] : []),
     ...(seed.derivesFromStartFrame !== true ? ["End-frame prompt plan must explicitly derive from the start frame."] : []),
-    ...(sourceStartFrameId ? [] : ["End-frame edit is missing its source start frame."]),
+    ...sourceStartFrameInputBlockers({ capability, referenceImageInputs, sourceStartFrameId }),
     ...(pair && pair.endDerivationSource !== "start_frame" ? ["Keyframe pair does not derive the end frame from the start frame."] : []),
     ...(pair && pair.validForI2vPair !== true ? ["Keyframe pair is not valid for I2V handoff."] : []),
   ]);
@@ -832,6 +898,7 @@ function buildEndPlan(
     image2Operation: "image2image",
     outputPath: seed.outputPath,
     inputReferenceIds: seed.inputReferenceIds,
+    referenceImageInputs,
     referenceStatuses: references,
     status: planStatus(blockers, seed),
     adapterRequestPreview: makeAdapterPreview({
@@ -841,6 +908,7 @@ function buildEndPlan(
       references,
       capabilityId: capability?.id,
       sourceStartFrameId,
+      referenceImageInputs,
     }),
     endDerivation: {
       derivesFrom: independentEndFrame ? "blocked_independent_end_frame" : sourceStartFrameId ? "start_frame" : "unknown",
@@ -1134,7 +1202,7 @@ function buildRuntimeLockGates(input: {
     .filter((job) => isTextToVideo(job.slot, job.requiredMode))
     .map((job) => `${job.id} uses text-to-video.`);
   const image2FallbackViolations = [...input.startPlans, ...input.endPlans]
-    .filter((plan) => plan.blockers.some((blocker) => /fallback|not registered|must use image2image|must use text2image/i.test(blocker)))
+    .filter((plan) => plan.blockers.some((blocker) => /fallback|not registered|must use image2image|must use text2image|reference-image input|source_start_frame visual input/i.test(blocker)))
     .map((plan) => `${plan.planId} violates image provider slot/mode fallback policy.`);
   const independentEndFrameViolations = [
     ...input.endPlans

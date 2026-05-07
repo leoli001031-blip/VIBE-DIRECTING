@@ -96,6 +96,7 @@ export function buildImageTaskPlan(input: BuildImageTaskPlanInput): ImageTaskPla
     status,
     expectedOutputPath: outputPath,
     inputReferenceIds: uniqueSorted(input.promptPlan.referenceIds),
+    referenceImageInputs: input.promptPlan.referenceImageInputs,
     sourcePromptPlanHash: input.promptPlan.promptPlanHash,
     sourceShotSpecHash: input.promptPlan.sourceShotSpecHash,
     taskEnvelopeSummary: taskEnvelopeSummary(input.taskEnvelope, input.promptPlan),

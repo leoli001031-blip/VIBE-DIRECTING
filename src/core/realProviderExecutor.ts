@@ -116,6 +116,7 @@ export interface RealProviderExecutorRequestPreview {
   requiredMode: RequiredMode;
   adapterId?: string;
   operation?: Image2AdapterRequest["operation"];
+  referenceImageInputs?: Image2AdapterRequest["payload"]["referenceImageInputs"];
   outputPath?: string;
   status: RealProviderExecutorPreviewStatus;
   blockers: string[];
@@ -472,6 +473,7 @@ function buildRequestPreview(
     requiredMode,
     adapterId: request.adapterId,
     operation: request.operation,
+    referenceImageInputs: request.payload.referenceImageInputs,
     outputPath: request.payload.outputPath,
     status,
     blockers,

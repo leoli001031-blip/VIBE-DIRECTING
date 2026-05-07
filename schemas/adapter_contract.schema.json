@@ -228,7 +228,23 @@
             },
             "supportsReferenceImage": { "type": ["boolean", "string"], "enum": [true, false, "planned"] },
             "supportsStartEndFrame": { "type": ["boolean", "string"], "enum": [true, false, "planned"] },
-            "supportsTextToVideo": { "type": ["boolean", "string"], "enum": [false, "experimental_parked"] }
+            "supportsTextToVideo": { "type": ["boolean", "string"], "enum": [false, "experimental_parked"] },
+            "referenceImageInputRoles": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "source_start_frame",
+                  "locked_character_reference",
+                  "locked_scene_reference",
+                  "locked_style_reference",
+                  "locked_prop_reference",
+                  "mask",
+                  "other"
+                ]
+              },
+              "uniqueItems": true
+            }
           }
         },
         "forbiddenRoutes": {

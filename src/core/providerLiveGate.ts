@@ -346,16 +346,34 @@ function pairQaPass(taskPlan: ImageTaskPlan, shots: ShotRecord[]): { pass: boole
   };
 }
 
+function hasAvailableSourceStartFrameInput(request: Image2AdapterRequest): boolean {
+  return request.payload.referenceImageInputs.some(
+    (input) =>
+      input.role === "source_start_frame" &&
+      input.source === "approved_start_frame" &&
+      input.required === true &&
+      input.mustUseAsVisualInput === true &&
+      input.status === "available" &&
+      Boolean(input.path?.trim()),
+  );
+}
+
 function image2RequestValid(request?: Image2AdapterRequest): boolean {
-  return Boolean(
-    request &&
-      request.adapterId &&
+  if (!request) return false;
+  const baseShapeValid = Boolean(
+    request.adapterId &&
       request.payload.outputPath &&
       Array.isArray(request.payload.sourceIntent) &&
+      Array.isArray(request.payload.referenceImageInputs) &&
       request.submitPolicy.dry_run_only === true &&
       request.submitPolicy.manual_submit_required === true &&
       request.submitPolicy.live_submit_forbidden === true,
   );
+  if (!baseShapeValid) return false;
+  if (request.operation !== "image2image") return true;
+  return hasAvailableSourceStartFrameInput(request) &&
+    request.forbiddenFallbacks.includes("image2image_to_text2image") &&
+    request.forbiddenFallbacks.includes("independent_end_frame_generation");
 }
 
 function matchingConfirmationToken(

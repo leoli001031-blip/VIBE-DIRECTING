@@ -86,7 +86,7 @@ function fixtureImageTaskPlan() {
   };
 }
 
-function fixtureImage2Request(taskPlan) {
+function fixtureImage2Request(taskPlan, overrides = {}) {
   return {
     requestId: "image2_request_image_task_plan_S01_end",
     taskPlanId: taskPlan.taskPlanId,
@@ -97,6 +97,19 @@ function fixtureImage2Request(taskPlan) {
       mustPreserve: ["character identity", "scene layout"],
       mustAvoid: ["unapproved props"],
       references: [{ referenceId: "ref_character_main", source: "prompt_plan" }],
+      referenceImageInputs: [
+        {
+          inputId: "source_start_frame_S01",
+          role: "source_start_frame",
+          path: "outputs/keyframes/S01_start.png",
+          source: "approved_start_frame",
+          required: true,
+          mustUseAsVisualInput: true,
+          status: "available",
+          notes: ["Provider live gate fixture must carry the start frame as a visual input."],
+        },
+      ],
+      sourceStartFrameId: "outputs/keyframes/S01_start.png",
       outputPath: taskPlan.expectedOutputPath,
     },
     submitPolicy: {
@@ -104,7 +117,8 @@ function fixtureImage2Request(taskPlan) {
       manual_submit_required: true,
       live_submit_forbidden: true,
     },
-    forbiddenFallbacks: ["image2image_to_text2image", "provider_or_mode_fallback"],
+    forbiddenFallbacks: ["image2image_to_text2image", "independent_end_frame_generation", "provider_or_mode_fallback"],
+    ...overrides,
   };
 }
 
@@ -210,6 +224,26 @@ assert(
   "missing user confirmation token placeholder must be explicit",
 );
 assert(blockedImageItem.livePathBlocked === true, "missing confirmation must keep livePathBlocked=true");
+
+const blockedByMissingSourceInput = buildProviderLiveGateState({
+  ...baseInput,
+  image2AdapterRequests: [
+    fixtureImage2Request(imageTaskPlan, {
+      payload: {
+        ...fixtureImage2Request(imageTaskPlan).payload,
+        referenceImageInputs: [],
+        sourceStartFrameId: "outputs/keyframes/S01_start.png",
+      },
+    }),
+  ],
+  confirmationTokens: [fixtureConfirmationToken(imageTaskPlan)],
+});
+const missingSourceInputItem = blockedByMissingSourceInput.items.find((item) => item.sourceId === imageTaskPlan.taskPlanId);
+assert(missingSourceInputItem.status === "blocked", "missing source_start_frame visual input must block provider live gate");
+assert(
+  missingSourceInputItem.checks.find((item) => item.checkId === "image2_adapter_request_valid")?.passed === false,
+  "provider live gate must fail image2 adapter request without source_start_frame visual input",
+);
 
 const videoItems = readyState.items.filter((item) => item.slot === "video.i2v");
 assert(videoItems.length === runtimeState.videoPlanning.taskPlans.length, "video live gate should mirror video task plans");

@@ -287,6 +287,19 @@ function oneShotActionInput(overrides = {}) {
       mustPreserve: ["hero identity", "locked scene geometry"],
       mustAvoid: ["style drift", "extra props"],
       references: [{ referenceId: "hero_locked", source: "prompt_plan" }],
+      referenceImageInputs: [
+        {
+          inputId: "source_start_frame_S01",
+          role: "source_start_frame",
+          path: "real-provider-executor/project_1/batch_A/shots/S01/start.png",
+          source: "approved_start_frame",
+          required: true,
+          mustUseAsVisualInput: true,
+          status: "available",
+          notes: ["One-shot image2image must receive the approved start frame as an explicit visual input."],
+        },
+      ],
+      sourceStartFrameId: "real-provider-executor/project_1/batch_A/shots/S01/start.png",
       outputPath: preview.outputPath,
     },
     submitPolicy: {
@@ -294,7 +307,7 @@ function oneShotActionInput(overrides = {}) {
       manual_submit_required: true,
       live_submit_forbidden: true,
     },
-    forbiddenFallbacks: ["image2image_to_text2image", "provider_or_mode_fallback"],
+    forbiddenFallbacks: ["image2image_to_text2image", "independent_end_frame_generation", "provider_or_mode_fallback"],
   };
 
   return {
@@ -353,6 +366,8 @@ assert(compiled.payload.providerFamily === "Image2", "compiled payload must targ
 assert(compiled.payload.providerId === "openai-image2-api", "compiled payload must keep the Image2 provider");
 assert(compiled.payload.operation === "image2image", "compiled payload must preserve operation");
 assert(compiled.payload.output.path.endsWith("/shots/S01/result.png"), "compiled payload must preserve output path");
+assert(compiled.payload.sourceStartFrameId === "real-provider-executor/project_1/batch_A/shots/S01/start.png", "compiled payload must carry source start frame id");
+assert(compiled.payload.referenceImageInputs.some((input) => input.role === "source_start_frame" && input.path.endsWith("/shots/S01/start.png")), "compiled payload must carry explicit source start visual input");
 assert(compiled.payload.executionPolicy.actionTimeConfirmationRequired === true, "compiled payload must require action-time confirmation");
 assert(compiled.payload.executionPolicy.budgetNoticeRequired === true, "compiled payload must require budget notice");
 assert(compiled.payload.executionPolicy.scopedSandboxOnly === true, "compiled payload must require scoped sandbox");
@@ -380,6 +395,26 @@ assert(actionReady.summary.fastOrVipAllowed === false, "ready action must forbid
 assert(actionReady.summary.textToVideoFallbackAllowed === false, "ready action must forbid text-to-video fallback");
 assert(actionReady.summary.outsideSandboxWriteAllowed === false, "ready action must forbid outside sandbox writes");
 assert(actionReady.summary.outputMayCompleteFromProviderSelfReport === false, "ready action must not complete from provider self-report");
+
+const missingVisualInputCompiled = compileImage2OneShotRealCallPayload({
+  request: {
+    ...oneShotActionInput().adapterRequest,
+    payload: {
+      ...oneShotActionInput().adapterRequest.payload,
+      referenceImageInputs: [],
+      sourceStartFrameId: "real-provider-executor/project_1/batch_A/shots/S01/start.png",
+    },
+  },
+  preview: oneShotActionInput().requestPreview,
+  actionConfirmationId: "confirm_S01_round4",
+  credentialRef: "user-authorized:image2:demo",
+  outputSandboxRoot: "real-provider-executor/project_1/batch_A",
+  manifestPath: "real-provider-executor/project_1/batch_A/manifest.json",
+  qaReportPath: "real-provider-executor/project_1/batch_A/qa/qa-report.json",
+  imageCount: 2,
+  budgetNotice: "This action may spend up to two Image2 images from the user's configured provider quota.",
+});
+assert(missingVisualInputCompiled.issues.includes("source_start_frame_visual_input_required"), "image2image one-shot without source visual input must not compile");
 
 const failedCall = buildRealProviderOneShotState(oneShotActionInput({
   providerReport: {
