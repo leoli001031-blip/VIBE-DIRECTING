@@ -8,6 +8,11 @@ export interface FreshRunArtifactFacts {
   fileModifiedAt?: string;
   sizeBytes?: number;
   outputSha256?: string;
+  mediaKind?: "image" | "video" | "audio" | "unknown";
+  mediaFormat?: "png" | "jpeg" | "mp4" | "wav" | "mp3" | "unknown";
+  mediaReadable?: boolean;
+  width?: number;
+  height?: number;
 }
 
 export interface FreshRunSidecarFacts {

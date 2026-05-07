@@ -29,6 +29,7 @@ export type TaskRunLifecycleEvent =
   | "block";
 
 export type RuntimeTruthLayerStatus = "preview_ready" | "blocked";
+export type ProviderObservationMode = "actual_provider_call_observed" | "mock_readiness_evidence" | "not_observed";
 
 export type SemanticQaGateKey = "identity" | "scene" | "style" | "story" | "neighbor" | "output";
 export type SemanticQaGateStatus = "pass" | "warn" | "fail" | "blocked" | "missing";
@@ -41,7 +42,17 @@ export type RuntimeTruthWatcherEventType =
   | "qa_paired";
 
 export interface WorkerLeaseFacts {
+  exists?: boolean;
+  sidecarKind?: "worker_provenance";
+  provenanceMode?: "actual_subagent_worker_lease_observed" | "mock_worker_lease" | "not_observed";
+  sidecarPath?: string;
+  sidecarModifiedAt?: string;
   leaseId?: string;
+  runId?: string;
+  taskRunId?: string;
+  taskPacketId?: string;
+  envelopeId?: string;
+  outputPath?: string;
   workerId?: string;
   subagentId?: string;
   threadId?: string;
@@ -59,7 +70,16 @@ export interface ProviderObservationReceiptV2Facts extends FreshRunSidecarFacts 
   runId?: string;
   generatedAt?: string;
   providerId?: string;
+  threadId?: string;
+  turnId?: string;
+  toolCallId?: string;
+  workerId?: string;
+  subagentId?: string;
+  providerObservationMode?: ProviderObservationMode;
   providerSelfReportedComplete?: boolean;
+  providerSelfReportCompletesTask?: boolean;
+  manualFileCopyDetected?: boolean;
+  fixtureReuseDetected?: boolean;
 }
 
 export interface SemanticQaSeverityCounts {
@@ -88,6 +108,7 @@ export interface RuntimeTruthWatcherEventFacts {
   artifactPath?: string;
   outputPath?: string;
   outputSha256?: string;
+  sourceKind?: string;
   sidecarKind?: "provider_observation" | "semantic_qa";
   sidecarPath?: string;
   notes?: string[];
@@ -137,6 +158,12 @@ export interface TaskRunLifecycleState {
 export interface WorkerLeaseState extends WorkerLeaseFacts {
   present: boolean;
   identityComplete: boolean;
+  bindingMatched: boolean;
+  provenanceModeActual: boolean;
+  sidecarPresent: boolean;
+  sidecarKindMatched: boolean;
+  sidecarIndependent: boolean;
+  sidecarModifiedAtFresh: boolean;
   timingComplete: boolean;
   notExpired: boolean;
   retryBudgetAvailable: boolean;
@@ -152,6 +179,13 @@ export interface ProviderObservationReceiptV2State extends ProviderObservationRe
   bindingMatched: boolean;
   hashPresent: boolean;
   hashMatched: boolean;
+  protocolBindingPresent: boolean;
+  protocolBindingMatched: boolean;
+  workerBindingPresent: boolean;
+  workerBindingMatched: boolean;
+  actualProviderCallObserved: boolean;
+  noManualFileCopy: boolean;
+  noFixtureReuse: boolean;
   generatedAtFresh: boolean;
   sidecarModifiedAtFresh: boolean;
   providerSelfReportRejected: boolean;
@@ -189,6 +223,8 @@ export interface RuntimeTruthWatcherEventLogState {
   hashRecorded: boolean;
   providerSidecarPaired: boolean;
   semanticQaPaired: boolean;
+  mockFixtureSourceFree: boolean;
+  actualWatcherSourceObserved: boolean;
   verified: boolean;
   blockers: string[];
   warnings: string[];
@@ -352,6 +388,18 @@ function applyLifecycleEvents(events: TaskRunLifecycleEvent[]): TaskRunLifecycle
 function buildWorkerLeaseState(input: BuildRuntimeTruthLayerInput): WorkerLeaseState {
   const lease = input.workerLease;
   const present = Boolean(lease);
+  const provenanceModeActual = lease?.provenanceMode === "actual_subagent_worker_lease_observed";
+  const sidecarPresent = lease?.exists === true && nonEmpty(lease?.sidecarPath);
+  const sidecarKindMatched = lease?.sidecarKind === "worker_provenance";
+  const sidecarIndependent = Boolean(
+    sidecarPresent &&
+      sidecarKindMatched &&
+      !pathsMatch(lease?.sidecarPath, input.providerObservation?.sidecarPath) &&
+      !pathsMatch(lease?.sidecarPath, input.semanticQa?.sidecarPath) &&
+      !pathsMatch(lease?.sidecarPath, input.expectedOutputPath) &&
+      !pathsMatch(lease?.sidecarPath, input.artifact.artifactPath),
+  );
+  const sidecarModifiedAtFresh = present && timestampIsFresh(lease?.sidecarModifiedAt, input.manifestGeneratedAt, input.allowedClockSkewMs || 1000);
   const identityComplete = Boolean(
     lease &&
       nonEmpty(lease.leaseId) &&
@@ -361,20 +409,44 @@ function buildWorkerLeaseState(input: BuildRuntimeTruthLayerInput): WorkerLeaseS
       nonEmpty(lease.turnId) &&
       nonEmpty(lease.toolCallId),
   );
+  const bindingIsMatched = Boolean(
+    lease &&
+      lease.runId === input.runId &&
+      lease.taskRunId === input.taskRunId &&
+      lease.taskPacketId === input.taskPacketId &&
+      lease.envelopeId === input.envelopeId &&
+      pathsMatch(lease.outputPath, input.expectedOutputPath),
+  );
   const timingComplete = Boolean(lease && nonEmpty(lease.leaseStartedAt) && nonEmpty(lease.leaseExpiresAt));
   const notExpired = Boolean(lease && timestampIsNotExpired(lease.leaseExpiresAt, input.generatedAt));
   const retryBudgetAvailable = Number(lease?.retryBudget ?? -1) >= 0;
   const resumptionConsistent = !lease?.resumed || lease.interrupted === true;
   const blockers = uniqueSorted([
     present ? "" : "runtime_truth_worker_lease_missing",
+    provenanceModeActual ? "" : "runtime_truth_worker_provenance_mode_not_actual",
+    sidecarPresent ? "" : "runtime_truth_worker_provenance_sidecar_missing",
+    sidecarKindMatched ? "" : "runtime_truth_worker_provenance_sidecar_kind_mismatch",
+    sidecarIndependent ? "" : "runtime_truth_worker_provenance_sidecar_not_independent",
+    sidecarModifiedAtFresh ? "" : "runtime_truth_worker_provenance_sidecar_stale",
     identityComplete ? "" : "runtime_truth_worker_provenance_incomplete",
+    bindingIsMatched ? "" : "runtime_truth_worker_lease_binding_mismatch",
     timingComplete ? "" : "runtime_truth_worker_lease_timing_incomplete",
     notExpired ? "" : "runtime_truth_worker_lease_expired",
     retryBudgetAvailable ? "" : "runtime_truth_worker_retry_budget_missing",
     resumptionConsistent ? "" : "runtime_truth_worker_resumed_without_interruption",
   ]);
   return {
+    exists: lease?.exists,
+    sidecarKind: lease?.sidecarKind,
+    provenanceMode: lease?.provenanceMode,
+    sidecarPath: lease?.sidecarPath,
+    sidecarModifiedAt: lease?.sidecarModifiedAt,
     leaseId: lease?.leaseId,
+    runId: lease?.runId,
+    taskRunId: lease?.taskRunId,
+    taskPacketId: lease?.taskPacketId,
+    envelopeId: lease?.envelopeId,
+    outputPath: lease?.outputPath,
     workerId: lease?.workerId,
     subagentId: lease?.subagentId,
     threadId: lease?.threadId,
@@ -388,6 +460,12 @@ function buildWorkerLeaseState(input: BuildRuntimeTruthLayerInput): WorkerLeaseS
     resumed: lease?.resumed,
     present,
     identityComplete,
+    bindingMatched: bindingIsMatched,
+    provenanceModeActual,
+    sidecarPresent,
+    sidecarKindMatched,
+    sidecarIndependent,
+    sidecarModifiedAtFresh,
     timingComplete,
     notExpired,
     retryBudgetAvailable,
@@ -408,15 +486,38 @@ function buildProviderObservationReceiptV2State(input: BuildRuntimeTruthLayerInp
   const matched = bindingMatched(input, observation);
   const hashPresent = nonEmpty(observation?.outputSha256);
   const hashMatched = Boolean(hashPresent && observation?.outputSha256 === input.artifact.outputSha256);
+  const protocolBindingPresent = Boolean(nonEmpty(observation?.threadId) && nonEmpty(observation?.turnId) && nonEmpty(observation?.toolCallId));
+  const protocolBindingMatched = Boolean(
+    protocolBindingPresent &&
+      observation?.threadId === input.workerLease?.threadId &&
+      observation?.turnId === input.workerLease?.turnId &&
+      observation?.toolCallId === input.workerLease?.toolCallId,
+  );
+  const workerBindingPresent = Boolean(nonEmpty(observation?.workerId) && nonEmpty(observation?.subagentId));
+  const workerBindingMatched = Boolean(
+    workerBindingPresent &&
+      observation?.workerId === input.workerLease?.workerId &&
+      observation?.subagentId === input.workerLease?.subagentId,
+  );
+  const actualProviderCallObserved = observation?.providerObservationMode === "actual_provider_call_observed";
+  const noManualFileCopy = observation?.manualFileCopyDetected !== true;
+  const noFixtureReuse = observation?.fixtureReuseDetected !== true;
   const generatedAtFresh = present && timestampIsFresh(observation?.generatedAt, input.manifestGeneratedAt, input.allowedClockSkewMs || 1000);
   const sidecarModifiedAtFresh = present && timestampIsFresh(observation?.sidecarModifiedAt, input.manifestGeneratedAt, input.allowedClockSkewMs || 1000);
-  const providerSelfReportRejected = observation?.providerSelfReportedComplete !== true;
+  const providerSelfReportRejected = observation?.providerSelfReportedComplete !== true && observation?.providerSelfReportCompletesTask !== true;
   const blockers = uniqueSorted([
     present ? "" : "runtime_truth_provider_observation_missing",
     runMatched ? "" : "runtime_truth_provider_observation_run_mismatch",
     matched ? "" : "runtime_truth_provider_observation_binding_mismatch",
     hashPresent ? "" : "runtime_truth_provider_observation_hash_missing",
     hashMatched ? "" : "runtime_truth_provider_observation_hash_mismatch",
+    protocolBindingPresent ? "" : "runtime_truth_provider_observation_protocol_binding_missing",
+    protocolBindingMatched ? "" : "runtime_truth_provider_observation_protocol_binding_mismatch",
+    workerBindingPresent ? "" : "runtime_truth_provider_observation_worker_binding_missing",
+    workerBindingMatched ? "" : "runtime_truth_provider_observation_worker_binding_mismatch",
+    actualProviderCallObserved ? "" : "runtime_truth_provider_observation_mode_not_actual",
+    noManualFileCopy ? "" : "runtime_truth_provider_observation_manual_file_copy_detected",
+    noFixtureReuse ? "" : "runtime_truth_provider_observation_fixture_reuse_detected",
     generatedAtFresh ? "" : "runtime_truth_provider_observation_generated_at_stale",
     sidecarModifiedAtFresh ? "" : "runtime_truth_provider_observation_sidecar_stale",
     providerSelfReportRejected ? "" : "runtime_truth_provider_self_report_cannot_complete",
@@ -429,6 +530,13 @@ function buildProviderObservationReceiptV2State(input: BuildRuntimeTruthLayerInp
     bindingMatched: matched,
     hashPresent,
     hashMatched,
+    protocolBindingPresent,
+    protocolBindingMatched,
+    workerBindingPresent,
+    workerBindingMatched,
+    actualProviderCallObserved,
+    noManualFileCopy,
+    noFixtureReuse,
     generatedAtFresh,
     sidecarModifiedAtFresh,
     providerSelfReportRejected,
@@ -548,6 +656,8 @@ function buildRuntimeTruthWatcherEventLog(input: BuildRuntimeTruthLayerInput): R
   const semanticQaPaired = events.some(
     (event) => event.eventType === "qa_paired" && event.sidecarKind === "semantic_qa" && pathsMatch(event.sidecarPath, input.semanticQa?.sidecarPath),
   );
+  const mockFixtureSourceFree = events.every((event) => event.sourceKind !== "mock_fixture");
+  const actualWatcherSourceObserved = events.length > 0 && events.every((event) => event.sourceKind === "app_server_fs_changed");
   const blockers = uniqueSorted([
     appendOnly ? "" : "runtime_truth_watcher_log_not_append_only",
     bindingIsMatched ? "" : "runtime_truth_watcher_log_binding_mismatch",
@@ -556,6 +666,8 @@ function buildRuntimeTruthWatcherEventLog(input: BuildRuntimeTruthLayerInput): R
     hashRecorded ? "" : "runtime_truth_watcher_hash_not_recorded",
     providerSidecarPaired ? "" : "runtime_truth_watcher_provider_sidecar_not_paired",
     semanticQaPaired ? "" : "runtime_truth_watcher_semantic_qa_not_paired",
+    mockFixtureSourceFree ? "" : "runtime_truth_watcher_mock_fixture_source_detected",
+    actualWatcherSourceObserved ? "" : "runtime_truth_watcher_source_not_actual",
   ]);
   return {
     requiredEventTypes: requiredWatcherEventTypes,
@@ -567,6 +679,8 @@ function buildRuntimeTruthWatcherEventLog(input: BuildRuntimeTruthLayerInput): R
     hashRecorded,
     providerSidecarPaired,
     semanticQaPaired,
+    mockFixtureSourceFree,
+    actualWatcherSourceObserved,
     verified: blockers.length === 0,
     blockers,
     warnings: [],
@@ -675,6 +789,9 @@ export function buildRuntimeTruthLayer(input: BuildRuntimeTruthLayerInput): Runt
     input.artifact.exists === true ? "" : "runtime_truth_output_missing",
     timestampIsFresh(input.artifact.fileModifiedAt, input.manifestGeneratedAt, input.allowedClockSkewMs || 1000) ? "" : "runtime_truth_output_stale",
     input.artifact.outputSha256 ? "" : "runtime_truth_output_hash_missing",
+    input.artifact.mediaKind === "image" ? "" : "runtime_truth_output_not_image",
+    input.artifact.mediaReadable === true ? "" : "runtime_truth_output_image_unreadable",
+    Number(input.artifact.width || 0) > 0 && Number(input.artifact.height || 0) > 0 ? "" : "runtime_truth_output_image_dimensions_missing",
     ...providerObservation.blockers,
     ...semanticQa.blockers,
     ...watcherEventLog.blockers,

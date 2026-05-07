@@ -56,6 +56,8 @@
     "image-reference-delivery-receipt:test": "node scripts/image-reference-delivery-receipt-test.mjs",
     "fresh-run-contract:test": "node scripts/fresh-run-contract-test.mjs",
     "runtime-truth-layer:test": "node scripts/runtime-truth-layer-test.mjs",
+    "runtime-truth-integration:test": "node scripts/runtime-truth-integration-test.mjs",
+    "real-image2-batch-prepare-check:test": "node scripts/real-image2-batch-prepare-check-test.mjs",
     "real-demo-e2e:test": "node scripts/real-demo-e2e-test.mjs",
     "real-demo-e2e-001:prepare": "node scripts/real-demo-e2e-001-prepare.mjs",
     "real-demo-e2e-001:verify": "node scripts/real-demo-e2e-001-verify.mjs",

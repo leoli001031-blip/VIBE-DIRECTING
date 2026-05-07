@@ -72,6 +72,11 @@ export async function loadCore() {
     providerPolicy: await import(pathToFileURL(path.join(tmpDir, "providerPolicy.mjs")).href),
     providerHandoffStatus: await import(pathToFileURL(path.join(tmpDir, "providerHandoffStatus.mjs")).href),
     preRealTestClosure: await import(pathToFileURL(path.join(tmpDir, "preRealTestClosure.mjs")).href),
+    runtimeTruthLayer: await import(pathToFileURL(path.join(tmpDir, "runtimeTruthLayer.mjs")).href),
+    runtimeTruthIngest: await import(pathToFileURL(path.join(tmpDir, "runtimeTruthIngest.mjs")).href),
+    runtimeTruthReceipts: await import(pathToFileURL(path.join(tmpDir, "runtimeTruthReceipts.mjs")).href),
+    projectStore: await import(pathToFileURL(path.join(tmpDir, "projectStore.mjs")).href),
+    projectVibeIo: await import(pathToFileURL(path.join(tmpDir, "projectVibeIo.mjs")).href),
   };
 }
 

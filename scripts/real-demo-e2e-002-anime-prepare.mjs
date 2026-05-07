@@ -9,6 +9,7 @@ const packetsRoot = path.join(runRoot, "task_packets");
 const envelopesRoot = path.join(runRoot, "subagent_envelopes");
 const promptsRoot = path.join(runRoot, "prompt_requests");
 const providerObservationRoot = path.join(runRoot, "provider_observations");
+const workerProvenanceRoot = path.join(runRoot, "worker_provenance");
 const semanticQaRoot = path.join(runRoot, "semantic_qa");
 const outputRoot = path.join(runRoot, "outputs/shots");
 const reportsRoot = path.join(runRoot, "reports");
@@ -50,6 +51,7 @@ for (const dir of [
   envelopesRoot,
   promptsRoot,
   providerObservationRoot,
+  workerProvenanceRoot,
   semanticQaRoot,
   outputRoot,
   reportsRoot,
@@ -619,10 +621,22 @@ function observationTemplate(plan) {
     provider: "openai_image2_via_codex_imagegen_subagent",
     subagentId: "FILL_BY_IMAGEGEN_SUBAGENT",
     workerId: "imagegen_subagent_worker",
+    threadId: "FILL_BY_IMAGEGEN_SUBAGENT_THREAD_ID",
+    turnId: "FILL_BY_IMAGEGEN_SUBAGENT_TURN_ID",
+    toolCallId: "FILL_BY_IMAGEGEN_SUBAGENT_TOOL_CALL_ID",
+    leaseId: "FILL_BY_IMAGEGEN_SUBAGENT_LEASE_ID",
+    leaseStartedAt: "FILL_BY_IMAGEGEN_SUBAGENT_LEASE_STARTED_AT",
+    leaseExpiresAt: "FILL_BY_IMAGEGEN_SUBAGENT_LEASE_EXPIRES_AT",
+    retryBudget: 0,
+    resumable: true,
+    interrupted: false,
+    resumed: false,
+    runId,
     taskRunId: plan.taskRunId,
     taskPacketId: plan.taskPacketId,
     envelopeId: plan.envelopeId,
     outputPath: plan.expectedOutputPath,
+    outputSha256: "FILL_BY_IMAGEGEN_SUBAGENT_OUTPUT_SHA256",
     generatedAt: "FILL_BY_IMAGEGEN_SUBAGENT_ISO_TIME",
     providerSelfReportCompletesTask: false,
     manualFileCopyDetected: false,
@@ -630,6 +644,35 @@ function observationTemplate(plan) {
     notes: [
       "This sidecar must be written only by the imagegen subagent after it creates the anime image at outputPath.",
       "The image path plus this sidecar are evidence only; verify still requires watcher, manifest, QA, and preview gates.",
+    ],
+  };
+}
+
+function workerProvenanceTemplate(plan) {
+  return {
+    schemaVersion: "worker_provenance_real_demo_e2e_002_anime_pressure",
+    sidecarKind: "worker_provenance",
+    provenanceMode: "actual_subagent_worker_lease_observed",
+    runId,
+    leaseId: "FILL_BY_IMAGEGEN_SUBAGENT_LEASE_ID",
+    workerId: "imagegen_subagent_worker",
+    subagentId: "FILL_BY_IMAGEGEN_SUBAGENT",
+    threadId: "FILL_BY_IMAGEGEN_SUBAGENT_THREAD_ID",
+    turnId: "FILL_BY_IMAGEGEN_SUBAGENT_TURN_ID",
+    toolCallId: "FILL_BY_IMAGEGEN_SUBAGENT_TOOL_CALL_ID",
+    taskRunId: plan.taskRunId,
+    taskPacketId: plan.taskPacketId,
+    envelopeId: plan.envelopeId,
+    outputPath: plan.expectedOutputPath,
+    leaseStartedAt: "FILL_BY_IMAGEGEN_SUBAGENT_LEASE_STARTED_AT",
+    leaseExpiresAt: "FILL_BY_IMAGEGEN_SUBAGENT_LEASE_EXPIRES_AT",
+    retryBudget: 0,
+    resumable: true,
+    interrupted: false,
+    resumed: false,
+    notes: [
+      "This worker provenance sidecar must be written independently from the provider observation sidecar.",
+      "Runtime Truth cross-checks workerId, subagentId, threadId, turnId, and toolCallId against the provider observation.",
     ],
   };
 }
@@ -707,6 +750,7 @@ function buildPlan(shot) {
   const safeShot = toId(shot.id);
   const outputPath = repoPath(path.join(outputRoot, shot.id, "start.png"));
   const providerObservationPath = repoPath(path.join(providerObservationRoot, `${shot.id}_start_provider_observation.json`));
+  const workerProvenancePath = repoPath(path.join(workerProvenanceRoot, `${shot.id}_start_worker_provenance.json`));
   const semanticQaPath = repoPath(path.join(semanticQaRoot, `${shot.id}_start_semantic_qa.json`));
   const taskPacketId = `task_packet_${safeShot}_anime_start_frame_real_demo_002`;
   const envelopeId = `subagent_envelope_${safeShot}_anime_start_frame_real_demo_002`;
@@ -719,6 +763,7 @@ function buildPlan(shot) {
     taskPacketId,
     envelopeId,
     workerProvenanceId,
+    workerProvenancePath,
     expectedOutputPath: outputPath,
     providerObservationPath,
     semanticQaPath,
@@ -788,17 +833,23 @@ for (const plan of realImagePlans) {
     expectedOutputContract: {
       outputPath: plan.expectedOutputPath,
       providerObservationPath: plan.providerObservationPath,
+      workerProvenancePath: plan.workerProvenancePath,
       semanticQaPath: plan.semanticQaPath,
       format: "png_or_jpeg_image",
       aspectRatio: "16:9",
       requiredFields: [
         "actual image at expected output path",
         "provider observation sidecar",
+        "worker provenance sidecar independent from provider observation",
         "semantic QA sidecar",
         "taskRunId",
         "taskPacketId",
         "envelopeId",
         "subagentId",
+        "workerId",
+        "threadId",
+        "turnId",
+        "toolCallId",
       ],
     },
     qaChecklist: [
@@ -815,6 +866,7 @@ for (const plan of realImagePlans) {
 
   const prompt = buildImagePrompt(shot);
   const observation = observationTemplate(plan);
+  const workerProvenance = workerProvenanceTemplate(plan);
   const semanticQa = semanticQaTemplate(plan, shot, scene, activeCharacters);
   writeJson(semanticQaPath, semanticQa);
   const packet = `# Real Demo E2E 002 Anime Pressure - ${shot.id} Start Frame Packet
@@ -835,6 +887,7 @@ Do not use Seedance, Jimeng, Fast model, VIP channel, text-to-video, or any vide
 ## Expected Output
 - Image path: \`${plan.expectedOutputPath}\`
 - Provider observation sidecar: \`${plan.providerObservationPath}\`
+- Worker provenance sidecar: \`${plan.workerProvenancePath}\`
 - Semantic QA sidecar: \`${plan.semanticQaPath}\`
 
 ## Locked Context
@@ -864,6 +917,13 @@ After generating the image, write this JSON to \`${plan.providerObservationPath}
 
 \`\`\`json
 ${JSON.stringify(observation, null, 2)}
+\`\`\`
+
+## Required Worker Provenance Template
+Also write this independent worker provenance JSON to \`${plan.workerProvenancePath}\`.
+
+\`\`\`json
+${JSON.stringify(workerProvenance, null, 2)}
 \`\`\`
 
 ## Required Semantic QA Template

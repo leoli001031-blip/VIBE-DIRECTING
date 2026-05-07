@@ -45,6 +45,7 @@ import { buildRealProviderExecutorState } from "./realProviderExecutor";
 import { buildRealProviderOneShotTestState } from "./realProviderOneShotTest";
 import { buildProviderHandoffStatus } from "./providerHandoffStatus";
 import { buildLocalOrchestratorState, type LocalOrchestratorTaskPacket } from "./localOrchestrator";
+import { buildRuntimeTruthLayer, type BuildRuntimeTruthLayerInput } from "./runtimeTruthLayer";
 import type { SubagentRuntimeGateReceipt } from "./subagentRuntimeGate";
 import type { SubagentWorkerRuntimePlan } from "./subagentWorkerRuntime";
 import {
@@ -87,6 +88,8 @@ export interface ProjectRuntimeStateBuildOptions {
   realProviderOneShotTest?: ProjectRuntimeState["realProviderOneShotTest"];
   realProviderTransport?: ProjectRuntimeState["realProviderTransport"];
   providerHandoffStatus?: ProjectRuntimeState["providerHandoffStatus"];
+  runtimeTruthLayer?: ProjectRuntimeState["runtimeTruthLayer"];
+  runtimeTruthLayerInput?: BuildRuntimeTruthLayerInput;
   realTestMode?: ExecutionLedgerMode;
   realTestBatchId?: string;
   realTestShotIds?: string[];
@@ -722,6 +725,7 @@ export function buildProjectRuntimeState(
       reports: taskViews.map((task) => task.manifestMatch),
     },
   });
+  const runtimeTruthLayer = options.runtimeTruthLayer || (options.runtimeTruthLayerInput ? buildRuntimeTruthLayer(options.runtimeTruthLayerInput) : undefined);
   const exportWorker = buildExportWorkerState({
     source: previewExport,
     exportRoot: "exports/export-worker",
@@ -814,6 +818,7 @@ export function buildProjectRuntimeState(
     realProviderOneShotTest,
     realProviderTransport,
     providerHandoffStatus,
+    runtimeTruthLayer,
     localOrchestrator,
     generationHarness,
     filesystemWatcherHarness,

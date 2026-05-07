@@ -61,13 +61,28 @@ function artifact(overrides = {}) {
     fileModifiedAt: freshAt,
     sizeBytes: 4096,
     outputSha256,
+    mediaKind: "image",
+    mediaFormat: "png",
+    mediaReadable: true,
+    width: 1920,
+    height: 1080,
     ...overrides,
   };
 }
 
 function workerLease(overrides = {}) {
   return {
+    exists: true,
+    sidecarKind: "worker_provenance",
+    provenanceMode: "actual_subagent_worker_lease_observed",
+    sidecarPath: "real-test-sandbox/runtime-truth-layer/worker_provenance/S01_start_worker_provenance.json",
+    sidecarModifiedAt: freshAt,
     leaseId: "lease_runtime_truth_S01",
+    runId,
+    taskRunId,
+    taskPacketId,
+    envelopeId,
+    outputPath: expectedOutputPath,
     workerId: "worker_codex_cli_mock",
     subagentId: "subagent_image_worker_mock",
     threadId: "thread_runtime_truth",
@@ -96,7 +111,16 @@ function providerObservation(overrides = {}) {
     outputPath: expectedOutputPath,
     outputSha256,
     providerId: "image2_mock",
+    providerObservationMode: "actual_provider_call_observed",
+    workerId: "worker_codex_cli_mock",
+    subagentId: "subagent_image_worker_mock",
     providerSelfReportedComplete: false,
+    providerSelfReportCompletesTask: false,
+    manualFileCopyDetected: false,
+    fixtureReuseDetected: false,
+    threadId: "thread_runtime_truth",
+    turnId: "turn_runtime_truth_001",
+    toolCallId: "tool_call_image2_mock_001",
     ...overrides,
   };
 }
@@ -146,6 +170,7 @@ function watcherEvents(overrides = {}) {
       envelopeId,
       artifactPath: expectedOutputPath,
       outputPath: expectedOutputPath,
+      sourceKind: "app_server_fs_changed",
     },
     {
       eventId: "rtl_watcher_002_file_stable",
@@ -158,6 +183,7 @@ function watcherEvents(overrides = {}) {
       envelopeId,
       artifactPath: expectedOutputPath,
       outputPath: expectedOutputPath,
+      sourceKind: "app_server_fs_changed",
     },
     {
       eventId: "rtl_watcher_003_hash_recorded",
@@ -171,6 +197,7 @@ function watcherEvents(overrides = {}) {
       artifactPath: expectedOutputPath,
       outputPath: expectedOutputPath,
       outputSha256,
+      sourceKind: "app_server_fs_changed",
     },
     {
       eventId: "rtl_watcher_004_provider_sidecar_paired",
@@ -184,6 +211,7 @@ function watcherEvents(overrides = {}) {
       artifactPath: expectedOutputPath,
       outputPath: expectedOutputPath,
       outputSha256,
+      sourceKind: "app_server_fs_changed",
       sidecarKind: "provider_observation",
       sidecarPath: providerPath,
     },
@@ -199,6 +227,7 @@ function watcherEvents(overrides = {}) {
       artifactPath: expectedOutputPath,
       outputPath: expectedOutputPath,
       outputSha256,
+      sourceKind: "app_server_fs_changed",
       sidecarKind: "semantic_qa",
       sidecarPath: qaPath,
     },
@@ -240,7 +269,13 @@ assert(ready.status === "preview_ready", `ready case should pass: ${ready.blocke
 assert(ready.lifecycle.currentStatus === "preview_ready", "ready lifecycle should reach preview_ready");
 assert(ready.lifecycle.reachedStatuses.includes("semantic_qa_pending"), "ready lifecycle should pass through semantic_qa_pending");
 assert(ready.workerLease.verified === true, "ready lease should be verified");
+assert(ready.workerLease.provenanceModeActual === true, "ready lease should be actual worker provenance");
+assert(ready.workerLease.sidecarIndependent === true, "ready lease sidecar should be independent");
 assert(ready.providerObservation.verified === true, "ready provider observation should be verified");
+assert(ready.providerObservation.protocolBindingPresent === true, "ready provider observation should bind thread/turn/toolCall");
+assert(ready.providerObservation.protocolBindingMatched === true, "ready provider observation protocol should match the worker lease");
+assert(ready.providerObservation.workerBindingPresent === true, "ready provider observation should bind worker/subagent");
+assert(ready.providerObservation.workerBindingMatched === true, "ready provider observation worker/subagent should match the worker lease");
 assert(ready.semanticQa.verified === true, "ready semantic QA should be verified");
 assert(ready.watcherEventLog.verified === true, "ready watcher log should be verified");
 assert(ready.freshRunContract.status === "ready", "ready fresh run contract should be ready");
@@ -254,6 +289,19 @@ const oldOutput = buildRuntimeTruthLayer(input({
   artifact: artifact({ fileModifiedAt: oldAt }),
 }));
 expectBlocked(oldOutput, "runtime_truth_output_stale", "old output");
+
+const promptOnlyOutput = buildRuntimeTruthLayer(input({
+  artifact: artifact({
+    mediaKind: "unknown",
+    mediaFormat: "unknown",
+    mediaReadable: false,
+    width: 0,
+    height: 0,
+  }),
+}));
+expectBlocked(promptOnlyOutput, "runtime_truth_output_not_image", "prompt-only output masquerading as image");
+expectBlocked(promptOnlyOutput, "runtime_truth_output_image_unreadable", "unreadable image output");
+expectBlocked(promptOnlyOutput, "runtime_truth_output_image_dimensions_missing", "missing image dimensions");
 
 const oldProviderSidecar = buildRuntimeTruthLayer(input({
   providerObservation: providerObservation({
@@ -287,10 +335,88 @@ const expiredLease = buildRuntimeTruthLayer(input({
 }));
 expectBlocked(expiredLease, "runtime_truth_worker_lease_expired", "expired worker lease");
 
+const mismatchedWorkerLeaseBinding = buildRuntimeTruthLayer(input({
+  workerLease: workerLease({ taskRunId: "task_run_from_another_run" }),
+}));
+expectBlocked(mismatchedWorkerLeaseBinding, "runtime_truth_worker_lease_binding_mismatch", "worker lease binding mismatch");
+
+const missingWorkerSidecar = buildRuntimeTruthLayer(input({
+  workerLease: workerLease({ sidecarPath: "" }),
+}));
+expectBlocked(missingWorkerSidecar, "runtime_truth_worker_provenance_sidecar_missing", "missing worker provenance sidecar");
+
+const providerSourcedWorkerSidecar = buildRuntimeTruthLayer(input({
+  workerLease: workerLease({ sidecarPath: providerSidecarPath }),
+}));
+expectBlocked(providerSourcedWorkerSidecar, "runtime_truth_worker_provenance_sidecar_not_independent", "provider-sourced worker provenance sidecar");
+
+const outputSourcedWorkerSidecar = buildRuntimeTruthLayer(input({
+  workerLease: workerLease({ sidecarPath: expectedOutputPath }),
+}));
+expectBlocked(outputSourcedWorkerSidecar, "runtime_truth_worker_provenance_sidecar_not_independent", "output-sourced worker provenance sidecar");
+
+const mismatchedWorkerSidecarKind = buildRuntimeTruthLayer(input({
+  workerLease: workerLease({ sidecarKind: undefined }),
+}));
+expectBlocked(mismatchedWorkerSidecarKind, "runtime_truth_worker_provenance_sidecar_kind_mismatch", "worker provenance sidecar kind mismatch");
+
+const verifyScanWatcher = buildRuntimeTruthLayer(input({
+  watcherEvents: watcherEvents().map((event) => ({ ...event, sourceKind: "verify_scan" })),
+}));
+expectBlocked(verifyScanWatcher, "runtime_truth_watcher_source_not_actual", "verify scan watcher source");
+
 const providerSelfReport = buildRuntimeTruthLayer(input({
   providerObservation: providerObservation({ providerSelfReportedComplete: true }),
 }));
 expectBlocked(providerSelfReport, "runtime_truth_provider_self_report_cannot_complete", "provider self-report completion");
+
+const providerSelfCompletesTask = buildRuntimeTruthLayer(input({
+  providerObservation: providerObservation({ providerSelfReportCompletesTask: true }),
+}));
+expectBlocked(providerSelfCompletesTask, "runtime_truth_provider_self_report_cannot_complete", "provider self-report completion alias");
+
+const missingProviderProtocol = buildRuntimeTruthLayer(input({
+  providerObservation: providerObservation({
+    threadId: "",
+  }),
+}));
+expectBlocked(missingProviderProtocol, "runtime_truth_provider_observation_protocol_binding_missing", "provider observation missing protocol binding");
+
+const mismatchedProviderProtocol = buildRuntimeTruthLayer(input({
+  providerObservation: providerObservation({
+    toolCallId: "tool_call_from_another_run",
+  }),
+}));
+expectBlocked(mismatchedProviderProtocol, "runtime_truth_provider_observation_protocol_binding_mismatch", "provider observation protocol mismatch");
+
+const missingProviderWorkerBinding = buildRuntimeTruthLayer(input({
+  providerObservation: providerObservation({
+    workerId: "",
+  }),
+}));
+expectBlocked(missingProviderWorkerBinding, "runtime_truth_provider_observation_worker_binding_missing", "provider observation missing worker binding");
+
+const mismatchedProviderWorkerBinding = buildRuntimeTruthLayer(input({
+  providerObservation: providerObservation({
+    subagentId: "subagent_from_another_run",
+  }),
+}));
+expectBlocked(mismatchedProviderWorkerBinding, "runtime_truth_provider_observation_worker_binding_mismatch", "provider observation worker mismatch");
+
+const mockProviderObservation = buildRuntimeTruthLayer(input({
+  providerObservation: providerObservation({ providerObservationMode: "mock_readiness_evidence" }),
+}));
+expectBlocked(mockProviderObservation, "runtime_truth_provider_observation_mode_not_actual", "mock provider observation mode");
+
+const manualFileCopyProviderObservation = buildRuntimeTruthLayer(input({
+  providerObservation: providerObservation({ manualFileCopyDetected: true }),
+}));
+expectBlocked(manualFileCopyProviderObservation, "runtime_truth_provider_observation_manual_file_copy_detected", "manual file copy provider observation");
+
+const fixtureReuseProviderObservation = buildRuntimeTruthLayer(input({
+  providerObservation: providerObservation({ fixtureReuseDetected: true }),
+}));
+expectBlocked(fixtureReuseProviderObservation, "runtime_truth_provider_observation_fixture_reuse_detected", "fixture reuse provider observation");
 
 const incompleteQaGate = buildRuntimeTruthLayer(input({
   semanticQa: semanticQa({
@@ -322,6 +448,11 @@ const nonAppendOnlyWatcher = buildRuntimeTruthLayer(input({
   )),
 }));
 expectBlocked(nonAppendOnlyWatcher, "runtime_truth_watcher_log_not_append_only", "non append-only watcher log");
+
+const mockFixtureWatcher = buildRuntimeTruthLayer(input({
+  watcherEvents: watcherEvents().map((event) => ({ ...event, sourceKind: "mock_fixture" })),
+}));
+expectBlocked(mockFixtureWatcher, "runtime_truth_watcher_mock_fixture_source_detected", "mock fixture watcher source");
 
 const freshRunBridge = buildRuntimeTruthLayer(input({
   semanticQa: semanticQa({ reviewedOutputSha256: "sha256:wrong-output" }),
