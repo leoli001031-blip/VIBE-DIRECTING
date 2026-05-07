@@ -388,6 +388,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "FreshRunContractState",
   },
   {
+    fileName: "runtime_truth_layer.schema.json",
+    id: "https://vibecore.local/schemas/runtime_truth_layer.schema.json",
+    version: schemaVersion,
+    purpose: "Pure Runtime Truth Layer contract joining TaskRun lifecycle, worker/subagent provenance, hash-bound provider observations, hash-bound semantic QA, and append-only watcher events before preview readiness.",
+    typeName: "RuntimeTruthLayerState",
+  },
+  {
     fileName: "image_keyframe_runtime.schema.json",
     id: "https://vibecore.local/schemas/image_keyframe_runtime.schema.json",
     version: schemaVersion,

@@ -252,6 +252,7 @@
     "realProviderPilot": { "$ref": "real_provider_pilot.schema.json" },
     "realProviderExecutor": { "$ref": "real_provider_executor.schema.json" },
     "realProviderOneShotTest": { "$ref": "real_provider_one_shot_test.schema.json" },
+    "runtimeTruthLayer": { "$ref": "runtime_truth_layer.schema.json" },
     "localOrchestrator": { "$ref": "local_orchestrator.schema.json" },
     "generationHarness": { "$ref": "generation_harness.schema.json" },
     "filesystemWatcherHarness": { "$ref": "filesystem_watcher_harness.schema.json" },

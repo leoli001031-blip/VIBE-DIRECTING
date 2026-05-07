@@ -24,6 +24,7 @@ import type { RealProviderOneShotTestState } from "./realProviderOneShotTest";
 import type { ImageReferenceDeliveryReceiptState } from "./imageReferenceDeliveryReceipt";
 import type { ImageReferenceTransportState } from "./imageReferenceTransport";
 import type { ProviderHandoffStatusState } from "./providerHandoffStatus";
+import type { RuntimeTruthLayerState } from "./runtimeTruthLayer";
 import type {
   RealProviderTransportPlan,
   RealProviderTransportReceipt,
@@ -231,6 +232,7 @@ export interface ProjectRuntimeState {
     result?: RealProviderTransportResult;
   };
   providerHandoffStatus: ProviderHandoffStatusState;
+  runtimeTruthLayer?: RuntimeTruthLayerState;
   localOrchestrator: LocalOrchestratorState;
   generationHarness: GenerationHarnessState;
   filesystemWatcherHarness: FilesystemWatcherHarnessState;

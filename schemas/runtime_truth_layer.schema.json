@@ -1,0 +1,303 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/runtime_truth_layer.schema.json",
+  "title": "RuntimeTruthLayerState",
+  "description": "Pure software-layer runtime truth contract for TaskRun lifecycle, worker/subagent provenance, provider observation receipts, semantic QA receipts, and append-only watcher events. It does not call providers, launch app-server, spawn workers, start daemons, mutate files, generate images, or generate videos.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "phase",
+    "status",
+    "runId",
+    "manifestGeneratedAt",
+    "taskRunId",
+    "taskPacketId",
+    "envelopeId",
+    "expectedOutputPath",
+    "lifecycle",
+    "workerLease",
+    "providerObservation",
+    "semanticQa",
+    "watcherEventLog",
+    "freshRunContract",
+    "verification",
+    "blockers",
+    "warnings",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "phase": { "const": "runtime_truth_layer" },
+    "status": { "type": "string", "enum": ["preview_ready", "blocked"] },
+    "runId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "manifestGeneratedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "taskRunId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "shotId": { "type": "string" },
+    "taskPacketId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "envelopeId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "expectedOutputPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "lifecycle": { "$ref": "#/$defs/lifecycle" },
+    "workerLease": { "$ref": "#/$defs/workerLease" },
+    "providerObservation": { "$ref": "#/$defs/providerObservation" },
+    "semanticQa": { "$ref": "#/$defs/semanticQa" },
+    "watcherEventLog": { "$ref": "#/$defs/watcherEventLog" },
+    "freshRunContract": { "$ref": "fresh_run_contract.schema.json" },
+    "verification": { "$ref": "#/$defs/verification" },
+    "blockers": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "warnings": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "lifecycleStatus": {
+      "type": "string",
+      "enum": [
+        "prepared",
+        "leased",
+        "running",
+        "output_detected",
+        "provider_observed",
+        "semantic_qa_pending",
+        "semantic_qa_complete",
+        "preview_ready",
+        "blocked"
+      ]
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["currentStatus", "reachedStatuses", "transitions", "binding", "timestamps", "blockers", "warnings"],
+      "properties": {
+        "currentStatus": { "$ref": "#/$defs/lifecycleStatus" },
+        "reachedStatuses": { "type": "array", "items": { "$ref": "#/$defs/lifecycleStatus" } },
+        "transitions": { "type": "array", "items": { "type": "object" } },
+        "binding": { "type": "object" },
+        "timestamps": { "type": "object" },
+        "blockers": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "workerLease": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "present",
+        "identityComplete",
+        "timingComplete",
+        "notExpired",
+        "retryBudgetAvailable",
+        "resumptionConsistent",
+        "verified",
+        "blockers",
+        "warnings"
+      ],
+      "properties": {
+        "leaseId": { "type": "string" },
+        "workerId": { "type": "string" },
+        "subagentId": { "type": "string" },
+        "threadId": { "type": "string" },
+        "turnId": { "type": "string" },
+        "toolCallId": { "type": "string" },
+        "leaseStartedAt": { "type": "string" },
+        "leaseExpiresAt": { "type": "string" },
+        "retryBudget": { "type": "integer", "minimum": 0 },
+        "resumable": { "type": "boolean" },
+        "interrupted": { "type": "boolean" },
+        "resumed": { "type": "boolean" },
+        "present": { "type": "boolean" },
+        "identityComplete": { "type": "boolean" },
+        "timingComplete": { "type": "boolean" },
+        "notExpired": { "type": "boolean" },
+        "retryBudgetAvailable": { "type": "boolean" },
+        "resumptionConsistent": { "type": "boolean" },
+        "verified": { "type": "boolean" },
+        "blockers": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "providerObservation": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "exists",
+        "present",
+        "runMatched",
+        "bindingMatched",
+        "hashPresent",
+        "hashMatched",
+        "generatedAtFresh",
+        "sidecarModifiedAtFresh",
+        "providerSelfReportRejected",
+        "verified",
+        "blockers",
+        "warnings"
+      ],
+      "properties": {
+        "exists": { "type": "boolean" },
+        "present": { "type": "boolean" },
+        "runMatched": { "type": "boolean" },
+        "bindingMatched": { "type": "boolean" },
+        "hashPresent": { "type": "boolean" },
+        "hashMatched": { "type": "boolean" },
+        "generatedAtFresh": { "type": "boolean" },
+        "sidecarModifiedAtFresh": { "type": "boolean" },
+        "providerSelfReportRejected": { "type": "boolean" },
+        "verified": { "type": "boolean" },
+        "blockers": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "semanticQa": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "exists",
+        "present",
+        "runMatched",
+        "bindingMatched",
+        "hashPresent",
+        "hashMatched",
+        "reviewedAtFresh",
+        "sidecarModifiedAtFresh",
+        "gates",
+        "gatesComplete",
+        "gatesPassable",
+        "severityCounts",
+        "noP0",
+        "noP1",
+        "verified",
+        "blockers",
+        "warnings"
+      ],
+      "properties": {
+        "exists": { "type": "boolean" },
+        "present": { "type": "boolean" },
+        "runMatched": { "type": "boolean" },
+        "bindingMatched": { "type": "boolean" },
+        "hashPresent": { "type": "boolean" },
+        "hashMatched": { "type": "boolean" },
+        "reviewedAtFresh": { "type": "boolean" },
+        "sidecarModifiedAtFresh": { "type": "boolean" },
+        "gates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["identity", "scene", "style", "story", "neighbor", "output"],
+          "properties": {
+            "identity": { "$ref": "#/$defs/gateStatus" },
+            "scene": { "$ref": "#/$defs/gateStatus" },
+            "style": { "$ref": "#/$defs/gateStatus" },
+            "story": { "$ref": "#/$defs/gateStatus" },
+            "neighbor": { "$ref": "#/$defs/gateStatus" },
+            "output": { "$ref": "#/$defs/gateStatus" }
+          }
+        },
+        "gatesComplete": { "type": "boolean" },
+        "gatesPassable": { "type": "boolean" },
+        "severityCounts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["p0", "p1", "p2"],
+          "properties": {
+            "p0": { "type": "integer", "minimum": 0 },
+            "p1": { "type": "integer", "minimum": 0 },
+            "p2": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "noP0": { "type": "boolean" },
+        "noP1": { "type": "boolean" },
+        "verified": { "type": "boolean" },
+        "blockers": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "gateStatus": {
+      "type": "string",
+      "enum": ["pass", "warn", "fail", "blocked", "missing"]
+    },
+    "watcherEventLog": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "requiredEventTypes",
+        "events",
+        "appendOnly",
+        "bindingMatched",
+        "eventsFresh",
+        "requiredEventsPresent",
+        "hashRecorded",
+        "providerSidecarPaired",
+        "semanticQaPaired",
+        "verified",
+        "blockers",
+        "warnings"
+      ],
+      "properties": {
+        "requiredEventTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/watcherEventType" }
+        },
+        "events": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/watcherEvent" }
+        },
+        "appendOnly": { "type": "boolean" },
+        "bindingMatched": { "type": "boolean" },
+        "eventsFresh": { "type": "boolean" },
+        "requiredEventsPresent": { "type": "boolean" },
+        "hashRecorded": { "type": "boolean" },
+        "providerSidecarPaired": { "type": "boolean" },
+        "semanticQaPaired": { "type": "boolean" },
+        "verified": { "type": "boolean" },
+        "blockers": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "watcherEventType": {
+      "type": "string",
+      "enum": ["file_observed", "file_stable", "hash_recorded", "sidecar_paired", "qa_paired"]
+    },
+    "watcherEvent": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["eventId", "sequence", "eventType", "occurredAt", "runId", "taskRunId", "taskPacketId", "envelopeId"],
+      "properties": {
+        "eventId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "eventType": { "$ref": "#/$defs/watcherEventType" },
+        "occurredAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "runId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "taskRunId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "taskPacketId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "envelopeId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "artifactPath": { "type": "string" },
+        "outputPath": { "type": "string" },
+        "outputSha256": { "type": "string" },
+        "sidecarKind": { "type": "string", "enum": ["provider_observation", "semantic_qa"] },
+        "sidecarPath": { "type": "string" },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workerLeaseVerified",
+        "outputFresh",
+        "providerObservationVerified",
+        "semanticQaVerified",
+        "watcherLogVerified",
+        "freshRunContractReady"
+      ],
+      "properties": {
+        "workerLeaseVerified": { "type": "boolean" },
+        "outputFresh": { "type": "boolean" },
+        "providerObservationVerified": { "type": "boolean" },
+        "semanticQaVerified": { "type": "boolean" },
+        "watcherLogVerified": { "type": "boolean" },
+        "freshRunContractReady": { "type": "boolean" }
+      }
+    }
+  }
+}
