@@ -319,7 +319,7 @@ function assertPacketMutationBlocks({ workflowState, packetId, expectedError, la
 
 const {
   directorWorkflow: { buildDirectorWorkflowState },
-  projectTransaction: { buildProjectTransactionRuntime },
+  projectTransaction: { buildProjectTransactionRuntime, confirmProjectPendingTransactionForRuntime },
 } = await loadModules();
 
 const runtimeState = runtime();
@@ -360,6 +360,19 @@ assert(
   "source facts must record missing task envelope knowledge trace ids",
 );
 
+const missingTraceReceipt = confirmProjectPendingTransactionForRuntime(missingTraceRuntime);
+assert(missingTraceReceipt.status === "blocked_missing_knowledge_trace", "missing trace confirmation must fail closed");
+assert(missingTraceReceipt.nextAction === "repair_knowledge_trace", "missing trace receipt must route to trace repair");
+assert(missingTraceReceipt.queuedCount === 0, "missing trace receipt must not project queued work");
+assert(
+  missingTraceReceipt.missingKnowledgeTraceCount === missingTraceRuntime.queueIngestSummary.missingKnowledgeTrace,
+  "missing trace count must be derived from summary",
+);
+assert(
+  missingTraceReceipt.blockedReasons.some((reason) => reason.startsWith("missing_knowledge_trace:")),
+  "missing trace receipt must expose missing envelope blockers",
+);
+
 const hydratedWorkflow = hydrateKnowledge(readyEnvelopeWorkflow(workflowState));
 const parkedByUser = buildProjectTransactionRuntime({
   workflowState: hydratedWorkflow,
@@ -370,6 +383,21 @@ const parkedByUser = buildProjectTransactionRuntime({
 assert(parkedByUser.userStatus === "parked", "user-disabled formal execution must park, not queue");
 assert(parkedByUser.queueIngestSummary.parked === hydratedWorkflow.taskPacketState.packets.length, "user-disabled queue ingest should park every hydrated task");
 assert(parkedByUser.runtimeEvents.every((event) => event.status === "parked"), "parked queue ingest facts should be exposed as runtime events");
+
+const parkedReceipt = confirmProjectPendingTransactionForRuntime(parkedByUser);
+assert(parkedReceipt.status === "confirmed", "confirmed parked transaction should still produce a software-layer projection receipt");
+assert(parkedReceipt.projectVibeWriteAllowed === false, "parked confirmation receipt must not allow project.vibe writes");
+assert(parkedReceipt.projectVibeWriteExecuted === false, "parked confirmation receipt must not execute project.vibe writes");
+assert(parkedReceipt.noFileMutation === true, "parked confirmation receipt must forbid file mutation");
+assert(parkedReceipt.providerSubmissionForbidden === true, "parked confirmation receipt must forbid provider submission");
+assert(parkedReceipt.workerSpawnForbidden === true, "parked confirmation receipt must forbid worker spawn");
+assert(parkedReceipt.requiresKnowledgeTrace === true, "parked confirmation receipt must require knowledge trace");
+assert(parkedReceipt.parkedCount === parkedByUser.queueIngestSummary.parked, "parked receipt must derive parked count from queue summary");
+assert(parkedReceipt.queuedCount === 0, "parked receipt must not invent queued work");
+assert(
+  parkedReceipt.runtimeProjection.parkedTaskRunIds.length === parkedByUser.pendingTransaction.taskEnqueue.items.length,
+  "parked receipt projection must retain parked task run ids",
+);
 
 const confirmedRuntime = buildProjectTransactionRuntime({
   workflowState: hydratedWorkflow,
@@ -405,6 +433,31 @@ assert(
   "parked ingest facts must include parked ledger events",
 );
 
+const confirmedReceipt = confirmProjectPendingTransactionForRuntime(confirmedRuntime);
+assert(confirmedReceipt.status === "confirmed", "queued confirmed transaction should produce confirmed projection receipt");
+assert(confirmedReceipt.nextAction === "project_runtime_projection_ready", "queued confirmed receipt should be projection-ready");
+assert(confirmedReceipt.projectVibeWriteAllowed === false, "queued confirmation receipt must not allow project.vibe writes");
+assert(confirmedReceipt.projectVibeWriteExecuted === false, "queued confirmation receipt must not write project.vibe");
+assert(confirmedReceipt.noFileMutation === true, "queued confirmation receipt must be in-memory only");
+assert(confirmedReceipt.providerSubmissionForbidden === true, "queued confirmation receipt must not submit provider work");
+assert(confirmedReceipt.workerSpawnForbidden === true, "queued confirmation receipt must not spawn workers");
+assert(confirmedReceipt.requiresKnowledgeTrace === true, "queued confirmation receipt must require trace");
+assert(confirmedReceipt.queuedCount === confirmedRuntime.queueIngestSummary.queued, "queued receipt must derive queued count from summary");
+assert(confirmedReceipt.parkedCount === confirmedRuntime.queueIngestSummary.parked, "queued receipt must derive parked count from summary");
+assert(confirmedReceipt.blockedCount === confirmedRuntime.queueIngestSummary.blocked, "queued receipt must derive blocked count from summary");
+assert(
+  confirmedReceipt.taskRunIds.length === confirmedRuntime.pendingTransaction.taskEnqueue.items.length,
+  "queued receipt must derive task run ids from existing pending transaction items",
+);
+assert(
+  confirmedReceipt.affectedExpectedOutputs.length >= confirmedRuntime.pendingTransaction.artifactInvalidation.affectedExpectedOutputs.length,
+  "queued receipt must include artifact invalidation outputs",
+);
+assert(
+  confirmedReceipt.runtimeProjection.queuedTaskRunIds.length === confirmedRuntime.queueIngestSummary.queued,
+  "queued projection must expose queued task ids without re-ingesting",
+);
+
 const missingExpectedOutputs = mutateFirstQueuedPacket(hydratedWorkflow, confirmedRuntime, (packet) => {
   packet.envelope.taskEnvelope.expectedOutputs = [];
 });
@@ -414,6 +467,16 @@ assertPacketMutationBlocks({
   expectedError: "expected_outputs_missing",
   label: "missing expected outputs",
 });
+const blockedQueueRuntime = buildProjectTransactionRuntime({
+  workflowState: missingExpectedOutputs.workflowState,
+  runtimeState,
+  userConfirmed: true,
+  userEnabled: true,
+});
+const blockedQueueReceipt = confirmProjectPendingTransactionForRuntime(blockedQueueRuntime);
+assert(blockedQueueReceipt.status === "blocked_queue", "blocked queue confirmation must fail closed");
+assert(blockedQueueReceipt.nextAction === "repair_queue_blockers", "blocked queue receipt must route to queue blocker repair");
+assert(blockedQueueReceipt.blockedReasons.includes("expected_outputs_missing"), "blocked queue receipt must expose queue validation blockers");
 
 const missingQaChecklist = mutateFirstQueuedPacket(hydratedWorkflow, confirmedRuntime, (packet) => {
   packet.envelope.taskEnvelope.qaChecklist = [];
@@ -474,6 +537,15 @@ const waitingRuntime = buildProjectTransactionRuntime({
 });
 assert(waitingRuntime.userStatus === "waiting_confirmation", "unconfirmed edit must stay waiting_confirmation");
 assert(waitingRuntime.queueIngestSummary.queued === 0, "waiting confirmation must not queue formal tasks");
+
+const waitingReceipt = confirmProjectPendingTransactionForRuntime(waitingRuntime);
+assert(waitingReceipt.status === "blocked_not_confirmed", "waiting confirmation receipt must fail closed");
+assert(waitingReceipt.nextAction === "show_confirmation", "waiting confirmation receipt must route back to confirmation");
+assert(waitingReceipt.projectVibeWriteAllowed === false, "waiting receipt must not allow project.vibe writes");
+assert(waitingReceipt.projectVibeWriteExecuted === false, "waiting receipt must not execute writes");
+assert(waitingReceipt.providerSubmissionForbidden === true, "waiting receipt must forbid provider submission");
+assert(waitingReceipt.workerSpawnForbidden === true, "waiting receipt must forbid worker spawn");
+assert(waitingReceipt.blockedReasons.includes("pending_transaction_not_confirmed"), "waiting receipt must explain unconfirmed blocker");
 
 const schema = readJson("schemas/project_transaction.schema.json");
 assert(schema.$id === "https://vibecore.local/schemas/project_transaction.schema.json", "project transaction schema id drifted");

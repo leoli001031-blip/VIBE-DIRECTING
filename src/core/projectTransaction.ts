@@ -229,6 +229,43 @@ export interface ProjectTransactionRuntimeState {
   };
 }
 
+export type ProjectConfirmedProjectionStatus = "confirmed" | "blocked_not_confirmed" | "blocked_missing_knowledge_trace" | "blocked_queue";
+
+export interface ProjectConfirmedProjectionReceipt {
+  schemaVersion: typeof projectTransactionSchemaVersion;
+  receiptId: string;
+  transactionId: string;
+  generatedAt: string;
+  status: ProjectConfirmedProjectionStatus;
+  sourceUserStatus: ProjectTransactionUserStatus;
+  queueStatus: ProjectTaskEnqueuePlan["status"];
+  queuedCount: number;
+  parkedCount: number;
+  blockedCount: number;
+  staleArtifactCount: number;
+  missingKnowledgeTraceCount: number;
+  taskRunIds: string[];
+  affectedExpectedOutputs: string[];
+  nextAction: "show_confirmation" | "repair_knowledge_trace" | "repair_queue_blockers" | "project_runtime_projection_ready";
+  blockedReasons: string[];
+  runtimeProjection: {
+    transactionId: string;
+    status: ProjectTransactionUserStatus;
+    shortLabel: string;
+    queuedTaskRunIds: string[];
+    parkedTaskRunIds: string[];
+    blockedTaskRunIds: string[];
+    affectedExpectedOutputs: string[];
+    staleArtifactCount: number;
+  };
+  projectVibeWriteAllowed: false;
+  projectVibeWriteExecuted: false;
+  noFileMutation: true;
+  providerSubmissionForbidden: true;
+  workerSpawnForbidden: true;
+  requiresKnowledgeTrace: true;
+}
+
 export interface BuildProjectTransactionRuntimeInput {
   workflowState: Pick<
     DirectorWorkflowState,
@@ -587,6 +624,91 @@ function shortLabelFor(status: ProjectTransactionUserStatus): string {
     blocked: "Blocked",
   };
   return labels[status];
+}
+
+function confirmedProjectionStatusFor(runtime: ProjectTransactionRuntimeState): ProjectConfirmedProjectionStatus {
+  if (runtime.pendingTransaction.userStatus === "waiting_confirmation" || runtime.userStatus === "waiting_confirmation") return "blocked_not_confirmed";
+  if (
+    runtime.pendingTransaction.sourceFacts.knowledgeInjectionTrace.status === "missing" ||
+    runtime.queueIngestSummary.missingKnowledgeTrace > 0
+  ) {
+    return "blocked_missing_knowledge_trace";
+  }
+  if (runtime.queueIngestSummary.blocked > 0 || runtime.pendingTransaction.taskEnqueue.status === "blocked") return "blocked_queue";
+  return "confirmed";
+}
+
+function confirmedProjectionNextAction(status: ProjectConfirmedProjectionStatus): ProjectConfirmedProjectionReceipt["nextAction"] {
+  if (status === "blocked_not_confirmed") return "show_confirmation";
+  if (status === "blocked_missing_knowledge_trace") return "repair_knowledge_trace";
+  if (status === "blocked_queue") return "repair_queue_blockers";
+  return "project_runtime_projection_ready";
+}
+
+function confirmedProjectionBlockedReasons(runtime: ProjectTransactionRuntimeState, status: ProjectConfirmedProjectionStatus): string[] {
+  if (status === "blocked_not_confirmed") return ["pending_transaction_not_confirmed"];
+  if (status === "blocked_missing_knowledge_trace") {
+    return unique([
+      "blocked_missing_knowledge_trace",
+      ...runtime.pendingTransaction.sourceFacts.knowledgeInjectionTrace.missingTaskEnvelopeIds.map((id) => `missing_knowledge_trace:${id}`),
+    ]);
+  }
+  if (status === "blocked_queue") {
+    return unique(
+      runtime.pendingTransaction.taskEnqueue.items
+        .filter((item) => item.queueStatus === "blocked")
+        .flatMap((item) => item.validationErrors.length ? item.validationErrors : item.queueDecision.blockers),
+    );
+  }
+  return [];
+}
+
+export function confirmProjectPendingTransactionForRuntime(runtime: ProjectTransactionRuntimeState): ProjectConfirmedProjectionReceipt {
+  const status = confirmedProjectionStatusFor(runtime);
+  const taskRunIds = unique(runtime.pendingTransaction.taskEnqueue.items.map((item) => item.taskRunId));
+  const queuedTaskRunIds = unique(runtime.pendingTransaction.taskEnqueue.items.filter((item) => item.queueStatus === "queued").map((item) => item.taskRunId));
+  const parkedTaskRunIds = unique(runtime.pendingTransaction.taskEnqueue.items.filter((item) => item.queueStatus === "parked").map((item) => item.taskRunId));
+  const blockedTaskRunIds = unique(runtime.pendingTransaction.taskEnqueue.items.filter((item) => item.queueStatus === "blocked").map((item) => item.taskRunId));
+  const affectedExpectedOutputs = unique([
+    ...runtime.pendingTransaction.artifactInvalidation.affectedExpectedOutputs,
+    ...runtime.pendingTransaction.taskEnqueue.items.flatMap((item) => item.expectedOutputs),
+  ]);
+  const staleArtifactCount = runtime.pendingTransaction.artifactInvalidation.staleArtifacts.length;
+
+  return {
+    schemaVersion: projectTransactionSchemaVersion,
+    receiptId: `project_confirm_${runtime.pendingTransaction.id}`,
+    transactionId: runtime.pendingTransaction.id,
+    generatedAt: runtime.generatedAt,
+    status,
+    sourceUserStatus: runtime.pendingTransaction.userStatus,
+    queueStatus: runtime.pendingTransaction.taskEnqueue.status,
+    queuedCount: runtime.queueIngestSummary.queued,
+    parkedCount: runtime.queueIngestSummary.parked,
+    blockedCount: runtime.queueIngestSummary.blocked,
+    staleArtifactCount,
+    missingKnowledgeTraceCount: runtime.queueIngestSummary.missingKnowledgeTrace,
+    taskRunIds,
+    affectedExpectedOutputs,
+    nextAction: confirmedProjectionNextAction(status),
+    blockedReasons: confirmedProjectionBlockedReasons(runtime, status),
+    runtimeProjection: {
+      transactionId: runtime.pendingTransaction.id,
+      status: runtime.pendingTransaction.userStatus,
+      shortLabel: runtime.nextUiProjection.shortLabel,
+      queuedTaskRunIds,
+      parkedTaskRunIds,
+      blockedTaskRunIds,
+      affectedExpectedOutputs,
+      staleArtifactCount,
+    },
+    projectVibeWriteAllowed: false,
+    projectVibeWriteExecuted: false,
+    noFileMutation: true,
+    providerSubmissionForbidden: true,
+    workerSpawnForbidden: true,
+    requiresKnowledgeTrace: true,
+  };
 }
 
 function writePlan(transactionId: string): ProjectVibeWritePlan {
