@@ -381,6 +381,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ImageReferenceDeliveryReceiptState",
   },
   {
+    fileName: "fresh_run_contract.schema.json",
+    id: "https://vibecore.local/schemas/fresh_run_contract.schema.json",
+    version: schemaVersion,
+    purpose: "Pure freshness contract requiring current-run output artifacts, provider observations, and optional semantic QA sidecars before real-demo verify can pass.",
+    typeName: "FreshRunContractState",
+  },
+  {
     fileName: "image_keyframe_runtime.schema.json",
     id: "https://vibecore.local/schemas/image_keyframe_runtime.schema.json",
     version: schemaVersion,

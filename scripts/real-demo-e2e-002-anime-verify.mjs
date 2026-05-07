@@ -57,26 +57,14 @@ function fileInfo(filePath) {
   };
 }
 
-function parseTimestampMs(value) {
-  const ms = Date.parse(value || "");
-  return Number.isFinite(ms) ? ms : null;
-}
-
-function timestampIsCurrent(value, runGeneratedAt) {
-  const valueMs = parseTimestampMs(value);
-  const runMs = parseTimestampMs(runGeneratedAt);
-  if (valueMs === null || runMs === null) return false;
-  return valueMs + 1000 >= runMs;
-}
-
-function fileInfoIsCurrent(info, runGeneratedAt) {
-  return Boolean(info && timestampIsCurrent(info.modifiedAt, runGeneratedAt));
-}
-
 function isScopedOutput(relativePath) {
   const absolute = path.resolve(absPath(relativePath));
   const scopedRoot = path.resolve(path.join(runRoot, "outputs/shots"));
   return absolute === scopedRoot || absolute.startsWith(`${scopedRoot}${path.sep}`);
+}
+
+function blockersForPrefix(blockers, prefix) {
+  return blockers.filter((blocker) => blocker.startsWith(prefix));
 }
 
 function normalizeSeverity(value) {
@@ -116,7 +104,7 @@ function dedupeFindings(items) {
   });
 }
 
-function loadObservation(plan, runGeneratedAt) {
+function loadObservation(plan) {
   const observationPath = absPath(plan.providerObservationPath);
   if (!exists(observationPath)) {
     return {
@@ -128,7 +116,6 @@ function loadObservation(plan, runGeneratedAt) {
   }
 
   const observation = readJson(observationPath);
-  const observationInfo = fileInfo(observationPath);
   const blockers = [
     observation.providerObservationMode === "actual_provider_call_observed" ? "" : "providerObservationMode is not actual_provider_call_observed",
     String(observation.provider || "").includes("image2") ? "" : "provider is not image2",
@@ -140,14 +127,12 @@ function loadObservation(plan, runGeneratedAt) {
     observation.providerSelfReportCompletesTask === false ? "" : "provider self-report attempted to complete task",
     observation.manualFileCopyDetected === false ? "" : "manual file copy detected by observation",
     observation.fixtureReuseDetected === false ? "" : "fixture reuse detected by observation",
-    fileInfoIsCurrent(observationInfo, runGeneratedAt) ? "" : "provider observation sidecar is stale for this prepared run",
-    timestampIsCurrent(observation.generatedAt, runGeneratedAt) ? "" : "provider observation generatedAt is stale for this prepared run",
   ].filter(Boolean);
 
-  return { exists: true, valid: blockers.length === 0, observation, observationInfo, blockers };
+  return { exists: true, valid: blockers.length === 0, observation, observationInfo: fileInfo(observationPath), blockers };
 }
 
-function loadSemanticQa(plan, runGeneratedAt) {
+function loadSemanticQa(plan) {
   const emptyResult = (blocker) => ({
     exists: false,
     completed: false,
@@ -164,7 +149,6 @@ function loadSemanticQa(plan, runGeneratedAt) {
   if (!exists(semanticQaPath)) return emptyResult("semantic QA sidecar missing");
 
   const qa = readJson(semanticQaPath);
-  const semanticQaInfo = fileInfo(semanticQaPath);
   const gateResults = qa.gateResults || {};
   const findings = { P0: [], P1: [], P2: [] };
   const gates = {};
@@ -176,8 +160,6 @@ function loadSemanticQa(plan, runGeneratedAt) {
     qa.envelopeId === plan.envelopeId ? "" : "semantic QA envelopeId mismatch",
     qa.reviewerId && qa.reviewerId !== "FILL_BY_SEMANTIC_QA_REVIEWER" ? "" : "semantic QA reviewerId missing",
     qa.reviewedAt && qa.reviewedAt !== "FILL_BY_SEMANTIC_QA_REVIEWER_ISO_TIME" ? "" : "semantic QA reviewedAt missing",
-    fileInfoIsCurrent(semanticQaInfo, runGeneratedAt) ? "" : "semantic QA sidecar is stale for this prepared run",
-    timestampIsCurrent(qa.reviewedAt, runGeneratedAt) ? "" : "semantic QA reviewedAt is stale for this prepared run",
   ].filter(Boolean);
 
   for (const gateId of requiredSemanticGates) {
@@ -261,6 +243,7 @@ function loadSemanticQa(plan, runGeneratedAt) {
     completed,
     status,
     qa,
+    semanticQaInfo: fileInfo(semanticQaPath),
     gates,
     blockers,
     findings: {
@@ -307,6 +290,7 @@ ensureDir(reportsRoot);
 
 const generatedAt = new Date().toISOString();
 const manifest = readJson(manifestPath);
+const { buildFreshRunContract } = await importTs(path.join(repoRoot, "src/core/freshRunContract.ts"));
 const realPlans = manifest.shotPlans.filter((plan) => plan.status === "real_image_planned");
 const allPlans = manifest.shotPlans;
 const scenarioBlockers = [
@@ -328,9 +312,51 @@ const projectFacts = {
 const outputObservations = realPlans.map((plan) => {
   const outputAbsolutePath = absPath(plan.expectedOutputPath);
   const outputInfo = fileInfo(outputAbsolutePath);
-  const outputCurrent = fileInfoIsCurrent(outputInfo, manifest.generatedAt);
-  const observationResult = loadObservation(plan, manifest.generatedAt);
-  const semanticQaResult = loadSemanticQa(plan, manifest.generatedAt);
+  const observationResult = loadObservation(plan);
+  const semanticQaResult = loadSemanticQa(plan);
+  const freshRunContract = buildFreshRunContract({
+    generatedAt,
+    runId: manifest.runId,
+    manifestGeneratedAt: manifest.generatedAt,
+    taskRunId: plan.taskRunId,
+    taskPacketId: plan.taskPacketId,
+    envelopeId: plan.envelopeId,
+    outputPath: plan.expectedOutputPath,
+    artifact: {
+      artifactPath: plan.expectedOutputPath,
+      exists: Boolean(outputInfo),
+      fileModifiedAt: outputInfo?.modifiedAt,
+      sizeBytes: outputInfo?.sizeBytes,
+    },
+    providerObservation: {
+      sidecarPath: plan.providerObservationPath,
+      exists: observationResult.exists,
+      sidecarModifiedAt: observationResult.observationInfo?.modifiedAt,
+      sidecarGeneratedAt: observationResult.observation?.generatedAt,
+      taskRunId: observationResult.observation?.taskRunId,
+      taskPacketId: observationResult.observation?.taskPacketId,
+      envelopeId: observationResult.observation?.envelopeId,
+      outputPath: observationResult.observation?.outputPath,
+      outputSha256: observationResult.observation?.outputSha256,
+    },
+    providerObservationRequired: true,
+    semanticQa: {
+      sidecarPath: plan.semanticQaPath,
+      exists: semanticQaResult.exists,
+      sidecarModifiedAt: semanticQaResult.semanticQaInfo?.modifiedAt,
+      reviewedAt: semanticQaResult.qa?.reviewedAt,
+      taskRunId: semanticQaResult.qa?.taskRunId,
+      taskPacketId: semanticQaResult.qa?.taskPacketId,
+      envelopeId: semanticQaResult.qa?.envelopeId,
+      outputPath: semanticQaResult.qa?.outputPath,
+      outputSha256: semanticQaResult.qa?.outputSha256,
+      reviewedOutputSha256: semanticQaResult.qa?.reviewedOutputSha256 || semanticQaResult.qa?.reviewedImageHash,
+    },
+    semanticQaRequired: true,
+  });
+  const providerFreshBlockers = blockersForPrefix(freshRunContract.blockers, "fresh_run_provider_observation");
+  const semanticQaFreshBlockers = blockersForPrefix(freshRunContract.blockers, "fresh_run_semantic_qa");
+  const freshRunBlockers = freshRunContract.blockers;
   return {
     shotId: plan.shotId,
     taskRunId: plan.taskRunId,
@@ -341,19 +367,21 @@ const outputObservations = realPlans.map((plan) => {
     semanticQaPath: plan.semanticQaPath,
     outputExists: Boolean(outputInfo),
     outputInfo,
-    outputCurrent,
+    outputCurrent: freshRunContract.verification.artifactFresh,
     scopedOutput: isScopedOutput(plan.expectedOutputPath),
     envelopeValid: envelopeIsValid(plan),
     providerObservationExists: observationResult.exists,
-    providerObservationValid: observationResult.valid,
-    providerObservationBlockers: observationResult.blockers,
+    providerObservationValid: observationResult.valid && providerFreshBlockers.length === 0,
+    providerObservationBlockers: Array.from(new Set([...observationResult.blockers, ...providerFreshBlockers])),
     providerObservation: observationResult.observation,
     semanticQaExists: semanticQaResult.exists,
-    semanticQaCompleted: semanticQaResult.completed,
+    semanticQaCompleted: semanticQaResult.completed && semanticQaFreshBlockers.length === 0,
     semanticQaStatus: semanticQaResult.status,
-    semanticQaBlockers: semanticQaResult.blockers,
+    semanticQaBlockers: Array.from(new Set([...semanticQaResult.blockers, ...semanticQaFreshBlockers])),
     semanticQaFindings: semanticQaResult.findings,
     semanticQaGates: semanticQaResult.gates,
+    freshRunContract,
+    freshRunBlockers,
   };
 });
 
@@ -400,6 +428,7 @@ const manifestMatch = {
       item.outputCurrent ? "" : "expected output is stale for this prepared run",
       item.scopedOutput ? "" : "output is outside scoped sandbox",
       item.providerObservationValid ? "" : "provider observation invalid or missing",
+      ...item.freshRunBlockers,
       ...item.providerObservationBlockers,
     ].filter(Boolean),
   })),
@@ -419,6 +448,7 @@ const qaChecks = outputObservations.map((item) => {
     item.semanticQaExists ? "" : "semantic QA sidecar missing",
     item.semanticQaCompleted ? "" : "semantic QA sidecar is incomplete",
     item.semanticQaFindings.P0.length ? "semantic QA contains P0 findings" : "",
+    ...item.freshRunBlockers,
     ...item.providerObservationBlockers,
     ...item.semanticQaBlockers,
   ].filter(Boolean);

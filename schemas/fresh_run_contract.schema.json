@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/fresh_run_contract.schema.json",
+  "title": "FreshRunContractState",
+  "description": "Pure software-layer freshness contract proving that an output artifact and its required sidecars belong to the currently prepared run. It performs no provider submit, network I/O, app-server launch, video generation, filesystem write, or child process work.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "phase",
+    "status",
+    "runId",
+    "manifestGeneratedAt",
+    "binding",
+    "artifact",
+    "providerObservation",
+    "semanticQa",
+    "verification",
+    "blockers",
+    "warnings",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "phase": { "const": "fresh_run_contract" },
+    "status": { "type": "string", "enum": ["ready", "blocked"] },
+    "runId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "manifestGeneratedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "binding": { "$ref": "#/$defs/binding" },
+    "artifact": { "$ref": "#/$defs/artifact" },
+    "providerObservation": { "$ref": "#/$defs/sidecar" },
+    "semanticQa": { "$ref": "#/$defs/sidecar" },
+    "verification": { "$ref": "#/$defs/verification" },
+    "blockers": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "warnings": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["taskRunId", "taskPacketId", "envelopeId", "outputPath"],
+      "properties": {
+        "taskRunId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "taskPacketId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "envelopeId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "outputPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactPath",
+        "exists",
+        "present",
+        "pathMatched",
+        "nonEmpty",
+        "fileModifiedAtFresh"
+      ],
+      "properties": {
+        "artifactPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "exists": { "type": "boolean" },
+        "fileModifiedAt": { "type": "string" },
+        "sizeBytes": { "type": "integer", "minimum": 0 },
+        "outputSha256": { "type": "string" },
+        "present": { "type": "boolean" },
+        "pathMatched": { "type": "boolean" },
+        "nonEmpty": { "type": "boolean" },
+        "fileModifiedAtFresh": { "type": "boolean" }
+      }
+    },
+    "sidecar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exists",
+        "required",
+        "present",
+        "sidecarModifiedAtFresh",
+        "sidecarGeneratedAtFresh",
+        "reviewedAtFresh",
+        "bindingMatched",
+        "hashMatched"
+      ],
+      "properties": {
+        "sidecarPath": { "type": "string" },
+        "exists": { "type": "boolean" },
+        "sidecarModifiedAt": { "type": "string" },
+        "sidecarGeneratedAt": { "type": "string" },
+        "reviewedAt": { "type": "string" },
+        "taskRunId": { "type": "string" },
+        "taskPacketId": { "type": "string" },
+        "envelopeId": { "type": "string" },
+        "outputPath": { "type": "string" },
+        "outputSha256": { "type": "string" },
+        "reviewedOutputSha256": { "type": "string" },
+        "required": { "type": "boolean" },
+        "present": { "type": "boolean" },
+        "sidecarModifiedAtFresh": { "type": "boolean" },
+        "sidecarGeneratedAtFresh": { "type": "boolean" },
+        "reviewedAtFresh": { "type": "boolean" },
+        "bindingMatched": { "type": "boolean" },
+        "hashMatched": { "type": "boolean" }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactPresent",
+        "artifactPathMatched",
+        "artifactFresh",
+        "artifactNonEmpty",
+        "outputSha256Present",
+        "providerObservationRequired",
+        "providerObservationPresent",
+        "providerObservationFresh",
+        "providerObservationBindingMatched",
+        "providerObservationHashMatched",
+        "semanticQaRequired",
+        "semanticQaPresent",
+        "semanticQaFresh",
+        "semanticQaBindingMatched",
+        "semanticQaHashMatched"
+      ],
+      "properties": {
+        "artifactPresent": { "type": "boolean" },
+        "artifactPathMatched": { "type": "boolean" },
+        "artifactFresh": { "type": "boolean" },
+        "artifactNonEmpty": { "type": "boolean" },
+        "outputSha256Present": { "type": "boolean" },
+        "providerObservationRequired": { "type": "boolean" },
+        "providerObservationPresent": { "type": "boolean" },
+        "providerObservationFresh": { "type": "boolean" },
+        "providerObservationBindingMatched": { "type": "boolean" },
+        "providerObservationHashMatched": { "type": "boolean" },
+        "semanticQaRequired": { "type": "boolean" },
+        "semanticQaPresent": { "type": "boolean" },
+        "semanticQaFresh": { "type": "boolean" },
+        "semanticQaBindingMatched": { "type": "boolean" },
+        "semanticQaHashMatched": { "type": "boolean" }
+      }
+    }
+  }
+}

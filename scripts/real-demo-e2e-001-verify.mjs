@@ -56,33 +56,20 @@ function fileInfo(filePath) {
   };
 }
 
-function parseTimestampMs(value) {
-  const ms = Date.parse(value || "");
-  return Number.isFinite(ms) ? ms : null;
-}
-
-function timestampIsCurrent(value, runGeneratedAt) {
-  const valueMs = parseTimestampMs(value);
-  const runMs = parseTimestampMs(runGeneratedAt);
-  if (valueMs === null || runMs === null) return false;
-  return valueMs + 1000 >= runMs;
-}
-
-function fileInfoIsCurrent(info, runGeneratedAt) {
-  return Boolean(info && timestampIsCurrent(info.modifiedAt, runGeneratedAt));
-}
-
 function isScopedOutput(relativePath) {
   const absolute = path.resolve(absPath(relativePath));
   const scopedRoot = path.resolve(path.join(runRoot, "outputs/shots"));
   return absolute === scopedRoot || absolute.startsWith(`${scopedRoot}${path.sep}`);
 }
 
-function loadObservation(plan, runGeneratedAt) {
+function blockersForPrefix(blockers, prefix) {
+  return blockers.filter((blocker) => blocker.startsWith(prefix));
+}
+
+function loadObservation(plan) {
   const observationPath = absPath(plan.providerObservationPath);
   if (!exists(observationPath)) return { exists: false, valid: false, observation: null, blockers: ["provider observation sidecar missing"] };
   const observation = readJson(observationPath);
-  const observationInfo = fileInfo(observationPath);
   const blockers = [
     observation.providerObservationMode === "actual_provider_call_observed" ? "" : "providerObservationMode is not actual_provider_call_observed",
     String(observation.provider || "").includes("image2") ? "" : "provider is not image2",
@@ -94,10 +81,8 @@ function loadObservation(plan, runGeneratedAt) {
     observation.providerSelfReportCompletesTask === false ? "" : "provider self-report attempted to complete task",
     observation.manualFileCopyDetected === false ? "" : "manual file copy detected by observation",
     observation.fixtureReuseDetected === false ? "" : "fixture reuse detected by observation",
-    fileInfoIsCurrent(observationInfo, runGeneratedAt) ? "" : "provider observation sidecar is stale for this prepared run",
-    timestampIsCurrent(observation.generatedAt, runGeneratedAt) ? "" : "provider observation generatedAt is stale for this prepared run",
   ].filter(Boolean);
-  return { exists: true, valid: blockers.length === 0, observation, observationInfo, blockers };
+  return { exists: true, valid: blockers.length === 0, observation, observationInfo: fileInfo(observationPath), blockers };
 }
 
 function envelopeIsValid(plan) {
@@ -132,6 +117,7 @@ ensureDir(reportsRoot);
 
 const generatedAt = new Date().toISOString();
 const manifest = readJson(manifestPath);
+const { buildFreshRunContract } = await importTs(path.join(repoRoot, "src/core/freshRunContract.ts"));
 const realPlans = manifest.shotPlans.filter((plan) => plan.status === "real_image_planned");
 const allPlans = manifest.shotPlans;
 
@@ -146,8 +132,37 @@ const projectFacts = {
 const outputObservations = realPlans.map((plan) => {
   const outputAbsolutePath = absPath(plan.expectedOutputPath);
   const outputInfo = fileInfo(outputAbsolutePath);
-  const outputCurrent = fileInfoIsCurrent(outputInfo, manifest.generatedAt);
-  const observationResult = loadObservation(plan, manifest.generatedAt);
+  const observationResult = loadObservation(plan);
+  const freshRunContract = buildFreshRunContract({
+    generatedAt,
+    runId: manifest.runId,
+    manifestGeneratedAt: manifest.generatedAt,
+    taskRunId: plan.taskRunId,
+    taskPacketId: plan.taskPacketId,
+    envelopeId: plan.envelopeId,
+    outputPath: plan.expectedOutputPath,
+    artifact: {
+      artifactPath: plan.expectedOutputPath,
+      exists: Boolean(outputInfo),
+      fileModifiedAt: outputInfo?.modifiedAt,
+      sizeBytes: outputInfo?.sizeBytes,
+    },
+    providerObservation: {
+      sidecarPath: plan.providerObservationPath,
+      exists: observationResult.exists,
+      sidecarModifiedAt: observationResult.observationInfo?.modifiedAt,
+      sidecarGeneratedAt: observationResult.observation?.generatedAt,
+      taskRunId: observationResult.observation?.taskRunId,
+      taskPacketId: observationResult.observation?.taskPacketId,
+      envelopeId: observationResult.observation?.envelopeId,
+      outputPath: observationResult.observation?.outputPath,
+      outputSha256: observationResult.observation?.outputSha256,
+    },
+    providerObservationRequired: true,
+    semanticQaRequired: false,
+  });
+  const providerFreshBlockers = blockersForPrefix(freshRunContract.blockers, "fresh_run_provider_observation");
+  const freshRunBlockers = freshRunContract.blockers;
   return {
     shotId: plan.shotId,
     taskRunId: plan.taskRunId,
@@ -157,13 +172,15 @@ const outputObservations = realPlans.map((plan) => {
     providerObservationPath: plan.providerObservationPath,
     outputExists: Boolean(outputInfo),
     outputInfo,
-    outputCurrent,
+    outputCurrent: freshRunContract.verification.artifactFresh,
     scopedOutput: isScopedOutput(plan.expectedOutputPath),
     envelopeValid: envelopeIsValid(plan),
     providerObservationExists: observationResult.exists,
-    providerObservationValid: observationResult.valid,
-    providerObservationBlockers: observationResult.blockers,
+    providerObservationValid: observationResult.valid && providerFreshBlockers.length === 0,
+    providerObservationBlockers: Array.from(new Set([...observationResult.blockers, ...providerFreshBlockers])),
     providerObservation: observationResult.observation,
+    freshRunContract,
+    freshRunBlockers,
   };
 });
 
@@ -205,6 +222,7 @@ const manifestMatch = {
       item.outputCurrent ? "" : "expected output is stale for this prepared run",
       item.scopedOutput ? "" : "output is outside scoped sandbox",
       item.providerObservationValid ? "" : "provider observation invalid or missing",
+      ...item.freshRunBlockers,
       ...item.providerObservationBlockers,
     ].filter(Boolean),
   })),
@@ -239,6 +257,7 @@ const qaReport = {
       item.scopedOutput ? "" : "output path is not inside real-demo-e2e/001/outputs/shots",
       item.envelopeValid ? "" : "subagent envelope is incomplete",
       item.providerObservationValid ? "" : "provider observation is incomplete",
+      ...item.freshRunBlockers,
       ...item.providerObservationBlockers,
     ].filter(Boolean),
   })),
