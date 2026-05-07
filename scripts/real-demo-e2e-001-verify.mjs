@@ -8,6 +8,7 @@ const repoRoot = process.cwd();
 const runRoot = path.join(repoRoot, "real-test-sandbox/real-demo-e2e/001");
 const reportsRoot = path.join(runRoot, "reports");
 const manifestPath = path.join(runRoot, "run_manifest.json");
+const requiredSemanticGates = ["identity", "scene", "style", "story", "neighbor", "output"];
 
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
@@ -127,6 +128,50 @@ function isFilled(value) {
   return typeof value === "string" && value.trim().length > 0 && !value.includes("FILL_BY");
 }
 
+function runtimeTruthGateStatus(status) {
+  if (status === "pass") return "pass";
+  if (status === "needs_review") return "warn";
+  if (status === "blocked") return "blocked";
+  return "missing";
+}
+
+function normalizeSeverity(value) {
+  const severity = String(value || "").toUpperCase();
+  return ["P0", "P1", "P2"].includes(severity) ? severity : null;
+}
+
+function normalizeFinding(value, fallback) {
+  if (typeof value === "string") {
+    return {
+      gateId: fallback.gateId,
+      severity: fallback.severity,
+      message: value,
+      source: fallback.source,
+    };
+  }
+  if (!value || typeof value !== "object") return null;
+  return {
+    gateId: value.gateId || fallback.gateId,
+    severity: normalizeSeverity(value.severity) || fallback.severity,
+    message: value.message || value.summary || value.note || fallback.message,
+    source: value.source || fallback.source,
+  };
+}
+
+function dedupeFindings(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = [
+      item.severity || "",
+      item.gateId || "",
+      String(item.message || "").trim().toLowerCase(),
+    ].join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function loadObservation(plan) {
   const observationPath = absPath(plan.providerObservationPath);
   if (!exists(observationPath)) return { exists: false, valid: false, observation: null, blockers: ["provider observation sidecar missing"] };
@@ -183,6 +228,130 @@ function loadWorkerLease(plan) {
   };
 }
 
+function loadSemanticQa(plan) {
+  const emptyResult = (blocker) => ({
+    exists: false,
+    completed: false,
+    status: "blocked",
+    qa: null,
+    gates: {},
+    blockers: [blocker],
+    findings: { P0: [], P1: [], P2: [] },
+  });
+
+  if (!plan.semanticQaPath) return emptyResult("semantic QA path missing from manifest");
+
+  const semanticQaPath = absPath(plan.semanticQaPath);
+  if (!exists(semanticQaPath)) return emptyResult("semantic QA sidecar missing");
+
+  const qa = readJson(semanticQaPath);
+  const gateResults = qa.gateResults || {};
+  const findings = { P0: [], P1: [], P2: [] };
+  const gates = {};
+  const blockers = [
+    qa.semanticReviewMode === "actual_image_semantic_review" ? "" : "semanticReviewMode is not actual_image_semantic_review",
+    qa.runId === manifest.runId ? "" : "semantic QA runId mismatch",
+    qa.outputPath === plan.expectedOutputPath ? "" : "semantic QA outputPath does not match expected output",
+    qa.taskRunId === plan.taskRunId ? "" : "semantic QA taskRunId mismatch",
+    qa.taskPacketId === plan.taskPacketId ? "" : "semantic QA taskPacketId mismatch",
+    qa.envelopeId === plan.envelopeId ? "" : "semantic QA envelopeId mismatch",
+    isFilled(qa.reviewerId) ? "" : "semantic QA reviewerId missing",
+    isFilled(qa.reviewedAt) ? "" : "semantic QA reviewedAt missing",
+    isFilled(qa.reviewedOutputSha256 || qa.reviewedImageHash) ? "" : "semantic QA reviewedOutputSha256 missing",
+  ].filter(Boolean);
+
+  for (const gateId of requiredSemanticGates) {
+    const gate = gateResults[gateId] || (qa.gates ? { status: qa.gates[gateId], findings: [] } : null);
+    if (!gate) {
+      blockers.push(`semantic QA gate missing: ${gateId}`);
+      gates[gateId] = { present: false, status: "missing", severity: null, findings: [] };
+      continue;
+    }
+
+    const status = gate.status;
+    const severity = normalizeSeverity(gate.severity);
+    const gateFindings = Array.isArray(gate.findings) ? gate.findings : [];
+    const normalizedFindings = gateFindings
+      .map((finding) => normalizeFinding(finding, { gateId, severity, source: "gateResults", message: `${gateId} finding` }))
+      .filter(Boolean);
+
+    if (!["pass", "needs_review", "blocked"].includes(status)) {
+      blockers.push(`semantic QA gate ${gateId} is not completed`);
+    }
+    if (severity && normalizedFindings.length === 0) {
+      normalizedFindings.push({
+        gateId,
+        severity,
+        message: gate.evidence || `${gateId} gate recorded ${severity}`,
+        source: "gateSeverity",
+      });
+    }
+    if (status === "blocked" && !normalizedFindings.some((finding) => finding.severity === "P0")) {
+      normalizedFindings.push({
+        gateId,
+        severity: "P0",
+        message: `${gateId} gate status is blocked`,
+        source: "gateStatus",
+      });
+    }
+    if (status === "needs_review" && !normalizedFindings.some((finding) => finding.severity === "P1")) {
+      normalizedFindings.push({
+        gateId,
+        severity: "P1",
+        message: `${gateId} gate status is needs_review`,
+        source: "gateStatus",
+      });
+    }
+
+    for (const finding of normalizedFindings) {
+      if (finding.severity) findings[finding.severity].push(finding);
+    }
+
+    gates[gateId] = {
+      present: true,
+      status,
+      severity,
+      findings: normalizedFindings,
+    };
+  }
+
+  for (const severity of ["P0", "P1", "P2"]) {
+    const finalFindings = qa.finalAssessment?.[`${severity.toLowerCase()}Findings`];
+    if (!Array.isArray(finalFindings)) continue;
+    for (const finding of finalFindings) {
+      const normalized = normalizeFinding(finding, {
+        gateId: "finalAssessment",
+        severity,
+        source: "finalAssessment",
+        message: `${severity} final assessment finding`,
+      });
+      if (normalized) findings[severity].push(normalized);
+    }
+  }
+
+  const completed = blockers.length === 0;
+  const status = !completed || findings.P0.length
+    ? "blocked"
+    : findings.P1.length
+      ? "needs_review"
+      : "pass";
+
+  return {
+    exists: true,
+    completed,
+    status,
+    qa,
+    semanticQaInfo: fileInfo(semanticQaPath),
+    gates,
+    blockers,
+    findings: {
+      P0: dedupeFindings(findings.P0),
+      P1: dedupeFindings(findings.P1),
+      P2: dedupeFindings(findings.P2),
+    },
+  };
+}
+
 function envelopeIsValid(plan) {
   const envelopePath = absPath(plan.envelopePath);
   const packetPath = absPath(plan.packetPath);
@@ -196,6 +365,7 @@ function envelopeIsValid(plan) {
       envelope.envelopeId === plan.envelopeId &&
       envelope.expectedOutputContract?.outputPath === plan.expectedOutputPath &&
       envelope.expectedOutputContract?.providerObservationPath === plan.providerObservationPath &&
+      envelope.expectedOutputContract?.semanticQaPath === plan.semanticQaPath &&
       Array.isArray(envelope.neighborShots ? [envelope.neighborShots] : []) &&
       Array.isArray(envelope.mustPreserve) &&
       envelope.mustPreserve.length &&
@@ -220,6 +390,23 @@ const { buildRuntimeTruthLayer } = await importRuntimeTruthLayer();
 const { buildRuntimeTruthWatcherEvents } = await importTs(path.join(repoRoot, "src/core/runtimeTruthIngest.ts"));
 const realPlans = manifest.shotPlans.filter((plan) => plan.status === "real_image_planned");
 const allPlans = manifest.shotPlans;
+const runtimeTruthWatcherPath = manifest.runtimeTruthWatcherPath || realPlans.find((plan) => plan.runtimeTruthWatcherPath)?.runtimeTruthWatcherPath;
+const runtimeTruthWatcherEventsFile = runtimeTruthWatcherPath ? absPath(runtimeTruthWatcherPath) : null;
+const runtimeTruthWatcherFileExists = Boolean(runtimeTruthWatcherEventsFile && exists(runtimeTruthWatcherEventsFile));
+const runtimeTruthWatcherFile = runtimeTruthWatcherFileExists ? readJson(runtimeTruthWatcherEventsFile) : null;
+
+function watcherEventsForPlan(plan) {
+  if (!runtimeTruthWatcherFileExists) return null;
+  const events = Array.isArray(runtimeTruthWatcherFile?.events) ? runtimeTruthWatcherFile.events : [];
+  return events.filter((event) =>
+    event.runId === manifest.runId &&
+    event.taskRunId === plan.taskRunId &&
+    event.taskPacketId === plan.taskPacketId &&
+    event.envelopeId === plan.envelopeId &&
+    (!event.outputPath || event.outputPath === plan.expectedOutputPath) &&
+    (!event.artifactPath || event.artifactPath === plan.expectedOutputPath)
+  );
+}
 
 const projectFacts = {
   projectVibePresent: exists(absPath(manifest.projectFacts.projectVibePath)),
@@ -236,6 +423,7 @@ const outputObservations = realPlans.map((plan) => {
   const outputSha256 = outputInfo ? sha256File(outputAbsolutePath) : undefined;
   const observationResult = loadObservation(plan);
   const workerLeaseResult = loadWorkerLease(plan);
+  const semanticQaResult = loadSemanticQa(plan);
   const freshRunContract = buildFreshRunContract({
     generatedAt,
     runId: manifest.runId,
@@ -264,9 +452,25 @@ const outputObservations = realPlans.map((plan) => {
       outputSha256: observationResult.observation?.outputSha256,
     },
     providerObservationRequired: true,
-    semanticQaRequired: false,
+    semanticQa: {
+      sidecarPath: plan.semanticQaPath,
+      exists: semanticQaResult.exists,
+      sidecarModifiedAt: semanticQaResult.semanticQaInfo?.modifiedAt,
+      reviewedAt: semanticQaResult.qa?.reviewedAt,
+      taskRunId: semanticQaResult.qa?.taskRunId,
+      taskPacketId: semanticQaResult.qa?.taskPacketId,
+      envelopeId: semanticQaResult.qa?.envelopeId,
+      outputPath: semanticQaResult.qa?.outputPath,
+      outputSha256: semanticQaResult.qa?.outputSha256,
+      reviewedOutputSha256: semanticQaResult.qa?.reviewedOutputSha256 || semanticQaResult.qa?.reviewedImageHash,
+    },
+    semanticQaRequired: true,
   });
-  const runtimeTruthIngest = buildRuntimeTruthWatcherEvents({
+  const runtimeTruthQaGates = Object.fromEntries(requiredSemanticGates.map((gateId) => [
+    gateId,
+    runtimeTruthGateStatus(semanticQaResult.gates[gateId]?.status),
+  ]));
+  const verifyScanIngest = buildRuntimeTruthWatcherEvents({
     generatedAt,
     sourceKind: "verify_scan",
     eventIdPrefix: `runtime_truth_real_demo_001_${plan.shotId}`,
@@ -295,7 +499,35 @@ const outputObservations = realPlans.map((plan) => {
           outputSha256: observationResult.observation?.outputSha256,
         }
       : undefined,
+    semanticQa: semanticQaResult.exists
+      ? {
+          exists: true,
+          sidecarPath: plan.semanticQaPath,
+          pairedAt: semanticQaResult.semanticQaInfo?.modifiedAt,
+          outputSha256: semanticQaResult.qa?.reviewedOutputSha256 || semanticQaResult.qa?.reviewedImageHash,
+        }
+      : undefined,
   });
+  const watcherEvents = watcherEventsForPlan(plan);
+  const runtimeTruthIngest = watcherEvents
+    ? {
+        schemaVersion: runtimeTruthWatcherFile.schemaVersion || "real_demo_e2e_001_runtime_truth_watcher_events_v1",
+        generatedAt: runtimeTruthWatcherFile.generatedAt || generatedAt,
+        sourceKind: "app_server_fs_changed",
+        binding: {
+          runId: manifest.runId,
+          taskRunId: plan.taskRunId,
+          taskPacketId: plan.taskPacketId,
+          envelopeId: plan.envelopeId,
+          outputPath: plan.expectedOutputPath,
+          outputSha256,
+        },
+        events: watcherEvents,
+        blockers: watcherEvents.length ? [] : ["runtime_truth_watcher_events_missing_for_plan"],
+        warnings: [],
+        notes: [`Loaded runtime truth watcher events from ${runtimeTruthWatcherPath}.`],
+      }
+    : verifyScanIngest;
   const runtimeTruthLayer = buildRuntimeTruthLayer({
     generatedAt,
     runId: manifest.runId,
@@ -338,10 +570,29 @@ const outputObservations = realPlans.map((plan) => {
         observationResult.observation?.providerSelfReportCompletesTask === true,
       providerSelfReportCompletesTask: observationResult.observation?.providerSelfReportCompletesTask === true,
     },
-    semanticQa: undefined,
+    semanticQa: {
+      sidecarPath: plan.semanticQaPath,
+      exists: semanticQaResult.exists,
+      sidecarModifiedAt: semanticQaResult.semanticQaInfo?.modifiedAt,
+      reviewedAt: semanticQaResult.qa?.reviewedAt,
+      runId: semanticQaResult.qa?.runId,
+      taskRunId: semanticQaResult.qa?.taskRunId,
+      taskPacketId: semanticQaResult.qa?.taskPacketId,
+      envelopeId: semanticQaResult.qa?.envelopeId,
+      outputPath: semanticQaResult.qa?.outputPath,
+      outputSha256: semanticQaResult.qa?.outputSha256,
+      reviewedOutputSha256: semanticQaResult.qa?.reviewedOutputSha256 || semanticQaResult.qa?.reviewedImageHash,
+      gates: runtimeTruthQaGates,
+      severityCounts: {
+        p0: semanticQaResult.findings.P0.length,
+        p1: semanticQaResult.findings.P1.length,
+        p2: semanticQaResult.findings.P2.length,
+      },
+    },
     watcherEvents: runtimeTruthIngest.events,
   });
   const providerFreshBlockers = blockersForPrefix(freshRunContract.blockers, "fresh_run_provider_observation");
+  const semanticQaFreshBlockers = blockersForPrefix(freshRunContract.blockers, "fresh_run_semantic_qa");
   const freshRunBlockers = freshRunContract.blockers;
   return {
     shotId: plan.shotId,
@@ -350,6 +601,9 @@ const outputObservations = realPlans.map((plan) => {
     envelopeId: plan.envelopeId,
     expectedOutputPath: plan.expectedOutputPath,
     providerObservationPath: plan.providerObservationPath,
+    semanticQaPath: plan.semanticQaPath,
+    runtimeTruthWatcherPath: plan.runtimeTruthWatcherPath || runtimeTruthWatcherPath,
+    runtimeTruthWatcherFileUsed: runtimeTruthWatcherFileExists,
     outputExists: Boolean(outputInfo),
     outputInfo,
     outputImageInfo,
@@ -365,6 +619,12 @@ const outputObservations = realPlans.map((plan) => {
     workerProvenanceValid: workerLeaseResult.valid,
     workerProvenanceBlockers: workerLeaseResult.blockers,
     workerLease: workerLeaseResult.lease,
+    semanticQaExists: semanticQaResult.exists,
+    semanticQaCompleted: semanticQaResult.completed && semanticQaFreshBlockers.length === 0,
+    semanticQaStatus: semanticQaResult.status,
+    semanticQaBlockers: Array.from(new Set([...semanticQaResult.blockers, ...semanticQaFreshBlockers])),
+    semanticQaFindings: semanticQaResult.findings,
+    semanticQaGates: semanticQaResult.gates,
     freshRunContract,
     freshRunBlockers,
     runtimeTruthIngest,
@@ -389,8 +649,10 @@ writeJson(path.join(reportsRoot, "runtime_truth_layer.json"), {
     warnings: item.runtimeTruthLayer.warnings,
   })),
   notes: [
-    "001 verify now projects RuntimeTruthLayer from the same scan facts used by freshness verification.",
-    "Semantic QA is intentionally absent in 001, so RuntimeTruthLayer remains blocked until a hash-bound semantic QA receipt exists.",
+    "001 verify projects RuntimeTruthLayer from output, provider observation, semantic QA, and watcher facts.",
+    runtimeTruthWatcherFileExists
+      ? `RuntimeTruth watcher events were loaded from ${runtimeTruthWatcherPath}.`
+      : "No runtimeTruthWatcherPath file was present; verify_scan fallback was used and remains blocked by RuntimeTruth source gates.",
   ],
 });
 
@@ -406,6 +668,8 @@ const watcherEvents = {
       shotId: item.shotId,
       artifactPath: item.expectedOutputPath,
       providerObservationPath: item.providerObservationPath,
+      semanticQaPath: item.semanticQaPath,
+      sourceKind: item.runtimeTruthWatcherFileUsed ? "app_server_fs_changed" : "verify_scan",
       observedAt: generatedAt,
       file: item.outputInfo,
     })),
@@ -421,7 +685,7 @@ const manifestMatch = {
   generatedAt,
   runId: manifest.runId,
   status: runtimeTruthReadyAll &&
-    outputObservations.every((item) => item.outputExists && item.outputImageInfo.mediaReadable && item.outputCurrent && item.scopedOutput && item.workerProvenanceValid && item.providerObservationValid)
+    outputObservations.every((item) => item.outputExists && item.outputImageInfo.mediaReadable && item.outputCurrent && item.scopedOutput && item.workerProvenanceValid && item.providerObservationValid && item.semanticQaCompleted)
     ? "matched"
     : "blocked",
   matches: outputObservations.map((item) => ({
@@ -431,8 +695,9 @@ const manifestMatch = {
     scopedOutput: item.scopedOutput,
     workerProvenanceValid: item.workerProvenanceValid,
     providerObservationValid: item.providerObservationValid,
+    semanticQaCompleted: item.semanticQaCompleted,
     runtimeTruthReady: item.runtimeTruthLayer.status === "preview_ready",
-    status: item.runtimeTruthLayer.status === "preview_ready" && item.outputExists && item.outputImageInfo.mediaReadable && item.outputCurrent && item.scopedOutput && item.workerProvenanceValid && item.providerObservationValid ? "matched" : "blocked",
+    status: item.runtimeTruthLayer.status === "preview_ready" && item.outputExists && item.outputImageInfo.mediaReadable && item.outputCurrent && item.scopedOutput && item.workerProvenanceValid && item.providerObservationValid && item.semanticQaCompleted ? "matched" : "blocked",
     blockers: [
       item.runtimeTruthLayer.status === "preview_ready" ? "" : "runtime truth layer blocked",
       item.outputExists ? "" : "expected output missing",
@@ -441,9 +706,11 @@ const manifestMatch = {
       item.scopedOutput ? "" : "output is outside scoped sandbox",
       item.workerProvenanceValid ? "" : "worker provenance invalid or missing",
       item.providerObservationValid ? "" : "provider observation invalid or missing",
+      item.semanticQaCompleted ? "" : "semantic QA incomplete or missing",
       ...item.freshRunBlockers,
       ...item.workerProvenanceBlockers,
       ...item.providerObservationBlockers,
+      ...item.semanticQaBlockers,
       ...item.runtimeTruthBlockers,
     ].filter(Boolean),
   })),
@@ -455,12 +722,16 @@ const qaReport = {
   schemaVersion: "real_demo_e2e_001_qa_report_v1",
   generatedAt,
   runId: manifest.runId,
-  overallStatus: manifestMatch.status === "matched" ? "needs_human_semantic_review" : "blocked",
+  overallStatus: manifestMatch.status === "matched"
+    ? outputObservations.some((item) => item.semanticQaStatus === "needs_review")
+      ? "needs_review"
+      : "pass"
+    : "blocked",
   note:
-    "This verify script performs return-path and provenance QA only. It does not perform semantic image critique; a human or visual QA subagent should review identity, scene, and style quality.",
+    "This verify script requires a hash-bound semantic QA sidecar before RuntimeTruthLayer can pass.",
   checks: outputObservations.map((item) => ({
     shotId: item.shotId,
-    status: item.runtimeTruthLayer.status === "preview_ready" && item.outputExists && item.outputImageInfo.mediaReadable && item.outputCurrent && item.scopedOutput && item.workerProvenanceValid && item.providerObservationValid
+    status: item.runtimeTruthLayer.status === "preview_ready" && item.outputExists && item.outputImageInfo.mediaReadable && item.outputCurrent && item.scopedOutput && item.workerProvenanceValid && item.providerObservationValid && item.semanticQaCompleted
       ? "structural_pass_semantic_needs_review"
       : "blocked",
     gates: {
@@ -474,6 +745,7 @@ const qaReport = {
       envelopeValid: item.envelopeValid,
       workerProvenanceValid: item.workerProvenanceValid,
       providerObservationValid: item.providerObservationValid,
+      semanticQaCompleted: item.semanticQaCompleted,
       runtimeTruthReady: item.runtimeTruthLayer.status === "preview_ready",
     },
     blockers: [
@@ -486,9 +758,11 @@ const qaReport = {
       item.envelopeValid ? "" : "subagent envelope is incomplete",
       item.workerProvenanceValid ? "" : "worker provenance is incomplete",
       item.providerObservationValid ? "" : "provider observation is incomplete",
+      item.semanticQaCompleted ? "" : "semantic QA is incomplete",
       ...item.freshRunBlockers,
       ...item.workerProvenanceBlockers,
       ...item.providerObservationBlockers,
+      ...item.semanticQaBlockers,
       ...item.runtimeTruthBlockers,
     ].filter(Boolean),
   })),
@@ -561,6 +835,14 @@ const report = buildRealDemoE2eReport({
     qaReportObserved: runtimeTruthReadyAll && allOutputsExist && qaReport.checks.length === outputObservations.length,
     previewUpdatedFromOutput: previewPlan.status === "draft_preview_ready",
     providerSelfReportCompletesTask,
+  },
+  quality: {
+    semanticQaStatus: qaReport.overallStatus === "pass" ? "pass" : qaReport.overallStatus === "needs_review" ? "needs_review" : "blocked",
+    semanticQaRequired: true,
+    p0FindingCount: outputObservations.reduce((sum, item) => sum + item.semanticQaFindings.P0.length, 0),
+    p1FindingCount: outputObservations.reduce((sum, item) => sum + item.semanticQaFindings.P1.length, 0),
+    p2FindingCount: outputObservations.reduce((sum, item) => sum + item.semanticQaFindings.P2.length, 0),
+    gates: requiredSemanticGates,
   },
   integrity: {
     manualFileCopyDetected,

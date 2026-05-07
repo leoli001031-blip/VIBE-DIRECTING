@@ -10,8 +10,10 @@ const envelopesRoot = path.join(runRoot, "subagent_envelopes");
 const promptsRoot = path.join(runRoot, "prompt_requests");
 const providerObservationRoot = path.join(runRoot, "provider_observations");
 const workerProvenanceRoot = path.join(runRoot, "worker_provenance");
+const semanticQaRoot = path.join(runRoot, "semantic_qa");
 const outputRoot = path.join(runRoot, "outputs/shots");
 const reportsRoot = path.join(runRoot, "reports");
+const runtimeTruthWatcherPath = path.join(reportsRoot, "runtime_truth_watcher_events.json");
 
 const generatedAt = new Date().toISOString();
 const projectId = "real_demo_e2e_001";
@@ -55,6 +57,7 @@ for (const dir of [
   promptsRoot,
   providerObservationRoot,
   workerProvenanceRoot,
+  semanticQaRoot,
   outputRoot,
   reportsRoot,
 ]) {
@@ -474,11 +477,48 @@ function workerProvenanceTemplate(plan) {
   };
 }
 
+function semanticQaTemplate(plan) {
+  return {
+    schemaVersion: "semantic_qa_real_demo_e2e_001",
+    receiptKind: "semantic_qa_receipt_v2",
+    semanticReviewMode: "template_pending_image_review",
+    sidecarPath: plan.semanticQaPath,
+    exists: true,
+    runId,
+    taskRunId: plan.taskRunId,
+    taskPacketId: plan.taskPacketId,
+    envelopeId: plan.envelopeId,
+    outputPath: plan.expectedOutputPath,
+    outputSha256: "FILL_BY_SEMANTIC_QA_REVIEWER_OUTPUT_SHA256",
+    reviewedOutputSha256: "FILL_BY_SEMANTIC_QA_REVIEWER_OUTPUT_SHA256",
+    reviewerId: "FILL_BY_SEMANTIC_QA_REVIEWER",
+    reviewedAt: "FILL_BY_SEMANTIC_QA_REVIEWER_ISO_TIME",
+    gateResults: {
+      identity: { status: "FILL_pass_needs_review_or_blocked", severity: null, findings: [] },
+      scene: { status: "FILL_pass_needs_review_or_blocked", severity: null, findings: [] },
+      style: { status: "FILL_pass_needs_review_or_blocked", severity: null, findings: [] },
+      story: { status: "FILL_pass_needs_review_or_blocked", severity: null, findings: [] },
+      neighbor: { status: "FILL_pass_needs_review_or_blocked", severity: null, findings: [] },
+      output: { status: "FILL_pass_needs_review_or_blocked", severity: null, findings: [] },
+    },
+    finalAssessment: {
+      p0Findings: [],
+      p1Findings: [],
+      p2Findings: [],
+    },
+    notes: [
+      "Write this only after reviewing the actual generated image at outputPath.",
+      "reviewedOutputSha256 must match the real image hash and must not be copied from a fixture.",
+    ],
+  };
+}
+
 function buildPlan(shot) {
   const safeShot = toId(shot.id);
   const outputPath = repoPath(path.join(outputRoot, shot.id, "start.png"));
   const providerObservationPath = repoPath(path.join(providerObservationRoot, `${shot.id}_start_provider_observation.json`));
   const workerProvenancePath = repoPath(path.join(workerProvenanceRoot, `${shot.id}_start_worker_provenance.json`));
+  const semanticQaPath = repoPath(path.join(semanticQaRoot, `${shot.id}_start_semantic_qa.json`));
   const taskPacketId = `task_packet_${safeShot}_start_frame_real_demo_001`;
   const envelopeId = `subagent_envelope_${safeShot}_start_frame_real_demo_001`;
   const taskRunId = `task_run_${safeShot}_start_frame_real_demo_001`;
@@ -491,6 +531,8 @@ function buildPlan(shot) {
     envelopeId,
     workerProvenanceId,
     workerProvenancePath,
+    semanticQaPath,
+    runtimeTruthWatcherPath: repoPath(runtimeTruthWatcherPath),
     expectedOutputPath: outputPath,
     providerObservationPath,
     packetPath: repoPath(path.join(packetsRoot, `${shot.id}_start_frame_packet.md`)),
@@ -508,6 +550,7 @@ for (const plan of realImagePlans) {
   const packetPath = path.join(repoRoot, plan.packetPath);
   const envelopePath = path.join(repoRoot, plan.envelopePath);
   const promptRequestPath = path.join(repoRoot, plan.promptRequestPath);
+  const semanticQaPath = path.join(repoRoot, plan.semanticQaPath);
   const expectedAbsPath = path.join(repoRoot, plan.expectedOutputPath);
   ensureDir(path.dirname(expectedAbsPath));
 
@@ -558,6 +601,8 @@ for (const plan of realImagePlans) {
       outputPath: plan.expectedOutputPath,
       providerObservationPath: plan.providerObservationPath,
       workerProvenancePath: plan.workerProvenancePath,
+      semanticQaPath: plan.semanticQaPath,
+      runtimeTruthWatcherPath: plan.runtimeTruthWatcherPath,
       format: "png_or_jpeg_image",
       aspectRatio: "16:9",
       requiredFields: [
@@ -589,6 +634,8 @@ for (const plan of realImagePlans) {
   const prompt = buildImagePrompt(shot);
   const observation = observationTemplate(plan);
   const workerProvenance = workerProvenanceTemplate(plan);
+  const semanticQa = semanticQaTemplate(plan);
+  writeJson(semanticQaPath, semanticQa);
   const packet = `# Real Demo E2E 001 - ${shot.id} Start Frame Packet
 
 You are the Image2/imagegen subagent for Vibe Core Real Demo E2E 001.
@@ -608,6 +655,8 @@ Do not use Seedance, Jimeng, Fast model, VIP channel, or text-to-video. Do not c
 - Image path: \`${plan.expectedOutputPath}\`
 - Provider observation sidecar: \`${plan.providerObservationPath}\`
 - Worker provenance sidecar: \`${plan.workerProvenancePath}\`
+- Semantic QA sidecar: \`${plan.semanticQaPath}\`
+- Runtime truth watcher events: \`${plan.runtimeTruthWatcherPath}\`
 
 ## Locked Context
 - Role: ${character.displayName} - ${character.description}
@@ -644,7 +693,14 @@ Also write this independent worker provenance JSON to \`${plan.workerProvenanceP
 ${JSON.stringify(workerProvenance, null, 2)}
 \`\`\`
 
-The task is not complete unless the image, provider observation sidecar, and independent worker provenance sidecar exist. The sidecars are evidence only; Vibe Core verify will still require watcher events, manifest match, QA report, and preview plan.
+## Required Semantic QA Template
+After the actual image exists, an independent semantic review must write this JSON to \`${plan.semanticQaPath}\`.
+
+\`\`\`json
+${JSON.stringify(semanticQa, null, 2)}
+\`\`\`
+
+The task is not complete unless the image, provider observation sidecar, independent worker provenance sidecar, semantic QA sidecar, and app-server fs changed watcher events exist. The sidecars are evidence only; Vibe Core verify will still require watcher events, manifest match, QA report, and preview plan.
 `;
 
   writeText(packetPath, packet);
@@ -662,6 +718,8 @@ const runManifest = {
   projectRoot: repoPath(projectRoot),
   outputRoot: repoPath(outputRoot),
   providerObservationRoot: repoPath(providerObservationRoot),
+  semanticQaRoot: repoPath(semanticQaRoot),
+  runtimeTruthWatcherPath: repoPath(runtimeTruthWatcherPath),
   sourceIndexHash,
   uiActionPath: repoPath(path.join(runRoot, "ui_action.json")),
   projectFacts: {

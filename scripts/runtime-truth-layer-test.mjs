@@ -280,6 +280,17 @@ assert(ready.semanticQa.verified === true, "ready semantic QA should be verified
 assert(ready.watcherEventLog.verified === true, "ready watcher log should be verified");
 assert(ready.freshRunContract.status === "ready", "ready fresh run contract should be ready");
 
+const verifiedAfterLeaseWindow = buildRuntimeTruthLayer(input({
+  generatedAt: "2026-05-07T01:10:00.000Z",
+  workerLease: workerLease({ leaseExpiresAt: "2026-05-07T01:00:30.000Z" }),
+}));
+assert(
+  verifiedAfterLeaseWindow.status === "preview_ready",
+  `completed output should remain verifiable after lease window: ${verifiedAfterLeaseWindow.blockers.join("; ")}`,
+);
+assert(verifiedAfterLeaseWindow.workerLease.notExpired === false, "post-window report should expose that the lease is no longer live");
+assert(verifiedAfterLeaseWindow.workerLease.leaseCoversObservedWork === true, "lease should cover the observed provider work timestamp");
+
 const noOutput = buildRuntimeTruthLayer(input({
   artifact: artifact({ exists: false, fileModifiedAt: undefined, sizeBytes: 0 }),
 }));

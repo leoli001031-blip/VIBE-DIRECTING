@@ -157,6 +157,7 @@ export interface TaskRunLifecycleState {
 
 export interface WorkerLeaseState extends WorkerLeaseFacts {
   present: boolean;
+  observedWorkAt?: string;
   identityComplete: boolean;
   bindingMatched: boolean;
   provenanceModeActual: boolean;
@@ -166,6 +167,7 @@ export interface WorkerLeaseState extends WorkerLeaseFacts {
   sidecarModifiedAtFresh: boolean;
   timingComplete: boolean;
   notExpired: boolean;
+  leaseCoversObservedWork: boolean;
   retryBudgetAvailable: boolean;
   resumptionConsistent: boolean;
   verified: boolean;
@@ -338,6 +340,14 @@ function timestampIsNotExpired(value: string | undefined, generatedAt: string): 
   return valueMs >= generatedMs;
 }
 
+function timestampIsWithinRange(value: string | undefined, start: string | undefined, end: string | undefined, skewMs: number): boolean {
+  const valueMs = parseTimestampMs(value);
+  const startMs = parseTimestampMs(start);
+  const endMs = parseTimestampMs(end);
+  if (valueMs === null || startMs === null || endMs === null) return false;
+  return valueMs + skewMs >= startMs && valueMs <= endMs + skewMs;
+}
+
 function normalizePath(value: string | undefined): string {
   return String(value || "").replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "");
 }
@@ -418,7 +428,11 @@ function buildWorkerLeaseState(input: BuildRuntimeTruthLayerInput): WorkerLeaseS
       pathsMatch(lease.outputPath, input.expectedOutputPath),
   );
   const timingComplete = Boolean(lease && nonEmpty(lease.leaseStartedAt) && nonEmpty(lease.leaseExpiresAt));
+  const observedWorkAt = input.providerObservation?.generatedAt || input.artifact.fileModifiedAt;
   const notExpired = Boolean(lease && timestampIsNotExpired(lease.leaseExpiresAt, input.generatedAt));
+  const leaseCoversObservedWork = Boolean(
+    lease && timestampIsWithinRange(observedWorkAt, lease.leaseStartedAt, lease.leaseExpiresAt, input.allowedClockSkewMs || 1000),
+  );
   const retryBudgetAvailable = Number(lease?.retryBudget ?? -1) >= 0;
   const resumptionConsistent = !lease?.resumed || lease.interrupted === true;
   const blockers = uniqueSorted([
@@ -431,7 +445,7 @@ function buildWorkerLeaseState(input: BuildRuntimeTruthLayerInput): WorkerLeaseS
     identityComplete ? "" : "runtime_truth_worker_provenance_incomplete",
     bindingIsMatched ? "" : "runtime_truth_worker_lease_binding_mismatch",
     timingComplete ? "" : "runtime_truth_worker_lease_timing_incomplete",
-    notExpired ? "" : "runtime_truth_worker_lease_expired",
+    leaseCoversObservedWork ? "" : "runtime_truth_worker_lease_expired",
     retryBudgetAvailable ? "" : "runtime_truth_worker_retry_budget_missing",
     resumptionConsistent ? "" : "runtime_truth_worker_resumed_without_interruption",
   ]);
@@ -458,6 +472,7 @@ function buildWorkerLeaseState(input: BuildRuntimeTruthLayerInput): WorkerLeaseS
     resumable: lease?.resumable,
     interrupted: lease?.interrupted,
     resumed: lease?.resumed,
+    observedWorkAt,
     present,
     identityComplete,
     bindingMatched: bindingIsMatched,
@@ -468,6 +483,7 @@ function buildWorkerLeaseState(input: BuildRuntimeTruthLayerInput): WorkerLeaseS
     sidecarModifiedAtFresh,
     timingComplete,
     notExpired,
+    leaseCoversObservedWork,
     retryBudgetAvailable,
     resumptionConsistent,
     verified: blockers.length === 0,
