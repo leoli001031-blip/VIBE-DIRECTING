@@ -158,6 +158,19 @@ const reviewProjection = buildMinimalRuntimeProjection({
 });
 assert(reviewProjection.progressDots.some((dot) => dot.id === "review" && dot.tone === "review"), "review dot should activate for parked/stale/review work");
 
+const image2LedgerProjection = buildMinimalRuntimeProjection({
+  ledgerProjections: [
+    { currentStatus: "queued", previewStatus: "missing", completeVerified: false },
+    { currentStatus: "queued", previewStatus: "qa_pending", completeVerified: false },
+    { currentStatus: "parked", previewStatus: "needs_review", completeVerified: false },
+  ],
+});
+assert(image2LedgerProjection.counts.queued === 2, "minimal projection should count queued Image2 ledger rows");
+assert(image2LedgerProjection.counts.parked === 1, "minimal projection should count parked Image2 ledger rows");
+assert(image2LedgerProjection.previewSummary.qaPendingCount === 1, "minimal projection should read compact ledger qa_pending status");
+assert(image2LedgerProjection.previewSummary.needsReviewCount === 1, "minimal projection should read compact ledger needs_review status");
+assert(image2LedgerProjection.progressDots.some((dot) => dot.id === "review" && dot.tone === "review"), "compact ledger review should affect top projection");
+
 const previewOnlyProjection = buildMinimalRuntimeProjection({
   previewQueue: [previewItem("s01", "image_hold"), previewItem("s02", "missing_placeholder")],
 });

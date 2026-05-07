@@ -57,8 +57,19 @@ export interface BuildMinimalRuntimeProjectionInput {
   transactionRuntime?: ProjectTransactionRuntimeState;
   previewQueue?: PreviewQueueItem[];
   assetLibrary?: Pick<AssetLibrarySnapshot, "assets">;
-  ledgerProjections?: TaskRunLedgerProjection[];
+  ledgerProjections?: MinimalLedgerProjectionLike[];
 }
+
+export type MinimalLedgerProjectionLike =
+  | TaskRunLedgerProjection
+  | {
+    currentStatus?: string;
+    previewStatus?: string;
+    completeVerified?: boolean;
+    previewSummary?: {
+      status?: string;
+    };
+  };
 
 const defaultTimestamp = "1970-01-01T00:00:00.000Z";
 
@@ -78,10 +89,15 @@ function statusShortLabel(status?: ProjectTransactionUserStatus) {
   return status ? labels[status] : undefined;
 }
 
-function ledgerCount(projections: TaskRunLedgerProjection[] | undefined, statuses: TaskRunLedgerStatus[]) {
+function ledgerCount(projections: MinimalLedgerProjectionLike[] | undefined, statuses: TaskRunLedgerStatus[]) {
   if (!projections?.length) return 0;
   const statusSet = new Set(statuses);
-  return projections.filter((projection) => statusSet.has(projection.currentStatus)).length;
+  return projections.filter((projection) => statusSet.has(projection.currentStatus as TaskRunLedgerStatus)).length;
+}
+
+function ledgerPreviewStatus(projection: MinimalLedgerProjectionLike) {
+  const compact = projection as { previewStatus?: string; previewSummary?: { status?: string } };
+  return compact.previewStatus || compact.previewSummary?.status;
 }
 
 function buildCounts(input: BuildMinimalRuntimeProjectionInput): MinimalRuntimeCounts {
@@ -102,14 +118,14 @@ function buildCounts(input: BuildMinimalRuntimeProjectionInput): MinimalRuntimeC
 
 function buildPreviewSummary(
   queue: PreviewQueueItem[] | undefined,
-  ledgerProjections: TaskRunLedgerProjection[] | undefined,
+  ledgerProjections: MinimalLedgerProjectionLike[] | undefined,
 ): MinimalRuntimePreviewSummary {
   const items = queue || [];
   const imageHoldCount = items.filter((item) => item.kind === "image_hold").length;
   const videoClipCount = items.filter((item) => item.kind === "video_clip").length;
   const missingPlaceholderCount = items.filter((item) => item.kind === "missing_placeholder").length;
-  const qaPendingCount = ledgerProjections?.filter((item) => item.previewSummary.status === "qa_pending").length || 0;
-  const needsReviewCount = ledgerProjections?.filter((item) => item.previewSummary.status === "needs_review").length || 0;
+  const qaPendingCount = ledgerProjections?.filter((item) => ledgerPreviewStatus(item) === "qa_pending").length || 0;
+  const needsReviewCount = ledgerProjections?.filter((item) => ledgerPreviewStatus(item) === "needs_review").length || 0;
   const returned = imageHoldCount + videoClipCount;
   const returnedUnit = videoClipCount > 0 ? "段已返回" : "张已返回";
   const detail = [

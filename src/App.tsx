@@ -7596,6 +7596,16 @@ function projectImage2BatchStatusLabel(state: ProjectImage2BatchPanelState) {
   return "unavailable";
 }
 
+function projectImage2BatchLedgerLabel(summary: ProjectImage2BatchPanelState["summary"]) {
+  if (!summary?.ledgerProjections.length) return "";
+  const parts = [
+    summary.queuedCount ? `${summary.queuedCount} queued` : "",
+    summary.parkedCount ? `${summary.parkedCount} parked` : "",
+    summary.completeVerifiedCount ? `${summary.completeVerifiedCount} verified` : "",
+  ].filter(Boolean);
+  return parts.length ? `ledger ${parts.join(" · ")}` : `ledger ${summary.ledgerProjections.length} tracked`;
+}
+
 function ProjectRealChainPanel({
   state,
   image2BatchState,
@@ -7615,6 +7625,7 @@ function ProjectRealChainPanel({
   const image2BatchRunning = image2BatchState.status === "running";
   const status = projectRealChainStatusLabel(state.status);
   const image2BatchStatus = projectImage2BatchStatusLabel(image2BatchState);
+  const image2BatchLedgerStatus = projectImage2BatchLedgerLabel(image2Batch);
   const reviewShotIds = summary?.reviewShotIds.length ? summary.reviewShotIds.join("/") : "";
   const returnedCount = summary?.returnedImageCount ?? 0;
   const plannedCount = summary?.totalPlannedImages ?? 0;
@@ -7650,7 +7661,10 @@ function ProjectRealChainPanel({
           <strong>{image2BatchStatus}</strong>
           <small>
             {image2Batch
-              ? `${image2Batch.readyCount}/${image2Batch.plannedCount} 可复核 · ${image2Batch.blockedCount} 阻断`
+              ? [
+                `${image2Batch.readyCount}/${image2Batch.plannedCount} 可复核 · ${image2Batch.blockedCount} 阻断`,
+                image2BatchLedgerStatus,
+              ].filter(Boolean).join(" · ")
               : "等待 runtime projection"}
           </small>
         </div>
@@ -9321,8 +9335,9 @@ function App() {
   const topRuntimeProjection = useMemo(() => buildMinimalRuntimeProjection({
     previewQueue: buildPreviewPlayerQueue(runtimeState.previewExport, runtimeState.storyFlow.shots),
     assetLibrary,
+    ledgerProjections: projectImage2BatchState.summary?.ledgerProjections,
     generatedAt: runtimeState.generatedAt,
-  }), [assetLibrary, runtimeState.generatedAt, runtimeState.previewExport, runtimeState.storyFlow.shots]);
+  }), [assetLibrary, projectImage2BatchState.summary?.ledgerProjections, runtimeState.generatedAt, runtimeState.previewExport, runtimeState.storyFlow.shots]);
   const projectPlan = useMemo(
     () => buildMinimalProjectPlan(runtimeState, topRuntimeProjection.shortLabel, topRuntimeProjection.progressDots),
     [runtimeState, topRuntimeProjection.progressDots, topRuntimeProjection.shortLabel],

@@ -99,6 +99,29 @@ export type ProjectImage2BatchPlanItem = {
   blockers: string[];
 };
 
+export type ProjectImage2BatchLedgerSummary = {
+  total: number;
+  queued: number;
+  blocked: number;
+  parked: number;
+  completeVerified: number;
+  providerSubmissionForbidden: boolean;
+  liveSubmitAllowed: boolean;
+  noFileMutation: boolean;
+  workerSpawnForbidden: boolean;
+  providerCalled: boolean;
+};
+
+export type ProjectImage2BatchLedgerProjection = {
+  taskRunId: string;
+  envelopeId?: string;
+  currentStatus: string;
+  expectedOutputPath?: string;
+  expectedOutputs: Array<{ expectedOutputPath?: string; path?: string } | string>;
+  previewStatus?: string;
+  completeVerified: boolean;
+};
+
 export type ProjectImage2BatchPlanStatus = {
   uiStatus: ProjectImage2BatchUiStatus;
   schemaVersion?: string;
@@ -116,6 +139,14 @@ export type ProjectImage2BatchPlanStatus = {
   selectedShotIds: string[];
   nextAction: string;
   items: ProjectImage2BatchPlanItem[];
+  ledgerSummary?: ProjectImage2BatchLedgerSummary;
+  ledgerProjections: ProjectImage2BatchLedgerProjection[];
+  queuedCount: number;
+  parkedCount: number;
+  completeVerifiedCount: number;
+  providerSubmissionForbidden: boolean;
+  noFileMutation: boolean;
+  workerSpawnForbidden: boolean;
   providerCalled: boolean;
   prepareRan: boolean;
   verifyScriptRan: boolean;
@@ -228,6 +259,11 @@ type ProjectImage2BatchPayload = {
     selectedShotIds?: string[];
     nextAction?: string;
   };
+  ledgerProjection?: {
+    schemaVersion?: string;
+    summary?: Record<string, unknown>;
+    projections?: Array<Record<string, unknown>>;
+  };
   message?: string;
 };
 
@@ -241,6 +277,10 @@ function stringArray(value: unknown): string[] {
 
 function numberOrUndefined(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function booleanOrUndefined(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 function payloadFromUnknown(payload: unknown): ProjectRealChainPayload | undefined {
@@ -261,6 +301,54 @@ function image2BatchPayloadFromUnknown(payload: unknown): ProjectImage2BatchPayl
   if (isRecord(payload.report)) return { ...(payload.report as ProjectImage2BatchPayload), ...payload } as ProjectImage2BatchPayload;
   if (isRecord(payload.result)) return { ...(payload.result as ProjectImage2BatchPayload), ...payload } as ProjectImage2BatchPayload;
   return undefined;
+}
+
+function deriveImage2BatchLedgerSummary(value: unknown): ProjectImage2BatchLedgerSummary | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    total: numberOrUndefined(value.total) ?? 0,
+    queued: numberOrUndefined(value.queued) ?? 0,
+    blocked: numberOrUndefined(value.blocked) ?? 0,
+    parked: numberOrUndefined(value.parked) ?? 0,
+    completeVerified: numberOrUndefined(value.completeVerified) ?? 0,
+    providerSubmissionForbidden: booleanOrUndefined(value.providerSubmissionForbidden) ?? false,
+    liveSubmitAllowed: booleanOrUndefined(value.liveSubmitAllowed) ?? false,
+    noFileMutation: booleanOrUndefined(value.noFileMutation) ?? false,
+    workerSpawnForbidden: booleanOrUndefined(value.workerSpawnForbidden) ?? false,
+    providerCalled: booleanOrUndefined(value.providerCalled) ?? false,
+  };
+}
+
+function normalizeLedgerExpectedOutputs(value: unknown): ProjectImage2BatchLedgerProjection["expectedOutputs"] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is { expectedOutputPath?: string; path?: string } | string => {
+    if (typeof item === "string") return true;
+    return isRecord(item) && (typeof item.expectedOutputPath === "string" || typeof item.path === "string");
+  }).map((item) => {
+    if (typeof item === "string") return item;
+    return {
+      expectedOutputPath: typeof item.expectedOutputPath === "string" ? item.expectedOutputPath : undefined,
+      path: typeof item.path === "string" ? item.path : undefined,
+    };
+  });
+}
+
+function deriveImage2BatchLedgerProjections(value: unknown): ProjectImage2BatchLedgerProjection[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isRecord).map((item, index): ProjectImage2BatchLedgerProjection => ({
+    taskRunId: typeof item.taskRunId === "string" ? item.taskRunId : `task_run_${String(index + 1).padStart(2, "0")}`,
+    envelopeId: typeof item.envelopeId === "string" ? item.envelopeId : undefined,
+    currentStatus: typeof item.currentStatus === "string" ? item.currentStatus : "prepared",
+    expectedOutputPath: typeof item.expectedOutputPath === "string" ? item.expectedOutputPath : undefined,
+    expectedOutputs: normalizeLedgerExpectedOutputs(item.expectedOutputs),
+    previewStatus: typeof item.previewStatus === "string"
+      ? item.previewStatus
+      : isRecord(item.previewSummary) && typeof item.previewSummary.status === "string"
+        ? item.previewSummary.status
+        : undefined,
+    completeVerified: item.completeVerified === true
+      || (isRecord(item.completionGate) && item.completionGate.completeVerified === true),
+  }));
 }
 
 function runtimeApiBaseUrl() {
@@ -450,6 +538,13 @@ export function deriveProjectImage2BatchPlanStatus(
       selectedShotIds: [],
       nextAction: "Runtime Image2 batch plan is unavailable.",
       items: [],
+      ledgerProjections: [],
+      queuedCount: 0,
+      parkedCount: 0,
+      completeVerifiedCount: 0,
+      providerSubmissionForbidden: false,
+      noFileMutation: false,
+      workerSpawnForbidden: false,
       providerCalled: false,
       prepareRan: false,
       verifyScriptRan: false,
@@ -478,6 +573,8 @@ export function deriveProjectImage2BatchPlanStatus(
   const selectedShotIds = stringArray(report.summary?.selectedShotIds).length
     ? stringArray(report.summary?.selectedShotIds)
     : items.map((item) => item.shotId);
+  const ledgerSummary = deriveImage2BatchLedgerSummary(report.ledgerProjection?.summary);
+  const ledgerProjections = deriveImage2BatchLedgerProjections(report.ledgerProjection?.projections);
   const uiStatus: ProjectImage2BatchUiStatus = plannedCount > 0 && blockedCount === 0 ? "ready_for_review" : plannedCount > 0 ? "blocked" : "unavailable";
   const project = report.project || {};
 
@@ -498,10 +595,18 @@ export function deriveProjectImage2BatchPlanStatus(
     selectedShotIds,
     nextAction: report.summary?.nextAction || "Review the dry-run Image2 batch plan before any manual submit.",
     items,
-    providerCalled: report.providerCalled === true,
+    ledgerSummary,
+    ledgerProjections,
+    queuedCount: ledgerSummary?.queued ?? ledgerProjections.filter((item) => item.currentStatus === "queued").length,
+    parkedCount: ledgerSummary?.parked ?? ledgerProjections.filter((item) => item.currentStatus === "parked").length,
+    completeVerifiedCount: ledgerSummary?.completeVerified ?? ledgerProjections.filter((item) => item.completeVerified).length,
+    providerSubmissionForbidden: ledgerSummary?.providerSubmissionForbidden ?? false,
+    noFileMutation: ledgerSummary?.noFileMutation ?? false,
+    workerSpawnForbidden: ledgerSummary?.workerSpawnForbidden ?? false,
+    providerCalled: (ledgerSummary?.providerCalled ?? report.providerCalled) === true,
     prepareRan: report.prepareRan === true,
     verifyScriptRan: report.verifyScriptRan === true,
-    liveSubmitAllowed: report.liveSubmitAllowed === true,
+    liveSubmitAllowed: (ledgerSummary?.liveSubmitAllowed ?? report.liveSubmitAllowed) === true,
     message: report.message,
   };
 }
