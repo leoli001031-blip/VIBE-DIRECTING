@@ -274,6 +274,46 @@ function image2BatchPlanItem(source, observation, queueOrder, shotPlan = {}) {
   };
 }
 
+function image2BatchLedgerProjection(payload) {
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  const projections = items.map((item) => {
+    const blocked = item.blocked === true || (Array.isArray(item.blockers) && item.blockers.length > 0);
+    return {
+      taskRunId: item.taskRunId,
+      envelopeId: item.envelopeId,
+      currentStatus: blocked ? "parked" : "queued",
+      expectedOutputPath: item.expectedOutputPath,
+      expectedOutputs: [
+        {
+          expectedOutputPath: item.expectedOutputPath,
+        },
+      ],
+      previewStatus: "missing",
+      completeVerified: false,
+    };
+  });
+  const parked = projections.filter((item) => item.currentStatus === "parked").length;
+
+  return {
+    schemaVersion: "vibe_core_current_project_image2_batch_ledger_projection_v1",
+    projectId: payload.project?.projectId,
+    runId: payload.project?.runId,
+    projections,
+    summary: {
+      total: projections.length,
+      queued: projections.length - parked,
+      blocked: parked,
+      parked,
+      completeVerified: 0,
+      providerSubmissionForbidden: true,
+      liveSubmitAllowed: false,
+      noFileMutation: true,
+      workerSpawnForbidden: true,
+      providerCalled: false,
+    },
+  };
+}
+
 function unavailableResponse(extra = {}) {
   const source = extra.sourceProject || realDemo005Source();
   return {
@@ -393,8 +433,7 @@ function currentProjectImage2BatchPlanResponse(extra = {}) {
     return image2BatchPlanItem(source, observation, index + 1, shotPlan);
   });
   const blockedItems = items.filter((item) => item.blocked);
-
-  return {
+  const payload = {
     ok: existsSync(source.reportPath),
     ...runtimePolicy({
       runMode: "read_only_image2_batch_plan_projection",
@@ -436,6 +475,10 @@ function currentProjectImage2BatchPlanResponse(extra = {}) {
     verifyScriptRan: false,
     liveSubmitAllowed: false,
     ...extra,
+  };
+  return {
+    ...payload,
+    ledgerProjection: image2BatchLedgerProjection(payload),
   };
 }
 
@@ -586,6 +629,9 @@ function handleCurrentProjectImage2BatchRunCheck(res) {
       prepareRan: false,
       verifyScriptRan: false,
       liveSubmitAllowed: false,
+      providerSubmissionForbidden: true,
+      noFileMutation: true,
+      workerSpawnForbidden: true,
     },
   });
   writeJson(res, payload.ok === false ? 500 : 200, payload);

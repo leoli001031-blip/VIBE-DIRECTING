@@ -105,6 +105,21 @@ function assertImage2BatchPlanPayload(payload, label) {
   assert(Array.isArray(payload.summary?.selectedShotIds), `${label} selectedShotIds missing`);
   assert(payload.summary.selectedShotIds.includes("S01"), `${label} selected shots should include S01`);
   assert(typeof payload.summary.nextAction === "string" && payload.summary.nextAction.length > 0, `${label} next action missing`);
+  assert(payload.ledgerProjection?.schemaVersion === "vibe_core_current_project_image2_batch_ledger_projection_v1", `${label} ledger projection schema mismatch`);
+  assert(payload.ledgerProjection.summary?.total === 8, `${label} ledger total mismatch`);
+  assert(payload.ledgerProjection.summary?.queued === payload.summary.readyCount, `${label} ledger queued count mismatch`);
+  assert(payload.ledgerProjection.summary?.blocked === payload.summary.blockedCount, `${label} ledger blocked count mismatch`);
+  assert(payload.ledgerProjection.summary?.parked === payload.summary.blockedCount, `${label} ledger parked count mismatch`);
+  assert(payload.ledgerProjection.summary?.completeVerified === 0, `${label} ledger completeVerified should be 0`);
+  assert(payload.ledgerProjection.summary?.providerSubmissionForbidden === true, `${label} ledger provider submission must be forbidden`);
+  assert(payload.ledgerProjection.summary?.liveSubmitAllowed === false, `${label} ledger live submit must not be allowed`);
+  assert(payload.ledgerProjection.summary?.noFileMutation === true, `${label} ledger must not mutate files`);
+  assert(payload.ledgerProjection.summary?.workerSpawnForbidden === true, `${label} ledger must forbid worker spawn`);
+  assert(payload.ledgerProjection.summary?.providerCalled === false, `${label} ledger must not call provider`);
+  assert(Array.isArray(payload.ledgerProjection.projections) && payload.ledgerProjection.projections.length === 8, `${label} ledger projections mismatch`);
+  assert(payload.ledgerProjection.projections.every((item) => item.completeVerified === false), `${label} ledger items must not be complete verified`);
+  assert(payload.ledgerProjection.projections.every((item) => item.previewStatus === "missing"), `${label} ledger previews should be missing`);
+  assert(payload.ledgerProjection.projections.every((item) => item.currentStatus === "queued" || item.currentStatus === "parked"), `${label} ledger item status mismatch`);
 
   const first = payload.items.find((item) => item.shotId === "S01");
   assert(first?.taskRunId === "task_run_s01_image2_start_real_demo_005", `${label} S01 taskRunId mismatch`);
@@ -117,6 +132,13 @@ function assertImage2BatchPlanPayload(payload, label) {
   assert(Array.isArray(first?.referencePaths), `${label} S01 referencePaths missing`);
   assert(first.referencePaths.includes("real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/project/project.vibe"), `${label} S01 referencePaths should include project.vibe`);
   assert(first.queueOrder === 1, `${label} S01 queue order mismatch`);
+
+  const firstLedgerProjection = payload.ledgerProjection.projections.find((item) => item.taskRunId === first.taskRunId);
+  assert(firstLedgerProjection?.envelopeId === first.envelopeId, `${label} S01 ledger envelope mismatch`);
+  assert(firstLedgerProjection?.currentStatus === "queued", `${label} S01 ledger status should be queued`);
+  assert(firstLedgerProjection?.expectedOutputPath === first.expectedOutputPath, `${label} S01 ledger expected output path mismatch`);
+  assert(Array.isArray(firstLedgerProjection?.expectedOutputs), `${label} S01 ledger expectedOutputs missing`);
+  assert(firstLedgerProjection.expectedOutputs.some((item) => item.expectedOutputPath === first.expectedOutputPath), `${label} S01 ledger expectedOutputs should include expectedOutputPath`);
 }
 
 const child = spawn(process.execPath, ["scripts/local-runtime-api-server.mjs"], {
@@ -163,6 +185,9 @@ try {
   assert(image2BatchRunCheck.payload.command?.prepareRan === false, "POST image2 batch command must not run prepare");
   assert(image2BatchRunCheck.payload.command?.verifyScriptRan === false, "POST image2 batch command must not run verify script");
   assert(image2BatchRunCheck.payload.command?.liveSubmitAllowed === false, "POST image2 batch command must not allow live submit");
+  assert(image2BatchRunCheck.payload.command?.providerSubmissionForbidden === true, "POST image2 batch command must forbid provider submission");
+  assert(image2BatchRunCheck.payload.command?.noFileMutation === true, "POST image2 batch command must not mutate files");
+  assert(image2BatchRunCheck.payload.command?.workerSpawnForbidden === true, "POST image2 batch command must forbid worker spawn");
 
   const status = await fetchJson(`${baseUrl}/api/runtime/real-demo-e2e/005/status`);
   assert(status.response.status === 200, "GET status should return 200");
