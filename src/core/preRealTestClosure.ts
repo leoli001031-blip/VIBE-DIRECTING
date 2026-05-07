@@ -1,4 +1,5 @@
 import { buildPreviewExportState } from "./previewExport";
+import { buildImageReferenceTransport, type SourceStartFrameFileFacts } from "./imageReferenceTransport";
 import { buildProviderHandoffStatus } from "./providerHandoffStatus";
 import type { ProjectRuntimeState } from "./projectState";
 import {
@@ -31,6 +32,7 @@ export interface PreRealTestClosureOptions {
   providerTaskRef?: string;
   providerSelfReportedComplete?: boolean;
   returnEvidence?: PreRealTestReturnEvidence;
+  sourceStartFrameFileFacts?: SourceStartFrameFileFacts;
 }
 
 export interface PreRealTestClosureResult {
@@ -268,12 +270,53 @@ export function applyPreRealTestClosure(
     authorizedAt: generatedAt,
     secretMaterialPresent: false,
   };
+  const imageReferenceTransport = buildImageReferenceTransport({
+    generatedAt,
+    request,
+    actionCapability: {
+      actionId: `pre_real_test_image_reference_${safeId(request.requestId)}`,
+      providerId: "openai-image2-api",
+      providerSlot: image2Preview.providerSlot,
+      requiredMode: image2Preview.requiredMode,
+      interfaceKind: request.operation === "image2image" ? "explicit_image_input" : "structured_handoff",
+      inputKinds: request.operation === "image2image" ? ["text", "local_image", "reference_image"] : ["text"],
+      supportsExplicitImageInput: request.operation === "image2image",
+      supportsLocalImageInput: request.operation === "image2image",
+      supportsFileReferenceInput: request.operation === "image2image",
+      supportsPromptOnly: false,
+      referenceImageInputRoles: request.operation === "image2image" ? ["source_start_frame"] : [],
+      notes: ["Pre-real-test closure builds a handoff receipt only; it never performs provider transport."],
+    },
+    appServerCapability: {
+      runtimeKind: "codex_app_server",
+      readiness: "ready",
+      canUseImageRuntime: true,
+      imageRuntimeAvailable: true,
+      imageRuntimeSupportsExplicitInputs: true,
+      imageRuntimeSupportsLocalFiles: true,
+      imageRuntimeInputKinds: request.operation === "image2image" ? ["text", "local_image", "reference_image"] : ["text"],
+      generatedSchemaAvailable: true,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      notes: ["This state is capability evidence for handoff gating, not an app-server provider call."],
+    },
+    outputSandbox: {
+      root: runtimeState.executionLedger.outputSandbox.root,
+      allowedPrefixes: runtimeState.executionLedger.outputSandbox.allowedPrefixes,
+      expectedOutputPath: image2Preview.outputPath || request.payload.outputPath,
+      manifestPath: runtimeState.executionLedger.outputSandbox.manifestPath,
+      qaReportPath: runtimeState.executionLedger.outputSandbox.qaReportPath,
+      outsideRootWriteAllowed: false,
+    },
+    sourceStartFrameFileFacts: options.sourceStartFrameFileFacts,
+  });
   const oneShotRealCallState = buildRealProviderOneShotState({
     generatedAt,
     selectedShotIds: runtimeState.realProviderOneShotTest.selectedShotIds,
     selectedTaskPlanIds: runtimeState.realProviderOneShotTest.selectedTaskPlanIds,
     requestPreview: image2Preview,
     adapterRequest: request,
+    imageReferenceTransport,
     actionConfirmation,
     credentialGrant,
     budgetNotice: {
@@ -294,6 +337,7 @@ export function applyPreRealTestClosure(
   const plan = buildRealProviderTransportPlan({
     generatedAt,
     oneShotState: oneShotRealCallState,
+    imageReferenceTransport,
     transportMode: options.transportMode || "mock_dry_run",
     manualTransportAcknowledged: options.manualTransportAcknowledged,
   });

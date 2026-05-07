@@ -1,7 +1,8 @@
 import { compileImage2OneShotRealCallPayload, type Image2OneShotRealCallPayload } from "./providerAdapters/image2Adapter";
+import type { ImageReferenceTransportState } from "./imageReferenceTransport";
 import type { ManifestMatchReport } from "./manifestMatcher";
 import type { RealProviderExecutorRequestPreview } from "./realProviderExecutor";
-import type { GenerationHealthReport, Image2AdapterRequest, WatcherEvent } from "./types";
+import type { GenerationHealthReport, Image2AdapterRequest, Image2ReferenceImageInput, WatcherEvent } from "./types";
 
 export const realProviderOneShotSchemaVersion = "0.1.0";
 
@@ -63,12 +64,25 @@ export interface RealProviderOneShotProviderReport {
   selfReportedComplete?: boolean;
 }
 
+export type RealProviderOneShotImageReferenceTransportEvidence = Pick<
+  ImageReferenceTransportState,
+  | "status"
+  | "requestId"
+  | "taskPlanId"
+  | "operation"
+  | "requiredSourceStartFrame"
+  | "sourceStartFrame"
+  | "transportPolicy"
+  | "blockers"
+>;
+
 export interface BuildRealProviderOneShotStateInput {
   generatedAt: string;
   selectedShotIds: string[];
   selectedTaskPlanIds: string[];
   requestPreview: RealProviderExecutorRequestPreview;
   adapterRequest: Image2AdapterRequest;
+  imageReferenceTransport?: RealProviderOneShotImageReferenceTransportEvidence;
   actionConfirmation?: RealProviderOneShotActionConfirmation;
   credentialGrant?: RealProviderOneShotCredentialGrant;
   budgetNotice: RealProviderOneShotBudgetNotice;
@@ -99,6 +113,8 @@ export interface RealProviderOneShotState {
     watcherExpectedOutputDetected: boolean;
     manifestMatched: boolean;
     qaPassed: boolean;
+    imageReferenceTransportDispatchReady: boolean;
+    imageReferenceTransportRequestMatched: boolean;
     providerSelfReportIgnoredForCompletion: true;
   };
   blockers: string[];
@@ -141,6 +157,82 @@ function pathInsideSandbox(path: string | undefined, sandbox: RealProviderOneSho
   if (normalizedPath.split("/").includes("..")) return false;
   const prefixes = uniqueSorted([sandbox.root, ...sandbox.allowedPrefixes]).map(normalizePath);
   return prefixes.some((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`));
+}
+
+function needsImageReferenceTransport(request: Image2AdapterRequest): boolean {
+  return request.operation === "image2image" || request.frameRole === "end_frame";
+}
+
+function sourceStartFrameInput(request: Image2AdapterRequest): Image2ReferenceImageInput | undefined {
+  return (request.payload.referenceImageInputs || []).find(
+    (input) =>
+      input.role === "source_start_frame" &&
+      input.source === "approved_start_frame" &&
+      input.required === true &&
+      input.mustUseAsVisualInput === true &&
+      input.status === "available" &&
+      Boolean(input.path?.trim()),
+  );
+}
+
+function imageReferenceTransportMatchesRequest(input: BuildRealProviderOneShotStateInput): boolean {
+  const transport = input.imageReferenceTransport;
+  if (!transport) return false;
+  return (
+    transport.requestId === input.adapterRequest.requestId &&
+    transport.taskPlanId === input.adapterRequest.taskPlanId &&
+    transport.operation === input.adapterRequest.operation
+  );
+}
+
+function imageReferenceTransportBlockers(input: BuildRealProviderOneShotStateInput): string[] {
+  const request = input.adapterRequest;
+  if (!needsImageReferenceTransport(request)) return [];
+
+  const transport = input.imageReferenceTransport;
+  const sourceInput = sourceStartFrameInput(request);
+  const policy = transport?.transportPolicy;
+  const sourcePath = transport?.sourceStartFrame?.path ? normalizePath(transport.sourceStartFrame.path) : undefined;
+  const requestedSourcePath = request.payload.sourceStartFrameId ? normalizePath(request.payload.sourceStartFrameId) : undefined;
+  const visualInputPath = sourceInput?.path ? normalizePath(sourceInput.path) : undefined;
+
+  if (!transport) {
+    return ["Image reference transport dispatch_ready evidence is required for image2image/end-frame one-shot."];
+  }
+
+  return uniqueSorted([
+    transport.status === "dispatch_ready" ? "" : "Image reference transport must be dispatch_ready before one-shot readiness.",
+    imageReferenceTransportMatchesRequest(input) ? "" : "Image reference transport must match the Image2 requestId, taskPlanId, and operation.",
+    transport.requiredSourceStartFrame === true ? "" : "Image reference transport must require source_start_frame for image2image/end-frame.",
+    transport.sourceStartFrame?.role === "source_start_frame" ? "" : "Image reference transport must carry a source_start_frame receipt.",
+    transport.sourceStartFrame?.transportRole === "explicit_local_image_reference"
+      ? ""
+      : "Image reference transport must carry an explicit local image reference receipt.",
+    sourcePath && requestedSourcePath && sourcePath === requestedSourcePath
+      ? ""
+      : "Image reference transport source frame path must match sourceStartFrameId.",
+    sourcePath && visualInputPath && sourcePath === visualInputPath
+      ? ""
+      : "Image reference transport source frame path must match the visual reference input.",
+    transport.sourceStartFrame?.hash ? "" : "Image reference transport source_start_frame receipt must include a file hash.",
+    transport.sourceStartFrame?.mime?.startsWith("image/") ? "" : "Image reference transport source_start_frame receipt mime must be an image.",
+    transport.sourceStartFrame?.dimensions && transport.sourceStartFrame.dimensions.width > 0 && transport.sourceStartFrame.dimensions.height > 0
+      ? ""
+      : "Image reference transport source_start_frame receipt dimensions are required.",
+    policy?.handoffOnly === true ? "" : "Image reference transport must remain handoff-only.",
+    policy?.dispatchSideEffectAllowed === false ? "" : "Image reference transport must not allow dispatch side effects.",
+    policy?.providerSubmitAllowed === 0 ? "" : "Image reference transport must not allow provider submit.",
+    policy?.canSubmitProvider === false ? "" : "Image reference transport must not expose provider submit.",
+    policy?.liveSubmitAllowed === false ? "" : "Image reference transport must forbid live submit.",
+    policy?.externalNetworkIoAllowed === false ? "" : "Image reference transport must forbid external network I/O.",
+    policy?.providerSelfReportCanComplete === false ? "" : "Image reference transport must not complete from provider self-report.",
+    policy?.promptOnlyImageEditAllowed === false ? "" : "Image reference transport must forbid prompt-only image edit.",
+    policy?.seedanceOrJimengAllowed === false ? "" : "Image reference transport must forbid Seedance/Jimeng.",
+    policy?.videoAllowed === false ? "" : "Image reference transport must forbid video providers.",
+    policy?.fastOrVipAllowed === false ? "" : "Image reference transport must forbid Fast/VIP.",
+    policy?.textToVideoAllowed === false ? "" : "Image reference transport must forbid text-to-video.",
+    ...(transport.blockers || []).map((blocker) => `Image reference transport blocker: ${blocker}`),
+  ]);
 }
 
 function matchingManifestReport(input: BuildRealProviderOneShotStateInput): ManifestMatchReport | undefined {
@@ -223,6 +315,7 @@ function baseBlockers(input: BuildRealProviderOneShotStateInput): string[] {
     pathInsideSandbox(sandbox.manifestPath, sandbox) ? "" : "Manifest path must stay inside the scoped sandbox.",
     pathInsideSandbox(sandbox.qaReportPath, sandbox) ? "" : "QA report path must stay inside the scoped sandbox.",
     (input.providerReport?.attemptCount || 0) <= 1 ? "" : "Automatic retry is forbidden; attempt count cannot exceed one.",
+    ...imageReferenceTransportBlockers(input),
   ]);
 }
 
@@ -295,6 +388,8 @@ export function buildRealProviderOneShotState(input: BuildRealProviderOneShotSta
   const manifest = matchingManifestReport(input);
   const health = matchingHealthReport(input);
   const watcherDetected = expectedOutputDetected(input, payload?.output.path);
+  const transportDispatchReady = !needsImageReferenceTransport(input.adapterRequest) || input.imageReferenceTransport?.status === "dispatch_ready";
+  const transportRequestMatched = !needsImageReferenceTransport(input.adapterRequest) || imageReferenceTransportMatchesRequest(input);
 
   return {
     schemaVersion: realProviderOneShotSchemaVersion,
@@ -316,6 +411,8 @@ export function buildRealProviderOneShotState(input: BuildRealProviderOneShotSta
       watcherExpectedOutputDetected: watcherDetected,
       manifestMatched: Boolean(manifest && manifestReadyStatuses.has(manifest.status)),
       qaPassed: health?.qaStatus === "pass" && health.healthStatus === "formal_ready",
+      imageReferenceTransportDispatchReady: transportDispatchReady,
+      imageReferenceTransportRequestMatched: transportRequestMatched,
       providerSelfReportIgnoredForCompletion: true,
     },
     blockers,
@@ -344,6 +441,7 @@ export function buildRealProviderOneShotState(input: BuildRealProviderOneShotSta
     notes: [
       "This core layer compiles the reviewed Image2 preview into a one-use real-call payload but does not perform network I/O.",
       "Completion can only advance from watcher, manifest, generation health, and QA evidence.",
+      "Image2image/end-frame calls require an Image Reference Transport dispatch_ready receipt before provider transport can plan.",
       "A retry must be modeled as a new user-confirmed one-shot action.",
     ],
   };

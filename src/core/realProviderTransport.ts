@@ -1,9 +1,15 @@
 import type { Image2OneShotRealCallPayload } from "./providerAdapters/image2Adapter";
+import type { ImageReferenceTransportState } from "./imageReferenceTransport";
 import type { RealProviderOneShotState, RealProviderOneShotStatus, RealProviderOneShotUserReadableStatus } from "./realProviderOneShot";
 
 export const realProviderTransportSchemaVersion = "0.1.0";
 
 export type RealProviderTransportMode = "mock_dry_run" | "manual_real_transport";
+
+export type RealProviderImageReferenceTransportEvidence = Pick<
+  ImageReferenceTransportState,
+  "status" | "requestId" | "taskPlanId" | "operation" | "requiredSourceStartFrame" | "sourceStartFrame" | "transportPolicy" | "blockers"
+>;
 
 export type RealProviderTransportPlanStatus =
   | "blocked"
@@ -30,6 +36,7 @@ export interface RealProviderTransportPlanInput {
     RealProviderOneShotState,
     "status" | "userReadableStatus" | "summary" | "compiledPayload" | "blockers" | "warnings" | "gateEvidence"
   >;
+  imageReferenceTransport?: RealProviderImageReferenceTransportEvidence;
   transportMode?: RealProviderTransportMode;
   credentialRef?: string;
   attemptNumber?: number;
@@ -145,6 +152,10 @@ function uniqueSorted(values: Array<string | undefined>): string[] {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value?.trim())))).sort((left, right) => left.localeCompare(right));
 }
 
+function normalizePath(value: string): string {
+  return value.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "");
+}
+
 function inspectForRawCredentialMaterial(value: unknown, keyPath = ""): boolean {
   if (value === null || value === undefined) return false;
   if (typeof value === "string") return rawSecretValuePattern.test(value);
@@ -199,6 +210,76 @@ function outputContractFor(payload?: Image2OneShotRealCallPayload): RealProvider
   };
 }
 
+function sourceStartFrameInput(payload: Image2OneShotRealCallPayload | undefined): Image2OneShotRealCallPayload["referenceImageInputs"][number] | undefined {
+  return payload?.referenceImageInputs.find(
+    (input) =>
+      input.role === "source_start_frame" &&
+      input.required === true &&
+      input.mustUseAsVisualInput === true &&
+      input.status === "available" &&
+      Boolean(input.path?.trim()),
+  );
+}
+
+function imageReferenceTransportBlockers(input: RealProviderTransportPlanInput): string[] {
+  const payload = input.oneShotState.compiledPayload;
+  if (payload?.operation !== "image2image") return [];
+
+  const transport = input.imageReferenceTransport;
+  const sourceInput = sourceStartFrameInput(payload);
+  const receipt = transport?.sourceStartFrame;
+  const policy = transport?.transportPolicy;
+  const payloadSourcePath = payload.sourceStartFrameId || sourceInput?.path;
+
+  if (!transport) {
+    return ["Image reference transport dispatch-ready evidence is required before image2image transport planning."];
+  }
+
+  const receiptPath = receipt?.path ? normalizePath(receipt.path) : undefined;
+  const sourceInputPath = sourceInput?.path ? normalizePath(sourceInput.path) : undefined;
+  const sourceStartFramePath = payload.sourceStartFrameId ? normalizePath(payload.sourceStartFrameId) : undefined;
+
+  return uniqueSorted([
+    transport.status === "dispatch_ready" ? "" : "Image reference transport must be dispatch_ready before image2image transport planning.",
+    transport.requestId === payload.requestId ? "" : "Image reference transport requestId must match the compiled payload requestId.",
+    transport.taskPlanId === payload.taskPlanId ? "" : "Image reference transport taskPlanId must match the compiled payload taskPlanId.",
+    transport.operation === "image2image" ? "" : "Image reference transport operation must be image2image for image2image payloads.",
+    transport.requiredSourceStartFrame === true ? "" : "Image reference transport must require source_start_frame for image2image payloads.",
+    sourceInput ? "" : "Compiled payload source_start_frame visual input is required before image2image transport planning.",
+    payloadSourcePath ? "" : "Compiled payload sourceStartFrameId is required before image2image transport planning.",
+    receipt ? "" : "Image reference transport source_start_frame receipt is required before image2image transport planning.",
+    receipt?.role === "source_start_frame" ? "" : "Image reference transport receipt role must be source_start_frame.",
+    receipt?.transportRole === "explicit_local_image_reference" ? "" : "Image reference transport receipt must be an explicit local image reference.",
+    receiptPath && sourceInputPath && receiptPath === sourceInputPath
+      ? ""
+      : "Image reference transport receipt path must match the compiled payload source_start_frame input path.",
+    receiptPath && sourceStartFramePath && receiptPath === sourceStartFramePath
+      ? ""
+      : "Image reference transport receipt path must match the compiled payload sourceStartFrameId.",
+    receipt?.inputId && sourceInput?.inputId && receipt.inputId === sourceInput.inputId
+      ? ""
+      : "Image reference transport receipt inputId must match the compiled payload source_start_frame inputId.",
+    receipt?.hash?.trim() ? "" : "Image reference transport source_start_frame receipt hash is required.",
+    receipt?.mime?.startsWith("image/") ? "" : "Image reference transport source_start_frame receipt mime must be an image.",
+    receipt?.dimensions && receipt.dimensions.width > 0 && receipt.dimensions.height > 0
+      ? ""
+      : "Image reference transport source_start_frame receipt dimensions are required.",
+    policy?.handoffOnly === true ? "" : "Image reference transport handoff must remain handoff-only.",
+    policy?.dispatchSideEffectAllowed === false ? "" : "Image reference transport handoff must not allow dispatch side effects.",
+    policy?.providerSubmitAllowed === 0 ? "" : "Image reference transport handoff must not allow provider submit.",
+    policy?.canSubmitProvider === false ? "" : "Image reference transport handoff must not expose provider submit.",
+    policy?.liveSubmitAllowed === false ? "" : "Image reference transport handoff must forbid live submit.",
+    policy?.externalNetworkIoAllowed === false ? "" : "Image reference transport handoff must not allow external network I/O.",
+    policy?.providerSelfReportCanComplete === false ? "" : "Image reference transport handoff must not complete from provider self-report.",
+    policy?.promptOnlyImageEditAllowed === false ? "" : "Image reference transport handoff must forbid prompt-only image edit.",
+    policy?.seedanceOrJimengAllowed === false ? "" : "Image reference transport handoff must forbid Seedance/Jimeng.",
+    policy?.videoAllowed === false ? "" : "Image reference transport handoff must forbid video providers.",
+    policy?.fastOrVipAllowed === false ? "" : "Image reference transport handoff must forbid Fast/VIP.",
+    policy?.textToVideoAllowed === false ? "" : "Image reference transport handoff must forbid text-to-video.",
+    ...(transport.blockers || []).map((blocker) => blocker ? `Image reference transport blocker: ${blocker}` : ""),
+  ]);
+}
+
 function planBlockers(input: RealProviderTransportPlanInput, credential: RealProviderTransportPlan["credential"], attemptNumber: number): string[] {
   const oneShotState = input.oneShotState;
   const payload = oneShotState.compiledPayload;
@@ -220,6 +301,7 @@ function planBlockers(input: RealProviderTransportPlanInput, credential: RealPro
     payload?.executionPolicy.arbitraryShellAllowed === false ? "" : "Compiled payload must forbid arbitrary shell execution.",
     payload?.executionPolicy.scopedSandboxOnly === true ? "" : "Compiled payload must require scoped sandbox output.",
     payload?.executionPolicy.outputMayCompleteFromProviderSelfReport === false ? "" : "Compiled payload must require watcher/manifest/QA completion.",
+    ...imageReferenceTransportBlockers(input),
   ]);
 }
 
@@ -273,6 +355,7 @@ export function buildRealProviderTransportPlan(input: RealProviderTransportPlanI
     notes: [
       "Default transport is mock dry-run and creates no provider side effects.",
       "Real provider transport can only be represented as manual/external action states in this core contract.",
+      "Image2image transport requires dispatch-ready Image Reference Transport handoff evidence.",
       "Outputs must return through watcher, manifest, and QA evidence before completion.",
     ],
   };

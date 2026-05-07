@@ -277,6 +277,7 @@ assert(blockedBudgetState.blockers.includes("Budget guard must pass before actio
 function oneShotActionInput(overrides = {}) {
   const baseExecutor = executor();
   const preview = baseExecutor.providerRequestPreviews[0];
+  const sourceStartFramePath = "real-provider-executor/project_1/batch_A/shots/S01/start.png";
   const adapterRequest = {
     requestId: "image2_request_S01",
     taskPlanId: "image_task_plan_S01",
@@ -291,7 +292,7 @@ function oneShotActionInput(overrides = {}) {
         {
           inputId: "source_start_frame_S01",
           role: "source_start_frame",
-          path: "real-provider-executor/project_1/batch_A/shots/S01/start.png",
+          path: sourceStartFramePath,
           source: "approved_start_frame",
           required: true,
           mustUseAsVisualInput: true,
@@ -299,7 +300,7 @@ function oneShotActionInput(overrides = {}) {
           notes: ["One-shot image2image must receive the approved start frame as an explicit visual input."],
         },
       ],
-      sourceStartFrameId: "real-provider-executor/project_1/batch_A/shots/S01/start.png",
+      sourceStartFrameId: sourceStartFramePath,
       outputPath: preview.outputPath,
     },
     submitPolicy: {
@@ -316,6 +317,37 @@ function oneShotActionInput(overrides = {}) {
     selectedTaskPlanIds: ["image_task_plan_S01"],
     requestPreview: preview,
     adapterRequest,
+    imageReferenceTransport: {
+      status: "dispatch_ready",
+      requestId: "image2_request_S01",
+      taskPlanId: "image_task_plan_S01",
+      operation: "image2image",
+      requiredSourceStartFrame: true,
+      sourceStartFrame: {
+        inputId: "source_start_frame_S01",
+        path: sourceStartFramePath,
+        hash: "sha256:source-start-frame",
+        mime: "image/png",
+        dimensions: { width: 1280, height: 720 },
+        role: "source_start_frame",
+        transportRole: "explicit_local_image_reference",
+      },
+      transportPolicy: {
+        handoffOnly: true,
+        dispatchSideEffectAllowed: false,
+        providerSubmitAllowed: 0,
+        canSubmitProvider: false,
+        liveSubmitAllowed: false,
+        externalNetworkIoAllowed: false,
+        providerSelfReportCanComplete: false,
+        promptOnlyImageEditAllowed: false,
+        seedanceOrJimengAllowed: false,
+        videoAllowed: false,
+        fastOrVipAllowed: false,
+        textToVideoAllowed: false,
+      },
+      blockers: [],
+    },
     actionConfirmation: {
       confirmationId: "confirm_S01_round4",
       confirmedBy: "user",
@@ -395,6 +427,97 @@ assert(actionReady.summary.fastOrVipAllowed === false, "ready action must forbid
 assert(actionReady.summary.textToVideoFallbackAllowed === false, "ready action must forbid text-to-video fallback");
 assert(actionReady.summary.outsideSandboxWriteAllowed === false, "ready action must forbid outside sandbox writes");
 assert(actionReady.summary.outputMayCompleteFromProviderSelfReport === false, "ready action must not complete from provider self-report");
+assert(actionReady.gateEvidence.imageReferenceTransportDispatchReady === true, "ready image2image action must carry dispatch-ready transport evidence");
+assert(actionReady.gateEvidence.imageReferenceTransportRequestMatched === true, "ready image2image action must match transport request evidence");
+
+const missingImageReferenceTransport = buildRealProviderOneShotState(oneShotActionInput({
+  imageReferenceTransport: undefined,
+}));
+assert(missingImageReferenceTransport.status === "blocked", "missing image reference transport must block image2image one-shot");
+assert(
+  missingImageReferenceTransport.blockers.includes("Image reference transport dispatch_ready evidence is required for image2image/end-frame one-shot."),
+  "missing image reference transport blocker missing",
+);
+
+const blockedImageReferenceTransport = buildRealProviderOneShotState(oneShotActionInput({
+  imageReferenceTransport: {
+    ...oneShotActionInput().imageReferenceTransport,
+    status: "blocked",
+    blockers: ["prompt_only_image_edit_forbidden"],
+  },
+}));
+assert(blockedImageReferenceTransport.status === "blocked", "blocked image reference transport must block one-shot");
+assert(
+  blockedImageReferenceTransport.blockers.includes("Image reference transport must be dispatch_ready before one-shot readiness."),
+  "blocked image reference transport status blocker missing",
+);
+assert(
+  blockedImageReferenceTransport.blockers.includes("Image reference transport blocker: prompt_only_image_edit_forbidden"),
+  "nested image reference transport blocker missing",
+);
+
+const mismatchedImageReferenceTransport = buildRealProviderOneShotState(oneShotActionInput({
+  imageReferenceTransport: {
+    ...oneShotActionInput().imageReferenceTransport,
+    taskPlanId: "image_task_plan_other",
+  },
+}));
+assert(mismatchedImageReferenceTransport.status === "blocked", "mismatched image reference transport must block one-shot");
+assert(
+  mismatchedImageReferenceTransport.blockers.includes("Image reference transport must match the Image2 requestId, taskPlanId, and operation."),
+  "mismatched image reference transport blocker missing",
+);
+
+const missingPolicyImageReferenceTransport = buildRealProviderOneShotState(oneShotActionInput({
+  imageReferenceTransport: {
+    ...oneShotActionInput().imageReferenceTransport,
+    transportPolicy: undefined,
+  },
+}));
+assert(missingPolicyImageReferenceTransport.status === "blocked", "missing image reference transport policy must block without throwing");
+assert(
+  missingPolicyImageReferenceTransport.blockers.includes("Image reference transport must remain handoff-only."),
+  "missing image reference transport policy blocker missing",
+);
+
+const text2imageBase = oneShotActionInput();
+const text2imageReady = buildRealProviderOneShotState({
+  ...text2imageBase,
+  requestPreview: {
+    ...text2imageBase.requestPreview,
+    providerSlot: "image.generate",
+    requiredMode: "text2image",
+    operation: "text2image",
+    fallbackPolicy: {
+      noProviderOrModeFallback: true,
+      inheritedForbiddenFallbacks: ["provider_or_mode_fallback", "text2image_to_image2image"],
+    },
+  },
+  adapterRequest: {
+    ...text2imageBase.adapterRequest,
+    operation: "text2image",
+    frameRole: "start_frame",
+    payload: {
+      ...text2imageBase.adapterRequest.payload,
+      sourceIntent: ["generate the reviewed start frame"],
+      referenceImageInputs: [],
+      sourceStartFrameId: undefined,
+    },
+    forbiddenFallbacks: ["provider_or_mode_fallback", "text2image_to_image2image"],
+  },
+  budgetNotice: {
+    ...text2imageBase.budgetNotice,
+    estimatedImageCount: 1,
+    maxImagesAllowed: 1,
+  },
+  imageReferenceTransport: undefined,
+});
+assert(text2imageReady.status === "ready_to_submit", "text2image/start-frame one-shot must not require image reference transport");
+assert(text2imageReady.gateEvidence.imageReferenceTransportDispatchReady === true, "text2image gate evidence should pass when transport is not required");
+assert(
+  !text2imageReady.blockers.some((blocker) => /Image reference transport|source_start_frame/.test(blocker)),
+  "text2image/start-frame one-shot should not receive image reference blockers",
+);
 
 const missingVisualInputCompiled = compileImage2OneShotRealCallPayload({
   request: {

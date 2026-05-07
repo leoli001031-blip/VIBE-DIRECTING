@@ -143,6 +143,7 @@ function oneShotActionInput(overrides = {}) {
     selectedTaskPlanIds: ["image_task_plan_S01"],
     requestPreview,
     adapterRequest,
+    imageReferenceTransport: imageReferenceTransport(),
     actionConfirmation: {
       confirmationId: "confirm_S01_real_test_round",
       confirmedBy: "user",
@@ -177,7 +178,98 @@ function oneShotActionInput(overrides = {}) {
   };
 }
 
-const oneShotReady = buildRealProviderOneShotState(oneShotActionInput());
+function imageReferenceTransport(overrides = {}) {
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt,
+    phase: "image_reference_transport_handoff",
+    status: "dispatch_ready",
+    requestId: "image2_request_S01",
+    taskPlanId: "image_task_plan_S01",
+    operation: "image2image",
+    frameRole: "end_frame",
+    requiredSourceStartFrame: true,
+    sourceStartFrame: {
+      inputId: "source_start_frame_S01",
+      path: `${sandboxRoot}/shots/S01/start.png`,
+      hash: "sha256:source-start-frame",
+      mime: "image/png",
+      dimensions: { width: 1280, height: 720 },
+      role: "source_start_frame",
+      transportRole: "explicit_local_image_reference",
+    },
+    capabilityEvidence: {
+      providerId: "openai-image2-api",
+      providerSlot: "image.edit",
+      requiredMode: "image2image",
+      interfaceKind: "explicit_image_input",
+      promptOnly: false,
+      actionSupportsExplicitImageInput: true,
+      appServerImageRuntimeReady: true,
+      appServerSupportsExplicitImageInput: true,
+      supportedReferenceRoles: ["source_start_frame"],
+    },
+    outputSandbox: {
+      root: sandboxRoot,
+      expectedOutputPath: outputPath,
+      manifestPath: `${sandboxRoot}/manifest.json`,
+      qaReportPath: `${sandboxRoot}/qa/qa-report.json`,
+      scopedSandboxOnly: true,
+      outsideRootWriteAllowed: false,
+    },
+    transportPolicy: {
+      handoffOnly: true,
+      dispatchSideEffectAllowed: false,
+      providerSubmitAllowed: 0,
+      canSubmitProvider: false,
+      liveSubmitAllowed: false,
+      externalNetworkIoAllowed: false,
+      providerSelfReportCanComplete: false,
+      promptOnlyImageEditAllowed: false,
+      seedanceOrJimengAllowed: false,
+      videoAllowed: false,
+      fastOrVipAllowed: false,
+      textToVideoAllowed: false,
+    },
+    blockers: [],
+    warnings: [],
+    notes: [],
+    ...overrides,
+  };
+}
+
+function text2imageOneShotActionInput() {
+  const input = oneShotActionInput();
+  return {
+    ...input,
+    requestPreview: {
+      ...input.requestPreview,
+      providerSlot: "image.generate",
+      requiredMode: "text2image",
+      operation: "text2image",
+    },
+    adapterRequest: {
+      ...input.adapterRequest,
+      operation: "text2image",
+      payload: {
+        ...input.adapterRequest.payload,
+        referenceImageInputs: [],
+        sourceStartFrameId: undefined,
+        sourceIntent: ["generate the start frame from source intent"],
+      },
+      forbiddenFallbacks: ["provider_or_mode_fallback", "text2image_to_image2image"],
+    },
+    budgetNotice: {
+      ...input.budgetNotice,
+      estimatedImageCount: 1,
+      maxImagesAllowed: 1,
+    },
+  };
+}
+
+const oneShotReady = buildRealProviderOneShotState(oneShotActionInput({
+  imageReferenceTransport: imageReferenceTransport(),
+}));
 assert(oneShotReady.status === "ready_to_submit", "fixture must produce a ready one-shot state");
 assert(oneShotReady.summary.providerSubmitAllowed === 1, "fixture must allow one submit");
 assert(oneShotReady.compiledPayload, "fixture must compile payload");
@@ -185,6 +277,7 @@ assert(oneShotReady.compiledPayload, "fixture must compile payload");
 const plan = buildRealProviderTransportPlan({
   generatedAt,
   oneShotState: oneShotReady,
+  imageReferenceTransport: imageReferenceTransport(),
 });
 
 assert(plan.schemaVersion === realProviderTransportSchemaVersion, "transport schema version drifted");
@@ -210,6 +303,99 @@ assert(plan.outputContract.mustReturnThroughWatcher === true, "watcher return mu
 assert(plan.outputContract.mustMatchManifest === true, "manifest match must be required");
 assert(plan.outputContract.mustPassQa === true, "QA pass must be required");
 
+const missingImageReferenceTransport = buildRealProviderTransportPlan({
+  generatedAt,
+  oneShotState: oneShotReady,
+});
+assert(missingImageReferenceTransport.status === "blocked", "image2image transport without image reference handoff must block");
+assert(
+  missingImageReferenceTransport.blockers.includes("Image reference transport dispatch-ready evidence is required before image2image transport planning."),
+  "missing image reference transport blocker missing",
+);
+
+const blockedImageReferenceTransport = buildRealProviderTransportPlan({
+  generatedAt,
+  oneShotState: oneShotReady,
+  imageReferenceTransport: imageReferenceTransport({
+    status: "blocked",
+    sourceStartFrame: undefined,
+    blockers: ["source_start_frame_file_facts_missing"],
+  }),
+});
+assert(blockedImageReferenceTransport.status === "blocked", "blocked image reference handoff must block transport plan");
+assert(
+  blockedImageReferenceTransport.blockers.includes("Image reference transport must be dispatch_ready before image2image transport planning."),
+  "blocked handoff status blocker missing",
+);
+assert(
+  blockedImageReferenceTransport.blockers.includes("Image reference transport blocker: source_start_frame_file_facts_missing"),
+  "nested image reference blocker missing",
+);
+
+const mismatchedImageReferenceTransport = buildRealProviderTransportPlan({
+  generatedAt,
+  oneShotState: oneShotReady,
+  imageReferenceTransport: imageReferenceTransport({
+    requestId: "image2_request_other",
+    taskPlanId: "image_task_plan_other",
+    sourceStartFrame: {
+      ...imageReferenceTransport().sourceStartFrame,
+      path: `${sandboxRoot}/shots/S01/other-start.png`,
+    },
+  }),
+});
+assert(mismatchedImageReferenceTransport.status === "blocked", "mismatched image reference handoff must block transport plan");
+assert(
+  mismatchedImageReferenceTransport.blockers.includes("Image reference transport requestId must match the compiled payload requestId."),
+  "requestId mismatch blocker missing",
+);
+assert(
+  mismatchedImageReferenceTransport.blockers.includes("Image reference transport taskPlanId must match the compiled payload taskPlanId."),
+  "taskPlanId mismatch blocker missing",
+);
+assert(
+  mismatchedImageReferenceTransport.blockers.includes("Image reference transport receipt path must match the compiled payload sourceStartFrameId."),
+  "source frame path mismatch blocker missing",
+);
+
+const missingReceiptImageReferenceTransport = buildRealProviderTransportPlan({
+  generatedAt,
+  oneShotState: oneShotReady,
+  imageReferenceTransport: imageReferenceTransport({
+    sourceStartFrame: undefined,
+  }),
+});
+assert(missingReceiptImageReferenceTransport.status === "blocked", "missing source_start_frame receipt must block transport plan");
+assert(
+  missingReceiptImageReferenceTransport.blockers.includes("Image reference transport source_start_frame receipt is required before image2image transport planning."),
+  "missing source_start_frame receipt blocker missing",
+);
+
+const missingPolicyImageReferenceTransport = buildRealProviderTransportPlan({
+  generatedAt,
+  oneShotState: oneShotReady,
+  imageReferenceTransport: imageReferenceTransport({
+    transportPolicy: undefined,
+  }),
+});
+assert(missingPolicyImageReferenceTransport.status === "blocked", "missing handoff policy must block transport plan without throwing");
+assert(
+  missingPolicyImageReferenceTransport.blockers.includes("Image reference transport handoff must remain handoff-only."),
+  "missing handoff policy blocker missing",
+);
+
+const text2imageReady = buildRealProviderOneShotState(text2imageOneShotActionInput());
+assert(text2imageReady.status === "ready_to_submit", "text2image fixture must produce a ready one-shot state");
+const text2imagePlanWithoutImageReferenceTransport = buildRealProviderTransportPlan({
+  generatedAt,
+  oneShotState: text2imageReady,
+});
+assert(text2imagePlanWithoutImageReferenceTransport.status === "mock_submit_ready", "text2image transport must not require source_start_frame handoff");
+assert(
+  !text2imagePlanWithoutImageReferenceTransport.blockers.some((blocker) => /Image reference transport|source_start_frame receipt/.test(blocker)),
+  "text2image start-frame transport should not receive image-reference blockers",
+);
+
 const missingPayloadPlan = buildRealProviderTransportPlan({
   generatedAt,
   oneShotState: {
@@ -230,6 +416,7 @@ const nonReadyPlan = buildRealProviderTransportPlan({
       providerSubmitAllowed: 0,
     },
   },
+  imageReferenceTransport: imageReferenceTransport(),
 });
 assert(nonReadyPlan.status === "blocked", "non-ready state must block");
 assert(nonReadyPlan.blockers.includes("Transport can only plan from ready_to_submit one-shot state."), "non-ready blocker missing");
@@ -238,6 +425,7 @@ assert(nonReadyPlan.blockers.includes("One-shot summary must allow exactly one p
 const rawCredentialPlan = buildRealProviderTransportPlan({
   generatedAt,
   oneShotState: oneShotReady,
+  imageReferenceTransport: imageReferenceTransport(),
   credentialRef: "sk-rawsecret123456789",
 });
 assert(rawCredentialPlan.status === "blocked", "raw credential-looking reference must block");
@@ -246,6 +434,7 @@ assert(rawCredentialPlan.blockers.some((blocker) => /Raw credential material/.te
 const mismatchedCredentialPlan = buildRealProviderTransportPlan({
   generatedAt,
   oneShotState: oneShotReady,
+  imageReferenceTransport: imageReferenceTransport(),
   credentialRef: "user-authorized:image2:other",
 });
 assert(mismatchedCredentialPlan.status === "blocked", "mismatched credentialRef must block");
@@ -254,6 +443,7 @@ assert(mismatchedCredentialPlan.blockers.includes("Credential reference must mat
 const attemptedTwice = buildRealProviderTransportPlan({
   generatedAt,
   oneShotState: oneShotReady,
+  imageReferenceTransport: imageReferenceTransport(),
   attemptNumber: 2,
 });
 assert(attemptedTwice.status === "blocked", "attempt greater than one must block");
@@ -262,6 +452,7 @@ assert(attemptedTwice.blockers.includes("Transport contract allows exactly one p
 const manualRequiresAction = buildRealProviderTransportPlan({
   generatedAt,
   oneShotState: oneShotReady,
+  imageReferenceTransport: imageReferenceTransport(),
   transportMode: "manual_real_transport",
 });
 assert(manualRequiresAction.status === "requires_external_action", "manual real transport must require external action by default");
@@ -270,6 +461,7 @@ assert(manualRequiresAction.transportPolicy.automaticProviderSubmitAllowed === f
 const manualReady = buildRealProviderTransportPlan({
   generatedAt,
   oneShotState: oneShotReady,
+  imageReferenceTransport: imageReferenceTransport(),
   transportMode: "manual_real_transport",
   manualTransportAcknowledged: true,
 });
