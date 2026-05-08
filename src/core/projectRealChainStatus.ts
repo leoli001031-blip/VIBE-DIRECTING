@@ -49,6 +49,89 @@ export type ProjectRealChainPreviewItem = {
   productionQaStatus?: string;
 };
 
+export type ProjectWorkbenchAssetFactStatus = "locked" | "candidate" | "needs_review" | "rejected" | "missing";
+
+export type ProjectWorkbenchAssetFact = {
+  id: string;
+  type: "character" | "scene" | "prop" | "style" | "unknown";
+  name: string;
+  status: ProjectWorkbenchAssetFactStatus;
+  path?: string;
+  sourceKind?: string;
+  textConstraints: string[];
+  usedByShotIds: string[];
+  sourceRefs: string[];
+  rejectedReason?: string;
+};
+
+export type ProjectWorkbenchStoryShotFact = {
+  id: string;
+  title?: string;
+  storyFunction?: string;
+  actId?: string;
+  sectionId?: string;
+  sceneId?: string;
+  roleIds?: string[];
+  startFrame?: string;
+  endFrame?: string;
+  status?: string;
+  issues?: string[];
+};
+
+export type ProjectWorkbenchStorySectionFact = {
+  id: string;
+  label: string;
+  shotIds: string[];
+};
+
+export type ProjectWorkbenchFacts = {
+  schemaVersion?: string;
+  source?: string;
+  project?: {
+    projectId?: string;
+    runId?: string;
+    schemaVersion?: string;
+    projectRoot?: string;
+    projectVibePath?: string;
+  };
+  projectRoot?: string;
+  projectVibePath?: string;
+  sourceIndex?: {
+    present: boolean;
+    readable: boolean;
+    path?: string;
+    sourceIndexHash?: string;
+    refs: string[];
+  };
+  storyFlow?: {
+    present: boolean;
+    readable: boolean;
+    path?: string;
+    shotCount: number;
+    sectionCount: number;
+    sections: ProjectWorkbenchStorySectionFact[];
+    shots: ProjectWorkbenchStoryShotFact[];
+  };
+  visualMemory?: {
+    present: boolean;
+    readable: boolean;
+    path?: string;
+    assetCount: number;
+    assets: ProjectWorkbenchAssetFact[];
+    summary?: {
+      locked?: number;
+      candidate?: number;
+      needsReview?: number;
+      rejected?: number;
+      missing?: number;
+    };
+  };
+  factsUsed?: Array<{ name: string; path: string; usedFor: string[] }>;
+  providerCalled: false;
+  prepareRan: false;
+  projectVibeWritten: false;
+};
+
 export type ProjectRealChainStatus = {
   uiStatus: ProjectRealChainUiStatus;
   schemaVersion?: string;
@@ -74,6 +157,7 @@ export type ProjectRealChainStatus = {
   reviewShotIds: string[];
   previewItems: ProjectRealChainPreviewItem[];
   previewThumbnails: ProjectRealChainPreviewItem[];
+  workbenchFacts?: ProjectWorkbenchFacts;
   reportPath: string;
   reportUrl: string;
   providerCalled: boolean;
@@ -234,6 +318,7 @@ type ProjectRealChainPayload = {
   prepareRan?: boolean;
   previewItems?: ProjectRealChainPreviewItem[];
   previewThumbnails?: ProjectRealChainPreviewItem[];
+  workbenchFacts?: ProjectWorkbenchFacts;
   observations?: Array<{
     id?: string;
     order?: number;
@@ -726,6 +811,7 @@ export function deriveProjectRealChainStatus(
     reviewShotIds,
     previewItems,
     previewThumbnails,
+    workbenchFacts: report.workbenchFacts,
     reportPath,
     reportUrl,
     providerCalled: report.providerCalled === true,

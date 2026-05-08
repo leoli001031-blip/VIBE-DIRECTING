@@ -117,6 +117,19 @@ function assertUnboundPayload(payload, label) {
 function assertProjectProjectionFacts(payload, label, root, primaryReportPath) {
   assert(payload.projectRootRelativePath === root, `${label} projectRootRelativePath mismatch`);
   assert(payload.projectVibeRelativePath === `${root}/project/project.vibe`, `${label} projectVibeRelativePath mismatch`);
+  assert(payload.workbenchFacts?.projectRoot === root, `${label} workbenchFacts project root mismatch`);
+  assert(payload.workbenchFacts?.projectVibePath === `${root}/project/project.vibe`, `${label} workbenchFacts project.vibe path mismatch`);
+  assert(payload.workbenchFacts?.sourceIndex?.present === true, `${label} source_index should be present`);
+  assert(payload.workbenchFacts?.sourceIndex?.readable === true, `${label} source_index should be readable`);
+  assert(payload.workbenchFacts?.storyFlow?.present === true, `${label} story_flow should be present`);
+  assert(payload.workbenchFacts?.storyFlow?.readable === true, `${label} story_flow should be readable`);
+  assert(payload.workbenchFacts?.storyFlow?.shotCount === 8, `${label} story_flow shot count mismatch`);
+  assert(payload.workbenchFacts?.visualMemory?.present === true, `${label} visual_memory should be present`);
+  assert(payload.workbenchFacts?.visualMemory?.readable === true, `${label} visual_memory should be readable`);
+  assert(payload.workbenchFacts?.visualMemory?.assetCount >= 6, `${label} visual_memory asset count mismatch`);
+  assert(payload.workbenchFacts?.providerCalled === false, `${label} workbenchFacts must not call provider`);
+  assert(payload.workbenchFacts?.prepareRan === false, `${label} workbenchFacts must not run prepare`);
+  assert(payload.workbenchFacts?.projectVibeWritten === false, `${label} workbenchFacts must not write project.vibe`);
   assert(payload.projectionSource === "runtime_truth_layer+preview_plan", `${label} should prefer runtime truth + preview plan`);
   assert(payload.ledgerTruthSource === "runtime_truth_layer", `${label} ledger truth source mismatch`);
   assert(Array.isArray(payload.factsUsed), `${label} factsUsed missing`);
@@ -146,6 +159,9 @@ function assertCurrent005(payload, label) {
   assert(payload.returnedImageCount === 8, `${label} returned image count mismatch`);
   assert(payload.needsReviewCount === 2, `${label} needs review count mismatch`);
   assert(Array.isArray(payload.previewItems) && payload.previewItems.length === 8, `${label} preview items mismatch`);
+  assert(payload.workbenchFacts?.storyFlow?.shots?.[0]?.storyFunction?.includes("Mika"), `${label} should read 005 story facts`);
+  assert(payload.workbenchFacts?.visualMemory?.assets?.some((asset) => asset.id === "char_mika"), `${label} should read 005 visual memory`);
+  assert(!JSON.stringify(payload.workbenchFacts).includes("char_naya"), `${label} must not leak 004 visual memory`);
   assertProjectProjectionFacts(payload, label, project005Root, project005TruthPath);
 }
 
@@ -155,6 +171,9 @@ function assertCurrent004(payload, label) {
   assert(payload.previewStatus === "blocked", `${label} should read 004 projection`);
   assert(payload.returnedImageCount === 4, `${label} should count only existing 004 outputs`);
   assert(payload.blockerCount === 8, `${label} should project blocked 004 shots`);
+  assert(payload.workbenchFacts?.storyFlow?.shots?.[0]?.storyFunction?.includes("Naya"), `${label} should read 004 story facts`);
+  assert(payload.workbenchFacts?.visualMemory?.assets?.some((asset) => asset.id === "char_naya"), `${label} should read 004 visual memory`);
+  assert(!JSON.stringify(payload.workbenchFacts).includes("char_mika"), `${label} must not leak 005 visual memory`);
   assertProjectProjectionFacts(payload, label, project004Root, project004TruthPath);
   assert(!JSON.stringify(payload).includes(project005Id), `${label} must not mix in 005 project identity`);
 }
@@ -276,9 +295,11 @@ try {
   assert(existsSync(bindingPath), "POST select should write runtime-local binding");
   assert(JSON.parse(readFileSync(bindingPath, "utf8")).projectRoot === project005Root, "binding file should store 005 root");
 
+  const project005VibeBeforeStatusRead = statSync(project005VibePath).mtimeMs;
   const project005Status = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
   assert(project005Status.response.status === 200, "GET current status after select 005 should return 200");
   assertCurrent005(project005Status.payload, "GET current status after select 005");
+  assert(statSync(project005VibePath).mtimeMs === project005VibeBeforeStatusRead, "GET current status with workbenchFacts must not mutate 005 project.vibe");
 
   const query004Status = await fetchJson(
     `${baseUrl}/api/runtime/projects/current/real-chain/status?projectRoot=${encodeURIComponent(project004Root)}&projectId=${encodeURIComponent(project004Id)}`,
@@ -323,9 +344,11 @@ try {
   assert(recentAfterSelect004.payload.choices[0]?.status === "当前", "recent projects should label the bound project as current");
   assert(recentAfterSelect004.payload.choices.filter((choice) => choice.projectRoot === project004Root).length === 1, "recent projects should de-duplicate the bound fixture");
 
+  const project004VibeBeforeStatusRead = statSync(project004VibePath).mtimeMs;
   const project004Status = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
   assert(project004Status.response.status === 200, "GET current status after select 004 should return 200");
   assertCurrent004(project004Status.payload, "GET current status after select 004");
+  assert(statSync(project004VibePath).mtimeMs === project004VibeBeforeStatusRead, "GET current status with workbenchFacts must not mutate 004 project.vibe");
 
   const query005Status = await fetchJson(
     `${baseUrl}/api/runtime/projects/current/real-chain/status?projectRoot=${encodeURIComponent(project005Root)}&projectId=${encodeURIComponent(project005Id)}`,

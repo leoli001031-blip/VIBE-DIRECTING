@@ -229,6 +229,10 @@ function resolveProjectSource(inputPath, options = {}) {
     projectVibeRelativePath: repoRelativePath(projectVibePath),
     sourceIndexPath: path.join(runRootPath, "project", "source_index.json"),
     sourceIndexRelativePath: repoRelativePath(path.join(runRootPath, "project", "source_index.json")),
+    storyFlowPath: path.join(runRootPath, "project", "story_flow.json"),
+    storyFlowRelativePath: repoRelativePath(path.join(runRootPath, "project", "story_flow.json")),
+    visualMemoryPath: path.join(runRootPath, "project", "visual_memory.json"),
+    visualMemoryRelativePath: repoRelativePath(path.join(runRootPath, "project", "visual_memory.json")),
     runManifestPath: path.join(runRootPath, "run_manifest.json"),
     runManifestRelativePath: repoRelativePath(path.join(runRootPath, "run_manifest.json")),
     runtimeTruthLayerPath: path.join(runRootPath, "reports", "runtime_truth_layer.json"),
@@ -567,6 +571,8 @@ function readProjectFacts(source) {
   const facts = [
     projectFact("project_vibe", source.projectVibePath, ["identity"]),
     projectFact("source_index", source.sourceIndexPath, ["project_facts"]),
+    projectFact("story_flow", source.storyFlowPath, ["story_flow"]),
+    projectFact("visual_memory", source.visualMemoryPath, ["visual_memory"]),
     projectFact("run_manifest", source.runManifestPath, ["ledger_plan", "identity"]),
     projectFact("runtime_truth_layer", source.runtimeTruthLayerPath, ["ledger_truth", "status"]),
     projectFact("preview_plan", source.previewPlanPath, ["preview", "status"]),
@@ -588,6 +594,8 @@ function readProjectFacts(source) {
     factsUsed,
     projectVibe: byName.project_vibe.parsed,
     sourceIndex: byName.source_index.parsed,
+    storyFlow: byName.story_flow.parsed,
+    visualMemory: byName.visual_memory.parsed,
     runManifest: byName.run_manifest.parsed,
     runtimeTruthLayer,
     previewPlan,
@@ -776,6 +784,245 @@ function projectProjectionFromSource(source) {
     previewStatus: status,
     productionStatus,
     ok: projectFacts.projectionAvailable,
+  };
+}
+
+function firstTextValue(record, keys) {
+  if (!isRecord(record)) return undefined;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function normalizeWorkbenchStatus(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["locked", "approved", "authority", "formal"].includes(normalized)) return "locked";
+  if (["needs_review", "review", "pending_review"].includes(normalized)) return "needs_review";
+  if (["rejected", "blocked", "negative"].includes(normalized)) return "rejected";
+  if (["missing", "not_generated", "absent"].includes(normalized)) return "missing";
+  if (["candidate", "draft", "temp", "temporary"].includes(normalized)) return "candidate";
+  return "locked";
+}
+
+function normalizeWorkbenchAssetType(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["character", "role", "person", "cast"].includes(normalized)) return "character";
+  if (["scene", "location", "set"].includes(normalized)) return "scene";
+  if (["style", "look", "style_anchor"].includes(normalized)) return "style";
+  return "prop";
+}
+
+function textArray(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim()) : [];
+}
+
+function workbenchSourceKindForPath(value) {
+  const normalized = String(value || "").replace(/\\/g, "/").toLowerCase();
+  if (!normalized) return "manual_definition";
+  if (/(^|\/)(tmp|temp|cache|candidates?|drafts?)(\/|$)/.test(normalized)) return "provider_temp_output";
+  if (/(^|\/)(failed|failures?)(\/|$)/.test(normalized)) return "failed_output";
+  if (/(^|\/)(shot[-_ ]?outputs?|outputs\/shots)(\/|$)/.test(normalized)) return "shot_output";
+  return "source_asset";
+}
+
+function portableWorkbenchPath(value) {
+  const normalized = runtimeRelativeFromValue(value);
+  if (!normalized) return undefined;
+  if (normalized.startsWith("../") || normalized === "..") return undefined;
+  return normalized;
+}
+
+function workbenchAssetFromRecord(item, type, sourceRef, index) {
+  if (!isRecord(item)) return undefined;
+  const id = firstTextValue(item, ["id", "assetId", "roleId", "sceneId", "styleId"]) || `${type}_${index + 1}`;
+  const pathValue = firstTextValue(item, ["mainReferencePath", "path", "sourcePath", "referencePath"]);
+  const authority = isRecord(item.referenceAuthority) ? item.referenceAuthority : undefined;
+  const authorityPath = firstTextValue(authority, ["path"]);
+  const pathValuePortable = portableWorkbenchPath(pathValue) || portableWorkbenchPath(authorityPath);
+  const status = normalizeWorkbenchStatus(
+    firstTextValue(item, ["status", "visualMemoryStatus", "lockedStatus"])
+      || firstTextValue(authority, ["lockedStatus"])
+      || (pathValuePortable && workbenchSourceKindForPath(pathValuePortable) !== "source_asset" ? "candidate" : undefined),
+  );
+  const name = firstTextValue(item, ["displayName", "name", "title", "label"]) || id;
+  const textConstraints = uniqueStrings([
+    ...textArray(item.mustPreserve),
+    ...textArray(item.spatialAnchors),
+    ...textArray(item.textConstraints),
+    firstTextValue(item, ["description", "positive"]),
+    ...textArray(item.mustAvoid).map((value) => `避免 ${value}`),
+    firstTextValue(item, ["negative"]) ? `避免 ${firstTextValue(item, ["negative"])}` : undefined,
+  ]);
+  return {
+    id,
+    type,
+    name,
+    status,
+    path: pathValuePortable,
+    sourceKind: workbenchSourceKindForPath(pathValuePortable),
+    textConstraints,
+    usedByShotIds: textArray(item.usedByShotIds),
+    sourceRefs: [sourceRef],
+    rejectedReason: firstTextValue(item, ["rejectedReason"]) || firstTextValue(authority, ["rejectedReason"]),
+  };
+}
+
+function normalizeWorkbenchAssets(visualMemory) {
+  const assets = [];
+  if (!isRecord(visualMemory)) return assets;
+  for (const [key, type] of [
+    ["roles", "character"],
+    ["characters", "character"],
+    ["scenes", "scene"],
+    ["props", "prop"],
+    ["styles", "style"],
+  ]) {
+    const items = Array.isArray(visualMemory[key]) ? visualMemory[key] : [];
+    items.forEach((item, index) => {
+      const asset = workbenchAssetFromRecord(item, type, `visual_memory.${key}:${index}`, index);
+      if (asset) assets.push(asset);
+    });
+  }
+  if (isRecord(visualMemory.style)) {
+    const asset = workbenchAssetFromRecord(visualMemory.style, "style", "visual_memory.style", 0);
+    if (asset) assets.push(asset);
+  }
+  const genericAssets = Array.isArray(visualMemory.assets) ? visualMemory.assets : [];
+  genericAssets.forEach((item, index) => {
+    const asset = workbenchAssetFromRecord(item, normalizeWorkbenchAssetType(item?.assetType || item?.type), `visual_memory.assets:${index}`, index);
+    if (asset) assets.push(asset);
+  });
+  const seen = new Set();
+  return assets.filter((asset) => {
+    if (seen.has(asset.id)) return false;
+    seen.add(asset.id);
+    return true;
+  });
+}
+
+function normalizeWorkbenchStorySections(storyFlow, shots) {
+  if (!isRecord(storyFlow)) return [];
+  const explicitSections = Array.isArray(storyFlow.sections) ? storyFlow.sections : [];
+  const sections = explicitSections
+    .filter(isRecord)
+    .map((section, index) => {
+      const nestedShots = Array.isArray(section.shots) ? section.shots : [];
+      const shotIds = textArray(section.shotIds).length
+        ? textArray(section.shotIds)
+        : nestedShots.filter(isRecord).map((shot) => firstTextValue(shot, ["id", "shotId"])).filter(Boolean);
+      const id = firstTextValue(section, ["id", "sectionId", "actId"]) || `section_${index + 1}`;
+      return {
+        id,
+        label: firstTextValue(section, ["label", "title", "name"]) || id,
+        shotIds,
+      };
+    })
+    .filter((section) => section.shotIds.length);
+  if (sections.length) return sections;
+
+  const byScene = new Map();
+  for (const shot of shots) {
+    const sectionId = shot.sceneId || shot.sectionId || "current_project";
+    if (!byScene.has(sectionId)) {
+      byScene.set(sectionId, {
+        id: sectionId,
+        label: sectionId === "current_project" ? "当前项目故事流" : sectionId,
+        shotIds: [],
+      });
+    }
+    byScene.get(sectionId).shotIds.push(shot.id);
+  }
+  return Array.from(byScene.values());
+}
+
+function normalizeWorkbenchStoryShots(storyFlow) {
+  if (!isRecord(storyFlow)) return [];
+  const directShots = Array.isArray(storyFlow.shots) ? storyFlow.shots : [];
+  const sectionShots = (Array.isArray(storyFlow.sections) ? storyFlow.sections : [])
+    .filter(isRecord)
+    .flatMap((section) => Array.isArray(section.shots) ? section.shots.map((shot) => ({ shot, section })) : []);
+  const normalized = [];
+  const seen = new Set();
+  for (const [index, entry] of [...directShots.map((shot) => ({ shot, section: undefined })), ...sectionShots].entries()) {
+    const shot = entry.shot;
+    if (!isRecord(shot)) continue;
+    const id = firstTextValue(shot, ["id", "shotId"]) || `S${String(index + 1).padStart(2, "0")}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const sectionId = firstTextValue(shot, ["sectionId", "sceneId"])
+      || firstTextValue(entry.section, ["id", "sectionId", "actId"])
+      || "current_project";
+    normalized.push({
+      id,
+      title: firstTextValue(shot, ["title", "name", "label"]) || id,
+      storyFunction: firstTextValue(shot, ["storyFunction", "action", "description"]) || "当前项目故事流",
+      actId: firstTextValue(shot, ["actId"]) || "current",
+      sectionId,
+      sceneId: firstTextValue(shot, ["sceneId"]),
+      roleIds: textArray(shot.roleIds),
+      startFrame: portableWorkbenchPath(firstTextValue(shot, ["startFrame", "startFramePath", "imagePath"])),
+      endFrame: portableWorkbenchPath(firstTextValue(shot, ["endFrame", "endFramePath"])),
+      status: firstTextValue(shot, ["status"]),
+      issues: textArray(shot.issues),
+    });
+  }
+  return normalized;
+}
+
+function currentProjectWorkbenchFacts(source, projectFacts) {
+  const storyFact = projectFact("story_flow", source.storyFlowPath, ["story_flow"]);
+  const visualMemoryFact = projectFact("visual_memory", source.visualMemoryPath, ["visual_memory"]);
+  const sourceIndexFact = projectFact("source_index", source.sourceIndexPath, ["source_index"]);
+  const storyShots = storyFact.readable ? normalizeWorkbenchStoryShots(storyFact.parsed) : [];
+  const storySections = storyFact.readable ? normalizeWorkbenchStorySections(storyFact.parsed, storyShots) : [];
+  const visualAssets = visualMemoryFact.readable ? normalizeWorkbenchAssets(visualMemoryFact.parsed) : [];
+
+  return {
+    schemaVersion: "vibe_core_current_project_workbench_facts_v1",
+    source: "current_project_files",
+    project: projectIdentityFromSource(source),
+    projectRoot: source.runRootRelativePath,
+    projectVibePath: source.projectVibeRelativePath,
+    sourceIndex: {
+      present: sourceIndexFact.present,
+      readable: sourceIndexFact.readable,
+      path: sourceIndexFact.path,
+      sourceIndexHash: firstTextValue(sourceIndexFact.parsed, ["sourceIndexHash"]),
+      refs: Array.isArray(sourceIndexFact.parsed?.refs) ? sourceIndexFact.parsed.refs.filter((item) => typeof item === "string") : [],
+    },
+    storyFlow: {
+      present: storyFact.present,
+      readable: storyFact.readable,
+      path: storyFact.path,
+      shotCount: storyShots.length,
+      sectionCount: storySections.length,
+      sections: storySections,
+      shots: storyShots,
+    },
+    visualMemory: {
+      present: visualMemoryFact.present,
+      readable: visualMemoryFact.readable,
+      path: visualMemoryFact.path,
+      assetCount: visualAssets.length,
+      assets: visualAssets,
+      summary: {
+        locked: visualAssets.filter((asset) => asset.status === "locked").length,
+        candidate: visualAssets.filter((asset) => asset.status === "candidate").length,
+        needsReview: visualAssets.filter((asset) => asset.status === "needs_review").length,
+        rejected: visualAssets.filter((asset) => asset.status === "rejected").length,
+        missing: visualAssets.filter((asset) => asset.status === "missing").length,
+      },
+    },
+    factsUsed: [
+      ...projectFacts.factsUsed,
+      ...(storyFact.readable ? [{ name: storyFact.name, path: storyFact.path, usedFor: storyFact.usedFor }] : []),
+      ...(visualMemoryFact.readable ? [{ name: visualMemoryFact.name, path: visualMemoryFact.path, usedFor: visualMemoryFact.usedFor }] : []),
+    ].filter((fact, index, facts) => facts.findIndex((item) => item.name === fact.name && item.path === fact.path) === index),
+    providerCalled: false,
+    prepareRan: false,
+    projectVibeWritten: false,
   };
 }
 
@@ -1226,6 +1473,7 @@ function currentProjectRealChainResponse(extra = {}, source = currentProjectSour
     projectionSource: projectFacts.projectionSource,
     ledgerTruthSource: projectFacts.ledgerTruthSource,
     factsUsed: projectFacts.factsUsed,
+    workbenchFacts: currentProjectWorkbenchFacts(source, projectFacts),
     project,
     plannedImageCount: observations.length,
     totalPlannedImages: observations.length,

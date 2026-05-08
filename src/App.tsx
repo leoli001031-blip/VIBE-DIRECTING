@@ -589,10 +589,39 @@ function createAssetLibraryFromRuntimeState(state: ProjectRuntimeState): AssetLi
 }
 
 function createAssetLibraryFromCurrentProjectWorkbench(projection: CurrentProjectWorkbenchProjection): AssetLibrarySnapshot {
-  return createAssetLibrarySnapshot({
+  let library = createAssetLibrarySnapshot({
     id: `${projection.identity.projectId || "current_project"}_asset_library_projection`,
     createdAt: new Date().toISOString(),
   });
+  for (const asset of projection.assetFacts) {
+    const status: AssetLibraryStatus =
+      asset.status === "needs_review"
+        ? "review"
+        : asset.status === "missing"
+          ? "missing"
+          : asset.status;
+    const detectedSourceKind = asset.path ? assetSourceKindForPath(asset.path) : "manual_definition";
+    const draftOnlySource = ["provider_temp_output", "failed_output", "shot_output", "contact_sheet"].includes(asset.sourceKind || detectedSourceKind);
+    const sourceKind = draftOnlySource ? "manual_definition" : detectedSourceKind;
+    const path = draftOnlySource ? undefined : asset.path;
+    const result = addAssetLibraryAsset(library, {
+      id: asset.id,
+      assetType: asset.type === "unknown" ? "prop" : asset.type,
+      name: asset.name,
+      status,
+      sourceKind,
+      path,
+      pathOrigin: pathOriginForUi(path),
+      importId: asset.id,
+      textConstraints: asset.textConstraints.length ? asset.textConstraints : defaultAssetConstraints(asset.type === "unknown" ? "prop" : asset.type, asset.name),
+      sourceRefs: asset.sourceRefs.length ? asset.sourceRefs : ["current_project.visual_memory"],
+      usedByShotIds: asset.usedByShotIds,
+      rejectedReason: asset.rejectedReason,
+      updatedAt: new Date().toISOString(),
+    });
+    library = result.library;
+  }
+  return library;
 }
 
 function assetLibraryAssetToRecord(asset: AssetLibraryAsset): AssetRecord {
@@ -9553,12 +9582,24 @@ function App() {
     () => applyCurrentProjectWorkbenchProjectionToRuntimeState(runtimeState, currentProjectWorkbenchProjection),
     [currentProjectWorkbenchProjection, runtimeState],
   );
-  const workbenchAssetLibrary = useMemo(
-    () => currentProjectWorkbenchProjection.assets.readOnlyProjection
-      ? createAssetLibraryFromCurrentProjectWorkbench(currentProjectWorkbenchProjection)
-      : assetLibrary,
-    [assetLibrary, currentProjectWorkbenchProjection],
+  const workbenchAssetFactsKey = useMemo(
+    () => `${currentProjectWorkbenchProjection.identity.projectRoot || ""}:${currentProjectWorkbenchProjection.assetFacts.map((asset) => `${asset.id}:${asset.status}:${asset.path || ""}`).join("|")}`,
+    [currentProjectWorkbenchProjection.assetFacts, currentProjectWorkbenchProjection.identity.projectRoot],
   );
+  const projectedWorkbenchAssetLibrary = useMemo(
+    () => createAssetLibraryFromCurrentProjectWorkbench(currentProjectWorkbenchProjection),
+    [workbenchAssetFactsKey],
+  );
+  const workbenchAssetLibrary = useMemo(
+    () => currentProjectWorkbenchProjection.assets.readOnlyProjection || assetLibrary.id !== projectedWorkbenchAssetLibrary.id
+      ? projectedWorkbenchAssetLibrary
+      : assetLibrary,
+    [assetLibrary, currentProjectWorkbenchProjection.assets.readOnlyProjection, projectedWorkbenchAssetLibrary],
+  );
+  useEffect(() => {
+    if (currentProjectWorkbenchProjection.assets.readOnlyProjection) return;
+    setAssetLibrary(projectedWorkbenchAssetLibrary);
+  }, [currentProjectWorkbenchProjection.assets.readOnlyProjection, projectedWorkbenchAssetLibrary, workbenchAssetFactsKey]);
   const workbenchSelectedShotId = useMemo(() => {
     const shotIds = new Set(currentProjectWorkbenchProjection.shots.map((shot) => shot.id));
     return shotIds.has(selectedShotId)

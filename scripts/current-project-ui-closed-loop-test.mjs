@@ -250,6 +250,81 @@ const stale005Payload = {
   prepareRan: false,
 };
 
+const workbenchFacts004 = {
+  schemaVersion: "vibe_core_current_project_workbench_facts_v1",
+  source: "current_project_files",
+  project: {
+    projectId: "real-demo-e2e-004",
+    projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004",
+    projectVibePath: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004/project/project.vibe",
+  },
+  projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004",
+  projectVibePath: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004/project/project.vibe",
+  sourceIndex: {
+    present: true,
+    readable: true,
+    path: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004/project/source_index.json",
+    sourceIndexHash: "sha256:004",
+    refs: ["story_flow.json", "visual_memory.json"],
+  },
+  storyFlow: {
+    present: true,
+    readable: true,
+    path: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004/project/story_flow.json",
+    shotCount: 2,
+    sectionCount: 1,
+    sections: [{ id: "scene_observatory_archive", label: "Old observatory archive", shotIds: ["S01", "S02"] }],
+    shots: [
+      { id: "S01", sceneId: "scene_observatory_archive", sectionId: "scene_observatory_archive", title: "Naya enters", storyFunction: "Naya enters the archive." },
+      { id: "S02", sceneId: "scene_observatory_archive", sectionId: "scene_observatory_archive", title: "Naya reads", storyFunction: "Naya reads the coordinate note." },
+    ],
+  },
+  visualMemory: {
+    present: true,
+    readable: true,
+    path: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004/project/visual_memory.json",
+    assetCount: 4,
+    assets: [
+      { id: "char_naya", type: "character", name: "Naya Chen", status: "locked", textConstraints: ["short black bob"], usedByShotIds: ["S01", "S02"], sourceRefs: ["visual_memory.roles:0"] },
+      { id: "char_ivo", type: "character", name: "Ivo Mark", status: "candidate", textConstraints: ["dark green raincoat"], usedByShotIds: [], sourceRefs: ["visual_memory.roles:1"] },
+      { id: "scene_archive", type: "scene", name: "Old archive", status: "needs_review", textConstraints: ["brass star map table"], usedByShotIds: ["S01"], sourceRefs: ["visual_memory.scenes:0"] },
+      { id: "style_quiet", type: "style", name: "Quiet sci-fi", status: "rejected", textConstraints: ["low texture"], usedByShotIds: [], sourceRefs: ["visual_memory.style"], rejectedReason: "old style" },
+    ],
+    summary: { locked: 1, candidate: 1, needsReview: 1, rejected: 1, missing: 0 },
+  },
+  providerCalled: false,
+  prepareRan: false,
+  projectVibeWritten: false,
+};
+
+const workbenchFacts005 = {
+  ...workbenchFacts004,
+  project: {
+    projectId: "real-demo-e2e-005",
+    projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005",
+    projectVibePath: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005/project/project.vibe",
+  },
+  projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005",
+  projectVibePath: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005/project/project.vibe",
+  storyFlow: {
+    ...workbenchFacts004.storyFlow,
+    shots: [
+      { id: "S07", sceneId: "scene_service_tunnel", sectionId: "scene_service_tunnel", title: "Door opens", storyFunction: "Mika and Ren stop at the cold stairwell." },
+      { id: "S08", sceneId: "scene_rooftop_array", sectionId: "scene_rooftop_array", title: "Signal", storyFunction: "Mika and Ren face the first signal." },
+    ],
+    sections: [{ id: "scene_service_tunnel", label: "Rainy tunnel", shotIds: ["S07"] }, { id: "scene_rooftop_array", label: "Rooftop", shotIds: ["S08"] }],
+  },
+  visualMemory: {
+    ...workbenchFacts004.visualMemory,
+    assets: [
+      { id: "char_mika", type: "character", name: "Mika Aoyama", status: "locked", textConstraints: ["red star hairpin"], usedByShotIds: ["S07", "S08"], sourceRefs: ["visual_memory.roles:0"] },
+      { id: "char_ren", type: "character", name: "Ren Kisaragi", status: "locked", textConstraints: ["olive hooded parka"], usedByShotIds: ["S07", "S08"], sourceRefs: ["visual_memory.roles:1"] },
+    ],
+    assetCount: 2,
+    summary: { locked: 2, candidate: 0, needsReview: 0, rejected: 0, missing: 0 },
+  },
+};
+
 const realChain = deriveProjectRealChainStatus(stale005Payload, "runtime_endpoint");
 assert(realChain.uiStatus === "production_needs_review", `real-chain UI status drifted: ${realChain.uiStatus}`);
 assert(realChain.returnedImageCount === 8, "real-chain should report returned images");
@@ -378,6 +453,73 @@ assert(workbench004.assets.readOnlyProjection === true, "Asset Library should be
 assert(/当前项目资产待补齐|只读投影/.test(workbench004.assets.detail), "Asset Library should show current-project pending asset copy");
 assert(!JSON.stringify(workbench004).includes("/005"), "004 workbench projection must not include stale 005 root");
 
+const current004FactsRealChain = deriveProjectRealChainStatus({
+  ...current004RealChainPayload,
+  workbenchFacts: workbenchFacts004,
+}, "runtime_endpoint");
+const guarded004FactsRealChain = guardProjectRealChainUiStateForCurrentProject(
+  { status: current004FactsRealChain.uiStatus, summary: current004FactsRealChain },
+  { projectId: "real-demo-e2e-004", projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004" },
+);
+const workbench004Facts = buildCurrentProjectWorkbenchProjection({
+  binding: boundBinding,
+  realChainState: guarded004FactsRealChain,
+  image2BatchState: image2Mismatch,
+  selectedShotId: "S07",
+});
+assert(workbench004Facts.shots.map((shot) => shot.id).join(",") === "S01,S02", "Story Flow should prefer 004 story_flow facts over preview fallback");
+assert(workbench004Facts.story.fallbackUsed === false, "story_flow facts should not be marked as fallback");
+assert(workbench004Facts.story.sectionCount === 1, "story_flow sections should be preserved");
+assert(workbench004Facts.assets.readOnlyProjection === false, "visual_memory facts should unlock a populated Asset Library projection");
+assert(workbench004Facts.assetFacts.map((asset) => asset.id).join(",") === "char_naya,char_ivo,scene_archive,style_quiet", "Asset Library should prefer 004 visual_memory facts");
+assert(workbench004Facts.assets.lockedCount === 1, "locked asset count should come from visual_memory");
+assert(workbench004Facts.assets.candidateCount === 1, "candidate asset count should be preserved");
+assert(workbench004Facts.assets.needsReviewCount === 1, "needs_review asset count should be preserved");
+assert(workbench004Facts.assets.rejectedCount === 1, "rejected asset count should be preserved");
+assert(!JSON.stringify(workbench004Facts).includes("char_mika"), "004 visual_memory facts must not leak 005 assets");
+
+const storyMissingFacts = {
+  ...workbenchFacts004,
+  storyFlow: { present: false, readable: false, path: "/missing/story_flow.json", shotCount: 0, sectionCount: 0, sections: [], shots: [] },
+};
+const storyMissingProjection = buildCurrentProjectWorkbenchProjection({
+  binding: boundBinding,
+  realChainState: {
+    status: guarded004FactsRealChain.status,
+    summary: { ...current004FactsRealChain, workbenchFacts: storyMissingFacts },
+  },
+});
+assert(storyMissingProjection.shots.map((shot) => shot.id).join(",") === "S01", "missing story_flow should safely fall back to current preview items");
+assert(/待补齐故事流/.test(storyMissingProjection.story.detail), "missing story_flow should show safe pending copy");
+
+const storyUnreadableFacts = {
+  ...workbenchFacts004,
+  storyFlow: { present: true, readable: false, path: "/bad/story_flow.json", shotCount: 0, sectionCount: 0, sections: [], shots: [] },
+};
+const storyUnreadableProjection = buildCurrentProjectWorkbenchProjection({
+  binding: boundBinding,
+  realChainState: {
+    status: guarded004FactsRealChain.status,
+    summary: { ...current004FactsRealChain, workbenchFacts: storyUnreadableFacts },
+  },
+});
+assert(storyUnreadableProjection.shots[0].id === "CURRENT_PROJECT", "unreadable story_flow should fail closed instead of using preview items");
+assert(/故事流读取失败/.test(storyUnreadableProjection.story.detail), "unreadable story_flow should expose product-safe failure copy");
+
+const visualMissingFacts = {
+  ...workbenchFacts004,
+  visualMemory: { present: false, readable: false, path: "/missing/visual_memory.json", assetCount: 0, assets: [], summary: { locked: 0, candidate: 0, needsReview: 0, rejected: 0, missing: 0 } },
+};
+const visualMissingProjection = buildCurrentProjectWorkbenchProjection({
+  binding: boundBinding,
+  realChainState: {
+    status: guarded004FactsRealChain.status,
+    summary: { ...current004FactsRealChain, workbenchFacts: visualMissingFacts },
+  },
+});
+assert(visualMissingProjection.assets.readOnlyProjection === true, "missing visual_memory should keep read-only fallback");
+assert(/当前项目资产待补齐/.test(visualMissingProjection.assets.detail), "missing visual_memory should show safe asset fallback copy");
+
 const staleRealChainUnder004 = guardProjectRealChainUiStateForCurrentProject(
   { status: realChain.uiStatus, summary: realChain },
   { projectId: "real-demo-e2e-004", projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004" },
@@ -406,6 +548,24 @@ const workbench005 = buildCurrentProjectWorkbenchProjection({
 assert(workbench005.identity.projectId === "real-demo-e2e-005", "workbench should switch back to selected 005 identity");
 assert(workbench005.shots.map((shot) => shot.id).join(",") === "S07,S08", "Story Flow should switch back to 005 shots when 005 is current");
 assert(workbench005.selectedScope.defaultShotId === "S07", "Agent selected scope should default to the current 005 shot, not stale 004");
+
+const realChain005Facts = deriveProjectRealChainStatus({
+  ...stale005Payload,
+  workbenchFacts: workbenchFacts005,
+}, "runtime_endpoint");
+const realChain005FactsMatched = guardProjectRealChainUiStateForCurrentProject(
+  { status: realChain005Facts.uiStatus, summary: realChain005Facts },
+  { projectId: "real-demo-e2e-005", projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005" },
+);
+const workbench005Facts = buildCurrentProjectWorkbenchProjection({
+  binding: binding005,
+  realChainState: realChain005FactsMatched,
+  image2BatchState: image2Matched,
+});
+assert(workbench005Facts.shots.map((shot) => shot.storyFunction).join(" ").includes("Mika"), "005 Story Flow should use 005 story_flow facts");
+assert(workbench005Facts.assetFacts.map((asset) => asset.id).join(",") === "char_mika,char_ren", "005 Asset Library should use 005 visual_memory facts");
+assert(workbench005Facts.assets.readOnlyProjection === false, "005 visual_memory should avoid empty read-only fallback");
+assert(!JSON.stringify(workbench005Facts).includes("char_naya"), "005 workbench facts must not leak 004 visual memory");
 
 const unboundWorkbench = buildCurrentProjectWorkbenchProjection({
   binding: unboundBinding,
