@@ -43,10 +43,12 @@ const {
   loadProjectImage2BatchPlan,
   loadProjectRealChainStatus,
   projectCurrentBindingEndpoint,
+  projectCurrentSelectEndpoint,
   projectImage2BatchPlanEndpoint,
   projectRealChainStatusEndpoint,
   runProjectImage2BatchCheck,
   runProjectRealChainCheck,
+  selectCurrentProjectBinding,
 } = await importProjectRealChainStatus();
 
 const project004 = {
@@ -138,7 +140,7 @@ let requests = [];
 let responseByUrl = new Map();
 globalThis.fetch = async (url, init) => {
   const urlText = String(url);
-  requests.push({ url: urlText, method: init?.method || "GET" });
+  requests.push({ url: urlText, method: init?.method || "GET", body: init?.body ? JSON.parse(String(init.body)) : undefined });
   const payload = responseByUrl.get(urlText);
   if (!payload) {
     return { ok: false, status: 404, json: async () => ({ status: "missing" }) };
@@ -155,6 +157,30 @@ const noIdentityState = await loadProjectRealChainStatus(undefined);
 assert(noIdentityState.status === "unavailable", "real-chain status without binding identity must fail closed");
 assert(requests.length === 1 && requests[0].url === projectCurrentBindingEndpoint, "unbound status should not request project status endpoints");
 assert(!/005|fallback|endpoint|provider|ledger|prompt|queue/i.test(noIdentityState.message || ""), "unbound message must not leak engineering/demo details");
+
+responseByUrl = new Map([[projectCurrentSelectEndpoint, currentProjectBindingResponse(project004)]]);
+requests = [];
+const selected004 = await selectCurrentProjectBinding({
+  projectRoot: project004.projectRoot,
+  projectId: project004.projectId,
+  displayName: project004.title,
+});
+assert(selected004.status === "bound", "select helper should return a bound current project");
+assert(selected004.projectRoot === project004.projectRoot, "select helper should parse selected project root");
+assert(requests.length === 1 && requests[0].url === projectCurrentSelectEndpoint, "select helper should call the select endpoint");
+assert(requests[0].method === "POST", "select helper should POST project selection");
+assert(requests[0].body.projectRoot === project004.projectRoot, "select helper should submit projectRoot");
+assert(requests[0].body.projectId === project004.projectId, "select helper should submit optional projectId");
+
+requests = [];
+let emptyPathRejected = false;
+try {
+  await selectCurrentProjectBinding({ projectRoot: "   " });
+} catch (error) {
+  emptyPathRejected = /请输入项目路径/.test(error instanceof Error ? error.message : "");
+}
+assert(emptyPathRejected, "select helper should reject an empty project path with product copy");
+assert(requests.length === 0, "empty project path must fail closed before network calls");
 
 responseByUrl = new Map([
   [projectCurrentBindingEndpoint, currentProjectBindingResponse(project004)],
@@ -194,5 +220,15 @@ assert(runStatus.status === "production_needs_review", "run check should pass ma
 assert(runImage2.status === "ready_for_review", "Image2 run check should pass matching 004 status");
 assert(requests.map((request) => request.method).join(",") === "POST,POST", "run checks must use POST");
 assert(requests.every((request) => !request.url.includes("?projectRoot") && !request.url.includes("?projectId")), "run checks must not pass arbitrary project identity query params");
+
+globalThis.window = {
+  location: { hostname: "127.0.0.1", port: "5173" },
+};
+responseByUrl = new Map([[`http://127.0.0.1:8790${projectCurrentSelectEndpoint}`, currentProjectBindingResponse(project004)]]);
+requests = [];
+const devPortSelected = await selectCurrentProjectBinding({ projectRoot: project004.projectRoot });
+assert(devPortSelected.status === "bound", "dev-port select helper should parse bound selection");
+assert(requests[0].url === `http://127.0.0.1:8790${projectCurrentSelectEndpoint}`, "dev UI select helper must route local runtime calls to port 8790");
+delete globalThis.window;
 
 console.log("Current project selection binding test passed. Adapter switches by runtime binding and blocks stale 005 summaries.");

@@ -695,6 +695,8 @@ checkMessage(requireWithin(projectRealChainUserSurface, /Production[\s\S]*needs_
 checkMessage(requireWithin(projectRealChainUserSurface, /displayTitle[\s\S]*状态已回流/, "current project chain panel must show bound project title instead of sandbox project id"));
 checkMessage(requireWithin(projectRealChainUserSurface, /未选择项目/, "current project chain panel must show unbound project copy"));
 checkMessage(requireWithin(projectRealChainUserSurface, /未同步/, "current project chain panel must show unsynced project copy"));
+checkMessage(requireWithin(projectRealChainUserSurface, /项目路径/, "current project chain panel must expose a simple project path entry"));
+checkMessage(requireWithin(projectRealChainUserSurface, /连接项目/, "current project chain panel must expose a creator-facing connect action"));
 checkMessage(requireWithin(minimalTopNav, /aria-label="项目计划状态"/, "top nav project plan status aria label should be localized"));
 check(!/real-demo-005/.test(`${appSource}\n${stylesSource}`), "main app/styles must not keep 005 demo class names");
 for (const [term, pattern] of [

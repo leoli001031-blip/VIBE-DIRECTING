@@ -781,6 +781,7 @@
   grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1fr) minmax(160px, 0.42fr);
   grid-template-areas:
     "head tags thumbs"
+    "select select thumbs"
     "batch policy thumbs"
     "report report thumbs"
     "message message thumbs";
@@ -841,6 +842,59 @@
 }
 
 .project-real-chain-head button:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.project-real-chain-select {
+  grid-area: select;
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.project-real-chain-select label {
+  color: rgba(37, 40, 34, 0.52);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.project-real-chain-select input {
+  min-width: 0;
+  height: 32px;
+  border: 1px solid rgba(37, 40, 34, 0.14);
+  background: rgba(255, 255, 255, 0.42);
+  color: rgba(37, 40, 34, 0.82);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.project-real-chain-select input:focus {
+  border-color: rgba(80, 96, 76, 0.42);
+}
+
+.project-real-chain-select button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  border: 1px solid rgba(37, 40, 34, 0.18);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(37, 40, 34, 0.74);
+  cursor: pointer;
+  padding: 0 11px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.project-real-chain-select button:disabled {
   opacity: 0.45;
   cursor: wait;
 }
@@ -1003,12 +1057,15 @@
 .preview-shell .project-real-chain-head strong,
 .preview-shell .project-real-chain-head button,
 .preview-shell .project-real-chain-batch strong,
-.preview-shell .project-real-chain-batch button {
+.preview-shell .project-real-chain-batch button,
+.preview-shell .project-real-chain-select button {
   color: rgba(242, 238, 230, 0.84);
 }
 
 .preview-shell .project-real-chain-head button,
 .preview-shell .project-real-chain-batch button,
+.preview-shell .project-real-chain-select input,
+.preview-shell .project-real-chain-select button,
 .preview-shell .project-real-chain-tags small,
 .preview-shell .project-real-chain-policy small {
   border-color: rgba(242, 238, 230, 0.16);
@@ -1021,8 +1078,14 @@
 }
 
 .preview-shell .project-real-chain-batch span,
-.preview-shell .project-real-chain-batch small {
+.preview-shell .project-real-chain-batch small,
+.preview-shell .project-real-chain-select label {
   color: rgba(242, 238, 230, 0.56);
+}
+
+.preview-shell .project-real-chain-select input {
+  background: rgba(242, 238, 230, 0.055);
+  color: rgba(242, 238, 230, 0.76);
 }
 
 .minimal-story-flow h2,
@@ -1918,6 +1981,7 @@
     grid-template-columns: 1fr;
     grid-template-areas:
       "head"
+      "select"
       "tags"
       "batch"
       "policy"

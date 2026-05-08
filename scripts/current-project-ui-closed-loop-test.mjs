@@ -99,9 +99,13 @@ function assertCreatorPanelContract() {
   assert(/本地复核/.test(surface), "ProjectRealChainPanel should expose creator-facing review copy");
   assert(/未选择项目/.test(surface), "ProjectRealChainPanel should expose unbound project copy");
   assert(/未同步/.test(surface), "ProjectRealChainPanel should expose unsynced project copy");
+  assert(/项目路径/.test(surface), "ProjectRealChainPanel should expose project path selection copy");
+  assert(/连接项目/.test(surface), "ProjectRealChainPanel should expose connect project copy");
   assert(/Preview[\s\S]*ready/.test(surface), "ProjectRealChainPanel should expose preview ready state");
   assert(/Production[\s\S]*needs_review/.test(surface), "ProjectRealChainPanel should expose production review state");
   assert(/displayTitle[\s\S]*状态已回流/.test(surface), "ProjectRealChainPanel should show the bound title for returned status");
+  assert(/selectCurrentProjectBinding\(\{\s*projectRoot/.test(app), "App must select the current project through the runtime helper");
+  assert(/refreshCurrentProjectPanels\(binding\)/.test(app), "App must refresh current binding and project panels after selection");
   assert(/loadCurrentProjectBindingStatus\(\)/.test(app), "App must load runtime current project binding first");
   assert(/currentProjectBindingIdentity\(runtimeProjectBinding\)/.test(app), "App must derive current project identity from runtime binding");
   assert(!/currentProjectIdentity\(runtimeState\)/.test(app), "App must not derive current project identity from runtime-state.json");

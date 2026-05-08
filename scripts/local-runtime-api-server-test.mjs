@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -72,9 +72,11 @@ function assert005Payload(payload, label) {
 const project004Root = "real-test-sandbox/real-demo-e2e/004-image2-start-frames";
 const project004Id = "real_demo_e2e_004_image2_start_frames";
 const project004TruthPath = `${project004Root}/reports/runtime_truth_layer.json`;
+const project004VibePath = `${project004Root}/project/project.vibe`;
 const project005Root = "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames";
 const project005Id = "real_demo_e2e_005_anime_image2_start_frames";
 const project005TruthPath = `${project005Root}/reports/runtime_truth_layer.json`;
+const project005VibePath = `${project005Root}/project/project.vibe`;
 
 function assertNo005Leak(payload, label) {
   const text = JSON.stringify(payload);
@@ -215,10 +217,14 @@ try {
     assertUnboundPayload(result.payload, label);
   }
 
+  const project005VibeBefore = statSync(project005VibePath).mtimeMs;
   const select005 = await selectProject(baseUrl, project005Root, project005Id, "005 anime image2");
   assert(select005.response.status === 200, "POST select 005 should return 200");
   assert(select005.payload.status === "bound", "POST select 005 should bind");
+  assert(select005.payload.providerCalled === false, "POST select 005 must not call provider");
+  assert(select005.payload.prepareRan === false, "POST select 005 must not run prepare");
   assert(select005.payload.projectVibeWritten === false, "POST select must not write project.vibe");
+  assert(statSync(project005VibePath).mtimeMs === project005VibeBefore, "POST select 005 must not mutate project.vibe");
   assert(existsSync(bindingPath), "POST select should write runtime-local binding");
   assert(JSON.parse(readFileSync(bindingPath, "utf8")).projectRoot === project005Root, "binding file should store 005 root");
 
@@ -254,8 +260,13 @@ try {
   assert(header004Plan.payload.ignoredRequestContext?.ignoredProjectRootProvided === true, "header override should be recorded as ignored");
   assert(header004Plan.payload.ignoredRequestContext?.ignoredProjectRootSource === "header", "header override source should be recorded");
 
+  const project004VibeBefore = statSync(project004VibePath).mtimeMs;
   const select004 = await selectProject(baseUrl, project004Root, project004Id, "004 image2");
   assert(select004.response.status === 200, "POST select 004 should return 200");
+  assert(select004.payload.providerCalled === false, "POST select 004 must not call provider");
+  assert(select004.payload.prepareRan === false, "POST select 004 must not run prepare");
+  assert(select004.payload.projectVibeWritten === false, "POST select 004 must not write project.vibe");
+  assert(statSync(project004VibePath).mtimeMs === project004VibeBefore, "POST select 004 must not mutate project.vibe");
   assert(JSON.parse(readFileSync(bindingPath, "utf8")).projectRoot === project004Root, "binding file should store 004 root");
 
   const project004Status = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);

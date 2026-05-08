@@ -13,6 +13,7 @@ declare global {
 export const defaultRuntimeApiBaseUrl = "http://127.0.0.1:8790";
 export const projectRealChainRuntimeBasePath = "/api/runtime";
 export const projectCurrentBindingEndpoint = `${projectRealChainRuntimeBasePath}/projects/current`;
+export const projectCurrentSelectEndpoint = `${projectRealChainRuntimeBasePath}/projects/select`;
 export const projectRealChainStatusEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/status`;
 export const projectRealChainRunCheckEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/run-check`;
 export const projectImage2BatchPlanEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-batch/plan`;
@@ -173,6 +174,12 @@ export type ProjectCurrentBindingStatus = {
   projectTitle?: string;
   projectVibePath?: string;
   message?: string;
+};
+
+export type SelectCurrentProjectInput = {
+  projectRoot: string;
+  projectId?: string;
+  displayName?: string;
 };
 
 type ProjectRealChainPayload = {
@@ -805,6 +812,30 @@ export async function loadCurrentProjectBindingStatus(): Promise<ProjectCurrentB
       message: projectMismatchMessage(),
     };
   }
+}
+
+export async function selectCurrentProjectBinding(input: SelectCurrentProjectInput): Promise<ProjectCurrentBindingStatus> {
+  const projectRoot = input.projectRoot.trim();
+  if (!projectRoot) throw new Error("请输入项目路径。");
+
+  const response = await fetch(toRuntimeUrl(projectCurrentSelectEndpoint), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      projectRoot,
+      projectId: input.projectId?.trim() || undefined,
+      displayName: input.displayName?.trim() || undefined,
+    }),
+  });
+  const payload = await response.json().catch(() => undefined);
+  if (!response.ok) {
+    throw new Error("连接项目失败，请确认路径在当前工作区内并且项目文件可读取。");
+  }
+  const binding = deriveCurrentProjectBindingStatus(payload);
+  if (binding.status !== "bound") {
+    throw new Error("连接项目失败，请确认路径在当前工作区内并且项目文件可读取。");
+  }
+  return binding;
 }
 
 export async function loadProjectRealChainStatus(expected?: ProjectRuntimeIdentity): Promise<ProjectRealChainUiState> {
