@@ -299,8 +299,25 @@ try {
   assert(legacyFile.status === 200, "legacy scoped file should be readable");
 
   const current004OutputPath = image2Batch004.payload.items.find((item) => item.outputExists)?.expectedOutputPath;
+  assert(current004OutputPath.endsWith("/start.png"), "current project preview output should be a start.png thumbnail");
+  const project004VibeBeforeFileRead = statSync(project004VibePath).mtimeMs;
   const current004File = await fetch(`${baseUrl}/api/runtime/files?path=${encodeURIComponent(current004OutputPath)}`);
   assert(current004File.status === 200, "current project file inside bound 004 should be readable");
+  assert(current004File.headers.get("content-type") === "image/png", "current project start.png should be served as image/png");
+  assert(current004File.headers.get("access-control-allow-origin") === "*", "current project start.png should retain CORS");
+  assert(current004File.headers.get("x-content-type-options") === "nosniff", "current project start.png should use nosniff with the correct MIME");
+  assert(current004File.headers.get("cache-control") === "no-store", "current project start.png should retain no-store cache policy");
+  await current004File.arrayBuffer();
+  assert(statSync(project004VibePath).mtimeMs === project004VibeBeforeFileRead, "runtime file read must not mutate project.vibe");
+
+  const missingImageAsMedia = await fetch(`${baseUrl}/api/runtime/files?path=${encodeURIComponent(`${project004Root}/outputs/shots/S01/start.png`)}`, {
+    headers: { accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8" },
+  });
+  assert(missingImageAsMedia.status === 404, "missing current project start.png media request should return 404");
+  assert(missingImageAsMedia.headers.get("content-type") === "image/png", "missing current project start.png media request should keep image/png");
+  assert(missingImageAsMedia.headers.get("access-control-allow-origin") === "*", "missing current project start.png media request should retain CORS");
+  assert(missingImageAsMedia.headers.get("x-content-type-options") === "nosniff", "missing current project start.png media request should use nosniff");
+  assert((await missingImageAsMedia.text()) === "", "missing current project start.png media request should not return JSON to image loads");
 
   const currentCannotRead005 = await fetchJson(`${baseUrl}/api/runtime/files?path=${encodeURIComponent(`${project005Root}/outputs/shots/S01/start.png`)}`);
   assert(currentCannotRead005.response.status === 403, "current project file route must not read outside bound project");

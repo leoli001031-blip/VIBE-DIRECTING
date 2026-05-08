@@ -40,6 +40,7 @@ export type ProjectRealChainPreviewItem = {
   expectedOutputAbsPath?: string;
   imageUrl?: string;
   thumbnailUrl?: string;
+  outputExists?: boolean;
   reviewRequired: boolean;
   reviewOverlay: boolean;
   previewQaStatus?: string;
@@ -231,6 +232,7 @@ type ProjectRealChainPayload = {
     expectedOutputAbsPath?: string;
     imageUrl?: string;
     thumbnailUrl?: string;
+    outputExists?: boolean;
     reviewRequired?: boolean;
     reviewOverlay?: boolean;
     previewQaStatus?: string;
@@ -572,6 +574,7 @@ function previewItemFromObservation(
     expectedOutputAbsPath: item.expectedOutputAbsPath,
     imageUrl,
     thumbnailUrl: item.thumbnailUrl ? toRuntimeUrl(item.thumbnailUrl) : imageUrl,
+    outputExists: item.outputExists,
     reviewRequired,
     reviewOverlay: item.reviewOverlay === true,
     previewQaStatus: item.previewQaStatus,

@@ -36,6 +36,7 @@ function corsHeaders(contentType = "application/json; charset=utf-8") {
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET,POST,OPTIONS",
     "access-control-allow-headers": "content-type,x-vibe-project-root,x-vibe-project-id,x-project-root,x-project-id",
+    "x-content-type-options": "nosniff",
     "cache-control": "no-store",
   };
 }
@@ -308,9 +309,34 @@ function contentTypeFor(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   if (ext === ".png") return "image/png";
   if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
-  if (ext === ".json") return "application/json; charset=utf-8";
   if (ext === ".webp") return "image/webp";
+  if (ext === ".gif") return "image/gif";
+  if (ext === ".mp4") return "video/mp4";
+  if (ext === ".webm") return "video/webm";
+  if (ext === ".json") return "application/json; charset=utf-8";
   return "application/octet-stream";
+}
+
+function isMediaContentType(contentType) {
+  return contentType.startsWith("image/") || contentType.startsWith("video/");
+}
+
+function acceptsMedia(req) {
+  const accept = String(req.headers.accept || "");
+  return accept.includes("image/") || accept.includes("video/");
+}
+
+function writeRuntimeFileError(req, res, statusCode, payload, relativePath) {
+  const contentType = contentTypeFor(relativePath || "");
+  if (isMediaContentType(contentType) && acceptsMedia(req)) {
+    res.writeHead(statusCode, {
+      ...corsHeaders(contentType),
+      "content-length": "0",
+    });
+    res.end();
+    return;
+  }
+  writeJson(res, statusCode, payload);
 }
 
 function runtimePolicy(extra = {}) {
@@ -1195,7 +1221,7 @@ function writeJson(res, statusCode, payload) {
   res.end(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
-function serveRuntimeFile(res, relativePath, options = {}) {
+function serveRuntimeFile(req, res, relativePath, options = {}) {
   if (!relativePath) {
     writeJson(res, 400, { ok: false, ...runtimePolicy(), status: "bad_request", message: "Missing file path." });
     return;
@@ -1203,12 +1229,12 @@ function serveRuntimeFile(res, relativePath, options = {}) {
 
   const normalizedRelativePath = normalizeRelativePath(relativePath);
   if (path.isAbsolute(normalizedRelativePath)) {
-    writeJson(res, 403, {
+    writeRuntimeFileError(req, res, 403, {
       ok: false,
       ...runtimePolicy(),
       status: "forbidden",
       message: "Runtime files must be addressed by repository-relative paths.",
-    });
+    }, normalizedRelativePath);
     return;
   }
 
@@ -1228,33 +1254,33 @@ function serveRuntimeFile(res, relativePath, options = {}) {
     }
   } catch (error) {
     const unbound = error?.code === "CURRENT_PROJECT_UNBOUND";
-    writeJson(res, unbound ? 409 : 403, {
+    writeRuntimeFileError(req, res, unbound ? 409 : 403, {
       ok: false,
       ...runtimePolicy(),
       status: unbound ? "unbound" : "forbidden",
       message: error instanceof Error ? error.message : "Path is outside project root.",
-    });
+    }, normalizedRelativePath);
     return;
   }
 
   const rootWithSep = `${allowedRootPath}${path.sep}`;
   if (filePath !== allowedRootPath && !filePath.startsWith(rootWithSep)) {
-    writeJson(res, 403, {
+    writeRuntimeFileError(req, res, 403, {
       ok: false,
       ...runtimePolicy(),
       status: "forbidden",
       message: `Runtime file is outside the allowed project scope: ${allowedRootLabel}`,
-    });
+    }, normalizedRelativePath);
     return;
   }
 
   if (!existsSync(filePath) || !statSync(filePath).isFile()) {
-    writeJson(res, 404, {
+    writeRuntimeFileError(req, res, 404, {
       ok: false,
       ...runtimePolicy(),
       status: "not_found",
       message: `Runtime file not found: ${relativePath}`,
-    });
+    }, normalizedRelativePath);
     return;
   }
 
@@ -1262,21 +1288,21 @@ function serveRuntimeFile(res, relativePath, options = {}) {
     const fileRealPath = realpathSync(filePath);
     const rootRealPath = realpathSync(allowedRootPath);
     if (!pathWithinRoot(fileRealPath, rootRealPath)) {
-      writeJson(res, 403, {
+      writeRuntimeFileError(req, res, 403, {
         ok: false,
         ...runtimePolicy(),
         status: "forbidden",
         message: "Runtime file symlink escapes the allowed project scope.",
-      });
+      }, normalizedRelativePath);
       return;
     }
   } catch (error) {
-    writeJson(res, 403, {
+    writeRuntimeFileError(req, res, 403, {
       ok: false,
       ...runtimePolicy(),
       status: "forbidden",
       message: error instanceof Error ? error.message : "Runtime file could not be resolved safely.",
-    });
+    }, normalizedRelativePath);
     return;
   }
 
@@ -1551,7 +1577,7 @@ async function handleRequest(req, res) {
     return;
   }
   if (req.method === "GET" && url.pathname === runtimeFileEndpoint) {
-    serveRuntimeFile(res, url.searchParams.get("path") || "", { scope: url.searchParams.get("scope") || undefined });
+    serveRuntimeFile(req, res, url.searchParams.get("path") || "", { scope: url.searchParams.get("scope") || undefined });
     return;
   }
   if (req.method === "GET" && url.pathname === currentProjectBindingEndpoint) {

@@ -7663,7 +7663,7 @@ function projectRealChainVisibleItems(
   items: ProjectRealChainPreviewItem[],
   selectedShotId: string,
 ) {
-  const withImage = items.filter((item) => item.imageUrl || item.thumbnailUrl);
+  const withImage = items.filter((item) => item.outputExists !== false && (item.imageUrl || item.thumbnailUrl));
   const selected = withImage.find((item) => item.shotId === selectedShotId);
   if (selected) return [selected];
   return withImage.slice(0, 4);
