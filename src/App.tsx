@@ -85,6 +85,11 @@ import {
   type PreviewQueueItemKind,
 } from "./core/previewPlayerQueue";
 import { buildCurrentProjectPreviewProjection } from "./core/currentProjectPreviewProjection";
+import {
+  applyCurrentProjectWorkbenchProjectionToRuntimeState,
+  buildCurrentProjectWorkbenchProjection,
+  type CurrentProjectWorkbenchProjection,
+} from "./core/currentProjectWorkbenchProjection";
 import { applyPreRealTestClosure } from "./core/preRealTestClosure";
 import {
   currentProjectBindingIdentity,
@@ -581,6 +586,13 @@ function createAssetLibraryFromRuntimeState(state: ProjectRuntimeState): AssetLi
   }
 
   return library;
+}
+
+function createAssetLibraryFromCurrentProjectWorkbench(projection: CurrentProjectWorkbenchProjection): AssetLibrarySnapshot {
+  return createAssetLibrarySnapshot({
+    id: `${projection.identity.projectId || "current_project"}_asset_library_projection`,
+    createdAt: new Date().toISOString(),
+  });
 }
 
 function assetLibraryAssetToRecord(asset: AssetLibraryAsset): AssetRecord {
@@ -6990,6 +7002,7 @@ function ProjectFactsStrip({
 
 function MinimalAssetLibrary({
   library,
+  readOnlyDetail,
   selectedAssetId,
   onSelectAsset,
   onAddAsset,
@@ -6997,6 +7010,7 @@ function MinimalAssetLibrary({
   onMarkAssetStatus,
 }: {
   library: AssetLibrarySnapshot;
+  readOnlyDetail?: string;
   selectedAssetId?: string;
   onSelectAsset: (id: string) => void;
   onAddAsset: (input: AddAssetLibraryAssetInput) => void;
@@ -7013,6 +7027,7 @@ function MinimalAssetLibrary({
   const blockerLabel = blockers.length
     ? `${blockers.length} 项待补参考`
     : "参考已就绪";
+  const isReadOnly = Boolean(readOnlyDetail);
   const [draft, setDraft] = useState<{ assetType: AssetLibraryAssetType; name: string; path: string; constraints: string }>({
     assetType: "character",
     name: "",
@@ -7078,9 +7093,9 @@ function MinimalAssetLibrary({
       <div className="asset-library-heading">
         <div>
           <h2>审核并锁定资产</h2>
-          <small>角色主参考、场景 master、风格锚图</small>
+          <small>{readOnlyDetail || "角色主参考、场景 master、风格锚图"}</small>
         </div>
-        <details className="asset-library-add" aria-label="添加资产">
+        {!isReadOnly && <details className="asset-library-add" aria-label="添加资产">
           <summary>添加资产</summary>
           <div className="asset-library-toolbar">
             <select value={draft.assetType} onChange={(event) => setDraft({ ...draft, assetType: event.target.value as AssetLibraryAssetType })}>
@@ -7095,7 +7110,7 @@ function MinimalAssetLibrary({
             <button onClick={() => addDraft("locked")}>锁定</button>
             <button onClick={() => addDraft("candidate")}>候选</button>
           </div>
-        </details>
+        </details>}
       </div>
       <div className="asset-status-strip" aria-label="Asset consistency">
         <span><i className="dot ok" /> locked</span>
@@ -7106,7 +7121,17 @@ function MinimalAssetLibrary({
       <div className="asset-blocker-strip" aria-label="资产阻断">
         <span title={blockers.join(" · ") || blockerLabel}>{blockerLabel}</span>
       </div>
-      {selectedAsset && (
+      {readOnlyDetail && (
+        <section className="asset-edit-surface" aria-label="当前项目资产状态">
+          <div>
+            <span>当前项目</span>
+            <strong>资产待补齐</strong>
+            <small>只读投影</small>
+          </div>
+          <small>{readOnlyDetail}</small>
+        </section>
+      )}
+      {!isReadOnly && selectedAsset && (
         <section className="asset-edit-surface" aria-label="资产编辑">
           <div>
             <span>已选择</span>
@@ -7357,6 +7382,7 @@ function MinimalPreview({
 
 function MinimalAgentPanel({
   runtimeState,
+  projectScopeLabel,
   shot,
   selectedShots = [],
   asset,
@@ -7364,6 +7390,7 @@ function MinimalAgentPanel({
   sectionId,
 }: {
   runtimeState: ProjectRuntimeState;
+  projectScopeLabel?: string;
   shot?: ShotRecord;
   selectedShots?: ShotRecord[];
   asset?: AssetRecord;
@@ -7376,7 +7403,8 @@ function MinimalAgentPanel({
   const [workflow, setWorkflow] = useState<ReturnType<typeof buildDirectorWorkflowState> | undefined>();
   const [projection, setProjection] = useState<MinimalRuntimeProjection | undefined>();
   const scopedShotIds = selectedShots.map((item) => item.id);
-  const scopeLabel = selectedScopeLabel(shot, asset, sectionLabel, selectedShots);
+  const localScopeLabel = selectedScopeLabel(shot, asset, sectionLabel, selectedShots);
+  const scopeLabel = projectScopeLabel ? `${projectScopeLabel} · ${localScopeLabel}` : localScopeLabel;
 
   function prepareChange() {
     const userIntent = text.trim();
@@ -7921,6 +7949,8 @@ function DirectorMode({
   view,
   runtimeState,
   assetLibrary,
+  assetLibraryReadOnlyDetail,
+  projectScopeLabel,
   projectFacts,
   projectFactsMode,
   selectedShot,
@@ -7955,6 +7985,8 @@ function DirectorMode({
   view: RuntimeView;
   runtimeState: ProjectRuntimeState;
   assetLibrary: AssetLibrarySnapshot;
+  assetLibraryReadOnlyDetail?: string;
+  projectScopeLabel?: string;
   projectFacts: ProjectFactsUiSummary;
   projectFactsMode: ProjectFactsUiMode;
   selectedShot?: ShotRecord;
@@ -8011,6 +8043,7 @@ function DirectorMode({
         {directorView === "assets" && (
           <MinimalAssetLibrary
             library={assetLibrary}
+            readOnlyDetail={assetLibraryReadOnlyDetail}
             selectedAssetId={selectedAssetId}
             onSelectAsset={onSelectAsset}
             onAddAsset={onAddAsset}
@@ -8040,6 +8073,7 @@ function DirectorMode({
       </div>
       <MinimalAgentPanel
         runtimeState={runtimeState}
+        projectScopeLabel={projectScopeLabel}
         shot={directorView === "assets" ? undefined : selectedShot}
         selectedShots={directorView === "story" ? selectedShots : []}
         asset={directorView === "assets" ? selectedAsset : undefined}
@@ -9499,40 +9533,70 @@ function App() {
     };
   }, [runtimeProjectIdentity]);
 
-  const audit = useMemo(() => auditFromProjectRuntimeState(runtimeState), [runtimeState]);
-  const view = useMemo(
-    () => buildRuntimeViewFromProjectState(runtimeState, { selectedShotId }),
-    [runtimeState, selectedShotId],
-  );
-  const selectedShot = useMemo(() => audit.shots.find((shot) => shot.id === selectedShotId), [audit.shots, selectedShotId]);
-  const selectedShots = useMemo(
-    () => selectedShotIds
-      .map((shotId) => audit.shots.find((shot) => shot.id === shotId))
-      .filter((shot): shot is ShotRecord => Boolean(shot)),
-    [audit.shots, selectedShotIds],
-  );
-  const selectedAsset = useMemo(() => audit.assets.find((asset) => asset.id === selectedAssetId), [audit.assets, selectedAssetId]);
-  const blockers = audit.issues.filter((issue) => issue.severity === "blocker");
   const currentProjectPreviewProjection = useMemo(() => buildCurrentProjectPreviewProjection({
     summary: projectRealChainState.summary,
     previewItems: projectRealChainState.summary?.previewItems,
-  }), [projectRealChainState.summary]);
+    projectId: runtimeProjectIdentity?.projectId,
+    projectRoot: runtimeProjectIdentity?.projectRoot,
+  }), [projectRealChainState.summary, runtimeProjectIdentity?.projectId, runtimeProjectIdentity?.projectRoot]);
   const currentProjectPreviewQueue = runtimeProjectBinding.status === "bound"
     ? currentProjectPreviewProjection.queue
     : [];
+  const currentProjectWorkbenchProjection = useMemo(() => buildCurrentProjectWorkbenchProjection({
+    binding: runtimeProjectBinding,
+    realChainState: projectRealChainState,
+    image2BatchState: projectImage2BatchState,
+    selectedShotId,
+    selectedShotIds,
+  }), [projectImage2BatchState, projectRealChainState, runtimeProjectBinding, selectedShotId, selectedShotIds]);
+  const workbenchRuntimeState = useMemo(
+    () => applyCurrentProjectWorkbenchProjectionToRuntimeState(runtimeState, currentProjectWorkbenchProjection),
+    [currentProjectWorkbenchProjection, runtimeState],
+  );
+  const workbenchAssetLibrary = useMemo(
+    () => currentProjectWorkbenchProjection.assets.readOnlyProjection
+      ? createAssetLibraryFromCurrentProjectWorkbench(currentProjectWorkbenchProjection)
+      : assetLibrary,
+    [assetLibrary, currentProjectWorkbenchProjection],
+  );
+  const workbenchSelectedShotId = useMemo(() => {
+    const shotIds = new Set(currentProjectWorkbenchProjection.shots.map((shot) => shot.id));
+    return shotIds.has(selectedShotId)
+      ? selectedShotId
+      : currentProjectWorkbenchProjection.selectedScope.defaultShotId || selectedShotId;
+  }, [currentProjectWorkbenchProjection, selectedShotId]);
+  const runtimeAudit = useMemo(() => auditFromProjectRuntimeState(runtimeState), [runtimeState]);
+  const runtimeView = useMemo(
+    () => buildRuntimeViewFromProjectState(runtimeState, { selectedShotId }),
+    [runtimeState, selectedShotId],
+  );
+  const audit = useMemo(() => auditFromProjectRuntimeState(workbenchRuntimeState), [workbenchRuntimeState]);
+  const view = useMemo(
+    () => buildRuntimeViewFromProjectState(workbenchRuntimeState, { selectedShotId: workbenchSelectedShotId }),
+    [workbenchRuntimeState, workbenchSelectedShotId],
+  );
+  const selectedShot = useMemo(() => audit.shots.find((shot) => shot.id === workbenchSelectedShotId), [audit.shots, workbenchSelectedShotId]);
+  const selectedShots = useMemo(
+    () => currentProjectWorkbenchProjection.selectedScope.selectedShotIds
+      .map((shotId) => audit.shots.find((shot) => shot.id === shotId))
+      .filter((shot): shot is ShotRecord => Boolean(shot)),
+    [audit.shots, currentProjectWorkbenchProjection.selectedScope.selectedShotIds],
+  );
+  const selectedAsset = useMemo(() => audit.assets.find((asset) => asset.id === selectedAssetId), [audit.assets, selectedAssetId]);
+  const blockers = audit.issues.filter((issue) => issue.severity === "blocker");
   const topRuntimeProjection = useMemo(() => buildMinimalRuntimeProjection({
     previewQueue: currentProjectPreviewQueue,
-    assetLibrary,
+    assetLibrary: workbenchAssetLibrary,
     ledgerProjections: projectImage2BatchState.summary?.ledgerProjections,
-    generatedAt: runtimeState.generatedAt,
-  }), [assetLibrary, currentProjectPreviewQueue, projectImage2BatchState.summary?.ledgerProjections, runtimeState.generatedAt]);
+    generatedAt: workbenchRuntimeState.generatedAt,
+  }), [currentProjectPreviewQueue, projectImage2BatchState.summary?.ledgerProjections, workbenchAssetLibrary, workbenchRuntimeState.generatedAt]);
   const projectPlan = useMemo(
-    () => buildMinimalProjectPlan(runtimeState, topRuntimeProjection.shortLabel, topRuntimeProjection.progressDots),
-    [runtimeState, topRuntimeProjection.progressDots, topRuntimeProjection.shortLabel],
+    () => buildMinimalProjectPlan(workbenchRuntimeState, topRuntimeProjection.shortLabel, topRuntimeProjection.progressDots),
+    [topRuntimeProjection.progressDots, topRuntimeProjection.shortLabel, workbenchRuntimeState],
   );
   const projectFacts = useMemo(
-    () => buildProjectFactsUiSummary(runtimeState, assetLibrary, projectFactsMode),
-    [assetLibrary, projectFactsMode, runtimeState],
+    () => buildProjectFactsUiSummary(workbenchRuntimeState, workbenchAssetLibrary, projectFactsMode),
+    [projectFactsMode, workbenchAssetLibrary, workbenchRuntimeState],
   );
   const resolvedActiveSectionId = activeSectionId
     || view.storySections.find((section) => selectedShot && section.shotIds.includes(selectedShot.id))?.id
@@ -9546,6 +9610,14 @@ function App() {
     }
     if (activeSectionId !== resolvedActiveSectionId) setActiveSectionId(resolvedActiveSectionId);
   }, [activeSectionId, resolvedActiveSectionId, view.storySections]);
+
+  useEffect(() => {
+    if (!workbenchSelectedShotId || selectedShotId === workbenchSelectedShotId) return;
+    setSelectedShotId(workbenchSelectedShotId);
+    setSelectedShotIds(currentProjectWorkbenchProjection.selectedScope.selectedShotIds.length
+      ? currentProjectWorkbenchProjection.selectedScope.selectedShotIds
+      : [workbenchSelectedShotId]);
+  }, [currentProjectWorkbenchProjection.selectedScope.selectedShotIds, selectedShotId, workbenchSelectedShotId]);
 
   function openDirectorView(nextView: DirectorView) {
     setMode("director");
@@ -9700,15 +9772,17 @@ function App() {
         <DirectorMode
           audit={audit}
           view={view}
-          runtimeState={runtimeState}
-          assetLibrary={assetLibrary}
+          runtimeState={workbenchRuntimeState}
+          assetLibrary={workbenchAssetLibrary}
+          assetLibraryReadOnlyDetail={currentProjectWorkbenchProjection.assets.detail}
+          projectScopeLabel={currentProjectWorkbenchProjection.selectedScope.label}
           projectFacts={projectFacts}
           projectFactsMode={projectFactsMode}
           selectedShot={selectedShot}
           selectedShots={selectedShots}
           selectedAsset={selectedAsset}
-          selectedShotId={selectedShotId}
-          selectedShotIds={selectedShotIds}
+          selectedShotId={workbenchSelectedShotId}
+          selectedShotIds={currentProjectWorkbenchProjection.selectedScope.selectedShotIds}
           selectedAssetId={selectedAssetId}
           projectRealChainState={projectRealChainState}
           currentProjectPreviewItems={currentProjectPreviewQueue}
@@ -9733,8 +9807,8 @@ function App() {
           onConnectProject={connectCurrentProject}
         />
       )}
-      {mode === "inspector" && <InspectorMode audit={audit} view={view} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />}
-      {mode === "diagnostics" && <DiagnosticsMode audit={audit} view={view} runtimeState={runtimeState} />}
+      {mode === "inspector" && <InspectorMode audit={runtimeAudit} view={runtimeView} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />}
+      {mode === "diagnostics" && <DiagnosticsMode audit={runtimeAudit} view={runtimeView} runtimeState={runtimeState} />}
 
       {mode !== "director" && (
         <footer className="policy-note">

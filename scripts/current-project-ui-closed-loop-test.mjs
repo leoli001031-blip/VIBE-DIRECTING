@@ -58,6 +58,21 @@ async function importProjectRealChainStatus() {
   return import(dataUrl(sourcePath, output.outputText));
 }
 
+async function importCurrentProjectWorkbenchProjection() {
+  const sourcePath = "src/core/currentProjectWorkbenchProjection.ts";
+  const output = ts.transpileModule(readText(sourcePath), {
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ES2022,
+      moduleResolution: ts.ModuleResolutionKind.Node10,
+      importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+      isolatedModules: true,
+    },
+    fileName: sourcePath,
+  });
+  return import(dataUrl(sourcePath, output.outputText));
+}
+
 function assertProductCopy(message) {
   assert(/未选择项目|未同步/.test(message || ""), "unbound/mismatch copy should be product-facing");
   assert(!/005|fallback|endpoint|provider|ledger|prompt|queue/i.test(message || ""), "unbound/mismatch copy must not expose engineering/demo details");
@@ -116,6 +131,11 @@ function assertCreatorPanelContract() {
   assert(/loadProjectImage2BatchPlan\(runtimeProjectIdentity\)/.test(app), "App must guard Image2 batch status by runtime binding identity");
   assert(/runProjectRealChainCheck\(runtimeProjectIdentity\)/.test(app), "App run-check must use runtime binding identity");
   assert(/runProjectImage2BatchCheck\(runtimeProjectIdentity\)/.test(app), "App Image2 check must use runtime binding identity");
+  assert(/buildCurrentProjectWorkbenchProjection\(\{[\s\S]*binding:\s*runtimeProjectBinding[\s\S]*realChainState:\s*projectRealChainState[\s\S]*image2BatchState:\s*projectImage2BatchState/.test(app), "App must derive the main workbench from current project runtime projection");
+  assert(/applyCurrentProjectWorkbenchProjectionToRuntimeState\(runtimeState,\s*currentProjectWorkbenchProjection\)/.test(app), "App must bind Story Flow to the current project workbench projection");
+  assert(/assetLibraryReadOnlyDetail=\{currentProjectWorkbenchProjection\.assets\.detail\}/.test(app), "App must bind Asset Library fallback copy to the current project projection");
+  assert(/projectScopeLabel=\{currentProjectWorkbenchProjection\.selectedScope\.label\}/.test(app), "App must bind Agent scope to the current project projection");
+  assert(/runtimeState=\{workbenchRuntimeState\}/.test(app), "DirectorMode must receive the current project workbench runtime state");
   assert(!/real-demo-005/.test(`${appSource}\n${stylesSource}`), "app/styles should not retain 005 demo class names");
 }
 
@@ -129,6 +149,10 @@ const {
   guardProjectImage2BatchUiStateForCurrentProject,
   projectRuntimeRequestPath,
 } = await importProjectRealChainStatus();
+const {
+  buildCurrentProjectWorkbenchProjection,
+  currentProjectWorkbenchProjectionSource,
+} = await importCurrentProjectWorkbenchProjection();
 
 assertCreatorPanelContract();
 
@@ -179,6 +203,14 @@ assert(boundBinding.status === "bound", "bound current project status should par
 assert(boundBinding.projectTitle === "004 当前项目", "bound current project title should parse");
 assert(currentProjectBindingIdentity(boundBinding)?.projectId === "real-demo-e2e-004", "bound identity should include project id from currentProject.project");
 assert(currentProjectBindingIdentity(boundBinding)?.projectRoot?.endsWith("/004"), "bound identity should come from current binding");
+
+const binding005 = deriveCurrentProjectBindingStatus({
+  ...currentProjectBindingResponse({
+    projectId: "real-demo-e2e-005",
+    projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005",
+    title: "005 当前项目",
+  }),
+});
 
 const unboundBinding = deriveCurrentProjectBindingStatus({ status: "unbound" });
 assert(unboundBinding.status === "unbound", "unbound current project status should parse");
@@ -310,5 +342,78 @@ const image2Mismatch = guardProjectImage2BatchUiStateForCurrentProject(
 assert(image2Mismatch.status === "unavailable", "stale 005 Image2 batch summary must be blocked under 004 identity");
 assert(!image2Mismatch.summary, "stale 005 Image2 batch summary must not leak under 004 identity");
 assertProductCopy(image2Mismatch.message);
+
+const current004RealChainPayload = {
+  ...stale005Payload,
+  project: {
+    projectId: "real-demo-e2e-004",
+    runId: "real_demo_e2e_004",
+    projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004",
+  },
+  returnedImageCount: 1,
+  totalPlannedImages: 1,
+  reviewShotIds: ["S01"],
+  previewItems: [
+    { shotId: "S01", order: 1, imageUrl: "/files/004-S01.png", reviewRequired: false },
+  ],
+};
+const current004RealChain = deriveProjectRealChainStatus(current004RealChainPayload, "runtime_endpoint");
+const guarded004RealChain = guardProjectRealChainUiStateForCurrentProject(
+  { status: current004RealChain.uiStatus, summary: current004RealChain },
+  { projectId: "real-demo-e2e-004", projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004" },
+);
+const workbench004 = buildCurrentProjectWorkbenchProjection({
+  binding: boundBinding,
+  realChainState: guarded004RealChain,
+  image2BatchState: image2Mismatch,
+  selectedShotId: "S07",
+  selectedShotIds: ["S07"],
+});
+assert(workbench004.source === currentProjectWorkbenchProjectionSource, "workbench projection source should be explicit");
+assert(workbench004.identity.projectId === "real-demo-e2e-004", "workbench identity should bind to selected 004");
+assert(workbench004.identity.projectRoot.endsWith("/004"), "workbench root should bind to selected 004");
+assert(workbench004.shots.map((shot) => shot.id).join(",") === "S01", "Story Flow should come from selected 004 preview items");
+assert(workbench004.selectedScope.defaultShotId === "S01", "selected scope should fail closed to the current 004 shot when stale S07 is selected");
+assert(workbench004.assets.readOnlyProjection === true, "Asset Library should be a read-only current project projection until visual memory is present");
+assert(/当前项目资产待补齐|只读投影/.test(workbench004.assets.detail), "Asset Library should show current-project pending asset copy");
+assert(!JSON.stringify(workbench004).includes("/005"), "004 workbench projection must not include stale 005 root");
+
+const staleRealChainUnder004 = guardProjectRealChainUiStateForCurrentProject(
+  { status: realChain.uiStatus, summary: realChain },
+  { projectId: "real-demo-e2e-004", projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004" },
+);
+const staleImage2Under004 = guardProjectImage2BatchUiStateForCurrentProject(
+  { status: image2Batch.uiStatus, summary: image2Batch },
+  { projectId: "real-demo-e2e-004", projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004" },
+);
+const stale005Under004 = buildCurrentProjectWorkbenchProjection({
+  binding: boundBinding,
+  realChainState: staleRealChainUnder004,
+  image2BatchState: staleImage2Under004,
+  selectedShotId: "S07",
+});
+assert(stale005Under004.identity.projectId === "real-demo-e2e-004", "stale status must not override selected 004 identity");
+assert(stale005Under004.shots[0].id === "CURRENT_PROJECT", "mismatched summaries should fall back to current project placeholder");
+assert(/待补齐故事流/.test(stale005Under004.shots[0].storyFunction), "Story Flow fallback should be current-project safe copy");
+assert(!JSON.stringify(stale005Under004).includes("/005"), "mismatched 005 data must not leak into the current 004 workbench");
+
+const workbench005 = buildCurrentProjectWorkbenchProjection({
+  binding: binding005,
+  realChainState: realChainMatched,
+  image2BatchState: image2Matched,
+  selectedShotId: "S01",
+});
+assert(workbench005.identity.projectId === "real-demo-e2e-005", "workbench should switch back to selected 005 identity");
+assert(workbench005.shots.map((shot) => shot.id).join(",") === "S07,S08", "Story Flow should switch back to 005 shots when 005 is current");
+assert(workbench005.selectedScope.defaultShotId === "S07", "Agent selected scope should default to the current 005 shot, not stale 004");
+
+const unboundWorkbench = buildCurrentProjectWorkbenchProjection({
+  binding: unboundBinding,
+  realChainState: { status: "unavailable", message: unboundBinding.message },
+});
+assert(unboundWorkbench.available === false, "unbound workbench must fail closed");
+assert(unboundWorkbench.identity.displayTitle === "未选择项目", "unbound workbench should not show fallback project identity");
+assert(unboundWorkbench.shots[0].id === "CURRENT_PROJECT", "unbound workbench should not show fallback story shots");
+assert(!JSON.stringify(unboundWorkbench).includes("005"), "unbound workbench must not include demo 005 state");
 
 console.log("Current project UI closed-loop test passed. Binding-first UI blocks unbound/stale summaries without provider calls.");
