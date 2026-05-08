@@ -82,6 +82,7 @@ function assertPreviewClosedLoopAppContract() {
 
 const {
   currentProjectBindingIdentity,
+  defaultRuntimeApiBaseUrl,
   loadCurrentProjectBindingStatus,
   loadProjectRealChainStatus,
   projectCurrentBindingEndpoint,
@@ -273,5 +274,28 @@ assert(currentProjection.returnedCount === 2, "Preview projection should count r
 assert(currentProjection.reviewCount === 1, "Preview projection should count review items");
 assert(currentProjection.missingCount === 1, "Preview projection should count missing items");
 assert(requests.every((request) => request.method === "GET"), "closed-loop status/preview test must only use read requests");
+
+globalThis.window = {
+  location: { hostname: "127.0.0.1", port: "5176" },
+  __VIBE_RUNTIME_API_BASE_URL__: "",
+};
+responseByUrl = new Map([
+  [`${defaultRuntimeApiBaseUrl}${projectCurrentBindingEndpoint}`, currentProjectBindingResponse(currentProject)],
+  [`${defaultRuntimeApiBaseUrl}${projectRealChainStatusEndpoint}`, currentRuntimeStatusPayload],
+]);
+requests = [];
+const devPortBinding = await loadCurrentProjectBindingStatus();
+const devPortState = await loadProjectRealChainStatus(currentProjectBindingIdentity(devPortBinding));
+assert(devPortState.status === "production_needs_review", "local dev port should reach the runtime API directly");
+assert(requests.length === 2, "local dev port should only request current binding and status endpoints");
+assert(
+  requests.every((request) => request.url.startsWith(defaultRuntimeApiBaseUrl)),
+  "local dev port must not try the Vite origin before runtime API",
+);
+assert(
+  requests.every((request) => !request.url.startsWith("http://127.0.0.1:5176/api/runtime")),
+  "local dev port must not request runtime endpoints from the Vite dev server",
+);
+delete globalThis.window;
 
 console.log("Current project Preview UI/runtime closed-loop test passed. Binding, runtime status, and Preview projection stay current-project scoped without provider calls.");

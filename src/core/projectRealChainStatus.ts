@@ -505,7 +505,12 @@ function deriveImage2BatchLedgerProjections(value: unknown): ProjectImage2BatchL
 function runtimeApiBaseUrl() {
   if (typeof window === "undefined") return "";
   const configured = window.__VIBE_RUNTIME_API_BASE_URL__ || import.meta.env?.VITE_VIBE_RUNTIME_API_BASE_URL || "";
-  return configured.replace(/\/+$/, "");
+  if (configured) return configured.replace(/\/+$/, "");
+  const { hostname, port } = window.location;
+  if ((hostname === "127.0.0.1" || hostname === "localhost") && port !== "8790") {
+    return defaultRuntimeApiBaseUrl;
+  }
+  return "";
 }
 
 function toRuntimeUrl(path: string) {
