@@ -2143,7 +2143,8 @@ function actualProviderObservationMatches(providerObservation, expectedOutputPat
     && /image2/i.test(provider)
     && outputPath === expectedOutputPath
     && observedHash === outputSha256
-    && providerObservation.providerCalled !== false;
+    && providerObservation.providerCalled === true
+    && providerObservation.actualImage2Triggered === true;
 }
 
 function actualSemanticQaMatches(semanticQa, expectedOutputPath, outputSha256) {

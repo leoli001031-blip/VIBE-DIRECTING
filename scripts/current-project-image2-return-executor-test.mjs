@@ -224,10 +224,37 @@ try {
   assertNoSubmit(noReturn.payload, "dry return check");
 
   const outputBytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=", "base64");
+  mkdirSync(path.dirname(prepare.payload.expectedOutputPath), { recursive: true });
+  writeFileSync(prepare.payload.expectedOutputPath, outputBytes);
+  const outputSha256 = sha256Bytes(outputBytes);
+  writeJson(prepare.payload.providerObservationPath, {
+    schemaVersion: "current_project_image2_return_executor_provider_observation_v1",
+    providerObservationMode: "actual_provider_call_observed",
+    provider: "openai-image2-api",
+    outputPath: prepare.payload.expectedOutputPath,
+    outputSha256,
+  });
+  writeJson(prepare.payload.semanticQaPath, {
+    schemaVersion: "current_project_image2_return_executor_semantic_qa_v1",
+    semanticReviewMode: "actual_image_semantic_review",
+    outputPath: prepare.payload.expectedOutputPath,
+    reviewedOutputSha256: outputSha256,
+    status: "needs_review",
+    finalAssessment: { status: "needs_review" },
+  });
+  const incompleteActual = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/execute-return`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ selectedShotId: "A01", selectedShotIds: ["A01"], imageCount: 1, receiptId: prepare.payload.receipt.receiptId }),
+  });
+  assert(incompleteActual.response.status === 409, "actual-labelled sidecars without explicit provider/trigger evidence must fail closed");
+  assert(incompleteActual.payload.providerCalled === false, "incomplete actual sidecars must not promote providerCalled");
+  assert(incompleteActual.payload.actualImage2Triggered === false, "incomplete actual sidecars must not promote actualImage2Triggered");
+  assertNoSubmit(incompleteActual.payload, "incomplete actual sidecar return check");
+
   const returnedOutputPath = `${fixtureRoot}/external_provider_returns/A01/start.png`;
   mkdirSync(path.dirname(returnedOutputPath), { recursive: true });
   writeFileSync(returnedOutputPath, outputBytes);
-  const outputSha256 = sha256Bytes(outputBytes);
   const providerObservation = {
     schemaVersion: "current_project_image2_return_executor_provider_observation_v1",
     providerObservationMode: "actual_provider_call_observed",
