@@ -117,8 +117,14 @@ function assertCreatorPanelContract() {
   assert(/项目路径/.test(surface), "ProjectRealChainPanel should expose project path selection copy");
   assert(/最近项目/.test(surface), "ProjectRealChainPanel should expose recent projects copy");
   assert(/连接项目/.test(surface), "ProjectRealChainPanel should expose connect project copy");
+  assert(/已返回[\s\S]*returnedCount[\s\S]*plannedCount/.test(surface), "ProjectRealChainPanel should show returned image count");
+  assert(/张需复核/.test(surface), "ProjectRealChainPanel should show needs-review image count");
   assert(/Preview[\s\S]*ready/.test(surface), "ProjectRealChainPanel should expose preview ready state");
   assert(/Production[\s\S]*needs_review/.test(surface), "ProjectRealChainPanel should expose production review state");
+  assert(/<button disabled=\{disabled\} onClick=\{onRun\}>[\s\S]*同步状态/.test(panel), "sync status button must route to project status run-check");
+  assert(/<button disabled=\{reviewDisabled\} onClick=\{onRunImage2Batch\}>[\s\S]*复核检查/.test(panel), "review check button must route to Image2 batch run-check");
+  assert(/aria-label="当前项目状态"/.test(panel), "current project panel should use creator-facing status aria copy");
+  assert(/aria-label="当前项目预览图"/.test(panel), "current project thumbnails should use creator-facing preview aria copy");
   assert(/displayTitle[\s\S]*状态已回流/.test(surface), "ProjectRealChainPanel should show the bound title for returned status");
   assert(/selectCurrentProjectBinding\(\{\s*projectRoot/.test(app), "App must select the current project through the runtime helper");
   assert(/loadCurrentProjectChoices\(\)/.test(app), "App must load recent project choices through the runtime helper");
@@ -136,6 +142,8 @@ function assertCreatorPanelContract() {
   assert(/assetLibraryReadOnlyDetail=\{currentProjectWorkbenchProjection\.assets\.detail\}/.test(app), "App must bind Asset Library fallback copy to the current project projection");
   assert(/projectScopeLabel=\{currentProjectWorkbenchProjection\.selectedScope\.label\}/.test(app), "App must bind Agent scope to the current project projection");
   assert(/runtimeState=\{workbenchRuntimeState\}/.test(app), "DirectorMode must receive the current project workbench runtime state");
+  assert(/onRunProjectRealChain=\{runProjectRealChain\}/.test(appSource), "DirectorMode must pass runtime status run-check handler to the project panel");
+  assert(/onRunProjectImage2Batch=\{runProjectImage2Batch\}/.test(appSource), "DirectorMode must pass Image2 batch run-check handler to the project panel");
   assert(/确认修改/.test(appSource), "Agent Panel confirmation action should use creator-facing confirmation copy");
   assert(/等待写入项目事实/.test(appSource), "Agent Panel confirmation receipt should expose pending project-fact write status");
   assert(/已准备写入/.test(appSource), "Agent Panel staged commit receipt should expose creator-facing ready-to-write copy");
@@ -152,7 +160,21 @@ const {
   deriveProjectImage2BatchPlanStatus,
   guardProjectRealChainUiStateForCurrentProject,
   guardProjectImage2BatchUiStateForCurrentProject,
+  loadCurrentProjectBindingStatus,
+  loadCurrentProjectChoices,
+  loadProjectImage2BatchPlan,
+  loadProjectRealChainStatus,
+  projectCurrentBindingEndpoint,
+  projectCurrentChoicesEndpoint,
+  projectCurrentSelectEndpoint,
+  projectImage2BatchPlanEndpoint,
+  projectImage2BatchRunCheckEndpoint,
   projectRuntimeRequestPath,
+  projectRealChainRunCheckEndpoint,
+  projectRealChainStatusEndpoint,
+  runProjectImage2BatchCheck,
+  runProjectRealChainCheck,
+  selectCurrentProjectBinding,
 } = await importProjectRealChainStatus();
 const {
   buildCurrentProjectWorkbenchProjection,
@@ -422,6 +444,151 @@ const image2Mismatch = guardProjectImage2BatchUiStateForCurrentProject(
 assert(image2Mismatch.status === "unavailable", "stale 005 Image2 batch summary must be blocked under 004 identity");
 assert(!image2Mismatch.summary, "stale 005 Image2 batch summary must not leak under 004 identity");
 assertProductCopy(image2Mismatch.message);
+
+const runtimeFetchCalls = [];
+const previousWindow = globalThis.window;
+const previousFetch = globalThis.fetch;
+const project005RuntimeIdentity = {
+  projectId: "real-demo-e2e-005",
+  projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005",
+};
+const runtimeEndpointPayloads = new Map([
+  [`GET ${projectCurrentBindingEndpoint}`, currentProjectBindingResponse({
+    projectId: project005RuntimeIdentity.projectId,
+    projectRoot: project005RuntimeIdentity.projectRoot,
+    title: "005 当前项目",
+  })],
+  [`GET ${projectCurrentChoicesEndpoint}`, {
+    ok: true,
+    choices: [
+      {
+        projectRoot: "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames",
+        displayName: "005 当前项目",
+        projectId: project005RuntimeIdentity.projectId,
+        status: "当前",
+      },
+    ],
+    providerCalled: false,
+    prepareRan: false,
+    projectVibeWritten: false,
+  }],
+  [`POST ${projectCurrentSelectEndpoint}`, currentProjectBindingResponse({
+    projectId: project005RuntimeIdentity.projectId,
+    projectRoot: project005RuntimeIdentity.projectRoot,
+    title: "005 当前项目",
+  })],
+  [`GET ${projectRealChainStatusEndpoint}`, {
+    ...stale005Payload,
+    workbenchFacts: workbenchFacts005,
+    projectVibeWritten: false,
+  }],
+  [`POST ${projectRealChainRunCheckEndpoint}`, {
+    ...stale005Payload,
+    workbenchFacts: workbenchFacts005,
+    projectVibeWritten: false,
+    command: {
+      mode: "read_only_projection_check",
+      providerCalled: false,
+      prepareRan: false,
+      projectVibeWritten: false,
+      liveSubmitAllowed: false,
+      workerSpawnForbidden: true,
+    },
+  }],
+  [`GET ${projectImage2BatchPlanEndpoint}`, {
+    ...image2Payload,
+    projectVibeWritten: false,
+  }],
+  [`POST ${projectImage2BatchRunCheckEndpoint}`, {
+    ...image2Payload,
+    projectVibeWritten: false,
+    command: {
+      mode: "read_only_image2_batch_plan_check",
+      providerCalled: false,
+      prepareRan: false,
+      projectVibeWritten: false,
+      liveSubmitAllowed: false,
+      workerSpawnForbidden: true,
+    },
+  }],
+]);
+
+try {
+  globalThis.window = {
+    __VIBE_RUNTIME_API_BASE_URL__: "http://runtime.test",
+    location: { hostname: "127.0.0.1", port: "5173" },
+  };
+  globalThis.fetch = async (url, init = {}) => {
+    const requestUrl = new URL(String(url), "http://runtime.test");
+    const method = init.method || "GET";
+    runtimeFetchCalls.push({ method, path: requestUrl.pathname, search: requestUrl.search, body: init.body });
+    const payload = runtimeEndpointPayloads.get(`${method} ${requestUrl.pathname}`);
+    assert(payload, `unexpected runtime request ${method} ${requestUrl.pathname}`);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => payload,
+    };
+  };
+
+  const loadedBinding = await loadCurrentProjectBindingStatus();
+  assert(loadedBinding.status === "bound", "frontend should load current project binding from runtime");
+  const loadedChoices = await loadCurrentProjectChoices();
+  assert(loadedChoices[0]?.displayName === "005 当前项目", "frontend should load recent project choices");
+  const selectedBinding = await selectCurrentProjectBinding({
+    projectRoot: project005RuntimeIdentity.projectRoot,
+    projectId: project005RuntimeIdentity.projectId,
+    displayName: "005 当前项目",
+  });
+  assert(selectedBinding.status === "bound", "frontend should connect project through runtime select");
+
+  const loadedStatus = await loadProjectRealChainStatus(project005RuntimeIdentity);
+  assert(loadedStatus.status === "production_needs_review", "sync status should load preview/production state");
+  assert(loadedStatus.summary?.returnedImageCount === 8, "sync status should show returned image count");
+  assert(loadedStatus.summary?.needsReviewCount === 2, "sync status should show needs-review count");
+  assert(loadedStatus.summary?.providerCalled === false, "sync status must preserve providerCalled=false");
+  assert(loadedStatus.summary?.prepareRan === false, "sync status must preserve prepareRan=false");
+  assert(loadedStatus.summary?.workbenchFacts?.projectVibeWritten === false, "sync status must preserve projectVibeWritten=false");
+
+  const checkedStatus = await runProjectRealChainCheck(project005RuntimeIdentity);
+  assert(checkedStatus.status === "production_needs_review", "sync status button should call real-chain run-check");
+  assert(checkedStatus.summary?.providerCalled === false, "real-chain run-check must not call provider");
+  assert(checkedStatus.summary?.prepareRan === false, "real-chain run-check must not run prepare");
+  assert(checkedStatus.summary?.workbenchFacts?.projectVibeWritten === false, "real-chain run-check must not write project.vibe");
+
+  const loadedPlan = await loadProjectImage2BatchPlan(project005RuntimeIdentity);
+  assert(loadedPlan.status === "ready_for_review", "review panel should load Image2 batch plan");
+  assert(loadedPlan.summary?.providerCalled === false, "Image2 batch plan must preserve providerCalled=false");
+  assert(loadedPlan.summary?.prepareRan === false, "Image2 batch plan must preserve prepareRan=false");
+  assert(loadedPlan.summary?.liveSubmitAllowed === false, "Image2 batch plan must preserve liveSubmitAllowed=false");
+  assert(loadedPlan.summary?.workerSpawnForbidden === true, "Image2 batch plan must preserve workerSpawnForbidden=true");
+
+  const checkedPlan = await runProjectImage2BatchCheck(project005RuntimeIdentity);
+  assert(checkedPlan.status === "ready_for_review", "review check button should call Image2 batch run-check");
+  assert(checkedPlan.summary?.providerCalled === false, "Image2 batch run-check must not call provider");
+  assert(checkedPlan.summary?.prepareRan === false, "Image2 batch run-check must not run prepare");
+  assert(checkedPlan.summary?.liveSubmitAllowed === false, "Image2 batch run-check must preserve liveSubmitAllowed=false");
+  assert(checkedPlan.summary?.workerSpawnForbidden === true, "Image2 batch run-check must preserve workerSpawnForbidden=true");
+
+  for (const [method, endpoint] of [
+    ["GET", projectCurrentBindingEndpoint],
+    ["GET", projectCurrentChoicesEndpoint],
+    ["POST", projectCurrentSelectEndpoint],
+    ["GET", projectRealChainStatusEndpoint],
+    ["POST", projectRealChainRunCheckEndpoint],
+    ["GET", projectImage2BatchPlanEndpoint],
+    ["POST", projectImage2BatchRunCheckEndpoint],
+  ]) {
+    const call = runtimeFetchCalls.find((item) => item.method === method && item.path === endpoint);
+    assert(call, `frontend should call ${method} ${endpoint}`);
+    assert(call.search === "", `${method} ${endpoint} should not carry project query params`);
+  }
+  const selectCall = runtimeFetchCalls.find((item) => item.method === "POST" && item.path === projectCurrentSelectEndpoint);
+  assert(selectCall?.body && JSON.parse(String(selectCall.body)).projectRoot === project005RuntimeIdentity.projectRoot, "connect project should send selected projectRoot");
+} finally {
+  globalThis.window = previousWindow;
+  globalThis.fetch = previousFetch;
+}
 
 const current004RealChainPayload = {
   ...stale005Payload,

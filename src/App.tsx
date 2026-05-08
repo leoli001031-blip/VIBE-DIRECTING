@@ -7814,7 +7814,7 @@ function ProjectRealChainPanel({
   const canConnect = projectPathInput.trim().length > 0 && !connecting;
 
   return (
-    <section className={`project-real-chain-panel ${state.status}`} aria-label="当前项目真实链路状态">
+    <section className={`project-real-chain-panel ${state.status}`} aria-label="当前项目状态">
       <div className="project-real-chain-head">
         <div>
           <span>当前项目</span>
@@ -7872,7 +7872,7 @@ function ProjectRealChainPanel({
         </button>
       </div>
       {visibleItems.length > 0 && (
-        <div className="project-real-chain-thumbs" aria-label="当前项目真实链路缩略图">
+        <div className="project-real-chain-thumbs" aria-label="当前项目预览图">
           {visibleItems.map((item) => (
             <figure key={item.shotId} className={item.reviewRequired ? "review-overlay" : undefined}>
               <img src={item.thumbnailUrl || item.imageUrl} alt={`${item.shotId} preview`} />

@@ -105,6 +105,12 @@ function assertNo005Leak(payload, label) {
 function assertUnboundPayload(payload, label) {
   assert(payload.ok === false, `${label} should fail closed`);
   assert(payload.status === "unbound", `${label} status should be unbound`);
+  assert(payload.providerCalled === false, `${label} must not call provider`);
+  assert(payload.prepareRan === false, `${label} must not run prepare`);
+  assert(payload.projectVibeWritten === false, `${label} must not write project.vibe`);
+  assert(payload.liveSubmitAllowed === false, `${label} live submit must stay blocked`);
+  assert(payload.dryRunOnly === true, `${label} must stay dry-run only`);
+  assert(payload.workerSpawnForbidden === true, `${label} worker spawn must stay blocked`);
   assert(payload.previewStatus === "unavailable", `${label} preview status should be unavailable`);
   assert(payload.productionStatus === "blocked", `${label} production status should be blocked`);
   assert(payload.projectRootMode === "unbound_current_project", `${label} project root mode mismatch`);
@@ -142,6 +148,12 @@ function assertProjectProjectionFacts(payload, label, root, primaryReportPath) {
 
 function assertCurrentBindingContext(payload, label, root, projectId) {
   assert(payload.currentProject?.bound === true, `${label} should expose bound current project`);
+  assert(payload.providerCalled === false, `${label} must not call provider`);
+  assert(payload.prepareRan === false, `${label} must not run prepare`);
+  assert(payload.projectVibeWritten === false, `${label} must not write project.vibe`);
+  assert(payload.liveSubmitAllowed === false, `${label} live submit must stay blocked`);
+  assert(payload.dryRunOnly === true, `${label} must stay dry-run only`);
+  assert(payload.workerSpawnForbidden === true, `${label} worker spawn must stay blocked`);
   assert(payload.projectRootMode === "runtime_current_project_binding", `${label} should use runtime binding`);
   assert(payload.requestContext?.projectRoot === root, `${label} request context project root mismatch`);
   assert(payload.requestContext?.projectRootSource === "binding", `${label} request context source mismatch`);
