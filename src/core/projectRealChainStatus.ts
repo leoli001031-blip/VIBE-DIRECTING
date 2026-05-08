@@ -316,7 +316,7 @@ function currentProjectIdentityMatches(
 }
 
 function projectMismatchMessage() {
-  return "当前项目状态还没有和本项目同步。请重新同步。";
+  return "当前项目还没有同步到本地运行时。";
 }
 
 export function projectRuntimeRequestPath(endpoint: string, expected?: ProjectRuntimeIdentity) {
@@ -537,7 +537,7 @@ export function deriveProjectRealChainStatus(
       reportUrl: projectRealChainFallbackReportUrl,
       providerCalled: false,
       prepareRan: false,
-      message: "Project real-chain status shape was not recognized.",
+      message: "当前项目还没有同步到本地运行时。",
     };
   }
 
@@ -605,7 +605,7 @@ export function deriveProjectImage2BatchPlanStatus(
       readyCount: 0,
       blockedCount: 0,
       selectedShotIds: [],
-      nextAction: "Runtime Image2 batch plan is unavailable.",
+      nextAction: "当前项目的复核状态还没有同步到本地运行时。",
       items: [],
       ledgerProjections: [],
       queuedCount: 0,
@@ -618,7 +618,7 @@ export function deriveProjectImage2BatchPlanStatus(
       prepareRan: false,
       verifyScriptRan: false,
       liveSubmitAllowed: false,
-      message: "Project Image2 batch plan shape was not recognized.",
+      message: "当前项目的复核状态还没有同步到本地运行时。",
     };
   }
 
@@ -662,7 +662,7 @@ export function deriveProjectImage2BatchPlanStatus(
     readyCount,
     blockedCount,
     selectedShotIds,
-    nextAction: report.summary?.nextAction || "Review the dry-run Image2 batch plan before any manual submit.",
+    nextAction: report.summary?.nextAction || "复核当前项目状态。",
     items,
     ledgerSummary,
     ledgerProjections,
@@ -713,7 +713,7 @@ async function fallbackToReport(message: string): Promise<ProjectRealChainUiStat
   } catch (reportError) {
     return {
       status: "unavailable",
-      message: reportError instanceof Error ? reportError.message : "Runtime API and fallback report are unavailable.",
+      message: "当前项目还没有同步到本地运行时。",
     };
   }
 }
@@ -725,7 +725,7 @@ export async function loadProjectRealChainStatus(expected?: ProjectRuntimeIdenti
     return guardProjectRealChainUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (endpointError) {
     return guardProjectRealChainUiStateForCurrentProject(await fallbackToReport(
-      `Runtime project endpoint unavailable; attempted report fallback. ${endpointError instanceof Error ? endpointError.message : ""}`.trim(),
+      "当前项目还没有同步到本地运行时。",
     ), expected);
   }
 }
@@ -737,7 +737,7 @@ export async function runProjectRealChainCheck(expected?: ProjectRuntimeIdentity
     return guardProjectRealChainUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (endpointError) {
     return guardProjectRealChainUiStateForCurrentProject(await fallbackToReport(
-      `Runtime project run-check endpoint unavailable; synced report fallback only. ${endpointError instanceof Error ? endpointError.message : ""}`.trim(),
+      "当前项目还没有同步到本地运行时。",
     ), expected);
   }
 }
@@ -753,7 +753,7 @@ export async function loadProjectImage2BatchPlan(expected?: ProjectRuntimeIdenti
     return guardProjectImage2BatchUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (endpointError) {
     return unavailableImage2BatchState(
-      `Runtime Image2 batch plan endpoint unavailable. ${endpointError instanceof Error ? endpointError.message : ""}`.trim(),
+      "当前项目的复核状态还没有同步到本地运行时。",
     );
   }
 }
@@ -765,7 +765,7 @@ export async function runProjectImage2BatchCheck(expected?: ProjectRuntimeIdenti
     return guardProjectImage2BatchUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (endpointError) {
     return unavailableImage2BatchState(
-      `Runtime Image2 batch run-check endpoint unavailable. ${endpointError instanceof Error ? endpointError.message : ""}`.trim(),
+      "当前项目的复核状态还没有同步到本地运行时。",
     );
   }
 }

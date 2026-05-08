@@ -108,14 +108,25 @@ function assertCreatorPanelContract() {
   const stylesSource = readText("src/styles.css");
   const app = findFunctionBody(appSource, "App");
   const panel = findFunctionBody(appSource, "ProjectRealChainPanel");
-  const surface = `${panel}\n${findFunctionBody(appSource, "projectRealChainStatusLabel")}\n${findFunctionBody(appSource, "projectImage2BatchStatusLabel")}\n${findFunctionBody(appSource, "projectImage2BatchLedgerLabel")}`;
+  const surface = [
+    panel,
+    findFunctionBody(appSource, "projectRealChainStatusLabel"),
+    findFunctionBody(appSource, "projectReviewCheckStatusLabel"),
+    findFunctionBody(appSource, "projectReviewCheckDetail"),
+    findFunctionBody(appSource, "projectPreviewReadyLabel"),
+    findFunctionBody(appSource, "projectProductionReviewLabel"),
+  ].join("\n");
 
   for (const [label, pattern] of [
     ["runtime endpoint", /runtime\s+endpoint/i],
     ["fallback report", /fallback\s+report/i],
     ["005 sandbox", /005\s+sandbox/i],
     ["real demo id", /real_demo_e2e_005/i],
+    ["demo", /\bdemo\b/i],
     ["provider submit", /provider\s+submit|provider\s+未提交/i],
+    ["provider", /\bprovider\b/i],
+    ["prompt", /\bprompt\b/i],
+    ["queue", /\bqueue\b/i],
     ["prepare ran", /prepare\s+ran|prepareRan|prepare\s+未执行/i],
     ["live submit", /live\s+submit/i],
     ["ledger", /\bledger\b/i],
@@ -125,7 +136,9 @@ function assertCreatorPanelContract() {
   }
 
   assert(/项目状态/.test(surface), "ProjectRealChainPanel should expose creator-facing project status copy");
-  assert(/图片生成/.test(surface), "ProjectRealChainPanel should expose creator-facing image generation copy");
+  assert(/本地复核/.test(surface), "ProjectRealChainPanel should expose creator-facing review copy");
+  assert(/Preview[\s\S]*ready/.test(surface), "ProjectRealChainPanel should expose preview ready state");
+  assert(/Production[\s\S]*needs_review/.test(surface), "ProjectRealChainPanel should expose production review state");
   assert(/projectTitle[\s\S]*状态已回流/.test(surface), "ProjectRealChainPanel should show project title for returned status");
   assert(/currentProjectIdentity\(runtimeState\)/.test(app), "App must derive current project identity from runtime state");
   assert(/loadProjectRealChainStatus\(runtimeProjectIdentity\)/.test(app), "App must guard real-chain status by current project identity");
@@ -188,14 +201,22 @@ try {
   );
   assert(realChainMismatch.status === "unavailable", "mismatched real-chain identity should be blocked from current project UI");
   assert(!realChainMismatch.summary, "mismatched real-chain identity must not leak another project's summary");
+  assert(/本地运行时/.test(realChainMismatch.message || ""), "mismatched real-chain copy should read as a product sync state");
+  assert(!/005|fallback|endpoint|provider|ledger|prompt|queue/i.test(realChainMismatch.message || ""), "mismatched real-chain copy must not expose engineering/demo details");
+  const externalProjectMismatch = guardProjectRealChainUiStateForCurrentProject(
+    { status: realChain.uiStatus, summary: realChain },
+    { projectId: "actual-current-project", projectRoot: "/Users/lichenhao/Desktop/some-other-project-root" },
+  );
+  assert(externalProjectMismatch.status === "unavailable", "repo-outside current project root should not receive compatibility fallback results");
+  assert(!externalProjectMismatch.summary, "repo-outside current project root must not leak compatibility fallback summary");
 
   const image2Batch = deriveProjectImage2BatchPlanStatus(image2Payload);
   assert(image2Batch.uiStatus === "ready_for_review", `image2 batch UI status drifted: ${image2Batch.uiStatus}`);
   assert(image2Batch.plannedCount === 8, "image2 batch should plan eight items");
   assert(image2Batch.readyCount === 8, "image2 batch should expose eight reviewable items");
   assert(image2Batch.blockedCount === 0, "image2 batch should have no blocked items in current fixture");
-  assert(image2Batch.queuedCount === 8, "image2 batch should project queued ledger items");
-  assert(image2Batch.ledgerProjections.length === 8, "image2 batch should carry ledger projections");
+  assert(image2Batch.selectedShotIds.length === 8, "image2 batch should keep current project review scope");
+  assert(image2Batch.nextAction.length > 0, "image2 batch should keep a review next action");
   assert(image2Batch.providerSubmissionForbidden === true, "image2 batch must forbid provider submission");
   assert(image2Batch.noFileMutation === true, "image2 batch must not mutate files");
   assert(image2Batch.workerSpawnForbidden === true, "image2 batch must forbid worker spawn");
@@ -213,6 +234,7 @@ try {
   );
   assert(image2Mismatch.status === "unavailable", "mismatched Image2 batch identity should be blocked from current project UI");
   assert(!image2Mismatch.summary, "mismatched Image2 batch identity must not leak another project's summary");
+  assert(/本地运行时/.test(image2Mismatch.message || ""), "mismatched Image2 copy should read as a product sync state");
 
   console.log("Current project UI closed-loop test passed. runtime -> report/preview -> UI projection is creator-facing; no provider was called.");
 } finally {

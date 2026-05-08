@@ -121,6 +121,14 @@ function resolveProjectSource(inputPath, options = {}) {
     runRootRelativePath,
     projectVibePath,
     projectVibeRelativePath: repoRelativePath(projectVibePath),
+    sourceIndexPath: path.join(runRootPath, "project", "source_index.json"),
+    sourceIndexRelativePath: repoRelativePath(path.join(runRootPath, "project", "source_index.json")),
+    runManifestPath: path.join(runRootPath, "run_manifest.json"),
+    runManifestRelativePath: repoRelativePath(path.join(runRootPath, "run_manifest.json")),
+    runtimeTruthLayerPath: path.join(runRootPath, "reports", "runtime_truth_layer.json"),
+    runtimeTruthLayerRelativePath: repoRelativePath(path.join(runRootPath, "reports", "runtime_truth_layer.json")),
+    previewPlanPath: path.join(runRootPath, "reports", "preview_plan.json"),
+    previewPlanRelativePath: repoRelativePath(path.join(runRootPath, "reports", "preview_plan.json")),
     reportPath,
     reportRelativePath: repoRelativePath(reportPath),
     projectRootMode: options.projectRootMode || "configured_project_root",
@@ -197,6 +205,15 @@ function readProjectVibe(source) {
 function projectIdentityFromSource(source) {
   const projectVibe = readProjectVibe(source);
   if (projectVibe) return projectVibe;
+  const manifest = readJsonIfPresent(source.runManifestPath);
+  if (manifest) {
+    return {
+      projectId: manifest.projectId || source.requestProjectId,
+      runId: manifest.runId,
+      projectRoot: source.runRootRelativePath,
+      projectVibePath: source.projectVibeRelativePath,
+    };
+  }
   return {
     projectId: source.requestProjectId,
     projectRoot: source.runRootRelativePath,
@@ -260,6 +277,266 @@ function observationSummary(item) {
   };
 }
 
+function runtimeRelativeFromValue(value) {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const normalized = normalizeRelativePath(value.trim());
+  if (!path.isAbsolute(normalized)) return normalized;
+  try {
+    return repoRelativePath(normalized);
+  } catch {
+    return undefined;
+  }
+}
+
+function runtimePathExists(relativePath) {
+  if (!relativePath) return false;
+  try {
+    const filePath = scopedRepoPath(relativePath);
+    return existsSync(filePath) && statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function readRuntimeJson(relativePath) {
+  if (!relativePath) return undefined;
+  try {
+    return readJsonIfPresent(scopedRepoPath(relativePath));
+  } catch {
+    return undefined;
+  }
+}
+
+function projectFact(name, filePath, usedFor = []) {
+  const relativePath = repoRelativePath(filePath);
+  const present = existsSync(filePath);
+  const parsed = present ? readJsonIfPresent(filePath) : undefined;
+  return {
+    name,
+    path: relativePath,
+    present,
+    readable: parsed !== undefined,
+    usedFor,
+    parsed,
+  };
+}
+
+function readProjectFacts(source) {
+  const facts = [
+    projectFact("project_vibe", source.projectVibePath, ["identity"]),
+    projectFact("source_index", source.sourceIndexPath, ["project_facts"]),
+    projectFact("run_manifest", source.runManifestPath, ["ledger_plan", "identity"]),
+    projectFact("runtime_truth_layer", source.runtimeTruthLayerPath, ["ledger_truth", "status"]),
+    projectFact("preview_plan", source.previewPlanPath, ["preview", "status"]),
+    projectFact("image2_start_long_chain_report", source.reportPath, ["compatibility_fallback"]),
+  ];
+  const byName = Object.fromEntries(facts.map((fact) => [fact.name, fact]));
+  const factsUsed = facts
+    .filter((fact) => fact.readable)
+    .map(({ name, path: factPath, usedFor }) => ({ name, path: factPath, usedFor }));
+  const runtimeTruthLayer = byName.runtime_truth_layer.parsed;
+  const previewPlan = byName.preview_plan.parsed;
+  const image2Report = byName.image2_start_long_chain_report.parsed;
+  const projectionParts = [
+    runtimeTruthLayer ? "runtime_truth_layer" : undefined,
+    previewPlan ? "preview_plan" : undefined,
+  ].filter(Boolean);
+  return {
+    facts,
+    factsUsed,
+    projectVibe: byName.project_vibe.parsed,
+    sourceIndex: byName.source_index.parsed,
+    runManifest: byName.run_manifest.parsed,
+    runtimeTruthLayer,
+    previewPlan,
+    image2Report,
+    projectionSource: projectionParts.length
+      ? projectionParts.join("+")
+      : image2Report
+        ? "image2_start_long_chain_report_fallback"
+        : "unavailable",
+    ledgerTruthSource: runtimeTruthLayer
+      ? "runtime_truth_layer"
+      : previewPlan
+        ? "preview_plan"
+        : image2Report
+          ? "image2_start_long_chain_report_fallback"
+          : "unavailable",
+    primaryReportRelativePath: runtimeTruthLayer
+      ? source.runtimeTruthLayerRelativePath
+      : previewPlan
+        ? source.previewPlanRelativePath
+        : image2Report
+          ? source.reportRelativePath
+          : source.reportRelativePath,
+    projectionAvailable: Boolean(runtimeTruthLayer || previewPlan || image2Report || byName.run_manifest.parsed),
+  };
+}
+
+function byShotId(items) {
+  const map = new Map();
+  for (const item of Array.isArray(items) ? items : []) {
+    if (typeof item?.shotId === "string" && item.shotId) map.set(item.shotId, item);
+  }
+  return map;
+}
+
+function orderedShotIds(...itemLists) {
+  const ids = [];
+  const seen = new Set();
+  for (const items of itemLists) {
+    for (const item of Array.isArray(items) ? items : []) {
+      const shotId = typeof item?.shotId === "string" ? item.shotId : undefined;
+      if (!shotId || seen.has(shotId)) continue;
+      seen.add(shotId);
+      ids.push(shotId);
+    }
+  }
+  return ids;
+}
+
+function mergeBlockers(...blockerLists) {
+  return uniqueStrings(blockerLists.flatMap((blockers) => Array.isArray(blockers) ? blockers : []));
+}
+
+function providerObservationActual(providerObservation, expectedOutputPath) {
+  if (!providerObservation) return false;
+  const provider = String(providerObservation.provider || providerObservation.providerId || "");
+  const outputPath = runtimeRelativeFromValue(providerObservation.outputPath);
+  return providerObservation.providerObservationMode === "actual_provider_call_observed"
+    && /image2/i.test(provider)
+    && (!expectedOutputPath || outputPath === expectedOutputPath);
+}
+
+function semanticQaSummary(semanticQa) {
+  if (!semanticQa) {
+    return {
+      present: false,
+      actual: false,
+      status: "missing",
+      passed: false,
+      needsReview: false,
+    };
+  }
+  const status = semanticQa.finalAssessment?.status || semanticQa.status || "unknown";
+  const actual = semanticQa.semanticReviewMode === "actual_image_semantic_review";
+  return {
+    present: true,
+    actual,
+    status,
+    passed: actual && status === "pass",
+    needsReview: actual && status === "needs_review",
+  };
+}
+
+function projectObservationItems(source, projectFacts) {
+  const manifestShotPlans = Array.isArray(projectFacts.runManifest?.shotPlans) ? projectFacts.runManifest.shotPlans : [];
+  const previewClips = Array.isArray(projectFacts.previewPlan?.clips) ? projectFacts.previewPlan.clips : [];
+  const truthItems = Array.isArray(projectFacts.runtimeTruthLayer?.items) ? projectFacts.runtimeTruthLayer.items : [];
+  const reportObservations = Array.isArray(projectFacts.image2Report?.observations) ? projectFacts.image2Report.observations : [];
+  const shotPlanById = byShotId(manifestShotPlans);
+  const previewById = byShotId(previewClips);
+  const truthById = byShotId(truthItems);
+  const reportById = byShotId(reportObservations);
+  const reviewOverlayShots = new Set([
+    ...(Array.isArray(projectFacts.previewPlan?.reviewOverlayShots) ? projectFacts.previewPlan.reviewOverlayShots : []),
+    ...(Array.isArray(projectFacts.image2Report?.reviewOverlayShots) ? projectFacts.image2Report.reviewOverlayShots : []),
+    ...(Array.isArray(projectFacts.image2Report?.productionNeedsReviewShots) ? projectFacts.image2Report.productionNeedsReviewShots : []),
+  ]);
+
+  return orderedShotIds(manifestShotPlans, previewClips, truthItems, reportObservations).map((shotId, index) => {
+    const shotPlan = shotPlanById.get(shotId) || {};
+    const previewClip = previewById.get(shotId) || {};
+    const truthItem = truthById.get(shotId) || {};
+    const reportObservation = reportById.get(shotId) || {};
+    const expectedOutputPath = runtimeRelativeFromValue(shotPlan.expectedOutputPath)
+      || runtimeRelativeFromValue(previewClip.mediaPath)
+      || runtimeRelativeFromValue(reportObservation.expectedOutputPath)
+      || `${source.runRootRelativePath}/outputs/shots/${shotId}/start.png`;
+    const providerObservationPath = runtimeRelativeFromValue(shotPlan.providerObservationPath)
+      || derivedShotPath(source, shotId, "provider_observations", "_start_provider_observation", "json");
+    const semanticQaPath = runtimeRelativeFromValue(shotPlan.semanticQaPath)
+      || derivedShotPath(source, shotId, "semantic_qa", "_start_semantic_qa", "json");
+    const providerObservation = readRuntimeJson(providerObservationPath);
+    const semanticQa = readRuntimeJson(semanticQaPath);
+    const semantic = semanticQaSummary(semanticQa);
+    const outputExists = runtimePathExists(expectedOutputPath);
+    const providerActual = providerObservationActual(providerObservation, expectedOutputPath);
+    const previewStatus = previewClip.status || reportObservation.previewQaStatus || (outputExists ? "returned" : "missing");
+    const reviewOverlay = reviewOverlayShots.has(shotId) || previewStatus === "returned_with_review_overlay" || reportObservation.reviewOverlay === true || semantic.needsReview;
+    const blockers = mergeBlockers(
+      truthItem.blockers,
+      truthItem.runtimeTruthBlockers,
+      reportObservation.blockers,
+      reportObservation.runtimeTruthBlockers,
+      previewStatus === "blocked" ? [`${shotId}: preview plan blocked`] : [],
+      semantic.present && !semantic.actual ? [`${shotId}: semantic QA not actual review`] : [],
+      semantic.present && !semantic.passed && !semantic.needsReview ? [`${shotId}: semantic QA status ${semantic.status}`] : [],
+      providerObservation && !providerActual ? [`${shotId}: provider observation not actual image2 output`] : [],
+    );
+
+    return {
+      order: Number(previewClip.order || reportObservation.order || index + 1),
+      shotId,
+      sceneId: reportObservation.sceneId,
+      roleIds: Array.isArray(reportObservation.roleIds) ? reportObservation.roleIds : [],
+      expectedOutputPath,
+      imageUrl: expectedOutputPath ? runtimeFileUrl(expectedOutputPath) : undefined,
+      outputExists,
+      providerObservationPath,
+      providerObservationPresent: Boolean(providerObservation),
+      providerObservationActual: providerActual,
+      providerOutputSha256: providerObservation?.outputSha256 || providerObservation?.outputHash,
+      semanticQaPath,
+      semanticQaPresent: semantic.present,
+      semanticQaActual: semantic.actual,
+      semanticQaStatus: semantic.status,
+      semanticQaPassed: semantic.passed,
+      semanticQaNeedsReview: semantic.needsReview,
+      previewStatus,
+      previewQaStatus: previewClip.previewQaStatus || reportObservation.previewQaStatus,
+      productionQaStatus: previewClip.productionQaStatus || reportObservation.productionQaStatus || (semantic.needsReview ? "needs_review" : undefined),
+      reviewOverlay,
+      runtimeTruthStatus: truthItem.status || reportObservation.runtimeTruthStatus,
+      blockers,
+      returned: outputExists || /^returned/.test(String(previewStatus)),
+      shotPlan,
+    };
+  });
+}
+
+function projectProjectionFromSource(source) {
+  const project = projectIdentityFromSource(source);
+  const projectFacts = readProjectFacts(source);
+  const observations = projectObservationItems(source, projectFacts);
+  const blockedObservations = observations.filter((item) => item.blockers.length > 0 || item.previewStatus === "blocked" || item.runtimeTruthStatus === "blocked");
+  const reviewShotIds = observations.filter((item) => item.reviewOverlay || item.semanticQaNeedsReview).map((item) => item.shotId);
+  const returnedObservations = observations.filter((item) => item.returned);
+  const status = projectFacts.previewPlan?.previewStatus
+    || projectFacts.previewPlan?.status
+    || projectFacts.runtimeTruthLayer?.status
+    || projectFacts.image2Report?.previewStatus
+    || projectFacts.image2Report?.status
+    || (projectFacts.projectionAvailable ? projectFacts.runManifest?.status : "unavailable")
+    || "unavailable";
+  const productionStatus = projectFacts.previewPlan?.productionStatus
+    || projectFacts.image2Report?.productionStatus
+    || (reviewShotIds.length ? "needs_review" : blockedObservations.length ? "blocked" : status === "unavailable" ? "unavailable" : "ready");
+
+  return {
+    project,
+    projectFacts,
+    observations,
+    blockedObservations,
+    reviewShotIds,
+    returnedObservations,
+    status,
+    previewStatus: status,
+    productionStatus,
+    ok: projectFacts.projectionAvailable,
+  };
+}
+
 function asString(value) {
   return typeof value === "string" && value.length ? value : undefined;
 }
@@ -316,6 +593,18 @@ function image2BatchPlanItem(source, observation, queueOrder, shotPlan = {}) {
     queueOrder,
     blocked: blockers.length > 0,
     blockers,
+    outputExists: observation.outputExists === true,
+    providerObservationPresent: observation.providerObservationPresent === true,
+    providerObservationActual: observation.providerObservationActual === true,
+    providerOutputSha256: observation.providerOutputSha256,
+    semanticQaPresent: observation.semanticQaPresent === true,
+    semanticQaActual: observation.semanticQaActual === true,
+    semanticQaStatus: observation.semanticQaStatus,
+    semanticQaPassed: observation.semanticQaPassed === true,
+    semanticQaNeedsReview: observation.semanticQaNeedsReview === true,
+    previewStatus: observation.previewStatus,
+    runtimeTruthStatus: observation.runtimeTruthStatus,
+    reviewOverlay: observation.reviewOverlay === true,
   };
 }
 
@@ -323,33 +612,62 @@ function image2BatchLedgerProjection(payload) {
   const items = Array.isArray(payload.items) ? payload.items : [];
   const projections = items.map((item) => {
     const blocked = item.blocked === true || (Array.isArray(item.blockers) && item.blockers.length > 0);
+    const completeVerified = !blocked && item.outputExists === true && item.providerObservationActual === true && item.semanticQaPassed === true;
+    const reviewNeeded = !blocked && !completeVerified && (item.semanticQaNeedsReview === true || item.reviewOverlay === true);
+    const currentStatus = blocked
+      ? "parked"
+      : completeVerified
+        ? "complete_verified"
+        : reviewNeeded
+          ? "review_needed"
+          : item.outputExists === true && item.providerObservationActual === true && item.semanticQaPresent !== true
+            ? "qa_pending"
+            : item.outputExists === true && item.providerObservationActual === true
+              ? "provider_observed"
+              : item.outputExists === true
+                ? "output_detected_no_sidecar"
+                : "queued";
     return {
       taskRunId: item.taskRunId,
       envelopeId: item.envelopeId,
-      currentStatus: blocked ? "parked" : "queued",
+      currentStatus,
       expectedOutputPath: item.expectedOutputPath,
       expectedOutputs: [
         {
           expectedOutputPath: item.expectedOutputPath,
+          exists: item.outputExists === true,
+          outputSha256: item.providerOutputSha256,
         },
       ],
-      previewStatus: "missing",
-      completeVerified: false,
+      previewStatus: item.previewStatus || (item.outputExists ? "returned" : "missing"),
+      completeVerified,
+      providerObservationPresent: item.providerObservationPresent === true,
+      providerObservationActual: item.providerObservationActual === true,
+      semanticQaPresent: item.semanticQaPresent === true,
+      semanticQaStatus: item.semanticQaStatus,
+      reviewNeeded,
     };
   });
   const parked = projections.filter((item) => item.currentStatus === "parked").length;
+  const completeVerified = projections.filter((item) => item.completeVerified === true).length;
+  const reviewNeeded = projections.filter((item) => item.currentStatus === "review_needed").length;
+  const queued = projections.filter((item) => item.currentStatus === "queued").length;
 
   return {
     schemaVersion: "vibe_core_current_project_image2_batch_ledger_projection_v1",
     projectId: payload.project?.projectId,
     runId: payload.project?.runId,
+    ledgerTruthSource: payload.ledgerTruthSource,
+    projectionSource: payload.projectionSource,
+    factsUsed: payload.factsUsed,
     projections,
     summary: {
       total: projections.length,
-      queued: projections.length - parked,
+      queued,
       blocked: parked,
       parked,
-      completeVerified: 0,
+      reviewNeeded,
+      completeVerified,
       providerSubmissionForbidden: true,
       liveSubmitAllowed: false,
       noFileMutation: true,
@@ -519,18 +837,19 @@ function responseFromReport(extra = {}, source = realDemo005Source()) {
 }
 
 function currentProjectRealChainResponse(extra = {}, source = currentProjectSource()) {
-  const project = projectIdentityFromSource(source);
-  const payload = responseFromReport(extra, source);
-  const needsReviewShotIds = Array.isArray(payload.productionNeedsReviewShots) && payload.productionNeedsReviewShots.length
-    ? payload.productionNeedsReviewShots
-    : Array.isArray(payload.reviewOverlayShots)
-      ? payload.reviewOverlayShots
-      : [];
-  const observations = Array.isArray(payload.observations) ? payload.observations : [];
+  const projection = projectProjectionFromSource(source);
+  const { project, projectFacts, observations } = projection;
+  const needsReviewShotIds = projection.reviewShotIds;
+  const primaryReportRelativePath = projectFacts.primaryReportRelativePath;
 
   return {
-    ...payload,
+    ok: projection.ok,
+    ...runtimePolicy(),
     endpoint: currentProjectStatusEndpoint,
+    status: projection.ok ? projection.status : "unavailable",
+    previewStatus: projection.ok ? projection.previewStatus : "unavailable",
+    productionStatus: projection.ok ? projection.productionStatus : "unavailable",
+    reportStatus: projection.ok ? projection.status : "unavailable",
     source: "runtime_endpoint",
     sourceLabel: source.sourceLabel,
     sandboxSource: source.sandboxSource,
@@ -550,45 +869,70 @@ function currentProjectRealChainResponse(extra = {}, source = currentProjectSour
     },
     projectRootRelativePath: source.runRootRelativePath,
     projectVibeRelativePath: source.projectVibeRelativePath,
+    sourceIndexRelativePath: source.sourceIndexRelativePath,
+    runManifestRelativePath: source.runManifestRelativePath,
+    projectionSource: projectFacts.projectionSource,
+    ledgerTruthSource: projectFacts.ledgerTruthSource,
+    factsUsed: projectFacts.factsUsed,
     project,
-    plannedImageCount: Number(payload.shotCount) || observations.length,
-    totalPlannedImages: Number(payload.shotCount) || observations.length,
-    returnedImageCount: observations.filter((item) => typeof item.imageUrl === "string").length,
+    plannedImageCount: observations.length,
+    totalPlannedImages: observations.length,
+    returnedImageCount: projection.returnedObservations.length,
     needsReviewCount: needsReviewShotIds.length,
     needsReviewShotIds,
     reviewShotIds: needsReviewShotIds,
-    reportPath: source.reportRelativePath,
-    reportRelativePath: source.reportRelativePath,
-    reportUrl: runtimeFileUrl(source.reportRelativePath),
+    reviewOverlayShots: needsReviewShotIds,
+    productionNeedsReviewShots: needsReviewShotIds,
+    shotCount: observations.length,
+    blockerCount: projection.blockedObservations.length,
+    reportPath: primaryReportRelativePath,
+    reportRelativePath: primaryReportRelativePath,
+    reportUrl: runtimeFileUrl(primaryReportRelativePath),
+    image2ReportPath: source.reportRelativePath,
+    image2ReportRelativePath: source.reportRelativePath,
+    runtimeTruthLayerPath: source.runtimeTruthLayerRelativePath,
+    previewPlanPath: source.previewPlanRelativePath,
+    observations,
     previewItems: observations.map((item) => ({
       shotId: item.shotId,
       order: item.order,
       imageUrl: item.imageUrl,
+      mediaPath: item.expectedOutputPath,
+      outputExists: item.outputExists,
+      status: item.previewStatus,
       reviewOverlay: item.reviewOverlay === true,
       previewQaStatus: item.previewQaStatus,
       productionQaStatus: item.productionQaStatus,
+      runtimeTruthStatus: item.runtimeTruthStatus,
+      blockers: item.blockers,
     })),
-    nextAction: "review_needed_outputs_before_production_promotion",
+    nextAction: projection.ok
+      ? needsReviewShotIds.length
+        ? "review_needed_outputs_before_production_promotion"
+        : projection.blockedObservations.length
+          ? "resolve_blockers_before_production_promotion"
+          : "preview_projection_ready"
+      : "provide_project_runtime_truth_or_preview_plan",
+    message: projection.ok
+      ? undefined
+      : "Current project projection is unavailable. Provide runtime_truth_layer.json, preview_plan.json, run_manifest.json, or a compatibility report.",
     ...extra,
   };
 }
 
 function currentProjectImage2BatchPlanResponse(extra = {}, source = currentProjectSource()) {
-  const project = projectIdentityFromSource(source);
-  const report = readJsonIfPresent(source.reportPath);
-  const reportObservations = Array.isArray(report?.observations)
-    ? report.observations.map(observationSummary)
-    : [];
-  const selectedObservations = reportObservations.slice(0, 10);
-  const manifest = readJsonIfPresent(path.join(source.runRootPath, "run_manifest.json"));
-  const shotPlans = Array.isArray(manifest?.shotPlans) ? manifest.shotPlans : [];
+  const projection = projectProjectionFromSource(source);
+  const { project, projectFacts } = projection;
+  const selectedObservations = projection.observations.slice(0, 10);
+  const shotPlans = Array.isArray(projectFacts.runManifest?.shotPlans) ? projectFacts.runManifest.shotPlans : [];
   const items = selectedObservations.map((observation, index) => {
-    const shotPlan = shotPlans.find((item) => item?.shotId === observation.shotId) || {};
+    const shotPlan = shotPlans.find((item) => item?.shotId === observation.shotId) || observation.shotPlan || {};
     return image2BatchPlanItem(source, observation, index + 1, shotPlan);
   });
   const blockedItems = items.filter((item) => item.blocked);
+  const primaryReportRelativePath = projectFacts.primaryReportRelativePath;
   const payload = {
-    ok: existsSync(source.reportPath),
+    ok: projection.ok,
     ...runtimePolicy({
       runMode: "read_only_image2_batch_plan_projection",
       verifyScriptRan: false,
@@ -614,11 +958,23 @@ function currentProjectImage2BatchPlanResponse(extra = {}, source = currentProje
     },
     projectRootRelativePath: source.runRootRelativePath,
     projectVibeRelativePath: source.projectVibeRelativePath,
+    sourceIndexRelativePath: source.sourceIndexRelativePath,
+    runManifestRelativePath: source.runManifestRelativePath,
+    projectionSource: projectFacts.projectionSource,
+    ledgerTruthSource: projectFacts.ledgerTruthSource,
+    factsUsed: projectFacts.factsUsed,
     project,
-    reportStatus: report?.status || "unavailable",
-    reportPath: source.reportRelativePath,
-    reportRelativePath: source.reportRelativePath,
-    reportUrl: runtimeFileUrl(source.reportRelativePath),
+    status: projection.ok ? projection.status : "unavailable",
+    previewStatus: projection.ok ? projection.previewStatus : "unavailable",
+    productionStatus: projection.ok ? projection.productionStatus : "unavailable",
+    reportStatus: projection.ok ? projection.status : "unavailable",
+    reportPath: primaryReportRelativePath,
+    reportRelativePath: primaryReportRelativePath,
+    reportUrl: runtimeFileUrl(primaryReportRelativePath),
+    image2ReportPath: source.reportRelativePath,
+    image2ReportRelativePath: source.reportRelativePath,
+    runtimeTruthLayerPath: source.runtimeTruthLayerRelativePath,
+    previewPlanPath: source.previewPlanRelativePath,
     observations: selectedObservations,
     submitPolicy: image2BatchSubmitPolicy(),
     plan: {
@@ -631,6 +987,8 @@ function currentProjectImage2BatchPlanResponse(extra = {}, source = currentProje
       plannedCount: items.length,
       readyCount: items.length - blockedItems.length,
       blockedCount: blockedItems.length,
+      returnedCount: selectedObservations.filter((item) => item.returned).length,
+      reviewCount: selectedObservations.filter((item) => item.reviewOverlay || item.semanticQaNeedsReview).length,
       selectedShotIds: items.map((item) => item.shotId),
       nextAction: blockedItems.length
         ? "resolve_blockers_before_manual_image2_batch_prepare"
@@ -766,12 +1124,15 @@ async function handleRun(res, options = {}) {
 }
 
 function handleCurrentProjectRunCheck(res, source) {
+  const projectFacts = readProjectFacts(source);
   const payload = currentProjectRealChainResponse({
     running,
     command: {
       mode: "read_only_projection_check",
-      exitCode: existsSync(source.reportPath) ? 0 : 1,
-      reportRead: existsSync(source.reportPath),
+      exitCode: projectFacts.projectionAvailable ? 0 : 1,
+      reportRead: projectFacts.projectionAvailable,
+      projectionSource: projectFacts.projectionSource,
+      ledgerTruthSource: projectFacts.ledgerTruthSource,
       projectVibeRead: existsSync(source.projectVibePath),
       providerCalled: false,
       prepareRan: false,
@@ -782,12 +1143,15 @@ function handleCurrentProjectRunCheck(res, source) {
 }
 
 function handleCurrentProjectImage2BatchRunCheck(res, source) {
+  const projectFacts = readProjectFacts(source);
   const payload = currentProjectImage2BatchPlanResponse({
     running,
     command: {
       mode: "read_only_image2_batch_plan_check",
-      exitCode: existsSync(source.reportPath) ? 0 : 1,
-      reportRead: existsSync(source.reportPath),
+      exitCode: projectFacts.projectionAvailable ? 0 : 1,
+      reportRead: projectFacts.projectionAvailable,
+      projectionSource: projectFacts.projectionSource,
+      ledgerTruthSource: projectFacts.ledgerTruthSource,
       projectVibeRead: existsSync(source.projectVibePath),
       providerCalled: false,
       prepareRan: false,

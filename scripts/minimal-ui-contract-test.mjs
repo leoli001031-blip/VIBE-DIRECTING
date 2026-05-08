@@ -679,10 +679,19 @@ check(
 );
 
 const minimalDirectorSurface = `${directorMode}\n${directorProgressStrip}\n${realPilotDirectorStatus}\n${oneShotActionPanel}\n${minimalAgentPanel}\n${minimalTopNav}\n${minimalProjectPlan}`;
-const projectRealChainUserSurface = `${projectRealChainPanel}\n${findFunctionBody(appSource, "projectRealChainStatusLabel")}\n${findFunctionBody(appSource, "projectImage2BatchStatusLabel")}\n${findFunctionBody(appSource, "projectImage2BatchLedgerLabel")}`;
+const projectRealChainUserSurface = [
+  projectRealChainPanel,
+  findFunctionBody(appSource, "projectRealChainStatusLabel"),
+  findFunctionBody(appSource, "projectReviewCheckStatusLabel"),
+  findFunctionBody(appSource, "projectReviewCheckDetail"),
+  findFunctionBody(appSource, "projectPreviewReadyLabel"),
+  findFunctionBody(appSource, "projectProductionReviewLabel"),
+].join("\n");
 checkMessage(requireWithin(projectRealChainUserSurface, /项目状态/, "current project chain panel must use creator-facing project status copy"));
 checkMessage(requireWithin(projectRealChainUserSurface, /同步状态/, "current project chain panel must use light sync copy"));
-checkMessage(requireWithin(projectRealChainUserSurface, /图片生成/, "current project chain panel must describe Image2 batch as image generation"));
+checkMessage(requireWithin(projectRealChainUserSurface, /本地复核/, "current project chain panel must describe local review without Image2/demo copy"));
+checkMessage(requireWithin(projectRealChainUserSurface, /Preview[\s\S]*ready/, "current project chain panel must expose preview ready state"));
+checkMessage(requireWithin(projectRealChainUserSurface, /Production[\s\S]*needs_review/, "current project chain panel must expose production review state"));
 checkMessage(requireWithin(projectRealChainUserSurface, /projectTitle[\s\S]*状态已回流/, "current project chain panel must show project title instead of sandbox project id"));
 checkMessage(requireWithin(minimalTopNav, /aria-label="项目计划状态"/, "top nav project plan status aria label should be localized"));
 check(!/real-demo-005/.test(`${appSource}\n${stylesSource}`), "main app/styles must not keep 005 demo class names");
@@ -691,7 +700,11 @@ for (const [term, pattern] of [
   ["fallback report", /fallback\s+report/i],
   ["005 sandbox", /005\s+sandbox/i],
   ["real demo id", /real_demo_e2e_005/i],
+  ["demo", /\bdemo\b/i],
   ["provider submit", /provider\s+未提交|provider\s+submit/i],
+  ["provider", /\bprovider\b/i],
+  ["prompt", /\bprompt\b/i],
+  ["queue", /\bqueue\b/i],
   ["prepare status", /prepare\s+未执行|prepare\s+ran|prepareRan/i],
   ["live submit", /live\s+submit/i],
   ["ledger copy", /\bledger\b/i],

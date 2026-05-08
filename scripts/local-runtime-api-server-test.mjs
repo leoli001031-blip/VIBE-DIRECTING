@@ -64,7 +64,22 @@ function assert005Payload(payload, label) {
 
 const project004Root = "real-test-sandbox/real-demo-e2e/004-image2-start-frames";
 const project004Id = "real_demo_e2e_004_image2_start_frames";
-const project004ReportPath = `${project004Root}/reports/image2_start_long_chain_report.json`;
+const project004TruthPath = `${project004Root}/reports/runtime_truth_layer.json`;
+const project005Root = "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames";
+const project005TruthPath = `${project005Root}/reports/runtime_truth_layer.json`;
+
+function assertProjectProjectionFacts(payload, label, root, primaryReportPath) {
+  assert(payload.projectRootRelativePath === root, `${label} projectRootRelativePath mismatch`);
+  assert(payload.projectVibeRelativePath === `${root}/project/project.vibe`, `${label} projectVibeRelativePath mismatch`);
+  assert(payload.projectionSource === "runtime_truth_layer+preview_plan", `${label} should prefer runtime truth + preview plan`);
+  assert(payload.ledgerTruthSource === "runtime_truth_layer", `${label} ledger truth source mismatch`);
+  assert(Array.isArray(payload.factsUsed), `${label} factsUsed missing`);
+  assert(payload.factsUsed.some((item) => item.name === "run_manifest"), `${label} should use run_manifest`);
+  assert(payload.factsUsed.some((item) => item.name === "runtime_truth_layer"), `${label} should use runtime_truth_layer`);
+  assert(payload.factsUsed.some((item) => item.name === "preview_plan"), `${label} should use preview_plan`);
+  assert(payload.reportPath === primaryReportPath, `${label} primary report path mismatch`);
+  assert(payload.image2ReportPath === `${root}/reports/image2_start_long_chain_report.json`, `${label} compatibility image2 report path mismatch`);
+}
 
 function assertProjectRealChainPayload(payload, label) {
   assert005Payload(payload, label);
@@ -84,7 +99,8 @@ function assertProjectRealChainPayload(payload, label) {
   assert(payload.needsReviewShotIds.includes("S07"), `${label} missing S07 needs review`);
   assert(payload.needsReviewShotIds.includes("S08"), `${label} missing S08 needs review`);
   assert(Array.isArray(payload.previewItems) && payload.previewItems.length === 8, `${label} preview items mismatch`);
-  assert(payload.reportPath === "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/reports/image2_start_long_chain_report.json", `${label} report path should be project relative`);
+  assertProjectProjectionFacts(payload, label, project005Root, project005TruthPath);
+  assert(payload.previewItems.every((item) => item.outputExists === true), `${label} should project existing 005 preview outputs`);
 }
 
 function assertImage2BatchPlanPayload(payload, label) {
@@ -109,29 +125,33 @@ function assertImage2BatchPlanPayload(payload, label) {
   assert(payload.prepareRan === false, `${label} must not run prepare`);
   assert(payload.verifyScriptRan === false, `${label} must not run verify script`);
   assert(payload.liveSubmitAllowed === false, `${label} live submit must not be allowed`);
+  assertProjectProjectionFacts(payload, label, project005Root, project005TruthPath);
   assert(Array.isArray(payload.observations) && payload.observations.length === 8, `${label} observations mismatch`);
   assert(Array.isArray(payload.items) && payload.items.length === 8, `${label} items mismatch`);
   assert(Array.isArray(payload.plan?.items) && payload.plan.items.length === 8, `${label} plan items mismatch`);
   assert(payload.summary?.plannedCount === 8, `${label} planned count mismatch`);
   assert(payload.summary?.readyCount + payload.summary?.blockedCount === 8, `${label} summary count mismatch`);
+  assert(payload.summary?.returnedCount === 8, `${label} returned count mismatch`);
+  assert(payload.summary?.reviewCount === 2, `${label} review count mismatch`);
   assert(Array.isArray(payload.summary?.selectedShotIds), `${label} selectedShotIds missing`);
   assert(payload.summary.selectedShotIds.includes("S01"), `${label} selected shots should include S01`);
   assert(typeof payload.summary.nextAction === "string" && payload.summary.nextAction.length > 0, `${label} next action missing`);
   assert(payload.ledgerProjection?.schemaVersion === "vibe_core_current_project_image2_batch_ledger_projection_v1", `${label} ledger projection schema mismatch`);
   assert(payload.ledgerProjection.summary?.total === 8, `${label} ledger total mismatch`);
-  assert(payload.ledgerProjection.summary?.queued === payload.summary.readyCount, `${label} ledger queued count mismatch`);
-  assert(payload.ledgerProjection.summary?.blocked === payload.summary.blockedCount, `${label} ledger blocked count mismatch`);
-  assert(payload.ledgerProjection.summary?.parked === payload.summary.blockedCount, `${label} ledger parked count mismatch`);
-  assert(payload.ledgerProjection.summary?.completeVerified === 0, `${label} ledger completeVerified should be 0`);
+  assert(payload.ledgerProjection.summary?.queued === 0, `${label} ledger queued count mismatch`);
+  assert(payload.ledgerProjection.summary?.blocked === 0, `${label} ledger blocked count mismatch`);
+  assert(payload.ledgerProjection.summary?.parked === 0, `${label} ledger parked count mismatch`);
+  assert(payload.ledgerProjection.summary?.reviewNeeded === 2, `${label} ledger reviewNeeded count mismatch`);
+  assert(payload.ledgerProjection.summary?.completeVerified === 6, `${label} ledger completeVerified mismatch`);
   assert(payload.ledgerProjection.summary?.providerSubmissionForbidden === true, `${label} ledger provider submission must be forbidden`);
   assert(payload.ledgerProjection.summary?.liveSubmitAllowed === false, `${label} ledger live submit must not be allowed`);
   assert(payload.ledgerProjection.summary?.noFileMutation === true, `${label} ledger must not mutate files`);
   assert(payload.ledgerProjection.summary?.workerSpawnForbidden === true, `${label} ledger must forbid worker spawn`);
   assert(payload.ledgerProjection.summary?.providerCalled === false, `${label} ledger must not call provider`);
   assert(Array.isArray(payload.ledgerProjection.projections) && payload.ledgerProjection.projections.length === 8, `${label} ledger projections mismatch`);
-  assert(payload.ledgerProjection.projections.every((item) => item.completeVerified === false), `${label} ledger items must not be complete verified`);
-  assert(payload.ledgerProjection.projections.every((item) => item.previewStatus === "missing"), `${label} ledger previews should be missing`);
-  assert(payload.ledgerProjection.projections.every((item) => item.currentStatus === "queued" || item.currentStatus === "parked"), `${label} ledger item status mismatch`);
+  assert(payload.ledgerProjection.projections.filter((item) => item.completeVerified === true).length === 6, `${label} ledger complete item count mismatch`);
+  assert(payload.ledgerProjection.projections.filter((item) => item.currentStatus === "review_needed").length === 2, `${label} ledger review item count mismatch`);
+  assert(payload.ledgerProjection.projections.every((item) => item.currentStatus === "complete_verified" || item.currentStatus === "review_needed"), `${label} ledger item status mismatch`);
 
   const first = payload.items.find((item) => item.shotId === "S01");
   assert(first?.taskRunId === "task_run_s01_image2_start_real_demo_005", `${label} S01 taskRunId mismatch`);
@@ -144,10 +164,13 @@ function assertImage2BatchPlanPayload(payload, label) {
   assert(Array.isArray(first?.referencePaths), `${label} S01 referencePaths missing`);
   assert(first.referencePaths.includes("real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/project/project.vibe"), `${label} S01 referencePaths should include project.vibe`);
   assert(first.queueOrder === 1, `${label} S01 queue order mismatch`);
+  assert(first.outputExists === true, `${label} S01 output should exist`);
+  assert(first.providerObservationActual === true, `${label} S01 provider observation should be actual`);
+  assert(first.semanticQaPassed === true, `${label} S01 semantic QA should pass`);
 
   const firstLedgerProjection = payload.ledgerProjection.projections.find((item) => item.taskRunId === first.taskRunId);
   assert(firstLedgerProjection?.envelopeId === first.envelopeId, `${label} S01 ledger envelope mismatch`);
-  assert(firstLedgerProjection?.currentStatus === "queued", `${label} S01 ledger status should be queued`);
+  assert(firstLedgerProjection?.currentStatus === "complete_verified", `${label} S01 ledger status should be complete_verified`);
   assert(firstLedgerProjection?.expectedOutputPath === first.expectedOutputPath, `${label} S01 ledger expected output path mismatch`);
   assert(Array.isArray(firstLedgerProjection?.expectedOutputs), `${label} S01 ledger expectedOutputs missing`);
   assert(firstLedgerProjection.expectedOutputs.some((item) => item.expectedOutputPath === first.expectedOutputPath), `${label} S01 ledger expectedOutputs should include expectedOutputPath`);
@@ -167,7 +190,7 @@ function assert004ProjectContext(payload, label, source) {
   assert(payload.project?.projectRoot === project004Root, `${label} project root mismatch`);
   assert(payload.projectRoot === project004Root, `${label} top-level project root mismatch`);
   assert(payload.identity?.projectRoot === project004Root, `${label} identity project root mismatch`);
-  assert(payload.reportPath === project004ReportPath, `${label} report path mismatch`);
+  assertProjectProjectionFacts(payload, label, project004Root, project004TruthPath);
   assert(payload.providerCalled === false, `${label} must not call provider`);
   assert(payload.prepareRan === false, `${label} must not run prepare`);
 }
@@ -198,7 +221,9 @@ try {
   assert(queryProjectStatus.response.status === 200, "GET project status with query context should return 200");
   assert004ProjectContext(queryProjectStatus.payload, "GET project status with query context", "query");
   assert(queryProjectStatus.payload.projectionKind === "project_real_chain_status", "GET project status query projection kind mismatch");
-  assert(queryProjectStatus.payload.previewStatus === "blocked", "GET project status query should read 004 report");
+  assert(queryProjectStatus.payload.previewStatus === "blocked", "GET project status query should read 004 projection");
+  assert(queryProjectStatus.payload.returnedImageCount === 4, "GET project status query should count only existing 004 outputs");
+  assert(queryProjectStatus.payload.blockerCount === 8, "GET project status query should project blocked 004 shots");
 
   const projectRun = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/run-check`, { method: "POST" });
   assert(projectRun.response.status === 200, "POST project real-chain run-check should return 200");
@@ -235,7 +260,11 @@ try {
   assert(headerImage2BatchPlan.response.status === 200, "GET image2 batch plan with header context should return 200");
   assert004ProjectContext(headerImage2BatchPlan.payload, "GET image2 batch plan with header context", "header");
   assert(headerImage2BatchPlan.payload.projectionKind === "current_project_image2_batch_prepare_plan", "GET image2 batch header projection kind mismatch");
-  assert(headerImage2BatchPlan.payload.summary?.plannedCount === 8, "GET image2 batch header should read 004 report");
+  assert(headerImage2BatchPlan.payload.summary?.plannedCount === 8, "GET image2 batch header should read 004 projection");
+  assert(headerImage2BatchPlan.payload.summary?.returnedCount === 4, "GET image2 batch header should count existing 004 outputs");
+  assert(headerImage2BatchPlan.payload.summary?.blockedCount === 8, "GET image2 batch header should project blocked 004 shots");
+  assert(headerImage2BatchPlan.payload.ledgerProjection?.summary?.parked === 8, "GET image2 batch header should park blocked 004 ledger items");
+  assert(headerImage2BatchPlan.payload.items.every((item) => item.taskRunId.includes("real_demo_004")), "GET image2 batch header must not leak 005 task ids");
 
   const image2BatchRunCheck = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-batch/run-check`, { method: "POST" });
   assert(image2BatchRunCheck.response.status === 200, "POST image2 batch run-check should return 200");
@@ -249,6 +278,17 @@ try {
   assert(image2BatchRunCheck.payload.command?.providerSubmissionForbidden === true, "POST image2 batch command must forbid provider submission");
   assert(image2BatchRunCheck.payload.command?.noFileMutation === true, "POST image2 batch command must not mutate files");
   assert(image2BatchRunCheck.payload.command?.workerSpawnForbidden === true, "POST image2 batch command must forbid worker spawn");
+
+  const missingReportsStatus = await fetchJson(
+    `${baseUrl}/api/runtime/projects/current/real-chain/status?projectRoot=${encodeURIComponent("scripts")}&projectId=${encodeURIComponent("missing_reports_project")}`,
+  );
+  assert(missingReportsStatus.response.status === 200, "GET project status with missing reports should return 200");
+  assert(missingReportsStatus.payload.ok === false, "missing reports projection should not be ok");
+  assert(missingReportsStatus.payload.status === "unavailable", "missing reports status mismatch");
+  assert(missingReportsStatus.payload.projectionSource === "unavailable", "missing reports projection source mismatch");
+  assert(missingReportsStatus.payload.projectId === "missing_reports_project", "missing reports identity project id mismatch");
+  assert(missingReportsStatus.payload.projectRoot === "scripts", "missing reports identity project root mismatch");
+  assert(Array.isArray(missingReportsStatus.payload.factsUsed) && missingReportsStatus.payload.factsUsed.length === 0, "missing reports should expose empty factsUsed");
 
   const blockedProjectRoot = await fetchJson(
     `${baseUrl}/api/runtime/projects/current/real-chain/status?projectRoot=${encodeURIComponent("../outside")}&projectId=${encodeURIComponent("blocked_project")}`,

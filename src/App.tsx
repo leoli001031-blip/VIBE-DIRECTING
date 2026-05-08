@@ -7656,7 +7656,7 @@ function projectRealChainStatusLabel(status: ProjectRealChainUiStatus) {
   if (status === "preview_ready_with_review") return "预览待复核";
   if (status === "production_needs_review") return "需要复核";
   if (status === "blocked") return "有阻断";
-  return "未连接";
+  return "未同步";
 }
 
 function projectRealChainVisibleItems(
@@ -7669,21 +7669,25 @@ function projectRealChainVisibleItems(
   return withImage.slice(0, 4);
 }
 
-function projectImage2BatchStatusLabel(state: ProjectImage2BatchPanelState) {
+function projectReviewCheckStatusLabel(state: ProjectImage2BatchPanelState) {
   if (state.status === "running") return "同步中";
   if (state.status === "ready_for_review") return "可复核";
-  if (state.status === "blocked") return "需要补齐";
-  return "未连接";
+  if (state.status === "blocked") return "待补齐";
+  return "未同步";
 }
 
-function projectImage2BatchLedgerLabel(summary: ProjectImage2BatchPanelState["summary"]) {
-  if (!summary?.ledgerProjections.length) return "";
-  const parts = [
-    summary.queuedCount ? `${summary.queuedCount} 已加入计划` : "",
-    summary.parkedCount ? `${summary.parkedCount} 等待复核` : "",
-    summary.completeVerifiedCount ? `${summary.completeVerifiedCount} 已完成` : "",
-  ].filter(Boolean);
-  return parts.length ? parts.join(" · ") : `${summary.ledgerProjections.length} 项已跟踪`;
+function projectReviewCheckDetail(summary: ProjectImage2BatchPanelState["summary"]) {
+  if (!summary) return "等待当前项目同步";
+  return `${summary.readyCount}/${summary.plannedCount} 可复核 · ${summary.blockedCount} 待补齐`;
+}
+
+function projectPreviewReadyLabel(summary: ProjectRealChainPanelState["summary"]) {
+  const status = `${summary?.previewStatus || ""} ${summary?.previewStatusLabel || ""}`.toLowerCase();
+  return status.includes("ready") ? "ready" : "not_ready";
+}
+
+function projectProductionReviewLabel(summary: ProjectRealChainPanelState["summary"]) {
+  return summary?.productionStatus === "needs_review" ? "needs_review" : "clear";
 }
 
 function ProjectRealChainPanel({
@@ -7706,21 +7710,20 @@ function ProjectRealChainPanel({
   const running = state.status === "running";
   const image2BatchRunning = image2BatchState.status === "running";
   const status = projectRealChainStatusLabel(state.status);
-  const image2BatchStatus = projectImage2BatchStatusLabel(image2BatchState);
-  const image2BatchLedgerStatus = projectImage2BatchLedgerLabel(image2Batch);
-  const reviewShotIds = summary?.reviewShotIds.length ? summary.reviewShotIds.join("/") : "";
+  const reviewCheckStatus = projectReviewCheckStatusLabel(image2BatchState);
+  const reviewCheckDetail = projectReviewCheckDetail(image2Batch);
   const returnedCount = summary?.returnedImageCount ?? 0;
   const plannedCount = summary?.totalPlannedImages ?? 0;
   const visibleItems = summary ? projectRealChainVisibleItems(summary.previewItems, selectedShotId) : [];
-  const previewLabel = summary?.previewStatusLabel === "ready with review" ? "待复核" : summary?.previewStatusLabel || "未就绪";
-  const productionLabel = summary?.productionStatus === "needs_review" ? "需复核" : summary?.productionStatus || "未就绪";
+  const previewLabel = projectPreviewReadyLabel(summary);
+  const productionLabel = projectProductionReviewLabel(summary);
 
   return (
     <section className={`project-real-chain-panel ${state.status}`} aria-label="当前项目真实链路状态">
       <div className="project-real-chain-head">
         <div>
-          <span>项目状态</span>
-          <strong>{status}</strong>
+          <span>当前项目</span>
+          <strong>{projectTitle || "未命名项目"}</strong>
         </div>
         <button disabled={running} onClick={onRun}>
           <RefreshCw size={15} />
@@ -7728,37 +7731,23 @@ function ProjectRealChainPanel({
         </button>
       </div>
       <div className="project-real-chain-tags">
-        <small>当前项目</small>
+        <small>项目状态 {status}</small>
         <small>已返回 {returnedCount}/{plannedCount} 张</small>
-        <small>{summary?.needsReviewCount ?? 0} 张需复核{reviewShotIds ? ` ${reviewShotIds}` : ""}</small>
-        <small>预览 {previewLabel}</small>
-        <small>成片 {productionLabel}</small>
+        <small>{summary?.needsReviewCount ?? 0} 张需复核</small>
+        <small>Preview {previewLabel}</small>
+        <small>Production {productionLabel}</small>
       </div>
       <div className="project-real-chain-batch">
         <div>
-          <span>图片生成</span>
-          <strong>{image2BatchStatus}</strong>
-          <small>
-            {image2Batch
-              ? [
-                `${image2Batch.readyCount}/${image2Batch.plannedCount} 可复核 · ${image2Batch.blockedCount} 需补齐`,
-                image2BatchLedgerStatus,
-              ].filter(Boolean).join(" · ")
-              : "等待项目状态"}
-          </small>
+          <span>本地复核</span>
+          <strong>{reviewCheckStatus}</strong>
+          <small>{reviewCheckDetail}</small>
         </div>
         <button disabled={image2BatchRunning} onClick={onRunImage2Batch}>
           <RefreshCw size={14} />
-          {image2BatchRunning ? "检查中" : "检查素材"}
+          {image2BatchRunning ? "检查中" : "复核检查"}
         </button>
       </div>
-      {image2Batch?.selectedShotIds.length ? (
-        <div className="project-real-chain-policy">
-          <small>计划 {image2Batch.selectedShotIds.slice(0, 4).join("/")}{image2Batch.selectedShotIds.length > 4 ? ` +${image2Batch.selectedShotIds.length - 4}` : ""}</small>
-          <small>等待人工确认</small>
-          <small>不会自动生成</small>
-        </div>
-      ) : null}
       {visibleItems.length > 0 && (
         <div className="project-real-chain-thumbs" aria-label="当前项目真实链路缩略图">
           {visibleItems.map((item) => (
@@ -7773,7 +7762,7 @@ function ProjectRealChainPanel({
         </div>
       )}
       <small className="project-real-chain-report">
-        {projectTitle || "当前项目"} · 状态已回流
+        {projectTitle || "当前项目"} · {summary ? "状态已回流" : status}
       </small>
       {state.message && <small className="project-real-chain-message">{state.message}</small>}
       {image2BatchState.message && <small className="project-real-chain-message">{image2BatchState.message}</small>}
@@ -9493,7 +9482,7 @@ function App() {
     setProjectImage2BatchState((current) => ({
       ...current,
       status: "running",
-      message: "正在检查图片素材准备情况。",
+      message: "正在检查当前项目复核状态。",
     }));
     const nextState = await runProjectImage2BatchCheck(runtimeProjectIdentity);
     setProjectImage2BatchState(nextState);
