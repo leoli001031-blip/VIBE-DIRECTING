@@ -6,6 +6,7 @@ declare global {
   interface ImportMeta {
     env?: {
       VITE_VIBE_RUNTIME_API_BASE_URL?: string;
+      VITE_VIBE_CORE_RUNTIME_API_TOKEN?: string;
     };
   }
 }
@@ -255,9 +256,21 @@ export function deriveRealDemoE2e005Summary(
 }
 
 async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
-  const response = await fetch(toRuntimeUrl(url), init);
+  const response = await fetch(toRuntimeUrl(url), runtimeRequestInit(init));
   if (!response.ok) throw new Error(`${url} returned ${response.status}`);
   return response.json() as Promise<unknown>;
+}
+
+function runtimeApiToken() {
+  return import.meta.env?.VITE_VIBE_CORE_RUNTIME_API_TOKEN || "";
+}
+
+function runtimeRequestInit(init?: RequestInit): RequestInit | undefined {
+  const token = runtimeApiToken();
+  if (!token) return init;
+  const headers = new Headers(init?.headers);
+  headers.set("x-vibe-runtime-token", token);
+  return { ...init, headers };
 }
 
 function isRuntimeEndpointPath(url: string) {
@@ -269,7 +282,7 @@ async function fetchRuntimeJson(url: string, init?: RequestInit): Promise<unknow
     return await fetchJson(url, init);
   } catch (error) {
     if (runtimeApiBaseUrl() || !isRuntimeEndpointPath(url)) throw error;
-    const response = await fetch(`${defaultRuntimeApiBaseUrl}${url}`, init);
+    const response = await fetch(`${defaultRuntimeApiBaseUrl}${url}`, runtimeRequestInit(init));
     if (!response.ok) throw new Error(`${defaultRuntimeApiBaseUrl}${url} returned ${response.status}`);
     return response.json() as Promise<unknown>;
   }

@@ -6,6 +6,7 @@ declare global {
   interface ImportMeta {
     env?: {
       VITE_VIBE_RUNTIME_API_BASE_URL?: string;
+      VITE_VIBE_CORE_RUNTIME_API_TOKEN?: string;
     };
   }
 }
@@ -559,6 +560,18 @@ function toRuntimeUrl(path: string) {
   return path.startsWith("/") ? `${baseUrl}${path}` : `${baseUrl}/${path}`;
 }
 
+function runtimeApiToken() {
+  return import.meta.env?.VITE_VIBE_CORE_RUNTIME_API_TOKEN || "";
+}
+
+function runtimeRequestInit(init?: RequestInit): RequestInit | undefined {
+  const token = runtimeApiToken();
+  if (!token) return init;
+  const headers = new Headers(init?.headers);
+  headers.set("x-vibe-runtime-token", token);
+  return { ...init, headers };
+}
+
 function toRuntimeFileUrl(path: string) {
   return toRuntimeUrl(`${projectRealChainFileEndpoint}?path=${encodeURIComponent(path)}`);
 }
@@ -808,7 +821,7 @@ export function deriveProjectImage2BatchPlanStatus(
 }
 
 async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
-  const response = await fetch(toRuntimeUrl(url), init);
+  const response = await fetch(toRuntimeUrl(url), runtimeRequestInit(init));
   if (!response.ok) throw new Error(`${url} returned ${response.status}`);
   return response.json() as Promise<unknown>;
 }
@@ -822,7 +835,7 @@ async function fetchRuntimeJson(url: string, init?: RequestInit): Promise<unknow
     return await fetchJson(url, init);
   } catch (error) {
     if (runtimeApiBaseUrl() || !isRuntimeEndpointPath(url)) throw error;
-    const response = await fetch(`${defaultRuntimeApiBaseUrl}${url}`, init);
+    const response = await fetch(`${defaultRuntimeApiBaseUrl}${url}`, runtimeRequestInit(init));
     if (!response.ok) throw new Error(`${defaultRuntimeApiBaseUrl}${url} returned ${response.status}`);
     return response.json() as Promise<unknown>;
   }
@@ -860,7 +873,7 @@ export async function selectCurrentProjectBinding(input: SelectCurrentProjectInp
   const projectRoot = input.projectRoot.trim();
   if (!projectRoot) throw new Error("请输入项目路径。");
 
-  const response = await fetch(toRuntimeUrl(projectCurrentSelectEndpoint), {
+  const response = await fetch(toRuntimeUrl(projectCurrentSelectEndpoint), runtimeRequestInit({
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -868,7 +881,7 @@ export async function selectCurrentProjectBinding(input: SelectCurrentProjectInp
       projectId: input.projectId?.trim() || undefined,
       displayName: input.displayName?.trim() || undefined,
     }),
-  });
+  }));
   const payload = await response.json().catch(() => undefined);
   if (!response.ok) {
     throw new Error("连接项目失败，请确认路径在当前工作区内并且项目文件可读取。");

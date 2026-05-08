@@ -38,15 +38,42 @@ const knownProjectFixtureRoots = [
 
 let running = false;
 
-function corsHeaders(contentType = "application/json; charset=utf-8") {
+function isTrustedLocalOrigin(origin) {
+  if (!origin) return true;
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === "http:" &&
+      (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1" || parsed.hostname === "[::1]");
+  } catch {
+    return false;
+  }
+}
+
+function runtimeToken() {
+  return process.env.VIBE_CORE_RUNTIME_API_TOKEN || "";
+}
+
+function runtimeSecurityPolicy() {
   return {
+    originPolicy: "localhost_or_no_origin_only",
+    tokenRequired: Boolean(runtimeToken()),
+    legacyRunEnabled: process.env.VIBE_CORE_ENABLE_LEGACY_RUN === "1",
+  };
+}
+
+function corsHeaders(contentType = "application/json; charset=utf-8", origin) {
+  const headers = {
     "content-type": contentType,
-    "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type,x-vibe-project-root,x-vibe-project-id,x-project-root,x-project-id",
+    "access-control-allow-headers": "content-type,x-vibe-runtime-token,x-vibe-project-root,x-vibe-project-id,x-project-root,x-project-id",
     "x-content-type-options": "nosniff",
     "cache-control": "no-store",
   };
+  if (origin && isTrustedLocalOrigin(origin)) {
+    headers["access-control-allow-origin"] = origin;
+    headers["vary"] = "Origin";
+  }
+  return headers;
 }
 
 function readJson(filePath) {
@@ -412,11 +439,48 @@ function acceptsMedia(req) {
   return accept.includes("image/") || accept.includes("video/");
 }
 
+function runtimeRequestSecurity(req) {
+  const origin = typeof req.headers.origin === "string" ? req.headers.origin : "";
+  if (origin && !isTrustedLocalOrigin(origin)) {
+    return {
+      ok: false,
+      statusCode: 403,
+      origin,
+      message: "Runtime API only accepts localhost or no-origin requests.",
+    };
+  }
+
+  const token = runtimeToken();
+  if (req.method !== "GET" && req.method !== "OPTIONS" && token) {
+    const suppliedToken = typeof req.headers["x-vibe-runtime-token"] === "string" ? req.headers["x-vibe-runtime-token"] : "";
+    if (suppliedToken !== token) {
+      return {
+        ok: false,
+        statusCode: 403,
+        origin,
+        message: "Runtime API token is required for this request.",
+      };
+    }
+  }
+
+  return { ok: true, origin };
+}
+
+function writeSecurityBlocked(res, security) {
+  res.runtimeAllowedOrigin = security.origin && isTrustedLocalOrigin(security.origin) ? security.origin : undefined;
+  writeJson(res, security.statusCode || 403, {
+    ok: false,
+    ...runtimePolicy(),
+    status: "forbidden",
+    message: security.message || "Runtime API request was blocked.",
+  });
+}
+
 function writeRuntimeFileError(req, res, statusCode, payload, relativePath) {
   const contentType = contentTypeFor(relativePath || "");
   if (isMediaContentType(contentType) && acceptsMedia(req)) {
     res.writeHead(statusCode, {
-      ...corsHeaders(contentType),
+      ...corsHeaders(contentType, res.runtimeAllowedOrigin),
       "content-length": "0",
     });
     res.end();
@@ -430,6 +494,8 @@ function runtimePolicy(extra = {}) {
     schemaVersion: "vibe_core_local_runtime_api_v1",
     source: "runtime_endpoint",
     basePath: runtimeBasePath,
+    security: runtimeSecurityPolicy(),
+    tokenRequired: Boolean(runtimeToken()),
     providerCalled: false,
     prepareRan: false,
     videoSubmitted: false,
@@ -1299,11 +1365,11 @@ function currentProjectImage2BatchPlanResponse(extra = {}, source = currentProje
 
 function writeJson(res, statusCode, payload) {
   if (statusCode === 204) {
-    res.writeHead(204, corsHeaders());
+    res.writeHead(204, corsHeaders("application/json; charset=utf-8", res.runtimeAllowedOrigin));
     res.end();
     return;
   }
-  res.writeHead(statusCode, corsHeaders());
+  res.writeHead(statusCode, corsHeaders("application/json; charset=utf-8", res.runtimeAllowedOrigin));
   res.end(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
@@ -1392,7 +1458,7 @@ function serveRuntimeFile(req, res, relativePath, options = {}) {
     return;
   }
 
-  res.writeHead(200, corsHeaders(contentTypeFor(filePath)));
+  res.writeHead(200, corsHeaders(contentTypeFor(filePath), res.runtimeAllowedOrigin));
   createReadStream(filePath).pipe(res);
 }
 
@@ -1639,6 +1705,12 @@ async function handleCurrentProjectSelect(req, res) {
 
 async function handleRequest(req, res) {
   const url = new URL(req.url || "/", `http://${host}`);
+  const security = runtimeRequestSecurity(req);
+  if (!security.ok) {
+    writeSecurityBlocked(res, security);
+    return;
+  }
+  res.runtimeAllowedOrigin = security.origin || undefined;
   if (req.method === "OPTIONS") {
     writeJson(res, 204, {});
     return;
@@ -1719,7 +1791,25 @@ async function handleRequest(req, res) {
     return;
   }
   if (req.method === "POST" && (url.pathname === realDemo005RunEndpoint || url.pathname === legacyRunEndpoint)) {
-    void handleRun(res);
+    if (process.env.VIBE_CORE_ENABLE_LEGACY_RUN !== "1") {
+      writeJson(res, 403, {
+        ok: false,
+        ...runtimePolicy(),
+        endpoint: url.pathname,
+        status: "disabled",
+        previewStatus: "blocked",
+        productionStatus: "blocked",
+        running: false,
+        command: {
+          providerCalled: false,
+          prepareRan: false,
+          verifyScriptRan: false,
+        },
+        message: "Legacy 005 run endpoint is disabled. Set VIBE_CORE_ENABLE_LEGACY_RUN=1 for diagnostics-only use.",
+      });
+      return;
+    }
+    void handleRun(res, { endpoint: url.pathname });
     return;
   }
   writeJson(res, 404, { ok: false, ...runtimePolicy(), status: "not_found", path: url.pathname });

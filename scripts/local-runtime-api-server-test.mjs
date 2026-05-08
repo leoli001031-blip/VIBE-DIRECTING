@@ -50,11 +50,27 @@ async function fetchJson(url, init) {
   return { response, payload };
 }
 
-async function selectProject(baseUrl, projectRoot, projectId, displayName) {
+async function selectProject(baseUrl, projectRoot, projectId, displayName, init = {}) {
+  const headers = {
+    "content-type": "application/json",
+    ...(init.headers || {}),
+  };
   return fetchJson(`${baseUrl}/api/runtime/projects/select`, {
+    ...init,
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify({ projectRoot, projectId, displayName }),
+  });
+}
+
+function spawnRuntimeServer(env) {
+  return spawn(process.execPath, ["scripts/local-runtime-api-server.mjs"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      ...env,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
@@ -182,25 +198,38 @@ const repoSymlinkFile = `${project004Root}/runtime-boundary-file-link.txt`;
 
 writeFileSync(outsideFile, "outside runtime boundary\n", "utf8");
 
-const child = spawn(process.execPath, ["scripts/local-runtime-api-server.mjs"], {
-  cwd: process.cwd(),
-  env: {
-    ...process.env,
+const child = spawnRuntimeServer({
     VIBE_CORE_RUNTIME_API_PORT: "0",
     VIBE_CORE_CURRENT_PROJECT_BINDING_PATH: bindingPath,
     VIBE_CORE_CURRENT_PROJECT_ROOT: project005Root,
     VIBE_CORE_PROJECT_ROOT: project005Root,
-  },
-  stdio: ["ignore", "pipe", "pipe"],
 });
 
 try {
   const { baseUrl } = await waitForServer(child);
   const runtimeStatus = await fetchJson(`${baseUrl}/api/runtime/status`);
   assert(runtimeStatus.response.status === 200, "GET runtime status should return 200");
+  assert(runtimeStatus.response.headers.get("access-control-allow-origin") !== "*", "runtime status must not use wildcard CORS");
+  assert(runtimeStatus.payload.security?.originPolicy === "localhost_or_no_origin_only", "runtime status should expose local origin policy");
+  assert(runtimeStatus.payload.security?.tokenRequired === false, "runtime status should expose tokenRequired=false without token env");
   assert(runtimeStatus.payload.endpoints?.currentProjectBindingEndpoint === "/api/runtime/projects/current", "runtime status should expose current project binding endpoint");
   assert(runtimeStatus.payload.endpoints?.currentProjectSelectEndpoint === "/api/runtime/projects/select", "runtime status should expose current project select endpoint");
   assert(runtimeStatus.payload.endpoints?.currentProjectRecentEndpoint === "/api/runtime/projects/recent", "runtime status should expose recent projects endpoint");
+
+  const trustedOrigin = "http://127.0.0.1:5176";
+  const trustedStatus = await fetchJson(`${baseUrl}/api/runtime/status`, {
+    headers: { origin: trustedOrigin },
+  });
+  assert(trustedStatus.response.status === 200, "trusted localhost origin should read runtime status");
+  assert(trustedStatus.response.headers.get("access-control-allow-origin") === trustedOrigin, "trusted localhost origin should be echoed");
+  assert(trustedStatus.response.headers.get("access-control-allow-origin") !== "*", "trusted localhost origin must not use wildcard CORS");
+
+  const hostileStatus = await fetchJson(`${baseUrl}/api/runtime/status`, {
+    headers: { origin: "https://evil.example" },
+  });
+  assert(hostileStatus.response.status === 403, "hostile origin should be blocked");
+  assert(hostileStatus.payload.status === "forbidden", "hostile origin status mismatch");
+  assert(hostileStatus.response.headers.get("access-control-allow-origin") !== "*", "hostile origin must not receive wildcard CORS");
 
   const currentUnbound = await fetchJson(`${baseUrl}/api/runtime/projects/current`);
   assert(currentUnbound.response.status === 200, "GET current project binding should return 200");
@@ -320,6 +349,13 @@ try {
   assert005Payload(legacyStatus.payload, "legacy 005 status");
   assert(legacyStatus.payload.observations[0]?.imageUrl.includes("scope=real-demo-e2e-005"), "legacy file URLs should use explicit 005 scope");
 
+  const legacyRunDisabled = await fetchJson(`${baseUrl}/api/runtime/real-demo-e2e/005/run`, {
+    method: "POST",
+  });
+  assert(legacyRunDisabled.response.status === 403, "legacy 005 run should be disabled by default");
+  assert(legacyRunDisabled.payload.status === "disabled", "legacy 005 run disabled status mismatch");
+  assert(legacyRunDisabled.payload.command?.verifyScriptRan === false, "legacy 005 run must not spawn verify script while disabled");
+
   const legacyFile = await fetch(legacyStatus.payload.observations[0].imageUrl.replace("/api/runtime/files", `${baseUrl}/api/runtime/files`));
   assert(legacyFile.status === 200, "legacy scoped file should be readable");
 
@@ -329,18 +365,25 @@ try {
   const current004File = await fetch(`${baseUrl}/api/runtime/files?path=${encodeURIComponent(current004OutputPath)}`);
   assert(current004File.status === 200, "current project file inside bound 004 should be readable");
   assert(current004File.headers.get("content-type") === "image/png", "current project start.png should be served as image/png");
-  assert(current004File.headers.get("access-control-allow-origin") === "*", "current project start.png should retain CORS");
+  assert(current004File.headers.get("access-control-allow-origin") !== "*", "current project start.png must not use wildcard CORS");
   assert(current004File.headers.get("x-content-type-options") === "nosniff", "current project start.png should use nosniff with the correct MIME");
   assert(current004File.headers.get("cache-control") === "no-store", "current project start.png should retain no-store cache policy");
   await current004File.arrayBuffer();
   assert(statSync(project004VibePath).mtimeMs === project004VibeBeforeFileRead, "runtime file read must not mutate project.vibe");
+
+  const current004TrustedFile = await fetch(`${baseUrl}/api/runtime/files?path=${encodeURIComponent(current004OutputPath)}`, {
+    headers: { origin: trustedOrigin },
+  });
+  assert(current004TrustedFile.status === 200, "trusted localhost origin should read current project file");
+  assert(current004TrustedFile.headers.get("access-control-allow-origin") === trustedOrigin, "trusted current project file request should echo origin");
+  await current004TrustedFile.arrayBuffer();
 
   const missingImageAsMedia = await fetch(`${baseUrl}/api/runtime/files?path=${encodeURIComponent(`${project004Root}/outputs/shots/S01/start.png`)}`, {
     headers: { accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8" },
   });
   assert(missingImageAsMedia.status === 404, "missing current project start.png media request should return 404");
   assert(missingImageAsMedia.headers.get("content-type") === "image/png", "missing current project start.png media request should keep image/png");
-  assert(missingImageAsMedia.headers.get("access-control-allow-origin") === "*", "missing current project start.png media request should retain CORS");
+  assert(missingImageAsMedia.headers.get("access-control-allow-origin") !== "*", "missing current project start.png media request must not use wildcard CORS");
   assert(missingImageAsMedia.headers.get("x-content-type-options") === "nosniff", "missing current project start.png media request should use nosniff");
   assert((await missingImageAsMedia.text()) === "", "missing current project start.png media request should not return JSON to image loads");
 
@@ -378,4 +421,67 @@ try {
   rmSync(repoSymlinkFile, { force: true });
   rmSync(repoSymlinkRoot, { recursive: true, force: true });
   rmSync(tempRoot, { recursive: true, force: true });
+}
+
+const tokenTempRoot = mkdtempSync(path.join(tmpdir(), "vibe-runtime-api-token-test-"));
+const tokenBindingPath = path.join(tokenTempRoot, "current-project.local.json");
+const tokenChild = spawnRuntimeServer({
+  VIBE_CORE_RUNTIME_API_PORT: "0",
+  VIBE_CORE_CURRENT_PROJECT_BINDING_PATH: tokenBindingPath,
+  VIBE_CORE_RUNTIME_API_TOKEN: "test-runtime-token",
+});
+
+try {
+  const { baseUrl: tokenBaseUrl } = await waitForServer(tokenChild);
+  const tokenStatus = await fetchJson(`${tokenBaseUrl}/api/runtime/status`, {
+    headers: { origin: "http://localhost:5176" },
+  });
+  assert(tokenStatus.response.status === 200, "trusted localhost origin should read token-protected status");
+  assert(tokenStatus.response.headers.get("access-control-allow-origin") === "http://localhost:5176", "token-protected status should echo trusted origin");
+  assert(tokenStatus.payload.security?.tokenRequired === true, "token-protected status should expose tokenRequired=true");
+
+  const project004VibeBeforeTokenTests = statSync(project004VibePath).mtimeMs;
+  const missingTokenSelect = await selectProject(tokenBaseUrl, project004Root, project004Id, "004 token missing", {
+    headers: { origin: "http://localhost:5176" },
+  });
+  assert(missingTokenSelect.response.status === 403, "POST select should require token when token env is set");
+  assert(missingTokenSelect.payload.status === "forbidden", "missing token select status mismatch");
+  assert(!existsSync(tokenBindingPath), "missing token select must not write binding");
+
+  const wrongTokenSelect = await selectProject(tokenBaseUrl, project004Root, project004Id, "004 token wrong", {
+    headers: {
+      origin: "http://localhost:5176",
+      "x-vibe-runtime-token": "wrong-token",
+    },
+  });
+  assert(wrongTokenSelect.response.status === 403, "POST select should reject wrong token");
+  assert(wrongTokenSelect.payload.status === "forbidden", "wrong token select status mismatch");
+  assert(!existsSync(tokenBindingPath), "wrong token select must not write binding");
+
+  const hostileTokenSelect = await selectProject(tokenBaseUrl, project004Root, project004Id, "004 hostile origin", {
+    headers: {
+      origin: "https://evil.example",
+      "x-vibe-runtime-token": "test-runtime-token",
+    },
+  });
+  assert(hostileTokenSelect.response.status === 403, "POST select should reject hostile origin even with a correct token");
+  assert(!existsSync(tokenBindingPath), "hostile origin select must not write binding");
+
+  const correctTokenSelect = await selectProject(tokenBaseUrl, project004Root, project004Id, "004 token ok", {
+    headers: {
+      origin: "http://localhost:5176",
+      "x-vibe-runtime-token": "test-runtime-token",
+    },
+  });
+  assert(correctTokenSelect.response.status === 200, "POST select should accept correct token from trusted origin");
+  assert(correctTokenSelect.response.headers.get("access-control-allow-origin") === "http://localhost:5176", "POST select should echo trusted origin");
+  assert(correctTokenSelect.payload.status === "bound", "correct token select should bind");
+  assert(correctTokenSelect.payload.projectVibeWritten === false, "correct token select must not write project.vibe");
+  assert(existsSync(tokenBindingPath), "correct token select should write runtime-local binding");
+  assert(statSync(project004VibePath).mtimeMs === project004VibeBeforeTokenTests, "token checks must not mutate project.vibe");
+
+  console.log("Local runtime API token/origin security test passed.");
+} finally {
+  tokenChild.kill("SIGTERM");
+  rmSync(tokenTempRoot, { recursive: true, force: true });
 }
