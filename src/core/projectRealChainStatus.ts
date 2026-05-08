@@ -14,6 +14,7 @@ export const defaultRuntimeApiBaseUrl = "http://127.0.0.1:8790";
 export const projectRealChainRuntimeBasePath = "/api/runtime";
 export const projectCurrentBindingEndpoint = `${projectRealChainRuntimeBasePath}/projects/current`;
 export const projectCurrentSelectEndpoint = `${projectRealChainRuntimeBasePath}/projects/select`;
+export const projectCurrentChoicesEndpoint = `${projectRealChainRuntimeBasePath}/projects/recent`;
 export const projectRealChainStatusEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/status`;
 export const projectRealChainRunCheckEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/run-check`;
 export const projectImage2BatchPlanEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-batch/plan`;
@@ -181,6 +182,14 @@ export type SelectCurrentProjectInput = {
   projectRoot: string;
   projectId?: string;
   displayName?: string;
+};
+
+export type ProjectCurrentChoice = {
+  projectRoot: string;
+  displayName: string;
+  projectId?: string;
+  updatedAt?: string;
+  status?: string;
 };
 
 type ProjectRealChainPayload = {
@@ -441,6 +450,27 @@ export function currentProjectBindingIdentity(binding: ProjectCurrentBindingStat
     projectRoot: binding.projectRoot,
   };
   return hasProjectRuntimeIdentity(identity) ? identity : undefined;
+}
+
+export function deriveCurrentProjectChoices(payload: unknown): ProjectCurrentChoice[] {
+  if (!isRecord(payload) || !Array.isArray(payload.choices)) return [];
+  const choices: ProjectCurrentChoice[] = [];
+  const seenRoots = new Set<string>();
+  for (const item of payload.choices) {
+    if (!isRecord(item)) continue;
+    const projectRoot = stringRecordValue(item, ["projectRoot", "projectRootRelativePath"]);
+    if (!projectRoot || projectRoot.startsWith("/") || /^[A-Za-z]:[\\/]/.test(projectRoot) || seenRoots.has(projectRoot)) continue;
+    const displayName = stringRecordValue(item, ["displayName", "projectTitle", "title", "name"]) || projectRoot.split("/").filter(Boolean).at(-1) || "未命名项目";
+    choices.push({
+      projectRoot,
+      displayName,
+      projectId: stringRecordValue(item, ["projectId", "id"]),
+      updatedAt: stringRecordValue(item, ["updatedAt"]),
+      status: stringRecordValue(item, ["status"]),
+    });
+    seenRoots.add(projectRoot);
+  }
+  return choices;
 }
 
 function payloadFromUnknown(payload: unknown): ProjectRealChainPayload | undefined {
@@ -814,6 +844,15 @@ export async function loadCurrentProjectBindingStatus(): Promise<ProjectCurrentB
       status: "unbound",
       message: projectMismatchMessage(),
     };
+  }
+}
+
+export async function loadCurrentProjectChoices(): Promise<ProjectCurrentChoice[]> {
+  try {
+    const payload = await fetchRuntimeJson(projectCurrentChoicesEndpoint);
+    return deriveCurrentProjectChoices(payload);
+  } catch {
+    return [];
   }
 }
 

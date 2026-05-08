@@ -18,6 +18,7 @@ const maxOutputChars = 8000;
 const runtimeBasePath = "/api/runtime";
 const currentProjectBindingEndpoint = `${runtimeBasePath}/projects/current`;
 const currentProjectSelectEndpoint = `${runtimeBasePath}/projects/select`;
+const currentProjectRecentEndpoint = `${runtimeBasePath}/projects/recent`;
 const currentProjectStatusEndpoint = `${runtimeBasePath}/projects/current/real-chain/status`;
 const currentProjectRunEndpoint = `${runtimeBasePath}/projects/current/real-chain/run-check`;
 const currentProjectImage2BatchPlanEndpoint = `${runtimeBasePath}/projects/current/image2-batch/plan`;
@@ -27,6 +28,13 @@ const realDemo005RunEndpoint = `${runtimeBasePath}/real-demo-e2e/005/run`;
 const runtimeFileEndpoint = `${runtimeBasePath}/files`;
 const legacyStatusEndpoint = "/api/real-demo-e2e/005/status";
 const legacyRunEndpoint = "/api/real-demo-e2e/005/run";
+const knownProjectFixtureRoots = [
+  "real-test-sandbox/real-demo-e2e/004-image2-start-frames",
+  "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames",
+  "real-test-sandbox/real-demo-e2e/003-long-chain-software",
+  "real-test-sandbox/real-demo-e2e/002-anime-pressure",
+  "real-test-sandbox/real-demo-e2e/001",
+];
 
 let running = false;
 
@@ -282,6 +290,84 @@ function projectIdentityFromSource(source) {
     projectId: source.requestProjectId,
     projectRoot: source.runRootRelativePath,
     projectVibePath: source.projectVibeRelativePath,
+  };
+}
+
+function projectChoiceTitle(source, project, binding) {
+  const displayName = asString(binding?.displayName) || asString(binding?.name);
+  if (displayName) return displayName;
+  if (asString(project?.title)) return asString(project.title);
+  if (asString(project?.projectId)) {
+    const match = String(project.projectId).match(/real_demo_e2e_(\d{3})/);
+    if (match) return `项目 ${match[1]}`;
+    return String(project.projectId).replace(/_/g, " ");
+  }
+  const match = source.runRootRelativePath.match(/\/(\d{3})[^/]*$/);
+  if (match) return `项目 ${match[1]}`;
+  return path.basename(source.runRootRelativePath) || "未命名项目";
+}
+
+function projectChoiceUpdatedAt(source) {
+  const candidates = [source.projectVibePath, source.reportPath, source.runRootPath];
+  for (const candidate of candidates) {
+    if (!candidate || !existsSync(candidate)) continue;
+    return statSync(candidate).mtime.toISOString();
+  }
+  return undefined;
+}
+
+function projectChoiceFromSource(source, options = {}) {
+  const project = projectIdentityFromSource(source);
+  return {
+    projectRoot: source.runRootRelativePath,
+    displayName: projectChoiceTitle(source, project, options.binding),
+    projectId: asString(project.projectId),
+    updatedAt: projectChoiceUpdatedAt(source),
+    status: options.current ? "当前" : "可打开",
+  };
+}
+
+function currentProjectRecentResponse(extra = {}) {
+  const choices = [];
+  const seenRoots = new Set();
+  const bindingState = readCurrentProjectBinding();
+
+  if (bindingState.bound) {
+    try {
+      const source = currentProjectSource();
+      const choice = projectChoiceFromSource(source, { current: true, binding: bindingState.binding });
+      choices.push(choice);
+      seenRoots.add(choice.projectRoot);
+    } catch {
+      // Ignore an unreadable binding; the list endpoint stays read-only and fail-closed.
+    }
+  }
+
+  for (const fixtureRoot of knownProjectFixtureRoots) {
+    try {
+      const source = resolveProjectSource(fixtureRoot, {
+        projectRootMode: "known_fixture_project_choice",
+        sourceLabel: "runtime endpoint / known project choice",
+        ignoreReportEnv: true,
+      });
+      if (!existsSync(source.projectVibePath) || seenRoots.has(source.runRootRelativePath)) continue;
+      choices.push(projectChoiceFromSource(source));
+      seenRoots.add(source.runRootRelativePath);
+    } catch {
+      // Missing or malformed fixtures are skipped instead of leaking diagnostics into the main UI.
+    }
+  }
+
+  return {
+    ok: true,
+    ...runtimePolicy(),
+    endpoint: currentProjectRecentEndpoint,
+    status: "ready",
+    choices,
+    providerCalled: false,
+    prepareRan: false,
+    projectVibeWritten: false,
+    ...extra,
   };
 }
 
@@ -1459,6 +1545,7 @@ function readRequestJsonBody(req) {
 function isCurrentProjectEndpoint(pathname) {
   return pathname === currentProjectBindingEndpoint
     || pathname === currentProjectSelectEndpoint
+    || pathname === currentProjectRecentEndpoint
     || pathname === currentProjectStatusEndpoint
     || pathname === currentProjectRunEndpoint
     || pathname === currentProjectImage2BatchPlanEndpoint
@@ -1559,14 +1646,15 @@ async function handleRequest(req, res) {
   if (req.method === "GET" && url.pathname === `${runtimeBasePath}/status`) {
     writeJson(res, 200, {
       ok: true,
-      ...runtimePolicy({
-        endpoints: {
-          currentProjectStatusEndpoint,
-          currentProjectBindingEndpoint,
-          currentProjectSelectEndpoint,
-          currentProjectRunEndpoint,
-          currentProjectImage2BatchPlanEndpoint,
-          currentProjectImage2BatchRunCheckEndpoint,
+    ...runtimePolicy({
+      endpoints: {
+        currentProjectStatusEndpoint,
+        currentProjectBindingEndpoint,
+        currentProjectSelectEndpoint,
+        currentProjectRecentEndpoint,
+        currentProjectRunEndpoint,
+        currentProjectImage2BatchPlanEndpoint,
+        currentProjectImage2BatchRunCheckEndpoint,
           realDemo005StatusEndpoint,
           realDemo005RunEndpoint,
           runtimeFileEndpoint,
@@ -1582,6 +1670,10 @@ async function handleRequest(req, res) {
   }
   if (req.method === "GET" && url.pathname === currentProjectBindingEndpoint) {
     writeJson(res, 200, currentProjectBindingStatusResponse({ running }));
+    return;
+  }
+  if (req.method === "GET" && url.pathname === currentProjectRecentEndpoint) {
+    writeJson(res, 200, currentProjectRecentResponse({ running }));
     return;
   }
   if (req.method === "POST" && url.pathname === currentProjectSelectEndpoint) {

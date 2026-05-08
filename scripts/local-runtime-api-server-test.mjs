@@ -200,11 +200,30 @@ try {
   assert(runtimeStatus.response.status === 200, "GET runtime status should return 200");
   assert(runtimeStatus.payload.endpoints?.currentProjectBindingEndpoint === "/api/runtime/projects/current", "runtime status should expose current project binding endpoint");
   assert(runtimeStatus.payload.endpoints?.currentProjectSelectEndpoint === "/api/runtime/projects/select", "runtime status should expose current project select endpoint");
+  assert(runtimeStatus.payload.endpoints?.currentProjectRecentEndpoint === "/api/runtime/projects/recent", "runtime status should expose recent projects endpoint");
 
   const currentUnbound = await fetchJson(`${baseUrl}/api/runtime/projects/current`);
   assert(currentUnbound.response.status === 200, "GET current project binding should return 200");
   assert(currentUnbound.payload.status === "unbound", "current project should start unbound");
   assert(!existsSync(bindingPath), "test binding file should not be created before select");
+
+  const project004VibeBeforeRecent = statSync(project004VibePath).mtimeMs;
+  const project005VibeBeforeRecent = statSync(project005VibePath).mtimeMs;
+  const recentUnbound = await fetchJson(`${baseUrl}/api/runtime/projects/recent`);
+  assert(recentUnbound.response.status === 200, "GET recent projects should return 200");
+  assert(recentUnbound.payload.ok === true, "GET recent projects should be ok");
+  assert(recentUnbound.payload.providerCalled === false, "GET recent projects must not call provider");
+  assert(recentUnbound.payload.prepareRan === false, "GET recent projects must not run prepare");
+  assert(recentUnbound.payload.projectVibeWritten === false, "GET recent projects must not write project.vibe");
+  assert(!existsSync(bindingPath), "GET recent projects must not create the runtime-local binding");
+  assert(statSync(project004VibePath).mtimeMs === project004VibeBeforeRecent, "GET recent projects must not mutate 004 project.vibe");
+  assert(statSync(project005VibePath).mtimeMs === project005VibeBeforeRecent, "GET recent projects must not mutate 005 project.vibe");
+  assert(Array.isArray(recentUnbound.payload.choices), "GET recent projects choices missing");
+  assert(recentUnbound.payload.choices.some((choice) => choice.projectRoot === project004Root), "GET recent projects should include 004");
+  assert(recentUnbound.payload.choices.some((choice) => choice.projectRoot === project005Root), "GET recent projects should include 005");
+  assert(recentUnbound.payload.choices.every((choice) => typeof choice.displayName === "string" && choice.displayName.length > 0), "GET recent projects choices need display names");
+  assert(recentUnbound.payload.choices.every((choice) => !String(choice.projectRoot).startsWith("/")), "GET recent projects must not expose absolute project roots");
+  assert(!JSON.stringify(recentUnbound.payload).includes("/Users/"), "GET recent projects must not expose sensitive absolute paths");
 
   for (const [label, url, init] of [
     ["GET current real-chain status", `${baseUrl}/api/runtime/projects/current/real-chain/status`, undefined],
@@ -268,6 +287,12 @@ try {
   assert(select004.payload.projectVibeWritten === false, "POST select 004 must not write project.vibe");
   assert(statSync(project004VibePath).mtimeMs === project004VibeBefore, "POST select 004 must not mutate project.vibe");
   assert(JSON.parse(readFileSync(bindingPath, "utf8")).projectRoot === project004Root, "binding file should store 004 root");
+
+  const recentAfterSelect004 = await fetchJson(`${baseUrl}/api/runtime/projects/recent`);
+  assert(recentAfterSelect004.response.status === 200, "GET recent projects after select 004 should return 200");
+  assert(recentAfterSelect004.payload.choices[0]?.projectRoot === project004Root, "recent projects should put the bound project first");
+  assert(recentAfterSelect004.payload.choices[0]?.status === "当前", "recent projects should label the bound project as current");
+  assert(recentAfterSelect004.payload.choices.filter((choice) => choice.projectRoot === project004Root).length === 1, "recent projects should de-duplicate the bound fixture");
 
   const project004Status = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
   assert(project004Status.response.status === 200, "GET current status after select 004 should return 200");

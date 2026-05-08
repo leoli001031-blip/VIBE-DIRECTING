@@ -100,11 +100,14 @@ function assertCreatorPanelContract() {
   assert(/未选择项目/.test(surface), "ProjectRealChainPanel should expose unbound project copy");
   assert(/未同步/.test(surface), "ProjectRealChainPanel should expose unsynced project copy");
   assert(/项目路径/.test(surface), "ProjectRealChainPanel should expose project path selection copy");
+  assert(/最近项目/.test(surface), "ProjectRealChainPanel should expose recent projects copy");
   assert(/连接项目/.test(surface), "ProjectRealChainPanel should expose connect project copy");
   assert(/Preview[\s\S]*ready/.test(surface), "ProjectRealChainPanel should expose preview ready state");
   assert(/Production[\s\S]*needs_review/.test(surface), "ProjectRealChainPanel should expose production review state");
   assert(/displayTitle[\s\S]*状态已回流/.test(surface), "ProjectRealChainPanel should show the bound title for returned status");
   assert(/selectCurrentProjectBinding\(\{\s*projectRoot/.test(app), "App must select the current project through the runtime helper");
+  assert(/loadCurrentProjectChoices\(\)/.test(app), "App must load recent project choices through the runtime helper");
+  assert(/selectProjectChoice/.test(app), "App must route recent project choices through the current selection helper");
   assert(/refreshCurrentProjectPanels\(binding\)/.test(app), "App must refresh current binding and project panels after selection");
   assert(/loadCurrentProjectBindingStatus\(\)/.test(app), "App must load runtime current project binding first");
   assert(/currentProjectBindingIdentity\(runtimeProjectBinding\)/.test(app), "App must derive current project identity from runtime binding");
@@ -118,6 +121,7 @@ function assertCreatorPanelContract() {
 
 const {
   currentProjectBindingIdentity,
+  deriveCurrentProjectChoices,
   deriveCurrentProjectBindingStatus,
   deriveProjectRealChainStatus,
   deriveProjectImage2BatchPlanStatus,
@@ -180,6 +184,17 @@ const unboundBinding = deriveCurrentProjectBindingStatus({ status: "unbound" });
 assert(unboundBinding.status === "unbound", "unbound current project status should parse");
 assert(!currentProjectBindingIdentity(unboundBinding), "unbound current project must not produce an identity");
 assertProductCopy(unboundBinding.message);
+
+const currentChoices = deriveCurrentProjectChoices({
+  ok: true,
+  choices: [
+    { projectRoot: "real-test-sandbox/real-demo-e2e/004-image2-start-frames", displayName: "项目 004", projectId: "real_demo_e2e_004_image2_start_frames", status: "当前" },
+    { projectRoot: "/Users/lichenhao/Desktop/vibe core/absolute-leak", displayName: "不应显示" },
+  ],
+});
+assert(currentChoices.length === 1, "recent project choices should hide absolute paths");
+assert(currentChoices[0].displayName === "项目 004", "recent project choices should preserve product display names");
+assert(currentChoices[0].projectRoot.includes("004-image2-start-frames"), "recent project choices should remain selectable");
 
 const stale005Payload = {
   schemaVersion: "current_project_real_chain_status.v1",

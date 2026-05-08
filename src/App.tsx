@@ -89,11 +89,13 @@ import { applyPreRealTestClosure } from "./core/preRealTestClosure";
 import {
   currentProjectBindingIdentity,
   loadCurrentProjectBindingStatus,
+  loadCurrentProjectChoices,
   loadProjectImage2BatchPlan,
   loadProjectRealChainStatus,
   runProjectImage2BatchCheck,
   runProjectRealChainCheck,
   selectCurrentProjectBinding,
+  type ProjectCurrentChoice,
   type ProjectCurrentBindingStatus,
   type ProjectImage2BatchUiState,
   type ProjectRealChainPreviewItem,
@@ -7697,8 +7699,10 @@ function ProjectRealChainPanel({
   projectTitle,
   runtimeProjectBinding,
   projectPathInput,
+  projectChoices,
   projectSelectionStatus,
   onProjectPathChange,
+  onSelectProjectChoice,
   onConnectProject,
   onRun,
   onRunImage2Batch,
@@ -7709,8 +7713,10 @@ function ProjectRealChainPanel({
   projectTitle: string;
   runtimeProjectBinding: ProjectCurrentBindingStatus;
   projectPathInput: string;
+  projectChoices: ProjectCurrentChoice[];
   projectSelectionStatus?: "idle" | "connecting" | "connected" | "error";
   onProjectPathChange: (value: string) => void;
+  onSelectProjectChoice: (choice: ProjectCurrentChoice) => void;
   onConnectProject: () => void;
   onRun: () => void;
   onRunImage2Batch: () => void;
@@ -7761,6 +7767,21 @@ function ProjectRealChainPanel({
           {connecting ? "连接中" : "连接项目"}
         </button>
       </div>
+      {projectChoices.length > 0 && (
+        <div className="project-real-chain-recent" aria-label="最近项目">
+          <span>最近项目</span>
+          {projectChoices.slice(0, 3).map((choice) => (
+            <button
+              key={choice.projectRoot}
+              disabled={connecting}
+              onClick={() => onSelectProjectChoice(choice)}
+              title={choice.projectRoot}
+            >
+              {choice.displayName}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="project-real-chain-tags">
         <small>项目状态 {status}</small>
         <small>已返回 {returnedCount}/{plannedCount} 张</small>
@@ -7912,6 +7933,7 @@ function DirectorMode({
   currentProjectPreviewItems,
   projectImage2BatchState,
   runtimeProjectBinding,
+  projectChoices,
   directorView,
   activeSectionId,
   onSelectShot,
@@ -7926,6 +7948,7 @@ function DirectorMode({
   projectPathInput,
   projectSelectionStatus,
   onProjectPathChange,
+  onSelectProjectChoice,
   onConnectProject,
 }: {
   audit: ProjectAudit;
@@ -7944,6 +7967,7 @@ function DirectorMode({
   currentProjectPreviewItems?: PreviewQueueItem[];
   projectImage2BatchState: ProjectImage2BatchPanelState;
   runtimeProjectBinding: ProjectCurrentBindingStatus;
+  projectChoices: ProjectCurrentChoice[];
   directorView: DirectorView;
   activeSectionId?: string;
   onSelectShot: (id: string, additive?: boolean) => void;
@@ -7958,6 +7982,7 @@ function DirectorMode({
   projectPathInput: string;
   projectSelectionStatus?: "idle" | "connecting" | "connected" | "error";
   onProjectPathChange: (value: string) => void;
+  onSelectProjectChoice: (choice: ProjectCurrentChoice) => void;
   onConnectProject: () => void;
 }) {
   const activeSection = view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0];
@@ -7975,8 +8000,10 @@ function DirectorMode({
           projectTitle={runtimeState.project.title}
           runtimeProjectBinding={runtimeProjectBinding}
           projectPathInput={projectPathInput}
+          projectChoices={projectChoices}
           projectSelectionStatus={projectSelectionStatus}
           onProjectPathChange={onProjectPathChange}
+          onSelectProjectChoice={onSelectProjectChoice}
           onConnectProject={onConnectProject}
           onRun={onRunProjectRealChain}
           onRunImage2Batch={onRunProjectImage2Batch}
@@ -9338,6 +9365,7 @@ function App() {
   const [projectImage2BatchState, setProjectImage2BatchState] = useState<ProjectImage2BatchPanelState>({ status: "unavailable" });
   const [runtimeProjectBinding, setRuntimeProjectBinding] = useState<ProjectCurrentBindingStatus>({ status: "loading" });
   const [projectPathInput, setProjectPathInput] = useState("");
+  const [projectChoices, setProjectChoices] = useState<ProjectCurrentChoice[]>([]);
   const [projectSelectionStatus, setProjectSelectionStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
 
   function loadProjectState(nextState: ProjectRuntimeState) {
@@ -9373,6 +9401,9 @@ function App() {
         setRuntimeProjectBinding(binding);
         if (binding.status === "bound" && binding.projectRoot) setProjectPathInput(binding.projectRoot);
       }
+    });
+    loadCurrentProjectChoices().then((choices) => {
+      if (!cancelled) setProjectChoices(choices);
     });
     return () => {
       cancelled = true;
@@ -9567,14 +9598,15 @@ function App() {
     setProjectImage2BatchState(nextImage2BatchState);
   }
 
-  async function connectCurrentProject() {
-    const projectRoot = projectPathInput.trim();
+  async function connectCurrentProject(choice?: ProjectCurrentChoice) {
+    const projectRoot = (choice?.projectRoot || projectPathInput).trim();
     if (!projectRoot) {
       setProjectSelectionStatus("error");
       setProjectRealChainState({ status: "unavailable", message: "请输入项目路径。" });
       setProjectImage2BatchState({ status: "unavailable", message: "请输入项目路径。" });
       return;
     }
+    setProjectPathInput(projectRoot);
 
     setProjectSelectionStatus("connecting");
     setProjectRealChainState((current) => ({
@@ -9589,9 +9621,15 @@ function App() {
     }));
 
     try {
-      const binding = await selectCurrentProjectBinding({ projectRoot });
+      const binding = await selectCurrentProjectBinding({
+        projectRoot,
+        projectId: choice?.projectId,
+        displayName: choice?.displayName,
+      });
       if (binding.projectRoot) setProjectPathInput(binding.projectRoot);
       await refreshCurrentProjectPanels(binding);
+      const choices = await loadCurrentProjectChoices();
+      setProjectChoices(choices);
       setProjectSelectionStatus("connected");
     } catch {
       setRuntimeProjectBinding({ status: "unbound", message: "连接项目失败，请确认路径在当前工作区内并且项目文件可读取。" });
@@ -9599,6 +9637,10 @@ function App() {
       setProjectImage2BatchState({ status: "unavailable", message: "连接项目失败，请确认路径在当前工作区内并且项目文件可读取。" });
       setProjectSelectionStatus("error");
     }
+  }
+
+  function selectProjectChoice(choice: ProjectCurrentChoice) {
+    void connectCurrentProject(choice);
   }
 
   async function runProjectRealChain() {
@@ -9673,6 +9715,7 @@ function App() {
           projectImage2BatchState={projectImage2BatchState}
           runtimeProjectBinding={runtimeProjectBinding}
           projectPathInput={projectPathInput}
+          projectChoices={projectChoices}
           projectSelectionStatus={projectSelectionStatus}
           directorView={directorView}
           activeSectionId={resolvedActiveSectionId}
@@ -9686,6 +9729,7 @@ function App() {
           onRunProjectRealChain={runProjectRealChain}
           onRunProjectImage2Batch={runProjectImage2Batch}
           onProjectPathChange={setProjectPathInput}
+          onSelectProjectChoice={selectProjectChoice}
           onConnectProject={connectCurrentProject}
         />
       )}

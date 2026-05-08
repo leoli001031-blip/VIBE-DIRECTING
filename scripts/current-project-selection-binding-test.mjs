@@ -39,9 +39,12 @@ function okJson(payload) {
 
 const {
   currentProjectBindingIdentity,
+  deriveCurrentProjectChoices,
   loadCurrentProjectBindingStatus,
+  loadCurrentProjectChoices,
   loadProjectImage2BatchPlan,
   loadProjectRealChainStatus,
+  projectCurrentChoicesEndpoint,
   projectCurrentBindingEndpoint,
   projectCurrentSelectEndpoint,
   projectImage2BatchPlanEndpoint,
@@ -157,6 +160,34 @@ const noIdentityState = await loadProjectRealChainStatus(undefined);
 assert(noIdentityState.status === "unavailable", "real-chain status without binding identity must fail closed");
 assert(requests.length === 1 && requests[0].url === projectCurrentBindingEndpoint, "unbound status should not request project status endpoints");
 assert(!/005|fallback|endpoint|provider|ledger|prompt|queue/i.test(noIdentityState.message || ""), "unbound message must not leak engineering/demo details");
+
+const projectChoicesPayload = {
+  ok: true,
+  status: "ready",
+  choices: [
+    { projectRoot: "real-test-sandbox/real-demo-e2e/004-image2-start-frames", displayName: "项目 004", projectId: "real_demo_e2e_004_image2_start_frames", status: "可打开" },
+    { projectRoot: "/Users/lichenhao/Desktop/vibe core/absolute-leak", displayName: "bad absolute" },
+    { projectRoot: "real-test-sandbox/real-demo-e2e/004-image2-start-frames", displayName: "duplicate" },
+    { displayName: "missing root" },
+  ],
+};
+const choices = deriveCurrentProjectChoices(projectChoicesPayload);
+assert(choices.length === 1, "choices parser should keep only relative roots and de-duplicate exact repeats");
+assert(choices[0].displayName === "项目 004", "choices parser should keep product display name");
+assert(choices[0].projectRoot.includes("004-image2-start-frames"), "choices parser should keep selectable project root");
+assert(choices[0].projectId === "real_demo_e2e_004_image2_start_frames", "choices parser should keep optional project id");
+assert(choices[0].status === "可打开", "choices parser should keep product status");
+
+responseByUrl = new Map([[projectCurrentChoicesEndpoint, projectChoicesPayload]]);
+requests = [];
+const loadedChoices = await loadCurrentProjectChoices();
+assert(loadedChoices.length === 1, "choices helper should load safe project choices");
+assert(requests.length === 1 && requests[0].url === projectCurrentChoicesEndpoint, "choices helper should call the recent projects endpoint");
+
+responseByUrl = new Map();
+requests = [];
+const closedChoices = await loadCurrentProjectChoices();
+assert(Array.isArray(closedChoices) && closedChoices.length === 0, "choices helper must fail closed to an empty list");
 
 responseByUrl = new Map([[projectCurrentSelectEndpoint, currentProjectBindingResponse(project004)]]);
 requests = [];
