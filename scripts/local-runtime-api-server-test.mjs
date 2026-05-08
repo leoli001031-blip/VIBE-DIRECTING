@@ -66,6 +66,7 @@ function assertProjectRealChainPayload(payload, label) {
   assert005Payload(payload, label);
   assert(payload.projectionKind === "project_real_chain_status", `${label} projection kind mismatch`);
   assert(payload.projectRootMode === "sandbox_fixture_projection", `${label} project root mode mismatch`);
+  assert(/compatibility fallback/.test(payload.sourceLabel || ""), `${label} current project fallback label mismatch`);
   assert(payload.project?.projectId === "real_demo_e2e_005_anime_image2_start_frames", `${label} project id mismatch`);
   assert(payload.project?.runId === "real_demo_e2e_005_anime_image2_start_frames_run_20260507", `${label} project run id mismatch`);
   assert(payload.plannedImageCount === 8, `${label} planned image count mismatch`);
@@ -83,6 +84,7 @@ function assertImage2BatchPlanPayload(payload, label) {
   assert(payload.ok === true, `${label} should be ok`);
   assert(payload.projectionKind === "current_project_image2_batch_prepare_plan", `${label} projection kind mismatch`);
   assert(payload.projectRootMode === "sandbox_fixture_projection", `${label} project root mode mismatch`);
+  assert(/compatibility fallback/.test(payload.sourceLabel || ""), `${label} current project fallback label mismatch`);
   assert(payload.project?.projectId === "real_demo_e2e_005_anime_image2_start_frames", `${label} project id mismatch`);
   assert(payload.submitPolicy?.providerCallAllowed === false, `${label} provider calls must be disallowed`);
   assert(payload.submitPolicy?.dryRunOnly === true, `${label} should be dry-run only`);

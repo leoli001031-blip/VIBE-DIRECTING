@@ -106,6 +106,7 @@ async function fetchJson(url, init) {
 function assertCreatorPanelContract() {
   const appSource = readText("src/App.tsx");
   const stylesSource = readText("src/styles.css");
+  const app = findFunctionBody(appSource, "App");
   const panel = findFunctionBody(appSource, "ProjectRealChainPanel");
   const surface = `${panel}\n${findFunctionBody(appSource, "projectRealChainStatusLabel")}\n${findFunctionBody(appSource, "projectImage2BatchStatusLabel")}\n${findFunctionBody(appSource, "projectImage2BatchLedgerLabel")}`;
 
@@ -126,12 +127,19 @@ function assertCreatorPanelContract() {
   assert(/项目状态/.test(surface), "ProjectRealChainPanel should expose creator-facing project status copy");
   assert(/图片生成/.test(surface), "ProjectRealChainPanel should expose creator-facing image generation copy");
   assert(/projectTitle[\s\S]*状态已回流/.test(surface), "ProjectRealChainPanel should show project title for returned status");
+  assert(/currentProjectIdentity\(runtimeState\)/.test(app), "App must derive current project identity from runtime state");
+  assert(/loadProjectRealChainStatus\(runtimeProjectIdentity\)/.test(app), "App must guard real-chain status by current project identity");
+  assert(/loadProjectImage2BatchPlan\(runtimeProjectIdentity\)/.test(app), "App must guard Image2 batch status by current project identity");
+  assert(/runProjectRealChainCheck\(runtimeProjectIdentity\)/.test(app), "App run-check must carry current project identity");
+  assert(/runProjectImage2BatchCheck\(runtimeProjectIdentity\)/.test(app), "App Image2 check must carry current project identity");
   assert(!/real-demo-005/.test(`${appSource}\n${stylesSource}`), "app/styles should not retain 005 demo class names");
 }
 
 const {
   deriveProjectRealChainStatus,
   deriveProjectImage2BatchPlanStatus,
+  guardProjectRealChainUiStateForCurrentProject,
+  guardProjectImage2BatchUiStateForCurrentProject,
 } = await importProjectRealChainStatus();
 
 const child = spawn(process.execPath, ["scripts/local-runtime-api-server.mjs"], {
@@ -145,6 +153,8 @@ try {
   const { baseUrl } = await waitForServer(child);
   const realChainPayload = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
   const image2Payload = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-batch/plan`);
+  assert(/compatibility fallback/.test(realChainPayload.sourceLabel || ""), "default current-project runtime source should be marked as compatibility fallback");
+  assert(/compatibility fallback/.test(image2Payload.sourceLabel || ""), "default Image2 batch runtime source should be marked as compatibility fallback");
 
   const realChain = deriveProjectRealChainStatus(realChainPayload, "runtime_endpoint");
   assert(realChain.uiStatus === "production_needs_review", `real-chain UI status drifted: ${realChain.uiStatus}`);
@@ -157,6 +167,17 @@ try {
   assert(realChain.previewItems.every((item) => item.imageUrl || item.expectedOutputPath), "preview items should have media refs");
   assert(realChain.providerCalled === false, "real-chain status must not imply provider call");
   assert(realChain.prepareRan === false, "real-chain status must not imply prepare run");
+  const realChainMatched = guardProjectRealChainUiStateForCurrentProject(
+    { status: realChain.uiStatus, summary: realChain },
+    { projectId: realChain.projectId, projectRoot: realChain.projectRoot },
+  );
+  assert(realChainMatched.status === "production_needs_review", "matching real-chain identity should pass through");
+  const realChainMismatch = guardProjectRealChainUiStateForCurrentProject(
+    { status: realChain.uiStatus, summary: realChain },
+    { projectId: "small-project-one-shot", projectRoot: "fixtures/small-project-one-shot" },
+  );
+  assert(realChainMismatch.status === "unavailable", "mismatched real-chain identity should be blocked from current project UI");
+  assert(!realChainMismatch.summary, "mismatched real-chain identity must not leak another project's summary");
 
   const image2Batch = deriveProjectImage2BatchPlanStatus(image2Payload);
   assert(image2Batch.uiStatus === "ready_for_review", `image2 batch UI status drifted: ${image2Batch.uiStatus}`);
@@ -171,6 +192,17 @@ try {
   assert(image2Batch.providerCalled === false, "image2 batch must not call provider");
   assert(image2Batch.prepareRan === false, "image2 batch must not run prepare");
   assert(image2Batch.liveSubmitAllowed === false, "image2 batch must not allow live submit");
+  const image2Matched = guardProjectImage2BatchUiStateForCurrentProject(
+    { status: image2Batch.uiStatus, summary: image2Batch },
+    { projectId: image2Batch.projectId, projectRoot: image2Batch.projectRoot },
+  );
+  assert(image2Matched.status === "ready_for_review", "matching Image2 batch identity should pass through");
+  const image2Mismatch = guardProjectImage2BatchUiStateForCurrentProject(
+    { status: image2Batch.uiStatus, summary: image2Batch },
+    { projectId: "small-project-one-shot", projectRoot: "fixtures/small-project-one-shot" },
+  );
+  assert(image2Mismatch.status === "unavailable", "mismatched Image2 batch identity should be blocked from current project UI");
+  assert(!image2Mismatch.summary, "mismatched Image2 batch identity must not leak another project's summary");
 
   console.log("Current project UI closed-loop test passed. runtime -> report/preview -> UI projection is creator-facing; no provider was called.");
 } finally {

@@ -92,6 +92,7 @@ import {
   runProjectRealChainCheck,
   type ProjectImage2BatchUiState,
   type ProjectRealChainPreviewItem,
+  type ProjectRuntimeIdentity,
   type ProjectRealChainUiState,
   type ProjectRealChainUiStatus,
 } from "./core/projectRealChainStatus";
@@ -1017,6 +1018,13 @@ function runtimeLoadTarget() {
     statePath: "/runtime-state.json",
     auditPath: "/runtime-audit.json",
     label: "runtime-state",
+  };
+}
+
+function currentProjectIdentity(runtimeState: ProjectRuntimeState): ProjectRuntimeIdentity {
+  return {
+    projectId: runtimeState.sourceIndexSummary?.projectId || runtimeState.sourceIndex?.projectId || runtimeState.project.title,
+    projectRoot: runtimeState.project.root,
   };
 }
 
@@ -9375,18 +9383,25 @@ function App() {
     };
   }, []);
 
+  const runtimeProjectIdentity = useMemo(() => currentProjectIdentity(runtimeState), [
+    runtimeState.project.root,
+    runtimeState.project.title,
+    runtimeState.sourceIndex?.projectId,
+    runtimeState.sourceIndexSummary?.projectId,
+  ]);
+
   useEffect(() => {
     let cancelled = false;
-    loadProjectRealChainStatus().then((nextState) => {
+    loadProjectRealChainStatus(runtimeProjectIdentity).then((nextState) => {
       if (!cancelled) setProjectRealChainState(nextState);
     });
-    loadProjectImage2BatchPlan().then((nextState) => {
+    loadProjectImage2BatchPlan(runtimeProjectIdentity).then((nextState) => {
       if (!cancelled) setProjectImage2BatchState(nextState);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [runtimeProjectIdentity]);
 
   const audit = useMemo(() => auditFromProjectRuntimeState(runtimeState), [runtimeState]);
   const view = useMemo(
@@ -9470,7 +9485,7 @@ function App() {
       status: "running",
       message: "正在同步当前项目状态。",
     }));
-    const nextState = await runProjectRealChainCheck();
+    const nextState = await runProjectRealChainCheck(runtimeProjectIdentity);
     setProjectRealChainState(nextState);
   }
 
@@ -9480,7 +9495,7 @@ function App() {
       status: "running",
       message: "正在检查图片素材准备情况。",
     }));
-    const nextState = await runProjectImage2BatchCheck();
+    const nextState = await runProjectImage2BatchCheck(runtimeProjectIdentity);
     setProjectImage2BatchState(nextState);
   }
 

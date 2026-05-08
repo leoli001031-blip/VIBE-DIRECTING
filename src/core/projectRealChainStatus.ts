@@ -160,6 +160,11 @@ export type ProjectImage2BatchUiState = {
   message?: string;
 };
 
+export type ProjectRuntimeIdentity = {
+  projectId?: string;
+  projectRoot?: string;
+};
+
 type ProjectRealChainPayload = {
   schemaVersion?: string;
   source?: string;
@@ -281,6 +286,59 @@ function numberOrUndefined(value: unknown): number | undefined {
 
 function booleanOrUndefined(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
+}
+
+function normalizeIdentityPart(value?: string) {
+  return String(value || "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/\/+$/g, "")
+    .toLowerCase();
+}
+
+function compactUnique(values: string[]) {
+  return Array.from(new Set(values.map(normalizeIdentityPart).filter(Boolean)));
+}
+
+function currentProjectIdentityMatches(
+  actual: { projectId?: string; projectRoot?: string },
+  expected?: ProjectRuntimeIdentity,
+) {
+  const expectedParts = compactUnique([expected?.projectId || "", expected?.projectRoot || ""]);
+  if (!expectedParts.length) return true;
+  const actualParts = compactUnique([actual.projectId || "", actual.projectRoot || ""]);
+  if (!actualParts.length) return false;
+  return expectedParts.some((expectedPart) => actualParts.some((actualPart) => (
+    actualPart === expectedPart
+    || actualPart.endsWith(`/${expectedPart}`)
+    || expectedPart.endsWith(`/${actualPart}`)
+  )));
+}
+
+function projectMismatchMessage() {
+  return "当前项目状态还没有和本项目同步。请重新同步。";
+}
+
+export function guardProjectRealChainUiStateForCurrentProject(
+  state: ProjectRealChainUiState,
+  expected?: ProjectRuntimeIdentity,
+): ProjectRealChainUiState {
+  if (!state.summary || currentProjectIdentityMatches(state.summary, expected)) return state;
+  return {
+    status: "unavailable",
+    message: projectMismatchMessage(),
+  };
+}
+
+export function guardProjectImage2BatchUiStateForCurrentProject(
+  state: ProjectImage2BatchUiState,
+  expected?: ProjectRuntimeIdentity,
+): ProjectImage2BatchUiState {
+  if (!state.summary || currentProjectIdentityMatches(state.summary, expected)) return state;
+  return {
+    status: "unavailable",
+    message: projectMismatchMessage(),
+  };
 }
 
 function payloadFromUnknown(payload: unknown): ProjectRealChainPayload | undefined {
@@ -649,27 +707,27 @@ async function fallbackToReport(message: string): Promise<ProjectRealChainUiStat
   }
 }
 
-export async function loadProjectRealChainStatus(): Promise<ProjectRealChainUiState> {
+export async function loadProjectRealChainStatus(expected?: ProjectRuntimeIdentity): Promise<ProjectRealChainUiState> {
   try {
     const payload = await fetchRuntimeJson(projectRealChainStatusEndpoint);
     const summary = deriveProjectRealChainStatus(payload, "runtime_endpoint");
-    return { status: summary.uiStatus, summary };
+    return guardProjectRealChainUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (endpointError) {
-    return fallbackToReport(
+    return guardProjectRealChainUiStateForCurrentProject(await fallbackToReport(
       `Runtime project endpoint unavailable; attempted report fallback. ${endpointError instanceof Error ? endpointError.message : ""}`.trim(),
-    );
+    ), expected);
   }
 }
 
-export async function runProjectRealChainCheck(): Promise<ProjectRealChainUiState> {
+export async function runProjectRealChainCheck(expected?: ProjectRuntimeIdentity): Promise<ProjectRealChainUiState> {
   try {
     const payload = await fetchRuntimeJson(projectRealChainRunCheckEndpoint, { method: "POST" });
     const summary = deriveProjectRealChainStatus(payload, "runtime_endpoint");
-    return { status: summary.uiStatus, summary };
+    return guardProjectRealChainUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (endpointError) {
-    return fallbackToReport(
+    return guardProjectRealChainUiStateForCurrentProject(await fallbackToReport(
       `Runtime project run-check endpoint unavailable; synced report fallback only. ${endpointError instanceof Error ? endpointError.message : ""}`.trim(),
-    );
+    ), expected);
   }
 }
 
@@ -677,11 +735,11 @@ async function unavailableImage2BatchState(message: string): Promise<ProjectImag
   return { status: "unavailable", message };
 }
 
-export async function loadProjectImage2BatchPlan(): Promise<ProjectImage2BatchUiState> {
+export async function loadProjectImage2BatchPlan(expected?: ProjectRuntimeIdentity): Promise<ProjectImage2BatchUiState> {
   try {
     const payload = await fetchRuntimeJson(projectImage2BatchPlanEndpoint);
     const summary = deriveProjectImage2BatchPlanStatus(payload);
-    return { status: summary.uiStatus, summary };
+    return guardProjectImage2BatchUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (endpointError) {
     return unavailableImage2BatchState(
       `Runtime Image2 batch plan endpoint unavailable. ${endpointError instanceof Error ? endpointError.message : ""}`.trim(),
@@ -689,11 +747,11 @@ export async function loadProjectImage2BatchPlan(): Promise<ProjectImage2BatchUi
   }
 }
 
-export async function runProjectImage2BatchCheck(): Promise<ProjectImage2BatchUiState> {
+export async function runProjectImage2BatchCheck(expected?: ProjectRuntimeIdentity): Promise<ProjectImage2BatchUiState> {
   try {
     const payload = await fetchRuntimeJson(projectImage2BatchRunCheckEndpoint, { method: "POST" });
     const summary = deriveProjectImage2BatchPlanStatus(payload);
-    return { status: summary.uiStatus, summary };
+    return guardProjectImage2BatchUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (endpointError) {
     return unavailableImage2BatchState(
       `Runtime Image2 batch run-check endpoint unavailable. ${endpointError instanceof Error ? endpointError.message : ""}`.trim(),

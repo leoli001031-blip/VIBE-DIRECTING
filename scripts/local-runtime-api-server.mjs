@@ -135,8 +135,8 @@ function currentProjectSource() {
   }
   return resolveProjectSource(sandboxRunRootRelativePath, {
     projectRootMode: "sandbox_fixture_projection",
-    sourceLabel: "runtime endpoint / project projection",
-    sandboxSource: "005 sandbox",
+    sourceLabel: "runtime endpoint / current project compatibility fallback",
+    sandboxSource: "005 compatibility fallback",
   });
 }
 
