@@ -23,6 +23,7 @@ export const projectImage2BatchRunCheckEndpoint = `${projectRealChainRuntimeBase
 export const projectImage2OneShotStatusEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/status`;
 export const projectImage2OneShotPrepareEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/prepare`;
 export const projectImage2OneShotConfirmEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/confirm`;
+export const projectImage2OneShotPrepareTriggerEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/prepare-trigger`;
 export const projectImage2OneShotReturnEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/return`;
 export const projectImage2OneShotExecuteReturnEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/execute-return`;
 export const projectRealChainFileEndpoint = `${projectRealChainRuntimeBasePath}/files`;
@@ -258,6 +259,7 @@ export type ProjectImage2OneShotUiStatus =
   | "ready_to_prepare"
   | "prepared"
   | "handoff_prepared"
+  | "trigger_plan_prepared"
   | "waiting_file"
   | "needs_review"
   | "blocked"
@@ -271,8 +273,11 @@ export type ProjectImage2OneShotReceipt = {
   selectedShotIds?: string[];
   imageCount?: number;
   expectedOutputPath?: string;
+  promptPath?: string;
+  promptText?: string;
   providerObservationPath?: string;
   semanticQaPath?: string;
+  triggerPlanPath?: string;
   handoffPacketPath?: string;
   blockers?: string[];
 };
@@ -283,8 +288,11 @@ export type ProjectImage2OneShotStatus = {
   projectRoot?: string;
   selectedShotId?: string;
   expectedOutputPath?: string;
+  promptPath?: string;
+  promptText?: string;
   providerObservationPath?: string;
   semanticQaPath?: string;
+  triggerPlanPath?: string;
   handoffPacketPath?: string;
   receipt?: ProjectImage2OneShotReceipt;
   userLabel: string;
@@ -456,8 +464,11 @@ type ProjectImage2OneShotPayload = {
   projectRoot?: string;
   selectedShotId?: string;
   expectedOutputPath?: string;
+  promptPath?: string;
+  promptText?: string;
   providerObservationPath?: string;
   semanticQaPath?: string;
+  triggerPlanPath?: string;
   handoffPacketPath?: string;
   receipt?: ProjectImage2OneShotReceipt;
   watcherProjection?: {
@@ -1020,6 +1031,7 @@ function oneShotPayloadFromUnknown(payload: unknown): ProjectImage2OneShotPayloa
 function normalizeOneShotStatus(value?: string): ProjectImage2OneShotUiStatus {
   if (value === "prepared") return "prepared";
   if (value === "handoff_prepared") return "handoff_prepared";
+  if (value === "trigger_plan_prepared") return "trigger_plan_prepared";
   if (value === "waiting_file") return "waiting_file";
   if (value === "needs_review") return "needs_review";
   if (value === "blocked") return "blocked";
@@ -1051,11 +1063,14 @@ export function deriveProjectImage2OneShotStatus(payload: unknown): ProjectImage
     projectRoot: project.projectRoot || report.projectRoot,
     selectedShotId: report.selectedShotId,
     expectedOutputPath: report.expectedOutputPath,
+    promptPath: report.promptPath,
+    promptText: report.promptText,
     providerObservationPath: report.providerObservationPath,
     semanticQaPath: report.semanticQaPath,
+    triggerPlanPath: report.triggerPlanPath,
     handoffPacketPath: report.handoffPacketPath,
     receipt: report.receipt,
-    userLabel: report.userLabel || (rawStatus === "prepared" ? "确认生成" : rawStatus === "handoff_prepared" || rawStatus === "waiting_file" ? "等待文件" : rawStatus === "needs_review" ? "需要复核" : "生成小样"),
+    userLabel: report.userLabel || (rawStatus === "prepared" ? "确认生成" : rawStatus === "trigger_plan_prepared" ? "等待确认" : rawStatus === "handoff_prepared" || rawStatus === "waiting_file" ? "等待文件" : rawStatus === "needs_review" ? "需要复核" : "生成小样"),
     outputExists: report.watcherProjection?.outputExists === true || Boolean(report.previewProjection?.imageUrl),
     imageUrl: report.previewProjection?.imageUrl ? toRuntimeUrl(report.previewProjection.imageUrl) : undefined,
     reviewRequired: report.previewProjection?.reviewRequired === true,
@@ -1288,6 +1303,33 @@ export async function confirmProjectImage2OneShot(
     return guardProjectImage2OneShotUiStateForCurrentProject({ status: summary.uiStatus, summary, receipt: summary.receipt, message: summary.message }, expected);
   } catch {
     return { status: "blocked", message: "确认生成失败，请重新生成小样。" };
+  }
+}
+
+export async function prepareProjectImage2OneShotTrigger(
+  expected?: ProjectRuntimeIdentity,
+  receipt?: ProjectImage2OneShotReceipt,
+): Promise<ProjectImage2OneShotUiState> {
+  if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
+  if (!receipt?.selectedShotId) return { status: "blocked", message: "请先确认生成小样。" };
+
+  try {
+    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2OneShotPrepareTriggerEndpoint, expected), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        selectedShotId: receipt.selectedShotId,
+        selectedShotIds: [receipt.selectedShotId],
+        imageCount: 1,
+        expectedOutputPath: receipt.expectedOutputPath,
+        receiptId: receipt.receiptId,
+        transportMode: "codex_app_server",
+      }),
+    });
+    const summary = deriveProjectImage2OneShotStatus(payload);
+    return guardProjectImage2OneShotUiStateForCurrentProject({ status: summary.uiStatus, summary, receipt: summary.receipt || receipt, message: summary.message }, expected);
+  } catch {
+    return { status: "blocked", message: "真实触发计划准备失败，请重新确认小样。" };
   }
 }
 

@@ -4,6 +4,12 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  buildCurrentProjectImage2TransportPlan,
+  currentProjectImage2ForbiddenProviders,
+  currentProjectImage2TransportModes,
+  normalizeCurrentProjectImage2TransportMode,
+} from "./current-project-image2-transport-contract.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -27,6 +33,7 @@ const currentProjectImage2BatchRunCheckEndpoint = `${runtimeBasePath}/projects/c
 const currentProjectImage2OneShotStatusEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/status`;
 const currentProjectImage2OneShotPrepareEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/prepare`;
 const currentProjectImage2OneShotConfirmEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/confirm`;
+const currentProjectImage2OneShotPrepareTriggerEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/prepare-trigger`;
 const currentProjectImage2OneShotExecuteMockEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/execute-mock`;
 const currentProjectImage2OneShotReturnEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/return`;
 const currentProjectImage2OneShotExecuteReturnEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/execute-return`;
@@ -1257,21 +1264,13 @@ function oneShotQaChecklist(shotId) {
   ];
 }
 
-const oneShotTransportModes = new Set(["manual", "codex_app_server", "codex_cli"]);
+const oneShotTransportModes = new Set(currentProjectImage2TransportModes);
 const oneShotExecutorModes = new Set(["mock_executor", "dry_run_executor", "real_provider_call"]);
 const rawSecretValuePattern = /(^sk-[a-z0-9_-]{8,}|^bearer\s+|api[_-]?key=|private[_-]?key|raw-secret)/i;
 const secretKeyPattern = /(api[_-]?key|access[_-]?token|secret|password|bearer|credentialmaterial|rawcredential|private[_-]?key)/i;
 
 function oneShotTransportMode(input) {
-  const raw = String(input.transportMode || "").trim();
-  if (!raw) return { mode: "manual", provided: false, valid: true };
-  const normalized = raw.toLowerCase();
-  return {
-    mode: oneShotTransportModes.has(normalized) ? normalized : "manual",
-    raw,
-    provided: true,
-    valid: oneShotTransportModes.has(normalized),
-  };
+  return normalizeCurrentProjectImage2TransportMode(input.transportMode);
 }
 
 function oneShotExecutorMode(input) {
@@ -1331,6 +1330,7 @@ function oneShotStatePaths(shotRoot) {
     stateRoot,
     receiptStatePath: `${stateRoot}/prepare-receipt.json`,
     handoffStatePath: `${stateRoot}/handoff-packet.json`,
+    triggerPlanStatePath: `${stateRoot}/trigger-plan.json`,
   };
 }
 
@@ -1392,6 +1392,8 @@ function oneShotTransportPlan(mode, {
   projectId,
   projectRoot,
   selectedShotId,
+  promptPath,
+  promptText,
   expectedOutputPath,
   providerObservationPath,
   semanticQaPath,
@@ -1411,6 +1413,8 @@ function oneShotTransportPlan(mode, {
     projectRoot,
     selectedShotId,
     receiptId,
+    promptPath,
+    promptText,
     expectedOutputPath,
     providerObservationPath,
     semanticQaPath,
@@ -1418,11 +1422,15 @@ function oneShotTransportPlan(mode, {
     receiptStatePath,
     handoffStatePath,
     actualExecutionAllowed: false,
+    providerCallAllowed: false,
     providerCalled: false,
+    actualImage2Triggered: false,
     liveSubmitAllowed: false,
     workerSpawnForbidden: true,
     projectVibeWritten: false,
     requiresActionTimeConfirmation: true,
+    actionTimeConfirmationRequired: true,
+    forbiddenProviders: [...currentProjectImage2ForbiddenProviders],
     outputMustReturnVia: "expected_output_and_sidecars",
   };
   if (mode === "codex_app_server") {
@@ -1445,6 +1453,14 @@ function oneShotTransportPlan(mode, {
       externalCommandPreparedOnly: true,
     };
   }
+  if (mode === "disabled") {
+    return {
+      ...base,
+      target: "disabled",
+      disabled: true,
+      blockers: ["Image2 transport mode is disabled for this request."],
+    };
+  }
   return {
     ...base,
     target: "manual",
@@ -1460,10 +1476,14 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
   const selectedShotId = input.selectedShotId;
   const selectedShotIds = input.selectedShotIds || [];
   const selectedShot = shots.find((shot) => shot.id === selectedShotId);
+  const shotPlans = Array.isArray(projectFacts.runManifest?.shotPlans) ? projectFacts.runManifest.shotPlans : [];
+  const selectedShotPlan = shotPlans.find((shotPlan) => shotPlan?.shotId === selectedShotId) || {};
   const sandboxRoot = `${source.runRootRelativePath}/real-trigger-one-shot`;
   const shotRoot = `${sandboxRoot}/${safePathSegment(selectedShotId)}`;
   const statePaths = oneShotStatePaths(shotRoot);
   const expectedOutputPath = input.expectedOutputPath || `${shotRoot}/image2-start.png`;
+  const promptPath = runtimeRelativeFromValue(selectedShotPlan.promptPath) || `${source.runRootRelativePath}/prompt_requests/${safePathSegment(selectedShotId)}_start_frame_prompt.md`;
+  const promptText = promptPath && runtimePathExists(promptPath) ? readFileSync(scopedRepoPath(promptPath), "utf8") : "";
   const providerObservationPath = `${shotRoot}/provider_observations/image2-start-provider-observation.json`;
   const semanticQaPath = `${shotRoot}/semantic_qa/image2-start-semantic-qa.json`;
   const handoffPacketPath = `${shotRoot}/handoff/image2-start-handoff-packet.json`;
@@ -1471,6 +1491,7 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
   const qaReportPath = `${shotRoot}/qa/semantic-qa.json`;
   const persistedReceipt = oneShotStateJson(statePaths.receiptStatePath, statePaths.stateRoot, sandboxRoot);
   const persistedHandoff = oneShotStateJson(statePaths.handoffStatePath, statePaths.stateRoot, sandboxRoot);
+  const persistedTriggerPlan = oneShotStateJson(statePaths.triggerPlanStatePath, statePaths.stateRoot, sandboxRoot);
   const persistedTransportMode = asString(input.receipt?.transportMode)
     || asString(persistedReceipt?.transportMode)
     || asString(persistedHandoff?.transportPlan?.mode);
@@ -1498,6 +1519,7 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
     selectedShotIds.length === 1 ? "" : "Image2 one-shot requires exactly one selected shot.",
     input.imageCount === 1 ? "" : "Image2 one-shot requires exactly one image.",
     selectedShot ? "" : "Selected shot was not found in the current project story flow.",
+    transport.mode === "disabled" ? "Image2 transport mode is disabled for this request." : "",
     outputPathSafe ? "" : "Expected output path must stay inside the current project one-shot sandbox.",
     sidecarPathsSafe ? "" : "Observation, QA, manifest, and handoff paths must stay inside the one-shot sandbox.",
     lockedReferences.characters.length ? "" : "Locked character reference is required for this shot.",
@@ -1509,6 +1531,8 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
     projectId: project.projectId,
     projectRoot: project.projectRoot,
     selectedShotId,
+    promptPath,
+    promptText,
     expectedOutputPath,
     providerObservationPath,
     semanticQaPath,
@@ -1533,6 +1557,8 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
     imageCount: input.imageCount,
     oneShotOnly,
     expectedOutputPath,
+    promptPath,
+    promptText,
     providerObservationPath,
     semanticQaPath,
     handoffPacketPath,
@@ -1546,6 +1572,7 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
       qaReportPath,
       receiptStatePath: statePaths.receiptStatePath,
       handoffStatePath: statePaths.handoffStatePath,
+      triggerPlanStatePath: statePaths.triggerPlanStatePath,
       outsideRootWriteAllowed: false,
     },
     lockedReferences: {
@@ -1592,6 +1619,14 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
     && oneShotHandoffMatches(persistedHandoff, receipt)
     && persistedHandoff.providerCalled === false
     && persistedHandoff.liveSubmitAllowed === false;
+  const persistedTriggerPlanUsable = action === "status"
+    && persistedHandoffUsable
+    && isRecord(persistedTriggerPlan)
+    && persistedTriggerPlan.status === "trigger_plan_prepared"
+    && persistedTriggerPlan.receiptId === receipt.receiptId
+    && persistedTriggerPlan.handoffId === `handoff_${receipt.receiptId}`
+    && persistedTriggerPlan.providerCalled === false
+    && persistedTriggerPlan.actualImage2Triggered === false;
   const handoffPacket = {
     packetId: `handoff_${receipt.receiptId}`,
     schemaVersion: "vibe_core_current_project_image2_one_shot_handoff_packet_v1",
@@ -1609,6 +1644,8 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
     workerSpawnForbidden: true,
     projectVibeWritten: false,
     expectedOutputPath,
+    promptPath,
+    promptText,
     providerObservationPath,
     semanticQaPath,
     receiptStatePath: statePaths.receiptStatePath,
@@ -1618,6 +1655,7 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
       mode: "codex_app_server_handoff_only",
       selectedShotId,
       expectedOutputPath,
+      promptPath,
       providerObservationPath,
       semanticQaPath,
       qaChecklistPath: qaReportPath,
@@ -1639,6 +1677,8 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
     ? "blocked"
     : outputExists && (semantic.passed || semantic.needsReview || semantic.present)
       ? "needs_review"
+      : persistedTriggerPlanUsable
+        ? "trigger_plan_prepared"
       : handoffForResponse
         ? "handoff_prepared"
         : action === "prepare" || persistedReceiptUsable
@@ -1646,6 +1686,8 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
           : "ready_to_prepare";
   const userLabel = status === "prepared"
     ? "确认生成"
+    : status === "trigger_plan_prepared"
+      ? "等待确认"
     : status === "handoff_prepared"
       ? "等待文件"
       : status === "needs_review"
@@ -1698,6 +1740,8 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
     selectedShotId,
     selectedShotIds,
     expectedOutputPath,
+    promptPath,
+    promptText,
     providerObservationPath,
     semanticQaPath,
     handoffPacketPath,
@@ -1708,8 +1752,10 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
     persistedState: {
       receiptPresent: persistedReceiptUsable || (action === "prepare" && confirmBlockers.length === 0) || confirmed,
       handoffPresent: persistedHandoffUsable || confirmed,
+      triggerPlanPresent: persistedTriggerPlanUsable,
       receiptStatePath: statePaths.receiptStatePath,
       handoffStatePath: statePaths.handoffStatePath,
+      triggerPlanStatePath: statePaths.triggerPlanStatePath,
     },
     watcherProjection: {
       expectedOutputPath,
@@ -1725,7 +1771,7 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
     },
     previewProjection: {
       shotId: selectedShotId,
-      status: outputExists ? (semantic.needsReview ? "needs_review" : "returned") : handoffForResponse ? "waiting_file" : "not_started",
+      status: outputExists ? (semantic.needsReview ? "needs_review" : "returned") : persistedTriggerPlanUsable ? "waiting_action_time_confirmation" : handoffForResponse ? "waiting_file" : "not_started",
       imageUrl: outputExists ? runtimeFileUrl(expectedOutputPath) : undefined,
       reviewRequired: semantic.needsReview,
     },
@@ -1739,12 +1785,202 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
       artifactFileMutationAllowed: false,
       statePersistenceAllowed: true,
     },
+    providerCallAllowed: false,
+    actualExecutionAllowed: false,
+    actionTimeConfirmationRequired: true,
     providerCalled: false,
+    actualImage2Triggered: false,
     liveSubmitAllowed: false,
     projectVibeWritten: false,
     workerSpawnForbidden: true,
     blockers: confirmBlockers,
     message: confirmBlockers.length ? "小样暂时受阻，请补齐镜头、引用或输出位置。" : undefined,
+    ...extra,
+  };
+}
+
+function currentProjectImage2OneShotPrepareTriggerResponse(input, extra = {}, source = currentProjectSource()) {
+  const generatedAt = new Date().toISOString();
+  const statusProjection = currentProjectImage2OneShotResponse("status", {
+    selectedShotId: input.selectedShotId,
+    selectedShotIds: input.selectedShotIds,
+    imageCount: input.imageCount,
+    transportMode: input.transportMode,
+  }, {}, source);
+  const statePaths = statusProjection.statePaths || {};
+  const sandboxRoot = statusProjection.receipt?.sandbox?.root;
+  const shotRoot = statusProjection.receipt?.sandbox?.shotRoot;
+  const receipt = oneShotStateJson(statePaths.receiptStatePath, statePaths.stateRoot, sandboxRoot);
+  const handoff = oneShotStateJson(statePaths.handoffStatePath, statePaths.stateRoot, sandboxRoot);
+  const promptPath = handoff?.promptPath || receipt?.promptPath || statusProjection.promptPath;
+  const promptText = handoff?.promptText || receipt?.promptText || statusProjection.promptText || "";
+  const expectedOutputPath = handoff?.expectedOutputPath || receipt?.expectedOutputPath || statusProjection.expectedOutputPath;
+  const providerObservationPath = handoff?.providerObservationPath || receipt?.providerObservationPath || statusProjection.providerObservationPath;
+  const semanticQaPath = handoff?.semanticQaPath || receipt?.semanticQaPath || statusProjection.semanticQaPath;
+  const triggerPlanPath = `${shotRoot}/trigger-plan/image2-start-trigger-plan.json`;
+  const handoffId = handoff?.packetId || (receipt?.receiptId ? `handoff_${receipt.receiptId}` : undefined);
+  const transportPlan = buildCurrentProjectImage2TransportPlan({
+    generatedAt,
+    cwd: repoRoot,
+    transportMode: input.transportMode || handoff?.transportPlan?.mode || receipt?.transportMode || "manual",
+    requestedTransportMode: input.requestedTransportMode,
+    selectedShotId: handoff?.selectedShotId || receipt?.selectedShotId || input.selectedShotId,
+    selectedShotIds: handoff?.selectedShotIds || receipt?.selectedShotIds || input.selectedShotIds,
+    receiptId: receipt?.receiptId || input.receiptId,
+    handoffId,
+    promptPath,
+    promptText,
+    expectedOutputPath,
+    providerObservationPath,
+    semanticQaPath,
+    triggerPlanPath,
+    receiptStatePath: statePaths.receiptStatePath,
+    handoffStatePath: statePaths.handoffStatePath,
+  });
+  const pathSafe = oneShotExecutorPathInsideSandbox(triggerPlanPath, sandboxRoot, shotRoot);
+  const blockers = uniqueStrings([
+    isRecord(receipt) ? "" : "Persisted prepare receipt is required before trigger-plan.",
+    isRecord(handoff) ? "" : "Persisted handoff packet is required before trigger-plan.",
+    handoff?.status === "ready_for_manual_transport" ? "" : "Handoff must be ready_for_manual_transport before trigger-plan.",
+    receipt?.status === "prepared" ? "" : "Prepare receipt must be status=prepared before trigger-plan.",
+    pathSafe ? "" : "Trigger plan path must stay inside the one-shot sandbox.",
+    transportPlan.transportModeAllowed ? "" : "Transport mode must be manual, codex_app_server, codex_cli, or disabled.",
+    transportPlan.transportMode === "disabled" ? "Image2 transport mode is disabled for this request." : "",
+    promptPath && promptText ? "" : "Prompt path and prompt text are required before trigger-plan.",
+  ]);
+  const triggerManifest = {
+    schemaVersion: "vibe_core_current_project_image2_one_shot_trigger_plan_v1",
+    generatedAt,
+    status: blockers.length ? "blocked" : "trigger_plan_prepared",
+    selectedShotId: transportPlan.selectedShotId,
+    selectedShotIds: transportPlan.selectedShotIds,
+    receiptId: transportPlan.receiptId,
+    handoffId: transportPlan.handoffId,
+    promptPath,
+    promptText,
+    expectedOutputPath,
+    providerObservationPath,
+    semanticQaPath,
+    forbiddenProviders: [...currentProjectImage2ForbiddenProviders],
+    providerCallAllowed: false,
+    actualExecutionAllowed: false,
+    actionTimeConfirmationRequired: true,
+    transportPlan,
+    instruction: transportPlan.clearInstruction,
+    returnExecutorInstruction: transportPlan.returnExecutorInstruction,
+    providerCalled: false,
+    actualImage2Triggered: false,
+    projectVibeWritten: false,
+    workerSpawnForbidden: true,
+    blockers,
+  };
+
+  let writeError;
+  if (blockers.length === 0) {
+    try {
+      writeOneShotExecutorJson(triggerPlanPath, triggerManifest, sandboxRoot, shotRoot);
+      writeOneShotStateJson(statePaths.triggerPlanStatePath, triggerManifest, statePaths.stateRoot, sandboxRoot);
+    } catch (error) {
+      writeError = error instanceof Error ? error.message : "Trigger plan write failed.";
+    }
+  }
+  const finalBlockers = uniqueStrings([...blockers, writeError]);
+  const ok = finalBlockers.length === 0;
+
+  return {
+    ok,
+    ...runtimePolicy({
+      runMode: "current_project_image2_one_shot_prepare_trigger_plan",
+      providerCalled: false,
+      prepareRan: false,
+      projectVibeWritten: false,
+      liveSubmitAllowed: false,
+      workerSpawnForbidden: true,
+      dryRunOnly: true,
+    }),
+    endpoint: currentProjectImage2OneShotPrepareTriggerEndpoint,
+    source: "runtime_endpoint",
+    sourceLabel: source.sourceLabel,
+    projectionKind: "current_project_image2_one_shot_trigger_plan",
+    currentProject: statusProjection.currentProject,
+    requestContext: {
+      ...statusProjection.requestContext,
+      selectedShotId: input.selectedShotId,
+      receiptId: input.receiptId || receipt?.receiptId,
+    },
+    projectRootMode: source.projectRootMode,
+    projectRoot: statusProjection.projectRoot,
+    projectId: statusProjection.projectId,
+    project: statusProjection.project,
+    status: ok ? "trigger_plan_prepared" : "blocked",
+    uiStatus: ok ? "trigger_plan_prepared" : "blocked",
+    userLabel: ok ? "等待确认" : "待补齐",
+    selectedShotId: transportPlan.selectedShotId,
+    selectedShotIds: transportPlan.selectedShotIds,
+    receiptId: transportPlan.receiptId,
+    handoffId: transportPlan.handoffId,
+    promptPath,
+    promptText,
+    expectedOutputPath,
+    providerObservationPath,
+    semanticQaPath,
+    triggerPlanPath,
+    forbiddenProviders: [...currentProjectImage2ForbiddenProviders],
+    statePaths,
+    receipt,
+    handoffPacket: handoff,
+    triggerManifest,
+    transportPlan,
+    commandPreview: transportPlan.commandPreview,
+    appServerPayloadPreview: transportPlan.appServerPayloadPreview,
+    persistedState: {
+      receiptPresent: isRecord(receipt),
+      handoffPresent: isRecord(handoff),
+      triggerPlanPresent: ok && runtimePathExists(triggerPlanPath),
+      receiptStatePath: statePaths.receiptStatePath,
+      handoffStatePath: statePaths.handoffStatePath,
+      triggerPlanStatePath: statePaths.triggerPlanStatePath,
+    },
+    watcherProjection: {
+      expectedOutputPath,
+      providerObservationPath,
+      semanticQaPath,
+      outputExists: runtimePathExists(expectedOutputPath),
+      providerObservationPresent: runtimePathExists(providerObservationPath),
+      semanticQaPresent: runtimePathExists(semanticQaPath),
+      watcherStarted: false,
+      daemonStarted: false,
+      reportProjectionOnly: true,
+    },
+    previewProjection: {
+      shotId: transportPlan.selectedShotId,
+      status: ok ? "waiting_action_time_confirmation" : "blocked",
+      reviewRequired: false,
+      providerCalled: false,
+      actualImage2Triggered: false,
+    },
+    submitPolicy: {
+      providerCallAllowed: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      realProviderCallAllowed: false,
+      manualTransportRequired: true,
+      actionTimeConfirmationRequired: true,
+      dryRunOnly: true,
+      noWorkerSpawn: true,
+      projectVibeMutationAllowed: false,
+      statePersistenceAllowed: true,
+    },
+    providerCallAllowed: false,
+    actualExecutionAllowed: false,
+    actionTimeConfirmationRequired: true,
+    providerCalled: false,
+    actualImage2Triggered: false,
+    liveSubmitAllowed: false,
+    projectVibeWritten: false,
+    workerSpawnForbidden: true,
+    blockers: finalBlockers,
+    message: ok ? "真实 Image2 触发计划已准备，等待 action-time confirmation；本 endpoint 未执行 provider。" : "真实 Image2 触发计划暂时受阻。",
     ...extra,
   };
 }
@@ -3479,6 +3715,7 @@ function isCurrentProjectEndpoint(pathname) {
     || pathname === currentProjectImage2OneShotStatusEndpoint
     || pathname === currentProjectImage2OneShotPrepareEndpoint
     || pathname === currentProjectImage2OneShotConfirmEndpoint
+    || pathname === currentProjectImage2OneShotPrepareTriggerEndpoint
     || pathname === currentProjectImage2OneShotExecuteMockEndpoint
     || pathname === currentProjectImage2OneShotReturnEndpoint
     || pathname === currentProjectImage2OneShotExecuteReturnEndpoint;
@@ -3596,6 +3833,7 @@ async function handleRequest(req, res) {
         currentProjectImage2OneShotStatusEndpoint,
         currentProjectImage2OneShotPrepareEndpoint,
         currentProjectImage2OneShotConfirmEndpoint,
+        currentProjectImage2OneShotPrepareTriggerEndpoint,
         currentProjectImage2OneShotExecuteMockEndpoint,
         currentProjectImage2OneShotReturnEndpoint,
         currentProjectImage2OneShotExecuteReturnEndpoint,
@@ -3685,6 +3923,17 @@ async function handleRequest(req, res) {
     if (!routeContext) return;
     const input = oneShotRequestInput(url, routeContext.body);
     const payload = currentProjectImage2OneShotResponse("confirm", input, {
+      running,
+      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
+    }, routeContext.source);
+    writeJson(res, payload.ok === false ? 409 : 200, payload);
+    return;
+  }
+  if (req.method === "POST" && url.pathname === currentProjectImage2OneShotPrepareTriggerEndpoint) {
+    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2OneShotPrepareTriggerEndpoint);
+    if (!routeContext) return;
+    const input = oneShotRequestInput(url, routeContext.body);
+    const payload = currentProjectImage2OneShotPrepareTriggerResponse(input, {
       running,
       ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
     }, routeContext.source);

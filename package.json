@@ -73,6 +73,7 @@
     "current-project-software-pressure:test": "node scripts/current-project-software-pressure-test.mjs",
     "current-project-round1-software-scale:test": "node scripts/current-project-round1-software-scale-test.mjs",
     "current-project-round2-anime-start-frame-package:test": "node scripts/current-project-round2-anime-start-frame-package.mjs",
+    "current-project-round2-trigger-plan:test": "node scripts/current-project-round2-trigger-plan-test.mjs",
     "current-project-real-image2-readiness:test": "node scripts/current-project-real-image2-readiness-test.mjs",
     "current-project-image2-return-executor:test": "node scripts/current-project-image2-return-executor-test.mjs",
     "current-project-selection-binding:test": "node scripts/current-project-selection-binding-test.mjs",

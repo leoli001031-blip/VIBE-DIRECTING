@@ -102,6 +102,7 @@ import {
   loadProjectImage2BatchPlan,
   loadProjectRealChainStatus,
   prepareProjectImage2OneShot,
+  prepareProjectImage2OneShotTrigger,
   runProjectImage2BatchCheck,
   runProjectRealChainCheck,
   selectCurrentProjectBinding,
@@ -7825,7 +7826,7 @@ function ProjectRealChainPanel({
   const disabled = !projectBound || running;
   const reviewDisabled = !projectBound || image2BatchRunning;
   const sampleReady = image2OneShotState.status === "prepared";
-  const sampleWaiting = image2OneShotState.status === "handoff_prepared" || image2OneShotState.status === "waiting_file";
+  const sampleWaiting = image2OneShotState.status === "handoff_prepared" || image2OneShotState.status === "trigger_plan_prepared" || image2OneShotState.status === "waiting_file";
   const sampleReview = image2OneShotState.status === "needs_review";
   const sampleRunning = image2OneShotState.status === "running";
   const sampleBlocked = image2OneShotState.status === "blocked";
@@ -7838,7 +7839,7 @@ function ProjectRealChainPanel({
       : sampleReady
         ? "确认生成"
         : "生成小样";
-  const sampleStatusLabel = sampleReview ? "需要复核" : sampleWaiting ? "等待文件" : sampleReady ? "待确认" : sampleBlocked ? "待补齐" : "可开始";
+  const sampleStatusLabel = sampleReview ? "需要复核" : image2OneShotState.status === "trigger_plan_prepared" ? "等待确认" : sampleWaiting ? "等待文件" : sampleReady ? "待确认" : sampleBlocked ? "待补齐" : "可开始";
   const connecting = projectSelectionStatus === "connecting";
   const canConnect = projectPathInput.trim().length > 0 && !connecting;
 
@@ -7904,7 +7905,7 @@ function ProjectRealChainPanel({
         <div>
           <span>单镜头小样</span>
           <strong>{sampleStatusLabel}</strong>
-          <small>{selectedShotId ? `镜头 ${selectedShotId}` : "选择镜头后开始"}</small>
+          <small>{image2OneShotState.status === "trigger_plan_prepared" ? "已准备真实触发，等待 action-time confirmation" : selectedShotId ? `镜头 ${selectedShotId}` : "选择镜头后开始"}</small>
         </div>
         <button
           disabled={sampleDisabled && !sampleWaiting}
@@ -9894,8 +9895,13 @@ function App() {
       status: "running",
       message: "正在确认生成。",
     }));
-    const nextState = await confirmProjectImage2OneShot(runtimeProjectIdentity, projectImage2OneShotState.receipt || projectImage2OneShotState.summary?.receipt);
-    setProjectImage2OneShotState(nextState);
+    const confirmedState = await confirmProjectImage2OneShot(runtimeProjectIdentity, projectImage2OneShotState.receipt || projectImage2OneShotState.summary?.receipt);
+    if (confirmedState.status === "handoff_prepared" || confirmedState.status === "waiting_file") {
+      const triggerState = await prepareProjectImage2OneShotTrigger(runtimeProjectIdentity, confirmedState.receipt || confirmedState.summary?.receipt);
+      setProjectImage2OneShotState(triggerState);
+      return;
+    }
+    setProjectImage2OneShotState(confirmedState);
   }
 
   async function checkImage2OneShotReturn() {
