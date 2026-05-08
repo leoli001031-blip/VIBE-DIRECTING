@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -93,6 +93,7 @@ const project005Root = "real-test-sandbox/real-demo-e2e/005-anime-image2-start-f
 const project005Id = "real_demo_e2e_005_anime_image2_start_frames";
 const project005TruthPath = `${project005Root}/reports/runtime_truth_layer.json`;
 const project005VibePath = `${project005Root}/project/project.vibe`;
+const project005OneShotRoot = `${project005Root}/real-trigger-one-shot`;
 
 function assertNo005Leak(payload, label) {
   const text = JSON.stringify(payload);
@@ -226,8 +227,43 @@ const outsideRoot = path.join(tempRoot, "outside-project");
 const outsideFile = path.join(tempRoot, "outside-file.txt");
 const repoSymlinkRoot = "real-test-sandbox/current-project-runtime-boundary-link";
 const repoSymlinkFile = `${project004Root}/runtime-boundary-file-link.txt`;
+const missingRefsRoot = "real-test-sandbox/current-project-one-shot-missing-refs-test";
+const missingRefsVibePath = `${missingRefsRoot}/project/project.vibe`;
 
 writeFileSync(outsideFile, "outside runtime boundary\n", "utf8");
+rmSync(project005OneShotRoot, { recursive: true, force: true });
+rmSync(missingRefsRoot, { recursive: true, force: true });
+mkdirSync(`${missingRefsRoot}/project`, { recursive: true });
+writeFileSync(missingRefsVibePath, JSON.stringify({
+  schemaVersion: "project_vibe_test_v1",
+  projectId: "one_shot_missing_refs",
+  runId: "one_shot_missing_refs_run",
+}, null, 2), "utf8");
+writeFileSync(`${missingRefsRoot}/project/story_flow.json`, JSON.stringify({
+  shots: [
+    {
+      id: "S01",
+      sceneId: "scene_missing",
+      roleIds: ["char_missing"],
+      action: "A deliberately blocked one-shot fixture.",
+    },
+  ],
+}, null, 2), "utf8");
+writeFileSync(`${missingRefsRoot}/project/visual_memory.json`, JSON.stringify({
+  roles: [
+    {
+      id: "char_candidate",
+      displayName: "Candidate only",
+      status: "candidate",
+    },
+  ],
+  scenes: [],
+  style: {
+    id: "style_rejected",
+    displayName: "Rejected style",
+    status: "rejected",
+  },
+}, null, 2), "utf8");
 
 const child = spawnRuntimeServer({
     VIBE_CORE_RUNTIME_API_PORT: "0",
@@ -246,6 +282,9 @@ try {
   assert(runtimeStatus.payload.endpoints?.currentProjectBindingEndpoint === "/api/runtime/projects/current", "runtime status should expose current project binding endpoint");
   assert(runtimeStatus.payload.endpoints?.currentProjectSelectEndpoint === "/api/runtime/projects/select", "runtime status should expose current project select endpoint");
   assert(runtimeStatus.payload.endpoints?.currentProjectRecentEndpoint === "/api/runtime/projects/recent", "runtime status should expose recent projects endpoint");
+  assert(runtimeStatus.payload.endpoints?.currentProjectImage2OneShotStatusEndpoint === "/api/runtime/projects/current/image2-one-shot/status", "runtime status should expose one-shot status endpoint");
+  assert(runtimeStatus.payload.endpoints?.currentProjectImage2OneShotPrepareEndpoint === "/api/runtime/projects/current/image2-one-shot/prepare", "runtime status should expose one-shot prepare endpoint");
+  assert(runtimeStatus.payload.endpoints?.currentProjectImage2OneShotConfirmEndpoint === "/api/runtime/projects/current/image2-one-shot/confirm", "runtime status should expose one-shot confirm endpoint");
 
   const trustedOrigin = "http://127.0.0.1:5176";
   const trustedStatus = await fetchJson(`${baseUrl}/api/runtime/status`, {
@@ -290,6 +329,9 @@ try {
     ["POST current real-chain run-check", `${baseUrl}/api/runtime/projects/current/real-chain/run-check`, { method: "POST" }],
     ["GET current image2 batch plan", `${baseUrl}/api/runtime/projects/current/image2-batch/plan`, undefined],
     ["POST current image2 batch run-check", `${baseUrl}/api/runtime/projects/current/image2-batch/run-check`, { method: "POST" }],
+    ["GET current image2 one-shot status", `${baseUrl}/api/runtime/projects/current/image2-one-shot/status?selectedShotId=S01`, undefined],
+    ["POST current image2 one-shot prepare", `${baseUrl}/api/runtime/projects/current/image2-one-shot/prepare`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ selectedShotId: "S01", selectedShotIds: ["S01"], imageCount: 1 }) }],
+    ["POST current image2 one-shot confirm", `${baseUrl}/api/runtime/projects/current/image2-one-shot/confirm`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ selectedShotId: "S01", selectedShotIds: ["S01"], imageCount: 1 }) }],
   ]) {
     const result = await fetchJson(url, init);
     assert(result.response.status === 409, `${label} should return 409 while unbound`);
@@ -312,6 +354,132 @@ try {
   assert(project005Status.response.status === 200, "GET current status after select 005 should return 200");
   assertCurrent005(project005Status.payload, "GET current status after select 005");
   assert(statSync(project005VibePath).mtimeMs === project005VibeBeforeStatusRead, "GET current status with workbenchFacts must not mutate 005 project.vibe");
+
+  const oneShot005Status = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/status?selectedShotId=S01`);
+  assert(oneShot005Status.response.status === 200, "GET one-shot status after select 005 should return 200");
+  assert(oneShot005Status.payload.status === "ready_to_prepare", "one-shot status should be ready to prepare");
+  assert(oneShot005Status.payload.userLabel === "生成小样", "one-shot status should expose creator-facing sample copy");
+  assert(oneShot005Status.payload.project?.projectId === project005Id, "one-shot status should use bound 005 identity");
+  assert(oneShot005Status.payload.selectedShotId === "S01", "one-shot status should preserve selected shot");
+  assert(oneShot005Status.payload.expectedOutputPath.startsWith(`${project005Root}/real-trigger-one-shot/S01/`), "one-shot expected output should stay under current project sandbox");
+  assert(oneShot005Status.payload.providerObservationPath.startsWith(`${project005Root}/real-trigger-one-shot/S01/`), "one-shot provider observation sidecar should stay under sandbox");
+  assert(oneShot005Status.payload.semanticQaPath.startsWith(`${project005Root}/real-trigger-one-shot/S01/`), "one-shot semantic QA path should stay under sandbox");
+  assert(oneShot005Status.payload.providerCalled === false, "one-shot status must not call provider");
+  assert(oneShot005Status.payload.liveSubmitAllowed === false, "one-shot status must not allow live submit");
+  assert(oneShot005Status.payload.projectVibeWritten === false, "one-shot status must not write project.vibe");
+  assert(oneShot005Status.payload.workerSpawnForbidden === true, "one-shot status must forbid worker spawn");
+
+  const unsupportedTransportOneShot = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/prepare`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ selectedShotId: "S01", selectedShotIds: ["S01"], imageCount: 1, transportMode: "fast_provider_escape" }),
+  });
+  assert(unsupportedTransportOneShot.response.status === 200, "unsupported one-shot transport should downgrade to manual");
+  assert(unsupportedTransportOneShot.payload.transportPlan?.mode === "manual", "unsupported transport must not enter the plan");
+  assert(unsupportedTransportOneShot.payload.transportPlan?.transportModeAllowed === false, "unsupported transport should be recorded as not allowlisted");
+  assert(unsupportedTransportOneShot.payload.transportPlan?.actualExecutionAllowed === false, "downgraded transport must stay locked");
+  assert(unsupportedTransportOneShot.payload.providerCalled === false, "unsupported transport must not call provider");
+
+  const appServerPlanOneShot = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/prepare`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ selectedShotId: "S02", selectedShotIds: ["S02"], imageCount: 1, transportMode: "codex_app_server" }),
+  });
+  assert(appServerPlanOneShot.response.status === 200, "codex app-server transport plan should be selectable");
+  assert(appServerPlanOneShot.payload.transportPlan?.mode === "codex_app_server", "codex app-server transport mode mismatch");
+  assert(appServerPlanOneShot.payload.transportPlan?.actualExecutionAllowed === false, "codex app-server transport must stay locked");
+  assert(appServerPlanOneShot.payload.providerCalled === false, "codex app-server transport plan must not call provider");
+
+  const missingShotOneShot = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/prepare`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ selectedShotIds: [], imageCount: 1 }),
+  });
+  assert(missingShotOneShot.response.status === 409, "one-shot prepare without selectedShotId should fail closed");
+  assert(missingShotOneShot.payload.status === "blocked", "missing selectedShotId one-shot status should be blocked");
+  assert(missingShotOneShot.payload.providerCalled === false, "missing selectedShotId must not call provider");
+  assert(missingShotOneShot.payload.projectVibeWritten === false, "missing selectedShotId must not write project.vibe");
+  assert(missingShotOneShot.payload.workerSpawnForbidden === true, "missing selectedShotId must not spawn worker");
+
+  const multiShotOneShot = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/prepare`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ selectedShotId: "S01", selectedShotIds: ["S01", "S02"], imageCount: 1 }),
+  });
+  assert(multiShotOneShot.response.status === 409, "one-shot prepare with multiple shots should fail closed");
+  assert(multiShotOneShot.payload.blockers.some((blocker) => /exactly one selected shot/i.test(blocker)), "multi-shot blocker missing");
+
+  const unsafePathOneShot = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/prepare`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ selectedShotId: "S01", selectedShotIds: ["S01"], imageCount: 1, expectedOutputPath: "../outside.png" }),
+  });
+  assert(unsafePathOneShot.response.status === 409, "one-shot prepare with unsafe path should fail closed");
+  assert(unsafePathOneShot.payload.blockers.some((blocker) => /sandbox paths?/.test(blocker) || /output path/i.test(blocker)), "unsafe path blocker missing");
+
+  const project005VibeBeforeOneShot = statSync(project005VibePath).mtimeMs;
+  const prepareOneShot = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/prepare`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ selectedShotId: "S01", selectedShotIds: ["S01"], imageCount: 1 }),
+  });
+  assert(prepareOneShot.response.status === 200, "one-shot prepare should return 200 when scoped");
+  assert(prepareOneShot.payload.status === "prepared", "one-shot prepare status mismatch");
+  assert(prepareOneShot.payload.userLabel === "确认生成", "one-shot prepare should expose confirmation copy");
+  assert(prepareOneShot.payload.receipt?.status === "prepared", "one-shot prepare receipt missing");
+  assert(prepareOneShot.payload.receipt?.policy?.providerCalled === false, "one-shot receipt must not call provider");
+  assert(prepareOneShot.payload.receipt?.policy?.liveSubmitAllowed === false, "one-shot receipt must not allow live submit");
+  assert(prepareOneShot.payload.receipt?.policy?.projectVibeWritten === false, "one-shot receipt must not write project.vibe");
+  assert(prepareOneShot.payload.receipt?.policy?.workerSpawnForbidden === true, "one-shot receipt must forbid worker spawn");
+  assert(prepareOneShot.payload.receipt?.qaChecklist?.length >= 4, "one-shot prepare should include QA checklist");
+  assert(prepareOneShot.payload.receipt?.lockedReferences?.characters?.length >= 1, "one-shot prepare should include locked character reference");
+  assert(prepareOneShot.payload.receipt?.lockedReferences?.scenes?.length >= 1, "one-shot prepare should include locked scene reference");
+  assert(prepareOneShot.payload.receipt?.lockedReferences?.styles?.length >= 1, "one-shot prepare should include locked style reference");
+  assert(prepareOneShot.payload.persistedState?.receiptPresent === true, "one-shot prepare should persist receipt state");
+  assert(existsSync(path.resolve(prepareOneShot.payload.statePaths.receiptStatePath)), "one-shot prepare receipt state file should exist");
+  assert(statSync(project005VibePath).mtimeMs === project005VibeBeforeOneShot, "one-shot prepare must not mutate 005 project.vibe");
+
+  const statusAfterPrepare = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/status?selectedShotId=S01`);
+  assert(statusAfterPrepare.response.status === 200, "one-shot status after prepare should return 200");
+  assert(statusAfterPrepare.payload.status === "prepared", "one-shot status should keep persisted prepared state after refresh");
+  assert(statusAfterPrepare.payload.receipt?.receiptId === prepareOneShot.payload.receipt.receiptId, "one-shot status should reload persisted receipt");
+
+  const confirmWithoutReceipt = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/confirm`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ selectedShotId: "S01", selectedShotIds: ["S01"], imageCount: 1 }),
+  });
+  assert(confirmWithoutReceipt.response.status === 409, "one-shot confirm without receipt should fail closed");
+  assert(confirmWithoutReceipt.payload.blockers.some((blocker) => /receipt/i.test(blocker)), "confirm without receipt blocker missing");
+
+  const confirmOneShot = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/confirm`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      selectedShotId: "S01",
+      selectedShotIds: ["S01"],
+      imageCount: 1,
+      expectedOutputPath: prepareOneShot.payload.receipt.expectedOutputPath,
+      receipt: prepareOneShot.payload.receipt,
+    }),
+  });
+  assert(confirmOneShot.response.status === 200, "one-shot confirm should return 200 with matching receipt");
+  assert(confirmOneShot.payload.status === "handoff_prepared", "one-shot confirm should prepare handoff only");
+  assert(confirmOneShot.payload.userLabel === "等待文件", "one-shot confirm should expose waiting file copy");
+  assert(confirmOneShot.payload.handoffPacket?.status === "ready_for_manual_transport", "one-shot confirm should prepare manual transport packet");
+  assert(confirmOneShot.payload.handoffPacket?.providerCalled === false, "one-shot handoff must not call provider");
+  assert(confirmOneShot.payload.handoffPacket?.liveSubmitAllowed === false, "one-shot handoff must not allow live submit");
+  assert(confirmOneShot.payload.handoffPacket?.workerSpawnForbidden === true, "one-shot handoff must forbid worker spawn");
+  assert(confirmOneShot.payload.watcherProjection?.watcherStarted === false, "one-shot confirm must not start watcher");
+  assert(confirmOneShot.payload.watcherProjection?.daemonStarted === false, "one-shot confirm must not start daemon");
+  assert(confirmOneShot.payload.persistedState?.handoffPresent === true, "one-shot confirm should persist handoff state");
+  assert(existsSync(path.resolve(confirmOneShot.payload.statePaths.handoffStatePath)), "one-shot handoff state file should exist");
+  assert(statSync(project005VibePath).mtimeMs === project005VibeBeforeOneShot, "one-shot confirm must not mutate 005 project.vibe");
+
+  const statusAfterConfirm = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/status?selectedShotId=S01`);
+  assert(statusAfterConfirm.response.status === 200, "one-shot status after confirm should return 200");
+  assert(statusAfterConfirm.payload.status === "handoff_prepared", "one-shot status should keep persisted handoff state after refresh");
+  assert(statusAfterConfirm.payload.handoffPacket?.receiptId === confirmOneShot.payload.handoffPacket.receiptId, "one-shot status should reload persisted handoff packet");
 
   const query004Status = await fetchJson(
     `${baseUrl}/api/runtime/projects/current/real-chain/status?projectRoot=${encodeURIComponent(project004Root)}&projectId=${encodeURIComponent(project004Id)}`,
@@ -445,6 +613,22 @@ try {
   assert(externalSelect.response.status === 403, "select should fail closed for absolute external roots");
   assert(/External user project roots/.test(externalSelect.payload.todo || ""), "external select should expose fail-closed diagnostic");
 
+  const missingRefsSelect = await selectProject(baseUrl, missingRefsRoot, "one_shot_missing_refs", "missing refs");
+  assert(missingRefsSelect.response.status === 200, "missing refs fixture should be selectable inside sandbox");
+  const missingRefsOneShot = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/prepare`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ selectedShotId: "S01", selectedShotIds: ["S01"], imageCount: 1 }),
+  });
+  assert(missingRefsOneShot.response.status === 409, "one-shot prepare with missing locked refs should fail closed");
+  assert(missingRefsOneShot.payload.status === "blocked", "missing locked refs one-shot status should be blocked");
+  assert(missingRefsOneShot.payload.blockers.some((blocker) => /locked character/i.test(blocker)), "missing locked character blocker missing");
+  assert(missingRefsOneShot.payload.blockers.some((blocker) => /locked scene/i.test(blocker)), "missing locked scene blocker missing");
+  assert(missingRefsOneShot.payload.blockers.some((blocker) => /locked style/i.test(blocker)), "missing locked style blocker missing");
+  assert(missingRefsOneShot.payload.providerCalled === false, "missing refs one-shot must not call provider");
+  assert(missingRefsOneShot.payload.projectVibeWritten === false, "missing refs one-shot must not write project.vibe");
+  assert(missingRefsOneShot.payload.workerSpawnForbidden === true, "missing refs one-shot must not spawn worker");
+
   rmSync(repoSymlinkRoot, { recursive: true, force: true });
   symlinkSync(tempRoot, repoSymlinkRoot, "dir");
   const symlinkSelect = await selectProject(baseUrl, repoSymlinkRoot, "symlink_project", "symlink");
@@ -455,6 +639,8 @@ try {
   child.kill("SIGTERM");
   rmSync(repoSymlinkFile, { force: true });
   rmSync(repoSymlinkRoot, { recursive: true, force: true });
+  rmSync(project005OneShotRoot, { recursive: true, force: true });
+  rmSync(missingRefsRoot, { recursive: true, force: true });
   rmSync(tempRoot, { recursive: true, force: true });
 }
 

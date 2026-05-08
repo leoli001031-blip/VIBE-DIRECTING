@@ -783,7 +783,7 @@
     "head tags thumbs"
     "select select thumbs"
     "recent recent thumbs"
-    "batch policy thumbs"
+    "batch oneshot thumbs"
     "report report thumbs"
     "message message thumbs";
   align-items: center;
@@ -1004,6 +1004,56 @@
   cursor: wait;
 }
 
+.project-real-chain-one-shot {
+  grid-area: oneshot;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.project-real-chain-one-shot > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.project-real-chain-one-shot span,
+.project-real-chain-one-shot small {
+  color: rgba(37, 40, 34, 0.52);
+  font-size: 11px;
+}
+
+.project-real-chain-one-shot strong {
+  color: rgba(37, 40, 34, 0.82);
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.project-real-chain-one-shot button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  border: 1px solid rgba(37, 40, 34, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.36);
+  color: rgba(37, 40, 34, 0.72);
+  cursor: pointer;
+  padding: 0 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.project-real-chain-one-shot button:disabled {
+  opacity: 0.48;
+  cursor: wait;
+}
+
 .project-real-chain-policy {
   grid-area: policy;
   display: flex;
@@ -1097,6 +1147,8 @@
 .preview-shell .project-real-chain-head button,
 .preview-shell .project-real-chain-batch strong,
 .preview-shell .project-real-chain-batch button,
+.preview-shell .project-real-chain-one-shot strong,
+.preview-shell .project-real-chain-one-shot button,
 .preview-shell .project-real-chain-select button,
 .preview-shell .project-real-chain-recent button {
   color: rgba(242, 238, 230, 0.84);
@@ -1104,6 +1156,7 @@
 
 .preview-shell .project-real-chain-head button,
 .preview-shell .project-real-chain-batch button,
+.preview-shell .project-real-chain-one-shot button,
 .preview-shell .project-real-chain-select input,
 .preview-shell .project-real-chain-select button,
 .preview-shell .project-real-chain-recent button,
@@ -1120,6 +1173,8 @@
 
 .preview-shell .project-real-chain-batch span,
 .preview-shell .project-real-chain-batch small,
+.preview-shell .project-real-chain-one-shot span,
+.preview-shell .project-real-chain-one-shot small,
 .preview-shell .project-real-chain-select label,
 .preview-shell .project-real-chain-recent span {
   color: rgba(242, 238, 230, 0.56);

@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -23,6 +23,9 @@ const currentProjectStatusEndpoint = `${runtimeBasePath}/projects/current/real-c
 const currentProjectRunEndpoint = `${runtimeBasePath}/projects/current/real-chain/run-check`;
 const currentProjectImage2BatchPlanEndpoint = `${runtimeBasePath}/projects/current/image2-batch/plan`;
 const currentProjectImage2BatchRunCheckEndpoint = `${runtimeBasePath}/projects/current/image2-batch/run-check`;
+const currentProjectImage2OneShotStatusEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/status`;
+const currentProjectImage2OneShotPrepareEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/prepare`;
+const currentProjectImage2OneShotConfirmEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/confirm`;
 const realDemo005StatusEndpoint = `${runtimeBasePath}/real-demo-e2e/005/status`;
 const realDemo005RunEndpoint = `${runtimeBasePath}/real-demo-e2e/005/run`;
 const runtimeFileEndpoint = `${runtimeBasePath}/files`;
@@ -1170,6 +1173,511 @@ function image2BatchLedgerProjection(payload) {
   };
 }
 
+function safePathSegment(value) {
+  return String(value || "shot")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80) || "shot";
+}
+
+function oneShotRequestInput(url, body) {
+  const receipt = isRecord(body?.receipt) ? body.receipt : isRecord(body?.prepareReceipt) ? body.prepareReceipt : undefined;
+  const requestedTransportMode = asString(url.searchParams.get("transportMode"))
+    || requestBodyString(body, ["transportMode", "mode"])
+    || asString(receipt?.transportMode);
+  const rawSelectedShotIds = Array.isArray(body?.selectedShotIds)
+    ? body.selectedShotIds.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim())
+    : [];
+  const selectedShotId = asString(url.searchParams.get("selectedShotId"))
+    || requestBodyString(body, ["selectedShotId", "shotId"])
+    || asString(receipt?.selectedShotId);
+  const selectedShotIds = rawSelectedShotIds.length
+    ? rawSelectedShotIds
+    : selectedShotId
+      ? [selectedShotId]
+      : [];
+  const imageCount = Number.isInteger(body?.imageCount) ? body.imageCount : Number.isInteger(receipt?.imageCount) ? receipt.imageCount : 1;
+  return {
+    selectedShotId,
+    selectedShotIds,
+    imageCount,
+    expectedOutputPath: requestBodyString(body, ["expectedOutputPath", "outputPath"]) || asString(receipt?.expectedOutputPath),
+    receipt,
+    transportMode: requestedTransportMode,
+    requestedTransportMode,
+  };
+}
+
+function oneShotPathInsideRoot(candidatePath, rootPath) {
+  if (typeof candidatePath !== "string" || !candidatePath.trim()) return false;
+  const normalizedPath = normalizeRelativePath(candidatePath.trim());
+  const normalizedRoot = normalizeRelativePath(rootPath.trim());
+  if (path.isAbsolute(normalizedPath) || normalizedPath.startsWith("../") || normalizedPath.includes("/../")) return false;
+  return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
+}
+
+function oneShotLockedReferences(workbenchFacts, shot) {
+  const assets = Array.isArray(workbenchFacts.visualMemory?.assets) ? workbenchFacts.visualMemory.assets : [];
+  const locked = assets.filter((asset) => asset.status === "locked");
+  const shotRoleIds = new Set(Array.isArray(shot?.roleIds) ? shot.roleIds : []);
+  const shotId = shot?.id;
+  const sceneId = shot?.sceneId || shot?.sectionId;
+  const characters = locked.filter(
+    (asset) =>
+      asset.type === "character" &&
+      (shotRoleIds.has(asset.id) || (Array.isArray(asset.usedByShotIds) && asset.usedByShotIds.includes(shotId))),
+  );
+  const scenes = locked.filter(
+    (asset) =>
+      asset.type === "scene" &&
+      (asset.id === sceneId || (Array.isArray(asset.usedByShotIds) && asset.usedByShotIds.includes(shotId))),
+  );
+  const styles = locked.filter((asset) => asset.type === "style");
+  return { characters, scenes, styles };
+}
+
+function oneShotQaChecklist(shotId) {
+  return [
+    { id: "identity", label: "角色一致", required: true, status: "pending", shotId },
+    { id: "scene", label: "场景一致", required: true, status: "pending", shotId },
+    { id: "style", label: "风格一致", required: true, status: "pending", shotId },
+    { id: "start_frame", label: "首帧可用", required: true, status: "pending", shotId },
+  ];
+}
+
+const oneShotTransportModes = new Set(["manual", "codex_app_server", "codex_cli"]);
+
+function oneShotTransportMode(input) {
+  const raw = String(input.transportMode || "").trim();
+  if (!raw) return { mode: "manual", provided: false, valid: true };
+  const normalized = raw.toLowerCase();
+  return {
+    mode: oneShotTransportModes.has(normalized) ? normalized : "manual",
+    raw,
+    provided: true,
+    valid: oneShotTransportModes.has(normalized),
+  };
+}
+
+function oneShotStatePaths(shotRoot) {
+  const stateRoot = `${shotRoot}/state`;
+  return {
+    stateRoot,
+    receiptStatePath: `${stateRoot}/prepare-receipt.json`,
+    handoffStatePath: `${stateRoot}/handoff-packet.json`,
+  };
+}
+
+function writeOneShotStateJson(relativePath, payload, stateRoot, sandboxRoot) {
+  if (!oneShotPathInsideRoot(relativePath, sandboxRoot) || !oneShotPathInsideRoot(relativePath, stateRoot)) {
+    throw new Error(`Refusing to write one-shot state outside sandbox: ${relativePath}`);
+  }
+  const filePath = scopedRepoPath(relativePath);
+  const stateRootPath = scopedRepoPath(stateRoot);
+  const sandboxRootPath = scopedRepoPath(sandboxRoot);
+  const stateRootWithSep = `${stateRootPath}${path.sep}`;
+  if (filePath !== stateRootPath && !filePath.startsWith(stateRootWithSep)) {
+    throw new Error(`Refusing to write one-shot state outside shot state root: ${relativePath}`);
+  }
+  const dirPath = path.dirname(filePath);
+  mkdirSync(dirPath, { recursive: true });
+  const dirRealPath = realpathSync(dirPath);
+  const stateRootRealPath = realpathSync(stateRootPath);
+  const sandboxRootRealPath = realpathSync(sandboxRootPath);
+  if ((dirRealPath !== stateRootRealPath && !dirRealPath.startsWith(`${stateRootRealPath}${path.sep}`))
+    || (stateRootRealPath !== sandboxRootRealPath && !stateRootRealPath.startsWith(`${sandboxRootRealPath}${path.sep}`))
+    || (sandboxRootRealPath !== repoRootRealPath && !sandboxRootRealPath.startsWith(`${repoRootRealPath}${path.sep}`))) {
+    throw new Error(`Refusing to write one-shot state through an unsafe real path: ${relativePath}`);
+  }
+  const tempPath = path.join(dirPath, `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
+  writeFileSync(tempPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  renameSync(tempPath, filePath);
+}
+
+function oneShotStateJson(relativePath, stateRoot, sandboxRoot) {
+  if (!oneShotPathInsideRoot(relativePath, sandboxRoot) || !oneShotPathInsideRoot(relativePath, stateRoot)) return undefined;
+  return readRuntimeJson(relativePath);
+}
+
+function oneShotReceiptMatches(candidate, receipt) {
+  return isRecord(candidate)
+    && candidate.schemaVersion === receipt.schemaVersion
+    && candidate.receiptId === receipt.receiptId
+    && candidate.status === "prepared"
+    && candidate.projectId === receipt.projectId
+    && candidate.projectRoot === receipt.projectRoot
+    && candidate.selectedShotId === receipt.selectedShotId
+    && candidate.expectedOutputPath === receipt.expectedOutputPath;
+}
+
+function oneShotHandoffMatches(candidate, receipt) {
+  return isRecord(candidate)
+    && candidate.schemaVersion === "vibe_core_current_project_image2_one_shot_handoff_packet_v1"
+    && candidate.packetId === `handoff_${receipt.receiptId}`
+    && candidate.status === "ready_for_manual_transport"
+    && candidate.receiptId === receipt.receiptId
+    && candidate.projectId === receipt.projectId
+    && candidate.projectRoot === receipt.projectRoot
+    && candidate.selectedShotId === receipt.selectedShotId
+    && candidate.expectedOutputPath === receipt.expectedOutputPath;
+}
+
+function oneShotTransportPlan(mode, {
+  projectId,
+  projectRoot,
+  selectedShotId,
+  expectedOutputPath,
+  providerObservationPath,
+  semanticQaPath,
+  handoffPacketPath,
+  receiptStatePath,
+  handoffStatePath,
+  receiptId,
+  requestedTransportMode,
+  transportModeAllowed,
+}) {
+  const base = {
+    schemaVersion: "vibe_core_current_project_image2_one_shot_transport_plan_v1",
+    mode,
+    requestedTransportMode,
+    transportModeAllowed,
+    projectId,
+    projectRoot,
+    selectedShotId,
+    receiptId,
+    expectedOutputPath,
+    providerObservationPath,
+    semanticQaPath,
+    handoffPacketPath,
+    receiptStatePath,
+    handoffStatePath,
+    actualExecutionAllowed: false,
+    providerCalled: false,
+    liveSubmitAllowed: false,
+    workerSpawnForbidden: true,
+    projectVibeWritten: false,
+    requiresActionTimeConfirmation: true,
+    outputMustReturnVia: "expected_output_and_sidecars",
+  };
+  if (mode === "codex_app_server") {
+    return {
+      ...base,
+      target: "codex_app_server",
+      endpoint: "/api/codex/app-server/image2/one-shot",
+      requiredFields: ["projectId", "projectRoot", "receiptId", "selectedShotId", "expectedOutputPath", "providerObservationPath", "semanticQaPath", "receiptStatePath", "handoffStatePath"],
+      externalCallPreparedOnly: true,
+    };
+  }
+  if (mode === "codex_cli") {
+    return {
+      ...base,
+      target: "codex_cli",
+      commandTemplate: ["codex", "image", "one-shot", "--receipt", "<receiptStatePath>", "--handoff", "<handoffStatePath>"],
+      command: "codex",
+      args: ["image", "one-shot", "--receipt", receiptStatePath, "--handoff", handoffStatePath],
+      cwd: repoRoot,
+      externalCommandPreparedOnly: true,
+    };
+  }
+  return {
+    ...base,
+    target: "manual",
+    manualTransportRequired: true,
+  };
+}
+
+function currentProjectImage2OneShotResponse(action, input, extra = {}, source = currentProjectSource()) {
+  const projection = projectProjectionFromSource(source);
+  const { project, projectFacts } = projection;
+  const workbenchFacts = currentProjectWorkbenchFacts(source, projectFacts);
+  const shots = Array.isArray(workbenchFacts.storyFlow?.shots) ? workbenchFacts.storyFlow.shots : [];
+  const selectedShotId = input.selectedShotId;
+  const selectedShotIds = input.selectedShotIds || [];
+  const selectedShot = shots.find((shot) => shot.id === selectedShotId);
+  const sandboxRoot = `${source.runRootRelativePath}/real-trigger-one-shot`;
+  const shotRoot = `${sandboxRoot}/${safePathSegment(selectedShotId)}`;
+  const statePaths = oneShotStatePaths(shotRoot);
+  const expectedOutputPath = input.expectedOutputPath || `${shotRoot}/image2-start.png`;
+  const providerObservationPath = `${shotRoot}/provider_observations/image2-start-provider-observation.json`;
+  const semanticQaPath = `${shotRoot}/semantic_qa/image2-start-semantic-qa.json`;
+  const handoffPacketPath = `${shotRoot}/handoff/image2-start-handoff-packet.json`;
+  const manifestPath = `${shotRoot}/manifest.json`;
+  const qaReportPath = `${shotRoot}/qa/semantic-qa.json`;
+  const persistedReceipt = oneShotStateJson(statePaths.receiptStatePath, statePaths.stateRoot, sandboxRoot);
+  const persistedHandoff = oneShotStateJson(statePaths.handoffStatePath, statePaths.stateRoot, sandboxRoot);
+  const transport = oneShotTransportMode(input);
+  const lockedReferences = selectedShot ? oneShotLockedReferences(workbenchFacts, selectedShot) : { characters: [], scenes: [], styles: [] };
+  const outputPathSafe = oneShotPathInsideRoot(expectedOutputPath, source.runRootRelativePath)
+    && oneShotPathInsideRoot(expectedOutputPath, sandboxRoot);
+  const sidecarPathsSafe = [
+    providerObservationPath,
+    semanticQaPath,
+    handoffPacketPath,
+    manifestPath,
+    qaReportPath,
+    statePaths.receiptStatePath,
+    statePaths.handoffStatePath,
+  ]
+    .every((item) => oneShotPathInsideRoot(item, sandboxRoot));
+  const oneShotOnly = selectedShotIds.length === 1 && selectedShotIds[0] === selectedShotId && input.imageCount === 1;
+  const blockers = uniqueStrings([
+    projection.ok ? "" : "Current project runtime projection is unavailable.",
+    selectedShotId ? "" : "Select one shot before preparing a sample.",
+    selectedShotIds.length === 1 ? "" : "Image2 one-shot requires exactly one selected shot.",
+    input.imageCount === 1 ? "" : "Image2 one-shot requires exactly one image.",
+    selectedShot ? "" : "Selected shot was not found in the current project story flow.",
+    outputPathSafe ? "" : "Expected output path must stay inside the current project one-shot sandbox.",
+    sidecarPathsSafe ? "" : "Observation, QA, manifest, and handoff paths must stay inside the one-shot sandbox.",
+    lockedReferences.characters.length ? "" : "Locked character reference is required for this shot.",
+    lockedReferences.scenes.length ? "" : "Locked scene reference is required for this shot.",
+    lockedReferences.styles.length ? "" : "Locked style reference is required for this shot.",
+  ]);
+  const receiptId = `image2_one_shot_prepare_${safePathSegment(project.projectId || "project")}_${safePathSegment(selectedShotId)}_${safePathSegment(project.runId || "run")}`;
+  const transportPlan = oneShotTransportPlan(transport.mode, {
+    projectId: project.projectId,
+    projectRoot: project.projectRoot,
+    selectedShotId,
+    expectedOutputPath,
+    providerObservationPath,
+    semanticQaPath,
+    handoffPacketPath,
+    receiptStatePath: statePaths.receiptStatePath,
+    handoffStatePath: statePaths.handoffStatePath,
+    receiptId,
+    requestedTransportMode: transport.raw || input.requestedTransportMode,
+    transportModeAllowed: transport.valid,
+  });
+  const receipt = {
+    schemaVersion: "vibe_core_current_project_image2_one_shot_receipt_v1",
+    receiptId,
+    status: blockers.length ? "blocked" : "prepared",
+    action: "prepare",
+    generatedAt: new Date().toISOString(),
+    projectId: project.projectId,
+    projectRoot: project.projectRoot,
+    projectVibePath: project.projectVibePath,
+    selectedShotId,
+    selectedShotIds,
+    imageCount: input.imageCount,
+    oneShotOnly,
+    expectedOutputPath,
+    providerObservationPath,
+    semanticQaPath,
+    handoffPacketPath,
+    transportMode: transport.mode,
+    transportPlan,
+    sandbox: {
+      root: sandboxRoot,
+      shotRoot,
+      allowedPrefixes: [sandboxRoot, shotRoot],
+      manifestPath,
+      qaReportPath,
+      receiptStatePath: statePaths.receiptStatePath,
+      handoffStatePath: statePaths.handoffStatePath,
+      outsideRootWriteAllowed: false,
+    },
+    lockedReferences: {
+      characters: lockedReferences.characters.map((asset) => ({ id: asset.id, name: asset.name, path: asset.path })),
+      scenes: lockedReferences.scenes.map((asset) => ({ id: asset.id, name: asset.name, path: asset.path })),
+      styles: lockedReferences.styles.map((asset) => ({ id: asset.id, name: asset.name, path: asset.path })),
+    },
+    qaChecklist: oneShotQaChecklist(selectedShotId),
+    policy: {
+      providerCalled: false,
+      liveSubmitAllowed: false,
+      projectVibeWritten: false,
+      workerSpawnForbidden: true,
+      providerSubmitAllowed: 0,
+      automaticSubmitAllowed: false,
+      externalNetworkIoAllowed: false,
+      artifactFileMutationAllowed: false,
+      statePersistenceAllowed: true,
+      confirmationRequired: true,
+    },
+    blockers,
+  };
+  const receiptMatches = input.receipt
+    && input.receipt.receiptId === receipt.receiptId
+    && input.receipt.selectedShotId === selectedShotId
+    && input.receipt.expectedOutputPath === expectedOutputPath
+    && input.receipt.status === "prepared";
+  const confirmBlockers = action === "confirm"
+    ? uniqueStrings([
+      ...blockers,
+      input.receipt ? "" : "Action-time prepare receipt is required before confirmation.",
+      receiptMatches ? "" : "Action-time prepare receipt must match the current project, shot, and output path.",
+      oneShotOnly ? "" : "Confirmation is limited to one shot and one image.",
+    ])
+    : blockers;
+  const confirmed = action === "confirm" && confirmBlockers.length === 0;
+  const outputExists = runtimePathExists(expectedOutputPath);
+  const semanticQa = readRuntimeJson(semanticQaPath);
+  const semantic = semanticQaSummary(semanticQa);
+  const persistedReceiptUsable = action === "status"
+    && oneShotReceiptMatches(persistedReceipt, receipt);
+  const persistedHandoffUsable = action === "status"
+    && persistedReceiptUsable
+    && oneShotHandoffMatches(persistedHandoff, receipt)
+    && persistedHandoff.providerCalled === false
+    && persistedHandoff.liveSubmitAllowed === false;
+  const handoffPacket = {
+    packetId: `handoff_${receipt.receiptId}`,
+    schemaVersion: "vibe_core_current_project_image2_one_shot_handoff_packet_v1",
+    receiptId: receipt.receiptId,
+    projectId: project.projectId,
+    projectRoot: project.projectRoot,
+    selectedShotId,
+    selectedShotIds,
+    imageCount: input.imageCount,
+    status: "ready_for_manual_transport",
+    createdAt: new Date().toISOString(),
+    requiresExternalAction: true,
+    providerCalled: false,
+    liveSubmitAllowed: false,
+    workerSpawnForbidden: true,
+    projectVibeWritten: false,
+    expectedOutputPath,
+    providerObservationPath,
+    semanticQaPath,
+    receiptStatePath: statePaths.receiptStatePath,
+    handoffStatePath: statePaths.handoffStatePath,
+    transportPlan,
+    appServerContract: {
+      mode: "codex_app_server_handoff_only",
+      selectedShotId,
+      expectedOutputPath,
+      providerObservationPath,
+      semanticQaPath,
+      qaChecklistPath: qaReportPath,
+      manualTransportRequired: true,
+      automaticSubmitAllowed: false,
+      actualExecutionAllowed: false,
+    },
+  };
+  if (action === "prepare" && confirmBlockers.length === 0) {
+    writeOneShotStateJson(statePaths.receiptStatePath, receipt, statePaths.stateRoot, sandboxRoot);
+  }
+  if (confirmed) {
+    writeOneShotStateJson(statePaths.receiptStatePath, receipt, statePaths.stateRoot, sandboxRoot);
+    writeOneShotStateJson(statePaths.handoffStatePath, handoffPacket, statePaths.stateRoot, sandboxRoot);
+  }
+  const receiptForResponse = persistedReceiptUsable ? persistedReceipt : receipt;
+  const handoffForResponse = confirmed ? handoffPacket : persistedHandoffUsable ? persistedHandoff : undefined;
+  const status = confirmBlockers.length
+    ? "blocked"
+    : outputExists && semantic.passed
+      ? "needs_review"
+      : handoffForResponse
+        ? "handoff_prepared"
+        : action === "prepare" || persistedReceiptUsable
+          ? "prepared"
+          : "ready_to_prepare";
+  const userLabel = status === "prepared"
+    ? "确认生成"
+    : status === "handoff_prepared"
+      ? "等待文件"
+      : status === "needs_review"
+        ? "需要复核"
+        : status === "blocked"
+          ? "待补齐"
+          : "生成小样";
+
+  return {
+    ok: confirmBlockers.length === 0,
+    ...runtimePolicy({
+      runMode: "current_project_image2_one_shot_handoff_only",
+      providerCalled: false,
+      prepareRan: false,
+      projectVibeWritten: false,
+      liveSubmitAllowed: false,
+      workerSpawnForbidden: true,
+    }),
+    endpoint: action === "confirm"
+      ? currentProjectImage2OneShotConfirmEndpoint
+      : action === "prepare"
+        ? currentProjectImage2OneShotPrepareEndpoint
+        : currentProjectImage2OneShotStatusEndpoint,
+    source: "runtime_endpoint",
+    sourceLabel: source.sourceLabel,
+    projectionKind: "current_project_image2_one_shot",
+    currentProject: {
+      bound: true,
+      bindingPath: source.bindingPathRelative,
+      binding: source.binding,
+    },
+    requestContext: {
+      projectRoot: source.requestProjectRoot,
+      projectRootSource: source.requestContextSource,
+      projectId: source.requestProjectId,
+      projectIdSource: source.requestProjectIdSource,
+      selectedShotId,
+    },
+    projectRootMode: source.projectRootMode,
+    projectRoot: project.projectRoot,
+    projectId: project.projectId,
+    identity: {
+      projectId: project.projectId,
+      projectRoot: project.projectRoot,
+    },
+    project,
+    status,
+    uiStatus: status,
+    userLabel,
+    selectedShotId,
+    selectedShotIds,
+    expectedOutputPath,
+    providerObservationPath,
+    semanticQaPath,
+    handoffPacketPath,
+    statePaths,
+    receipt: receiptForResponse,
+    handoffPacket: handoffForResponse,
+    transportPlan,
+    persistedState: {
+      receiptPresent: persistedReceiptUsable || (action === "prepare" && confirmBlockers.length === 0) || confirmed,
+      handoffPresent: persistedHandoffUsable || confirmed,
+      receiptStatePath: statePaths.receiptStatePath,
+      handoffStatePath: statePaths.handoffStatePath,
+    },
+    watcherProjection: {
+      expectedOutputPath,
+      providerObservationPath,
+      semanticQaPath,
+      outputExists,
+      providerObservationPresent: runtimePathExists(providerObservationPath),
+      semanticQaPresent: Boolean(semanticQa),
+      semanticQaPassed: semantic.passed,
+      watcherStarted: false,
+      daemonStarted: false,
+      reportProjectionOnly: true,
+    },
+    previewProjection: {
+      shotId: selectedShotId,
+      status: outputExists ? (semantic.needsReview ? "needs_review" : "returned") : handoffForResponse ? "waiting_file" : "not_started",
+      imageUrl: outputExists ? runtimeFileUrl(expectedOutputPath) : undefined,
+      reviewRequired: semantic.needsReview,
+    },
+    submitPolicy: {
+      providerCallAllowed: false,
+      providerSubmitAllowed: 0,
+      liveSubmitAllowed: false,
+      manualTransportRequired: true,
+      dryRunOnly: true,
+      noWorkerSpawn: true,
+      artifactFileMutationAllowed: false,
+      statePersistenceAllowed: true,
+    },
+    providerCalled: false,
+    liveSubmitAllowed: false,
+    projectVibeWritten: false,
+    workerSpawnForbidden: true,
+    blockers: confirmBlockers,
+    message: confirmBlockers.length ? "小样暂时受阻，请补齐镜头、引用或输出位置。" : undefined,
+    ...extra,
+  };
+}
+
 function firstHeaderValue(req, names) {
   for (const name of names) {
     const value = req.headers[name.toLowerCase()];
@@ -1867,7 +2375,10 @@ function isCurrentProjectEndpoint(pathname) {
     || pathname === currentProjectStatusEndpoint
     || pathname === currentProjectRunEndpoint
     || pathname === currentProjectImage2BatchPlanEndpoint
-    || pathname === currentProjectImage2BatchRunCheckEndpoint;
+    || pathname === currentProjectImage2BatchRunCheckEndpoint
+    || pathname === currentProjectImage2OneShotStatusEndpoint
+    || pathname === currentProjectImage2OneShotPrepareEndpoint
+    || pathname === currentProjectImage2OneShotConfirmEndpoint;
 }
 
 async function currentProjectRouteContext(req, res, url, endpoint) {
@@ -1896,7 +2407,7 @@ async function currentProjectRouteContext(req, res, url, endpoint) {
     }));
     return undefined;
   }
-  return { requestContext, source: sourceResult.source };
+  return { requestContext, source: sourceResult.source, body: bodyResult.body };
 }
 
 async function handleCurrentProjectSelect(req, res) {
@@ -1979,6 +2490,9 @@ async function handleRequest(req, res) {
         currentProjectRunEndpoint,
         currentProjectImage2BatchPlanEndpoint,
         currentProjectImage2BatchRunCheckEndpoint,
+        currentProjectImage2OneShotStatusEndpoint,
+        currentProjectImage2OneShotPrepareEndpoint,
+        currentProjectImage2OneShotConfirmEndpoint,
           realDemo005StatusEndpoint,
           realDemo005RunEndpoint,
           runtimeFileEndpoint,
@@ -2036,6 +2550,39 @@ async function handleRequest(req, res) {
     handleCurrentProjectImage2BatchRunCheck(res, routeContext.source, {
       ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
     });
+    return;
+  }
+  if (req.method === "GET" && url.pathname === currentProjectImage2OneShotStatusEndpoint) {
+    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2OneShotStatusEndpoint);
+    if (!routeContext) return;
+    const input = oneShotRequestInput(url, routeContext.body);
+    const payload = currentProjectImage2OneShotResponse("status", input, {
+      running,
+      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
+    }, routeContext.source);
+    writeJson(res, 200, payload);
+    return;
+  }
+  if (req.method === "POST" && url.pathname === currentProjectImage2OneShotPrepareEndpoint) {
+    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2OneShotPrepareEndpoint);
+    if (!routeContext) return;
+    const input = oneShotRequestInput(url, routeContext.body);
+    const payload = currentProjectImage2OneShotResponse("prepare", input, {
+      running,
+      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
+    }, routeContext.source);
+    writeJson(res, payload.ok === false ? 409 : 200, payload);
+    return;
+  }
+  if (req.method === "POST" && url.pathname === currentProjectImage2OneShotConfirmEndpoint) {
+    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2OneShotConfirmEndpoint);
+    if (!routeContext) return;
+    const input = oneShotRequestInput(url, routeContext.body);
+    const payload = currentProjectImage2OneShotResponse("confirm", input, {
+      running,
+      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
+    }, routeContext.source);
+    writeJson(res, payload.ok === false ? 409 : 200, payload);
     return;
   }
   if (req.method === "GET" && (url.pathname === realDemo005StatusEndpoint || url.pathname === legacyStatusEndpoint)) {

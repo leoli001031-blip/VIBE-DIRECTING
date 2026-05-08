@@ -123,6 +123,12 @@ function assertCreatorPanelContract() {
   assert(/Production[\s\S]*needs_review/.test(surface), "ProjectRealChainPanel should expose production review state");
   assert(/<button disabled=\{disabled\} onClick=\{onRun\}>[\s\S]*同步状态/.test(panel), "sync status button must route to project status run-check");
   assert(/<button disabled=\{reviewDisabled\} onClick=\{onRunImage2Batch\}>[\s\S]*复核检查/.test(panel), "review check button must route to Image2 batch run-check");
+  assert(/单镜头小样/.test(surface), "ProjectRealChainPanel should expose one-shot sample copy");
+  assert(/生成小样/.test(surface), "ProjectRealChainPanel should expose sample prepare copy");
+  assert(/确认生成/.test(surface), "ProjectRealChainPanel should expose sample confirm copy");
+  assert(/等待文件/.test(surface), "ProjectRealChainPanel should expose waiting-file copy");
+  assert(/onPrepareImage2OneShot/.test(panel), "one-shot sample button must route to prepare handler");
+  assert(/onConfirmImage2OneShot/.test(panel), "one-shot confirm button must route to confirm handler");
   assert(/aria-label="当前项目状态"/.test(panel), "current project panel should use creator-facing status aria copy");
   assert(/aria-label="当前项目预览图"/.test(panel), "current project thumbnails should use creator-facing preview aria copy");
   assert(/displayTitle[\s\S]*状态已回流/.test(surface), "ProjectRealChainPanel should show the bound title for returned status");
@@ -158,17 +164,25 @@ const {
   deriveCurrentProjectBindingStatus,
   deriveProjectRealChainStatus,
   deriveProjectImage2BatchPlanStatus,
+  deriveProjectImage2OneShotStatus,
   guardProjectRealChainUiStateForCurrentProject,
   guardProjectImage2BatchUiStateForCurrentProject,
+  guardProjectImage2OneShotUiStateForCurrentProject,
   loadCurrentProjectBindingStatus,
   loadCurrentProjectChoices,
+  loadProjectImage2OneShotStatus,
   loadProjectImage2BatchPlan,
   loadProjectRealChainStatus,
+  prepareProjectImage2OneShot,
+  confirmProjectImage2OneShot,
   projectCurrentBindingEndpoint,
   projectCurrentChoicesEndpoint,
   projectCurrentSelectEndpoint,
   projectImage2BatchPlanEndpoint,
   projectImage2BatchRunCheckEndpoint,
+  projectImage2OneShotStatusEndpoint,
+  projectImage2OneShotPrepareEndpoint,
+  projectImage2OneShotConfirmEndpoint,
   projectRuntimeRequestPath,
   projectRealChainRunCheckEndpoint,
   projectRealChainStatusEndpoint,
@@ -445,6 +459,89 @@ assert(image2Mismatch.status === "unavailable", "stale 005 Image2 batch summary 
 assert(!image2Mismatch.summary, "stale 005 Image2 batch summary must not leak under 004 identity");
 assertProductCopy(image2Mismatch.message);
 
+const oneShotReadyPayload = {
+  status: "ready_to_prepare",
+  uiStatus: "ready_to_prepare",
+  userLabel: "生成小样",
+  project: {
+    projectId: "real-demo-e2e-005",
+    projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005",
+  },
+  selectedShotId: "S07",
+  expectedOutputPath: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005/real-trigger-one-shot/S07/image2-start.png",
+  providerObservationPath: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005/real-trigger-one-shot/S07/provider_observations/image2-start-provider-observation.json",
+  semanticQaPath: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005/real-trigger-one-shot/S07/semantic_qa/image2-start-semantic-qa.json",
+  receipt: undefined,
+  watcherProjection: { outputExists: false },
+  providerCalled: false,
+  liveSubmitAllowed: false,
+  projectVibeWritten: false,
+  workerSpawnForbidden: true,
+  blockers: [],
+};
+
+const oneShotPreparePayload = {
+  ...oneShotReadyPayload,
+  status: "prepared",
+  uiStatus: "prepared",
+  userLabel: "确认生成",
+  statePaths: {
+    receiptStatePath: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005/real-trigger-one-shot/S07/state/prepare-receipt.json",
+    handoffStatePath: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005/real-trigger-one-shot/S07/state/handoff-packet.json",
+  },
+  persistedState: {
+    receiptPresent: true,
+    handoffPresent: false,
+  },
+  receipt: {
+    receiptId: "image2_one_shot_prepare_real-demo-e2e-005_S07",
+    status: "prepared",
+    selectedShotId: "S07",
+    selectedShotIds: ["S07"],
+    imageCount: 1,
+    expectedOutputPath: oneShotReadyPayload.expectedOutputPath,
+    providerObservationPath: oneShotReadyPayload.providerObservationPath,
+    semanticQaPath: oneShotReadyPayload.semanticQaPath,
+  },
+};
+
+const oneShotConfirmPayload = {
+  ...oneShotPreparePayload,
+  status: "handoff_prepared",
+  uiStatus: "handoff_prepared",
+  userLabel: "等待文件",
+  persistedState: {
+    receiptPresent: true,
+    handoffPresent: true,
+  },
+  handoffPacket: {
+    receiptId: "image2_one_shot_prepare_real-demo-e2e-005_S07",
+    status: "ready_for_manual_transport",
+    requiresExternalAction: true,
+    transportPlan: {
+      mode: "manual",
+      actualExecutionAllowed: false,
+      providerCalled: false,
+      liveSubmitAllowed: false,
+    },
+  },
+};
+
+const persistedOneShotPrepareSummary = deriveProjectImage2OneShotStatus(oneShotPreparePayload);
+assert(persistedOneShotPrepareSummary.uiStatus === "prepared", "persisted one-shot receipt status should display prepared");
+assert(persistedOneShotPrepareSummary.userLabel === "确认生成", "persisted one-shot receipt should keep confirm copy");
+assert(persistedOneShotPrepareSummary.receipt?.selectedShotId === "S07", "persisted one-shot receipt should remain available to helpers");
+
+const persistedOneShotHandoffSummary = deriveProjectImage2OneShotStatus(oneShotConfirmPayload);
+assert(persistedOneShotHandoffSummary.uiStatus === "handoff_prepared", "persisted one-shot handoff status should display handoff prepared");
+assert(persistedOneShotHandoffSummary.userLabel === "等待文件", "persisted one-shot handoff should keep waiting-file copy");
+
+const persistedOneShotHandoffGuard = guardProjectImage2OneShotUiStateForCurrentProject(
+  { status: persistedOneShotHandoffSummary.uiStatus, summary: persistedOneShotHandoffSummary, receipt: persistedOneShotHandoffSummary.receipt },
+  { projectId: "real-demo-e2e-005", projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005" },
+);
+assert(persistedOneShotHandoffGuard.status === "handoff_prepared", "persisted one-shot handoff should pass current-project guard");
+
 const runtimeFetchCalls = [];
 const previousWindow = globalThis.window;
 const previousFetch = globalThis.fetch;
@@ -511,6 +608,9 @@ const runtimeEndpointPayloads = new Map([
       workerSpawnForbidden: true,
     },
   }],
+  [`GET ${projectImage2OneShotStatusEndpoint}`, oneShotReadyPayload],
+  [`POST ${projectImage2OneShotPrepareEndpoint}`, oneShotPreparePayload],
+  [`POST ${projectImage2OneShotConfirmEndpoint}`, oneShotConfirmPayload],
 ]);
 
 try {
@@ -570,6 +670,30 @@ try {
   assert(checkedPlan.summary?.liveSubmitAllowed === false, "Image2 batch run-check must preserve liveSubmitAllowed=false");
   assert(checkedPlan.summary?.workerSpawnForbidden === true, "Image2 batch run-check must preserve workerSpawnForbidden=true");
 
+  const oneShotStatus = await loadProjectImage2OneShotStatus(project005RuntimeIdentity, "S07");
+  assert(oneShotStatus.status === "ready_to_prepare", "one-shot status should expose sample entry");
+  assert(oneShotStatus.summary?.userLabel === "生成小样", "one-shot status should use creator-facing prepare copy");
+  assert(oneShotStatus.summary?.providerCalled === false, "one-shot status must not call provider");
+  assert(oneShotStatus.summary?.projectVibeWritten === false, "one-shot status must not write project.vibe");
+  assert(oneShotStatus.summary?.workerSpawnForbidden === true, "one-shot status must forbid worker spawn");
+
+  const preparedOneShot = await prepareProjectImage2OneShot(project005RuntimeIdentity, "S07");
+  assert(preparedOneShot.status === "prepared", "one-shot prepare should create a pending confirmation receipt");
+  assert(preparedOneShot.receipt?.selectedShotId === "S07", "one-shot prepare should preserve selected shot");
+  assert(preparedOneShot.summary?.userLabel === "确认生成", "one-shot prepare should use creator-facing confirm copy");
+  assert(preparedOneShot.summary?.providerCalled === false, "one-shot prepare must not call provider");
+  assert(preparedOneShot.summary?.liveSubmitAllowed === false, "one-shot prepare must not allow live submit");
+  assert(preparedOneShot.summary?.projectVibeWritten === false, "one-shot prepare must not write project.vibe");
+  assert(preparedOneShot.summary?.workerSpawnForbidden === true, "one-shot prepare must forbid worker spawn");
+
+  const confirmedOneShot = await confirmProjectImage2OneShot(project005RuntimeIdentity, preparedOneShot.receipt);
+  assert(confirmedOneShot.status === "handoff_prepared", "one-shot confirm should prepare external handoff only");
+  assert(confirmedOneShot.summary?.userLabel === "等待文件", "one-shot confirm should use waiting-file copy");
+  assert(confirmedOneShot.summary?.providerCalled === false, "one-shot confirm must not call provider");
+  assert(confirmedOneShot.summary?.liveSubmitAllowed === false, "one-shot confirm must not allow live submit");
+  assert(confirmedOneShot.summary?.projectVibeWritten === false, "one-shot confirm must not write project.vibe");
+  assert(confirmedOneShot.summary?.workerSpawnForbidden === true, "one-shot confirm must forbid worker spawn");
+
   for (const [method, endpoint] of [
     ["GET", projectCurrentBindingEndpoint],
     ["GET", projectCurrentChoicesEndpoint],
@@ -578,10 +702,13 @@ try {
     ["POST", projectRealChainRunCheckEndpoint],
     ["GET", projectImage2BatchPlanEndpoint],
     ["POST", projectImage2BatchRunCheckEndpoint],
+    ["GET", projectImage2OneShotStatusEndpoint],
+    ["POST", projectImage2OneShotPrepareEndpoint],
+    ["POST", projectImage2OneShotConfirmEndpoint],
   ]) {
     const call = runtimeFetchCalls.find((item) => item.method === method && item.path === endpoint);
     assert(call, `frontend should call ${method} ${endpoint}`);
-    assert(call.search === "", `${method} ${endpoint} should not carry project query params`);
+    assert(!call.search.includes("projectRoot=") && !call.search.includes("projectId="), `${method} ${endpoint} should not carry project query params`);
   }
   const selectCall = runtimeFetchCalls.find((item) => item.method === "POST" && item.path === projectCurrentSelectEndpoint);
   assert(selectCall?.body && JSON.parse(String(selectCall.body)).projectRoot === project005RuntimeIdentity.projectRoot, "connect project should send selected projectRoot");

@@ -20,6 +20,9 @@ export const projectRealChainStatusEndpoint = `${projectRealChainRuntimeBasePath
 export const projectRealChainRunCheckEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/run-check`;
 export const projectImage2BatchPlanEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-batch/plan`;
 export const projectImage2BatchRunCheckEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-batch/run-check`;
+export const projectImage2OneShotStatusEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/status`;
+export const projectImage2OneShotPrepareEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/prepare`;
+export const projectImage2OneShotConfirmEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/confirm`;
 export const projectRealChainFileEndpoint = `${projectRealChainRuntimeBasePath}/files`;
 export const projectRealChainReportRelativePath =
   "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/reports/image2_start_long_chain_report.json";
@@ -249,6 +252,56 @@ export type ProjectImage2BatchUiState = {
   message?: string;
 };
 
+export type ProjectImage2OneShotUiStatus =
+  | "ready_to_prepare"
+  | "prepared"
+  | "handoff_prepared"
+  | "waiting_file"
+  | "needs_review"
+  | "blocked"
+  | "running"
+  | "unavailable";
+
+export type ProjectImage2OneShotReceipt = {
+  receiptId?: string;
+  status?: string;
+  selectedShotId?: string;
+  selectedShotIds?: string[];
+  imageCount?: number;
+  expectedOutputPath?: string;
+  providerObservationPath?: string;
+  semanticQaPath?: string;
+  handoffPacketPath?: string;
+  blockers?: string[];
+};
+
+export type ProjectImage2OneShotStatus = {
+  uiStatus: ProjectImage2OneShotUiStatus;
+  projectId?: string;
+  projectRoot?: string;
+  selectedShotId?: string;
+  expectedOutputPath?: string;
+  providerObservationPath?: string;
+  semanticQaPath?: string;
+  handoffPacketPath?: string;
+  receipt?: ProjectImage2OneShotReceipt;
+  userLabel: string;
+  outputExists: boolean;
+  providerCalled: boolean;
+  liveSubmitAllowed: boolean;
+  projectVibeWritten: boolean;
+  workerSpawnForbidden: boolean;
+  blockers: string[];
+  message?: string;
+};
+
+export type ProjectImage2OneShotUiState = {
+  status: ProjectImage2OneShotUiStatus;
+  summary?: ProjectImage2OneShotStatus;
+  receipt?: ProjectImage2OneShotReceipt;
+  message?: string;
+};
+
 export type ProjectRuntimeIdentity = {
   projectId?: string;
   projectRoot?: string;
@@ -386,6 +439,33 @@ type ProjectImage2BatchPayload = {
   message?: string;
 };
 
+type ProjectImage2OneShotPayload = {
+  status?: string;
+  uiStatus?: string;
+  userLabel?: string;
+  project?: {
+    projectId?: string;
+    projectRoot?: string;
+  };
+  projectId?: string;
+  projectRoot?: string;
+  selectedShotId?: string;
+  expectedOutputPath?: string;
+  providerObservationPath?: string;
+  semanticQaPath?: string;
+  handoffPacketPath?: string;
+  receipt?: ProjectImage2OneShotReceipt;
+  watcherProjection?: {
+    outputExists?: boolean;
+  };
+  providerCalled?: boolean;
+  liveSubmitAllowed?: boolean;
+  projectVibeWritten?: boolean;
+  workerSpawnForbidden?: boolean;
+  blockers?: string[];
+  message?: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -468,6 +548,17 @@ export function guardProjectImage2BatchUiStateForCurrentProject(
   state: ProjectImage2BatchUiState,
   expected?: ProjectRuntimeIdentity,
 ): ProjectImage2BatchUiState {
+  if (!state.summary || currentProjectIdentityMatches(state.summary, expected)) return state;
+  return {
+    status: "unavailable",
+    message: projectMismatchMessage(),
+  };
+}
+
+export function guardProjectImage2OneShotUiStateForCurrentProject(
+  state: ProjectImage2OneShotUiState,
+  expected?: ProjectRuntimeIdentity,
+): ProjectImage2OneShotUiState {
   if (!state.summary || currentProjectIdentityMatches(state.summary, expected)) return state;
   return {
     status: "unavailable",
@@ -906,6 +997,63 @@ export function deriveProjectImage2BatchPlanStatus(
   };
 }
 
+function oneShotPayloadFromUnknown(payload: unknown): ProjectImage2OneShotPayload | undefined {
+  if (!isRecord(payload)) return undefined;
+  if (typeof payload.status === "string" || typeof payload.uiStatus === "string" || isRecord(payload.receipt)) {
+    return payload as ProjectImage2OneShotPayload;
+  }
+  return undefined;
+}
+
+function normalizeOneShotStatus(value?: string): ProjectImage2OneShotUiStatus {
+  if (value === "prepared") return "prepared";
+  if (value === "handoff_prepared") return "handoff_prepared";
+  if (value === "waiting_file") return "waiting_file";
+  if (value === "needs_review") return "needs_review";
+  if (value === "blocked") return "blocked";
+  if (value === "running") return "running";
+  if (value === "ready_to_prepare") return "ready_to_prepare";
+  return "unavailable";
+}
+
+export function deriveProjectImage2OneShotStatus(payload: unknown): ProjectImage2OneShotStatus {
+  const report = oneShotPayloadFromUnknown(payload);
+  if (!report) {
+    return {
+      uiStatus: "unavailable",
+      userLabel: "生成小样",
+      outputExists: false,
+      providerCalled: false,
+      liveSubmitAllowed: false,
+      projectVibeWritten: false,
+      workerSpawnForbidden: true,
+      blockers: [],
+      message: "未选择项目/未同步。",
+    };
+  }
+  const rawStatus = normalizeOneShotStatus(report.uiStatus || report.status);
+  const project = report.project || {};
+  return {
+    uiStatus: rawStatus,
+    projectId: project.projectId || report.projectId,
+    projectRoot: project.projectRoot || report.projectRoot,
+    selectedShotId: report.selectedShotId,
+    expectedOutputPath: report.expectedOutputPath,
+    providerObservationPath: report.providerObservationPath,
+    semanticQaPath: report.semanticQaPath,
+    handoffPacketPath: report.handoffPacketPath,
+    receipt: report.receipt,
+    userLabel: report.userLabel || (rawStatus === "prepared" ? "确认生成" : rawStatus === "handoff_prepared" || rawStatus === "waiting_file" ? "等待文件" : rawStatus === "needs_review" ? "需要复核" : "生成小样"),
+    outputExists: report.watcherProjection?.outputExists === true,
+    providerCalled: report.providerCalled === true,
+    liveSubmitAllowed: report.liveSubmitAllowed === true,
+    projectVibeWritten: report.projectVibeWritten === true,
+    workerSpawnForbidden: report.workerSpawnForbidden !== false,
+    blockers: stringArray(report.blockers),
+    message: report.message,
+  };
+}
+
 async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
   const response = await fetch(toRuntimeUrl(url), runtimeRequestInit(init));
   if (!response.ok) throw new Error(`${url} returned ${response.status}`);
@@ -1050,5 +1198,80 @@ export async function runProjectImage2BatchCheck(expected?: ProjectRuntimeIdenti
     return unavailableImage2BatchState(
       "未选择项目/未同步。",
     );
+  }
+}
+
+function oneShotUnavailable(message = "未选择项目/未同步。"): ProjectImage2OneShotUiState {
+  return { status: "unavailable", message };
+}
+
+function oneShotPath(endpoint: string, selectedShotId?: string) {
+  if (!selectedShotId) return endpoint;
+  return `${endpoint}?selectedShotId=${encodeURIComponent(selectedShotId)}`;
+}
+
+export async function loadProjectImage2OneShotStatus(
+  expected?: ProjectRuntimeIdentity,
+  selectedShotId?: string,
+): Promise<ProjectImage2OneShotUiState> {
+  if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
+  if (!selectedShotId) return { status: "unavailable", message: "选择镜头后可生成小样。" };
+
+  try {
+    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(oneShotPath(projectImage2OneShotStatusEndpoint, selectedShotId), expected));
+    const summary = deriveProjectImage2OneShotStatus(payload);
+    return guardProjectImage2OneShotUiStateForCurrentProject({ status: summary.uiStatus, summary, receipt: summary.receipt }, expected);
+  } catch {
+    return oneShotUnavailable("选择镜头后可生成小样。");
+  }
+}
+
+export async function prepareProjectImage2OneShot(
+  expected?: ProjectRuntimeIdentity,
+  selectedShotId?: string,
+): Promise<ProjectImage2OneShotUiState> {
+  if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
+  if (!selectedShotId) return { status: "blocked", message: "请先选择一个镜头。" };
+
+  try {
+    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2OneShotPrepareEndpoint, expected), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        selectedShotId,
+        selectedShotIds: [selectedShotId],
+        imageCount: 1,
+      }),
+    });
+    const summary = deriveProjectImage2OneShotStatus(payload);
+    return guardProjectImage2OneShotUiStateForCurrentProject({ status: summary.uiStatus, summary, receipt: summary.receipt, message: summary.message }, expected);
+  } catch {
+    return { status: "blocked", message: "小样准备失败，请检查镜头和引用。" };
+  }
+}
+
+export async function confirmProjectImage2OneShot(
+  expected?: ProjectRuntimeIdentity,
+  receipt?: ProjectImage2OneShotReceipt,
+): Promise<ProjectImage2OneShotUiState> {
+  if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
+  if (!receipt?.selectedShotId) return { status: "blocked", message: "请先生成小样。" };
+
+  try {
+    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2OneShotConfirmEndpoint, expected), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        selectedShotId: receipt.selectedShotId,
+        selectedShotIds: [receipt.selectedShotId],
+        imageCount: 1,
+        expectedOutputPath: receipt.expectedOutputPath,
+        receipt,
+      }),
+    });
+    const summary = deriveProjectImage2OneShotStatus(payload);
+    return guardProjectImage2OneShotUiStateForCurrentProject({ status: summary.uiStatus, summary, receipt: summary.receipt, message: summary.message }, expected);
+  } catch {
+    return { status: "blocked", message: "确认生成失败，请重新生成小样。" };
   }
 }

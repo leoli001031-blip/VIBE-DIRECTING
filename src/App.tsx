@@ -94,16 +94,20 @@ import {
 import { applyPreRealTestClosure } from "./core/preRealTestClosure";
 import {
   currentProjectBindingIdentity,
+  confirmProjectImage2OneShot,
   loadCurrentProjectBindingStatus,
   loadCurrentProjectChoices,
+  loadProjectImage2OneShotStatus,
   loadProjectImage2BatchPlan,
   loadProjectRealChainStatus,
+  prepareProjectImage2OneShot,
   runProjectImage2BatchCheck,
   runProjectRealChainCheck,
   selectCurrentProjectBinding,
   type ProjectCurrentChoice,
   type ProjectCurrentBindingStatus,
   type ProjectImage2BatchUiState,
+  type ProjectImage2OneShotUiState,
   type ProjectRealChainPreviewItem,
   type ProjectRealChainUiState,
   type ProjectRealChainUiStatus,
@@ -428,6 +432,7 @@ type RealPilotUiSummary = {
 type OneShotActionStatus = "idle" | "confirmed";
 type ProjectRealChainPanelState = ProjectRealChainUiState;
 type ProjectImage2BatchPanelState = ProjectImage2BatchUiState;
+type ProjectImage2OneShotPanelState = ProjectImage2OneShotUiState;
 
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
@@ -7766,6 +7771,7 @@ function projectProductionReviewLabel(summary: ProjectRealChainPanelState["summa
 function ProjectRealChainPanel({
   state,
   image2BatchState,
+  image2OneShotState,
   selectedShotId,
   projectTitle,
   runtimeProjectBinding,
@@ -7777,9 +7783,12 @@ function ProjectRealChainPanel({
   onConnectProject,
   onRun,
   onRunImage2Batch,
+  onPrepareImage2OneShot,
+  onConfirmImage2OneShot,
 }: {
   state: ProjectRealChainPanelState;
   image2BatchState: ProjectImage2BatchPanelState;
+  image2OneShotState: ProjectImage2OneShotPanelState;
   selectedShotId: string;
   projectTitle: string;
   runtimeProjectBinding: ProjectCurrentBindingStatus;
@@ -7791,6 +7800,8 @@ function ProjectRealChainPanel({
   onConnectProject: () => void;
   onRun: () => void;
   onRunImage2Batch: () => void;
+  onPrepareImage2OneShot: () => void;
+  onConfirmImage2OneShot: () => void;
 }) {
   const projectBound = runtimeProjectBinding.status === "bound";
   const summary = projectBound ? state.summary : undefined;
@@ -7810,6 +7821,20 @@ function ProjectRealChainPanel({
     : "未选择项目";
   const disabled = !projectBound || running;
   const reviewDisabled = !projectBound || image2BatchRunning;
+  const sampleReady = image2OneShotState.status === "prepared";
+  const sampleWaiting = image2OneShotState.status === "handoff_prepared" || image2OneShotState.status === "waiting_file";
+  const sampleReview = image2OneShotState.status === "needs_review";
+  const sampleRunning = image2OneShotState.status === "running";
+  const sampleBlocked = image2OneShotState.status === "blocked";
+  const sampleDisabled = !projectBound || sampleRunning || sampleWaiting || sampleReview;
+  const sampleButtonLabel = sampleWaiting
+    ? "等待文件"
+    : sampleReview
+      ? "需要复核"
+      : sampleReady
+        ? "确认生成"
+        : "生成小样";
+  const sampleStatusLabel = sampleReview ? "需要复核" : sampleWaiting ? "等待文件" : sampleReady ? "待确认" : sampleBlocked ? "待补齐" : "可开始";
   const connecting = projectSelectionStatus === "connecting";
   const canConnect = projectPathInput.trim().length > 0 && !connecting;
 
@@ -7871,6 +7896,20 @@ function ProjectRealChainPanel({
           {image2BatchRunning ? "检查中" : "复核检查"}
         </button>
       </div>
+      <div className="project-real-chain-one-shot">
+        <div>
+          <span>单镜头小样</span>
+          <strong>{sampleStatusLabel}</strong>
+          <small>{selectedShotId ? `镜头 ${selectedShotId}` : "选择镜头后开始"}</small>
+        </div>
+        <button
+          disabled={sampleDisabled}
+          onClick={sampleReady ? onConfirmImage2OneShot : onPrepareImage2OneShot}
+        >
+          {sampleReady ? <CheckCircle2 size={14} /> : <Sparkles size={14} />}
+          {sampleRunning ? "准备中" : sampleButtonLabel}
+        </button>
+      </div>
       {visibleItems.length > 0 && (
         <div className="project-real-chain-thumbs" aria-label="当前项目预览图">
           {visibleItems.map((item) => (
@@ -7890,6 +7929,7 @@ function ProjectRealChainPanel({
       {!projectBound && <small className="project-real-chain-message">未选择项目/未同步</small>}
       {state.message && <small className="project-real-chain-message">{state.message}</small>}
       {image2BatchState.message && <small className="project-real-chain-message">{image2BatchState.message}</small>}
+      {image2OneShotState.message && <small className="project-real-chain-message">{image2OneShotState.message}</small>}
     </section>
   );
 }
@@ -8005,6 +8045,7 @@ function DirectorMode({
   projectRealChainState,
   currentProjectPreviewItems,
   projectImage2BatchState,
+  projectImage2OneShotState,
   runtimeProjectBinding,
   projectChoices,
   directorView,
@@ -8018,6 +8059,8 @@ function DirectorMode({
   onConfirmOneShot,
   onRunProjectRealChain,
   onRunProjectImage2Batch,
+  onPrepareImage2OneShot,
+  onConfirmImage2OneShot,
   projectPathInput,
   projectSelectionStatus,
   onProjectPathChange,
@@ -8041,6 +8084,7 @@ function DirectorMode({
   projectRealChainState: ProjectRealChainPanelState;
   currentProjectPreviewItems?: PreviewQueueItem[];
   projectImage2BatchState: ProjectImage2BatchPanelState;
+  projectImage2OneShotState: ProjectImage2OneShotPanelState;
   runtimeProjectBinding: ProjectCurrentBindingStatus;
   projectChoices: ProjectCurrentChoice[];
   directorView: DirectorView;
@@ -8054,6 +8098,8 @@ function DirectorMode({
   onConfirmOneShot: () => void;
   onRunProjectRealChain: () => void;
   onRunProjectImage2Batch: () => void;
+  onPrepareImage2OneShot: () => void;
+  onConfirmImage2OneShot: () => void;
   projectPathInput: string;
   projectSelectionStatus?: "idle" | "connecting" | "connected" | "error";
   onProjectPathChange: (value: string) => void;
@@ -8071,6 +8117,7 @@ function DirectorMode({
         <ProjectRealChainPanel
           state={projectRealChainState}
           image2BatchState={projectImage2BatchState}
+          image2OneShotState={projectImage2OneShotState}
           selectedShotId={selectedShotId}
           projectTitle={runtimeState.project.title}
           runtimeProjectBinding={runtimeProjectBinding}
@@ -8082,6 +8129,8 @@ function DirectorMode({
           onConnectProject={onConnectProject}
           onRun={onRunProjectRealChain}
           onRunImage2Batch={onRunProjectImage2Batch}
+          onPrepareImage2OneShot={onPrepareImage2OneShot}
+          onConfirmImage2OneShot={onConfirmImage2OneShot}
         />
         {directorView === "assets" && (
           <MinimalAssetLibrary
@@ -9440,6 +9489,7 @@ function App() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | undefined>();
   const [projectRealChainState, setProjectRealChainState] = useState<ProjectRealChainPanelState>({ status: "unavailable" });
   const [projectImage2BatchState, setProjectImage2BatchState] = useState<ProjectImage2BatchPanelState>({ status: "unavailable" });
+  const [projectImage2OneShotState, setProjectImage2OneShotState] = useState<ProjectImage2OneShotPanelState>({ status: "unavailable" });
   const [runtimeProjectBinding, setRuntimeProjectBinding] = useState<ProjectCurrentBindingStatus>({ status: "loading" });
   const [projectPathInput, setProjectPathInput] = useState("");
   const [projectChoices, setProjectChoices] = useState<ProjectCurrentChoice[]>([]);
@@ -9561,6 +9611,7 @@ function App() {
     if (!runtimeProjectIdentity) {
       setProjectRealChainState({ status: "unavailable", message: "未选择项目/未同步。" });
       setProjectImage2BatchState({ status: "unavailable", message: "未选择项目/未同步。" });
+      setProjectImage2OneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
       return () => {
         cancelled = true;
       };
@@ -9571,10 +9622,13 @@ function App() {
     loadProjectImage2BatchPlan(runtimeProjectIdentity).then((nextState) => {
       if (!cancelled) setProjectImage2BatchState(nextState);
     });
+    loadProjectImage2OneShotStatus(runtimeProjectIdentity, selectedShotId).then((nextState) => {
+      if (!cancelled) setProjectImage2OneShotState(nextState);
+    });
     return () => {
       cancelled = true;
     };
-  }, [runtimeProjectIdentity]);
+  }, [runtimeProjectIdentity, selectedShotId]);
 
   const currentProjectPreviewProjection = useMemo(() => buildCurrentProjectPreviewProjection({
     summary: projectRealChainState.summary,
@@ -9701,6 +9755,7 @@ function App() {
     const normalizedSelection = nextSelection.length ? nextSelection : [shotId];
     setSelectedShotIds(normalizedSelection);
     setSelectedShotId(normalizedSelection.includes(shotId) ? shotId : normalizedSelection[0]);
+    setProjectImage2OneShotState({ status: "unavailable", message: "选择镜头后可生成小样。" });
     const section = view.storySections.find((item) => item.shotIds.includes(shotId));
     if (section) setActiveSectionId(section.id);
   }
@@ -9715,14 +9770,17 @@ function App() {
     if (!identity) {
       setProjectRealChainState({ status: "unavailable", message: "未选择项目/未同步。" });
       setProjectImage2BatchState({ status: "unavailable", message: "未选择项目/未同步。" });
+      setProjectImage2OneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
       return;
     }
-    const [nextRealChainState, nextImage2BatchState] = await Promise.all([
+    const [nextRealChainState, nextImage2BatchState, nextOneShotState] = await Promise.all([
       loadProjectRealChainStatus(identity),
       loadProjectImage2BatchPlan(identity),
+      loadProjectImage2OneShotStatus(identity, selectedShotId),
     ]);
     setProjectRealChainState(nextRealChainState);
     setProjectImage2BatchState(nextImage2BatchState);
+    setProjectImage2OneShotState(nextOneShotState);
   }
 
   async function connectCurrentProject(choice?: ProjectCurrentChoice) {
@@ -9731,6 +9789,7 @@ function App() {
       setProjectSelectionStatus("error");
       setProjectRealChainState({ status: "unavailable", message: "请输入项目路径。" });
       setProjectImage2BatchState({ status: "unavailable", message: "请输入项目路径。" });
+      setProjectImage2OneShotState({ status: "unavailable", message: "请输入项目路径。" });
       return;
     }
     setProjectPathInput(projectRoot);
@@ -9742,6 +9801,11 @@ function App() {
       message: "正在连接当前项目。",
     }));
     setProjectImage2BatchState((current) => ({
+      ...current,
+      status: "running",
+      message: "正在同步当前项目。",
+    }));
+    setProjectImage2OneShotState((current) => ({
       ...current,
       status: "running",
       message: "正在同步当前项目。",
@@ -9762,6 +9826,7 @@ function App() {
       setRuntimeProjectBinding({ status: "unbound", message: "连接项目失败，请确认路径在当前工作区内并且项目文件可读取。" });
       setProjectRealChainState({ status: "unavailable", message: "连接项目失败，请确认路径在当前工作区内并且项目文件可读取。" });
       setProjectImage2BatchState({ status: "unavailable", message: "连接项目失败，请确认路径在当前工作区内并且项目文件可读取。" });
+      setProjectImage2OneShotState({ status: "unavailable", message: "连接项目失败，请确认路径在当前工作区内并且项目文件可读取。" });
       setProjectSelectionStatus("error");
     }
   }
@@ -9796,6 +9861,34 @@ function App() {
     }));
     const nextState = await runProjectImage2BatchCheck(runtimeProjectIdentity);
     setProjectImage2BatchState(nextState);
+  }
+
+  async function prepareImage2OneShot() {
+    if (!runtimeProjectIdentity) {
+      setProjectImage2OneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
+      return;
+    }
+    setProjectImage2OneShotState((current) => ({
+      ...current,
+      status: "running",
+      message: "正在准备小样。",
+    }));
+    const nextState = await prepareProjectImage2OneShot(runtimeProjectIdentity, workbenchSelectedShotId);
+    setProjectImage2OneShotState(nextState);
+  }
+
+  async function confirmImage2OneShot() {
+    if (!runtimeProjectIdentity) {
+      setProjectImage2OneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
+      return;
+    }
+    setProjectImage2OneShotState((current) => ({
+      ...current,
+      status: "running",
+      message: "正在确认生成。",
+    }));
+    const nextState = await confirmProjectImage2OneShot(runtimeProjectIdentity, projectImage2OneShotState.receipt || projectImage2OneShotState.summary?.receipt);
+    setProjectImage2OneShotState(nextState);
   }
 
   return (
@@ -9842,6 +9935,7 @@ function App() {
           projectRealChainState={projectRealChainState}
           currentProjectPreviewItems={currentProjectPreviewQueue}
           projectImage2BatchState={projectImage2BatchState}
+          projectImage2OneShotState={projectImage2OneShotState}
           runtimeProjectBinding={runtimeProjectBinding}
           projectPathInput={projectPathInput}
           projectChoices={projectChoices}
@@ -9857,6 +9951,8 @@ function App() {
           onConfirmOneShot={confirmOneShot}
           onRunProjectRealChain={runProjectRealChain}
           onRunProjectImage2Batch={runProjectImage2Batch}
+          onPrepareImage2OneShot={prepareImage2OneShot}
+          onConfirmImage2OneShot={confirmImage2OneShot}
           onProjectPathChange={setProjectPathInput}
           onSelectProjectChoice={selectProjectChoice}
           onConnectProject={connectCurrentProject}
