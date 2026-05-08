@@ -131,16 +131,45 @@ const queryPath = projectRuntimeRequestPath(currentEndpoint, {
 });
 assert(queryPath === currentEndpoint, "current project requests must not carry project id/root query params");
 
+function currentProjectBindingResponse(project) {
+  return {
+    ok: true,
+    status: "bound",
+    currentProject: {
+      bound: true,
+      bindingPath: ".vibe/current-project-binding.json",
+      binding: {
+        schemaVersion: "vibe_core_current_project_binding_v1",
+        projectRoot: project.projectRoot,
+        projectRootRelativePath: project.projectRoot,
+        projectVibeRelativePath: `${project.projectRoot}/project/project.vibe`,
+        projectId: project.projectId,
+        displayName: project.title,
+        selectedAt: "2026-05-08T00:00:00.000Z",
+      },
+      project: {
+        projectId: project.projectId,
+        projectRoot: project.projectRoot,
+        projectVibePath: `${project.projectRoot}/project/project.vibe`,
+        title: project.title,
+      },
+      projectRoot: project.projectRoot,
+      projectRootRelativePath: project.projectRoot,
+      projectVibeRelativePath: `${project.projectRoot}/project/project.vibe`,
+    },
+  };
+}
+
 const boundBinding = deriveCurrentProjectBindingStatus({
-  status: "bound",
-  project: {
+  ...currentProjectBindingResponse({
     projectId: "real-demo-e2e-004",
     projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004",
     title: "004 当前项目",
-  },
+  }),
 });
 assert(boundBinding.status === "bound", "bound current project status should parse");
 assert(boundBinding.projectTitle === "004 当前项目", "bound current project title should parse");
+assert(currentProjectBindingIdentity(boundBinding)?.projectId === "real-demo-e2e-004", "bound identity should include project id from currentProject.project");
 assert(currentProjectBindingIdentity(boundBinding)?.projectRoot?.endsWith("/004"), "bound identity should come from current binding");
 
 const unboundBinding = deriveCurrentProjectBindingStatus({ status: "unbound" });
@@ -185,6 +214,9 @@ assert(realChainMatched.status === "production_needs_review", "matching real-cha
 
 for (const [label, identity] of [
   ["004 current identity", { projectId: "real-demo-e2e-004", projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004" }],
+  ["same id different root", { projectId: "real-demo-e2e-005", projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004" }],
+  ["same root different id", { projectId: "real-demo-e2e-004", projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005" }],
+  ["id-only weak fallback", { projectId: "real-demo-e2e-005" }],
   ["other current identity", { projectId: "actual-current-project", projectRoot: "/Users/lichenhao/Desktop/some-other-project-root" }],
   ["repo-outside suffix 005 identity", { projectId: "external-005", projectRoot: "/tmp/repo-outside/005" }],
   ["unbound identity", undefined],

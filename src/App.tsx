@@ -84,6 +84,7 @@ import {
   type PreviewQueueItem,
   type PreviewQueueItemKind,
 } from "./core/previewPlayerQueue";
+import { buildCurrentProjectPreviewProjection } from "./core/currentProjectPreviewProjection";
 import { applyPreRealTestClosure } from "./core/preRealTestClosure";
 import {
   currentProjectBindingIdentity,
@@ -7151,12 +7152,14 @@ function MinimalAssetLibrary({
 
 function MinimalPreview({
   previewExport,
+  currentProjectPreviewItems,
   sections,
   shots,
   selectedShotId,
   onSelectShot,
 }: {
   previewExport: ProjectPreviewExportState;
+  currentProjectPreviewItems?: PreviewQueueItem[];
   sections: RuntimeView["storySections"];
   shots: ShotRecord[];
   selectedShotId: string;
@@ -7166,7 +7169,8 @@ function MinimalPreview({
   const [currentTime, setCurrentTime] = useState(0);
   const currentTimeRef = useRef(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const queue = useMemo(() => buildPreviewPlayerQueue(previewExport, shots), [previewExport, shots]);
+  const fallbackQueue = useMemo(() => buildPreviewPlayerQueue(previewExport, shots), [previewExport, shots]);
+  const queue = currentProjectPreviewItems ?? fallbackQueue;
   const projection = useMemo(() => buildMinimalRuntimeProjection({ previewQueue: queue }), [queue]);
   const total = Math.max(1, getPreviewPlayerTotalDuration(queue));
   const activeItem = getPreviewPlayerActiveItem(queue, currentTime);
@@ -7881,6 +7885,7 @@ function DirectorMode({
   selectedShotIds,
   selectedAssetId,
   projectRealChainState,
+  currentProjectPreviewItems,
   projectImage2BatchState,
   runtimeProjectBinding,
   directorView,
@@ -7908,6 +7913,7 @@ function DirectorMode({
   selectedShotIds: string[];
   selectedAssetId?: string;
   projectRealChainState: ProjectRealChainPanelState;
+  currentProjectPreviewItems?: PreviewQueueItem[];
   projectImage2BatchState: ProjectImage2BatchPanelState;
   runtimeProjectBinding: ProjectCurrentBindingStatus;
   directorView: DirectorView;
@@ -7961,6 +7967,7 @@ function DirectorMode({
         {directorView === "preview" && (
           <MinimalPreview
             previewExport={runtimeState.previewExport}
+            currentProjectPreviewItems={currentProjectPreviewItems}
             sections={view.storySections}
             shots={audit.shots}
             selectedShotId={selectedShotId}
@@ -9434,12 +9441,19 @@ function App() {
   );
   const selectedAsset = useMemo(() => audit.assets.find((asset) => asset.id === selectedAssetId), [audit.assets, selectedAssetId]);
   const blockers = audit.issues.filter((issue) => issue.severity === "blocker");
+  const currentProjectPreviewProjection = useMemo(() => buildCurrentProjectPreviewProjection({
+    summary: projectRealChainState.summary,
+    previewItems: projectRealChainState.summary?.previewItems,
+  }), [projectRealChainState.summary]);
+  const currentProjectPreviewQueue = runtimeProjectBinding.status === "bound"
+    ? currentProjectPreviewProjection.queue
+    : [];
   const topRuntimeProjection = useMemo(() => buildMinimalRuntimeProjection({
-    previewQueue: buildPreviewPlayerQueue(runtimeState.previewExport, runtimeState.storyFlow.shots),
+    previewQueue: currentProjectPreviewQueue,
     assetLibrary,
     ledgerProjections: projectImage2BatchState.summary?.ledgerProjections,
     generatedAt: runtimeState.generatedAt,
-  }), [assetLibrary, projectImage2BatchState.summary?.ledgerProjections, runtimeState.generatedAt, runtimeState.previewExport, runtimeState.storyFlow.shots]);
+  }), [assetLibrary, currentProjectPreviewQueue, projectImage2BatchState.summary?.ledgerProjections, runtimeState.generatedAt]);
   const projectPlan = useMemo(
     () => buildMinimalProjectPlan(runtimeState, topRuntimeProjection.shortLabel, topRuntimeProjection.progressDots),
     [runtimeState, topRuntimeProjection.progressDots, topRuntimeProjection.shortLabel],
@@ -9564,6 +9578,7 @@ function App() {
           selectedShotIds={selectedShotIds}
           selectedAssetId={selectedAssetId}
           projectRealChainState={projectRealChainState}
+          currentProjectPreviewItems={currentProjectPreviewQueue}
           projectImage2BatchState={projectImage2BatchState}
           runtimeProjectBinding={runtimeProjectBinding}
           directorView={directorView}

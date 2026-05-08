@@ -60,6 +60,36 @@ const project005 = {
   title: "005 旧项目",
 };
 
+function currentProjectBindingResponse(project, overrides = {}) {
+  return {
+    ok: true,
+    status: "bound",
+    currentProject: {
+      bound: true,
+      bindingPath: ".vibe/current-project-binding.json",
+      binding: {
+        schemaVersion: "vibe_core_current_project_binding_v1",
+        projectRoot: project.projectRoot,
+        projectRootRelativePath: project.projectRoot,
+        projectVibeRelativePath: `${project.projectRoot}/project/project.vibe`,
+        projectId: project.projectId,
+        displayName: project.title,
+        selectedAt: "2026-05-08T00:00:00.000Z",
+      },
+      project: {
+        projectId: project.projectId,
+        projectRoot: project.projectRoot,
+        projectVibePath: `${project.projectRoot}/project/project.vibe`,
+        title: project.title,
+      },
+      projectRoot: project.projectRoot,
+      projectRootRelativePath: project.projectRoot,
+      projectVibeRelativePath: `${project.projectRoot}/project/project.vibe`,
+    },
+    ...overrides,
+  };
+}
+
 const stale005RealChainPayload = {
   project: project005,
   status: "preview_ready_with_review",
@@ -127,12 +157,13 @@ assert(requests.length === 1 && requests[0].url === projectCurrentBindingEndpoin
 assert(!/005|fallback|endpoint|provider|ledger|prompt|queue/i.test(noIdentityState.message || ""), "unbound message must not leak engineering/demo details");
 
 responseByUrl = new Map([
-  [projectCurrentBindingEndpoint, { status: "bound", project: project004 }],
+  [projectCurrentBindingEndpoint, currentProjectBindingResponse(project004)],
   [projectRealChainStatusEndpoint, stale005RealChainPayload],
 ]);
 requests = [];
 const binding004 = await loadCurrentProjectBindingStatus();
 const identity004 = currentProjectBindingIdentity(binding004);
+assert(identity004?.projectId === project004.projectId, "004 binding identity should include project id from real currentProject response");
 assert(identity004?.projectRoot === project004.projectRoot, "004 binding should become the current project identity");
 const staleStatus = await loadProjectRealChainStatus(identity004);
 assert(staleStatus.status === "unavailable", "stale 005 status must be blocked under 004 binding");
@@ -141,7 +172,7 @@ assert(requests[1].url === projectRealChainStatusEndpoint, "real-chain status mu
 assert(!requests[1].url.includes("?"), "real-chain status request must not carry projectRoot query");
 
 responseByUrl = new Map([
-  [projectCurrentBindingEndpoint, { status: "bound", project: project004 }],
+  [projectCurrentBindingEndpoint, currentProjectBindingResponse(project004)],
   [projectRealChainStatusEndpoint, current004RealChainPayload],
   [projectImage2BatchPlanEndpoint, current004Image2Payload],
 ]);

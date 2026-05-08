@@ -64,6 +64,7 @@
     "current-project-image2-batch:test": "node scripts/current-project-image2-batch-test.mjs",
     "current-project-image2-batch-ledger:test": "node scripts/current-project-image2-batch-ledger-test.mjs",
     "current-project-image2-runtime-projection:test": "node scripts/current-project-image2-runtime-projection-test.mjs",
+    "current-project-preview-projection:test": "node scripts/current-project-preview-projection-test.mjs",
     "current-project-image2-closed-loop:test": "node scripts/current-project-image2-closed-loop-test.mjs",
     "current-project-ui-closed-loop:test": "node scripts/current-project-ui-closed-loop-test.mjs",
     "current-project-selection-binding:test": "node scripts/current-project-selection-binding-test.mjs",

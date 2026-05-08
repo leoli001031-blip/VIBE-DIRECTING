@@ -306,23 +306,38 @@ function normalizeIdentityPart(value?: string) {
     .toLowerCase();
 }
 
-function compactUnique(values: string[]) {
-  return Array.from(new Set(values.map(normalizeIdentityPart).filter(Boolean)));
-}
-
 function hasProjectRuntimeIdentity(value?: ProjectRuntimeIdentity) {
   return Boolean(String(value?.projectId || "").trim() || String(value?.projectRoot || "").trim());
+}
+
+function stringRecordValue(record: Record<string, unknown> | undefined, keys: string[]) {
+  if (!record) return undefined;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return undefined;
 }
 
 function currentProjectIdentityMatches(
   actual: { projectId?: string; projectRoot?: string },
   expected?: ProjectRuntimeIdentity,
 ) {
-  const expectedParts = compactUnique([expected?.projectId || "", expected?.projectRoot || ""]);
-  if (!expectedParts.length) return false;
-  const actualParts = compactUnique([actual.projectId || "", actual.projectRoot || ""]);
-  if (!actualParts.length) return false;
-  return expectedParts.some((expectedPart) => actualParts.includes(expectedPart));
+  const expectedProjectId = normalizeIdentityPart(expected?.projectId);
+  const expectedProjectRoot = normalizeIdentityPart(expected?.projectRoot);
+  const actualProjectId = normalizeIdentityPart(actual.projectId);
+  const actualProjectRoot = normalizeIdentityPart(actual.projectRoot);
+
+  if (!expectedProjectId && !expectedProjectRoot) return false;
+  if (!actualProjectId && !actualProjectRoot) return false;
+
+  if (expectedProjectRoot && actualProjectRoot) {
+    if (expectedProjectRoot !== actualProjectRoot) return false;
+    if (expectedProjectId && actualProjectId && expectedProjectId !== actualProjectId) return false;
+    return true;
+  }
+
+  return false;
 }
 
 function projectMismatchMessage() {
@@ -364,33 +379,36 @@ export function deriveCurrentProjectBindingStatus(payload: unknown): ProjectCurr
     };
   }
 
-  const project = isRecord(payload.project) ? payload.project : payload;
-  const projectId = typeof project.projectId === "string"
-    ? project.projectId
-    : typeof project.id === "string"
-      ? project.id
-      : undefined;
-  const projectRoot = typeof project.projectRoot === "string"
-    ? project.projectRoot
-    : typeof project.root === "string"
-      ? project.root
-      : undefined;
-  const projectTitle = typeof project.projectTitle === "string"
-    ? project.projectTitle
-    : typeof project.title === "string"
-      ? project.title
-      : typeof project.name === "string"
-        ? project.name
-        : undefined;
-  const projectVibePath = typeof project.projectVibePath === "string" ? project.projectVibePath : undefined;
+  const currentProject = isRecord(payload.currentProject) ? payload.currentProject : undefined;
+  const binding = isRecord(currentProject?.binding) ? currentProject.binding : undefined;
+  const project = isRecord(currentProject?.project)
+    ? currentProject.project
+    : isRecord(payload.project)
+      ? payload.project
+      : payload;
+  const projectId = stringRecordValue(project, ["projectId", "id"])
+    || stringRecordValue(currentProject, ["projectId"])
+    || stringRecordValue(binding, ["projectId"]);
+  const projectRoot = stringRecordValue(project, ["projectRoot", "root"])
+    || stringRecordValue(currentProject, ["projectRoot", "projectRootRelativePath"])
+    || stringRecordValue(binding, ["projectRoot", "projectRootRelativePath"]);
+  const projectTitle = stringRecordValue(project, ["projectTitle", "title", "name"])
+    || stringRecordValue(currentProject, ["projectTitle", "title", "name", "displayName"])
+    || stringRecordValue(binding, ["projectTitle", "title", "name", "displayName"]);
+  const projectVibePath = stringRecordValue(project, ["projectVibePath", "projectVibeRelativePath"])
+    || stringRecordValue(currentProject, ["projectVibePath", "projectVibeRelativePath"])
+    || stringRecordValue(binding, ["projectVibePath", "projectVibeRelativePath"]);
   const rawStatus = typeof payload.status === "string" ? payload.status.trim().toLowerCase() : "";
   const explicitlyUnbound = payload.bound === false
+    || currentProject?.bound === false
     || ["unbound", "unselected", "not_selected", "none", "missing"].includes(rawStatus);
+  const explicitlyBlocked = ["blocked", "error", "forbidden", "bad_request"].includes(rawStatus);
   const bound = payload.bound === true
+    || currentProject?.bound === true
     || ["bound", "selected", "ready", "ok"].includes(rawStatus)
     || Boolean(projectId || projectRoot);
 
-  if (!explicitlyUnbound && bound) {
+  if (!explicitlyUnbound && !explicitlyBlocked && bound) {
     return {
       status: "bound",
       projectId,
@@ -410,7 +428,7 @@ export function deriveCurrentProjectBindingStatus(payload: unknown): ProjectCurr
 export function currentProjectBindingIdentity(binding: ProjectCurrentBindingStatus): ProjectRuntimeIdentity | undefined {
   if (binding.status !== "bound") return undefined;
   const identity = {
-    projectId: binding.projectId || binding.projectTitle,
+    projectId: binding.projectId,
     projectRoot: binding.projectRoot,
   };
   return hasProjectRuntimeIdentity(identity) ? identity : undefined;
