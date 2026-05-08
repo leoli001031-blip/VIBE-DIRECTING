@@ -95,6 +95,7 @@ import { applyPreRealTestClosure } from "./core/preRealTestClosure";
 import {
   currentProjectBindingIdentity,
   confirmProjectImage2OneShot,
+  executeReturnedProjectImage2OneShot,
   loadCurrentProjectBindingStatus,
   loadCurrentProjectChoices,
   loadProjectImage2OneShotStatus,
@@ -7785,6 +7786,7 @@ function ProjectRealChainPanel({
   onRunImage2Batch,
   onPrepareImage2OneShot,
   onConfirmImage2OneShot,
+  onCheckImage2OneShotReturn,
 }: {
   state: ProjectRealChainPanelState;
   image2BatchState: ProjectImage2BatchPanelState;
@@ -7802,6 +7804,7 @@ function ProjectRealChainPanel({
   onRunImage2Batch: () => void;
   onPrepareImage2OneShot: () => void;
   onConfirmImage2OneShot: () => void;
+  onCheckImage2OneShotReturn: () => void;
 }) {
   const projectBound = runtimeProjectBinding.status === "bound";
   const summary = projectBound ? state.summary : undefined;
@@ -7826,9 +7829,10 @@ function ProjectRealChainPanel({
   const sampleReview = image2OneShotState.status === "needs_review";
   const sampleRunning = image2OneShotState.status === "running";
   const sampleBlocked = image2OneShotState.status === "blocked";
-  const sampleDisabled = !projectBound || sampleRunning || sampleWaiting || sampleReview;
+  const sampleDisabled = !projectBound || sampleRunning || sampleReview;
+  const sampleAction = sampleReady ? onConfirmImage2OneShot : sampleWaiting ? onCheckImage2OneShotReturn : onPrepareImage2OneShot;
   const sampleButtonLabel = sampleWaiting
-    ? "等待文件"
+    ? "检查回流"
     : sampleReview
       ? "需要复核"
       : sampleReady
@@ -7903,8 +7907,8 @@ function ProjectRealChainPanel({
           <small>{selectedShotId ? `镜头 ${selectedShotId}` : "选择镜头后开始"}</small>
         </div>
         <button
-          disabled={sampleDisabled}
-          onClick={sampleReady ? onConfirmImage2OneShot : onPrepareImage2OneShot}
+          disabled={sampleDisabled && !sampleWaiting}
+          onClick={sampleAction}
         >
           {sampleReady ? <CheckCircle2 size={14} /> : <Sparkles size={14} />}
           {sampleRunning ? "准备中" : sampleButtonLabel}
@@ -8061,6 +8065,7 @@ function DirectorMode({
   onRunProjectImage2Batch,
   onPrepareImage2OneShot,
   onConfirmImage2OneShot,
+  onCheckImage2OneShotReturn,
   projectPathInput,
   projectSelectionStatus,
   onProjectPathChange,
@@ -8100,6 +8105,7 @@ function DirectorMode({
   onRunProjectImage2Batch: () => void;
   onPrepareImage2OneShot: () => void;
   onConfirmImage2OneShot: () => void;
+  onCheckImage2OneShotReturn: () => void;
   projectPathInput: string;
   projectSelectionStatus?: "idle" | "connecting" | "connected" | "error";
   onProjectPathChange: (value: string) => void;
@@ -8131,6 +8137,7 @@ function DirectorMode({
           onRunImage2Batch={onRunProjectImage2Batch}
           onPrepareImage2OneShot={onPrepareImage2OneShot}
           onConfirmImage2OneShot={onConfirmImage2OneShot}
+          onCheckImage2OneShotReturn={onCheckImage2OneShotReturn}
         />
         {directorView === "assets" && (
           <MinimalAssetLibrary
@@ -9891,6 +9898,22 @@ function App() {
     setProjectImage2OneShotState(nextState);
   }
 
+  async function checkImage2OneShotReturn() {
+    if (!runtimeProjectIdentity) {
+      setProjectImage2OneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
+      return;
+    }
+    setProjectImage2OneShotState((current) => ({
+      ...current,
+      status: "running",
+      message: "正在检查回流。",
+    }));
+    const nextState = await executeReturnedProjectImage2OneShot(runtimeProjectIdentity, projectImage2OneShotState.receipt || projectImage2OneShotState.summary?.receipt);
+    setProjectImage2OneShotState(nextState);
+    const refreshed = await loadProjectRealChainStatus(runtimeProjectIdentity);
+    setProjectRealChainState(refreshed);
+  }
+
   return (
     <div className={`app-shell minimal-shell ${mode === "director" && directorView === "preview" ? "preview-shell" : ""}`}>
       <MinimalTopNav
@@ -9953,6 +9976,7 @@ function App() {
           onRunProjectImage2Batch={runProjectImage2Batch}
           onPrepareImage2OneShot={prepareImage2OneShot}
           onConfirmImage2OneShot={confirmImage2OneShot}
+          onCheckImage2OneShotReturn={checkImage2OneShotReturn}
           onProjectPathChange={setProjectPathInput}
           onSelectProjectChoice={selectProjectChoice}
           onConnectProject={connectCurrentProject}
