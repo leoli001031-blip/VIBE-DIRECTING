@@ -50,6 +50,7 @@ import { buildDirectorWorkflowState, type DirectorWorkflowStatus } from "./core/
 import { buildMinimalRuntimeProjection, type MinimalRuntimeProjection } from "./core/minimalRuntimeProjection";
 import {
   buildProjectTransactionRuntime,
+  commitProjectPendingTransactionForRuntime,
   confirmProjectPendingTransactionForRuntime,
   type ProjectConfirmedProjectionReceipt,
 } from "./core/projectTransaction";
@@ -864,13 +865,22 @@ function agentReceiptCountSummary(receipt: ProjectConfirmedProjectionReceipt) {
 function confirmAgentPlanProjection(workflow: MinimalAgentWorkflow, runtimeState: ProjectRuntimeState) {
   const transactionRuntime = confirmedTransactionRuntime(workflow, runtimeState);
   const receipt = confirmProjectPendingTransactionForRuntime(transactionRuntime);
+  const stagedReceipt = commitProjectPendingTransactionForRuntime({
+    runtime: transactionRuntime,
+    confirmationReceipt: receipt,
+  });
   const hardLocksHeld = receipt.projectVibeWriteAllowed === false
     && receipt.projectVibeWriteExecuted === false
     && receipt.noFileMutation === true
     && receipt.providerSubmissionForbidden === true
     && receipt.workerSpawnForbidden === true
     && receipt.providerCalled === false
-    && receipt.projectVibeWritten === false;
+    && receipt.projectVibeWritten === false
+    && stagedReceipt.projectVibeWritten === false
+    && stagedReceipt.providerCalled === false
+    && stagedReceipt.workerSpawned === false
+    && stagedReceipt.hardLocks.noFileMutation === true
+    && stagedReceipt.hardLocks.projectVibeWriteAllowed === false;
   const baseProjection = buildMinimalRuntimeProjection({
     generatedAt: receipt.generatedAt,
     transactionRuntime,
@@ -881,11 +891,12 @@ function confirmAgentPlanProjection(workflow: MinimalAgentWorkflow, runtimeState
     blocked: receipt.blockedCount,
     stale: receipt.runtimeProjection.staleArtifactCount,
   };
-  const shortLabel = hardLocksHeld ? agentReceiptStatusLabel(receipt) : "需更新";
+  const shortLabel = hardLocksHeld && stagedReceipt.status === "staged" ? "已准备写入" : agentReceiptStatusLabel(receipt);
   const countSummary = agentReceiptCountSummary(receipt);
 
   return {
     receipt,
+    stagedReceipt,
     projection: {
       ...baseProjection,
       generatedAt: receipt.generatedAt,

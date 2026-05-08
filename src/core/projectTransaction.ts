@@ -353,6 +353,85 @@ export interface ProjectConfirmedProjectionReceipt {
   projectVibeWritten: false;
 }
 
+export type ProjectFactsStagedCommitStatus =
+  | "staged"
+  | "blocked_not_confirmed"
+  | "blocked_missing_knowledge_trace"
+  | "blocked_missing_task_envelope"
+  | "blocked_missing_expected_outputs"
+  | "blocked_missing_qa_checklist"
+  | "blocked_queue"
+  | "blocked_write_gate";
+
+export interface ProjectFactsStagedTaskRunPointer {
+  taskRunId: string;
+  packetId: string;
+  taskKind: TaskPacketKind;
+  taskEnvelopeId: string;
+  queueStatus: ProjectTransactionQueueStatus;
+  expectedOutputs: string[];
+  pointerOnly: true;
+  providerSubmissionForbidden: true;
+}
+
+export interface ProjectFactStagedPatch {
+  patchId: string;
+  transactionId: string;
+  role: ProjectFactWriteRole;
+  operation: "stage_append_pending" | "stage_update" | "stage_link";
+  sourceComponentKinds: ProjectTransactionKind[];
+  sourceComponentIds: string[];
+  targetIds: string[];
+  sourceRefs: string[];
+  changeKinds: ProjectTransactionChangeKind[];
+  stagedTaskRunPointers: ProjectFactsStagedTaskRunPointer[];
+  affectedExpectedOutputs: string[];
+  summary: string;
+  noFileMutation: true;
+  projectVibeWriteAllowed: false;
+}
+
+export interface ProjectFactsStagedCommitReceipt {
+  schemaVersion: typeof projectTransactionSchemaVersion;
+  receiptId: string;
+  transactionId: string;
+  sourceConfirmationReceiptId: string;
+  generatedAt: string;
+  status: ProjectFactsStagedCommitStatus;
+  mode: "dry_run_staged";
+  requiresConfirmedReceipt: true;
+  stagedOnly: true;
+  pendingFactPatches: ProjectFactStagedPatch[];
+  stagingSummary: {
+    rolesToUpdate: ProjectFactWriteRole[];
+    sourceComponentKinds: ProjectTransactionKind[];
+    sourceComponentCount: number;
+    stagedTaskRunPointerCount: number;
+    queuedTaskRunPointerCount: number;
+    parkedTaskRunPointerCount: number;
+    affectedExpectedOutputCount: number;
+  };
+  blockedReasons: string[];
+  nextAction: "show_confirmation" | "repair_constraints" | "repair_queue_blockers" | "review_staged_project_facts";
+  hardLocks: {
+    noFileMutation: true;
+    projectVibeWriteAllowed: false;
+    projectVibeWritten: false;
+    providerCalled: false;
+    providerSubmissionForbidden: true;
+    workerSpawnForbidden: true;
+    workerSpawned: false;
+  };
+  projectVibeWritten: false;
+  providerCalled: false;
+  workerSpawned: false;
+}
+
+export interface CommitProjectPendingTransactionForRuntimeInput {
+  runtime: ProjectTransactionRuntimeState;
+  confirmationReceipt: ProjectConfirmedProjectionReceipt;
+}
+
 export interface BuildProjectTransactionRuntimeInput {
   workflowState: Pick<
     DirectorWorkflowState,
@@ -952,6 +1031,167 @@ export function confirmProjectPendingTransactionForRuntime(runtime: ProjectTrans
     providerCalled: false,
     projectVibeWritten: false,
   };
+}
+
+function stagedPatchOperation(operation: ProjectFactWriteRolePlan["operation"]): ProjectFactStagedPatch["operation"] {
+  if (operation === "append_pending") return "stage_append_pending";
+  if (operation === "link_on_user_commit") return "stage_link";
+  return "stage_update";
+}
+
+function stagedTaskRunPointers(runtime: ProjectTransactionRuntimeState): ProjectFactsStagedTaskRunPointer[] {
+  return runtime.pendingTransaction.taskEnqueue.items
+    .filter((item) => item.taskEnvelopeId)
+    .map((item) => ({
+      taskRunId: item.taskRunId,
+      packetId: item.packetId,
+      taskKind: item.taskKind,
+      taskEnvelopeId: item.taskEnvelopeId as string,
+      queueStatus: item.queueStatus,
+      expectedOutputs: item.expectedOutputs,
+      pointerOnly: true,
+      providerSubmissionForbidden: true,
+    }));
+}
+
+function stagedPatchesFor(runtime: ProjectTransactionRuntimeState): ProjectFactStagedPatch[] {
+  const taskRunPointers = stagedTaskRunPointers(runtime);
+  const componentByKind = new Map(runtime.pendingTransaction.components.map((item) => [item.kind, item]));
+  return runtime.projectFactsWriteGate.futureFactRoles.map((rolePlan) => {
+    const sourceComponents = rolePlan.sourceComponentKinds
+      .map((kind) => componentByKind.get(kind))
+      .filter((item): item is ProjectTransactionComponent => Boolean(item));
+    const roleTaskRunPointers = rolePlan.role === "task_runs_pointer" ? taskRunPointers : [];
+    const affectedExpectedOutputs = roleTaskRunPointers.length
+      ? unique(roleTaskRunPointers.flatMap((item) => item.expectedOutputs))
+      : runtime.pendingTransaction.artifactInvalidation.affectedExpectedOutputs;
+    return {
+      patchId: `${runtime.pendingTransaction.id}_${rolePlan.role}_staged_patch`,
+      transactionId: runtime.pendingTransaction.id,
+      role: rolePlan.role,
+      operation: stagedPatchOperation(rolePlan.operation),
+      sourceComponentKinds: rolePlan.sourceComponentKinds,
+      sourceComponentIds: unique(sourceComponents.map((item) => item.sourceId)),
+      targetIds: unique(sourceComponents.flatMap((item) => item.targetIds)),
+      sourceRefs: runtime.pendingTransaction.sourceFacts.sourceRefs,
+      changeKinds: runtime.pendingTransaction.artifactInvalidation.changeKinds,
+      stagedTaskRunPointers: roleTaskRunPointers,
+      affectedExpectedOutputs,
+      summary: `Staged ${rolePlan.role} project fact patch from ${rolePlan.sourceComponentKinds.join(", ")}.`,
+      noFileMutation: true,
+      projectVibeWriteAllowed: false,
+    };
+  });
+}
+
+function stagedCommitBlockedReasons(
+  runtime: ProjectTransactionRuntimeState,
+  confirmationReceipt: ProjectConfirmedProjectionReceipt,
+): string[] {
+  const plan = runtime.pendingTransaction.sourceFacts.expectedTaskEnqueuePlan;
+  const planner = runtime.pendingTransaction.sourceFacts.packetPlannerReceipt;
+  return unique([
+    confirmationReceipt.transactionId === runtime.pendingTransaction.id ? "" : "confirmation_receipt_transaction_mismatch",
+    confirmationReceipt.status === "confirmed" ? "" : confirmationReceipt.status,
+    runtime.pendingTransaction.userStatus === "waiting_confirmation" || runtime.userStatus === "waiting_confirmation" ? "pending_transaction_not_confirmed" : "",
+    runtime.pendingTransaction.status === "pending" ? "" : "pending_transaction_missing",
+    runtime.pendingTransaction.sourceFacts.knowledgeInjectionTrace.status === "present" ? "" : "blocked_missing_knowledge_trace",
+    runtime.queueIngestSummary.missingKnowledgeTrace > 0 ? "blocked_missing_knowledge_trace" : "",
+    runtime.pendingTransaction.sourceFacts.taskEnvelopeIds.length ? "" : "validated_task_envelope_missing",
+    runtime.pendingTransaction.taskEnqueue.items.some((item) => !item.taskEnvelopeId) ? "validated_task_envelope_missing" : "",
+    plan.validatedEnvelopeRequired === true ? "" : "validated_task_envelope_missing",
+    plan.knowledgeTraceRequired === true ? "" : "blocked_missing_knowledge_trace",
+    plan.expectedOutputsRequired === true && planner.expectedOutputsIncluded === true ? "" : "expected_outputs_missing",
+    runtime.pendingTransaction.taskEnqueue.items.some((item) => item.expectedOutputs.length === 0 || item.validationErrors.includes("expected_outputs_missing"))
+      ? "expected_outputs_missing"
+      : "",
+    plan.qaChecklistRequired === true ? "" : "qa_checklist_missing",
+    runtime.pendingTransaction.taskEnqueue.items.some((item) => item.validationErrors.includes("qa_checklist_missing")) ? "qa_checklist_missing" : "",
+    runtime.queueIngestSummary.blocked > 0
+      ? runtime.pendingTransaction.taskEnqueue.items
+          .filter((item) => item.queueStatus === "blocked")
+          .flatMap((item) => item.validationErrors.length ? item.validationErrors : item.queueDecision.blockers)
+          .join("|")
+      : "",
+    runtime.projectFactsWriteGate.projectVibeWriteAllowed === false &&
+    runtime.projectFactsWriteGate.noFileMutation === true &&
+    runtime.projectFactsWriteGate.requiresUserCommit === true &&
+    runtime.projectFactsWriteGate.canWriteNow === false &&
+    runtime.hardLocks.projectVibeWriteAllowed === false &&
+    runtime.hardLocks.noFileMutation === true &&
+    runtime.hardLocks.workerSpawnForbidden === true &&
+    runtime.hardLocks.providerSubmissionForbidden === true
+      ? ""
+      : "project_facts_write_gate_lock_drift",
+  ].flatMap((reason) => reason.split("|")));
+}
+
+function stagedCommitStatusFor(blockedReasons: string[]): ProjectFactsStagedCommitStatus {
+  if (!blockedReasons.length) return "staged";
+  if (blockedReasons.includes("blocked_not_confirmed") || blockedReasons.includes("pending_transaction_not_confirmed")) return "blocked_not_confirmed";
+  if (blockedReasons.includes("blocked_missing_knowledge_trace")) return "blocked_missing_knowledge_trace";
+  if (blockedReasons.includes("validated_task_envelope_missing")) return "blocked_missing_task_envelope";
+  if (blockedReasons.includes("expected_outputs_missing")) return "blocked_missing_expected_outputs";
+  if (blockedReasons.includes("qa_checklist_missing")) return "blocked_missing_qa_checklist";
+  if (blockedReasons.includes("project_facts_write_gate_lock_drift")) return "blocked_write_gate";
+  return "blocked_queue";
+}
+
+function stagedCommitNextAction(status: ProjectFactsStagedCommitStatus): ProjectFactsStagedCommitReceipt["nextAction"] {
+  if (status === "staged") return "review_staged_project_facts";
+  if (status === "blocked_not_confirmed") return "show_confirmation";
+  if (status === "blocked_queue") return "repair_queue_blockers";
+  return "repair_constraints";
+}
+
+export function stageProjectFactsForCommit(input: CommitProjectPendingTransactionForRuntimeInput): ProjectFactsStagedCommitReceipt {
+  const { runtime, confirmationReceipt } = input;
+  const blockedReasons = stagedCommitBlockedReasons(runtime, confirmationReceipt);
+  const status = stagedCommitStatusFor(blockedReasons);
+  const pendingFactPatches = status === "staged" ? stagedPatchesFor(runtime) : [];
+  const taskRunPointers = pendingFactPatches.flatMap((patch) => patch.stagedTaskRunPointers);
+  const rolesToUpdate = unique(pendingFactPatches.map((patch) => patch.role));
+  const sourceComponentKinds = unique(pendingFactPatches.flatMap((patch) => patch.sourceComponentKinds));
+
+  return {
+    schemaVersion: projectTransactionSchemaVersion,
+    receiptId: `project_facts_stage_${runtime.pendingTransaction.id}`,
+    transactionId: runtime.pendingTransaction.id,
+    sourceConfirmationReceiptId: confirmationReceipt.receiptId,
+    generatedAt: runtime.generatedAt,
+    status,
+    mode: "dry_run_staged",
+    requiresConfirmedReceipt: true,
+    stagedOnly: true,
+    pendingFactPatches,
+    stagingSummary: {
+      rolesToUpdate,
+      sourceComponentKinds,
+      sourceComponentCount: sourceComponentKinds.length,
+      stagedTaskRunPointerCount: taskRunPointers.length,
+      queuedTaskRunPointerCount: taskRunPointers.filter((item) => item.queueStatus === "queued").length,
+      parkedTaskRunPointerCount: taskRunPointers.filter((item) => item.queueStatus === "parked").length,
+      affectedExpectedOutputCount: unique(pendingFactPatches.flatMap((patch) => patch.affectedExpectedOutputs)).length,
+    },
+    blockedReasons,
+    nextAction: stagedCommitNextAction(status),
+    hardLocks: {
+      noFileMutation: true,
+      projectVibeWriteAllowed: false,
+      projectVibeWritten: false,
+      providerCalled: false,
+      providerSubmissionForbidden: true,
+      workerSpawnForbidden: true,
+      workerSpawned: false,
+    },
+    projectVibeWritten: false,
+    providerCalled: false,
+    workerSpawned: false,
+  };
+}
+
+export function commitProjectPendingTransactionForRuntime(input: CommitProjectPendingTransactionForRuntimeInput): ProjectFactsStagedCommitReceipt {
+  return stageProjectFactsForCommit(input);
 }
 
 function writePlan(transactionId: string, writeGate: ProjectFactsWriteGate): ProjectVibeWritePlan {

@@ -319,7 +319,12 @@ function assertPacketMutationBlocks({ workflowState, packetId, expectedError, la
 
 const {
   directorWorkflow: { buildDirectorWorkflowState },
-  projectTransaction: { buildProjectTransactionRuntime, confirmProjectPendingTransactionForRuntime },
+  projectTransaction: {
+    buildProjectTransactionRuntime,
+    commitProjectPendingTransactionForRuntime,
+    confirmProjectPendingTransactionForRuntime,
+    stageProjectFactsForCommit,
+  },
 } = await loadModules();
 
 const runtimeState = runtime();
@@ -372,6 +377,15 @@ assert(
   missingTraceReceipt.blockedReasons.some((reason) => reason.startsWith("missing_knowledge_trace:")),
   "missing trace receipt must expose missing envelope blockers",
 );
+const missingTraceStaged = commitProjectPendingTransactionForRuntime({
+  runtime: missingTraceRuntime,
+  confirmationReceipt: missingTraceReceipt,
+});
+assert(missingTraceStaged.status === "blocked_missing_knowledge_trace", "missing trace staged commit must fail closed");
+assert(missingTraceStaged.pendingFactPatches.length === 0, "missing trace staged commit must not produce fact patches");
+assert(missingTraceStaged.projectVibeWritten === false, "missing trace staged commit must not write project.vibe");
+assert(missingTraceStaged.providerCalled === false, "missing trace staged commit must not call provider");
+assert(missingTraceStaged.workerSpawned === false, "missing trace staged commit must not spawn workers");
 
 const hydratedWorkflow = hydrateKnowledge(readyEnvelopeWorkflow(workflowState));
 const parkedByUser = buildProjectTransactionRuntime({
@@ -398,6 +412,20 @@ assert(
   parkedReceipt.runtimeProjection.parkedTaskRunIds.length === parkedByUser.pendingTransaction.taskEnqueue.items.length,
   "parked receipt projection must retain parked task run ids",
 );
+const parkedStaged = stageProjectFactsForCommit({
+  runtime: parkedByUser,
+  confirmationReceipt: parkedReceipt,
+});
+assert(parkedStaged.status === "staged", "confirmed parked transaction should stage project facts in memory");
+assert(parkedStaged.mode === "dry_run_staged", "parked staged commit must be dry-run staged");
+assert(parkedStaged.pendingFactPatches.some((patch) => patch.role === "task_runs_pointer"), "parked staged commit must include task run pointer patch");
+assert(
+  parkedStaged.stagingSummary.parkedTaskRunPointerCount === parkedByUser.queueIngestSummary.parked,
+  "parked staged commit must count parked task run pointers",
+);
+assert(parkedStaged.hardLocks.projectVibeWritten === false, "parked staged commit must hard-lock project.vibe writes off");
+assert(parkedStaged.hardLocks.providerCalled === false, "parked staged commit must hard-lock provider calls off");
+assert(parkedStaged.hardLocks.workerSpawned === false, "parked staged commit must hard-lock worker spawn off");
 
 const confirmedRuntime = buildProjectTransactionRuntime({
   workflowState: hydratedWorkflow,
@@ -459,6 +487,32 @@ assert(
   confirmedReceipt.runtimeProjection.queuedTaskRunIds.length === confirmedRuntime.queueIngestSummary.queued,
   "queued projection must expose queued task ids without re-ingesting",
 );
+const confirmedStaged = commitProjectPendingTransactionForRuntime({
+  runtime: confirmedRuntime,
+  confirmationReceipt: confirmedReceipt,
+});
+assert(confirmedStaged.status === "staged", "valid confirmed transaction must produce staged project fact receipt");
+assert(confirmedStaged.nextAction === "review_staged_project_facts", "valid staged commit should route to staged fact review");
+assert(confirmedStaged.pendingFactPatches.length === confirmedRuntime.projectFactsWriteGate.futureFactRoles.length, "staged commit must produce one patch per future fact role");
+assert(confirmedStaged.stagingSummary.rolesToUpdate.includes("story_flow"), "staged commit must summarize story_flow updates");
+assert(confirmedStaged.stagingSummary.rolesToUpdate.includes("visual_memory"), "staged commit must summarize visual_memory updates");
+assert(confirmedStaged.stagingSummary.rolesToUpdate.includes("shot_layout"), "staged commit must summarize shot_layout updates");
+assert(confirmedStaged.stagingSummary.rolesToUpdate.includes("task_runs_pointer"), "staged commit must summarize task_runs pointer updates");
+assert(
+  confirmedStaged.pendingFactPatches
+    .filter((patch) => patch.role === "task_runs_pointer")
+    .every((patch) => patch.stagedTaskRunPointers.every((pointer) => pointer.pointerOnly === true && pointer.providerSubmissionForbidden === true)),
+  "task run pointers must be staged pointer-only facts",
+);
+assert(
+  confirmedStaged.stagingSummary.stagedTaskRunPointerCount === confirmedRuntime.pendingTransaction.taskEnqueue.items.length,
+  "valid staged commit must retain staged task run pointers for every enqueue item",
+);
+assert(confirmedStaged.projectVibeWritten === false, "valid staged commit must not write project.vibe");
+assert(confirmedStaged.providerCalled === false, "valid staged commit must not call provider");
+assert(confirmedStaged.workerSpawned === false, "valid staged commit must not spawn worker");
+assert(confirmedStaged.hardLocks.noFileMutation === true, "valid staged commit must forbid file mutation");
+assert(confirmedStaged.hardLocks.projectVibeWriteAllowed === false, "valid staged commit must keep write gate closed");
 
 const missingExpectedOutputs = mutateFirstQueuedPacket(hydratedWorkflow, confirmedRuntime, (packet) => {
   packet.envelope.taskEnvelope.expectedOutputs = [];
@@ -479,6 +533,12 @@ const blockedQueueReceipt = confirmProjectPendingTransactionForRuntime(blockedQu
 assert(blockedQueueReceipt.status === "blocked_queue", "blocked queue confirmation must fail closed");
 assert(blockedQueueReceipt.nextAction === "repair_queue_blockers", "blocked queue receipt must route to queue blocker repair");
 assert(blockedQueueReceipt.blockedReasons.includes("expected_outputs_missing"), "blocked queue receipt must expose queue validation blockers");
+const blockedExpectedOutputsStaged = commitProjectPendingTransactionForRuntime({
+  runtime: blockedQueueRuntime,
+  confirmationReceipt: blockedQueueReceipt,
+});
+assert(blockedExpectedOutputsStaged.status === "blocked_missing_expected_outputs", "missing expected outputs must block staged commit specifically");
+assert(blockedExpectedOutputsStaged.pendingFactPatches.length === 0, "missing expected outputs must not produce fact patches");
 
 const missingQaChecklist = mutateFirstQueuedPacket(hydratedWorkflow, confirmedRuntime, (packet) => {
   packet.envelope.taskEnvelope.qaChecklist = [];
@@ -489,6 +549,43 @@ assertPacketMutationBlocks({
   expectedError: "qa_checklist_missing",
   label: "missing QA checklist",
 });
+const missingQaRuntime = buildProjectTransactionRuntime({
+  workflowState: missingQaChecklist.workflowState,
+  runtimeState,
+  userConfirmed: true,
+  userEnabled: true,
+});
+const missingQaReceipt = confirmProjectPendingTransactionForRuntime(missingQaRuntime);
+const missingQaStaged = commitProjectPendingTransactionForRuntime({
+  runtime: missingQaRuntime,
+  confirmationReceipt: missingQaReceipt,
+});
+assert(missingQaStaged.status === "blocked_missing_qa_checklist", "missing QA checklist must block staged commit specifically");
+assert(missingQaStaged.pendingFactPatches.length === 0, "missing QA checklist must not produce fact patches");
+
+const missingTaskEnvelope = mutateFirstQueuedPacket(hydratedWorkflow, confirmedRuntime, (packet) => {
+  packet.envelope = undefined;
+  packet.envelopeId = undefined;
+});
+assertPacketMutationBlocks({
+  workflowState: missingTaskEnvelope.workflowState,
+  packetId: missingTaskEnvelope.packetId,
+  expectedError: "validated_task_envelope_missing",
+  label: "missing task envelope",
+});
+const missingEnvelopeRuntime = buildProjectTransactionRuntime({
+  workflowState: missingTaskEnvelope.workflowState,
+  runtimeState,
+  userConfirmed: true,
+  userEnabled: true,
+});
+const missingEnvelopeReceipt = confirmProjectPendingTransactionForRuntime(missingEnvelopeRuntime);
+const missingEnvelopeStaged = commitProjectPendingTransactionForRuntime({
+  runtime: missingEnvelopeRuntime,
+  confirmationReceipt: missingEnvelopeReceipt,
+});
+assert(missingEnvelopeStaged.status === "blocked_missing_task_envelope", "missing task envelope must block staged commit specifically");
+assert(missingEnvelopeStaged.pendingFactPatches.length === 0, "missing task envelope must not produce fact patches");
 
 const missingSourceFactTrace = mutateFirstQueuedPacket(hydratedWorkflow, confirmedRuntime, (packet) => {
   packet.sourceFactTrace = [];
@@ -571,10 +668,24 @@ assert(waitingReceipt.projectVibeWriteExecuted === false, "waiting receipt must 
 assert(waitingReceipt.providerSubmissionForbidden === true, "waiting receipt must forbid provider submission");
 assert(waitingReceipt.workerSpawnForbidden === true, "waiting receipt must forbid worker spawn");
 assert(waitingReceipt.blockedReasons.includes("pending_transaction_not_confirmed"), "waiting receipt must explain unconfirmed blocker");
+const waitingStaged = commitProjectPendingTransactionForRuntime({
+  runtime: waitingRuntime,
+  confirmationReceipt: waitingReceipt,
+});
+assert(waitingStaged.status === "blocked_not_confirmed", "unconfirmed user transaction must not stage project facts");
+assert(waitingStaged.pendingFactPatches.length === 0, "unconfirmed user transaction must not produce fact patches");
+assert(waitingStaged.nextAction === "show_confirmation", "unconfirmed staged commit must route to confirmation");
 
 const schema = readJson("schemas/project_transaction.schema.json");
 assert(schema.$id === "https://vibecore.local/schemas/project_transaction.schema.json", "project transaction schema id drifted");
 assert(JSON.stringify(schema).includes("pending_only"), "schema must document pending_only write plan");
+assert(JSON.stringify(schema).includes("dry_run_staged"), "schema must document staged dry-run commit receipt");
+assert(schema.$defs.projectFactsStagedCommitReceipt, "schema must define staged project facts commit receipt");
+assert(schema.$defs.projectFactStagedPatch, "schema must define staged project fact patch");
+assert(schema.$defs.stagedTaskRunPointer, "schema must define staged task run pointer");
+assert(schema.$defs.projectFactsStagedCommitReceipt.properties.projectVibeWritten.const === false, "staged commit schema must forbid project.vibe writes");
+assert(schema.$defs.projectFactsStagedCommitReceipt.properties.providerCalled.const === false, "staged commit schema must forbid provider calls");
+assert(schema.$defs.projectFactsStagedCommitReceipt.properties.workerSpawned.const === false, "staged commit schema must forbid worker spawn");
 assert(!JSON.stringify(confirmedRuntime).includes(process.cwd()), "runtime transaction must not persist absolute workspace paths");
 
 console.log(

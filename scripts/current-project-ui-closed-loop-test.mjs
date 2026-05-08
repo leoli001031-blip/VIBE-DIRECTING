@@ -138,6 +138,8 @@ function assertCreatorPanelContract() {
   assert(/runtimeState=\{workbenchRuntimeState\}/.test(app), "DirectorMode must receive the current project workbench runtime state");
   assert(/确认修改/.test(appSource), "Agent Panel confirmation action should use creator-facing confirmation copy");
   assert(/等待写入项目事实/.test(appSource), "Agent Panel confirmation receipt should expose pending project-fact write status");
+  assert(/已准备写入/.test(appSource), "Agent Panel staged commit receipt should expose creator-facing ready-to-write copy");
+  assert(/commitProjectPendingTransactionForRuntime/.test(appSource), "Agent Panel confirmation should use staged project facts commit API");
   assert(/providerCalled\s*===\s*false/.test(appSource) || /providerCalled/.test(appSource), "App source should preserve provider-called false contract in runtime projections");
   assert(!/real-demo-005/.test(`${appSource}\n${stylesSource}`), "app/styles should not retain 005 demo class names");
 }
