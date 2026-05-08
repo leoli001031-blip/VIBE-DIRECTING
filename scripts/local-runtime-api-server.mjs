@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
+const repoRootRealPath = realpathSync(repoRoot);
 const host = process.env.VIBE_CORE_RUNTIME_API_HOST || "127.0.0.1";
 const port = Number(process.env.VIBE_CORE_RUNTIME_API_PORT || 8790);
 const sandboxRunRootRelativePath = "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames";
@@ -32,7 +33,7 @@ function corsHeaders(contentType = "application/json; charset=utf-8") {
     "content-type": contentType,
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type",
+    "access-control-allow-headers": "content-type,x-vibe-project-root,x-vibe-project-id,x-project-root,x-project-id",
     "cache-control": "no-store",
   };
 }
@@ -54,6 +55,10 @@ function normalizeRelativePath(value) {
   return value.replace(/\\/g, "/");
 }
 
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function repoRelativePath(filePath) {
   const relativePath = normalizeRelativePath(path.relative(repoRoot, filePath));
   if (relativePath === "") return ".";
@@ -70,6 +75,13 @@ function resolveRepoInputPath(inputPath) {
   const rootWithSep = `${repoRoot}${path.sep}`;
   if (candidate !== repoRoot && !candidate.startsWith(rootWithSep)) {
     throw new Error(`Path escapes project root: ${inputPath}`);
+  }
+  if (existsSync(candidate)) {
+    const candidateRealPath = realpathSync(candidate);
+    const realRootWithSep = `${repoRootRealPath}${path.sep}`;
+    if (candidateRealPath !== repoRootRealPath && !candidateRealPath.startsWith(realRootWithSep)) {
+      throw new Error(`Path escapes project root: ${inputPath}`);
+    }
   }
   return candidate;
 }
@@ -114,6 +126,10 @@ function resolveProjectSource(inputPath, options = {}) {
     projectRootMode: options.projectRootMode || "configured_project_root",
     sourceLabel: options.sourceLabel || "runtime endpoint / project projection",
     sandboxSource: options.sandboxSource,
+    requestContextSource: options.requestContextSource,
+    requestProjectId: options.requestProjectId,
+    requestProjectIdSource: options.requestProjectIdSource,
+    requestProjectRoot: options.requestProjectRoot,
   };
 }
 
@@ -125,18 +141,37 @@ function realDemo005Source() {
   });
 }
 
-function currentProjectSource() {
+function currentProjectSource(requestContext = {}) {
+  if (requestContext.projectRoot) {
+    return resolveProjectSource(requestContext.projectRoot, {
+      projectRootMode: "request_project_root",
+      sourceLabel: `runtime endpoint / current project request ${requestContext.projectRootSource || "request"}`,
+      requestContextSource: requestContext.projectRootSource,
+      requestProjectId: requestContext.projectId,
+      requestProjectIdSource: requestContext.projectIdSource,
+      requestProjectRoot: requestContext.projectRoot,
+    });
+  }
+
   const configuredProjectRoot = process.env.VIBE_CORE_CURRENT_PROJECT_ROOT || process.env.VIBE_CORE_PROJECT_ROOT;
   if (configuredProjectRoot) {
     return resolveProjectSource(configuredProjectRoot, {
       projectRootMode: "configured_project_root",
       sourceLabel: "runtime endpoint / current project",
+      requestContextSource: "env",
+      requestProjectId: requestContext.projectId,
+      requestProjectIdSource: requestContext.projectIdSource,
+      requestProjectRoot: configuredProjectRoot,
     });
   }
   return resolveProjectSource(sandboxRunRootRelativePath, {
-    projectRootMode: "sandbox_fixture_projection",
+    projectRootMode: "compatibility_fallback",
     sourceLabel: "runtime endpoint / current project compatibility fallback",
-    sandboxSource: "005 compatibility fallback",
+    sandboxSource: "005 compatibility_fallback",
+    requestContextSource: "compatibility_fallback",
+    requestProjectId: requestContext.projectId,
+    requestProjectIdSource: requestContext.projectIdSource || "compatibility_fallback",
+    requestProjectRoot: sandboxRunRootRelativePath,
   });
 }
 
@@ -157,6 +192,16 @@ function readProjectVibe(source) {
   } catch {
     return undefined;
   }
+}
+
+function projectIdentityFromSource(source) {
+  const projectVibe = readProjectVibe(source);
+  if (projectVibe) return projectVibe;
+  return {
+    projectId: source.requestProjectId,
+    projectRoot: source.runRootRelativePath,
+    projectVibePath: source.projectVibeRelativePath,
+  };
 }
 
 function clip(value) {
@@ -314,6 +359,103 @@ function image2BatchLedgerProjection(payload) {
   };
 }
 
+function firstHeaderValue(req, names) {
+  for (const name of names) {
+    const value = req.headers[name.toLowerCase()];
+    if (Array.isArray(value)) {
+      const firstValue = value.find((item) => typeof item === "string" && item.trim());
+      if (firstValue) return firstValue.trim();
+      continue;
+    }
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function requestBodyString(body, names) {
+  if (!isRecord(body)) return undefined;
+  for (const name of names) {
+    const value = body[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  const project = body.project;
+  if (isRecord(project)) {
+    for (const name of names) {
+      const value = project[name];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function currentProjectRequestContext(req, url, body) {
+  const queryProjectRoot = asString(url.searchParams.get("projectRoot")) || asString(url.searchParams.get("projectRootPath"));
+  const headerProjectRoot = firstHeaderValue(req, ["x-vibe-project-root", "x-project-root"]);
+  const bodyProjectRoot = requestBodyString(body, ["projectRoot", "projectRootPath"]);
+  const queryProjectId = asString(url.searchParams.get("projectId"));
+  const headerProjectId = firstHeaderValue(req, ["x-vibe-project-id", "x-project-id"]);
+  const bodyProjectId = requestBodyString(body, ["projectId"]);
+  const projectRoot = queryProjectRoot || headerProjectRoot || bodyProjectRoot;
+  const projectId = queryProjectId || headerProjectId || bodyProjectId;
+
+  return {
+    projectRoot,
+    projectRootSource: queryProjectRoot ? "query" : headerProjectRoot ? "header" : bodyProjectRoot ? "payload" : undefined,
+    projectId,
+    projectIdSource: queryProjectId ? "query" : headerProjectId ? "header" : bodyProjectId ? "payload" : undefined,
+  };
+}
+
+function currentProjectSourceResult(requestContext = {}) {
+  try {
+    return { source: currentProjectSource(requestContext) };
+  } catch (error) {
+    return {
+      error,
+      message: error instanceof Error ? error.message : "Current project root is unavailable.",
+    };
+  }
+}
+
+function blockedCurrentProjectResponse(endpoint, requestContext = {}, extra = {}) {
+  const projectRoot = requestContext.projectRoot;
+  const projectId = requestContext.projectId;
+  const identity = { projectId, projectRoot };
+  return {
+    ok: false,
+    ...runtimePolicy(),
+    endpoint,
+    source: "runtime_endpoint",
+    sourceLabel: "runtime endpoint / current project blocked",
+    requestContext: {
+      projectRoot,
+      projectRootSource: requestContext.projectRootSource,
+      projectId,
+      projectIdSource: requestContext.projectIdSource,
+    },
+    projectRootMode: "blocked_project_root",
+    projectRoot,
+    projectId,
+    identity,
+    project: identity,
+    status: "blocked",
+    previewStatus: "blocked",
+    productionStatus: "blocked",
+    reportStatus: "blocked",
+    reportPath: undefined,
+    reportRelativePath: undefined,
+    reportUrl: undefined,
+    reviewOverlayShots: [],
+    productionNeedsReviewShots: [],
+    shotCount: 0,
+    blockerCount: 1,
+    observations: [],
+    previewItems: [],
+    message: "Current project root is blocked or unavailable.",
+    ...extra,
+  };
+}
+
 function unavailableResponse(extra = {}) {
   const source = extra.sourceProject || realDemo005Source();
   return {
@@ -376,8 +518,8 @@ function responseFromReport(extra = {}, source = realDemo005Source()) {
   }
 }
 
-function currentProjectRealChainResponse(extra = {}) {
-  const source = currentProjectSource();
+function currentProjectRealChainResponse(extra = {}, source = currentProjectSource()) {
+  const project = projectIdentityFromSource(source);
   const payload = responseFromReport(extra, source);
   const needsReviewShotIds = Array.isArray(payload.productionNeedsReviewShots) && payload.productionNeedsReviewShots.length
     ? payload.productionNeedsReviewShots
@@ -392,11 +534,23 @@ function currentProjectRealChainResponse(extra = {}) {
     source: "runtime_endpoint",
     sourceLabel: source.sourceLabel,
     sandboxSource: source.sandboxSource,
+    requestContext: {
+      projectRoot: source.requestProjectRoot,
+      projectRootSource: source.requestContextSource,
+      projectId: source.requestProjectId,
+      projectIdSource: source.requestProjectIdSource,
+    },
     projectionKind: "project_real_chain_status",
     projectRootMode: source.projectRootMode,
+    projectRoot: project.projectRoot,
+    projectId: project.projectId,
+    identity: {
+      projectId: project.projectId,
+      projectRoot: project.projectRoot,
+    },
     projectRootRelativePath: source.runRootRelativePath,
     projectVibeRelativePath: source.projectVibeRelativePath,
-    project: readProjectVibe(source),
+    project,
     plannedImageCount: Number(payload.shotCount) || observations.length,
     totalPlannedImages: Number(payload.shotCount) || observations.length,
     returnedImageCount: observations.filter((item) => typeof item.imageUrl === "string").length,
@@ -419,8 +573,8 @@ function currentProjectRealChainResponse(extra = {}) {
   };
 }
 
-function currentProjectImage2BatchPlanResponse(extra = {}) {
-  const source = currentProjectSource();
+function currentProjectImage2BatchPlanResponse(extra = {}, source = currentProjectSource()) {
+  const project = projectIdentityFromSource(source);
   const report = readJsonIfPresent(source.reportPath);
   const reportObservations = Array.isArray(report?.observations)
     ? report.observations.map(observationSummary)
@@ -444,11 +598,23 @@ function currentProjectImage2BatchPlanResponse(extra = {}) {
     source: "runtime_endpoint",
     sourceLabel: source.sourceLabel,
     sandboxSource: source.sandboxSource,
+    requestContext: {
+      projectRoot: source.requestProjectRoot,
+      projectRootSource: source.requestContextSource,
+      projectId: source.requestProjectId,
+      projectIdSource: source.requestProjectIdSource,
+    },
     projectionKind: "current_project_image2_batch_prepare_plan",
     projectRootMode: source.projectRootMode,
+    projectRoot: project.projectRoot,
+    projectId: project.projectId,
+    identity: {
+      projectId: project.projectId,
+      projectRoot: project.projectRoot,
+    },
     projectRootRelativePath: source.runRootRelativePath,
     projectVibeRelativePath: source.projectVibeRelativePath,
-    project: readProjectVibe(source),
+    project,
     reportStatus: report?.status || "unavailable",
     reportPath: source.reportRelativePath,
     reportRelativePath: source.reportRelativePath,
@@ -599,8 +765,7 @@ async function handleRun(res, options = {}) {
   }
 }
 
-function handleCurrentProjectRunCheck(res) {
-  const source = currentProjectSource();
+function handleCurrentProjectRunCheck(res, source) {
   const payload = currentProjectRealChainResponse({
     running,
     command: {
@@ -612,12 +777,11 @@ function handleCurrentProjectRunCheck(res) {
       prepareRan: false,
       verifyScriptRan: false,
     },
-  });
+  }, source);
   writeJson(res, payload.ok === false ? 500 : 200, payload);
 }
 
-function handleCurrentProjectImage2BatchRunCheck(res) {
-  const source = currentProjectSource();
+function handleCurrentProjectImage2BatchRunCheck(res, source) {
   const payload = currentProjectImage2BatchPlanResponse({
     running,
     command: {
@@ -633,11 +797,71 @@ function handleCurrentProjectImage2BatchRunCheck(res) {
       noFileMutation: true,
       workerSpawnForbidden: true,
     },
-  });
+  }, source);
   writeJson(res, payload.ok === false ? 500 : 200, payload);
 }
 
-const server = createServer((req, res) => {
+function readRequestJsonBody(req) {
+  return new Promise((resolve) => {
+    let text = "";
+    req.on("data", (chunk) => {
+      text += chunk.toString();
+      if (text.length > 1024 * 1024) {
+        req.destroy(new Error("Request body is too large."));
+      }
+    });
+    req.on("error", (error) => {
+      resolve({ ok: false, message: error instanceof Error ? error.message : "Request body could not be read." });
+    });
+    req.on("end", () => {
+      const trimmed = text.trim();
+      if (!trimmed) {
+        resolve({ ok: true, body: undefined });
+        return;
+      }
+      try {
+        const body = JSON.parse(trimmed);
+        resolve({ ok: true, body });
+      } catch {
+        resolve({ ok: false, message: "Request body must be valid JSON." });
+      }
+    });
+  });
+}
+
+function isCurrentProjectEndpoint(pathname) {
+  return pathname === currentProjectStatusEndpoint
+    || pathname === currentProjectRunEndpoint
+    || pathname === currentProjectImage2BatchPlanEndpoint
+    || pathname === currentProjectImage2BatchRunCheckEndpoint;
+}
+
+async function currentProjectRouteContext(req, res, url, endpoint) {
+  const bodyResult = req.method === "POST"
+    ? await readRequestJsonBody(req)
+    : { ok: true, body: undefined };
+  if (!bodyResult.ok) {
+    writeJson(res, 400, blockedCurrentProjectResponse(endpoint, {}, {
+      status: "bad_request",
+      previewStatus: "bad_request",
+      productionStatus: "bad_request",
+      message: bodyResult.message,
+    }));
+    return undefined;
+  }
+
+  const requestContext = currentProjectRequestContext(req, url, bodyResult.body);
+  const sourceResult = currentProjectSourceResult(requestContext);
+  if (sourceResult.error) {
+    writeJson(res, 403, blockedCurrentProjectResponse(endpoint, requestContext, {
+      message: sourceResult.message,
+    }));
+    return undefined;
+  }
+  return { requestContext, source: sourceResult.source };
+}
+
+async function handleRequest(req, res) {
   const url = new URL(req.url || "/", `http://${host}`);
   if (req.method === "OPTIONS") {
     writeJson(res, 204, {});
@@ -666,19 +890,27 @@ const server = createServer((req, res) => {
     return;
   }
   if (req.method === "GET" && url.pathname === currentProjectStatusEndpoint) {
-    writeJson(res, 200, currentProjectRealChainResponse({ running }));
+    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectStatusEndpoint);
+    if (!routeContext) return;
+    writeJson(res, 200, currentProjectRealChainResponse({ running }, routeContext.source));
     return;
   }
   if (req.method === "POST" && url.pathname === currentProjectRunEndpoint) {
-    handleCurrentProjectRunCheck(res);
+    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectRunEndpoint);
+    if (!routeContext) return;
+    handleCurrentProjectRunCheck(res, routeContext.source);
     return;
   }
   if (req.method === "GET" && url.pathname === currentProjectImage2BatchPlanEndpoint) {
-    writeJson(res, 200, currentProjectImage2BatchPlanResponse({ running }));
+    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2BatchPlanEndpoint);
+    if (!routeContext) return;
+    writeJson(res, 200, currentProjectImage2BatchPlanResponse({ running }, routeContext.source));
     return;
   }
   if (req.method === "POST" && url.pathname === currentProjectImage2BatchRunCheckEndpoint) {
-    handleCurrentProjectImage2BatchRunCheck(res);
+    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2BatchRunCheckEndpoint);
+    if (!routeContext) return;
+    handleCurrentProjectImage2BatchRunCheck(res, routeContext.source);
     return;
   }
   if (req.method === "GET" && (url.pathname === realDemo005StatusEndpoint || url.pathname === legacyStatusEndpoint)) {
@@ -690,6 +922,22 @@ const server = createServer((req, res) => {
     return;
   }
   writeJson(res, 404, { ok: false, ...runtimePolicy(), status: "not_found", path: url.pathname });
+}
+
+const server = createServer((req, res) => {
+  const url = new URL(req.url || "/", `http://${host}`);
+  void handleRequest(req, res).catch((error) => {
+    const endpoint = isCurrentProjectEndpoint(url.pathname) ? url.pathname : undefined;
+    writeJson(res, 500, {
+      ok: false,
+      ...runtimePolicy(),
+      endpoint,
+      status: "blocked",
+      previewStatus: "blocked",
+      productionStatus: "blocked",
+      message: error instanceof Error ? error.message : "Runtime API request failed.",
+    });
+  });
 });
 
 server.listen(port, host, () => {

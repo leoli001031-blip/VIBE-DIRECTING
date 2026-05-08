@@ -62,12 +62,19 @@ function assert005Payload(payload, label) {
   assert(s08?.reviewOverlay === true, `${label} S08 should be review overlay`);
 }
 
+const project004Root = "real-test-sandbox/real-demo-e2e/004-image2-start-frames";
+const project004Id = "real_demo_e2e_004_image2_start_frames";
+const project004ReportPath = `${project004Root}/reports/image2_start_long_chain_report.json`;
+
 function assertProjectRealChainPayload(payload, label) {
   assert005Payload(payload, label);
   assert(payload.projectionKind === "project_real_chain_status", `${label} projection kind mismatch`);
-  assert(payload.projectRootMode === "sandbox_fixture_projection", `${label} project root mode mismatch`);
+  assert(payload.projectRootMode === "compatibility_fallback", `${label} project root mode mismatch`);
   assert(/compatibility fallback/.test(payload.sourceLabel || ""), `${label} current project fallback label mismatch`);
+  assert(payload.requestContext?.projectRootSource === "compatibility_fallback", `${label} request context fallback mismatch`);
   assert(payload.project?.projectId === "real_demo_e2e_005_anime_image2_start_frames", `${label} project id mismatch`);
+  assert(payload.projectId === payload.project.projectId, `${label} top-level project id mismatch`);
+  assert(payload.identity?.projectId === payload.project.projectId, `${label} identity project id mismatch`);
   assert(payload.project?.runId === "real_demo_e2e_005_anime_image2_start_frames_run_20260507", `${label} project run id mismatch`);
   assert(payload.plannedImageCount === 8, `${label} planned image count mismatch`);
   assert(payload.totalPlannedImages === 8, `${label} total planned image count mismatch`);
@@ -83,9 +90,12 @@ function assertProjectRealChainPayload(payload, label) {
 function assertImage2BatchPlanPayload(payload, label) {
   assert(payload.ok === true, `${label} should be ok`);
   assert(payload.projectionKind === "current_project_image2_batch_prepare_plan", `${label} projection kind mismatch`);
-  assert(payload.projectRootMode === "sandbox_fixture_projection", `${label} project root mode mismatch`);
+  assert(payload.projectRootMode === "compatibility_fallback", `${label} project root mode mismatch`);
   assert(/compatibility fallback/.test(payload.sourceLabel || ""), `${label} current project fallback label mismatch`);
+  assert(payload.requestContext?.projectRootSource === "compatibility_fallback", `${label} request context fallback mismatch`);
   assert(payload.project?.projectId === "real_demo_e2e_005_anime_image2_start_frames", `${label} project id mismatch`);
+  assert(payload.projectId === payload.project.projectId, `${label} top-level project id mismatch`);
+  assert(payload.identity?.projectId === payload.project.projectId, `${label} identity project id mismatch`);
   assert(payload.submitPolicy?.providerCallAllowed === false, `${label} provider calls must be disallowed`);
   assert(payload.submitPolicy?.dryRunOnly === true, `${label} should be dry-run only`);
   assert(payload.submitPolicy?.manualSubmitRequired === true, `${label} should require manual submit`);
@@ -143,6 +153,25 @@ function assertImage2BatchPlanPayload(payload, label) {
   assert(firstLedgerProjection.expectedOutputs.some((item) => item.expectedOutputPath === first.expectedOutputPath), `${label} S01 ledger expectedOutputs should include expectedOutputPath`);
 }
 
+function assert004ProjectContext(payload, label, source) {
+  assert(payload.ok === true, `${label} should be ok`);
+  assert(payload.projectRootMode === "request_project_root", `${label} should use request project root`);
+  assert((payload.sourceLabel || "").includes(source), `${label} source label should include ${source}`);
+  assert(payload.requestContext?.projectRoot === project004Root, `${label} request project root mismatch`);
+  assert(payload.requestContext?.projectRootSource === source, `${label} request project root source mismatch`);
+  assert(payload.requestContext?.projectId === project004Id, `${label} request project id mismatch`);
+  assert(payload.requestContext?.projectIdSource === source, `${label} request project id source mismatch`);
+  assert(payload.project?.projectId === project004Id, `${label} project id mismatch`);
+  assert(payload.projectId === project004Id, `${label} top-level project id mismatch`);
+  assert(payload.identity?.projectId === project004Id, `${label} identity project id mismatch`);
+  assert(payload.project?.projectRoot === project004Root, `${label} project root mismatch`);
+  assert(payload.projectRoot === project004Root, `${label} top-level project root mismatch`);
+  assert(payload.identity?.projectRoot === project004Root, `${label} identity project root mismatch`);
+  assert(payload.reportPath === project004ReportPath, `${label} report path mismatch`);
+  assert(payload.providerCalled === false, `${label} must not call provider`);
+  assert(payload.prepareRan === false, `${label} must not run prepare`);
+}
+
 const child = spawn(process.execPath, ["scripts/local-runtime-api-server.mjs"], {
   cwd: process.cwd(),
   env: { ...process.env, VIBE_CORE_RUNTIME_API_PORT: "0" },
@@ -163,6 +192,14 @@ try {
   assert(projectStatus.payload.providerCalled === false, "GET project status must not call provider");
   assert(projectStatus.payload.prepareRan === false, "GET project status must not run prepare");
 
+  const queryProjectStatus = await fetchJson(
+    `${baseUrl}/api/runtime/projects/current/real-chain/status?projectRoot=${encodeURIComponent(project004Root)}&projectId=${encodeURIComponent(project004Id)}`,
+  );
+  assert(queryProjectStatus.response.status === 200, "GET project status with query context should return 200");
+  assert004ProjectContext(queryProjectStatus.payload, "GET project status with query context", "query");
+  assert(queryProjectStatus.payload.projectionKind === "project_real_chain_status", "GET project status query projection kind mismatch");
+  assert(queryProjectStatus.payload.previewStatus === "blocked", "GET project status query should read 004 report");
+
   const projectRun = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/run-check`, { method: "POST" });
   assert(projectRun.response.status === 200, "POST project real-chain run-check should return 200");
   assertProjectRealChainPayload(projectRun.payload, "POST project real-chain run-check");
@@ -174,9 +211,31 @@ try {
   assert(projectRun.payload.command?.mode === "read_only_projection_check", "POST project command should be a read-only projection check");
   assert(projectRun.payload.command?.exitCode === 0, "POST project command should pass");
 
+  const bodyProjectRun = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/run-check`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ projectRoot: project004Root, projectId: project004Id }),
+  });
+  assert(bodyProjectRun.response.status === 200, "POST project run-check with body context should return 200");
+  assert004ProjectContext(bodyProjectRun.payload, "POST project run-check with body context", "payload");
+  assert(bodyProjectRun.payload.command?.mode === "read_only_projection_check", "POST project body command mode mismatch");
+  assert(bodyProjectRun.payload.command?.exitCode === 0, "POST project body command should pass");
+  assert(bodyProjectRun.payload.command?.verifyScriptRan === false, "POST project body command must not run verify script");
+
   const image2BatchPlan = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-batch/plan`);
   assert(image2BatchPlan.response.status === 200, "GET image2 batch plan should return 200");
   assertImage2BatchPlanPayload(image2BatchPlan.payload, "GET image2 batch plan");
+
+  const headerImage2BatchPlan = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-batch/plan`, {
+    headers: {
+      "x-vibe-project-root": project004Root,
+      "x-vibe-project-id": project004Id,
+    },
+  });
+  assert(headerImage2BatchPlan.response.status === 200, "GET image2 batch plan with header context should return 200");
+  assert004ProjectContext(headerImage2BatchPlan.payload, "GET image2 batch plan with header context", "header");
+  assert(headerImage2BatchPlan.payload.projectionKind === "current_project_image2_batch_prepare_plan", "GET image2 batch header projection kind mismatch");
+  assert(headerImage2BatchPlan.payload.summary?.plannedCount === 8, "GET image2 batch header should read 004 report");
 
   const image2BatchRunCheck = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-batch/run-check`, { method: "POST" });
   assert(image2BatchRunCheck.response.status === 200, "POST image2 batch run-check should return 200");
@@ -190,6 +249,16 @@ try {
   assert(image2BatchRunCheck.payload.command?.providerSubmissionForbidden === true, "POST image2 batch command must forbid provider submission");
   assert(image2BatchRunCheck.payload.command?.noFileMutation === true, "POST image2 batch command must not mutate files");
   assert(image2BatchRunCheck.payload.command?.workerSpawnForbidden === true, "POST image2 batch command must forbid worker spawn");
+
+  const blockedProjectRoot = await fetchJson(
+    `${baseUrl}/api/runtime/projects/current/real-chain/status?projectRoot=${encodeURIComponent("../outside")}&projectId=${encodeURIComponent("blocked_project")}`,
+  );
+  assert(blockedProjectRoot.response.status === 403, "GET project status with escaping projectRoot should return 403");
+  assert(blockedProjectRoot.payload.ok === false, "blocked project root should not be ok");
+  assert(blockedProjectRoot.payload.status === "blocked", "blocked project root status mismatch");
+  assert(blockedProjectRoot.payload.projectRootMode === "blocked_project_root", "blocked project root mode mismatch");
+  assert(blockedProjectRoot.payload.project?.projectRoot === "../outside", "blocked project root should echo requested root");
+  assert(/escapes project root/.test(blockedProjectRoot.payload.message || ""), "blocked project root message mismatch");
 
   const status = await fetchJson(`${baseUrl}/api/runtime/real-demo-e2e/005/status`);
   assert(status.response.status === 200, "GET status should return 200");

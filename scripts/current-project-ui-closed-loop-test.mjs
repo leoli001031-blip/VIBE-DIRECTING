@@ -140,6 +140,7 @@ const {
   deriveProjectImage2BatchPlanStatus,
   guardProjectRealChainUiStateForCurrentProject,
   guardProjectImage2BatchUiStateForCurrentProject,
+  projectRuntimeRequestPath,
 } = await importProjectRealChainStatus();
 
 const child = spawn(process.execPath, ["scripts/local-runtime-api-server.mjs"], {
@@ -150,6 +151,15 @@ const child = spawn(process.execPath, ["scripts/local-runtime-api-server.mjs"], 
 
 try {
   assertCreatorPanelContract();
+  const queryPath = projectRuntimeRequestPath("/api/runtime/projects/current/real-chain/status", {
+    projectId: "最后一班星图",
+    projectRoot: "/Users/lichenhao/Desktop/Vibe Director/runtime-tests/full_generation_10shot_two_act_20260429",
+  });
+  const queryParams = new URLSearchParams(queryPath.split("?")[1] || "");
+  assert(queryPath.includes("projectId="), "runtime request path should carry project id");
+  assert(queryPath.includes("projectRoot="), "runtime request path should carry project root");
+  assert(queryParams.get("projectId") === "最后一班星图", "runtime request path should preserve non-ASCII project id");
+  assert(queryParams.get("projectRoot") === "/Users/lichenhao/Desktop/Vibe Director/runtime-tests/full_generation_10shot_two_act_20260429", "runtime request path should preserve absolute project root");
   const { baseUrl } = await waitForServer(child);
   const realChainPayload = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
   const image2Payload = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-batch/plan`);
