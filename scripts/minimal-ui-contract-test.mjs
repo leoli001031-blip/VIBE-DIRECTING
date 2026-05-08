@@ -273,12 +273,12 @@ checkMessage(requireWithin(`${minimalAgentPanel}\n${workflowCanConfirm}`, /dry_r
 checkMessage(requireWithin(appSource, /function\s+agentProjectionNextStep[\s\S]*canConfirm[\s\S]*确认后只会加入计划/, "Agent panel confirmable projection must show a confirmation next step before missing-reference copy"));
 checkMessage(requireWithin(minimalAgentPanel, /agentProjectionNextStep\s*\([^)]*canConfirm/, "MinimalAgentPanel must pass the confirmation guard into projection next-step copy"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /描述你想怎么改\.\.\./, "MinimalAgentPanel natural input placeholder"));
-checkMessage(requireWithin(minimalAgentLanguageSurface, /应用前确认/, "MinimalAgentPanel light confirmation label"));
+checkMessage(requireWithin(minimalAgentLanguageSurface, /确认修改/, "MinimalAgentPanel light confirmation label"));
 check(
   !/排队中|已计划|待写入项目事实|transaction|queueItems/.test(minimalAgentPanel),
   "Director Clean Mode Agent panel must not expose queue/project-fact implementation copy",
 );
-check(!/准备修改|确认修改|开始生成/.test(minimalAgentLanguageSurface), "Director Clean Mode Agent panel must avoid heavy prepare/confirm/generate workflow copy");
+check(!/准备修改|开始生成/.test(minimalAgentLanguageSurface), "Director Clean Mode Agent panel must avoid heavy prepare/generate workflow copy");
 check(!/minimal-agent-plan/.test(minimalAgentPanel), "Director Clean Mode must not show the engineering plan summary surface");
 check(!/minimal-agent-steps/.test(minimalAgentPanel), "Director Clean Mode must not show stepper chrome in the Agent panel");
 for (const [term, pattern] of [

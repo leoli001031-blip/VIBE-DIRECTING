@@ -10,6 +10,7 @@
     "generatedAt",
     "userStatus",
     "pendingTransaction",
+    "projectFactsWriteGate",
     "projectVibeWritePlan",
     "queueIngestSummary",
     "runtimeEvents",
@@ -21,6 +22,7 @@
     "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
     "userStatus": { "$ref": "#/$defs/userStatus" },
     "pendingTransaction": { "$ref": "#/$defs/pendingTransaction" },
+    "projectFactsWriteGate": { "$ref": "#/$defs/projectFactsWriteGate" },
     "projectVibeWritePlan": { "$ref": "#/$defs/projectVibeWritePlan" },
     "queueIngestSummary": { "$ref": "#/$defs/queueSummary" },
     "runtimeEvents": {
@@ -87,6 +89,7 @@
         "shotReflow",
         "artifactInvalidation",
         "taskEnqueue",
+        "projectFactsWriteGate",
         "noFileMutation",
         "providerSubmissionForbidden",
         "projectVibeWriteAllowed"
@@ -108,6 +111,7 @@
         "shotReflow": { "$ref": "#/$defs/component" },
         "artifactInvalidation": { "$ref": "#/$defs/artifactInvalidation" },
         "taskEnqueue": { "$ref": "#/$defs/taskEnqueue" },
+        "projectFactsWriteGate": { "$ref": "#/$defs/projectFactsWriteGate" },
         "noFileMutation": { "type": "boolean", "const": true },
         "providerSubmissionForbidden": { "type": "boolean", "const": true },
         "projectVibeWriteAllowed": { "type": "boolean", "const": false }
@@ -119,11 +123,17 @@
       "required": [
         "projectId",
         "projectVersion",
+        "projectTitle",
+        "projectRoot",
         "projectHash",
         "sourceIndexHash",
         "generatedAt",
+        "currentProjectIdentity",
+        "selectedScope",
         "selection",
         "userIntent",
+        "staleArtifactImpact",
+        "expectedTaskEnqueuePlan",
         "taskEnvelopeIds",
         "sourceRefs",
         "packetPlannerReceipt",
@@ -132,11 +142,17 @@
       "properties": {
         "projectId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
         "projectVersion": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "projectTitle": { "type": "string" },
+        "projectRoot": { "type": "string" },
         "projectHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
         "sourceIndexHash": { "type": "string" },
         "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "currentProjectIdentity": { "$ref": "#/$defs/currentProjectIdentity" },
+        "selectedScope": { "$ref": "#/$defs/selectedScope" },
         "selection": { "type": "object" },
         "userIntent": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "staleArtifactImpact": { "$ref": "#/$defs/staleArtifactImpact" },
+        "expectedTaskEnqueuePlan": { "$ref": "#/$defs/expectedTaskEnqueuePlan" },
         "taskEnvelopeIds": {
           "type": "array",
           "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
@@ -147,6 +163,135 @@
         },
         "packetPlannerReceipt": { "$ref": "#/$defs/packetPlannerReceipt" },
         "knowledgeInjectionTrace": { "$ref": "#/$defs/knowledgeTrace" }
+      }
+    },
+    "currentProjectIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectId", "projectVersion", "projectTitle", "projectRoot", "sourceIndexHash", "sourceIndexRefs"],
+      "properties": {
+        "projectId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "projectVersion": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "projectTitle": { "type": "string" },
+        "projectRoot": { "type": "string" },
+        "sourceIndexHash": { "type": "string" },
+        "sourceIndexRefs": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "selectedScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selectedShotIds", "selectedAssetIds", "targetIds"],
+      "properties": {
+        "scopeKind": { "type": "string" },
+        "selectedShotIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "selectedAssetIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sectionId": { "type": "string" },
+        "targetIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "staleArtifactImpact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changeKinds",
+        "staleArtifactCount",
+        "affectedShotIds",
+        "affectedTaskRunIds",
+        "affectedEnvelopeIds",
+        "affectedExpectedOutputs",
+        "requiresRegenerationCount"
+      ],
+      "properties": {
+        "changeKinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["character", "scene", "style", "shot_order", "shot_content", "asset", "voice", "export"]
+          }
+        },
+        "staleArtifactCount": { "type": "integer", "minimum": 0 },
+        "affectedShotIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "affectedTaskRunIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "affectedEnvelopeIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "affectedExpectedOutputs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "requiresRegenerationCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "expectedTaskEnqueuePlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "validatedEnvelopeRequired",
+        "knowledgeTraceRequired",
+        "expectedOutputsRequired",
+        "qaChecklistRequired",
+        "total",
+        "queued",
+        "parked",
+        "blocked",
+        "missingKnowledgeTrace",
+        "items"
+      ],
+      "properties": {
+        "status": { "type": "string", "enum": ["queued", "parked", "blocked", "empty"] },
+        "validatedEnvelopeRequired": { "type": "boolean", "const": true },
+        "knowledgeTraceRequired": { "type": "boolean", "const": true },
+        "expectedOutputsRequired": { "type": "boolean", "const": true },
+        "qaChecklistRequired": { "type": "boolean", "const": true },
+        "total": { "type": "integer", "minimum": 0 },
+        "queued": { "type": "integer", "minimum": 0 },
+        "parked": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "missingKnowledgeTrace": { "type": "integer", "minimum": 0 },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["taskRunId", "packetId", "taskKind", "expectedOutputs", "queueStatus", "validationErrors"],
+            "properties": {
+              "taskRunId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+              "packetId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+              "taskKind": { "$ref": "#/$defs/taskKind" },
+              "taskEnvelopeId": { "type": "string" },
+              "expectedOutputs": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "queueStatus": { "type": "string", "enum": ["queued", "parked", "blocked"] },
+              "validationErrors": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        }
       }
     },
     "packetPlannerReceipt": {
@@ -419,6 +564,8 @@
         "transactionId",
         "noFileMutation",
         "projectVibeWriteAllowed",
+        "requiresUserCommit",
+        "projectFactsWriteGate",
         "entries",
         "futureApplyInterface",
         "notes"
@@ -428,6 +575,8 @@
         "transactionId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
         "noFileMutation": { "type": "boolean", "const": true },
         "projectVibeWriteAllowed": { "type": "boolean", "const": false },
+        "requiresUserCommit": { "type": "boolean", "const": true },
+        "projectFactsWriteGate": { "$ref": "#/$defs/projectFactsWriteGate" },
         "entries": {
           "type": "array",
           "items": {
@@ -468,6 +617,58 @@
             "enqueueValidatedTasks": { "type": "boolean", "const": false },
             "requiresKnowledgeTrace": { "type": "boolean", "const": true }
           }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "projectFactsWriteGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transactionId",
+        "projectVibeWriteAllowed",
+        "requiresUserCommit",
+        "noFileMutation",
+        "canWriteNow",
+        "futureFactRoles",
+        "blockedBy",
+        "notes"
+      ],
+      "properties": {
+        "transactionId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "projectVibeWriteAllowed": { "type": "boolean", "const": false },
+        "requiresUserCommit": { "type": "boolean", "const": true },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "canWriteNow": { "type": "boolean", "const": false },
+        "futureFactRoles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["role", "operation", "sourceComponentKinds", "reason"],
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": ["story_flow", "visual_memory", "shot_layout", "source_index", "task_runs_pointer", "knowledge_route_history"]
+              },
+              "operation": { "type": "string", "enum": ["append_pending", "update_on_user_commit", "link_on_user_commit"] },
+              "sourceComponentKinds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["story_change", "asset_update", "shot_reflow", "artifact_invalidation", "task_enqueue"]
+                }
+              },
+              "reason": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+            }
+          }
+        },
+        "blockedBy": {
+          "type": "array",
+          "items": { "type": "string" }
         },
         "notes": {
           "type": "array",

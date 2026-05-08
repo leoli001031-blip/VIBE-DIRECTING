@@ -441,6 +441,8 @@ assert(confirmedReceipt.projectVibeWriteExecuted === false, "queued confirmation
 assert(confirmedReceipt.noFileMutation === true, "queued confirmation receipt must be in-memory only");
 assert(confirmedReceipt.providerSubmissionForbidden === true, "queued confirmation receipt must not submit provider work");
 assert(confirmedReceipt.workerSpawnForbidden === true, "queued confirmation receipt must not spawn workers");
+assert(confirmedReceipt.providerCalled === false, "queued confirmation receipt must explicitly report providerCalled=false");
+assert(confirmedReceipt.projectVibeWritten === false, "queued confirmation receipt must explicitly report projectVibeWritten=false");
 assert(confirmedReceipt.requiresKnowledgeTrace === true, "queued confirmation receipt must require trace");
 assert(confirmedReceipt.queuedCount === confirmedRuntime.queueIngestSummary.queued, "queued receipt must derive queued count from summary");
 assert(confirmedReceipt.parkedCount === confirmedRuntime.queueIngestSummary.parked, "queued receipt must derive parked count from summary");
@@ -507,9 +509,21 @@ assert(confirmedRuntime.pendingTransaction.components.some((component) => compon
 assert(confirmedRuntime.pendingTransaction.components.some((component) => component.kind === "task_enqueue"), "pending transaction must include task_enqueue component");
 assert(confirmedRuntime.pendingTransaction.sourceFacts.projectId === "project_tx_fixture", "source facts must retain projectId");
 assert(confirmedRuntime.pendingTransaction.sourceFacts.projectVersion === "0.4.0", "source facts must retain projectVersion");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.currentProjectIdentity.projectId === "project_tx_fixture", "source facts must retain current project identity");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.currentProjectIdentity.projectTitle === "Portable Transaction Test", "source facts must retain current project title");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.currentProjectIdentity.sourceIndexHash === "source_hash_tx_123", "source facts must retain current project source hash");
 assert(confirmedRuntime.pendingTransaction.sourceFacts.sourceIndexHash === "source_hash_tx_123", "source facts must retain sourceIndexHash");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.selectedScope.scopeKind === "shot", "source facts must retain selected shot scope kind");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.selectedScope.selectedShotIds.join(",") === "A1_02", "source facts must retain selected shot ids");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.selectedScope.selectedAssetIds.length === 0, "source facts must avoid inventing selected asset ids");
 assert(confirmedRuntime.pendingTransaction.sourceFacts.taskEnvelopeIds.length === hydratedWorkflow.taskPacketState.summary.envelopeReady, "source facts must record task envelope ids");
 assert(confirmedRuntime.pendingTransaction.sourceFacts.knowledgeInjectionTrace.status === "present", "hydrated trace should be present");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.staleArtifactImpact.staleArtifactCount === confirmedRuntime.pendingTransaction.artifactInvalidation.staleArtifacts.length, "source facts must retain stale artifact impact");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.expectedTaskEnqueuePlan.total === confirmedRuntime.pendingTransaction.taskEnqueue.summary.total, "source facts must retain expected task enqueue plan total");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.expectedTaskEnqueuePlan.validatedEnvelopeRequired === true, "expected task enqueue plan must require validated envelopes");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.expectedTaskEnqueuePlan.knowledgeTraceRequired === true, "expected task enqueue plan must require knowledge trace");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.expectedTaskEnqueuePlan.expectedOutputsRequired === true, "expected task enqueue plan must require expected outputs");
+assert(confirmedRuntime.pendingTransaction.sourceFacts.expectedTaskEnqueuePlan.qaChecklistRequired === true, "expected task enqueue plan must require QA checklist");
 assert(confirmedRuntime.pendingTransaction.sourceFacts.packetPlannerReceipt.receiptId, "source facts must retain packet planner receipt id");
 assert(confirmedRuntime.pendingTransaction.sourceFacts.packetPlannerReceipt.validatedEnvelopeRequired === true, "packet planner receipt must require validated envelopes");
 assert(confirmedRuntime.pendingTransaction.sourceFacts.packetPlannerReceipt.formalTaskRejectsMissingPacket === true, "packet planner receipt must reject missing packets");
@@ -524,6 +538,17 @@ assert(confirmedRuntime.pendingTransaction.artifactInvalidation.affectedEnvelope
 assert(confirmedRuntime.pendingTransaction.artifactInvalidation.affectedExpectedOutputs.every((item) => !path.isAbsolute(item)), "artifact invalidation output refs must be portable");
 assert(confirmedRuntime.projectVibeWritePlan.entries.every((entry) => entry.path === "project.vibe"), "write plan must stay project.vibe scoped");
 assert(confirmedRuntime.projectVibeWritePlan.entries.every((entry) => entry.canExecute === false), "write plan entries must not execute");
+assert(confirmedRuntime.projectFactsWriteGate.projectVibeWriteAllowed === false, "project facts write gate must default project.vibe writes off");
+assert(confirmedRuntime.projectFactsWriteGate.requiresUserCommit === true, "project facts write gate must require user commit");
+assert(confirmedRuntime.projectFactsWriteGate.noFileMutation === true, "project facts write gate must forbid file mutation");
+assert(confirmedRuntime.projectFactsWriteGate.canWriteNow === false, "project facts write gate must not be executable");
+assert(confirmedRuntime.projectFactsWriteGate.futureFactRoles.some((role) => role.role === "story_flow"), "project facts write gate must list story_flow future writes");
+assert(confirmedRuntime.projectFactsWriteGate.futureFactRoles.some((role) => role.role === "visual_memory"), "project facts write gate must list visual_memory future writes");
+assert(confirmedRuntime.projectFactsWriteGate.futureFactRoles.some((role) => role.role === "shot_layout"), "project facts write gate must list shot_layout future writes");
+assert(confirmedRuntime.projectFactsWriteGate.futureFactRoles.some((role) => role.role === "task_runs_pointer"), "project facts write gate must list task_runs pointer future writes");
+assert(confirmedRuntime.pendingTransaction.projectFactsWriteGate.transactionId === confirmedRuntime.pendingTransaction.id, "pending transaction must carry the project facts write gate");
+assert(confirmedRuntime.projectVibeWritePlan.requiresUserCommit === true, "write plan must require user commit");
+assert(confirmedRuntime.projectVibeWritePlan.projectFactsWriteGate.transactionId === confirmedRuntime.pendingTransaction.id, "write plan must embed the project facts write gate");
 assert(confirmedRuntime.projectVibeWritePlan.futureApplyInterface.requiresKnowledgeTrace === true, "future apply interface must require knowledge trace");
 
 const waitingWorkflow = clone(workflowState);

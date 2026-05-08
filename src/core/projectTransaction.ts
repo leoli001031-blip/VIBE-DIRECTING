@@ -38,15 +38,38 @@ export type ProjectTransactionQueueStatus = "queued" | "parked" | "blocked";
 export interface ProjectTransactionSourceFacts {
   projectId: string;
   projectVersion: string;
+  projectTitle: string;
+  projectRoot: string;
   projectHash: string;
   sourceIndexHash: string;
   generatedAt: string;
+  currentProjectIdentity: ProjectCurrentProjectIdentityFacts;
+  selectedScope: ProjectTransactionSelectedScopeFacts;
   selection: DirectorEditSelection;
   userIntent: string;
+  staleArtifactImpact: ProjectStaleArtifactImpactSummary;
+  expectedTaskEnqueuePlan: ProjectExpectedTaskEnqueuePlanSummary;
   taskEnvelopeIds: string[];
   sourceRefs: string[];
   packetPlannerReceipt: ProjectPacketPlannerReceiptSummary;
   knowledgeInjectionTrace: ProjectKnowledgeInjectionTraceSummary;
+}
+
+export interface ProjectCurrentProjectIdentityFacts {
+  projectId: string;
+  projectVersion: string;
+  projectTitle: string;
+  projectRoot: string;
+  sourceIndexHash: string;
+  sourceIndexRefs: string[];
+}
+
+export interface ProjectTransactionSelectedScopeFacts {
+  scopeKind?: DirectorEditSelection["scopeKind"];
+  selectedShotIds: string[];
+  selectedAssetIds: string[];
+  sectionId?: string;
+  targetIds: string[];
 }
 
 export interface ProjectPacketPlannerReceiptSummary {
@@ -110,6 +133,16 @@ export interface ProjectArtifactInvalidationSummary {
   notes: string[];
 }
 
+export interface ProjectStaleArtifactImpactSummary {
+  changeKinds: ProjectTransactionChangeKind[];
+  staleArtifactCount: number;
+  affectedShotIds: string[];
+  affectedTaskRunIds: string[];
+  affectedEnvelopeIds: string[];
+  affectedExpectedOutputs: string[];
+  requiresRegenerationCount: number;
+}
+
 export interface ProjectTransactionComponent {
   kind: ProjectTransactionKind;
   sourceId: string;
@@ -153,6 +186,54 @@ export interface ProjectTaskEnqueuePlan {
   };
 }
 
+export interface ProjectExpectedTaskEnqueuePlanSummary {
+  status: ProjectTaskEnqueuePlan["status"];
+  validatedEnvelopeRequired: true;
+  knowledgeTraceRequired: true;
+  expectedOutputsRequired: true;
+  qaChecklistRequired: true;
+  total: number;
+  queued: number;
+  parked: number;
+  blocked: number;
+  missingKnowledgeTrace: number;
+  items: Array<{
+    taskRunId: string;
+    packetId: string;
+    taskKind: TaskPacketKind;
+    taskEnvelopeId?: string;
+    expectedOutputs: string[];
+    queueStatus: ProjectTransactionQueueStatus;
+    validationErrors: string[];
+  }>;
+}
+
+export type ProjectFactWriteRole =
+  | "story_flow"
+  | "visual_memory"
+  | "shot_layout"
+  | "source_index"
+  | "task_runs_pointer"
+  | "knowledge_route_history";
+
+export interface ProjectFactWriteRolePlan {
+  role: ProjectFactWriteRole;
+  operation: "append_pending" | "update_on_user_commit" | "link_on_user_commit";
+  sourceComponentKinds: ProjectTransactionKind[];
+  reason: string;
+}
+
+export interface ProjectFactsWriteGate {
+  transactionId: string;
+  projectVibeWriteAllowed: false;
+  requiresUserCommit: true;
+  noFileMutation: true;
+  canWriteNow: false;
+  futureFactRoles: ProjectFactWriteRolePlan[];
+  blockedBy: string[];
+  notes: string[];
+}
+
 export interface ProjectVibePendingWritePlanEntry {
   id: string;
   operation: "append_pending_transaction";
@@ -169,6 +250,8 @@ export interface ProjectVibeWritePlan {
   transactionId: string;
   noFileMutation: true;
   projectVibeWriteAllowed: false;
+  requiresUserCommit: true;
+  projectFactsWriteGate: ProjectFactsWriteGate;
   entries: ProjectVibePendingWritePlanEntry[];
   futureApplyInterface: {
     confirmPendingTransaction: true;
@@ -192,6 +275,7 @@ export interface ProjectPendingTransaction {
   shotReflow: ProjectTransactionComponent;
   artifactInvalidation: ProjectArtifactInvalidationSummary;
   taskEnqueue: ProjectTaskEnqueuePlan;
+  projectFactsWriteGate: ProjectFactsWriteGate;
   noFileMutation: true;
   providerSubmissionForbidden: true;
   projectVibeWriteAllowed: false;
@@ -202,6 +286,7 @@ export interface ProjectTransactionRuntimeState {
   generatedAt: string;
   userStatus: ProjectTransactionUserStatus;
   pendingTransaction: ProjectPendingTransaction;
+  projectFactsWriteGate: ProjectFactsWriteGate;
   projectVibeWritePlan: ProjectVibeWritePlan;
   queueIngestSummary: ProjectTaskEnqueuePlan["summary"];
   runtimeEvents: Array<{
@@ -264,6 +349,8 @@ export interface ProjectConfirmedProjectionReceipt {
   providerSubmissionForbidden: true;
   workerSpawnForbidden: true;
   requiresKnowledgeTrace: true;
+  providerCalled: false;
+  projectVibeWritten: false;
 }
 
 export interface BuildProjectTransactionRuntimeInput {
@@ -399,19 +486,95 @@ function projectVersionFor(input: BuildProjectTransactionRuntimeInput): string {
   return input.projectVersion || input.runtimeState?.sourceIndexSummary?.projectVersion || "0.1.0";
 }
 
-function sourceFacts(input: BuildProjectTransactionRuntimeInput, trace: ProjectKnowledgeInjectionTraceSummary): ProjectTransactionSourceFacts {
+function projectTitleFor(input: BuildProjectTransactionRuntimeInput): string {
+  return input.runtimeState?.project?.title || projectIdFor(input);
+}
+
+function projectRootFor(input: BuildProjectTransactionRuntimeInput): string {
+  return input.runtimeState?.project?.root || "";
+}
+
+function sourceIndexRefsFor(input: BuildProjectTransactionRuntimeInput): string[] {
+  return unique([
+    input.runtimeState?.sourceIndex?.currentStoryFlowId || "",
+    input.runtimeState?.sourceIndex?.currentVisualMemoryId || "",
+    ...(input.runtimeState?.sourceIndex?.lockedReferenceIds || []),
+    ...(input.runtimeState?.sourceIndex?.candidateReferenceIds || []),
+    ...(input.runtimeState?.sourceIndex?.rejectedReferenceIds || []),
+  ]);
+}
+
+function selectedScopeFacts(selection: DirectorEditSelection): ProjectTransactionSelectedScopeFacts {
+  return {
+    scopeKind: selection.scopeKind,
+    selectedShotIds: unique([...(selection.shotIds || []), selection.shotId || ""]),
+    selectedAssetIds: unique([selection.assetId || ""]),
+    sectionId: selection.sectionId,
+    targetIds: unique(selection.targetIds || []),
+  };
+}
+
+function staleArtifactImpact(invalidation: ProjectArtifactInvalidationSummary): ProjectStaleArtifactImpactSummary {
+  return {
+    changeKinds: invalidation.changeKinds,
+    staleArtifactCount: invalidation.staleArtifacts.length,
+    affectedShotIds: invalidation.affectedShotIds,
+    affectedTaskRunIds: invalidation.affectedTaskRunIds,
+    affectedEnvelopeIds: invalidation.affectedEnvelopeIds,
+    affectedExpectedOutputs: invalidation.affectedExpectedOutputs,
+    requiresRegenerationCount: invalidation.staleArtifacts.filter((artifact) => artifact.requiresRegeneration).length,
+  };
+}
+
+function expectedTaskEnqueuePlanSummary(taskEnqueue: ProjectTaskEnqueuePlan): ProjectExpectedTaskEnqueuePlanSummary {
+  return {
+    status: taskEnqueue.status,
+    validatedEnvelopeRequired: true,
+    knowledgeTraceRequired: true,
+    expectedOutputsRequired: true,
+    qaChecklistRequired: true,
+    total: taskEnqueue.summary.total,
+    queued: taskEnqueue.summary.queued,
+    parked: taskEnqueue.summary.parked,
+    blocked: taskEnqueue.summary.blocked,
+    missingKnowledgeTrace: taskEnqueue.summary.missingKnowledgeTrace,
+    items: taskEnqueue.items.map((item) => ({
+      taskRunId: item.taskRunId,
+      packetId: item.packetId,
+      taskKind: item.taskKind,
+      taskEnvelopeId: item.taskEnvelopeId,
+      expectedOutputs: item.expectedOutputs,
+      queueStatus: item.queueStatus,
+      validationErrors: item.validationErrors,
+    })),
+  };
+}
+
+function sourceFacts(
+  input: BuildProjectTransactionRuntimeInput,
+  trace: ProjectKnowledgeInjectionTraceSummary,
+  invalidation: ProjectArtifactInvalidationSummary,
+  taskEnqueue: ProjectTaskEnqueuePlan,
+): ProjectTransactionSourceFacts {
   const projectId = projectIdFor(input);
   const projectVersion = projectVersionFor(input);
+  const projectTitle = projectTitleFor(input);
+  const projectRoot = projectRootFor(input);
   const sourceIndexHash = sourceIndexHashFor(input);
+  const sourceIndexRefs = sourceIndexRefsFor(input);
   const taskEnvelopeIds = input.workflowState.taskPacketState.packets
     .map((packet) => packetTaskEnvelope(packet)?.id)
     .filter((id): id is string => Boolean(id));
   return {
     projectId,
     projectVersion,
+    projectTitle,
+    projectRoot,
     projectHash: stableHash({
       projectId,
       projectVersion,
+      projectTitle,
+      projectRoot,
       sourceIndexHash,
       taskEnvelopeIds,
       selection: input.workflowState.editPlan.selection,
@@ -419,10 +582,21 @@ function sourceFacts(input: BuildProjectTransactionRuntimeInput, trace: ProjectK
     }),
     sourceIndexHash,
     generatedAt: input.workflowState.generatedAt,
+    currentProjectIdentity: {
+      projectId,
+      projectVersion,
+      projectTitle,
+      projectRoot,
+      sourceIndexHash,
+      sourceIndexRefs,
+    },
+    selectedScope: selectedScopeFacts(input.workflowState.editPlan.selection),
     selection: input.workflowState.editPlan.selection,
     userIntent: input.workflowState.editPlan.userIntent,
+    staleArtifactImpact: staleArtifactImpact(invalidation),
+    expectedTaskEnqueuePlan: expectedTaskEnqueuePlanSummary(taskEnqueue),
     taskEnvelopeIds,
-    sourceRefs: unique(["director_workflow", input.workflowState.editPlan.id, input.workflowState.editPlan.transaction.id, sourceIndexHash]),
+    sourceRefs: unique(["director_workflow", input.workflowState.editPlan.id, input.workflowState.editPlan.transaction.id, sourceIndexHash, ...sourceIndexRefs]),
     packetPlannerReceipt: packetPlannerReceiptSummary(input.workflowState.taskPacketState),
     knowledgeInjectionTrace: trace,
   };
@@ -663,6 +837,73 @@ function confirmedProjectionBlockedReasons(runtime: ProjectTransactionRuntimeSta
   return [];
 }
 
+function factRolesFor(editPlan: DirectorEditPlan): ProjectFactWriteRolePlan[] {
+  const changeKinds = changeKindsFor(editPlan);
+  const plans: ProjectFactWriteRolePlan[] = [
+    {
+      role: "story_flow",
+      operation: "update_on_user_commit",
+      sourceComponentKinds: ["story_change", "shot_reflow"],
+      reason: "Apply story beat, shot content, or shot order changes after explicit user commit.",
+    },
+    {
+      role: "visual_memory",
+      operation: "update_on_user_commit",
+      sourceComponentKinds: ["asset_update"],
+      reason: "Apply selected asset memory changes after explicit user commit.",
+    },
+    {
+      role: "shot_layout",
+      operation: "update_on_user_commit",
+      sourceComponentKinds: ["story_change", "shot_reflow"],
+      reason: "Refresh shot layout facts when story, scene, style, or ordering changes affect selected shots.",
+    },
+    {
+      role: "source_index",
+      operation: "link_on_user_commit",
+      sourceComponentKinds: ["story_change", "asset_update", "shot_reflow", "artifact_invalidation"],
+      reason: "Link updated source refs and stale artifact facts after project facts are committed.",
+    },
+    {
+      role: "task_runs_pointer",
+      operation: "link_on_user_commit",
+      sourceComponentKinds: ["task_enqueue"],
+      reason: "Attach validated TaskRun plan pointers after the project fact commit succeeds.",
+    },
+    {
+      role: "knowledge_route_history",
+      operation: "append_pending",
+      sourceComponentKinds: ["task_enqueue"],
+      reason: "Preserve the knowledge route trace required for future formal task enqueue.",
+    },
+  ];
+  return plans.filter((rolePlan) => {
+    if (rolePlan.role === "visual_memory") return editPlan.selection.scopeKind === "asset" || changeKinds.includes("asset") || changeKinds.includes("character") || changeKinds.includes("scene") || changeKinds.includes("style");
+    return true;
+  });
+}
+
+function projectFactsWriteGate(transactionId: string, editPlan: DirectorEditPlan, taskEnqueue: ProjectTaskEnqueuePlan): ProjectFactsWriteGate {
+  return {
+    transactionId,
+    projectVibeWriteAllowed: false,
+    requiresUserCommit: true,
+    noFileMutation: true,
+    canWriteNow: false,
+    futureFactRoles: factRolesFor(editPlan),
+    blockedBy: unique([
+      "project_vibe_write_disabled_by_default",
+      "requires_explicit_user_commit",
+      taskEnqueue.summary.missingKnowledgeTrace ? "missing_knowledge_trace_blocks_task_enqueue" : "",
+      taskEnqueue.summary.blocked ? "task_enqueue_validation_blocked" : "",
+    ]),
+    notes: [
+      "This gate projects the project fact writes that would be eligible after a later explicit commit.",
+      "The current runtime keeps project.vibe writes disabled and performs no file mutation.",
+    ],
+  };
+}
+
 export function confirmProjectPendingTransactionForRuntime(runtime: ProjectTransactionRuntimeState): ProjectConfirmedProjectionReceipt {
   const status = confirmedProjectionStatusFor(runtime);
   const taskRunIds = unique(runtime.pendingTransaction.taskEnqueue.items.map((item) => item.taskRunId));
@@ -708,15 +949,19 @@ export function confirmProjectPendingTransactionForRuntime(runtime: ProjectTrans
     providerSubmissionForbidden: true,
     workerSpawnForbidden: true,
     requiresKnowledgeTrace: true,
+    providerCalled: false,
+    projectVibeWritten: false,
   };
 }
 
-function writePlan(transactionId: string): ProjectVibeWritePlan {
+function writePlan(transactionId: string, writeGate: ProjectFactsWriteGate): ProjectVibeWritePlan {
   return {
     mode: "pending_only",
     transactionId,
     noFileMutation: true,
     projectVibeWriteAllowed: false,
+    requiresUserCommit: true,
+    projectFactsWriteGate: writeGate,
     entries: [
       {
         id: `pending_write_${transactionId}`,
@@ -744,9 +989,9 @@ function writePlan(transactionId: string): ProjectVibeWritePlan {
 
 export function buildProjectTransactionRuntime(input: BuildProjectTransactionRuntimeInput): ProjectTransactionRuntimeState {
   const trace = knowledgeTraceSummary(input.workflowState.taskPacketState);
-  const facts = sourceFacts(input, trace);
   const invalidation = invalidationSummary(input.workflowState.editPlan, input.workflowState.taskPacketState);
   const taskEnqueue = queuePlanFor(input, trace);
+  const facts = sourceFacts(input, trace, invalidation, taskEnqueue);
   const transactionId = `project_tx_${stableHash({
     createdAt: input.workflowState.generatedAt,
     editPlanId: input.workflowState.editPlan.id,
@@ -754,6 +999,7 @@ export function buildProjectTransactionRuntime(input: BuildProjectTransactionRun
   }).replace(/^vtx_/, "")}`;
   const components = transactionComponents(input.workflowState.editPlan, invalidation);
   const userStatus = userStatusFor(input, taskEnqueue);
+  const writeGate = projectFactsWriteGate(transactionId, input.workflowState.editPlan, taskEnqueue);
   const pendingTransaction: ProjectPendingTransaction = {
     id: transactionId,
     schemaVersion: projectTransactionSchemaVersion,
@@ -767,17 +1013,19 @@ export function buildProjectTransactionRuntime(input: BuildProjectTransactionRun
     shotReflow: components.find((item) => item.kind === "shot_reflow") as ProjectTransactionComponent,
     artifactInvalidation: invalidation,
     taskEnqueue,
+    projectFactsWriteGate: writeGate,
     noFileMutation: true,
     providerSubmissionForbidden: true,
     projectVibeWriteAllowed: false,
   };
-  const projectVibeWritePlan = writePlan(transactionId);
+  const projectVibeWritePlan = writePlan(transactionId, writeGate);
 
   return {
     schemaVersion: projectTransactionSchemaVersion,
     generatedAt: input.workflowState.generatedAt,
     userStatus,
     pendingTransaction,
+    projectFactsWriteGate: writeGate,
     projectVibeWritePlan,
     queueIngestSummary: taskEnqueue.summary,
     runtimeEvents: taskEnqueue.items.map((item) => ({

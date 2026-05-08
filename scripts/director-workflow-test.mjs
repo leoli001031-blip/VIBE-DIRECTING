@@ -145,6 +145,14 @@ assert(shotEdit.taskPacketState.packets.length === 12, "shot edit should build a
 assert(["pass", "blocked"].includes(shotEdit.taskPacketState.plannerReceipt.status), "shot edit should expose a Phase38 packet planner receipt");
 assert(shotEdit.taskPacketState.plannerReceipt.allProductionTaskKindsCovered === true, "shot edit planner receipt must cover all production task kinds");
 assert(shotEdit.taskPacketState.plannerReceipt.naturalLanguageMustEnterTransactionOrPacketBuilder === true, "natural language must be routed through transaction/packet builder");
+assert(shotEdit.transactionRuntime.pendingTransaction.status === "pending", "natural-language intent must produce a pending transaction");
+assert(shotEdit.transactionRuntime.pendingTransaction.sourceFacts.selectedScope.selectedShotIds.join(",") === selectedShotId, "pending transaction must retain selected shot scope");
+assert(shotEdit.transactionRuntime.pendingTransaction.sourceFacts.currentProjectIdentity.projectId === runtimeState.sourceIndexSummary.projectId, "pending transaction must carry current project identity");
+assert(shotEdit.transactionRuntime.projectFactsWriteGate.projectVibeWriteAllowed === false, "project facts write gate must default project.vibe writes off");
+assert(shotEdit.transactionRuntime.projectFactsWriteGate.requiresUserCommit === true, "project facts write gate must require user commit");
+assert(shotEdit.transactionRuntime.projectFactsWriteGate.noFileMutation === true, "project facts write gate must forbid file mutation");
+assert(shotEdit.transactionRuntime.pendingTransaction.taskEnqueue.validatedEnvelopeRequired === true, "TaskRun enqueue plan must require validated envelopes");
+assert(shotEdit.transactionRuntime.pendingTransaction.taskEnqueue.noFreeTextTask === true, "TaskRun enqueue plan must reject free text");
 for (const packet of shotEdit.taskPacketState.packets) {
   assert(packet.noFreeTextTask === true, `${packet.packetId} must forbid free text`);
   assert(packet.canSubmitProvider === false, `${packet.packetId} cannot submit providers`);

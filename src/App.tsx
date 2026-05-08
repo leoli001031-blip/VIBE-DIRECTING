@@ -844,10 +844,11 @@ function buildAgentPanelProjection(
 
 function agentReceiptStatusLabel(receipt: ProjectConfirmedProjectionReceipt) {
   if (receipt.queuedCount > 0) return "已加入计划";
-  if (receipt.status === "blocked_missing_knowledge_trace" || receipt.status === "blocked_queue") return "需更新";
+  if (receipt.status === "blocked_missing_knowledge_trace") return "缺少资产约束，需补齐";
+  if (receipt.status === "blocked_queue") return "需补齐";
   if (receipt.status === "blocked_not_confirmed") return "等待复核";
-  if (receipt.parkedCount > 0 && receipt.queuedCount === 0) return "等待复核";
-  return "已加入计划";
+  if (receipt.parkedCount > 0 && receipt.queuedCount === 0) return "等待写入项目事实";
+  return "等待写入项目事实";
 }
 
 function agentReceiptCountSummary(receipt: ProjectConfirmedProjectionReceipt) {
@@ -855,7 +856,7 @@ function agentReceiptCountSummary(receipt: ProjectConfirmedProjectionReceipt) {
   const parts = [
     receipt.queuedCount ? `${receipt.queuedCount} 已加入计划` : "",
     receipt.parkedCount ? `${receipt.parkedCount} 等待复核` : "",
-    updateCount ? `${updateCount} 需更新` : "",
+    updateCount ? `${updateCount} 需补齐` : "",
   ].filter(Boolean);
   return parts.join(" · ") || agentReceiptStatusLabel(receipt);
 }
@@ -867,7 +868,9 @@ function confirmAgentPlanProjection(workflow: MinimalAgentWorkflow, runtimeState
     && receipt.projectVibeWriteExecuted === false
     && receipt.noFileMutation === true
     && receipt.providerSubmissionForbidden === true
-    && receipt.workerSpawnForbidden === true;
+    && receipt.workerSpawnForbidden === true
+    && receipt.providerCalled === false
+    && receipt.projectVibeWritten === false;
   const baseProjection = buildMinimalRuntimeProjection({
     generatedAt: receipt.generatedAt,
     transactionRuntime,
@@ -916,9 +919,9 @@ function agentProjectionBadges(projection: MinimalRuntimeProjection, planPhase: 
 }
 
 function agentProjectionNextStep(projection: MinimalRuntimeProjection, planPhase: AgentPlanPhase, canConfirm: boolean) {
-  if (planPhase === "confirmed") return `${projection.countSummary}，先等人工复核。`;
+  if (planPhase === "confirmed") return `${projection.countSummary}，等待写入项目事实。`;
   if (canConfirm) return "确认后只会加入计划，后续结果先复核。";
-  if (projection.counts.blocked > 0) return "需要补充参考或改得更具体。";
+  if (projection.counts.blocked > 0) return "缺少资产约束，需补齐。";
   return "确认后只会加入计划，后续结果先复核。";
 }
 
@@ -7498,7 +7501,7 @@ function MinimalAgentPanel({
         <div className="minimal-agent-actions">
           <button disabled={!canConfirm || planPhase === "confirmed"} onClick={confirmPlan}>
             <CheckCircle2 size={15} />
-            应用前确认
+            确认修改
           </button>
         </div>
       )}
