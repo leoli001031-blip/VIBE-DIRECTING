@@ -775,7 +775,7 @@
   border-color: rgba(242, 238, 230, 0.18);
 }
 
-.real-demo-005-panel {
+.project-real-chain-panel {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1fr) minmax(160px, 0.42fr);
@@ -792,7 +792,7 @@
   color: rgba(37, 40, 34, 0.72);
 }
 
-.real-demo-005-head {
+.project-real-chain-head {
   grid-area: head;
   display: flex;
   align-items: center;
@@ -801,20 +801,20 @@
   min-width: 0;
 }
 
-.real-demo-005-head > div {
+.project-real-chain-head > div {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
-.real-demo-005-head span {
+.project-real-chain-head span {
   color: rgba(37, 40, 34, 0.52);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
-.real-demo-005-head strong {
+.project-real-chain-head strong {
   min-width: 0;
   overflow-wrap: anywhere;
   color: rgba(37, 40, 34, 0.88);
@@ -823,7 +823,7 @@
   font-weight: 400;
 }
 
-.real-demo-005-head button {
+.project-real-chain-head button {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -840,12 +840,12 @@
   white-space: nowrap;
 }
 
-.real-demo-005-head button:disabled {
+.project-real-chain-head button:disabled {
   opacity: 0.45;
   cursor: wait;
 }
 
-.real-demo-005-tags {
+.project-real-chain-tags {
   grid-area: tags;
   display: flex;
   flex-wrap: wrap;
@@ -853,7 +853,7 @@
   min-width: 0;
 }
 
-.real-demo-005-tags small {
+.project-real-chain-tags small {
   border: 1px solid rgba(37, 40, 34, 0.12);
   background: rgba(37, 40, 34, 0.035);
   color: rgba(37, 40, 34, 0.66);
@@ -861,7 +861,7 @@
   font-size: 11px;
 }
 
-.real-demo-005-batch {
+.project-real-chain-batch {
   grid-area: batch;
   display: flex;
   align-items: center;
@@ -870,26 +870,26 @@
   min-width: 0;
 }
 
-.real-demo-005-batch > div {
+.project-real-chain-batch > div {
   display: grid;
   gap: 2px;
   min-width: 0;
 }
 
-.real-demo-005-batch span,
-.real-demo-005-batch small {
+.project-real-chain-batch span,
+.project-real-chain-batch small {
   color: rgba(37, 40, 34, 0.52);
   font-size: 11px;
 }
 
-.real-demo-005-batch strong {
+.project-real-chain-batch strong {
   color: rgba(37, 40, 34, 0.82);
   font-size: 13px;
   font-weight: 650;
   overflow-wrap: anywhere;
 }
 
-.real-demo-005-batch button {
+.project-real-chain-batch button {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -906,12 +906,12 @@
   white-space: nowrap;
 }
 
-.real-demo-005-batch button:disabled {
+.project-real-chain-batch button:disabled {
   opacity: 0.45;
   cursor: wait;
 }
 
-.real-demo-005-policy {
+.project-real-chain-policy {
   grid-area: policy;
   display: flex;
   flex-wrap: wrap;
@@ -919,14 +919,14 @@
   min-width: 0;
 }
 
-.real-demo-005-policy small {
+.project-real-chain-policy small {
   border: 1px solid rgba(37, 40, 34, 0.1);
   color: rgba(37, 40, 34, 0.58);
   padding: 4px 7px;
   font-size: 11px;
 }
 
-.real-demo-005-thumbs {
+.project-real-chain-thumbs {
   grid-area: thumbs;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -934,13 +934,13 @@
   min-width: 0;
 }
 
-.real-demo-005-thumbs figure {
+.project-real-chain-thumbs figure {
   position: relative;
   min-width: 0;
   margin: 0;
 }
 
-.real-demo-005-thumbs img {
+.project-real-chain-thumbs img {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -948,12 +948,12 @@
   object-fit: cover;
 }
 
-.real-demo-005-thumbs figure.review-overlay img {
+.project-real-chain-thumbs figure.review-overlay img {
   outline: 1px solid rgba(192, 147, 82, 0.92);
   outline-offset: -1px;
 }
 
-.real-demo-005-thumbs figcaption {
+.project-real-chain-thumbs figcaption {
   position: absolute;
   right: 5px;
   bottom: 5px;
@@ -967,12 +967,12 @@
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
 }
 
-.real-demo-005-thumbs figcaption small {
+.project-real-chain-thumbs figcaption small {
   font-size: 10px;
 }
 
-.real-demo-005-report,
-.real-demo-005-message {
+.project-real-chain-report,
+.project-real-chain-message {
   min-width: 0;
   color: inherit;
   font-size: 11px;
@@ -980,48 +980,48 @@
   overflow-wrap: anywhere;
 }
 
-.real-demo-005-report {
+.project-real-chain-report {
   grid-area: report;
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
 
-.real-demo-005-message {
+.project-real-chain-message {
   grid-area: message;
 }
 
-.preview-shell .real-demo-005-panel {
+.preview-shell .project-real-chain-panel {
   border-color: rgba(242, 238, 230, 0.14);
   color: rgba(242, 238, 230, 0.68);
 }
 
-.preview-shell .real-demo-005-head span {
+.preview-shell .project-real-chain-head span {
   color: rgba(242, 238, 230, 0.5);
 }
 
-.preview-shell .real-demo-005-head strong,
-.preview-shell .real-demo-005-head button,
-.preview-shell .real-demo-005-batch strong,
-.preview-shell .real-demo-005-batch button {
+.preview-shell .project-real-chain-head strong,
+.preview-shell .project-real-chain-head button,
+.preview-shell .project-real-chain-batch strong,
+.preview-shell .project-real-chain-batch button {
   color: rgba(242, 238, 230, 0.84);
 }
 
-.preview-shell .real-demo-005-head button,
-.preview-shell .real-demo-005-batch button,
-.preview-shell .real-demo-005-tags small,
-.preview-shell .real-demo-005-policy small {
+.preview-shell .project-real-chain-head button,
+.preview-shell .project-real-chain-batch button,
+.preview-shell .project-real-chain-tags small,
+.preview-shell .project-real-chain-policy small {
   border-color: rgba(242, 238, 230, 0.16);
 }
 
-.preview-shell .real-demo-005-tags small,
-.preview-shell .real-demo-005-policy small {
+.preview-shell .project-real-chain-tags small,
+.preview-shell .project-real-chain-policy small {
   background: rgba(242, 238, 230, 0.055);
   color: rgba(242, 238, 230, 0.68);
 }
 
-.preview-shell .real-demo-005-batch span,
-.preview-shell .real-demo-005-batch small {
+.preview-shell .project-real-chain-batch span,
+.preview-shell .project-real-chain-batch small {
   color: rgba(242, 238, 230, 0.56);
 }
 
@@ -1914,7 +1914,7 @@
     gap: 10px;
   }
 
-  .real-demo-005-panel {
+  .project-real-chain-panel {
     grid-template-columns: 1fr;
     grid-template-areas:
       "head"
@@ -1926,7 +1926,7 @@
       "message";
   }
 
-  .real-demo-005-thumbs {
+  .project-real-chain-thumbs {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 

@@ -112,6 +112,7 @@ const workflowPanelNextStepLabel = findFunctionBody(appSource, "workflowPanelNex
 const workflowPlanFacts = findFunctionBody(appSource, "workflowPlanFacts");
 const realPilotDirectorStatus = findFunctionBody(appSource, "RealPilotDirectorStatus");
 const oneShotActionPanel = findFunctionBody(appSource, "OneShotActionPanel");
+const projectRealChainPanel = findFunctionBody(appSource, "ProjectRealChainPanel");
 const projectFactsStrip = findFunctionBody(appSource, "ProjectFactsStrip");
 const projectStoreSnapshotForUi = findFunctionBody(appSource, "buildProjectStoreSnapshotForUi");
 const projectFactsUiSummary = findFunctionBody(appSource, "buildProjectFactsUiSummary");
@@ -120,6 +121,8 @@ const assetSourceKindForPath = findFunctionBody(appSource, "assetSourceKindForPa
 const assetLibraryUserBlockers = findFunctionBody(appSource, "assetLibraryUserBlockers");
 const minimalPreview = findFunctionBody(appSource, "MinimalPreview");
 const minimalProjectPlan = findFunctionBody(appSource, "buildMinimalProjectPlan");
+const agentReceiptStatusLabel = findFunctionBody(appSource, "agentReceiptStatusLabel");
+const agentReceiptCountSummary = findFunctionBody(appSource, "agentReceiptCountSummary");
 const confirmAgentPlanProjection = findFunctionBody(appSource, "confirmAgentPlanProjection");
 const previewPlayerQueue = findFunctionBody(appSource, "buildPreviewPlayerQueue");
 const previewQueueKind = findFunctionBody(appSource, "previewQueueKind");
@@ -262,8 +265,13 @@ checkMessage(requireWithin(confirmAgentPlanProjection, /projectVibeWriteExecuted
 checkMessage(requireWithin(confirmAgentPlanProjection, /noFileMutation\s*===\s*true/, "receipt-backed confirmation helper must preserve no file mutation lock"));
 checkMessage(requireWithin(confirmAgentPlanProjection, /providerSubmissionForbidden\s*===\s*true/, "receipt-backed confirmation helper must preserve provider submission lock"));
 checkMessage(requireWithin(confirmAgentPlanProjection, /workerSpawnForbidden\s*===\s*true/, "receipt-backed confirmation helper must preserve worker spawn lock"));
+checkMessage(requireWithin(agentReceiptStatusLabel, /queuedCount\s*>\s*0[\s\S]*已加入计划/, "creator receipt status should prefer queued work over repair-only copy"));
+checkMessage(requireWithin(agentReceiptCountSummary, /Math\.max\s*\(\s*receipt\.blockedCount\s*,\s*receipt\.runtimeProjection\.staleArtifactCount\s*\)/, "creator receipt count summary must merge blocked/stale repair counts"));
+checkMessage(requireWithin(appSource, /function\s+agentProjectionBadges[\s\S]*confirmed[\s\S]*先等复核/, "confirmed Agent panel badges should avoid duplicate repair counts"));
 checkMessage(requireWithin(minimalAgentPanel, /minimal-state-dots/, "One Creator Loop MinimalAgentPanel must render compact progress dots"));
 checkMessage(requireWithin(`${minimalAgentPanel}\n${workflowCanConfirm}`, /dry_run_ready/, "Round 3 confirmation only after dry-run ready"));
+checkMessage(requireWithin(appSource, /function\s+agentProjectionNextStep[\s\S]*canConfirm[\s\S]*确认后只会加入计划/, "Agent panel confirmable projection must show a confirmation next step before missing-reference copy"));
+checkMessage(requireWithin(minimalAgentPanel, /agentProjectionNextStep\s*\([^)]*canConfirm/, "MinimalAgentPanel must pass the confirmation guard into projection next-step copy"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /描述你想怎么改\.\.\./, "MinimalAgentPanel natural input placeholder"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /应用前确认/, "MinimalAgentPanel light confirmation label"));
 check(
@@ -671,6 +679,26 @@ check(
 );
 
 const minimalDirectorSurface = `${directorMode}\n${directorProgressStrip}\n${realPilotDirectorStatus}\n${oneShotActionPanel}\n${minimalAgentPanel}\n${minimalTopNav}\n${minimalProjectPlan}`;
+const projectRealChainUserSurface = `${projectRealChainPanel}\n${findFunctionBody(appSource, "projectRealChainStatusLabel")}\n${findFunctionBody(appSource, "projectImage2BatchStatusLabel")}\n${findFunctionBody(appSource, "projectImage2BatchLedgerLabel")}`;
+checkMessage(requireWithin(projectRealChainUserSurface, /项目状态/, "current project chain panel must use creator-facing project status copy"));
+checkMessage(requireWithin(projectRealChainUserSurface, /同步状态/, "current project chain panel must use light sync copy"));
+checkMessage(requireWithin(projectRealChainUserSurface, /图片生成/, "current project chain panel must describe Image2 batch as image generation"));
+checkMessage(requireWithin(projectRealChainUserSurface, /projectTitle[\s\S]*状态已回流/, "current project chain panel must show project title instead of sandbox project id"));
+checkMessage(requireWithin(minimalTopNav, /aria-label="项目计划状态"/, "top nav project plan status aria label should be localized"));
+check(!/real-demo-005/.test(`${appSource}\n${stylesSource}`), "main app/styles must not keep 005 demo class names");
+for (const [term, pattern] of [
+  ["runtime endpoint", /runtime\s+endpoint/i],
+  ["fallback report", /fallback\s+report/i],
+  ["005 sandbox", /005\s+sandbox/i],
+  ["real demo id", /real_demo_e2e_005/i],
+  ["provider submit", /provider\s+未提交|provider\s+submit/i],
+  ["prepare status", /prepare\s+未执行|prepare\s+ran|prepareRan/i],
+  ["live submit", /live\s+submit/i],
+  ["ledger copy", /\bledger\b/i],
+  ["needs review English", /needs\s+review/i],
+]) {
+  check(!pattern.test(projectRealChainUserSurface), `current project chain panel must not expose ${term}`);
+}
 const minimalDirectorButtonSurface = Array.from(minimalDirectorSurface.matchAll(/<button\b[\s\S]*?<\/button>/gi))
   .map((match) => match[0])
   .join("\n");
