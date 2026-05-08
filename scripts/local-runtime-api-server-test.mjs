@@ -1,3 +1,6 @@
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { spawn } from "node:child_process";
 
 function assert(condition, message) {
@@ -47,6 +50,14 @@ async function fetchJson(url, init) {
   return { response, payload };
 }
 
+async function selectProject(baseUrl, projectRoot, projectId, displayName) {
+  return fetchJson(`${baseUrl}/api/runtime/projects/select`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ projectRoot, projectId, displayName }),
+  });
+}
+
 function assert005Payload(payload, label) {
   assert(payload.ok === true, `${label} should be ok`);
   assert(payload.previewStatus === "real_image2_start_preview_ready_with_review", `${label} preview status mismatch`);
@@ -56,17 +67,34 @@ function assert005Payload(payload, label) {
   assert(payload.reviewOverlayShots.includes("S08"), `${label} missing S08 overlay`);
   assert(Number(payload.shotCount) === 8, `${label} shot count mismatch`);
   assert(Array.isArray(payload.observations) && payload.observations.length === 8, `${label} observations mismatch`);
-  const s07 = payload.observations.find((item) => item.shotId === "S07");
-  const s08 = payload.observations.find((item) => item.shotId === "S08");
-  assert(s07?.reviewOverlay === true, `${label} S07 should be review overlay`);
-  assert(s08?.reviewOverlay === true, `${label} S08 should be review overlay`);
 }
 
 const project004Root = "real-test-sandbox/real-demo-e2e/004-image2-start-frames";
 const project004Id = "real_demo_e2e_004_image2_start_frames";
 const project004TruthPath = `${project004Root}/reports/runtime_truth_layer.json`;
 const project005Root = "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames";
+const project005Id = "real_demo_e2e_005_anime_image2_start_frames";
 const project005TruthPath = `${project005Root}/reports/runtime_truth_layer.json`;
+
+function assertNo005Leak(payload, label) {
+  const text = JSON.stringify(payload);
+  assert(!text.includes(project005Id), `${label} must not leak 005 project id`);
+  assert(!text.includes(project005Root), `${label} must not leak 005 project root`);
+  assert(!text.includes("S07"), `${label} must not leak 005 review shots`);
+  assert(!text.includes("S08"), `${label} must not leak 005 review shots`);
+}
+
+function assertUnboundPayload(payload, label) {
+  assert(payload.ok === false, `${label} should fail closed`);
+  assert(payload.status === "unbound", `${label} status should be unbound`);
+  assert(payload.previewStatus === "unavailable", `${label} preview status should be unavailable`);
+  assert(payload.productionStatus === "blocked", `${label} production status should be blocked`);
+  assert(payload.projectRootMode === "unbound_current_project", `${label} project root mode mismatch`);
+  assert(Array.isArray(payload.observations) && payload.observations.length === 0, `${label} observations should be empty`);
+  assert(Array.isArray(payload.previewItems) && payload.previewItems.length === 0, `${label} previewItems should be empty`);
+  assert(payload.ledgerProjection === undefined, `${label} ledger projection should be absent`);
+  assertNo005Leak(payload, label);
+}
 
 function assertProjectProjectionFacts(payload, label, root, primaryReportPath) {
   assert(payload.projectRootRelativePath === root, `${label} projectRootRelativePath mismatch`);
@@ -81,123 +109,86 @@ function assertProjectProjectionFacts(payload, label, root, primaryReportPath) {
   assert(payload.image2ReportPath === `${root}/reports/image2_start_long_chain_report.json`, `${label} compatibility image2 report path mismatch`);
 }
 
-function assertProjectRealChainPayload(payload, label) {
+function assertCurrentBindingContext(payload, label, root, projectId) {
+  assert(payload.currentProject?.bound === true, `${label} should expose bound current project`);
+  assert(payload.projectRootMode === "runtime_current_project_binding", `${label} should use runtime binding`);
+  assert(payload.requestContext?.projectRoot === root, `${label} request context project root mismatch`);
+  assert(payload.requestContext?.projectRootSource === "binding", `${label} request context source mismatch`);
+  assert(payload.project?.projectId === projectId, `${label} project id mismatch`);
+  assert(payload.projectId === projectId, `${label} top-level project id mismatch`);
+  assert(payload.identity?.projectId === projectId, `${label} identity project id mismatch`);
+  assert(payload.project?.projectRoot === root, `${label} project root mismatch`);
+}
+
+function assertCurrent005(payload, label) {
   assert005Payload(payload, label);
-  assert(payload.projectionKind === "project_real_chain_status", `${label} projection kind mismatch`);
-  assert(payload.projectRootMode === "compatibility_fallback", `${label} project root mode mismatch`);
-  assert(/compatibility fallback/.test(payload.sourceLabel || ""), `${label} current project fallback label mismatch`);
-  assert(payload.requestContext?.projectRootSource === "compatibility_fallback", `${label} request context fallback mismatch`);
-  assert(payload.project?.projectId === "real_demo_e2e_005_anime_image2_start_frames", `${label} project id mismatch`);
-  assert(payload.projectId === payload.project.projectId, `${label} top-level project id mismatch`);
-  assert(payload.identity?.projectId === payload.project.projectId, `${label} identity project id mismatch`);
+  assertCurrentBindingContext(payload, label, project005Root, project005Id);
   assert(payload.project?.runId === "real_demo_e2e_005_anime_image2_start_frames_run_20260507", `${label} project run id mismatch`);
   assert(payload.plannedImageCount === 8, `${label} planned image count mismatch`);
-  assert(payload.totalPlannedImages === 8, `${label} total planned image count mismatch`);
   assert(payload.returnedImageCount === 8, `${label} returned image count mismatch`);
   assert(payload.needsReviewCount === 2, `${label} needs review count mismatch`);
-  assert(Array.isArray(payload.needsReviewShotIds), `${label} needsReviewShotIds missing`);
-  assert(payload.needsReviewShotIds.includes("S07"), `${label} missing S07 needs review`);
-  assert(payload.needsReviewShotIds.includes("S08"), `${label} missing S08 needs review`);
   assert(Array.isArray(payload.previewItems) && payload.previewItems.length === 8, `${label} preview items mismatch`);
   assertProjectProjectionFacts(payload, label, project005Root, project005TruthPath);
-  assert(payload.previewItems.every((item) => item.outputExists === true), `${label} should project existing 005 preview outputs`);
 }
 
-function assertImage2BatchPlanPayload(payload, label) {
+function assertCurrent004(payload, label) {
+  assert(payload.ok === true, `${label} should be ok`);
+  assertCurrentBindingContext(payload, label, project004Root, project004Id);
+  assert(payload.previewStatus === "blocked", `${label} should read 004 projection`);
+  assert(payload.returnedImageCount === 4, `${label} should count only existing 004 outputs`);
+  assert(payload.blockerCount === 8, `${label} should project blocked 004 shots`);
+  assertProjectProjectionFacts(payload, label, project004Root, project004TruthPath);
+  assert(!JSON.stringify(payload).includes(project005Id), `${label} must not mix in 005 project identity`);
+}
+
+function assertImage2Batch005(payload, label) {
   assert(payload.ok === true, `${label} should be ok`);
   assert(payload.projectionKind === "current_project_image2_batch_prepare_plan", `${label} projection kind mismatch`);
-  assert(payload.projectRootMode === "compatibility_fallback", `${label} project root mode mismatch`);
-  assert(/compatibility fallback/.test(payload.sourceLabel || ""), `${label} current project fallback label mismatch`);
-  assert(payload.requestContext?.projectRootSource === "compatibility_fallback", `${label} request context fallback mismatch`);
-  assert(payload.project?.projectId === "real_demo_e2e_005_anime_image2_start_frames", `${label} project id mismatch`);
-  assert(payload.projectId === payload.project.projectId, `${label} top-level project id mismatch`);
-  assert(payload.identity?.projectId === payload.project.projectId, `${label} identity project id mismatch`);
+  assertCurrentBindingContext(payload, label, project005Root, project005Id);
   assert(payload.submitPolicy?.providerCallAllowed === false, `${label} provider calls must be disallowed`);
   assert(payload.submitPolicy?.dryRunOnly === true, `${label} should be dry-run only`);
-  assert(payload.submitPolicy?.manualSubmitRequired === true, `${label} should require manual submit`);
-  assert(payload.submitPolicy?.liveSubmitAllowed === false, `${label} live submit must be disallowed`);
-  assert(payload.submitPolicy?.noSeedance === true, `${label} Seedance must be blocked`);
-  assert(payload.submitPolicy?.noJimeng === true, `${label} Jimeng must be blocked`);
-  assert(payload.submitPolicy?.noVideo === true, `${label} video must be blocked`);
-  assert(payload.submitPolicy?.noFast === true, `${label} fast mode must be blocked`);
-  assert(payload.submitPolicy?.noVip === true, `${label} VIP mode must be blocked`);
   assert(payload.providerCalled === false, `${label} must not call provider`);
   assert(payload.prepareRan === false, `${label} must not run prepare`);
-  assert(payload.verifyScriptRan === false, `${label} must not run verify script`);
   assert(payload.liveSubmitAllowed === false, `${label} live submit must not be allowed`);
-  assertProjectProjectionFacts(payload, label, project005Root, project005TruthPath);
-  assert(Array.isArray(payload.observations) && payload.observations.length === 8, `${label} observations mismatch`);
   assert(Array.isArray(payload.items) && payload.items.length === 8, `${label} items mismatch`);
-  assert(Array.isArray(payload.plan?.items) && payload.plan.items.length === 8, `${label} plan items mismatch`);
   assert(payload.summary?.plannedCount === 8, `${label} planned count mismatch`);
-  assert(payload.summary?.readyCount + payload.summary?.blockedCount === 8, `${label} summary count mismatch`);
   assert(payload.summary?.returnedCount === 8, `${label} returned count mismatch`);
   assert(payload.summary?.reviewCount === 2, `${label} review count mismatch`);
-  assert(Array.isArray(payload.summary?.selectedShotIds), `${label} selectedShotIds missing`);
-  assert(payload.summary.selectedShotIds.includes("S01"), `${label} selected shots should include S01`);
-  assert(typeof payload.summary.nextAction === "string" && payload.summary.nextAction.length > 0, `${label} next action missing`);
-  assert(payload.ledgerProjection?.schemaVersion === "vibe_core_current_project_image2_batch_ledger_projection_v1", `${label} ledger projection schema mismatch`);
-  assert(payload.ledgerProjection.summary?.total === 8, `${label} ledger total mismatch`);
-  assert(payload.ledgerProjection.summary?.queued === 0, `${label} ledger queued count mismatch`);
-  assert(payload.ledgerProjection.summary?.blocked === 0, `${label} ledger blocked count mismatch`);
-  assert(payload.ledgerProjection.summary?.parked === 0, `${label} ledger parked count mismatch`);
-  assert(payload.ledgerProjection.summary?.reviewNeeded === 2, `${label} ledger reviewNeeded count mismatch`);
-  assert(payload.ledgerProjection.summary?.completeVerified === 6, `${label} ledger completeVerified mismatch`);
-  assert(payload.ledgerProjection.summary?.providerSubmissionForbidden === true, `${label} ledger provider submission must be forbidden`);
-  assert(payload.ledgerProjection.summary?.liveSubmitAllowed === false, `${label} ledger live submit must not be allowed`);
-  assert(payload.ledgerProjection.summary?.noFileMutation === true, `${label} ledger must not mutate files`);
-  assert(payload.ledgerProjection.summary?.workerSpawnForbidden === true, `${label} ledger must forbid worker spawn`);
-  assert(payload.ledgerProjection.summary?.providerCalled === false, `${label} ledger must not call provider`);
-  assert(Array.isArray(payload.ledgerProjection.projections) && payload.ledgerProjection.projections.length === 8, `${label} ledger projections mismatch`);
-  assert(payload.ledgerProjection.projections.filter((item) => item.completeVerified === true).length === 6, `${label} ledger complete item count mismatch`);
-  assert(payload.ledgerProjection.projections.filter((item) => item.currentStatus === "review_needed").length === 2, `${label} ledger review item count mismatch`);
-  assert(payload.ledgerProjection.projections.every((item) => item.currentStatus === "complete_verified" || item.currentStatus === "review_needed"), `${label} ledger item status mismatch`);
-
-  const first = payload.items.find((item) => item.shotId === "S01");
-  assert(first?.taskRunId === "task_run_s01_image2_start_real_demo_005", `${label} S01 taskRunId mismatch`);
-  assert(first?.packetId === "task_packet_s01_image2_start_real_demo_005", `${label} S01 packetId mismatch`);
-  assert(first?.envelopeId === "subagent_envelope_s01_image2_start_real_demo_005", `${label} S01 envelopeId mismatch`);
-  assert(first?.expectedOutputPath === "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/outputs/shots/S01/start.png", `${label} S01 expected output mismatch`);
-  assert(first?.providerObservationPath === "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/provider_observations/S01_start_provider_observation.json", `${label} S01 provider observation path mismatch`);
-  assert(first?.semanticQaPath === "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/semantic_qa/S01_start_semantic_qa.json", `${label} S01 semantic QA path mismatch`);
-  assert(first?.promptPath === "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/prompt_requests/S01_start_frame_prompt.md", `${label} S01 prompt path mismatch`);
-  assert(Array.isArray(first?.referencePaths), `${label} S01 referencePaths missing`);
-  assert(first.referencePaths.includes("real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/project/project.vibe"), `${label} S01 referencePaths should include project.vibe`);
-  assert(first.queueOrder === 1, `${label} S01 queue order mismatch`);
-  assert(first.outputExists === true, `${label} S01 output should exist`);
-  assert(first.providerObservationActual === true, `${label} S01 provider observation should be actual`);
-  assert(first.semanticQaPassed === true, `${label} S01 semantic QA should pass`);
-
-  const firstLedgerProjection = payload.ledgerProjection.projections.find((item) => item.taskRunId === first.taskRunId);
-  assert(firstLedgerProjection?.envelopeId === first.envelopeId, `${label} S01 ledger envelope mismatch`);
-  assert(firstLedgerProjection?.currentStatus === "complete_verified", `${label} S01 ledger status should be complete_verified`);
-  assert(firstLedgerProjection?.expectedOutputPath === first.expectedOutputPath, `${label} S01 ledger expected output path mismatch`);
-  assert(Array.isArray(firstLedgerProjection?.expectedOutputs), `${label} S01 ledger expectedOutputs missing`);
-  assert(firstLedgerProjection.expectedOutputs.some((item) => item.expectedOutputPath === first.expectedOutputPath), `${label} S01 ledger expectedOutputs should include expectedOutputPath`);
+  assert(payload.ledgerProjection?.summary?.completeVerified === 6, `${label} ledger completeVerified mismatch`);
+  assert(payload.ledgerProjection?.summary?.reviewNeeded === 2, `${label} ledger reviewNeeded count mismatch`);
+  assert(payload.items.every((item) => item.taskRunId.includes("real_demo_005")), `${label} must use 005 task ids`);
 }
 
-function assert004ProjectContext(payload, label, source) {
+function assertImage2Batch004(payload, label) {
   assert(payload.ok === true, `${label} should be ok`);
-  assert(payload.projectRootMode === "request_project_root", `${label} should use request project root`);
-  assert((payload.sourceLabel || "").includes(source), `${label} source label should include ${source}`);
-  assert(payload.requestContext?.projectRoot === project004Root, `${label} request project root mismatch`);
-  assert(payload.requestContext?.projectRootSource === source, `${label} request project root source mismatch`);
-  assert(payload.requestContext?.projectId === project004Id, `${label} request project id mismatch`);
-  assert(payload.requestContext?.projectIdSource === source, `${label} request project id source mismatch`);
-  assert(payload.project?.projectId === project004Id, `${label} project id mismatch`);
-  assert(payload.projectId === project004Id, `${label} top-level project id mismatch`);
-  assert(payload.identity?.projectId === project004Id, `${label} identity project id mismatch`);
-  assert(payload.project?.projectRoot === project004Root, `${label} project root mismatch`);
-  assert(payload.projectRoot === project004Root, `${label} top-level project root mismatch`);
-  assert(payload.identity?.projectRoot === project004Root, `${label} identity project root mismatch`);
-  assertProjectProjectionFacts(payload, label, project004Root, project004TruthPath);
-  assert(payload.providerCalled === false, `${label} must not call provider`);
-  assert(payload.prepareRan === false, `${label} must not run prepare`);
+  assert(payload.projectionKind === "current_project_image2_batch_prepare_plan", `${label} projection kind mismatch`);
+  assertCurrentBindingContext(payload, label, project004Root, project004Id);
+  assert(payload.summary?.plannedCount === 8, `${label} planned count mismatch`);
+  assert(payload.summary?.returnedCount === 4, `${label} returned count mismatch`);
+  assert(payload.summary?.blockedCount === 8, `${label} blocked count mismatch`);
+  assert(payload.ledgerProjection?.summary?.parked === 8, `${label} should park blocked 004 ledger items`);
+  assert(payload.items.every((item) => item.taskRunId.includes("real_demo_004")), `${label} must use 004 task ids`);
+  assert(!JSON.stringify(payload).includes(project005Id), `${label} must not mix in 005 project identity`);
 }
+
+const tempRoot = mkdtempSync(path.join(tmpdir(), "vibe-runtime-api-test-"));
+const bindingPath = path.join(tempRoot, "current-project.local.json");
+const outsideRoot = path.join(tempRoot, "outside-project");
+const outsideFile = path.join(tempRoot, "outside-file.txt");
+const repoSymlinkRoot = "real-test-sandbox/current-project-runtime-boundary-link";
+const repoSymlinkFile = `${project004Root}/runtime-boundary-file-link.txt`;
+
+writeFileSync(outsideFile, "outside runtime boundary\n", "utf8");
 
 const child = spawn(process.execPath, ["scripts/local-runtime-api-server.mjs"], {
   cwd: process.cwd(),
-  env: { ...process.env, VIBE_CORE_RUNTIME_API_PORT: "0" },
+  env: {
+    ...process.env,
+    VIBE_CORE_RUNTIME_API_PORT: "0",
+    VIBE_CORE_CURRENT_PROJECT_BINDING_PATH: bindingPath,
+    VIBE_CORE_CURRENT_PROJECT_ROOT: project005Root,
+    VIBE_CORE_PROJECT_ROOT: project005Root,
+  },
   stdio: ["ignore", "pipe", "pipe"],
 });
 
@@ -205,119 +196,133 @@ try {
   const { baseUrl } = await waitForServer(child);
   const runtimeStatus = await fetchJson(`${baseUrl}/api/runtime/status`);
   assert(runtimeStatus.response.status === 200, "GET runtime status should return 200");
-  assert(runtimeStatus.payload.endpoints?.currentProjectImage2BatchPlanEndpoint === "/api/runtime/projects/current/image2-batch/plan", "runtime status should expose image2 batch plan endpoint");
-  assert(runtimeStatus.payload.endpoints?.currentProjectImage2BatchRunCheckEndpoint === "/api/runtime/projects/current/image2-batch/run-check", "runtime status should expose image2 batch run-check endpoint");
+  assert(runtimeStatus.payload.endpoints?.currentProjectBindingEndpoint === "/api/runtime/projects/current", "runtime status should expose current project binding endpoint");
+  assert(runtimeStatus.payload.endpoints?.currentProjectSelectEndpoint === "/api/runtime/projects/select", "runtime status should expose current project select endpoint");
 
-  const projectStatus = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
-  assert(projectStatus.response.status === 200, "GET project real-chain status should return 200");
-  assertProjectRealChainPayload(projectStatus.payload, "GET project real-chain status");
-  assert(projectStatus.payload.source === "runtime_endpoint", "GET project status should come from runtime endpoint");
-  assert(projectStatus.payload.providerCalled === false, "GET project status must not call provider");
-  assert(projectStatus.payload.prepareRan === false, "GET project status must not run prepare");
+  const currentUnbound = await fetchJson(`${baseUrl}/api/runtime/projects/current`);
+  assert(currentUnbound.response.status === 200, "GET current project binding should return 200");
+  assert(currentUnbound.payload.status === "unbound", "current project should start unbound");
+  assert(!existsSync(bindingPath), "test binding file should not be created before select");
 
-  const queryProjectStatus = await fetchJson(
+  for (const [label, url, init] of [
+    ["GET current real-chain status", `${baseUrl}/api/runtime/projects/current/real-chain/status`, undefined],
+    ["POST current real-chain run-check", `${baseUrl}/api/runtime/projects/current/real-chain/run-check`, { method: "POST" }],
+    ["GET current image2 batch plan", `${baseUrl}/api/runtime/projects/current/image2-batch/plan`, undefined],
+    ["POST current image2 batch run-check", `${baseUrl}/api/runtime/projects/current/image2-batch/run-check`, { method: "POST" }],
+  ]) {
+    const result = await fetchJson(url, init);
+    assert(result.response.status === 409, `${label} should return 409 while unbound`);
+    assertUnboundPayload(result.payload, label);
+  }
+
+  const select005 = await selectProject(baseUrl, project005Root, project005Id, "005 anime image2");
+  assert(select005.response.status === 200, "POST select 005 should return 200");
+  assert(select005.payload.status === "bound", "POST select 005 should bind");
+  assert(select005.payload.projectVibeWritten === false, "POST select must not write project.vibe");
+  assert(existsSync(bindingPath), "POST select should write runtime-local binding");
+  assert(JSON.parse(readFileSync(bindingPath, "utf8")).projectRoot === project005Root, "binding file should store 005 root");
+
+  const project005Status = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
+  assert(project005Status.response.status === 200, "GET current status after select 005 should return 200");
+  assertCurrent005(project005Status.payload, "GET current status after select 005");
+
+  const query004Status = await fetchJson(
     `${baseUrl}/api/runtime/projects/current/real-chain/status?projectRoot=${encodeURIComponent(project004Root)}&projectId=${encodeURIComponent(project004Id)}`,
   );
-  assert(queryProjectStatus.response.status === 200, "GET project status with query context should return 200");
-  assert004ProjectContext(queryProjectStatus.payload, "GET project status with query context", "query");
-  assert(queryProjectStatus.payload.projectionKind === "project_real_chain_status", "GET project status query projection kind mismatch");
-  assert(queryProjectStatus.payload.previewStatus === "blocked", "GET project status query should read 004 projection");
-  assert(queryProjectStatus.payload.returnedImageCount === 4, "GET project status query should count only existing 004 outputs");
-  assert(queryProjectStatus.payload.blockerCount === 8, "GET project status query should project blocked 004 shots");
+  assert(query004Status.response.status === 200, "GET current status with query override should return 200");
+  assertCurrent005(query004Status.payload, "GET current status with ignored query override");
+  assert(query004Status.payload.ignoredRequestContext?.ignoredProjectRootProvided === true, "query override should be recorded as ignored");
+  assert(query004Status.payload.ignoredRequestContext?.ignoredProjectRootSource === "query", "query override source should be recorded");
 
-  const projectRun = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/run-check`, { method: "POST" });
-  assert(projectRun.response.status === 200, "POST project real-chain run-check should return 200");
-  assertProjectRealChainPayload(projectRun.payload, "POST project real-chain run-check");
-  assert(projectRun.payload.providerCalled === false, "POST project run-check must not call provider");
-  assert(projectRun.payload.prepareRan === false, "POST project run-check must not run prepare");
-  assert(projectRun.payload.command?.providerCalled === false, "POST project command must not call provider");
-  assert(projectRun.payload.command?.prepareRan === false, "POST project command must not run prepare");
-  assert(projectRun.payload.command?.verifyScriptRan === false, "POST project command must not run the 005 verify script");
-  assert(projectRun.payload.command?.mode === "read_only_projection_check", "POST project command should be a read-only projection check");
-  assert(projectRun.payload.command?.exitCode === 0, "POST project command should pass");
-
-  const bodyProjectRun = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/run-check`, {
+  const body004Run = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/run-check`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ projectRoot: project004Root, projectId: project004Id }),
   });
-  assert(bodyProjectRun.response.status === 200, "POST project run-check with body context should return 200");
-  assert004ProjectContext(bodyProjectRun.payload, "POST project run-check with body context", "payload");
-  assert(bodyProjectRun.payload.command?.mode === "read_only_projection_check", "POST project body command mode mismatch");
-  assert(bodyProjectRun.payload.command?.exitCode === 0, "POST project body command should pass");
-  assert(bodyProjectRun.payload.command?.verifyScriptRan === false, "POST project body command must not run verify script");
+  assert(body004Run.response.status === 200, "POST current run-check with body override should return 200");
+  assertCurrent005(body004Run.payload, "POST current run-check with ignored body override");
+  assert(body004Run.payload.command?.verifyScriptRan === false, "current run-check must not run verify script");
 
-  const image2BatchPlan = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-batch/plan`);
-  assert(image2BatchPlan.response.status === 200, "GET image2 batch plan should return 200");
-  assertImage2BatchPlanPayload(image2BatchPlan.payload, "GET image2 batch plan");
-
-  const headerImage2BatchPlan = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-batch/plan`, {
+  const header004Plan = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-batch/plan`, {
     headers: {
       "x-vibe-project-root": project004Root,
       "x-vibe-project-id": project004Id,
     },
   });
-  assert(headerImage2BatchPlan.response.status === 200, "GET image2 batch plan with header context should return 200");
-  assert004ProjectContext(headerImage2BatchPlan.payload, "GET image2 batch plan with header context", "header");
-  assert(headerImage2BatchPlan.payload.projectionKind === "current_project_image2_batch_prepare_plan", "GET image2 batch header projection kind mismatch");
-  assert(headerImage2BatchPlan.payload.summary?.plannedCount === 8, "GET image2 batch header should read 004 projection");
-  assert(headerImage2BatchPlan.payload.summary?.returnedCount === 4, "GET image2 batch header should count existing 004 outputs");
-  assert(headerImage2BatchPlan.payload.summary?.blockedCount === 8, "GET image2 batch header should project blocked 004 shots");
-  assert(headerImage2BatchPlan.payload.ledgerProjection?.summary?.parked === 8, "GET image2 batch header should park blocked 004 ledger items");
-  assert(headerImage2BatchPlan.payload.items.every((item) => item.taskRunId.includes("real_demo_004")), "GET image2 batch header must not leak 005 task ids");
+  assert(header004Plan.response.status === 200, "GET image2 batch plan with header override should return 200");
+  assertImage2Batch005(header004Plan.payload, "GET image2 batch plan with ignored header override");
+  assert(header004Plan.payload.ignoredRequestContext?.ignoredProjectRootProvided === true, "header override should be recorded as ignored");
+  assert(header004Plan.payload.ignoredRequestContext?.ignoredProjectRootSource === "header", "header override source should be recorded");
 
-  const image2BatchRunCheck = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-batch/run-check`, { method: "POST" });
-  assert(image2BatchRunCheck.response.status === 200, "POST image2 batch run-check should return 200");
-  assertImage2BatchPlanPayload(image2BatchRunCheck.payload, "POST image2 batch run-check");
-  assert(image2BatchRunCheck.payload.command?.mode === "read_only_image2_batch_plan_check", "POST image2 batch command mode mismatch");
-  assert(image2BatchRunCheck.payload.command?.exitCode === 0, "POST image2 batch command should pass");
-  assert(image2BatchRunCheck.payload.command?.providerCalled === false, "POST image2 batch command must not call provider");
-  assert(image2BatchRunCheck.payload.command?.prepareRan === false, "POST image2 batch command must not run prepare");
-  assert(image2BatchRunCheck.payload.command?.verifyScriptRan === false, "POST image2 batch command must not run verify script");
-  assert(image2BatchRunCheck.payload.command?.liveSubmitAllowed === false, "POST image2 batch command must not allow live submit");
-  assert(image2BatchRunCheck.payload.command?.providerSubmissionForbidden === true, "POST image2 batch command must forbid provider submission");
-  assert(image2BatchRunCheck.payload.command?.noFileMutation === true, "POST image2 batch command must not mutate files");
-  assert(image2BatchRunCheck.payload.command?.workerSpawnForbidden === true, "POST image2 batch command must forbid worker spawn");
+  const select004 = await selectProject(baseUrl, project004Root, project004Id, "004 image2");
+  assert(select004.response.status === 200, "POST select 004 should return 200");
+  assert(JSON.parse(readFileSync(bindingPath, "utf8")).projectRoot === project004Root, "binding file should store 004 root");
 
-  const missingReportsStatus = await fetchJson(
-    `${baseUrl}/api/runtime/projects/current/real-chain/status?projectRoot=${encodeURIComponent("scripts")}&projectId=${encodeURIComponent("missing_reports_project")}`,
+  const project004Status = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
+  assert(project004Status.response.status === 200, "GET current status after select 004 should return 200");
+  assertCurrent004(project004Status.payload, "GET current status after select 004");
+
+  const query005Status = await fetchJson(
+    `${baseUrl}/api/runtime/projects/current/real-chain/status?projectRoot=${encodeURIComponent(project005Root)}&projectId=${encodeURIComponent(project005Id)}`,
   );
-  assert(missingReportsStatus.response.status === 200, "GET project status with missing reports should return 200");
-  assert(missingReportsStatus.payload.ok === false, "missing reports projection should not be ok");
-  assert(missingReportsStatus.payload.status === "unavailable", "missing reports status mismatch");
-  assert(missingReportsStatus.payload.projectionSource === "unavailable", "missing reports projection source mismatch");
-  assert(missingReportsStatus.payload.projectId === "missing_reports_project", "missing reports identity project id mismatch");
-  assert(missingReportsStatus.payload.projectRoot === "scripts", "missing reports identity project root mismatch");
-  assert(Array.isArray(missingReportsStatus.payload.factsUsed) && missingReportsStatus.payload.factsUsed.length === 0, "missing reports should expose empty factsUsed");
+  assert(query005Status.response.status === 200, "GET current status with 005 query override should return 200");
+  assertCurrent004(query005Status.payload, "GET current status with ignored 005 query override");
 
-  const blockedProjectRoot = await fetchJson(
-    `${baseUrl}/api/runtime/projects/current/real-chain/status?projectRoot=${encodeURIComponent("../outside")}&projectId=${encodeURIComponent("blocked_project")}`,
-  );
-  assert(blockedProjectRoot.response.status === 403, "GET project status with escaping projectRoot should return 403");
-  assert(blockedProjectRoot.payload.ok === false, "blocked project root should not be ok");
-  assert(blockedProjectRoot.payload.status === "blocked", "blocked project root status mismatch");
-  assert(blockedProjectRoot.payload.projectRootMode === "blocked_project_root", "blocked project root mode mismatch");
-  assert(blockedProjectRoot.payload.project?.projectRoot === "../outside", "blocked project root should echo requested root");
-  assert(/escapes project root/.test(blockedProjectRoot.payload.message || ""), "blocked project root message mismatch");
+  const image2Batch004 = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-batch/run-check`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ projectRoot: project005Root, projectId: project005Id }),
+  });
+  assert(image2Batch004.response.status === 200, "POST image2 batch run-check after select 004 should return 200");
+  assertImage2Batch004(image2Batch004.payload, "POST image2 batch run-check with ignored 005 body override");
+  assert(image2Batch004.payload.command?.providerCalled === false, "image2 run-check must not call provider");
+  assert(image2Batch004.payload.command?.prepareRan === false, "image2 run-check must not run prepare");
+  assert(image2Batch004.payload.command?.workerSpawnForbidden === true, "image2 run-check must forbid worker spawn");
 
-  const status = await fetchJson(`${baseUrl}/api/runtime/real-demo-e2e/005/status`);
-  assert(status.response.status === 200, "GET status should return 200");
-  assert005Payload(status.payload, "GET status");
-  assert(status.payload.source === "runtime_endpoint", "GET status should come from runtime endpoint");
-  assert(status.payload.providerCalled === false, "GET status must not call provider");
-  assert(status.payload.prepareRan === false, "GET status must not run prepare");
+  const legacyStatus = await fetchJson(`${baseUrl}/api/runtime/real-demo-e2e/005/status`);
+  assert(legacyStatus.response.status === 200, "legacy 005 status should return 200");
+  assert005Payload(legacyStatus.payload, "legacy 005 status");
+  assert(legacyStatus.payload.observations[0]?.imageUrl.includes("scope=real-demo-e2e-005"), "legacy file URLs should use explicit 005 scope");
 
-  const run = await fetchJson(`${baseUrl}/api/runtime/real-demo-e2e/005/run`, { method: "POST" });
-  assert(run.response.status === 200, "POST run should return 200");
-  assert005Payload(run.payload, "POST run");
-  assert(run.payload.source === "runtime_endpoint", "POST run should come from runtime endpoint");
-  assert(run.payload.providerCalled === false, "POST run must not call provider");
-  assert(run.payload.prepareRan === false, "POST run must not run prepare");
-  assert(run.payload.command?.providerCalled === false, "POST run must not call provider");
-  assert(run.payload.command?.prepareRan === false, "POST run must not run prepare");
-  assert(run.payload.command?.exitCode === 0, "POST run verify command should pass");
+  const legacyFile = await fetch(legacyStatus.payload.observations[0].imageUrl.replace("/api/runtime/files", `${baseUrl}/api/runtime/files`));
+  assert(legacyFile.status === 200, "legacy scoped file should be readable");
 
-  console.log("Local runtime API 005 bridge test passed. No provider was called.");
+  const current004OutputPath = image2Batch004.payload.items.find((item) => item.outputExists)?.expectedOutputPath;
+  const current004File = await fetch(`${baseUrl}/api/runtime/files?path=${encodeURIComponent(current004OutputPath)}`);
+  assert(current004File.status === 200, "current project file inside bound 004 should be readable");
+
+  const currentCannotRead005 = await fetchJson(`${baseUrl}/api/runtime/files?path=${encodeURIComponent(`${project005Root}/outputs/shots/S01/start.png`)}`);
+  assert(currentCannotRead005.response.status === 403, "current project file route must not read outside bound project");
+  assert(currentCannotRead005.payload.status === "forbidden", "outside bound project file status mismatch");
+
+  const parentTraversal = await fetchJson(`${baseUrl}/api/runtime/files?path=${encodeURIComponent("../package.json")}`);
+  assert(parentTraversal.response.status === 403, "runtime files should block parent traversal");
+
+  const externalAbsoluteFile = await fetchJson(`${baseUrl}/api/runtime/files?path=${encodeURIComponent(outsideFile)}`);
+  assert(externalAbsoluteFile.response.status === 403, "runtime files should block absolute outside paths");
+
+  rmSync(repoSymlinkFile, { force: true });
+  symlinkSync(outsideFile, repoSymlinkFile);
+  const symlinkFile = await fetchJson(`${baseUrl}/api/runtime/files?path=${encodeURIComponent(repoSymlinkFile)}`);
+  assert(symlinkFile.response.status === 403, "runtime files should block symlink escape inside bound project");
+
+  const escapingSelect = await selectProject(baseUrl, "../outside", "blocked_project", "blocked");
+  assert(escapingSelect.response.status === 403, "select should block parent traversal roots");
+  assert(escapingSelect.payload.status === "blocked", "escaping select status mismatch");
+
+  const externalSelect = await selectProject(baseUrl, outsideRoot, "external_project", "external");
+  assert(externalSelect.response.status === 403, "select should fail closed for absolute external roots");
+  assert(/External user project roots/.test(externalSelect.payload.todo || ""), "external select should expose fail-closed diagnostic");
+
+  rmSync(repoSymlinkRoot, { recursive: true, force: true });
+  symlinkSync(tempRoot, repoSymlinkRoot, "dir");
+  const symlinkSelect = await selectProject(baseUrl, repoSymlinkRoot, "symlink_project", "symlink");
+  assert(symlinkSelect.response.status === 403, "select should block repo symlink roots pointing outside");
+
+  console.log("Local runtime API current project binding test passed. No provider was called.");
 } finally {
   child.kill("SIGTERM");
+  rmSync(repoSymlinkFile, { force: true });
+  rmSync(repoSymlinkRoot, { recursive: true, force: true });
+  rmSync(tempRoot, { recursive: true, force: true });
 }

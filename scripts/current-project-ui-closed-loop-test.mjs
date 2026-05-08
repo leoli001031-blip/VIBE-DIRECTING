@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
@@ -59,48 +58,9 @@ async function importProjectRealChainStatus() {
   return import(dataUrl(sourcePath, output.outputText));
 }
 
-function waitForServer(child) {
-  return new Promise((resolve, reject) => {
-    let stdout = "";
-    let stderr = "";
-    const timeout = setTimeout(() => {
-      reject(new Error(`Timed out waiting for server. stdout=${stdout} stderr=${stderr}`));
-    }, 15000);
-
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-      for (const line of stdout.split(/\r?\n/)) {
-        if (!line.includes("vibe-core-runtime-api-listening")) continue;
-        try {
-          const payload = JSON.parse(line);
-          clearTimeout(timeout);
-          resolve(payload);
-          return;
-        } catch {
-          // Keep waiting for a complete JSON line.
-        }
-      }
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-    child.on("exit", (code) => {
-      if (code === 0) return;
-      clearTimeout(timeout);
-      reject(new Error(`Server exited early with ${code}. stdout=${stdout} stderr=${stderr}`));
-    });
-  });
-}
-
-async function fetchJson(url, init) {
-  const response = await fetch(url, init);
-  const payload = await response.json();
-  assert(response.status === 200, `${url} returned ${response.status}`);
-  return payload;
+function assertProductCopy(message) {
+  assert(/未选择项目|未同步/.test(message || ""), "unbound/mismatch copy should be product-facing");
+  assert(!/005|fallback|endpoint|provider|ledger|prompt|queue/i.test(message || ""), "unbound/mismatch copy must not expose engineering/demo details");
 }
 
 function assertCreatorPanelContract() {
@@ -137,18 +97,24 @@ function assertCreatorPanelContract() {
 
   assert(/项目状态/.test(surface), "ProjectRealChainPanel should expose creator-facing project status copy");
   assert(/本地复核/.test(surface), "ProjectRealChainPanel should expose creator-facing review copy");
+  assert(/未选择项目/.test(surface), "ProjectRealChainPanel should expose unbound project copy");
+  assert(/未同步/.test(surface), "ProjectRealChainPanel should expose unsynced project copy");
   assert(/Preview[\s\S]*ready/.test(surface), "ProjectRealChainPanel should expose preview ready state");
   assert(/Production[\s\S]*needs_review/.test(surface), "ProjectRealChainPanel should expose production review state");
-  assert(/projectTitle[\s\S]*状态已回流/.test(surface), "ProjectRealChainPanel should show project title for returned status");
-  assert(/currentProjectIdentity\(runtimeState\)/.test(app), "App must derive current project identity from runtime state");
-  assert(/loadProjectRealChainStatus\(runtimeProjectIdentity\)/.test(app), "App must guard real-chain status by current project identity");
-  assert(/loadProjectImage2BatchPlan\(runtimeProjectIdentity\)/.test(app), "App must guard Image2 batch status by current project identity");
-  assert(/runProjectRealChainCheck\(runtimeProjectIdentity\)/.test(app), "App run-check must carry current project identity");
-  assert(/runProjectImage2BatchCheck\(runtimeProjectIdentity\)/.test(app), "App Image2 check must carry current project identity");
+  assert(/displayTitle[\s\S]*状态已回流/.test(surface), "ProjectRealChainPanel should show the bound title for returned status");
+  assert(/loadCurrentProjectBindingStatus\(\)/.test(app), "App must load runtime current project binding first");
+  assert(/currentProjectBindingIdentity\(runtimeProjectBinding\)/.test(app), "App must derive current project identity from runtime binding");
+  assert(!/currentProjectIdentity\(runtimeState\)/.test(app), "App must not derive current project identity from runtime-state.json");
+  assert(/loadProjectRealChainStatus\(runtimeProjectIdentity\)/.test(app), "App must guard real-chain status by runtime binding identity");
+  assert(/loadProjectImage2BatchPlan\(runtimeProjectIdentity\)/.test(app), "App must guard Image2 batch status by runtime binding identity");
+  assert(/runProjectRealChainCheck\(runtimeProjectIdentity\)/.test(app), "App run-check must use runtime binding identity");
+  assert(/runProjectImage2BatchCheck\(runtimeProjectIdentity\)/.test(app), "App Image2 check must use runtime binding identity");
   assert(!/real-demo-005/.test(`${appSource}\n${stylesSource}`), "app/styles should not retain 005 demo class names");
 }
 
 const {
+  currentProjectBindingIdentity,
+  deriveCurrentProjectBindingStatus,
   deriveProjectRealChainStatus,
   deriveProjectImage2BatchPlanStatus,
   guardProjectRealChainUiStateForCurrentProject,
@@ -156,87 +122,142 @@ const {
   projectRuntimeRequestPath,
 } = await importProjectRealChainStatus();
 
-const child = spawn(process.execPath, ["scripts/local-runtime-api-server.mjs"], {
-  cwd: process.cwd(),
-  env: { ...process.env, VIBE_CORE_RUNTIME_API_PORT: "0" },
-  stdio: ["ignore", "pipe", "pipe"],
+assertCreatorPanelContract();
+
+const currentEndpoint = "/api/runtime/projects/current/real-chain/status";
+const queryPath = projectRuntimeRequestPath(currentEndpoint, {
+  projectId: "最后一班星图",
+  projectRoot: "/Users/lichenhao/Desktop/Vibe Director/runtime-tests/full_generation_10shot_two_act_20260429",
 });
+assert(queryPath === currentEndpoint, "current project requests must not carry project id/root query params");
 
-try {
-  assertCreatorPanelContract();
-  const queryPath = projectRuntimeRequestPath("/api/runtime/projects/current/real-chain/status", {
-    projectId: "最后一班星图",
-    projectRoot: "/Users/lichenhao/Desktop/Vibe Director/runtime-tests/full_generation_10shot_two_act_20260429",
-  });
-  const queryParams = new URLSearchParams(queryPath.split("?")[1] || "");
-  assert(queryPath.includes("projectId="), "runtime request path should carry project id");
-  assert(queryPath.includes("projectRoot="), "runtime request path should carry project root");
-  assert(queryParams.get("projectId") === "最后一班星图", "runtime request path should preserve non-ASCII project id");
-  assert(queryParams.get("projectRoot") === "/Users/lichenhao/Desktop/Vibe Director/runtime-tests/full_generation_10shot_two_act_20260429", "runtime request path should preserve absolute project root");
-  const { baseUrl } = await waitForServer(child);
-  const realChainPayload = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
-  const image2Payload = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-batch/plan`);
-  assert(/compatibility fallback/.test(realChainPayload.sourceLabel || ""), "default current-project runtime source should be marked as compatibility fallback");
-  assert(/compatibility fallback/.test(image2Payload.sourceLabel || ""), "default Image2 batch runtime source should be marked as compatibility fallback");
+const boundBinding = deriveCurrentProjectBindingStatus({
+  status: "bound",
+  project: {
+    projectId: "real-demo-e2e-004",
+    projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004",
+    title: "004 当前项目",
+  },
+});
+assert(boundBinding.status === "bound", "bound current project status should parse");
+assert(boundBinding.projectTitle === "004 当前项目", "bound current project title should parse");
+assert(currentProjectBindingIdentity(boundBinding)?.projectRoot?.endsWith("/004"), "bound identity should come from current binding");
 
-  const realChain = deriveProjectRealChainStatus(realChainPayload, "runtime_endpoint");
-  assert(realChain.uiStatus === "production_needs_review", `real-chain UI status drifted: ${realChain.uiStatus}`);
-  assert(realChain.returnedImageCount === 8, "real-chain should report returned images");
-  assert(realChain.totalPlannedImages === 8, "real-chain should report planned images");
-  assert(realChain.needsReviewCount === 2, "real-chain should report review count");
-  assert(realChain.reviewShotIds.includes("S07"), "real-chain should keep S07 review shot");
-  assert(realChain.reviewShotIds.includes("S08"), "real-chain should keep S08 review shot");
-  assert(realChain.previewItems.length === 8, "real-chain should expose preview items");
-  assert(realChain.previewItems.every((item) => item.imageUrl || item.expectedOutputPath), "preview items should have media refs");
-  assert(realChain.providerCalled === false, "real-chain status must not imply provider call");
-  assert(realChain.prepareRan === false, "real-chain status must not imply prepare run");
-  const realChainMatched = guardProjectRealChainUiStateForCurrentProject(
+const unboundBinding = deriveCurrentProjectBindingStatus({ status: "unbound" });
+assert(unboundBinding.status === "unbound", "unbound current project status should parse");
+assert(!currentProjectBindingIdentity(unboundBinding), "unbound current project must not produce an identity");
+assertProductCopy(unboundBinding.message);
+
+const stale005Payload = {
+  schemaVersion: "current_project_real_chain_status.v1",
+  project: {
+    projectId: "real-demo-e2e-005",
+    runId: "real_demo_e2e_005",
+    projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005",
+  },
+  status: "preview_ready_with_review",
+  previewStatus: "preview_ready_with_review",
+  productionStatus: "needs_review",
+  returnedImageCount: 8,
+  totalPlannedImages: 8,
+  needsReviewCount: 2,
+  reviewShotIds: ["S07", "S08"],
+  previewItems: [
+    { shotId: "S07", order: 7, imageUrl: "/files/S07.png", reviewRequired: true },
+    { shotId: "S08", order: 8, imageUrl: "/files/S08.png", reviewRequired: true },
+  ],
+  providerCalled: false,
+  prepareRan: false,
+};
+
+const realChain = deriveProjectRealChainStatus(stale005Payload, "runtime_endpoint");
+assert(realChain.uiStatus === "production_needs_review", `real-chain UI status drifted: ${realChain.uiStatus}`);
+assert(realChain.returnedImageCount === 8, "real-chain should report returned images");
+assert(realChain.needsReviewCount === 2, "real-chain should report review count");
+assert(realChain.providerCalled === false, "real-chain status must not imply provider call");
+assert(realChain.prepareRan === false, "real-chain status must not imply prepare run");
+
+const realChainMatched = guardProjectRealChainUiStateForCurrentProject(
+  { status: realChain.uiStatus, summary: realChain },
+  { projectId: "real-demo-e2e-005", projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005" },
+);
+assert(realChainMatched.status === "production_needs_review", "matching real-chain identity should pass through");
+
+for (const [label, identity] of [
+  ["004 current identity", { projectId: "real-demo-e2e-004", projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004" }],
+  ["other current identity", { projectId: "actual-current-project", projectRoot: "/Users/lichenhao/Desktop/some-other-project-root" }],
+  ["repo-outside suffix 005 identity", { projectId: "external-005", projectRoot: "/tmp/repo-outside/005" }],
+  ["unbound identity", undefined],
+]) {
+  const guarded = guardProjectRealChainUiStateForCurrentProject(
     { status: realChain.uiStatus, summary: realChain },
-    { projectId: realChain.projectId, projectRoot: realChain.projectRoot },
+    identity,
   );
-  assert(realChainMatched.status === "production_needs_review", "matching real-chain identity should pass through");
-  const realChainMismatch = guardProjectRealChainUiStateForCurrentProject(
-    { status: realChain.uiStatus, summary: realChain },
-    { projectId: "small-project-one-shot", projectRoot: "fixtures/small-project-one-shot" },
-  );
-  assert(realChainMismatch.status === "unavailable", "mismatched real-chain identity should be blocked from current project UI");
-  assert(!realChainMismatch.summary, "mismatched real-chain identity must not leak another project's summary");
-  assert(/本地运行时/.test(realChainMismatch.message || ""), "mismatched real-chain copy should read as a product sync state");
-  assert(!/005|fallback|endpoint|provider|ledger|prompt|queue/i.test(realChainMismatch.message || ""), "mismatched real-chain copy must not expose engineering/demo details");
-  const externalProjectMismatch = guardProjectRealChainUiStateForCurrentProject(
-    { status: realChain.uiStatus, summary: realChain },
-    { projectId: "actual-current-project", projectRoot: "/Users/lichenhao/Desktop/some-other-project-root" },
-  );
-  assert(externalProjectMismatch.status === "unavailable", "repo-outside current project root should not receive compatibility fallback results");
-  assert(!externalProjectMismatch.summary, "repo-outside current project root must not leak compatibility fallback summary");
-
-  const image2Batch = deriveProjectImage2BatchPlanStatus(image2Payload);
-  assert(image2Batch.uiStatus === "ready_for_review", `image2 batch UI status drifted: ${image2Batch.uiStatus}`);
-  assert(image2Batch.plannedCount === 8, "image2 batch should plan eight items");
-  assert(image2Batch.readyCount === 8, "image2 batch should expose eight reviewable items");
-  assert(image2Batch.blockedCount === 0, "image2 batch should have no blocked items in current fixture");
-  assert(image2Batch.selectedShotIds.length === 8, "image2 batch should keep current project review scope");
-  assert(image2Batch.nextAction.length > 0, "image2 batch should keep a review next action");
-  assert(image2Batch.providerSubmissionForbidden === true, "image2 batch must forbid provider submission");
-  assert(image2Batch.noFileMutation === true, "image2 batch must not mutate files");
-  assert(image2Batch.workerSpawnForbidden === true, "image2 batch must forbid worker spawn");
-  assert(image2Batch.providerCalled === false, "image2 batch must not call provider");
-  assert(image2Batch.prepareRan === false, "image2 batch must not run prepare");
-  assert(image2Batch.liveSubmitAllowed === false, "image2 batch must not allow live submit");
-  const image2Matched = guardProjectImage2BatchUiStateForCurrentProject(
-    { status: image2Batch.uiStatus, summary: image2Batch },
-    { projectId: image2Batch.projectId, projectRoot: image2Batch.projectRoot },
-  );
-  assert(image2Matched.status === "ready_for_review", "matching Image2 batch identity should pass through");
-  const image2Mismatch = guardProjectImage2BatchUiStateForCurrentProject(
-    { status: image2Batch.uiStatus, summary: image2Batch },
-    { projectId: "small-project-one-shot", projectRoot: "fixtures/small-project-one-shot" },
-  );
-  assert(image2Mismatch.status === "unavailable", "mismatched Image2 batch identity should be blocked from current project UI");
-  assert(!image2Mismatch.summary, "mismatched Image2 batch identity must not leak another project's summary");
-  assert(/本地运行时/.test(image2Mismatch.message || ""), "mismatched Image2 copy should read as a product sync state");
-
-  console.log("Current project UI closed-loop test passed. runtime -> report/preview -> UI projection is creator-facing; no provider was called.");
-} finally {
-  child.kill("SIGTERM");
+  assert(guarded.status === "unavailable", `${label} should not receive stale 005 real-chain summary`);
+  assert(!guarded.summary, `${label} must not leak stale 005 real-chain summary`);
+  assertProductCopy(guarded.message);
 }
+
+const image2Payload = {
+  schemaVersion: "current_project_image2_batch_prepare_plan.v1",
+  projectionKind: "current_project_image2_batch_prepare_plan",
+  project: {
+    projectId: "real-demo-e2e-005",
+    runId: "real_demo_e2e_005",
+    projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005",
+  },
+  items: [
+    { shotId: "S07", queueOrder: 7, blocked: false, referencePaths: [] },
+    { shotId: "S08", queueOrder: 8, blocked: false, referencePaths: [] },
+  ],
+  summary: {
+    plannedCount: 2,
+    readyCount: 2,
+    blockedCount: 0,
+    selectedShotIds: ["S07", "S08"],
+    nextAction: "复核当前项目状态。",
+  },
+  ledgerProjection: {
+    summary: {
+      queued: 2,
+      blocked: 0,
+      parked: 0,
+      completeVerified: 0,
+      providerSubmissionForbidden: true,
+      liveSubmitAllowed: false,
+      noFileMutation: true,
+      workerSpawnForbidden: true,
+      providerCalled: false,
+    },
+    projections: [],
+  },
+  providerCalled: false,
+  prepareRan: false,
+  liveSubmitAllowed: false,
+};
+
+const image2Batch = deriveProjectImage2BatchPlanStatus(image2Payload);
+assert(image2Batch.uiStatus === "ready_for_review", `image2 batch UI status drifted: ${image2Batch.uiStatus}`);
+assert(image2Batch.plannedCount === 2, "image2 batch should preserve planned item count");
+assert(image2Batch.providerSubmissionForbidden === true, "image2 batch must forbid provider submission");
+assert(image2Batch.noFileMutation === true, "image2 batch must not mutate files");
+assert(image2Batch.workerSpawnForbidden === true, "image2 batch must forbid worker spawn");
+assert(image2Batch.providerCalled === false, "image2 batch must not call provider");
+assert(image2Batch.prepareRan === false, "image2 batch must not run prepare");
+assert(image2Batch.liveSubmitAllowed === false, "image2 batch must not allow live submit");
+
+const image2Matched = guardProjectImage2BatchUiStateForCurrentProject(
+  { status: image2Batch.uiStatus, summary: image2Batch },
+  { projectId: "real-demo-e2e-005", projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005" },
+);
+assert(image2Matched.status === "ready_for_review", "matching Image2 batch identity should pass through");
+
+const image2Mismatch = guardProjectImage2BatchUiStateForCurrentProject(
+  { status: image2Batch.uiStatus, summary: image2Batch },
+  { projectId: "real-demo-e2e-004", projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/004" },
+);
+assert(image2Mismatch.status === "unavailable", "stale 005 Image2 batch summary must be blocked under 004 identity");
+assert(!image2Mismatch.summary, "stale 005 Image2 batch summary must not leak under 004 identity");
+assertProductCopy(image2Mismatch.message);
+
+console.log("Current project UI closed-loop test passed. Binding-first UI blocks unbound/stale summaries without provider calls.");

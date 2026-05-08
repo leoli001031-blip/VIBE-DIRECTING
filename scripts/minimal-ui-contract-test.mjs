@@ -692,7 +692,9 @@ checkMessage(requireWithin(projectRealChainUserSurface, /同步状态/, "current
 checkMessage(requireWithin(projectRealChainUserSurface, /本地复核/, "current project chain panel must describe local review without Image2/demo copy"));
 checkMessage(requireWithin(projectRealChainUserSurface, /Preview[\s\S]*ready/, "current project chain panel must expose preview ready state"));
 checkMessage(requireWithin(projectRealChainUserSurface, /Production[\s\S]*needs_review/, "current project chain panel must expose production review state"));
-checkMessage(requireWithin(projectRealChainUserSurface, /projectTitle[\s\S]*状态已回流/, "current project chain panel must show project title instead of sandbox project id"));
+checkMessage(requireWithin(projectRealChainUserSurface, /displayTitle[\s\S]*状态已回流/, "current project chain panel must show bound project title instead of sandbox project id"));
+checkMessage(requireWithin(projectRealChainUserSurface, /未选择项目/, "current project chain panel must show unbound project copy"));
+checkMessage(requireWithin(projectRealChainUserSurface, /未同步/, "current project chain panel must show unsynced project copy"));
 checkMessage(requireWithin(minimalTopNav, /aria-label="项目计划状态"/, "top nav project plan status aria label should be localized"));
 check(!/real-demo-005/.test(`${appSource}\n${stylesSource}`), "main app/styles must not keep 005 demo class names");
 for (const [term, pattern] of [

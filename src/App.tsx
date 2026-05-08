@@ -86,13 +86,15 @@ import {
 } from "./core/previewPlayerQueue";
 import { applyPreRealTestClosure } from "./core/preRealTestClosure";
 import {
+  currentProjectBindingIdentity,
+  loadCurrentProjectBindingStatus,
   loadProjectImage2BatchPlan,
   loadProjectRealChainStatus,
   runProjectImage2BatchCheck,
   runProjectRealChainCheck,
+  type ProjectCurrentBindingStatus,
   type ProjectImage2BatchUiState,
   type ProjectRealChainPreviewItem,
-  type ProjectRuntimeIdentity,
   type ProjectRealChainUiState,
   type ProjectRealChainUiStatus,
 } from "./core/projectRealChainStatus";
@@ -1018,13 +1020,6 @@ function runtimeLoadTarget() {
     statePath: "/runtime-state.json",
     auditPath: "/runtime-audit.json",
     label: "runtime-state",
-  };
-}
-
-function currentProjectIdentity(runtimeState: ProjectRuntimeState): ProjectRuntimeIdentity {
-  return {
-    projectId: runtimeState.sourceIndexSummary?.projectId || runtimeState.sourceIndex?.projectId || runtimeState.project.title,
-    projectRoot: runtimeState.project.root,
   };
 }
 
@@ -7695,6 +7690,7 @@ function ProjectRealChainPanel({
   image2BatchState,
   selectedShotId,
   projectTitle,
+  runtimeProjectBinding,
   onRun,
   onRunImage2Batch,
 }: {
@@ -7702,30 +7698,37 @@ function ProjectRealChainPanel({
   image2BatchState: ProjectImage2BatchPanelState;
   selectedShotId: string;
   projectTitle: string;
+  runtimeProjectBinding: ProjectCurrentBindingStatus;
   onRun: () => void;
   onRunImage2Batch: () => void;
 }) {
-  const summary = state.summary;
-  const image2Batch = image2BatchState.summary;
+  const projectBound = runtimeProjectBinding.status === "bound";
+  const summary = projectBound ? state.summary : undefined;
+  const image2Batch = projectBound ? image2BatchState.summary : undefined;
   const running = state.status === "running";
   const image2BatchRunning = image2BatchState.status === "running";
-  const status = projectRealChainStatusLabel(state.status);
-  const reviewCheckStatus = projectReviewCheckStatusLabel(image2BatchState);
+  const status = projectBound ? projectRealChainStatusLabel(state.status) : "未同步";
+  const reviewCheckStatus = projectBound ? projectReviewCheckStatusLabel(image2BatchState) : "未同步";
   const reviewCheckDetail = projectReviewCheckDetail(image2Batch);
   const returnedCount = summary?.returnedImageCount ?? 0;
   const plannedCount = summary?.totalPlannedImages ?? 0;
   const visibleItems = summary ? projectRealChainVisibleItems(summary.previewItems, selectedShotId) : [];
   const previewLabel = projectPreviewReadyLabel(summary);
   const productionLabel = projectProductionReviewLabel(summary);
+  const displayTitle = projectBound
+    ? runtimeProjectBinding.projectTitle || projectTitle || "未命名项目"
+    : "未选择项目";
+  const disabled = !projectBound || running;
+  const reviewDisabled = !projectBound || image2BatchRunning;
 
   return (
     <section className={`project-real-chain-panel ${state.status}`} aria-label="当前项目真实链路状态">
       <div className="project-real-chain-head">
         <div>
           <span>当前项目</span>
-          <strong>{projectTitle || "未命名项目"}</strong>
+          <strong>{displayTitle}</strong>
         </div>
-        <button disabled={running} onClick={onRun}>
+        <button disabled={disabled} onClick={onRun}>
           <RefreshCw size={15} />
           {running ? "同步中" : "同步状态"}
         </button>
@@ -7743,7 +7746,7 @@ function ProjectRealChainPanel({
           <strong>{reviewCheckStatus}</strong>
           <small>{reviewCheckDetail}</small>
         </div>
-        <button disabled={image2BatchRunning} onClick={onRunImage2Batch}>
+        <button disabled={reviewDisabled} onClick={onRunImage2Batch}>
           <RefreshCw size={14} />
           {image2BatchRunning ? "检查中" : "复核检查"}
         </button>
@@ -7762,8 +7765,9 @@ function ProjectRealChainPanel({
         </div>
       )}
       <small className="project-real-chain-report">
-        {projectTitle || "当前项目"} · {summary ? "状态已回流" : status}
+        {displayTitle} · {summary ? "状态已回流" : "未同步"}
       </small>
+      {!projectBound && <small className="project-real-chain-message">未选择项目/未同步</small>}
       {state.message && <small className="project-real-chain-message">{state.message}</small>}
       {image2BatchState.message && <small className="project-real-chain-message">{image2BatchState.message}</small>}
     </section>
@@ -7878,6 +7882,7 @@ function DirectorMode({
   selectedAssetId,
   projectRealChainState,
   projectImage2BatchState,
+  runtimeProjectBinding,
   directorView,
   activeSectionId,
   onSelectShot,
@@ -7904,6 +7909,7 @@ function DirectorMode({
   selectedAssetId?: string;
   projectRealChainState: ProjectRealChainPanelState;
   projectImage2BatchState: ProjectImage2BatchPanelState;
+  runtimeProjectBinding: ProjectCurrentBindingStatus;
   directorView: DirectorView;
   activeSectionId?: string;
   onSelectShot: (id: string, additive?: boolean) => void;
@@ -7929,6 +7935,7 @@ function DirectorMode({
           image2BatchState={projectImage2BatchState}
           selectedShotId={selectedShotId}
           projectTitle={runtimeState.project.title}
+          runtimeProjectBinding={runtimeProjectBinding}
           onRun={onRunProjectRealChain}
           onRunImage2Batch={onRunProjectImage2Batch}
         />
@@ -9286,6 +9293,7 @@ function App() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | undefined>();
   const [projectRealChainState, setProjectRealChainState] = useState<ProjectRealChainPanelState>({ status: "unavailable" });
   const [projectImage2BatchState, setProjectImage2BatchState] = useState<ProjectImage2BatchPanelState>({ status: "unavailable" });
+  const [runtimeProjectBinding, setRuntimeProjectBinding] = useState<ProjectCurrentBindingStatus>({ status: "loading" });
 
   function loadProjectState(nextState: ProjectRuntimeState) {
     setRuntimeState(nextState);
@@ -9312,6 +9320,16 @@ function App() {
     const result = markAssetLibraryAssetStatus(assetLibrary, assetId, uiStatusToAssetLibraryStatus(status), new Date().toISOString());
     applyAssetLibraryMutation(result.library, result.asset?.id || assetId);
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    loadCurrentProjectBindingStatus().then((binding) => {
+      if (!cancelled) setRuntimeProjectBinding(binding);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -9372,15 +9390,25 @@ function App() {
     };
   }, []);
 
-  const runtimeProjectIdentity = useMemo(() => currentProjectIdentity(runtimeState), [
-    runtimeState.project.root,
-    runtimeState.project.title,
-    runtimeState.sourceIndex?.projectId,
-    runtimeState.sourceIndexSummary?.projectId,
-  ]);
+  const runtimeProjectIdentity = useMemo(
+    () => currentProjectBindingIdentity(runtimeProjectBinding),
+    [
+      runtimeProjectBinding.projectId,
+      runtimeProjectBinding.projectRoot,
+      runtimeProjectBinding.projectTitle,
+      runtimeProjectBinding.status,
+    ],
+  );
 
   useEffect(() => {
     let cancelled = false;
+    if (!runtimeProjectIdentity) {
+      setProjectRealChainState({ status: "unavailable", message: "未选择项目/未同步。" });
+      setProjectImage2BatchState({ status: "unavailable", message: "未选择项目/未同步。" });
+      return () => {
+        cancelled = true;
+      };
+    }
     loadProjectRealChainStatus(runtimeProjectIdentity).then((nextState) => {
       if (!cancelled) setProjectRealChainState(nextState);
     });
@@ -9469,6 +9497,10 @@ function App() {
   }
 
   async function runProjectRealChain() {
+    if (!runtimeProjectIdentity) {
+      setProjectRealChainState({ status: "unavailable", message: "未选择项目/未同步。" });
+      return;
+    }
     setProjectRealChainState((current) => ({
       ...current,
       status: "running",
@@ -9479,6 +9511,10 @@ function App() {
   }
 
   async function runProjectImage2Batch() {
+    if (!runtimeProjectIdentity) {
+      setProjectImage2BatchState({ status: "unavailable", message: "未选择项目/未同步。" });
+      return;
+    }
     setProjectImage2BatchState((current) => ({
       ...current,
       status: "running",
@@ -9529,6 +9565,7 @@ function App() {
           selectedAssetId={selectedAssetId}
           projectRealChainState={projectRealChainState}
           projectImage2BatchState={projectImage2BatchState}
+          runtimeProjectBinding={runtimeProjectBinding}
           directorView={directorView}
           activeSectionId={resolvedActiveSectionId}
           onSelectShot={selectShot}

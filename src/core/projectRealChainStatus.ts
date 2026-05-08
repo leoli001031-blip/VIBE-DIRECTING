@@ -12,6 +12,7 @@ declare global {
 
 export const defaultRuntimeApiBaseUrl = "http://127.0.0.1:8790";
 export const projectRealChainRuntimeBasePath = "/api/runtime";
+export const projectCurrentBindingEndpoint = `${projectRealChainRuntimeBasePath}/projects/current`;
 export const projectRealChainStatusEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/status`;
 export const projectRealChainRunCheckEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/run-check`;
 export const projectImage2BatchPlanEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-batch/plan`;
@@ -165,6 +166,15 @@ export type ProjectRuntimeIdentity = {
   projectRoot?: string;
 };
 
+export type ProjectCurrentBindingStatus = {
+  status: "loading" | "bound" | "unbound";
+  projectId?: string;
+  projectRoot?: string;
+  projectTitle?: string;
+  projectVibePath?: string;
+  message?: string;
+};
+
 type ProjectRealChainPayload = {
   schemaVersion?: string;
   source?: string;
@@ -300,34 +310,28 @@ function compactUnique(values: string[]) {
   return Array.from(new Set(values.map(normalizeIdentityPart).filter(Boolean)));
 }
 
+function hasProjectRuntimeIdentity(value?: ProjectRuntimeIdentity) {
+  return Boolean(String(value?.projectId || "").trim() || String(value?.projectRoot || "").trim());
+}
+
 function currentProjectIdentityMatches(
   actual: { projectId?: string; projectRoot?: string },
   expected?: ProjectRuntimeIdentity,
 ) {
   const expectedParts = compactUnique([expected?.projectId || "", expected?.projectRoot || ""]);
-  if (!expectedParts.length) return true;
+  if (!expectedParts.length) return false;
   const actualParts = compactUnique([actual.projectId || "", actual.projectRoot || ""]);
   if (!actualParts.length) return false;
-  return expectedParts.some((expectedPart) => actualParts.some((actualPart) => (
-    actualPart === expectedPart
-    || actualPart.endsWith(`/${expectedPart}`)
-    || expectedPart.endsWith(`/${actualPart}`)
-  )));
+  return expectedParts.some((expectedPart) => actualParts.includes(expectedPart));
 }
 
 function projectMismatchMessage() {
-  return "当前项目还没有同步到本地运行时。";
+  return "未选择项目/未同步。";
 }
 
 export function projectRuntimeRequestPath(endpoint: string, expected?: ProjectRuntimeIdentity) {
-  const params = new URLSearchParams();
-  const projectId = String(expected?.projectId || "").trim();
-  const projectRoot = String(expected?.projectRoot || "").trim();
-  if (projectId) params.set("projectId", projectId);
-  if (projectRoot) params.set("projectRoot", projectRoot);
-  const query = params.toString();
-  if (!query) return endpoint;
-  return `${endpoint}${endpoint.includes("?") ? "&" : "?"}${query}`;
+  void expected;
+  return endpoint;
 }
 
 export function guardProjectRealChainUiStateForCurrentProject(
@@ -350,6 +354,66 @@ export function guardProjectImage2BatchUiStateForCurrentProject(
     status: "unavailable",
     message: projectMismatchMessage(),
   };
+}
+
+export function deriveCurrentProjectBindingStatus(payload: unknown): ProjectCurrentBindingStatus {
+  if (!isRecord(payload)) {
+    return {
+      status: "unbound",
+      message: projectMismatchMessage(),
+    };
+  }
+
+  const project = isRecord(payload.project) ? payload.project : payload;
+  const projectId = typeof project.projectId === "string"
+    ? project.projectId
+    : typeof project.id === "string"
+      ? project.id
+      : undefined;
+  const projectRoot = typeof project.projectRoot === "string"
+    ? project.projectRoot
+    : typeof project.root === "string"
+      ? project.root
+      : undefined;
+  const projectTitle = typeof project.projectTitle === "string"
+    ? project.projectTitle
+    : typeof project.title === "string"
+      ? project.title
+      : typeof project.name === "string"
+        ? project.name
+        : undefined;
+  const projectVibePath = typeof project.projectVibePath === "string" ? project.projectVibePath : undefined;
+  const rawStatus = typeof payload.status === "string" ? payload.status.trim().toLowerCase() : "";
+  const explicitlyUnbound = payload.bound === false
+    || ["unbound", "unselected", "not_selected", "none", "missing"].includes(rawStatus);
+  const bound = payload.bound === true
+    || ["bound", "selected", "ready", "ok"].includes(rawStatus)
+    || Boolean(projectId || projectRoot);
+
+  if (!explicitlyUnbound && bound) {
+    return {
+      status: "bound",
+      projectId,
+      projectRoot,
+      projectTitle,
+      projectVibePath,
+      message: typeof payload.message === "string" ? payload.message : undefined,
+    };
+  }
+
+  return {
+    status: "unbound",
+    message: typeof payload.message === "string" ? payload.message : projectMismatchMessage(),
+  };
+}
+
+export function currentProjectBindingIdentity(binding: ProjectCurrentBindingStatus): ProjectRuntimeIdentity | undefined {
+  if (binding.status !== "bound") return undefined;
+  const identity = {
+    projectId: binding.projectId || binding.projectTitle,
+    projectRoot: binding.projectRoot,
+  };
+  return hasProjectRuntimeIdentity(identity) ? identity : undefined;
 }
 
 function payloadFromUnknown(payload: unknown): ProjectRealChainPayload | undefined {
@@ -537,7 +601,7 @@ export function deriveProjectRealChainStatus(
       reportUrl: projectRealChainFallbackReportUrl,
       providerCalled: false,
       prepareRan: false,
-      message: "当前项目还没有同步到本地运行时。",
+      message: projectMismatchMessage(),
     };
   }
 
@@ -605,7 +669,7 @@ export function deriveProjectImage2BatchPlanStatus(
       readyCount: 0,
       blockedCount: 0,
       selectedShotIds: [],
-      nextAction: "当前项目的复核状态还没有同步到本地运行时。",
+      nextAction: "未选择项目/未同步。",
       items: [],
       ledgerProjections: [],
       queuedCount: 0,
@@ -618,7 +682,7 @@ export function deriveProjectImage2BatchPlanStatus(
       prepareRan: false,
       verifyScriptRan: false,
       liveSubmitAllowed: false,
-      message: "当前项目的复核状态还没有同步到本地运行时。",
+      message: "未选择项目/未同步。",
     };
   }
 
@@ -702,42 +766,58 @@ async function fetchRuntimeJson(url: string, init?: RequestInit): Promise<unknow
 }
 
 async function fallbackToReport(message: string): Promise<ProjectRealChainUiState> {
+  return {
+    status: "unavailable",
+    message,
+  };
+}
+
+export async function loadCurrentProjectBindingStatus(): Promise<ProjectCurrentBindingStatus> {
   try {
-    const payload = await fetchJson(projectRealChainFallbackReportUrl);
-    const summary = deriveProjectRealChainStatus(payload, "fallback_report");
+    const payload = await fetchRuntimeJson(projectCurrentBindingEndpoint);
+    return deriveCurrentProjectBindingStatus(payload);
+  } catch (endpointError) {
     return {
-      status: summary.uiStatus,
-      summary,
-      message,
-    };
-  } catch (reportError) {
-    return {
-      status: "unavailable",
-      message: "当前项目还没有同步到本地运行时。",
+      status: "unbound",
+      message: projectMismatchMessage(),
     };
   }
 }
 
 export async function loadProjectRealChainStatus(expected?: ProjectRuntimeIdentity): Promise<ProjectRealChainUiState> {
+  if (!hasProjectRuntimeIdentity(expected)) {
+    return {
+      status: "unavailable",
+      message: projectMismatchMessage(),
+    };
+  }
+
   try {
     const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectRealChainStatusEndpoint, expected));
     const summary = deriveProjectRealChainStatus(payload, "runtime_endpoint");
     return guardProjectRealChainUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (endpointError) {
     return guardProjectRealChainUiStateForCurrentProject(await fallbackToReport(
-      "当前项目还没有同步到本地运行时。",
+      projectMismatchMessage(),
     ), expected);
   }
 }
 
 export async function runProjectRealChainCheck(expected?: ProjectRuntimeIdentity): Promise<ProjectRealChainUiState> {
+  if (!hasProjectRuntimeIdentity(expected)) {
+    return {
+      status: "unavailable",
+      message: projectMismatchMessage(),
+    };
+  }
+
   try {
     const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectRealChainRunCheckEndpoint, expected), { method: "POST" });
     const summary = deriveProjectRealChainStatus(payload, "runtime_endpoint");
     return guardProjectRealChainUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (endpointError) {
     return guardProjectRealChainUiStateForCurrentProject(await fallbackToReport(
-      "当前项目还没有同步到本地运行时。",
+      projectMismatchMessage(),
     ), expected);
   }
 }
@@ -747,25 +827,33 @@ async function unavailableImage2BatchState(message: string): Promise<ProjectImag
 }
 
 export async function loadProjectImage2BatchPlan(expected?: ProjectRuntimeIdentity): Promise<ProjectImage2BatchUiState> {
+  if (!hasProjectRuntimeIdentity(expected)) {
+    return unavailableImage2BatchState("未选择项目/未同步。");
+  }
+
   try {
     const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2BatchPlanEndpoint, expected));
     const summary = deriveProjectImage2BatchPlanStatus(payload);
     return guardProjectImage2BatchUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (endpointError) {
     return unavailableImage2BatchState(
-      "当前项目的复核状态还没有同步到本地运行时。",
+      "未选择项目/未同步。",
     );
   }
 }
 
 export async function runProjectImage2BatchCheck(expected?: ProjectRuntimeIdentity): Promise<ProjectImage2BatchUiState> {
+  if (!hasProjectRuntimeIdentity(expected)) {
+    return unavailableImage2BatchState("未选择项目/未同步。");
+  }
+
   try {
     const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2BatchRunCheckEndpoint, expected), { method: "POST" });
     const summary = deriveProjectImage2BatchPlanStatus(payload);
     return guardProjectImage2BatchUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (endpointError) {
     return unavailableImage2BatchState(
-      "当前项目的复核状态还没有同步到本地运行时。",
+      "未选择项目/未同步。",
     );
   }
 }

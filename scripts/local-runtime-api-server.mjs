@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -16,6 +16,8 @@ const verifyScript = path.join(repoRoot, "scripts/real-demo-e2e-005-anime-image2
 const maxOutputChars = 8000;
 
 const runtimeBasePath = "/api/runtime";
+const currentProjectBindingEndpoint = `${runtimeBasePath}/projects/current`;
+const currentProjectSelectEndpoint = `${runtimeBasePath}/projects/select`;
 const currentProjectStatusEndpoint = `${runtimeBasePath}/projects/current/real-chain/status`;
 const currentProjectRunEndpoint = `${runtimeBasePath}/projects/current/real-chain/run-check`;
 const currentProjectImage2BatchPlanEndpoint = `${runtimeBasePath}/projects/current/image2-batch/plan`;
@@ -86,6 +88,74 @@ function resolveRepoInputPath(inputPath) {
   return candidate;
 }
 
+function pathWithinRoot(candidatePath, rootPath) {
+  const rootWithSep = `${rootPath}${path.sep}`;
+  return candidatePath === rootPath || candidatePath.startsWith(rootWithSep);
+}
+
+function currentProjectBindingPath() {
+  const configuredPath = process.env.VIBE_CORE_CURRENT_PROJECT_BINDING_PATH;
+  if (!configuredPath) return path.join(repoRoot, ".vibe-runtime", "current-project.local.json");
+  return path.isAbsolute(configuredPath)
+    ? path.resolve(configuredPath)
+    : path.resolve(repoRoot, configuredPath);
+}
+
+function readCurrentProjectBinding() {
+  const bindingPath = currentProjectBindingPath();
+  const binding = readJsonIfPresent(bindingPath);
+  if (!isRecord(binding)) {
+    return {
+      bound: false,
+      bindingPath,
+      bindingPathRelative: pathWithinRoot(bindingPath, repoRoot) ? repoRelativePath(bindingPath) : bindingPath,
+    };
+  }
+  return {
+    bound: typeof binding.projectRoot === "string" && binding.projectRoot.length > 0,
+    bindingPath,
+    bindingPathRelative: pathWithinRoot(bindingPath, repoRoot) ? repoRelativePath(bindingPath) : bindingPath,
+    binding,
+  };
+}
+
+function validateSelectableProjectRoot(projectRoot) {
+  if (typeof projectRoot !== "string" || !projectRoot.trim()) {
+    throw new Error("projectRoot is required.");
+  }
+  const configuredPath = resolveRepoInputPath(projectRoot.trim());
+  if (!existsSync(configuredPath)) {
+    throw new Error(`Project root does not exist: ${projectRoot}`);
+  }
+  const stats = statSync(configuredPath);
+  if (!stats.isDirectory() && !(stats.isFile() && path.basename(configuredPath) === "project.vibe")) {
+    throw new Error("projectRoot must be a project directory or project.vibe inside the repository.");
+  }
+  const source = resolveProjectSource(configuredPath, {
+    projectRootMode: "runtime_current_project_binding",
+    sourceLabel: "runtime endpoint / current project binding validation",
+    ignoreReportEnv: true,
+  });
+  return source;
+}
+
+function writeCurrentProjectBinding(input) {
+  const source = validateSelectableProjectRoot(input.projectRoot);
+  const bindingPath = currentProjectBindingPath();
+  const binding = {
+    schemaVersion: "vibe_core_current_project_binding_v1",
+    projectRoot: source.runRootRelativePath,
+    projectRootRelativePath: source.runRootRelativePath,
+    projectVibeRelativePath: source.projectVibeRelativePath,
+    projectId: asString(input.projectId),
+    displayName: asString(input.displayName),
+    selectedAt: new Date().toISOString(),
+  };
+  mkdirSync(path.dirname(bindingPath), { recursive: true });
+  writeFileSync(bindingPath, `${JSON.stringify(binding, null, 2)}\n`, "utf8");
+  return { bindingPath, binding, source };
+}
+
 function firstExistingPath(paths) {
   return paths.find((filePath) => existsSync(filePath));
 }
@@ -106,7 +176,7 @@ function resolveProjectSource(inputPath, options = {}) {
       path.join(runRootPath, "project", "project.vibe"),
     ]) || path.join(runRootPath, "project", "project.vibe");
 
-  const reportInput = options.reportPath || process.env.VIBE_CORE_CURRENT_PROJECT_REPORT || process.env.VIBE_CORE_PROJECT_REPORT;
+  const reportInput = options.reportPath || (options.ignoreReportEnv ? undefined : (process.env.VIBE_CORE_CURRENT_PROJECT_REPORT || process.env.VIBE_CORE_PROJECT_REPORT));
   const reportPath = reportInput
     ? resolveRepoInputPath(reportInput)
     : firstExistingPath([
@@ -134,6 +204,9 @@ function resolveProjectSource(inputPath, options = {}) {
     projectRootMode: options.projectRootMode || "configured_project_root",
     sourceLabel: options.sourceLabel || "runtime endpoint / project projection",
     sandboxSource: options.sandboxSource,
+    binding: options.binding,
+    bindingPath: options.bindingPath,
+    bindingPathRelative: options.bindingPathRelative,
     requestContextSource: options.requestContextSource,
     requestProjectId: options.requestProjectId,
     requestProjectIdSource: options.requestProjectIdSource,
@@ -149,37 +222,27 @@ function realDemo005Source() {
   });
 }
 
-function currentProjectSource(requestContext = {}) {
-  if (requestContext.projectRoot) {
-    return resolveProjectSource(requestContext.projectRoot, {
-      projectRootMode: "request_project_root",
-      sourceLabel: `runtime endpoint / current project request ${requestContext.projectRootSource || "request"}`,
-      requestContextSource: requestContext.projectRootSource,
-      requestProjectId: requestContext.projectId,
-      requestProjectIdSource: requestContext.projectIdSource,
-      requestProjectRoot: requestContext.projectRoot,
-    });
+function currentProjectSource() {
+  const bindingState = readCurrentProjectBinding();
+  if (!bindingState.bound) {
+    const error = new Error("No current project is bound. Use POST /api/runtime/projects/select first.");
+    error.code = "CURRENT_PROJECT_UNBOUND";
+    error.bindingState = bindingState;
+    throw error;
   }
 
-  const configuredProjectRoot = process.env.VIBE_CORE_CURRENT_PROJECT_ROOT || process.env.VIBE_CORE_PROJECT_ROOT;
-  if (configuredProjectRoot) {
-    return resolveProjectSource(configuredProjectRoot, {
-      projectRootMode: "configured_project_root",
-      sourceLabel: "runtime endpoint / current project",
-      requestContextSource: "env",
-      requestProjectId: requestContext.projectId,
-      requestProjectIdSource: requestContext.projectIdSource,
-      requestProjectRoot: configuredProjectRoot,
-    });
-  }
-  return resolveProjectSource(sandboxRunRootRelativePath, {
-    projectRootMode: "compatibility_fallback",
-    sourceLabel: "runtime endpoint / current project compatibility fallback",
-    sandboxSource: "005 compatibility_fallback",
-    requestContextSource: "compatibility_fallback",
-    requestProjectId: requestContext.projectId,
-    requestProjectIdSource: requestContext.projectIdSource || "compatibility_fallback",
-    requestProjectRoot: sandboxRunRootRelativePath,
+  const binding = bindingState.binding;
+  return resolveProjectSource(binding.projectRoot, {
+    projectRootMode: "runtime_current_project_binding",
+    sourceLabel: "runtime endpoint / current project binding",
+    requestContextSource: "binding",
+    requestProjectId: binding.projectId,
+    requestProjectIdSource: binding.projectId ? "binding" : undefined,
+    requestProjectRoot: binding.projectRoot,
+    binding,
+    bindingPath: bindingState.bindingPath,
+    bindingPathRelative: bindingState.bindingPathRelative,
+    ignoreReportEnv: true,
   });
 }
 
@@ -227,8 +290,9 @@ function clip(value) {
   return `${text.slice(0, maxOutputChars)}\n...[clipped ${text.length - maxOutputChars} chars]`;
 }
 
-function runtimeFileUrl(relativePath) {
-  return `${runtimeFileEndpoint}?path=${encodeURIComponent(relativePath)}`;
+function runtimeFileUrl(relativePath, scope) {
+  const scopeQuery = scope ? `scope=${encodeURIComponent(scope)}&` : "";
+  return `${runtimeFileEndpoint}?${scopeQuery}path=${encodeURIComponent(relativePath)}`;
 }
 
 function scopedRepoPath(relativePath) {
@@ -262,13 +326,13 @@ function runtimePolicy(extra = {}) {
   };
 }
 
-function observationSummary(item) {
+function observationSummary(item, fileScope) {
   const expectedOutputPath = typeof item.expectedOutputPath === "string" ? item.expectedOutputPath : undefined;
   return {
     order: item.order,
     shotId: item.shotId,
     expectedOutputPath,
-    imageUrl: expectedOutputPath ? runtimeFileUrl(expectedOutputPath) : undefined,
+    imageUrl: expectedOutputPath ? runtimeFileUrl(expectedOutputPath, fileScope) : undefined,
     previewQaStatus: item.previewQaStatus,
     productionQaStatus: item.productionQaStatus,
     reviewOverlay: item.reviewOverlay === true,
@@ -724,15 +788,26 @@ function currentProjectRequestContext(req, url, body) {
   };
 }
 
-function currentProjectSourceResult(requestContext = {}) {
+function currentProjectSourceResult() {
   try {
-    return { source: currentProjectSource(requestContext) };
+    return { source: currentProjectSource() };
   } catch (error) {
     return {
       error,
       message: error instanceof Error ? error.message : "Current project root is unavailable.",
+      unbound: error?.code === "CURRENT_PROJECT_UNBOUND",
+      bindingState: error?.bindingState,
     };
   }
+}
+
+function requestOverrideDiagnostics(requestContext = {}) {
+  return {
+    ignoredProjectRootSource: requestContext.projectRootSource,
+    ignoredProjectRootProvided: Boolean(requestContext.projectRoot),
+    ignoredProjectIdSource: requestContext.projectIdSource,
+    ignoredProjectIdProvided: Boolean(requestContext.projectId),
+  };
 }
 
 function blockedCurrentProjectResponse(endpoint, requestContext = {}, extra = {}) {
@@ -746,10 +821,7 @@ function blockedCurrentProjectResponse(endpoint, requestContext = {}, extra = {}
     source: "runtime_endpoint",
     sourceLabel: "runtime endpoint / current project blocked",
     requestContext: {
-      projectRoot,
-      projectRootSource: requestContext.projectRootSource,
-      projectId,
-      projectIdSource: requestContext.projectIdSource,
+      ...requestOverrideDiagnostics(requestContext),
     },
     projectRootMode: "blocked_project_root",
     projectRoot,
@@ -774,8 +846,105 @@ function blockedCurrentProjectResponse(endpoint, requestContext = {}, extra = {}
   };
 }
 
+function unboundCurrentProjectResponse(endpoint, requestContext = {}, extra = {}) {
+  const bindingState = readCurrentProjectBinding();
+  return {
+    ok: false,
+    ...runtimePolicy(),
+    endpoint,
+    source: "runtime_endpoint",
+    sourceLabel: "runtime endpoint / current project unbound",
+    requestContext: {
+      ...requestOverrideDiagnostics(requestContext),
+    },
+    currentProject: {
+      bound: false,
+      bindingPath: bindingState.bindingPathRelative,
+    },
+    projectRootMode: "unbound_current_project",
+    projectRoot: undefined,
+    projectId: undefined,
+    identity: {},
+    project: {},
+    status: "unbound",
+    previewStatus: "unavailable",
+    productionStatus: "blocked",
+    reportStatus: "unavailable",
+    projectionSource: "unavailable",
+    ledgerTruthSource: "unavailable",
+    factsUsed: [],
+    reportPath: undefined,
+    reportRelativePath: undefined,
+    reportUrl: undefined,
+    image2ReportPath: undefined,
+    runtimeTruthLayerPath: undefined,
+    previewPlanPath: undefined,
+    reviewOverlayShots: [],
+    productionNeedsReviewShots: [],
+    shotCount: 0,
+    blockerCount: 1,
+    observations: [],
+    previewItems: [],
+    message: "No current project is bound. Use POST /api/runtime/projects/select before reading current-project runtime truth.",
+    ...extra,
+  };
+}
+
+function currentProjectBindingStatusResponse(extra = {}) {
+  const bindingState = readCurrentProjectBinding();
+  if (!bindingState.bound) {
+    return {
+      ok: true,
+      ...runtimePolicy(),
+      endpoint: currentProjectBindingEndpoint,
+      status: "unbound",
+      currentProject: {
+        bound: false,
+        bindingPath: bindingState.bindingPathRelative,
+      },
+      ...extra,
+    };
+  }
+
+  try {
+    const source = currentProjectSource();
+    const project = projectIdentityFromSource(source);
+    return {
+      ok: true,
+      ...runtimePolicy(),
+      endpoint: currentProjectBindingEndpoint,
+      status: "bound",
+      currentProject: {
+        bound: true,
+        bindingPath: bindingState.bindingPathRelative,
+        binding: bindingState.binding,
+        project,
+        projectRoot: source.runRootRelativePath,
+        projectRootRelativePath: source.runRootRelativePath,
+        projectVibeRelativePath: source.projectVibeRelativePath,
+      },
+      ...extra,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      ...runtimePolicy(),
+      endpoint: currentProjectBindingEndpoint,
+      status: "blocked",
+      currentProject: {
+        bound: true,
+        bindingPath: bindingState.bindingPathRelative,
+        binding: bindingState.binding,
+      },
+      message: error instanceof Error ? error.message : "Current project binding could not be resolved.",
+      ...extra,
+    };
+  }
+}
+
 function unavailableResponse(extra = {}) {
   const source = extra.sourceProject || realDemo005Source();
+  const fileScope = source.sandboxSource === "005 sandbox" ? "real-demo-e2e-005" : undefined;
   return {
     ok: false,
     ...runtimePolicy(),
@@ -785,7 +954,7 @@ function unavailableResponse(extra = {}) {
     productionStatus: "unavailable",
     reportPath: source.reportPath,
     reportRelativePath: source.reportRelativePath,
-    reportUrl: runtimeFileUrl(source.reportRelativePath),
+    reportUrl: runtimeFileUrl(source.reportRelativePath, fileScope),
     reviewOverlayShots: [],
     productionNeedsReviewShots: [],
     shotCount: 0,
@@ -803,7 +972,7 @@ function responseFromReport(extra = {}, source = realDemo005Source()) {
   try {
     const report = readJson(source.reportPath);
     const observations = Array.isArray(report.observations)
-      ? report.observations.map(observationSummary)
+      ? report.observations.map((item) => observationSummary(item, "real-demo-e2e-005"))
       : [];
 
     return {
@@ -815,7 +984,7 @@ function responseFromReport(extra = {}, source = realDemo005Source()) {
       productionStatus: report.productionStatus || "unavailable",
       reportPath: source.reportPath,
       reportRelativePath: source.reportRelativePath,
-      reportUrl: runtimeFileUrl(source.reportRelativePath),
+      reportUrl: runtimeFileUrl(source.reportRelativePath, "real-demo-e2e-005"),
       reviewOverlayShots: Array.isArray(report.reviewOverlayShots) ? report.reviewOverlayShots : [],
       productionNeedsReviewShots: Array.isArray(report.productionNeedsReviewShots) ? report.productionNeedsReviewShots : [],
       shotCount: report.shotCount || observations.length,
@@ -853,6 +1022,11 @@ function currentProjectRealChainResponse(extra = {}, source = currentProjectSour
     source: "runtime_endpoint",
     sourceLabel: source.sourceLabel,
     sandboxSource: source.sandboxSource,
+    currentProject: {
+      bound: true,
+      bindingPath: source.bindingPathRelative,
+      binding: source.binding,
+    },
     requestContext: {
       projectRoot: source.requestProjectRoot,
       projectRootSource: source.requestContextSource,
@@ -942,6 +1116,11 @@ function currentProjectImage2BatchPlanResponse(extra = {}, source = currentProje
     source: "runtime_endpoint",
     sourceLabel: source.sourceLabel,
     sandboxSource: source.sandboxSource,
+    currentProject: {
+      bound: true,
+      bindingPath: source.bindingPathRelative,
+      binding: source.binding,
+    },
     requestContext: {
       projectRoot: source.requestProjectRoot,
       projectRootSource: source.requestContextSource,
@@ -1016,21 +1195,55 @@ function writeJson(res, statusCode, payload) {
   res.end(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
-function serveRuntimeFile(res, relativePath) {
+function serveRuntimeFile(res, relativePath, options = {}) {
   if (!relativePath) {
     writeJson(res, 400, { ok: false, ...runtimePolicy(), status: "bad_request", message: "Missing file path." });
     return;
   }
 
-  let filePath;
-  try {
-    filePath = scopedRepoPath(relativePath);
-  } catch (error) {
+  const normalizedRelativePath = normalizeRelativePath(relativePath);
+  if (path.isAbsolute(normalizedRelativePath)) {
     writeJson(res, 403, {
       ok: false,
       ...runtimePolicy(),
       status: "forbidden",
+      message: "Runtime files must be addressed by repository-relative paths.",
+    });
+    return;
+  }
+
+  let filePath;
+  let allowedRootPath;
+  let allowedRootLabel;
+  try {
+    filePath = scopedRepoPath(normalizedRelativePath);
+    if (options.scope === "real-demo-e2e-005") {
+      const source = realDemo005Source();
+      allowedRootPath = source.runRootPath;
+      allowedRootLabel = source.runRootRelativePath;
+    } else {
+      const source = currentProjectSource();
+      allowedRootPath = source.runRootPath;
+      allowedRootLabel = source.runRootRelativePath;
+    }
+  } catch (error) {
+    const unbound = error?.code === "CURRENT_PROJECT_UNBOUND";
+    writeJson(res, unbound ? 409 : 403, {
+      ok: false,
+      ...runtimePolicy(),
+      status: unbound ? "unbound" : "forbidden",
       message: error instanceof Error ? error.message : "Path is outside project root.",
+    });
+    return;
+  }
+
+  const rootWithSep = `${allowedRootPath}${path.sep}`;
+  if (filePath !== allowedRootPath && !filePath.startsWith(rootWithSep)) {
+    writeJson(res, 403, {
+      ok: false,
+      ...runtimePolicy(),
+      status: "forbidden",
+      message: `Runtime file is outside the allowed project scope: ${allowedRootLabel}`,
     });
     return;
   }
@@ -1041,6 +1254,28 @@ function serveRuntimeFile(res, relativePath) {
       ...runtimePolicy(),
       status: "not_found",
       message: `Runtime file not found: ${relativePath}`,
+    });
+    return;
+  }
+
+  try {
+    const fileRealPath = realpathSync(filePath);
+    const rootRealPath = realpathSync(allowedRootPath);
+    if (!pathWithinRoot(fileRealPath, rootRealPath)) {
+      writeJson(res, 403, {
+        ok: false,
+        ...runtimePolicy(),
+        status: "forbidden",
+        message: "Runtime file symlink escapes the allowed project scope.",
+      });
+      return;
+    }
+  } catch (error) {
+    writeJson(res, 403, {
+      ok: false,
+      ...runtimePolicy(),
+      status: "forbidden",
+      message: error instanceof Error ? error.message : "Runtime file could not be resolved safely.",
     });
     return;
   }
@@ -1123,9 +1358,10 @@ async function handleRun(res, options = {}) {
   }
 }
 
-function handleCurrentProjectRunCheck(res, source) {
+function handleCurrentProjectRunCheck(res, source, extra = {}) {
   const projectFacts = readProjectFacts(source);
   const payload = currentProjectRealChainResponse({
+    ...extra,
     running,
     command: {
       mode: "read_only_projection_check",
@@ -1142,9 +1378,10 @@ function handleCurrentProjectRunCheck(res, source) {
   writeJson(res, payload.ok === false ? 500 : 200, payload);
 }
 
-function handleCurrentProjectImage2BatchRunCheck(res, source) {
+function handleCurrentProjectImage2BatchRunCheck(res, source, extra = {}) {
   const projectFacts = readProjectFacts(source);
   const payload = currentProjectImage2BatchPlanResponse({
+    ...extra,
     running,
     command: {
       mode: "read_only_image2_batch_plan_check",
@@ -1194,7 +1431,9 @@ function readRequestJsonBody(req) {
 }
 
 function isCurrentProjectEndpoint(pathname) {
-  return pathname === currentProjectStatusEndpoint
+  return pathname === currentProjectBindingEndpoint
+    || pathname === currentProjectSelectEndpoint
+    || pathname === currentProjectStatusEndpoint
     || pathname === currentProjectRunEndpoint
     || pathname === currentProjectImage2BatchPlanEndpoint
     || pathname === currentProjectImage2BatchRunCheckEndpoint;
@@ -1215,14 +1454,74 @@ async function currentProjectRouteContext(req, res, url, endpoint) {
   }
 
   const requestContext = currentProjectRequestContext(req, url, bodyResult.body);
-  const sourceResult = currentProjectSourceResult(requestContext);
+  const sourceResult = currentProjectSourceResult();
   if (sourceResult.error) {
+    if (sourceResult.unbound) {
+      writeJson(res, 409, unboundCurrentProjectResponse(endpoint, requestContext));
+      return undefined;
+    }
     writeJson(res, 403, blockedCurrentProjectResponse(endpoint, requestContext, {
       message: sourceResult.message,
     }));
     return undefined;
   }
   return { requestContext, source: sourceResult.source };
+}
+
+async function handleCurrentProjectSelect(req, res) {
+  const bodyResult = await readRequestJsonBody(req);
+  if (!bodyResult.ok) {
+    writeJson(res, 400, {
+      ok: false,
+      ...runtimePolicy(),
+      endpoint: currentProjectSelectEndpoint,
+      status: "bad_request",
+      message: bodyResult.message,
+    });
+    return;
+  }
+  const body = isRecord(bodyResult.body) ? bodyResult.body : {};
+  const projectRoot = requestBodyString(body, ["projectRoot", "projectRootPath"]);
+  const projectId = requestBodyString(body, ["projectId"]);
+  const displayName = requestBodyString(body, ["displayName", "name"]);
+
+  try {
+    const { bindingPath, binding, source } = writeCurrentProjectBinding({ projectRoot, projectId, displayName });
+    const project = projectIdentityFromSource(source);
+    writeJson(res, 200, {
+      ok: true,
+      ...runtimePolicy(),
+      endpoint: currentProjectSelectEndpoint,
+      status: "bound",
+      currentProject: {
+        bound: true,
+        bindingPath: pathWithinRoot(bindingPath, repoRoot) ? repoRelativePath(bindingPath) : bindingPath,
+        binding,
+        project,
+        projectRoot: source.runRootRelativePath,
+        projectRootRelativePath: source.runRootRelativePath,
+        projectVibeRelativePath: source.projectVibeRelativePath,
+      },
+      providerCalled: false,
+      prepareRan: false,
+      projectVibeWritten: false,
+    });
+  } catch (error) {
+    writeJson(res, 403, {
+      ok: false,
+      ...runtimePolicy(),
+      endpoint: currentProjectSelectEndpoint,
+      status: "blocked",
+      currentProject: {
+        bound: false,
+      },
+      providerCalled: false,
+      prepareRan: false,
+      projectVibeWritten: false,
+      message: error instanceof Error ? error.message : "Current project selection was blocked.",
+      todo: "External user project roots are intentionally fail-closed until the runtime boundary is expanded safely.",
+    });
+  }
 }
 
 async function handleRequest(req, res) {
@@ -1237,6 +1536,8 @@ async function handleRequest(req, res) {
       ...runtimePolicy({
         endpoints: {
           currentProjectStatusEndpoint,
+          currentProjectBindingEndpoint,
+          currentProjectSelectEndpoint,
           currentProjectRunEndpoint,
           currentProjectImage2BatchPlanEndpoint,
           currentProjectImage2BatchRunCheckEndpoint,
@@ -1250,31 +1551,49 @@ async function handleRequest(req, res) {
     return;
   }
   if (req.method === "GET" && url.pathname === runtimeFileEndpoint) {
-    serveRuntimeFile(res, url.searchParams.get("path") || "");
+    serveRuntimeFile(res, url.searchParams.get("path") || "", { scope: url.searchParams.get("scope") || undefined });
+    return;
+  }
+  if (req.method === "GET" && url.pathname === currentProjectBindingEndpoint) {
+    writeJson(res, 200, currentProjectBindingStatusResponse({ running }));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === currentProjectSelectEndpoint) {
+    await handleCurrentProjectSelect(req, res);
     return;
   }
   if (req.method === "GET" && url.pathname === currentProjectStatusEndpoint) {
     const routeContext = await currentProjectRouteContext(req, res, url, currentProjectStatusEndpoint);
     if (!routeContext) return;
-    writeJson(res, 200, currentProjectRealChainResponse({ running }, routeContext.source));
+    writeJson(res, 200, currentProjectRealChainResponse({
+      running,
+      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
+    }, routeContext.source));
     return;
   }
   if (req.method === "POST" && url.pathname === currentProjectRunEndpoint) {
     const routeContext = await currentProjectRouteContext(req, res, url, currentProjectRunEndpoint);
     if (!routeContext) return;
-    handleCurrentProjectRunCheck(res, routeContext.source);
+    handleCurrentProjectRunCheck(res, routeContext.source, {
+      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
+    });
     return;
   }
   if (req.method === "GET" && url.pathname === currentProjectImage2BatchPlanEndpoint) {
     const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2BatchPlanEndpoint);
     if (!routeContext) return;
-    writeJson(res, 200, currentProjectImage2BatchPlanResponse({ running }, routeContext.source));
+    writeJson(res, 200, currentProjectImage2BatchPlanResponse({
+      running,
+      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
+    }, routeContext.source));
     return;
   }
   if (req.method === "POST" && url.pathname === currentProjectImage2BatchRunCheckEndpoint) {
     const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2BatchRunCheckEndpoint);
     if (!routeContext) return;
-    handleCurrentProjectImage2BatchRunCheck(res, routeContext.source);
+    handleCurrentProjectImage2BatchRunCheck(res, routeContext.source, {
+      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
+    });
     return;
   }
   if (req.method === "GET" && (url.pathname === realDemo005StatusEndpoint || url.pathname === legacyStatusEndpoint)) {

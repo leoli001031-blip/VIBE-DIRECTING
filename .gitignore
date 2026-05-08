@@ -4,6 +4,7 @@ dist/
 .DS_Store
 
 # Local/generated runtime imports
+.vibe-runtime/current-project.local.json
 public/runtime-audit.json
 public/runtime-state.json
 public/demo-runtime-audit.json
