@@ -90,6 +90,7 @@ function assertCreatorPanelContract() {
     findFunctionBody(appSource, "projectReviewCheckDetail"),
     findFunctionBody(appSource, "projectPreviewReadyLabel"),
     findFunctionBody(appSource, "projectProductionReviewLabel"),
+    findFunctionBody(appSource, "projectOneShotEvidence"),
   ].join("\n");
 
   for (const [label, pattern] of [
@@ -99,7 +100,6 @@ function assertCreatorPanelContract() {
     ["real demo id", /real_demo_e2e_005/i],
     ["demo", /\bdemo\b/i],
     ["provider submit", /provider\s+submit|provider\s+未提交/i],
-    ["provider", /\bprovider\b/i],
     ["prompt", /\bprompt\b/i],
     ["queue", /\bqueue\b/i],
     ["prepare ran", /prepare\s+ran|prepareRan|prepare\s+未执行/i],
@@ -117,21 +117,29 @@ function assertCreatorPanelContract() {
   assert(/项目路径/.test(surface), "ProjectRealChainPanel should expose project path selection copy");
   assert(/最近项目/.test(surface), "ProjectRealChainPanel should expose recent projects copy");
   assert(/连接项目/.test(surface), "ProjectRealChainPanel should expose connect project copy");
-  assert(/已返回[\s\S]*returnedCount[\s\S]*plannedCount/.test(surface), "ProjectRealChainPanel should show returned image count");
+  assert(/已观察输出[\s\S]*returnedCount[\s\S]*plannedCount/.test(surface), "ProjectRealChainPanel should show observed output count");
   assert(/张需复核/.test(surface), "ProjectRealChainPanel should show needs-review image count");
   assert(/Preview[\s\S]*ready/.test(surface), "ProjectRealChainPanel should expose preview ready state");
   assert(/Production[\s\S]*needs_review/.test(surface), "ProjectRealChainPanel should expose production review state");
   assert(/<button disabled=\{disabled\} onClick=\{onRun\}>[\s\S]*同步状态/.test(panel), "sync status button must route to project status run-check");
   assert(/<button disabled=\{reviewDisabled\} onClick=\{onRunImage2Batch\}>[\s\S]*复核检查/.test(panel), "review check button must route to Image2 batch run-check");
   assert(/单镜头小样/.test(surface), "ProjectRealChainPanel should expose one-shot sample copy");
-  assert(/生成小样/.test(surface), "ProjectRealChainPanel should expose sample prepare copy");
-  assert(/确认生成/.test(surface), "ProjectRealChainPanel should expose sample confirm copy");
+  assert(/准备小样包/.test(surface), "ProjectRealChainPanel should expose sample prepare copy");
+  assert(/确认 handoff/.test(surface), "ProjectRealChainPanel should expose sample confirm copy");
   assert(/等待文件/.test(surface), "ProjectRealChainPanel should expose waiting-file copy");
+  assert(/providerRequestId/.test(surface), "ProjectRealChainPanel should expose provider request id evidence");
+  assert(/已 hash-bound 回流，QA needs_review，正式晋级阻断/.test(surface), "ProjectRealChainPanel should expose hash-bound needs-review evidence");
+  assert(/仅生成 handoff\/sidecar 路径，不调用 provider/.test(surface), "ProjectRealChainPanel should expose handoff-only evidence");
+  assert(/等待外部 provider 输出 \+ providerRequestId \+ semantic QA/.test(surface), "ProjectRealChainPanel should expose waiting-for-provider evidence");
   assert(/onPrepareImage2OneShot/.test(panel), "one-shot sample button must route to prepare handler");
   assert(/onConfirmImage2OneShot/.test(panel), "one-shot confirm button must route to confirm handler");
+  assert(/onCheckImage2OneShotReturn/.test(panel), "one-shot sample button must route to execute-return handler");
   assert(/aria-label="当前项目状态"/.test(panel), "current project panel should use creator-facing status aria copy");
   assert(/aria-label="当前项目预览图"/.test(panel), "current project thumbnails should use creator-facing preview aria copy");
-  assert(/displayTitle[\s\S]*状态已回流/.test(surface), "ProjectRealChainPanel should show the bound title for returned status");
+  assert(/className="project-real-chain-messages"[\s\S]*className="project-real-chain-message"/.test(panel), "ProjectRealChainPanel should group messages before placing them in the grid");
+  assert(/\.project-real-chain-messages\s*\{[\s\S]*grid-area:\s*message[\s\S]*display:\s*flex[\s\S]*flex-wrap:\s*wrap/.test(stylesSource), "project real-chain messages should share one wrapping grid item");
+  assert(!/\.project-real-chain-message\s*\{[\s\S]{0,160}grid-area:\s*message/.test(stylesSource), "individual project real-chain messages must not claim the grid area");
+  assert(/displayTitle[\s\S]*runtime 状态已同步/.test(surface), "ProjectRealChainPanel should show the bound title for synced runtime status");
   assert(/selectCurrentProjectBinding\(\{\s*projectRoot/.test(app), "App must select the current project through the runtime helper");
   assert(/loadCurrentProjectChoices\(\)/.test(app), "App must load recent project choices through the runtime helper");
   assert(/selectProjectChoice/.test(app), "App must route recent project choices through the current selection helper");
@@ -174,7 +182,9 @@ const {
   loadProjectImage2BatchPlan,
   loadProjectRealChainStatus,
   prepareProjectImage2OneShot,
+  prepareProjectImage2OneShotTrigger,
   confirmProjectImage2OneShot,
+  executeReturnedProjectImage2OneShot,
   projectCurrentBindingEndpoint,
   projectCurrentChoicesEndpoint,
   projectCurrentSelectEndpoint,
@@ -183,6 +193,8 @@ const {
   projectImage2OneShotStatusEndpoint,
   projectImage2OneShotPrepareEndpoint,
   projectImage2OneShotConfirmEndpoint,
+  projectImage2OneShotPrepareTriggerEndpoint,
+  projectImage2OneShotExecuteReturnEndpoint,
   projectRuntimeRequestPath,
   projectRealChainRunCheckEndpoint,
   projectRealChainStatusEndpoint,
@@ -475,7 +487,7 @@ assertProductCopy(image2Mismatch.message);
 const oneShotReadyPayload = {
   status: "ready_to_prepare",
   uiStatus: "ready_to_prepare",
-  userLabel: "生成小样",
+  userLabel: "准备小样包",
   project: {
     projectId: "real-demo-e2e-005",
     projectRoot: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005",
@@ -497,7 +509,7 @@ const oneShotPreparePayload = {
   ...oneShotReadyPayload,
   status: "prepared",
   uiStatus: "prepared",
-  userLabel: "确认生成",
+  userLabel: "确认 handoff",
   statePaths: {
     receiptStatePath: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005/real-trigger-one-shot/S07/state/prepare-receipt.json",
     handoffStatePath: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005/real-trigger-one-shot/S07/state/handoff-packet.json",
@@ -528,6 +540,7 @@ const oneShotConfirmPayload = {
     handoffPresent: true,
   },
   handoffPacket: {
+    packetId: "handoff_image2_one_shot_prepare_real-demo-e2e-005_S07",
     receiptId: "image2_one_shot_prepare_real-demo-e2e-005_S07",
     status: "ready_for_manual_transport",
     requiresExternalAction: true,
@@ -540,14 +553,72 @@ const oneShotConfirmPayload = {
   },
 };
 
+const oneShotTriggerPayload = {
+  ...oneShotConfirmPayload,
+  status: "trigger_plan_prepared",
+  uiStatus: "trigger_plan_prepared",
+  userLabel: "等待回流",
+  returnSource: "dry_run_projection_only",
+  persistedState: {
+    receiptPresent: true,
+    handoffPresent: true,
+    triggerPlanPresent: true,
+  },
+};
+
+const oneShotReturnedPayload = {
+  ...oneShotConfirmPayload,
+  status: "real_provider_returned_needs_review",
+  uiStatus: "needs_review",
+  userLabel: "需要复核",
+  providerRequestId: "provider-request-s07",
+  outputSha256: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  hashBoundActual: true,
+  providerObservationMode: "actual_provider_call_observed",
+  semanticQaStatus: "needs_review",
+  returnSource: "actual_provider_return_ingest",
+  formalPromotionBlocked: true,
+  formalPromotionBlockedReason: "Formal promotion remains blocked until human QA approval after hash-bound provider return.",
+  formalPromotionBlockedReasons: ["Formal promotion remains blocked until human QA approval after hash-bound provider return."],
+  providerReturnIngested: true,
+  externalProviderCallObserved: true,
+  actualImage2Triggered: true,
+  providerCalled: true,
+  watcherProjection: {
+    outputExists: true,
+    providerRequestId: "provider-request-s07",
+    outputSha256: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    hashBoundActual: true,
+    providerObservationMode: "actual_provider_call_observed",
+    semanticQaStatus: "needs_review",
+    returnSource: "actual_provider_return_ingest",
+  },
+  previewProjection: {
+    status: "needs_review",
+    reviewRequired: true,
+    imageUrl: "/api/runtime/files?path=runtime-tests/005/real-trigger-one-shot/S07/image2-start.png",
+    providerCalled: true,
+  },
+};
+
 const persistedOneShotPrepareSummary = deriveProjectImage2OneShotStatus(oneShotPreparePayload);
 assert(persistedOneShotPrepareSummary.uiStatus === "prepared", "persisted one-shot receipt status should display prepared");
-assert(persistedOneShotPrepareSummary.userLabel === "确认生成", "persisted one-shot receipt should keep confirm copy");
+assert(persistedOneShotPrepareSummary.userLabel === "确认 handoff", "persisted one-shot receipt should keep confirm copy");
 assert(persistedOneShotPrepareSummary.receipt?.selectedShotId === "S07", "persisted one-shot receipt should remain available to helpers");
 
 const persistedOneShotHandoffSummary = deriveProjectImage2OneShotStatus(oneShotConfirmPayload);
 assert(persistedOneShotHandoffSummary.uiStatus === "handoff_prepared", "persisted one-shot handoff status should display handoff prepared");
 assert(persistedOneShotHandoffSummary.userLabel === "等待文件", "persisted one-shot handoff should keep waiting-file copy");
+
+const persistedOneShotReturnedSummary = deriveProjectImage2OneShotStatus(oneShotReturnedPayload);
+assert(persistedOneShotReturnedSummary.uiStatus === "needs_review", "persisted one-shot return should display needs_review");
+assert(persistedOneShotReturnedSummary.providerRequestId === "provider-request-s07", "persisted one-shot return should keep providerRequestId");
+assert(persistedOneShotReturnedSummary.outputSha256 === oneShotReturnedPayload.outputSha256, "persisted one-shot return should keep output hash");
+assert(persistedOneShotReturnedSummary.hashBoundActual === true, "persisted one-shot return should keep hash-bound fact");
+assert(persistedOneShotReturnedSummary.providerObservationMode === "actual_provider_call_observed", "persisted one-shot return should keep observation mode");
+assert(persistedOneShotReturnedSummary.semanticQaStatus === "needs_review", "persisted one-shot return should keep semantic QA status");
+assert(persistedOneShotReturnedSummary.returnSource === "actual_provider_return_ingest", "persisted one-shot return should keep return source");
+assert(persistedOneShotReturnedSummary.formalPromotionBlockedReason, "persisted one-shot return should keep promotion blocker reason");
 
 const persistedOneShotHandoffGuard = guardProjectImage2OneShotUiStateForCurrentProject(
   { status: persistedOneShotHandoffSummary.uiStatus, summary: persistedOneShotHandoffSummary, receipt: persistedOneShotHandoffSummary.receipt },
@@ -624,6 +695,8 @@ const runtimeEndpointPayloads = new Map([
   [`GET ${projectImage2OneShotStatusEndpoint}`, oneShotReadyPayload],
   [`POST ${projectImage2OneShotPrepareEndpoint}`, oneShotPreparePayload],
   [`POST ${projectImage2OneShotConfirmEndpoint}`, oneShotConfirmPayload],
+  [`POST ${projectImage2OneShotPrepareTriggerEndpoint}`, oneShotTriggerPayload],
+  [`POST ${projectImage2OneShotExecuteReturnEndpoint}`, oneShotReturnedPayload],
 ]);
 
 try {
@@ -685,7 +758,7 @@ try {
 
   const oneShotStatus = await loadProjectImage2OneShotStatus(project005RuntimeIdentity, "S07");
   assert(oneShotStatus.status === "ready_to_prepare", "one-shot status should expose sample entry");
-  assert(oneShotStatus.summary?.userLabel === "生成小样", "one-shot status should use creator-facing prepare copy");
+  assert(oneShotStatus.summary?.userLabel === "准备小样包", "one-shot status should use creator-facing prepare copy");
   assert(oneShotStatus.summary?.providerCalled === false, "one-shot status must not call provider");
   assert(oneShotStatus.summary?.projectVibeWritten === false, "one-shot status must not write project.vibe");
   assert(oneShotStatus.summary?.workerSpawnForbidden === true, "one-shot status must forbid worker spawn");
@@ -693,7 +766,7 @@ try {
   const preparedOneShot = await prepareProjectImage2OneShot(project005RuntimeIdentity, "S07");
   assert(preparedOneShot.status === "prepared", "one-shot prepare should create a pending confirmation receipt");
   assert(preparedOneShot.receipt?.selectedShotId === "S07", "one-shot prepare should preserve selected shot");
-  assert(preparedOneShot.summary?.userLabel === "确认生成", "one-shot prepare should use creator-facing confirm copy");
+  assert(preparedOneShot.summary?.userLabel === "确认 handoff", "one-shot prepare should use creator-facing confirm copy");
   assert(preparedOneShot.summary?.providerCalled === false, "one-shot prepare must not call provider");
   assert(preparedOneShot.summary?.liveSubmitAllowed === false, "one-shot prepare must not allow live submit");
   assert(preparedOneShot.summary?.projectVibeWritten === false, "one-shot prepare must not write project.vibe");
@@ -707,6 +780,19 @@ try {
   assert(confirmedOneShot.summary?.projectVibeWritten === false, "one-shot confirm must not write project.vibe");
   assert(confirmedOneShot.summary?.workerSpawnForbidden === true, "one-shot confirm must forbid worker spawn");
 
+  const triggerPreparedOneShot = await prepareProjectImage2OneShotTrigger(project005RuntimeIdentity, confirmedOneShot.receipt);
+  assert(triggerPreparedOneShot.status === "trigger_plan_prepared", "one-shot trigger helper should prepare app-server handoff");
+  assert(triggerPreparedOneShot.summary?.userLabel === "等待回流", "one-shot trigger helper should use waiting return copy");
+  assert(triggerPreparedOneShot.summary?.providerCalled === false, "one-shot trigger helper must not call provider");
+
+  const returnedOneShot = await executeReturnedProjectImage2OneShot(project005RuntimeIdentity, triggerPreparedOneShot.receipt);
+  assert(returnedOneShot.status === "needs_review", "one-shot execute-return helper should surface needs_review");
+  assert(returnedOneShot.summary?.providerRequestId === "provider-request-s07", "one-shot execute-return should preserve providerRequestId");
+  assert(returnedOneShot.summary?.outputSha256 === oneShotReturnedPayload.outputSha256, "one-shot execute-return should preserve output hash");
+  assert(returnedOneShot.summary?.hashBoundActual === true, "one-shot execute-return should preserve hash-bound fact");
+  assert(returnedOneShot.summary?.semanticQaStatus === "needs_review", "one-shot execute-return should preserve semantic QA status");
+  assert(returnedOneShot.summary?.returnSource === "actual_provider_return_ingest", "one-shot execute-return should preserve return source");
+
   for (const [method, endpoint] of [
     ["GET", projectCurrentBindingEndpoint],
     ["GET", projectCurrentChoicesEndpoint],
@@ -718,6 +804,8 @@ try {
     ["GET", projectImage2OneShotStatusEndpoint],
     ["POST", projectImage2OneShotPrepareEndpoint],
     ["POST", projectImage2OneShotConfirmEndpoint],
+    ["POST", projectImage2OneShotPrepareTriggerEndpoint],
+    ["POST", projectImage2OneShotExecuteReturnEndpoint],
   ]) {
     const call = runtimeFetchCalls.find((item) => item.method === method && item.path === endpoint);
     assert(call, `frontend should call ${method} ${endpoint}`);

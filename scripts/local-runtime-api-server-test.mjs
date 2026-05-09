@@ -473,6 +473,9 @@ try {
   assert(runtimeStatus.payload.endpoints?.currentProjectImage2OneShotStatusEndpoint === "/api/runtime/projects/current/image2-one-shot/status", "runtime status should expose one-shot status endpoint");
   assert(runtimeStatus.payload.endpoints?.currentProjectImage2OneShotPrepareEndpoint === "/api/runtime/projects/current/image2-one-shot/prepare", "runtime status should expose one-shot prepare endpoint");
   assert(runtimeStatus.payload.endpoints?.currentProjectImage2OneShotConfirmEndpoint === "/api/runtime/projects/current/image2-one-shot/confirm", "runtime status should expose one-shot confirm endpoint");
+  assert(runtimeStatus.payload.endpoints?.currentProjectImage2OneShotPrepareTriggerEndpoint === "/api/runtime/projects/current/image2-one-shot/prepare-trigger", "runtime status should expose one-shot trigger endpoint");
+  assert(runtimeStatus.payload.endpoints?.currentProjectImage2OneShotReturnEndpoint === "/api/runtime/projects/current/image2-one-shot/return", "runtime status should expose one-shot return endpoint");
+  assert(runtimeStatus.payload.endpoints?.currentProjectImage2OneShotExecuteReturnEndpoint === "/api/runtime/projects/current/image2-one-shot/execute-return", "runtime status should expose one-shot execute-return endpoint");
   assert(runtimeStatus.payload.endpoints?.currentProjectRound5StrictEditPrepareEndpoint === "/api/runtime/projects/current/round5/strict-edit/prepare", "runtime status should expose Round 5 strict edit prepare endpoint");
   assert(runtimeStatus.payload.endpoints?.currentProjectRound5StrictEditReturnEndpoint === "/api/runtime/projects/current/round5/strict-edit/return", "runtime status should expose Round 5 strict edit return endpoint");
 
@@ -748,7 +751,7 @@ try {
   const oneShot005Status = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/status?selectedShotId=S01`);
   assert(oneShot005Status.response.status === 200, "GET one-shot status after select 005 should return 200");
   assert(oneShot005Status.payload.status === "ready_to_prepare", "one-shot status should be ready to prepare");
-  assert(oneShot005Status.payload.userLabel === "生成小样", "one-shot status should expose creator-facing sample copy");
+  assert(oneShot005Status.payload.userLabel === "准备小样包", "one-shot status should expose creator-facing sample copy");
   assert(oneShot005Status.payload.project?.projectId === project005Id, "one-shot status should use bound 005 identity");
   assert(oneShot005Status.payload.selectedShotId === "S01", "one-shot status should preserve selected shot");
   assert(oneShot005Status.payload.expectedOutputPath.startsWith(`${project005Root}/real-trigger-one-shot/S01/`), "one-shot expected output should stay under current project sandbox");
@@ -815,7 +818,7 @@ try {
   });
   assert(prepareOneShot.response.status === 200, "one-shot prepare should return 200 when scoped");
   assert(prepareOneShot.payload.status === "prepared", "one-shot prepare status mismatch");
-  assert(prepareOneShot.payload.userLabel === "确认生成", "one-shot prepare should expose confirmation copy");
+  assert(prepareOneShot.payload.userLabel === "确认 handoff", "one-shot prepare should expose confirmation copy");
   assert(prepareOneShot.payload.receipt?.status === "prepared", "one-shot prepare receipt missing");
   assert(prepareOneShot.payload.receipt?.policy?.providerCalled === false, "one-shot receipt must not call provider");
   assert(prepareOneShot.payload.receipt?.policy?.liveSubmitAllowed === false, "one-shot receipt must not allow live submit");

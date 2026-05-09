@@ -260,6 +260,9 @@ try {
     providerObservationMode: "actual_provider_call_observed",
     provider: "openai-image2-api",
     providerRequestId: "provider-request-current-project-image2-return-executor-a01",
+    selectedShotId: "A01",
+    receiptId: prepare.payload.receipt.receiptId,
+    handoffPacketId: confirm.payload.handoffPacket.packetId,
     outputPath: prepare.payload.expectedOutputPath,
     outputSha256,
     providerCalled: true,
@@ -289,6 +292,34 @@ try {
   assert(missingProviderRequestId.payload.providerReturnIngested === false, "missing providerRequestId must not promote providerReturnIngested");
   assertNoSubmit(missingProviderRequestId.payload, "missing providerRequestId return check");
 
+  for (const contextCase of [
+    ["missing receiptId", { receiptId: undefined }, /receiptId/i],
+    ["mismatched receiptId", { receiptId: "old-receipt-id" }, /receiptId/i],
+    ["missing handoffPacketId", { handoffPacketId: undefined }, /handoffPacketId/i],
+    ["mismatched handoffPacketId", { handoffPacketId: "old-handoff-id" }, /handoffPacketId/i],
+    ["missing selectedShotId", { selectedShotId: undefined }, /selectedShotId/i],
+    ["mismatched selectedShotId", { selectedShotId: "A99" }, /selectedShotId/i],
+  ]) {
+    const [label, overrides, blockerPattern] = contextCase;
+    writeJson(prepare.payload.providerObservationPath, {
+      ...providerObservation,
+      ...overrides,
+    });
+    writeJson(prepare.payload.semanticQaPath, semanticQa);
+    const contextMismatch = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/execute-return`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ selectedShotId: "A01", selectedShotIds: ["A01"], imageCount: 1, receiptId: prepare.payload.receipt.receiptId }),
+    });
+    assert(contextMismatch.response.status === 409, `${label} provider observation must fail closed`);
+    assert(contextMismatch.payload.providerCalled === false, `${label} must not promote providerCalled`);
+    assert(contextMismatch.payload.actualImage2Triggered === false, `${label} must not promote actualImage2Triggered`);
+    assert(contextMismatch.payload.providerReturnIngested === false, `${label} must not promote providerReturnIngested`);
+    assert(contextMismatch.payload.hashBoundActual === false, `${label} must not become hash-bound`);
+    assert(contextMismatch.payload.blockers.some((blocker) => blockerPattern.test(blocker)), `${label} blocker should name the context field`);
+    assertNoSubmit(contextMismatch.payload, `${label} return check`);
+  }
+
   const returned = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/execute-return`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -312,12 +343,34 @@ try {
   assert(returned.payload.runtimeProviderSubmitAttempted === false, "actual return must not claim runtime provider submit");
   assert(returned.payload.runtimeExternalNetworkCallMade === false, "actual return must not claim runtime external network IO");
   assert(returned.payload.formalPromotionBlocked === true, "actual return should remain blocked from formal promotion");
+  assert(returned.payload.providerRequestId === providerObservation.providerRequestId, "actual return should surface providerRequestId");
+  assert(returned.payload.outputSha256 === outputSha256, "actual return should surface output hash");
+  assert(returned.payload.hashBoundActual === true, "actual return should expose top-level hash-bound fact");
+  assert(returned.payload.providerObservationMode === "actual_provider_call_observed", "actual return should surface provider observation mode");
+  assert(returned.payload.semanticQaStatus === "needs_review", "actual return should surface semantic QA status");
+  assert(returned.payload.returnSource === "actual_provider_return_ingest", "actual return should surface return source");
+  assert(returned.payload.formalPromotionBlockedReason, "actual return should surface formal promotion blocker");
   assert(returned.payload.executorEvidence.hashBoundActual === true, "actual return should be hash-bound");
+  assert(returned.payload.executorEvidence.providerRequestId === providerObservation.providerRequestId, "executor evidence should keep providerRequestId");
+  assert(returned.payload.executorEvidence.outputSha256 === outputSha256, "executor evidence should keep output hash");
   assert(returned.payload.watcherProjection.semanticQaStatus === "needs_review", "actual return should surface needs_review QA");
+  assert(returned.payload.watcherProjection.hashBoundActual === true, "watcher projection should keep hash-bound fact");
+  assert(returned.payload.watcherProjection.returnSource === "actual_provider_return_ingest", "watcher projection should keep return source");
   assert(existsSync(returned.payload.expectedOutputPath), "actual return should write expected output");
   assert(existsSync(returned.payload.providerObservationPath), "actual return should write provider sidecar");
   assert(existsSync(returned.payload.semanticQaPath), "actual return should write semantic QA sidecar");
   assertNoSubmit(returned.payload, "actual return ingest");
+
+  const oneShotStatusAfterReturn = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/status?selectedShotId=A01`);
+  assert(oneShotStatusAfterReturn.response.status === 200, "one-shot status should reload after actual return");
+  assert(oneShotStatusAfterReturn.payload.uiStatus === "needs_review", "one-shot status should surface needs_review after actual return");
+  assert(oneShotStatusAfterReturn.payload.providerRequestId === providerObservation.providerRequestId, "one-shot status should expose providerRequestId after actual return");
+  assert(oneShotStatusAfterReturn.payload.outputSha256 === outputSha256, "one-shot status should expose output hash after actual return");
+  assert(oneShotStatusAfterReturn.payload.hashBoundActual === true, "one-shot status should expose hash-bound fact after actual return");
+  assert(oneShotStatusAfterReturn.payload.providerObservationMode === "actual_provider_call_observed", "one-shot status should expose provider observation mode after actual return");
+  assert(oneShotStatusAfterReturn.payload.semanticQaStatus === "needs_review", "one-shot status should expose semantic QA status after actual return");
+  assert(oneShotStatusAfterReturn.payload.returnSource === "actual_provider_return_ingest", "one-shot status should expose return source after actual return");
+  assert(oneShotStatusAfterReturn.payload.formalPromotionBlockedReason, "one-shot status should expose formal promotion blocker after actual return");
 
   const status = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
   assert(status.response.status === 200, "real-chain status should reload after return");

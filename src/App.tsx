@@ -111,6 +111,7 @@ import {
   type ProjectCurrentChoice,
   type ProjectCurrentBindingStatus,
   type ProjectImage2BatchUiState,
+  type ProjectImage2OneShotStatus,
   type ProjectImage2OneShotUiState,
   type ProjectRealChainPreviewItem,
   type ProjectRound5StrictEditPreflightUiState,
@@ -7720,7 +7721,7 @@ function RealPilotDirectorStatus({ summary }: { summary: RealPilotUiSummary }) {
           <small>{summary.framePairDetail}</small>
         </div>
         <div>
-          <span>预计生成</span>
+          <span>预计输出</span>
           <strong>{summary.estimatedOutputCount || "待估算"}</strong>
           <small>{summary.estimatedOutputDetail}</small>
         </div>
@@ -7889,6 +7890,43 @@ function projectProductionReviewLabel(summary: ProjectRealChainPanelState["summa
   return summary?.productionStatus === "needs_review" ? "needs_review" : "clear";
 }
 
+function shortEvidenceToken(value?: string) {
+  if (!value) return "未观察";
+  if (value.startsWith("sha256:")) return `${value.slice(0, 15)}...`;
+  return value.length > 18 ? `${value.slice(0, 18)}...` : value;
+}
+
+function projectOneShotEvidence(summary?: ProjectImage2OneShotStatus) {
+  if (!summary) {
+    return {
+      label: "未同步",
+      detail: "等待 handoff 准备",
+    };
+  }
+  if (summary.uiStatus === "needs_review" || summary.hashBoundActual) {
+    return {
+      label: "已 hash-bound 回流，QA needs_review，正式晋级阻断",
+      detail: `providerRequestId ${shortEvidenceToken(summary.providerRequestId)} · output ${shortEvidenceToken(summary.outputSha256)}`,
+    };
+  }
+  if (summary.uiStatus === "handoff_prepared" || summary.uiStatus === "trigger_plan_prepared" || summary.uiStatus === "waiting_file") {
+    return {
+      label: "等待外部 provider 输出 + providerRequestId + semantic QA",
+      detail: summary.returnSource === "unavailable" ? "尚未观察真实回流" : `returnSource ${summary.returnSource}`,
+    };
+  }
+  if (summary.uiStatus === "prepared") {
+    return {
+      label: "仅生成 handoff/sidecar 路径，不调用 provider",
+      detail: summary.receipt?.receiptId ? `receipt ${shortEvidenceToken(summary.receipt.receiptId)}` : "等待确认 handoff",
+    };
+  }
+  return {
+    label: "仅生成 handoff/sidecar 路径，不调用 provider",
+    detail: summary.selectedShotId ? `镜头 ${summary.selectedShotId}` : "选择镜头后开始",
+  };
+}
+
 function ProjectRealChainPanel({
   state,
   image2BatchState,
@@ -7974,6 +8012,7 @@ function ProjectRealChainPanel({
         ? "确认 handoff"
         : "准备小样包";
   const sampleStatusLabel = sampleReview ? "需要复核" : image2OneShotState.status === "trigger_plan_prepared" ? "等待回流" : sampleWaiting ? "等待文件" : sampleReady ? "待确认" : sampleBlocked ? "待补齐" : "可开始";
+  const sampleEvidence = projectOneShotEvidence(image2OneShotState.summary);
   const connecting = projectSelectionStatus === "connecting";
   const canConnect = projectPathInput.trim().length > 0 && !connecting;
 
@@ -8019,7 +8058,7 @@ function ProjectRealChainPanel({
       )}
       <div className="project-real-chain-tags">
         <small>项目状态 {status}</small>
-        <small>已返回 {returnedCount}/{plannedCount} 张</small>
+        <small>已观察输出 {returnedCount}/{plannedCount} 张</small>
         <small>{summary?.needsReviewCount ?? 0} 张需复核</small>
         <small>Preview {previewLabel}</small>
         <small>Production {productionLabel}</small>
@@ -8078,6 +8117,10 @@ function ProjectRealChainPanel({
           {sampleRunning ? "准备中" : sampleButtonLabel}
         </button>
       </div>
+      <div className={`project-real-chain-evidence ${image2OneShotState.status}`} aria-label="one-shot evidence">
+        <small>{sampleEvidence.label}</small>
+        <small>{sampleEvidence.detail}</small>
+      </div>
       {visibleItems.length > 0 && (
         <div className="project-real-chain-thumbs" aria-label="当前项目预览图">
           {visibleItems.map((item) => (
@@ -8092,13 +8135,15 @@ function ProjectRealChainPanel({
         </div>
       )}
       <small className="project-real-chain-report">
-        {displayTitle} · {summary ? "状态已回流" : "未同步"}
+        {displayTitle} · {summary ? "runtime 状态已同步" : "未同步"}
       </small>
-      {!projectBound && <small className="project-real-chain-message">未选择项目/未同步</small>}
-      {state.message && <small className="project-real-chain-message">{state.message}</small>}
-      {image2BatchState.message && <small className="project-real-chain-message">{image2BatchState.message}</small>}
-      {image2OneShotState.message && <small className="project-real-chain-message">{image2OneShotState.message}</small>}
-      {strictEditPreflightState.message && <small className="project-real-chain-message">{strictEditPreflightState.message}</small>}
+      <div className="project-real-chain-messages">
+        {!projectBound && <small className="project-real-chain-message">未选择项目/未同步</small>}
+        {state.message && <small className="project-real-chain-message">{state.message}</small>}
+        {image2BatchState.message && <small className="project-real-chain-message">{image2BatchState.message}</small>}
+        {image2OneShotState.message && <small className="project-real-chain-message">{image2OneShotState.message}</small>}
+        {strictEditPreflightState.message && <small className="project-real-chain-message">{strictEditPreflightState.message}</small>}
+      </div>
     </section>
   );
 }

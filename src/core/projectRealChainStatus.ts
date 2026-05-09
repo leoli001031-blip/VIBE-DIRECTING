@@ -334,6 +334,14 @@ export type ProjectImage2OneShotStatus = {
   reviewRequired?: boolean;
   actualImage2Triggered?: boolean;
   providerReturnIngested: boolean;
+  providerRequestId?: string;
+  outputSha256?: string;
+  hashBoundActual: boolean;
+  providerObservationMode: string;
+  semanticQaStatus: string;
+  returnSource: string;
+  formalPromotionBlockedReason?: string;
+  formalPromotionBlockedReasons: string[];
   externalProviderCallObserved: boolean;
   runtimeProviderSubmitAttempted: boolean;
   runtimeExternalNetworkCallMade: boolean;
@@ -592,6 +600,14 @@ type ProjectImage2OneShotPayload = {
   };
   actualImage2Triggered?: boolean;
   providerReturnIngested?: boolean;
+  providerRequestId?: string;
+  outputSha256?: string;
+  hashBoundActual?: boolean;
+  providerObservationMode?: string;
+  semanticQaStatus?: string;
+  returnSource?: string;
+  formalPromotionBlockedReason?: string;
+  formalPromotionBlockedReasons?: string[];
   externalProviderCallObserved?: boolean;
   runtimeProviderSubmitAttempted?: boolean;
   runtimeExternalNetworkCallMade?: boolean;
@@ -1243,6 +1259,11 @@ export function deriveProjectImage2OneShotStatus(payload: unknown): ProjectImage
       userLabel: "准备小样包",
       outputExists: false,
       providerReturnIngested: false,
+      hashBoundActual: false,
+      providerObservationMode: "not_observed",
+      semanticQaStatus: "not_written",
+      returnSource: "unavailable",
+      formalPromotionBlockedReasons: [],
       externalProviderCallObserved: false,
       runtimeProviderSubmitAttempted: false,
       runtimeExternalNetworkCallMade: false,
@@ -1276,6 +1297,14 @@ export function deriveProjectImage2OneShotStatus(payload: unknown): ProjectImage
     reviewRequired: report.previewProjection?.reviewRequired === true,
     actualImage2Triggered: report.actualImage2Triggered === true,
     providerReturnIngested: report.providerReturnIngested === true,
+    providerRequestId: report.providerRequestId,
+    outputSha256: report.outputSha256,
+    hashBoundActual: report.hashBoundActual === true,
+    providerObservationMode: report.providerObservationMode || "not_observed",
+    semanticQaStatus: report.semanticQaStatus || "not_written",
+    returnSource: report.returnSource || "unavailable",
+    formalPromotionBlockedReason: report.formalPromotionBlockedReason,
+    formalPromotionBlockedReasons: stringArray(report.formalPromotionBlockedReasons),
     externalProviderCallObserved: report.externalProviderCallObserved === true,
     runtimeProviderSubmitAttempted: report.runtimeProviderSubmitAttempted === true,
     runtimeExternalNetworkCallMade: report.runtimeExternalNetworkCallMade === true,

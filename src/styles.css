@@ -786,6 +786,7 @@
     "gate gate thumbs"
     "policy policy thumbs"
     "batch oneshot thumbs"
+    "evidence evidence thumbs"
     "report report thumbs"
     "message message thumbs";
   align-items: center;
@@ -1072,6 +1073,24 @@
   cursor: wait;
 }
 
+.project-real-chain-evidence {
+  grid-area: evidence;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-evidence small {
+  min-width: 0;
+  border: 1px solid rgba(46, 118, 88, 0.18);
+  background: rgba(46, 118, 88, 0.055);
+  color: rgba(37, 40, 34, 0.64);
+  padding: 4px 7px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
 .project-real-chain-policy {
   grid-area: policy;
   display: flex;
@@ -1181,8 +1200,16 @@
   gap: 5px;
 }
 
-.project-real-chain-message {
+.project-real-chain-messages {
   grid-area: message;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-message {
+  min-width: 0;
 }
 
 .preview-shell .project-real-chain-panel {
@@ -1215,12 +1242,14 @@
 .preview-shell .project-real-chain-recent button,
 .preview-shell .project-real-chain-tags small,
 .preview-shell .project-real-chain-gates small,
+.preview-shell .project-real-chain-evidence small,
 .preview-shell .project-real-chain-policy small {
   border-color: rgba(242, 238, 230, 0.16);
 }
 
 .preview-shell .project-real-chain-tags small,
 .preview-shell .project-real-chain-gates small,
+.preview-shell .project-real-chain-evidence small,
 .preview-shell .project-real-chain-policy small {
   background: rgba(242, 238, 230, 0.055);
   color: rgba(242, 238, 230, 0.68);
@@ -2143,6 +2172,7 @@
       "gate"
       "batch"
       "policy"
+      "evidence"
       "thumbs"
       "report"
       "message";

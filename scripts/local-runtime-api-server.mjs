@@ -2792,6 +2792,8 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
     : blockers;
   const confirmed = action === "confirm" && confirmBlockers.length === 0;
   const outputExists = runtimePathExists(expectedOutputPath);
+  const outputSha256 = outputExists ? sha256File(scopedRepoPath(expectedOutputPath)) : undefined;
+  const providerObservation = readRuntimeJson(providerObservationPath);
   const semanticQa = readRuntimeJson(semanticQaPath);
   const semantic = semanticQaSummary(semanticQa);
   const persistedReceiptUsable = action === "status"
@@ -2855,6 +2857,23 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
   }
   const receiptForResponse = persistedReceiptUsable ? persistedReceipt : receipt;
   const handoffForResponse = confirmed ? handoffPacket : persistedHandoffUsable ? persistedHandoff : undefined;
+  const providerObservationContext = {
+    selectedShotId,
+    receiptId: receiptForResponse?.receiptId || receipt.receiptId,
+    handoffPacketId: handoffForResponse?.packetId || `handoff_${receipt.receiptId}`,
+  };
+  const hashBoundActual = Boolean(
+    outputSha256
+      && outputExists
+      && actualProviderObservationMatches(providerObservation, expectedOutputPath, outputSha256, providerObservationContext)
+      && actualSemanticQaMatches(semanticQa, expectedOutputPath, outputSha256),
+  );
+  const providerObservationMode = hashBoundActual ? providerObservation?.providerObservationMode || "actual_provider_call_observed" : "not_observed";
+  const semanticQaStatus = hashBoundActual ? semanticQa?.status || semanticQa?.qaStatus || semanticQa?.finalAssessment?.status || "needs_review" : "not_written";
+  const returnSource = hashBoundActual ? "actual_provider_return_ingest" : "dry_run_projection_only";
+  const formalPromotionBlockedReasons = hashBoundActual
+    ? ["Formal promotion remains blocked until human QA approval after hash-bound provider return."]
+    : [];
   const status = confirmBlockers.length
     ? "blocked"
     : outputExists && (semantic.passed || semantic.needsReview || semantic.present)
@@ -2919,6 +2938,15 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
     status,
     uiStatus: status,
     userLabel,
+    providerRequestId: providerObservation?.providerRequestId,
+    outputSha256,
+    hashBoundActual,
+    providerObservationMode,
+    semanticQaStatus,
+    returnSource,
+    formalPromotionBlocked: hashBoundActual,
+    formalPromotionBlockedReason: formalPromotionBlockedReasons[0],
+    formalPromotionBlockedReasons,
     selectedShotId,
     selectedShotIds,
     expectedOutputPath,
@@ -2947,6 +2975,14 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
       providerObservationPresent: runtimePathExists(providerObservationPath),
       semanticQaPresent: Boolean(semanticQa),
       semanticQaPassed: semantic.passed,
+      providerRequestId: providerObservation?.providerRequestId,
+      outputSha256,
+      hashBoundActual,
+      providerObservationMode,
+      semanticQaStatus,
+      returnSource,
+      formalPromotionBlockedReason: formalPromotionBlockedReasons[0],
+      formalPromotionBlockedReasons,
       watcherStarted: false,
       daemonStarted: false,
       reportProjectionOnly: true,
@@ -2971,7 +3007,11 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
     actualExecutionAllowed: false,
     actionTimeConfirmationRequired: true,
     providerCalled: false,
-    actualImage2Triggered: false,
+    actualImage2Triggered: hashBoundActual,
+    providerReturnIngested: hashBoundActual,
+    externalProviderCallObserved: hashBoundActual,
+    runtimeProviderSubmitAttempted: false,
+    runtimeExternalNetworkCallMade: false,
     liveSubmitAllowed: false,
     projectVibeWritten: false,
     workerSpawnForbidden: true,
@@ -3560,15 +3600,41 @@ function oneShotExecutorContract(input, context) {
   };
 }
 
-function actualProviderObservationMatches(providerObservation, expectedOutputPath, outputSha256) {
+function providerObservationContextBlockers(providerObservation, expectedContext = {}) {
+  if (!isRecord(providerObservation)) return ["Provider observation sidecar is required."];
+  const blockers = [];
+  const selectedShotId = asString(expectedContext.selectedShotId);
+  const receiptId = asString(expectedContext.receiptId);
+  const handoffPacketId = asString(expectedContext.handoffPacketId);
+  if (!asString(providerObservation.selectedShotId)) {
+    blockers.push("Provider observation must include selectedShotId for the current shot.");
+  } else if (selectedShotId && asString(providerObservation.selectedShotId) !== selectedShotId) {
+    blockers.push("Provider observation selectedShotId does not match the current shot.");
+  }
+  if (!asString(providerObservation.receiptId)) {
+    blockers.push("Provider observation must include receiptId for the current receipt.");
+  } else if (receiptId && asString(providerObservation.receiptId) !== receiptId) {
+    blockers.push("Provider observation receiptId does not match the current receipt.");
+  }
+  if (!asString(providerObservation.handoffPacketId)) {
+    blockers.push("Provider observation must include handoffPacketId for the current handoff.");
+  } else if (handoffPacketId && asString(providerObservation.handoffPacketId) !== handoffPacketId) {
+    blockers.push("Provider observation handoffPacketId does not match the current handoff.");
+  }
+  return blockers;
+}
+
+function actualProviderObservationMatches(providerObservation, expectedOutputPath, outputSha256, expectedContext = {}) {
   if (!isRecord(providerObservation)) return false;
   const provider = String(providerObservation.provider || providerObservation.providerId || "");
   const outputPath = runtimeRelativeFromValue(providerObservation.outputPath);
   const observedHash = asString(providerObservation.outputSha256) || asString(providerObservation.outputHash);
   const providerRequestId = asString(providerObservation.providerRequestId);
+  const contextMatches = providerObservationContextBlockers(providerObservation, expectedContext).length === 0;
   return providerObservation.providerObservationMode === "actual_provider_call_observed"
     && /image2/i.test(provider)
     && Boolean(providerRequestId)
+    && contextMatches
     && outputPath === expectedOutputPath
     && observedHash === outputSha256
     && providerObservation.providerCalled === true
@@ -4044,20 +4110,33 @@ function currentProjectImage2OneShotReturnIngestResponse(input, extra = {}, sour
 
   providerObservation = readRuntimeJson(providerObservationPath) || providerObservation;
   semanticQa = readRuntimeJson(semanticQaPath) || semanticQa;
+  const expectedProviderObservationContext = {
+    selectedShotId: receipt?.selectedShotId || input.selectedShotId,
+    receiptId: receipt?.receiptId || input.receiptId,
+    handoffPacketId: handoff?.packetId || input.handoffPacketId,
+  };
+  const providerObservationBlockers = providerObservationContextBlockers(providerObservation, expectedProviderObservationContext);
+  const providerObservationMode = providerObservation?.providerObservationMode || "not_observed";
+  const semanticQaStatus = semanticQa?.status || semanticQa?.qaStatus || semanticQa?.finalAssessment?.status || "not_written";
   const hashBoundActual = Boolean(
     outputSha256
       && runtimePathExists(expectedOutputPath)
-      && actualProviderObservationMatches(providerObservation, expectedOutputPath, outputSha256)
+      && actualProviderObservationMatches(providerObservation, expectedOutputPath, outputSha256, expectedProviderObservationContext)
       && actualSemanticQaMatches(semanticQa, expectedOutputPath, outputSha256),
   );
+  const returnSource = hashBoundActual ? "actual_provider_return_ingest" : "dry_run_projection_only";
+  const formalPromotionBlockedReasons = hashBoundActual
+    ? ["Formal promotion remains blocked until human QA approval after hash-bound provider return."]
+    : [];
   const blockers = uniqueStrings([
     ...preflightContract.blockers,
     writeError,
     input.actualProviderReturned === true || hashBoundActual ? "" : "Actual provider return requires actualProviderReturned=true or existing actual hash-bound sidecars.",
     hasReturnedOutput || runtimePathExists(expectedOutputPath) ? "" : "Returned provider output file is required.",
     outputSourceInsideProject ? "" : "Returned provider output must stay inside the current project root.",
-    returnedProviderRequestId || actualProviderObservationMatches(providerObservation, expectedOutputPath, outputSha256) ? "" : "Actual provider return requires a non-empty providerRequestId in provider observation.",
+    returnedProviderRequestId || actualProviderObservationMatches(providerObservation, expectedOutputPath, outputSha256, expectedProviderObservationContext) ? "" : "Actual provider return requires a non-empty providerRequestId in provider observation.",
     outputSha256 ? "" : "Returned provider output must be hashable.",
+    ...providerObservationBlockers,
     hashBoundActual ? "" : "Actual provider return requires providerRequestId, output hash, provider observation, and semantic QA sidecars before ingest.",
   ]);
   const ok = blockers.length === 0;
@@ -4071,11 +4150,15 @@ function currentProjectImage2OneShotReturnIngestResponse(input, extra = {}, sour
       watcherProjection: {
         ...preflightContract.outputReturnContract.watcherProjection,
         expectedOutputDetected: hashBoundActual,
-        source: hashBoundActual ? "actual_provider_return_ingest" : "dry_run_projection_only",
+        source: returnSource,
+        returnSource,
+        outputSha256,
+        hashBoundActual,
       },
       providerObservation: {
         providerId: providerObservation?.providerId || providerObservation?.provider || "openai-image2-api",
-        providerObservationMode: hashBoundActual ? "actual_provider_call_observed" : "not_observed",
+        providerRequestId: providerObservation?.providerRequestId,
+        providerObservationMode: hashBoundActual ? providerObservationMode : "not_observed",
         providerCalled: hashBoundActual,
         externalNetworkCallMade: hashBoundActual,
       },
@@ -4085,7 +4168,7 @@ function currentProjectImage2OneShotReturnIngestResponse(input, extra = {}, sour
       },
       semanticQa: {
         semanticReviewMode: hashBoundActual ? "actual_image_semantic_review" : "not_observed",
-        status: hashBoundActual ? "needs_review" : "not_written",
+        status: hashBoundActual ? semanticQaStatus : "not_written",
       },
       previewProjection: {
         status,
@@ -4123,6 +4206,14 @@ function currentProjectImage2OneShotReturnIngestResponse(input, extra = {}, sour
     status,
     uiStatus: ok ? "needs_review" : status,
     userLabel: ok ? "需要复核" : "回流检查",
+    providerRequestId: providerObservation?.providerRequestId || returnedProviderRequestId,
+    outputSha256,
+    hashBoundActual,
+    providerObservationMode: hashBoundActual ? providerObservationMode : "not_observed",
+    semanticQaStatus: hashBoundActual ? semanticQaStatus : "not_written",
+    returnSource,
+    formalPromotionBlockedReason: formalPromotionBlockedReasons[0],
+    formalPromotionBlockedReasons,
     actualImage2Triggered: hashBoundActual,
     providerReturnIngested: hashBoundActual,
     externalProviderCallObserved: hashBoundActual,
@@ -4152,7 +4243,14 @@ function currentProjectImage2OneShotReturnIngestResponse(input, extra = {}, sour
       runtimeExternalNetworkCallMade: false,
       formalPromotionAllowed: false,
       formalPromotionBlocked: hashBoundActual,
+      formalPromotionBlockedReason: formalPromotionBlockedReasons[0],
+      formalPromotionBlockedReasons,
+      providerRequestId: providerObservation?.providerRequestId || returnedProviderRequestId,
+      outputSha256,
       hashBoundActual,
+      providerObservationMode: hashBoundActual ? providerObservationMode : "not_observed",
+      semanticQaStatus: hashBoundActual ? semanticQaStatus : "not_written",
+      returnSource,
     },
     executorContract: contract,
     providerObservation,
@@ -4173,11 +4271,18 @@ function currentProjectImage2OneShotReturnIngestResponse(input, extra = {}, sour
       qaReportPresent: runtimePathExists(qaReportPath),
       expectedOutputDetected: hashBoundActual,
       manifestMatched: hashBoundActual,
-      semanticQaStatus: semanticQa?.status || semanticQa?.qaStatus,
+      providerRequestId: providerObservation?.providerRequestId || returnedProviderRequestId,
+      outputSha256,
+      hashBoundActual,
+      providerObservationMode: hashBoundActual ? providerObservationMode : "not_observed",
+      semanticQaStatus: hashBoundActual ? semanticQaStatus : "not_written",
+      returnSource,
+      formalPromotionBlockedReason: formalPromotionBlockedReasons[0],
+      formalPromotionBlockedReasons,
       watcherStarted: false,
       daemonStarted: false,
       reportProjectionOnly: false,
-      source: hashBoundActual ? "actual_provider_return_ingest" : "dry_run_projection_only",
+      source: returnSource,
     },
     previewProjection: {
       shotId: input.selectedShotId,

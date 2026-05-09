@@ -439,7 +439,7 @@ checkMessage(requireWithin(realPilotDirectorStatus, /真实小样/, "post-Phase4
 checkMessage(requireWithin(realPilotDirectorStatus, /选择镜头/, "post-Phase42 real test round Real Pilot selected shots copy"));
 checkMessage(requireWithin(realPilotDirectorStatus, /首尾帧/, "post-Phase42 real test round Real Pilot start/end frames copy"));
 checkMessage(requireWithin(realPilotDirectorStatus, /输出文件夹/, "post-Phase42 real test round Real Pilot output folder copy"));
-checkMessage(requireWithin(realPilotDirectorStatus, /预计生成/, "post-Phase42 real test round Real Pilot estimated generation copy"));
+checkMessage(requireWithin(realPilotDirectorStatus, /预计输出/, "post-Phase42 real test round Real Pilot estimated output copy"));
 checkMessage(requireWithin(realPilotDirectorStatus, /动作确认后才进入单次测试/, "One Creator Loop Real Pilot action-time-confirmation-before-one-shot copy"));
 check(!/确认后生成/.test(realPilotDirectorStatus), "real test round Real Pilot must not imply immediate generation");
 checkMessage(requireWithin(realPilotDirectorStatus, /Image2/, "post-Phase42 real test round Real Pilot Image2 first copy"));
@@ -725,12 +725,15 @@ checkMessage(requireWithin(projectRealChainUserSurface, /同步状态/, "current
 checkMessage(requireWithin(projectRealChainUserSurface, /本地复核/, "current project chain panel must describe local review without Image2/demo copy"));
 checkMessage(requireWithin(projectRealChainUserSurface, /Preview[\s\S]*ready/, "current project chain panel must expose preview ready state"));
 checkMessage(requireWithin(projectRealChainUserSurface, /Production[\s\S]*needs_review/, "current project chain panel must expose production review state"));
-checkMessage(requireWithin(projectRealChainUserSurface, /displayTitle[\s\S]*状态已回流/, "current project chain panel must show bound project title instead of sandbox project id"));
+checkMessage(requireWithin(projectRealChainUserSurface, /displayTitle[\s\S]*runtime 状态已同步/, "current project chain panel must show bound project title instead of sandbox project id"));
 checkMessage(requireWithin(projectRealChainUserSurface, /未选择项目/, "current project chain panel must show unbound project copy"));
 checkMessage(requireWithin(projectRealChainUserSurface, /未同步/, "current project chain panel must show unsynced project copy"));
 checkMessage(requireWithin(projectRealChainUserSurface, /项目路径/, "current project chain panel must expose a simple project path entry"));
 checkMessage(requireWithin(projectRealChainUserSurface, /最近项目/, "current project chain panel must expose recent project choices"));
 checkMessage(requireWithin(projectRealChainUserSurface, /连接项目/, "current project chain panel must expose a creator-facing connect action"));
+checkMessage(requireWithin(projectRealChainPanel, /className="project-real-chain-messages"[\s\S]*className="project-real-chain-message"/, "current project chain messages must be grouped in one grid item"));
+checkMessage(requireWithin(stylesSource, /\.project-real-chain-messages\s*\{[\s\S]*grid-area:\s*message[\s\S]*display:\s*flex[\s\S]*flex-wrap:\s*wrap/, "current project chain messages must wrap in one shared grid area"));
+check(!/\.project-real-chain-message\s*\{[\s\S]{0,160}grid-area:\s*message/.test(stylesSource), "individual current project chain messages must not claim the grid area");
 checkMessage(requireWithin(minimalTopNav, /aria-label="项目计划状态"/, "top nav project plan status aria label should be localized"));
 check(!/real-demo-005/.test(`${appSource}\n${stylesSource}`), "main app/styles must not keep 005 demo class names");
 for (const [term, pattern] of [
