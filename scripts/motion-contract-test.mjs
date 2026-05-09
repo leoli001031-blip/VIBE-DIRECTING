@@ -70,6 +70,14 @@ const { schemaRegistry, findSchemaByType, findSchemaByFileName } = await importT
 assert(motionEndpointContractSchemaVersion === "0.1.0", "motion contract schema version drifted");
 assert(classifyMotionType("角色眨眼、轻微呼吸，只有微表情变化") === "micro_expression", "micro expression classification failed");
 assert(endFrameRequiredForMotionType("micro_expression") === false, "micro expression must not require end frame");
+assert(
+  classifyMotionType("Head and eye-line shift while seated; no walking and no prop interaction.") === "pose_change_in_place",
+  "negated walking/prop text must not override an in-place head or gaze shift",
+);
+assert(
+  classifyMotionType("The index finger touches the approved map contact point; no step is required.") === "object_interaction",
+  "negated step text must not hide a hand/prop interaction",
+);
 
 const microContract = buildMotionEndpointContract({
   generatedAt: "2026-05-09T00:00:00.000Z",
@@ -131,6 +139,40 @@ assert(
   bboxOnlyLocomotion.blockers.some((blocker) => blocker.includes("bbox translation")),
   "bbox-only locomotion should include a bbox translation blocker",
 );
+
+const plannedWalkingLocomotion = buildMotionEndpointContract({
+  generatedAt: "2026-05-09T00:00:00.000Z",
+  shot: shot({
+    id: "S_locomotion_planned",
+    title: "Character takes two small steps to camera right",
+    storyFunction:
+      "Small locomotion endpoint: left foot plants on the floor contact point, center of mass shifts over the planted foot, right foot follows and settles.",
+  }),
+  keyframePair: keyframePair({ shotId: "S_locomotion_planned" }),
+});
+assert(plannedWalkingLocomotion.motionType === "locomotion", "planned walking should classify as locomotion");
+assert(plannedWalkingLocomotion.status === "pass", `planned walking should pass, got ${plannedWalkingLocomotion.status}`);
+assert(plannedWalkingLocomotion.bodyMechanics.footwork.length > 0, "planned walking should include footwork");
+assert(plannedWalkingLocomotion.bodyMechanics.centerOfMass === "specified", "planned walking should include center-of-mass transfer");
+assert(
+  plannedWalkingLocomotion.bodyMechanics.contactPoints.includes("foot_ground_contact_specified"),
+  "planned walking should include an explicit foot/ground contact point",
+);
+
+const missingContactLocomotion = buildMotionEndpointContract({
+  generatedAt: "2026-05-09T00:00:00.000Z",
+  shot: shot({
+    id: "S_locomotion_missing_contact",
+    title: "Character walks to camera right",
+    storyFunction: "The plan says steps and center of mass transfer, but without a ground contact point.",
+  }),
+  keyframePair: keyframePair({ shotId: "S_locomotion_missing_contact" }),
+});
+assert(missingContactLocomotion.motionType === "locomotion", "missing-contact walk should classify as locomotion");
+assert(missingContactLocomotion.status === "warning", "missing-contact walk should warn before hard-gate validation");
+assert(missingContactLocomotion.bodyMechanics.footwork.length > 0, "missing-contact walk should still detect footwork");
+assert(missingContactLocomotion.bodyMechanics.centerOfMass === "specified", "missing-contact walk should still detect center of mass");
+assert(missingContactLocomotion.bodyMechanics.contactPoints.length === 0, "missing-contact walk must not invent contact points");
 
 const weakLocomotion = buildMotionEndpointContract({
   generatedAt: "2026-05-09T00:00:00.000Z",

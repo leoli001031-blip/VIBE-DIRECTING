@@ -10,6 +10,7 @@
     "knowledge-pack-manager:test": "node scripts/knowledge-pack-manager-test.mjs",
     "video:test": "node scripts/video-planning-test.mjs",
     "motion-contract:test": "node scripts/motion-contract-test.mjs",
+    "round4.1-motion-planning:test": "node scripts/round4-1-motion-planning-test.mjs",
     "adapter:test": "node scripts/adapter-contract-test.mjs",
     "generation:test": "node scripts/generation-harness-test.mjs",
     "watcher:test": "node scripts/filesystem-watcher-test.mjs",

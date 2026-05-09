@@ -36,6 +36,14 @@ function hasAny(text: string, patterns: RegExp[]): boolean {
 export function classifyMotionType(text: string): MotionType {
   const normalized = normalizeText(text);
   if (!normalized) return "static_hold";
+  const locomotionNegated = hasAny(normalized, [
+    /\b(no|without|not)\s+(?:walking|walk|steps?|stride|strides|running|run|locomotion)\b/,
+    /不走|没有走|无步行|没有步行/,
+  ]);
+  const objectInteractionNegated = hasAny(normalized, [
+    /\b(no|without|not)\s+(?:prop interaction|object interaction|hand interaction|touch|touching|grab|grabbing|hold|holding|point|pointing)\b/,
+    /没有道具交互|无道具交互|没有物体交互|无物体交互|没有手部交互|无手部交互/,
+  ]);
 
   if (
     hasAny(normalized, [
@@ -65,6 +73,7 @@ export function classifyMotionType(text: string): MotionType {
   }
 
   if (
+    !locomotionNegated &&
     hasAny(normalized, [
       /\b(walk|walks|walking|run|runs|running|step|steps|stride|strides|cross|crosses|enter|enters|exit|exits|leave|leaves|locomotion)\b/,
       /走|跑|步行|迈步|跨步|穿过|进入|离开|移动到/,
@@ -74,6 +83,7 @@ export function classifyMotionType(text: string): MotionType {
   }
 
   if (
+    !objectInteractionNegated &&
     hasAny(normalized, [
       /\b(grab|grabs|pick up|picks up|hold|holds|touch|touches|pour|pours|hand(?:s)? over|point|points|pointing|finger|fingers|interact|prop)\b/,
       /\b(?:open|opens|opened|opening|close|closes|closed|closing)\s+(?:door|gate|handle|lid|box|drawer|window)\b/,
@@ -87,6 +97,7 @@ export function classifyMotionType(text: string): MotionType {
   if (
     hasAny(normalized, [
       /\b(pose change|changes pose|turn|turns|lean|leans|sit|sits|stand|stands|raise hand|raises hand|head (?:tilt|tilts|turn|turns|lift|lifts|raise|raises)|chin|eye line|gaze shift|gesture)\b/,
+      /\beye[- ]line\b/,
       /姿态|转身|倾斜|坐下|站起|举手|抬手|抬头|转头|眼神|视线|动作变化|手势/,
     ])
   ) {
@@ -184,18 +195,27 @@ function buildBodyMechanics(type: MotionType, text: string): MotionBodyMechanics
   const required = bodyMechanicsRequiredMotionTypes.has(type);
   const footworkMentioned = hasAny(normalized, [/\b(step|steps|stride|foot|feet|walk|run|plant|contact)\b/, /脚步|步伐|落脚|支撑脚|接触点/]);
   const centerOfMassMentioned = hasAny(normalized, [/\b(center of mass|centre of mass|weight shift|balance|gravity|hips?)\b/, /重心|平衡|胯|身体重量/]);
+  const locomotionContactMentioned = hasAny(normalized, [
+    /\b(foot contact|ground contact|floor contact|contact point|support point|plant|plants|planted|landing|lands|landed|weight-bearing foot)\b/,
+    /落脚|支撑脚|接触点|地面接触|脚掌接触|踩地|落地/,
+  ]);
   const handPropContactMentioned = hasAny(normalized, [/\b(hand|hands|finger|fingers|grab|hold|touch|point|prop|object|door|handle|map|pen|book)\b/, /手|手指|拿|抓|握|触碰|指向|道具|物体|门|把手|地图|笔|书/]);
   const seatedOrAnchoredMentioned = hasAny(normalized, [
     /\b(seated|sits?|chair|anchored|mostly anchored|body remains|remains seated|table contact|leaning over|chin|eye line|gaze)\b/,
     /坐|椅|锚定|身体保持|身体基本不动|桌面|抬头|视线|眼神/,
   ]);
   const footworkNegated = hasAny(normalized, [/\b(no|without|missing)\s+(footwork|steps?|stride|foot|feet|contact)\b/, /没有脚步|无脚步|缺少脚步|没有落脚/]);
+  const locomotionContactNegated = hasAny(normalized, [
+    /\b(no|without|missing)\s+(?:a\s+)?(?:ground|floor|foot|support)?\s*(?:contact|contact point|support point|plant|landing)\b/,
+    /没有接触点|无接触点|缺少接触点|没有地面接触|无地面接触|缺少地面接触/,
+  ]);
   const centerOfMassNegated = hasAny(normalized, [
     /\b(no|without|missing)\s+(center of mass|centre of mass|weight shift|balance|gravity|hip)\b/,
     /\b(no|without|missing)\b.{0,40}\b(center of mass|centre of mass|weight shift|balance)\b/,
     /没有重心|无重心|缺少重心|没有平衡/,
   ]);
   const hasFootwork = type === "locomotion" ? footworkMentioned && !footworkNegated : false;
+  const hasLocomotionContact = type === "locomotion" ? locomotionContactMentioned && !locomotionContactNegated : false;
   const hasCenterOfMass =
     type === "locomotion"
       ? centerOfMassMentioned && !centerOfMassNegated
@@ -203,7 +223,7 @@ function buildBodyMechanics(type: MotionType, text: string): MotionBodyMechanics
         ? (centerOfMassMentioned || seatedOrAnchoredMentioned) && !centerOfMassNegated
         : false;
   const contactPoints = unique([
-    hasFootwork || hasCenterOfMass ? "ground_or_body_anchor_specified" : "",
+    hasLocomotionContact ? "foot_ground_contact_specified" : "",
     type === "object_interaction" && handPropContactMentioned ? "hand_or_prop_contact_specified" : "",
     type === "pose_change_in_place" && seatedOrAnchoredMentioned ? "seated_or_body_anchor_specified" : "",
   ]);
@@ -371,9 +391,10 @@ export function validateMotionEndpointContract(contract: MotionEndpointContract)
   if (contract.motionType === "locomotion") {
     const hasFootwork = contract.bodyMechanics.footwork.length > 0;
     const hasCenterOfMass = contract.bodyMechanics.centerOfMass !== "missing";
+    const hasContactPoint = contract.bodyMechanics.contactPoints.length > 0;
     const bboxOnly = contract.gateInputs.motionEvidence.includes("bbox_or_translation_language") && !hasFootwork && !hasCenterOfMass;
-    if (!hasFootwork || !hasCenterOfMass) {
-      warnings.push("Locomotion should specify footwork and center-of-mass transfer before endpoint generation.");
+    if (!hasFootwork || !hasCenterOfMass || !hasContactPoint) {
+      warnings.push("Locomotion should specify footwork, center-of-mass transfer, and ground contact points before endpoint generation.");
     }
     if (bboxOnly) {
       blockers.push("Locomotion cannot be represented only by bbox translation; add footwork, contact, and center-of-mass mechanics.");

@@ -610,6 +610,36 @@ assert(
   "bbox-only locomotion evidence must block",
 );
 
+const missingLocomotionContactIssues = validateMotionEndpointHardContracts({
+  motionEndpointContracts: [
+    motionEndpointContract({
+      motionType: "locomotion",
+      whetherEndFrameRequired: true,
+      bodyMechanics: {
+        required: true,
+        description: "Locomotion needs footwork, center of mass, and contact points.",
+        centerOfMass: "specified",
+        footwork: ["left foot steps before weight transfer"],
+        contactPoints: [],
+        timing: "must be coherent",
+      },
+      gateInputs: {
+        shotText: "Subject walks with steps and center-of-mass transfer but no explicit foot-ground contact point.",
+        motionEvidence: ["body_mechanics_language"],
+        keyframePairPresent: true,
+        keyframePairDerivesFromStart: true,
+        bboxOnlyMotionForbidden: true,
+      },
+    }),
+  ],
+  keyframePairs: [keyframePair()],
+  shotLayouts: [shotLayout()],
+});
+assert(
+  missingLocomotionContactIssues.some((item) => item.detail.includes("contactPoints")),
+  "locomotion missing explicit contact points must block",
+);
+
 const pairMismatchIssues = validateMotionEndpointHardContracts({
   motionEndpointContracts: [
     motionEndpointContract({
