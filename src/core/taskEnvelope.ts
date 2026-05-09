@@ -153,7 +153,9 @@ export function buildTaskEnvelope(
     allowedReadScope: options.allowedReadScope || ["task_envelope", "source_index", "locked_references", "injected_knowledge_snippets"],
     forbiddenActions: options.forbiddenActions || [
       "no_free_text_task",
+      "no_free_text_worker",
       "provider_submit_forbidden",
+      "live_submit_forbidden",
       "provider_credentials_forbidden",
       "file_mutation_forbidden",
     ],

@@ -32,6 +32,11 @@ async function importTaskPacketBuilder() {
   }).outputText;
   const providerCapabilitiesUrl = `data:text/javascript;base64,${Buffer.from(`${providerCapabilitiesOutput}\n//# sourceURL=${pathToFileURL("src/core/providerCapabilities.ts").href}`).toString("base64")}`;
   const knowledgeManifestUrl = `data:text/javascript;base64,${Buffer.from(`${transpileSource("src/core/knowledgeManifest.ts")}\n//# sourceURL=${pathToFileURL("src/core/knowledgeManifest.ts").href}`).toString("base64")}`;
+  const envelopeValidatorOutput = transpileSource("src/core/envelopeValidator.ts").replaceAll(
+    'from "./knowledgeManifest";',
+    `from "${knowledgeManifestUrl}";`,
+  );
+  const envelopeValidatorUrl = `data:text/javascript;base64,${Buffer.from(`${envelopeValidatorOutput}\n//# sourceURL=${pathToFileURL("src/core/envelopeValidator.ts").href}`).toString("base64")}`;
   const knowledgeContextBudgetOutput = transpileSource("src/core/knowledgeContextBudget.ts").replaceAll(
     'from "./knowledgeManifest";',
     `from "${knowledgeManifestUrl}";`,
@@ -53,6 +58,7 @@ async function importTaskPacketBuilder() {
   const knowledgeRouterUrl = `data:text/javascript;base64,${Buffer.from(`${knowledgeRouterOutput}\n//# sourceURL=${pathToFileURL("src/core/knowledgeRouter.ts").href}`).toString("base64")}`;
 
   return importTs("src/core/taskPacketBuilder.ts", [
+    ['from "./envelopeValidator";', `from "${envelopeValidatorUrl}";`],
     ['from "./providerCapabilities";', `from "${providerCapabilitiesUrl}";`],
     ['from "./knowledgeContextBudget";', `from "${knowledgeContextBudgetUrl}";`],
     ['from "./knowledgeDefaults";', `from "${knowledgeDefaultsUrl}";`],
@@ -397,6 +403,9 @@ for (const kind of taskPacketKinds) {
   assert(packet.hardFields.outputSchema === "subagent_result_v1", `${kind} output schema drifted`);
   assert(packet.hardFields.expectedOutputContract.format === "subagent_result_v1", `${kind} expected output contract format drifted`);
   assert(packet.envelope.expectedOutputContract.requiredFields.includes("summaryForMainAgent"), `${kind} output contract missing summaryForMainAgent`);
+  for (const resultField of ["changedFiles", "tests", "artifactPaths", "residualRisks", "touched"]) {
+    assert(packet.envelope.expectedOutputContract.requiredFields.includes(resultField), `${kind} output contract missing ${resultField}`);
+  }
   assert(packet.envelope.expectedOutputContract.gateFields.length === 6, `${kind} output contract gate fields incomplete`);
   assert(packet.envelope.userIntent.includes(`task_kind:${kind}`), `${kind} envelope context capsule missing from userIntent`);
   assert(packet.envelope.taskEnvelope.expectedOutputs.length > 0, `${kind} envelope expected output missing`);
@@ -404,7 +413,20 @@ for (const kind of taskPacketKinds) {
   assert(packet.envelope.sourceFactTrace.length === packet.sourceFactTrace.length, `${kind} subagent source fact trace must mirror packet`);
   assert(packet.envelope.resultSchema === "subagent_result_v1", `${kind} subagent result schema missing`);
   assert(packet.envelope.forbiddenActions.includes("no_free_text_task"), `${kind} subagent forbidden actions missing no_free_text_task`);
+  for (const action of [
+    "no_free_text_worker",
+    "provider_submit_forbidden",
+    "live_submit_forbidden",
+    "provider_credentials_forbidden",
+    "file_mutation_forbidden",
+  ]) {
+    assert(packet.envelope.forbiddenActions.includes(action), `${kind} subagent forbidden actions missing ${action}`);
+  }
   assert(packet.envelope.injectedKnowledgeTrace.status === "present", `${kind} subagent injected knowledge trace must be present`);
+  assert(packet.envelope.policyBinding, `${kind} subagent policy binding missing`);
+  for (const hashKey of ["providerPolicy", "preflight", "references", "keyframePairDerivation", "knowledgeManifest", "policyBinding"]) {
+    assert(packet.envelope.nonOverridableGateHashes?.[hashKey], `${kind} subagent gate hash missing ${hashKey}`);
+  }
   assert(packet.envelope.taskEnvelope.knowledgeRouteResultId, `${kind} task envelope missing knowledge route result id`);
   assert(packet.envelope.taskEnvelope.contextBudgetId, `${kind} task envelope missing context budget id`);
   assert(packet.envelope.taskEnvelope.knowledgeInputHash, `${kind} task envelope missing knowledge input hash`);
@@ -425,7 +447,13 @@ for (const kind of taskPacketKinds) {
   assert(packet.envelope.lockedReferences.length > 0, `${kind} envelope locked reference authority missing`);
   assert(packet.envelope.mustNotAdd.length > 0, `${kind} envelope hard negatives missing`);
   assert(packet.envelope.allowedReadScopes.length > 0, `${kind} envelope allowed read scopes missing`);
+  for (const scope of ["task_envelope", "source_index", "locked_references", "injected_knowledge_snippets"]) {
+    assert(packet.envelope.allowedReadScopes.includes(scope), `${kind} envelope allowed read scope missing ${scope}`);
+  }
   assert(packet.envelope.disallowedReadScopes.includes("provider_credentials"), `${kind} provider credentials must be forbidden`);
+  for (const scope of ["api_keys", "live_provider_task_ids", "unrouted_knowledge_library", "rejected_references", "failed_artifacts"]) {
+    assert(packet.envelope.disallowedReadScopes.includes(scope), `${kind} envelope disallowed read scope missing ${scope}`);
+  }
   assert(packet.canSubmitProvider === false, `${kind} cannot submit provider`);
 }
 

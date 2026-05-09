@@ -20,6 +20,40 @@ const injectionRecordKeys = new Set([
   "truncationReason",
 ]);
 
+const requiredNonOverridableGateHashKeys = [
+  "providerPolicy",
+  "preflight",
+  "references",
+  "keyframePairDerivation",
+  "knowledgeManifest",
+  "policyBinding",
+];
+
+const requiredAllowedReadScopes = [
+  "task_envelope",
+  "source_index",
+  "locked_references",
+  "injected_knowledge_snippets",
+];
+
+const requiredDisallowedReadScopes = [
+  "provider_credentials",
+  "api_keys",
+  "live_provider_task_ids",
+  "unrouted_knowledge_library",
+  "rejected_references",
+  "failed_artifacts",
+];
+
+const requiredForbiddenActionAliases: Record<string, string[]> = {
+  no_free_text_task: ["no_free_text_task", "free_text_task_forbidden"],
+  no_free_text_worker: ["no_free_text_worker", "free_text_worker_forbidden"],
+  provider_submit_forbidden: ["provider_submit_forbidden", "provider_submission_forbidden", "no_provider_submit"],
+  live_submit_forbidden: ["live_submit_forbidden", "live_submission_forbidden", "no_live_submit"],
+  provider_credentials_forbidden: ["provider_credentials_forbidden", "credential_access_forbidden", "no_provider_credentials"],
+  file_mutation_forbidden: ["file_mutation_forbidden", "no_file_mutation"],
+};
+
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
 
@@ -141,6 +175,41 @@ function validateTaskEnvelopeCore(envelope: TaskEnvelope): string[] {
   return issues;
 }
 
+function hasNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasSourceHashEvidence(trace: string[] | undefined, sourceIndexHash: string): boolean {
+  if (!trace?.length) return false;
+  return trace.some((item) => item.includes(sourceIndexHash)) || trace.some((item) => /hash|source_index/i.test(item));
+}
+
+function hasProviderPolicyProof(summary: string[], envelope: SubagentTaskEnvelope): boolean {
+  const joined = summary.join("\n").toLowerCase();
+  const forbidsProviderSubmit =
+    joined.includes("providersubmissionforbidden=true") ||
+    joined.includes("provider_submit_forbidden") ||
+    joined.includes("provider submission forbidden");
+  const forbidsLiveSubmit =
+    joined.includes("livesubmitallowed=false") ||
+    joined.includes("live_submit_forbidden") ||
+    joined.includes("live submit allowed false");
+  const hasSlot = summary.some((item) => item.includes(`slot=${envelope.taskEnvelope.providerSlot}`)) || joined.includes("policy lock");
+  const hasMode = summary.some((item) => item.includes(`mode=${envelope.taskEnvelope.requiredMode}`)) || joined.includes("policy lock");
+  const hasState =
+    summary.some((item) => item.includes(`state=${envelope.taskEnvelope.executionState}`)) ||
+    summary.some((item) => item.includes(`providerExecutionState=${envelope.taskEnvelope.executionState}`)) ||
+    joined.includes("provider policy lock") ||
+    joined.includes("policy lock");
+
+  return forbidsProviderSubmit && forbidsLiveSubmit && hasSlot && hasMode && hasState;
+}
+
+function hasRequiredForbiddenAction(actions: string[], canonicalAction: string): boolean {
+  const aliases = requiredForbiddenActionAliases[canonicalAction] || [canonicalAction];
+  return aliases.some((alias) => actions.includes(alias));
+}
+
 export function validateTaskEnvelope(envelope: TaskEnvelope): EnvelopeValidationResult {
   const issues = validateTaskEnvelopeCore(envelope);
 
@@ -161,11 +230,71 @@ export function validateSubagentTaskEnvelope(envelope: SubagentTaskEnvelope): En
   ];
   const qaGatePacks = envelope.injectedKnowledgePacks.filter((pack) => pack.consumer === "qa_gate");
   const qaPackBindingEntries = Object.entries(envelope.qaPackBindings);
+  const expectedPolicyBinding = buildPolicyBinding(envelope.taskEnvelope);
+  const expectedGateHashes = buildNonOverridableGateHashes(envelope.taskEnvelope);
+  const allowedScopes = new Set(envelope.allowedReadScopes);
+  const disallowedScopes = new Set(envelope.disallowedReadScopes);
+  const taskSourceFactTrace = envelope.taskEnvelope.sourceFactTrace;
 
+  if (!hasNonEmptyString(envelope.sourceIndexHash) || envelope.sourceIndexHash === "missing-source-index") {
+    issues.push("subagent_source_index_hash_missing");
+  }
+  if (envelope.sourceIndexHash !== envelope.taskEnvelope.sourceIndexHash) {
+    issues.push("subagent_source_index_hash_mismatch");
+  }
+  if (!hasSourceHashEvidence(envelope.sourceFactTrace, envelope.sourceIndexHash)) {
+    issues.push("subagent_source_fact_trace_missing_hash_evidence");
+  }
+  if (!hasSourceHashEvidence(taskSourceFactTrace, envelope.sourceIndexHash)) {
+    issues.push("task_envelope_source_fact_trace_missing_hash_evidence");
+  }
+  if (!envelope.providerPolicySummary.length) {
+    issues.push("subagent_provider_policy_summary_missing");
+  } else if (!hasProviderPolicyProof(envelope.providerPolicySummary, envelope)) {
+    issues.push("subagent_provider_policy_summary_missing_hard_lock_proof");
+  }
+  if (envelope.policyBinding !== expectedPolicyBinding) {
+    issues.push("subagent_policy_binding_missing_or_mismatch");
+  }
+  for (const key of requiredNonOverridableGateHashKeys) {
+    if (!envelope.nonOverridableGateHashes?.[key]) {
+      issues.push(`non_overridable_gate_hash_missing:${key}`);
+    } else if (envelope.nonOverridableGateHashes[key] !== expectedGateHashes[key]) {
+      issues.push(`non_overridable_gate_hash_mismatch:${key}`);
+    }
+  }
   if (!envelope.sourceIndexRequired) issues.push("subagent_source_index_not_required");
   if (!envelope.resultMustReferencePackHashes) issues.push("subagent_result_pack_hash_reference_not_required");
   if (!envelope.allowedReadScopes.length) issues.push("subagent_allowed_read_scopes_missing");
   if (!envelope.disallowedReadScopes.length) issues.push("subagent_disallowed_read_scopes_missing");
+  for (const scope of requiredAllowedReadScopes) {
+    if (!allowedScopes.has(scope)) issues.push(`subagent_allowed_read_scope_missing:${scope}`);
+  }
+  for (const scope of requiredDisallowedReadScopes) {
+    if (!disallowedScopes.has(scope)) issues.push(`subagent_disallowed_read_scope_missing:${scope}`);
+  }
+  for (const scope of envelope.allowedReadScopes) {
+    if (disallowedScopes.has(scope)) issues.push(`subagent_read_scope_overlap:${scope}`);
+  }
+  if (!envelope.qaChecklist.length) {
+    issues.push("subagent_qa_checklist_missing");
+  } else {
+    const taskChecklist = new Set(envelope.taskEnvelope.qaChecklist);
+    for (const item of taskChecklist) {
+      if (!envelope.qaChecklist.includes(item)) issues.push(`subagent_qa_checklist_missing_task_item:${item}`);
+    }
+  }
+  if (envelope.resultSchema !== "subagent_result_v1") {
+    issues.push("subagent_result_schema_not_subagent_result_v1");
+  }
+  if (envelope.expectedOutputContract.format !== "subagent_result_v1") {
+    issues.push("subagent_expected_output_contract_not_subagent_result_v1");
+  }
+  for (const action of Object.keys(requiredForbiddenActionAliases)) {
+    if (!hasRequiredForbiddenAction(envelope.forbiddenActions || [], action)) {
+      issues.push(`subagent_forbidden_action_missing:${action}`);
+    }
+  }
 
   for (const pack of qaGatePacks) {
     const binding = envelope.qaPackBindings[pack.packId];

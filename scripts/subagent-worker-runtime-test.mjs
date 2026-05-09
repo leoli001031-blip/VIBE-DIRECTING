@@ -36,7 +36,11 @@ async function importWorkerRuntime() {
     /from "\.\/envelopeValidator";/g,
     `from "${envelopeValidatorUrl}";`,
   );
-  return import(dataUrl("src/core/subagentWorkerRuntime.ts", workerOutput));
+  const [validator, workerRuntime] = await Promise.all([
+    import(envelopeValidatorUrl),
+    import(dataUrl("src/core/subagentWorkerRuntime.ts", workerOutput)),
+  ]);
+  return { ...workerRuntime, buildPolicyBinding: validator.buildPolicyBinding, buildNonOverridableGateHashes: validator.buildNonOverridableGateHashes };
 }
 
 function taskEnvelope(id = "task_video_A1_01") {
@@ -67,11 +71,14 @@ function taskEnvelope(id = "task_video_A1_01") {
     injectedKnowledgeSnippetIds: [],
     injectedKnowledgeSnippets: [],
     routeWarnings: [],
+    sourceFactTrace: ["source_index:source_hash_123"],
     blockingReasons: [],
   };
 }
 
 function subagentEnvelope(id = "subagent_video_A1_01", parentTaskId = "task_video_A1_01") {
+  const task = taskEnvelope(parentTaskId);
+  const policyBinding = buildPolicyBinding(task);
   const envelope = {
     id,
     parentTaskId,
@@ -83,8 +90,15 @@ function subagentEnvelope(id = "subagent_video_A1_01", parentTaskId = "task_vide
     neighborShots: [],
     lockedReferences: [],
     forbiddenReferences: [],
-    providerPolicySummary: ["slot=video.i2v", "provider=seedance2-provider", "state=parked", "mode=frames2video"],
-    taskEnvelope: taskEnvelope(parentTaskId),
+    providerPolicySummary: [
+      "slot=video.i2v",
+      "provider=seedance2-provider",
+      "state=parked",
+      "mode=frames2video",
+      "providerSubmissionForbidden=true",
+      "liveSubmitAllowed=false",
+    ],
+    taskEnvelope: { ...task, policyBinding, nonOverridableGateHashes: buildNonOverridableGateHashes({ ...task, policyBinding }) },
     injectedKnowledgePacks: [],
     injectedKnowledgeSnippetIds: [],
     injectedKnowledgeSnippets: [],
@@ -92,8 +106,10 @@ function subagentEnvelope(id = "subagent_video_A1_01", parentTaskId = "task_vide
     forbiddenKnowledgePacks: [],
     requiredKnowledgeCategories: ["provider", "qa"],
     qaPackBindings: {},
-    allowedReadScopes: ["task_envelope", "locked_references", "injected_knowledge_snippets"],
-    disallowedReadScopes: ["provider_credentials", "api_keys", "live_provider_task_ids", "unrouted_knowledge_library"],
+    policyBinding,
+    nonOverridableGateHashes: buildNonOverridableGateHashes({ ...task, policyBinding }),
+    allowedReadScopes: ["task_envelope", "source_index", "locked_references", "injected_knowledge_snippets"],
+    disallowedReadScopes: ["provider_credentials", "api_keys", "live_provider_task_ids", "unrouted_knowledge_library", "rejected_references", "failed_artifacts"],
     sourceIndexRequired: true,
     mustInspectNeighborShotIds: [],
     authorityPriority: ["source_index", "provider_policy", "preflight"],
@@ -104,10 +120,41 @@ function subagentEnvelope(id = "subagent_video_A1_01", parentTaskId = "task_vide
     mustNotAdd: ["new characters", "unapproved props", "provider submit"],
     expectedOutputContract: {
       format: "subagent_result_v1",
-      requiredFields: ["taskId", "status", "inspectedFiles", "gates", "issues", "requiredFixes", "summaryForMainAgent"],
+      requiredFields: [
+        "taskId",
+        "status",
+        "inspectedFiles",
+        "changedFiles",
+        "tests",
+        "artifactPaths",
+        "residualRisks",
+        "touched",
+        "gates",
+        "issues",
+        "requiredFixes",
+        "summaryForMainAgent",
+      ],
       severityLevels: ["P0", "P1", "P2"],
       gateFields: ["identity", "scene", "pair", "story", "prop", "style"],
     },
+    sourceFactTrace: ["source_index:source_hash_123"],
+    injectedKnowledgeTrace: {
+      status: "missing",
+      packIds: [],
+      snippetIds: [],
+      snippetCount: 0,
+      qaPackBindingIds: [],
+      warnings: [],
+    },
+    resultSchema: "subagent_result_v1",
+    forbiddenActions: [
+      "no_free_text_task",
+      "no_free_text_worker",
+      "provider_submit_forbidden",
+      "live_submit_forbidden",
+      "provider_credentials_forbidden",
+      "file_mutation_forbidden",
+    ],
   };
   return envelope;
 }
@@ -117,6 +164,11 @@ function passingResult(taskId = "task_video_A1_01") {
     taskId,
     status: "pass",
     inspectedFiles: ["outputs/video/A1_01.mp4"],
+    changedFiles: [],
+    tests: [{ command: "npm run subagent-worker:test", status: "pass" }],
+    artifactPaths: ["outputs/video/A1_01.mp4"],
+    residualRisks: [],
+    touched: { provider: false, credential: false, promotion: false, fileMutation: false },
     gates: {
       identity: "PASS",
       scene: "PASS",
@@ -138,7 +190,7 @@ function passingResult(taskId = "task_video_A1_01") {
   };
 }
 
-const { buildSubagentWorkerRuntimePlan, subagentWorkerRuntimeHardLocks } = await importWorkerRuntime();
+const { buildSubagentWorkerRuntimePlan, subagentWorkerRuntimeHardLocks, buildPolicyBinding, buildNonOverridableGateHashes } = await importWorkerRuntime();
 const generatedAt = "2026-05-01T00:00:00.000Z";
 const envelope = subagentEnvelope();
 
@@ -191,6 +243,36 @@ assert(
   "invalid envelope reason should be preserved",
 );
 
+const strictEnvelopeDrift = {
+  ...subagentEnvelope("strict_drift", "task_strict_drift"),
+  sourceIndexHash: "source_hash_drift",
+  sourceFactTrace: [],
+  providerPolicySummary: ["slot=video.i2v"],
+  policyBinding: "drifted_policy_binding",
+  allowedReadScopes: ["task_envelope", "provider_credentials"],
+  disallowedReadScopes: ["provider_credentials", "api_keys", "live_provider_task_ids", "unrouted_knowledge_library", "rejected_references", "failed_artifacts"],
+  forbiddenActions: ["no_free_text_task"],
+};
+const strictEnvelopeDriftPlan = buildSubagentWorkerRuntimePlan({
+  generatedAt,
+  envelopes: [strictEnvelopeDrift],
+});
+assert(strictEnvelopeDriftPlan.slots[0].status === "blocked_invalid_envelope", "strict envelope drift must block worker runtime");
+for (const issue of [
+  "subagent_source_index_hash_mismatch",
+  "subagent_source_fact_trace_missing_hash_evidence",
+  "subagent_provider_policy_summary_missing_hard_lock_proof",
+  "subagent_policy_binding_missing_or_mismatch",
+  "subagent_allowed_read_scope_missing:source_index",
+  "subagent_read_scope_overlap:provider_credentials",
+  "subagent_forbidden_action_missing:no_free_text_worker",
+]) {
+  assert(
+    strictEnvelopeDriftPlan.slots[0].blockedReasons.some((reason) => reason.includes(issue)),
+    `strict envelope drift blocker ${issue} missing`,
+  );
+}
+
 const acceptedPlan = buildSubagentWorkerRuntimePlan({
   generatedAt,
   envelopes: [envelope],
@@ -203,6 +285,46 @@ assert(acceptedPlan.slots[0].resultGate.taskIdMatchesEnvelope === true, "result 
 assert(acceptedPlan.slots[0].resultGate.gateFieldsPresent.length === 6, "all gate fields must be present");
 assert(acceptedPlan.slots[0].handoffPlan.projectStorePatchPlanned === true, "valid result should plan Project Store patch");
 assert(acceptedPlan.slots[0].handoffPlan.canWriteProjectStoreNow === false, "valid result still must not write now");
+
+const missingAuditFieldsPlan = buildSubagentWorkerRuntimePlan({
+  generatedAt,
+  envelopes: [envelope],
+  resultCandidates: [{ resultId: "result_missing_audit", envelopeId: envelope.id, result: { ...passingResult(), tests: [] } }],
+});
+assert(missingAuditFieldsPlan.slots[0].status === "result_rejected", "result without tests must be rejected");
+assert(missingAuditFieldsPlan.slots[0].resultGate.blockers.includes("subagent_result_tests_missing"), "missing tests blocker missing");
+
+const notRunWithoutNotesPlan = buildSubagentWorkerRuntimePlan({
+  generatedAt,
+  envelopes: [envelope],
+  resultCandidates: [
+    {
+      resultId: "result_not_run_without_notes",
+      envelopeId: envelope.id,
+      result: { ...passingResult(), tests: [{ command: "npm run external:test", status: "not_run" }] },
+    },
+  ],
+});
+assert(notRunWithoutNotesPlan.slots[0].status === "result_rejected", "not_run without notes must reject");
+assert(
+  notRunWithoutNotesPlan.slots[0].resultGate.blockers.includes("subagent_result_test_not_run_notes_missing:0"),
+  "not_run notes blocker missing",
+);
+
+const touchedProviderPlan = buildSubagentWorkerRuntimePlan({
+  generatedAt,
+  envelopes: [envelope],
+  resultCandidates: [
+    {
+      resultId: "result_touched_provider",
+      envelopeId: envelope.id,
+      result: { ...passingResult(), touched: { provider: true, credential: false, promotion: false, fileMutation: false } },
+    },
+  ],
+});
+assert(touchedProviderPlan.slots[0].status === "result_rejected", "provider-touched result must be rejected");
+assert(touchedProviderPlan.slots[0].handoffPlan.projectStorePatchPlanned === false, "provider-touched result must not plan handoff");
+assert(touchedProviderPlan.slots[0].resultGate.blockers.includes("subagent_result_touched_provider_blocker"), "provider touched blocker missing");
 
 const rejectedPlan = buildSubagentWorkerRuntimePlan({
   generatedAt,

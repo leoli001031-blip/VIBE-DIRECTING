@@ -2302,6 +2302,15 @@ export interface SubagentOutputContract {
   gateFields: Array<keyof GateSet>;
 }
 
+export interface SubagentInjectedKnowledgeTrace {
+  status: "present" | "missing";
+  packIds: string[];
+  snippetIds: string[];
+  snippetCount: number;
+  qaPackBindingIds: string[];
+  warnings: string[];
+}
+
 export interface SubagentTaskEnvelope {
   id: string;
   parentTaskId: string;
@@ -2343,6 +2352,9 @@ export interface SubagentTaskEnvelope {
   mustNotAdd: string[];
   expectedOutputContract: SubagentOutputContract;
   sourceFactTrace?: string[];
+  injectedKnowledgeTrace: SubagentInjectedKnowledgeTrace;
+  resultSchema: "subagent_result_v1";
+  forbiddenActions: string[];
 }
 
 export interface SubagentIssue {
@@ -2352,10 +2364,28 @@ export interface SubagentIssue {
   recommendation: string;
 }
 
+export interface SubagentResultTest {
+  command: string;
+  status: "pass" | "fail" | "not_run";
+  notes?: string;
+}
+
+export interface SubagentResultTouched {
+  provider: boolean;
+  credential: boolean;
+  promotion: boolean;
+  fileMutation: boolean;
+}
+
 export interface SubagentResult {
   taskId: string;
   status: "pass" | "fail" | "partial";
   inspectedFiles: string[];
+  changedFiles: string[];
+  tests: SubagentResultTest[];
+  artifactPaths: string[];
+  residualRisks: string[];
+  touched: SubagentResultTouched;
   gates: GateSet;
   overallVisualVerdict: GateStatus;
   styleQa: GateStatus;

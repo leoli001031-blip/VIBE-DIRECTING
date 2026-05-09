@@ -5,6 +5,7 @@ import {
   ensureMinimumDefaultKnowledgePacks,
   hasNonEmptyKnowledgeTrace,
 } from "./knowledgeDefaults";
+import { buildNonOverridableGateHashes, buildPolicyBinding } from "./envelopeValidator";
 import { selectAvailableKnowledgePacks } from "./knowledgeLibrary";
 import { stableKnowledgeHash } from "./knowledgeManifest";
 import { routeKnowledge } from "./knowledgeRouter";
@@ -226,6 +227,11 @@ const expectedOutputContract: SubagentOutputContract = {
     "taskId",
     "status",
     "inspectedFiles",
+    "changedFiles",
+    "tests",
+    "artifactPaths",
+    "residualRisks",
+    "touched",
     "gates",
     "overallVisualVerdict",
     "styleQa",
@@ -1159,7 +1165,13 @@ function makeTaskEnvelope(input: {
     outputPath: expectedOutputs[0],
     blockingReasons,
   };
-  return envelope;
+  const policyBinding = buildPolicyBinding(envelope);
+
+  return {
+    ...envelope,
+    policyBinding,
+    nonOverridableGateHashes: buildNonOverridableGateHashes({ ...envelope, policyBinding }),
+  };
 }
 
 function makeSubagentEnvelope(input: {
@@ -1257,7 +1269,11 @@ function makeSubagentEnvelope(input: {
     resultSchema: input.hardFields.outputSchema,
     forbiddenActions: input.hardFields.forbiddenActions,
   };
-  return envelope;
+  return {
+    ...envelope,
+    policyBinding: input.taskEnvelope.policyBinding,
+    nonOverridableGateHashes: input.taskEnvelope.nonOverridableGateHashes,
+  };
 }
 
 function knowledgeTraceFor(envelope: SubagentTaskEnvelope | undefined): TaskPacketKnowledgeTrace {

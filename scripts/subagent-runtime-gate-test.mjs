@@ -41,12 +41,13 @@ async function importRuntimeModules() {
     `from "${envelopeValidatorUrl}";`,
   );
 
-  const [workerRuntime, runtimeGate] = await Promise.all([
+  const [validator, workerRuntime, runtimeGate] = await Promise.all([
+    import(envelopeValidatorUrl),
     import(dataUrl("src/core/subagentWorkerRuntime.ts", workerOutput)),
     import(dataUrl("src/core/subagentRuntimeGate.ts", gateOutput)),
   ]);
 
-  return { workerRuntime, runtimeGate };
+  return { workerRuntime, runtimeGate, buildPolicyBinding: validator.buildPolicyBinding, buildNonOverridableGateHashes: validator.buildNonOverridableGateHashes };
 }
 
 function taskEnvelope(id = "task_video_A1_01") {
@@ -78,6 +79,7 @@ function taskEnvelope(id = "task_video_A1_01") {
     injectedKnowledgeSnippetIds: [],
     injectedKnowledgeSnippets: [],
     routeWarnings: [],
+    sourceFactTrace: ["source_index:source_hash_123"],
     blockingReasons: [],
   };
 }
@@ -97,6 +99,9 @@ function referenceAuthority(id, role = "identity_authority") {
 }
 
 function subagentEnvelope(id = "subagent_video_A1_01", parentTaskId = "task_video_A1_01") {
+  const task = taskEnvelope(parentTaskId);
+  const policyBinding = buildPolicyBinding(task);
+  const nonOverridableGateHashes = buildNonOverridableGateHashes({ ...task, policyBinding });
   return {
     id,
     parentTaskId,
@@ -126,8 +131,15 @@ function subagentEnvelope(id = "subagent_video_A1_01", parentTaskId = "task_vide
     ],
     lockedReferences: [referenceAuthority("hero_identity")],
     forbiddenReferences: [],
-    providerPolicySummary: ["slot=video.i2v", "provider=seedance2-provider", "state=parked", "mode=frames2video"],
-    taskEnvelope: taskEnvelope(parentTaskId),
+    providerPolicySummary: [
+      "slot=video.i2v",
+      "provider=seedance2-provider",
+      "state=parked",
+      "mode=frames2video",
+      "providerSubmissionForbidden=true",
+      "liveSubmitAllowed=false",
+    ],
+    taskEnvelope: { ...task, policyBinding, nonOverridableGateHashes },
     injectedKnowledgePacks: [],
     injectedKnowledgeSnippetIds: [],
     injectedKnowledgeSnippets: [],
@@ -135,8 +147,10 @@ function subagentEnvelope(id = "subagent_video_A1_01", parentTaskId = "task_vide
     forbiddenKnowledgePacks: [],
     requiredKnowledgeCategories: ["provider", "qa"],
     qaPackBindings: {},
-    allowedReadScopes: ["task_envelope", "locked_references", "injected_knowledge_snippets"],
-    disallowedReadScopes: ["provider_credentials", "api_keys", "live_provider_task_ids", "unrouted_knowledge_library"],
+    policyBinding,
+    nonOverridableGateHashes,
+    allowedReadScopes: ["task_envelope", "source_index", "locked_references", "injected_knowledge_snippets"],
+    disallowedReadScopes: ["provider_credentials", "api_keys", "live_provider_task_ids", "unrouted_knowledge_library", "rejected_references", "failed_artifacts"],
     sourceIndexRequired: true,
     mustInspectNeighborShotIds: ["A1_00", "A1_02"],
     authorityPriority: ["source_index", "provider_policy", "preflight"],
@@ -147,10 +161,41 @@ function subagentEnvelope(id = "subagent_video_A1_01", parentTaskId = "task_vide
     mustNotAdd: ["new characters", "unapproved props", "provider submit"],
     expectedOutputContract: {
       format: "subagent_result_v1",
-      requiredFields: ["taskId", "status", "inspectedFiles", "gates", "issues", "requiredFixes", "summaryForMainAgent"],
+      requiredFields: [
+        "taskId",
+        "status",
+        "inspectedFiles",
+        "changedFiles",
+        "tests",
+        "artifactPaths",
+        "residualRisks",
+        "touched",
+        "gates",
+        "issues",
+        "requiredFixes",
+        "summaryForMainAgent",
+      ],
       severityLevels: ["P0", "P1", "P2"],
       gateFields: ["identity", "scene", "pair", "story", "prop", "style"],
     },
+    sourceFactTrace: ["source_index:source_hash_123"],
+    injectedKnowledgeTrace: {
+      status: "missing",
+      packIds: [],
+      snippetIds: [],
+      snippetCount: 0,
+      qaPackBindingIds: [],
+      warnings: [],
+    },
+    resultSchema: "subagent_result_v1",
+    forbiddenActions: [
+      "no_free_text_task",
+      "no_free_text_worker",
+      "provider_submit_forbidden",
+      "live_submit_forbidden",
+      "provider_credentials_forbidden",
+      "file_mutation_forbidden",
+    ],
   };
 }
 
@@ -230,7 +275,7 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-const { workerRuntime, runtimeGate } = await importRuntimeModules();
+const { workerRuntime, runtimeGate, buildPolicyBinding, buildNonOverridableGateHashes } = await importRuntimeModules();
 const {
   buildSubagentWorkerRuntimePlan,
 } = workerRuntime;

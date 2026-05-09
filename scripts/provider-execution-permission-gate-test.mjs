@@ -226,6 +226,63 @@ const blockedMode = buildProviderExecutionPermissionGateState({
 assert(blockedMode.summary.readyForUserReview === 0, "forbidden mode drift must block user review");
 assert(blockedMode.requests.some((request) => request.blockers.some((blocker) => /Fast|VIP|text-to-video|BGM/.test(blocker))), "forbidden mode blocker missing");
 
+const phaseDrift = buildProviderExecutionPermissionGateState({
+  generatedAt: "2026-05-01T00:00:00.000Z",
+  providerLiveGate: {
+    ...readyLiveGate(),
+    phase: "phase_30_drifted_live_gate",
+  },
+});
+assert(phaseDrift.summary.readyForUserReview === 0, "providerLiveGate phase drift must block user review");
+assert(
+  phaseDrift.requests.some((request) => request.blockers.includes("provider_live_gate_phase_drift")),
+  "providerLiveGate phase drift blocker missing",
+);
+
+const dangerousSummaryDrift = buildProviderExecutionPermissionGateState({
+  generatedAt: "2026-05-01T00:00:00.000Z",
+  providerLiveGate: {
+    ...readyLiveGate(),
+    summary: {
+      ...readyLiveGate().summary,
+      providerSubmitAllowed: 1,
+      liveSubmitAllowed: true,
+      credentialStorage: true,
+    },
+  },
+});
+assert(dangerousSummaryDrift.summary.readyForUserReview === 0, "dangerous providerLiveGate summary drift must block review");
+for (const blocker of [
+  "provider_live_gate_summary_provider_submit_allowed_drift",
+  "provider_live_gate_summary_live_submit_allowed_drift",
+  "provider_live_gate_summary_credential_storage_drift",
+]) {
+  assert(dangerousSummaryDrift.requests.some((request) => request.blockers.includes(blocker)), `summary drift blocker ${blocker} missing`);
+}
+
+const dangerousPhase30Drift = buildProviderExecutionPermissionGateState({
+  generatedAt: "2026-05-01T00:00:00.000Z",
+  providerLiveGate: {
+    ...readyLiveGate(),
+    phase30Evidence: {
+      ...readyLiveGate().phase30Evidence,
+      canSubmitProvider: true,
+      providerSubmitAllowed: 1,
+      liveSubmitAllowed: true,
+      credentialStorage: true,
+    },
+  },
+});
+assert(dangerousPhase30Drift.summary.readyForUserReview === 0, "dangerous Phase30 evidence drift must block review");
+for (const blocker of [
+  "provider_live_gate_phase30_can_submit_provider_drift",
+  "provider_live_gate_phase30_provider_submit_allowed_drift",
+  "provider_live_gate_phase30_live_submit_allowed_drift",
+  "provider_live_gate_phase30_credential_storage_drift",
+]) {
+  assert(dangerousPhase30Drift.requests.some((request) => request.blockers.includes(blocker)), `Phase30 drift blocker ${blocker} missing`);
+}
+
 const source = fs.readFileSync("src/core/providerExecutionPermissionGate.ts", "utf8");
 for (const forbiddenCode of ["fetch(", "XMLHttpRequest", "localStorage", "process.env", "spawn(", "exec("]) {
   assert(!source.includes(forbiddenCode), `providerExecutionPermissionGate source must not contain ${forbiddenCode}`);

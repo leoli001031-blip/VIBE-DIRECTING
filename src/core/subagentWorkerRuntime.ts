@@ -152,6 +152,11 @@ const requiredResultFields: Array<keyof SubagentResult> = [
   "taskId",
   "status",
   "inspectedFiles",
+  "changedFiles",
+  "tests",
+  "artifactPaths",
+  "residualRisks",
+  "touched",
   "gates",
   "overallVisualVerdict",
   "styleQa",
@@ -166,6 +171,7 @@ const requiredResultFields: Array<keyof SubagentResult> = [
 ];
 const gateFields: Array<keyof SubagentResult["gates"]> = ["identity", "scene", "pair", "story", "prop", "style"];
 const allowedSeverities = new Set(["P0", "P1", "P2"]);
+const allowedTestStatuses = new Set(["pass", "fail", "not_run"]);
 
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right));
@@ -179,6 +185,34 @@ function hasValue(value: unknown): boolean {
   if (Array.isArray(value)) return true;
   if (typeof value === "string") return value.trim().length > 0;
   return value !== undefined && value !== null;
+}
+
+function validateResultTests(result: Partial<SubagentResult>): string[] {
+  if (!Array.isArray(result.tests) || result.tests.length === 0) return ["subagent_result_tests_missing"];
+
+  return result.tests.flatMap((test, index) => {
+    const blockers: string[] = [];
+    if (!test || typeof test.command !== "string" || !test.command.trim()) blockers.push(`subagent_result_test_command_missing:${index}`);
+    if (!test || !allowedTestStatuses.has(test.status)) blockers.push(`subagent_result_test_status_invalid:${index}`);
+    if (test?.status === "not_run" && (!test.notes || !test.notes.trim())) blockers.push(`subagent_result_test_not_run_notes_missing:${index}`);
+    return blockers;
+  });
+}
+
+function touchedBlockers(result: Partial<SubagentResult>): string[] {
+  const touched = result.touched;
+  if (!touched || typeof touched !== "object") return ["subagent_result_touched_missing"];
+
+  return [
+    typeof touched.provider !== "boolean" ? "subagent_result_touched_provider_missing" : "",
+    typeof touched.credential !== "boolean" ? "subagent_result_touched_credential_missing" : "",
+    typeof touched.promotion !== "boolean" ? "subagent_result_touched_promotion_missing" : "",
+    typeof touched.fileMutation !== "boolean" ? "subagent_result_touched_file_mutation_missing" : "",
+    touched.provider ? "subagent_result_touched_provider_blocker" : "",
+    touched.credential ? "subagent_result_touched_credential_blocker" : "",
+    touched.promotion ? "subagent_result_touched_promotion_blocker" : "",
+    touched.fileMutation ? "subagent_result_touched_file_mutation_blocker" : "",
+  ].filter(Boolean);
 }
 
 function commandPlan(envelope: SubagentTaskEnvelope): SubagentWorkerCommandPlan {
@@ -222,6 +256,8 @@ function resultGate(envelope: SubagentTaskEnvelope | undefined, candidate?: Suba
   const taskIdMatchesEnvelope = Boolean(envelope && result.taskId === envelope.parentTaskId);
   const blockers = uniqueSorted([
     ...missingRequiredFields.map((field) => `missing_result_field:${field}`),
+    ...validateResultTests(result),
+    ...touchedBlockers(result),
     ...(gateFieldsPresent.length === gateFields.length ? [] : ["subagent_result_gate_set_incomplete"]),
     ...(issueSeveritiesAllowed ? [] : ["subagent_result_issue_severity_invalid"]),
     ...(taskIdMatchesEnvelope ? [] : ["subagent_result_task_id_mismatch"]),
