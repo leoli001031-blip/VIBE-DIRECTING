@@ -252,6 +252,9 @@ assert(projectVibe.kind === "vibe_project_file", "project.vibe kind must be vibe
 assert(projectVibe.runtimeStateRole === "derived_cache", "project.vibe must mark runtime-state as derived cache");
 assert(projectVibe.projectFileFactSource.receiptKind === "project_file_fact_source", "project.vibe must carry fact source receipt");
 assert(projectVibe.projectStoreSnapshot.projectFile.fileName === "project.vibe", "project.vibe must contain project store snapshot");
+const projectVibeStoryFlowRef = projectVibe.factFiles.find((factFile) => factFile.role === "story_flow");
+assert(projectVibeStoryFlowRef?.path === "story_flow/story_flow.vibe.json", "project.vibe must declare the canonical story_flow sidecar path");
+assert(projectVibeStoryFlowRef?.sourceOfTruth === "project_file", "project.vibe story_flow sidecar must be a project_file fact source");
 
 const openGate = projectStoreIo.buildProjectStoreIoGate({
   mode: "open",

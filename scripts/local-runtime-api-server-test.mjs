@@ -115,6 +115,10 @@ function round5StrictEditSidecars(shotId) {
 const round5Zp05StrictEditSidecars = round5StrictEditSidecars("ZP05");
 const round5Zp05StrictEditPreflightSidecars = round5Zp05StrictEditSidecars.slice(0, 3);
 const round5Zp05StrictEditReturnSidecars = round5Zp05StrictEditSidecars.slice(3);
+const storyFlowFactSourceRoot = path.join(process.cwd(), ".tmp-current-story-flow-fact-source-test");
+const storyFlowFactSourceProjectRoot = path.relative(process.cwd(), storyFlowFactSourceRoot);
+const storyFlowFactSourceProjectVibePath = path.join(storyFlowFactSourceRoot, "project", "project.vibe");
+const storyFlowFactSourceSidecarPath = path.join(storyFlowFactSourceRoot, "project", "story_flow", "story_flow.vibe.json");
 
 function assertNo005Leak(payload, label) {
   const text = JSON.stringify(payload);
@@ -322,6 +326,112 @@ function assertRound5Zp05StrictEditSidecarsPrepared(payload, label) {
   assert(receipt.sourceStartFrameAttachmentId === approved.providerAttachmentId, `${label} receipt attachment should match approved start`);
   assert(receipt.noFallbackUsed === true, `${label} receipt noFallbackUsed mismatch`);
   assert(receipt.providerCalled === false, `${label} receipt must not call provider`);
+}
+
+function writeStoryFlowFactSourceFixture() {
+  rmSync(storyFlowFactSourceRoot, { recursive: true, force: true });
+  mkdirSync(path.join(storyFlowFactSourceRoot, "project", "story_flow"), { recursive: true });
+  const canonicalStoryFlow = {
+    schemaVersion: "story_flow_fact_source_sidecar_v1",
+    shots: [
+      {
+        id: "SF01",
+        sceneId: "scene_fact_source",
+        roleIds: ["char_fact_source"],
+        action: "Canonical sidecar Story Flow wins over legacy and runtime cache traps.",
+      },
+    ],
+  };
+  const legacyStoryFlow = {
+    schemaVersion: "story_flow_legacy_compat_v1",
+    shots: [
+      {
+        id: "LEGACY_SHOULD_ONLY_WIN_AFTER_SIDECAR_REMOVAL",
+        sceneId: "scene_legacy",
+        action: "Legacy project/story_flow.json is compatibility fallback only.",
+      },
+    ],
+  };
+  const runtimeTrap = {
+    storyFlow: {
+      shots: [
+        {
+          id: "RUNTIME_SHOULD_NOT_WIN",
+          action: "runtime-state.json is a derived cache and must not authorize current-project Story Flow.",
+        },
+      ],
+    },
+  };
+  writeFileSync(storyFlowFactSourceProjectVibePath, `${JSON.stringify({
+    schemaVersion: "project_vibe_story_flow_fact_source_test",
+    projectId: "story_flow_fact_source_test",
+    runId: "story_flow_fact_source_test_run",
+    factFiles: [
+      {
+        id: "story_flow",
+        role: "story_flow",
+        path: "story_flow/story_flow.vibe.json",
+        sourceOfTruth: "project_file",
+        hash: "fixture_hash_not_validated_by_runtime_read_projection",
+      },
+    ],
+    runtimeStateRole: "derived_cache",
+  }, null, 2)}\n`, "utf8");
+  writeFileSync(storyFlowFactSourceSidecarPath, `${JSON.stringify(canonicalStoryFlow, null, 2)}\n`, "utf8");
+  writeFileSync(path.join(storyFlowFactSourceRoot, "project", "story_flow.json"), `${JSON.stringify(legacyStoryFlow, null, 2)}\n`, "utf8");
+  writeFileSync(path.join(storyFlowFactSourceRoot, "runtime-state.json"), `${JSON.stringify(runtimeTrap, null, 2)}\n`, "utf8");
+  writeFileSync(path.join(storyFlowFactSourceRoot, "project", "runtime-state.json"), `${JSON.stringify(runtimeTrap, null, 2)}\n`, "utf8");
+  writeFileSync(path.join(storyFlowFactSourceRoot, "project", "source_index.json"), `${JSON.stringify({
+    sourceIndexHash: "story_flow_fact_source_hash",
+    refs: ["story_flow/story_flow.vibe.json", "story_flow.json"],
+  }, null, 2)}\n`, "utf8");
+  writeFileSync(path.join(storyFlowFactSourceRoot, "project", "visual_memory.json"), `${JSON.stringify({
+    assets: [
+      { id: "char_fact_source", type: "character", name: "Fact Source Character", status: "locked" },
+    ],
+  }, null, 2)}\n`, "utf8");
+  writeFileSync(path.join(storyFlowFactSourceRoot, "run_manifest.json"), `${JSON.stringify({
+    projectId: "story_flow_fact_source_test",
+    runId: "story_flow_fact_source_test_run",
+    status: "ready",
+    shotPlans: [],
+  }, null, 2)}\n`, "utf8");
+}
+
+async function assertStoryFlowFactSourceProjection(baseUrl) {
+  writeStoryFlowFactSourceFixture();
+  const projectVibeBefore = statSync(storyFlowFactSourceProjectVibePath).mtimeMs;
+  const selected = await selectProject(baseUrl, storyFlowFactSourceProjectRoot, "story_flow_fact_source_test", "Story Flow fact source");
+  assert(selected.response.status === 200, "Story Flow fact source project should bind");
+  assert(selected.payload.projectVibeWritten === false, "Story Flow fact source select must not write project.vibe");
+
+  const sidecarStatus = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
+  assert(sidecarStatus.response.status === 200, "Story Flow sidecar status should return 200");
+  const sidecarStory = sidecarStatus.payload.workbenchFacts?.storyFlow;
+  assert(sidecarStory?.shots?.[0]?.id === "SF01", "project.vibe-declared Story Flow sidecar must win");
+  assert(sidecarStory?.sourceRole === "canonical_project_store_sidecar", "Story Flow sidecar source role mismatch");
+  assert(sidecarStory?.factSourceRole === "project_vibe_declared_story_flow", "Story Flow fact source role mismatch");
+  assert(sidecarStory?.sourceOfTruth === "project_file", "Story Flow source of truth must be project_file");
+  assert(sidecarStory?.runtimeStateRole === "derived_cache", "runtime-state role must remain derived_cache");
+  assert(sidecarStory?.runtimeStateUsed === false, "Story Flow projection must not read runtime-state");
+  assert(sidecarStory?.runtimeStateMayOverride === false, "runtime-state must not override Story Flow facts");
+  assert(sidecarStory?.compatibilityFallbackUsed === false, "sidecar path must not report compatibility fallback");
+  assert(sidecarStory?.path === `${storyFlowFactSourceProjectRoot}/project/story_flow/story_flow.vibe.json`, "Story Flow sidecar path mismatch");
+  assert(!JSON.stringify(sidecarStory).includes("RUNTIME_SHOULD_NOT_WIN"), "runtime-state Story Flow trap must not appear in sidecar projection");
+  assert(!JSON.stringify(sidecarStory).includes("LEGACY_SHOULD_ONLY_WIN"), "legacy Story Flow trap must not appear while sidecar exists");
+  assert(statSync(storyFlowFactSourceProjectVibePath).mtimeMs === projectVibeBefore, "Story Flow sidecar read must not mutate project.vibe");
+
+  rmSync(storyFlowFactSourceSidecarPath, { force: true });
+  const fallbackStatus = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
+  assert(fallbackStatus.response.status === 200, "Story Flow fallback status should return 200");
+  const fallbackStory = fallbackStatus.payload.workbenchFacts?.storyFlow;
+  assert(fallbackStory?.shots?.[0]?.id === "LEGACY_SHOULD_ONLY_WIN_AFTER_SIDECAR_REMOVAL", "legacy story_flow.json must be compatibility fallback");
+  assert(fallbackStory?.sourceRole === "compatibility_fallback", "legacy Story Flow source role mismatch");
+  assert(fallbackStory?.factSourceRole === "legacy_project_story_flow_json", "legacy Story Flow fact role mismatch");
+  assert(fallbackStory?.compatibilityFallbackUsed === true, "legacy Story Flow path must report compatibility fallback");
+  assert(fallbackStory?.runtimeStateUsed === false, "legacy fallback must still ignore runtime-state");
+  assert(!JSON.stringify(fallbackStory).includes("RUNTIME_SHOULD_NOT_WIN"), "runtime-state Story Flow trap must not appear in fallback projection");
+  assert(statSync(storyFlowFactSourceProjectVibePath).mtimeMs === projectVibeBefore, "Story Flow fallback read must not mutate project.vibe");
 }
 
 function assertRound5Zp05StrictEditReturned(payload, label) {
@@ -1022,6 +1132,8 @@ try {
   assert(missingRefsOneShot.payload.projectVibeWritten === false, "missing refs one-shot must not write project.vibe");
   assert(missingRefsOneShot.payload.workerSpawnForbidden === true, "missing refs one-shot must not spawn worker");
 
+  await assertStoryFlowFactSourceProjection(baseUrl);
+
   rmSync(repoSymlinkRoot, { recursive: true, force: true });
   symlinkSync(tempRoot, repoSymlinkRoot, "dir");
   const symlinkSelect = await selectProject(baseUrl, repoSymlinkRoot, "symlink_project", "symlink");
@@ -1034,6 +1146,7 @@ try {
   rmSync(repoSymlinkRoot, { recursive: true, force: true });
   rmSync(project005OneShotRoot, { recursive: true, force: true });
   rmSync(missingRefsRoot, { recursive: true, force: true });
+  rmSync(storyFlowFactSourceRoot, { recursive: true, force: true });
   cleanupRound5Zp05StrictEditSidecars();
   rmSync(tempRoot, { recursive: true, force: true });
 }

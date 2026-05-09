@@ -612,14 +612,134 @@ function projectFact(name, filePath, usedFor = []) {
   };
 }
 
+function projectFactRefPath(entry) {
+  if (!isRecord(entry)) return undefined;
+  if (typeof entry.path === "string") return entry.path;
+  if (isRecord(entry.path) && typeof entry.path.path === "string") return entry.path.path;
+  return undefined;
+}
+
+function projectVibeDeclaredFactRefs(projectVibe, role) {
+  if (!isRecord(projectVibe)) return [];
+  const refs = [];
+  const collectFactFiles = (items, declaredBy) => {
+    if (!Array.isArray(items)) return;
+    for (const item of items) {
+      if (!isRecord(item) || item.role !== role) continue;
+      const refPath = projectFactRefPath(item);
+      if (refPath) refs.push({ refPath, declaredBy, sourceOfTruth: item.sourceOfTruth });
+    }
+  };
+  collectFactFiles(projectVibe.factFiles, "project_vibe.factFiles");
+  collectFactFiles(projectVibe.projectStoreSnapshot?.factFiles, "project_vibe.projectStoreSnapshot.factFiles");
+
+  if (role === "story_flow") {
+    for (const key of ["storyFlowPath", "story_flow_path", "storyFlowRef", "story_flow_ref"]) {
+      if (typeof projectVibe[key] === "string") {
+        refs.push({ refPath: projectVibe[key], declaredBy: `project_vibe.${key}`, sourceOfTruth: "project_file" });
+      }
+    }
+  }
+
+  const seen = new Set();
+  return refs.filter((ref) => {
+    const key = `${ref.declaredBy}:${ref.refPath}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function safeProjectFactRefPath(refPath) {
+  if (typeof refPath !== "string" || !refPath.trim()) return undefined;
+  const normalized = normalizeRelativePath(refPath.trim()).replace(/^\.\//, "");
+  if (
+    path.isAbsolute(normalized)
+    || normalized === ".."
+    || normalized.startsWith("../")
+    || normalized.includes("/../")
+  ) {
+    return undefined;
+  }
+  return normalized;
+}
+
+function projectFactRefCandidates(source, refPath) {
+  const normalized = safeProjectFactRefPath(refPath);
+  if (!normalized) return [];
+  const projectVibeDir = path.dirname(source.projectVibePath);
+  const candidates = [];
+  if (normalized === source.runRootRelativePath || normalized.startsWith(`${source.runRootRelativePath}/`)) {
+    candidates.push(path.resolve(repoRoot, normalized));
+  }
+  candidates.push(path.resolve(projectVibeDir, normalized));
+  candidates.push(path.resolve(source.runRootPath, normalized));
+  const seen = new Set();
+  return candidates.filter((candidate) => {
+    const key = path.resolve(candidate);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return pathWithinRoot(key, source.runRootPath);
+  });
+}
+
+function withProjectFactSourceMetadata(fact, metadata) {
+  return {
+    ...fact,
+    sourceOfTruth: "project_file",
+    factSourceRole: metadata.factSourceRole,
+    sourceRole: metadata.sourceRole,
+    declaredBy: metadata.declaredBy,
+    declaredRefPath: metadata.declaredRefPath,
+    compatibilityFallbackUsed: metadata.compatibilityFallbackUsed === true,
+    runtimeStateRole: "derived_cache",
+    runtimeStateUsed: false,
+    runtimeStateMayOverride: false,
+  };
+}
+
+function resolveCurrentProjectStoryFlowFact(source, projectVibe) {
+  const declaredRefs = projectVibeDeclaredFactRefs(projectVibe, "story_flow");
+  for (const declaredRef of declaredRefs) {
+    const candidates = projectFactRefCandidates(source, declaredRef.refPath);
+    for (const candidate of candidates) {
+      if (!existsSync(candidate)) continue;
+      try {
+        const runRootRealPath = realpathSync(source.runRootPath);
+        const candidateRealPath = realpathSync(candidate);
+        if (!isPathInsideRealRoot(candidateRealPath, runRootRealPath)) continue;
+      } catch {
+        continue;
+      }
+      return withProjectFactSourceMetadata(projectFact("story_flow", candidate, ["story_flow"]), {
+        factSourceRole: "project_vibe_declared_story_flow",
+        sourceRole: "canonical_project_store_sidecar",
+        declaredBy: declaredRef.declaredBy,
+        declaredRefPath: safeProjectFactRefPath(declaredRef.refPath),
+        compatibilityFallbackUsed: false,
+      });
+    }
+  }
+
+  return withProjectFactSourceMetadata(projectFact("story_flow", source.storyFlowPath, ["story_flow"]), {
+    factSourceRole: "legacy_project_story_flow_json",
+    sourceRole: "compatibility_fallback",
+    declaredBy: declaredRefs.length ? declaredRefs.map((ref) => ref.declaredBy).join("+") : undefined,
+    declaredRefPath: declaredRefs.length ? declaredRefs.map((ref) => safeProjectFactRefPath(ref.refPath)).filter(Boolean).join(",") : undefined,
+    compatibilityFallbackUsed: true,
+  });
+}
+
 function readProjectFacts(source) {
   const reportFactName = source.reportRelativePath.endsWith(`/reports/${round5FullRealChainReportFileName}`)
     ? "round5_full_real_chain_report"
     : "image2_start_long_chain_report";
+  const projectVibeFact = projectFact("project_vibe", source.projectVibePath, ["identity"]);
+  const storyFlowFact = resolveCurrentProjectStoryFlowFact(source, projectVibeFact.parsed);
   const facts = [
-    projectFact("project_vibe", source.projectVibePath, ["identity"]),
+    projectVibeFact,
     projectFact("source_index", source.sourceIndexPath, ["project_facts"]),
-    projectFact("story_flow", source.storyFlowPath, ["story_flow"]),
+    storyFlowFact,
     projectFact("visual_memory", source.visualMemoryPath, ["visual_memory"]),
     projectFact("run_manifest", source.runManifestPath, ["ledger_plan", "identity"]),
     projectFact("runtime_truth_layer", source.runtimeTruthLayerPath, ["ledger_truth", "status"]),
@@ -644,6 +764,20 @@ function readProjectFacts(source) {
     projectVibe: byName.project_vibe.parsed,
     sourceIndex: byName.source_index.parsed,
     storyFlow: byName.story_flow.parsed,
+    storyFlowSource: {
+      path: byName.story_flow.path,
+      present: byName.story_flow.present,
+      readable: byName.story_flow.readable,
+      sourceOfTruth: byName.story_flow.sourceOfTruth,
+      factSourceRole: byName.story_flow.factSourceRole,
+      sourceRole: byName.story_flow.sourceRole,
+      declaredBy: byName.story_flow.declaredBy,
+      declaredRefPath: byName.story_flow.declaredRefPath,
+      compatibilityFallbackUsed: byName.story_flow.compatibilityFallbackUsed,
+      runtimeStateRole: byName.story_flow.runtimeStateRole,
+      runtimeStateUsed: byName.story_flow.runtimeStateUsed,
+      runtimeStateMayOverride: byName.story_flow.runtimeStateMayOverride,
+    },
     visualMemory: byName.visual_memory.parsed,
     runManifest: byName.run_manifest.parsed,
     runtimeTruthLayer,
@@ -2178,7 +2312,7 @@ function normalizeWorkbenchStoryShots(storyFlow) {
 }
 
 function currentProjectWorkbenchFacts(source, projectFacts) {
-  const storyFact = projectFact("story_flow", source.storyFlowPath, ["story_flow"]);
+  const storyFact = resolveCurrentProjectStoryFlowFact(source, projectFacts.projectVibe);
   const visualMemoryFact = projectFact("visual_memory", source.visualMemoryPath, ["visual_memory"]);
   const sourceIndexFact = projectFact("source_index", source.sourceIndexPath, ["source_index"]);
   const storyShots = storyFact.readable ? normalizeWorkbenchStoryShots(storyFact.parsed) : [];
@@ -2202,6 +2336,15 @@ function currentProjectWorkbenchFacts(source, projectFacts) {
       present: storyFact.present,
       readable: storyFact.readable,
       path: storyFact.path,
+      sourceOfTruth: storyFact.sourceOfTruth,
+      factSourceRole: storyFact.factSourceRole,
+      sourceRole: storyFact.sourceRole,
+      declaredBy: storyFact.declaredBy,
+      declaredRefPath: storyFact.declaredRefPath,
+      compatibilityFallbackUsed: storyFact.compatibilityFallbackUsed,
+      runtimeStateRole: storyFact.runtimeStateRole,
+      runtimeStateUsed: storyFact.runtimeStateUsed,
+      runtimeStateMayOverride: storyFact.runtimeStateMayOverride,
       shotCount: storyShots.length,
       sectionCount: storySections.length,
       sections: storySections,

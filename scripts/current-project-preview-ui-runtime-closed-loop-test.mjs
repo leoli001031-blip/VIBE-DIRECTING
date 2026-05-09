@@ -72,10 +72,12 @@ function assertProductCopy(message) {
 
 function assertPreviewClosedLoopAppContract() {
   const appSource = readText("src/App.tsx");
+  const minimalPreviewSource = readText("src/ui/director/MinimalPreview.tsx");
   assert(/buildCurrentProjectPreviewProjection\(\{[\s\S]*summary:\s*projectRealChainState\.summary[\s\S]*previewItems:\s*projectRealChainState\.summary\?\.previewItems/.test(appSource), "App must project current runtime summary previewItems for Preview");
   assert(/const\s+currentProjectPreviewQueue\s*=\s*runtimeProjectBinding\.status\s*===\s*"bound"[\s\S]*currentProjectPreviewProjection\.queue[\s\S]*:\s*\[\]/.test(appSource), "App must fail closed when the current project is not bound");
   assert(/currentProjectPreviewItems=\{currentProjectPreviewQueue\}/.test(appSource), "App must pass the current project queue into the Preview view");
-  assert(/const\s+queue\s*=\s*currentProjectPreviewItems\s*\?\?\s*fallbackQueue/.test(appSource), "MinimalPreview must prefer current project preview items over previewExport fallback");
+  assert(/currentProjectPreviewItems\?:\s*PreviewQueueItem\[\]/.test(minimalPreviewSource), "MinimalPreview must accept current project preview items");
+  assert(/const\s+queue\s*=\s*currentProjectPreviewItems\s*\?\?\s*fallbackQueue/.test(minimalPreviewSource), "MinimalPreview must prefer current project preview items over previewExport fallback");
   assert(!/currentProjectIdentity\(runtimeState\)/.test(appSource), "App must not bind Preview to runtime-state.json identity");
   assert(!/real-demo-005/.test(appSource), "App must not retain hard-coded 005 UI hooks");
 }

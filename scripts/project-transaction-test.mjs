@@ -41,6 +41,7 @@ async function loadModules() {
     ["knowledgeContextBudget.ts", "knowledgeContextBudget.mjs", [['from "./knowledgeManifest"', 'from "./knowledgeManifest.mjs"']]],
     ["knowledgeDefaults.ts", "knowledgeDefaults.mjs", [['from "./knowledgeManifest"', 'from "./knowledgeManifest.mjs"']]],
     ["knowledgeLibrary.ts", "knowledgeLibrary.mjs", [['from "./knowledgeManifest"', 'from "./knowledgeManifest.mjs"']]],
+    ["envelopeValidator.ts", "envelopeValidator.mjs", [['from "./knowledgeManifest"', 'from "./knowledgeManifest.mjs"']]],
     [
       "knowledgeRouter.ts",
       "knowledgeRouter.mjs",
@@ -56,6 +57,7 @@ async function loadModules() {
         ['from "./providerCapabilities"', 'from "./providerCapabilities.mjs"'],
         ['from "./knowledgeContextBudget"', 'from "./knowledgeContextBudget.mjs"'],
         ['from "./knowledgeDefaults"', 'from "./knowledgeDefaults.mjs"'],
+        ['from "./envelopeValidator"', 'from "./envelopeValidator.mjs"'],
         ['from "./knowledgeLibrary"', 'from "./knowledgeLibrary.mjs"'],
         ['from "./knowledgeManifest"', 'from "./knowledgeManifest.mjs"'],
         ['from "./knowledgeRouter"', 'from "./knowledgeRouter.mjs"'],
