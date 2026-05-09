@@ -91,6 +91,7 @@ function findFunctionNames(source, pattern) {
 
 const appPath = "src/App.tsx";
 const minimalStoryFlowPath = "src/ui/director/MinimalStoryFlow.tsx";
+const minimalPreviewPath = "src/ui/director/MinimalPreview.tsx";
 const stylesPath = "src/styles.css";
 const packagePath = "package.json";
 const sequenceDocPath = "docs/core-development-sequence.md";
@@ -98,6 +99,7 @@ const contractDocPath = "docs/ui/minimal-director-ui-contract.md";
 
 const appSource = stripComments(readText(appPath));
 const minimalStoryFlowSource = stripComments(readText(minimalStoryFlowPath));
+const minimalPreviewSource = stripComments(readText(minimalPreviewPath));
 const stylesSource = stripComments(readText(stylesPath));
 const packageJson = readJson(packagePath);
 const sequenceDoc = readText(sequenceDocPath);
@@ -129,13 +131,13 @@ const projectFactsUiSummary = findFunctionBody(appSource, "buildProjectFactsUiSu
 const minimalAssetLibrary = findFunctionBody(appSource, "MinimalAssetLibrary");
 const assetSourceKindForPath = findFunctionBody(appSource, "assetSourceKindForPath");
 const assetLibraryUserBlockers = findFunctionBody(appSource, "assetLibraryUserBlockers");
-const minimalPreview = findFunctionBody(appSource, "MinimalPreview");
+const minimalPreview = findFunctionBody(minimalPreviewSource, "MinimalPreview");
 const minimalProjectPlan = findFunctionBody(appSource, "buildMinimalProjectPlan");
 const agentReceiptStatusLabel = findFunctionBody(appSource, "agentReceiptStatusLabel");
 const agentReceiptCountSummary = findFunctionBody(appSource, "agentReceiptCountSummary");
 const confirmAgentPlanProjection = findFunctionBody(appSource, "confirmAgentPlanProjection");
-const previewPlayerQueue = findFunctionBody(appSource, "buildPreviewPlayerQueue");
-const previewQueueKind = findFunctionBody(appSource, "previewQueueKind");
+const previewPlayerQueue = findFunctionBody(minimalPreviewSource, "buildPreviewPlayerQueue");
+const previewQueueKind = findFunctionBody(minimalPreviewSource, "previewQueueKind");
 const desktopShellView = findFunctionBody(appSource, "buildDesktopRuntimeShellView");
 const subagentWorkerRuntimeDiagnostics = findFunctionBody(appSource, "SubagentWorkerRuntimeDiagnostics");
 const agentCliMockRunnerDiagnostics = findFunctionBody(appSource, "AgentCliMockRunnerDiagnostics");
