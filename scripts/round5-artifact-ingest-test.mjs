@@ -164,6 +164,81 @@ assert(projectionWithStrictZp05.ledgerProjection.completeVerified === 0, "strict
 assert(projectionWithStrictZp05.uiSummary.providerCalled === false, "strict edit preflight must not claim provider call");
 assert(projectionWithStrictZp05.uiSummary.generatedImages === false, "strict edit preflight must not claim image generation");
 
+const projectionWithReturnedZp05 = buildRound5ArtifactIngest({
+  runRoot,
+  projectId: "round5-zero-project-planning-anime",
+  runId: "run-2026-05-09T11-09-28-642Z",
+  report,
+  strictEditEvidence: {
+    approvedStartFrames: [{
+      shotId: "ZP05",
+      startFramePath: "shots/ZP05/start.png",
+      sha256: zp05.startFrameSha256,
+      providerAttachmentId: "attachment_round5_ZP05_start",
+      approvalStatus: "approved_for_strict_edit",
+    }],
+    editableRegionEvidence: [{
+      shotId: "ZP05",
+      sourceStartFrameSha256: zp05.startFrameSha256,
+      evidencePath: "shots/ZP05/editable_region_mask_or_bbox.json",
+      evidenceSha256: "sha256:fixture-zp05-editable-region",
+      bboxNormalized: { x: 0.42, y: 0.34, width: 0.22, height: 0.2 },
+      qaStatus: "pass",
+    }],
+    providerEditReceipts: [{
+      shotId: "ZP05",
+      receiptId: "round5_zp05_strict_edit_handoff",
+      receiptPath: "shots/ZP05/provider_edit_receipt.json",
+      status: "ready_for_provider_edit",
+      operation: "image.edit",
+      sourceStartFramePath: "shots/ZP05/start.png",
+      sourceStartFrameSha256: zp05.startFrameSha256,
+      sourceStartFrameAttachmentId: "attachment_round5_ZP05_start",
+      editableRegionEvidencePath: "shots/ZP05/editable_region_mask_or_bbox.json",
+      editableRegionEvidenceSha256: "sha256:fixture-zp05-editable-region",
+      noFallbackUsed: true,
+      providerCalled: false,
+    }],
+  },
+  strictEditEndReturns: [{
+    shotId: "ZP05",
+    endFramePath: "shots/ZP05/end.png",
+    endExists: true,
+    endFrameSha256: "sha256:fixture-zp05-end",
+    providerObservation: {
+      providerObservationMode: "actual_provider_call_observed",
+      provider: "openai-image2-api",
+      operation: "image.edit",
+      providerRequestId: "provider-request-zp05",
+      outputPath: "shots/ZP05/end.png",
+      outputSha256: "sha256:fixture-zp05-end",
+      providerCalled: true,
+      actualImage2Triggered: true,
+      sourceStartFrameSha256: zp05.startFrameSha256,
+      sourceStartFrameAttachmentId: "attachment_round5_ZP05_start",
+      editableRegionEvidenceSha256: "sha256:fixture-zp05-editable-region",
+      preflightReceiptId: "round5_zp05_strict_edit_handoff",
+      noFallbackUsed: true,
+    },
+    semanticQa: {
+      semanticReviewMode: "actual_image_semantic_review",
+      outputPath: "shots/ZP05/end.png",
+      reviewedOutputSha256: "sha256:fixture-zp05-end",
+      status: "needs_review",
+      finalAssessment: { status: "needs_review" },
+    },
+  }],
+});
+const returnedZp05 = new Map(projectionWithReturnedZp05.shotGateMatrix.map((shot) => [shot.shotId, shot])).get("ZP05");
+assert(returnedZp05.gateStatus === "end_returned_needs_review", "ZP05 returned end should require review");
+assert(returnedZp05.ledgerStatus === "needs_review", "ZP05 returned end should become needs_review");
+assert(returnedZp05.nextAction === "review_strict_edit_end_frame", "ZP05 returned end next action mismatch");
+assert(returnedZp05.endExists === true, "ZP05 returned end should mark endExists");
+assert(returnedZp05.blockers.length === 0, "ZP05 returned end should clear strict edit blockers");
+assert(projectionWithReturnedZp05.ledgerProjection.endReturnedNeedsReview === 1, "returned end should count one needs_review end");
+assert(projectionWithReturnedZp05.uiSummary.providerCalled === true, "returned end should preserve provider fact in Round 5 ingest");
+assert(projectionWithReturnedZp05.uiSummary.generatedImages === true, "returned end should preserve generated image fact in Round 5 ingest");
+
 const projectionWithLooseStatusTraps = buildRound5ArtifactIngest({
   runRoot,
   projectId: "round5-zero-project-planning-anime",

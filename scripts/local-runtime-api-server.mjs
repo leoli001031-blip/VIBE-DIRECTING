@@ -40,6 +40,9 @@ const round5StrictEditSidecarFileNames = {
   approvedStartFrame: "approved_start_frame_ref.json",
   editableRegionEvidence: "editable_region_mask_or_bbox.json",
   providerEditReceipt: "provider_edit_receipt.json",
+  endProviderObservation: "end_provider_observation.json",
+  endSemanticQa: "end_semantic_qa.json",
+  endPairQa: "end_pair_qa.json",
 };
 
 const runtimeBasePath = "/api/runtime";
@@ -58,6 +61,7 @@ const currentProjectImage2OneShotExecuteMockEndpoint = `${runtimeBasePath}/proje
 const currentProjectImage2OneShotReturnEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/return`;
 const currentProjectImage2OneShotExecuteReturnEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/execute-return`;
 const currentProjectRound5StrictEditPrepareEndpoint = `${runtimeBasePath}/projects/current/round5/strict-edit/prepare`;
+const currentProjectRound5StrictEditReturnEndpoint = `${runtimeBasePath}/projects/current/round5/strict-edit/return`;
 const realDemo005StatusEndpoint = `${runtimeBasePath}/real-demo-e2e/005/status`;
 const realDemo005RunEndpoint = `${runtimeBasePath}/real-demo-e2e/005/run`;
 const runtimeFileEndpoint = `${runtimeBasePath}/files`;
@@ -843,6 +847,76 @@ function round5ReadStrictEditEvidence(runRootPath, shotIds) {
   return evidence;
 }
 
+function round5ReadStrictEditReturns(runRootPath, shotIds) {
+  const returns = [];
+  for (const shotId of shotIds) {
+    const shotDir = path.join(runRootPath, "shots", shotId);
+    const endPath = path.join(shotDir, "end.png");
+    const providerObservationPath = path.join(shotDir, round5StrictEditSidecarFileNames.endProviderObservation);
+    const semanticQaPath = path.join(shotDir, round5StrictEditSidecarFileNames.endSemanticQa);
+    const pairQaPath = path.join(shotDir, round5StrictEditSidecarFileNames.endPairQa);
+    const endExists = existsSync(endPath) && statSync(endPath).isFile();
+    returns.push({
+      shotId,
+      endFramePath: `shots/${shotId}/end.png`,
+      endExists,
+      endFrameSha256: endExists ? sha256File(endPath) : undefined,
+      providerObservationPath: `shots/${shotId}/${round5StrictEditSidecarFileNames.endProviderObservation}`,
+      providerObservation: readJsonIfPresent(providerObservationPath),
+      semanticQaPath: `shots/${shotId}/${round5StrictEditSidecarFileNames.endSemanticQa}`,
+      semanticQa: readJsonIfPresent(semanticQaPath),
+      pairQaPath: `shots/${shotId}/${round5StrictEditSidecarFileNames.endPairQa}`,
+      pairQa: readJsonIfPresent(pairQaPath),
+    });
+  }
+  return returns;
+}
+
+function round5EndProviderObservationMatches({ returnedEnd, generated, approvedStartFrame, editableRegionEvidence, providerEditReceipt }) {
+  const observation = returnedEnd?.providerObservation;
+  if (!isRecord(observation)) return false;
+  const provider = String(observation.provider || observation.providerId || "");
+  const operation = String(observation.operation || "").toLowerCase();
+  const outputPath = normalizeRelativePath(asString(observation.outputPath) || "");
+  const observedHash = asString(observation.outputSha256) || asString(observation.outputHash);
+  const providerRequestId = asString(observation.providerRequestId) || asString(observation.requestId);
+  const receiptId = asString(observation.preflightReceiptId) || asString(observation.receiptId);
+  const attachmentId = asString(observation.sourceStartFrameAttachmentId);
+  const editableEvidenceSha = asString(observation.editableRegionEvidenceSha256);
+  return returnedEnd?.endExists === true
+    && observation.providerObservationMode === "actual_provider_call_observed"
+    && /image2/i.test(provider)
+    && (operation === "image.edit" || operation === "image2image")
+    && outputPath === returnedEnd.endFramePath
+    && observedHash === returnedEnd.endFrameSha256
+    && observation.providerCalled === true
+    && observation.actualImage2Triggered === true
+    && providerRequestId
+    && asString(observation.sourceStartFrameSha256) === generated?.sha256
+    && attachmentId === approvedStartFrame?.providerAttachmentId
+    && editableEvidenceSha === editableRegionEvidence?.evidenceSha256
+    && receiptId === providerEditReceipt?.receiptId
+    && observation.noFallbackUsed === true;
+}
+
+function round5EndSemanticQaMatches(returnedEnd) {
+  const semanticQa = returnedEnd?.semanticQa;
+  if (!isRecord(semanticQa)) return false;
+  const outputPath = normalizeRelativePath(asString(semanticQa.outputPath) || asString(semanticQa.expectedOutputPath) || "");
+  const reviewedHash = asString(semanticQa.reviewedOutputSha256) || asString(semanticQa.outputSha256);
+  const status = String(semanticQa.finalAssessment?.status || semanticQa.qaStatus || semanticQa.status || "").toLowerCase();
+  return returnedEnd?.endExists === true
+    && semanticQa.semanticReviewMode === "actual_image_semantic_review"
+    && outputPath === returnedEnd.endFramePath
+    && reviewedHash === returnedEnd.endFrameSha256
+    && (status === "needs_review" || status === "pass" || status === "warning");
+}
+
+function round5StrictEditEndReturned(input) {
+  return round5EndProviderObservationMatches(input)
+    && round5EndSemanticQaMatches(input.returnedEnd);
+}
+
 function round5LedgerEvents({
   generatedAt,
   projectId,
@@ -852,6 +926,9 @@ function round5LedgerEvents({
   sha256,
   qaStatus,
   strictEditPreflightStatus,
+  strictEditEndReturned,
+  endFramePath,
+  endFrameSha256,
   approvedStartFrameRef,
   editableRegionEvidenceRef,
   providerEditReceiptRef,
@@ -948,6 +1025,24 @@ function round5LedgerEvents({
     });
   }
 
+  if (strictEditEndReturned) {
+    events.push({
+      eventId: `${taskRunId}:strict_edit_end_returned`,
+      eventType: "needs_review",
+      at: generatedAt,
+      taskRunId,
+      output: { path: endFramePath, hash: endFrameSha256, hashAlgorithm: "sha256" },
+      qaReview: {
+        qaReportId: `${shotId}:strict_edit_end_semantic_qa`,
+        outputPath: endFramePath,
+        reviewedOutputHash: endFrameSha256,
+        status: "needs_review",
+        findingIds: [],
+      },
+      notes: ["Strict edit end frame was returned with hash-bound actual provider observation and still requires human pair review."],
+    });
+  }
+
   return events;
 }
 
@@ -961,9 +1056,11 @@ function round5ArtifactIngestFromReport(source, project, report) {
   const qaByShot = new Map((Array.isArray(report.shotQa) ? report.shotQa : []).map((item) => [item.shotId, item]));
   const shotIds = uniqueStrings([...startsByShot.keys(), ...qaByShot.keys()]).sort();
   const strictEditEvidence = round5ReadStrictEditEvidence(source.runRootPath, shotIds);
+  const strictEditReturns = round5ReadStrictEditReturns(source.runRootPath, shotIds);
   const approvedStartByShot = new Map(strictEditEvidence.approvedStartFrames.map((item) => [item.shotId, item]));
   const editableRegionByShot = new Map(strictEditEvidence.editableRegionEvidence.map((item) => [item.shotId, item]));
   const providerEditReceiptByShot = new Map(strictEditEvidence.providerEditReceipts.map((item) => [item.shotId, item]));
+  const returnedEndByShot = new Map(strictEditReturns.map((item) => [item.shotId, item]));
 
   const shotGateMatrix = shotIds.map((shotId) => {
     const generated = startsByShot.get(shotId);
@@ -976,6 +1073,7 @@ function round5ArtifactIngestFromReport(source, project, report) {
     const approvedStartFrame = approvedStartByShot.get(shotId);
     const editableRegionEvidence = editableRegionByShot.get(shotId);
     const providerEditReceipt = providerEditReceiptByShot.get(shotId);
+    const returnedEnd = returnedEndByShot.get(shotId);
     const evidenceBlockers = round5StrictEditEvidenceBlockers({
       qaStatus: startQaStatus,
       endRequired,
@@ -989,14 +1087,29 @@ function round5ArtifactIngestFromReport(source, project, report) {
       endRequired,
       evidenceBlockers,
     });
+    const strictEditEndReturned = evidenceBlockers.length === 0 && round5StrictEditEndReturned({
+      returnedEnd,
+      generated,
+      approvedStartFrame,
+      editableRegionEvidence,
+      providerEditReceipt,
+    });
     const blockers = round5BlockersFor({
       qaStatus: startQaStatus,
       endRequired,
       shotQa,
       report,
       strictEditEvidenceBlockers: evidenceBlockers,
-    });
-    const nextAction = round5NextActionFor(shotId, startQaStatus, endRequired, strictEditPreflightStatus);
+    }).filter((blocker) => !strictEditEndReturned || !String(blocker).startsWith("end_frame_blocked_until"));
+    const nextAction = strictEditEndReturned
+      ? "review_strict_edit_end_frame"
+      : round5NextActionFor(shotId, startQaStatus, endRequired, strictEditPreflightStatus);
+    const gateStatus = strictEditEndReturned
+      ? "end_returned_needs_review"
+      : round5GateStatusFor(startQaStatus, endRequired, strictEditPreflightStatus);
+    const ledgerStatus = strictEditEndReturned
+      ? "needs_review"
+      : round5LedgerStatusFor(startQaStatus, strictEditPreflightStatus);
 
     return {
       shotId,
@@ -1007,9 +1120,10 @@ function round5ArtifactIngestFromReport(source, project, report) {
       startQaStatus,
       endRequired,
       endFramePath: `shots/${shotId}/end.png`,
-      endExists: false,
-      gateStatus: round5GateStatusFor(startQaStatus, endRequired, strictEditPreflightStatus),
-      ledgerStatus: round5LedgerStatusFor(startQaStatus, strictEditPreflightStatus),
+      endExists: returnedEnd?.endExists === true,
+      endFrameSha256: returnedEnd?.endFrameSha256,
+      gateStatus,
+      ledgerStatus,
       nextAction,
       strictEditPilotCandidate: shotId === "ZP05" && endRequired && startQaStatus === "pass",
       strictEditPreflightStatus,
@@ -1017,7 +1131,7 @@ function round5ArtifactIngestFromReport(source, project, report) {
       editableRegionEvidenceRef: editableRegionEvidence?.evidencePath || editableRegionEvidence?.maskPath,
       providerEditReceiptRef: providerEditReceipt?.receiptPath || providerEditReceipt?.receiptId,
       completeVerified: false,
-      blockers,
+      blockers: strictEditEndReturned ? [] : blockers,
       warnings: Array.isArray(shotQa?.issues) ? shotQa.issues : [],
     };
   });
@@ -1032,6 +1146,9 @@ function round5ArtifactIngestFromReport(source, project, report) {
       sha256: shot.startFrameSha256,
       qaStatus: shot.startQaStatus,
       strictEditPreflightStatus: shot.strictEditPreflightStatus,
+      strictEditEndReturned: shot.gateStatus === "end_returned_needs_review",
+      endFramePath: shot.endFramePath,
+      endFrameSha256: shot.endFrameSha256,
       approvedStartFrameRef: shot.approvedStartFrameRef,
       editableRegionEvidenceRef: shot.editableRegionEvidenceRef,
       providerEditReceiptRef: shot.providerEditReceiptRef,
@@ -1056,6 +1173,7 @@ function round5ArtifactIngestFromReport(source, project, report) {
     waiting_output: 0,
   };
   for (const shot of shotGateMatrix) byStatus[shot.ledgerStatus] += 1;
+  const returnedEndFrames = shotGateMatrix.filter((shot) => shot.gateStatus === "end_returned_needs_review").length;
 
   const assetStatuses = (Array.isArray(report.assetQa) ? report.assetQa : []).map((item) => item.status || "unknown");
   const nextActions = shotGateMatrix
@@ -1063,7 +1181,7 @@ function round5ArtifactIngestFromReport(source, project, report) {
     .map((shot) => ({ shotId: shot.shotId, nextAction: shot.nextAction }));
   const status = shotGateMatrix.some((shot) => shot.gateStatus === "start_regeneration_required" || shot.gateStatus === "end_edit_preflight_blocked")
     ? "blocked"
-    : shotGateMatrix.some((shot) => shot.gateStatus === "start_needs_review")
+    : shotGateMatrix.some((shot) => shot.gateStatus === "start_needs_review" || shot.gateStatus === "end_returned_needs_review")
       ? "needs_review"
       : "in_progress";
 
@@ -1088,21 +1206,25 @@ function round5ArtifactIngestFromReport(source, project, report) {
       completeVerified: 0,
       endEditPreflightBlocked: shotGateMatrix.filter((shot) => shot.gateStatus === "end_edit_preflight_blocked").length,
       endEditPreflightReady: shotGateMatrix.filter((shot) => shot.gateStatus === "end_edit_preflight_ready").length,
+      endReturnedNeedsReview: returnedEndFrames,
       projections: shotGateMatrix,
     },
     uiSummary: {
       status,
       complete: false,
       completeVerified: false,
-      providerCalled: false,
-      generatedImages: false,
+      providerCalled: returnedEndFrames > 0,
+      generatedImages: returnedEndFrames > 0,
       totalShots: shotGateMatrix.length,
       observedStarts: shotGateMatrix.filter((shot) => shot.startExists).length,
       endFramesComplete: 0,
+      returnedEndFrames,
       nextActions,
       warnings: [
         "Round 5 artifact ingest is projection-only; it does not generate images.",
-        "End frames remain blocked until strict edit provenance and provider receipts exist.",
+        returnedEndFrames > 0
+          ? "Strict edit end frame returns are hash-bound but remain needs_review until pair QA and human review pass."
+          : "End frames remain blocked until strict edit provenance and provider receipts exist.",
       ],
     },
   };
@@ -1119,6 +1241,23 @@ function round5StrictEditRequestInput(url, body) {
         ? body.bbox
         : undefined,
     inputSha256: requestBodyString(body, ["sha256", "startFrameSha256", "sourceStartFrameSha256"]),
+  };
+}
+
+function round5StrictEditReturnRequestInput(url, body) {
+  const payload = isRecord(body) ? body : {};
+  return {
+    shotId: asString(url.searchParams.get("shotId"))
+      || requestBodyString(payload, ["shotId", "selectedShotId"])
+      || "ZP05",
+    returnedOutputPath: requestBodyString(payload, ["returnedOutputPath", "outputPath", "endFramePath"]),
+    actualProviderReturned: payload.actualProviderReturned === true,
+    providerObservation: isRecord(payload.providerObservation) ? payload.providerObservation : undefined,
+    semanticQa: isRecord(payload.semanticQa) ? payload.semanticQa : undefined,
+    returnedProviderObservationPath: requestBodyString(payload, ["returnedProviderObservationPath", "providerObservationPath"]),
+    returnedSemanticQaPath: requestBodyString(payload, ["returnedSemanticQaPath", "semanticQaPath"]),
+    providerRequestId: requestBodyString(payload, ["providerRequestId", "requestId"]),
+    inputSha256: requestBodyString(payload, ["sha256", "startFrameSha256", "sourceStartFrameSha256"]),
   };
 }
 
@@ -1353,6 +1492,216 @@ function currentProjectRound5StrictEditPrepareResponse(input, extra = {}, source
     round5ArtifactIngest: statusProjection.round5ArtifactIngest,
     ignoredInputSha256: input.inputSha256 ? "sha256_from_request_ignored" : undefined,
     message: "Round 5 strict edit preflight sidecars are prepared. No provider call or project.vibe write was performed.",
+  };
+}
+
+function currentProjectRound5StrictEditReturnResponse(input, extra = {}, source = currentProjectSource()) {
+  const requestContext = extra.requestContext || {};
+  const blockers = [];
+  const generatedAt = new Date().toISOString();
+  const project = projectIdentityFromSource(source);
+  const report = readJsonIfPresent(source.reportPath);
+  const shotId = input.shotId;
+
+  if (!isRecord(report) || !isRound5FullRealChainReport(report, source)) {
+    blockers.push("round5_full_real_chain_report_missing");
+  }
+  if (!shotId || safePathSegment(shotId) !== shotId) {
+    blockers.push("shot_id_must_be_safe_path_segment");
+  }
+
+  const generated = Array.isArray(report?.generatedStartFrames)
+    ? report.generatedStartFrames.find((item) => item?.shotId === shotId)
+    : undefined;
+  const shotQa = Array.isArray(report?.shotQa)
+    ? report.shotQa.find((item) => item?.shotId === shotId)
+    : undefined;
+  if (isRecord(report) && !generated && !shotQa) blockers.push("shot_not_found");
+
+  const startFrameSha256 = generated?.sha256;
+  const startQaStatus = round5QaStatusFor(shotQa, generated);
+  const endRequired = isRecord(report) && shotId ? round5EndRequiredFor(shotId, report, shotQa) : false;
+  if (generated && startQaStatus !== "pass") blockers.push("start_qa_not_pass");
+  if (generated && !endRequired) blockers.push("strict_edit_not_required_for_shot");
+
+  const approvedPath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.approvedStartFrame}`;
+  const editablePath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.editableRegionEvidence}`;
+  const receiptPath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.providerEditReceipt}`;
+  const approvedStartFrame = readRuntimeJson(approvedPath);
+  const editableRegionEvidence = readRuntimeJson(editablePath);
+  const providerEditReceipt = readRuntimeJson(receiptPath);
+  const preflightBlockers = round5StrictEditEvidenceBlockers({
+    qaStatus: startQaStatus,
+    endRequired,
+    generated,
+    approvedStartFrame,
+    editableRegionEvidence,
+    providerEditReceipt,
+  });
+  blockers.push(...preflightBlockers.map((blocker) => `preflight_${blocker}`));
+
+  const expectedEndFramePath = `${source.runRootRelativePath}/shots/${shotId}/end.png`;
+  const returnedOutputPath = runtimeRelativeFromValue(input.returnedOutputPath) || expectedEndFramePath;
+  const returnedOutputInsideProject = oneShotPathInsideRoot(returnedOutputPath, source.runRootRelativePath);
+  const returnedOutputExists = runtimePathExists(returnedOutputPath);
+  const outputSourceIsExpected = returnedOutputPath === expectedEndFramePath;
+  if (!input.actualProviderReturned && !runtimePathExists(expectedEndFramePath)) blockers.push("actual_provider_return_required");
+  if (!returnedOutputInsideProject) blockers.push("returned_output_outside_project_root");
+  if (!returnedOutputExists) blockers.push("returned_output_missing");
+
+  const providerRequestId = input.providerRequestId
+    || asString(input.providerObservation?.providerRequestId)
+    || asString(input.providerObservation?.requestId);
+  if (!providerRequestId) blockers.push("provider_request_id_missing");
+
+  let endFrameSha256;
+  let outputBytesWritten = 0;
+  let writeError;
+  if (!blockers.length) {
+    try {
+      const outputBytes = readFileSync(scopedRepoPath(returnedOutputPath));
+      outputBytesWritten = outputBytes.length;
+      if (!outputSourceIsExpected) {
+        writeCurrentProjectRuntimeBytes(expectedEndFramePath, outputBytes, source);
+      }
+      endFrameSha256 = sha256Bytes(outputBytes);
+      const providerObservationPath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.endProviderObservation}`;
+      const semanticQaPath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.endSemanticQa}`;
+      const pairQaPath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.endPairQa}`;
+      const providerObservation = {
+        ...(input.providerObservation || readRuntimeJson(input.returnedProviderObservationPath) || {}),
+        schemaVersion: "round5_strict_edit_end_provider_observation_v1",
+        generatedAt,
+        providerObservationMode: "actual_provider_call_observed",
+        provider: input.providerObservation?.provider || input.providerObservation?.providerId || "openai-image2-api",
+        providerId: input.providerObservation?.providerId || input.providerObservation?.provider || "openai-image2-api",
+        operation: "image.edit",
+        providerRequestId,
+        shotId,
+        preflightReceiptId: providerEditReceipt.receiptId,
+        receiptId: providerEditReceipt.receiptId,
+        sourceStartFramePath: approvedStartFrame.startFramePath,
+        sourceStartFrameSha256: startFrameSha256,
+        sourceStartFrameAttachmentId: approvedStartFrame.providerAttachmentId,
+        editableRegionEvidencePath: editableRegionEvidence.evidencePath || `shots/${shotId}/${round5StrictEditSidecarFileNames.editableRegionEvidence}`,
+        editableRegionEvidenceSha256: editableRegionEvidence.evidenceSha256,
+        outputPath: `shots/${shotId}/end.png`,
+        outputSha256: endFrameSha256,
+        outputBytes: outputBytesWritten,
+        providerCalled: true,
+        actualImage2Triggered: true,
+        providerCallsAttempted: 1,
+        maxProviderCallsPerExecution: 1,
+        noFallbackUsed: true,
+        externalNetworkCallMade: true,
+        projectVibeWritten: false,
+        workerSpawned: false,
+      };
+      const semanticQa = {
+        ...(input.semanticQa || readRuntimeJson(input.returnedSemanticQaPath) || {}),
+        schemaVersion: "round5_strict_edit_end_semantic_qa_v1",
+        generatedAt,
+        reviewedAt: input.semanticQa?.reviewedAt || generatedAt,
+        semanticReviewMode: "actual_image_semantic_review",
+        shotId,
+        outputPath: `shots/${shotId}/end.png`,
+        expectedOutputPath: `shots/${shotId}/end.png`,
+        outputSha256: endFrameSha256,
+        reviewedOutputSha256: endFrameSha256,
+        status: "needs_review",
+        qaStatus: "needs_review",
+        finalAssessment: {
+          ...(isRecord(input.semanticQa?.finalAssessment) ? input.semanticQa.finalAssessment : {}),
+          status: "needs_review",
+        },
+        providerCalled: true,
+        actualImage2Triggered: true,
+      };
+      const pairQa = {
+        schemaVersion: "round5_strict_edit_pair_qa_v1",
+        generatedAt,
+        status: "needs_review",
+        shotId,
+        startFramePath: approvedStartFrame.startFramePath,
+        startFrameSha256,
+        endFramePath: `shots/${shotId}/end.png`,
+        endFrameSha256,
+        sourceStartFrameAttachmentId: approvedStartFrame.providerAttachmentId,
+        providerRequestId,
+        pairReviewRequired: true,
+        completeVerified: false,
+        notes: ["Strict edit end frame returned; pair QA and human review are still required before production promotion."],
+      };
+
+      writeCurrentProjectRuntimeJson(providerObservationPath, providerObservation, source);
+      writeCurrentProjectRuntimeJson(semanticQaPath, semanticQa, source);
+      writeCurrentProjectRuntimeJson(pairQaPath, pairQa, source);
+    } catch (error) {
+      writeError = error instanceof Error ? error.message : "Round 5 strict edit return ingest failed.";
+    }
+  }
+
+  if (writeError) blockers.push(writeError);
+  const statusProjection = currentProjectRealChainResponse({
+    running: extra.running,
+    ignoredRequestContext: requestOverrideDiagnostics(requestContext),
+  }, source);
+  const returnedShot = statusProjection.round5ArtifactIngest?.shotGateMatrix?.find((shot) => shot.shotId === shotId);
+  const hashBoundActual = returnedShot?.gateStatus === "end_returned_needs_review";
+  if (!blockers.length && !hashBoundActual) blockers.push("strict_edit_end_return_not_hash_bound");
+
+  if (blockers.length) {
+    return round5StrictEditBlockedResponse(source, requestContext, input, blockers, {
+      endpoint: currentProjectRound5StrictEditReturnEndpoint,
+      strictEditReturnIngestRan: false,
+      message: "Round 5 strict edit return was blocked before promotion.",
+      reportPath: source.reportRelativePath,
+      image2ReportPath: source.reportRelativePath,
+    });
+  }
+
+  const providerObservationPath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.endProviderObservation}`;
+  const semanticQaPath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.endSemanticQa}`;
+  const pairQaPath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.endPairQa}`;
+  return {
+    ok: true,
+    ...runtimePolicy({
+      runMode: "round5_strict_edit_return_ingest",
+      providerCalled: true,
+      dryRunOnly: false,
+    }),
+    endpoint: currentProjectRound5StrictEditReturnEndpoint,
+    status: "strict_edit_end_returned_needs_review",
+    uiStatus: "needs_review",
+    previewStatus: statusProjection.previewStatus,
+    productionStatus: "needs_review",
+    reportStatus: statusProjection.reportStatus,
+    currentProject: statusProjection.currentProject,
+    requestContext: statusProjection.requestContext,
+    ignoredRequestContext: requestOverrideDiagnostics(requestContext),
+    projectRootMode: source.projectRootMode,
+    projectRoot: project.projectRoot,
+    projectId: project.projectId,
+    project,
+    shotId,
+    expectedOutputPath: expectedEndFramePath,
+    returnedOutputPath,
+    outputSha256: endFrameSha256,
+    outputBytesWritten,
+    providerObservationPath,
+    semanticQaPath,
+    pairQaPath,
+    strictEditReturnIngestRan: true,
+    providerCalled: true,
+    actualImage2Triggered: true,
+    prepareRan: false,
+    projectVibeWritten: false,
+    liveSubmitAllowed: false,
+    videoSubmitted: false,
+    workerSpawnForbidden: true,
+    shotGate: returnedShot,
+    round5ArtifactIngest: statusProjection.round5ArtifactIngest,
+    message: "Round 5 strict edit end frame returned with hash-bound Image2 edit evidence and remains needs_review.",
   };
 }
 
@@ -2798,6 +3147,14 @@ function writeCurrentProjectRuntimeJson(relativePath, payload, source) {
   const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
   writeFileSync(tempPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   renameSync(tempPath, filePath);
+}
+
+function writeCurrentProjectRuntimeBytes(relativePath, bytes, source) {
+  const filePath = assertCurrentProjectRuntimeWritePath(relativePath, source);
+  const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
+  writeFileSync(tempPath, bytes);
+  renameSync(tempPath, filePath);
+  return filePath;
 }
 
 function upsertByShotId(items, item) {
@@ -4472,7 +4829,8 @@ function isCurrentProjectEndpoint(pathname) {
     || pathname === currentProjectImage2OneShotExecuteMockEndpoint
     || pathname === currentProjectImage2OneShotReturnEndpoint
     || pathname === currentProjectImage2OneShotExecuteReturnEndpoint
-    || pathname === currentProjectRound5StrictEditPrepareEndpoint;
+    || pathname === currentProjectRound5StrictEditPrepareEndpoint
+    || pathname === currentProjectRound5StrictEditReturnEndpoint;
 }
 
 async function currentProjectRouteContext(req, res, url, endpoint) {
@@ -4592,6 +4950,7 @@ async function handleRequest(req, res) {
         currentProjectImage2OneShotReturnEndpoint,
         currentProjectImage2OneShotExecuteReturnEndpoint,
         currentProjectRound5StrictEditPrepareEndpoint,
+        currentProjectRound5StrictEditReturnEndpoint,
           realDemo005StatusEndpoint,
           realDemo005RunEndpoint,
           runtimeFileEndpoint,
@@ -4722,6 +5081,17 @@ async function handleRequest(req, res) {
     if (!routeContext) return;
     const input = round5StrictEditRequestInput(url, routeContext.body);
     const payload = currentProjectRound5StrictEditPrepareResponse(input, {
+      running,
+      requestContext: routeContext.requestContext,
+    }, routeContext.source);
+    writeJson(res, payload.ok === false ? 409 : 200, payload);
+    return;
+  }
+  if (req.method === "POST" && url.pathname === currentProjectRound5StrictEditReturnEndpoint) {
+    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectRound5StrictEditReturnEndpoint);
+    if (!routeContext) return;
+    const input = round5StrictEditReturnRequestInput(url, routeContext.body);
+    const payload = currentProjectRound5StrictEditReturnResponse(input, {
       running,
       requestContext: routeContext.requestContext,
     }, routeContext.source);

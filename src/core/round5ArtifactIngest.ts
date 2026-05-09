@@ -24,6 +24,7 @@ type Round5GateStatus =
   | "start_regeneration_required"
   | "end_edit_preflight_blocked"
   | "end_edit_preflight_ready"
+  | "end_returned_needs_review"
   | "start_missing";
 type Round5NextAction =
   | "none"
@@ -31,7 +32,8 @@ type Round5NextAction =
   | "regenerate_start_frame"
   | "block_regenerate_start"
   | "collect_strict_edit_provenance"
-  | "submit_strict_image_edit";
+  | "submit_strict_image_edit"
+  | "review_strict_edit_end_frame";
 
 export interface Round5GeneratedStartFrame {
   shotId: string;
@@ -129,6 +131,42 @@ export interface Round5StrictEditEvidence {
   providerEditReceipts?: Round5ProviderEditReceipt[];
 }
 
+export interface Round5StrictEditEndReturn {
+  shotId: string;
+  endFramePath?: string;
+  endExists?: boolean;
+  endFrameSha256?: string;
+  providerObservation?: {
+    providerObservationMode?: string;
+    provider?: string;
+    providerId?: string;
+    operation?: string;
+    providerRequestId?: string;
+    requestId?: string;
+    outputPath?: string;
+    outputSha256?: string;
+    outputHash?: string;
+    providerCalled?: boolean;
+    actualImage2Triggered?: boolean;
+    sourceStartFrameSha256?: string;
+    sourceStartFrameAttachmentId?: string;
+    editableRegionEvidenceSha256?: string;
+    preflightReceiptId?: string;
+    receiptId?: string;
+    noFallbackUsed?: boolean;
+  };
+  semanticQa?: {
+    semanticReviewMode?: string;
+    outputPath?: string;
+    expectedOutputPath?: string;
+    outputSha256?: string;
+    reviewedOutputSha256?: string;
+    status?: string;
+    qaStatus?: string;
+    finalAssessment?: { status?: string };
+  };
+}
+
 export interface BuildRound5ArtifactIngestInput {
   runRoot: string;
   projectId: string;
@@ -136,6 +174,7 @@ export interface BuildRound5ArtifactIngestInput {
   report: Round5FullRealChainReport;
   generatedAt?: string;
   strictEditEvidence?: Round5StrictEditEvidence;
+  strictEditEndReturns?: Round5StrictEditEndReturn[];
 }
 
 export interface Round5TaskRunLedgerStyleEvent {
@@ -198,7 +237,8 @@ export interface Round5ShotGateProjection {
   startQaStatus: Round5QaStatus;
   endRequired: boolean;
   endFramePath: string;
-  endExists: false;
+  endExists: boolean;
+  endFrameSha256?: string;
   gateStatus: Round5GateStatus;
   ledgerStatus: Round5LedgerStatus;
   nextAction: Round5NextAction;
@@ -233,17 +273,19 @@ export interface Round5ArtifactIngestResult {
     completeVerified: 0;
     endEditPreflightBlocked: number;
     endEditPreflightReady: number;
+    endReturnedNeedsReview: number;
     projections: Round5ShotGateProjection[];
   };
   uiSummary: {
     status: "blocked" | "needs_review" | "in_progress";
     complete: false;
     completeVerified: false;
-    providerCalled: false;
-    generatedImages: false;
+    providerCalled: boolean;
+    generatedImages: boolean;
     totalShots: number;
     observedStarts: number;
     endFramesComplete: 0;
+    returnedEndFrames: number;
     nextActions: Array<{ shotId: string; nextAction: Round5NextAction }>;
     warnings: string[];
   };
@@ -300,6 +342,59 @@ function hasEditableRegion(evidence?: Round5EditableRegionEvidence): boolean {
 
 function evidenceStatusAllowed(status: string | undefined, allowed: ReadonlySet<string>): boolean {
   return allowed.has((status || "").toLowerCase());
+}
+
+function strictEditEndProviderObservationMatches(input: {
+  returnedEnd?: Round5StrictEditEndReturn;
+  generated?: Round5GeneratedStartFrame;
+  approvedStartFrame?: Round5ApprovedStartFrameRef;
+  editableRegionEvidence?: Round5EditableRegionEvidence;
+  providerEditReceipt?: Round5ProviderEditReceipt;
+}): boolean {
+  const observation = input.returnedEnd?.providerObservation;
+  if (!observation) return false;
+  const provider = observation.provider || observation.providerId || "";
+  const operation = (observation.operation || "").toLowerCase();
+  const observedHash = observation.outputSha256 || observation.outputHash;
+  const providerRequestId = observation.providerRequestId || observation.requestId;
+  const receiptId = observation.preflightReceiptId || observation.receiptId;
+  return input.returnedEnd?.endExists === true
+    && observation.providerObservationMode === "actual_provider_call_observed"
+    && /image2/i.test(provider)
+    && (operation === "image.edit" || operation === "image2image")
+    && observation.outputPath === input.returnedEnd.endFramePath
+    && observedHash === input.returnedEnd.endFrameSha256
+    && observation.providerCalled === true
+    && observation.actualImage2Triggered === true
+    && Boolean(providerRequestId)
+    && observation.sourceStartFrameSha256 === input.generated?.sha256
+    && observation.sourceStartFrameAttachmentId === input.approvedStartFrame?.providerAttachmentId
+    && observation.editableRegionEvidenceSha256 === input.editableRegionEvidence?.evidenceSha256
+    && receiptId === input.providerEditReceipt?.receiptId
+    && observation.noFallbackUsed === true;
+}
+
+function strictEditEndSemanticQaMatches(returnedEnd?: Round5StrictEditEndReturn): boolean {
+  const semanticQa = returnedEnd?.semanticQa;
+  if (!semanticQa) return false;
+  const outputPath = semanticQa.outputPath || semanticQa.expectedOutputPath;
+  const reviewedHash = semanticQa.reviewedOutputSha256 || semanticQa.outputSha256;
+  const status = (semanticQa.finalAssessment?.status || semanticQa.qaStatus || semanticQa.status || "").toLowerCase();
+  return returnedEnd?.endExists === true
+    && semanticQa.semanticReviewMode === "actual_image_semantic_review"
+    && outputPath === returnedEnd.endFramePath
+    && reviewedHash === returnedEnd.endFrameSha256
+    && (status === "needs_review" || status === "pass" || status === "warning");
+}
+
+function strictEditEndReturned(input: {
+  returnedEnd?: Round5StrictEditEndReturn;
+  generated?: Round5GeneratedStartFrame;
+  approvedStartFrame?: Round5ApprovedStartFrameRef;
+  editableRegionEvidence?: Round5EditableRegionEvidence;
+  providerEditReceipt?: Round5ProviderEditReceipt;
+}): boolean {
+  return strictEditEndProviderObservationMatches(input) && strictEditEndSemanticQaMatches(input.returnedEnd);
 }
 
 function strictEditEvidenceBlockers(input: {
@@ -417,6 +512,9 @@ function buildEvents(input: {
   sha256?: string;
   qaStatus: Round5QaStatus;
   strictEditPreflightStatus: Round5StrictEditPreflightStatus;
+  strictEditEndReturned: boolean;
+  endFramePath: string;
+  endFrameSha256?: string;
   approvedStartFrameRef?: string;
   editableRegionEvidenceRef?: string;
   providerEditReceiptRef?: string;
@@ -514,6 +612,24 @@ function buildEvents(input: {
     });
   }
 
+  if (input.strictEditEndReturned && input.endFrameSha256) {
+    events.push({
+      eventId: `${input.taskRunId}:strict_edit_end_returned`,
+      eventType: "needs_review",
+      at: input.generatedAt,
+      taskRunId: input.taskRunId,
+      output: { path: input.endFramePath, hash: input.endFrameSha256, hashAlgorithm: "sha256" },
+      qaReview: {
+        qaReportId: `${input.shotId}:strict_edit_end_semantic_qa`,
+        outputPath: input.endFramePath,
+        reviewedOutputHash: input.endFrameSha256,
+        status: "needs_review",
+        findingIds: [],
+      },
+      notes: ["Strict edit end frame was returned with hash-bound actual provider observation and still requires human pair review."],
+    });
+  }
+
   return events;
 }
 
@@ -524,6 +640,7 @@ export function buildRound5ArtifactIngest(input: BuildRound5ArtifactIngestInput)
   const approvedStartByShot = byShot(input.strictEditEvidence?.approvedStartFrames);
   const editableRegionByShot = byShot(input.strictEditEvidence?.editableRegionEvidence);
   const providerEditReceiptByShot = byShot(input.strictEditEvidence?.providerEditReceipts);
+  const returnedEndByShot = byShot(input.strictEditEndReturns);
   const shotIds = unique([...startsByShot.keys(), ...qaByShot.keys()]).sort();
 
   const shotGateMatrix = shotIds.map((shotId): Round5ShotGateProjection => {
@@ -537,6 +654,7 @@ export function buildRound5ArtifactIngest(input: BuildRound5ArtifactIngestInput)
     const approvedStartFrame = approvedStartByShot.get(shotId);
     const editableRegionEvidence = editableRegionByShot.get(shotId);
     const providerEditReceipt = providerEditReceiptByShot.get(shotId);
+    const returnedEnd = returnedEndByShot.get(shotId);
     const evidenceBlockers = strictEditEvidenceBlockers({
       endRequired,
       qaStatus: startQaStatus,
@@ -550,14 +668,29 @@ export function buildRound5ArtifactIngest(input: BuildRound5ArtifactIngestInput)
       qaStatus: startQaStatus,
       evidenceBlockers,
     });
+    const strictEndReturned = evidenceBlockers.length === 0 && strictEditEndReturned({
+      returnedEnd,
+      generated,
+      approvedStartFrame,
+      editableRegionEvidence,
+      providerEditReceipt,
+    });
     const blockers = blockersFor({
       qaStatus: startQaStatus,
       endRequired,
       shotQa,
       report: input.report,
       strictEditEvidenceBlockers: evidenceBlockers,
-    });
-    const nextAction = nextActionFor(shotId, startQaStatus, endRequired, strictEditPreflightStatus);
+    }).filter((blocker) => !strictEndReturned || !String(blocker).startsWith("end_frame_blocked_until"));
+    const nextAction = strictEndReturned
+      ? "review_strict_edit_end_frame"
+      : nextActionFor(shotId, startQaStatus, endRequired, strictEditPreflightStatus);
+    const gateStatus = strictEndReturned
+      ? "end_returned_needs_review"
+      : gateStatusFor(startQaStatus, endRequired, strictEditPreflightStatus);
+    const ledgerStatus = strictEndReturned
+      ? "needs_review"
+      : ledgerStatusFor(startQaStatus, strictEditPreflightStatus);
 
     return {
       shotId,
@@ -568,9 +701,10 @@ export function buildRound5ArtifactIngest(input: BuildRound5ArtifactIngestInput)
       startQaStatus,
       endRequired,
       endFramePath: `shots/${shotId}/end.png`,
-      endExists: false,
-      gateStatus: gateStatusFor(startQaStatus, endRequired, strictEditPreflightStatus),
-      ledgerStatus: ledgerStatusFor(startQaStatus, strictEditPreflightStatus),
+      endExists: returnedEnd?.endExists === true,
+      endFrameSha256: returnedEnd?.endFrameSha256,
+      gateStatus,
+      ledgerStatus,
       nextAction,
       strictEditPilotCandidate: shotId === "ZP05" && endRequired && startQaStatus === "pass",
       strictEditPreflightStatus,
@@ -578,7 +712,7 @@ export function buildRound5ArtifactIngest(input: BuildRound5ArtifactIngestInput)
       editableRegionEvidenceRef: editableRegionEvidence?.evidencePath || editableRegionEvidence?.maskPath,
       providerEditReceiptRef: providerEditReceipt?.receiptPath || providerEditReceipt?.receiptId,
       completeVerified: false,
-      blockers,
+      blockers: strictEndReturned ? [] : blockers,
       warnings: shotQa?.issues || [],
     };
   });
@@ -593,6 +727,9 @@ export function buildRound5ArtifactIngest(input: BuildRound5ArtifactIngestInput)
       sha256: shot.startFrameSha256,
       qaStatus: shot.startQaStatus,
       strictEditPreflightStatus: shot.strictEditPreflightStatus,
+      strictEditEndReturned: shot.gateStatus === "end_returned_needs_review",
+      endFramePath: shot.endFramePath,
+      endFrameSha256: shot.endFrameSha256,
       approvedStartFrameRef: shot.approvedStartFrameRef,
       editableRegionEvidenceRef: shot.editableRegionEvidenceRef,
       providerEditReceiptRef: shot.providerEditReceiptRef,
@@ -617,6 +754,7 @@ export function buildRound5ArtifactIngest(input: BuildRound5ArtifactIngestInput)
     waiting_output: 0,
   };
   for (const shot of shotGateMatrix) byStatus[shot.ledgerStatus] += 1;
+  const returnedEndFrames = shotGateMatrix.filter((shot) => shot.gateStatus === "end_returned_needs_review").length;
 
   const assetStatuses = (input.report.assetQa || []).map((item) => item.status || "unknown");
   const nextActions = shotGateMatrix
@@ -625,7 +763,7 @@ export function buildRound5ArtifactIngest(input: BuildRound5ArtifactIngestInput)
 
   const status = shotGateMatrix.some((shot) => shot.gateStatus === "start_regeneration_required" || shot.gateStatus === "end_edit_preflight_blocked")
     ? "blocked"
-    : shotGateMatrix.some((shot) => shot.gateStatus === "start_needs_review")
+    : shotGateMatrix.some((shot) => shot.gateStatus === "start_needs_review" || shot.gateStatus === "end_returned_needs_review")
       ? "needs_review"
       : "in_progress";
 
@@ -650,21 +788,25 @@ export function buildRound5ArtifactIngest(input: BuildRound5ArtifactIngestInput)
       completeVerified: 0,
       endEditPreflightBlocked: shotGateMatrix.filter((shot) => shot.gateStatus === "end_edit_preflight_blocked").length,
       endEditPreflightReady: shotGateMatrix.filter((shot) => shot.gateStatus === "end_edit_preflight_ready").length,
+      endReturnedNeedsReview: returnedEndFrames,
       projections: shotGateMatrix,
     },
     uiSummary: {
       status,
       complete: false,
       completeVerified: false,
-      providerCalled: false,
-      generatedImages: false,
+      providerCalled: returnedEndFrames > 0,
+      generatedImages: returnedEndFrames > 0,
       totalShots: shotGateMatrix.length,
       observedStarts: shotGateMatrix.filter((shot) => shot.startExists).length,
       endFramesComplete: 0,
+      returnedEndFrames,
       nextActions,
       warnings: [
         "Round 5 artifact ingest is projection-only; it does not generate images.",
-        "End frames remain blocked until strict edit provenance and provider receipts exist.",
+        returnedEndFrames > 0
+          ? "Strict edit end frame returns are hash-bound but remain needs_review until pair QA and human review pass."
+          : "End frames remain blocked until strict edit provenance and provider receipts exist.",
       ],
     },
   };

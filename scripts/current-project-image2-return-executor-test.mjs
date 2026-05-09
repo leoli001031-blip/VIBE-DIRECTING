@@ -299,7 +299,7 @@ try {
 
   const status = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
   assert(status.response.status === 200, "real-chain status should reload after return");
-  assert(status.payload.providerCalled === true, "real-chain status should project actual provider fact");
+  assert(status.payload.providerCalled === false, "real-chain status read must not itself call provider");
   assert(status.payload.actualImage2Triggered === true, "real-chain status should project actual trigger fact");
   assert(status.payload.productionStatus === "needs_review", "real-chain status should project needs_review");
   assert(status.payload.needsReviewShotIds.includes("A01"), "real-chain status should include returned shot in review list");
