@@ -7775,10 +7775,27 @@ function OneShotActionPanel({
 
 function projectRealChainStatusLabel(status: ProjectRealChainUiStatus) {
   if (status === "running") return "同步中";
+  if (status === "needs_review") return "需要复核";
   if (status === "preview_ready_with_review") return "预览待复核";
   if (status === "production_needs_review") return "需要复核";
   if (status === "blocked") return "有阻断";
   return "未同步";
+}
+
+function projectRound5GateLabels(summary: ProjectRealChainPanelState["summary"]) {
+  const shots = summary?.round5Gate?.shotGateMatrix || [];
+  const labels: string[] = [];
+  const zp04 = shots.find((shot) => shot.shotId === "ZP04");
+  const zp05 = shots.find((shot) => shot.shotId === "ZP05");
+  const endBlocked = shots.some((shot) => {
+    const gateStatus = `${shot.gateStatus || ""} ${shot.nextAction || ""}`.toLowerCase();
+    return gateStatus.includes("end") && (gateStatus.includes("blocked") || gateStatus.includes("provenance"));
+  });
+
+  if (zp04?.nextAction && zp04.nextAction !== "none") labels.push("ZP04 重生 start");
+  if (zp05?.strictEditPilotCandidate) labels.push("ZP05 可做 edit pilot");
+  if (endBlocked) labels.push("End 缺证据");
+  return labels;
 }
 
 function projectRealChainVisibleItems(
@@ -7805,10 +7822,12 @@ function projectReviewCheckDetail(summary: ProjectImage2BatchPanelState["summary
 
 function projectPreviewReadyLabel(summary: ProjectRealChainPanelState["summary"]) {
   const status = `${summary?.previewStatus || ""} ${summary?.previewStatusLabel || ""}`.toLowerCase();
+  if (status.includes("blocked")) return "blocked";
   return status.includes("ready") ? "ready" : "not_ready";
 }
 
 function projectProductionReviewLabel(summary: ProjectRealChainPanelState["summary"]) {
+  if (summary?.productionStatus === "blocked") return "blocked";
   return summary?.productionStatus === "needs_review" ? "needs_review" : "clear";
 }
 
@@ -7860,6 +7879,7 @@ function ProjectRealChainPanel({
   const returnedCount = summary?.returnedImageCount ?? 0;
   const plannedCount = summary?.totalPlannedImages ?? 0;
   const visibleItems = summary ? projectRealChainVisibleItems(summary.previewItems, selectedShotId) : [];
+  const round5GateLabels = projectRound5GateLabels(summary);
   const previewLabel = projectPreviewReadyLabel(summary);
   const productionLabel = projectProductionReviewLabel(summary);
   const displayTitle = projectBound
@@ -7932,6 +7952,13 @@ function ProjectRealChainPanel({
         <small>Preview {previewLabel}</small>
         <small>Production {productionLabel}</small>
       </div>
+      {round5GateLabels.length > 0 && (
+        <div className="project-real-chain-gates" aria-label="Round 5 gate 摘要">
+          {round5GateLabels.map((label) => (
+            <small key={label}>{label}</small>
+          ))}
+        </div>
+      )}
       <div className="project-real-chain-batch">
         <div>
           <span>本地复核</span>

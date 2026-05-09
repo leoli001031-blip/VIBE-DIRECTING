@@ -94,6 +94,10 @@ const project005Id = "real_demo_e2e_005_anime_image2_start_frames";
 const project005TruthPath = `${project005Root}/reports/runtime_truth_layer.json`;
 const project005VibePath = `${project005Root}/project/project.vibe`;
 const project005OneShotRoot = `${project005Root}/real-trigger-one-shot`;
+const round5Root = "real-test-sandbox/round5-zero-project-planning-anime/runs/run-2026-05-09T11-09-28-642Z";
+const round5ProjectId = "round5_zero_planning_anime_signal";
+const round5ReportPath = `${round5Root}/reports/round5_full_real_chain_report.json`;
+const round5VibePath = `${round5Root}/project/project.vibe.json`;
 
 function assertNo005Leak(payload, label) {
   const text = JSON.stringify(payload);
@@ -189,6 +193,49 @@ function assertCurrent004(payload, label) {
   assert(!JSON.stringify(payload.workbenchFacts).includes("char_mika"), `${label} must not leak 005 visual memory`);
   assertProjectProjectionFacts(payload, label, project004Root, project004TruthPath);
   assert(!JSON.stringify(payload).includes(project005Id), `${label} must not mix in 005 project identity`);
+}
+
+function assertCurrentRound5(payload, label) {
+  assert(payload.ok === true, `${label} should be ok`);
+  assertCurrentBindingContext(payload, label, round5Root, round5ProjectId);
+  assert(payload.status === "blocked", `${label} top-level status should follow Round 5 gates`);
+  assert(payload.previewStatus === "blocked", `${label} preview status should follow Round 5 gates`);
+  assert(payload.productionStatus === "blocked", `${label} production status should follow Round 5 gates`);
+  assert(payload.plannedImageCount === 6, `${label} planned image count should come from Round 5 gates`);
+  assert(payload.returnedImageCount === 6, `${label} returned image count should come from observed starts`);
+  assert(payload.blockerCount >= 3, `${label} blocker count should include Round 5 gate actions`);
+  assert(payload.nextAction === "round5_artifact_gates_require_review", `${label} nextAction should point to Round 5 gate review`);
+  assert(payload.reportPath === round5ReportPath, `${label} should expose Round 5 report as primary report`);
+  assert(payload.image2ReportPath === round5ReportPath, `${label} compatibility report path should be Round 5 report`);
+  assert(payload.projectionSource === "round5_full_real_chain_report_fallback", `${label} should use Round 5 report fallback without 004/005 truth layers`);
+  assert(payload.round5ArtifactIngest?.schemaVersion === "0.1.0", `${label} missing round5ArtifactIngest`);
+  assert(Array.isArray(payload.round5ArtifactIngest.shotGateMatrix), `${label} shotGateMatrix missing`);
+  assert(payload.round5ArtifactIngest.shotGateMatrix.length === 6, `${label} shotGateMatrix count mismatch`);
+  assert(payload.round5ArtifactIngest.ledgerProjection?.completeVerified === 0, `${label} completeVerified must stay 0`);
+  assert(payload.round5ArtifactIngest.uiSummary?.providerCalled === false, `${label} ingest must not call provider`);
+  assert(payload.round5ArtifactIngest.uiSummary?.generatedImages === false, `${label} ingest must not generate images`);
+  assert(payload.round5ArtifactIngest.uiSummary?.completeVerified === false, `${label} uiSummary must not mark complete verified`);
+  assert(payload.round5ArtifactIngest.isolation?.noProjectVibeMutation === true, `${label} isolation must forbid project.vibe mutation`);
+  assert(payload.round5ArtifactIngest.isolation?.sidecarOnlyImageTransport === true, `${label} isolation must require sidecar transport`);
+  assert(payload.providerCalled === false, `${label} top-level providerCalled must stay false`);
+  assert(payload.projectVibeWritten === false, `${label} top-level projectVibeWritten must stay false`);
+
+  const byShot = new Map(payload.round5ArtifactIngest.shotGateMatrix.map((shot) => [shot.shotId, shot]));
+  const zp04 = byShot.get("ZP04");
+  assert(zp04?.nextAction === "regenerate_start_frame", `${label} ZP04 should require start regeneration`);
+  assert(zp04?.gateStatus === "start_regeneration_required", `${label} ZP04 gate status mismatch`);
+  assert(zp04?.ledgerStatus === "parked", `${label} ZP04 should be parked`);
+  assert(zp04?.blockers?.includes("start_motion_affordance_failed"), `${label} ZP04 start regeneration blocker missing`);
+
+  const zp05 = byShot.get("ZP05");
+  assert(zp05?.strictEditPilotCandidate === true, `${label} ZP05 should be strict edit pilot candidate`);
+  assert(zp05?.gateStatus === "end_edit_preflight_blocked", `${label} ZP05 end edit preflight should be blocked`);
+  assert(zp05?.nextAction === "collect_strict_edit_provenance", `${label} ZP05 nextAction mismatch`);
+
+  const zp02 = byShot.get("ZP02");
+  assert(zp02?.gateStatus === "end_edit_preflight_blocked", `${label} ZP02 end edit preflight should be blocked`);
+  assert(zp02?.nextAction === "collect_strict_edit_provenance", `${label} ZP02 nextAction mismatch`);
+  assert(payload.round5ArtifactIngest.ledgerProjection?.endEditPreflightBlocked === 2, `${label} end edit preflight blocked count mismatch`);
 }
 
 function assertImage2Batch005(payload, label) {
@@ -354,6 +401,26 @@ try {
   assert(project005Status.response.status === 200, "GET current status after select 005 should return 200");
   assertCurrent005(project005Status.payload, "GET current status after select 005");
   assert(statSync(project005VibePath).mtimeMs === project005VibeBeforeStatusRead, "GET current status with workbenchFacts must not mutate 005 project.vibe");
+
+  const round5VibeBefore = statSync(round5VibePath).mtimeMs;
+  const selectRound5 = await selectProject(baseUrl, round5Root, round5ProjectId, "Round 5 artifact ingest");
+  assert(selectRound5.response.status === 200, "POST select Round 5 should return 200");
+  assert(selectRound5.payload.status === "bound", "POST select Round 5 should bind");
+  assert(selectRound5.payload.providerCalled === false, "POST select Round 5 must not call provider");
+  assert(selectRound5.payload.prepareRan === false, "POST select Round 5 must not run prepare");
+  assert(selectRound5.payload.projectVibeWritten === false, "POST select Round 5 must not write project.vibe");
+  assert(statSync(round5VibePath).mtimeMs === round5VibeBefore, "POST select Round 5 must not mutate project.vibe");
+
+  const round5VibeBeforeStatusRead = statSync(round5VibePath).mtimeMs;
+  const round5Status = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
+  assert(round5Status.response.status === 200, "GET current status after select Round 5 should return 200");
+  assertCurrentRound5(round5Status.payload, "GET current status after select Round 5");
+  assert(statSync(round5VibePath).mtimeMs === round5VibeBeforeStatusRead, "GET Round 5 status must not mutate project.vibe");
+
+  const reselect005 = await selectProject(baseUrl, project005Root, project005Id, "005 anime image2");
+  assert(reselect005.response.status === 200, "POST reselect 005 should return 200");
+  assert(reselect005.payload.status === "bound", "POST reselect 005 should bind");
+  assert(reselect005.payload.providerCalled === false, "POST reselect 005 must not call provider");
 
   const oneShot005Status = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/status?selectedShotId=S01`);
   assert(oneShot005Status.response.status === 200, "GET one-shot status after select 005 should return 200");

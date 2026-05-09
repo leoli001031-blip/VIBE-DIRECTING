@@ -33,6 +33,7 @@ export const projectRealChainFallbackReportUrl = `/${projectRealChainReportRelat
 
 export type ProjectRealChainUiStatus =
   | "running"
+  | "needs_review"
   | "preview_ready_with_review"
   | "production_needs_review"
   | "blocked"
@@ -53,6 +54,25 @@ export type ProjectRealChainPreviewItem = {
   reviewOverlay: boolean;
   previewQaStatus?: string;
   productionQaStatus?: string;
+};
+
+export type ProjectRound5ShotGate = {
+  shotId: string;
+  gateStatus?: string;
+  ledgerStatus?: string;
+  nextAction?: string;
+  strictEditPilotCandidate: boolean;
+  blockers: string[];
+  warnings: string[];
+};
+
+export type ProjectRound5GateSummary = {
+  status?: string;
+  shotGateMatrix: ProjectRound5ShotGate[];
+  ledgerProjection?: Record<string, unknown>;
+  assetGateSummary?: Record<string, unknown>;
+  uiSummary?: Record<string, unknown>;
+  isolation?: Record<string, unknown>;
 };
 
 export type ProjectWorkbenchAssetFactStatus = "locked" | "candidate" | "needs_review" | "rejected" | "missing";
@@ -163,6 +183,7 @@ export type ProjectRealChainStatus = {
   reviewShotIds: string[];
   previewItems: ProjectRealChainPreviewItem[];
   previewThumbnails: ProjectRealChainPreviewItem[];
+  round5Gate?: ProjectRound5GateSummary;
   workbenchFacts?: ProjectWorkbenchFacts;
   reportPath: string;
   reportUrl: string;
@@ -384,6 +405,13 @@ type ProjectRealChainPayload = {
   prepareRan?: boolean;
   previewItems?: ProjectRealChainPreviewItem[];
   previewThumbnails?: ProjectRealChainPreviewItem[];
+  round5ArtifactIngest?: unknown;
+  round5Gate?: unknown;
+  shotGateMatrix?: unknown;
+  ledgerProjection?: unknown;
+  assetGateSummary?: unknown;
+  uiSummary?: unknown;
+  isolation?: unknown;
   workbenchFacts?: ProjectWorkbenchFacts;
   observations?: Array<{
     id?: string;
@@ -675,12 +703,57 @@ export function deriveCurrentProjectChoices(payload: unknown): ProjectCurrentCho
 
 function payloadFromUnknown(payload: unknown): ProjectRealChainPayload | undefined {
   if (!isRecord(payload)) return undefined;
-  if (typeof payload.previewStatus === "string" || Array.isArray(payload.previewItems) || Array.isArray(payload.observations)) {
+  if (
+    typeof payload.previewStatus === "string"
+    || Array.isArray(payload.previewItems)
+    || Array.isArray(payload.observations)
+    || isRecord(payload.round5ArtifactIngest)
+    || isRecord(payload.round5Gate)
+    || Array.isArray(payload.shotGateMatrix)
+    || isRecord(payload.uiSummary)
+  ) {
     return payload as ProjectRealChainPayload;
   }
   if (isRecord(payload.report)) return { ...(payload.report as ProjectRealChainPayload), ...payload } as ProjectRealChainPayload;
   if (isRecord(payload.result)) return { ...(payload.result as ProjectRealChainPayload), ...payload } as ProjectRealChainPayload;
   return undefined;
+}
+
+function deriveRound5GateSummary(payload: ProjectRealChainPayload): ProjectRound5GateSummary | undefined {
+  const ingest = isRecord(payload.round5ArtifactIngest)
+    ? payload.round5ArtifactIngest
+    : isRecord(payload.round5Gate)
+      ? payload.round5Gate
+      : Array.isArray(payload.shotGateMatrix) || isRecord(payload.uiSummary)
+        ? payload
+        : undefined;
+  if (!ingest) return undefined;
+
+  const shotGateMatrix = Array.isArray(ingest.shotGateMatrix)
+    ? ingest.shotGateMatrix.filter(isRecord).map((shot, index): ProjectRound5ShotGate => ({
+      shotId: typeof shot.shotId === "string" && shot.shotId.trim() ? shot.shotId : `ZP${String(index + 1).padStart(2, "0")}`,
+      gateStatus: typeof shot.gateStatus === "string" ? shot.gateStatus : undefined,
+      ledgerStatus: typeof shot.ledgerStatus === "string" ? shot.ledgerStatus : undefined,
+      nextAction: typeof shot.nextAction === "string" ? shot.nextAction : undefined,
+      strictEditPilotCandidate: shot.strictEditPilotCandidate === true,
+      blockers: stringArray(shot.blockers),
+      warnings: stringArray(shot.warnings),
+    }))
+    : [];
+  if (!shotGateMatrix.length && !isRecord(ingest.uiSummary)) return undefined;
+
+  return {
+    status: isRecord(ingest.uiSummary) && typeof ingest.uiSummary.status === "string"
+      ? ingest.uiSummary.status
+      : typeof ingest.status === "string"
+        ? ingest.status
+        : undefined,
+    shotGateMatrix,
+    ledgerProjection: isRecord(ingest.ledgerProjection) ? ingest.ledgerProjection : undefined,
+    assetGateSummary: isRecord(ingest.assetGateSummary) ? ingest.assetGateSummary : undefined,
+    uiSummary: isRecord(ingest.uiSummary) ? ingest.uiSummary : undefined,
+    isolation: isRecord(ingest.isolation) ? ingest.isolation : undefined,
+  };
 }
 
 function image2BatchPayloadFromUnknown(payload: unknown): ProjectImage2BatchPayload | undefined {
@@ -785,6 +858,15 @@ function humanPreviewStatus(status: string) {
 }
 
 function deriveUiStatus(payload: ProjectRealChainPayload): ProjectRealChainUiStatus {
+  const round5Gate = deriveRound5GateSummary(payload);
+  const round5UiStatus = String(round5Gate?.status || "").toLowerCase();
+  const round5ShotBlockers = round5Gate?.shotGateMatrix.some((shot) => {
+    const gateStatus = String(shot.gateStatus || "").toLowerCase();
+    return shot.blockers.length > 0 || gateStatus.includes("blocked") || gateStatus.includes("required");
+  }) === true;
+  if (round5UiStatus === "blocked" || round5ShotBlockers) return "blocked";
+  if (round5UiStatus === "needs_review") return "needs_review";
+
   const raw = [payload.status, payload.previewStatus, payload.productionStatus].filter(Boolean).join(" ").toLowerCase();
   const blockers = stringArray(payload.blockers);
   if (blockers.length || raw.includes("blocked") || raw.includes("fail")) return "blocked";
@@ -891,13 +973,19 @@ export function deriveProjectRealChainStatus(
   const previewThumbnails = Array.isArray(report.previewThumbnails) && report.previewThumbnails.length
     ? report.previewThumbnails.map(normalizePreviewItem)
     : previewItems;
+  const round5Gate = deriveRound5GateSummary(report);
   const reviewShotIds = deriveReviewShotIds(report, previewItems);
   const previewStatus = report.previewStatus || report.status || "unavailable";
   const totalPlannedImages = numberOrUndefined(report.totalPlannedImages)
     ?? numberOrUndefined(report.plannedImageCount)
     ?? numberOrUndefined(report.shotCount)
+    ?? numberOrUndefined(round5Gate?.uiSummary?.totalShots)
+    ?? numberOrUndefined(round5Gate?.ledgerProjection?.total)
+    ?? round5Gate?.shotGateMatrix.length
     ?? previewItems.length;
-  const returnedImageCount = numberOrUndefined(report.returnedImageCount) ?? previewItems.filter((item) => item.imageUrl || item.expectedOutputPath).length;
+  const returnedImageCount = numberOrUndefined(report.returnedImageCount)
+    ?? numberOrUndefined(round5Gate?.uiSummary?.observedStarts)
+    ?? previewItems.filter((item) => item.imageUrl || item.expectedOutputPath).length;
   const project = report.project || {};
 
   return {
@@ -925,6 +1013,7 @@ export function deriveProjectRealChainStatus(
     reviewShotIds,
     previewItems,
     previewThumbnails,
+    round5Gate,
     workbenchFacts: report.workbenchFacts,
     reportPath,
     reportUrl,

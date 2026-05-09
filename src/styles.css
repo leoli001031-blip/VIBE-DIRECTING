@@ -783,6 +783,7 @@
     "head tags thumbs"
     "select select thumbs"
     "recent recent thumbs"
+    "gate gate thumbs"
     "batch oneshot thumbs"
     "report report thumbs"
     "message message thumbs";
@@ -951,6 +952,22 @@
   background: rgba(37, 40, 34, 0.035);
   color: rgba(37, 40, 34, 0.66);
   padding: 5px 8px;
+  font-size: 11px;
+}
+
+.project-real-chain-gates {
+  grid-area: gate;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-gates small {
+  border: 1px solid rgba(151, 117, 69, 0.22);
+  background: rgba(151, 117, 69, 0.06);
+  color: rgba(37, 40, 34, 0.7);
+  padding: 4px 7px;
   font-size: 11px;
 }
 
@@ -1161,11 +1178,13 @@
 .preview-shell .project-real-chain-select button,
 .preview-shell .project-real-chain-recent button,
 .preview-shell .project-real-chain-tags small,
+.preview-shell .project-real-chain-gates small,
 .preview-shell .project-real-chain-policy small {
   border-color: rgba(242, 238, 230, 0.16);
 }
 
 .preview-shell .project-real-chain-tags small,
+.preview-shell .project-real-chain-gates small,
 .preview-shell .project-real-chain-policy small {
   background: rgba(242, 238, 230, 0.055);
   color: rgba(242, 238, 230, 0.68);
@@ -2085,6 +2104,7 @@
       "select"
       "recent"
       "tags"
+      "gate"
       "batch"
       "policy"
       "thumbs"

@@ -21,6 +21,21 @@ const sandboxProjectVibeRelativePath = `${sandboxRunRootRelativePath}/project/pr
 const sandboxReportRelativePath = `${sandboxRunRootRelativePath}/reports/image2_start_long_chain_report.json`;
 const verifyScript = path.join(repoRoot, "scripts/real-demo-e2e-005-anime-image2-start-verify.mjs");
 const maxOutputChars = 8000;
+const round5FullRealChainReportFileName = "round5_full_real_chain_report.json";
+const round5ArtifactIngestSchemaVersion = "0.1.0";
+const round5EndFrameBlockers = [
+  "approved_start_attachment_missing",
+  "strict_image_edit_provenance_missing",
+  "provider_edit_receipt_missing",
+  "source_start_frame_attachment_id_missing",
+  "source_start_frame_sha_not_provider_confirmed",
+  "editable_region_mask_or_bbox_missing",
+];
+const round5ArtifactIsolationFlags = {
+  mainThreadImageBytesForbidden: true,
+  sidecarOnlyImageTransport: true,
+  noProjectVibeMutation: true,
+};
 
 const runtimeBasePath = "/api/runtime";
 const currentProjectBindingEndpoint = `${runtimeBasePath}/projects/current`;
@@ -224,12 +239,14 @@ function resolveProjectSource(inputPath, options = {}) {
     : firstExistingPath([
       path.join(runRootPath, "project.vibe"),
       path.join(runRootPath, "project", "project.vibe"),
+      path.join(runRootPath, "project", "project.vibe.json"),
     ]) || path.join(runRootPath, "project", "project.vibe");
 
   const reportInput = options.reportPath || (options.ignoreReportEnv ? undefined : (process.env.VIBE_CORE_CURRENT_PROJECT_REPORT || process.env.VIBE_CORE_PROJECT_REPORT));
   const reportPath = reportInput
     ? resolveRepoInputPath(reportInput)
     : firstExistingPath([
+      path.join(runRootPath, "reports", round5FullRealChainReportFileName),
       path.join(runRootPath, "reports", "image2_start_long_chain_report.json"),
       path.join(runRootPath, "reports", "real_demo_e2e_report.json"),
       path.join(runRootPath, "image2_start_long_chain_report.json"),
@@ -586,6 +603,9 @@ function projectFact(name, filePath, usedFor = []) {
 }
 
 function readProjectFacts(source) {
+  const reportFactName = source.reportRelativePath.endsWith(`/reports/${round5FullRealChainReportFileName}`)
+    ? "round5_full_real_chain_report"
+    : "image2_start_long_chain_report";
   const facts = [
     projectFact("project_vibe", source.projectVibePath, ["identity"]),
     projectFact("source_index", source.sourceIndexPath, ["project_facts"]),
@@ -594,7 +614,7 @@ function readProjectFacts(source) {
     projectFact("run_manifest", source.runManifestPath, ["ledger_plan", "identity"]),
     projectFact("runtime_truth_layer", source.runtimeTruthLayerPath, ["ledger_truth", "status"]),
     projectFact("preview_plan", source.previewPlanPath, ["preview", "status"]),
-    projectFact("image2_start_long_chain_report", source.reportPath, ["compatibility_fallback"]),
+    projectFact(reportFactName, source.reportPath, ["compatibility_fallback"]),
   ];
   const byName = Object.fromEntries(facts.map((fact) => [fact.name, fact]));
   const factsUsed = facts
@@ -602,7 +622,8 @@ function readProjectFacts(source) {
     .map(({ name, path: factPath, usedFor }) => ({ name, path: factPath, usedFor }));
   const runtimeTruthLayer = byName.runtime_truth_layer.parsed;
   const previewPlan = byName.preview_plan.parsed;
-  const image2Report = byName.image2_start_long_chain_report.parsed;
+  const image2Report = byName.image2_start_long_chain_report?.parsed || byName.round5_full_real_chain_report?.parsed;
+  const round5Report = byName.round5_full_real_chain_report?.parsed;
   const projectionParts = [
     runtimeTruthLayer ? "runtime_truth_layer" : undefined,
     previewPlan ? "preview_plan" : undefined,
@@ -620,13 +641,17 @@ function readProjectFacts(source) {
     image2Report,
     projectionSource: projectionParts.length
       ? projectionParts.join("+")
-      : image2Report
+      : round5Report
+        ? "round5_full_real_chain_report_fallback"
+        : image2Report
         ? "image2_start_long_chain_report_fallback"
         : "unavailable",
     ledgerTruthSource: runtimeTruthLayer
       ? "runtime_truth_layer"
       : previewPlan
         ? "preview_plan"
+        : round5Report
+          ? "round5_full_real_chain_report_fallback"
         : image2Report
           ? "image2_start_long_chain_report_fallback"
           : "unavailable",
@@ -638,6 +663,266 @@ function readProjectFacts(source) {
           ? source.reportRelativePath
           : source.reportRelativePath,
     projectionAvailable: Boolean(runtimeTruthLayer || previewPlan || image2Report || byName.run_manifest.parsed),
+  };
+}
+
+function isRound5FullRealChainReport(report, source) {
+  return isRecord(report) && (
+    String(report.schemaVersion || "").startsWith("round5_full_real_chain_report")
+    || source.reportRelativePath.endsWith(`/reports/${round5FullRealChainReportFileName}`)
+  );
+}
+
+function round5TaskRunId(runId, shotId) {
+  return `${runId}:${shotId}:start`;
+}
+
+function round5QaStatusFor(shotQa, generated) {
+  const qaStatus = String(shotQa?.qaStatus || "").toLowerCase();
+  const startStatus = String(shotQa?.startStatus || generated?.status || "").toLowerCase();
+  if (!generated?.exists) return "missing";
+  if (qaStatus.startsWith("blocked") || startStatus.includes("motion_affordance_failed") || startStatus.includes("failed")) return "blocked";
+  if (qaStatus.includes("needs_review") || startStatus.includes("needs_review")) return "needs_review";
+  if (qaStatus.startsWith("pass") || startStatus.includes("generated")) return "pass";
+  return "needs_review";
+}
+
+function round5EndRequiredFor(shotId, report, shotQa) {
+  if (Array.isArray(report.endFrameStage?.appliesTo) && report.endFrameStage.appliesTo.includes(shotId)) return true;
+  const endStatus = shotQa?.endStatus || "";
+  return Boolean(endStatus && endStatus !== "not_required");
+}
+
+function round5BlockersFor({ qaStatus, endRequired, shotQa, report }) {
+  const shotIssues = Array.isArray(shotQa?.issues) ? shotQa.issues : [];
+  if (qaStatus === "missing") return uniqueStrings(["start_frame_missing", ...shotIssues]);
+  if (qaStatus === "blocked") return uniqueStrings(["start_motion_affordance_failed", ...shotIssues]);
+  if (endRequired) return uniqueStrings([...(Array.isArray(report.endFrameStage?.blockers) ? report.endFrameStage.blockers : round5EndFrameBlockers), ...shotIssues]);
+  if (qaStatus === "needs_review") return uniqueStrings(["start_frame_needs_review", ...shotIssues]);
+  return uniqueStrings(shotIssues);
+}
+
+function round5GateStatusFor(qaStatus, endRequired) {
+  if (qaStatus === "missing") return "start_missing";
+  if (qaStatus === "blocked") return "start_regeneration_required";
+  if (qaStatus === "needs_review") return "start_needs_review";
+  if (endRequired) return "end_edit_preflight_blocked";
+  return "start_provider_observed";
+}
+
+function round5LedgerStatusFor(qaStatus) {
+  if (qaStatus === "missing") return "waiting_output";
+  if (qaStatus === "blocked") return "parked";
+  if (qaStatus === "needs_review") return "needs_review";
+  return "provider_observed";
+}
+
+function round5NextActionFor(shotId, qaStatus, endRequired) {
+  if (shotId === "ZP04" && qaStatus === "blocked") return "regenerate_start_frame";
+  if (qaStatus === "blocked") return "block_regenerate_start";
+  if (qaStatus === "needs_review") return "review_start_frame";
+  if (endRequired) return "collect_strict_edit_provenance";
+  return "none";
+}
+
+function round5LedgerEvents({ generatedAt, projectId, taskRunId, shotId, path: outputPath, sha256, qaStatus, blockers }) {
+  const events = [
+    {
+      eventId: `${taskRunId}:prepared`,
+      eventType: "task_prepared",
+      at: generatedAt,
+      taskRunId,
+      notes: ["Projected from Round 5 artifact report; no provider call or file mutation performed."],
+    },
+  ];
+
+  if (!outputPath || !sha256) return events;
+
+  events.push({
+    eventId: `${taskRunId}:output_detected_no_sidecar`,
+    eventType: "output_detected_no_sidecar",
+    at: generatedAt,
+    taskRunId,
+    output: { path: outputPath, hash: sha256, hashAlgorithm: "sha256" },
+    notes: ["start.png exists in run artifacts; image bytes stay in sidecar/artifact storage."],
+  });
+  events.push({
+    eventId: `${taskRunId}:provider_observed`,
+    eventType: "provider_observed",
+    at: generatedAt,
+    taskRunId,
+    providerObservation: {
+      providerId: "round5_report_artifact_projection",
+      observationId: `${projectId}:${shotId}:start`,
+      outputPath,
+      outputHash: sha256,
+    },
+    notes: ["Observation is report-derived; it is not a new provider invocation."],
+  });
+
+  if (qaStatus === "pass") {
+    events.push({
+      eventId: `${taskRunId}:qa_passed`,
+      eventType: "qa_passed",
+      at: generatedAt,
+      taskRunId,
+      qaReview: {
+        qaReportId: `${shotId}:start_motion_affordance_qa`,
+        outputPath,
+        reviewedOutputHash: sha256,
+        status: "pass",
+        findingIds: blockers,
+      },
+      notes: ["QA pass does not imply complete_verified without strict sidecars/provenance."],
+    });
+  } else if (qaStatus === "needs_review") {
+    events.push({
+      eventId: `${taskRunId}:needs_review`,
+      eventType: "needs_review",
+      at: generatedAt,
+      taskRunId,
+      qaReview: {
+        qaReportId: `${shotId}:start_motion_affordance_qa`,
+        outputPath,
+        reviewedOutputHash: sha256,
+        status: "needs_review",
+        findingIds: blockers,
+      },
+      notes: ["Start frame requires review before downstream promotion."],
+    });
+  } else if (qaStatus === "blocked") {
+    events.push({
+      eventId: `${taskRunId}:parked`,
+      eventType: "parked",
+      at: generatedAt,
+      taskRunId,
+      reason: blockers.join(", "),
+      notes: ["Start frame is parked until regenerated; end frame must remain blocked."],
+    });
+  }
+
+  return events;
+}
+
+function round5ArtifactIngestFromReport(source, project, report) {
+  if (!isRound5FullRealChainReport(report, source)) return undefined;
+
+  const runId = project.runId || path.basename(source.runRootPath);
+  const projectId = project.projectId || source.requestProjectId || path.basename(path.dirname(path.dirname(source.runRootPath)));
+  const generatedAt = report.generatedAt || "1970-01-01T00:00:00.000Z";
+  const startsByShot = new Map((Array.isArray(report.generatedStartFrames) ? report.generatedStartFrames : []).map((item) => [item.shotId, item]));
+  const qaByShot = new Map((Array.isArray(report.shotQa) ? report.shotQa : []).map((item) => [item.shotId, item]));
+  const shotIds = uniqueStrings([...startsByShot.keys(), ...qaByShot.keys()]).sort();
+
+  const shotGateMatrix = shotIds.map((shotId) => {
+    const generated = startsByShot.get(shotId);
+    const shotQa = qaByShot.get(shotId);
+    const startFramePath = generated?.startFramePath || generated?.path || shotQa?.path;
+    const startFrameSha256 = generated?.sha256;
+    const startExists = Boolean(generated?.exists && startFramePath && startFrameSha256);
+    const startQaStatus = round5QaStatusFor(shotQa, generated);
+    const endRequired = round5EndRequiredFor(shotId, report, shotQa);
+    const blockers = round5BlockersFor({ qaStatus: startQaStatus, endRequired, shotQa, report });
+    const nextAction = round5NextActionFor(shotId, startQaStatus, endRequired);
+
+    return {
+      shotId,
+      taskRunId: round5TaskRunId(runId, shotId),
+      startFramePath,
+      startFrameSha256,
+      startExists,
+      startQaStatus,
+      endRequired,
+      endFramePath: `shots/${shotId}/end.png`,
+      endExists: false,
+      gateStatus: round5GateStatusFor(startQaStatus, endRequired),
+      ledgerStatus: round5LedgerStatusFor(startQaStatus),
+      nextAction,
+      strictEditPilotCandidate: shotId === "ZP05" && endRequired && startQaStatus === "pass",
+      completeVerified: false,
+      blockers,
+      warnings: Array.isArray(shotQa?.issues) ? shotQa.issues : [],
+    };
+  });
+
+  const ledgers = shotGateMatrix.map((shot) => {
+    const events = round5LedgerEvents({
+      generatedAt,
+      projectId,
+      taskRunId: shot.taskRunId,
+      shotId: shot.shotId,
+      path: shot.startFramePath,
+      sha256: shot.startFrameSha256,
+      qaStatus: shot.startQaStatus,
+      blockers: shot.blockers,
+    });
+    return {
+      schemaVersion: "task_run_ledger_style_projection_v1",
+      ledgerId: `round5_artifact_ledger_${runId}_${shot.shotId}`,
+      projectId,
+      taskRunId: shot.taskRunId,
+      createdAt: generatedAt,
+      updatedAt: generatedAt,
+      expectedOutputs: uniqueStrings([shot.startFramePath || "", shot.endRequired ? shot.endFramePath : ""]),
+      events,
+    };
+  });
+
+  const byStatus = {
+    provider_observed: 0,
+    needs_review: 0,
+    parked: 0,
+    waiting_output: 0,
+  };
+  for (const shot of shotGateMatrix) byStatus[shot.ledgerStatus] += 1;
+
+  const assetStatuses = (Array.isArray(report.assetQa) ? report.assetQa : []).map((item) => item.status || "unknown");
+  const nextActions = shotGateMatrix
+    .filter((shot) => shot.nextAction !== "none")
+    .map((shot) => ({ shotId: shot.shotId, nextAction: shot.nextAction }));
+  const status = shotGateMatrix.some((shot) => shot.gateStatus === "start_regeneration_required" || shot.gateStatus === "end_edit_preflight_blocked")
+    ? "blocked"
+    : shotGateMatrix.some((shot) => shot.gateStatus === "start_needs_review")
+      ? "needs_review"
+      : "in_progress";
+
+  return {
+    schemaVersion: round5ArtifactIngestSchemaVersion,
+    runRoot: source.runRootPath,
+    projectId,
+    runId,
+    sourceReportSchemaVersion: report.schemaVersion,
+    isolation: round5ArtifactIsolationFlags,
+    assetGateSummary: {
+      total: assetStatuses.length,
+      needsReview: assetStatuses.filter((item) => item.includes("needs_review")).length,
+      pass: assetStatuses.filter((item) => item === "pass").length,
+      statuses: uniqueStrings(assetStatuses),
+    },
+    shotGateMatrix,
+    ledgers,
+    ledgerProjection: {
+      total: shotGateMatrix.length,
+      byStatus,
+      completeVerified: 0,
+      endEditPreflightBlocked: shotGateMatrix.filter((shot) => shot.gateStatus === "end_edit_preflight_blocked").length,
+      projections: shotGateMatrix,
+    },
+    uiSummary: {
+      status,
+      complete: false,
+      completeVerified: false,
+      providerCalled: false,
+      generatedImages: false,
+      totalShots: shotGateMatrix.length,
+      observedStarts: shotGateMatrix.filter((shot) => shot.startExists).length,
+      endFramesComplete: 0,
+      nextActions,
+      warnings: [
+        "Round 5 artifact ingest is projection-only; it does not generate images.",
+        "End frames remain blocked until strict edit provenance and provider receipts exist.",
+      ],
+    },
   };
 }
 
@@ -3277,15 +3562,48 @@ function currentProjectRealChainResponse(extra = {}, source = currentProjectSour
   const needsReviewShotIds = projection.reviewShotIds;
   const primaryReportRelativePath = projectFacts.primaryReportRelativePath;
   const actualProviderReturned = observations.some((item) => item.providerObservationActual === true);
+  const round5ArtifactIngest = round5ArtifactIngestFromReport(source, project, projectFacts.image2Report);
+  const hasRound5ArtifactIngest = Boolean(round5ArtifactIngest);
+  const round5UiStatus = round5ArtifactIngest?.uiSummary?.status;
+  const preferRound5Status = hasRound5ArtifactIngest && (
+    !projection.ok ||
+    projection.status === "unavailable" ||
+    projectFacts.projectionSource === "round5_full_real_chain_report_fallback"
+  );
+  const resolvedOk = projection.ok || hasRound5ArtifactIngest;
+  const resolvedStatus = preferRound5Status ? round5UiStatus || "unavailable" : projection.ok ? projection.status : "unavailable";
+  const resolvedPreviewStatus = preferRound5Status
+    ? round5UiStatus === "blocked"
+      ? "blocked"
+      : round5UiStatus === "needs_review"
+        ? "needs_review"
+        : round5UiStatus === "in_progress"
+          ? "running"
+          : "unavailable"
+    : projection.ok
+      ? projection.previewStatus
+      : "unavailable";
+  const resolvedProductionStatus = preferRound5Status
+    ? round5UiStatus === "blocked"
+      ? "blocked"
+      : round5UiStatus === "needs_review"
+        ? "needs_review"
+        : "unavailable"
+    : projection.ok
+      ? projection.productionStatus
+      : "unavailable";
+  const plannedImageCount = observations.length || round5ArtifactIngest?.uiSummary?.totalShots || 0;
+  const returnedImageCount = projection.returnedObservations.length || round5ArtifactIngest?.uiSummary?.observedStarts || 0;
+  const blockerCount = projection.blockedObservations.length || round5ArtifactIngest?.uiSummary?.nextActions?.length || 0;
 
   return {
-    ok: projection.ok,
-    ...runtimePolicy({ providerCalled: actualProviderReturned }),
+    ok: resolvedOk,
+    ...runtimePolicy(),
     endpoint: currentProjectStatusEndpoint,
-    status: projection.ok ? projection.status : "unavailable",
-    previewStatus: projection.ok ? projection.previewStatus : "unavailable",
-    productionStatus: projection.ok ? projection.productionStatus : "unavailable",
-    reportStatus: projection.ok ? projection.status : "unavailable",
+    status: resolvedStatus,
+    previewStatus: resolvedPreviewStatus,
+    productionStatus: resolvedProductionStatus,
+    reportStatus: resolvedStatus,
     source: "runtime_endpoint",
     sourceLabel: source.sourceLabel,
     sandboxSource: source.sandboxSource,
@@ -3317,18 +3635,18 @@ function currentProjectRealChainResponse(extra = {}, source = currentProjectSour
     factsUsed: projectFacts.factsUsed,
     workbenchFacts: currentProjectWorkbenchFacts(source, projectFacts),
     project,
-    plannedImageCount: observations.length,
-    totalPlannedImages: observations.length,
-    returnedImageCount: projection.returnedObservations.length,
+    plannedImageCount,
+    totalPlannedImages: plannedImageCount,
+    returnedImageCount,
     needsReviewCount: needsReviewShotIds.length,
     needsReviewShotIds,
     reviewShotIds: needsReviewShotIds,
     reviewOverlayShots: needsReviewShotIds,
     productionNeedsReviewShots: needsReviewShotIds,
-    shotCount: observations.length,
+    shotCount: plannedImageCount,
     actualImage2Triggered: actualProviderReturned,
-    providerCalled: actualProviderReturned,
-    blockerCount: projection.blockedObservations.length,
+    providerCalled: false,
+    blockerCount,
     reportPath: primaryReportRelativePath,
     reportRelativePath: primaryReportRelativePath,
     reportUrl: runtimeFileUrl(primaryReportRelativePath),
@@ -3336,6 +3654,7 @@ function currentProjectRealChainResponse(extra = {}, source = currentProjectSour
     image2ReportRelativePath: source.reportRelativePath,
     runtimeTruthLayerPath: source.runtimeTruthLayerRelativePath,
     previewPlanPath: source.previewPlanRelativePath,
+    round5ArtifactIngest,
     observations,
     previewItems: observations.map((item) => ({
       shotId: item.shotId,
@@ -3350,14 +3669,18 @@ function currentProjectRealChainResponse(extra = {}, source = currentProjectSour
       runtimeTruthStatus: item.runtimeTruthStatus,
       blockers: item.blockers,
     })),
-    nextAction: projection.ok
+    nextAction: preferRound5Status
+      ? "round5_artifact_gates_require_review"
+      : projection.ok
       ? needsReviewShotIds.length
         ? "review_needed_outputs_before_production_promotion"
         : projection.blockedObservations.length
           ? "resolve_blockers_before_production_promotion"
           : "preview_projection_ready"
       : "provide_project_runtime_truth_or_preview_plan",
-    message: projection.ok
+    message: hasRound5ArtifactIngest && !projection.ok
+      ? "Round 5 artifact gates are projected from the existing report. No provider call was made."
+      : projection.ok
       ? undefined
       : "Current project projection is unavailable. Provide runtime_truth_layer.json, preview_plan.json, run_manifest.json, or a compatibility report.",
     ...extra,
