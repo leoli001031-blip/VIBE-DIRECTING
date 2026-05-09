@@ -731,8 +731,18 @@ checkMessage(requireWithin(projectRealChainUserSurface, /未同步/, "current pr
 checkMessage(requireWithin(projectRealChainUserSurface, /项目路径/, "current project chain panel must expose a simple project path entry"));
 checkMessage(requireWithin(projectRealChainUserSurface, /最近项目/, "current project chain panel must expose recent project choices"));
 checkMessage(requireWithin(projectRealChainUserSurface, /连接项目/, "current project chain panel must expose a creator-facing connect action"));
+checkMessage(requireWithin(projectRealChainUserSurface, /授权票据/, "current project chain panel must expose localized permission receipt copy"));
+checkMessage(requireWithin(projectRealChainUserSurface, /授权引用/, "current project chain panel must expose localized authorization reference copy"));
+checkMessage(requireWithin(projectRealChainUserSurface, /仅记录意图/, "current project chain panel must explain intent-only receipt behavior"));
+checkMessage(requireWithin(projectRealChainUserSurface, /不读取密钥、不发起调用/, "current project chain panel must explain no secret read/no external call behavior"));
+checkMessage(requireWithin(projectRealChainPanel, /permissionBaseReady[\s\S]*Boolean\(image2OneShotState\.receipt \|\| image2OneShotState\.summary\?\.receipt\)[\s\S]*&& sampleWaiting[\s\S]*&& !sampleRunning[\s\S]*&& !sampleReview/, "permission receipt action must be enabled only after handoff confirmation"));
+check(!/permissionBaseReady[\s\S]{0,180}sampleReady\s*\|\|\s*sampleWaiting/.test(projectRealChainPanel), "prepared sample state must not enable permission receipt action");
 checkMessage(requireWithin(projectRealChainPanel, /className="project-real-chain-messages"[\s\S]*className="project-real-chain-message"/, "current project chain messages must be grouped in one grid item"));
 checkMessage(requireWithin(stylesSource, /\.project-real-chain-messages\s*\{[\s\S]*grid-area:\s*message[\s\S]*display:\s*flex[\s\S]*flex-wrap:\s*wrap/, "current project chain messages must wrap in one shared grid area"));
+checkMessage(requireWithin(stylesSource, /\.project-real-chain-permission\s*\{[\s\S]*grid-area:\s*permission[\s\S]*grid-template-columns:/, "permission receipt row should have stable responsive columns"));
+checkMessage(requireWithin(stylesSource, /\.project-real-chain-permission\s*\{[\s\S]*justify-self:\s*stretch[\s\S]*width:\s*100%[\s\S]*box-sizing:\s*border-box/, "permission receipt row should fill the current-project grid area"));
+checkMessage(requireWithin(stylesSource, /@media \(max-width:\s*1040px\)[\s\S]*\.project-real-chain-panel\s*\{[\s\S]*grid-template-areas:[\s\S]*"batch"[\s\S]*"oneshot"[\s\S]*"policy"[\s\S]*"evidence"[\s\S]*"permission"/, "mobile current-project grid template must include the one-shot area before permission row"));
+checkMessage(requireWithin(stylesSource, /@media \(max-width:\s*1040px\)[\s\S]*\.project-real-chain-permission\s*\{[\s\S]*grid-template-columns:\s*1fr[\s\S]*justify-items:\s*stretch[\s\S]*\.project-real-chain-permission > div,\s*[\s\S]*\.project-real-chain-permission input,\s*[\s\S]*\.project-real-chain-permission button\s*\{[\s\S]*width:\s*100%[\s\S]*box-sizing:\s*border-box/, "permission receipt row children should fill narrow mobile layout"));
 check(!/\.project-real-chain-message\s*\{[\s\S]{0,160}grid-area:\s*message/.test(stylesSource), "individual current project chain messages must not claim the grid area");
 checkMessage(requireWithin(minimalTopNav, /aria-label="项目计划状态"/, "top nav project plan status aria label should be localized"));
 check(!/real-demo-005/.test(`${appSource}\n${stylesSource}`), "main app/styles must not keep 005 demo class names");

@@ -315,6 +315,32 @@ export type ProjectImage2OneShotReceipt = {
   blockers?: string[];
 };
 
+export type ProjectImage2OneShotPermissionReceipt = {
+  receiptId?: string;
+  handoffId?: string;
+  status?: string;
+  blockers?: string[];
+  credential?: {
+    credentialRef?: string;
+    authorizedReferenceOnly?: boolean;
+    secretMaterialPresent?: boolean;
+    credentialMaterialStored?: boolean;
+    credentialMaterialRead?: boolean;
+  };
+  submitIntent?: {
+    maxProviderCallsPerReceipt?: number;
+    providerSubmitAllowed?: number;
+    providerSubmitRequestState?: string;
+  };
+  actionTimeConfirmation?: {
+    required?: boolean;
+    userConfirmedAtActionTime?: boolean;
+    confirmationReceiptId?: string;
+    confirmationCapturedAt?: string;
+  };
+  maxProviderCallsPerReceipt?: number;
+};
+
 export type ProjectImage2OneShotStatus = {
   uiStatus: ProjectImage2OneShotUiStatus;
   projectId?: string;
@@ -328,6 +354,13 @@ export type ProjectImage2OneShotStatus = {
   triggerPlanPath?: string;
   handoffPacketPath?: string;
   receipt?: ProjectImage2OneShotReceipt;
+  submitPermissionReceiptRequested?: boolean;
+  submitPermissionReceiptPresent?: boolean;
+  submitPermissionReceiptStatePath?: string;
+  submitPermissionReceipt?: ProjectImage2OneShotPermissionReceipt;
+  permissionBlockers?: string[];
+  credentialRef?: string;
+  maxProviderCallsPerReceipt?: number;
   userLabel: string;
   outputExists: boolean;
   imageUrl?: string;
@@ -359,6 +392,11 @@ export type ProjectImage2OneShotUiState = {
   summary?: ProjectImage2OneShotStatus;
   receipt?: ProjectImage2OneShotReceipt;
   message?: string;
+};
+
+export type ProjectImage2OneShotPermissionInput = {
+  credentialRef?: string;
+  requireSubmitPermissionReceipt?: boolean;
 };
 
 export type ProjectRound5StrictEditPreflightUiStatus = "prepared" | "blocked" | "running" | "unavailable";
@@ -589,6 +627,18 @@ type ProjectImage2OneShotPayload = {
   triggerPlanPath?: string;
   handoffPacketPath?: string;
   receipt?: ProjectImage2OneShotReceipt;
+  submitPermissionReceiptRequested?: boolean;
+  submitPermissionReceiptStatePath?: string;
+  submitPermissionReceipt?: ProjectImage2OneShotPermissionReceipt;
+  credentialRef?: string;
+  maxProviderCallsPerReceipt?: number;
+  statePaths?: {
+    submitPermissionReceiptStatePath?: string;
+  };
+  persistedState?: {
+    submitPermissionReceiptPresent?: boolean;
+    submitPermissionReceiptStatePath?: string;
+  };
   watcherProjection?: {
     outputExists?: boolean;
   };
@@ -1278,6 +1328,21 @@ export function deriveProjectImage2OneShotStatus(payload: unknown): ProjectImage
   }
   const rawStatus = normalizeOneShotStatus(report.uiStatus || report.status);
   const project = report.project || {};
+  const permissionReceipt = isRecord(report.submitPermissionReceipt)
+    ? report.submitPermissionReceipt as ProjectImage2OneShotPermissionReceipt
+    : undefined;
+  const persistedState = isRecord(report.persistedState) ? report.persistedState : {};
+  const statePaths = isRecord(report.statePaths) ? report.statePaths : {};
+  const permissionStatePath = stringOrUndefined(report.submitPermissionReceiptStatePath)
+    || stringOrUndefined(persistedState.submitPermissionReceiptStatePath)
+    || stringOrUndefined(statePaths.submitPermissionReceiptStatePath);
+  const permissionBlockers = stringArray(permissionReceipt?.blockers);
+  const credentialRef = stringOrUndefined(permissionReceipt?.credential?.credentialRef)
+    || stringOrUndefined(report.credentialRef);
+  const maxProviderCallsPerReceipt = numberOrUndefined(permissionReceipt?.submitIntent?.maxProviderCallsPerReceipt)
+    ?? numberOrUndefined(permissionReceipt?.maxProviderCallsPerReceipt)
+    ?? numberOrUndefined(report.maxProviderCallsPerReceipt);
+  const persistedPermissionPresent = booleanOrUndefined(persistedState.submitPermissionReceiptPresent);
   return {
     uiStatus: rawStatus,
     projectId: project.projectId || report.projectId,
@@ -1291,6 +1356,13 @@ export function deriveProjectImage2OneShotStatus(payload: unknown): ProjectImage
     triggerPlanPath: report.triggerPlanPath,
     handoffPacketPath: report.handoffPacketPath,
     receipt: report.receipt,
+    submitPermissionReceiptRequested: report.submitPermissionReceiptRequested === true || Boolean(permissionReceipt),
+    submitPermissionReceiptPresent: persistedPermissionPresent ?? Boolean(permissionReceipt),
+    submitPermissionReceiptStatePath: permissionStatePath,
+    submitPermissionReceipt: permissionReceipt,
+    permissionBlockers,
+    credentialRef,
+    maxProviderCallsPerReceipt,
     userLabel: report.userLabel || (rawStatus === "prepared" ? "确认 handoff" : rawStatus === "trigger_plan_prepared" ? "等待回流" : rawStatus === "handoff_prepared" || rawStatus === "waiting_file" ? "等待文件" : rawStatus === "needs_review" ? "需要复核" : "准备小样包"),
     outputExists: report.watcherProjection?.outputExists === true || Boolean(report.previewProjection?.imageUrl),
     imageUrl: report.previewProjection?.imageUrl ? toRuntimeUrl(report.previewProjection.imageUrl) : undefined,
@@ -1647,28 +1719,57 @@ export async function confirmProjectImage2OneShot(
 export async function prepareProjectImage2OneShotTrigger(
   expected?: ProjectRuntimeIdentity,
   receipt?: ProjectImage2OneShotReceipt,
+  options?: ProjectImage2OneShotPermissionInput,
 ): Promise<ProjectImage2OneShotUiState> {
   if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
   if (!receipt?.selectedShotId) return { status: "blocked", message: "请先确认 handoff。" };
+
+  const requestBody: Record<string, unknown> = {
+    selectedShotId: receipt.selectedShotId,
+    selectedShotIds: [receipt.selectedShotId],
+    imageCount: 1,
+    expectedOutputPath: receipt.expectedOutputPath,
+    receiptId: receipt.receiptId,
+    transportMode: "codex_app_server",
+  };
+  if (options?.requireSubmitPermissionReceipt) {
+    requestBody.submitPermissionReceiptRequired = true;
+    requestBody.credentialRef = options.credentialRef;
+    requestBody.maxProviderCallsPerReceipt = 1;
+    requestBody.actionTimeConfirmation = {
+      required: true,
+      userConfirmedAtActionTime: false,
+    };
+    requestBody.expectedOutputs = [{
+      shotId: receipt.selectedShotId,
+      expectedOutputPath: receipt.expectedOutputPath,
+      providerObservationPath: receipt.providerObservationPath,
+      semanticQaPath: receipt.semanticQaPath,
+    }];
+  }
 
   try {
     const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2OneShotPrepareTriggerEndpoint, expected), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        selectedShotId: receipt.selectedShotId,
-        selectedShotIds: [receipt.selectedShotId],
-        imageCount: 1,
-        expectedOutputPath: receipt.expectedOutputPath,
-        receiptId: receipt.receiptId,
-        transportMode: "codex_app_server",
-      }),
+      body: JSON.stringify(requestBody),
     });
     const summary = deriveProjectImage2OneShotStatus(payload);
     return guardProjectImage2OneShotUiStateForCurrentProject({ status: summary.uiStatus, summary, receipt: summary.receipt || receipt, message: summary.message }, expected);
   } catch {
     return { status: "blocked", message: "外部执行 handoff 准备失败，请重新确认。" };
   }
+}
+
+export async function prepareProjectImage2OneShotPermissionReceipt(
+  expected?: ProjectRuntimeIdentity,
+  receipt?: ProjectImage2OneShotReceipt,
+  credentialRef?: string,
+): Promise<ProjectImage2OneShotUiState> {
+  return prepareProjectImage2OneShotTrigger(expected, receipt, {
+    requireSubmitPermissionReceipt: true,
+    credentialRef,
+  });
 }
 
 export async function executeReturnedProjectImage2OneShot(

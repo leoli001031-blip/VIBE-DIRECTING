@@ -104,6 +104,7 @@ import {
   loadProjectRealChainStatus,
   prepareProjectRound5StrictEditPreflight,
   prepareProjectImage2OneShot,
+  prepareProjectImage2OneShotPermissionReceipt,
   prepareProjectImage2OneShotTrigger,
   runProjectImage2BatchCheck,
   runProjectRealChainCheck,
@@ -7896,6 +7897,37 @@ function shortEvidenceToken(value?: string) {
   return value.length > 18 ? `${value.slice(0, 18)}...` : value;
 }
 
+function shortAuthorizationRef(value?: string) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "未填写";
+  const tail = trimmed.split(/[/:]+/).filter(Boolean).at(-1) || trimmed;
+  return tail.length > 12 ? `${tail.slice(0, 12)}...` : tail;
+}
+
+function projectPermissionReceiptLabel(summary?: ProjectImage2OneShotStatus) {
+  if (summary?.submitPermissionReceiptPresent) {
+    const state = summary.submitPermissionReceipt?.status === "pending_action_time_confirmation"
+      ? "待动作确认"
+      : summary.submitPermissionReceipt?.status === "blocked"
+        ? "待补齐"
+        : "已准备";
+    return {
+      label: `授权票据 ${state}`,
+      tone: state === "待补齐" ? "blocked" : "ready",
+    };
+  }
+  if (summary?.submitPermissionReceiptRequested || (summary?.permissionBlockers?.length || 0) > 0) {
+    return {
+      label: "授权票据 待补齐",
+      tone: "blocked",
+    };
+  }
+  return {
+    label: "授权票据 未准备",
+    tone: "idle",
+  };
+}
+
 function projectOneShotEvidence(summary?: ProjectImage2OneShotStatus) {
   if (!summary) {
     return {
@@ -7906,23 +7938,23 @@ function projectOneShotEvidence(summary?: ProjectImage2OneShotStatus) {
   if (summary.uiStatus === "needs_review" || summary.hashBoundActual) {
     return {
       label: "已 hash-bound 回流，QA needs_review，正式晋级阻断",
-      detail: `providerRequestId ${shortEvidenceToken(summary.providerRequestId)} · output ${shortEvidenceToken(summary.outputSha256)}`,
+      detail: `请求票据 ${shortEvidenceToken(summary.providerRequestId)} · output ${shortEvidenceToken(summary.outputSha256)}`,
     };
   }
   if (summary.uiStatus === "handoff_prepared" || summary.uiStatus === "trigger_plan_prepared" || summary.uiStatus === "waiting_file") {
     return {
-      label: "等待外部 provider 输出 + providerRequestId + semantic QA",
-      detail: summary.returnSource === "unavailable" ? "尚未观察真实回流" : `returnSource ${summary.returnSource}`,
+      label: "等待外部输出 + 请求票据 + semantic QA",
+      detail: summary.returnSource === "unavailable" ? "尚未观察真实回流" : `回流来源 ${summary.returnSource}`,
     };
   }
   if (summary.uiStatus === "prepared") {
     return {
-      label: "仅生成 handoff/sidecar 路径，不调用 provider",
+      label: "仅生成 handoff/sidecar 路径，不发起外部调用",
       detail: summary.receipt?.receiptId ? `receipt ${shortEvidenceToken(summary.receipt.receiptId)}` : "等待确认 handoff",
     };
   }
   return {
-    label: "仅生成 handoff/sidecar 路径，不调用 provider",
+    label: "仅生成 handoff/sidecar 路径，不发起外部调用",
     detail: summary.selectedShotId ? `镜头 ${summary.selectedShotId}` : "选择镜头后开始",
   };
 }
@@ -7938,6 +7970,7 @@ function ProjectRealChainPanel({
   projectPathInput,
   projectChoices,
   projectSelectionStatus,
+  authorizationRef,
   onProjectPathChange,
   onSelectProjectChoice,
   onConnectProject,
@@ -7945,6 +7978,8 @@ function ProjectRealChainPanel({
   onRunImage2Batch,
   onPrepareStrictEditPreflight,
   onPrepareImage2OneShot,
+  onAuthorizationRefChange,
+  onPrepareImage2OneShotPermissionReceipt,
   onConfirmImage2OneShot,
   onCheckImage2OneShotReturn,
 }: {
@@ -7958,6 +7993,7 @@ function ProjectRealChainPanel({
   projectPathInput: string;
   projectChoices: ProjectCurrentChoice[];
   projectSelectionStatus?: "idle" | "connecting" | "connected" | "error";
+  authorizationRef: string;
   onProjectPathChange: (value: string) => void;
   onSelectProjectChoice: (choice: ProjectCurrentChoice) => void;
   onConnectProject: () => void;
@@ -7965,6 +8001,8 @@ function ProjectRealChainPanel({
   onRunImage2Batch: () => void;
   onPrepareStrictEditPreflight: (shotId: string) => void;
   onPrepareImage2OneShot: () => void;
+  onAuthorizationRefChange: (value: string) => void;
+  onPrepareImage2OneShotPermissionReceipt: () => void;
   onConfirmImage2OneShot: () => void;
   onCheckImage2OneShotReturn: () => void;
 }) {
@@ -8013,6 +8051,12 @@ function ProjectRealChainPanel({
         : "准备小样包";
   const sampleStatusLabel = sampleReview ? "需要复核" : image2OneShotState.status === "trigger_plan_prepared" ? "等待回流" : sampleWaiting ? "等待文件" : sampleReady ? "待确认" : sampleBlocked ? "待补齐" : "可开始";
   const sampleEvidence = projectOneShotEvidence(image2OneShotState.summary);
+  const permissionLabel = projectPermissionReceiptLabel(image2OneShotState.summary);
+  const permissionBaseReady = Boolean(image2OneShotState.receipt || image2OneShotState.summary?.receipt)
+    && sampleWaiting
+    && !sampleRunning
+    && !sampleReview;
+  const permissionDisabled = !projectBound || !permissionBaseReady || !authorizationRef.trim();
   const connecting = projectSelectionStatus === "connecting";
   const canConnect = projectPathInput.trim().length > 0 && !connecting;
 
@@ -8120,6 +8164,28 @@ function ProjectRealChainPanel({
       <div className={`project-real-chain-evidence ${image2OneShotState.status}`} aria-label="one-shot evidence">
         <small>{sampleEvidence.label}</small>
         <small>{sampleEvidence.detail}</small>
+      </div>
+      <div className={`project-real-chain-permission ${permissionLabel.tone}`} aria-label="授权票据">
+        <div>
+          <small>{permissionLabel.label}</small>
+          <small>授权引用 {shortAuthorizationRef(authorizationRef)} · 仅记录意图 · 不读取密钥、不发起调用</small>
+        </div>
+        <label htmlFor="image2-one-shot-authorization-ref">授权引用</label>
+        <input
+          id="image2-one-shot-authorization-ref"
+          type="password"
+          value={authorizationRef}
+          onChange={(event) => onAuthorizationRefChange(event.target.value)}
+          placeholder="授权引用"
+          autoComplete="off"
+        />
+        <button
+          disabled={permissionDisabled}
+          onClick={onPrepareImage2OneShotPermissionReceipt}
+        >
+          <LockKeyhole size={14} />
+          {sampleRunning ? "准备中" : "准备授权票据"}
+        </button>
       </div>
       {visibleItems.length > 0 && (
         <div className="project-real-chain-thumbs" aria-label="当前项目预览图">
@@ -8396,6 +8462,7 @@ function DirectorMode({
   strictEditPreflightState,
   runtimeProjectBinding,
   projectChoices,
+  authorizationRef,
   directorView,
   activeSectionId,
   onSelectShot,
@@ -8409,6 +8476,8 @@ function DirectorMode({
   onRunProjectImage2Batch,
   onPrepareStrictEditPreflight,
   onPrepareImage2OneShot,
+  onAuthorizationRefChange,
+  onPrepareImage2OneShotPermissionReceipt,
   onConfirmImage2OneShot,
   onCheckImage2OneShotReturn,
   projectPathInput,
@@ -8438,6 +8507,7 @@ function DirectorMode({
   strictEditPreflightState: ProjectRound5StrictEditPreflightPanelState;
   runtimeProjectBinding: ProjectCurrentBindingStatus;
   projectChoices: ProjectCurrentChoice[];
+  authorizationRef: string;
   directorView: DirectorView;
   activeSectionId?: string;
   onSelectShot: (id: string, additive?: boolean) => void;
@@ -8451,6 +8521,8 @@ function DirectorMode({
   onRunProjectImage2Batch: () => void;
   onPrepareStrictEditPreflight: (shotId: string) => void;
   onPrepareImage2OneShot: () => void;
+  onAuthorizationRefChange: (value: string) => void;
+  onPrepareImage2OneShotPermissionReceipt: () => void;
   onConfirmImage2OneShot: () => void;
   onCheckImage2OneShotReturn: () => void;
   projectPathInput: string;
@@ -8478,6 +8550,7 @@ function DirectorMode({
           projectPathInput={projectPathInput}
           projectChoices={projectChoices}
           projectSelectionStatus={projectSelectionStatus}
+          authorizationRef={authorizationRef}
           onProjectPathChange={onProjectPathChange}
           onSelectProjectChoice={onSelectProjectChoice}
           onConnectProject={onConnectProject}
@@ -8485,6 +8558,8 @@ function DirectorMode({
           onRunImage2Batch={onRunProjectImage2Batch}
           onPrepareStrictEditPreflight={onPrepareStrictEditPreflight}
           onPrepareImage2OneShot={onPrepareImage2OneShot}
+          onAuthorizationRefChange={onAuthorizationRefChange}
+          onPrepareImage2OneShotPermissionReceipt={onPrepareImage2OneShotPermissionReceipt}
           onConfirmImage2OneShot={onConfirmImage2OneShot}
           onCheckImage2OneShotReturn={onCheckImage2OneShotReturn}
         />
@@ -9885,6 +9960,7 @@ function App() {
   const [projectPathInput, setProjectPathInput] = useState("");
   const [projectChoices, setProjectChoices] = useState<ProjectCurrentChoice[]>([]);
   const [projectSelectionStatus, setProjectSelectionStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
+  const [authorizationRef, setAuthorizationRef] = useState("secret-store://providers/openai-image2/default");
 
   function loadProjectState(nextState: ProjectRuntimeState) {
     setRuntimeState(nextState);
@@ -10309,6 +10385,29 @@ function App() {
     setProjectImage2OneShotState(confirmedState);
   }
 
+  async function prepareImage2OneShotPermissionReceipt() {
+    if (!runtimeProjectIdentity) {
+      setProjectImage2OneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
+      return;
+    }
+    const receipt = projectImage2OneShotState.receipt || projectImage2OneShotState.summary?.receipt;
+    if (!receipt) {
+      setProjectImage2OneShotState((current) => ({
+        ...current,
+        status: "blocked",
+        message: "请先准备小样包。",
+      }));
+      return;
+    }
+    setProjectImage2OneShotState((current) => ({
+      ...current,
+      status: "running",
+      message: "正在准备授权票据。",
+    }));
+    const nextState = await prepareProjectImage2OneShotPermissionReceipt(runtimeProjectIdentity, receipt, authorizationRef.trim());
+    setProjectImage2OneShotState(nextState);
+  }
+
   async function checkImage2OneShotReturn() {
     if (!runtimeProjectIdentity) {
       setProjectImage2OneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
@@ -10372,6 +10471,7 @@ function App() {
           projectImage2OneShotState={projectImage2OneShotState}
           strictEditPreflightState={strictEditPreflightState}
           runtimeProjectBinding={runtimeProjectBinding}
+          authorizationRef={authorizationRef}
           projectPathInput={projectPathInput}
           projectChoices={projectChoices}
           projectSelectionStatus={projectSelectionStatus}
@@ -10388,6 +10488,8 @@ function App() {
           onRunProjectImage2Batch={runProjectImage2Batch}
           onPrepareStrictEditPreflight={prepareStrictEditPreflight}
           onPrepareImage2OneShot={prepareImage2OneShot}
+          onAuthorizationRefChange={setAuthorizationRef}
+          onPrepareImage2OneShotPermissionReceipt={prepareImage2OneShotPermissionReceipt}
           onConfirmImage2OneShot={confirmImage2OneShot}
           onCheckImage2OneShotReturn={checkImage2OneShotReturn}
           onProjectPathChange={setProjectPathInput}

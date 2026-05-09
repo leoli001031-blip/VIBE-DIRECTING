@@ -127,11 +127,18 @@ function assertCreatorPanelContract() {
   assert(/准备小样包/.test(surface), "ProjectRealChainPanel should expose sample prepare copy");
   assert(/确认 handoff/.test(surface), "ProjectRealChainPanel should expose sample confirm copy");
   assert(/等待文件/.test(surface), "ProjectRealChainPanel should expose waiting-file copy");
-  assert(/providerRequestId/.test(surface), "ProjectRealChainPanel should expose provider request id evidence");
+  assert(/授权票据/.test(surface), "ProjectRealChainPanel should expose permission receipt copy");
+  assert(/授权引用/.test(surface), "ProjectRealChainPanel should expose authorization reference copy");
+  assert(/仅记录意图/.test(surface), "ProjectRealChainPanel should state intent-only permission receipt copy");
+  assert(/不读取密钥、不发起调用/.test(surface), "ProjectRealChainPanel should state no secret read/no call copy");
+  assert(/请求票据/.test(surface), "ProjectRealChainPanel should expose request ticket evidence without provider copy");
   assert(/已 hash-bound 回流，QA needs_review，正式晋级阻断/.test(surface), "ProjectRealChainPanel should expose hash-bound needs-review evidence");
-  assert(/仅生成 handoff\/sidecar 路径，不调用 provider/.test(surface), "ProjectRealChainPanel should expose handoff-only evidence");
-  assert(/等待外部 provider 输出 \+ providerRequestId \+ semantic QA/.test(surface), "ProjectRealChainPanel should expose waiting-for-provider evidence");
+  assert(/仅生成 handoff\/sidecar 路径，不发起外部调用/.test(surface), "ProjectRealChainPanel should expose handoff-only evidence");
+  assert(/等待外部输出 \+ 请求票据 \+ semantic QA/.test(surface), "ProjectRealChainPanel should expose waiting-for-external evidence");
   assert(/onPrepareImage2OneShot/.test(panel), "one-shot sample button must route to prepare handler");
+  assert(/onPrepareImage2OneShotPermissionReceipt/.test(panel), "permission receipt button must route to explicit helper");
+  assert(/permissionBaseReady[\s\S]*Boolean\(image2OneShotState\.receipt \|\| image2OneShotState\.summary\?\.receipt\)[\s\S]*&& sampleWaiting[\s\S]*&& !sampleRunning[\s\S]*&& !sampleReview/.test(panel), "permission receipt button must enable only after handoff is confirmed");
+  assert(!/permissionBaseReady[\s\S]{0,180}sampleReady\s*\|\|\s*sampleWaiting/.test(panel), "prepared state must not enable permission receipt button before handoff");
   assert(/onConfirmImage2OneShot/.test(panel), "one-shot confirm button must route to confirm handler");
   assert(/onCheckImage2OneShotReturn/.test(panel), "one-shot sample button must route to execute-return handler");
   assert(/aria-label="当前项目状态"/.test(panel), "current project panel should use creator-facing status aria copy");
@@ -182,6 +189,7 @@ const {
   loadProjectImage2BatchPlan,
   loadProjectRealChainStatus,
   prepareProjectImage2OneShot,
+  prepareProjectImage2OneShotPermissionReceipt,
   prepareProjectImage2OneShotTrigger,
   confirmProjectImage2OneShot,
   executeReturnedProjectImage2OneShot,
@@ -566,6 +574,40 @@ const oneShotTriggerPayload = {
   },
 };
 
+const oneShotPermissionTriggerPayload = {
+  ...oneShotTriggerPayload,
+  submitPermissionReceiptRequested: true,
+  submitPermissionReceiptStatePath: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005/real-trigger-one-shot/S07/state/submit-permission-receipt.json",
+  persistedState: {
+    ...oneShotTriggerPayload.persistedState,
+    submitPermissionReceiptPresent: true,
+    submitPermissionReceiptStatePath: "/Users/lichenhao/Desktop/vibe core/runtime-tests/005/real-trigger-one-shot/S07/state/submit-permission-receipt.json",
+  },
+  submitPermissionReceipt: {
+    receiptId: "submit_permission_image2_one_shot_prepare_real-demo-e2e-005_S07",
+    handoffId: "handoff_image2_one_shot_prepare_real-demo-e2e-005_S07",
+    status: "pending_action_time_confirmation",
+    blockers: [],
+    credential: {
+      credentialRef: "secret-store://providers/openai-image2/default",
+      authorizedReferenceOnly: true,
+      secretMaterialPresent: false,
+      credentialMaterialStored: false,
+      credentialMaterialRead: false,
+    },
+    submitIntent: {
+      maxProviderCallsPerReceipt: 1,
+      providerSubmitAllowed: 0,
+      providerSubmitRequestState: "pending_action_time_confirmation",
+    },
+    actionTimeConfirmation: {
+      required: true,
+      userConfirmedAtActionTime: false,
+    },
+    maxProviderCallsPerReceipt: 1,
+  },
+};
+
 const oneShotReturnedPayload = {
   ...oneShotConfirmPayload,
   status: "real_provider_returned_needs_review",
@@ -609,6 +651,14 @@ assert(persistedOneShotPrepareSummary.receipt?.selectedShotId === "S07", "persis
 const persistedOneShotHandoffSummary = deriveProjectImage2OneShotStatus(oneShotConfirmPayload);
 assert(persistedOneShotHandoffSummary.uiStatus === "handoff_prepared", "persisted one-shot handoff status should display handoff prepared");
 assert(persistedOneShotHandoffSummary.userLabel === "等待文件", "persisted one-shot handoff should keep waiting-file copy");
+
+const persistedOneShotPermissionSummary = deriveProjectImage2OneShotStatus(oneShotPermissionTriggerPayload);
+assert(persistedOneShotPermissionSummary.submitPermissionReceiptRequested === true, "persisted one-shot permission receipt should keep requested flag");
+assert(persistedOneShotPermissionSummary.submitPermissionReceiptPresent === true, "persisted one-shot permission receipt should keep present flag");
+assert(persistedOneShotPermissionSummary.submitPermissionReceipt?.status === "pending_action_time_confirmation", "persisted one-shot permission receipt should keep status");
+assert(persistedOneShotPermissionSummary.submitPermissionReceiptStatePath?.endsWith("submit-permission-receipt.json"), "persisted one-shot permission receipt should keep state path");
+assert(persistedOneShotPermissionSummary.credentialRef === "secret-store://providers/openai-image2/default", "persisted one-shot permission receipt should keep credentialRef");
+assert(persistedOneShotPermissionSummary.maxProviderCallsPerReceipt === 1, "persisted one-shot permission receipt should keep max call cap");
 
 const persistedOneShotReturnedSummary = deriveProjectImage2OneShotStatus(oneShotReturnedPayload);
 assert(persistedOneShotReturnedSummary.uiStatus === "needs_review", "persisted one-shot return should display needs_review");
@@ -695,7 +745,6 @@ const runtimeEndpointPayloads = new Map([
   [`GET ${projectImage2OneShotStatusEndpoint}`, oneShotReadyPayload],
   [`POST ${projectImage2OneShotPrepareEndpoint}`, oneShotPreparePayload],
   [`POST ${projectImage2OneShotConfirmEndpoint}`, oneShotConfirmPayload],
-  [`POST ${projectImage2OneShotPrepareTriggerEndpoint}`, oneShotTriggerPayload],
   [`POST ${projectImage2OneShotExecuteReturnEndpoint}`, oneShotReturnedPayload],
 ]);
 
@@ -708,7 +757,9 @@ try {
     const requestUrl = new URL(String(url), "http://runtime.test");
     const method = init.method || "GET";
     runtimeFetchCalls.push({ method, path: requestUrl.pathname, search: requestUrl.search, body: init.body });
-    const payload = runtimeEndpointPayloads.get(`${method} ${requestUrl.pathname}`);
+    const payload = method === "POST" && requestUrl.pathname === projectImage2OneShotPrepareTriggerEndpoint
+      ? (JSON.parse(String(init.body || "{}")).submitPermissionReceiptRequired === true ? oneShotPermissionTriggerPayload : oneShotTriggerPayload)
+      : runtimeEndpointPayloads.get(`${method} ${requestUrl.pathname}`);
     assert(payload, `unexpected runtime request ${method} ${requestUrl.pathname}`);
     return {
       ok: true,
@@ -784,6 +835,35 @@ try {
   assert(triggerPreparedOneShot.status === "trigger_plan_prepared", "one-shot trigger helper should prepare app-server handoff");
   assert(triggerPreparedOneShot.summary?.userLabel === "等待回流", "one-shot trigger helper should use waiting return copy");
   assert(triggerPreparedOneShot.summary?.providerCalled === false, "one-shot trigger helper must not call provider");
+  const defaultTriggerCall = runtimeFetchCalls
+    .filter((item) => item.method === "POST" && item.path === projectImage2OneShotPrepareTriggerEndpoint)
+    .at(-1);
+  const defaultTriggerBody = JSON.parse(String(defaultTriggerCall?.body || "{}"));
+  assert(!Object.prototype.hasOwnProperty.call(defaultTriggerBody, "submitPermissionReceiptRequired"), "default trigger helper must not request permission receipt");
+  assert(!Object.prototype.hasOwnProperty.call(defaultTriggerBody, "credentialRef"), "default trigger helper must not send credentialRef");
+
+  const permissionPreparedOneShot = await prepareProjectImage2OneShotPermissionReceipt(
+    project005RuntimeIdentity,
+    confirmedOneShot.receipt,
+    "secret-store://providers/openai-image2/default",
+  );
+  assert(permissionPreparedOneShot.status === "trigger_plan_prepared", "permission receipt helper should prepare trigger plan");
+  assert(permissionPreparedOneShot.summary?.submitPermissionReceiptPresent === true, "permission receipt helper should surface persisted receipt");
+  assert(permissionPreparedOneShot.summary?.submitPermissionReceipt?.status === "pending_action_time_confirmation", "permission receipt helper should surface pending action confirmation");
+  const permissionTriggerCall = runtimeFetchCalls
+    .filter((item) => item.method === "POST" && item.path === projectImage2OneShotPrepareTriggerEndpoint)
+    .at(-1);
+  const permissionTriggerBody = JSON.parse(String(permissionTriggerCall?.body || "{}"));
+  assert(permissionTriggerBody.submitPermissionReceiptRequired === true, "permission helper body should request permission receipt");
+  assert(permissionTriggerBody.credentialRef === "secret-store://providers/openai-image2/default", "permission helper body should carry opaque credentialRef");
+  assert(permissionTriggerBody.maxProviderCallsPerReceipt === 1, "permission helper body should pin maxProviderCallsPerReceipt");
+  assert(permissionTriggerBody.actionTimeConfirmation?.required === true, "permission helper body should require action-time confirmation");
+  assert(permissionTriggerBody.actionTimeConfirmation?.userConfirmedAtActionTime === false, "permission helper body should not mark action-time confirmation done");
+  assert(Array.isArray(permissionTriggerBody.expectedOutputs) && permissionTriggerBody.expectedOutputs.length === 1, "permission helper body should include one expected output");
+  assert(permissionTriggerBody.expectedOutputs[0].shotId === "S07", "permission helper expected output should keep shotId");
+  assert(permissionTriggerBody.expectedOutputs[0].expectedOutputPath === confirmedOneShot.receipt.expectedOutputPath, "permission helper expected output should keep output path");
+  assert(permissionTriggerBody.expectedOutputs[0].providerObservationPath === confirmedOneShot.receipt.providerObservationPath, "permission helper expected output should keep observation path");
+  assert(permissionTriggerBody.expectedOutputs[0].semanticQaPath === confirmedOneShot.receipt.semanticQaPath, "permission helper expected output should keep QA path");
 
   const returnedOneShot = await executeReturnedProjectImage2OneShot(project005RuntimeIdentity, triggerPreparedOneShot.receipt);
   assert(returnedOneShot.status === "needs_review", "one-shot execute-return helper should surface needs_review");
