@@ -17,18 +17,21 @@ export const round5ArtifactIsolationFlags = {
 
 type Round5QaStatus = "pass" | "needs_review" | "blocked" | "missing";
 type Round5LedgerStatus = "provider_observed" | "needs_review" | "parked" | "waiting_output";
+type Round5StrictEditPreflightStatus = "not_required" | "blocked" | "ready_for_provider_edit";
 type Round5GateStatus =
   | "start_provider_observed"
   | "start_needs_review"
   | "start_regeneration_required"
   | "end_edit_preflight_blocked"
+  | "end_edit_preflight_ready"
   | "start_missing";
 type Round5NextAction =
   | "none"
   | "review_start_frame"
   | "regenerate_start_frame"
   | "block_regenerate_start"
-  | "collect_strict_edit_provenance";
+  | "collect_strict_edit_provenance"
+  | "submit_strict_image_edit";
 
 export interface Round5GeneratedStartFrame {
   shotId: string;
@@ -67,12 +70,72 @@ export interface Round5FullRealChainReport {
   };
 }
 
+export interface Round5ApprovedStartFrameRef {
+  shotId: string;
+  startFramePath?: string;
+  sha256?: string;
+  providerAttachmentId?: string;
+  approvalStatus?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+}
+
+export interface Round5EditableRegionEvidence {
+  shotId: string;
+  sourceStartFrameSha256?: string;
+  evidencePath?: string;
+  evidenceSha256?: string;
+  maskPath?: string;
+  maskSha256?: string;
+  bboxNormalized?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  regions?: Array<{
+    id?: string;
+    purpose?: string;
+    bboxNormalized?: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+  }>;
+  qaStatus?: string;
+  status?: string;
+}
+
+export interface Round5ProviderEditReceipt {
+  shotId: string;
+  receiptId?: string;
+  receiptPath?: string;
+  status?: string;
+  operation?: string;
+  sourceStartFramePath?: string;
+  sourceStartFrameSha256?: string;
+  sourceStartFrameAttachmentId?: string;
+  editableRegionEvidencePath?: string;
+  editableRegionEvidenceSha256?: string;
+  noFallbackUsed?: boolean;
+  providerCalled?: boolean;
+  providerRequestId?: string;
+}
+
+export interface Round5StrictEditEvidence {
+  approvedStartFrames?: Round5ApprovedStartFrameRef[];
+  editableRegionEvidence?: Round5EditableRegionEvidence[];
+  providerEditReceipts?: Round5ProviderEditReceipt[];
+}
+
 export interface BuildRound5ArtifactIngestInput {
   runRoot: string;
   projectId: string;
   runId: string;
   report: Round5FullRealChainReport;
   generatedAt?: string;
+  strictEditEvidence?: Round5StrictEditEvidence;
 }
 
 export interface Round5TaskRunLedgerStyleEvent {
@@ -83,7 +146,8 @@ export interface Round5TaskRunLedgerStyleEvent {
     | "provider_observed"
     | "qa_passed"
     | "needs_review"
-    | "parked";
+    | "parked"
+    | "strict_edit_preflight_ready";
   at: string;
   taskRunId: string;
   output?: {
@@ -105,6 +169,12 @@ export interface Round5TaskRunLedgerStyleEvent {
     findingIds: string[];
   };
   reason?: string;
+  strictEditPreflight?: {
+    status: "ready_for_provider_edit";
+    approvedStartFrameRef?: string;
+    editableRegionEvidenceRef?: string;
+    providerEditReceiptRef?: string;
+  };
   notes: string[];
 }
 
@@ -133,6 +203,10 @@ export interface Round5ShotGateProjection {
   ledgerStatus: Round5LedgerStatus;
   nextAction: Round5NextAction;
   strictEditPilotCandidate: boolean;
+  strictEditPreflightStatus: Round5StrictEditPreflightStatus;
+  approvedStartFrameRef?: string;
+  editableRegionEvidenceRef?: string;
+  providerEditReceiptRef?: string;
   completeVerified: false;
   blockers: string[];
   warnings: string[];
@@ -158,6 +232,7 @@ export interface Round5ArtifactIngestResult {
     byStatus: Record<Round5LedgerStatus, number>;
     completeVerified: 0;
     endEditPreflightBlocked: number;
+    endEditPreflightReady: number;
     projections: Round5ShotGateProjection[];
   };
   uiSummary: {
@@ -176,6 +251,10 @@ export interface Round5ArtifactIngestResult {
 
 function unique(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))];
+}
+
+function byShot<T extends { shotId: string }>(items?: T[]): Map<string, T> {
+  return new Map((items || []).filter((item) => item.shotId).map((item) => [item.shotId, item]));
 }
 
 function taskRunIdFor(runId: string, shotId: string): string {
@@ -198,39 +277,129 @@ function endRequiredFor(shotId: string, report: Round5FullRealChainReport, shotQ
   return Boolean(endStatus && endStatus !== "not_required");
 }
 
+function bboxValid(bbox?: { x: number; y: number; width: number; height: number }): boolean {
+  if (!bbox) return false;
+  return Number.isFinite(bbox.x)
+    && Number.isFinite(bbox.y)
+    && Number.isFinite(bbox.width)
+    && Number.isFinite(bbox.height)
+    && bbox.x >= 0
+    && bbox.y >= 0
+    && bbox.width > 0
+    && bbox.height > 0
+    && bbox.x + bbox.width <= 1.001
+    && bbox.y + bbox.height <= 1.001;
+}
+
+function hasEditableRegion(evidence?: Round5EditableRegionEvidence): boolean {
+  if (!evidence) return false;
+  if (evidence.maskPath && evidence.maskSha256) return true;
+  if (bboxValid(evidence.bboxNormalized)) return true;
+  return Boolean(evidence.regions?.some((region) => bboxValid(region.bboxNormalized)));
+}
+
+function evidenceStatusPass(status?: string): boolean {
+  const normalized = (status || "").toLowerCase();
+  return normalized.includes("pass") || normalized.includes("approved") || normalized.includes("ready");
+}
+
+function strictEditEvidenceBlockers(input: {
+  endRequired: boolean;
+  qaStatus: Round5QaStatus;
+  generated?: Round5GeneratedStartFrame;
+  approvedStartFrame?: Round5ApprovedStartFrameRef;
+  editableRegionEvidence?: Round5EditableRegionEvidence;
+  providerEditReceipt?: Round5ProviderEditReceipt;
+}): string[] {
+  if (!input.endRequired || input.qaStatus !== "pass") return [];
+
+  const blockers: string[] = [];
+  const approved = input.approvedStartFrame;
+  const region = input.editableRegionEvidence;
+  const receipt = input.providerEditReceipt;
+  const startSha = input.generated?.sha256;
+
+  if (!approved || !evidenceStatusPass(approved.approvalStatus)) blockers.push("approved_start_attachment_missing");
+  if (!approved?.providerAttachmentId) blockers.push("source_start_frame_attachment_id_missing");
+  if (!startSha || approved?.sha256 !== startSha) blockers.push("source_start_frame_sha_not_provider_confirmed");
+
+  const regionStatusReady = evidenceStatusPass(region?.qaStatus || region?.status);
+  if (!region || !regionStatusReady || region.sourceStartFrameSha256 !== startSha || !hasEditableRegion(region)) {
+    blockers.push("editable_region_mask_or_bbox_missing");
+  }
+
+  const receiptOperation = (receipt?.operation || "").toLowerCase();
+  const receiptStatusReady = evidenceStatusPass(receipt?.status);
+  const receiptMatchesStart = Boolean(receipt?.sourceStartFrameSha256 && receipt.sourceStartFrameSha256 === startSha);
+  const receiptMatchesAttachment = Boolean(receipt?.sourceStartFrameAttachmentId && receipt.sourceStartFrameAttachmentId === approved?.providerAttachmentId);
+  if (!receipt || !receipt.receiptId || !receiptStatusReady) {
+    blockers.push("provider_edit_receipt_missing");
+    blockers.push("strict_image_edit_provenance_missing");
+  } else if (!receiptOperation.includes("image.edit") && !receiptOperation.includes("image2image")) {
+    blockers.push("strict_image_edit_provenance_missing");
+  } else if (!receiptMatchesStart || !receiptMatchesAttachment || receipt.noFallbackUsed !== true) {
+    blockers.push("strict_image_edit_provenance_missing");
+  }
+
+  return unique(blockers);
+}
+
+function strictEditPreflightStatusFor(input: {
+  endRequired: boolean;
+  qaStatus: Round5QaStatus;
+  evidenceBlockers: string[];
+}): Round5StrictEditPreflightStatus {
+  if (!input.endRequired) return "not_required";
+  if (input.qaStatus !== "pass") return "blocked";
+  return input.evidenceBlockers.length === 0 ? "ready_for_provider_edit" : "blocked";
+}
+
 function blockersFor(input: {
   qaStatus: Round5QaStatus;
   endRequired: boolean;
   shotQa?: Round5ShotQa;
   report: Round5FullRealChainReport;
+  strictEditEvidenceBlockers: string[];
 }): string[] {
   const shotIssues = input.shotQa?.issues || [];
   if (input.qaStatus === "missing") return unique(["start_frame_missing", ...shotIssues]);
   if (input.qaStatus === "blocked") return unique(["start_motion_affordance_failed", ...shotIssues]);
-  if (input.endRequired) return unique([...(input.report.endFrameStage?.blockers || round5EndFrameBlockers), ...shotIssues]);
+  if (input.endRequired) return unique([...input.strictEditEvidenceBlockers, ...shotIssues]);
   if (input.qaStatus === "needs_review") return unique(["start_frame_needs_review", ...shotIssues]);
   return unique(shotIssues);
 }
 
-function gateStatusFor(qaStatus: Round5QaStatus, endRequired: boolean): Round5GateStatus {
+function gateStatusFor(
+  qaStatus: Round5QaStatus,
+  endRequired: boolean,
+  strictEditPreflightStatus: Round5StrictEditPreflightStatus,
+): Round5GateStatus {
   if (qaStatus === "missing") return "start_missing";
   if (qaStatus === "blocked") return "start_regeneration_required";
   if (qaStatus === "needs_review") return "start_needs_review";
+  if (endRequired && strictEditPreflightStatus === "ready_for_provider_edit") return "end_edit_preflight_ready";
   if (endRequired) return "end_edit_preflight_blocked";
   return "start_provider_observed";
 }
 
-function ledgerStatusFor(qaStatus: Round5QaStatus): Round5LedgerStatus {
+function ledgerStatusFor(qaStatus: Round5QaStatus, strictEditPreflightStatus: Round5StrictEditPreflightStatus): Round5LedgerStatus {
   if (qaStatus === "missing") return "waiting_output";
   if (qaStatus === "blocked") return "parked";
   if (qaStatus === "needs_review") return "needs_review";
+  if (strictEditPreflightStatus === "ready_for_provider_edit") return "waiting_output";
   return "provider_observed";
 }
 
-function nextActionFor(shotId: string, qaStatus: Round5QaStatus, endRequired: boolean): Round5NextAction {
+function nextActionFor(
+  shotId: string,
+  qaStatus: Round5QaStatus,
+  endRequired: boolean,
+  strictEditPreflightStatus: Round5StrictEditPreflightStatus,
+): Round5NextAction {
   if (shotId === "ZP04" && qaStatus === "blocked") return "regenerate_start_frame";
   if (qaStatus === "blocked") return "block_regenerate_start";
   if (qaStatus === "needs_review") return "review_start_frame";
+  if (endRequired && strictEditPreflightStatus === "ready_for_provider_edit") return "submit_strict_image_edit";
   if (endRequired) return "collect_strict_edit_provenance";
   return "none";
 }
@@ -243,6 +412,10 @@ function buildEvents(input: {
   path?: string;
   sha256?: string;
   qaStatus: Round5QaStatus;
+  strictEditPreflightStatus: Round5StrictEditPreflightStatus;
+  approvedStartFrameRef?: string;
+  editableRegionEvidenceRef?: string;
+  providerEditReceiptRef?: string;
   blockers: string[];
 }): Round5TaskRunLedgerStyleEvent[] {
   const events: Round5TaskRunLedgerStyleEvent[] = [
@@ -321,6 +494,22 @@ function buildEvents(input: {
     });
   }
 
+  if (input.strictEditPreflightStatus === "ready_for_provider_edit") {
+    events.push({
+      eventId: `${input.taskRunId}:strict_edit_preflight_ready`,
+      eventType: "strict_edit_preflight_ready",
+      at: input.generatedAt,
+      taskRunId: input.taskRunId,
+      strictEditPreflight: {
+        status: "ready_for_provider_edit",
+        approvedStartFrameRef: input.approvedStartFrameRef,
+        editableRegionEvidenceRef: input.editableRegionEvidenceRef,
+        providerEditReceiptRef: input.providerEditReceiptRef,
+      },
+      notes: ["Strict edit handoff evidence is present; this still does not mark an end frame complete."],
+    });
+  }
+
   return events;
 }
 
@@ -328,6 +517,9 @@ export function buildRound5ArtifactIngest(input: BuildRound5ArtifactIngestInput)
   const generatedAt = input.generatedAt || input.report.generatedAt || "1970-01-01T00:00:00.000Z";
   const startsByShot = new Map((input.report.generatedStartFrames || []).map((item) => [item.shotId, item]));
   const qaByShot = new Map((input.report.shotQa || []).map((item) => [item.shotId, item]));
+  const approvedStartByShot = byShot(input.strictEditEvidence?.approvedStartFrames);
+  const editableRegionByShot = byShot(input.strictEditEvidence?.editableRegionEvidence);
+  const providerEditReceiptByShot = byShot(input.strictEditEvidence?.providerEditReceipts);
   const shotIds = unique([...startsByShot.keys(), ...qaByShot.keys()]).sort();
 
   const shotGateMatrix = shotIds.map((shotId): Round5ShotGateProjection => {
@@ -338,8 +530,30 @@ export function buildRound5ArtifactIngest(input: BuildRound5ArtifactIngestInput)
     const startExists = Boolean(generated?.exists && startFramePath && startFrameSha256);
     const startQaStatus = qaStatusFor(shotQa, generated);
     const endRequired = endRequiredFor(shotId, input.report, shotQa);
-    const blockers = blockersFor({ qaStatus: startQaStatus, endRequired, shotQa, report: input.report });
-    const nextAction = nextActionFor(shotId, startQaStatus, endRequired);
+    const approvedStartFrame = approvedStartByShot.get(shotId);
+    const editableRegionEvidence = editableRegionByShot.get(shotId);
+    const providerEditReceipt = providerEditReceiptByShot.get(shotId);
+    const evidenceBlockers = strictEditEvidenceBlockers({
+      endRequired,
+      qaStatus: startQaStatus,
+      generated,
+      approvedStartFrame,
+      editableRegionEvidence,
+      providerEditReceipt,
+    });
+    const strictEditPreflightStatus = strictEditPreflightStatusFor({
+      endRequired,
+      qaStatus: startQaStatus,
+      evidenceBlockers,
+    });
+    const blockers = blockersFor({
+      qaStatus: startQaStatus,
+      endRequired,
+      shotQa,
+      report: input.report,
+      strictEditEvidenceBlockers: evidenceBlockers,
+    });
+    const nextAction = nextActionFor(shotId, startQaStatus, endRequired, strictEditPreflightStatus);
 
     return {
       shotId,
@@ -351,10 +565,14 @@ export function buildRound5ArtifactIngest(input: BuildRound5ArtifactIngestInput)
       endRequired,
       endFramePath: `shots/${shotId}/end.png`,
       endExists: false,
-      gateStatus: gateStatusFor(startQaStatus, endRequired),
-      ledgerStatus: ledgerStatusFor(startQaStatus),
+      gateStatus: gateStatusFor(startQaStatus, endRequired, strictEditPreflightStatus),
+      ledgerStatus: ledgerStatusFor(startQaStatus, strictEditPreflightStatus),
       nextAction,
       strictEditPilotCandidate: shotId === "ZP05" && endRequired && startQaStatus === "pass",
+      strictEditPreflightStatus,
+      approvedStartFrameRef: approvedStartFrame?.startFramePath,
+      editableRegionEvidenceRef: editableRegionEvidence?.evidencePath || editableRegionEvidence?.maskPath,
+      providerEditReceiptRef: providerEditReceipt?.receiptPath || providerEditReceipt?.receiptId,
       completeVerified: false,
       blockers,
       warnings: shotQa?.issues || [],
@@ -370,6 +588,10 @@ export function buildRound5ArtifactIngest(input: BuildRound5ArtifactIngestInput)
       path: shot.startFramePath,
       sha256: shot.startFrameSha256,
       qaStatus: shot.startQaStatus,
+      strictEditPreflightStatus: shot.strictEditPreflightStatus,
+      approvedStartFrameRef: shot.approvedStartFrameRef,
+      editableRegionEvidenceRef: shot.editableRegionEvidenceRef,
+      providerEditReceiptRef: shot.providerEditReceiptRef,
       blockers: shot.blockers,
     });
     return {
@@ -423,6 +645,7 @@ export function buildRound5ArtifactIngest(input: BuildRound5ArtifactIngestInput)
       byStatus,
       completeVerified: 0,
       endEditPreflightBlocked: shotGateMatrix.filter((shot) => shot.gateStatus === "end_edit_preflight_blocked").length,
+      endEditPreflightReady: shotGateMatrix.filter((shot) => shot.gateStatus === "end_edit_preflight_ready").length,
       projections: shotGateMatrix,
     },
     uiSummary: {

@@ -96,11 +96,79 @@ for (const shotId of ["ZP02", "ZP04", "ZP05"]) {
 
 assert(projection.ledgerProjection.completeVerified === 0, "no shot should be complete_verified");
 assert(projection.ledgerProjection.endEditPreflightBlocked === 2, "only ZP02 and ZP05 should be end edit preflight blocked");
+assert(projection.ledgerProjection.endEditPreflightReady === 0, "no shot should be strict edit ready without evidence");
 assert(projection.uiSummary.complete === false, "uiSummary must not mark complete");
 assert(projection.uiSummary.completeVerified === false, "uiSummary must not mark completeVerified");
 assert(projection.uiSummary.status !== "complete", "uiSummary status must not be complete");
 assert(projection.uiSummary.generatedImages === false, "ingest must not claim image generation");
 assert(projection.uiSummary.providerCalled === false, "ingest must not claim a provider call");
+
+const projectionWithStrictZp05 = buildRound5ArtifactIngest({
+  runRoot,
+  projectId: "round5-zero-project-planning-anime",
+  runId: "run-2026-05-09T11-09-28-642Z",
+  report,
+  strictEditEvidence: {
+    approvedStartFrames: [
+      {
+        shotId: "ZP05",
+        startFramePath: "shots/ZP05/start.png",
+        sha256: zp05.startFrameSha256,
+        providerAttachmentId: "attachment_round5_ZP05_start",
+        approvalStatus: "approved_for_strict_edit",
+      },
+    ],
+    editableRegionEvidence: [
+      {
+        shotId: "ZP05",
+        sourceStartFrameSha256: zp05.startFrameSha256,
+        evidencePath: "shots/ZP05/editable_region_mask_or_bbox.json",
+        evidenceSha256: "sha256:fixture-zp05-editable-region",
+        bboxNormalized: { x: 0.42, y: 0.34, width: 0.22, height: 0.2 },
+        qaStatus: "pass",
+      },
+    ],
+    providerEditReceipts: [
+      {
+        shotId: "ZP05",
+        receiptId: "round5_zp05_strict_edit_handoff",
+        receiptPath: "shots/ZP05/provider_edit_receipt.json",
+        status: "ready_for_provider_edit",
+        operation: "image.edit",
+        sourceStartFramePath: "shots/ZP05/start.png",
+        sourceStartFrameSha256: zp05.startFrameSha256,
+        sourceStartFrameAttachmentId: "attachment_round5_ZP05_start",
+        editableRegionEvidencePath: "shots/ZP05/editable_region_mask_or_bbox.json",
+        editableRegionEvidenceSha256: "sha256:fixture-zp05-editable-region",
+        noFallbackUsed: true,
+        providerCalled: false,
+      },
+    ],
+  },
+});
+
+const strictByShot = new Map(projectionWithStrictZp05.shotGateMatrix.map((shot) => [shot.shotId, shot]));
+const strictZp05 = strictByShot.get("ZP05");
+assert(strictZp05.gateStatus === "end_edit_preflight_ready", "ZP05 should become strict edit preflight ready when evidence is complete");
+assert(strictZp05.ledgerStatus === "waiting_output", "ZP05 should wait for provider output after strict edit preflight");
+assert(strictZp05.nextAction === "submit_strict_image_edit", "ZP05 next action should submit strict image edit");
+assert(strictZp05.strictEditPreflightStatus === "ready_for_provider_edit", "ZP05 strict edit status mismatch");
+assert(strictZp05.blockers.length === 1 && strictZp05.blockers[0] === "end_frame_blocked_until_approved_start_attachment_and_edit_provenance", "ZP05 should keep source warning only after evidence clears hard blockers");
+assert(strictZp05.approvedStartFrameRef === "shots/ZP05/start.png", "ZP05 approved start ref missing");
+assert(strictZp05.editableRegionEvidenceRef === "shots/ZP05/editable_region_mask_or_bbox.json", "ZP05 editable region evidence ref missing");
+assert(strictZp05.providerEditReceiptRef === "shots/ZP05/provider_edit_receipt.json", "ZP05 edit receipt ref missing");
+assert(strictByShot.get("ZP02").gateStatus === "end_edit_preflight_blocked", "ZP02 should remain blocked without strict edit evidence");
+assert(projectionWithStrictZp05.ledgerProjection.endEditPreflightBlocked === 1, "strict ZP05 evidence should leave only ZP02 end edit preflight blocked");
+assert(projectionWithStrictZp05.ledgerProjection.endEditPreflightReady === 1, "strict ZP05 evidence should count one ready strict edit preflight");
+assert(projectionWithStrictZp05.ledgerProjection.completeVerified === 0, "strict edit preflight must not complete any shot");
+assert(projectionWithStrictZp05.uiSummary.providerCalled === false, "strict edit preflight must not claim provider call");
+assert(projectionWithStrictZp05.uiSummary.generatedImages === false, "strict edit preflight must not claim image generation");
+
+const zp05Ledger = projectionWithStrictZp05.ledgers.find((ledger) => ledger.taskRunId.endsWith(":ZP05:start"));
+assert(
+  zp05Ledger?.events.some((event) => event.eventType === "strict_edit_preflight_ready"),
+  "ZP05 ledger should record strict edit preflight readiness",
+);
 
 assert(round5ArtifactIsolationFlags.mainThreadImageBytesForbidden === true, "module isolation flag should forbid main-thread image bytes");
 assert(round5ArtifactIsolationFlags.sidecarOnlyImageTransport === true, "module isolation flag should require sidecar-only image transport");

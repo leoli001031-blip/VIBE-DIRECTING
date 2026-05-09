@@ -98,6 +98,11 @@ const round5Root = "real-test-sandbox/round5-zero-project-planning-anime/runs/ru
 const round5ProjectId = "round5_zero_planning_anime_signal";
 const round5ReportPath = `${round5Root}/reports/round5_full_real_chain_report.json`;
 const round5VibePath = `${round5Root}/project/project.vibe.json`;
+const round5Zp05StrictEditSidecars = [
+  `${round5Root}/shots/ZP05/approved_start_frame_ref.json`,
+  `${round5Root}/shots/ZP05/editable_region_mask_or_bbox.json`,
+  `${round5Root}/shots/ZP05/provider_edit_receipt.json`,
+];
 
 function assertNo005Leak(payload, label) {
   const text = JSON.stringify(payload);
@@ -196,6 +201,11 @@ function assertCurrent004(payload, label) {
 }
 
 function assertCurrentRound5(payload, label) {
+  return assertCurrentRound5WithOptions(payload, label, {});
+}
+
+function assertCurrentRound5WithOptions(payload, label, options) {
+  const strictZp05Ready = options.strictZp05Ready === true;
   assert(payload.ok === true, `${label} should be ok`);
   assertCurrentBindingContext(payload, label, round5Root, round5ProjectId);
   assert(payload.status === "blocked", `${label} top-level status should follow Round 5 gates`);
@@ -229,13 +239,74 @@ function assertCurrentRound5(payload, label) {
 
   const zp05 = byShot.get("ZP05");
   assert(zp05?.strictEditPilotCandidate === true, `${label} ZP05 should be strict edit pilot candidate`);
-  assert(zp05?.gateStatus === "end_edit_preflight_blocked", `${label} ZP05 end edit preflight should be blocked`);
-  assert(zp05?.nextAction === "collect_strict_edit_provenance", `${label} ZP05 nextAction mismatch`);
+  if (strictZp05Ready) {
+    assert(zp05?.gateStatus === "end_edit_preflight_ready", `${label} ZP05 should be strict edit preflight ready`);
+    assert(zp05?.ledgerStatus === "waiting_output", `${label} ZP05 should wait for strict edit output`);
+    assert(zp05?.nextAction === "submit_strict_image_edit", `${label} ZP05 nextAction should submit strict image edit`);
+    assert(zp05?.approvedStartFrameRef === "shots/ZP05/start.png", `${label} ZP05 approved start ref missing`);
+    assert(zp05?.editableRegionEvidenceRef === "shots/ZP05/editable_region_mask_or_bbox.json", `${label} ZP05 editable region ref missing`);
+    assert(zp05?.providerEditReceiptRef === "shots/ZP05/provider_edit_receipt.json", `${label} ZP05 provider edit receipt ref missing`);
+  } else {
+    assert(zp05?.gateStatus === "end_edit_preflight_blocked", `${label} ZP05 end edit preflight should be blocked`);
+    assert(zp05?.nextAction === "collect_strict_edit_provenance", `${label} ZP05 nextAction mismatch`);
+  }
 
   const zp02 = byShot.get("ZP02");
   assert(zp02?.gateStatus === "end_edit_preflight_blocked", `${label} ZP02 end edit preflight should be blocked`);
   assert(zp02?.nextAction === "collect_strict_edit_provenance", `${label} ZP02 nextAction mismatch`);
-  assert(payload.round5ArtifactIngest.ledgerProjection?.endEditPreflightBlocked === 2, `${label} end edit preflight blocked count mismatch`);
+  assert(
+    payload.round5ArtifactIngest.ledgerProjection?.endEditPreflightBlocked === (strictZp05Ready ? 1 : 2),
+    `${label} end edit preflight blocked count mismatch`,
+  );
+  assert(
+    payload.round5ArtifactIngest.ledgerProjection?.endEditPreflightReady === (strictZp05Ready ? 1 : 0),
+    `${label} end edit preflight ready count mismatch`,
+  );
+}
+
+function writeRound5Zp05StrictEditSidecars() {
+  const report = JSON.parse(readFileSync(round5ReportPath, "utf8"));
+  const startFrame = report.generatedStartFrames.find((item) => item.shotId === "ZP05");
+  assert(startFrame?.sha256, "Round 5 ZP05 start sha missing");
+  const shotDir = `${round5Root}/shots/ZP05`;
+  mkdirSync(shotDir, { recursive: true });
+  writeFileSync(round5Zp05StrictEditSidecars[0], JSON.stringify({
+    schemaVersion: "round5_approved_start_frame_ref_v1",
+    shotId: "ZP05",
+    startFramePath: "shots/ZP05/start.png",
+    sha256: startFrame.sha256,
+    providerAttachmentId: "attachment_round5_ZP05_start",
+    approvalStatus: "approved_for_strict_edit",
+    approvedAt: "2026-05-09T12:00:00.000Z",
+  }, null, 2), "utf8");
+  writeFileSync(round5Zp05StrictEditSidecars[1], JSON.stringify({
+    schemaVersion: "round5_editable_region_mask_or_bbox_v1",
+    shotId: "ZP05",
+    sourceStartFrameSha256: startFrame.sha256,
+    evidencePath: "shots/ZP05/editable_region_mask_or_bbox.json",
+    evidenceSha256: "sha256:runtime-test-zp05-editable-region",
+    bboxNormalized: { x: 0.42, y: 0.34, width: 0.22, height: 0.2 },
+    qaStatus: "pass",
+  }, null, 2), "utf8");
+  writeFileSync(round5Zp05StrictEditSidecars[2], JSON.stringify({
+    schemaVersion: "round5_provider_edit_receipt_v1",
+    shotId: "ZP05",
+    receiptId: "round5_zp05_strict_edit_handoff_runtime_test",
+    receiptPath: "shots/ZP05/provider_edit_receipt.json",
+    status: "ready_for_provider_edit",
+    operation: "image.edit",
+    sourceStartFramePath: "shots/ZP05/start.png",
+    sourceStartFrameSha256: startFrame.sha256,
+    sourceStartFrameAttachmentId: "attachment_round5_ZP05_start",
+    editableRegionEvidencePath: "shots/ZP05/editable_region_mask_or_bbox.json",
+    editableRegionEvidenceSha256: "sha256:runtime-test-zp05-editable-region",
+    noFallbackUsed: true,
+    providerCalled: false,
+  }, null, 2), "utf8");
+}
+
+function cleanupRound5Zp05StrictEditSidecars() {
+  for (const filePath of round5Zp05StrictEditSidecars) rmSync(filePath, { force: true });
 }
 
 function assertImage2Batch005(payload, label) {
@@ -280,6 +351,7 @@ const missingRefsVibePath = `${missingRefsRoot}/project/project.vibe`;
 writeFileSync(outsideFile, "outside runtime boundary\n", "utf8");
 rmSync(project005OneShotRoot, { recursive: true, force: true });
 rmSync(missingRefsRoot, { recursive: true, force: true });
+cleanupRound5Zp05StrictEditSidecars();
 mkdirSync(`${missingRefsRoot}/project`, { recursive: true });
 writeFileSync(missingRefsVibePath, JSON.stringify({
   schemaVersion: "project_vibe_test_v1",
@@ -416,6 +488,15 @@ try {
   assert(round5Status.response.status === 200, "GET current status after select Round 5 should return 200");
   assertCurrentRound5(round5Status.payload, "GET current status after select Round 5");
   assert(statSync(round5VibePath).mtimeMs === round5VibeBeforeStatusRead, "GET Round 5 status must not mutate project.vibe");
+
+  writeRound5Zp05StrictEditSidecars();
+  const round5StrictEditStatus = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
+  assert(round5StrictEditStatus.response.status === 200, "GET Round 5 status with strict edit sidecars should return 200");
+  assertCurrentRound5WithOptions(round5StrictEditStatus.payload, "GET Round 5 status with strict edit sidecars", {
+    strictZp05Ready: true,
+  });
+  assert(statSync(round5VibePath).mtimeMs === round5VibeBeforeStatusRead, "GET Round 5 strict edit status must not mutate project.vibe");
+  cleanupRound5Zp05StrictEditSidecars();
 
   const reselect005 = await selectProject(baseUrl, project005Root, project005Id, "005 anime image2");
   assert(reselect005.response.status === 200, "POST reselect 005 should return 200");
@@ -708,6 +789,7 @@ try {
   rmSync(repoSymlinkRoot, { recursive: true, force: true });
   rmSync(project005OneShotRoot, { recursive: true, force: true });
   rmSync(missingRefsRoot, { recursive: true, force: true });
+  cleanupRound5Zp05StrictEditSidecars();
   rmSync(tempRoot, { recursive: true, force: true });
 }
 

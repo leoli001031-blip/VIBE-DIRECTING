@@ -7793,7 +7793,8 @@ function projectRound5GateLabels(summary: ProjectRealChainPanelState["summary"])
   });
 
   if (zp04?.nextAction && zp04.nextAction !== "none") labels.push("ZP04 重生 start");
-  if (zp05?.strictEditPilotCandidate) labels.push("ZP05 可做 edit pilot");
+  if (zp05?.gateStatus === "end_edit_preflight_ready") labels.push("ZP05 edit 就绪");
+  else if (zp05?.strictEditPilotCandidate) labels.push("ZP05 可做 edit pilot");
   if (endBlocked) labels.push("End 缺证据");
   return labels;
 }
