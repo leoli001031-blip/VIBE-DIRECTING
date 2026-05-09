@@ -33,6 +33,7 @@
     "codex-cli-adapter-spike:test": "node scripts/codex-cli-adapter-spike-test.mjs",
     "codex-worker-runtime-gate:test": "node scripts/codex-worker-runtime-gate-test.mjs",
     "codex-app-server-adapter:test": "node scripts/codex-app-server-adapter-test.mjs",
+    "codex-app-server-image2-edit-adapter:test": "node scripts/codex-app-server-image2-edit-adapter-test.mjs",
     "software-layer-diagnostic:test": "node scripts/software-layer-diagnostic-test.mjs",
     "software-layer-demo:test": "node scripts/software-layer-demo-test.mjs",
     "image-keyframe:test": "node scripts/image-keyframe-runtime-test.mjs",
