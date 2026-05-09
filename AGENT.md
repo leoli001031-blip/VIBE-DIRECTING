@@ -10,6 +10,20 @@ Project root:
 /Users/lichenhao/Desktop/vibe core
 ```
 
+Retrospective and boundary map:
+
+```text
+docs/vibe-core-retrospective.md
+```
+
+## High-Priority Rules
+
+- `execute-return` is external provider return ingest, not provider submit.
+- Mock, dry-run, prepared handoff, and software pressure results must not be called real provider ready.
+- Missing media must not return JSON to `<img>` requests; avoid ORB regression.
+- Current-project binding is the fact entrypoint; `runtime-state.json` is a rebuildable cache/projection.
+- Future implementation changes should default to subagents/workers; the main agent owns decomposition, review, integration, and verification.
+
 ## Product Intent
 
 Vibe Director is not meant to become an engineering experiment console. It is an extremely simple AI film/video director desk for creators.
@@ -277,6 +291,8 @@ Local postprocess rules:
 - Semantic failures require regeneration or provider-supported editing, not OpenCV-style repair.
 
 ## Subagent Task Envelope Rules
+
+By default, all future implementation work and file modifications should be executed through subagents/workers to prevent main-agent context explosion; the main agent owns task decomposition, boundary passing, review, integration, and verification.
 
 Formal subagent work must not depend on the main agent improvising context.
 
