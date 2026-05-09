@@ -4142,7 +4142,7 @@ small {
 }
 
 .phase17-runtime-panel .phase17-metrics {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .phase17-runtime-panel .metric strong {

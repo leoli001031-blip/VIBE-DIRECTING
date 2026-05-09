@@ -30,6 +30,7 @@ import type {
   PreviewEvent,
   ProjectAudit,
   ProjectPreviewExportState,
+  MotionEndpointContract,
   ShotRecord,
   UiMode,
   WorkflowStage,
@@ -1554,6 +1555,28 @@ type VideoExecutionPreviewRow = VideoExecutionPreviewState["previews"][number];
 type VideoReadinessGateState = VideoPlanningState["readinessGates"][number];
 type VideoTaskPlanState = VideoPlanningState["taskPlans"][number];
 type AdapterContractState = ProjectRuntimeState["adapterContracts"];
+type MotionEndpointUiFacts = {
+  shotId: string;
+  motionType: string;
+  motionLabel: string;
+  endFrameRequired: boolean;
+  contractStatus: string;
+  bodyMechanicsRequired: boolean;
+  editableRegionCount: number;
+  protectedRegionCount: number;
+  bboxOnlyMotionForbidden: boolean;
+  blockers: string[];
+  warnings: string[];
+  source: "contract" | "task_facts" | "missing";
+};
+type MotionEndpointDiagnosticsSummary = {
+  total: number;
+  endFrameRequiredCount: number;
+  bodyMechanicsRequiredCount: number;
+  typeCounts: Record<string, number>;
+  statusCounts: Record<string, number>;
+  compactItems: string[];
+};
 type Phase17LoopRow = {
   label: string;
   status: string;
@@ -1567,6 +1590,9 @@ type Phase17ImageKeyframeRuntimeSummary = {
   adapterRequestCount: number;
   validPairCount: number;
   pairGateCount: number;
+  startPlanMotionFactCount: number;
+  endPlanMotionFactCount: number;
+  blockedPairMotionBlockerCount: number;
   closedLoopEvidenceCount: number;
   providerLockCount: number;
   rows: Phase17LoopRow[];
@@ -6523,6 +6549,7 @@ function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRunti
   const gateCounts = countBy(videoPlanning.readinessGates.map((gate) => gate.status));
   const planCounts = countBy(videoPlanning.taskPlans.map((plan) => plan.status));
   const queueCounts = countBy(videoPlanning.taskPlans.map((plan) => plan.queueStatus));
+  const motionSummary = buildMotionEndpointDiagnosticsSummary(videoPlanning);
 
   return (
     <section className="machine-panel video-planning-diagnostics">
@@ -6535,6 +6562,7 @@ function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRunti
         <Metric label="Readiness Gates" value={`${videoPlanning.readinessGates.length}`} detail={`${gateCounts.ready || 0} ready · ${gateCounts.blocked || 0} blocked · ${gateCounts.parked || 0} parked`} />
         <Metric label="Task Plans" value={`${videoPlanning.taskPlans.length}`} detail={`${planCounts.ready || 0} ready · ${planCounts.blocked || 0} blocked · ${planCounts.parked || 0} parked`} />
         <Metric label="Provider Lock" value={policy.liveSubmitAllowed ? "unlocked" : "locked"} detail={`${policy.parkedProviderIds.length || 0} parked provider(s)`} />
+        <Metric label="Motion Endpoint" value={`${motionSummary.total}`} detail={`${motionSummary.endFrameRequiredCount} end-frame · ${motionSummary.bodyMechanicsRequiredCount} body mechanics`} />
       </div>
       <div className="video-diagnostics-grid">
         <div>
@@ -6580,6 +6608,20 @@ function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRunti
             ]}
             empty="No video task plans."
           />
+        </div>
+        <div>
+          <h3>Motion Contract</h3>
+          <div className="field-grid compact">
+            <label>Types</label>
+            <span>{Object.entries(motionSummary.typeCounts).map(([type, count]) => `${type}: ${count}`).join(" · ") || "none"}</span>
+            <label>Status</label>
+            <span>{Object.entries(motionSummary.statusCounts).map(([status, count]) => `${status}: ${count}`).join(" · ") || "none"}</span>
+            <label>End Required</label>
+            <span>{motionSummary.endFrameRequiredCount}</span>
+            <label>Body Mechanics</label>
+            <span>{motionSummary.bodyMechanicsRequiredCount}</span>
+          </div>
+          <CompactList items={motionSummary.compactItems} empty="No motion endpoint facts." />
         </div>
       </div>
       <div className="pipeline-details">
@@ -7984,7 +8026,134 @@ function firstVideoBlocker(gate?: VideoReadinessGateState, plan?: VideoTaskPlanS
     || "No selected-shot video blocker.";
 }
 
-function VideoPlanningSummaryStrip({
+function motionTypeLabel(type?: string) {
+  const labels: Record<string, string> = {
+    static_hold: "静止",
+    micro_expression: "表情",
+    pose_change_in_place: "姿态",
+    locomotion: "走位",
+    object_interaction: "交互",
+    camera_reframe: "运镜",
+    camera_move: "运镜",
+    reveal_or_occlusion: "揭示",
+    transform_or_state_change: "状态变化",
+  };
+  return type ? labels[type] || type : "未规划";
+}
+
+function motionContractFromGate(gate?: VideoReadinessGateState): MotionEndpointContract | undefined {
+  const value = gate ? (gate as unknown as Record<string, unknown>).motionEndpointContract : undefined;
+  return isRecord(value) ? value as unknown as MotionEndpointContract : undefined;
+}
+
+function motionFactsFromTaskPlan(plan?: VideoTaskPlanState): Record<string, unknown> | undefined {
+  const value = plan ? (plan as unknown as Record<string, unknown>).motionEndpointFacts : undefined;
+  return isRecord(value) ? value : undefined;
+}
+
+function motionEndpointNoticeText(value: string) {
+  return /motion|MotionEndpoint|body mechanics|end[-\s]?frame|editable|protected|bbox|动作|尾帧|姿态|走位|运镜/i.test(value);
+}
+
+function firstMotionEndpointNotice(gate?: VideoReadinessGateState, plan?: VideoTaskPlanState) {
+  const contract = motionContractFromGate(gate);
+  return contract?.blockers[0]
+    || contract?.warnings[0]
+    || gate?.checks.find((check) => check.id.includes("motion") && check.status === "blocked")?.detail
+    || gate?.checks.find((check) => check.id.includes("motion") && check.status === "warning")?.detail
+    || plan?.blockers.find(motionEndpointNoticeText)
+    || plan?.warnings.find(motionEndpointNoticeText)
+    || "No motion endpoint blocker or warning.";
+}
+
+function motionContractSummaryForGate(gate?: VideoReadinessGateState, plan?: VideoTaskPlanState): MotionEndpointUiFacts {
+  const contract = motionContractFromGate(gate);
+  if (contract) {
+    return {
+      shotId: contract.shotId || gate?.shotId || plan?.shotId || "project",
+      motionType: contract.motionType,
+      motionLabel: motionTypeLabel(contract.motionType),
+      endFrameRequired: contract.whetherEndFrameRequired,
+      contractStatus: contract.status,
+      bodyMechanicsRequired: contract.bodyMechanics.required,
+      editableRegionCount: contract.editableRegions.length,
+      protectedRegionCount: contract.protectedRegions.length,
+      bboxOnlyMotionForbidden: contract.gateInputs.bboxOnlyMotionForbidden,
+      blockers: contract.blockers,
+      warnings: contract.warnings,
+      source: "contract",
+    };
+  }
+
+  const facts = motionFactsFromTaskPlan(plan);
+  if (facts) {
+    const motionType = typeof facts.motionType === "string" ? facts.motionType : "unknown";
+    const status = typeof facts.contractStatus === "string"
+      ? facts.contractStatus
+      : typeof facts.motionContractStatus === "string"
+        ? facts.motionContractStatus
+        : "missing";
+    return {
+      shotId: plan?.shotId || gate?.shotId || "project",
+      motionType,
+      motionLabel: motionTypeLabel(motionType),
+      endFrameRequired: readOptionalBoolean(facts, "whetherEndFrameRequired") ?? readOptionalBoolean(facts, "endRequired") ?? false,
+      contractStatus: status,
+      bodyMechanicsRequired: readOptionalBoolean(facts, "bodyMechanicsRequired") ?? false,
+      editableRegionCount: readStringArray(facts.editableRegionIds).length,
+      protectedRegionCount: readStringArray(facts.protectedRegionIds).length,
+      bboxOnlyMotionForbidden: readOptionalBoolean(facts, "bboxOnlyMotionForbidden") ?? false,
+      blockers: [],
+      warnings: [],
+      source: "task_facts",
+    };
+  }
+
+  return {
+    shotId: gate?.shotId || plan?.shotId || "project",
+    motionType: "missing",
+    motionLabel: "未规划",
+    endFrameRequired: false,
+    contractStatus: "missing",
+    bodyMechanicsRequired: false,
+    editableRegionCount: 0,
+    protectedRegionCount: 0,
+    bboxOnlyMotionForbidden: false,
+    blockers: [],
+    warnings: [],
+    source: "missing",
+  };
+}
+
+function motionEndpointFactsForShot(videoPlanning: VideoPlanningState, selectedShot?: ShotRecord) {
+  const selectedGate = selectedShot ? videoPlanning.readinessGates.find((gate) => gate.shotId === selectedShot.id) : undefined;
+  const selectedPlan = selectedShot ? videoPlanning.taskPlans.find((plan) => plan.shotId === selectedShot.id) : undefined;
+  return motionContractSummaryForGate(selectedGate, selectedPlan);
+}
+
+function buildMotionEndpointDiagnosticsSummary(videoPlanning: VideoPlanningState): MotionEndpointDiagnosticsSummary {
+  const shotIds = Array.from(new Set([
+    ...videoPlanning.readinessGates.map((gate) => gate.shotId),
+    ...videoPlanning.taskPlans.map((plan) => plan.shotId),
+  ]));
+  const facts = shotIds.map((shotId) => motionContractSummaryForGate(
+    videoPlanning.readinessGates.find((gate) => gate.shotId === shotId),
+    videoPlanning.taskPlans.find((plan) => plan.shotId === shotId),
+  ));
+
+  return {
+    total: facts.length,
+    endFrameRequiredCount: facts.filter((item) => item.endFrameRequired).length,
+    bodyMechanicsRequiredCount: facts.filter((item) => item.bodyMechanicsRequired).length,
+    typeCounts: countBy(facts.map((item) => item.motionLabel)),
+    statusCounts: countBy(facts.map((item) => item.contractStatus)),
+    compactItems: facts.slice(0, 6).map((item) => (
+      `${item.shotId} · ${item.motionLabel} · ${item.endFrameRequired ? "需要尾帧" : "无需尾帧"} · ${item.contractStatus}`
+    )),
+  };
+}
+
+function VideoPrepareSummaryStrip({
   runtimeState,
   selectedShot,
 }: {
@@ -7998,14 +8167,20 @@ function VideoPlanningSummaryStrip({
   const selectedPlan = selectedShot ? videoPlanning.taskPlans.find((plan) => plan.shotId === selectedShot.id) : undefined;
   const readyGates = videoPlanning.readinessGates.filter((gate) => gate.status === "ready").length;
   const blockedGates = videoPlanning.readinessGates.filter((gate) => gate.status === "blocked").length;
+  const motionFacts = motionEndpointFactsForShot(videoPlanning, selectedShot);
 
   return (
     <section className="video-plan-summary-strip">
       <div className="audit-head">
         <LockKeyhole size={17} />
-        <span>Video Prepare</span>
+        <span>Video Prepare · 动作规划</span>
       </div>
       <div className="video-status-grid">
+        <div>
+          <span>动作规划</span>
+          <strong>{motionFacts.motionLabel}</strong>
+          <small>{motionFacts.endFrameRequired ? "需要尾帧" : "无需尾帧"} · {motionFacts.contractStatus}</small>
+        </div>
         <div>
           <span>Video Readiness</span>
           <strong>{selectedGate?.status || `${readyGates}/${videoPlanning.readinessGates.length}`}</strong>
@@ -8140,6 +8315,7 @@ function DirectorMode({
           onConfirmImage2OneShot={onConfirmImage2OneShot}
           onCheckImage2OneShotReturn={onCheckImage2OneShotReturn}
         />
+        <VideoPrepareSummaryStrip runtimeState={runtimeState} selectedShot={selectedShot} />
         {directorView === "assets" && (
           <MinimalAssetLibrary
             library={assetLibrary}
@@ -8388,6 +8564,8 @@ function ShotVideoGateInspector({
   const derivation = gate?.keyframePairDerivation;
   const preflight = plan?.preflightFacts;
   const manifest = plan?.manifestFacts;
+  const motionSummary = motionContractSummaryForGate(gate, plan);
+  const motionNotice = firstMotionEndpointNotice(gate, plan);
   const hardRules = plan
     ? [
       `dryRunOnly=${ruleValue(plan.dryRunOnly)}`,
@@ -8441,6 +8619,20 @@ function ShotVideoGateInspector({
         <span>{plan?.promptConstraints.join(", ") || "no bgm provider prompt policy"}</span>
         <label>Motion</label>
         <span>{plan?.motionBrief || "not planned"}</span>
+      </div>
+      <div className="field-grid compact">
+        <label>Motion Type</label>
+        <span>{motionSummary.motionLabel} · {motionSummary.motionType}</span>
+        <label>End Frame Required</label>
+        <span>{ruleValue(motionSummary.endFrameRequired)}</span>
+        <label>Body Mechanics</label>
+        <span>{motionSummary.bodyMechanicsRequired ? "required" : "not required"}</span>
+        <label>Editable / Protected</label>
+        <span>{motionSummary.editableRegionCount} / {motionSummary.protectedRegionCount}</span>
+        <label>Bbox-only guard</label>
+        <span>{motionSummary.bboxOnlyMotionForbidden ? "forbidden" : "missing"}</span>
+        <label>Motion Notice</label>
+        <span>{motionNotice}</span>
       </div>
       <div className="video-rule-strip">
         {hardRules.map((rule) => (
@@ -9241,6 +9433,14 @@ function buildPhase17ImageKeyframeRuntimeSummary(runtimeState: ProjectRuntimeSta
   const editRequests = runtimePlan.image2EndFramePlans.filter((plan) => plan.adapterRequestPreview.operation === "image2image").length;
   const liveForbiddenRequests = [...runtimePlan.image2StartFramePlans, ...runtimePlan.image2EndFramePlans]
     .filter((plan) => plan.adapterRequestPreview.submitPolicy.liveSubmitForbidden).length;
+  const startPlanMotionFactCount = runtimePlan.image2StartFramePlans.filter((plan) => Boolean(plan.motionEndpointFacts)).length;
+  const endPlanMotionFactCount = runtimePlan.image2EndFramePlans.filter((plan) => (
+    Boolean(plan.motionEndpointFacts) || plan.endDerivation.motionContractStatus !== "missing"
+  )).length;
+  const blockedPairMotionBlockerCount = runtimePlan.keyframePairGates
+    .filter((gate) => gate.status === "blocked")
+    .flatMap((gate) => gate.blockers)
+    .filter(motionEndpointNoticeText).length;
   const expectedOutputSignals = pipeline.watcherEvents.filter((event) => (
     event.eventType === "expected_output_detected" ||
     event.eventType === "provider_ready_derivative_detected"
@@ -9260,6 +9460,9 @@ function buildPhase17ImageKeyframeRuntimeSummary(runtimeState: ProjectRuntimeSta
     adapterRequestCount: adapterPreviewCount,
     validPairCount: runtimePlan.summary.readyKeyframePairs,
     pairGateCount: runtimePlan.summary.keyframePairGates,
+    startPlanMotionFactCount,
+    endPlanMotionFactCount,
+    blockedPairMotionBlockerCount,
     closedLoopEvidenceCount: closedLoopEvidence,
     providerLockCount,
     blockers,
@@ -9279,6 +9482,11 @@ function buildPhase17ImageKeyframeRuntimeSummary(runtimeState: ProjectRuntimeSta
         label: "End-frame derivation",
         status: `${derivedFromStart}/${runtimePlan.summary.endFramePlans} from start frame`,
         detail: `${runtimePlan.summary.readyKeyframePairs} valid keyframe pair gate(s) · ${runtimePlan.summary.blockedKeyframePairs} blocked or unknown`,
+      },
+      {
+        label: "Motion Endpoint facts",
+        status: `${startPlanMotionFactCount}/${runtimePlan.image2StartFramePlans.length} start · ${endPlanMotionFactCount}/${runtimePlan.image2EndFramePlans.length} end`,
+        detail: `${blockedPairMotionBlockerCount} blocked pair motion blocker(s)`,
       },
       {
         label: "Adapter dry-run",
@@ -9308,6 +9516,7 @@ function Image2KeyframeRuntimeDiagnostics({ runtimeState }: { runtimeState: Proj
         <Metric label="Image2 Assets" value={`${summary.assetPlanCount}`} detail="reference asset task plans" />
         <Metric label="Keyframe Plans" value={`${summary.startFramePlanCount}/${summary.endFramePlanCount}`} detail="start / end frame plans" />
         <Metric label="Keyframe Pair" value={`${summary.validPairCount}/${summary.pairGateCount}`} detail="valid pair gates" />
+        <Metric label="Motion Facts" value={`${summary.startPlanMotionFactCount}/${summary.endPlanMotionFactCount}`} detail={`${summary.blockedPairMotionBlockerCount} blocked pair motion blocker(s)`} />
         <Metric label="Closed Loop" value={`${summary.closedLoopEvidenceCount}`} detail="watcher, health, QA evidence" />
         <Metric label="Provider Locks" value={`${summary.providerLockCount}`} detail="live submit remains disabled" />
       </div>
