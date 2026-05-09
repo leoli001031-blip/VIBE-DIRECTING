@@ -7,6 +7,7 @@ import type {
 import type {
   GenerationHarnessState,
   KeyframePairDerivation,
+  MotionEndpointContract,
   ShotPromptPlan,
 } from "./types";
 
@@ -307,6 +308,12 @@ export interface ValidateStartEndDerivationInput {
   allowIndependentExceptions?: boolean;
 }
 
+export interface ValidateMotionEndpointHardContractsInput {
+  motionEndpointContracts?: MotionEndpointContract[];
+  keyframePairs?: KeyframePairDerivation[];
+  shotLayouts?: ShotLayoutContract[];
+}
+
 export interface ValidateVisualConsistencyInput {
   checkedAt?: string;
   assetLibrary?: AssetLibrarySnapshot;
@@ -314,6 +321,7 @@ export interface ValidateVisualConsistencyInput {
   shotLayouts?: ShotLayoutContract[];
   spatialMemory?: SpatialMemoryContract;
   startEndDerivations?: ValidateStartEndDerivationInput;
+  motionEndpointContracts?: MotionEndpointContract[];
   postprocessPolicies?: VisualConsistencyPostprocessPolicy[];
   generationHarnesses?: GenerationHarnessState[];
 }
@@ -1178,6 +1186,196 @@ export function validateStartEndDerivationHardContracts(input: ValidateStartEndD
   return issues;
 }
 
+function motionContractSourceRefs(
+  contract: MotionEndpointContract | undefined,
+  pair: KeyframePairDerivation | undefined,
+  layout: ShotLayoutContract | undefined,
+): string[] {
+  return unique([
+    contract?.shotId || "",
+    pair?.shotId || "",
+    pair?.startFrameId || "",
+    pair?.endFrameId || "",
+    layout?.id || "",
+  ]);
+}
+
+function motionEndpointIssue(
+  target: string,
+  detail: string,
+  sourceRefs: string[],
+): VisualConsistencyIssue {
+  return issue({
+    code: "motion_gate_violation",
+    layer: "start_end_derivation",
+    severity: "blocker",
+    target,
+    detail,
+    sourceRefs,
+  });
+}
+
+function valuesDiffer(left: unknown, right: unknown): boolean {
+  return left !== undefined && right !== undefined && left !== right;
+}
+
+export function validateMotionEndpointHardContracts(input: ValidateMotionEndpointHardContractsInput): VisualConsistencyIssue[] {
+  const issues: VisualConsistencyIssue[] = [];
+  const contracts = input.motionEndpointContracts || [];
+  const keyframePairs = input.keyframePairs || [];
+  const pairsByShot = new Map(keyframePairs.map((pair) => [pair.shotId, pair]));
+  const contractsByShot = new Map(contracts.map((contract) => [contract.shotId, contract]));
+  const layoutsByShot = new Map((input.shotLayouts || []).map((layout) => [layout.shotId, layout]));
+
+  for (const pair of keyframePairs) {
+    if (!contractsByShot.has(pair.shotId)) {
+      issues.push(
+        motionEndpointIssue(
+          pair.shotId,
+          "Keyframe pair has no MotionEndpointContract; visual consistency cannot approve the motion endpoint.",
+          motionContractSourceRefs(undefined, pair, layoutsByShot.get(pair.shotId)),
+        ),
+      );
+    }
+  }
+
+  for (const contract of contracts) {
+    const pair = pairsByShot.get(contract.shotId) || contract.keyframePairDerivation;
+    const layout = layoutsByShot.get(contract.shotId);
+    const sourceRefs = motionContractSourceRefs(contract, pair, layout);
+    const target = contract.shotId || "motion_endpoint_contract";
+
+    if (contract.status === "blocked" || contract.blockers.length > 0) {
+      issues.push(
+        motionEndpointIssue(
+          target,
+          `MotionEndpointContract is already blocked: ${contract.blockers.length ? contract.blockers.join("; ") : "status is blocked."}`,
+          sourceRefs,
+        ),
+      );
+    }
+
+    if (!pair) {
+      issues.push(
+        motionEndpointIssue(
+          target,
+          "MotionEndpointContract has no matching keyframe pair evidence for shotId/start/end validation.",
+          sourceRefs,
+        ),
+      );
+    }
+
+    const embeddedPair = contract.keyframePairDerivation;
+    if (pair && !embeddedPair) {
+      issues.push(
+        motionEndpointIssue(
+          target,
+          "MotionEndpointContract must embed the keyframePairDerivation it gates.",
+          sourceRefs,
+        ),
+      );
+    }
+    if (pair && embeddedPair) {
+      const mismatchFields = [
+        valuesDiffer(contract.shotId, pair.shotId) ? "shotId" : "",
+        valuesDiffer(embeddedPair.shotId, pair.shotId) ? "keyframePairDerivation.shotId" : "",
+        valuesDiffer(embeddedPair.startFrameId, pair.startFrameId) ? "startFrameId" : "",
+        valuesDiffer(embeddedPair.endFrameId, pair.endFrameId) ? "endFrameId" : "",
+        valuesDiffer(embeddedPair.endDerivationSource, pair.endDerivationSource) ? "endDerivationSource" : "",
+        valuesDiffer(embeddedPair.validForI2vPair, pair.validForI2vPair) ? "validForI2vPair" : "",
+      ].filter(Boolean);
+      if (mismatchFields.length > 0) {
+        issues.push(
+          motionEndpointIssue(
+            target,
+            `MotionEndpointContract does not match keyframe pair fields: ${mismatchFields.join(", ")}.`,
+            sourceRefs,
+          ),
+        );
+      }
+    }
+
+    if (contract.gateInputs.keyframePairPresent !== true) {
+      issues.push(
+        motionEndpointIssue(
+          target,
+          "MotionEndpointContract gateInputs.keyframePairPresent must be true.",
+          sourceRefs,
+        ),
+      );
+    }
+    if (contract.gateInputs.keyframePairDerivesFromStart !== true) {
+      issues.push(
+        motionEndpointIssue(
+          target,
+          "MotionEndpointContract gateInputs.keyframePairDerivesFromStart must be true.",
+          sourceRefs,
+        ),
+      );
+    }
+    if (contract.gateInputs.bboxOnlyMotionForbidden !== true) {
+      issues.push(
+        motionEndpointIssue(
+          target,
+          "MotionEndpointContract gateInputs.bboxOnlyMotionForbidden must be true.",
+          sourceRefs,
+        ),
+      );
+    }
+
+    if (contract.bodyMechanics.required === true) {
+      const missingBodyMechanics = [
+        !contract.bodyMechanics.centerOfMass || contract.bodyMechanics.centerOfMass === "missing" ? "centerOfMass" : "",
+        !contract.bodyMechanics.footwork.length ? "footwork" : "",
+        !contract.bodyMechanics.contactPoints.length ? "contactPoints" : "",
+      ].filter(Boolean);
+      if (missingBodyMechanics.length > 0) {
+        issues.push(
+          motionEndpointIssue(
+            target,
+            `MotionEndpointContract requires body mechanics but is missing ${missingBodyMechanics.join(", ")}.`,
+            sourceRefs,
+          ),
+        );
+      }
+    }
+
+    if (contract.editableRegions.length === 0 || contract.protectedRegions.length === 0) {
+      issues.push(
+        motionEndpointIssue(
+          target,
+          "MotionEndpointContract must declare both editableRegions and protectedRegions.",
+          sourceRefs,
+        ),
+      );
+    }
+    const editableRegionIds = new Set(contract.editableRegions.map((region) => region.id).filter(Boolean));
+    const conflictingRegionIds = unique(contract.protectedRegions.map((region) => region.id).filter((id) => editableRegionIds.has(id)));
+    if (conflictingRegionIds.length > 0) {
+      issues.push(
+        motionEndpointIssue(
+          target,
+          `MotionEndpointContract region ids cannot be both editable and protected: ${conflictingRegionIds.join(", ")}.`,
+          sourceRefs,
+        ),
+      );
+    }
+
+    const evidence = contract.gateInputs.motionEvidence || [];
+    if (contract.motionType === "locomotion" && evidence.length === 1 && evidence[0] === "bbox_or_translation_language") {
+      issues.push(
+        motionEndpointIssue(
+          target,
+          "Locomotion cannot use bbox_or_translation_language as its only motion evidence.",
+          sourceRefs,
+        ),
+      );
+    }
+  }
+
+  return issues;
+}
+
 export function validatePostprocessHardContracts(
   policies: VisualConsistencyPostprocessPolicy[] = [],
   generationHarnesses: GenerationHarnessState[] = [],
@@ -1515,7 +1713,10 @@ function buildVisualConsistencyGates(input: ValidateVisualConsistencyInput, issu
       detail: "Motion deltas cannot contradict fixed camera/world-position contracts.",
       blockers: blockedByCode(["motion_gate_violation", "shot_layout_camera_constraint_violation"]),
       warnings: warnedByCode(["motion_gate_violation"]),
-      sourceRefs: (input.shotLayouts || []).map((layout) => layout.id),
+      sourceRefs: [
+        ...(input.shotLayouts || []).map((layout) => layout.id),
+        ...(input.motionEndpointContracts || []).map((contract) => contract.shotId),
+      ],
     }),
     gate({
       gateId: "video_handoff_gate",
@@ -1682,6 +1883,11 @@ export function validateVisualConsistency(input: ValidateVisualConsistencyInput)
   const derivationIssues = input.startEndDerivations
     ? validateStartEndDerivationHardContracts(input.startEndDerivations)
     : [];
+  const motionEndpointIssues = validateMotionEndpointHardContracts({
+    motionEndpointContracts: input.motionEndpointContracts,
+    keyframePairs: input.startEndDerivations?.keyframePairs,
+    shotLayouts: input.shotLayouts,
+  });
   const postprocessIssues = validatePostprocessHardContracts(input.postprocessPolicies, input.generationHarnesses);
   const motionPairIssues = buildMotionPairIssues(input);
   const preQaIssues = [
@@ -1690,6 +1896,7 @@ export function validateVisualConsistency(input: ValidateVisualConsistencyInput)
     ...shotLayoutIssues,
     ...spatialMemoryIssues,
     ...derivationIssues,
+    ...motionEndpointIssues,
     ...motionPairIssues,
     ...postprocessIssues,
   ];

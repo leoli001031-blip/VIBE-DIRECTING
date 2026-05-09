@@ -35,6 +35,7 @@ const {
   validateShotLayoutHardContracts,
   validateSpatialMemoryHardContracts,
   validateStartEndDerivationHardContracts,
+  validateMotionEndpointHardContracts,
   validatePostprocessHardContracts,
   validateVisualConsistency,
 } = await importTs("src/core/visualConsistency.ts");
@@ -256,16 +257,116 @@ function keyframePair(overrides = {}) {
   };
 }
 
+function motionEndpointContract(overrides = {}) {
+  const pair = overrides.keyframePairDerivation || keyframePair({ shotId: overrides.shotId || "S02" });
+  return {
+    schemaVersion: "0.1.0",
+    generatedAt,
+    shotId: pair.shotId,
+    motionType: "micro_expression",
+    whetherEndFrameRequired: false,
+    endFrameRequiredReason: "Micro-expression can be carried by motion prompt.",
+    startPoseRequirement: {
+      required: true,
+      description: "Preserve the approved start pose.",
+      mustPreserve: ["identity", "scene layout"],
+      reservedForEndPose: false,
+    },
+    endPoseRequirement: {
+      required: false,
+      description: "End pose is optional for micro-expression.",
+      mustPreserve: ["identity", "scene layout"],
+      reservedForEndPose: false,
+    },
+    bodyMechanics: {
+      required: false,
+      description: "Body mechanics are not required for micro-expression.",
+      centerOfMass: "not_required",
+      footwork: [],
+      contactPoints: [],
+      timing: "not_required",
+    },
+    editableRegions: [
+      {
+        id: "subject_motion_region",
+        label: "Subject motion region",
+        kind: "face",
+        frameRole: "both",
+        description: "Face and breathing surface may animate subtly.",
+        constraints: ["keep identity locked"],
+      },
+    ],
+    protectedRegions: [
+      {
+        id: "identity_lock_region",
+        label: "Identity lock",
+        kind: "subject",
+        frameRole: "both",
+        description: "Character identity is protected.",
+        constraints: ["no face swap"],
+      },
+      {
+        id: "scene_layout_lock_region",
+        label: "Scene layout lock",
+        kind: "background",
+        frameRole: "both",
+        description: "Background layout is protected.",
+        constraints: ["no scene replacement"],
+      },
+    ],
+    bboxAnchors: [
+      {
+        id: "subject_bbox_anchor",
+        target: "primary_subject",
+        frameRole: "both",
+        notes: ["BBox anchors are QA inputs only."],
+      },
+    ],
+    qaThresholds: {
+      identityPreservation: "strict",
+      scenePreservation: "strict",
+      maxUnexplainedBboxShift: "small",
+      requireDerivedEndFrame: false,
+      requireBodyMechanicsEvidence: false,
+    },
+    gateInputs: {
+      shotText: "Hero blinks subtly.",
+      motionEvidence: ["keyframe_derivation_language"],
+      keyframePairPresent: true,
+      keyframePairDerivesFromStart: true,
+      bboxOnlyMotionForbidden: true,
+    },
+    keyframePairDerivation: pair,
+    status: "pass",
+    blockers: [],
+    warnings: [],
+    ...overrides,
+  };
+}
+
 const library = addRequiredAssets();
+const cleanPair = keyframePair();
+const cleanMotionContract = motionEndpointContract({ keyframePairDerivation: cleanPair });
+const cleanMotionContractIssues = validateMotionEndpointHardContracts({
+  motionEndpointContracts: [cleanMotionContract],
+  keyframePairs: [cleanPair],
+  shotLayouts: [shotLayout()],
+});
+assert(
+  cleanMotionContractIssues.length === 0,
+  `clean motion endpoint contract should pass: ${cleanMotionContractIssues.map((item) => item.detail).join("; ")}`,
+);
+
 const cleanReport = validateVisualConsistency({
   checkedAt: generatedAt,
   assetLibrary: library,
   shotLayouts: [shotLayout()],
   spatialMemory: spatialMemory(),
   startEndDerivations: {
-    keyframePairs: [keyframePair()],
+    keyframePairs: [cleanPair],
     promptPlans: [endPromptPlan()],
   },
+  motionEndpointContracts: [cleanMotionContract],
   postprocessPolicies: [
     {
       policyId: "local_postprocess_safe",
@@ -443,6 +544,115 @@ assert(
   "end-frame prompt not derived from start frame must block",
 );
 
+const missingMotionContractIssues = validateMotionEndpointHardContracts({
+  keyframePairs: [keyframePair()],
+  shotLayouts: [shotLayout()],
+});
+assert(
+  missingMotionContractIssues.some((item) => item.detail.includes("no MotionEndpointContract")),
+  "keyframe pair without motion endpoint contract must block",
+);
+const missingMotionContractReport = validateVisualConsistency({
+  checkedAt: generatedAt,
+  assetLibrary: library,
+  shotLayouts: [shotLayout()],
+  spatialMemory: spatialMemory(),
+  startEndDerivations: {
+    keyframePairs: [keyframePair()],
+    promptPlans: [endPromptPlan()],
+  },
+  postprocessPolicies: [
+    {
+      policyId: "local_postprocess_safe_missing_motion",
+      allowedLocalOperations: ["resize", "format_convert", "thumbnail_preview", "metadata_probe", "manifest_match"],
+      semanticRepairAllowed: false,
+      openCvSemanticRepairAllowed: false,
+      localPostprocessCanChangeMeaning: false,
+      localPostprocessCanPromoteFormal: false,
+      forbiddenActions: ["semantic_postprocess_repair"],
+    },
+  ],
+});
+assert(
+  missingMotionContractReport.gates.find((candidate) => candidate.gateId === "motion_gate").status === "blocked",
+  "visual consistency motion gate must block missing motion endpoint contract",
+);
+
+const bboxOnlyLocomotionIssues = validateMotionEndpointHardContracts({
+  motionEndpointContracts: [
+    motionEndpointContract({
+      motionType: "locomotion",
+      whetherEndFrameRequired: true,
+      bodyMechanics: {
+        required: true,
+        description: "Body mechanics are required for locomotion.",
+        centerOfMass: "missing",
+        footwork: [],
+        contactPoints: [],
+        timing: "must be coherent",
+      },
+      gateInputs: {
+        shotText: "Subject walks by bbox translation only.",
+        motionEvidence: ["bbox_or_translation_language"],
+        keyframePairPresent: true,
+        keyframePairDerivesFromStart: true,
+        bboxOnlyMotionForbidden: true,
+      },
+      status: "blocked",
+      blockers: ["Locomotion cannot be represented only by bbox translation."],
+    }),
+  ],
+  keyframePairs: [keyframePair()],
+  shotLayouts: [shotLayout()],
+});
+assert(
+  bboxOnlyLocomotionIssues.some((item) => item.detail.includes("only motion evidence")),
+  "bbox-only locomotion evidence must block",
+);
+
+const pairMismatchIssues = validateMotionEndpointHardContracts({
+  motionEndpointContracts: [
+    motionEndpointContract({
+      keyframePairDerivation: keyframePair({ endFrameId: "outputs/keyframes/S02_wrong_end.png" }),
+    }),
+  ],
+  keyframePairs: [keyframePair()],
+  shotLayouts: [shotLayout()],
+});
+assert(
+  pairMismatchIssues.some((item) => item.detail.includes("endFrameId")),
+  "motion endpoint contract/keyframe pair mismatch must block",
+);
+
+const missingBodyMechanicsIssues = validateMotionEndpointHardContracts({
+  motionEndpointContracts: [
+    motionEndpointContract({
+      motionType: "pose_change_in_place",
+      bodyMechanics: {
+        required: true,
+        description: "Pose change needs physical continuity.",
+        centerOfMass: "missing",
+        footwork: [],
+        contactPoints: [],
+        timing: "must be coherent",
+      },
+      gateInputs: {
+        shotText: "Subject shifts pose in place.",
+        motionEvidence: ["body_mechanics_language"],
+        keyframePairPresent: true,
+        keyframePairDerivesFromStart: true,
+        bboxOnlyMotionForbidden: true,
+      },
+    }),
+  ],
+  keyframePairs: [keyframePair()],
+  shotLayouts: [shotLayout()],
+});
+assert(
+  missingBodyMechanicsIssues.some((item) => item.detail.includes("centerOfMass") && item.detail.includes("contactPoints")),
+  "required body mechanics missing center of mass, footwork, or contact points must block",
+);
+
 const badMotionReport = validateVisualConsistency({
   checkedAt: generatedAt,
   assetLibrary: library,
@@ -452,6 +662,7 @@ const badMotionReport = validateVisualConsistency({
     keyframePairs: [keyframePair({ allowedDelta: ["large camera movement"] })],
     promptPlans: [endPromptPlan()],
   },
+  motionEndpointContracts: [motionEndpointContract({ keyframePairDerivation: keyframePair({ allowedDelta: ["large camera movement"] }) })],
 });
 assert(
   badMotionReport.issues.some((item) => item.code === "motion_gate_violation" && item.severity === "blocker"),

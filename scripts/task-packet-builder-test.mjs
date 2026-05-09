@@ -125,6 +125,89 @@ const keyframePair = {
   mustNotAdd: ["new characters", "unapproved props", "text-to-video fallback"],
 };
 
+const motionEndpointContract = {
+  schemaVersion: "0.1.0",
+  generatedAt,
+  shotId: "1-2",
+  motionType: "pose_change_in_place",
+  whetherEndFrameRequired: true,
+  endFrameRequiredReason: "End pose is required to preserve the planned start-to-end motion endpoint.",
+  startPoseRequirement: {
+    required: true,
+    description: "Hero starts grounded beside the garage door.",
+    mustPreserve: ["character identity", "garage layout"],
+    reservedForEndPose: false,
+  },
+  endPoseRequirement: {
+    required: true,
+    description: "Hero finishes with the raised-arm silhouette from the approved end frame.",
+    mustPreserve: ["character identity", "scene layout"],
+    reservedForEndPose: true,
+  },
+  bodyMechanics: {
+    required: true,
+    description: "Weight shifts through the hips before the arm lift reaches the end pose.",
+    centerOfMass: "hips shift from left foot to centered stance",
+    footwork: ["left foot stays planted", "right foot pivots slightly"],
+    contactPoints: ["both feet remain on floor"],
+    timing: "anticipation, lift, settle",
+  },
+  editableRegions: [
+    {
+      id: "hero_pose",
+      label: "hero pose",
+      kind: "subject",
+      frameRole: "both",
+      description: "The hero body pose may move between endpoint frames.",
+      constraints: ["preserve identity", "preserve clothing"],
+    },
+    {
+      id: "hero_hands",
+      label: "hero hands",
+      kind: "hands",
+      frameRole: "end",
+      description: "Hand position can resolve into the approved end pose.",
+      constraints: ["no extra fingers"],
+    },
+  ],
+  protectedRegions: [
+    {
+      id: "garage_background",
+      label: "garage background",
+      kind: "background",
+      frameRole: "both",
+      description: "Garage layout must not drift.",
+      constraints: ["no new props", "no layout change"],
+    },
+  ],
+  bboxAnchors: [
+    {
+      id: "hero_bbox",
+      target: "hero",
+      frameRole: "both",
+      notes: ["bbox is an anchor, not a substitute for motion mechanics"],
+    },
+  ],
+  qaThresholds: {
+    identityPreservation: "strict",
+    scenePreservation: "strict",
+    maxUnexplainedBboxShift: "small",
+    requireDerivedEndFrame: true,
+    requireBodyMechanicsEvidence: true,
+  },
+  gateInputs: {
+    shotText: "Hero shifts weight and raises one hand.",
+    motionEvidence: ["raised-arm endpoint", "grounded feet"],
+    keyframePairPresent: true,
+    keyframePairDerivesFromStart: true,
+    bboxOnlyMotionForbidden: true,
+  },
+  keyframePairDerivation: keyframePair,
+  status: "pass",
+  blockers: [],
+  warnings: [],
+};
+
 function runtime(overrides = {}) {
   return {
     generatedAt,
@@ -151,6 +234,7 @@ function runtime(overrides = {}) {
           gateId: "video_gate_1-2",
           shotId: "1-2",
           keyframePairDerivation: keyframePair,
+          motionEndpointContract,
         },
       ],
       taskPlans: [
@@ -159,6 +243,15 @@ function runtime(overrides = {}) {
           shotId: "1-2",
           manifestFacts: {
             expectedOutputs: ["outputs/videos/1-2.mp4"],
+          },
+          motionEndpointFacts: {
+            motionType: motionEndpointContract.motionType,
+            whetherEndFrameRequired: motionEndpointContract.whetherEndFrameRequired,
+            contractStatus: motionEndpointContract.status,
+            editableRegionIds: motionEndpointContract.editableRegions.map((region) => region.id),
+            protectedRegionIds: motionEndpointContract.protectedRegions.map((region) => region.id),
+            bodyMechanicsRequired: motionEndpointContract.bodyMechanics.required,
+            bboxOnlyMotionForbidden: motionEndpointContract.gateInputs.bboxOnlyMotionForbidden,
           },
         },
       ],
@@ -198,6 +291,9 @@ const requiredTaskKinds = [
   "audio",
   "export",
 ];
+const motionTraceTaskKinds = ["start_frame", "end_frame", "pair_qa", "video_execution"];
+const motionQaTaskKinds = ["end_frame", "pair_qa", "video_execution"];
+const motionQaGates = ["motion_endpoint_contract_gate", "body_mechanics_gate", "editable_protected_region_gate"];
 assert(state.packets.length === requiredTaskKinds.length, "builder must create all Phase38 task packet classes by default");
 assert(state.summary.ready === requiredTaskKinds.length, `all fixture packets should be ready, got ${state.summary.ready}`);
 assert(state.summary.validatedEnvelopeReady === requiredTaskKinds.length, "all ready packets must have validated envelopes");
@@ -231,6 +327,23 @@ for (const kind of taskPacketKinds) {
   assert(packet.sourceFactTrace.length > 0, `${kind} source fact trace missing`);
   for (const phase37Gate of ["identity", "scene", "shot_layout", "spatial_memory", "keyframe_pair", "master_inheritance_qa"]) {
     assert(packet.sourceFactTrace.some((item) => item.startsWith(`phase37_gate:${phase37Gate}:`)), `${kind} missing Phase37 ${phase37Gate} source trace`);
+  }
+  if (motionTraceTaskKinds.includes(kind)) {
+    assert(
+      packet.sourceFactTrace.includes("motion_contract:shot:1-2:status:pass:type:pose_change_in_place"),
+      `${kind} missing motion contract status/type trace`,
+    );
+    assert(packet.sourceFactTrace.includes("motion_contract:end_required:true"), `${kind} missing motion end-required trace`);
+    assert(packet.sourceFactTrace.includes("motion_contract:body_mechanics_required:true"), `${kind} missing body mechanics trace`);
+    assert(packet.sourceFactTrace.includes("motion_contract:editable_regions:hero_pose,hero_hands"), `${kind} missing editable regions trace`);
+    assert(packet.sourceFactTrace.includes("motion_contract:protected_regions:garage_background"), `${kind} missing protected regions trace`);
+    assert(packet.sourceFactTrace.includes("motion_contract:bbox_only_forbidden:true"), `${kind} missing bbox-only forbidden trace`);
+    assert(
+      packet.sourceFactTrace.includes("motion_contract:keyframe_pair:1-2:outputs/keyframes/1-2_start.png:outputs/keyframes/1-2_end.png:start_frame:true"),
+      `${kind} missing motion keyframe-pair trace`,
+    );
+  } else {
+    assert(!packet.sourceFactTrace.some((item) => item.startsWith("motion_contract:")), `${kind} should not receive motion contract trace`);
   }
   assert(packet.injectedKnowledgeTrace.status === "present", `${kind} injected knowledge trace must be present`);
   assert(packet.injectedKnowledgeTrace.packIds.length > 0, `${kind} injected knowledge pack trace missing`);
@@ -269,6 +382,15 @@ for (const kind of taskPacketKinds) {
   assert(packet.hardFields.mustAvoid.includes("provider_submit"), `${kind} mustAvoid missing provider_submit`);
   assert(packet.hardFields.hardNegatives.includes("free_text_task"), `${kind} hard negatives missing free_text_task`);
   assert(packet.hardFields.qaChecklist.length > 0, `${kind} qaChecklist missing`);
+  for (const gate of motionQaGates) {
+    if (motionQaTaskKinds.includes(kind)) {
+      assert(packet.hardFields.qaChecklist.includes(gate), `${kind} qaChecklist missing ${gate}`);
+      assert(packet.envelope.qaChecklist.includes(gate), `${kind} envelope qaChecklist missing ${gate}`);
+      assert(packet.envelope.taskEnvelope.qaChecklist.includes(gate), `${kind} task envelope qaChecklist missing ${gate}`);
+    } else {
+      assert(!packet.hardFields.qaChecklist.includes(gate), `${kind} should not include ${gate}`);
+    }
+  }
   assert(packet.hardFields.allowedReadScope.includes("source_index"), `${kind} allowed read scope missing source_index`);
   assert(packet.hardFields.forbiddenActions.includes("no_free_text_task"), `${kind} forbidden actions missing no_free_text_task`);
   assert(packet.hardFields.forbiddenActions.includes("no_free_text_worker"), `${kind} forbidden actions missing no_free_text_worker`);
@@ -325,6 +447,41 @@ assert(
   videoPacket.envelope.taskEnvelope.injectedKnowledgePacks.some((pack) => pack.packId === "audio/core-audio-planning"),
   "video packet must inject audio pack for default no-BGM separation",
 );
+
+const minimalMotionTraceState = buildTaskPackets({
+  runtimeState: runtime({
+    videoPlanning: {
+      readinessGates: [
+        {
+          gateId: "video_gate_1-2",
+          shotId: "1-2",
+          keyframePairDerivation: keyframePair,
+        },
+      ],
+      taskPlans: [
+        {
+          taskPlanId: "video_task_1-2",
+          shotId: "1-2",
+          manifestFacts: {
+            expectedOutputs: ["outputs/videos/1-2.mp4"],
+          },
+        },
+      ],
+    },
+  }),
+  selectedShotId: "1-2",
+  selectedAssetId: "hero_locked",
+  storyChangeTransaction,
+  requestedTaskKinds: ["start_frame", "end_frame", "pair_qa", "video_execution"],
+  generatedAt,
+});
+for (const packet of minimalMotionTraceState.packets) {
+  assert(packet.sourceFactTrace.includes("motion_contract:source:keyframe_pair_derived_minimal"), `${packet.taskKind} missing minimal motion source marker`);
+  assert(
+    packet.sourceFactTrace.includes("motion_contract:shot:1-2:status:derived_minimal:type:unknown"),
+    `${packet.taskKind} missing minimal motion status/type trace`,
+  );
+}
 
 const audioPacket = state.packets.find((packet) => packet.taskKind === "audio");
 assert(audioPacket.envelope.taskEnvelope.purpose === "audio", "audio task envelope purpose must be audio");

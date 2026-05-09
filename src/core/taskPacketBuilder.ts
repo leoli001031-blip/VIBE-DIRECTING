@@ -14,6 +14,7 @@ import type {
   AssetRecord,
   ContextLevel,
   KeyframePairDerivation,
+  MotionEndpointContract,
   NeighborShotContext,
   PreflightBlocker,
   ProviderCapabilityRequirement,
@@ -520,11 +521,12 @@ function providerRequirementFor(kind: TaskPacketKind): ProviderCapabilityRequire
 
 function qaChecklistFor(kind: TaskPacketKind): string[] {
   const common = ["identity_gate", "scene_gate", "story_gate", "style_gate"];
-  if (kind === "pair_qa" || kind === "video_execution") return unique([...common, "pair_gate", "motion_gate"]);
+  const motionContractGates = ["motion_endpoint_contract_gate", "body_mechanics_gate", "editable_protected_region_gate"];
+  if (kind === "pair_qa" || kind === "video_execution") return unique([...common, "pair_gate", "motion_gate", ...motionContractGates]);
   if (kind === "identity_qa") return unique(["identity_gate", "reference_authority_gate", "negative_identity_gate", "style_gate"]);
   if (kind === "scene_qa") return unique([...common, "spatial_layout_gate", "locked_scene_gate"]);
   if (kind === "start_frame") return unique([...common, "start_frame_role_gate", "reference_authority_gate"]);
-  if (kind === "end_frame") return unique([...common, "end_frame_derivation_gate", "pair_gate", "reference_authority_gate"]);
+  if (kind === "end_frame") return unique([...common, "end_frame_derivation_gate", "pair_gate", "reference_authority_gate", ...motionContractGates]);
   if (kind === "image_edit") return unique([...common, "edit_scope_gate", "reference_authority_gate"]);
   if (kind === "audio") return unique(["voice_source_gate", "dialogue_gate", "narration_gate", "sync_gate"]);
   if (kind === "export") return unique(["manifest_gate", "preview_gate", "asset_package_gate", "no_provider_submit_gate"]);
@@ -563,6 +565,91 @@ function videoKeyframePair(runtimeState: ProjectRuntimeState, shot: ShotRecord |
     mustPreserve: ["character identity", "scene layout", "style capsule"],
     mustNotAdd: ["new characters", "unapproved props", "text-to-video fallback"],
   };
+}
+
+function motionContractTraceRequiredFor(kind: TaskPacketKind): boolean {
+  return kind === "start_frame" || kind === "end_frame" || kind === "pair_qa" || kind === "video_execution";
+}
+
+function motionContractFromReadinessGate(runtimeState: ProjectRuntimeState, shot: ShotRecord): MotionEndpointContract | undefined {
+  const gate = runtimeState.videoPlanning?.readinessGates?.find((candidate) => candidate.shotId === shot.id);
+  return dynamicRecord(gate).motionEndpointContract as MotionEndpointContract | undefined;
+}
+
+function motionEndpointFactsFromTaskPlan(runtimeState: ProjectRuntimeState, shot: ShotRecord): Record<string, unknown> | undefined {
+  const taskPlan = runtimeState.videoPlanning?.taskPlans?.find((candidate) => candidate.shotId === shot.id);
+  const facts = dynamicRecord(taskPlan).motionEndpointFacts;
+  return Object.keys(dynamicRecord(facts)).length ? dynamicRecord(facts) : undefined;
+}
+
+function motionContractTraceValue(value: unknown, fallback: string): string {
+  return stringValue(value) || fallback;
+}
+
+function motionContractBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function motionContractRegionIds(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return unique(
+      value.flatMap((item) => {
+        if (typeof item === "string") return [item];
+        return stringList(dynamicRecord(item).id);
+      }),
+    );
+  }
+  return stringList(value);
+}
+
+function motionContractFactsFor(input: {
+  kind: TaskPacketKind;
+  runtimeState: ProjectRuntimeState;
+  shot: ShotRecord;
+  keyframePair?: KeyframePairDerivation;
+}): string[] {
+  if (!motionContractTraceRequiredFor(input.kind)) return [];
+
+  const contract = motionContractFromReadinessGate(input.runtimeState, input.shot);
+  const taskPlanFacts = contract ? undefined : motionEndpointFactsFromTaskPlan(input.runtimeState, input.shot);
+  const keyframePair = contract?.keyframePairDerivation || input.keyframePair || videoKeyframePair(input.runtimeState, input.shot);
+  const source = contract ? "readiness_gate_contract" : taskPlanFacts ? "task_plan_facts" : "keyframe_pair_derived_minimal";
+  const status = contract
+    ? contract.status
+    : taskPlanFacts
+      ? motionContractTraceValue(taskPlanFacts.contractStatus ?? taskPlanFacts.motionContractStatus, "missing")
+      : "derived_minimal";
+  const motionType = contract ? contract.motionType : taskPlanFacts ? motionContractTraceValue(taskPlanFacts.motionType, "unknown") : "unknown";
+  const endRequired = contract
+    ? contract.whetherEndFrameRequired
+    : taskPlanFacts
+      ? motionContractBoolean(taskPlanFacts.whetherEndFrameRequired ?? taskPlanFacts.endRequired, Boolean(keyframePair))
+      : Boolean(keyframePair);
+  const bodyMechanicsRequired = contract
+    ? contract.bodyMechanics.required
+    : taskPlanFacts
+      ? motionContractBoolean(taskPlanFacts.bodyMechanicsRequired, false)
+      : false;
+  const editableRegionIds = contract ? contract.editableRegions.map((region) => region.id) : motionContractRegionIds(taskPlanFacts?.editableRegionIds);
+  const protectedRegionIds = contract ? contract.protectedRegions.map((region) => region.id) : motionContractRegionIds(taskPlanFacts?.protectedRegionIds);
+  const bboxOnlyForbidden = contract
+    ? contract.gateInputs.bboxOnlyMotionForbidden
+    : taskPlanFacts
+      ? motionContractBoolean(taskPlanFacts.bboxOnlyMotionForbidden, false)
+      : false;
+
+  return unique([
+    `motion_contract:shot:${input.shot.id}:status:${status}:type:${motionType}`,
+    `motion_contract:source:${source}`,
+    `motion_contract:end_required:${endRequired}`,
+    `motion_contract:body_mechanics_required:${bodyMechanicsRequired}`,
+    `motion_contract:editable_regions:${editableRegionIds.length ? editableRegionIds.join(",") : source}`,
+    `motion_contract:protected_regions:${protectedRegionIds.length ? protectedRegionIds.join(",") : source}`,
+    `motion_contract:bbox_only_forbidden:${bboxOnlyForbidden}`,
+    keyframePair
+      ? `motion_contract:keyframe_pair:${keyframePair.shotId}:${keyframePair.startFrameId}:${keyframePair.endFrameId}:${keyframePair.endDerivationSource}:${keyframePair.validForI2vPair}`
+      : `motion_contract:keyframe_pair:${input.shot.id}:${input.shot.startFrame || "missing_start_frame"}:${input.shot.endFrame || "missing_end_frame"}:${source}:false`,
+  ]);
 }
 
 function commonForbiddenActions(kind: TaskPacketKind): string[] {
@@ -736,6 +823,7 @@ function sourceFactTraceFor(input: {
     ...input.forbidden.map((asset) => `forbidden_reference:${asset.id}:${asset.referenceRole}:${asset.lockedStatus}`),
     ...input.expectedOutputs.map((output) => `expected_output:${output}`),
     ...phase37VisualConsistencySourceFacts(input),
+    ...motionContractFactsFor(input),
   ]);
 }
 
