@@ -11,6 +11,7 @@ import {
   normalizeCurrentProjectImage2TransportMode,
 } from "./current-project-image2-transport-contract.mjs";
 import { createRuntimeApiBoundary } from "./runtime-api-boundary.mjs";
+import { createRuntimeApiFileServing } from "./runtime-api-file-serving.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -396,11 +397,6 @@ function clip(value) {
   const text = String(value || "");
   if (text.length <= maxOutputChars) return text;
   return `${text.slice(0, maxOutputChars)}\n...[clipped ${text.length - maxOutputChars} chars]`;
-}
-
-function runtimeFileUrl(relativePath, scope) {
-  const scopeQuery = scope ? `scope=${encodeURIComponent(scope)}&` : "";
-  return `${runtimeFileEndpoint}?${scopeQuery}path=${encodeURIComponent(relativePath)}`;
 }
 
 function writeSecurityBlocked(res, security) {
@@ -4613,6 +4609,36 @@ function currentProjectSourceResult() {
   }
 }
 
+const { runtimeFileUrl, serveRuntimeFile } = createRuntimeApiFileServing({
+  runtimeFileEndpoint,
+  scopedRepoPath,
+  pathWithinRoot,
+  contentTypeFor,
+  corsHeaders,
+  runtimePolicy,
+  writeRuntimeFileError,
+  currentProjectSourceResult,
+  sourceForScope(scope) {
+    if (scope === "real-demo-e2e-005") {
+      try {
+        return { source: realDemo005Source() };
+      } catch (error) {
+        return {
+          error,
+          message: error instanceof Error ? error.message : "Project root is unavailable.",
+          unbound: error?.code === "CURRENT_PROJECT_UNBOUND",
+          bindingState: error?.bindingState,
+        };
+      }
+    }
+    return currentProjectSourceResult();
+  },
+  createReadStream,
+  existsSync,
+  statSync,
+  realpathSync,
+});
+
 function requestOverrideDiagnostics(requestContext = {}) {
   return {
     ignoredProjectRootSource: requestContext.projectRootSource,
@@ -5047,95 +5073,6 @@ function writeJson(res, statusCode, payload) {
   }
   res.writeHead(statusCode, corsHeaders("application/json; charset=utf-8", res.runtimeAllowedOrigin));
   res.end(`${JSON.stringify(payload, null, 2)}\n`);
-}
-
-function serveRuntimeFile(req, res, relativePath, options = {}) {
-  if (!relativePath) {
-    writeJson(res, 400, { ok: false, ...runtimePolicy(), status: "bad_request", message: "Missing file path." });
-    return;
-  }
-
-  const normalizedRelativePath = normalizeRelativePath(relativePath);
-  if (path.isAbsolute(normalizedRelativePath)) {
-    writeRuntimeFileError(req, res, 403, {
-      ok: false,
-      ...runtimePolicy(),
-      status: "forbidden",
-      message: "Runtime files must be addressed by repository-relative paths.",
-    }, normalizedRelativePath);
-    return;
-  }
-
-  let filePath;
-  let allowedRootPath;
-  let allowedRootLabel;
-  try {
-    filePath = scopedRepoPath(normalizedRelativePath);
-    if (options.scope === "real-demo-e2e-005") {
-      const source = realDemo005Source();
-      allowedRootPath = source.runRootPath;
-      allowedRootLabel = source.runRootRelativePath;
-    } else {
-      const source = currentProjectSource();
-      allowedRootPath = source.runRootPath;
-      allowedRootLabel = source.runRootRelativePath;
-    }
-  } catch (error) {
-    const unbound = error?.code === "CURRENT_PROJECT_UNBOUND";
-    writeRuntimeFileError(req, res, unbound ? 409 : 403, {
-      ok: false,
-      ...runtimePolicy(),
-      status: unbound ? "unbound" : "forbidden",
-      message: error instanceof Error ? error.message : "Path is outside project root.",
-    }, normalizedRelativePath);
-    return;
-  }
-
-  const rootWithSep = `${allowedRootPath}${path.sep}`;
-  if (filePath !== allowedRootPath && !filePath.startsWith(rootWithSep)) {
-    writeRuntimeFileError(req, res, 403, {
-      ok: false,
-      ...runtimePolicy(),
-      status: "forbidden",
-      message: `Runtime file is outside the allowed project scope: ${allowedRootLabel}`,
-    }, normalizedRelativePath);
-    return;
-  }
-
-  if (!existsSync(filePath) || !statSync(filePath).isFile()) {
-    writeRuntimeFileError(req, res, 404, {
-      ok: false,
-      ...runtimePolicy(),
-      status: "not_found",
-      message: `Runtime file not found: ${relativePath}`,
-    }, normalizedRelativePath);
-    return;
-  }
-
-  try {
-    const fileRealPath = realpathSync(filePath);
-    const rootRealPath = realpathSync(allowedRootPath);
-    if (!pathWithinRoot(fileRealPath, rootRealPath)) {
-      writeRuntimeFileError(req, res, 403, {
-        ok: false,
-        ...runtimePolicy(),
-        status: "forbidden",
-        message: "Runtime file symlink escapes the allowed project scope.",
-      }, normalizedRelativePath);
-      return;
-    }
-  } catch (error) {
-    writeRuntimeFileError(req, res, 403, {
-      ok: false,
-      ...runtimePolicy(),
-      status: "forbidden",
-      message: error instanceof Error ? error.message : "Runtime file could not be resolved safely.",
-    }, normalizedRelativePath);
-    return;
-  }
-
-  res.writeHead(200, corsHeaders(contentTypeFor(filePath), res.runtimeAllowedOrigin));
-  createReadStream(filePath).pipe(res);
 }
 
 function runVerify() {
