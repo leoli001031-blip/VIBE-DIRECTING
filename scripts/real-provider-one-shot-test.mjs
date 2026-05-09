@@ -674,6 +674,30 @@ const missingVisualInputCompiled = compileImage2OneShotRealCallPayload({
 });
 assert(missingVisualInputCompiled.issues.includes("source_start_frame_visual_input_required"), "image2image one-shot without source visual input must not compile");
 
+const pathInPromptWithoutReferenceCompiled = compileImage2OneShotRealCallPayload({
+  request: {
+    ...oneShotActionInput().adapterRequest,
+    payload: {
+      ...oneShotActionInput().adapterRequest.payload,
+      sourceIntent: ["Use /Users/lichenhao/Desktop/vibe core/real-test-sandbox/ZP05/start.png as the source image."],
+      referenceImageInputs: [],
+      sourceStartFrameId: undefined,
+    },
+  },
+  preview: oneShotActionInput().requestPreview,
+  actionConfirmationId: "confirm_S01_round4",
+  credentialRef: "user-authorized:image2:demo",
+  outputSandboxRoot: "real-provider-executor/project_1/batch_A",
+  manifestPath: "real-provider-executor/project_1/batch_A/manifest.json",
+  qaReportPath: "real-provider-executor/project_1/batch_A/qa/qa-report.json",
+  imageCount: 2,
+  budgetNotice: "This action may spend up to two Image2 images from the user's configured provider quota.",
+});
+assert(
+  pathInPromptWithoutReferenceCompiled.issues.includes("path_in_prompt_without_reference_attachment"),
+  "image2image one-shot must block local image paths in prompt when no visual reference is attached",
+);
+
 const failedCall = buildRealProviderOneShotState(oneShotActionInput({
   providerReport: {
     status: "failed",

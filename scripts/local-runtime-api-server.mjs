@@ -767,6 +767,108 @@ function round5StrictEditEvidenceBlockers({ qaStatus, endRequired, generated, ap
   return uniqueStrings(blockers);
 }
 
+const round5VisualInputKinds = new Set([
+  "app_server_localimage",
+  "app_server_local_image",
+  "input_image",
+  "local_file",
+  "local_image",
+  "uploaded_file",
+  "image_file",
+  "reference_image",
+]);
+
+function round5TextMentionsImagePath(value) {
+  if (typeof value === "string") {
+    return /(?:^|\s|["'(])(?:file:\/\/|\/Users\/|[A-Za-z]:[\\/]|\.{1,2}\/|[\w.-]+\/)[^\s"'()]+\.(?:png|jpe?g|webp|gif|tiff?)(?:$|\s|["')])/i.test(value);
+  }
+  if (Array.isArray(value)) return value.some(round5TextMentionsImagePath);
+  if (isRecord(value)) return Object.values(value).some(round5TextMentionsImagePath);
+  return false;
+}
+
+function round5ReferenceAttachmentReceipt(providerObservation) {
+  if (!isRecord(providerObservation)) return undefined;
+  for (const key of [
+    "referenceAttachmentReceipt",
+    "sourceStartFrameAttachmentReceipt",
+    "imageReferenceDeliveryReceipt",
+    "uploadReceipt",
+  ]) {
+    if (isRecord(providerObservation[key])) return providerObservation[key];
+  }
+  return undefined;
+}
+
+function round5StrictEditProviderObservationBlockers({
+  providerObservation,
+  providerRequestId,
+  generated,
+  approvedStartFrame,
+  editableRegionEvidence,
+  providerEditReceipt,
+}) {
+  const blockers = [];
+  if (!isRecord(providerObservation)) {
+    return ["provider_observation_missing", "source_reference_attachment_receipt_missing"];
+  }
+
+  const provider = String(providerObservation.provider || providerObservation.providerId || "");
+  const operation = String(providerObservation.operation || "").toLowerCase();
+  const observationRequestId = asString(providerObservation.providerRequestId) || asString(providerObservation.requestId);
+  const receiptId = asString(providerObservation.preflightReceiptId) || asString(providerObservation.receiptId);
+  const attachmentId = asString(providerObservation.sourceStartFrameAttachmentId);
+  const editableEvidenceSha = asString(providerObservation.editableRegionEvidenceSha256);
+  const attachmentReceipt = round5ReferenceAttachmentReceipt(providerObservation);
+  const promptMentionsImagePath = round5TextMentionsImagePath([
+    providerObservation.prompt,
+    providerObservation.promptText,
+    providerObservation.finalPrompt,
+    providerObservation.requestPrompt,
+    providerObservation.instructions,
+  ]);
+  const deliveredKind = String(
+    providerObservation.deliveredInputKind
+      || attachmentReceipt?.deliveredInputKind
+      || attachmentReceipt?.inputKind
+      || "",
+  ).toLowerCase();
+
+  if (!/image2/i.test(provider)) blockers.push("provider_observation_provider_not_image2");
+  if (providerObservation.providerObservationMode !== "actual_provider_call_observed") blockers.push("provider_observation_mode_not_actual");
+  if (operation !== "image.edit" && operation !== "image2image") blockers.push("provider_observation_operation_not_image_edit");
+  if (!observationRequestId) blockers.push("provider_observation_request_id_missing");
+  if (providerRequestId && observationRequestId && providerRequestId !== observationRequestId) blockers.push("provider_request_id_mismatch");
+  if (asString(providerObservation.sourceStartFrameSha256) !== generated?.sha256) blockers.push("source_start_frame_sha_mismatch");
+  if (attachmentId !== approvedStartFrame?.providerAttachmentId) blockers.push("source_start_frame_attachment_mismatch");
+  if (editableEvidenceSha !== editableRegionEvidence?.evidenceSha256) blockers.push("editable_region_evidence_sha_mismatch");
+  if (receiptId !== providerEditReceipt?.receiptId) blockers.push("preflight_receipt_id_mismatch");
+  if (providerObservation.noFallbackUsed !== true) blockers.push("no_fallback_evidence_missing");
+  if (providerObservation.promptOnly === true || ["prompt", "prompt_only", "prompt_text_only", "text", "text_only"].includes(deliveredKind)) {
+    blockers.push("prompt_only_image_edit_forbidden");
+  }
+  if (promptMentionsImagePath && !attachmentReceipt) blockers.push("path_in_prompt_without_reference_attachment");
+
+  if (!attachmentReceipt) {
+    blockers.push("source_reference_attachment_receipt_missing");
+  } else {
+    const receiptAttachmentId = asString(attachmentReceipt.sourceStartFrameAttachmentId)
+      || asString(attachmentReceipt.attachmentId)
+      || asString(attachmentReceipt.inputId);
+    const receiptSha = asString(attachmentReceipt.sourceStartFrameSha256)
+      || asString(attachmentReceipt.deliveredSha256)
+      || asString(attachmentReceipt.inputSha256)
+      || asString(attachmentReceipt.sha256);
+    if (receiptSha !== generated?.sha256) blockers.push("source_reference_attachment_sha_mismatch");
+    if (receiptAttachmentId !== approvedStartFrame?.providerAttachmentId) blockers.push("source_reference_attachment_id_mismatch");
+    if (!round5VisualInputKinds.has(deliveredKind)) blockers.push("source_reference_attachment_input_kind_not_visual");
+    if (attachmentReceipt.promptOnly !== false) blockers.push("source_reference_attachment_prompt_only_not_false");
+    if (attachmentReceipt.acceptedByActionSchema !== true) blockers.push("source_reference_attachment_schema_not_accepted");
+  }
+
+  return uniqueStrings(blockers);
+}
+
 function round5StrictEditPreflightStatusFor({ qaStatus, endRequired, evidenceBlockers }) {
   if (!endRequired) return "not_required";
   if (qaStatus !== "pass") return "blocked";
@@ -1539,6 +1641,7 @@ function currentProjectRound5StrictEditReturnResponse(input, extra = {}, source 
     providerEditReceipt,
   });
   blockers.push(...preflightBlockers.map((blocker) => `preflight_${blocker}`));
+  const returnedProviderObservation = input.providerObservation || readRuntimeJson(input.returnedProviderObservationPath);
 
   const expectedEndFramePath = `${source.runRootRelativePath}/shots/${shotId}/end.png`;
   const returnedOutputPath = runtimeRelativeFromValue(input.returnedOutputPath) || expectedEndFramePath;
@@ -1550,9 +1653,17 @@ function currentProjectRound5StrictEditReturnResponse(input, extra = {}, source 
   if (!returnedOutputExists) blockers.push("returned_output_missing");
 
   const providerRequestId = input.providerRequestId
-    || asString(input.providerObservation?.providerRequestId)
-    || asString(input.providerObservation?.requestId);
+    || asString(returnedProviderObservation?.providerRequestId)
+    || asString(returnedProviderObservation?.requestId);
   if (!providerRequestId) blockers.push("provider_request_id_missing");
+  blockers.push(...round5StrictEditProviderObservationBlockers({
+    providerObservation: returnedProviderObservation,
+    providerRequestId,
+    generated,
+    approvedStartFrame,
+    editableRegionEvidence,
+    providerEditReceipt,
+  }));
 
   let endFrameSha256;
   let outputBytesWritten = 0;
@@ -1561,20 +1672,25 @@ function currentProjectRound5StrictEditReturnResponse(input, extra = {}, source 
     try {
       const outputBytes = readFileSync(scopedRepoPath(returnedOutputPath));
       outputBytesWritten = outputBytes.length;
-      if (!outputSourceIsExpected) {
+      endFrameSha256 = sha256Bytes(outputBytes);
+      const observedOutputSha256 = asString(returnedProviderObservation?.outputSha256)
+        || asString(returnedProviderObservation?.outputHash);
+      if (observedOutputSha256 && observedOutputSha256 !== endFrameSha256) {
+        blockers.push("provider_observation_output_sha_mismatch");
+      }
+      if (!blockers.length && !outputSourceIsExpected) {
         writeCurrentProjectRuntimeBytes(expectedEndFramePath, outputBytes, source);
       }
-      endFrameSha256 = sha256Bytes(outputBytes);
       const providerObservationPath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.endProviderObservation}`;
       const semanticQaPath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.endSemanticQa}`;
       const pairQaPath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.endPairQa}`;
-      const providerObservation = {
-        ...(input.providerObservation || readRuntimeJson(input.returnedProviderObservationPath) || {}),
+      const providerObservation = !blockers.length ? {
+        ...(returnedProviderObservation || {}),
         schemaVersion: "round5_strict_edit_end_provider_observation_v1",
         generatedAt,
         providerObservationMode: "actual_provider_call_observed",
-        provider: input.providerObservation?.provider || input.providerObservation?.providerId || "openai-image2-api",
-        providerId: input.providerObservation?.providerId || input.providerObservation?.provider || "openai-image2-api",
+        provider: returnedProviderObservation?.provider || returnedProviderObservation?.providerId || "openai-image2-api",
+        providerId: returnedProviderObservation?.providerId || returnedProviderObservation?.provider || "openai-image2-api",
         operation: "image.edit",
         providerRequestId,
         shotId,
@@ -1596,7 +1712,7 @@ function currentProjectRound5StrictEditReturnResponse(input, extra = {}, source 
         externalNetworkCallMade: true,
         projectVibeWritten: false,
         workerSpawned: false,
-      };
+      } : undefined;
       const semanticQa = {
         ...(input.semanticQa || readRuntimeJson(input.returnedSemanticQaPath) || {}),
         schemaVersion: "round5_strict_edit_end_semantic_qa_v1",
@@ -1633,9 +1749,11 @@ function currentProjectRound5StrictEditReturnResponse(input, extra = {}, source 
         notes: ["Strict edit end frame returned; pair QA and human review are still required before production promotion."],
       };
 
-      writeCurrentProjectRuntimeJson(providerObservationPath, providerObservation, source);
-      writeCurrentProjectRuntimeJson(semanticQaPath, semanticQa, source);
-      writeCurrentProjectRuntimeJson(pairQaPath, pairQa, source);
+      if (!blockers.length) {
+        writeCurrentProjectRuntimeJson(providerObservationPath, providerObservation, source);
+        writeCurrentProjectRuntimeJson(semanticQaPath, semanticQa, source);
+        writeCurrentProjectRuntimeJson(pairQaPath, pairQa, source);
+      }
     } catch (error) {
       writeError = error instanceof Error ? error.message : "Round 5 strict edit return ingest failed.";
     }

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, sym
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -640,6 +641,40 @@ try {
     const externalReturnedEndPath = `${round5Root}/external_provider_returns/ZP05/end.png`;
     mkdirSync(path.dirname(externalReturnedEndPath), { recursive: true });
     writeFileSync(externalReturnedEndPath, readFileSync(`${round5Root}/shots/ZP05/start.png`));
+    const pathOnlyStrictEdit = await fetchJson(`${baseUrl}/api/runtime/projects/current/round5/strict-edit/return`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        shotId: "ZP05",
+        actualProviderReturned: true,
+        returnedOutputPath: externalReturnedEndPath,
+        providerRequestId: "provider-request-round5-zp05-path-only-test",
+        providerObservation: {
+          provider: "openai-image2-api",
+          providerObservationMode: "actual_provider_call_observed",
+          operation: "image.edit",
+          providerRequestId: "provider-request-round5-zp05-path-only-test",
+          prompt: `Use ${round5Root}/shots/ZP05/start.png as the source image and open the control-box lid.`,
+          promptOnly: true,
+        },
+        semanticQa: {
+          finalAssessment: { status: "needs_review" },
+        },
+      }),
+    });
+    assert(pathOnlyStrictEdit.response.status === 409, "path-in-prompt strict edit return should fail closed");
+    assert(pathOnlyStrictEdit.payload.blockers.includes("path_in_prompt_without_reference_attachment"), "path-in-prompt strict edit return should require an attachment receipt");
+    assert(pathOnlyStrictEdit.payload.blockers.includes("prompt_only_image_edit_forbidden"), "path-in-prompt strict edit return should reject prompt-only delivery");
+    assert(pathOnlyStrictEdit.payload.blockers.includes("source_reference_attachment_receipt_missing"), "path-in-prompt strict edit return should require source reference attachment receipt");
+    assert(pathOnlyStrictEdit.payload.providerCalled === false, "path-in-prompt strict edit return must not mark providerCalled");
+    for (const sidecarPath of round5Zp05StrictEditReturnSidecars) {
+      assert(!existsSync(sidecarPath), `path-in-prompt strict edit return must not write ${sidecarPath}`);
+    }
+
+    const approved = JSON.parse(readFileSync(round5Zp05StrictEditPreflightSidecars[0], "utf8"));
+    const editable = JSON.parse(readFileSync(round5Zp05StrictEditPreflightSidecars[1], "utf8"));
+    const receipt = JSON.parse(readFileSync(round5Zp05StrictEditPreflightSidecars[2], "utf8"));
+    const returnedEndSha256 = `sha256:${createHash("sha256").update(readFileSync(externalReturnedEndPath)).digest("hex")}`;
     const returnedStrictEdit = await fetchJson(`${baseUrl}/api/runtime/projects/current/round5/strict-edit/return`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -650,6 +685,28 @@ try {
         providerRequestId: "provider-request-round5-zp05-test",
         providerObservation: {
           provider: "openai-image2-api",
+          providerId: "openai-image2-api",
+          providerObservationMode: "actual_provider_call_observed",
+          operation: "image.edit",
+          providerRequestId: "provider-request-round5-zp05-test",
+          preflightReceiptId: receipt.receiptId,
+          receiptId: receipt.receiptId,
+          sourceStartFrameSha256: approved.sourceStartFrameSha256,
+          sourceStartFrameAttachmentId: approved.providerAttachmentId,
+          editableRegionEvidenceSha256: editable.evidenceSha256,
+          outputSha256: returnedEndSha256,
+          noFallbackUsed: true,
+          promptOnly: false,
+          deliveredInputKind: "input_image",
+          referenceAttachmentReceipt: {
+            status: "delivered",
+            deliveredInputKind: "input_image",
+            sourceStartFrameSha256: approved.sourceStartFrameSha256,
+            sourceStartFrameAttachmentId: approved.providerAttachmentId,
+            deliveredSha256: approved.sourceStartFrameSha256,
+            promptOnly: false,
+            acceptedByActionSchema: true,
+          },
         },
         semanticQa: {
           finalAssessment: { status: "needs_review" },
