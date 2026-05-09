@@ -113,6 +113,7 @@ import {
   type ProjectRealChainPanelState,
   type ProjectRound5StrictEditPreflightPanelState,
 } from "./ui/project/ProjectRealChainPanel";
+import { CompactList, Metric, StatusPill } from "./ui/common/DiagnosticsPrimitives";
 import { MediaFrame } from "./ui/common/MediaFrame";
 import { fallbackAudit } from "./data/fallbackAudit";
 
@@ -837,15 +838,6 @@ function buildSubagentWorkerRuntimeView(runtimeState: ProjectRuntimeState): Suba
   });
 }
 
-function StatusPill({ value }: { value: string }) {
-  const tone = value.includes("blocked") || value.includes("missing") || value === "blocker" || value === "failed"
-    ? "danger"
-    : value.includes("ready") || value.includes("done") || value === "PASS" || value === "success"
-      ? "good"
-      : "neutral";
-  return <span className={`pill ${tone}`}>{value}</span>;
-}
-
 async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(path);
   if (!response.ok) throw new Error(`Failed to load ${path}: ${response.status}`);
@@ -1315,16 +1307,6 @@ function normalizeRuntimeState(value: unknown): unknown {
       { generatedAt: typeof value.generatedAt === "string" ? value.generatedAt : undefined },
     ),
   };
-}
-
-function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <div className="metric">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </div>
-  );
 }
 
 type ImagePipelineState = ProjectRuntimeState["imagePipeline"];
@@ -4675,18 +4657,6 @@ function countBy<T extends string>(values: T[]): Record<T, number> {
     counts[value] = (counts[value] || 0) + 1;
     return counts;
   }, {} as Record<T, number>);
-}
-
-function CompactList({ items, empty = "No blockers or warnings." }: { items: string[]; empty?: string }) {
-  if (!items.length) return <small className="muted-copy">{empty}</small>;
-  return (
-    <div className="compact-list">
-      {items.slice(0, 5).map((item, index) => (
-        <small key={`${item}-${index}`}>{item}</small>
-      ))}
-      {items.length > 5 && <small>+{items.length - 5} more</small>}
-    </div>
-  );
 }
 
 function formatDuration(seconds: number) {
