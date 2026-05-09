@@ -8650,6 +8650,83 @@ function RealPilotDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeSt
   );
 }
 
+function DiagnosticsQueueTaskRunsSection({ view }: { view: RuntimeView }) {
+  return (
+    <section className="machine-panel">
+      <div className="audit-head">
+        <Gauge size={17} />
+        <span>Queue / Task Runs</span>
+      </div>
+      <div className="summary-grid">
+        <Metric label="Total" value={`${view.queueSummary.total}`} detail="derived task runs" />
+        <Metric label="Ready" value={`${view.queueSummary.ready}`} detail="can enter dry queue" />
+        <Metric label="Blocked" value={`${view.queueSummary.blocked}`} detail="preflight/policy" />
+        <Metric label="Parked" value={`${view.queueSummary.parked}`} detail="provider disabled" />
+      </div>
+      <TaskRows tasks={view.taskViews.slice(0, 12)} compact />
+    </section>
+  );
+}
+
+function DiagnosticsPreflightBlockersSection({ view, firstQueueBlocker }: { view: RuntimeView; firstQueueBlocker?: string }) {
+  return (
+    <section className="machine-panel">
+      <div className="audit-head">
+        <ShieldAlert size={17} />
+        <span>Preflight Blockers</span>
+      </div>
+      {!view.preflightSummary.blockers.length && firstQueueBlocker && (
+        <p className="muted-copy">Queue policy blocker: {firstQueueBlocker}</p>
+      )}
+      <div className="code-list">
+        {view.preflightSummary.blockers.slice(0, 12).map((blocker, index) => (
+          <details key={`${blocker.code}-${index}`}>
+            <summary>{blocker.code} · {blocker.messageForUser}</summary>
+            <pre>{JSON.stringify(blocker, null, 2)}</pre>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DiagnosticsManifestSourceIndexSection({
+  audit,
+  view,
+  runtimeState,
+}: {
+  audit: ProjectAudit;
+  view: RuntimeView;
+  runtimeState: ProjectRuntimeState;
+}) {
+  return (
+    <section className="machine-panel">
+      <div className="audit-head">
+        <Layers3 size={17} />
+        <span>Manifest Matcher / Source Index</span>
+      </div>
+      <div className="field-grid compact">
+        <label>Source</label>
+        <span>{view.sourceIndexSummary.sourceIndexHash}</span>
+        <label>Refs</label>
+        <span>{view.sourceIndexSummary.lockedReferenceCount} locked / {view.sourceIndexSummary.candidateReferenceCount} candidates</span>
+        <label>Outputs</label>
+        <span>{view.manifestSummary.present} present / {view.manifestSummary.missing} missing / {view.manifestSummary.recoverable} recoverable</span>
+        <label>State Source</label>
+        <span>{view.stateSource?.label || "runtime-state"}</span>
+        <label>Schema</label>
+        <span>{view.stateSource?.path || audit.schemaSummary?.coreStateVersion || "runtime audit v0.3 shell"}</span>
+        <label>Preview</label>
+        <span>{view.previewEvents.filter((event) => event.type === "blocked_placeholder").length} blocked / {view.previewEvents.length} events</span>
+        <label>Story Changes</label>
+        <span>{runtimeState.storyChanges.pendingConfirmationCount} pending / {runtimeState.storyChanges.transactions.length} transaction(s)</span>
+        <label>Reflow</label>
+        <span>{runtimeState.storyChanges.reflowReports.length} report(s)</span>
+      </div>
+    </section>
+  );
+}
+
 function DiagnosticsMode({
   audit,
   view,
@@ -8765,60 +8842,9 @@ function DiagnosticsMode({
       <ProviderExecutionHandoffDiagnostics runtimeState={runtimeState} />
       <LocalOrchestratorDiagnostics runtimeState={runtimeState} />
       <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />
-      <section className="machine-panel">
-        <div className="audit-head">
-          <Gauge size={17} />
-          <span>Queue / Task Runs</span>
-        </div>
-        <div className="summary-grid">
-          <Metric label="Total" value={`${view.queueSummary.total}`} detail="derived task runs" />
-          <Metric label="Ready" value={`${view.queueSummary.ready}`} detail="can enter dry queue" />
-          <Metric label="Blocked" value={`${view.queueSummary.blocked}`} detail="preflight/policy" />
-          <Metric label="Parked" value={`${view.queueSummary.parked}`} detail="provider disabled" />
-        </div>
-        <TaskRows tasks={view.taskViews.slice(0, 12)} compact />
-      </section>
-      <section className="machine-panel">
-        <div className="audit-head">
-          <ShieldAlert size={17} />
-          <span>Preflight Blockers</span>
-        </div>
-        {!view.preflightSummary.blockers.length && firstQueueBlocker && (
-          <p className="muted-copy">Queue policy blocker: {firstQueueBlocker}</p>
-        )}
-        <div className="code-list">
-          {view.preflightSummary.blockers.slice(0, 12).map((blocker, index) => (
-            <details key={`${blocker.code}-${index}`}>
-              <summary>{blocker.code} · {blocker.messageForUser}</summary>
-              <pre>{JSON.stringify(blocker, null, 2)}</pre>
-            </details>
-          ))}
-        </div>
-      </section>
-      <section className="machine-panel">
-        <div className="audit-head">
-          <Layers3 size={17} />
-          <span>Manifest Matcher / Source Index</span>
-        </div>
-        <div className="field-grid compact">
-          <label>Source</label>
-          <span>{view.sourceIndexSummary.sourceIndexHash}</span>
-          <label>Refs</label>
-          <span>{view.sourceIndexSummary.lockedReferenceCount} locked / {view.sourceIndexSummary.candidateReferenceCount} candidates</span>
-          <label>Outputs</label>
-          <span>{view.manifestSummary.present} present / {view.manifestSummary.missing} missing / {view.manifestSummary.recoverable} recoverable</span>
-          <label>State Source</label>
-          <span>{view.stateSource?.label || "runtime-state"}</span>
-          <label>Schema</label>
-          <span>{view.stateSource?.path || audit.schemaSummary?.coreStateVersion || "runtime audit v0.3 shell"}</span>
-          <label>Preview</label>
-          <span>{view.previewEvents.filter((event) => event.type === "blocked_placeholder").length} blocked / {view.previewEvents.length} events</span>
-          <label>Story Changes</label>
-          <span>{runtimeState.storyChanges.pendingConfirmationCount} pending / {runtimeState.storyChanges.transactions.length} transaction(s)</span>
-          <label>Reflow</label>
-          <span>{runtimeState.storyChanges.reflowReports.length} report(s)</span>
-        </div>
-      </section>
+      <DiagnosticsQueueTaskRunsSection view={view} />
+      <DiagnosticsPreflightBlockersSection view={view} firstQueueBlocker={firstQueueBlocker} />
+      <DiagnosticsManifestSourceIndexSection audit={audit} view={view} runtimeState={runtimeState} />
       <KnowledgePackManager view={view} />
       <SettingsShell runtimeState={runtimeState} view={view} />
     </div>
