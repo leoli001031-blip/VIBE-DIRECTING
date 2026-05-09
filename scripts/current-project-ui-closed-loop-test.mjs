@@ -80,6 +80,9 @@ function assertProductCopy(message) {
 
 function assertCreatorPanelContract() {
   const appSource = readText("src/App.tsx");
+  const agentPanelSource = readText("src/ui/director/MinimalAgentPanel.tsx");
+  const agentPanelProjectionSource = readText("src/ui/director/agentPanelProjection.ts");
+  const agentPanelContractSource = `${agentPanelSource}\n${agentPanelProjectionSource}`;
   const stylesSource = readText("src/styles.css");
   const app = findFunctionBody(appSource, "App");
   const panel = findFunctionBody(appSource, "ProjectRealChainPanel");
@@ -165,11 +168,12 @@ function assertCreatorPanelContract() {
   assert(/runtimeState=\{workbenchRuntimeState\}/.test(app), "DirectorMode must receive the current project workbench runtime state");
   assert(/onRunProjectRealChain=\{runProjectRealChain\}/.test(appSource), "DirectorMode must pass runtime status run-check handler to the project panel");
   assert(/onRunProjectImage2Batch=\{runProjectImage2Batch\}/.test(appSource), "DirectorMode must pass Image2 batch run-check handler to the project panel");
-  assert(/确认修改/.test(appSource), "Agent Panel confirmation action should use creator-facing confirmation copy");
-  assert(/等待写入项目事实/.test(appSource), "Agent Panel confirmation receipt should expose pending project-fact write status");
-  assert(/已准备写入/.test(appSource), "Agent Panel staged commit receipt should expose creator-facing ready-to-write copy");
-  assert(/commitProjectPendingTransactionForRuntime/.test(appSource), "Agent Panel confirmation should use staged project facts commit API");
-  assert(/providerCalled\s*===\s*false/.test(appSource) || /providerCalled/.test(appSource), "App source should preserve provider-called false contract in runtime projections");
+  assert(/import\s+\{\s*MinimalAgentPanel\s*\}\s+from\s+"\.\/ui\/director\/MinimalAgentPanel"/.test(appSource), "App must mount the extracted MinimalAgentPanel");
+  assert(/确认修改/.test(agentPanelContractSource), "Agent Panel confirmation action should use creator-facing confirmation copy");
+  assert(/等待写入项目事实/.test(agentPanelContractSource), "Agent Panel confirmation receipt should expose pending project-fact write status");
+  assert(/已准备写入/.test(agentPanelContractSource), "Agent Panel staged commit receipt should expose creator-facing ready-to-write copy");
+  assert(/commitProjectPendingTransactionForRuntime/.test(agentPanelContractSource), "Agent Panel confirmation should use staged project facts commit API");
+  assert(/providerCalled\s*===\s*false/.test(agentPanelContractSource) || /providerCalled/.test(agentPanelContractSource), "Agent Panel source should preserve provider-called false contract in runtime projections");
   assert(!/real-demo-005/.test(`${appSource}\n${stylesSource}`), "app/styles should not retain 005 demo class names");
 }
 

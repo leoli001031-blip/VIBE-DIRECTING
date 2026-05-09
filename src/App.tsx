@@ -46,14 +46,7 @@ import {
 import { buildDesktopRuntimePlan, type DesktopRuntimePlan } from "./core/desktopRuntime";
 import { buildSubagentWorkerRuntimePlan, type SubagentWorkerRuntimePlan } from "./core/subagentWorkerRuntime";
 import { ensureRuntimeEnvironment } from "./core/runtimeConfig";
-import { buildDirectorWorkflowState, type DirectorWorkflowStatus } from "./core/directorWorkflow";
 import { buildMinimalRuntimeProjection, type MinimalRuntimeProjection } from "./core/minimalRuntimeProjection";
-import {
-  buildProjectTransactionRuntime,
-  commitProjectPendingTransactionForRuntime,
-  confirmProjectPendingTransactionForRuntime,
-  type ProjectConfirmedProjectionReceipt,
-} from "./core/projectTransaction";
 import {
   addAssetLibraryAsset,
   createAssetLibrarySnapshot,
@@ -119,6 +112,7 @@ import {
   MinimalStoryFlow,
 } from "./ui/director/MinimalStoryFlow";
 import { MinimalPreview } from "./ui/director/MinimalPreview";
+import { MinimalAgentPanel } from "./ui/director/MinimalAgentPanel";
 import { MediaFrame } from "./ui/common/MediaFrame";
 import { fallbackAudit } from "./data/fallbackAudit";
 
@@ -175,7 +169,6 @@ type ProjectFactsUiSummary = {
   gate: ProjectStoreIoGate;
   snapshot: ProjectStoreSnapshot;
 };
-type AgentPlanPhase = "idle" | "review" | "confirmed";
 
 type DesktopRuntimeShellView = {
   planStatus: string;
@@ -777,140 +770,6 @@ function buildProjectFactsUiSummary(
     gate,
     snapshot,
   };
-}
-
-function selectedScopeLabel(shot?: ShotRecord, asset?: AssetRecord, sectionLabel?: string, selectedShots: ShotRecord[] = []) {
-  if (selectedShots.length > 1) {
-    const labels = selectedShots.slice(0, 4).map((item) => formatShotNumber(item.id));
-    const suffix = selectedShots.length > labels.length ? ` +${selectedShots.length - labels.length}` : "";
-    return `已选择 ${labels.join(", ")}${suffix}`;
-  }
-  if (shot) return `正在看 ${formatShotNumber(shot.id)}`;
-  if (asset) return `正在看 ${cleanLabel(asset.name)}`;
-  if (sectionLabel) return `正在看 ${sectionLabel}`;
-  return "正在看整个项目";
-}
-
-type MinimalAgentWorkflow = ReturnType<typeof buildDirectorWorkflowState>;
-
-function confirmedTransactionRuntime(workflow: MinimalAgentWorkflow, runtimeState: ProjectRuntimeState) {
-  return buildProjectTransactionRuntime({
-    workflowState: {
-      generatedAt: workflow.generatedAt,
-      status: workflow.status,
-      confirmationRequired: workflow.confirmationRequired,
-      blockedReasons: workflow.blockedReasons,
-      editPlan: workflow.editPlan,
-      taskPacketState: workflow.taskPacketState,
-    },
-    runtimeState,
-    userConfirmed: true,
-    userEnabled: true,
-  });
-}
-
-function buildAgentPanelProjection(
-  workflow: MinimalAgentWorkflow,
-  runtimeState: ProjectRuntimeState,
-  planPhase: AgentPlanPhase,
-) {
-  return buildMinimalRuntimeProjection({
-    generatedAt: workflow.generatedAt,
-    transactionRuntime: planPhase === "confirmed" ? confirmedTransactionRuntime(workflow, runtimeState) : workflow.transactionRuntime,
-  });
-}
-
-function agentReceiptStatusLabel(receipt: ProjectConfirmedProjectionReceipt) {
-  if (receipt.queuedCount > 0) return "已加入计划";
-  if (receipt.status === "blocked_missing_knowledge_trace") return "缺少资产约束，需补齐";
-  if (receipt.status === "blocked_queue") return "需补齐";
-  if (receipt.status === "blocked_not_confirmed") return "等待复核";
-  if (receipt.parkedCount > 0 && receipt.queuedCount === 0) return "等待写入项目事实";
-  return "等待写入项目事实";
-}
-
-function agentReceiptCountSummary(receipt: ProjectConfirmedProjectionReceipt) {
-  const updateCount = Math.max(receipt.blockedCount, receipt.runtimeProjection.staleArtifactCount);
-  const parts = [
-    receipt.queuedCount ? `${receipt.queuedCount} 已加入计划` : "",
-    receipt.parkedCount ? `${receipt.parkedCount} 等待复核` : "",
-    updateCount ? `${updateCount} 需补齐` : "",
-  ].filter(Boolean);
-  return parts.join(" · ") || agentReceiptStatusLabel(receipt);
-}
-
-function confirmAgentPlanProjection(workflow: MinimalAgentWorkflow, runtimeState: ProjectRuntimeState) {
-  const transactionRuntime = confirmedTransactionRuntime(workflow, runtimeState);
-  const receipt = confirmProjectPendingTransactionForRuntime(transactionRuntime);
-  const stagedReceipt = commitProjectPendingTransactionForRuntime({
-    runtime: transactionRuntime,
-    confirmationReceipt: receipt,
-  });
-  const hardLocksHeld = receipt.projectVibeWriteAllowed === false
-    && receipt.projectVibeWriteExecuted === false
-    && receipt.noFileMutation === true
-    && receipt.providerSubmissionForbidden === true
-    && receipt.workerSpawnForbidden === true
-    && receipt.providerCalled === false
-    && receipt.projectVibeWritten === false
-    && stagedReceipt.projectVibeWritten === false
-    && stagedReceipt.providerCalled === false
-    && stagedReceipt.workerSpawned === false
-    && stagedReceipt.hardLocks.noFileMutation === true
-    && stagedReceipt.hardLocks.projectVibeWriteAllowed === false;
-  const baseProjection = buildMinimalRuntimeProjection({
-    generatedAt: receipt.generatedAt,
-    transactionRuntime,
-  });
-  const counts = {
-    queued: receipt.queuedCount,
-    parked: receipt.parkedCount,
-    blocked: receipt.blockedCount,
-    stale: receipt.runtimeProjection.staleArtifactCount,
-  };
-  const shortLabel = hardLocksHeld && stagedReceipt.status === "staged" ? "已准备写入" : agentReceiptStatusLabel(receipt);
-  const countSummary = agentReceiptCountSummary(receipt);
-
-  return {
-    receipt,
-    stagedReceipt,
-    projection: {
-      ...baseProjection,
-      generatedAt: receipt.generatedAt,
-      shortLabel,
-      counts,
-      countSummary,
-      staleSummary: counts.stale ? `${counts.stale} 需更新` : "画面保持同步",
-      progressDots: buildMinimalRuntimeProjection({
-        generatedAt: receipt.generatedAt,
-        transactionRuntime: {
-          ...transactionRuntime,
-          userStatus: receipt.runtimeProjection.status,
-          nextUiProjection: {
-            ...transactionRuntime.nextUiProjection,
-            status: receipt.runtimeProjection.status,
-            shortLabel,
-            queuedCount: counts.queued,
-            parkedCount: counts.parked,
-            blockedCount: counts.blocked,
-            staleArtifactCount: counts.stale,
-          },
-        },
-      }).progressDots,
-    },
-  };
-}
-
-function agentProjectionBadges(projection: MinimalRuntimeProjection, planPhase: AgentPlanPhase) {
-  if (planPhase === "confirmed") return [projection.countSummary, "先等复核"].filter(Boolean);
-  return [projection.shortLabel, projection.staleSummary].filter(Boolean);
-}
-
-function agentProjectionNextStep(projection: MinimalRuntimeProjection, planPhase: AgentPlanPhase, canConfirm: boolean) {
-  if (planPhase === "confirmed") return `${projection.countSummary}，等待写入项目事实。`;
-  if (canConfirm) return "确认后只会加入计划，后续结果先复核。";
-  if (projection.counts.blocked > 0) return "缺少资产约束，需补齐。";
-  return "确认后只会加入计划，后续结果先复核。";
 }
 
 function exportStatusLabel(status: string) {
@@ -7105,167 +6964,6 @@ function MinimalAssetLibrary({
       </section>
     </main>
   );
-}
-
-function MinimalAgentPanel({
-  runtimeState,
-  projectScopeLabel,
-  shot,
-  selectedShots = [],
-  asset,
-  sectionLabel,
-  sectionId,
-}: {
-  runtimeState: ProjectRuntimeState;
-  projectScopeLabel?: string;
-  shot?: ShotRecord;
-  selectedShots?: ShotRecord[];
-  asset?: AssetRecord;
-  sectionLabel?: string;
-  sectionId?: string;
-}) {
-  const [text, setText] = useState("");
-  const [status, setStatus] = useState("等待描述");
-  const [planPhase, setPlanPhase] = useState<AgentPlanPhase>("idle");
-  const [workflow, setWorkflow] = useState<ReturnType<typeof buildDirectorWorkflowState> | undefined>();
-  const [projection, setProjection] = useState<MinimalRuntimeProjection | undefined>();
-  const scopedShotIds = selectedShots.map((item) => item.id);
-  const localScopeLabel = selectedScopeLabel(shot, asset, sectionLabel, selectedShots);
-  const scopeLabel = projectScopeLabel ? `${projectScopeLabel} · ${localScopeLabel}` : localScopeLabel;
-
-  function prepareChange() {
-    const userIntent = text.trim();
-    if (!userIntent) {
-      setStatus("先写下想改哪里");
-      return;
-    }
-    const nextWorkflow = buildDirectorWorkflowState({
-      runtimeState,
-      userIntent,
-      selection: {
-        selectedShotId: scopedShotIds.length <= 1 ? shot?.id : undefined,
-        selectedShotIds: scopedShotIds.length > 1 ? scopedShotIds : undefined,
-        selectedAssetId: asset?.id,
-        sectionId: !scopedShotIds.length && !asset ? sectionId : undefined,
-      },
-    });
-    const nextProjection = buildAgentPanelProjection(nextWorkflow, runtimeState, "review");
-    setWorkflow(nextWorkflow);
-    setProjection(nextProjection);
-    setPlanPhase("review");
-    setStatus(nextProjection.shortLabel);
-  }
-
-  function confirmPlan() {
-    if (!workflowCanConfirm(workflow)) return;
-    const { projection: nextProjection } = confirmAgentPlanProjection(workflow, runtimeState);
-    setProjection(nextProjection);
-    setPlanPhase("confirmed");
-    setStatus(nextProjection.shortLabel);
-  }
-
-  const canConfirm = workflowCanConfirm(workflow);
-  const badges = projection ? agentProjectionBadges(projection, planPhase).slice(0, 2) : workflow ? workflowBadgeLabels(workflow).slice(0, 2) : ["先看一下"];
-  const nextStep = projection ? agentProjectionNextStep(projection, planPhase, canConfirm) : workflow ? workflowPanelNextStepLabel(workflow, planPhase) : "写一句你想调整的画面、角色或节奏。";
-
-  return (
-    <aside className="minimal-agent-panel">
-      <span>{scopeLabel}</span>
-      <div className="minimal-agent-input">
-        <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="描述你想怎么改..." />
-        <button disabled={!text.trim()} onClick={prepareChange}>
-          <Eye size={15} />
-          看看
-        </button>
-      </div>
-      <strong className="minimal-agent-status">{status}</strong>
-      {projection && (
-        <div className="minimal-state-dots agent" aria-label={projection.shortLabel}>
-          {projection.progressDots.map((dot) => (
-            <i key={dot.id} className={dot.tone} title={dot.label} />
-          ))}
-        </div>
-      )}
-      <div className="minimal-agent-badges" aria-label="修改摘要">
-        {badges.map((badge) => (
-          <small key={badge}>{badge}</small>
-        ))}
-      </div>
-      <small>{nextStep}</small>
-      {workflow && (
-        <div className="minimal-agent-actions">
-          <button disabled={!canConfirm || planPhase === "confirmed"} onClick={confirmPlan}>
-            <CheckCircle2 size={15} />
-            确认修改
-          </button>
-        </div>
-      )}
-    </aside>
-  );
-}
-
-function naturalWorkflowScopeLabel(label: string) {
-  return label
-    .replace(/^Multi-shot\s+/i, "多个镜头 ")
-    .replace(/^Shot\s+/i, "镜头 ")
-    .replace(/^Asset\s+/i, "素材 ")
-    .replace(/^Section\s+/i, "段落 ")
-    .replace(/^Export$/i, "导出")
-    .replace(/^Project$/i, "整个项目");
-}
-
-function workflowStatusLabel(status: DirectorWorkflowStatus) {
-  if (status === "dry_run_ready") return "可以继续";
-  if (status === "pending_confirmation") return "等你确认";
-  if (status === "blocked_missing_context") return "需要补充信息";
-  return "暂时不能改";
-}
-
-function workflowNextStepLabel(status: DirectorWorkflowStatus) {
-  if (status === "dry_run_ready") return "修改方向已准备好，确认后才会继续。";
-  if (status === "pending_confirmation") return "等你确认后再继续。";
-  if (status === "blocked_missing_context") return "补充镜头、角色或参考图后再试。";
-  return "换一种更具体的说法。";
-}
-
-function workflowBadgeLabels(workflow: ReturnType<typeof buildDirectorWorkflowState>) {
-  const labels = ["先看一下", naturalWorkflowScopeLabel(workflow.scopeLabel)];
-  if (workflow.summary.blockedTaskPackets > 0) labels.push("需要补充参考");
-  if (workflow.summary.readyTaskPackets > 0) labels.push(`${workflow.summary.readyTaskPackets} 个画面会受影响`);
-  return Array.from(new Set(labels));
-}
-
-function workflowCanConfirm(
-  workflow?: ReturnType<typeof buildDirectorWorkflowState>,
-): workflow is ReturnType<typeof buildDirectorWorkflowState> {
-  return Boolean(workflow && (workflow.status === "dry_run_ready" || workflow.status === "pending_confirmation"));
-}
-
-function workflowPanelStatusLabel(workflow: ReturnType<typeof buildDirectorWorkflowState>, planPhase: AgentPlanPhase) {
-  if (workflow.status === "blocked") return "阻断";
-  if (workflow.status === "blocked_missing_context") return "需要补充信息";
-  if (planPhase === "confirmed") return "已确认";
-  return "等你确认";
-}
-
-function workflowPanelNextStepLabel(workflow: ReturnType<typeof buildDirectorWorkflowState>, planPhase: AgentPlanPhase) {
-  if (workflow.status === "blocked") return "这次修改还不能进入计划。";
-  if (workflow.status === "blocked_missing_context") return workflowNextStepLabel(workflow.status);
-  if (planPhase === "confirmed") return "已确认，后续输出会先进入人工复核。";
-  return "确认后再继续。";
-}
-
-function workflowPlanFacts(workflow: ReturnType<typeof buildDirectorWorkflowState>) {
-  return [
-    {
-      label: "影响画面",
-      value: `${workflow.summary.readyTaskPackets}`,
-    },
-    {
-      label: "状态",
-      value: workflowStatusLabel(workflow.status),
-    },
-  ];
 }
 
 function DirectorProgressStrip({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
