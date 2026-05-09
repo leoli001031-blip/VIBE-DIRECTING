@@ -71,6 +71,12 @@ function requireWithin(source, pattern, label) {
   return pattern.test(source) ? undefined : `${label} is missing`;
 }
 
+function extractStringLiterals(source) {
+  return Array.from(source.matchAll(/(["'`])((?:\\.|(?!\1)[\s\S])*?)\1/g))
+    .map((match) => match[2])
+    .join("\n");
+}
+
 function firstLineOf(source, pattern) {
   const index = source.search(pattern);
   if (index < 0) return undefined;
@@ -167,6 +173,16 @@ const diagnosticsMode = findFunctionBody(appSource, "DiagnosticsMode");
 const settingsShell = findFunctionBody(appSource, "SettingsShell");
 const appBody = findFunctionBody(appSource, "App");
 const failures = [];
+const defaultMountedDirectorSurface = [
+  directorMode,
+  minimalDirectorStatusDot,
+  findFunctionBody(appSource, "MinimalStoryFlow"),
+  minimalAssetLibrary,
+  minimalPreview,
+  minimalAgentPanel,
+  minimalTopNav,
+].join("\n");
+const defaultMountedDirectorCopySurface = extractStringLiterals(defaultMountedDirectorSurface);
 const minimalAgentLanguageSurface = [
   minimalAgentPanel,
   selectedScopeLabel,
@@ -351,10 +367,12 @@ checkMessage(requireWithin(appSource, /function\s+motionEndpointFactsForShot\s*\
 checkMessage(requireWithin(appSource, /function\s+motionContractSummaryForGate\s*\(/, "motion contract gate summary helper"));
 checkMessage(requireWithin(appSource, /function\s+firstMotionEndpointNotice\s*\(/, "first motion endpoint notice helper"));
 checkMessage(requireWithin(`${motionTypeLabel}\n${motionEndpointFactsForShot}\n${motionContractSummaryForGate}\n${firstMotionEndpointNotice}`, /静止[\s\S]*表情[\s\S]*姿态[\s\S]*走位[\s\S]*交互[\s\S]*运镜[\s\S]*揭示[\s\S]*状态变化/, "motion endpoint helper Chinese labels"));
-checkMessage(requireWithin(directorMode, /<VideoPrepareSummaryStrip\s+runtimeState=\{runtimeState\}\s+selectedShot=\{selectedShot\}\s*\/>/, "Director Clean Mode motion prepare strip mounted"));
+check(!/<VideoPrepareSummaryStrip\b/.test(directorMode), "Director Clean Mode must not mount VideoPrepareSummaryStrip in the default DirectorMode");
+check(!/<ProjectRealChainPanel\b/.test(directorMode), "Director Clean Mode must not mount ProjectRealChainPanel in the default DirectorMode");
+checkMessage(requireWithin(diagnosticsMode, /<ProjectRealChainPanel\b/, "DiagnosticsMode must mount ProjectRealChainPanel"));
+checkMessage(requireWithin(diagnosticsMode, /<VideoPrepareSummaryStrip\s+runtimeState=\{runtimeState\}\s+selectedShot=\{selectedShot\}\s*\/>/, "DiagnosticsMode motion prepare strip mounted"));
 checkMessage(requireWithin(videoPrepareSummaryStrip, /motionEndpointFactsForShot\s*\(/, "VideoPrepareSummaryStrip must call selected-shot motion endpoint helper"));
-checkMessage(requireWithin(`${directorMode}\n${videoPrepareSummaryStrip}`, /动作规划|Motion Endpoint/i, "Director Clean Mode must expose motion endpoint status"));
-check(!/\bbbox\b|mask|Bbox-only/i.test(`${directorMode}\n${videoPrepareSummaryStrip}`), "Director Clean Mode motion prepare strip must not expose bbox/mask engineering terms");
+checkMessage(requireWithin(videoPrepareSummaryStrip, /动作规划|Motion Endpoint/i, "Diagnostics motion prepare strip must expose motion endpoint status"));
 checkMessage(requireWithin(shotVideoGateInspector, /motionContractSummaryForGate\s*\(/, "ShotVideoGateInspector must call motion contract summary helper"));
 checkMessage(requireWithin(shotVideoGateInspector, /firstMotionEndpointNotice\s*\(/, "ShotVideoGateInspector must call first motion endpoint notice helper"));
 checkMessage(requireWithin(shotVideoGateInspector, /Motion Type/i, "ShotVideoGateInspector motion type field"));
@@ -712,6 +730,36 @@ check(
 );
 
 const minimalDirectorSurface = `${directorMode}\n${directorProgressStrip}\n${realPilotDirectorStatus}\n${oneShotActionPanel}\n${minimalAgentPanel}\n${minimalTopNav}\n${minimalProjectPlan}`;
+for (const [term, pattern] of [
+  ["provider", /provider/i],
+  ["receipt", /receipt/i],
+  ["授权票据", /授权票据/],
+  ["授权引用", /授权引用/],
+  ["请求票据", /请求票据/],
+  ["Round", /\bRound\b/i],
+  ["Phase", /\bPhase\b/i],
+  ["ZP", /\bZP\d*/i],
+  ["strict edit", /strict\s+edit/i],
+  ["edit 证据", /edit\s*证据/i],
+  ["handoff", /handoff/i],
+  ["hash-bound", /hash-bound/i],
+  ["semantic QA", /semantic\s+QA/i],
+  ["Queue Shell", /Queue\s+Shell/i],
+  ["Provider Lock", /Provider\s+Lock/i],
+  ["gate", /\bgate\b/i],
+  ["queue", /\bqueue\b/i],
+  ["runtime 状态", /runtime\s+状态/i],
+  ["runtime endpoint", /runtime\s+endpoint/i],
+  ["sidecar", /sidecar/i],
+  ["Image2", /Image2/i],
+  ["准备小样包", /准备小样包/],
+  ["确认 handoff", /确认\s+handoff/i],
+  ["准备授权票据", /准备授权票据/],
+  ["检查回流", /检查回流/],
+  ["复核检查", /复核检查/],
+]) {
+  check(!pattern.test(defaultMountedDirectorCopySurface), `default mounted Director surface must not expose ${term}`);
+}
 const projectRealChainUserSurface = [
   projectRealChainPanel,
   findFunctionBody(appSource, "projectRealChainStatusLabel"),

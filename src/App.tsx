@@ -8447,22 +8447,13 @@ function DirectorMode({
   assetLibrary,
   assetLibraryReadOnlyDetail,
   projectScopeLabel,
-  projectFacts,
-  projectFactsMode,
   selectedShot,
   selectedShots,
   selectedAsset,
   selectedShotId,
   selectedShotIds,
   selectedAssetId,
-  projectRealChainState,
   currentProjectPreviewItems,
-  projectImage2BatchState,
-  projectImage2OneShotState,
-  strictEditPreflightState,
-  runtimeProjectBinding,
-  projectChoices,
-  authorizationRef,
   directorView,
   activeSectionId,
   onSelectShot,
@@ -8470,21 +8461,6 @@ function DirectorMode({
   onAddAsset,
   onUpdateAsset,
   onMarkAssetStatus,
-  onProjectFactsModeChange,
-  onConfirmOneShot,
-  onRunProjectRealChain,
-  onRunProjectImage2Batch,
-  onPrepareStrictEditPreflight,
-  onPrepareImage2OneShot,
-  onAuthorizationRefChange,
-  onPrepareImage2OneShotPermissionReceipt,
-  onConfirmImage2OneShot,
-  onCheckImage2OneShotReturn,
-  projectPathInput,
-  projectSelectionStatus,
-  onProjectPathChange,
-  onSelectProjectChoice,
-  onConnectProject,
 }: {
   audit: ProjectAudit;
   view: RuntimeView;
@@ -8492,22 +8468,13 @@ function DirectorMode({
   assetLibrary: AssetLibrarySnapshot;
   assetLibraryReadOnlyDetail?: string;
   projectScopeLabel?: string;
-  projectFacts: ProjectFactsUiSummary;
-  projectFactsMode: ProjectFactsUiMode;
   selectedShot?: ShotRecord;
   selectedShots: ShotRecord[];
   selectedAsset?: AssetRecord;
   selectedShotId: string;
   selectedShotIds: string[];
   selectedAssetId?: string;
-  projectRealChainState: ProjectRealChainPanelState;
   currentProjectPreviewItems?: PreviewQueueItem[];
-  projectImage2BatchState: ProjectImage2BatchPanelState;
-  projectImage2OneShotState: ProjectImage2OneShotPanelState;
-  strictEditPreflightState: ProjectRound5StrictEditPreflightPanelState;
-  runtimeProjectBinding: ProjectCurrentBindingStatus;
-  projectChoices: ProjectCurrentChoice[];
-  authorizationRef: string;
   directorView: DirectorView;
   activeSectionId?: string;
   onSelectShot: (id: string, additive?: boolean) => void;
@@ -8515,21 +8482,6 @@ function DirectorMode({
   onAddAsset: (input: AddAssetLibraryAssetInput) => void;
   onUpdateAsset: (assetId: string, input: UpdateAssetLibraryAssetInput) => void;
   onMarkAssetStatus: (assetId: string, status: AssetLibraryUiStatus) => void;
-  onProjectFactsModeChange: (mode: ProjectFactsUiMode) => void;
-  onConfirmOneShot: () => void;
-  onRunProjectRealChain: () => void;
-  onRunProjectImage2Batch: () => void;
-  onPrepareStrictEditPreflight: (shotId: string) => void;
-  onPrepareImage2OneShot: () => void;
-  onAuthorizationRefChange: (value: string) => void;
-  onPrepareImage2OneShotPermissionReceipt: () => void;
-  onConfirmImage2OneShot: () => void;
-  onCheckImage2OneShotReturn: () => void;
-  projectPathInput: string;
-  projectSelectionStatus?: "idle" | "connecting" | "connected" | "error";
-  onProjectPathChange: (value: string) => void;
-  onSelectProjectChoice: (choice: ProjectCurrentChoice) => void;
-  onConnectProject: () => void;
 }) {
   const activeSection = view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0];
   const sectionLabel = activeSection?.label || "Story";
@@ -8539,31 +8491,6 @@ function DirectorMode({
     <div className={`minimal-director ${directorView}`}>
       <div className="minimal-director-main">
         <MinimalDirectorStatusDot runtimeState={runtimeState} />
-        <ProjectRealChainPanel
-          state={projectRealChainState}
-          image2BatchState={projectImage2BatchState}
-          image2OneShotState={projectImage2OneShotState}
-          strictEditPreflightState={strictEditPreflightState}
-          selectedShotId={selectedShotId}
-          projectTitle={runtimeState.project.title}
-          runtimeProjectBinding={runtimeProjectBinding}
-          projectPathInput={projectPathInput}
-          projectChoices={projectChoices}
-          projectSelectionStatus={projectSelectionStatus}
-          authorizationRef={authorizationRef}
-          onProjectPathChange={onProjectPathChange}
-          onSelectProjectChoice={onSelectProjectChoice}
-          onConnectProject={onConnectProject}
-          onRun={onRunProjectRealChain}
-          onRunImage2Batch={onRunProjectImage2Batch}
-          onPrepareStrictEditPreflight={onPrepareStrictEditPreflight}
-          onPrepareImage2OneShot={onPrepareImage2OneShot}
-          onAuthorizationRefChange={onAuthorizationRefChange}
-          onPrepareImage2OneShotPermissionReceipt={onPrepareImage2OneShotPermissionReceipt}
-          onConfirmImage2OneShot={onConfirmImage2OneShot}
-          onCheckImage2OneShotReturn={onCheckImage2OneShotReturn}
-        />
-        <VideoPrepareSummaryStrip runtimeState={runtimeState} selectedShot={selectedShot} />
         {directorView === "assets" && (
           <MinimalAssetLibrary
             library={assetLibrary}
@@ -9840,16 +9767,85 @@ function DiagnosticsMode({
   audit,
   view,
   runtimeState,
+  selectedShot,
+  selectedShotId,
+  projectRealChainState,
+  projectImage2BatchState,
+  projectImage2OneShotState,
+  strictEditPreflightState,
+  runtimeProjectBinding,
+  projectPathInput,
+  projectChoices,
+  projectSelectionStatus,
+  authorizationRef,
+  onProjectPathChange,
+  onSelectProjectChoice,
+  onConnectProject,
+  onRunProjectRealChain,
+  onRunProjectImage2Batch,
+  onPrepareStrictEditPreflight,
+  onPrepareImage2OneShot,
+  onAuthorizationRefChange,
+  onPrepareImage2OneShotPermissionReceipt,
+  onConfirmImage2OneShot,
+  onCheckImage2OneShotReturn,
 }: {
   audit: ProjectAudit;
   view: RuntimeView;
   runtimeState: ProjectRuntimeState;
+  selectedShot?: ShotRecord;
+  selectedShotId: string;
+  projectRealChainState: ProjectRealChainPanelState;
+  projectImage2BatchState: ProjectImage2BatchPanelState;
+  projectImage2OneShotState: ProjectImage2OneShotPanelState;
+  strictEditPreflightState: ProjectRound5StrictEditPreflightPanelState;
+  runtimeProjectBinding: ProjectCurrentBindingStatus;
+  projectPathInput: string;
+  projectChoices: ProjectCurrentChoice[];
+  projectSelectionStatus?: "idle" | "connecting" | "connected" | "error";
+  authorizationRef: string;
+  onProjectPathChange: (value: string) => void;
+  onSelectProjectChoice: (choice: ProjectCurrentChoice) => void;
+  onConnectProject: () => void;
+  onRunProjectRealChain: () => void;
+  onRunProjectImage2Batch: () => void;
+  onPrepareStrictEditPreflight: (shotId: string) => void;
+  onPrepareImage2OneShot: () => void;
+  onAuthorizationRefChange: (value: string) => void;
+  onPrepareImage2OneShotPermissionReceipt: () => void;
+  onConfirmImage2OneShot: () => void;
+  onCheckImage2OneShotReturn: () => void;
 }) {
   const firstQueueBlocker = view.taskViews.find((task) => task.queueGate.status === "blocked" && task.queueGate.blockers[0])?.queueGate.blockers[0];
 
   return (
     <div className="diagnostics-layout">
       <DirectorProgressStrip runtimeState={runtimeState} />
+      <ProjectRealChainPanel
+        state={projectRealChainState}
+        image2BatchState={projectImage2BatchState}
+        image2OneShotState={projectImage2OneShotState}
+        strictEditPreflightState={strictEditPreflightState}
+        selectedShotId={selectedShotId}
+        projectTitle={runtimeState.project.title}
+        runtimeProjectBinding={runtimeProjectBinding}
+        projectPathInput={projectPathInput}
+        projectChoices={projectChoices}
+        projectSelectionStatus={projectSelectionStatus}
+        authorizationRef={authorizationRef}
+        onProjectPathChange={onProjectPathChange}
+        onSelectProjectChoice={onSelectProjectChoice}
+        onConnectProject={onConnectProject}
+        onRun={onRunProjectRealChain}
+        onRunImage2Batch={onRunProjectImage2Batch}
+        onPrepareStrictEditPreflight={onPrepareStrictEditPreflight}
+        onPrepareImage2OneShot={onPrepareImage2OneShot}
+        onAuthorizationRefChange={onAuthorizationRefChange}
+        onPrepareImage2OneShotPermissionReceipt={onPrepareImage2OneShotPermissionReceipt}
+        onConfirmImage2OneShot={onConfirmImage2OneShot}
+        onCheckImage2OneShotReturn={onCheckImage2OneShotReturn}
+      />
+      <VideoPrepareSummaryStrip runtimeState={runtimeState} selectedShot={selectedShot} />
       <ProviderDock audit={audit} />
       <ImagePipelineDiagnostics runtimeState={runtimeState} />
       <GenerationHealthCheckerDiagnostics runtimeState={runtimeState} />
@@ -10457,16 +10453,31 @@ function App() {
           assetLibrary={workbenchAssetLibrary}
           assetLibraryReadOnlyDetail={currentProjectWorkbenchProjection.assets.detail}
           projectScopeLabel={currentProjectWorkbenchProjection.selectedScope.label}
-          projectFacts={projectFacts}
-          projectFactsMode={projectFactsMode}
           selectedShot={selectedShot}
           selectedShots={selectedShots}
           selectedAsset={selectedAsset}
           selectedShotId={workbenchSelectedShotId}
           selectedShotIds={currentProjectWorkbenchProjection.selectedScope.selectedShotIds}
           selectedAssetId={selectedAssetId}
-          projectRealChainState={projectRealChainState}
           currentProjectPreviewItems={currentProjectPreviewQueue}
+          directorView={directorView}
+          activeSectionId={resolvedActiveSectionId}
+          onSelectShot={selectShot}
+          onSelectAsset={setSelectedAssetId}
+          onAddAsset={addAsset}
+          onUpdateAsset={updateAsset}
+          onMarkAssetStatus={markAssetStatus}
+        />
+      )}
+      {mode === "inspector" && <InspectorMode audit={runtimeAudit} view={runtimeView} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />}
+      {mode === "diagnostics" && (
+        <DiagnosticsMode
+          audit={runtimeAudit}
+          view={runtimeView}
+          runtimeState={runtimeState}
+          selectedShot={selectedShot}
+          selectedShotId={workbenchSelectedShotId}
+          projectRealChainState={projectRealChainState}
           projectImage2BatchState={projectImage2BatchState}
           projectImage2OneShotState={projectImage2OneShotState}
           strictEditPreflightState={strictEditPreflightState}
@@ -10475,15 +10486,9 @@ function App() {
           projectPathInput={projectPathInput}
           projectChoices={projectChoices}
           projectSelectionStatus={projectSelectionStatus}
-          directorView={directorView}
-          activeSectionId={resolvedActiveSectionId}
-          onSelectShot={selectShot}
-          onSelectAsset={setSelectedAssetId}
-          onAddAsset={addAsset}
-          onUpdateAsset={updateAsset}
-          onMarkAssetStatus={markAssetStatus}
-          onProjectFactsModeChange={setProjectFactsMode}
-          onConfirmOneShot={confirmOneShot}
+          onProjectPathChange={setProjectPathInput}
+          onSelectProjectChoice={selectProjectChoice}
+          onConnectProject={connectCurrentProject}
           onRunProjectRealChain={runProjectRealChain}
           onRunProjectImage2Batch={runProjectImage2Batch}
           onPrepareStrictEditPreflight={prepareStrictEditPreflight}
@@ -10492,13 +10497,8 @@ function App() {
           onPrepareImage2OneShotPermissionReceipt={prepareImage2OneShotPermissionReceipt}
           onConfirmImage2OneShot={confirmImage2OneShot}
           onCheckImage2OneShotReturn={checkImage2OneShotReturn}
-          onProjectPathChange={setProjectPathInput}
-          onSelectProjectChoice={selectProjectChoice}
-          onConnectProject={connectCurrentProject}
         />
       )}
-      {mode === "inspector" && <InspectorMode audit={runtimeAudit} view={runtimeView} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />}
-      {mode === "diagnostics" && <DiagnosticsMode audit={runtimeAudit} view={runtimeView} runtimeState={runtimeState} />}
 
       {mode !== "director" && (
         <footer className="policy-note">
