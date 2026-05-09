@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/provider_submit_permission_receipt.schema.json",
+  "title": "ProviderSubmitPermissionReceiptState",
+  "description": "Small-batch provider submit permission receipt state. It records an opaque credential reference and pending action-time intent while provider submission, credential material access, network IO, worker spawn, and file mutation remain locked off.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "receiptId",
+    "handoffId",
+    "status",
+    "blockers",
+    "providerId",
+    "providerSlot",
+    "requiredMode",
+    "selectedShotIds",
+    "expectedOutputs",
+    "credential",
+    "submitIntent",
+    "actionTimeConfirmationRequired",
+    "actionTimeConfirmation",
+    "maxProviderCallsPerReceipt",
+    "providerCalled",
+    "runtimeProviderSubmitAttempted",
+    "runtimeExternalNetworkCallMade",
+    "projectVibeWritten",
+    "hardLocks",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "0.1.0" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "receiptId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "handoffId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "status": { "$ref": "#/$defs/status" },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "providerSlot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+    "requiredMode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+    "selectedShotIds": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "expectedOutputs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/expectedOutput" }
+    },
+    "credential": { "$ref": "#/$defs/credential" },
+    "submitIntent": { "$ref": "#/$defs/submitIntent" },
+    "actionTimeConfirmationRequired": { "const": true },
+    "actionTimeConfirmation": { "$ref": "#/$defs/actionTimeConfirmation" },
+    "promptPath": { "type": "string" },
+    "promptSha256": { "type": "string" },
+    "promptSnapshotPath": { "type": "string" },
+    "maxProviderCallsPerReceipt": { "type": "integer", "const": 1 },
+    "providerCalled": { "const": false },
+    "runtimeProviderSubmitAttempted": { "const": false },
+    "runtimeExternalNetworkCallMade": { "const": false },
+    "projectVibeWritten": { "const": false },
+    "hardLocks": { "$ref": "#/$defs/hardLocks" },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "status": {
+      "type": "string",
+      "enum": ["pending_action_time_confirmation", "blocked"]
+    },
+    "expectedOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shotId", "expectedOutputPath", "providerObservationPath", "semanticQaPath"],
+      "properties": {
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "expectedOutputPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerObservationPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "semanticQaPath": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "credentialRef",
+        "authorizedReferenceOnly",
+        "secretMaterialPresent",
+        "credentialMaterialStored",
+        "credentialMaterialRead"
+      ],
+      "properties": {
+        "credentialRef": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "authorizedReferenceOnly": { "const": true },
+        "secretMaterialPresent": { "const": false },
+        "credentialMaterialStored": { "const": false },
+        "credentialMaterialRead": { "const": false }
+      }
+    },
+    "submitIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerId",
+        "providerSlot",
+        "requiredMode",
+        "maxProviderCallsPerReceipt",
+        "providerSubmitAllowed",
+        "providerSubmitRequestState"
+      ],
+      "properties": {
+        "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "providerSlot": { "$ref": "common.schema.json#/$defs/providerSlot" },
+        "requiredMode": { "$ref": "common.schema.json#/$defs/requiredMode" },
+        "maxProviderCallsPerReceipt": { "type": "integer", "const": 1 },
+        "providerSubmitAllowed": { "type": "integer", "const": 0 },
+        "providerSubmitRequestState": { "const": "pending_action_time_confirmation" }
+      }
+    },
+    "actionTimeConfirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "userConfirmedAtActionTime"],
+      "properties": {
+        "required": { "const": true },
+        "userConfirmedAtActionTime": { "const": false },
+        "confirmationReceiptId": { "type": "string" },
+        "confirmationCapturedAt": { "type": "string" }
+      }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultLocked",
+        "actualExecutionAllowed",
+        "canSubmitProvider",
+        "providerSubmitAllowed",
+        "automaticSubmitAllowed",
+        "liveSubmitAllowed",
+        "externalNetworkIoAllowed",
+        "credentialMaterialAccessAllowed",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "noWorkerSpawn",
+        "noFileMutation",
+        "projectVibeMutationAllowed",
+        "maxConcurrency",
+        "maxAutoRetries"
+      ],
+      "properties": {
+        "defaultLocked": { "const": true },
+        "actualExecutionAllowed": { "const": false },
+        "canSubmitProvider": { "const": false },
+        "providerSubmitAllowed": { "type": "integer", "const": 0 },
+        "automaticSubmitAllowed": { "const": false },
+        "liveSubmitAllowed": { "const": false },
+        "externalNetworkIoAllowed": { "const": false },
+        "credentialMaterialAccessAllowed": { "const": false },
+        "noCredentialRead": { "const": true },
+        "noCredentialWrite": { "const": true },
+        "noWorkerSpawn": { "const": true },
+        "noFileMutation": { "const": true },
+        "projectVibeMutationAllowed": { "const": false },
+        "maxConcurrency": { "type": "integer", "const": 1 },
+        "maxAutoRetries": { "type": "integer", "const": 0 }
+      }
+    }
+  }
+}

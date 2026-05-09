@@ -2236,6 +2236,15 @@ function asString(value) {
   return typeof value === "string" && value.length ? value : undefined;
 }
 
+function asBoolean(value) {
+  if (value === true || value === false) return value;
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes"].includes(normalized)) return true;
+  if (["0", "false", "no"].includes(normalized)) return false;
+  return undefined;
+}
+
 function uniqueStrings(values) {
   return [...new Set(values.filter((value) => typeof value === "string" && value.length))];
 }
@@ -2397,14 +2406,39 @@ function oneShotRequestInput(url, body) {
       ? [selectedShotId]
       : [];
   const imageCount = Number.isInteger(body?.imageCount) ? body.imageCount : Number.isInteger(receipt?.imageCount) ? receipt.imageCount : 1;
+  const maxProviderCallsRaw = asString(url.searchParams.get("maxProviderCallsPerReceipt"))
+    || requestBodyString(body, ["maxProviderCallsPerReceipt"])
+    || asString(receipt?.maxProviderCallsPerReceipt);
+  const maxProviderCallsPerReceipt = maxProviderCallsRaw
+    ? Number(maxProviderCallsRaw)
+    : Number.isInteger(body?.maxProviderCallsPerReceipt)
+      ? body.maxProviderCallsPerReceipt
+      : 1;
+  const bodyRequiresSubmitPermissionReceipt = asBoolean(body?.submitPermissionReceiptRequired)
+    ?? asBoolean(body?.requireSubmitPermissionReceipt);
+  const queryRequiresSubmitPermissionReceipt = asBoolean(url.searchParams.get("submitPermissionReceiptRequired"))
+    ?? asBoolean(url.searchParams.get("requireSubmitPermissionReceipt"));
+  const credentialRefProvided = url.searchParams.has("credentialRef")
+    || (isRecord(body) && Object.prototype.hasOwnProperty.call(body, "credentialRef"));
+  const credentialRef = asString(url.searchParams.get("credentialRef"))
+    || requestBodyString(body, ["credentialRef"])
+    || asString(receipt?.credentialRef);
   return {
     selectedShotId,
     selectedShotIds,
     imageCount,
     expectedOutputPath: requestBodyString(body, ["expectedOutputPath", "outputPath"]) || asString(receipt?.expectedOutputPath),
+    expectedOutputs: Array.isArray(body?.expectedOutputs) ? body.expectedOutputs : undefined,
+    credentialRef,
+    credentialRefProvided,
+    maxProviderCallsPerReceipt,
+    submitPermissionReceiptRequired: queryRequiresSubmitPermissionReceipt ?? bodyRequiresSubmitPermissionReceipt ?? false,
+    actionTimeConfirmation: isRecord(body?.actionTimeConfirmation) ? body.actionTimeConfirmation : undefined,
     receipt,
     transportMode: requestedTransportMode,
     requestedTransportMode,
+    rawBody: isRecord(body) ? body : {},
+    rawQuery: Object.fromEntries(url.searchParams.entries()),
   };
 }
 
@@ -2449,7 +2483,7 @@ function oneShotQaChecklist(shotId) {
 const oneShotTransportModes = new Set(currentProjectImage2TransportModes);
 const oneShotExecutorModes = new Set(["mock_executor", "dry_run_executor", "real_provider_call"]);
 const rawSecretValuePattern = /(^sk-[a-z0-9_-]{8,}|^bearer\s+|api[_-]?key=|private[_-]?key|raw-secret)/i;
-const secretKeyPattern = /(api[_-]?key|access[_-]?token|secret|password|bearer|credentialmaterial|rawcredential|private[_-]?key)/i;
+const secretKeyPattern = /(api[_-]?key|access[_-]?token|authorization|secret|password|bearer|credential|credentialmaterial|rawcredential|private[_-]?key)/i;
 
 function oneShotTransportMode(input) {
   return normalizeCurrentProjectImage2TransportMode(input.transportMode);
@@ -2513,6 +2547,7 @@ function oneShotStatePaths(shotRoot) {
     receiptStatePath: `${stateRoot}/prepare-receipt.json`,
     handoffStatePath: `${stateRoot}/handoff-packet.json`,
     triggerPlanStatePath: `${stateRoot}/trigger-plan.json`,
+    submitPermissionReceiptStatePath: `${stateRoot}/submit-permission-receipt.json`,
   };
 }
 
@@ -2674,6 +2709,7 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
   const persistedReceipt = oneShotStateJson(statePaths.receiptStatePath, statePaths.stateRoot, sandboxRoot);
   const persistedHandoff = oneShotStateJson(statePaths.handoffStatePath, statePaths.stateRoot, sandboxRoot);
   const persistedTriggerPlan = oneShotStateJson(statePaths.triggerPlanStatePath, statePaths.stateRoot, sandboxRoot);
+  const persistedSubmitPermissionReceipt = oneShotStateJson(statePaths.submitPermissionReceiptStatePath, statePaths.stateRoot, sandboxRoot);
   const persistedTransportMode = asString(input.receipt?.transportMode)
     || asString(persistedReceipt?.transportMode)
     || asString(persistedHandoff?.transportPlan?.mode);
@@ -2692,6 +2728,7 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
     qaReportPath,
     statePaths.receiptStatePath,
     statePaths.handoffStatePath,
+    statePaths.submitPermissionReceiptStatePath,
   ]
     .every((item) => oneShotPathInsideRoot(item, sandboxRoot));
   const oneShotOnly = selectedShotIds.length === 1 && selectedShotIds[0] === selectedShotId && input.imageCount === 1;
@@ -2755,6 +2792,7 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
       receiptStatePath: statePaths.receiptStatePath,
       handoffStatePath: statePaths.handoffStatePath,
       triggerPlanStatePath: statePaths.triggerPlanStatePath,
+      submitPermissionReceiptStatePath: statePaths.submitPermissionReceiptStatePath,
       outsideRootWriteAllowed: false,
     },
     lockedReferences: {
@@ -2956,16 +2994,22 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
     semanticQaPath,
     handoffPacketPath,
     statePaths,
+    submitPermissionReceiptStatePath: statePaths.submitPermissionReceiptStatePath,
     receipt: receiptForResponse,
     handoffPacket: handoffForResponse,
+    submitPermissionReceipt: isRecord(persistedSubmitPermissionReceipt) ? persistedSubmitPermissionReceipt : undefined,
     transportPlan,
     persistedState: {
       receiptPresent: persistedReceiptUsable || (action === "prepare" && confirmBlockers.length === 0) || confirmed,
       handoffPresent: persistedHandoffUsable || confirmed,
       triggerPlanPresent: persistedTriggerPlanUsable,
+      submitPermissionReceiptPresent: isRecord(persistedSubmitPermissionReceipt)
+        && persistedSubmitPermissionReceipt.receiptId === receipt.receiptId
+        && persistedSubmitPermissionReceipt.handoffId === `handoff_${receipt.receiptId}`,
       receiptStatePath: statePaths.receiptStatePath,
       handoffStatePath: statePaths.handoffStatePath,
       triggerPlanStatePath: statePaths.triggerPlanStatePath,
+      submitPermissionReceiptStatePath: statePaths.submitPermissionReceiptStatePath,
     },
     watcherProjection: {
       expectedOutputPath,
@@ -3059,7 +3103,26 @@ function currentProjectImage2OneShotPrepareTriggerResponse(input, extra = {}, so
     receiptStatePath: statePaths.receiptStatePath,
     handoffStatePath: statePaths.handoffStatePath,
   });
+  const projection = projectProjectionFromSource(source);
+  const shotPlans = Array.isArray(projection.projectFacts?.runManifest?.shotPlans) ? projection.projectFacts.runManifest.shotPlans : [];
+  const selectedShotPlan = shotPlans.find((shotPlan) => shotPlan?.shotId === transportPlan.selectedShotId) || {};
+  const providerId = asString(selectedShotPlan.providerId) || "openai-image2-api";
+  const providerSlot = asString(selectedShotPlan.providerSlot) || "image.generate";
+  const requiredMode = asString(selectedShotPlan.requiredMode) || "text2image";
+  const expectedOutputs = [
+    {
+      shotId: transportPlan.selectedShotId,
+      expectedOutputPath,
+      providerObservationPath,
+      semanticQaPath,
+    },
+  ];
+  const promptSha256 = promptPath && runtimePathExists(promptPath) ? sha256File(scopedRepoPath(promptPath)) : undefined;
   const pathSafe = oneShotExecutorPathInsideSandbox(triggerPlanPath, sandboxRoot, shotRoot);
+  const rawCredentialMaterialPresent = inspectForRawCredentialMaterial(input.rawBody) || inspectForRawCredentialMaterial(input.rawQuery);
+  const submitPermissionReceiptRequested = input.submitPermissionReceiptRequired === true
+    || input.credentialRefProvided === true
+    || Boolean(input.credentialRef);
   const blockers = uniqueStrings([
     isRecord(receipt) ? "" : "Persisted prepare receipt is required before trigger-plan.",
     isRecord(handoff) ? "" : "Persisted handoff packet is required before trigger-plan.",
@@ -3069,44 +3132,85 @@ function currentProjectImage2OneShotPrepareTriggerResponse(input, extra = {}, so
     transportPlan.transportModeAllowed ? "" : "Transport mode must be manual, codex_app_server, codex_cli, or disabled.",
     transportPlan.transportMode === "disabled" ? "Image2 transport mode is disabled for this request." : "",
     promptPath && promptText ? "" : "Prompt path and prompt text are required before trigger-plan.",
+    rawCredentialMaterialPresent ? "Raw credential material or credential-like keys are forbidden." : "",
+    submitPermissionReceiptRequested && !providerSubmitPermissionInputExpectedOutputsMatch(input.expectedOutputs, expectedOutputs) ? "Request expectedOutputs must match the prepared one-shot output paths." : "",
   ]);
+  const submitPermissionReceipt = buildProviderSubmitPermissionReceiptState({
+    generatedAt,
+    receiptId: transportPlan.receiptId,
+    handoffId: transportPlan.handoffId,
+    providerId,
+    providerSlot,
+    requiredMode,
+    selectedShotIds: transportPlan.selectedShotIds,
+    expectedOutputs,
+    credentialRef: input.credentialRef,
+    maxProviderCallsPerReceipt: input.maxProviderCallsPerReceipt,
+    actionTimeConfirmation: input.actionTimeConfirmation,
+    promptPath,
+    promptSha256,
+    promptSnapshotPath: promptPath,
+    rawBody: input.rawBody,
+    rawQuery: input.rawQuery,
+  });
+  const submitPermissionReceiptBlockers = submitPermissionReceiptRequested ? submitPermissionReceipt.blockers : [];
+  const submitPermissionReceiptReady = submitPermissionReceiptRequested
+    && submitPermissionReceiptBlockers.length === 0
+    && submitPermissionReceipt.status === "pending_action_time_confirmation";
+  const prepareTriggerBlockers = uniqueStrings([...blockers, ...submitPermissionReceiptBlockers]);
   const triggerManifest = {
     schemaVersion: "vibe_core_current_project_image2_one_shot_trigger_plan_v1",
     generatedAt,
-    status: blockers.length ? "blocked" : "trigger_plan_prepared",
+    status: prepareTriggerBlockers.length ? "blocked" : "trigger_plan_prepared",
     selectedShotId: transportPlan.selectedShotId,
     selectedShotIds: transportPlan.selectedShotIds,
     receiptId: transportPlan.receiptId,
     handoffId: transportPlan.handoffId,
+    providerId,
+    providerSlot,
+    requiredMode,
     promptPath,
+    promptSha256,
     promptText,
     expectedOutputPath,
+    expectedOutputs,
     providerObservationPath,
     semanticQaPath,
+    submitPermissionReceiptRequested,
+    submitPermissionReceipt: submitPermissionReceiptRequested ? submitPermissionReceipt : undefined,
+    submitPermissionReceiptStatePath: statePaths.submitPermissionReceiptStatePath,
+    submitPermissionReceiptPresent: false,
     forbiddenProviders: [...currentProjectImage2ForbiddenProviders],
     providerCallAllowed: false,
     actualExecutionAllowed: false,
     actionTimeConfirmationRequired: true,
+    providerSubmitAllowed: 0,
     transportPlan,
     instruction: transportPlan.clearInstruction,
     returnExecutorInstruction: transportPlan.returnExecutorInstruction,
     providerCalled: false,
     actualImage2Triggered: false,
+    runtimeProviderSubmitAttempted: false,
+    runtimeExternalNetworkCallMade: false,
     projectVibeWritten: false,
     workerSpawnForbidden: true,
-    blockers,
+    blockers: prepareTriggerBlockers,
   };
 
   let writeError;
-  if (blockers.length === 0) {
+  if (prepareTriggerBlockers.length === 0) {
     try {
+      triggerManifest.submitPermissionReceiptPresent = submitPermissionReceiptReady;
       writeOneShotExecutorJson(triggerPlanPath, triggerManifest, sandboxRoot, shotRoot);
       writeOneShotStateJson(statePaths.triggerPlanStatePath, triggerManifest, statePaths.stateRoot, sandboxRoot);
+      if (submitPermissionReceiptReady) {
+        writeOneShotStateJson(statePaths.submitPermissionReceiptStatePath, submitPermissionReceipt, statePaths.stateRoot, sandboxRoot);
+      }
     } catch (error) {
       writeError = error instanceof Error ? error.message : "Trigger plan write failed.";
     }
   }
-  const finalBlockers = uniqueStrings([...blockers, writeError]);
+  const finalBlockers = uniqueStrings([...prepareTriggerBlockers, writeError]);
   const ok = finalBlockers.length === 0;
 
   return {
@@ -3142,15 +3246,20 @@ function currentProjectImage2OneShotPrepareTriggerResponse(input, extra = {}, so
     receiptId: transportPlan.receiptId,
     handoffId: transportPlan.handoffId,
     promptPath,
+    promptSha256,
     promptText,
     expectedOutputPath,
+    expectedOutputs,
     providerObservationPath,
     semanticQaPath,
     triggerPlanPath,
+    submitPermissionReceiptStatePath: statePaths.submitPermissionReceiptStatePath,
     forbiddenProviders: [...currentProjectImage2ForbiddenProviders],
     statePaths,
     receipt,
     handoffPacket: handoff,
+    submitPermissionReceiptRequested,
+    submitPermissionReceipt: submitPermissionReceiptRequested ? submitPermissionReceipt : undefined,
     triggerManifest,
     transportPlan,
     commandPreview: transportPlan.commandPreview,
@@ -3159,9 +3268,11 @@ function currentProjectImage2OneShotPrepareTriggerResponse(input, extra = {}, so
       receiptPresent: isRecord(receipt),
       handoffPresent: isRecord(handoff),
       triggerPlanPresent: ok && runtimePathExists(triggerPlanPath),
+      submitPermissionReceiptPresent: ok && submitPermissionReceiptReady && runtimePathExists(statePaths.submitPermissionReceiptStatePath),
       receiptStatePath: statePaths.receiptStatePath,
       handoffStatePath: statePaths.handoffStatePath,
       triggerPlanStatePath: statePaths.triggerPlanStatePath,
+      submitPermissionReceiptStatePath: statePaths.submitPermissionReceiptStatePath,
     },
     watcherProjection: {
       expectedOutputPath,
@@ -3188,6 +3299,7 @@ function currentProjectImage2OneShotPrepareTriggerResponse(input, extra = {}, so
       realProviderCallAllowed: false,
       manualTransportRequired: true,
       actionTimeConfirmationRequired: true,
+      providerSubmitRequestState: "pending_action_time_confirmation",
       dryRunOnly: true,
       noWorkerSpawn: true,
       projectVibeMutationAllowed: false,
@@ -3216,6 +3328,146 @@ function inspectForRawCredentialMaterial(value) {
     if (key !== "credentialRef" && secretKeyPattern.test(key)) return true;
     return inspectForRawCredentialMaterial(child);
   });
+}
+
+const providerSubmitPermissionReceiptSchemaVersion = "0.1.0";
+const providerSubmitPermissionHardLocks = {
+  defaultLocked: true,
+  actualExecutionAllowed: false,
+  canSubmitProvider: false,
+  providerSubmitAllowed: 0,
+  automaticSubmitAllowed: false,
+  liveSubmitAllowed: false,
+  externalNetworkIoAllowed: false,
+  credentialMaterialAccessAllowed: false,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noWorkerSpawn: true,
+  noFileMutation: true,
+  projectVibeMutationAllowed: false,
+  maxConcurrency: 1,
+  maxAutoRetries: 0,
+};
+
+function providerSubmitPermissionExpectedOutputsMatch(selectedShotIds, expectedOutputs) {
+  if (!Array.isArray(selectedShotIds) || !Array.isArray(expectedOutputs)) return false;
+  if (selectedShotIds.length < 1 || selectedShotIds.length > 3) return false;
+  if (new Set(selectedShotIds).size !== selectedShotIds.length) return false;
+  if (expectedOutputs.length !== selectedShotIds.length) return false;
+  return expectedOutputs.every((item) =>
+    isRecord(item)
+    && selectedShotIds.includes(item.shotId)
+    && Boolean(asString(item.expectedOutputPath))
+    && Boolean(asString(item.providerObservationPath))
+    && Boolean(asString(item.semanticQaPath))
+  );
+}
+
+function providerSubmitPermissionInputExpectedOutputsMatch(inputExpectedOutputs, expectedOutputs) {
+  if (!Array.isArray(inputExpectedOutputs) || inputExpectedOutputs.length === 0) return true;
+  if (inputExpectedOutputs.length !== expectedOutputs.length) return false;
+  return inputExpectedOutputs.every((item) => {
+    if (!isRecord(item)) return false;
+    const expected = expectedOutputs.find((candidate) => candidate.shotId === item.shotId);
+    return Boolean(expected)
+      && (!item.expectedOutputPath || item.expectedOutputPath === expected.expectedOutputPath)
+      && (!item.providerObservationPath || item.providerObservationPath === expected.providerObservationPath)
+      && (!item.semanticQaPath || item.semanticQaPath === expected.semanticQaPath);
+  });
+}
+
+function buildProviderSubmitPermissionReceiptState({
+  generatedAt,
+  receiptId,
+  handoffId,
+  providerId,
+  providerSlot,
+  requiredMode,
+  selectedShotIds,
+  expectedOutputs,
+  credentialRef,
+  maxProviderCallsPerReceipt,
+  actionTimeConfirmation,
+  promptPath,
+  promptSha256,
+  promptSnapshotPath,
+  rawBody,
+  rawQuery,
+}) {
+  const normalizedSelectedShotIds = Array.isArray(selectedShotIds)
+    ? selectedShotIds.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim())
+    : [];
+  const normalizedExpectedOutputs = Array.isArray(expectedOutputs)
+    ? expectedOutputs.map((item) => ({
+      shotId: asString(item?.shotId) || "",
+      expectedOutputPath: asString(item?.expectedOutputPath) || "",
+      providerObservationPath: asString(item?.providerObservationPath) || "",
+      semanticQaPath: asString(item?.semanticQaPath) || "",
+    }))
+    : [];
+  const ref = asString(credentialRef) || "";
+  const blockers = uniqueStrings([
+    receiptId ? "" : "Submit permission receipt requires a prepare receipt id.",
+    handoffId ? "" : "Submit permission receipt requires a handoff id.",
+    providerId ? "" : "Submit permission receipt requires providerId.",
+    providerSlot ? "" : "Submit permission receipt requires providerSlot.",
+    requiredMode ? "" : "Submit permission receipt requires requiredMode.",
+    normalizedSelectedShotIds.length >= 1 && normalizedSelectedShotIds.length <= 3 ? "" : "Submit permission receipt supports only 1-3 selected shots.",
+    new Set(normalizedSelectedShotIds).size === normalizedSelectedShotIds.length ? "" : "Submit permission receipt selectedShotIds must be unique.",
+    providerSubmitPermissionExpectedOutputsMatch(normalizedSelectedShotIds, normalizedExpectedOutputs) ? "" : "Submit permission expectedOutputs must match selectedShotIds.",
+    ref ? "" : "credentialRef is required and must be an opaque reference.",
+    rawSecretValuePattern.test(ref) ? "credentialRef must not contain raw credential material." : "",
+    Number(maxProviderCallsPerReceipt) === 1 ? "" : "maxProviderCallsPerReceipt must equal 1.",
+    inspectForRawCredentialMaterial(rawBody) || inspectForRawCredentialMaterial(rawQuery) ? "Raw credential material or credential-like keys are forbidden." : "",
+  ]);
+  return {
+    schemaVersion: providerSubmitPermissionReceiptSchemaVersion,
+    generatedAt,
+    receiptId,
+    handoffId,
+    status: blockers.length ? "blocked" : "pending_action_time_confirmation",
+    blockers,
+    providerId,
+    providerSlot,
+    requiredMode,
+    selectedShotIds: normalizedSelectedShotIds,
+    expectedOutputs: normalizedExpectedOutputs,
+    credential: {
+      credentialRef: ref,
+      authorizedReferenceOnly: true,
+      secretMaterialPresent: false,
+      credentialMaterialStored: false,
+      credentialMaterialRead: false,
+    },
+    submitIntent: {
+      providerId,
+      providerSlot,
+      requiredMode,
+      maxProviderCallsPerReceipt: 1,
+      providerSubmitAllowed: 0,
+      providerSubmitRequestState: "pending_action_time_confirmation",
+    },
+    actionTimeConfirmationRequired: true,
+    actionTimeConfirmation: {
+      required: true,
+      userConfirmedAtActionTime: false,
+      confirmationReceiptId: asString(actionTimeConfirmation?.confirmationReceiptId),
+      confirmationCapturedAt: asString(actionTimeConfirmation?.confirmationCapturedAt),
+    },
+    promptPath,
+    promptSha256,
+    promptSnapshotPath,
+    maxProviderCallsPerReceipt: 1,
+    providerCalled: false,
+    runtimeProviderSubmitAttempted: false,
+    runtimeExternalNetworkCallMade: false,
+    projectVibeWritten: false,
+    hardLocks: providerSubmitPermissionHardLocks,
+    notes: [
+      "This is a state-only provider submit permission receipt.",
+      "Provider submit, credential material reads, external network IO, workers, and project.vibe mutation remain locked.",
+    ],
+  };
 }
 
 function sha256Bytes(bytes) {

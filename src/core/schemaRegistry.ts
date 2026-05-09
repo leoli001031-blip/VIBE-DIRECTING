@@ -164,6 +164,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "ProviderExecutionHandoffState",
   },
   {
+    fileName: "provider_submit_permission_receipt.schema.json",
+    id: "https://vibecore.local/schemas/provider_submit_permission_receipt.schema.json",
+    version: schemaVersion,
+    purpose: "Small-batch provider submit permission receipt that stores only opaque credential references and pending action-time intent while submit, credential material, network IO, workers, and file mutation remain locked off.",
+    typeName: "ProviderSubmitPermissionReceiptState",
+  },
+  {
     fileName: "provider_closed_loop_shell.schema.json",
     id: "https://vibecore.local/schemas/provider_closed_loop_shell.schema.json",
     version: schemaVersion,
