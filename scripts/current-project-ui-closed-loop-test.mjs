@@ -186,6 +186,7 @@ const {
   projectRuntimeRequestPath,
   projectRealChainRunCheckEndpoint,
   projectRealChainStatusEndpoint,
+  projectRound5StrictEditReturnEndpoint,
   runProjectImage2BatchCheck,
   runProjectRealChainCheck,
   selectCurrentProjectBinding,
@@ -198,11 +199,23 @@ const {
 assertCreatorPanelContract();
 
 const currentEndpoint = "/api/runtime/projects/current/real-chain/status";
+const round5StrictEditReturnEndpoint = "/api/runtime/projects/current/round5/strict-edit/return";
+assert(
+  projectRound5StrictEditReturnEndpoint === round5StrictEditReturnEndpoint,
+  "formal runtime client must expose the Round 5 strict-edit return endpoint",
+);
 const queryPath = projectRuntimeRequestPath(currentEndpoint, {
   projectId: "最后一班星图",
   projectRoot: "/Users/lichenhao/Desktop/Vibe Director/runtime-tests/full_generation_10shot_two_act_20260429",
 });
 assert(queryPath === currentEndpoint, "current project requests must not carry project id/root query params");
+assert(
+  projectRuntimeRequestPath(projectRound5StrictEditReturnEndpoint, {
+    projectId: "round5_zero_planning_anime_signal",
+    projectRoot: "real-test-sandbox/round5-zero-project-planning-anime/runs/run-2026-05-09T11-09-28-642Z",
+  }) === round5StrictEditReturnEndpoint,
+  "Round 5 strict-edit return requests must use the current-project endpoint without 005 sample query params",
+);
 
 function currentProjectBindingResponse(project) {
   return {

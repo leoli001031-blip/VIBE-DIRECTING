@@ -19,6 +19,7 @@ export const projectCurrentChoicesEndpoint = `${projectRealChainRuntimeBasePath}
 export const projectRealChainStatusEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/status`;
 export const projectRealChainRunCheckEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/run-check`;
 export const projectRound5StrictEditPrepareEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/round5/strict-edit/prepare`;
+export const projectRound5StrictEditReturnEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/round5/strict-edit/return`;
 export const projectImage2BatchPlanEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-batch/plan`;
 export const projectImage2BatchRunCheckEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-batch/run-check`;
 export const projectImage2OneShotStatusEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/status`;
@@ -59,9 +60,19 @@ export type ProjectRealChainPreviewItem = {
 
 export type ProjectRound5ShotGate = {
   shotId: string;
+  taskRunId?: string;
   gateStatus?: string;
   ledgerStatus?: string;
   nextAction?: string;
+  startFramePath?: string;
+  startFrameSha256?: string;
+  startExists?: boolean;
+  startQaStatus?: string;
+  endRequired?: boolean;
+  endFramePath?: string;
+  endExists?: boolean;
+  endFrameSha256?: string;
+  strictEditPreflightStatus?: string;
   strictEditPilotCandidate: boolean;
   blockers: string[];
   warnings: string[];
@@ -360,6 +371,45 @@ export type ProjectRound5StrictEditPreflightStatus = {
 export type ProjectRound5StrictEditPreflightUiState = {
   status: ProjectRound5StrictEditPreflightUiStatus;
   summary?: ProjectRound5StrictEditPreflightStatus;
+  message?: string;
+};
+
+export type ProjectRound5StrictEditReturnUiStatus = "needs_review" | "blocked" | "running" | "unavailable";
+
+export type ProjectRound5StrictEditReturnRequest = {
+  shotId: string;
+  selectedShotId?: string;
+  returnedOutputPath?: string;
+  returnedProviderObservationPath?: string;
+  returnedSemanticQaPath?: string;
+  providerRequestId?: string;
+  actualProviderReturned?: boolean;
+  providerObservation?: Record<string, unknown>;
+  semanticQa?: Record<string, unknown>;
+};
+
+export type ProjectRound5StrictEditReturnStatus = {
+  uiStatus: ProjectRound5StrictEditReturnUiStatus;
+  shotId?: string;
+  expectedOutputPath?: string;
+  returnedOutputPath?: string;
+  outputSha256?: string;
+  providerObservationPath?: string;
+  semanticQaPath?: string;
+  pairQaPath?: string;
+  strictEditReturnIngestRan: boolean;
+  providerCalled: boolean;
+  actualImage2Triggered: boolean;
+  projectVibeWritten: boolean;
+  workerSpawnForbidden: boolean;
+  shotGate?: ProjectRound5ShotGate;
+  blockers: string[];
+  message?: string;
+};
+
+export type ProjectRound5StrictEditReturnUiState = {
+  status: ProjectRound5StrictEditReturnUiStatus;
+  summary?: ProjectRound5StrictEditReturnStatus;
   message?: string;
 };
 
@@ -750,6 +800,28 @@ function payloadFromUnknown(payload: unknown): ProjectRealChainPayload | undefin
   return undefined;
 }
 
+function normalizeRound5ShotGate(shot: Record<string, unknown>, index: number): ProjectRound5ShotGate {
+  return {
+    shotId: typeof shot.shotId === "string" && shot.shotId.trim() ? shot.shotId : `ZP${String(index + 1).padStart(2, "0")}`,
+    taskRunId: typeof shot.taskRunId === "string" ? shot.taskRunId : undefined,
+    gateStatus: typeof shot.gateStatus === "string" ? shot.gateStatus : undefined,
+    ledgerStatus: typeof shot.ledgerStatus === "string" ? shot.ledgerStatus : undefined,
+    nextAction: typeof shot.nextAction === "string" ? shot.nextAction : undefined,
+    startFramePath: typeof shot.startFramePath === "string" ? shot.startFramePath : undefined,
+    startFrameSha256: typeof shot.startFrameSha256 === "string" ? shot.startFrameSha256 : undefined,
+    startExists: typeof shot.startExists === "boolean" ? shot.startExists : undefined,
+    startQaStatus: typeof shot.startQaStatus === "string" ? shot.startQaStatus : undefined,
+    endRequired: typeof shot.endRequired === "boolean" ? shot.endRequired : undefined,
+    endFramePath: typeof shot.endFramePath === "string" ? shot.endFramePath : undefined,
+    endExists: typeof shot.endExists === "boolean" ? shot.endExists : undefined,
+    endFrameSha256: typeof shot.endFrameSha256 === "string" ? shot.endFrameSha256 : undefined,
+    strictEditPreflightStatus: typeof shot.strictEditPreflightStatus === "string" ? shot.strictEditPreflightStatus : undefined,
+    strictEditPilotCandidate: shot.strictEditPilotCandidate === true,
+    blockers: stringArray(shot.blockers),
+    warnings: stringArray(shot.warnings),
+  };
+}
+
 function deriveRound5GateSummary(payload: ProjectRealChainPayload): ProjectRound5GateSummary | undefined {
   const ingest = isRecord(payload.round5ArtifactIngest)
     ? payload.round5ArtifactIngest
@@ -761,15 +833,7 @@ function deriveRound5GateSummary(payload: ProjectRealChainPayload): ProjectRound
   if (!ingest) return undefined;
 
   const shotGateMatrix = Array.isArray(ingest.shotGateMatrix)
-    ? ingest.shotGateMatrix.filter(isRecord).map((shot, index): ProjectRound5ShotGate => ({
-      shotId: typeof shot.shotId === "string" && shot.shotId.trim() ? shot.shotId : `ZP${String(index + 1).padStart(2, "0")}`,
-      gateStatus: typeof shot.gateStatus === "string" ? shot.gateStatus : undefined,
-      ledgerStatus: typeof shot.ledgerStatus === "string" ? shot.ledgerStatus : undefined,
-      nextAction: typeof shot.nextAction === "string" ? shot.nextAction : undefined,
-      strictEditPilotCandidate: shot.strictEditPilotCandidate === true,
-      blockers: stringArray(shot.blockers),
-      warnings: stringArray(shot.warnings),
-    }))
+    ? ingest.shotGateMatrix.filter(isRecord).map(normalizeRound5ShotGate)
     : [];
   if (!shotGateMatrix.length && !isRecord(ingest.uiSummary)) return undefined;
 
@@ -895,8 +959,9 @@ function deriveUiStatus(payload: ProjectRealChainPayload): ProjectRealChainUiSta
     const gateStatus = String(shot.gateStatus || "").toLowerCase();
     return shot.blockers.length > 0 || gateStatus.includes("blocked") || gateStatus.includes("required");
   }) === true;
+  const round5ReturnedNeedsReview = round5Gate?.shotGateMatrix.some((shot) => shot.gateStatus === "end_returned_needs_review") === true;
   if (round5UiStatus === "blocked" || round5ShotBlockers) return "blocked";
-  if (round5UiStatus === "needs_review") return "needs_review";
+  if (round5UiStatus === "needs_review" || round5ReturnedNeedsReview) return "needs_review";
 
   const raw = [payload.status, payload.previewStatus, payload.productionStatus].filter(Boolean).join(" ").toLowerCase();
   const blockers = stringArray(payload.blockers);
@@ -1226,6 +1291,35 @@ function deriveRound5StrictEditPreflightStatus(payload: unknown, requestedShotId
   };
 }
 
+export function deriveRound5StrictEditReturnStatus(payload: unknown, requestedShotId?: string): ProjectRound5StrictEditReturnStatus {
+  const report = isRecord(payload) ? payload : {};
+  const status = String(report.uiStatus || report.status || "").toLowerCase();
+  const blockers = stringArray(report.blockers);
+  const shotGate = isRecord(report.shotGate) ? normalizeRound5ShotGate(report.shotGate, 0) : undefined;
+  const returned = report.ok === true
+    && blockers.length === 0
+    && (status.includes("needs_review") || shotGate?.gateStatus === "end_returned_needs_review");
+
+  return {
+    uiStatus: returned ? "needs_review" : blockers.length > 0 ? "blocked" : "blocked",
+    shotId: stringOrUndefined(report.shotId) || shotGate?.shotId || requestedShotId,
+    expectedOutputPath: stringOrUndefined(report.expectedOutputPath),
+    returnedOutputPath: stringOrUndefined(report.returnedOutputPath),
+    outputSha256: stringOrUndefined(report.outputSha256) || shotGate?.endFrameSha256,
+    providerObservationPath: stringOrUndefined(report.providerObservationPath),
+    semanticQaPath: stringOrUndefined(report.semanticQaPath),
+    pairQaPath: stringOrUndefined(report.pairQaPath),
+    strictEditReturnIngestRan: report.strictEditReturnIngestRan === true,
+    providerCalled: report.providerCalled === true || report.actualProviderCalled === true,
+    actualImage2Triggered: report.actualImage2Triggered === true,
+    projectVibeWritten: report.projectVibeWritten === true,
+    workerSpawnForbidden: report.workerSpawnForbidden !== false,
+    shotGate,
+    blockers,
+    message: stringOrUndefined(report.message),
+  };
+}
+
 async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
   const response = await fetch(toRuntimeUrl(url), runtimeRequestInit(init));
   if (!response.ok) throw new Error(`${url} returned ${response.status}`);
@@ -1364,6 +1458,29 @@ export async function prepareProjectRound5StrictEditPreflight(
     return { status: summary.uiStatus, summary, message: summary.message };
   } catch {
     return { status: "blocked", message: "edit 证据准备失败，请等待 runtime endpoint 合入或检查 sidecar。" };
+  }
+}
+
+export async function ingestProjectRound5StrictEditReturn(
+  expected: ProjectRuntimeIdentity | undefined,
+  request: ProjectRound5StrictEditReturnRequest,
+): Promise<ProjectRound5StrictEditReturnUiState> {
+  if (!hasProjectRuntimeIdentity(expected)) return { status: "unavailable", message: "未选择项目/未同步。" };
+  if (!request.shotId) return { status: "blocked", message: "请先选择镜头。" };
+
+  try {
+    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectRound5StrictEditReturnEndpoint, expected), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...request,
+        selectedShotId: request.selectedShotId || request.shotId,
+      }),
+    });
+    const summary = deriveRound5StrictEditReturnStatus(payload, request.shotId);
+    return { status: summary.uiStatus, summary, message: summary.message };
+  } catch {
+    return { status: "blocked", message: "真实 end 回流接收失败，请检查返回文件、providerRequestId 和 preflight sidecar。" };
   }
 }
 

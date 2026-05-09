@@ -1088,6 +1088,16 @@
   font-size: 11px;
 }
 
+.project-real-chain-policy.round5-end-return.waiting small {
+  border-color: rgba(57, 101, 126, 0.18);
+  background: rgba(57, 101, 126, 0.05);
+}
+
+.project-real-chain-policy.round5-end-return.returned small {
+  border-color: rgba(46, 118, 88, 0.2);
+  background: rgba(46, 118, 88, 0.06);
+}
+
 .project-real-chain-policy button {
   display: inline-flex;
   flex: 0 0 auto;

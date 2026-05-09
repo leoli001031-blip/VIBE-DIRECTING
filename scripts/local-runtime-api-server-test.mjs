@@ -473,6 +473,7 @@ try {
   assert(runtimeStatus.payload.endpoints?.currentProjectImage2OneShotPrepareEndpoint === "/api/runtime/projects/current/image2-one-shot/prepare", "runtime status should expose one-shot prepare endpoint");
   assert(runtimeStatus.payload.endpoints?.currentProjectImage2OneShotConfirmEndpoint === "/api/runtime/projects/current/image2-one-shot/confirm", "runtime status should expose one-shot confirm endpoint");
   assert(runtimeStatus.payload.endpoints?.currentProjectRound5StrictEditPrepareEndpoint === "/api/runtime/projects/current/round5/strict-edit/prepare", "runtime status should expose Round 5 strict edit prepare endpoint");
+  assert(runtimeStatus.payload.endpoints?.currentProjectRound5StrictEditReturnEndpoint === "/api/runtime/projects/current/round5/strict-edit/return", "runtime status should expose Round 5 strict edit return endpoint");
 
   const trustedOrigin = "http://127.0.0.1:5176";
   const trustedStatus = await fetchJson(`${baseUrl}/api/runtime/status`, {
@@ -521,6 +522,7 @@ try {
     ["POST current image2 one-shot prepare", `${baseUrl}/api/runtime/projects/current/image2-one-shot/prepare`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ selectedShotId: "S01", selectedShotIds: ["S01"], imageCount: 1 }) }],
     ["POST current image2 one-shot confirm", `${baseUrl}/api/runtime/projects/current/image2-one-shot/confirm`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ selectedShotId: "S01", selectedShotIds: ["S01"], imageCount: 1 }) }],
     ["POST current Round 5 strict edit prepare", `${baseUrl}/api/runtime/projects/current/round5/strict-edit/prepare`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ shotId: "ZP05" }) }],
+    ["POST current Round 5 strict edit return", `${baseUrl}/api/runtime/projects/current/round5/strict-edit/return`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ shotId: "ZP05" }) }],
   ]) {
     const result = await fetchJson(url, init);
     assert(result.response.status === 409, `${label} should return 409 while unbound`);
@@ -611,6 +613,29 @@ try {
       strictZp05Ready: true,
     });
     assert(statSync(round5VibePath).mtimeMs === round5VibeBeforeStatusRead, "GET Round 5 strict edit status must not mutate project.vibe");
+
+    const promptOnlyStrictEdit = await fetchJson(`${baseUrl}/api/runtime/projects/current/round5/strict-edit/return`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        shotId: "ZP05",
+        actualProviderReturned: false,
+        providerRequestId: "prompt-only-provider-request-must-not-promote",
+        providerObservation: {
+          provider: "prompt-only-fixture",
+          prompt: "A textual end-frame description without a returned Image2 edit artifact.",
+        },
+      }),
+    });
+    assert(promptOnlyStrictEdit.response.status === 409, "prompt-only strict edit return should fail closed");
+    assert(promptOnlyStrictEdit.payload.blockers.includes("actual_provider_return_required"), "prompt-only strict edit return should require actual provider return");
+    assert(promptOnlyStrictEdit.payload.blockers.includes("returned_output_missing"), "prompt-only strict edit return should require a returned output file");
+    assert(promptOnlyStrictEdit.payload.providerCalled === false, "prompt-only strict edit return must not mark providerCalled");
+    assert(promptOnlyStrictEdit.payload.strictEditReturnIngestRan === false, "prompt-only strict edit return must not ingest artifacts");
+    for (const sidecarPath of round5Zp05StrictEditReturnSidecars) {
+      assert(!existsSync(sidecarPath), `prompt-only strict edit return must not write ${sidecarPath}`);
+    }
+    assert(statSync(round5VibePath).mtimeMs === round5VibeBeforeStatusRead, "prompt-only strict edit return must not mutate project.vibe");
 
     const externalReturnedEndPath = `${round5Root}/external_provider_returns/ZP05/end.png`;
     mkdirSync(path.dirname(externalReturnedEndPath), { recursive: true });

@@ -74,11 +74,13 @@ const round5ArtifactIngest = {
     },
     {
       shotId: "ZP05",
-      gateStatus: "end_edit_preflight_blocked",
-      ledgerStatus: "provider_observed",
-      nextAction: "collect_strict_edit_provenance",
+      gateStatus: "end_returned_needs_review",
+      ledgerStatus: "needs_review",
+      nextAction: "review_strict_edit_end_frame",
       strictEditPilotCandidate: true,
-      blockers: ["missing_inputSha256", "missing_providerRequestId"],
+      endExists: true,
+      endFrameSha256: "sha256:round5-zp05-returned-end",
+      blockers: [],
       warnings: [],
     },
     {
@@ -94,7 +96,8 @@ const round5ArtifactIngest = {
   ledgerProjection: {
     total: 6,
     completeVerified: 0,
-    endEditPreflightBlocked: 2,
+    endEditPreflightBlocked: 1,
+    endReturnedNeedsReview: 1,
   },
   assetGateSummary: {
     total: 6,
@@ -132,7 +135,13 @@ assert(status.returnedImageCount === 6, `returnedImageCount should stay 6, got $
 assert(status.totalPlannedImages === 6, `totalPlannedImages should stay 6, got ${status.totalPlannedImages}`);
 assert(byShot.get("ZP04").nextAction === "regenerate_start_frame", "ZP04 nextAction should be preserved");
 assert(byShot.get("ZP05").strictEditPilotCandidate === true, "ZP05 strictEditPilotCandidate should be preserved");
-assert(status.round5Gate.ledgerProjection.endEditPreflightBlocked === 2, "ledgerProjection should be preserved");
+assert(byShot.get("ZP05").gateStatus === "end_returned_needs_review", "ZP05 returned end gate status should be exposed");
+assert(byShot.get("ZP05").ledgerStatus === "needs_review", "ZP05 returned end ledger status should be exposed");
+assert(byShot.get("ZP05").nextAction === "review_strict_edit_end_frame", "ZP05 returned end next action should be exposed");
+assert(byShot.get("ZP05").endExists === true, "ZP05 returned end existence should be exposed");
+assert(byShot.get("ZP05").endFrameSha256 === "sha256:round5-zp05-returned-end", "ZP05 returned end hash should be exposed");
+assert(status.round5Gate.ledgerProjection.endEditPreflightBlocked === 1, "ledgerProjection should preserve remaining blocked count");
+assert(status.round5Gate.ledgerProjection.endReturnedNeedsReview === 1, "ledgerProjection should preserve returned needs-review count");
 
 const topLevelStatus = deriveProjectRealChainStatus({
   projectId: "round5-zero-project-planning-anime",

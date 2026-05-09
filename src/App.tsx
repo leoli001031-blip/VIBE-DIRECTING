@@ -7796,10 +7796,49 @@ function projectRound5GateLabels(summary: ProjectRealChainPanelState["summary"])
   });
 
   if (zp04?.nextAction && zp04.nextAction !== "none") labels.push("ZP04 重生 start");
-  if (zp05?.gateStatus === "end_edit_preflight_ready") labels.push("ZP05 edit 就绪");
+  if (zp05?.gateStatus === "end_returned_needs_review") labels.push("ZP05 end 待复核");
+  else if (zp05?.gateStatus === "end_edit_preflight_ready" || zp05?.nextAction === "submit_strict_image_edit") labels.push("ZP05 等待 end 回流");
   else if (zp05?.strictEditPilotCandidate) labels.push("ZP05 可做 edit pilot");
   if (endBlocked) labels.push("End 缺证据");
   return labels;
+}
+
+function projectRound5EndReturnState(summary: ProjectRealChainPanelState["summary"]) {
+  const shots = summary?.round5Gate?.shotGateMatrix || [];
+  const returnedShot = shots.find((shot) => (
+    shot.gateStatus === "end_returned_needs_review"
+    || (shot.endExists === true && Boolean(shot.endFrameSha256))
+  ));
+  if (returnedShot) {
+    const hash = returnedShot.endFrameSha256 ? `${returnedShot.endFrameSha256.slice(0, 18)}…` : "hash-bound";
+    return {
+      status: "returned" as const,
+      shotId: returnedShot.shotId,
+      label: "End 已回流，待复核",
+      detail: `${returnedShot.shotId} · ${hash}`,
+    };
+  }
+
+  const waitingShot = shots.find((shot) => (
+    shot.gateStatus === "end_edit_preflight_ready"
+    || shot.nextAction === "submit_strict_image_edit"
+    || shot.strictEditPreflightStatus === "ready_for_provider_edit"
+  ));
+  if (waitingShot) {
+    return {
+      status: "waiting" as const,
+      shotId: waitingShot.shotId,
+      label: "等待真实 end 回流",
+      detail: `${waitingShot.shotId} · 状态同步只读，不触发 provider`,
+    };
+  }
+
+  return {
+    status: "none" as const,
+    shotId: undefined,
+    label: "未到回流阶段",
+    detail: "等待 strict edit preflight",
+  };
 }
 
 function projectRound5StrictEditTargetShotId(summary: ProjectRealChainPanelState["summary"], selectedShotId: string) {
@@ -7905,9 +7944,12 @@ function ProjectRealChainPanel({
   const round5GateLabels = projectRound5GateLabels(summary);
   const strictEditTargetShotId = projectRound5StrictEditTargetShotId(summary, selectedShotId);
   const zp05Gate = summary?.round5Gate?.shotGateMatrix.find((shot) => shot.shotId === "ZP05");
+  const round5EndReturn = projectRound5EndReturnState(summary);
   const showStrictEditPreflight = projectBound
     && zp05Gate?.strictEditPilotCandidate === true
+    && round5EndReturn.status === "none"
     && zp05Gate.gateStatus !== "end_edit_preflight_ready";
+  const showRound5EndReturn = projectBound && round5EndReturn.status !== "none";
   const strictEditRunning = strictEditPreflightState.status === "running";
   const strictEditLabel = projectRound5StrictEditLabel(strictEditPreflightState);
   const previewLabel = projectPreviewReadyLabel(summary);
@@ -7998,6 +8040,16 @@ function ProjectRealChainPanel({
           >
             <Sparkles size={14} />
             {strictEditRunning ? "准备中" : "准备 edit 证据"}
+          </button>
+        </div>
+      )}
+      {showRound5EndReturn && (
+        <div className={`project-real-chain-policy round5-end-return ${round5EndReturn.status}`} aria-label="Round 5 strict edit return status">
+          <small>Round 5 end · {round5EndReturn.label}</small>
+          <small>{round5EndReturn.detail}</small>
+          <button disabled={running} onClick={onRun}>
+            <RefreshCw size={14} />
+            {running ? "同步中" : "刷新回流"}
           </button>
         </div>
       )}
