@@ -1325,8 +1325,11 @@ export function validateMotionEndpointHardContracts(input: ValidateMotionEndpoin
 
     if (contract.bodyMechanics.required === true) {
       const missingBodyMechanics = [
-        !contract.bodyMechanics.centerOfMass || contract.bodyMechanics.centerOfMass === "missing" ? "centerOfMass" : "",
-        !contract.bodyMechanics.footwork.length ? "footwork" : "",
+        (contract.motionType === "locomotion" || contract.motionType === "pose_change_in_place") &&
+        (!contract.bodyMechanics.centerOfMass || contract.bodyMechanics.centerOfMass === "missing")
+          ? "centerOfMass"
+          : "",
+        contract.motionType === "locomotion" && !contract.bodyMechanics.footwork.length ? "footwork" : "",
         !contract.bodyMechanics.contactPoints.length ? "contactPoints" : "",
       ].filter(Boolean);
       if (missingBodyMechanics.length > 0) {

@@ -101,6 +101,19 @@ assert(objectContract.editableRegions.some((region) => region.id === "hands_and_
 assert(objectContract.protectedRegions.length >= 2, "object interaction missing protected regions");
 assert(objectContract.status === "pass", `object interaction contract should pass, got ${objectContract.status}`);
 
+const headPoseContract = buildMotionEndpointContract({
+  generatedAt: "2026-05-09T00:00:00.000Z",
+  shot: shot({
+    id: "S_head_pose",
+    title: "Seated character lifts his chin toward the rainy window reflection",
+    storyFunction: "Head and eye-line shift while the seated body remains anchored at the table; pen hand can relax minimally.",
+  }),
+  keyframePair: keyframePair({ shotId: "S_head_pose" }),
+});
+assert(headPoseContract.motionType === "pose_change_in_place", "head/eye-line motion should not be misclassified as object interaction");
+assert(headPoseContract.bodyMechanics.centerOfMass === "specified", "anchored seated pose change should carry body anchor evidence");
+assert(headPoseContract.bodyMechanics.contactPoints.length > 0, "anchored pose change should include contact/body anchor evidence");
+
 const bboxOnlyLocomotion = buildMotionEndpointContract({
   generatedAt: "2026-05-09T00:00:00.000Z",
   shot: shot({

@@ -66,8 +66,19 @@ export function classifyMotionType(text: string): MotionType {
 
   if (
     hasAny(normalized, [
-      /\b(grab|grabs|pick up|picks up|hold|holds|touch|touches|open|opens|close|closes|pour|pours|hand(?:s)? over|interact|prop)\b/,
-      /拿起|抓住|握住|触碰|打开|关闭|倒入|递给|交互|道具|手部/,
+      /\b(walk|walks|walking|run|runs|running|step|steps|stride|strides|cross|crosses|enter|enters|exit|exits|leave|leaves|locomotion)\b/,
+      /走|跑|步行|迈步|跨步|穿过|进入|离开|移动到/,
+    ])
+  ) {
+    return "locomotion";
+  }
+
+  if (
+    hasAny(normalized, [
+      /\b(grab|grabs|pick up|picks up|hold|holds|touch|touches|pour|pours|hand(?:s)? over|point|points|pointing|finger|fingers|interact|prop)\b/,
+      /\b(?:open|opens|opened|opening|close|closes|closed|closing)\s+(?:door|gate|handle|lid|box|drawer|window)\b/,
+      /\b(?:door|gate|lid|drawer|window)\s+(?:open|opens|opened|opening|close|closes|closed|closing)\b/,
+      /拿起|抓住|握住|触碰|打开|关闭|倒入|递给|指向|手指|交互|道具/,
     ])
   ) {
     return "object_interaction";
@@ -75,11 +86,11 @@ export function classifyMotionType(text: string): MotionType {
 
   if (
     hasAny(normalized, [
-      /\b(walk|walks|walking|run|runs|running|step|steps|stride|strides|cross|crosses|enter|enters|exit|exits|leave|leaves|locomotion)\b/,
-      /走|跑|步行|迈步|跨步|穿过|进入|离开|移动到/,
+      /\b(pose change|changes pose|turn|turns|lean|leans|sit|sits|stand|stands|raise hand|raises hand|head (?:tilt|tilts|turn|turns|lift|lifts|raise|raises)|chin|eye line|gaze shift|gesture)\b/,
+      /姿态|转身|倾斜|坐下|站起|举手|抬手|抬头|转头|眼神|视线|动作变化|手势/,
     ])
   ) {
-    return "locomotion";
+    return "pose_change_in_place";
   }
 
   if (
@@ -93,15 +104,6 @@ export function classifyMotionType(text: string): MotionType {
 
   if (hasAny(normalized, [/\b(reframe|reframes|recompose|recomposes|frame adjustment|crop adjustment)\b/, /重新构图|调整构图|改构图/])) {
     return "camera_reframe";
-  }
-
-  if (
-    hasAny(normalized, [
-      /\b(pose|poses|turn|turns|lean|leans|sit|sits|stand|stands|raise hand|raises hand|head tilt|gesture)\b/,
-      /姿态|转身|倾斜|坐下|站起|举手|抬手|动作变化|手势/,
-    ])
-  ) {
-    return "pose_change_in_place";
   }
 
   return "static_hold";
@@ -182,22 +184,37 @@ function buildBodyMechanics(type: MotionType, text: string): MotionBodyMechanics
   const required = bodyMechanicsRequiredMotionTypes.has(type);
   const footworkMentioned = hasAny(normalized, [/\b(step|steps|stride|foot|feet|walk|run|plant|contact)\b/, /脚步|步伐|落脚|支撑脚|接触点/]);
   const centerOfMassMentioned = hasAny(normalized, [/\b(center of mass|centre of mass|weight shift|balance|gravity|hips?)\b/, /重心|平衡|胯|身体重量/]);
+  const handPropContactMentioned = hasAny(normalized, [/\b(hand|hands|finger|fingers|grab|hold|touch|point|prop|object|door|handle|map|pen|book)\b/, /手|手指|拿|抓|握|触碰|指向|道具|物体|门|把手|地图|笔|书/]);
+  const seatedOrAnchoredMentioned = hasAny(normalized, [
+    /\b(seated|sits?|chair|anchored|mostly anchored|body remains|remains seated|table contact|leaning over|chin|eye line|gaze)\b/,
+    /坐|椅|锚定|身体保持|身体基本不动|桌面|抬头|视线|眼神/,
+  ]);
   const footworkNegated = hasAny(normalized, [/\b(no|without|missing)\s+(footwork|steps?|stride|foot|feet|contact)\b/, /没有脚步|无脚步|缺少脚步|没有落脚/]);
   const centerOfMassNegated = hasAny(normalized, [
     /\b(no|without|missing)\s+(center of mass|centre of mass|weight shift|balance|gravity|hip)\b/,
     /\b(no|without|missing)\b.{0,40}\b(center of mass|centre of mass|weight shift|balance)\b/,
     /没有重心|无重心|缺少重心|没有平衡/,
   ]);
-  const hasFootwork = footworkMentioned && !footworkNegated;
-  const hasCenterOfMass = centerOfMassMentioned && !centerOfMassNegated;
+  const hasFootwork = type === "locomotion" ? footworkMentioned && !footworkNegated : false;
+  const hasCenterOfMass =
+    type === "locomotion"
+      ? centerOfMassMentioned && !centerOfMassNegated
+      : type === "pose_change_in_place"
+        ? (centerOfMassMentioned || seatedOrAnchoredMentioned) && !centerOfMassNegated
+        : false;
+  const contactPoints = unique([
+    hasFootwork || hasCenterOfMass ? "ground_or_body_anchor_specified" : "",
+    type === "object_interaction" && handPropContactMentioned ? "hand_or_prop_contact_specified" : "",
+    type === "pose_change_in_place" && seatedOrAnchoredMentioned ? "seated_or_body_anchor_specified" : "",
+  ]);
   return {
     required,
     description: required
       ? "Motion must explain physical continuity rather than only moving the visible bbox."
       : "No explicit body-mechanics evidence required for this motion type.",
-    centerOfMass: hasCenterOfMass ? "specified" : required ? "missing" : "not_required",
+    centerOfMass: hasCenterOfMass ? "specified" : type === "locomotion" || type === "pose_change_in_place" ? "missing" : "not_required",
     footwork: hasFootwork ? ["specified"] : [],
-    contactPoints: hasFootwork || hasCenterOfMass ? ["ground_or_prop_contact_specified"] : [],
+    contactPoints,
     timing: required ? "must be coherent across start and end endpoints" : "not_required",
   };
 }
