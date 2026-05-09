@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/motion_endpoint_contract.schema.json",
+  "title": "MotionEndpointContract",
+  "description": "Structured motion endpoint contract that decides whether an I2V shot needs an end frame and what the start/end frames must preserve or leave editable.",
+  "$defs": {
+    "motionType": {
+      "type": "string",
+      "enum": [
+        "static_hold",
+        "micro_expression",
+        "pose_change_in_place",
+        "locomotion",
+        "object_interaction",
+        "camera_reframe",
+        "camera_move",
+        "reveal_or_occlusion",
+        "transform_or_state_change"
+      ]
+    },
+    "contractStatus": {
+      "type": "string",
+      "enum": ["pass", "blocked", "warning"]
+    },
+    "frameRole": {
+      "type": "string",
+      "enum": ["start", "end", "both"]
+    },
+    "regionKind": {
+      "type": "string",
+      "enum": ["subject", "face", "hands", "feet", "prop", "background", "camera", "occluder", "unknown"]
+    },
+    "poseRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "description", "mustPreserve", "reservedForEndPose"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "description": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "mustPreserve": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "reservedForEndPose": { "type": "boolean" }
+      }
+    },
+    "bodyMechanics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "description", "centerOfMass", "footwork", "contactPoints", "timing"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "description": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "centerOfMass": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "footwork": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "contactPoints": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "timing": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "endpointRegion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "kind", "frameRole", "description", "constraints"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "label": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "kind": { "$ref": "#/$defs/regionKind" },
+        "frameRole": { "$ref": "#/$defs/frameRole" },
+        "description": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "constraints": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "bboxAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "target", "frameRole", "notes"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "target": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "frameRole": { "$ref": "#/$defs/frameRole" },
+        "bbox": {
+          "type": "array",
+          "prefixItems": [
+            { "type": "number" },
+            { "type": "number" },
+            { "type": "number" },
+            { "type": "number" }
+          ],
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "notes": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "qaThresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identityPreservation",
+        "scenePreservation",
+        "maxUnexplainedBboxShift",
+        "requireDerivedEndFrame",
+        "requireBodyMechanicsEvidence"
+      ],
+      "properties": {
+        "identityPreservation": { "type": "string", "const": "strict" },
+        "scenePreservation": { "type": "string", "const": "strict" },
+        "maxUnexplainedBboxShift": { "type": "string", "enum": ["none", "small", "medium"] },
+        "requireDerivedEndFrame": { "type": "boolean" },
+        "requireBodyMechanicsEvidence": { "type": "boolean" }
+      }
+    },
+    "gateInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shotText",
+        "motionEvidence",
+        "keyframePairPresent",
+        "keyframePairDerivesFromStart",
+        "bboxOnlyMotionForbidden"
+      ],
+      "properties": {
+        "shotText": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "motionEvidence": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "keyframePairPresent": { "type": "boolean" },
+        "keyframePairDerivesFromStart": { "type": "boolean" },
+        "bboxOnlyMotionForbidden": { "type": "boolean", "const": true }
+      }
+    },
+    "motionEndpointContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "generatedAt",
+        "shotId",
+        "motionType",
+        "whetherEndFrameRequired",
+        "endFrameRequiredReason",
+        "startPoseRequirement",
+        "endPoseRequirement",
+        "bodyMechanics",
+        "editableRegions",
+        "protectedRegions",
+        "bboxAnchors",
+        "qaThresholds",
+        "gateInputs",
+        "status",
+        "blockers",
+        "warnings"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+        "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "motionType": { "$ref": "#/$defs/motionType" },
+        "whetherEndFrameRequired": { "type": "boolean" },
+        "endFrameRequiredReason": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "startPoseRequirement": { "$ref": "#/$defs/poseRequirement" },
+        "endPoseRequirement": { "$ref": "#/$defs/poseRequirement" },
+        "bodyMechanics": { "$ref": "#/$defs/bodyMechanics" },
+        "editableRegions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/endpointRegion" }
+        },
+        "protectedRegions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/endpointRegion" }
+        },
+        "bboxAnchors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/bboxAnchor" }
+        },
+        "qaThresholds": { "$ref": "#/$defs/qaThresholds" },
+        "gateInputs": { "$ref": "#/$defs/gateInputs" },
+        "keyframePairDerivation": { "$ref": "keyframe_pair_derivation.schema.json" },
+        "status": { "$ref": "#/$defs/contractStatus" },
+        "blockers": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    }
+  },
+  "$ref": "#/$defs/motionEndpointContract"
+}

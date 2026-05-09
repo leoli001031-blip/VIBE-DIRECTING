@@ -36,7 +36,20 @@ async function importImageKeyframeRuntime() {
     fileName: "src/core/providerCapabilities.ts",
   }).outputText;
   const providerCapabilitiesUrl = `data:text/javascript;base64,${Buffer.from(`${providerCapabilitiesOutput}\n//# sourceURL=${pathToFileURL("src/core/providerCapabilities.ts").href}`).toString("base64")}`;
-  return importTs("src/core/imageKeyframeRuntime.ts", [['from "./providerCapabilities";', `from "${providerCapabilitiesUrl}";`]]);
+  const motionPlanningSource = fs.readFileSync("src/core/motionPlanning.ts", "utf8");
+  const motionPlanningOutput = ts.transpileModule(motionPlanningSource, {
+    compilerOptions: {
+      module: ts.ModuleKind.ES2022,
+      target: ts.ScriptTarget.ES2022,
+      importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+    },
+    fileName: "src/core/motionPlanning.ts",
+  }).outputText;
+  const motionPlanningUrl = `data:text/javascript;base64,${Buffer.from(`${motionPlanningOutput}\n//# sourceURL=${pathToFileURL("src/core/motionPlanning.ts").href}`).toString("base64")}`;
+  return importTs("src/core/imageKeyframeRuntime.ts", [
+    ['from "./motionPlanning";', `from "${motionPlanningUrl}";`],
+    ['from "./providerCapabilities";', `from "${providerCapabilitiesUrl}";`],
+  ]);
 }
 
 function clone(value) {
@@ -189,6 +202,7 @@ const sourceIndex = {
 
 const { buildImageKeyframeRuntimePlan } = await importImageKeyframeRuntime();
 const { buildDefaultProviderRegistry } = await importTs("src/core/providerCapabilities.ts");
+const { buildMotionEndpointContract } = await importTs("src/core/motionPlanning.ts");
 
 const cleanPlan = buildImageKeyframeRuntimePlan(baseInput());
 assert(cleanPlan.schemaVersion === "0.1.0", "runtime plan schema version drifted");
@@ -214,6 +228,10 @@ const startPlan = cleanPlan.image2StartFramePlans[0];
 assert(startPlan.providerSlot === "image.generate", "start frame must use image.generate");
 assert(startPlan.requiredMode === "text2image", "start frame generate must use text2image");
 assert(startPlan.image2Operation === "text2image", "start frame operation must be text2image");
+assert(startPlan.motionEndpointFacts, "start frame must expose motion endpoint facts");
+assert(startPlan.motionEndpointFacts.motionType === "micro_expression", "clean fallback contract should classify micro-expression motion");
+assert(startPlan.motionEndpointFacts.whetherEndFrameRequired === false, "clean micro-expression fallback should not require a future end pose");
+assert(startPlan.motionEndpointFacts.protectedRegionIds.includes("identity_lock_region"), "motion facts must expose protected identity region");
 assert(startPlan.adapterRequestPreview.adapterId === "openai-image2-codex-cli-dry-run", "start frame adapter preview must use the registry-selected provider adapter id");
 assert(startPlan.adapterRequestPreview.providerId === startPlan.providerId, "start frame adapter preview must carry resolved provider id");
 assert(startPlan.adapterRequestPreview.submitPolicy.noProviderSubmit === true, "start frame submit policy must forbid provider submit");
@@ -224,6 +242,11 @@ assert(endPlan.requiredMode === "image2image", "end frame must use image2image")
 assert(endPlan.image2Operation === "image2image", "end frame operation must be image2image");
 assert(endPlan.endDerivation.derivesFrom === "start_frame", "end frame must derive from start frame");
 assert(endPlan.endDerivation.sourceStartFrameId === "outputs/keyframes/S01_start.png", "end frame source start frame missing");
+assert(endPlan.endDerivation.motionContractStatus === "pass", "end derivation must summarize motion contract status");
+assert(endPlan.endDerivation.protectedRegionIds.includes("identity_lock_region"), "end derivation must carry protected region ids");
+assert(endPlan.endDerivation.editableRegionIds.includes("subject_motion_region"), "end derivation must carry editable region ids");
+assert(endPlan.endDerivation.bodyMechanicsRequired === false, "clean micro-expression motion should not require body mechanics");
+assert(endPlan.endDerivation.bboxOnlyMotionForbidden === true, "end derivation must preserve bbox-only motion guard");
 assert(endPlan.adapterRequestPreview.payload.sourceStartFrameId === "outputs/keyframes/S01_start.png", "adapter preview must carry source start frame");
 assert(endPlan.referenceImageInputs.some((input) => input.role === "source_start_frame" && input.path === "outputs/keyframes/S01_start.png"), "end frame plan must carry explicit source start visual input");
 assert(endPlan.adapterRequestPreview.payload.referenceImageInputs.some((input) => input.role === "source_start_frame" && input.path === "outputs/keyframes/S01_start.png"), "adapter preview must carry explicit source start visual input");
@@ -234,6 +257,8 @@ const gate = cleanPlan.keyframePairGates[0];
 assert(gate.status === "pass", `keyframe gate should pass: ${gate.blockers.join("; ")}`);
 assert(gate.endDerivationSource === "start_frame", "keyframe gate must record start_frame derivation");
 assert(gate.validForPromotionHandoff === true, "keyframe gate must be handoff-ready");
+assert(gate.motionContractStatus === "pass", "keyframe gate must carry motion contract status");
+assert(gate.bboxOnlyMotionForbidden === true, "keyframe gate must require bbox-only motion protection");
 
 assert(cleanPlan.promotionHandoffPlan.targetProviderId === "seedance2-provider", "default handoff target must come from registry config");
 assert(cleanPlan.promotionHandoffPlan.providerState === "parked_dry_run_only", "default video handoff must stay parked");
@@ -360,6 +385,40 @@ submittedInput.jobs[0].submitId = "provider_submit_should_block";
 const submittedPlan = buildImageKeyframeRuntimePlan(submittedInput);
 assert(byGate(submittedPlan, "noProviderSubmit").status === "blocked", "provider submission state must block noProviderSubmit gate");
 
+const bboxOnlyPair = keyframePair({
+  allowedDelta: ["walks across the garage by bbox translation only without footwork or center of mass"],
+  mustPreserve: ["hero identity", "garage layout", "style capsule"],
+  mustNotAdd: ["new character", "new location"],
+});
+const bboxOnlyContract = buildMotionEndpointContract({
+  generatedAt,
+  shot: {
+    id: "S01",
+    actId: "A_motion",
+    title: "Hero walks across the garage by bbox translation only",
+    storyFunction: "Walks to the door with bbox translation only, without footwork or center of mass.",
+    startFrame: bboxOnlyPair.startFrameId,
+    endFrame: bboxOnlyPair.endFrameId,
+    status: "keyframe_pair_ready",
+    gates: {},
+    issues: ["bbox translation only", "without footwork", "without center of mass"],
+  },
+  keyframePair: bboxOnlyPair,
+});
+assert(bboxOnlyContract.status === "blocked", `fixture motion contract must be blocked, got ${bboxOnlyContract.status}: ${bboxOnlyContract.motionType} ${bboxOnlyContract.blockers.join("; ")}`);
+const bboxOnlyPlan = buildImageKeyframeRuntimePlan(baseInput({
+  keyframePairs: [bboxOnlyPair],
+  motionEndpointContracts: [bboxOnlyContract],
+}));
+const bboxOnlyGate = bboxOnlyPlan.keyframePairGates[0];
+assert(bboxOnlyPlan.status === "blocked", "blocked locomotion bbox-only contract must block runtime plan");
+assert(bboxOnlyPlan.image2EndFramePlans[0].status === "blocked", "blocked motion contract must block end frame plan");
+assert(bboxOnlyPlan.image2EndFramePlans[0].endDerivation.motionContractStatus === "blocked", "end derivation must record blocked motion contract");
+assert(bboxOnlyGate.status === "blocked", "blocked locomotion bbox-only contract must block keyframe pair gate");
+assert(bboxOnlyGate.validForPromotionHandoff === false, "blocked motion contract must prevent promotion handoff");
+assert(bboxOnlyGate.blockers.some((blocker) => /Motion endpoint contract is blocked/i.test(blocker)), "pair gate must include blocked motion contract blocker");
+assert(bboxOnlyPlan.promotionHandoffPlan.items[0].status === "blocked", "blocked motion contract must block handoff item");
+
 const schema = readJson("schemas/image_keyframe_runtime.schema.json");
 assert(schema.title === "ImageKeyframeRuntimePlan", "schema title drifted");
 for (const required of [
@@ -388,7 +447,12 @@ assert(schema.$defs.adapterPreview.properties.adapterId.$ref === "common.schema.
 assert(schema.$defs.adapterPreview.properties.providerId.$ref === "common.schema.json#/$defs/nonEmptyString", "schema adapter preview must carry provider id");
 assert(schema.$defs.adapterPreview.properties.submitPolicy.properties.noProviderSubmit.const === true, "schema submitPolicy must forbid provider submit");
 assert(schema.$defs.adapterPreview.properties.submitPolicy.properties.noCredentialRead.const === true, "schema submitPolicy must forbid credential read");
+assert(schema.$defs.image2FramePlan.properties.motionEndpointFacts.$ref === "#/$defs/motionEndpointFacts", "schema must allow start motion endpoint facts");
 assert(schema.$defs.endDerivation.properties.noIndependentEndFrame.const === true, "schema must pin no independent end frame");
+assert(schema.$defs.endDerivation.required.includes("motionContractStatus"), "schema must require end motion contract status");
+assert(schema.$defs.endDerivation.required.includes("bboxOnlyMotionForbidden"), "schema must require end bbox-only guard");
+assert(schema.$defs.keyframePairGate.required.includes("motionContractStatus"), "schema must require pair gate motion contract status");
+assert(schema.$defs.keyframePairGate.required.includes("bboxOnlyMotionForbidden"), "schema must require pair gate bbox-only guard");
 assert(!("const" in schema.$defs.promotionHandoffPlan.properties.targetProviderId), "schema must not pin a named handoff provider");
 assert(schema.$defs.promotionHandoffPlan.properties.canSubmitProvider.const === false, "schema must forbid provider submit");
 assert(schema.$defs.promotionHandoffItem.properties.fastModeAllowed.const === false, "schema must forbid fast handoff item");

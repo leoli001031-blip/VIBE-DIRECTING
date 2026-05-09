@@ -346,6 +346,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     typeName: "VideoPlanningState",
   },
   {
+    fileName: "motion_endpoint_contract.schema.json",
+    id: "https://vibecore.local/schemas/motion_endpoint_contract.schema.json",
+    version: schemaVersion,
+    purpose: "Structured start/end motion endpoint contract used before keyframe generation and I2V readiness.",
+    typeName: "MotionEndpointContract",
+  },
+  {
     fileName: "video_execution_preview.schema.json",
     id: "https://vibecore.local/schemas/video_execution_preview.schema.json",
     version: schemaVersion,

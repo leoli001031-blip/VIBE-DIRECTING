@@ -1,4 +1,8 @@
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import ts from "typescript";
 
 function readJson(path) {
   return JSON.parse(fs.readFileSync(path, "utf8"));
@@ -7,6 +11,136 @@ function readJson(path) {
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
+  }
+}
+
+function transpileTsModule(sourcePath, outputPath, replacements = []) {
+  let output = ts.transpileModule(fs.readFileSync(sourcePath, "utf8"), {
+    compilerOptions: {
+      module: ts.ModuleKind.ES2022,
+      target: ts.ScriptTarget.ES2022,
+      importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+    },
+    fileName: sourcePath,
+  }).outputText;
+  for (const [from, to] of replacements) {
+    output = output.replace(from, to);
+  }
+  fs.writeFileSync(outputPath, output);
+}
+
+async function importVideoPlanningForTest() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "video-planning-test-"));
+  const motionPath = path.join(tempDir, "motionPlanning.mjs");
+  const videoPath = path.join(tempDir, "videoPlanning.mjs");
+  transpileTsModule("src/core/motionPlanning.ts", motionPath);
+  transpileTsModule("src/core/videoPlanning.ts", videoPath, [[`from "./motionPlanning";`, `from "./motionPlanning.mjs";`]]);
+  return {
+    ...(await import(pathToFileURL(motionPath).href)),
+    ...(await import(pathToFileURL(videoPath).href)),
+  };
+}
+
+function shotRecord(overrides = {}) {
+  return {
+    id: overrides.id || "S01",
+    actId: "A1",
+    title: overrides.title || "Static hold",
+    storyFunction: overrides.storyFunction || "Hold the moment with only subtle motion.",
+    status: "assets_ready",
+    startFrame: `${overrides.id || "S01"}_start.png`,
+    endFrame: `${overrides.id || "S01"}_end.png`,
+    gates: {
+      identity: "PASS",
+      scene: "PASS",
+      pair: "PASS",
+      story: "PASS",
+      prop: "PASS",
+      style: "PASS",
+    },
+    issues: [],
+    ...overrides,
+  };
+}
+
+function keyframePair(shotId) {
+  return {
+    shotId,
+    startFrameId: `${shotId}:start`,
+    endFrameId: `${shotId}:end`,
+    endDerivationSource: "start_frame",
+    validForI2vPair: true,
+    allowedDelta: ["planned endpoint motion"],
+    mustPreserve: ["identity", "scene layout"],
+    mustNotAdd: ["new character"],
+  };
+}
+
+async function assertMotionEndpointContractIntegration() {
+  const { buildMotionEndpointContract, buildVideoPlanningState } = await importVideoPlanningForTest();
+  const generatedAt = "2026-05-09T00:00:00.000Z";
+  const explicitShot = shotRecord({
+    id: "S_explicit",
+    title: "Hero picks up the brass key",
+    storyFunction: "Object interaction: hand grabs the approved prop and settles into the end pose.",
+  });
+  const fallbackShot = shotRecord({
+    id: "S_fallback",
+    title: "Close-up blink and breathing",
+    storyFunction: "Micro-expression only; no pose or camera change.",
+  });
+  const explicitContract = buildMotionEndpointContract({
+    generatedAt,
+    shot: explicitShot,
+    keyframePair: keyframePair(explicitShot.id),
+  });
+  const syntheticPlanning = buildVideoPlanningState({
+    generatedAt,
+    shots: [explicitShot, fallbackShot],
+    jobs: [],
+    taskViews: [],
+    providerRegistry: {
+      defaultProviderBySlot: { "video.i2v": "seedance_shell" },
+      capabilities: [
+        {
+          providerId: "seedance_shell",
+          slot: "video.i2v",
+          requiredMode: "frames2video",
+          executionState: "parked",
+          liveSubmitAllowed: false,
+        },
+      ],
+    },
+    audioPlanning: {
+      videoProviderPolicy: {
+        noBgmForVideoProvider: true,
+      },
+    },
+    issues: [],
+    motionEndpointContracts: [explicitContract],
+  });
+
+  for (const gate of syntheticPlanning.readinessGates) {
+    assert(gate.motionEndpointContract, `${gate.shotId} missing motionEndpointContract`);
+    assert(gate.motionEndpointContract.shotId === gate.shotId, `${gate.shotId} motion contract shot mismatch`);
+  }
+  const fallbackGate = syntheticPlanning.readinessGates.find((gate) => gate.shotId === fallbackShot.id);
+  assert(fallbackGate, "fallback shot missing readiness gate");
+  assert(fallbackGate.motionEndpointContract.motionType === "micro_expression", "fallback contract was not derived from shot motion text");
+  assert(
+    fallbackGate.checks.find((item) => item.id === "motion_contract_present_or_derived")?.detail.includes("derived"),
+    "fallback contract should be marked as derived",
+  );
+  for (const taskPlan of syntheticPlanning.taskPlans) {
+    assert(taskPlan.motionEndpointFacts, `${taskPlan.shotId} missing motionEndpointFacts`);
+    assert(typeof taskPlan.motionEndpointFacts.motionType === "string", `${taskPlan.shotId} missing motion type fact`);
+    assert(typeof taskPlan.motionEndpointFacts.whetherEndFrameRequired === "boolean", `${taskPlan.shotId} missing end-frame requirement fact`);
+    assert(taskPlan.motionEndpointFacts.endFrameRequiredReason, `${taskPlan.shotId} missing end-frame reason fact`);
+    assert(["pass", "blocked", "warning"].includes(taskPlan.motionEndpointFacts.contractStatus), `${taskPlan.shotId} invalid contract status fact`);
+    assert(Array.isArray(taskPlan.motionEndpointFacts.editableRegionIds), `${taskPlan.shotId} missing editable region facts`);
+    assert(Array.isArray(taskPlan.motionEndpointFacts.protectedRegionIds), `${taskPlan.shotId} missing protected region facts`);
+    assert(typeof taskPlan.motionEndpointFacts.bodyMechanicsRequired === "boolean", `${taskPlan.shotId} missing body mechanics fact`);
+    assert(taskPlan.motionEndpointFacts.bboxOnlyMotionForbidden === true, `${taskPlan.shotId} bbox-only motion must be forbidden`);
   }
 }
 
@@ -66,6 +200,8 @@ assert(
   JSON.stringify(runtimeQueue.counts) === JSON.stringify(videoPlanning.queueShell.counts),
   "runtime queue counts mismatch",
 );
+
+await assertMotionEndpointContractIntegration();
 
 for (const taskPlan of videoPlanning.taskPlans) {
   assert(taskPlan.dryRunOnly === true, `${taskPlan.shotId} dryRunOnly must be true`);
@@ -164,5 +300,17 @@ assert(videoExecutionSchema.$ref === "#/$defs/videoExecutionPreviewState", "vide
 const queueCondition = "counts.blocked > 0 && (counts.parked > 0 || counts.ready > 0)";
 assert(fs.readFileSync("src/core/videoPlanning.ts", "utf8").includes(queueCondition), "core queue mixed-state condition drifted");
 assert(fs.readFileSync("scripts/import-runtime-test.mjs", "utf8").includes(queueCondition), "import queue mixed-state condition drifted");
+const videoPlanningSource = fs.readFileSync("src/core/videoPlanning.ts", "utf8");
+for (const checkId of [
+  "motion_contract_present_or_derived",
+  "motion_contract_not_blocked",
+  "motion_endpoint_requirements_present",
+  "motion_gate_inputs_pass",
+  "motion_regions_declared",
+  "motion_qa_thresholds_strict",
+  "motion_end_frame_requirement_satisfied",
+]) {
+  assert(videoPlanningSource.includes(`"${checkId}"`), `videoPlanning missing motion check id ${checkId}`);
+}
 
 console.log(`Video planning tests passed: ${queueFixtures.length} queue fixtures, ${videoPlanning.taskPlans.length} runtime task plans, ${videoExecutionPreview.previews.length} execution previews, ${adapters.length} adapter shells.`);

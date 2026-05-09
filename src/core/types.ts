@@ -1880,6 +1880,102 @@ export interface KeyframePairDerivation {
   mustNotAdd: string[];
 }
 
+export type MotionType =
+  | "static_hold"
+  | "micro_expression"
+  | "pose_change_in_place"
+  | "locomotion"
+  | "object_interaction"
+  | "camera_reframe"
+  | "camera_move"
+  | "reveal_or_occlusion"
+  | "transform_or_state_change";
+
+export type MotionEndpointContractStatus = "pass" | "blocked" | "warning";
+
+export type MotionEndpointFrameRole = "start" | "end" | "both";
+
+export type MotionEndpointRegionKind =
+  | "subject"
+  | "face"
+  | "hands"
+  | "feet"
+  | "prop"
+  | "background"
+  | "camera"
+  | "occluder"
+  | "unknown";
+
+export interface MotionPoseRequirement {
+  required: boolean;
+  description: string;
+  mustPreserve: string[];
+  reservedForEndPose: boolean;
+}
+
+export interface MotionBodyMechanics {
+  required: boolean;
+  description: string;
+  centerOfMass: string;
+  footwork: string[];
+  contactPoints: string[];
+  timing: string;
+}
+
+export interface MotionEndpointRegion {
+  id: string;
+  label: string;
+  kind: MotionEndpointRegionKind;
+  frameRole: MotionEndpointFrameRole;
+  description: string;
+  constraints: string[];
+}
+
+export interface MotionBboxAnchor {
+  id: string;
+  target: string;
+  frameRole: MotionEndpointFrameRole;
+  bbox?: [number, number, number, number];
+  notes: string[];
+}
+
+export interface MotionQaThresholds {
+  identityPreservation: "strict";
+  scenePreservation: "strict";
+  maxUnexplainedBboxShift: "none" | "small" | "medium";
+  requireDerivedEndFrame: boolean;
+  requireBodyMechanicsEvidence: boolean;
+}
+
+export interface MotionGateInputs {
+  shotText: string;
+  motionEvidence: string[];
+  keyframePairPresent: boolean;
+  keyframePairDerivesFromStart: boolean;
+  bboxOnlyMotionForbidden: boolean;
+}
+
+export interface MotionEndpointContract {
+  schemaVersion: string;
+  generatedAt: string;
+  shotId: string;
+  motionType: MotionType;
+  whetherEndFrameRequired: boolean;
+  endFrameRequiredReason: string;
+  startPoseRequirement: MotionPoseRequirement;
+  endPoseRequirement: MotionPoseRequirement;
+  bodyMechanics: MotionBodyMechanics;
+  editableRegions: MotionEndpointRegion[];
+  protectedRegions: MotionEndpointRegion[];
+  bboxAnchors: MotionBboxAnchor[];
+  qaThresholds: MotionQaThresholds;
+  gateInputs: MotionGateInputs;
+  keyframePairDerivation?: KeyframePairDerivation;
+  status: MotionEndpointContractStatus;
+  blockers: string[];
+  warnings: string[];
+}
+
 export type VideoReadinessGateStatus = "ready" | "blocked" | "parked";
 
 export type VideoReadinessCheckStatus = "pass" | "blocked" | "warning" | "not_applicable";

@@ -28,6 +28,7 @@
         "canSubmitToProvider",
         "startFramePresent",
         "endFramePresent",
+        "motionEndpointContract",
         "allowedNaGateFields",
         "checks",
         "blockers",
@@ -44,6 +45,7 @@
         "startFramePresent": { "type": "boolean" },
         "endFramePresent": { "type": "boolean" },
         "keyframePairDerivation": { "$ref": "keyframe_pair_derivation.schema.json" },
+        "motionEndpointContract": { "$ref": "motion_endpoint_contract.schema.json" },
         "allowedNaGateFields": {
           "type": "array",
           "items": { "type": "string", "enum": ["identity", "scene", "prop", "style"] }
@@ -62,6 +64,49 @@
         },
         "dryRunOnly": { "type": "boolean", "const": true },
         "providerSubmissionForbidden": { "type": "boolean", "const": true }
+      }
+    },
+    "motionEndpointFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "motionType",
+        "whetherEndFrameRequired",
+        "endFrameRequiredReason",
+        "contractStatus",
+        "editableRegionIds",
+        "protectedRegionIds",
+        "bodyMechanicsRequired",
+        "bboxOnlyMotionForbidden"
+      ],
+      "properties": {
+        "motionType": {
+          "type": "string",
+          "enum": [
+            "static_hold",
+            "micro_expression",
+            "pose_change_in_place",
+            "locomotion",
+            "object_interaction",
+            "camera_reframe",
+            "camera_move",
+            "reveal_or_occlusion",
+            "transform_or_state_change"
+          ]
+        },
+        "whetherEndFrameRequired": { "type": "boolean" },
+        "endFrameRequiredReason": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "contractStatus": { "type": "string", "enum": ["pass", "blocked", "warning"] },
+        "editableRegionIds": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "protectedRegionIds": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "bodyMechanicsRequired": { "type": "boolean" },
+        "bboxOnlyMotionForbidden": { "type": "boolean", "const": true }
       }
     },
     "videoFrameRef": {
@@ -95,6 +140,7 @@
         "durationSeconds",
         "durationPlaceholder",
         "motionBrief",
+        "motionEndpointFacts",
         "promptConstraints",
         "preflightFacts",
         "manifestFacts",
@@ -124,6 +170,7 @@
         "durationSeconds": { "type": ["number", "null"], "minimum": 0 },
         "durationPlaceholder": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
         "motionBrief": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "motionEndpointFacts": { "$ref": "#/$defs/motionEndpointFacts" },
         "promptConstraints": {
           "type": "array",
           "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },

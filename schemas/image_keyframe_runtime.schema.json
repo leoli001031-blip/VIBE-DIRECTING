@@ -295,6 +295,53 @@
       "type": "string",
       "enum": ["text2image", "image2image", "reference_asset"]
     },
+    "motionContractStatus": {
+      "type": "string",
+      "enum": ["pass", "blocked", "warning", "missing"]
+    },
+    "motionType": {
+      "type": "string",
+      "enum": [
+        "static_hold",
+        "micro_expression",
+        "pose_change_in_place",
+        "locomotion",
+        "object_interaction",
+        "camera_reframe",
+        "camera_move",
+        "reveal_or_occlusion",
+        "transform_or_state_change"
+      ]
+    },
+    "motionPoseRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "description", "mustPreserve", "reservedForEndPose"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "description": { "type": "string" },
+        "mustPreserve": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "reservedForEndPose": { "type": "boolean" }
+      }
+    },
+    "motionEndpointFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["motionContractStatus", "whetherEndFrameRequired", "protectedRegionIds"],
+      "properties": {
+        "motionContractStatus": { "$ref": "#/$defs/motionContractStatus" },
+        "motionType": { "$ref": "#/$defs/motionType" },
+        "whetherEndFrameRequired": { "type": "boolean" },
+        "startPoseRequirement": { "$ref": "#/$defs/motionPoseRequirement" },
+        "protectedRegionIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
     "image2Reference": {
       "type": "object",
       "additionalProperties": false,
@@ -457,6 +504,7 @@
           "type": "array",
           "items": { "$ref": "#/$defs/image2Reference" }
         },
+        "motionEndpointFacts": { "$ref": "#/$defs/motionEndpointFacts" },
         "referenceImageInputs": {
           "type": "array",
           "items": { "$ref": "#/$defs/referenceImageInput" }
@@ -534,7 +582,12 @@
         "noIndependentEndFrame",
         "allowedDelta",
         "mustPreserve",
-        "mustNotAdd"
+        "mustNotAdd",
+        "motionContractStatus",
+        "editableRegionIds",
+        "protectedRegionIds",
+        "bodyMechanicsRequired",
+        "bboxOnlyMotionForbidden"
       ],
       "properties": {
         "derivesFrom": { "type": "string", "enum": ["start_frame", "blocked_independent_end_frame", "unknown"] },
@@ -554,7 +607,18 @@
         "mustNotAdd": {
           "type": "array",
           "items": { "type": "string" }
-        }
+        },
+        "motionContractStatus": { "$ref": "#/$defs/motionContractStatus" },
+        "editableRegionIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "protectedRegionIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "bodyMechanicsRequired": { "type": "boolean" },
+        "bboxOnlyMotionForbidden": { "type": "boolean" }
       }
     },
     "keyframePairGate": {
@@ -567,6 +631,11 @@
         "endDerivationSource",
         "validForI2vPair",
         "validForPromotionHandoff",
+        "motionContractStatus",
+        "editableRegionIds",
+        "protectedRegionIds",
+        "bodyMechanicsRequired",
+        "bboxOnlyMotionForbidden",
         "noIndependentEndFrame",
         "blockers",
         "warnings"
@@ -582,6 +651,17 @@
         "endDerivationSource": { "type": "string", "enum": ["start_frame", "independent_exception", "unknown", "missing"] },
         "validForI2vPair": { "type": "boolean" },
         "validForPromotionHandoff": { "type": "boolean" },
+        "motionContractStatus": { "$ref": "#/$defs/motionContractStatus" },
+        "editableRegionIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "protectedRegionIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "bodyMechanicsRequired": { "type": "boolean" },
+        "bboxOnlyMotionForbidden": { "type": "boolean" },
         "noIndependentEndFrame": { "type": "boolean", "const": true },
         "blockers": {
           "type": "array",

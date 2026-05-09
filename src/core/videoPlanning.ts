@@ -1,4 +1,5 @@
 import type { ManifestMatchReport } from "./manifestMatcher";
+import { buildMotionEndpointContract } from "./motionPlanning";
 import type { QueueGateResult } from "./taskQueue";
 import type {
   AudioPlanningState,
@@ -7,6 +8,7 @@ import type {
   GateStatus,
   GenerationJob,
   KeyframePairDerivation,
+  MotionEndpointContract,
   PreflightReport,
   ProviderCapability,
   ProviderRegistry,
@@ -38,7 +40,27 @@ export interface BuildVideoPlanningStateInput {
   providerRegistry: ProviderRegistry;
   audioPlanning: AudioPlanningState;
   issues: AuditIssue[];
+  motionEndpointContracts?: MotionEndpointContract[];
 }
+
+interface MotionEndpointFacts {
+  motionType: MotionEndpointContract["motionType"];
+  whetherEndFrameRequired: boolean;
+  endFrameRequiredReason: string;
+  contractStatus: MotionEndpointContract["status"];
+  editableRegionIds: string[];
+  protectedRegionIds: string[];
+  bodyMechanicsRequired: boolean;
+  bboxOnlyMotionForbidden: boolean;
+}
+
+type VideoReadinessGateWithMotion = VideoReadinessGate & {
+  motionEndpointContract: MotionEndpointContract;
+};
+
+type VideoTaskPlanWithMotion = VideoTaskPlan & {
+  motionEndpointFacts: MotionEndpointFacts;
+};
 
 const allowedNaGateFields: VideoReadinessGate["allowedNaGateFields"] = ["identity", "scene", "prop", "style"];
 
@@ -108,6 +130,134 @@ function check(
   return { id, label, status, required, detail, target };
 }
 
+function findMotionEndpointContract(
+  contracts: MotionEndpointContract[] | undefined,
+  shotId: string,
+): MotionEndpointContract | undefined {
+  return contracts?.find((contract) => contract.shotId === shotId);
+}
+
+function buildMotionEndpointFacts(contract: MotionEndpointContract): MotionEndpointFacts {
+  return {
+    motionType: contract.motionType,
+    whetherEndFrameRequired: contract.whetherEndFrameRequired,
+    endFrameRequiredReason: contract.endFrameRequiredReason,
+    contractStatus: contract.status,
+    editableRegionIds: contract.editableRegions.map((region) => region.id),
+    protectedRegionIds: contract.protectedRegions.map((region) => region.id),
+    bodyMechanicsRequired: contract.bodyMechanics.required,
+    bboxOnlyMotionForbidden: contract.gateInputs.bboxOnlyMotionForbidden,
+  };
+}
+
+function motionEndpointChecks(input: {
+  shot: ShotRecord;
+  contract: MotionEndpointContract;
+  contractSource: "explicit" | "derived";
+  derivation: KeyframePairDerivation;
+  startFramePresent: boolean;
+  endFramePresent: boolean;
+}): VideoReadinessGateCheck[] {
+  const { shot, contract, contractSource, derivation, startFramePresent, endFramePresent } = input;
+  const endpointRequirementsPresent =
+    contract.startPoseRequirement.required &&
+    Boolean(contract.startPoseRequirement.description) &&
+    Boolean(contract.endFrameRequiredReason) &&
+    (!contract.whetherEndFrameRequired || contract.endPoseRequirement.required);
+  const gateInputsPass =
+    contract.gateInputs.bboxOnlyMotionForbidden &&
+    (!contract.whetherEndFrameRequired ||
+      (contract.gateInputs.keyframePairPresent &&
+        contract.gateInputs.keyframePairDerivesFromStart &&
+        derivation.validForI2vPair));
+  const regionsDeclared = contract.editableRegions.length > 0 && contract.protectedRegions.length > 0;
+  const qaThresholdsStrict =
+    contract.qaThresholds.identityPreservation === "strict" &&
+    contract.qaThresholds.scenePreservation === "strict" &&
+    contract.qaThresholds.maxUnexplainedBboxShift !== "medium" &&
+    contract.gateInputs.bboxOnlyMotionForbidden;
+  const endFrameRequirementSatisfied =
+    !contract.whetherEndFrameRequired ||
+    (startFramePresent && endFramePresent && derivation.validForI2vPair && contract.endPoseRequirement.required);
+
+  return [
+    check(
+      "motion_contract_present_or_derived",
+      "motion contract present or derived",
+      "pass",
+      true,
+      contractSource === "explicit"
+        ? "Shot has an explicit MotionEndpointContract."
+        : "Shot uses a derived fallback MotionEndpointContract from the keyframe pair derivation.",
+      contract.shotId,
+    ),
+    check(
+      "motion_contract_not_blocked",
+      "motion contract not blocked",
+      contract.status === "blocked" ? "blocked" : contract.status === "warning" ? "warning" : "pass",
+      true,
+      contract.status === "blocked"
+        ? `MotionEndpointContract is blocked: ${contract.blockers.join("; ")}`
+        : contract.status === "warning"
+          ? `MotionEndpointContract has warnings: ${contract.warnings.join("; ")}`
+          : "MotionEndpointContract is pass.",
+      contract.shotId,
+    ),
+    check(
+      "motion_endpoint_requirements_present",
+      "motion endpoint requirements present",
+      endpointRequirementsPresent ? "pass" : "blocked",
+      true,
+      endpointRequirementsPresent
+        ? "Start/end pose requirements and end-frame reason are present."
+        : "Motion endpoint contract is missing required pose or end-frame requirement facts.",
+      contract.shotId,
+    ),
+    check(
+      "motion_gate_inputs_pass",
+      "motion gate inputs pass",
+      gateInputsPass ? "pass" : "blocked",
+      true,
+      gateInputsPass
+        ? "Motion gate inputs forbid bbox-only motion and satisfy required keyframe derivation facts."
+        : "Motion gate inputs do not satisfy bbox-only or required keyframe derivation constraints.",
+      contract.shotId,
+    ),
+    check(
+      "motion_regions_declared",
+      "motion regions declared",
+      regionsDeclared ? "pass" : "blocked",
+      true,
+      regionsDeclared
+        ? "Motion contract declares both editable and protected regions."
+        : "Motion contract must declare editable and protected regions.",
+      contract.shotId,
+    ),
+    check(
+      "motion_qa_thresholds_strict",
+      "motion QA thresholds strict",
+      qaThresholdsStrict ? "pass" : "blocked",
+      true,
+      qaThresholdsStrict
+        ? "Motion QA thresholds preserve identity/scene strictly and forbid bbox-only motion."
+        : "Motion QA thresholds are not strict enough for video readiness.",
+      contract.shotId,
+    ),
+    check(
+      "motion_end_frame_requirement_satisfied",
+      "motion end-frame requirement satisfied",
+      endFrameRequirementSatisfied ? "pass" : "blocked",
+      true,
+      contract.whetherEndFrameRequired
+        ? endFrameRequirementSatisfied
+          ? "Motion type requires an end frame, and the approved keyframe pair satisfies it."
+          : "Motion type requires an end frame, but the end frame or keyframe pair is not ready."
+        : "Motion type does not require a separate end frame.",
+      shot.id,
+    ),
+  ];
+}
+
 function requiredGateCheck(field: "pair" | "story", value: GateStatus, shotId: string): VideoReadinessGateCheck {
   return check(
     `${field}_gate_pass`,
@@ -155,14 +305,25 @@ function matchingIssues(issues: AuditIssue[], shot: ShotRecord, job?: Generation
 }
 
 function buildReadinessGate(input: {
+  generatedAt: string;
   shot: ShotRecord;
   task?: VideoPlanningTaskContext;
   capability?: ProviderCapability;
   audioPlanning: AudioPlanningState;
   issues: AuditIssue[];
-}): VideoReadinessGate {
+  motionEndpointContract?: MotionEndpointContract;
+}): VideoReadinessGateWithMotion {
   const { shot, task, capability, audioPlanning } = input;
   const derivation = task?.envelope.keyframePairDerivation || buildFallbackPairDerivation(shot);
+  const explicitMotionEndpointContract = input.motionEndpointContract;
+  const motionEndpointContract =
+    explicitMotionEndpointContract ||
+    buildMotionEndpointContract({
+      generatedAt: input.generatedAt,
+      shot,
+      keyframePair: derivation,
+    });
+  const motionContractSource: "explicit" | "derived" = explicitMotionEndpointContract ? "explicit" : "derived";
   const startFramePresent = Boolean(shot.startFrame && !shot.issues.includes("missing_start_frame"));
   const endFramePresent = Boolean(shot.endFrame && !shot.issues.includes("missing_end_frame"));
   const hardIssues = matchingIssues(input.issues, shot, task?.job);
@@ -199,6 +360,14 @@ function buildReadinessGate(input: {
     nonRequiredGateCheck("scene", shot.gates.scene, shot.id),
     nonRequiredGateCheck("prop", shot.gates.prop, shot.id),
     nonRequiredGateCheck("style", shot.gates.style, shot.id),
+    ...motionEndpointChecks({
+      shot,
+      contract: motionEndpointContract,
+      contractSource: motionContractSource,
+      derivation,
+      startFramePresent,
+      endFramePresent,
+    }),
     check(
       "no_bgm_for_video_provider",
       "no BGM for video provider",
@@ -266,6 +435,7 @@ function buildReadinessGate(input: {
   const blockers = uniqueSorted(checks.filter((item) => item.required && item.status === "blocked").map((item) => item.detail));
   const warnings = uniqueSorted([
     ...checks.filter((item) => item.status === "warning").map((item) => item.detail),
+    ...motionEndpointContract.warnings,
     ...(task?.envelope.preflight.warnings || []).map((item) => item.messageForUser),
   ]);
   const status: VideoReadinessGate["status"] = blockers.length ? "blocked" : "parked";
@@ -279,6 +449,7 @@ function buildReadinessGate(input: {
     startFramePresent,
     endFramePresent,
     keyframePairDerivation: derivation,
+    motionEndpointContract,
     allowedNaGateFields,
     checks,
     blockers,
@@ -319,10 +490,10 @@ function preflightFacts(task?: VideoPlanningTaskContext): VideoTaskPlan["preflig
 function buildVideoTaskPlan(input: {
   shot: ShotRecord;
   task?: VideoPlanningTaskContext;
-  gate: VideoReadinessGate;
+  gate: VideoReadinessGateWithMotion;
   providerId: VideoTaskPlan["providerId"];
   capability?: ProviderCapability;
-}): VideoTaskPlan {
+}): VideoTaskPlanWithMotion {
   const { shot, task, gate, providerId, capability } = input;
   const preflightBlockers = task?.envelope.preflight.blockers.map((item) => item.messageForUser) || [];
   const providerParked = isParkedState(capability?.executionState);
@@ -348,6 +519,7 @@ function buildVideoTaskPlan(input: {
     motionBrief: shot.storyFunction
       ? `Motion should preserve the shot function: ${shot.storyFunction}`
       : "Motion placeholder reserved for future provider enablement.",
+    motionEndpointFacts: buildMotionEndpointFacts(gate.motionEndpointContract),
     promptConstraints: [
       "no bgm",
       "start/end frames only",
@@ -446,19 +618,21 @@ export function buildVideoPlanningState(input: BuildVideoPlanningStateInput): Vi
       .filter((task) => task.job.slot === "video.i2v")
       .map((task) => [task.shotId || task.envelope.keyframePairDerivation?.shotId || task.job.id, task]),
   );
-  const readinessGates: VideoReadinessGate[] = [];
-  const taskPlans: VideoTaskPlan[] = [];
+  const readinessGates: VideoReadinessGateWithMotion[] = [];
+  const taskPlans: VideoTaskPlanWithMotion[] = [];
 
   for (const shot of input.shots) {
     const task = videoTasksByShot.get(shot.id);
     const providerId = selectedVideoProviderId(task?.job || input.jobs.find((job) => job.id.includes(shot.id) && job.slot === "video.i2v"), input.providerRegistry);
     const capability = selectedVideoCapability(providerId, input.providerRegistry) || videoCapabilities(input.providerRegistry)[0];
     const gate = buildReadinessGate({
+      generatedAt: input.generatedAt,
       shot,
       task,
       capability,
       audioPlanning: input.audioPlanning,
       issues: input.issues,
+      motionEndpointContract: findMotionEndpointContract(input.motionEndpointContracts, shot.id),
     });
     readinessGates.push(gate);
     taskPlans.push(buildVideoTaskPlan({ shot, task, gate, providerId, capability }));

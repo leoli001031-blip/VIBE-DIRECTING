@@ -4,15 +4,19 @@ import type {
   GenerationJob,
   ImageTaskPlan,
   KeyframePairDerivation,
+  MotionEndpointContract,
+  MotionEndpointContractStatus,
   ProjectSourceIndex,
   ProviderCapability,
   ProviderExecutionState,
   ProviderRegistry,
   ProviderSlot,
   RequiredMode,
+  ShotRecord,
   ShotPromptPlan,
   Image2ReferenceImageInput,
 } from "./types";
+import { buildMotionEndpointContract } from "./motionPlanning";
 import { buildDefaultProviderRegistry, buildProviderRequirement, selectCapabilityForRequirement } from "./providerCapabilities";
 
 export const imageKeyframeRuntimeSchemaVersion = "0.1.0";
@@ -49,6 +53,14 @@ export type ImageKeyframeVisualConsistencyGateId =
   | "motion_gate";
 
 export type Image2RuntimeVisualReferenceInput = Image2ReferenceImageInput;
+
+export interface ImageMotionEndpointFacts {
+  motionContractStatus: MotionEndpointContractStatus | "missing";
+  motionType?: MotionEndpointContract["motionType"];
+  whetherEndFrameRequired: boolean;
+  startPoseRequirement?: MotionEndpointContract["startPoseRequirement"];
+  protectedRegionIds: string[];
+}
 
 export interface ImageKeyframeReferencePlan {
   referenceId: string;
@@ -145,6 +157,7 @@ export interface Image2FramePlan {
   inputReferenceIds: string[];
   referenceImageInputs: Image2RuntimeVisualReferenceInput[];
   referenceStatuses: Image2RuntimeReference[];
+  motionEndpointFacts?: ImageMotionEndpointFacts;
   status: ImageKeyframePlanStatus;
   adapterRequestPreview: Image2RuntimeAdapterPreview;
   blockers: string[];
@@ -168,6 +181,11 @@ export interface Image2EndFramePlan extends Image2FramePlan {
     allowedDelta: string[];
     mustPreserve: string[];
     mustNotAdd: string[];
+    motionContractStatus: MotionEndpointContractStatus | "missing";
+    editableRegionIds: string[];
+    protectedRegionIds: string[];
+    bodyMechanicsRequired: boolean;
+    bboxOnlyMotionForbidden: boolean;
   };
 }
 
@@ -182,6 +200,11 @@ export interface ImageKeyframePairGate {
   endDerivationSource: KeyframePairDerivation["endDerivationSource"] | "missing";
   validForI2vPair: boolean;
   validForPromotionHandoff: boolean;
+  motionContractStatus: MotionEndpointContractStatus | "missing";
+  editableRegionIds: string[];
+  protectedRegionIds: string[];
+  bodyMechanicsRequired: boolean;
+  bboxOnlyMotionForbidden: boolean;
   noIndependentEndFrame: true;
   blockers: string[];
   warnings: string[];
@@ -295,6 +318,7 @@ export interface BuildImageKeyframeRuntimePlanInput {
   promptPlans?: ShotPromptPlan[];
   imageTaskPlans?: ImageTaskPlan[];
   keyframePairs?: KeyframePairDerivation[];
+  motionEndpointContracts?: MotionEndpointContract[];
   providerRegistry?: ProviderRegistry;
 }
 
@@ -346,6 +370,117 @@ function uniqueSorted(values: string[]): string[] {
 
 function safeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, "_");
+}
+
+function minimalShotForKeyframePair(pair: KeyframePairDerivation): ShotRecord {
+  const motionText = uniqueSorted([
+    ...pair.allowedDelta,
+    ...pair.mustPreserve,
+    ...pair.mustNotAdd,
+    pair.exceptionReason || "",
+  ]);
+  return {
+    id: pair.shotId,
+    actId: "image_keyframe_runtime",
+    title: motionText.join(" ") || `Keyframe pair ${pair.shotId}`,
+    storyFunction: motionText.join(" ") || "Image keyframe runtime fallback motion contract.",
+    startFrame: pair.startFrameId,
+    endFrame: pair.endFrameId,
+    status: pair.validForI2vPair ? "keyframe_pair_ready" : "blocked",
+    gates: {} as ShotRecord["gates"],
+    issues: motionText,
+  };
+}
+
+function buildMotionContractsByShot(input: {
+  generatedAt: string;
+  explicitContracts?: MotionEndpointContract[];
+  keyframePairs?: KeyframePairDerivation[];
+}): Map<string, MotionEndpointContract> {
+  const contractsByShot = new Map<string, MotionEndpointContract>();
+  for (const contract of input.explicitContracts || []) {
+    contractsByShot.set(contract.shotId, contract);
+  }
+  for (const pair of input.keyframePairs || []) {
+    if (!contractsByShot.has(pair.shotId)) {
+      contractsByShot.set(
+        pair.shotId,
+        buildMotionEndpointContract({
+          generatedAt: input.generatedAt,
+          shot: minimalShotForKeyframePair(pair),
+          keyframePair: pair,
+        }),
+      );
+    }
+  }
+  return contractsByShot;
+}
+
+function motionEndpointFacts(contract?: MotionEndpointContract): ImageMotionEndpointFacts | undefined {
+  if (!contract) return undefined;
+  return {
+    motionContractStatus: contract.status,
+    motionType: contract.motionType,
+    whetherEndFrameRequired: contract.whetherEndFrameRequired,
+    startPoseRequirement: contract.startPoseRequirement,
+    protectedRegionIds: contract.protectedRegions.map((region) => region.id),
+  };
+}
+
+function motionContractStatus(contract?: MotionEndpointContract): MotionEndpointContractStatus | "missing" {
+  return contract?.status || "missing";
+}
+
+function editableRegionIds(contract?: MotionEndpointContract): string[] {
+  return contract?.editableRegions.map((region) => region.id) || [];
+}
+
+function protectedRegionIds(contract?: MotionEndpointContract): string[] {
+  return contract?.protectedRegions.map((region) => region.id) || [];
+}
+
+function bboxOnlyMotionForbidden(contract?: MotionEndpointContract): boolean {
+  return contract?.gateInputs.bboxOnlyMotionForbidden === true;
+}
+
+function bodyMechanicsEvidenceMissing(contract?: MotionEndpointContract): boolean {
+  if (!contract?.bodyMechanics.required) return false;
+  const hasCenterOfMass = Boolean(contract.bodyMechanics.centerOfMass && contract.bodyMechanics.centerOfMass !== "missing");
+  const hasFootwork = contract.bodyMechanics.footwork.length > 0;
+  const hasContact = contract.bodyMechanics.contactPoints.length > 0;
+  return !hasCenterOfMass || (!hasFootwork && !hasContact);
+}
+
+function motionContractPairMismatch(
+  contract: MotionEndpointContract | undefined,
+  pair: KeyframePairDerivation | undefined,
+  shotId: string,
+): boolean {
+  if (!contract) return false;
+  if (contract.shotId !== shotId) return true;
+  if (!pair) return false;
+  if (!contract.gateInputs.keyframePairPresent) return true;
+  if (contract.keyframePairDerivation && contract.keyframePairDerivation.shotId !== pair.shotId) return true;
+  if (contract.keyframePairDerivation && contract.keyframePairDerivation.startFrameId !== pair.startFrameId) return true;
+  if (contract.keyframePairDerivation && contract.keyframePairDerivation.endFrameId !== pair.endFrameId) return true;
+  if (contract.gateInputs.keyframePairPresent && !contract.keyframePairDerivation) return true;
+  return false;
+}
+
+function motionContractBlockers(input: {
+  contract?: MotionEndpointContract;
+  pair?: KeyframePairDerivation;
+  shotId: string;
+  requireContract?: boolean;
+}): string[] {
+  const contract = input.contract;
+  return [
+    ...(input.requireContract && !contract ? ["Motion endpoint contract is missing."] : []),
+    ...(contract?.status === "blocked" ? ["Motion endpoint contract is blocked.", ...contract.blockers] : []),
+    ...(contract && contract.gateInputs.bboxOnlyMotionForbidden !== true ? ["Motion endpoint contract must forbid bbox-only motion."] : []),
+    ...(bodyMechanicsEvidenceMissing(contract) ? ["Motion endpoint contract requires body-mechanics evidence before handoff."] : []),
+    ...(motionContractPairMismatch(contract, input.pair, input.shotId) ? ["Motion endpoint contract and keyframe pair shot do not match."] : []),
+  ];
 }
 
 function requiredModeForSlot(slot: ProviderSlot, mode: RequiredMode): RequiredMode {
@@ -792,6 +927,7 @@ function buildStartPlan(
   job: GenerationJob | undefined,
   assetPlanning: ImageKeyframeAssetReferencePlanning,
   registry: ProviderRegistry,
+  motionContract: MotionEndpointContract | undefined,
 ): Image2FramePlan {
   const references = referencesForPlan(seed.inputReferenceIds, assetPlanning);
   const operation = operationForStart(seed);
@@ -825,6 +961,7 @@ function buildStartPlan(
     inputReferenceIds: seed.inputReferenceIds,
     referenceImageInputs: seed.referenceImageInputs,
     referenceStatuses: references,
+    ...(motionEndpointFacts(motionContract) ? { motionEndpointFacts: motionEndpointFacts(motionContract) } : {}),
     status: planStatus(blockers, seed),
     adapterRequestPreview: makeAdapterPreview({ planId, operation, seed, references, capabilityId: capability?.id }),
     blockers,
@@ -860,10 +997,12 @@ function buildEndPlan(
   assetPlanning: ImageKeyframeAssetReferencePlanning,
   startPlans: Image2FramePlan[],
   keyframePairs: KeyframePairDerivation[],
+  motionContractsByShot: Map<string, MotionEndpointContract>,
   registry: ProviderRegistry,
 ): Image2EndFramePlan {
   const references = referencesForPlan(seed.inputReferenceIds, assetPlanning);
   const { sourceStartFrameId, sourceStartFramePlanId, pair } = sourceStartFrameFor(seed, startPlans, keyframePairs);
+  const motionContract = motionContractsByShot.get(seed.shotId);
   const capability = capabilityForSeed(seed, registry);
   const referenceImageInputs = visualReferenceInputsForEnd(seed, sourceStartFrameId);
   const independentEndFrame =
@@ -881,6 +1020,7 @@ function buildEndPlan(
     ...sourceStartFrameInputBlockers({ capability, referenceImageInputs, sourceStartFrameId }),
     ...(pair && pair.endDerivationSource !== "start_frame" ? ["Keyframe pair does not derive the end frame from the start frame."] : []),
     ...(pair && pair.validForI2vPair !== true ? ["Keyframe pair is not valid for I2V handoff."] : []),
+    ...motionContractBlockers({ contract: motionContract, pair, shotId: seed.shotId, requireContract: Boolean(pair) }),
   ]);
   const warnings = uniqueSorted([...seed.warnings, ...referenceWarningsForPlan(references)]);
   const planId = `image2_end_${seed.shotId}_${seed.jobId}`;
@@ -920,6 +1060,11 @@ function buildEndPlan(
       allowedDelta: pair?.allowedDelta || [],
       mustPreserve: pair?.mustPreserve || seed.mustPreserve,
       mustNotAdd: pair?.mustNotAdd || seed.mustAvoid,
+      motionContractStatus: motionContractStatus(motionContract),
+      editableRegionIds: editableRegionIds(motionContract),
+      protectedRegionIds: protectedRegionIds(motionContract),
+      bodyMechanicsRequired: Boolean(motionContract?.bodyMechanics.required),
+      bboxOnlyMotionForbidden: bboxOnlyMotionForbidden(motionContract),
     },
     blockers,
     warnings,
@@ -934,6 +1079,7 @@ function buildKeyframePairGates(
   startPlans: Image2FramePlan[],
   endPlans: Image2EndFramePlan[],
   keyframePairs: KeyframePairDerivation[],
+  motionContractsByShot: Map<string, MotionEndpointContract>,
 ): ImageKeyframePairGate[] {
   const shotIds = uniqueSorted([
     ...startPlans.map((plan) => plan.shotId),
@@ -945,6 +1091,7 @@ function buildKeyframePairGates(
     const pair = pairForShot(keyframePairs, shotId);
     const startPlan = startPlans.find((plan) => plan.shotId === shotId);
     const endPlan = endPlans.find((plan) => plan.shotId === shotId);
+    const motionContract = motionContractsByShot.get(shotId);
     const blockers = uniqueSorted([
       ...(startPlan ? [] : ["Image start frame plan is missing."]),
       ...(endPlan ? [] : ["Image end-frame edit-from-start plan is missing."]),
@@ -958,6 +1105,7 @@ function buildKeyframePairGates(
         : []),
       ...(startPlan?.status === "blocked" ? startPlan.blockers : []),
       ...(endPlan?.status === "blocked" ? endPlan.blockers : []),
+      ...motionContractBlockers({ contract: motionContract, pair, shotId, requireContract: Boolean(pair) }),
     ]);
     const warnings = uniqueSorted([...(startPlan?.warnings || []), ...(endPlan?.warnings || [])]);
     const validForPromotionHandoff = blockers.length === 0 && Boolean(pair) && startPlan?.status === "ready_for_dry_run" && endPlan?.status === "ready_for_dry_run";
@@ -973,6 +1121,11 @@ function buildKeyframePairGates(
       endDerivationSource: pair?.endDerivationSource || "missing",
       validForI2vPair: Boolean(pair?.validForI2vPair),
       validForPromotionHandoff,
+      motionContractStatus: motionContractStatus(motionContract),
+      editableRegionIds: editableRegionIds(motionContract),
+      protectedRegionIds: protectedRegionIds(motionContract),
+      bodyMechanicsRequired: Boolean(motionContract?.bodyMechanics.required),
+      bboxOnlyMotionForbidden: bboxOnlyMotionForbidden(motionContract),
       noIndependentEndFrame: true,
       blockers,
       warnings,
@@ -1233,13 +1386,20 @@ export function buildImageKeyframeRuntimePlan(input: BuildImageKeyframeRuntimePl
   const assetReferencePlanning = buildAssetReferencePlanning(input);
   const seeds = buildRuntimeTaskSeeds(input);
   const jobById = new Map(jobs.map((job) => [job.id, job]));
+  const motionContractsByShot = buildMotionContractsByShot({
+    generatedAt,
+    explicitContracts: input.motionEndpointContracts,
+    keyframePairs: input.keyframePairs,
+  });
   const startSeeds = seeds.filter((seed) => seed.promptKind === "start_frame");
   const endSeeds = seeds.filter((seed) => seed.promptKind === "end_frame");
-  const image2StartFramePlans = startSeeds.map((seed) => buildStartPlan(seed, jobById.get(seed.jobId), assetReferencePlanning, providerRegistry));
-  const image2EndFramePlans = endSeeds.map((seed) =>
-    buildEndPlan(seed, jobById.get(seed.jobId), assetReferencePlanning, image2StartFramePlans, input.keyframePairs || [], providerRegistry),
+  const image2StartFramePlans = startSeeds.map((seed) =>
+    buildStartPlan(seed, jobById.get(seed.jobId), assetReferencePlanning, providerRegistry, motionContractsByShot.get(seed.shotId)),
   );
-  const keyframePairGates = buildKeyframePairGates(image2StartFramePlans, image2EndFramePlans, input.keyframePairs || []);
+  const image2EndFramePlans = endSeeds.map((seed) =>
+    buildEndPlan(seed, jobById.get(seed.jobId), assetReferencePlanning, image2StartFramePlans, input.keyframePairs || [], motionContractsByShot, providerRegistry),
+  );
+  const keyframePairGates = buildKeyframePairGates(image2StartFramePlans, image2EndFramePlans, input.keyframePairs || [], motionContractsByShot);
   const promotionHandoffPlan = buildPromotionHandoffPlan(generatedAt, keyframePairGates, providerRegistry);
   const runtimeLockGates = buildRuntimeLockGates({
     jobs,
