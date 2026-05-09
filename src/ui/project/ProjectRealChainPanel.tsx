@@ -1,4 +1,5 @@
 import { CheckCircle2, LockKeyhole, RefreshCw, Sparkles } from "lucide-react";
+import "./ProjectRealChainPanel.css";
 import type {
   ProjectCurrentBindingStatus,
   ProjectCurrentChoice,

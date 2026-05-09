@@ -84,7 +84,7 @@ function assertCreatorPanelContract() {
   const agentPanelProjectionSource = readText("src/ui/director/agentPanelProjection.ts");
   const projectRealChainPanelSource = readText("src/ui/project/ProjectRealChainPanel.tsx");
   const agentPanelContractSource = `${agentPanelSource}\n${agentPanelProjectionSource}`;
-  const stylesSource = readText("src/styles.css");
+  const stylesSource = `${readText("src/styles.css")}\n${readText("src/ui/project/ProjectRealChainPanel.css")}`;
   const app = findFunctionBody(appSource, "App");
   const panel = findFunctionBody(projectRealChainPanelSource, "ProjectRealChainPanel");
   const surface = [
@@ -145,6 +145,7 @@ function assertCreatorPanelContract() {
   assert(!/permissionBaseReady[\s\S]{0,180}sampleReady\s*\|\|\s*sampleWaiting/.test(panel), "prepared state must not enable permission receipt button before handoff");
   assert(/onConfirmImage2OneShot/.test(panel), "one-shot confirm button must route to confirm handler");
   assert(/onCheckImage2OneShotReturn/.test(panel), "one-shot sample button must route to execute-return handler");
+  assert(/import\s+"\.\/ProjectRealChainPanel\.css"/.test(projectRealChainPanelSource), "ProjectRealChainPanel must import its extracted CSS");
   assert(/aria-label="当前项目状态"/.test(panel), "current project panel should use creator-facing status aria copy");
   assert(/aria-label="当前项目预览图"/.test(panel), "current project thumbnails should use creator-facing preview aria copy");
   assert(/className="project-real-chain-messages"[\s\S]*className="project-real-chain-message"/.test(panel), "ProjectRealChainPanel should group messages before placing them in the grid");
