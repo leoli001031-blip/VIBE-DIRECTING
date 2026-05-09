@@ -113,7 +113,8 @@ import {
   type ProjectRealChainPanelState,
   type ProjectRound5StrictEditPreflightPanelState,
 } from "./ui/project/ProjectRealChainPanel";
-import { CompactList, Metric, StatusPill } from "./ui/common/DiagnosticsPrimitives";
+import { CompactList, Metric, StatusPill, statusLabel } from "./ui/common/DiagnosticsPrimitives";
+import { PreviewExportDiagnostics } from "./ui/diagnostics/PreviewExportDiagnostics";
 import { MediaFrame } from "./ui/common/MediaFrame";
 import { fallbackAudit } from "./data/fallbackAudit";
 
@@ -4789,44 +4790,6 @@ function ShotPreviewExportSummary({
   );
 }
 
-function PreviewExportDiagnostics({ previewExport }: { previewExport: ProjectPreviewExportState }) {
-  const gateChecks = Object.entries(previewExport.formalPreviewGate.requiredChecks);
-
-  return (
-    <section className="machine-panel preview-export-diagnostics">
-      <div className="audit-head">
-        <Play size={17} />
-        <span>Preview / Export</span>
-      </div>
-      <div className="summary-grid">
-        <Metric label="Formal Gate" value={previewExport.formalPreviewGate.status} detail={`${gateChecks.filter(([, passed]) => !passed).length} failed check(s)`} />
-        <Metric label="Blocked Reasons" value={`${previewExport.formalPreviewGate.blockedReasons.length}`} detail="formal preview eligibility" />
-        <Metric label="Package" value={previewExport.exportPackagePlan.status} detail={`${previewExport.exportProfiles.length} dry-run profile(s)`} />
-        <Metric label="Future Targets" value={`${previewExport.exportPackagePlan.futureTargets.length}`} detail="reserved export slots" />
-      </div>
-      <div className="preview-export-grid">
-        <div className="check-list">
-          <h3>Formal Gate Checks</h3>
-          {gateChecks.map(([check, passed]) => (
-            <div key={check}>
-              <span>{statusLabel(check)}</span>
-              <StatusPill value={passed ? "PASS" : "blocked"} />
-            </div>
-          ))}
-        </div>
-        <div>
-          <h3>Blocked Reasons</h3>
-          <CompactList items={previewExport.formalPreviewGate.blockedReasons} empty="Formal preview gate is eligible." />
-        </div>
-        <div>
-          <h3>Export Package Targets</h3>
-          <CompactList items={previewExport.exportPackagePlan.futureTargets.map((target) => `${target} · ${previewExport.exportPackagePlan.status}`)} empty="No future package targets planned." />
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function ImagePipelineDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
   const pipeline = getImagePipeline(runtimeState);
   const capabilities = pipeline.providerRegistry.capabilities;
@@ -7909,10 +7872,6 @@ function KnowledgePackManager({ view }: { view: RuntimeView }) {
       </div>
     </section>
   );
-}
-
-function statusLabel(value: string) {
-  return value.replace(/_/g, " ");
 }
 
 function boolLockLabel(value: boolean) {

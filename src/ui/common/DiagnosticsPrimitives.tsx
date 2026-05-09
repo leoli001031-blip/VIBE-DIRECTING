@@ -1,3 +1,7 @@
+export function statusLabel(value: string) {
+  return value.replace(/_/g, " ");
+}
+
 export function StatusPill({ value }: { value: string }) {
   const tone = value.includes("blocked") || value.includes("missing") || value === "blocker" || value === "failed"
     ? "danger"
