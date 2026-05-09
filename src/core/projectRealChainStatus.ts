@@ -18,6 +18,7 @@ export const projectCurrentSelectEndpoint = `${projectRealChainRuntimeBasePath}/
 export const projectCurrentChoicesEndpoint = `${projectRealChainRuntimeBasePath}/projects/recent`;
 export const projectRealChainStatusEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/status`;
 export const projectRealChainRunCheckEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/run-check`;
+export const projectRound5StrictEditPrepareEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/round5/strict-edit/prepare`;
 export const projectImage2BatchPlanEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-batch/plan`;
 export const projectImage2BatchRunCheckEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-batch/run-check`;
 export const projectImage2OneShotStatusEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/status`;
@@ -336,6 +337,32 @@ export type ProjectImage2OneShotUiState = {
   message?: string;
 };
 
+export type ProjectRound5StrictEditPreflightUiStatus = "prepared" | "blocked" | "running" | "unavailable";
+
+export type ProjectRound5StrictEditPreflightRequest = {
+  shotId: string;
+  selectedShotId: string;
+  selectedShotIds: string[];
+};
+
+export type ProjectRound5StrictEditPreflightStatus = {
+  uiStatus: ProjectRound5StrictEditPreflightUiStatus;
+  shotId?: string;
+  selectedShotId?: string;
+  evidencePath?: string;
+  sidecarPath?: string;
+  blockers: string[];
+  warnings: string[];
+  providerCalled: boolean;
+  message?: string;
+};
+
+export type ProjectRound5StrictEditPreflightUiState = {
+  status: ProjectRound5StrictEditPreflightUiStatus;
+  summary?: ProjectRound5StrictEditPreflightStatus;
+  message?: string;
+};
+
 export type ProjectRuntimeIdentity = {
   projectId?: string;
   projectRoot?: string;
@@ -523,6 +550,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function stringOrUndefined(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
 }
 
 function numberOrUndefined(value: unknown): number | undefined {
@@ -1173,6 +1204,28 @@ export function deriveProjectImage2OneShotStatus(payload: unknown): ProjectImage
   };
 }
 
+function deriveRound5StrictEditPreflightStatus(payload: unknown, requestedShotId?: string): ProjectRound5StrictEditPreflightStatus {
+  const report = isRecord(payload) ? payload : {};
+  const status = String(report.uiStatus || report.status || "").toLowerCase();
+  const blockers = stringArray(report.blockers);
+  const providerCalled = report.providerCalled === true || report.actualProviderCalled === true;
+  const preparedStatuses = new Set(["prepared", "sidecars_prepared", "ready_for_provider_edit", "end_edit_preflight_ready"]);
+  const prepared = preparedStatuses.has(status)
+    || (report.ok === true && blockers.length === 0 && !providerCalled);
+
+  return {
+    uiStatus: blockers.length > 0 || providerCalled ? "blocked" : prepared ? "prepared" : "blocked",
+    shotId: stringOrUndefined(report.shotId) || stringOrUndefined(report.selectedShotId) || requestedShotId,
+    selectedShotId: stringOrUndefined(report.selectedShotId) || stringOrUndefined(report.shotId) || requestedShotId,
+    evidencePath: stringOrUndefined(report.evidencePath) || stringOrUndefined(report.receiptPath),
+    sidecarPath: stringOrUndefined(report.sidecarPath),
+    blockers,
+    warnings: stringArray(report.warnings),
+    providerCalled,
+    message: stringOrUndefined(report.message),
+  };
+}
+
 async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
   const response = await fetch(toRuntimeUrl(url), runtimeRequestInit(init));
   if (!response.ok) throw new Error(`${url} returned ${response.status}`);
@@ -1281,6 +1334,36 @@ export async function runProjectRealChainCheck(expected?: ProjectRuntimeIdentity
     return guardProjectRealChainUiStateForCurrentProject(await fallbackToReport(
       projectMismatchMessage(),
     ), expected);
+  }
+}
+
+function strictEditPreflightUnavailable(message = "未选择项目/未同步。"): ProjectRound5StrictEditPreflightUiState {
+  return { status: "unavailable", message };
+}
+
+export async function prepareProjectRound5StrictEditPreflight(
+  expected?: ProjectRuntimeIdentity,
+  shotId?: string,
+): Promise<ProjectRound5StrictEditPreflightUiState> {
+  if (!hasProjectRuntimeIdentity(expected)) return strictEditPreflightUnavailable();
+  if (!shotId) return { status: "blocked", message: "请先选择镜头。" };
+
+  const request: ProjectRound5StrictEditPreflightRequest = {
+    shotId,
+    selectedShotId: shotId,
+    selectedShotIds: [shotId],
+  };
+
+  try {
+    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectRound5StrictEditPrepareEndpoint, expected), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    const summary = deriveRound5StrictEditPreflightStatus(payload, shotId);
+    return { status: summary.uiStatus, summary, message: summary.message };
+  } catch {
+    return { status: "blocked", message: "edit 证据准备失败，请等待 runtime endpoint 合入或检查 sidecar。" };
   }
 }
 

@@ -57,6 +57,7 @@ const currentProjectImage2OneShotPrepareTriggerEndpoint = `${runtimeBasePath}/pr
 const currentProjectImage2OneShotExecuteMockEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/execute-mock`;
 const currentProjectImage2OneShotReturnEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/return`;
 const currentProjectImage2OneShotExecuteReturnEndpoint = `${runtimeBasePath}/projects/current/image2-one-shot/execute-return`;
+const currentProjectRound5StrictEditPrepareEndpoint = `${runtimeBasePath}/projects/current/round5/strict-edit/prepare`;
 const realDemo005StatusEndpoint = `${runtimeBasePath}/real-demo-e2e/005/status`;
 const realDemo005RunEndpoint = `${runtimeBasePath}/real-demo-e2e/005/run`;
 const runtimeFileEndpoint = `${runtimeBasePath}/files`;
@@ -719,9 +720,8 @@ function round5HasEditableRegion(evidence) {
   return Boolean(Array.isArray(evidence.regions) && evidence.regions.some((region) => round5BboxValid(region.bboxNormalized)));
 }
 
-function round5EvidenceStatusPass(status) {
-  const normalized = String(status || "").toLowerCase();
-  return normalized.includes("pass") || normalized.includes("approved") || normalized.includes("ready");
+function round5EvidenceStatusAllowed(status, allowed) {
+  return allowed.has(String(status || "").toLowerCase());
 }
 
 function round5StrictEditEvidenceBlockers({ qaStatus, endRequired, generated, approvedStartFrame, editableRegionEvidence, providerEditReceipt }) {
@@ -729,17 +729,23 @@ function round5StrictEditEvidenceBlockers({ qaStatus, endRequired, generated, ap
 
   const blockers = [];
   const startSha = generated?.sha256;
-  if (!approvedStartFrame || !round5EvidenceStatusPass(approvedStartFrame.approvalStatus)) blockers.push("approved_start_attachment_missing");
+  const approvedStatuses = new Set(["approved", "approved_for_strict_edit"]);
+  const regionStatuses = new Set(["pass", "ready"]);
+  const receiptStatuses = new Set(["ready_for_provider_edit"]);
+  const strictEditOperations = new Set(["image.edit", "image2image"]);
+
+  if (!approvedStartFrame || !round5EvidenceStatusAllowed(approvedStartFrame.approvalStatus, approvedStatuses)) blockers.push("approved_start_attachment_missing");
   if (!approvedStartFrame?.providerAttachmentId) blockers.push("source_start_frame_attachment_id_missing");
   if (!startSha || approvedStartFrame?.sha256 !== startSha) blockers.push("source_start_frame_sha_not_provider_confirmed");
 
-  const regionStatusReady = round5EvidenceStatusPass(editableRegionEvidence?.qaStatus || editableRegionEvidence?.status);
+  const regionStatusReady = round5EvidenceStatusAllowed(editableRegionEvidence?.qaStatus, regionStatuses)
+    || round5EvidenceStatusAllowed(editableRegionEvidence?.status, regionStatuses);
   if (!editableRegionEvidence || !regionStatusReady || editableRegionEvidence.sourceStartFrameSha256 !== startSha || !round5HasEditableRegion(editableRegionEvidence)) {
     blockers.push("editable_region_mask_or_bbox_missing");
   }
 
   const receiptOperation = String(providerEditReceipt?.operation || "").toLowerCase();
-  const receiptStatusReady = round5EvidenceStatusPass(providerEditReceipt?.status);
+  const receiptStatusReady = round5EvidenceStatusAllowed(providerEditReceipt?.status, receiptStatuses);
   const receiptMatchesStart = Boolean(providerEditReceipt?.sourceStartFrameSha256 && providerEditReceipt.sourceStartFrameSha256 === startSha);
   const receiptMatchesAttachment = Boolean(
     providerEditReceipt?.sourceStartFrameAttachmentId
@@ -748,7 +754,7 @@ function round5StrictEditEvidenceBlockers({ qaStatus, endRequired, generated, ap
   if (!providerEditReceipt || !providerEditReceipt.receiptId || !receiptStatusReady) {
     blockers.push("provider_edit_receipt_missing");
     blockers.push("strict_image_edit_provenance_missing");
-  } else if (!receiptOperation.includes("image.edit") && !receiptOperation.includes("image2image")) {
+  } else if (!strictEditOperations.has(receiptOperation)) {
     blockers.push("strict_image_edit_provenance_missing");
   } else if (!receiptMatchesStart || !receiptMatchesAttachment || providerEditReceipt.noFallbackUsed !== true) {
     blockers.push("strict_image_edit_provenance_missing");
@@ -1099,6 +1105,254 @@ function round5ArtifactIngestFromReport(source, project, report) {
         "End frames remain blocked until strict edit provenance and provider receipts exist.",
       ],
     },
+  };
+}
+
+function round5StrictEditRequestInput(url, body) {
+  return {
+    shotId: asString(url.searchParams.get("shotId"))
+      || requestBodyString(body, ["shotId", "selectedShotId"])
+      || "ZP05",
+    bboxNormalized: isRecord(body?.bboxNormalized)
+      ? body.bboxNormalized
+      : isRecord(body?.bbox)
+        ? body.bbox
+        : undefined,
+    inputSha256: requestBodyString(body, ["sha256", "startFrameSha256", "sourceStartFrameSha256"]),
+  };
+}
+
+function round5NormalizeBbox(input) {
+  if (!isRecord(input)) return undefined;
+  return {
+    x: Number(input.x),
+    y: Number(input.y),
+    width: Number(input.width),
+    height: Number(input.height),
+  };
+}
+
+function round5DefaultStrictEditBbox(shotId) {
+  if (shotId !== "ZP05") return undefined;
+  return { x: 0.42, y: 0.34, width: 0.22, height: 0.2 };
+}
+
+function round5StartFramePathInfo(source, shotId, startFramePath) {
+  const normalizedStartFramePath = normalizeRelativePath(String(startFramePath || ""));
+  const shotRoot = `shots/${shotId}`;
+  if (
+    !normalizedStartFramePath
+    || path.isAbsolute(normalizedStartFramePath)
+    || normalizedStartFramePath.startsWith("../")
+    || normalizedStartFramePath.includes("/../")
+    || !oneShotPathInsideRoot(normalizedStartFramePath, shotRoot)
+  ) {
+    return { ok: false, blocker: "start_frame_path_outside_shot_root" };
+  }
+
+  const repoRelativeStartFramePath = `${source.runRootRelativePath}/${normalizedStartFramePath}`;
+  if (!oneShotPathInsideRoot(repoRelativeStartFramePath, source.runRootRelativePath)) {
+    return { ok: false, blocker: "start_frame_path_outside_project_root" };
+  }
+
+  const startFrameAbsolutePath = scopedRepoPath(repoRelativeStartFramePath);
+  if (!existsSync(startFrameAbsolutePath) || !statSync(startFrameAbsolutePath).isFile()) {
+    return { ok: false, blocker: "start_frame_file_missing" };
+  }
+
+  const startFrameRealPath = realpathSync(startFrameAbsolutePath);
+  const runRootRealPath = realpathSync(source.runRootPath);
+  if (!isPathInsideRealRoot(startFrameRealPath, runRootRealPath)) {
+    return { ok: false, blocker: "start_frame_path_realpath_escape" };
+  }
+
+  return {
+    ok: true,
+    startFramePath: normalizedStartFramePath,
+    repoRelativeStartFramePath,
+    startFrameAbsolutePath,
+  };
+}
+
+function round5StrictEditBlockedResponse(source, requestContext, input, blockers, extra = {}) {
+  const project = source ? projectIdentityFromSource(source) : {};
+  return {
+    ok: false,
+    ...runtimePolicy(),
+    endpoint: currentProjectRound5StrictEditPrepareEndpoint,
+    status: "blocked",
+    previewStatus: "blocked",
+    productionStatus: "blocked",
+    reportStatus: "blocked",
+    currentProject: source
+      ? {
+        bound: true,
+        bindingPath: source.bindingPathRelative,
+        binding: source.binding,
+      }
+      : undefined,
+    requestContext: {
+      ...requestOverrideDiagnostics(requestContext),
+    },
+    projectRootMode: source?.projectRootMode,
+    projectRoot: project.projectRoot,
+    projectId: project.projectId,
+    project,
+    shotId: input?.shotId,
+    blockers: uniqueStrings(blockers),
+    sidecarWrites: [],
+    strictEditPreflightPrepareRan: false,
+    message: "Round 5 strict edit preflight sidecars were not written.",
+    ...extra,
+  };
+}
+
+function currentProjectRound5StrictEditPrepareResponse(input, extra = {}, source = currentProjectSource()) {
+  const requestContext = extra.requestContext || {};
+  const blockers = [];
+  const project = projectIdentityFromSource(source);
+  const report = readJsonIfPresent(source.reportPath);
+  const shotId = input.shotId;
+
+  if (!isRecord(report) || !isRound5FullRealChainReport(report, source)) {
+    blockers.push("round5_full_real_chain_report_missing");
+  }
+  if (!shotId || safePathSegment(shotId) !== shotId) {
+    blockers.push("shot_id_must_be_safe_path_segment");
+  }
+
+  const generated = Array.isArray(report?.generatedStartFrames)
+    ? report.generatedStartFrames.find((item) => item?.shotId === shotId)
+    : undefined;
+  const shotQa = Array.isArray(report?.shotQa)
+    ? report.shotQa.find((item) => item?.shotId === shotId)
+    : undefined;
+  if (isRecord(report) && !generated && !shotQa) blockers.push("shot_not_found");
+
+  const startFrameSha256 = generated?.sha256;
+  const startExistsInReport = Boolean(generated?.exists && generated?.startFramePath && startFrameSha256);
+  const startQaStatus = round5QaStatusFor(shotQa, generated);
+  const endRequired = isRecord(report) && shotId ? round5EndRequiredFor(shotId, report, shotQa) : false;
+  if (generated && !startExistsInReport) blockers.push("start_frame_missing_in_report");
+  if (generated && !startFrameSha256) blockers.push("start_sha_missing_in_report");
+  if (generated && startQaStatus !== "pass") blockers.push("start_qa_not_pass");
+  if (generated && !endRequired) blockers.push("strict_edit_not_required_for_shot");
+
+  const startPathInfo = generated
+    ? round5StartFramePathInfo(source, shotId, generated.startFramePath || generated.path)
+    : undefined;
+  if (generated && startPathInfo && !startPathInfo.ok) blockers.push(startPathInfo.blocker);
+
+  if (startPathInfo?.ok && startFrameSha256) {
+    const actualSha256 = createHash("sha256").update(readFileSync(startPathInfo.startFrameAbsolutePath)).digest("hex");
+    if (actualSha256 !== startFrameSha256) blockers.push("start_sha_mismatch_with_file");
+  }
+
+  const requestedBbox = round5NormalizeBbox(input.bboxNormalized);
+  const bboxNormalized = requestedBbox || round5DefaultStrictEditBbox(shotId);
+  if (!round5BboxValid(bboxNormalized)) blockers.push("editable_bbox_invalid");
+
+  if (blockers.length) {
+    return round5StrictEditBlockedResponse(source, requestContext, input, blockers, {
+      ignoredInputSha256: input.inputSha256 ? "sha256_from_request_ignored" : undefined,
+      reportPath: source.reportRelativePath,
+      image2ReportPath: source.reportRelativePath,
+    });
+  }
+
+  const approvedPath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.approvedStartFrame}`;
+  const editablePath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.editableRegionEvidence}`;
+  const receiptPath = `${source.runRootRelativePath}/shots/${shotId}/${round5StrictEditSidecarFileNames.providerEditReceipt}`;
+  const providerAttachmentId = `attachment_round5_${shotId}_start_${startFrameSha256.slice(0, 12)}`;
+  const editableRegionEvidenceSha256 = `sha256:runtime-strict-edit-bbox-${shotId}-${startFrameSha256.slice(0, 12)}`;
+  const preparedAt = new Date().toISOString();
+
+  const approvedStartFrameRef = {
+    schemaVersion: "round5_approved_start_frame_ref_v1",
+    shotId,
+    startFramePath: startPathInfo.startFramePath,
+    sha256: startFrameSha256,
+    sourceStartFrameSha256: startFrameSha256,
+    providerAttachmentId,
+    approvalStatus: "approved",
+    approvedAt: preparedAt,
+    providerCalled: false,
+  };
+  const editableRegionEvidence = {
+    schemaVersion: "round5_editable_region_mask_or_bbox_v1",
+    shotId,
+    sourceStartFrameSha256: startFrameSha256,
+    evidencePath: `shots/${shotId}/${round5StrictEditSidecarFileNames.editableRegionEvidence}`,
+    evidenceSha256: editableRegionEvidenceSha256,
+    bboxNormalized,
+    qaStatus: "pass",
+    status: "ready",
+    providerCalled: false,
+  };
+  const providerEditReceipt = {
+    schemaVersion: "round5_provider_edit_receipt_v1",
+    shotId,
+    receiptId: `round5_${shotId}_strict_edit_preflight_${startFrameSha256.slice(0, 12)}`,
+    receiptPath: `shots/${shotId}/${round5StrictEditSidecarFileNames.providerEditReceipt}`,
+    status: "ready_for_provider_edit",
+    operation: "image.edit",
+    sourceStartFramePath: startPathInfo.startFramePath,
+    sourceStartFrameSha256: startFrameSha256,
+    sourceStartFrameAttachmentId: providerAttachmentId,
+    editableRegionEvidencePath: `shots/${shotId}/${round5StrictEditSidecarFileNames.editableRegionEvidence}`,
+    editableRegionEvidenceSha256,
+    noFallbackUsed: true,
+    providerCalled: false,
+    liveSubmitAllowed: false,
+    videoSubmitted: false,
+    workerSpawnForbidden: true,
+    preparedAt,
+  };
+
+  writeCurrentProjectRuntimeJson(approvedPath, approvedStartFrameRef, source);
+  writeCurrentProjectRuntimeJson(editablePath, editableRegionEvidence, source);
+  writeCurrentProjectRuntimeJson(receiptPath, providerEditReceipt, source);
+
+  const statusProjection = currentProjectRealChainResponse({
+    running: extra.running,
+    ignoredRequestContext: requestOverrideDiagnostics(requestContext),
+  }, source);
+  const preparedShot = statusProjection.round5ArtifactIngest?.shotGateMatrix?.find((shot) => shot.shotId === shotId);
+  return {
+    ok: true,
+    ...runtimePolicy(),
+    endpoint: currentProjectRound5StrictEditPrepareEndpoint,
+    status: "prepared",
+    previewStatus: statusProjection.previewStatus,
+    productionStatus: statusProjection.productionStatus,
+    reportStatus: statusProjection.reportStatus,
+    currentProject: statusProjection.currentProject,
+    requestContext: statusProjection.requestContext,
+    ignoredRequestContext: requestOverrideDiagnostics(requestContext),
+    projectRootMode: source.projectRootMode,
+    projectRoot: project.projectRoot,
+    projectId: project.projectId,
+    project,
+    shotId,
+    strictEditPreflightPrepareRan: true,
+    providerCalled: false,
+    prepareRan: false,
+    projectVibeWritten: false,
+    liveSubmitAllowed: false,
+    videoSubmitted: false,
+    workerSpawnForbidden: true,
+    sidecarWrites: [
+      repoRelativePath(scopedRepoPath(approvedPath)),
+      repoRelativePath(scopedRepoPath(editablePath)),
+      repoRelativePath(scopedRepoPath(receiptPath)),
+    ],
+    approvedStartFrameRef,
+    editableRegionEvidence,
+    providerEditReceipt,
+    shotGate: preparedShot,
+    round5ArtifactIngest: statusProjection.round5ArtifactIngest,
+    ignoredInputSha256: input.inputSha256 ? "sha256_from_request_ignored" : undefined,
+    message: "Round 5 strict edit preflight sidecars are prepared. No provider call or project.vibe write was performed.",
   };
 }
 
@@ -4217,7 +4471,8 @@ function isCurrentProjectEndpoint(pathname) {
     || pathname === currentProjectImage2OneShotPrepareTriggerEndpoint
     || pathname === currentProjectImage2OneShotExecuteMockEndpoint
     || pathname === currentProjectImage2OneShotReturnEndpoint
-    || pathname === currentProjectImage2OneShotExecuteReturnEndpoint;
+    || pathname === currentProjectImage2OneShotExecuteReturnEndpoint
+    || pathname === currentProjectRound5StrictEditPrepareEndpoint;
 }
 
 async function currentProjectRouteContext(req, res, url, endpoint) {
@@ -4336,6 +4591,7 @@ async function handleRequest(req, res) {
         currentProjectImage2OneShotExecuteMockEndpoint,
         currentProjectImage2OneShotReturnEndpoint,
         currentProjectImage2OneShotExecuteReturnEndpoint,
+        currentProjectRound5StrictEditPrepareEndpoint,
           realDemo005StatusEndpoint,
           realDemo005RunEndpoint,
           runtimeFileEndpoint,
@@ -4457,6 +4713,17 @@ async function handleRequest(req, res) {
     const payload = currentProjectImage2OneShotReturnIngestResponse(input, {
       running,
       ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
+    }, routeContext.source);
+    writeJson(res, payload.ok === false ? 409 : 200, payload);
+    return;
+  }
+  if (req.method === "POST" && url.pathname === currentProjectRound5StrictEditPrepareEndpoint) {
+    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectRound5StrictEditPrepareEndpoint);
+    if (!routeContext) return;
+    const input = round5StrictEditRequestInput(url, routeContext.body);
+    const payload = currentProjectRound5StrictEditPrepareResponse(input, {
+      running,
+      requestContext: routeContext.requestContext,
     }, routeContext.source);
     writeJson(res, payload.ok === false ? 409 : 200, payload);
     return;

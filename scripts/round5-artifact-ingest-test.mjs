@@ -164,6 +164,57 @@ assert(projectionWithStrictZp05.ledgerProjection.completeVerified === 0, "strict
 assert(projectionWithStrictZp05.uiSummary.providerCalled === false, "strict edit preflight must not claim provider call");
 assert(projectionWithStrictZp05.uiSummary.generatedImages === false, "strict edit preflight must not claim image generation");
 
+const projectionWithLooseStatusTraps = buildRound5ArtifactIngest({
+  runRoot,
+  projectId: "round5-zero-project-planning-anime",
+  runId: "run-2026-05-09T11-09-28-642Z",
+  report,
+  strictEditEvidence: {
+    approvedStartFrames: [
+      {
+        shotId: "ZP05",
+        startFramePath: "shots/ZP05/start.png",
+        sha256: zp05.startFrameSha256,
+        providerAttachmentId: "attachment_round5_ZP05_start",
+        approvalStatus: "unapproved",
+      },
+    ],
+    editableRegionEvidence: [
+      {
+        shotId: "ZP05",
+        sourceStartFrameSha256: zp05.startFrameSha256,
+        evidencePath: "shots/ZP05/editable_region_mask_or_bbox.json",
+        evidenceSha256: "sha256:fixture-zp05-editable-region",
+        bboxNormalized: { x: 0.42, y: 0.34, width: 0.22, height: 0.2 },
+        qaStatus: "not_ready",
+        status: "not_ready",
+      },
+    ],
+    providerEditReceipts: [
+      {
+        shotId: "ZP05",
+        receiptId: "round5_zp05_strict_edit_handoff",
+        receiptPath: "shots/ZP05/provider_edit_receipt.json",
+        status: "not_ready",
+        operation: "fake_image.edit_wrapper",
+        sourceStartFramePath: "shots/ZP05/start.png",
+        sourceStartFrameSha256: zp05.startFrameSha256,
+        sourceStartFrameAttachmentId: "attachment_round5_ZP05_start",
+        editableRegionEvidencePath: "shots/ZP05/editable_region_mask_or_bbox.json",
+        editableRegionEvidenceSha256: "sha256:fixture-zp05-editable-region",
+        noFallbackUsed: true,
+        providerCalled: false,
+      },
+    ],
+  },
+});
+const trappedZp05 = new Map(projectionWithLooseStatusTraps.shotGateMatrix.map((shot) => [shot.shotId, shot])).get("ZP05");
+assert(trappedZp05.gateStatus === "end_edit_preflight_blocked", "loose status substrings must not make ZP05 preflight ready");
+assert(trappedZp05.nextAction === "collect_strict_edit_provenance", "loose status substrings should keep ZP05 collecting strict evidence");
+for (const blocker of ["approved_start_attachment_missing", "editable_region_mask_or_bbox_missing", "provider_edit_receipt_missing", "strict_image_edit_provenance_missing"]) {
+  assert(trappedZp05.blockers.includes(blocker), `loose status trap missing blocker ${blocker}`);
+}
+
 const zp05Ledger = projectionWithStrictZp05.ledgers.find((ledger) => ledger.taskRunId.endsWith(":ZP05:start"));
 assert(
   zp05Ledger?.events.some((event) => event.eventType === "strict_edit_preflight_ready"),

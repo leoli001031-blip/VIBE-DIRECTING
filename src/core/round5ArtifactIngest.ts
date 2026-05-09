@@ -298,9 +298,8 @@ function hasEditableRegion(evidence?: Round5EditableRegionEvidence): boolean {
   return Boolean(evidence.regions?.some((region) => bboxValid(region.bboxNormalized)));
 }
 
-function evidenceStatusPass(status?: string): boolean {
-  const normalized = (status || "").toLowerCase();
-  return normalized.includes("pass") || normalized.includes("approved") || normalized.includes("ready");
+function evidenceStatusAllowed(status: string | undefined, allowed: ReadonlySet<string>): boolean {
+  return allowed.has((status || "").toLowerCase());
 }
 
 function strictEditEvidenceBlockers(input: {
@@ -319,23 +318,28 @@ function strictEditEvidenceBlockers(input: {
   const receipt = input.providerEditReceipt;
   const startSha = input.generated?.sha256;
 
-  if (!approved || !evidenceStatusPass(approved.approvalStatus)) blockers.push("approved_start_attachment_missing");
+  const approvedStatuses = new Set(["approved", "approved_for_strict_edit"]);
+  const regionStatuses = new Set(["pass", "ready"]);
+  const receiptStatuses = new Set(["ready_for_provider_edit"]);
+  const strictEditOperations = new Set(["image.edit", "image2image"]);
+
+  if (!approved || !evidenceStatusAllowed(approved.approvalStatus, approvedStatuses)) blockers.push("approved_start_attachment_missing");
   if (!approved?.providerAttachmentId) blockers.push("source_start_frame_attachment_id_missing");
   if (!startSha || approved?.sha256 !== startSha) blockers.push("source_start_frame_sha_not_provider_confirmed");
 
-  const regionStatusReady = evidenceStatusPass(region?.qaStatus || region?.status);
+  const regionStatusReady = evidenceStatusAllowed(region?.qaStatus, regionStatuses) || evidenceStatusAllowed(region?.status, regionStatuses);
   if (!region || !regionStatusReady || region.sourceStartFrameSha256 !== startSha || !hasEditableRegion(region)) {
     blockers.push("editable_region_mask_or_bbox_missing");
   }
 
   const receiptOperation = (receipt?.operation || "").toLowerCase();
-  const receiptStatusReady = evidenceStatusPass(receipt?.status);
+  const receiptStatusReady = evidenceStatusAllowed(receipt?.status, receiptStatuses);
   const receiptMatchesStart = Boolean(receipt?.sourceStartFrameSha256 && receipt.sourceStartFrameSha256 === startSha);
   const receiptMatchesAttachment = Boolean(receipt?.sourceStartFrameAttachmentId && receipt.sourceStartFrameAttachmentId === approved?.providerAttachmentId);
   if (!receipt || !receipt.receiptId || !receiptStatusReady) {
     blockers.push("provider_edit_receipt_missing");
     blockers.push("strict_image_edit_provenance_missing");
-  } else if (!receiptOperation.includes("image.edit") && !receiptOperation.includes("image2image")) {
+  } else if (!strictEditOperations.has(receiptOperation)) {
     blockers.push("strict_image_edit_provenance_missing");
   } else if (!receiptMatchesStart || !receiptMatchesAttachment || receipt.noFallbackUsed !== true) {
     blockers.push("strict_image_edit_provenance_missing");

@@ -102,6 +102,7 @@ import {
   loadProjectImage2OneShotStatus,
   loadProjectImage2BatchPlan,
   loadProjectRealChainStatus,
+  prepareProjectRound5StrictEditPreflight,
   prepareProjectImage2OneShot,
   prepareProjectImage2OneShotTrigger,
   runProjectImage2BatchCheck,
@@ -112,6 +113,7 @@ import {
   type ProjectImage2BatchUiState,
   type ProjectImage2OneShotUiState,
   type ProjectRealChainPreviewItem,
+  type ProjectRound5StrictEditPreflightUiState,
   type ProjectRealChainUiState,
   type ProjectRealChainUiStatus,
 } from "./core/projectRealChainStatus";
@@ -436,6 +438,7 @@ type OneShotActionStatus = "idle" | "confirmed";
 type ProjectRealChainPanelState = ProjectRealChainUiState;
 type ProjectImage2BatchPanelState = ProjectImage2BatchUiState;
 type ProjectImage2OneShotPanelState = ProjectImage2OneShotUiState;
+type ProjectRound5StrictEditPreflightPanelState = ProjectRound5StrictEditPreflightUiState | { status: "idle"; message?: string };
 
 function toMediaSrc(path?: string) {
   if (!path) return undefined;
@@ -7799,6 +7802,21 @@ function projectRound5GateLabels(summary: ProjectRealChainPanelState["summary"])
   return labels;
 }
 
+function projectRound5StrictEditTargetShotId(summary: ProjectRealChainPanelState["summary"], selectedShotId: string) {
+  const shots = summary?.round5Gate?.shotGateMatrix || [];
+  const zp05 = shots.find((shot) => shot.shotId === "ZP05");
+  if (zp05?.strictEditPilotCandidate) return zp05.shotId;
+  const selected = shots.find((shot) => shot.shotId === selectedShotId);
+  return selected?.strictEditPilotCandidate ? selected.shotId : selectedShotId;
+}
+
+function projectRound5StrictEditLabel(state: ProjectRound5StrictEditPreflightPanelState) {
+  if (state.status === "running") return "准备中";
+  if (state.status === "prepared") return "已准备";
+  if (state.status === "blocked") return "准备失败";
+  return "可准备";
+}
+
 function projectRealChainVisibleItems(
   items: ProjectRealChainPreviewItem[],
   selectedShotId: string,
@@ -7836,6 +7854,7 @@ function ProjectRealChainPanel({
   state,
   image2BatchState,
   image2OneShotState,
+  strictEditPreflightState,
   selectedShotId,
   projectTitle,
   runtimeProjectBinding,
@@ -7847,6 +7866,7 @@ function ProjectRealChainPanel({
   onConnectProject,
   onRun,
   onRunImage2Batch,
+  onPrepareStrictEditPreflight,
   onPrepareImage2OneShot,
   onConfirmImage2OneShot,
   onCheckImage2OneShotReturn,
@@ -7854,6 +7874,7 @@ function ProjectRealChainPanel({
   state: ProjectRealChainPanelState;
   image2BatchState: ProjectImage2BatchPanelState;
   image2OneShotState: ProjectImage2OneShotPanelState;
+  strictEditPreflightState: ProjectRound5StrictEditPreflightPanelState;
   selectedShotId: string;
   projectTitle: string;
   runtimeProjectBinding: ProjectCurrentBindingStatus;
@@ -7865,6 +7886,7 @@ function ProjectRealChainPanel({
   onConnectProject: () => void;
   onRun: () => void;
   onRunImage2Batch: () => void;
+  onPrepareStrictEditPreflight: (shotId: string) => void;
   onPrepareImage2OneShot: () => void;
   onConfirmImage2OneShot: () => void;
   onCheckImage2OneShotReturn: () => void;
@@ -7881,6 +7903,13 @@ function ProjectRealChainPanel({
   const plannedCount = summary?.totalPlannedImages ?? 0;
   const visibleItems = summary ? projectRealChainVisibleItems(summary.previewItems, selectedShotId) : [];
   const round5GateLabels = projectRound5GateLabels(summary);
+  const strictEditTargetShotId = projectRound5StrictEditTargetShotId(summary, selectedShotId);
+  const zp05Gate = summary?.round5Gate?.shotGateMatrix.find((shot) => shot.shotId === "ZP05");
+  const showStrictEditPreflight = projectBound
+    && zp05Gate?.strictEditPilotCandidate === true
+    && zp05Gate.gateStatus !== "end_edit_preflight_ready";
+  const strictEditRunning = strictEditPreflightState.status === "running";
+  const strictEditLabel = projectRound5StrictEditLabel(strictEditPreflightState);
   const previewLabel = projectPreviewReadyLabel(summary);
   const productionLabel = projectProductionReviewLabel(summary);
   const displayTitle = projectBound
@@ -7960,6 +7989,18 @@ function ProjectRealChainPanel({
           ))}
         </div>
       )}
+      {showStrictEditPreflight && (
+        <div className="project-real-chain-policy" aria-label="Round 5 strict edit preflight">
+          <small>ZP05 strict edit · {strictEditLabel}</small>
+          <button
+            disabled={strictEditRunning}
+            onClick={() => onPrepareStrictEditPreflight(strictEditTargetShotId)}
+          >
+            <Sparkles size={14} />
+            {strictEditRunning ? "准备中" : "准备 edit 证据"}
+          </button>
+        </div>
+      )}
       <div className="project-real-chain-batch">
         <div>
           <span>本地复核</span>
@@ -8005,6 +8046,7 @@ function ProjectRealChainPanel({
       {state.message && <small className="project-real-chain-message">{state.message}</small>}
       {image2BatchState.message && <small className="project-real-chain-message">{image2BatchState.message}</small>}
       {image2OneShotState.message && <small className="project-real-chain-message">{image2OneShotState.message}</small>}
+      {strictEditPreflightState.message && <small className="project-real-chain-message">{strictEditPreflightState.message}</small>}
     </section>
   );
 }
@@ -8254,6 +8296,7 @@ function DirectorMode({
   currentProjectPreviewItems,
   projectImage2BatchState,
   projectImage2OneShotState,
+  strictEditPreflightState,
   runtimeProjectBinding,
   projectChoices,
   directorView,
@@ -8267,6 +8310,7 @@ function DirectorMode({
   onConfirmOneShot,
   onRunProjectRealChain,
   onRunProjectImage2Batch,
+  onPrepareStrictEditPreflight,
   onPrepareImage2OneShot,
   onConfirmImage2OneShot,
   onCheckImage2OneShotReturn,
@@ -8294,6 +8338,7 @@ function DirectorMode({
   currentProjectPreviewItems?: PreviewQueueItem[];
   projectImage2BatchState: ProjectImage2BatchPanelState;
   projectImage2OneShotState: ProjectImage2OneShotPanelState;
+  strictEditPreflightState: ProjectRound5StrictEditPreflightPanelState;
   runtimeProjectBinding: ProjectCurrentBindingStatus;
   projectChoices: ProjectCurrentChoice[];
   directorView: DirectorView;
@@ -8307,6 +8352,7 @@ function DirectorMode({
   onConfirmOneShot: () => void;
   onRunProjectRealChain: () => void;
   onRunProjectImage2Batch: () => void;
+  onPrepareStrictEditPreflight: (shotId: string) => void;
   onPrepareImage2OneShot: () => void;
   onConfirmImage2OneShot: () => void;
   onCheckImage2OneShotReturn: () => void;
@@ -8328,6 +8374,7 @@ function DirectorMode({
           state={projectRealChainState}
           image2BatchState={projectImage2BatchState}
           image2OneShotState={projectImage2OneShotState}
+          strictEditPreflightState={strictEditPreflightState}
           selectedShotId={selectedShotId}
           projectTitle={runtimeState.project.title}
           runtimeProjectBinding={runtimeProjectBinding}
@@ -8339,6 +8386,7 @@ function DirectorMode({
           onConnectProject={onConnectProject}
           onRun={onRunProjectRealChain}
           onRunImage2Batch={onRunProjectImage2Batch}
+          onPrepareStrictEditPreflight={onPrepareStrictEditPreflight}
           onPrepareImage2OneShot={onPrepareImage2OneShot}
           onConfirmImage2OneShot={onConfirmImage2OneShot}
           onCheckImage2OneShotReturn={onCheckImage2OneShotReturn}
@@ -9735,6 +9783,7 @@ function App() {
   const [projectRealChainState, setProjectRealChainState] = useState<ProjectRealChainPanelState>({ status: "unavailable" });
   const [projectImage2BatchState, setProjectImage2BatchState] = useState<ProjectImage2BatchPanelState>({ status: "unavailable" });
   const [projectImage2OneShotState, setProjectImage2OneShotState] = useState<ProjectImage2OneShotPanelState>({ status: "unavailable" });
+  const [strictEditPreflightState, setStrictEditPreflightState] = useState<ProjectRound5StrictEditPreflightPanelState>({ status: "idle" });
   const [runtimeProjectBinding, setRuntimeProjectBinding] = useState<ProjectCurrentBindingStatus>({ status: "loading" });
   const [projectPathInput, setProjectPathInput] = useState("");
   const [projectChoices, setProjectChoices] = useState<ProjectCurrentChoice[]>([]);
@@ -9857,6 +9906,7 @@ function App() {
       setProjectRealChainState({ status: "unavailable", message: "未选择项目/未同步。" });
       setProjectImage2BatchState({ status: "unavailable", message: "未选择项目/未同步。" });
       setProjectImage2OneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
+      setStrictEditPreflightState({ status: "idle" });
       return () => {
         cancelled = true;
       };
@@ -10016,6 +10066,7 @@ function App() {
       setProjectRealChainState({ status: "unavailable", message: "未选择项目/未同步。" });
       setProjectImage2BatchState({ status: "unavailable", message: "未选择项目/未同步。" });
       setProjectImage2OneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
+      setStrictEditPreflightState({ status: "idle" });
       return;
     }
     const [nextRealChainState, nextImage2BatchState, nextOneShotState] = await Promise.all([
@@ -10026,6 +10077,7 @@ function App() {
     setProjectRealChainState(nextRealChainState);
     setProjectImage2BatchState(nextImage2BatchState);
     setProjectImage2OneShotState(nextOneShotState);
+    setStrictEditPreflightState({ status: "idle" });
   }
 
   async function connectCurrentProject(choice?: ProjectCurrentChoice) {
@@ -10035,6 +10087,7 @@ function App() {
       setProjectRealChainState({ status: "unavailable", message: "请输入项目路径。" });
       setProjectImage2BatchState({ status: "unavailable", message: "请输入项目路径。" });
       setProjectImage2OneShotState({ status: "unavailable", message: "请输入项目路径。" });
+      setStrictEditPreflightState({ status: "idle" });
       return;
     }
     setProjectPathInput(projectRoot);
@@ -10072,6 +10125,7 @@ function App() {
       setProjectRealChainState({ status: "unavailable", message: "连接项目失败，请确认路径在当前工作区内并且项目文件可读取。" });
       setProjectImage2BatchState({ status: "unavailable", message: "连接项目失败，请确认路径在当前工作区内并且项目文件可读取。" });
       setProjectImage2OneShotState({ status: "unavailable", message: "连接项目失败，请确认路径在当前工作区内并且项目文件可读取。" });
+      setStrictEditPreflightState({ status: "idle" });
       setProjectSelectionStatus("error");
     }
   }
@@ -10106,6 +10160,23 @@ function App() {
     }));
     const nextState = await runProjectImage2BatchCheck(runtimeProjectIdentity);
     setProjectImage2BatchState(nextState);
+  }
+
+  async function prepareStrictEditPreflight(shotId: string) {
+    if (!runtimeProjectIdentity) {
+      setStrictEditPreflightState({ status: "unavailable", message: "未选择项目/未同步。" });
+      return;
+    }
+    setStrictEditPreflightState({
+      status: "running",
+      message: shotId ? `正在准备 ${shotId} edit 证据。` : "正在准备 edit 证据。",
+    });
+    const nextState = await prepareProjectRound5StrictEditPreflight(runtimeProjectIdentity, shotId);
+    setStrictEditPreflightState(nextState);
+    if (nextState.status === "prepared") {
+      const refreshed = await loadProjectRealChainStatus(runtimeProjectIdentity);
+      setProjectRealChainState(refreshed);
+    }
   }
 
   async function prepareImage2OneShot() {
@@ -10202,6 +10273,7 @@ function App() {
           currentProjectPreviewItems={currentProjectPreviewQueue}
           projectImage2BatchState={projectImage2BatchState}
           projectImage2OneShotState={projectImage2OneShotState}
+          strictEditPreflightState={strictEditPreflightState}
           runtimeProjectBinding={runtimeProjectBinding}
           projectPathInput={projectPathInput}
           projectChoices={projectChoices}
@@ -10217,6 +10289,7 @@ function App() {
           onConfirmOneShot={confirmOneShot}
           onRunProjectRealChain={runProjectRealChain}
           onRunProjectImage2Batch={runProjectImage2Batch}
+          onPrepareStrictEditPreflight={prepareStrictEditPreflight}
           onPrepareImage2OneShot={prepareImage2OneShot}
           onConfirmImage2OneShot={confirmImage2OneShot}
           onCheckImage2OneShotReturn={checkImage2OneShotReturn}

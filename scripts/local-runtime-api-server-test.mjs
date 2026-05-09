@@ -98,11 +98,16 @@ const round5Root = "real-test-sandbox/round5-zero-project-planning-anime/runs/ru
 const round5ProjectId = "round5_zero_planning_anime_signal";
 const round5ReportPath = `${round5Root}/reports/round5_full_real_chain_report.json`;
 const round5VibePath = `${round5Root}/project/project.vibe.json`;
-const round5Zp05StrictEditSidecars = [
-  `${round5Root}/shots/ZP05/approved_start_frame_ref.json`,
-  `${round5Root}/shots/ZP05/editable_region_mask_or_bbox.json`,
-  `${round5Root}/shots/ZP05/provider_edit_receipt.json`,
-];
+
+function round5StrictEditSidecars(shotId) {
+  return [
+    `${round5Root}/shots/${shotId}/approved_start_frame_ref.json`,
+    `${round5Root}/shots/${shotId}/editable_region_mask_or_bbox.json`,
+    `${round5Root}/shots/${shotId}/provider_edit_receipt.json`,
+  ];
+}
+
+const round5Zp05StrictEditSidecars = round5StrictEditSidecars("ZP05");
 
 function assertNo005Leak(payload, label) {
   const text = JSON.stringify(payload);
@@ -264,44 +269,61 @@ function assertCurrentRound5WithOptions(payload, label, options) {
   );
 }
 
-function writeRound5Zp05StrictEditSidecars() {
+function assertRound5Zp05StrictEditSidecarsPrepared(payload, label) {
   const report = JSON.parse(readFileSync(round5ReportPath, "utf8"));
   const startFrame = report.generatedStartFrames.find((item) => item.shotId === "ZP05");
   assert(startFrame?.sha256, "Round 5 ZP05 start sha missing");
-  const shotDir = `${round5Root}/shots/ZP05`;
-  mkdirSync(shotDir, { recursive: true });
+  assert(payload.ok === true, `${label} should be ok`);
+  assert(payload.status === "prepared", `${label} status mismatch`);
+  assert(payload.strictEditPreflightPrepareRan === true, `${label} should record the sidecar prepare`);
+  assert(payload.providerCalled === false, `${label} must not call provider`);
+  assert(payload.prepareRan === false, `${label} must not run provider prepare`);
+  assert(payload.projectVibeWritten === false, `${label} must not write project.vibe`);
+  assert(payload.liveSubmitAllowed === false, `${label} must not allow live submit`);
+  assert(payload.videoSubmitted === false, `${label} must not submit video`);
+  assert(payload.workerSpawnForbidden === true, `${label} must forbid worker spawn`);
+  assert(payload.ignoredInputSha256 === "sha256_from_request_ignored", `${label} should ignore request sha`);
+  assert(payload.shotGate?.gateStatus === "end_edit_preflight_ready", `${label} response shot gate should be ready`);
+  assert(payload.shotGate?.nextAction === "submit_strict_image_edit", `${label} response nextAction mismatch`);
+  for (const sidecarPath of round5Zp05StrictEditSidecars) {
+    assert(existsSync(sidecarPath), `${label} missing sidecar ${sidecarPath}`);
+  }
+  const approved = JSON.parse(readFileSync(round5Zp05StrictEditSidecars[0], "utf8"));
+  const editable = JSON.parse(readFileSync(round5Zp05StrictEditSidecars[1], "utf8"));
+  const receipt = JSON.parse(readFileSync(round5Zp05StrictEditSidecars[2], "utf8"));
+  assert(approved.approvalStatus === "approved", `${label} approved status mismatch`);
+  assert(approved.sha256 === startFrame.sha256, `${label} approved sha should come from report`);
+  assert(approved.sourceStartFrameSha256 === startFrame.sha256, `${label} approved source sha should come from report`);
+  assert(approved.providerAttachmentId, `${label} provider attachment id missing`);
+  assert(editable.sourceStartFrameSha256 === startFrame.sha256, `${label} editable sha should come from report`);
+  assert(editable.qaStatus === "pass", `${label} editable QA status mismatch`);
+  assert(editable.status === "ready", `${label} editable status mismatch`);
+  assert(editable.bboxNormalized?.x === 0.42, `${label} default bbox should be written`);
+  assert(receipt.operation === "image.edit", `${label} receipt operation mismatch`);
+  assert(receipt.status === "ready_for_provider_edit", `${label} receipt status mismatch`);
+  assert(receipt.sourceStartFrameSha256 === startFrame.sha256, `${label} receipt sha should come from report`);
+  assert(receipt.sourceStartFrameAttachmentId === approved.providerAttachmentId, `${label} receipt attachment should match approved start`);
+  assert(receipt.noFallbackUsed === true, `${label} receipt noFallbackUsed mismatch`);
+  assert(receipt.providerCalled === false, `${label} receipt must not call provider`);
+}
+
+function writeRound5Zp05LooseStatusTrapSidecars() {
+  const approved = JSON.parse(readFileSync(round5Zp05StrictEditSidecars[0], "utf8"));
+  const editable = JSON.parse(readFileSync(round5Zp05StrictEditSidecars[1], "utf8"));
+  const receipt = JSON.parse(readFileSync(round5Zp05StrictEditSidecars[2], "utf8"));
   writeFileSync(round5Zp05StrictEditSidecars[0], JSON.stringify({
-    schemaVersion: "round5_approved_start_frame_ref_v1",
-    shotId: "ZP05",
-    startFramePath: "shots/ZP05/start.png",
-    sha256: startFrame.sha256,
-    providerAttachmentId: "attachment_round5_ZP05_start",
-    approvalStatus: "approved_for_strict_edit",
-    approvedAt: "2026-05-09T12:00:00.000Z",
+    ...approved,
+    approvalStatus: "unapproved",
   }, null, 2), "utf8");
   writeFileSync(round5Zp05StrictEditSidecars[1], JSON.stringify({
-    schemaVersion: "round5_editable_region_mask_or_bbox_v1",
-    shotId: "ZP05",
-    sourceStartFrameSha256: startFrame.sha256,
-    evidencePath: "shots/ZP05/editable_region_mask_or_bbox.json",
-    evidenceSha256: "sha256:runtime-test-zp05-editable-region",
-    bboxNormalized: { x: 0.42, y: 0.34, width: 0.22, height: 0.2 },
-    qaStatus: "pass",
+    ...editable,
+    qaStatus: "not_ready",
+    status: "not_ready",
   }, null, 2), "utf8");
   writeFileSync(round5Zp05StrictEditSidecars[2], JSON.stringify({
-    schemaVersion: "round5_provider_edit_receipt_v1",
-    shotId: "ZP05",
-    receiptId: "round5_zp05_strict_edit_handoff_runtime_test",
-    receiptPath: "shots/ZP05/provider_edit_receipt.json",
-    status: "ready_for_provider_edit",
-    operation: "image.edit",
-    sourceStartFramePath: "shots/ZP05/start.png",
-    sourceStartFrameSha256: startFrame.sha256,
-    sourceStartFrameAttachmentId: "attachment_round5_ZP05_start",
-    editableRegionEvidencePath: "shots/ZP05/editable_region_mask_or_bbox.json",
-    editableRegionEvidenceSha256: "sha256:runtime-test-zp05-editable-region",
-    noFallbackUsed: true,
-    providerCalled: false,
+    ...receipt,
+    status: "not_ready",
+    operation: "fake_image.edit_wrapper",
   }, null, 2), "utf8");
 }
 
@@ -404,6 +426,7 @@ try {
   assert(runtimeStatus.payload.endpoints?.currentProjectImage2OneShotStatusEndpoint === "/api/runtime/projects/current/image2-one-shot/status", "runtime status should expose one-shot status endpoint");
   assert(runtimeStatus.payload.endpoints?.currentProjectImage2OneShotPrepareEndpoint === "/api/runtime/projects/current/image2-one-shot/prepare", "runtime status should expose one-shot prepare endpoint");
   assert(runtimeStatus.payload.endpoints?.currentProjectImage2OneShotConfirmEndpoint === "/api/runtime/projects/current/image2-one-shot/confirm", "runtime status should expose one-shot confirm endpoint");
+  assert(runtimeStatus.payload.endpoints?.currentProjectRound5StrictEditPrepareEndpoint === "/api/runtime/projects/current/round5/strict-edit/prepare", "runtime status should expose Round 5 strict edit prepare endpoint");
 
   const trustedOrigin = "http://127.0.0.1:5176";
   const trustedStatus = await fetchJson(`${baseUrl}/api/runtime/status`, {
@@ -451,6 +474,7 @@ try {
     ["GET current image2 one-shot status", `${baseUrl}/api/runtime/projects/current/image2-one-shot/status?selectedShotId=S01`, undefined],
     ["POST current image2 one-shot prepare", `${baseUrl}/api/runtime/projects/current/image2-one-shot/prepare`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ selectedShotId: "S01", selectedShotIds: ["S01"], imageCount: 1 }) }],
     ["POST current image2 one-shot confirm", `${baseUrl}/api/runtime/projects/current/image2-one-shot/confirm`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ selectedShotId: "S01", selectedShotIds: ["S01"], imageCount: 1 }) }],
+    ["POST current Round 5 strict edit prepare", `${baseUrl}/api/runtime/projects/current/round5/strict-edit/prepare`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ shotId: "ZP05" }) }],
   ]) {
     const result = await fetchJson(url, init);
     assert(result.response.status === 409, `${label} should return 409 while unbound`);
@@ -489,14 +513,74 @@ try {
   assertCurrentRound5(round5Status.payload, "GET current status after select Round 5");
   assert(statSync(round5VibePath).mtimeMs === round5VibeBeforeStatusRead, "GET Round 5 status must not mutate project.vibe");
 
-  writeRound5Zp05StrictEditSidecars();
-  const round5StrictEditStatus = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
-  assert(round5StrictEditStatus.response.status === 200, "GET Round 5 status with strict edit sidecars should return 200");
-  assertCurrentRound5WithOptions(round5StrictEditStatus.payload, "GET Round 5 status with strict edit sidecars", {
-    strictZp05Ready: true,
-  });
-  assert(statSync(round5VibePath).mtimeMs === round5VibeBeforeStatusRead, "GET Round 5 strict edit status must not mutate project.vibe");
-  cleanupRound5Zp05StrictEditSidecars();
+  try {
+    const blockedZp04Prepare = await fetchJson(`${baseUrl}/api/runtime/projects/current/round5/strict-edit/prepare`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ shotId: "ZP04" }),
+    });
+    assert(blockedZp04Prepare.response.status === 409, "ZP04 strict edit prepare should fail closed");
+    assert(blockedZp04Prepare.payload.status === "blocked", "ZP04 strict edit prepare status mismatch");
+    assert(blockedZp04Prepare.payload.blockers.includes("start_qa_not_pass"), "ZP04 strict edit prepare should block on start QA");
+    assert(blockedZp04Prepare.payload.providerCalled === false, "ZP04 strict edit prepare must not call provider");
+    assert(blockedZp04Prepare.payload.projectVibeWritten === false, "ZP04 strict edit prepare must not write project.vibe");
+    for (const sidecarPath of round5StrictEditSidecars("ZP04")) {
+      assert(!existsSync(sidecarPath), "ZP04 strict edit prepare must not write sidecars");
+    }
+
+    const unknownShotPrepare = await fetchJson(`${baseUrl}/api/runtime/projects/current/round5/strict-edit/prepare`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ shotId: "ZP99" }),
+    });
+    assert(unknownShotPrepare.response.status === 409, "unknown shot strict edit prepare should fail closed");
+    assert(unknownShotPrepare.payload.blockers.includes("shot_not_found"), "unknown shot blocker missing");
+    assert(unknownShotPrepare.payload.providerCalled === false, "unknown shot prepare must not call provider");
+    assert(unknownShotPrepare.payload.strictEditPreflightPrepareRan === false, "unknown shot prepare must not run");
+
+    const invalidBboxPrepare = await fetchJson(`${baseUrl}/api/runtime/projects/current/round5/strict-edit/prepare`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ shotId: "ZP05", bboxNormalized: { x: 0.9, y: 0.2, width: 0.4, height: 0.2 } }),
+    });
+    assert(invalidBboxPrepare.response.status === 409, "invalid bbox strict edit prepare should fail closed");
+    assert(invalidBboxPrepare.payload.blockers.includes("editable_bbox_invalid"), "invalid bbox blocker missing");
+    assert(invalidBboxPrepare.payload.providerCalled === false, "invalid bbox prepare must not call provider");
+    for (const sidecarPath of round5Zp05StrictEditSidecars) {
+      assert(!existsSync(sidecarPath), "invalid bbox prepare must not write ZP05 sidecars");
+    }
+
+    const prepareStrictEdit = await fetchJson(`${baseUrl}/api/runtime/projects/current/round5/strict-edit/prepare`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ shotId: "ZP05", sourceStartFrameSha256: "request-sha-must-be-ignored" }),
+    });
+    assert(prepareStrictEdit.response.status === 200, "ZP05 strict edit prepare should return 200");
+    assertRound5Zp05StrictEditSidecarsPrepared(prepareStrictEdit.payload, "POST ZP05 strict edit prepare");
+    assert(statSync(round5VibePath).mtimeMs === round5VibeBeforeStatusRead, "ZP05 strict edit prepare must not mutate project.vibe");
+
+    const round5StrictEditStatus = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
+    assert(round5StrictEditStatus.response.status === 200, "GET Round 5 status with strict edit sidecars should return 200");
+    assertCurrentRound5WithOptions(round5StrictEditStatus.payload, "GET Round 5 status with strict edit sidecars", {
+      strictZp05Ready: true,
+    });
+    assert(statSync(round5VibePath).mtimeMs === round5VibeBeforeStatusRead, "GET Round 5 strict edit status must not mutate project.vibe");
+
+    writeRound5Zp05LooseStatusTrapSidecars();
+    const round5LooseTrapStatus = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
+    assert(round5LooseTrapStatus.response.status === 200, "GET Round 5 status with loose status traps should return 200");
+    const looseTrapByShot = new Map(round5LooseTrapStatus.payload.round5ArtifactIngest.shotGateMatrix.map((shot) => [shot.shotId, shot]));
+    const looseTrapZp05 = looseTrapByShot.get("ZP05");
+    assert(looseTrapZp05?.gateStatus === "end_edit_preflight_blocked", "loose status traps must not make ZP05 ready");
+    assert(looseTrapZp05?.nextAction === "collect_strict_edit_provenance", "loose status traps should keep ZP05 collecting provenance");
+    for (const blocker of ["approved_start_attachment_missing", "editable_region_mask_or_bbox_missing", "provider_edit_receipt_missing", "strict_image_edit_provenance_missing"]) {
+      assert(looseTrapZp05?.blockers?.includes(blocker), `loose status trap missing blocker ${blocker}`);
+    }
+    assert(round5LooseTrapStatus.payload.round5ArtifactIngest.ledgerProjection?.endEditPreflightReady === 0, "loose status traps must clear ready count");
+    assert(statSync(round5VibePath).mtimeMs === round5VibeBeforeStatusRead, "GET Round 5 loose trap status must not mutate project.vibe");
+  } finally {
+    cleanupRound5Zp05StrictEditSidecars();
+  }
 
   const reselect005 = await selectProject(baseUrl, project005Root, project005Id, "005 anime image2");
   assert(reselect005.response.status === 200, "POST reselect 005 should return 200");
