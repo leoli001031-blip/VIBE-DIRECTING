@@ -94,6 +94,7 @@ const minimalStoryFlowPath = "src/ui/director/MinimalStoryFlow.tsx";
 const minimalPreviewPath = "src/ui/director/MinimalPreview.tsx";
 const minimalAgentPanelPath = "src/ui/director/MinimalAgentPanel.tsx";
 const agentPanelProjectionPath = "src/ui/director/agentPanelProjection.ts";
+const projectRealChainPanelPath = "src/ui/project/ProjectRealChainPanel.tsx";
 const stylesPath = "src/styles.css";
 const packagePath = "package.json";
 const sequenceDocPath = "docs/core-development-sequence.md";
@@ -104,6 +105,7 @@ const minimalStoryFlowSource = stripComments(readText(minimalStoryFlowPath));
 const minimalPreviewSource = stripComments(readText(minimalPreviewPath));
 const minimalAgentPanelSource = stripComments(readText(minimalAgentPanelPath));
 const agentPanelProjectionSource = stripComments(readText(agentPanelProjectionPath));
+const projectRealChainPanelSource = stripComments(readText(projectRealChainPanelPath));
 const stylesSource = stripComments(readText(stylesPath));
 const packageJson = readJson(packagePath);
 const sequenceDoc = readText(sequenceDocPath);
@@ -127,7 +129,7 @@ const workflowPanelNextStepLabel = findFunctionBody(agentPanelProjectionSource, 
 const workflowPlanFacts = findFunctionBody(agentPanelProjectionSource, "workflowPlanFacts");
 const realPilotDirectorStatus = findFunctionBody(appSource, "RealPilotDirectorStatus");
 const oneShotActionPanel = findFunctionBody(appSource, "OneShotActionPanel");
-const projectRealChainPanel = findFunctionBody(appSource, "ProjectRealChainPanel");
+const projectRealChainPanel = findFunctionBody(projectRealChainPanelSource, "ProjectRealChainPanel");
 const videoPrepareSummaryStrip = findFunctionBody(appSource, "VideoPrepareSummaryStrip");
 const projectFactsStrip = findFunctionBody(appSource, "ProjectFactsStrip");
 const projectStoreSnapshotForUi = findFunctionBody(appSource, "buildProjectStoreSnapshotForUi");
@@ -773,11 +775,11 @@ for (const [term, pattern] of [
 }
 const projectRealChainUserSurface = [
   projectRealChainPanel,
-  findFunctionBody(appSource, "projectRealChainStatusLabel"),
-  findFunctionBody(appSource, "projectReviewCheckStatusLabel"),
-  findFunctionBody(appSource, "projectReviewCheckDetail"),
-  findFunctionBody(appSource, "projectPreviewReadyLabel"),
-  findFunctionBody(appSource, "projectProductionReviewLabel"),
+  findFunctionBody(projectRealChainPanelSource, "projectRealChainStatusLabel"),
+  findFunctionBody(projectRealChainPanelSource, "projectReviewCheckStatusLabel"),
+  findFunctionBody(projectRealChainPanelSource, "projectReviewCheckDetail"),
+  findFunctionBody(projectRealChainPanelSource, "projectPreviewReadyLabel"),
+  findFunctionBody(projectRealChainPanelSource, "projectProductionReviewLabel"),
 ].join("\n");
 checkMessage(requireWithin(projectRealChainUserSurface, /项目状态/, "current project chain panel must use creator-facing project status copy"));
 checkMessage(requireWithin(projectRealChainUserSurface, /同步状态/, "current project chain panel must use light sync copy"));

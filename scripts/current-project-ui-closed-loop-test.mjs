@@ -82,18 +82,19 @@ function assertCreatorPanelContract() {
   const appSource = readText("src/App.tsx");
   const agentPanelSource = readText("src/ui/director/MinimalAgentPanel.tsx");
   const agentPanelProjectionSource = readText("src/ui/director/agentPanelProjection.ts");
+  const projectRealChainPanelSource = readText("src/ui/project/ProjectRealChainPanel.tsx");
   const agentPanelContractSource = `${agentPanelSource}\n${agentPanelProjectionSource}`;
   const stylesSource = readText("src/styles.css");
   const app = findFunctionBody(appSource, "App");
-  const panel = findFunctionBody(appSource, "ProjectRealChainPanel");
+  const panel = findFunctionBody(projectRealChainPanelSource, "ProjectRealChainPanel");
   const surface = [
     panel,
-    findFunctionBody(appSource, "projectRealChainStatusLabel"),
-    findFunctionBody(appSource, "projectReviewCheckStatusLabel"),
-    findFunctionBody(appSource, "projectReviewCheckDetail"),
-    findFunctionBody(appSource, "projectPreviewReadyLabel"),
-    findFunctionBody(appSource, "projectProductionReviewLabel"),
-    findFunctionBody(appSource, "projectOneShotEvidence"),
+    findFunctionBody(projectRealChainPanelSource, "projectRealChainStatusLabel"),
+    findFunctionBody(projectRealChainPanelSource, "projectReviewCheckStatusLabel"),
+    findFunctionBody(projectRealChainPanelSource, "projectReviewCheckDetail"),
+    findFunctionBody(projectRealChainPanelSource, "projectPreviewReadyLabel"),
+    findFunctionBody(projectRealChainPanelSource, "projectProductionReviewLabel"),
+    findFunctionBody(projectRealChainPanelSource, "projectOneShotEvidence"),
   ].join("\n");
 
   for (const [label, pattern] of [
