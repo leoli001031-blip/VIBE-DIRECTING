@@ -90,12 +90,14 @@ function findFunctionNames(source, pattern) {
 }
 
 const appPath = "src/App.tsx";
+const minimalStoryFlowPath = "src/ui/director/MinimalStoryFlow.tsx";
 const stylesPath = "src/styles.css";
 const packagePath = "package.json";
 const sequenceDocPath = "docs/core-development-sequence.md";
 const contractDocPath = "docs/ui/minimal-director-ui-contract.md";
 
 const appSource = stripComments(readText(appPath));
+const minimalStoryFlowSource = stripComments(readText(minimalStoryFlowPath));
 const stylesSource = stripComments(readText(stylesPath));
 const packageJson = readJson(packagePath);
 const sequenceDoc = readText(sequenceDocPath);
@@ -106,6 +108,7 @@ const directorProgressStrip = findFunctionBody(appSource, "DirectorProgressStrip
 const directorProgressStripState = findFunctionBody(appSource, "buildDirectorProgressStripState");
 const minimalDirectorStatusDot = findFunctionBody(appSource, "MinimalDirectorStatusDot");
 const minimalTopNav = findFunctionBody(appSource, "MinimalTopNav");
+const minimalStoryFlow = findFunctionBody(minimalStoryFlowSource, "MinimalStoryFlow");
 const minimalAgentPanel = findFunctionBody(appSource, "MinimalAgentPanel");
 const selectedScopeLabel = findFunctionBody(appSource, "selectedScopeLabel");
 const naturalWorkflowScopeLabel = findFunctionBody(appSource, "naturalWorkflowScopeLabel");
@@ -176,7 +179,7 @@ const failures = [];
 const defaultMountedDirectorSurface = [
   directorMode,
   minimalDirectorStatusDot,
-  findFunctionBody(appSource, "MinimalStoryFlow"),
+  minimalStoryFlow,
   minimalAssetLibrary,
   minimalPreview,
   minimalAgentPanel,
@@ -338,7 +341,7 @@ checkMessage(requireWithin(minimalAssetLibrary, /<details\s+className="asset-lib
 checkMessage(requireWithin(minimalAssetLibrary, /blockerLabel/, "Asset Library blockers must collapse to a short status"));
 checkMessage(requireWithin(minimalAssetLibrary, /asset-feature-grid anchors/, "Asset Library props/styles must render as image-first asset cards"));
 check(!/blockers\.slice\(0,\s*4\)\.map/.test(minimalAssetLibrary), "Asset Library must not show long blocker chips on the main surface");
-check(!/Queue|queue|gate|provider/.test(findFunctionBody(appSource, "MinimalStoryFlow")), "Story Flow must not expose queue/gate/provider engineering details");
+check(!/Queue|queue|gate|provider/.test(minimalStoryFlow), "Story Flow must not expose queue/gate/provider engineering details");
 
 checkMessage(requireWithin(desktopShellView, /buildDesktopRuntimePlan\s*\(/, "Phase 15 Settings shell must use buildDesktopRuntimePlan"));
 checkMessage(requireWithin(settingsShell, /Desktop Runtime\s*\/\s*Permission Shell/i, "Phase 15 Desktop Runtime / Permission Shell in Settings"));

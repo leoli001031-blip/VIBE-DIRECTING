@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
-  Boxes,
   CheckCircle2,
   Clapperboard,
   Database,
@@ -119,6 +118,13 @@ import {
   type ProjectRealChainUiState,
   type ProjectRealChainUiStatus,
 } from "./core/projectRealChainStatus";
+import {
+  formatShotNumber,
+  MediaFrame,
+  MinimalStoryFlow,
+  shortStoryFunction,
+  toMediaSrc,
+} from "./ui/director/MinimalStoryFlow";
 import { fallbackAudit } from "./data/fallbackAudit";
 
 const gateNames = ["identity", "scene", "pair", "story", "prop", "style"] as const;
@@ -149,16 +155,6 @@ function stageIcon(stage: WorkflowStage) {
   if (stage.status === "blocked") return <ShieldAlert size={15} />;
   if (stage.status === "active") return <RefreshCw size={15} />;
   return <Radio size={15} />;
-}
-
-function groupAssets(assets: AssetRecord[]) {
-  return {
-    Characters: assets.filter((asset) => asset.type === "character"),
-    Scenes: assets.filter((asset) => asset.type === "scene"),
-    Props: assets.filter((asset) => asset.type === "prop"),
-    Style: assets.filter((asset) => asset.type === "style"),
-    Other: assets.filter((asset) => !["character", "scene", "prop", "style"].includes(asset.type)),
-  };
 }
 
 type DirectorView = "story" | "assets" | "preview";
@@ -442,39 +438,12 @@ type ProjectImage2BatchPanelState = ProjectImage2BatchUiState;
 type ProjectImage2OneShotPanelState = ProjectImage2OneShotUiState;
 type ProjectRound5StrictEditPreflightPanelState = ProjectRound5StrictEditPreflightUiState | { status: "idle"; message?: string };
 
-function toMediaSrc(path?: string) {
-  if (!path) return undefined;
-  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:") || path.startsWith("blob:")) return path;
-  if (path.startsWith("/")) return `/@fs${path}`;
-  return path;
-}
-
-function formatShotNumber(id: string) {
-  const match = id.match(/^A(\d+)_(\d+)$/i);
-  if (!match) return id;
-  return `${Number(match[1])}-${Number(match[2])}`;
-}
-
 function cleanLabel(value: string) {
   return value
     .replace(/^asset_/i, "")
     .replace(/_/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-const storyFunctionLabels = ["Setup", "Signal", "Choice", "Move", "Reveal", "Test", "Turn", "Decision", "Payoff", "Close"];
-
-function shortStoryFunction(shot: ShotRecord, index: number) {
-  const value = shot.storyFunction.trim();
-  if (/^[A-Za-z][A-Za-z\s-]{1,16}$/.test(value)) return value;
-  return storyFunctionLabels[index % storyFunctionLabels.length];
-}
-
-function shotStatusTone(shot: ShotRecord) {
-  if (shot.status === "blocked" || shot.issues.some((issue) => issue.includes("missing"))) return "bad";
-  if (shot.issues.length || shot.status === "video_missing") return "warn";
-  return "ok";
 }
 
 function assetStatusTone(asset: AssetRecord) {
@@ -1036,31 +1005,6 @@ function buildSubagentWorkerRuntimeView(runtimeState: ProjectRuntimeState): Suba
       .map((preview) => preview.subagentTaskEnvelope)
       .filter(Boolean),
   });
-}
-
-function MediaFrame({
-  src,
-  alt,
-  label,
-  className = "",
-}: {
-  src?: string;
-  alt: string;
-  label: string;
-  className?: string;
-}) {
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setFailed(false);
-  }, [src]);
-
-  const mediaSrc = toMediaSrc(src);
-  if (!mediaSrc || failed) {
-    return <div className={`minimal-media-placeholder ${className}`}>{label}</div>;
-  }
-
-  return <img className={className} src={mediaSrc} alt={alt} onError={() => setFailed(true)} />;
 }
 
 function StatusPill({ value }: { value: string }) {
@@ -6763,51 +6707,6 @@ function Workflow({ stages }: { stages: WorkflowStage[] }) {
   );
 }
 
-function VisualMemoryPanel({
-  audit,
-  view,
-  selectedAsset,
-  onSelectAsset,
-}: {
-  audit: ProjectAudit;
-  view: RuntimeView;
-  selectedAsset?: string;
-  onSelectAsset: (id: string) => void;
-}) {
-  const groups = groupAssets(audit.assets);
-  return (
-    <aside className="asset-panel">
-      <div className="panel-title">
-        <Boxes size={17} />
-        <span>Visual Memory</span>
-      </div>
-      <div className="memory-summary">
-        <strong>{view.visualMemory.existing}/{view.visualMemory.total || audit.metrics.expectedAssets}</strong>
-        <span>assets present</span>
-        <small>{view.visualMemory.needsReview} need review · {view.visualMemory.missing} missing</small>
-      </div>
-      {Object.entries(groups).filter(([, items]) => items.length).map(([group, items]) => (
-        <section key={group} className="asset-group">
-          <h3>{group}</h3>
-          <div className="asset-list">
-            {items.map((asset) => (
-              <button
-                key={asset.id}
-                className={`asset-row ${selectedAsset === asset.id ? "selected" : ""}`}
-                onClick={() => onSelectAsset(asset.id)}
-              >
-                <span className="asset-name">{asset.name}</span>
-                <span className={`dot ${asset.status === "missing" ? "bad" : asset.issues.length ? "warn" : "ok"}`} />
-                <small>{asset.lockedStatus}</small>
-              </button>
-            ))}
-          </div>
-        </section>
-      ))}
-    </aside>
-  );
-}
-
 function ShotCard({ shot, selected, taskCount, onClick }: { shot: ShotRecord; selected: boolean; taskCount: number; onClick: () => void }) {
   return (
     <button className={`shot-card ${selected ? "selected" : ""}`} onClick={onClick}>
@@ -7014,49 +6913,6 @@ function MinimalTopNav({
         <span className="sr-only">Diagnostics</span>
       </button>
     </header>
-  );
-}
-
-function MinimalStoryFlow({
-  sectionLabel,
-  shots,
-  selectedShotId,
-  selectedShotIds,
-  onSelectShot,
-}: {
-  sectionLabel: string;
-  shots: ShotRecord[];
-  selectedShotId: string;
-  selectedShotIds: string[];
-  onSelectShot: (id: string, additive?: boolean) => void;
-}) {
-  const selectedSet = new Set(selectedShotIds.length ? selectedShotIds : [selectedShotId]);
-  return (
-    <main className="minimal-story-flow">
-      <h2 title={sectionLabel}>{sectionLabel.length > 24 ? `${sectionLabel.slice(0, 23).trim()}...` : sectionLabel}</h2>
-      <div className="minimal-shot-grid">
-        {shots.map((shot, index) => (
-          <button
-            key={shot.id}
-            className={`minimal-shot-card ${selectedSet.has(shot.id) ? "selected" : ""} ${selectedShotId === shot.id ? "primary" : ""}`}
-            onClick={(event) => onSelectShot(shot.id, event.metaKey || event.ctrlKey || event.shiftKey)}
-            aria-pressed={selectedSet.has(shot.id)}
-          >
-            <MediaFrame
-              src={shot.startFrame || shot.endFrame}
-              alt={shot.title}
-              label={formatShotNumber(shot.id)}
-              className="minimal-shot-image"
-            />
-            <span className="minimal-shot-caption">
-              <strong>{formatShotNumber(shot.id)}</strong>
-              <span>{shortStoryFunction(shot, index)}</span>
-              <i className={`dot ${shotStatusTone(shot)}`} aria-label={shot.status} />
-            </span>
-          </button>
-        ))}
-      </div>
-    </main>
   );
 }
 
