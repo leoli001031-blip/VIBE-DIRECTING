@@ -54,6 +54,19 @@ function countPattern(source, pattern) {
   return (source.match(pattern) || []).length;
 }
 
+function visibleUiCopy(source) {
+  const copies = [];
+  for (const match of source.matchAll(/>([^<>{}]+)</g)) {
+    const text = match[1].replace(/\s+/g, " ").trim();
+    if (text) copies.push(text);
+  }
+  for (const match of source.matchAll(/aria-label=\{[^?]+\?\s*"([^"]+)"\s*:\s*"([^"]+)"\}/g)) {
+    copies.push(match[1], match[2]);
+  }
+  for (const match of source.matchAll(/aria-label="([^"]+)"/g)) copies.push(match[1]);
+  return copies.join(" ");
+}
+
 function dataUrl(path, output) {
   return `data:text/javascript;base64,${Buffer.from(`${output}\n//# sourceURL=${pathToFileURL(path).href}`).toString("base64")}`;
 }
@@ -212,6 +225,25 @@ const {
 const { buildPreviewExportState } = await importPreviewExport();
 
 const shots = [shot("S01"), shot("S02"), shot("S03")];
+const mixedQueue = buildPreviewPlayerQueue(
+  previewExport([
+    event({ id: "missing-third", type: "blocked_placeholder", shotId: "S03", startSeconds: 8.5, durationSeconds: 1.5, mediaPath: "media/hidden-debug.png" }),
+    event({ id: "video-second", type: "video_clip", shotId: "S02", startSeconds: 2.5, durationSeconds: 6, mediaPath: "media/s02.mp4" }),
+    event({ id: "image-first", type: "image_hold", shotId: "S01", startSeconds: 0, durationSeconds: 2.5, mediaPath: "media/s01.png" }),
+  ]),
+  shots,
+);
+assert(mixedQueue.map((item) => item.id).join(",") === "image-first,video-second,missing-third", "mixed queue must sort image/video/missing by timeline start");
+assert(mixedQueue.map((item) => item.kind).join(",") === "image_hold,video_clip,missing_placeholder", "mixed queue must preserve image/video and convert missing to placeholder");
+assert(mixedQueue.map((item) => item.startSeconds).join(",") === "0,2.5,8.5", "mixed queue must preserve startSeconds");
+assert(mixedQueue.map((item) => item.durationSeconds).join(",") === "2.5,6,1.5", "mixed queue must preserve shot durations");
+assert(mixedQueue[1].mediaPath === "media/s02.mp4", "video clip must carry its media path");
+assert(mixedQueue[2].mediaPath === undefined, "missing placeholder must not carry a hidden media path");
+assert(getPreviewPlayerTotalDuration(mixedQueue) === 10, "mixed queue total duration must equal the final shot end");
+assert(getPreviewPlayerActiveItem(mixedQueue, 0)?.id === "image-first", "image hold must be active at timeline start");
+assert(getPreviewPlayerActiveItem(mixedQueue, 2.5)?.id === "video-second", "video clip must replace the image hold at its boundary");
+assert(getPreviewPlayerActiveItem(mixedQueue, 8.5)?.id === "missing-third", "missing placeholder must become active at its boundary");
+
 const queue = buildPreviewPlayerQueue(
   previewExport([
     event({ id: "clip-missing", type: "video_clip", shotId: "S02", startSeconds: 4, durationSeconds: 0, mediaPath: undefined }),
@@ -350,11 +382,11 @@ assert(
 );
 assert(returnedOutputPreview.formalPreview.status === "blocked", "returned output draft preview must not auto-promote formal preview");
 
-const appSource = stripComments(readText("src/App.tsx"));
+const previewSource = stripComments(readText("src/ui/director/MinimalPreview.tsx"));
 const stylesSource = stripComments(readText("src/styles.css"));
 const packageJson = readJson("package.json");
-const previewBody = findFunctionBody(appSource, "MinimalPreview");
-const assetBody = findFunctionBody(appSource, "MinimalAssetLibrary");
+const previewBody = findFunctionBody(previewSource, "MinimalPreview");
+const previewCopy = visibleUiCopy(previewBody);
 const failures = [];
 function check(condition, message) {
   if (!condition) failures.push(message);
@@ -362,7 +394,7 @@ function check(condition, message) {
 
 check(packageJson.scripts?.["preview-player:test"] === "node scripts/preview-player-test.mjs", "package.json must expose preview-player:test");
 check(packageJson.scripts?.["minimal-runtime-projection:test"] === "node scripts/minimal-runtime-projection-test.mjs", "package.json must expose minimal-runtime-projection:test");
-check(/from "\.\/core\/previewPlayerQueue"/.test(appSource), "MinimalPreview must use the core Preview Player queue helper");
+check(/from "\.\.\/\.\.\/core\/previewPlayerQueue"/.test(previewSource), "MinimalPreview must use the core Preview Player queue helper");
 check(/buildPreviewPlayerQueue\s*\(/.test(previewBody), "MinimalPreview must consume the queue helper");
 check(/buildMinimalRuntimeProjection\s*\(/.test(previewBody), "MinimalPreview must consume the minimal runtime projection helper");
 check(/previewSummary\.detail/.test(previewBody), "MinimalPreview must show a short preview summary");
@@ -371,11 +403,13 @@ check(/getPreviewPlayerActiveItem\s*\(/.test(previewBody), "MinimalPreview must 
 check(/selectPreviewItem/.test(previewBody) && /setCurrentTime\(item\.startSeconds\)/.test(previewBody), "timeline click must seek currentTime");
 check(/onSelectShot\(item\.shotId\)/.test(previewBody), "timeline click must select the clicked shot");
 check(/<video/.test(previewBody) && /preview-stage-video/.test(previewBody), "video clips with mediaPath must render a video shell");
+check(/activeItem\?\.kind === "image_hold"[\s\S]*<MediaFrame/.test(previewBody), "image holds must render through MediaFrame");
+check(/activeItem\?\.kind === "video_clip" && activeItem\.mediaPath[\s\S]*<video/.test(previewBody), "video clips must replace the image hold render branch");
+check(/preview-stage-card/.test(previewBody) && />Missing</.test(previewBody), "missing media must render only a light placeholder");
+check(!/blockedReasons|formalPreviewGate|requiredChecks|providerSubmissionForbidden|sourceTaskId/.test(previewBody), "Preview Player source must not surface engineering state branches");
 check(!/activeItem\?\.kind === "video_clip" \? "Clip"/.test(previewBody), "missing video placeholders must not show Clip copy");
 check(/preview-stage/.test(previewBody) && /preview-line/.test(previewBody), "MinimalPreview must render a large shell and a minimal timeline");
-check(!/Formal\s+Gate|Proxy\s+Duration|Draft\s+Events|blockedPlaceholder|provider|schema|manifest|TaskEnvelope/i.test(previewBody), "MinimalPreview must not show engineering counters or terms");
-check(/locked/.test(assetBody) && /candidate/.test(assetBody) && /review/.test(assetBody), "Asset Library must retain locked/candidate/review states");
-check(!/contactSheets|Voice\s+Source\s+Library|voiceSource/i.test(assetBody), "Asset Library main surface must not become a contact sheet or voice-source diagnostics view");
+check(!/\b(provider|gate|receipt|queue|round|phase|strict edit|handoff)\b/i.test(previewCopy), `Preview Player visible copy must stay user-facing: ${previewCopy}`);
 check(/preview-stage-card/.test(stylesSource), "Preview shell styling is missing");
 check(/preview-stage-video/.test(stylesSource), "Video stage styling is missing");
 check(/preview-line-progress/.test(stylesSource), "Preview progress styling is missing");

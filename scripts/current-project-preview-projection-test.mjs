@@ -122,6 +122,68 @@ const defaultDurationProjection = buildCurrentProjectPreviewProjection({
 });
 assert(defaultDurationProjection.items.every((item) => item.durationSeconds === 5), "missing clip duration should default to 5s");
 
+const planOnlyProjection = buildCurrentProjectPreviewProjection({
+  summary: {
+    status: "ready",
+    projectId: "plan_only_preview_player",
+    projectRoot: "/workspace/plan-only",
+    previewStatus: "ready",
+    productionStatus: "blocked",
+  },
+  previewPlan: {
+    clips: [
+      {
+        clipId: "plan-s01-image",
+        order: 1,
+        shotId: "S01",
+        type: "image",
+        mediaPath: "/workspace/plan-only/outputs/S01.png",
+        durationSeconds: 2.5,
+        status: "returned",
+      },
+      {
+        clipId: "plan-s02-video",
+        order: 2,
+        shotId: "S02",
+        mediaType: "video/mp4",
+        fileUrl: "/api/runtime/files?path=outputs%2FS02.mp4",
+        durationSeconds: 6,
+        status: "returned",
+      },
+      {
+        clipId: "plan-s03-missing",
+        order: 3,
+        shotId: "S03",
+        type: "image",
+        durationSeconds: 1.5,
+        status: "missing",
+      },
+      {
+        clipId: "plan-s04-blocked",
+        order: 4,
+        shotId: "S04",
+        mediaType: "video/mp4",
+        mediaPath: "/workspace/plan-only/outputs/S04.mp4",
+        durationSeconds: 4,
+        status: "blocked_by_runtime_truth",
+      },
+    ],
+  },
+});
+assert(planOnlyProjection.available === true, "plan-only projection should be available");
+assert(planOnlyProjection.providerCalled === false, "plan-only projection must hard-lock provider calls");
+assert(planOnlyProjection.liveSubmitAllowed === false, "plan-only projection must hard-lock live submit");
+assert(planOnlyProjection.workerSpawnForbidden === true, "plan-only projection must hard-lock worker spawn");
+assert(planOnlyProjection.items.map((item) => item.kind).join(",") === "image_hold,video_clip,missing_placeholder,missing_placeholder", "plan-only projection must map image/video/missing/blocked kinds for Preview Player");
+assert(planOnlyProjection.items.map((item) => item.durationSeconds).join(",") === "2.5,6,1.5,4", "plan-only projection must preserve clip durations");
+assert(planOnlyProjection.items.map((item) => item.startSeconds).join(",") === "0,2.5,8.5,10", "plan-only projection must accumulate startSeconds from durations");
+assert(planOnlyProjection.totalDurationSeconds === 14, "plan-only projection total duration must include placeholders");
+assert(planOnlyProjection.items.find((item) => item.shotId === "S02")?.mediaPath === "/api/runtime/files?path=outputs%2FS02.mp4", "video clip must preserve the runtime file URL");
+assert(planOnlyProjection.items.find((item) => item.shotId === "S03")?.mediaPath === undefined, "missing clip must not expose a media path");
+assert(planOnlyProjection.items.find((item) => item.shotId === "S04")?.mediaPath === undefined, "blocked clip must not expose a media path");
+assert(planOnlyProjection.blockedCount === 2, "plan-only projection should count missing and blocked items as blocked");
+assert(planOnlyProjection.missingCount === 2, "plan-only projection should count missing and blocked placeholders as missing");
+
 const projection004 = buildCurrentProjectPreviewProjection({
   summary: project004.summary,
   previewItems: project004.previewItems,
