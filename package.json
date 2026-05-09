@@ -58,6 +58,7 @@
     "real-image2-executor-adapter:test": "node scripts/real-image2-executor-adapter-test.mjs",
     "real-provider-one-shot:test": "node scripts/real-provider-one-shot-test.mjs",
     "real-provider-transport:test": "node scripts/real-provider-transport-test.mjs",
+    "image2-provider-boundary:test": "npm run codex-app-server-image2-edit-adapter:test && npm run real-image2-executor-adapter:test && npm run real-provider-one-shot:test && npm run real-provider-transport:test && npm run current-project-real-image2-readiness:test && npm run current-project-image2-return-executor:test",
     "image-reference-transport:test": "node scripts/image-reference-transport-test.mjs",
     "image-reference-delivery-receipt:test": "node scripts/image-reference-delivery-receipt-test.mjs",
     "fresh-run-contract:test": "node scripts/fresh-run-contract-test.mjs",

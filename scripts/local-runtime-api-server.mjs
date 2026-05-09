@@ -2867,16 +2867,16 @@ function currentProjectImage2OneShotResponse(action, input, extra = {}, source =
           ? "prepared"
           : "ready_to_prepare";
   const userLabel = status === "prepared"
-    ? "确认生成"
+    ? "确认 handoff"
     : status === "trigger_plan_prepared"
-      ? "等待确认"
+      ? "等待回流"
     : status === "handoff_prepared"
       ? "等待文件"
       : status === "needs_review"
         ? "需要复核"
         : status === "blocked"
           ? "待补齐"
-          : "生成小样";
+          : "准备小样包";
 
   return {
     ok: confirmBlockers.length === 0,
@@ -3096,7 +3096,7 @@ function currentProjectImage2OneShotPrepareTriggerResponse(input, extra = {}, so
     project: statusProjection.project,
     status: ok ? "trigger_plan_prepared" : "blocked",
     uiStatus: ok ? "trigger_plan_prepared" : "blocked",
-    userLabel: ok ? "等待确认" : "待补齐",
+    userLabel: ok ? "等待回流" : "待补齐",
     selectedShotId: transportPlan.selectedShotId,
     selectedShotIds: transportPlan.selectedShotIds,
     receiptId: transportPlan.receiptId,
@@ -3162,7 +3162,7 @@ function currentProjectImage2OneShotPrepareTriggerResponse(input, extra = {}, so
     projectVibeWritten: false,
     workerSpawnForbidden: true,
     blockers: finalBlockers,
-    message: ok ? "真实 Image2 触发计划已准备，等待 action-time confirmation；本 endpoint 未执行 provider。" : "真实 Image2 触发计划暂时受阻。",
+    message: ok ? "外部 Image2 执行 handoff 已准备，等待回流确认；本 endpoint 未执行 provider。" : "外部 Image2 执行 handoff 暂时受阻。",
     ...extra,
   };
 }
@@ -3565,8 +3565,10 @@ function actualProviderObservationMatches(providerObservation, expectedOutputPat
   const provider = String(providerObservation.provider || providerObservation.providerId || "");
   const outputPath = runtimeRelativeFromValue(providerObservation.outputPath);
   const observedHash = asString(providerObservation.outputSha256) || asString(providerObservation.outputHash);
+  const providerRequestId = asString(providerObservation.providerRequestId);
   return providerObservation.providerObservationMode === "actual_provider_call_observed"
     && /image2/i.test(provider)
+    && Boolean(providerRequestId)
     && outputPath === expectedOutputPath
     && observedHash === outputSha256
     && providerObservation.providerCalled === true
@@ -3911,8 +3913,9 @@ function currentProjectImage2OneShotReturnIngestResponse(input, extra = {}, sour
   const hasReturnedOutput = runtimePathExists(returnedOutputPath);
   const outputSourceInsideProject = oneShotPathInsideRoot(returnedOutputPath, source.runRootRelativePath);
   const outputSourceIsExpected = returnedOutputPath === expectedOutputPath;
+  const returnedProviderRequestId = asString(input.providerRequestId) || asString(providerObservation?.providerRequestId);
 
-  if (preflightContract.blockers.length === 0 && input.actualProviderReturned === true && hasReturnedOutput && outputSourceInsideProject) {
+  if (preflightContract.blockers.length === 0 && input.actualProviderReturned === true && hasReturnedOutput && outputSourceInsideProject && returnedProviderRequestId) {
     try {
       const sourceOutputPath = scopedRepoPath(returnedOutputPath);
       const outputBytes = readFileSync(sourceOutputPath);
@@ -3933,6 +3936,7 @@ function currentProjectImage2OneShotReturnIngestResponse(input, extra = {}, sour
         selectedShotId: receipt.selectedShotId,
         receiptId: receipt.receiptId,
         handoffPacketId: handoff.packetId,
+        providerRequestId: returnedProviderRequestId,
         sourceOutputPath: returnedOutputPath,
         outputPath: expectedOutputPath,
         outputSha256,
@@ -4052,8 +4056,9 @@ function currentProjectImage2OneShotReturnIngestResponse(input, extra = {}, sour
     input.actualProviderReturned === true || hashBoundActual ? "" : "Actual provider return requires actualProviderReturned=true or existing actual hash-bound sidecars.",
     hasReturnedOutput || runtimePathExists(expectedOutputPath) ? "" : "Returned provider output file is required.",
     outputSourceInsideProject ? "" : "Returned provider output must stay inside the current project root.",
+    returnedProviderRequestId || actualProviderObservationMatches(providerObservation, expectedOutputPath, outputSha256) ? "" : "Actual provider return requires a non-empty providerRequestId in provider observation.",
     outputSha256 ? "" : "Returned provider output must be hashable.",
-    hashBoundActual ? "" : "Actual provider return must include hash-bound provider observation and semantic QA sidecars.",
+    hashBoundActual ? "" : "Actual provider return requires providerRequestId, output hash, provider observation, and semantic QA sidecars before ingest.",
   ]);
   const ok = blockers.length === 0;
   const status = ok ? "real_provider_returned_needs_review" : preflightContract.blockers.length ? "blocked" : "dry_run_executor_ready";
@@ -4119,6 +4124,11 @@ function currentProjectImage2OneShotReturnIngestResponse(input, extra = {}, sour
     uiStatus: ok ? "needs_review" : status,
     userLabel: ok ? "需要复核" : "回流检查",
     actualImage2Triggered: hashBoundActual,
+    providerReturnIngested: hashBoundActual,
+    externalProviderCallObserved: hashBoundActual,
+    runtimeProviderSubmitAttempted: false,
+    runtimeExternalNetworkCallMade: false,
+    formalPromotionBlocked: hashBoundActual,
     selectedShotId: input.selectedShotId,
     expectedOutputPath,
     returnedOutputPath,
@@ -4138,7 +4148,10 @@ function currentProjectImage2OneShotReturnIngestResponse(input, extra = {}, sour
       consumedPersistedHandoff: isRecord(handoff),
       mockProviderOnly: false,
       externalProviderReturnOnly: true,
+      runtimeProviderSubmitAttempted: false,
+      runtimeExternalNetworkCallMade: false,
       formalPromotionAllowed: false,
+      formalPromotionBlocked: hashBoundActual,
       hashBoundActual,
     },
     executorContract: contract,
@@ -4187,7 +4200,11 @@ function currentProjectImage2OneShotReturnIngestResponse(input, extra = {}, sour
       statePersistenceAllowed: false,
     },
     providerCalled: hashBoundActual,
-    externalNetworkCallMade: hashBoundActual,
+    externalProviderCallObserved: hashBoundActual,
+    externalNetworkCallMade: false,
+    runtimeProviderSubmitAttempted: false,
+    runtimeExternalNetworkCallMade: false,
+    formalPromotionBlocked: hashBoundActual,
     liveSubmitAllowed: false,
     projectVibeWritten: false,
     workerSpawnForbidden: true,

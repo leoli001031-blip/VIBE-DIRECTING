@@ -7971,9 +7971,9 @@ function ProjectRealChainPanel({
     : sampleReview
       ? "需要复核"
       : sampleReady
-        ? "确认生成"
-        : "生成小样";
-  const sampleStatusLabel = sampleReview ? "需要复核" : image2OneShotState.status === "trigger_plan_prepared" ? "等待确认" : sampleWaiting ? "等待文件" : sampleReady ? "待确认" : sampleBlocked ? "待补齐" : "可开始";
+        ? "确认 handoff"
+        : "准备小样包";
+  const sampleStatusLabel = sampleReview ? "需要复核" : image2OneShotState.status === "trigger_plan_prepared" ? "等待回流" : sampleWaiting ? "等待文件" : sampleReady ? "待确认" : sampleBlocked ? "待补齐" : "可开始";
   const connecting = projectSelectionStatus === "connecting";
   const canConnect = projectPathInput.trim().length > 0 && !connecting;
 
@@ -8068,7 +8068,7 @@ function ProjectRealChainPanel({
         <div>
           <span>单镜头小样</span>
           <strong>{sampleStatusLabel}</strong>
-          <small>{image2OneShotState.status === "trigger_plan_prepared" ? "已准备真实触发，等待 action-time confirmation" : selectedShotId ? `镜头 ${selectedShotId}` : "选择镜头后开始"}</small>
+          <small>{image2OneShotState.status === "trigger_plan_prepared" ? "已准备外部执行 handoff，等待回流确认" : selectedShotId ? `镜头 ${selectedShotId}` : "选择镜头后开始"}</small>
         </div>
         <button
           disabled={sampleDisabled && !sampleWaiting}
@@ -10102,7 +10102,7 @@ function App() {
     const normalizedSelection = nextSelection.length ? nextSelection : [shotId];
     setSelectedShotIds(normalizedSelection);
     setSelectedShotId(normalizedSelection.includes(shotId) ? shotId : normalizedSelection[0]);
-    setProjectImage2OneShotState({ status: "unavailable", message: "选择镜头后可生成小样。" });
+    setProjectImage2OneShotState({ status: "unavailable", message: "选择镜头后可准备小样包。" });
     const section = view.storySections.find((item) => item.shotIds.includes(shotId));
     if (section) setActiveSectionId(section.id);
   }
@@ -10253,7 +10253,7 @@ function App() {
     setProjectImage2OneShotState((current) => ({
       ...current,
       status: "running",
-      message: "正在确认生成。",
+      message: "正在确认 handoff。",
     }));
     const confirmedState = await confirmProjectImage2OneShot(runtimeProjectIdentity, projectImage2OneShotState.receipt || projectImage2OneShotState.summary?.receipt);
     if (confirmedState.status === "handoff_prepared" || confirmedState.status === "waiting_file") {

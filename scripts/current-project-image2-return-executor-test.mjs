@@ -259,6 +259,7 @@ try {
     schemaVersion: "current_project_image2_return_executor_provider_observation_v1",
     providerObservationMode: "actual_provider_call_observed",
     provider: "openai-image2-api",
+    providerRequestId: "provider-request-current-project-image2-return-executor-a01",
     outputPath: prepare.payload.expectedOutputPath,
     outputSha256,
     providerCalled: true,
@@ -272,6 +273,22 @@ try {
     status: "needs_review",
     finalAssessment: { status: "needs_review" },
   };
+  writeJson(prepare.payload.providerObservationPath, {
+    ...providerObservation,
+    providerRequestId: undefined,
+  });
+  writeJson(prepare.payload.semanticQaPath, semanticQa);
+  const missingProviderRequestId = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/execute-return`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ selectedShotId: "A01", selectedShotIds: ["A01"], imageCount: 1, receiptId: prepare.payload.receipt.receiptId }),
+  });
+  assert(missingProviderRequestId.response.status === 409, "hash-bound-looking sidecars without providerRequestId must fail closed");
+  assert(missingProviderRequestId.payload.providerCalled === false, "missing providerRequestId must not promote providerCalled");
+  assert(missingProviderRequestId.payload.actualImage2Triggered === false, "missing providerRequestId must not promote actualImage2Triggered");
+  assert(missingProviderRequestId.payload.providerReturnIngested === false, "missing providerRequestId must not promote providerReturnIngested");
+  assertNoSubmit(missingProviderRequestId.payload, "missing providerRequestId return check");
+
   const returned = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-one-shot/execute-return`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -290,6 +307,11 @@ try {
   assert(returned.payload.status === "real_provider_returned_needs_review", "actual return should project needs_review");
   assert(returned.payload.providerCalled === true, "actual return should preserve providerCalled fact");
   assert(returned.payload.actualImage2Triggered === true, "actual return should preserve actualImage2Triggered fact");
+  assert(returned.payload.providerReturnIngested === true, "actual return should mark provider return ingested");
+  assert(returned.payload.externalProviderCallObserved === true, "actual return should observe external provider call");
+  assert(returned.payload.runtimeProviderSubmitAttempted === false, "actual return must not claim runtime provider submit");
+  assert(returned.payload.runtimeExternalNetworkCallMade === false, "actual return must not claim runtime external network IO");
+  assert(returned.payload.formalPromotionBlocked === true, "actual return should remain blocked from formal promotion");
   assert(returned.payload.executorEvidence.hashBoundActual === true, "actual return should be hash-bound");
   assert(returned.payload.watcherProjection.semanticQaStatus === "needs_review", "actual return should surface needs_review QA");
   assert(existsSync(returned.payload.expectedOutputPath), "actual return should write expected output");

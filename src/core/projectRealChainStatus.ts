@@ -333,6 +333,11 @@ export type ProjectImage2OneShotStatus = {
   imageUrl?: string;
   reviewRequired?: boolean;
   actualImage2Triggered?: boolean;
+  providerReturnIngested: boolean;
+  externalProviderCallObserved: boolean;
+  runtimeProviderSubmitAttempted: boolean;
+  runtimeExternalNetworkCallMade: boolean;
+  formalPromotionBlocked: boolean;
   providerCalled: boolean;
   liveSubmitAllowed: boolean;
   projectVibeWritten: boolean;
@@ -586,6 +591,11 @@ type ProjectImage2OneShotPayload = {
     providerCalled?: boolean;
   };
   actualImage2Triggered?: boolean;
+  providerReturnIngested?: boolean;
+  externalProviderCallObserved?: boolean;
+  runtimeProviderSubmitAttempted?: boolean;
+  runtimeExternalNetworkCallMade?: boolean;
+  formalPromotionBlocked?: boolean;
   providerCalled?: boolean;
   liveSubmitAllowed?: boolean;
   projectVibeWritten?: boolean;
@@ -1230,8 +1240,13 @@ export function deriveProjectImage2OneShotStatus(payload: unknown): ProjectImage
   if (!report) {
     return {
       uiStatus: "unavailable",
-      userLabel: "生成小样",
+      userLabel: "准备小样包",
       outputExists: false,
+      providerReturnIngested: false,
+      externalProviderCallObserved: false,
+      runtimeProviderSubmitAttempted: false,
+      runtimeExternalNetworkCallMade: false,
+      formalPromotionBlocked: false,
       providerCalled: false,
       liveSubmitAllowed: false,
       projectVibeWritten: false,
@@ -1255,11 +1270,16 @@ export function deriveProjectImage2OneShotStatus(payload: unknown): ProjectImage
     triggerPlanPath: report.triggerPlanPath,
     handoffPacketPath: report.handoffPacketPath,
     receipt: report.receipt,
-    userLabel: report.userLabel || (rawStatus === "prepared" ? "确认生成" : rawStatus === "trigger_plan_prepared" ? "等待确认" : rawStatus === "handoff_prepared" || rawStatus === "waiting_file" ? "等待文件" : rawStatus === "needs_review" ? "需要复核" : "生成小样"),
+    userLabel: report.userLabel || (rawStatus === "prepared" ? "确认 handoff" : rawStatus === "trigger_plan_prepared" ? "等待回流" : rawStatus === "handoff_prepared" || rawStatus === "waiting_file" ? "等待文件" : rawStatus === "needs_review" ? "需要复核" : "准备小样包"),
     outputExists: report.watcherProjection?.outputExists === true || Boolean(report.previewProjection?.imageUrl),
     imageUrl: report.previewProjection?.imageUrl ? toRuntimeUrl(report.previewProjection.imageUrl) : undefined,
     reviewRequired: report.previewProjection?.reviewRequired === true,
     actualImage2Triggered: report.actualImage2Triggered === true,
+    providerReturnIngested: report.providerReturnIngested === true,
+    externalProviderCallObserved: report.externalProviderCallObserved === true,
+    runtimeProviderSubmitAttempted: report.runtimeProviderSubmitAttempted === true,
+    runtimeExternalNetworkCallMade: report.runtimeExternalNetworkCallMade === true,
+    formalPromotionBlocked: report.formalPromotionBlocked === true,
     providerCalled: report.providerCalled === true,
     liveSubmitAllowed: report.liveSubmitAllowed === true,
     projectVibeWritten: report.projectVibeWritten === true,
@@ -1534,14 +1554,14 @@ export async function loadProjectImage2OneShotStatus(
   selectedShotId?: string,
 ): Promise<ProjectImage2OneShotUiState> {
   if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
-  if (!selectedShotId) return { status: "unavailable", message: "选择镜头后可生成小样。" };
+  if (!selectedShotId) return { status: "unavailable", message: "选择镜头后可准备小样包。" };
 
   try {
     const payload = await fetchRuntimeJson(projectRuntimeRequestPath(oneShotPath(projectImage2OneShotStatusEndpoint, selectedShotId), expected));
     const summary = deriveProjectImage2OneShotStatus(payload);
     return guardProjectImage2OneShotUiStateForCurrentProject({ status: summary.uiStatus, summary, receipt: summary.receipt }, expected);
   } catch {
-    return oneShotUnavailable("选择镜头后可生成小样。");
+    return oneShotUnavailable("选择镜头后可准备小样包。");
   }
 }
 
@@ -1574,7 +1594,7 @@ export async function confirmProjectImage2OneShot(
   receipt?: ProjectImage2OneShotReceipt,
 ): Promise<ProjectImage2OneShotUiState> {
   if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
-  if (!receipt?.selectedShotId) return { status: "blocked", message: "请先生成小样。" };
+  if (!receipt?.selectedShotId) return { status: "blocked", message: "请先准备小样包。" };
 
   try {
     const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2OneShotConfirmEndpoint, expected), {
@@ -1591,7 +1611,7 @@ export async function confirmProjectImage2OneShot(
     const summary = deriveProjectImage2OneShotStatus(payload);
     return guardProjectImage2OneShotUiStateForCurrentProject({ status: summary.uiStatus, summary, receipt: summary.receipt, message: summary.message }, expected);
   } catch {
-    return { status: "blocked", message: "确认生成失败，请重新生成小样。" };
+    return { status: "blocked", message: "确认 handoff 失败，请重新准备小样包。" };
   }
 }
 
@@ -1600,7 +1620,7 @@ export async function prepareProjectImage2OneShotTrigger(
   receipt?: ProjectImage2OneShotReceipt,
 ): Promise<ProjectImage2OneShotUiState> {
   if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
-  if (!receipt?.selectedShotId) return { status: "blocked", message: "请先确认生成小样。" };
+  if (!receipt?.selectedShotId) return { status: "blocked", message: "请先确认 handoff。" };
 
   try {
     const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2OneShotPrepareTriggerEndpoint, expected), {
@@ -1618,7 +1638,7 @@ export async function prepareProjectImage2OneShotTrigger(
     const summary = deriveProjectImage2OneShotStatus(payload);
     return guardProjectImage2OneShotUiStateForCurrentProject({ status: summary.uiStatus, summary, receipt: summary.receipt || receipt, message: summary.message }, expected);
   } catch {
-    return { status: "blocked", message: "真实触发计划准备失败，请重新确认小样。" };
+    return { status: "blocked", message: "外部执行 handoff 准备失败，请重新确认。" };
   }
 }
 
@@ -1627,7 +1647,7 @@ export async function executeReturnedProjectImage2OneShot(
   receipt?: ProjectImage2OneShotReceipt,
 ): Promise<ProjectImage2OneShotUiState> {
   if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
-  if (!receipt?.selectedShotId) return { status: "blocked", message: "请先确认生成小样。" };
+  if (!receipt?.selectedShotId) return { status: "blocked", message: "请先确认 handoff。" };
 
   try {
     const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2OneShotExecuteReturnEndpoint, expected), {
