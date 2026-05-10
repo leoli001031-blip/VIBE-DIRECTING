@@ -13,6 +13,7 @@ import {
 import { createRuntimeApiBoundary } from "./runtime-api-boundary.mjs";
 import { createRuntimeApiCurrentProjectBinding } from "./runtime-api-current-project-binding.mjs";
 import { createRuntimeApiCurrentProjectImage2Handoff } from "./runtime-api-current-project-image2-handoff.mjs";
+import { createRuntimeApiCurrentProjectReturnWriters } from "./runtime-api-current-project-return-writers.mjs";
 import { createRuntimeApiFileServing } from "./runtime-api-file-serving.mjs";
 import { createRuntimeApiProviderReturnEvidence } from "./runtime-api-provider-return-evidence.mjs";
 import { createRuntimeApiWorkbenchProjection } from "./runtime-api-workbench-projection.mjs";
@@ -1569,93 +1570,10 @@ function sha256File(filePath) {
   return sha256Bytes(readFileSync(filePath));
 }
 
-function oneShotExecutorPathInsideSandbox(relativePath, sandboxRoot, shotRoot) {
-  return oneShotPathInsideRoot(relativePath, sandboxRoot) && oneShotPathInsideRoot(relativePath, shotRoot);
-}
-
-function assertOneShotExecutorSandboxWritePath(relativePath, sandboxRoot, shotRoot) {
-  if (!oneShotExecutorPathInsideSandbox(relativePath, sandboxRoot, shotRoot)) {
-    throw new Error(`Refusing to write outside one-shot executor sandbox: ${relativePath}`);
-  }
-  if (path.basename(relativePath) === "project.vibe" || normalizeRelativePath(relativePath).includes("/project.vibe")) {
-    throw new Error(`Refusing to mutate project.vibe from executor: ${relativePath}`);
-  }
-  const filePath = scopedRepoPath(relativePath);
-  const sandboxPath = scopedRepoPath(sandboxRoot);
-  const shotPath = scopedRepoPath(shotRoot);
-  mkdirSync(path.dirname(filePath), { recursive: true });
-  const dirRealPath = realpathSync(path.dirname(filePath));
-  const sandboxRealPath = realpathSync(sandboxPath);
-  const shotRealPath = realpathSync(shotPath);
-  const sandboxWithSep = `${sandboxRealPath}${path.sep}`;
-  const shotWithSep = `${shotRealPath}${path.sep}`;
-  if ((dirRealPath !== sandboxRealPath && !dirRealPath.startsWith(sandboxWithSep))
-    || (dirRealPath !== shotRealPath && !dirRealPath.startsWith(shotWithSep))
-    || (sandboxRealPath !== repoRootRealPath && !sandboxRealPath.startsWith(`${repoRootRealPath}${path.sep}`))) {
-    throw new Error(`Refusing to write through unsafe executor real path: ${relativePath}`);
-  }
-  if (existsSync(filePath)) {
-    const fileRealPath = realpathSync(filePath);
-    if ((fileRealPath !== sandboxRealPath && !fileRealPath.startsWith(sandboxWithSep))
-      || (fileRealPath !== shotRealPath && !fileRealPath.startsWith(shotWithSep))) {
-      throw new Error(`Refusing to overwrite unsafe executor path: ${relativePath}`);
-    }
-  }
-  return filePath;
-}
-
-function writeOneShotExecutorJson(relativePath, payload, sandboxRoot, shotRoot) {
-  const filePath = assertOneShotExecutorSandboxWritePath(relativePath, sandboxRoot, shotRoot);
-  const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
-  writeFileSync(tempPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-  renameSync(tempPath, filePath);
-}
-
-function writeOneShotExecutorBytes(relativePath, bytes, sandboxRoot, shotRoot) {
-  const filePath = assertOneShotExecutorSandboxWritePath(relativePath, sandboxRoot, shotRoot);
-  const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
-  writeFileSync(tempPath, bytes);
-  renameSync(tempPath, filePath);
-  return filePath;
-}
-
 function isPathInsideRealRoot(candidatePath, rootPath) {
   if (!candidatePath || !rootPath) return false;
   const rootWithSep = `${rootPath}${path.sep}`;
   return candidatePath === rootPath || candidatePath.startsWith(rootWithSep);
-}
-
-function assertCurrentProjectRuntimeWritePath(relativePath, source) {
-  const normalized = normalizeRelativePath(relativePath || "");
-  if (!oneShotPathInsideRoot(normalized, source.runRootRelativePath)) {
-    throw new Error(`Refusing to write return projection outside current project root: ${relativePath}`);
-  }
-  if (path.basename(normalized) === "project.vibe" || normalized.includes("/project.vibe")) {
-    throw new Error(`Refusing to mutate project.vibe from provider return ingestion: ${relativePath}`);
-  }
-  const filePath = scopedRepoPath(normalized);
-  mkdirSync(path.dirname(filePath), { recursive: true });
-  const dirRealPath = realpathSync(path.dirname(filePath));
-  const runRootRealPath = realpathSync(source.runRootPath);
-  if (!isPathInsideRealRoot(dirRealPath, runRootRealPath)) {
-    throw new Error(`Refusing to write through unsafe project return path: ${relativePath}`);
-  }
-  return filePath;
-}
-
-function writeCurrentProjectRuntimeJson(relativePath, payload, source) {
-  const filePath = assertCurrentProjectRuntimeWritePath(relativePath, source);
-  const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
-  writeFileSync(tempPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-  renameSync(tempPath, filePath);
-}
-
-function writeCurrentProjectRuntimeBytes(relativePath, bytes, source) {
-  const filePath = assertCurrentProjectRuntimeWritePath(relativePath, source);
-  const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
-  writeFileSync(tempPath, bytes);
-  renameSync(tempPath, filePath);
-  return filePath;
 }
 
 function upsertByShotId(items, item) {
@@ -2753,6 +2671,27 @@ const {
   renameSync,
   realpathSync,
   readFileSync,
+});
+
+const {
+  oneShotExecutorPathInsideSandbox,
+  assertOneShotExecutorSandboxWritePath,
+  writeOneShotExecutorJson,
+  writeOneShotExecutorBytes,
+  assertCurrentProjectRuntimeWritePath,
+  writeCurrentProjectRuntimeJson,
+  writeCurrentProjectRuntimeBytes,
+} = createRuntimeApiCurrentProjectReturnWriters({
+  repoRootRealPath,
+  scopedRepoPath,
+  normalizeRelativePath,
+  oneShotPathInsideRoot,
+  isPathInsideRealRoot,
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  renameSync,
+  realpathSync,
 });
 
 function unavailableResponse(extra = {}) {
