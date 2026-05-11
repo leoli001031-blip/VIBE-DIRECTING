@@ -244,6 +244,26 @@ assert(getPreviewPlayerActiveItem(mixedQueue, 0)?.id === "image-first", "image h
 assert(getPreviewPlayerActiveItem(mixedQueue, 2.5)?.id === "video-second", "video clip must replace the image hold at its boundary");
 assert(getPreviewPlayerActiveItem(mixedQueue, 8.5)?.id === "missing-third", "missing placeholder must become active at its boundary");
 
+const replacementQueue = buildPreviewPlayerQueue(
+  previewExport([
+    event({ id: "image-replaced", type: "image_hold", shotId: "S01", startSeconds: 0, durationSeconds: 3, mediaPath: "media/s01.png" }),
+    event({ id: "video-same-start", type: "video_clip", shotId: "S01", startSeconds: 0, durationSeconds: 3, mediaPath: "media/s01.mp4" }),
+    event({ id: "image-other-shot-same-start", type: "image_hold", shotId: "S02", startSeconds: 0, durationSeconds: 2, mediaPath: "media/s02.png" }),
+    event({ id: "image-same-shot-later", type: "image_hold", shotId: "S01", startSeconds: 3, durationSeconds: 2, mediaPath: "media/s01-later.png" }),
+  ]),
+  shots,
+);
+assert(
+  replacementQueue.map((item) => item.id).join(",") === "video-same-start,image-other-shot-same-start,image-same-shot-later",
+  "renderable video_clip must replace only the same-shot same-start image_hold",
+);
+assert(replacementQueue[0].kind === "video_clip" && replacementQueue[0].mediaPath === "media/s01.mp4", "same-start replacement must keep the renderable video item");
+assert(replacementQueue[1].kind === "image_hold", "same-start image_hold for a different shot must remain");
+assert(replacementQueue[2].kind === "image_hold" && replacementQueue[2].startSeconds === 3, "same-shot image_hold at a different start must remain");
+assert(getPreviewPlayerTotalDuration(replacementQueue) === 5, "replacement queue total duration must still use remaining segment durations");
+assert(getPreviewPlayerActiveItem(replacementQueue, 0)?.id === "video-same-start", "replacement video must be active at its segment start");
+assert(getPreviewPlayerActiveItem(replacementQueue, 3)?.id === "image-same-shot-later", "later same-shot image hold must remain playable");
+
 const queue = buildPreviewPlayerQueue(
   previewExport([
     event({ id: "clip-missing", type: "video_clip", shotId: "S02", startSeconds: 4, durationSeconds: 0, mediaPath: undefined }),
@@ -383,7 +403,7 @@ assert(
 assert(returnedOutputPreview.formalPreview.status === "blocked", "returned output draft preview must not auto-promote formal preview");
 
 const previewSource = stripComments(readText("src/ui/director/MinimalPreview.tsx"));
-const stylesSource = stripComments(readText("src/styles.css"));
+const stylesSource = stripComments(`${readText("src/styles.css")}\n${readText("src/styles/director.css")}`);
 const packageJson = readJson("package.json");
 const previewBody = findFunctionBody(previewSource, "MinimalPreview");
 const previewCopy = visibleUiCopy(previewBody);

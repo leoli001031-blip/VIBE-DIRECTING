@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 
 const scripts = [
   "local-runtime-api:test",
+  "runtime-api-real-demo-005-routes:test",
   "runtime-api-boundary:test",
   "runtime-api-current-project-return-writers:test",
   "runtime-api-current-project-one-shot-return:test",

@@ -28,6 +28,7 @@ import { createRuntimeApiCurrentProjectRound5StrictEditReturnRoutes } from "./ru
 import { createRuntimeApiCurrentProjectReturnWriters } from "./runtime-api-current-project-return-writers.mjs";
 import { createRuntimeApiFileServing } from "./runtime-api-file-serving.mjs";
 import { createRuntimeApiProviderReturnEvidence } from "./runtime-api-provider-return-evidence.mjs";
+import { createRuntimeApiRealDemo005Routes } from "./runtime-api-real-demo-005-routes.mjs";
 import { createRuntimeApiRound5ArtifactIngest } from "./runtime-api-round5-artifact-ingest.mjs";
 import { createRuntimeApiWorkbenchProjection } from "./runtime-api-workbench-projection.mjs";
 
@@ -827,6 +828,23 @@ async function handleRun(res, options = {}) {
   }
 }
 
+const {
+  handleRuntimeApiRealDemo005Route,
+} = createRuntimeApiRealDemo005Routes({
+  endpoints: {
+    realDemo005StatusEndpoint,
+    realDemo005RunEndpoint,
+    legacyStatusEndpoint,
+    legacyRunEndpoint,
+  },
+  writeJson,
+  responseFromReport,
+  handleRun,
+  runtimePolicy,
+  readLegacyRunEnabled: () => process.env.VIBE_CORE_ENABLE_LEGACY_RUN === "1",
+  running: () => running,
+});
+
 function readRequestJsonBody(req) {
   return new Promise((resolve) => {
     let text = "";
@@ -955,32 +973,7 @@ async function handleRequest(req, res) {
   if (await handleCurrentProjectOneShotReturnRoute(req, res, url)) return;
   if (await handleCurrentProjectRound5StrictEditPrepareRoute(req, res, url)) return;
   if (await handleCurrentProjectRound5StrictEditReturnRoute(req, res, url)) return;
-  if (req.method === "GET" && (url.pathname === realDemo005StatusEndpoint || url.pathname === legacyStatusEndpoint)) {
-    writeJson(res, 200, responseFromReport({ running }));
-    return;
-  }
-  if (req.method === "POST" && (url.pathname === realDemo005RunEndpoint || url.pathname === legacyRunEndpoint)) {
-    if (process.env.VIBE_CORE_ENABLE_LEGACY_RUN !== "1") {
-      writeJson(res, 403, {
-        ok: false,
-        ...runtimePolicy(),
-        endpoint: url.pathname,
-        status: "disabled",
-        previewStatus: "blocked",
-        productionStatus: "blocked",
-        running: false,
-        command: {
-          providerCalled: false,
-          prepareRan: false,
-          verifyScriptRan: false,
-        },
-        message: "Legacy 005 run endpoint is disabled. Set VIBE_CORE_ENABLE_LEGACY_RUN=1 for diagnostics-only use.",
-      });
-      return;
-    }
-    void handleRun(res, { endpoint: url.pathname });
-    return;
-  }
+  if (handleRuntimeApiRealDemo005Route(req, res, url)) return;
   writeJson(res, 404, { ok: false, ...runtimePolicy(), status: "not_found", path: url.pathname });
 }
 

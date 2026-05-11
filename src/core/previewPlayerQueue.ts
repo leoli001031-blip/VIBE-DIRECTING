@@ -44,8 +44,20 @@ function safeDurationSeconds(value: number) {
 
 export function buildPreviewPlayerQueue(previewExport: ProjectPreviewExportState, shots: ShotRecord[]): PreviewQueueItem[] {
   const shotOrder = new Map(shots.map((shot, index) => [shot.id, index]));
-  return previewExport.draftPreview.events
-    .filter((event) => event.type === "image_hold" || event.type === "video_clip" || event.type === "blocked_placeholder")
+  const visualEvents = previewExport.draftPreview.events.filter(
+    (event) => event.type === "image_hold" || event.type === "video_clip" || event.type === "blocked_placeholder",
+  );
+  const renderableVideoKeys = new Set(
+    visualEvents
+      .filter((event) => event.type === "video_clip" && event.mediaPath && event.shotId)
+      .map((event) => `${event.shotId}:${safeStartSeconds(event.startSeconds)}`),
+  );
+
+  return visualEvents
+    .filter((event) => {
+      if (event.type !== "image_hold" || !event.shotId) return true;
+      return !renderableVideoKeys.has(`${event.shotId}:${safeStartSeconds(event.startSeconds)}`);
+    })
     .sort((left, right) => {
       const leftStart = safeStartSeconds(left.startSeconds);
       const rightStart = safeStartSeconds(right.startSeconds);

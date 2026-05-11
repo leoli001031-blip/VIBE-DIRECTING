@@ -128,7 +128,61 @@ function shotLayout(overrides = {}) {
   };
 }
 
-const projectStore = createProjectStoreSnapshot({
+function spatialMemoryFixture(overrides = {}) {
+  return {
+    schemaVersion: "0.1.0",
+    id: "spatial_memory_fixture",
+    coordinatePolicy: {
+      worldPositionRequired: true,
+      cameraVectorRequired: true,
+      textOnlyMultiViewAllowed: false,
+    },
+    visualConsistencyPolicy: {
+      masterSceneInheritanceRequired: true,
+      cameraWorldPositionRequired: true,
+      subjectWorldPositionRequired: true,
+      axisContinuityRequired: true,
+      sceneStateFactsRequired: true,
+      missingSpatialMemoryBlocksFormal: true,
+    },
+    scenes: [
+      {
+        id: "garage_scene_master",
+        name: "Garage",
+        status: "locked",
+        worldAnchors: [{ id: "workbench", label: "Workbench", worldPosition: { x: 0, y: 0, z: 1 } }],
+        cameraVectors: [
+          {
+            id: "garage_camera_A",
+            worldPosition: { x: 0, y: 1.5, z: -3 },
+            cameraVector: { x: 0, y: -0.1, z: 1 },
+            usableForShotIds: ["shot_001"],
+          },
+        ],
+        subjectBlocking: [
+          {
+            subjectId: "hero_main_ref",
+            worldPosition: { x: 0, y: 0, z: 1 },
+            blockingNote: "Hero waits by the workbench.",
+          },
+        ],
+        axisRules: [
+          {
+            id: "garage_axis",
+            axisVector: { x: 1, y: 0, z: 0 },
+            screenDirectionRule: "static screen direction for shot_001",
+          },
+        ],
+        revealStates: [{ targetId: "garage_door", state: "revealed" }],
+        derivedViewRefs: ["garage_reverse_locked"],
+      },
+    ],
+    updatedAt: generatedAt,
+    ...overrides,
+  };
+}
+
+const projectStoreInput = {
   generatedAt,
   projectId: "facts_fixture",
   title: "Facts Integration Fixture",
@@ -174,7 +228,9 @@ const projectStore = createProjectStoreSnapshot({
     projectId: "facts_fixture",
     sourceIndexHash: "facts_source_hash",
   },
-});
+};
+
+const projectStore = createProjectStoreSnapshot(projectStoreInput);
 
 let assetLibrary = createAssetLibrarySnapshot({ id: "facts_visual_memory", createdAt: generatedAt });
 let assetResult = addAssetLibraryAsset(assetLibrary, {
@@ -364,56 +420,7 @@ const readyState = buildProjectFactsIntegrationState({
   assetLibrary,
   voiceSourceLibrary: voiceLibrary,
   shotLayouts: [shotLayout()],
-  spatialMemory: {
-    schemaVersion: "0.1.0",
-    id: "spatial_memory_fixture",
-    coordinatePolicy: {
-      worldPositionRequired: true,
-      cameraVectorRequired: true,
-      textOnlyMultiViewAllowed: false,
-    },
-    visualConsistencyPolicy: {
-      masterSceneInheritanceRequired: true,
-      cameraWorldPositionRequired: true,
-      subjectWorldPositionRequired: true,
-      axisContinuityRequired: true,
-      sceneStateFactsRequired: true,
-      missingSpatialMemoryBlocksFormal: true,
-    },
-    scenes: [
-      {
-        id: "garage_scene_master",
-        name: "Garage",
-        status: "locked",
-        worldAnchors: [{ id: "workbench", label: "Workbench", worldPosition: { x: 0, y: 0, z: 1 } }],
-        cameraVectors: [
-          {
-            id: "garage_camera_A",
-            worldPosition: { x: 0, y: 1.5, z: -3 },
-            cameraVector: { x: 0, y: -0.1, z: 1 },
-            usableForShotIds: ["shot_001"],
-          },
-        ],
-        subjectBlocking: [
-          {
-            subjectId: "hero_main_ref",
-            worldPosition: { x: 0, y: 0, z: 1 },
-            blockingNote: "Hero waits by the workbench.",
-          },
-        ],
-        axisRules: [
-          {
-            id: "garage_axis",
-            axisVector: { x: 1, y: 0, z: 0 },
-            screenDirectionRule: "static screen direction for shot_001",
-          },
-        ],
-        revealStates: [{ targetId: "garage_door", state: "revealed" }],
-        derivedViewRefs: ["garage_reverse_locked"],
-      },
-    ],
-    updatedAt: generatedAt,
-  },
+  spatialMemory: spatialMemoryFixture(),
 });
 
 assertNoRuntimeSourceOfTruth(readyState, "ready fixture state");
@@ -439,6 +446,47 @@ assert(readyState.projectLocalKnowledgeScope.oldChatMayAuthorizeProjectFacts ===
 assert(readyState.projectLocalKnowledgeScope.directInputMayAuthorizeProjectFacts === false, "direct input must not authorize project facts");
 assert(readyState.projectLocalKnowledgeScope.runtimeStateMayAuthorizeProjectFacts === false, "runtime-state must not authorize project facts");
 assert(readyState.summary.blockedAuthoritySourceCount === 0, "ready project-local state should have no blocked authority refs");
+
+const projectStoreBackedFactStore = createProjectStoreSnapshot({
+  ...projectStoreInput,
+  shotLayouts: [{ shotId: "shot_001", value: shotLayout() }],
+  spatialMemory: spatialMemoryFixture(),
+});
+const projectStoreBackedReadyState = buildProjectFactsIntegrationState({
+  generatedAt,
+  projectStore: projectStoreBackedFactStore,
+  assetLibrary,
+  voiceSourceLibrary: voiceLibrary,
+});
+
+assertNoRuntimeSourceOfTruth(projectStoreBackedReadyState, "ProjectStore-backed ready state");
+assert(projectStoreBackedReadyState.status === "ready", `ProjectStore-backed state should be ready: ${projectStoreBackedReadyState.summary.blockerCount} blockers`);
+assert(projectStoreBackedReadyState.facts.shotLayout.status === "connected", "ProjectStore-backed Shot Layout should connect");
+assert(projectStoreBackedReadyState.facts.shotLayout.sourceOfTruth === "project_store", "ProjectStore-backed Shot Layout must use Project Store source-of-truth");
+assert(
+  projectStoreBackedReadyState.facts.shotLayout.sources.every((source) => source.ref.startsWith("projectStore.factFiles:")),
+  "ProjectStore-backed Shot Layout evidence must point at Project Store fact files",
+);
+assert(
+  projectStoreBackedReadyState.facts.shotLayout.sourceRefs.includes("projectStore.facts.shotLayouts:shot_001"),
+  "ProjectStore-backed Shot Layout source ref must point at projectStore.facts.shotLayouts",
+);
+assert(projectStoreBackedReadyState.facts.spatialMemory.status === "connected", "ProjectStore-backed Spatial Memory should connect");
+assert(projectStoreBackedReadyState.facts.spatialMemory.sourceOfTruth === "project_store", "ProjectStore-backed Spatial Memory must use Project Store source-of-truth");
+assert(
+  projectStoreBackedReadyState.facts.spatialMemory.sources.every((source) => source.ref.startsWith("projectStore.factFiles:")),
+  "ProjectStore-backed Spatial Memory evidence must point at Project Store fact files",
+);
+assert(
+  projectStoreBackedReadyState.facts.spatialMemory.sourceRefs.includes("projectStore.facts.spatialMemory"),
+  "ProjectStore-backed Spatial Memory source ref must point at projectStore.facts.spatialMemory",
+);
+assert(projectStoreBackedReadyState.visualConsistency.worldPosition.status === "structured", "ProjectStore-backed world position should be structured");
+assert(projectStoreBackedReadyState.visualConsistency.startEndDerivation.status === "structured", "ProjectStore-backed start-end derivation should be structured");
+assert(
+  projectStoreBackedReadyState.projectLocalKnowledgeScope.runtimeStateMayAuthorizeProjectFacts === false,
+  "ProjectStore-backed state must not authorize runtime-state project facts",
+);
 
 const drifted = structuredClone(readyState);
 drifted.hardLocks.noProviderSubmit = false;
