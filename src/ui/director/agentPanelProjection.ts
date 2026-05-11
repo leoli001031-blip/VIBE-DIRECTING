@@ -2,6 +2,7 @@ import { buildDirectorWorkflowState, type DirectorWorkflowStatus } from "../../c
 import { buildMinimalRuntimeProjection, type MinimalRuntimeProjection } from "../../core/minimalRuntimeProjection";
 import type { ProjectRuntimeState } from "../../core/projectState";
 import {
+  buildProjectStoreApplyPlanForStagedFacts,
   buildProjectTransactionRuntime,
   commitProjectPendingTransactionForRuntime,
   confirmProjectPendingTransactionForRuntime,
@@ -86,6 +87,7 @@ export function confirmAgentPlanProjection(workflow: MinimalAgentWorkflow, runti
     runtime: transactionRuntime,
     confirmationReceipt: receipt,
   });
+  const applyPlan = buildProjectStoreApplyPlanForStagedFacts({ receipt: stagedReceipt, generatedAt: receipt.generatedAt });
   const hardLocksHeld = receipt.projectVibeWriteAllowed === false
     && receipt.projectVibeWriteExecuted === false
     && receipt.noFileMutation === true
@@ -114,6 +116,7 @@ export function confirmAgentPlanProjection(workflow: MinimalAgentWorkflow, runti
   return {
     receipt,
     stagedReceipt,
+    applyPlan,
     projection: {
       ...baseProjection,
       generatedAt: receipt.generatedAt,

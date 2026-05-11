@@ -67,6 +67,7 @@ import {
   buildProjectStoreIoGate,
   type ProjectStoreIoGate,
 } from "./core/projectStoreIo";
+import type { ProjectFactsStagedApplyPlan } from "./core/projectTransaction";
 import {
   type PreviewQueueItem,
 } from "./core/previewPlayerQueue";
@@ -8050,12 +8051,16 @@ function DiagnosticsMode({
   projectPathInput,
   projectChoices,
   projectSelectionStatus,
+  projectFacts,
+  projectFactsMode,
+  latestProjectStoreApplyPlan,
   authorizationRef,
   onProjectPathChange,
   onSelectProjectChoice,
   onConnectProject,
   onRunProjectRealChain,
   onRunProjectImage2Batch,
+  onProjectFactsModeChange,
   onPrepareStrictEditPreflight,
   onPrepareImage2OneShot,
   onAuthorizationRefChange,
@@ -8076,12 +8081,16 @@ function DiagnosticsMode({
   projectPathInput: string;
   projectChoices: ProjectCurrentChoice[];
   projectSelectionStatus?: "idle" | "connecting" | "connected" | "error";
+  projectFacts: ProjectFactsUiSummary;
+  projectFactsMode: ProjectFactsUiMode;
+  latestProjectStoreApplyPlan?: ProjectFactsStagedApplyPlan;
   authorizationRef: string;
   onProjectPathChange: (value: string) => void;
   onSelectProjectChoice: (choice: ProjectCurrentChoice) => void;
   onConnectProject: () => void;
   onRunProjectRealChain: () => void;
   onRunProjectImage2Batch: () => void;
+  onProjectFactsModeChange: (mode: ProjectFactsUiMode) => void;
   onPrepareStrictEditPreflight: (shotId: string) => void;
   onPrepareImage2OneShot: () => void;
   onAuthorizationRefChange: (value: string) => void;
@@ -8094,6 +8103,12 @@ function DiagnosticsMode({
   return (
     <div className="diagnostics-layout">
       <DirectorProgressStrip runtimeState={runtimeState} />
+      <ProjectFactsStrip
+        summary={projectFacts}
+        mode={projectFactsMode}
+        applyPlan={latestProjectStoreApplyPlan}
+        onModeChange={onProjectFactsModeChange}
+      />
       <ProjectRealChainPanel
         state={projectRealChainState}
         image2BatchState={projectImage2BatchState}
@@ -8164,6 +8179,7 @@ function App() {
   const [runtimeState, setRuntimeState] = useState<ProjectRuntimeState>(fallbackRuntimeState);
   const [assetLibrary, setAssetLibrary] = useState<AssetLibrarySnapshot>(() => createAssetLibraryFromRuntimeState(fallbackRuntimeState));
   const [projectFactsMode, setProjectFactsMode] = useState<ProjectFactsUiMode>("save");
+  const [latestProjectStoreApplyPlan, setLatestProjectStoreApplyPlan] = useState<ProjectFactsStagedApplyPlan | undefined>();
   const [mode, setMode] = useState<UiMode>("director");
   const [directorView, setDirectorView] = useState<DirectorView>("story");
   const [activeSectionId, setActiveSectionId] = useState<string | undefined>();
@@ -8694,6 +8710,7 @@ function App() {
             />
           }
           onSelectShot={selectShot}
+          onProjectStoreApplyPlanReady={setLatestProjectStoreApplyPlan}
         />
       )}
       {mode === "inspector" && <InspectorMode audit={runtimeAudit} view={runtimeView} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />}
@@ -8713,11 +8730,15 @@ function App() {
           projectPathInput={projectPathInput}
           projectChoices={projectChoices}
           projectSelectionStatus={projectSelectionStatus}
+          projectFacts={projectFacts}
+          projectFactsMode={projectFactsMode}
+          latestProjectStoreApplyPlan={latestProjectStoreApplyPlan}
           onProjectPathChange={setProjectPathInput}
           onSelectProjectChoice={selectProjectChoice}
           onConnectProject={connectCurrentProject}
           onRunProjectRealChain={runProjectRealChain}
           onRunProjectImage2Batch={runProjectImage2Batch}
+          onProjectFactsModeChange={setProjectFactsMode}
           onPrepareStrictEditPreflight={prepareStrictEditPreflight}
           onPrepareImage2OneShot={prepareImage2OneShot}
           onAuthorizationRefChange={setAuthorizationRef}

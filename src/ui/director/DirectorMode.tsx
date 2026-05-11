@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { PreviewQueueItem } from "../../core/previewPlayerQueue";
 import type { ProjectRuntimeState } from "../../core/projectState";
+import type { ProjectFactsStagedApplyPlan } from "../../core/projectTransaction";
 import type { RuntimeView } from "../../core/runtimeView";
 import type { AssetRecord, ProjectAudit, ShotRecord } from "../../core/types";
 import { MinimalAgentPanel } from "./MinimalAgentPanel";
@@ -24,6 +25,7 @@ export function DirectorMode({
   statusNode,
   assetLibraryNode,
   onSelectShot,
+  onProjectStoreApplyPlanReady,
 }: {
   audit: ProjectAudit;
   view: RuntimeView;
@@ -40,6 +42,7 @@ export function DirectorMode({
   statusNode: ReactNode;
   assetLibraryNode: ReactNode;
   onSelectShot: (id: string, additive?: boolean) => void;
+  onProjectStoreApplyPlanReady?: (plan: ProjectFactsStagedApplyPlan) => void;
 }) {
   const activeSection = view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0];
   const sectionLabel = activeSection?.label || "Story";
@@ -78,6 +81,7 @@ export function DirectorMode({
         asset={directorView === "assets" ? selectedAsset : undefined}
         sectionLabel={sectionLabel}
         sectionId={directorView === "story" && !selectedShot ? activeSection?.id : undefined}
+        onProjectStoreApplyPlanReady={onProjectStoreApplyPlanReady}
       />
     </div>
   );

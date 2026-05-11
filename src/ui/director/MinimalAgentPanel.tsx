@@ -3,6 +3,7 @@ import { CheckCircle2, Eye } from "lucide-react";
 import { buildDirectorWorkflowState } from "../../core/directorWorkflow";
 import type { MinimalRuntimeProjection } from "../../core/minimalRuntimeProjection";
 import type { ProjectRuntimeState } from "../../core/projectState";
+import type { ProjectFactsStagedApplyPlan } from "../../core/projectTransaction";
 import type { AssetRecord, ShotRecord } from "../../core/types";
 import {
   agentProjectionBadges,
@@ -24,6 +25,7 @@ export function MinimalAgentPanel({
   asset,
   sectionLabel,
   sectionId,
+  onProjectStoreApplyPlanReady,
 }: {
   runtimeState: ProjectRuntimeState;
   projectScopeLabel?: string;
@@ -32,6 +34,7 @@ export function MinimalAgentPanel({
   asset?: AssetRecord;
   sectionLabel?: string;
   sectionId?: string;
+  onProjectStoreApplyPlanReady?: (plan: ProjectFactsStagedApplyPlan) => void;
 }) {
   const [text, setText] = useState("");
   const [status, setStatus] = useState("等待描述");
@@ -67,10 +70,11 @@ export function MinimalAgentPanel({
 
   function confirmPlan() {
     if (!workflowCanConfirm(workflow)) return;
-    const { projection: nextProjection } = confirmAgentPlanProjection(workflow, runtimeState);
+    const { projection: nextProjection, applyPlan } = confirmAgentPlanProjection(workflow, runtimeState);
     setProjection(nextProjection);
     setPlanPhase("confirmed");
     setStatus(nextProjection.shortLabel);
+    onProjectStoreApplyPlanReady?.(applyPlan);
   }
 
   const canConfirm = workflowCanConfirm(workflow);

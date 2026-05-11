@@ -318,6 +318,7 @@ checkMessage(requireWithin(agentPanelProjectionSource, /commitProjectPendingTran
 checkMessage(requireWithin(minimalAgentPanel, /confirmAgentPlanProjection\s*\(/, "MinimalAgentPanel confirmPlan must use receipt-backed confirmation helper"));
 checkMessage(requireWithin(confirmAgentPlanProjection, /confirmProjectPendingTransactionForRuntime\s*\(/, "receipt-backed confirmation helper must call confirmProjectPendingTransactionForRuntime"));
 checkMessage(requireWithin(confirmAgentPlanProjection, /commitProjectPendingTransactionForRuntime\s*\(/, "receipt-backed confirmation helper must call staged project facts commit API"));
+checkMessage(requireWithin(confirmAgentPlanProjection, /buildProjectStoreApplyPlanForStagedFacts\s*\(\s*\{\s*receipt:\s*stagedReceipt,\s*generatedAt:\s*receipt\.generatedAt\s*\}\s*\)/, "Agent confirmation helper must build a read-only staged Project Store apply plan"));
 checkMessage(requireWithin(confirmAgentPlanProjection, /receipt\.runtimeProjection/, "receipt-backed confirmation helper must project from receipt runtimeProjection"));
 checkMessage(requireWithin(confirmAgentPlanProjection, /receipt\.queuedCount/, "receipt-backed confirmation helper must use receipt counts"));
 checkMessage(requireWithin(confirmAgentPlanProjection, /stagedReceipt\.status\s*===\s*"staged"/, "Agent confirmation helper must surface only staged project fact commits"));
@@ -699,6 +700,7 @@ checkMessage(requireAny(appSource, [/Story/, /section\.label/, /storySections/, 
 checkMessage(requireAny(appSource, [/Diagnostics/, /diagnostics/], "Diagnostics entry"));
 check(!/ProjectFactsStrip/.test(directorMode), "Director Clean Mode must not mount ProjectFactsStrip in the default DirectorMode");
 check(!/project-plan-actions|Project Store/.test(directorMode), "Phase 36 main Director surface must not expose project file plan controls");
+checkMessage(requireWithin(diagnosticsMode, /<ProjectFactsStrip\b/, "DiagnosticsMode must mount ProjectFactsStrip"));
 checkMessage(requireWithin(projectFactsStrip, /Project Store/, "Round 2 Project Store strip remains available outside the clean surface"));
 checkMessage(requireWithin(`${projectFactsStrip}\n${projectFactsUiSummary}`, /project\.vibe/, "Phase 36 project.vibe fact source copy"));
 checkMessage(requireWithin(`${projectFactsStrip}\n${projectFactsUiSummary}`, /project files/, "Phase 36 project files fact source copy"));
