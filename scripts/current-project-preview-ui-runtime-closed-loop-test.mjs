@@ -70,16 +70,33 @@ function assertProductCopy(message) {
   assert(!/005|fallback|endpoint|provider|ledger|manifest|schema|task|envelope|queue/i.test(message || ""), "fail-closed message must not expose engineering terms");
 }
 
+function assertPreviewEmptyCopy(label, detail) {
+  const message = `${label || ""} ${detail || ""}`;
+  assert(/项目|同步|素材|故事流|预览/.test(message), "Preview empty state must use creator-facing copy");
+  assert(!/005|fallback|provider|runtime-state|schema|queue/i.test(message), "Preview empty state must not expose engineering terms");
+}
+
 function assertPreviewClosedLoopAppContract() {
   const appSource = readText("src/App.tsx");
   const minimalPreviewSource = readText("src/ui/director/MinimalPreview.tsx");
+  const directorModeSource = readText("src/ui/director/DirectorMode.tsx");
   assert(/buildCurrentProjectPreviewProjection\(\{[\s\S]*summary:\s*projectRealChainState\.summary[\s\S]*previewItems:\s*projectRealChainState\.summary\?\.previewItems/.test(appSource), "App must project current runtime summary previewItems for Preview");
   assert(/const\s+currentProjectPreviewQueue\s*=\s*runtimeProjectBinding\.status\s*===\s*"bound"[\s\S]*currentProjectPreviewProjection\.queue[\s\S]*:\s*\[\]/.test(appSource), "App must fail closed when the current project is not bound");
+  assert(/currentProjectPreviewEmptyState[\s\S]*runtimeProjectBinding\.status[\s\S]*currentProjectPreviewProjection\.available[\s\S]*currentProjectPreviewQueue\.length/.test(appSource), "App must derive Preview empty state from binding, projection availability, and current items");
   assert(/currentProjectPreviewItems=\{currentProjectPreviewQueue\}/.test(appSource), "App must pass the current project queue into the Preview view");
+  assert(/previewEmptyStateLabel=\{currentProjectPreviewEmptyState\.label\}/.test(appSource), "App must pass creator-facing Preview empty label");
+  assert(/previewEmptyStateDetail=\{currentProjectPreviewEmptyState\.detail\}/.test(appSource), "App must pass creator-facing Preview empty detail");
   assert(/currentProjectPreviewItems\?:\s*PreviewQueueItem\[\]/.test(minimalPreviewSource), "MinimalPreview must accept current project preview items");
+  assert(/emptyStateLabel\?:\s*string/.test(minimalPreviewSource), "MinimalPreview must accept a display-only empty label");
+  assert(/emptyStateDetail\?:\s*string/.test(minimalPreviewSource), "MinimalPreview must accept a display-only empty detail");
+  assert(/\{emptyStateLabel\}/.test(minimalPreviewSource) && /\{emptyStateDetail\}/.test(minimalPreviewSource), "MinimalPreview must render display-only empty copy when no items are playable");
+  assert(/previewEmptyStateLabel\?:\s*string/.test(directorModeSource) && /emptyStateLabel=\{previewEmptyStateLabel\}/.test(directorModeSource), "DirectorMode must pass Preview empty copy through without changing Preview behavior");
   assert(/const\s+queue\s*=\s*currentProjectPreviewItems\s*\?\?\s*fallbackQueue/.test(minimalPreviewSource), "MinimalPreview must prefer current project preview items over previewExport fallback");
   assert(!/currentProjectIdentity\(runtimeState\)/.test(appSource), "App must not bind Preview to runtime-state.json identity");
   assert(!/real-demo-005/.test(appSource), "App must not retain hard-coded 005 UI hooks");
+  const emptyCopyLiterals = Array.from(`${appSource}\n${minimalPreviewSource}`.matchAll(/(?:label|detail|emptyStateLabel|emptyStateDetail):?\s*[=]?\s*"([^"]*(?:预览|项目|素材|故事流|同步)[^"]*)"/g)).map((match) => match[1]);
+  assert(emptyCopyLiterals.length >= 5, "Preview empty state should keep explicit product copy literals");
+  emptyCopyLiterals.forEach((literal) => assertPreviewEmptyCopy(literal, ""));
 }
 
 const {

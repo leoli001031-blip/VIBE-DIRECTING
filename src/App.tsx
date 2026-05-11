@@ -7519,6 +7519,30 @@ function App() {
   const currentProjectPreviewQueue = runtimeProjectBinding.status === "bound"
     ? currentProjectPreviewProjection.queue
     : [];
+  const currentProjectPreviewEmptyState = useMemo(() => {
+    if (currentProjectPreviewQueue.length > 0) {
+      return {
+        label: "预览已准备好",
+        detail: "可以播放当前故事流。",
+      };
+    }
+    if (runtimeProjectBinding.status !== "bound") {
+      return {
+        label: "先选择一个项目",
+        detail: "连接或同步项目后，预览会显示当前故事的可播放素材。",
+      };
+    }
+    if (currentProjectPreviewProjection.available) {
+      return {
+        label: "这个项目还没有可播放素材",
+        detail: "完成画面准备后，预览会自动出现在这里。",
+      };
+    }
+    return {
+      label: "等待故事流和素材同步",
+      detail: "当前项目已连接，预览会在素材准备好后自动更新。",
+    };
+  }, [currentProjectPreviewProjection.available, currentProjectPreviewQueue.length, runtimeProjectBinding.status]);
   const currentProjectWorkbenchProjection = useMemo(() => buildCurrentProjectWorkbenchProjection({
     binding: runtimeProjectBinding,
     realChainState: projectRealChainState,
@@ -7868,6 +7892,8 @@ function App() {
           selectedShotId={workbenchSelectedShotId}
           selectedShotIds={currentProjectWorkbenchProjection.selectedScope.selectedShotIds}
           currentProjectPreviewItems={currentProjectPreviewQueue}
+          previewEmptyStateLabel={currentProjectPreviewEmptyState.label}
+          previewEmptyStateDetail={currentProjectPreviewEmptyState.detail}
           directorView={directorView}
           activeSectionId={resolvedActiveSectionId}
           statusNode={

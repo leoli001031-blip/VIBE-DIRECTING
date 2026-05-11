@@ -20,6 +20,8 @@ export function DirectorMode({
   selectedShotId,
   selectedShotIds,
   currentProjectPreviewItems,
+  previewEmptyStateLabel,
+  previewEmptyStateDetail,
   directorView,
   activeSectionId,
   statusNode,
@@ -37,6 +39,8 @@ export function DirectorMode({
   selectedShotId: string;
   selectedShotIds: string[];
   currentProjectPreviewItems?: PreviewQueueItem[];
+  previewEmptyStateLabel?: string;
+  previewEmptyStateDetail?: string;
   directorView: DirectorView;
   activeSectionId?: string;
   statusNode: ReactNode;
@@ -66,6 +70,8 @@ export function DirectorMode({
           <MinimalPreview
             previewExport={runtimeState.previewExport}
             currentProjectPreviewItems={currentProjectPreviewItems}
+            emptyStateLabel={previewEmptyStateLabel}
+            emptyStateDetail={previewEmptyStateDetail}
             sections={view.storySections}
             shots={audit.shots}
             selectedShotId={selectedShotId}

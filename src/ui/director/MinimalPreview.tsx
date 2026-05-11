@@ -43,6 +43,8 @@ function formatDuration(seconds: number) {
 export function MinimalPreview({
   previewExport,
   currentProjectPreviewItems,
+  emptyStateLabel = "预览还没有可播放素材",
+  emptyStateDetail = "等待故事流和素材同步后，这里会自动显示可播放画面。",
   sections,
   shots,
   selectedShotId,
@@ -50,6 +52,8 @@ export function MinimalPreview({
 }: {
   previewExport: ProjectPreviewExportState;
   currentProjectPreviewItems?: PreviewQueueItem[];
+  emptyStateLabel?: string;
+  emptyStateDetail?: string;
   sections: RuntimeView["storySections"];
   shots: ShotRecord[];
   selectedShotId: string;
@@ -187,11 +191,17 @@ export function MinimalPreview({
             muted
             playsInline
           />
-        ) : (
+        ) : queue.length ? (
           <div className={`preview-stage-card ${activeItem?.kind || "missing_placeholder"}`}>
             <span>素材待补齐</span>
             <strong>{activeItem?.label || "预览画面"}</strong>
             <small>{activeShot ? shortStoryFunction(activeShot, shots.indexOf(activeShot)) : "静帧等待"}</small>
+          </div>
+        ) : (
+          <div className="preview-stage-card missing_placeholder">
+            <span>预览暂不可播放</span>
+            <strong>{emptyStateLabel}</strong>
+            <small>{emptyStateDetail}</small>
           </div>
         )}
         <button className="preview-play-button" onClick={togglePlaying} aria-label={playing ? "暂停预览" : "播放预览"}>
