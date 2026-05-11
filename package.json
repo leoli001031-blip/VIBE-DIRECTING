@@ -70,6 +70,7 @@
     "runtime-truth-integration:test": "node scripts/runtime-truth-integration-test.mjs",
     "local-runtime-api": "node scripts/local-runtime-api-server.mjs",
     "local-runtime-api:test": "node scripts/local-runtime-api-server-test.mjs",
+    "runtime-api-endpoints:test": "node scripts/runtime-api-endpoints-test.mjs",
     "runtime-api-request-body:test": "node scripts/runtime-api-request-body-test.mjs",
     "runtime-api-current-project-route-context:test": "node scripts/runtime-api-current-project-route-context-test.mjs",
     "runtime-api-status-route:test": "node scripts/runtime-api-status-route-test.mjs",
