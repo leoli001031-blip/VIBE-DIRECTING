@@ -7,6 +7,7 @@ const scripts = [
   "runtime-api-current-project-one-shot-return:test",
   "runtime-api-current-project-one-shot-return-routes:test",
   "runtime-api-current-project-round5-strict-edit-prepare:test",
+  "runtime-api-current-project-round5-strict-edit-return:test",
   "runtime-api-provider-return-evidence:test",
   "runtime-api-workbench-projection:test",
   "runtime-api-current-project-binding-routes:test",

@@ -24,6 +24,7 @@ import { createRuntimeApiCurrentProjectRealChainStatus } from "./runtime-api-cur
 import { createRuntimeApiCurrentProjectRound5StrictEditPrepare } from "./runtime-api-current-project-round5-strict-edit-prepare.mjs";
 import { createRuntimeApiCurrentProjectRound5StrictEditPrepareRoutes } from "./runtime-api-current-project-round5-strict-edit-prepare-routes.mjs";
 import { createRuntimeApiCurrentProjectRound5StrictEditReturn } from "./runtime-api-current-project-round5-strict-edit-return.mjs";
+import { createRuntimeApiCurrentProjectRound5StrictEditReturnRoutes } from "./runtime-api-current-project-round5-strict-edit-return-routes.mjs";
 import { createRuntimeApiCurrentProjectReturnWriters } from "./runtime-api-current-project-return-writers.mjs";
 import { createRuntimeApiFileServing } from "./runtime-api-file-serving.mjs";
 import { createRuntimeApiProviderReturnEvidence } from "./runtime-api-provider-return-evidence.mjs";
@@ -223,23 +224,6 @@ const {
   round5FullRealChainReportFileName,
   round5StrictEditSidecarFileNames,
 });
-
-function round5StrictEditReturnRequestInput(url, body) {
-  const payload = isRecord(body) ? body : {};
-  return {
-    shotId: asString(url.searchParams.get("shotId"))
-      || requestBodyString(payload, ["shotId", "selectedShotId"])
-      || "ZP05",
-    returnedOutputPath: requestBodyString(payload, ["returnedOutputPath", "outputPath", "endFramePath"]),
-    actualProviderReturned: payload.actualProviderReturned === true,
-    providerObservation: isRecord(payload.providerObservation) ? payload.providerObservation : undefined,
-    semanticQa: isRecord(payload.semanticQa) ? payload.semanticQa : undefined,
-    returnedProviderObservationPath: requestBodyString(payload, ["returnedProviderObservationPath", "providerObservationPath"]),
-    returnedSemanticQaPath: requestBodyString(payload, ["returnedSemanticQaPath", "semanticQaPath"]),
-    providerRequestId: requestBodyString(payload, ["providerRequestId", "requestId"]),
-    inputSha256: requestBodyString(payload, ["sha256", "startFrameSha256", "sourceStartFrameSha256"]),
-  };
-}
 
 function round5StrictEditBlockedResponse(source, requestContext, input, blockers, extra = {}) {
   const project = source ? projectIdentityFromSource(source) : {};
@@ -686,6 +670,16 @@ const {
   currentProjectRound5StrictEditReturnEndpoint,
 });
 
+const {
+  handleCurrentProjectRound5StrictEditReturnRoute,
+} = createRuntimeApiCurrentProjectRound5StrictEditReturnRoutes({
+  currentProjectRound5StrictEditReturnEndpoint,
+  currentProjectRouteContext,
+  writeJson,
+  currentProjectRound5StrictEditReturnResponse,
+  running: () => running,
+});
+
 function unavailableResponse(extra = {}) {
   const source = extra.sourceProject || realDemo005Source();
   const fileScope = source.sandboxSource === "005 sandbox" ? "real-demo-e2e-005" : undefined;
@@ -960,17 +954,7 @@ async function handleRequest(req, res) {
   if (await handleCurrentProjectOneShotRoute(req, res, url)) return;
   if (await handleCurrentProjectOneShotReturnRoute(req, res, url)) return;
   if (await handleCurrentProjectRound5StrictEditPrepareRoute(req, res, url)) return;
-  if (req.method === "POST" && url.pathname === currentProjectRound5StrictEditReturnEndpoint) {
-    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectRound5StrictEditReturnEndpoint);
-    if (!routeContext) return;
-    const input = round5StrictEditReturnRequestInput(url, routeContext.body);
-    const payload = currentProjectRound5StrictEditReturnResponse(input, {
-      running,
-      requestContext: routeContext.requestContext,
-    }, routeContext.source);
-    writeJson(res, payload.ok === false ? 409 : 200, payload);
-    return;
-  }
+  if (await handleCurrentProjectRound5StrictEditReturnRoute(req, res, url)) return;
   if (req.method === "GET" && (url.pathname === realDemo005StatusEndpoint || url.pathname === legacyStatusEndpoint)) {
     writeJson(res, 200, responseFromReport({ running }));
     return;
