@@ -338,6 +338,7 @@ const {
   directorWorkflow: { buildDirectorWorkflowState },
   projectTransaction: {
     buildProjectStoreApplyPlanForStagedFacts,
+    buildProjectStoreTypedValueMaterializationPreviewForStagedFacts,
     buildProjectStoreTypedValueSourcePreviewForStagedFacts,
     buildProjectTransactionRuntime,
     commitProjectPendingTransactionForRuntime,
@@ -602,6 +603,24 @@ const previewProjectStore = {
     { role: "visual_memory", sourceOfTruth: "project_file", path: { path: "visual_memory/visual_memory.vibe.json" }, hash: "vck_visual_memory" },
     { role: "source_index", sourceOfTruth: "project_file", path: { path: "manifests/source_index.vibe.json" }, hash: "vck_source_index" },
   ],
+  facts: {
+    storyFlow: {
+      schemaVersion: "0.1.0",
+      id: "portable_story_flow",
+      shotOrder: ["A1_01", "A1_02", "A1_03"],
+      sections: [{ id: "section-1", shots: ["A1_01", "A1_02", "A1_03"] }],
+    },
+    visualMemory: {
+      schemaVersion: "0.1.0",
+      id: "portable_visual_memory",
+      assets: [{ id: "hero_locked", type: "character", lockedStatus: "locked" }],
+    },
+    sourceIndex: {
+      schemaVersion: "0.1.0",
+      sourceIndexHash: "source_hash_tx_123",
+      refs: ["story_flow/story_flow.vibe.json", "visual_memory/visual_memory.vibe.json"],
+    },
+  },
 };
 const previewProjectFactsIntegration = {
   facts: {
@@ -667,6 +686,59 @@ assert(
   !collectStrings(confirmedTypedValuePreview).some((value) => path.isAbsolute(value)),
   "typed value/source preview must not contain absolute paths",
 );
+const materializationPreview = buildProjectStoreTypedValueMaterializationPreviewForStagedFacts({
+  receipt: confirmedStaged,
+  sourcePreview: confirmedTypedValuePreview,
+  projectStore: previewProjectStore,
+  generatedAt,
+});
+assert(materializationPreview.mode === "dry_run_typed_value_materialization_preview", "typed value materialization preview must use dry-run materialization mode");
+assert(materializationPreview.stagedOnly === true, "typed value materialization preview must remain staged-only");
+assert(materializationPreview.canWriteNow === false, "typed value materialization preview must never be writable");
+assert(materializationPreview.noFileMutation === true, "typed value materialization preview must forbid file mutation");
+assert(materializationPreview.projectVibeWritten === false, "typed value materialization preview must not write project.vibe");
+assert(materializationPreview.providerCalled === false, "typed value materialization preview must not call providers");
+assert(materializationPreview.workerSpawned === false, "typed value materialization preview must not spawn workers");
+assert(materializationPreview.projectStorePatch.operations.length === 0, "typed value materialization preview must not construct ProjectStorePatch operations");
+assert(
+  materializationPreview.items.length === confirmedStaged.pendingFactPatches.length,
+  "typed value materialization preview must generate one item per staged patch",
+);
+for (const [role, operationIntent] of [
+  ["story_flow", "set_story_flow"],
+  ["visual_memory", "set_visual_memory"],
+  ["source_index", "set_source_index"],
+]) {
+  const item = materializationPreview.items.find((candidate) => candidate.role === role);
+  assert(item, `${role} materialization item must be present`);
+  assert(item.valueMaterialization.valuePresent === true, `${role} materialization must find the typed ProjectStore value`);
+  assert(item.valueMaterialization.valueKind === "object", `${role} materialization must only accept typed objects`);
+  assert(/^vtx_[0-9a-f]{8}$/.test(item.valueMaterialization.valueHash || ""), `${role} materialization must include a stable value hash`);
+  assert(item.projectStoreOperationIntent === operationIntent, `${role} materialization must expose operation intent`);
+  assert(item.valueMaterialization.projectStoreOperationPreview?.op === operationIntent, `${role} materialization must preview the intended op`);
+  assert(item.valueMaterialization.projectStoreOperationPreview?.canApplyNow === false, `${role} operation preview must remain non-applicable`);
+  assert(item.canApplyNow === false, `${role} materialization candidate must not be applyable`);
+}
+for (const role of ["shot_layout", "task_runs_pointer", "knowledge_route_history"]) {
+  const item = materializationPreview.items.find((candidate) => candidate.role === role);
+  assert(item, `${role} materialization item must be present`);
+  assert(item.valueMaterialization.valuePresent === false, `${role} must not materialize a typed value`);
+  assert(item.valueMaterialization.valueKind === "unsupported", `${role} must remain unsupported or pointer-only`);
+  assert(!("projectStoreOperationIntent" in item), `${role} materialization must not expose unsupported operation intent`);
+  assert(item.blockedReasons.includes("project_store_operation_unavailable_for_role"), `${role} materialization must explain unavailable operation`);
+}
+assert(
+  materializationPreview.items
+    .find((item) => item.role === "task_runs_pointer")
+    ?.blockedReasons.includes("task_runs_pointer_is_pointer_only"),
+  "task_runs_pointer materialization must retain pointer-only blocker",
+);
+const stringifiedMaterializationPreview = JSON.stringify(materializationPreview);
+assert(!stringifiedMaterializationPreview.includes(process.cwd()), "typed value materialization preview must not persist the workspace absolute path");
+assert(
+  !collectStrings(materializationPreview).some((value) => path.isAbsolute(value)),
+  "typed value materialization preview must not contain absolute paths",
+);
 const blockedAuthorityPreview = buildProjectStoreTypedValueSourcePreviewForStagedFacts({
   receipt: {
     ...confirmedStaged,
@@ -686,6 +758,47 @@ assert(
     ?.sourceValidation.errors.includes("blocked_authority_cannot_authorize_project_fact"),
   "runtime-state/direct-input/old-chat/global knowledge must not authorize project fact sources",
 );
+const blockedAuthorityMaterializationPreview = buildProjectStoreTypedValueMaterializationPreviewForStagedFacts({
+  receipt: confirmedStaged,
+  sourcePreview: blockedAuthorityPreview,
+  projectStore: previewProjectStore,
+  generatedAt,
+});
+const blockedAuthorityMaterializationItem = blockedAuthorityMaterializationPreview.items.find((item) => item.role === "story_flow");
+assert(blockedAuthorityMaterializationItem, "blocked authority materialization item must be present");
+assert(blockedAuthorityMaterializationItem.valueMaterialization.valuePresent === false, "blocked authority source preview must fail closed before materializing value");
+assert(
+  blockedAuthorityMaterializationItem.sourceValidation.errors.includes("blocked_authority_cannot_authorize_project_fact"),
+  "blocked authority materialization must retain source validation error",
+);
+for (const rejectedPath of ["/tmp/story_flow.vibe.json", "~/story_flow.vibe.json", "../story_flow.vibe.json"]) {
+  const unsafeSourcePreview = buildProjectStoreTypedValueSourcePreviewForStagedFacts({
+    receipt: confirmedStaged,
+    projectStore: {
+      factFiles: previewProjectStore.factFiles.map((factFile) =>
+        factFile.role === "story_flow" ? { ...factFile, path: { path: rejectedPath } } : factFile,
+      ),
+    },
+    projectFactsIntegration: previewProjectFactsIntegration,
+    generatedAt,
+  });
+  const unsafeMaterializationPreview = buildProjectStoreTypedValueMaterializationPreviewForStagedFacts({
+    receipt: confirmedStaged,
+    sourcePreview: unsafeSourcePreview,
+    projectStore: previewProjectStore,
+    generatedAt,
+  });
+  const unsafeStoryItem = unsafeMaterializationPreview.items.find((item) => item.role === "story_flow");
+  assert(unsafeStoryItem, `${rejectedPath} materialization item must remain present for review`);
+  assert(unsafeStoryItem.valueMaterialization.valuePresent === false, `${rejectedPath} must fail closed before value materialization`);
+  assert(
+    unsafeStoryItem.sourceValidation.errors.some((error) =>
+      ["base_source_path_must_be_project_relative", "base_source_path_must_not_escape_project_root", "base_source_path_missing"].includes(error),
+    ),
+    `${rejectedPath} must be rejected as a non-portable source path`,
+  );
+  assert(!JSON.stringify(unsafeMaterializationPreview).includes(rejectedPath), `${rejectedPath} must not be persisted in materialization output`);
+}
 
 const missingExpectedOutputs = mutateFirstQueuedPacket(hydratedWorkflow, confirmedRuntime, (packet) => {
   packet.envelope.taskEnvelope.expectedOutputs = [];
@@ -860,6 +973,8 @@ assert(schema.$defs.projectFactsStagedApplyPlan, "schema must define staged Proj
 assert(schema.$defs.projectFactsStagedApplyPlanItem, "schema must define staged ProjectStore apply plan item");
 assert(schema.$defs.projectStoreTypedValueSourcePreview, "schema must define typed value/source preview");
 assert(schema.$defs.projectStoreTypedValueSourcePreviewItem, "schema must define typed value/source preview item");
+assert(schema.$defs.projectStoreTypedValueMaterializationPreview, "schema must define typed value materialization preview");
+assert(schema.$defs.projectStoreTypedValueMaterializationPreviewItem, "schema must define typed value materialization preview item");
 assert(schema.$defs.projectFactsStagedCommitReceipt.properties.projectVibeWritten.const === false, "staged commit schema must forbid project.vibe writes");
 assert(schema.$defs.projectFactsStagedCommitReceipt.properties.providerCalled.const === false, "staged commit schema must forbid provider calls");
 assert(schema.$defs.projectFactsStagedCommitReceipt.properties.workerSpawned.const === false, "staged commit schema must forbid worker spawn");
@@ -875,14 +990,32 @@ assert(schema.$defs.projectStoreTypedValueSourcePreview.properties.canWriteNow.c
 assert(schema.$defs.projectStoreTypedValueSourcePreview.properties.projectVibeWritten.const === false, "preview schema must forbid project.vibe writes");
 assert(schema.$defs.projectStoreTypedValueSourcePreview.properties.providerCalled.const === false, "preview schema must forbid provider calls");
 assert(schema.$defs.projectStoreTypedValueSourcePreview.properties.workerSpawned.const === false, "preview schema must forbid worker spawn");
+assert(schema.$defs.projectStoreTypedValueMaterializationPreview.properties.canWriteNow.const === false, "materialization preview schema must forbid immediate writes");
+assert(schema.$defs.projectStoreTypedValueMaterializationPreview.properties.projectVibeWritten.const === false, "materialization preview schema must forbid project.vibe writes");
+assert(schema.$defs.projectStoreTypedValueMaterializationPreview.properties.providerCalled.const === false, "materialization preview schema must forbid provider calls");
+assert(schema.$defs.projectStoreTypedValueMaterializationPreview.properties.workerSpawned.const === false, "materialization preview schema must forbid worker spawn");
+assert(
+  schema.$defs.projectStoreTypedValueMaterializationPreview.properties.projectStorePatch.properties.operations.maxItems === 0,
+  "materialization preview schema must keep ProjectStorePatch operations unavailable",
+);
 assert(!JSON.stringify(confirmedRuntime).includes(process.cwd()), "runtime transaction must not persist absolute workspace paths");
 const projectTransactionSource = fs.readFileSync("src/core/projectTransaction.ts", "utf8");
 const typedPreviewSource = projectTransactionSource.slice(
   projectTransactionSource.indexOf("export function buildProjectStoreTypedValueSourcePreviewForStagedFacts"),
   projectTransactionSource.indexOf("function writePlan"),
 );
-for (const forbiddenEntry of ["executeProjectStoreIoGate", "child_process", "spawn(", "provider.submit", "submitProvider", "executeProvider"]) {
-  assert(!typedPreviewSource.includes(forbiddenEntry), `typed value/source preview must not reference ${forbiddenEntry}`);
+for (const forbiddenEntry of [
+  "buildProjectStoreIoGate",
+  "executeProjectStoreIoGate",
+  "saveProjectStoreSnapshot",
+  "applyProjectStorePatch",
+  "child_process",
+  "spawn(",
+  "provider.submit",
+  "submitProvider",
+  "executeProvider",
+]) {
+  assert(!typedPreviewSource.includes(forbiddenEntry), `typed value/source and materialization previews must not reference ${forbiddenEntry}`);
 }
 
 console.log(

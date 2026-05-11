@@ -1033,6 +1033,112 @@
         }
       }
     },
+    "projectStoreTypedValueMaterializationPreview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "receiptId",
+        "transactionId",
+        "generatedAt",
+        "status",
+        "mode",
+        "stagedOnly",
+        "canWriteNow",
+        "noFileMutation",
+        "projectVibeWritten",
+        "providerCalled",
+        "workerSpawned",
+        "projectStorePatch",
+        "items",
+        "blockedReasons"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+        "receiptId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "transactionId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+        "status": {
+          "type": "string",
+          "enum": ["blocked_staged_receipt", "blocked_missing_typed_value_source_evidence", "blocked_dry_run_only"]
+        },
+        "mode": { "type": "string", "const": "dry_run_typed_value_materialization_preview" },
+        "stagedOnly": { "type": "boolean", "const": true },
+        "canWriteNow": { "type": "boolean", "const": false },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "projectVibeWritten": { "type": "boolean", "const": false },
+        "providerCalled": { "type": "boolean", "const": false },
+        "workerSpawned": { "type": "boolean", "const": false },
+        "projectStorePatch": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "appliedAt", "operations"],
+          "properties": {
+            "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+            "appliedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+            "operations": {
+              "type": "array",
+              "maxItems": 0
+            }
+          }
+        },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/projectStoreTypedValueMaterializationPreviewItem" }
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "projectStoreTypedValueMaterializationPreviewItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "role",
+        "patchId",
+        "sourceValidation",
+        "valueMaterialization",
+        "canApplyNow",
+        "blockedReasons"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "role": { "$ref": "#/$defs/projectFactWriteRole" },
+        "patchId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "projectStoreOperationIntent": { "type": "string", "enum": ["set_story_flow", "set_visual_memory", "set_source_index"] },
+        "sourcePreviewItemId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "sourceValidation": { "$ref": "#/$defs/projectStoreTypedValueSourceValidation" },
+        "valueMaterialization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["valuePresent", "valueKind"],
+          "properties": {
+            "valuePresent": { "type": "boolean" },
+            "valueKind": { "type": "string", "enum": ["object", "missing", "unsupported"] },
+            "valueHash": { "type": "string" },
+            "sourcePath": { "type": "string" },
+            "sourceAuthority": { "type": "string" },
+            "projectStoreOperationPreview": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["op", "canApplyNow"],
+              "properties": {
+                "op": { "type": "string", "enum": ["set_story_flow", "set_visual_memory", "set_source_index"] },
+                "canApplyNow": { "type": "boolean", "const": false }
+              }
+            }
+          }
+        },
+        "canApplyNow": { "type": "boolean", "const": false },
+        "blockedReasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
     "projectFactStagedPatch": {
       "type": "object",
       "additionalProperties": false,
