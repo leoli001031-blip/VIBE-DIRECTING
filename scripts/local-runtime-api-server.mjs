@@ -12,6 +12,7 @@ import {
 } from "./current-project-image2-transport-contract.mjs";
 import { createRuntimeApiBoundary } from "./runtime-api-boundary.mjs";
 import { createRuntimeApiCurrentProjectBinding } from "./runtime-api-current-project-binding.mjs";
+import { createRuntimeApiCurrentProjectBindingRoutes } from "./runtime-api-current-project-binding-routes.mjs";
 import { createRuntimeApiCurrentProjectImage2Handoff } from "./runtime-api-current-project-image2-handoff.mjs";
 import { createRuntimeApiCurrentProjectImage2BatchPlan } from "./runtime-api-current-project-image2-batch-plan.mjs";
 import { createRuntimeApiCurrentProjectOneShotExecutor } from "./runtime-api-current-project-one-shot-executor.mjs";
@@ -467,6 +468,21 @@ const {
 });
 
 const {
+  handleCurrentProjectBindingRoute,
+} = createRuntimeApiCurrentProjectBindingRoutes({
+  currentProjectBindingEndpoint,
+  currentProjectRecentEndpoint,
+  currentProjectSelectEndpoint,
+  readRequestJsonBody,
+  writeJson,
+  runtimePolicy,
+  currentProjectBindingStatusResponse,
+  currentProjectRecentResponse,
+  selectCurrentProjectBindingResponse,
+  running: () => running,
+});
+
+const {
   handleCurrentProjectReadCheckRoute,
 } = createRuntimeApiCurrentProjectReadCheckRoutes({
   currentProjectStatusEndpoint,
@@ -868,22 +884,6 @@ async function currentProjectRouteContext(req, res, url, endpoint) {
   return { requestContext, source: sourceResult.source, body: bodyResult.body };
 }
 
-async function handleCurrentProjectSelect(req, res) {
-  const bodyResult = await readRequestJsonBody(req);
-  if (!bodyResult.ok) {
-    writeJson(res, 400, {
-      ok: false,
-      ...runtimePolicy(),
-      endpoint: currentProjectSelectEndpoint,
-      status: "bad_request",
-      message: bodyResult.message,
-    });
-    return;
-  }
-  const { statusCode, payload } = selectCurrentProjectBindingResponse(bodyResult.body);
-  writeJson(res, statusCode, payload);
-}
-
 async function handleRequest(req, res) {
   const url = new URL(req.url || "/", `http://${host}`);
   const security = runtimeRequestSecurity(req);
@@ -930,18 +930,7 @@ async function handleRequest(req, res) {
     serveRuntimeFile(req, res, url.searchParams.get("path") || "", { scope: url.searchParams.get("scope") || undefined });
     return;
   }
-  if (req.method === "GET" && url.pathname === currentProjectBindingEndpoint) {
-    writeJson(res, 200, currentProjectBindingStatusResponse({ running }));
-    return;
-  }
-  if (req.method === "GET" && url.pathname === currentProjectRecentEndpoint) {
-    writeJson(res, 200, currentProjectRecentResponse({ running }));
-    return;
-  }
-  if (req.method === "POST" && url.pathname === currentProjectSelectEndpoint) {
-    await handleCurrentProjectSelect(req, res);
-    return;
-  }
+  if (await handleCurrentProjectBindingRoute(req, res, url)) return;
   if (await handleCurrentProjectReadCheckRoute(req, res, url)) return;
   if (req.method === "GET" && url.pathname === currentProjectImage2OneShotStatusEndpoint) {
     const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2OneShotStatusEndpoint);
