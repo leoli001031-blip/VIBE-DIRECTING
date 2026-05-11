@@ -73,6 +73,7 @@
     "runtime-api-current-project-return-writers:test": "node scripts/runtime-api-current-project-return-writers-test.mjs",
     "runtime-api-current-project-one-shot-executor:test": "node scripts/runtime-api-current-project-one-shot-executor-test.mjs",
     "runtime-api-current-project-one-shot-return:test": "node scripts/runtime-api-current-project-one-shot-return-test.mjs",
+    "runtime-api-current-project-one-shot-return-routes:test": "node scripts/runtime-api-current-project-one-shot-return-routes-test.mjs",
     "runtime-api-round5-artifact-ingest:test": "node scripts/runtime-api-round5-artifact-ingest-test.mjs",
     "runtime-api-current-project-round5-strict-edit-prepare:test": "node scripts/runtime-api-current-project-round5-strict-edit-prepare-test.mjs && node scripts/runtime-api-current-project-round5-strict-edit-prepare-routes-test.mjs",
     "runtime-api-current-project-round5-strict-edit-return:test": "node scripts/runtime-api-current-project-round5-strict-edit-return-test.mjs",

@@ -17,6 +17,7 @@ import { createRuntimeApiCurrentProjectImage2Handoff } from "./runtime-api-curre
 import { createRuntimeApiCurrentProjectImage2BatchPlan } from "./runtime-api-current-project-image2-batch-plan.mjs";
 import { createRuntimeApiCurrentProjectOneShotExecutor } from "./runtime-api-current-project-one-shot-executor.mjs";
 import { createRuntimeApiCurrentProjectOneShotReturn } from "./runtime-api-current-project-one-shot-return.mjs";
+import { createRuntimeApiCurrentProjectOneShotReturnRoutes } from "./runtime-api-current-project-one-shot-return-routes.mjs";
 import { createRuntimeApiCurrentProjectOneShotRoutes } from "./runtime-api-current-project-one-shot-routes.mjs";
 import { createRuntimeApiCurrentProjectReadCheckRoutes } from "./runtime-api-current-project-read-check-routes.mjs";
 import { createRuntimeApiCurrentProjectRealChainStatus } from "./runtime-api-current-project-real-chain-status.mjs";
@@ -296,26 +297,6 @@ function safePathSegment(value) {
     .replace(/[^a-zA-Z0-9_-]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 80) || "shot";
-}
-
-function oneShotReturnRequestInput(url, body) {
-  const input = oneShotRequestInput(url, body);
-  return {
-    ...input,
-    receiptId: asString(url.searchParams.get("receiptId")) || requestBodyString(body, ["receiptId"]),
-    sourceImagePath: requestBodyString(body, ["sourceImagePath", "generatedImagePath", "providerOutputPath"]),
-    actualProviderReturned: body?.actualProviderReturned === true,
-    returnedOutputPath: requestBodyString(body, ["returnedOutputPath", "providerOutputPath", "actualOutputPath", "sourceImagePath", "generatedImagePath"]),
-    returnedProviderObservationPath: requestBodyString(body, ["returnedProviderObservationPath", "actualProviderObservationPath"]),
-    returnedSemanticQaPath: requestBodyString(body, ["returnedSemanticQaPath", "actualSemanticQaPath"]),
-    providerObservation: isRecord(body?.providerObservation) ? body.providerObservation : undefined,
-    semanticQa: isRecord(body?.semanticQa) ? body.semanticQa : undefined,
-    provider: requestBodyString(body, ["provider"]) || "openai_image2_via_codex_imagegen",
-    providerObservationMode: requestBodyString(body, ["providerObservationMode"]) || "actual_provider_call_observed",
-    actualImage2Triggered: body?.actualImage2Triggered === true,
-    providerCalled: body?.providerCalled === true,
-    rawBody: isRecord(body) ? body : {},
-  };
 }
 
 function sha256Bytes(bytes) {
@@ -626,6 +607,18 @@ const {
   runtimePolicy,
   runtimeFileUrl,
   currentProjectImage2OneShotExecuteReturnEndpoint,
+});
+
+const {
+  handleCurrentProjectOneShotReturnRoute,
+} = createRuntimeApiCurrentProjectOneShotReturnRoutes({
+  currentProjectImage2OneShotReturnEndpoint,
+  currentProjectImage2OneShotExecuteReturnEndpoint,
+  currentProjectRouteContext,
+  writeJson,
+  requestOverrideDiagnostics,
+  currentProjectImage2OneShotReturnIngestResponse,
+  running: () => running,
 });
 
 const round5StrictEditPrepareApi = createRuntimeApiCurrentProjectRound5StrictEditPrepare({
@@ -965,17 +958,7 @@ async function handleRequest(req, res) {
   if (await handleCurrentProjectBindingRoute(req, res, url)) return;
   if (await handleCurrentProjectReadCheckRoute(req, res, url)) return;
   if (await handleCurrentProjectOneShotRoute(req, res, url)) return;
-  if (req.method === "POST" && (url.pathname === currentProjectImage2OneShotReturnEndpoint || url.pathname === currentProjectImage2OneShotExecuteReturnEndpoint)) {
-    const routeContext = await currentProjectRouteContext(req, res, url, url.pathname);
-    if (!routeContext) return;
-    const input = oneShotReturnRequestInput(url, routeContext.body);
-    const payload = currentProjectImage2OneShotReturnIngestResponse(input, {
-      running,
-      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
-    }, routeContext.source);
-    writeJson(res, payload.ok === false ? 409 : 200, payload);
-    return;
-  }
+  if (await handleCurrentProjectOneShotReturnRoute(req, res, url)) return;
   if (await handleCurrentProjectRound5StrictEditPrepareRoute(req, res, url)) return;
   if (req.method === "POST" && url.pathname === currentProjectRound5StrictEditReturnEndpoint) {
     const routeContext = await currentProjectRouteContext(req, res, url, currentProjectRound5StrictEditReturnEndpoint);
