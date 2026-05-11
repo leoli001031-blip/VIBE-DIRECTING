@@ -8,6 +8,7 @@ const scripts = [
   "runtime-api-provider-return-evidence:test",
   "runtime-api-workbench-projection:test",
   "runtime-api-current-project-real-chain-status:test",
+  "runtime-api-current-project-image2-batch-plan:test",
   "runtime-api-file-serving:test",
 ];
 

@@ -78,6 +78,7 @@
     "runtime-api-current-project-round5-strict-edit-return:test": "node scripts/runtime-api-current-project-round5-strict-edit-return-test.mjs",
     "runtime-api-workbench-projection:test": "node scripts/runtime-api-workbench-projection-test.mjs",
     "runtime-api-current-project-real-chain-status:test": "node scripts/runtime-api-current-project-real-chain-status-test.mjs",
+    "runtime-api-current-project-image2-batch-plan:test": "node scripts/runtime-api-current-project-image2-batch-plan-test.mjs",
     "runtime-api-current-project-binding:test": "node scripts/runtime-api-current-project-binding-test.mjs",
     "runtime-api-current-project-image2-handoff:test": "node scripts/runtime-api-current-project-image2-handoff-test.mjs",
     "runtime-api-provider-return-evidence:test": "node scripts/runtime-api-provider-return-evidence-test.mjs",
