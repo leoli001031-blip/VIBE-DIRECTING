@@ -50,7 +50,7 @@ export function MinimalTopNav({
       <button className="project-title-button" onClick={() => onOpenDirectorView("story")}>
         <span className="project-title-text">{projectTitle || "Untitled project"}</span>
         <span className="project-plan-entry" aria-label="项目计划状态">
-          <strong>Story</strong>
+          <strong>故事流</strong>
           <span>{projectPlan.entryLabel}</span>
           <span>{projectPlan.planLabel}</span>
           <span>{projectPlan.statusLabel}</span>
@@ -61,12 +61,12 @@ export function MinimalTopNav({
           ))}
         </span>
       </button>
-      <nav className="minimal-nav" aria-label="Director views">
+      <nav className="minimal-nav" aria-label="导演视图">
         <button
           className={mode === "director" && directorView === "assets" ? "active" : ""}
           onClick={() => onOpenDirectorView("assets")}
         >
-          Asset Library
+          视觉记忆
         </button>
         {sections.map((section, index) => (
           <button
@@ -74,7 +74,7 @@ export function MinimalTopNav({
             className={mode === "director" && directorView === "story" && activeSectionId === section.id ? "active" : ""}
             onClick={() => onOpenSection(section.id)}
             title={section.label || section.id}
-            aria-label={`${section.label || section.id} · ${section.shotCount} shots`}
+            aria-label={`${section.label || section.id} · ${section.shotCount} 个镜头`}
           >
             <span className="minimal-section-label">{shortSectionLabel(section, index)}</span>
             <small className="minimal-section-count">{section.shotCount}</small>
@@ -84,12 +84,12 @@ export function MinimalTopNav({
           className={mode === "director" && directorView === "preview" ? "active" : ""}
           onClick={() => onOpenDirectorView("preview")}
         >
-          Preview
+          预览
         </button>
       </nav>
-      <button className={`diagnostics-link ${mode === "diagnostics" ? "active" : ""}`} onClick={onOpenDiagnostics} aria-label="Diagnostics">
+      <button className={`diagnostics-link ${mode === "diagnostics" ? "active" : ""}`} onClick={onOpenDiagnostics} aria-label="诊断">
         <Settings size={18} aria-hidden="true" />
-        <span className="sr-only">Diagnostics</span>
+        <span className="sr-only">诊断</span>
       </button>
     </header>
   );

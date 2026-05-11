@@ -45,7 +45,7 @@ export function DirectorMode({
   onProjectStoreApplyPlanReady?: (plan: ProjectFactsStagedApplyPlan) => void;
 }) {
   const activeSection = view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0];
-  const sectionLabel = activeSection?.label || "Story";
+  const sectionLabel = activeSection?.label || "故事流";
   const shots = activeSection ? audit.shots.filter((shot) => activeSection.shotIds.includes(shot.id)) : audit.shots;
 
   return (

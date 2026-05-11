@@ -626,8 +626,8 @@ function exportStatusLabel(status: string) {
 function buildMinimalProjectPlan(runtimeState: ProjectRuntimeState, statusLabel = "等待确认", progressDots: MinimalRuntimeProjection["progressDots"] = []): MinimalProjectPlan {
   const lockedReferences = runtimeState.visualMemory.assets.filter((asset) => asset.lockedStatus === "locked").length;
   return {
-    entryLabel: `${runtimeState.storyFlow.shots.length} shots`,
-    planLabel: `${lockedReferences} locked refs`,
+    entryLabel: `${runtimeState.storyFlow.shots.length} 个镜头`,
+    planLabel: `${lockedReferences} 个锁定参考`,
     statusLabel,
     progressDots,
   };

@@ -174,7 +174,7 @@ export function MinimalPreview({
         {activeItem?.kind === "image_hold" ? (
           <MediaFrame
             src={activeItem.mediaPath}
-            alt={activeItem.shotId || "Preview"}
+            alt={activeItem.shotId || "预览画面"}
             label={activeItem.label}
             className="preview-stage-image"
           />
@@ -189,12 +189,12 @@ export function MinimalPreview({
           />
         ) : (
           <div className={`preview-stage-card ${activeItem?.kind || "missing_placeholder"}`}>
-            <span>Missing</span>
-            <strong>{activeItem?.label || "Preview"}</strong>
-            <small>{activeShot ? shortStoryFunction(activeShot, shots.indexOf(activeShot)) : "Hold"}</small>
+            <span>素材待补齐</span>
+            <strong>{activeItem?.label || "预览画面"}</strong>
+            <small>{activeShot ? shortStoryFunction(activeShot, shots.indexOf(activeShot)) : "静帧等待"}</small>
           </div>
         )}
-        <button className="preview-play-button" onClick={togglePlaying} aria-label={playing ? "Pause" : "Play"}>
+        <button className="preview-play-button" onClick={togglePlaying} aria-label={playing ? "暂停预览" : "播放预览"}>
           {playing ? <PauseCircle size={42} /> : <Play size={42} />}
         </button>
       </section>
@@ -231,10 +231,10 @@ export function MinimalPreview({
           <span className="preview-line-progress" style={{ left: `${progress}%` }} />
         </div>
         <div className="preview-time-row">
-          <button onClick={togglePlaying}>{playing ? <PauseCircle size={17} /> : <Play size={17} />}</button>
+          <button onClick={togglePlaying} aria-label={playing ? "暂停预览" : "播放预览"}>{playing ? <PauseCircle size={17} /> : <Play size={17} />}</button>
           <span>{formatDuration(currentTime)} / {formatDuration(total)}</span>
         </div>
-        <p className="preview-export-summary" aria-label="Preview summary">
+        <p className="preview-export-summary" aria-label="预览摘要">
           {projection.previewSummary.detail} · {formatDuration(total)}
         </p>
       </section>

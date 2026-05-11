@@ -378,17 +378,36 @@ for (const [term, pattern] of [
 }
 
 const phase14ProjectSurface = `${minimalTopNav}\n${minimalProjectPlan}`;
-checkMessage(requireWithin(phase14ProjectSurface, /Story/i, "Director Clean Mode story summary in minimal top navigation"));
-checkMessage(requireWithin(phase14ProjectSurface, /shots/i, "Director Clean Mode shot count badge"));
-checkMessage(requireWithin(phase14ProjectSurface, /locked refs/i, "Director Clean Mode locked reference count badge"));
+checkMessage(requireWithin(phase14ProjectSurface, /故事流/, "Director Clean Mode story summary in minimal top navigation"));
+checkMessage(requireWithin(phase14ProjectSurface, /个镜头/, "Director Clean Mode shot count badge must use product copy"));
+checkMessage(requireWithin(phase14ProjectSurface, /个锁定参考/, "Director Clean Mode locked reference count badge must use product copy"));
 checkMessage(requireWithin(phase14ProjectSurface, /statusLabel/, "One Creator Loop top navigation short runtime status"));
 checkMessage(requireWithin(phase14ProjectSurface, /minimal-state-dots/, "One Creator Loop top navigation compact progress dots"));
-checkMessage(requireWithin(minimalTopNav, /Settings/, "One Creator Loop Diagnostics entry should be icon-based"));
+checkMessage(requireWithin(minimalTopNav, /aria-label="导演视图"/, "Top navigation view aria label must use product copy"));
+checkMessage(requireWithin(minimalTopNav, /视觉记忆/, "Top navigation asset view must use product copy"));
+checkMessage(requireWithin(minimalTopNav, /预览/, "Top navigation preview view must use product copy"));
+checkMessage(requireWithin(minimalTopNav, /aria-label="诊断"[\s\S]*sr-only">诊断/, "One Creator Loop Diagnostics entry should use product copy"));
 checkMessage(requireWithin(minimalTopNav, /shortSectionLabel\s*\(/, "Top navigation story section tabs must use compact section labels"));
 checkMessage(requireWithin(minimalTopNav, /title=\{section\.label\s*\|\|\s*section\.id\}/, "Top navigation must keep full section label in title"));
 checkMessage(requireWithin(stylesSource, /\.minimal-section-label[\s\S]{0,220}text-overflow:\s*ellipsis/, "Top navigation section labels must ellipsize"));
 check(!/<button\b[^>]*diagnostics-link[\s\S]{0,120}>\s*Diagnostics\s*<\/button>/i.test(minimalTopNav), "One Creator Loop Diagnostics must not be a prominent text button in the top navigation");
 check(!/Plan\s+preview/i.test(phase14ProjectSurface), "Minimal top navigation must not expose Plan preview copy");
+checkMessage(requireWithin(directorMode, /activeSection\?\.label\s*\|\|\s*"故事流"/, "DirectorMode fallback section label must use product copy"));
+checkMessage(requireWithin(minimalPreview, /素材待补齐/, "Preview missing material card must use product copy"));
+checkMessage(requireWithin(minimalPreview, /播放预览/, "Preview play aria label must use product copy"));
+checkMessage(requireWithin(minimalPreview, /暂停预览/, "Preview pause aria label must use product copy"));
+
+const defaultDirectorSurfaceText = extractStringLiterals(`${minimalTopNav}\n${directorMode}\n${minimalPreview}\n${minimalProjectPlan}`);
+for (const [term, pattern] of [
+  ["Asset Library", /Asset Library/],
+  ["Preview", /Preview/],
+  ["Diagnostics", /Diagnostics/],
+  ["locked refs", /locked refs/],
+  ["shots", /(^|[^.])\bshots\b/],
+  ["Story", /\bStory\b/],
+]) {
+  check(!pattern.test(defaultDirectorSurfaceText), `Default Director surface must not expose ${term}`);
+}
 
 checkMessage(requireWithin(minimalAssetLibrary, /<details\s+className="asset-library-add"/, "Asset Library add asset form must be collapsed behind a light entry"));
 checkMessage(requireWithin(minimalAssetLibrary, /blockerLabel/, "Asset Library blockers must collapse to a short status"));
