@@ -431,6 +431,64 @@ export type ProjectStorePatchOperationIntent = "set_story_flow" | "set_visual_me
 
 export type ProjectFactsStagedApplyPlanStatus = "blocked_staged_receipt" | "blocked_missing_project_store_values";
 
+export type ProjectFactSourceAuthority =
+  | "project_file"
+  | "project_store"
+  | "asset_library"
+  | "voice_source_library"
+  | "not_connected"
+  | string;
+
+export interface ProjectStoreTypedValueSourceEvidence {
+  sourceOfTruth: ProjectFactSourceAuthority;
+  role: string;
+  path?: string;
+  hash?: string;
+}
+
+export interface ProjectStoreTypedValueSourceValidation {
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface ProjectStoreTypedValueContract {
+  expectedType: "typed_project_store_fact_value";
+  acceptedAuthorities: string[];
+  missing: true;
+  notes: string[];
+}
+
+export interface ProjectStoreTypedValueSourcePreviewItem {
+  id: string;
+  role: ProjectFactWriteRole;
+  patchId: string;
+  projectStoreOperationIntent?: ProjectStorePatchOperationIntent;
+  valueContract: ProjectStoreTypedValueContract;
+  baseSourceEvidence?: ProjectStoreTypedValueSourceEvidence;
+  sourceValidation: ProjectStoreTypedValueSourceValidation;
+  valuePresent: false;
+  canApplyNow: false;
+  blockedReasons: string[];
+}
+
+export interface ProjectStoreTypedValueSourcePreview {
+  schemaVersion: typeof projectTransactionSchemaVersion;
+  receiptId: string;
+  transactionId: string;
+  generatedAt: string;
+  status: "blocked_staged_receipt" | "blocked_missing_typed_value_source_evidence";
+  mode: "dry_run_typed_value_source_preview";
+  stagedOnly: true;
+  canWriteNow: false;
+  noFileMutation: true;
+  projectVibeWritten: false;
+  providerCalled: false;
+  workerSpawned: false;
+  items: ProjectStoreTypedValueSourcePreviewItem[];
+  blockedReasons: string[];
+}
+
 export interface ProjectFactsStagedApplyPlanItem {
   id: string;
   patchId: string;
@@ -497,6 +555,24 @@ export interface BuildProjectTransactionRuntimeInput {
   userEnabled?: boolean;
   capacityStatus?: "available" | "full";
 }
+
+type ProjectStorePreviewFactFile = {
+  role?: string;
+  path?: { path?: string } | string;
+  sourceOfTruth?: string;
+  hash?: string;
+};
+
+type ProjectFactsIntegrationPreviewFact = {
+  sourceOfTruth?: string;
+  path?: string;
+  sourceHash?: string;
+  sourceHashes?: string[];
+  sources?: ProjectStoreTypedValueSourceEvidence[];
+  sourceRefs?: string[];
+  blockers?: string[];
+  warnings?: string[];
+};
 
 function unique<T extends string>(values: T[]): T[] {
   return Array.from(new Set(values.filter((value) => value.trim()).map((value) => value.trim()))).sort() as T[];
@@ -1306,6 +1382,153 @@ function stagedApplyPlanItemFor(patch: ProjectFactStagedPatch): ProjectFactsStag
   };
 }
 
+const projectFactAllowedAuthorities = ["project_file", "project_store", "asset_library", "voice_source_library"];
+const blockedProjectFactAuthorityPattern = /(?:runtime[-_]?state|runtime[-_]?cache|direct[-_]?input|old[-_]?chat|previous[-_]?chat|global[-_]?knowledge)/i;
+const absoluteOrHomePathPattern = /^(?:[A-Za-z]:[\\/]|\/|\/\/|~[\\/])/;
+
+function previewFactKeyForRole(role: ProjectFactWriteRole): string | undefined {
+  if (role === "story_flow") return "storyFlow";
+  if (role === "visual_memory") return "visualMemory";
+  if (role === "shot_layout") return "shotLayout";
+  return undefined;
+}
+
+function previewPathFrom(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const pathValue = (value as { path?: unknown }).path;
+    return typeof pathValue === "string" ? pathValue : undefined;
+  }
+  return undefined;
+}
+
+function sanitizePreviewPath(pathValue: string | undefined, errors: string[]): string | undefined {
+  const trimmed = pathValue?.trim();
+  if (!trimmed) return undefined;
+  const normalized = trimmed.replace(/\\/g, "/").replace(/\/+/g, "/");
+  if (absoluteOrHomePathPattern.test(normalized)) {
+    errors.push("base_source_path_must_be_project_relative");
+    return undefined;
+  }
+  if (/(?:^|\/)\.\.(?:\/|$)/.test(normalized)) {
+    errors.push("base_source_path_must_not_escape_project_root");
+    return undefined;
+  }
+  return normalized.replace(/^\/+/, "");
+}
+
+function hasBlockedProjectFactAuthority(value: unknown): boolean {
+  if (typeof value === "string") return blockedProjectFactAuthorityPattern.test(value);
+  if (Array.isArray(value)) return value.some(hasBlockedProjectFactAuthority);
+  if (value && typeof value === "object") return Object.values(value).some(hasBlockedProjectFactAuthority);
+  return false;
+}
+
+function sourceValidationForPreview(input: {
+  patch: ProjectFactStagedPatch;
+  operationIntent?: ProjectStorePatchOperationIntent;
+  evidence?: ProjectStoreTypedValueSourceEvidence;
+  integrationFact?: ProjectFactsIntegrationPreviewFact;
+}): ProjectStoreTypedValueSourceValidation {
+  const errors = unique([
+    hasBlockedProjectFactAuthority(input.patch.sourceRefs) ? "blocked_authority_cannot_authorize_project_fact" : "",
+    hasBlockedProjectFactAuthority(input.integrationFact?.sourceRefs) ? "blocked_authority_cannot_authorize_project_fact" : "",
+    input.evidence?.sourceOfTruth && !projectFactAllowedAuthorities.includes(input.evidence.sourceOfTruth)
+      ? "base_source_authority_unavailable_for_project_fact"
+      : "",
+    input.evidence ? "" : "base_source_evidence_missing",
+    input.evidence?.path ? "" : "base_source_path_missing",
+    input.evidence?.hash ? "" : "base_source_hash_missing",
+    input.operationIntent ? "" : "project_store_operation_unavailable_for_role",
+  ]);
+  const warnings = unique([...(input.integrationFact?.warnings || [])]);
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+function factFileEvidenceForRole(input: {
+  role: ProjectFactWriteRole;
+  projectStore?: { factFiles?: ProjectStorePreviewFactFile[] };
+  errors: string[];
+}): ProjectStoreTypedValueSourceEvidence | undefined {
+  const factFile = input.projectStore?.factFiles?.find((item) => item.role === input.role);
+  if (!factFile) return undefined;
+  const path = sanitizePreviewPath(previewPathFrom(factFile.path), input.errors);
+  return {
+    sourceOfTruth: factFile.sourceOfTruth || "project_file",
+    role: factFile.role || input.role,
+    ...(path ? { path } : {}),
+    ...(factFile.hash ? { hash: factFile.hash } : {}),
+  };
+}
+
+function integrationEvidenceForRole(input: {
+  role: ProjectFactWriteRole;
+  integrationFact?: ProjectFactsIntegrationPreviewFact;
+  errors: string[];
+}): ProjectStoreTypedValueSourceEvidence | undefined {
+  const source = input.integrationFact?.sources?.find((item) => item.role === input.role || item.role === previewFactKeyForRole(input.role));
+  const pathValue = source?.path || input.integrationFact?.path;
+  const hashValue = source?.hash || input.integrationFact?.sourceHash || input.integrationFact?.sourceHashes?.[0];
+  const sourceOfTruth = source?.sourceOfTruth || input.integrationFact?.sourceOfTruth;
+  if (!sourceOfTruth && !pathValue && !hashValue) return undefined;
+  const path = sanitizePreviewPath(pathValue, input.errors);
+  return {
+    sourceOfTruth: sourceOfTruth || "not_connected",
+    role: source?.role || input.role,
+    ...(path ? { path } : {}),
+    ...(hashValue ? { hash: hashValue } : {}),
+  };
+}
+
+function typedValueSourcePreviewItemFor(input: {
+  patch: ProjectFactStagedPatch;
+  projectStore?: { factFiles?: ProjectStorePreviewFactFile[] };
+  projectFactsIntegration?: { facts?: Record<string, ProjectFactsIntegrationPreviewFact> };
+}): ProjectStoreTypedValueSourcePreviewItem {
+  const { patch } = input;
+  const operationIntent = projectStoreOperationIntentForRole(patch.role);
+  const sourcePathErrors: string[] = [];
+  const integrationFactKey = previewFactKeyForRole(patch.role);
+  const integrationFact = integrationFactKey ? input.projectFactsIntegration?.facts?.[integrationFactKey] : undefined;
+  const baseSourceEvidence =
+    factFileEvidenceForRole({ role: patch.role, projectStore: input.projectStore, errors: sourcePathErrors }) ||
+    integrationEvidenceForRole({ role: patch.role, integrationFact, errors: sourcePathErrors });
+  const sourceValidation = sourceValidationForPreview({ patch, operationIntent, evidence: baseSourceEvidence, integrationFact });
+  sourceValidation.errors = unique([...sourceValidation.errors, ...sourcePathErrors]);
+  sourceValidation.ok = sourceValidation.errors.length === 0;
+  const blockedReasons = unique([
+    "typed_project_store_value_missing",
+    ...sourceValidation.errors,
+    operationIntent ? "" : "project_store_operation_unavailable_for_role",
+    patch.role === "task_runs_pointer" ? "task_runs_pointer_is_pointer_only" : "",
+  ]);
+
+  return {
+    id: `${patch.patchId}_typed_value_source_preview_item`,
+    role: patch.role,
+    patchId: patch.patchId,
+    ...(operationIntent ? { projectStoreOperationIntent: operationIntent } : {}),
+    valueContract: {
+      expectedType: "typed_project_store_fact_value",
+      acceptedAuthorities: projectFactAllowedAuthorities,
+      missing: true,
+      notes: [
+        "Preview only records the contract gap between staged facts and ProjectStore typed values.",
+        "No proposed next value or ProjectStorePatch operation is created here.",
+      ],
+    },
+    ...(baseSourceEvidence ? { baseSourceEvidence } : {}),
+    sourceValidation,
+    valuePresent: false,
+    canApplyNow: false,
+    blockedReasons,
+  };
+}
+
 export function buildProjectStoreApplyPlanForStagedFacts(input: {
   receipt: ProjectFactsStagedCommitReceipt;
   generatedAt?: string;
@@ -1345,6 +1568,48 @@ export function buildProjectStoreApplyPlanForStagedFacts(input: {
       appliedAt: generatedAt,
       operations: [],
     },
+    items,
+    blockedReasons,
+  };
+}
+
+export function buildProjectStoreTypedValueSourcePreviewForStagedFacts(input: {
+  receipt: ProjectFactsStagedCommitReceipt;
+  projectStore?: { factFiles?: ProjectStorePreviewFactFile[] };
+  projectFactsIntegration?: { facts?: Record<string, ProjectFactsIntegrationPreviewFact> };
+  generatedAt?: string;
+}): ProjectStoreTypedValueSourcePreview {
+  const { receipt } = input;
+  const generatedAt = input.generatedAt ?? receipt.generatedAt;
+  const receiptBlockers = projectStoreApplyReceiptBlockers(receipt);
+  const items = receiptBlockers.length
+    ? []
+    : receipt.pendingFactPatches.map((patch) =>
+        typedValueSourcePreviewItemFor({
+          patch,
+          projectStore: input.projectStore,
+          projectFactsIntegration: input.projectFactsIntegration,
+        }),
+      );
+  const blockedReasons = unique([
+    ...receiptBlockers,
+    ...items.flatMap((item) => item.blockedReasons),
+    receiptBlockers.length || items.length ? "" : "pending_fact_patches_missing",
+  ]);
+
+  return {
+    schemaVersion: projectTransactionSchemaVersion,
+    receiptId: receipt.receiptId,
+    transactionId: receipt.transactionId,
+    generatedAt,
+    status: receiptBlockers.length ? "blocked_staged_receipt" : "blocked_missing_typed_value_source_evidence",
+    mode: "dry_run_typed_value_source_preview",
+    stagedOnly: true,
+    canWriteNow: false,
+    noFileMutation: true,
+    projectVibeWritten: false,
+    providerCalled: false,
+    workerSpawned: false,
     items,
     blockedReasons,
   };

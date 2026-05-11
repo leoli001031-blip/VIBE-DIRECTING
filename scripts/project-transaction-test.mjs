@@ -338,6 +338,7 @@ const {
   directorWorkflow: { buildDirectorWorkflowState },
   projectTransaction: {
     buildProjectStoreApplyPlanForStagedFacts,
+    buildProjectStoreTypedValueSourcePreviewForStagedFacts,
     buildProjectTransactionRuntime,
     commitProjectPendingTransactionForRuntime,
     confirmProjectPendingTransactionForRuntime,
@@ -595,6 +596,96 @@ assert(
   !collectStrings(confirmedApplyPlan).some((value) => path.isAbsolute(value)),
   "ProjectStore apply plan must not contain absolute paths",
 );
+const previewProjectStore = {
+  factFiles: [
+    { role: "story_flow", sourceOfTruth: "project_file", path: { path: "story_flow/story_flow.vibe.json" }, hash: "vck_story_flow" },
+    { role: "visual_memory", sourceOfTruth: "project_file", path: { path: "visual_memory/visual_memory.vibe.json" }, hash: "vck_visual_memory" },
+    { role: "source_index", sourceOfTruth: "project_file", path: { path: "manifests/source_index.vibe.json" }, hash: "vck_source_index" },
+  ],
+};
+const previewProjectFactsIntegration = {
+  facts: {
+    storyFlow: {
+      sourceOfTruth: "project_store",
+      path: "story_flow/story_flow.vibe.json",
+      sourceHash: "vck_story_flow",
+      sources: [{ sourceOfTruth: "project_store", role: "story_flow", path: "story_flow/story_flow.vibe.json", hash: "vck_story_flow" }],
+      sourceRefs: ["projectStore.facts.storyFlow"],
+      warnings: [],
+    },
+    visualMemory: {
+      sourceOfTruth: "project_store",
+      path: "visual_memory/visual_memory.vibe.json",
+      sourceHash: "vck_visual_memory",
+      sources: [{ sourceOfTruth: "project_store", role: "visual_memory", path: "visual_memory/visual_memory.vibe.json", hash: "vck_visual_memory" }],
+      sourceRefs: ["projectStore.facts.visualMemory"],
+      warnings: [],
+    },
+  },
+};
+const confirmedTypedValuePreview = buildProjectStoreTypedValueSourcePreviewForStagedFacts({
+  receipt: confirmedStaged,
+  projectStore: previewProjectStore,
+  projectFactsIntegration: previewProjectFactsIntegration,
+  generatedAt,
+});
+assert(confirmedTypedValuePreview.mode === "dry_run_typed_value_source_preview", "typed value/source preview must use dry-run preview mode");
+assert(confirmedTypedValuePreview.stagedOnly === true, "typed value/source preview must remain staged-only");
+assert(confirmedTypedValuePreview.canWriteNow === false, "typed value/source preview must never be writable");
+assert(confirmedTypedValuePreview.noFileMutation === true, "typed value/source preview must forbid file mutation");
+assert(confirmedTypedValuePreview.projectVibeWritten === false, "typed value/source preview must not write project.vibe");
+assert(confirmedTypedValuePreview.providerCalled === false, "typed value/source preview must not call providers");
+assert(confirmedTypedValuePreview.workerSpawned === false, "typed value/source preview must not spawn workers");
+assert(
+  confirmedTypedValuePreview.items.length === confirmedStaged.pendingFactPatches.length,
+  "confirmed staged receipt must generate one typed value/source preview item per pending fact patch",
+);
+assert(
+  confirmedTypedValuePreview.items.every((item) => item.valuePresent === false && item.canApplyNow === false),
+  "typed value/source preview items must never expose present values or apply readiness",
+);
+for (const [role, operationIntent] of [
+  ["story_flow", "set_story_flow"],
+  ["visual_memory", "set_visual_memory"],
+  ["source_index", "set_source_index"],
+]) {
+  const item = confirmedTypedValuePreview.items.find((candidate) => candidate.role === role);
+  assert(item, `${role} typed value/source preview item must be present`);
+  assert(item.projectStoreOperationIntent === operationIntent, `${role} preview must expose ProjectStore operation intent`);
+  assert(item.baseSourceEvidence?.path, `${role} preview must include base source path`);
+  assert(item.baseSourceEvidence?.hash, `${role} preview must include base source hash`);
+}
+for (const role of ["shot_layout", "task_runs_pointer", "knowledge_route_history"]) {
+  const item = confirmedTypedValuePreview.items.find((candidate) => candidate.role === role);
+  assert(item, `${role} typed value/source preview item must be present`);
+  assert(!("projectStoreOperationIntent" in item), `${role} preview must not expose unsupported operation intent`);
+  assert(item.blockedReasons.includes("project_store_operation_unavailable_for_role"), `${role} preview must explain unavailable operation`);
+}
+const stringifiedTypedValuePreview = JSON.stringify(confirmedTypedValuePreview);
+assert(!stringifiedTypedValuePreview.includes(process.cwd()), "typed value/source preview must not persist the workspace absolute path");
+assert(
+  !collectStrings(confirmedTypedValuePreview).some((value) => path.isAbsolute(value)),
+  "typed value/source preview must not contain absolute paths",
+);
+const blockedAuthorityPreview = buildProjectStoreTypedValueSourcePreviewForStagedFacts({
+  receipt: {
+    ...confirmedStaged,
+    pendingFactPatches: confirmedStaged.pendingFactPatches.map((patch) =>
+      patch.role === "story_flow"
+        ? { ...patch, sourceRefs: ["runtime-state/storyFlow", "direct-input/storyFlow", "old-chat/storyFlow", "global-knowledge/storyFlow"] }
+        : patch,
+    ),
+  },
+  projectStore: previewProjectStore,
+  projectFactsIntegration: previewProjectFactsIntegration,
+  generatedAt,
+});
+assert(
+  blockedAuthorityPreview.items
+    .find((item) => item.role === "story_flow")
+    ?.sourceValidation.errors.includes("blocked_authority_cannot_authorize_project_fact"),
+  "runtime-state/direct-input/old-chat/global knowledge must not authorize project fact sources",
+);
 
 const missingExpectedOutputs = mutateFirstQueuedPacket(hydratedWorkflow, confirmedRuntime, (packet) => {
   packet.envelope.taskEnvelope.expectedOutputs = [];
@@ -767,6 +858,8 @@ assert(schema.$defs.projectFactStagedPatch, "schema must define staged project f
 assert(schema.$defs.stagedTaskRunPointer, "schema must define staged task run pointer");
 assert(schema.$defs.projectFactsStagedApplyPlan, "schema must define staged ProjectStore apply plan");
 assert(schema.$defs.projectFactsStagedApplyPlanItem, "schema must define staged ProjectStore apply plan item");
+assert(schema.$defs.projectStoreTypedValueSourcePreview, "schema must define typed value/source preview");
+assert(schema.$defs.projectStoreTypedValueSourcePreviewItem, "schema must define typed value/source preview item");
 assert(schema.$defs.projectFactsStagedCommitReceipt.properties.projectVibeWritten.const === false, "staged commit schema must forbid project.vibe writes");
 assert(schema.$defs.projectFactsStagedCommitReceipt.properties.providerCalled.const === false, "staged commit schema must forbid provider calls");
 assert(schema.$defs.projectFactsStagedCommitReceipt.properties.workerSpawned.const === false, "staged commit schema must forbid worker spawn");
@@ -774,7 +867,23 @@ assert(schema.$defs.projectFactsStagedApplyPlan.properties.canWriteNow.const ===
 assert(schema.$defs.projectFactsStagedApplyPlan.properties.projectVibeWritten.const === false, "apply plan schema must forbid project.vibe writes");
 assert(schema.$defs.projectFactsStagedApplyPlan.properties.providerCalled.const === false, "apply plan schema must forbid provider calls");
 assert(schema.$defs.projectFactsStagedApplyPlan.properties.workerSpawned.const === false, "apply plan schema must forbid worker spawn");
+assert(
+  schema.$defs.projectFactsStagedApplyPlan.properties.projectStorePatch.properties.operations.maxItems === 0,
+  "apply plan schema must keep ProjectStorePatch operations unavailable",
+);
+assert(schema.$defs.projectStoreTypedValueSourcePreview.properties.canWriteNow.const === false, "preview schema must forbid immediate writes");
+assert(schema.$defs.projectStoreTypedValueSourcePreview.properties.projectVibeWritten.const === false, "preview schema must forbid project.vibe writes");
+assert(schema.$defs.projectStoreTypedValueSourcePreview.properties.providerCalled.const === false, "preview schema must forbid provider calls");
+assert(schema.$defs.projectStoreTypedValueSourcePreview.properties.workerSpawned.const === false, "preview schema must forbid worker spawn");
 assert(!JSON.stringify(confirmedRuntime).includes(process.cwd()), "runtime transaction must not persist absolute workspace paths");
+const projectTransactionSource = fs.readFileSync("src/core/projectTransaction.ts", "utf8");
+const typedPreviewSource = projectTransactionSource.slice(
+  projectTransactionSource.indexOf("export function buildProjectStoreTypedValueSourcePreviewForStagedFacts"),
+  projectTransactionSource.indexOf("function writePlan"),
+);
+for (const forbiddenEntry of ["executeProjectStoreIoGate", "child_process", "spawn(", "provider.submit", "submitProvider", "executeProvider"]) {
+  assert(!typedPreviewSource.includes(forbiddenEntry), `typed value/source preview must not reference ${forbiddenEntry}`);
+}
 
 console.log(
   `Project transaction tests passed: missingTrace=${missingTraceRuntime.userStatus}, userOff=${parkedByUser.userStatus}, queued=${confirmedRuntime.queueIngestSummary.queued}, parked=${confirmedRuntime.queueIngestSummary.parked}.`,
