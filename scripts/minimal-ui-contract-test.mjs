@@ -135,8 +135,13 @@ const directorProgressStripState = findFunctionBody(directorProgressStripSource,
 const minimalDirectorStatusDot = findFunctionBody(minimalDirectorStatusDotSource, "MinimalDirectorStatusDot");
 const minimalTopNav = findFunctionBody(minimalTopNavSource, "MinimalTopNav");
 const minimalStoryFlow = findFunctionBody(minimalStoryFlowSource, "MinimalStoryFlow");
+const formatShotNumber = findFunctionBody(minimalStoryFlowSource, "formatShotNumber");
+const shortStoryFunction = findFunctionBody(minimalStoryFlowSource, "shortStoryFunction");
+const shotStatusLabel = findFunctionBody(minimalStoryFlowSource, "shotStatusLabel");
 const minimalAgentPanel = findFunctionBody(minimalAgentPanelSource, "MinimalAgentPanel");
+const cleanLabel = findFunctionBody(agentPanelProjectionSource, "cleanLabel");
 const selectedScopeLabel = findFunctionBody(agentPanelProjectionSource, "selectedScopeLabel");
+const productScopeLabel = findFunctionBody(agentPanelProjectionSource, "productScopeLabel");
 const naturalWorkflowScopeLabel = findFunctionBody(agentPanelProjectionSource, "naturalWorkflowScopeLabel");
 const workflowStatusLabel = findFunctionBody(agentPanelProjectionSource, "workflowStatusLabel");
 const workflowNextStepLabel = findFunctionBody(agentPanelProjectionSource, "workflowNextStepLabel");
@@ -222,6 +227,7 @@ check(!/AppOverview/.test(defaultMountedDirectorSurface), "default mounted Direc
 const minimalAgentLanguageSurface = [
   minimalAgentPanel,
   selectedScopeLabel,
+  productScopeLabel,
   naturalWorkflowScopeLabel,
   workflowStatusLabel,
   workflowNextStepLabel,
@@ -389,6 +395,15 @@ checkMessage(requireWithin(minimalAssetLibrary, /blockerLabel/, "Asset Library b
 checkMessage(requireWithin(minimalAssetLibrary, /asset-feature-grid anchors/, "Asset Library props/styles must render as image-first asset cards"));
 check(!/blockers\.slice\(0,\s*4\)\.map/.test(minimalAssetLibrary), "Asset Library must not show long blocker chips on the main surface");
 check(!/Queue|queue|gate|provider/.test(minimalStoryFlow), "Story Flow must not expose queue/gate/provider engineering details");
+checkMessage(requireWithin(formatShotNumber, /CURRENT_PROJECT[\s\S]*当前项目/, "Story Flow must display the current-project placeholder with product copy"));
+checkMessage(requireWithin(shortStoryFunction, /current_project_story_pending[\s\S]*(待补齐故事流|等待同步)/, "Story Flow fallback story function must use product copy"));
+check(!/"Setup"/.test(minimalStoryFlowSource), "Story Flow fallback labels must not expose Setup");
+checkMessage(requireWithin(shotStatusLabel, /blocked[\s\S]*(待补齐|需复核)/, "Story Flow status label must map blocked to product copy"));
+checkMessage(requireWithin(minimalStoryFlow, /aria-label=\{shotStatusLabel\(shot\)\}/, "Story Flow dot aria-label must use product status labels"));
+check(!/aria-label=\{shot\.status\}/.test(minimalStoryFlow), "Story Flow dot aria-label must not expose raw shot status");
+checkMessage(requireWithin(minimalAgentPanel, /productScopeLabel\(projectScopeLabel\)/, "Agent panel must sanitize projected scope labels before display"));
+checkMessage(requireWithin(`${cleanLabel}\n${productScopeLabel}`, /CURRENT_PROJECT[\s\S]*当前项目/, "Agent scope must sanitize current-project placeholders before display"));
+check(!/正在看\s*\$\{[^}]*\.id\}/.test(selectedScopeLabel), "Agent scope must not render raw selected shot ids");
 
 checkMessage(requireWithin(desktopShellView, /buildDesktopRuntimePlan\s*\(/, "Phase 15 Settings shell must use buildDesktopRuntimePlan"));
 checkMessage(requireWithin(settingsShell, /Desktop Runtime\s*\/\s*Permission Shell/i, "Phase 15 Desktop Runtime / Permission Shell in Settings"));

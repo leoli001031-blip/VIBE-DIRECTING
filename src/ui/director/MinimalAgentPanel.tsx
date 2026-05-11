@@ -10,6 +10,7 @@ import {
   agentProjectionNextStep,
   buildAgentPanelProjection,
   confirmAgentPlanProjection,
+  productScopeLabel,
   selectedScopeLabel,
   type AgentPlanPhase,
   workflowBadgeLabels,
@@ -43,7 +44,7 @@ export function MinimalAgentPanel({
   const [projection, setProjection] = useState<MinimalRuntimeProjection | undefined>();
   const scopedShotIds = selectedShots.map((item) => item.id);
   const localScopeLabel = selectedScopeLabel(shot, asset, sectionLabel, selectedShots);
-  const scopeLabel = projectScopeLabel ? `${projectScopeLabel} · ${localScopeLabel}` : localScopeLabel;
+  const scopeLabel = projectScopeLabel ? `${productScopeLabel(projectScopeLabel)} · ${localScopeLabel}` : localScopeLabel;
 
   function prepareChange() {
     const userIntent = text.trim();

@@ -16,10 +16,15 @@ type MinimalAgentWorkflow = ReturnType<typeof buildDirectorWorkflowState>;
 
 function cleanLabel(value: string) {
   return value
+    .replace(/\bCURRENT_PROJECT\b/g, "当前项目")
     .replace(/^asset_/i, "")
     .replace(/_/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function productScopeLabel(value: string) {
+  return cleanLabel(value).replace(/当前项目\s*·\s*当前项目/g, "当前项目");
 }
 
 export function selectedScopeLabel(shot?: ShotRecord, asset?: AssetRecord, sectionLabel?: string, selectedShots: ShotRecord[] = []) {
@@ -30,7 +35,7 @@ export function selectedScopeLabel(shot?: ShotRecord, asset?: AssetRecord, secti
   }
   if (shot) return `正在看 ${formatShotNumber(shot.id)}`;
   if (asset) return `正在看 ${cleanLabel(asset.name)}`;
-  if (sectionLabel) return `正在看 ${sectionLabel}`;
+  if (sectionLabel) return `正在看 ${productScopeLabel(sectionLabel)}`;
   return "正在看整个项目";
 }
 
