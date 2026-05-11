@@ -103,6 +103,7 @@ const agentPanelProjectionPath = "src/ui/director/agentPanelProjection.ts";
 const appOverviewPath = "src/ui/common/AppOverview.tsx";
 const projectRealChainPanelPath = "src/ui/project/ProjectRealChainPanel.tsx";
 const projectFactsStripPath = "src/ui/diagnostics/ProjectFactsStrip.tsx";
+const providerGateDiagnosticsPath = "src/ui/diagnostics/ProviderGateDiagnostics.tsx";
 const stylesPath = "src/styles.css";
 const directorStylesPath = "src/styles/director.css";
 const projectRealChainPanelCssPath = "src/ui/project/ProjectRealChainPanel.css";
@@ -124,6 +125,7 @@ const agentPanelProjectionSource = stripComments(readText(agentPanelProjectionPa
 const appOverviewSource = stripComments(readText(appOverviewPath));
 const projectRealChainPanelSource = stripComments(readText(projectRealChainPanelPath));
 const projectFactsStripSource = stripComments(readText(projectFactsStripPath));
+const providerGateDiagnosticsSource = stripComments(readText(providerGateDiagnosticsPath));
 const stylesSource = stripComments(`${readText(directorStylesPath)}\n${readText(stylesPath)}\n${readText(projectRealChainPanelCssPath)}`);
 const packageJson = readJson(packagePath);
 const sequenceDoc = readText(sequenceDocPath);
@@ -174,12 +176,14 @@ const agentCliMockRunnerDiagnostics = findFunctionBody(appSource, "AgentCliMockR
 const codexCliAdapterSpikeDiagnostics = findFunctionBody(appSource, "CodexCliAdapterSpikeDiagnostics");
 const exportWorkerDiagnostics = findFunctionBody(appSource, "ExportWorkerDiagnostics");
 const voiceAudioSettingsDiagnostics = findFunctionBody(appSource, "VoiceAudioSettingsDiagnostics");
-const providerEnablementGateDiagnostics = findFunctionBody(appSource, "ProviderEnablementGateDiagnostics");
-const providerEnablementGateUiSummary = findFunctionBody(appSource, "buildProviderEnablementGateUiSummary");
-const providerActionConfirmationReceiptDiagnostics = findFunctionBody(appSource, "ProviderActionConfirmationReceiptDiagnostics");
-const providerActionConfirmationReceiptUiSummary = findFunctionBody(appSource, "buildProviderActionConfirmationReceiptUiSummary");
-const providerExecutionHandoffDiagnostics = findFunctionBody(appSource, "ProviderExecutionHandoffDiagnostics");
-const providerExecutionHandoffUiSummary = findFunctionBody(appSource, "buildProviderExecutionHandoffUiSummary");
+const providerEnablementGateDiagnostics = findFunctionBody(providerGateDiagnosticsSource, "ProviderEnablementGateDiagnostics");
+const providerEnablementGateUiSummary = findFunctionBody(providerGateDiagnosticsSource, "buildProviderEnablementGateUiSummary");
+const providerExecutionPermissionGateDiagnostics = findFunctionBody(providerGateDiagnosticsSource, "ProviderExecutionPermissionGateDiagnostics");
+const providerExecutionPermissionGateUiSummary = findFunctionBody(providerGateDiagnosticsSource, "buildProviderExecutionPermissionGateUiSummary");
+const providerActionConfirmationReceiptDiagnostics = findFunctionBody(providerGateDiagnosticsSource, "ProviderActionConfirmationReceiptDiagnostics");
+const providerActionConfirmationReceiptUiSummary = findFunctionBody(providerGateDiagnosticsSource, "buildProviderActionConfirmationReceiptUiSummary");
+const providerExecutionHandoffDiagnostics = findFunctionBody(providerGateDiagnosticsSource, "ProviderExecutionHandoffDiagnostics");
+const providerExecutionHandoffUiSummary = findFunctionBody(providerGateDiagnosticsSource, "buildProviderExecutionHandoffUiSummary");
 const localOrchestratorDiagnostics = findFunctionBody(appSource, "LocalOrchestratorDiagnostics");
 const localOrchestratorUiSummary = findFunctionBody(appSource, "buildLocalOrchestratorUiSummary");
 const visualConsistencyContractDiagnostics = findFunctionBody(appSource, "VisualConsistencyContractDiagnostics");
@@ -674,6 +678,15 @@ checkMessage(requireWithin(`${providerEnablementGateDiagnostics}\n${providerEnab
 checkMessage(requireWithin(`${providerEnablementGateDiagnostics}\n${providerEnablementGateUiSummary}`, /credential\/live submit\/shell locked/i, "Phase 30 credential/live submit/shell locks"));
 checkMessage(requireWithin(providerEnablementGateDiagnostics, /Blockers\s*\/\s*warnings/i, "Phase 30 blockers/warnings summary"));
 checkMessage(requireWithin(providerEnablementGateDiagnostics, /phase30-lock-strip/i, "Phase 30 hard lock strip"));
+checkMessage(requireWithin(diagnosticsMode, /ProviderExecutionPermissionGateDiagnostics/, "Phase 31 ProviderExecutionPermissionGateDiagnostics mounted in Diagnostics"));
+checkMessage(requireWithin(providerExecutionPermissionGateDiagnostics, /Provider Execution Permission Gate/i, "Phase 31 Provider Execution Permission Gate diagnostics panel"));
+checkMessage(requireWithin(providerExecutionPermissionGateDiagnostics, /Readiness/i, "Phase 31 readiness summary"));
+checkMessage(requireWithin(providerExecutionPermissionGateDiagnostics, /Reviewable/i, "Phase 31 reviewable summary"));
+checkMessage(requireWithin(providerExecutionPermissionGateDiagnostics, /Action Confirm/i, "Phase 31 action confirmation summary"));
+checkMessage(requireWithin(providerExecutionPermissionGateDiagnostics, /Provider Submit/i, "Phase 31 provider submit summary"));
+checkMessage(requireWithin(`${providerExecutionPermissionGateDiagnostics}\n${providerExecutionPermissionGateUiSummary}`, /providerExecutionPermissionGate/i, "Phase 31 providerExecutionPermissionGate parser"));
+checkMessage(requireWithin(`${providerExecutionPermissionGateDiagnostics}\n${providerExecutionPermissionGateUiSummary}`, /credential\/live\/worker\/file locked/i, "Phase 31 credential/live/worker/file locks"));
+checkMessage(requireWithin(providerExecutionPermissionGateDiagnostics, /phase31-lock-strip/i, "Phase 31 hard lock strip"));
 checkMessage(requireWithin(diagnosticsMode, /ProviderActionConfirmationReceiptDiagnostics/, "Phase 32 ProviderActionConfirmationReceiptDiagnostics mounted in Diagnostics"));
 checkMessage(requireWithin(providerActionConfirmationReceiptDiagnostics, /Provider Action Confirmation Receipt/i, "Phase 32 Provider Action Confirmation Receipt diagnostics panel"));
 checkMessage(requireWithin(providerActionConfirmationReceiptDiagnostics, /Readiness/i, "Phase 32 readiness summary"));
@@ -803,7 +816,7 @@ const diagnosticsComponentBodies = [
   "SettingsShell",
   "EnvelopePreview",
 ].map((name) => findFunctionBody(appSource, name));
-const diagnosticsSurface = diagnosticsComponentBodies.join("\n");
+const diagnosticsSurface = `${diagnosticsComponentBodies.join("\n")}\n${providerGateDiagnosticsSource}`;
 const diagnosticsTermTotal = directorTerms.reduce((sum, [, pattern]) => sum + countPattern(diagnosticsSurface, pattern), 0);
 
 check(
