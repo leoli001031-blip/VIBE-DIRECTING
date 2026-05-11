@@ -13,6 +13,7 @@ import {
 import { createRuntimeApiBoundary } from "./runtime-api-boundary.mjs";
 import { createRuntimeApiCurrentProjectBinding } from "./runtime-api-current-project-binding.mjs";
 import { createRuntimeApiCurrentProjectBindingRoutes } from "./runtime-api-current-project-binding-routes.mjs";
+import { createCurrentProjectRouteContext, isCurrentProjectEndpoint } from "./runtime-api-current-project-route-context.mjs";
 import { createRuntimeApiCurrentProjectImage2Handoff } from "./runtime-api-current-project-image2-handoff.mjs";
 import { createRuntimeApiCurrentProjectImage2BatchPlan } from "./runtime-api-current-project-image2-batch-plan.mjs";
 import { createRuntimeApiCurrentProjectOneShotExecutor } from "./runtime-api-current-project-one-shot-executor.mjs";
@@ -77,6 +78,24 @@ const realDemo005RunEndpoint = `${runtimeBasePath}/real-demo-e2e/005/run`;
 const runtimeFileEndpoint = `${runtimeBasePath}/files`;
 const legacyStatusEndpoint = "/api/real-demo-e2e/005/status";
 const legacyRunEndpoint = "/api/real-demo-e2e/005/run";
+const currentProjectEndpoints = {
+  currentProjectBindingEndpoint,
+  currentProjectSelectEndpoint,
+  currentProjectRecentEndpoint,
+  currentProjectStatusEndpoint,
+  currentProjectRunEndpoint,
+  currentProjectImage2BatchPlanEndpoint,
+  currentProjectImage2BatchRunCheckEndpoint,
+  currentProjectImage2OneShotStatusEndpoint,
+  currentProjectImage2OneShotPrepareEndpoint,
+  currentProjectImage2OneShotConfirmEndpoint,
+  currentProjectImage2OneShotPrepareTriggerEndpoint,
+  currentProjectImage2OneShotExecuteMockEndpoint,
+  currentProjectImage2OneShotReturnEndpoint,
+  currentProjectImage2OneShotExecuteReturnEndpoint,
+  currentProjectRound5StrictEditPrepareEndpoint,
+  currentProjectRound5StrictEditReturnEndpoint,
+};
 const knownProjectFixtureRoots = [
   "real-test-sandbox/real-demo-e2e/004-image2-start-frames",
   "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames",
@@ -357,6 +376,15 @@ function currentProjectRequestContext(req, url, body) {
     projectIdSource: queryProjectId ? "query" : headerProjectId ? "header" : bodyProjectId ? "payload" : undefined,
   };
 }
+
+const currentProjectRouteContext = createCurrentProjectRouteContext({
+  readRequestJsonBody,
+  currentProjectRequestContext,
+  currentProjectSourceResult,
+  writeJson,
+  blockedCurrentProjectResponse,
+  unboundCurrentProjectResponse,
+});
 
 const { runtimeFileUrl, serveRuntimeFile } = createRuntimeApiFileServing({
   runtimeFileEndpoint,
@@ -878,54 +906,6 @@ const {
   running: () => running,
 });
 
-function isCurrentProjectEndpoint(pathname) {
-  return pathname === currentProjectBindingEndpoint
-    || pathname === currentProjectSelectEndpoint
-    || pathname === currentProjectRecentEndpoint
-    || pathname === currentProjectStatusEndpoint
-    || pathname === currentProjectRunEndpoint
-    || pathname === currentProjectImage2BatchPlanEndpoint
-    || pathname === currentProjectImage2BatchRunCheckEndpoint
-    || pathname === currentProjectImage2OneShotStatusEndpoint
-    || pathname === currentProjectImage2OneShotPrepareEndpoint
-    || pathname === currentProjectImage2OneShotConfirmEndpoint
-    || pathname === currentProjectImage2OneShotPrepareTriggerEndpoint
-    || pathname === currentProjectImage2OneShotExecuteMockEndpoint
-    || pathname === currentProjectImage2OneShotReturnEndpoint
-    || pathname === currentProjectImage2OneShotExecuteReturnEndpoint
-    || pathname === currentProjectRound5StrictEditPrepareEndpoint
-    || pathname === currentProjectRound5StrictEditReturnEndpoint;
-}
-
-async function currentProjectRouteContext(req, res, url, endpoint) {
-  const bodyResult = req.method === "POST"
-    ? await readRequestJsonBody(req)
-    : { ok: true, body: undefined };
-  if (!bodyResult.ok) {
-    writeJson(res, 400, blockedCurrentProjectResponse(endpoint, {}, {
-      status: "bad_request",
-      previewStatus: "bad_request",
-      productionStatus: "bad_request",
-      message: bodyResult.message,
-    }));
-    return undefined;
-  }
-
-  const requestContext = currentProjectRequestContext(req, url, bodyResult.body);
-  const sourceResult = currentProjectSourceResult();
-  if (sourceResult.error) {
-    if (sourceResult.unbound) {
-      writeJson(res, 409, unboundCurrentProjectResponse(endpoint, requestContext));
-      return undefined;
-    }
-    writeJson(res, 403, blockedCurrentProjectResponse(endpoint, requestContext, {
-      message: sourceResult.message,
-    }));
-    return undefined;
-  }
-  return { requestContext, source: sourceResult.source, body: bodyResult.body };
-}
-
 async function handleRequest(req, res) {
   const url = new URL(req.url || "/", `http://${host}`);
   const security = runtimeRequestSecurity(req);
@@ -956,7 +936,7 @@ async function handleRequest(req, res) {
 const server = createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${host}`);
   void handleRequest(req, res).catch((error) => {
-    const endpoint = isCurrentProjectEndpoint(url.pathname) ? url.pathname : undefined;
+    const endpoint = isCurrentProjectEndpoint(url.pathname, currentProjectEndpoints) ? url.pathname : undefined;
     writeJson(res, 500, {
       ok: false,
       ...runtimePolicy(),

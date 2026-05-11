@@ -91,6 +91,7 @@ function findFunctionNames(source, pattern) {
 
 const appPath = "src/App.tsx";
 const directorModePath = "src/ui/director/DirectorMode.tsx";
+const directorProgressStripPath = "src/ui/director/DirectorProgressStrip.tsx";
 const minimalDirectorStatusDotPath = "src/ui/director/MinimalDirectorStatusDot.tsx";
 const minimalTopNavPath = "src/ui/director/MinimalTopNav.tsx";
 const minimalStoryFlowPath = "src/ui/director/MinimalStoryFlow.tsx";
@@ -110,6 +111,7 @@ const contractDocPath = "docs/ui/minimal-director-ui-contract.md";
 
 const appSource = stripComments(readText(appPath));
 const directorModeSource = stripComments(readText(directorModePath));
+const directorProgressStripSource = stripComments(readText(directorProgressStripPath));
 const minimalDirectorStatusDotSource = stripComments(readText(minimalDirectorStatusDotPath));
 const minimalTopNavSource = stripComments(readText(minimalTopNavPath));
 const minimalStoryFlowSource = stripComments(readText(minimalStoryFlowPath));
@@ -126,8 +128,8 @@ const sequenceDoc = readText(sequenceDocPath);
 const contractDoc = readText(contractDocPath);
 
 const directorMode = findFunctionBody(directorModeSource, "DirectorMode");
-const directorProgressStrip = findFunctionBody(appSource, "DirectorProgressStrip");
-const directorProgressStripState = findFunctionBody(appSource, "buildDirectorProgressStripState");
+const directorProgressStrip = findFunctionBody(directorProgressStripSource, "DirectorProgressStrip");
+const directorProgressStripState = findFunctionBody(directorProgressStripSource, "buildDirectorProgressStripState");
 const minimalDirectorStatusDot = findFunctionBody(minimalDirectorStatusDotSource, "MinimalDirectorStatusDot");
 const minimalTopNav = findFunctionBody(minimalTopNavSource, "MinimalTopNav");
 const minimalStoryFlow = findFunctionBody(minimalStoryFlowSource, "MinimalStoryFlow");
@@ -258,7 +260,10 @@ checkMessage(requireWithin(contractDoc, /Diagnostics/i, "diagnostics boundary in
 checkMessage(requireWithin(directorModeSource, /function\s+DirectorMode\s*\(/, "DirectorMode component"));
 checkMessage(requireWithin(appSource, /import\s+\{\s*DirectorMode\s*\}\s+from\s+"\.\/ui\/director\/DirectorMode"/, "App must import extracted DirectorMode component"));
 checkMessage(requireWithin(appBody, /<DirectorMode\b/, "App must mount extracted DirectorMode component"));
-checkMessage(requireWithin(appSource, /function\s+DirectorProgressStrip\s*\(/, "Phase 35 Director progress strip component"));
+checkMessage(requireWithin(directorProgressStripSource, /function\s+DirectorProgressStrip\s*\(/, "Phase 35 Director progress strip component"));
+checkMessage(requireWithin(directorProgressStripSource, /function\s+buildDirectorProgressStripState\s*\(/, "Phase 35 Director progress strip state builder"));
+checkMessage(requireWithin(appSource, /from\s+"\.\/ui\/director\/DirectorProgressStrip"/, "App must import extracted DirectorProgressStrip module"));
+check(!/function\s+DirectorProgressStrip\s*\(/.test(appSource), "App must not keep DirectorProgressStrip component after extraction");
 checkMessage(requireWithin(minimalDirectorStatusDotSource, /function\s+MinimalDirectorStatusDot\s*\(/, "minimal director status dot component"));
 checkMessage(requireWithin(appSource, /import\s+\{\s*MinimalDirectorStatusDot\s*\}\s+from\s+"\.\/ui\/director\/MinimalDirectorStatusDot"/, "App must import extracted minimal director status dot component"));
 checkMessage(requireWithin(minimalTopNavSource, /function\s+MinimalTopNav\s*\(/, "MinimalTopNav component"));
@@ -271,13 +276,13 @@ checkMessage(requireWithin(appSource, /function\s+DiagnosticsMode\s*\(/, "Diagno
 checkMessage(requireWithin(appBody, /mode\s*===\s*"diagnostics"/, "Diagnostics entry in App mode switch/rendering"));
 checkMessage(requireWithin(appBody, /mode\s*===\s*"director"/, "Director mode rendering"));
 check(!/<DirectorProgressStrip\s+runtimeState=\{runtimeState\}\s*\/>/.test(directorMode), "Director Clean Mode must not keep the detailed progress strip mounted on the three main pages");
-checkMessage(requireWithin(appBody, /statusNode=\{\s*<MinimalDirectorStatusDot\s+state=\{buildDirectorProgressStripState\(workbenchRuntimeState\)\}\s*\/>\s*\}/, "App must pass the compact creator status dot into DirectorMode"));
+checkMessage(requireWithin(appBody, /state=\{buildDirectorProgressStripState\(\s*buildLocalOrchestratorUiSummary\(workbenchRuntimeState\)\s*\)\}/, "App must pass the compact creator status dot into DirectorMode"));
 checkMessage(requireWithin(directorMode, /\{statusNode\}/, "DirectorMode must render the injected compact creator status dot"));
-checkMessage(requireWithin(diagnosticsMode, /<DirectorProgressStrip\s+runtimeState=\{runtimeState\}\s*\/>/, "Diagnostics must keep the detailed runtime progress strip"));
-checkMessage(requireWithin(appBody, /buildDirectorProgressStripState\(workbenchRuntimeState\)/, "compact director status dot derives from runtime progress state in App"));
+checkMessage(requireWithin(diagnosticsMode, /<DirectorProgressStrip\s+state=\{buildDirectorProgressStripState\(\s*buildLocalOrchestratorUiSummary\(runtimeState\)\s*\)\}\s*\/>/, "Diagnostics must keep the detailed runtime progress strip"));
+checkMessage(requireWithin(appBody, /buildDirectorProgressStripState\(\s*buildLocalOrchestratorUiSummary\(workbenchRuntimeState\)\s*\)/, "compact director status dot derives from runtime progress state in App"));
 checkMessage(requireWithin(minimalDirectorStatusDotSource, /state\s*:\s*DirectorProgressStripState/, "compact director status dot must receive presentational progress state"));
 check(!/state\.segments\.map/.test(minimalDirectorStatusDot), "compact director status dot must not render detailed progress counts");
-checkMessage(requireWithin(directorProgressStripState, /buildLocalOrchestratorUiSummary\s*\(/, "Phase 35 progress strip must derive from Phase 34 runtime summary"));
+checkMessage(requireWithin(appBody, /buildDirectorProgressStripState\(\s*buildLocalOrchestratorUiSummary\(/, "Phase 35 progress strip must derive from Phase 34 runtime summary"));
 check(
   !/readDirectorProgressOverride|progressRecord|stateRecord\.directorProgress|uiRecord\.directorProgress/.test(directorProgressStripState),
   "Phase 35 progress strip must not accept UI-only progress overrides",
