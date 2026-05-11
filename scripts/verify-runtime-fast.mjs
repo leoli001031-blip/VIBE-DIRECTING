@@ -9,6 +9,7 @@ const scripts = [
   "runtime-api-workbench-projection:test",
   "runtime-api-current-project-binding-routes:test",
   "runtime-api-current-project-read-check-routes:test",
+  "runtime-api-current-project-one-shot-routes:test",
   "runtime-api-current-project-real-chain-status:test",
   "runtime-api-current-project-image2-batch-plan:test",
   "runtime-api-file-serving:test",

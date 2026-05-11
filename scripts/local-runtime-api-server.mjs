@@ -17,6 +17,7 @@ import { createRuntimeApiCurrentProjectImage2Handoff } from "./runtime-api-curre
 import { createRuntimeApiCurrentProjectImage2BatchPlan } from "./runtime-api-current-project-image2-batch-plan.mjs";
 import { createRuntimeApiCurrentProjectOneShotExecutor } from "./runtime-api-current-project-one-shot-executor.mjs";
 import { createRuntimeApiCurrentProjectOneShotReturn } from "./runtime-api-current-project-one-shot-return.mjs";
+import { createRuntimeApiCurrentProjectOneShotRoutes } from "./runtime-api-current-project-one-shot-routes.mjs";
 import { createRuntimeApiCurrentProjectReadCheckRoutes } from "./runtime-api-current-project-read-check-routes.mjs";
 import { createRuntimeApiCurrentProjectRealChainStatus } from "./runtime-api-current-project-real-chain-status.mjs";
 import { createRuntimeApiCurrentProjectRound5StrictEditPrepare } from "./runtime-api-current-project-round5-strict-edit-prepare.mjs";
@@ -580,6 +581,25 @@ const oneShotExecutorApi = createRuntimeApiCurrentProjectOneShotExecutor({
 });
 
 const {
+  handleCurrentProjectOneShotRoute,
+} = createRuntimeApiCurrentProjectOneShotRoutes({
+  currentProjectImage2OneShotStatusEndpoint,
+  currentProjectImage2OneShotPrepareEndpoint,
+  currentProjectImage2OneShotConfirmEndpoint,
+  currentProjectImage2OneShotPrepareTriggerEndpoint,
+  currentProjectImage2OneShotExecuteMockEndpoint,
+  currentProjectRouteContext,
+  writeJson,
+  requestOverrideDiagnostics,
+  oneShotRequestInput,
+  currentProjectImage2OneShotResponse,
+  currentProjectImage2OneShotPrepareTriggerResponse,
+  oneShotExecutorRequestInput: oneShotExecutorApi.oneShotExecutorRequestInput,
+  currentProjectImage2OneShotExecutorResponse: oneShotExecutorApi.currentProjectImage2OneShotExecutorResponse,
+  running: () => running,
+});
+
+const {
   currentProjectOneShotReturnProjection,
   currentProjectImage2OneShotReturnIngestResponse,
 } = createRuntimeApiCurrentProjectOneShotReturn({
@@ -932,61 +952,7 @@ async function handleRequest(req, res) {
   }
   if (await handleCurrentProjectBindingRoute(req, res, url)) return;
   if (await handleCurrentProjectReadCheckRoute(req, res, url)) return;
-  if (req.method === "GET" && url.pathname === currentProjectImage2OneShotStatusEndpoint) {
-    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2OneShotStatusEndpoint);
-    if (!routeContext) return;
-    const input = oneShotRequestInput(url, routeContext.body);
-    const payload = currentProjectImage2OneShotResponse("status", input, {
-      running,
-      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
-    }, routeContext.source);
-    writeJson(res, 200, payload);
-    return;
-  }
-  if (req.method === "POST" && url.pathname === currentProjectImage2OneShotPrepareEndpoint) {
-    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2OneShotPrepareEndpoint);
-    if (!routeContext) return;
-    const input = oneShotRequestInput(url, routeContext.body);
-    const payload = currentProjectImage2OneShotResponse("prepare", input, {
-      running,
-      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
-    }, routeContext.source);
-    writeJson(res, payload.ok === false ? 409 : 200, payload);
-    return;
-  }
-  if (req.method === "POST" && url.pathname === currentProjectImage2OneShotConfirmEndpoint) {
-    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2OneShotConfirmEndpoint);
-    if (!routeContext) return;
-    const input = oneShotRequestInput(url, routeContext.body);
-    const payload = currentProjectImage2OneShotResponse("confirm", input, {
-      running,
-      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
-    }, routeContext.source);
-    writeJson(res, payload.ok === false ? 409 : 200, payload);
-    return;
-  }
-  if (req.method === "POST" && url.pathname === currentProjectImage2OneShotPrepareTriggerEndpoint) {
-    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2OneShotPrepareTriggerEndpoint);
-    if (!routeContext) return;
-    const input = oneShotRequestInput(url, routeContext.body);
-    const payload = currentProjectImage2OneShotPrepareTriggerResponse(input, {
-      running,
-      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
-    }, routeContext.source);
-    writeJson(res, payload.ok === false ? 409 : 200, payload);
-    return;
-  }
-  if (req.method === "POST" && url.pathname === currentProjectImage2OneShotExecuteMockEndpoint) {
-    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2OneShotExecuteMockEndpoint);
-    if (!routeContext) return;
-    const input = oneShotExecutorApi.oneShotExecutorRequestInput(url, routeContext.body);
-    const payload = oneShotExecutorApi.currentProjectImage2OneShotExecutorResponse(input, {
-      running,
-      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
-    }, routeContext.source);
-    writeJson(res, payload.ok === false ? 409 : 200, payload);
-    return;
-  }
+  if (await handleCurrentProjectOneShotRoute(req, res, url)) return;
   if (req.method === "POST" && (url.pathname === currentProjectImage2OneShotReturnEndpoint || url.pathname === currentProjectImage2OneShotExecuteReturnEndpoint)) {
     const routeContext = await currentProjectRouteContext(req, res, url, url.pathname);
     if (!routeContext) return;

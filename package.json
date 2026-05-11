@@ -79,6 +79,7 @@
     "runtime-api-workbench-projection:test": "node scripts/runtime-api-workbench-projection-test.mjs",
     "runtime-api-current-project-binding-routes:test": "node scripts/runtime-api-current-project-binding-routes-test.mjs",
     "runtime-api-current-project-read-check-routes:test": "node scripts/runtime-api-current-project-read-check-routes-test.mjs",
+    "runtime-api-current-project-one-shot-routes:test": "node scripts/runtime-api-current-project-one-shot-routes-test.mjs",
     "runtime-api-current-project-real-chain-status:test": "node scripts/runtime-api-current-project-real-chain-status-test.mjs",
     "runtime-api-current-project-image2-batch-plan:test": "node scripts/runtime-api-current-project-image2-batch-plan-test.mjs",
     "runtime-api-current-project-binding:test": "node scripts/runtime-api-current-project-binding-test.mjs",
