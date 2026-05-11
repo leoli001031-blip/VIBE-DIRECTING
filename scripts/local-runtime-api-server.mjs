@@ -28,6 +28,7 @@ import { createRuntimeApiCurrentProjectRound5StrictEditReturnRoutes } from "./ru
 import { createRuntimeApiCurrentProjectReturnWriters } from "./runtime-api-current-project-return-writers.mjs";
 import { createRuntimeApiFileServing } from "./runtime-api-file-serving.mjs";
 import { createRuntimeApiProviderReturnEvidence } from "./runtime-api-provider-return-evidence.mjs";
+import { readRequestJsonBody } from "./runtime-api-request-body.mjs";
 import { createRuntimeApiRealDemo005Routes } from "./runtime-api-real-demo-005-routes.mjs";
 import { createRuntimeApiRound5ArtifactIngest } from "./runtime-api-round5-artifact-ingest.mjs";
 import { createRuntimeApiStatusRoute } from "./runtime-api-status-route.mjs";
@@ -876,34 +877,6 @@ const {
   runtimePolicy,
   running: () => running,
 });
-
-function readRequestJsonBody(req) {
-  return new Promise((resolve) => {
-    let text = "";
-    req.on("data", (chunk) => {
-      text += chunk.toString();
-      if (text.length > 1024 * 1024) {
-        req.destroy(new Error("Request body is too large."));
-      }
-    });
-    req.on("error", (error) => {
-      resolve({ ok: false, message: error instanceof Error ? error.message : "Request body could not be read." });
-    });
-    req.on("end", () => {
-      const trimmed = text.trim();
-      if (!trimmed) {
-        resolve({ ok: true, body: undefined });
-        return;
-      }
-      try {
-        const body = JSON.parse(trimmed);
-        resolve({ ok: true, body });
-      } catch {
-        resolve({ ok: false, message: "Request body must be valid JSON." });
-      }
-    });
-  });
-}
 
 function isCurrentProjectEndpoint(pathname) {
   return pathname === currentProjectBindingEndpoint

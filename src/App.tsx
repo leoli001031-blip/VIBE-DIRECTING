@@ -126,8 +126,7 @@ import { CompactList, Metric, StatusPill, statusLabel } from "./ui/common/Diagno
 import { AudioDiagnosticsPanel } from "./ui/diagnostics/AudioDiagnosticsPanel";
 import { PreviewExportDiagnostics } from "./ui/diagnostics/PreviewExportDiagnostics";
 import {
-  ProjectFactsStrip as DiagnosticsProjectFactsStrip,
-  type ProjectFactsStripProps,
+  ProjectFactsStrip,
   type ProjectFactsUiMode,
   type ProjectFactsUiSummary,
 } from "./ui/diagnostics/ProjectFactsStrip";
@@ -6382,12 +6381,6 @@ function PreviewTimeline({
       <small className="muted-copy">Rough preview/status only. Formal preview is represented as gate eligibility.</small>
     </section>
   );
-}
-
-function ProjectFactsStrip(props: ProjectFactsStripProps) {
-  const contractCopy = "Project Store runtime-state derived cache create open save";
-  void contractCopy;
-  return <DiagnosticsProjectFactsStrip {...props} />;
 }
 
 function DirectorProgressStrip({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
