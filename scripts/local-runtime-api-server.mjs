@@ -30,6 +30,7 @@ import { createRuntimeApiFileServing } from "./runtime-api-file-serving.mjs";
 import { createRuntimeApiProviderReturnEvidence } from "./runtime-api-provider-return-evidence.mjs";
 import { createRuntimeApiRealDemo005Routes } from "./runtime-api-real-demo-005-routes.mjs";
 import { createRuntimeApiRound5ArtifactIngest } from "./runtime-api-round5-artifact-ingest.mjs";
+import { createRuntimeApiStatusRoute } from "./runtime-api-status-route.mjs";
 import { createRuntimeApiWorkbenchProjection } from "./runtime-api-workbench-projection.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -53,6 +54,7 @@ const round5StrictEditSidecarFileNames = {
 };
 
 const runtimeBasePath = "/api/runtime";
+const runtimeStatusEndpoint = `${runtimeBasePath}/status`;
 const currentProjectBindingEndpoint = `${runtimeBasePath}/projects/current`;
 const currentProjectSelectEndpoint = `${runtimeBasePath}/projects/select`;
 const currentProjectRecentEndpoint = `${runtimeBasePath}/projects/recent`;
@@ -845,6 +847,36 @@ const {
   running: () => running,
 });
 
+const {
+  handleRuntimeApiStatusRoute,
+} = createRuntimeApiStatusRoute({
+  statusEndpoint: runtimeStatusEndpoint,
+  endpoints: {
+    currentProjectStatusEndpoint,
+    currentProjectBindingEndpoint,
+    currentProjectSelectEndpoint,
+    currentProjectRecentEndpoint,
+    currentProjectRunEndpoint,
+    currentProjectImage2BatchPlanEndpoint,
+    currentProjectImage2BatchRunCheckEndpoint,
+    currentProjectImage2OneShotStatusEndpoint,
+    currentProjectImage2OneShotPrepareEndpoint,
+    currentProjectImage2OneShotConfirmEndpoint,
+    currentProjectImage2OneShotPrepareTriggerEndpoint,
+    currentProjectImage2OneShotExecuteMockEndpoint,
+    currentProjectImage2OneShotReturnEndpoint,
+    currentProjectImage2OneShotExecuteReturnEndpoint,
+    currentProjectRound5StrictEditPrepareEndpoint,
+    currentProjectRound5StrictEditReturnEndpoint,
+    realDemo005StatusEndpoint,
+    realDemo005RunEndpoint,
+    runtimeFileEndpoint,
+  },
+  writeJson,
+  runtimePolicy,
+  running: () => running,
+});
+
 function readRequestJsonBody(req) {
   return new Promise((resolve) => {
     let text = "";
@@ -933,36 +965,7 @@ async function handleRequest(req, res) {
     writeJson(res, 204, {});
     return;
   }
-  if (req.method === "GET" && url.pathname === `${runtimeBasePath}/status`) {
-    writeJson(res, 200, {
-      ok: true,
-    ...runtimePolicy({
-      endpoints: {
-        currentProjectStatusEndpoint,
-        currentProjectBindingEndpoint,
-        currentProjectSelectEndpoint,
-        currentProjectRecentEndpoint,
-        currentProjectRunEndpoint,
-        currentProjectImage2BatchPlanEndpoint,
-        currentProjectImage2BatchRunCheckEndpoint,
-        currentProjectImage2OneShotStatusEndpoint,
-        currentProjectImage2OneShotPrepareEndpoint,
-        currentProjectImage2OneShotConfirmEndpoint,
-        currentProjectImage2OneShotPrepareTriggerEndpoint,
-        currentProjectImage2OneShotExecuteMockEndpoint,
-        currentProjectImage2OneShotReturnEndpoint,
-        currentProjectImage2OneShotExecuteReturnEndpoint,
-        currentProjectRound5StrictEditPrepareEndpoint,
-        currentProjectRound5StrictEditReturnEndpoint,
-          realDemo005StatusEndpoint,
-          realDemo005RunEndpoint,
-          runtimeFileEndpoint,
-        },
-      }),
-      running,
-    });
-    return;
-  }
+  if (handleRuntimeApiStatusRoute(req, res, url)) return;
   if (req.method === "GET" && url.pathname === runtimeFileEndpoint) {
     serveRuntimeFile(req, res, url.searchParams.get("path") || "", { scope: url.searchParams.get("scope") || undefined });
     return;

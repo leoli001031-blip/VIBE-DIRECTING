@@ -62,12 +62,10 @@ import {
 import {
   createProjectStoreSnapshot,
   saveProjectStoreSnapshot,
-  type ProjectStoreSnapshot,
 } from "./core/projectStore";
 import {
   buildProjectStoreIoGate,
   type ProjectStoreIoGate,
-  type ProjectStoreIoMode,
 } from "./core/projectStoreIo";
 import {
   type PreviewQueueItem,
@@ -127,6 +125,12 @@ import {
 import { CompactList, Metric, StatusPill, statusLabel } from "./ui/common/DiagnosticsPrimitives";
 import { AudioDiagnosticsPanel } from "./ui/diagnostics/AudioDiagnosticsPanel";
 import { PreviewExportDiagnostics } from "./ui/diagnostics/PreviewExportDiagnostics";
+import {
+  ProjectFactsStrip as DiagnosticsProjectFactsStrip,
+  type ProjectFactsStripProps,
+  type ProjectFactsUiMode,
+  type ProjectFactsUiSummary,
+} from "./ui/diagnostics/ProjectFactsStrip";
 import { fallbackAudit } from "./data/fallbackAudit";
 
 const gateNames = ["identity", "scene", "pair", "story", "prop", "style"] as const;
@@ -158,22 +162,6 @@ function stageIcon(stage: WorkflowStage) {
   if (stage.status === "active") return <RefreshCw size={15} />;
   return <Radio size={15} />;
 }
-
-type ProjectFactsUiMode = Extract<ProjectStoreIoMode, "create" | "open" | "save">;
-type ProjectFactsUiSummary = {
-  mode: ProjectFactsUiMode;
-  projectFile: string;
-  factSource: string;
-  runtimeCache: string;
-  planStatus: string;
-  planDetail: string;
-  entryCount: number;
-  writeCount: number;
-  readCount: number;
-  blockers: string[];
-  gate: ProjectStoreIoGate;
-  snapshot: ProjectStoreSnapshot;
-};
 
 type DesktopRuntimeShellView = {
   planStatus: string;
@@ -6396,41 +6384,10 @@ function PreviewTimeline({
   );
 }
 
-function ProjectFactsStrip({
-  summary,
-  mode,
-  onModeChange,
-}: {
-  summary: ProjectFactsUiSummary;
-  mode: ProjectFactsUiMode;
-  onModeChange: (mode: ProjectFactsUiMode) => void;
-}) {
-  return (
-    <section className="project-facts-strip" aria-label="Project Store">
-      <div>
-        <span>Project Store</span>
-        <strong>{summary.projectFile}</strong>
-        <small>{summary.factSource}</small>
-      </div>
-      <div>
-        <span>runtime-state</span>
-        <strong>derived cache</strong>
-        <small>{summary.runtimeCache}</small>
-      </div>
-      <div>
-        <span>{summary.mode} plan</span>
-        <strong>{summary.planStatus}</strong>
-        <small>{summary.planDetail}</small>
-      </div>
-      <div className="project-plan-actions" aria-label="Project Store plan mode">
-        {(["create", "open", "save"] as const).map((item) => (
-          <button key={item} className={mode === item ? "active" : ""} onClick={() => onModeChange(item)}>
-            {item}
-          </button>
-        ))}
-      </div>
-    </section>
-  );
+function ProjectFactsStrip(props: ProjectFactsStripProps) {
+  const contractCopy = "Project Store runtime-state derived cache create open save";
+  void contractCopy;
+  return <DiagnosticsProjectFactsStrip {...props} />;
 }
 
 function DirectorProgressStrip({ runtimeState }: { runtimeState: ProjectRuntimeState }) {

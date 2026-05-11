@@ -16,6 +16,21 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
+function collectStrings(value, out = []) {
+  if (typeof value === "string") {
+    out.push(value);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectStrings(item, out);
+    return out;
+  }
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectStrings(item, out);
+  }
+  return out;
+}
+
 function transpile(sourcePath, rewrites = []) {
   let output = ts.transpileModule(fs.readFileSync(sourcePath, "utf8"), {
     compilerOptions: {
@@ -322,6 +337,7 @@ function assertPacketMutationBlocks({ workflowState, packetId, expectedError, la
 const {
   directorWorkflow: { buildDirectorWorkflowState },
   projectTransaction: {
+    buildProjectStoreApplyPlanForStagedFacts,
     buildProjectTransactionRuntime,
     commitProjectPendingTransactionForRuntime,
     confirmProjectPendingTransactionForRuntime,
@@ -388,6 +404,14 @@ assert(missingTraceStaged.pendingFactPatches.length === 0, "missing trace staged
 assert(missingTraceStaged.projectVibeWritten === false, "missing trace staged commit must not write project.vibe");
 assert(missingTraceStaged.providerCalled === false, "missing trace staged commit must not call provider");
 assert(missingTraceStaged.workerSpawned === false, "missing trace staged commit must not spawn workers");
+const missingTraceApplyPlan = buildProjectStoreApplyPlanForStagedFacts({ receipt: missingTraceStaged, generatedAt });
+assert(missingTraceApplyPlan.status === "blocked_staged_receipt", "blocked staged receipt must generate blocked apply plan");
+assert(missingTraceApplyPlan.items.length === 0, "blocked staged receipt apply plan must not expose patch items");
+assert(missingTraceApplyPlan.projectStorePatch.operations.length === 0, "blocked staged receipt apply plan must not construct operations");
+assert(missingTraceApplyPlan.canWriteNow === false, "blocked staged receipt apply plan must not be writable");
+assert(missingTraceApplyPlan.projectVibeWritten === false, "blocked staged receipt apply plan must not write project.vibe");
+assert(missingTraceApplyPlan.providerCalled === false, "blocked staged receipt apply plan must not call provider");
+assert(missingTraceApplyPlan.workerSpawned === false, "blocked staged receipt apply plan must not spawn workers");
 
 const hydratedWorkflow = hydrateKnowledge(readyEnvelopeWorkflow(workflowState));
 const parkedByUser = buildProjectTransactionRuntime({
@@ -515,6 +539,62 @@ assert(confirmedStaged.providerCalled === false, "valid staged commit must not c
 assert(confirmedStaged.workerSpawned === false, "valid staged commit must not spawn worker");
 assert(confirmedStaged.hardLocks.noFileMutation === true, "valid staged commit must forbid file mutation");
 assert(confirmedStaged.hardLocks.projectVibeWriteAllowed === false, "valid staged commit must keep write gate closed");
+const confirmedApplyPlan = buildProjectStoreApplyPlanForStagedFacts({ receipt: confirmedStaged, generatedAt });
+assert(confirmedApplyPlan.mode === "dry_run_project_store_apply_plan", "confirmed staged receipt must generate ProjectStore dry-run apply plan");
+assert(confirmedApplyPlan.stagedOnly === true, "ProjectStore apply plan must remain staged-only");
+assert(confirmedApplyPlan.canWriteNow === false, "ProjectStore apply plan must never be writable");
+assert(confirmedApplyPlan.noFileMutation === true, "ProjectStore apply plan must forbid file mutation");
+assert(confirmedApplyPlan.projectVibeWritten === false, "ProjectStore apply plan must not write project.vibe");
+assert(confirmedApplyPlan.providerCalled === false, "ProjectStore apply plan must not call provider");
+assert(confirmedApplyPlan.workerSpawned === false, "ProjectStore apply plan must not spawn workers");
+assert(confirmedApplyPlan.projectStorePatch.operations.length === 0, "ProjectStore apply plan must not construct operations without typed values");
+assert(
+  confirmedApplyPlan.items.length === confirmedStaged.pendingFactPatches.length,
+  "ProjectStore apply plan must expose one review item per staged pending fact patch",
+);
+assert(
+  confirmedApplyPlan.items.every((item) => item.canApplyNow === false && item.valuePresent === false),
+  "ProjectStore apply plan items must stay blocked without typed fact values",
+);
+assert(
+  confirmedApplyPlan.items.every((item) => item.blockedReasons.includes("project_store_value_missing")),
+  "ProjectStore apply plan items must explicitly block missing ProjectStore values",
+);
+assert(
+  confirmedApplyPlan.items.find((item) => item.role === "story_flow")?.projectStoreOperationIntent === "set_story_flow",
+  "story_flow staged patch must map to set_story_flow intent",
+);
+assert(
+  confirmedApplyPlan.items.find((item) => item.role === "visual_memory")?.projectStoreOperationIntent === "set_visual_memory",
+  "visual_memory staged patch must map to set_visual_memory intent",
+);
+assert(
+  confirmedApplyPlan.items.find((item) => item.role === "source_index")?.projectStoreOperationIntent === "set_source_index",
+  "source_index staged patch must map to set_source_index intent",
+);
+for (const role of ["shot_layout", "task_runs_pointer", "knowledge_route_history"]) {
+  const item = confirmedApplyPlan.items.find((candidate) => candidate.role === role);
+  assert(item, `${role} staged patch must remain visible in the ProjectStore apply plan`);
+  assert(item.canApplyNow === false, `${role} staged patch must not be currently applicable`);
+  assert(!("projectStoreOperationIntent" in item), `${role} staged patch must not carry a ProjectStore operation intent`);
+  assert(item.blockedReasons.includes("project_store_operation_unavailable_for_role"), `${role} staged patch must explain missing ProjectStore op`);
+}
+const taskRunPointerApplyItem = confirmedApplyPlan.items.find((item) => item.role === "task_runs_pointer");
+assert(taskRunPointerApplyItem, "task_runs_pointer apply plan item must be present");
+assert(
+  taskRunPointerApplyItem.stagedTaskRunPointers.length === confirmedRuntime.pendingTransaction.taskEnqueue.items.length,
+  "task_runs_pointer apply plan item must retain pointer-only task run information",
+);
+assert(
+  taskRunPointerApplyItem.stagedTaskRunPointers.every((pointer) => pointer.pointerOnly === true && pointer.providerSubmissionForbidden === true),
+  "task_runs_pointer apply plan item must keep pointers non-executable",
+);
+const stringifiedConfirmedApplyPlan = JSON.stringify(confirmedApplyPlan);
+assert(!stringifiedConfirmedApplyPlan.includes(process.cwd()), "ProjectStore apply plan must not persist the workspace absolute path");
+assert(
+  !collectStrings(confirmedApplyPlan).some((value) => path.isAbsolute(value)),
+  "ProjectStore apply plan must not contain absolute paths",
+);
 
 const missingExpectedOutputs = mutateFirstQueuedPacket(hydratedWorkflow, confirmedRuntime, (packet) => {
   packet.envelope.taskEnvelope.expectedOutputs = [];
@@ -685,9 +765,15 @@ assert(JSON.stringify(schema).includes("dry_run_staged"), "schema must document 
 assert(schema.$defs.projectFactsStagedCommitReceipt, "schema must define staged project facts commit receipt");
 assert(schema.$defs.projectFactStagedPatch, "schema must define staged project fact patch");
 assert(schema.$defs.stagedTaskRunPointer, "schema must define staged task run pointer");
+assert(schema.$defs.projectFactsStagedApplyPlan, "schema must define staged ProjectStore apply plan");
+assert(schema.$defs.projectFactsStagedApplyPlanItem, "schema must define staged ProjectStore apply plan item");
 assert(schema.$defs.projectFactsStagedCommitReceipt.properties.projectVibeWritten.const === false, "staged commit schema must forbid project.vibe writes");
 assert(schema.$defs.projectFactsStagedCommitReceipt.properties.providerCalled.const === false, "staged commit schema must forbid provider calls");
 assert(schema.$defs.projectFactsStagedCommitReceipt.properties.workerSpawned.const === false, "staged commit schema must forbid worker spawn");
+assert(schema.$defs.projectFactsStagedApplyPlan.properties.canWriteNow.const === false, "apply plan schema must forbid immediate writes");
+assert(schema.$defs.projectFactsStagedApplyPlan.properties.projectVibeWritten.const === false, "apply plan schema must forbid project.vibe writes");
+assert(schema.$defs.projectFactsStagedApplyPlan.properties.providerCalled.const === false, "apply plan schema must forbid provider calls");
+assert(schema.$defs.projectFactsStagedApplyPlan.properties.workerSpawned.const === false, "apply plan schema must forbid worker spawn");
 assert(!JSON.stringify(confirmedRuntime).includes(process.cwd()), "runtime transaction must not persist absolute workspace paths");
 
 console.log(

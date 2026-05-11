@@ -427,6 +427,58 @@ export interface ProjectFactsStagedCommitReceipt {
   workerSpawned: false;
 }
 
+export type ProjectStorePatchOperationIntent = "set_story_flow" | "set_visual_memory" | "set_source_index";
+
+export type ProjectFactsStagedApplyPlanStatus = "blocked_staged_receipt" | "blocked_missing_project_store_values";
+
+export interface ProjectFactsStagedApplyPlanItem {
+  id: string;
+  patchId: string;
+  transactionId: string;
+  role: ProjectFactWriteRole;
+  sourcePatchOperation: ProjectFactStagedPatch["operation"];
+  projectStoreOperationIntent?: ProjectStorePatchOperationIntent;
+  canApplyNow: false;
+  valuePresent: false;
+  sourceComponentKinds: ProjectTransactionKind[];
+  sourceComponentIds: string[];
+  targetIds: string[];
+  sourceRefs: string[];
+  stagedTaskRunPointers: ProjectFactsStagedTaskRunPointer[];
+  affectedExpectedOutputs: string[];
+  blockedReasons: string[];
+  noFileMutation: true;
+}
+
+export interface ProjectFactsStagedApplyPlan {
+  schemaVersion: typeof projectTransactionSchemaVersion;
+  receiptId: string;
+  transactionId: string;
+  generatedAt: string;
+  status: ProjectFactsStagedApplyPlanStatus;
+  mode: "dry_run_project_store_apply_plan";
+  stagedOnly: true;
+  canWriteNow: false;
+  noFileMutation: true;
+  projectVibeWritten: false;
+  providerCalled: false;
+  workerSpawned: false;
+  requiredGuards: {
+    confirmedReceipt: true;
+    knowledgeTrace: true;
+    taskEnvelope: true;
+    expectedOutputs: true;
+    qaChecklist: true;
+  };
+  projectStorePatch: {
+    id: string;
+    appliedAt: string;
+    operations: [];
+  };
+  items: ProjectFactsStagedApplyPlanItem[];
+  blockedReasons: string[];
+}
+
 export interface CommitProjectPendingTransactionForRuntimeInput {
   runtime: ProjectTransactionRuntimeState;
   confirmationReceipt: ProjectConfirmedProjectionReceipt;
@@ -1192,6 +1244,110 @@ export function stageProjectFactsForCommit(input: CommitProjectPendingTransactio
 
 export function commitProjectPendingTransactionForRuntime(input: CommitProjectPendingTransactionForRuntimeInput): ProjectFactsStagedCommitReceipt {
   return stageProjectFactsForCommit(input);
+}
+
+function projectStoreOperationIntentForRole(role: ProjectFactWriteRole): ProjectStorePatchOperationIntent | undefined {
+  if (role === "story_flow") return "set_story_flow";
+  if (role === "visual_memory") return "set_visual_memory";
+  if (role === "source_index") return "set_source_index";
+  return undefined;
+}
+
+function projectStoreApplyReceiptBlockers(receipt: ProjectFactsStagedCommitReceipt): string[] {
+  const hardLocks = receipt.hardLocks;
+  return unique([
+    receipt.status === "staged" ? "" : `staged_receipt_${receipt.status}`,
+    ...receipt.blockedReasons,
+    receipt.mode === "dry_run_staged" ? "" : "dry_run_staged_receipt_required",
+    receipt.requiresConfirmedReceipt === true && receipt.sourceConfirmationReceiptId ? "" : "confirmed_receipt_required",
+    receipt.stagedOnly === true ? "" : "staged_only_receipt_required",
+    hardLocks.noFileMutation === true &&
+    hardLocks.projectVibeWriteAllowed === false &&
+    hardLocks.projectVibeWritten === false &&
+    hardLocks.providerCalled === false &&
+    hardLocks.providerSubmissionForbidden === true &&
+    hardLocks.workerSpawnForbidden === true &&
+    hardLocks.workerSpawned === false &&
+    receipt.projectVibeWritten === false &&
+    receipt.providerCalled === false &&
+    receipt.workerSpawned === false
+      ? ""
+      : "staged_receipt_hard_lock_drift",
+  ]);
+}
+
+function projectStoreApplyItemBlockers(patch: ProjectFactStagedPatch, operationIntent?: ProjectStorePatchOperationIntent): string[] {
+  return unique([
+    "project_store_value_missing",
+    operationIntent ? "" : "project_store_operation_unavailable_for_role",
+    patch.role === "task_runs_pointer" ? "task_runs_pointer_is_pointer_only" : "",
+  ]);
+}
+
+function stagedApplyPlanItemFor(patch: ProjectFactStagedPatch): ProjectFactsStagedApplyPlanItem {
+  const operationIntent = projectStoreOperationIntentForRole(patch.role);
+  return {
+    id: `${patch.patchId}_project_store_apply_item`,
+    patchId: patch.patchId,
+    transactionId: patch.transactionId,
+    role: patch.role,
+    sourcePatchOperation: patch.operation,
+    ...(operationIntent ? { projectStoreOperationIntent: operationIntent } : {}),
+    canApplyNow: false,
+    valuePresent: false,
+    sourceComponentKinds: patch.sourceComponentKinds,
+    sourceComponentIds: patch.sourceComponentIds,
+    targetIds: patch.targetIds,
+    sourceRefs: patch.sourceRefs,
+    stagedTaskRunPointers: patch.stagedTaskRunPointers,
+    affectedExpectedOutputs: patch.affectedExpectedOutputs,
+    blockedReasons: projectStoreApplyItemBlockers(patch, operationIntent),
+    noFileMutation: true,
+  };
+}
+
+export function buildProjectStoreApplyPlanForStagedFacts(input: {
+  receipt: ProjectFactsStagedCommitReceipt;
+  generatedAt?: string;
+}): ProjectFactsStagedApplyPlan {
+  const { receipt } = input;
+  const generatedAt = input.generatedAt ?? receipt.generatedAt;
+  const receiptBlockers = projectStoreApplyReceiptBlockers(receipt);
+  const items = receiptBlockers.length ? [] : receipt.pendingFactPatches.map(stagedApplyPlanItemFor);
+  const blockedReasons = unique([
+    ...receiptBlockers,
+    ...items.flatMap((item) => item.blockedReasons),
+    receiptBlockers.length || items.length ? "" : "pending_fact_patches_missing",
+  ]);
+
+  return {
+    schemaVersion: projectTransactionSchemaVersion,
+    receiptId: receipt.receiptId,
+    transactionId: receipt.transactionId,
+    generatedAt,
+    status: receiptBlockers.length ? "blocked_staged_receipt" : "blocked_missing_project_store_values",
+    mode: "dry_run_project_store_apply_plan",
+    stagedOnly: true,
+    canWriteNow: false,
+    noFileMutation: true,
+    projectVibeWritten: false,
+    providerCalled: false,
+    workerSpawned: false,
+    requiredGuards: {
+      confirmedReceipt: true,
+      knowledgeTrace: true,
+      taskEnvelope: true,
+      expectedOutputs: true,
+      qaChecklist: true,
+    },
+    projectStorePatch: {
+      id: `project_store_patch_${receipt.transactionId}`,
+      appliedAt: generatedAt,
+      operations: [],
+    },
+    items,
+    blockedReasons,
+  };
 }
 
 function writePlan(transactionId: string, writeGate: ProjectFactsWriteGate): ProjectVibeWritePlan {
