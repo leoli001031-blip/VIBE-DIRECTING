@@ -3,6 +3,27 @@ import type { MinimalRuntimeProjection } from "../../core/minimalRuntimeProjecti
 export type DirectorView = "story" | "assets" | "preview";
 export type AssetLibraryUiStatus = "locked" | "candidate" | "needs_review" | "rejected";
 
+export type DirectorProgressTone = "preparing" | "working" | "review" | "blocked" | "complete";
+
+export type DirectorProgressSegment = {
+  label: string;
+  value: number;
+  tone: DirectorProgressTone;
+};
+
+export type DirectorProgressStripState = {
+  label: string;
+  detail: string;
+  tone: DirectorProgressTone;
+  total: number;
+  preparing: number;
+  working: number;
+  review: number;
+  blocked: number;
+  complete: number;
+  segments: DirectorProgressSegment[];
+};
+
 export type MinimalProjectPlan = {
   entryLabel: string;
   planLabel: string;

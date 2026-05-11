@@ -102,8 +102,15 @@ import {
 } from "./core/projectRealChainStatus";
 import { formatShotNumber } from "./ui/director/MinimalStoryFlow";
 import { MinimalTopNav } from "./ui/director/MinimalTopNav";
+import { MinimalDirectorStatusDot } from "./ui/director/MinimalDirectorStatusDot";
 import { DirectorMode } from "./ui/director/DirectorMode";
-import type { AssetLibraryUiStatus, DirectorView, MinimalProjectPlan } from "./ui/director/directorTypes";
+import type {
+  AssetLibraryUiStatus,
+  DirectorProgressStripState,
+  DirectorProgressTone,
+  DirectorView,
+  MinimalProjectPlan,
+} from "./ui/director/directorTypes";
 import {
   ProjectRealChainPanel,
   type ProjectImage2BatchPanelState,
@@ -363,24 +370,6 @@ type BetaAcceptanceUiSummary = {
   closureStatus: string;
   blockersWarnings: string[];
   requiredGates: string[];
-};
-type DirectorProgressTone = "preparing" | "working" | "review" | "blocked" | "complete";
-type DirectorProgressSegment = {
-  label: string;
-  value: number;
-  tone: DirectorProgressTone;
-};
-type DirectorProgressStripState = {
-  label: string;
-  detail: string;
-  tone: DirectorProgressTone;
-  total: number;
-  preparing: number;
-  working: number;
-  review: number;
-  blocked: number;
-  complete: number;
-  segments: DirectorProgressSegment[];
 };
 type RealPilotUiSummary = {
   reviewStatus: string;
@@ -6764,20 +6753,6 @@ function DirectorProgressStrip({ runtimeState }: { runtimeState: ProjectRuntimeS
   );
 }
 
-function MinimalDirectorStatusDot({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const state = buildDirectorProgressStripState(runtimeState);
-  const activeSegment = state.segments.find((segment) => segment.value > 0 && segment.tone === state.tone)
-    || state.segments.find((segment) => segment.value > 0)
-    || state.segments[0];
-
-  return (
-    <section className={`minimal-director-status ${state.tone}`} aria-label="当前状态">
-      <i className={`director-progress-dot ${activeSegment?.tone || state.tone}`} aria-hidden="true" />
-      <span>{state.label}</span>
-    </section>
-  );
-}
-
 function RealPilotDirectorStatus({ summary }: { summary: RealPilotUiSummary }) {
   return (
     <section className="real-pilot-entry" aria-label="真实小样">
@@ -9045,7 +9020,7 @@ function App() {
           currentProjectPreviewItems={currentProjectPreviewQueue}
           directorView={directorView}
           activeSectionId={resolvedActiveSectionId}
-          statusNode={<MinimalDirectorStatusDot runtimeState={workbenchRuntimeState} />}
+          statusNode={<MinimalDirectorStatusDot state={buildDirectorProgressStripState(workbenchRuntimeState)} />}
           assetLibraryNode={
             <MinimalAssetLibrary
               library={workbenchAssetLibrary}

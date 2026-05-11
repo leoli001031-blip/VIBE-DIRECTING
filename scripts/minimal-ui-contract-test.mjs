@@ -91,6 +91,7 @@ function findFunctionNames(source, pattern) {
 
 const appPath = "src/App.tsx";
 const directorModePath = "src/ui/director/DirectorMode.tsx";
+const minimalDirectorStatusDotPath = "src/ui/director/MinimalDirectorStatusDot.tsx";
 const minimalTopNavPath = "src/ui/director/MinimalTopNav.tsx";
 const minimalStoryFlowPath = "src/ui/director/MinimalStoryFlow.tsx";
 const minimalPreviewPath = "src/ui/director/MinimalPreview.tsx";
@@ -105,6 +106,7 @@ const contractDocPath = "docs/ui/minimal-director-ui-contract.md";
 
 const appSource = stripComments(readText(appPath));
 const directorModeSource = stripComments(readText(directorModePath));
+const minimalDirectorStatusDotSource = stripComments(readText(minimalDirectorStatusDotPath));
 const minimalTopNavSource = stripComments(readText(minimalTopNavPath));
 const minimalStoryFlowSource = stripComments(readText(minimalStoryFlowPath));
 const minimalPreviewSource = stripComments(readText(minimalPreviewPath));
@@ -119,7 +121,7 @@ const contractDoc = readText(contractDocPath);
 const directorMode = findFunctionBody(directorModeSource, "DirectorMode");
 const directorProgressStrip = findFunctionBody(appSource, "DirectorProgressStrip");
 const directorProgressStripState = findFunctionBody(appSource, "buildDirectorProgressStripState");
-const minimalDirectorStatusDot = findFunctionBody(appSource, "MinimalDirectorStatusDot");
+const minimalDirectorStatusDot = findFunctionBody(minimalDirectorStatusDotSource, "MinimalDirectorStatusDot");
 const minimalTopNav = findFunctionBody(minimalTopNavSource, "MinimalTopNav");
 const minimalStoryFlow = findFunctionBody(minimalStoryFlowSource, "MinimalStoryFlow");
 const minimalAgentPanel = findFunctionBody(minimalAgentPanelSource, "MinimalAgentPanel");
@@ -250,7 +252,8 @@ checkMessage(requireWithin(directorModeSource, /function\s+DirectorMode\s*\(/, "
 checkMessage(requireWithin(appSource, /import\s+\{\s*DirectorMode\s*\}\s+from\s+"\.\/ui\/director\/DirectorMode"/, "App must import extracted DirectorMode component"));
 checkMessage(requireWithin(appBody, /<DirectorMode\b/, "App must mount extracted DirectorMode component"));
 checkMessage(requireWithin(appSource, /function\s+DirectorProgressStrip\s*\(/, "Phase 35 Director progress strip component"));
-checkMessage(requireWithin(appSource, /function\s+MinimalDirectorStatusDot\s*\(/, "minimal director status dot component"));
+checkMessage(requireWithin(minimalDirectorStatusDotSource, /function\s+MinimalDirectorStatusDot\s*\(/, "minimal director status dot component"));
+checkMessage(requireWithin(appSource, /import\s+\{\s*MinimalDirectorStatusDot\s*\}\s+from\s+"\.\/ui\/director\/MinimalDirectorStatusDot"/, "App must import extracted minimal director status dot component"));
 checkMessage(requireWithin(minimalTopNavSource, /function\s+MinimalTopNav\s*\(/, "MinimalTopNav component"));
 checkMessage(requireWithin(appSource, /import\s+\{\s*MinimalTopNav\s*\}\s+from\s+"\.\/ui\/director\/MinimalTopNav"/, "App must import extracted MinimalTopNav component"));
 checkMessage(requireWithin(appBody, /<MinimalTopNav\b/, "App must mount extracted MinimalTopNav component"));
@@ -261,10 +264,11 @@ checkMessage(requireWithin(appSource, /function\s+DiagnosticsMode\s*\(/, "Diagno
 checkMessage(requireWithin(appBody, /mode\s*===\s*"diagnostics"/, "Diagnostics entry in App mode switch/rendering"));
 checkMessage(requireWithin(appBody, /mode\s*===\s*"director"/, "Director mode rendering"));
 check(!/<DirectorProgressStrip\s+runtimeState=\{runtimeState\}\s*\/>/.test(directorMode), "Director Clean Mode must not keep the detailed progress strip mounted on the three main pages");
-checkMessage(requireWithin(appBody, /statusNode=\{\s*<MinimalDirectorStatusDot\s+runtimeState=\{workbenchRuntimeState\}\s*\/>\s*\}/, "App must pass the compact creator status dot into DirectorMode"));
+checkMessage(requireWithin(appBody, /statusNode=\{\s*<MinimalDirectorStatusDot\s+state=\{buildDirectorProgressStripState\(workbenchRuntimeState\)\}\s*\/>\s*\}/, "App must pass the compact creator status dot into DirectorMode"));
 checkMessage(requireWithin(directorMode, /\{statusNode\}/, "DirectorMode must render the injected compact creator status dot"));
 checkMessage(requireWithin(diagnosticsMode, /<DirectorProgressStrip\s+runtimeState=\{runtimeState\}\s*\/>/, "Diagnostics must keep the detailed runtime progress strip"));
-checkMessage(requireWithin(minimalDirectorStatusDot, /buildDirectorProgressStripState\s*\(/, "compact director status dot derives from runtime progress state"));
+checkMessage(requireWithin(appBody, /buildDirectorProgressStripState\(workbenchRuntimeState\)/, "compact director status dot derives from runtime progress state in App"));
+checkMessage(requireWithin(minimalDirectorStatusDotSource, /state\s*:\s*DirectorProgressStripState/, "compact director status dot must receive presentational progress state"));
 check(!/state\.segments\.map/.test(minimalDirectorStatusDot), "compact director status dot must not render detailed progress counts");
 checkMessage(requireWithin(directorProgressStripState, /buildLocalOrchestratorUiSummary\s*\(/, "Phase 35 progress strip must derive from Phase 34 runtime summary"));
 check(
