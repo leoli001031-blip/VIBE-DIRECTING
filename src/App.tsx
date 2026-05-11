@@ -118,6 +118,7 @@ import {
   pathOriginForUi,
   uiStatusToAssetLibraryStatus,
 } from "./ui/director/assetLibraryUi";
+import { AppOverview } from "./ui/common/AppOverview";
 import {
   ProjectRealChainPanel,
   type ProjectImage2BatchPanelState,
@@ -8583,12 +8584,7 @@ function App() {
       />
 
       {mode !== "director" && (
-        <section className="overview">
-          <Metric label="Story Flow" value={`${audit.shots.length}`} detail={`${view.storySections.length} section(s)`} />
-          <Metric label="Visual Memory" value={`${view.visualMemory.existing}/${view.visualMemory.total || audit.metrics.expectedAssets}`} detail="real assets indexed" />
-          <Metric label="Queue" value={`${view.queueSummary.ready}/${view.queueSummary.total}`} detail={`${view.queueSummary.blocked} blocked · ${view.queueSummary.parked} parked`} />
-          <Metric label="Blockers" value={`${blockers.length + view.preflightSummary.blocked}`} detail={view.nextStep} />
-        </section>
+        <AppOverview audit={audit} view={view} blockerCount={blockers.length} />
       )}
 
       {mode !== "director" && audit.workflow.length > 0 && <Workflow stages={audit.workflow} />}

@@ -100,6 +100,7 @@ const assetLibraryUiPath = "src/ui/director/assetLibraryUi.ts";
 const minimalPreviewPath = "src/ui/director/MinimalPreview.tsx";
 const minimalAgentPanelPath = "src/ui/director/MinimalAgentPanel.tsx";
 const agentPanelProjectionPath = "src/ui/director/agentPanelProjection.ts";
+const appOverviewPath = "src/ui/common/AppOverview.tsx";
 const projectRealChainPanelPath = "src/ui/project/ProjectRealChainPanel.tsx";
 const projectFactsStripPath = "src/ui/diagnostics/ProjectFactsStrip.tsx";
 const stylesPath = "src/styles.css";
@@ -120,6 +121,7 @@ const assetLibraryUiSource = stripComments(readText(assetLibraryUiPath));
 const minimalPreviewSource = stripComments(readText(minimalPreviewPath));
 const minimalAgentPanelSource = stripComments(readText(minimalAgentPanelPath));
 const agentPanelProjectionSource = stripComments(readText(agentPanelProjectionPath));
+const appOverviewSource = stripComments(readText(appOverviewPath));
 const projectRealChainPanelSource = stripComments(readText(projectRealChainPanelPath));
 const projectFactsStripSource = stripComments(readText(projectFactsStripPath));
 const stylesSource = stripComments(`${readText(directorStylesPath)}\n${readText(stylesPath)}\n${readText(projectRealChainPanelCssPath)}`);
@@ -160,6 +162,7 @@ const agentReceiptCountSummary = findFunctionBody(agentPanelProjectionSource, "a
 const confirmAgentPlanProjection = findFunctionBody(agentPanelProjectionSource, "confirmAgentPlanProjection");
 const previewPlayerQueue = findFunctionBody(minimalPreviewSource, "buildPreviewPlayerQueue");
 const previewQueueKind = findFunctionBody(minimalPreviewSource, "previewQueueKind");
+const appOverview = findFunctionBody(appOverviewSource, "AppOverview");
 const desktopShellView = findFunctionBody(appSource, "buildDesktopRuntimeShellView");
 const subagentWorkerRuntimeDiagnostics = findFunctionBody(appSource, "SubagentWorkerRuntimeDiagnostics");
 const agentCliMockRunnerDiagnostics = findFunctionBody(appSource, "AgentCliMockRunnerDiagnostics");
@@ -210,6 +213,12 @@ const defaultMountedDirectorSurface = [
   minimalTopNav,
 ].join("\n");
 const defaultMountedDirectorCopySurface = extractStringLiterals(defaultMountedDirectorSurface);
+checkMessage(requireWithin(appSource, /from\s+["']\.\/ui\/common\/AppOverview["']/, "App.tsx must import AppOverview"));
+checkMessage(requireWithin(appBody, /mode\s*!==\s*["']director["'][\s\S]*<AppOverview\s+audit=\{audit\}\s+view=\{view\}\s+blockerCount=\{blockers\.length\}\s*\/>/, "App body must mount AppOverview outside Director mode"));
+for (const label of ["Story Flow", "Visual Memory", "Queue", "Blockers"]) {
+  checkMessage(requireWithin(appOverview, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `AppOverview must keep ${label} metric label`));
+}
+check(!/AppOverview/.test(defaultMountedDirectorSurface), "default mounted Director surface must not include AppOverview");
 const minimalAgentLanguageSurface = [
   minimalAgentPanel,
   selectedScopeLabel,
