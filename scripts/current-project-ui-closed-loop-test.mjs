@@ -80,6 +80,7 @@ function assertProductCopy(message) {
 
 function assertCreatorPanelContract() {
   const appSource = readText("src/App.tsx");
+  const directorModeSource = readText("src/ui/director/DirectorMode.tsx");
   const agentPanelSource = readText("src/ui/director/MinimalAgentPanel.tsx");
   const agentPanelProjectionSource = readText("src/ui/director/agentPanelProjection.ts");
   const projectRealChainPanelSource = readText("src/ui/project/ProjectRealChainPanel.tsx");
@@ -165,12 +166,13 @@ function assertCreatorPanelContract() {
   assert(/runProjectImage2BatchCheck\(runtimeProjectIdentity\)/.test(app), "App Image2 check must use runtime binding identity");
   assert(/buildCurrentProjectWorkbenchProjection\(\{[\s\S]*binding:\s*runtimeProjectBinding[\s\S]*realChainState:\s*projectRealChainState[\s\S]*image2BatchState:\s*projectImage2BatchState/.test(app), "App must derive the main workbench from current project runtime projection");
   assert(/applyCurrentProjectWorkbenchProjectionToRuntimeState\(runtimeState,\s*currentProjectWorkbenchProjection\)/.test(app), "App must bind Story Flow to the current project workbench projection");
-  assert(/assetLibraryReadOnlyDetail=\{currentProjectWorkbenchProjection\.assets\.detail\}/.test(app), "App must bind Asset Library fallback copy to the current project projection");
+  assert(/assetLibraryNode=\{\s*<MinimalAssetLibrary[\s\S]*readOnlyDetail=\{currentProjectWorkbenchProjection\.assets\.detail\}/.test(app), "App must bind Asset Library fallback copy to the current project projection");
   assert(/projectScopeLabel=\{currentProjectWorkbenchProjection\.selectedScope\.label\}/.test(app), "App must bind Agent scope to the current project projection");
   assert(/runtimeState=\{workbenchRuntimeState\}/.test(app), "DirectorMode must receive the current project workbench runtime state");
   assert(/onRunProjectRealChain=\{runProjectRealChain\}/.test(appSource), "DirectorMode must pass runtime status run-check handler to the project panel");
   assert(/onRunProjectImage2Batch=\{runProjectImage2Batch\}/.test(appSource), "DirectorMode must pass Image2 batch run-check handler to the project panel");
-  assert(/import\s+\{\s*MinimalAgentPanel\s*\}\s+from\s+"\.\/ui\/director\/MinimalAgentPanel"/.test(appSource), "App must mount the extracted MinimalAgentPanel");
+  assert(/import\s+\{\s*DirectorMode\s*\}\s+from\s+"\.\/ui\/director\/DirectorMode"/.test(appSource), "App must mount the extracted DirectorMode");
+  assert(/import\s+\{\s*MinimalAgentPanel\s*\}\s+from\s+"\.\/MinimalAgentPanel"/.test(directorModeSource), "DirectorMode must mount the extracted MinimalAgentPanel");
   assert(/确认修改/.test(agentPanelContractSource), "Agent Panel confirmation action should use creator-facing confirmation copy");
   assert(/等待写入项目事实/.test(agentPanelContractSource), "Agent Panel confirmation receipt should expose pending project-fact write status");
   assert(/已准备写入/.test(agentPanelContractSource), "Agent Panel staged commit receipt should expose creator-facing ready-to-write copy");

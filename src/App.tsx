@@ -100,12 +100,10 @@ import {
   type ProjectCurrentChoice,
   type ProjectCurrentBindingStatus,
 } from "./core/projectRealChainStatus";
-import {
-  formatShotNumber,
-  MinimalStoryFlow,
-} from "./ui/director/MinimalStoryFlow";
-import { MinimalPreview } from "./ui/director/MinimalPreview";
-import { MinimalAgentPanel } from "./ui/director/MinimalAgentPanel";
+import { formatShotNumber } from "./ui/director/MinimalStoryFlow";
+import { MinimalTopNav } from "./ui/director/MinimalTopNav";
+import { DirectorMode } from "./ui/director/DirectorMode";
+import type { AssetLibraryUiStatus, DirectorView, MinimalProjectPlan } from "./ui/director/directorTypes";
 import {
   ProjectRealChainPanel,
   type ProjectImage2BatchPanelState,
@@ -149,15 +147,7 @@ function stageIcon(stage: WorkflowStage) {
   return <Radio size={15} />;
 }
 
-type DirectorView = "story" | "assets" | "preview";
-type AssetLibraryUiStatus = "locked" | "candidate" | "needs_review" | "rejected";
 type ProjectFactsUiMode = Extract<ProjectStoreIoMode, "create" | "open" | "save">;
-type MinimalProjectPlan = {
-  entryLabel: string;
-  planLabel: string;
-  statusLabel: string;
-  progressDots: MinimalRuntimeProjection["progressDots"];
-};
 type ProjectFactsUiSummary = {
   mode: ProjectFactsUiMode;
   projectFile: string;
@@ -677,19 +667,6 @@ function assetLibraryUserBlockers(library: AssetLibrarySnapshot) {
     ...library.blockedImports.map((item) => `${item.sourceKind} 已拦截：${item.reason}`),
     ...validation.errors,
   ]);
-}
-
-function shortSectionLabel(section: RuntimeView["storySections"][number], index = 0) {
-  const raw = cleanLabel(section.label || section.id || `Section ${index + 1}`);
-  const withoutIdPrefix = raw
-    .replace(/^section[-_\s]*/i, "")
-    .replace(/^act[-_\s]*/i, "");
-  const titleish = withoutIdPrefix
-    .replace(/[-_]+/g, " ")
-    .replace(/\b[a-f0-9]{7,}\b/gi, "")
-    .trim();
-  const label = titleish || `Part ${index + 1}`;
-  return label.length > 14 ? `${label.slice(0, 13).trim()}...` : label;
 }
 
 function buildProjectStoreSnapshotForUi(runtimeState: ProjectRuntimeState, library: AssetLibrarySnapshot) {
@@ -6541,77 +6518,6 @@ function PreviewTimeline({
   );
 }
 
-function MinimalTopNav({
-  projectTitle,
-  projectPlan,
-  mode,
-  directorView,
-  sections,
-  activeSectionId,
-  onOpenDirectorView,
-  onOpenSection,
-  onOpenDiagnostics,
-}: {
-  projectTitle: string;
-  projectPlan: MinimalProjectPlan;
-  mode: UiMode;
-  directorView: DirectorView;
-  sections: RuntimeView["storySections"];
-  activeSectionId?: string;
-  onOpenDirectorView: (view: DirectorView) => void;
-  onOpenSection: (sectionId: string) => void;
-  onOpenDiagnostics: () => void;
-}) {
-  return (
-    <header className="minimal-topbar">
-      <button className="project-title-button" onClick={() => onOpenDirectorView("story")}>
-        <span className="project-title-text">{projectTitle || "Untitled project"}</span>
-        <span className="project-plan-entry" aria-label="项目计划状态">
-          <strong>Story</strong>
-          <span>{projectPlan.entryLabel}</span>
-          <span>{projectPlan.planLabel}</span>
-          <span>{projectPlan.statusLabel}</span>
-        </span>
-        <span className="minimal-state-dots" aria-label={projectPlan.statusLabel}>
-          {projectPlan.progressDots.map((dot) => (
-            <i key={dot.id} className={dot.tone} title={dot.label} />
-          ))}
-        </span>
-      </button>
-      <nav className="minimal-nav" aria-label="Director views">
-        <button
-          className={mode === "director" && directorView === "assets" ? "active" : ""}
-          onClick={() => onOpenDirectorView("assets")}
-        >
-          Asset Library
-        </button>
-        {sections.map((section, index) => (
-          <button
-            key={section.id}
-            className={mode === "director" && directorView === "story" && activeSectionId === section.id ? "active" : ""}
-            onClick={() => onOpenSection(section.id)}
-            title={section.label || section.id}
-            aria-label={`${section.label || section.id} · ${section.shotCount} shots`}
-          >
-            <span className="minimal-section-label">{shortSectionLabel(section, index)}</span>
-            <small className="minimal-section-count">{section.shotCount}</small>
-          </button>
-        ))}
-        <button
-          className={mode === "director" && directorView === "preview" ? "active" : ""}
-          onClick={() => onOpenDirectorView("preview")}
-        >
-          Preview
-        </button>
-      </nav>
-      <button className={`diagnostics-link ${mode === "diagnostics" ? "active" : ""}`} onClick={onOpenDiagnostics} aria-label="Diagnostics">
-        <Settings size={18} aria-hidden="true" />
-        <span className="sr-only">Diagnostics</span>
-      </button>
-    </header>
-  );
-}
-
 function ProjectFactsStrip({
   summary,
   mode,
@@ -7190,101 +7096,6 @@ function VideoPrepareSummaryStrip({
       </div>
       <small className="muted-copy">Readiness and queue shell only. Provider execution remains locked.</small>
     </section>
-  );
-}
-
-function DirectorMode({
-  audit,
-  view,
-  runtimeState,
-  assetLibrary,
-  assetLibraryReadOnlyDetail,
-  projectScopeLabel,
-  selectedShot,
-  selectedShots,
-  selectedAsset,
-  selectedShotId,
-  selectedShotIds,
-  selectedAssetId,
-  currentProjectPreviewItems,
-  directorView,
-  activeSectionId,
-  onSelectShot,
-  onSelectAsset,
-  onAddAsset,
-  onUpdateAsset,
-  onMarkAssetStatus,
-}: {
-  audit: ProjectAudit;
-  view: RuntimeView;
-  runtimeState: ProjectRuntimeState;
-  assetLibrary: AssetLibrarySnapshot;
-  assetLibraryReadOnlyDetail?: string;
-  projectScopeLabel?: string;
-  selectedShot?: ShotRecord;
-  selectedShots: ShotRecord[];
-  selectedAsset?: AssetRecord;
-  selectedShotId: string;
-  selectedShotIds: string[];
-  selectedAssetId?: string;
-  currentProjectPreviewItems?: PreviewQueueItem[];
-  directorView: DirectorView;
-  activeSectionId?: string;
-  onSelectShot: (id: string, additive?: boolean) => void;
-  onSelectAsset: (id: string) => void;
-  onAddAsset: (input: AddAssetLibraryAssetInput) => void;
-  onUpdateAsset: (assetId: string, input: UpdateAssetLibraryAssetInput) => void;
-  onMarkAssetStatus: (assetId: string, status: AssetLibraryUiStatus) => void;
-}) {
-  const activeSection = view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0];
-  const sectionLabel = activeSection?.label || "Story";
-  const shots = activeSection ? audit.shots.filter((shot) => activeSection.shotIds.includes(shot.id)) : audit.shots;
-
-  return (
-    <div className={`minimal-director ${directorView}`}>
-      <div className="minimal-director-main">
-        <MinimalDirectorStatusDot runtimeState={runtimeState} />
-        {directorView === "assets" && (
-          <MinimalAssetLibrary
-            library={assetLibrary}
-            readOnlyDetail={assetLibraryReadOnlyDetail}
-            selectedAssetId={selectedAssetId}
-            onSelectAsset={onSelectAsset}
-            onAddAsset={onAddAsset}
-            onUpdateAsset={onUpdateAsset}
-            onMarkAssetStatus={onMarkAssetStatus}
-          />
-        )}
-        {directorView === "story" && (
-          <MinimalStoryFlow
-            sectionLabel={sectionLabel}
-            shots={shots}
-            selectedShotId={selectedShotId}
-            selectedShotIds={selectedShotIds}
-            onSelectShot={onSelectShot}
-          />
-        )}
-        {directorView === "preview" && (
-          <MinimalPreview
-            previewExport={runtimeState.previewExport}
-            currentProjectPreviewItems={currentProjectPreviewItems}
-            sections={view.storySections}
-            shots={audit.shots}
-            selectedShotId={selectedShotId}
-            onSelectShot={onSelectShot}
-          />
-        )}
-      </div>
-      <MinimalAgentPanel
-        runtimeState={runtimeState}
-        projectScopeLabel={projectScopeLabel}
-        shot={directorView === "assets" ? undefined : selectedShot}
-        selectedShots={directorView === "story" ? selectedShots : []}
-        asset={directorView === "assets" ? selectedAsset : undefined}
-        sectionLabel={sectionLabel}
-        sectionId={directorView === "story" && !selectedShot ? activeSection?.id : undefined}
-      />
-    </div>
   );
 }
 
@@ -9225,23 +9036,28 @@ function App() {
           audit={audit}
           view={view}
           runtimeState={workbenchRuntimeState}
-          assetLibrary={workbenchAssetLibrary}
-          assetLibraryReadOnlyDetail={currentProjectWorkbenchProjection.assets.detail}
           projectScopeLabel={currentProjectWorkbenchProjection.selectedScope.label}
           selectedShot={selectedShot}
           selectedShots={selectedShots}
           selectedAsset={selectedAsset}
           selectedShotId={workbenchSelectedShotId}
           selectedShotIds={currentProjectWorkbenchProjection.selectedScope.selectedShotIds}
-          selectedAssetId={selectedAssetId}
           currentProjectPreviewItems={currentProjectPreviewQueue}
           directorView={directorView}
           activeSectionId={resolvedActiveSectionId}
+          statusNode={<MinimalDirectorStatusDot runtimeState={workbenchRuntimeState} />}
+          assetLibraryNode={
+            <MinimalAssetLibrary
+              library={workbenchAssetLibrary}
+              readOnlyDetail={currentProjectWorkbenchProjection.assets.detail}
+              selectedAssetId={selectedAssetId}
+              onSelectAsset={setSelectedAssetId}
+              onAddAsset={addAsset}
+              onUpdateAsset={updateAsset}
+              onMarkAssetStatus={markAssetStatus}
+            />
+          }
           onSelectShot={selectShot}
-          onSelectAsset={setSelectedAssetId}
-          onAddAsset={addAsset}
-          onUpdateAsset={updateAsset}
-          onMarkAssetStatus={markAssetStatus}
         />
       )}
       {mode === "inspector" && <InspectorMode audit={runtimeAudit} view={runtimeView} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />}
