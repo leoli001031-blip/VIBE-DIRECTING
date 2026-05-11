@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 const scripts = [
   "round5-artifact-ingest:test",
   "runtime-api-round5-artifact-ingest:test",
+  "runtime-api-current-project-round5-strict-edit-prepare:test",
   "runtime-api-current-project-round5-strict-edit-return:test",
   "project-real-chain-round5-ui-derive:test",
   "codex-app-server-image2-edit-adapter:test",

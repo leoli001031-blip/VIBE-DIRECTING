@@ -74,6 +74,7 @@
     "runtime-api-current-project-one-shot-executor:test": "node scripts/runtime-api-current-project-one-shot-executor-test.mjs",
     "runtime-api-current-project-one-shot-return:test": "node scripts/runtime-api-current-project-one-shot-return-test.mjs",
     "runtime-api-round5-artifact-ingest:test": "node scripts/runtime-api-round5-artifact-ingest-test.mjs",
+    "runtime-api-current-project-round5-strict-edit-prepare:test": "node scripts/runtime-api-current-project-round5-strict-edit-prepare-test.mjs",
     "runtime-api-current-project-round5-strict-edit-return:test": "node scripts/runtime-api-current-project-round5-strict-edit-return-test.mjs",
     "runtime-api-workbench-projection:test": "node scripts/runtime-api-workbench-projection-test.mjs",
     "runtime-api-current-project-binding:test": "node scripts/runtime-api-current-project-binding-test.mjs",
