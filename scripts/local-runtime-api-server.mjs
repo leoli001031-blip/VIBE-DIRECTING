@@ -16,6 +16,7 @@ import { createRuntimeApiCurrentProjectImage2Handoff } from "./runtime-api-curre
 import { createRuntimeApiCurrentProjectImage2BatchPlan } from "./runtime-api-current-project-image2-batch-plan.mjs";
 import { createRuntimeApiCurrentProjectOneShotExecutor } from "./runtime-api-current-project-one-shot-executor.mjs";
 import { createRuntimeApiCurrentProjectOneShotReturn } from "./runtime-api-current-project-one-shot-return.mjs";
+import { createRuntimeApiCurrentProjectReadCheckRoutes } from "./runtime-api-current-project-read-check-routes.mjs";
 import { createRuntimeApiCurrentProjectRealChainStatus } from "./runtime-api-current-project-real-chain-status.mjs";
 import { createRuntimeApiCurrentProjectRound5StrictEditPrepare } from "./runtime-api-current-project-round5-strict-edit-prepare.mjs";
 import { createRuntimeApiCurrentProjectRound5StrictEditReturn } from "./runtime-api-current-project-round5-strict-edit-return.mjs";
@@ -463,6 +464,23 @@ const {
   runtimeFileUrl,
   existsSync,
   currentProjectImage2BatchPlanEndpoint,
+});
+
+const {
+  handleCurrentProjectReadCheckRoute,
+} = createRuntimeApiCurrentProjectReadCheckRoutes({
+  currentProjectStatusEndpoint,
+  currentProjectRunEndpoint,
+  currentProjectImage2BatchPlanEndpoint,
+  currentProjectImage2BatchRunCheckEndpoint,
+  currentProjectRouteContext,
+  writeJson,
+  requestOverrideDiagnostics,
+  currentProjectRealChainResponse,
+  currentProjectRealChainRunCheckResponse,
+  currentProjectImage2BatchPlanResponse,
+  currentProjectImage2BatchRunCheckResponse,
+  running: () => running,
 });
 
 const {
@@ -924,44 +942,7 @@ async function handleRequest(req, res) {
     await handleCurrentProjectSelect(req, res);
     return;
   }
-  if (req.method === "GET" && url.pathname === currentProjectStatusEndpoint) {
-    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectStatusEndpoint);
-    if (!routeContext) return;
-    writeJson(res, 200, currentProjectRealChainResponse({
-      running,
-      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
-    }, routeContext.source));
-    return;
-  }
-  if (req.method === "POST" && url.pathname === currentProjectRunEndpoint) {
-    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectRunEndpoint);
-    if (!routeContext) return;
-    const payload = currentProjectRealChainRunCheckResponse({
-      running,
-      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
-    }, routeContext.source);
-    writeJson(res, payload.ok === false ? 500 : 200, payload);
-    return;
-  }
-  if (req.method === "GET" && url.pathname === currentProjectImage2BatchPlanEndpoint) {
-    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2BatchPlanEndpoint);
-    if (!routeContext) return;
-    writeJson(res, 200, currentProjectImage2BatchPlanResponse({
-      running,
-      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
-    }, routeContext.source));
-    return;
-  }
-  if (req.method === "POST" && url.pathname === currentProjectImage2BatchRunCheckEndpoint) {
-    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2BatchRunCheckEndpoint);
-    if (!routeContext) return;
-    const payload = currentProjectImage2BatchRunCheckResponse({
-      running,
-      ignoredRequestContext: requestOverrideDiagnostics(routeContext.requestContext),
-    }, routeContext.source);
-    writeJson(res, payload.ok === false ? 500 : 200, payload);
-    return;
-  }
+  if (await handleCurrentProjectReadCheckRoute(req, res, url)) return;
   if (req.method === "GET" && url.pathname === currentProjectImage2OneShotStatusEndpoint) {
     const routeContext = await currentProjectRouteContext(req, res, url, currentProjectImage2OneShotStatusEndpoint);
     if (!routeContext) return;
