@@ -21,6 +21,7 @@ import { createRuntimeApiCurrentProjectOneShotRoutes } from "./runtime-api-curre
 import { createRuntimeApiCurrentProjectReadCheckRoutes } from "./runtime-api-current-project-read-check-routes.mjs";
 import { createRuntimeApiCurrentProjectRealChainStatus } from "./runtime-api-current-project-real-chain-status.mjs";
 import { createRuntimeApiCurrentProjectRound5StrictEditPrepare } from "./runtime-api-current-project-round5-strict-edit-prepare.mjs";
+import { createRuntimeApiCurrentProjectRound5StrictEditPrepareRoutes } from "./runtime-api-current-project-round5-strict-edit-prepare-routes.mjs";
 import { createRuntimeApiCurrentProjectRound5StrictEditReturn } from "./runtime-api-current-project-round5-strict-edit-return.mjs";
 import { createRuntimeApiCurrentProjectReturnWriters } from "./runtime-api-current-project-return-writers.mjs";
 import { createRuntimeApiFileServing } from "./runtime-api-file-serving.mjs";
@@ -654,6 +655,17 @@ const round5StrictEditPrepareApi = createRuntimeApiCurrentProjectRound5StrictEdi
 });
 
 const {
+  handleCurrentProjectRound5StrictEditPrepareRoute,
+} = createRuntimeApiCurrentProjectRound5StrictEditPrepareRoutes({
+  currentProjectRound5StrictEditPrepareEndpoint,
+  currentProjectRouteContext,
+  writeJson,
+  round5StrictEditRequestInput: round5StrictEditPrepareApi.round5StrictEditRequestInput,
+  currentProjectRound5StrictEditPrepareResponse: round5StrictEditPrepareApi.currentProjectRound5StrictEditPrepareResponse,
+  running: () => running,
+});
+
+const {
   currentProjectRound5StrictEditReturnResponse,
 } = createRuntimeApiCurrentProjectRound5StrictEditReturn({
   currentProjectSource,
@@ -964,17 +976,7 @@ async function handleRequest(req, res) {
     writeJson(res, payload.ok === false ? 409 : 200, payload);
     return;
   }
-  if (req.method === "POST" && url.pathname === currentProjectRound5StrictEditPrepareEndpoint) {
-    const routeContext = await currentProjectRouteContext(req, res, url, currentProjectRound5StrictEditPrepareEndpoint);
-    if (!routeContext) return;
-    const input = round5StrictEditPrepareApi.round5StrictEditRequestInput(url, routeContext.body);
-    const payload = round5StrictEditPrepareApi.currentProjectRound5StrictEditPrepareResponse(input, {
-      running,
-      requestContext: routeContext.requestContext,
-    }, routeContext.source);
-    writeJson(res, payload.ok === false ? 409 : 200, payload);
-    return;
-  }
+  if (await handleCurrentProjectRound5StrictEditPrepareRoute(req, res, url)) return;
   if (req.method === "POST" && url.pathname === currentProjectRound5StrictEditReturnEndpoint) {
     const routeContext = await currentProjectRouteContext(req, res, url, currentProjectRound5StrictEditReturnEndpoint);
     if (!routeContext) return;
