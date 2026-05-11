@@ -1,6 +1,5 @@
 import { createReadStream, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,6 +30,7 @@ import { createRuntimeApiFileServing } from "./runtime-api-file-serving.mjs";
 import { createRuntimeApiProviderReturnEvidence } from "./runtime-api-provider-return-evidence.mjs";
 import { readRequestJsonBody } from "./runtime-api-request-body.mjs";
 import { createRuntimeApiEndpoints } from "./runtime-api-endpoints.mjs";
+import { createRuntimeApiRealDemo005Runner } from "./runtime-api-real-demo-005-runner.mjs";
 import { createRuntimeApiRealDemo005Routes } from "./runtime-api-real-demo-005-routes.mjs";
 import { createRuntimeApiRound5ArtifactIngest } from "./runtime-api-round5-artifact-ingest.mjs";
 import { createRuntimeApiStatusRoute } from "./runtime-api-status-route.mjs";
@@ -45,7 +45,6 @@ const sandboxRunRootRelativePath = "real-test-sandbox/real-demo-e2e/005-anime-im
 const sandboxProjectVibeRelativePath = `${sandboxRunRootRelativePath}/project/project.vibe`;
 const sandboxReportRelativePath = `${sandboxRunRootRelativePath}/reports/image2_start_long_chain_report.json`;
 const verifyScript = path.join(repoRoot, "scripts/real-demo-e2e-005-anime-image2-start-verify.mjs");
-const maxOutputChars = 8000;
 const round5FullRealChainReportFileName = "round5_full_real_chain_report.json";
 const round5StrictEditSidecarFileNames = {
   approvedStartFrame: "approved_start_frame_ref.json",
@@ -175,12 +174,6 @@ const {
   writeFileSync,
 });
 
-function clip(value) {
-  const text = String(value || "");
-  if (text.length <= maxOutputChars) return text;
-  return `${text.slice(0, maxOutputChars)}\n...[clipped ${text.length - maxOutputChars} chars]`;
-}
-
 function writeSecurityBlocked(res, security) {
   res.runtimeAllowedOrigin = security.origin && isTrustedLocalOrigin(security.origin) ? security.origin : undefined;
   writeJson(res, security.statusCode || 403, {
@@ -189,21 +182,6 @@ function writeSecurityBlocked(res, security) {
     status: "forbidden",
     message: security.message || "Runtime API request was blocked.",
   });
-}
-
-function observationSummary(item, fileScope) {
-  const expectedOutputPath = typeof item.expectedOutputPath === "string" ? item.expectedOutputPath : undefined;
-  return {
-    order: item.order,
-    shotId: item.shotId,
-    expectedOutputPath,
-    imageUrl: expectedOutputPath ? runtimeFileUrl(expectedOutputPath, fileScope) : undefined,
-    previewQaStatus: item.previewQaStatus,
-    productionQaStatus: item.productionQaStatus,
-    reviewOverlay: item.reviewOverlay === true,
-    runtimeTruthStatus: item.runtimeTruthStatus,
-    blockers: Array.isArray(item.blockers) ? item.blockers : [],
-  };
 }
 
 function readRuntimeJson(relativePath) {
@@ -700,69 +678,6 @@ const {
   running: () => running,
 });
 
-function unavailableResponse(extra = {}) {
-  const source = extra.sourceProject || realDemo005Source();
-  const fileScope = source.sandboxSource === "005 sandbox" ? "real-demo-e2e-005" : undefined;
-  return {
-    ok: false,
-    ...runtimePolicy(),
-    endpoint: realDemo005StatusEndpoint,
-    status: "unavailable",
-    previewStatus: "unavailable",
-    productionStatus: "unavailable",
-    reportPath: source.reportPath,
-    reportRelativePath: source.reportRelativePath,
-    reportUrl: runtimeFileUrl(source.reportRelativePath, fileScope),
-    reviewOverlayShots: [],
-    productionNeedsReviewShots: [],
-    shotCount: 0,
-    blockerCount: 0,
-    observations: [],
-    message: "005 report is unavailable. The runtime API can only verify an existing prepared report and output set.",
-    ...extra,
-    sourceProject: undefined,
-  };
-}
-
-function responseFromReport(extra = {}, source = realDemo005Source()) {
-  if (!existsSync(source.reportPath)) return unavailableResponse({ ...extra, sourceProject: source });
-
-  try {
-    const report = readJson(source.reportPath);
-    const observations = Array.isArray(report.observations)
-      ? report.observations.map((item) => observationSummary(item, "real-demo-e2e-005"))
-      : [];
-
-    return {
-      ok: true,
-      ...runtimePolicy(),
-      endpoint: realDemo005StatusEndpoint,
-      status: report.status || "unavailable",
-      previewStatus: report.previewStatus || report.status || "unavailable",
-      productionStatus: report.productionStatus || "unavailable",
-      reportPath: source.reportPath,
-      reportRelativePath: source.reportRelativePath,
-      reportUrl: runtimeFileUrl(source.reportRelativePath, "real-demo-e2e-005"),
-      reviewOverlayShots: Array.isArray(report.reviewOverlayShots) ? report.reviewOverlayShots : [],
-      productionNeedsReviewShots: Array.isArray(report.productionNeedsReviewShots) ? report.productionNeedsReviewShots : [],
-      shotCount: report.shotCount || observations.length,
-      blockerCount: Array.isArray(report.blockers) ? report.blockers.length : 0,
-      observations,
-      report,
-      ...extra,
-    };
-  } catch (error) {
-    return unavailableResponse({
-      status: "blocked",
-      previewStatus: "blocked",
-      productionStatus: "blocked",
-      message: error instanceof Error ? error.message : "005 report could not be parsed.",
-      ...extra,
-      sourceProject: source,
-    });
-  }
-}
-
 function writeJson(res, statusCode, payload) {
   if (statusCode === 204) {
     res.writeHead(204, corsHeaders("application/json; charset=utf-8", res.runtimeAllowedOrigin));
@@ -773,79 +688,24 @@ function writeJson(res, statusCode, payload) {
   res.end(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
-function runVerify() {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, [verifyScript], {
-      cwd: repoRoot,
-      env: { ...process.env },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on("error", (error) => {
-      resolve({ code: 1, stdout, stderr: `${stderr}${error.stack || error.message}` });
-    });
-    child.on("close", (code) => {
-      resolve({ code: code ?? 1, stdout, stderr });
-    });
-  });
-}
-
-async function handleRun(res, options = {}) {
-  const endpoint = options.endpoint || realDemo005RunEndpoint;
-  const source = options.source || realDemo005Source();
-  const buildResponse = options.buildResponse || ((extra) => responseFromReport(extra, source));
-  if (running) {
-    writeJson(res, 409, buildResponse({
-      ok: false,
-      endpoint,
-      status: "running",
-      running: true,
-      message: "Real chain verification is already running.",
-    }));
-    return;
-  }
-
-  running = true;
-  try {
-    const command = await runVerify();
-    const payload = buildResponse({
-      ok: command.code === 0,
-      endpoint,
-      running: false,
-      command: {
-        command: `${process.execPath} ${path.relative(repoRoot, verifyScript)}`,
-        exitCode: command.code,
-        stdout: clip(command.stdout),
-        stderr: clip(command.stderr),
-        providerCalled: false,
-        prepareRan: false,
-      },
-    });
-    writeJson(res, command.code === 0 ? 200 : 500, payload);
-  } catch (error) {
-    writeJson(res, 500, {
-      ok: false,
-      ...runtimePolicy(),
-      endpoint,
-      status: "blocked",
-      previewStatus: "blocked",
-      productionStatus: "blocked",
-      reportPath: source.reportPath,
-      reportRelativePath: source.reportRelativePath,
-      reportUrl: runtimeFileUrl(source.reportRelativePath),
-      message: error instanceof Error ? error.message : "Unknown run failure.",
-    });
-  } finally {
-    running = false;
-  }
-}
+const {
+  responseFromReport,
+  handleRun,
+} = createRuntimeApiRealDemo005Runner({
+  endpoints: realDemo005Endpoints,
+  existsSync,
+  readJson,
+  realDemo005Source,
+  repoRoot,
+  runtimeFileUrl,
+  runtimePolicy,
+  setRunning: (value) => {
+    running = value;
+  },
+  verifyScript,
+  writeJson,
+  running: () => running,
+});
 
 const {
   handleRuntimeApiRealDemo005Route,
