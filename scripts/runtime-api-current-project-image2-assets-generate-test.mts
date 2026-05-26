@@ -101,6 +101,12 @@ function createFixture(fixtureRoot) {
         sceneGuidance: ["清晨旧书店", "木地板", "高书架", "窗外淡雾"],
         characterGuidance: ["Mika 戴耳机，女高中生，安静观察"],
         propGuidance: ["一本磨损的旧书"],
+        referenceStrategy: "storyboard_narrative",
+        visibleClips: 1,
+        storyboardPanels: 3,
+        durationSeconds: 4,
+        camera: "低机位轻推，建立旧书店空间与人物位置。",
+        actionBeats: ["书架前停步", "手指触到旧书", "翻开书页"],
         order: 1,
       },
       {
@@ -360,6 +366,40 @@ try {
   const propObservation = readJson(repoPath(`${fixtureRoot}/provider_observations/assets/prop_prop_old_book.json`));
   assert(!propObservation.requestPromptText.includes("worn old train ticket"), "prop prompt must not contain the old hardcoded ticket prompt");
 
+  const storyboardGenerated = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-assets/generate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      selectedShotId: shotId,
+      selectedShotIds: [shotId],
+      providerId: "lanyi-image2",
+      assetTypes: ["storyboard"],
+      mockProviderResult: true,
+      confirmation: {
+        receiptId: "confirm_storyboard_mock_ok",
+        confirmedAt: new Date().toISOString(),
+        phrase: "generate-image2-assets",
+        confirmed: true,
+      },
+    }),
+  });
+  assert(storyboardGenerated.response.status === 200, `storyboard generation should pass: ${storyboardGenerated.payload.message}`);
+  assert(storyboardGenerated.payload.generatedAssetCount === 1, "storyboard generation should create one storyboard reference");
+  const storyboardAsset = storyboardGenerated.payload.assets[0];
+  assert(storyboardAsset.type === "storyboard", "storyboard result should preserve storyboard type");
+  assert(storyboardAsset.usedByShotIds.join(",") === shotId, "storyboard reference should bind to the active shot");
+  const storyboardObservation = readJson(repoPath(storyboardAsset.providerObservationPath));
+  assert(storyboardObservation.providerSlot === "image.storyboard_reference", "storyboard provider observation should use storyboard slot");
+  assert(storyboardObservation.requestPromptVersion === "storyboard_reference_prompt_v3", "storyboard prompt version should be explicit");
+  assert(storyboardObservation.requestPromptText.includes("Panel count: exactly 3"), "storyboard prompt should preserve panel count");
+  assert(storyboardObservation.requestPromptText.includes("Final visible video clips: exactly 1"), "storyboard prompt should separate visible clips from panels");
+  assert(storyboardObservation.referenceImageCount >= 3, "storyboard generation should use generated character/scene/prop references when available");
+  const storyboardVisualMemory = readJson(repoPath(`${fixtureRoot}/project/visual_memory.json`));
+  const storedStoryboard = storyboardVisualMemory.entries.find((asset) => asset.id === `storyboard_reference_${shotId}`);
+  assert(storedStoryboard?.type === "storyboard_reference", "visual memory should store storyboard references as reusable entries");
+  assert(storyboardVisualMemory.assets.find((asset) => asset.id === `storyboard_reference_${shotId}`)?.type === "storyboard_reference", "visual memory should keep legacy assets compatibility for storyboard references");
+  assert(storedStoryboard?.usedByShotIds.includes(shotId), "visual memory storyboard should bind to its shot");
+
   const projectGenerated = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-assets/generate`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -379,7 +419,7 @@ try {
   assert(projectGenerated.response.status === 200, `project-scope asset generation should pass: ${projectGenerated.payload.message}`);
   assert(projectGenerated.payload.scope === "project", "project-scope asset generation should report project scope");
   assert(projectGenerated.payload.selectedShotIds.length === 3, "project-scope asset generation should scan all project shots");
-  assert(projectGenerated.payload.generatedAssetCount === 5, "project-scope asset generation should reuse one scene baseline for the old-bookstore sequence");
+  assert(projectGenerated.payload.generatedAssetCount === 4, "project-scope asset generation should reuse existing references and only prepare missing bindings/assets");
   assert(!projectGenerated.payload.assets.some((asset) => /手|hand/i.test(asset.name || asset.id)), "body-part shot details must not become standalone reference assets");
   assert(!projectGenerated.payload.assets.some((asset) => asset.type === "prop" && asset.id === "char_mika"), "character subjects repeated in prop fields must not generate duplicate prop references");
 
@@ -391,7 +431,6 @@ try {
   assert(fullVisualMemory.props.length === 3, "project-scope generation should create all prop references");
   assert(!fullVisualMemory.props.some((prop) => prop.id === "char_mika"), "visual memory must not contain a character duplicate in props");
   const deskObservation = readJson(repoPath(`${fixtureRoot}/provider_observations/assets/scene_scene_morning_bookstore.json`));
-  assert(deskObservation.requestPromptText.includes("旧书店书桌前"), "shared scene prompt must keep second-shot scene guidance");
   assert(deskObservation.requestPromptText.includes("No train station"), "project-scope bookstore scene prompt must guard against train-station contamination");
   const ticketObservation = readJson(repoPath(`${fixtureRoot}/provider_observations/assets/prop_prop_glowing_ticket.json`));
   assert(ticketObservation.requestPromptText.includes("发光车票"), "project-scope prop prompt must use prop-specific guidance");

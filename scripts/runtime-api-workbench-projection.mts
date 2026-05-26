@@ -503,6 +503,7 @@ export function createRuntimeApiWorkbenchProjection({
 
   function normalizeWorkbenchAssetType(value) {
     const normalized = String(value || "").trim().toLowerCase();
+    if (/storyboard|storyboard_reference|reference|分镜|故事板/.test(normalized)) return "reference";
     if (["character", "role", "person", "cast"].includes(normalized)) return "character";
     if (["scene", "location", "set"].includes(normalized)) return "scene";
     if (["style", "look", "style_anchor"].includes(normalized)) return "style";
@@ -681,7 +682,12 @@ export function createRuntimeApiWorkbenchProjection({
     }
     const genericAssets = Array.isArray(visualMemory.assets) ? visualMemory.assets : [];
     genericAssets.forEach((item, index) => {
-      const asset = workbenchAssetFromRecord(item, normalizeWorkbenchAssetType(item?.assetType || item?.type), `visual_memory.assets:${index}`, index);
+      const asset = workbenchAssetFromRecord(item, normalizeWorkbenchAssetType([item?.type, item?.assetType, item?.roleBinding?.role].filter(Boolean).join(" ")), `visual_memory.assets:${index}`, index);
+      if (asset) assets.push(asset);
+    });
+    const entries = Array.isArray(visualMemory.entries) ? visualMemory.entries : [];
+    entries.forEach((item, index) => {
+      const asset = workbenchAssetFromRecord(item, normalizeWorkbenchAssetType([item?.type, item?.assetType, item?.roleBinding?.role].filter(Boolean).join(" ")), `visual_memory.entries:${index}`, index);
       if (asset) assets.push(asset);
     });
     const seen = new Set();

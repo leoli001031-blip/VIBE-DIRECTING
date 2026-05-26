@@ -162,7 +162,7 @@ export function DirectorMode({
   onSelectShot: (id: string, additive?: boolean) => void;
   onProjectStoreApplyPlanReady?: (plan: ProjectFactsStagedApplyPlan) => void;
   onNewVideoDraftConfirmed?: (draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) => boolean | void | Promise<boolean | void>;
-  onCreateLocalProject?: (draft: NewVideoStartDraft) => void | Promise<void>;
+  onCreateLocalProject?: (draft: NewVideoStartDraft) => unknown | Promise<unknown>;
   onRunExport?: () => void | Promise<void>;
   onCreateP6RealSample?: () => void | Promise<void>;
   onCreateImage2EndFrame?: () => void | Promise<void>;
@@ -196,6 +196,7 @@ export function DirectorMode({
   const storyAssets = projectReady ? audit.assets : [];
   const showNewVideoStart = !projectReady || shots.length === 0;
   const showAgentPanel = !(directorView === "story" && showNewVideoStart);
+  const agentShotBoundView = directorView === "story" || directorView === "preview" || directorView === "export";
   const [videoPermissionContract, setVideoPermissionContract] = useState<AgentVideoPermissionContract>(defaultAgentVideoPermissionContract);
   const videoPermissionAllowsSend = agentVideoPermissionAllowsVideo(videoPermissionContract);
   const sessionVideoSendAction = useMemo(() => {
@@ -206,7 +207,7 @@ export function DirectorMode({
       ready: false,
       message: videoPermissionContract.mode === "plan_only"
         ? "当前只规划，不会提交视频。"
-        : "当前先做参考，视频等你再确认。",
+        : "当前先做参考，视频等你确认。",
     };
   }, [videoSendAction, videoPermissionAllowsSend, videoPermissionContract.mode]);
   const sessionSendSeedanceVideo = videoPermissionAllowsSend ? onSendSeedanceVideo : undefined;
@@ -226,9 +227,9 @@ export function DirectorMode({
           localProjectReady={projectReady}
         />
         {directorView === "assets" && (projectReady ? assetLibraryNode : (
-          <EmptyProjectSurface
-            title="还没有参考资产"
-            detail="把脚本、图片或声音放到底部输入框，发送并确认后，角色、场景、道具和故事板参考会出现在这里。"
+            <EmptyProjectSurface
+              title="还没有参考资产"
+              detail="在底部写脚本或拖文件，确认后会出现在这里。"
           />
         ))}
         {directorView === "story" && (
@@ -291,7 +292,7 @@ export function DirectorMode({
           </Suspense> : (
             <EmptyProjectSurface
               title="还没有预览"
-              detail="确认故事和参考后，生成回来的画面与视频会在这里播放。"
+              detail="画面和视频回来后，会在这里播放。"
             />
           )
         )}
@@ -308,18 +309,18 @@ export function DirectorMode({
           </Suspense> : (
             <EmptyProjectSurface
               title="还没有可导出的内容"
-              detail="先从底部输入框开始一个项目，确认后再导出素材包和成片。"
+              detail="先从底部开始一个项目，确认后再导出。"
             />
           )
         )}
       </div>
       {showAgentPanel && (
-        <div className="director-bottom-composer" aria-label="固定对话框">
+        <div className="director-bottom-composer" aria-label="底部对话框">
           <MinimalAgentPanel
             runtimeState={runtimeState}
             projectScopeLabel={projectReady ? projectScopeLabel : "新视频项目"}
-            shot={projectReady && directorView === "story" ? selectedShot : undefined}
-            selectedShots={projectReady && directorView === "story" ? selectedShots : []}
+            shot={projectReady && agentShotBoundView ? selectedShot : undefined}
+            selectedShots={projectReady && agentShotBoundView ? selectedShots : []}
             asset={projectReady && directorView === "assets" ? selectedAsset : undefined}
             sectionLabel={agentSectionLabel}
             sectionId={projectReady && directorView === "story" && !selectedShot ? activeSection?.id : undefined}

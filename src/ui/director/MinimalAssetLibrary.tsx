@@ -85,6 +85,11 @@ export function MinimalAssetLibrary({
     storyboards: groups.storyboards.length,
     audio: audioSources.length + groups.audioAnchors.length,
   };
+  const reviewCounts = {
+    locked: library.assets.filter((asset) => asset.status === "locked").length,
+    needsReview: library.assets.filter((asset) => asset.status === "review" || asset.status === "candidate").length,
+    missing: library.assets.filter((asset) => asset.status === "missing").length,
+  };
   const blockers = assetLibraryUserBlockers(library);
   const blockerLabel = blockers.length
     ? "待复核"
@@ -169,11 +174,11 @@ export function MinimalAssetLibrary({
           </span>
           <dl className="asset-authority-grid" aria-label="参考职责">
             <div>
-              <dt>只管</dt>
+              <dt>用于</dt>
               <dd>{roleCopy.useFor}</dd>
             </div>
             <div>
-              <dt>不负责</dt>
+              <dt>不用于</dt>
               <dd>{roleCopy.ignoreFor}</dd>
             </div>
           </dl>
@@ -207,7 +212,7 @@ export function MinimalAssetLibrary({
                     void onMarkAssetStatus(asset.id, "needs_review");
                   }}
                 >
-                  继续复核
+                  保留待复核
                 </button>
               </>
             )}
@@ -229,20 +234,27 @@ export function MinimalAssetLibrary({
       !workspaceCounts.scenes ? "场景/天气" : "",
       !workspaceCounts.props ? "独立道具" : "",
     ].filter(Boolean);
-    if (!missingParts.length) return "参考基本齐了，只检查缺口。";
-    return `缺：${missingParts.join("、")}。细节会跟随主体处理。`;
+    if (!missingParts.length) return "参考基本齐了。";
+    return `缺：${missingParts.join("、")}。细节会写进镜头里。`;
+  }
+
+  function assetNextStepCopy() {
+    if (reviewCounts.needsReview > 0) return `${reviewCounts.needsReview} 个参考等你看。`;
+    if (reviewCounts.missing > 0) return `${reviewCounts.missing} 个参考待补。`;
+    if (workspaceCounts.characters && workspaceCounts.scenes && reviewCounts.locked > 0) return "参考已准备好，可以回到故事页继续。";
+    return "先放脚本和素材，AI 会整理参考。";
   }
 
   function generationStatusCopy(message?: string) {
     if (!message) {
       if (!localProjectReady) return "先创建本地项目";
-      if (assetGenerationAction?.keyConfigured === false) return "先去设置里完成生成能力";
-      if (assetGenerationAction?.disabled) return "正在连接项目，稍等一下";
-      return "会检查当前故事，缺的参考会放进复核区";
+      if (assetGenerationAction?.keyConfigured === false) return "先去设置里填 Key";
+      if (assetGenerationAction?.disabled) return "正在准备参考";
+      return "会补缺的参考，结果先给你看";
     }
-    if (/key|lanyi/i.test(message)) return "先去设置里完成生成能力";
-    if (/project|项目|同步|选择/i.test(message)) {
-      return localProjectReady ? "正在连接项目，稍等一下" : "先创建本地项目";
+    if (/key|lanyi/i.test(message)) return "先去设置里填 Key";
+    if (/未选择项目|未同步|连接项目失败|项目文件已打开|请选择|先创建本地项目/i.test(message)) {
+      return localProjectReady ? "正在连接项目" : "先创建本地项目";
     }
     return message;
   }
@@ -252,7 +264,7 @@ export function MinimalAssetLibrary({
       <div className="asset-library-heading">
         <div>
           <h2>参考素材</h2>
-          <small>{readOnlyDetail || "角色、场景、道具和故事板分开管理，后面生成会更稳。"}</small>
+          <small>{readOnlyDetail || "角色、场景、道具和故事板分开管理。"}</small>
         </div>
         {onGenerateAssets && (
           <div className="asset-generation-action">
@@ -294,6 +306,10 @@ export function MinimalAssetLibrary({
       <div className="asset-blocker-strip" aria-label="参考提醒">
         <span title={blockerLabel}>{blockerLabel}</span>
       </div>
+      <section className="asset-next-step-strip" aria-label="下一步">
+        <span>下一步</span>
+        <strong>{assetNextStepCopy()}</strong>
+      </section>
       <section className="asset-workspace-strip" aria-label="工作区参考">
         <span>
           <small>角色参考</small>
@@ -326,7 +342,7 @@ export function MinimalAssetLibrary({
           <div>
             <span>当前项目</span>
             <strong>资产待补齐</strong>
-            <small>等待生成/复核</small>
+            <small>等待生成或确认</small>
           </div>
           <small>{readOnlyDetail}</small>
         </section>

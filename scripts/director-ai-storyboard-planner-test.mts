@@ -318,6 +318,18 @@ const normalizedSum = Math.round(durationNormalized.shots.reduce((sum, shot) => 
 assert(normalizedSum === 45, "shot durations should normalize to requested total duration");
 assert(durationNormalized.warnings.some((warning) => warning.includes("归一化")), "duration normalization should leave a warning");
 
+const halfSecondDriftNormalized = normalizeDirectorAiStoryboardPlan({
+  totalDurationSeconds: 10,
+  shots: [
+    { title: "旧机器亮起", durationSeconds: 3.5 },
+    { title: "投币吐出票", durationSeconds: 4 },
+    { title: "抬头见电车", durationSeconds: 3 },
+  ],
+});
+const halfSecondDriftSum = Math.round(halfSecondDriftNormalized.shots.reduce((sum, shot) => sum + shot.durationSeconds, 0) * 10) / 10;
+assert(halfSecondDriftSum === 10, "explicit user duration should absorb 0.5s planning drift before the draft reaches UI");
+assert(halfSecondDriftNormalized.warnings.some((warning) => warning.includes("归一化")), "half-second duration drift should leave a warning");
+
 const manyShots = normalizeDirectorAiStoryboardPlan({
   totalDurationSeconds: 320,
   shots: Array.from({ length: 72 }, (_, index) => ({

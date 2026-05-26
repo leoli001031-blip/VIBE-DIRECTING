@@ -89,6 +89,10 @@ export function createRuntimeApiFileServing({
     };
   }
 
+  function firstPathSegment(value) {
+    return normalizeRelativePath(value).replace(/^\/+/, "").split("/").filter(Boolean)[0] || "";
+  }
+
   function parseRangeHeader(req, fileSize) {
     const header = String(req.headers.range || "");
     if (!header) return undefined;
@@ -136,12 +140,17 @@ export function createRuntimeApiFileServing({
         filePath = path.resolve(normalizedRelativePath);
       } else {
         let repoCandidate;
+        let repoCandidateError;
         try {
           repoCandidate = scopedRepoPath(normalizedRelativePath);
-        } catch {
+        } catch (error) {
+          repoCandidateError = error;
           repoCandidate = undefined;
         }
-        filePath = repoCandidate && (pathWithinRoot(repoCandidate, allowedRootPath) || existsSync(repoCandidate))
+        const inputLooksRepoScoped = firstPathSegment(normalizedRelativePath)
+          && firstPathSegment(normalizedRelativePath) === firstPathSegment(allowedRootLabel);
+        if (repoCandidateError && inputLooksRepoScoped) throw repoCandidateError;
+        filePath = repoCandidate && (pathWithinRoot(repoCandidate, allowedRootPath) || existsSync(repoCandidate) || inputLooksRepoScoped)
           ? repoCandidate
           : path.resolve(allowedRootPath, normalizedRelativePath);
       }

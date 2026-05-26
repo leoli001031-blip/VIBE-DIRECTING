@@ -2859,6 +2859,45 @@ small {
   color: rgba(47, 39, 34, 0.58);
 }
 
+.settings-subdetails {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid rgba(47, 39, 34, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.34);
+  padding: 10px;
+}
+
+.settings-subdetails > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-subdetails > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-subdetails > summary span {
+  color: rgba(47, 39, 34, 0.84);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.settings-subdetails > summary small {
+  color: rgba(47, 39, 34, 0.5);
+  font-size: 12px;
+}
+
+.settings-subdetails[open] > summary {
+  margin-bottom: 8px;
+}
+
 .service-connection-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

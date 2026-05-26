@@ -137,18 +137,18 @@ export function useSeedanceVideoSubmitAction({
 
   const runSeedanceVideoSubmit = useCallback(async () => {
     if (!runtimeProjectIdentity) {
-      setActionState({ status: "blocked", message: "未选择项目/未同步。" });
+      setActionState({ status: "blocked", message: "先选择项目。" });
       return;
     }
 
     const statuses = await loadProviderConfigStatuses();
     setProviderConfigStatuses(statuses);
     if (!isStoryboardProviderConfigured(statuses)) {
-      setActionState({ status: "blocked", message: "请先在设置里完成故事板生成能力。" });
+      setActionState({ status: "blocked", message: "先去设置里完成视频连接。" });
       return;
     }
 
-    if (!confirmAction("确认提交当前故事到 Seedance 2.0 720p？即梦可能排队约 50 分钟，提交后可以稍后恢复查询。")) {
+    if (!confirmAction("要提交当前故事到 Seedance 2.0 720p 吗？\n\n即梦可能排队很久，提交后可以稍后回来查。")) {
       setActionState({ status: "blocked", message: "已取消，本次没有提交。" });
       return;
     }

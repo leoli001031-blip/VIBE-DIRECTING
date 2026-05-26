@@ -16,7 +16,7 @@ const reviewLockLabels: Record<CreatorReviewLockTarget, string> = {
   character: "角色参考",
   scene: "场景参考",
   prop: "道具参考",
-  shot_reference: "本镜头参考",
+  shot_reference: "本镜头画面",
 };
 
 const reviewLockTargets: CreatorReviewLockTarget[] = ["character", "scene", "prop", "shot_reference"];
@@ -36,24 +36,24 @@ function reviewStatusLabel(value: string) {
 }
 
 function plannerStatusLabel(value: string) {
-  return normalizedLabel(value) === "ready" ? "已进入故事流" : "待补齐";
+  return normalizedLabel(value) === "ready" ? "已确认" : "待补齐";
 }
 
 function plannerBrief(projection: CreatorDeskProjection["scriptPlanner"]) {
-  if (!projection.shotCount) return "先用一句话描述故事，再确认写入故事流。";
-  return `${projection.sectionCount} 个段落、${projection.shotCount} 个镜头已在故事流中，可继续调整角色、场景和画面。`;
+  if (!projection.shotCount) return "先写一句故事。";
+  return `${projection.sectionCount} 个段落、${projection.shotCount} 个镜头，可继续改角色、场景和画面。`;
 }
 
 function missingQuestionLabel(value: string) {
   const normalized = normalizedLabel(value);
   if (normalized === "add_a_first_shot") return "补一个开场镜头";
   if (normalized === "lock_one_visual_reference") return "锁定一个视觉参考";
-  if (normalized === "prepare_frames_for_review") return "准备待复核参考";
+  if (normalized === "prepare_frames_for_review") return "准备参考";
   return value;
 }
 
 function batchDetail(projection: CreatorDeskProjection["batchGeneration"]) {
-  return `${projection.readyCount}/${projection.plannedCount} 张待复核 · ${projection.missingCount} 张待补齐`;
+  return `${projection.readyCount}/${projection.plannedCount} 张可看 · ${projection.missingCount} 张待补`;
 }
 
 function frameStatusLabel(status: CreatorFrameStatus) {
@@ -64,27 +64,27 @@ function frameStatusLabel(status: CreatorFrameStatus) {
 }
 
 function framePlanBrief(projection: CreatorDeskProjection["framePlan"]) {
-  if (!projection.items.length) return "确认故事流后，会在这里看到每个镜头的参考和视频准备状态。";
-  if (projection.reviewCount > 0) return `${projection.reviewCount} 个镜头参考待复核。`;
-  if (projection.missingCount > 0) return `${projection.missingCount} 个镜头还需要补齐参考。`;
-  if (projection.readyCount > 0) return `${projection.readyCount} 个镜头参考已通过，可以继续准备视频。`;
-  if (projection.endpointCount > 0) return "首尾控制镜头会额外显示特殊尾帧，其余镜头直接进入视频准备。";
-  return "先准备镜头参考，再进入视频。";
+  if (!projection.items.length) return "确认故事后，这里会显示每个镜头的画面状态。";
+  if (projection.reviewCount > 0) return `${projection.reviewCount} 个镜头等你看。`;
+  if (projection.missingCount > 0) return `${projection.missingCount} 个镜头还缺画面。`;
+  if (projection.readyCount > 0) return `${projection.readyCount} 个镜头已通过，可以准备视频。`;
+  if (projection.endpointCount > 0) return "有镜头使用特殊结束画面，其余镜头正常生成视频。";
+  return "先补画面，再做视频。";
 }
 
 function concurrencyLabel(value: string) {
   const count = value.match(/\d+/)?.[0] || "3";
-  return `最多 ${count} 张同时准备`;
+  return `最多同时 ${count} 张`;
 }
 
 function safetyLabel(value: string) {
   const count = value.match(/\d+/)?.[0];
-  if (/[A-Za-z]/.test(value)) return count ? `重试会降到 ${count} 张` : "先复核再重试";
-  return value || "确认后进入复核";
+  if (/[A-Za-z]/.test(value)) return count ? `重试降到 ${count} 张` : "先看再重试";
+  return value || "确认后再看";
 }
 
 function retryLabel(value: string) {
-  return normalizedLabel(value).includes("retry") ? "重试待补齐" : value || "重试待补齐";
+  return normalizedLabel(value).includes("retry") ? "重试缺的" : value || "重试缺的";
 }
 
 function videoStatusClass(value: string) {
@@ -131,9 +131,9 @@ function nextStepLabel(projection: CreatorDeskProjection) {
   if (videoGeneration.status === "recoverable") return "稍后恢复查询";
   if (videoGeneration.status === ["que", "ued"].join("") || videoGeneration.status === "generating" || videoGeneration.status === "submitted") return "等待视频";
   if (videoGeneration.status === "not_generated" && scriptPlanner.shotCount > 0 && !pendingCount(reviewTray)) return "提交视频";
-  if (batchGeneration.missingCount > 0 || reviewTray.counts.missing > 0) return "补齐参考";
-  if (reviewTray.counts.needs_review > 0) return "复核参考";
-  if (reviewTray.counts.retry > 0) return "重试参考";
+  if (batchGeneration.missingCount > 0 || reviewTray.counts.missing > 0) return "补齐画面";
+  if (reviewTray.counts.needs_review > 0) return "检查画面";
+  if (reviewTray.counts.retry > 0) return "重试画面";
   if (videoGeneration.status === "not_generated" && scriptPlanner.shotCount > 0) return "提交视频";
   return "继续创作";
 }
@@ -155,6 +155,9 @@ function summaryLine(projection: CreatorDeskProjection) {
 
 function itemLabel(item: CreatorReviewTrayItem) {
   const shotLabel = item.shotId ? `镜头 ${formatShotNumber(item.shotId)}` : "";
+  if (item.referenceKind === "storyboard_reference") {
+    return shotLabel ? `${shotLabel} · 故事板参考 · ${reviewLabels[item.status]}` : `故事板参考 · ${reviewLabels[item.status]}`;
+  }
   if (item.assetId) return `${item.label}`;
   return shotLabel ? `${shotLabel} · ${reviewLabels[item.status]}` : reviewLabels[item.status];
 }
@@ -186,6 +189,7 @@ function itemDetail(item: CreatorReviewTrayItem) {
 }
 
 function defaultLockTarget(item: CreatorReviewTrayItem): CreatorReviewLockTarget {
+  if (item.referenceKind === "storyboard_reference") return "shot_reference";
   if (item.assetType === "character" || item.assetType === "scene" || item.assetType === "prop") return item.assetType;
   return "shot_reference";
 }
@@ -196,9 +200,21 @@ function hasReviewEvidence(item: CreatorReviewTrayItem) {
 
 function reviewPromptSummary(item: CreatorReviewTrayItem) {
   if (item.promptText) return item.promptText;
-  if (item.promptPath) return `生成说明文件：${item.promptPath}`;
-  if (item.promptHash) return `生成说明指纹：${item.promptHash}`;
-  return "这张参考图还没有带回生成说明。";
+  if (item.promptPath || item.promptHash) return "有生成说明，可展开查看。";
+  return "还没有生成说明。";
+}
+
+function reviewShortcutPriority(item: CreatorReviewTrayItem) {
+  const storyboard = item.referenceKind === "storyboard_reference" ? 0 : 4;
+  const status = item.status === "needs_review"
+    ? 0
+    : item.status === "missing"
+      ? 1
+      : item.status === "retry"
+        ? 2
+        : 3;
+  const evidence = hasReviewEvidence(item) ? 0 : 1;
+  return storyboard + status + evidence;
 }
 
 export function CreatorDeskPanels({
@@ -237,13 +253,18 @@ export function CreatorDeskPanels({
       if (item.status === "missing" || item.status === "retry") return Boolean(item.shotId && (onRetryItem || onRetryMissing));
       return false;
     })
-    .slice(0, 3);
+    .sort((left, right) => {
+      const priority = reviewShortcutPriority(left) - reviewShortcutPriority(right);
+      if (priority !== 0) return priority;
+      return itemLabel(left).localeCompare(itemLabel(right), "zh-Hans-CN");
+    })
+    .slice(0, 6);
   return (
     <section className="creator-desk-panels compact" aria-label="待处理">
       <div className="creator-desk-summary">
         <div>
           <span>待处理</span>
-          <strong>{actionableCount ? `${actionableCount} 个任务` : "可以继续创作"}</strong>
+          <strong>{actionableCount ? `${actionableCount} 项` : "可以继续"}</strong>
           <small>{summaryLine(projection)}</small>
         </div>
         {batchGeneration.canRetryMissing ? (
@@ -257,8 +278,12 @@ export function CreatorDeskPanels({
       </div>
 
       {reviewShortcutItems.length > 0 && (
-        <div className="creator-review-shortcuts" aria-label="待复核快捷入口">
-          <span>待处理</span>
+        <details className="creator-review-shortcuts" aria-label="待复核快捷入口">
+          <summary>
+            <span>优先查看</span>
+            <strong>{reviewShortcutItems.length} 项</strong>
+            <small>{actionableCount > reviewShortcutItems.length ? `还有 ${actionableCount - reviewShortcutItems.length} 项在列表里` : "点开处理"}</small>
+          </summary>
           <div>
             {reviewShortcutItems.map((item) => {
               const canApprove = item.status === "needs_review" && hasReviewEvidence(item) && Boolean(onApproveItem);
@@ -287,7 +312,7 @@ export function CreatorDeskPanels({
                       </button>
                     )}
                     {canRetry && (
-                      <button onClick={() => item.status === "needs_review" ? onRetryItem?.(item) : (onRetryItem?.(item) || onRetryMissing?.())}>
+                      <button onClick={() => item.status === "needs_review" ? onRetryItem?.(item) : (onRetryMissing?.() || onRetryItem?.(item))}>
                         <RefreshCw size={13} />
                         重试
                       </button>
@@ -295,14 +320,14 @@ export function CreatorDeskPanels({
                     {canLock && (
                       <button onClick={() => onLockItem?.(item, defaultLockTarget(item))}>
                         <LockKeyhole size={13} />
-                        通过并锁定
+                          通过并锁定
                       </button>
                     )}
                     {hasReviewEvidence(item) && (
                       <details className="review-prompt-popover">
                         <summary>
                           <Eye size={13} />
-                          查看生成说明
+                          查看说明
                         </summary>
                         <small>{reviewPromptSummary(item)}</small>
                       </details>
@@ -312,15 +337,15 @@ export function CreatorDeskPanels({
               );
             })}
           </div>
-        </div>
+        </details>
       )}
 
       <details className="creator-desk-details">
-        <summary>查看详情</summary>
+        <summary>更多状态</summary>
         <div className="creator-desk-detail-grid">
           <div className="creator-desk-panel script-planner-panel">
             <div className="creator-panel-head">
-              <span>故事计划</span>
+              <span>故事</span>
               <strong>{plannerStatusLabel(scriptPlanner.draftStatus)}</strong>
             </div>
             <p>{plannerBrief(scriptPlanner)}</p>
@@ -341,14 +366,14 @@ export function CreatorDeskPanels({
 
           <div className="creator-desk-panel batch-generation-panel">
             <div className="creator-panel-head">
-              <span>画面准备</span>
+              <span>画面</span>
               <strong>{reviewStatusLabel(batchGeneration.statusLabel)}</strong>
             </div>
             <p>{batchDetail(batchGeneration)}</p>
             <div className="creator-panel-metrics">
-              <span><b>{batchGeneration.plannedCount}</b> 计划画面</span>
-              <span><b>{batchGeneration.readyCount}</b> 待复核</span>
-              <span><b>{batchGeneration.missingCount}</b> 待补齐</span>
+              <span><b>{batchGeneration.plannedCount}</b> 计划</span>
+              <span><b>{batchGeneration.readyCount}</b> 待看</span>
+              <span><b>{batchGeneration.missingCount}</b> 待补</span>
             </div>
             <div className="batch-generation-actions">
               <small>{concurrencyLabel(batchGeneration.concurrencyLabel)}</small>
@@ -362,7 +387,7 @@ export function CreatorDeskPanels({
 
           <div className="creator-desk-panel frame-plan-panel">
             <div className="creator-panel-head">
-              <span>画面顺序</span>
+              <span>镜头画面</span>
               <strong>{framePlan.readyCount ? `${framePlan.readyCount} 已通过` : "画面到视频"}</strong>
             </div>
             <p>{framePlanBrief(framePlan)}</p>
@@ -372,15 +397,15 @@ export function CreatorDeskPanels({
                   <span>镜头 {formatShotNumber(item.shotId)}</span>
                   <small title={item.title}>{item.title}</small>
                   <div>
-                    <b className={item.startStatus}>镜头参考 {frameStatusLabel(item.startStatus)}</b>
-                    {item.requiresEndFrame && <b className={item.endStatus}>特殊尾帧 {frameStatusLabel(item.endStatus)}</b>}
+                    <b className={item.startStatus}>画面 {frameStatusLabel(item.startStatus)}</b>
+                    {item.requiresEndFrame && <b className={item.endStatus}>特殊结束画面 {frameStatusLabel(item.endStatus)}</b>}
                   </div>
                   <em>{item.nextAction}</em>
                 </div>
               )) : (
                 <div className="review-tray-empty">
                   <span>还没有分镜</span>
-                  <small>确认草案后再准备画面。</small>
+                  <small>确认后再准备画面。</small>
                 </div>
               )}
             </div>
@@ -418,7 +443,7 @@ export function CreatorDeskPanels({
           <div className="creator-desk-panel review-tray-panel">
             <div className="creator-panel-head">
               <span>复核列表</span>
-              <strong>{reviewTray.counts.needs_review + reviewTray.counts.missing} 待处理</strong>
+              <strong>{pendingCount(reviewTray)} 项</strong>
             </div>
             <div className="review-tray-counts">
               {(["needs_review", "missing", "retry", "approved", "locked"] as const).map((status) => (
@@ -451,7 +476,7 @@ export function CreatorDeskPanels({
                         || !item.shotId
                         || (!onRetryItem && !onRetryMissing)
                       }
-                      onClick={() => item.status === "needs_review" ? onRetryItem?.(item) : (onRetryItem?.(item) || onRetryMissing?.())}
+                      onClick={() => item.status === "needs_review" ? onRetryItem?.(item) : (onRetryMissing?.() || onRetryItem?.(item))}
                     >
                       <RefreshCw size={13} />
                       重试
@@ -480,7 +505,7 @@ export function CreatorDeskPanels({
                     <details className="review-prompt-popover">
                       <summary>
                         <Eye size={13} />
-                        查看生成说明
+                        查看说明
                       </summary>
                       <small>{reviewPromptSummary(item)}</small>
                     </details>

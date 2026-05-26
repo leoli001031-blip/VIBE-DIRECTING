@@ -79,8 +79,8 @@ function previewVideoStageCopy(item?: DisplayItem) {
   const video = item?.videoGeneration;
   if (!previewVideoStatusVisible(item) || !video) {
     return {
-      label: "素材待补齐",
-      detail: "镜头参考或视频还没有回到预览。",
+      label: "还缺素材",
+      detail: "画面或视频还没回来。",
     };
   }
   return {
@@ -92,8 +92,8 @@ function previewVideoStageCopy(item?: DisplayItem) {
 export function MinimalPreview({
   previewExport,
   currentProjectPreviewItems,
-  emptyStateLabel = "预览还没有可播放素材",
-  emptyStateDetail = "等待故事流和素材同步后，这里会自动显示可播放画面。",
+  emptyStateLabel = "还没有可播放内容",
+  emptyStateDetail = "故事和参考准备好后，这里会自动显示。",
   sections,
   shots,
   selectedShotId,
@@ -238,7 +238,7 @@ export function MinimalPreview({
   const missingCopy = previewVideoStageCopy(activeItem);
   const missingDiv = (
     <div className="preview-stage-card missing_placeholder">
-      {missingCopy.label === "素材待补齐" ? <b>素材待补齐</b> : <b>{missingCopy.label}</b>}
+      {missingCopy.label === "还缺素材" ? <b>还缺素材</b> : <b>{missingCopy.label}</b>}
       <em>{missingCopy.detail}</em>
     </div>
   );

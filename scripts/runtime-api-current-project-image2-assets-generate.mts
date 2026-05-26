@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { IMAGE2_GENERATE_DEFAULT_ASPECT_RATIO, IMAGE2_GENERATE_DEFAULT_SIZE } from "../src/core/providerPolicy.ts";
 import {
   isParentObjectReference,
@@ -14,6 +16,7 @@ import { fetchImageBytesFromProvider, image2ProviderTimeoutMs } from "./runtime-
 
 const CONFIRM_PHRASE = "generate-image2-assets";
 const MOCK_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=", "base64");
+const ASSET_GENERATION_TYPES = new Set(["character", "scene", "prop", "storyboard"]);
 
 function isRecord(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -61,7 +64,7 @@ function providerConfigFor(statuses, providerId) {
   return (Array.isArray(statuses) ? statuses : []).find((item) => item?.providerId === providerId);
 }
 
-async function fetchAssetImageFromProvider({ providerId, apiKey, providerConfig, prompt }) {
+async function fetchAssetImageFromProvider({ providerId, apiKey, providerConfig, prompt, referenceImages = [] }) {
   if (providerId === APIKEY_FUN_RESPONSES_IMAGE_PROVIDER_ID) {
     const result = await fetchApikeyFunImageViaResponses({
       apiKey,
@@ -71,6 +74,7 @@ async function fetchAssetImageFromProvider({ providerId, apiKey, providerConfig,
       size: IMAGE2_GENERATE_DEFAULT_SIZE,
       quality: "low", // intentional default to keep generation cost predictable; size and aspect ratio come from providerPolicy
       stream: true,
+      referenceImages,
       timeoutMs: image2AssetProviderTimeoutMs(),
     });
     if (!result.ok) {
@@ -142,7 +146,7 @@ function assetGenerateRequestInput(url, body) {
     ? body.selectedShotIds
     : selectedShotId ? [selectedShotId] : []);
   const assetTypes = uniqueStrings(Array.isArray(body?.assetTypes) ? body.assetTypes : [])
-    .filter((type) => type === "character" || type === "scene" || type === "prop");
+    .filter((type) => ASSET_GENERATION_TYPES.has(type));
   const mockProviderResult = normalizeMockProviderResult(body?.mockProviderResult === undefined && body?.submitMode === "mock" ? true : body?.mockProviderResult);
   return {
     scope: body?.scope === "project" ? "project" : "selected_shots",
@@ -175,9 +179,14 @@ function rawShotById(storyFlow, shotId) {
 
 function rawProjectShotById(projectFacts, shotId) {
   if (!shotId) return undefined;
-  return rawShotById(projectFacts?.storyFlow, shotId)
+  return rawShotById({ shots: Array.isArray(projectFacts?.projectVibe?.shots) ? projectFacts.projectVibe.shots : [] }, shotId)
+    || rawShotById(projectFacts?.storyFlow, shotId)
     || rawShotById({ shots: Array.isArray(projectFacts?.shots) ? projectFacts.shots : [] }, shotId)
-    || rawShotById({ shots: Array.isArray(projectFacts?.projectVibe?.shots) ? projectFacts.projectVibe.shots : [] }, shotId);
+}
+
+function asPositiveNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function projectCharacterIdentityKeys(workbenchFacts, projectFacts) {
@@ -288,6 +297,17 @@ function selectedShotFacts(workbenchFacts, projectFacts, selectedShotId) {
     characterDetailIds: propBuckets.characterConstraints,
     shotDetailIds: propBuckets.shotDetails,
     ignoredDetailIds: propBuckets.ignoredDetails,
+    referenceStrategy: asString(rawShot?.referenceStrategy) || asString(selected?.referenceStrategy),
+    visibleClips: asPositiveNumber(rawShot?.visibleClips) || asPositiveNumber(selected?.visibleClips),
+    storyboardPanels: asPositiveNumber(rawShot?.storyboardPanels) || asPositiveNumber(selected?.storyboardPanels),
+    durationSeconds: asPositiveNumber(rawShot?.durationSeconds) || asPositiveNumber(rawShot?.duration) || asPositiveNumber(selected?.durationSeconds),
+    camera: asString(rawShot?.camera) || asString(selected?.camera),
+    splitPolicy: asString(rawShot?.splitPolicy) || asString(selected?.splitPolicy),
+    executionMode: asString(rawShot?.executionMode) || asString(selected?.executionMode),
+    actionBeats: textArray(rawShot?.actionBeats),
+    primaryAction: asString(rawShot?.primaryAction),
+    actionTrigger: asString(rawShot?.actionTrigger),
+    microReaction: asString(rawShot?.microReaction),
   };
 }
 
@@ -375,6 +395,21 @@ function assetMatchesShot(asset, selected) {
   return false;
 }
 
+function isStoryboardAssetRecord(asset) {
+  const text = [asset?.id, asset?.name, asset?.displayName, asset?.path, asset?.mainReferencePath, ...(asset?.textConstraints || [])]
+    .join(" ")
+    .toLowerCase();
+  return /storyboard|分镜/.test(text);
+}
+
+function assetReferencePath(asset) {
+  return asString(asset?.mainReferencePath) || asString(asset?.path) || asString(asset?.referencePath);
+}
+
+function assetAlreadyBoundToShot(asset, selected) {
+  return Array.isArray(asset?.usedByShotIds) && asset.usedByShotIds.includes(selected.shotId);
+}
+
 function normalizeSceneText(value) {
   return String(value || "")
     .toLowerCase()
@@ -450,14 +485,31 @@ function assetSpecsForShot(workbenchFacts, selected, assetTypes) {
   const assets = Array.isArray(workbenchFacts?.visualMemory?.assets) ? workbenchFacts.visualMemory.assets : [];
   const specs = [];
   const includeType = (type) => assetTypes.includes(type);
+  const covered = new Set();
+  let sceneCovered = false;
   for (const asset of assets) {
-    if (!includeType(asset.type) || asset.status === "locked") continue;
+    if (isStoryboardAssetRecord(asset)) continue;
+    if (!includeType(asset.type)) continue;
     if (!assetMatchesShot(asset, selected)) continue;
+    if (asset.status === "locked") {
+      covered.add(`${asset.type}:${asset.id}`);
+      if (asset.type === "scene") sceneCovered = true;
+      continue;
+    }
+    const existingPath = assetReferencePath(asset);
+    if (existingPath && assetAlreadyBoundToShot(asset, selected)) {
+      covered.add(`${asset.type}:${asset.id}`);
+      if (asset.type === "scene") sceneCovered = true;
+      continue;
+    }
     specs.push({
       id: asset.id,
       type: asset.type,
       name: asset.name || displayNameForId(asset.id, asset.type),
-      existingPath: asset.path,
+      existingPath,
+      existingOutputSha256: asset.outputHash || asset.outputSha256 || asset.generatedBy?.outputSha256,
+      existingProviderObservationPath: asset.providerObservationPath || asset.generatedBy?.providerObservationPath,
+      existingSemanticQaPath: asset.semanticQaPath || asset.generatedBy?.semanticQaPath,
       textConstraints: uniqueStrings([
         ...(Array.isArray(asset.textConstraints) ? asset.textConstraints : []),
         ...(asset.type === "scene" ? (selected.sceneDetailIds || []) : []),
@@ -468,7 +520,7 @@ function assetSpecsForShot(workbenchFacts, selected, assetTypes) {
       storyContexts: [selected.storyFunction],
     });
   }
-  const seen = new Set(specs.map((spec) => `${spec.type}:${spec.id}`));
+  const seen = new Set([...covered, ...specs.map((spec) => `${spec.type}:${spec.id}`)]);
   const addMissing = (type, id) => {
     if (!id || !includeType(type) || seen.has(`${type}:${id}`)) return;
     seen.add(`${type}:${id}`);
@@ -485,7 +537,7 @@ function assetSpecsForShot(workbenchFacts, selected, assetTypes) {
     });
   };
   for (const id of selected.roleIds) addMissing("character", id);
-  if (selected.sceneId && includeType("scene") && !specs.some((spec) => spec.type === "scene")) {
+  if (selected.sceneId && includeType("scene") && !sceneCovered && !specs.some((spec) => spec.type === "scene")) {
     const cluster = canonicalSceneCluster(selected);
     if (!seen.has(`scene:${cluster.id}`)) {
       seen.add(`scene:${cluster.id}`);
@@ -525,6 +577,86 @@ function assetSpecsForShots(workbenchFacts, selectedShots, assetTypes) {
     }
   }
   return removeCrossTypeDuplicateSpecs([...byKey.values()]);
+}
+
+function storyboardReferenceExists(workbenchFacts, selected) {
+  const assets = Array.isArray(workbenchFacts?.visualMemory?.assets) ? workbenchFacts.visualMemory.assets : [];
+  return assets.some((asset) => {
+    const text = [asset?.id, asset?.name, asset?.displayName, asset?.path, asset?.mainReferencePath, ...(asset?.textConstraints || [])]
+      .join(" ")
+      .toLowerCase();
+    if (!/storyboard|分镜/.test(text)) return false;
+    if (Array.isArray(asset?.usedByShotIds) && asset.usedByShotIds.includes(selected.shotId)) return true;
+    return selected.shotId && text.includes(String(selected.shotId).toLowerCase());
+  });
+}
+
+function storyboardPanelCount(selected) {
+  const explicitPanels = Math.floor(selected.storyboardPanels || 0);
+  if (explicitPanels > 0) return Math.min(explicitPanels, 12);
+  const visibleClips = Math.floor(selected.visibleClips || 0);
+  if (visibleClips > 0 && selected.referenceStrategy === "storyboard_narrative") return Math.min(visibleClips, 8);
+  if (visibleClips > 0 && selected.referenceStrategy === "storyboard_rapid_cut") return Math.min(Math.max(visibleClips + 2, 3), 12);
+  if (selected.referenceStrategy === "storyboard_rapid_cut") return 4;
+  return 3;
+}
+
+function shotNeedsStoryboardReference(selected) {
+  const strategy = String(selected.referenceStrategy || "").trim();
+  if (strategy === "omni_reference") return false;
+  if (strategy === "storyboard_narrative" || strategy === "storyboard_rapid_cut") return true;
+  if (selected.storyboardPanels && selected.storyboardPanels > 0) return true;
+  const text = [
+    selected.title,
+    selected.storyFunction,
+    selected.camera,
+    selected.splitPolicy,
+    selected.executionMode,
+    ...(selected.actionBeats || []),
+  ].join(" ");
+  return /故事板|分镜图|快切|切镜|rapid[_\s-]*cut|storyboard/i.test(text);
+}
+
+function storyboardSpecsForShots(workbenchFacts, selectedShots, assetTypes) {
+  if (!assetTypes.includes("storyboard")) return [];
+  return selectedShots.flatMap((selected) => {
+    if (!selected?.shotId || !shotNeedsStoryboardReference(selected)) return [];
+    if (storyboardReferenceExists(workbenchFacts, selected)) return [];
+    const panelCount = storyboardPanelCount(selected);
+    const visibleClips = Math.max(1, Math.floor(selected.visibleClips || (selected.referenceStrategy === "storyboard_rapid_cut" ? 1 : panelCount)));
+    return [{
+      id: `storyboard_reference_${selected.shotId}`,
+      type: "storyboard",
+      name: `${selected.title || selected.shotId} 故事板参考`,
+      textConstraints: uniqueStrings([
+        `referenceStrategy:${selected.referenceStrategy || "storyboard_narrative"}`,
+        `visibleClips:${visibleClips}`,
+        `storyboardPanels:${panelCount}`,
+        selected.splitPolicy ? `splitPolicy:${selected.splitPolicy}` : "",
+      ]),
+      usedByShotIds: [selected.shotId],
+      relatedShotTitles: [selected.title],
+      storyContexts: [selected.storyFunction],
+      referenceStrategy: selected.referenceStrategy || "storyboard_narrative",
+      visibleClips,
+      storyboardPanels: panelCount,
+      durationSeconds: selected.durationSeconds,
+      camera: selected.camera,
+      splitPolicy: selected.splitPolicy,
+      executionMode: selected.executionMode,
+      actionBeats: selected.actionBeats || [],
+      primaryAction: selected.primaryAction,
+      actionTrigger: selected.actionTrigger,
+      microReaction: selected.microReaction,
+    }];
+  });
+}
+
+function generationSpecsForShots(workbenchFacts, selectedShots, assetTypes) {
+  return [
+    ...assetSpecsForShots(workbenchFacts, selectedShots, assetTypes),
+    ...storyboardSpecsForShots(workbenchFacts, selectedShots, assetTypes),
+  ];
 }
 
 function contextTextForAsset(spec, selected) {
@@ -606,9 +738,46 @@ function assetPrompt(spec, selected) {
   ].filter(Boolean).join("\n");
 }
 
-function providerPromptAudit(prompt) {
+function storyboardPrompt(spec, selected) {
+  const panelCount = Math.max(1, Math.floor(spec.storyboardPanels || storyboardPanelCount(selected)));
+  const visibleClips = Math.max(1, Math.floor(spec.visibleClips || selected.visibleClips || 1));
+  const duration = spec.durationSeconds || selected.durationSeconds || 4;
+  const beatLines = uniqueStrings([
+    ...(Array.isArray(spec.actionBeats) ? spec.actionBeats : []),
+    spec.primaryAction,
+    spec.actionTrigger ? `trigger: ${spec.actionTrigger}` : "",
+    spec.microReaction ? `micro reaction: ${spec.microReaction}` : "",
+  ]).slice(0, 8);
+  const referenceStrategy = spec.referenceStrategy || selected.referenceStrategy || "storyboard_narrative";
+  const rapidCutRules = referenceStrategy === "storyboard_rapid_cut"
+    ? [
+      "This is a rapid-cut / action-beat planning board: use multiple small panels to clarify timing, body/object paths, impact beats and camera rhythm.",
+      "If final visibleClips is 1 but storyboardPanels is larger, those panels are internal beat planning for one final clip, not extra final clips.",
+    ].join("\n")
+    : "This is a narrative storyboard: each panel should be a clear visible clip or composition beat.";
+  return [
+    "storyboard_reference_prompt_v3:",
+    "Create a 16:9 rough cinematic storyboard reference sheet for video generation planning.",
+    `Panel count: exactly ${panelCount}. Final visible video clips: exactly ${visibleClips}. Total duration: ${duration}s.`,
+    "Use a clean white sheet with black panel borders. Keep every panel readable at a glance.",
+    "Each panel must show one clear action beat, composition, camera direction, and motion intention.",
+    "Keep the drawing rough: pencil/ink sketch, gesture poses, simple masses, minimal rendering. This is planning, not final illustration.",
+    "Use small panel numbers and optional time ranges in the panel margin only; keep them away from faces, hands, props and silhouettes.",
+    "Do not add decorative UI, logos, watermarks, fake app chrome, production brand marks, or unrelated text.",
+    "If using arrows or motion marks, make them thin hand-drawn production notes and do not cover the main silhouette.",
+    "Use reference images only for identity, scene/weather, and prop shape. Do not collage reference images into the board.",
+    rapidCutRules,
+    `Shot title: ${selected.title || spec.name}.`,
+    `Shot story: ${selected.storyFunction || "按当前镜头意图完成构图和动作。"}。`,
+    selected.camera || spec.camera ? `Camera / lens / movement: ${selected.camera || spec.camera}.` : "",
+    beatLines.length ? `Action beats: ${beatLines.join(" / ")}.` : "",
+    "Style: keep the board suitable for directing Seedance; prioritize staging, timing, motion readability and spatial continuity.",
+  ].filter(Boolean).join("\n");
+}
+
+function providerPromptAudit(prompt, requestPromptVersion = "reference_asset_prompt_v2") {
   return {
-    requestPromptVersion: "reference_asset_prompt_v2",
+    requestPromptVersion,
     requestPromptText: prompt,
     requestPromptSha256: sha256Bytes(Buffer.from(prompt, "utf8")),
   };
@@ -642,8 +811,155 @@ function visualMemoryKeyForType(type) {
   return "props";
 }
 
+function resolveProjectMediaFile(source, value) {
+  const raw = asString(value);
+  if (!raw) return undefined;
+  if (path.isAbsolute(raw)) return raw;
+  const normalized = raw.replace(/\\/g, "/");
+  const rootRelative = String(source?.runRootRelativePath || "").replace(/\\/g, "/");
+  if (rootRelative && (normalized === rootRelative || normalized.startsWith(`${rootRelative}/`))) {
+    return path.resolve(process.cwd(), normalized);
+  }
+  return path.resolve(source?.runRootPath || process.cwd(), normalized);
+}
+
+function flattenVisualMemoryReferences(visualMemory) {
+  if (!isRecord(visualMemory)) return [];
+  const refs = [];
+  for (const [key, type] of [
+    ["roles", "character"],
+    ["characters", "character"],
+    ["scenes", "scene"],
+    ["props", "prop"],
+  ]) {
+    const items = Array.isArray(visualMemory[key]) ? visualMemory[key] : [];
+    items.forEach((item) => refs.push({ ...item, type }));
+  }
+  const genericAssets = Array.isArray(visualMemory.assets) ? visualMemory.assets : [];
+  genericAssets.forEach((item) => {
+    const type = item?.assetType === "character" || item?.type === "character"
+      ? "character"
+      : item?.assetType === "scene" || item?.type === "scene"
+        ? "scene"
+        : "prop";
+    refs.push({ ...item, type });
+  });
+  const entries = Array.isArray(visualMemory.entries) ? visualMemory.entries : [];
+  entries.forEach((item) => {
+    const type = item?.assetType === "character" || item?.type === "character"
+      ? "character"
+      : item?.assetType === "scene" || item?.type === "scene"
+        ? "scene"
+        : "prop";
+    refs.push({ ...item, type });
+  });
+  return refs;
+}
+
+function referenceSortWeight(ref) {
+  if (ref.type === "scene") return 0;
+  if (ref.type === "character") return 1;
+  return 2;
+}
+
+function referenceImagesForStoryboardSpec(visualMemory, spec, source) {
+  const shotIds = new Set(spec.usedByShotIds || []);
+  const refs = flattenVisualMemoryReferences(visualMemory)
+    .filter((ref) => {
+      const status = String(ref?.status || ref?.visualMemoryStatus || ref?.lockedStatus || "").toLowerCase();
+      if (status === "missing" || status === "rejected") return false;
+      const haystack = [ref?.id, ref?.name, ref?.displayName, ref?.type, ref?.assetType, ref?.path, ref?.mainReferencePath].join(" ").toLowerCase();
+      if (/storyboard|分镜/.test(haystack)) return false;
+      const usedByShotIds = Array.isArray(ref?.usedByShotIds) ? ref.usedByShotIds : [];
+      return usedByShotIds.length === 0 || usedByShotIds.some((shotId) => shotIds.has(shotId));
+    })
+    .sort((a, b) => referenceSortWeight(a) - referenceSortWeight(b));
+  const unique = [];
+  const seen = new Set();
+  for (const ref of refs) {
+    const mediaPath = ref?.mainReferencePath || ref?.path || ref?.referencePath;
+    const filePath = resolveProjectMediaFile(source, mediaPath);
+    if (!filePath || seen.has(filePath) || !existsSync(filePath)) continue;
+    seen.add(filePath);
+    try {
+      unique.push({
+        name: asString(ref?.displayName) || asString(ref?.name) || asString(ref?.id) || path.basename(filePath),
+        path: filePath,
+        bytes: readFileSync(filePath),
+      });
+    } catch {
+      // Missing or unreadable local references should not block storyboard generation.
+    }
+    if (unique.length >= 4) break;
+  }
+  return unique;
+}
+
 function updateVisualMemoryAsset(visualMemory, result, selected) {
   const next = isRecord(visualMemory) ? structuredClone(visualMemory) : {};
+  if (result.type === "storyboard") {
+    const list = Array.isArray(next.entries) ? next.entries : [];
+    const legacyList = Array.isArray(next.assets) ? next.assets : [];
+    const usedByShotIds = uniqueStrings(Array.isArray(result.usedByShotIds) ? result.usedByShotIds : [selected.shotId].filter(Boolean));
+    const index = list.findIndex((item) => isRecord(item) && (item.id === result.id || item.assetId === result.id));
+    const legacyIndex = legacyList.findIndex((item) => isRecord(item) && (item.id === result.id || item.assetId === result.id));
+    const updated = {
+      ...(index >= 0 ? list[index] : {}),
+      id: result.id,
+      assetId: result.id,
+      displayName: result.name,
+      name: result.name,
+      assetType: "reference",
+      type: "storyboard_reference",
+      status: "needs_review",
+      visualMemoryStatus: "needs_review",
+      lockedStatus: "needs_review",
+      path: result.path,
+      mainReferencePath: result.path,
+      usedByShotIds,
+      textConstraints: uniqueStrings([
+        "故事板参考：用于构图、动作、切镜节奏，不替代角色和场景设定。",
+        ...(Array.isArray(result.textConstraints) ? result.textConstraints : []),
+      ]),
+      sourceKind: "provider_temp_output",
+      generatedBy: {
+        providerId: result.providerId,
+        providerSlot: "image.storyboard_reference",
+        providerOperation: "image.generate",
+        generatedAt: result.generatedAt,
+        providerObservationPath: result.providerObservationPath,
+        semanticQaPath: result.semanticQaPath,
+        outputSha256: result.outputSha256,
+      },
+      referenceAuthority: {
+        lockedStatus: "needs_review",
+        canUseAsFutureReference: false,
+        updatedAt: result.generatedAt,
+      },
+      roleBinding: {
+        role: "storyboard_reference",
+        useFor: ["composition", "blocking", "camera", "timing"],
+        ignoreFor: ["character_identity", "scene_weather", "prop_design"],
+        priority: 1,
+        conflictRule: "故事板只管构图、动作和节奏；角色、场景、道具身份以对应参考为准。",
+      },
+      updatedAt: result.generatedAt,
+    };
+    if (index >= 0) {
+      list[index] = updated;
+    } else {
+      list.push(updated);
+    }
+    if (legacyIndex >= 0) {
+      legacyList[legacyIndex] = updated;
+    } else {
+      legacyList.push(updated);
+    }
+    next.entries = list;
+    next.assets = legacyList;
+    if (!next.schemaVersion) next.schemaVersion = "current_project_visual_memory_v1";
+    return pruneVisualMemoryCrossTypeDuplicates(next);
+  }
   const key = visualMemoryKeyForType(result.type);
   const list = Array.isArray(next[key]) ? next[key] : [];
   const index = list.findIndex((item) => isRecord(item) && (item.id === result.id || item.roleId === result.id || item.sceneId === result.id));
@@ -662,15 +978,21 @@ function updateVisualMemoryAsset(visualMemory, result, selected) {
     path: result.path,
     mainReferencePath: result.path,
     usedByShotIds,
-    generatedBy: {
-      providerId: result.providerId,
-      providerSlot: "image.reference_asset",
-      providerOperation: "image.generate",
-      generatedAt: result.generatedAt,
-      providerObservationPath: result.providerObservationPath,
-      semanticQaPath: result.semanticQaPath,
-      outputSha256: result.outputSha256,
-    },
+    textConstraints: uniqueStrings([
+      ...(Array.isArray(base.textConstraints) ? base.textConstraints : []),
+      ...(Array.isArray(result.textConstraints) ? result.textConstraints : []),
+    ]),
+    generatedBy: result.reusedExistingReference && isRecord(base.generatedBy)
+      ? base.generatedBy
+      : {
+        providerId: result.providerId,
+        providerSlot: "image.reference_asset",
+        providerOperation: "image.generate",
+        generatedAt: result.generatedAt,
+        providerObservationPath: result.providerObservationPath,
+        semanticQaPath: result.semanticQaPath,
+        outputSha256: result.outputSha256,
+      },
   };
   if (index >= 0) {
     list[index] = updated;
@@ -719,13 +1041,13 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
       && confirmation.phrase === CONFIRM_PHRASE
       && Boolean(asString(confirmation.receiptId))
       && Boolean(asString(confirmation.confirmedAt));
-    const specs = assetSpecsForShots(workbenchFacts, selectedShots, input.assetTypes);
+    const specs = generationSpecsForShots(workbenchFacts, selectedShots, input.assetTypes);
     const blockers = uniqueStrings([
       selectedShotIds.length ? "" : "项目里还没有可补参考的镜头。",
       providerConfig ? "" : "未找到可用的出图配置。",
       providerConfig?.credential?.keyStatus === "configured" && apiKey ? "" : "请先在设置里保存生成服务 Key。",
       confirmationOk ? "" : "需要在提交前明确确认本次生成参考。",
-      specs.length ? "" : "当前镜头没有需要生成的角色、场景或道具参考。",
+      specs.length ? "" : "当前镜头没有需要生成的参考。",
       workbenchFacts?.visualMemory?.readable === true ? "" : "项目资产文件不可读取。",
     ]);
 
@@ -764,15 +1086,46 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
 
     const results = [];
     let visualMemory = pruneVisualMemoryCrossTypeDuplicates(projectFacts.visualMemory || {});
+    let providerCalled = false;
+    let externalNetworkCallMade = false;
     for (const [index, spec] of specs.entries()) {
       const assetId = safePathSegment(spec.id);
       const selected = selectedShots.find((shot) => Array.isArray(spec.usedByShotIds) && spec.usedByShotIds.includes(shot.shotId)) || primarySelected;
-      const outputPath = `${source.runRootRelativePath}/assets/generated/${spec.type}_${assetId}.png`;
-      const providerObservationPath = `${source.runRootRelativePath}/provider_observations/assets/${spec.type}_${assetId}.json`;
-      const rawSsePath = `${source.runRootRelativePath}/provider_observations/assets/${spec.type}_${assetId}.sse.txt`;
-      const semanticQaPath = `${source.runRootRelativePath}/semantic_qa/assets/${spec.type}_${assetId}.json`;
-      const prompt = assetPrompt(spec, selected);
-      const promptAudit = providerPromptAudit(prompt);
+      const slot = spec.type === "storyboard" ? "storyboard" : spec.type;
+      const providerSlot = spec.type === "storyboard" ? "image.storyboard_reference" : "image.reference_asset";
+      const outputPath = `${source.runRootRelativePath}/assets/generated/${slot}_${assetId}.png`;
+      const providerObservationPath = `${source.runRootRelativePath}/provider_observations/assets/${slot}_${assetId}.json`;
+      const rawSsePath = `${source.runRootRelativePath}/provider_observations/assets/${slot}_${assetId}.sse.txt`;
+      const semanticQaPath = `${source.runRootRelativePath}/semantic_qa/assets/${slot}_${assetId}.json`;
+      if (spec.existingPath) {
+        const result = {
+          id: spec.id,
+          type: spec.type,
+          name: spec.name,
+          status: "needs_review",
+          path: spec.existingPath,
+          imageUrl: runtimeFileUrl(spec.existingPath),
+          outputFilePath: spec.existingPath,
+          outputSha256: spec.existingOutputSha256,
+          requestPromptSha256: undefined,
+          usedByShotIds: spec.usedByShotIds || [selected.shotId].filter(Boolean),
+          textConstraints: spec.textConstraints || [],
+          providerId: input.providerId,
+          generatedAt,
+          providerObservationPath: spec.existingProviderObservationPath,
+          semanticQaPath: spec.existingSemanticQaPath,
+          reusedExistingReference: true,
+        };
+        results.push(result);
+        visualMemory = updateVisualMemoryAsset(visualMemory, result, selected);
+        writeCurrentProjectRuntimeJson(source.visualMemoryRelativePath, visualMemory, source);
+        continue;
+      }
+      const prompt = spec.type === "storyboard" ? storyboardPrompt(spec, selected) : assetPrompt(spec, selected);
+      const promptAudit = providerPromptAudit(prompt, spec.type === "storyboard" ? "storyboard_reference_prompt_v3" : "reference_asset_prompt_v2");
+      const referenceImages = spec.type === "storyboard" ? referenceImagesForStoryboardSpec(visualMemory, spec, source) : [];
+      providerCalled = true;
+      externalNetworkCallMade = externalNetworkCallMade || !input.mockProviderResult;
       const providerResult = input.mockProviderResult
         ? input.mockProviderResultStatus === "missing"
           ? {
@@ -795,6 +1148,7 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
           apiKey,
           providerConfig,
           prompt,
+          referenceImages,
         });
       const rawSseFilePath = providerResult.rawSseBytes?.length
         ? writeCurrentProjectRuntimeBytes(rawSsePath, providerResult.rawSseBytes, source)
@@ -806,7 +1160,7 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
           generatedAt,
           provider: input.providerId,
           providerId: input.providerId,
-          providerSlot: "image.reference_asset",
+          providerSlot,
           providerOperation: "image.generate",
           baseUrl: providerConfig.baseUrl,
           model: providerConfig.imageModel,
@@ -823,6 +1177,7 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
           actualImage2Triggered: !input.mockProviderResult,
           externalNetworkCallMade: !input.mockProviderResult,
           providerAttemptCount: providerResult.providerAttemptCount || 1,
+          referenceImageCount: referenceImages.length,
           rawCredentialMaterialSeen: false,
           projectVibeWritten: false,
           statusCode: providerResult.statusCode,
@@ -851,6 +1206,7 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
           finalAssessment: { status: "missing", reason: providerResult.message, retryable: true },
           providerCalled: true,
           actualImage2Triggered: !input.mockProviderResult,
+          referenceImageCount: referenceImages.length,
         };
         writeCurrentProjectRuntimeJson(providerObservationPath, providerObservation, source);
         writeCurrentProjectRuntimeJson(semanticQaPath, semanticQa, source);
@@ -861,10 +1217,11 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
           status: "missing",
           path: outputPath,
           providerObservationPath,
-        semanticQaPath,
-        usedByShotIds: spec.usedByShotIds || [selected.shotId].filter(Boolean),
-        message: providerResult.message,
-      });
+          semanticQaPath,
+          usedByShotIds: spec.usedByShotIds || [selected.shotId].filter(Boolean),
+          textConstraints: spec.textConstraints || [],
+          message: providerResult.message,
+        });
         continue;
       }
 
@@ -876,7 +1233,7 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
         providerRequestId: providerResult.providerRequestId,
         provider: input.providerId,
         providerId: input.providerId,
-        providerSlot: "image.reference_asset",
+        providerSlot,
         providerOperation: "image.generate",
         baseUrl: providerConfig.baseUrl,
         model: providerConfig.imageModel,
@@ -895,6 +1252,7 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
         actualImage2Triggered: !input.mockProviderResult,
         externalNetworkCallMade: !input.mockProviderResult,
         providerAttemptCount: providerResult.providerAttemptCount || 1,
+        referenceImageCount: referenceImages.length,
         rawCredentialMaterialSeen: false,
         projectVibeWritten: false,
         providerResponseMetadata: providerResult.providerResponseMetadata,
@@ -923,6 +1281,7 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
         },
         providerCalled: true,
         actualImage2Triggered: !input.mockProviderResult,
+        referenceImageCount: referenceImages.length,
       };
       writeCurrentProjectRuntimeJson(providerObservationPath, providerObservation, source);
       writeCurrentProjectRuntimeJson(semanticQaPath, semanticQa, source);
@@ -937,6 +1296,7 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
         outputSha256,
         requestPromptSha256: promptAudit.requestPromptSha256,
         usedByShotIds: spec.usedByShotIds || [selected.shotId].filter(Boolean),
+        textConstraints: spec.textConstraints || [],
         providerId: input.providerId,
         generatedAt,
         providerObservationPath,
@@ -956,7 +1316,7 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
       ok: successful.length > 0 && missing.length === 0,
       ...runtimePolicy({
         runMode: "current_project_image2_asset_generate",
-        providerCalled: true,
+        providerCalled,
         prepareRan: false,
         projectVibeWritten: false,
         liveSubmitAllowed: false,
@@ -977,9 +1337,9 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
       requestedAspectRatio: IMAGE2_GENERATE_DEFAULT_ASPECT_RATIO,
       generatedAssetCount: successful.length,
       assets: results,
-      providerCalled: true,
-      runtimeProviderSubmitAttempted: !input.mockProviderResult,
-      runtimeExternalNetworkCallMade: !input.mockProviderResult,
+      providerCalled,
+      runtimeProviderSubmitAttempted: providerCalled && !input.mockProviderResult,
+      runtimeExternalNetworkCallMade: externalNetworkCallMade,
       formalPromotionBlocked: true,
       liveSubmitAllowed: false,
       projectVibeWritten: false,

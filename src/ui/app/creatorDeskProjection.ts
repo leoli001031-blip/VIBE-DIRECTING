@@ -91,7 +91,32 @@ function assetReviewStatus(asset: AssetRecord): CreatorReviewStatus | undefined 
   return undefined;
 }
 
-function assetTypeTitle(type: AssetRecord["type"]) {
+function assetSearchText(asset: AssetRecord) {
+  return [
+    asset.id,
+    asset.name,
+    asset.path,
+    asset.promptText,
+    asset.promptPath,
+    asset.roleBinding?.role,
+    ...(asset.roleBinding?.useFor || []),
+    ...(asset.roleBinding?.ignoreFor || []),
+    ...(asset.textConstraints || []),
+    ...(asset.sourceRefs || []),
+  ].join(" ").toLowerCase();
+}
+
+function isStoryboardReferenceAsset(asset: AssetRecord) {
+  return /storyboard|分镜|故事板/.test(assetSearchText(asset));
+}
+
+function assetReferenceKind(asset: AssetRecord): CreatorReviewTrayItem["referenceKind"] {
+  if (isStoryboardReferenceAsset(asset)) return "storyboard_reference";
+  return "visual_reference";
+}
+
+function assetTypeTitle(type: AssetRecord["type"], referenceKind?: CreatorReviewTrayItem["referenceKind"]) {
+  if (referenceKind === "storyboard_reference") return "故事板参考";
   if (type === "character") return "角色参考";
   if (type === "scene") return "场景参考";
   if (type === "prop") return "道具参考";
@@ -99,26 +124,36 @@ function assetTypeTitle(type: AssetRecord["type"]) {
   return "参考图";
 }
 
-function assetReviewDetail(asset: AssetRecord, status: CreatorReviewStatus) {
+function assetReviewDetail(asset: AssetRecord, status: CreatorReviewStatus, referenceKind?: CreatorReviewTrayItem["referenceKind"]) {
   const firstConstraint = clean(asset.textConstraints?.[0]);
   const firstIssue = clean(asset.issues?.[0]);
-  if (status === "locked") return `${assetTypeTitle(asset.type)}已锁定，可继续用于后续镜头。`;
-  if (status === "missing") return `${assetTypeTitle(asset.type)}还没有可复核画面。`;
-  return firstConstraint || firstIssue || `${assetTypeTitle(asset.type)}已生成，等待你确认是否可作为后续参考。`;
+  const title = assetTypeTitle(asset.type, referenceKind);
+  if (referenceKind === "storyboard_reference") {
+    if (status === "locked") return "故事板参考已锁定，会用于这个镜头的构图、动作和切镜节奏。";
+    if (status === "missing") return "这个镜头还缺故事板参考。";
+    return firstConstraint || firstIssue || "故事板参考已生成，请确认它是否适合作为构图、动作和切镜节奏。";
+  }
+  if (status === "locked") return `${title}已锁定，可继续用于后续镜头。`;
+  if (status === "missing") return `${title}还没有可复核画面。`;
+  return firstConstraint || firstIssue || `${title}已生成，等待你确认是否可作为后续参考。`;
 }
 
 function assetReviewItem(asset: AssetRecord): CreatorReviewTrayItem | undefined {
   const status = assetReviewStatus(asset);
   if (!status) return undefined;
   const usedByShotIds = unique(asset.usedByShotIds || []);
+  const referenceKind = assetReferenceKind(asset);
+  const reviewAssetType = referenceKind === "storyboard_reference" ? "shot_reference" : asset.type;
+  const title = assetTypeTitle(asset.type, referenceKind);
   return {
     id: `asset_${asset.id}`,
     assetId: asset.id,
-    assetType: asset.type,
+    assetType: reviewAssetType,
+    referenceKind,
     shotId: usedByShotIds[0],
     usedByShotIds,
-    label: `${asset.name} · ${statusTitle(status)}`,
-    detail: assetReviewDetail(asset, status),
+    label: `${asset.name || title} · ${title} · ${statusTitle(status)}`,
+    detail: assetReviewDetail(asset, status, referenceKind),
     status,
     mediaPath: asset.status === "missing" ? undefined : asset.path,
     sourceReceiptId: clean(asset.sourceReceiptId),
@@ -127,6 +162,30 @@ function assetReviewItem(asset: AssetRecord): CreatorReviewTrayItem | undefined 
     promptPath: clean(asset.promptPath),
     promptHash: clean(asset.promptHash),
   };
+}
+
+function reviewItemPriority(item: CreatorReviewTrayItem, selectedShotIds: string[]) {
+  const selected = item.shotId && selectedShotIds.includes(item.shotId) ? 0 : 10;
+  const storyboard = item.referenceKind === "storyboard_reference" ? 0 : 2;
+  const status = item.status === "needs_review"
+    ? 0
+    : item.status === "missing"
+      ? 1
+      : item.status === "retry"
+        ? 2
+        : item.status === "approved"
+          ? 3
+          : 4;
+  const evidence = item.mediaPath ? 0 : 1;
+  return selected + storyboard + status + evidence;
+}
+
+function sortReviewItems(items: CreatorReviewTrayItem[], selectedShotIds: string[]) {
+  return [...items].sort((left, right) => {
+    const priority = reviewItemPriority(left, selectedShotIds) - reviewItemPriority(right, selectedShotIds);
+    if (priority !== 0) return priority;
+    return left.label.localeCompare(right.label, "zh-Hans-CN");
+  });
 }
 
 function frameStatusLabel(status: ShotRecord["status"], hasFrame: boolean, phase: "start" | "end"): CreatorFrameStatus {
@@ -276,9 +335,9 @@ export function buildCreatorDeskProjection({
   ]);
 
   const batch = image2BatchState.summary;
-  const assetReviewItems = runtimeState.visualMemory.assets
+  const assetReviewItems = sortReviewItems(runtimeState.visualMemory.assets
     .map(assetReviewItem)
-    .filter((item): item is CreatorReviewTrayItem => Boolean(item));
+    .filter((item): item is CreatorReviewTrayItem => Boolean(item)), selected);
   const generatedReferenceAssetCount = runtimeState.visualMemory.assets.filter((asset) =>
     asset.status !== "missing" && asset.lockedStatus !== "not_generated",
   ).length;
@@ -330,14 +389,6 @@ export function buildCreatorDeskProjection({
     retry: retryCount || allItems.filter((item) => item.status === "retry").length,
     locked: runtimeState.visualMemory.summary.locked || allItems.filter((item) => item.status === "locked").length,
   };
-  const retryConcurrency = batch?.retrySummary?.retryConcurrency || 2;
-  const activeConcurrency = batch?.retrySummary?.activeConcurrency || batch?.retrySummary?.maxConcurrency || 10;
-  const safetyLabel =
-    batch?.retrySummary?.circuitBreakerStatus === "open"
-      ? "Review before retry"
-      : batch?.retrySummary?.circuitBreakerStatus === "retry_downshift"
-        ? `Retry now ${activeConcurrency}`
-        : `Retry downshifts to ${retryConcurrency}`;
   const frameItems = (selected.length
     ? runtimeState.storyFlow.shots.filter((shot) => selected.includes(shot.id))
     : runtimeState.storyFlow.shots
@@ -346,6 +397,17 @@ export function buildCreatorDeskProjection({
   const frameMissingCount = frameItems.filter((item) => framePlanStatuses(item).includes("missing")).length;
   const frameReadyCount = frameItems.filter((item) => framePlanStatuses(item).every((status) => status === "approved")).length;
   const endpointCount = frameItems.filter((item) => item.requiresEndFrame).length;
+  const needsInitialReferenceGeneration = shotCount > 0
+    && image2BatchState.status !== "running"
+    && (runtimeState.visualMemory.assets.length === 0 || frameMissingCount > 0 || missingReferenceAssetCount > 0);
+  const retryConcurrency = batch?.retrySummary?.retryConcurrency || 2;
+  const activeConcurrency = batch?.retrySummary?.activeConcurrency || batch?.retrySummary?.maxConcurrency || 10;
+  const safetyLabel =
+    batch?.retrySummary?.circuitBreakerStatus === "open"
+      ? "Review before retry"
+      : batch?.retrySummary?.circuitBreakerStatus === "retry_downshift"
+        ? `Retry now ${activeConcurrency}`
+        : `Retry downshifts to ${retryConcurrency}`;
   const videoGeneration = buildCreatorVideoGenerationProjection(previewItems, shotCount);
 
   return {
@@ -382,7 +444,9 @@ export function buildCreatorDeskProjection({
       concurrencyLabel: "Concurrency 10",
       safetyLabel,
       retryLabel: "Retry Missing",
-      canRetryMissing: image2BatchState.status !== "running" && Boolean(batch && (effectiveBlockedCount > 0 || retryCount > 0)),
+      canRetryMissing: image2BatchState.status !== "running" && Boolean(
+        batch && (effectiveBlockedCount > 0 || retryCount > 0) || needsInitialReferenceGeneration,
+      ),
     },
     framePlan: {
       items: frameItems,

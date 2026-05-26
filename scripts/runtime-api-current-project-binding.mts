@@ -127,7 +127,7 @@ export function createRuntimeApiCurrentProjectBinding({
         path.join(runRootPath, "project.vibe"),
         path.join(runRootPath, "project", "project.vibe"),
         path.join(runRootPath, "project", "project.vibe.json"),
-      ], existsSync) || path.join(runRootPath, "project", "project.vibe");
+      ], existsSync) || path.join(runRootPath, "project.vibe");
 
     const reportInput = options.reportPath || (options.ignoreReportEnv ? undefined : (options.projectReportPath || readCurrentProjectReportPathInput()));
     const reportPath = reportInput

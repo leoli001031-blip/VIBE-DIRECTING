@@ -20,6 +20,17 @@ console-*.txt
 console-*.log
 *.log
 
+# Local screenshots / one-off debugging artifacts
+/breakpoint-*
+/vibe-*.png
+/new-story-preview-*.png
+/rainy-neon-project-vibe-localstorage.json
+/image2-real2-request.json
+/network-image2-assets-after-fixed.md
+/main.mjs
+/preload.cjs
+/exited
+
 # Local/generated runtime imports
 .vibe-runtime/current-project.local.json
 fixtures/runtime-audit.json

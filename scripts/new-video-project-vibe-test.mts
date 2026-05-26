@@ -371,6 +371,10 @@ assert(stagedFromStoryboardTable.planner.shots[0]?.durationSeconds === 8, "edite
 assert(stagedFromStoryboardTable.planner.shots[0]?.camera === storyboardTableRows[0].camera, "edited camera language should be preserved");
 assert(stagedFromStoryboardTable.planner.shots[0]?.primaryAction === storyboardTableRows[0].primaryAction, "primary action should be promoted from the table");
 assert(stagedFromStoryboardTable.planner.shots[1]?.executionMode === "action_insert", "execution mode should be promoted from the table");
+assert(stagedFromStoryboardTable.planner.shots[0]?.visibleClips === 1, "narrative storyboard rows should persist one visible clip");
+assert(stagedFromStoryboardTable.planner.shots[0]?.storyboardPanels === 1, "narrative storyboard rows should persist one storyboard panel");
+assert(stagedFromStoryboardTable.planner.shots[1]?.visibleClips === 1, "omni rows should persist one visible clip");
+assert(stagedFromStoryboardTable.planner.shots[1]?.storyboardPanels === 0, "omni rows should not create hidden storyboard panels");
 assert(stagedFromStoryboardTable.planner.shots.every((shot) => shot.videoControlMode === "reference_driven"), "new video storyboard rows should no longer fall back to first-frame mode");
 assert(stagedFromStoryboardTable.planner.shots[1]?.propGuidance?.includes("纸条"), "prop binding text should be preserved on the shot");
 assert(

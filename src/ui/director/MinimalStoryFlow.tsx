@@ -54,7 +54,7 @@ function shotDisplayBrief(shot: ShotRecord) {
     .map((value) => cleanStoryText(value || ""))
     .filter(Boolean)
     .join(" / ");
-  return brief || "先确认镜头意图，再准备镜头参考和视频。";
+  return brief || "先确认镜头，再准备画面和视频。";
 }
 
 export function shotStatusTone(shot: ShotRecord) {
@@ -182,7 +182,7 @@ function currentShotReadiness(shot: ShotRecord, displayReference?: ShotDisplayRe
       label: "参考分工",
       value: referenceReady ? "已分清" : "待确认",
       tone: referenceReady ? "ok" : "warn",
-      detail: "角色、场景、道具各自只管一件事",
+      detail: "角色、场景、道具分开用",
     },
     {
       label: "分镜策略",
@@ -194,7 +194,7 @@ function currentShotReadiness(shot: ShotRecord, displayReference?: ShotDisplayRe
       label: "画面参考",
       value: displayReference?.statusLabel || "待补齐",
       tone: visualTone,
-      detail: "故事板镜头先生成故事板，全能参考镜头直接使用参考包",
+      detail: "按这一镜的方式准备画面",
     },
   ];
 }
@@ -425,7 +425,7 @@ function referenceLabelForType(type?: AssetRecord["type"]) {
   if (type === "scene") return "场景参考";
   if (type === "character") return "角色参考";
   if (type === "prop") return "道具参考";
-  return "镜头参考";
+  return "画面参考";
 }
 
 type ShotReferenceStrategy = "omni_reference" | "storyboard_narrative" | "storyboard_rapid_cut";
@@ -444,9 +444,9 @@ function referenceStrategyLabel(strategy: ShotReferenceStrategy) {
 }
 
 function referenceStrategyDetail(strategy: ShotReferenceStrategy) {
-  if (strategy === "storyboard_narrative") return "先用故事板控制构图和人物关系";
-  if (strategy === "storyboard_rapid_cut") return "先用故事板控制快切和动作节点";
-  return "直接使用角色、场景、道具和文字导演提示";
+  if (strategy === "storyboard_narrative") return "用故事板控制构图和人物关系";
+  if (strategy === "storyboard_rapid_cut") return "用故事板控制快切和动作";
+  return "用角色、场景、道具和文字说明生成";
 }
 
 function shotDisplayReference(shot: ShotRecord, fallbackReference?: AssetRecord, shotStoryboardReference?: AssetRecord) {
@@ -455,7 +455,7 @@ function shotDisplayReference(shot: ShotRecord, fallbackReference?: AssetRecord,
   if (actualStartFrame) {
     return {
       src: actualStartFrame,
-      label: strategy === "omni_reference" ? "镜头参考" : referenceStrategyLabel(strategy),
+      label: strategy === "omni_reference" ? "画面参考" : referenceStrategyLabel(strategy),
       statusLabel: frameStatusLabel(shotFrameStatus(shot, "start")),
       statusTone: shotFrameStatus(shot, "start"),
     };
@@ -488,7 +488,7 @@ function shotDisplayReference(shot: ShotRecord, fallbackReference?: AssetRecord,
   }
   return {
     src: undefined,
-    label: shot.videoControlMode === "text_only_draft" ? "文本计划" : "镜头参考",
+    label: shot.videoControlMode === "text_only_draft" ? "文字计划" : "画面参考",
     statusLabel: "待补齐",
     statusTone: "missing" as const,
   };
@@ -517,7 +517,7 @@ function shotThumbnailReference(shot: ShotRecord, fallbackReference?: AssetRecor
   if (actualStartFrame) {
     return {
       src: actualStartFrame,
-      label: "镜头参考",
+      label: "画面参考",
       statusLabel: frameStatusLabel(shotFrameStatus(shot, "start")),
       statusTone: shotFrameStatus(shot, "start"),
     };
@@ -611,7 +611,7 @@ export function MinimalStoryFlow({
                 镜头 {displayShotNumber(currentShot.id)} {shotDisplayTitle(currentShot, Math.max(currentIndex, 0))}
               </h3>
               {currentStrategy && (
-                <div className="current-shot-strategy-row" aria-label="参考模式">
+                <div className="current-shot-strategy-row" aria-label="生成方式">
                   <b>{referenceStrategyLabel(currentStrategy)}</b>
                   <small>{referenceStrategyDetail(currentStrategy)}</small>
                 </div>
@@ -625,39 +625,39 @@ export function MinimalStoryFlow({
           <div className={`current-frame-pair ${currentRequiresEndFrame ? "" : "single-frame"}`}>
             <figure>
               <figcaption>
-                <span>{currentDisplayReference?.label || "镜头参考"}</span>
+                <span>{currentDisplayReference?.label || "画面参考"}</span>
                 <small className={currentDisplayReference?.statusTone || currentStartStatus}>
                   {currentDisplayReference?.statusLabel || frameStatusLabel(currentStartStatus)}
                 </small>
               </figcaption>
               <MediaFrame
                 src={currentDisplayReference?.src}
-                alt={`${cleanStoryText(currentShot.title) || "当前镜头"} ${currentDisplayReference?.label || "镜头参考"}`}
-                label={currentDisplayReference?.label || "镜头参考"}
+                alt={`${cleanStoryText(currentShot.title) || "当前镜头"} ${currentDisplayReference?.label || "画面参考"}`}
+                label={currentDisplayReference?.label || "画面参考"}
                 className="current-frame-image"
               />
             </figure>
             {currentRequiresEndFrame && (
               <figure>
                 <figcaption>
-                  <span>尾帧参考</span>
+                  <span>结束画面</span>
                   <small className={currentEndStatus}>{frameStatusLabel(currentEndStatus)}</small>
                 </figcaption>
                 <MediaFrame
                   src={currentShot.endFrame}
-                  alt={`${cleanStoryText(currentShot.title) || "当前镜头"} 尾帧参考`}
-                  label="尾帧参考"
+                  alt={`${cleanStoryText(currentShot.title) || "当前镜头"} 结束画面`}
+                  label="结束画面"
                   className="current-frame-image"
                 />
               </figure>
             )}
           </div>
           {currentSubmittedBundle.length > 0 && (
-            <div className="submitted-reference-strip" aria-label="视频提交参考包">
+            <div className="submitted-reference-strip" aria-label="实际会用的参考">
               <div>
-                <small>实际提交参考</small>
+                <small>提交用参考</small>
                 <strong>
-                  {currentReferenceSegment.length > 1 ? `本段 ${currentReferenceSegment.length} 镜头 · 共享参考` : "本镜头参考"}
+                  {currentReferenceSegment.length > 1 ? `本段 ${currentReferenceSegment.length} 镜头共用` : "本镜头使用"}
                 </strong>
               </div>
               {currentSubmittedBundle.map((item) => (
@@ -679,25 +679,25 @@ export function MinimalStoryFlow({
             <span>
               <small>角色参考</small>
               <strong>{referenceUi?.identity.label}</strong>
-              <em>只管身份和外观</em>
+              <em>身份外观</em>
               <i className={`dot ${referenceUi?.identity.tone || "warn"}`} />
             </span>
             <span>
               <small>场景参考</small>
               <strong>{referenceUi?.scene.label}</strong>
-              <em>只管空间和天气</em>
+              <em>空间天气</em>
               <i className={`dot ${referenceUi?.scene.tone || "warn"}`} />
             </span>
             <span>
               <small>道具参考</small>
               <strong>{referenceUi?.prop.label}</strong>
-              <em>只管形状和交互</em>
+              <em>形状交互</em>
               <i className={`dot ${referenceUi?.prop.tone || "warn"}`} />
             </span>
             <span>
               <small>故事板参考</small>
               <strong>{referenceUi?.story.label}</strong>
-              <em>只管构图和动作</em>
+              <em>构图动作</em>
               <i className={`dot ${referenceUi?.story.tone || "warn"}`} />
             </span>
           </div>
@@ -713,7 +713,7 @@ export function MinimalStoryFlow({
         </section>
       ) : (
         <section className="current-shot-workbench empty" aria-label="当前镜头">
-          <div className="minimal-empty-line">确认草案后，当前镜头会显示在这里。</div>
+          <div className="minimal-empty-line">确认后，当前镜头会显示在这里。</div>
         </section>
       )}
       <div className="minimal-shot-grid filmstrip-shot-grid" aria-label="分镜胶片条">

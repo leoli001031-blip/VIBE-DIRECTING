@@ -101,32 +101,32 @@ export function useImage2AssetGenerationAction({
     const liveRuntimeProjectIdentity = runtimeProjectIdentity
       || currentProjectBindingIdentity(await loadCurrentProjectBindingStatus());
     if (!liveRuntimeProjectIdentity) {
-      setActionState({ status: "blocked", message: "未选择项目/未同步。" });
+      setActionState({ status: "blocked", message: "先选择项目。" });
       return;
     }
     const statuses = await loadProviderConfigStatuses();
     setProviderConfigStatuses(statuses);
     const providerId = preferredAssetProviderId(statuses);
     if (!providerId) {
-      setActionState({ status: "blocked", message: "请先在设置里完成生成能力。" });
+      setActionState({ status: "blocked", message: "先去设置里填 Key。" });
       return;
     }
 
     const scopedShotIds = undefined;
     const scopeCopy = "整个项目";
-    if (!confirmAction(`要补齐${scopeCopy}的参考素材吗？\n\n我会先准备角色、场景和关键道具；车灯、手部、雨雾这类细小画面会写进对应说明里，不会单独出图。生成后先放到复核区。`)) {
+    if (!confirmAction(`要为${scopeCopy}准备画面参考吗？\n\n会补角色、场景、关键道具和需要的故事板。细节动作会留在镜头说明里。结果会先进入复核区，不会自动锁定。`)) {
       setActionState({ status: "blocked", message: "已取消，本次没有提交。" });
       return;
     }
 
-    setActionState({ status: "running", message: `正在用 ${assetProviderLabel(providerId)} 准备项目参考；生成后会放到复核区。` });
+    setActionState({ status: "running", message: `正在用 ${assetProviderLabel(providerId)} 准备参考；结果先给你看。` });
     try {
       const submitted = await submitProjectImage2AssetGeneration(liveRuntimeProjectIdentity, {
         scope: "project",
         selectedShotId: undefined,
         selectedShotIds: scopedShotIds,
         providerId,
-        assetTypes: ["character", "scene", "prop"],
+        assetTypes: ["character", "scene", "prop", "storyboard"],
         confirmation: {
           receiptId: `image2_asset_ui_${Date.now()}`,
           confirmedAt: new Date().toISOString(),

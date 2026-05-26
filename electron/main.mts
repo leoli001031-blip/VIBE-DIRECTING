@@ -184,6 +184,23 @@ function selectionForProjectRoot(projectRoot: string, displayName?: string) {
   };
 }
 
+function safeProjectFolderName(displayName?: string) {
+  return (displayName || "新视频项目")
+    .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 48)
+    || "新视频项目";
+}
+
+function uniqueChildProjectRoot(parentRoot: string, displayName?: string) {
+  const baseName = safeProjectFolderName(displayName);
+  const baseCandidate = path.join(parentRoot, baseName);
+  if (!fs.existsSync(baseCandidate)) return baseCandidate;
+  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+  return path.join(parentRoot, `${baseName}-${stamp}`);
+}
+
 async function startRuntimeServer() {
   if (runtimeServer && runtimeApiBaseUrl) return runtimeApiBaseUrl;
   const packagedResourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
@@ -308,7 +325,14 @@ function registerIpcHandlers() {
       return { cancelled: true };
     }
 
-    return selectionForProjectRoot(result.filePaths[0], path.basename(result.filePaths[0]) || input?.displayName || "未命名项目");
+    const selectedRoot = path.resolve(result.filePaths[0]);
+    const resolvedProjectsRoot = path.resolve(projectsRoot);
+    const displayName = input?.displayName?.trim() || path.basename(selectedRoot) || "未命名项目";
+    const projectRoot = selectedRoot === resolvedProjectsRoot
+      ? uniqueChildProjectRoot(resolvedProjectsRoot, displayName)
+      : selectedRoot;
+    fs.mkdirSync(projectRoot, { recursive: true });
+    return selectionForProjectRoot(projectRoot, path.basename(projectRoot) || displayName);
   });
 
   ipcMain.handle("project:remember", async (_event, projectRoot: string) => {

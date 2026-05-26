@@ -35,6 +35,8 @@ export interface StoryboardReferenceProjectPlannerShot {
   camera?: string;
   executionMode?: string;
   referenceStrategy?: DirectorProductionStrategyId;
+  visibleClips?: number;
+  storyboardPanels?: number;
   creativeBrief?: CreativeBrief;
   userPreference?: string;
   rhythmProfile?: DirectorRhythmProfile;

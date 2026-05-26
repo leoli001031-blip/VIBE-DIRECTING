@@ -196,16 +196,16 @@ export function SettingsShell({
     {
       id: "deepseek-v4-pro",
       title: "规划模型",
-      purpose: "负责拆脚本、定节奏、选故事板模式和编译文字提示词；不直接生图或提交视频。",
+      purpose: "负责拆脚本、定节奏、选生成方式；不直接生图或提交视频。",
       config: deepseekConfig,
       credential: credentialForProvider(credentials, "deepseek-v4-pro"),
       saveLabel: "DeepSeek v4 Pro",
-      noKeyNote: "需要真实让 AI 拆分镜时再填。",
+      noKeyNote: "需要 AI 拆分镜时再填。",
     },
     {
       id: "lanyi-image2",
       title: "Image2 生图",
-      purpose: "用于生成角色、场景、道具和故事板参考图。规划模型的 Key 单独配置。",
+      purpose: "用于生成角色、场景、道具和故事板图。",
       config: lanyiConfig,
       credential: credentialForProvider(credentials, "lanyi-image2"),
       saveLabel: "Lanyi Image2",
@@ -214,7 +214,7 @@ export function SettingsShell({
     {
       id: "apikey-fun-gpt55-responses-image",
       title: "备用 GPT-5.5 生图",
-      purpose: "当前用于前端真实出图测试。它走 Responses 流式回图，适合在 Lanyi Image2 不稳定时继续生成参考图。",
+      purpose: "备用生图通道，Image2 不稳定时可以继续出图。",
       config: apikeyFunConfig,
       credential: credentialForProvider(credentials, "apikey-fun-gpt55-responses-image"),
       saveLabel: "Apikey.fun GPT-5.5 Images",
@@ -223,7 +223,7 @@ export function SettingsShell({
     {
       id: "tavily-search",
       title: "联网查资料",
-      purpose: "给 Agent 做风格、导演方法、资料检索。不开启联网时可以先用本地演示。",
+      purpose: "给 AI 查风格、导演方法和背景资料。",
       config: tavilyConfig,
       credential: credentialForProvider(credentials, "tavily-search"),
       saveLabel: "Tavily Search",
@@ -232,7 +232,7 @@ export function SettingsShell({
     {
       id: "cloud-tts",
       title: "云端配音",
-      purpose: "给后续云端 TTS 或声音克隆预留。本地 IndexTTS / Qwen3 TTS 不需要 API Key。",
+      purpose: "给后续云端配音或声音克隆预留。本地配音不需要 Key。",
       config: cloudTtsConfig,
       credential: credentialForProvider(credentials, "cloud-tts"),
       saveLabel: "Cloud TTS",
@@ -241,7 +241,7 @@ export function SettingsShell({
     {
       id: "jimeng-video",
       title: "视频生成",
-      purpose: "Seedance / 即梦走 CLI 登录态，不在这里填 API Key。生成前仍然需要你确认任务。",
+      purpose: "Seedance / 即梦走本机登录。提交前仍会确认。",
       config: undefined,
       credential: undefined,
       saveLabel: "",
@@ -260,12 +260,12 @@ export function SettingsShell({
     return Boolean(localCredential?.hasKey || keyStatus === "configured" || keyStatus === "not_required");
   }).length;
   const quickImageStatus = imageProviders.length
-    ? `${imageProviders.length} 个图片服务 · ${configuredImageProviderCount} 个已配置`
+    ? `${configuredImageProviderCount}/${imageProviders.length} 已配置`
     : "还没有图片服务";
   const quickVideoStatus = videoProviders.length
-    ? `${videoProviders.length} 个视频通道 · 默认需要手动确认`
+    ? `${videoProviders.length} 个通道 · 提交前确认`
     : "还没有视频通道";
-  const quickVoiceStatus = `${voiceSources.length} 个音频参考 · ${voiceAudioSettingsSummary.noBgmPolicy ? "默认不加背景音乐" : "背景音乐未关闭"}`;
+  const quickVoiceStatus = `${voiceSources.length} 个音频参考 · ${voiceAudioSettingsSummary.noBgmPolicy ? "视频模型不用音乐" : "音乐策略待确认"}`;
   const webSearchStatusLabel = !resolvedWebSearchSettings.enabled
     ? "AI 查资料已关闭"
     : resolvedWebSearchSettings.provider === "tavily_search" && !tavilyReady
@@ -303,8 +303,8 @@ export function SettingsShell({
         <span>设置</span>
       </div>
       <div className="settings-friendly-intro">
-        <strong>这里只放日常会用到的设置。</strong>
-        <span>项目、生成服务、联网资料和声音开关放在前面；排查项收在高级区域。</span>
+        <strong>常用设置放这里。</strong>
+        <span>高级排查默认收起。</span>
       </div>
       <div className="settings-quick-grid">
         <div>
@@ -315,17 +315,17 @@ export function SettingsShell({
         <div>
           <span>图片生成</span>
           <strong>{quickImageStatus}</strong>
-          <small>Image2 / 参考图 / 分镜图都走确认后提交</small>
+          <small>确认后才会生成</small>
         </div>
         <div>
           <span>视频生成</span>
           <strong>{quickVideoStatus}</strong>
-          <small>Seedance / 即梦任务不会自动静默提交</small>
+          <small>不会静默提交</small>
         </div>
         <div>
           <span>声音</span>
           <strong>{quickVoiceStatus}</strong>
-          <small>{ttsProviders.length ? `${ttsProviders.length} 个 TTS 配置` : "TTS 可以稍后再配置"}</small>
+          <small>{ttsProviders.length ? `${ttsProviders.length} 个配音配置` : "配音可以稍后配置"}</small>
         </div>
       </div>
       <div className="settings-user-section">
@@ -334,8 +334,8 @@ export function SettingsShell({
           <div className="settings-readonly-note">
             <strong>{webSearchStatusLabel}</strong>
             <small>
-              {agentWebSearchSourceLabel(resolvedWebSearchSettings)} · 查到的内容只会变成待确认研究卡。
-              {resolvedWebSearchSettings.provider === "tavily_search" && !tavilyReady ? " 先在服务连接里保存 Tavily Key。" : ""}
+              {agentWebSearchSourceLabel(resolvedWebSearchSettings)} · 查到的资料会先等你确认。
+              {resolvedWebSearchSettings.provider === "tavily_search" && !tavilyReady ? " 先保存 Tavily Key。" : ""}
             </small>
           </div>
           <div className="web-search-quick-actions" aria-label="查资料快捷设置">
@@ -360,132 +360,144 @@ export function SettingsShell({
               关闭查资料
             </button>
           </div>
-          <div className="web-search-settings-form">
-            <label>
-              <span>使用查资料</span>
-              <input
-                type="checkbox"
-                checked={resolvedWebSearchSettings.enabled}
-                onChange={(event) => updateWebSearchSettings({ enabled: event.currentTarget.checked })}
-              />
-            </label>
-            <label>
-              <span>资料来源</span>
-              <select
-                value={resolvedWebSearchSettings.provider}
-                onChange={(event) => updateWebSearchSettings({
-                  provider: event.currentTarget.value as AgentWebSearchProvider,
-                  allowNetwork: event.currentTarget.value === "mock" ? false : resolvedWebSearchSettings.allowNetwork,
-                })}
-              >
-                <option value="mock">本地演示</option>
-                <option value="tavily_search">联网资料</option>
-                <option value="searxng_json">本地搜索服务</option>
-                <option value="duckduckgo_instant_answer">公开搜索</option>
-              </select>
-            </label>
-            <label>
-              <span>允许联网</span>
-              <input
-                type="checkbox"
-                disabled={resolvedWebSearchSettings.provider === "mock"}
-                checked={resolvedWebSearchSettings.provider !== "mock" && resolvedWebSearchSettings.allowNetwork}
-                onChange={(event) => updateWebSearchSettings({ allowNetwork: event.currentTarget.checked })}
-              />
-            </label>
-            <label>
-              <span>最多卡片</span>
-              <input
-                type="number"
-                min={1}
-                max={5}
-                value={resolvedWebSearchSettings.maxResults}
-                onChange={(event) => updateWebSearchSettings({ maxResults: Number(event.currentTarget.value) })}
-              />
-            </label>
-          </div>
+          <details className="settings-subdetails">
+            <summary>
+              <span>更多设置</span>
+              <small>来源和数量</small>
+            </summary>
+            <div className="web-search-settings-form">
+              <label>
+                <span>使用查资料</span>
+                <input
+                  type="checkbox"
+                  checked={resolvedWebSearchSettings.enabled}
+                  onChange={(event) => updateWebSearchSettings({ enabled: event.currentTarget.checked })}
+                />
+              </label>
+              <label>
+                <span>资料来源</span>
+                <select
+                  value={resolvedWebSearchSettings.provider}
+                  onChange={(event) => updateWebSearchSettings({
+                    provider: event.currentTarget.value as AgentWebSearchProvider,
+                    allowNetwork: event.currentTarget.value === "mock" ? false : resolvedWebSearchSettings.allowNetwork,
+                  })}
+                >
+                  <option value="mock">本地演示</option>
+                  <option value="tavily_search">联网资料</option>
+                  <option value="searxng_json">本地搜索服务</option>
+                  <option value="duckduckgo_instant_answer">公开搜索</option>
+                </select>
+              </label>
+              <label>
+                <span>允许联网</span>
+                <input
+                  type="checkbox"
+                  disabled={resolvedWebSearchSettings.provider === "mock"}
+                  checked={resolvedWebSearchSettings.provider !== "mock" && resolvedWebSearchSettings.allowNetwork}
+                  onChange={(event) => updateWebSearchSettings({ allowNetwork: event.currentTarget.checked })}
+                />
+              </label>
+              <label>
+                <span>最多卡片</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={5}
+                  value={resolvedWebSearchSettings.maxResults}
+                  onChange={(event) => updateWebSearchSettings({ maxResults: Number(event.currentTarget.value) })}
+                />
+              </label>
+            </div>
+          </details>
         </div>
         <div className="settings-group-title">服务连接</div>
         <div className="settings-list credential-settings-list">
           <div className="settings-readonly-note">
             <strong>{credentialProviderIds.length ? `${credentialProviderIds.length} 个 Key 已保存在本机` : "还没有保存 API Key"}</strong>
-            <small>按用途管理，不再暴露内部 providerId。真实提交前仍然会二次确认。</small>
+            <small>按用途管理。真实提交前仍会确认。</small>
           </div>
-          <div className="service-connection-grid">
-            {serviceConnections.map((service) => {
-              const status = keyStatusForProvider(service.config, service.credential);
-              const keyless = "keyless" in service && service.keyless === true;
-              const badge = keyless ? "不需要 Key" : connectionStatusLabel(status);
-              const credentialProviderId = service.credential?.providerId;
-              const canDelete = Boolean(credentialProviderId && status === "local_settings");
-              const statusTone = status === "not_configured" && !keyless ? "needs-key" : "ready";
-              return (
-                <div key={service.id} className={`service-connection-card ${statusTone}`}>
-                  <div className="service-connection-head">
-                    <strong>{service.title}</strong>
-                    <span>{badge}</span>
+          <details className="settings-subdetails" open={!credentialProviderIds.length}>
+            <summary>
+              <span>管理 Key</span>
+              <small>{credentialProviderIds.length ? "平时不用展开" : "先保存一个 Key"}</small>
+            </summary>
+            <div className="service-connection-grid">
+              {serviceConnections.map((service) => {
+                const status = keyStatusForProvider(service.config, service.credential);
+                const keyless = "keyless" in service && service.keyless === true;
+                const badge = keyless ? "不需要 Key" : connectionStatusLabel(status);
+                const credentialProviderId = service.credential?.providerId;
+                const canDelete = Boolean(credentialProviderId && status === "local_settings");
+                const statusTone = status === "not_configured" && !keyless ? "needs-key" : "ready";
+                return (
+                  <div key={service.id} className={`service-connection-card ${statusTone}`}>
+                    <div className="service-connection-head">
+                      <strong>{service.title}</strong>
+                      <span>{badge}</span>
+                    </div>
+                    <p>{service.purpose}</p>
+                    <small>{providerModelLine(service.config, keyless ? "即梦 / Seedance CLI 登录态" : "等待配置")}</small>
+                    {service.credential ? (
+                      <small>本机已保存：{service.credential.maskedKey} · {service.credential.updatedAt ? new Date(service.credential.updatedAt).toLocaleDateString() : "时间未知"}</small>
+                    ) : (
+                      <small>{service.noKeyNote}</small>
+                    )}
+                    {canDelete && credentialProviderId && (
+                      <button className="credential-delete-btn" onClick={async () => { await handleDeleteCredential(credentialProviderId); }}>
+                        删除这个 Key
+                      </button>
+                    )}
                   </div>
-                  <p>{service.purpose}</p>
-                  <small>{providerModelLine(service.config, keyless ? "即梦 / Seedance CLI 登录态" : "等待配置")}</small>
-                  {service.credential ? (
-                    <small>本机已保存：{service.credential.maskedKey} · {service.credential.updatedAt ? new Date(service.credential.updatedAt).toLocaleDateString() : "unknown"}</small>
-                  ) : (
-                    <small>{service.noKeyNote}</small>
-                  )}
-                  {canDelete && credentialProviderId && (
-                    <button className="credential-delete-btn" onClick={async () => { await handleDeleteCredential(credentialProviderId); }}>
-                      删除这个 Key
-                    </button>
-                  )}
+                );
+              })}
+            </div>
+            <details className="settings-raw-credentials">
+              <summary>查看已保存 Key</summary>
+              {credentialProviderIds.map((pid) => {
+                const entry = credentials[pid];
+              return (
+                <div key={pid}>
+                  <strong>{entry.label || entry.providerId}</strong>
+                  <small>{entry.maskedKey} · {entry.updatedAt ? new Date(entry.updatedAt).toLocaleDateString() : "时间未知"}</small>
+                  <button className="credential-delete-btn" onClick={async () => { await handleDeleteCredential(pid); }}>删除</button>
                 </div>
               );
-            })}
-          </div>
-          <details className="settings-raw-credentials">
-            <summary>查看已保存的原始条目</summary>
-            {credentialProviderIds.map((pid) => {
-              const entry = credentials[pid];
-            return (
-              <div key={pid}>
-                <strong>{entry.label || entry.providerId}</strong>
-                <small>{entry.maskedKey} · updated {entry.updatedAt ? new Date(entry.updatedAt).toLocaleDateString() : "unknown"}</small>
-                <button className="credential-delete-btn" onClick={async () => { await handleDeleteCredential(pid); }}>Delete</button>
-              </div>
-            );
-            })}
-            {!credentialProviderIds.length && (
-              <div>
-                <strong>暂无保存条目</strong>
-                <small>添加 Key 后会在这里显示脱敏记录。</small>
-              </div>
-            )}
+              })}
+              {!credentialProviderIds.length && (
+                <div>
+                  <strong>暂无保存条目</strong>
+                  <small>添加 Key 后会在这里显示脱敏记录。</small>
+                </div>
+              )}
+            </details>
+            <div className="credential-add-form">
+              <strong>添加 Key</strong>
+              <select value={credFormProviderId} onChange={(e) => setCredFormProviderId(e.currentTarget.value)}>
+                <option value="">选择服务</option>
+                {serviceKeyOptions.map((option) => (
+                  <option key={option.providerId} value={option.providerId}>{option.label}</option>
+                ))}
+              </select>
+              <input type="password" placeholder="粘贴 Key" value={credFormApiKey} onChange={(e) => setCredFormApiKey(e.currentTarget.value)} />
+              <button
+                disabled={!credFormProviderId || !credFormApiKey || credFormSaving}
+                onClick={async () => {
+                  if (!credFormProviderId || !credFormApiKey) return;
+                  setCredFormSaving(true);
+                  try {
+                    const label = serviceKeyOptions.find((option) => option.providerId === credFormProviderId)?.label || credFormProviderId;
+                    await handleSaveCredential(credFormProviderId, credFormApiKey, label);
+                    setCredFormApiKey("");
+                    setCredFormProviderId("");
+                  }
+                  finally { setCredFormSaving(false); }
+                }}
+              >
+                {credFormSaving ? "保存中..." : "保存"}
+              </button>
+            </div>
           </details>
-          <div className="credential-add-form">
-            <strong>添加 Key</strong>
-            <select value={credFormProviderId} onChange={(e) => setCredFormProviderId(e.currentTarget.value)}>
-              <option value="">选择服务...</option>
-              {serviceKeyOptions.map((option) => (
-                <option key={option.providerId} value={option.providerId}>{option.label}</option>
-              ))}
-            </select>
-            <input type="password" placeholder="API Key" value={credFormApiKey} onChange={(e) => setCredFormApiKey(e.currentTarget.value)} />
-            <button
-              disabled={!credFormProviderId || !credFormApiKey || credFormSaving}
-              onClick={async () => {
-                if (!credFormProviderId || !credFormApiKey) return;
-                setCredFormSaving(true);
-                try {
-                  const label = serviceKeyOptions.find((option) => option.providerId === credFormProviderId)?.label || credFormProviderId;
-                  await handleSaveCredential(credFormProviderId, credFormApiKey, label);
-                  setCredFormApiKey("");
-                  setCredFormProviderId("");
-                }
-                finally { setCredFormSaving(false); }
-              }}
-            >
-              {credFormSaving ? "保存中..." : "保存"}
-            </button>
-          </div>
         </div>
       </div>
       <details className="settings-advanced">

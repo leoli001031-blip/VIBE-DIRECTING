@@ -50,18 +50,18 @@ function endFrameActionState(result: ProjectImage2EndFrameSubmitResult): Image2E
   if (result.status === "needs_review" || result.uiStatus === "needs_review") {
     return {
       status: "needs_review",
-      message: result.message || "特殊尾帧已生成，先放在复核区。",
+      message: result.message || "特殊结束画面已生成，先放在复核区。",
     };
   }
   if (result.status === "verified" || result.uiStatus === "verified") {
     return {
       status: "verified",
-      message: result.message || "特殊尾帧已生成，先放在复核区。",
+      message: result.message || "特殊结束画面已生成，先放在复核区。",
     };
   }
   return {
     status: "blocked",
-    message: result.message || "特殊尾帧生成未完成，可以稍后重试。",
+    message: result.message || "特殊结束画面还没完成，可以稍后重试。",
   };
 }
 
@@ -79,7 +79,7 @@ export function useImage2EndFrameAction({
 
   const runImage2EndFrame = useCallback(async () => {
     if (!runtimeProjectIdentity) {
-      setActionState({ status: "blocked", message: "未选择项目/未同步。" });
+      setActionState({ status: "blocked", message: "先选择项目。" });
       return;
     }
     if (!selectedShotId) {
@@ -90,16 +90,16 @@ export function useImage2EndFrameAction({
     const statuses = await loadProviderConfigStatuses();
     setProviderConfigStatuses(statuses);
     if (!isEndFrameKeyConfigured(statuses)) {
-      setActionState({ status: "blocked", message: "请先在设置里完成生成能力。" });
+      setActionState({ status: "blocked", message: "先去设置里填 Key。" });
       return;
     }
 
-    if (!confirmAction("要生成特殊尾帧吗？\n\n只适合循环、变身或明确首尾控制。生成后先放到复核区。")) {
+    if (!confirmAction("要生成特殊结束画面吗？\n\n只适合循环、变身或明确首尾控制。结果先给你看。")) {
       setActionState({ status: "blocked", message: "已取消，本次没有提交。" });
       return;
     }
 
-    setActionState({ status: "running", message: "正在生成特殊尾帧；生成后会放到复核区。" });
+    setActionState({ status: "running", message: "正在生成特殊结束画面；结果先给你看。" });
     try {
       const submitted = await submitProjectImage2EndFrame(runtimeProjectIdentity, {
         selectedShotId,
@@ -120,7 +120,7 @@ export function useImage2EndFrameAction({
     } catch (error) {
       setActionState({
         status: "blocked",
-        message: error instanceof Error ? error.message : "特殊尾帧生成失败。",
+        message: error instanceof Error ? error.message : "特殊结束画面生成失败。",
       });
     }
   }, [

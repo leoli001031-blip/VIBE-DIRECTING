@@ -178,7 +178,7 @@ export function MinimalAgentPanel({
   // File objects in React state can cause memory leaks; consider using a ref or blob URL instead
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
-  const [status, setStatus] = useState("等待描述");
+  const [status, setStatus] = useState("等待输入");
   const [planPhase, setPlanPhase] = useState<AgentPlanPhase>("idle");
   const [localPrototypeAgentDemo, setLocalPrototypeAgentDemo] = useState<PrototypeAgentDemoRun | undefined>();
   const [workflow, setWorkflow] = useState<ReturnType<typeof buildDirectorWorkflowState> | undefined>();
@@ -196,19 +196,19 @@ export function MinimalAgentPanel({
   const hasMultiShotSelection = scopedShotIds.length > 1;
   const hasSectionSelection = Boolean(sectionId && !scopedShotIds.length && !asset);
   const selectionHint = hasMultiShotSelection
-    ? `${localScopeLabel} 已绑定。直接说这些镜头哪里不顺，比如节奏太碎、动作太平或场景不连贯。`
+    ? `已选中 ${localScopeLabel}。直接说这些镜头哪里不顺。`
     : shot
-      ? `${localScopeLabel} 已绑定。直接说这一段哪里不对，比如人物不像、动作太平、需要拆特写、场景天气不对。`
+      ? `已选中 ${localScopeLabel}。直接说这一段怎么改。`
       : asset
-        ? `${localScopeLabel} 已绑定。直接说这个素材怎么改，比如只改角色外观、不要影响场景。`
+        ? `已选中 ${localScopeLabel}。直接说这个素材怎么改。`
         : hasSectionSelection
-          ? `${localScopeLabel} 已绑定。直接说这一段故事要怎么改，比如多拆几个镜头、节奏慢一点或补一个反应。`
-          : "可以先说你想拍什么；也可以点一个镜头、段落或素材后，再直接说哪里要改。";
+          ? `已选中 ${localScopeLabel}。直接说这一段故事怎么改。`
+          : "写脚本、提需求，或点一段再说修改。";
   const displayedScopeLabel = workflow ? preparedContext?.scopeLabel || scopeLabel : scopeLabel;
   const displayedSelectionHint = workflow ? preparedContext?.selectionHint || selectionHint : selectionHint;
   const inputPlaceholder = hasBoundSelection
-    ? "说这段想怎么改，例如：递东西别一个中景拍完，先远景再手部特写。"
-    : "先点选一段，或直接说整个项目想怎么改；脚本、图片、音频也可以拖进来。";
+    ? "说这段怎么改..."
+    : "写脚本、提需求，或拖入图片/音频/文档。";
   const prototypeAgentDemo = latestPrototypeAgentDemo || localPrototypeAgentDemo;
   const prototypeAgentProjection = buildPrototypeAgentDemoProjection(prototypeAgentDemo);
   const realSampleBusy = realSampleAction?.status === "running";
@@ -227,7 +227,7 @@ export function MinimalAgentPanel({
   });
   const videoPermissionModeItems: Array<{ mode: AgentVideoPermissionMode; label: string }> = [
     { mode: "plan_only", label: "只规划" },
-    { mode: "reference_allowed", label: "可生成参考" },
+    { mode: "reference_allowed", label: "可做参考" },
     { mode: "video_allowed", label: "可提交视频" },
   ];
   const realSampleLabel = realSampleBusy
@@ -243,7 +243,7 @@ export function MinimalAgentPanel({
       ? "等待复核"
       : endFrameAction?.status === "verified"
         ? "已完成"
-        : "生成尾帧参考";
+        : "生成结束画面";
   const videoActionLabel = videoBusy
     ? "提交中"
     : videoPermissionBlockedByContract
@@ -269,7 +269,7 @@ export function MinimalAgentPanel({
     setPreparedContext(undefined);
     setPlanPhase("idle");
     setLocalPrototypeAgentDemo(undefined);
-    setStatus(value.trim() ? "继续描述" : "等待描述");
+    setStatus(value.trim() ? "继续写" : "等待输入");
   }
 
   function resetPreparedComposerState(nextStatus?: string) {
@@ -297,14 +297,14 @@ export function MinimalAgentPanel({
       })),
     ];
     setAttachments(nextAttachments);
-    resetPreparedComposerState("素材已放入");
+    resetPreparedComposerState("文件已放入");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function removeComposerAttachment(id: string) {
     const nextAttachments = attachments.filter((item) => item.id !== id);
     setAttachments(nextAttachments);
-    resetPreparedComposerState(text.trim() || nextAttachments.length ? "继续描述" : "等待描述");
+    resetPreparedComposerState(text.trim() || nextAttachments.length ? "继续写" : "等待输入");
   }
 
   function handleComposerDrag(event: DragEvent<HTMLElement>, active: boolean) {
@@ -323,16 +323,17 @@ export function MinimalAgentPanel({
   function prepareChange() {
     const userIntent = [text.trim(), attachments.map(attachmentIntentLine).join("\n")].filter(Boolean).join("\n");
     if (!userIntent) {
-      setStatus("先说想改什么，或放入文件");
+      setStatus("先写一句，或拖文件");
       return;
     }
+    const singleSelectedShotId = scopedShotIds.length === 1 ? scopedShotIds[0] : shot?.id;
     const nextVideoPermissionContract = detectAgentVideoPermissionContract(userIntent, activeVideoPermissionContract);
     updateVideoPermissionContract(nextVideoPermissionContract);
     const preparedSelection: PreparedComposerContext = {
       scopeLabel,
       selectionHint,
       userIntent,
-      selectedShotId: scopedShotIds.length <= 1 ? shot?.id : undefined,
+      selectedShotId: scopedShotIds.length <= 1 ? singleSelectedShotId : undefined,
       selectedShotIds: scopedShotIds.length > 1 ? scopedShotIds : undefined,
       selectedAssetId: asset?.id,
       sectionId: !scopedShotIds.length && !asset ? sectionId : undefined,
@@ -368,10 +369,10 @@ export function MinimalAgentPanel({
     setStatus(!agentVideoPermissionAllowsVideo(nextVideoPermissionContract)
       ? agentVideoPermissionLabel(nextVideoPermissionContract)
       : directorFeedbackCanConfirm(nextFeedbackRecompile)
-      ? "待确认重编译"
-      : directorFeedbackNeedsConcreteDirection(nextFeedbackRecompile)
-        ? "需要具体说法"
-        : workflowCanConfirm(nextWorkflow) ? "待确认" : nextProjection.shortLabel);
+        ? "等你确认"
+        : directorFeedbackNeedsConcreteDirection(nextFeedbackRecompile)
+          ? "再说具体一点"
+          : workflowCanConfirm(nextWorkflow) ? "等你确认" : nextProjection.shortLabel);
   }
 
   function revisePlan() {
@@ -383,7 +384,7 @@ export function MinimalAgentPanel({
     setPlanPhase("idle");
     setLocalPrototypeAgentDemo(undefined);
     if (previousIntent) setText(previousIntent);
-    setStatus(previousIntent || text.trim() ? "继续描述" : "等待描述");
+    setStatus(previousIntent || text.trim() ? "继续写" : "等待输入");
   }
 
   async function confirmPlan() {
@@ -400,12 +401,12 @@ export function MinimalAgentPanel({
       : undefined;
     if (confirmed) setProjection(confirmed.projection);
     setPlanPhase("confirmed");
-    setStatus(canConfirmFeedback ? "正在写入修改计划" : canPreviewPrototypeDemo ? "正在整理预览" : "已加入待处理");
+    setStatus(canConfirmFeedback ? "正在保存修改" : canPreviewPrototypeDemo ? "正在整理预览" : "已加入待处理");
     if (confirmed) onProjectStoreApplyPlanReady?.(confirmed.applyPlan);
     if (canConfirmFeedback && feedbackRecompile && onDirectorFeedbackConfirmed) {
       try {
         await onDirectorFeedbackConfirmed(feedbackRecompile);
-        setStatus("修改计划已写入项目");
+        setStatus("修改已保存");
         setLocalPrototypeAgentDemo({
           status: "ready",
           result: {
@@ -417,11 +418,11 @@ export function MinimalAgentPanel({
           },
         });
       } catch {
-        setStatus("需要复核");
+        setStatus("保存失败");
         setLocalPrototypeAgentDemo({
           status: "error",
           result: {
-            label: "修改计划写入失败",
+            label: "修改保存失败",
             projectVibeAdded: false,
             waitingReview: true,
             status: "error",
@@ -447,10 +448,10 @@ export function MinimalAgentPanel({
         generatedAt: workflow.generatedAt,
         applyPlan: confirmed?.applyPlan,
       });
-      setStatus("预览已生成、等待复核");
+      setStatus("预览已生成");
       setLocalPrototypeAgentDemo({ status: "preview_ready", result: { projectVibeAdded: true, waitingReview: true, previewReady: true } });
     } catch {
-      setStatus("需要复核");
+      setStatus("需要检查");
       setLocalPrototypeAgentDemo({ status: "error", result: { projectVibeAdded: true, waitingReview: true } });
     }
   }
@@ -474,8 +475,15 @@ export function MinimalAgentPanel({
   const primaryLabel = !workflow || planPhase === "idle"
     ? "发送"
     : planPhase === "confirmed"
-      ? "已加入"
+      ? feedbackRecompile
+        ? "已写入"
+        : "已确认"
       : "确认修改";
+  const primaryDisabledReason = !hasComposerInput && (!workflow || planPhase === "idle")
+    ? "先写一句，或拖入文件。"
+    : status === "正在整理"
+      ? "正在整理，稍等一下。"
+      : "当前不能发送。";
   const showFooterPrimaryAction = !workflow || planPhase === "idle";
   const badges = feedbackRecompile
     ? [
@@ -485,32 +493,32 @@ export function MinimalAgentPanel({
     : projection ? agentProjectionBadges(projection, planPhase).slice(0, 2) : workflow ? workflowBadgeLabels(workflow).slice(0, 2) : ["待确认", "会先整理"];
   const nextStep = feedbackRecompile
     ? directorFeedbackCanConfirm(feedbackRecompile)
-      ? "确认后写入项目，并重新整理生成参考和视频计划；不会启动生成。"
-      : "这条反馈需要说成具体导演修改，例如角色一致性、动作拆分、场景光线或无配乐。"
+      ? "确认后保存修改，不会生成。"
+      : "再具体一点：改角色、动作、场景、节奏还是声音？"
     : projection ? agentProjectionNextStep(projection, planPhase, canConfirm) : workflow ? workflowPanelNextStepLabel(workflow, planPhase) : "用自然语言描述想调整的镜头、角色或节奏。";
   const feedbackFacts = feedbackRecompile
     ? [
         { label: "修改对象", value: feedbackRecompile.feedbackIntent.targetShotId },
-        { label: "会重编译", value: "生成参考 / 视频计划" },
+        { label: "会更新", value: "参考 / 视频安排" },
         { label: "生成动作", value: directorFeedbackGenerationLabel(feedbackRecompile) },
       ]
     : [];
   const planFacts = feedbackFacts.length
     ? feedbackFacts
     : workflow
-    ? [...workflowPlanFacts(workflow), { label: "作用范围", value: "故事 / 镜头 / 复核记录" }]
+    ? [...workflowPlanFacts(workflow), { label: "范围", value: "故事 / 镜头 / 复核" }]
     : [];
   const agentUnderstanding = feedbackRecompile
     ? directorFeedbackCanConfirm(feedbackRecompile)
-      ? "已整理成结构化导演修改：会更新当前镜头的生成参考和视频计划，确认前不生成。"
-      : "这条反馈暂时不能直接进入计划。请说清楚要改角色、动作、分镜、场景还是声音。"
+      ? "已整理好。确认前不会生成。"
+      : "还不够明确。请说清楚要改角色、动作、分镜、场景还是声音。"
     : preparedContext?.userIntent?.trim()
-    ? `我已把这句话整理成一条待确认改动：${preparedContext.userIntent.trim()}`
+    ? `已整理成待确认修改：${preparedContext.userIntent.trim()}`
     : text.trim()
-    ? `我会把这句话整理成一条可确认的修改：${text.trim()}`
+    ? `我会先整理成可确认修改：${text.trim()}`
     : attachments.length
-      ? `我会先识别这 ${attachments.length} 个文件，把它们整理成脚本、参考图、音频或素材候选。`
-    : "你先说想拍什么，或者点一个镜头/素材后说哪里不对。我会先整理成草案，确认后再写入项目。";
+      ? `我会先识别这 ${attachments.length} 个文件。`
+    : "先说想拍什么，或点一段再提修改。";
   const enabledResearchSuggestion = buildAgentWebResearchSuggestion(text, { ...webSearchSettings, enabled: true });
   const researchSuggestion = webSearchSettings.enabled
     ? enabledResearchSuggestion
@@ -518,22 +526,23 @@ export function MinimalAgentPanel({
       ...enabledResearchSuggestion,
       label: enabledResearchSuggestion.shouldSuggest ? "可先查资料" : "查资料未开启",
       detail: enabledResearchSuggestion.shouldSuggest
-        ? "这类风格或知识点适合先查外部来源；去设置里选择 Tavily 后再查。"
-        : "在设置里开启后，Agent 可以先整理外部来源。",
+        ? "可以先查资料；去设置里开启 Tavily。"
+        : "开启后可先整理外部资料。",
     };
   const showResearchPrompt = Boolean(text.trim() && (enabledResearchSuggestion.shouldSuggest || researchResult || researchStatus !== "idle"));
   const researchBusy = researchStatus === "running";
   const researchLabel = researchStatus === "running"
     ? "正在查找"
     : researchResult
-      ? "来源已整理"
+      ? "资料已整理"
       : researchSuggestion.label;
   const researchDetail = researchResult
-    ? `${researchResult.citations.length} 个来源，先作为研究卡等待确认。`
+    ? `${researchResult.citations.length} 个来源，等你确认后再用。`
     : researchSuggestion.detail;
   const agentNoteLabel = workflow
-    ? planPhase === "confirmed" ? "已确认改动" : "待确认改动"
+    ? planPhase === "confirmed" ? "已确认" : "待确认"
     : "我先帮你整理";
+  const showAgentNote = Boolean(workflow && planPhase !== "confirmed");
 
   async function lookupSources() {
     if (!researchSuggestion.query || researchStatus === "running") return;
@@ -567,11 +576,11 @@ export function MinimalAgentPanel({
   return (
     <aside className="minimal-agent-panel">
       <div className="minimal-agent-head">
-        <span>和 AI 导演聊一聊</span>
+        <span>和 AI 导演说</span>
         <strong>{displayedScopeLabel}</strong>
       </div>
-      <section className="minimal-agent-selection-context" aria-label="当前沟通对象">
-        <span>{hasBoundSelection ? "当前选择" : "沟通方式"}</span>
+      <section className="minimal-agent-selection-context" aria-label="当前选择">
+        <span>{hasBoundSelection ? "当前选择" : "怎么用"}</span>
         <p>{displayedSelectionHint}</p>
       </section>
       <div className="minimal-agent-permission-mode" aria-label="当前生成边界">
@@ -582,23 +591,21 @@ export function MinimalAgentPanel({
         ))}
         <span>{agentVideoPermissionDetail(videoPermissionContractForUi)}</span>
       </div>
-      <section className={`minimal-agent-note ${workflow ? "has-plan" : ""}`} aria-label="AI 导演理解">
-        <span>{agentNoteLabel}</span>
-        <p>{agentUnderstanding}</p>
-        {workflow && (
+      {showAgentNote && (
+        <section className="minimal-agent-note has-plan" aria-label="AI 导演理解">
+          <span>{agentNoteLabel}</span>
+          <p>{agentUnderstanding}</p>
           <div className="minimal-agent-note-actions">
-            <button disabled={primaryDisabled} onClick={handleNext}>
+            <button disabled={primaryDisabled} title={primaryDisabled ? primaryDisabledReason : primaryLabel} onClick={handleNext}>
               <CheckCircle2 size={15} />
               {primaryLabel}
             </button>
-            {planPhase !== "confirmed" && (
-              <button type="button" className="secondary" onClick={revisePlan}>
-                再改一下
-              </button>
-            )}
+            <button type="button" className="secondary" onClick={revisePlan}>
+              再改一下
+            </button>
           </div>
-        )}
-      </section>
+        </section>
+      )}
       {showResearchPrompt && (
         <section className={`minimal-agent-research ${researchStatus}`} aria-label="资料来源">
           <div className="minimal-agent-research-head">
@@ -634,7 +641,7 @@ export function MinimalAgentPanel({
                 onClick={saveReferenceMethod}
               >
                 <CheckCircle2 size={14} />
-                {referenceStatus === "saved" ? "已保存" : referenceStatus === "saving" ? "保存中" : "保存为本片参考"}
+                {referenceStatus === "saved" ? "已保存" : referenceStatus === "saving" ? "保存中" : "保存为参考"}
               </button>
             )}
             {researchResult && <small>{referenceStatus === "saved" ? "后续整理会参考它。" : "采用前会先让你确认。"}</small>}
@@ -664,7 +671,7 @@ export function MinimalAgentPanel({
         {attachments.length > 0 && (
           <div className="minimal-agent-attachments" aria-label="已放入的文件">
             {attachments.map((attachment) => (
-              <span key={attachment.id}>
+              <span key={attachment.id} title={attachment.file.name}>
                 <b>{composerAttachmentLabel(attachment.kind)}</b>
                 <small>{attachment.file.name}</small>
                 <button type="button" onClick={() => removeComposerAttachment(attachment.id)} aria-label={`移除 ${attachment.file.name}`}>
@@ -674,15 +681,29 @@ export function MinimalAgentPanel({
             ))}
           </div>
         )}
-        <textarea value={text} onChange={(event) => updateText(event.target.value)} placeholder={inputPlaceholder} />
+        <textarea
+          value={text}
+          onChange={(event) => updateText(event.target.value)}
+          onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+              event.preventDefault();
+              if (!primaryDisabled) handleNext();
+            }
+          }}
+          placeholder={inputPlaceholder}
+        />
         <div className="minimal-agent-input-footer">
           <button type="button" className="minimal-agent-file-button" onClick={() => fileInputRef.current?.click()}>
             <Plus size={15} aria-hidden="true" />
             添加文件
           </button>
-          <small>{text.trim() ? `${text.trim().length} 字` : attachments.length ? `${attachments.length} 个文件待整理` : hasBoundSelection ? "反馈会落到当前选择" : "直接描述，或把文件拖进来"}</small>
+          <small>{text.trim() ? `${text.trim().length} 字` : attachments.length ? `${attachments.length} 个文件` : hasBoundSelection ? "会改当前选择" : "直接说，或拖文件"}</small>
           {showFooterPrimaryAction && (
-            <button disabled={primaryDisabled} onClick={handleNext}>
+            <button
+              disabled={primaryDisabled}
+              title={primaryDisabled ? primaryDisabledReason : `${primaryLabel}，也可以按 Command Enter`}
+              onClick={handleNext}
+            >
               <Send size={15} />
               {primaryLabel}
             </button>
@@ -701,7 +722,7 @@ export function MinimalAgentPanel({
         )}
       </div>
       <details className="minimal-agent-details">
-        <summary>会影响的内容</summary>
+        <summary>这次会改什么</summary>
         <div className="minimal-agent-badges" aria-label="修改摘要">
           {badges.map((badge) => (
             <small key={badge}>{badge}</small>
@@ -778,9 +799,9 @@ export function MinimalAgentPanel({
         </section>
       )}
       {showEndFrameAction && endFrameAction && (
-        <section className={`agent-real-sample-action ${endFrameAction.status}`} aria-label="当前镜头特殊尾帧参考">
+        <section className={`agent-real-sample-action ${endFrameAction.status}`} aria-label="当前镜头特殊结束画面">
           <div>
-            <span>特殊尾帧</span>
+            <span>特殊结束画面</span>
             <strong>{endFrameLabel}</strong>
             <small>{endFrameAction.message || "只用于循环、变身或明确首尾控制；生成后先放到复核区。"}</small>
           </div>

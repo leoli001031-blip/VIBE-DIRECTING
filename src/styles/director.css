@@ -2598,7 +2598,29 @@
 }
 
 .project-control-recent-list strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
+}
+
+.project-control-recent-list strong span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-control-current-badge {
+  flex: 0 0 auto;
+  border: 1px solid rgba(163, 119, 48, 0.24);
+  border-radius: 999px;
+  background: rgba(163, 119, 48, 0.12);
+  color: var(--studio-accent);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 820;
+  line-height: 1;
+  padding: 3px 6px;
 }
 
 .project-control-recent-list small {
@@ -3523,27 +3545,33 @@
   padding-top: 10px;
 }
 
-.new-video-style-preflight > div:first-child {
+.new-video-style-preflight summary {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr);
   align-items: baseline;
   gap: 8px;
   min-width: 0;
+  cursor: pointer;
+  list-style: none;
 }
 
-.new-video-style-preflight > div:first-child span {
+.new-video-style-preflight summary::-webkit-details-marker {
+  display: none;
+}
+
+.new-video-style-preflight summary span {
   color: var(--studio-soft);
   font-size: 11px;
   font-weight: 850;
 }
 
-.new-video-style-preflight > div:first-child strong {
+.new-video-style-preflight summary strong {
   color: var(--studio-accent);
   font-size: 12px;
   font-weight: 850;
 }
 
-.new-video-style-preflight > div:first-child small,
+.new-video-style-preflight summary small,
 .new-video-style-preflight > small {
   min-width: 0;
   overflow: hidden;
@@ -3551,6 +3579,12 @@
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.new-video-style-preflight-body {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .new-video-style-preflight-summary {
@@ -4392,6 +4426,30 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+}
+
+.asset-next-step-strip {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--studio-line);
+  border-radius: 8px;
+  background: rgba(255, 252, 246, 0.72);
+  padding: 10px 12px;
+}
+
+.asset-next-step-strip span {
+  color: var(--studio-muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.asset-next-step-strip strong {
+  color: var(--studio-ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
 }
 
 .asset-workspace-strip span {
@@ -5779,7 +5837,7 @@
   bottom: 22px;
   left: max(28px, calc((100vw - 980px) / 2));
   z-index: 40;
-  max-height: min(34vh, 260px);
+  max-height: min(42vh, 340px);
 }
 
 .new-video-bottom-portal {
@@ -5796,6 +5854,8 @@
   box-shadow: 0 18px 48px rgba(82, 62, 42, 0.18);
   padding: 12px 14px;
   backdrop-filter: blur(18px);
+  max-height: min(44vh, 360px);
+  overflow: auto;
 }
 
 .director-bottom-composer .minimal-agent-panel,
@@ -5830,6 +5890,10 @@
   padding: 0 4px;
 }
 
+.director-bottom-composer .minimal-agent-permission-mode {
+  display: none;
+}
+
 .director-bottom-composer .minimal-agent-selection-context span {
   flex: 0 0 auto;
 }
@@ -5853,6 +5917,8 @@
 .director-bottom-composer .minimal-agent-input {
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.72);
+  max-height: min(30vh, 232px);
+  overflow: auto;
   padding: 10px 12px;
 }
 
@@ -5902,11 +5968,22 @@
   padding: 10px 12px;
 }
 
+.new-video-bottom-portal .new-video-composer-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: rgba(255, 252, 246, 0.96);
+}
+
 .minimal-director.composer-only .new-video-start-footer > button:first-child {
   display: none;
 }
 
 .new-video-primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   justify-self: end;
   min-width: 74px;
   border-color: rgba(122, 85, 60, 0.28);
@@ -6448,15 +6525,40 @@
   padding-top: 10px;
 }
 
-.creator-review-shortcuts > span {
+.creator-review-shortcuts summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  cursor: pointer;
+  list-style: none;
+}
+
+.creator-review-shortcuts summary::-webkit-details-marker {
+  display: none;
+}
+
+.creator-review-shortcuts summary span {
   color: rgba(47, 39, 34, 0.52);
   font-size: 11px;
   font-weight: 700;
 }
 
+.creator-review-shortcuts summary strong {
+  color: rgba(47, 39, 34, 0.82);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.creator-review-shortcuts summary small {
+  color: rgba(124, 111, 99, 0.72);
+  font-size: 11px;
+}
+
 .creator-review-shortcuts > div {
   display: grid;
   gap: 8px;
+  margin-top: 8px;
   max-height: 180px;
   overflow: auto;
 }

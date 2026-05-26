@@ -1289,7 +1289,7 @@ function upsertStoryboardReferenceAsset(source, input) {
     assetId,
     displayName: "本次故事板参考",
     name: "本次故事板参考",
-    assetType: "prop",
+    assetType: "reference",
     type: "storyboard_reference",
     status: "needs_review",
     visualMemoryStatus: "needs_review",

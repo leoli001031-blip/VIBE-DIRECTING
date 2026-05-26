@@ -37,6 +37,7 @@ export type CreatorReviewTrayItem = {
   shotId?: string;
   assetId?: string;
   assetType?: "character" | "scene" | "prop" | "style" | "unknown" | "shot_reference";
+  referenceKind?: "visual_reference" | "storyboard_reference" | "shot_reference";
   usedByShotIds?: string[];
   label: string;
   detail: string;

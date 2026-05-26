@@ -273,7 +273,8 @@ function assertCreatorPanelContract() {
   assert(!/pendingReferenceReviewCount[\s\S]{0,260}framePlan\.(?:reviewCount|missingCount)/.test(appSource), "Video submit gate must not treat missing video/shot outputs as reference review blockers");
   assert(/先复核参考素材，再提交视频/.test(appSource), "Video submit gate should use creator-facing review copy");
   assert(/videoSendAction=\{gatedVideoSubmitAction\}/.test(appSource), "DirectorMode must receive the gated video submit action");
-  assert(/onRetryMissingBatch=\{runProjectImage2Batch\}/.test(app), "DirectorMode must route Retry Missing through the batch check handler");
+  assert(/onRetryMissingBatch=\{runMissingVisualsFromStory\}/.test(app), "DirectorMode must route missing visuals through the story fallback handler");
+  assert(/hasRunnableBatch\s*=\s*retryCount\s*>\s*0[\s\S]*runProjectImage2Batch\(\)[\s\S]*runImage2AssetGeneration\(\)/.test(app), "Story fallback must only use the old batch runner for runnable retries and project reference generation otherwise");
   assert(/onRetryReviewItem=\{\(item\)\s*=>\s*applyCreatorReviewDecision\(item,\s*"retry"\)\}/.test(app), "DirectorMode must route per-item retry through Project.vibe review decisions");
   assert(/onRejectReviewItem=\{\(item\)\s*=>\s*applyCreatorReviewDecision\(item,\s*"reject"\)\}/.test(app), "DirectorMode must route reject through Project.vibe review decisions");
   assert(/submitCurrentProjectReviewDecision\(effectiveRuntimeProjectIdentity,\s*\{/.test(app), "review decisions must use the current project runtime route when a project folder is bound");
@@ -281,7 +282,7 @@ function assertCreatorPanelContract() {
   assert(/onRunProjectImage2Batch=\{runProjectImage2Batch\}/.test(appSource), "DirectorMode must pass Image2 batch run-check handler to the project panel");
   assert(/scopeCopy\s*=\s*"整个项目"/.test(image2AssetGenerationActionSource), "Project reference completion must be project-scoped, not current-shot scoped");
   assert(/selectedShotId:\s*undefined/.test(image2AssetGenerationActionSource), "Project reference completion must not submit only the selected shot");
-  assert(/车灯、手部、雨雾这类细小画面会写进对应说明里/.test(image2AssetGenerationActionSource), "reference completion copy should explain generic detail folding");
+  assert(/细节动作会留在镜头说明里/.test(image2AssetGenerationActionSource), "reference completion copy should explain generic detail folding");
   assert(/convenience_store/.test(workbenchProjectionSource), "workbench projection should understand convenience-store scenes");
   assert(/convenience_store/.test(minimalStoryFlowSource), "story flow reference matching should understand convenience-store scenes");
   assert(/convenience_store[\s\S]*mountain_road/.test(workbenchProjectionSource), "workbench scene matching should prefer convenience-store before mountain-road");
@@ -297,7 +298,7 @@ function assertCreatorPanelContract() {
   assert(/import\s+\{\s*MinimalAgentPanel\s*\}\s+from\s+"\.\/MinimalAgentPanel"/.test(directorModeSource), "DirectorMode must mount the extracted MinimalAgentPanel");
   assert(/import\s+\{\s*CreatorDeskPanels\s*\}\s+from\s+"\.\/CreatorDeskPanels"/.test(directorModeSource), "DirectorMode must mount the creator desk panels");
   const creatorDeskPanelCopy = extractStringLiterals(creatorDeskPanelsSource);
-  assert(/故事计划[\s\S]*画面准备[\s\S]*复核列表/.test(creatorDeskPanelsSource), "Creator desk must expose planner, preparation, and review panels in product copy");
+  assert(/故事[\s\S]*画面[\s\S]*复核列表/.test(creatorDeskPanelsSource), "Creator desk must expose planner, preparation, and review panels in product copy");
   assert(/视频生成/.test(creatorDeskPanelsSource), "Creator desk must expose the video generation panel");
   for (const statusLabel of ["未生成", "已提交", "排队中", "生成中", "已完成", "可稍后恢复"]) {
     assert(new RegExp(statusLabel).test(creatorDeskPanelsSource), `Creator desk must expose ${statusLabel} video status`);
@@ -306,10 +307,10 @@ function assertCreatorPanelContract() {
   for (const statusLabel of ["待复核", "待补齐", "可重试", "已通过", "已锁定"]) {
     assert(new RegExp(statusLabel).test(creatorDeskPanelCopy), `Creator desk must expose ${statusLabel}`);
   }
-  for (const actionLabel of ["通过", "重试", "拒绝", "锁定", "绑定为", "查看生成说明"]) {
+  for (const actionLabel of ["通过", "重试", "拒绝", "锁定", "绑定为", "查看说明"]) {
     assert(new RegExp(actionLabel).test(creatorDeskPanelsSource), `Creator desk must expose ${actionLabel} action`);
   }
-  for (const lockLabel of ["角色参考", "场景参考", "道具参考", "本镜头参考"]) {
+  for (const lockLabel of ["角色参考", "场景参考", "道具参考", "本镜头画面"]) {
     assert(new RegExp(lockLabel).test(creatorDeskPanelsSource), `Creator desk must expose ${lockLabel} lock target`);
   }
   assert(/onLockReviewItem=\{\(item,\s*target\)\s*=>\s*applyCreatorReviewDecision\(item,\s*"lock",\s*target\)\}/.test(app), "DirectorMode must route lock target through Project.vibe review decisions");
@@ -325,7 +326,7 @@ function assertCreatorPanelContract() {
   assert(/创作者路径/.test(agentPanelSource), "Agent Panel should label the default creator path");
   assert(/描述修改[\s\S]*生成计划[\s\S]*确认应用/.test(agentPanelSource), "Agent Panel should expose the simplified creator path");
   assert(/修改计划详情/.test(agentPanelSource), "Agent Panel should keep staged plan details behind disclosure");
-  assert(/故事 \/ 镜头 \/ 复核记录/.test(agentPanelSource), "Agent Panel should name staged plan write targets in user copy");
+  assert(/故事 \/ 镜头 \/ 复核/.test(agentPanelSource), "Agent Panel should name staged plan write targets in user copy");
   assert(
     /等待写入项目事实|已加入项目计划|已记录到项目/.test(agentPanelContractSource),
     "Agent Panel confirmation receipt should expose pending project plan write status",

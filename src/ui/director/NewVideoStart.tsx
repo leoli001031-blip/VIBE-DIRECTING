@@ -112,6 +112,9 @@ export type NewVideoStoryboardShot = {
   executionMode: NewVideoStoryboardExecutionMode;
   referenceStrategy: NewVideoReferenceStrategy;
   visibleCutBudget: string;
+  visibleClips: number;
+  storyboardPanels: number;
+  actionBeats: string[];
   subtitle: string;
   sound: string;
   title: string;
@@ -199,6 +202,46 @@ const referenceStrategyDescriptions: Record<NewVideoReferenceStrategy, string> =
   storyboard_rapid_cut: "用粗故事板锁快切、动作节点、运镜和节奏。",
   omni_reference: "直接用角色、场景、道具和文字导演提示生成视频。",
 };
+
+const newVideoComposerDraftStorageKey = "vibe-director:new-video-composer-draft";
+
+function readStoredNewVideoComposerDraft(): Pick<NewVideoStartDraft, "script" | "style"> {
+  if (typeof window === "undefined") return { script: "", style: "" };
+  try {
+    const parsed = JSON.parse(window.sessionStorage.getItem(newVideoComposerDraftStorageKey) || "{}") as Partial<NewVideoStartDraft>;
+    return {
+      script: typeof parsed.script === "string" ? parsed.script : "",
+      style: typeof parsed.style === "string" ? parsed.style : "",
+    };
+  } catch {
+    return { script: "", style: "" };
+  }
+}
+
+function writeStoredNewVideoComposerDraft(draft: NewVideoStartDraft) {
+  if (typeof window === "undefined") return;
+  try {
+    if (!draft.script.trim() && !draft.style.trim()) {
+      window.sessionStorage.removeItem(newVideoComposerDraftStorageKey);
+      return;
+    }
+    window.sessionStorage.setItem(newVideoComposerDraftStorageKey, JSON.stringify({
+      script: draft.script,
+      style: draft.style,
+    }));
+  } catch {
+    // Best-effort protection for the first-send folder picker path.
+  }
+}
+
+function clearStoredNewVideoComposerDraft() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(newVideoComposerDraftStorageKey);
+  } catch {
+    // Best-effort cleanup only.
+  }
+}
 
 function formatFileSize(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "文件";
@@ -566,6 +609,47 @@ function buildActionReactionQa(input: {
   ].join("");
 }
 
+function storyboardActionBeats(input: {
+  primaryAction: string;
+  actionTrigger: string;
+  microReaction: string;
+  visualDescription?: string;
+}): string[] {
+  const explicitBeats = cleanText(input.visualDescription)
+    .split(/[；;。]/u)
+    .map((item) => cleanText(item))
+    .filter((item) => /^节拍[一二三四五六七八九十\d]/u.test(item));
+  return Array.from(new Set([
+    ...explicitBeats,
+    cleanText(input.primaryAction),
+    cleanText(input.actionTrigger),
+    cleanText(input.microReaction),
+  ].filter(Boolean))).slice(0, 12);
+}
+
+function visibleClipsFromBudget(input: {
+  referenceStrategy: NewVideoReferenceStrategy;
+  visibleCutBudget: string;
+  actionBeats: string[];
+}): number {
+  if (input.referenceStrategy !== "storyboard_rapid_cut") return 1;
+  const exactCut = cleanText(input.visibleCutBudget).match(/(\d+)\s*个?可见切点/u);
+  if (exactCut) return Math.max(1, Math.min(12, Number(exactCut[1]) + 1));
+  const rangeCut = cleanText(input.visibleCutBudget).match(/(\d+)\s*[-~到至]\s*(\d+)\s*个?可见切点/u);
+  if (rangeCut) return Math.max(1, Math.min(12, Number(rangeCut[2]) + 1));
+  return Math.max(2, Math.min(12, input.actionBeats.length || 2));
+}
+
+function storyboardPanelsForReference(input: {
+  referenceStrategy: NewVideoReferenceStrategy;
+  visibleClips: number;
+  actionBeats: string[];
+}): number {
+  if (input.referenceStrategy === "omni_reference") return 0;
+  if (input.referenceStrategy === "storyboard_narrative") return 1;
+  return Math.max(2, Math.min(12, input.visibleClips, input.actionBeats.length || 2));
+}
+
 function factsByKind(session: ReturnType<typeof buildDirectorSessionFromIntake> | undefined, kind: DirectorStagedFactKind) {
   return session?.stagedFacts.filter((fact) => fact.kind === kind) || [];
 }
@@ -644,6 +728,22 @@ function makeStoryboardRow(input: {
     text,
   });
   const segmentReferenceStrategy = input.musicSegment?.referenceStrategy || referenceStrategy;
+  const actionBeats = storyboardActionBeats({
+    primaryAction,
+    actionTrigger,
+    microReaction,
+    visualDescription,
+  });
+  const visibleClips = visibleClipsFromBudget({
+    referenceStrategy: segmentReferenceStrategy,
+    visibleCutBudget,
+    actionBeats,
+  });
+  const storyboardPanels = storyboardPanelsForReference({
+    referenceStrategy: segmentReferenceStrategy,
+    visibleClips,
+    actionBeats,
+  });
   return {
     id: input.id,
     shotNo: shotNoForIndex(input.index),
@@ -665,6 +765,9 @@ function makeStoryboardRow(input: {
     executionMode,
     referenceStrategy: segmentReferenceStrategy,
     visibleCutBudget,
+    visibleClips,
+    storyboardPanels,
+    actionBeats,
     subtitle: subtitleFromText(text),
     sound: soundFromText(text, audioUsage),
     title: cleanText(input.title) || titleFromShotText(text, input.index),
@@ -758,6 +861,25 @@ function aiShotToStoryboardRow(
   const durationSeconds = Math.max(3, Math.min(15, shot.durationSeconds || Number.parseFloat(fallback.duration) || 5));
   const executionMode = shot.executionMode as NewVideoStoryboardExecutionMode;
   const referenceStrategy = shot.referenceStrategy as NewVideoReferenceStrategy;
+  const actionBeats = shot.actionBeats?.length
+    ? shot.actionBeats
+    : storyboardActionBeats({
+      primaryAction: cleanText(shot.primaryAction) || fallback.primaryAction,
+      actionTrigger: cleanText(shot.actionTrigger) || fallback.actionTrigger,
+      microReaction: cleanText(shot.microReaction) || fallback.microReaction,
+      visualDescription: cleanText(shot.visualDescription) || fallback.visualDescription,
+    });
+  const visibleCutBudget = cleanText(shot.visibleCutBudget) || visibleCutBudgetFor({
+    executionMode,
+    durationSeconds,
+    rhythmProfile: shot.rhythmProfile,
+  });
+  const visibleClips = Number.isFinite(shot.visibleClips) && shot.visibleClips > 0
+    ? Math.max(1, Math.min(12, Math.round(shot.visibleClips)))
+    : visibleClipsFromBudget({ referenceStrategy, visibleCutBudget, actionBeats });
+  const storyboardPanels = Number.isFinite(shot.storyboardPanels) && shot.storyboardPanels >= 0
+    ? Math.max(0, Math.min(12, Math.round(shot.storyboardPanels)))
+    : storyboardPanelsForReference({ referenceStrategy, visibleClips, actionBeats });
   return {
     ...fallback,
     id: `ai_storyboard_${safeDraftId(shot.shotNo || String(index + 1))}_${index + 1}`,
@@ -771,11 +893,10 @@ function aiShotToStoryboardRow(
     microReaction: cleanText(shot.microReaction) || fallback.microReaction,
     executionMode,
     referenceStrategy,
-    visibleCutBudget: cleanText(shot.visibleCutBudget) || visibleCutBudgetFor({
-      executionMode,
-      durationSeconds,
-      rhythmProfile: shot.rhythmProfile,
-    }),
+    visibleCutBudget,
+    visibleClips,
+    storyboardPanels,
+    actionBeats,
     subtitle: cleanText(shot.subtitle) || "-",
     sound: cleanText(shot.sound) || fallback.sound,
     title: cleanText(shot.title) || fallback.title,
@@ -791,7 +912,7 @@ function aiShotToStoryboardRow(
       microReaction: cleanText(shot.microReaction) || fallback.microReaction,
       executionMode,
       referenceStrategy,
-      visibleCutBudget: cleanText(shot.visibleCutBudget) || fallback.visibleCutBudget,
+      visibleCutBudget,
     }),
     sourceFactId: fallback.sourceFactId,
   };
@@ -819,6 +940,9 @@ function emptyStoryboardRow(index: number): NewVideoStoryboardShot {
     executionMode: "single_continuous_shot",
     referenceStrategy: "omni_reference",
     visibleCutBudget: "不主动切镜",
+    visibleClips: 1,
+    storyboardPanels: 0,
+    actionBeats: ["角色完成一个清楚的主要动作", "由上一镜头或当前场景状态触发", "保留轻微呼吸、眨眼或视线变化"],
     subtitle: "-",
     sound: "环境底噪",
     title: `新增镜头 ${index + 1}`,
@@ -846,6 +970,9 @@ function storyboardSignature(rows: NewVideoStoryboardShot[]) {
     cleanText(row.executionMode),
     cleanText(row.referenceStrategy),
     cleanText(row.visibleCutBudget),
+    String(row.visibleClips),
+    String(row.storyboardPanels),
+    row.actionBeats.join("|"),
     cleanText(row.subtitle),
     cleanText(row.sound),
     cleanText(row.title),
@@ -1033,7 +1160,7 @@ function buildStoryboardTableDeltas(input: {
         createdAt: input.createdAt,
       }));
     }
-    const fieldsChanged = ["shotNo", "shotSize", "camera", "visualDescription", "primaryAction", "actionTrigger", "microReaction", "actionReactionQa", "executionMode", "referenceStrategy", "visibleCutBudget", "subtitle", "sound", "title", "characters", "scene", "props", "audioUsage", "rhythmProfile", "rhythmReason"].some((field) => (
+    const fieldsChanged = ["shotNo", "shotSize", "camera", "visualDescription", "primaryAction", "actionTrigger", "microReaction", "actionReactionQa", "executionMode", "referenceStrategy", "visibleCutBudget", "visibleClips", "storyboardPanels", "actionBeats", "subtitle", "sound", "title", "characters", "scene", "props", "audioUsage", "rhythmProfile", "rhythmReason"].some((field) => (
       cleanText(baseline[field as keyof NewVideoStoryboardShot]) !== cleanText(row[field as keyof NewVideoStoryboardShot])
     ));
     if (fieldsChanged) {
@@ -1080,7 +1207,7 @@ function workspaceWithStoryboardTable(
       },
     ],
     stagedDeltas: [...workspace.stagedDeltas, ...deltas],
-    nextActionLabel: "确认草案",
+    nextActionLabel: "确认",
   };
 }
 
@@ -1103,7 +1230,7 @@ export function NewVideoStart({
   localProjectReady?: boolean;
   localProjectBusy?: boolean;
   canCreateLocalProject?: boolean;
-  onCreateLocalProject?: (draft: NewVideoStartDraft) => void | Promise<void>;
+  onCreateLocalProject?: (draft: NewVideoStartDraft) => unknown | Promise<unknown>;
   onDraftConfirmed?: (draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) => boolean | void | Promise<boolean | void>;
   availableKnowledgePacks?: KnowledgePack[];
   webSearchSettings?: AgentWebSearchSettings;
@@ -1118,9 +1245,11 @@ export function NewVideoStart({
   const audioInputRef = useRef<HTMLInputElement>(null);
   const planRef = useRef<HTMLDivElement>(null);
   const autoProjectCreateRequestedRef = useRef(false);
+  const pendingPrepareAfterProjectSelectionRef = useRef(false);
+  const initialComposerDraftRef = useRef(readStoredNewVideoComposerDraft());
   const pendingReferenceTypeRef = useRef<NewVideoReferenceKind>("image");
-  const [script, setScript] = useState("");
-  const [style, setStyle] = useState("");
+  const [script, setScript] = useState(initialComposerDraftRef.current.script);
+  const [style, setStyle] = useState(initialComposerDraftRef.current.style);
   const [references, setReferences] = useState<NewVideoReferenceFile[]>([]);
   const [audio, setAudio] = useState<File | undefined>();
   const [audioRole, setAudioRole] = useState<NewVideoStartDraft["audioRole"]>();
@@ -1140,6 +1269,9 @@ export function NewVideoStart({
   const [storyboardPlanningSource, setStoryboardPlanningSource] = useState<"none" | "local_structure" | "ai_director">("none");
   const [storyboardPlanningStatus, setStoryboardPlanningStatus] = useState<"idle" | "running" | "ready" | "fallback" | "blocked">("idle");
   const [storyboardPlanningMessage, setStoryboardPlanningMessage] = useState("");
+  const [storyboardPlanningStartedAt, setStoryboardPlanningStartedAt] = useState<number | undefined>();
+  const [storyboardPlanningElapsedSeconds, setStoryboardPlanningElapsedSeconds] = useState(0);
+  const [submittedDraft, setSubmittedDraft] = useState<NewVideoStartDraft | undefined>();
   const [styleResearchResult, setStyleResearchResult] = useState<AgentWebSearchResult | undefined>();
   const [styleResearchStatus, setStyleResearchStatus] = useState<"idle" | "running" | "ready" | "blocked">("idle");
   const [styleReferenceStatus, setStyleReferenceStatus] = useState<"idle" | "saving" | "saved" | "blocked">("idle");
@@ -1158,6 +1290,19 @@ export function NewVideoStart({
     }),
     [audio, audioRole, references, script, style],
   );
+  const activeDraft = submittedDraft || draft;
+  useEffect(() => {
+    if (storyboardPlanningStatus !== "running" || !storyboardPlanningStartedAt) {
+      setStoryboardPlanningElapsedSeconds(0);
+      return undefined;
+    }
+    const tick = () => {
+      setStoryboardPlanningElapsedSeconds(Math.max(0, Math.floor((Date.now() - storyboardPlanningStartedAt) / 1000)));
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [storyboardPlanningStartedAt, storyboardPlanningStatus]);
   const visualReferences = useMemo(
     () => references.filter((reference) => reference.file.type.startsWith("image/")),
     [references],
@@ -1185,6 +1330,14 @@ export function NewVideoStart({
   }, [hasDraft, localProjectBusy, localProjectReady]);
 
   useEffect(() => {
+    if (!localProjectReady || !pendingPrepareAfterProjectSelectionRef.current) return;
+    pendingPrepareAfterProjectSelectionRef.current = false;
+    window.setTimeout(() => {
+      void prepareDraft();
+    }, 0);
+  }, [localProjectReady]);
+
+  useEffect(() => {
     const urls = Object.fromEntries(visualReferences.map((reference) => [
       reference.id,
       URL.createObjectURL(reference.file),
@@ -1196,6 +1349,8 @@ export function NewVideoStart({
   }, [visualReferences]);
 
   function publish(nextDraft: NewVideoStartDraft) {
+    writeStoredNewVideoComposerDraft(nextDraft);
+    setSubmittedDraft(undefined);
     onDraftChange?.(nextDraft);
     setProjection(undefined);
     setDirectorSession(undefined);
@@ -1215,11 +1370,16 @@ export function NewVideoStart({
     setConfirmError("");
   }
 
-  function buildCurrentStyleResearchPreflight(input?: { webSearchResults?: AgentWebSearchResult[]; extraPacks?: KnowledgePack[] }) {
+  function buildCurrentStyleResearchPreflight(input?: {
+    draftOverride?: NewVideoStartDraft;
+    webSearchResults?: AgentWebSearchResult[];
+    extraPacks?: KnowledgePack[];
+  }) {
+    const sourceDraft = input?.draftOverride || activeDraft;
     return buildStyleResearchPreflight({
-      userIntent: [draft.style, draft.script].filter(Boolean).join("\n"),
-      styleIntent: draft.style,
-      scriptText: draft.script,
+      userIntent: [sourceDraft.style, sourceDraft.script].filter(Boolean).join("\n"),
+      styleIntent: sourceDraft.style,
+      scriptText: sourceDraft.script,
       availablePacks: ensureMinimumDefaultKnowledgePacks([...(availableKnowledgePacks || []), ...(input?.extraPacks || [])]),
       webSearchResults: input?.webSearchResults,
       createdAt: new Date().toISOString(),
@@ -1374,24 +1534,38 @@ export function NewVideoStart({
     if (audioInputRef.current) audioInputRef.current.value = "";
   }
 
-  async function ensureLocalProjectForDraft(nextDraft: NewVideoStartDraft) {
-    if (localProjectReady || localProjectBusy || !canCreateLocalProject || !onCreateLocalProject) return;
-    if (autoProjectCreateRequestedRef.current) return;
+  async function ensureLocalProjectForDraft(nextDraft: NewVideoStartDraft): Promise<boolean> {
+    if (localProjectReady) return true;
+    if (localProjectBusy || !canCreateLocalProject || !onCreateLocalProject) return false;
+    if (autoProjectCreateRequestedRef.current) return false;
     autoProjectCreateRequestedRef.current = true;
     try {
-      await onCreateLocalProject(nextDraft);
+      const result = await onCreateLocalProject(nextDraft);
+      const selected = Boolean(result);
+      if (!selected) autoProjectCreateRequestedRef.current = false;
+      return selected;
     } catch {
       autoProjectCreateRequestedRef.current = false;
+      return false;
     }
   }
 
   async function prepareDraft() {
     if (!hasDraft || storyboardPlanningStatus === "running") return;
-    const intakeDraft = buildIntakeDraftFromNewVideoDraft(draft);
+    const draftToSubmit = draft;
+    if (!localProjectReady) pendingPrepareAfterProjectSelectionRef.current = true;
+    const localProjectPrepared = await ensureLocalProjectForDraft(draftToSubmit);
+    if (!localProjectReady && !localProjectPrepared) return;
+    pendingPrepareAfterProjectSelectionRef.current = false;
+    const intakeDraft = buildIntakeDraftFromNewVideoDraft(draftToSubmit);
     const nextProjection = buildIntakeStagedPlanProjection(intakeDraft);
     const nextSession = buildDirectorSessionFromIntake({ draft: intakeDraft, projection: nextProjection });
-    const nextStyleResearchPreflight = buildCurrentStyleResearchPreflight();
-    const localStoryboardRows = buildStoryboardRowsFromSession(nextSession, draft, nextStyleResearchPreflight);
+    const nextStyleResearchPreflight = buildCurrentStyleResearchPreflight({ draftOverride: draftToSubmit });
+    const localStoryboardRows = buildStoryboardRowsFromSession(nextSession, draftToSubmit, nextStyleResearchPreflight);
+    setSubmittedDraft(draftToSubmit);
+    setScript("");
+    setScriptFileName("");
+    setScriptFileError("");
     setProjection(nextProjection);
     setDirectorSession(nextSession);
     setStyleResearchPreflight(nextStyleResearchPreflight);
@@ -1400,27 +1574,29 @@ export function NewVideoStart({
     setStoryboardBaselineRows(localStoryboardRows);
     setStoryboardPlanningSource("local_structure");
     setStoryboardPlanningStatus("running");
+    setStoryboardPlanningStartedAt(Date.now());
+    setStoryboardPlanningElapsedSeconds(0);
     setStoryboardPlanningMessage("已先按时间码和材料做初步识别，正在让 AI 导演重新拆镜头和判断节奏。");
     setDiscussionFeedback("");
     setConfirmed(false);
     setConfirmError("");
-    onStart?.(draft);
-    void ensureLocalProjectForDraft(draft);
+    onStart?.(draftToSubmit);
+    void ensureLocalProjectForDraft(draftToSubmit);
     window.setTimeout(() => {
       planRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
     try {
       const aiPlan = await requestDirectorAiStoryboardPlan({
-        scriptText: draft.script,
-        styleText: draft.style,
+        scriptText: draftToSubmit.script,
+        styleText: draftToSubmit.style,
         userPreference: [
           "请真正按导演逻辑拆分，不要机械沿用本地结构行。",
-          explicitShotCount(`${draft.script}\n${draft.style}`)
-            ? `用户明确要求 ${explicitShotCount(`${draft.script}\n${draft.style}`)} 个镜头，AI 输出的 shots 数组必须保持这个数量。`
+          explicitShotCount(`${draftToSubmit.script}\n${draftToSubmit.style}`)
+            ? `用户明确要求 ${explicitShotCount(`${draftToSubmit.script}\n${draftToSubmit.style}`)} 个镜头，AI 输出的 shots 数组必须保持这个数量。`
             : "",
-          draft.audioRole === "music_reference" ? "用户放入了配乐参考，节奏可以受音乐影响，但不要把 BGM 写给视频模型。" : "",
+          draftToSubmit.audioRole === "music_reference" ? "用户放入了配乐参考，节奏可以受音乐影响，但不要把 BGM 写给视频模型。" : "",
         ].filter(Boolean).join("\n"),
-        targetDurationSeconds: explicitTargetDurationSeconds(`${draft.script}\n${draft.style}`)
+        targetDurationSeconds: explicitTargetDurationSeconds(`${draftToSubmit.script}\n${draftToSubmit.style}`)
           || localStoryboardRows.reduce((sum, row) => sum + (Number.parseFloat(row.duration) || 0), 0)
           || undefined,
         structuralRows: storyboardRowsToAiSeedRows(localStoryboardRows),
@@ -1430,19 +1606,21 @@ export function NewVideoStart({
       setStoryboardBaselineRows(aiRows);
       setStoryboardPlanningSource("ai_director");
       setStoryboardPlanningStatus("ready");
-      setStoryboardPlanningMessage("AI 已重新拆分镜头、节奏和参考模式；确认前仍只是草案。");
+      setStoryboardPlanningStartedAt(undefined);
+      setStoryboardPlanningMessage("AI 已重新拆分镜头、节奏和生成方式。确认前仍是草案。");
     } catch (error) {
       setStoryboardPlanningSource("local_structure");
       setStoryboardPlanningStatus("fallback");
+      setStoryboardPlanningStartedAt(undefined);
       setStoryboardPlanningMessage(error instanceof Error && /key|配置|API/i.test(error.message)
-        ? "AI 分镜还没跑起来：当前先显示本地初步识别。配置好 AI Key 后再发送会由 AI 拆镜头。"
+        ? "AI 分镜还没跑起来：先显示本地初步识别。配置好 Key 后再试。"
         : "AI 分镜这次没有完成，当前保留本地初步识别；可以直接改，或稍后再发送重试。");
     }
   }
 
   async function lookupStyleResearch() {
     if (styleResearchStatus === "running") return;
-    const suggestion = buildAgentWebResearchSuggestion([draft.style, draft.script].filter(Boolean).join("\n"), webSearchSettings);
+    const suggestion = buildAgentWebResearchSuggestion([activeDraft.style, activeDraft.script].filter(Boolean).join("\n"), webSearchSettings);
     const query = styleResearchPreflight?.suggestedWebQueries[0] || suggestion.query || styleResearchPreflight?.query || "";
     if (!webSearchSettings.enabled || !query.trim()) {
       setStyleResearchStatus("blocked");
@@ -1461,7 +1639,7 @@ export function NewVideoStart({
       const canRebuildRows = directorSession && storyboardSignature(storyboardRows) === storyboardSignature(storyboardBaselineRows);
       setStyleResearchPreflight(nextPreflight);
       if (directorSession && canRebuildRows) {
-        const nextRows = buildStoryboardRowsFromSession(directorSession, draft, nextPreflight);
+        const nextRows = buildStoryboardRowsFromSession(directorSession, activeDraft, nextPreflight);
         setStoryboardRows(nextRows);
         setStoryboardBaselineRows(nextRows);
       }
@@ -1477,13 +1655,13 @@ export function NewVideoStart({
     try {
       const pack = await onSaveResearchAsReference({
         result: styleResearchResult,
-        userIntent: [draft.style, draft.script].filter(Boolean).join("\n") || styleResearchResult.query,
+        userIntent: [activeDraft.style, activeDraft.script].filter(Boolean).join("\n") || styleResearchResult.query,
       });
       const nextPreflight = buildCurrentStyleResearchPreflight({ extraPacks: [pack] });
       const canRebuildRows = directorSession && storyboardSignature(storyboardRows) === storyboardSignature(storyboardBaselineRows);
       setStyleResearchPreflight(nextPreflight);
       if (directorSession && canRebuildRows) {
-        const nextRows = buildStoryboardRowsFromSession(directorSession, draft, nextPreflight);
+        const nextRows = buildStoryboardRowsFromSession(directorSession, activeDraft, nextPreflight);
         setStoryboardRows(nextRows);
         setStoryboardBaselineRows(nextRows);
       }
@@ -1523,14 +1701,14 @@ export function NewVideoStart({
   async function confirmDraft() {
     if (!projection || !directorSession || confirmPending || confirmed) return;
     if (discussionWorkspace?.stagedDeltas.some((delta) => delta.status === "staged")) {
-      setConfirmError("先确认待修改，再确认草案。");
+      setConfirmError("先确认待修改。");
       return;
     }
     setConfirmPending(true);
     setConfirmError("");
     try {
       const confirmationWorkspace = workspaceWithStoryboardTable(discussionWorkspace, storyboardRows, storyboardBaselineRows);
-      const accepted = await onDraftConfirmed?.(draft, {
+      const accepted = await onDraftConfirmed?.(activeDraft, {
         projection,
         directorSession,
         styleResearchPreflight,
@@ -1538,6 +1716,7 @@ export function NewVideoStart({
         storyboardDraft: storyboardRows,
       });
       if (accepted === false) return;
+      clearStoredNewVideoComposerDraft();
       setConfirmed(true);
     } catch (error) {
       setConfirmError(error instanceof Error ? error.message : "保存失败，请再试一次。");
@@ -1620,24 +1799,24 @@ export function NewVideoStart({
   const requiredMissing = projection?.missingChecklist.some((item) => item.severity === "required") || false;
   const pendingDiscussionDeltaCount = discussionWorkspace?.stagedDeltas.filter((delta) => delta.status === "staged").length || 0;
   const workspaceStage = confirmed
-    ? "草案已进入故事流"
+    ? "已进入故事流"
     : directorSession?.workspace.stageLabel || (projection
-      ? "草案待确认"
+      ? "待确认"
       : hasDraft
-        ? "素材已在工作区"
-        : "放入脚本和素材");
+        ? "已放入材料"
+        : "先写脚本");
   const referenceSummary = directorSession
     ? `${directorSession.workspace.visualReferenceCount} 张参考图${directorSession.workspace.audioReferenceCount ? ` · 1 段${audioCopy.title}` : ""}`
     : references.length || audio
     ? `${references.length} 张参考图${audio ? ` · 1 段${audioCopy.title}` : ""}`
-    : "参考图和配乐会显示在这里";
+    : "参考和音乐会显示在这里";
   const stagedFacts = visibleStagedFacts(directorSession);
   const showLocalProjectAction = Boolean(localProjectReady || localProjectBusy || canCreateLocalProject);
   const localProjectLabel = localProjectReady
-    ? "本地项目已准备"
+    ? "项目文件夹已准备"
     : localProjectBusy
-      ? "正在选择项目文件夹"
-      : "首次发送会选择项目文件夹";
+      ? "正在选择文件夹"
+      : "首次发送会选文件夹";
   const storyboardPlanningLabel = storyboardPlanningStatus === "running"
     ? "AI 正在拆分"
     : storyboardPlanningSource === "ai_director"
@@ -1648,17 +1827,22 @@ export function NewVideoStart({
   const storyboardPlanningRunning = storyboardPlanningStatus === "running";
   const showStoryboardRows = storyboardRows.length > 0 && !storyboardPlanningRunning;
   const storyboardPlanningDetail = storyboardPlanningMessage || (storyboardPlanningSource === "ai_director"
-    ? "AI 已按故事、节奏和参考模式整理，确认前不会写入项目。"
+    ? "AI 已整理好，确认前不会写入项目。"
     : storyboardPlanningSource === "local_structure"
-      ? "这是本地按时间码和素材整理的结构，不是最终 AI 导演判断。"
+      ? "这是本地初步识别，可继续让 AI 拆分。"
       : "");
+  const storyboardPlanningRunningDetail = storyboardPlanningRunning
+    ? `${storyboardPlanningDetail || "正在整理内容。"} ${storyboardPlanningElapsedSeconds >= 8
+      ? `已等待 ${storyboardPlanningElapsedSeconds} 秒，网络慢时可能要 1-3 分钟。`
+      : "只整理分镜，不会生图或提交视频。"}`
+    : storyboardPlanningDetail;
   const composerIsFeedback = Boolean(projection && discussionWorkspace);
   const composerValue = composerIsFeedback ? discussionFeedback : script;
   const composerDisabled = storyboardPlanningStatus === "running"
     || (composerIsFeedback ? !discussionFeedback.trim() : !hasDraft);
   const composerPlaceholder = composerIsFeedback
-    ? "直接说你想改哪里，例如：倒计时那段合成一个快切故事板，不要每个数字单独成镜头。"
-    : "把脚本、风格、参考说明或修改意见都写在这里。图片、音频、txt/md/srt 脚本直接拖进来。";
+    ? "直接说哪里要改..."
+    : "写脚本、风格或修改意见；也可以拖文件。";
   const unifiedComposer = (
     <section
       className={`new-video-unified-composer ${projection ? "is-compact" : ""}`}
@@ -1680,6 +1864,12 @@ export function NewVideoStart({
             updateScript(event.target.value);
           }}
           placeholder={composerPlaceholder}
+          onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+              event.preventDefault();
+              if (!composerDisabled) submitComposer();
+            }
+          }}
         />
       </label>
       <div className="new-video-composer-bar">
@@ -1727,7 +1917,7 @@ export function NewVideoStart({
         </button>
         <small>
           {scriptFileName ? `${scriptFileName} · ` : ""}
-          拖入图片、音乐或脚本文件；音频会自动识别为配乐或声音参考；首次发送会请你选择项目文件夹。
+          拖入图片、音乐或脚本；首次发送会选项目文件夹。
         </small>
         <button className="new-video-asset-action new-video-primary-action" type="button" disabled={composerDisabled} onClick={submitComposer}>
           <Sparkles size={15} aria-hidden="true" />
@@ -1768,7 +1958,7 @@ export function NewVideoStart({
   const composerSurface = typeof document === "undefined"
     ? unifiedComposer
     : createPortal(<div className="new-video-bottom-portal">{unifiedComposer}</div>, document.body);
-  const projectionTitleForDisplay = projection ? planSummaryTitleForDisplay(projection.summary.title, draft.script) : "";
+  const projectionTitleForDisplay = projection ? planSummaryTitleForDisplay(projection.summary.title, activeDraft.script) : "";
 
   return (
     <details
@@ -1779,7 +1969,7 @@ export function NewVideoStart({
       <summary>
         <span>
           <strong>{isStartingProject ? "从新视频开始" : "新视频"}</strong>
-          <small>{hasDraft ? "草稿已准备" : "脚本、素材和修改都放到底部输入框"}</small>
+          <small>{hasDraft ? "草稿已准备" : "脚本、素材和修改都放下面"}</small>
         </span>
         <Sparkles size={16} aria-hidden="true" />
       </summary>
@@ -1819,17 +2009,14 @@ export function NewVideoStart({
             </div>
           </details>
         )}
-        <div className="new-video-start-footer">
-          <button type="button" disabled={composerDisabled} onClick={submitComposer}>
-            {storyboardPlanningStatus === "running" ? "AI 拆分中" : "发送"}
-          </button>
-          {showLocalProjectAction && (
+        {showLocalProjectAction && (
+          <div className="new-video-start-footer">
             <small className="new-video-local-project-status">
               <FolderPlus size={14} aria-hidden="true" />
               {localProjectLabel}
             </small>
-          )}
-        </div>
+          </div>
+        )}
         {projection && (
           <div ref={planRef} className={`new-video-plan ${confirmed ? "is-confirmed" : ""} ${confirmError ? "has-error" : ""}`} aria-label="新视频草案">
             <div className="new-video-plan-summary">
@@ -1846,72 +2033,78 @@ export function NewVideoStart({
                   : storyboardPlanningRunning
                     ? "AI 正在拆分镜头，等草案出来后再确认。"
                   : requiredMissing
-                  ? "先补脚本，再确认草案。"
+                  ? "先补脚本，再确认。"
                   : pendingDiscussionDeltaCount
-                    ? "先确认待修改，再确认草案。"
+                    ? "先确认待修改。"
                     : "确认后会进入故事流，不会直接生成。"}
               >
                 <CheckCircle2 size={15} aria-hidden="true" />
-                {confirmed ? "已进入故事流" : confirmPending ? "正在确认" : "确认草案"}
+                {confirmed ? "已确认" : confirmPending ? "正在确认" : "确认"}
               </button>
             </div>
             {styleResearchPreflight && (
-              <section className="new-video-style-preflight" aria-label="导演准备">
-                <div>
-                  <span>准备情况</span>
+              <details
+                className="new-video-style-preflight"
+                aria-label="导演准备"
+                open={styleResearchStatus === "running" || Boolean(styleResearchResult)}
+              >
+                <summary>
+                  <span>资料</span>
                   <strong>{stylePreflightStatusLabel(styleResearchPreflight.status)}</strong>
                   <small>{stylePreflightLayerText(styleResearchPreflight)}</small>
-                </div>
-                <small className="new-video-style-preflight-summary">{stylePreflightBehindSceneText(styleResearchPreflight)}</small>
-                <div className={`new-video-style-research-actions ${styleResearchStatus}`} aria-label="导演资料动作">
-                  <button
-                    type="button"
-                    disabled={!webSearchSettings.enabled || styleResearchStatus === "running"}
-                    onClick={() => { void lookupStyleResearch(); }}
-                  >
-                    <Search size={14} aria-hidden="true" />
-                    {styleResearchStatus === "running" ? "查找中" : "查资料"}
-                  </button>
-                  {styleResearchResult && onSaveResearchAsReference && (
+                </summary>
+                <div className="new-video-style-preflight-body">
+                  <small className="new-video-style-preflight-summary">{stylePreflightBehindSceneText(styleResearchPreflight)}</small>
+                  <div className={`new-video-style-research-actions ${styleResearchStatus}`} aria-label="导演资料动作">
                     <button
                       type="button"
-                      className="secondary"
-                      disabled={styleReferenceStatus === "saving" || styleReferenceStatus === "saved"}
-                      onClick={() => { void saveStyleResearchAsReference(); }}
+                      disabled={!webSearchSettings.enabled || styleResearchStatus === "running"}
+                      onClick={() => { void lookupStyleResearch(); }}
                     >
-                      <CheckCircle2 size={14} aria-hidden="true" />
-                      {styleReferenceStatus === "saved" ? "已保存" : styleReferenceStatus === "saving" ? "保存中" : "保存为本片参考"}
+                      <Search size={14} aria-hidden="true" />
+                      {styleResearchStatus === "running" ? "查找中" : "查资料"}
                     </button>
-                  )}
-                  <small>
-                    {!webSearchSettings.enabled
-                      ? "在设置里开启后，这里可以先查风格和分镜方法。"
-                      : styleResearchStatus === "blocked"
-                        ? "这次没有查到可用资料，可换一个风格描述再试。"
-                        : styleReferenceStatus === "saved"
-                          ? "后续分镜会把它当成本片参考。"
-                          : "外部资料只会先变成待确认研究卡。"}
-                  </small>
-                </div>
-                {styleResearchResult && (
-                  <div className="new-video-style-sources" aria-label="资料来源">
-                    {styleResearchResult.citations.slice(0, 3).map((source) => (
-                      <a key={source.url} href={source.url} target="_blank" rel="noreferrer">
-                        <span>{source.title}</span>
-                        <small>{source.domain}</small>
-                        <ExternalLink size={12} aria-hidden="true" />
-                      </a>
-                    ))}
+                    {styleResearchResult && onSaveResearchAsReference && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={styleReferenceStatus === "saving" || styleReferenceStatus === "saved"}
+                        onClick={() => { void saveStyleResearchAsReference(); }}
+                      >
+                        <CheckCircle2 size={14} aria-hidden="true" />
+                        {styleReferenceStatus === "saved" ? "已保存" : styleReferenceStatus === "saving" ? "保存中" : "保存为参考"}
+                      </button>
+                    )}
+                    <small>
+                      {!webSearchSettings.enabled
+                        ? "在设置里开启后，可以先查风格和分镜方法。"
+                        : styleResearchStatus === "blocked"
+                          ? "这次没有查到可用资料，可换一个风格描述再试。"
+                          : styleReferenceStatus === "saved"
+                            ? "后续分镜会参考它。"
+                            : "资料会先等你确认。"}
+                    </small>
                   </div>
-                )}
-              </section>
+                  {styleResearchResult && (
+                    <div className="new-video-style-sources" aria-label="资料来源">
+                      {styleResearchResult.citations.slice(0, 3).map((source) => (
+                        <a key={source.url} href={source.url} target="_blank" rel="noreferrer">
+                          <span>{source.title}</span>
+                          <small>{source.domain}</small>
+                          <ExternalLink size={12} aria-hidden="true" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </details>
             )}
             {storyboardPlanningRunning && (
               <section className="new-video-storyboard-draft is-planning" aria-label="AI 正在拆分镜头">
                 <div className="new-video-storyboard-head">
                   <span>{storyboardPlanningLabel}</span>
-                  <strong>正在整理镜头、节奏和参考方式</strong>
-                  <small>{storyboardPlanningDetail || "会先生成可确认草案，不会直接写入正式项目。"}</small>
+                  <strong>正在整理分镜</strong>
+                  <small>{storyboardPlanningRunningDetail || "先给你看草案，不会直接写入项目。"}</small>
                 </div>
               </section>
             )}
@@ -1988,8 +2181,8 @@ export function NewVideoStart({
                             ))}
                           </select>
                         </label>
-                        <div className="new-video-reference-strategy" aria-label={`第 ${index + 1} 个参考策略`}>
-                          <span>参考策略</span>
+                        <div className="new-video-reference-strategy" aria-label={`第 ${index + 1} 个生成方式`}>
+                          <span>生成方式</span>
                           <strong>{referenceStrategyLabels[row.referenceStrategy]}</strong>
                           <small>{referenceStrategyDescriptions[row.referenceStrategy]}</small>
                         </div>
@@ -2168,11 +2361,11 @@ export function NewVideoStart({
             )}
             {confirmError && <small className="new-video-confirm-error">{confirmError}</small>}
             <details className="new-video-plan-details">
-              <summary>查看草案细节</summary>
+              <summary>更多细节</summary>
               <div className="new-video-plan-detail-body">
                 <div className="new-video-plan-status">
-                  <small>{confirmed ? "草案已确认" : "草案待确认"}</small>
-                  <small>{requiredMissing ? "先补脚本，再确认草案。" : "确认后会进入故事流，不会直接生成。"}</small>
+                  <small>{confirmed ? "已确认" : "待确认"}</small>
+                  <small>{requiredMissing ? "先补脚本，再确认。" : "确认后进入故事流，不会直接生成。"}</small>
                 </div>
                 <div className="new-video-plan-grid" aria-label="草案材料">
                   <small>{referenceTypeCounts.character} 个主角参考</small>

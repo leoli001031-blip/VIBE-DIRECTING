@@ -82,9 +82,9 @@ export function MinimalTopNav({
   const activeSection = sections.find((section) => section.id === activeSectionId) || sections[0];
   const storyLabel = activeSection ? shortSectionLabel(activeSection) : "故事";
   const isEmptyProject = totalShots === 0;
-  const projectTitleLabel = isEmptyProject && !canForgetProject ? "新视频项目" : (projectTitle || "新视频项目");
+  const projectTitleLabel = isEmptyProject ? "新视频项目" : (projectTitle || "新视频项目");
   const emptyProjectPrimary = canForgetProject ? "本地项目已准备" : "还没有项目";
-  const emptyProjectSecondary = canForgetProject ? "确认草案后会写到这里" : "先写脚本或打开项目";
+  const emptyProjectSecondary = canForgetProject ? "确认后会写到这里" : "先写脚本或打开项目";
   const [projectControlOpen, setProjectControlOpen] = useState(false);
   const projectControlRef = useRef<HTMLDivElement>(null);
   const projectRootLabel = projectRoot?.trim() || (canForgetProject ? "本地项目已连接" : "尚未选择本地文件夹");
@@ -181,7 +181,10 @@ export function MinimalTopNav({
                             disabled={active || !onOpenRecentProject}
                             onClick={() => performProjectControlAction(() => onOpenRecentProject?.(project))}
                           >
-                            <strong>{project.displayName || "未命名项目"}</strong>
+                            <strong>
+                              <span>{project.displayName || "未命名项目"}</span>
+                              {active && <em className="project-control-current-badge">当前</em>}
+                            </strong>
                             <small>{project.projectRoot}</small>
                           </button>
                           <button

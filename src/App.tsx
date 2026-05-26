@@ -321,7 +321,7 @@ function explicitProjectTitleFromScript(script?: string) {
   const labelledTitle = cleanProjectDisplayNameCandidate(labelled?.[1] || labelled?.[2] || labelled?.[3]);
   if (labelledTitle && !looksLikeProjectInstruction(labelledTitle)) return labelledTitle;
 
-  const bracketed = source.match(/(?:^|[\n\r\s])《([^》\n]{2,48})》/u);
+  const bracketed = source.match(/《([^》\n]{2,48})》/u);
   const bracketedTitle = cleanProjectDisplayNameCandidate(bracketed?.[1]);
   if (bracketedTitle && !looksLikeProjectInstruction(bracketedTitle)) return bracketedTitle;
   return undefined;
@@ -3920,6 +3920,16 @@ function App() {
     setProviderConfigStatuses,
     setProjectRealChainState,
   });
+  async function runMissingVisualsFromStory() {
+    const batch = projectImage2BatchState.summary;
+    const retryCount = batch?.retrySummary?.nextRunnableCount || batch?.retrySummary?.retryScheduled || 0;
+    const hasRunnableBatch = retryCount > 0;
+    if (hasRunnableBatch) {
+      await runProjectImage2Batch();
+      return;
+    }
+    await runImage2AssetGeneration();
+  }
   const { endFrameAction, runImage2EndFrame } = useImage2EndFrameAction({
     runtimeProjectIdentity,
     selectedShotId: workbenchSelectedShotId,
@@ -4112,13 +4122,13 @@ function App() {
           onCreateImage2EndFrame={runImage2EndFrame}
           onSendSeedanceVideo={runSeedanceVideoSubmit}
           onDialogueAudioCreated={applyDialogueAudioCreated}
-          onRetryMissingBatch={runProjectImage2Batch}
+          onRetryMissingBatch={runMissingVisualsFromStory}
           onRetryReviewItem={(item) => applyCreatorReviewDecision(item, "retry")}
           onApproveReviewItem={(item) => applyCreatorReviewDecision(item, "approve")}
           onRejectReviewItem={(item) => applyCreatorReviewDecision(item, "reject")}
           onLockReviewItem={(item, target) => applyCreatorReviewDecision(item, "lock", target)}
           onNewVideoDraftConfirmed={confirmNewVideoProjectVibeDraft}
-          onCreateLocalProject={async (draft) => { await createNewVideoLocalProject(draft, undefined, { reserveForImmediateSave: true }); }}
+          onCreateLocalProject={(draft) => createNewVideoLocalProject(draft, undefined, { reserveForImmediateSave: true })}
           localProjectReady={localProjectReadyForUi}
           localProjectBusy={projectFileSelection.status === "choosing"}
           canCreateLocalProject={canCreateLocalProjectFromDialog && projectFileSelection.status !== "choosing"}

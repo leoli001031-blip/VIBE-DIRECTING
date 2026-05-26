@@ -74,8 +74,27 @@ const runtimeState = {
     ],
   },
   visualMemory: {
-    summary: { total: 2, existing: 2, locked: 0, needsReview: 2, missing: 0, byType: [] },
+    summary: { total: 3, existing: 3, locked: 0, needsReview: 3, missing: 0, byType: [] },
     assets: [
+      {
+        id: "storyboard_reference_s01",
+        type: "prop",
+        name: "Mika 出场故事板参考",
+        path: "assets/generated/storyboard_s01.png",
+        status: "exists",
+        lockedStatus: "needs_review",
+        providerId: "current-project-visual-memory",
+        sourceReceiptId: "mock_lanyi_image2_asset_storyboard_s01",
+        outputHash: "sha256:storyboard-s01",
+        promptText: "生成 S01 的故事板参考，用于构图、动作和切镜节奏。",
+        promptHash: "sha256:prompt-storyboard",
+        usedByShotIds: ["S01"],
+        safeForFutureReference: false,
+        textConstraints: ["故事板参考：用于构图、动作、切镜节奏，不替代角色和场景设定。"],
+        sourceRefs: ["visual_memory.storyboard:0"],
+        roleBinding: { role: "storyboard_reference", useFor: ["构图", "动作", "切镜节奏"], ignoreFor: ["角色身份", "场景设定"] },
+        issues: ["needs_review"],
+      },
       {
         id: "char_mika",
         type: "character",
@@ -150,8 +169,12 @@ const projection = buildCreatorDeskProjection({
   selectedShotIds: ["S01"],
 });
 
-assert(projection.reviewTray.counts.needs_review === 3, "generated asset references and returned shot reference should all enter review");
+assert(projection.reviewTray.counts.needs_review === 4, "generated asset references and returned shot reference should all enter review");
 assert(!projection.reviewTray.items.some((item) => item.id === "stale_s02_without_receipt"), "shot previews without receipt/hash evidence should not create disabled review buttons");
+const storyboardItem = projection.reviewTray.items.find((item) => item.assetId === "storyboard_reference_s01");
+assert(storyboardItem?.referenceKind === "storyboard_reference", "storyboard visual memory assets should be marked as storyboard references");
+assert(storyboardItem?.assetType === "shot_reference", "storyboard review items should bind as shot references by default");
+assert(projection.reviewTray.items[0]?.assetId === "storyboard_reference_s01", "selected-shot storyboard references should be prioritized in the review tray");
 assert(projection.reviewTray.items.some((item) => item.assetId === "char_mika" && item.status === "needs_review"), "needs_review visual-memory asset must be visible in Review Tray");
 assert(projection.reviewTray.items.some((item) => item.assetId === "scene_archive" && item.status === "needs_review"), "candidate visual-memory asset must be visible in Review Tray");
 const characterItem = projection.reviewTray.items.find((item) => item.assetId === "char_mika");
@@ -168,7 +191,7 @@ const lockedRuntimeState = {
   ...runtimeState,
   sourceIndex: {
     ...runtimeState.sourceIndex,
-    lockedReferenceIds: ["char_mika", "scene_archive"],
+    lockedReferenceIds: ["storyboard_reference_s01", "char_mika", "scene_archive"],
     candidateReferenceIds: [],
   },
   sourceIndexSummary: {
@@ -180,7 +203,7 @@ const lockedRuntimeState = {
   },
   visualMemory: {
     ...runtimeState.visualMemory,
-    summary: { ...runtimeState.visualMemory.summary, locked: 2, needsReview: 0 },
+    summary: { ...runtimeState.visualMemory.summary, locked: 3, needsReview: 0 },
     assets: runtimeState.visualMemory.assets.map((asset: any) => ({
       ...asset,
       lockedStatus: "locked",
@@ -197,7 +220,7 @@ const lockedProjection = buildCreatorDeskProjection({
   selectedShotIds: ["S01"],
 });
 assert(lockedProjection.reviewTray.counts.needs_review === 0, "locking references should clear the review count");
-assert(lockedProjection.reviewTray.counts.locked === 2, "locking references should refresh locked counts");
+assert(lockedProjection.reviewTray.counts.locked === 3, "locking references should refresh locked counts");
 assert(lockedProjection.videoGeneration.status === "not_generated", "after lock, video plan should be ready to submit rather than already submitted");
 const lockedProjectVibe = createProjectVibeFromRuntimeState(lockedRuntimeState);
 assert(lockedProjectVibe.assets.every((asset) => asset.status === "locked"), "Project.vibe projection should refresh locked assets");

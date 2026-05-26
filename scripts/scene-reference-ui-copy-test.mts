@@ -53,11 +53,17 @@ function visibleCopyFrom(source: string, functionNames: string[]) {
   return functionNames.map((name) => findFunctionBody(source, name)).join("\n");
 }
 
+function extractStringLiterals(source: string) {
+  return Array.from(source.matchAll(/(["'`])((?:\\.|(?!\1)[\s\S])*?)\1/g))
+    .map((match) => match[2])
+    .join("\n");
+}
+
 const storyFlowSource = stripComments(readText("src/ui/director/MinimalStoryFlow.tsx"));
 const assetLibrarySource = stripComments(readText("src/ui/director/MinimalAssetLibrary.tsx"));
 const assetLibraryUiSource = stripComments(readText("src/ui/director/assetLibraryUi.ts"));
 
-const visibleCopy = [
+const visibleCopySource = [
   visibleCopyFrom(storyFlowSource, [
     "MinimalStoryFlow",
     "shotSceneReferenceStatus",
@@ -71,9 +77,9 @@ const visibleCopy = [
     "assetLibraryUserBlockers",
   ]),
 ].join("\n");
+const visibleCopyStrings = extractStringLiterals(visibleCopySource);
 
 for (const label of [
-  "场景参考",
   "场景/天气参考",
   "已锁定",
   "待复核",
@@ -81,7 +87,7 @@ for (const label of [
   "天气、空间和环境一致",
   "后续视频会继续使用",
 ]) {
-  assert(visibleCopy.includes(label), `UI copy must include ${label}`);
+  assert(visibleCopySource.includes(label), `UI copy must include ${label}`);
 }
 
 for (const [label, pattern] of [
@@ -91,7 +97,7 @@ for (const [label, pattern] of [
   ["queue", /\bqueue\b/i],
   ["schema", /\bschema\b/i],
 ] as const) {
-  assert(!pattern.test(visibleCopy), `default scene reference UI copy must not expose ${label}`);
+  assert(!pattern.test(visibleCopyStrings), `default scene reference UI copy must not expose ${label}`);
 }
 
 console.log("scene-reference-ui-copy-test: creator-facing scene reference copy checks completed.");

@@ -231,6 +231,11 @@ function sidecarAssetsFromVisualMemory(visualMemory: unknown, projectRoot?: stri
     const asset = sidecarAssetFromRecord(item, "reference", index, `project/visual_memory.json#assets/${index}`, projectRoot);
     if (asset) assets.push(asset);
   });
+  const entries = Array.isArray(visualMemory.entries) ? visualMemory.entries : [];
+  entries.forEach((item, index) => {
+    const asset = sidecarAssetFromRecord(item, "reference", index, `project/visual_memory.json#entries/${index}`, projectRoot);
+    if (asset) assets.push(asset);
+  });
   const seen = new Set<string>();
   return assets.filter((asset) => {
     if (seen.has(asset.id)) return false;

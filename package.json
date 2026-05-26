@@ -40,6 +40,8 @@
     "new-video-project-vibe:test": "tsx scripts/new-video-project-vibe-test.mts",
     "new-video-golden-path:test": "tsx scripts/new-video-golden-path-test.mts",
     "new-video-audio-reference:test": "tsx scripts/new-video-audio-reference-test.mts",
+    "demo:closeout:test": "tsx scripts/demo-closeout-smoke-test.mts",
+    "demo:ready:test": "npm run demo:closeout:test && npm run director-production-skill:test && npm run director-rule-qa:test && npm run director-text-qa:test && npm run storyboard-reference-pipeline:test && npm run runtime-api-current-project-image2-assets-generate:test && npm run creator-desk-p4-review-loop:test && npm run minimal-ui:test && npx tsc --noEmit --pretty false",
     "music-rhythm-analysis:test": "tsx scripts/music-rhythm-analysis-test.mts",
     "script-music-rhythm-planner:test": "tsx scripts/script-music-rhythm-planner-test.mts",
     "knowledge-audio:test": "tsx scripts/knowledge-audio-pack-test.mts",

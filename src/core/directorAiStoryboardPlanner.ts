@@ -337,7 +337,7 @@ function normalizeDurationsToTotal(
   const requestedTotal = Number.isFinite(Number(requestedTotalSeconds)) && Number(requestedTotalSeconds) > 0
     ? roundOne(Number(requestedTotalSeconds))
     : currentTotal;
-  if (!currentTotal || !requestedTotal || Math.abs(currentTotal - requestedTotal) <= 0.5) {
+  if (!currentTotal || !requestedTotal || Math.abs(currentTotal - requestedTotal) <= 0.1) {
     return { shots, totalDurationSeconds: currentTotal || requestedTotal };
   }
   const scale = requestedTotal / currentTotal;

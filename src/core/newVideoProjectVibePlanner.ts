@@ -71,6 +71,9 @@ export interface NewVideoProjectVibeStoryboardDraftShotLike {
   executionMode?: string;
   referenceStrategy?: string;
   visibleCutBudget?: string;
+  visibleClips?: string | number;
+  storyboardPanels?: string | number;
+  actionBeats?: string[];
   subtitle?: string;
   sound?: string;
   title?: string;
@@ -575,6 +578,52 @@ function storyboardDurationSeconds(row: NewVideoProjectVibeStoryboardDraftShotLi
   return Math.max(1, Math.min(60, Math.round(parsed * 10) / 10));
 }
 
+function positiveInteger(value: unknown): number | undefined {
+  const parsed = Number.parseInt(clean(value), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+  return Math.max(0, Math.min(12, parsed));
+}
+
+function storyboardActionBeats(row: NewVideoProjectVibeStoryboardDraftShotLike): string[] {
+  return unique([
+    ...(Array.isArray(row.actionBeats) ? row.actionBeats.map((item) => clean(item)) : []),
+    clean(row.primaryAction),
+    clean(row.actionTrigger),
+    clean(row.microReaction),
+  ].filter(Boolean)).slice(0, 12);
+}
+
+function storyboardReferenceStrategy(row: NewVideoProjectVibeStoryboardDraftShotLike): ProjectVibeShot["referenceStrategy"] | undefined {
+  const strategy = clean(row.referenceStrategy);
+  if (strategy === "storyboard_narrative" || strategy === "storyboard_rapid_cut" || strategy === "omni_reference") return strategy;
+  return undefined;
+}
+
+function storyboardVisibleClips(row: NewVideoProjectVibeStoryboardDraftShotLike, actionBeats: string[]): number {
+  const explicit = positiveInteger(row.visibleClips);
+  if (explicit && explicit > 0) return explicit;
+  if (storyboardReferenceStrategy(row) !== "storyboard_rapid_cut") return 1;
+  const exactCut = clean(row.visibleCutBudget).match(/(\d+)\s*个?可见切点/u);
+  if (exactCut) return Math.max(1, Math.min(12, Number(exactCut[1]) + 1));
+  const rangeCut = clean(row.visibleCutBudget).match(/(\d+)\s*[-~到至]\s*(\d+)\s*个?可见切点/u);
+  if (rangeCut) return Math.max(1, Math.min(12, Number(rangeCut[2]) + 1));
+  return Math.max(2, Math.min(12, actionBeats.length || 2));
+}
+
+function storyboardPanelCount(
+  row: NewVideoProjectVibeStoryboardDraftShotLike,
+  visibleClips: number,
+  actionBeats: string[],
+): number {
+  const explicit = positiveInteger(row.storyboardPanels);
+  if (explicit !== undefined) return explicit;
+  const strategy = storyboardReferenceStrategy(row);
+  if (strategy === "omni_reference") return 0;
+  if (strategy === "storyboard_narrative") return 1;
+  if (strategy === "storyboard_rapid_cut") return Math.max(2, Math.min(12, visibleClips, actionBeats.length || 2));
+  return 0;
+}
+
 function splitStoryboardList(value: unknown): string[] {
   return unique(clean(value)
     .split(/[、,，/|]/u)
@@ -643,6 +692,10 @@ function applyStoryboardDraftToPlanner(input: {
       clean(row.sourceFactId) ? `director_session_fact:${clean(row.sourceFactId)}` : "",
       `script_planner:${input.planner.plannerId}`,
     ]);
+    const actionBeats = storyboardActionBeats(row);
+    const visibleClips = storyboardVisibleClips(row, actionBeats);
+    const storyboardPanels = storyboardPanelCount(row, visibleClips, actionBeats);
+    const referenceStrategy = storyboardReferenceStrategy(row);
 
     sections.push({
       id: sectionId,
@@ -662,11 +715,9 @@ function applyStoryboardDraftToPlanner(input: {
       executionMode: clean(row.executionMode) || undefined,
       rhythmProfile: clean(row.rhythmProfile) || undefined,
       splitPolicy: clean(row.visibleCutBudget) || undefined,
-      actionBeats: unique([
-        clean(row.primaryAction),
-        clean(row.actionTrigger),
-        clean(row.microReaction),
-      ]),
+      visibleClips,
+      storyboardPanels,
+      actionBeats,
       primaryAction: clean(row.primaryAction) || undefined,
       actionTrigger: clean(row.actionTrigger) || undefined,
       microReaction: clean(row.microReaction) || undefined,
@@ -675,7 +726,7 @@ function applyStoryboardDraftToPlanner(input: {
       sound: clean(row.sound) || undefined,
       audioUsage: clean(row.audioUsage) || undefined,
       dialogueLines: clean(row.subtitle) && clean(row.subtitle) !== "-" ? [clean(row.subtitle)] : [],
-      referenceStrategy: (clean(row.referenceStrategy) as ProjectVibeShot["referenceStrategy"]) || undefined,
+      referenceStrategy,
       directorFeedbackDirectives: unique([
         clean(row.rhythmReason) ? `节奏判断：${clean(row.rhythmReason)}` : "",
         clean(row.audioUsage) ? `音频用途：${clean(row.audioUsage)}` : "",

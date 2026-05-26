@@ -221,7 +221,7 @@ export type ProjectImage2AssetGenerationInput = {
   scope?: "project" | "selected_shots";
   selectedShotId?: string;
   selectedShotIds?: string[];
-  assetTypes?: Array<"character" | "scene" | "prop">;
+  assetTypes?: Array<"character" | "scene" | "prop" | "storyboard">;
   providerId?: string;
   confirmation: {
     receiptId: string;
@@ -246,7 +246,7 @@ export type ProjectImage2AssetGenerationResult = {
   generatedAssetCount?: number;
   assets?: Array<{
     id?: string;
-    type?: "character" | "scene" | "prop";
+    type?: "character" | "scene" | "prop" | "storyboard";
     name?: string;
     status?: string;
     path?: string;

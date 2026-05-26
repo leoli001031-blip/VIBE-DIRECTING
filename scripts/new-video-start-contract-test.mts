@@ -140,7 +140,7 @@ for (const storyboardColumn of ["镜号", "时长", "景别", "镜头", "画面�
     failures,
   );
 }
-for (const storyboardField of ["primaryAction", "actionTrigger", "microReaction", "actionReactionQa", "executionMode", "referenceStrategy", "visibleCutBudget"]) {
+for (const storyboardField of ["primaryAction", "actionTrigger", "microReaction", "actionReactionQa", "executionMode", "referenceStrategy", "visibleCutBudget", "visibleClips", "storyboardPanels", "actionBeats"]) {
   check(
     newVideoStartSource.includes(storyboardField),
     `NewVideoStart storyboard draft must carry structured director field "${storyboardField}".`,

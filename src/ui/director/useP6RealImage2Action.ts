@@ -94,19 +94,19 @@ export function useP6RealImage2Action({
 
   const runP6RealImage2OneShot = useCallback(async () => {
     if (!runtimeProjectIdentity) {
-      setActionState({ status: "blocked", message: "未选择项目/未同步。" });
-      setOneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
+      setActionState({ status: "blocked", message: "先选择项目。" });
+      setOneShotState({ status: "unavailable", message: "先选择项目。" });
       return;
     }
 
     const statuses = await loadProviderConfigStatuses();
     setProviderConfigStatuses(statuses);
     if (!isP6RealImage2KeyConfigured(statuses)) {
-      setActionState({ status: "blocked", message: "请先在设置里完成生成能力。" });
+      setActionState({ status: "blocked", message: "先去设置里填 Key。" });
       return;
     }
 
-    if (!confirmAction("要生成 1 张画面小样吗？\n\n会调用真实生成服务，结果先放到复核区。")) {
+    if (!confirmAction("要生成 1 张画面小样吗？\n\n会调用真实生图，结果先给你看。")) {
       setActionState({ status: "blocked", message: "已取消，本次没有提交。" });
       return;
     }

@@ -153,7 +153,7 @@ export function MinimalExport({
             <Download size={16} aria-hidden="true" />
             <span>生成素材包</span>
           </button>
-          <small className="muted-copy">创建或打开本地项目后，这里会整理可交付素材。</small>
+          <small className="muted-copy">创建或打开项目后，这里会整理交付文件。</small>
         </div>
         <div className="export-summary-strip" aria-label="导出摘要">
           <span><strong>0</strong><small>文件</small></span>
@@ -162,7 +162,7 @@ export function MinimalExport({
           <span><strong>0</strong><small>本片参考</small></span>
           <span><strong>0</strong><small>音频计划</small></span>
         </div>
-        <p className="empty-state">先创建或打开项目。导出包会包含 Project.vibe、锁定素材、预览媒体、回执和报告。</p>
+        <p className="empty-state">先创建或打开项目。导出包会包含项目文件、锁定素材、预览和报告。</p>
       </section>
     );
   }
@@ -196,7 +196,7 @@ export function MinimalExport({
 	      </div>
 	      {videoSummary && (
 	        <small className="muted-copy">
-	          视频生成记录：{videoSummary}
+          视频记录：{videoSummary}
 	        </small>
 	      )}
 	      {exportAction && exportAction.status !== "idle" && (
@@ -204,14 +204,14 @@ export function MinimalExport({
           <strong>{exportAction.label}</strong>
           <small className="muted-copy">
             {exportAction.status === "blocked" || exportAction.status === "failed"
-              ? "请补齐待复核内容后再试。"
-              : `${exportAction.executedCount || 0} 个步骤完成 · 素材包已生成`}
+              ? "先处理待确认内容。"
+              : `${exportAction.executedCount || 0} 步完成 · 素材包已生成`}
           </small>
         </div>
       )}
 
       {!hasEvents && (
-        <p className="empty-state">预览还没有素材。请先同步故事流与素材库。</p>
+        <p className="empty-state">还没有预览素材。先准备故事和参考。</p>
       )}
 
       <div className="export-profile-list">
