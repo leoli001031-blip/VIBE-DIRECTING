@@ -1,3 +1,4 @@
+import { PROVIDER_CREDENTIALS_FORBIDDEN } from "./statusConstants";
 import type {
   ContextLevel,
   GateSet,
@@ -9,7 +10,7 @@ import type {
   SubagentTaskPurpose,
   TaskEnvelope,
 } from "./types";
-import { buildNonOverridableGateHashes, buildPolicyBinding } from "./envelopeValidator";
+import { buildInputHash, buildSubagentInputHash, buildNonOverridableGateHashes, buildPolicyBinding, envelopeSchemaVersion } from "./envelopeValidator";
 import type { ContextBudgetResult, KnowledgeInjectedSnippet, KnowledgeInjectionRecord, KnowledgeRouteResult } from "./knowledgeTypes";
 import type { KnowledgePackCategory } from "./knowledgeTypes";
 
@@ -19,6 +20,11 @@ const defaultOutputContract: SubagentOutputContract = {
     "taskId",
     "status",
     "inspectedFiles",
+    "changedFiles",
+    "tests",
+    "artifactPaths",
+    "residualRisks",
+    "touched",
     "gates",
     "overallVisualVerdict",
     "styleQa",
@@ -115,6 +121,7 @@ export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): Su
     resultSchema: "subagent_result_v1";
     forbiddenActions: string[];
   } = {
+    schemaVersion: envelopeSchemaVersion,
     id: input.id,
     parentTaskId: input.parentTaskId,
     purpose: input.purpose,
@@ -141,6 +148,8 @@ export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): Su
         `provider=${input.taskEnvelope.providerId}`,
         `state=${input.taskEnvelope.executionState}`,
         `mode=${input.taskEnvelope.requiredMode}`,
+        "providerSubmissionForbidden=true",
+        "liveSubmitAllowed=false",
       ],
     taskEnvelope: input.taskEnvelope,
     knowledgeRouteResultId: input.knowledgeRouteResult?.routeId || input.taskEnvelope.knowledgeRouteResultId,
@@ -167,8 +176,15 @@ export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): Su
           .filter((pack) => pack.consumer === "qa_gate")
           .map((pack) => [pack.packId, { version: pack.version, hash: pack.hash }]),
       ),
-    allowedReadScopes: input.allowedReadScopes || ["task_envelope", "locked_references", "injected_knowledge_snippets"],
-    disallowedReadScopes: input.disallowedReadScopes || ["unrouted_knowledge_library", "rejected_references", "failed_artifacts"],
+    allowedReadScopes: input.allowedReadScopes || ["task_envelope", "source_index", "locked_references", "injected_knowledge_snippets"],
+    disallowedReadScopes: input.disallowedReadScopes || [
+      "provider_credentials",
+      "api_keys",
+      "live_provider_task_ids",
+      "unrouted_knowledge_library",
+      "rejected_references",
+      "failed_artifacts",
+    ],
     sourceIndexRequired: true,
     mustInspectNeighborShotIds: input.mustInspectNeighborShotIds || (input.neighborShots || []).map((shot) => shot.shotId),
     authorityPriority: input.authorityPriority || ["source_index", "provider_policy", "preflight", "identity", "scene", "pair", "story", "prop", "style"],
@@ -201,7 +217,15 @@ export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): Su
         ],
       },
     resultSchema: input.resultSchema || "subagent_result_v1",
-    forbiddenActions: input.forbiddenActions || taskEnvelopeExtras.forbiddenActions || [],
+    forbiddenActions: [
+      "no_free_text_task",
+      "no_free_text_worker",
+      "provider_submit_forbidden",
+      "live_submit_forbidden",
+      PROVIDER_CREDENTIALS_FORBIDDEN,
+      "file_mutation_forbidden",
+      ...(input.forbiddenActions || taskEnvelopeExtras.forbiddenActions || []),
+    ],
   };
 
   const policyBinding = envelope.policyBinding || buildPolicyBinding(envelope.taskEnvelope);
@@ -210,5 +234,6 @@ export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): Su
     ...envelope,
     policyBinding,
     nonOverridableGateHashes: envelope.nonOverridableGateHashes || buildNonOverridableGateHashes(envelope.taskEnvelope),
+    inputHash: buildSubagentInputHash({ ...envelope, policyBinding }),
   };
 }

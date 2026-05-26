@@ -62,9 +62,9 @@
     "toolPaths": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["codexCli", "image2Runtime", "ffmpeg", "ffprobe", "node", "npm", "git"],
+      "required": ["agentCli", "image2Runtime", "ffmpeg", "ffprobe", "node", "npm", "git"],
       "properties": {
-        "codexCli": { "$ref": "#/$defs/runtimeToolPath" },
+        "agentCli": { "$ref": "#/$defs/runtimeToolPath" },
         "image2Runtime": { "$ref": "#/$defs/runtimeToolPath" },
         "ffmpeg": { "$ref": "#/$defs/runtimeToolPath" },
         "ffprobe": { "$ref": "#/$defs/runtimeToolPath" },

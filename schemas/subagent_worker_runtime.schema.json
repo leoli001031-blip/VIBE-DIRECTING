@@ -68,7 +68,7 @@
         "notes"
       ],
       "properties": {
-        "executable": { "type": "string", "const": "codex" },
+        "executable": { "type": "string", "const": "agent" },
         "commandKind": { "type": "string", "const": "subagent_worker" },
         "argumentSource": { "type": "string", "const": "validated_envelope_only" },
         "envelopeId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },

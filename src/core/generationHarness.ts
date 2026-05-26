@@ -1,3 +1,4 @@
+import { PROVIDER_READY_DERIVATIVE_DETECTED } from "./statusConstants";
 import type {
   AssetReadinessReport,
   GenerationCandidateOutputStatus,
@@ -159,7 +160,7 @@ function buildStages(input: {
   const conflictBlockers = conflictReport?.conflicts.filter((conflict) => conflict.severity === "blocker").map((conflict) => conflict.detail) || [];
   const conflictWarnings = conflictReport?.conflicts.filter((conflict) => conflict.severity !== "blocker").map((conflict) => conflict.detail) || [];
   const hasWatcherCandidate = watcherEvents.some((event) =>
-    ["temp_output_detected", "expected_output_detected", "provider_ready_derivative_detected"].includes(event.eventType),
+    ["temp_output_detected", "expected_output_detected", PROVIDER_READY_DERIVATIVE_DETECTED].includes(event.eventType),
   );
 
   return [

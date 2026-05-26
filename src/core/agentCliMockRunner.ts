@@ -1,6 +1,8 @@
+import { PROVIDER_SUBMIT_ATTEMPT_BLOCKED, VALIDATED_SUBAGENT_TASK_ENVELOPE_REQUIRED } from "./statusConstants";
+import { unique, hardLockDrift } from "./collectionUtils";
 import { validateSubagentTaskEnvelope } from "./envelopeValidator";
 import type { SubagentRuntimeGateReceipt } from "./subagentRuntimeGate";
-import type { GateSet, SubagentIssue, SubagentResult, SubagentTaskEnvelope } from "./types";
+import type { BaseHardLocks, GateSet, SubagentIssue, SubagentResult, SubagentTaskEnvelope } from "./types";
 
 export const agentCliMockRunnerSchemaVersion = "0.1.0";
 export const agentCliMockRunnerPhase = "phase_26_agent_cli_mock_runner";
@@ -11,15 +13,10 @@ export type AgentCliMockRunnerReadiness = "ready_for_phase_29_adapter_spike" | "
 export type AgentCliMockRunnerSlotStatus = "ready" | "blocked";
 export type AgentCliMockResultStatus = "planned" | "blocked" | "noop";
 
-export interface AgentCliMockRunnerHardLocks {
-  noCodexSpawn: true;
-  noCodexResume: true;
+export interface AgentCliMockRunnerHardLocks extends BaseHardLocks {
+  noAgentSpawn: true;
+  noAgentResume: true;
   noProviderSubmit: true;
-  liveSubmitAllowed: false;
-  noCredentialRead: true;
-  noCredentialWrite: true;
-  noShellExecution: true;
-  noFileMutation: true;
   validatedEnvelopeRequired: true;
   structuredResultRequired: true;
   noFreeTextWorker: true;
@@ -104,7 +101,7 @@ export interface AgentCliMockRunnerState {
     outputContract: "structured_subagent_result_shape_only";
     runnerContract: "replaceable_agent_cli_adapter";
     phase26Boundary: "mock_noop_only";
-    phase29Boundary: "codex_cli_adapter_spike_after_replacement_proof";
+    phase29Boundary: "agent_cli_adapter_spike_after_replacement_proof";
     providerSubmitAllowed: false;
     shellAllowed: false;
     fileMutationAllowed: false;
@@ -121,14 +118,17 @@ export interface AgentCliMockRunnerState {
 }
 
 export const agentCliMockRunnerHardLocks: AgentCliMockRunnerHardLocks = {
-  noCodexSpawn: true,
-  noCodexResume: true,
-  noProviderSubmit: true,
+  dryRunOnly: true,
   liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
   noCredentialRead: true,
   noCredentialWrite: true,
   noShellExecution: true,
-  noFileMutation: true,
+  noWorkerSpawn: true,
+  noAgentSpawn: true,
+  noAgentResume: true,
+  noProviderSubmit: true,
   validatedEnvelopeRequired: true,
   structuredResultRequired: true,
   noFreeTextWorker: true,
@@ -156,16 +156,6 @@ function uniqueSorted(values: string[]): string[] {
 
 function safeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, "_");
-}
-
-function hardLockDrift<T extends object>(actual: T | undefined, expected: T, prefix: string): string[] {
-  if (!actual) return [`${prefix}_hard_locks_missing`];
-  const actualRecord = actual as Record<string, boolean>;
-  const expectedRecord = expected as Record<string, boolean>;
-
-  return Object.entries(expectedRecord).flatMap(([key, expectedValue]) =>
-    actualRecord[key] === expectedValue ? [] : [`${prefix}_hard_lock_drift:${key}`],
-  );
 }
 
 function sourceRefs(input: {
@@ -301,8 +291,8 @@ function inputBlockers(input: {
     ...hardLockDrift(gateReceipt?.hardLocks, gateHardLockExpectations, "subagent_runtime_gate"),
     ...hardLockDrift(input.hardLocks, agentCliMockRunnerHardLocks, "agent_cli_mock_runner"),
     ...(input.freeTextPromptAttempted ? ["free_text_prompt_attempt_blocked"] : []),
-    ...(input.providerSubmitAttempted ? ["provider_submit_attempt_blocked"] : []),
-    ...(!input.envelope ? ["validated_subagent_task_envelope_required"] : []),
+    ...(input.providerSubmitAttempted ? [PROVIDER_SUBMIT_ATTEMPT_BLOCKED] : []),
+    ...(!input.envelope ? [VALIDATED_SUBAGENT_TASK_ENVELOPE_REQUIRED] : []),
     ...(input.envelope && !envelopeValidation.valid ? envelopeValidation.issues.map((issue) => `invalid_envelope:${issue}`) : []),
     ...(input.envelopeId && input.envelope && input.envelopeId !== input.envelope.id ? ["input_envelope_id_mismatch"] : []),
     ...(subject?.envelopeId && input.envelope && subject.envelopeId !== input.envelope.id
@@ -383,7 +373,7 @@ export function buildAgentCliMockRunnerState(input: AgentCliMockRunnerInput = {}
       outputContract: "structured_subagent_result_shape_only",
       runnerContract: "replaceable_agent_cli_adapter",
       phase26Boundary: "mock_noop_only",
-      phase29Boundary: "codex_cli_adapter_spike_after_replacement_proof",
+      phase29Boundary: "agent_cli_adapter_spike_after_replacement_proof",
       providerSubmitAllowed: false,
       shellAllowed: false,
       fileMutationAllowed: false,
@@ -407,7 +397,7 @@ export function buildAgentCliMockRunnerState(input: AgentCliMockRunnerInput = {}
     notes: [
       "Phase 26 is a mock/no-op runner contract proof only.",
       "It consumes a ready Phase 24 gate receipt plus a validated SubagentTaskEnvelope and emits structured no-op results.",
-      "Real Codex adapter work belongs to Phase 29 and provider submit remains blocked.",
+      "Real agent adapter work belongs to Phase 29 and provider submit remains blocked.",
     ],
   };
 }

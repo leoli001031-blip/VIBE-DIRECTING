@@ -12,6 +12,10 @@ export interface PreviewQueueItem {
   label: string;
 }
 
+export interface BuildMissingPreviewQueueFromShotsOptions {
+  durationSeconds?: number;
+}
+
 function formatShotNumber(id: string) {
   const match = id.match(/^A(\d+)_(\d+)$/i);
   if (!match) return id;
@@ -44,8 +48,20 @@ function safeDurationSeconds(value: number) {
 
 export function buildPreviewPlayerQueue(previewExport: ProjectPreviewExportState, shots: ShotRecord[]): PreviewQueueItem[] {
   const shotOrder = new Map(shots.map((shot, index) => [shot.id, index]));
-  return previewExport.draftPreview.events
-    .filter((event) => event.type === "image_hold" || event.type === "video_clip" || event.type === "blocked_placeholder")
+  const visualEvents = previewExport.draftPreview.events.filter(
+    (event) => event.type === "image_hold" || event.type === "video_clip" || event.type === "blocked_placeholder",
+  );
+  const renderableVideoKeys = new Set(
+    visualEvents
+      .filter((event) => event.type === "video_clip" && event.mediaPath && event.shotId)
+      .map((event) => `${event.shotId}:${safeStartSeconds(event.startSeconds)}`),
+  );
+
+  return visualEvents
+    .filter((event) => {
+      if (event.type !== "image_hold" || !event.shotId) return true;
+      return !renderableVideoKeys.has(`${event.shotId}:${safeStartSeconds(event.startSeconds)}`);
+    })
     .sort((left, right) => {
       const leftStart = safeStartSeconds(left.startSeconds);
       const rightStart = safeStartSeconds(right.startSeconds);
@@ -64,6 +80,29 @@ export function buildPreviewPlayerQueue(previewExport: ProjectPreviewExportState
         mediaPath: kind === "missing_placeholder" ? undefined : event.mediaPath,
         label: previewQueueLabel(event, kind),
       };
+    });
+}
+
+export function buildMissingPreviewQueueFromShots(
+  shots: ShotRecord[],
+  options: BuildMissingPreviewQueueFromShotsOptions = {},
+): PreviewQueueItem[] {
+  const fallbackDurationSeconds = Math.max(1, options.durationSeconds || 5);
+  let startSeconds = 0;
+  return shots
+    .filter((shot) => Boolean(shot.id))
+    .map((shot) => {
+      const durationSeconds = safeDurationSeconds(shot.durationSeconds || fallbackDurationSeconds);
+      const item: PreviewQueueItem = {
+        id: `local_story_placeholder_${shot.id}`,
+        kind: "missing_placeholder",
+        shotId: shot.id,
+        startSeconds,
+        durationSeconds,
+        label: formatShotNumber(shot.id),
+      };
+      startSeconds += durationSeconds;
+      return item;
     });
 }
 

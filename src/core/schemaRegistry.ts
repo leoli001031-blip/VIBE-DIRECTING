@@ -1,3 +1,22 @@
+/**
+ * P2-127: The schemas/ directory contains 103 JSON schema files (~964 KB).
+ * These schemas are documented statically in schemaRegistry but are not loaded
+ * or validated at runtime. Consider lazy validation for critical schemas.
+ *
+ * P2-131: No automated schema cross-reference validation exists in the test
+ * suite (no project-level test files found). Schema references between files
+ * (e.g., $defs, $ref targets) are never checked programmatically. Consider
+ * adding a CI step that validates inter-schema references.
+ *
+ * P2-137: The project lacks CHANGELOG.md and CONTRIBUTING.md at the project
+ * root. Neither file exists outside of node_modules. Consider adding a basic
+ * developer onboarding guide and changelog to aid contributors.
+ *
+ * P2-138: resources/knowledge_pack_manifest.json is ~412 KB (408 KB reported)
+ * and is NOT bundled in the Electron asar archive. This file should be
+ * included in the build packaging to prevent runtime 404s.
+ */
+
 export interface SchemaRegistryEntry {
   fileName: string;
   id: string;
@@ -162,6 +181,13 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     version: schemaVersion,
     purpose: "Phase 33 final provider execution handoff review plan derived from action-time confirmation receipts with provider submission, live submit, credentials, worker spawn, and file mutation locked off.",
     typeName: "ProviderExecutionHandoffState",
+  },
+  {
+    fileName: "provider_submit_permission_receipt.schema.json",
+    id: "https://vibecore.local/schemas/provider_submit_permission_receipt.schema.json",
+    version: schemaVersion,
+    purpose: "Small-batch provider submit permission receipt that stores only opaque credential references and pending action-time intent while submit, credential material, network IO, workers, and file mutation remain locked off.",
+    typeName: "ProviderSubmitPermissionReceiptState",
   },
   {
     fileName: "provider_closed_loop_shell.schema.json",
@@ -482,22 +508,22 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     fileName: "agent_cli_mock_runner.schema.json",
     id: "https://vibecore.local/schemas/agent_cli_mock_runner.schema.json",
     version: schemaVersion,
-    purpose: "Phase 26 mock/no-op Agent/CLI runner replacement proof with Codex spawn, resume, provider submit, shell, credential, and file mutation routes locked off.",
+    purpose: "Phase 26 mock/no-op Agent/CLI runner replacement proof with Agent spawn, resume, provider submit, shell, credential, and file mutation routes locked off.",
     typeName: "AgentCliMockRunnerState",
   },
   {
-    fileName: "codex_cli_adapter_spike.schema.json",
-    id: "https://vibecore.local/schemas/codex_cli_adapter_spike.schema.json",
+    fileName: "cli_adapter_spike.schema.json",
+    id: "https://vibecore.local/schemas/cli_adapter_spike.schema.json",
     version: schemaVersion,
-    purpose: "Phase 29 Codex CLI adapter contract spike using validated envelopes, structured results, and Phase 26 replacement proof while all live execution routes remain blocked.",
-    typeName: "CodexCliAdapterSpikeState",
+    purpose: "Phase 29 CLI adapter contract spike using validated envelopes, structured results, and Phase 26 replacement proof while all live execution routes remain blocked.",
+    typeName: "CliAdapterSpikeState",
   },
   {
-    fileName: "codex_worker_runtime_gate.schema.json",
-    id: "https://vibecore.local/schemas/codex_worker_runtime_gate.schema.json",
+    fileName: "worker_runtime_gate.schema.json",
+    id: "https://vibecore.local/schemas/worker_runtime_gate.schema.json",
     version: schemaVersion,
-    purpose: "Phase 40 Codex Worker Runtime gate shell requiring validated SubagentTaskEnvelope, Phase38 packet evidence, and Phase26 replacement proof while Codex spawn, resume, daemon, shell, provider, credentials, and file mutation stay locked off.",
-    typeName: "CodexWorkerRuntimeGateState",
+    purpose: "Phase 40 Worker Runtime gate shell requiring validated SubagentTaskEnvelope, Phase38 packet evidence, and Phase26 replacement proof while Agent spawn, resume, daemon, shell, provider, credentials, and file mutation stay locked off.",
+    typeName: "WorkerRuntimeGateState",
   },
   {
     fileName: "local_orchestrator.schema.json",
@@ -652,6 +678,20 @@ export const schemaRegistry: SchemaRegistryEntry[] = [
     version: schemaVersion,
     purpose: "Conservative director intent classification before story mutation or prompt changes.",
     typeName: "DirectorIntentResult",
+  },
+  {
+    fileName: "director_analysis_envelope.schema.json",
+    id: "https://vibecore.local/schemas/director_analysis_envelope.schema.json",
+    version: schemaVersion,
+    purpose: "Validated AI director analysis envelope for rhythm, action, and storyboard planning before project mutation or provider submit.",
+    typeName: "DirectorAnalysisEnvelope",
+  },
+  {
+    fileName: "director_workflow.schema.json",
+    id: "https://vibecore.local/schemas/director_workflow.schema.json",
+    version: schemaVersion,
+    purpose: "Director workflow shell: intent → edit plan → dry-run transaction with hard locks.",
+    typeName: "DirectorWorkflowState",
   },
   {
     fileName: "story_change_transaction.schema.json",

@@ -126,6 +126,15 @@ function sourceStartFrameInput(inputs: Image2ReferenceImageInput[] = []): Image2
   );
 }
 
+function textMentionsImagePath(value: unknown): boolean {
+  if (typeof value === "string") {
+    return /(?:^|\s|["'(])(?:file:\/\/|\/Users\/|[A-Za-z]:[\\/]|\.{1,2}\/|[\w.-]+\/)[^\s"'()]+\.(?:png|jpe?g|webp|gif|tiff?)(?:$|\s|["')])/i.test(value);
+  }
+  if (Array.isArray(value)) return value.some(textMentionsImagePath);
+  if (value && typeof value === "object") return Object.values(value as Record<string, unknown>).some(textMentionsImagePath);
+  return false;
+}
+
 export function buildImage2AdapterRequest(taskPlan: ImageTaskPlan, promptPlan: ShotPromptPlan): Image2AdapterRequest {
   const referenceImageInputs = taskPlan.referenceImageInputs || promptPlan.referenceImageInputs || [];
   const startFrameInput = sourceStartFrameInput(referenceImageInputs);
@@ -177,8 +186,16 @@ export function validateImage2AdapterRequest(request: Image2AdapterRequest): Ima
   if (request.operation === "image2image") {
     const referenceImageInputs = request.payload?.referenceImageInputs || [];
     const startFrameInput = sourceStartFrameInput(referenceImageInputs);
+    const promptMentionsImagePath = textMentionsImagePath([
+      request.payload?.sourceIntent,
+      request.payload?.mustPreserve,
+      request.payload?.mustAvoid,
+      request.payload?.references,
+      request.payload?.sourceStartFrameId,
+    ]);
     if (!Array.isArray(request.payload?.referenceImageInputs)) issues.push("payload_reference_image_inputs_missing");
     if (!startFrameInput) issues.push("source_start_frame_visual_input_required");
+    if (promptMentionsImagePath && !startFrameInput) issues.push("path_in_prompt_without_reference_attachment");
     if (startFrameInput && request.payload.sourceStartFrameId && startFrameInput.path !== request.payload.sourceStartFrameId) {
       issues.push("source_start_frame_id_mismatch");
     }

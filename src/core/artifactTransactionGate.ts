@@ -168,6 +168,7 @@ function pathInsideAllowedPrefixes(path: string, allowedPrefixes: string[]): boo
   return allowedPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
+// Intentional identity function - preserves type narrowing from ArtifactSemanticQaStatus to the narrower ledger event enum.
 function qaReviewStatusForLedger(status: ArtifactSemanticQaStatus): "pending" | "pass" | "needs_review" | "failed" {
   return status;
 }

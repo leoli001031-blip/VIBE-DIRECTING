@@ -1,3 +1,5 @@
+import type { BaseHardLocks } from "./types";
+
 export type DesktopRuntimePlatform = "darwin" | "win32" | "linux" | "unknown";
 export type DesktopRuntimeMode = "desktop_plan_only" | "tauri_permission_shell_planned";
 export type DesktopRuntimeGateStatus = "planned" | "disabled" | "permission_gated" | "blocked";
@@ -59,7 +61,7 @@ export interface DesktopRuntimePathResolverPlan {
 
 export interface DesktopRuntimeSidecarCommand {
   id: string;
-  executable: "codex" | "ffmpeg" | "ffprobe" | "provider-cli";
+  executable: "agent" | "ffmpeg" | "ffprobe" | "provider-cli";
   status: "planned" | "disabled";
   argumentSource: "validated_envelope_only";
   userFreeTextShellAllowed: false;
@@ -90,18 +92,14 @@ export interface DesktopRuntimeCredentialVaultPlan {
   notes: string[];
 }
 
-export interface DesktopRuntimeHardLocks {
-  noFileMutation: true;
+export interface DesktopRuntimeHardLocks extends BaseHardLocks {
   noDirectoryCreate: true;
   noUserFileMove: true;
   noProviderSubmit: true;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   noArbitraryShell: true;
   noSidecarSpawn: true;
   noInstall: true;
   noDownload: true;
-  liveSubmitAllowed: false;
 }
 
 export interface DesktopRuntimeValidation {
@@ -147,17 +145,21 @@ const absolutePathPattern = /^(?:[A-Za-z]:[\\/]|[\\/]{1,2}|~(?:[\\/]|$))/;
 const parentTraversalPattern = /(?:^|\/)\.\.(?:\/|$)/;
 
 export const desktopRuntimeHardLocks: DesktopRuntimeHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
   noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   noDirectoryCreate: true,
   noUserFileMove: true,
   noProviderSubmit: true,
-  noCredentialRead: true,
-  noCredentialWrite: true,
   noArbitraryShell: true,
   noSidecarSpawn: true,
   noInstall: true,
   noDownload: true,
-  liveSubmitAllowed: false,
 };
 
 function normalizeSlashes(value: string): string {
@@ -339,13 +341,13 @@ function buildPathResolverPlan(input: DesktopRuntimeBuildInput, platform: Deskto
 function buildSidecarAllowlist(requestedCommand?: string): DesktopRuntimeSidecarPlan {
   const commands: DesktopRuntimeSidecarCommand[] = [
     {
-      id: "codex-agent-task",
-      executable: "codex",
+      id: "agent-task",
+      executable: "agent",
       status: "planned",
       argumentSource: "validated_envelope_only",
       userFreeTextShellAllowed: false,
       liveSubmitAllowed: false,
-      notes: ["Future Codex invocations must be compiled from task/subagent envelopes, never free text shell strings."],
+      notes: ["Future agent invocations must be compiled from task/subagent envelopes, never free text shell strings."],
     },
     {
       id: "ffmpeg-media-inspect",

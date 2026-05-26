@@ -1,6 +1,6 @@
 import type { ProviderLiveGateItem, ProviderLiveGateState } from "./providerLiveGate";
-import type { CodexCliAdapterSpikeState } from "./codexCliAdapterSpike";
-import type { ProviderSlot, RequiredMode } from "./types";
+import type { CliAdapterSpikeState } from "./cliAdapterSpike";
+import type { BaseHardLocks, ProviderSlot, RequiredMode } from "./types";
 
 export const providerExecutionPermissionGateSchemaVersion = "0.1.0";
 
@@ -53,23 +53,16 @@ export interface ProviderExecutionPermissionRequest {
   noFileMutation: true;
 }
 
-export interface ProviderExecutionPermissionHardLocks {
-  dryRunOnly: true;
+export interface ProviderExecutionPermissionHardLocks extends BaseHardLocks {
   readOnly: true;
   reviewPlanOnly: true;
   actionTimeConfirmationRequired: true;
-  providerSubmissionForbidden: true;
   canSubmitProvider: false;
   providerSubmitAllowed: 0;
-  liveSubmitAllowed: false;
   credentialAccessAllowed: false;
   credentialStorage: false;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   noApiKeyCreation: true;
   noArbitraryProviderCommand: true;
-  noWorkerSpawn: true;
-  noFileMutation: true;
   fastModelForbidden: true;
   vipChannelForbidden: true;
   textToVideoMainPathForbidden: true;
@@ -128,26 +121,28 @@ export interface ProviderExecutionPermissionGateState {
 export interface BuildProviderExecutionPermissionGateStateInput {
   generatedAt: string;
   providerLiveGate: ProviderLiveGateState;
-  codexCliAdapterSpike?: CodexCliAdapterSpikeState;
+  cliAdapterSpike?: CliAdapterSpikeState;
 }
 
 const hardLocks: ProviderExecutionPermissionHardLocks = {
   dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   readOnly: true,
   reviewPlanOnly: true,
   actionTimeConfirmationRequired: true,
-  providerSubmissionForbidden: true,
   canSubmitProvider: false,
   providerSubmitAllowed: 0,
-  liveSubmitAllowed: false,
   credentialAccessAllowed: false,
   credentialStorage: false,
-  noCredentialRead: true,
-  noCredentialWrite: true,
+  credentialReadAllowedForSettings: true,
   noApiKeyCreation: true,
   noArbitraryProviderCommand: true,
-  noWorkerSpawn: true,
-  noFileMutation: true,
   fastModelForbidden: true,
   vipChannelForbidden: true,
   textToVideoMainPathForbidden: true,
@@ -201,15 +196,31 @@ function isForbiddenModesAbsent(providerLiveGate: ProviderLiveGateState): boolea
     && providerLiveGate.hardLocks.bgmInVideoPromptForbidden === true;
 }
 
-function adapterSpikeStillLocked(codexCliAdapterSpike?: CodexCliAdapterSpikeState): boolean {
-  if (!codexCliAdapterSpike) return true;
-  return codexCliAdapterSpike.hardLocks.noActualCodexSpawn === true
-    && codexCliAdapterSpike.hardLocks.noActualCodexResume === true
-    && codexCliAdapterSpike.hardLocks.noProviderSubmit === true
-    && codexCliAdapterSpike.hardLocks.liveSubmitAllowed === false
-    && codexCliAdapterSpike.hardLocks.noCredentialAccess === true
-    && codexCliAdapterSpike.hardLocks.noFileMutation === true
-    && codexCliAdapterSpike.hardLocks.noFreeTextTask === true;
+function providerLiveGateSafetyBlockers(providerLiveGate: ProviderLiveGateState): string[] {
+  return uniqueSorted([
+    providerLiveGate.phase === "phase_11_provider_adapter_live_gate" ? "" : "provider_live_gate_phase_drift",
+    providerLiveGate.summary.providerSubmitAllowed === 0 ? "" : "provider_live_gate_summary_provider_submit_allowed_drift",
+    providerLiveGate.summary.liveSubmitAllowed === false ? "" : "provider_live_gate_summary_live_submit_allowed_drift",
+    providerLiveGate.summary.credentialStorage === false ? "" : "provider_live_gate_summary_credential_storage_drift",
+    providerLiveGate.phase30Evidence.canSubmitProvider === false ? "" : "provider_live_gate_phase30_can_submit_provider_drift",
+    providerLiveGate.phase30Evidence.providerSubmitAllowed === 0 ? "" : "provider_live_gate_phase30_provider_submit_allowed_drift",
+    providerLiveGate.phase30Evidence.liveSubmitAllowed === false ? "" : "provider_live_gate_phase30_live_submit_allowed_drift",
+    providerLiveGate.phase30Evidence.credentialStorage === false ? "" : "provider_live_gate_phase30_credential_storage_drift",
+    providerLiveGate.hardLocks.providerSubmissionForbidden === true ? "" : "provider_live_gate_lock_provider_submission_forbidden_drift",
+    providerLiveGate.hardLocks.liveSubmitAllowed === false ? "" : "provider_live_gate_lock_live_submit_allowed_drift",
+    providerLiveGate.hardLocks.credentialStorage === false ? "" : "provider_live_gate_lock_credential_storage_drift",
+  ]);
+}
+
+function adapterSpikeStillLocked(cliAdapterSpike?: CliAdapterSpikeState): boolean {
+  if (!cliAdapterSpike) return true;
+  return cliAdapterSpike.hardLocks.noActualAgentSpawn === true
+    && cliAdapterSpike.hardLocks.noActualAgentResume === true
+    && cliAdapterSpike.hardLocks.noProviderSubmit === true
+    && cliAdapterSpike.hardLocks.liveSubmitAllowed === false
+    && cliAdapterSpike.hardLocks.noCredentialAccess === true
+    && cliAdapterSpike.hardLocks.noFileMutation === true
+    && cliAdapterSpike.hardLocks.noFreeTextTask === true;
 }
 
 function buildRequest(
@@ -221,8 +232,10 @@ function buildRequest(
     && item.liveSubmitAllowed === false
     && item.providerSubmissionForbidden === true
     && item.credentialStorage === false;
-  const adapterLocked = adapterSpikeStillLocked(input.codexCliAdapterSpike);
+  const adapterLocked = adapterSpikeStillLocked(input.cliAdapterSpike);
   const forbiddenModesAbsent = isForbiddenModesAbsent(input.providerLiveGate);
+  const liveGateSafetyBlockers = providerLiveGateSafetyBlockers(input.providerLiveGate);
+  const liveGateSafe = liveGateSafetyBlockers.length === 0;
   const parked = item.status === "parked";
   const confirmations = [
     confirmation(
@@ -263,12 +276,13 @@ function buildRequest(
   ];
   const blockers = uniqueSorted([
     ...item.blockers,
+    ...liveGateSafetyBlockers,
     ...confirmations.flatMap((check) => (check.blocker ? [check.blocker] : [])),
     ...(parked ? ["Provider slot is parked and cannot request action-time confirmation."] : []),
   ]);
   const status: ProviderExecutionPermissionStatus = parked
     ? "parked"
-    : phase30Ready && adapterLocked && forbiddenModesAbsent
+    : phase30Ready && adapterLocked && forbiddenModesAbsent && liveGateSafe
       ? "ready_for_user_review"
       : "blocked";
 

@@ -37,6 +37,16 @@
     },
     "canPromoteToFormal": { "type": "boolean" },
     "canUseAsFutureReference": { "type": "boolean" },
+    "textConstraints": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "uniqueItems": true
+    },
+    "sourceRefs": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "uniqueItems": true
+    },
     "rejectedReason": { "type": "string" },
     "contaminationReason": { "type": "string" },
     "sourceTaskId": { "type": "string" },

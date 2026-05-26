@@ -183,6 +183,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "dryRunOnly",
+        "providerSubmissionForbidden",
         "settingsOnly",
         "noProviderSubmit",
         "noTtsSubmit",
@@ -192,11 +194,15 @@
         "noSecretStorage",
         "noSampleAudioCopy",
         "noFileMutation",
+        "noShellExecution",
+        "noWorkerSpawn",
         "noBgmInVideoProvider",
         "noVideoProviderBgmPrompt",
         "liveSubmitAllowed"
       ],
       "properties": {
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
         "settingsOnly": { "type": "boolean", "const": true },
         "noProviderSubmit": { "type": "boolean", "const": true },
         "noTtsSubmit": { "type": "boolean", "const": true },
@@ -206,6 +212,8 @@
         "noSecretStorage": { "type": "boolean", "const": true },
         "noSampleAudioCopy": { "type": "boolean", "const": true },
         "noFileMutation": { "type": "boolean", "const": true },
+        "noShellExecution": { "type": "boolean", "const": true },
+        "noWorkerSpawn": { "type": "boolean", "const": true },
         "noBgmInVideoProvider": { "type": "boolean", "const": true },
         "noVideoProviderBgmPrompt": { "type": "boolean", "const": true },
         "liveSubmitAllowed": { "type": "boolean", "const": false }

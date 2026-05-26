@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+{/* Review: dynamic content regions (preview status, agent panel updates, etc.) should use aria-live for screen reader announcements */}
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
-  Boxes,
   CheckCircle2,
   Clapperboard,
   Database,
@@ -22,7 +22,6 @@ import {
   Wrench,
 } from "lucide-react";
 import type {
-  AssetRecord,
   AudioPlan,
   AudioPlanningState,
   AuditIssue,
@@ -30,7 +29,6 @@ import type {
   PreviewEvent,
   ProjectAudit,
   ProjectPreviewExportState,
-  MotionEndpointContract,
   ShotRecord,
   UiMode,
   WorkflowStage,
@@ -44,91 +42,215 @@ import {
   emptyKnowledgeManifest,
   withRuntimeDefaults,
 } from "./core/projectStateBuilder";
-import { buildDesktopRuntimePlan, type DesktopRuntimePlan } from "./core/desktopRuntime";
 import { buildSubagentWorkerRuntimePlan, type SubagentWorkerRuntimePlan } from "./core/subagentWorkerRuntime";
 import { ensureRuntimeEnvironment } from "./core/runtimeConfig";
-import { buildDirectorWorkflowState, type DirectorWorkflowStatus } from "./core/directorWorkflow";
 import { buildMinimalRuntimeProjection, type MinimalRuntimeProjection } from "./core/minimalRuntimeProjection";
 import {
-  buildProjectTransactionRuntime,
-  commitProjectPendingTransactionForRuntime,
-  confirmProjectPendingTransactionForRuntime,
-  type ProjectConfirmedProjectionReceipt,
-} from "./core/projectTransaction";
+  buildNewVideoProjectVibeStagedTransaction,
+  commitNewVideoProjectVibeStagedTransaction,
+  type NewVideoProjectVibeStagedTransactionPreview,
+} from "./core/newVideoProjectVibePlanner";
+import { bindNewVideoAudioReferenceToRuntimeState } from "./core/newVideoAudioReferenceBinding";
+import { buildAudioPlanningState } from "./core/audioPlanning";
+import {
+  applyDialogueAudioMaterialToRuntimeState,
+  buildDialogueAudioMaterialProjectVibeTransaction,
+} from "./core/dialogueAudioMaterial";
+import { buildVoiceAudioSettingsState } from "./core/voiceAudioSettings";
+import {
+  toRuntimeVoiceSources,
+  updateVoiceSource,
+} from "./core/voiceSourceLibrary";
 import {
   addAssetLibraryAsset,
-  createAssetLibrarySnapshot,
   markAssetLibraryAssetStatus,
   toVisualMemoryDocument,
   updateAssetLibraryAsset,
-  validateAssetLibrarySnapshot,
   type AddAssetLibraryAssetInput,
-  type AssetLibraryAsset,
-  type AssetLibraryAssetType,
   type AssetLibrarySnapshot,
-  type AssetLibraryStatus,
   type UpdateAssetLibraryAssetInput,
 } from "./core/assetLibraryCrud";
 import {
   createProjectStoreSnapshot,
   saveProjectStoreSnapshot,
-  type ProjectStoreSnapshot,
 } from "./core/projectStore";
 import {
   buildProjectStoreIoGate,
   type ProjectStoreIoGate,
-  type ProjectStoreIoMode,
 } from "./core/projectStoreIo";
+import type { ProjectFactsStagedApplyPlan } from "./core/projectTransaction";
 import {
-  buildPreviewPlayerQueue as buildCorePreviewPlayerQueue,
-  getPreviewPlayerActiveItem,
-  getPreviewPlayerTotalDuration,
+  buildMissingPreviewQueueFromShots,
   type PreviewQueueItem,
-  type PreviewQueueItemKind,
 } from "./core/previewPlayerQueue";
+import type { DirectorFeedbackRecompileResult } from "./core/directorFeedbackRecompile";
+import {
+  applyDirectorFeedbackRecompileToProjectVibe,
+  buildProjectVibeStoryboardPlannerInput,
+} from "./core/directorFeedbackProjectVibe";
+import { runDirectorPrototypeClosedLoop } from "./agent/directorPrototypeLoop";
+import {
+  applyProjectVibeTransaction,
+  buildProjectRuntimeStateFromProjectVibe,
+  confirmProjectVibeCreativeLoop,
+  createProjectVibe,
+  refreshProjectVibeSourceIndex,
+  type ProjectVibeAssetKind,
+  type ProjectVibeDocument,
+} from "./project";
+import { buildProviderReviewPromotionTransaction } from "./core/providerReviewPromotion";
+import {
+  forgetBrowserProjectVibeDraft,
+  openProjectVibeDraft,
+  projectVibeDraftTargetId as buildProjectVibeDraftTargetId,
+  saveProjectVibeDraft,
+  type ProjectVibeDraftTarget,
+} from "./project/projectVibeDraftStore";
+import {
+  canCreateLocalProject as canCreateLocalProjectDialog,
+  canChooseProjectRoot as canChooseProjectRootDialog,
+  canRememberProjectRoot as canRememberProjectRootDialog,
+  chooseProjectRoot,
+  createLocalProject,
+  rememberProjectRoot,
+  type ProjectRootDialogSelection,
+} from "./project/projectRootDialog";
 import { buildCurrentProjectPreviewProjection } from "./core/currentProjectPreviewProjection";
+import { loadProjectRealChainStatus } from "./core/projectCurrentRuntimeClient";
+import { submitCurrentProjectReviewDecision } from "./core/projectReviewDecisionClient";
+import { markCurrentProjectAssetStatus } from "./core/projectAssetStatusClient";
+import {
+  loadAgentWebSearchSettings,
+  saveAgentWebSearchSettings,
+  type AgentWebSearchResult,
+  type AgentWebSearchSettings,
+} from "./core/agentWebSearchClient";
+import {
+  buildProjectLocalKnowledgeManifest,
+  buildProjectLocalKnowledgePackFromWebSearch,
+  buildProjectLocalKnowledgeReferenceStagedTransaction,
+  commitProjectLocalKnowledgeReferenceStagedTransaction,
+  loadProjectLocalKnowledgePacks,
+  openProjectLocalKnowledgePacks,
+  saveProjectLocalKnowledgePack,
+} from "./core/projectLocalKnowledge";
+import type { KnowledgePack } from "./core/knowledgeTypes";
+import { runExportAction, type ExportActionState } from "./core/exportAction";
+import { buildLocalPreviewExportProjection } from "./core/localPreviewExportProjection";
 import {
   applyCurrentProjectWorkbenchProjectionToRuntimeState,
   buildCurrentProjectWorkbenchProjection,
-  type CurrentProjectWorkbenchProjection,
 } from "./core/currentProjectWorkbenchProjection";
 import { applyPreRealTestClosure } from "./core/preRealTestClosure";
 import {
-  currentProjectBindingIdentity,
-  confirmProjectImage2OneShot,
-  executeReturnedProjectImage2OneShot,
-  loadCurrentProjectBindingStatus,
-  loadCurrentProjectChoices,
-  loadProjectImage2OneShotStatus,
-  loadProjectImage2BatchPlan,
-  loadProjectRealChainStatus,
-  prepareProjectRound5StrictEditPreflight,
-  prepareProjectImage2OneShot,
-  prepareProjectImage2OneShotTrigger,
-  runProjectImage2BatchCheck,
-  runProjectRealChainCheck,
-  selectCurrentProjectBinding,
-  type ProjectCurrentChoice,
-  type ProjectCurrentBindingStatus,
-  type ProjectImage2BatchUiState,
-  type ProjectImage2OneShotUiState,
-  type ProjectRealChainPreviewItem,
-  type ProjectRound5StrictEditPreflightUiState,
-  type ProjectRealChainUiState,
-  type ProjectRealChainUiStatus,
-} from "./core/projectRealChainStatus";
+  buildRealImage2GateState,
+  lockRealImage2Gate,
+  promoteRealImage2Artifact,
+  realImage2GateCanGenerate,
+  realImage2GatePromotionReady,
+  startRealImage2Generation,
+  unlockRealImage2Gate,
+  type RealImage2GateState,
+} from "./core/realImage2Gate";
+import { formatShotNumber } from "./ui/director/MinimalStoryFlow";
+import { MinimalTopNav } from "./ui/director/MinimalTopNav";
+import { MinimalDirectorStatusDot } from "./ui/director/MinimalDirectorStatusDot";
+import {
+  DirectorProgressStrip,
+  buildDirectorProgressStripState,
+} from "./ui/director/DirectorProgressStrip";
+import { DirectorMode } from "./ui/director/DirectorModeShell";
+import { MinimalAssetLibrary } from "./ui/director/MinimalAssetLibrary";
+import type {
+  AssetLibraryUiStatus,
+  DirectorView,
+  MinimalProjectPlan,
+} from "./ui/director/directorTypes";
+import type { CreatorReviewLockTarget, CreatorReviewTrayItem } from "./ui/director/creatorDeskTypes";
+import type {
+  PrototypeAgentDemoRun,
+  PreviewPrototypeAgentDemoInput,
+} from "./ui/director/agentPanelProjection";
+import type { NewVideoStartConfirmationContext, NewVideoStartDraft } from "./ui/director/NewVideoStart";
+import type { MinimalAudioPlanDialogueAudioCreated } from "./ui/director/MinimalAudioPlan";
+import { uiStatusToAssetLibraryStatus } from "./ui/director/assetLibraryUi";
+import {
+  createAssetLibraryFromCurrentProjectWorkbench,
+  createAssetLibraryFromRuntimeState,
+  createProjectVibeFromRuntimeState,
+  syncRuntimeStateWithAssetLibrary,
+} from "./ui/app/projectRuntimeProjections";
+import {
+  projectFileSelectionDetail,
+  projectFileSelectionLabel,
+  prototypeProjectDraftStorageKey,
+  type ProjectFileSelectionStatus,
+} from "./ui/app/projectFileUi";
+import { buildCreatorDeskProjection } from "./ui/app/creatorDeskProjection";
+import { useCurrentProjectRuntimePanels } from "./ui/app/useCurrentProjectRuntimePanels";
+import { useImage2AssetGenerationAction } from "./ui/director/useImage2AssetGenerationAction";
+import { useImage2EndFrameAction } from "./ui/director/useImage2EndFrameAction";
+import { useSeedanceVideoSubmitAction } from "./ui/director/useSeedanceVideoSubmitAction";
+import { AppOverview } from "./ui/common/AppOverview";
+import { ErrorBoundary } from "./ui/ErrorBoundary";
+import { CompactList, Metric, StatusPill, statusLabel } from "./ui/common/DiagnosticsPrimitives";
+import type { ProjectFactsUiMode, ProjectFactsUiSummary } from "./ui/diagnostics/ProjectFactsStrip";
+import {
+  buildLocalOrchestratorUiSummary,
+  firstMotionEndpointNotice,
+  getImagePipeline,
+  getVideoExecutionPreview,
+  getVideoPlanning,
+  motionContractSummaryForGate,
+  type RealPilotUiSummary,
+  type VideoExecutionPreviewRow,
+} from "./ui/app/runtimeStatusProjection";
 import { fallbackAudit } from "./data/fallbackAudit";
 
-const gateNames = ["identity", "scene", "pair", "story", "prop", "style"] as const;
-const fallbackRuntimeState = buildProjectRuntimeState(fallbackAudit, emptyKnowledgeManifest, {
+const InspectorMode = lazy(() =>
+  import("./ui/inspector/InspectorModeShell").then(({ InspectorMode }) => ({
+    default: InspectorMode,
+  })),
+);
+const DiagnosticsMode = lazy(() =>
+  import("./ui/diagnostics/DiagnosticsMode").then(({ DiagnosticsMode }) => ({
+    default: DiagnosticsMode,
+  })),
+);
+
+export const gateNames = ["identity", "scene", "pair", "story", "prop", "style"] as const;
+const startupAudit: ProjectAudit = {
+  ...fallbackAudit,
+  projectTitle: "新视频项目",
+  projectRoot: "",
+  sourceTask: "",
+  state: "empty_project",
+  metrics: {
+    expectedAssets: 0,
+    existingAssets: 0,
+    expectedKeyframes: 0,
+    existingKeyframes: 0,
+    expectedVideos: 0,
+    existingVideos: 0,
+    providerEvents: 0,
+    dreaminaImageEvents: 0,
+    forbiddenFallbackEvents: 0,
+  },
+  workflow: [],
+  assets: [],
+  shots: [],
+  jobs: [],
+  issues: [],
+};
+const fallbackRuntimeState = buildProjectRuntimeState(startupAudit, emptyKnowledgeManifest, {
   stateSource: {
     kind: "fallback-audit",
-    label: "fallbackAudit",
-    note: "Bundled fallback data; runtime-state.json and runtime-audit.json were unavailable.",
+    label: "empty startup",
+    note: "No project is selected yet.",
   },
 });
 
-function gateClass(value: string) {
+export function gateClass(value: string) {
   if (value === "PASS") return "gate pass";
   if (value === "PARTIAL") return "gate partial";
   if (value === "FAIL") return "gate fail";
@@ -136,7 +258,7 @@ function gateClass(value: string) {
   return "gate unknown";
 }
 
-function issueTone(issue: AuditIssue) {
+export function issueTone(issue: AuditIssue) {
   if (issue.severity === "blocker") return "issue blocker";
   if (issue.severity === "warning") return "issue warning";
   return "issue";
@@ -149,591 +271,111 @@ function stageIcon(stage: WorkflowStage) {
   return <Radio size={15} />;
 }
 
-function groupAssets(assets: AssetRecord[]) {
-  return {
-    Characters: assets.filter((asset) => asset.type === "character"),
-    Scenes: assets.filter((asset) => asset.type === "scene"),
-    Props: assets.filter((asset) => asset.type === "prop"),
-    Style: assets.filter((asset) => asset.type === "style"),
-    Other: assets.filter((asset) => !["character", "scene", "prop", "style"].includes(asset.type)),
-  };
+function safeProjectVibeId(value: string, fallback: string) {
+  const safe = value.trim().replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64);
+  return safe || fallback;
 }
 
-type DirectorView = "story" | "assets" | "preview";
-type AssetLibraryUiStatus = "locked" | "candidate" | "needs_review" | "rejected";
-type ProjectFactsUiMode = Extract<ProjectStoreIoMode, "create" | "open" | "save">;
-type MinimalProjectPlan = {
-  entryLabel: string;
-  planLabel: string;
-  statusLabel: string;
-  progressDots: MinimalRuntimeProjection["progressDots"];
-};
-type ProjectFactsUiSummary = {
-  mode: ProjectFactsUiMode;
-  projectFile: string;
-  factSource: string;
-  runtimeCache: string;
-  planStatus: string;
-  planDetail: string;
-  entryCount: number;
-  writeCount: number;
-  readCount: number;
-  blockers: string[];
-  gate: ProjectStoreIoGate;
-  snapshot: ProjectStoreSnapshot;
-};
-type AgentPlanPhase = "idle" | "review" | "confirmed";
-
-type DesktopRuntimeShellView = {
-  planStatus: string;
-  runtimeMode: string;
-  platformPathPolicy: string;
-  projectPermissionScope: string;
-  sidecarPolicy: string;
-  credentialVault: string;
-  hardLocks: string[];
-};
-
-type AgentCliMockRunnerUiSummary = {
-  initialized: boolean;
-  runnerKind: string;
-  replacementProof: string;
-  readiness: string;
-  noopResultCount: number;
-  hardLocks: string[];
-};
-type CodexCliAdapterSpikeUiSummary = {
-  initialized: boolean;
-  readiness: string;
-  contractMode: string;
-  replacementProof: string;
-  inputSource: string;
-  spawnResumeShape: string;
-  providerSubmit: string;
-  mutationBoundary: string;
-  blockers: string[];
-  warnings: string[];
-  hardLocks: string[];
-};
-
-type ExportWorkerUiSummary = {
-  initialized: boolean;
-  readiness: string;
-  scope: string;
-  plannedWriteCount: number;
-  plannedWriteSamples: string[];
-  exportRoot: string;
-  blockersWarnings: string[];
-  hardLocks: string[];
-};
-type VoiceAudioSettingsUiSummary = {
-  initialized: boolean;
-  phase: string;
-  readiness: string;
-  voiceSourceCount: number;
-  voiceSourceDetail: string;
-  audioPlanCount: number;
-  audioPlanDetail: string;
-  noBgmPolicy: boolean;
-  noBgmDetail: string;
-  providerSlotsTotal: number;
-  providerSlotsPlanned: number;
-  providerSlotsLive: number;
-  blockersWarnings: string[];
-  hardLocks: string[];
-};
-type ProviderEnablementGateUiSummary = {
-  initialized: boolean;
-  readiness: string;
-  readyForConfirmation: number;
-  blocked: number;
-  parked: number;
-  confirmationTokenStatus: string;
-  packetCompleteStatus: string;
-  closedLoopStatus: string;
-  forbiddenPathsAbsent: string;
-  canSubmitProvider: string;
-  submitBlocked: string;
-  credentialLiveShellLocked: string;
-  blockersWarnings: string[];
-  hardLocks: string[];
-};
-type ProviderExecutionPermissionGateUiSummary = {
-  initialized: boolean;
-  readiness: string;
-  readyForUserReview: number;
-  blocked: number;
-  parked: number;
-  canAskUserToConfirm: number;
-  actionTimeConfirmation: string;
-  automaticSubmit: string;
-  providerSubmit: string;
-  credentialWorkerFileLocks: string;
-  blockersWarnings: string[];
-  hardLocks: string[];
-};
-type ProviderActionConfirmationReceiptUiSummary = {
-  initialized: boolean;
-  readiness: string;
-  readyReceipts: number;
-  blocked: number;
-  parked: number;
-  confirmedCount: number;
-  providerSubmitBlocked: string;
-  credentialWorkerFileLocked: string;
-  blockersWarnings: string[];
-  hardLocks: string[];
-};
-type ProviderExecutionHandoffUiSummary = {
-  initialized: boolean;
-  readiness: string;
-  handoffCount: number;
-  blockedCount: number;
-  confirmedCount: number;
-  providerSubmitLocked: string;
-  credentialWorkerFileLocked: string;
-  blockersWarnings: string[];
-  hardLocks: string[];
-};
-type LocalOrchestratorUiSummary = {
-  initialized: boolean;
-  readiness: string;
-  queueTotal: number;
-  ready: number;
-  waiting: number;
-  runningPlanned: number;
-  waitingOutput: number;
-  qaPending: number;
-  needsReview: number;
-  blocked: number;
-  failed: number;
-  stalled: number;
-  completeVerified: number;
-  nextReadyCount: number;
-  autoContinueMode: string;
-  providerFileDaemonLocks: string;
-  blockersWarnings: string[];
-  hardLocks: string[];
-};
-type VisualConsistencyContractUiSummary = {
-  initialized: boolean;
-  readiness: string;
-  gateStatus: string;
-  geometryStatus: string;
-  shotLayoutStatus: string;
-  keyframePairStatus: string;
-  driftRepairStatus: string;
-  blockersWarnings: string[];
-  requiredGates: string[];
-};
-type FullTaskSubagentPacketPlannerUiSummary = {
-  initialized: boolean;
-  readiness: string;
-  coverageStatus: string;
-  packetStatus: string;
-  outputStatus: string;
-  traceStatus: string;
-  freeTextStatus: string;
-  routeStatus: string;
-  blockersWarnings: string[];
-  requiredGates: string[];
-};
-type KnowledgePackUserManagementUiSummary = {
-  initialized: boolean;
-  readiness: string;
-  userFlowStatus: string;
-  checkStatus: string;
-  routeConflictStatus: string;
-  overrideStatus: string;
-  injectionStatus: string;
-  promotionStatus: string;
-  blockersWarnings: string[];
-  requiredGates: string[];
-};
-type CodexWorkerRuntimeGateUiSummary = {
-  initialized: boolean;
-  readiness: string;
-  contractStatus: string;
-  gateStatus: string;
-  inputStatus: string;
-  outputStatus: string;
-  executionStatus: string;
-  blockersWarnings: string[];
-  requiredGates: string[];
-};
-type ProviderClosedLoopShellUiSummary = {
-  initialized: boolean;
-  readiness: string;
-  shellStatus: string;
-  watcherStatus: string;
-  manifestStatus: string;
-  qaStatus: string;
-  promotionStatus: string;
-  safetyStatus: string;
-  blockersWarnings: string[];
-  requiredGates: string[];
-};
-type BetaAcceptanceUiSummary = {
-  initialized: boolean;
-  readiness: string;
-  desktopStatus: string;
-  projectExportStatus: string;
-  runtimeGateStatus: string;
-  providerStatus: string;
-  testStatus: string;
-  closureStatus: string;
-  blockersWarnings: string[];
-  requiredGates: string[];
-};
-type DirectorProgressTone = "preparing" | "working" | "review" | "blocked" | "complete";
-type DirectorProgressSegment = {
-  label: string;
-  value: number;
-  tone: DirectorProgressTone;
-};
-type DirectorProgressStripState = {
-  label: string;
-  detail: string;
-  tone: DirectorProgressTone;
-  total: number;
-  preparing: number;
-  working: number;
-  review: number;
-  blocked: number;
-  complete: number;
-  segments: DirectorProgressSegment[];
-};
-type RealPilotUiSummary = {
-  reviewStatus: string;
-  handoffLabel: string;
-  handoffDetail: string;
-  handoffTone: string;
-  selectedShotCount: number;
-  selectedShotDetail: string;
-  framePairValue: string;
-  framePairDetail: string;
-  estimatedOutputCount: number;
-  estimatedOutputDetail: string;
-  outputRoot: string;
-  confirmationState: string;
-  image2State: string;
-  seedanceState: string;
-  preConfirmState: string;
-  preConfirmBudgetLimit: string;
-  preConfirmOutputWatch: string;
-  preConfirmRequestPreview: string;
-  preConfirmScopeDetail: string;
-  oneShotStatus: string;
-  oneShotConfirmation: string;
-  oneShotActionScope: string;
-  oneShotOutputExpectation: string;
-  oneShotConfirmed: boolean;
-  readyItems: number;
-  blockedItems: number;
-  ledgerEntries: number;
-  blockers: string[];
-  warnings: string[];
-};
-type OneShotActionStatus = "idle" | "confirmed";
-type ProjectRealChainPanelState = ProjectRealChainUiState;
-type ProjectImage2BatchPanelState = ProjectImage2BatchUiState;
-type ProjectImage2OneShotPanelState = ProjectImage2OneShotUiState;
-type ProjectRound5StrictEditPreflightPanelState = ProjectRound5StrictEditPreflightUiState | { status: "idle"; message?: string };
-
-function toMediaSrc(path?: string) {
-  if (!path) return undefined;
-  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:") || path.startsWith("blob:")) return path;
-  if (path.startsWith("/")) return `/@fs${path}`;
-  return path;
+function reviewLockAssetKind(target: CreatorReviewLockTarget): ProjectVibeAssetKind {
+  if (target === "character" || target === "scene" || target === "prop") return target;
+  return "reference";
 }
 
-function formatShotNumber(id: string) {
-  const match = id.match(/^A(\d+)_(\d+)$/i);
-  if (!match) return id;
-  return `${Number(match[1])}-${Number(match[2])}`;
+function reviewLockTargetLabel(target: CreatorReviewLockTarget) {
+  if (target === "character") return "角色参考";
+  if (target === "scene") return "场景参考";
+  if (target === "prop") return "道具参考";
+  return "本镜头参考";
 }
 
-function cleanLabel(value: string) {
-  return value
-    .replace(/^asset_/i, "")
-    .replace(/_/g, " ")
-    .replace(/\s+/g, " ")
+function cleanReviewItemProjectLabel(label: string) {
+  return label
+    .replace(/\s*[·•]\s*(待复核|待补齐|可重试|已通过|已锁定)\s*$/u, "")
+    .trim() || label.trim();
+}
+
+function cleanProjectDisplayNameCandidate(value?: string) {
+  const cleaned = value
+    ?.trim()
+    .replace(/^[#\s]+/u, "")
+    .replace(/^[:：\-\s]+/u, "")
+    .replace(/[。；;，,]\s*$/u, "")
+    .replace(/^《(.{1,64})》$/u, "$1")
+    .replace(/^["“「『](.{1,64})["”」』]$/u, "$1")
     .trim();
+  return cleaned || undefined;
 }
 
-const storyFunctionLabels = ["Setup", "Signal", "Choice", "Move", "Reveal", "Test", "Turn", "Decision", "Payoff", "Close"];
-
-function shortStoryFunction(shot: ShotRecord, index: number) {
-  const value = shot.storyFunction.trim();
-  if (/^[A-Za-z][A-Za-z\s-]{1,16}$/.test(value)) return value;
-  return storyFunctionLabels[index % storyFunctionLabels.length];
+function looksLikeProjectInstruction(value?: string) {
+  const text = value?.trim() || "";
+  if (!text) return true;
+  if (text.length > 64) return true;
+  return /^(请|先|帮我|我要|我想|不要|不用|直接|测试|做一个|来一个|生成|跑一轮|开始|确认|上传|参考|风格|脚本|主题|要求)/u.test(text)
+    || /(?:不要|不用|先不要|测试|真实生图|提交视频|项目|脚本|参考|分镜|镜头|风格|音频|音乐|素材|AI|Agent|Seedance|Image2|生图|生视频)/iu.test(text);
 }
 
-function shotStatusTone(shot: ShotRecord) {
-  if (shot.status === "blocked" || shot.issues.some((issue) => issue.includes("missing"))) return "bad";
-  if (shot.issues.length || shot.status === "video_missing") return "warn";
-  return "ok";
+function explicitProjectTitleFromScript(script?: string) {
+  const source = script?.slice(0, 1600) || "";
+  const titleLabelPattern = /(?:^|[\n\r\s])(?:标题|片名|故事名|项目名|作品名|Title)\s*[:：]\s*(?:《([^》\n]{1,64})》|["“「『]([^"”」』\n]{1,64})["”」』]|([^\n\r。；;]{1,64}))/iu;
+  const labelled = source.match(titleLabelPattern);
+  const labelledTitle = cleanProjectDisplayNameCandidate(labelled?.[1] || labelled?.[2] || labelled?.[3]);
+  if (labelledTitle && !looksLikeProjectInstruction(labelledTitle)) return labelledTitle;
+
+  const bracketed = source.match(/(?:^|[\n\r\s])《([^》\n]{2,48})》/u);
+  const bracketedTitle = cleanProjectDisplayNameCandidate(bracketed?.[1]);
+  if (bracketedTitle && !looksLikeProjectInstruction(bracketedTitle)) return bracketedTitle;
+  return undefined;
 }
 
-function assetStatusTone(asset: AssetRecord) {
-  if (asset.status === "missing" || asset.lockedStatus === "not_generated") return "bad";
-  if (asset.lockedStatus === "candidate" || asset.lockedStatus === "needs_review" || asset.issues.length) return "warn";
-  return "ok";
+function projectDisplayNameFromDraft(draft?: NewVideoStartDraft, context?: NewVideoStartConfirmationContext) {
+  const explicitTitle = explicitProjectTitleFromScript(draft?.script);
+  if (explicitTitle) return explicitTitle;
+  const summaryTitle = cleanProjectDisplayNameCandidate(context?.projection.summary.title);
+  if (summaryTitle && !looksLikeProjectInstruction(summaryTitle)) return summaryTitle;
+  const firstLine = draft?.script.split(/\r?\n/).map((line) => cleanProjectDisplayNameCandidate(line)).find((line) => line && !looksLikeProjectInstruction(line));
+  if (firstLine) return firstLine.slice(0, 36);
+  return "新视频";
 }
 
-function assetStatusLabel(asset: AssetRecord) {
-  if (asset.lockedStatus === "needs_review") return "review";
-  if (asset.lockedStatus === "not_generated") return "missing";
-  return asset.lockedStatus;
+function projectPathFromRuntimeBinding(projectRoot?: string, projectVibePath?: string) {
+  const root = projectRoot?.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  const vibePath = projectVibePath?.trim().replace(/\\/g, "/");
+  if (root && vibePath?.startsWith(`${root}/`)) {
+    const relative = vibePath.slice(root.length + 1);
+    return relative || "project.vibe";
+  }
+  return vibePath?.includes("/") ? "project.vibe" : (vibePath || "project.vibe");
 }
 
-function uniqueStrings(values: string[]) {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+function normalizeProjectRootForUiCompare(value?: string) {
+  const normalized = value?.trim().replace(/\\/g, "/").replace(/\/+$/, "") || "";
+  const runtimeProjectIndex = normalized.indexOf("/.vibe-runtime/");
+  const comparable = runtimeProjectIndex >= 0
+    ? normalized.slice(runtimeProjectIndex + 1)
+    : normalized.replace(/^\.\//, "");
+  return comparable.toLowerCase();
 }
 
-function splitConstraints(value: string) {
-  return uniqueStrings(value.split(/\n|；|;|,/g));
-}
-
-function safeAssetId(value: string, type: AssetLibraryAssetType) {
-  const slug = value
-    .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fa5]+/gi, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 48);
-  return `${type}_${slug || "asset"}_${Date.now().toString(36).slice(-4)}`;
-}
-
-function assetLibraryTypeLabel(type: AssetLibraryAssetType) {
-  if (type === "character") return "角色";
-  if (type === "scene") return "场景";
-  if (type === "style") return "风格";
-  if (type === "voice_anchor") return "音源";
-  return "道具";
-}
-
-function assetLibraryStatusLabel(status: AssetLibraryUiStatus | AssetLibraryStatus) {
-  if (status === "review" || status === "needs_review") return "review";
-  return status;
-}
-
-function uiStatusToAssetLibraryStatus(status: AssetLibraryUiStatus): AssetLibraryStatus {
-  return status === "needs_review" ? "review" : status;
-}
-
-function assetLibraryStatusToUiStatus(status: AssetLibraryStatus): AssetLibraryUiStatus {
-  if (status === "review" || status === "missing") return "needs_review";
-  return status;
-}
-
-function assetRecordTypeToLibraryType(type: AssetRecord["type"]): AssetLibraryAssetType {
-  if (type === "character" || type === "scene" || type === "prop" || type === "style") return type;
-  return "prop";
-}
-
-function assetRecordStatusToLibraryStatus(asset: AssetRecord): AssetLibraryStatus {
-  if (asset.status === "missing" || asset.lockedStatus === "not_generated") return "missing";
-  if (asset.lockedStatus === "locked") return "locked";
-  if (asset.lockedStatus === "needs_review") return "review";
-  return "candidate";
-}
-
-function assetSourceKindForPath(path?: string) {
-  const normalized = (path || "").replace(/\\/g, "/").toLowerCase();
-  if (/contact[-_ ]?sheet/.test(normalized)) return "contact_sheet" as const;
-  if (/(^|\/)(tmp|temp|cache|candidates?|drafts?)(\/|$)/.test(normalized)) return "provider_temp_output" as const;
-  if (/(^|\/)(failed|failures?)(\/|$)/.test(normalized)) return "failed_output" as const;
-  if (/(^|\/)(shot[-_ ]?outputs?|outputs\/shots)(\/|$)/.test(normalized)) return "shot_output" as const;
-  return "source_asset" as const;
-}
-
-function pathOriginForUi(path?: string) {
-  return path && /^(?:[A-Za-z]:[\\/]|\/|\/\/|~[\\/])/.test(path) ? "user_selected_import" as const : "project_root_relative" as const;
-}
-
-function defaultAssetConstraints(type: AssetLibraryAssetType, name: string) {
-  if (type === "character") return [`保持 ${cleanLabel(name)} 的身份、年龄感、发型和服装连续`];
-  if (type === "scene") return [`保持 ${cleanLabel(name)} 的空间布局、主要入口、光源方向和透视关系`];
-  if (type === "style") return [`保持 ${cleanLabel(name)} 的色彩、光比、颗粒和纹理强度一致`];
-  if (type === "voice_anchor") return [`保持 ${cleanLabel(name)} 的音色、语速和情绪区间一致`];
-  return [`保持 ${cleanLabel(name)} 的形状、材质和使用方式一致`];
-}
-
-function linkedShotIdsForAsset(asset: AssetRecord, state: ProjectRuntimeState) {
-  return uniqueStrings(
-    state.taskRuns.jobs
-      .filter((job) => job.references.includes(asset.path) || job.references.includes(asset.id))
-      .flatMap((job) =>
-        state.storyFlow.shots
-          .filter((shot) => job.id.startsWith(`${shot.id}_`) || job.outputPath === shot.startFrame || job.outputPath === shot.endFrame)
-          .map((shot) => shot.id),
-      ),
-  );
-}
-
-function createAssetLibraryFromRuntimeState(state: ProjectRuntimeState): AssetLibrarySnapshot {
-  const generatedAt = state.generatedAt || new Date().toISOString();
-  let library = createAssetLibrarySnapshot({
-    id: `${state.sourceIndex.projectId || "project"}_asset_library`,
-    createdAt: generatedAt,
-  });
-
-  for (const asset of state.visualMemory.assets) {
-    const assetType = assetRecordTypeToLibraryType(asset.type);
-    const result = addAssetLibraryAsset(library, {
-      id: asset.id,
-      assetType,
-      name: asset.name,
-      status: assetRecordStatusToLibraryStatus(asset),
-      sourceKind: assetSourceKindForPath(asset.path),
-      path: asset.status === "missing" ? undefined : asset.path,
-      pathOrigin: pathOriginForUi(asset.path),
-      importId: asset.id,
-      textConstraints: defaultAssetConstraints(assetType, asset.name),
-      sourceRefs: [`runtime.visualMemory.assets:${asset.id}`],
-      usedByShotIds: linkedShotIdsForAsset(asset, state),
+function projectVibeWithNewVideoTitle(
+  project: ProjectVibeDocument,
+  draft: NewVideoStartDraft,
+  context: NewVideoStartConfirmationContext,
+  generatedAt: string,
+): ProjectVibeDocument {
+  const title = projectDisplayNameFromDraft(draft, context);
+  if (!title || project.manifest.title === title) return project;
+  return refreshProjectVibeSourceIndex({
+    ...project,
+    manifest: {
+      ...project.manifest,
+      title,
       updatedAt: generatedAt,
-    });
-    library = result.library;
-  }
-
-  return library;
-}
-
-function createAssetLibraryFromCurrentProjectWorkbench(projection: CurrentProjectWorkbenchProjection): AssetLibrarySnapshot {
-  let library = createAssetLibrarySnapshot({
-    id: `${projection.identity.projectId || "current_project"}_asset_library_projection`,
-    createdAt: new Date().toISOString(),
-  });
-  for (const asset of projection.assetFacts) {
-    const status: AssetLibraryStatus =
-      asset.status === "needs_review"
-        ? "review"
-        : asset.status === "missing"
-          ? "missing"
-          : asset.status;
-    const detectedSourceKind = asset.path ? assetSourceKindForPath(asset.path) : "manual_definition";
-    const draftOnlySource = ["provider_temp_output", "failed_output", "shot_output", "contact_sheet"].includes(asset.sourceKind || detectedSourceKind);
-    const sourceKind = draftOnlySource ? "manual_definition" : detectedSourceKind;
-    const path = draftOnlySource ? undefined : asset.path;
-    const result = addAssetLibraryAsset(library, {
-      id: asset.id,
-      assetType: asset.type === "unknown" ? "prop" : asset.type,
-      name: asset.name,
-      status,
-      sourceKind,
-      path,
-      pathOrigin: pathOriginForUi(path),
-      importId: asset.id,
-      textConstraints: asset.textConstraints.length ? asset.textConstraints : defaultAssetConstraints(asset.type === "unknown" ? "prop" : asset.type, asset.name),
-      sourceRefs: asset.sourceRefs.length ? asset.sourceRefs : ["current_project.visual_memory"],
-      usedByShotIds: asset.usedByShotIds,
-      rejectedReason: asset.rejectedReason,
-      updatedAt: new Date().toISOString(),
-    });
-    library = result.library;
-  }
-  return library;
-}
-
-function assetLibraryAssetToRecord(asset: AssetLibraryAsset): AssetRecord {
-  const lockedStatus =
-    asset.referenceAuthority.lockedStatus === "rejected"
-      ? "needs_review"
-      : asset.referenceAuthority.lockedStatus;
-  const status = asset.status === "missing" ? "missing" : asset.sourceKind === "formal_output" ? "generated" : "exists";
-  const type = asset.assetType === "voice_anchor" ? "unknown" : asset.assetType;
-  return {
-    id: asset.id,
-    type,
-    name: asset.name,
-    path: asset.mainReferencePath || asset.sourcePath?.path || asset.referenceAuthority.path,
-    status,
-    lockedStatus,
-    providerId: "asset-library",
-    safeForFutureReference: asset.canUseAsFutureReference,
-    issues: uniqueStrings([
-      ...asset.blockers,
-      ...asset.warnings,
-      ...(asset.status === "rejected" ? [asset.referenceAuthority.rejectedReason || "Rejected by asset authority review."] : []),
-    ]),
-  };
-}
-
-function syncRuntimeStateWithAssetLibrary(state: ProjectRuntimeState, library: AssetLibrarySnapshot): ProjectRuntimeState {
-  const assets = library.assets.map(assetLibraryAssetToRecord);
-  const lockedReferenceIds = assets.filter((asset) => asset.lockedStatus === "locked").map((asset) => asset.id);
-  const candidateReferenceIds = assets.filter((asset) => asset.lockedStatus === "candidate" || asset.lockedStatus === "needs_review").map((asset) => asset.id);
-  const assetTypes = uniqueStrings(assets.map((asset) => asset.type));
-  return {
-    ...state,
-    visualMemory: {
-      ...state.visualMemory,
-      assets,
-      summary: {
-        ...state.visualMemory.summary,
-        existing: assets.filter((asset) => asset.status !== "missing").length,
-        total: assets.length,
-        locked: lockedReferenceIds.length,
-        needsReview: assets.filter((asset) => asset.lockedStatus === "candidate" || asset.lockedStatus === "needs_review").length,
-        missing: assets.filter((asset) => asset.status === "missing" || asset.lockedStatus === "not_generated").length,
-        byType: assetTypes.map((type) => {
-          const typedAssets = assets.filter((asset) => asset.type === type);
-          return {
-            type,
-            total: typedAssets.length,
-            existing: typedAssets.filter((asset) => asset.status !== "missing").length,
-            missing: typedAssets.filter((asset) => asset.status === "missing").length,
-          };
-        }),
-      },
     },
-    sourceIndex: {
-      ...state.sourceIndex,
-      lockedReferenceIds,
-      candidateReferenceIds,
-      rejectedReferenceIds: library.assets.filter((asset) => asset.status === "rejected").map((asset) => asset.id),
-      updatedAt: library.updatedAt,
-    },
-    sourceIndexSummary: {
-      ...state.sourceIndexSummary,
-      lockedReferenceCount: lockedReferenceIds.length,
-      candidateReferenceCount: candidateReferenceIds.length,
-      rejectedReferenceCount: library.assets.filter((asset) => asset.status === "rejected").length,
-      blockingReferenceCount: assets.filter((asset) => asset.lockedStatus !== "locked").length,
-      updatedAt: library.updatedAt,
-    },
-  };
+  }, generatedAt);
 }
 
-function assetLibraryUserBlockers(library: AssetLibrarySnapshot) {
-  const validation = validateAssetLibrarySnapshot(library);
-  const lockedCharacters = library.assets.filter((asset) => asset.assetType === "character" && asset.status === "locked");
-  const lockedScenes = library.assets.filter((asset) => asset.assetType === "scene" && asset.status === "locked");
-  const nonLocked = library.assets.filter((asset) => asset.status !== "locked" && asset.status !== "rejected");
-  const noConstraints = library.assets.filter((asset) => !asset.textConstraints.length || asset.blockers.length);
-  return uniqueStrings([
-    ...(lockedCharacters.length ? [] : ["缺主角参考"]),
-    ...(lockedScenes.length ? [] : ["缺场景 master"]),
-    ...nonLocked.map((asset) => `${cleanLabel(asset.name)} 未 locked，不能做正式参考`),
-    ...noConstraints.map((asset) => `${cleanLabel(asset.name)} 缺文本约束`),
-    ...library.blockedImports.map((item) => `${item.sourceKind} 已拦截：${item.reason}`),
-    ...validation.errors,
-  ]);
-}
 
-function shortSectionLabel(section: RuntimeView["storySections"][number], index = 0) {
-  const raw = cleanLabel(section.label || section.id || `Section ${index + 1}`);
-  const withoutIdPrefix = raw
-    .replace(/^section[-_\s]*/i, "")
-    .replace(/^act[-_\s]*/i, "");
-  const titleish = withoutIdPrefix
-    .replace(/[-_]+/g, " ")
-    .replace(/\b[a-f0-9]{7,}\b/gi, "")
-    .trim();
-  const label = titleish || `Part ${index + 1}`;
-  return label.length > 14 ? `${label.slice(0, 13).trim()}...` : label;
-}
+type OneShotActionStatus = "idle" | "confirmed";
 
 function buildProjectStoreSnapshotForUi(runtimeState: ProjectRuntimeState, library: AssetLibrarySnapshot) {
   const visualMemory = toVisualMemoryDocument(library);
@@ -813,159 +455,6 @@ function buildProjectFactsUiSummary(
   };
 }
 
-function selectedScopeLabel(shot?: ShotRecord, asset?: AssetRecord, sectionLabel?: string, selectedShots: ShotRecord[] = []) {
-  if (selectedShots.length > 1) {
-    const labels = selectedShots.slice(0, 4).map((item) => formatShotNumber(item.id));
-    const suffix = selectedShots.length > labels.length ? ` +${selectedShots.length - labels.length}` : "";
-    return `已选择 ${labels.join(", ")}${suffix}`;
-  }
-  if (shot) return `正在看 ${formatShotNumber(shot.id)}`;
-  if (asset) return `正在看 ${cleanLabel(asset.name)}`;
-  if (sectionLabel) return `正在看 ${sectionLabel}`;
-  return "正在看整个项目";
-}
-
-type MinimalAgentWorkflow = ReturnType<typeof buildDirectorWorkflowState>;
-
-function confirmedTransactionRuntime(workflow: MinimalAgentWorkflow, runtimeState: ProjectRuntimeState) {
-  return buildProjectTransactionRuntime({
-    workflowState: {
-      generatedAt: workflow.generatedAt,
-      status: workflow.status,
-      confirmationRequired: workflow.confirmationRequired,
-      blockedReasons: workflow.blockedReasons,
-      editPlan: workflow.editPlan,
-      taskPacketState: workflow.taskPacketState,
-    },
-    runtimeState,
-    userConfirmed: true,
-    userEnabled: true,
-  });
-}
-
-function buildAgentPanelProjection(
-  workflow: MinimalAgentWorkflow,
-  runtimeState: ProjectRuntimeState,
-  planPhase: AgentPlanPhase,
-) {
-  return buildMinimalRuntimeProjection({
-    generatedAt: workflow.generatedAt,
-    transactionRuntime: planPhase === "confirmed" ? confirmedTransactionRuntime(workflow, runtimeState) : workflow.transactionRuntime,
-  });
-}
-
-function agentReceiptStatusLabel(receipt: ProjectConfirmedProjectionReceipt) {
-  if (receipt.queuedCount > 0) return "已加入计划";
-  if (receipt.status === "blocked_missing_knowledge_trace") return "缺少资产约束，需补齐";
-  if (receipt.status === "blocked_queue") return "需补齐";
-  if (receipt.status === "blocked_not_confirmed") return "等待复核";
-  if (receipt.parkedCount > 0 && receipt.queuedCount === 0) return "等待写入项目事实";
-  return "等待写入项目事实";
-}
-
-function agentReceiptCountSummary(receipt: ProjectConfirmedProjectionReceipt) {
-  const updateCount = Math.max(receipt.blockedCount, receipt.runtimeProjection.staleArtifactCount);
-  const parts = [
-    receipt.queuedCount ? `${receipt.queuedCount} 已加入计划` : "",
-    receipt.parkedCount ? `${receipt.parkedCount} 等待复核` : "",
-    updateCount ? `${updateCount} 需补齐` : "",
-  ].filter(Boolean);
-  return parts.join(" · ") || agentReceiptStatusLabel(receipt);
-}
-
-function confirmAgentPlanProjection(workflow: MinimalAgentWorkflow, runtimeState: ProjectRuntimeState) {
-  const transactionRuntime = confirmedTransactionRuntime(workflow, runtimeState);
-  const receipt = confirmProjectPendingTransactionForRuntime(transactionRuntime);
-  const stagedReceipt = commitProjectPendingTransactionForRuntime({
-    runtime: transactionRuntime,
-    confirmationReceipt: receipt,
-  });
-  const hardLocksHeld = receipt.projectVibeWriteAllowed === false
-    && receipt.projectVibeWriteExecuted === false
-    && receipt.noFileMutation === true
-    && receipt.providerSubmissionForbidden === true
-    && receipt.workerSpawnForbidden === true
-    && receipt.providerCalled === false
-    && receipt.projectVibeWritten === false
-    && stagedReceipt.projectVibeWritten === false
-    && stagedReceipt.providerCalled === false
-    && stagedReceipt.workerSpawned === false
-    && stagedReceipt.hardLocks.noFileMutation === true
-    && stagedReceipt.hardLocks.projectVibeWriteAllowed === false;
-  const baseProjection = buildMinimalRuntimeProjection({
-    generatedAt: receipt.generatedAt,
-    transactionRuntime,
-  });
-  const counts = {
-    queued: receipt.queuedCount,
-    parked: receipt.parkedCount,
-    blocked: receipt.blockedCount,
-    stale: receipt.runtimeProjection.staleArtifactCount,
-  };
-  const shortLabel = hardLocksHeld && stagedReceipt.status === "staged" ? "已准备写入" : agentReceiptStatusLabel(receipt);
-  const countSummary = agentReceiptCountSummary(receipt);
-
-  return {
-    receipt,
-    stagedReceipt,
-    projection: {
-      ...baseProjection,
-      generatedAt: receipt.generatedAt,
-      shortLabel,
-      counts,
-      countSummary,
-      staleSummary: counts.stale ? `${counts.stale} 需更新` : "画面保持同步",
-      progressDots: buildMinimalRuntimeProjection({
-        generatedAt: receipt.generatedAt,
-        transactionRuntime: {
-          ...transactionRuntime,
-          userStatus: receipt.runtimeProjection.status,
-          nextUiProjection: {
-            ...transactionRuntime.nextUiProjection,
-            status: receipt.runtimeProjection.status,
-            shortLabel,
-            queuedCount: counts.queued,
-            parkedCount: counts.parked,
-            blockedCount: counts.blocked,
-            staleArtifactCount: counts.stale,
-          },
-        },
-      }).progressDots,
-    },
-  };
-}
-
-function agentProjectionBadges(projection: MinimalRuntimeProjection, planPhase: AgentPlanPhase) {
-  if (planPhase === "confirmed") return [projection.countSummary, "先等复核"].filter(Boolean);
-  return [projection.shortLabel, projection.staleSummary].filter(Boolean);
-}
-
-function agentProjectionNextStep(projection: MinimalRuntimeProjection, planPhase: AgentPlanPhase, canConfirm: boolean) {
-  if (planPhase === "confirmed") return `${projection.countSummary}，等待写入项目事实。`;
-  if (canConfirm) return "确认后只会加入计划，后续结果先复核。";
-  if (projection.counts.blocked > 0) return "缺少资产约束，需补齐。";
-  return "确认后只会加入计划，后续结果先复核。";
-}
-
-function previewQueueKind(event: PreviewEvent): PreviewQueueItemKind {
-  if (event.type === "blocked_placeholder" || !event.mediaPath) return "missing_placeholder";
-  if (event.type === "video_clip") return "video_clip";
-  return "image_hold";
-}
-
-function buildPreviewPlayerQueue(previewExport: ProjectPreviewExportState, shots: ShotRecord[]): PreviewQueueItem[] {
-  const draftEvents = previewExport.draftPreview.events.filter(
-    (event) =>
-      event.type === "image_hold" ||
-      event.type === "video_clip" ||
-      (event.type === "blocked_placeholder" && previewQueueKind(event) === "missing_placeholder"),
-  );
-  return buildCorePreviewPlayerQueue(
-    { ...previewExport, draftPreview: { ...previewExport.draftPreview, events: draftEvents } },
-    shots,
-  );
-}
-
 function exportStatusLabel(status: string) {
   if (status === "ready") return "可导出";
   if (status === "blocked") return "需要补齐";
@@ -976,99 +465,21 @@ function exportStatusLabel(status: string) {
 function buildMinimalProjectPlan(runtimeState: ProjectRuntimeState, statusLabel = "等待确认", progressDots: MinimalRuntimeProjection["progressDots"] = []): MinimalProjectPlan {
   const lockedReferences = runtimeState.visualMemory.assets.filter((asset) => asset.lockedStatus === "locked").length;
   return {
-    entryLabel: `${runtimeState.storyFlow.shots.length} shots`,
-    planLabel: `${lockedReferences} locked refs`,
+    entryLabel: `${runtimeState.storyFlow.shots.length} 个镜头`,
+    planLabel: `${lockedReferences} 个锁定参考`,
     statusLabel,
     progressDots,
   };
 }
 
-function desktopLockSummary(hardLocks: DesktopRuntimePlan["hardLocks"]) {
-  const labels: Partial<Record<keyof DesktopRuntimePlan["hardLocks"], string>> = {
-    noFileMutation: "no user project file mutation",
-    noProviderSubmit: "no provider submit",
-    noCredentialRead: "no credential read",
-    noCredentialWrite: "no credential write",
-    noArbitraryShell: "no arbitrary shell",
-    noSidecarSpawn: "no sidecar execution",
-    liveSubmitAllowed: "live submit disabled",
-  };
-
-  return Object.entries(labels)
-    .filter(([key]) => hardLocks[key as keyof DesktopRuntimePlan["hardLocks"]] === true || key === "liveSubmitAllowed")
-    .map(([key, label]) => key === "liveSubmitAllowed" && hardLocks.liveSubmitAllowed === false ? label : label)
-    .filter((label): label is string => Boolean(label));
-}
-
-function buildDesktopRuntimeShellView(runtimeState: ProjectRuntimeState): DesktopRuntimeShellView {
-  const config = runtimeState.runtime.config;
-  const plan = buildDesktopRuntimePlan({
-    generatedAt: runtimeState.project.importedAt,
-    platform: config.platform,
-    runtimeMode: "tauri_permission_shell_planned",
-    projectRootToken: "user_selected_project_root:unbound",
-    portableProjectPaths: [
-      "project.vibe",
-      "story_flow/story_flow.vibe.json",
-      "visual_memory/visual_memory.vibe.json",
-      "shots/index.vibe.json",
-    ],
-  });
-  const plannedVaults = plan.credentialVaultPlan.plannedStores.map(statusLabel).join(", ") || "not configured";
-
-  return {
-    planStatus: plan.validation.ok ? "dry-run" : "blocked",
-    runtimeMode: `${statusLabel(plan.runtimeMode)} / ${plan.platform}`,
-    platformPathPolicy: `${statusLabel(plan.pathResolverPlan.mode)} · ${plan.pathResolverPlan.resolvers.length} resolver(s) · absolute persistence ${String(plan.pathResolverPlan.hardcodedAbsolutePathPersistenceAllowed)}`,
-    projectPermissionScope: `${statusLabel(plan.projectPermissionScope.scopeKind)} · ${plan.projectPermissionScope.allowedRoots.map(statusLabel).join(", ")}`,
-    sidecarPolicy: `${plan.sidecarAllowlist.status} · ${plan.sidecarAllowlist.arbitraryShell} arbitrary shell · ${plan.sidecarAllowlist.commands.length} allowlisted command(s)`,
-    credentialVault: `${plan.credentialVaultPlan.mode}; read ${String(plan.credentialVaultPlan.readAllowedNow)}; write ${String(plan.credentialVaultPlan.writeAllowedNow)}; planned vaults ${plannedVaults}`,
-    hardLocks: desktopLockSummary(plan.hardLocks),
-  };
-}
-
-function buildSubagentWorkerRuntimeView(runtimeState: ProjectRuntimeState): SubagentWorkerRuntimePlan {
-  return buildSubagentWorkerRuntimePlan({
-    generatedAt: runtimeState.generatedAt,
-    envelopes: runtimeState.videoExecutionPreview.previews
-      .map((preview) => preview.subagentTaskEnvelope)
-      .filter(Boolean),
-  });
-}
-
-function MediaFrame({
-  src,
-  alt,
-  label,
-  className = "",
-}: {
-  src?: string;
-  alt: string;
+type PrototypeProjectDraftStatus = {
+  status: "idle" | "loading" | "restored" | "saved" | "missing" | "unavailable" | "error";
   label: string;
-  className?: string;
-}) {
-  const [failed, setFailed] = useState(false);
+  targetId?: string;
+  factHash?: string;
+  error?: string;
+};
 
-  useEffect(() => {
-    setFailed(false);
-  }, [src]);
-
-  const mediaSrc = toMediaSrc(src);
-  if (!mediaSrc || failed) {
-    return <div className={`minimal-media-placeholder ${className}`}>{label}</div>;
-  }
-
-  return <img className={className} src={mediaSrc} alt={alt} onError={() => setFailed(true)} />;
-}
-
-function StatusPill({ value }: { value: string }) {
-  const tone = value.includes("blocked") || value.includes("missing") || value === "blocker" || value === "failed"
-    ? "danger"
-    : value.includes("ready") || value.includes("done") || value === "PASS" || value === "success"
-      ? "good"
-      : "neutral";
-  return <span className={`pill ${tone}`}>{value}</span>;
-}
 
 async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(path);
@@ -1086,6 +497,8 @@ function runtimeLoadTarget() {
       label: "demo small runtime",
     };
   }
+  const useRuntimeState = params.get("runtime") === "state" || params.get("runtime") === "default";
+  if (!useRuntimeState) return undefined;
   return {
     statePath: "/runtime-state.json",
     auditPath: "/runtime-audit.json",
@@ -1113,6 +526,51 @@ function arrayIncludes(value: unknown, expected: string) {
 function sameStringSet(left: unknown, right: string[]) {
   return Array.isArray(left) && left.length === right.length && right.every((item) => left.includes(item));
 }
+
+const requiredVideoExecutionHardLocks = [
+  "no_live_submit",
+  "no_fast_model",
+  "no_vip_channel",
+  "no_text_to_video_main_path",
+  "no_bgm_in_video_prompt",
+  "first_frame_video_default",
+  "endpoint_end_frame_optional",
+  "subagent_must_use_packet",
+] as const;
+const requiredVoiceSourceHardLocks = [
+  ["dryRunOnly", true],
+  ["noProviderSubmit", true],
+  ["providerSubmissionForbidden", true],
+  ["liveSubmitAllowed", false],
+  ["noCredentialRead", true],
+  ["noCredentialWrite", true],
+  ["noSecretStorage", true],
+  ["noSampleAudioCopy", true],
+  ["noFileMutation", true],
+  ["noTtsSubmit", true],
+  ["noMusicSubmit", true],
+  ["noBgmInVideoProvider", true],
+] as const;
+const requiredGenerationHarnessStages = [
+  "shot_spec",
+  "visual_memory",
+  "spatial_memory",
+  "shot_layout",
+  "style_capsule",
+  "shot_prompt_plan",
+  "provider_capability_check",
+  "provider_request_preview",
+  "candidate_output",
+  "qa_gate",
+] as const;
+const requiredGenerationHarnessForbiddenActions = [
+  "live_submit",
+  "provider_unlock",
+  "prompt_bypass",
+  "candidate_auto_promote",
+  "semantic_postprocess_repair",
+  "text_to_video_fallback",
+] as const;
 
 function assertProjectRuntimeState(value: unknown): asserts value is ProjectRuntimeState {
   const issues: string[] = [];
@@ -1490,7 +948,7 @@ function assertProjectRuntimeState(value: unknown): asserts value is ProjectRunt
       if (jobPostprocessPolicy.semanticRepairAllowed !== false) issues.push(`generationHarness.jobs.${index}.postprocessPolicy.semanticRepairAllowed`);
       if (jobPostprocessPolicy.openCvSemanticRepairAllowed !== false) issues.push(`generationHarness.jobs.${index}.postprocessPolicy.openCvSemanticRepairAllowed`);
       const stageIds = Array.isArray(job.stages)
-        ? job.stages.filter((stage): stage is Record<string, unknown> => isRecord(stage)).map((stage) => stage.stageId)
+        ? job.stages.reduce((acc, stage) => { if (isRecord(stage)) acc.push((stage as Record<string, unknown>).stageId); return acc; }, [] as unknown[])
         : [];
       requiredGenerationHarnessStages.forEach((stageId, stageIndex) => {
         if (stageIds[stageIndex] !== stageId) issues.push(`generationHarness.jobs.${index}.stages.${stageId}`);
@@ -1541,3377 +999,6 @@ function normalizeRuntimeState(value: unknown): unknown {
   };
 }
 
-function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <div className="metric">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </div>
-  );
-}
-
-type ImagePipelineState = ProjectRuntimeState["imagePipeline"];
-type VideoPlanningState = ProjectRuntimeState["videoPlanning"];
-type VideoExecutionPreviewState = ProjectRuntimeState["videoExecutionPreview"];
-type VideoExecutionPreviewRow = VideoExecutionPreviewState["previews"][number];
-type VideoReadinessGateState = VideoPlanningState["readinessGates"][number];
-type VideoTaskPlanState = VideoPlanningState["taskPlans"][number];
-type AdapterContractState = ProjectRuntimeState["adapterContracts"];
-type MotionEndpointUiFacts = {
-  shotId: string;
-  motionType: string;
-  motionLabel: string;
-  endFrameRequired: boolean;
-  contractStatus: string;
-  bodyMechanicsRequired: boolean;
-  editableRegionCount: number;
-  protectedRegionCount: number;
-  bboxOnlyMotionForbidden: boolean;
-  blockers: string[];
-  warnings: string[];
-  source: "contract" | "task_facts" | "missing";
-};
-type MotionEndpointDiagnosticsSummary = {
-  total: number;
-  endFrameRequiredCount: number;
-  bodyMechanicsRequiredCount: number;
-  typeCounts: Record<string, number>;
-  statusCounts: Record<string, number>;
-  compactItems: string[];
-};
-type Phase17LoopRow = {
-  label: string;
-  status: string;
-  detail: string;
-};
-type Phase17ImageKeyframeRuntimeSummary = {
-  status: string;
-  assetPlanCount: number;
-  startFramePlanCount: number;
-  endFramePlanCount: number;
-  adapterRequestCount: number;
-  validPairCount: number;
-  pairGateCount: number;
-  startPlanMotionFactCount: number;
-  endPlanMotionFactCount: number;
-  blockedPairMotionBlockerCount: number;
-  closedLoopEvidenceCount: number;
-  providerLockCount: number;
-  rows: Phase17LoopRow[];
-  blockers: string[];
-  warnings: string[];
-};
-type CheckerFactRow = {
-  id: string;
-  label: string;
-  status: string;
-  detail: string;
-  sourceRefs: string[];
-};
-type GenerationHealthCheckerState = {
-  initialized: boolean;
-  reportCount: number;
-  factChainSummary: CheckerFactRow[];
-  postprocessRecoverable: number;
-  workerSelfReportMismatch: number;
-  qaCoverageMissing: number;
-  blockers: string[];
-  warnings: string[];
-};
-type PromptConflictCheckerState = {
-  initialized: boolean;
-  reportCount: number;
-  conflictCount: number;
-  blockingConflicts: number;
-  needsRecompile: number;
-  structuredSourcesToUpdate: string[];
-  blockers: string[];
-  warnings: string[];
-};
-type GenerationHarnessStage = {
-  id: string;
-  label: string;
-  status: string;
-  detail?: string;
-};
-type GenerationHarnessCandidateOutput = {
-  status: string;
-  candidatePath?: string;
-  formalPath?: string;
-  expectedOutputPath?: string;
-  manifestStatus?: string;
-  healthStatus?: string;
-  qaStatus?: string;
-  canPromoteToFormal: boolean;
-};
-type GenerationHarnessJob = {
-  jobId: string;
-  shotId: string;
-  taskPlanId?: string;
-  providerSlot: string;
-  chainStatus: string;
-  blockingReasons: string[];
-  stages: GenerationHarnessStage[];
-  candidateOutput: GenerationHarnessCandidateOutput;
-  postprocessPolicy?: string;
-  forbiddenActions: string[];
-  dryRunOnly: boolean;
-  providerSubmissionForbidden: boolean;
-  liveSubmitAllowed: boolean;
-};
-type GenerationHarnessSummary = {
-  totalJobs: number;
-  blockedJobs: number;
-  readyJobs: number;
-  waitingForOutputJobs: number;
-  qaPendingJobs: number;
-  formalReadyJobs: number;
-  dryRunOnly: boolean;
-  providerSubmissionForbidden: boolean;
-};
-type GenerationHarnessState = {
-  initialized: boolean;
-  summary: GenerationHarnessSummary;
-  jobs: GenerationHarnessJob[];
-};
-type FilesystemWatcherSummary = {
-  totalEvents?: number;
-  tempCandidates?: number;
-  expectedOutputs?: number;
-  qaReports?: number;
-  manifestMismatches?: number;
-  blockedEvents?: number;
-  draftOnlyArtifacts?: number;
-  promotableArtifacts?: number;
-  linkedHarnessJobs?: number;
-  missingHarnessLinks?: number;
-  liveSubmitAllowed?: boolean;
-  providerSubmissionForbidden?: boolean;
-};
-type FilesystemWatcherRoot = {
-  id: string;
-  label: string;
-  kind: string;
-  status: string;
-  pathHint?: string;
-  notes: string[];
-};
-type FilesystemWatcherStream = {
-  streamId: string;
-  taskPlanId?: string;
-  jobId?: string;
-  shotId?: string;
-  harnessJobId?: string;
-  eventType: string;
-  status: string;
-  severity: string;
-  artifactClass: string;
-  artifactPath?: string;
-  expectedOutputPath?: string;
-  draftOnly?: boolean;
-  canPromoteFormal?: boolean;
-  canBecomeFutureReference?: boolean;
-  requiresManifestMatch?: boolean;
-  requiresQaPass?: boolean;
-  blockingReasons: string[];
-  notes: string[];
-};
-type FilesystemWatcherLocks = {
-  watcherCannotPromoteFormal?: boolean;
-  workerSelfReportCannotComplete?: boolean;
-  tempOutputDraftOnly?: boolean;
-  semanticPostprocessForbidden?: boolean;
-  liveSubmitAllowed?: boolean;
-  providerSubmissionForbidden?: boolean;
-};
-type FilesystemWatcherHarnessState = {
-  initialized: boolean;
-  hasSummary: boolean;
-  hasMonitoredRoots: boolean;
-  hasStreams: boolean;
-  hasLocks: boolean;
-  summary: FilesystemWatcherSummary;
-  monitoredRoots: FilesystemWatcherRoot[];
-  streams: FilesystemWatcherStream[];
-  locks: FilesystemWatcherLocks;
-};
-type CheckpointResumeSummary = {
-  totalItems?: number;
-  skipAllowed?: number;
-  rerunAllowed?: number;
-  manualReviewRequired?: number;
-  blocked?: number;
-  missingExpectedOutput?: number;
-  formalReady?: number;
-  tempCandidateBlocked?: number;
-  liveSubmitAllowed?: boolean;
-  providerSubmissionForbidden?: boolean;
-};
-type CheckpointResumeHardLocks = {
-  dryRunOnly?: boolean;
-  providerSubmissionForbidden?: boolean;
-  liveSubmitAllowed?: boolean;
-  noFileMutation?: boolean;
-  noAutoSkipWithoutQa?: boolean;
-  workerSelfReportCannotComplete?: boolean;
-  tempCandidateCannotResumeAsFormal?: boolean;
-};
-type CheckpointResumeItem = {
-  resumeItemId: string;
-  taskPlanId?: string;
-  jobId?: string;
-  shotId?: string;
-  generationHarnessJobId?: string;
-  expectedOutputPath?: string;
-  candidatePath?: string;
-  formalPath?: string;
-  manifestStatus?: string;
-  healthStatus?: string;
-  qaStatus?: string;
-  watcherStreamIds: string[];
-  hasWatcherStreamIds: boolean;
-  resumeStatus?: string;
-  resumeDecision?: string;
-  skipAllowed?: boolean;
-  rerunAllowed?: boolean;
-  manualReviewRequired?: boolean;
-  blockingReasons: string[];
-  hasBlockingReasons: boolean;
-  notes: string[];
-};
-type CheckpointResumeHarnessState = {
-  initialized: boolean;
-  hasSummary: boolean;
-  hasHardLocks: boolean;
-  hasResumeItems: boolean;
-  summary: CheckpointResumeSummary;
-  hardLocks: CheckpointResumeHardLocks;
-  resumeItems: CheckpointResumeItem[];
-};
-const qaHarnessDimensions = [
-  "whole_film",
-  "identity",
-  "scene",
-  "pair",
-  "story",
-  "prop",
-  "style",
-  "motion",
-  "audio",
-] as const;
-type QaHarnessDimension = typeof qaHarnessDimensions[number];
-type QaHarnessSummary = {
-  totalItems?: number;
-  formalEligible?: number;
-  requiresHumanReview?: number;
-  blocked?: number;
-  unknown?: number;
-  failed?: number;
-  partial?: number;
-  dryRunOnly?: boolean;
-  liveSubmitAllowed?: boolean;
-  noFileMutation?: boolean;
-};
-type QaHarnessHardLocks = {
-  dryRunOnly?: boolean;
-  providerSubmissionForbidden?: boolean;
-  liveSubmitAllowed?: boolean;
-  noFileMutation?: boolean;
-  noAutoPromotion?: boolean;
-  semanticRepairForbidden?: boolean;
-  workerSelfReportCannotPassQa?: boolean;
-  overallFirst?: boolean;
-};
-type QaGateRow = {
-  dimension: string;
-  label: string;
-  status: string;
-  severity: string;
-  blockers: string[];
-  warnings: string[];
-  sourceRefs: string[];
-  notes: string[];
-  initialized: boolean;
-};
-type QaHarnessItem = {
-  qaItemId: string;
-  shotId: string;
-  taskPlanId?: string;
-  jobId?: string;
-  harnessJobId?: string;
-  checkpointResumeItemId?: string;
-  formalPromotionEligible?: boolean;
-  requiresHumanReview?: boolean;
-  overallStatus: string;
-  dimensionGates: QaGateRow[];
-  sourceCoverage: string[];
-  blockers: string[];
-  warnings: string[];
-  notes: string[];
-};
-type QaHarnessState = {
-  initialized: boolean;
-  hasSummary: boolean;
-  hasHardLocks: boolean;
-  hasOverall: boolean;
-  hasItems: boolean;
-  schemaVersion: string;
-  generatedAt: string;
-  dimensions: readonly QaHarnessDimension[];
-  summary: QaHarnessSummary;
-  overall: QaGateRow[];
-  items: QaHarnessItem[];
-  hardLocks: QaHarnessHardLocks;
-};
-type ToolRuntimeHarnessSummary = {
-  totalChecks?: number;
-  ready?: number;
-  missing?: number;
-  planned?: number;
-  blocked?: number;
-  unknown?: number;
-  requiredMissing?: number;
-  optionalMissing?: number;
-  dryRunOnly?: boolean;
-  liveSubmitAllowed?: boolean;
-};
-type ToolRuntimeHarnessCheck = {
-  checkId: string;
-  category: string;
-  label: string;
-  requiredFor: string[];
-  status: string;
-  pathStatus: string;
-  path?: string;
-  version?: string;
-  platformSupport: string[];
-  canExecuteNow?: boolean;
-  executionMode: string;
-  missingIsBlocker?: boolean;
-  blockers: string[];
-  warnings: string[];
-  sourceRefs: string[];
-  notes: string[];
-};
-type ToolRuntimePathPolicy = {
-  platformPathAbstractionRequired?: boolean;
-  macPathStyle: string;
-  windowsPathStyle: string;
-  projectRootRelativeRequired?: boolean;
-  allowedRoots: string[];
-  blockers: string[];
-  warnings: string[];
-  notes: string[];
-};
-type ToolRuntimeHardLocks = {
-  dryRunOnly?: boolean;
-  diagnosticsOnly?: boolean;
-  noInstall?: boolean;
-  noCredentialRead?: boolean;
-  noCredentialWrite?: boolean;
-  noSystemSettingsMutation?: boolean;
-  arbitraryShellExecutionBlocked?: boolean;
-  sidecarDaemonDisabled?: boolean;
-  providerSubmissionForbidden?: boolean;
-  liveSubmitAllowed?: boolean;
-  platformPathAbstractionRequired?: boolean;
-};
-type ToolRuntimeHarnessState = {
-  initialized: boolean;
-  hasSummary: boolean;
-  hasChecks: boolean;
-  hasPathPolicy: boolean;
-  hasHardLocks: boolean;
-  schemaVersion: string;
-  generatedAt: string;
-  summary: ToolRuntimeHarnessSummary;
-  checks: ToolRuntimeHarnessCheck[];
-  pathPolicy: ToolRuntimePathPolicy;
-  hardLocks: ToolRuntimeHardLocks;
-};
-const requiredVideoExecutionHardLocks = [
-  "no_live_submit",
-  "no_fast_model",
-  "no_vip_channel",
-  "no_text_to_video_main_path",
-  "no_bgm_in_video_prompt",
-  "start_end_frames_required",
-  "subagent_must_use_packet",
-] as const;
-const requiredVoiceSourceHardLocks = [
-  ["dryRunOnly", true],
-  ["noProviderSubmit", true],
-  ["providerSubmissionForbidden", true],
-  ["liveSubmitAllowed", false],
-  ["noCredentialRead", true],
-  ["noCredentialWrite", true],
-  ["noSecretStorage", true],
-  ["noSampleAudioCopy", true],
-  ["noFileMutation", true],
-  ["noTtsSubmit", true],
-  ["noMusicSubmit", true],
-  ["noBgmInVideoProvider", true],
-] as const;
-const requiredGenerationHarnessStages = [
-  "shot_spec",
-  "visual_memory",
-  "spatial_memory",
-  "shot_layout",
-  "style_capsule",
-  "shot_prompt_plan",
-  "provider_capability_check",
-  "provider_request_preview",
-  "candidate_output",
-  "qa_gate",
-] as const;
-const requiredGenerationHarnessForbiddenActions = [
-  "live_submit",
-  "provider_unlock",
-  "prompt_bypass",
-  "candidate_auto_promote",
-  "semantic_postprocess_repair",
-  "text_to_video_fallback",
-] as const;
-
-function emptyImagePipeline(): ImagePipelineState {
-  return {
-    providerRegistry: {
-      schemaVersion: "0.1.0",
-      registryVersion: "empty",
-      strictImageProvider: "image2_only",
-      defaultProviderBySlot: {},
-      capabilities: [],
-      notes: [],
-    },
-    promptPlans: [],
-    promptConflictReports: [],
-    assetReadinessReports: [],
-    imageTaskPlans: [],
-    image2AdapterRequests: [],
-    watcherEvents: [],
-    generationHealthReports: [],
-    qaPromotionReports: [],
-  };
-}
-
-function getImagePipeline(runtimeState: ProjectRuntimeState): ImagePipelineState {
-  const pipeline = (runtimeState as Partial<ProjectRuntimeState>).imagePipeline;
-  if (!pipeline) return emptyImagePipeline();
-  return {
-    ...emptyImagePipeline(),
-    ...pipeline,
-    providerRegistry: {
-      ...emptyImagePipeline().providerRegistry,
-      ...pipeline.providerRegistry,
-      capabilities: pipeline.providerRegistry?.capabilities || [],
-      notes: pipeline.providerRegistry?.notes || [],
-    },
-    promptPlans: pipeline.promptPlans || [],
-    promptConflictReports: pipeline.promptConflictReports || [],
-    assetReadinessReports: pipeline.assetReadinessReports || [],
-    imageTaskPlans: pipeline.imageTaskPlans || [],
-    image2AdapterRequests: pipeline.image2AdapterRequests || [],
-    watcherEvents: pipeline.watcherEvents || [],
-    generationHealthReports: pipeline.generationHealthReports || [],
-    qaPromotionReports: pipeline.qaPromotionReports || [],
-  };
-}
-
-function readString(value: unknown, fallback: string) {
-  return typeof value === "string" && value.length ? value : fallback;
-}
-
-function readNumber(value: unknown, fallback: number) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function readBoolean(value: unknown, fallback: boolean) {
-  return typeof value === "boolean" ? value : fallback;
-}
-
-function readStringArray(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-}
-
-function readOptionalNumber(record: Record<string, unknown>, key: string) {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function readOptionalBoolean(record: Record<string, unknown>, key: string) {
-  const value = record[key];
-  return typeof value === "boolean" ? value : undefined;
-}
-
-function readNoteList(value: unknown) {
-  if (typeof value === "string" && value.trim()) return [value];
-  return readStringArray(value);
-}
-
-function readBooleanLockLabel(
-  record: Record<string, unknown>,
-  key: string,
-  label: string,
-  expected: boolean,
-) {
-  return record[key] === expected ? label : undefined;
-}
-
-function readReplacementProofLabel(value: unknown) {
-  if (typeof value === "boolean") return value ? "present" : "missing";
-  if (typeof value === "string" && value.length) return statusLabel(value);
-  if (!isRecord(value)) return "missing";
-  const status = readString(value.status, readString(value.result, ""));
-  if (status) return statusLabel(status);
-  const proven =
-    readOptionalBoolean(value, "proven") ??
-    readOptionalBoolean(value, "ready") ??
-    readOptionalBoolean(value, "replacementProofReady") ??
-    readOptionalBoolean(value, "present");
-  return proven ? "present" : "missing";
-}
-
-function readFirstString(records: Record<string, unknown>[], keys: string[], fallback: string) {
-  for (const record of records) {
-    for (const key of keys) {
-      const value = record[key];
-      if (typeof value === "string" && value.trim()) return value;
-    }
-  }
-  return fallback;
-}
-
-function readFirstNumber(records: Record<string, unknown>[], keys: string[]) {
-  for (const record of records) {
-    for (const key of keys) {
-      const value = record[key];
-      if (typeof value === "number" && Number.isFinite(value)) return value;
-      if (Array.isArray(value)) return value.length;
-    }
-  }
-  return undefined;
-}
-
-function readFirstBoolean(records: Record<string, unknown>[], keys: string[]) {
-  for (const record of records) {
-    for (const key of keys) {
-      const value = record[key];
-      if (typeof value === "boolean") return value;
-    }
-  }
-  return undefined;
-}
-
-function firstRecordFrom(record: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    if (isRecord(record[key])) return record[key];
-  }
-  return {};
-}
-
-function firstArrayFrom(records: Record<string, unknown>[], keys: string[]) {
-  for (const record of records) {
-    for (const key of keys) {
-      const value = record[key];
-      if (Array.isArray(value)) return value;
-    }
-  }
-  return [];
-}
-
-function compactPathLabel(value: unknown, fallback = "blocked/missing") {
-  if (typeof value !== "string" || !value.trim()) return fallback;
-  const normalized = value.replace(/\\/g, "/").replace(/\/+$/g, "");
-  const parts = normalized.split("/").filter(Boolean);
-  if (!parts.length) return normalized || fallback;
-  if (parts.length === 1) return parts[0];
-  return `.../${parts.slice(-2).join("/")}`;
-}
-
-function formatPlannedWriteSample(value: unknown, index: number) {
-  if (typeof value === "string") return compactPathLabel(value, `planned write ${index + 1}`);
-  if (!isRecord(value)) return `planned write ${index + 1}`;
-  const action = readString(value.action, readString(value.kind, readString(value.type, "planned write")));
-  const target = value.targetPath ?? value.path ?? value.relativePath ?? value.destination ?? value.outputPath ?? value.file;
-  const targetLabel = compactPathLabel(target, "");
-  return [statusLabel(action), targetLabel].filter(Boolean).join(" / ") || `planned write ${index + 1}`;
-}
-
-function voiceAudioSettingsReadinessLabel(status: string, initialized: boolean, phase: string) {
-  if (!initialized) return "blocked/missing";
-  if (phase !== "phase_28_voice_audio_settings_ui") return "blocked";
-  const normalized = status.toLowerCase();
-  if (normalized.includes("ready")) return "ready";
-  if (normalized.includes("planned")) return "planned";
-  if (normalized.includes("blocked") || normalized.includes("missing") || normalized.includes("fail")) return "blocked";
-  return status ? statusLabel(status) : "blocked/missing";
-}
-
-function providerSlotState(slot: unknown) {
-  if (!isRecord(slot)) return "";
-  return readString(slot.state, readString(slot.status, ""));
-}
-
-function providerSlotIsLive(slot: unknown) {
-  return isRecord(slot) && slot.liveSubmitAllowed === true;
-}
-
-function buildVoiceAudioHardLocks(
-  rootRecord: Record<string, unknown>,
-  summary: Record<string, unknown>,
-  policy: Record<string, unknown>,
-) {
-  const explicitHardLocks = firstArrayFrom([rootRecord, summary, policy], ["hardLocks", "locks", "hardLockStrip"])
-    .map((item, index) => formatHarnessValue(item, `hard lock ${index + 1}`))
-    .filter(Boolean);
-  const rootLocks = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockStrip", "hardLockSummary"]);
-  const summaryLocks = firstRecordFrom(summary, ["hardLocks", "locks", "hardLockStrip", "hardLockSummary"]);
-  const lockRecords = [rootLocks, summaryLocks, policy, rootRecord, summary];
-  const inferredLocks = [
-    readBooleanLockLabel(rootLocks, "dryRunOnly", "dry-run only", true),
-    readBooleanLockLabel(rootLocks, "readOnly", "read-only", true),
-    readBooleanLockLabel(rootLocks, "diagnosticsOnly", "diagnostics/settings only", true),
-    readBooleanLockLabel(rootLocks, "noTtsSubmit", "TTS submit blocked", true),
-    readBooleanLockLabel(rootLocks, "noMusicSubmit", "music submit blocked", true),
-    readBooleanLockLabel(rootLocks, "noBgmInVideoProvider", "no BGM in video provider", true),
-    readBooleanLockLabel(rootLocks, "noProviderSubmit", "provider submit blocked", true),
-    readBooleanLockLabel(rootLocks, "providerSubmissionForbidden", "provider submit blocked", true),
-    readBooleanLockLabel(rootLocks, "liveSubmitAllowed", "live submit disabled", false),
-    readBooleanLockLabel(rootLocks, "noCredentialRead", "no credential read", true),
-    readBooleanLockLabel(rootLocks, "noCredentialWrite", "no credential write", true),
-    readBooleanLockLabel(rootLocks, "noSecretStorage", "no secret storage", true),
-    readBooleanLockLabel(rootLocks, "noSampleAudioCopy", "no sample audio copy", true),
-    readBooleanLockLabel(rootLocks, "noFileUpload", "no file upload", true),
-    readBooleanLockLabel(rootLocks, "noFileMutation", "no file mutation", true),
-    readBooleanLockLabel(rootLocks, "noProviderRun", "provider run blocked", true),
-    readBooleanLockLabel(summaryLocks, "noTtsSubmit", "TTS submit blocked", true),
-    readBooleanLockLabel(summaryLocks, "noMusicSubmit", "music submit blocked", true),
-    readBooleanLockLabel(summaryLocks, "noBgmInVideoProvider", "no BGM in video provider", true),
-    readBooleanLockLabel(summaryLocks, "providerSubmissionForbidden", "provider submit blocked", true),
-    readBooleanLockLabel(summaryLocks, "liveSubmitAllowed", "live submit disabled", false),
-    readBooleanLockLabel(policy, "noBgmInVideoProvider", "no BGM in video provider", true),
-    readBooleanLockLabel(policy, "noBgmForVideoProvider", "no BGM in video provider", true),
-    readBooleanLockLabel(policy, "providerSubmissionForbidden", "provider submit blocked", true),
-    readBooleanLockLabel(policy, "liveSubmitAllowed", "live submit disabled", false),
-    readFirstBoolean(lockRecords, ["noCredentialRead"]) === true ? "no credential read" : undefined,
-    readFirstBoolean(lockRecords, ["noCredentialWrite"]) === true ? "no credential write" : undefined,
-  ].filter((lock): lock is string => Boolean(lock));
-
-  return Array.from(new Set([...explicitHardLocks, ...inferredLocks]));
-}
-
-function buildVoiceAudioSettingsUiSummary(runtimeState: ProjectRuntimeState): VoiceAudioSettingsUiSummary {
-  const root = (runtimeState as Partial<ProjectRuntimeState> & { voiceAudioSettings?: unknown }).voiceAudioSettings;
-  const initialized = isRecord(root);
-  const rootRecord = initialized ? root as Record<string, unknown> : {};
-  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
-  const voice = firstRecordFrom(rootRecord, ["voiceSourceSummary", "voice", "voiceSummary", "voiceSources", "voiceSourceRegistry"]);
-  const audio = firstRecordFrom(rootRecord, ["audioSettingSummary", "audio", "audioSummary", "audioPlans", "audioPlanning"]);
-  const policy = firstRecordFrom(rootRecord, ["videoProviderAudioPolicy", "policy", "audioPolicy", "providerPolicy", "videoProviderPolicy"]);
-  const providerSlotSummary = firstRecordFrom(rootRecord, ["providerSlots", "providerSlotSummary", "providers", "providerSummary"]);
-  const records = [summary, voice, audio, policy, providerSlotSummary, rootRecord].filter(isRecord);
-  const voiceRecords = [voice, summary, rootRecord].filter(isRecord);
-  const audioRecords = [audio, summary, rootRecord].filter(isRecord);
-  const providerRecords = [providerSlotSummary, audio, policy, summary, rootRecord].filter(isRecord);
-  const phase = readString(rootRecord.phase, initialized ? "missing phase" : "missing");
-  const status = readFirstString([summary, rootRecord], ["readiness", "status", "state"], "");
-  const providerSlotRows = firstArrayFrom(providerRecords, ["providerSlotStates", "providerSlots", "slots", "audioProviderSlots"]);
-  const effectiveProviderSlots = providerSlotRows.length ? providerSlotRows : runtimeState.audioPlanning.providerSlots;
-  const voiceSourceCount = readFirstNumber(voiceRecords, [
-    "voiceSourceCount",
-    "sourceCount",
-    "sources",
-    "voiceSources",
-    "totalSources",
-  ]) ?? runtimeState.audioPlanning.voiceSourceRegistry.sourceCount;
-  const lockedVoiceSourceCount = readFirstNumber(voiceRecords, ["locked", "lockedCount", "lockedSources", "lockedVoiceSources"]);
-  const candidateVoiceSourceCount = readFirstNumber(voiceRecords, ["candidate", "candidateCount", "candidateSources", "candidateVoiceSources"]);
-  const rejectedVoiceSourceCount = readFirstNumber(voiceRecords, ["rejected", "rejectedCount", "rejectedSources", "rejectedVoiceSources"]);
-  const voiceSourceDetail = [
-    lockedVoiceSourceCount !== undefined ? `${lockedVoiceSourceCount} locked` : undefined,
-    candidateVoiceSourceCount !== undefined ? `${candidateVoiceSourceCount} candidate` : undefined,
-    rejectedVoiceSourceCount !== undefined ? `${rejectedVoiceSourceCount} rejected` : undefined,
-  ].filter(Boolean).join(" · ") || `${voiceSourceCount} source(s)`;
-  const audioPlanCount = readFirstNumber(audioRecords, [
-    "audioPlanCount",
-    "planCount",
-    "shotPlanCount",
-    "plans",
-    "audioPlans",
-    "shotPlans",
-  ]) ?? runtimeState.audioPlanning.shotPlans.length;
-  const previewMixCount = readFirstNumber(audioRecords, ["previewMixCount", "mixEventCount", "previewEvents", "events"])
-    ?? runtimeState.audioPlanning.previewMix.eventCount;
-  const audioPlanDetail = `${previewMixCount} preview mix item(s)`;
-  const noBgmPolicy = readFirstBoolean(records, [
-    "noBgmForVideoProvider",
-    "noBgmInVideoProvider",
-    "noBgmPolicy",
-    "noBgm",
-  ]) ?? runtimeState.audioPlanning.videoProviderPolicy.noBgmForVideoProvider;
-  const noBgmDetail = readFirstString([policy, summary, rootRecord], ["policySummary", "noBgmSummary", "detail"], "")
-    || (noBgmPolicy ? "music off for video provider" : "policy not asserted");
-  const providerSlotsTotal = readFirstNumber(providerRecords, [
-    "providerSlotsTotal",
-    "totalProviderSlots",
-    "providerSlotCount",
-    "slotCount",
-    "providerSlots",
-    "slots",
-  ]) ?? effectiveProviderSlots.length;
-  const providerSlotsPlanned = readFirstNumber(providerRecords, [
-    "providerSlotsPlanned",
-    "plannedProviderSlots",
-    "plannedSlots",
-  ]) ?? effectiveProviderSlots.filter((slot) => providerSlotState(slot) === "planned").length;
-  const providerSlotsLive = readFirstNumber(providerRecords, [
-    "providerSlotsLive",
-    "liveProviderSlots",
-    "liveSlots",
-    "providerLiveCount",
-  ]) ?? effectiveProviderSlots.filter(providerSlotIsLive).length;
-  const rawBlockersWarnings = [
-    ...readDisplayList(rootRecord.blockers, "blocker"),
-    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
-    ...readDisplayList(summary.blockers, "blocker"),
-    ...readDisplayList(summary.blockedReasons, "blocker"),
-    ...readDisplayList(voice.blockers, "blocker"),
-    ...readDisplayList(audio.blockers, "blocker"),
-    ...readDisplayList(policy.blockers, "blocker"),
-    ...readDisplayList(rootRecord.warnings, "warning"),
-    ...readDisplayList(summary.warnings, "warning"),
-    ...readDisplayList(voice.warnings, "warning"),
-    ...readDisplayList(audio.warnings, "warning"),
-    ...readDisplayList(policy.warnings, "warning"),
-  ];
-  const blockersWarnings = Array.from(new Set(rawBlockersWarnings.filter(Boolean)));
-  const hardLocks = buildVoiceAudioHardLocks(rootRecord, summary, policy);
-
-  return {
-    initialized,
-    phase,
-    readiness: voiceAudioSettingsReadinessLabel(status, initialized, phase),
-    voiceSourceCount,
-    voiceSourceDetail,
-    audioPlanCount,
-    audioPlanDetail,
-    noBgmPolicy,
-    noBgmDetail,
-    providerSlotsTotal,
-    providerSlotsPlanned,
-    providerSlotsLive,
-    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.voiceAudioSettings"],
-    hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.voiceAudioSettings"],
-  };
-}
-
-function providerEnablementGateReadinessLabel(
-  status: string,
-  initialized: boolean,
-  readyForConfirmation: number,
-  blocked: number,
-  parked: number,
-) {
-  if (!initialized) return "blocked/missing";
-  const normalized = status.toLowerCase();
-  if (normalized.includes("ready_for_confirmation") || normalized.includes("ready for confirmation")) return "ready_for_confirmation";
-  if (normalized.includes("blocked") || normalized.includes("missing") || normalized.includes("fail")) return "blocked";
-  if (normalized.includes("parked")) return "parked";
-  if (blocked > 0) return "blocked";
-  if (readyForConfirmation > 0) return "ready_for_confirmation";
-  if (parked > 0) return "parked";
-  return status ? statusLabel(status) : "blocked/missing";
-}
-
-function readProviderEnablementGateChecks(items: unknown[]) {
-  return items.flatMap((item) => isRecord(item) && Array.isArray(item.checks) ? item.checks : []).filter(isRecord);
-}
-
-function checkPassed(checks: Record<string, unknown>[], pattern: RegExp) {
-  const matching = checks.filter((check) => pattern.test(readString(check.checkId, readString(check.label, ""))));
-  if (!matching.length) return undefined;
-  return matching.every((check) => check.passed === true || readString(check.status, "").toLowerCase() === "pass");
-}
-
-function yesNoMissing(value: boolean | undefined, yes: string, no: string) {
-  if (value === true) return yes;
-  if (value === false) return no;
-  return "blocked/missing";
-}
-
-function buildProviderEnablementGateHardLocks(rootRecord: Record<string, unknown>, summary: Record<string, unknown>) {
-  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
-  const summaryLocks = firstRecordFrom(summary, ["hardLocks", "locks", "hardLockSummary"]);
-  const lockRecords = [hardLocksRecord, summaryLocks, rootRecord, summary];
-  const explicitHardLocks = firstArrayFrom([rootRecord, summary, hardLocksRecord], ["hardLocks", "locks", "hardLockStrip"])
-    .map((item, index) => formatHarnessValue(item, `hard lock ${index + 1}`))
-    .filter(Boolean);
-  const inferredLocks = [
-    readBooleanLockLabel(hardLocksRecord, "dryRunOnly", "dry-run only", true),
-    readBooleanLockLabel(hardLocksRecord, "readOnly", "read-only", true),
-    readBooleanLockLabel(hardLocksRecord, "readinessPlanOnly", "readiness plan only", true),
-    readBooleanLockLabel(hardLocksRecord, "confirmationPlanOnly", "confirmation plan only", true),
-    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noProviderSubmit", "canSubmitProvider=false", true),
-    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit locked", false),
-    readBooleanLockLabel(hardLocksRecord, "credentialStorage", "credential storage locked", false),
-    readBooleanLockLabel(hardLocksRecord, "noCredentialRead", "credential read locked", true),
-    readBooleanLockLabel(hardLocksRecord, "noCredentialWrite", "credential write locked", true),
-    readBooleanLockLabel(hardLocksRecord, "noArbitraryProviderCommand", "shell locked", true),
-    readBooleanLockLabel(hardLocksRecord, "fastModelForbidden", "Fast absent", true),
-    readBooleanLockLabel(hardLocksRecord, "vipChannelForbidden", "VIP absent", true),
-    readBooleanLockLabel(hardLocksRecord, "textToVideoMainPathForbidden", "text-to-video absent", true),
-    readBooleanLockLabel(hardLocksRecord, "bgmInVideoPromptForbidden", "BGM prompt absent", true),
-    readFirstBoolean(lockRecords, ["canSubmitProvider"]) === false ? "canSubmitProvider=false" : undefined,
-  ].filter((lock): lock is string => Boolean(lock));
-
-  return Array.from(new Set([...explicitHardLocks, ...inferredLocks]));
-}
-
-function buildProviderEnablementGateUiSummary(runtimeState: ProjectRuntimeState): ProviderEnablementGateUiSummary {
-  const root = (runtimeState as Partial<ProjectRuntimeState> & { providerLiveGate?: unknown }).providerLiveGate;
-  const initialized = isRecord(root);
-  const rootRecord = initialized ? root as Record<string, unknown> : {};
-  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
-  const items = Array.isArray(rootRecord.items) ? rootRecord.items : [];
-  const checks = readProviderEnablementGateChecks(items);
-  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
-  const records = [summary, rootRecord, hardLocksRecord].filter(isRecord);
-  const readyForConfirmation = readFirstNumber(records, ["readyForConfirmation", "ready_for_confirmation"])
-    ?? items.filter((item) => isRecord(item) && item.status === "ready_for_confirmation").length;
-  const blocked = readFirstNumber(records, ["blocked"])
-    ?? items.filter((item) => isRecord(item) && item.status === "blocked").length;
-  const parked = readFirstNumber(records, ["parked"])
-    ?? items.filter((item) => isRecord(item) && item.status === "parked").length;
-  const status = readFirstString(records, ["readiness", "status", "state"], "");
-  const tokenPresent = readFirstBoolean(records, [
-    "providerConfirmationTokenPlaceholderPresent",
-    "confirmationTokenPlaceholderPresent",
-    "confirmationTokenPresent",
-    "userConfirmationTokenPlaceholderPresent",
-  ]) ?? checkPassed(checks, /user_confirmation_token_placeholder|confirmation/i);
-  const packetComplete = readFirstBoolean(records, [
-    "providerPacketComplete",
-    "packetComplete",
-    "enablementPacketComplete",
-    "completeEnablementPacket",
-  ]) ?? checkPassed(checks, /envelope_valid|packet|enablement/i);
-  const closedLoopSignals = [
-    checkPassed(checks, /asset_readiness|watcher/),
-    checkPassed(checks, /envelope_valid|manifest/),
-    checkPassed(checks, /pair_qa_pass|qa/),
-  ];
-  const inferredClosedLoop = closedLoopSignals.every((signal) => signal !== undefined)
-    ? closedLoopSignals.every((signal) => signal === true)
-    : undefined;
-  const closedLoop = readFirstBoolean(records, [
-    "closedLoopReady",
-    "closedLoopComplete",
-    "closedLoopRequirementMet",
-    "watcherManifestQaClosedLoop",
-  ]) ?? inferredClosedLoop;
-  const forbiddenPathSignals = [
-    hardLocksRecord.fastModelForbidden,
-    hardLocksRecord.vipChannelForbidden,
-    hardLocksRecord.textToVideoMainPathForbidden,
-    hardLocksRecord.bgmInVideoPromptForbidden,
-  ];
-  const inferredForbiddenPathsAbsent = forbiddenPathSignals.every((signal) => typeof signal === "boolean")
-    ? forbiddenPathSignals.every((signal) => signal === true)
-    : undefined;
-  const forbiddenPathsAbsent = readFirstBoolean(records, [
-    "forbiddenProviderModesAbsent",
-    "forbiddenPathsAbsent",
-    "forbiddenModesAbsent",
-  ]) ?? inferredForbiddenPathsAbsent;
-  const canSubmitProvider = readFirstBoolean(records, ["canSubmitProvider"]);
-  const providerSubmitBlocked = readFirstBoolean(records, [
-    "providerSubmissionForbidden",
-    "providerSubmitBlocked",
-    "noProviderSubmit",
-  ]) ?? hardLocksRecord.providerSubmissionForbidden === true;
-  const credentialLiveShellLocked =
-    (readFirstBoolean(records, ["credentialStorage"]) === false || hardLocksRecord.noCredentialRead === true || hardLocksRecord.noCredentialWrite === true)
-    && (readFirstBoolean(records, ["liveSubmitAllowed"]) === false)
-    && (hardLocksRecord.noArbitraryProviderCommand === true || hardLocksRecord.arbitraryShellExecutionBlocked === true);
-  const blockersWarnings = Array.from(new Set([
-    ...readDisplayList(rootRecord.blockers, "blocker"),
-    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
-    ...readDisplayList(summary.blockers, "blocker"),
-    ...readDisplayList(summary.blockedReasons, "blocker"),
-    ...items.flatMap((item) => isRecord(item) ? readDisplayList(item.blockers, "blocker") : []),
-    ...readDisplayList(rootRecord.warnings, "warning"),
-    ...readDisplayList(summary.warnings, "warning"),
-    ...items.flatMap((item) => isRecord(item) ? readDisplayList(item.warnings, "warning") : []),
-  ].filter(Boolean)));
-  const hardLocks = buildProviderEnablementGateHardLocks(rootRecord, summary);
-
-  return {
-    initialized,
-    readiness: providerEnablementGateReadinessLabel(status, initialized, readyForConfirmation, blocked, parked),
-    readyForConfirmation,
-    blocked,
-    parked,
-    confirmationTokenStatus: yesNoMissing(tokenPresent, "placeholder present", "placeholder missing"),
-    packetCompleteStatus: yesNoMissing(packetComplete, "complete", "incomplete"),
-    closedLoopStatus: yesNoMissing(closedLoop, "closed loop satisfied", "closed loop missing"),
-    forbiddenPathsAbsent: yesNoMissing(forbiddenPathsAbsent, "Fast / VIP / text-to-video / BGM prompt absent", "forbidden path present"),
-    canSubmitProvider: canSubmitProvider === false ? "canSubmitProvider=false" : "blocked/missing",
-    submitBlocked: providerSubmitBlocked ? "provider submit blocked" : "blocked/missing",
-    credentialLiveShellLocked: credentialLiveShellLocked ? "credential/live submit/shell locked" : "blocked/missing",
-    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.providerLiveGate"],
-    hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.providerLiveGate"],
-  };
-}
-
-function providerExecutionPermissionGateReadinessLabel(
-  status: string,
-  initialized: boolean,
-  readyForUserReview: number,
-  blocked: number,
-  parked: number,
-) {
-  if (!initialized) return "blocked/missing";
-  if (blocked > 0) return "blocked";
-  if (readyForUserReview > 0) return "ready_for_user_review";
-  if (parked > 0) return "parked";
-  return status ? statusLabel(status) : "blocked/missing";
-}
-
-function buildProviderExecutionPermissionGateHardLocks(rootRecord: Record<string, unknown>, summary: Record<string, unknown>) {
-  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
-  const explicitHardLocks = firstArrayFrom([rootRecord, summary, hardLocksRecord], ["hardLocks", "locks", "hardLockStrip"])
-    .map((item, index) => formatHarnessValue(item, `hard lock ${index + 1}`))
-    .filter(Boolean);
-  const inferredLocks = [
-    readBooleanLockLabel(hardLocksRecord, "dryRunOnly", "dry-run only", true),
-    readBooleanLockLabel(hardLocksRecord, "readOnly", "read-only", true),
-    readBooleanLockLabel(hardLocksRecord, "reviewPlanOnly", "review plan only", true),
-    readBooleanLockLabel(hardLocksRecord, "actionTimeConfirmationRequired", "action-time confirmation", true),
-    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "canSubmitProvider", "canSubmitProvider=false", false),
-    hardLocksRecord.providerSubmitAllowed === 0 ? "providerSubmitAllowed=0" : undefined,
-    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit locked", false),
-    readBooleanLockLabel(hardLocksRecord, "credentialAccessAllowed", "credential access locked", false),
-    readBooleanLockLabel(hardLocksRecord, "noWorkerSpawn", "worker spawn locked", true),
-    readBooleanLockLabel(hardLocksRecord, "noFileMutation", "file mutation locked", true),
-    readBooleanLockLabel(hardLocksRecord, "fastModelForbidden", "Fast absent", true),
-    readBooleanLockLabel(hardLocksRecord, "vipChannelForbidden", "VIP absent", true),
-    readBooleanLockLabel(hardLocksRecord, "textToVideoMainPathForbidden", "text-to-video absent", true),
-    readBooleanLockLabel(hardLocksRecord, "bgmInVideoPromptForbidden", "BGM prompt absent", true),
-  ].filter((lock): lock is string => Boolean(lock));
-
-  return Array.from(new Set([...explicitHardLocks, ...inferredLocks]));
-}
-
-function buildProviderExecutionPermissionGateUiSummary(runtimeState: ProjectRuntimeState): ProviderExecutionPermissionGateUiSummary {
-  const root = (runtimeState as Partial<ProjectRuntimeState> & { providerExecutionPermissionGate?: unknown }).providerExecutionPermissionGate;
-  const initialized = isRecord(root);
-  const rootRecord = initialized ? root as Record<string, unknown> : {};
-  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
-  const evidence = initialized && isRecord(rootRecord.phase31Evidence) ? rootRecord.phase31Evidence : {};
-  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
-  const records = [summary, evidence, rootRecord, hardLocksRecord].filter(isRecord);
-  const requests = Array.isArray(rootRecord.requests) ? rootRecord.requests : [];
-  const readyForUserReview = readFirstNumber(records, ["readyForUserReview", "ready_for_user_review"])
-    ?? requests.filter((request) => isRecord(request) && request.status === "ready_for_user_review").length;
-  const blocked = readFirstNumber(records, ["blocked"])
-    ?? requests.filter((request) => isRecord(request) && request.status === "blocked").length;
-  const parked = readFirstNumber(records, ["parked"])
-    ?? requests.filter((request) => isRecord(request) && request.status === "parked").length;
-  const canAskUserToConfirm = readFirstNumber(records, ["canAskUserToConfirm"])
-    ?? requests.filter((request) => isRecord(request) && request.canAskUserToConfirm === true).length;
-  const status = readFirstString(records, ["readiness", "status", "state"], "");
-  const actionTimeRequired = readFirstBoolean(records, ["actionTimeUserConfirmationRequired", "actionTimeConfirmationRequired"]);
-  const automaticSubmitAllowed = readFirstBoolean(records, ["automaticSubmitAllowed"]);
-  const automaticSubmitForbidden = readFirstBoolean(records, ["automaticSubmitForbidden"]) ?? automaticSubmitAllowed === false;
-  const providerSubmitAllowed = readFirstNumber(records, ["providerSubmitAllowed"]) ?? (readFirstBoolean(records, ["canSubmitProvider"]) === false ? 0 : undefined);
-  const liveSubmitAllowed = readFirstBoolean(records, ["liveSubmitAllowed"]);
-  const credentialAccessAllowed = readFirstBoolean(records, ["credentialAccessAllowed"]);
-  const workerSpawnLocked = readFirstBoolean(records, ["noWorkerSpawn"]);
-  const fileMutationLocked = readFirstBoolean(records, ["noFileMutation"]);
-  const blockersWarnings = Array.from(new Set([
-    ...readDisplayList(rootRecord.blockers, "blocker"),
-    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
-    ...readDisplayList(summary.blockers, "blocker"),
-    ...readDisplayList(summary.blockedReasons, "blocker"),
-    ...requests.flatMap((request) => isRecord(request) ? readDisplayList(request.blockers, "blocker") : []),
-    ...readDisplayList(rootRecord.warnings, "warning"),
-    ...readDisplayList(summary.warnings, "warning"),
-    ...requests.flatMap((request) => isRecord(request) ? readDisplayList(request.warnings, "warning") : []),
-  ].filter(Boolean)));
-  const hardLocks = buildProviderExecutionPermissionGateHardLocks(rootRecord, summary);
-
-  return {
-    initialized,
-    readiness: providerExecutionPermissionGateReadinessLabel(status, initialized, readyForUserReview, blocked, parked),
-    readyForUserReview,
-    blocked,
-    parked,
-    canAskUserToConfirm,
-    actionTimeConfirmation: actionTimeRequired ? "required" : "blocked/missing",
-    automaticSubmit: automaticSubmitForbidden ? "automatic submit blocked" : "blocked/missing",
-    providerSubmit: providerSubmitAllowed === 0 ? "provider submit blocked" : "blocked/missing",
-    credentialWorkerFileLocks: liveSubmitAllowed === false && credentialAccessAllowed === false && workerSpawnLocked === true && fileMutationLocked === true
-      ? "credential/live/worker/file locked"
-      : "blocked/missing",
-    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.providerExecutionPermissionGate"],
-    hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.providerExecutionPermissionGate"],
-  };
-}
-
-function providerActionConfirmationReceiptReadinessLabel(
-  status: string,
-  initialized: boolean,
-  readyReceipts: number,
-  blocked: number,
-  parked: number,
-  confirmedCount: number,
-) {
-  if (!initialized) return "blocked/missing";
-  const normalized = status.toLowerCase();
-  if (blocked > 0 || normalized.includes("blocked") || normalized.includes("missing") || normalized.includes("fail")) return "blocked";
-  if (confirmedCount > 0 || normalized.includes("confirmed")) return "confirmed";
-  if (readyReceipts > 0 || normalized.includes("ready")) return "ready_receipts";
-  if (parked > 0 || normalized.includes("parked")) return "parked";
-  return status ? statusLabel(status) : "blocked/missing";
-}
-
-function receiptRowIsConfirmed(row: Record<string, unknown>) {
-  if (row.confirmed === true || row.userConfirmedAtActionTime === true || row.confirmedAtActionTime === true) return true;
-  const confirmations = Array.isArray(row.confirmations) ? row.confirmations : [];
-  return confirmations.some((item) => isRecord(item) && item.confirmed === true);
-}
-
-function buildProviderActionConfirmationReceiptHardLocks(rootRecord: Record<string, unknown>, summary: Record<string, unknown>) {
-  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
-  const explicitHardLocks = firstArrayFrom([rootRecord, summary, hardLocksRecord], ["hardLocks", "locks", "hardLockStrip"])
-    .map((item, index) => formatHarnessValue(item, `hard lock ${index + 1}`))
-    .filter(Boolean);
-  const inferredLocks = [
-    readBooleanLockLabel(hardLocksRecord, "dryRunOnly", "dry-run only", true),
-    readBooleanLockLabel(hardLocksRecord, "readOnly", "read-only", true),
-    readBooleanLockLabel(hardLocksRecord, "receiptOnly", "receipt only", true),
-    readBooleanLockLabel(hardLocksRecord, "receiptPlanOnly", "receipt plan only", true),
-    readBooleanLockLabel(hardLocksRecord, "reviewShellOnly", "review shell only", true),
-    readBooleanLockLabel(hardLocksRecord, "actionTimeConfirmationRequired", "action-time confirmation required", true),
-    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noProviderSubmit", "provider submit blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "canSubmitProvider", "canSubmitProvider=false", false),
-    hardLocksRecord.providerSubmitAllowed === 0 ? "providerSubmitAllowed=0" : undefined,
-    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit locked", false),
-    readBooleanLockLabel(hardLocksRecord, "credentialAccessAllowed", "credential access locked", false),
-    readBooleanLockLabel(hardLocksRecord, "noCredentialRead", "credential read locked", true),
-    readBooleanLockLabel(hardLocksRecord, "noCredentialWrite", "credential write locked", true),
-    readBooleanLockLabel(hardLocksRecord, "noWorkerSpawn", "worker spawn locked", true),
-    readBooleanLockLabel(hardLocksRecord, "workerSpawnAllowed", "worker spawn locked", false),
-    readBooleanLockLabel(hardLocksRecord, "noFileMutation", "file mutation locked", true),
-    readBooleanLockLabel(hardLocksRecord, "fileMutationAllowed", "file mutation locked", false),
-  ].filter((lock): lock is string => Boolean(lock));
-
-  return Array.from(new Set([...explicitHardLocks, ...inferredLocks]));
-}
-
-function buildProviderActionConfirmationReceiptUiSummary(runtimeState: ProjectRuntimeState): ProviderActionConfirmationReceiptUiSummary {
-  const root = (runtimeState as Partial<ProjectRuntimeState> & { providerActionConfirmationReceipt?: unknown }).providerActionConfirmationReceipt;
-  const initialized = isRecord(root);
-  const rootRecord = initialized ? root as Record<string, unknown> : {};
-  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
-  const evidence = initialized && isRecord(rootRecord.phase32Evidence) ? rootRecord.phase32Evidence : {};
-  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
-  const records = [summary, evidence, rootRecord, hardLocksRecord].filter(isRecord);
-  const receiptRows = firstArrayFrom([rootRecord, summary], [
-    "receipts",
-    "items",
-    "confirmationReceipts",
-    "actionReceipts",
-    "requests",
-  ]);
-  const receiptRecords = receiptRows.filter(isRecord);
-  const readyReceipts = readFirstNumber(records, [
-    "readyReceipts",
-    "readyReceiptCount",
-    "readyForReceipt",
-    "readyForActionConfirmation",
-    "ready",
-  ]) ?? receiptRecords.filter((row) => /ready/.test(readString(row.status, "").toLowerCase())).length;
-  const blocked = readFirstNumber(records, ["blocked", "blockedReceipts", "blockedReceiptCount"])
-    ?? receiptRecords.filter((row) => readString(row.status, "") === "blocked").length;
-  const parked = readFirstNumber(records, ["parked", "parkedReceipts", "parkedReceiptCount"])
-    ?? receiptRecords.filter((row) => readString(row.status, "") === "parked").length;
-  const confirmedCount = readFirstNumber(records, [
-    "confirmedCount",
-    "confirmedReceiptCount",
-    "confirmedReceipts",
-    "confirmed",
-  ]) ?? receiptRecords.filter(receiptRowIsConfirmed).length;
-  const status = readFirstString(records, ["readiness", "status", "state"], "");
-  const providerSubmitAllowedNumber = readFirstNumber(records, ["providerSubmitAllowed"]);
-  const providerSubmitAllowedBoolean = readFirstBoolean(records, ["providerSubmitAllowed", "canSubmitProvider"]);
-  const providerSubmitBlockedFlag = readFirstBoolean(records, [
-    "providerSubmitBlocked",
-    "providerSubmissionForbidden",
-    "noProviderSubmit",
-  ]);
-  const providerSubmitBlocked = providerSubmitAllowedNumber === 0
-    || providerSubmitAllowedBoolean === false
-    || providerSubmitBlockedFlag === true;
-  const providerSubmitDrift = (providerSubmitAllowedNumber !== undefined && providerSubmitAllowedNumber !== 0)
-    || providerSubmitAllowedBoolean === true
-    || providerSubmitBlockedFlag === false;
-  const credentialLocked = readFirstBoolean(records, ["credentialAccessAllowed", "credentialReadAllowed", "credentialStorage"]) === false
-    || records.some((record) => record.noCredentialRead === true || record.noCredentialWrite === true || record.credentialAccessBlocked === true);
-  const workerLocked = readFirstBoolean(records, ["workerSpawnAllowed", "canSpawnWorker", "workerExecutionAllowed"]) === false
-    || records.some((record) => record.noWorkerSpawn === true || record.workerSpawnBlocked === true);
-  const fileLocked = readFirstBoolean(records, ["fileMutationAllowed", "canMutateFiles", "fileWriteAllowed"]) === false
-    || records.some((record) => record.noFileMutation === true || record.fileMutationBlocked === true);
-  const blockersWarnings = Array.from(new Set([
-    ...readDisplayList(rootRecord.blockers, "blocker"),
-    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
-    ...readDisplayList(summary.blockers, "blocker"),
-    ...readDisplayList(summary.blockedReasons, "blocker"),
-    ...receiptRecords.flatMap((row) => readDisplayList(row.blockers, "blocker")),
-    ...readDisplayList(rootRecord.warnings, "warning"),
-    ...readDisplayList(summary.warnings, "warning"),
-    ...receiptRecords.flatMap((row) => readDisplayList(row.warnings, "warning")),
-  ].filter(Boolean)));
-  const hardLocks = buildProviderActionConfirmationReceiptHardLocks(rootRecord, summary);
-
-  return {
-    initialized,
-    readiness: providerActionConfirmationReceiptReadinessLabel(status, initialized, readyReceipts, blocked, parked, confirmedCount),
-    readyReceipts,
-    blocked,
-    parked,
-    confirmedCount,
-    providerSubmitBlocked: providerSubmitBlocked ? "provider submit blocked" : providerSubmitDrift ? "provider submit drift" : "blocked/missing",
-    credentialWorkerFileLocked: credentialLocked && workerLocked && fileLocked ? "credential/worker/file locked" : "blocked/missing",
-    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.providerActionConfirmationReceipt"],
-    hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.providerActionConfirmationReceipt"],
-  };
-}
-
-function providerExecutionHandoffReadinessLabel(
-  status: string,
-  initialized: boolean,
-  handoffCount: number,
-  blockedCount: number,
-  confirmedCount: number,
-) {
-  if (!initialized) return "blocked/missing";
-  const normalized = status.toLowerCase();
-  if (blockedCount > 0 || normalized.includes("blocked") || normalized.includes("missing") || normalized.includes("fail")) return "blocked";
-  if (confirmedCount > 0 || normalized.includes("confirmed")) return "confirmed";
-  if (handoffCount > 0 || normalized.includes("ready")) return "ready_for_final_action";
-  return status ? statusLabel(status) : "blocked/missing";
-}
-
-function handoffRowIsConfirmed(row: Record<string, unknown>) {
-  if (row.confirmed === true || row.userConfirmedAtActionTime === true || row.finalActionConfirmed === true) return true;
-  const receipts = Array.isArray(row.receipts) ? row.receipts : [];
-  const confirmations = Array.isArray(row.confirmations) ? row.confirmations : [];
-  return [...receipts, ...confirmations].some((item) => isRecord(item) && item.confirmed === true);
-}
-
-function buildProviderExecutionHandoffHardLocks(rootRecord: Record<string, unknown>, summary: Record<string, unknown>) {
-  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
-  const explicitHardLocks = firstArrayFrom([rootRecord, summary, hardLocksRecord], ["hardLocks", "locks", "hardLockStrip"])
-    .map((item, index) => formatHarnessValue(item, `hard lock ${index + 1}`))
-    .filter(Boolean);
-  const inferredLocks = [
-    readBooleanLockLabel(hardLocksRecord, "dryRunOnly", "dry-run only", true),
-    readBooleanLockLabel(hardLocksRecord, "readOnly", "read-only", true),
-    readBooleanLockLabel(hardLocksRecord, "handoffOnly", "handoff only", true),
-    readBooleanLockLabel(hardLocksRecord, "finalActionGateOnly", "final action gate only", true),
-    readBooleanLockLabel(hardLocksRecord, "actionTimeConfirmationRequired", "action-time confirmation required", true),
-    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit locked", true),
-    readBooleanLockLabel(hardLocksRecord, "noProviderSubmit", "provider submit locked", true),
-    readBooleanLockLabel(hardLocksRecord, "canSubmitProvider", "canSubmitProvider=false", false),
-    hardLocksRecord.providerSubmitAllowed === 0 ? "providerSubmitAllowed=0" : undefined,
-    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit locked", false),
-    readBooleanLockLabel(hardLocksRecord, "credentialAccessAllowed", "credential access locked", false),
-    readBooleanLockLabel(hardLocksRecord, "noCredentialRead", "credential read locked", true),
-    readBooleanLockLabel(hardLocksRecord, "noCredentialWrite", "credential write locked", true),
-    readBooleanLockLabel(hardLocksRecord, "noWorkerSpawn", "worker spawn locked", true),
-    readBooleanLockLabel(hardLocksRecord, "workerSpawnAllowed", "worker spawn locked", false),
-    readBooleanLockLabel(hardLocksRecord, "noFileMutation", "file mutation locked", true),
-    readBooleanLockLabel(hardLocksRecord, "fileMutationAllowed", "file mutation locked", false),
-  ].filter((lock): lock is string => Boolean(lock));
-
-  return Array.from(new Set([...explicitHardLocks, ...inferredLocks]));
-}
-
-function buildProviderExecutionHandoffUiSummary(runtimeState: ProjectRuntimeState): ProviderExecutionHandoffUiSummary {
-  const root = (runtimeState as Partial<ProjectRuntimeState> & { providerExecutionHandoff?: unknown }).providerExecutionHandoff;
-  const initialized = isRecord(root);
-  const rootRecord = initialized ? root as Record<string, unknown> : {};
-  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
-  const evidence = initialized && isRecord(rootRecord.phase33Evidence) ? rootRecord.phase33Evidence : {};
-  const finalActionGate = firstRecordFrom(rootRecord, ["finalActionGate", "handoffGate", "executionHandoffGate"]);
-  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
-  const records = [summary, evidence, finalActionGate, rootRecord, hardLocksRecord].filter(isRecord);
-  const handoffRows = firstArrayFrom([rootRecord, summary, finalActionGate], [
-    "handoffs",
-    "items",
-    "handoffItems",
-    "executionHandoffs",
-    "finalActionRequests",
-    "requests",
-  ]);
-  const handoffRecords = handoffRows.filter(isRecord);
-  const handoffCount = readFirstNumber(records, [
-    "handoffCount",
-    "totalHandoffs",
-    "total",
-    "readyHandoffCount",
-    "readyForFinalAction",
-  ]) ?? handoffRecords.length;
-  const blockedCount = readFirstNumber(records, [
-    "blockedCount",
-    "blocked",
-    "blockedHandoffs",
-    "blockedHandoffCount",
-  ]) ?? handoffRecords.filter((row) => /blocked|missing|fail/.test(readString(row.status, "").toLowerCase())).length;
-  const confirmedCount = readFirstNumber(records, [
-    "confirmedCount",
-    "confirmedHandoffCount",
-    "confirmedHandoffs",
-    "confirmed",
-  ]) ?? handoffRecords.filter(handoffRowIsConfirmed).length;
-  const status = readFirstString(records, ["readiness", "status", "state"], "");
-  const providerSubmitAllowedNumber = readFirstNumber(records, ["providerSubmitAllowed"]);
-  const providerSubmitAllowedBoolean = readFirstBoolean(records, ["providerSubmitAllowed", "canSubmitProvider", "providerSubmitAllowedNow"]);
-  const providerSubmitBlockedFlag = readFirstBoolean(records, [
-    "providerSubmitLocked",
-    "providerSubmitBlocked",
-    "providerSubmissionForbidden",
-    "noProviderSubmit",
-  ]);
-  const providerSubmitLocked = providerSubmitAllowedNumber === 0
-    || providerSubmitAllowedBoolean === false
-    || providerSubmitBlockedFlag === true;
-  const providerSubmitDrift = (providerSubmitAllowedNumber !== undefined && providerSubmitAllowedNumber !== 0)
-    || providerSubmitAllowedBoolean === true
-    || providerSubmitBlockedFlag === false;
-  const credentialLocked = readFirstBoolean(records, ["credentialAccessAllowed", "credentialReadAllowed", "credentialStorage"]) === false
-    || records.some((record) => record.noCredentialRead === true || record.noCredentialWrite === true || record.credentialAccessBlocked === true);
-  const workerLocked = readFirstBoolean(records, ["workerSpawnAllowed", "canSpawnWorker", "workerExecutionAllowed"]) === false
-    || records.some((record) => record.noWorkerSpawn === true || record.workerSpawnBlocked === true);
-  const fileLocked = readFirstBoolean(records, ["fileMutationAllowed", "canMutateFiles", "fileWriteAllowed"]) === false
-    || records.some((record) => record.noFileMutation === true || record.fileMutationBlocked === true);
-  const blockersWarnings = Array.from(new Set([
-    ...readDisplayList(rootRecord.blockers, "blocker"),
-    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
-    ...readDisplayList(summary.blockers, "blocker"),
-    ...readDisplayList(summary.blockedReasons, "blocker"),
-    ...readDisplayList(finalActionGate.blockers, "blocker"),
-    ...readDisplayList(finalActionGate.blockedReasons, "blocker"),
-    ...handoffRecords.flatMap((row) => readDisplayList(row.blockers, "blocker")),
-    ...readDisplayList(rootRecord.warnings, "warning"),
-    ...readDisplayList(summary.warnings, "warning"),
-    ...readDisplayList(finalActionGate.warnings, "warning"),
-    ...handoffRecords.flatMap((row) => readDisplayList(row.warnings, "warning")),
-  ].filter(Boolean)));
-  const hardLocks = buildProviderExecutionHandoffHardLocks(rootRecord, summary);
-
-  return {
-    initialized,
-    readiness: providerExecutionHandoffReadinessLabel(status, initialized, handoffCount, blockedCount, confirmedCount),
-    handoffCount,
-    blockedCount,
-    confirmedCount,
-    providerSubmitLocked: providerSubmitLocked ? "provider submit locked" : providerSubmitDrift ? "provider submit drift" : "blocked/missing",
-    credentialWorkerFileLocked: credentialLocked && workerLocked && fileLocked ? "credential/worker/file locked" : "blocked/missing",
-    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.providerExecutionHandoff"],
-    hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.providerExecutionHandoff"],
-  };
-}
-
-function localOrchestratorReadinessLabel(summary: {
-  initialized: boolean;
-  blocked: number;
-  failed: number;
-  needsReview: number;
-  qaPending: number;
-  stalled: number;
-  runningPlanned: number;
-  waitingOutput: number;
-  ready: number;
-  waiting: number;
-  completeVerified: number;
-  queueTotal: number;
-}) {
-  if (!summary.initialized) return "blocked/missing";
-  if (summary.blocked > 0 || summary.failed > 0) return "blocked";
-  if (summary.needsReview > 0) return "needs_review";
-  if (summary.qaPending > 0 || summary.stalled > 0 || summary.runningPlanned > 0 || summary.waitingOutput > 0) return "waiting";
-  if (summary.ready > 0) return "ready";
-  if (summary.waiting > 0) return "waiting";
-  if (summary.queueTotal > 0 && summary.completeVerified === summary.queueTotal) return "complete_verified";
-  return "blocked/missing";
-}
-
-function buildLocalOrchestratorHardLocks(rootRecord: Record<string, unknown>, summary: Record<string, unknown>) {
-  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
-  const explicitHardLocks = firstArrayFrom([rootRecord, summary, hardLocksRecord], ["hardLocks", "locks", "hardLockStrip"])
-    .map((item, index) => formatHarnessValue(item, `hard lock ${index + 1}`))
-    .filter(Boolean);
-  const inferredLocks = [
-    readBooleanLockLabel(hardLocksRecord, "dryRunOnly", "dry-run only", true),
-    readBooleanLockLabel(hardLocksRecord, "planOnly", "plan-only", true),
-    readBooleanLockLabel(hardLocksRecord, "noDaemon", "daemon locked", true),
-    readBooleanLockLabel(hardLocksRecord, "daemonStarted", "daemon not started", false),
-    readBooleanLockLabel(hardLocksRecord, "noSpawnCodex", "Codex spawn locked", true),
-    readBooleanLockLabel(hardLocksRecord, "noSubprocess", "subprocess locked", true),
-    readBooleanLockLabel(hardLocksRecord, "noShellExecution", "shell locked", true),
-    readBooleanLockLabel(hardLocksRecord, "noProviderExecution", "provider execution locked", true),
-    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit locked", false),
-    readBooleanLockLabel(hardLocksRecord, "noFileMutation", "file mutation locked", true),
-    readBooleanLockLabel(hardLocksRecord, "noCredentialRead", "credential read locked", true),
-    readBooleanLockLabel(hardLocksRecord, "expectedOutputRequired", "expected output required", true),
-    readBooleanLockLabel(hardLocksRecord, "manifestRequired", "manifest required", true),
-    readBooleanLockLabel(hardLocksRecord, "qaGateRequired", "QA gate required", true),
-    rootRecord.providerSubmissionForbidden === true || summary.providerSubmissionForbidden === true ? "provider submit blocked" : undefined,
-    rootRecord.noFileMutation === true || summary.noFileMutation === true ? "file mutation locked" : undefined,
-    rootRecord.daemonStarted === false || summary.daemonStarted === false ? "daemon not started" : undefined,
-  ].filter((lock): lock is string => Boolean(lock));
-
-  return Array.from(new Set([...explicitHardLocks, ...inferredLocks]));
-}
-
-function buildLocalOrchestratorUiSummary(runtimeState: ProjectRuntimeState): LocalOrchestratorUiSummary {
-  const root = (runtimeState as Partial<ProjectRuntimeState> & { localOrchestrator?: unknown }).localOrchestrator;
-  const initialized = isRecord(root);
-  const rootRecord = initialized ? root as Record<string, unknown> : {};
-  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
-  const autoContinuePlan = initialized && isRecord(rootRecord.autoContinuePlan) ? rootRecord.autoContinuePlan : {};
-  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockSummary"]);
-  const queue = Array.isArray(rootRecord.queue) ? rootRecord.queue : [];
-  const queueRecords = queue.filter(isRecord);
-  const records = [summary, rootRecord, autoContinuePlan, hardLocksRecord].filter(isRecord);
-  const countByStatus = (status: string) => queueRecords.filter((item) => readString(item.queueStatus, "") === status).length;
-  const queueTotal = readFirstNumber(records, ["totalItems", "queueTotal", "total"]) ?? queueRecords.length;
-  const ready = readFirstNumber(records, ["ready"]) ?? countByStatus("ready");
-  const waiting = readFirstNumber(records, ["waiting"]) ?? countByStatus("waiting");
-  const runningPlanned = readFirstNumber(records, ["runningPlanned", "running_planned", "running"]) ?? countByStatus("running_planned");
-  const waitingOutput = readFirstNumber(records, ["waitingOutput", "waiting_output"]) ?? countByStatus("waiting_output");
-  const qaPending = readFirstNumber(records, ["qaPending", "qa_pending"]) ?? countByStatus("qa_pending");
-  const needsReview = readFirstNumber(records, ["needsReview", "needs_review", "manualReviewRequired"]) ?? countByStatus("needs_review");
-  const stalled = readFirstNumber(records, ["stalled"]) ?? queueRecords.filter((item) => {
-    const activity = isRecord(item.codexActivity) ? item.codexActivity : {};
-    return activity.stalled === true;
-  }).length;
-  const blocked = readFirstNumber(records, ["blocked"]) ?? countByStatus("blocked");
-  const failed = readFirstNumber(records, ["failed"]) ?? countByStatus("failed");
-  const completeVerified = readFirstNumber(records, ["completeVerified", "complete_verified"]) ?? countByStatus("complete_verified");
-  const nextReadyIds = firstArrayFrom([autoContinuePlan, summary, rootRecord], ["nextReadyQueueItemIds", "nextReadyIds", "nextReady"]);
-  const nextReadyCount = readFirstNumber([autoContinuePlan, summary, rootRecord].filter(isRecord), [
-    "nextReadyCount",
-    "autoContinueNextReadyCount",
-  ]) ?? nextReadyIds.length;
-  const autoContinueMode = readFirstString([autoContinuePlan, summary, rootRecord].filter(isRecord), [
-    "mode",
-    "autoContinueMode",
-  ], "plan_only");
-  const providerLocked = readFirstBoolean(records, ["providerSubmissionForbidden", "noProviderExecution"]) === true;
-  const fileLocked = readFirstBoolean(records, ["noFileMutation"]) === true;
-  const daemonLocked = readFirstBoolean(records, ["noDaemon"]) === true || readFirstBoolean(records, ["daemonStarted"]) === false;
-  const blockersWarnings = Array.from(new Set([
-    ...readDisplayList(rootRecord.blockers, "blocker"),
-    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
-    ...readDisplayList(summary.blockers, "blocker"),
-    ...readDisplayList(summary.blockedReasons, "blocker"),
-    ...queueRecords.flatMap((item) => readDisplayList(item.blockers, "blocker")),
-    ...readDisplayList(rootRecord.warnings, "warning"),
-    ...readDisplayList(summary.warnings, "warning"),
-    ...queueRecords.flatMap((item) => readDisplayList(item.warnings, "warning")),
-  ].filter(Boolean)));
-  const hardLocks = buildLocalOrchestratorHardLocks(rootRecord, summary);
-  const readinessFacts = {
-    initialized,
-    blocked,
-    failed,
-    needsReview,
-    qaPending,
-    stalled,
-    runningPlanned,
-    waitingOutput,
-    ready,
-    waiting,
-    completeVerified,
-    queueTotal,
-  };
-
-  return {
-    initialized,
-    readiness: localOrchestratorReadinessLabel(readinessFacts),
-    queueTotal,
-    ready,
-    waiting,
-    runningPlanned,
-    waitingOutput,
-    qaPending,
-    needsReview,
-    blocked,
-    failed,
-    stalled,
-    completeVerified,
-    nextReadyCount,
-    autoContinueMode: autoContinueMode === "plan_only" ? "plan-only" : statusLabel(autoContinueMode),
-    providerFileDaemonLocks: providerLocked && fileLocked && daemonLocked ? "provider/file/daemon locked" : "blocked/missing",
-    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing runtimeState.localOrchestrator"],
-    hardLocks: hardLocks.length ? hardLocks : [initialized ? "hard locks blocked/missing" : "blocked/missing runtimeState.localOrchestrator"],
-  };
-}
-
-function buildVisualConsistencyContractUiSummary(runtimeState: ProjectRuntimeState): VisualConsistencyContractUiSummary {
-  const root = runtimeState as unknown as Record<string, unknown>;
-  const contractRoot = isRecord(root.visualConsistencyContract)
-    ? root.visualConsistencyContract
-    : isRecord(root.visualConsistency)
-      ? root.visualConsistency
-      : {};
-  const initialized = isRecord(contractRoot);
-  const rootRecord = initialized ? contractRoot : {};
-  const gates = firstRecordFrom(rootRecord, ["gates"]);
-  const summary = firstRecordFrom(rootRecord, ["summary"]);
-  const geometry = firstRecordFrom(rootRecord, ["cameraGeometry", "sceneAssetPack"]);
-  const shotLayout = firstRecordFrom(rootRecord, ["shotLayout"]);
-  const keyframePair = firstRecordFrom(rootRecord, ["keyframePair", "keyframePairDerivation"]);
-  const motionQa = firstRecordFrom(rootRecord, ["motionQa"]);
-  const repairPolicy = firstRecordFrom(rootRecord, ["repairPolicy"]);
-  const records = [gates, summary, rootRecord].filter(isRecord);
-  const gateKeys = [
-    "identityGateDefined",
-    "sceneGateDefined",
-    "shotLayoutGateDefined",
-    "spatialMemoryGateDefined",
-    "keyframePairDerivationGateDefined",
-    "masterInheritanceQaGateDefined",
-  ];
-  const readyGateCount = gateKeys.filter((key) => readFirstBoolean(records, [key]) === true).length;
-  const status = readFirstString(records, ["readiness", "status", "state"], "");
-  const blockersWarnings = Array.from(new Set([
-    ...readDisplayList(rootRecord.blockers, "blocker"),
-    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
-    ...readDisplayList(summary.blockers, "blocker"),
-    ...readDisplayList(summary.blockedReasons, "blocker"),
-    ...readDisplayList(rootRecord.warnings, "warning"),
-    ...readDisplayList(summary.warnings, "warning"),
-  ].filter(Boolean)));
-  const cameraVectorReady = readFirstBoolean([gates, geometry, shotLayout].filter(isRecord), ["cameraVectorDefined"]) === true;
-  const worldPositionReady = readFirstBoolean([gates, geometry].filter(isRecord), ["worldPositionDefined"]) === true;
-  const shotLayoutPartsReady = ["shotLayoutSubjectDefined", "shotLayoutCameraDefined", "shotLayoutAxisDefined", "shotLayoutAnchorsDefined"]
-    .every((key) => readFirstBoolean([gates, shotLayout].filter(isRecord), [key]) === true);
-  const independentEndFrame = readFirstBoolean([keyframePair, rootRecord].filter(isRecord), [
-    "independentSameShotEndFrameObserved",
-    "independentSameShotEndFrame",
-  ]) === true;
-  const largeMotionDrift = readFirstBoolean([motionQa, rootRecord].filter(isRecord), [
-    "largeMotionDriftObserved",
-    "largeMotionDrift",
-  ]) === true;
-  const semanticRepair = readFirstBoolean([repairPolicy, rootRecord].filter(isRecord), [
-    "semanticOpenCvRepairObserved",
-    "opencvSemanticRepairObserved",
-  ]) === true;
-
-  return {
-    initialized,
-    readiness: initialized
-      ? statusLabel(status || (readyGateCount === gateKeys.length && !blockersWarnings.length ? "ready" : "blocked"))
-      : "blocked/missing",
-    gateStatus: `${readyGateCount}/${gateKeys.length} typed gate(s)`,
-    geometryStatus: cameraVectorReady && worldPositionReady ? "camera vector + world position present" : "camera vector/world position missing",
-    shotLayoutStatus: shotLayoutPartsReady ? "subject/camera/axis/anchors present" : "shot layout incomplete",
-    keyframePairStatus: independentEndFrame ? "independent same-shot end frame blocked" : "keyframe pair derivation tied",
-    driftRepairStatus: largeMotionDrift || semanticRepair ? "motion drift or semantic OpenCV repair blocked" : "motion drift and repair policy clear",
-    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing visualConsistencyContract"],
-    requiredGates: gateKeys,
-  };
-}
-
-function buildFullTaskSubagentPacketPlannerUiSummary(runtimeState: ProjectRuntimeState): FullTaskSubagentPacketPlannerUiSummary {
-  const root = runtimeState as unknown as Record<string, unknown>;
-  const plannerRoot = isRecord(root.fullTaskSubagentPacketPlanner)
-    ? root.fullTaskSubagentPacketPlanner
-    : isRecord(root.taskPacketPlanner)
-      ? root.taskPacketPlanner
-      : isRecord(root.subagentPacketPlanner)
-        ? root.subagentPacketPlanner
-        : {};
-  const initialized = isRecord(plannerRoot);
-  const rootRecord = initialized ? plannerRoot : {};
-  const gates = firstRecordFrom(rootRecord, ["gates"]);
-  const summary = firstRecordFrom(rootRecord, ["summary"]);
-  const taskCoverage = firstRecordFrom(rootRecord, ["taskCoverage", "coverage"]);
-  const packetPolicy = firstRecordFrom(rootRecord, ["packetPolicy", "validation"]);
-  const outputContract = firstRecordFrom(rootRecord, ["outputContract", "expectedOutputs"]);
-  const sourceFactTrace = firstRecordFrom(rootRecord, ["sourceFactTrace", "sourceFacts"]);
-  const knowledgeTrace = firstRecordFrom(rootRecord, ["knowledgeTrace", "injectedKnowledge"]);
-  const freeTextPolicy = firstRecordFrom(rootRecord, ["freeTextPolicy", "workerPolicy"]);
-  const routeSafety = firstRecordFrom(rootRecord, ["routeSafety", "routes"]);
-  const records = [gates, summary, rootRecord].filter(isRecord);
-  const gateKeys = [
-    "allProductionTaskKindsCovered",
-    "validatedPacketsRequired",
-    "expectedOutputsRequired",
-    "sourceFactTraceRequired",
-    "knowledgeTraceRequired",
-    "freeTextWorkerForbidden",
-  ];
-  const readyGateCount = gateKeys.filter((key) => readFirstBoolean(records, [key]) === true).length;
-  const status = readFirstString(records, ["readiness", "status", "state"], "");
-  const coveredKinds = firstArrayFrom([taskCoverage, summary, rootRecord].filter(isRecord), [
-    "coveredProductionTaskKinds",
-    "productionTaskKinds",
-    "taskKinds",
-  ]).length;
-  const missingKinds = firstArrayFrom([taskCoverage, summary, rootRecord].filter(isRecord), [
-    "missingProductionTaskKinds",
-    "missingTaskKinds",
-  ]).length;
-  const blockersWarnings = Array.from(new Set([
-    ...readDisplayList(rootRecord.blockers, "blocker"),
-    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
-    ...readDisplayList(summary.blockers, "blocker"),
-    ...readDisplayList(summary.blockedReasons, "blocker"),
-    ...readDisplayList(rootRecord.warnings, "warning"),
-    ...readDisplayList(summary.warnings, "warning"),
-  ].filter(Boolean)));
-  const unvalidatedPacket = readFirstBoolean([packetPolicy, rootRecord].filter(isRecord), [
-    "unvalidatedPacketAllowed",
-    "unvalidatedPacketObserved",
-  ]) === true;
-  const missingExpectedOutputs = readFirstBoolean([outputContract, rootRecord].filter(isRecord), [
-    "missingExpectedOutputsAllowed",
-    "missingExpectedOutputsObserved",
-    "expectedOutputsMissing",
-  ]) === true;
-  const sourceTraceMissing = readFirstBoolean([sourceFactTrace, rootRecord].filter(isRecord), [
-    "missingSourceFactTraceAllowed",
-    "missingSourceFactTraceObserved",
-    "sourceFactTraceMissing",
-  ]) === true;
-  const knowledgeTraceMissing = readFirstBoolean([knowledgeTrace, rootRecord].filter(isRecord), [
-    "missingKnowledgeTraceAllowed",
-    "missingKnowledgeTraceObserved",
-    "knowledgeTraceMissing",
-  ]) === true;
-  const freeTextAllowed = readFirstBoolean([freeTextPolicy, rootRecord].filter(isRecord), [
-    "freeTextWorkerAllowed",
-    "freeTextTaskAllowed",
-    "formalTaskAcceptsFreeText",
-  ]) === true;
-  const routeOpened = ["workerRouteOpened", "providerRouteOpened", "fileRouteOpened", "credentialRouteOpened", "shellRouteOpened"]
-    .some((key) => readFirstBoolean([routeSafety, rootRecord].filter(isRecord), [key]) === true);
-
-  return {
-    initialized,
-    readiness: initialized
-      ? statusLabel(status || (readyGateCount === gateKeys.length && !blockersWarnings.length ? "ready" : "blocked"))
-      : "blocked/missing",
-    coverageStatus: missingKinds > 0
-      ? `${missingKinds} missing task kind(s)`
-      : coveredKinds > 0
-        ? `${coveredKinds} task kind(s) covered`
-        : `${readyGateCount}/${gateKeys.length} typed gate(s)`,
-    packetStatus: unvalidatedPacket ? "unvalidated packet blocked" : "validated packet required",
-    outputStatus: missingExpectedOutputs ? "expected outputs missing" : "expected outputs required",
-    traceStatus: sourceTraceMissing || knowledgeTraceMissing ? "source fact trace / knowledge trace missing" : "source fact trace + knowledge trace required",
-    freeTextStatus: freeTextAllowed ? "free-text worker/task allowed" : "free-text worker/task forbidden",
-    routeStatus: routeOpened ? "worker/provider/file/credential/shell route open" : "worker/provider/file/credential/shell routes closed",
-    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing fullTaskSubagentPacketPlanner"],
-    requiredGates: gateKeys,
-  };
-}
-
-function buildKnowledgePackUserManagementUiSummary(runtimeState: ProjectRuntimeState): KnowledgePackUserManagementUiSummary {
-  const root = runtimeState as unknown as Record<string, unknown>;
-  const managerRoot = isRecord(root.knowledgePackUserManagement)
-    ? root.knowledgePackUserManagement
-    : isRecord(root.knowledgePackManager)
-      ? root.knowledgePackManager
-      : {};
-  const initialized = isRecord(managerRoot);
-  const rootRecord = initialized ? managerRoot : {};
-  const gates = firstRecordFrom(rootRecord, ["gates"]);
-  const summary = firstRecordFrom(rootRecord, ["summary"]);
-  const routeSafety = firstRecordFrom(rootRecord, ["routeSafety", "routes"]);
-  const injectionPolicy = firstRecordFrom(rootRecord, ["injectionPolicy", "knowledgeInjection"]);
-  const assetPromotion = firstRecordFrom(rootRecord, ["assetPromotion", "formalReferencePolicy"]);
-  const records = [gates, summary, rootRecord].filter(isRecord);
-  const requiredGates = [
-    "userImportFlowReady",
-    "userCreateFlowReady",
-    "userEnableFlowReady",
-    "userDisableFlowReady",
-    "versionCheckReady",
-    "hashCheckReady",
-    "dependencyCheckReady",
-    "routeTestReady",
-    "conflictDetectionReady",
-    "cannotOverrideHardGates",
-  ];
-  const readyGateCount = requiredGates.filter((key) => readFirstBoolean(records, [key]) === true).length;
-  const status = readFirstString(records, ["readiness", "status", "state"], "");
-  const blockersWarnings = Array.from(new Set([
-    ...readDisplayList(rootRecord.blockers, "blocker"),
-    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
-    ...readDisplayList(summary.blockers, "blocker"),
-    ...readDisplayList(summary.blockedReasons, "blocker"),
-    ...readDisplayList(rootRecord.warnings, "warning"),
-    ...readDisplayList(summary.warnings, "warning"),
-  ].filter(Boolean)));
-  const userFlowsReady = ["userImportFlowReady", "userCreateFlowReady", "userEnableFlowReady", "userDisableFlowReady"]
-    .every((key) => readFirstBoolean(records, [key]) === true);
-  const checksReady = ["versionCheckReady", "hashCheckReady", "dependencyCheckReady"]
-    .every((key) => readFirstBoolean(records, [key]) === true);
-  const routeConflictReady = readFirstBoolean(records, ["routeTestReady"]) === true &&
-    readFirstBoolean(records, ["conflictDetectionReady"]) === true;
-  const routeOpened = [
-    "providerRouteOpened",
-    "providerSubmitRouteOpened",
-    "credentialRouteOpened",
-    "shellRouteOpened",
-    "fileRouteOpened",
-    "freeTextRouteOpened",
-  ].some((key) => readFirstBoolean([routeSafety, rootRecord].filter(isRecord), [key]) === true);
-  const wholeLibraryInjection = readFirstBoolean([injectionPolicy, rootRecord].filter(isRecord), [
-    "wholeLibraryInjectionObserved",
-    "wholeLibraryInjectionAllowed",
-  ]) === true;
-  const unverifiedImportInjection = readFirstBoolean([injectionPolicy, rootRecord].filter(isRecord), [
-    "unverifiedExternalImportInjectionObserved",
-    "unverifiedExternalImportInjectionAllowed",
-  ]) === true;
-  const badPromotion = [
-    "tempAssetFormalPromotionObserved",
-    "rejectedAssetFormalPromotionObserved",
-    "candidateAssetFormalPromotionObserved",
-    "shotOutputFormalPromotionObserved",
-  ].some((key) => readFirstBoolean([assetPromotion, rootRecord].filter(isRecord), [key]) === true);
-
-  return {
-    initialized,
-    readiness: initialized
-      ? statusLabel(status || (readyGateCount === requiredGates.length && !blockersWarnings.length ? "ready" : "blocked"))
-      : "blocked/missing",
-    userFlowStatus: userFlowsReady ? "import/create/enable/disable ready" : "user flows incomplete",
-    checkStatus: checksReady ? "version/hash/dependency checks ready" : "version/hash/dependency checks missing",
-    routeConflictStatus: routeOpened
-      ? "provider/credential/shell/file/free-text route open"
-      : routeConflictReady
-        ? "route test + conflict detection ready"
-        : "route test or conflict detection missing",
-    overrideStatus: readFirstBoolean(records, ["cannotOverrideHardGates"]) === true
-      ? "hard gate override forbidden"
-      : "hard gate override guard missing",
-    injectionStatus: wholeLibraryInjection || unverifiedImportInjection
-      ? "library or unverified import injection blocked"
-      : "scoped verified injection only",
-    promotionStatus: badPromotion
-      ? "informal asset promotion blocked"
-      : "formal references stay gated",
-    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing knowledgePackUserManagement"],
-    requiredGates,
-  };
-}
-
-function buildCodexWorkerRuntimeGateUiSummary(runtimeState: ProjectRuntimeState): CodexWorkerRuntimeGateUiSummary {
-  const root = runtimeState as unknown as Record<string, unknown>;
-  const gateRoot = isRecord(root.codexWorkerRuntimeGate) ? root.codexWorkerRuntimeGate : {};
-  const initialized = isRecord(root.codexWorkerRuntimeGate);
-  const rootRecord = initialized ? gateRoot : {};
-  const gates = firstRecordFrom(rootRecord, ["gates"]);
-  const summary = firstRecordFrom(rootRecord, ["summary"]);
-  const observations = firstRecordFrom(rootRecord, ["observations"]);
-  const runtimeGate = firstRecordFrom(rootRecord, ["runtimeGate", "executionPolicy"]);
-  const records = [gates, summary, rootRecord].filter(isRecord);
-  const observedRecords = [observations, runtimeGate, rootRecord].filter(isRecord);
-  const requiredGates = [
-    "workerRuntimeContractDefined",
-    "defaultGatedOff",
-    "validatedEnvelopeOnly",
-    "structuredResultOnly",
-    "noActualSpawnByDefault",
-    "noDaemonByDefault",
-    "noShellExecution",
-    "noCredentialAccess",
-    "noFileMutation",
-    "noProviderSubmit",
-    "noFreeTextWorker",
-    "noCodexResumeByDefault",
-  ];
-  const readyGateCount = requiredGates.filter((key) => readFirstBoolean(records, [key]) === true).length;
-  const status = readFirstString(records, ["readiness", "status", "state"], "");
-  const blockersWarnings = Array.from(new Set([
-    ...readDisplayList(rootRecord.blockers, "blocker"),
-    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
-    ...readDisplayList(summary.blockers, "blocker"),
-    ...readDisplayList(summary.blockedReasons, "blocker"),
-    ...readDisplayList(rootRecord.warnings, "warning"),
-    ...readDisplayList(summary.warnings, "warning"),
-  ].filter(Boolean)));
-  const defaultOpened = readFirstBoolean(observedRecords, ["defaultGateOpened", "gateDefaultOn"]) === true;
-  const inputRejected = readFirstBoolean(observedRecords, ["unvalidatedEnvelopeAccepted"]) === true;
-  const outputRejected = readFirstBoolean(observedRecords, ["unstructuredResultAccepted"]) === true;
-  const executionOpened = [
-    "spawnCodexObserved",
-    "codexResumeObserved",
-    "daemonStarted",
-    "subprocessObserved",
-    "shellExecutionObserved",
-    "providerSubmitObserved",
-    "providerExecutionObserved",
-    "liveSubmitObserved",
-    "credentialReadObserved",
-    "credentialWriteObserved",
-    "credentialAccessObserved",
-    "fileMutationObserved",
-    "freeTextWorkerObserved",
-    "freeTextTaskObserved",
-  ].some((key) => readFirstBoolean(observedRecords, [key]) === true);
-  const executionLocked = [
-    "noActualSpawnByDefault",
-    "noDaemonByDefault",
-    "noShellExecution",
-    "noCredentialAccess",
-    "noFileMutation",
-    "noProviderSubmit",
-    "noFreeTextWorker",
-    "noCodexResumeByDefault",
-  ].every((key) => readFirstBoolean(records, [key]) === true);
-
-  return {
-    initialized,
-    readiness: initialized
-      ? statusLabel(status || (readyGateCount === requiredGates.length && !blockersWarnings.length ? "ready" : "blocked"))
-      : "blocked/missing",
-    contractStatus: readFirstBoolean(records, ["workerRuntimeContractDefined"]) === true ? "defined" : "missing",
-    gateStatus: defaultOpened ? "opened" : readFirstBoolean(records, ["defaultGatedOff"]) === true ? "default off" : "missing",
-    inputStatus: inputRejected ? "blocked" : readFirstBoolean(records, ["validatedEnvelopeOnly"]) === true ? "locked" : "missing",
-    outputStatus: outputRejected ? "blocked" : readFirstBoolean(records, ["structuredResultOnly"]) === true ? "locked" : "missing",
-    executionStatus: executionOpened ? "opened" : executionLocked ? "closed" : "missing",
-    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing codexWorkerRuntimeGate"],
-    requiredGates,
-  };
-}
-
-function buildProviderClosedLoopShellUiSummary(runtimeState: ProjectRuntimeState): ProviderClosedLoopShellUiSummary {
-  const root = runtimeState as unknown as Record<string, unknown>;
-  const shellRoot = isRecord(root.providerClosedLoopShell) ? root.providerClosedLoopShell : {};
-  const initialized = isRecord(root.providerClosedLoopShell);
-  const rootRecord = initialized ? shellRoot : {};
-  const gates = firstRecordFrom(rootRecord, ["gates"]);
-  const summary = firstRecordFrom(rootRecord, ["summary"]);
-  const observations = firstRecordFrom(rootRecord, ["observations"]);
-  const providerShells = firstRecordFrom(rootRecord, ["providerShells"]);
-  const providerCommitGate = firstRecordFrom(rootRecord, ["providerCommitGate"]);
-  const executionPolicy = firstRecordFrom(rootRecord, ["executionPolicy"]);
-  const records = [gates, summary, rootRecord].filter(isRecord);
-  const observedRecords = [observations, providerShells, providerCommitGate, executionPolicy, rootRecord].filter(isRecord);
-  const requiredGates = [
-    "image2ClosedLoopShellDefined",
-    "seedanceClosedLoopShellDefined",
-    "watcherRequired",
-    "manifestRequired",
-    "qaGateRequired",
-    "promotionGateRequired",
-    "workerSelfReportCannotComplete",
-    "providerCommitDefaultGated",
-    "noActualProviderSubmit",
-    "noLiveSubmit",
-    "noCredentialAccess",
-    "noFileMutation",
-    "noWorkerSpawn",
-    "noShellExecution",
-    "forbiddenProviderModesAbsent",
-  ];
-  const readyGateCount = requiredGates.filter((key) => readFirstBoolean(records, [key]) === true).length;
-  const status = readFirstString(records, ["readiness", "status", "state"], "");
-  const blockersWarnings = Array.from(new Set([
-    ...readDisplayList(rootRecord.blockers, "blocker"),
-    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
-    ...readDisplayList(summary.blockers, "blocker"),
-    ...readDisplayList(summary.blockedReasons, "blocker"),
-    ...readDisplayList(rootRecord.warnings, "warning"),
-    ...readDisplayList(summary.warnings, "warning"),
-  ].filter(Boolean)));
-  const image2Ready = readFirstBoolean(records, ["image2ClosedLoopShellDefined"]) === true;
-  const seedanceReady = readFirstBoolean(records, ["seedanceClosedLoopShellDefined"]) === true;
-  const watcherReady = readFirstBoolean(records, ["watcherRequired"]) === true;
-  const manifestReady = readFirstBoolean(records, ["manifestRequired"]) === true;
-  const qaReady = readFirstBoolean(records, ["qaGateRequired"]) === true;
-  const promotionReady = readFirstBoolean(records, ["promotionGateRequired"]) === true;
-  const defaultOpened = readFirstBoolean(observedRecords, ["providerCommitDefaultOn", "defaultGateOpened", "gateDefaultOn"]) === true;
-  const unsafeObserved = [
-    "providerSubmitObserved",
-    "providerExecutionObserved",
-    "providerCommitObserved",
-    "liveSubmitObserved",
-    "credentialReadObserved",
-    "credentialWriteObserved",
-    "credentialAccessObserved",
-    "apiKeyCreatedObserved",
-    "workerSpawnObserved",
-    "subprocessObserved",
-    "shellExecutionObserved",
-    "fileMutationObserved",
-    "fastModelObserved",
-    "vipChannelObserved",
-    "textToVideoMainPathObserved",
-    "bgmInVideoPromptObserved",
-  ].some((key) => readFirstBoolean(observedRecords, [key]) === true);
-  const safetyLocked = [
-    "workerSelfReportCannotComplete",
-    "providerCommitDefaultGated",
-    "noActualProviderSubmit",
-    "noLiveSubmit",
-    "noCredentialAccess",
-    "noFileMutation",
-    "noWorkerSpawn",
-    "noShellExecution",
-    "forbiddenProviderModesAbsent",
-  ].every((key) => readFirstBoolean(records, [key]) === true);
-
-  return {
-    initialized,
-    readiness: initialized
-      ? statusLabel(status || (readyGateCount === requiredGates.length && !blockersWarnings.length ? "ready" : "blocked"))
-      : "blocked/missing",
-    shellStatus: image2Ready && seedanceReady ? "Image2/Seedance defined" : "missing",
-    watcherStatus: watcherReady ? "watcher required" : "missing",
-    manifestStatus: manifestReady ? "manifest required" : "missing",
-    qaStatus: qaReady ? "QA gate required" : "missing",
-    promotionStatus: promotionReady ? "promotion gate required" : "missing",
-    safetyStatus: defaultOpened || unsafeObserved ? "opened" : safetyLocked ? "closed" : "missing",
-    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing providerClosedLoopShell"],
-    requiredGates,
-  };
-}
-
-function buildBetaAcceptanceUiSummary(runtimeState: ProjectRuntimeState): BetaAcceptanceUiSummary {
-  const root = runtimeState as unknown as Record<string, unknown>;
-  const acceptanceRoot = isRecord(root.betaAcceptance) ? root.betaAcceptance : {};
-  const initialized = isRecord(root.betaAcceptance);
-  const rootRecord = initialized ? acceptanceRoot : {};
-  const gates = firstRecordFrom(rootRecord, ["gates"]);
-  const summary = firstRecordFrom(rootRecord, ["summary"]);
-  const observations = firstRecordFrom(rootRecord, ["observations"]);
-  const betaClosure = firstRecordFrom(rootRecord, ["betaClosure", "roadmap"]);
-  const executionPolicy = firstRecordFrom(rootRecord, ["executionPolicy", "workerPolicy", "providerPolicy"]);
-  const closure = firstRecordFrom(rootRecord, ["closure"]);
-  const hardLocks = firstRecordFrom(rootRecord, ["hardLocks"]);
-  const areas = Array.isArray(rootRecord.areas) ? rootRecord.areas.filter(isRecord) : [];
-  const records = [gates, summary, rootRecord].filter(isRecord);
-  const observedRecords = [observations, betaClosure, executionPolicy, hardLocks, rootRecord].filter(isRecord);
-  const areaByName = (area: string) => areas.find((item) => item.area === area);
-  const areaAccepted = (area: string) => {
-    const item = areaByName(area);
-    return isRecord(item) && item.status === "accepted" && readDisplayList(item.blockers, "blocker").length === 0;
-  };
-  const areaChecked = (area: string, proofKey: string) => {
-    const item = areaByName(area);
-    const proof = isRecord(item?.proof) ? item.proof : {};
-    return areaAccepted(area) && proof[proofKey] === true;
-  };
-  const gateReady = (key: string) => {
-    const explicit = readFirstBoolean(records, [key]);
-    if (explicit !== undefined) return explicit;
-    if (key === "macDesktopReadiness") return areaAccepted("mac_desktop_readiness");
-    if (key === "windowsDesktopReadiness") return areaAccepted("windows_desktop_readiness");
-    if (key === "projectSaveOpen") return areaAccepted("project_save_open");
-    if (key === "previewExport") return areaAccepted("preview_export");
-    if (key === "queueVisibility") return areaAccepted("queue_visibility");
-    if (key === "visualConsistency") return areaAccepted("visual_consistency");
-    if (key === "knowledgePackManagement") return areaAccepted("knowledge_pack_management");
-    if (key === "workerRuntimeGate" || key === "providerClosedLoopShell" || key === "providerGate") {
-      return areaAccepted("worker_provider_gate");
-    }
-    if (key === "tests") return areaAccepted("test_matrix");
-    if (key === "noAdditionalPhasesPlanned") return rootRecord.noAdditionalPhasesPlanned === true || closure.noAdditionalPhasesPlanned === true;
-    if (key === "betaAcceptanceOwnsClosure") return rootRecord.betaAcceptanceOwnsClosure === true || closure.betaAcceptanceOwnsClosure === true;
-    if (key === "finalPhaseNumberLocked") return rootRecord.finalPhaseNumber === 42 || closure.finalPhaseNumber === 42;
-    return false;
-  };
-  const requiredGates = [
-    "macDesktopReadiness",
-    "windowsDesktopReadiness",
-    "projectSaveOpen",
-    "previewExport",
-    "queueVisibility",
-    "visualConsistency",
-    "knowledgePackManagement",
-    "workerRuntimeGate",
-    "providerClosedLoopShell",
-    "providerGate",
-    "tests",
-    "noAdditionalPhasesPlanned",
-    "betaAcceptanceOwnsClosure",
-    "finalPhaseNumberLocked",
-  ];
-  const readyGateCount = requiredGates.filter((key) => gateReady(key)).length;
-  const status = readFirstString(records, ["readiness", "status", "state"], "");
-  const blockersWarnings = Array.from(new Set([
-    ...readDisplayList(rootRecord.blockers, "blocker"),
-    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
-    ...readDisplayList(summary.blockers, "blocker"),
-    ...readDisplayList(summary.blockedReasons, "blocker"),
-    ...areas.flatMap((area) => readDisplayList(area.blockers, "blocker").map((blocker) => `${area.area}:${blocker}`)),
-    ...readDisplayList(rootRecord.warnings, "warning"),
-    ...readDisplayList(summary.warnings, "warning"),
-    ...areas.flatMap((area) => readDisplayList(area.warnings, "warning").map((warning) => `${area.area}:${warning}`)),
-  ].filter(Boolean)));
-  const desktopReady =
-    gateReady("macDesktopReadiness") &&
-    gateReady("windowsDesktopReadiness") &&
-    !["macDesktopMissing", "windowsDesktopMissing"].some((key) => readFirstBoolean(observedRecords, [key]) === true);
-  const projectExportReady =
-    gateReady("projectSaveOpen") &&
-    gateReady("previewExport") &&
-    !["projectSaveOpenMissing", "previewExportMissing"].some((key) => readFirstBoolean(observedRecords, [key]) === true);
-  const runtimeReady =
-    gateReady("queueVisibility") &&
-    gateReady("visualConsistency") &&
-    gateReady("knowledgePackManagement") &&
-    gateReady("workerRuntimeGate");
-  const providerReady =
-    gateReady("providerClosedLoopShell") &&
-    gateReady("providerGate");
-  const unsafeObserved = [
-    "providerSubmitObserved",
-    "liveSubmitObserved",
-    "spawnCodexObserved",
-    "workerSpawnObserved",
-    "subprocessObserved",
-    "shellExecutionObserved",
-    "credentialReadObserved",
-    "credentialWriteObserved",
-    "credentialAccessObserved",
-    "fileMutationObserved",
-    "apiKeyCreatedObserved",
-  ].some((key) => readFirstBoolean(observedRecords, [key]) === true);
-  const closureReady =
-    gateReady("noAdditionalPhasesPlanned") &&
-    gateReady("betaAcceptanceOwnsClosure") &&
-    gateReady("finalPhaseNumberLocked") &&
-    !["additionalPhaseRequested", "phaseAfter42Observed", "finalPhaseNumberNot42"].some((key) =>
-      readFirstBoolean(observedRecords, [key]) === true,
-    );
-  const testMatrixChecked = areaChecked("test_matrix", "packageScriptsChecked") ||
-    readFirstBoolean(records, ["tests"]) === true;
-
-  return {
-    initialized,
-    readiness: initialized
-      ? statusLabel(status || (readyGateCount === requiredGates.length && !blockersWarnings.length ? "ready" : "blocked"))
-      : "blocked/missing",
-    desktopStatus: desktopReady ? "Mac/Windows readiness accepted" : "desktop readiness missing",
-    projectExportStatus: projectExportReady ? "project save/open + preview/export accepted" : "project or export readiness missing",
-    runtimeGateStatus: runtimeReady ? "queue/visual/knowledge/worker gates accepted" : "runtime gate missing",
-    providerStatus: unsafeObserved ? "provider submit/credential/shell observation blocked" : providerReady ? "provider shell + gate accepted" : "provider gate missing",
-    testStatus: gateReady("tests") && testMatrixChecked && readFirstBoolean(observedRecords, ["testsMissing"]) !== true
-      ? "test matrix accepted"
-      : "test matrix missing",
-    closureStatus: closureReady ? "final phase locked at 42" : "closure freeze missing",
-    blockersWarnings: blockersWarnings.length ? blockersWarnings : initialized ? [] : ["blocked/missing betaAcceptance"],
-    requiredGates,
-  };
-}
-
-function buildDirectorProgressStripState(runtimeState: ProjectRuntimeState): DirectorProgressStripState {
-  const summary = buildLocalOrchestratorUiSummary(runtimeState);
-  const knownPreparing = Math.max(0, summary.ready + summary.waiting);
-  const working = Math.max(0, summary.runningPlanned + summary.waitingOutput);
-  const review = Math.max(0, summary.qaPending + summary.needsReview);
-  const blocked = Math.max(0, summary.blocked + summary.failed + summary.stalled);
-  const complete = Math.max(0, summary.completeVerified);
-  const knownTotal = knownPreparing + working + review + blocked + complete;
-  const preparing = knownPreparing + Math.max(0, summary.queueTotal - knownTotal);
-  const observedTotal = preparing + working + review + blocked + complete;
-  const total = Math.max(summary.queueTotal, observedTotal);
-  const hasItems = summary.initialized && total > 0;
-
-  let tone: DirectorProgressTone = "preparing";
-  let label = "准备中";
-  if (!hasItems) {
-    label = "准备中";
-  } else if (blocked > 0) {
-    tone = "blocked";
-    label = "有阻断";
-  } else if (review > 0) {
-    tone = "review";
-    label = "等待复核";
-  } else if (working > 0) {
-    tone = "working";
-    label = "生成中";
-  } else if (complete === total) {
-    tone = "complete";
-    label = "已完成";
-  }
-
-  const detail = !hasItems
-    ? "0 项"
-    : tone === "blocked"
-      ? `${total} 项 · ${blocked} 项有阻断`
-      : tone === "review"
-        ? `${total} 项 · ${review} 项等待复核`
-        : tone === "working"
-          ? `${total} 项 · ${working} 项生成中`
-          : tone === "complete"
-            ? `${total} 项已完成`
-            : `${total} 项 · ${preparing} 项准备中`;
-
-  return {
-    label,
-    detail,
-    tone,
-    total,
-    preparing,
-    working,
-    review,
-    blocked,
-    complete,
-    segments: [
-      { label: "准备中", value: preparing, tone: "preparing" },
-      { label: "生成中", value: working, tone: "working" },
-      { label: "等待复核", value: review, tone: "review" },
-      { label: "有阻断", value: blocked, tone: "blocked" },
-      { label: "已完成", value: complete, tone: "complete" },
-    ],
-  };
-}
-
-function buildRealPilotUiSummary(runtimeState: ProjectRuntimeState, selectedShot?: ShotRecord): RealPilotUiSummary {
-  const gate = runtimeState.realExecutionGate;
-  const ledger = runtimeState.executionLedger;
-  const handoff = runtimeState.providerHandoffStatus;
-  const realProviderExecutor = (runtimeState as ProjectRuntimeState & { realProviderExecutor?: unknown }).realProviderExecutor;
-  const executorRecord = isRecord(realProviderExecutor) ? realProviderExecutor : {};
-  const realProviderOneShotTest = (runtimeState as ProjectRuntimeState & { realProviderOneShotTest?: unknown }).realProviderOneShotTest;
-  const oneShotRecord = isRecord(realProviderOneShotTest) ? realProviderOneShotTest : {};
-  const executorSummary = firstRecordFrom(executorRecord, ["summary", "uiSummary", "statusSummary"]);
-  const oneShotSummary = firstRecordFrom(oneShotRecord, ["summary", "uiSummary", "statusSummary"]);
-  const oneShotActionReview = firstRecordFrom(oneShotRecord, ["actionReview", "actionTimeConfirmation", "confirmation"]);
-  const oneShotOutput = firstRecordFrom(oneShotRecord, ["outputWatcherExpectation", "output", "watcher"]);
-  const oneShotBudget = firstRecordFrom(oneShotRecord, ["budgetSnapshot", "budget", "budgetGuard"]);
-  const confirmationRecord = firstRecordFrom(executorRecord, ["actionTimeConfirmation", "preExecutionConfirmation", "confirmation"]);
-  const budgetRecord = firstRecordFrom(executorRecord, ["budget", "budgetLimit", "budgetCap", "quotaRisk", "quota"]);
-  const outputRecord = firstRecordFrom(executorRecord, ["outputWatcher", "watcher", "output"]);
-  const requestRecord = firstRecordFrom(executorRecord, ["requestPreview", "preview", "request"]);
-  const budgetValue = readFirstString([budgetRecord, executorSummary, executorRecord], [
-    "budgetLimit",
-    "budgetCap",
-    "quotaLimit",
-    "limit",
-    "display",
-  ], "");
-  const budgetRisk = readFirstString([budgetRecord, executorSummary, executorRecord], ["quotaRisk", "risk", "riskLevel"], "");
-  const watcherState = readFirstString([outputRecord, executorSummary, executorRecord], [
-    "watcherState",
-    "outputWatcherState",
-    "status",
-    "state",
-  ], "");
-  const requestPreviewState = readFirstString([requestRecord, executorSummary, executorRecord], [
-    "previewState",
-    "requestPreviewState",
-    "status",
-    "state",
-  ], "");
-  const oneShotReady = readFirstBoolean([oneShotSummary, oneShotActionReview, oneShotRecord], [
-    "readyForActionTimeConfirmation",
-    "canAskUserForActionTimeConfirmation",
-    "ready",
-  ]) === true;
-  const oneShotStatus = readFirstString([oneShotActionReview, oneShotSummary, oneShotRecord], ["status", "state"], "");
-  const oneShotExpectedOutputCount = readFirstNumber([oneShotOutput, oneShotSummary, oneShotRecord], [
-    "expectedOutputCount",
-    "outputs",
-    "expectedOutputs",
-  ]);
-  const oneShotBudgetImageCount = readFirstNumber([oneShotBudget, oneShotSummary, oneShotRecord], [
-    "estimatedImageCount",
-    "estimatedOutputCount",
-    "imageCount",
-  ]);
-  const handoffStatus = handoff?.status;
-  const confirmedOrReturned = handoffStatus === "waiting_file" || handoffStatus === "needs_review";
-  const selectedShotIds = gate.selectedShotIds.length
-    ? gate.selectedShotIds
-    : selectedShot ? [selectedShot.id] : [];
-  const selectedShots = selectedShotIds
-    .map((id) => runtimeState.storyFlow.shots.find((shot) => shot.id === id) || (selectedShot?.id === id ? selectedShot : undefined))
-    .filter((shot): shot is ShotRecord => Boolean(shot));
-  const selectedShotDetail = selectedShotIds.length
-    ? selectedShotIds.map(formatShotNumber).join(", ")
-    : "从故事镜头中选择一小组";
-  const selectedShotCount = selectedShotIds.length;
-  const shotCount = Math.max(1, selectedShots.length);
-  const startFrameCount = selectedShots.filter((shot) => Boolean(shot.startFrame)).length;
-  const endFrameCount = selectedShots.filter((shot) => Boolean(shot.endFrame)).length;
-  const scopedPlans = runtimeState.imagePipeline.imageTaskPlans.filter((plan) => selectedShotIds.includes(plan.shotId));
-  const image2Plans = scopedPlans.filter((plan) =>
-    plan.providerId.toLowerCase().includes("image2") ||
-    ["image.generate", "image.edit", "image.reference_asset"].includes(plan.providerSlot),
-  );
-  const estimatedOutputCount = image2Plans.reduce((sum, plan) => {
-    const envelopeOutputs = plan.taskEnvelopeSummary?.expectedOutputs.length || 0;
-    return sum + Math.max(1, envelopeOutputs || (plan.expectedOutputPath ? 1 : 0));
-  }, 0);
-  const readyItems = gate.summary.readyForScopedRealTestReview;
-  const blockedItems = gate.summary.blocked;
-  const reviewStatus = !selectedShotCount
-    ? "先选择镜头"
-    : readyItems > 0 && blockedItems === 0
-      ? "可审查"
-      : "等待确认";
-
-  return {
-    reviewStatus,
-    handoffLabel: handoff?.label || "等待确认",
-    handoffDetail: handoff?.detail || "动作确认后继续。",
-    handoffTone: handoff?.status || "waiting_confirmation",
-    selectedShotCount,
-    selectedShotDetail,
-    framePairValue: selectedShotCount ? `${startFrameCount}/${shotCount} · ${endFrameCount}/${shotCount}` : "未选择",
-    framePairDetail: selectedShotCount ? "首帧 / 尾帧" : "选择镜头后检查首尾帧",
-    estimatedOutputCount,
-    estimatedOutputDetail: estimatedOutputCount > 0 ? "Image2 小批量" : "选择后估算",
-    outputRoot: (gate.outputSandbox.root || ledger.outputSandbox.root) ? "已设置" : "待选择",
-    confirmationState: handoffStatus === "needs_review" ? "等待复核" : confirmedOrReturned ? "已确认" : "需要确认",
-    image2State: "Image2 first",
-    seedanceState: "Seedance 暂停/后续",
-    preConfirmState: confirmedOrReturned ? "已确认" : "等待确认",
-    preConfirmBudgetLimit: budgetValue
-      ? `${statusLabel(budgetValue)}${budgetRisk ? ` · ${statusLabel(budgetRisk)}` : ""}`
-      : "待复核",
-    preConfirmOutputWatch: watcherState ? statusLabel(watcherState) : "待连接",
-    preConfirmRequestPreview: requestPreviewState ? statusLabel(requestPreviewState) : "待复核",
-    preConfirmScopeDetail: "1 个镜头小样 · 0 自动重试",
-    oneShotStatus: handoffStatus === "needs_review"
-      ? "需要复核"
-      : handoffStatus === "waiting_file"
-        ? "等待文件"
-        : oneShotReady
-          ? "单次待确认"
-          : oneShotStatus === "blocked"
-            ? "有阻断"
-            : "未就绪",
-    oneShotConfirmation: handoffStatus === "needs_review"
-      ? "等待复核输出"
-      : handoffStatus === "waiting_file"
-        ? "已记录确认"
-        : oneShotReady
-          ? "动作确认待定"
-          : "先完成复核",
-    oneShotActionScope: "Image2 单镜头",
-    oneShotOutputExpectation: typeof oneShotBudgetImageCount === "number"
-      ? `${oneShotBudgetImageCount} 个预期输出`
-      : typeof oneShotExpectedOutputCount === "number"
-        ? `${Math.min(oneShotExpectedOutputCount, 2)} 个预期输出`
-      : "等待输出计划",
-    oneShotConfirmed: confirmedOrReturned,
-    readyItems,
-    blockedItems,
-    ledgerEntries: ledger.summary.totalEntries,
-    blockers: [...gate.items.flatMap((item) => item.blockers), ...ledger.scopeBlockers],
-    warnings: gate.items.flatMap((item) => item.warnings),
-  };
-}
-
-function exportWorkerReadinessLabel(status: string, blockersWarnings: string[], initialized: boolean) {
-  if (!initialized) return "blocked/missing";
-  const normalized = status.toLowerCase();
-  if (normalized.includes("ready")) return "ready";
-  if (normalized.includes("planned")) return "planned";
-  if (normalized.includes("blocked") || normalized.includes("missing") || normalized.includes("fail")) return "blocked";
-  return blockersWarnings.length ? "blocked" : "blocked/missing";
-}
-
-function buildExportWorkerUiSummary(runtimeState: ProjectRuntimeState): ExportWorkerUiSummary {
-  const root = (runtimeState as Partial<ProjectRuntimeState> & { exportWorker?: unknown }).exportWorker;
-  const initialized = isRecord(root);
-  const rootRecord = initialized ? root as Record<string, unknown> : {};
-  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
-  const scopeRecord = firstRecordFrom(rootRecord, ["ioScope", "exportIoScope", "projectIoScope", "scope", "ioContract", "projectIoContract"]);
-  const writePlan = firstRecordFrom(rootRecord, ["writePlan", "plannedWritePlan", "mutationPlan", "exportPlan"]);
-  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockStrip"]);
-  const readableRecords = [rootRecord, summary, scopeRecord, writePlan].filter(isRecord);
-  const rawBlockersWarnings = [
-    ...readDisplayList(rootRecord.blockers, "blocker"),
-    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
-    ...readDisplayList(summary.blockers, "blocker"),
-    ...readDisplayList(summary.blockedReasons, "blocker"),
-    ...readDisplayList(scopeRecord.blockers, "blocker"),
-    ...readDisplayList(scopeRecord.blockedReasons, "blocker"),
-    ...readDisplayList(rootRecord.warnings, "warning"),
-    ...readDisplayList(summary.warnings, "warning"),
-    ...readDisplayList(scopeRecord.warnings, "warning"),
-  ];
-  const blockersWarnings = Array.from(new Set(rawBlockersWarnings.filter(Boolean)));
-  const status = readFirstString(readableRecords, ["readiness", "status", "state"], "");
-  const entries = firstArrayFrom(readableRecords, ["entries"]);
-  const plannedWrites = firstArrayFrom(readableRecords, ["plannedWrites", "writes", "writeIntents", "plannedMutations", "mutations"]);
-  const effectivePlannedWrites = plannedWrites.length
-    ? plannedWrites
-    : entries.filter((entry) => isRecord(entry) && readString(entry.operation, "") === "write_file");
-  const plannedWriteCount = readFirstNumber(readableRecords, [
-    "plannedWriteCount",
-    "plannedWritesCount",
-    "writeCount",
-    "mutationCount",
-    "plannedMutationCount",
-  ]) ?? effectivePlannedWrites.length;
-  const exportRootValue = readFirstString(readableRecords, ["exportRoot", "exportRootPath", "root", "rootPath", "outputRoot"], "");
-  const scope = readFirstString(readableRecords, [
-    "scope",
-    "scopeLabel",
-    "ioScope",
-    "exportIoScope",
-    "projectIoScope",
-    "writeScope",
-    "allowedScope",
-  ], "");
-  const hardLocks = [
-    readBooleanLockLabel(hardLocksRecord, "explicitIoScopeRequired", "explicit IO scope required", true),
-    readBooleanLockLabel(hardLocksRecord, "projectIoContractRequired", "project IO contract required", true),
-    readBooleanLockLabel(hardLocksRecord, "exportProjectIoScopeOnly", "export/project IO scope only", true),
-    readBooleanLockLabel(hardLocksRecord, "outsideScopeBlocked", "outside scope blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "manifestMatchRequired", "manifest match required", true),
-    readBooleanLockLabel(hardLocksRecord, "structuredResultRequired", "structured result required", true),
-    readBooleanLockLabel(hardLocksRecord, "noProviderSubmit", "provider submit blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit disabled", false),
-    readBooleanLockLabel(hardLocksRecord, "noCredentialRead", "no credential read", true),
-    readBooleanLockLabel(hardLocksRecord, "noCredentialWrite", "no credential write", true),
-    readBooleanLockLabel(hardLocksRecord, "noArbitraryShell", "no shell execution", true),
-    readBooleanLockLabel(hardLocksRecord, "arbitraryShellExecutionBlocked", "no shell execution", true),
-    readBooleanLockLabel(hardLocksRecord, "projectRootRelativeOnly", "project root relative only", true),
-    readBooleanLockLabel(hardLocksRecord, "exportScopeOnly", "export scope only", true),
-    readBooleanLockLabel(hardLocksRecord, "noAbsolutePath", "absolute paths blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noParentTraversal", "parent traversal blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noDelete", "delete blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noMove", "move blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noMediaRender", "media render blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noUserFileOverwriteOutsideExport", "outside export overwrite blocked", true),
-  ].filter((lock): lock is string => Boolean(lock));
-
-  return {
-    initialized,
-    readiness: exportWorkerReadinessLabel(status, blockersWarnings, initialized),
-    scope: scope ? statusLabel(scope) : "blocked/missing",
-    plannedWriteCount,
-    plannedWriteSamples: effectivePlannedWrites.slice(0, 4).map(formatPlannedWriteSample),
-    exportRoot: compactPathLabel(exportRootValue),
-    blockersWarnings: blockersWarnings.length ? blockersWarnings : [initialized ? "blocked/missing scope evidence" : "blocked/missing runtimeState.exportWorker"],
-    hardLocks: Array.from(new Set(hardLocks.length ? hardLocks : ["hard locks blocked/missing"])),
-  };
-}
-
-function phase26ReadinessLabel(status: string, proofLabel: string, providerSubmitObserved?: boolean) {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("ready")) return "ready";
-  if (normalized.includes("blocked") || normalized.includes("missing") || normalized.includes("fail")) return "blocked";
-  return proofLabel === "present" && providerSubmitObserved !== true ? "ready" : "blocked";
-}
-
-function buildAgentCliMockRunnerUiSummary(runtimeState: ProjectRuntimeState): AgentCliMockRunnerUiSummary {
-  const root = (runtimeState as Partial<ProjectRuntimeState> & { agentCliMockRunner?: unknown }).agentCliMockRunner;
-  const initialized = isRecord(root);
-  const rootRecord = initialized ? root as Record<string, unknown> : {};
-  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
-  const hardLocksRecord = initialized && isRecord(rootRecord.hardLocks)
-    ? rootRecord.hardLocks
-    : initialized && isRecord(rootRecord.locks) ? rootRecord.locks : rootRecord;
-  const proofValue = summary.replacementProof
-    ?? rootRecord.replacementProof
-    ?? summary.replacementProofReady
-    ?? rootRecord.replacementProofReady
-    ?? summary.replacementProofFromMockRunner
-    ?? rootRecord.replacementProofFromMockRunner;
-  const replacementProof = readReplacementProofLabel(proofValue);
-  const status = readString(
-    rootRecord.readiness,
-    readString(summary.readiness, readString(rootRecord.status, readString(summary.status, ""))),
-  );
-  const providerSubmitObserved = readOptionalBoolean(summary, "providerSubmitObserved")
-    ?? readOptionalBoolean(rootRecord, "providerSubmitObserved")
-    ?? readOptionalBoolean(summary, "mockRunnerProviderSubmitObserved")
-    ?? readOptionalBoolean(rootRecord, "mockRunnerProviderSubmitObserved");
-  const readiness = !initialized
-    ? "blocked/missing"
-    : phase26ReadinessLabel(status, replacementProof, providerSubmitObserved);
-  const rawNoopResults = summary.noopResults ?? summary.noOpResults ?? rootRecord.noopResults ?? rootRecord.noOpResults ?? rootRecord.results;
-  const noopResultCount = readNumber(
-    summary.noopResultCount,
-    readNumber(
-      summary.noOpResultCount,
-      Array.isArray(rawNoopResults) ? rawNoopResults.length : readNumber(rootRecord.noopResultCount, 0),
-    ),
-  );
-  const hardLocks = [
-    readBooleanLockLabel(hardLocksRecord, "dryRunOnly", "dry-run only", true),
-    readBooleanLockLabel(hardLocksRecord, "diagnosticsOnly", "diagnostics only", true),
-    readBooleanLockLabel(hardLocksRecord, "noSpawnAgent", "no spawn", true),
-    readBooleanLockLabel(hardLocksRecord, "noCodexSpawn", "Codex spawn disabled", true),
-    readBooleanLockLabel(hardLocksRecord, "canSpawnCodex", "Codex spawn disabled", false),
-    readBooleanLockLabel(hardLocksRecord, "noCodexResume", "Codex resume disabled", true),
-    readBooleanLockLabel(hardLocksRecord, "canResumeCodex", "Codex resume disabled", false),
-    readBooleanLockLabel(hardLocksRecord, "noSubprocess", "no subprocess", true),
-    readBooleanLockLabel(hardLocksRecord, "noShellExecution", "no shell execution", true),
-    readBooleanLockLabel(hardLocksRecord, "noProviderExecution", "no provider execution", true),
-    readBooleanLockLabel(hardLocksRecord, "noProviderSubmit", "provider submit blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "canSubmitProvider", "provider submit blocked", false),
-    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noCredentialRead", "no credential read", true),
-    readBooleanLockLabel(hardLocksRecord, "noCredentialWrite", "no credential write", true),
-    readBooleanLockLabel(hardLocksRecord, "noFileMutation", "no file mutation", true),
-    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit disabled", false),
-    readBooleanLockLabel(hardLocksRecord, "structuredResultRequired", "structured result required", true),
-    readBooleanLockLabel(hardLocksRecord, "mockOnly", "mock only", true),
-  ].filter((lock): lock is string => Boolean(lock));
-
-  return {
-    initialized,
-    runnerKind: readString(rootRecord.runnerKind, readString(summary.runnerKind, readString(rootRecord.kind, initialized ? "mock/no-op" : "missing"))),
-    replacementProof,
-    readiness,
-    noopResultCount,
-    hardLocks: Array.from(new Set(hardLocks.length ? hardLocks : ["runner state missing"])),
-  };
-}
-
-function phase29ReadinessLabel(
-  status: string,
-  initialized: boolean,
-  replacementProof: string,
-  blockers: string[],
-) {
-  if (!initialized) return "blocked/missing";
-  const normalized = status.toLowerCase();
-  if (normalized.includes("ready")) return "ready";
-  if (normalized.includes("planned")) return blockers.length ? "blocked" : "planned";
-  if (normalized.includes("blocked") || normalized.includes("missing") || normalized.includes("fail")) return "blocked";
-  return replacementProof === "present" && !blockers.length ? "planned" : "blocked";
-}
-
-function contractOnlyLabel(value: unknown) {
-  const label = readString(value, "");
-  if (/contract[-_\s]?only/i.test(label)) return "contract-only";
-  if (/dry[-_\s]?run/i.test(label)) return "dry-run";
-  if (/readonly|read[-_\s]?only/i.test(label)) return "read-only";
-  return label ? statusLabel(label) : "contract-only";
-}
-
-function readContractInputSource(records: Record<string, unknown>[]) {
-  const source = readFirstString(records, [
-    "inputSource",
-    "argumentSource",
-    "envelopeSource",
-    "inputContract",
-  ], "");
-  if (/validated.*envelope|validated_envelope_only|validated_subagent_task_envelope_only/i.test(source)) {
-    return "validated envelope only";
-  }
-  return source ? statusLabel(source) : "validated envelope only";
-}
-
-function buildCodexCliAdapterSpikeUiSummary(runtimeState: ProjectRuntimeState): CodexCliAdapterSpikeUiSummary {
-  const root = (runtimeState as Partial<ProjectRuntimeState> & { codexCliAdapterSpike?: unknown }).codexCliAdapterSpike;
-  const initialized = isRecord(root);
-  const rootRecord = initialized ? root as Record<string, unknown> : {};
-  const summary = initialized && isRecord(rootRecord.summary) ? rootRecord.summary : {};
-  const inputContract = firstRecordFrom(rootRecord, ["inputContract"]);
-  const resultContract = firstRecordFrom(rootRecord, ["resultContract"]);
-  const executionPolicy = firstRecordFrom(rootRecord, ["executionPolicy"]);
-  const roadmapEvidence = firstRecordFrom(rootRecord, ["roadmapEvidence"]);
-  const contract = firstRecordFrom(rootRecord, ["contract", "adapterContract", "adapterBoundary", "boundary"]);
-  const hardLocksRecord = firstRecordFrom(rootRecord, ["hardLocks", "locks", "hardLockStrip"]);
-  const records = [summary, contract, executionPolicy, inputContract, resultContract, roadmapEvidence, rootRecord].filter(isRecord);
-  const phase26 = buildAgentCliMockRunnerUiSummary(runtimeState);
-  const replacementProof = readReplacementProofLabel(
-    summary.phase26ReplacementProof ??
-    rootRecord.phase26ReplacementProof ??
-    summary.replacementProof ??
-    rootRecord.replacementProof ??
-    summary.replacementProofReady ??
-    rootRecord.replacementProofReady ??
-    phase26.replacementProof,
-  );
-  const rawBlockers = [
-    ...readDisplayList(rootRecord.blockers, "blocker"),
-    ...readDisplayList(rootRecord.blockedReasons, "blocker"),
-    ...readDisplayList(summary.blockers, "blocker"),
-    ...readDisplayList(summary.blockedReasons, "blocker"),
-    ...readDisplayList(contract.blockers, "blocker"),
-    ...readDisplayList(rootRecord.validation && isRecord(rootRecord.validation) ? rootRecord.validation.errors : undefined, "blocker"),
-  ];
-  const rawWarnings = [
-    ...readDisplayList(rootRecord.warnings, "warning"),
-    ...readDisplayList(summary.warnings, "warning"),
-    ...readDisplayList(contract.warnings, "warning"),
-    ...readDisplayList(rootRecord.validation && isRecord(rootRecord.validation) ? rootRecord.validation.warnings : undefined, "warning"),
-  ];
-  const blockers = Array.from(new Set(rawBlockers.filter(Boolean)));
-  const warnings = Array.from(new Set(rawWarnings.filter(Boolean)));
-  const modeValue = summary.contractMode ?? rootRecord.contractMode ?? contract.mode ?? rootRecord.executionMode ?? summary.executionMode;
-  const status = readFirstString(records, ["readiness", "status", "state"], "");
-  const spawnExecuted = readFirstBoolean(records, ["spawnExecuted", "spawnCodexObserved", "codexSpawnObserved"]) === true;
-  const resumeExecuted = readFirstBoolean(records, ["resumeExecuted", "resumeCodexObserved", "codexResumeObserved"]) === true;
-  const spawnPlanned = readFirstBoolean(records, ["spawnShapePlanned", "canSpawnCodex", "spawnPlanned"]) !== false;
-  const resumePlanned = readFirstBoolean(records, ["resumeShapePlanned", "canResumeCodex", "resumePlanned"]) !== false;
-  const providerSubmitAllowed = readFirstBoolean(records, [
-    "providerSubmitAllowed",
-    "canSubmitProvider",
-    "liveSubmitAllowed",
-  ]) === true;
-  const credentialReadAllowed = readFirstBoolean(records, ["credentialReadAllowed", "canReadCredentials"]) === true;
-  const credentialWriteAllowed = readFirstBoolean(records, ["credentialWriteAllowed", "canWriteCredentials"]) === true;
-  const shellAllowed = readFirstBoolean(records, ["shellAllowed", "canExecuteShell", "arbitraryShellAllowed"]) === true;
-  const fileMutationAllowed = readFirstBoolean(records, ["fileMutationAllowed", "canMutateFiles"]) === true;
-  const hardLocks = [
-    readBooleanLockLabel(hardLocksRecord, "adapterContractOnly", "contract-only", true),
-    readBooleanLockLabel(hardLocksRecord, "contractOnly", "contract-only", true),
-    readBooleanLockLabel(hardLocksRecord, "dryRunOnly", "dry-run only", true),
-    readBooleanLockLabel(hardLocksRecord, "validatedEnvelopeRequired", "validated envelope only", true),
-    readBooleanLockLabel(hardLocksRecord, "structuredResultRequired", "structured result required", true),
-    readBooleanLockLabel(hardLocksRecord, "spawnResumePlannedOnly", "spawn/resume planned only", true),
-    readBooleanLockLabel(hardLocksRecord, "noActualCodexSpawn", "spawn disabled", true),
-    readBooleanLockLabel(hardLocksRecord, "noActualCodexResume", "resume disabled", true),
-    readBooleanLockLabel(hardLocksRecord, "noProviderSubmit", "provider submit blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "providerSubmissionForbidden", "provider submit blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "liveSubmitAllowed", "live submit disabled", false),
-    readBooleanLockLabel(hardLocksRecord, "noCredentialAccess", "credential access blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noCredentialRead", "credential read blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noCredentialWrite", "credential write blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noShellExecution", "shell blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noArbitraryShell", "shell blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noFileMutation", "file mutation blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noFreeTextTask", "free text blocked", true),
-    readBooleanLockLabel(hardLocksRecord, "noFreeTextWorker", "free text blocked", true),
-  ].filter((lock): lock is string => Boolean(lock));
-  const inferredHardLocks = [
-    "contract-only",
-    "validated envelope only",
-    "spawn/resume planned only",
-    "provider submit blocked",
-    "credential/shell/file mutation blocked",
-    "free text blocked",
-  ];
-
-  return {
-    initialized,
-    readiness: phase29ReadinessLabel(status, initialized, replacementProof, blockers),
-    contractMode: contractOnlyLabel(modeValue),
-    replacementProof,
-    inputSource: readContractInputSource(records),
-    spawnResumeShape: spawnExecuted || resumeExecuted
-      ? "execution observed"
-      : spawnPlanned || resumePlanned ? "planned only / not executed" : "blocked/missing",
-    providerSubmit: providerSubmitAllowed ? "open" : "blocked",
-    mutationBoundary: credentialReadAllowed || credentialWriteAllowed || shellAllowed || fileMutationAllowed
-      ? "open"
-      : "credential/shell/file mutation blocked",
-    blockers: blockers.length ? blockers : initialized ? [] : ["blocked/missing runtimeState.codexCliAdapterSpike"],
-    warnings,
-    hardLocks: Array.from(new Set(hardLocks.length ? hardLocks : inferredHardLocks)),
-  };
-}
-
-function formatHarnessValue(value: unknown, fallbackLabel = "value"): string {
-  if (typeof value === "string") return value.trim();
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  if (!isRecord(value)) return "";
-
-  const label = readString(
-    value.label,
-    readString(value.id, readString(value.name, fallbackLabel)),
-  );
-  const status = readString(value.status, readString(value.value, ""));
-  const detail = readString(value.detail, readString(value.path, ""));
-  return [label, status, detail].filter(Boolean).join(" / ");
-}
-
-function readDisplayList(value: unknown, fallbackLabel = "value") {
-  if (Array.isArray(value)) {
-    return value
-      .map((item, index) => formatHarnessValue(item, `${fallbackLabel}-${index + 1}`))
-      .filter(Boolean);
-  }
-  const single = formatHarnessValue(value, fallbackLabel);
-  return single ? [single] : [];
-}
-
-function readRuntimeExtension(runtimeState: ProjectRuntimeState, keys: string[]): Record<string, unknown> {
-  const root = runtimeState as unknown as Record<string, unknown>;
-  for (const key of keys) {
-    if (isRecord(root[key])) return root[key];
-  }
-
-  const pipeline = isRecord(root.imagePipeline) ? root.imagePipeline : {};
-  for (const key of keys) {
-    if (isRecord(pipeline[key])) return pipeline[key];
-  }
-
-  return {};
-}
-
-function readCount(record: Record<string, unknown>, keys: string[], fallback = 0) {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (Array.isArray(value)) return value.length;
-  }
-  return fallback;
-}
-
-function readCheckerFacts(value: unknown, fallback: CheckerFactRow[]) {
-  if (!Array.isArray(value)) return fallback;
-  const rows = value
-    .map((item, index): CheckerFactRow | undefined => {
-      const row = isRecord(item) ? item : {};
-      const id = readString(row.id, readString(row.factId, `fact-${index + 1}`));
-      const label = readString(row.label, readString(row.name, id));
-      const status = readString(row.status, readString(row.healthStatus, "unknown"));
-      const detail = readString(row.detail, readString(row.summary, readString(row.nextAction, "No fact detail reported.")));
-      const sourceRefs = readStringArray(row.sourceRefs).length
-        ? readStringArray(row.sourceRefs)
-        : readStringArray(row.sources);
-      return { id, label, status, detail, sourceRefs };
-    })
-    .filter((item): item is CheckerFactRow => Boolean(item));
-  return rows.length ? rows : fallback;
-}
-
-function getGenerationHealthChecker(runtimeState: ProjectRuntimeState): GenerationHealthCheckerState {
-  const pipeline = getImagePipeline(runtimeState);
-  const checker = readRuntimeExtension(runtimeState, [
-    "generationHealthChecker",
-    "generationHealthCheck",
-    "generationHealthDiagnostics",
-  ]);
-  const summary = isRecord(checker.summary) ? checker.summary : checker;
-  const reports = pipeline.generationHealthReports;
-  const reportDerivedFacts = reports.slice(0, 5).map((report): CheckerFactRow => ({
-    id: report.reportId,
-    label: report.shotId || report.taskPlanId,
-    status: report.healthStatus || "unknown",
-    detail: [
-      `manifest ${report.manifestStatus || "unknown"}`,
-      `qa ${report.qaStatus || "unknown"}`,
-      report.outputExists ? "output present" : "output missing",
-      report.stalePrompt ? "stale prompt" : undefined,
-    ].filter(Boolean).join(" · "),
-    sourceRefs: [report.taskPlanId, report.jobId].filter(Boolean),
-  }));
-  const factSource = checker.factChainSummary ?? checker.factChain ?? checker.facts ?? checker.factRows;
-  const postprocessRecoverableFallback = reports.filter((report) => (
-    report.healthStatus === "failed" ||
-    report.warnings.some((warning) => warning.toLowerCase().includes("recoverable")) ||
-    report.blockers.some((blocker) => blocker.toLowerCase().includes("postprocess"))
-  )).length;
-  const workerMismatchFallback = reports.filter((report) => (
-    report.warnings.some((warning) => warning.toLowerCase().includes("worker") && warning.toLowerCase().includes("mismatch")) ||
-    report.blockers.some((blocker) => blocker.toLowerCase().includes("worker") && blocker.toLowerCase().includes("mismatch"))
-  )).length;
-  const qaMissingFallback = reports.filter((report) => report.qaStatus === "missing" || report.qaStatus === "unknown").length;
-
-  return {
-    initialized: Object.keys(checker).length > 0 || reports.length > 0,
-    reportCount: readCount(summary, ["reportCount", "totalReports", "total"], reports.length),
-    factChainSummary: readCheckerFacts(factSource, reportDerivedFacts),
-    postprocessRecoverable: readCount(summary, ["postprocessRecoverable", "postprocess_recoverable", "recoverablePostprocess"], postprocessRecoverableFallback),
-    workerSelfReportMismatch: readCount(summary, ["workerSelfReportMismatch", "worker_self_report_mismatch", "selfReportMismatch"], workerMismatchFallback),
-    qaCoverageMissing: readCount(summary, ["qaCoverageMissing", "qa_coverage_missing", "missingQaCoverage"], qaMissingFallback),
-    blockers: readStringArray(checker.blockers),
-    warnings: readStringArray(checker.warnings),
-  };
-}
-
-function getPromptConflictChecker(runtimeState: ProjectRuntimeState): PromptConflictCheckerState {
-  const pipeline = getImagePipeline(runtimeState);
-  const checker = readRuntimeExtension(runtimeState, [
-    "promptConflictChecker",
-    "promptConflictCheck",
-    "promptConflictDiagnostics",
-  ]);
-  const summary = isRecord(checker.summary) ? checker.summary : checker;
-  const reports = pipeline.promptConflictReports;
-  const conflicts = reports.flatMap((report) => report.conflicts || []);
-  const blockingFallback = conflicts.filter((conflict) => conflict.severity === "blocker").length;
-  const needsRecompileReports = reports.filter((report) => {
-    const raw = report as unknown as Record<string, unknown>;
-    return readBoolean(raw.needsRecompile, false) ||
-      readBoolean(raw.needs_recompile, false) ||
-      report.conflicts.some((conflict) => conflict.code.toLowerCase().includes("recompile"));
-  }).length;
-  const sourceCandidates = [
-    checker.structuredSourcesToUpdate,
-    checker.structured_sources_to_update,
-    checker.sourcesToUpdate,
-    summary.structuredSourcesToUpdate,
-    summary.structured_sources_to_update,
-  ];
-  const structuredSourcesToUpdate = sourceCandidates.reduce<string[]>((acc, value) => (
-    acc.length ? acc : readDisplayList(value, "source")
-  ), []);
-
-  return {
-    initialized: Object.keys(checker).length > 0 || reports.length > 0,
-    reportCount: readCount(summary, ["reportCount", "totalReports", "total"], reports.length),
-    conflictCount: readCount(summary, ["conflictCount", "totalConflicts", "conflicts"], conflicts.length),
-    blockingConflicts: readCount(summary, ["blockingConflicts", "blocking_conflicts", "blockers"], blockingFallback),
-    needsRecompile: readCount(summary, ["needsRecompile", "needs_recompile", "recompileNeeded"], needsRecompileReports),
-    structuredSourcesToUpdate,
-    blockers: readStringArray(checker.blockers),
-    warnings: readStringArray(checker.warnings),
-  };
-}
-
-function normalizeGenerationStage(value: unknown, index: number): GenerationHarnessStage {
-  const stage = isRecord(value) ? value : {};
-  const blockers = readStringArray(stage.blockers);
-  const warnings = readStringArray(stage.warnings);
-  const sourceRefs = readStringArray(stage.sourceRefs);
-  const stageId = readString(stage.stageId, readString(stage.id, `stage-${index + 1}`));
-  return {
-    id: stageId,
-    label: readString(stage.label, stageId),
-    status: readString(stage.status, "unknown"),
-    detail: typeof stage.detail === "string"
-      ? stage.detail
-      : `${sourceRefs.length} refs · ${blockers.length} blockers · ${warnings.length} warnings`,
-  };
-}
-
-function normalizeCandidateOutput(value: unknown): GenerationHarnessCandidateOutput {
-  const output = isRecord(value) ? value : {};
-  return {
-    status: readString(output.status, "not_reported"),
-    candidatePath: typeof output.candidatePath === "string" ? output.candidatePath : undefined,
-    formalPath: typeof output.formalPath === "string" ? output.formalPath : undefined,
-    expectedOutputPath: typeof output.expectedOutputPath === "string" ? output.expectedOutputPath : undefined,
-    manifestStatus: typeof output.manifestStatus === "string" ? output.manifestStatus : undefined,
-    healthStatus: typeof output.healthStatus === "string" ? output.healthStatus : undefined,
-    qaStatus: typeof output.qaStatus === "string" ? output.qaStatus : undefined,
-    canPromoteToFormal: readBoolean(output.canPromoteToFormal, false),
-  };
-}
-
-function normalizeGenerationJob(value: unknown, index: number): GenerationHarnessJob {
-  const job = isRecord(value) ? value : {};
-  const stages = Array.isArray(job.stages) ? job.stages.map(normalizeGenerationStage) : [];
-  const candidateOutput = normalizeCandidateOutput(job.candidateOutput);
-  const blockingReasons = readStringArray(job.blockingReasons).length
-    ? readStringArray(job.blockingReasons)
-    : readStringArray(job.blockers);
-  const postprocessPolicy = isRecord(job.postprocessPolicy)
-    ? `semantic repair ${job.postprocessPolicy.semanticRepairAllowed === false ? "locked" : "open"}`
-    : typeof job.postprocessPolicy === "string" ? job.postprocessPolicy : undefined;
-  return {
-    jobId: readString(job.jobId, `job-${index + 1}`),
-    shotId: readString(job.shotId, "unassigned-shot"),
-    taskPlanId: typeof job.taskPlanId === "string" ? job.taskPlanId : undefined,
-    providerSlot: readString(job.providerSlot, "provider.unassigned"),
-    chainStatus: readString(job.chainStatus, candidateOutput.status),
-    blockingReasons,
-    stages,
-    candidateOutput,
-    postprocessPolicy,
-    forbiddenActions: readStringArray(job.forbiddenActions),
-    dryRunOnly: readBoolean(job.dryRunOnly, false),
-    providerSubmissionForbidden: readBoolean(job.providerSubmissionForbidden, false),
-    liveSubmitAllowed: readBoolean(job.liveSubmitAllowed, false),
-  };
-}
-
-function getGenerationHarness(runtimeState: ProjectRuntimeState): GenerationHarnessState {
-  const harness = (runtimeState as Partial<ProjectRuntimeState> & { generationHarness?: unknown }).generationHarness;
-  const initialized = isRecord(harness);
-  const harnessRecord: Record<string, unknown> = initialized ? harness as unknown as Record<string, unknown> : {};
-  const jobs = initialized && Array.isArray(harness.jobs) ? harness.jobs.map(normalizeGenerationJob) : [];
-  const summary: Record<string, unknown> = initialized && isRecord(harness.summary) ? harness.summary : {};
-
-  return {
-    initialized,
-    jobs,
-    summary: {
-      totalJobs: readNumber(summary.totalJobs, readNumber(summary.total, jobs.length)),
-      blockedJobs: readNumber(summary.blockedJobs, readNumber(summary.blocked, jobs.filter((job) => job.blockingReasons.length > 0 || job.chainStatus.includes("blocked")).length)),
-      readyJobs: readNumber(summary.readyJobs, jobs.filter((job) => job.chainStatus === "candidate" || job.chainStatus === "formal_ready").length),
-      waitingForOutputJobs: readNumber(summary.waitingForOutputJobs, readNumber(summary.waiting, jobs.filter((job) => job.chainStatus.includes("missing") || job.chainStatus.includes("waiting")).length)),
-      qaPendingJobs: readNumber(summary.qaPendingJobs, readNumber(summary.qaPending, jobs.filter((job) => job.candidateOutput.qaStatus === "pending" || job.candidateOutput.status.includes("qa")).length)),
-      formalReadyJobs: readNumber(summary.formalReadyJobs, readNumber(summary.formalReady, jobs.filter((job) => job.candidateOutput.canPromoteToFormal).length)),
-      dryRunOnly: readBoolean(harnessRecord.dryRunOnly, jobs.some((job) => job.dryRunOnly)),
-      providerSubmissionForbidden: readBoolean(harnessRecord.providerSubmissionForbidden, jobs.some((job) => job.providerSubmissionForbidden)),
-    },
-  };
-}
-
-function normalizeFilesystemWatcherRoot(value: unknown, index: number): FilesystemWatcherRoot {
-  const root = isRecord(value) ? value : {};
-  const id = readString(root.id, readString(root.rootId, `root-${index + 1}`));
-  const pathHints = readStringArray(root.pathHints);
-  return {
-    id,
-    label: readString(root.label, id),
-    kind: readString(root.kind, "unknown"),
-    status: readString(root.status, root.daemonStarted === false ? "derived only" : "unknown"),
-    pathHint: typeof root.pathHint === "string" ? root.pathHint : pathHints[0],
-    notes: readNoteList(root.notes),
-  };
-}
-
-function normalizeFilesystemWatcherStream(value: unknown, index: number): FilesystemWatcherStream {
-  const stream = isRecord(value) ? value : {};
-  const blockingReasons = readStringArray(stream.blockingReasons).length
-    ? readStringArray(stream.blockingReasons)
-    : readStringArray(stream.blockers);
-  return {
-    streamId: readString(stream.streamId, `stream-${index + 1}`),
-    taskPlanId: typeof stream.taskPlanId === "string" ? stream.taskPlanId : undefined,
-    jobId: typeof stream.jobId === "string" ? stream.jobId : undefined,
-    shotId: typeof stream.shotId === "string" ? stream.shotId : undefined,
-    harnessJobId: typeof stream.harnessJobId === "string"
-      ? stream.harnessJobId
-      : typeof stream.generationHarnessJobId === "string" ? stream.generationHarnessJobId : undefined,
-    eventType: readString(stream.eventType, "unknown"),
-    status: readString(stream.status, readString(stream.harnessLinkStatus, "unknown")),
-    severity: readString(stream.severity, stream.draftOnly === true ? "warning" : "info"),
-    artifactClass: readString(stream.artifactClass, "unknown"),
-    artifactPath: typeof stream.artifactPath === "string" ? stream.artifactPath : undefined,
-    expectedOutputPath: typeof stream.expectedOutputPath === "string" ? stream.expectedOutputPath : undefined,
-    draftOnly: readOptionalBoolean(stream, "draftOnly"),
-    canPromoteFormal: readOptionalBoolean(stream, "canPromoteFormal"),
-    canBecomeFutureReference: readOptionalBoolean(stream, "canBecomeFutureReference"),
-    requiresManifestMatch: readOptionalBoolean(stream, "requiresManifestMatch"),
-    requiresQaPass: readOptionalBoolean(stream, "requiresQaPass"),
-    blockingReasons,
-    notes: readNoteList(stream.notes),
-  };
-}
-
-function getFilesystemWatcherHarness(runtimeState: ProjectRuntimeState): FilesystemWatcherHarnessState {
-  const harness = (runtimeState as Partial<ProjectRuntimeState> & { filesystemWatcherHarness?: unknown }).filesystemWatcherHarness;
-  const initialized = isRecord(harness);
-  const harnessRecord = initialized ? harness as Record<string, unknown> : {};
-  const summaryRecord = initialized && isRecord(harnessRecord.summary) ? harnessRecord.summary : {};
-  const locksRecord = initialized && isRecord(harnessRecord.locks)
-    ? harnessRecord.locks
-    : initialized && isRecord(harnessRecord.hardLocks) ? harnessRecord.hardLocks : {};
-  const hasMonitoredRoots = initialized && Array.isArray(harnessRecord.monitoredRoots);
-  const hasStreams = initialized && Array.isArray(harnessRecord.streams);
-
-  return {
-    initialized,
-    hasSummary: initialized && isRecord(harnessRecord.summary),
-    hasMonitoredRoots,
-    hasStreams,
-    hasLocks: initialized && isRecord(harnessRecord.locks),
-    summary: {
-      totalEvents: readOptionalNumber(summaryRecord, "totalEvents") ?? readOptionalNumber(summaryRecord, "totalStreams"),
-      tempCandidates: readOptionalNumber(summaryRecord, "tempCandidates"),
-      expectedOutputs: readOptionalNumber(summaryRecord, "expectedOutputs"),
-      qaReports: readOptionalNumber(summaryRecord, "qaReports"),
-      manifestMismatches: readOptionalNumber(summaryRecord, "manifestMismatches"),
-      blockedEvents: readOptionalNumber(summaryRecord, "blockedEvents"),
-      draftOnlyArtifacts: readOptionalNumber(summaryRecord, "draftOnlyArtifacts") ?? readOptionalNumber(summaryRecord, "draftOnly"),
-      promotableArtifacts: readOptionalNumber(summaryRecord, "promotableArtifacts") ?? readOptionalNumber(summaryRecord, "promotableFormal"),
-      linkedHarnessJobs: readOptionalNumber(summaryRecord, "linkedHarnessJobs") ??
-        (readOptionalNumber(summaryRecord, "totalStreams") !== undefined && readOptionalNumber(summaryRecord, "missingHarnessLinks") !== undefined
-          ? Number(readOptionalNumber(summaryRecord, "totalStreams")) - Number(readOptionalNumber(summaryRecord, "missingHarnessLinks"))
-          : undefined),
-      missingHarnessLinks: readOptionalNumber(summaryRecord, "missingHarnessLinks"),
-      liveSubmitAllowed: readOptionalBoolean(summaryRecord, "liveSubmitAllowed"),
-      providerSubmissionForbidden: readOptionalBoolean(summaryRecord, "providerSubmissionForbidden"),
-    },
-    monitoredRoots: hasMonitoredRoots ? (harnessRecord.monitoredRoots as unknown[]).map(normalizeFilesystemWatcherRoot) : [],
-    streams: hasStreams ? (harnessRecord.streams as unknown[]).map(normalizeFilesystemWatcherStream) : [],
-    locks: {
-      watcherCannotPromoteFormal: readOptionalBoolean(locksRecord, "watcherCannotPromoteFormal"),
-      workerSelfReportCannotComplete: readOptionalBoolean(locksRecord, "workerSelfReportCannotComplete"),
-      tempOutputDraftOnly: readOptionalBoolean(locksRecord, "tempOutputDraftOnly"),
-      semanticPostprocessForbidden: readOptionalBoolean(locksRecord, "semanticPostprocessForbidden"),
-      liveSubmitAllowed: readOptionalBoolean(locksRecord, "liveSubmitAllowed"),
-      providerSubmissionForbidden: readOptionalBoolean(locksRecord, "providerSubmissionForbidden"),
-    },
-  };
-}
-
-function normalizeCheckpointResumeItem(value: unknown, index: number): CheckpointResumeItem {
-  const item = isRecord(value) ? value : {};
-  return {
-    resumeItemId: readString(item.resumeItemId, "Not initialized"),
-    taskPlanId: typeof item.taskPlanId === "string" ? item.taskPlanId : undefined,
-    jobId: typeof item.jobId === "string" ? item.jobId : undefined,
-    shotId: typeof item.shotId === "string" ? item.shotId : undefined,
-    generationHarnessJobId: typeof item.generationHarnessJobId === "string"
-      ? item.generationHarnessJobId
-      : typeof item.harnessJobId === "string" ? item.harnessJobId : undefined,
-    expectedOutputPath: typeof item.expectedOutputPath === "string" ? item.expectedOutputPath : undefined,
-    candidatePath: typeof item.candidatePath === "string" ? item.candidatePath : undefined,
-    formalPath: typeof item.formalPath === "string" ? item.formalPath : undefined,
-    manifestStatus: typeof item.manifestStatus === "string" ? item.manifestStatus : undefined,
-    healthStatus: typeof item.healthStatus === "string" ? item.healthStatus : undefined,
-    qaStatus: typeof item.qaStatus === "string" ? item.qaStatus : undefined,
-    watcherStreamIds: readStringArray(item.watcherStreamIds),
-    hasWatcherStreamIds: Array.isArray(item.watcherStreamIds),
-    resumeStatus: typeof item.resumeStatus === "string" ? item.resumeStatus : undefined,
-    resumeDecision: typeof item.resumeDecision === "string" ? item.resumeDecision : undefined,
-    skipAllowed: readOptionalBoolean(item, "skipAllowed"),
-    rerunAllowed: readOptionalBoolean(item, "rerunAllowed"),
-    manualReviewRequired: readOptionalBoolean(item, "manualReviewRequired"),
-    blockingReasons: readStringArray(item.blockingReasons),
-    hasBlockingReasons: Array.isArray(item.blockingReasons),
-    notes: readNoteList(item.notes),
-  };
-}
-
-function getCheckpointResumeHarness(runtimeState: ProjectRuntimeState): CheckpointResumeHarnessState {
-  const harness = (runtimeState as Partial<ProjectRuntimeState> & { checkpointResumeHarness?: unknown }).checkpointResumeHarness;
-  const initialized = isRecord(harness);
-  const harnessRecord = initialized ? harness as Record<string, unknown> : {};
-  const summaryRecord = initialized && isRecord(harnessRecord.summary) ? harnessRecord.summary : {};
-  const hardLocksRecord = initialized && isRecord(harnessRecord.hardLocks) ? harnessRecord.hardLocks : {};
-  const rawItems = Array.isArray(harnessRecord.resumeItems)
-    ? harnessRecord.resumeItems
-    : Array.isArray(harnessRecord.items) ? harnessRecord.items : undefined;
-  const hasResumeItems = initialized && Array.isArray(rawItems);
-
-  return {
-    initialized,
-    hasSummary: initialized && isRecord(harnessRecord.summary),
-    hasHardLocks: initialized && isRecord(harnessRecord.hardLocks),
-    hasResumeItems,
-    summary: {
-      totalItems: readOptionalNumber(summaryRecord, "totalItems"),
-      skipAllowed: readOptionalNumber(summaryRecord, "skipAllowed"),
-      rerunAllowed: readOptionalNumber(summaryRecord, "rerunAllowed"),
-      manualReviewRequired: readOptionalNumber(summaryRecord, "manualReviewRequired"),
-      blocked: readOptionalNumber(summaryRecord, "blocked"),
-      missingExpectedOutput: readOptionalNumber(summaryRecord, "missingExpectedOutput"),
-      formalReady: readOptionalNumber(summaryRecord, "formalReady") ?? readOptionalNumber(summaryRecord, "skipAllowed"),
-      tempCandidateBlocked: readOptionalNumber(summaryRecord, "tempCandidateBlocked"),
-      liveSubmitAllowed: readOptionalBoolean(summaryRecord, "liveSubmitAllowed"),
-      providerSubmissionForbidden: readOptionalBoolean(summaryRecord, "providerSubmissionForbidden"),
-    },
-    hardLocks: {
-      dryRunOnly: readOptionalBoolean(hardLocksRecord, "dryRunOnly"),
-      providerSubmissionForbidden: readOptionalBoolean(hardLocksRecord, "providerSubmissionForbidden"),
-      liveSubmitAllowed: readOptionalBoolean(hardLocksRecord, "liveSubmitAllowed"),
-      noFileMutation: readOptionalBoolean(hardLocksRecord, "noFileMutation"),
-      noAutoSkipWithoutQa: readOptionalBoolean(hardLocksRecord, "noAutoSkipWithoutQa"),
-      workerSelfReportCannotComplete: readOptionalBoolean(hardLocksRecord, "workerSelfReportCannotComplete"),
-      tempCandidateCannotResumeAsFormal: readOptionalBoolean(hardLocksRecord, "tempCandidateCannotResumeAsFormal"),
-    },
-    resumeItems: hasResumeItems ? (rawItems as unknown[]).map(normalizeCheckpointResumeItem) : [],
-  };
-}
-
-const qaHarnessDimensionLabels: Record<QaHarnessDimension, string> = {
-  whole_film: "同片感",
-  identity: "identity",
-  scene: "scene",
-  pair: "pair",
-  story: "story",
-  prop: "prop",
-  style: "style",
-  motion: "motion",
-  audio: "audio",
-};
-
-function qaDimensionLabel(dimension: string) {
-  return (qaHarnessDimensions as readonly string[]).includes(dimension)
-    ? qaHarnessDimensionLabels[dimension as QaHarnessDimension]
-    : dimension;
-}
-
-function normalizeQaGateRow(value: unknown, index: number, fallbackDimension?: string): QaGateRow {
-  const gate = isRecord(value) ? value : {};
-  const dimension = readString(gate.dimension, readString(gate.dimensionId, fallbackDimension || `dimension-${index + 1}`));
-  const blockers = readStringArray(gate.blockers).length
-    ? readStringArray(gate.blockers)
-    : readStringArray(gate.blockingReasons);
-  return {
-    dimension,
-    label: readString(gate.label, qaDimensionLabel(dimension)),
-    status: readString(gate.status, "Not initialized"),
-    severity: readString(gate.severity, "unknown"),
-    blockers,
-    warnings: readStringArray(gate.warnings),
-    sourceRefs: readStringArray(gate.sourceRefs).length
-      ? readStringArray(gate.sourceRefs)
-      : readStringArray(gate.refs),
-    notes: readNoteList(gate.notes),
-    initialized: isRecord(value),
-  };
-}
-
-function normalizeQaGateRows(value: unknown): QaGateRow[] {
-  if (Array.isArray(value)) return value.map((row, index) => normalizeQaGateRow(row, index));
-  if (!isRecord(value)) return [];
-  return Object.entries(value).map(([dimension, row], index) => normalizeQaGateRow(row, index, dimension));
-}
-
-function normalizeQaOverallRows(value: unknown): QaGateRow[] {
-  const overall = isRecord(value) && Array.isArray(value.dimensions) ? value.dimensions : value;
-  const rows = normalizeQaGateRows(overall);
-  return qaHarnessDimensions.map((dimension, index) =>
-    rows.find((row) => row.dimension === dimension) || normalizeQaGateRow(undefined, index, dimension),
-  );
-}
-
-function summarizeQaCoverageEntry(value: unknown, index: number, fallbackLabel?: string) {
-  if (typeof value === "string" && value.trim()) return value;
-  if (typeof value === "number" || typeof value === "boolean") {
-    return `${fallbackLabel || `source-${index + 1}`}: ${String(value)}`;
-  }
-  if (!isRecord(value)) return "";
-
-  const label = readString(
-    value.label,
-    readString(
-      value.layer,
-      readString(value.dimension, readString(value.dimensionId, readString(value.sourceId, readString(value.id, fallbackLabel || `source-${index + 1}`)))),
-    ),
-  );
-  const status = readString(
-    value.status,
-    readString(value.coverageStatus, typeof value.referenced === "boolean" ? (value.referenced ? "referenced" : "missing") : "unknown"),
-  );
-  const refs = readStringArray(value.sourceRefs).length
-    ? readStringArray(value.sourceRefs)
-    : readStringArray(value.refs);
-  const missingFacts = readStringArray(value.missingFacts).length
-    ? readStringArray(value.missingFacts)
-    : readStringArray(value.missingFactIds);
-  const missingContext = readStringArray(value.missingContext).length
-    ? readStringArray(value.missingContext)
-    : readStringArray(value.missingContextIds);
-  const notes = readNoteList(value.notes);
-  const details = [
-    status,
-    refs.length ? `refs: ${refs.join(", ")}` : "",
-    missingFacts.length ? `missing facts: ${missingFacts.join(", ")}` : "",
-    missingContext.length ? `missing context: ${missingContext.join(", ")}` : "",
-    notes.length ? `notes: ${notes.join(" · ")}` : "",
-  ].filter(Boolean);
-
-  return `${label}: ${details.join(" · ") || "reported"}`;
-}
-
-function normalizeQaSourceCoverage(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.map((entry, index) => summarizeQaCoverageEntry(entry, index)).filter(Boolean);
-  }
-  if (!isRecord(value)) return [];
-
-  for (const key of ["items", "entries", "sources", "coverage"]) {
-    if (Array.isArray(value[key])) return normalizeQaSourceCoverage(value[key]);
-  }
-
-  return Object.entries(value)
-    .flatMap(([key, entry], index) => {
-      if (Array.isArray(entry)) {
-        return entry.map((nested, nestedIndex) => summarizeQaCoverageEntry(nested, nestedIndex, key));
-      }
-      return [summarizeQaCoverageEntry(entry, index, key)];
-    })
-    .filter(Boolean);
-}
-
-function normalizeQaHarnessItem(value: unknown, index: number): QaHarnessItem {
-  const item = isRecord(value) ? value : {};
-  const dimensionGates = normalizeQaGateRows(Array.isArray(item.dimensionGates) ? item.dimensionGates : item.dimensions);
-  const dimensionBlockers = dimensionGates.flatMap((gate) => gate.blockers);
-  const dimensionWarnings = dimensionGates.flatMap((gate) => gate.warnings);
-  const promotionBlockers = readStringArray(item.formalPromotionBlockedReasons);
-  const blockers = readStringArray(item.blockers).length
-    ? readStringArray(item.blockers)
-    : [...readStringArray(item.blockingReasons), ...promotionBlockers, ...dimensionBlockers];
-  const overallStatus = readString(
-    item.overallStatus,
-    readString(item.status, dimensionGates.some((gate) => gate.status === "FAIL") ? "FAIL" : dimensionGates.some((gate) => gate.status === "UNKNOWN") ? "UNKNOWN" : "PARTIAL"),
-  );
-  return {
-    qaItemId: readString(item.qaItemId, `qa-item-${index + 1}`),
-    shotId: readString(item.shotId, "Not initialized"),
-    taskPlanId: typeof item.taskPlanId === "string" ? item.taskPlanId : undefined,
-    jobId: typeof item.jobId === "string" ? item.jobId : undefined,
-    harnessJobId: typeof item.harnessJobId === "string" ? item.harnessJobId : undefined,
-    checkpointResumeItemId: typeof item.checkpointResumeItemId === "string" ? item.checkpointResumeItemId : undefined,
-    formalPromotionEligible: readOptionalBoolean(item, "formalPromotionEligible"),
-    requiresHumanReview: readOptionalBoolean(item, "requiresHumanReview"),
-    overallStatus,
-    dimensionGates,
-    sourceCoverage: normalizeQaSourceCoverage(item.sourceCoverage),
-    blockers,
-    warnings: [...readStringArray(item.warnings), ...dimensionWarnings],
-    notes: readNoteList(item.notes),
-  };
-}
-
-function countQaItems(items: QaHarnessItem[], predicate: (item: QaHarnessItem) => boolean) {
-  return items.filter(predicate).length;
-}
-
-function qaStatusIncludes(item: QaHarnessItem, value: string) {
-  return item.overallStatus.toLowerCase().includes(value);
-}
-
-function getQaHarness(runtimeState: ProjectRuntimeState): QaHarnessState {
-  const harness = (runtimeState as Partial<ProjectRuntimeState> & { qaHarness?: unknown }).qaHarness;
-  const initialized = isRecord(harness);
-  const harnessRecord = initialized ? harness as Record<string, unknown> : {};
-  const summaryRecord = initialized && isRecord(harnessRecord.summary) ? harnessRecord.summary : {};
-  const hardLocksRecord = initialized && isRecord(harnessRecord.hardLocks) ? harnessRecord.hardLocks : {};
-  const items = initialized && Array.isArray(harnessRecord.items)
-    ? harnessRecord.items.map(normalizeQaHarnessItem)
-    : [];
-
-  return {
-    initialized,
-    hasSummary: initialized && isRecord(harnessRecord.summary),
-    hasHardLocks: initialized && isRecord(harnessRecord.hardLocks),
-    hasOverall: initialized && (Array.isArray(harnessRecord.overall) || isRecord(harnessRecord.overall)),
-    hasItems: initialized && Array.isArray(harnessRecord.items),
-    schemaVersion: readString(harnessRecord.schemaVersion, "Not initialized"),
-    generatedAt: readString(harnessRecord.generatedAt, "Not initialized"),
-    dimensions: qaHarnessDimensions,
-    summary: {
-      totalItems: readOptionalNumber(summaryRecord, "totalItems") ?? items.length,
-      formalEligible: readOptionalNumber(summaryRecord, "formalEligible") ??
-        readOptionalNumber(summaryRecord, "formalPromotionEligible") ??
-        countQaItems(items, (item) => item.formalPromotionEligible === true),
-      requiresHumanReview: readOptionalNumber(summaryRecord, "requiresHumanReview") ??
-        countQaItems(items, (item) => item.requiresHumanReview === true),
-      blocked: readOptionalNumber(summaryRecord, "blocked") ??
-        readOptionalNumber(summaryRecord, "formalPromotionBlocked") ??
-        countQaItems(items, (item) => qaStatusIncludes(item, "block") || item.blockers.length > 0),
-      unknown: readOptionalNumber(summaryRecord, "unknown") ??
-        readOptionalNumber(summaryRecord, "unknownItems") ??
-        countQaItems(items, (item) => qaStatusIncludes(item, "unknown") || qaStatusIncludes(item, "not initialized")),
-      failed: readOptionalNumber(summaryRecord, "failed") ??
-        readOptionalNumber(summaryRecord, "failedItems") ??
-        countQaItems(items, (item) => qaStatusIncludes(item, "fail")),
-      partial: readOptionalNumber(summaryRecord, "partial") ??
-        readOptionalNumber(summaryRecord, "partialItems") ??
-        countQaItems(items, (item) => qaStatusIncludes(item, "partial")),
-      dryRunOnly: readOptionalBoolean(summaryRecord, "dryRunOnly"),
-      liveSubmitAllowed: readOptionalBoolean(summaryRecord, "liveSubmitAllowed"),
-      noFileMutation: readOptionalBoolean(summaryRecord, "noFileMutation"),
-    },
-    overall: normalizeQaOverallRows(harnessRecord.overall),
-    items,
-    hardLocks: {
-      dryRunOnly: readOptionalBoolean(hardLocksRecord, "dryRunOnly"),
-      providerSubmissionForbidden: readOptionalBoolean(hardLocksRecord, "providerSubmissionForbidden"),
-      liveSubmitAllowed: readOptionalBoolean(hardLocksRecord, "liveSubmitAllowed"),
-      noFileMutation: readOptionalBoolean(hardLocksRecord, "noFileMutation"),
-      noAutoPromotion: readOptionalBoolean(hardLocksRecord, "noAutoPromotion"),
-      semanticRepairForbidden: readOptionalBoolean(hardLocksRecord, "semanticRepairForbidden"),
-      workerSelfReportCannotPassQa: readOptionalBoolean(hardLocksRecord, "workerSelfReportCannotPassQa"),
-      overallFirst: readOptionalBoolean(hardLocksRecord, "overallFirst"),
-    },
-  };
-}
-
-function normalizeToolRuntimeCheck(value: unknown, index: number): ToolRuntimeHarnessCheck {
-  const check = isRecord(value) ? value : {};
-  const checkId = readString(check.checkId, readString(check.id, `tool-check-${index + 1}`));
-  const path = typeof check.path === "string" ? check.path : undefined;
-  const blockers = readDisplayList(check.blockers).length
-    ? readDisplayList(check.blockers)
-    : readDisplayList(check.blockingReasons);
-
-  return {
-    checkId,
-    category: readString(check.category, "unknown"),
-    label: readString(check.label, checkId),
-    requiredFor: readDisplayList(check.requiredFor, "required-for"),
-    status: readString(check.status, "unknown"),
-    pathStatus: readString(check.pathStatus, path ? "reported" : "unknown"),
-    path,
-    version: typeof check.version === "string" ? check.version : undefined,
-    platformSupport: normalizeToolRuntimePlatformSupport(check.platformSupport),
-    canExecuteNow: readOptionalBoolean(check, "canExecuteNow"),
-    executionMode: readString(check.executionMode, "diagnostics_only"),
-    missingIsBlocker: readOptionalBoolean(check, "missingIsBlocker"),
-    blockers,
-    warnings: readDisplayList(check.warnings),
-    sourceRefs: readDisplayList(check.sourceRefs).length
-      ? readDisplayList(check.sourceRefs)
-      : readDisplayList(check.refs),
-    notes: readDisplayList(check.notes),
-  };
-}
-
-function normalizeToolRuntimePlatformSupport(value: unknown): string[] {
-  if (!isRecord(value)) return readDisplayList(value, "platform");
-  const pathStyles = readDisplayList(value.pathStyles, "path-style");
-  return [
-    `darwin: ${readString(value.darwin, "unknown")}`,
-    `win32: ${readString(value.win32, "unknown")}`,
-    `linux: ${readString(value.linux, "unknown")}`,
-    pathStyles.length ? `paths: ${pathStyles.join(", ")}` : "",
-  ].filter(Boolean);
-}
-
-function normalizeToolRuntimePathPolicy(value: unknown, runtimeState: ProjectRuntimeState): ToolRuntimePathPolicy {
-  const policy = isRecord(value) ? value : {};
-  const policyRows = Array.isArray(policy.policies) ? policy.policies.filter(isRecord) : [];
-  const policyPathStyle = (platform: string) =>
-    readString(policyRows.find((row) => readString(row.platform, "") === platform)?.pathStyle, "");
-  const runtimeRootPolicy = runtimeState.runtime?.config?.projectRootPolicy;
-  const allowedRoots = readDisplayList(policy.allowedRoots, "root").length
-    ? readDisplayList(policy.allowedRoots, "root")
-    : readDisplayList(runtimeRootPolicy?.allowedRoots, "root");
-  return {
-    platformPathAbstractionRequired: readOptionalBoolean(policy, "platformPathAbstractionRequired"),
-    macPathStyle: readString(policy.macPathStyle, policyPathStyle("darwin") || runtimeRootPolicy?.macPathStyle || "Not initialized"),
-    windowsPathStyle: readString(policy.windowsPathStyle, policyPathStyle("win32") || runtimeRootPolicy?.windowsPathStyle || "Not initialized"),
-    projectRootRelativeRequired: readOptionalBoolean(policy, "projectRootRelativeRequired"),
-    allowedRoots,
-    blockers: readDisplayList(policy.blockers),
-    warnings: readDisplayList(policy.warnings),
-    notes: [
-      ...readDisplayList(policy.notes),
-      ...policyRows.map((row) =>
-        `${readString(row.policyId, "path-policy")}: ${readString(row.platform, "unknown")} / ${readString(row.pathStyle, "unknown")}`,
-      ),
-    ],
-  };
-}
-
-function toolRuntimeStatusIncludes(check: ToolRuntimeHarnessCheck, value: string) {
-  const needle = value.toLowerCase();
-  return check.status.toLowerCase().includes(needle) || check.pathStatus.toLowerCase().includes(needle);
-}
-
-function getToolRuntimeHarness(runtimeState: ProjectRuntimeState): ToolRuntimeHarnessState {
-  const harness = (runtimeState as Partial<ProjectRuntimeState> & { toolRuntimeHarness?: unknown }).toolRuntimeHarness;
-  const initialized = isRecord(harness);
-  const harnessRecord = initialized ? harness as Record<string, unknown> : {};
-  const summaryRecord = initialized && isRecord(harnessRecord.summary) ? harnessRecord.summary : {};
-  const pathPolicyRecord = initialized && isRecord(harnessRecord.pathPolicy) ? harnessRecord.pathPolicy : {};
-  const hardLocksRecord = initialized && isRecord(harnessRecord.hardLocks) ? harnessRecord.hardLocks : {};
-  const hasChecks = initialized && Array.isArray(harnessRecord.checks);
-  const checks = hasChecks ? (harnessRecord.checks as unknown[]).map(normalizeToolRuntimeCheck) : [];
-  const pathPolicy = normalizeToolRuntimePathPolicy(pathPolicyRecord, runtimeState);
-  const missingChecks = checks.filter((check) => toolRuntimeStatusIncludes(check, "missing"));
-  const blockedChecks = checks.filter((check) =>
-    toolRuntimeStatusIncludes(check, "blocked") ||
-    check.blockers.length > 0 ||
-    check.missingIsBlocker === true,
-  );
-  const unknownChecks = checks.filter((check) =>
-    toolRuntimeStatusIncludes(check, "unknown") ||
-    toolRuntimeStatusIncludes(check, "not initialized"),
-  );
-
-  return {
-    initialized,
-    hasSummary: initialized && isRecord(harnessRecord.summary),
-    hasChecks,
-    hasPathPolicy: initialized && isRecord(harnessRecord.pathPolicy),
-    hasHardLocks: initialized && isRecord(harnessRecord.hardLocks),
-    schemaVersion: readString(harnessRecord.schemaVersion, "Not initialized"),
-    generatedAt: readString(harnessRecord.generatedAt, "Not initialized"),
-    summary: {
-      totalChecks: readOptionalNumber(summaryRecord, "totalChecks") ?? checks.length,
-      ready: readOptionalNumber(summaryRecord, "ready") ??
-        checks.filter((check) => toolRuntimeStatusIncludes(check, "ready")).length,
-      missing: readOptionalNumber(summaryRecord, "missing") ?? missingChecks.length,
-      planned: readOptionalNumber(summaryRecord, "planned") ??
-        checks.filter((check) => toolRuntimeStatusIncludes(check, "planned")).length,
-      blocked: readOptionalNumber(summaryRecord, "blocked") ?? blockedChecks.length,
-      unknown: readOptionalNumber(summaryRecord, "unknown") ?? unknownChecks.length,
-      requiredMissing: readOptionalNumber(summaryRecord, "requiredMissing") ??
-        readOptionalNumber(summaryRecord, "missingBlockers") ??
-        missingChecks.filter((check) => check.missingIsBlocker === true).length,
-      optionalMissing: readOptionalNumber(summaryRecord, "optionalMissing") ??
-        missingChecks.filter((check) => check.missingIsBlocker !== true).length,
-      dryRunOnly: readOptionalBoolean(summaryRecord, "dryRunOnly"),
-      liveSubmitAllowed: readOptionalBoolean(summaryRecord, "liveSubmitAllowed"),
-    },
-    checks,
-    pathPolicy,
-    hardLocks: {
-      dryRunOnly: readOptionalBoolean(hardLocksRecord, "dryRunOnly") ?? readOptionalBoolean(summaryRecord, "dryRunOnly"),
-      diagnosticsOnly: readOptionalBoolean(hardLocksRecord, "diagnosticsOnly"),
-      noInstall: readOptionalBoolean(hardLocksRecord, "noInstall"),
-      noCredentialRead: readOptionalBoolean(hardLocksRecord, "noCredentialRead"),
-      noCredentialWrite: readOptionalBoolean(hardLocksRecord, "noCredentialWrite"),
-      noSystemSettingsMutation: readOptionalBoolean(hardLocksRecord, "noSystemSettingsMutation"),
-      arbitraryShellExecutionBlocked: readOptionalBoolean(hardLocksRecord, "arbitraryShellExecutionBlocked"),
-      sidecarDaemonDisabled: readOptionalBoolean(hardLocksRecord, "sidecarDaemonDisabled"),
-      providerSubmissionForbidden: readOptionalBoolean(hardLocksRecord, "providerSubmissionForbidden"),
-      liveSubmitAllowed: readOptionalBoolean(hardLocksRecord, "liveSubmitAllowed") ?? readOptionalBoolean(summaryRecord, "liveSubmitAllowed"),
-      platformPathAbstractionRequired: readOptionalBoolean(hardLocksRecord, "platformPathAbstractionRequired") ??
-        pathPolicy.platformPathAbstractionRequired,
-    },
-  };
-}
-
-function emptyVideoPlanning(): VideoPlanningState {
-  return {
-    schemaVersion: "0.1.0",
-    generatedAt: "",
-    readinessGates: [],
-    taskPlans: [],
-    queueShell: {
-      status: "empty",
-      counts: {
-        total: 0,
-        pending: 0,
-        ready: 0,
-        blocked: 0,
-        parked: 0,
-      },
-      concurrency: {
-        placeholder: true,
-        configuredLimit: 0,
-        activeProviderLimit: 0,
-        notes: [],
-      },
-      autoContinuePolicy: {
-        enabled: false,
-        mode: "manual_after_user_enablement",
-        providerSubmissionForbidden: true,
-        notes: [],
-      },
-      longQueueTimeout: {
-        placeholder: true,
-        stallTimeoutSeconds: 0,
-        action: "surface_waiting_state_only",
-        notes: [],
-      },
-      dryRunOnly: true,
-      providerSubmissionForbidden: true,
-      notes: ["Video planning defaults are shown because runtimeState.videoPlanning is unavailable."],
-    },
-    providerPolicySummary: {
-      videoProvidersRemainParked: true,
-      liveSubmitAllowed: false,
-      userEnablementRequired: true,
-      providerSubmissionForbidden: true,
-      fastModelForbidden: true,
-      vipChannelForbidden: true,
-      textToVideoForbidden: true,
-      parkedProviderIds: [],
-      notes: [],
-    },
-    dryRunOnly: true,
-    providerSubmissionForbidden: true,
-    notes: [],
-  };
-}
-
-function getVideoPlanning(runtimeState: ProjectRuntimeState): VideoPlanningState {
-  const fallback = emptyVideoPlanning();
-  const planning = (runtimeState as Partial<ProjectRuntimeState>).videoPlanning;
-  if (!planning) return fallback;
-  return {
-    ...fallback,
-    ...planning,
-    readinessGates: planning.readinessGates || [],
-    taskPlans: planning.taskPlans || [],
-    queueShell: {
-      ...fallback.queueShell,
-      ...planning.queueShell,
-      counts: {
-        ...fallback.queueShell.counts,
-        ...planning.queueShell?.counts,
-      },
-      concurrency: {
-        ...fallback.queueShell.concurrency,
-        ...planning.queueShell?.concurrency,
-        notes: planning.queueShell?.concurrency?.notes || [],
-      },
-      autoContinuePolicy: {
-        ...fallback.queueShell.autoContinuePolicy,
-        ...planning.queueShell?.autoContinuePolicy,
-        notes: planning.queueShell?.autoContinuePolicy?.notes || [],
-      },
-      longQueueTimeout: {
-        ...fallback.queueShell.longQueueTimeout,
-        ...planning.queueShell?.longQueueTimeout,
-        notes: planning.queueShell?.longQueueTimeout?.notes || [],
-      },
-      notes: planning.queueShell?.notes || [],
-    },
-    providerPolicySummary: {
-      ...fallback.providerPolicySummary,
-      ...planning.providerPolicySummary,
-      parkedProviderIds: planning.providerPolicySummary?.parkedProviderIds || [],
-      notes: planning.providerPolicySummary?.notes || [],
-    },
-    notes: planning.notes || [],
-  };
-}
-
-function emptyVideoExecutionPreview(): VideoExecutionPreviewState {
-  return {
-    schemaVersion: "0.1.0",
-    generatedAt: "",
-    previews: [],
-    summary: {
-      total: 0,
-      blocked: 0,
-      previewReady: 0,
-      parked: 0,
-      canPreviewPacket: 0,
-      canExecute: 0,
-    },
-    dryRunOnly: true,
-    providerSubmissionForbidden: true,
-    liveSubmitAllowed: false,
-    notes: ["Video execution preview defaults are shown because runtimeState.videoExecutionPreview is unavailable."],
-  };
-}
-
-function getVideoExecutionPreview(runtimeState: ProjectRuntimeState): VideoExecutionPreviewState {
-  const fallback = emptyVideoExecutionPreview();
-  const preview = (runtimeState as Partial<ProjectRuntimeState>).videoExecutionPreview;
-  if (!preview) return fallback;
-  return {
-    ...fallback,
-    ...preview,
-    previews: preview.previews || [],
-    summary: {
-      ...fallback.summary,
-      ...preview.summary,
-      canExecute: 0,
-    },
-    notes: preview.notes || [],
-    dryRunOnly: true,
-    providerSubmissionForbidden: true,
-    liveSubmitAllowed: false,
-  };
-}
-
-function countBy<T extends string>(values: T[]): Record<T, number> {
-  return values.reduce((counts, value) => {
-    counts[value] = (counts[value] || 0) + 1;
-    return counts;
-  }, {} as Record<T, number>);
-}
-
-function CompactList({ items, empty = "No blockers or warnings." }: { items: string[]; empty?: string }) {
-  if (!items.length) return <small className="muted-copy">{empty}</small>;
-  return (
-    <div className="compact-list">
-      {items.slice(0, 5).map((item, index) => (
-        <small key={`${item}-${index}`}>{item}</small>
-      ))}
-      {items.length > 5 && <small>+{items.length - 5} more</small>}
-    </div>
-  );
-}
 
 function formatDuration(seconds: number) {
   if (!Number.isFinite(seconds) || seconds <= 0) return "0s";
@@ -4977,30 +1064,7 @@ function profileInclusion(
   return "not included";
 }
 
-function ExportProfilesPanel({ previewExport }: { previewExport: ProjectPreviewExportState }) {
-  return (
-    <section className="export-profiles-panel">
-      <div className="audit-head">
-        <FileJson size={17} />
-        <span>Export Profiles</span>
-      </div>
-      <div className="export-profile-list">
-        {previewExport.exportProfiles.map((profile) => (
-          <button key={profile.profileId} className="export-profile-row" disabled title="Dry-run plan only. Export is not wired in this UI.">
-            <span>
-              <strong>{profile.label}</strong>
-              <small>{statusLabel(profile.kind)} · {profile.includedPaths.length} path(s)</small>
-            </span>
-            <StatusPill value={profile.readiness} />
-          </button>
-        ))}
-      </div>
-      <small className="muted-copy">Plan only. No files are written or submitted.</small>
-    </section>
-  );
-}
-
-function ShotPreviewExportSummary({
+export function ShotPreviewExportSummary({
   previewExport,
   selectedShot,
   tasks,
@@ -5043,1653 +1107,11 @@ function ShotPreviewExportSummary({
   );
 }
 
-function PreviewExportDiagnostics({ previewExport }: { previewExport: ProjectPreviewExportState }) {
-  const gateChecks = Object.entries(previewExport.formalPreviewGate.requiredChecks);
 
-  return (
-    <section className="machine-panel preview-export-diagnostics">
-      <div className="audit-head">
-        <Play size={17} />
-        <span>Preview / Export</span>
-      </div>
-      <div className="summary-grid">
-        <Metric label="Formal Gate" value={previewExport.formalPreviewGate.status} detail={`${gateChecks.filter(([, passed]) => !passed).length} failed check(s)`} />
-        <Metric label="Blocked Reasons" value={`${previewExport.formalPreviewGate.blockedReasons.length}`} detail="formal preview eligibility" />
-        <Metric label="Package" value={previewExport.exportPackagePlan.status} detail={`${previewExport.exportProfiles.length} dry-run profile(s)`} />
-        <Metric label="Future Targets" value={`${previewExport.exportPackagePlan.futureTargets.length}`} detail="reserved export slots" />
-      </div>
-      <div className="preview-export-grid">
-        <div className="check-list">
-          <h3>Formal Gate Checks</h3>
-          {gateChecks.map(([check, passed]) => (
-            <div key={check}>
-              <span>{statusLabel(check)}</span>
-              <StatusPill value={passed ? "PASS" : "blocked"} />
-            </div>
-          ))}
-        </div>
-        <div>
-          <h3>Blocked Reasons</h3>
-          <CompactList items={previewExport.formalPreviewGate.blockedReasons} empty="Formal preview gate is eligible." />
-        </div>
-        <div>
-          <h3>Export Package Targets</h3>
-          <CompactList items={previewExport.exportPackagePlan.futureTargets.map((target) => `${target} · ${previewExport.exportPackagePlan.status}`)} empty="No future package targets planned." />
-        </div>
-      </div>
-    </section>
-  );
-}
 
-function ImagePipelineDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const pipeline = getImagePipeline(runtimeState);
-  const capabilities = pipeline.providerRegistry.capabilities;
-  const activeImage = capabilities.filter((item) => item.slot.startsWith("image.") && item.executionState === "active").length;
-  const parkedVideo = capabilities.filter((item) => item.slot.startsWith("video.") && item.executionState === "parked").length;
-  const promptBlocked = pipeline.promptPlans.filter((plan) => plan.status === "blocked").length;
-  const promptReady = pipeline.promptPlans.filter((plan) => plan.status === "ready_for_envelope").length;
-  const readinessCounts = countBy(pipeline.assetReadinessReports.map((report) => report.status));
-  const taskBlocked = pipeline.imageTaskPlans.filter((plan) => plan.status === "blocked").length;
-  const taskReady = pipeline.imageTaskPlans.filter((plan) => plan.status === "ready_for_dry_run").length;
-  const dryRunOnly = pipeline.image2AdapterRequests.filter((request) => request.submitPolicy?.dry_run_only).length;
-  const liveForbidden = pipeline.image2AdapterRequests.filter((request) => request.submitPolicy?.live_submit_forbidden).length;
-  const watcherCounts = countBy(pipeline.watcherEvents.map((event) => event.status));
-  const healthCounts = countBy(pipeline.generationHealthReports.map((report) => report.healthStatus));
-  const promotionCounts = countBy(pipeline.qaPromotionReports.map((report) => report.promotionStatus));
-  const blockers = [
-    ...pipeline.promptPlans.flatMap((plan) => plan.blockers.map((blocker) => `${plan.shotId || plan.jobId}: ${blocker}`)),
-    ...pipeline.assetReadinessReports.flatMap((report) => report.blockers.map((blocker) => `${report.shotId}: ${blocker}`)),
-    ...pipeline.imageTaskPlans.flatMap((plan) => plan.blockers.map((blocker) => `${plan.shotId}: ${blocker}`)),
-    ...pipeline.generationHealthReports.flatMap((report) => report.blockers.map((blocker) => `${report.shotId}: ${blocker}`)),
-    ...pipeline.qaPromotionReports.flatMap((report) => report.blockers.map((blocker) => `${report.shotId}: ${blocker}`)),
-  ];
-  const warnings = [
-    ...pipeline.promptPlans.flatMap((plan) => plan.adapterWarnings.map((warning) => `${plan.shotId || plan.jobId}: ${warning}`)),
-    ...pipeline.assetReadinessReports.flatMap((report) => report.warnings.map((warning) => `${report.shotId}: ${warning}`)),
-    ...pipeline.imageTaskPlans.flatMap((plan) => plan.warnings.map((warning) => `${plan.shotId}: ${warning}`)),
-    ...pipeline.generationHealthReports.flatMap((report) => report.warnings.map((warning) => `${report.shotId}: ${warning}`)),
-    ...pipeline.qaPromotionReports.flatMap((report) => report.warnings.map((warning) => `${report.shotId}: ${warning}`)),
-  ];
 
-  return (
-    <section className="machine-panel image-pipeline-panel">
-      <div className="audit-head">
-        <Sparkles size={17} />
-        <span>Image Pipeline</span>
-      </div>
-      <div className="summary-grid">
-        <Metric label="Provider Capabilities" value={`${capabilities.length}`} detail={`${activeImage} active image · ${parkedVideo} parked video`} />
-        <Metric label="Prompt Plans" value={`${pipeline.promptPlans.length}`} detail={`${promptBlocked} blocked · ${promptReady} ready`} />
-        <Metric label="Asset Readiness" value={`${readinessCounts.ready || 0}/${pipeline.assetReadinessReports.length}`} detail={`${readinessCounts.draft_only || 0} draft only · ${readinessCounts.blocked || 0} blocked`} />
-        <Metric label="Image Task Plans" value={`${pipeline.imageTaskPlans.length}`} detail={`${taskBlocked} blocked · ${taskReady} dry-run ready`} />
-      </div>
-      <div className="summary-grid pipeline-secondary">
-        <Metric label="Adapter Requests" value={`${pipeline.image2AdapterRequests.length}`} detail={`${dryRunOnly} dry run only · ${liveForbidden} live path forbidden`} />
-        <Metric label="Watcher Events" value={`${pipeline.watcherEvents.length}`} detail={Object.entries(watcherCounts).map(([key, value]) => `${value} ${statusLabel(key)}`).join(" · ") || "none"} />
-        <Metric label="Health Reports" value={`${pipeline.generationHealthReports.length}`} detail={Object.entries(healthCounts).map(([key, value]) => `${value} ${statusLabel(key)}`).join(" · ") || "none"} />
-        <Metric label="Promotion Reports" value={`${pipeline.qaPromotionReports.length}`} detail={Object.entries(promotionCounts).map(([key, value]) => `${value} ${statusLabel(key)}`).join(" · ") || "none"} />
-      </div>
-      <div className="pipeline-details">
-        <details>
-          <summary>Blockers ({blockers.length})</summary>
-          <CompactList items={blockers} />
-        </details>
-        <details>
-          <summary>Warnings ({warnings.length})</summary>
-          <CompactList items={warnings} />
-        </details>
-      </div>
-    </section>
-  );
-}
 
-function GenerationHealthCheckerDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const checker = getGenerationHealthChecker(runtimeState);
-  const visibleFacts = checker.factChainSummary.slice(0, 6);
-
-  return (
-    <section className="machine-panel health-checker-panel">
-      <div className="audit-head">
-        <ListChecks size={17} />
-        <span>Generation Health Checker</span>
-      </div>
-      <div className="summary-grid checker-metrics">
-        <Metric label="Reports" value={`${checker.reportCount}`} detail={checker.initialized ? "fact chain coverage" : "Not initialized"} />
-        <Metric label="Postprocess Recoverable" value={`${checker.postprocessRecoverable}`} detail="recoverable only; no semantic repair" />
-        <Metric label="Worker Mismatch" value={`${checker.workerSelfReportMismatch}`} detail="self-report differs from evidence" />
-        <Metric label="QA Coverage Missing" value={`${checker.qaCoverageMissing}`} detail="missing explicit QA signal" />
-      </div>
-      {!checker.initialized && (
-        <p className="muted-copy generation-empty-state">Generation Health Checker runtime field not initialized; showing defaults.</p>
-      )}
-      <div className="checker-fact-table">
-        {visibleFacts.map((fact) => (
-          <div key={fact.id} className="checker-fact-row">
-            <div>
-              <strong>{fact.label}</strong>
-              <small>{fact.sourceRefs.join(" · ") || fact.id}</small>
-            </div>
-            <StatusPill value={fact.status} />
-            <small>{fact.detail}</small>
-          </div>
-        ))}
-        {checker.initialized && !visibleFacts.length && <p className="muted-copy">No fact chain rows reported.</p>}
-      </div>
-      <div className="pipeline-details checker-details">
-        <details open={Boolean(checker.blockers.length)}>
-          <summary>Blockers ({checker.blockers.length})</summary>
-          <CompactList items={checker.blockers} empty="No health checker blockers reported." />
-        </details>
-        <details>
-          <summary>Warnings ({checker.warnings.length})</summary>
-          <CompactList items={checker.warnings} empty="No health checker warnings reported." />
-        </details>
-      </div>
-    </section>
-  );
-}
-
-function PromptConflictCheckerDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const checker = getPromptConflictChecker(runtimeState);
-
-  return (
-    <section className="machine-panel prompt-conflict-panel">
-      <div className="audit-head">
-        <ShieldAlert size={17} />
-        <span>Prompt Conflict Checker</span>
-      </div>
-      <div className="summary-grid checker-metrics">
-        <Metric label="Reports" value={`${checker.reportCount}`} detail={checker.initialized ? "prompt plans checked" : "Not initialized"} />
-        <Metric label="Conflicts" value={`${checker.conflictCount}`} detail="all severities" />
-        <Metric label="Blocking" value={`${checker.blockingConflicts}`} detail="blocks envelope readiness" />
-        <Metric label="Needs Recompile" value={`${checker.needsRecompile}`} detail="structured source drift" />
-      </div>
-      {!checker.initialized && (
-        <p className="muted-copy generation-empty-state">Prompt Conflict Checker runtime field not initialized; showing defaults.</p>
-      )}
-      <div className="structured-source-strip">
-        <span>Structured sources to update</span>
-        <CompactList items={checker.structuredSourcesToUpdate.slice(0, 8)} empty="No structured source updates reported." />
-        {checker.structuredSourcesToUpdate.length > 8 && (
-          <small className="muted-copy">Showing 8 of {checker.structuredSourcesToUpdate.length} source update(s).</small>
-        )}
-      </div>
-      <div className="pipeline-details checker-details">
-        <details open={Boolean(checker.blockers.length)}>
-          <summary>Blockers ({checker.blockers.length})</summary>
-          <CompactList items={checker.blockers} empty="No conflict checker blockers reported." />
-        </details>
-        <details>
-          <summary>Warnings ({checker.warnings.length})</summary>
-          <CompactList items={checker.warnings} empty="No conflict checker warnings reported." />
-        </details>
-      </div>
-    </section>
-  );
-}
-
-function GenerationStageStrip({ stages }: { stages: GenerationHarnessStage[] }) {
-  if (!stages.length) return <small className="muted-copy">No stage telemetry reported.</small>;
-
-  return (
-    <div className="generation-stage-strip" aria-label="Generation stage status">
-      {stages.map((stage) => (
-        <span key={stage.id} className={`generation-stage ${generationStageTone(stage.status)}`}>
-          <strong>{stage.label}</strong>
-          <small>{statusLabel(stage.status)}</small>
-          {stage.detail && <em>{stage.detail}</em>}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function generationStageTone(status: string) {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("blocked") || normalized.includes("fail") || normalized.includes("missing")) return "stage-danger";
-  if (normalized.includes("ready") || normalized.includes("done") || normalized.includes("pass") || normalized.includes("formal")) return "stage-good";
-  if (normalized.includes("waiting") || normalized.includes("pending") || normalized.includes("qa")) return "stage-pending";
-  return "stage-neutral";
-}
-
-function CandidateOutputSummary({ output }: { output: GenerationHarnessCandidateOutput }) {
-  const details = [
-    output.manifestStatus ? `manifest ${output.manifestStatus}` : undefined,
-    output.healthStatus ? `health ${output.healthStatus}` : undefined,
-    output.qaStatus ? `qa ${output.qaStatus}` : undefined,
-    output.canPromoteToFormal ? "formal promotion ready" : "formal promotion blocked",
-  ].filter((item): item is string => Boolean(item));
-
-  return (
-    <div className="candidate-output-summary">
-      <div>
-        <span>Candidate output</span>
-        <StatusPill value={output.status} />
-      </div>
-      <small>{details.join(" · ") || "No candidate output telemetry."}</small>
-      {output.candidatePath && <small>candidate: {output.candidatePath}</small>}
-      {output.formalPath && <small>formal: {output.formalPath}</small>}
-      {!output.candidatePath && output.expectedOutputPath && <small>{output.expectedOutputPath}</small>}
-    </div>
-  );
-}
-
-function GenerationHarnessDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const harness = getGenerationHarness(runtimeState);
-  const summary = harness.summary;
-  const visibleJobs = harness.jobs.slice(0, 6);
-  const providerLockLabel = harness.initialized
-    ? summary.providerSubmissionForbidden ? "provider submission locked" : "provider submission open"
-    : "provider lock not initialized";
-  const dryRunLabel = harness.initialized
-    ? summary.dryRunOnly ? "dry-run only" : "dry-run off"
-    : "dry-run not initialized";
-  const providerLockValue = !harness.initialized ? "not initialized" : summary.providerSubmissionForbidden || summary.dryRunOnly ? "locked" : "open";
-
-  return (
-    <section className="machine-panel generation-harness-panel">
-      <div className="audit-head">
-        <LockKeyhole size={17} />
-        <span>Generation Harness</span>
-      </div>
-      <div className="summary-grid generation-harness-metrics">
-        <Metric label="Total Jobs" value={`${summary.totalJobs}`} detail={`${summary.readyJobs} ready`} />
-        <Metric label="Blocked" value={`${summary.blockedJobs}`} detail="blocking reasons active" />
-        <Metric label="Waiting" value={`${summary.waitingForOutputJobs}`} detail="candidate output pending" />
-        <Metric label="QA Pending" value={`${summary.qaPendingJobs}`} detail="requires QA decision" />
-        <Metric label="Formal Ready" value={`${summary.formalReadyJobs}`} detail="promotable assets" />
-        <Metric label="Provider Lock" value={providerLockValue} detail={`${providerLockLabel} · ${dryRunLabel}`} />
-      </div>
-
-      <div className="generation-lock-strip">
-        <StatusPill value={providerLockLabel} />
-        <StatusPill value={dryRunLabel} />
-        <small>No live submit controls are exposed in Diagnostics.</small>
-      </div>
-
-      {!harness.initialized && (
-        <p className="muted-copy generation-empty-state">Generation Harness not initialized in this runtime state.</p>
-      )}
-
-      <div className="generation-job-list">
-        {visibleJobs.map((job) => (
-          <div key={job.jobId} className="generation-job-row">
-            <div className="generation-job-head">
-              <div>
-                <strong>{job.shotId}</strong>
-                <small>{job.providerSlot} · {job.taskPlanId || job.jobId}</small>
-              </div>
-              <StatusPill value={job.chainStatus} />
-            </div>
-            <GenerationStageStrip stages={job.stages} />
-            <CandidateOutputSummary output={job.candidateOutput} />
-            <div className="generation-job-locks">
-              <StatusPill value={job.providerSubmissionForbidden ? "provider locked" : "provider open"} />
-              <StatusPill value={job.dryRunOnly ? "dry-run only" : "dry-run off"} />
-              <StatusPill value={job.liveSubmitAllowed ? "live allowed" : "live false"} />
-            </div>
-            <div className="pipeline-details generation-job-details">
-              <details open={Boolean(job.blockingReasons.length)}>
-                <summary>Blocking reasons ({job.blockingReasons.length})</summary>
-                <CompactList items={job.blockingReasons} empty="No blocking reasons reported." />
-              </details>
-              <details>
-                <summary>Forbidden actions ({job.forbiddenActions.length})</summary>
-                <CompactList
-                  items={[
-                    ...job.forbiddenActions,
-                    ...(job.postprocessPolicy ? [`postprocess: ${job.postprocessPolicy}`] : []),
-                  ]}
-                  empty="No forbidden actions reported."
-                />
-              </details>
-            </div>
-          </div>
-        ))}
-        {harness.initialized && !visibleJobs.length && (
-          <p className="muted-copy generation-empty-state">Generation Harness is initialized, but no jobs are currently queued.</p>
-        )}
-        {harness.jobs.length > visibleJobs.length && (
-          <small className="muted-copy">Showing {visibleJobs.length} of {harness.jobs.length} generation jobs.</small>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function watcherMetricValue(harness: FilesystemWatcherHarnessState, value?: number) {
-  return harness.hasSummary && typeof value === "number" ? `${value}` : "Not initialized";
-}
-
-function watcherMetricDetail(harness: FilesystemWatcherHarnessState, detail: string) {
-  return harness.hasSummary ? detail : "runtimeState.filesystemWatcherHarness.summary missing";
-}
-
-function watcherBooleanLabel(value: boolean | undefined, trueLabel: string, falseLabel: string) {
-  if (typeof value !== "boolean") return "Not initialized";
-  return value ? trueLabel : falseLabel;
-}
-
-function FilesystemWatcherDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const harness = getFilesystemWatcherHarness(runtimeState);
-  const summary = harness.summary;
-  const visibleStreams = harness.streams.slice(0, 8);
-  const rootRows = harness.monitoredRoots.slice(0, 6);
-  const lockRows = [
-    {
-      label: "Watcher cannot promote formal",
-      value: watcherBooleanLabel(harness.locks.watcherCannotPromoteFormal, "locked", "not locked"),
-    },
-    {
-      label: "Temp output draft only",
-      value: watcherBooleanLabel(harness.locks.tempOutputDraftOnly, "draft only", "not locked"),
-    },
-    {
-      label: "No semantic postprocess",
-      value: watcherBooleanLabel(harness.locks.semanticPostprocessForbidden, "forbidden", "not locked"),
-    },
-    {
-      label: "Provider submission",
-      value: watcherBooleanLabel(harness.locks.providerSubmissionForbidden ?? summary.providerSubmissionForbidden, "forbidden", "not locked"),
-    },
-    {
-      label: "Live submit",
-      value: watcherBooleanLabel(harness.locks.liveSubmitAllowed ?? summary.liveSubmitAllowed, "allowed", "not allowed"),
-    },
-  ];
-
-  return (
-    <section className="machine-panel filesystem-watcher-panel">
-      <div className="audit-head">
-        <Database size={17} />
-        <span>Filesystem Watcher Harness</span>
-      </div>
-      <div className="summary-grid filesystem-watcher-metrics">
-        <Metric label="Events" value={watcherMetricValue(harness, summary.totalEvents)} detail={watcherMetricDetail(harness, `${summary.blockedEvents || 0} blocked`)} />
-        <Metric label="Temp/Candidate" value={watcherMetricValue(harness, summary.tempCandidates)} detail={watcherMetricDetail(harness, `${summary.promotableArtifacts || 0} promotable`)} />
-        <Metric label="Expected" value={watcherMetricValue(harness, summary.expectedOutputs)} detail={watcherMetricDetail(harness, "expected output paths")} />
-        <Metric label="QA Reports" value={watcherMetricValue(harness, summary.qaReports)} detail={watcherMetricDetail(harness, "QA evidence files")} />
-        <Metric label="Manifest Mismatch" value={watcherMetricValue(harness, summary.manifestMismatches)} detail={watcherMetricDetail(harness, "manifest gate failures")} />
-        <Metric label="Draft Only" value={watcherMetricValue(harness, summary.draftOnlyArtifacts)} detail={watcherMetricDetail(harness, "cannot become formal automatically")} />
-        <Metric label="Linked Harness" value={watcherMetricValue(harness, summary.linkedHarnessJobs)} detail={watcherMetricDetail(harness, `${summary.missingHarnessLinks || 0} missing link(s)`)} />
-      </div>
-
-      <div className="watcher-lock-strip">
-        {lockRows.map((lock) => (
-          <div key={lock.label}>
-            <span>{lock.label}</span>
-            <StatusPill value={lock.value} />
-          </div>
-        ))}
-      </div>
-
-      {!harness.initialized && (
-        <p className="muted-copy generation-empty-state">Filesystem Watcher Harness not initialized in this runtime state.</p>
-      )}
-
-      <div className="watcher-diagnostics-grid">
-        <div>
-          <h3>Monitored Roots</h3>
-          {!harness.hasMonitoredRoots && <p className="muted-copy">Not initialized</p>}
-          {harness.hasMonitoredRoots && !rootRows.length && <p className="muted-copy">No monitored roots reported.</p>}
-          {Boolean(rootRows.length) && (
-            <div className="watcher-root-table">
-              {rootRows.map((root) => (
-                <div key={root.id} className="watcher-root-row">
-                  <span>
-                    <strong>{root.label}</strong>
-                    <small>{root.id}</small>
-                  </span>
-                  <span>
-                    <StatusPill value={root.status} />
-                    <small>{root.kind}</small>
-                  </span>
-                  <small>{root.pathHint || "No path hint"}</small>
-                  <small>{root.notes.join(" · ") || "No notes"}</small>
-                </div>
-              ))}
-              {harness.monitoredRoots.length > rootRows.length && (
-                <small className="muted-copy watcher-more">Showing {rootRows.length} of {harness.monitoredRoots.length} monitored roots.</small>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <h3>Watcher Streams</h3>
-          {!harness.hasStreams && <p className="muted-copy">Not initialized</p>}
-          {harness.hasStreams && !visibleStreams.length && <p className="muted-copy">No watcher events reported.</p>}
-          {Boolean(visibleStreams.length) && (
-            <div className="watcher-stream-table">
-              {visibleStreams.map((stream) => {
-                const shotTask = stream.shotId || stream.taskPlanId || stream.jobId || "unassigned";
-                const harnessLink = stream.harnessJobId || stream.jobId || "missing";
-                return (
-                  <details key={stream.streamId} className="watcher-stream-row">
-                    <summary>
-                      <span>
-                        <strong>{shotTask}</strong>
-                        <small>{stream.eventType} · {stream.streamId}</small>
-                      </span>
-                      <span>{stream.artifactClass}</span>
-                      <StatusPill value={stream.status} />
-                      <StatusPill value={watcherBooleanLabel(stream.draftOnly, "draft only", "not draft only")} />
-                      <StatusPill value={watcherBooleanLabel(stream.canPromoteFormal, "can promote", "cannot promote")} />
-                      <span>
-                        <strong>{harnessLink}</strong>
-                        <small>{stream.harnessJobId ? "linked" : "missing link"}</small>
-                      </span>
-                    </summary>
-                    <div className="watcher-stream-details">
-                      <small>severity: {stream.severity}</small>
-                      <small>artifact: {stream.artifactPath || "Not initialized"}</small>
-                      <small>expected: {stream.expectedOutputPath || "Not initialized"}</small>
-                      <small>future reference: {watcherBooleanLabel(stream.canBecomeFutureReference, "allowed", "blocked")}</small>
-                      <small>requires manifest: {watcherBooleanLabel(stream.requiresManifestMatch, "yes", "no")}</small>
-                      <small>requires QA: {watcherBooleanLabel(stream.requiresQaPass, "yes", "no")}</small>
-                      <CompactList items={[...stream.blockingReasons, ...stream.notes]} empty="No blocking reasons or notes reported." />
-                    </div>
-                  </details>
-                );
-              })}
-              {harness.streams.length > visibleStreams.length && (
-                <small className="muted-copy watcher-more">Showing {visibleStreams.length} of {harness.streams.length} watcher stream event(s).</small>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function checkpointMetricValue(harness: CheckpointResumeHarnessState, value?: number) {
-  return harness.hasSummary && typeof value === "number" ? `${value}` : "Not initialized";
-}
-
-function checkpointMetricDetail(harness: CheckpointResumeHarnessState, detail: string) {
-  return harness.hasSummary ? detail : "runtimeState.checkpointResumeHarness.summary missing";
-}
-
-function CheckpointResumeDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const harness = getCheckpointResumeHarness(runtimeState);
-  const summary = harness.summary;
-  const visibleItems = harness.resumeItems.slice(0, 8);
-  const lockRows = [
-    {
-      label: "dry-run only",
-      value: watcherBooleanLabel(harness.hardLocks.dryRunOnly, "locked", "not locked"),
-    },
-    {
-      label: "no file mutation",
-      value: watcherBooleanLabel(harness.hardLocks.noFileMutation, "locked", "not locked"),
-    },
-    {
-      label: "no auto skip without QA",
-      value: watcherBooleanLabel(harness.hardLocks.noAutoSkipWithoutQa, "locked", "not locked"),
-    },
-    {
-      label: "worker self-report cannot complete",
-      value: watcherBooleanLabel(harness.hardLocks.workerSelfReportCannotComplete, "locked", "not locked"),
-    },
-    {
-      label: "temp candidate cannot resume as formal",
-      value: watcherBooleanLabel(harness.hardLocks.tempCandidateCannotResumeAsFormal, "locked", "not locked"),
-    },
-  ];
-
-  return (
-    <section className="machine-panel checkpoint-resume-panel">
-      <div className="audit-head">
-        <ListChecks size={17} />
-        <span>Checkpoint Resume Harness</span>
-      </div>
-      <div className="summary-grid checkpoint-resume-metrics">
-        <Metric label="Items" value={checkpointMetricValue(harness, summary.totalItems)} detail={checkpointMetricDetail(harness, "resume candidates")} />
-        <Metric label="Skip allowed" value={checkpointMetricValue(harness, summary.skipAllowed)} detail={checkpointMetricDetail(harness, "safe to skip after QA")} />
-        <Metric label="Rerun allowed" value={checkpointMetricValue(harness, summary.rerunAllowed)} detail={checkpointMetricDetail(harness, "eligible for rerun")} />
-        <Metric label="Manual review" value={checkpointMetricValue(harness, summary.manualReviewRequired)} detail={checkpointMetricDetail(harness, "human decision required")} />
-        <Metric label="Blocked" value={checkpointMetricValue(harness, summary.blocked)} detail={checkpointMetricDetail(harness, "cannot resume automatically")} />
-        <Metric label="Missing output" value={checkpointMetricValue(harness, summary.missingExpectedOutput)} detail={checkpointMetricDetail(harness, "expected path absent")} />
-        <Metric label="Formal ready" value={checkpointMetricValue(harness, summary.formalReady)} detail={checkpointMetricDetail(harness, "formal assets present")} />
-      </div>
-
-      <div className="watcher-lock-strip checkpoint-lock-strip">
-        {lockRows.map((lock) => (
-          <div key={lock.label}>
-            <span>{lock.label}</span>
-            <StatusPill value={lock.value} />
-          </div>
-        ))}
-      </div>
-
-      {!harness.initialized && (
-        <p className="muted-copy generation-empty-state">Checkpoint Resume Harness not initialized in this runtime state.</p>
-      )}
-
-      <div className="checkpoint-resume-table">
-        {!harness.hasResumeItems && <p className="muted-copy">Not initialized</p>}
-        {harness.hasResumeItems && !visibleItems.length && <p className="muted-copy">No resume items reported.</p>}
-        {visibleItems.map((item, index) => {
-          const shotTask = item.shotId || item.taskPlanId || item.jobId || "Not initialized";
-          const harnessLink = item.generationHarnessJobId || "Not initialized";
-          return (
-            <details key={`${item.resumeItemId}-${index}`} className="checkpoint-resume-row">
-              <summary>
-                <span>
-                  <strong>{shotTask}</strong>
-                  <small>{item.taskPlanId || item.resumeItemId}</small>
-                </span>
-                <StatusPill value={item.resumeStatus || "Not initialized"} />
-                <StatusPill value={item.resumeDecision || "Not initialized"} />
-                <span className="checkpoint-flag-group">
-                  <StatusPill value={watcherBooleanLabel(item.skipAllowed, "skip allowed", "skip blocked")} />
-                  <StatusPill value={watcherBooleanLabel(item.rerunAllowed, "rerun allowed", "rerun blocked")} />
-                  <StatusPill value={watcherBooleanLabel(item.manualReviewRequired, "manual review", "review not required")} />
-                </span>
-                <span className="checkpoint-gate-group">
-                  <small>manifest: {item.manifestStatus || "Not initialized"}</small>
-                  <small>health: {item.healthStatus || "Not initialized"}</small>
-                  <small>QA: {item.qaStatus || "Not initialized"}</small>
-                </span>
-                <span>
-                  <strong>{harnessLink}</strong>
-                  <small>{item.generationHarnessJobId ? "harness link" : "missing harness link"}</small>
-                </span>
-              </summary>
-              <div className="checkpoint-resume-details">
-                <small>watcher streams: {item.hasWatcherStreamIds ? item.watcherStreamIds.join(", ") || "None reported" : "Not initialized"}</small>
-                <small>expected: {item.expectedOutputPath || "Not initialized"}</small>
-                <small>candidate: {item.candidatePath || "Not initialized"}</small>
-                <small>formal: {item.formalPath || "Not initialized"}</small>
-                <small>blocking reasons: {item.hasBlockingReasons ? `${item.blockingReasons.length}` : "Not initialized"}</small>
-                <CompactList items={[...item.blockingReasons, ...item.notes]} empty="No blocking reasons or notes reported." />
-              </div>
-            </details>
-          );
-        })}
-        {harness.resumeItems.length > visibleItems.length && (
-          <small className="muted-copy watcher-more">Showing {visibleItems.length} of {harness.resumeItems.length} resume item(s).</small>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function qaMetricValue(harness: QaHarnessState, value?: number) {
-  return harness.initialized && typeof value === "number" ? `${value}` : "Not initialized";
-}
-
-function qaMetricDetail(harness: QaHarnessState, detail: string) {
-  return harness.initialized ? detail : "runtimeState.qaHarness missing";
-}
-
-function qaLockLabel(value: boolean | undefined, inverse = false) {
-  if (typeof value !== "boolean") return "Not initialized";
-  const locked = inverse ? !value : value;
-  return locked ? "locked" : "not locked";
-}
-
-function qaBooleanLabel(value: boolean | undefined, trueLabel: string, falseLabel: string) {
-  if (typeof value !== "boolean") return "Not initialized";
-  return value ? trueLabel : falseLabel;
-}
-
-function qaGateCompact(gate: QaGateRow) {
-  const details = [
-    gate.severity !== "unknown" ? `severity: ${gate.severity}` : "",
-    `${gate.blockers.length} blockers`,
-    `${gate.warnings.length} warnings`,
-    gate.sourceRefs.length ? `refs: ${gate.sourceRefs.join(", ")}` : "",
-    gate.notes.length ? `notes: ${gate.notes.join(" · ")}` : "",
-  ].filter(Boolean);
-  return `${gate.label}: ${gate.status}${details.length ? ` · ${details.join(" · ")}` : ""}`;
-}
-
-function QaHarnessDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const harness = getQaHarness(runtimeState);
-  const summary = harness.summary;
-  const visibleItems = harness.items.slice(0, 8);
-  const hardLockRows = [
-    {
-      label: "overallFirst",
-      value: qaLockLabel(harness.hardLocks.overallFirst),
-      primary: true,
-    },
-    {
-      label: "noAutoPromotion",
-      value: qaLockLabel(harness.hardLocks.noAutoPromotion),
-      primary: true,
-    },
-    {
-      label: "semanticRepairForbidden",
-      value: qaLockLabel(harness.hardLocks.semanticRepairForbidden),
-      primary: true,
-    },
-    {
-      label: "workerSelfReportCannotPassQa",
-      value: qaLockLabel(harness.hardLocks.workerSelfReportCannotPassQa),
-      primary: true,
-    },
-    {
-      label: "dryRunOnly",
-      value: qaLockLabel(harness.hardLocks.dryRunOnly ?? summary.dryRunOnly),
-    },
-    {
-      label: "providerSubmissionForbidden",
-      value: qaLockLabel(harness.hardLocks.providerSubmissionForbidden),
-    },
-    {
-      label: "liveSubmitAllowed",
-      value: qaLockLabel(harness.hardLocks.liveSubmitAllowed ?? summary.liveSubmitAllowed, true),
-    },
-    {
-      label: "noFileMutation",
-      value: qaLockLabel(harness.hardLocks.noFileMutation ?? summary.noFileMutation),
-    },
-  ];
-
-  return (
-    <section className="machine-panel qa-harness-panel">
-      <div className="audit-head">
-        <ShieldAlert size={17} />
-        <span>QA Harness</span>
-      </div>
-      <div className="qa-harness-meta">
-        <small>schema: {harness.schemaVersion}</small>
-        <small>generated: {harness.generatedAt}</small>
-        <small>{harness.dimensions.length} fixed dimensions</small>
-      </div>
-      <div className="summary-grid qa-harness-metrics">
-        <Metric label="Items" value={qaMetricValue(harness, summary.totalItems)} detail={qaMetricDetail(harness, "QA item count")} />
-        <Metric label="Formal eligible" value={qaMetricValue(harness, summary.formalEligible)} detail={qaMetricDetail(harness, "eligible after QA")} />
-        <Metric label="Human review" value={qaMetricValue(harness, summary.requiresHumanReview)} detail={qaMetricDetail(harness, "requires human decision")} />
-        <Metric label="Blocked" value={qaMetricValue(harness, summary.blocked)} detail={qaMetricDetail(harness, "cannot pass current gate")} />
-        <Metric label="Unknown" value={qaMetricValue(harness, summary.unknown)} detail={qaMetricDetail(harness, "missing facts or context")} />
-        <Metric label="Failed" value={qaMetricValue(harness, summary.failed)} detail={qaMetricDetail(harness, "failed QA checks")} />
-        <Metric label="Partial" value={qaMetricValue(harness, summary.partial)} detail={qaMetricDetail(harness, "partial evidence")} />
-      </div>
-
-      <div className="watcher-lock-strip qa-lock-strip">
-        {hardLockRows.map((lock) => (
-          <div key={lock.label} className={lock.primary ? "qa-lock-primary" : undefined}>
-            <span>{lock.label}</span>
-            <StatusPill value={lock.value} />
-          </div>
-        ))}
-      </div>
-
-      {!harness.initialized && (
-        <p className="muted-copy generation-empty-state">QA Harness not initialized in this runtime state.</p>
-      )}
-
-      {harness.initialized && (
-        <div className="qa-harness-sections">
-          <div className="qa-section-head">
-            <h3>Overall gates</h3>
-            <small>{qaHarnessDimensions.map(qaDimensionLabel).join(" · ")}</small>
-          </div>
-          {!harness.hasOverall && <p className="muted-copy">Not initialized</p>}
-          {harness.hasOverall && (
-            <div className="qa-overall-table">
-              {harness.overall.map((gate) => (
-                <details key={gate.dimension} className="qa-overall-row" open={gate.blockers.length > 0}>
-                  <summary>
-                    <span>
-                      <strong>{gate.label}</strong>
-                      <small>{gate.dimension}</small>
-                    </span>
-                    <StatusPill value={gate.status} />
-                    <span>{gate.severity}</span>
-                    <small>{gate.blockers.length} blockers · {gate.warnings.length} warnings · {gate.sourceRefs.length} refs</small>
-                  </summary>
-                  <div className="qa-gate-details">
-                    <CompactList items={gate.blockers} empty="No blockers reported." />
-                    <CompactList items={gate.warnings} empty="No warnings reported." />
-                    <CompactList items={[...gate.sourceRefs.map((ref) => `source: ${ref}`), ...gate.notes]} empty="No source refs or notes reported." />
-                  </div>
-                </details>
-              ))}
-            </div>
-          )}
-
-          <div className="qa-section-head">
-            <h3>Item details</h3>
-            <small>showing first {visibleItems.length} of {harness.items.length}</small>
-          </div>
-          {!harness.hasItems && <p className="muted-copy">Not initialized</p>}
-          {harness.hasItems && !visibleItems.length && <p className="muted-copy">No QA items reported.</p>}
-          {Boolean(visibleItems.length) && (
-            <div className="qa-item-table">
-              {visibleItems.map((item, index) => {
-                const jobLink = item.harnessJobId || item.jobId || item.checkpointResumeItemId || "Not initialized";
-                return (
-                  <details key={`${item.qaItemId}-${index}`} className="qa-item-row" open={item.blockers.length > 0}>
-                    <summary>
-                      <span>
-                        <strong>{item.shotId}</strong>
-                        <small>{item.qaItemId}</small>
-                      </span>
-                      <StatusPill value={item.overallStatus} />
-                      <StatusPill value={qaBooleanLabel(item.formalPromotionEligible, "formal eligible", "formal blocked")} />
-                      <StatusPill value={qaBooleanLabel(item.requiresHumanReview, "human review", "review clear")} />
-                      <span>
-                        <strong>{jobLink}</strong>
-                        <small>{item.harnessJobId ? "harness job" : "job/checkpoint link"}</small>
-                      </span>
-                      <small>{item.blockers.length} blockers · {item.warnings.length} warnings · {item.sourceCoverage.length} coverage rows</small>
-                    </summary>
-                    <div className="qa-item-details">
-                      <small>task: {item.taskPlanId || "Not initialized"}</small>
-                      <small>job: {item.jobId || "Not initialized"}</small>
-                      <small>harness: {item.harnessJobId || "Not initialized"}</small>
-                      <small>checkpoint: {item.checkpointResumeItemId || "Not initialized"}</small>
-                      <div className="pipeline-details qa-item-detail-sections">
-                        <details>
-                          <summary>sourceCoverage ({item.sourceCoverage.length})</summary>
-                          <CompactList items={item.sourceCoverage} empty="No source coverage reported." />
-                        </details>
-                        <details open={item.blockers.length > 0}>
-                          <summary>Blockers ({item.blockers.length})</summary>
-                          <CompactList items={item.blockers} empty="No blockers reported." />
-                        </details>
-                        <details open={item.warnings.length > 0}>
-                          <summary>Warnings ({item.warnings.length})</summary>
-                          <CompactList items={item.warnings} empty="No warnings reported." />
-                        </details>
-                        <details>
-                          <summary>Dimension gates ({item.dimensionGates.length})</summary>
-                          <CompactList items={item.dimensionGates.map(qaGateCompact)} empty="No dimension gates reported." />
-                        </details>
-                        <details>
-                          <summary>Notes ({item.notes.length})</summary>
-                          <CompactList items={item.notes} empty="No item notes reported." />
-                        </details>
-                      </div>
-                    </div>
-                  </details>
-                );
-              })}
-              {harness.items.length > visibleItems.length && (
-                <small className="muted-copy watcher-more">Showing {visibleItems.length} of {harness.items.length} QA item(s).</small>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function toolRuntimeMetricValue(harness: ToolRuntimeHarnessState, value?: number) {
-  return harness.initialized && typeof value === "number" ? `${value}` : "Not initialized";
-}
-
-function toolRuntimeMetricDetail(harness: ToolRuntimeHarnessState, detail: string) {
-  return harness.initialized ? detail : "runtimeState.toolRuntimeHarness missing";
-}
-
-function toolRuntimeLockLabel(value: boolean | undefined) {
-  if (typeof value !== "boolean") return "Not initialized";
-  return value ? "locked" : "not locked";
-}
-
-function toolRuntimeRequiredLabel(value: boolean | undefined) {
-  if (typeof value !== "boolean") return "Not initialized";
-  return value ? "required" : "not required";
-}
-
-function toolRuntimeBooleanLabel(value: boolean | undefined, trueLabel: string, falseLabel: string) {
-  if (typeof value !== "boolean") return "Not initialized";
-  return value ? trueLabel : falseLabel;
-}
-
-function ToolRuntimeHarnessDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const harness = getToolRuntimeHarness(runtimeState);
-  const summary = harness.summary;
-  const visibleChecks = harness.checks.slice(0, 8);
-  const optionalMissing = typeof summary.optionalMissing === "number" ? summary.optionalMissing : 0;
-  const lockRows = [
-    { label: "noInstall", value: toolRuntimeLockLabel(harness.hardLocks.noInstall) },
-    { label: "noCredentialRead", value: toolRuntimeLockLabel(harness.hardLocks.noCredentialRead) },
-    { label: "arbitraryShellExecutionBlocked", value: toolRuntimeLockLabel(harness.hardLocks.arbitraryShellExecutionBlocked) },
-    { label: "sidecarDaemonDisabled", value: toolRuntimeLockLabel(harness.hardLocks.sidecarDaemonDisabled) },
-    { label: "providerSubmissionForbidden", value: toolRuntimeLockLabel(harness.hardLocks.providerSubmissionForbidden) },
-    { label: "platformPathAbstractionRequired", value: toolRuntimeRequiredLabel(harness.hardLocks.platformPathAbstractionRequired) },
-  ];
-  const pathPolicyRows = [
-    {
-      label: "mac posix",
-      value: harness.pathPolicy.macPathStyle,
-      detail: toolRuntimeRequiredLabel(harness.pathPolicy.platformPathAbstractionRequired),
-    },
-    {
-      label: "win32",
-      value: harness.pathPolicy.windowsPathStyle,
-      detail: `${harness.pathPolicy.allowedRoots.length} allowed root(s)`,
-    },
-    {
-      label: "project-relative",
-      value: toolRuntimeRequiredLabel(harness.pathPolicy.projectRootRelativeRequired),
-      detail: "project root policy",
-    },
-    {
-      label: "allowed roots",
-      value: harness.pathPolicy.allowedRoots.join(", ") || "Not initialized",
-      detail: `${harness.pathPolicy.blockers.length} blockers / ${harness.pathPolicy.warnings.length} warnings`,
-    },
-  ];
-
-  return (
-    <section className="machine-panel tool-runtime-panel">
-      <div className="audit-head">
-        <Wrench size={17} />
-        <span>Tool Runtime Harness</span>
-      </div>
-      <div className="qa-harness-meta">
-        <small>schema: {harness.schemaVersion}</small>
-        <small>generated: {harness.generatedAt}</small>
-        <small>{harness.hasSummary ? "summary reported" : "summary Not initialized"}</small>
-        <small>{harness.hasHardLocks ? "hard locks reported" : "hard locks Not initialized"}</small>
-      </div>
-
-      <div className="summary-grid tool-runtime-metrics">
-        <Metric label="Checks" value={toolRuntimeMetricValue(harness, summary.totalChecks)} detail={toolRuntimeMetricDetail(harness, "tool readiness checks")} />
-        <Metric label="Ready" value={toolRuntimeMetricValue(harness, summary.ready)} detail={toolRuntimeMetricDetail(harness, "diagnostic ready")} />
-        <Metric label="Missing" value={toolRuntimeMetricValue(harness, summary.missing)} detail={toolRuntimeMetricDetail(harness, "required + optional")} />
-        <Metric label="Planned" value={toolRuntimeMetricValue(harness, summary.planned)} detail={toolRuntimeMetricDetail(harness, "planned slots")} />
-        <Metric label="Blocked" value={toolRuntimeMetricValue(harness, summary.blocked)} detail={toolRuntimeMetricDetail(harness, "cannot execute now")} />
-        <Metric label="Unknown" value={toolRuntimeMetricValue(harness, summary.unknown)} detail={toolRuntimeMetricDetail(harness, "missing facts")} />
-        <Metric label="Required missing" value={toolRuntimeMetricValue(harness, summary.requiredMissing)} detail={toolRuntimeMetricDetail(harness, `${optionalMissing} optional missing`)} />
-      </div>
-
-      <div className="watcher-lock-strip tool-runtime-lock-strip">
-        {lockRows.map((lock) => (
-          <div key={lock.label}>
-            <span>{lock.label}</span>
-            <StatusPill value={lock.value} />
-          </div>
-        ))}
-      </div>
-
-      {!harness.initialized && (
-        <p className="muted-copy generation-empty-state">Tool Runtime Harness not initialized in this runtime state.</p>
-      )}
-
-      {harness.initialized && (
-        <div className="tool-runtime-sections">
-          <div>
-            <div className="qa-section-head">
-              <h3>Path policy</h3>
-              <small>{harness.hasPathPolicy ? "platform path abstraction" : "Not initialized"}</small>
-            </div>
-            {!harness.hasPathPolicy && <p className="muted-copy">Not initialized</p>}
-            {harness.hasPathPolicy && (
-              <>
-                <div className="tool-runtime-policy-grid">
-                  {pathPolicyRows.map((row) => (
-                    <div key={row.label}>
-                      <span>{row.label}</span>
-                      <strong>{row.value}</strong>
-                      <small>{row.detail}</small>
-                    </div>
-                  ))}
-                </div>
-                <div className="pipeline-details tool-runtime-policy-details">
-                  <details open={harness.pathPolicy.blockers.length > 0}>
-                    <summary>Policy blockers ({harness.pathPolicy.blockers.length})</summary>
-                    <CompactList items={harness.pathPolicy.blockers} empty="No path policy blockers reported." />
-                  </details>
-                  <details open={harness.pathPolicy.warnings.length > 0}>
-                    <summary>Policy warnings ({harness.pathPolicy.warnings.length})</summary>
-                    <CompactList items={harness.pathPolicy.warnings} empty="No path policy warnings reported." />
-                  </details>
-                  <details>
-                    <summary>Policy notes ({harness.pathPolicy.notes.length})</summary>
-                    <CompactList items={harness.pathPolicy.notes} empty="No path policy notes reported." />
-                  </details>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div>
-            <div className="qa-section-head">
-              <h3>Tool checks</h3>
-              <small>showing first {visibleChecks.length} of {harness.checks.length}</small>
-            </div>
-            {!harness.hasChecks && <p className="muted-copy">Not initialized</p>}
-            {harness.hasChecks && !visibleChecks.length && <p className="muted-copy">No tool runtime checks reported.</p>}
-            {Boolean(visibleChecks.length) && (
-              <div className="tool-runtime-check-table">
-                {visibleChecks.map((check, index) => {
-                  const requiredFor = check.requiredFor.join(", ") || "Not initialized";
-                  const platformSupport = check.platformSupport.join(", ") || "Not initialized";
-                  return (
-                    <details key={`${check.checkId}-${index}`} className="tool-runtime-row" open={check.blockers.length > 0}>
-                      <summary>
-                        <span>
-                          <strong>{check.label}</strong>
-                          <small>{check.checkId}</small>
-                          <small>{check.category}</small>
-                        </span>
-                        <StatusPill value={check.status} />
-                        <StatusPill value={check.pathStatus} />
-                        <span>
-                          <strong>{check.path || "No path"}</strong>
-                          <small>{check.version ? `version ${check.version}` : "version Not initialized"}</small>
-                        </span>
-                        <span>
-                          <strong>{requiredFor}</strong>
-                          <small>{platformSupport}</small>
-                        </span>
-                        <small>
-                          {toolRuntimeBooleanLabel(check.canExecuteNow, "canExecute true", "canExecute false")} / {check.executionMode}
-                        </small>
-                      </summary>
-                      <div className="tool-runtime-check-details">
-                        <small>category: {check.category}</small>
-                        <small>requiredFor: {requiredFor}</small>
-                        <small>platformSupport: {platformSupport}</small>
-                        <small>missingIsBlocker: {toolRuntimeBooleanLabel(check.missingIsBlocker, "true", "false")}</small>
-                        <div className="pipeline-details tool-runtime-detail-sections">
-                          <details open={check.blockers.length > 0}>
-                            <summary>Blockers ({check.blockers.length})</summary>
-                            <CompactList items={check.blockers} empty="No blockers reported." />
-                          </details>
-                          <details open={check.warnings.length > 0}>
-                            <summary>Warnings ({check.warnings.length})</summary>
-                            <CompactList items={check.warnings} empty="No warnings reported." />
-                          </details>
-                          <details>
-                            <summary>Source refs ({check.sourceRefs.length})</summary>
-                            <CompactList items={check.sourceRefs} empty="No source refs reported." />
-                          </details>
-                          <details>
-                            <summary>Notes ({check.notes.length})</summary>
-                            <CompactList items={check.notes} empty="No notes reported." />
-                          </details>
-                        </div>
-                      </div>
-                    </details>
-                  );
-                })}
-                {harness.checks.length > visibleChecks.length && (
-                  <small className="muted-copy watcher-more">Showing {visibleChecks.length} of {harness.checks.length} tool runtime check(s).</small>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function AudioDiagnosticsPanel({ audioPlanning }: { audioPlanning: AudioPlanningState }) {
-  const plannedSlots = audioPlanning.providerSlots.filter((slot) => slot.state === "planned").length;
-  const liveSlots = audioPlanning.providerSlots.filter((slot) => slot.liveSubmitAllowed).length;
-  const registry = audioPlanning.voiceSourceRegistry;
-  const exportSummary = audioPlanning.exportPackageSummary;
-
-  return (
-    <section className="machine-panel audio-diagnostics-panel">
-      <div className="audit-head">
-        <Radio size={17} />
-        <span>Audio Planning</span>
-      </div>
-      <div className="summary-grid">
-        <Metric label="Shot Plans" value={`${audioPlanning.shotPlans.length}`} detail="AudioPlan contracts" />
-        <Metric label="Preview Mix" value={`${audioPlanning.previewMix.eventCount}`} detail="placeholder event(s)" />
-        <Metric label="Missing Output" value={`${audioPlanning.previewMix.missingOutputPathCount}`} detail="planned audio paths" />
-        <Metric label="Provider Slots" value={`${plannedSlots}/${audioPlanning.providerSlots.length}`} detail={`${liveSlots} live · submit forbidden`} />
-      </div>
-      <div className="audio-diagnostics-grid">
-        <div>
-          <h3>Voice Source Registry</h3>
-          <div className="field-grid compact">
-            <label>Sources</label>
-            <span>{registry.sourceCount}</span>
-            <label>Secrets</label>
-            <span>{registry.storesSecrets ? "stored" : "not stored"}</span>
-            <label>Planned</label>
-            <span>{registry.plannedCount}</span>
-            <label>Live</label>
-            <span>{registry.liveSubmitAllowed ? "allowed" : "false"}</span>
-          </div>
-          <CompactList
-            items={registry.sources.map((source) => `${source.label} · ${source.status} · ${statusLabel(source.kind)}`)}
-            empty="No voice sources registered."
-          />
-        </div>
-        <div>
-          <h3>Audio Provider Slots</h3>
-          <CompactList
-            items={audioPlanning.providerSlots.map((slot) => `${slot.slot} · ${slot.state} · live ${slot.liveSubmitAllowed ? "allowed" : "false"}`)}
-            empty="No audio provider slots planned."
-          />
-        </div>
-        <div>
-          <h3>Export Package Summary</h3>
-          <div className="field-grid compact">
-            <label>Status</label>
-            <span>{exportSummary.status}</span>
-            <label>Profiles</label>
-            <span>{exportSummary.includedInExportProfiles.map(statusLabel).join(", ")}</span>
-            <label>Dry Run</label>
-            <span>{exportSummary.dryRunOnly ? "true" : "false"}</span>
-            <label>Provider</label>
-            <span>{exportSummary.providerSubmissionForbidden ? "forbidden" : "allowed"}</span>
-          </div>
-          <CompactList
-            items={[
-              ...exportSummary.plannedCategories.map((item) => `category: ${item}`),
-              ...exportSummary.blockedReasons.map((item) => `blocked: ${item}`),
-            ]}
-            empty="No export package notes."
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function VoiceAudioSettingsDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildVoiceAudioSettingsUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel phase28-voice-audio-panel">
-      <div className="audit-head">
-        <Radio size={17} />
-        <span>Phase 28 Voice/Audio Settings</span>
-      </div>
-      <div className="summary-grid phase28-metrics">
-        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "settings summary" : "blocked/missing"} />
-        <Metric label="Voice Sources" value={`${summary.voiceSourceCount}`} detail={summary.voiceSourceDetail} />
-        <Metric label="Audio Plans" value={`${summary.audioPlanCount}`} detail={summary.audioPlanDetail} />
-        <Metric label="No BGM Policy" value={summary.noBgmPolicy ? "on" : "off"} detail={summary.noBgmDetail} />
-        <Metric label="Provider Slots" value={`${summary.providerSlotsPlanned}/${summary.providerSlotsTotal}`} detail={`${summary.providerSlotsLive} live`} />
-      </div>
-      <div className="phase28-summary-list">
-        <div>
-          <strong>Blockers / warnings</strong>
-          <small>{summary.blockersWarnings.length ? summary.blockersWarnings.slice(0, 4).join(" · ") : "none reported"}</small>
-        </div>
-        <div>
-          <strong>Provider slots planned/live</strong>
-          <small>{summary.providerSlotsPlanned} planned · {summary.providerSlotsLive} live · {summary.providerSlotsTotal} total</small>
-        </div>
-      </div>
-      <div className="phase28-lock-strip" aria-label="Phase 28 Voice/Audio Settings hard locks">
-        {summary.hardLocks.slice(0, 8).map((lock) => (
-          <span key={lock}>{lock}</span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ProviderEnablementGateDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildProviderEnablementGateUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel phase30-provider-gate-panel">
-      <div className="audit-head">
-        <ShieldAlert size={17} />
-        <span>Provider Enablement Gate</span>
-      </div>
-      <div className="summary-grid phase30-metrics">
-        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "read-only status" : "blocked/missing"} />
-        <Metric label="Ready" value={`${summary.readyForConfirmation}`} detail="ready_for_confirmation" />
-        <Metric label="Blocked" value={`${summary.blocked}`} detail={`${summary.parked} parked`} />
-        <Metric label="Token" value={summary.confirmationTokenStatus} detail="confirmation placeholder" />
-        <Metric label="Packet" value={summary.packetCompleteStatus} detail="enablement packet" />
-        <Metric label="Closed Loop" value={summary.closedLoopStatus} detail="watcher / manifest / QA" />
-      </div>
-      <div className="phase30-summary-list">
-        <div>
-          <strong>Forbidden paths absent</strong>
-          <small>{summary.forbiddenPathsAbsent}</small>
-        </div>
-        <div>
-          <strong>Provider submit</strong>
-          <small>{summary.canSubmitProvider} · {summary.submitBlocked}</small>
-        </div>
-        <div>
-          <strong>Credential / live submit / shell</strong>
-          <small>{summary.credentialLiveShellLocked}</small>
-        </div>
-        <div>
-          <strong>Blockers / warnings</strong>
-          <small>{summary.blockersWarnings.length ? summary.blockersWarnings.slice(0, 5).join(" · ") : "none reported"}</small>
-        </div>
-      </div>
-      <div className="phase30-lock-strip" aria-label="Phase 30 Provider Enablement Gate hard locks">
-        {summary.hardLocks.slice(0, 10).map((lock) => (
-          <span key={lock}>{lock}</span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ProviderExecutionPermissionGateDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildProviderExecutionPermissionGateUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel phase31-provider-permission-panel">
-      <div className="audit-head">
-        <ShieldAlert size={17} />
-        <span>Provider Execution Permission Gate</span>
-      </div>
-      <div className="summary-grid phase31-metrics">
-        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "confirmation shell" : "blocked/missing"} />
-        <Metric label="Reviewable" value={`${summary.readyForUserReview}`} detail={`${summary.canAskUserToConfirm} can ask`} />
-        <Metric label="Blocked" value={`${summary.blocked}`} detail={`${summary.parked} parked`} />
-        <Metric label="Action Confirm" value={summary.actionTimeConfirmation} detail="not prefilled" />
-        <Metric label="Auto Submit" value={summary.automaticSubmit} detail="manual gate only" />
-        <Metric label="Provider Submit" value={summary.providerSubmit} detail="0 allowed" />
-      </div>
-      <div className="phase31-summary-list">
-        <div>
-          <strong>Credential / worker / file</strong>
-          <small>{summary.credentialWorkerFileLocks}</small>
-        </div>
-        <div>
-          <strong>Blockers / warnings</strong>
-          <small>{summary.blockersWarnings.length ? summary.blockersWarnings.slice(0, 5).join(" · ") : "none reported"}</small>
-        </div>
-      </div>
-      <div className="phase31-lock-strip" aria-label="Phase 31 Provider Execution Permission Gate hard locks">
-        {summary.hardLocks.slice(0, 10).map((lock) => (
-          <span key={lock}>{lock}</span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ProviderActionConfirmationReceiptDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildProviderActionConfirmationReceiptUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel phase32-provider-action-receipt-panel">
-      <div className="audit-head">
-        <ShieldAlert size={17} />
-        <span>Provider Action Confirmation Receipt</span>
-      </div>
-      <div className="summary-grid phase32-metrics">
-        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "Phase 32 receipt shell" : "blocked/missing"} />
-        <Metric label="Ready Receipts" value={`${summary.readyReceipts}`} detail={`${summary.parked} parked`} />
-        <Metric label="Blocked" value={`${summary.blocked}`} detail="receipt blockers" />
-        <Metric label="Confirmed Count" value={`${summary.confirmedCount}`} detail="action-time confirmations" />
-        <Metric label="Provider Submit" value={summary.providerSubmitBlocked} detail="read-only" />
-        <Metric label="Credential / Worker / File" value={summary.credentialWorkerFileLocked} detail="locked route summary" />
-      </div>
-      <div className="phase32-summary-list">
-        <div>
-          <strong>Receipt status</strong>
-          <small>{summary.readyReceipts} ready receipt(s) · {summary.blocked} blocked · {summary.parked} parked · {summary.confirmedCount} confirmed</small>
-        </div>
-        <div>
-          <strong>Provider submit blocked</strong>
-          <small>{summary.providerSubmitBlocked}</small>
-        </div>
-        <div>
-          <strong>Credential / worker / file locked</strong>
-          <small>{summary.credentialWorkerFileLocked}</small>
-        </div>
-        <div>
-          <strong>Blockers / warnings</strong>
-          <small>{summary.blockersWarnings.length ? summary.blockersWarnings.slice(0, 5).join(" · ") : "none reported"}</small>
-        </div>
-      </div>
-      <div className="phase32-lock-strip" aria-label="Phase 32 Provider Action Confirmation Receipt hard locks">
-        {summary.hardLocks.slice(0, 10).map((lock) => (
-          <span key={lock}>{lock}</span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ProviderExecutionHandoffDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildProviderExecutionHandoffUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel phase33-provider-execution-handoff-panel">
-      <div className="audit-head">
-        <ShieldAlert size={17} />
-        <span>Provider Execution Handoff</span>
-      </div>
-      <div className="summary-grid phase33-metrics">
-        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "Phase 33 final action gate" : "blocked/missing"} />
-        <Metric label="Handoff Count" value={`${summary.handoffCount}`} detail="handoff rows" />
-        <Metric label="Blocked Count" value={`${summary.blockedCount}`} detail="handoff blockers" />
-        <Metric label="Confirmed Count" value={`${summary.confirmedCount}`} detail="receipt-backed only" />
-        <Metric label="Provider Submit" value={summary.providerSubmitLocked} detail="no live action" />
-        <Metric label="Credential / Worker / File" value={summary.credentialWorkerFileLocked} detail="locked route summary" />
-      </div>
-      <div className="phase33-summary-list">
-        <div>
-          <strong>Final action gate</strong>
-          <small>{summary.handoffCount} handoff(s) · {summary.blockedCount} blocked · {summary.confirmedCount} confirmed</small>
-        </div>
-        <div>
-          <strong>Provider submit locked</strong>
-          <small>{summary.providerSubmitLocked}</small>
-        </div>
-        <div>
-          <strong>Credential / worker / file locked</strong>
-          <small>{summary.credentialWorkerFileLocked}</small>
-        </div>
-        <div>
-          <strong>Blockers / warnings</strong>
-          <small>{summary.blockersWarnings.length ? summary.blockersWarnings.slice(0, 5).join(" · ") : "none reported"}</small>
-        </div>
-      </div>
-      <div className="phase33-lock-strip" aria-label="Phase 33 Provider Execution Handoff hard locks">
-        {summary.hardLocks.slice(0, 10).map((lock) => (
-          <span key={lock}>{lock}</span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function LocalOrchestratorDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildLocalOrchestratorUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel phase34-local-orchestrator-panel">
-      <div className="audit-head">
-        <Gauge size={17} />
-        <span>Local Orchestrator / Auto-continue</span>
-      </div>
-      <div className="summary-grid phase34-metrics">
-        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "read-only queue state" : "blocked/missing"} />
-        <Metric label="Queue Total" value={`${summary.queueTotal}`} detail="planned items" />
-        <Metric label="Ready" value={`${summary.ready}`} detail={`${summary.nextReadyCount} next-ready`} />
-        <Metric label="Waiting" value={`${summary.waiting}`} detail="held by earlier facts" />
-        <Metric label="Running / Output" value={`${summary.runningPlanned} / ${summary.waitingOutput}`} detail="planned / waiting output" />
-        <Metric label="QA Pending" value={`${summary.qaPending}`} detail={`${summary.needsReview} needs review`} />
-        <Metric label="Blocked" value={`${summary.blocked + summary.failed}`} detail={`${summary.failed} failed`} />
-        <Metric label="Complete Verified" value={`${summary.completeVerified}`} detail="verified complete" />
-        <Metric label="Stalled" value={`${summary.stalled}`} detail="timeout/watch evidence" />
-        <Metric label="Auto-continue" value={`${summary.nextReadyCount}`} detail={summary.autoContinueMode} />
-      </div>
-      <div className="phase34-summary-list">
-        <div>
-          <strong>Queue state</strong>
-          <small>{summary.queueTotal} total · {summary.ready} ready · {summary.waiting} waiting · {summary.runningPlanned} running planned · {summary.waitingOutput} waiting output</small>
-        </div>
-        <div>
-          <strong>Review gates</strong>
-          <small>{summary.qaPending} QA pending · {summary.needsReview} needs review · {summary.stalled} stalled</small>
-        </div>
-        <div>
-          <strong>Resolution</strong>
-          <small>{summary.blocked} blocked · {summary.failed} failed · {summary.completeVerified} complete verified</small>
-        </div>
-        <div>
-          <strong>Provider / file / daemon locks</strong>
-          <small>{summary.providerFileDaemonLocks}</small>
-        </div>
-        <div>
-          <strong>Blockers / warnings</strong>
-          <small>{summary.blockersWarnings.length ? summary.blockersWarnings.slice(0, 5).join(" · ") : "none reported"}</small>
-        </div>
-      </div>
-      <div className="phase34-lock-strip" aria-label="Phase 34 Local Orchestrator hard locks">
-        {summary.hardLocks.slice(0, 10).map((lock) => (
-          <span key={lock}>{lock}</span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function VisualConsistencyContractDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildVisualConsistencyContractUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel visual-consistency-contract-panel">
-      <div className="audit-head">
-        <Eye size={17} />
-        <span>Visual Consistency Contract</span>
-      </div>
-      <div className="summary-grid visual-consistency-contract-metrics">
-        <Metric label="Readiness" value={summary.readiness} detail="Phase 37 typed evidence" />
-        <Metric label="Typed Gates" value={summary.gateStatus} detail="identity/scene/spatial/keyframe/master QA" />
-        <Metric label="Shot Layout" value={summary.shotLayoutStatus} detail="subject/camera/axis/anchors" />
-        <Metric label="Spatial Memory" value={summary.geometryStatus} detail="camera vector/world position" />
-        <Metric label="Keyframe Pair" value={summary.keyframePairStatus} detail="same-shot end frame must derive" />
-        <Metric label="Motion / Repair" value={summary.driftRepairStatus} detail="large drift and semantic OpenCV repair blocked" />
-      </div>
-      <div className="phase17-rule-strip">
-        {summary.requiredGates.map((gate) => (
-          <span key={gate}>{gate}</span>
-        ))}
-      </div>
-      <div className="pipeline-details checker-details">
-        <details open={Boolean(summary.blockersWarnings.length)}>
-          <summary>Phase 37 blockers / warnings ({summary.blockersWarnings.length})</summary>
-          <CompactList items={summary.blockersWarnings} empty="No Phase 37 blockers reported." />
-        </details>
-      </div>
-    </section>
-  );
-}
-
-function FullTaskSubagentPacketPlannerDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildFullTaskSubagentPacketPlannerUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel full-task-subagent-packet-planner-panel">
-      <div className="audit-head">
-        <FileJson size={17} />
-        <span>Full Task Subagent Packet Planner</span>
-      </div>
-      <div className="summary-grid full-task-subagent-packet-planner-metrics">
-        <Metric label="Readiness" value={summary.readiness} detail="Phase 38 typed evidence" />
-        <Metric label="Task Coverage" value={summary.coverageStatus} detail="production task kinds" />
-        <Metric label="Validated Packet" value={summary.packetStatus} detail="formal task input contract" />
-        <Metric label="Expected Outputs" value={summary.outputStatus} detail="worker completion contract" />
-        <Metric label="Source / Knowledge Trace" value={summary.traceStatus} detail="source fact trace + knowledge trace" />
-        <Metric label="Free Text" value={summary.freeTextStatus} detail="worker/task route guard" />
-        <Metric label="Routes" value={summary.routeStatus} detail="worker/provider/file/credential/shell" />
-      </div>
-      <div className="phase17-rule-strip">
-        {summary.requiredGates.map((gate) => (
-          <span key={gate}>{gate}</span>
-        ))}
-      </div>
-      <div className="pipeline-details checker-details">
-        <details open={Boolean(summary.blockersWarnings.length)}>
-          <summary>Phase 38 blockers / warnings ({summary.blockersWarnings.length})</summary>
-          <CompactList items={summary.blockersWarnings} empty="No Phase 38 blockers reported." />
-        </details>
-      </div>
-    </section>
-  );
-}
-
-function KnowledgePackUserManagementDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildKnowledgePackUserManagementUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel knowledge-pack-user-management-panel">
-      <div className="audit-head">
-        <FileJson size={17} />
-        <span>Phase 39 Knowledge Pack User Management</span>
-      </div>
-      <div className="summary-grid knowledge-pack-user-management-metrics">
-        <Metric label="Readiness" value={summary.readiness} detail="typed evidence only" />
-        <Metric label="User Flows" value={summary.userFlowStatus} detail="import/create/enable/disable" />
-        <Metric label="Checks" value={summary.checkStatus} detail="version/hash/dependency" />
-        <Metric label="Route / Conflict" value={summary.routeConflictStatus} detail="route test + conflict detection" />
-        <Metric label="Hard Gates" value={summary.overrideStatus} detail="override forbidden" />
-        <Metric label="Injection" value={summary.injectionStatus} detail="scoped verified packs" />
-        <Metric label="References" value={summary.promotionStatus} detail="formal promotion gated" />
-      </div>
-      <div className="phase17-rule-strip">
-        {summary.requiredGates.map((gate) => (
-          <span key={gate}>{gate}</span>
-        ))}
-      </div>
-      <div className="pipeline-details checker-details">
-        <details open={Boolean(summary.blockersWarnings.length)}>
-          <summary>Phase 39 blockers / warnings ({summary.blockersWarnings.length})</summary>
-          <CompactList items={summary.blockersWarnings} empty="No Phase 39 blockers reported." />
-        </details>
-      </div>
-    </section>
-  );
-}
-
-function CodexWorkerRuntimeGateDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildCodexWorkerRuntimeGateUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel codex-worker-runtime-gate-panel">
-      <div className="audit-head">
-        <LockKeyhole size={17} />
-        <span>Phase 40 Codex Worker Runtime Gate</span>
-      </div>
-      <div className="summary-grid codex-worker-runtime-gate-metrics">
-        <Metric label="Readiness" value={summary.readiness} detail="Phase 40 typed evidence" />
-        <Metric label="Runtime Contract" value={summary.contractStatus} detail="worker runtime contract defined" />
-        <Metric label="Default Gate" value={summary.gateStatus} detail="default gated off" />
-        <Metric label="Input" value={summary.inputStatus} detail="validated envelope only" />
-        <Metric label="Output" value={summary.outputStatus} detail="structured result only" />
-        <Metric label="Execution Paths" value={summary.executionStatus} detail="spawn/resume/daemon/shell/credential/file/provider/free-text closed" />
-      </div>
-      <div className="phase17-rule-strip">
-        {summary.requiredGates.map((gate) => (
-          <span key={gate}>{gate}</span>
-        ))}
-      </div>
-      <div className="pipeline-details checker-details">
-        <details open={Boolean(summary.blockersWarnings.length)}>
-          <summary>Phase 40 blockers / warnings ({summary.blockersWarnings.length})</summary>
-          <CompactList items={summary.blockersWarnings} empty="No Phase 40 blockers reported." />
-        </details>
-      </div>
-    </section>
-  );
-}
-
-function ProviderClosedLoopShellDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildProviderClosedLoopShellUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel provider-closed-loop-shell-panel">
-      <div className="audit-head">
-        <LockKeyhole size={17} />
-        <span>Phase 41 Provider Closed-loop Shell</span>
-      </div>
-      <div className="summary-grid provider-closed-loop-shell-metrics">
-        <Metric label="Readiness" value={summary.readiness} detail="Phase 41 typed evidence" />
-        <Metric label="Provider Shells" value={summary.shellStatus} detail="Image2 + Seedance" />
-        <Metric label="Watcher" value={summary.watcherStatus} detail="required" />
-        <Metric label="Manifest" value={summary.manifestStatus} detail="required" />
-        <Metric label="QA Gate" value={summary.qaStatus} detail="required" />
-        <Metric label="Promotion Gate" value={summary.promotionStatus} detail="required" />
-        <Metric label="Safety" value={summary.safetyStatus} detail="provider submit/live submit/credential/shell closed" />
-      </div>
-      <div className="phase17-rule-strip">
-        {summary.requiredGates.map((gate) => (
-          <span key={gate}>{gate}</span>
-        ))}
-      </div>
-      <div className="pipeline-details checker-details">
-        <details open={Boolean(summary.blockersWarnings.length)}>
-          <summary>Phase 41 blockers / warnings ({summary.blockersWarnings.length})</summary>
-          <CompactList items={summary.blockersWarnings} empty="No Phase 41 blockers reported." />
-        </details>
-      </div>
-    </section>
-  );
-}
-
-function BetaAcceptanceDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildBetaAcceptanceUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel beta-acceptance-panel">
-      <div className="audit-head">
-        <ListChecks size={17} />
-        <span>Phase 42 Beta Acceptance</span>
-      </div>
-      <div className="summary-grid beta-acceptance-metrics">
-        <Metric label="Readiness" value={summary.readiness} detail="Phase 42 typed evidence" />
-        <Metric label="Mac/Windows" value={summary.desktopStatus} detail="desktop readiness" />
-        <Metric label="Project / Export" value={summary.projectExportStatus} detail="save/open + preview/export" />
-        <Metric label="Runtime Gates" value={summary.runtimeGateStatus} detail="queue, visual, knowledge, worker" />
-        <Metric label="Provider Gate" value={summary.providerStatus} detail="closed-loop shell + provider gate" />
-        <Metric label="Tests" value={summary.testStatus} detail="test matrix" />
-        <Metric label="Closure" value={summary.closureStatus} detail="no additional phases planned" />
-      </div>
-      <div className="phase17-rule-strip">
-        {summary.requiredGates.map((gate) => (
-          <span key={gate}>{gate}</span>
-        ))}
-      </div>
-      <div className="pipeline-details checker-details">
-        <details open={Boolean(summary.blockersWarnings.length)}>
-          <summary>Phase 42 blockers / warnings ({summary.blockersWarnings.length})</summary>
-          <CompactList items={summary.blockersWarnings} empty="No Phase 42 blockers reported." />
-        </details>
-      </div>
-    </section>
-  );
-}
-
-function VideoPlanningDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const videoPlanning = getVideoPlanning(runtimeState);
-  const queue = videoPlanning.queueShell;
-  const policy = videoPlanning.providerPolicySummary;
-  const gateCounts = countBy(videoPlanning.readinessGates.map((gate) => gate.status));
-  const planCounts = countBy(videoPlanning.taskPlans.map((plan) => plan.status));
-  const queueCounts = countBy(videoPlanning.taskPlans.map((plan) => plan.queueStatus));
-  const motionSummary = buildMotionEndpointDiagnosticsSummary(videoPlanning);
-
-  return (
-    <section className="machine-panel video-planning-diagnostics">
-      <div className="audit-head">
-        <LockKeyhole size={17} />
-        <span>Video Planning</span>
-      </div>
-      <div className="summary-grid">
-        <Metric label="Queue Shell" value={queue.status} detail={`${queue.counts.ready} ready · ${queue.counts.blocked} blocked · ${queue.counts.parked} parked`} />
-        <Metric label="Readiness Gates" value={`${videoPlanning.readinessGates.length}`} detail={`${gateCounts.ready || 0} ready · ${gateCounts.blocked || 0} blocked · ${gateCounts.parked || 0} parked`} />
-        <Metric label="Task Plans" value={`${videoPlanning.taskPlans.length}`} detail={`${planCounts.ready || 0} ready · ${planCounts.blocked || 0} blocked · ${planCounts.parked || 0} parked`} />
-        <Metric label="Provider Lock" value={policy.liveSubmitAllowed ? "unlocked" : "locked"} detail={`${policy.parkedProviderIds.length || 0} parked provider(s)`} />
-        <Metric label="Motion Endpoint" value={`${motionSummary.total}`} detail={`${motionSummary.endFrameRequiredCount} end-frame · ${motionSummary.bodyMechanicsRequiredCount} body mechanics`} />
-      </div>
-      <div className="video-diagnostics-grid">
-        <div>
-          <h3>Queue Shell</h3>
-          <div className="field-grid compact">
-            <label>Total</label>
-            <span>{queue.counts.total}</span>
-            <label>Pending</label>
-            <span>{queue.counts.pending}</span>
-            <label>Concurrency</label>
-            <span>{queue.concurrency.configuredLimit} configured · {queue.concurrency.activeProviderLimit} active</span>
-            <label>Auto</label>
-            <span>{queue.autoContinuePolicy.enabled ? "enabled" : queue.autoContinuePolicy.mode}</span>
-            <label>Timeout</label>
-            <span>{queue.longQueueTimeout.stallTimeoutSeconds}s · {queue.longQueueTimeout.action}</span>
-            <label>Dry Run</label>
-            <span>{queue.dryRunOnly ? "true" : "false"}</span>
-          </div>
-        </div>
-        <div>
-          <h3>Provider Policy</h3>
-          <div className="field-grid compact">
-            <label>Parked</label>
-            <span>{policy.videoProvidersRemainParked ? "true" : "false"}</span>
-            <label>Provider</label>
-            <span>{policy.providerSubmissionForbidden ? "forbidden" : "allowed"}</span>
-            <label>Fast</label>
-            <span>{policy.fastModelForbidden ? "forbidden" : "allowed"}</span>
-            <label>VIP</label>
-            <span>{policy.vipChannelForbidden ? "forbidden" : "allowed"}</span>
-            <label>T2V</label>
-            <span>{policy.textToVideoForbidden ? "forbidden" : "allowed"}</span>
-            <label>Providers</label>
-            <span>{policy.parkedProviderIds.join(", ") || "none listed"}</span>
-          </div>
-        </div>
-        <div>
-          <h3>Task Plan Counts</h3>
-          <CompactList
-            items={[
-              ...Object.entries(queueCounts).map(([status, count]) => `${status}: ${count}`),
-              ...videoPlanning.taskPlans.slice(0, 4).map((plan) => `${plan.shotId} · ${plan.providerId} · ${plan.queueStatus}`),
-            ]}
-            empty="No video task plans."
-          />
-        </div>
-        <div>
-          <h3>Motion Contract</h3>
-          <div className="field-grid compact">
-            <label>Types</label>
-            <span>{Object.entries(motionSummary.typeCounts).map(([type, count]) => `${type}: ${count}`).join(" · ") || "none"}</span>
-            <label>Status</label>
-            <span>{Object.entries(motionSummary.statusCounts).map(([status, count]) => `${status}: ${count}`).join(" · ") || "none"}</span>
-            <label>End Required</label>
-            <span>{motionSummary.endFrameRequiredCount}</span>
-            <label>Body Mechanics</label>
-            <span>{motionSummary.bodyMechanicsRequiredCount}</span>
-          </div>
-          <CompactList items={motionSummary.compactItems} empty="No motion endpoint facts." />
-        </div>
-      </div>
-      <div className="pipeline-details">
-        <details>
-          <summary>Queue notes ({queue.notes.length})</summary>
-          <CompactList items={[...queue.notes, ...queue.concurrency.notes, ...queue.autoContinuePolicy.notes, ...queue.longQueueTimeout.notes]} empty="No queue shell notes." />
-        </details>
-        <details>
-          <summary>Policy notes ({policy.notes.length})</summary>
-          <CompactList items={policy.notes} empty="No provider policy notes." />
-        </details>
-      </div>
-    </section>
-  );
-}
-
-function VideoExecutionPreviewDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const executionPreview = getVideoExecutionPreview(runtimeState);
-  const summary = executionPreview.summary;
-  const hardLocks = Array.from(new Set(executionPreview.previews.flatMap((preview) => preview.hardLocks)));
-  const previewRows = executionPreview.previews.slice(0, 6);
-
-  return (
-    <section className="machine-panel video-execution-preview-diagnostics">
-      <div className="audit-head">
-        <FileJson size={17} />
-        <span>Video Execution Preview</span>
-      </div>
-      <div className="summary-grid">
-        <Metric label="Total" value={`${summary.total}`} detail={`${summary.blocked} blocked · ${summary.parked} parked`} />
-        <Metric label="Preview Ready" value={`${summary.previewReady}`} detail={`${summary.canPreviewPacket} packet preview(s)`} />
-        <Metric label="Can Execute" value={`${summary.canExecute}`} detail="dry-run packet surface only" />
-        <Metric label="Hard Locks" value={executionPreview.liveSubmitAllowed ? "unlocked" : "locked"} detail={`${hardLocks.length} lock(s) active`} />
-      </div>
-      <div className="video-preview-locks">
-        <StatusPill value={executionPreview.providerSubmissionForbidden ? "provider forbidden" : "provider allowed"} />
-        <StatusPill value={executionPreview.liveSubmitAllowed ? "live allowed" : "live false"} />
-        <StatusPill value={executionPreview.dryRunOnly ? "dry-run only" : "dry-run off"} />
-        <StatusPill value={summary.canExecute === 0 ? "canExecute 0" : `canExecute ${summary.canExecute}`} />
-      </div>
-      <div className="video-execution-preview-list">
-        {previewRows.map((preview) => (
-          <div key={preview.previewId} className="video-execution-preview-row">
-            <span>{preview.shotId}</span>
-            <StatusPill value={preview.status} />
-            <small>Packet {preview.canPreviewPacket ? "previewable" : "blocked"} · {preview.subagentTaskEnvelope.injectedKnowledgePacks.length} injected pack(s) · canExecute {String(preview.canExecute)}</small>
-          </div>
-        ))}
-        {!previewRows.length && <p className="muted-copy">No Video Execution Preview rows in this runtime state.</p>}
-      </div>
-      <div className="pipeline-details">
-        <details>
-          <summary>Hard locks ({hardLocks.length})</summary>
-          <CompactList items={hardLocks} empty="No hard locks reported." />
-        </details>
-        <details>
-          <summary>Preview notes ({executionPreview.notes.length})</summary>
-          <CompactList items={executionPreview.notes} empty="No Video Execution Preview notes." />
-        </details>
-      </div>
-    </section>
-  );
-}
-
-function ShotImagePipelineSummary({
+export function ShotImagePipelineSummary({
   runtimeState,
   selectedShot,
 }: {
@@ -6758,51 +1180,6 @@ function Workflow({ stages }: { stages: WorkflowStage[] }) {
         </div>
       ))}
     </div>
-  );
-}
-
-function VisualMemoryPanel({
-  audit,
-  view,
-  selectedAsset,
-  onSelectAsset,
-}: {
-  audit: ProjectAudit;
-  view: RuntimeView;
-  selectedAsset?: string;
-  onSelectAsset: (id: string) => void;
-}) {
-  const groups = groupAssets(audit.assets);
-  return (
-    <aside className="asset-panel">
-      <div className="panel-title">
-        <Boxes size={17} />
-        <span>Visual Memory</span>
-      </div>
-      <div className="memory-summary">
-        <strong>{view.visualMemory.existing}/{view.visualMemory.total || audit.metrics.expectedAssets}</strong>
-        <span>assets present</span>
-        <small>{view.visualMemory.needsReview} need review · {view.visualMemory.missing} missing</small>
-      </div>
-      {Object.entries(groups).filter(([, items]) => items.length).map(([group, items]) => (
-        <section key={group} className="asset-group">
-          <h3>{group}</h3>
-          <div className="asset-list">
-            {items.map((asset) => (
-              <button
-                key={asset.id}
-                className={`asset-row ${selectedAsset === asset.id ? "selected" : ""}`}
-                onClick={() => onSelectAsset(asset.id)}
-              >
-                <span className="asset-name">{asset.name}</span>
-                <span className={`dot ${asset.status === "missing" ? "bad" : asset.issues.length ? "warn" : "ok"}`} />
-                <small>{asset.lockedStatus}</small>
-              </button>
-            ))}
-          </div>
-        </section>
-      ))}
-    </aside>
   );
 }
 
@@ -6944,743 +1321,6 @@ function PreviewTimeline({
   );
 }
 
-function MinimalTopNav({
-  projectTitle,
-  projectPlan,
-  mode,
-  directorView,
-  sections,
-  activeSectionId,
-  onOpenDirectorView,
-  onOpenSection,
-  onOpenDiagnostics,
-}: {
-  projectTitle: string;
-  projectPlan: MinimalProjectPlan;
-  mode: UiMode;
-  directorView: DirectorView;
-  sections: RuntimeView["storySections"];
-  activeSectionId?: string;
-  onOpenDirectorView: (view: DirectorView) => void;
-  onOpenSection: (sectionId: string) => void;
-  onOpenDiagnostics: () => void;
-}) {
-  return (
-    <header className="minimal-topbar">
-      <button className="project-title-button" onClick={() => onOpenDirectorView("story")}>
-        <span className="project-title-text">{projectTitle || "Untitled project"}</span>
-        <span className="project-plan-entry" aria-label="项目计划状态">
-          <strong>Story</strong>
-          <span>{projectPlan.entryLabel}</span>
-          <span>{projectPlan.planLabel}</span>
-          <span>{projectPlan.statusLabel}</span>
-        </span>
-        <span className="minimal-state-dots" aria-label={projectPlan.statusLabel}>
-          {projectPlan.progressDots.map((dot) => (
-            <i key={dot.id} className={dot.tone} title={dot.label} />
-          ))}
-        </span>
-      </button>
-      <nav className="minimal-nav" aria-label="Director views">
-        <button
-          className={mode === "director" && directorView === "assets" ? "active" : ""}
-          onClick={() => onOpenDirectorView("assets")}
-        >
-          Asset Library
-        </button>
-        {sections.map((section, index) => (
-          <button
-            key={section.id}
-            className={mode === "director" && directorView === "story" && activeSectionId === section.id ? "active" : ""}
-            onClick={() => onOpenSection(section.id)}
-            title={section.label || section.id}
-            aria-label={`${section.label || section.id} · ${section.shotCount} shots`}
-          >
-            <span className="minimal-section-label">{shortSectionLabel(section, index)}</span>
-            <small className="minimal-section-count">{section.shotCount}</small>
-          </button>
-        ))}
-        <button
-          className={mode === "director" && directorView === "preview" ? "active" : ""}
-          onClick={() => onOpenDirectorView("preview")}
-        >
-          Preview
-        </button>
-      </nav>
-      <button className={`diagnostics-link ${mode === "diagnostics" ? "active" : ""}`} onClick={onOpenDiagnostics} aria-label="Diagnostics">
-        <Settings size={18} aria-hidden="true" />
-        <span className="sr-only">Diagnostics</span>
-      </button>
-    </header>
-  );
-}
-
-function MinimalStoryFlow({
-  sectionLabel,
-  shots,
-  selectedShotId,
-  selectedShotIds,
-  onSelectShot,
-}: {
-  sectionLabel: string;
-  shots: ShotRecord[];
-  selectedShotId: string;
-  selectedShotIds: string[];
-  onSelectShot: (id: string, additive?: boolean) => void;
-}) {
-  const selectedSet = new Set(selectedShotIds.length ? selectedShotIds : [selectedShotId]);
-  return (
-    <main className="minimal-story-flow">
-      <h2 title={sectionLabel}>{sectionLabel.length > 24 ? `${sectionLabel.slice(0, 23).trim()}...` : sectionLabel}</h2>
-      <div className="minimal-shot-grid">
-        {shots.map((shot, index) => (
-          <button
-            key={shot.id}
-            className={`minimal-shot-card ${selectedSet.has(shot.id) ? "selected" : ""} ${selectedShotId === shot.id ? "primary" : ""}`}
-            onClick={(event) => onSelectShot(shot.id, event.metaKey || event.ctrlKey || event.shiftKey)}
-            aria-pressed={selectedSet.has(shot.id)}
-          >
-            <MediaFrame
-              src={shot.startFrame || shot.endFrame}
-              alt={shot.title}
-              label={formatShotNumber(shot.id)}
-              className="minimal-shot-image"
-            />
-            <span className="minimal-shot-caption">
-              <strong>{formatShotNumber(shot.id)}</strong>
-              <span>{shortStoryFunction(shot, index)}</span>
-              <i className={`dot ${shotStatusTone(shot)}`} aria-label={shot.status} />
-            </span>
-          </button>
-        ))}
-      </div>
-    </main>
-  );
-}
-
-function ProjectFactsStrip({
-  summary,
-  mode,
-  onModeChange,
-}: {
-  summary: ProjectFactsUiSummary;
-  mode: ProjectFactsUiMode;
-  onModeChange: (mode: ProjectFactsUiMode) => void;
-}) {
-  return (
-    <section className="project-facts-strip" aria-label="Project Store">
-      <div>
-        <span>Project Store</span>
-        <strong>{summary.projectFile}</strong>
-        <small>{summary.factSource}</small>
-      </div>
-      <div>
-        <span>runtime-state</span>
-        <strong>derived cache</strong>
-        <small>{summary.runtimeCache}</small>
-      </div>
-      <div>
-        <span>{summary.mode} plan</span>
-        <strong>{summary.planStatus}</strong>
-        <small>{summary.planDetail}</small>
-      </div>
-      <div className="project-plan-actions" aria-label="Project Store plan mode">
-        {(["create", "open", "save"] as const).map((item) => (
-          <button key={item} className={mode === item ? "active" : ""} onClick={() => onModeChange(item)}>
-            {item}
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function MinimalAssetLibrary({
-  library,
-  readOnlyDetail,
-  selectedAssetId,
-  onSelectAsset,
-  onAddAsset,
-  onUpdateAsset,
-  onMarkAssetStatus,
-}: {
-  library: AssetLibrarySnapshot;
-  readOnlyDetail?: string;
-  selectedAssetId?: string;
-  onSelectAsset: (id: string) => void;
-  onAddAsset: (input: AddAssetLibraryAssetInput) => void;
-  onUpdateAsset: (assetId: string, input: UpdateAssetLibraryAssetInput) => void;
-  onMarkAssetStatus: (assetId: string, status: AssetLibraryUiStatus) => void;
-}) {
-  const groups = {
-    characters: library.assets.filter((asset) => asset.assetType === "character"),
-    scenes: library.assets.filter((asset) => asset.assetType === "scene"),
-    anchors: library.assets.filter((asset) => asset.assetType === "prop" || asset.assetType === "style" || asset.assetType === "voice_anchor"),
-  };
-  const selectedAsset = library.assets.find((asset) => asset.id === selectedAssetId);
-  const blockers = assetLibraryUserBlockers(library);
-  const blockerLabel = blockers.length
-    ? `${blockers.length} 项待补参考`
-    : "参考已就绪";
-  const isReadOnly = Boolean(readOnlyDetail);
-  const [draft, setDraft] = useState<{ assetType: AssetLibraryAssetType; name: string; path: string; constraints: string }>({
-    assetType: "character",
-    name: "",
-    path: "",
-    constraints: "",
-  });
-  const [constraintDraft, setConstraintDraft] = useState("");
-
-  useEffect(() => {
-    setConstraintDraft(selectedAsset?.textConstraints.join("\n") || "");
-  }, [selectedAsset?.id, selectedAsset?.textConstraints]);
-
-  function addDraft(status: AssetLibraryStatus) {
-    const name = draft.name.trim() || `${assetLibraryTypeLabel(draft.assetType)}参考`;
-    const id = safeAssetId(name, draft.assetType);
-    const path = draft.path.trim();
-    const textConstraints = splitConstraints(draft.constraints || defaultAssetConstraints(draft.assetType, name).join("\n"));
-    onAddAsset({
-      id,
-      assetType: draft.assetType,
-      name,
-      status,
-      sourceKind: assetSourceKindForPath(path) === "source_asset" && !path ? "manual_definition" : assetSourceKindForPath(path),
-      path: path || undefined,
-      pathOrigin: pathOriginForUi(path),
-      importId: id,
-      textConstraints,
-      sourceRefs: ["ui.asset_library"],
-      usedByShotIds: [],
-      updatedAt: new Date().toISOString(),
-    });
-    setDraft({ ...draft, name: "", path: "", constraints: "" });
-  }
-
-  function updateSelectedConstraints() {
-    if (!selectedAsset) return;
-    onUpdateAsset(selectedAsset.id, {
-      textConstraints: splitConstraints(constraintDraft),
-      updatedAt: new Date().toISOString(),
-    });
-  }
-
-  function renderAssetCard(asset: AssetLibraryAsset, wide = false) {
-    const record = assetLibraryAssetToRecord(asset);
-    return (
-      <button
-        key={asset.id}
-        className={`asset-reference-card ${wide ? "wide" : ""} ${selectedAssetId === asset.id ? "selected" : ""}`}
-        onClick={() => onSelectAsset(asset.id)}
-      >
-        <MediaFrame src={record.path} alt={asset.name} label={cleanLabel(asset.name)} className="asset-reference-image" />
-        <span>
-          <strong>{cleanLabel(asset.name)}</strong>
-          <small><i className={`dot ${assetStatusTone(record)}`} /> {assetLibraryStatusLabel(asset.status)}</small>
-        </span>
-        <p>{asset.textConstraints[0] || "缺文本约束"}</p>
-      </button>
-    );
-  }
-
-  return (
-    <main className="asset-library-view">
-      <div className="asset-library-heading">
-        <div>
-          <h2>审核并锁定资产</h2>
-          <small>{readOnlyDetail || "角色主参考、场景 master、风格锚图"}</small>
-        </div>
-        {!isReadOnly && <details className="asset-library-add" aria-label="添加资产">
-          <summary>添加资产</summary>
-          <div className="asset-library-toolbar">
-            <select value={draft.assetType} onChange={(event) => setDraft({ ...draft, assetType: event.target.value as AssetLibraryAssetType })}>
-              <option value="character">角色主参考</option>
-              <option value="scene">场景 master</option>
-              <option value="style">风格文本/锚图</option>
-              <option value="prop">道具</option>
-            </select>
-            <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="名称" />
-            <input value={draft.path} onChange={(event) => setDraft({ ...draft, path: event.target.value })} placeholder="参考路径或留空" />
-            <textarea value={draft.constraints} onChange={(event) => setDraft({ ...draft, constraints: event.target.value })} placeholder="文本约束" />
-            <button onClick={() => addDraft("locked")}>锁定</button>
-            <button onClick={() => addDraft("candidate")}>候选</button>
-          </div>
-        </details>}
-      </div>
-      <div className="asset-status-strip" aria-label="Asset consistency">
-        <span><i className="dot ok" /> locked</span>
-        <span><i className="dot warn" /> candidate</span>
-        <span><i className="dot warn" /> review</span>
-        <span><i className="dot bad" /> rejected</span>
-      </div>
-      <div className="asset-blocker-strip" aria-label="资产阻断">
-        <span title={blockers.join(" · ") || blockerLabel}>{blockerLabel}</span>
-      </div>
-      {readOnlyDetail && (
-        <section className="asset-edit-surface" aria-label="当前项目资产状态">
-          <div>
-            <span>当前项目</span>
-            <strong>资产待补齐</strong>
-            <small>只读投影</small>
-          </div>
-          <small>{readOnlyDetail}</small>
-        </section>
-      )}
-      {!isReadOnly && selectedAsset && (
-        <section className="asset-edit-surface" aria-label="资产编辑">
-          <div>
-            <span>已选择</span>
-            <strong>{cleanLabel(selectedAsset.name)}</strong>
-            <small>{assetLibraryStatusLabel(selectedAsset.status)}</small>
-          </div>
-          <div className="asset-status-actions">
-            {(["locked", "candidate", "needs_review", "rejected"] as const).map((status) => (
-              <button
-                key={status}
-                className={assetLibraryStatusToUiStatus(selectedAsset.status) === status ? "active" : ""}
-                onClick={() => onMarkAssetStatus(selectedAsset.id, status)}
-              >
-                {assetLibraryStatusLabel(status)}
-              </button>
-            ))}
-          </div>
-          <textarea value={constraintDraft} onChange={(event) => setConstraintDraft(event.target.value)} aria-label="编辑文本约束" />
-          <button onClick={updateSelectedConstraints}>更新约束</button>
-        </section>
-      )}
-      <section className="asset-library-section">
-        <span className="asset-section-label">角色参考</span>
-        <div className="asset-feature-grid characters">
-          {groups.characters.map((asset) => renderAssetCard(asset))}
-          {!groups.characters.length && <div className="minimal-empty-line">还没有角色主参考</div>}
-        </div>
-      </section>
-      <section className="asset-library-section">
-        <span className="asset-section-label">场景 master</span>
-        <div className="asset-feature-grid scenes">
-          {groups.scenes.map((asset) => renderAssetCard(asset, true))}
-          {!groups.scenes.length && <div className="minimal-empty-line">还没有场景 master</div>}
-        </div>
-      </section>
-      <section className="asset-library-section compact">
-        <span className="asset-section-label">道具 / 风格</span>
-        <div className="asset-feature-grid anchors">
-          {groups.anchors.map((asset) => renderAssetCard(asset, asset.assetType === "style"))}
-          {!groups.anchors.length && <div className="minimal-empty-line">还没有道具或风格参考</div>}
-        </div>
-      </section>
-    </main>
-  );
-}
-
-function MinimalPreview({
-  previewExport,
-  currentProjectPreviewItems,
-  sections,
-  shots,
-  selectedShotId,
-  onSelectShot,
-}: {
-  previewExport: ProjectPreviewExportState;
-  currentProjectPreviewItems?: PreviewQueueItem[];
-  sections: RuntimeView["storySections"];
-  shots: ShotRecord[];
-  selectedShotId: string;
-  onSelectShot: (id: string) => void;
-}) {
-  const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const currentTimeRef = useRef(0);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const fallbackQueue = useMemo(() => buildPreviewPlayerQueue(previewExport, shots), [previewExport, shots]);
-  const queue = currentProjectPreviewItems ?? fallbackQueue;
-  const projection = useMemo(() => buildMinimalRuntimeProjection({ previewQueue: queue }), [queue]);
-  const total = Math.max(1, getPreviewPlayerTotalDuration(queue));
-  const activeItem = getPreviewPlayerActiveItem(queue, currentTime);
-  const activeShot = activeItem?.shotId ? shots.find((shot) => shot.id === activeItem.shotId) : undefined;
-  const progress = Math.min(100, Math.max(0, (currentTime / total) * 100));
-
-  useEffect(() => {
-    currentTimeRef.current = currentTime;
-  }, [currentTime]);
-
-  useEffect(() => {
-    if (!queue.length) {
-      setPlaying(false);
-      currentTimeRef.current = 0;
-      setCurrentTime(0);
-      return;
-    }
-    setCurrentTime((time) => {
-      const nextTime = Math.min(Math.max(0, time), total);
-      currentTimeRef.current = nextTime;
-      return nextTime;
-    });
-  }, [queue, total]);
-
-  useEffect(() => {
-    if (!playing || !queue.length) return undefined;
-    let frame = 0;
-    let stopped = false;
-    let previous = performance.now();
-    const tick = (now: number) => {
-      if (stopped) return;
-      const deltaSeconds = Math.max(0, (now - previous) / 1000);
-      previous = now;
-      const nextTime = Math.min(total, currentTimeRef.current + deltaSeconds);
-      currentTimeRef.current = nextTime;
-      setCurrentTime(nextTime);
-      if (nextTime >= total) {
-        setPlaying(false);
-        return;
-      }
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => {
-      stopped = true;
-      cancelAnimationFrame(frame);
-    };
-  }, [playing, queue.length, total]);
-
-  useEffect(() => {
-    const selectedItem = queue.find((item) => item.shotId === selectedShotId);
-    if (!selectedItem) return;
-    setCurrentTime((time) => {
-      const itemAtTime = getPreviewPlayerActiveItem(queue, time);
-      if (playing && itemAtTime?.shotId === selectedShotId) return time;
-      const nextTime = Math.abs(time - selectedItem.startSeconds) < 0.05 ? time : selectedItem.startSeconds;
-      currentTimeRef.current = nextTime;
-      return nextTime;
-    });
-  }, [playing, queue, selectedShotId]);
-
-  useEffect(() => {
-    if (playing && activeItem?.shotId && activeItem.shotId !== selectedShotId) onSelectShot(activeItem.shotId);
-  }, [activeItem?.shotId, onSelectShot, playing, selectedShotId]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || activeItem?.kind !== "video_clip") return;
-    const mediaTime = Math.max(0, currentTime - activeItem.startSeconds);
-    if (Number.isFinite(mediaTime) && Math.abs(video.currentTime - mediaTime) > 0.75) {
-      try {
-        video.currentTime = mediaTime;
-      } catch {
-        // Some browsers reject seeks before metadata is ready.
-      }
-    }
-  }, [activeItem?.id, activeItem?.kind, activeItem?.startSeconds, currentTime]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || activeItem?.kind !== "video_clip") return;
-    if (playing) {
-      void video.play().catch(() => undefined);
-    } else {
-      video.pause();
-    }
-  }, [activeItem?.id, activeItem?.kind, playing]);
-
-  const togglePlaying = () => {
-    if (!queue.length) return;
-    setPlaying((value) => {
-      if (value) return false;
-      setCurrentTime((time) => {
-        const nextTime = time >= total ? 0 : time;
-        currentTimeRef.current = nextTime;
-        return nextTime;
-      });
-      return true;
-    });
-  };
-
-  const selectPreviewItem = (item: PreviewQueueItem) => {
-    currentTimeRef.current = item.startSeconds;
-    setCurrentTime(item.startSeconds);
-    if (item.shotId) onSelectShot(item.shotId);
-  };
-
-  return (
-    <main className="minimal-preview-view">
-      <section className="preview-stage">
-        {activeItem?.kind === "image_hold" ? (
-          <MediaFrame
-            src={activeItem.mediaPath}
-            alt={activeItem.shotId || "Preview"}
-            label={activeItem.label}
-            className="preview-stage-image"
-          />
-        ) : activeItem?.kind === "video_clip" && activeItem.mediaPath ? (
-          <video
-            key={activeItem.id}
-            ref={videoRef}
-            className="preview-stage-video"
-            src={toMediaSrc(activeItem.mediaPath)}
-            muted
-            playsInline
-          />
-        ) : (
-          <div className={`preview-stage-card ${activeItem?.kind || "missing_placeholder"}`}>
-            <span>Missing</span>
-            <strong>{activeItem?.label || "Preview"}</strong>
-            <small>{activeShot ? shortStoryFunction(activeShot, shots.indexOf(activeShot)) : "Hold"}</small>
-          </div>
-        )}
-        <button className="preview-play-button" onClick={togglePlaying} aria-label={playing ? "Pause" : "Play"}>
-          {playing ? <PauseCircle size={42} /> : <Play size={42} />}
-        </button>
-      </section>
-      <section className="minimal-preview-controls">
-        <div className="preview-ruler">
-          {sections.map((section) => {
-            const firstShotId = section.shotIds[0];
-            const item = queue.find((candidate) => candidate.shotId === firstShotId);
-            const left = item ? (item.startSeconds / total) * 100 : 0;
-            return (
-              <span
-                key={section.id}
-                className={left <= 2 ? "edge-start" : left >= 98 ? "edge-end" : undefined}
-                style={{ left: `${left}%` }}
-              >
-                {section.label}
-              </span>
-            );
-          })}
-        </div>
-        <div className="preview-line">
-          {queue.map((item) => (
-            <button
-              key={item.id}
-              className={`preview-line-event ${item.kind} ${item.id === activeItem?.id ? "selected" : ""}`}
-              style={{
-                left: `${(item.startSeconds / total) * 100}%`,
-                width: `${Math.max(3, (item.durationSeconds / total) * 100)}%`,
-              }}
-              onClick={() => selectPreviewItem(item)}
-              aria-label={item.label}
-            />
-          ))}
-          <span className="preview-line-progress" style={{ left: `${progress}%` }} />
-        </div>
-        <div className="preview-time-row">
-          <button onClick={togglePlaying}>{playing ? <PauseCircle size={17} /> : <Play size={17} />}</button>
-          <span>{formatDuration(currentTime)} / {formatDuration(total)}</span>
-        </div>
-        <p className="preview-export-summary" aria-label="Preview summary">
-          {projection.previewSummary.detail} · {formatDuration(total)}
-        </p>
-      </section>
-    </main>
-  );
-}
-
-function MinimalAgentPanel({
-  runtimeState,
-  projectScopeLabel,
-  shot,
-  selectedShots = [],
-  asset,
-  sectionLabel,
-  sectionId,
-}: {
-  runtimeState: ProjectRuntimeState;
-  projectScopeLabel?: string;
-  shot?: ShotRecord;
-  selectedShots?: ShotRecord[];
-  asset?: AssetRecord;
-  sectionLabel?: string;
-  sectionId?: string;
-}) {
-  const [text, setText] = useState("");
-  const [status, setStatus] = useState("等待描述");
-  const [planPhase, setPlanPhase] = useState<AgentPlanPhase>("idle");
-  const [workflow, setWorkflow] = useState<ReturnType<typeof buildDirectorWorkflowState> | undefined>();
-  const [projection, setProjection] = useState<MinimalRuntimeProjection | undefined>();
-  const scopedShotIds = selectedShots.map((item) => item.id);
-  const localScopeLabel = selectedScopeLabel(shot, asset, sectionLabel, selectedShots);
-  const scopeLabel = projectScopeLabel ? `${projectScopeLabel} · ${localScopeLabel}` : localScopeLabel;
-
-  function prepareChange() {
-    const userIntent = text.trim();
-    if (!userIntent) {
-      setStatus("先写下想改哪里");
-      return;
-    }
-    const nextWorkflow = buildDirectorWorkflowState({
-      runtimeState,
-      userIntent,
-      selection: {
-        selectedShotId: scopedShotIds.length <= 1 ? shot?.id : undefined,
-        selectedShotIds: scopedShotIds.length > 1 ? scopedShotIds : undefined,
-        selectedAssetId: asset?.id,
-        sectionId: !scopedShotIds.length && !asset ? sectionId : undefined,
-      },
-    });
-    const nextProjection = buildAgentPanelProjection(nextWorkflow, runtimeState, "review");
-    setWorkflow(nextWorkflow);
-    setProjection(nextProjection);
-    setPlanPhase("review");
-    setStatus(nextProjection.shortLabel);
-  }
-
-  function confirmPlan() {
-    if (!workflowCanConfirm(workflow)) return;
-    const { projection: nextProjection } = confirmAgentPlanProjection(workflow, runtimeState);
-    setProjection(nextProjection);
-    setPlanPhase("confirmed");
-    setStatus(nextProjection.shortLabel);
-  }
-
-  const canConfirm = workflowCanConfirm(workflow);
-  const badges = projection ? agentProjectionBadges(projection, planPhase).slice(0, 2) : workflow ? workflowBadgeLabels(workflow).slice(0, 2) : ["先看一下"];
-  const nextStep = projection ? agentProjectionNextStep(projection, planPhase, canConfirm) : workflow ? workflowPanelNextStepLabel(workflow, planPhase) : "写一句你想调整的画面、角色或节奏。";
-
-  return (
-    <aside className="minimal-agent-panel">
-      <span>{scopeLabel}</span>
-      <div className="minimal-agent-input">
-        <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="描述你想怎么改..." />
-        <button disabled={!text.trim()} onClick={prepareChange}>
-          <Eye size={15} />
-          看看
-        </button>
-      </div>
-      <strong className="minimal-agent-status">{status}</strong>
-      {projection && (
-        <div className="minimal-state-dots agent" aria-label={projection.shortLabel}>
-          {projection.progressDots.map((dot) => (
-            <i key={dot.id} className={dot.tone} title={dot.label} />
-          ))}
-        </div>
-      )}
-      <div className="minimal-agent-badges" aria-label="修改摘要">
-        {badges.map((badge) => (
-          <small key={badge}>{badge}</small>
-        ))}
-      </div>
-      <small>{nextStep}</small>
-      {workflow && (
-        <div className="minimal-agent-actions">
-          <button disabled={!canConfirm || planPhase === "confirmed"} onClick={confirmPlan}>
-            <CheckCircle2 size={15} />
-            确认修改
-          </button>
-        </div>
-      )}
-    </aside>
-  );
-}
-
-function naturalWorkflowScopeLabel(label: string) {
-  return label
-    .replace(/^Multi-shot\s+/i, "多个镜头 ")
-    .replace(/^Shot\s+/i, "镜头 ")
-    .replace(/^Asset\s+/i, "素材 ")
-    .replace(/^Section\s+/i, "段落 ")
-    .replace(/^Export$/i, "导出")
-    .replace(/^Project$/i, "整个项目");
-}
-
-function workflowStatusLabel(status: DirectorWorkflowStatus) {
-  if (status === "dry_run_ready") return "可以继续";
-  if (status === "pending_confirmation") return "等你确认";
-  if (status === "blocked_missing_context") return "需要补充信息";
-  return "暂时不能改";
-}
-
-function workflowNextStepLabel(status: DirectorWorkflowStatus) {
-  if (status === "dry_run_ready") return "修改方向已准备好，确认后才会继续。";
-  if (status === "pending_confirmation") return "等你确认后再继续。";
-  if (status === "blocked_missing_context") return "补充镜头、角色或参考图后再试。";
-  return "换一种更具体的说法。";
-}
-
-function workflowBadgeLabels(workflow: ReturnType<typeof buildDirectorWorkflowState>) {
-  const labels = ["先看一下", naturalWorkflowScopeLabel(workflow.scopeLabel)];
-  if (workflow.summary.blockedTaskPackets > 0) labels.push("需要补充参考");
-  if (workflow.summary.readyTaskPackets > 0) labels.push(`${workflow.summary.readyTaskPackets} 个画面会受影响`);
-  return Array.from(new Set(labels));
-}
-
-function workflowCanConfirm(
-  workflow?: ReturnType<typeof buildDirectorWorkflowState>,
-): workflow is ReturnType<typeof buildDirectorWorkflowState> {
-  return Boolean(workflow && (workflow.status === "dry_run_ready" || workflow.status === "pending_confirmation"));
-}
-
-function workflowPanelStatusLabel(workflow: ReturnType<typeof buildDirectorWorkflowState>, planPhase: AgentPlanPhase) {
-  if (workflow.status === "blocked") return "阻断";
-  if (workflow.status === "blocked_missing_context") return "需要补充信息";
-  if (planPhase === "confirmed") return "已确认";
-  return "等你确认";
-}
-
-function workflowPanelNextStepLabel(workflow: ReturnType<typeof buildDirectorWorkflowState>, planPhase: AgentPlanPhase) {
-  if (workflow.status === "blocked") return "这次修改还不能进入计划。";
-  if (workflow.status === "blocked_missing_context") return workflowNextStepLabel(workflow.status);
-  if (planPhase === "confirmed") return "已确认，后续输出会先进入人工复核。";
-  return "确认后再继续。";
-}
-
-function workflowPlanFacts(workflow: ReturnType<typeof buildDirectorWorkflowState>) {
-  return [
-    {
-      label: "影响画面",
-      value: `${workflow.summary.readyTaskPackets}`,
-    },
-    {
-      label: "状态",
-      value: workflowStatusLabel(workflow.status),
-    },
-  ];
-}
-
-function DirectorProgressStrip({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const state = buildDirectorProgressStripState(runtimeState);
-
-  return (
-    <section className={`director-progress-strip ${state.tone}`} aria-label="项目处理进度">
-      <div className="director-progress-heading">
-        <span>{state.label}</span>
-        <small>{state.detail}</small>
-      </div>
-      <div className="director-progress-track" aria-hidden="true">
-        {state.segments.map((segment) => (
-          <span
-            key={segment.label}
-            className={`director-progress-segment ${segment.tone}${segment.value === 0 ? " empty" : ""}`}
-            style={{ flex: segment.value > 0 ? `${segment.value} 1 0` : "0 0 0" }}
-          />
-        ))}
-      </div>
-      <div className="director-progress-counts" aria-label="处理状态">
-        {state.segments.map((segment) => (
-          <span key={segment.label} className={segment.value === 0 ? "is-empty" : undefined}>
-            <i className={`director-progress-dot ${segment.tone}`} aria-hidden="true" />
-            {segment.label}
-            <b>{segment.value} 项</b>
-          </span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function MinimalDirectorStatusDot({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const state = buildDirectorProgressStripState(runtimeState);
-  const activeSegment = state.segments.find((segment) => segment.value > 0 && segment.tone === state.tone)
-    || state.segments.find((segment) => segment.value > 0)
-    || state.segments[0];
-
-  return (
-    <section className={`minimal-director-status ${state.tone}`} aria-label="当前状态">
-      <i className={`director-progress-dot ${activeSegment?.tone || state.tone}`} aria-hidden="true" />
-      <span>{state.label}</span>
-    </section>
-  );
-}
-
 function RealPilotDirectorStatus({ summary }: { summary: RealPilotUiSummary }) {
   return (
     <section className="real-pilot-entry" aria-label="真实小样">
@@ -7715,12 +1355,12 @@ function RealPilotDirectorStatus({ summary }: { summary: RealPilotUiSummary }) {
           <small>{summary.selectedShotDetail}</small>
         </div>
         <div>
-          <span>首尾帧</span>
+          <span>首帧控制</span>
           <strong>{summary.framePairValue}</strong>
           <small>{summary.framePairDetail}</small>
         </div>
         <div>
-          <span>预计生成</span>
+          <span>预计输出</span>
           <strong>{summary.estimatedOutputCount || "待估算"}</strong>
           <small>{summary.estimatedOutputDetail}</small>
         </div>
@@ -7734,761 +1374,89 @@ function RealPilotDirectorStatus({ summary }: { summary: RealPilotUiSummary }) {
   );
 }
 
-function OneShotActionPanel({
-  summary,
-  status,
-  onConfirm,
-}: {
-  summary: RealPilotUiSummary;
-  status: OneShotActionStatus;
-  onConfirm: () => void;
-}) {
-  const ready = summary.oneShotStatus === "单次待确认";
-  const confirmed = status === "confirmed";
-  const needsReview = summary.oneShotStatus === "需要复核";
-  const waitingFile = summary.oneShotStatus === "等待文件" || confirmed;
-  const stateLabel = needsReview ? "需要复核" : waitingFile ? "等待文件" : ready ? "等待确认" : "需要复核";
-  const detail = needsReview
-    ? "输出已回流，等待人工复核。"
-    : waitingFile
-      ? "已记录本次确认，等待输出回流。"
-      : ready
-        ? "确认后只执行一次小样。"
-        : "先完成复核。";
-
-  return (
-    <section className="one-shot-action-panel" aria-label="单次小样确认">
-      <div>
-        <span>单次小样</span>
-        <strong>{stateLabel}</strong>
-      </div>
-      <div className="one-shot-action-facts">
-        <small>{summary.oneShotActionScope}</small>
-        <small>{summary.oneShotOutputExpectation}</small>
-        <small>{summary.outputRoot}</small>
-      </div>
-      <small>{detail}</small>
-      <button disabled={!ready || confirmed} onClick={onConfirm}>
-        <CheckCircle2 size={15} />
-        确认单次小样
-      </button>
-    </section>
-  );
-}
-
-function projectRealChainStatusLabel(status: ProjectRealChainUiStatus) {
-  if (status === "running") return "同步中";
-  if (status === "needs_review") return "需要复核";
-  if (status === "preview_ready_with_review") return "预览待复核";
-  if (status === "production_needs_review") return "需要复核";
-  if (status === "blocked") return "有阻断";
-  return "未同步";
-}
-
-function projectRound5GateLabels(summary: ProjectRealChainPanelState["summary"]) {
-  const shots = summary?.round5Gate?.shotGateMatrix || [];
-  const labels: string[] = [];
-  const zp04 = shots.find((shot) => shot.shotId === "ZP04");
-  const zp05 = shots.find((shot) => shot.shotId === "ZP05");
-  const endBlocked = shots.some((shot) => {
-    const gateStatus = `${shot.gateStatus || ""} ${shot.nextAction || ""}`.toLowerCase();
-    return gateStatus.includes("end") && (gateStatus.includes("blocked") || gateStatus.includes("provenance"));
-  });
-
-  if (zp04?.nextAction && zp04.nextAction !== "none") labels.push("ZP04 重生 start");
-  if (zp05?.gateStatus === "end_returned_needs_review") labels.push("ZP05 end 待复核");
-  else if (zp05?.gateStatus === "end_edit_preflight_ready" || zp05?.nextAction === "submit_strict_image_edit") labels.push("ZP05 等待 end 回流");
-  else if (zp05?.strictEditPilotCandidate) labels.push("ZP05 可做 edit pilot");
-  if (endBlocked) labels.push("End 缺证据");
-  return labels;
-}
-
-function projectRound5EndReturnState(summary: ProjectRealChainPanelState["summary"]) {
-  const shots = summary?.round5Gate?.shotGateMatrix || [];
-  const returnedShot = shots.find((shot) => (
-    shot.gateStatus === "end_returned_needs_review"
-    || (shot.endExists === true && Boolean(shot.endFrameSha256))
-  ));
-  if (returnedShot) {
-    const hash = returnedShot.endFrameSha256 ? `${returnedShot.endFrameSha256.slice(0, 18)}…` : "hash-bound";
-    return {
-      status: "returned" as const,
-      shotId: returnedShot.shotId,
-      label: "End 已回流，待复核",
-      detail: `${returnedShot.shotId} · ${hash}`,
-    };
+function realImage2GatePhaseLabel(gate: RealImage2GateState) {
+  switch (gate.phase) {
+    case "locked": return "locked";
+    case "ready": return "ready";
+    case "generating": return "generating";
+    case "watching": return "watching";
+    case "file_detected": return "file_detected";
+    case "observation_written": return "observation_written";
+    case "promoted": return "promoted";
+    case "blocked": return "blocked";
   }
-
-  const waitingShot = shots.find((shot) => (
-    shot.gateStatus === "end_edit_preflight_ready"
-    || shot.nextAction === "submit_strict_image_edit"
-    || shot.strictEditPreflightStatus === "ready_for_provider_edit"
-  ));
-  if (waitingShot) {
-    return {
-      status: "waiting" as const,
-      shotId: waitingShot.shotId,
-      label: "等待真实 end 回流",
-      detail: `${waitingShot.shotId} · 状态同步只读，不触发 provider`,
-    };
-  }
-
-  return {
-    status: "none" as const,
-    shotId: undefined,
-    label: "未到回流阶段",
-    detail: "等待 strict edit preflight",
-  };
 }
 
-function projectRound5StrictEditTargetShotId(summary: ProjectRealChainPanelState["summary"], selectedShotId: string) {
-  const shots = summary?.round5Gate?.shotGateMatrix || [];
-  const zp05 = shots.find((shot) => shot.shotId === "ZP05");
-  if (zp05?.strictEditPilotCandidate) return zp05.shotId;
-  const selected = shots.find((shot) => shot.shotId === selectedShotId);
-  return selected?.strictEditPilotCandidate ? selected.shotId : selectedShotId;
-}
-
-function projectRound5StrictEditLabel(state: ProjectRound5StrictEditPreflightPanelState) {
-  if (state.status === "running") return "准备中";
-  if (state.status === "prepared") return "已准备";
-  if (state.status === "blocked") return "准备失败";
-  return "可准备";
-}
-
-function projectRealChainVisibleItems(
-  items: ProjectRealChainPreviewItem[],
-  selectedShotId: string,
-) {
-  const withImage = items.filter((item) => item.outputExists !== false && (item.imageUrl || item.thumbnailUrl));
-  const selected = withImage.find((item) => item.shotId === selectedShotId);
-  if (selected) return [selected];
-  return withImage.slice(0, 4);
-}
-
-function projectReviewCheckStatusLabel(state: ProjectImage2BatchPanelState) {
-  if (state.status === "running") return "同步中";
-  if (state.status === "ready_for_review") return "可复核";
-  if (state.status === "blocked") return "待补齐";
-  return "未同步";
-}
-
-function projectReviewCheckDetail(summary: ProjectImage2BatchPanelState["summary"]) {
-  if (!summary) return "等待当前项目同步";
-  return `${summary.readyCount}/${summary.plannedCount} 可复核 · ${summary.blockedCount} 待补齐`;
-}
-
-function projectPreviewReadyLabel(summary: ProjectRealChainPanelState["summary"]) {
-  const status = `${summary?.previewStatus || ""} ${summary?.previewStatusLabel || ""}`.toLowerCase();
-  if (status.includes("blocked")) return "blocked";
-  return status.includes("ready") ? "ready" : "not_ready";
-}
-
-function projectProductionReviewLabel(summary: ProjectRealChainPanelState["summary"]) {
-  if (summary?.productionStatus === "blocked") return "blocked";
-  return summary?.productionStatus === "needs_review" ? "needs_review" : "clear";
-}
-
-function ProjectRealChainPanel({
-  state,
-  image2BatchState,
-  image2OneShotState,
-  strictEditPreflightState,
-  selectedShotId,
-  projectTitle,
-  runtimeProjectBinding,
-  projectPathInput,
-  projectChoices,
-  projectSelectionStatus,
-  onProjectPathChange,
-  onSelectProjectChoice,
-  onConnectProject,
-  onRun,
-  onRunImage2Batch,
-  onPrepareStrictEditPreflight,
-  onPrepareImage2OneShot,
-  onConfirmImage2OneShot,
-  onCheckImage2OneShotReturn,
+function RealImage2GateDiagnostics({
+  gate,
+  onUnlock,
+  onGenerate,
+  onPromote,
+  onReset,
 }: {
-  state: ProjectRealChainPanelState;
-  image2BatchState: ProjectImage2BatchPanelState;
-  image2OneShotState: ProjectImage2OneShotPanelState;
-  strictEditPreflightState: ProjectRound5StrictEditPreflightPanelState;
-  selectedShotId: string;
-  projectTitle: string;
-  runtimeProjectBinding: ProjectCurrentBindingStatus;
-  projectPathInput: string;
-  projectChoices: ProjectCurrentChoice[];
-  projectSelectionStatus?: "idle" | "connecting" | "connected" | "error";
-  onProjectPathChange: (value: string) => void;
-  onSelectProjectChoice: (choice: ProjectCurrentChoice) => void;
-  onConnectProject: () => void;
-  onRun: () => void;
-  onRunImage2Batch: () => void;
-  onPrepareStrictEditPreflight: (shotId: string) => void;
-  onPrepareImage2OneShot: () => void;
-  onConfirmImage2OneShot: () => void;
-  onCheckImage2OneShotReturn: () => void;
+  gate?: RealImage2GateState;
+  onUnlock: () => void;
+  onGenerate: () => void;
+  onPromote: () => void;
+  onReset: () => void;
 }) {
-  const projectBound = runtimeProjectBinding.status === "bound";
-  const summary = projectBound ? state.summary : undefined;
-  const image2Batch = projectBound ? image2BatchState.summary : undefined;
-  const running = state.status === "running";
-  const image2BatchRunning = image2BatchState.status === "running";
-  const status = projectBound ? projectRealChainStatusLabel(state.status) : "未同步";
-  const reviewCheckStatus = projectBound ? projectReviewCheckStatusLabel(image2BatchState) : "未同步";
-  const reviewCheckDetail = projectReviewCheckDetail(image2Batch);
-  const returnedCount = summary?.returnedImageCount ?? 0;
-  const plannedCount = summary?.totalPlannedImages ?? 0;
-  const visibleItems = summary ? projectRealChainVisibleItems(summary.previewItems, selectedShotId) : [];
-  const round5GateLabels = projectRound5GateLabels(summary);
-  const strictEditTargetShotId = projectRound5StrictEditTargetShotId(summary, selectedShotId);
-  const zp05Gate = summary?.round5Gate?.shotGateMatrix.find((shot) => shot.shotId === "ZP05");
-  const round5EndReturn = projectRound5EndReturnState(summary);
-  const showStrictEditPreflight = projectBound
-    && zp05Gate?.strictEditPilotCandidate === true
-    && round5EndReturn.status === "none"
-    && zp05Gate.gateStatus !== "end_edit_preflight_ready";
-  const showRound5EndReturn = projectBound && round5EndReturn.status !== "none";
-  const strictEditRunning = strictEditPreflightState.status === "running";
-  const strictEditLabel = projectRound5StrictEditLabel(strictEditPreflightState);
-  const previewLabel = projectPreviewReadyLabel(summary);
-  const productionLabel = projectProductionReviewLabel(summary);
-  const displayTitle = projectBound
-    ? runtimeProjectBinding.projectTitle || projectTitle || "未命名项目"
-    : "未选择项目";
-  const disabled = !projectBound || running;
-  const reviewDisabled = !projectBound || image2BatchRunning;
-  const sampleReady = image2OneShotState.status === "prepared";
-  const sampleWaiting = image2OneShotState.status === "handoff_prepared" || image2OneShotState.status === "trigger_plan_prepared" || image2OneShotState.status === "waiting_file";
-  const sampleReview = image2OneShotState.status === "needs_review";
-  const sampleRunning = image2OneShotState.status === "running";
-  const sampleBlocked = image2OneShotState.status === "blocked";
-  const sampleDisabled = !projectBound || sampleRunning || sampleReview;
-  const sampleAction = sampleReady ? onConfirmImage2OneShot : sampleWaiting ? onCheckImage2OneShotReturn : onPrepareImage2OneShot;
-  const sampleButtonLabel = sampleWaiting
-    ? "检查回流"
-    : sampleReview
-      ? "需要复核"
-      : sampleReady
-        ? "确认生成"
-        : "生成小样";
-  const sampleStatusLabel = sampleReview ? "需要复核" : image2OneShotState.status === "trigger_plan_prepared" ? "等待确认" : sampleWaiting ? "等待文件" : sampleReady ? "待确认" : sampleBlocked ? "待补齐" : "可开始";
-  const connecting = projectSelectionStatus === "connecting";
-  const canConnect = projectPathInput.trim().length > 0 && !connecting;
-
   return (
-    <section className={`project-real-chain-panel ${state.status}`} aria-label="当前项目状态">
-      <div className="project-real-chain-head">
-        <div>
-          <span>当前项目</span>
-          <strong>{displayTitle}</strong>
-        </div>
-        <button disabled={disabled} onClick={onRun}>
-          <RefreshCw size={15} />
-          {running ? "同步中" : "同步状态"}
-        </button>
-      </div>
-      <div className="project-real-chain-select">
-        <label htmlFor="current-project-path">项目路径</label>
-        <input
-          id="current-project-path"
-          value={projectPathInput}
-          onChange={(event) => onProjectPathChange(event.target.value)}
-          placeholder="输入项目路径"
-        />
-        <button disabled={!canConnect} onClick={onConnectProject}>
-          <CheckCircle2 size={14} />
-          {connecting ? "连接中" : "连接项目"}
-        </button>
-      </div>
-      {projectChoices.length > 0 && (
-        <div className="project-real-chain-recent" aria-label="最近项目">
-          <span>最近项目</span>
-          {projectChoices.slice(0, 3).map((choice) => (
-            <button
-              key={choice.projectRoot}
-              disabled={connecting}
-              onClick={() => onSelectProjectChoice(choice)}
-              title={choice.projectRoot}
-            >
-              {choice.displayName}
-            </button>
-          ))}
-        </div>
+    <details className="diagnostic-collapsible real-image2-gate-details">
+      <summary>Image2 gate detail</summary>
+      {!gate && <p className="muted-copy">No active Image2 gate for the current Director session.</p>}
+      {gate && (
+        <section className="machine-panel">
+          <div className="audit-head">
+            <span>Image2 Gate</span>
+            <StatusPill value={realImage2GatePhaseLabel(gate)} />
+          </div>
+          <div className="field-grid compact">
+            <label>Shot</label>
+            <span>{gate.shotId}</span>
+            <label>Task Plan</label>
+            <span>{gate.taskPlanId}</span>
+            <label>Schema</label>
+            <span>{gate.schemaVersion}</span>
+            <label>Sandbox</label>
+            <span>{gate.sandbox.root}</span>
+            <label>Output</label>
+            <span>{gate.latestOutputFile || "none"}</span>
+            <label>Hash</label>
+            <span>{gate.latestOutputHash || "none"}</span>
+            <label>Message</label>
+            <span>{gate.userMessage}</span>
+          </div>
+          {gate.blockers.length > 0 && (
+            <div className="code-list">
+              {gate.blockers.map((blocker, index) => (
+                <div key={`${blocker}-${index}`} className="code-item">{blocker}</div>
+              ))}
+            </div>
+          )}
+          <div className="gate-actions">
+            {gate.phase === "locked" && (
+              <button onClick={onUnlock}>解锁生成</button>
+            )}
+            {realImage2GateCanGenerate(gate) && (
+              <button onClick={onGenerate}>生成画面</button>
+            )}
+            {realImage2GatePromotionReady(gate) && (
+              <button onClick={onPromote}>复核通过</button>
+            )}
+            {(gate.phase === "blocked" || gate.phase === "promoted") && (
+              <button onClick={onReset}>重新锁定</button>
+            )}
+          </div>
+        </section>
       )}
-      <div className="project-real-chain-tags">
-        <small>项目状态 {status}</small>
-        <small>已返回 {returnedCount}/{plannedCount} 张</small>
-        <small>{summary?.needsReviewCount ?? 0} 张需复核</small>
-        <small>Preview {previewLabel}</small>
-        <small>Production {productionLabel}</small>
-      </div>
-      {round5GateLabels.length > 0 && (
-        <div className="project-real-chain-gates" aria-label="Round 5 gate 摘要">
-          {round5GateLabels.map((label) => (
-            <small key={label}>{label}</small>
-          ))}
-        </div>
-      )}
-      {showStrictEditPreflight && (
-        <div className="project-real-chain-policy" aria-label="Round 5 strict edit preflight">
-          <small>ZP05 strict edit · {strictEditLabel}</small>
-          <button
-            disabled={strictEditRunning}
-            onClick={() => onPrepareStrictEditPreflight(strictEditTargetShotId)}
-          >
-            <Sparkles size={14} />
-            {strictEditRunning ? "准备中" : "准备 edit 证据"}
-          </button>
-        </div>
-      )}
-      {showRound5EndReturn && (
-        <div className={`project-real-chain-policy round5-end-return ${round5EndReturn.status}`} aria-label="Round 5 strict edit return status">
-          <small>Round 5 end · {round5EndReturn.label}</small>
-          <small>{round5EndReturn.detail}</small>
-          <button disabled={running} onClick={onRun}>
-            <RefreshCw size={14} />
-            {running ? "同步中" : "刷新回流"}
-          </button>
-        </div>
-      )}
-      <div className="project-real-chain-batch">
-        <div>
-          <span>本地复核</span>
-          <strong>{reviewCheckStatus}</strong>
-          <small>{reviewCheckDetail}</small>
-        </div>
-        <button disabled={reviewDisabled} onClick={onRunImage2Batch}>
-          <RefreshCw size={14} />
-          {image2BatchRunning ? "检查中" : "复核检查"}
-        </button>
-      </div>
-      <div className="project-real-chain-one-shot">
-        <div>
-          <span>单镜头小样</span>
-          <strong>{sampleStatusLabel}</strong>
-          <small>{image2OneShotState.status === "trigger_plan_prepared" ? "已准备真实触发，等待 action-time confirmation" : selectedShotId ? `镜头 ${selectedShotId}` : "选择镜头后开始"}</small>
-        </div>
-        <button
-          disabled={sampleDisabled && !sampleWaiting}
-          onClick={sampleAction}
-        >
-          {sampleReady ? <CheckCircle2 size={14} /> : <Sparkles size={14} />}
-          {sampleRunning ? "准备中" : sampleButtonLabel}
-        </button>
-      </div>
-      {visibleItems.length > 0 && (
-        <div className="project-real-chain-thumbs" aria-label="当前项目预览图">
-          {visibleItems.map((item) => (
-            <figure key={item.shotId} className={item.reviewRequired ? "review-overlay" : undefined}>
-              <img src={item.thumbnailUrl || item.imageUrl} alt={`${item.shotId} preview`} />
-              <figcaption>
-                <span>{item.shotId}</span>
-                {item.reviewRequired && <small>需复核</small>}
-              </figcaption>
-            </figure>
-          ))}
-        </div>
-      )}
-      <small className="project-real-chain-report">
-        {displayTitle} · {summary ? "状态已回流" : "未同步"}
-      </small>
-      {!projectBound && <small className="project-real-chain-message">未选择项目/未同步</small>}
-      {state.message && <small className="project-real-chain-message">{state.message}</small>}
-      {image2BatchState.message && <small className="project-real-chain-message">{image2BatchState.message}</small>}
-      {image2OneShotState.message && <small className="project-real-chain-message">{image2OneShotState.message}</small>}
-      {strictEditPreflightState.message && <small className="project-real-chain-message">{strictEditPreflightState.message}</small>}
-    </section>
+    </details>
   );
 }
 
-function AudioPlanSummaryStrip({ audioPlanning, selectedShot }: { audioPlanning: AudioPlanningState; selectedShot?: ShotRecord }) {
-  const selectedPlan = findAudioPlan(audioPlanning, selectedShot?.id);
-  const plannedSlots = audioPlanning.providerSlots.filter((slot) => slot.state === "planned").length;
-  const liveAudioSlots = audioPlanning.providerSlots.filter((slot) => slot.liveSubmitAllowed).length;
 
-  return (
-    <section className="audio-plan-summary-strip">
-      <div className="audit-head">
-        <Radio size={17} />
-        <span>Audio Plan</span>
-      </div>
-      <div className="audio-summary-line">
-        <div>
-          <span>Audio planned</span>
-          <strong>{audioPlanning.shotPlans.length}</strong>
-        </div>
-        <div>
-          <span>Mix placeholders</span>
-          <strong>{audioPlanning.previewMix.eventCount}</strong>
-        </div>
-        <div>
-          <span>No BGM</span>
-          <strong>{audioPlanning.videoProviderPolicy.noBgmForVideoProvider ? "on" : "off"}</strong>
-        </div>
-      </div>
-      <div className="audio-policy-line">
-        <small>Music off for video provider</small>
-        <small>{plannedSlots} audio provider slot(s) planned · {liveAudioSlots} live</small>
-      </div>
-      <div className="audio-badge-row" aria-label="Selected shot audio badges">
-        {audioPlanBadges(selectedPlan).map((badge) => (
-          <span key={badge} className="audio-badge">{badge}</span>
-        ))}
-      </div>
-    </section>
-  );
-}
 
-function firstVideoBlocker(gate?: VideoReadinessGateState, plan?: VideoTaskPlanState) {
-  return gate?.blockers[0]
-    || plan?.blockers[0]
-    || gate?.checks.find((check) => check.status === "blocked")?.detail
-    || "No selected-shot video blocker.";
-}
 
-function motionTypeLabel(type?: string) {
-  const labels: Record<string, string> = {
-    static_hold: "静止",
-    micro_expression: "表情",
-    pose_change_in_place: "姿态",
-    locomotion: "走位",
-    object_interaction: "交互",
-    camera_reframe: "运镜",
-    camera_move: "运镜",
-    reveal_or_occlusion: "揭示",
-    transform_or_state_change: "状态变化",
-  };
-  return type ? labels[type] || type : "未规划";
-}
-
-function motionContractFromGate(gate?: VideoReadinessGateState): MotionEndpointContract | undefined {
-  const value = gate ? (gate as unknown as Record<string, unknown>).motionEndpointContract : undefined;
-  return isRecord(value) ? value as unknown as MotionEndpointContract : undefined;
-}
-
-function motionFactsFromTaskPlan(plan?: VideoTaskPlanState): Record<string, unknown> | undefined {
-  const value = plan ? (plan as unknown as Record<string, unknown>).motionEndpointFacts : undefined;
-  return isRecord(value) ? value : undefined;
-}
-
-function motionEndpointNoticeText(value: string) {
-  return /motion|MotionEndpoint|body mechanics|end[-\s]?frame|editable|protected|bbox|动作|尾帧|姿态|走位|运镜/i.test(value);
-}
-
-function firstMotionEndpointNotice(gate?: VideoReadinessGateState, plan?: VideoTaskPlanState) {
-  const contract = motionContractFromGate(gate);
-  return contract?.blockers[0]
-    || contract?.warnings[0]
-    || gate?.checks.find((check) => check.id.includes("motion") && check.status === "blocked")?.detail
-    || gate?.checks.find((check) => check.id.includes("motion") && check.status === "warning")?.detail
-    || plan?.blockers.find(motionEndpointNoticeText)
-    || plan?.warnings.find(motionEndpointNoticeText)
-    || "No motion endpoint blocker or warning.";
-}
-
-function motionContractSummaryForGate(gate?: VideoReadinessGateState, plan?: VideoTaskPlanState): MotionEndpointUiFacts {
-  const contract = motionContractFromGate(gate);
-  if (contract) {
-    return {
-      shotId: contract.shotId || gate?.shotId || plan?.shotId || "project",
-      motionType: contract.motionType,
-      motionLabel: motionTypeLabel(contract.motionType),
-      endFrameRequired: contract.whetherEndFrameRequired,
-      contractStatus: contract.status,
-      bodyMechanicsRequired: contract.bodyMechanics.required,
-      editableRegionCount: contract.editableRegions.length,
-      protectedRegionCount: contract.protectedRegions.length,
-      bboxOnlyMotionForbidden: contract.gateInputs.bboxOnlyMotionForbidden,
-      blockers: contract.blockers,
-      warnings: contract.warnings,
-      source: "contract",
-    };
-  }
-
-  const facts = motionFactsFromTaskPlan(plan);
-  if (facts) {
-    const motionType = typeof facts.motionType === "string" ? facts.motionType : "unknown";
-    const status = typeof facts.contractStatus === "string"
-      ? facts.contractStatus
-      : typeof facts.motionContractStatus === "string"
-        ? facts.motionContractStatus
-        : "missing";
-    return {
-      shotId: plan?.shotId || gate?.shotId || "project",
-      motionType,
-      motionLabel: motionTypeLabel(motionType),
-      endFrameRequired: readOptionalBoolean(facts, "whetherEndFrameRequired") ?? readOptionalBoolean(facts, "endRequired") ?? false,
-      contractStatus: status,
-      bodyMechanicsRequired: readOptionalBoolean(facts, "bodyMechanicsRequired") ?? false,
-      editableRegionCount: readStringArray(facts.editableRegionIds).length,
-      protectedRegionCount: readStringArray(facts.protectedRegionIds).length,
-      bboxOnlyMotionForbidden: readOptionalBoolean(facts, "bboxOnlyMotionForbidden") ?? false,
-      blockers: [],
-      warnings: [],
-      source: "task_facts",
-    };
-  }
-
-  return {
-    shotId: gate?.shotId || plan?.shotId || "project",
-    motionType: "missing",
-    motionLabel: "未规划",
-    endFrameRequired: false,
-    contractStatus: "missing",
-    bodyMechanicsRequired: false,
-    editableRegionCount: 0,
-    protectedRegionCount: 0,
-    bboxOnlyMotionForbidden: false,
-    blockers: [],
-    warnings: [],
-    source: "missing",
-  };
-}
-
-function motionEndpointFactsForShot(videoPlanning: VideoPlanningState, selectedShot?: ShotRecord) {
-  const selectedGate = selectedShot ? videoPlanning.readinessGates.find((gate) => gate.shotId === selectedShot.id) : undefined;
-  const selectedPlan = selectedShot ? videoPlanning.taskPlans.find((plan) => plan.shotId === selectedShot.id) : undefined;
-  return motionContractSummaryForGate(selectedGate, selectedPlan);
-}
-
-function buildMotionEndpointDiagnosticsSummary(videoPlanning: VideoPlanningState): MotionEndpointDiagnosticsSummary {
-  const shotIds = Array.from(new Set([
-    ...videoPlanning.readinessGates.map((gate) => gate.shotId),
-    ...videoPlanning.taskPlans.map((plan) => plan.shotId),
-  ]));
-  const facts = shotIds.map((shotId) => motionContractSummaryForGate(
-    videoPlanning.readinessGates.find((gate) => gate.shotId === shotId),
-    videoPlanning.taskPlans.find((plan) => plan.shotId === shotId),
-  ));
-
-  return {
-    total: facts.length,
-    endFrameRequiredCount: facts.filter((item) => item.endFrameRequired).length,
-    bodyMechanicsRequiredCount: facts.filter((item) => item.bodyMechanicsRequired).length,
-    typeCounts: countBy(facts.map((item) => item.motionLabel)),
-    statusCounts: countBy(facts.map((item) => item.contractStatus)),
-    compactItems: facts.slice(0, 6).map((item) => (
-      `${item.shotId} · ${item.motionLabel} · ${item.endFrameRequired ? "需要尾帧" : "无需尾帧"} · ${item.contractStatus}`
-    )),
-  };
-}
-
-function VideoPrepareSummaryStrip({
-  runtimeState,
-  selectedShot,
-}: {
-  runtimeState: ProjectRuntimeState;
-  selectedShot?: ShotRecord;
-}) {
-  const videoPlanning = getVideoPlanning(runtimeState);
-  const queue = videoPlanning.queueShell;
-  const policy = videoPlanning.providerPolicySummary;
-  const selectedGate = selectedShot ? videoPlanning.readinessGates.find((gate) => gate.shotId === selectedShot.id) : undefined;
-  const selectedPlan = selectedShot ? videoPlanning.taskPlans.find((plan) => plan.shotId === selectedShot.id) : undefined;
-  const readyGates = videoPlanning.readinessGates.filter((gate) => gate.status === "ready").length;
-  const blockedGates = videoPlanning.readinessGates.filter((gate) => gate.status === "blocked").length;
-  const motionFacts = motionEndpointFactsForShot(videoPlanning, selectedShot);
-
-  return (
-    <section className="video-plan-summary-strip">
-      <div className="audit-head">
-        <LockKeyhole size={17} />
-        <span>Video Prepare · 动作规划</span>
-      </div>
-      <div className="video-status-grid">
-        <div>
-          <span>动作规划</span>
-          <strong>{motionFacts.motionLabel}</strong>
-          <small>{motionFacts.endFrameRequired ? "需要尾帧" : "无需尾帧"} · {motionFacts.contractStatus}</small>
-        </div>
-        <div>
-          <span>Video Readiness</span>
-          <strong>{selectedGate?.status || `${readyGates}/${videoPlanning.readinessGates.length}`}</strong>
-          <small>{blockedGates} blocked gate(s)</small>
-        </div>
-        <div>
-          <span>Queue Shell</span>
-          <strong>{queue.status}</strong>
-          <small>{queue.counts.ready} ready · {queue.counts.parked} parked</small>
-        </div>
-        <div>
-          <span>Provider Lock</span>
-          <strong>{policy.liveSubmitAllowed ? "unlocked" : "locked"}</strong>
-          <small>{policy.parkedProviderIds.join(", ") || "providers parked"}</small>
-        </div>
-        <div>
-          <span>First Blocker</span>
-          <strong>{selectedShot ? selectedShot.id : "project"}</strong>
-          <small>{firstVideoBlocker(selectedGate, selectedPlan)}</small>
-        </div>
-      </div>
-      <small className="muted-copy">Readiness and queue shell only. Provider execution remains locked.</small>
-    </section>
-  );
-}
-
-function DirectorMode({
-  audit,
-  view,
-  runtimeState,
-  assetLibrary,
-  assetLibraryReadOnlyDetail,
-  projectScopeLabel,
-  projectFacts,
-  projectFactsMode,
-  selectedShot,
-  selectedShots,
-  selectedAsset,
-  selectedShotId,
-  selectedShotIds,
-  selectedAssetId,
-  projectRealChainState,
-  currentProjectPreviewItems,
-  projectImage2BatchState,
-  projectImage2OneShotState,
-  strictEditPreflightState,
-  runtimeProjectBinding,
-  projectChoices,
-  directorView,
-  activeSectionId,
-  onSelectShot,
-  onSelectAsset,
-  onAddAsset,
-  onUpdateAsset,
-  onMarkAssetStatus,
-  onProjectFactsModeChange,
-  onConfirmOneShot,
-  onRunProjectRealChain,
-  onRunProjectImage2Batch,
-  onPrepareStrictEditPreflight,
-  onPrepareImage2OneShot,
-  onConfirmImage2OneShot,
-  onCheckImage2OneShotReturn,
-  projectPathInput,
-  projectSelectionStatus,
-  onProjectPathChange,
-  onSelectProjectChoice,
-  onConnectProject,
-}: {
-  audit: ProjectAudit;
-  view: RuntimeView;
-  runtimeState: ProjectRuntimeState;
-  assetLibrary: AssetLibrarySnapshot;
-  assetLibraryReadOnlyDetail?: string;
-  projectScopeLabel?: string;
-  projectFacts: ProjectFactsUiSummary;
-  projectFactsMode: ProjectFactsUiMode;
-  selectedShot?: ShotRecord;
-  selectedShots: ShotRecord[];
-  selectedAsset?: AssetRecord;
-  selectedShotId: string;
-  selectedShotIds: string[];
-  selectedAssetId?: string;
-  projectRealChainState: ProjectRealChainPanelState;
-  currentProjectPreviewItems?: PreviewQueueItem[];
-  projectImage2BatchState: ProjectImage2BatchPanelState;
-  projectImage2OneShotState: ProjectImage2OneShotPanelState;
-  strictEditPreflightState: ProjectRound5StrictEditPreflightPanelState;
-  runtimeProjectBinding: ProjectCurrentBindingStatus;
-  projectChoices: ProjectCurrentChoice[];
-  directorView: DirectorView;
-  activeSectionId?: string;
-  onSelectShot: (id: string, additive?: boolean) => void;
-  onSelectAsset: (id: string) => void;
-  onAddAsset: (input: AddAssetLibraryAssetInput) => void;
-  onUpdateAsset: (assetId: string, input: UpdateAssetLibraryAssetInput) => void;
-  onMarkAssetStatus: (assetId: string, status: AssetLibraryUiStatus) => void;
-  onProjectFactsModeChange: (mode: ProjectFactsUiMode) => void;
-  onConfirmOneShot: () => void;
-  onRunProjectRealChain: () => void;
-  onRunProjectImage2Batch: () => void;
-  onPrepareStrictEditPreflight: (shotId: string) => void;
-  onPrepareImage2OneShot: () => void;
-  onConfirmImage2OneShot: () => void;
-  onCheckImage2OneShotReturn: () => void;
-  projectPathInput: string;
-  projectSelectionStatus?: "idle" | "connecting" | "connected" | "error";
-  onProjectPathChange: (value: string) => void;
-  onSelectProjectChoice: (choice: ProjectCurrentChoice) => void;
-  onConnectProject: () => void;
-}) {
-  const activeSection = view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0];
-  const sectionLabel = activeSection?.label || "Story";
-  const shots = activeSection ? audit.shots.filter((shot) => activeSection.shotIds.includes(shot.id)) : audit.shots;
-
-  return (
-    <div className={`minimal-director ${directorView}`}>
-      <div className="minimal-director-main">
-        <MinimalDirectorStatusDot runtimeState={runtimeState} />
-        <ProjectRealChainPanel
-          state={projectRealChainState}
-          image2BatchState={projectImage2BatchState}
-          image2OneShotState={projectImage2OneShotState}
-          strictEditPreflightState={strictEditPreflightState}
-          selectedShotId={selectedShotId}
-          projectTitle={runtimeState.project.title}
-          runtimeProjectBinding={runtimeProjectBinding}
-          projectPathInput={projectPathInput}
-          projectChoices={projectChoices}
-          projectSelectionStatus={projectSelectionStatus}
-          onProjectPathChange={onProjectPathChange}
-          onSelectProjectChoice={onSelectProjectChoice}
-          onConnectProject={onConnectProject}
-          onRun={onRunProjectRealChain}
-          onRunImage2Batch={onRunProjectImage2Batch}
-          onPrepareStrictEditPreflight={onPrepareStrictEditPreflight}
-          onPrepareImage2OneShot={onPrepareImage2OneShot}
-          onConfirmImage2OneShot={onConfirmImage2OneShot}
-          onCheckImage2OneShotReturn={onCheckImage2OneShotReturn}
-        />
-        <VideoPrepareSummaryStrip runtimeState={runtimeState} selectedShot={selectedShot} />
-        {directorView === "assets" && (
-          <MinimalAssetLibrary
-            library={assetLibrary}
-            readOnlyDetail={assetLibraryReadOnlyDetail}
-            selectedAssetId={selectedAssetId}
-            onSelectAsset={onSelectAsset}
-            onAddAsset={onAddAsset}
-            onUpdateAsset={onUpdateAsset}
-            onMarkAssetStatus={onMarkAssetStatus}
-          />
-        )}
-        {directorView === "story" && (
-          <MinimalStoryFlow
-            sectionLabel={sectionLabel}
-            shots={shots}
-            selectedShotId={selectedShotId}
-            selectedShotIds={selectedShotIds}
-            onSelectShot={onSelectShot}
-          />
-        )}
-        {directorView === "preview" && (
-          <MinimalPreview
-            previewExport={runtimeState.previewExport}
-            currentProjectPreviewItems={currentProjectPreviewItems}
-            sections={view.storySections}
-            shots={audit.shots}
-            selectedShotId={selectedShotId}
-            onSelectShot={onSelectShot}
-          />
-        )}
-      </div>
-      <MinimalAgentPanel
-        runtimeState={runtimeState}
-        projectScopeLabel={projectScopeLabel}
-        shot={directorView === "assets" ? undefined : selectedShot}
-        selectedShots={directorView === "story" ? selectedShots : []}
-        asset={directorView === "assets" ? selectedAsset : undefined}
-        sectionLabel={sectionLabel}
-        sectionId={directorView === "story" && !selectedShot ? activeSection?.id : undefined}
-      />
-    </div>
-  );
-}
-
-function TaskRows({ tasks, compact = false }: { tasks: TaskRuntimeView[]; compact?: boolean }) {
+export function TaskRows({ tasks, compact = false }: { tasks: TaskRuntimeView[]; compact?: boolean }) {
   if (!tasks.length) return <p className="muted-copy">No task runs for this selection.</p>;
   return (
     <div className="job-list">
@@ -8506,7 +1474,7 @@ function TaskRows({ tasks, compact = false }: { tasks: TaskRuntimeView[]; compac
   );
 }
 
-function EnvelopePreview({ task }: { task?: TaskRuntimeView }) {
+export function EnvelopePreview({ task }: { task?: TaskRuntimeView }) {
   if (!task) return <p className="muted-copy">Select a shot to preview its standardized task envelope.</p>;
 
   return (
@@ -8541,7 +1509,7 @@ function EnvelopePreview({ task }: { task?: TaskRuntimeView }) {
   );
 }
 
-function ShotAudioInspector({ audioPlanning, selectedShot }: { audioPlanning: AudioPlanningState; selectedShot?: ShotRecord }) {
+export function ShotAudioInspector({ audioPlanning, selectedShot }: { audioPlanning: AudioPlanningState; selectedShot?: ShotRecord }) {
   if (!selectedShot) return <p className="muted-copy">Select a shot to inspect its audio plan.</p>;
 
   const plan = findAudioPlan(audioPlanning, selectedShot.id);
@@ -8601,7 +1569,164 @@ function formatFrameRef(ref?: VideoExecutionPreviewRow["subagentPacketPreview"][
   return `${ref.shotFrameId} · ${ref.present ? "present" : "missing"} · ${ref.source}${path}`;
 }
 
-function ShotExecutionPreviewInspector({
+const rememberedProjectRootStorageKey = "vibe-director:last-project-root";
+const recentProjectSelectionsStorageKey = "vibe-director:recent-projects";
+const autoRestoreRememberedProjectStorageKey = "vibe-director:auto-restore-project";
+
+type RememberedProjectSelection = ProjectRootDialogSelection & {
+  updatedAt?: string;
+};
+
+function projectFolderName(projectRoot?: string) {
+  return projectRoot?.split(/[\\/]/).filter(Boolean).at(-1) || "未命名项目";
+}
+
+function projectIdFromLocalRoot(projectRoot?: string) {
+  const folderName = projectFolderName(projectRoot);
+  const slug = folderName
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  let hash = 0;
+  for (let index = 0; index < (projectRoot || folderName).length; index += 1) {
+    hash = ((hash << 5) - hash + (projectRoot || folderName).charCodeAt(index)) | 0;
+  }
+  const suffix = Math.abs(hash).toString(36);
+  return `${slug || "local_project"}_${suffix || "0"}`;
+}
+
+function createEmptyProjectVibeForProjectRoot(projectRoot?: string, displayName?: string): ProjectVibeDocument {
+  const now = new Date().toISOString();
+  const title = displayName?.trim() || projectFolderName(projectRoot) || "新视频项目";
+  return createProjectVibe({
+    projectId: projectIdFromLocalRoot(projectRoot),
+    title,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+function normalizeRememberedProjectSelection(selection: ProjectRootDialogSelection): RememberedProjectSelection | undefined {
+  const projectRoot = selection.projectRoot?.trim();
+  if (!projectRoot) return undefined;
+  return {
+    cancelled: false,
+    projectRoot,
+    projectPath: selection.projectPath?.trim() || "project.vibe",
+    projectVibePath: selection.projectVibePath?.trim(),
+    hasProjectVibe: selection.hasProjectVibe !== false,
+    displayName: selection.displayName?.trim() || projectFolderName(projectRoot),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function readRememberedProjectSelection(): ProjectRootDialogSelection | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const value = window.localStorage.getItem(rememberedProjectRootStorageKey)?.trim();
+    if (!value) return undefined;
+    if (value.startsWith("{")) {
+      const parsed = JSON.parse(value) as ProjectRootDialogSelection;
+      return parsed.projectRoot?.trim() ? parsed : undefined;
+    }
+    return {
+      cancelled: false,
+      projectRoot: value,
+      projectPath: "project.vibe",
+      hasProjectVibe: true,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function shouldAutoRestoreRememberedProject() {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(autoRestoreRememberedProjectStorageKey) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function readRecentProjectSelections(): RememberedProjectSelection[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const value = window.localStorage.getItem(recentProjectSelectionsStorageKey)?.trim();
+    if (!value) return [];
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const seen = new Set<string>();
+    const items: RememberedProjectSelection[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const selection = normalizeRememberedProjectSelection(item as ProjectRootDialogSelection);
+      if (!selection || seen.has(selection.projectRoot!)) continue;
+      const updatedAt = typeof (item as { updatedAt?: unknown }).updatedAt === "string"
+        ? (item as { updatedAt: string }).updatedAt
+        : selection.updatedAt;
+      items.push({ ...selection, updatedAt });
+      seen.add(selection.projectRoot!);
+    }
+    return items.slice(0, 12);
+  } catch {
+    return [];
+  }
+}
+
+function writeRecentProjectSelections(items: RememberedProjectSelection[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(recentProjectSelectionsStorageKey, JSON.stringify(items.slice(0, 12)));
+  } catch {
+    // Best-effort project switch list only.
+  }
+}
+
+function writeRememberedProjectSelection(selection: ProjectRootDialogSelection): RememberedProjectSelection[] {
+  if (typeof window === "undefined") return [];
+  const normalized = normalizeRememberedProjectSelection(selection);
+  if (!normalized?.projectRoot) return readRecentProjectSelections();
+  try {
+    window.localStorage.setItem(rememberedProjectRootStorageKey, JSON.stringify({
+      cancelled: false,
+      projectRoot: normalized.projectRoot,
+      projectPath: normalized.projectPath,
+      projectVibePath: normalized.projectVibePath,
+      hasProjectVibe: normalized.hasProjectVibe,
+      displayName: normalized.displayName,
+    }));
+  } catch {
+    // Best-effort restore hint only.
+  }
+  const recent = [
+    normalized,
+    ...readRecentProjectSelections().filter((item) => item.projectRoot !== normalized.projectRoot),
+  ].slice(0, 12);
+  writeRecentProjectSelections(recent);
+  return recent;
+}
+
+function clearRememberedProjectRoot(projectRoot?: string): RememberedProjectSelection[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const remembered = readRememberedProjectSelection();
+    if (!projectRoot || remembered?.projectRoot === projectRoot) {
+      window.localStorage.removeItem(rememberedProjectRootStorageKey);
+    }
+    const recent = projectRoot
+      ? readRecentProjectSelections().filter((item) => item.projectRoot !== projectRoot)
+      : [];
+    writeRecentProjectSelections(recent);
+    return recent;
+  } catch {
+    // Best-effort restore hint only.
+    return readRecentProjectSelections();
+  }
+}
+
+export function ShotExecutionPreviewInspector({
   runtimeState,
   selectedShot,
 }: {
@@ -8674,7 +1799,7 @@ function ShotExecutionPreviewInspector({
   );
 }
 
-function ShotVideoGateInspector({
+export function ShotVideoGateInspector({
   runtimeState,
   selectedShot,
 }: {
@@ -8716,12 +1841,12 @@ function ShotVideoGateInspector({
   const blockers = [
     ...(gate?.blockers || []).map((item) => `gate: ${item}`),
     ...(plan?.blockers || []).map((item) => `task: ${item}`),
-    ...(gate?.checks || []).filter((check) => check.status === "blocked").map((check) => `${check.label}: ${check.detail}`),
+    ...(gate?.checks || []).reduce((acc, check) => { if (check.status === "blocked") acc.push(`${check.label}: ${check.detail}`); return acc; }, [] as string[]),
   ];
   const warnings = [
     ...(gate?.warnings || []).map((item) => `gate: ${item}`),
     ...(plan?.warnings || []).map((item) => `task: ${item}`),
-    ...(gate?.checks || []).filter((check) => check.status === "warning").map((check) => `${check.label}: ${check.detail}`),
+    ...(gate?.checks || []).reduce((acc, check) => { if (check.status === "warning") acc.push(`${check.label}: ${check.detail}`); return acc; }, [] as string[]),
   ];
 
   return (
@@ -8781,1069 +1906,194 @@ function ShotVideoGateInspector({
   );
 }
 
-function InspectorMode({
-  audit,
-  view,
-  runtimeState,
-  selectedShot,
-  selectedAsset,
-}: {
-  audit: ProjectAudit;
-  view: RuntimeView;
-  runtimeState: ProjectRuntimeState;
-  selectedShot?: ShotRecord;
-  selectedAsset?: AssetRecord;
-}) {
-  const selectedTasks = selectedShot ? view.taskViews.filter((task) => task.shot?.id === selectedShot.id) : [];
-  const primaryTask = selectedTasks.find((task) => task.job.slot === "video.i2v") || selectedTasks[0];
-  const relatedIssues = audit.issues.filter((issue) => !selectedShot || issue.target?.includes(selectedShot.id) || issue.type === "provider_policy" || issue.type === "fallback" || issue.type === "missing_output");
 
-  return (
-    <div className="inspector-layout">
-      <aside className="inspector">
-        <div className="panel-title">
-          <Clapperboard size={17} />
-          <span>Inspector</span>
-        </div>
-        {selectedShot && (
-          <section className="inspector-section">
-            <div className="selected-line">Selected {selectedShot.id}</div>
-            <h2>{selectedShot.storyFunction}</h2>
-            <div className="field-grid">
-              <label>Act</label>
-              <span>{selectedShot.actId}</span>
-              <label>Section</label>
-              <span>{selectedShot.sectionId || "none"}</span>
-              <label>Status</label>
-              <span>{selectedShot.status}</span>
-              <label>Video</label>
-              <span>{selectedShot.videoPath ? "ready" : "blocked"}</span>
-            </div>
-            <div className="gate-table">
-              {gateNames.map((name) => (
-                <div key={name}>
-                  <span>{name}</span>
-                  <b className={gateClass(selectedShot.gates[name])}>{selectedShot.gates[name]}</b>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-        {selectedAsset && (
-          <section className="inspector-section">
-            <div className="selected-line">Asset {selectedAsset.type}</div>
-            <h2>{selectedAsset.name}</h2>
-            <div className="field-grid">
-              <label>Status</label>
-              <span>{selectedAsset.status}</span>
-              <label>Lock</label>
-              <span>{selectedAsset.lockedStatus}</span>
-              <label>Provider</label>
-              <span>{selectedAsset.providerId || "unknown"}</span>
-            </div>
-            <div className="path-list">
-              <small>{selectedAsset.path}</small>
-            </div>
-          </section>
-        )}
-      </aside>
-      <main className="inspector-main">
-        <section className="machine-panel">
-          <div className="audit-head">
-            <Sparkles size={17} />
-            <span>Phase 4 Image Pipeline</span>
-          </div>
-          <ShotImagePipelineSummary runtimeState={runtimeState} selectedShot={selectedShot} />
-        </section>
-        <section className="machine-panel">
-          <div className="audit-head">
-            <LockKeyhole size={17} />
-            <span>Video Gate</span>
-          </div>
-          <ShotVideoGateInspector runtimeState={runtimeState} selectedShot={selectedShot} />
-        </section>
-        <section className="machine-panel">
-          <div className="audit-head">
-            <FileJson size={17} />
-            <span>Video Execution Preview</span>
-          </div>
-          <ShotExecutionPreviewInspector runtimeState={runtimeState} selectedShot={selectedShot} />
-        </section>
-        <section className="machine-panel">
-          <div className="audit-head">
-            <Play size={17} />
-            <span>Preview / Export</span>
-          </div>
-          <ShotPreviewExportSummary previewExport={runtimeState.previewExport} selectedShot={selectedShot} tasks={selectedTasks} />
-        </section>
-        <section className="machine-panel">
-          <div className="audit-head">
-            <Radio size={17} />
-            <span>Shot Audio Plan</span>
-          </div>
-          <ShotAudioInspector audioPlanning={runtimeState.audioPlanning} selectedShot={selectedShot} />
-        </section>
-        <section className="machine-panel">
-          <div className="audit-head">
-            <ListChecks size={17} />
-            <span>Task Runs</span>
-          </div>
-          <TaskRows tasks={selectedTasks} />
-        </section>
-        <section className="machine-panel">
-          <div className="audit-head">
-            <FileJson size={17} />
-            <span>Task Envelope Preview</span>
-          </div>
-          <EnvelopePreview task={primaryTask} />
-        </section>
-        <section className="machine-panel">
-          <div className="audit-head">
-            <AlertTriangle size={17} />
-            <span>Blocking Reasons</span>
-          </div>
-          <div className="issue-list">
-            {relatedIssues.slice(0, 8).map((issue) => (
-              <div key={issue.id} className={issueTone(issue)}>
-                <strong>{issue.title}</strong>
-                <p>{issue.detail}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      </main>
-    </div>
-  );
-}
 
-function ProviderDock({ audit }: { audit: ProjectAudit }) {
-  return (
-    <section className="provider-dock">
-      <div className="provider-title">
-        <PlugZap size={16} />
-        <span>Provider Policy</span>
-      </div>
-      {audit.providerPolicy.rules.slice(0, 6).map((rule) => (
-        <div key={rule.slot} className={`provider-rule ${rule.executionState}`}>
-          <div>
-            <strong>{rule.slot}</strong>
-            <small>{rule.activeProvider}</small>
-          </div>
-          <StatusPill value={rule.executionState} />
-        </div>
-      ))}
-      <div className="provider-note">
-        <PauseCircle size={15} />
-        <span>Seedance/Jimeng stays parked. This UI builds envelopes and dry checks only.</span>
-      </div>
-    </section>
-  );
-}
-
-function uniqueCount(values: string[]) {
-  return new Set(values.filter(Boolean)).size;
-}
-
-function taskKnowledgeWarnings(task: TaskRuntimeView) {
-  return Array.from(new Set([
-    ...task.routeResult.warnings,
-    ...task.contextBudget.warnings,
-    ...task.envelope.routeWarnings,
-  ].filter(Boolean)));
-}
-
-type KnowledgeUiSummary = {
-  enabledTotal: string;
-  injectedUnique: string;
-  warningBlockerCount: string;
-  budgetUsed: string;
-  readiness: string;
-  hardLockReminder: string;
-};
-
-function buildKnowledgeUiSummary(view: RuntimeView): KnowledgeUiSummary {
-  const routeTest = view.knowledge.routeTest;
-  const totalInjectedPacks = view.taskViews.reduce((count, task) => count + task.envelope.injectedKnowledgePacks.length, 0);
-  const uniqueInjectedPacks = uniqueCount(view.taskViews.flatMap((task) => task.envelope.injectedKnowledgePacks.map((pack) => pack.packId)));
-  const usedTokens = view.taskViews.reduce((sum, task) => sum + task.contextBudget.usedTokens, 0);
-  const maxTokens = view.taskViews.reduce((sum, task) => sum + task.contextBudget.maxInjectionTokens, 0);
-  const routeWarnings = routeTest ? Array.from(new Set([...routeTest.routeResult.warnings, ...routeTest.contextBudget.warnings])) : [];
-  const taskWarnings = view.taskViews.flatMap(taskKnowledgeWarnings);
-  const warningCount = uniqueCount([...taskWarnings, ...routeWarnings]);
-  const blockerCount = view.knowledge.validationIssues.length;
-  const readiness = blockerCount ? "blocked" : warningCount ? "needs review" : "ready";
-
-  return {
-    enabledTotal: `${view.knowledge.enabledCount}/${view.knowledge.packCount}`,
-    injectedUnique: `${totalInjectedPacks}/${uniqueInjectedPacks}`,
-    warningBlockerCount: `${warningCount}/${blockerCount}`,
-    budgetUsed: `${usedTokens}/${maxTokens}`,
-    readiness,
-    hardLockReminder: "Hard lock: provider policy, preflight, reference authority, keyframe pair derivation, and QA gates stay fixed.",
-  };
-}
-
-function KnowledgePackManager({ view }: { view: RuntimeView }) {
-  const summary = buildKnowledgeUiSummary(view);
-
-  return (
-    <section className="machine-panel knowledge-manager">
-      <div className="audit-head">
-        <Database size={17} />
-        <span>Knowledge Pack Manager</span>
-      </div>
-      <div className="summary-grid">
-        <Metric label="Enabled" value={summary.enabledTotal} detail="packs enabled / total" />
-        <Metric label="Injected" value={summary.injectedUnique} detail="records / unique" />
-        <Metric label="Warnings / Blockers" value={summary.warningBlockerCount} detail="router, budget, manifest" />
-        <Metric label="Budget Used" value={summary.budgetUsed} detail="tokens across task packets" />
-      </div>
-      <div className="knowledge-summary-strip">
-        <StatusPill value={summary.readiness} />
-        <span>Read-only Diagnostics summary.</span>
-        <span>{summary.hardLockReminder}</span>
-      </div>
-    </section>
-  );
-}
-
-function statusLabel(value: string) {
-  return value.replace(/_/g, " ");
-}
-
-function boolLockLabel(value: boolean) {
-  return value ? "allowed" : "false / locked";
-}
-
-function AdapterContractDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const contracts: AdapterContractState = runtimeState.adapterContracts;
-  const summary = contracts.summary;
-  const providerContracts = contracts.providerAdapters;
-  const workerContracts = contracts.workerAdapters;
-  const lockedProviderCount = providerContracts.filter((adapter) => adapter.providerSubmissionForbidden).length;
-  const readOnlyCount = providerContracts.filter((adapter) => adapter.readOnly && adapter.dryRunOnly).length;
-
-  return (
-    <section className="machine-panel adapter-contract-diagnostics">
-      <div className="audit-head">
-        <PlugZap size={17} />
-        <span>Adapter Contract Diagnostics</span>
-      </div>
-      <div className="summary-grid">
-        <Metric label="Agent Contracts" value={`${summary.agentAdapters.length}`} detail={summary.agentAdapters.join(", ") || "none"} />
-        <Metric label="Worker Contracts" value={`${summary.workerAdapters.length}`} detail={summary.workerAdapters.join(", ") || "none"} />
-        <Metric label="Provider Contracts" value={`${summary.providerAdapters.length}`} detail={`${readOnlyCount} read-only dry-run · ${lockedProviderCount} provider locked`} />
-        <Metric label="Violations" value={`${summary.contractViolations.length}`} detail="contract validation blockers" />
-      </div>
-      <div className="adapter-contract-locks video-rule-strip">
-        <span>Contract: read-only diagnostics</span>
-        <span>Active image provider: {summary.activeImageProvider || "none"}</span>
-        <span>Parked video providers: {summary.parkedVideoProviders.join(", ") || "none"}</span>
-        <span>liveSubmitAllowed: {boolLockLabel(summary.liveSubmitAllowed)}</span>
-        <span>credentialStorage: {String(summary.credentialStorage)}</span>
-      </div>
-      <div className="adapter-contract-grid">
-        <div>
-          <h3>Provider Contracts</h3>
-          <div className="adapter-contract-list">
-            {providerContracts.map((adapter) => (
-              <div key={adapter.id} className="adapter-contract-row">
-                <div className="row-head">
-                  <strong>{adapter.id}</strong>
-                  <StatusPill value={adapter.state} />
-                </div>
-                <div className="field-grid compact">
-                  <label>Slot</label>
-                  <span>{adapter.slot}</span>
-                  <label>requiredModes</label>
-                  <span>{adapter.requiredModes.join(", ")}</span>
-                  <label>capabilityRefs</label>
-                  <span>{adapter.capabilityRefs.length}</span>
-                  <label>Contract</label>
-                  <span>dryRunOnly {String(adapter.dryRunOnly)} · readOnly {String(adapter.readOnly)}</span>
-                  <label>liveSubmitAllowed</label>
-                  <span>{boolLockLabel(adapter.liveSubmitAllowed)}</span>
-                  <label>Provider</label>
-                  <span>{adapter.providerSubmissionForbidden ? "locked / forbidden" : "allowed"}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <h3>Worker Envelope / Context Packet</h3>
-          <div className="adapter-contract-list">
-            {workerContracts.map((adapter) => (
-              <div key={adapter.id} className="adapter-contract-row">
-                <div className="row-head">
-                  <strong>{adapter.id}</strong>
-                  <StatusPill value={adapter.state} />
-                </div>
-                <div className="field-grid compact">
-                  <label>Envelope</label>
-                  <span>{adapter.requiredEnvelopeSchema}</span>
-                  <label>Context</label>
-                  <span>{adapter.mustReceiveContextPacket ? "required" : "optional"}</span>
-                  <label>Bypass</label>
-                  <span>{adapter.canBypassEnvelope ? "allowed" : "false / locked"}</span>
-                  <label>Read</label>
-                  <span>{adapter.readScopePolicy}</span>
-                  <label>Write</label>
-                  <span>{adapter.writeScopePolicy}</span>
-                  <label>Modes</label>
-                  <span>{adapter.allowedPurposes.join(", ")}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="settings-list adapter-violation-list">
-            <div>
-              <strong>Contract Violations</strong>
-              <small>{summary.contractViolations.length ? `${summary.contractViolations.length} violation(s)` : "none · provider locked · dry-run only"}</small>
-            </div>
-            {summary.contractViolations.slice(0, 4).map((violation) => (
-              <div key={`${violation.adapterId}-${violation.code}`}>
-                <strong>{violation.adapterId}</strong>
-                <small>{violation.severity} · {statusLabel(violation.code)} · {violation.detail}</small>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ExportWorkerDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildExportWorkerUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel phase27-export-worker-panel">
-      <div className="audit-head">
-        <FileJson size={17} />
-        <span>Export Worker Diagnostics</span>
-      </div>
-      <div className="summary-grid phase27-metrics">
-        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "runtimeState.exportWorker" : "blocked/missing"} />
-        <Metric label="Scope" value={summary.scope} detail="export/project IO only" />
-        <Metric label="Planned Writes" value={`${summary.plannedWriteCount}`} detail={summary.plannedWriteCount ? "scoped plan entries" : "blocked/missing"} />
-        <Metric label="Export Root" value={summary.exportRoot} detail="compact root label" />
-      </div>
-      <div className="phase27-summary-list">
-        <div>
-          <strong>Blocked / warnings</strong>
-          <small>{summary.blockersWarnings.slice(0, 4).join(" · ")}</small>
-        </div>
-        <div>
-          <strong>Planned writes</strong>
-          <small>{summary.plannedWriteSamples.length ? summary.plannedWriteSamples.join(" · ") : "blocked/missing"}</small>
-        </div>
-      </div>
-      <div className="phase27-lock-strip" aria-label="Phase 27 hard locks">
-        {summary.hardLocks.slice(0, 8).map((lock) => (
-          <span key={lock}>{lock}</span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function AgentCliMockRunnerDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildAgentCliMockRunnerUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel phase26-runner-panel">
-      <div className="audit-head">
-        <PlugZap size={17} />
-        <span>Agent/CLI Mock Runner</span>
-      </div>
-      <div className="summary-grid phase26-metrics">
-        <Metric label="Runner Kind" value={summary.runnerKind} detail={summary.initialized ? "Phase 26 mock/no-op" : "blocked/missing"} />
-        <Metric label="Replacement Proof" value={summary.replacementProof} detail="replaceable runner contract" />
-        <Metric label="Readiness" value={summary.readiness} detail="ready/blocked only" />
-        <Metric label="No-op Results" value={`${summary.noopResultCount}`} detail="structured no-op count" />
-      </div>
-      <div className="phase26-lock-strip" aria-label="Phase 26 hard locks">
-        {summary.hardLocks.slice(0, 8).map((lock) => (
-          <span key={lock}>{lock}</span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function CodexCliAdapterSpikeDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildCodexCliAdapterSpikeUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel phase29-codex-adapter-panel">
-      <div className="audit-head">
-        <PlugZap size={17} />
-        <span>Codex CLI Adapter Spike</span>
-      </div>
-      <div className="summary-grid phase29-metrics">
-        <Metric label="Readiness" value={summary.readiness} detail={summary.initialized ? "Phase 29 contract-only" : "blocked/missing"} />
-        <Metric label="Contract Mode" value={summary.contractMode} detail="adapter shape only" />
-        <Metric label="Replacement Proof" value={summary.replacementProof} detail="Phase 26 required" />
-        <Metric label="Input Source" value={summary.inputSource} detail="no free text task" />
-        <Metric label="Spawn / Resume" value={summary.spawnResumeShape} detail="not executed" />
-        <Metric label="Provider Submit" value={summary.providerSubmit} detail="blocked" />
-      </div>
-      <div className="phase29-summary-list">
-        <div>
-          <strong>Boundary</strong>
-          <small>{summary.mutationBoundary}</small>
-        </div>
-        <div>
-          <strong>Blocked / warnings</strong>
-          <small>{[...summary.blockers, ...summary.warnings].slice(0, 4).join(" · ") || "none"}</small>
-        </div>
-      </div>
-      <div className="phase29-lock-strip" aria-label="Phase 29 Codex CLI Adapter Spike hard locks">
-        {summary.hardLocks.slice(0, 8).map((lock) => (
-          <span key={lock}>{lock}</span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function SettingsShell({ runtimeState, view }: { runtimeState: ProjectRuntimeState; view: RuntimeView }) {
-  const runtime = runtimeState.runtime;
-  const config = runtime.config;
-  const providerSummary = runtime.providerEnablementSummary;
-  const adapterSummary = runtimeState.adapterContracts.summary;
-  const tools = runtime.detectionReport.tools;
-  const sidecar = config.sidecarPermissions;
-  const providerSlots = config.providerEnablement.slots;
-  const providerAdapters = config.providerAdapterSettings || [];
-  const voiceLibrary = runtimeState.voiceSourceLibrary;
-  const voiceSources = voiceLibrary.sources;
-  const desktopShell = buildDesktopRuntimeShellView(runtimeState);
-  const knowledgeSummary = buildKnowledgeUiSummary(view);
-  const agentCliMockRunnerSummary = buildAgentCliMockRunnerUiSummary(runtimeState);
-  const codexCliAdapterSpikeSummary = buildCodexCliAdapterSpikeUiSummary(runtimeState);
-  const exportWorkerSummary = buildExportWorkerUiSummary(runtimeState);
-  const voiceAudioSettingsSummary = buildVoiceAudioSettingsUiSummary(runtimeState);
-  const providerEnablementGateSummary = buildProviderEnablementGateUiSummary(runtimeState);
-  const providerExecutionPermissionGateSummary = buildProviderExecutionPermissionGateUiSummary(runtimeState);
-  const providerActionConfirmationReceiptSummary = buildProviderActionConfirmationReceiptUiSummary(runtimeState);
-  const providerExecutionHandoffSummary = buildProviderExecutionHandoffUiSummary(runtimeState);
-  const localOrchestratorSummary = buildLocalOrchestratorUiSummary(runtimeState);
-  const visualConsistencySummary = buildVisualConsistencyContractUiSummary(runtimeState);
-  const fullTaskSubagentPacketPlannerSummary = buildFullTaskSubagentPacketPlannerUiSummary(runtimeState);
-  const knowledgePackUserManagementSummary = buildKnowledgePackUserManagementUiSummary(runtimeState);
-  const codexWorkerRuntimeGateSummary = buildCodexWorkerRuntimeGateUiSummary(runtimeState);
-  const providerClosedLoopShellSummary = buildProviderClosedLoopShellUiSummary(runtimeState);
-  const betaAcceptanceSummary = buildBetaAcceptanceUiSummary(runtimeState);
-  const realPilotSummary = buildRealPilotUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel settings-shell">
-      <div className="audit-head">
-        <Settings size={17} />
-        <span>Settings Shell</span>
-      </div>
-      <div className="desktop-runtime-shell">
-        <div className="row-head">
-          <div className="audit-head desktop-runtime-title">
-            <LockKeyhole size={16} />
-            <span>Desktop Runtime / Permission Shell</span>
-          </div>
-          <StatusPill value={desktopShell.planStatus} />
-        </div>
-        <div className="field-grid compact desktop-runtime-grid">
-          <label>runtime mode</label>
-          <span>{desktopShell.runtimeMode}</span>
-          <label>platform/path policy</label>
-          <span>{desktopShell.platformPathPolicy}</span>
-          <label>project permission scope</label>
-          <span>{desktopShell.projectPermissionScope}</span>
-          <label>sidecar policy</label>
-          <span>{desktopShell.sidecarPolicy}</span>
-          <label>credential vault placeholder</label>
-          <span>{desktopShell.credentialVault}</span>
-        </div>
-        <div className="desktop-runtime-locks" aria-label="hard locks summary">
-          {desktopShell.hardLocks.map((lock) => (
-            <span key={lock}>{lock}</span>
-          ))}
-        </div>
-      </div>
-      <div className="field-grid compact runtime-facts">
-        <label>Runtime</label>
-        <span>{statusLabel(config.runtimeMode)} / {config.platform}</span>
-        <label>Root Policy</label>
-        <span>{statusLabel(config.projectRootPolicy.strategy)} · mac {config.projectRootPolicy.macPathStyle} · win {config.projectRootPolicy.windowsPathStyle}</span>
-        <label>Live Path</label>
-        <span>{providerSummary.liveSubmitAllowed ? "allowed" : "blocked"}</span>
-        <label>Credentials</label>
-        <span>{config.credentialStorage.mode}; secrets stored: {config.credentialStorage.storesSecrets ? "yes" : "no"}</span>
-        <label>Contract</label>
-        <span>{adapterSummary.providerAdapters.length} provider contract(s) · read-only · dry-run · provider locked</span>
-      </div>
-      <div className="settings-group-title">Tools</div>
-      <div className="settings-list">
-        {tools.map((tool) => (
-          <div key={tool.id}>
-            <strong>{tool.label}</strong>
-            <small>{statusLabel(tool.status)}{tool.path ? ` · ${tool.path}` : ""}{tool.version ? ` · ${tool.version}` : ""}</small>
-          </div>
-        ))}
-      </div>
-      <div className="settings-group-title">Sidecar Policy</div>
-      <div className="settings-list">
-        <div>
-          <strong>Arbitrary shell</strong>
-          <small>{sidecar.arbitraryShellExecution}; {sidecar.providerLiveSubmit} provider live path</small>
-        </div>
-        <div>
-          <strong>Allowed commands</strong>
-          <small>{sidecar.allowedCommands.map((command) => command.executable).join(", ") || "none"}</small>
-        </div>
-        <div>
-          <strong>Filesystem scope</strong>
-          <small>{sidecar.filesystemScope.map(statusLabel).join(", ")}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Provider Enablement</div>
-      <div className="settings-list">
-        {providerSlots.map((slot) => (
-          <div key={slot.slot}>
-            <strong>{slot.slot}</strong>
-            <small>{slot.state} · live path {slot.liveSubmitAllowed ? "allowed" : "blocked"} · {(slot.allowedProviders.length ? slot.allowedProviders : ["planned"]).join(", ")}</small>
-          </div>
-        ))}
-      </div>
-      <div className="settings-group-title">Provider Adapter Shell</div>
-      <div className="settings-list adapter-settings-list">
-        <div className="settings-readonly-note">
-          <strong>Adapter Contract Status</strong>
-          <small>
-            {adapterSummary.activeImageProvider || "no active image provider"} · {adapterSummary.parkedVideoProviders.length} parked video provider(s) · {adapterSummary.contractViolations.length} violation(s)
-          </small>
-        </div>
-        {providerAdapters.map((adapter) => (
-          <div key={adapter.id}>
-            <strong>{adapter.label}</strong>
-            <small>
-              {adapter.slot} / {adapter.requiredMode} · {adapter.state} · credentials {adapter.credentialStatus}
-            </small>
-            <small>
-              start/end {String(adapter.supports.startEndFrame)} · t2v {String(adapter.supports.textToVideo)} · fast {String(adapter.supports.fastModel)} · VIP {String(adapter.supports.vipChannel)}
-            </small>
-          </div>
-        ))}
-        {!providerAdapters.length && (
-          <div>
-            <strong>No adapters configured</strong>
-            <small>Runtime defaults will provide read-only adapter shells.</small>
-          </div>
-        )}
-      </div>
-      <div className="settings-group-title">Knowledge Pack Manager</div>
-      <div className="settings-list knowledge-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Knowledge Pack Manager readiness: {knowledgeSummary.readiness}</strong>
-          <small>{knowledgeSummary.enabledTotal} enabled / total · {knowledgeSummary.injectedUnique} injected / unique</small>
-          <small>warnings / blockers {knowledgeSummary.warningBlockerCount} · budget {knowledgeSummary.budgetUsed} tokens</small>
-          <small>{knowledgeSummary.hardLockReminder}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Agent/CLI Mock Runner</div>
-      <div className="settings-list agent-cli-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Agent/CLI Mock Runner readiness: {agentCliMockRunnerSummary.readiness}</strong>
-          <small>{agentCliMockRunnerSummary.runnerKind} · replacement proof {agentCliMockRunnerSummary.replacementProof} · adapter boundary mock/no-op only · {agentCliMockRunnerSummary.noopResultCount} no-op result(s)</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Codex CLI Adapter Spike</div>
-      <div className="settings-list codex-cli-adapter-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Codex CLI Adapter readiness: {codexCliAdapterSpikeSummary.readiness}</strong>
-          <small>{codexCliAdapterSpikeSummary.contractMode} · {codexCliAdapterSpikeSummary.inputSource} · spawn/resume {codexCliAdapterSpikeSummary.spawnResumeShape} · provider submit {codexCliAdapterSpikeSummary.providerSubmit}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Export Worker</div>
-      <div className="settings-list export-worker-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Export Worker readiness: {exportWorkerSummary.readiness}</strong>
-          <small>export IO scope {exportWorkerSummary.scope} · planned writes {exportWorkerSummary.plannedWriteCount} · root {exportWorkerSummary.exportRoot}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Voice/Audio Settings</div>
-      <div className="settings-list voice-audio-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Voice/Audio Settings readiness: {voiceAudioSettingsSummary.readiness}</strong>
-          <small>{voiceAudioSettingsSummary.voiceSourceCount} source(s) · {voiceAudioSettingsSummary.audioPlanCount} audio plan(s) · no BGM {voiceAudioSettingsSummary.noBgmPolicy ? "on" : "off"} · provider live {voiceAudioSettingsSummary.providerSlotsLive}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Real Pilot / 真实小样</div>
-      <div className="settings-list real-pilot-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Real Pilot / 真实小样: {realPilotSummary.reviewStatus}</strong>
-          <small>{realPilotSummary.image2State} · {realPilotSummary.seedanceState} · {realPilotSummary.confirmationState}</small>
-          <small>selected shots {realPilotSummary.selectedShotCount} · start/end frames {realPilotSummary.framePairValue} · estimated outputs {realPilotSummary.estimatedOutputCount}</small>
-          <small>output root {realPilotSummary.outputRoot}</small>
-          <small>执行前确认 {realPilotSummary.preConfirmState} · 预算上限 {realPilotSummary.preConfirmBudgetLimit} · 输出监听 {realPilotSummary.preConfirmOutputWatch} · 请求预览 {realPilotSummary.preConfirmRequestPreview}</small>
-          <small>单次确认 {realPilotSummary.oneShotStatus} · {realPilotSummary.oneShotConfirmation} · {realPilotSummary.oneShotActionScope}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Provider Enablement Gate</div>
-      <div className="settings-list provider-enable-gate-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Provider Enablement Gate readiness: {providerEnablementGateSummary.readiness}</strong>
-          <small>{providerEnablementGateSummary.readyForConfirmation} ready_for_confirmation · {providerEnablementGateSummary.blocked} blocked · {providerEnablementGateSummary.parked} parked · {providerEnablementGateSummary.submitBlocked}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Provider Execution Permission Gate</div>
-      <div className="settings-list provider-execution-permission-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Provider Execution Permission readiness: {providerExecutionPermissionGateSummary.readiness}</strong>
-          <small>{providerExecutionPermissionGateSummary.readyForUserReview} reviewable · {providerExecutionPermissionGateSummary.blocked} blocked · {providerExecutionPermissionGateSummary.providerSubmit} · {providerExecutionPermissionGateSummary.automaticSubmit}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Provider Action Confirmation Receipt</div>
-      <div className="settings-list provider-action-confirmation-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Provider Action Confirmation readiness: {providerActionConfirmationReceiptSummary.readiness}</strong>
-          <small>{providerActionConfirmationReceiptSummary.readyReceipts} ready receipt(s) · {providerActionConfirmationReceiptSummary.blocked} blocked · {providerActionConfirmationReceiptSummary.parked} parked · {providerActionConfirmationReceiptSummary.confirmedCount} confirmed</small>
-          <small>{providerActionConfirmationReceiptSummary.providerSubmitBlocked} · {providerActionConfirmationReceiptSummary.credentialWorkerFileLocked}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Provider Execution Handoff</div>
-      <div className="settings-list provider-execution-handoff-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Provider Execution Handoff readiness: {providerExecutionHandoffSummary.readiness}</strong>
-          <small>{providerExecutionHandoffSummary.handoffCount} handoff(s) · {providerExecutionHandoffSummary.blockedCount} blocked · {providerExecutionHandoffSummary.confirmedCount} confirmed</small>
-          <small>{providerExecutionHandoffSummary.providerSubmitLocked} · {providerExecutionHandoffSummary.credentialWorkerFileLocked}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Local Orchestrator</div>
-      <div className="settings-list local-orchestrator-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Local Orchestrator: {localOrchestratorSummary.readiness}</strong>
-          <small>{localOrchestratorSummary.queueTotal} total · {localOrchestratorSummary.ready} ready · {localOrchestratorSummary.waiting} waiting · next ready {localOrchestratorSummary.nextReadyCount}</small>
-          <small>{localOrchestratorSummary.runningPlanned} running planned · {localOrchestratorSummary.waitingOutput} waiting output · {localOrchestratorSummary.qaPending} QA pending · {localOrchestratorSummary.needsReview} needs review</small>
-          <small>{localOrchestratorSummary.blocked} blocked · {localOrchestratorSummary.failed} failed · {localOrchestratorSummary.completeVerified} complete verified</small>
-          <small>{localOrchestratorSummary.autoContinueMode} · {localOrchestratorSummary.providerFileDaemonLocks}</small>
-          <small>hard locks {localOrchestratorSummary.hardLocks.length}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Visual Consistency Contract</div>
-      <div className="settings-list visual-consistency-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Visual Consistency Contract: {visualConsistencySummary.readiness}</strong>
-          <small>{visualConsistencySummary.gateStatus} · shot layout {visualConsistencySummary.shotLayoutStatus}</small>
-          <small>{visualConsistencySummary.geometryStatus} · {visualConsistencySummary.keyframePairStatus}</small>
-          <small>{visualConsistencySummary.driftRepairStatus}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Full Task Subagent Packet Planner</div>
-      <div className="settings-list full-task-subagent-packet-planner-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Full Task Subagent Packet Planner: {fullTaskSubagentPacketPlannerSummary.readiness}</strong>
-          <small>{fullTaskSubagentPacketPlannerSummary.coverageStatus} · {fullTaskSubagentPacketPlannerSummary.packetStatus}</small>
-          <small>{fullTaskSubagentPacketPlannerSummary.outputStatus} · {fullTaskSubagentPacketPlannerSummary.traceStatus}</small>
-          <small>{fullTaskSubagentPacketPlannerSummary.freeTextStatus} · {fullTaskSubagentPacketPlannerSummary.routeStatus}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Phase 39 Knowledge Pack User Management</div>
-      <div className="settings-list knowledge-pack-user-management-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Phase 39 Knowledge Pack User Management: {knowledgePackUserManagementSummary.readiness}</strong>
-          <small>{knowledgePackUserManagementSummary.userFlowStatus} · {knowledgePackUserManagementSummary.checkStatus}</small>
-          <small>{knowledgePackUserManagementSummary.routeConflictStatus} · {knowledgePackUserManagementSummary.overrideStatus}</small>
-          <small>{knowledgePackUserManagementSummary.injectionStatus} · {knowledgePackUserManagementSummary.promotionStatus}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Phase 40 Codex Worker Runtime Gate</div>
-      <div className="settings-list codex-worker-runtime-gate-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Phase 40 Codex Worker Runtime Gate: {codexWorkerRuntimeGateSummary.readiness}</strong>
-          <small>{codexWorkerRuntimeGateSummary.contractStatus} · {codexWorkerRuntimeGateSummary.gateStatus}</small>
-          <small>validated envelope {codexWorkerRuntimeGateSummary.inputStatus} · structured result {codexWorkerRuntimeGateSummary.outputStatus}</small>
-          <small>spawn/resume/daemon/shell/credential/file/provider submit {codexWorkerRuntimeGateSummary.executionStatus}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Phase 41 Provider Closed-loop Shell</div>
-      <div className="settings-list provider-closed-loop-shell-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Phase 41 Provider Closed-loop Shell: {providerClosedLoopShellSummary.readiness}</strong>
-          <small>{providerClosedLoopShellSummary.shellStatus} · watcher {providerClosedLoopShellSummary.watcherStatus} · manifest {providerClosedLoopShellSummary.manifestStatus}</small>
-          <small>{providerClosedLoopShellSummary.qaStatus} · {providerClosedLoopShellSummary.promotionStatus}</small>
-          <small>provider submit/live submit/credential/shell safety {providerClosedLoopShellSummary.safetyStatus}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Phase 42 Beta Acceptance</div>
-      <div className="settings-list beta-acceptance-settings-summary">
-        <div className="settings-readonly-note">
-          <strong>Phase 42 Beta Acceptance: {betaAcceptanceSummary.readiness}</strong>
-          <small>{betaAcceptanceSummary.desktopStatus} · {betaAcceptanceSummary.projectExportStatus}</small>
-          <small>{betaAcceptanceSummary.runtimeGateStatus} · {betaAcceptanceSummary.providerStatus}</small>
-          <small>{betaAcceptanceSummary.testStatus} · {betaAcceptanceSummary.closureStatus}</small>
-        </div>
-      </div>
-      <div className="settings-group-title">Voice Source Library (dry-run)</div>
-      <div className="settings-list">
-        <div className="settings-readonly-note">
-          <strong>{voiceLibrary.summary.locked} locked · {voiceLibrary.summary.candidate} candidate · {voiceLibrary.summary.rejected} rejected</strong>
-          <small>No credentials · no sample copy · no TTS/music submit · no BGM in video provider prompts.</small>
-        </div>
-        {voiceSources.slice(0, 6).map((source) => (
-          <div key={source.id}>
-            <strong>{source.displayName}</strong>
-            <small>
-              {source.status} · {statusLabel(source.role)} · {source.provider} · consent {statusLabel(source.consentStatus)} · commercial {statusLabel(source.commercialUseStatus)}
-            </small>
-          </div>
-        ))}
-        {voiceSources.length > 6 && (
-          <div>
-            <strong>{voiceSources.length - 6} more source(s)</strong>
-            <small>Hidden here to keep Settings compact.</small>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function SubagentWorkerRuntimeDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const plan = buildSubagentWorkerRuntimeView(runtimeState);
-  const visibleSlots = plan.slots.slice(0, 6);
-
-  return (
-    <section className="machine-panel">
-      <div className="audit-head">
-        <ListChecks size={17} />
-        <span>Subagent Worker Runtime</span>
-      </div>
-      <div className="summary-grid">
-        <Metric label="Worker Plans" value={`${plan.summary.totalSlots}`} detail={statusLabel(plan.runtimeMode)} />
-        <Metric label="Permission Gate" value={`${plan.summary.readyForPermissionGate}`} detail="validated envelopes" />
-        <Metric label="Structured Results" value={`${plan.summary.resultAcceptedForHandoff}`} detail={`${plan.summary.resultRejected} rejected`} />
-        <Metric label="Free Text" value={`${plan.summary.freeTextBlocked}`} detail="blocked" />
-      </div>
-      <div className="field-grid compact">
-        <label>Spawn</label>
-        <span>{plan.summary.canSpawnNow} now · permission gated · validated envelope only</span>
-        <label>Project Store</label>
-        <span>{plan.summary.canWriteProjectStoreNow} writes now · structured result required</span>
-        <label>Provider</label>
-        <span>{plan.summary.providerSubmissionForbidden ? "submission forbidden" : "allowed"} · live {String(plan.summary.liveSubmitAllowed)}</span>
-      </div>
-      <div className="settings-list">
-        {visibleSlots.map((slot) => (
-          <div key={slot.workerSlotId}>
-            <strong>{slot.envelopeId || slot.workerSlotId}</strong>
-            <small>{slot.status} · envelope {slot.envelopeValidation.status} · result {slot.resultGate.resultStatus}</small>
-          </div>
-        ))}
-        {!visibleSlots.length && (
-          <div>
-            <strong>No worker plans</strong>
-            <small>Validated SubagentTaskEnvelope packets are required before a worker runtime plan appears.</small>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function buildPhase17ImageKeyframeRuntimeSummary(runtimeState: ProjectRuntimeState): Phase17ImageKeyframeRuntimeSummary {
-  const runtimePlan = runtimeState.imageKeyframeRuntime;
-  const pipeline = getImagePipeline(runtimeState);
-  const filesystemWatcher = getFilesystemWatcherHarness(runtimeState);
-  const qaHarness = getQaHarness(runtimeState);
-  const references = runtimePlan.assetReferencePlanning.references;
-  const derivedFromStart = runtimePlan.image2EndFramePlans.filter((plan) => plan.endDerivation.derivesFrom === "start_frame").length;
-  const editRequests = runtimePlan.image2EndFramePlans.filter((plan) => plan.adapterRequestPreview.operation === "image2image").length;
-  const liveForbiddenRequests = [...runtimePlan.image2StartFramePlans, ...runtimePlan.image2EndFramePlans]
-    .filter((plan) => plan.adapterRequestPreview.submitPolicy.liveSubmitForbidden).length;
-  const startPlanMotionFactCount = runtimePlan.image2StartFramePlans.filter((plan) => Boolean(plan.motionEndpointFacts)).length;
-  const endPlanMotionFactCount = runtimePlan.image2EndFramePlans.filter((plan) => (
-    Boolean(plan.motionEndpointFacts) || plan.endDerivation.motionContractStatus !== "missing"
-  )).length;
-  const blockedPairMotionBlockerCount = runtimePlan.keyframePairGates
-    .filter((gate) => gate.status === "blocked")
-    .flatMap((gate) => gate.blockers)
-    .filter(motionEndpointNoticeText).length;
-  const expectedOutputSignals = pipeline.watcherEvents.filter((event) => (
-    event.eventType === "expected_output_detected" ||
-    event.eventType === "provider_ready_derivative_detected"
-  )).length + (filesystemWatcher.summary.expectedOutputs || 0);
-  const formalReadySignals = pipeline.qaPromotionReports.filter((report) => report.canPromoteToFormal).length + (qaHarness.summary.formalEligible || 0);
-  const closedLoopEvidence = expectedOutputSignals + pipeline.generationHealthReports.length + pipeline.qaPromotionReports.length + formalReadySignals;
-  const providerLockCount = runtimePlan.runtimeLockGates.filter((gate) => gate.status === "pass").length;
-  const blockers = runtimePlan.blockers;
-  const warnings = runtimePlan.warnings;
-  const adapterPreviewCount = runtimePlan.image2StartFramePlans.length + runtimePlan.image2EndFramePlans.length;
-
-  return {
-    status: runtimePlan.status,
-    assetPlanCount: references.length,
-    startFramePlanCount: runtimePlan.summary.startFramePlans,
-    endFramePlanCount: runtimePlan.summary.endFramePlans,
-    adapterRequestCount: adapterPreviewCount,
-    validPairCount: runtimePlan.summary.readyKeyframePairs,
-    pairGateCount: runtimePlan.summary.keyframePairGates,
-    startPlanMotionFactCount,
-    endPlanMotionFactCount,
-    blockedPairMotionBlockerCount,
-    closedLoopEvidenceCount: closedLoopEvidence,
-    providerLockCount,
-    blockers,
-    warnings,
-    rows: [
-      {
-        label: "Asset reference plan",
-        status: `${runtimePlan.summary.lockedReferences} locked`,
-        detail: `${references.length} reference(s) · ${runtimePlan.summary.candidateReferences} candidate · ${runtimePlan.summary.rejectedReferences} rejected`,
-      },
-      {
-        label: "Keyframe runtime plan",
-        status: `${runtimePlan.summary.startFramePlans} start / ${runtimePlan.summary.endFramePlans} end`,
-        detail: `${runtimePlan.image2StartFramePlans.filter((plan) => plan.status === "ready_for_dry_run").length + runtimePlan.image2EndFramePlans.filter((plan) => plan.status === "ready_for_dry_run").length} ready dry-run plan(s)`,
-      },
-      {
-        label: "End-frame derivation",
-        status: `${derivedFromStart}/${runtimePlan.summary.endFramePlans} from start frame`,
-        detail: `${runtimePlan.summary.readyKeyframePairs} valid keyframe pair gate(s) · ${runtimePlan.summary.blockedKeyframePairs} blocked or unknown`,
-      },
-      {
-        label: "Motion Endpoint facts",
-        status: `${startPlanMotionFactCount}/${runtimePlan.image2StartFramePlans.length} start · ${endPlanMotionFactCount}/${runtimePlan.image2EndFramePlans.length} end`,
-        detail: `${blockedPairMotionBlockerCount} blocked pair motion blocker(s)`,
-      },
-      {
-        label: "Adapter dry-run",
-        status: `${adapterPreviewCount} preview(s)`,
-        detail: `${editRequests} image2image edit request(s) · ${liveForbiddenRequests} live submit forbidden`,
-      },
-      {
-        label: "Closed loop evidence",
-        status: `${closedLoopEvidence} signal(s)`,
-        detail: `${expectedOutputSignals} watcher signal(s) · ${pipeline.generationHealthReports.length} health report(s) · ${formalReadySignals} formal-ready signal(s)`,
-      },
-    ],
-  };
-}
-
-function Image2KeyframeRuntimeDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildPhase17ImageKeyframeRuntimeSummary(runtimeState);
-
-  return (
-    <section className="machine-panel phase17-runtime-panel">
-      <div className="audit-head">
-        <Sparkles size={17} />
-        <span>Image2 Asset + Keyframe Runtime</span>
-      </div>
-      <div className="summary-grid phase17-metrics">
-        <Metric label="Runtime Plan" value={summary.status} detail="Phase 17 Diagnostics only" />
-        <Metric label="Image2 Assets" value={`${summary.assetPlanCount}`} detail="reference asset task plans" />
-        <Metric label="Keyframe Plans" value={`${summary.startFramePlanCount}/${summary.endFramePlanCount}`} detail="start / end frame plans" />
-        <Metric label="Keyframe Pair" value={`${summary.validPairCount}/${summary.pairGateCount}`} detail="valid pair gates" />
-        <Metric label="Motion Facts" value={`${summary.startPlanMotionFactCount}/${summary.endPlanMotionFactCount}`} detail={`${summary.blockedPairMotionBlockerCount} blocked pair motion blocker(s)`} />
-        <Metric label="Closed Loop" value={`${summary.closedLoopEvidenceCount}`} detail="watcher, health, QA evidence" />
-        <Metric label="Provider Locks" value={`${summary.providerLockCount}`} detail="live submit remains disabled" />
-      </div>
-      <div className="phase17-loop-grid" aria-label="Phase 17 Image2 runtime closed loop">
-        {summary.rows.map((row) => (
-          <div key={row.label} className="phase17-loop-row">
-            <strong>{row.label}</strong>
-            <StatusPill value={row.status} />
-            <small>{row.detail}</small>
-          </div>
-        ))}
-      </div>
-      <div className="phase17-rule-strip">
-        <span>Diagnostics-only runtime summary</span>
-        <span>Image2 runtime details stay out of the Director surface</span>
-        <span>End-frame derivation must stay tied to the approved start frame</span>
-        <span>Provider locks remain active</span>
-      </div>
-      <div className="pipeline-details checker-details">
-        <details open={Boolean(summary.blockers.length)}>
-          <summary>Phase 17 blockers ({summary.blockers.length})</summary>
-          <CompactList items={summary.blockers} empty="No Phase 17 blockers reported." />
-        </details>
-        <details>
-          <summary>Phase 17 warnings ({summary.warnings.length})</summary>
-          <CompactList items={summary.warnings} empty="No Phase 17 warnings reported." />
-        </details>
-      </div>
-    </section>
-  );
-}
-
-function RealPilotDiagnostics({ runtimeState }: { runtimeState: ProjectRuntimeState }) {
-  const summary = buildRealPilotUiSummary(runtimeState);
-
-  return (
-    <section className="machine-panel real-pilot-diagnostics">
-      <div className="audit-head">
-        <Sparkles size={17} />
-        <span>Real Pilot / 真实小样</span>
-      </div>
-      <div className="summary-grid real-pilot-diagnostic-metrics">
-        <Metric label="Review Status" value={summary.reviewStatus} detail={summary.confirmationState} />
-        <Metric label="Selected Shots" value={`${summary.selectedShotCount}`} detail={summary.selectedShotDetail} />
-        <Metric label="Start / End Frames" value={summary.framePairValue} detail={summary.framePairDetail} />
-        <Metric label="Output Root" value={summary.outputRoot} detail="scoped review folder" />
-        <Metric label="Estimated Outputs" value={`${summary.estimatedOutputCount}`} detail={summary.estimatedOutputDetail} />
-        <Metric label="Image2 First" value={summary.image2State} detail={summary.seedanceState} />
-        <Metric label="Ready / Blocked" value={`${summary.readyItems}/${summary.blockedItems}`} detail="gate item review state" />
-        <Metric label="Ledger Entries" value={`${summary.ledgerEntries}`} detail="state-only record" />
-        <Metric label="执行前确认" value={summary.preConfirmState} detail={summary.preConfirmScopeDetail} />
-        <Metric label="预算上限" value={summary.preConfirmBudgetLimit} detail="额度风险复核" />
-        <Metric label="输出监听" value={summary.preConfirmOutputWatch} detail={summary.outputRoot} />
-        <Metric label="请求预览" value={summary.preConfirmRequestPreview} detail="只读摘要" />
-        <Metric label="单次确认" value={summary.oneShotStatus} detail={summary.oneShotConfirmation} />
-        <Metric label="单次范围" value={summary.oneShotActionScope} detail={summary.oneShotOutputExpectation} />
-      </div>
-      <div className="real-pilot-diagnostic-list">
-        <div>
-          <strong>Pilot Boundary</strong>
-          <small>Small Image2 review only; the UI exposes no action button here.</small>
-        </div>
-        <div>
-          <strong>Blockers / warnings</strong>
-          <small>{[...summary.blockers, ...summary.warnings].slice(0, 5).join(" · ") || "none reported"}</small>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function DiagnosticsMode({
-  audit,
-  view,
-  runtimeState,
-}: {
-  audit: ProjectAudit;
-  view: RuntimeView;
-  runtimeState: ProjectRuntimeState;
-}) {
-  const firstQueueBlocker = view.taskViews.find((task) => task.queueGate.status === "blocked" && task.queueGate.blockers[0])?.queueGate.blockers[0];
-
-  return (
-    <div className="diagnostics-layout">
-      <DirectorProgressStrip runtimeState={runtimeState} />
-      <ProviderDock audit={audit} />
-      <ImagePipelineDiagnostics runtimeState={runtimeState} />
-      <GenerationHealthCheckerDiagnostics runtimeState={runtimeState} />
-      <PromptConflictCheckerDiagnostics runtimeState={runtimeState} />
-      <GenerationHarnessDiagnostics runtimeState={runtimeState} />
-      <FilesystemWatcherDiagnostics runtimeState={runtimeState} />
-      <CheckpointResumeDiagnostics runtimeState={runtimeState} />
-      <QaHarnessDiagnostics runtimeState={runtimeState} />
-      <ToolRuntimeHarnessDiagnostics runtimeState={runtimeState} />
-      <VideoPlanningDiagnostics runtimeState={runtimeState} />
-      <VideoExecutionPreviewDiagnostics runtimeState={runtimeState} />
-      <AdapterContractDiagnostics runtimeState={runtimeState} />
-      <SubagentWorkerRuntimeDiagnostics runtimeState={runtimeState} />
-      <AgentCliMockRunnerDiagnostics runtimeState={runtimeState} />
-      <CodexCliAdapterSpikeDiagnostics runtimeState={runtimeState} />
-      <ExportWorkerDiagnostics runtimeState={runtimeState} />
-      <Image2KeyframeRuntimeDiagnostics runtimeState={runtimeState} />
-      <VisualConsistencyContractDiagnostics runtimeState={runtimeState} />
-      <FullTaskSubagentPacketPlannerDiagnostics runtimeState={runtimeState} />
-      <KnowledgePackUserManagementDiagnostics runtimeState={runtimeState} />
-      <CodexWorkerRuntimeGateDiagnostics runtimeState={runtimeState} />
-      <ProviderClosedLoopShellDiagnostics runtimeState={runtimeState} />
-      <BetaAcceptanceDiagnostics runtimeState={runtimeState} />
-      <RealPilotDiagnostics runtimeState={runtimeState} />
-      <AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} />
-      <VoiceAudioSettingsDiagnostics runtimeState={runtimeState} />
-      <ProviderEnablementGateDiagnostics runtimeState={runtimeState} />
-      <ProviderExecutionPermissionGateDiagnostics runtimeState={runtimeState} />
-      <ProviderActionConfirmationReceiptDiagnostics runtimeState={runtimeState} />
-      <ProviderExecutionHandoffDiagnostics runtimeState={runtimeState} />
-      <LocalOrchestratorDiagnostics runtimeState={runtimeState} />
-      <PreviewExportDiagnostics previewExport={runtimeState.previewExport} />
-      <section className="machine-panel">
-        <div className="audit-head">
-          <Gauge size={17} />
-          <span>Queue / Task Runs</span>
-        </div>
-        <div className="summary-grid">
-          <Metric label="Total" value={`${view.queueSummary.total}`} detail="derived task runs" />
-          <Metric label="Ready" value={`${view.queueSummary.ready}`} detail="can enter dry queue" />
-          <Metric label="Blocked" value={`${view.queueSummary.blocked}`} detail="preflight/policy" />
-          <Metric label="Parked" value={`${view.queueSummary.parked}`} detail="provider disabled" />
-        </div>
-        <TaskRows tasks={view.taskViews.slice(0, 12)} compact />
-      </section>
-      <section className="machine-panel">
-        <div className="audit-head">
-          <ShieldAlert size={17} />
-          <span>Preflight Blockers</span>
-        </div>
-        {!view.preflightSummary.blockers.length && firstQueueBlocker && (
-          <p className="muted-copy">Queue policy blocker: {firstQueueBlocker}</p>
-        )}
-        <div className="code-list">
-          {view.preflightSummary.blockers.slice(0, 12).map((blocker, index) => (
-            <details key={`${blocker.code}-${index}`}>
-              <summary>{blocker.code} · {blocker.messageForUser}</summary>
-              <pre>{JSON.stringify(blocker, null, 2)}</pre>
-            </details>
-          ))}
-        </div>
-      </section>
-      <section className="machine-panel">
-        <div className="audit-head">
-          <Layers3 size={17} />
-          <span>Manifest Matcher / Source Index</span>
-        </div>
-        <div className="field-grid compact">
-          <label>Source</label>
-          <span>{view.sourceIndexSummary.sourceIndexHash}</span>
-          <label>Refs</label>
-          <span>{view.sourceIndexSummary.lockedReferenceCount} locked / {view.sourceIndexSummary.candidateReferenceCount} candidates</span>
-          <label>Outputs</label>
-          <span>{view.manifestSummary.present} present / {view.manifestSummary.missing} missing / {view.manifestSummary.recoverable} recoverable</span>
-          <label>State Source</label>
-          <span>{view.stateSource?.label || "runtime-state"}</span>
-          <label>Schema</label>
-          <span>{view.stateSource?.path || audit.schemaSummary?.coreStateVersion || "runtime audit v0.3 shell"}</span>
-          <label>Preview</label>
-          <span>{view.previewEvents.filter((event) => event.type === "blocked_placeholder").length} blocked / {view.previewEvents.length} events</span>
-          <label>Story Changes</label>
-          <span>{runtimeState.storyChanges.pendingConfirmationCount} pending / {runtimeState.storyChanges.transactions.length} transaction(s)</span>
-          <label>Reflow</label>
-          <span>{runtimeState.storyChanges.reflowReports.length} report(s)</span>
-        </div>
-      </section>
-      <KnowledgePackManager view={view} />
-      <SettingsShell runtimeState={runtimeState} view={view} />
-    </div>
-  );
-}
 
 function App() {
   const [runtimeState, setRuntimeState] = useState<ProjectRuntimeState>(fallbackRuntimeState);
   const [assetLibrary, setAssetLibrary] = useState<AssetLibrarySnapshot>(() => createAssetLibraryFromRuntimeState(fallbackRuntimeState));
+  const [prototypeProjectVibe, setPrototypeProjectVibe] = useState<ProjectVibeDocument>(() => createProjectVibeFromRuntimeState(fallbackRuntimeState));
+  const prototypeProjectVibeRef = useRef(prototypeProjectVibe);
+  prototypeProjectVibeRef.current = prototypeProjectVibe;
+  const prototypeProjectDraftStatusRef = useRef<PrototypeProjectDraftStatus>({
+    status: "idle",
+    label: "本地项目待保存",
+  });
+  const [loadedPrototypeProjectDraftTargetId, setLoadedPrototypeProjectDraftTargetId] = useState<string | undefined>();
+  const [prototypePreviewItems, setPrototypePreviewItems] = useState<PreviewQueueItem[]>([]);
+  const [latestPrototypeAgentDemo, setLatestPrototypeAgentDemo] = useState<PrototypeAgentDemoRun | undefined>();
+  const [agentWebSearchSettings, setAgentWebSearchSettings] = useState<AgentWebSearchSettings>(() => loadAgentWebSearchSettings());
+  const [projectLocalKnowledgePacks, setProjectLocalKnowledgePacks] = useState<KnowledgePack[]>(() =>
+    loadProjectLocalKnowledgePacks(fallbackRuntimeState.sourceIndex.projectId),
+  );
+  const newVideoStagedTransactionRef = useRef<NewVideoProjectVibeStagedTransactionPreview | undefined>(undefined);
   const [projectFactsMode, setProjectFactsMode] = useState<ProjectFactsUiMode>("save");
+  const [latestProjectStoreApplyPlan, setLatestProjectStoreApplyPlan] = useState<ProjectFactsStagedApplyPlan | undefined>();
   const [mode, setMode] = useState<UiMode>("director");
+  const [showInspector, setShowInspector] = useState(false);
   const [directorView, setDirectorView] = useState<DirectorView>("story");
   const [activeSectionId, setActiveSectionId] = useState<string | undefined>();
   const [selectedShotId, setSelectedShotId] = useState("A1_01");
   const [selectedShotIds, setSelectedShotIds] = useState<string[]>(["A1_01"]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | undefined>();
-  const [projectRealChainState, setProjectRealChainState] = useState<ProjectRealChainPanelState>({ status: "unavailable" });
-  const [projectImage2BatchState, setProjectImage2BatchState] = useState<ProjectImage2BatchPanelState>({ status: "unavailable" });
-  const [projectImage2OneShotState, setProjectImage2OneShotState] = useState<ProjectImage2OneShotPanelState>({ status: "unavailable" });
-  const [strictEditPreflightState, setStrictEditPreflightState] = useState<ProjectRound5StrictEditPreflightPanelState>({ status: "idle" });
-  const [runtimeProjectBinding, setRuntimeProjectBinding] = useState<ProjectCurrentBindingStatus>({ status: "loading" });
-  const [projectPathInput, setProjectPathInput] = useState("");
-  const [projectChoices, setProjectChoices] = useState<ProjectCurrentChoice[]>([]);
-  const [projectSelectionStatus, setProjectSelectionStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
+  const {
+    projectRealChainState,
+    projectImage2BatchState,
+    projectImage2OneShotState,
+    strictEditPreflightState,
+    providerConfigStatuses,
+    runtimeProjectBinding,
+    runtimeProjectIdentity,
+    projectPathInput,
+    projectChoices,
+    projectSelectionStatus,
+    authorizationRef,
+    setProjectRealChainState,
+    setProjectImage2BatchState,
+    setProjectImage2OneShotState,
+    setProviderConfigStatuses,
+    setProjectPathInput,
+    setProjectSelectionStatus,
+    setAuthorizationRef,
+    connectCurrentProject,
+    selectProjectChoice,
+    forgetCurrentProject,
+    runProjectRealChain,
+    runProjectImage2Batch,
+    prepareStrictEditPreflight,
+    prepareImage2OneShot,
+    confirmImage2OneShot,
+    prepareImage2OneShotPermissionReceipt,
+    checkImage2OneShotReturn,
+  } = useCurrentProjectRuntimePanels({
+    selectedShotId,
+    previewRefreshEnabled: directorView === "preview",
+  });
+
+  function updateAgentWebSearchSettings(settings: AgentWebSearchSettings) {
+    setAgentWebSearchSettings(saveAgentWebSearchSettings(settings));
+  }
+
+  const [exportActionState, setExportActionState] = useState<ExportActionState>({
+    status: "idle",
+    label: "导出待准备",
+  });
+  const [projectFileSelection, setProjectFileSelection] = useState<ProjectFileSelectionStatus>({
+    status: "idle",
+    label: "打开项目",
+  });
+  const [recentProjectSelections, setRecentProjectSelections] = useState<RememberedProjectSelection[]>(() => readRecentProjectSelections());
+  const rememberedProjectRestoreAttemptedRef = useRef(false);
+  const localProjectReadyForUi = projectFileSelection.status === "selected" || runtimeProjectBinding.status === "bound";
+  const [realImage2Gate, setRealImage2Gate] = useState<RealImage2GateState | undefined>();
+
+  function createImage2GateForShot(shotId: string) {
+    const sandboxRoot = `real-test-sandbox/image2-one-shot/${shotId}`;
+    const gate = buildRealImage2GateState({
+      shotId,
+      taskPlanId: `image2_${shotId}_${Date.now()}`,
+      sandbox: {
+        root: sandboxRoot,
+        allowedPrefixes: [sandboxRoot],
+        manifestPath: `${sandboxRoot}/manifest.json`,
+        qaReportPath: `${sandboxRoot}/qa-report.json`,
+        ledgerPath: `${sandboxRoot}/ledger.json`,
+        projectRootRelative: true,
+        outsideRootWriteAllowed: false,
+      },
+    });
+    setRealImage2Gate(gate);
+  }
+
+  function unlockAndGenerateImage2Shot() {
+    if (!realImage2Gate) return;
+    const gate = realImage2GateCanGenerate(realImage2Gate)
+      ? realImage2Gate
+      : unlockRealImage2Gate(realImage2Gate);
+    if (!realImage2GateCanGenerate(gate)) {
+      setRealImage2Gate(gate);
+      return;
+    }
+    const { state: generatingState } = startRealImage2Generation({
+      state: gate,
+      onPhaseChange: (nextState) => setRealImage2Gate(nextState),
+    });
+    setRealImage2Gate(generatingState);
+  }
+
+  function promoteImage2Artifact() {
+    if (!realImage2Gate || !realImage2GatePromotionReady(realImage2Gate)) return;
+    const promoted = promoteRealImage2Artifact(realImage2Gate);
+    setRealImage2Gate(promoted);
+  }
+
+  function resetImage2Gate() {
+    if (!realImage2Gate) return;
+    setRealImage2Gate(lockRealImage2Gate(realImage2Gate));
+  }
 
   function loadProjectState(nextState: ProjectRuntimeState) {
     setRuntimeState(nextState);
     setAssetLibrary(createAssetLibraryFromRuntimeState(nextState));
+    setPrototypeProjectVibe(createProjectVibeFromRuntimeState(nextState));
+    setProjectLocalKnowledgePacks(loadProjectLocalKnowledgePacks(nextState.sourceIndex.projectId));
+    prototypeProjectDraftStatusRef.current = ({
+      status: "loading",
+      label: "正在读取本地项目",
+    });
+    setLoadedPrototypeProjectDraftTargetId(undefined);
+    setPrototypePreviewItems([]);
+    setLatestPrototypeAgentDemo(undefined);
+    const firstShotId = nextState.storyFlow.shots[0]?.id;
+    setSelectedShotId(firstShotId || "");
+    setSelectedShotIds(firstShotId ? [firstShotId] : []);
+    setSelectedAssetId(nextState.visualMemory.assets[0]?.id);
+    setActiveSectionId(nextState.storyFlow.sections[0]?.id);
+  }
+
+  function applyProjectVibeProjectState(
+    project: ProjectVibeDocument,
+    target: ProjectVibeDraftTarget,
+    options?: {
+      newVideoDraft?: NewVideoStartDraft;
+      discussionWorkspace?: NewVideoStartConfirmationContext["discussionWorkspace"];
+      generatedAt?: string;
+      projectLocalKnowledgePacks?: KnowledgePack[];
+    },
+  ) {
+    const generatedAt = options?.generatedAt || new Date().toISOString();
+    const knowledgeManifest = options?.projectLocalKnowledgePacks
+      ? buildProjectLocalKnowledgeManifest(project.manifest.projectId, options.projectLocalKnowledgePacks, generatedAt)
+      : undefined;
+    const projectState = buildProjectRuntimeStateFromProjectVibe({
+      project,
+      projectRoot: target.projectRoot,
+      projectPath: target.projectPath,
+      generatedAt,
+      knowledgeManifest,
+    });
+    const nextState = options?.newVideoDraft?.audio
+      ? bindNewVideoAudioReferenceToRuntimeState({
+          runtimeState: projectState,
+          draft: options.newVideoDraft,
+          discussionDeltas: options.discussionWorkspace?.stagedDeltas,
+          generatedAt,
+        }).runtimeState
+      : projectState;
+    setRuntimeState(nextState);
+    setAssetLibrary(createAssetLibraryFromRuntimeState(nextState));
+    setPrototypeProjectVibe(project);
+    setProjectLocalKnowledgePacks(options?.projectLocalKnowledgePacks || loadProjectLocalKnowledgePacks(nextState.sourceIndex.projectId));
+    setPrototypePreviewItems([]);
+    const firstShotId = nextState.storyFlow.shots[0]?.id;
+    if (firstShotId) {
+      setSelectedShotId(firstShotId);
+      setSelectedShotIds([firstShotId]);
+    } else {
+      setSelectedShotId("");
+      setSelectedShotIds([]);
+    }
+    setSelectedAssetId(nextState.visualMemory.assets[0]?.id);
   }
 
   function applyAssetLibraryMutation(nextLibrary: AssetLibrarySnapshot, selectedId?: string) {
@@ -9862,38 +2112,51 @@ function App() {
     applyAssetLibraryMutation(result.library, result.asset?.id || assetId);
   }
 
-  function markAssetStatus(assetId: string, status: AssetLibraryUiStatus) {
+  async function markAssetStatus(assetId: string, status: AssetLibraryUiStatus) {
     const result = markAssetLibraryAssetStatus(assetLibrary, assetId, uiStatusToAssetLibraryStatus(status), new Date().toISOString());
     applyAssetLibraryMutation(result.library, result.asset?.id || assetId);
+    const shouldWriteCurrentProject = (useCurrentProjectAssetProjection || useCurrentProjectWorkbenchProjection)
+      && currentProjectWorkbenchProjection.assets.visualMemoryReadable;
+    if (!shouldWriteCurrentProject) return;
+
+    const writeResult = await markCurrentProjectAssetStatus(effectiveRuntimeProjectIdentity, {
+      assetId,
+      status,
+    });
+    if (!writeResult.ok) {
+      setLatestPrototypeAgentDemo({
+        status: "error",
+        result: {
+          label: "参考状态没有写入项目",
+          status: writeResult.message || "请重新打开项目后再试一次。",
+        },
+      });
+      return;
+    }
+    if (effectiveRuntimeProjectIdentity) {
+      const refreshed = await loadProjectRealChainStatus(effectiveRuntimeProjectIdentity);
+      setProjectRealChainState(refreshed);
+    }
   }
 
   useEffect(() => {
     let cancelled = false;
-    loadCurrentProjectBindingStatus().then((binding) => {
-      if (!cancelled) {
-        setRuntimeProjectBinding(binding);
-        if (binding.status === "bound" && binding.projectRoot) setProjectPathInput(binding.projectRoot);
-      }
-    });
-    loadCurrentProjectChoices().then((choices) => {
-      if (!cancelled) setProjectChoices(choices);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
     const loadTarget = runtimeLoadTarget();
+    if (!loadTarget) {
+      loadProjectState(fallbackRuntimeState);
+      return () => {
+        cancelled = true;
+      };
+    }
+    const activeLoadTarget = loadTarget;
 
     async function loadRuntime() {
       try {
-        const state = await fetchJson<unknown>(loadTarget.statePath);
+        const state = await fetchJson<unknown>(activeLoadTarget.statePath);
         const normalized = withRuntimeDefaults(normalizeRuntimeState(state) as ProjectRuntimeState);
         const runtimeReady = {
           ...normalized,
-          stateSource: normalized.stateSource || { kind: "runtime-state", label: loadTarget.label, path: loadTarget.statePath },
+          stateSource: normalized.stateSource || { kind: "runtime-state", label: activeLoadTarget.label, path: activeLoadTarget.statePath },
         } satisfies ProjectRuntimeState;
         assertProjectRuntimeState(runtimeReady);
         if (cancelled) return;
@@ -9904,18 +2167,18 @@ function App() {
         }
         return;
       } catch (error) {
-        console.warn(`${loadTarget.statePath} load failed; falling back to ${loadTarget.auditPath}.`, error);
+        console.warn(`${activeLoadTarget.statePath} load failed; falling back to ${activeLoadTarget.auditPath}.`, error);
         // Fall through to the legacy audit file for Phase 3 compatibility.
       }
 
       try {
-        const auditData = await fetchJson<ProjectAudit>(loadTarget.auditPath);
+        const auditData = await fetchJson<ProjectAudit>(activeLoadTarget.auditPath);
         if (cancelled) return;
         const state = buildProjectRuntimeState(auditData, emptyKnowledgeManifest, {
           stateSource: {
             kind: "runtime-audit-fallback",
-            label: `${loadTarget.label} audit fallback`,
-            path: loadTarget.auditPath,
+            label: `${activeLoadTarget.label} audit fallback`,
+            path: activeLoadTarget.auditPath,
             note: "Derived in browser from the legacy audit file without bundling the full knowledge manifest.",
             sourceImportedAt: auditData.importedAt,
           },
@@ -9942,61 +2205,412 @@ function App() {
     };
   }, []);
 
-  const runtimeProjectIdentity = useMemo(
-    () => currentProjectBindingIdentity(runtimeProjectBinding),
-    [
-      runtimeProjectBinding.projectId,
-      runtimeProjectBinding.projectRoot,
-      runtimeProjectBinding.projectTitle,
-      runtimeProjectBinding.status,
-    ],
-  );
+  const canChooseProjectRootFromDialog = canChooseProjectRootDialog();
+  const canCreateLocalProjectFromDialog = canCreateLocalProjectDialog();
+  const canRememberProjectRootFromDialog = canRememberProjectRootDialog();
+  const activeProjectFileRoot = projectFileSelection.status === "selected"
+    ? projectFileSelection.projectRoot
+    : undefined;
+  const projectFileStatusLabel = projectFileSelectionLabel(projectFileSelection, canChooseProjectRootFromDialog);
+  const projectFileStatusDetail = projectFileSelectionDetail(projectFileSelection);
+  const selectedProjectRoot = projectFileSelection.status === "selected" ? projectFileSelection.projectRoot : "";
+  const normalizedSelectedProjectRoot = normalizeProjectRootForUiCompare(selectedProjectRoot);
+  const selectedProjectFallbackRuntimeBinding = useMemo(() => {
+    if (!selectedProjectRoot) return runtimeProjectBinding;
+    const displayName = selectedProjectRoot.split(/[\\/]/).filter(Boolean).at(-1) || "未命名项目";
+    return {
+      status: "bound" as const,
+      projectRoot: selectedProjectRoot,
+      projectTitle: displayName,
+      projectVibePath: projectFileSelection.status === "selected" ? projectFileSelection.projectVibePath : undefined,
+      projectId: normalizeProjectRootForUiCompare(runtimeProjectBinding.projectRoot) === normalizedSelectedProjectRoot
+        ? runtimeProjectBinding.projectId
+        : undefined,
+      message: runtimeProjectBinding.message,
+    };
+  }, [
+    normalizedSelectedProjectRoot,
+    projectFileSelection.projectVibePath,
+    projectFileSelection.status,
+    runtimeProjectBinding.message,
+    runtimeProjectBinding.projectId,
+    runtimeProjectBinding.projectRoot,
+    selectedProjectRoot,
+  ]);
+  const effectiveRuntimeProjectBinding = runtimeProjectBinding.status === "bound"
+    ? runtimeProjectBinding
+    : selectedProjectFallbackRuntimeBinding;
+  const effectiveRuntimeProjectIdentity = effectiveRuntimeProjectBinding.status === "bound"
+    ? {
+      projectId: effectiveRuntimeProjectBinding.projectId,
+      projectRoot: effectiveRuntimeProjectBinding.projectRoot,
+    }
+    : runtimeProjectIdentity;
 
   useEffect(() => {
-    let cancelled = false;
-    if (!runtimeProjectIdentity) {
-      setProjectRealChainState({ status: "unavailable", message: "未选择项目/未同步。" });
-      setProjectImage2BatchState({ status: "unavailable", message: "未选择项目/未同步。" });
-      setProjectImage2OneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
-      setStrictEditPreflightState({ status: "idle" });
-      return () => {
-        cancelled = true;
-      };
+    if (effectiveRuntimeProjectBinding.status !== "bound" || !effectiveRuntimeProjectBinding.projectRoot) return;
+    const currentFactsRoot = projectRealChainState.summary?.projectRoot
+      || projectRealChainState.summary?.workbenchFacts?.projectRoot
+      || projectRealChainState.summary?.workbenchFacts?.project?.projectRoot;
+    if (
+      normalizeProjectRootForUiCompare(currentFactsRoot) === normalizeProjectRootForUiCompare(effectiveRuntimeProjectBinding.projectRoot)
+      && projectRealChainState.summary?.workbenchFacts
+    ) {
+      return;
     }
-    loadProjectRealChainStatus(runtimeProjectIdentity).then((nextState) => {
-      if (!cancelled) setProjectRealChainState(nextState);
-    });
-    loadProjectImage2BatchPlan(runtimeProjectIdentity).then((nextState) => {
-      if (!cancelled) setProjectImage2BatchState(nextState);
-    });
-    loadProjectImage2OneShotStatus(runtimeProjectIdentity, selectedShotId).then((nextState) => {
-      if (!cancelled) setProjectImage2OneShotState(nextState);
+
+    let cancelled = false;
+    loadProjectRealChainStatus({
+      projectId: effectiveRuntimeProjectBinding.projectId,
+      projectRoot: effectiveRuntimeProjectBinding.projectRoot,
+    }).then((nextState) => {
+      if (!cancelled && nextState.summary?.workbenchFacts) setProjectRealChainState(nextState);
+    }).catch((error: unknown) => {
+      if (!cancelled) console.error("Failed to refresh selected project workbench facts", error);
     });
     return () => {
       cancelled = true;
     };
-  }, [runtimeProjectIdentity, selectedShotId]);
+  }, [
+    effectiveRuntimeProjectBinding.projectId,
+    effectiveRuntimeProjectBinding.projectRoot,
+    effectiveRuntimeProjectBinding.status,
+    projectRealChainState.summary?.projectRoot,
+    projectRealChainState.summary?.workbenchFacts,
+    setProjectRealChainState,
+  ]);
 
-  const currentProjectPreviewProjection = useMemo(() => buildCurrentProjectPreviewProjection({
-    summary: projectRealChainState.summary,
-    previewItems: projectRealChainState.summary?.previewItems,
-    projectId: runtimeProjectIdentity?.projectId,
-    projectRoot: runtimeProjectIdentity?.projectRoot,
-  }), [projectRealChainState.summary, runtimeProjectIdentity?.projectId, runtimeProjectIdentity?.projectRoot]);
-  const currentProjectPreviewQueue = runtimeProjectBinding.status === "bound"
-    ? currentProjectPreviewProjection.queue
-    : [];
   const currentProjectWorkbenchProjection = useMemo(() => buildCurrentProjectWorkbenchProjection({
-    binding: runtimeProjectBinding,
+    binding: effectiveRuntimeProjectBinding,
     realChainState: projectRealChainState,
     image2BatchState: projectImage2BatchState,
     selectedShotId,
     selectedShotIds,
-  }), [projectImage2BatchState, projectRealChainState, runtimeProjectBinding, selectedShotId, selectedShotIds]);
-  const workbenchRuntimeState = useMemo(
-    () => applyCurrentProjectWorkbenchProjectionToRuntimeState(runtimeState, currentProjectWorkbenchProjection),
-    [currentProjectWorkbenchProjection, runtimeState],
+  }), [effectiveRuntimeProjectBinding, projectImage2BatchState, projectRealChainState, selectedShotId, selectedShotIds]);
+  const normalizedProjectionProjectRoot = normalizeProjectRootForUiCompare(currentProjectWorkbenchProjection.identity.projectRoot);
+  const currentProjectProjectionMatchesSelectedRoot = !normalizedSelectedProjectRoot
+    || normalizedProjectionProjectRoot === normalizedSelectedProjectRoot;
+  const useCurrentProjectWorkbenchProjection = currentProjectWorkbenchProjection.available
+    && currentProjectProjectionMatchesSelectedRoot;
+  const useCurrentProjectAssetProjection = currentProjectWorkbenchProjection.available
+    && currentProjectProjectionMatchesSelectedRoot
+    && currentProjectWorkbenchProjection.assets.visualMemoryReadable
+    && currentProjectWorkbenchProjection.assetFacts.length > 0;
+  const currentProjectHasOnlyPlaceholder = useCurrentProjectWorkbenchProjection
+    && currentProjectWorkbenchProjection.previewItemCount === 0
+    && currentProjectWorkbenchProjection.assetFacts.length === 0
+    && currentProjectWorkbenchProjection.shots.length === 1
+    && currentProjectWorkbenchProjection.shots[0]?.id === "CURRENT_PROJECT"
+    && currentProjectWorkbenchProjection.shots[0]?.issues.includes("current_project_story_pending");
+  const currentProjectProjectionForRuntime = useMemo(
+    () => currentProjectHasOnlyPlaceholder
+      ? {
+        ...currentProjectWorkbenchProjection,
+        story: {
+          ...currentProjectWorkbenchProjection.story,
+          statusLabel: "新视频项目",
+          detail: "还没有故事流",
+          shotCount: 0,
+          sectionCount: 0,
+          fallbackUsed: false,
+        },
+        selectedScope: {
+          ...currentProjectWorkbenchProjection.selectedScope,
+          defaultShotId: undefined,
+          selectedShotIds: [],
+          label: currentProjectWorkbenchProjection.identity.displayTitle,
+          detail: "等待开始新故事",
+        },
+        shots: [],
+        sections: [],
+      }
+      : currentProjectWorkbenchProjection,
+    [currentProjectHasOnlyPlaceholder, currentProjectWorkbenchProjection],
   );
+  const workbenchRuntimeState = useMemo(
+    () => useCurrentProjectWorkbenchProjection
+      ? applyCurrentProjectWorkbenchProjectionToRuntimeState(runtimeState, currentProjectProjectionForRuntime)
+      : runtimeState,
+    [currentProjectProjectionForRuntime, runtimeState, useCurrentProjectWorkbenchProjection],
+  );
+  const currentProjectPreviewProjection = useMemo(() => buildCurrentProjectPreviewProjection({
+    summary: projectRealChainState.summary,
+    previewItems: projectRealChainState.summary?.previewItems,
+    previewPlan: {
+      clips: workbenchRuntimeState.storyFlow.shots.map((shot, index) => ({
+        id: `story_duration_${shot.id}`,
+        shotId: shot.id,
+        order: index + 1,
+        durationSeconds: shot.durationSeconds,
+      })),
+    },
+    projectId: effectiveRuntimeProjectIdentity?.projectId,
+    projectRoot: effectiveRuntimeProjectIdentity?.projectRoot,
+  }), [
+    effectiveRuntimeProjectIdentity?.projectId,
+    effectiveRuntimeProjectIdentity?.projectRoot,
+    projectRealChainState.summary,
+    workbenchRuntimeState.storyFlow.shots,
+  ]);
+  const currentProjectPreviewQueue = useMemo(() => {
+    const base = effectiveRuntimeProjectBinding.status === "bound"
+      ? currentProjectPreviewProjection.queue
+      : [];
+    const withGate = (() => {
+      if (!realImage2Gate || !realImage2Gate.promoted || !realImage2Gate.latestOutputFile) return base;
+      const gateItem = {
+        id: `gate_${realImage2Gate.shotId}`,
+        shotId: realImage2Gate.shotId,
+        kind: "image_hold" as const,
+        label: `${formatShotNumber(realImage2Gate.shotId)} 画面小样`,
+        mediaPath: realImage2Gate.latestOutputFile,
+        startSeconds: base.length > 0 ? base[base.length - 1].startSeconds + base[base.length - 1].durationSeconds + 1 : 0,
+        durationSeconds: 9,
+        qa: "pass" as const,
+      };
+      return [...base, gateItem];
+    })();
+    if (!prototypePreviewItems.length) return withGate;
+    const startOffset = withGate.reduce((max, item) => Math.max(max, item.startSeconds + item.durationSeconds), 0);
+    return [
+      ...withGate,
+      ...prototypePreviewItems.map((item, index) => ({
+        ...item,
+        startSeconds: startOffset + index * item.durationSeconds,
+      })),
+    ];
+  }, [
+    currentProjectPreviewProjection.queue,
+    effectiveRuntimeProjectBinding.status,
+    realImage2Gate?.promoted,
+    realImage2Gate?.latestOutputFile,
+    realImage2Gate?.shotId,
+    prototypePreviewItems,
+  ]);
+  const projectLocalKnowledgeManifest = useMemo(
+    () => buildProjectLocalKnowledgeManifest(workbenchRuntimeState.sourceIndex.projectId, projectLocalKnowledgePacks),
+    [projectLocalKnowledgePacks, workbenchRuntimeState.sourceIndex.projectId],
+  );
+  const storyboardProjectPlanInput = useMemo(
+    () => buildProjectVibeStoryboardPlannerInput(prototypeProjectVibe, {
+      storyboardOutputRoot: "storyboards",
+      videoOutputRoot: "video",
+      outputSize: "16:9",
+    }),
+    [prototypeProjectVibe],
+  );
+
+  async function saveResearchAsProjectReference(input: {
+    result: AgentWebSearchResult;
+    userIntent: string;
+  }): Promise<KnowledgePack> {
+    const generatedAt = new Date().toISOString();
+    const pack = buildProjectLocalKnowledgePackFromWebSearch({
+      result: input.result,
+      userIntent: input.userIntent,
+      projectId: workbenchRuntimeState.sourceIndex.projectId,
+      projectTitle: workbenchRuntimeState.project.title,
+      createdAt: generatedAt,
+    });
+    const stagedTransaction = buildProjectLocalKnowledgeReferenceStagedTransaction({
+      project: prototypeProjectVibeRef.current,
+      pack,
+      result: input.result,
+      userIntent: input.userIntent,
+      generatedAt,
+    });
+    if (stagedTransaction.blocked) {
+      throw new Error(stagedTransaction.blockedReasons[0] || "本片参考还不能写入项目");
+    }
+    const committed = commitProjectLocalKnowledgeReferenceStagedTransaction({
+      project: prototypeProjectVibeRef.current,
+      stagedTransaction,
+    });
+    if (committed.status !== "applied") {
+      throw new Error(committed.blockedReasons[0] || "本片参考写入项目失败");
+    }
+    const packSaveResult = await saveProjectLocalKnowledgePack(
+      workbenchRuntimeState.sourceIndex.projectId,
+      pack,
+      prototypeProjectDraftTarget,
+    );
+    if (!packSaveResult.ok) {
+      throw new Error(packSaveResult.errors[0] || "本片参考文件保存失败");
+    }
+    const saveResult = await saveProjectVibeDraft(prototypeProjectDraftTarget, committed.project);
+    if (!saveResult.ok) {
+      throw new Error(saveResult.errors[0] || "本片参考保存失败");
+    }
+    const nextPacks = Array.from(new Map([...projectLocalKnowledgePacks, packSaveResult.pack].map((item) => [item.id, item])).values());
+    applyProjectVibeProjectState(committed.project, prototypeProjectDraftTarget, {
+      generatedAt,
+      projectLocalKnowledgePacks: nextPacks,
+    });
+    setProjectLocalKnowledgePacks(nextPacks);
+    prototypeProjectDraftStatusRef.current = ({
+      status: saveResult.status,
+      label: "本片参考已写入项目",
+      targetId: saveResult.targetId,
+      factHash: saveResult.factHash,
+      error: saveResult.errors[0],
+    });
+    setLatestPrototypeAgentDemo({
+      status: "ready",
+      result: {
+        label: "本片参考已写入项目",
+        projectVibeAdded: true,
+        projectSaved: true,
+        storageLabel: packSaveResult.mode === "electron_project_file" ? `已保存到 ${packSaveResult.path}` : "已保存到本机浏览器",
+        waitingReview: false,
+        status: "ready",
+      },
+    });
+    return pack;
+  }
+  const prototypeProjectDraftStorageKeyValue = useMemo(
+    () => prototypeProjectDraftStorageKey(workbenchRuntimeState),
+    [workbenchRuntimeState.project.title, workbenchRuntimeState.sourceIndex.projectId],
+  );
+  const prototypeProjectDraftTarget = useMemo<ProjectVibeDraftTarget>(
+    () => ({
+      projectRoot: activeProjectFileRoot,
+      projectPath: projectFileSelection.status === "selected" ? projectFileSelection.projectPath : undefined,
+      storageKey: prototypeProjectDraftStorageKeyValue,
+    }),
+    [
+      activeProjectFileRoot,
+      projectFileSelection.projectPath,
+      projectFileSelection.status,
+      prototypeProjectDraftStorageKeyValue,
+    ],
+  );
+  const prototypeProjectDraftTargetId = useMemo(
+    () => buildProjectVibeDraftTargetId(prototypeProjectDraftTarget),
+    [prototypeProjectDraftTarget],
+  );
+
+  useEffect(() => {
+    if (rememberedProjectRestoreAttemptedRef.current) return;
+    if (projectFileSelection.status === "choosing") return;
+    if (!shouldAutoRestoreRememberedProject()) {
+      rememberedProjectRestoreAttemptedRef.current = true;
+      return;
+    }
+    const rememberedSelection = readRememberedProjectSelection();
+    if (!rememberedSelection?.projectRoot) return;
+    if (
+      projectFileSelection.status === "selected"
+      && projectFileSelection.projectRoot === rememberedSelection.projectRoot
+      && runtimeProjectBinding.projectRoot === rememberedSelection.projectRoot
+    ) {
+      rememberedProjectRestoreAttemptedRef.current = true;
+      return;
+    }
+
+    rememberedProjectRestoreAttemptedRef.current = true;
+    const restoredSelection: ProjectRootDialogSelection = rememberedSelection;
+    let cancelled = false;
+    async function restoreRememberedProject() {
+      let selection: ProjectRootDialogSelection = restoredSelection;
+      if (canRememberProjectRootFromDialog) {
+        try {
+          const electronSelection = await rememberProjectRoot(restoredSelection.projectRoot!);
+          if (!electronSelection.cancelled && electronSelection.projectRoot) {
+            selection = electronSelection;
+            setRecentProjectSelections(writeRememberedProjectSelection(electronSelection));
+          }
+        } catch {
+          // The project remains visible, but saving may ask the user to reopen if the OS scope is gone.
+        }
+      }
+      if (cancelled || !selection.projectRoot) return;
+      setProjectFileSelection({
+        status: "selected",
+        label: "切换项目",
+        detail: "已恢复上次项目",
+        projectRoot: selection.projectRoot,
+        projectPath: selection.projectPath || "project.vibe",
+        projectVibePath: selection.projectVibePath,
+        hasProjectVibe: selection.hasProjectVibe !== false,
+        displayName: selection.displayName || projectFolderName(selection.projectRoot),
+      });
+      const displayName = selection.displayName
+        || selection.projectRoot.split(/[\\/]/).filter(Boolean).at(-1)
+        || "未命名项目";
+      applyProjectVibeProjectState(createEmptyProjectVibeForProjectRoot(selection.projectRoot, displayName), {
+        projectRoot: selection.projectRoot,
+        projectPath: selection.projectPath || "project.vibe",
+        storageKey: prototypeProjectDraftStorageKeyValue,
+      });
+      setProjectRealChainState({ status: "unavailable", message: "正在读取上次项目。" });
+      setProjectImage2BatchState({ status: "unavailable", message: "正在同步上次项目复核状态。" });
+      setProjectImage2OneShotState({ status: "unavailable", message: "正在同步上次项目小样状态。" });
+      await connectCurrentProject({
+        projectRoot: selection.projectRoot,
+        displayName,
+      }, { projectFileRootSelected: true }).catch(() => {
+        setProjectSelectionStatus("error");
+      });
+    }
+    void restoreRememberedProject();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    canRememberProjectRootFromDialog,
+    connectCurrentProject,
+    projectFileSelection.projectRoot,
+    projectFileSelection.status,
+    runtimeProjectBinding.projectRoot,
+  ]);
+
+  useEffect(() => {
+    if (runtimeProjectBinding.status !== "bound" || !runtimeProjectBinding.projectRoot) return;
+    if (projectFileSelection.status === "selected") return;
+    const projectPath = projectPathFromRuntimeBinding(runtimeProjectBinding.projectRoot, runtimeProjectBinding.projectVibePath);
+    setProjectPathInput(runtimeProjectBinding.projectRoot);
+    setProjectFileSelection({
+      status: "selected",
+      label: "切换项目",
+      detail: runtimeProjectBinding.projectVibePath ? "已连接当前项目" : "本地项目已准备",
+      projectRoot: runtimeProjectBinding.projectRoot,
+      projectPath,
+      projectVibePath: runtimeProjectBinding.projectVibePath,
+      hasProjectVibe: Boolean(runtimeProjectBinding.projectVibePath),
+      displayName: runtimeProjectBinding.projectTitle || projectFolderName(runtimeProjectBinding.projectRoot),
+    });
+    if (canRememberProjectRootFromDialog) {
+      rememberProjectRoot(runtimeProjectBinding.projectRoot).then((selection) => {
+        if (selection.cancelled || !selection.projectRoot) return;
+        setRecentProjectSelections(writeRememberedProjectSelection({
+          ...selection,
+          displayName: runtimeProjectBinding.projectTitle || selection.displayName || projectFolderName(selection.projectRoot),
+        }));
+        setProjectFileSelection((current) => current.status === "selected" && current.projectRoot === runtimeProjectBinding.projectRoot
+          ? {
+            ...current,
+            projectRoot: selection.projectRoot,
+            projectPath: selection.projectPath || current.projectPath,
+            projectVibePath: selection.projectVibePath || current.projectVibePath,
+            hasProjectVibe: selection.hasProjectVibe || current.hasProjectVibe,
+            displayName: current.displayName || selection.displayName,
+          }
+          : current);
+      }).catch((error: unknown) => {
+        console.error("Failed to remember runtime-selected project root", error);
+      });
+    }
+  }, [
+    canRememberProjectRootFromDialog,
+    projectFileSelection.projectRoot,
+    projectFileSelection.status,
+    runtimeProjectBinding.projectRoot,
+    runtimeProjectBinding.projectTitle,
+    runtimeProjectBinding.projectVibePath,
+    runtimeProjectBinding.status,
+    setProjectPathInput,
+  ]);
+
   const workbenchAssetFactsKey = useMemo(
     () => `${currentProjectWorkbenchProjection.identity.projectRoot || ""}:${currentProjectWorkbenchProjection.assetFacts.map((asset) => `${asset.id}:${asset.status}:${asset.path || ""}`).join("|")}`,
     [currentProjectWorkbenchProjection.assetFacts, currentProjectWorkbenchProjection.identity.projectRoot],
@@ -10006,21 +2620,154 @@ function App() {
     [workbenchAssetFactsKey],
   );
   const workbenchAssetLibrary = useMemo(
-    () => currentProjectWorkbenchProjection.assets.readOnlyProjection || assetLibrary.id !== projectedWorkbenchAssetLibrary.id
-      ? projectedWorkbenchAssetLibrary
-      : assetLibrary,
-    [assetLibrary, currentProjectWorkbenchProjection.assets.readOnlyProjection, projectedWorkbenchAssetLibrary],
+    () => !useCurrentProjectWorkbenchProjection && !useCurrentProjectAssetProjection
+      ? assetLibrary
+      : (currentProjectWorkbenchProjection.assets.readOnlyProjection
+        || currentProjectWorkbenchProjection.assetFacts.length > 0
+        || assetLibrary.id !== projectedWorkbenchAssetLibrary.id
+        ? projectedWorkbenchAssetLibrary
+        : assetLibrary),
+    [
+      assetLibrary,
+      currentProjectWorkbenchProjection.assetFacts.length,
+      currentProjectWorkbenchProjection.assets.readOnlyProjection,
+      projectedWorkbenchAssetLibrary,
+      useCurrentProjectAssetProjection,
+      useCurrentProjectWorkbenchProjection,
+    ],
   );
   useEffect(() => {
+    if (!useCurrentProjectWorkbenchProjection && !useCurrentProjectAssetProjection) return;
     if (currentProjectWorkbenchProjection.assets.readOnlyProjection) return;
     setAssetLibrary(projectedWorkbenchAssetLibrary);
-  }, [currentProjectWorkbenchProjection.assets.readOnlyProjection, projectedWorkbenchAssetLibrary, workbenchAssetFactsKey]);
+  }, [
+    currentProjectWorkbenchProjection.assets.readOnlyProjection,
+    projectedWorkbenchAssetLibrary,
+    useCurrentProjectAssetProjection,
+    useCurrentProjectWorkbenchProjection,
+    workbenchAssetFactsKey,
+  ]);
+  useEffect(() => {
+    let cancelled = false;
+    if (loadedPrototypeProjectDraftTargetId === prototypeProjectDraftTargetId) return () => {
+      cancelled = true;
+    };
+
+    prototypeProjectDraftStatusRef.current = ({
+      status: "loading",
+      label: "正在读取本地项目",
+      targetId: prototypeProjectDraftTargetId,
+    });
+    async function openOrInitializeProjectDraft() {
+      const result = await openProjectVibeDraft(prototypeProjectDraftTarget);
+      if (cancelled) return;
+      setLoadedPrototypeProjectDraftTargetId(prototypeProjectDraftTargetId);
+      if (result.ok && result.project) {
+        const knowledgeOpen = await openProjectLocalKnowledgePacks(
+          result.project.manifest.projectId,
+          prototypeProjectDraftTarget,
+          result.project,
+        );
+        if (cancelled) return;
+        applyProjectVibeProjectState(result.project, prototypeProjectDraftTarget, {
+          projectLocalKnowledgePacks: knowledgeOpen.packs,
+        });
+        setProjectFileSelection((current) => current.status === "selected" && current.projectRoot === prototypeProjectDraftTarget.projectRoot
+          ? {
+              ...current,
+              detail: knowledgeOpen.packs.length ? "已连接当前项目和本片参考" : "已连接当前项目",
+              hasProjectVibe: true,
+            }
+          : current);
+        prototypeProjectDraftStatusRef.current = ({
+          status: "restored",
+          label: knowledgeOpen.packs.length ? "已恢复本地项目和本片参考" : "已恢复本地项目",
+          targetId: result.targetId,
+          factHash: result.factHash,
+        });
+        setLatestPrototypeAgentDemo({
+          status: "ready",
+          result: {
+            label: "已恢复本地项目",
+            projectRestored: true,
+            projectVibeAdded: true,
+            status: "ready",
+          },
+        });
+        return;
+      }
+
+      if (result.status === "missing" && projectFileSelection.status === "selected" && projectFileSelection.projectRoot) {
+        const initialProject = createEmptyProjectVibeForProjectRoot(
+          projectFileSelection.projectRoot,
+          projectFileSelection.displayName,
+        );
+        const saveResult = await saveProjectVibeDraft(prototypeProjectDraftTarget, initialProject);
+        if (cancelled) return;
+        if (saveResult.ok) {
+          applyProjectVibeProjectState(initialProject, prototypeProjectDraftTarget);
+          setProjectFileSelection((current) => current.status === "selected" && current.projectRoot === projectFileSelection.projectRoot
+            ? { ...current, detail: "已创建项目文件", hasProjectVibe: true }
+            : current);
+          prototypeProjectDraftStatusRef.current = ({
+            status: "saved",
+            label: "已创建本地项目",
+            targetId: saveResult.targetId,
+            factHash: saveResult.factHash,
+          });
+          setLatestPrototypeAgentDemo({
+            status: "ready",
+            result: {
+              label: "已创建本地项目",
+              projectSaved: true,
+              projectVibeAdded: true,
+              status: "ready",
+            },
+          });
+          return;
+        }
+
+        prototypeProjectDraftStatusRef.current = ({
+          status: saveResult.status,
+          label: "项目保存待重试",
+          targetId: saveResult.targetId,
+          factHash: saveResult.factHash,
+          error: saveResult.errors[0],
+        });
+        return;
+      }
+
+      prototypeProjectDraftStatusRef.current = ({
+        status: result.status,
+        label: result.status === "missing" ? "本地项目待保存" : "本地项目暂不可用",
+        targetId: result.targetId,
+        error: result.errors[0],
+      });
+    }
+
+    void openOrInitializeProjectDraft();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    loadedPrototypeProjectDraftTargetId,
+    projectFileSelection.projectRoot,
+    projectFileSelection.status,
+    prototypeProjectDraftTarget,
+    prototypeProjectDraftTargetId,
+  ]);
   const workbenchSelectedShotId = useMemo(() => {
-    const shotIds = new Set(currentProjectWorkbenchProjection.shots.map((shot) => shot.id));
+    const sourceShots = useCurrentProjectWorkbenchProjection
+      ? currentProjectWorkbenchProjection.shots
+      : workbenchRuntimeState.storyFlow.shots;
+    const shotIds = new Set(sourceShots.map((shot) => shot.id));
     return shotIds.has(selectedShotId)
       ? selectedShotId
-      : currentProjectWorkbenchProjection.selectedScope.defaultShotId || selectedShotId;
-  }, [currentProjectWorkbenchProjection, selectedShotId]);
+      : useCurrentProjectWorkbenchProjection
+        ? currentProjectWorkbenchProjection.selectedScope.defaultShotId || selectedShotId
+        : sourceShots[0]?.id || selectedShotId;
+  }, [currentProjectWorkbenchProjection, selectedShotId, useCurrentProjectWorkbenchProjection, workbenchRuntimeState.storyFlow.shots]);
   const runtimeAudit = useMemo(() => auditFromProjectRuntimeState(runtimeState), [runtimeState]);
   const runtimeView = useMemo(
     () => buildRuntimeViewFromProjectState(runtimeState, { selectedShotId }),
@@ -10031,21 +2778,142 @@ function App() {
     () => buildRuntimeViewFromProjectState(workbenchRuntimeState, { selectedShotId: workbenchSelectedShotId }),
     [workbenchRuntimeState, workbenchSelectedShotId],
   );
+  // Trivial computation - useMemo overhead may exceed benefit
   const selectedShot = useMemo(() => audit.shots.find((shot) => shot.id === workbenchSelectedShotId), [audit.shots, workbenchSelectedShotId]);
+  const hasWorkbenchProjectContent = audit.shots.length > 0 || view.storySections.length > 0 || audit.assets.length > 0;
+  const selectedProjectDisplayName = projectFileSelection.status === "selected"
+    ? projectFileSelection.displayName || projectFolderName(projectFileSelection.projectRoot)
+    : effectiveRuntimeProjectBinding.status === "bound"
+      ? effectiveRuntimeProjectBinding.projectTitle || projectFolderName(effectiveRuntimeProjectBinding.projectRoot)
+      : undefined;
+  const selectedProjectHasNoContent = localProjectReadyForUi && !hasWorkbenchProjectContent;
+  const isFallbackWorkbenchSource = audit.projectTitle === fallbackAudit.projectTitle
+    || workbenchRuntimeState.stateSource?.kind === "fallback-audit";
+  const isEmptyFallbackWorkbench = selectedProjectHasNoContent || (
+    isFallbackWorkbenchSource
+    && !useCurrentProjectWorkbenchProjection
+    && !(localProjectReadyForUi && hasWorkbenchProjectContent)
+  );
+  const projectContentReadyForUi = !isEmptyFallbackWorkbench && hasWorkbenchProjectContent;
+  const visibleProjectTitle = selectedProjectHasNoContent
+    ? selectedProjectDisplayName || "空项目"
+    : isEmptyFallbackWorkbench
+      ? "新视频项目"
+      : audit.projectTitle;
+  const projectControlRoot = projectFileSelection.status === "selected"
+    ? projectFileSelection.projectRoot
+    : effectiveRuntimeProjectBinding.status === "bound"
+      ? effectiveRuntimeProjectBinding.projectRoot
+      : undefined;
+  const localStoryPreviewQueue = useMemo(
+    () => isEmptyFallbackWorkbench ? [] : buildMissingPreviewQueueFromShots(audit.shots),
+    [audit.shots, isEmptyFallbackWorkbench],
+  );
+  // Trivial computation - useMemo overhead may exceed benefit
+  const directorPreviewQueue = useMemo(
+    () => isEmptyFallbackWorkbench ? [] : currentProjectPreviewQueue.length ? currentProjectPreviewQueue : localStoryPreviewQueue,
+    [currentProjectPreviewQueue, isEmptyFallbackWorkbench, localStoryPreviewQueue],
+  );
+  const currentProjectPreviewEmptyState = useMemo(() => {
+    if (directorPreviewQueue.length > 0) {
+      return {
+        label: "预览已准备好",
+        detail: "可以播放当前故事流。",
+      };
+    }
+    if (effectiveRuntimeProjectBinding.status !== "bound" && audit.shots.length === 0) {
+      return {
+        label: "先选择一个项目",
+        detail: "连接或打开项目后，预览会显示当前故事的可播放素材。",
+      };
+    }
+    if (effectiveRuntimeProjectBinding.status !== "bound") {
+      return {
+        label: "当前故事还没有可播放素材",
+        detail: "素材回流前，会先显示当前故事流的待补齐位置。",
+      };
+    }
+    if (currentProjectPreviewProjection.available) {
+      return {
+        label: "这个项目还没有可播放素材",
+        detail: "完成画面准备后，预览会自动出现在这里。",
+      };
+    }
+    return {
+      label: "等待故事流和素材同步",
+      detail: "当前项目已连接，预览会在素材准备好后自动更新。",
+    };
+  }, [
+    audit.shots.length,
+    currentProjectPreviewProjection.available,
+    directorPreviewQueue.length,
+    effectiveRuntimeProjectBinding.status,
+  ]);
+  const workbenchSelectedShotIds = useMemo(() => {
+    if (useCurrentProjectWorkbenchProjection) return currentProjectWorkbenchProjection.selectedScope.selectedShotIds;
+    const shotIds = new Set(audit.shots.map((shot) => shot.id));
+    const normalized = selectedShotIds.filter((shotId) => shotIds.has(shotId));
+    return normalized.length ? normalized : workbenchSelectedShotId ? [workbenchSelectedShotId] : [];
+  }, [audit.shots, currentProjectWorkbenchProjection.selectedScope.selectedShotIds, selectedShotIds, useCurrentProjectWorkbenchProjection, workbenchSelectedShotId]);
+  const workbenchProjectScopeLabel = useMemo(() => {
+    if (isEmptyFallbackWorkbench) return "新视频项目";
+    if (useCurrentProjectWorkbenchProjection) return currentProjectWorkbenchProjection.selectedScope.label;
+    if (workbenchSelectedShotIds.length > 1) return `${workbenchRuntimeState.project.title} · ${workbenchSelectedShotIds.length} 个镜头`;
+    return workbenchSelectedShotId
+      ? `${workbenchRuntimeState.project.title} · ${workbenchSelectedShotId}`
+      : workbenchRuntimeState.project.title;
+  }, [
+    currentProjectWorkbenchProjection.selectedScope.label,
+    isEmptyFallbackWorkbench,
+    useCurrentProjectWorkbenchProjection,
+    workbenchRuntimeState.project.title,
+    workbenchSelectedShotId,
+    workbenchSelectedShotIds.length,
+  ]);
+  const workbenchProgressState = useMemo(() => {
+    const state = buildDirectorProgressStripState(buildLocalOrchestratorUiSummary(workbenchRuntimeState));
+    if (!isEmptyFallbackWorkbench) return state;
+    return {
+      ...state,
+      label: "等待开始",
+      detail: "先写脚本或创建本地项目",
+      tone: "preparing" as const,
+      total: 0,
+      preparing: 0,
+      working: 0,
+      review: 0,
+      blocked: 0,
+      complete: 0,
+      segments: state.segments.map((segment) => ({ ...segment, value: 0 })),
+    };
+  }, [isEmptyFallbackWorkbench, workbenchRuntimeState]);
+  const workbenchAssetReadOnlyDetail = useCurrentProjectWorkbenchProjection
+    && currentProjectWorkbenchProjection.assets.readOnlyProjection
+    ? currentProjectWorkbenchProjection.assets.detail
+    : undefined;
   const selectedShots = useMemo(
-    () => currentProjectWorkbenchProjection.selectedScope.selectedShotIds
+    () => workbenchSelectedShotIds
       .map((shotId) => audit.shots.find((shot) => shot.id === shotId))
       .filter((shot): shot is ShotRecord => Boolean(shot)),
-    [audit.shots, currentProjectWorkbenchProjection.selectedScope.selectedShotIds],
+    [audit.shots, workbenchSelectedShotIds],
   );
+  const visibleSelectedShot = isEmptyFallbackWorkbench ? undefined : selectedShot;
+  const visibleSelectedShots = isEmptyFallbackWorkbench ? [] : selectedShots;
+  // Trivial computation - useMemo overhead may exceed benefit
   const selectedAsset = useMemo(() => audit.assets.find((asset) => asset.id === selectedAssetId), [audit.assets, selectedAssetId]);
   const blockers = audit.issues.filter((issue) => issue.severity === "blocker");
   const topRuntimeProjection = useMemo(() => buildMinimalRuntimeProjection({
-    previewQueue: currentProjectPreviewQueue,
+    previewQueue: directorPreviewQueue,
     assetLibrary: workbenchAssetLibrary,
     ledgerProjections: projectImage2BatchState.summary?.ledgerProjections,
     generatedAt: workbenchRuntimeState.generatedAt,
-  }), [currentProjectPreviewQueue, projectImage2BatchState.summary?.ledgerProjections, workbenchAssetLibrary, workbenchRuntimeState.generatedAt]);
+  }), [directorPreviewQueue, projectImage2BatchState.summary?.ledgerProjections, workbenchAssetLibrary, workbenchRuntimeState.generatedAt]);
+  const creatorDeskProjection = useMemo(() => buildCreatorDeskProjection({
+    runtimeState: workbenchRuntimeState,
+    previewItems: directorPreviewQueue,
+    image2BatchState: projectImage2BatchState,
+    selectedShotIds: workbenchSelectedShotIds,
+  }), [directorPreviewQueue, projectImage2BatchState, workbenchRuntimeState, workbenchSelectedShotIds]);
   const projectPlan = useMemo(
     () => buildMinimalProjectPlan(workbenchRuntimeState, topRuntimeProjection.shortLabel, topRuntimeProjection.progressDots),
     [topRuntimeProjection.progressDots, topRuntimeProjection.shortLabel, workbenchRuntimeState],
@@ -10057,6 +2925,25 @@ function App() {
   const resolvedActiveSectionId = activeSectionId
     || view.storySections.find((section) => selectedShot && section.shotIds.includes(selectedShot.id))?.id
     || view.storySections[0]?.id;
+  const localPreviewExportProjection = useMemo(() => buildLocalPreviewExportProjection({
+    runtimeState: workbenchRuntimeState,
+    previewQueue: directorPreviewQueue,
+    shots: audit.shots,
+    projectVibe: prototypeProjectVibe,
+    projectLocalKnowledgePacks,
+    projectRoot: prototypeProjectDraftTarget.projectRoot || runtimeProjectIdentity?.projectRoot,
+    selectedShotId: workbenchSelectedShotId,
+    generatedAt: workbenchRuntimeState.generatedAt,
+  }), [
+    audit.shots,
+    directorPreviewQueue,
+    projectLocalKnowledgePacks,
+    prototypeProjectDraftTarget.projectRoot,
+    prototypeProjectVibe,
+    runtimeProjectIdentity?.projectRoot,
+    workbenchRuntimeState,
+    workbenchSelectedShotId,
+  ]);
 
   useEffect(() => {
     if (!view.storySections.length) return;
@@ -10070,10 +2957,10 @@ function App() {
   useEffect(() => {
     if (!workbenchSelectedShotId || selectedShotId === workbenchSelectedShotId) return;
     setSelectedShotId(workbenchSelectedShotId);
-    setSelectedShotIds(currentProjectWorkbenchProjection.selectedScope.selectedShotIds.length
-      ? currentProjectWorkbenchProjection.selectedScope.selectedShotIds
+    setSelectedShotIds(workbenchSelectedShotIds.length
+      ? workbenchSelectedShotIds
       : [workbenchSelectedShotId]);
-  }, [currentProjectWorkbenchProjection.selectedScope.selectedShotIds, selectedShotId, workbenchSelectedShotId]);
+  }, [selectedShotId, workbenchSelectedShotId, workbenchSelectedShotIds]);
 
   function openDirectorView(nextView: DirectorView) {
     setMode("director");
@@ -10102,256 +2989,1223 @@ function App() {
     const normalizedSelection = nextSelection.length ? nextSelection : [shotId];
     setSelectedShotIds(normalizedSelection);
     setSelectedShotId(normalizedSelection.includes(shotId) ? shotId : normalizedSelection[0]);
-    setProjectImage2OneShotState({ status: "unavailable", message: "选择镜头后可生成小样。" });
+    setProjectImage2OneShotState({ status: "unavailable", message: "选择镜头后可准备小样包。" });
     const section = view.storySections.find((item) => item.shotIds.includes(shotId));
     if (section) setActiveSectionId(section.id);
+  }
+
+  function newVideoDraftFriendlyError(reasons: string[]) {
+    if (reasons.includes("script_missing")) return "先补一段大概脚本，再确认草案。";
+    if (reasons.includes("discussion_delta_unconfirmed")) return "先确认待修改，再确认草案。";
+    if (reasons.some((reason) => reason.startsWith("script_qa_"))) return "这版草案还缺角色、阻碍或转折，补一句再确认。";
+    if (reasons.some((reason) => reason.includes("project") || reason.includes("source"))) return "项目刚刚有变化，请重新发送后再确认。";
+    return "草案确认失败，请重新整理后再试。";
+  }
+
+  async function confirmNewVideoProjectVibeDraft(draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) {
+    const generatedAt = new Date().toISOString();
+    newVideoStagedTransactionRef.current = (undefined);
+    let draftTarget: ProjectVibeDraftTarget;
+    try {
+      draftTarget = await projectDraftTargetForNewVideoConfirmation(draft, context);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "先新建或打开本地项目，再确认草案。";
+      prototypeProjectDraftStatusRef.current = ({
+        status: "error",
+        label: "先准备本地项目",
+        targetId: prototypeProjectDraftTargetId,
+        error: message,
+      });
+      throw new Error(message);
+    }
+    const draftTargetId = buildProjectVibeDraftTargetId(draftTarget);
+    const projectForNewVideo = projectVibeWithNewVideoTitle(prototypeProjectVibeRef.current, draft, context, generatedAt);
+    const stagedTransaction = buildNewVideoProjectVibeStagedTransaction({
+      project: projectForNewVideo,
+      draft,
+      directorSession: context.directorSession,
+      discussionDeltas: context.discussionWorkspace?.stagedDeltas,
+      storyboardDraft: context.storyboardDraft,
+      generatedAt,
+    });
+    newVideoStagedTransactionRef.current = (stagedTransaction);
+    prototypeProjectDraftStatusRef.current = ({
+      status: "idle",
+      label: `草案待确认：${stagedTransaction.summary.shotCount} 个镜头`,
+      targetId: draftTargetId,
+    });
+    if (stagedTransaction.blocked) {
+      const message = newVideoDraftFriendlyError(stagedTransaction.blockedReasons);
+      prototypeProjectDraftStatusRef.current = ({
+        status: "error",
+        label: "草案还需要补齐",
+        targetId: draftTargetId,
+        error: message,
+      });
+      throw new Error(message);
+    }
+
+    const result = commitNewVideoProjectVibeStagedTransaction({
+      project: projectForNewVideo,
+      stagedTransaction,
+    });
+    if (result.patch.receipt.status !== "applied") {
+      const message = newVideoDraftFriendlyError(result.blockedReasons.length ? result.blockedReasons : result.patch.receipt.errors);
+      prototypeProjectDraftStatusRef.current = ({
+        status: "error",
+        label: "草案未写入项目",
+        targetId: draftTargetId,
+        error: message,
+      });
+      throw new Error(message);
+    }
+
+    const saveResult = await saveProjectVibeDraft(draftTarget, result.project);
+    prototypeProjectDraftStatusRef.current = ({
+      status: saveResult.status,
+      label: saveResult.ok ? "草案已写入项目" : "草案保存待重试",
+      targetId: saveResult.targetId,
+      factHash: saveResult.factHash,
+      error: saveResult.errors[0],
+    });
+    if (!saveResult.ok) {
+      throw new Error(saveResult.errors[0] || "草案保存失败");
+    }
+    if (draftTarget.projectRoot) {
+      const savedProjectTitle = result.project.manifest.title || projectDisplayNameFromDraft(draft, context);
+      setLoadedPrototypeProjectDraftTargetId(draftTargetId);
+      setProjectFileSelection((current) => current.status === "selected" && current.projectRoot === draftTarget.projectRoot
+        ? { ...current, detail: "草案已保存到本地项目", hasProjectVibe: true, displayName: savedProjectTitle }
+        : current);
+      await connectCurrentProject({
+        projectRoot: draftTarget.projectRoot,
+        projectId: result.project.manifest.projectId,
+        displayName: savedProjectTitle,
+      }, { projectFileRootSelected: true }).catch(() => {
+        setProjectSelectionStatus("error");
+      });
+    }
+
+    applyProjectVibeProjectState(result.project, draftTarget, {
+      newVideoDraft: draft,
+      discussionWorkspace: context.discussionWorkspace,
+      generatedAt,
+    });
+    const selectedNewShotId = result.selectedShotId || result.project.storyFlow.shotOrder[0] || result.project.shots[0]?.id;
+    const selectedSection = result.project.storyFlow.sections.find((section) => selectedNewShotId && section.shotIds.includes(selectedNewShotId))
+      || result.project.storyFlow.sections[0];
+    if (selectedSection) setActiveSectionId(selectedSection.id);
+    if (selectedNewShotId) {
+      setSelectedShotId(selectedNewShotId);
+      setSelectedShotIds([selectedNewShotId]);
+    }
+    setMode("director");
+    setDirectorView("story");
+    prototypeProjectDraftStatusRef.current = ({
+      status: "saved",
+      label: "草案已写入项目",
+      targetId: saveResult.targetId,
+      factHash: saveResult.factHash,
+    });
+    setLatestPrototypeAgentDemo({
+      status: "ready",
+      result: {
+        label: "草案已写入故事流",
+        projectVibeAdded: true,
+        projectSaved: true,
+        storageLabel: "已保存到项目",
+        status: "ready",
+      },
+    });
+    return true;
+  }
+
+  async function runLocalExportAction() {
+    setExportActionState({
+      status: "running",
+      label: "正在生成导出包",
+      exportRoot: localPreviewExportProjection.exportRoot,
+      plannedWriteCount: localPreviewExportProjection.exportWorker.entries.filter((entry) => entry.operation === "write_file").length,
+    });
+    const bridge = typeof window !== "undefined" ? window.vibeRuntime : undefined;
+    try {
+      const nextState = await runExportAction({
+        worker: localPreviewExportProjection.exportWorker,
+        projectRoot: prototypeProjectDraftTarget.projectRoot || runtimeProjectIdentity?.projectRoot,
+        bridge,
+      });
+      setExportActionState(nextState);
+    } catch (e) {
+      setExportActionState({
+        status: "failed",
+        label: `导出失败: ${e instanceof Error ? e.message : "未知错误"}`,
+        exportRoot: localPreviewExportProjection.exportRoot,
+      });
+    }
+  }
+
+  async function applyDialogueAudioCreated(input: MinimalAudioPlanDialogueAudioCreated) {
+    const outputRelativePath = input.payload.outputRelativePath;
+    const generatedAt = new Date().toISOString();
+    if (!outputRelativePath) {
+      setLatestPrototypeAgentDemo({
+        status: "error",
+        result: {
+          label: "配音已返回，但缺少可保存的音频路径",
+          projectVibeAdded: false,
+          waitingReview: true,
+          status: "error",
+        },
+      });
+      return;
+    }
+
+    const runtimeAudioInput = {
+      shotId: input.shotId,
+      outputRelativePath,
+      providerId: "local-qwen3-tts-clone",
+      receiptRelativePath: input.payload.receiptRelativePath,
+      outputSha256: input.payload.outputSha256,
+      outputSizeBytes: input.payload.outputSizeBytes,
+      generatedAt,
+    };
+    setRuntimeState((current) => applyDialogueAudioMaterialToRuntimeState({
+      runtimeState: current,
+      ...runtimeAudioInput,
+    }).runtimeState);
+
+    const transactionPlan = buildDialogueAudioMaterialProjectVibeTransaction({
+      project: prototypeProjectVibeRef.current,
+      shotId: input.shotId,
+      outputRelativePath,
+      providerId: "local-qwen3-tts-clone",
+      receiptRelativePath: input.payload.receiptRelativePath,
+      outputSha256: input.payload.outputSha256,
+      outputSizeBytes: input.payload.outputSizeBytes,
+      transcript: input.text,
+      generatedAt,
+    });
+    if (transactionPlan.status !== "ready" || !transactionPlan.transaction) {
+      setLatestPrototypeAgentDemo({
+        status: "error",
+        result: {
+          label: "配音已生成，项目素材待同步",
+          projectVibeAdded: false,
+          waitingReview: true,
+          status: "error",
+        },
+      });
+      return;
+    }
+
+    const patchResult = applyProjectVibeTransaction(prototypeProjectVibeRef.current, transactionPlan.transaction);
+    if (patchResult.receipt.status !== "applied") {
+      setLatestPrototypeAgentDemo({
+        status: "error",
+        result: {
+          label: patchResult.receipt.errors[0] || "配音素材写入失败",
+          projectVibeAdded: false,
+          waitingReview: true,
+          status: "error",
+        },
+      });
+      return;
+    }
+
+    const saveResult = await saveProjectVibeDraft(prototypeProjectDraftTarget, patchResult.project);
+    const nextState = buildProjectRuntimeStateFromProjectVibe({
+      project: patchResult.project,
+      projectRoot: prototypeProjectDraftTarget.projectRoot,
+      projectPath: prototypeProjectDraftTarget.projectPath,
+      generatedAt,
+      knowledgeManifest: buildProjectLocalKnowledgeManifest(
+        patchResult.project.manifest.projectId,
+        projectLocalKnowledgePacks,
+        generatedAt,
+      ),
+    });
+    const withDialogueAudio = applyDialogueAudioMaterialToRuntimeState({
+      runtimeState: nextState,
+      ...runtimeAudioInput,
+    }).runtimeState;
+    setPrototypeProjectVibe(patchResult.project);
+    setRuntimeState(withDialogueAudio);
+    setAssetLibrary(createAssetLibraryFromRuntimeState(withDialogueAudio));
+    prototypeProjectDraftStatusRef.current = ({
+      status: saveResult.status,
+      label: saveResult.ok ? "配音已作为素材写入项目" : "配音素材保存待重试",
+      targetId: saveResult.targetId,
+      factHash: saveResult.factHash,
+      error: saveResult.errors[0],
+    });
+    setLatestPrototypeAgentDemo({
+      status: saveResult.ok ? "ready" : "error",
+      result: {
+        label: saveResult.ok ? "配音素材已准备好" : "配音素材保存待重试",
+        projectVibeAdded: true,
+        projectSaved: saveResult.ok,
+        storageLabel: saveResult.ok ? "已保存到项目" : "项目保存待重试",
+        waitingReview: true,
+        status: saveResult.ok ? "needs_review" : "error",
+      },
+    });
+  }
+
+  async function applyCreatorReviewDecision(item: CreatorReviewTrayItem, mode: "approve" | "lock" | "reject" | "retry", lockTarget: CreatorReviewLockTarget = "shot_reference") {
+    const now = new Date().toISOString();
+    const promotionMode = mode === "lock";
+    const retryMode = mode === "retry";
+    const rejectMode = mode === "reject";
+    const requiresHashBoundOutput = mode === "approve" || promotionMode;
+    if (requiresHashBoundOutput && (!item.mediaPath || !item.sourceReceiptId || !item.outputHash)) {
+      setLatestPrototypeAgentDemo({
+        status: "error",
+        result: {
+          label: "需要完整复核凭证",
+          projectVibeAdded: false,
+          waitingReview: true,
+          status: "needs_review",
+        },
+      });
+      return;
+    }
+    if (retryMode && !item.shotId) {
+      setLatestPrototypeAgentDemo({
+        status: "error",
+        result: {
+          label: "需要指定镜头后才能重试",
+          projectVibeAdded: false,
+          waitingReview: true,
+          status: "needs_review",
+        },
+      });
+      return;
+    }
+
+    const lockAssetKind = reviewLockAssetKind(lockTarget);
+    const lockLabel = reviewLockTargetLabel(lockTarget);
+    const assetId = promotionMode
+      ? item.assetId || `asset_${safeProjectVibeId(`${item.id}_${lockTarget}`, item.shotId ? `${item.shotId}_${lockTarget}` : lockTarget)}`
+      : undefined;
+    const usedByShotIds = item.usedByShotIds?.length ? item.usedByShotIds : item.shotId ? [item.shotId] : [];
+    const projectLabel = cleanReviewItemProjectLabel(item.label);
+    const assetLabel = promotionMode ? `${lockLabel}：${projectLabel}` : projectLabel;
+    if (effectiveRuntimeProjectIdentity) {
+      try {
+        const runtimeReviewResult = await submitCurrentProjectReviewDecision(effectiveRuntimeProjectIdentity, {
+          action: mode,
+          reviewedAt: now,
+          reviewerId: "local_user",
+          item: {
+            id: item.id,
+            shotId: item.shotId,
+            assetId,
+            assetType: item.assetType,
+            label: projectLabel,
+            mediaPath: item.mediaPath,
+            sourceReceiptId: item.sourceReceiptId,
+            outputHash: item.outputHash,
+            status: item.status,
+          },
+          candidate: {
+            shotId: item.shotId,
+            assetId,
+            assetKind: promotionMode ? lockAssetKind : undefined,
+            label: projectLabel,
+            outputPath: item.mediaPath,
+            outputHash: item.outputHash,
+            sourceReceiptId: item.sourceReceiptId,
+            missingOutput: item.status === "missing" || retryMode,
+            evidenceRefs: item.mediaPath ? [`preview#${item.id}`] : [`review_item#${item.id}`],
+          },
+          decision: {
+            assetKind: promotionMode ? lockAssetKind : "reference",
+            assetLabel,
+            usedByShotIds,
+          },
+        });
+        if (runtimeReviewResult.ok) {
+          const refreshed = await loadProjectRealChainStatus(effectiveRuntimeProjectIdentity);
+          setProjectRealChainState(refreshed);
+          const reopened = await openProjectVibeDraft(prototypeProjectDraftTarget);
+          if (reopened.ok && reopened.project && reopened.mode === "electron_project_file") {
+            applyProjectVibeProjectState(reopened.project, prototypeProjectDraftTarget, { generatedAt: now });
+          }
+          setLatestPrototypeAgentDemo({
+            status: "preview_ready",
+            result: {
+              label: runtimeReviewResult.message || (promotionMode ? "已锁定参考" : "已写入复核决定"),
+              projectVibeAdded: runtimeReviewResult.projectVibeWritten === true,
+              waitingReview: false,
+              previewReady: true,
+              status: runtimeReviewResult.status || "approved",
+            },
+          });
+          return;
+        }
+        console.warn("Runtime review decision did not apply; falling back to local Project.vibe patch", runtimeReviewResult);
+      } catch (error) {
+        console.error("Runtime review decision failed; falling back to local Project.vibe patch", error);
+      }
+    }
+    const result = buildProviderReviewPromotionTransaction({
+      project: prototypeProjectVibeRef.current,
+      candidate: {
+        shotId: item.shotId,
+        assetId,
+        assetKind: promotionMode ? lockAssetKind : undefined,
+        label: projectLabel,
+        outputPath: item.mediaPath,
+        outputHash: item.outputHash,
+        sourceReceiptId: item.sourceReceiptId,
+        missingOutput: item.status === "missing" || retryMode,
+        evidenceRefs: item.mediaPath ? [`preview#${item.id}`] : [`review_item#${item.id}`],
+      },
+      decision: {
+        status: retryMode ? "retry_requested" : rejectMode ? "rejected" : "approved",
+        humanReviewed: true,
+        reviewerId: "local_user",
+        reviewedAt: now,
+        retryRequested: retryMode ? true : undefined,
+        promotionTarget: promotionMode ? "asset_and_locked_visual_memory" : "review_receipt_only",
+        promotionAuthorization: promotionMode
+          ? {
+              authorized: true,
+              authorizedBy: "local_user",
+              authorizedAt: now,
+            }
+          : undefined,
+        assetKind: promotionMode ? lockAssetKind : "reference",
+        assetLabel,
+        usedByShotIds,
+      },
+    });
+
+    if (result.status !== "staged" || !result.transaction) {
+      setLatestPrototypeAgentDemo({
+        status: "error",
+        result: {
+          label: promotionMode
+            ? "锁定前还需要完整复核凭证"
+            : retryMode
+              ? "重试前需要补齐镜头信息"
+              : rejectMode
+                ? "拒绝前需要补齐复核信息"
+                : "需要补齐复核信息",
+          projectVibeAdded: false,
+          waitingReview: true,
+          status: "needs_review",
+        },
+      });
+      return;
+    }
+
+    const transaction = result.transaction;
+    const promotedAssetId = assetId;
+    if (promotionMode && promotedAssetId && item.shotId && (lockTarget === "character" || lockTarget === "scene" || lockTarget === "prop")) {
+      const sourceShot = prototypeProjectVibeRef.current.shots.find((shot) => shot.id === item.shotId);
+      if (sourceShot) {
+        transaction.operations.push({
+          op: "upsert_shot",
+          shot: {
+            ...sourceShot,
+            characterAssetIds: lockTarget === "character"
+              ? Array.from(new Set([...sourceShot.characterAssetIds, promotedAssetId]))
+              : sourceShot.characterAssetIds,
+            sceneAssetIds: lockTarget === "scene"
+              ? Array.from(new Set([...sourceShot.sceneAssetIds, promotedAssetId]))
+              : sourceShot.sceneAssetIds,
+            propAssetIds: lockTarget === "prop"
+              ? Array.from(new Set([...sourceShot.propAssetIds, promotedAssetId]))
+              : sourceShot.propAssetIds,
+            status: sourceShot.status === "blocked" ? sourceShot.status : "ready",
+            sourceRefs: Array.from(new Set([
+              ...sourceShot.sourceRefs,
+              `project.vibe#assets/${promotedAssetId}`,
+            ])),
+          },
+        });
+      }
+    }
+
+    const patchResult = applyProjectVibeTransaction(prototypeProjectVibeRef.current, transaction);
+    if (patchResult.receipt.status !== "applied") {
+      setLatestPrototypeAgentDemo({
+        status: "error",
+        result: {
+          label: patchResult.receipt.errors[0] || "复核记录未写入",
+          projectVibeAdded: false,
+          waitingReview: true,
+          status: "error",
+        },
+      });
+      return;
+    }
+
+    const saveResult = await saveProjectVibeDraft(prototypeProjectDraftTarget, patchResult.project);
+    const nextState = buildProjectRuntimeStateFromProjectVibe({
+      project: patchResult.project,
+      projectRoot: prototypeProjectDraftTarget.projectRoot,
+      projectPath: prototypeProjectDraftTarget.projectPath,
+      generatedAt: now,
+    });
+    setPrototypeProjectVibe(patchResult.project);
+    setRuntimeState(nextState);
+    setAssetLibrary(createAssetLibraryFromRuntimeState(nextState));
+    if (effectiveRuntimeProjectIdentity) {
+      try {
+        const refreshed = await loadProjectRealChainStatus(effectiveRuntimeProjectIdentity);
+        setProjectRealChainState(refreshed);
+      } catch (error) {
+        console.error("Failed to refresh project workbench after review decision", error);
+      }
+    }
+    prototypeProjectDraftStatusRef.current = ({
+      status: saveResult.status,
+      label: saveResult.ok ? "复核记录已写入项目" : "复核记录保存待重试",
+      targetId: saveResult.targetId,
+      factHash: saveResult.factHash,
+      error: saveResult.errors[0],
+    });
+    setLatestPrototypeAgentDemo({
+      status: saveResult.ok ? "preview_ready" : "error",
+      result: {
+        label: promotionMode
+          ? `已锁为${lockLabel}`
+          : retryMode
+            ? "已写入重试请求"
+            : rejectMode
+              ? "已写入拒绝记录"
+              : "已写入复核记录",
+        projectVibeAdded: patchResult.receipt.status === "applied",
+        projectSaved: saveResult.ok,
+        storageLabel: saveResult.ok ? "已保存到项目" : "项目保存待重试",
+        waitingReview: !promotionMode && !rejectMode,
+        previewReady: true,
+        status: promotionMode ? "complete" : rejectMode ? "rejected" : "needs_review",
+      },
+    });
+  }
+
+  async function preparePrototypeAgentDemo(input: PreviewPrototypeAgentDemoInput) {
+    let projectVibeWritten = false;
+    const selectedPrototypeShotId =
+      input.selectedShotId
+      || input.selectedShotIds?.[0]
+      || workbenchSelectedShotId
+      || prototypeProjectVibeRef.current.shots[0]?.id;
+    if (!selectedPrototypeShotId) {
+      setLatestPrototypeAgentDemo({
+        status: "error",
+        result: { label: "需要先选择镜头", projectVibeAdded: false, waitingReview: true },
+      });
+      throw new Error("Prototype Agent demo requires a selected shot.");
+    }
+
+    const sourceProject = prototypeProjectVibeRef.current.shots.some((shot) => shot.id === selectedPrototypeShotId)
+      ? prototypeProjectVibeRef.current
+      : createProjectVibeFromRuntimeState(workbenchRuntimeState);
+    const userIntent = input.userIntent.trim() || `整理 ${selectedPrototypeShotId} 的预览画面`;
+    const now = new Date().toISOString();
+    setLatestPrototypeAgentDemo({
+      status: "running",
+      result: { label: "正在整理预览", projectVibeAdded: true, waitingReview: true },
+    });
+
+    try {
+      const creativeLoop = confirmProjectVibeCreativeLoop({
+        project: sourceProject,
+        userIntent,
+        selectedShotId: input.selectedShotIds && input.selectedShotIds.length > 1 ? undefined : selectedPrototypeShotId,
+        selectedShotIds: input.selectedShotIds,
+        selectedAssetId: input.selectedAssetId,
+        sectionId: input.sectionId,
+        generatedAt: now,
+        projectRoot: prototypeProjectDraftTarget.projectRoot,
+        projectPath: prototypeProjectDraftTarget.projectPath,
+        userConfirmed: true,
+      });
+      if (creativeLoop.status !== "project_facts_written" || !creativeLoop.nextProject) {
+        throw new Error(creativeLoop.blockedReasons[0] || "Project.vibe creative loop confirmation was blocked.");
+      }
+      const confirmedSaveResult = await saveProjectVibeDraft(prototypeProjectDraftTarget, creativeLoop.nextProject);
+      projectVibeWritten = confirmedSaveResult.ok;
+      setPrototypeProjectVibe(creativeLoop.nextProject);
+      prototypeProjectDraftStatusRef.current = ({
+        status: confirmedSaveResult.status,
+        label: confirmedSaveResult.ok ? "已写入项目事实" : "项目事实保存待重试",
+        targetId: confirmedSaveResult.targetId,
+        factHash: confirmedSaveResult.factHash,
+        error: confirmedSaveResult.errors[0],
+      });
+      setLatestPrototypeAgentDemo({
+        status: "running",
+        result: {
+          label: confirmedSaveResult.ok ? "项目事实已写入，正在整理预览" : "项目事实保存待重试",
+          projectVibeAdded: true,
+          projectSaved: confirmedSaveResult.ok,
+          storageLabel: confirmedSaveResult.ok ? "已写入项目事实" : "项目保存待重试",
+          waitingReview: true,
+        },
+      });
+      const result = await runDirectorPrototypeClosedLoop({
+        project: creativeLoop.nextProject,
+        userIntent,
+        selectedShotId: selectedPrototypeShotId,
+        now,
+      });
+      const saveResult = await saveProjectVibeDraft(prototypeProjectDraftTarget, result.nextProject);
+      const storageLabel = saveResult.ok ? "已保存到项目" : "项目保存待重试";
+
+      setPrototypeProjectVibe(result.nextProject);
+      prototypeProjectDraftStatusRef.current = ({
+        status: saveResult.status,
+        label: storageLabel,
+        targetId: saveResult.targetId,
+        factHash: saveResult.factHash,
+        error: saveResult.errors[0],
+      });
+      setPrototypePreviewItems((items) => [
+        ...items.filter((item) => item.id !== result.previewItem.id),
+        {
+          id: result.previewItem.id,
+          kind: "image_hold",
+          shotId: result.previewItem.shotId,
+          startSeconds: 0,
+          durationSeconds: 5,
+          mediaPath: result.previewItem.mediaPath,
+          label: formatShotNumber(result.previewItem.shotId),
+        },
+      ]);
+      setLatestPrototypeAgentDemo({
+        status: "preview_ready",
+        result: {
+          label: "预览已生成、等待复核",
+          projectVibeAdded: result.transactionReceipt.status === "applied",
+          projectSaved: saveResult.ok,
+          storageLabel,
+          waitingReview: result.providerRequestSummary.reviewStatus === "approved",
+          previewReady: true,
+          status: "preview_ready",
+        },
+      });
+    } catch (error) {
+      setLatestPrototypeAgentDemo({
+        status: "error",
+        result: {
+          label: "需要复核",
+          projectVibeAdded: projectVibeWritten,
+          waitingReview: true,
+          status: "error",
+        },
+      });
+      throw error;
+    }
+  }
+
+  async function confirmDirectorFeedbackRecompile(recompile: DirectorFeedbackRecompileResult) {
+    const generatedAt = new Date().toISOString();
+    setLatestPrototypeAgentDemo({
+      status: "running",
+      result: {
+        label: "正在写入修改计划",
+        projectVibeAdded: true,
+        waitingReview: true,
+        status: "running",
+      },
+    });
+    const applied = applyDirectorFeedbackRecompileToProjectVibe({
+      project: prototypeProjectVibeRef.current,
+      recompile,
+      createdAt: generatedAt,
+    });
+    if (applied.status !== "applied") {
+      setLatestPrototypeAgentDemo({
+        status: "error",
+        result: {
+          label: applied.summary || "修改计划写入失败",
+          projectVibeAdded: false,
+          waitingReview: true,
+          status: "error",
+        },
+      });
+      throw new Error(applied.blockedReasons[0] || applied.summary);
+    }
+
+    const saveResult = await saveProjectVibeDraft(prototypeProjectDraftTarget, applied.project);
+    const nextState = buildProjectRuntimeStateFromProjectVibe({
+      project: applied.project,
+      projectRoot: prototypeProjectDraftTarget.projectRoot,
+      projectPath: prototypeProjectDraftTarget.projectPath,
+      generatedAt,
+      knowledgeManifest: buildProjectLocalKnowledgeManifest(
+        applied.project.manifest.projectId,
+        projectLocalKnowledgePacks,
+        generatedAt,
+      ),
+    });
+    setPrototypeProjectVibe(applied.project);
+    setRuntimeState(nextState);
+    setAssetLibrary(createAssetLibraryFromRuntimeState(nextState));
+    setPrototypePreviewItems([]);
+    setSelectedShotId(recompile.feedbackIntent.targetShotId);
+    setSelectedShotIds([recompile.feedbackIntent.targetShotId]);
+    createImage2GateForShot(recompile.feedbackIntent.targetShotId);
+    prototypeProjectDraftStatusRef.current = ({
+      status: saveResult.status,
+      label: saveResult.ok ? "修改计划已写入项目" : "修改计划保存待重试",
+      targetId: saveResult.targetId,
+      factHash: saveResult.factHash,
+      error: saveResult.errors[0],
+    });
+    setLatestPrototypeAgentDemo({
+      status: saveResult.ok ? "ready" : "error",
+      result: {
+        label: saveResult.ok ? "修改计划已写入项目" : "修改计划保存待重试",
+        projectVibeAdded: applied.projectVibeWritten,
+        projectSaved: saveResult.ok,
+        storageLabel: saveResult.ok ? "已保存到项目" : "项目保存待重试",
+        waitingReview: true,
+        status: saveResult.ok ? "ready" : "error",
+      },
+    });
+    if (!saveResult.ok) throw new Error(saveResult.errors[0] || "修改计划保存失败");
   }
 
   function confirmOneShot() {
     setRuntimeState((current) => applyPreRealTestClosure(current, { generatedAt: new Date().toISOString() }).runtimeState);
   }
 
-  async function refreshCurrentProjectPanels(binding: ProjectCurrentBindingStatus) {
-    setRuntimeProjectBinding(binding);
-    const identity = currentProjectBindingIdentity(binding);
-    if (!identity) {
-      setProjectRealChainState({ status: "unavailable", message: "未选择项目/未同步。" });
-      setProjectImage2BatchState({ status: "unavailable", message: "未选择项目/未同步。" });
-      setProjectImage2OneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
-      setStrictEditPreflightState({ status: "idle" });
-      return;
-    }
-    const [nextRealChainState, nextImage2BatchState, nextOneShotState] = await Promise.all([
-      loadProjectRealChainStatus(identity),
-      loadProjectImage2BatchPlan(identity),
-      loadProjectImage2OneShotStatus(identity, selectedShotId),
-    ]);
-    setProjectRealChainState(nextRealChainState);
-    setProjectImage2BatchState(nextImage2BatchState);
-    setProjectImage2OneShotState(nextOneShotState);
-    setStrictEditPreflightState({ status: "idle" });
-  }
-
-  async function connectCurrentProject(choice?: ProjectCurrentChoice) {
-    const projectRoot = (choice?.projectRoot || projectPathInput).trim();
-    if (!projectRoot) {
-      setProjectSelectionStatus("error");
-      setProjectRealChainState({ status: "unavailable", message: "请输入项目路径。" });
-      setProjectImage2BatchState({ status: "unavailable", message: "请输入项目路径。" });
-      setProjectImage2OneShotState({ status: "unavailable", message: "请输入项目路径。" });
-      setStrictEditPreflightState({ status: "idle" });
-      return;
-    }
-    setProjectPathInput(projectRoot);
-
-    setProjectSelectionStatus("connecting");
-    setProjectRealChainState((current) => ({
-      ...current,
-      status: "running",
-      message: "正在连接当前项目。",
-    }));
-    setProjectImage2BatchState((current) => ({
-      ...current,
-      status: "running",
-      message: "正在同步当前项目。",
-    }));
-    setProjectImage2OneShotState((current) => ({
-      ...current,
-      status: "running",
-      message: "正在同步当前项目。",
-    }));
+  async function bindProjectFileRootSelection(
+    selection: ProjectRootDialogSelection,
+    options: { detail?: string; loadedTargetId?: string } = {},
+  ): Promise<ProjectVibeDraftTarget | undefined> {
+    if (selection.cancelled || !selection.projectRoot) return undefined;
+    const displayName = selection.displayName || selection.projectRoot.split(/[\\/]/).filter(Boolean).at(-1) || "未命名项目";
+    setProjectPathInput(selection.projectRoot);
+    setLoadedPrototypeProjectDraftTargetId(options.loadedTargetId);
+    setProjectFileSelection({
+      status: "selected",
+      label: "切换项目",
+      detail: options.detail || (selection.hasProjectVibe ? "当前项目已连接" : "会创建项目文件"),
+      projectRoot: selection.projectRoot,
+      projectPath: selection.projectPath,
+      projectVibePath: selection.projectVibePath,
+      hasProjectVibe: selection.hasProjectVibe,
+      displayName,
+    });
+    setRecentProjectSelections(writeRememberedProjectSelection({ ...selection, displayName }));
+    const target: ProjectVibeDraftTarget = {
+      projectRoot: selection.projectRoot,
+      projectPath: selection.projectPath,
+      storageKey: prototypeProjectDraftStorageKeyValue,
+    };
+    applyProjectVibeProjectState(createEmptyProjectVibeForProjectRoot(selection.projectRoot, displayName), target);
+    setProjectRealChainState({ status: "unavailable", message: "正在读取当前项目。" });
+    setProjectImage2BatchState({ status: "unavailable", message: "正在同步当前项目复核状态。" });
+    setProjectImage2OneShotState({ status: "unavailable", message: "正在同步当前项目小样状态。" });
+    setRealImage2Gate(undefined);
+    setActiveSectionId(undefined);
+    setDirectorView("story");
 
     try {
-      const binding = await selectCurrentProjectBinding({
-        projectRoot,
-        projectId: choice?.projectId,
-        displayName: choice?.displayName,
-      });
-      if (binding.projectRoot) setProjectPathInput(binding.projectRoot);
-      await refreshCurrentProjectPanels(binding);
-      const choices = await loadCurrentProjectChoices();
-      setProjectChoices(choices);
-      setProjectSelectionStatus("connected");
+      await connectCurrentProject({
+        projectRoot: selection.projectRoot,
+        displayName,
+      }, { projectFileRootSelected: true });
     } catch {
-      setRuntimeProjectBinding({ status: "unbound", message: "连接项目失败，请确认路径在当前工作区内并且项目文件可读取。" });
-      setProjectRealChainState({ status: "unavailable", message: "连接项目失败，请确认路径在当前工作区内并且项目文件可读取。" });
-      setProjectImage2BatchState({ status: "unavailable", message: "连接项目失败，请确认路径在当前工作区内并且项目文件可读取。" });
-      setProjectImage2OneShotState({ status: "unavailable", message: "连接项目失败，请确认路径在当前工作区内并且项目文件可读取。" });
-      setStrictEditPreflightState({ status: "idle" });
+      setProjectSelectionStatus("error");
+    }
+
+    return {
+      projectRoot: selection.projectRoot,
+      projectPath: selection.projectPath,
+      storageKey: prototypeProjectDraftStorageKeyValue,
+    };
+  }
+
+  async function createNewVideoLocalProject(
+    draft?: NewVideoStartDraft,
+    context?: NewVideoStartConfirmationContext,
+    options: { reserveForImmediateSave?: boolean } = {},
+  ): Promise<ProjectVibeDraftTarget | undefined> {
+    if (!canCreateLocalProjectFromDialog) return undefined;
+    const previousProjectFileSelection = projectFileSelection;
+    setProjectFileSelection({
+      status: "choosing",
+      label: "选择文件夹",
+      detail: "选择或新建一个项目文件夹",
+    });
+
+    try {
+      const selection = await createLocalProject({
+        displayName: projectDisplayNameFromDraft(draft, context),
+      });
+      if (selection.cancelled || !selection.projectRoot) {
+        setProjectFileSelection((current) => current.status === "choosing"
+          ? previousProjectFileSelection
+          : current);
+        return undefined;
+      }
+
+      const target: ProjectVibeDraftTarget = {
+        projectRoot: selection.projectRoot,
+        projectPath: selection.projectPath,
+        storageKey: prototypeProjectDraftStorageKeyValue,
+      };
+      const targetId = options.reserveForImmediateSave ? buildProjectVibeDraftTargetId(target) : undefined;
+      return bindProjectFileRootSelection(selection, {
+        detail: "本地项目已准备，确认后会保存",
+        loadedTargetId: targetId,
+      });
+    } catch (error) {
+      setProjectFileSelection({
+        status: "error",
+        label: "选择失败",
+        detail: error instanceof Error ? error.message : "项目文件夹选择失败",
+      });
+      setProjectSelectionStatus("error");
+      return undefined;
+    }
+  }
+
+  async function projectDraftTargetForNewVideoConfirmation(
+    draft: NewVideoStartDraft,
+    context: NewVideoStartConfirmationContext,
+  ): Promise<ProjectVibeDraftTarget> {
+    if (projectFileSelection.status === "selected") {
+      if (!canRememberProjectRootFromDialog || !prototypeProjectDraftTarget.projectRoot) {
+        return prototypeProjectDraftTarget;
+      }
+      try {
+        const remembered = await rememberProjectRoot(prototypeProjectDraftTarget.projectRoot);
+        if (remembered.cancelled || !remembered.projectRoot) return prototypeProjectDraftTarget;
+        const displayName = projectFileSelection.displayName || remembered.displayName || projectFolderName(remembered.projectRoot);
+        setRecentProjectSelections(writeRememberedProjectSelection({ ...remembered, displayName }));
+        setProjectFileSelection((current) => current.status === "selected" && current.projectRoot === prototypeProjectDraftTarget.projectRoot
+          ? {
+            ...current,
+            projectRoot: remembered.projectRoot!,
+            projectPath: remembered.projectPath || current.projectPath,
+            projectVibePath: remembered.projectVibePath || current.projectVibePath,
+            hasProjectVibe: remembered.hasProjectVibe || current.hasProjectVibe,
+            displayName,
+          }
+          : current);
+        return {
+          ...prototypeProjectDraftTarget,
+          projectRoot: remembered.projectRoot,
+          projectPath: remembered.projectPath || prototypeProjectDraftTarget.projectPath,
+        };
+      } catch (error) {
+        console.error("Failed to prepare selected project folder for saving", error);
+        return prototypeProjectDraftTarget;
+      }
+    }
+    if (canCreateLocalProjectFromDialog) {
+      const createdTarget = await createNewVideoLocalProject(draft, context, { reserveForImmediateSave: true });
+      if (createdTarget) return createdTarget;
+    }
+    if (canChooseProjectRootFromDialog) {
+      throw new Error("先新建或打开本地项目，再确认草案。");
+    }
+    return prototypeProjectDraftTarget;
+  }
+
+  async function chooseProjectFileRoot() {
+    if (!canChooseProjectRootFromDialog) {
+      setProjectFileSelection({
+        status: "unavailable",
+        label: "浏览器草稿",
+        detail: "当前环境没有项目选择器",
+      });
+      return;
+    }
+
+    const previousProjectFileSelection = projectFileSelection;
+    setProjectFileSelection({
+      status: "choosing",
+      label: "选择中",
+      detail: "等待选择项目文件夹",
+    });
+
+    try {
+      const selection = await chooseProjectRoot();
+      if (selection.cancelled || !selection.projectRoot) {
+        setProjectFileSelection((current) => current.status === "choosing"
+          ? previousProjectFileSelection
+          : current);
+        return;
+      }
+
+      await bindProjectFileRootSelection(selection);
+    } catch (error) {
+      setProjectFileSelection({
+        status: "error",
+        label: "打开失败",
+        detail: error instanceof Error ? error.message : "项目打开失败",
+      });
       setProjectSelectionStatus("error");
     }
   }
 
-  function selectProjectChoice(choice: ProjectCurrentChoice) {
-    void connectCurrentProject(choice);
+  async function openRecentProject(selection: ProjectRootDialogSelection) {
+    if (!selection.projectRoot) return;
+    let nextSelection = selection;
+    if (canRememberProjectRootFromDialog) {
+      try {
+        const electronSelection = await rememberProjectRoot(selection.projectRoot);
+        if (!electronSelection.cancelled && electronSelection.projectRoot) {
+          nextSelection = {
+            ...electronSelection,
+            displayName: selection.displayName || electronSelection.displayName,
+          };
+        }
+      } catch {
+        // Keep the local history usable; bindProjectFileRootSelection will surface any project read issue.
+      }
+    }
+    await bindProjectFileRootSelection(nextSelection, { detail: "已切换项目" });
   }
 
-  async function runProjectRealChain() {
-    if (!runtimeProjectIdentity) {
-      setProjectRealChainState({ status: "unavailable", message: "未选择项目/未同步。" });
-      return;
-    }
-    setProjectRealChainState((current) => ({
-      ...current,
-      status: "running",
-      message: "正在同步当前项目状态。",
-    }));
-    const nextState = await runProjectRealChainCheck(runtimeProjectIdentity);
-    setProjectRealChainState(nextState);
+  function resetAllProjectState() {
+    setRuntimeState(fallbackRuntimeState);
+    setAssetLibrary(createAssetLibraryFromRuntimeState(fallbackRuntimeState));
+    setPrototypeProjectVibe(createProjectVibeFromRuntimeState(fallbackRuntimeState));
+    prototypeProjectDraftStatusRef.current = ({ status: "idle", label: "本地项目待保存" });
+    setPrototypePreviewItems([]);
+    setLatestPrototypeAgentDemo(undefined);
+    setAgentWebSearchSettings(loadAgentWebSearchSettings());
+    setProjectLocalKnowledgePacks(loadProjectLocalKnowledgePacks(fallbackRuntimeState.sourceIndex.projectId));
+    newVideoStagedTransactionRef.current = (undefined);
+    setProjectFactsMode("save");
+    setLatestProjectStoreApplyPlan(undefined);
+    setExportActionState({ status: "idle", label: "导出待准备" });
+    setProjectFileSelection({ status: "idle", label: "打开项目" });
+    setLoadedPrototypeProjectDraftTargetId(undefined);
+    setRealImage2Gate(undefined);
+    setSelectedShotIds([]);
+    setSelectedShotId("");
+    setSelectedAssetId(undefined);
+    setActiveSectionId(undefined);
+    setDirectorView("story");
   }
 
-  async function runProjectImage2Batch() {
-    if (!runtimeProjectIdentity) {
-      setProjectImage2BatchState({ status: "unavailable", message: "未选择项目/未同步。" });
-      return;
+  async function forgetProjectFileRoot() {
+    const projectRootToForget = projectFileSelection.status === "selected" ? projectFileSelection.projectRoot : undefined;
+    await forgetCurrentProject();
+    if (projectRootToForget) {
+      try {
+        await window.vibeRuntime?.forgetProject?.(projectRootToForget);
+      } catch {
+        // Runtime binding and local remembered state are still cleared below.
+      }
+    } else {
+      forgetBrowserProjectVibeDraft(prototypeProjectDraftTarget);
     }
-    setProjectImage2BatchState((current) => ({
-      ...current,
-      status: "running",
-      message: "正在检查当前项目复核状态。",
-    }));
-    const nextState = await runProjectImage2BatchCheck(runtimeProjectIdentity);
-    setProjectImage2BatchState(nextState);
+    setRecentProjectSelections(clearRememberedProjectRoot(projectRootToForget));
+    resetAllProjectState();
   }
 
-  async function prepareStrictEditPreflight(shotId: string) {
-    if (!runtimeProjectIdentity) {
-      setStrictEditPreflightState({ status: "unavailable", message: "未选择项目/未同步。" });
-      return;
-    }
-    setStrictEditPreflightState({
-      status: "running",
-      message: shotId ? `正在准备 ${shotId} edit 证据。` : "正在准备 edit 证据。",
+  function removeRecentProjectRecord(projectRoot: string) {
+    if (!projectRoot.trim()) return;
+    setRecentProjectSelections(clearRememberedProjectRoot(projectRoot));
+  }
+
+  const { assetGenerationAction, runImage2AssetGeneration } = useImage2AssetGenerationAction({
+    runtimeProjectIdentity,
+    selectedShotId: workbenchSelectedShotId,
+    selectedShotIds: workbenchSelectedShotIds,
+    providerConfigStatuses,
+    setProviderConfigStatuses,
+    setProjectRealChainState,
+  });
+  const { endFrameAction, runImage2EndFrame } = useImage2EndFrameAction({
+    runtimeProjectIdentity,
+    selectedShotId: workbenchSelectedShotId,
+    providerConfigStatuses,
+    setProviderConfigStatuses,
+    setProjectRealChainState,
+    openPreview: () => setDirectorView("preview"),
+  });
+  const { videoSubmitAction, runSeedanceVideoSubmit } = useSeedanceVideoSubmitAction({
+    runtimeProjectIdentity,
+    selectedShotIds: workbenchSelectedShotIds,
+    providerConfigStatuses,
+    setProviderConfigStatuses,
+    setProjectRealChainState,
+    openPreview: () => setDirectorView("preview"),
+  });
+  const pendingReferenceReviewCount = workbenchRuntimeState.visualMemory.assets.filter((asset) => {
+    if (asset.lockedStatus === "locked" && asset.status !== "missing") return false;
+    return asset.lockedStatus === "needs_review"
+      || asset.lockedStatus === "candidate"
+      || asset.lockedStatus === "not_generated"
+      || asset.status === "missing"
+      || asset.status === "planned";
+  }).length;
+  const gatedVideoSubmitAction = useMemo(() => {
+    if (!videoSubmitAction || pendingReferenceReviewCount <= 0) return videoSubmitAction;
+    return {
+      ...videoSubmitAction,
+      disabled: true,
+      ready: false,
+      message: "先复核参考素材，再提交视频。",
+    };
+  }, [pendingReferenceReviewCount, videoSubmitAction]);
+
+  function lockVoiceSourceForProject(sourceId: string) {
+    const generatedAt = new Date().toISOString();
+    const result = updateVoiceSource(workbenchRuntimeState.voiceSourceLibrary, sourceId, {
+      status: "locked",
+      consentStatus: "user_owned",
+      commercialUseStatus: "allowed",
+      updatedAt: generatedAt,
     });
-    const nextState = await prepareProjectRound5StrictEditPreflight(runtimeProjectIdentity, shotId);
-    setStrictEditPreflightState(nextState);
-    if (nextState.status === "prepared") {
-      const refreshed = await loadProjectRealChainStatus(runtimeProjectIdentity);
-      setProjectRealChainState(refreshed);
+    if (!result.validation.ok) {
+      setLatestPrototypeAgentDemo({
+        status: "error",
+        result: {
+          label: result.validation.errors[0] || "音源暂时不能锁定",
+          projectVibeAdded: false,
+          waitingReview: true,
+          status: "needs_review",
+        },
+      });
+      return;
     }
-  }
 
-  async function prepareImage2OneShot() {
-    if (!runtimeProjectIdentity) {
-      setProjectImage2OneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
-      return;
-    }
-    setProjectImage2OneShotState((current) => ({
-      ...current,
-      status: "running",
-      message: "正在准备小样。",
-    }));
-    const nextState = await prepareProjectImage2OneShot(runtimeProjectIdentity, workbenchSelectedShotId);
-    setProjectImage2OneShotState(nextState);
-  }
+    const voiceSources = toRuntimeVoiceSources(result.library);
+    const runtime = {
+      ...workbenchRuntimeState.runtime,
+      config: {
+        ...workbenchRuntimeState.runtime.config,
+        voiceSources,
+      },
+    };
+    const audioPlanning = buildAudioPlanningState({
+      generatedAt,
+      shots: workbenchRuntimeState.storyFlow.shots,
+      runtimeConfig: runtime.config,
+      previewEvents: workbenchRuntimeState.previewEvents,
+      musicReferences: workbenchRuntimeState.audioPlanning.musicReferences,
+    });
+    const voiceAudioSettings = buildVoiceAudioSettingsState({
+      generatedAt,
+      voiceSourceLibrary: result.library,
+      audioPlanning,
+    });
 
-  async function confirmImage2OneShot() {
-    if (!runtimeProjectIdentity) {
-      setProjectImage2OneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
-      return;
-    }
-    setProjectImage2OneShotState((current) => ({
-      ...current,
-      status: "running",
-      message: "正在确认生成。",
-    }));
-    const confirmedState = await confirmProjectImage2OneShot(runtimeProjectIdentity, projectImage2OneShotState.receipt || projectImage2OneShotState.summary?.receipt);
-    if (confirmedState.status === "handoff_prepared" || confirmedState.status === "waiting_file") {
-      const triggerState = await prepareProjectImage2OneShotTrigger(runtimeProjectIdentity, confirmedState.receipt || confirmedState.summary?.receipt);
-      setProjectImage2OneShotState(triggerState);
-      return;
-    }
-    setProjectImage2OneShotState(confirmedState);
-  }
-
-  async function checkImage2OneShotReturn() {
-    if (!runtimeProjectIdentity) {
-      setProjectImage2OneShotState({ status: "unavailable", message: "未选择项目/未同步。" });
-      return;
-    }
-    setProjectImage2OneShotState((current) => ({
-      ...current,
-      status: "running",
-      message: "正在检查回流。",
-    }));
-    const nextState = await executeReturnedProjectImage2OneShot(runtimeProjectIdentity, projectImage2OneShotState.receipt || projectImage2OneShotState.summary?.receipt);
-    setProjectImage2OneShotState(nextState);
-    const refreshed = await loadProjectRealChainStatus(runtimeProjectIdentity);
-    setProjectRealChainState(refreshed);
+    setRuntimeState({
+      ...workbenchRuntimeState,
+      generatedAt,
+      runtime,
+      voiceSourceLibrary: result.library,
+      audioPlanning,
+      voiceAudioSettings,
+    });
+    setLatestPrototypeAgentDemo({
+      status: "ready",
+      result: {
+        label: "音源已确认授权并锁定",
+        projectVibeAdded: false,
+        waitingReview: false,
+        status: "ready",
+      },
+    });
   }
 
   return (
     <div className={`app-shell minimal-shell ${mode === "director" && directorView === "preview" ? "preview-shell" : ""}`}>
       <MinimalTopNav
-        projectTitle={audit.projectTitle}
+        projectTitle={visibleProjectTitle}
         projectPlan={projectPlan}
         mode={mode}
         directorView={directorView}
-        sections={view.storySections}
-        activeSectionId={resolvedActiveSectionId}
+        sections={isEmptyFallbackWorkbench ? [] : view.storySections}
+        activeSectionId={isEmptyFallbackWorkbench ? undefined : resolvedActiveSectionId}
+        projectFileStatusLabel={projectFileStatusLabel}
+        projectFileStatusDetail={projectFileStatusDetail}
+        projectRoot={projectControlRoot}
+        currentProjectPath={projectFileSelection.status === "selected" ? projectFileSelection.projectPath : effectiveRuntimeProjectBinding.projectVibePath}
+        recentProjects={recentProjectSelections.map((selection) => ({
+          projectRoot: selection.projectRoot || "",
+          displayName: selection.displayName || projectFolderName(selection.projectRoot),
+          projectPath: selection.projectPath,
+          updatedAt: selection.updatedAt,
+          hasProjectVibe: selection.hasProjectVibe,
+        }))}
+        canCreateProject={canCreateLocalProjectFromDialog && projectFileSelection.status !== "choosing"}
+        onCreateProject={() => { void createNewVideoLocalProject(undefined, undefined); }}
+        canChooseProjectRoot={canChooseProjectRootFromDialog && projectFileSelection.status !== "choosing"}
+        onChooseProjectRoot={chooseProjectFileRoot}
+        canForgetProject={localProjectReadyForUi || (!isEmptyFallbackWorkbench && hasWorkbenchProjectContent)}
+        onForgetProject={() => { void forgetProjectFileRoot(); }}
+        onOpenRecentProject={(selection) => { void openRecentProject({ ...selection, cancelled: false }); }}
+        onRemoveRecentProject={removeRecentProjectRecord}
         onOpenDirectorView={openDirectorView}
         onOpenSection={openSection}
-        onOpenDiagnostics={() => setMode("diagnostics")}
+        showInspector={showInspector}
+        onOpenInspector={() => setShowInspector(true)}
       />
 
       {mode !== "director" && (
-        <section className="overview">
-          <Metric label="Story Flow" value={`${audit.shots.length}`} detail={`${view.storySections.length} section(s)`} />
-          <Metric label="Visual Memory" value={`${view.visualMemory.existing}/${view.visualMemory.total || audit.metrics.expectedAssets}`} detail="real assets indexed" />
-          <Metric label="Queue" value={`${view.queueSummary.ready}/${view.queueSummary.total}`} detail={`${view.queueSummary.blocked} blocked · ${view.queueSummary.parked} parked`} />
-          <Metric label="Blockers" value={`${blockers.length + view.preflightSummary.blocked}`} detail={view.nextStep} />
-        </section>
+        <AppOverview audit={audit} view={view} blockerCount={blockers.length} />
       )}
 
       {mode !== "director" && audit.workflow.length > 0 && <Workflow stages={audit.workflow} />}
 
       {mode === "director" && (
-        <DirectorMode
+        <ErrorBoundary fallbackLabel="导演视图">
+          <DirectorMode
           audit={audit}
           view={view}
           runtimeState={workbenchRuntimeState}
-          assetLibrary={workbenchAssetLibrary}
-          assetLibraryReadOnlyDetail={currentProjectWorkbenchProjection.assets.detail}
-          projectScopeLabel={currentProjectWorkbenchProjection.selectedScope.label}
-          projectFacts={projectFacts}
-          projectFactsMode={projectFactsMode}
-          selectedShot={selectedShot}
-          selectedShots={selectedShots}
+          projectScopeLabel={workbenchProjectScopeLabel}
+          selectedShot={visibleSelectedShot}
+          selectedShots={visibleSelectedShots}
           selectedAsset={selectedAsset}
           selectedShotId={workbenchSelectedShotId}
-          selectedShotIds={currentProjectWorkbenchProjection.selectedScope.selectedShotIds}
-          selectedAssetId={selectedAssetId}
-          projectRealChainState={projectRealChainState}
-          currentProjectPreviewItems={currentProjectPreviewQueue}
-          projectImage2BatchState={projectImage2BatchState}
-          projectImage2OneShotState={projectImage2OneShotState}
-          strictEditPreflightState={strictEditPreflightState}
-          runtimeProjectBinding={runtimeProjectBinding}
-          projectPathInput={projectPathInput}
-          projectChoices={projectChoices}
-          projectSelectionStatus={projectSelectionStatus}
+          selectedShotIds={workbenchSelectedShotIds}
+          currentProjectPreviewItems={directorPreviewQueue}
+          localPreviewExport={localPreviewExportProjection.previewExport}
+          exportWorker={localPreviewExportProjection.exportWorker}
+          exportAction={exportActionState}
+          previewEmptyStateLabel={currentProjectPreviewEmptyState.label}
+          previewEmptyStateDetail={currentProjectPreviewEmptyState.detail}
+          realSampleAction={assetGenerationAction}
+          endFrameAction={endFrameAction}
+          videoSendAction={gatedVideoSubmitAction}
+          webSearchSettings={agentWebSearchSettings}
+          projectReferenceGuide={projectLocalKnowledgeManifest}
+          storyboardProjectPlanInput={storyboardProjectPlanInput}
+          onDirectorFeedbackConfirmed={confirmDirectorFeedbackRecompile}
+          onSaveResearchAsReference={saveResearchAsProjectReference}
+          creatorDesk={creatorDeskProjection}
+          projectContentReady={projectContentReadyForUi}
           directorView={directorView}
           activeSectionId={resolvedActiveSectionId}
+          statusNode={
+            <MinimalDirectorStatusDot
+              state={workbenchProgressState}
+            />
+          }
+          assetLibraryNode={
+            <MinimalAssetLibrary
+              library={workbenchAssetLibrary}
+              readOnlyDetail={workbenchAssetReadOnlyDetail}
+              selectedAssetId={selectedAssetId}
+              onSelectAsset={setSelectedAssetId}
+              onAddAsset={addAsset}
+              onUpdateAsset={updateAsset}
+              onMarkAssetStatus={markAssetStatus}
+              assetGenerationAction={assetGenerationAction}
+              onGenerateAssets={runImage2AssetGeneration}
+              localProjectReady={localProjectReadyForUi}
+              voiceSourceLibrary={workbenchRuntimeState.voiceSourceLibrary}
+              onLockVoiceSource={lockVoiceSourceForProject}
+            />
+          }
           onSelectShot={selectShot}
-          onSelectAsset={setSelectedAssetId}
-          onAddAsset={addAsset}
-          onUpdateAsset={updateAsset}
-          onMarkAssetStatus={markAssetStatus}
-          onProjectFactsModeChange={setProjectFactsMode}
-          onConfirmOneShot={confirmOneShot}
-          onRunProjectRealChain={runProjectRealChain}
-          onRunProjectImage2Batch={runProjectImage2Batch}
-          onPrepareStrictEditPreflight={prepareStrictEditPreflight}
-          onPrepareImage2OneShot={prepareImage2OneShot}
-          onConfirmImage2OneShot={confirmImage2OneShot}
-          onCheckImage2OneShotReturn={checkImage2OneShotReturn}
-          onProjectPathChange={setProjectPathInput}
-          onSelectProjectChoice={selectProjectChoice}
-          onConnectProject={connectCurrentProject}
+          onRunExport={runLocalExportAction}
+          onCreateP6RealSample={runImage2AssetGeneration}
+          onCreateImage2EndFrame={runImage2EndFrame}
+          onSendSeedanceVideo={runSeedanceVideoSubmit}
+          onDialogueAudioCreated={applyDialogueAudioCreated}
+          onRetryMissingBatch={runProjectImage2Batch}
+          onRetryReviewItem={(item) => applyCreatorReviewDecision(item, "retry")}
+          onApproveReviewItem={(item) => applyCreatorReviewDecision(item, "approve")}
+          onRejectReviewItem={(item) => applyCreatorReviewDecision(item, "reject")}
+          onLockReviewItem={(item, target) => applyCreatorReviewDecision(item, "lock", target)}
+          onNewVideoDraftConfirmed={confirmNewVideoProjectVibeDraft}
+          onCreateLocalProject={async (draft) => { await createNewVideoLocalProject(draft, undefined, { reserveForImmediateSave: true }); }}
+          localProjectReady={localProjectReadyForUi}
+          localProjectBusy={projectFileSelection.status === "choosing"}
+          canCreateLocalProject={canCreateLocalProjectFromDialog && projectFileSelection.status !== "choosing"}
+          onProjectStoreApplyPlanReady={(plan) => {
+            setLatestProjectStoreApplyPlan(plan);
+            createImage2GateForShot(workbenchSelectedShotId);
+          }}
+          latestPrototypeAgentDemo={latestPrototypeAgentDemo}
+          onPreviewPrototypeAgentDemo={preparePrototypeAgentDemo}
         />
+        </ErrorBoundary>
       )}
-      {mode === "inspector" && <InspectorMode audit={runtimeAudit} view={runtimeView} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />}
-      {mode === "diagnostics" && <DiagnosticsMode audit={runtimeAudit} view={runtimeView} runtimeState={runtimeState} />}
+      {mode === "inspector" && (
+        <Suspense fallback={null}>
+          <InspectorMode audit={runtimeAudit} view={runtimeView} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />
+        </Suspense>
+      )}
+      {showInspector && (
+        <div className="diagnostics-overlay" role="dialog" aria-label="设置">
+          <div className="diagnostics-overlay-header">
+            <h2>设置</h2>
+            <button className="diagnostics-overlay-close" onClick={() => setShowInspector(false)} aria-label="关闭设置">
+              关闭
+            </button>
+          </div>
+          <div className="diagnostics-overlay-body">
+            <Suspense fallback={null}>
+              <DiagnosticsMode
+                audit={runtimeAudit}
+                view={runtimeView}
+                runtimeState={runtimeState}
+                selectedShot={selectedShot}
+                selectedShotId={workbenchSelectedShotId}
+                projectRealChainState={projectRealChainState}
+                projectImage2BatchState={projectImage2BatchState}
+                projectImage2OneShotState={projectImage2OneShotState}
+                strictEditPreflightState={strictEditPreflightState}
+                runtimeProjectBinding={runtimeProjectBinding}
+                authorizationRef={authorizationRef}
+                webSearchSettings={agentWebSearchSettings}
+                projectPathInput={projectPathInput}
+                projectChoices={projectChoices}
+                projectSelectionStatus={projectSelectionStatus}
+                canChooseProjectRoot={canChooseProjectRootFromDialog && projectFileSelection.status !== "choosing"}
+                projectFileStatusLabel={projectFileStatusLabel}
+                projectFileStatusDetail={projectFileStatusDetail}
+                projectFacts={projectFacts}
+                projectFactsMode={projectFactsMode}
+                latestProjectStoreApplyPlan={latestProjectStoreApplyPlan}
+                onProjectPathChange={setProjectPathInput}
+                onSelectProjectChoice={selectProjectChoice}
+                onChooseProjectRoot={chooseProjectFileRoot}
+                onConnectProject={() => { void connectCurrentProject(); }}
+                onRunProjectRealChain={runProjectRealChain}
+                onRunProjectImage2Batch={runProjectImage2Batch}
+                onProjectFactsModeChange={setProjectFactsMode}
+                onPrepareStrictEditPreflight={prepareStrictEditPreflight}
+                onPrepareImage2OneShot={() => { void prepareImage2OneShot(workbenchSelectedShotId); }}
+                onAuthorizationRefChange={setAuthorizationRef}
+                onPrepareImage2OneShotPermissionReceipt={prepareImage2OneShotPermissionReceipt}
+                onConfirmImage2OneShot={confirmImage2OneShot}
+                onCheckImage2OneShotReturn={checkImage2OneShotReturn}
+                onWebSearchSettingsChange={updateAgentWebSearchSettings}
+              />
+              {realImage2Gate && (
+                <details className="settings-advanced diagnostics-advanced-panels">
+                  <summary>
+                    <span>Image2 许可闸门</span>
+                    <small>真实提交排查用，平时不用打开</small>
+                  </summary>
+                  <div className="diagnostics-advanced-grid">
+                    <RealImage2GateDiagnostics
+                      gate={realImage2Gate}
+                      onUnlock={() => {
+                        if (realImage2Gate) setRealImage2Gate(unlockRealImage2Gate(realImage2Gate));
+                      }}
+                      onGenerate={unlockAndGenerateImage2Shot}
+                      onPromote={promoteImage2Artifact}
+                      onReset={resetImage2Gate}
+                    />
+                  </div>
+                </details>
+              )}
+            </Suspense>
+          </div>
+        </div>
+      )}
 
       {mode !== "director" && (
         <footer className="policy-note">
@@ -10359,6 +4213,10 @@ function App() {
           <span>Hard lock: provider policy, preflight, reference authority, keyframe pair derivation, and QA gates cannot be overridden by Knowledge Packs or natural-language input.</span>
         </footer>
       )}
+
+      <footer className="footer-signature">
+        <img src="/zc-signature-transparent.png" alt="" aria-hidden="true" />
+      </footer>
     </div>
   );
 }

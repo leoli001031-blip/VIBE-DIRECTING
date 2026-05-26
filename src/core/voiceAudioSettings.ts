@@ -1,5 +1,6 @@
-import type { AudioPlanningState, AudioProviderSlotSummary } from "./types";
+import type { AudioPlanningState, AudioProviderSlotSummary, BaseHardLocks } from "./types";
 import type { VoiceSourceLibraryEntry, VoiceSourceLibraryState } from "./voiceSourceLibrary";
+import { hardLockDrift } from "./collectionUtils";
 
 export const voiceAudioSettingsSchemaVersion = "0.1.0";
 export const voiceAudioSettingsPhase = "phase_28_voice_audio_settings_ui";
@@ -53,6 +54,10 @@ export interface VoiceAudioSettingSummary {
   previewEventCount: number;
   missingOutputCount: number;
   providerSlotStates: VoiceAudioProviderSlotState[];
+  ttsProviderRoutesReady: number;
+  ttsSubmitDraftCount: number;
+  ttsLocalMaxConcurrency: number;
+  ttsCloudMaxConcurrency: number;
   shotPlansWithMusicAllowed: number;
   linkedTtsJobCount: number;
   linkedMusicJobCount: number;
@@ -78,19 +83,15 @@ export interface VoiceAudioSettingsControls {
   fileMutationMode: "blocked";
 }
 
-export interface VoiceAudioSettingsHardLocks {
+export interface VoiceAudioSettingsHardLocks extends BaseHardLocks {
   settingsOnly: true;
   noProviderSubmit: true;
   noTtsSubmit: true;
   noMusicSubmit: true;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   noSecretStorage: true;
   noSampleAudioCopy: true;
-  noFileMutation: true;
   noBgmInVideoProvider: true;
   noVideoProviderBgmPrompt: true;
-  liveSubmitAllowed: false;
 }
 
 export interface VoiceAudioSettingsState {
@@ -127,18 +128,22 @@ export interface VoiceAudioSettingsValidationResult {
 }
 
 export const voiceAudioSettingsHardLocks: VoiceAudioSettingsHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   settingsOnly: true,
   noProviderSubmit: true,
   noTtsSubmit: true,
   noMusicSubmit: true,
-  noCredentialRead: true,
-  noCredentialWrite: true,
   noSecretStorage: true,
   noSampleAudioCopy: true,
-  noFileMutation: true,
   noBgmInVideoProvider: true,
   noVideoProviderBgmPrompt: true,
-  liveSubmitAllowed: false,
 };
 
 const expectedVoiceSourceHardLocks = {
@@ -164,14 +169,6 @@ function uniqueSorted(values: string[]): string[] {
 
 function entryRoleCount(sources: VoiceSourceLibraryEntry[], role: VoiceSourceLibraryEntry["role"]): number {
   return sources.filter((source) => source.role === role).length;
-}
-
-function hardLockDrift(
-  locks: Record<string, unknown> | undefined,
-  expected: Record<string, boolean>,
-  label: string,
-): string[] {
-  return Object.entries(expected).flatMap(([key, value]) => (locks?.[key] === value ? [] : [`${label} hard lock ${key} drifted.`]));
 }
 
 function summarizeVoiceSources(library: VoiceSourceLibraryState, blockers: string[]): VoiceAudioSourceSummary {
@@ -215,6 +212,10 @@ function summarizeAudioSettings(audioPlanning: AudioPlanningState): VoiceAudioSe
     previewEventCount: audioPlanning.previewMix.eventCount,
     missingOutputCount: audioPlanning.previewMix.missingOutputPathCount,
     providerSlotStates: audioPlanning.providerSlots.map(summarizeProviderSlot),
+    ttsProviderRoutesReady: audioPlanning.ttsProviderPlanning?.providers.length || 0,
+    ttsSubmitDraftCount: audioPlanning.ttsProviderPlanning?.submitPlanDrafts.length || 0,
+    ttsLocalMaxConcurrency: audioPlanning.ttsProviderPlanning?.summary.maxLocalConcurrency || 0,
+    ttsCloudMaxConcurrency: audioPlanning.ttsProviderPlanning?.summary.maxCloudConcurrency || 0,
     shotPlansWithMusicAllowed: audioPlanning.shotPlans.filter((plan) => plan.musicAllowed).length,
     linkedTtsJobCount: audioPlanning.shotPlans.filter((plan) => Boolean(plan.linkedTtsJobId)).length,
     linkedMusicJobCount: audioPlanning.shotPlans.filter((plan) => Boolean(plan.linkedMusicJobId)).length,
@@ -303,6 +304,18 @@ function collectAudioPlanningBlockers(audioPlanning: AudioPlanningState): string
   for (const slot of audioPlanning.providerSlots) {
     if (slot.liveSubmitAllowed !== false) blockers.push(`${slot.slot} live submit must remain false.`);
   }
+  if (audioPlanning.ttsProviderPlanning) {
+    if (audioPlanning.ttsProviderPlanning.summary.storesSecrets !== false) blockers.push("TTS provider planning must not store secrets.");
+    if (
+      audioPlanning.ttsProviderPlanning.summary.providerSubmissionForbidden !== true
+      || audioPlanning.ttsProviderPlanning.summary.liveSubmitAllowed !== false
+    ) {
+      blockers.push("TTS provider planning must keep execution gated.");
+    }
+    if (audioPlanning.ttsProviderPlanning.hardLocks.permissionReceiptRequired !== true) {
+      blockers.push("TTS provider planning must require explicit permission receipt.");
+    }
+  }
   for (const plan of audioPlanning.shotPlans) {
     if (plan.musicAllowed !== false) blockers.push(`${plan.shotId} musicAllowed must remain false for Phase 28 settings facts.`);
   }
@@ -314,6 +327,9 @@ function collectWarnings(library: VoiceSourceLibraryState, audioPlanning: AudioP
   if ((library.rejectedInputs || []).length) warnings.push("Rejected voice source inputs exist and remain blocked metadata.");
   if (audioPlanning.previewMix.missingOutputPathCount > 0) {
     warnings.push("Audio preview mix has missing output paths; Phase 28 records placeholders only.");
+  }
+  if (audioPlanning.ttsProviderPlanning?.summary.submitDraftCount) {
+    warnings.push("TTS submit-plan drafts are prepared but still require permission receipt before execution.");
   }
   for (const slot of audioPlanning.providerSlots) {
     if (slot.state === "enabled" || slot.state === "active") {

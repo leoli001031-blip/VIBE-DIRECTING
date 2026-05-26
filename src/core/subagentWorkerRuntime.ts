@@ -1,5 +1,6 @@
-import { validateSubagentTaskEnvelope } from "./envelopeValidator";
-import type { SubagentResult, SubagentTaskEnvelope } from "./types";
+import { VALIDATED_SUBAGENT_TASK_ENVELOPE_REQUIRED } from "./statusConstants";
+import { buildOutputHash, validateSubagentTaskEnvelope } from "./envelopeValidator";
+import type { BaseHardLocks, SubagentResult, SubagentTaskEnvelope } from "./types";
 
 export type SubagentWorkerRuntimeMode = "plan_only" | "permission_gated_worker_planned";
 export type SubagentWorkerRuntimeStatus =
@@ -33,7 +34,7 @@ export interface SubagentWorkerRuntimeInput {
 }
 
 export interface SubagentWorkerCommandPlan {
-  executable: "codex";
+  executable: "agent";
   commandKind: "subagent_worker";
   argumentSource: "validated_envelope_only";
   envelopeId: string;
@@ -53,6 +54,7 @@ export interface SubagentWorkerResultGate {
   gateFieldsPresent: string[];
   issueSeveritiesAllowed: boolean;
   canHandoffToProjectStore: boolean;
+  outputHash?: string;
   blockers: string[];
   warnings: string[];
 }
@@ -82,21 +84,15 @@ export interface SubagentWorkerRuntimeSlot {
   notes: string[];
 }
 
-export interface SubagentWorkerRuntimeHardLocks {
+export interface SubagentWorkerRuntimeHardLocks extends BaseHardLocks {
   noFreeTextTask: true;
   validatedEnvelopeRequired: true;
   structuredResultRequired: true;
   noSpawnWorkerNow: true;
   noSubprocess: true;
-  noShellExecution: true;
   noProviderExecution: true;
-  noCredentialRead: true;
-  noCredentialWrite: true;
-  noFileMutation: true;
   noProjectStoreWrite: true;
   noUnscopedRead: true;
-  providerSubmissionForbidden: true;
-  liveSubmitAllowed: false;
 }
 
 export interface SubagentWorkerRuntimePlan {
@@ -131,20 +127,22 @@ export interface SubagentWorkerRuntimePlan {
 export const subagentWorkerRuntimeSchemaVersion = "0.1.0";
 
 export const subagentWorkerRuntimeHardLocks: SubagentWorkerRuntimeHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   noFreeTextTask: true,
   validatedEnvelopeRequired: true,
   structuredResultRequired: true,
   noSpawnWorkerNow: true,
   noSubprocess: true,
-  noShellExecution: true,
   noProviderExecution: true,
-  noCredentialRead: true,
-  noCredentialWrite: true,
-  noFileMutation: true,
   noProjectStoreWrite: true,
   noUnscopedRead: true,
-  providerSubmissionForbidden: true,
-  liveSubmitAllowed: false,
 };
 
 const defaultGeneratedAt = "1970-01-01T00:00:00.000Z";
@@ -152,6 +150,11 @@ const requiredResultFields: Array<keyof SubagentResult> = [
   "taskId",
   "status",
   "inspectedFiles",
+  "changedFiles",
+  "tests",
+  "artifactPaths",
+  "residualRisks",
+  "touched",
   "gates",
   "overallVisualVerdict",
   "styleQa",
@@ -166,6 +169,7 @@ const requiredResultFields: Array<keyof SubagentResult> = [
 ];
 const gateFields: Array<keyof SubagentResult["gates"]> = ["identity", "scene", "pair", "story", "prop", "style"];
 const allowedSeverities = new Set(["P0", "P1", "P2"]);
+const allowedTestStatuses = new Set(["pass", "fail", "not_run"]);
 
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right));
@@ -181,9 +185,37 @@ function hasValue(value: unknown): boolean {
   return value !== undefined && value !== null;
 }
 
+function validateResultTests(result: Partial<SubagentResult>): string[] {
+  if (!Array.isArray(result.tests) || result.tests.length === 0) return ["subagent_result_tests_missing"];
+
+  return result.tests.flatMap((test, index) => {
+    const blockers: string[] = [];
+    if (!test || typeof test.command !== "string" || !test.command.trim()) blockers.push(`subagent_result_test_command_missing:${index}`);
+    if (!test || !allowedTestStatuses.has(test.status)) blockers.push(`subagent_result_test_status_invalid:${index}`);
+    if (test?.status === "not_run" && (!test.notes || !test.notes.trim())) blockers.push(`subagent_result_test_not_run_notes_missing:${index}`);
+    return blockers;
+  });
+}
+
+function touchedBlockers(result: Partial<SubagentResult>): string[] {
+  const touched = result.touched;
+  if (!touched || typeof touched !== "object") return ["subagent_result_touched_missing"];
+
+  return [
+    typeof touched.provider !== "boolean" ? "subagent_result_touched_provider_missing" : "",
+    typeof touched.credential !== "boolean" ? "subagent_result_touched_credential_missing" : "",
+    typeof touched.promotion !== "boolean" ? "subagent_result_touched_promotion_missing" : "",
+    typeof touched.fileMutation !== "boolean" ? "subagent_result_touched_file_mutation_missing" : "",
+    touched.provider ? "subagent_result_touched_provider_blocker" : "",
+    touched.credential ? "subagent_result_touched_credential_blocker" : "",
+    touched.promotion ? "subagent_result_touched_promotion_blocker" : "",
+    touched.fileMutation ? "subagent_result_touched_file_mutation_blocker" : "",
+  ].filter(Boolean);
+}
+
 function commandPlan(envelope: SubagentTaskEnvelope): SubagentWorkerCommandPlan {
   return {
-    executable: "codex",
+    executable: "agent",
     commandKind: "subagent_worker",
     argumentSource: "validated_envelope_only",
     envelopeId: envelope.id,
@@ -222,6 +254,8 @@ function resultGate(envelope: SubagentTaskEnvelope | undefined, candidate?: Suba
   const taskIdMatchesEnvelope = Boolean(envelope && result.taskId === envelope.parentTaskId);
   const blockers = uniqueSorted([
     ...missingRequiredFields.map((field) => `missing_result_field:${field}`),
+    ...validateResultTests(result),
+    ...touchedBlockers(result),
     ...(gateFieldsPresent.length === gateFields.length ? [] : ["subagent_result_gate_set_incomplete"]),
     ...(issueSeveritiesAllowed ? [] : ["subagent_result_issue_severity_invalid"]),
     ...(taskIdMatchesEnvelope ? [] : ["subagent_result_task_id_mismatch"]),
@@ -236,6 +270,7 @@ function resultGate(envelope: SubagentTaskEnvelope | undefined, candidate?: Suba
     gateFieldsPresent,
     issueSeveritiesAllowed,
     canHandoffToProjectStore: blockers.length === 0,
+    outputHash: buildOutputHash(result),
     blockers,
     warnings: result.status === "partial" ? ["partial_result_requires_main_agent_review"] : [],
   };
@@ -272,7 +307,7 @@ function makeSlot(input: {
   });
   const blockedReasons = uniqueSorted([
     ...(freeTextPromptPresent ? ["free_text_worker_start_forbidden"] : []),
-    ...(!input.envelope ? ["validated_subagent_task_envelope_required"] : []),
+    ...(!input.envelope ? [VALIDATED_SUBAGENT_TASK_ENVELOPE_REQUIRED] : []),
     ...(input.envelope && !envelopeValidation.valid ? envelopeValidation.issues.map((issue) => `invalid_envelope:${issue}`) : []),
     ...gate.blockers,
   ]);

@@ -1,3 +1,5 @@
+import type { BaseHardLocks } from "./types";
+
 export const phaseRoadmapRuntimeSchemaVersion = "0.1.0";
 
 export type PhaseRoadmapPhaseId =
@@ -6,7 +8,7 @@ export type PhaseRoadmapPhaseId =
   | "phase_26_agent_cli_mock_runner"
   | "phase_27_export_worker_mvp"
   | "phase_28_voice_audio_settings_ui"
-  | "phase_29_codex_cli_adapter_spike"
+  | "phase_29_cli_adapter_spike"
   | "phase_30_provider_enablement_gate"
   | "phase_31_provider_execution_permission_gate"
   | "phase_32_action_time_confirmation_receipt"
@@ -17,7 +19,7 @@ export type PhaseRoadmapPhaseId =
   | "phase_37_visual_consistency_contract"
   | "phase_38_full_task_subagent_packet_planner"
   | "phase_39_knowledge_pack_user_management"
-  | "phase_40_codex_worker_runtime_gate"
+  | "phase_40_worker_runtime_gate"
   | "phase_41_provider_closed_loop_shell"
   | "phase_42_export_desktop_beta_acceptance";
 
@@ -493,9 +495,9 @@ export interface PhaseRoadmapAgentCliMockRunnerEvidence {
   contract?: {
     inputSource?: "validated_envelope_only" | string;
     resultKind?: "structured_noop" | string;
-    canReplaceCodexCli?: boolean;
-    canSpawnCodex?: boolean;
-    canResumeCodex?: boolean;
+    canReplaceAgentCli?: boolean;
+    canSpawnAgent?: boolean;
+    canResumeAgent?: boolean;
     canSubmitProvider?: boolean;
     canExecuteShell?: boolean;
     canReadCredentials?: boolean;
@@ -510,8 +512,8 @@ export interface PhaseRoadmapAgentCliMockRunnerEvidence {
   observations?: {
     providerSubmitObserved?: boolean;
     freeTextTaskObserved?: boolean;
-    spawnCodexObserved?: boolean;
-    resumeCodexObserved?: boolean;
+    spawnAgentObserved?: boolean;
+    resumeAgentObserved?: boolean;
     shellExecutionObserved?: boolean;
     credentialReadObserved?: boolean;
     credentialWriteObserved?: boolean;
@@ -520,10 +522,10 @@ export interface PhaseRoadmapAgentCliMockRunnerEvidence {
   hardLocks?: {
     mockOnly?: boolean;
     dryRunOnly?: boolean;
-    noCodexSpawn?: boolean;
-    noCodexResume?: boolean;
-    noSpawnCodex?: boolean;
-    noResumeCodex?: boolean;
+    noAgentSpawn?: boolean;
+    noAgentResume?: boolean;
+    noSpawnAgent?: boolean;
+    noResumeAgent?: boolean;
     noProviderSubmit?: boolean;
     liveSubmitAllowed?: boolean;
     noFreeTextWorker?: boolean;
@@ -541,8 +543,8 @@ export interface PhaseRoadmapAgentCliMockRunnerEvidence {
     replacementProofReady?: boolean;
     providerSubmitObserved?: boolean;
     freeTextTaskObserved?: boolean;
-    spawnCodexObserved?: boolean;
-    resumeCodexObserved?: boolean;
+    spawnAgentObserved?: boolean;
+    resumeAgentObserved?: boolean;
     shellExecutionObserved?: boolean;
     credentialReadObserved?: boolean;
     credentialWriteObserved?: boolean;
@@ -794,10 +796,10 @@ export interface PhaseRoadmapVoiceAudioSettingsEvidence {
   sourceRef?: string;
 }
 
-export interface PhaseRoadmapCodexCliAdapterEvidence {
-  kind?: "codex_cli_adapter_spike";
-  phaseId?: "phase_29_codex_cli_adapter_spike";
-  phase?: "phase_29_codex_cli_adapter_spike";
+export interface PhaseRoadmapAgentCliAdapterEvidence {
+  kind?: "agent_cli_adapter_spike";
+  phaseId?: "phase_29_cli_adapter_spike";
+  phase?: "phase_29_cli_adapter_spike";
   status?: PhaseRoadmapEvidenceStatus;
   readiness?: "ready_for_adapter_spike" | "ready" | "blocked";
   adapterContractReady?: boolean;
@@ -842,8 +844,8 @@ export interface PhaseRoadmapCodexCliAdapterEvidence {
     freeTextWorkerObserved?: boolean;
     actualSpawnObserved?: boolean;
     actualResumeObserved?: boolean;
-    spawnCodexObserved?: boolean;
-    resumeCodexObserved?: boolean;
+    spawnAgentObserved?: boolean;
+    resumeAgentObserved?: boolean;
     unstructuredResultObserved?: boolean;
   };
   hardLocks?: {
@@ -867,7 +869,7 @@ export interface PhaseRoadmapCodexCliAdapterEvidence {
     structuredResultRequired?: boolean;
   };
   roadmapEvidence?: {
-    phaseId?: "phase_29_codex_cli_adapter_spike";
+    phaseId?: "phase_29_cli_adapter_spike";
     adapterContractReady?: boolean;
     phase26ReplacementProofReady?: boolean;
     inputSourceValidatedEnvelopeOnly?: boolean;
@@ -934,7 +936,7 @@ export type PhaseRoadmapClosurePhaseId =
   | "phase_37_visual_consistency_contract"
   | "phase_38_full_task_subagent_packet_planner"
   | "phase_39_knowledge_pack_user_management"
-  | "phase_40_codex_worker_runtime_gate"
+  | "phase_40_worker_runtime_gate"
   | "phase_41_provider_closed_loop_shell"
   | "phase_42_export_desktop_beta_acceptance";
 
@@ -950,13 +952,13 @@ export interface PhaseRoadmapClosureHardLocks {
   closedLoopShellOnly?: boolean;
   noDaemon?: boolean;
   daemonStarted?: boolean;
-  noSpawnCodex?: boolean;
+  noSpawnAgent?: boolean;
   noWorkerSpawn?: boolean;
   workerSpawnAllowed?: boolean;
-  canSpawnCodex?: boolean;
+  canSpawnAgent?: boolean;
   noSubprocess?: boolean;
-  noCodexResume?: boolean;
-  codexResumeAllowed?: boolean;
+  noAgentResume?: boolean;
+  agentResumeAllowed?: boolean;
   noShellExecution?: boolean;
   noArbitraryShell?: boolean;
   arbitraryShellAllowed?: boolean;
@@ -987,8 +989,8 @@ export interface PhaseRoadmapClosureHardLocks {
 
 export interface PhaseRoadmapClosureObservations {
   daemonStarted?: boolean;
-  spawnCodexObserved?: boolean;
-  codexResumeObserved?: boolean;
+  spawnAgentObserved?: boolean;
+  agentResumeObserved?: boolean;
   workerSpawnObserved?: boolean;
   subprocessObserved?: boolean;
   shellExecutionObserved?: boolean;
@@ -1098,7 +1100,7 @@ export interface PhaseRoadmapLocalOrchestratorRuntimeEvidence extends PhaseRoadm
   queue?: Array<{
     queueStatus?: string;
     canExecute?: boolean;
-    canSpawnCodex?: boolean;
+    canSpawnAgent?: boolean;
     providerSubmissionForbidden?: boolean;
     liveSubmitAllowed?: boolean;
     noFileMutation?: boolean;
@@ -1111,7 +1113,7 @@ export interface PhaseRoadmapLocalOrchestratorRuntimeEvidence extends PhaseRoadm
       workerSelfReportOnly?: boolean;
       completeVerified?: boolean;
     };
-    codexActivity?: {
+    agentActivity?: {
       retryBudget?: number;
       stalled?: boolean;
       manualReviewRequired?: boolean;
@@ -1182,7 +1184,7 @@ export interface PhaseRoadmapFullTaskSubagentPacketPlannerEvidence extends Phase
   };
 }
 
-export interface PhaseRoadmapCodexWorkerRuntimeGateEvidence extends PhaseRoadmapClosureEvidence {
+export interface PhaseRoadmapWorkerRuntimeGateEvidence extends PhaseRoadmapClosureEvidence {
   inputContract?: Record<string, unknown>;
   outputContract?: Record<string, unknown>;
   runtimeGate?: Record<string, unknown>;
@@ -1269,8 +1271,8 @@ export interface PhaseRoadmapRuntimeEvidence {
   projectFactsIntegration?: PhaseRoadmapProjectFactsIntegrationEvidence;
   subagentEnvelopeValidator?: PhaseRoadmapSubagentEnvelopeValidatorReceipt;
   agentCliMockRunner?: PhaseRoadmapAgentCliMockRunnerEvidence;
-  codexCliAdapter?: PhaseRoadmapCodexCliAdapterEvidence;
-  codexCliAdapterSpike?: PhaseRoadmapCodexCliAdapterEvidence;
+  agentCliAdapter?: PhaseRoadmapAgentCliAdapterEvidence;
+  cliAdapterSpike?: PhaseRoadmapAgentCliAdapterEvidence;
   exportWorker?: PhaseRoadmapExportWorkerEvidence;
   voiceAudioSettings?: PhaseRoadmapVoiceAudioSettingsEvidence;
   providerLiveGate?: PhaseRoadmapProviderLiveGateReceipt;
@@ -1284,7 +1286,7 @@ export interface PhaseRoadmapRuntimeEvidence {
   fullTaskSubagentPacketPlanner?: PhaseRoadmapFullTaskSubagentPacketPlannerEvidence;
   subagentPacketPlanner?: PhaseRoadmapClosureEvidence;
   knowledgePackUserManagement?: PhaseRoadmapClosureEvidence;
-  codexWorkerRuntimeGate?: PhaseRoadmapCodexWorkerRuntimeGateEvidence;
+  workerRuntimeGate?: PhaseRoadmapWorkerRuntimeGateEvidence;
   providerClosedLoopShell?: PhaseRoadmapProviderClosedLoopShellEvidence;
   betaAcceptance?: PhaseRoadmapBetaAcceptanceEvidence;
   watcherManifestQaClosedLoop?: PhaseRoadmapClosedLoopReceipt;
@@ -1295,7 +1297,7 @@ export interface PhaseRoadmapEvidenceDecision {
     | "projectFactsIntegration"
     | "subagentEnvelopeValidator"
     | "agentCliMockRunner"
-    | "codexCliAdapter"
+    | "agentCliAdapter"
     | "exportWorker"
     | "voiceAudioSettings"
     | "providerConfirmationTokenPlaceholder"
@@ -1312,7 +1314,7 @@ export interface PhaseRoadmapEvidenceDecision {
     | "fullTaskSubagentPacketPlanner"
     | "subagentPacketPlanner"
     | "knowledgePackUserManagement"
-    | "codexWorkerRuntimeGate"
+    | "workerRuntimeGate"
     | "providerClosedLoopShell"
     | "betaAcceptance";
   source: PhaseRoadmapEvidenceDecisionSource;
@@ -1332,7 +1334,7 @@ export interface PhaseRoadmapRuntimeInput {
   mockRunnerProviderSubmitObserved?: boolean;
   exportWorkerIoScopeReady?: boolean;
   voiceAudioSettingsReady?: boolean;
-  codexCliAdapterDryRunReady?: boolean;
+  agentCliAdapterDryRunReady?: boolean;
   replacementProofFromMockRunner?: boolean;
   providerConfirmationTokenPlaceholderPresent?: boolean;
   providerPacketComplete?: boolean;
@@ -1347,24 +1349,20 @@ export interface PhaseRoadmapRuntimeInput {
   visualConsistencyContractReady?: boolean;
   subagentPacketPlannerReady?: boolean;
   knowledgePackUserManagementReady?: boolean;
-  codexWorkerRuntimeGateReady?: boolean;
+  workerRuntimeGateReady?: boolean;
   providerClosedLoopShellReady?: boolean;
   betaAcceptanceReady?: boolean;
 }
 
-export interface PhaseRoadmapHardLocks {
+export interface PhaseRoadmapHardLocks extends BaseHardLocks {
   noFreeTextWorker: true;
   validatedEnvelopeRequired: true;
   structuredResultRequired: true;
   noProviderSubmit: true;
   noCredentials: true;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   noArbitraryShell: true;
   noFileMutationUnlessExplicitExportOrProjectIoPhase: true;
   fileMutationAllowed: boolean;
-  liveSubmitAllowed: false;
-  dryRunOnly: true;
 }
 
 export interface PhaseRoadmapPhasePlan {
@@ -1406,12 +1404,12 @@ export interface PhaseRoadmapRuntimePlan {
     phase26: {
       runnerKind: "mock_noop";
       purpose: "prove_replaceable_runner_contract";
-      canSpawnCodex: false;
-      canResumeCodex: false;
+      canSpawnAgent: false;
+      canResumeAgent: false;
       canSubmitProvider: false;
     };
     phase29: {
-      runnerKind: "codex_cli_adapter_spike";
+      runnerKind: "agent_cli_adapter_spike";
       purpose: "connect_spawn_resume_after_mock_contract_is_proven";
       requiresPhase26ReplacementProof: true;
       canSubmitProvider: false;
@@ -1457,9 +1455,9 @@ export interface PhaseRoadmapRuntimePlan {
     finalPhaseNumber: 42;
     noAdditionalPhasesPlanned: true;
     betaAcceptanceOwnsClosure: true;
-    codexWorkerRuntimeDefaultGated: true;
+    workerRuntimeDefaultGated: true;
     providerClosedLoopDefaultGated: true;
-    canSpawnCodex: false;
+    canSpawnAgent: false;
     canSubmitProvider: false;
     providerSubmitAllowed: 0;
     liveSubmitAllowed: false;
@@ -1477,7 +1475,7 @@ const phaseIds: PhaseRoadmapPhaseId[] = [
   "phase_26_agent_cli_mock_runner",
   "phase_27_export_worker_mvp",
   "phase_28_voice_audio_settings_ui",
-  "phase_29_codex_cli_adapter_spike",
+  "phase_29_cli_adapter_spike",
   "phase_30_provider_enablement_gate",
   "phase_31_provider_execution_permission_gate",
   "phase_32_action_time_confirmation_receipt",
@@ -1488,24 +1486,28 @@ const phaseIds: PhaseRoadmapPhaseId[] = [
   "phase_37_visual_consistency_contract",
   "phase_38_full_task_subagent_packet_planner",
   "phase_39_knowledge_pack_user_management",
-  "phase_40_codex_worker_runtime_gate",
+  "phase_40_worker_runtime_gate",
   "phase_41_provider_closed_loop_shell",
   "phase_42_export_desktop_beta_acceptance",
 ];
 
 export const phaseRoadmapRuntimeHardLocks: PhaseRoadmapHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   noFreeTextWorker: true,
   validatedEnvelopeRequired: true,
   structuredResultRequired: true,
   noProviderSubmit: true,
   noCredentials: true,
-  noCredentialRead: true,
-  noCredentialWrite: true,
   noArbitraryShell: true,
   noFileMutationUnlessExplicitExportOrProjectIoPhase: true,
   fileMutationAllowed: false,
-  liveSubmitAllowed: false,
-  dryRunOnly: true,
 };
 
 function locksForPhase(phaseId: PhaseRoadmapPhaseId): PhaseRoadmapHardLocks {
@@ -1612,14 +1614,14 @@ function hasVoiceAudioSettingsEvidence(
   ));
 }
 
-function hasCodexCliAdapterEvidence(
-  evidence: PhaseRoadmapCodexCliAdapterEvidence | undefined,
-): evidence is PhaseRoadmapCodexCliAdapterEvidence {
+function hasAgentCliAdapterEvidence(
+  evidence: PhaseRoadmapAgentCliAdapterEvidence | undefined,
+): evidence is PhaseRoadmapAgentCliAdapterEvidence {
   return Boolean(evidence && (
-    evidence.kind === "codex_cli_adapter_spike" ||
-    evidence.phase === "phase_29_codex_cli_adapter_spike" ||
-    evidence.phaseId === "phase_29_codex_cli_adapter_spike" ||
-    evidence.roadmapEvidence?.phaseId === "phase_29_codex_cli_adapter_spike"
+    evidence.kind === "agent_cli_adapter_spike" ||
+    evidence.phase === "phase_29_cli_adapter_spike" ||
+    evidence.phaseId === "phase_29_cli_adapter_spike" ||
+    evidence.roadmapEvidence?.phaseId === "phase_29_cli_adapter_spike"
   ));
 }
 
@@ -1791,19 +1793,19 @@ function agentCliMockRunnerEvidenceDecision(input: PhaseRoadmapRuntimeInput): Ph
     const replacementProofReady = evidence.replacementProofReady === true
       || roadmap.replacementProofReady === true
       || evidence.receipt?.replacementProofReady === true
-      || evidence.contract?.canReplaceCodexCli === true;
+      || evidence.contract?.canReplaceAgentCli === true;
     const providerSubmitObserved = observations.providerSubmitObserved === true
       || roadmap.providerSubmitObserved === true
       || validationErrors.some((error) => /provider[_ ]?submit/i.test(error));
     const freeTextTaskObserved = observations.freeTextTaskObserved === true
       || roadmap.freeTextTaskObserved === true
       || validationErrors.some((error) => /free[_ ]?text/i.test(error));
-    const spawnCodexObserved = observations.spawnCodexObserved === true
-      || roadmap.spawnCodexObserved === true
-      || validationErrors.some((error) => /spawn|codex_spawn/i.test(error));
-    const resumeCodexObserved = observations.resumeCodexObserved === true
-      || roadmap.resumeCodexObserved === true
-      || validationErrors.some((error) => /resume|codex_resume/i.test(error));
+    const spawnAgentObserved = observations.spawnAgentObserved === true
+      || roadmap.spawnAgentObserved === true
+      || validationErrors.some((error) => /spawn|agent_spawn/i.test(error));
+    const resumeAgentObserved = observations.resumeAgentObserved === true
+      || roadmap.resumeAgentObserved === true
+      || validationErrors.some((error) => /resume|agent_resume/i.test(error));
     const shellExecutionObserved = observations.shellExecutionObserved === true
       || roadmap.shellExecutionObserved === true
       || validationErrors.some((error) => /shell/i.test(error));
@@ -1823,16 +1825,16 @@ function agentCliMockRunnerEvidenceDecision(input: PhaseRoadmapRuntimeInput): Ph
       ...blockedIf(evidence.contract?.resultKind !== undefined && evidence.contract.resultKind !== "structured_noop", "mock_runner_structured_noop_result_missing"),
       ...blockedIf(providerSubmitObserved || evidence.contract?.canSubmitProvider === true || evidence.adapterBoundary?.providerSubmitAllowed === true, "mock_runner_attempted_provider_submit"),
       ...blockedIf(freeTextTaskObserved, "mock_runner_free_text_task_observed"),
-      ...blockedIf(spawnCodexObserved || evidence.contract?.canSpawnCodex === true || evidence.hardLocks?.noCodexSpawn === false, "mock_runner_spawn_codex_observed"),
-      ...blockedIf(resumeCodexObserved || evidence.contract?.canResumeCodex === true || evidence.hardLocks?.noCodexResume === false, "mock_runner_resume_codex_observed"),
+      ...blockedIf(spawnAgentObserved || evidence.contract?.canSpawnAgent === true || evidence.hardLocks?.noAgentSpawn === false, "mock_runner_spawn_agent_observed"),
+      ...blockedIf(resumeAgentObserved || evidence.contract?.canResumeAgent === true || evidence.hardLocks?.noAgentResume === false, "mock_runner_resume_agent_observed"),
       ...blockedIf(shellExecutionObserved || evidence.contract?.canExecuteShell === true || evidence.adapterBoundary?.shellAllowed === true, "mock_runner_shell_execution_observed"),
       ...blockedIf(credentialReadObserved || evidence.contract?.canReadCredentials === true, "mock_runner_credential_read_observed"),
       ...blockedIf(credentialWriteObserved || evidence.contract?.canWriteCredentials === true, "mock_runner_credential_write_observed"),
       ...blockedIf(fileMutationObserved || evidence.contract?.canMutateFiles === true || evidence.adapterBoundary?.fileMutationAllowed === true, "mock_runner_file_mutation_observed"),
       ...blockedIf(evidence.hardLocks?.mockOnly === false, "mock_runner_hard_lock_mock_only_missing"),
       ...blockedIf(evidence.hardLocks?.dryRunOnly === false, "mock_runner_hard_lock_dry_run_missing"),
-      ...blockedIf(evidence.hardLocks?.noSpawnCodex === false || evidence.hardLocks?.noCodexSpawn === false, "mock_runner_hard_lock_no_spawn_codex_missing"),
-      ...blockedIf(evidence.hardLocks?.noResumeCodex === false || evidence.hardLocks?.noCodexResume === false, "mock_runner_hard_lock_no_resume_codex_missing"),
+      ...blockedIf(evidence.hardLocks?.noSpawnAgent === false || evidence.hardLocks?.noAgentSpawn === false, "mock_runner_hard_lock_no_spawn_agent_missing"),
+      ...blockedIf(evidence.hardLocks?.noResumeAgent === false || evidence.hardLocks?.noAgentResume === false, "mock_runner_hard_lock_no_resume_agent_missing"),
       ...blockedIf(evidence.hardLocks?.noProviderSubmit === false, "mock_runner_hard_lock_no_provider_submit_missing"),
       ...blockedIf(evidence.hardLocks?.liveSubmitAllowed === true, "mock_runner_hard_lock_live_submit_missing"),
       ...blockedIf(evidence.hardLocks?.noFreeTextTask === false || evidence.hardLocks?.noFreeTextWorker === false, "mock_runner_hard_lock_no_free_text_missing"),
@@ -1890,12 +1892,12 @@ function agentCliMockRunnerEvidenceDecision(input: PhaseRoadmapRuntimeInput): Ph
   };
 }
 
-function codexCliAdapterEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
-  const evidence = input.evidence?.codexCliAdapter || input.evidence?.codexCliAdapterSpike;
+function agentCliAdapterEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+  const evidence = input.evidence?.agentCliAdapter || input.evidence?.cliAdapterSpike;
   const roadmap = evidence?.roadmapEvidence || {};
   const observations = evidence?.observations || {};
 
-  if (hasCodexCliAdapterEvidence(evidence)) {
+  if (hasAgentCliAdapterEvidence(evidence)) {
     const validationErrors = [
       ...(evidence.validation?.errors || []),
       ...(evidence.blockedReasons || []),
@@ -1987,8 +1989,8 @@ function codexCliAdapterEvidenceDecision(input: PhaseRoadmapRuntimeInput): Phase
       || validationErrors.some((error) => /free[_ ]?text/i.test(error));
     const actualSpawnResumeObserved = observations.actualSpawnObserved === true
       || observations.actualResumeObserved === true
-      || observations.spawnCodexObserved === true
-      || observations.resumeCodexObserved === true
+      || observations.spawnAgentObserved === true
+      || observations.resumeAgentObserved === true
       || roadmap.actualSpawnObserved === true
       || roadmap.actualResumeObserved === true
       || evidence.contract?.actualSpawnAllowed === true
@@ -2000,17 +2002,17 @@ function codexCliAdapterEvidenceDecision(input: PhaseRoadmapRuntimeInput): Phase
       || evidence.executionPolicy?.actualSpawnAllowed === true
       || evidence.executionPolicy?.actualResumeAllowed === true
       || roadmap.actualSpawnResumeUnavailable === false
-      || validationErrors.some((error) => /actual[_ ]?spawn|actual[_ ]?resume|codex[_ ]?spawn|codex[_ ]?resume/i.test(error));
+      || validationErrors.some((error) => /actual[_ ]?spawn|actual[_ ]?resume|agent[_ ]?spawn|agent[_ ]?resume/i.test(error));
     const unstructuredResultObserved = observations.unstructuredResultObserved === true
       || roadmap.unstructuredResultObserved === true
       || evidence.resultContract?.structured === false
       || evidence.resultContract?.expectedResultSchema !== undefined && evidence.resultContract.expectedResultSchema !== "subagent_result_v1";
     const blockers = uniqueSorted([
-      ...blockedIf(!adapterContractReady, "codex_cli_adapter_contract_missing"),
+      ...blockedIf(!adapterContractReady, "agent_cli_adapter_contract_missing"),
       ...blockedIf(!phase26ReplacementProofReady, "phase_26_replacement_proof_missing"),
-      ...blockedIf(!validatedEnvelopeOnly, "codex_cli_adapter_validated_envelope_only_missing"),
-      ...blockedIf(!structuredResult, "codex_cli_adapter_structured_result_contract_missing"),
-      ...blockedIf(!hardLocksPinned, "codex_cli_adapter_hard_locks_not_pinned"),
+      ...blockedIf(!validatedEnvelopeOnly, "agent_cli_adapter_validated_envelope_only_missing"),
+      ...blockedIf(!structuredResult, "agent_cli_adapter_structured_result_contract_missing"),
+      ...blockedIf(!hardLocksPinned, "agent_cli_adapter_hard_locks_not_pinned"),
       ...blockedIf(providerSubmitObserved, "phase_29_provider_submit_not_blocked"),
       ...blockedIf(credentialObserved, "phase_29_credential_access_not_blocked"),
       ...blockedIf(shellObserved, "phase_29_arbitrary_shell_not_blocked"),
@@ -2022,7 +2024,7 @@ function codexCliAdapterEvidenceDecision(input: PhaseRoadmapRuntimeInput): Phase
     ]);
 
     return {
-      evidenceKey: "codexCliAdapter",
+      evidenceKey: "agentCliAdapter",
       source: "typed_evidence",
       ready: blockers.length === 0,
       blockers,
@@ -2031,15 +2033,15 @@ function codexCliAdapterEvidenceDecision(input: PhaseRoadmapRuntimeInput): Phase
   }
 
   return {
-    evidenceKey: "codexCliAdapter",
-    source: input.codexCliAdapterDryRunReady === undefined ? "missing" : "legacy_boolean_override",
+    evidenceKey: "agentCliAdapter",
+    source: input.agentCliAdapterDryRunReady === undefined ? "missing" : "legacy_boolean_override",
     ready: false,
     blockers: uniqueSorted([
-      "codex_cli_adapter_typed_evidence_missing",
-      ...blockedIf(input.codexCliAdapterDryRunReady !== true, "codex_cli_adapter_dry_run_contract_missing"),
+      "agent_cli_adapter_typed_evidence_missing",
+      ...blockedIf(input.agentCliAdapterDryRunReady !== true, "agent_cli_adapter_dry_run_contract_missing"),
     ]),
     warnings: uniqueSorted([
-      ...blockedIf(input.codexCliAdapterDryRunReady === true, "legacy_codexCliAdapterDryRunReady_boolean_ignored_without_typed_evidence"),
+      ...blockedIf(input.agentCliAdapterDryRunReady === true, "legacy_agentCliAdapterDryRunReady_boolean_ignored_without_typed_evidence"),
     ]),
   };
 }
@@ -3074,7 +3076,7 @@ type PhaseRoadmapClosureEvidenceKey =
   | "visualConsistencyContract"
   | "fullTaskSubagentPacketPlanner"
   | "knowledgePackUserManagement"
-  | "codexWorkerRuntimeGate"
+  | "workerRuntimeGate"
   | "providerClosedLoopShell"
   | "betaAcceptance";
 
@@ -3139,14 +3141,14 @@ function closureSafetyBlockers(evidence: PhaseRoadmapClosureEvidence, prefix: st
       `${prefix}_daemon_not_blocked`,
     ),
     ...blockedIf(
-      locks.noSpawnCodex === false ||
+      locks.noSpawnAgent === false ||
         locks.noWorkerSpawn === false ||
         locks.workerSpawnAllowed === true ||
-        locks.canSpawnCodex === true ||
-        locks.codexResumeAllowed === true ||
+        locks.canSpawnAgent === true ||
+        locks.agentResumeAllowed === true ||
         summary.workerSpawnAllowed === true ||
-        observations.spawnCodexObserved === true ||
-        observations.codexResumeObserved === true ||
+        observations.spawnAgentObserved === true ||
+        observations.agentResumeObserved === true ||
         observations.workerSpawnObserved === true ||
         observations.subprocessObserved === true,
       `${prefix}_spawn_not_blocked`,
@@ -3746,30 +3748,30 @@ function knowledgePackUserManagementEvidenceDecision(input: PhaseRoadmapRuntimeI
   };
 }
 
-function codexWorkerRuntimeGateEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
+function workerRuntimeGateEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseRoadmapEvidenceDecision {
   const decision = phaseClosureEvidenceDecision(input, {
-    evidenceKey: "codexWorkerRuntimeGate",
-    phaseId: "phase_40_codex_worker_runtime_gate",
-    missingBlocker: "codex_worker_runtime_gate_typed_evidence_missing",
-    safetyPrefix: "codex_worker_runtime_gate",
-    legacyReadyInput: "codexWorkerRuntimeGateReady",
+    evidenceKey: "workerRuntimeGate",
+    phaseId: "phase_40_worker_runtime_gate",
+    missingBlocker: "worker_runtime_gate_typed_evidence_missing",
+    safetyPrefix: "worker_runtime_gate",
+    legacyReadyInput: "workerRuntimeGateReady",
     requireGatedRuntimeOnly: true,
     requiredGates: [
-      { field: "workerRuntimeContractDefined", blocker: "codex_worker_runtime_gate_contract_missing" },
-      { field: "defaultGatedOff", blocker: "codex_worker_runtime_gate_default_not_gated" },
-      { field: "validatedEnvelopeOnly", blocker: "codex_worker_runtime_gate_validated_envelope_missing" },
-      { field: "structuredResultOnly", blocker: "codex_worker_runtime_gate_structured_result_missing" },
-      { field: "noActualSpawnByDefault", blocker: "codex_worker_runtime_gate_spawn_not_blocked" },
-      { field: "noDaemonByDefault", blocker: "codex_worker_runtime_gate_daemon_not_blocked" },
-      { field: "noShellExecution", blocker: "codex_worker_runtime_gate_shell_not_blocked" },
-      { field: "noCredentialAccess", blocker: "codex_worker_runtime_gate_credential_access_not_blocked" },
-      { field: "noFileMutation", blocker: "codex_worker_runtime_gate_file_mutation_not_blocked" },
-      { field: "noProviderSubmit", blocker: "codex_worker_runtime_gate_provider_submit_not_blocked" },
-      { field: "noFreeTextWorker", blocker: "codex_worker_runtime_gate_free_text_worker_not_blocked" },
-      { field: "noCodexResumeByDefault", blocker: "codex_worker_runtime_gate_resume_not_blocked" },
+      { field: "workerRuntimeContractDefined", blocker: "worker_runtime_gate_contract_missing" },
+      { field: "defaultGatedOff", blocker: "worker_runtime_gate_default_not_gated" },
+      { field: "validatedEnvelopeOnly", blocker: "worker_runtime_gate_validated_envelope_missing" },
+      { field: "structuredResultOnly", blocker: "worker_runtime_gate_structured_result_missing" },
+      { field: "noActualSpawnByDefault", blocker: "worker_runtime_gate_spawn_not_blocked" },
+      { field: "noDaemonByDefault", blocker: "worker_runtime_gate_daemon_not_blocked" },
+      { field: "noShellExecution", blocker: "worker_runtime_gate_shell_not_blocked" },
+      { field: "noCredentialAccess", blocker: "worker_runtime_gate_credential_access_not_blocked" },
+      { field: "noFileMutation", blocker: "worker_runtime_gate_file_mutation_not_blocked" },
+      { field: "noProviderSubmit", blocker: "worker_runtime_gate_provider_submit_not_blocked" },
+      { field: "noFreeTextWorker", blocker: "worker_runtime_gate_free_text_worker_not_blocked" },
+      { field: "noAgentResumeByDefault", blocker: "worker_runtime_gate_resume_not_blocked" },
     ],
   });
-  const evidence = input.evidence?.codexWorkerRuntimeGate;
+  const evidence = input.evidence?.workerRuntimeGate;
   if (!hasClosureEvidence(evidence)) return decision;
 
   const freeTextWorkerObserved = closureAnyObservedTrue(
@@ -3777,9 +3779,9 @@ function codexWorkerRuntimeGateEvidenceDecision(input: PhaseRoadmapRuntimeInput)
     ["freeTextWorkerObserved", "freeTextTaskObserved", "freeTextWorkerAccepted", "freeTextTaskAccepted"],
     ["runtimeGate", "inputContract", "executionPolicy", "routeSafety"],
   );
-  const codexResumeObserved = closureAnyObservedTrue(
+  const agentResumeObserved = closureAnyObservedTrue(
     evidence,
-    ["codexResumeObserved", "resumeCodexObserved", "codexResumeAccepted"],
+    ["agentResumeObserved", "resumeAgentObserved", "agentResumeAccepted"],
     ["runtimeGate", "executionPolicy"],
   );
   const unvalidatedEnvelopeAccepted = closureAnyObservedTrue(
@@ -3799,11 +3801,11 @@ function codexWorkerRuntimeGateEvidenceDecision(input: PhaseRoadmapRuntimeInput)
   );
   const blockers = uniqueSorted([
     ...decision.blockers,
-    ...blockedIf(freeTextWorkerObserved, "codex_worker_runtime_gate_free_text_worker_not_blocked"),
-    ...blockedIf(codexResumeObserved, "codex_worker_runtime_gate_resume_not_blocked"),
-    ...blockedIf(unvalidatedEnvelopeAccepted, "codex_worker_runtime_gate_unvalidated_envelope_accepted"),
-    ...blockedIf(unstructuredResultAccepted, "codex_worker_runtime_gate_unstructured_result_accepted"),
-    ...blockedIf(defaultGateOpened, "codex_worker_runtime_gate_default_not_gated"),
+    ...blockedIf(freeTextWorkerObserved, "worker_runtime_gate_free_text_worker_not_blocked"),
+    ...blockedIf(agentResumeObserved, "worker_runtime_gate_resume_not_blocked"),
+    ...blockedIf(unvalidatedEnvelopeAccepted, "worker_runtime_gate_unvalidated_envelope_accepted"),
+    ...blockedIf(unstructuredResultAccepted, "worker_runtime_gate_unstructured_result_accepted"),
+    ...blockedIf(defaultGateOpened, "worker_runtime_gate_default_not_gated"),
   ]);
 
   return {
@@ -3866,7 +3868,7 @@ function providerClosedLoopShellEvidenceDecision(input: PhaseRoadmapRuntimeInput
     );
     const workerSpawnObserved = closureAnyObservedTrue(
       evidence,
-      ["workerSpawnObserved", "subprocessObserved", "spawnCodexObserved", "workerSpawnAllowed"],
+      ["workerSpawnObserved", "subprocessObserved", "spawnAgentObserved", "workerSpawnAllowed"],
       ["workerPolicy", "executionPolicy", "providerShells"],
     );
     const shellExecutionObserved = closureAnyObservedTrue(
@@ -4002,7 +4004,7 @@ function betaAcceptanceEvidenceDecision(input: PhaseRoadmapRuntimeInput): PhaseR
     );
     const workerSpawnObserved = closureAnyObservedTrue(
       evidence,
-      ["spawnCodexObserved", "workerSpawnObserved", "subprocessObserved", "workerSpawnAllowed"],
+      ["spawnAgentObserved", "workerSpawnObserved", "subprocessObserved", "workerSpawnAllowed"],
       ["workerPolicy", "executionPolicy", "betaClosure"],
     );
     const shellExecutionObserved = closureAnyObservedTrue(
@@ -4189,7 +4191,7 @@ function localOrchestratorRuntimeEvidenceDecision(input: PhaseRoadmapRuntimeInpu
       (evidence.schemaVersion === "0.1.0" && Array.isArray(evidence.queue));
     const queueLocksPinned = queue.every((item) =>
       item.canExecute === false &&
-      item.canSpawnCodex === false &&
+      item.canSpawnAgent === false &&
       item.providerSubmissionForbidden === true &&
       item.liveSubmitAllowed === false &&
       item.noFileMutation === true,
@@ -4207,11 +4209,11 @@ function localOrchestratorRuntimeEvidenceDecision(input: PhaseRoadmapRuntimeInpu
       closureGateReady(evidence, "autoContinuePlanOnly");
     const activityStatesPresent = queue.length > 0 &&
       queue.every((item) =>
-        item.codexActivity !== undefined &&
-        typeof item.codexActivity.retryBudget === "number" &&
-        typeof item.codexActivity.state === "string" &&
-        typeof item.codexActivity.stalled === "boolean" &&
-        typeof item.codexActivity.manualReviewRequired === "boolean",
+        item.agentActivity !== undefined &&
+        typeof item.agentActivity.retryBudget === "number" &&
+        typeof item.agentActivity.state === "string" &&
+        typeof item.agentActivity.stalled === "boolean" &&
+        typeof item.agentActivity.manualReviewRequired === "boolean",
       );
     const blockers = uniqueSorted([
       ...closureStatusBlockers(evidence, "phase_34_local_orchestrator_runtime_integration", "local_orchestrator_runtime"),
@@ -4220,7 +4222,7 @@ function localOrchestratorRuntimeEvidenceDecision(input: PhaseRoadmapRuntimeInpu
       ...blockedIf(evidence.dryRunOnly !== true || evidence.hardLocks?.dryRunOnly !== true, "local_orchestrator_runtime_dry_run_missing"),
       ...blockedIf(evidence.planOnly !== true || evidence.hardLocks?.planOnly !== true, "local_orchestrator_runtime_plan_only_missing"),
       ...blockedIf(evidence.hardLocks?.noDaemon !== true || evidence.hardLocks?.daemonStarted !== false, "local_orchestrator_runtime_daemon_not_blocked"),
-      ...blockedIf(evidence.hardLocks?.noSpawnCodex !== true || evidence.hardLocks?.noSubprocess !== true, "local_orchestrator_runtime_spawn_not_blocked"),
+      ...blockedIf(evidence.hardLocks?.noSpawnAgent !== true || evidence.hardLocks?.noSubprocess !== true, "local_orchestrator_runtime_spawn_not_blocked"),
       ...blockedIf(evidence.hardLocks?.noShellExecution !== true, "local_orchestrator_runtime_shell_not_blocked"),
       ...blockedIf(evidence.hardLocks?.noProviderExecution !== true, "local_orchestrator_runtime_provider_submit_not_blocked"),
       ...blockedIf(evidence.providerSubmissionForbidden !== true, "local_orchestrator_runtime_provider_submit_not_blocked"),
@@ -4307,7 +4309,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const projectFactsDecision = projectFactsEvidenceDecision(input);
   const envelopeDecision = envelopeValidatorEvidenceDecision(input);
   const agentCliMockRunnerDecision = agentCliMockRunnerEvidenceDecision(input);
-  const codexCliAdapterDecision = codexCliAdapterEvidenceDecision(input);
+  const agentCliAdapterDecision = agentCliAdapterEvidenceDecision(input);
   const exportWorkerDecision = exportWorkerEvidenceDecision(input);
   const voiceAudioSettingsDecision = voiceAudioSettingsEvidenceDecision(input);
   const providerConfirmationDecision = providerConfirmationEvidenceDecision(input);
@@ -4323,14 +4325,14 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
   const visualConsistencyContractDecision = visualConsistencyContractEvidenceDecision(input);
   const fullTaskSubagentPacketPlannerDecision = fullTaskSubagentPacketPlannerEvidenceDecision(input);
   const knowledgePackUserManagementDecision = knowledgePackUserManagementEvidenceDecision(input);
-  const codexWorkerRuntimeGateDecision = codexWorkerRuntimeGateEvidenceDecision(input);
+  const workerRuntimeGateDecision = workerRuntimeGateEvidenceDecision(input);
   const providerClosedLoopShellDecision = providerClosedLoopShellEvidenceDecision(input);
   const betaAcceptanceDecision = betaAcceptanceEvidenceDecision(input);
   const evidenceDecisions = [
     projectFactsDecision,
     envelopeDecision,
     agentCliMockRunnerDecision,
-    codexCliAdapterDecision,
+    agentCliAdapterDecision,
     exportWorkerDecision,
     voiceAudioSettingsDecision,
     providerConfirmationDecision,
@@ -4346,7 +4348,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
     visualConsistencyContractDecision,
     fullTaskSubagentPacketPlannerDecision,
     knowledgePackUserManagementDecision,
-    codexWorkerRuntimeGateDecision,
+    workerRuntimeGateDecision,
     providerClosedLoopShellDecision,
     betaAcceptanceDecision,
   ];
@@ -4409,12 +4411,12 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "providerSubmit/freeText/spawn/resume/shell/credential/fileMutation observations all false",
       ],
       acceptanceCriteria: [
-        "The runner proves the command/result contract is replaceable without spawning Codex.",
+        "The runner proves the command/result contract is replaceable without spawning agent.",
         "The runner returns no-op structured results and never submits providers.",
         "The runner cannot read credentials, run arbitrary shell, or mutate files.",
       ],
       notes: [
-        "Phase 26 is the replaceability proof, not the real Codex CLI integration.",
+        "Phase 26 is the replaceability proof, not the real agent CLI integration.",
         ...evidenceNotes([agentCliMockRunnerDecision]),
       ],
     }),
@@ -4480,9 +4482,9 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       ],
     }),
     makePhase({
-      phaseId: "phase_29_codex_cli_adapter_spike",
+      phaseId: "phase_29_cli_adapter_spike",
       phaseNumber: 29,
-      title: "Codex CLI Adapter Spike",
+      title: "Agent CLI Adapter Spike",
       requiredPrecedingPhases: [
         "phase_24_subagent_runtime_gate",
         "phase_25_knowledge_pack_manager",
@@ -4491,12 +4493,12 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       readyPhases,
       ownBlockers: uniqueSorted([
         ...blockedIf(!agentCliMockRunnerDecision.ready, "phase_26_replacement_proof_missing"),
-        ...codexCliAdapterDecision.blockers,
+        ...agentCliAdapterDecision.blockers,
       ]),
       readyStatus: "ready_for_adapter_spike",
       requiredInputs: [
         "evidence.agentCliMockRunner.replacementProofReady",
-        "evidence.codexCliAdapter",
+        "evidence.agentCliAdapter",
         "validated-envelope-only input",
         "structured result contract",
         "provider/credential/shell/file/free-text/actual-spawn-resume blocked",
@@ -4505,12 +4507,12 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "Adapter spike may describe spawn/resume shape only after Phase 26 proves replaceability.",
         "Adapter input remains the validated envelope, never a free text task.",
         "Adapter output remains structured and provider submission remains blocked.",
-        "Actual Codex spawn/resume, credentials, arbitrary shell, and file mutation remain unavailable in Phase 29.",
+        "Actual agent spawn/resume, credentials, arbitrary shell, and file mutation remain unavailable in Phase 29.",
       ],
       notes: [
-        "Phase 29 is a contract-only spike; real Codex spawn/resume execution is still postponed.",
-        "The legacy codexCliAdapterDryRunReady boolean is ignored unless typed evidence is present.",
-        ...evidenceNotes([codexCliAdapterDecision]),
+        "Phase 29 is a contract-only spike; real agent spawn/resume execution is still postponed.",
+        "The legacy agentCliAdapterDryRunReady boolean is ignored unless typed evidence is present.",
+        ...evidenceNotes([agentCliAdapterDecision]),
       ],
     }),
     makePhase({
@@ -4523,7 +4525,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "phase_26_agent_cli_mock_runner",
         "phase_27_export_worker_mvp",
         "phase_28_voice_audio_settings_ui",
-        "phase_29_codex_cli_adapter_spike",
+        "phase_29_cli_adapter_spike",
       ],
       readyPhases,
       ownBlockers: uniqueSorted([
@@ -4567,7 +4569,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "phase_26_agent_cli_mock_runner",
         "phase_27_export_worker_mvp",
         "phase_28_voice_audio_settings_ui",
-        "phase_29_codex_cli_adapter_spike",
+        "phase_29_cli_adapter_spike",
         "phase_30_provider_enablement_gate",
       ],
       readyPhases,
@@ -4588,7 +4590,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       ],
       notes: [
         "Phase 31 is the permission shell that Phase 32 consumes before any future live provider execution layer.",
-        "It prepares confirmation requests; it does not call Image2, Seedance, Jimeng, Codex, or a sidecar.",
+        "It prepares confirmation requests; it does not call Image2, Seedance, Jimeng, agent, or a sidecar.",
         ...evidenceNotes([providerExecutionPermissionDecision]),
       ],
     }),
@@ -4602,7 +4604,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "phase_26_agent_cli_mock_runner",
         "phase_27_export_worker_mvp",
         "phase_28_voice_audio_settings_ui",
-        "phase_29_codex_cli_adapter_spike",
+        "phase_29_cli_adapter_spike",
         "phase_30_provider_enablement_gate",
         "phase_31_provider_execution_permission_gate",
       ],
@@ -4638,7 +4640,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "phase_26_agent_cli_mock_runner",
         "phase_27_export_worker_mvp",
         "phase_28_voice_audio_settings_ui",
-        "phase_29_codex_cli_adapter_spike",
+        "phase_29_cli_adapter_spike",
         "phase_30_provider_enablement_gate",
         "phase_31_provider_execution_permission_gate",
         "phase_32_action_time_confirmation_receipt",
@@ -4675,7 +4677,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "phase_26_agent_cli_mock_runner",
         "phase_27_export_worker_mvp",
         "phase_28_voice_audio_settings_ui",
-        "phase_29_codex_cli_adapter_spike",
+        "phase_29_cli_adapter_spike",
         "phase_30_provider_enablement_gate",
         "phase_31_provider_execution_permission_gate",
         "phase_32_action_time_confirmation_receipt",
@@ -4687,7 +4689,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       requiredInputs: [
         "evidence.localOrchestratorRuntime",
         "ProjectRuntimeState.localOrchestrator present",
-        "queue items with canExecute=false and canSpawnCodex=false",
+        "queue items with canExecute=false and canSpawnAgent=false",
         "auto-continue mode=plan_only",
         "expected output, manifest, QA, and promotion gates pinned",
       ],
@@ -4695,7 +4697,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "Local Orchestrator is a first-class ProjectRuntimeState fact, not a separate test fixture only.",
         "Queue states cover waiting, ready, running planned, waiting output, QA pending, needs review, failed, blocked, and complete verified.",
         "Worker self-report cannot complete a task without expected output, manifest, QA, and promotion gates.",
-        "Auto-continue is a plan only and cannot start daemons, spawn Codex, submit providers, execute shell, read credentials, or mutate files.",
+        "Auto-continue is a plan only and cannot start daemons, spawn agent, submit providers, execute shell, read credentials, or mutate files.",
       ],
       notes: [
         "Phase 34 makes queue activity observable without creating an execution daemon.",
@@ -4834,17 +4836,17 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       ],
     }),
     makePhase({
-      phaseId: "phase_40_codex_worker_runtime_gate",
+      phaseId: "phase_40_worker_runtime_gate",
       phaseNumber: 40,
-      title: "Codex Worker Runtime Gate",
+      title: "Agent Worker Runtime Gate",
       requiredPrecedingPhases: [
         "phase_39_knowledge_pack_user_management",
       ],
       readyPhases,
-      ownBlockers: uniqueSorted(codexWorkerRuntimeGateDecision.blockers),
+      ownBlockers: uniqueSorted(workerRuntimeGateDecision.blockers),
       readyStatus: "ready_for_gated_worker_runtime",
       requiredInputs: [
-        "evidence.codexWorkerRuntimeGate",
+        "evidence.workerRuntimeGate",
         "gated runtime contract",
         "defaultGatedOff=true",
         "validatedEnvelopeOnly=true",
@@ -4853,14 +4855,14 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
         "noDaemonByDefault/noShellExecution/noCredentialAccess/noFileMutation/noProviderSubmit=true",
       ],
       acceptanceCriteria: [
-        "Real Codex worker runtime shape exists only behind a default-off gate.",
+        "Real agent worker runtime shape exists only behind a default-off gate.",
         "Validated envelope input and structured result output remain mandatory.",
-        "The roadmap default cannot spawn or resume Codex, start daemons, execute shell, read/write credentials, submit providers, mutate files, or accept free-text worker tasks.",
+        "The roadmap default cannot spawn or resume agent, start daemons, execute shell, read/write credentials, submit providers, mutate files, or accept free-text worker tasks.",
       ],
       notes: [
         "Phase 40 is a gated runtime shell, not live worker execution.",
-        "The legacy codexWorkerRuntimeGateReady boolean is ignored without typed evidence.",
-        ...evidenceNotes([codexWorkerRuntimeGateDecision]),
+        "The legacy workerRuntimeGateReady boolean is ignored without typed evidence.",
+        ...evidenceNotes([workerRuntimeGateDecision]),
       ],
     }),
     makePhase({
@@ -4868,7 +4870,7 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       phaseNumber: 41,
       title: "Image2/Seedance Provider Closed-loop Shell",
       requiredPrecedingPhases: [
-        "phase_40_codex_worker_runtime_gate",
+        "phase_40_worker_runtime_gate",
       ],
       readyPhases,
       ownBlockers: uniqueSorted(providerClosedLoopShellDecision.blockers),
@@ -4954,12 +4956,12 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       phase26: {
         runnerKind: "mock_noop",
         purpose: "prove_replaceable_runner_contract",
-        canSpawnCodex: false,
-        canResumeCodex: false,
+        canSpawnAgent: false,
+        canResumeAgent: false,
         canSubmitProvider: false,
       },
       phase29: {
-        runnerKind: "codex_cli_adapter_spike",
+        runnerKind: "agent_cli_adapter_spike",
         purpose: "connect_spawn_resume_after_mock_contract_is_proven",
         requiresPhase26ReplacementProof: true,
         canSubmitProvider: false,
@@ -5005,9 +5007,9 @@ export function buildPhaseRoadmapRuntimePlan(input: PhaseRoadmapRuntimeInput = {
       finalPhaseNumber: 42,
       noAdditionalPhasesPlanned: true,
       betaAcceptanceOwnsClosure: true,
-      codexWorkerRuntimeDefaultGated: true,
+      workerRuntimeDefaultGated: true,
       providerClosedLoopDefaultGated: true,
-      canSpawnCodex: false,
+      canSpawnAgent: false,
       canSubmitProvider: false,
       providerSubmitAllowed: 0,
       liveSubmitAllowed: false,

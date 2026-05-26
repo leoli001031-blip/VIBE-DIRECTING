@@ -1,0 +1,720 @@
+.project-real-chain-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1fr) minmax(160px, 0.42fr);
+  grid-template-areas:
+    "head tags thumbs"
+    "select select thumbs"
+    "file file thumbs"
+    "recent recent thumbs"
+    "gate gate thumbs"
+    "policy policy thumbs"
+    "batch oneshot thumbs"
+    "flow flow thumbs"
+    "evidence evidence thumbs"
+    "permission permission thumbs"
+    "report report thumbs"
+    "message message thumbs";
+  align-items: center;
+  gap: 10px 14px;
+  min-width: 0;
+  border-bottom: 1px solid rgba(37, 40, 34, 0.1);
+  padding: 0 0 16px;
+  color: rgba(37, 40, 34, 0.72);
+}
+
+.project-real-chain-head {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.project-real-chain-head > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.project-real-chain-head span {
+  color: rgba(37, 40, 34, 0.52);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.project-real-chain-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: rgba(37, 40, 34, 0.88);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  font-weight: 400;
+}
+
+.project-real-chain-head button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 1px solid rgba(37, 40, 34, 0.2);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(37, 40, 34, 0.78);
+  cursor: pointer;
+  padding: 0 11px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.project-real-chain-head button:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.project-real-chain-select {
+  grid-area: select;
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.project-real-chain-select label {
+  color: rgba(37, 40, 34, 0.52);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.project-real-chain-select input {
+  min-width: 0;
+  height: 32px;
+  border: 1px solid rgba(37, 40, 34, 0.14);
+  background: rgba(255, 255, 255, 0.42);
+  color: rgba(37, 40, 34, 0.82);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  outline: none; /* TODO: add :focus-visible fallback for keyboard navigation */
+}
+
+.project-real-chain-select input:focus {
+  border-color: rgba(80, 96, 76, 0.42);
+}
+
+.project-real-chain-select button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  border: 1px solid rgba(37, 40, 34, 0.18);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(37, 40, 34, 0.74);
+  cursor: pointer;
+  padding: 0 11px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.project-real-chain-select button:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.project-real-chain-file {
+  grid-area: file;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-file small {
+  border: 1px solid rgba(37, 40, 34, 0.12);
+  background: rgba(255, 255, 255, 0.28);
+  color: rgba(37, 40, 34, 0.62);
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.project-real-chain-recent {
+  grid-area: recent;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-recent span {
+  color: rgba(37, 40, 34, 0.52);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.project-real-chain-recent button {
+  min-width: 0;
+  max-width: 190px;
+  height: 28px;
+  overflow: hidden;
+  border: 1px solid rgba(37, 40, 34, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.32);
+  color: rgba(37, 40, 34, 0.72);
+  cursor: pointer;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-real-chain-recent button:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.project-real-chain-tags {
+  grid-area: tags;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-tags small {
+  border: 1px solid rgba(37, 40, 34, 0.12);
+  background: rgba(37, 40, 34, 0.035);
+  color: rgba(37, 40, 34, 0.66);
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+.project-real-chain-gates {
+  grid-area: gate;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-gates small {
+  border: 1px solid rgba(151, 117, 69, 0.22);
+  background: rgba(151, 117, 69, 0.06);
+  color: rgba(37, 40, 34, 0.7);
+  padding: 4px 7px;
+  font-size: 11px;
+}
+
+.project-real-chain-batch {
+  grid-area: batch;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.project-real-chain-batch > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.project-real-chain-batch span,
+.project-real-chain-batch small {
+  color: rgba(37, 40, 34, 0.52);
+  font-size: 11px;
+}
+
+.project-real-chain-batch strong {
+  color: rgba(37, 40, 34, 0.82);
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.project-real-chain-batch button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  border: 1px solid rgba(37, 40, 34, 0.16);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(37, 40, 34, 0.68);
+  cursor: pointer;
+  padding: 0 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.project-real-chain-batch button:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.project-real-chain-one-shot {
+  grid-area: oneshot;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.project-real-chain-one-shot > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.project-real-chain-one-shot span,
+.project-real-chain-one-shot small {
+  color: rgba(37, 40, 34, 0.52);
+  font-size: 11px;
+}
+
+.project-real-chain-one-shot strong {
+  color: rgba(37, 40, 34, 0.82);
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.project-real-chain-one-shot button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  border: 1px solid rgba(37, 40, 34, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.36);
+  color: rgba(37, 40, 34, 0.72);
+  cursor: pointer;
+  padding: 0 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.project-real-chain-one-shot button:disabled {
+  opacity: 0.48;
+  cursor: wait;
+}
+
+.project-real-chain-one-shot-flow {
+  grid-area: flow;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-one-shot-flow span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid rgba(37, 40, 34, 0.12);
+  background: rgba(255, 255, 255, 0.24);
+  padding: 6px 7px;
+}
+
+.project-real-chain-one-shot-flow strong {
+  color: rgba(37, 40, 34, 0.78);
+  font-size: 11px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.project-real-chain-one-shot-flow small {
+  color: rgba(37, 40, 34, 0.52);
+  font-size: 10px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.project-real-chain-one-shot-flow span.done {
+  border-color: rgba(46, 118, 88, 0.2);
+  background: rgba(46, 118, 88, 0.055);
+}
+
+.project-real-chain-one-shot-flow span.active {
+  border-color: rgba(57, 101, 126, 0.22);
+  background: rgba(57, 101, 126, 0.06);
+}
+
+.project-real-chain-one-shot-flow span.review {
+  border-color: rgba(151, 117, 69, 0.24);
+  background: rgba(151, 117, 69, 0.065);
+}
+
+.project-real-chain-one-shot-flow span.blocked {
+  border-color: rgba(177, 75, 62, 0.22);
+  background: rgba(177, 75, 62, 0.06);
+}
+
+.project-real-chain-evidence {
+  grid-area: evidence;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-evidence small {
+  min-width: 0;
+  border: 1px solid rgba(46, 118, 88, 0.18);
+  background: rgba(46, 118, 88, 0.055);
+  color: rgba(37, 40, 34, 0.64);
+  padding: 4px 7px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.project-real-chain-permission {
+  grid-area: permission;
+  justify-self: stretch;
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto minmax(150px, 0.5fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.project-real-chain-permission > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-permission small {
+  min-width: 0;
+  border: 1px solid rgba(74, 85, 104, 0.14);
+  background: rgba(74, 85, 104, 0.045);
+  color: rgba(37, 40, 34, 0.62);
+  padding: 4px 7px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.project-real-chain-permission.ready small:first-child {
+  border-color: rgba(46, 118, 88, 0.22);
+  background: rgba(46, 118, 88, 0.065);
+}
+
+.project-real-chain-permission.blocked small:first-child {
+  border-color: rgba(177, 75, 62, 0.22);
+  background: rgba(177, 75, 62, 0.06);
+}
+
+.project-real-chain-permission label {
+  color: rgba(37, 40, 34, 0.52);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.project-real-chain-permission input {
+  min-width: 0;
+  height: 28px;
+  border: 1px solid rgba(37, 40, 34, 0.14);
+  background: rgba(255, 255, 255, 0.36);
+  color: rgba(37, 40, 34, 0.78);
+  padding: 0 9px;
+  font: inherit;
+  font-size: 11px;
+  outline: none; /* TODO: add :focus-visible fallback for keyboard navigation */
+}
+
+.project-real-chain-permission input:focus {
+  border-color: rgba(80, 96, 76, 0.42);
+}
+
+.project-real-chain-permission button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  border: 1px solid rgba(37, 40, 34, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.3);
+  color: rgba(37, 40, 34, 0.7);
+  cursor: pointer;
+  padding: 0 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.project-real-chain-permission button:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.project-real-chain-policy {
+  grid-area: policy;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-policy small {
+  border: 1px solid rgba(37, 40, 34, 0.1);
+  color: rgba(37, 40, 34, 0.58);
+  padding: 4px 7px;
+  font-size: 11px;
+}
+
+.project-real-chain-policy.round5-end-return.waiting small {
+  border-color: rgba(57, 101, 126, 0.18);
+  background: rgba(57, 101, 126, 0.05);
+}
+
+.project-real-chain-policy.round5-end-return.returned small {
+  border-color: rgba(46, 118, 88, 0.2);
+  background: rgba(46, 118, 88, 0.06);
+}
+
+.project-real-chain-policy button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 26px;
+  border: 1px solid rgba(37, 40, 34, 0.16);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(37, 40, 34, 0.68);
+  cursor: pointer;
+  padding: 0 9px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.project-real-chain-policy button:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.project-real-chain-thumbs {
+  grid-area: thumbs;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-thumbs figure {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+}
+
+.project-real-chain-thumbs img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: rgba(37, 40, 34, 0.06);
+  object-fit: cover;
+}
+
+.project-real-chain-thumbs figure.review-overlay img {
+  outline: 1px solid rgba(192, 147, 82, 0.92);
+  outline-offset: -1px;
+}
+
+.project-real-chain-thumbs figcaption {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  left: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  color: #f4efe7;
+  font-size: 10px;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
+}
+
+.project-real-chain-thumbs figcaption small {
+  font-size: 10px;
+}
+
+.project-real-chain-report,
+.project-real-chain-message {
+  min-width: 0;
+  color: inherit;
+  font-size: 11px;
+  opacity: 0.64;
+  overflow-wrap: anywhere;
+}
+
+.project-real-chain-report {
+  grid-area: report;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.project-real-chain-messages {
+  grid-area: message;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-message {
+  min-width: 0;
+}
+
+.preview-shell .project-real-chain-panel {
+  border-color: rgba(242, 238, 230, 0.14);
+  color: rgba(242, 238, 230, 0.68);
+}
+
+.preview-shell .project-real-chain-head span {
+  color: rgba(242, 238, 230, 0.5);
+}
+
+.preview-shell .project-real-chain-head strong,
+.preview-shell .project-real-chain-head button,
+.preview-shell .project-real-chain-batch strong,
+.preview-shell .project-real-chain-batch button,
+.preview-shell .project-real-chain-one-shot strong,
+.preview-shell .project-real-chain-one-shot button,
+.preview-shell .project-real-chain-policy button,
+.preview-shell .project-real-chain-permission button,
+.preview-shell .project-real-chain-select button,
+.preview-shell .project-real-chain-recent button {
+  color: rgba(242, 238, 230, 0.84);
+}
+
+.preview-shell .project-real-chain-head button,
+.preview-shell .project-real-chain-batch button,
+.preview-shell .project-real-chain-one-shot button,
+.preview-shell .project-real-chain-policy button,
+.preview-shell .project-real-chain-permission button,
+.preview-shell .project-real-chain-permission input,
+.preview-shell .project-real-chain-select input,
+.preview-shell .project-real-chain-select button,
+.preview-shell .project-real-chain-recent button,
+.preview-shell .project-real-chain-tags small,
+.preview-shell .project-real-chain-file small,
+.preview-shell .project-real-chain-gates small,
+.preview-shell .project-real-chain-one-shot-flow span,
+.preview-shell .project-real-chain-evidence small,
+.preview-shell .project-real-chain-policy small,
+.preview-shell .project-real-chain-permission small {
+  border-color: rgba(242, 238, 230, 0.16);
+}
+
+.preview-shell .project-real-chain-tags small,
+.preview-shell .project-real-chain-file small,
+.preview-shell .project-real-chain-gates small,
+.preview-shell .project-real-chain-evidence small,
+.preview-shell .project-real-chain-policy small,
+.preview-shell .project-real-chain-permission small {
+  background: rgba(242, 238, 230, 0.055);
+  color: rgba(242, 238, 230, 0.68);
+}
+
+.preview-shell .project-real-chain-batch span,
+.preview-shell .project-real-chain-batch small,
+.preview-shell .project-real-chain-one-shot span,
+.preview-shell .project-real-chain-one-shot small,
+.preview-shell .project-real-chain-one-shot-flow small,
+.preview-shell .project-real-chain-permission label,
+.preview-shell .project-real-chain-select label,
+.preview-shell .project-real-chain-recent span {
+  color: rgba(242, 238, 230, 0.56);
+}
+
+.preview-shell .project-real-chain-one-shot-flow strong {
+  color: rgba(242, 238, 230, 0.82);
+}
+
+.preview-shell .project-real-chain-select input,
+.preview-shell .project-real-chain-permission input {
+  background: rgba(242, 238, 230, 0.055);
+  color: rgba(242, 238, 230, 0.76);
+}
+
+.preview-shell .project-real-chain-recent button {
+  background: rgba(242, 238, 230, 0.055);
+}
+
+@media (max-width: 1040px) {
+  .project-real-chain-panel {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "head"
+      "select"
+      "file"
+      "recent"
+      "tags"
+      "gate"
+      "batch"
+      "oneshot"
+      "policy"
+      "flow"
+      "evidence"
+      "permission"
+      "thumbs"
+      "report"
+      "message";
+  }
+
+  .project-real-chain-permission {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    justify-items: stretch;
+  }
+
+  .project-real-chain-select {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .project-real-chain-permission > div,
+  .project-real-chain-select input,
+  .project-real-chain-select button,
+  .project-real-chain-permission input,
+  .project-real-chain-permission button {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .project-real-chain-permission label {
+    white-space: normal;
+  }
+
+  .project-real-chain-one-shot-flow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-real-chain-thumbs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

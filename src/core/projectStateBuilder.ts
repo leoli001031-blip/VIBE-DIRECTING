@@ -17,8 +17,8 @@ import { buildToolRuntimeHarnessState } from "./toolRuntimeHarness";
 import { buildSubagentRunnerState } from "./subagentRunner";
 import { buildTaskPackets, type BuiltTaskPacket } from "./taskPacketBuilder";
 import { buildAgentCliMockRunnerState } from "./agentCliMockRunner";
-import { buildCodexCliAdapterSpikeState } from "./codexCliAdapterSpike";
-import { buildCodexWorkerRuntimeGateState } from "./codexWorkerRuntimeGate";
+import { buildCliAdapterSpikeState } from "./cliAdapterSpike";
+import { buildWorkerRuntimeGateState } from "./workerRuntimeGate";
 import { buildBetaAcceptanceState } from "./betaAcceptance";
 import { buildExportWorkerState } from "./exportWorker";
 import { buildProjectFileCoreState } from "./projectFileCore";
@@ -58,11 +58,13 @@ import {
   type RuntimeStateSource,
 } from "./projectState";
 import { buildRuntimeEnvironment, ensureRuntimeEnvironment } from "./runtimeConfig";
-import type { GenerationQaStatus, ProjectAudit, ProviderSlot, SubagentTaskEnvelope } from "./types";
+import type { GenerationQaStatus, KeyframePairDerivation, ProjectAudit, ProviderSlot, SubagentTaskEnvelope } from "./types";
 
 export const emptyKnowledgeManifest: KnowledgePackManifest = {
   schemaVersion: "0.1.0",
   manifestVersion: "empty",
+  // P2-130: emptyKnowledgeManifest uses new Date(0) as an epoch default.
+  // Consider using a sentinel value to distinguish empty/unknown from valid timestamps.
   generatedAt: new Date(0).toISOString(),
   knowledgeLibraryRoot: "",
   manifestHash: "empty",
@@ -77,8 +79,8 @@ export interface ProjectRuntimeStateBuildOptions {
   runtime?: ProjectRuntimeState["runtime"];
   projectFactsIntegration?: ProjectRuntimeState["projectFactsIntegration"];
   agentCliMockRunner?: ProjectRuntimeState["agentCliMockRunner"];
-  codexCliAdapterSpike?: ProjectRuntimeState["codexCliAdapterSpike"];
-  codexWorkerRuntimeGate?: ProjectRuntimeState["codexWorkerRuntimeGate"];
+  cliAdapterSpike?: ProjectRuntimeState["cliAdapterSpike"];
+  workerRuntimeGate?: ProjectRuntimeState["workerRuntimeGate"];
   betaAcceptance?: ProjectRuntimeState["betaAcceptance"];
   providerClosedLoopShell?: ProjectRuntimeState["providerClosedLoopShell"];
   executionLedger?: ProjectRuntimeState["executionLedger"];
@@ -95,6 +97,7 @@ export interface ProjectRuntimeStateBuildOptions {
   realTestShotIds?: string[];
   realTestOutputSandbox?: Partial<ExecutionLedgerOutputSandbox>;
   generationQaStatusByOutputPath?: Record<string, GenerationQaStatus>;
+  keyframePairs?: KeyframePairDerivation[];
   subagentRuntimeGateReceipt?: SubagentRuntimeGateReceipt;
   subagentWorkerRuntimePlan?: SubagentWorkerRuntimePlan;
   subagentTaskEnvelope?: SubagentTaskEnvelope;
@@ -345,6 +348,7 @@ export function buildProjectRuntimeState(
       sourceIndex: view.sourceIndex,
       providerRegistry,
       injectedKnowledgePacks: task.envelope.injectedKnowledgePacks,
+      injectedKnowledgeSnippets: task.envelope.injectedKnowledgeSnippets,
       createdAt: generatedAt,
     }),
   );
@@ -438,7 +442,7 @@ export function buildProjectRuntimeState(
     jobs: audit.jobs,
     promptPlans: promptPlanResults.map((result) => result.plan),
     imageTaskPlans,
-    keyframePairs: videoPlanning.readinessGates
+    keyframePairs: options.keyframePairs || videoPlanning.readinessGates
       .map((gate) => gate.keyframePairDerivation)
       .filter((pair): pair is NonNullable<typeof pair> => Boolean(pair)),
   });
@@ -563,26 +567,26 @@ export function buildProjectRuntimeState(
       options.subagentRuntimeGateReceipt?.evidence.subject.envelopeId ||
       options.subagentWorkerRuntimePlan?.slots.find((slot) => slot.envelopeValidation.status === "valid")?.envelopeId,
   });
-  const codexCliAdapterSpike = options.codexCliAdapterSpike || buildCodexCliAdapterSpikeState({
+  const cliAdapterSpike = options.cliAdapterSpike || buildCliAdapterSpikeState({
     generatedAt,
     phase26ReplacementProof: agentCliMockRunner,
     subagentTaskEnvelope: options.subagentTaskEnvelope,
     envelopeId: options.subagentTaskEnvelope?.id || taskViews.find((task) => task.validator.valid)?.envelope.id,
   });
-  const codexWorkerRuntimePhase38Packet = options.subagentTaskEnvelope
+  const workerRuntimePhase38Packet = options.subagentTaskEnvelope
     ? taskPacketBuilderState.packets.find((packet) => packet.envelopeId === options.subagentTaskEnvelope?.id)
     : taskPacketBuilderState.packets.find((packet) => packet.status === "ready");
-  const codexWorkerRuntimeGate = options.codexWorkerRuntimeGate || buildCodexWorkerRuntimeGateState({
+  const workerRuntimeGate = options.workerRuntimeGate || buildWorkerRuntimeGateState({
     generatedAt,
-    subagentTaskEnvelope: options.subagentTaskEnvelope || codexWorkerRuntimePhase38Packet?.envelope,
-    envelopeId: options.subagentTaskEnvelope?.id || codexWorkerRuntimePhase38Packet?.envelopeId,
-    phase38Packet: codexWorkerRuntimePhase38Packet,
+    subagentTaskEnvelope: options.subagentTaskEnvelope || workerRuntimePhase38Packet?.envelope,
+    envelopeId: options.subagentTaskEnvelope?.id || workerRuntimePhase38Packet?.envelopeId,
+    phase38Packet: workerRuntimePhase38Packet,
     phase26ReplacementProof: agentCliMockRunner,
   });
   const providerExecutionPermissionGate = buildProviderExecutionPermissionGateState({
     generatedAt,
     providerLiveGate,
-    codexCliAdapterSpike,
+    cliAdapterSpike,
   });
   const providerActionConfirmationReceipt = buildProviderActionConfirmationReceiptState({
     generatedAt,
@@ -752,7 +756,7 @@ export function buildProjectRuntimeState(
       providerExecutionHandoff,
       providerClosedLoopShell,
       localOrchestrator,
-      codexWorkerRuntimeGate,
+      workerRuntimeGate,
       knowledge,
     },
   });
@@ -827,8 +831,8 @@ export function buildProjectRuntimeState(
     toolRuntimeHarness,
     subagentRunner,
     agentCliMockRunner,
-    codexCliAdapterSpike,
-    codexWorkerRuntimeGate,
+    cliAdapterSpike,
+    workerRuntimeGate,
     betaAcceptance,
     generationHealthChecker,
     promptConflictChecker,
@@ -1068,22 +1072,22 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
       generatedAt: state.generatedAt,
       envelopeId: state.taskRuns.taskViews.find((task) => task.validator.valid)?.envelope.id,
     });
-  const codexCliAdapterSpike =
-    state.codexCliAdapterSpike ||
-    buildCodexCliAdapterSpikeState({
+  const cliAdapterSpike =
+    state.cliAdapterSpike ||
+    buildCliAdapterSpikeState({
       generatedAt: state.generatedAt,
       phase26ReplacementProof: agentCliMockRunner,
       envelopeId: state.taskRuns.taskViews.find((task) => task.validator.valid)?.envelope.id,
     });
-  const codexWorkerRuntimePhase38Packet = taskPacketBuilderState.packets.find((packet) => packet.status === "ready");
-  const codexWorkerRuntimeGate =
-    state.codexWorkerRuntimeGate ||
-    buildCodexWorkerRuntimeGateState({
+  const workerRuntimePhase38Packet = taskPacketBuilderState.packets.find((packet) => packet.status === "ready");
+  const workerRuntimeGate =
+    state.workerRuntimeGate ||
+    buildWorkerRuntimeGateState({
       generatedAt: state.generatedAt,
-      subagentTaskEnvelope: codexWorkerRuntimePhase38Packet?.envelope,
-      envelopeId: codexWorkerRuntimePhase38Packet?.envelopeId ||
+      subagentTaskEnvelope: workerRuntimePhase38Packet?.envelope,
+      envelopeId: workerRuntimePhase38Packet?.envelopeId ||
         state.taskRuns.taskViews.find((task) => task.validator.valid)?.envelope.id,
-      phase38Packet: codexWorkerRuntimePhase38Packet,
+      phase38Packet: workerRuntimePhase38Packet,
       phase26ReplacementProof: agentCliMockRunner,
     });
   const providerExecutionPermissionGate =
@@ -1091,7 +1095,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     buildProviderExecutionPermissionGateState({
       generatedAt: state.generatedAt,
       providerLiveGate,
-      codexCliAdapterSpike,
+      cliAdapterSpike,
     });
   const providerActionConfirmationReceipt =
     state.providerActionConfirmationReceipt ||
@@ -1294,8 +1298,8 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
         toolRuntimeHarness,
         subagentRunner,
         agentCliMockRunner,
-        codexCliAdapterSpike,
-        codexWorkerRuntimeGate,
+        cliAdapterSpike,
+        workerRuntimeGate,
         generationHealthChecker,
         promptConflictChecker,
       },
@@ -1334,8 +1338,8 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     toolRuntimeHarness,
     subagentRunner,
     agentCliMockRunner,
-    codexCliAdapterSpike,
-    codexWorkerRuntimeGate,
+    cliAdapterSpike,
+    workerRuntimeGate,
     betaAcceptance,
     generationHealthChecker,
     promptConflictChecker,

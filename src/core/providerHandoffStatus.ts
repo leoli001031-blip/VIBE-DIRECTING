@@ -201,10 +201,10 @@ function detailFor(status: ProviderHandoffStatusKind, facts: ProviderHandoffMach
   if (status === "ready_to_call") return "已准备好一次动作；不会自动提交。";
   if (status === "waiting_file") {
     return facts.providerSelfReportedComplete
-      ? "外部回报不会完成任务，仍需文件、清单和 QA 回流。"
-      : "已记录动作，等待文件、清单和 QA 回流。";
+      ? "外部回报不会直接完成任务，还要等文件和清单确认。"
+      : "已记录动作，正在等待生成结果。";
   }
-  if (status === "needs_review") return "文件、清单和 QA 已回流，等待人工复核。";
+  if (status === "needs_review") return "文件和清单已准备好，等待复核。";
   return "硬性约束未满足，不能继续。";
 }
 
@@ -232,14 +232,14 @@ function stagesFor(status: ProviderHandoffStatusKind): ProviderHandoffStage[] {
     },
     {
       id: "file_return",
-      label: "文件回流",
-      detail: fileState === "complete" ? "文件和清单已回流" : fileState === "active" ? "等待文件回到输出位置" : "尚未开始等待",
+      label: "结果文件",
+      detail: fileState === "complete" ? "文件和清单已准备好" : fileState === "active" ? "等待文件写入输出位置" : "尚未开始等待",
       state: fileState,
     },
     {
       id: "qa_review",
       label: "复核",
-      detail: reviewState === "active" ? "QA 后待人工确认" : reviewState === "blocked" ? "阻断后不可复核" : "等回流后再复核",
+      detail: reviewState === "active" ? "等待你确认" : reviewState === "blocked" ? "阻断后不可复核" : "等结果回来再复核",
       state: reviewState,
     },
   ];

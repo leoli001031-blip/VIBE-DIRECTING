@@ -90,10 +90,10 @@ function providerContract(
 function buildAgentAdapters(): AgentAdapterContract[] {
   return [
     {
-      id: "codex-cli-agent",
+      id: "agent-cli",
       kind: "agent",
-      label: "Codex CLI Agent",
-      runtimeKind: "codex_cli",
+      label: "Agent CLI",
+      runtimeKind: "agent_cli",
       state: "active",
       dryRunOnly: true,
       readOnly: true,
@@ -109,13 +109,13 @@ function buildAgentAdapters(): AgentAdapterContract[] {
         supportsStructuredResult: true,
       },
       forbiddenRoutes: ["ui_binding", "live_submit", "credential_read", "credential_storage", "arbitrary_shell"],
-      notes: ["Default agent runtime contract; product logic must depend on capabilities, not Codex-specific identity."],
+      notes: ["Default agent runtime contract; product logic must depend on capabilities, not agent-specific identity."],
     },
     {
-      id: "codex-app-server-agent",
+      id: "agent-app-server",
       kind: "agent",
-      label: "Codex App Server Agent",
-      runtimeKind: "codex_app_server",
+      label: "Agent App Server",
+      runtimeKind: "agent_app_server",
       state: "planned",
       dryRunOnly: true,
       readOnly: true,
@@ -132,8 +132,8 @@ function buildAgentAdapters(): AgentAdapterContract[] {
       },
       forbiddenRoutes: ["ui_binding", "live_submit", "credential_read", "credential_storage", "arbitrary_shell"],
       notes: [
-        "Planned app-server protocol agent adapter; contract/readiness only, with legacy codex exec --json fallback preserved.",
-        "Transport and method readiness are detailed in codexAppServerAdapter.ts; this generic contract remains dry-run/read-only.",
+        "Planned app-server protocol agent adapter; contract/readiness only, with legacy agent exec --json fallback preserved.",
+        "Transport and method readiness are detailed in agentAppServerAdapter.ts; this generic contract remains dry-run/read-only.",
       ],
     },
   ];
@@ -172,7 +172,7 @@ function buildWorkerAdapters(): WorkerAdapterContract[] {
 }
 
 function buildProviderAdapters(registry: ProviderRegistry): ProviderAdapterContract[] {
-  const image2GenerateProviderIds = ["openai-image2-codex-cli"];
+  const image2GenerateProviderIds = ["openai-image2-agent-cli"];
   const image2ApiProviderIds = ["openai-image2-api"];
   const seedanceProviderIds = ["seedance2-provider"];
   const jimengProviderIds = ["jimeng-video"];

@@ -1,3 +1,4 @@
+import { unique } from "./collectionUtils";
 import type { ProjectRuntimeState } from "./projectState";
 import type {
   ArtifactInvalidation,
@@ -155,10 +156,6 @@ function stableId(prefix: string, seed: string): string {
     hash = Math.imul(hash, 16777619);
   }
   return `${prefix}_${(hash >>> 0).toString(16)}`;
-}
-
-function unique(items: string[]): string[] {
-  return Array.from(new Set(items.filter((item) => item.trim()).map((item) => item.trim()))).sort();
 }
 
 function includesAny(value: string, patterns: readonly RegExp[]): boolean {

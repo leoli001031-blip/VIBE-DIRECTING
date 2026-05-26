@@ -1,6 +1,9 @@
+import { PROVIDER_SUBMIT_ATTEMPT_BLOCKED } from "./statusConstants";
+import { hardLockDrift } from "./collectionUtils";
 import { buildDesktopRuntimePlan, type DesktopRuntimePlan } from "./desktopRuntime";
 import type { KnowledgePackManagerState } from "./knowledgePackManager";
 import type { ProjectRuntimeState } from "./projectState";
+import type { BaseHardLocks } from "./types";
 import type { VisualConsistencyContractReceipt } from "./visualConsistency";
 
 export const betaAcceptanceSchemaVersion = "0.1.0";
@@ -20,29 +23,22 @@ export type BetaAcceptanceArea =
   | "test_matrix"
   | "roadmap_closure";
 
-export interface BetaAcceptanceHardLocks {
-  dryRunOnly: true;
+export interface BetaAcceptanceHardLocks extends BaseHardLocks {
   readOnly: true;
   planOnly: true;
   noAdditionalPhasesPlanned: true;
   canSubmitProvider: false;
   providerSubmitAllowed: 0;
-  liveSubmitAllowed: false;
-  canSpawnCodex: false;
-  noWorkerSpawn: true;
-  noShellExecution: true;
-  noCredentialRead: true;
-  noCredentialWrite: true;
+  canSpawnAgent: false;
   credentialAccessAllowed: false;
   credentialStorage: false;
-  noFileMutation: true;
   noApiKeyCreation: true;
 }
 
 export interface BetaAcceptanceAttemptedActions {
   providerSubmitAttempted: boolean;
   liveSubmitAttempted: boolean;
-  spawnCodexAttempted: boolean;
+  spawnAgentAttempted: boolean;
   shellAttempted: boolean;
   credentialAttempted: boolean;
   fileMutationAttempted: boolean;
@@ -121,7 +117,7 @@ export interface BuildBetaAcceptanceStateInput {
   hardLocksOverride?: Partial<Record<keyof BetaAcceptanceHardLocks, boolean | number>>;
   providerSubmitAttempted?: boolean;
   liveSubmitAttempted?: boolean;
-  spawnCodexAttempted?: boolean;
+  spawnAgentAttempted?: boolean;
   shellAttempted?: boolean;
   credentialAttempted?: boolean;
   fileMutationAttempted?: boolean;
@@ -131,20 +127,21 @@ export interface BuildBetaAcceptanceStateInput {
 
 export const betaAcceptanceHardLocks: BetaAcceptanceHardLocks = {
   dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   readOnly: true,
   planOnly: true,
   noAdditionalPhasesPlanned: true,
   canSubmitProvider: false,
   providerSubmitAllowed: 0,
-  liveSubmitAllowed: false,
-  canSpawnCodex: false,
-  noWorkerSpawn: true,
-  noShellExecution: true,
-  noCredentialRead: true,
-  noCredentialWrite: true,
+  canSpawnAgent: false,
   credentialAccessAllowed: false,
   credentialStorage: false,
-  noFileMutation: true,
   noApiKeyCreation: true,
 };
 
@@ -159,7 +156,7 @@ export const betaAcceptanceExpectedScripts = [
   "knowledge:test",
   "knowledge-pack-manager:test",
   "task-packet:test",
-  "codex-worker-runtime-gate:test",
+  "worker-runtime-gate:test",
   "provider-closed-loop-shell:test",
   "phase-roadmap:test",
   "minimal-ui:test",
@@ -182,20 +179,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function bool(value: unknown): boolean {
   return value === true;
-}
-
-function hardLockDrift(
-  actual: object | undefined,
-  expected: object,
-  prefix: string,
-): string[] {
-  if (!actual) return [`${prefix}_hard_locks_missing`];
-  const actualRecord = actual as Record<string, boolean | number | undefined>;
-  const expectedRecord = expected as Record<string, boolean | number>;
-
-  return Object.entries(expectedRecord).flatMap(([key, expectedValue]) =>
-    actualRecord[key] === expectedValue ? [] : [`${prefix}_hard_lock_drift:${key}`],
-  );
 }
 
 function check(
@@ -413,7 +396,7 @@ function queueVisibilityReadiness(runtimeState: Partial<ProjectRuntimeState> | u
       planOnly: true,
       noDaemon: true,
       daemonStarted: false,
-      noSpawnCodex: true,
+      noSpawnAgent: true,
       noShellExecution: true,
       noProviderExecution: true,
       providerSubmissionForbidden: true,
@@ -521,7 +504,7 @@ function knowledgePackManagementReadiness(
 }
 
 function workerProviderGateReadiness(runtimeState: Partial<ProjectRuntimeState> | undefined): BetaAcceptanceCheck {
-  const codexWorkerRuntimeGate = runtimeState?.codexWorkerRuntimeGate;
+  const workerRuntimeGate = runtimeState?.workerRuntimeGate;
   const providerClosedLoopShell = runtimeState?.providerClosedLoopShell;
   const providerLiveGate = runtimeState?.providerLiveGate;
   const providerExecutionHandoff = runtimeState?.providerExecutionHandoff;
@@ -529,12 +512,12 @@ function workerProviderGateReadiness(runtimeState: Partial<ProjectRuntimeState> 
   const handoffSummary = isRecord(providerExecutionHandoff) ? providerExecutionHandoff.summary : undefined;
 
   const blockers = [
-    ...(!codexWorkerRuntimeGate ? ["codex_worker_runtime_gate_missing"] : []),
+    ...(!workerRuntimeGate ? ["worker_runtime_gate_missing"] : []),
     ...(!providerClosedLoopShell ? ["provider_closed_loop_shell_missing"] : []),
     ...(!providerLiveGate ? ["provider_live_gate_missing"] : []),
     ...(!providerExecutionHandoff ? ["provider_execution_handoff_missing"] : []),
-    ...hardLockDrift(isRecord(codexWorkerRuntimeGate) ? codexWorkerRuntimeGate.hardLocks : undefined, {
-      noSpawnCodex: true,
+    ...hardLockDrift(isRecord(workerRuntimeGate) ? workerRuntimeGate.hardLocks : undefined, {
+      noSpawnAgent: true,
       noShellExecution: true,
       canSubmitProvider: false,
       providerSubmitAllowed: 0,
@@ -544,7 +527,7 @@ function workerProviderGateReadiness(runtimeState: Partial<ProjectRuntimeState> 
       credentialAccessAllowed: false,
       credentialStorage: false,
       noFileMutation: true,
-    }, "codex_worker_runtime_gate"),
+    }, "worker_runtime_gate"),
     ...hardLockDrift(isRecord(providerClosedLoopShell) ? providerClosedLoopShell.hardLocks : undefined, {
       dryRunOnly: true,
       readOnly: true,
@@ -571,12 +554,12 @@ function workerProviderGateReadiness(runtimeState: Partial<ProjectRuntimeState> 
   ];
 
   return check("worker_provider_gate", [
-    "codexWorkerRuntimeGate",
+    "workerRuntimeGate",
     "providerClosedLoopShell",
     "providerLiveGate",
     "providerExecutionHandoff",
   ], {
-    codexWorkerGatePresent: Boolean(codexWorkerRuntimeGate),
+    workerGatePresent: Boolean(workerRuntimeGate),
     providerClosedLoopShellPresent: Boolean(providerClosedLoopShell),
     providerSubmitAllowed: isRecord(providerLiveSummary) && typeof providerLiveSummary.providerSubmitAllowed === "number"
       ? providerLiveSummary.providerSubmitAllowed
@@ -622,9 +605,9 @@ function closureReadiness(): BetaAcceptanceCheck {
 
 function attemptedActionBlockers(attemptedActions: BetaAcceptanceAttemptedActions): string[] {
   return [
-    ...(attemptedActions.providerSubmitAttempted ? ["provider_submit_attempt_blocked"] : []),
+    ...(attemptedActions.providerSubmitAttempted ? [PROVIDER_SUBMIT_ATTEMPT_BLOCKED] : []),
     ...(attemptedActions.liveSubmitAttempted ? ["live_submit_attempt_blocked"] : []),
-    ...(attemptedActions.spawnCodexAttempted ? ["spawn_codex_attempt_blocked"] : []),
+    ...(attemptedActions.spawnAgentAttempted ? ["spawn_agent_attempt_blocked"] : []),
     ...(attemptedActions.shellAttempted ? ["shell_attempt_blocked"] : []),
     ...(attemptedActions.credentialAttempted ? ["credential_attempt_blocked"] : []),
     ...(attemptedActions.fileMutationAttempted ? ["file_mutation_attempt_blocked"] : []),
@@ -642,7 +625,7 @@ export function buildBetaAcceptanceState(input: BuildBetaAcceptanceStateInput = 
   const attemptedActions: BetaAcceptanceAttemptedActions = {
     providerSubmitAttempted: Boolean(input.providerSubmitAttempted),
     liveSubmitAttempted: Boolean(input.liveSubmitAttempted),
-    spawnCodexAttempted: Boolean(input.spawnCodexAttempted),
+    spawnAgentAttempted: Boolean(input.spawnAgentAttempted),
     shellAttempted: Boolean(input.shellAttempted),
     credentialAttempted: Boolean(input.credentialAttempted),
     fileMutationAttempted: Boolean(input.fileMutationAttempted),

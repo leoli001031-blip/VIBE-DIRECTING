@@ -1,3 +1,4 @@
+import { WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT, PROVIDER_READY_DERIVATIVE_DETECTED } from "./statusConstants";
 import type { FileSnapshot, ManifestMatchReport } from "./manifestMatcher";
 import type {
   FilesystemWatcherArtifactClass,
@@ -26,7 +27,7 @@ export interface BuildFilesystemWatcherHarnessInput {
 }
 
 export const filesystemWatcherMonitoredKinds: FilesystemWatcherMonitoredKind[] = [
-  "codex_temp_generated_images",
+  "agent_temp_generated_images",
   "project_outputs",
   "reports",
   "videos",
@@ -34,12 +35,18 @@ export const filesystemWatcherMonitoredKinds: FilesystemWatcherMonitoredKind[] =
 ];
 
 export const filesystemWatcherHardLocks: FilesystemWatcherHarnessState["hardLocks"] = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   watcherCannotPromoteFormal: true,
   workerSelfReportCannotComplete: true,
   tempOutputDraftOnly: true,
   semanticPostprocessForbidden: true,
-  liveSubmitAllowed: false,
-  providerSubmissionForbidden: true,
 };
 
 function normalizePath(path: string): string {
@@ -53,11 +60,11 @@ function snapshotPathCount(snapshot: FileSnapshot): number {
 function artifactClassFor(eventType: WatcherEventType): FilesystemWatcherArtifactClass {
   if (eventType === "temp_output_detected") return "temp_candidate";
   if (eventType === "expected_output_detected") return "expected_output";
-  if (eventType === "provider_ready_derivative_detected") return "provider_ready_derivative";
+  if (eventType === PROVIDER_READY_DERIVATIVE_DETECTED) return "provider_ready_derivative";
   if (eventType === "qa_report_detected") return "qa_report";
   if (eventType === "manifest_mismatch_detected") return "manifest_mismatch";
   if (eventType === "formal_output_promoted") return "formal_output";
-  if (eventType === "worker_exit_without_expected_output") return "worker_exit_without_expected_output";
+  if (eventType === WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT) return WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT;
   if (eventType === "postprocess_recoverable") return "postprocess_recoverable";
   if (eventType === "stall_timeout_reached") return "stall_timeout";
   if (eventType === "blocked") return "blocked";
@@ -67,7 +74,7 @@ function artifactClassFor(eventType: WatcherEventType): FilesystemWatcherArtifac
 function monitoredKindFor(path: string | undefined, artifactClass: FilesystemWatcherArtifactClass): FilesystemWatcherMonitoredKind {
   const normalized = normalizePath(path || "").toLowerCase();
   if (artifactClass === "temp_candidate" || /(^|\/)(tmp|temp|cache|candidates?|drafts?)(\/|$)/.test(normalized)) {
-    return "codex_temp_generated_images";
+    return "agent_temp_generated_images";
   }
   if (artifactClass === "qa_report" || artifactClass === "manifest_mismatch" || /(^|\/)reports?(\/|$)/.test(normalized)) return "reports";
   if (/\.(mp4|mov|m4v|webm)$/i.test(normalized) || /(^|\/)videos?(\/|$)/.test(normalized)) return "videos";
@@ -85,7 +92,7 @@ function requiresManifestMatch(artifactClass: FilesystemWatcherArtifactClass): b
 }
 
 function requiresQaPass(artifactClass: FilesystemWatcherArtifactClass): boolean {
-  return !["qa_report", "manifest_mismatch", "blocked", "stall_timeout", "worker_exit_without_expected_output"].includes(artifactClass);
+  return !["qa_report", "manifest_mismatch", "blocked", "stall_timeout", WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT].includes(artifactClass);
 }
 
 function isDraftOnly(artifactClass: FilesystemWatcherArtifactClass, canPromoteFormal: boolean): boolean {
@@ -103,11 +110,11 @@ function buildMonitoredRoots(projectRoot: string): FilesystemWatcherHarnessState
   const root = projectRoot || "<project-root>";
   return [
     {
-      rootId: "codex-temp-generated-images",
-      kind: "codex_temp_generated_images",
-      label: "Codex Temp Generated Images",
+      rootId: "agent-temp-generated-images",
+      kind: "agent_temp_generated_images",
+      label: "Agent Temp Generated Images",
       pathPolicy: "derived_static_only",
-      pathHints: ["<codex-temp>/generated-images", `${root}/tmp`, `${root}/cache`, `${root}/candidates`],
+      pathHints: ["<agent-temp>/generated-images", `${root}/tmp`, `${root}/cache`, `${root}/candidates`],
       daemonStarted: false,
       notes: ["Derived from fileSnapshot paths and watcherEvents only; Phase 8.5 does not start fs.watch."],
     },
@@ -202,7 +209,7 @@ export function buildFilesystemWatcherHarnessState(input: BuildFilesystemWatcher
       notes: [
         ...event.notes,
         "Phase 8.5 watcher harness is derived/static and does not start a filesystem daemon.",
-        ...(artifactClass === "worker_exit_without_expected_output" || requestTaskPlanIds.has(taskPlanId)
+        ...(artifactClass === WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT || requestTaskPlanIds.has(taskPlanId)
           ? ["Worker/provider self-report cannot complete or promote a task."]
           : []),
       ],

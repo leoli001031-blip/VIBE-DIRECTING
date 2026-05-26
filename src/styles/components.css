@@ -1,0 +1,277 @@
+/* Components — 暖米咖 AI 工作台组件 */
+
+/* ============================================
+   Status Bean / 状态豆
+   ============================================ */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-system);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 12px;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+}
+
+.status-pill.pass {
+  color: var(--warm-sage);
+  background: #EFF2EC;
+}
+
+.status-pill.blocked,
+.status-pill.fail {
+  color: var(--warm-clay);
+  background: #FBF0ED;
+}
+
+.status-pill.warning,
+.status-pill.partial {
+  color: #B8860B;
+  background: #FEF9EC;
+}
+
+.status-pill.info,
+.status-pill.unknown {
+  color: var(--warm-muted);
+  background: var(--warm-surface-soft);
+}
+
+/* ============================================
+   Primary Action Button / 主动作
+   ============================================ */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--font-system);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warm-paper);
+  background: var(--warm-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-xs) var(--space-md);
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.btn-primary:hover {
+  background: #6B4A34;
+}
+
+.btn-primary:active {
+  background: #5D3F2C;
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Secondary action */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--font-system);
+  font-size: 12px;
+  color: var(--warm-ink);
+  background: var(--warm-paper);
+  border: 1px solid var(--warm-line);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-secondary:hover {
+  background: var(--warm-surface-soft);
+}
+
+/* ============================================
+   Evidence Strip / 证据条
+   ============================================ */
+.evidence-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--warm-surface-soft);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.evidence-strip .evidence-type {
+  font-weight: 600;
+  color: var(--warm-muted);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+.evidence-strip .evidence-name {
+  color: var(--warm-ink);
+  flex: 1;
+}
+
+.evidence-strip .evidence-meta {
+  color: var(--warm-muted);
+  font-size: 11px;
+}
+
+.evidence-strip .evidence-action {
+  color: var(--warm-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ============================================
+   Credential Form
+   ============================================ */
+.credential-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+  padding: var(--space-sm);
+  background: var(--warm-surface-soft);
+  border-radius: var(--radius-sm);
+}
+
+.credential-add-form strong {
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.credential-add-form select,
+.credential-add-form input {
+  font-family: var(--font-system);
+  font-size: 13px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--warm-line);
+  border-radius: var(--radius-sm);
+  background: var(--warm-paper);
+  color: var(--warm-ink);
+}
+
+.credential-add-form button,
+.credential-delete-btn {
+  font-family: var(--font-system);
+  font-size: 12px;
+  font-weight: 600;
+  padding: var(--space-xs) var(--space-sm);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.credential-add-form button {
+  color: var(--warm-paper);
+  background: var(--warm-primary);
+}
+
+.credential-add-form button:hover {
+  background: #6B4A34;
+}
+
+.credential-delete-btn {
+  color: var(--warm-clay);
+  background: #FBF0ED;
+  margin-left: var(--space-sm);
+}
+
+.credential-delete-btn:hover {
+  background: #F5E0D9;
+}
+
+/* ============================================
+   Director Mode Components
+   ============================================ */
+.director-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: var(--space-md);
+}
+
+.director-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.director-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* Story flow */
+.story-shot-card {
+  background: var(--warm-paper);
+  border: 1px solid var(--warm-line);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-sm);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.story-shot-card:hover {
+  border-color: var(--warm-primary);
+}
+
+.story-shot-card.selected {
+  border-color: var(--warm-primary);
+  background: var(--warm-primary-soft);
+}
+
+/* Asset library */
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: var(--space-sm);
+}
+
+.asset-thumb {
+  aspect-ratio: 16/9;
+  background: var(--warm-surface-soft);
+  border: 1px solid var(--warm-line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.asset-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ============================================
+   Preview
+   ============================================ */
+.preview-container {
+  position: relative;
+  aspect-ratio: 16/9;
+  background: var(--warm-ink);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-container img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.preview-empty {
+  color: var(--warm-muted);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+}

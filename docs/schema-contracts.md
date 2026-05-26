@@ -1,5 +1,24 @@
 # Schema Contracts
 
+<!--
+P2-134: This document lists 8 schemas in the "Project Fact Schemas" section below.
+The schemas/ directory actually contains 103 schema files (~964 KB total).
+The document count should be updated to reflect the full set, or the section
+should be scoped to "Phase 9.2 project fact schemas" explicitly.
+
+P2-133: At least 6 docs in the docs/ directory reference historical/deprecated content:
+- core-development-sequence.md (historical sequence notice)
+- demo-completion-plan.md (historical plan notice)
+- software-architecture.md (historical snapshot notice)
+- legacy-route-retirement-plan.md (deprecated aliases)
+- verification-checklists.md (deprecated aliases)
+- refactor-plan-20260511.md (deprecated status field)
+Others (landing-architecture.md, mvp-rc-status.md, mvp-rc-checklist.md,
+mvp-integration-development-plan.md, mvp-delivery-technical-debt-plan.md)
+also reference deprecated or historical routes/docs. Consider adding explicit
+"Historical" or "Deprecated" banners to each.
+-->
+
 Date: 2026-04-29
 Status: v0.1 draft
 

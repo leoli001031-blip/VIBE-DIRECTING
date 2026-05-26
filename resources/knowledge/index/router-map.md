@@ -50,6 +50,7 @@
 | Image 2 关键帧 | `prompt/core-prompt-templates.md`, `visual-memory/reference-authority.md`, 命中的 style/composition/lighting/color/lens 包 |
 | Image 2 编辑 | `prompt/core-prompt-templates.md`, `visual-memory/reference-authority.md`, `qa/core-qa.md` |
 | Seedance 2.0 图生视频 | `keyframe-pair/action-continuity.md`, `camera/core-camera-movement.md`, `prompt/core-prompt-templates.md`, `qa/core-qa.md`, `audio/core-audio-planning.md` |
+| AIGC 商业短视频 / 参考图职责 / 素材分析后分镜 / 无字画面 / 动作动机 / 时间线拆分 | `prompt/aigc-video-directing-workflow.md`, `prompt/core-prompt-templates.md`, `visual-memory/reference-authority.md`, `keyframe-pair/action-continuity.md`, `performance/core-performance.md`, `qa/core-qa.md` |
 | 判断 Image 2 / Seedance / 其他模型能不能做 | `provider/model-capability-matrix.md`, `provider/image2-provider-pack.md`, `provider/seedance2-provider-pack.md` |
 | 当前 Codex CLI 怎么执行生成任务 | `provider/codex-cli-execution-boundary.md`, `provider/model-capability-matrix.md` |
 | 新增 OpenAI 视频模型 / 即梦 / Runway / ComfyUI 等模型 | `provider/provider-api-extension-slots.md`, `provider/provider-onboarding-research-checklist.md`, `provider/model-capability-matrix.md` |
@@ -59,6 +60,13 @@
 | 角色 / 场景 / 道具 / 风格 reference QA | `visual-memory/reference-authority.md`, `qa/core-qa.md`, 命中的 style/lighting/color 包 |
 | 同一场景多视角 / 空间连续性 QA | `scene-asset-pack/spatial-continuity.md`, `qa/core-qa.md`, `story-function/core-shot-functions.md`, `composition/core-composition.md` |
 | start/end frame 动作连续性 QA | `keyframe-pair/action-continuity.md`, `qa/core-qa.md`, `camera/core-camera-movement.md` |
+| 分镜画面结构 / 主画面怎么写 / 故事板不像分镜 | `composition/visual-structure-decomposition.md`, `composition/core-composition.md`, `story-function/core-shot-functions.md`, `qa/core-qa.md` |
+| 多人分镜 / 递东西 / 对视 / 快切关系戏 | `composition/multi-character-blocking.md`, `performance/action-motivation-microreaction.md`, `camera/state-flow-motion-planning.md`, `qa/core-qa.md` |
+| 参考图太多 / 全能参考冲突 / 角色漂移 | `visual-memory/reference-dimension-locking.md`, `visual-memory/reference-authority.md`, `prompt/aigc-video-directing-workflow.md`, `qa/core-qa.md` |
+| Seedance 全能参考 / 分镜图作参考 / no BGM / 多图职责 | `visual-memory/reference-dimension-locking.md`, `composition/visual-structure-decomposition.md`, `camera/state-flow-motion-planning.md`, `prompt/aigc-video-directing-workflow.md`, `audio/core-audio-planning.md`, `qa/core-qa.md` |
+| 快切动作 / 4 秒多动作 / 状态流而非动词清单 | `camera/state-flow-motion-planning.md`, `composition/multi-character-blocking.md`, `camera/core-camera-movement.md`, `qa/core-qa.md` |
+| 人物动作平 / NPC 感 / 微反应 | `performance/action-motivation-microreaction.md`, `performance/core-performance.md`, `camera/state-flow-motion-planning.md`, `qa/core-qa.md` |
+| 运镜太完美 / 镜头像 AI 滑轨 | `camera/imperfect-camera-motion.md`, `camera/core-camera-movement.md`, `composition/core-composition.md`, `qa/core-qa.md` |
 | 风格 QA | `qa/core-qa.md`, 命中的 style/lighting/color 包 |
 | 连续性 QA | `qa/core-qa.md`, `story-function/core-shot-functions.md`, `composition/core-composition.md` |
 | 旁白 / 对白 / 音效规划 | `audio/core-audio-planning.md`, `provider/model-capability-matrix.md`, `qa/core-qa.md` |

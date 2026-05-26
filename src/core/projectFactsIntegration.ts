@@ -1,6 +1,7 @@
 import type { AssetLibrarySceneAssetPack, AssetLibrarySnapshot } from "./assetLibraryCrud";
 import type { ProjectStoreFactFile, ProjectStoreSnapshot } from "./projectStore";
 import type { ProjectRuntimeState } from "./projectState";
+import type { BaseHardLocks } from "./types";
 import type { ShotLayoutContract } from "./visualConsistency";
 import type { VoiceSourceLibraryState } from "./voiceSourceLibrary";
 
@@ -81,13 +82,9 @@ export interface ProjectFactsVisualConsistencySupport {
   };
 }
 
-export interface ProjectFactsIntegrationHardLocks {
-  dryRunOnly: true;
-  noFileMutation: true;
+export interface ProjectFactsIntegrationHardLocks extends BaseHardLocks {
   noDirectoryCreate: true;
   noProviderSubmit: true;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   noImageGeneration: true;
   noVideoGeneration: true;
   noTextToVideo: true;
@@ -152,11 +149,15 @@ export interface BuildProjectFactsIntegrationInput {
 
 const hardLocks: ProjectFactsIntegrationHardLocks = {
   dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
   noFileMutation: true,
-  noDirectoryCreate: true,
-  noProviderSubmit: true,
   noCredentialRead: true,
   noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
+  noDirectoryCreate: true,
+  noProviderSubmit: true,
   noImageGeneration: true,
   noVideoGeneration: true,
   noTextToVideo: true,
@@ -297,6 +298,30 @@ function storyShots(input: BuildProjectFactsIntegrationInput): unknown[] {
 
 function scenePacks(input: BuildProjectFactsIntegrationInput): AssetLibrarySceneAssetPack[] {
   return input.sceneAssetPacks || input.assetLibrary?.sceneAssetPacks || [];
+}
+
+function resolveShotLayouts(input: BuildProjectFactsIntegrationInput): ShotLayoutContract[] {
+  const projectStoreLayouts = input.projectStore?.facts.shotLayouts || [];
+  if (projectStoreLayouts.length) {
+    return projectStoreLayouts.map((layout) => ({
+      ...layout.value,
+      shotId: layout.shotId,
+    }) as unknown as ShotLayoutContract);
+  }
+  return input.shotLayouts || [];
+}
+
+function hasProjectStoreShotLayouts(input: BuildProjectFactsIntegrationInput): boolean {
+  return Boolean(input.projectStore?.facts.shotLayouts?.length);
+}
+
+function resolveSpatialMemory(input: BuildProjectFactsIntegrationInput): Record<string, unknown> | undefined {
+  const projectStoreSpatialMemory = input.projectStore?.facts.spatialMemory;
+  return projectStoreSpatialMemory !== undefined ? projectStoreSpatialMemory : input.spatialMemory;
+}
+
+function hasProjectStoreSpatialMemory(input: BuildProjectFactsIntegrationInput): boolean {
+  return input.projectStore?.facts.spatialMemory !== undefined;
 }
 
 function vectorReady(value: unknown): boolean {
@@ -445,30 +470,51 @@ function buildShotSpecFact(input: BuildProjectFactsIntegrationInput): ProjectFac
 }
 
 function buildShotLayoutFact(input: BuildProjectFactsIntegrationInput): ProjectFactConnection {
-  const shotLayouts = input.shotLayouts || [];
-  const blockers = shotLayouts.length ? [] : ["Shot Layout is not connected; camera placement, subject placement, and layout constraints remain missing."];
-  const warnings = shotLayouts.filter((layout) => !layout.schemaVersion || !layout.endFrameDerivation?.derivesFrom).map((layout) => `${layout.shotId} has incomplete Shot Layout derivation structure.`);
+  const projectStoreBacked = hasProjectStoreShotLayouts(input);
+  const projectStoreLayouts = input.projectStore?.facts.shotLayouts || [];
+  const resolvedShotLayouts = resolveShotLayouts(input);
+  const blockers = resolvedShotLayouts.length ? [] : ["Shot Layout is not connected; camera placement, subject placement, and layout constraints remain missing."];
+  const warnings = resolvedShotLayouts.filter((layout) => !layout.schemaVersion || !layout.endFrameDerivation?.derivesFrom).map((layout) => `${layout.shotId} has incomplete Shot Layout derivation structure.`);
+  const projectStoreSources = sourcesForProjectStoreRole(input.projectStore, "shot_layout");
   return fact({
     kind: "shotLayout",
     label: "Shot Layout",
-    sourceOfTruth: shotLayouts.length ? "project_store" : "not_connected",
-    path: shotLayouts.length === 1 ? `shots/${shotLayouts[0].shotId}/shot_layout.vibe.json` : "shots/*/shot_layout.vibe.json",
-    status: statusFor(blockers, shotLayouts.length, shotLayouts.length > 0, warnings),
-    recordCount: shotLayouts.length,
+    sourceOfTruth: resolvedShotLayouts.length ? "project_store" : "not_connected",
+    path: projectStoreBacked && projectStoreLayouts.length === 1
+      ? projectStoreLayouts[0].path.path
+      : resolvedShotLayouts.length === 1
+        ? `shots/${resolvedShotLayouts[0].shotId}/shot_layout.vibe.json`
+        : "shots/*/shot_layout.vibe.json",
+    status: statusFor(blockers, resolvedShotLayouts.length, resolvedShotLayouts.length > 0, warnings),
+    recordCount: resolvedShotLayouts.length,
     blockers,
     warnings,
-    sources: shotLayouts.length
-      ? shotLayouts.map((layout) =>
-          sourceFromValue({
-            sourceOfTruth: "project_store",
-            ref: `shotLayouts:${layout.shotId}`,
-            role: "shot_layout",
-            path: `shots/${layout.shotId}/shot_layout.vibe.json`,
-            value: layout,
-          }),
-        )
+    sources: projectStoreBacked
+      ? projectStoreSources.length
+        ? projectStoreSources
+        : projectStoreLayouts.map((layout) =>
+            sourceFromValue({
+              sourceOfTruth: "project_store",
+              ref: `projectStore.facts.shotLayouts:${layout.shotId}`,
+              role: "shot_layout",
+              path: layout.path.path,
+              value: layout.value,
+            }),
+          )
+      : resolvedShotLayouts.length
+        ? resolvedShotLayouts.map((layout) =>
+            sourceFromValue({
+              sourceOfTruth: "project_store",
+              ref: `shotLayouts:${layout.shotId}`,
+              role: "shot_layout",
+              path: `shots/${layout.shotId}/shot_layout.vibe.json`,
+              value: layout,
+            }),
+          )
       : [],
-    sourceRefs: shotLayouts.map((layout) => `shotLayouts:${layout.shotId}`),
+    sourceRefs: projectStoreBacked
+      ? projectStoreLayouts.map((layout) => `projectStore.facts.shotLayouts:${layout.shotId}`)
+      : resolvedShotLayouts.map((layout) => `shotLayouts:${layout.shotId}`),
   });
 }
 
@@ -524,11 +570,12 @@ function buildVisualMemoryFact(input: BuildProjectFactsIntegrationInput): Projec
 }
 
 function buildSpatialMemoryFact(input: BuildProjectFactsIntegrationInput): ProjectFactConnection {
-  const spatialMemory = input.spatialMemory;
-  const worldRefs = spatialWorldRefs(spatialMemory);
-  const axisRefs = spatialAxisRefs(spatialMemory);
-  const sceneStateRefs = spatialSceneStateRefs(spatialMemory);
-  const blockers = hasKeys(spatialMemory)
+  const projectStoreBacked = hasProjectStoreSpatialMemory(input);
+  const resolvedSpatialMemory = resolveSpatialMemory(input);
+  const worldRefs = spatialWorldRefs(resolvedSpatialMemory);
+  const axisRefs = spatialAxisRefs(resolvedSpatialMemory);
+  const sceneStateRefs = spatialSceneStateRefs(resolvedSpatialMemory);
+  const blockers = hasKeys(resolvedSpatialMemory)
     ? [
         ...(!worldRefs.length ? ["Spatial Memory has no structured world coordinate facts."] : []),
         ...(!axisRefs.length ? ["Spatial Memory has no structured axis/screen-direction facts."] : []),
@@ -536,30 +583,43 @@ function buildSpatialMemoryFact(input: BuildProjectFactsIntegrationInput): Proje
       ]
     : ["Spatial Memory is not connected; world coordinate, axis, and scene-state facts remain missing."];
   const recordCount = worldRefs.length + axisRefs.length + sceneStateRefs.length;
-  const warnings = hasKeys(spatialMemory) && !arrayFrom(spatialMemory?.scenes).length
+  const warnings = hasKeys(resolvedSpatialMemory) && !arrayFrom(resolvedSpatialMemory?.scenes).length
     ? ["Spatial Memory is connected through legacy root arrays; formal schema should use scenes[]."]
     : [];
+  const projectStoreSources = sourcesForProjectStoreRole(input.projectStore, "spatial_memory");
   return fact({
     kind: "spatialMemory",
     label: "Spatial Memory",
-    sourceOfTruth: hasKeys(spatialMemory) ? "project_store" : "not_connected",
-    path: "spatial_memory/spatial_memory.vibe.json",
-    status: statusFor(blockers, recordCount, hasKeys(spatialMemory), warnings),
+    sourceOfTruth: hasKeys(resolvedSpatialMemory) ? "project_store" : "not_connected",
+    path: projectStoreBacked ? factPath(input.projectStore, "spatial_memory") || "spatial_memory/spatial_memory.vibe.json" : "spatial_memory/spatial_memory.vibe.json",
+    status: statusFor(blockers, recordCount, hasKeys(resolvedSpatialMemory), warnings),
     recordCount,
     blockers,
     warnings,
-    sources: hasKeys(spatialMemory)
-      ? [
-          sourceFromValue({
-            sourceOfTruth: "project_store",
-            ref: "spatialMemory",
-            role: "spatial_memory",
-            path: "spatial_memory/spatial_memory.vibe.json",
-            value: spatialMemory,
-          }),
-        ]
+    sources: projectStoreBacked
+      ? projectStoreSources.length
+        ? projectStoreSources
+        : [
+            sourceFromValue({
+              sourceOfTruth: "project_store",
+              ref: "projectStore.facts.spatialMemory",
+              role: "spatial_memory",
+              path: "spatial_memory/spatial_memory.vibe.json",
+              value: resolvedSpatialMemory,
+            }),
+          ]
+      : hasKeys(resolvedSpatialMemory)
+        ? [
+            sourceFromValue({
+              sourceOfTruth: "project_store",
+              ref: "spatialMemory",
+              role: "spatial_memory",
+              path: "spatial_memory/spatial_memory.vibe.json",
+              value: resolvedSpatialMemory,
+            }),
+          ]
       : [],
-    sourceRefs: hasKeys(spatialMemory) ? ["spatialMemory"] : [],
+    sourceRefs: projectStoreBacked ? ["projectStore.facts.spatialMemory"] : hasKeys(resolvedSpatialMemory) ? ["spatialMemory"] : [],
   });
 }
 
@@ -636,18 +696,18 @@ function supportStatus(hasStructured: boolean, hasPartial: boolean): VisualSuppo
 
 function buildVisualConsistencySupport(input: BuildProjectFactsIntegrationInput): ProjectFactsVisualConsistencySupport {
   const packs = scenePacks(input);
-  const shotLayouts = input.shotLayouts || [];
-  const spatialWorldPositionRefs = spatialWorldRefs(input.spatialMemory);
+  const resolvedShotLayouts = resolveShotLayouts(input);
+  const spatialWorldPositionRefs = spatialWorldRefs(resolveSpatialMemory(input));
   const packsWithMaster = packs.filter((pack) => Boolean(pack.masterScene?.id && pack.masterScene.masterImageRefs.length));
   const derivedViews = packs.flatMap((pack) => pack.derivedViews.map((view) => ({ pack, view })));
   const structuredViews = derivedViews.filter(({ view }) => view.inheritsFromMaster && vectorReady(view.worldPosition) && vectorReady(view.cameraVector) && view.derivationEvidence.length);
-  const layoutWorldRefs = shotLayouts.filter((layout) => vectorReady(layout.subjectPlacement?.worldPosition) && vectorReady(layout.cameraPlacement?.worldPosition));
+  const layoutWorldRefs = resolvedShotLayouts.filter((layout) => vectorReady(layout.subjectPlacement?.worldPosition) && vectorReady(layout.cameraPlacement?.worldPosition));
   const packWorldRefs = packs.flatMap((pack) => [
     ...pack.masterScene.worldAnchors.map((anchor) => `${pack.id}:${anchor.id}`),
     ...pack.masterScene.cameraVectors.filter((camera) => vectorReady(camera.worldPosition) && vectorReady(camera.cameraVector)).map((camera) => `${pack.id}:${camera.id}`),
     ...pack.derivedViews.filter((view) => vectorReady(view.worldPosition) && vectorReady(view.cameraVector)).map((view) => `${pack.id}:${view.id}`),
   ]);
-  const derivationLayouts = shotLayouts.filter((layout) => layout.endFrameDerivation?.derivesFrom === "start_frame");
+  const derivationLayouts = resolvedShotLayouts.filter((layout) => layout.endFrameDerivation?.derivesFrom === "start_frame");
 
   return {
     masterScene: {
@@ -683,10 +743,10 @@ function buildVisualConsistencySupport(input: BuildProjectFactsIntegrationInput)
       ],
     },
     startEndDerivation: {
-      status: supportStatus(derivationLayouts.length > 0, shotLayouts.length > 0),
+      status: supportStatus(derivationLayouts.length > 0, resolvedShotLayouts.length > 0),
       supportedShotIds: derivationLayouts.map((layout) => layout.shotId),
-      blockers: shotLayouts.length ? [] : ["Start-end derivation is missing because Shot Layout is not connected."],
-      warnings: shotLayouts.length && derivationLayouts.length !== shotLayouts.length ? ["Some Shot Layouts do not derive end frame from start_frame."] : [],
+      blockers: resolvedShotLayouts.length ? [] : ["Start-end derivation is missing because Shot Layout is not connected."],
+      warnings: resolvedShotLayouts.length && derivationLayouts.length !== resolvedShotLayouts.length ? ["Some Shot Layouts do not derive end frame from start_frame."] : [],
     },
   };
 }

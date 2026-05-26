@@ -1,5 +1,12 @@
 # Vibe Core Software Architecture
 
+> Historical snapshot notice: this 2026-04-29 architecture draft predates the
+> current Project.vibe-centered MVP plan, Electron packaging path, owned Agent
+> Loop direction, and Lanyi Image2 policy. Keep it for background only. Current
+> worker authority lives in `README.md`,
+> `docs/mvp-integration-development-plan.md`, and
+> `docs/mvp-delivery-technical-debt-plan.md`.
+
 日期：2026-04-29  
 状态：开发架构草案 v0.1  
 目标平台：macOS / Windows  

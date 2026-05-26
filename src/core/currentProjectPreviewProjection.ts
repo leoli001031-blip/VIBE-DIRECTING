@@ -1,4 +1,8 @@
 import type { PreviewQueueItem, PreviewQueueItemKind } from "./previewPlayerQueue";
+import {
+  buildJimengVideoStatusProjection,
+  type JimengVideoStatusProjection,
+} from "./jimengVideoCli";
 
 export const currentProjectPreviewProjectionSchemaVersion = "0.1.0";
 export const currentProjectPreviewProjectionSource = "current_project_runtime_truth" as const;
@@ -10,6 +14,19 @@ export interface CurrentProjectPreviewItemInput {
   imageUrl?: string;
   thumbnailUrl?: string;
   mediaPath?: string;
+  mediaType?: string;
+  sourceReceiptId?: string;
+  providerReceiptId?: string;
+  providerRequestId?: string;
+  outputHash?: string;
+  outputSha256?: string;
+  providerOutputSha256?: string;
+  promptText?: string;
+  promptPath?: string;
+  promptHash?: string;
+  durationSeconds?: number;
+  duration_seconds?: number;
+  duration?: number;
   fileUrl?: string;
   expectedOutputPath?: string;
   status?: string;
@@ -21,6 +38,26 @@ export interface CurrentProjectPreviewItemInput {
   reviewOverlay?: boolean;
   outputExists?: boolean;
   blockers?: string[];
+  videoStatus?: string;
+  generationStatus?: string;
+  submitId?: string;
+  submit_id?: string;
+  queueInfo?: Record<string, unknown>;
+  queue_info?: Record<string, unknown>;
+  queuePosition?: number;
+  queueIndex?: number;
+  queue_idx?: number;
+  queueLength?: number;
+  queue_length?: number;
+  queueStatus?: string;
+  queue_status?: string;
+  outputVideoPath?: string;
+  videoPath?: string;
+  videoUrl?: string;
+  videoUrls?: string[];
+  localMediaPaths?: string[];
+  recoverable?: boolean;
+  timedOut?: boolean;
 }
 
 export interface CurrentProjectPreviewSummaryInput {
@@ -50,6 +87,18 @@ export interface CurrentProjectPreviewPlanClipInput {
   duration_seconds?: number;
   duration?: number;
   status?: string;
+  videoStatus?: string;
+  submitId?: string;
+  submit_id?: string;
+  queueInfo?: Record<string, unknown>;
+  queue_info?: Record<string, unknown>;
+  queuePosition?: number;
+  queueIndex?: number;
+  queue_idx?: number;
+  queueLength?: number;
+  queue_length?: number;
+  queueStatus?: string;
+  queue_status?: string;
   previewQaStatus?: string;
   productionQaStatus?: string;
 }
@@ -66,6 +115,14 @@ export interface CurrentProjectPreviewQueueItem extends PreviewQueueItem {
   source: typeof currentProjectPreviewProjectionSource;
   order: number;
   status: string;
+  sourceReceiptId?: string;
+  providerReceiptId?: string;
+  providerRequestId?: string;
+  outputHash?: string;
+  outputSha256?: string;
+  promptText?: string;
+  promptPath?: string;
+  promptHash?: string;
   previewStatus?: string;
   runtimeTruthStatus?: string;
   previewQaStatus?: string;
@@ -74,6 +131,7 @@ export interface CurrentProjectPreviewQueueItem extends PreviewQueueItem {
   blocked: boolean;
   returned: boolean;
   blockers: string[];
+  videoGeneration: JimengVideoStatusProjection;
 }
 
 export interface CurrentProjectPreviewProjection {
@@ -163,6 +221,14 @@ function statusMatches(value: string | undefined, pattern: RegExp) {
   return pattern.test(String(value || "").toLowerCase());
 }
 
+function statusLooksLikeSelfReport(value: string | undefined) {
+  return statusMatches(value, /self[-_ ]?report|worker[-_ ]?claim|provider[-_ ]?claimed|provider[-_ ]?succeeded|worker[-_ ]?succeeded/);
+}
+
+function statusLooksPreviewEligible(value: string | undefined) {
+  return statusMatches(value, /^(complete_verified|verified|needs_review|returned|returned_with_review_overlay)$/);
+}
+
 function itemMediaPath(item: CurrentProjectPreviewItemInput, clip: CurrentProjectPreviewPlanClipInput | undefined) {
   return stringValue(item.imageUrl)
     ?? stringValue(item.fileUrl)
@@ -176,11 +242,86 @@ function itemLabel(shotId: string | undefined, index: number) {
   return shotId || `Preview ${index + 1}`;
 }
 
-function itemKind(blocked: boolean, mediaPath: string | undefined, clip: CurrentProjectPreviewPlanClipInput | undefined): PreviewQueueItemKind {
+function itemKind(
+  blocked: boolean,
+  mediaPath: string | undefined,
+  item: CurrentProjectPreviewItemInput,
+  clip: CurrentProjectPreviewPlanClipInput | undefined,
+): PreviewQueueItemKind {
   if (blocked || !mediaPath) return "missing_placeholder";
-  const mediaType = String(clip?.mediaType || clip?.type || "").toLowerCase();
+  const mediaType = String(item.mediaType || clip?.mediaType || clip?.type || "").toLowerCase();
   if (mediaType.includes("video")) return "video_clip";
   return "image_hold";
+}
+
+function mediaLooksVideo(path: string | undefined) {
+  return /\.(?:mp4|mov|webm)(?:\?|$)/i.test(path || "");
+}
+
+function itemHasVideoGenerationEvidence(
+  item: CurrentProjectPreviewItemInput,
+  clip: CurrentProjectPreviewPlanClipInput | undefined,
+  mediaPath: string | undefined,
+) {
+  const mediaType = String(item.mediaType || clip?.mediaType || clip?.type || "").toLowerCase();
+  return Boolean(
+    item.videoStatus
+    || item.generationStatus
+    || item.submitId
+    || item.submit_id
+    || clip?.videoStatus
+    || clip?.submitId
+    || clip?.submit_id
+    || item.queueInfo
+    || item.queue_info
+    || clip?.queueInfo
+    || clip?.queue_info
+    || item.queuePosition !== undefined
+    || item.queueIndex !== undefined
+    || item.queue_idx !== undefined
+    || clip?.queuePosition !== undefined
+    || clip?.queueIndex !== undefined
+    || clip?.queue_idx !== undefined
+    || item.outputVideoPath
+    || item.videoPath
+    || item.videoUrl
+    || item.videoUrls?.length
+    || item.localMediaPaths?.length
+    || mediaType.includes("video")
+    || mediaLooksVideo(mediaPath),
+  );
+}
+
+function itemVideoGeneration(
+  item: CurrentProjectPreviewItemInput,
+  clip: CurrentProjectPreviewPlanClipInput | undefined,
+  status: string,
+  mediaPath: string | undefined,
+) {
+  const hasEvidence = itemHasVideoGenerationEvidence(item, clip, mediaPath);
+  return buildJimengVideoStatusProjection({
+    status: hasEvidence ? (item.videoStatus || item.generationStatus || clip?.videoStatus || item.previewStatus || status || clip?.status) : "not_submitted",
+    submitId: item.submitId || item.submit_id || clip?.submitId || clip?.submit_id,
+    queueInfo: item.queueInfo || item.queue_info || clip?.queueInfo || clip?.queue_info,
+    queuePosition: numberValue(item.queuePosition)
+      ?? numberValue(item.queueIndex)
+      ?? numberValue(item.queue_idx)
+      ?? numberValue(clip?.queuePosition)
+      ?? numberValue(clip?.queueIndex)
+      ?? numberValue(clip?.queue_idx),
+    queueLength: numberValue(item.queueLength)
+      ?? numberValue(item.queue_length)
+      ?? numberValue(clip?.queueLength)
+      ?? numberValue(clip?.queue_length),
+    queueStatus: item.queueStatus || item.queue_status || clip?.queueStatus || clip?.queue_status,
+    videoPath: item.videoPath,
+    outputVideoPath: item.outputVideoPath,
+    mediaPath,
+    videoUrls: item.videoUrl ? [item.videoUrl, ...(item.videoUrls || [])] : item.videoUrls,
+    localMediaPaths: item.localMediaPaths,
+    recoverable: item.recoverable,
+    timedOut: item.timedOut,
+  });
 }
 
 function clipList(previewPlan: CurrentProjectPreviewPlanInput | undefined): CurrentProjectPreviewPlanClipInput[] {
@@ -252,14 +393,17 @@ function itemBlocked(item: CurrentProjectPreviewItemInput, status: string, clip:
   return item.blockers?.length
     ? true
     : statusMatches(status, /blocked|missing|failed|unavailable/)
-      || statusMatches(clip?.status, /blocked|missing|failed|unavailable/);
+      || statusMatches(clip?.status, /blocked|missing|failed|unavailable/)
+      || statusLooksLikeSelfReport(status)
+      || statusLooksLikeSelfReport(clip?.status);
 }
 
 function itemReturned(item: CurrentProjectPreviewItemInput, status: string, mediaPath: string | undefined) {
-  if (item.outputExists === true) return true;
-  if (item.outputExists === false) return statusMatches(status, /^returned|ready|preview_ready/);
-  if (item.imageUrl || item.fileUrl || item.thumbnailUrl) return true;
-  return Boolean(mediaPath) && statusMatches(status, /^returned|ready|preview_ready/);
+  if (itemBlocked(item, status, undefined) || statusLooksLikeSelfReport(status)) return false;
+  if (item.outputExists === true) return statusLooksPreviewEligible(status);
+  if (item.outputExists === false) return false;
+  if (item.imageUrl || item.fileUrl || item.thumbnailUrl) return statusLooksPreviewEligible(status);
+  return Boolean(mediaPath) && statusLooksPreviewEligible(status);
 }
 
 export function buildCurrentProjectPreviewProjection(
@@ -278,8 +422,12 @@ export function buildCurrentProjectPreviewProjection(
     const mediaPath = itemMediaPath(item, clip);
     const blocked = itemBlocked(item, status, clip);
     const reviewRequired = itemReviewRequired(item, clip, reviewShots);
-    const durationSeconds = clipDuration(clip);
-    const kind = itemKind(blocked, mediaPath, clip);
+    const durationSeconds = safeDuration(item.durationSeconds)
+      ?? safeDuration(item.duration_seconds)
+      ?? safeDuration(item.duration)
+      ?? clipDuration(clip);
+    const kind = itemKind(blocked, mediaPath, item, clip);
+    const videoGeneration = itemVideoGeneration(item, clip, status, mediaPath);
     const queueItem: CurrentProjectPreviewQueueItem = {
       id: stringValue(item.id) || stringValue(clip?.id) || stringValue(clip?.clipId) || `current_project_preview_${shotId || index + 1}`,
       kind,
@@ -291,6 +439,14 @@ export function buildCurrentProjectPreviewProjection(
       source: currentProjectPreviewProjectionSource,
       order: numberValue(item.order) ?? numberValue(clip?.order) ?? index + 1,
       status,
+      sourceReceiptId: stringValue(item.sourceReceiptId) || stringValue(item.providerReceiptId) || stringValue(item.providerRequestId),
+      providerReceiptId: stringValue(item.providerReceiptId),
+      providerRequestId: stringValue(item.providerRequestId),
+      outputHash: stringValue(item.outputHash) || stringValue(item.outputSha256) || stringValue(item.providerOutputSha256),
+      outputSha256: stringValue(item.outputSha256) || stringValue(item.providerOutputSha256),
+      promptText: stringValue(item.promptText),
+      promptPath: stringValue(item.promptPath),
+      promptHash: stringValue(item.promptHash),
       previewStatus: item.previewStatus || clip?.status,
       runtimeTruthStatus: item.runtimeTruthStatus,
       previewQaStatus: item.previewQaStatus || clip?.previewQaStatus,
@@ -299,6 +455,7 @@ export function buildCurrentProjectPreviewProjection(
       blocked,
       returned: itemReturned(item, status, mediaPath),
       blockers: item.blockers || [],
+      videoGeneration,
     };
     startSeconds += durationSeconds;
     return queueItem;

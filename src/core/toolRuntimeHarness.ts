@@ -54,15 +54,18 @@ export const toolRuntimeHarnessSourceLayers: ToolRuntimeHarnessSourceLayer[] = [
 
 export const toolRuntimeHarnessHardLocks: ToolRuntimeHarnessHardLocks = {
   dryRunOnly: true,
-  diagnosticsOnly: true,
-  noInstall: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
   noCredentialRead: true,
   noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
+  diagnosticsOnly: true,
+  noInstall: true,
   noSystemSettingsMutation: true,
   arbitraryShellExecutionBlocked: true,
   sidecarDaemonDisabled: true,
-  providerSubmissionForbidden: true,
-  liveSubmitAllowed: false,
   platformPathAbstractionRequired: true,
 };
 
@@ -339,15 +342,15 @@ export function buildToolRuntimeHarnessState(input: BuildToolRuntimeHarnessInput
   const pythonTool = findTool(tools, ["python", "python3"]);
   const checks: ToolRuntimeHarnessCheckRow[] = [
     detectedCheck({
-      checkId: "codex-cli",
+      checkId: "agent-cli",
       category: "agent_cli",
-      label: "Codex CLI",
-      toolIds: ["codex"],
+      label: "Agent CLI",
+      toolIds: ["agent"],
       tools,
       requiredFor: ["agent task sidecar", "adapter contract diagnostics"],
       missingIsBlocker: true,
-      sourceRefs: ["adapterContracts:agentAdapters:codex-cli-agent"],
-      notes: ["Codex may be the default agent adapter, but 8.8 does not start a Codex session."],
+      sourceRefs: ["adapterContracts:agentAdapters:agent-cli"],
+      notes: ["Agent may be the default agent adapter, but 8.8 does not start a agent session."],
     }),
     detectedCheck({
       checkId: "node-runtime",

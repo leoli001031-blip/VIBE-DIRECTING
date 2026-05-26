@@ -49,7 +49,7 @@
         "phase_26_agent_cli_mock_runner",
         "phase_27_export_worker_mvp",
         "phase_28_voice_audio_settings_ui",
-        "phase_29_codex_cli_adapter_spike",
+        "phase_29_agent_cli_adapter_spike",
         "phase_30_provider_enablement_gate",
         "phase_31_provider_execution_permission_gate",
         "phase_32_action_time_confirmation_receipt",
@@ -60,7 +60,7 @@
         "phase_37_visual_consistency_contract",
         "phase_38_full_task_subagent_packet_planner",
         "phase_39_knowledge_pack_user_management",
-        "phase_40_codex_worker_runtime_gate",
+        "phase_40_worker_runtime_gate",
         "phase_41_provider_closed_loop_shell",
         "phase_42_export_desktop_beta_acceptance"
       ]
@@ -168,7 +168,7 @@
             "projectFactsIntegration",
             "subagentEnvelopeValidator",
             "agentCliMockRunner",
-            "codexCliAdapter",
+            "agentCliAdapter",
             "exportWorker",
             "voiceAudioSettings",
             "providerConfirmationTokenPlaceholder",
@@ -184,7 +184,7 @@
             "visualConsistencyContract",
             "subagentPacketPlanner",
             "knowledgePackUserManagement",
-            "codexWorkerRuntimeGate",
+            "workerRuntimeGate",
             "providerClosedLoopShell",
             "betaAcceptance"
           ]
@@ -238,12 +238,12 @@
         "phase26": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["runnerKind", "purpose", "canSpawnCodex", "canResumeCodex", "canSubmitProvider"],
+          "required": ["runnerKind", "purpose", "canSpawnAgent", "canResumeAgent", "canSubmitProvider"],
           "properties": {
             "runnerKind": { "type": "string", "const": "mock_noop" },
             "purpose": { "type": "string", "const": "prove_replaceable_runner_contract" },
-            "canSpawnCodex": { "type": "boolean", "const": false },
-            "canResumeCodex": { "type": "boolean", "const": false },
+            "canSpawnAgent": { "type": "boolean", "const": false },
+            "canResumeAgent": { "type": "boolean", "const": false },
             "canSubmitProvider": { "type": "boolean", "const": false }
           }
         },
@@ -252,7 +252,7 @@
           "additionalProperties": false,
           "required": ["runnerKind", "purpose", "requiresPhase26ReplacementProof", "canSubmitProvider"],
           "properties": {
-            "runnerKind": { "type": "string", "const": "codex_cli_adapter_spike" },
+            "runnerKind": { "type": "string", "const": "agent_cli_adapter_spike" },
             "purpose": { "type": "string", "const": "connect_spawn_resume_after_mock_contract_is_proven" },
             "requiresPhase26ReplacementProof": { "type": "boolean", "const": true },
             "canSubmitProvider": { "type": "boolean", "const": false }
@@ -355,9 +355,9 @@
         "finalPhaseNumber",
         "noAdditionalPhasesPlanned",
         "betaAcceptanceOwnsClosure",
-        "codexWorkerRuntimeDefaultGated",
+        "workerRuntimeDefaultGated",
         "providerClosedLoopDefaultGated",
-        "canSpawnCodex",
+        "canSpawnAgent",
         "canSubmitProvider",
         "providerSubmitAllowed",
         "liveSubmitAllowed",
@@ -369,9 +369,9 @@
         "finalPhaseNumber": { "type": "integer", "const": 42 },
         "noAdditionalPhasesPlanned": { "type": "boolean", "const": true },
         "betaAcceptanceOwnsClosure": { "type": "boolean", "const": true },
-        "codexWorkerRuntimeDefaultGated": { "type": "boolean", "const": true },
+        "workerRuntimeDefaultGated": { "type": "boolean", "const": true },
         "providerClosedLoopDefaultGated": { "type": "boolean", "const": true },
-        "canSpawnCodex": { "type": "boolean", "const": false },
+        "canSpawnAgent": { "type": "boolean", "const": false },
         "canSubmitProvider": { "type": "boolean", "const": false },
         "providerSubmitAllowed": { "type": "integer", "const": 0 },
         "liveSubmitAllowed": { "type": "boolean", "const": false },

@@ -1,0 +1,133 @@
+{
+  "kind": "project_vibe_document",
+  "modelVersion": "project_vibe_minimal_v1",
+  "manifest": {
+    "projectId": "agent_loop_minimal",
+    "title": "Agent Loop Minimal Fixture",
+    "version": "0.1.0",
+    "createdAt": "2026-05-15T00:00:00.000Z",
+    "updatedAt": "2026-05-15T00:00:00.000Z",
+    "sourceOfTruth": "project_vibe",
+    "portableRoot": "project_root",
+    "runtimeFixtureAuthority": false
+  },
+  "storyFlow": {
+    "id": "story_flow_current",
+    "updatedAt": "2026-05-15T00:00:00.000Z",
+    "sourceOfTruth": "project_vibe",
+    "sections": [
+      {
+        "id": "opening",
+        "title": "Opening",
+        "summary": "Mira finds the old station awake before sunrise.",
+        "sequenceIndex": 0,
+        "shotIds": ["shot_001"]
+      },
+      {
+        "id": "turn",
+        "title": "Signal Turn",
+        "summary": "The platform lights answer her radio signal.",
+        "sequenceIndex": 1,
+        "shotIds": ["shot_002"]
+      }
+    ],
+    "shotOrder": ["shot_001", "shot_002"]
+  },
+  "visualMemory": {
+    "id": "visual_memory_current",
+    "updatedAt": "2026-05-15T00:00:00.000Z",
+    "sourceOfTruth": "project_vibe",
+    "referencePolicy": {
+      "temporaryOutputsMayBecomeAuthority": false,
+      "runtimeFixturesMayBecomeAuthority": false,
+      "lockedAssetsRequiredForGeneration": true
+    },
+    "entries": [
+      {
+        "id": "vm_char_mira",
+        "assetId": "asset_char_mira",
+        "kind": "character",
+        "label": "Mira",
+        "status": "locked",
+        "textConstraints": ["short black hair", "green raincoat", "calm but alert"],
+        "usedByShotIds": ["shot_001", "shot_002"],
+        "canUseAsFutureReference": true,
+        "sourceRefs": ["project.vibe#assets/asset_char_mira"]
+      },
+      {
+        "id": "vm_scene_station",
+        "assetId": "asset_scene_station",
+        "kind": "scene",
+        "label": "Old Station",
+        "status": "locked",
+        "textConstraints": ["empty platform", "wet concrete", "early blue light"],
+        "usedByShotIds": ["shot_001", "shot_002"],
+        "canUseAsFutureReference": true,
+        "sourceRefs": ["project.vibe#assets/asset_scene_station"]
+      }
+    ]
+  },
+  "shots": [
+    {
+      "id": "shot_001",
+      "sectionId": "opening",
+      "title": "Mira Enters Platform",
+      "intent": "Establish the protagonist and the abandoned platform.",
+      "sceneAssetIds": ["asset_scene_station"],
+      "characterAssetIds": ["asset_char_mira"],
+      "propAssetIds": [],
+      "durationSeconds": 4,
+      "status": "planned",
+      "sourceRefs": ["project.vibe#storyFlow", "project.vibe#visualMemory"]
+    },
+    {
+      "id": "shot_002",
+      "sectionId": "turn",
+      "title": "Radio Signal Answered",
+      "intent": "Show the station responding to Mira's radio.",
+      "sceneAssetIds": ["asset_scene_station"],
+      "characterAssetIds": ["asset_char_mira"],
+      "propAssetIds": [],
+      "durationSeconds": 5,
+      "status": "planned",
+      "sourceRefs": ["project.vibe#storyFlow", "project.vibe#visualMemory"]
+    }
+  ],
+  "assets": [
+    {
+      "id": "asset_char_mira",
+      "kind": "character",
+      "label": "Mira",
+      "status": "locked",
+      "path": "assets/locked/char_mira.md",
+      "textConstraints": ["short black hair", "green raincoat", "calm but alert"],
+      "usedByShotIds": ["shot_001", "shot_002"],
+      "sourceRefs": ["project.vibe#visualMemory/vm_char_mira"],
+      "lockedBy": "user"
+    },
+    {
+      "id": "asset_scene_station",
+      "kind": "scene",
+      "label": "Old Station",
+      "status": "locked",
+      "path": "assets/locked/scene_station.md",
+      "textConstraints": ["empty platform", "wet concrete", "early blue light"],
+      "usedByShotIds": ["shot_001", "shot_002"],
+      "sourceRefs": ["project.vibe#visualMemory/vm_scene_station"],
+      "lockedBy": "user"
+    }
+  ],
+  "runs": [],
+  "sourceIndex": {
+    "id": "source_index_current",
+    "updatedAt": "2026-05-15T00:00:00.000Z",
+    "sourceOfTruth": "project_vibe",
+    "manifestRef": "project.vibe#manifest",
+    "storyFlowRef": "project.vibe#storyFlow",
+    "visualMemoryRef": "project.vibe#visualMemory",
+    "shotRefs": ["project.vibe#shots/shot_001", "project.vibe#shots/shot_002"],
+    "assetRefs": ["project.vibe#assets/asset_char_mira", "project.vibe#assets/asset_scene_station"],
+    "runReceiptRefs": []
+  }
+}
+

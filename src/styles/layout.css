@@ -1,0 +1,354 @@
+/* Layout — 暖米咖 AI 工作台布局 */
+
+#root {
+  min-height: 100vh;
+  background: var(--warm-bg);
+}
+
+/* Identity Layer */
+.identity-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+}
+
+.identity-signature {
+  height: 22px;
+  width: auto;
+  opacity: 0.7;
+}
+
+.identity-name {
+  font-family: var(--font-system);
+  font-size: 13px;
+  color: var(--warm-muted);
+  letter-spacing: 0.03em;
+}
+
+.identity-separator {
+  color: var(--warm-line);
+  margin: 0 2px;
+}
+
+/* Footer signature */
+.footer-signature {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-xl) 0;
+  opacity: 0.2;
+}
+
+.footer-signature img {
+  height: 28px;
+  width: auto;
+}
+
+/* Workspace */
+.workspace {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--space-md);
+}
+
+/* Tabs / Navigation */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--warm-paper);
+  border: 1px solid var(--warm-line);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-md);
+}
+
+.tabs button {
+  font-family: var(--font-system);
+  font-size: 13px;
+  color: var(--warm-muted);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.tabs button:hover {
+  color: var(--warm-ink);
+  background: var(--warm-surface-soft);
+}
+
+.tabs button.active {
+  color: var(--warm-ink);
+  background: var(--warm-primary-soft);
+  font-weight: 600;
+}
+
+/* Machine Panel → Work Order card */
+.machine-panel {
+  background: var(--warm-paper);
+  border: 1px solid var(--warm-line);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md) var(--space-lg);
+  margin-bottom: var(--space-md);
+}
+
+.audit-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--warm-ink);
+  margin-bottom: var(--space-sm);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--warm-line);
+}
+
+/* Field grid */
+.field-grid {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: var(--space-xs) var(--space-sm);
+  font-size: 13px;
+}
+
+.field-grid.compact {
+  grid-template-columns: 170px 1fr;
+  font-size: 12px;
+}
+
+.field-grid label {
+  color: var(--warm-muted);
+  font-weight: 500;
+}
+
+.field-grid span {
+  color: var(--warm-ink);
+}
+
+/* Summary grid */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+/* Row head */
+.row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-sm);
+}
+
+/* Settings list */
+.settings-list {
+  margin-bottom: var(--space-md);
+}
+
+.settings-list > div {
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--warm-line);
+}
+
+.settings-list > div:last-child {
+  border-bottom: none;
+}
+
+.settings-list strong {
+  display: block;
+  font-size: 13px;
+  color: var(--warm-ink);
+  margin-bottom: 2px;
+}
+
+.settings-list small {
+  display: block;
+  font-size: 12px;
+  color: var(--warm-muted);
+}
+
+.settings-group-title {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--warm-ink);
+  margin: var(--space-md) 0 var(--space-sm);
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--warm-line);
+}
+
+.settings-readonly-note {
+  color: var(--warm-muted);
+  font-size: 12px;
+  margin-bottom: var(--space-sm);
+}
+
+.settings-readonly-note strong {
+  color: var(--warm-ink);
+}
+
+.web-search-settings-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.web-search-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: var(--space-sm);
+}
+
+.web-search-quick-actions button {
+  min-height: 32px;
+  border: 1px solid var(--warm-line);
+  border-radius: 8px;
+  background: rgba(255, 252, 246, 0.78);
+  color: var(--warm-ink);
+  padding: 0 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.web-search-quick-actions button.active {
+  border-color: rgba(122, 85, 60, 0.42);
+  background: rgba(180, 130, 72, 0.14);
+}
+
+.web-search-settings-form label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.web-search-settings-form label span {
+  color: var(--warm-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.web-search-settings-form input,
+.web-search-settings-form select {
+  min-width: 0;
+  border: 1px solid var(--warm-line);
+  border-radius: 7px;
+  background: rgba(255, 252, 246, 0.72);
+  color: var(--warm-ink);
+  padding: 8px;
+}
+
+.web-search-settings-form input[type="checkbox"] {
+  justify-self: start;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+}
+
+.web-search-endpoint-field {
+  grid-column: 1 / -1;
+}
+
+/* Desktop runtime shell */
+.desktop-runtime-shell {
+  background: var(--warm-surface-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.desktop-runtime-locks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+.desktop-runtime-locks span {
+  font-size: 11px;
+  color: var(--warm-muted);
+  background: var(--warm-paper);
+  border: 1px solid var(--warm-line);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.desktop-runtime-title {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* Tabs in workspace */
+.workspace > .tabs {
+  margin-top: var(--space-md);
+}
+
+/* Diagnostics layout */
+.diagnostics-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* Collapsible diagnostic panels */
+.diagnostic-collapsible {
+  background: var(--warm-paper);
+  border: 1px solid var(--warm-line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.diagnostic-collapsible[open] {
+  border-color: var(--warm-primary-soft);
+}
+
+.diagnostic-collapsible > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg);
+  font-family: var(--font-system);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warm-muted);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  transition: color 0.15s;
+}
+
+.diagnostic-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.diagnostic-collapsible > summary::before {
+  content: "▸";
+  display: inline-block;
+  font-size: 10px;
+  color: var(--warm-muted);
+  transition: transform 0.15s;
+  width: 12px;
+}
+
+.diagnostic-collapsible[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.diagnostic-collapsible > summary:hover {
+  color: var(--warm-ink);
+}
+
+.diagnostic-collapsible .machine-panel {
+  border: none;
+  border-radius: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  border-top: 1px solid var(--warm-line);
+}

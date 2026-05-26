@@ -24,6 +24,8 @@ const cameraMovementPattern = /\b(push(?:\s|-)?in|pull(?:\s|-)?back|dolly|truck|
 const subjectMotionPattern = /\b(cross(?:es)?\s+axis|reverse(?:s)?\s+screen\s+direction|turn(?:s)?\s+around|walk(?:s)?\s+away|run(?:s)?\s+across|changes?\s+blocking|new\s+blocking)\b/i;
 const frontDoorPattern = /\bfront\s+door\b/i;
 const garagePattern = /\bgarage(?:\s+door)?\b/i;
+const actionChainMarkerPattern = /->|>|→|then|after that|before that|while|同时|然后|随后|接着|并且|再|又/gi;
+const primaryActionPattern = /\b(open|close|enter|exit|walk|run|turn|grab|pick|hand|pass|move|approach|pull|push|hide|reveal|step|stand|sit)\b|推开|入画|后退|伸|拿|递|接过|藏|转|走|跑|打开|关上|起身|坐下|穿过|捡起|拉开|放下|靠近|离开/gi;
 
 function normalizeText(value: string): string {
   return value.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
@@ -40,6 +42,7 @@ function promptText(plan: ShotPromptPlan): string {
     ...plan.mustAvoid,
     ...plan.styleDirectives,
     ...plan.adapterWarnings,
+    ...plan.blockers,
   ].join(" "));
 }
 
@@ -81,6 +84,7 @@ function resolutionFor(code: ConflictCode): PromptConflictCheckerConflict["requi
   return {
     updateShotSpec:
       code === "story_flow_stale_function" ||
+      code === "one_shot_complex_action_chain" ||
       code === "garage_front_door_conflict" ||
       code === "visual_memory_locked_identity_conflict" ||
       code === "visual_memory_locked_outfit_conflict" ||
@@ -90,6 +94,7 @@ function resolutionFor(code: ConflictCode): PromptConflictCheckerConflict["requi
     updateShotLayout:
       code === "fixed_camera_movement_conflict" ||
       code === "shot_layout_motion_conflict" ||
+      code === "one_shot_complex_action_chain" ||
       code === "garage_front_door_conflict",
     updateShotPromptPlan: true,
     recompileRequired: true,
@@ -173,6 +178,18 @@ function hasStyleConflict(lockedText: string, text: string): boolean {
   return lockedStyles.length > 0 && promptStyles.some((token) => !lockedStyles.includes(token));
 }
 
+function hasComplexActionChain(plan: ShotPromptPlan, text: string): boolean {
+  const isVideoPrompt = plan.providerSlot.startsWith("video.") || plan.promptKind === "video_parked";
+  const explicitBlocker = plan.blockers.some((blocker) => /complex_action_requires_split|too complex for one direct video prompt|split.*before video/i.test(blocker));
+  if (explicitBlocker) return true;
+  if (!isVideoPrompt) return false;
+
+  const chainMarkers = text.match(actionChainMarkerPattern)?.length || 0;
+  const primaryActions = text.match(primaryActionPattern)?.length || 0;
+  const mentionsActionBeats = /action beats|动作节拍|main visible action|director action qa|primary visible action/i.test(text);
+  return mentionsActionBeats && (chainMarkers >= 3 || primaryActions > 3);
+}
+
 function buildConflicts(plan: ShotPromptPlan, report: PromptConflictReport | undefined, shot: ShotRecord | undefined, assets: AssetRecord[]): PromptConflictCheckerConflict[] {
   const text = promptText(plan);
   const shotText = structuredShotText(shot);
@@ -240,6 +257,19 @@ function buildConflicts(plan: ShotPromptPlan, report: PromptConflictReport | und
         structuredFact: "Shot Layout fixes camera/blocking and screen direction.",
         promptEvidence: "Prompt asks for axis, screen-direction, or blocking motion drift.",
         detail: "Prompt motion conflicts with Shot Layout spatial continuity facts.",
+        sourceRefs: refs,
+      }),
+    );
+  }
+
+  if (hasComplexActionChain(plan, text)) {
+    conflicts.push(
+      makeConflict({
+        code: "one_shot_complex_action_chain",
+        target: shot?.id || plan.promptPlanId,
+        structuredFact: "One shot should carry one primary action with trigger and micro-reaction.",
+        promptEvidence: "Prompt contains a complex chained action sequence or an action-QA split blocker.",
+        detail: "Complex action chain must be split or reduced before it can become a direct video prompt.",
         sourceRefs: refs,
       }),
     );
@@ -402,9 +432,14 @@ export function buildPromptConflictCheckerState(input: BuildPromptConflictChecke
     },
     hardLocks: {
       dryRunOnly: true,
-      diagnosticsOnly: true,
-      providerSubmissionForbidden: true,
       liveSubmitAllowed: false,
+      providerSubmissionForbidden: true,
+      noFileMutation: true,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      noShellExecution: true,
+      noWorkerSpawn: true,
+      diagnosticsOnly: true,
       agentPromiseCannotResolveConflict: true,
       requiresStructuredPlanUpdate: true,
       recompileRequiredAfterConflict: true,

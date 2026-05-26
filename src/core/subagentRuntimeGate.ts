@@ -1,3 +1,5 @@
+import { PROVIDER_SUBMIT_ATTEMPT_BLOCKED } from "./statusConstants";
+import { hardLockDrift } from "./collectionUtils";
 import { validateSubagentTaskEnvelope } from "./envelopeValidator";
 import type {
   ProjectFactsIntegrationHardLocks,
@@ -9,7 +11,7 @@ import type {
   SubagentWorkerRuntimePlan,
   SubagentWorkerRuntimeSlot,
 } from "./subagentWorkerRuntime";
-import type { SubagentTaskEnvelope } from "./types";
+import type { BaseHardLocks, SubagentTaskEnvelope } from "./types";
 
 export const subagentRuntimeGateSchemaVersion = "0.1.0";
 export const subagentRuntimeGatePhase = "phase_24_subagent_runtime_gate";
@@ -22,18 +24,12 @@ export type SubagentRuntimeGateSubjectSource =
   | "worker_runtime_plan_slot"
   | "missing";
 
-export interface SubagentRuntimeGateHardLocks {
+export interface SubagentRuntimeGateHardLocks extends BaseHardLocks {
   noFreeTextWorker: true;
   validatedEnvelopeRequired: true;
   structuredResultRequired: true;
   noSpawnNow: true;
-  noShellExecution: true;
   noProviderSubmit: true;
-  providerSubmissionForbidden: true;
-  liveSubmitAllowed: false;
-  noCredentialRead: true;
-  noCredentialWrite: true;
-  noFileMutation: true;
   projectFactsEvidenceRequired: true;
   workerRuntimePlanEvidenceRequired: true;
   runtimeStateSourceOfTruthForbidden: true;
@@ -141,17 +137,19 @@ export interface SubagentRuntimeGateReceipt {
 }
 
 export const subagentRuntimeGateHardLocks: SubagentRuntimeGateHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   noFreeTextWorker: true,
   validatedEnvelopeRequired: true,
   structuredResultRequired: true,
   noSpawnNow: true,
-  noShellExecution: true,
   noProviderSubmit: true,
-  providerSubmissionForbidden: true,
-  liveSubmitAllowed: false,
-  noCredentialRead: true,
-  noCredentialWrite: true,
-  noFileMutation: true,
   projectFactsEvidenceRequired: true,
   workerRuntimePlanEvidenceRequired: true,
   runtimeStateSourceOfTruthForbidden: true,
@@ -161,11 +159,15 @@ const defaultGeneratedAt = "1970-01-01T00:00:00.000Z";
 
 const projectFactsHardLockExpectations: ProjectFactsIntegrationHardLocks = {
   dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
   noFileMutation: true,
-  noDirectoryCreate: true,
-  noProviderSubmit: true,
   noCredentialRead: true,
   noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
+  noDirectoryCreate: true,
+  noProviderSubmit: true,
   noImageGeneration: true,
   noVideoGeneration: true,
   noTextToVideo: true,
@@ -178,20 +180,22 @@ const projectFactsHardLockExpectations: ProjectFactsIntegrationHardLocks = {
 };
 
 const workerRuntimeHardLockExpectations: SubagentWorkerRuntimeHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   noFreeTextTask: true,
   validatedEnvelopeRequired: true,
   structuredResultRequired: true,
   noSpawnWorkerNow: true,
   noSubprocess: true,
-  noShellExecution: true,
   noProviderExecution: true,
-  noCredentialRead: true,
-  noCredentialWrite: true,
-  noFileMutation: true,
   noProjectStoreWrite: true,
   noUnscopedRead: true,
-  providerSubmissionForbidden: true,
-  liveSubmitAllowed: false,
 };
 
 function uniqueSorted(values: string[]): string[] {
@@ -200,16 +204,6 @@ function uniqueSorted(values: string[]): string[] {
 
 function safeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, "_");
-}
-
-function hardLockDrift<T extends object>(actual: T | undefined, expected: T, prefix: string): string[] {
-  if (!actual) return [`${prefix}_hard_locks_missing`];
-  const actualRecord = actual as Record<string, boolean>;
-  const expectedRecord = expected as Record<string, boolean>;
-
-  return Object.entries(expectedRecord).flatMap(([key, expectedValue]) =>
-    actualRecord[key] === expectedValue ? [] : [`${prefix}_hard_lock_drift:${key}`],
-  );
 }
 
 function projectFactBlockers(state: ProjectFactsIntegrationState): string[] {
@@ -503,7 +497,7 @@ export function buildSubagentRuntimeGateReceipt(input: SubagentRuntimeGateInput 
   const workerRuntime = evaluateWorkerRuntime(input.workerRuntimePlanEvidence);
   const subject = evaluateSubject(input);
   const providerSubmissionAttempted = Boolean(input.providerSubmissionAttempted);
-  const providerBlockers = providerSubmissionAttempted ? ["provider_submit_attempt_blocked"] : [];
+  const providerBlockers = providerSubmissionAttempted ? [PROVIDER_SUBMIT_ATTEMPT_BLOCKED] : [];
   const blockedReasons = uniqueSorted([
     ...projectFacts.blockers,
     ...workerRuntime.blockers,
@@ -561,4 +555,11 @@ export function buildSubagentRuntimeGateReceipt(input: SubagentRuntimeGateInput 
       "PhaseRoadmapRuntime can consume roadmapEvidence as typed evidence for phase_24_subagent_runtime_gate.",
     ],
   };
+}
+
+export function linkReceiptToEnvelope(
+  envelope: SubagentTaskEnvelope,
+  receiptId: string,
+): SubagentTaskEnvelope {
+  return { ...envelope, receiptRef: receiptId };
 }

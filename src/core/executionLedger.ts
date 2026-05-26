@@ -1,5 +1,6 @@
 import type { ManifestMatchReport } from "./manifestMatcher";
 import type {
+  BaseHardLocks,
   GenerationHarnessState,
   ImageTaskPlan,
   ProviderSlot,
@@ -74,24 +75,17 @@ export interface ExecutionLedgerEntry {
   ledgerRecordOnly: true;
 }
 
-export interface ExecutionLedgerHardLocks {
+export interface ExecutionLedgerHardLocks extends BaseHardLocks {
   defaultLocked: true;
   stateOnly: true;
   appendOnly: true;
   ledgerWriteAllowed: false;
   actualExecutionAllowed: false;
   canSpawnWorker: false;
-  noWorkerSpawn: true;
   noSubprocess: true;
-  noShellExecution: true;
-  providerSubmissionForbidden: true;
   canSubmitProvider: false;
   providerSubmitAllowed: 0;
-  liveSubmitAllowed: false;
   credentialAccessAllowed: false;
-  noCredentialRead: true;
-  noCredentialWrite: true;
-  noFileMutation: true;
   outsideSandboxWriteForbidden: true;
 }
 
@@ -158,23 +152,24 @@ export interface BuildExecutionLedgerInput {
 }
 
 export const executionLedgerHardLocks: ExecutionLedgerHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   defaultLocked: true,
   stateOnly: true,
   appendOnly: true,
   ledgerWriteAllowed: false,
   actualExecutionAllowed: false,
   canSpawnWorker: false,
-  noWorkerSpawn: true,
   noSubprocess: true,
-  noShellExecution: true,
-  providerSubmissionForbidden: true,
   canSubmitProvider: false,
   providerSubmitAllowed: 0,
-  liveSubmitAllowed: false,
   credentialAccessAllowed: false,
-  noCredentialRead: true,
-  noCredentialWrite: true,
-  noFileMutation: true,
   outsideSandboxWriteForbidden: true,
 };
 
@@ -309,11 +304,11 @@ function manifestFor(taskPlan: ImageTaskPlan, reports: ManifestMatchReport[] = [
 }
 
 function generationJobFor(taskPlan: ImageTaskPlan, generationHarness?: GenerationHarnessState) {
-  return generationHarness?.jobs.find((job) => job.taskPlanId === taskPlan.taskPlanId || job.jobId === taskPlan.jobId);
+  return generationHarness?.jobs?.find((job) => job.taskPlanId === taskPlan.taskPlanId || job.jobId === taskPlan.jobId);
 }
 
 function qaItemFor(taskPlan: ImageTaskPlan, qaHarness?: QaHarnessState) {
-  return qaHarness?.items.find(
+  return qaHarness?.items?.find(
     (item) => item.taskPlanId === taskPlan.taskPlanId || item.jobId === taskPlan.jobId || item.shotId === taskPlan.shotId,
   );
 }

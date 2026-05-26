@@ -1,5 +1,11 @@
 # Core Development Sequence
 
+> Historical sequence notice: this file records the earlier Vibe Core phase
+> sequence. It is useful context for why runtime truth and Project.vibe matter,
+> but it is not the active MVP worker plan. Use
+> `docs/mvp-integration-development-plan.md` and
+> `docs/mvp-delivery-technical-debt-plan.md` for current execution.
+
 日期：2026-04-29
 
 这份文件用于约束 Vibe Core 的连续开发顺序。核心原则是：先把项目事实源、任务合同、文件监听、知识注入和门禁做硬，再做 UI 抛光和真实模型调用。

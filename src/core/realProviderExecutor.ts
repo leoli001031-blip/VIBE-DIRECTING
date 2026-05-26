@@ -2,7 +2,7 @@ import type { ExecutionLedgerOutputSandbox, ExecutionLedgerState } from "./execu
 import type { RealExecutionGateState } from "./realExecutionGate";
 import type { RealProviderPilotOutputRole, RealProviderPilotState } from "./realProviderPilot";
 import type { ProviderExecutionHandoffState } from "./providerExecutionHandoff";
-import type { Image2AdapterRequest, ImageTaskPlan, ProviderSlot, RequiredMode } from "./types";
+import type { BaseHardLocks, Image2AdapterRequest, ImageTaskPlan, ProviderSlot, RequiredMode } from "./types";
 
 export const realProviderExecutorSchemaVersion = "0.1.0";
 
@@ -14,7 +14,7 @@ export type RealProviderExecutorOneShotStatus =
   | "blocked"
   | "not_one_shot";
 
-export interface RealProviderExecutorHardLocks {
+export interface RealProviderExecutorHardLocks extends BaseHardLocks {
   defaultLocked: true;
   executorEnabled: false;
   actualExecutionAllowed: false;
@@ -22,20 +22,15 @@ export interface RealProviderExecutorHardLocks {
   canSubmitProvider: false;
   providerSubmitAllowed: 0;
   providerSubmitAllowedBoolean: false;
-  liveSubmitAllowed: false;
   credentialAccessAllowed: false;
   credentialReadAllowed: false;
   credentialWriteAllowed: false;
   canSpawnWorker: false;
-  noWorkerSpawn: true;
   noSubprocess: true;
-  noShellExecution: true;
-  noFileMutation: true;
   canMutateFiles: false;
   automaticRetryAllowed: false;
   maxConcurrency: 1;
   maxAutoRetries: 0;
-  dryRunOnly: true;
   manualSubmitRequired: true;
   liveSubmitForbidden: true;
   requestPreviewOnly: true;
@@ -269,6 +264,14 @@ export interface BuildRealProviderExecutorStateInput {
 }
 
 export const realProviderExecutorHardLocks: RealProviderExecutorHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   defaultLocked: true,
   executorEnabled: false,
   actualExecutionAllowed: false,
@@ -276,20 +279,15 @@ export const realProviderExecutorHardLocks: RealProviderExecutorHardLocks = {
   canSubmitProvider: false,
   providerSubmitAllowed: 0,
   providerSubmitAllowedBoolean: false,
-  liveSubmitAllowed: false,
   credentialAccessAllowed: false,
   credentialReadAllowed: false,
   credentialWriteAllowed: false,
   canSpawnWorker: false,
-  noWorkerSpawn: true,
   noSubprocess: true,
-  noShellExecution: true,
-  noFileMutation: true,
   canMutateFiles: false,
   automaticRetryAllowed: false,
   maxConcurrency: 1,
   maxAutoRetries: 0,
-  dryRunOnly: true,
   manualSubmitRequired: true,
   liveSubmitForbidden: true,
   requestPreviewOnly: true,

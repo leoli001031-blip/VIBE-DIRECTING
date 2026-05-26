@@ -5,7 +5,7 @@ import type {
   ExecutionLedgerStatus,
   ExecutionLedgerTaskView,
 } from "./executionLedger";
-import type { GenerationHarnessState, ImageTaskPlan, ProviderSlot, QaHarnessState, RequiredMode } from "./types";
+import type { BaseHardLocks, GenerationHarnessState, ImageTaskPlan, ProviderSlot, QaHarnessState, RequiredMode } from "./types";
 import type { LocalOrchestratorState } from "./localOrchestrator";
 import type { ProviderExecutionHandoffState } from "./providerExecutionHandoff";
 
@@ -68,24 +68,17 @@ export interface RealExecutionGateItem {
   noFileMutation: true;
 }
 
-export interface RealExecutionGateHardLocks {
+export interface RealExecutionGateHardLocks extends BaseHardLocks {
   defaultLocked: true;
   scopedRealTestReviewOnly: true;
   actualExecutionAllowed: false;
   canExecute: false;
   canSpawnWorker: false;
-  noWorkerSpawn: true;
   noSubprocess: true;
-  noShellExecution: true;
-  providerSubmissionForbidden: true;
   noProviderSubmit: true;
   canSubmitProvider: false;
   providerSubmitAllowed: 0;
-  liveSubmitAllowed: false;
   credentialAccessAllowed: false;
-  noCredentialRead: true;
-  noCredentialWrite: true;
-  noFileMutation: true;
   selectedScopeRequired: true;
   validatedEnvelopeRequired: true;
   outputSandboxRequired: true;
@@ -161,23 +154,24 @@ export interface BuildRealExecutionGateInput {
 }
 
 export const realExecutionGateHardLocks: RealExecutionGateHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   defaultLocked: true,
   scopedRealTestReviewOnly: true,
   actualExecutionAllowed: false,
   canExecute: false,
   canSpawnWorker: false,
-  noWorkerSpawn: true,
   noSubprocess: true,
-  noShellExecution: true,
-  providerSubmissionForbidden: true,
   noProviderSubmit: true,
   canSubmitProvider: false,
   providerSubmitAllowed: 0,
-  liveSubmitAllowed: false,
   credentialAccessAllowed: false,
-  noCredentialRead: true,
-  noCredentialWrite: true,
-  noFileMutation: true,
   selectedScopeRequired: true,
   validatedEnvelopeRequired: true,
   outputSandboxRequired: true,
@@ -380,7 +374,7 @@ function providerRoutesClosed(handoff?: ProviderExecutionHandoffState): boolean 
 
 function localWorkerRoutesClosed(localOrchestrator?: LocalOrchestratorState): boolean {
   if (!localOrchestrator) return true;
-  return localOrchestrator.hardLocks.noSpawnCodex === true
+  return localOrchestrator.hardLocks.noSpawnAgent === true
     && localOrchestrator.hardLocks.noSubprocess === true
     && localOrchestrator.hardLocks.noShellExecution === true
     && localOrchestrator.hardLocks.noProviderExecution === true

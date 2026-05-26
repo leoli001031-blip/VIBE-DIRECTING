@@ -1,20 +1,18 @@
 import type { RealProviderExecutorRequestPreview, RealProviderExecutorState } from "./realProviderExecutor";
+import type { BaseHardLocks } from "./types";
 
 export const realProviderOneShotTestSchemaVersion = "0.1.0";
 
 export type RealProviderOneShotTestMode = "locked" | "one_shot_review";
 export type RealProviderOneShotTestStatus = "locked" | "blocked" | "ready_for_action_time_confirmation";
 
-export interface RealProviderOneShotTestHardLocks {
+export interface RealProviderOneShotTestHardLocks extends BaseHardLocks {
   defaultLocked: true;
   actualExecutionAllowed: false;
   providerSubmitAllowed: 0;
-  liveSubmitAllowed: false;
   credentialAccessAllowed: false;
   canSpawnWorker: false;
   noSubprocess: true;
-  noShellExecution: true;
-  noFileMutation: true;
   automaticRetryAllowed: false;
   maxConcurrency: 1;
   maxAutoRetries: 0;
@@ -126,15 +124,20 @@ export interface BuildRealProviderOneShotTestStateInput {
 }
 
 export const realProviderOneShotTestHardLocks: RealProviderOneShotTestHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   defaultLocked: true,
   actualExecutionAllowed: false,
   providerSubmitAllowed: 0,
-  liveSubmitAllowed: false,
   credentialAccessAllowed: false,
   canSpawnWorker: false,
   noSubprocess: true,
-  noShellExecution: true,
-  noFileMutation: true,
   automaticRetryAllowed: false,
   maxConcurrency: 1,
   maxAutoRetries: 0,

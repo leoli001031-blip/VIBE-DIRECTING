@@ -44,6 +44,7 @@ export interface BuildPreviewExportStateInput {
   naturalLanguagePlanSummary?: unknown;
   oneShotResultSummary?: unknown;
   defaultImageHoldSeconds?: number;
+  preferPreviewEvents?: boolean;
 }
 
 function uniqueSorted(values: string[]): string[] {
@@ -111,6 +112,12 @@ function mediaStatusForEvent(event?: PreviewEvent): DemoPackageMediaStatus {
 
 function buildDraftEvents(input: BuildPreviewExportStateInput): { events: PreviewEvent[]; blockedReasons: string[] } {
   const explicitDraftEvents = input.previewEvents.filter((event) => event.mode === "draft_preview");
+  if (input.preferPreviewEvents && explicitDraftEvents.length) {
+    const explicitBlockedReasons = explicitDraftEvents
+      .filter((event) => event.type === "blocked_placeholder")
+      .map((event) => `${event.shotId || event.id}: draft preview contains blocked placeholder.`);
+    return { events: explicitDraftEvents, blockedReasons: uniqueSorted(explicitBlockedReasons) };
+  }
   if (!input.shots.length) {
     const explicitBlockedReasons = explicitDraftEvents
       .filter((event) => event.type === "blocked_placeholder")

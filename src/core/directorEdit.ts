@@ -1,3 +1,4 @@
+import { unique } from "./collectionUtils";
 import {
   buildReflowImpactReport,
   buildStoryChangeTransaction,
@@ -26,7 +27,9 @@ export type DirectorEditAffectedArtifactType =
   | "shotSpec"
   | "shotLayout"
   | "shotPromptPlan"
+  // @deprecated use keyframe derivation instead
   | "startFrame"
+  // @deprecated use keyframe derivation instead
   | "endFrame"
   | "video"
   | "audio"
@@ -104,10 +107,6 @@ function stableId(prefix: string, seed: string): string {
     hash = Math.imul(hash, 16777619);
   }
   return `${prefix}_${(hash >>> 0).toString(16)}`;
-}
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values.filter((value) => value.trim()).map((value) => value.trim()))).sort();
 }
 
 function shotsFromRuntime(runtimeState?: ProjectRuntimeState): ShotRecord[] {

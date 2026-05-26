@@ -18,10 +18,11 @@ import type {
   KnowledgeRouteResult,
   KnowledgeSnippet,
 } from "./knowledgeTypes";
+import type { BaseHardLocks } from "./types";
 
 export const knowledgePackManagerSchemaVersion = "0.1.0";
 
-export interface KnowledgePackManagerHardLocks {
+export interface KnowledgePackManagerHardLocks extends BaseHardLocks {
   providerPolicyOverrideForbidden: true;
   preflightOverrideForbidden: true;
   referenceAuthorityOverrideForbidden: true;
@@ -29,7 +30,6 @@ export interface KnowledgePackManagerHardLocks {
   qaGateOverrideForbidden: true;
   phase24ValidatedEnvelopeRequired: true;
   phase38ValidatedPacketRequired: true;
-  providerSubmissionForbidden: true;
   providerSubmitRouteForbidden: true;
   credentialReadForbidden: true;
   credentialWriteForbidden: true;
@@ -48,6 +48,14 @@ export interface KnowledgePackManagerHardLocks {
 }
 
 export const knowledgePackManagerHardLocks: KnowledgePackManagerHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   providerPolicyOverrideForbidden: true,
   preflightOverrideForbidden: true,
   referenceAuthorityOverrideForbidden: true,
@@ -55,7 +63,6 @@ export const knowledgePackManagerHardLocks: KnowledgePackManagerHardLocks = {
   qaGateOverrideForbidden: true,
   phase24ValidatedEnvelopeRequired: true,
   phase38ValidatedPacketRequired: true,
-  providerSubmissionForbidden: true,
   providerSubmitRouteForbidden: true,
   credentialReadForbidden: true,
   credentialWriteForbidden: true,

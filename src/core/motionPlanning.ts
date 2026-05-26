@@ -12,11 +12,6 @@ import type {
 export const motionEndpointContractSchemaVersion = "0.1.0";
 
 const endFrameRequiredMotionTypes: ReadonlySet<MotionType> = new Set([
-  "locomotion",
-  "object_interaction",
-  "camera_move",
-  "reveal_or_occlusion",
-  "transform_or_state_change",
 ]);
 
 const bodyMechanicsRequiredMotionTypes: ReadonlySet<MotionType> = new Set([
@@ -166,17 +161,21 @@ function motionEvidence(text: string): string[] {
   return evidence;
 }
 
-function endFrameReason(type: MotionType): string {
-  if (endFrameRequiredForMotionType(type)) {
-    return `${type} changes spatial, interaction, camera, reveal, or state facts enough that the end endpoint must be planned before I2V.`;
+function shotRequiresEndpointEndFrame(shot: ShotRecord): boolean {
+  return shot.videoControlMode === "first_last_endpoint";
+}
+
+function endFrameReason(type: MotionType, required: boolean): string {
+  if (required) {
+    return "This shot explicitly selected first_last_endpoint mode, so the end frame must be planned and derived from the approved start frame.";
   }
   if (type === "micro_expression") return "Micro expression, breathing, and blinking can usually be carried by motion prompt without a separate end frame.";
   if (type === "camera_reframe") return "Simple reframing can use a start frame plus camera instructions unless later gates mark the move as large.";
-  return "Static or in-place motion does not require an end frame by default.";
+  return "Default video control uses a strong start frame plus motion prompt; no separate end frame is required unless the shot explicitly selects endpoint mode.";
 }
 
-function buildPoseRequirement(type: MotionType, role: "start" | "end", required: boolean): MotionPoseRequirement {
-  const startDescription = endFrameRequiredForMotionType(type)
+function buildPoseRequirement(type: MotionType, role: "start" | "end", required: boolean, endpointMode: boolean): MotionPoseRequirement {
+  const startDescription = endpointMode
     ? "Start pose must leave visible action space for the planned end endpoint and avoid cropping future motion."
     : "Start pose should preserve identity, scene layout, and the intended subtle motion surface.";
   const endDescription = required
@@ -186,7 +185,7 @@ function buildPoseRequirement(type: MotionType, role: "start" | "end", required:
     required,
     description: role === "start" ? startDescription : endDescription,
     mustPreserve: ["identity", "scene layout", "style", "approved props"],
-    reservedForEndPose: role === "start" && endFrameRequiredForMotionType(type),
+    reservedForEndPose: role === "start" && endpointMode,
   };
 }
 
@@ -307,8 +306,11 @@ function protectedRegionsFor(_type: MotionType): MotionEndpointRegion[] {
 export function buildMotionEndpointContract(input: BuildMotionEndpointContractInput): MotionEndpointContract {
   const text = shotText(input.shot, input.keyframePair);
   const motionType = classifyMotionType(text);
-  const whetherEndFrameRequired = endFrameRequiredForMotionType(motionType);
-  const evidence = motionEvidence(text);
+  const whetherEndFrameRequired = shotRequiresEndpointEndFrame(input.shot);
+  const evidence = unique([
+    ...motionEvidence(text),
+    whetherEndFrameRequired ? "video_control_mode:first_last_endpoint" : `video_control_mode:${input.shot.videoControlMode || "first_frame_default"}`,
+  ]);
   const bodyMechanics = buildBodyMechanics(motionType, text);
   const contract: MotionEndpointContract = {
     schemaVersion: motionEndpointContractSchemaVersion,
@@ -316,9 +318,9 @@ export function buildMotionEndpointContract(input: BuildMotionEndpointContractIn
     shotId: input.shot.id,
     motionType,
     whetherEndFrameRequired,
-    endFrameRequiredReason: endFrameReason(motionType),
-    startPoseRequirement: buildPoseRequirement(motionType, "start", true),
-    endPoseRequirement: buildPoseRequirement(motionType, "end", whetherEndFrameRequired),
+    endFrameRequiredReason: endFrameReason(motionType, whetherEndFrameRequired),
+    startPoseRequirement: buildPoseRequirement(motionType, "start", true, whetherEndFrameRequired),
+    endPoseRequirement: buildPoseRequirement(motionType, "end", whetherEndFrameRequired, whetherEndFrameRequired),
     bodyMechanics,
     editableRegions: editableRegionsFor(motionType),
     protectedRegions: protectedRegionsFor(motionType),
@@ -366,9 +368,10 @@ export function validateMotionEndpointContract(contract: MotionEndpointContract)
 } {
   const blockers: string[] = [];
   const warnings: string[] = [];
+  const endpointModeRequired = contract.gateInputs.motionEvidence.includes("video_control_mode:first_last_endpoint");
 
-  if (contract.whetherEndFrameRequired !== endFrameRequiredForMotionType(contract.motionType)) {
-    blockers.push(`End-frame requirement does not match motion type ${contract.motionType}.`);
+  if (contract.whetherEndFrameRequired !== endpointModeRequired) {
+    blockers.push(`End-frame requirement does not match video control mode for motion type ${contract.motionType}.`);
   }
 
   if (contract.whetherEndFrameRequired && !contract.startPoseRequirement.reservedForEndPose) {

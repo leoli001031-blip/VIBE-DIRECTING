@@ -1,6 +1,6 @@
 import { stableKnowledgeHash } from "./knowledgeManifest";
 import { buildDefaultProviderRegistry, validateJobAgainstCapability } from "./providerCapabilities";
-import type { KnowledgeInjectionRecord } from "./knowledgeTypes";
+import type { KnowledgeInjectedSnippet, KnowledgeInjectionRecord } from "./knowledgeTypes";
 import type {
   AssetRecord,
   GenerationJob,
@@ -42,11 +42,42 @@ function assetLabel(asset: AssetRecord): string {
   return `${asset.type}:${asset.id}`;
 }
 
-function styleDirectivesFromInjectedKnowledge(injectedKnowledgePacks: KnowledgeInjectionRecord[] = []): string[] {
-  const directives = injectedKnowledgePacks
-    .filter((pack) => ["style", "composition", "camera", "lighting", "color", "prompt"].includes(pack.category))
-    .slice(0, 6)
-    .map((pack) => `${pack.consumer}:${pack.category}:${pack.packId}@${pack.hash}`);
+const promptStyleCategories = new Set(["style", "composition", "camera", "lighting", "color", "prompt"]);
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function compactKnowledgeSnippetContent(snippet: KnowledgeInjectedSnippet): string {
+  const withoutSourceDump = snippet.content
+    .split(/\n来源信号：/)[0]
+    .split(/\n来源回执：/)[0]
+    .split(/\nSources?:/i)[0];
+  const lines = withoutSourceDump
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^#+\s*/, "").trim())
+    .filter((line) => line && !/^\d+\.\s/.test(line))
+    .slice(0, 7);
+  return lines.join(" ").replace(/\s+/g, " ").slice(0, 420);
+}
+
+function styleDirectivesFromInjectedKnowledge(
+  injectedKnowledgePacks: KnowledgeInjectionRecord[] = [],
+  injectedKnowledgeSnippets: KnowledgeInjectedSnippet[] = [],
+): string[] {
+  const stylePacks = injectedKnowledgePacks
+    .filter((pack) => promptStyleCategories.has(pack.category))
+    .slice(0, 6);
+  const packIds = new Set(stylePacks.map((pack) => pack.packId));
+  const snippetDirectives = injectedKnowledgeSnippets
+    .filter((snippet) => packIds.has(snippet.packId))
+    .slice(0, 8)
+    .map((snippet) => {
+      const content = compactKnowledgeSnippetContent(snippet);
+      return content ? `本片参考:${snippet.title}:${content}` : "";
+    });
+  const packDirectives = stylePacks.map((pack) => `knowledge:${pack.consumer}:${pack.category}:${pack.packId}@${pack.hash}`);
+  const directives = uniqueStrings([...snippetDirectives, ...packDirectives]);
 
   return directives.length ? directives : ["Use only routed knowledge summaries as compiler hints."];
 }
@@ -64,6 +95,7 @@ export interface BuildShotPromptPlanInput {
   sourceIndex: ProjectSourceIndex;
   providerRegistry?: ProviderRegistry;
   injectedKnowledgePacks?: KnowledgeInjectionRecord[];
+  injectedKnowledgeSnippets?: KnowledgeInjectedSnippet[];
   createdAt?: string;
 }
 
@@ -200,7 +232,7 @@ export function buildShotPromptPlan(input: BuildShotPromptPlanInput): BuildShotP
       ...(promptKind === "end_frame" ? ["text2image fallback"] : []),
     ],
     referenceIds,
-    styleDirectives: styleDirectivesFromInjectedKnowledge(input.injectedKnowledgePacks),
+    styleDirectives: styleDirectivesFromInjectedKnowledge(input.injectedKnowledgePacks, input.injectedKnowledgeSnippets),
     adapterWarnings,
     derivesFromStartFrame,
     sourceStartFrameId,

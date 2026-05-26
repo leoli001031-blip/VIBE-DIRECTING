@@ -1,6 +1,9 @@
+import { PROVIDER_SUBMIT_ATTEMPT_BLOCKED } from "./statusConstants";
+import { hardLockDrift } from "./collectionUtils";
 import type { ManifestMatchReport } from "./manifestMatcher";
 import type { ProviderLiveGateState } from "./providerLiveGate";
 import type {
+  BaseHardLocks,
   Image2AdapterRequest,
   ImageTaskPlan,
   QaPromotionReport,
@@ -17,22 +20,15 @@ export type ProviderClosedLoopProviderKind = "image2" | "seedance" | "jimeng";
 export type ProviderClosedLoopShellStatus = "blocked" | "ready_gated_shell" | "parked_unsupported";
 export type ProviderClosedLoopStepStatus = "pass" | "blocked" | "parked";
 
-export interface ProviderClosedLoopShellHardLocks {
+export interface ProviderClosedLoopShellHardLocks extends BaseHardLocks {
   closedLoopShellOnly: true;
-  dryRunOnly: true;
   readOnly: true;
   planOnly: true;
-  providerSubmissionForbidden: true;
   noActualProviderSubmit: true;
   noLiveSubmit: true;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   credentialAccessAllowed: false;
   credentialStorage: false;
   noApiKeyCreation: true;
-  noWorkerSpawn: true;
-  noShellExecution: true;
-  noFileMutation: true;
   fastModelForbidden: true;
   vipChannelForbidden: true;
   textToVideoMainPathForbidden: true;
@@ -229,21 +225,22 @@ export interface BuildProviderClosedLoopShellInput {
 }
 
 export const providerClosedLoopShellHardLocks: ProviderClosedLoopShellHardLocks = {
-  closedLoopShellOnly: true,
   dryRunOnly: true,
-  readOnly: true,
-  planOnly: true,
+  liveSubmitAllowed: false,
   providerSubmissionForbidden: true,
-  noActualProviderSubmit: true,
-  noLiveSubmit: true,
+  noFileMutation: true,
   noCredentialRead: true,
   noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
+  closedLoopShellOnly: true,
+  readOnly: true,
+  planOnly: true,
+  noActualProviderSubmit: true,
+  noLiveSubmit: true,
   credentialAccessAllowed: false,
   credentialStorage: false,
   noApiKeyCreation: true,
-  noWorkerSpawn: true,
-  noShellExecution: true,
-  noFileMutation: true,
   fastModelForbidden: true,
   vipChannelForbidden: true,
   textToVideoMainPathForbidden: true,
@@ -264,16 +261,6 @@ function safeId(value: string): string {
 
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right));
-}
-
-function hardLockDrift<T extends object>(actual: T | undefined, expected: T, prefix: string): string[] {
-  if (!actual) return [`${prefix}_hard_locks_missing`];
-  const actualRecord = actual as Record<string, boolean | undefined>;
-  const expectedRecord = expected as Record<string, boolean>;
-
-  return Object.entries(expectedRecord).flatMap(([key, expectedValue]) =>
-    actualRecord[key] === expectedValue ? [] : [`${prefix}_hard_lock_drift:${key}`],
-  );
 }
 
 function providerCommitPolicy(): ProviderClosedLoopRequestPreview["submitPolicy"] {
@@ -305,7 +292,7 @@ function step(
 
 function attemptedActionBlockers(input: BuildProviderClosedLoopShellInput): string[] {
   return [
-    ...(input.providerSubmitAttempted ? ["provider_submit_attempt_blocked"] : []),
+    ...(input.providerSubmitAttempted ? [PROVIDER_SUBMIT_ATTEMPT_BLOCKED] : []),
     ...(input.liveSubmitAttempted ? ["live_submit_attempt_blocked"] : []),
     ...(input.credentialReadWriteAttempted ? ["credential_read_write_attempt_blocked"] : []),
     ...(input.credentialReadAttempted ? ["credential_read_attempt_blocked"] : []),

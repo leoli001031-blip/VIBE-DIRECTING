@@ -1,7 +1,7 @@
 import type { ExecutionLedgerOutputSandbox, ExecutionLedgerState } from "./executionLedger";
 import type { RealExecutionGateState } from "./realExecutionGate";
 import type { BuiltTaskPacket } from "./taskPacketBuilder";
-import type { Image2AdapterRequest, ImageTaskPlan, ProviderExecutionState, ProviderSlot, RequiredMode, TaskEnvelope } from "./types";
+import type { BaseHardLocks, Image2AdapterRequest, ImageTaskPlan, ProviderExecutionState, ProviderSlot, RequiredMode, TaskEnvelope } from "./types";
 
 export const realProviderPilotSchemaVersion = "0.1.0";
 
@@ -61,30 +61,22 @@ export interface RealProviderPilotItem {
   canMutateFiles: false;
 }
 
-export interface RealProviderPilotHardLocks {
+export interface RealProviderPilotHardLocks extends BaseHardLocks {
   defaultLocked: true;
   image2FirstOnly: true;
   smallBatchOnly: true;
   seedanceParked: true;
   videoProvidersParked: true;
-  providerSubmissionForbidden: true;
   noProviderSubmit: true;
   canSubmitProvider: false;
   providerSubmitAllowed: 0;
   providerSubmitAllowedBoolean: false;
-  liveSubmitAllowed: false;
   actualExecutionAllowed: false;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   credentialAccessAllowed: false;
-  noWorkerSpawn: true;
   canSpawnWorker: false;
   noSubprocess: true;
-  noShellExecution: true;
   noImage2Execution: true;
   noSeedanceExecution: true;
-  noFileMutation: true;
-  dryRunOnly: true;
   canMutateFiles: false;
   reviewOnly: true;
 }
@@ -268,29 +260,29 @@ export interface BuildRealProviderPilotInput {
 }
 
 export const realProviderPilotHardLocks: RealProviderPilotHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   defaultLocked: true,
   image2FirstOnly: true,
   smallBatchOnly: true,
   seedanceParked: true,
   videoProvidersParked: true,
-  providerSubmissionForbidden: true,
   noProviderSubmit: true,
   canSubmitProvider: false,
   providerSubmitAllowed: 0,
   providerSubmitAllowedBoolean: false,
-  liveSubmitAllowed: false,
   actualExecutionAllowed: false,
-  noCredentialRead: true,
-  noCredentialWrite: true,
   credentialAccessAllowed: false,
-  noWorkerSpawn: true,
   canSpawnWorker: false,
   noSubprocess: true,
-  noShellExecution: true,
   noImage2Execution: true,
   noSeedanceExecution: true,
-  noFileMutation: true,
-  dryRunOnly: true,
   canMutateFiles: false,
   reviewOnly: true,
 };
@@ -480,9 +472,9 @@ function envelopeForShot(envelope: TaskEnvelope, shotId: string): boolean {
 
 function rolesForShot(input: BuildRealProviderPilotInput, shotId: string): RealProviderPilotOutputRole[] {
   const roles = uniqueInOrder([
-    ...(input.taskPackets || []).filter((packet) => packetForShot(packet, shotId)).map((packet) => outputRoleFromText(packet.taskKind)),
+    ...(input.taskPackets || []).reduce((acc, packet) => { if (packetForShot(packet, shotId)) acc.push(outputRoleFromText(packet.taskKind)); return acc; }, [] as string[]),
     ...(input.taskEnvelopes || []).filter((envelope) => envelopeForShot(envelope, shotId)).flatMap((envelope) => envelope.expectedOutputs.map(outputRoleFromText)),
-    ...(input.imageTaskPlans || []).filter((taskPlan) => taskPlan.shotId === shotId).map((taskPlan) => outputRoleFromText(taskPlan.expectedOutputPath)),
+    ...(input.imageTaskPlans || []).reduce((acc, taskPlan) => { if (taskPlan.shotId === shotId) acc.push(outputRoleFromText(taskPlan.expectedOutputPath)); return acc; }, [] as string[]),
   ]) as RealProviderPilotOutputRole[];
   return roles.length ? roles : ["start_frame", "end_frame"];
 }
@@ -508,9 +500,9 @@ function buildExpectedOutputs(input: BuildRealProviderPilotInput, sandboxRoot?: 
 function buildSelectedShots(input: BuildRealProviderPilotInput, sandboxRoot?: string): RealProviderPilotSelectedShot[] {
   return uniqueInOrder(input.selectedShotIds || []).map((shotId) => {
     const roles = rolesForShot(input, shotId);
-    const taskEnvelopeIds = uniqueInOrder((input.taskEnvelopes || []).filter((envelope) => envelopeForShot(envelope, shotId)).map((envelope) => envelope.id));
-    const taskPacketIds = uniqueInOrder((input.taskPackets || []).filter((packet) => packetForShot(packet, shotId)).map((packet) => packet.packetId));
-    const taskPlanIds = uniqueInOrder((input.imageTaskPlans || []).filter((taskPlan) => taskPlan.shotId === shotId).map((taskPlan) => taskPlan.taskPlanId));
+    const taskEnvelopeIds = uniqueInOrder((input.taskEnvelopes || []).reduce((acc, envelope) => { if (envelopeForShot(envelope, shotId)) acc.push(envelope.id); return acc; }, [] as string[]));
+    const taskPacketIds = uniqueInOrder((input.taskPackets || []).reduce((acc, packet) => { if (packetForShot(packet, shotId)) acc.push(packet.packetId); return acc; }, [] as string[]));
+    const taskPlanIds = uniqueInOrder((input.imageTaskPlans || []).reduce((acc, taskPlan) => { if (taskPlan.shotId === shotId) acc.push(taskPlan.taskPlanId); return acc; }, [] as string[]));
     return {
       shotId,
       sourceRefs: uniqueSorted([
@@ -587,7 +579,7 @@ export function buildRealProviderPilotState(input: BuildRealProviderPilotInput):
   const selectedShots = buildSelectedShots(input, sandboxRoot);
   const manifestEntries = selectedShotIds.map((shotId) => ({
     shotId,
-    expectedOutputs: expectedOutputs.filter((output) => output.shotId === shotId).map((output) => output.suggestedSandboxPath || output.suggestedRelativePath),
+    expectedOutputs: expectedOutputs.reduce((acc, output) => { if (output.shotId === shotId) acc.push(output.suggestedSandboxPath || output.suggestedRelativePath); return acc; }, [] as string[]),
     status: "planned_for_review" as const,
   }));
 

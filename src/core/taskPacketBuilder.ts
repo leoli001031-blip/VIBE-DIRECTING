@@ -1,3 +1,5 @@
+import { PROVIDER_CREDENTIALS_FORBIDDEN } from "./statusConstants";
+import { unique } from "./collectionUtils";
 import type { ProjectRuntimeState } from "./projectState";
 import { attachKnowledgeBudgetToRouteResult, buildKnowledgeContextBudget } from "./knowledgeContextBudget";
 import {
@@ -5,6 +7,7 @@ import {
   ensureMinimumDefaultKnowledgePacks,
   hasNonEmptyKnowledgeTrace,
 } from "./knowledgeDefaults";
+import { buildInputHash, buildNonOverridableGateHashes, buildPolicyBinding, buildSubagentInputHash, envelopeSchemaVersion } from "./envelopeValidator";
 import { selectAvailableKnowledgePacks } from "./knowledgeLibrary";
 import { stableKnowledgeHash } from "./knowledgeManifest";
 import { routeKnowledge } from "./knowledgeRouter";
@@ -226,6 +229,11 @@ const expectedOutputContract: SubagentOutputContract = {
     "taskId",
     "status",
     "inspectedFiles",
+    "changedFiles",
+    "tests",
+    "artifactPaths",
+    "residualRisks",
+    "touched",
     "gates",
     "overallVisualVerdict",
     "styleQa",
@@ -241,10 +249,6 @@ const expectedOutputContract: SubagentOutputContract = {
   severityLevels: ["P0", "P1", "P2"],
   gateFields: ["identity", "scene", "pair", "story", "prop", "style"],
 };
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values.filter((value) => value.trim()).map((value) => value.trim()))).sort();
-}
 
 function safeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, "_");
@@ -306,6 +310,19 @@ function stringList(value: unknown): string[] {
   if (Array.isArray(value)) return value.flatMap((item) => stringList(item));
   const text = stringValue(value);
   return text ? [text] : [];
+}
+
+const unsafeContextRefPattern = /(?:bearer\s+[a-z0-9._~+/-]+|sk-[a-z0-9_-]{12,}|tvly-[a-z0-9_-]{8,}|api[_-]?key|secret|password|token|(?:^|[#:=\s])(?:[A-Za-z]:[\\/]|\/Users\/|\/private\/|\/tmp\/|~[\\/]|\/\/))/i;
+
+function safeContextValue(value: string): string {
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  if (!trimmed) return "";
+  if (unsafeContextRefPattern.test(trimmed)) return `redacted_ref:${stableKnowledgeHash(trimmed)}`;
+  return trimmed.slice(0, 240);
+}
+
+function safeContextList(value: unknown, limit = 8): string[] {
+  return unique(stringList(value).map(safeContextValue).filter(Boolean)).slice(0, limit);
 }
 
 function dynamicRecord(value: unknown): Record<string, unknown> {
@@ -379,6 +396,7 @@ function uniqueAssetsById(values: AssetRecord[]): AssetRecord[] {
 
 function referenceFromAsset(asset: AssetRecord): ReferenceAuthority {
   const locked = asset.lockedStatus === "locked" && asset.safeForFutureReference && asset.status !== "missing";
+  const record = dynamicRecord(asset);
   return {
     id: asset.id,
     path: asset.path,
@@ -396,6 +414,8 @@ function referenceFromAsset(asset: AssetRecord): ReferenceAuthority {
     allowedUse: locked ? ["prompt_reference", "future_reference", "draft_preview"] : ["draft_preview"],
     canPromoteToFormal: locked,
     canUseAsFutureReference: locked,
+    textConstraints: safeContextList(record.textConstraints, 6),
+    sourceRefs: safeContextList(record.sourceRefs, 10),
     contaminationReason: locked ? undefined : "Asset is not locked for future reference.",
   };
 }
@@ -659,7 +679,7 @@ function commonForbiddenActions(kind: TaskPacketKind): string[] {
     "validated_envelope_required",
     "provider_submit_forbidden",
     "live_submit_forbidden",
-    "provider_credentials_forbidden",
+    PROVIDER_CREDENTIALS_FORBIDDEN,
     "prompt_bypass_forbidden",
     "file_mutation_forbidden",
     kind === "video_execution" ? "no_fast_model" : "",
@@ -750,6 +770,8 @@ function contextCapsuleFor(input: BuildTaskPacketsInput, kind: TaskPacketKind, s
 function referenceAuthorityFor(boundAssets: ReferenceAuthority[], forbidden: ReferenceAuthority[]): string[] {
   return unique([
     ...boundAssets.map((asset) => `locked:${asset.id}:${asset.referenceRole}:${asset.lockedStatus}`),
+    ...boundAssets.flatMap((asset) => (asset.textConstraints || []).map((constraint) => `constraint:${asset.id}:${constraint}`)),
+    ...boundAssets.flatMap((asset) => (asset.sourceRefs || []).map((ref) => `source_ref:${asset.id}:${ref}`)),
     ...forbidden.map((asset) => `forbidden:${asset.id}:${asset.referenceRole}:${asset.lockedStatus}`),
   ]);
 }
@@ -1120,6 +1142,7 @@ function makeTaskEnvelope(input: {
     allowedReadScope: string[];
     forbiddenActions: string[];
   } = {
+    schemaVersion: envelopeSchemaVersion,
     id: taskId,
     purpose: taskPurposeFor(input.kind),
     providerSlot: input.hardFields.providerRequirements.slot,
@@ -1159,7 +1182,14 @@ function makeTaskEnvelope(input: {
     outputPath: expectedOutputs[0],
     blockingReasons,
   };
-  return envelope;
+  const policyBinding = buildPolicyBinding(envelope);
+
+  return {
+    ...envelope,
+    policyBinding,
+    nonOverridableGateHashes: buildNonOverridableGateHashes({ ...envelope, policyBinding }),
+    inputHash: buildInputHash({ ...envelope, policyBinding }),
+  };
 }
 
 function makeSubagentEnvelope(input: {
@@ -1181,6 +1211,7 @@ function makeSubagentEnvelope(input: {
     resultSchema: "subagent_result_v1";
     forbiddenActions: string[];
   } = {
+    schemaVersion: envelopeSchemaVersion,
     id: input.packetId,
     parentTaskId: input.taskEnvelope.id,
     purpose: input.hardFields.purpose,
@@ -1257,7 +1288,15 @@ function makeSubagentEnvelope(input: {
     resultSchema: input.hardFields.outputSchema,
     forbiddenActions: input.hardFields.forbiddenActions,
   };
-  return envelope;
+  return {
+    ...envelope,
+    policyBinding: input.taskEnvelope.policyBinding ?? buildPolicyBinding(input.taskEnvelope),
+    nonOverridableGateHashes: input.taskEnvelope.nonOverridableGateHashes ?? buildNonOverridableGateHashes(input.taskEnvelope),
+    inputHash: buildSubagentInputHash({
+      ...envelope,
+      policyBinding: input.taskEnvelope.policyBinding ?? buildPolicyBinding(input.taskEnvelope),
+    }),
+  };
 }
 
 function knowledgeTraceFor(envelope: SubagentTaskEnvelope | undefined): TaskPacketKnowledgeTrace {

@@ -69,9 +69,13 @@ export const qaHarnessSourceLayers: QaHarnessSourceLayer[] = [
 
 export const qaHarnessHardLocks: QaHarnessHardLocks = {
   dryRunOnly: true,
-  providerSubmissionForbidden: true,
   liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
   noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   noAutoPromotion: true,
   semanticRepairForbidden: true,
   workerSelfReportCannotPassQa: true,

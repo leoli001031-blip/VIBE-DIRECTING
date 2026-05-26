@@ -1082,7 +1082,6 @@ function buildKeyframePairGates(
   motionContractsByShot: Map<string, MotionEndpointContract>,
 ): ImageKeyframePairGate[] {
   const shotIds = uniqueSorted([
-    ...startPlans.map((plan) => plan.shotId),
     ...endPlans.map((plan) => plan.shotId),
     ...keyframePairs.map((pair) => pair.shotId),
   ]);
@@ -1281,7 +1280,7 @@ function buildVisualConsistencyGates(input: {
     }),
     visualGate({
       gateId: "pair_gate",
-      detail: "Start/end frame pairs must derive end frames from start frames before video handoff.",
+      detail: "Endpoint start/end frame pairs must derive end frames from start frames before endpoint-mode video handoff.",
       blockers: input.pairGates.flatMap((gateItem) => gateItem.blockers),
       warnings: input.pairGates.flatMap((gateItem) => gateItem.warnings),
       sourceRefs: input.pairGates.map((gateItem) => gateItem.gateId),
@@ -1375,7 +1374,7 @@ function buildRuntimeLockGates(input: {
     gate("noVip", "VIP channels are forbidden.", vipViolations),
     gate("noTextToVideo", "Text-to-video is not an allowed Phase 17 path.", textToVideoViolations),
     gate("noImage2Fallback", "Image provider slot/mode fallback is forbidden.", image2FallbackViolations),
-    gate("noIndependentEndFrame", "End frames must derive from start frames by default.", independentEndFrameViolations),
+    gate("noIndependentEndFrame", "When endpoint end frames are requested, they must derive from start frames.", independentEndFrameViolations),
   ];
 }
 

@@ -33,7 +33,7 @@ const categoryKeywords: Record<KnowledgePackCategory, string[]> = {
   lens_focus: ["lens", "focus", "dof", "wide angle", "telephoto", "焦点", "镜头", "广角", "长焦", "景深", "虚化"],
   performance: ["performance", "gesture", "eye", "posture", "表演", "微表情", "视线", "姿态", "停顿", "犹豫"],
   prompt: ["prompt", "template", "compiler", "提示词", "模板", "编译", "生成"],
-  provider: ["provider", "model", "image2", "seedance", "codex", "runway", "comfyui", "模型", "供应商", "即梦"],
+  provider: ["provider", "model", "image2", "seedance", "agent", "runway", "comfyui", "模型", "供应商", "即梦"],
   qa: ["qa", "audit", "check", "gate", "reference", "authority", "locked", "candidate", "检查", "验收", "污染", "连续性", "失败", "审计", "参考", "权威", "锁定"],
   audio: [
     "audio",
@@ -58,7 +58,7 @@ const categoryKeywords: Record<KnowledgePackCategory, string[]> = {
     "无配乐",
     "bgm",
   ],
-  agent: ["agent", "subagent", "harness", "codex", "执行", "边界", "队列", "子代理"],
+  agent: ["agent", "subagent", "harness", "agent", "执行", "边界", "队列", "子代理"],
 };
 
 const purposeCategories: Record<string, KnowledgePackCategory[]> = {

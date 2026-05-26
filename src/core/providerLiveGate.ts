@@ -2,6 +2,7 @@ import type {
   AdapterContractState,
   AssetReadinessReport,
   AudioPlanningState,
+  BaseHardLocks,
   Image2AdapterRequest,
   ImageTaskPlan,
   ProviderAdapterContract,
@@ -108,16 +109,11 @@ export interface ProviderLiveGateItem {
   noCredentialWrite: true;
 }
 
-export interface ProviderLiveGateHardLocks {
-  dryRunOnly: true;
+export interface ProviderLiveGateHardLocks extends BaseHardLocks {
   readOnly: true;
   readinessPlanOnly: true;
   confirmationPlanOnly: true;
-  providerSubmissionForbidden: true;
-  liveSubmitAllowed: false;
   credentialStorage: false;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   noApiKeyCreation: true;
   noProviderSubmit: true;
   noArbitraryProviderCommand: true;
@@ -194,14 +190,17 @@ export interface BuildProviderLiveGateStateInput {
 
 const hardLocks: ProviderLiveGateHardLocks = {
   dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   readOnly: true,
   readinessPlanOnly: true,
   confirmationPlanOnly: true,
-  providerSubmissionForbidden: true,
-  liveSubmitAllowed: false,
   credentialStorage: false,
-  noCredentialRead: true,
-  noCredentialWrite: true,
   noApiKeyCreation: true,
   noProviderSubmit: true,
   noArbitraryProviderCommand: true,

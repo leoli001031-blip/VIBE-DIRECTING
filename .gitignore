@@ -1,14 +1,31 @@
 node_modules/
 dist/
+.electron-dev/
 *.tsbuildinfo
 .DS_Store
+.env
+.env.*
+!.env.example
+.vibe-director/
+.vibe-runtime/
+.playwright-mcp/
+.review-tmp/
+electron-dist/
+release/
+test_artifacts/
+artifacts/
+exports/
+tmp/
+console-*.txt
+console-*.log
+*.log
 
 # Local/generated runtime imports
 .vibe-runtime/current-project.local.json
-public/runtime-audit.json
-public/runtime-state.json
-public/demo-runtime-audit.json
-public/demo-runtime-state.json
+fixtures/runtime-audit.json
+fixtures/runtime-state.json
+fixtures/demo-runtime-audit.json
+fixtures/demo-runtime-state.json
 public/media/
 real-test-sandbox/
 

@@ -1,33 +1,40 @@
-declare global {
-  interface Window {
-    __VIBE_RUNTIME_API_BASE_URL__?: string;
-  }
+import {
+  currentProjectIdentityMatches,
+  fetchRuntimeJson,
+  hasProjectRuntimeIdentity,
+  isRecord,
+  numberOrUndefined,
+  projectMismatchMessage,
+  projectRuntimeBasePath,
+  projectRuntimeRequestPath,
+  stringArray,
+  toRuntimeUrl,
+  type ProjectRuntimeIdentity,
+} from "./runtimeApiClient";
+import {
+  normalizeProjectRound5ShotGate,
+  type ProjectRound5GateSummary,
+} from "./projectRound5Types";
+import { deriveP6LiveReportProjection } from "./p6LiveReportProjection";
+import type { VideoRelayQueueState } from "./videoRelayQueue";
 
-  interface ImportMeta {
-    env?: {
-      VITE_VIBE_RUNTIME_API_BASE_URL?: string;
-      VITE_VIBE_CORE_RUNTIME_API_TOKEN?: string;
-    };
-  }
-}
+export {
+  defaultRuntimeApiBaseUrl,
+  projectRuntimeRequestPath,
+} from "./runtimeApiClient";
 
-export const defaultRuntimeApiBaseUrl = "http://127.0.0.1:8790";
-export const projectRealChainRuntimeBasePath = "/api/runtime";
-export const projectCurrentBindingEndpoint = `${projectRealChainRuntimeBasePath}/projects/current`;
-export const projectCurrentSelectEndpoint = `${projectRealChainRuntimeBasePath}/projects/select`;
-export const projectCurrentChoicesEndpoint = `${projectRealChainRuntimeBasePath}/projects/recent`;
+export type {
+  ProjectRuntimeIdentity,
+} from "./runtimeApiClient";
+
+export type {
+  ProjectRound5GateSummary,
+  ProjectRound5ShotGate,
+} from "./projectRound5Types";
+
+export const projectRealChainRuntimeBasePath = projectRuntimeBasePath;
 export const projectRealChainStatusEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/status`;
 export const projectRealChainRunCheckEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/real-chain/run-check`;
-export const projectRound5StrictEditPrepareEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/round5/strict-edit/prepare`;
-export const projectRound5StrictEditReturnEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/round5/strict-edit/return`;
-export const projectImage2BatchPlanEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-batch/plan`;
-export const projectImage2BatchRunCheckEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-batch/run-check`;
-export const projectImage2OneShotStatusEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/status`;
-export const projectImage2OneShotPrepareEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/prepare`;
-export const projectImage2OneShotConfirmEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/confirm`;
-export const projectImage2OneShotPrepareTriggerEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/prepare-trigger`;
-export const projectImage2OneShotReturnEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/return`;
-export const projectImage2OneShotExecuteReturnEndpoint = `${projectRealChainRuntimeBasePath}/projects/current/image2-one-shot/execute-return`;
 export const projectRealChainFileEndpoint = `${projectRealChainRuntimeBasePath}/files`;
 export const projectRealChainReportRelativePath =
   "real-test-sandbox/real-demo-e2e/005-anime-image2-start-frames/reports/image2_start_long_chain_report.json";
@@ -49,42 +56,38 @@ export type ProjectRealChainPreviewItem = {
   order: number;
   expectedOutputPath?: string;
   expectedOutputAbsPath?: string;
+  sourceReceiptId?: string;
+  providerReceiptId?: string;
+  providerRequestId?: string;
+  outputHash?: string;
+  outputSha256?: string;
+  promptText?: string;
+  promptPath?: string;
+  promptHash?: string;
+  mediaPath?: string;
+  mediaType?: string;
+  durationSeconds?: number;
+  duration_seconds?: number;
+  duration?: number;
+  fileUrl?: string;
   imageUrl?: string;
   thumbnailUrl?: string;
+  status?: string;
+  previewStatus?: string;
+  runtimeTruthStatus?: string;
   outputExists?: boolean;
   reviewRequired: boolean;
   reviewOverlay: boolean;
   previewQaStatus?: string;
   productionQaStatus?: string;
-};
-
-export type ProjectRound5ShotGate = {
-  shotId: string;
-  taskRunId?: string;
-  gateStatus?: string;
-  ledgerStatus?: string;
-  nextAction?: string;
-  startFramePath?: string;
-  startFrameSha256?: string;
-  startExists?: boolean;
-  startQaStatus?: string;
-  endRequired?: boolean;
-  endFramePath?: string;
-  endExists?: boolean;
-  endFrameSha256?: string;
-  strictEditPreflightStatus?: string;
-  strictEditPilotCandidate: boolean;
-  blockers: string[];
-  warnings: string[];
-};
-
-export type ProjectRound5GateSummary = {
-  status?: string;
-  shotGateMatrix: ProjectRound5ShotGate[];
-  ledgerProjection?: Record<string, unknown>;
-  assetGateSummary?: Record<string, unknown>;
-  uiSummary?: Record<string, unknown>;
-  isolation?: Record<string, unknown>;
+  blockers?: string[];
+  videoStatus?: string;
+  submitId?: string;
+  submit_id?: string;
+  queueInfo?: Record<string, unknown>;
+  queue_info?: Record<string, unknown>;
+  localMediaPaths?: string[];
+  outputVideoPath?: string;
 };
 
 export type ProjectWorkbenchAssetFactStatus = "locked" | "candidate" | "needs_review" | "rejected" | "missing";
@@ -96,6 +99,12 @@ export type ProjectWorkbenchAssetFact = {
   status: ProjectWorkbenchAssetFactStatus;
   path?: string;
   sourceKind?: string;
+  sourceReceiptId?: string;
+  sourceRunId?: string;
+  outputHash?: string;
+  promptText?: string;
+  promptPath?: string;
+  promptHash?: string;
   textConstraints: string[];
   usedByShotIds: string[];
   sourceRefs: string[];
@@ -110,10 +119,29 @@ export type ProjectWorkbenchStoryShotFact = {
   sectionId?: string;
   sceneId?: string;
   roleIds?: string[];
+  propIds?: string[];
+  characterAssetIds?: string[];
+  sceneAssetIds?: string[];
+  propAssetIds?: string[];
   startFrame?: string;
   endFrame?: string;
   status?: string;
   issues?: string[];
+  camera?: string;
+  executionMode?: string;
+  rhythmProfile?: string;
+  splitPolicy?: string;
+  actionBeats?: string[];
+  primaryAction?: string;
+  actionTrigger?: string;
+  microReaction?: string;
+  seedanceDirection?: string;
+  directorFeedbackDirectives?: string[];
+  characterGuidance?: string[];
+  sceneGuidance?: string[];
+  propGuidance?: string[];
+  durationSeconds?: number;
+  sourceRefs?: string[];
 };
 
 export type ProjectWorkbenchStorySectionFact = {
@@ -129,6 +157,7 @@ export type ProjectWorkbenchFacts = {
     projectId?: string;
     runId?: string;
     schemaVersion?: string;
+    title?: string;
     projectRoot?: string;
     projectVibePath?: string;
   };
@@ -195,6 +224,7 @@ export type ProjectRealChainStatus = {
   reviewShotIds: string[];
   previewItems: ProjectRealChainPreviewItem[];
   previewThumbnails: ProjectRealChainPreviewItem[];
+  relayQueue?: VideoRelayQueueState;
   round5Gate?: ProjectRound5GateSummary;
   workbenchFacts?: ProjectWorkbenchFacts;
   reportPath: string;
@@ -208,237 +238,6 @@ export type ProjectRealChainUiState = {
   status: ProjectRealChainUiStatus;
   summary?: ProjectRealChainStatus;
   message?: string;
-};
-
-export type ProjectImage2BatchUiStatus = "ready_for_review" | "blocked" | "running" | "unavailable";
-
-export type ProjectImage2BatchPlanItem = {
-  shotId: string;
-  taskRunId?: string;
-  packetId?: string;
-  envelopeId?: string;
-  expectedOutputPath?: string;
-  providerObservationPath?: string;
-  semanticQaPath?: string;
-  promptPath?: string;
-  referencePaths: string[];
-  queueOrder: number;
-  blocked: boolean;
-  blockers: string[];
-};
-
-export type ProjectImage2BatchLedgerSummary = {
-  total: number;
-  queued: number;
-  blocked: number;
-  parked: number;
-  completeVerified: number;
-  providerSubmissionForbidden: boolean;
-  liveSubmitAllowed: boolean;
-  noFileMutation: boolean;
-  workerSpawnForbidden: boolean;
-  providerCalled: boolean;
-};
-
-export type ProjectImage2BatchLedgerProjection = {
-  taskRunId: string;
-  envelopeId?: string;
-  currentStatus: string;
-  expectedOutputPath?: string;
-  expectedOutputs: Array<{ expectedOutputPath?: string; path?: string } | string>;
-  previewStatus?: string;
-  completeVerified: boolean;
-};
-
-export type ProjectImage2BatchPlanStatus = {
-  uiStatus: ProjectImage2BatchUiStatus;
-  schemaVersion?: string;
-  projectionKind?: string;
-  sourceLabel?: string;
-  sandboxSource?: string;
-  projectId?: string;
-  runId?: string;
-  projectRoot?: string;
-  projectVibePath?: string;
-  reportPath?: string;
-  plannedCount: number;
-  readyCount: number;
-  blockedCount: number;
-  selectedShotIds: string[];
-  nextAction: string;
-  items: ProjectImage2BatchPlanItem[];
-  ledgerSummary?: ProjectImage2BatchLedgerSummary;
-  ledgerProjections: ProjectImage2BatchLedgerProjection[];
-  queuedCount: number;
-  parkedCount: number;
-  completeVerifiedCount: number;
-  providerSubmissionForbidden: boolean;
-  noFileMutation: boolean;
-  workerSpawnForbidden: boolean;
-  providerCalled: boolean;
-  prepareRan: boolean;
-  verifyScriptRan: boolean;
-  liveSubmitAllowed: boolean;
-  message?: string;
-};
-
-export type ProjectImage2BatchUiState = {
-  status: ProjectImage2BatchUiStatus;
-  summary?: ProjectImage2BatchPlanStatus;
-  message?: string;
-};
-
-export type ProjectImage2OneShotUiStatus =
-  | "ready_to_prepare"
-  | "prepared"
-  | "handoff_prepared"
-  | "trigger_plan_prepared"
-  | "waiting_file"
-  | "needs_review"
-  | "blocked"
-  | "running"
-  | "unavailable";
-
-export type ProjectImage2OneShotReceipt = {
-  receiptId?: string;
-  status?: string;
-  selectedShotId?: string;
-  selectedShotIds?: string[];
-  imageCount?: number;
-  expectedOutputPath?: string;
-  promptPath?: string;
-  promptText?: string;
-  providerObservationPath?: string;
-  semanticQaPath?: string;
-  triggerPlanPath?: string;
-  handoffPacketPath?: string;
-  blockers?: string[];
-};
-
-export type ProjectImage2OneShotStatus = {
-  uiStatus: ProjectImage2OneShotUiStatus;
-  projectId?: string;
-  projectRoot?: string;
-  selectedShotId?: string;
-  expectedOutputPath?: string;
-  promptPath?: string;
-  promptText?: string;
-  providerObservationPath?: string;
-  semanticQaPath?: string;
-  triggerPlanPath?: string;
-  handoffPacketPath?: string;
-  receipt?: ProjectImage2OneShotReceipt;
-  userLabel: string;
-  outputExists: boolean;
-  imageUrl?: string;
-  reviewRequired?: boolean;
-  actualImage2Triggered?: boolean;
-  providerCalled: boolean;
-  liveSubmitAllowed: boolean;
-  projectVibeWritten: boolean;
-  workerSpawnForbidden: boolean;
-  blockers: string[];
-  message?: string;
-};
-
-export type ProjectImage2OneShotUiState = {
-  status: ProjectImage2OneShotUiStatus;
-  summary?: ProjectImage2OneShotStatus;
-  receipt?: ProjectImage2OneShotReceipt;
-  message?: string;
-};
-
-export type ProjectRound5StrictEditPreflightUiStatus = "prepared" | "blocked" | "running" | "unavailable";
-
-export type ProjectRound5StrictEditPreflightRequest = {
-  shotId: string;
-  selectedShotId: string;
-  selectedShotIds: string[];
-};
-
-export type ProjectRound5StrictEditPreflightStatus = {
-  uiStatus: ProjectRound5StrictEditPreflightUiStatus;
-  shotId?: string;
-  selectedShotId?: string;
-  evidencePath?: string;
-  sidecarPath?: string;
-  blockers: string[];
-  warnings: string[];
-  providerCalled: boolean;
-  message?: string;
-};
-
-export type ProjectRound5StrictEditPreflightUiState = {
-  status: ProjectRound5StrictEditPreflightUiStatus;
-  summary?: ProjectRound5StrictEditPreflightStatus;
-  message?: string;
-};
-
-export type ProjectRound5StrictEditReturnUiStatus = "needs_review" | "blocked" | "running" | "unavailable";
-
-export type ProjectRound5StrictEditReturnRequest = {
-  shotId: string;
-  selectedShotId?: string;
-  returnedOutputPath?: string;
-  returnedProviderObservationPath?: string;
-  returnedSemanticQaPath?: string;
-  providerRequestId?: string;
-  actualProviderReturned?: boolean;
-  providerObservation?: Record<string, unknown>;
-  semanticQa?: Record<string, unknown>;
-};
-
-export type ProjectRound5StrictEditReturnStatus = {
-  uiStatus: ProjectRound5StrictEditReturnUiStatus;
-  shotId?: string;
-  expectedOutputPath?: string;
-  returnedOutputPath?: string;
-  outputSha256?: string;
-  providerObservationPath?: string;
-  semanticQaPath?: string;
-  pairQaPath?: string;
-  strictEditReturnIngestRan: boolean;
-  providerCalled: boolean;
-  actualImage2Triggered: boolean;
-  projectVibeWritten: boolean;
-  workerSpawnForbidden: boolean;
-  shotGate?: ProjectRound5ShotGate;
-  blockers: string[];
-  message?: string;
-};
-
-export type ProjectRound5StrictEditReturnUiState = {
-  status: ProjectRound5StrictEditReturnUiStatus;
-  summary?: ProjectRound5StrictEditReturnStatus;
-  message?: string;
-};
-
-export type ProjectRuntimeIdentity = {
-  projectId?: string;
-  projectRoot?: string;
-};
-
-export type ProjectCurrentBindingStatus = {
-  status: "loading" | "bound" | "unbound";
-  projectId?: string;
-  projectRoot?: string;
-  projectTitle?: string;
-  projectVibePath?: string;
-  message?: string;
-};
-
-export type SelectCurrentProjectInput = {
-  projectRoot: string;
-  projectId?: string;
-  displayName?: string;
-};
-
-export type ProjectCurrentChoice = {
-  projectRoot: string;
-  displayName: string;
-  projectId?: string;
-  updatedAt?: string;
-  status?: string;
 };
 
 type ProjectRealChainPayload = {
@@ -482,6 +281,7 @@ type ProjectRealChainPayload = {
   prepareRan?: boolean;
   previewItems?: ProjectRealChainPreviewItem[];
   previewThumbnails?: ProjectRealChainPreviewItem[];
+  relayQueue?: VideoRelayQueueState;
   round5ArtifactIngest?: unknown;
   round5Gate?: unknown;
   shotGateMatrix?: unknown;
@@ -494,9 +294,18 @@ type ProjectRealChainPayload = {
     id?: string;
     order?: number;
     shotId?: string;
-    expectedOutputPath?: string;
-    expectedOutputAbsPath?: string;
-    imageUrl?: string;
+	    expectedOutputPath?: string;
+	    expectedOutputAbsPath?: string;
+	    sourceReceiptId?: string;
+	    providerReceiptId?: string;
+	    providerRequestId?: string;
+	    outputHash?: string;
+	    outputSha256?: string;
+	    providerOutputSha256?: string;
+	    promptText?: string;
+	    promptPath?: string;
+	    promptHash?: string;
+	    imageUrl?: string;
     thumbnailUrl?: string;
     outputExists?: boolean;
     reviewRequired?: boolean;
@@ -511,160 +320,6 @@ type ProjectRealChainPayload = {
   result?: unknown;
 };
 
-type ProjectImage2BatchPayload = {
-  schemaVersion?: string;
-  projectionKind?: string;
-  sourceLabel?: string;
-  sandboxSource?: string;
-  project?: {
-    projectId?: string;
-    runId?: string;
-    projectRoot?: string;
-    projectVibePath?: string;
-  };
-  reportPath?: string;
-  reportRelativePath?: string;
-  providerCalled?: boolean;
-  prepareRan?: boolean;
-  verifyScriptRan?: boolean;
-  liveSubmitAllowed?: boolean;
-  items?: Array<{
-    shotId?: string;
-    taskRunId?: string;
-    packetId?: string;
-    envelopeId?: string;
-    expectedOutputPath?: string;
-    providerObservationPath?: string;
-    semanticQaPath?: string;
-    promptPath?: string;
-    referencePaths?: string[];
-    queueOrder?: number;
-    blocked?: boolean;
-    blockers?: string[];
-  }>;
-  summary?: {
-    plannedCount?: number;
-    readyCount?: number;
-    blockedCount?: number;
-    selectedShotIds?: string[];
-    nextAction?: string;
-  };
-  ledgerProjection?: {
-    schemaVersion?: string;
-    summary?: Record<string, unknown>;
-    projections?: Array<Record<string, unknown>>;
-  };
-  message?: string;
-};
-
-type ProjectImage2OneShotPayload = {
-  status?: string;
-  uiStatus?: string;
-  userLabel?: string;
-  project?: {
-    projectId?: string;
-    projectRoot?: string;
-  };
-  projectId?: string;
-  projectRoot?: string;
-  selectedShotId?: string;
-  expectedOutputPath?: string;
-  promptPath?: string;
-  promptText?: string;
-  providerObservationPath?: string;
-  semanticQaPath?: string;
-  triggerPlanPath?: string;
-  handoffPacketPath?: string;
-  receipt?: ProjectImage2OneShotReceipt;
-  watcherProjection?: {
-    outputExists?: boolean;
-  };
-  previewProjection?: {
-    status?: string;
-    imageUrl?: string;
-    reviewRequired?: boolean;
-    providerCalled?: boolean;
-  };
-  actualImage2Triggered?: boolean;
-  providerCalled?: boolean;
-  liveSubmitAllowed?: boolean;
-  projectVibeWritten?: boolean;
-  workerSpawnForbidden?: boolean;
-  blockers?: string[];
-  message?: string;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-}
-
-function stringOrUndefined(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function numberOrUndefined(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function booleanOrUndefined(value: unknown): boolean | undefined {
-  return typeof value === "boolean" ? value : undefined;
-}
-
-function normalizeIdentityPart(value?: string) {
-  return String(value || "")
-    .trim()
-    .replace(/\\/g, "/")
-    .replace(/\/+$/g, "")
-    .toLowerCase();
-}
-
-function hasProjectRuntimeIdentity(value?: ProjectRuntimeIdentity) {
-  return Boolean(String(value?.projectId || "").trim() || String(value?.projectRoot || "").trim());
-}
-
-function stringRecordValue(record: Record<string, unknown> | undefined, keys: string[]) {
-  if (!record) return undefined;
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim()) return value;
-  }
-  return undefined;
-}
-
-function currentProjectIdentityMatches(
-  actual: { projectId?: string; projectRoot?: string },
-  expected?: ProjectRuntimeIdentity,
-) {
-  const expectedProjectId = normalizeIdentityPart(expected?.projectId);
-  const expectedProjectRoot = normalizeIdentityPart(expected?.projectRoot);
-  const actualProjectId = normalizeIdentityPart(actual.projectId);
-  const actualProjectRoot = normalizeIdentityPart(actual.projectRoot);
-
-  if (!expectedProjectId && !expectedProjectRoot) return false;
-  if (!actualProjectId && !actualProjectRoot) return false;
-
-  if (expectedProjectRoot && actualProjectRoot) {
-    if (expectedProjectRoot !== actualProjectRoot) return false;
-    if (expectedProjectId && actualProjectId && expectedProjectId !== actualProjectId) return false;
-    return true;
-  }
-
-  return false;
-}
-
-function projectMismatchMessage() {
-  return "未选择项目/未同步。";
-}
-
-export function projectRuntimeRequestPath(endpoint: string, expected?: ProjectRuntimeIdentity) {
-  void expected;
-  return endpoint;
-}
-
 export function guardProjectRealChainUiStateForCurrentProject(
   state: ProjectRealChainUiState,
   expected?: ProjectRuntimeIdentity,
@@ -676,114 +331,10 @@ export function guardProjectRealChainUiStateForCurrentProject(
   };
 }
 
-export function guardProjectImage2BatchUiStateForCurrentProject(
-  state: ProjectImage2BatchUiState,
-  expected?: ProjectRuntimeIdentity,
-): ProjectImage2BatchUiState {
-  if (!state.summary || currentProjectIdentityMatches(state.summary, expected)) return state;
-  return {
-    status: "unavailable",
-    message: projectMismatchMessage(),
-  };
-}
-
-export function guardProjectImage2OneShotUiStateForCurrentProject(
-  state: ProjectImage2OneShotUiState,
-  expected?: ProjectRuntimeIdentity,
-): ProjectImage2OneShotUiState {
-  if (!state.summary || currentProjectIdentityMatches(state.summary, expected)) return state;
-  return {
-    status: "unavailable",
-    message: projectMismatchMessage(),
-  };
-}
-
-export function deriveCurrentProjectBindingStatus(payload: unknown): ProjectCurrentBindingStatus {
-  if (!isRecord(payload)) {
-    return {
-      status: "unbound",
-      message: projectMismatchMessage(),
-    };
-  }
-
-  const currentProject = isRecord(payload.currentProject) ? payload.currentProject : undefined;
-  const binding = isRecord(currentProject?.binding) ? currentProject.binding : undefined;
-  const project = isRecord(currentProject?.project)
-    ? currentProject.project
-    : isRecord(payload.project)
-      ? payload.project
-      : payload;
-  const projectId = stringRecordValue(project, ["projectId", "id"])
-    || stringRecordValue(currentProject, ["projectId"])
-    || stringRecordValue(binding, ["projectId"]);
-  const projectRoot = stringRecordValue(project, ["projectRoot", "root"])
-    || stringRecordValue(currentProject, ["projectRoot", "projectRootRelativePath"])
-    || stringRecordValue(binding, ["projectRoot", "projectRootRelativePath"]);
-  const projectTitle = stringRecordValue(project, ["projectTitle", "title", "name"])
-    || stringRecordValue(currentProject, ["projectTitle", "title", "name", "displayName"])
-    || stringRecordValue(binding, ["projectTitle", "title", "name", "displayName"]);
-  const projectVibePath = stringRecordValue(project, ["projectVibePath", "projectVibeRelativePath"])
-    || stringRecordValue(currentProject, ["projectVibePath", "projectVibeRelativePath"])
-    || stringRecordValue(binding, ["projectVibePath", "projectVibeRelativePath"]);
-  const rawStatus = typeof payload.status === "string" ? payload.status.trim().toLowerCase() : "";
-  const explicitlyUnbound = payload.bound === false
-    || currentProject?.bound === false
-    || ["unbound", "unselected", "not_selected", "none", "missing"].includes(rawStatus);
-  const explicitlyBlocked = ["blocked", "error", "forbidden", "bad_request"].includes(rawStatus);
-  const bound = payload.bound === true
-    || currentProject?.bound === true
-    || ["bound", "selected", "ready", "ok"].includes(rawStatus)
-    || Boolean(projectId || projectRoot);
-
-  if (!explicitlyUnbound && !explicitlyBlocked && bound) {
-    return {
-      status: "bound",
-      projectId,
-      projectRoot,
-      projectTitle,
-      projectVibePath,
-      message: typeof payload.message === "string" ? payload.message : undefined,
-    };
-  }
-
-  return {
-    status: "unbound",
-    message: typeof payload.message === "string" ? payload.message : projectMismatchMessage(),
-  };
-}
-
-export function currentProjectBindingIdentity(binding: ProjectCurrentBindingStatus): ProjectRuntimeIdentity | undefined {
-  if (binding.status !== "bound") return undefined;
-  const identity = {
-    projectId: binding.projectId,
-    projectRoot: binding.projectRoot,
-  };
-  return hasProjectRuntimeIdentity(identity) ? identity : undefined;
-}
-
-export function deriveCurrentProjectChoices(payload: unknown): ProjectCurrentChoice[] {
-  if (!isRecord(payload) || !Array.isArray(payload.choices)) return [];
-  const choices: ProjectCurrentChoice[] = [];
-  const seenRoots = new Set<string>();
-  for (const item of payload.choices) {
-    if (!isRecord(item)) continue;
-    const projectRoot = stringRecordValue(item, ["projectRoot", "projectRootRelativePath"]);
-    if (!projectRoot || projectRoot.startsWith("/") || /^[A-Za-z]:[\\/]/.test(projectRoot) || seenRoots.has(projectRoot)) continue;
-    const displayName = stringRecordValue(item, ["displayName", "projectTitle", "title", "name"]) || projectRoot.split("/").filter(Boolean).at(-1) || "未命名项目";
-    choices.push({
-      projectRoot,
-      displayName,
-      projectId: stringRecordValue(item, ["projectId", "id"]),
-      updatedAt: stringRecordValue(item, ["updatedAt"]),
-      status: stringRecordValue(item, ["status"]),
-    });
-    seenRoots.add(projectRoot);
-  }
-  return choices;
-}
-
 function payloadFromUnknown(payload: unknown): ProjectRealChainPayload | undefined {
   if (!isRecord(payload)) return undefined;
+  const p6Projection = deriveP6LiveReportProjection(payload);
+  if (p6Projection) return p6Projection as unknown as ProjectRealChainPayload;
   if (
     typeof payload.previewStatus === "string"
     || Array.isArray(payload.previewItems)
@@ -792,34 +343,13 @@ function payloadFromUnknown(payload: unknown): ProjectRealChainPayload | undefin
     || isRecord(payload.round5Gate)
     || Array.isArray(payload.shotGateMatrix)
     || isRecord(payload.uiSummary)
+    || isRecord(payload.workbenchFacts)
   ) {
     return payload as ProjectRealChainPayload;
   }
   if (isRecord(payload.report)) return { ...(payload.report as ProjectRealChainPayload), ...payload } as ProjectRealChainPayload;
   if (isRecord(payload.result)) return { ...(payload.result as ProjectRealChainPayload), ...payload } as ProjectRealChainPayload;
   return undefined;
-}
-
-function normalizeRound5ShotGate(shot: Record<string, unknown>, index: number): ProjectRound5ShotGate {
-  return {
-    shotId: typeof shot.shotId === "string" && shot.shotId.trim() ? shot.shotId : `ZP${String(index + 1).padStart(2, "0")}`,
-    taskRunId: typeof shot.taskRunId === "string" ? shot.taskRunId : undefined,
-    gateStatus: typeof shot.gateStatus === "string" ? shot.gateStatus : undefined,
-    ledgerStatus: typeof shot.ledgerStatus === "string" ? shot.ledgerStatus : undefined,
-    nextAction: typeof shot.nextAction === "string" ? shot.nextAction : undefined,
-    startFramePath: typeof shot.startFramePath === "string" ? shot.startFramePath : undefined,
-    startFrameSha256: typeof shot.startFrameSha256 === "string" ? shot.startFrameSha256 : undefined,
-    startExists: typeof shot.startExists === "boolean" ? shot.startExists : undefined,
-    startQaStatus: typeof shot.startQaStatus === "string" ? shot.startQaStatus : undefined,
-    endRequired: typeof shot.endRequired === "boolean" ? shot.endRequired : undefined,
-    endFramePath: typeof shot.endFramePath === "string" ? shot.endFramePath : undefined,
-    endExists: typeof shot.endExists === "boolean" ? shot.endExists : undefined,
-    endFrameSha256: typeof shot.endFrameSha256 === "string" ? shot.endFrameSha256 : undefined,
-    strictEditPreflightStatus: typeof shot.strictEditPreflightStatus === "string" ? shot.strictEditPreflightStatus : undefined,
-    strictEditPilotCandidate: shot.strictEditPilotCandidate === true,
-    blockers: stringArray(shot.blockers),
-    warnings: stringArray(shot.warnings),
-  };
 }
 
 function deriveRound5GateSummary(payload: ProjectRealChainPayload): ProjectRound5GateSummary | undefined {
@@ -833,7 +363,7 @@ function deriveRound5GateSummary(payload: ProjectRealChainPayload): ProjectRound
   if (!ingest) return undefined;
 
   const shotGateMatrix = Array.isArray(ingest.shotGateMatrix)
-    ? ingest.shotGateMatrix.filter(isRecord).map(normalizeRound5ShotGate)
+    ? ingest.shotGateMatrix.filter(isRecord).map(normalizeProjectRound5ShotGate)
     : [];
   if (!shotGateMatrix.length && !isRecord(ingest.uiSummary)) return undefined;
 
@@ -851,96 +381,8 @@ function deriveRound5GateSummary(payload: ProjectRealChainPayload): ProjectRound
   };
 }
 
-function image2BatchPayloadFromUnknown(payload: unknown): ProjectImage2BatchPayload | undefined {
-  if (!isRecord(payload)) return undefined;
-  if (payload.projectionKind === "current_project_image2_batch_prepare_plan" || Array.isArray(payload.items)) {
-    return payload as ProjectImage2BatchPayload;
-  }
-  if (isRecord(payload.report)) return { ...(payload.report as ProjectImage2BatchPayload), ...payload } as ProjectImage2BatchPayload;
-  if (isRecord(payload.result)) return { ...(payload.result as ProjectImage2BatchPayload), ...payload } as ProjectImage2BatchPayload;
-  return undefined;
-}
-
-function deriveImage2BatchLedgerSummary(value: unknown): ProjectImage2BatchLedgerSummary | undefined {
-  if (!isRecord(value)) return undefined;
-  return {
-    total: numberOrUndefined(value.total) ?? 0,
-    queued: numberOrUndefined(value.queued) ?? 0,
-    blocked: numberOrUndefined(value.blocked) ?? 0,
-    parked: numberOrUndefined(value.parked) ?? 0,
-    completeVerified: numberOrUndefined(value.completeVerified) ?? 0,
-    providerSubmissionForbidden: booleanOrUndefined(value.providerSubmissionForbidden) ?? false,
-    liveSubmitAllowed: booleanOrUndefined(value.liveSubmitAllowed) ?? false,
-    noFileMutation: booleanOrUndefined(value.noFileMutation) ?? false,
-    workerSpawnForbidden: booleanOrUndefined(value.workerSpawnForbidden) ?? false,
-    providerCalled: booleanOrUndefined(value.providerCalled) ?? false,
-  };
-}
-
-function normalizeLedgerExpectedOutputs(value: unknown): ProjectImage2BatchLedgerProjection["expectedOutputs"] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is { expectedOutputPath?: string; path?: string } | string => {
-    if (typeof item === "string") return true;
-    return isRecord(item) && (typeof item.expectedOutputPath === "string" || typeof item.path === "string");
-  }).map((item) => {
-    if (typeof item === "string") return item;
-    return {
-      expectedOutputPath: typeof item.expectedOutputPath === "string" ? item.expectedOutputPath : undefined,
-      path: typeof item.path === "string" ? item.path : undefined,
-    };
-  });
-}
-
-function deriveImage2BatchLedgerProjections(value: unknown): ProjectImage2BatchLedgerProjection[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter(isRecord).map((item, index): ProjectImage2BatchLedgerProjection => ({
-    taskRunId: typeof item.taskRunId === "string" ? item.taskRunId : `task_run_${String(index + 1).padStart(2, "0")}`,
-    envelopeId: typeof item.envelopeId === "string" ? item.envelopeId : undefined,
-    currentStatus: typeof item.currentStatus === "string" ? item.currentStatus : "prepared",
-    expectedOutputPath: typeof item.expectedOutputPath === "string" ? item.expectedOutputPath : undefined,
-    expectedOutputs: normalizeLedgerExpectedOutputs(item.expectedOutputs),
-    previewStatus: typeof item.previewStatus === "string"
-      ? item.previewStatus
-      : isRecord(item.previewSummary) && typeof item.previewSummary.status === "string"
-        ? item.previewSummary.status
-        : undefined,
-    completeVerified: item.completeVerified === true
-      || (isRecord(item.completionGate) && item.completionGate.completeVerified === true),
-  }));
-}
-
-function runtimeApiBaseUrl() {
-  if (typeof window === "undefined") return "";
-  const configured = window.__VIBE_RUNTIME_API_BASE_URL__ || import.meta.env?.VITE_VIBE_RUNTIME_API_BASE_URL || "";
-  if (configured) return configured.replace(/\/+$/, "");
-  const { hostname, port } = window.location;
-  if ((hostname === "127.0.0.1" || hostname === "localhost") && port !== "8790") {
-    return defaultRuntimeApiBaseUrl;
-  }
-  return "";
-}
-
-function toRuntimeUrl(path: string) {
-  if (/^(?:https?:|data:|blob:)/.test(path)) return path;
-  const baseUrl = runtimeApiBaseUrl();
-  if (!baseUrl) return path;
-  return path.startsWith("/") ? `${baseUrl}${path}` : `${baseUrl}/${path}`;
-}
-
-function runtimeApiToken() {
-  return import.meta.env?.VITE_VIBE_CORE_RUNTIME_API_TOKEN || "";
-}
-
-function runtimeRequestInit(init?: RequestInit): RequestInit | undefined {
-  const token = runtimeApiToken();
-  if (!token) return init;
-  const headers = new Headers(init?.headers);
-  headers.set("x-vibe-runtime-token", token);
-  return { ...init, headers };
-}
-
 function toRuntimeFileUrl(path: string) {
-  return toRuntimeUrl(`${projectRealChainFileEndpoint}?path=${encodeURIComponent(path)}`);
+  return toRuntimeUrl(`${projectRealChainFileEndpoint}?scope=current-project&path=${encodeURIComponent(path)}`);
 }
 
 function humanPreviewStatus(status: string) {
@@ -992,6 +434,14 @@ function previewItemFromObservation(
     order: typeof item.order === "number" ? item.order : index + 1,
     expectedOutputPath: item.expectedOutputPath,
     expectedOutputAbsPath: item.expectedOutputAbsPath,
+    sourceReceiptId: item.sourceReceiptId || item.providerReceiptId || item.providerRequestId,
+    providerReceiptId: item.providerReceiptId,
+    providerRequestId: item.providerRequestId,
+    outputHash: item.outputHash || item.outputSha256 || item.providerOutputSha256,
+    outputSha256: item.outputSha256 || item.providerOutputSha256,
+    promptText: item.promptText,
+    promptPath: item.promptPath,
+    promptHash: item.promptHash,
     imageUrl,
     thumbnailUrl: item.thumbnailUrl ? toRuntimeUrl(item.thumbnailUrl) : imageUrl,
     outputExists: item.outputExists,
@@ -1015,10 +465,16 @@ function normalizePreviewItem(item: ProjectRealChainPreviewItem, index: number):
     id: item.id || shotId,
     shotId,
     order: typeof item.order === "number" ? item.order : index + 1,
+    mediaPath: item.mediaPath,
+    fileUrl: item.fileUrl,
     imageUrl,
     thumbnailUrl,
+    status: item.status,
+    previewStatus: item.previewStatus,
+    runtimeTruthStatus: item.runtimeTruthStatus,
     reviewRequired: item.reviewRequired === true || item.reviewOverlay === true || item.productionQaStatus === "needs_review",
     reviewOverlay: item.reviewOverlay === true,
+    blockers: item.blockers,
   };
 }
 
@@ -1083,6 +539,7 @@ export function deriveProjectRealChainStatus(
     ?? numberOrUndefined(round5Gate?.uiSummary?.observedStarts)
     ?? previewItems.filter((item) => item.imageUrl || item.expectedOutputPath).length;
   const project = report.project || {};
+  const workbenchProject = report.workbenchFacts?.project || {};
 
   return {
     uiStatus: deriveUiStatus({ ...report, reviewShotIds }),
@@ -1095,11 +552,11 @@ export function deriveProjectRealChainStatus(
     endpoint: report.endpoint,
     runtimeEndpoint: report.runtimeEndpoint,
     generatedAt: report.generatedAt,
-    projectId: project.projectId || report.projectId,
+    projectId: project.projectId || report.projectId || workbenchProject.projectId,
     runId: project.runId || report.runId,
     projectSchemaVersion: project.schemaVersion || report.projectSchemaVersion,
-    projectRoot: project.projectRoot || report.projectRoot,
-    projectVibePath: project.projectVibePath || report.projectVibePath,
+    projectRoot: project.projectRoot || report.projectRoot || workbenchProject.projectRoot || report.workbenchFacts?.projectRoot,
+    projectVibePath: project.projectVibePath || report.projectVibePath || workbenchProject.projectVibePath || report.workbenchFacts?.projectVibePath,
     previewStatus,
     previewStatusLabel: report.previewStatusLabel || humanPreviewStatus(previewStatus),
     productionStatus: report.productionStatus || "unavailable",
@@ -1109,6 +566,7 @@ export function deriveProjectRealChainStatus(
     reviewShotIds,
     previewItems,
     previewThumbnails,
+    relayQueue: isRecord(report.relayQueue) ? report.relayQueue as VideoRelayQueueState : undefined,
     round5Gate,
     workbenchFacts: report.workbenchFacts,
     reportPath,
@@ -1119,278 +577,11 @@ export function deriveProjectRealChainStatus(
   };
 }
 
-export function deriveProjectImage2BatchPlanStatus(
-  payload: unknown,
-): ProjectImage2BatchPlanStatus {
-  const report = image2BatchPayloadFromUnknown(payload);
-  if (!report) {
-    return {
-      uiStatus: "unavailable",
-      plannedCount: 0,
-      readyCount: 0,
-      blockedCount: 0,
-      selectedShotIds: [],
-      nextAction: "未选择项目/未同步。",
-      items: [],
-      ledgerProjections: [],
-      queuedCount: 0,
-      parkedCount: 0,
-      completeVerifiedCount: 0,
-      providerSubmissionForbidden: false,
-      noFileMutation: false,
-      workerSpawnForbidden: false,
-      providerCalled: false,
-      prepareRan: false,
-      verifyScriptRan: false,
-      liveSubmitAllowed: false,
-      message: "未选择项目/未同步。",
-    };
-  }
-
-  const items = (report.items || []).map((item, index): ProjectImage2BatchPlanItem => ({
-    shotId: item.shotId || `S${String(index + 1).padStart(2, "0")}`,
-    taskRunId: item.taskRunId,
-    packetId: item.packetId,
-    envelopeId: item.envelopeId,
-    expectedOutputPath: item.expectedOutputPath,
-    providerObservationPath: item.providerObservationPath,
-    semanticQaPath: item.semanticQaPath,
-    promptPath: item.promptPath,
-    referencePaths: stringArray(item.referencePaths),
-    queueOrder: typeof item.queueOrder === "number" ? item.queueOrder : index + 1,
-    blocked: item.blocked === true || stringArray(item.blockers).length > 0,
-    blockers: stringArray(item.blockers),
-  }));
-  const plannedCount = numberOrUndefined(report.summary?.plannedCount) ?? items.length;
-  const blockedCount = numberOrUndefined(report.summary?.blockedCount) ?? items.filter((item) => item.blocked).length;
-  const readyCount = numberOrUndefined(report.summary?.readyCount) ?? Math.max(0, plannedCount - blockedCount);
-  const selectedShotIds = stringArray(report.summary?.selectedShotIds).length
-    ? stringArray(report.summary?.selectedShotIds)
-    : items.map((item) => item.shotId);
-  const ledgerSummary = deriveImage2BatchLedgerSummary(report.ledgerProjection?.summary);
-  const ledgerProjections = deriveImage2BatchLedgerProjections(report.ledgerProjection?.projections);
-  const uiStatus: ProjectImage2BatchUiStatus = plannedCount > 0 && blockedCount === 0 ? "ready_for_review" : plannedCount > 0 ? "blocked" : "unavailable";
-  const project = report.project || {};
-
-  return {
-    uiStatus,
-    schemaVersion: report.schemaVersion,
-    projectionKind: report.projectionKind,
-    sourceLabel: report.sourceLabel,
-    sandboxSource: report.sandboxSource,
-    projectId: project.projectId,
-    runId: project.runId,
-    projectRoot: project.projectRoot,
-    projectVibePath: project.projectVibePath,
-    reportPath: report.reportRelativePath || report.reportPath,
-    plannedCount,
-    readyCount,
-    blockedCount,
-    selectedShotIds,
-    nextAction: report.summary?.nextAction || "复核当前项目状态。",
-    items,
-    ledgerSummary,
-    ledgerProjections,
-    queuedCount: ledgerSummary?.queued ?? ledgerProjections.filter((item) => item.currentStatus === "queued").length,
-    parkedCount: ledgerSummary?.parked ?? ledgerProjections.filter((item) => item.currentStatus === "parked").length,
-    completeVerifiedCount: ledgerSummary?.completeVerified ?? ledgerProjections.filter((item) => item.completeVerified).length,
-    providerSubmissionForbidden: ledgerSummary?.providerSubmissionForbidden ?? false,
-    noFileMutation: ledgerSummary?.noFileMutation ?? false,
-    workerSpawnForbidden: ledgerSummary?.workerSpawnForbidden ?? false,
-    providerCalled: (ledgerSummary?.providerCalled ?? report.providerCalled) === true,
-    prepareRan: report.prepareRan === true,
-    verifyScriptRan: report.verifyScriptRan === true,
-    liveSubmitAllowed: (ledgerSummary?.liveSubmitAllowed ?? report.liveSubmitAllowed) === true,
-    message: report.message,
-  };
-}
-
-function oneShotPayloadFromUnknown(payload: unknown): ProjectImage2OneShotPayload | undefined {
-  if (!isRecord(payload)) return undefined;
-  if (typeof payload.status === "string" || typeof payload.uiStatus === "string" || isRecord(payload.receipt)) {
-    return payload as ProjectImage2OneShotPayload;
-  }
-  return undefined;
-}
-
-function normalizeOneShotStatus(value?: string): ProjectImage2OneShotUiStatus {
-  if (value === "prepared") return "prepared";
-  if (value === "handoff_prepared") return "handoff_prepared";
-  if (value === "trigger_plan_prepared") return "trigger_plan_prepared";
-  if (value === "waiting_file") return "waiting_file";
-  if (value === "needs_review") return "needs_review";
-  if (value === "blocked") return "blocked";
-  if (value === "running") return "running";
-  if (value === "ready_to_prepare") return "ready_to_prepare";
-  return "unavailable";
-}
-
-export function deriveProjectImage2OneShotStatus(payload: unknown): ProjectImage2OneShotStatus {
-  const report = oneShotPayloadFromUnknown(payload);
-  if (!report) {
-    return {
-      uiStatus: "unavailable",
-      userLabel: "生成小样",
-      outputExists: false,
-      providerCalled: false,
-      liveSubmitAllowed: false,
-      projectVibeWritten: false,
-      workerSpawnForbidden: true,
-      blockers: [],
-      message: "未选择项目/未同步。",
-    };
-  }
-  const rawStatus = normalizeOneShotStatus(report.uiStatus || report.status);
-  const project = report.project || {};
-  return {
-    uiStatus: rawStatus,
-    projectId: project.projectId || report.projectId,
-    projectRoot: project.projectRoot || report.projectRoot,
-    selectedShotId: report.selectedShotId,
-    expectedOutputPath: report.expectedOutputPath,
-    promptPath: report.promptPath,
-    promptText: report.promptText,
-    providerObservationPath: report.providerObservationPath,
-    semanticQaPath: report.semanticQaPath,
-    triggerPlanPath: report.triggerPlanPath,
-    handoffPacketPath: report.handoffPacketPath,
-    receipt: report.receipt,
-    userLabel: report.userLabel || (rawStatus === "prepared" ? "确认生成" : rawStatus === "trigger_plan_prepared" ? "等待确认" : rawStatus === "handoff_prepared" || rawStatus === "waiting_file" ? "等待文件" : rawStatus === "needs_review" ? "需要复核" : "生成小样"),
-    outputExists: report.watcherProjection?.outputExists === true || Boolean(report.previewProjection?.imageUrl),
-    imageUrl: report.previewProjection?.imageUrl ? toRuntimeUrl(report.previewProjection.imageUrl) : undefined,
-    reviewRequired: report.previewProjection?.reviewRequired === true,
-    actualImage2Triggered: report.actualImage2Triggered === true,
-    providerCalled: report.providerCalled === true,
-    liveSubmitAllowed: report.liveSubmitAllowed === true,
-    projectVibeWritten: report.projectVibeWritten === true,
-    workerSpawnForbidden: report.workerSpawnForbidden !== false,
-    blockers: stringArray(report.blockers),
-    message: report.message,
-  };
-}
-
-function deriveRound5StrictEditPreflightStatus(payload: unknown, requestedShotId?: string): ProjectRound5StrictEditPreflightStatus {
-  const report = isRecord(payload) ? payload : {};
-  const status = String(report.uiStatus || report.status || "").toLowerCase();
-  const blockers = stringArray(report.blockers);
-  const providerCalled = report.providerCalled === true || report.actualProviderCalled === true;
-  const preparedStatuses = new Set(["prepared", "sidecars_prepared", "ready_for_provider_edit", "end_edit_preflight_ready"]);
-  const prepared = preparedStatuses.has(status)
-    || (report.ok === true && blockers.length === 0 && !providerCalled);
-
-  return {
-    uiStatus: blockers.length > 0 || providerCalled ? "blocked" : prepared ? "prepared" : "blocked",
-    shotId: stringOrUndefined(report.shotId) || stringOrUndefined(report.selectedShotId) || requestedShotId,
-    selectedShotId: stringOrUndefined(report.selectedShotId) || stringOrUndefined(report.shotId) || requestedShotId,
-    evidencePath: stringOrUndefined(report.evidencePath) || stringOrUndefined(report.receiptPath),
-    sidecarPath: stringOrUndefined(report.sidecarPath),
-    blockers,
-    warnings: stringArray(report.warnings),
-    providerCalled,
-    message: stringOrUndefined(report.message),
-  };
-}
-
-export function deriveRound5StrictEditReturnStatus(payload: unknown, requestedShotId?: string): ProjectRound5StrictEditReturnStatus {
-  const report = isRecord(payload) ? payload : {};
-  const status = String(report.uiStatus || report.status || "").toLowerCase();
-  const blockers = stringArray(report.blockers);
-  const shotGate = isRecord(report.shotGate) ? normalizeRound5ShotGate(report.shotGate, 0) : undefined;
-  const returned = report.ok === true
-    && blockers.length === 0
-    && (status.includes("needs_review") || shotGate?.gateStatus === "end_returned_needs_review");
-
-  return {
-    uiStatus: returned ? "needs_review" : blockers.length > 0 ? "blocked" : "blocked",
-    shotId: stringOrUndefined(report.shotId) || shotGate?.shotId || requestedShotId,
-    expectedOutputPath: stringOrUndefined(report.expectedOutputPath),
-    returnedOutputPath: stringOrUndefined(report.returnedOutputPath),
-    outputSha256: stringOrUndefined(report.outputSha256) || shotGate?.endFrameSha256,
-    providerObservationPath: stringOrUndefined(report.providerObservationPath),
-    semanticQaPath: stringOrUndefined(report.semanticQaPath),
-    pairQaPath: stringOrUndefined(report.pairQaPath),
-    strictEditReturnIngestRan: report.strictEditReturnIngestRan === true,
-    providerCalled: report.providerCalled === true || report.actualProviderCalled === true,
-    actualImage2Triggered: report.actualImage2Triggered === true,
-    projectVibeWritten: report.projectVibeWritten === true,
-    workerSpawnForbidden: report.workerSpawnForbidden !== false,
-    shotGate,
-    blockers,
-    message: stringOrUndefined(report.message),
-  };
-}
-
-async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
-  const response = await fetch(toRuntimeUrl(url), runtimeRequestInit(init));
-  if (!response.ok) throw new Error(`${url} returned ${response.status}`);
-  return response.json() as Promise<unknown>;
-}
-
-function isRuntimeEndpointPath(url: string) {
-  return url.startsWith(projectRealChainRuntimeBasePath);
-}
-
-async function fetchRuntimeJson(url: string, init?: RequestInit): Promise<unknown> {
-  try {
-    return await fetchJson(url, init);
-  } catch (error) {
-    if (runtimeApiBaseUrl() || !isRuntimeEndpointPath(url)) throw error;
-    const response = await fetch(`${defaultRuntimeApiBaseUrl}${url}`, runtimeRequestInit(init));
-    if (!response.ok) throw new Error(`${defaultRuntimeApiBaseUrl}${url} returned ${response.status}`);
-    return response.json() as Promise<unknown>;
-  }
-}
-
 async function fallbackToReport(message: string): Promise<ProjectRealChainUiState> {
   return {
     status: "unavailable",
     message,
   };
-}
-
-export async function loadCurrentProjectBindingStatus(): Promise<ProjectCurrentBindingStatus> {
-  try {
-    const payload = await fetchRuntimeJson(projectCurrentBindingEndpoint);
-    return deriveCurrentProjectBindingStatus(payload);
-  } catch (endpointError) {
-    return {
-      status: "unbound",
-      message: projectMismatchMessage(),
-    };
-  }
-}
-
-export async function loadCurrentProjectChoices(): Promise<ProjectCurrentChoice[]> {
-  try {
-    const payload = await fetchRuntimeJson(projectCurrentChoicesEndpoint);
-    return deriveCurrentProjectChoices(payload);
-  } catch {
-    return [];
-  }
-}
-
-export async function selectCurrentProjectBinding(input: SelectCurrentProjectInput): Promise<ProjectCurrentBindingStatus> {
-  const projectRoot = input.projectRoot.trim();
-  if (!projectRoot) throw new Error("请输入项目路径。");
-
-  const response = await fetch(toRuntimeUrl(projectCurrentSelectEndpoint), runtimeRequestInit({
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      projectRoot,
-      projectId: input.projectId?.trim() || undefined,
-      displayName: input.displayName?.trim() || undefined,
-    }),
-  }));
-  const payload = await response.json().catch(() => undefined);
-  if (!response.ok) {
-    throw new Error("连接项目失败，请确认路径在当前工作区内并且项目文件可读取。");
-  }
-  const binding = deriveCurrentProjectBindingStatus(payload);
-  if (binding.status !== "bound") {
-    throw new Error("连接项目失败，请确认路径在当前工作区内并且项目文件可读取。");
-  }
-  return binding;
 }
 
 export async function loadProjectRealChainStatus(expected?: ProjectRuntimeIdentity): Promise<ProjectRealChainUiState> {
@@ -1431,219 +622,98 @@ export async function runProjectRealChainCheck(expected?: ProjectRuntimeIdentity
   }
 }
 
-function strictEditPreflightUnavailable(message = "未选择项目/未同步。"): ProjectRound5StrictEditPreflightUiState {
-  return { status: "unavailable", message };
-}
+export {
+  currentProjectBindingIdentity,
+  deriveCurrentProjectBindingStatus,
+  deriveCurrentProjectChoices,
+  loadCurrentProjectBindingStatus,
+  loadCurrentProjectChoices,
+  projectCurrentBindingEndpoint,
+  projectCurrentChoicesEndpoint,
+  projectCurrentSelectEndpoint,
+  selectCurrentProjectBinding,
+} from "./projectCurrentBindingClient";
 
-export async function prepareProjectRound5StrictEditPreflight(
-  expected?: ProjectRuntimeIdentity,
-  shotId?: string,
-): Promise<ProjectRound5StrictEditPreflightUiState> {
-  if (!hasProjectRuntimeIdentity(expected)) return strictEditPreflightUnavailable();
-  if (!shotId) return { status: "blocked", message: "请先选择镜头。" };
+export type {
+  ProjectCurrentBindingStatus,
+  ProjectCurrentChoice,
+  SelectCurrentProjectInput,
+} from "./projectCurrentBindingClient";
 
-  const request: ProjectRound5StrictEditPreflightRequest = {
-    shotId,
-    selectedShotId: shotId,
-    selectedShotIds: [shotId],
-  };
+export {
+  deriveRound5StrictEditReturnStatus,
+  ingestProjectRound5StrictEditReturn,
+  prepareProjectRound5StrictEditPreflight,
+  projectRound5StrictEditPrepareEndpoint,
+  projectRound5StrictEditReturnEndpoint,
+} from "./projectRound5StrictEditClient";
 
-  try {
-    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectRound5StrictEditPrepareEndpoint, expected), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(request),
-    });
-    const summary = deriveRound5StrictEditPreflightStatus(payload, shotId);
-    return { status: summary.uiStatus, summary, message: summary.message };
-  } catch {
-    return { status: "blocked", message: "edit 证据准备失败，请等待 runtime endpoint 合入或检查 sidecar。" };
-  }
-}
+export type {
+  ProjectRound5StrictEditPreflightRequest,
+  ProjectRound5StrictEditPreflightStatus,
+  ProjectRound5StrictEditPreflightUiState,
+  ProjectRound5StrictEditPreflightUiStatus,
+  ProjectRound5StrictEditReturnRequest,
+  ProjectRound5StrictEditReturnStatus,
+  ProjectRound5StrictEditReturnUiState,
+  ProjectRound5StrictEditReturnUiStatus,
+} from "./projectRound5StrictEditClient";
 
-export async function ingestProjectRound5StrictEditReturn(
-  expected: ProjectRuntimeIdentity | undefined,
-  request: ProjectRound5StrictEditReturnRequest,
-): Promise<ProjectRound5StrictEditReturnUiState> {
-  if (!hasProjectRuntimeIdentity(expected)) return { status: "unavailable", message: "未选择项目/未同步。" };
-  if (!request.shotId) return { status: "blocked", message: "请先选择镜头。" };
+export {
+  confirmProjectImage2OneShot,
+  deriveProjectImage2BatchPlanStatus,
+  deriveProjectImage2OneShotStatus,
+  executeReturnedProjectImage2OneShot,
+  guardProjectImage2BatchUiStateForCurrentProject,
+  guardProjectImage2OneShotUiStateForCurrentProject,
+  loadProjectImage2BatchPlan,
+  loadProjectImage2OneShotStatus,
+  prepareProjectImage2OneShot,
+  prepareProjectImage2OneShotPermissionReceipt,
+  prepareProjectImage2OneShotTrigger,
+  projectImage2BatchPlanEndpoint,
+  projectImage2BatchRunCheckEndpoint,
+  projectImage2OneShotConfirmEndpoint,
+  projectImage2OneShotExecuteReturnEndpoint,
+  projectImage2OneShotPrepareEndpoint,
+  projectImage2OneShotPrepareTriggerEndpoint,
+  projectImage2OneShotReturnEndpoint,
+  projectImage2OneShotStatusEndpoint,
+  projectP6RealImage2SubmitEndpoint,
+  projectP6RealImage2SubmitSerialEndpoint,
+  runProjectImage2BatchCheck,
+  submitProjectP6RealImage2OneShot,
+  submitProjectP6RealImage2SerialBatch,
+} from "./projectImage2Client";
 
-  try {
-    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectRound5StrictEditReturnEndpoint, expected), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...request,
-        selectedShotId: request.selectedShotId || request.shotId,
-      }),
-    });
-    const summary = deriveRound5StrictEditReturnStatus(payload, request.shotId);
-    return { status: summary.uiStatus, summary, message: summary.message };
-  } catch {
-    return { status: "blocked", message: "真实 end 回流接收失败，请检查返回文件、providerRequestId 和 preflight sidecar。" };
-  }
-}
+export type {
+  ProjectImage2BatchLedgerProjection,
+  ProjectImage2BatchLedgerSummary,
+  ProjectImage2BatchPlanItem,
+  ProjectImage2BatchPlanStatus,
+  ProjectImage2BatchUiState,
+  ProjectImage2BatchUiStatus,
+  ProjectImage2OneShotPermissionInput,
+  ProjectImage2OneShotPermissionReceipt,
+  ProjectImage2OneShotReceipt,
+  ProjectImage2OneShotStatus,
+  ProjectImage2OneShotUiState,
+  ProjectImage2OneShotUiStatus,
+  ProjectP6RealImage2SerialBatchInput,
+  ProjectP6RealImage2SerialShotInput,
+  ProjectP6RealImage2SubmitInput,
+} from "./projectImage2Client";
 
-async function unavailableImage2BatchState(message: string): Promise<ProjectImage2BatchUiState> {
-  return { status: "unavailable", message };
-}
+export {
+  credentialsEndpoint,
+  deleteCredential,
+  loadCredentials,
+  loadProviderConfigStatuses,
+  saveCredential,
+} from "./providerCredentialsClient";
 
-export async function loadProjectImage2BatchPlan(expected?: ProjectRuntimeIdentity): Promise<ProjectImage2BatchUiState> {
-  if (!hasProjectRuntimeIdentity(expected)) {
-    return unavailableImage2BatchState("未选择项目/未同步。");
-  }
-
-  try {
-    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2BatchPlanEndpoint, expected));
-    const summary = deriveProjectImage2BatchPlanStatus(payload);
-    return guardProjectImage2BatchUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
-  } catch (endpointError) {
-    return unavailableImage2BatchState(
-      "未选择项目/未同步。",
-    );
-  }
-}
-
-export async function runProjectImage2BatchCheck(expected?: ProjectRuntimeIdentity): Promise<ProjectImage2BatchUiState> {
-  if (!hasProjectRuntimeIdentity(expected)) {
-    return unavailableImage2BatchState("未选择项目/未同步。");
-  }
-
-  try {
-    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2BatchRunCheckEndpoint, expected), { method: "POST" });
-    const summary = deriveProjectImage2BatchPlanStatus(payload);
-    return guardProjectImage2BatchUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
-  } catch (endpointError) {
-    return unavailableImage2BatchState(
-      "未选择项目/未同步。",
-    );
-  }
-}
-
-function oneShotUnavailable(message = "未选择项目/未同步。"): ProjectImage2OneShotUiState {
-  return { status: "unavailable", message };
-}
-
-function oneShotPath(endpoint: string, selectedShotId?: string) {
-  if (!selectedShotId) return endpoint;
-  return `${endpoint}?selectedShotId=${encodeURIComponent(selectedShotId)}`;
-}
-
-export async function loadProjectImage2OneShotStatus(
-  expected?: ProjectRuntimeIdentity,
-  selectedShotId?: string,
-): Promise<ProjectImage2OneShotUiState> {
-  if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
-  if (!selectedShotId) return { status: "unavailable", message: "选择镜头后可生成小样。" };
-
-  try {
-    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(oneShotPath(projectImage2OneShotStatusEndpoint, selectedShotId), expected));
-    const summary = deriveProjectImage2OneShotStatus(payload);
-    return guardProjectImage2OneShotUiStateForCurrentProject({ status: summary.uiStatus, summary, receipt: summary.receipt }, expected);
-  } catch {
-    return oneShotUnavailable("选择镜头后可生成小样。");
-  }
-}
-
-export async function prepareProjectImage2OneShot(
-  expected?: ProjectRuntimeIdentity,
-  selectedShotId?: string,
-): Promise<ProjectImage2OneShotUiState> {
-  if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
-  if (!selectedShotId) return { status: "blocked", message: "请先选择一个镜头。" };
-
-  try {
-    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2OneShotPrepareEndpoint, expected), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        selectedShotId,
-        selectedShotIds: [selectedShotId],
-        imageCount: 1,
-      }),
-    });
-    const summary = deriveProjectImage2OneShotStatus(payload);
-    return guardProjectImage2OneShotUiStateForCurrentProject({ status: summary.uiStatus, summary, receipt: summary.receipt, message: summary.message }, expected);
-  } catch {
-    return { status: "blocked", message: "小样准备失败，请检查镜头和引用。" };
-  }
-}
-
-export async function confirmProjectImage2OneShot(
-  expected?: ProjectRuntimeIdentity,
-  receipt?: ProjectImage2OneShotReceipt,
-): Promise<ProjectImage2OneShotUiState> {
-  if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
-  if (!receipt?.selectedShotId) return { status: "blocked", message: "请先生成小样。" };
-
-  try {
-    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2OneShotConfirmEndpoint, expected), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        selectedShotId: receipt.selectedShotId,
-        selectedShotIds: [receipt.selectedShotId],
-        imageCount: 1,
-        expectedOutputPath: receipt.expectedOutputPath,
-        receipt,
-      }),
-    });
-    const summary = deriveProjectImage2OneShotStatus(payload);
-    return guardProjectImage2OneShotUiStateForCurrentProject({ status: summary.uiStatus, summary, receipt: summary.receipt, message: summary.message }, expected);
-  } catch {
-    return { status: "blocked", message: "确认生成失败，请重新生成小样。" };
-  }
-}
-
-export async function prepareProjectImage2OneShotTrigger(
-  expected?: ProjectRuntimeIdentity,
-  receipt?: ProjectImage2OneShotReceipt,
-): Promise<ProjectImage2OneShotUiState> {
-  if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
-  if (!receipt?.selectedShotId) return { status: "blocked", message: "请先确认生成小样。" };
-
-  try {
-    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2OneShotPrepareTriggerEndpoint, expected), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        selectedShotId: receipt.selectedShotId,
-        selectedShotIds: [receipt.selectedShotId],
-        imageCount: 1,
-        expectedOutputPath: receipt.expectedOutputPath,
-        receiptId: receipt.receiptId,
-        transportMode: "codex_app_server",
-      }),
-    });
-    const summary = deriveProjectImage2OneShotStatus(payload);
-    return guardProjectImage2OneShotUiStateForCurrentProject({ status: summary.uiStatus, summary, receipt: summary.receipt || receipt, message: summary.message }, expected);
-  } catch {
-    return { status: "blocked", message: "真实触发计划准备失败，请重新确认小样。" };
-  }
-}
-
-export async function executeReturnedProjectImage2OneShot(
-  expected?: ProjectRuntimeIdentity,
-  receipt?: ProjectImage2OneShotReceipt,
-): Promise<ProjectImage2OneShotUiState> {
-  if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
-  if (!receipt?.selectedShotId) return { status: "blocked", message: "请先确认生成小样。" };
-
-  try {
-    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2OneShotExecuteReturnEndpoint, expected), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        selectedShotId: receipt.selectedShotId,
-        selectedShotIds: [receipt.selectedShotId],
-        imageCount: 1,
-        expectedOutputPath: receipt.expectedOutputPath,
-        receiptId: receipt.receiptId,
-      }),
-    });
-    const summary = deriveProjectImage2OneShotStatus(payload);
-    return guardProjectImage2OneShotUiStateForCurrentProject({ status: summary.uiStatus, summary, receipt: summary.receipt, message: summary.message }, expected);
-  } catch {
-    return { status: "blocked", message: "回流检查未发现可用的真实 Image2 返回。" };
-  }
-}
+export type {
+  CredentialEntry,
+  CredentialsSnapshot,
+  ProviderConfigStatus,
+} from "./providerCredentialsClient";

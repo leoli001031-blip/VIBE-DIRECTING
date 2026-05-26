@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_analysis_envelope.schema.json",
+  "title": "DirectorAnalysisEnvelope",
+  "description": "Validated AI director analysis envelope for rhythm, action, and storyboard planning before project mutation or provider submit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "envelopeId",
+    "generatedAt",
+    "providerCalled",
+    "runtimeExternalNetworkCallMade",
+    "taskEnvelope",
+    "narrativeGoal",
+    "directorNotes",
+    "shots",
+    "blocked",
+    "blockers",
+    "warnings",
+    "hardLocks"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "director_analysis_envelope_v1" },
+    "envelopeId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "projectId": { "type": "string" },
+    "generatedAt": { "$ref": "common.schema.json#/$defs/isoDateTime" },
+    "providerCalled": { "const": false },
+    "runtimeExternalNetworkCallMade": { "const": false },
+    "taskEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "envelopeId",
+        "taskKind",
+        "source",
+        "inputHash",
+        "expectedOutput",
+        "requiredFields",
+        "forbiddenActions",
+        "status"
+      ],
+      "properties": {
+        "envelopeId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "taskKind": { "const": "director_analysis" },
+        "source": { "const": "validated_story_context" },
+        "inputHash": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "expectedOutput": { "const": "structured_director_analysis" },
+        "requiredFields": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "forbiddenActions": {
+          "type": "array",
+          "items": { "enum": ["provider_submit", "credential_access", "file_mutation", "free_text_promotion"] }
+        },
+        "status": { "enum": ["valid", "blocked"] }
+      }
+    },
+    "narrativeGoal": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "directorNotes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "shots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["shotId", "shotTitle", "source", "candidateAccepted", "validationWarnings", "rhythmPlan", "directorPlan"],
+        "properties": {
+          "shotId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "shotTitle": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "source": { "enum": ["llm_candidate_validated", "heuristic_fallback"] },
+          "candidateAccepted": { "type": "boolean" },
+          "validationWarnings": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "rhythmPlan": { "type": "object" },
+          "directorPlan": { "type": "object" }
+        }
+      }
+    },
+    "blocked": { "type": "boolean" },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["noProviderSubmit", "noCredentialAccess", "noFileMutation", "noFreeTextPromotion"],
+      "properties": {
+        "noProviderSubmit": { "const": true },
+        "noCredentialAccess": { "const": true },
+        "noFileMutation": { "const": true },
+        "noFreeTextPromotion": { "const": true }
+      }
+    }
+  }
+}
