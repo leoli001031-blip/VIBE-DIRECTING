@@ -1917,7 +1917,7 @@ export function NewVideoStart({
         </button>
         <small>
           {scriptFileName ? `${scriptFileName} · ` : ""}
-          拖入图片、音乐或脚本；首次发送会选项目文件夹。
+          拖入图片、音乐或脚本；Cmd Enter 发送，首次会选项目文件夹。
         </small>
         <button className="new-video-asset-action new-video-primary-action" type="button" disabled={composerDisabled} onClick={submitComposer}>
           <Sparkles size={15} aria-hidden="true" />

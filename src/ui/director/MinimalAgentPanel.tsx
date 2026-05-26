@@ -1,4 +1,4 @@
-import { useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import { CheckCircle2, ExternalLink, LockKeyhole, Plus, Search, Send, Sparkles, X } from "lucide-react";
 import {
   agentWebSearchSourceLabel,
@@ -174,6 +174,8 @@ export function MinimalAgentPanel({
   onDirectorFeedbackConfirmed?: (recompile: DirectorFeedbackRecompileResult) => void | Promise<void>;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previousSelectionFocusKeyRef = useRef("");
   const [text, setText] = useState("");
   // File objects in React state can cause memory leaks; consider using a ref or blob URL instead
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -190,6 +192,7 @@ export function MinimalAgentPanel({
   const [preparedContext, setPreparedContext] = useState<PreparedComposerContext | undefined>();
   const [localVideoPermissionContract, setLocalVideoPermissionContract] = useState<AgentVideoPermissionContract>(defaultAgentVideoPermissionContract);
   const scopedShotIds = selectedShots.map((item) => item.id);
+  const scopedShotKey = scopedShotIds.join("|");
   const localScopeLabel = selectedScopeLabel(shot, asset, sectionLabel, selectedShots);
   const scopeLabel = projectScopeLabel ? `${productScopeLabel(projectScopeLabel)} · ${localScopeLabel}` : localScopeLabel;
   const hasBoundSelection = Boolean(scopedShotIds.length || shot || asset);
@@ -209,6 +212,7 @@ export function MinimalAgentPanel({
   const inputPlaceholder = hasBoundSelection
     ? "说这段怎么改..."
     : "写脚本、提需求，或拖入图片/音频/文档。";
+  const selectionFocusKey = [scopedShotKey, shot?.id, asset?.id, sectionId].filter(Boolean).join("::");
   const prototypeAgentDemo = latestPrototypeAgentDemo || localPrototypeAgentDemo;
   const prototypeAgentProjection = buildPrototypeAgentDemoProjection(prototypeAgentDemo);
   const realSampleBusy = realSampleAction?.status === "running";
@@ -251,6 +255,29 @@ export function MinimalAgentPanel({
       : videoAlreadySent
       ? "已提交"
       : "提交视频";
+
+  function canAutoFocusComposer() {
+    if (typeof document === "undefined") return false;
+    const activeElement = document.activeElement;
+    if (!activeElement || activeElement === document.body) return true;
+    if (activeElement === textareaRef.current) return false;
+    return !(
+      activeElement instanceof HTMLInputElement
+      || activeElement instanceof HTMLTextAreaElement
+      || activeElement instanceof HTMLSelectElement
+    );
+  }
+
+  useEffect(() => {
+    if (!selectionFocusKey || !hasBoundSelection || workflow || text.trim()) {
+      previousSelectionFocusKeyRef.current = selectionFocusKey;
+      return;
+    }
+    if (previousSelectionFocusKeyRef.current === selectionFocusKey) return;
+    previousSelectionFocusKeyRef.current = selectionFocusKey;
+    if (!canAutoFocusComposer()) return;
+    window.setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 0);
+  }, [asset?.id, hasBoundSelection, scopedShotKey, sectionId, selectionFocusKey, shot?.id, text, workflow]);
 
   function updateVideoPermissionContract(nextContract: AgentVideoPermissionContract) {
     setLocalVideoPermissionContract(nextContract);
@@ -299,6 +326,7 @@ export function MinimalAgentPanel({
     setAttachments(nextAttachments);
     resetPreparedComposerState("文件已放入");
     if (fileInputRef.current) fileInputRef.current.value = "";
+    window.setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 0);
   }
 
   function removeComposerAttachment(id: string) {
@@ -485,6 +513,13 @@ export function MinimalAgentPanel({
       ? "正在整理，稍等一下。"
       : "当前不能发送。";
   const showFooterPrimaryAction = !workflow || planPhase === "idle";
+  const composerHint = text.trim()
+    ? `${text.trim().length} 字 · Cmd Enter 发送`
+    : attachments.length
+      ? `${attachments.length} 个文件 · Cmd Enter 发送`
+      : hasBoundSelection
+        ? "已选中内容，直接说改法"
+        : "直接说，或拖文件";
   const badges = feedbackRecompile
     ? [
         directorFeedbackCanConfirm(feedbackRecompile) ? "待确认" : "需要复核",
@@ -682,6 +717,7 @@ export function MinimalAgentPanel({
           </div>
         )}
         <textarea
+          ref={textareaRef}
           value={text}
           onChange={(event) => updateText(event.target.value)}
           onKeyDown={(event) => {
@@ -697,11 +733,11 @@ export function MinimalAgentPanel({
             <Plus size={15} aria-hidden="true" />
             添加文件
           </button>
-          <small>{text.trim() ? `${text.trim().length} 字` : attachments.length ? `${attachments.length} 个文件` : hasBoundSelection ? "会改当前选择" : "直接说，或拖文件"}</small>
+          <small>{composerHint}</small>
           {showFooterPrimaryAction && (
             <button
               disabled={primaryDisabled}
-              title={primaryDisabled ? primaryDisabledReason : `${primaryLabel}，也可以按 Command Enter`}
+              title={primaryDisabled ? primaryDisabledReason : `${primaryLabel}，也可以按 Cmd Enter`}
               onClick={handleNext}
             >
               <Send size={15} />

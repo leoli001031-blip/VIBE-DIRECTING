@@ -428,6 +428,7 @@ checkMessage(requireWithin(newVideoStartSource, /声音参考[\s\S]*配乐参考
 check(!/Voice\s+Source\s+Library/i.test(extractStringLiterals(newVideoStartSource)), "NewVideoStart default copy must not expose Voice Source Library");
 checkMessage(requireWithin(newVideoStartSource, /<details\s+className="new-video-file-details"[\s\S]*className="new-video-file-list"/, "NewVideoStart selected material list must be behind details"));
 checkMessage(requireWithin(newVideoStartSource, /className="new-video-asset-action new-video-primary-action"[\s\S]*发送/, "NewVideoStart bottom composer must expose the single submit action"));
+checkMessage(requireWithin(newVideoStartSource, /Cmd Enter 发送/, "NewVideoStart composer must expose the keyboard send shortcut"));
 check(!/className="new-video-start-footer"[\s\S]*<button[\s\S]*发送/.test(newVideoStartSource), "NewVideoStart footer must not duplicate the composer submit action");
 checkMessage(requireWithin(newVideoStartSource, /className="new-video-plan-summary"[\s\S]*projectionTitleForDisplay[\s\S]*projection\.summary\.scriptPreview[\s\S]*confirmDraft/, "NewVideoStart organized draft default must show only title, short preview, and confirmation action"));
 checkMessage(requireWithin(newVideoStartSource, /<details\s+className="new-video-plan-details"[\s\S]*projection\.summary\.assetCounts[\s\S]*projection\.missingChecklist[\s\S]*projection\.stagedPlan/, "NewVideoStart organized draft counts, checklist, and plan must live inside details"));
@@ -556,9 +557,12 @@ checkMessage(requireWithin(minimalAgentPanelSource, /buildDirectorFeedbackRecomp
 checkMessage(requireWithin(minimalAgentPanelSource, /onDirectorFeedbackConfirmed/, "MinimalAgentPanel must confirm structured feedback through the Project.vibe callback"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /参考 \/ 视频安排/, "MinimalAgentPanel feedback plan must name reference/video recompile targets"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /不会开始生成|不会生成/, "MinimalAgentPanel feedback plan must explain recompile without starting generation"));
-checkMessage(requireWithin(minimalAgentLanguageSurface, /当前选择[\s\S]*会改当前选择/, "MinimalAgentPanel feedback must bind to the selected object"));
+checkMessage(requireWithin(minimalAgentLanguageSurface, /当前选择/, "MinimalAgentPanel feedback must keep a selected-object context"));
+checkMessage(requireWithin(minimalAgentPanelSource, /已选中内容，直接说改法/, "MinimalAgentPanel selected-object footer copy must be clear"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /写脚本、提需求/, "MinimalAgentPanel must keep one normal chat entry for project-wide feedback"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /说这段怎么改/, "MinimalAgentPanel selected input placeholder"));
+checkMessage(requireWithin(minimalAgentPanelSource, /textareaRef\.current\?\.focus/, "MinimalAgentPanel should focus the composer after selection or file add"));
+checkMessage(requireWithin(minimalAgentPanelSource, /Cmd Enter 发送/, "MinimalAgentPanel composer must expose the keyboard send shortcut"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /发送[\s\S]*确认修改/, "MinimalAgentPanel confirmation action labels"));
 checkMessage(requireWithin(minimalAgentPanelSource, /showFooterPrimaryAction\s*=\s*!workflow\s*\|\|\s*planPhase\s*===\s*"idle"[\s\S]*showFooterPrimaryAction[\s\S]*<Send/, "MinimalAgentPanel must keep the bottom send action out of staged confirmation state"));
 checkMessage(requireWithin(minimalAgentPanelSource, /function\s+revisePlan[\s\S]*previousIntent[\s\S]*setText\(previousIntent\)/, "MinimalAgentPanel must restore the last feedback text when the creator chooses to revise"));
