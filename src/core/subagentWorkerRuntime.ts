@@ -1,5 +1,6 @@
-import { validateSubagentTaskEnvelope } from "./envelopeValidator";
-import type { SubagentResult, SubagentTaskEnvelope } from "./types";
+import { VALIDATED_SUBAGENT_TASK_ENVELOPE_REQUIRED } from "./statusConstants";
+import { buildOutputHash, validateSubagentTaskEnvelope } from "./envelopeValidator";
+import type { BaseHardLocks, SubagentResult, SubagentTaskEnvelope } from "./types";
 
 export type SubagentWorkerRuntimeMode = "plan_only" | "permission_gated_worker_planned";
 export type SubagentWorkerRuntimeStatus =
@@ -33,7 +34,7 @@ export interface SubagentWorkerRuntimeInput {
 }
 
 export interface SubagentWorkerCommandPlan {
-  executable: "codex";
+  executable: "agent";
   commandKind: "subagent_worker";
   argumentSource: "validated_envelope_only";
   envelopeId: string;
@@ -53,6 +54,7 @@ export interface SubagentWorkerResultGate {
   gateFieldsPresent: string[];
   issueSeveritiesAllowed: boolean;
   canHandoffToProjectStore: boolean;
+  outputHash?: string;
   blockers: string[];
   warnings: string[];
 }
@@ -82,21 +84,15 @@ export interface SubagentWorkerRuntimeSlot {
   notes: string[];
 }
 
-export interface SubagentWorkerRuntimeHardLocks {
+export interface SubagentWorkerRuntimeHardLocks extends BaseHardLocks {
   noFreeTextTask: true;
   validatedEnvelopeRequired: true;
   structuredResultRequired: true;
   noSpawnWorkerNow: true;
   noSubprocess: true;
-  noShellExecution: true;
   noProviderExecution: true;
-  noCredentialRead: true;
-  noCredentialWrite: true;
-  noFileMutation: true;
   noProjectStoreWrite: true;
   noUnscopedRead: true;
-  providerSubmissionForbidden: true;
-  liveSubmitAllowed: false;
 }
 
 export interface SubagentWorkerRuntimePlan {
@@ -131,20 +127,22 @@ export interface SubagentWorkerRuntimePlan {
 export const subagentWorkerRuntimeSchemaVersion = "0.1.0";
 
 export const subagentWorkerRuntimeHardLocks: SubagentWorkerRuntimeHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   noFreeTextTask: true,
   validatedEnvelopeRequired: true,
   structuredResultRequired: true,
   noSpawnWorkerNow: true,
   noSubprocess: true,
-  noShellExecution: true,
   noProviderExecution: true,
-  noCredentialRead: true,
-  noCredentialWrite: true,
-  noFileMutation: true,
   noProjectStoreWrite: true,
   noUnscopedRead: true,
-  providerSubmissionForbidden: true,
-  liveSubmitAllowed: false,
 };
 
 const defaultGeneratedAt = "1970-01-01T00:00:00.000Z";
@@ -217,7 +215,7 @@ function touchedBlockers(result: Partial<SubagentResult>): string[] {
 
 function commandPlan(envelope: SubagentTaskEnvelope): SubagentWorkerCommandPlan {
   return {
-    executable: "codex",
+    executable: "agent",
     commandKind: "subagent_worker",
     argumentSource: "validated_envelope_only",
     envelopeId: envelope.id,
@@ -272,6 +270,7 @@ function resultGate(envelope: SubagentTaskEnvelope | undefined, candidate?: Suba
     gateFieldsPresent,
     issueSeveritiesAllowed,
     canHandoffToProjectStore: blockers.length === 0,
+    outputHash: buildOutputHash(result),
     blockers,
     warnings: result.status === "partial" ? ["partial_result_requires_main_agent_review"] : [],
   };
@@ -308,7 +307,7 @@ function makeSlot(input: {
   });
   const blockedReasons = uniqueSorted([
     ...(freeTextPromptPresent ? ["free_text_worker_start_forbidden"] : []),
-    ...(!input.envelope ? ["validated_subagent_task_envelope_required"] : []),
+    ...(!input.envelope ? [VALIDATED_SUBAGENT_TASK_ENVELOPE_REQUIRED] : []),
     ...(input.envelope && !envelopeValidation.valid ? envelopeValidation.issues.map((issue) => `invalid_envelope:${issue}`) : []),
     ...gate.blockers,
   ]);

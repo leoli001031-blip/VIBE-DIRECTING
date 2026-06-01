@@ -1,6 +1,7 @@
+import { PROVIDER_CREDENTIALS_FORBIDDEN } from "./statusConstants";
 import { defaultProviderPolicy } from "./providerPolicy";
 import { buildPreflightReport } from "./preflightGate";
-import { buildNonOverridableGateHashes, buildPolicyBinding } from "./envelopeValidator";
+import { buildInputHash, buildNonOverridableGateHashes, buildPolicyBinding, envelopeSchemaVersion } from "./envelopeValidator";
 import type {
   AuditIssue,
   ContextLevel,
@@ -83,6 +84,7 @@ export function buildTaskEnvelope(
     promptHash: options.promptHash,
     expectedOutputs,
     preflightScope: options.preflightScope,
+    videoControlMode: shot?.videoControlMode,
   });
 
   const hardRules = [
@@ -96,7 +98,7 @@ export function buildTaskEnvelope(
   }
 
   if (job.slot === "video.i2v") {
-    hardRules.push("No text-to-video fallback. Use start/end frames only.");
+    hardRules.push("No text-to-video fallback. Use the approved start frame as the default video anchor; endpoint end frames are optional and require explicit endpoint mode.");
     hardRules.push("No BGM in generated video; sound effects may be handled later.");
   }
 
@@ -118,6 +120,7 @@ export function buildTaskEnvelope(
     allowedReadScope: string[];
     forbiddenActions: string[];
   } = {
+    schemaVersion: envelopeSchemaVersion,
     id: job.id,
     purpose: purposeFromSlot(job.slot),
     providerSlot: job.slot,
@@ -156,7 +159,7 @@ export function buildTaskEnvelope(
       "no_free_text_worker",
       "provider_submit_forbidden",
       "live_submit_forbidden",
-      "provider_credentials_forbidden",
+      PROVIDER_CREDENTIALS_FORBIDDEN,
       "file_mutation_forbidden",
     ],
     outputPath: job.outputPath,
@@ -169,5 +172,6 @@ export function buildTaskEnvelope(
     ...envelope,
     policyBinding,
     nonOverridableGateHashes: envelope.nonOverridableGateHashes || buildNonOverridableGateHashes({ ...envelope, policyBinding }),
+    inputHash: buildInputHash({ ...envelope, policyBinding }),
   };
 }

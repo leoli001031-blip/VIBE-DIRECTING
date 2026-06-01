@@ -1,20 +1,27 @@
 # Vibe Core Agent Handoff
 
-Last updated: 2026-05-10
+Last updated: 2026-05-18
 
 This repository is the active development root for Vibe Core / Vibe Director Studio.
 
 Project root:
 
 ```text
-/Users/lichenhao/Desktop/vibe core
+/Users/lichenhao/Desktop/new vibe directing
 ```
 
-Retrospective and boundary map:
+Current planning authority:
 
 ```text
-docs/vibe-core-retrospective.md
+README.md
+docs/mvp-integration-development-plan.md
+docs/mvp-delivery-technical-debt-plan.md
+docs/mvp-rc-status.md
 ```
+
+Older files such as `PLAN.md`, `docs/software-architecture.md`,
+`docs/core-development-sequence.md`, and `docs/demo-completion-plan.md` are
+historical context unless an active worker brief explicitly references them.
 
 ## High-Priority Rules
 

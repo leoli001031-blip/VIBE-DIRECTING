@@ -25,7 +25,7 @@ export interface ImageReferenceActionCapabilitySummary {
 }
 
 export interface ImageReferenceAppServerCapabilitySummary {
-  runtimeKind?: "codex_app_server" | "codex_cli" | "image_runtime" | "unknown" | string;
+  runtimeKind?: "agent_app_server" | "agent_cli" | "image_runtime" | "unknown" | string;
   readiness?: "ready" | "blocked" | "unknown" | string;
   canUseImageRuntime?: boolean;
   imageRuntimeAvailable?: boolean;

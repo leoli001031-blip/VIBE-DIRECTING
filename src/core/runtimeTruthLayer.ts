@@ -31,7 +31,7 @@ export type TaskRunLifecycleEvent =
 export type RuntimeTruthLayerStatus = "preview_ready" | "blocked";
 export type ProviderObservationMode = "actual_provider_call_observed" | "mock_readiness_evidence" | "not_observed";
 
-export type SemanticQaGateKey = "identity" | "scene" | "style" | "story" | "neighbor" | "output";
+export type SemanticQaGateKey = "identity" | "scene" | "style" | "story" | "pair" | "prop";
 export type SemanticQaGateStatus = "pass" | "warn" | "fail" | "blocked" | "missing";
 
 export type RuntimeTruthWatcherEventType =
@@ -299,7 +299,7 @@ const lifecycleTransitions: Record<TaskRunLifecycleStatus, Partial<Record<TaskRu
   blocked: {},
 };
 
-const requiredQaGateKeys: SemanticQaGateKey[] = ["identity", "scene", "style", "story", "neighbor", "output"];
+const requiredQaGateKeys: SemanticQaGateKey[] = ["identity", "scene", "style", "story", "pair", "prop"];
 const requiredWatcherEventTypes: RuntimeTruthWatcherEventType[] = ["file_observed", "file_stable", "hash_recorded", "sidecar_paired", "qa_paired"];
 
 function uniqueSorted(values: Array<string | undefined>): string[] {
@@ -539,7 +539,7 @@ function buildProviderObservationReceiptV2State(input: BuildRuntimeTruthLayerInp
     providerSelfReportRejected ? "" : "runtime_truth_provider_self_report_cannot_complete",
   ]);
   return {
-    ...observation,
+    ...(observation || {}),
     exists: present,
     present,
     runMatched,
@@ -606,7 +606,7 @@ function buildSemanticQaReceiptV2State(input: BuildRuntimeTruthLayerInput): Sema
     noP1 ? "" : "runtime_truth_semantic_qa_p1_needs_review",
   ]);
   return {
-    ...qa,
+    ...(qa || {}),
     exists: present,
     present,
     runMatched,

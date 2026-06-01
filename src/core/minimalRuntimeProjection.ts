@@ -123,13 +123,19 @@ function buildPreviewSummary(
   const items = queue || [];
   const imageHoldCount = items.filter((item) => item.kind === "image_hold").length;
   const videoClipCount = items.filter((item) => item.kind === "video_clip").length;
-  const missingPlaceholderCount = items.filter((item) => item.kind === "missing_placeholder").length;
+  const queuedVideoPlaceholderCount = items.filter((item) => {
+    if (item.kind !== "missing_placeholder") return false;
+    const video = (item as PreviewQueueItem & { videoGeneration?: { status?: string } }).videoGeneration;
+    return video?.status === "queued" || video?.status === "submitted" || video?.status === "generating" || video?.status === "recoverable";
+  }).length;
+  const missingPlaceholderCount = items.filter((item) => item.kind === "missing_placeholder").length - queuedVideoPlaceholderCount;
   const qaPendingCount = ledgerProjections?.filter((item) => ledgerPreviewStatus(item) === "qa_pending").length || 0;
   const needsReviewCount = ledgerProjections?.filter((item) => ledgerPreviewStatus(item) === "needs_review").length || 0;
   const returned = imageHoldCount + videoClipCount;
   const returnedUnit = videoClipCount > 0 ? "段已返回" : "张已返回";
   const detail = [
     returned ? `${returned} ${returnedUnit}` : "",
+    queuedVideoPlaceholderCount ? `${queuedVideoPlaceholderCount} 段视频处理中` : "",
     qaPendingCount ? `${qaPendingCount} 段等复核` : "",
     needsReviewCount ? `${needsReviewCount} 段需复核` : "",
     missingPlaceholderCount ? `${missingPlaceholderCount} 段待补齐` : "",

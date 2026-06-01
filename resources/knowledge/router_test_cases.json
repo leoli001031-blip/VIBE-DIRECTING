@@ -473,5 +473,97 @@
       "camera/core-camera-movement"
     ],
     "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-44",
+    "userIntent": "参考图职责分工，先素材分析再分镜，生成 Seedance 无字画面",
+    "taskPurpose": "video_generation",
+    "providerSlot": "video.i2v",
+    "expectedPackIds": [
+      "prompt/aigc-video-directing-workflow",
+      "prompt/core-prompt-templates",
+      "visual-memory/reference-authority",
+      "keyframe-pair/action-continuity",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-45",
+    "userIntent": "人物动作要有行为动机和微反应，15 秒时间线拆分",
+    "taskPurpose": "video_generation",
+    "providerSlot": "video.i2v",
+    "expectedPackIds": [
+      "prompt/aigc-video-directing-workflow",
+      "performance/core-performance",
+      "camera/core-camera-movement",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-46",
+    "userIntent": "分镜画面结构，大主画面怎么写，故事板不像分镜",
+    "taskPurpose": "keyframe",
+    "providerSlot": "image.generate",
+    "expectedPackIds": [
+      "composition/visual-structure-decomposition",
+      "composition/core-composition",
+      "story-function/core-shot-functions",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-47",
+    "userIntent": "多人分镜，递东西，对视，快切关系戏",
+    "taskPurpose": "video_generation",
+    "providerSlot": "video.i2v",
+    "expectedPackIds": [
+      "composition/multi-character-blocking",
+      "performance/action-motivation-microreaction",
+      "camera/state-flow-motion-planning",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-48",
+    "userIntent": "Seedance 全能参考，参考图太多，角色漂移，场景和分镜冲突",
+    "taskPurpose": "video_generation",
+    "providerSlot": "video.i2v",
+    "expectedPackIds": [
+      "visual-memory/reference-dimension-locking",
+      "prompt/aigc-video-directing-workflow",
+      "visual-memory/reference-authority",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-49",
+    "userIntent": "人物动作平，NPC 感，状态流，不要动词清单",
+    "taskPurpose": "video_generation",
+    "providerSlot": "video.i2v",
+    "expectedPackIds": [
+      "performance/action-motivation-microreaction",
+      "camera/state-flow-motion-planning",
+      "performance/core-performance",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": []
+  },
+  {
+    "id": "router-map-50",
+    "userIntent": "运镜太完美，镜头像 AI 滑轨，需要前景遮挡和慢半拍跟拍",
+    "taskPurpose": "i2v",
+    "providerSlot": "video.i2v",
+    "expectedPackIds": [
+      "camera/imperfect-camera-motion",
+      "camera/core-camera-movement",
+      "composition/core-composition",
+      "qa/core-qa"
+    ],
+    "forbiddenPackIds": []
   }
 ]

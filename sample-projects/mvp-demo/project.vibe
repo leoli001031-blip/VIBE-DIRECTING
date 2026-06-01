@@ -1,0 +1,173 @@
+{
+  "kind": "project_vibe_document",
+  "modelVersion": "project_vibe_minimal_v1",
+  "manifest": {
+    "projectId": "mvp_demo_sample",
+    "title": "Morning Market MVP Demo",
+    "version": "0.1.0",
+    "createdAt": "2026-05-16T00:00:00.000Z",
+    "updatedAt": "2026-05-16T00:00:00.000Z",
+    "sourceOfTruth": "project_vibe",
+    "portableRoot": "project_root",
+    "runtimeFixtureAuthority": false
+  },
+  "storyFlow": {
+    "id": "story_flow_current",
+    "updatedAt": "2026-05-16T00:00:00.000Z",
+    "sourceOfTruth": "project_vibe",
+    "sections": [
+      {
+        "id": "opening",
+        "title": "Opening",
+        "summary": "Three-shot local demo showing a Project.vibe-first Agent Loop path.",
+        "sequenceIndex": 0,
+        "shotIds": ["S01", "S02", "S03"]
+      }
+    ],
+    "shotOrder": ["S01", "S02", "S03"]
+  },
+  "visualMemory": {
+    "id": "visual_memory_current",
+    "updatedAt": "2026-05-16T00:00:00.000Z",
+    "sourceOfTruth": "project_vibe",
+    "referencePolicy": {
+      "temporaryOutputsMayBecomeAuthority": false,
+      "runtimeFixturesMayBecomeAuthority": false,
+      "lockedAssetsRequiredForGeneration": true
+    },
+    "entries": [
+      {
+        "id": "vm_scene_morning",
+        "assetId": "scene_morning",
+        "kind": "scene",
+        "label": "Morning street",
+        "status": "locked",
+        "textConstraints": ["soft morning street", "same storefront", "clean documentary framing"],
+        "usedByShotIds": ["S01", "S02", "S03"],
+        "canUseAsFutureReference": true,
+        "sourceRefs": ["sample:user_locked"]
+      },
+      {
+        "id": "vm_character_vendor",
+        "assetId": "character_vendor",
+        "kind": "character",
+        "label": "Market vendor",
+        "status": "locked",
+        "textConstraints": ["green apron", "calm expression", "same person across shots"],
+        "usedByShotIds": ["S02", "S03"],
+        "canUseAsFutureReference": true,
+        "sourceRefs": ["sample:user_locked"]
+      },
+      {
+        "id": "vm_style_handheld",
+        "assetId": "style_handheld",
+        "kind": "style",
+        "label": "Handheld warm realism",
+        "status": "locked",
+        "textConstraints": ["natural handheld feel", "warm restrained color", "no glossy commercial lighting"],
+        "usedByShotIds": ["S01", "S02", "S03"],
+        "canUseAsFutureReference": true,
+        "sourceRefs": ["sample:user_locked"]
+      }
+    ]
+  },
+  "shots": [
+    {
+      "id": "S01",
+      "sectionId": "opening",
+      "title": "Open on the street",
+      "intent": "Establish the location.",
+      "sceneAssetIds": ["scene_morning"],
+      "characterAssetIds": [],
+      "propAssetIds": ["style_handheld"],
+      "durationSeconds": 4,
+      "status": "generated",
+      "sourceRefs": ["sample:story"]
+    },
+    {
+      "id": "S02",
+      "sectionId": "opening",
+      "title": "Move toward the door",
+      "intent": "Reveal the vendor preparing the stand.",
+      "sceneAssetIds": ["scene_morning"],
+      "characterAssetIds": ["character_vendor"],
+      "propAssetIds": ["style_handheld"],
+      "durationSeconds": 5,
+      "status": "ready",
+      "sourceRefs": ["sample:story"]
+    },
+    {
+      "id": "S03",
+      "sectionId": "opening",
+      "title": "Offer the first cup",
+      "intent": "Close the demo beat with a simple human action.",
+      "sceneAssetIds": ["scene_morning"],
+      "characterAssetIds": ["character_vendor"],
+      "propAssetIds": ["style_handheld"],
+      "durationSeconds": 4,
+      "status": "planned",
+      "sourceRefs": ["sample:story"]
+    }
+  ],
+  "assets": [
+    {
+      "id": "scene_morning",
+      "kind": "scene",
+      "label": "Morning street",
+      "status": "locked",
+      "path": "assets/scene_morning.txt",
+      "textConstraints": ["soft morning street", "same storefront", "clean documentary framing"],
+      "usedByShotIds": ["S01", "S02", "S03"],
+      "sourceRefs": ["sample:user_locked"],
+      "lockedBy": "user"
+    },
+    {
+      "id": "character_vendor",
+      "kind": "character",
+      "label": "Market vendor",
+      "status": "locked",
+      "path": "assets/character_vendor.txt",
+      "textConstraints": ["green apron", "calm expression", "same person across shots"],
+      "usedByShotIds": ["S02", "S03"],
+      "sourceRefs": ["sample:user_locked"],
+      "lockedBy": "user"
+    },
+    {
+      "id": "style_handheld",
+      "kind": "style",
+      "label": "Handheld warm realism",
+      "status": "locked",
+      "path": "assets/style_handheld.txt",
+      "textConstraints": ["natural handheld feel", "warm restrained color", "no glossy commercial lighting"],
+      "usedByShotIds": ["S01", "S02", "S03"],
+      "sourceRefs": ["sample:user_locked"],
+      "lockedBy": "user"
+    }
+  ],
+  "runs": [
+    {
+      "id": "run_sample_preview",
+      "runKind": "agent_loop",
+      "status": "succeeded",
+      "createdAt": "2026-05-16T00:00:00.000Z",
+      "summary": "Sample preview prepared",
+      "sourceFactHash": "sample_fact_hash",
+      "affectedShotIds": ["S01", "S02", "S03"],
+      "producedAssetIds": [],
+      "evidenceRefs": ["receipts/run_sample_preview.json"],
+      "projectFactsMutated": true,
+      "runtimeFixtureUsed": false
+    }
+  ],
+  "sourceIndex": {
+    "id": "source_index_current",
+    "updatedAt": "2026-05-16T00:00:00.000Z",
+    "sourceOfTruth": "project_vibe",
+    "manifestRef": "project.vibe#manifest",
+    "storyFlowRef": "project.vibe#storyFlow",
+    "visualMemoryRef": "project.vibe#visualMemory",
+    "shotRefs": ["project.vibe#shots/S01", "project.vibe#shots/S02", "project.vibe#shots/S03"],
+    "assetRefs": ["project.vibe#assets/character_vendor", "project.vibe#assets/scene_morning", "project.vibe#assets/style_handheld"],
+    "runReceiptRefs": ["project.vibe#runs/run_sample_preview"]
+  }
+}

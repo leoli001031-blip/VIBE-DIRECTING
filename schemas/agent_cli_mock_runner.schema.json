@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vibecore.local/schemas/agent_cli_mock_runner.schema.json",
   "title": "AgentCliMockRunnerState",
-  "description": "Phase 26 mock/no-op Agent/CLI runner contract proof. It consumes a ready SubagentRuntimeGateReceipt plus a validated SubagentTaskEnvelope and emits structured no-op results without spawning Codex, resuming Codex, submitting providers, reading credentials, executing shells, or mutating files.",
+  "description": "Phase 26 mock/no-op Agent/CLI runner contract proof. It consumes a ready SubagentRuntimeGateReceipt plus a validated SubagentTaskEnvelope and emits structured no-op results without spawning agent, resuming agent, submitting providers, reading credentials, executing shells, or mutating files.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -196,7 +196,7 @@
         "outputContract": { "type": "string", "const": "structured_subagent_result_shape_only" },
         "runnerContract": { "type": "string", "const": "replaceable_agent_cli_adapter" },
         "phase26Boundary": { "type": "string", "const": "mock_noop_only" },
-        "phase29Boundary": { "type": "string", "const": "codex_cli_adapter_spike_after_replacement_proof" },
+        "phase29Boundary": { "type": "string", "const": "agent_cli_adapter_spike_after_replacement_proof" },
         "providerSubmitAllowed": { "type": "boolean", "const": false },
         "shellAllowed": { "type": "boolean", "const": false },
         "fileMutationAllowed": { "type": "boolean", "const": false }
@@ -206,8 +206,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "noCodexSpawn",
-        "noCodexResume",
+        "noAgentSpawn",
+        "noAgentResume",
         "noProviderSubmit",
         "liveSubmitAllowed",
         "noCredentialRead",
@@ -220,8 +220,8 @@
         "mockOnly"
       ],
       "properties": {
-        "noCodexSpawn": { "type": "boolean", "const": true },
-        "noCodexResume": { "type": "boolean", "const": true },
+        "noAgentSpawn": { "type": "boolean", "const": true },
+        "noAgentResume": { "type": "boolean", "const": true },
         "noProviderSubmit": { "type": "boolean", "const": true },
         "liveSubmitAllowed": { "type": "boolean", "const": false },
         "noCredentialRead": { "type": "boolean", "const": true },

@@ -1,3 +1,4 @@
+import { VALIDATED_SUBAGENT_TASK_ENVELOPE_REQUIRED } from "./statusConstants";
 import type {
   GenerationHarnessJob,
   GenerationHarnessState,
@@ -65,17 +66,19 @@ export const subagentRunnerTaskKinds = [
 
 export const subagentRunnerHardLocks: SubagentRunnerHardLocks = {
   dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   diagnosticsOnly: true,
   noFreeTextTask: true,
   validatedEnvelopeRequired: true,
   noSpawnAgent: true,
   noSubprocess: true,
-  noShellExecution: true,
   noProviderExecution: true,
-  noCredentialRead: true,
-  noFileMutation: true,
-  providerSubmissionForbidden: true,
-  liveSubmitAllowed: false,
 };
 
 export const subagentRunnerPacketRequirements = [
@@ -321,7 +324,7 @@ function blockedReasonsFor(input: {
   return uniqueSorted([
     ...(input.freeTextPromptPresent ? ["free_text_task_input_forbidden"] : []),
     ...(input.status === "planned_missing_envelope" || input.status === "blocked_missing_envelope"
-      ? ["validated_subagent_task_envelope_required"]
+      ? [VALIDATED_SUBAGENT_TASK_ENVELOPE_REQUIRED]
       : []),
     ...(input.status === "blocked_contract_violation"
       ? input.checks.filter((check) => !check.present).map((check) => `missing_${check.requirementId}`)
@@ -552,7 +555,7 @@ export function buildSubagentRunnerState(input: BuildSubagentRunnerStateInput): 
     notes: [
       "Phase 9.3 Subagent Runner is a plan/diagnostics contract only.",
       "Production workers must be launched from validated SubagentTaskEnvelope packets, never free-text prompts.",
-      "This state does not call Codex CLI, start subprocesses, execute shell commands, submit providers, read credentials, or move files.",
+      "This state does not call agent CLI, start subprocesses, execute shell commands, submit providers, read credentials, or move files.",
     ],
   };
 }

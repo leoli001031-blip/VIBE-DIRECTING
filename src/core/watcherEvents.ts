@@ -1,3 +1,4 @@
+import { WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT, PROVIDER_READY_DERIVATIVE_DETECTED } from "./statusConstants";
 import type { FileSnapshot, ManifestMatchReport } from "./manifestMatcher";
 import type { Image2AdapterRequest, ImageTaskPlan, Severity, WatcherEvent, WatcherEventStatus, WatcherEventType } from "./types";
 
@@ -134,7 +135,7 @@ export function buildWatcherEventsFromImagePipeline(input: BuildWatcherEventsInp
     for (const candidatePath of providerReadyCandidates) {
       events.push(
         watcherEvent(
-          "provider_ready_derivative_detected",
+          PROVIDER_READY_DERIVATIVE_DETECTED,
           taskPlan,
           "detected",
           "info",
@@ -183,7 +184,7 @@ export function buildWatcherEventsFromImagePipeline(input: BuildWatcherEventsInp
     if (!expectedExists && adapterTaskIds.has(taskPlan.taskPlanId) && taskPlan.status !== "blocked") {
       events.push(
         watcherEvent(
-          "worker_exit_without_expected_output",
+          WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT,
           taskPlan,
           "failed",
           "warning",

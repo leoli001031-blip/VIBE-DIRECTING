@@ -71,6 +71,7 @@
         "story_flow_stale_function",
         "garage_front_door_conflict",
         "fixed_camera_movement_conflict",
+        "one_shot_complex_action_chain",
         "independent_end_frame_conflict",
         "visual_memory_locked_identity_conflict",
         "visual_memory_locked_outfit_conflict",

@@ -1,0 +1,131 @@
+import { deriveProjectRealChainStatus } from "../src/core/projectRealChainStatus.ts";
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+const round5ArtifactIngest = {
+  schemaVersion: "0.1.0",
+  projectId: "round5-zero-project-planning-anime",
+  runId: "run-round5-ui",
+  shotGateMatrix: [
+    {
+      shotId: "ZP01",
+      gateStatus: "start_observed",
+      ledgerStatus: "provider_observed",
+      nextAction: "none",
+      strictEditPilotCandidate: false,
+      blockers: [],
+      warnings: [],
+    },
+    {
+      shotId: "ZP02",
+      gateStatus: "end_edit_preflight_blocked",
+      ledgerStatus: "provider_observed",
+      nextAction: "collect_strict_edit_provenance",
+      strictEditPilotCandidate: false,
+      blockers: ["missing_providerRequestId"],
+      warnings: [],
+    },
+    {
+      shotId: "ZP03",
+      gateStatus: "start_observed",
+      ledgerStatus: "provider_observed",
+      nextAction: "none",
+      strictEditPilotCandidate: false,
+      blockers: [],
+      warnings: [],
+    },
+    {
+      shotId: "ZP04",
+      gateStatus: "start_regeneration_required",
+      ledgerStatus: "parked",
+      nextAction: "regenerate_start_frame",
+      strictEditPilotCandidate: false,
+      blockers: ["start_motion_affordance_failed"],
+      warnings: [],
+    },
+    {
+      shotId: "ZP05",
+      gateStatus: "end_returned_needs_review",
+      ledgerStatus: "needs_review",
+      nextAction: "review_strict_edit_end_frame",
+      strictEditPilotCandidate: true,
+      endExists: true,
+      endFrameSha256: "sha256:round5-zp05-returned-end",
+      blockers: [],
+      warnings: [],
+    },
+    {
+      shotId: "ZP06",
+      gateStatus: "start_observed",
+      ledgerStatus: "provider_observed",
+      nextAction: "none",
+      strictEditPilotCandidate: false,
+      blockers: [],
+      warnings: [],
+    },
+  ],
+  ledgerProjection: {
+    total: 6,
+    completeVerified: 0,
+    endEditPreflightBlocked: 1,
+    endReturnedNeedsReview: 1,
+  },
+  assetGateSummary: {
+    total: 6,
+    needsReview: 1,
+    pass: 5,
+  },
+  uiSummary: {
+    status: "blocked",
+    complete: false,
+    completeVerified: false,
+    providerCalled: false,
+    generatedImages: false,
+    totalShots: 6,
+    observedStarts: 6,
+    endFramesComplete: 0,
+  },
+  isolation: {
+    mainThreadImageBytesForbidden: true,
+    sidecarOnlyImageTransport: true,
+    noProjectVibeMutation: true,
+  },
+};
+
+const status = deriveProjectRealChainStatus({
+  project: {
+    projectId: "round5-zero-project-planning-anime",
+    projectRoot: "real-test-sandbox/round5-zero-project-planning-anime",
+  },
+  round5ArtifactIngest,
+}, "runtime_endpoint");
+
+const byShot = new Map(status.round5Gate.shotGateMatrix.map((shot) => [shot.shotId, shot]));
+assert(status.uiStatus === "blocked", `round5 blocked ui status drifted: ${status.uiStatus}`);
+assert(status.returnedImageCount === 6, `returnedImageCount should stay 6, got ${status.returnedImageCount}`);
+assert(status.totalPlannedImages === 6, `totalPlannedImages should stay 6, got ${status.totalPlannedImages}`);
+assert(byShot.get("ZP04").nextAction === "regenerate_start_frame", "ZP04 nextAction should be preserved");
+assert(byShot.get("ZP05").strictEditPilotCandidate === true, "ZP05 strictEditPilotCandidate should be preserved");
+assert(byShot.get("ZP05").gateStatus === "end_returned_needs_review", "ZP05 returned end gate status should be exposed");
+assert(byShot.get("ZP05").ledgerStatus === "needs_review", "ZP05 returned end ledger status should be exposed");
+assert(byShot.get("ZP05").nextAction === "review_strict_edit_end_frame", "ZP05 returned end next action should be exposed");
+assert(byShot.get("ZP05").endExists === true, "ZP05 returned end existence should be exposed");
+assert(byShot.get("ZP05").endFrameSha256 === "sha256:round5-zp05-returned-end", "ZP05 returned end hash should be exposed");
+assert(status.round5Gate.ledgerProjection.endEditPreflightBlocked === 1, "ledgerProjection should preserve remaining blocked count");
+assert(status.round5Gate.ledgerProjection.endReturnedNeedsReview === 1, "ledgerProjection should preserve returned needs-review count");
+
+const topLevelStatus = deriveProjectRealChainStatus({
+  projectId: "round5-zero-project-planning-anime",
+  shotGateMatrix: round5ArtifactIngest.shotGateMatrix,
+  ledgerProjection: round5ArtifactIngest.ledgerProjection,
+  assetGateSummary: round5ArtifactIngest.assetGateSummary,
+  uiSummary: { ...round5ArtifactIngest.uiSummary, status: "needs_review" },
+  isolation: round5ArtifactIngest.isolation,
+}, "runtime_endpoint");
+
+assert(topLevelStatus.uiStatus === "blocked", "shot gate blockers should dominate top-level needs_review uiSummary");
+assert(topLevelStatus.round5Gate.shotGateMatrix.length === 6, "top-level shotGateMatrix should be parsed");
+
+console.log("Project real-chain Round 5 UI derive tests passed.");

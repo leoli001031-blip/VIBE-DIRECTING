@@ -8,7 +8,10 @@ export function MinimalDirectorStatusDot({ state }: { state: DirectorProgressStr
   return (
     <section className={`minimal-director-status ${state.tone}`} aria-label="当前状态">
       <i className={`director-progress-dot ${activeSegment?.tone || state.tone}`} aria-hidden="true" />
-      <span>{state.label}</span>
+      <span>
+        <b>{state.label}</b>
+        {state.detail && <small>{state.detail}</small>}
+      </span>
     </section>
   );
 }

@@ -1,10 +1,8 @@
 :root {
-  color-scheme: dark;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-  background: #11100e;
-  color: #ece7df;
+  color-scheme: light;
+  font-family: var(--font-system);
+  background: var(--warm-bg);
+  color: var(--warm-ink);
   font-synthesis: none;
   text-rendering: geometricPrecision;
 }
@@ -25,9 +23,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    linear-gradient(180deg, rgba(39, 44, 45, 0.5), rgba(17, 16, 14, 0) 320px),
-    #11100e;
+  background: var(--warm-bg);
 }
 
 button,
@@ -42,6 +38,7 @@ button {
 .app-shell {
   min-height: 100vh;
   padding: 18px;
+  background: var(--warm-bg);
 }
 
 .topbar {
@@ -50,7 +47,7 @@ button {
   justify-content: space-between;
   gap: 12px;
   min-height: 64px;
-  border-bottom: 1px solid rgba(236, 231, 223, 0.1);
+  border-bottom: 1px solid var(--warm-line);
 }
 
 .brand {
@@ -141,7 +138,7 @@ small {
 .metric {
   min-height: 88px;
   padding: 14px;
-  background: #171612;
+  background: var(--warm-paper);
 }
 
 .metric span {
@@ -503,6 +500,7 @@ small {
 }
 
 .field-grid {
+  /* Overrides layout.css .field-grid (180px 1fr → 80px 1fr) for compact inline forms */
   display: grid;
   grid-template-columns: 80px 1fr;
   gap: 8px 10px;
@@ -757,7 +755,7 @@ small {
 .director-brief div {
   min-height: 82px;
   padding: 14px;
-  background: #171612;
+  background: var(--warm-paper);
 }
 
 .director-brief h2 {
@@ -863,7 +861,7 @@ small {
   min-width: 0;
   min-height: 62px;
   padding: 10px;
-  background: #171612;
+  background: var(--warm-paper);
 }
 
 .preview-status-grid span,
@@ -898,7 +896,7 @@ small {
   min-width: 0;
   min-height: 58px;
   padding: 9px;
-  background: #171612;
+  background: var(--warm-paper);
 }
 
 .audio-summary-line span,
@@ -933,7 +931,7 @@ small {
   min-width: 0;
   min-height: 74px;
   padding: 9px;
-  background: #171612;
+  background: var(--warm-paper);
 }
 
 .video-status-grid span,
@@ -1045,6 +1043,64 @@ small {
   display: grid;
   gap: 8px;
   margin-top: 12px;
+}
+
+.minimal-export {
+  display: grid;
+  gap: 14px;
+}
+
+.export-head,
+.export-action-row,
+.export-profile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.export-run-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  border: 1px solid rgba(212, 176, 98, 0.55);
+  background: rgba(212, 176, 98, 0.14);
+  color: #f2e5c6;
+  padding: 0 12px;
+  font-weight: 700;
+}
+
+.export-run-button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.export-action-status,
+.export-profile,
+.export-gate-blockers,
+.export-audio-summary {
+  border: 1px solid rgba(236, 231, 223, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 10px;
+}
+
+.export-action-status.ready,
+.export-profile.ready {
+  border-color: rgba(168, 214, 163, 0.28);
+}
+
+.export-action-status.blocked,
+.export-action-status.failed,
+.export-profile.blocked {
+  border-color: rgba(255, 154, 138, 0.32);
+}
+
+.export-blockers {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding-left: 16px;
 }
 
 .export-profile-row {
@@ -1912,7 +1968,7 @@ small {
   display: grid;
   align-content: start;
   gap: 5px;
-  background: #171612;
+  background: var(--warm-paper);
   padding: 10px;
 }
 
@@ -2658,5 +2714,442 @@ small {
 
   .policy-note {
     align-items: flex-start;
+  }
+}
+
+/* Diagnostics overlay */
+.diagnostics-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(247, 241, 231, 0.96);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.diagnostics-overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(47, 39, 34, 0.12);
+  background: rgba(255, 253, 248, 0.82);
+  flex-shrink: 0;
+}
+
+.diagnostics-overlay-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(47, 39, 34, 0.92);
+  margin: 0;
+}
+
+.diagnostics-overlay-close {
+  padding: 6px 14px;
+  border: 1px solid rgba(47, 39, 34, 0.14);
+  border-radius: 6px;
+  background: rgba(255, 253, 248, 0.72);
+  color: rgba(47, 39, 34, 0.72);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.diagnostics-overlay-close:hover {
+  background: rgba(255, 253, 248, 0.95);
+  color: rgba(47, 39, 34, 0.92);
+}
+
+.diagnostics-overlay-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 32px;
+}
+
+.diagnostics-overlay-body .diagnostics-layout {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-shell {
+  max-width: 1040px;
+  margin: 0 auto 14px;
+  border-color: rgba(47, 39, 34, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 253, 248, 0.88);
+  color: rgba(47, 39, 34, 0.92);
+  box-shadow: 0 18px 48px rgba(41, 31, 22, 0.08);
+}
+
+.settings-shell .audit-head,
+.settings-shell .settings-group-title {
+  color: rgba(47, 39, 34, 0.9);
+}
+
+.settings-friendly-intro {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 14px;
+  color: rgba(47, 39, 34, 0.66);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-friendly-intro strong {
+  color: rgba(47, 39, 34, 0.94);
+  font-size: 15px;
+}
+
+.settings-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-quick-grid > div {
+  min-width: 0;
+  border: 1px solid rgba(47, 39, 34, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.54);
+  padding: 12px;
+}
+
+.settings-quick-grid span,
+.settings-quick-grid strong,
+.settings-quick-grid small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-quick-grid span {
+  color: rgba(47, 39, 34, 0.48);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.settings-quick-grid strong {
+  margin-top: 5px;
+  color: rgba(47, 39, 34, 0.94);
+  font-size: 14px;
+}
+
+.settings-quick-grid small {
+  margin-top: 6px;
+  color: rgba(47, 39, 34, 0.58);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.settings-user-section {
+  margin-top: 14px;
+}
+
+.settings-service-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(47, 39, 34, 0.1);
+  border-radius: 10px;
+  background: rgba(47, 39, 34, 0.08);
+}
+
+.settings-service-strip > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  background: rgba(255, 253, 248, 0.82);
+  padding: 10px;
+}
+
+.settings-service-strip span,
+.settings-service-strip strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-service-strip span {
+  color: rgba(47, 39, 34, 0.52);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.settings-service-strip strong {
+  color: rgba(47, 39, 34, 0.9);
+  font-size: 12px;
+}
+
+.settings-shell .settings-list > div,
+.settings-shell .settings-list div {
+  border-color: rgba(47, 39, 34, 0.1);
+  background: rgba(255, 255, 255, 0.44);
+}
+
+.settings-shell .settings-list strong {
+  color: rgba(47, 39, 34, 0.92);
+}
+
+.settings-shell .settings-list small {
+  color: rgba(47, 39, 34, 0.58);
+}
+
+.settings-subdetails {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid rgba(47, 39, 34, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.34);
+  padding: 10px;
+}
+
+.settings-subdetails > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-subdetails > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-subdetails > summary span {
+  color: rgba(47, 39, 34, 0.84);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.settings-subdetails > summary small {
+  color: rgba(47, 39, 34, 0.5);
+  font-size: 12px;
+}
+
+.settings-subdetails[open] > summary {
+  margin-bottom: 8px;
+}
+
+.settings-shell .web-search-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.web-search-quick-actions button {
+  min-height: 34px;
+  border: 1px solid rgba(47, 39, 34, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.78);
+  color: rgba(47, 39, 34, 0.78);
+  cursor: pointer;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.web-search-quick-actions button:hover,
+.web-search-quick-actions button.active {
+  border-color: rgba(126, 80, 48, 0.24);
+  background: rgba(126, 80, 48, 0.12);
+  color: rgba(47, 39, 34, 0.94);
+}
+
+.service-connection-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-shell .service-connection-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.settings-shell .service-connection-card.ready {
+  border-color: rgba(53, 104, 95, 0.18);
+  background: rgba(53, 104, 95, 0.045);
+}
+
+.settings-shell .service-connection-card.needs-key {
+  border-color: rgba(126, 80, 48, 0.2);
+  background: rgba(126, 80, 48, 0.045);
+}
+
+.service-connection-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.service-connection-head span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.68);
+  color: rgba(47, 39, 34, 0.62);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.service-connection-card p {
+  margin: 0;
+  color: rgba(47, 39, 34, 0.66);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-raw-credentials {
+  border: 1px solid rgba(47, 39, 34, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.34);
+  padding: 10px;
+}
+
+.settings-raw-credentials summary {
+  cursor: pointer;
+  color: rgba(47, 39, 34, 0.58);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.credential-delete-btn {
+  min-height: 30px;
+  border: 1px solid rgba(126, 80, 48, 0.16);
+  border-radius: 8px;
+  background: rgba(126, 80, 48, 0.07);
+  color: rgba(126, 80, 48, 0.88);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.credential-add-form {
+  display: grid;
+  gap: 8px;
+}
+
+.credential-selected-service {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(47, 39, 34, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 253, 248, 0.62);
+  padding: 10px;
+}
+
+.credential-selected-service.ready {
+  border-color: rgba(53, 104, 95, 0.18);
+  background: rgba(53, 104, 95, 0.06);
+}
+
+.credential-selected-service.needs-key {
+  border-color: rgba(126, 80, 48, 0.18);
+  background: rgba(126, 80, 48, 0.055);
+}
+
+.credential-selected-service strong,
+.credential-selected-service small,
+.credential-selected-service span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.credential-selected-service strong {
+  color: rgba(47, 39, 34, 0.9);
+  font-size: 13px;
+}
+
+.credential-selected-service small {
+  color: rgba(47, 39, 34, 0.62);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.credential-selected-service span {
+  color: rgba(47, 39, 34, 0.54);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.credential-add-form select,
+.credential-add-form input {
+  min-width: 0;
+  border: 1px solid rgba(47, 39, 34, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 252, 246, 0.72);
+  color: rgba(47, 39, 34, 0.88);
+  padding: 8px;
+}
+
+.credential-add-form button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(126, 80, 48, 0.92);
+  color: #fffaf2;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.credential-add-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.settings-advanced {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  border-top: 1px solid rgba(47, 39, 34, 0.1);
+  padding-top: 12px;
+}
+
+.settings-advanced > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  border: 1px solid rgba(47, 39, 34, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.54);
+  padding: 0 12px;
+  color: rgba(47, 39, 34, 0.86);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-advanced > summary small {
+  color: rgba(47, 39, 34, 0.48);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.diagnostics-advanced-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+@media (max-width: 900px) {
+  .settings-quick-grid,
+  .service-connection-grid,
+  .settings-service-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

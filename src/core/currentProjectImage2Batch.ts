@@ -5,13 +5,39 @@ import {
   type TaskRunLedger,
   type TaskRunLedgerProjection,
 } from "./taskRunLedger";
+import {
+  createProviderRetrySchedulerState,
+  providerRetryAttemptReceiptCandidates,
+  queueNextProviderRetryBatch,
+  type ProviderRetryFailureKind,
+  type ProviderRetryPolicy,
+  type ProviderRetrySchedulerState,
+  type ProviderRetryTask,
+} from "./providerRetryScheduler";
+import {
+  IMAGE2_GENERATE_MAX_AUTO_RETRIES,
+  IMAGE2_GENERATE_MAX_CONCURRENCY,
+  IMAGE2_GENERATE_RETRY_CONCURRENCY,
+  IMAGE2_REFERENCE_EDIT_MAX_AUTO_RETRIES,
+  IMAGE2_REFERENCE_EDIT_MAX_CONCURRENCY,
+  IMAGE2_REFERENCE_EDIT_RETRY_CONCURRENCY,
+  getProviderRule,
+} from "./providerPolicy";
 import type { AssetLibraryAsset, AssetLibrarySnapshot } from "./assetLibraryCrud";
+import type { CurrentProjectPreviewItemInput } from "./currentProjectPreviewProjection";
 
 export const currentProjectImage2BatchSchemaVersion = "0.1.0";
+export const currentProjectImage2BatchPolicySchemaVersion = "current_project_image2_batch_policy_v1";
 
 export type CurrentProjectImage2BatchStatus = "ready_for_review" | "blocked";
+export type CurrentProjectImage2BatchExecutionStatus =
+  | "queued"
+  | "blocked"
+  | "completed_needs_review"
+  | "completed_with_missing"
+  | "missing";
 
-export type CurrentProjectImage2ReferenceRole = "character" | "scene" | "style";
+export type CurrentProjectImage2ReferenceRole = "character" | "scene" | "style" | "prop";
 
 export type CurrentProjectImage2ReferenceInput =
   | string
@@ -84,6 +110,61 @@ export interface CurrentProjectImage2BatchPlanItem {
   blockers: string[];
 }
 
+export interface CurrentProjectImage2BatchPolicyProjection {
+  schemaVersion: typeof currentProjectImage2BatchPolicySchemaVersion;
+  providerCalled: false;
+  liveSubmitAllowed: false;
+  promotionAllowed: false;
+  imageGenerate: {
+    providerSlot: "image.generate";
+    activeProvider?: string;
+    requiredMode: "text2image";
+    concurrency: typeof IMAGE2_GENERATE_MAX_CONCURRENCY;
+    retryConcurrency: typeof IMAGE2_GENERATE_RETRY_CONCURRENCY;
+    maxAutoRetries: typeof IMAGE2_GENERATE_MAX_AUTO_RETRIES;
+    successfulReturnStatus: "needs_review";
+    missingReturnStatus: "missing";
+    lateReturnStatus: "needs_review";
+    threeConcurrentTextToImageDefaultAllowed: true;
+  };
+  imageEditReference: {
+    providerSlot: "image.edit";
+    activeProvider?: string;
+    requiredMode: "image2image";
+    concurrency: typeof IMAGE2_REFERENCE_EDIT_MAX_CONCURRENCY;
+    referenceConcurrency: typeof IMAGE2_REFERENCE_EDIT_MAX_CONCURRENCY;
+    retryConcurrency: typeof IMAGE2_REFERENCE_EDIT_RETRY_CONCURRENCY;
+    maxAutoRetries: typeof IMAGE2_REFERENCE_EDIT_MAX_AUTO_RETRIES;
+    textToImageFallbackAllowed: false;
+    successfulReturnStatus: "needs_review";
+    missingReturnStatus: "missing";
+    lateReturnStatus: "needs_review";
+  };
+}
+
+export type CurrentProjectImage2CircuitBreakerStatus = "closed" | "retry_downshift" | "open";
+
+export interface CurrentProjectImage2CircuitBreakerProjection {
+  schemaVersion: "current_project_image2_circuit_breaker_v1";
+  status: CurrentProjectImage2CircuitBreakerStatus;
+  defaultConcurrency: number;
+  retryConcurrency: number;
+  activeConcurrency: number;
+  maxAutoRetries: number;
+  retryableFailureKinds: ProviderRetryFailureKind[];
+  networkErrorCount: number;
+  retryableFailureCount: number;
+  retryScheduledCount: number;
+  terminalFailedCount: number;
+  nextRunnableCount: number;
+  downshiftOnNetworkError: true;
+  providerCalled: boolean;
+  liveSubmitAllowed: false;
+  promotionAllowed: false;
+  nextAction: "run_default_batch" | "retry_missing_at_reduced_concurrency" | "manual_review_required";
+  userLabel: string;
+}
+
 export interface CurrentProjectImage2BatchUiSummary {
   plannedCount: number;
   blockedCount: number;
@@ -101,9 +182,61 @@ export interface CurrentProjectImage2BatchPlan {
   runRoot: string;
   status: CurrentProjectImage2BatchStatus;
   submitPolicy: CurrentProjectImage2BatchSubmitPolicy;
+  policyProjection: CurrentProjectImage2BatchPolicyProjection;
   items: CurrentProjectImage2BatchPlanItem[];
   blockers: string[];
   uiSummary: CurrentProjectImage2BatchUiSummary;
+}
+
+export interface CurrentProjectImage2BatchRetrySchedulerProjection {
+  schemaVersion: ProviderRetrySchedulerState["schemaVersion"];
+  mode: "planning_only_retry_scheduler_projection";
+  actualProviderRetryAllowed: false;
+  automaticProviderRetryAllowed: false;
+  requiresExplicitPermissionReceipt: true;
+  noPromotionWithoutReceipt: true;
+  providerCalled: false;
+  liveSubmitAllowed: false;
+  dryRunOnly: true;
+  promotionAllowed: false;
+  policyProjection: CurrentProjectImage2BatchPolicyProjection;
+  schedulerState: ProviderRetrySchedulerState;
+  circuitBreaker: CurrentProjectImage2CircuitBreakerProjection;
+  attemptReceiptCandidates: ReturnType<typeof providerRetryAttemptReceiptCandidates>;
+  summary: ProviderRetrySchedulerState["summary"] & {
+    nextRunnableCount: number;
+    blockedFromRetryCount: number;
+  };
+}
+
+export interface CurrentProjectImage2BatchExecutionItem {
+  taskId: string;
+  shotId: string;
+  expectedOutputPath: string;
+  status: "needs_review" | "missing" | "blocked";
+  providerReturned: boolean;
+  outputPath?: string;
+  outputSha256?: string;
+  attemptId?: string;
+  reasons: string[];
+  promotionAllowed: false;
+}
+
+export interface CurrentProjectImage2BatchExecutionSummary {
+  schemaVersion: typeof currentProjectImage2BatchPolicySchemaVersion;
+  status: CurrentProjectImage2BatchExecutionStatus;
+  requestedCount: number;
+  returnedCount: number;
+  missingCount: number;
+  needsReviewCount: number;
+  blockedCount: number;
+  maxConcurrency: number;
+  retryConcurrency: number;
+  maxAutoRetries: number;
+  promotionAllowed: false;
+  missingCanPromote: false;
+  lateReturnCanPromote: false;
+  items: CurrentProjectImage2BatchExecutionItem[];
 }
 
 export interface CurrentProjectImage2BatchLedgerSummary {
@@ -190,8 +323,9 @@ export interface CurrentProjectImage2AssetLibraryReferenceReadiness {
 }
 
 const defaultGeneratedAt = "1970-01-01T00:00:00.000Z";
-const defaultMaxImages = 10;
+const defaultMaxImages = 3;
 const requiredReferenceRoles: CurrentProjectImage2ReferenceRole[] = ["character", "scene", "style"];
+const supportedReferenceRoles: CurrentProjectImage2ReferenceRole[] = ["character", "scene", "style", "prop"];
 const absolutePathPattern = /^(?:[A-Za-z]:[\\/]|\/|\/\/|~[\\/]|[a-zA-Z][a-zA-Z0-9+.-]*:)/;
 const parentTraversalPattern = /(?:^|\/)\.\.(?:\/|$)/;
 
@@ -211,6 +345,147 @@ function cloneSubmitPolicy(): CurrentProjectImage2BatchSubmitPolicy {
   return { ...fixedSubmitPolicy };
 }
 
+export function getCurrentProjectImage2BatchPolicyProjection(): CurrentProjectImage2BatchPolicyProjection {
+  const imageGenerateRule = getProviderRule("image.generate");
+  const imageEditRule = getProviderRule("image.edit");
+
+  return {
+    schemaVersion: currentProjectImage2BatchPolicySchemaVersion,
+    providerCalled: false,
+    liveSubmitAllowed: false,
+    promotionAllowed: false,
+    imageGenerate: {
+      providerSlot: "image.generate",
+      activeProvider: imageGenerateRule?.activeProvider,
+      requiredMode: "text2image",
+      concurrency: IMAGE2_GENERATE_MAX_CONCURRENCY,
+      retryConcurrency: IMAGE2_GENERATE_RETRY_CONCURRENCY,
+      maxAutoRetries: IMAGE2_GENERATE_MAX_AUTO_RETRIES,
+      successfulReturnStatus: "needs_review",
+      missingReturnStatus: "missing",
+      lateReturnStatus: "needs_review",
+      threeConcurrentTextToImageDefaultAllowed: true,
+    },
+    imageEditReference: {
+      providerSlot: "image.edit",
+      activeProvider: imageEditRule?.activeProvider,
+      requiredMode: "image2image",
+      concurrency: IMAGE2_REFERENCE_EDIT_MAX_CONCURRENCY,
+      referenceConcurrency: IMAGE2_REFERENCE_EDIT_MAX_CONCURRENCY,
+      retryConcurrency: IMAGE2_REFERENCE_EDIT_RETRY_CONCURRENCY,
+      maxAutoRetries: IMAGE2_REFERENCE_EDIT_MAX_AUTO_RETRIES,
+      textToImageFallbackAllowed: false,
+      successfulReturnStatus: "needs_review",
+      missingReturnStatus: "missing",
+      lateReturnStatus: "needs_review",
+    },
+  };
+}
+
+export function buildCurrentProjectImage2GenerateRetryPolicy(
+  overrides: Partial<ProviderRetryPolicy> = {},
+): ProviderRetryPolicy {
+  const maxConcurrency = Math.min(
+    IMAGE2_GENERATE_MAX_CONCURRENCY,
+    Math.max(0, Math.floor(overrides.maxConcurrency ?? IMAGE2_GENERATE_MAX_CONCURRENCY)),
+  );
+  const retryConcurrency = Math.min(
+    IMAGE2_GENERATE_RETRY_CONCURRENCY,
+    Math.max(0, Math.floor(overrides.retryConcurrency ?? IMAGE2_GENERATE_RETRY_CONCURRENCY)),
+  );
+  const maxAutoRetries = Math.min(
+    IMAGE2_GENERATE_MAX_AUTO_RETRIES,
+    Math.max(0, Math.floor(overrides.maxAutoRetries ?? IMAGE2_GENERATE_MAX_AUTO_RETRIES)),
+  );
+
+  return {
+    maxConcurrency,
+    retryConcurrency,
+    maxAutoRetries,
+    baseDelayMs: Math.max(0, Math.floor(overrides.baseDelayMs ?? 1_500)),
+    maxDelayMs: Math.max(0, Math.floor(overrides.maxDelayMs ?? 30_000)),
+    jitterRatio: Math.max(0, overrides.jitterRatio ?? 0),
+    retryableFailureKinds: overrides.retryableFailureKinds || [
+      "timeout",
+      "rate_limit",
+      "server_error",
+      "network_error",
+      "provider_missing",
+    ],
+    terminalFailureKinds: overrides.terminalFailureKinds || [
+      "auth",
+      "validation_error",
+      "content_policy",
+      "qa_failed",
+      "cancelled",
+    ],
+  };
+}
+
+export function projectCurrentProjectImage2CircuitBreaker(
+  state?: ProviderRetrySchedulerState,
+): CurrentProjectImage2CircuitBreakerProjection {
+  const policy = state?.policy || buildCurrentProjectImage2GenerateRetryPolicy();
+  const retryConcurrency = policy.retryConcurrency ?? policy.maxConcurrency;
+  const attempts = state?.attempts || [];
+  const nextRunnable = state ? queueNextProviderRetryBatch(state, state.summary.lastUpdatedAt || state.generatedAt) : [];
+  const networkErrorCount = attempts.filter((attempt) => attempt.failureKind === "network_error").length;
+  const retryableFailureCount = attempts.filter(
+    (attempt) => attempt.failureKind && policy.retryableFailureKinds.includes(attempt.failureKind),
+  ).length;
+  const retryScheduledCount = state?.summary.retryScheduled ?? 0;
+  const terminalFailedCount = state?.summary.terminalFailed ?? 0;
+  const retrySignal =
+    retryScheduledCount > 0 ||
+    retryableFailureCount > 0 ||
+    nextRunnable.some((attempt) => attempt.attemptNumber > 1);
+  const exhaustedAfterRetryableFailure =
+    Boolean(state && state.tasks.length > 0) &&
+    retryableFailureCount > 0 &&
+    terminalFailedCount > 0 &&
+    (state?.summary.queued ?? 0) === 0 &&
+    (state?.summary.running ?? 0) === 0 &&
+    (state?.summary.succeeded ?? 0) < (state?.tasks.length ?? 0);
+  const status: CurrentProjectImage2CircuitBreakerStatus = exhaustedAfterRetryableFailure
+    ? "open"
+    : retrySignal
+      ? "retry_downshift"
+      : "closed";
+  const activeConcurrency =
+    status === "open" ? 0 : status === "retry_downshift" ? retryConcurrency : policy.maxConcurrency;
+
+  return {
+    schemaVersion: "current_project_image2_circuit_breaker_v1",
+    status,
+    defaultConcurrency: policy.maxConcurrency,
+    retryConcurrency,
+    activeConcurrency,
+    maxAutoRetries: policy.maxAutoRetries,
+    retryableFailureKinds: policy.retryableFailureKinds,
+    networkErrorCount,
+    retryableFailureCount,
+    retryScheduledCount,
+    terminalFailedCount,
+    nextRunnableCount: nextRunnable.length,
+    downshiftOnNetworkError: true,
+    providerCalled: state?.summary.providerCalled ?? false,
+    liveSubmitAllowed: false,
+    promotionAllowed: false,
+    nextAction:
+      status === "open"
+        ? "manual_review_required"
+        : status === "retry_downshift"
+          ? "retry_missing_at_reduced_concurrency"
+          : "run_default_batch",
+    userLabel:
+      status === "open"
+        ? "Manual review needed"
+        : status === "retry_downshift"
+          ? `Retry at ${retryConcurrency}`
+          : `Default ${policy.maxConcurrency}`,
+  };
+}
+
 function normalizePath(value: string | undefined): string {
   return (value || "").trim().replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "");
 }
@@ -222,6 +497,15 @@ function joinPortablePath(...parts: string[]): string {
 function safeId(value: string): string {
   const safe = value.trim().replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");
   return safe || "item";
+}
+
+function stablePlanHash(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `fnv1a32:${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
 function uniqueInOrder(values: string[]): string[] {
@@ -241,7 +525,7 @@ function mergeReferences(
   second: CurrentProjectImage2ReferenceSet | undefined,
 ): CurrentProjectImage2ReferenceSet | undefined {
   const result: CurrentProjectImage2ReferenceSet = {};
-  for (const role of requiredReferenceRoles) {
+  for (const role of supportedReferenceRoles) {
     const entries = [...referenceList(first?.[role]), ...referenceList(second?.[role])];
     if (entries.length) result[role] = entries;
   }
@@ -261,7 +545,7 @@ function assetFutureReferenceBlockers(asset: AssetLibraryAsset): string[] {
   const blockers: string[] = [];
   const authority = asset.referenceAuthority;
 
-  if (asset.assetType !== "character" && asset.assetType !== "scene" && asset.assetType !== "style") {
+  if (asset.assetType !== "character" && asset.assetType !== "scene" && asset.assetType !== "style" && asset.assetType !== "prop") {
     blockers.push(`asset_library_${asset.id}_unsupported_reference_asset_type`);
   }
   if (asset.status !== "locked") blockers.push(`asset_library_${asset.id}_status_${asset.status}_not_locked`);
@@ -282,11 +566,11 @@ export function buildCurrentProjectImage2ReferencesFromAssetLibrary(
   const references: CurrentProjectImage2ReferenceSet = {};
   const blockers: string[] = [];
   const warnings: string[] = [];
-  const byRole: Record<CurrentProjectImage2ReferenceRole, number> = { character: 0, scene: 0, style: 0 };
+  const byRole: Record<CurrentProjectImage2ReferenceRole, number> = { character: 0, scene: 0, style: 0, prop: 0 };
   let blockedCount = 0;
 
   for (const asset of library.assets) {
-    if (asset.assetType !== "character" && asset.assetType !== "scene" && asset.assetType !== "style") continue;
+    if (asset.assetType !== "character" && asset.assetType !== "scene" && asset.assetType !== "style" && asset.assetType !== "prop") continue;
 
     const assetBlockers = assetFutureReferenceBlockers(asset);
     if (assetBlockers.length) {
@@ -325,7 +609,7 @@ export function buildCurrentProjectImage2ReferencesFromAssetLibrary(
     blockers: uniqueInOrder(blockers),
     warnings: uniqueInOrder(warnings),
     summary: {
-      eligibleCount: byRole.character + byRole.scene + byRole.style,
+      eligibleCount: byRole.character + byRole.scene + byRole.style + byRole.prop,
       blockedCount,
       warningCount: uniqueInOrder(warnings).length,
       byRole,
@@ -377,16 +661,16 @@ function normalizeReferences(references: CurrentProjectImage2ReferenceSet | unde
   const blockers: string[] = [];
   const paths: string[] = [];
 
-  for (const role of requiredReferenceRoles) {
+  for (const role of supportedReferenceRoles) {
     const entries = referenceList(references?.[role]);
     if (!entries.length) {
-      blockers.push(`missing_locked_${role}_reference`);
+      if (requiredReferenceRoles.includes(role)) blockers.push(`missing_locked_${role}_reference`);
       continue;
     }
 
     const locked = entries.filter(referenceIsLocked);
     if (!locked.length) {
-      blockers.push(`missing_locked_${role}_reference`);
+      if (requiredReferenceRoles.includes(role)) blockers.push(`missing_locked_${role}_reference`);
       continue;
     }
 
@@ -544,6 +828,7 @@ export function buildCurrentProjectImage2BatchPlan(input: BuildCurrentProjectIma
     runRoot,
     status,
     submitPolicy: cloneSubmitPolicy(),
+    policyProjection: getCurrentProjectImage2BatchPolicyProjection(),
     items: items.map((item) => ({
       ...item,
       status: status === "blocked" ? "blocked" : item.status,
@@ -560,6 +845,173 @@ export function buildCurrentProjectImage2BatchPlan(input: BuildCurrentProjectIma
           ? "Review the dry-run Image2 batch packet before any manual submit."
           : "Resolve blocked shot selection, locked references, or portable run-root paths before review.",
     },
+  };
+}
+
+function inputHashForCurrentProjectImage2BatchItem(item: CurrentProjectImage2BatchPlanItem): string {
+  return stablePlanHash(
+    [
+      item.shotId,
+      item.taskRunId,
+      item.packetId,
+      item.envelopeId,
+      item.expectedOutputPath,
+      item.providerObservationPath,
+      item.semanticQaPath,
+      item.promptPath,
+      ...item.referencePaths,
+    ].join("\n"),
+  );
+}
+
+export function buildCurrentProjectImage2ProviderRetryTasks(
+  plan: CurrentProjectImage2BatchPlan,
+  options: {
+    permissionReceiptIdsByShotId?: Record<string, string>;
+    permissionReceiptIdsByTaskRunId?: Record<string, string>;
+  } = {},
+): ProviderRetryTask[] {
+  return plan.items
+    .filter((item) => item.status === "ready_for_review")
+    .map((item) => ({
+      taskId: item.taskRunId,
+      shotId: item.shotId,
+      inputHash: inputHashForCurrentProjectImage2BatchItem(item),
+      permissionReceiptId:
+        options.permissionReceiptIdsByTaskRunId?.[item.taskRunId] ||
+        options.permissionReceiptIdsByShotId?.[item.shotId] ||
+        `manual_permission_required:${item.shotId}`,
+      expectedOutputPath: item.expectedOutputPath,
+      priority: Math.max(0, plan.items.length - item.queueOrder),
+    }));
+}
+
+export function buildCurrentProjectImage2ProviderRetrySchedulerState(
+  plan: CurrentProjectImage2BatchPlan,
+  options: {
+    generatedAt?: string;
+    policyOverrides?: Partial<ProviderRetryPolicy>;
+    permissionReceiptIdsByShotId?: Record<string, string>;
+    permissionReceiptIdsByTaskRunId?: Record<string, string>;
+  } = {},
+): ProviderRetrySchedulerState {
+  return createProviderRetrySchedulerState({
+    tasks: buildCurrentProjectImage2ProviderRetryTasks(plan, options),
+    policy: buildCurrentProjectImage2GenerateRetryPolicy(options.policyOverrides),
+    generatedAt: options.generatedAt || plan.generatedAt,
+  });
+}
+
+export function projectCurrentProjectImage2ProviderRetryScheduler(
+  plan: CurrentProjectImage2BatchPlan,
+  options: {
+    generatedAt?: string;
+    policyOverrides?: Partial<ProviderRetryPolicy>;
+    permissionReceiptIdsByShotId?: Record<string, string>;
+    permissionReceiptIdsByTaskRunId?: Record<string, string>;
+  } = {},
+): CurrentProjectImage2BatchRetrySchedulerProjection {
+  const state = buildCurrentProjectImage2ProviderRetrySchedulerState(plan, options);
+  const nextRunnable = queueNextProviderRetryBatch(state, options.generatedAt || plan.generatedAt);
+  const circuitBreaker = projectCurrentProjectImage2CircuitBreaker(state);
+
+  return {
+    schemaVersion: state.schemaVersion,
+    mode: "planning_only_retry_scheduler_projection",
+    actualProviderRetryAllowed: false,
+    automaticProviderRetryAllowed: false,
+    requiresExplicitPermissionReceipt: true,
+    noPromotionWithoutReceipt: true,
+    providerCalled: false,
+    liveSubmitAllowed: false,
+    dryRunOnly: true,
+    promotionAllowed: false,
+    policyProjection: plan.policyProjection,
+    schedulerState: state,
+    circuitBreaker,
+    attemptReceiptCandidates: providerRetryAttemptReceiptCandidates(state),
+    summary: {
+      ...state.summary,
+      providerCalled: false,
+      promotionAllowed: false,
+      nextRunnableCount: nextRunnable.length,
+      blockedFromRetryCount: plan.items.length - state.tasks.length,
+    },
+  };
+}
+
+function latestSucceededCurrentProjectImage2Attempt(state: ProviderRetrySchedulerState, task: ProviderRetryTask) {
+  return state.attempts
+    .filter((attempt) => attempt.taskId === task.taskId && attempt.status === "succeeded")
+    .sort((left, right) => right.attemptNumber - left.attemptNumber)[0];
+}
+
+function currentProjectImage2TaskHasTerminalFailure(state: ProviderRetrySchedulerState, task: ProviderRetryTask): boolean {
+  return state.attempts.some((attempt) => attempt.taskId === task.taskId && attempt.status === "failed_terminal");
+}
+
+export function summarizeCurrentProjectImage2BatchExecution(
+  state: ProviderRetrySchedulerState,
+): CurrentProjectImage2BatchExecutionSummary {
+  const policyProjection = getCurrentProjectImage2BatchPolicyProjection();
+  const items: CurrentProjectImage2BatchExecutionItem[] = state.tasks.map((task) => {
+    const succeeded = latestSucceededCurrentProjectImage2Attempt(state, task);
+    if (succeeded) {
+      return {
+        taskId: task.taskId,
+        shotId: task.shotId,
+        expectedOutputPath: task.expectedOutputPath,
+        status: "needs_review",
+        providerReturned: true,
+        outputPath: succeeded.outputPath,
+        outputSha256: succeeded.outputSha256,
+        attemptId: succeeded.attemptId,
+        reasons: ["provider_return_requires_human_review"],
+        promotionAllowed: false,
+      };
+    }
+
+    const terminalMissing = currentProjectImage2TaskHasTerminalFailure(state, task);
+    return {
+      taskId: task.taskId,
+      shotId: task.shotId,
+      expectedOutputPath: task.expectedOutputPath,
+      status: terminalMissing ? "missing" : "blocked",
+      providerReturned: false,
+      reasons: terminalMissing ? ["provider_return_missing"] : ["provider_return_not_settled"],
+      promotionAllowed: false,
+    };
+  });
+  const returnedCount = items.filter((item) => item.providerReturned).length;
+  const missingCount = items.filter((item) => item.status === "missing").length;
+  const blockedCount = items.filter((item) => item.status === "blocked").length;
+  const needsReviewCount = items.filter((item) => item.status === "needs_review").length;
+  const status =
+    blockedCount > 0
+      ? "blocked"
+      : returnedCount > 0 && missingCount > 0
+        ? "completed_with_missing"
+        : returnedCount > 0
+          ? "completed_needs_review"
+          : missingCount > 0
+            ? "missing"
+            : "queued";
+
+  return {
+    schemaVersion: currentProjectImage2BatchPolicySchemaVersion,
+    status,
+    requestedCount: state.tasks.length,
+    returnedCount,
+    missingCount,
+    needsReviewCount,
+    blockedCount,
+    maxConcurrency: policyProjection.imageGenerate.concurrency,
+    retryConcurrency: policyProjection.imageGenerate.retryConcurrency,
+    maxAutoRetries: policyProjection.imageGenerate.maxAutoRetries,
+    promotionAllowed: false,
+    missingCanPromote: false,
+    lateReturnCanPromote: false,
+    items,
   };
 }
 
@@ -692,5 +1144,54 @@ export function projectCurrentProjectImage2BatchRuntimeProjection(
     runId: plan.runId,
     generatedAt: plan.generatedAt,
     projections: ledgerProjection.projections,
+  });
+}
+
+function previewShotIdFor(item: CurrentProjectImage2BatchRuntimeProjectionItem): string {
+  const outputPath = item.manifestSummary.expectedOutputs[0] || item.reportSummary.latestOutputPath || "";
+  const outputParts = normalizePath(outputPath).split("/").filter(Boolean);
+  const image2PrepIndex = outputParts.lastIndexOf("image2-prep");
+  if (image2PrepIndex >= 0 && outputParts[image2PrepIndex + 1]) return outputParts[image2PrepIndex + 1];
+  const match = item.taskRunId.match(/_([^_]+)_image2_start$/);
+  return match?.[1] || item.taskRunId;
+}
+
+export function projectCurrentProjectImage2BatchPreviewItems(
+  projection: CurrentProjectImage2BatchRuntimeProjection,
+): CurrentProjectPreviewItemInput[] {
+  return projection.items.map((item, index): CurrentProjectPreviewItemInput => {
+    const previewItem = item.previewSummary.items[0];
+    const canShowMedia = Boolean(
+      previewItem?.path &&
+      (
+        (item.previewStatus === "ready" && previewItem.verified === true && item.completeVerified) ||
+        (item.previewStatus === "needs_review" && previewItem.needsReview === true)
+      ),
+    );
+    const blocked = item.previewStatus === "parked" ||
+      item.previewStatus === "failed" ||
+      item.previewStatus === "stalled" ||
+      item.previewStatus === "interrupted";
+
+    return {
+      id: `current_project_image2_${item.taskRunId}`,
+      shotId: previewShotIdFor(item),
+      order: index + 1,
+      mediaPath: canShowMedia ? previewItem?.path : undefined,
+      expectedOutputPath: item.manifestSummary.expectedOutputs[0],
+      status: item.completeVerified ? "complete_verified" : item.previewStatus,
+      previewStatus: item.previewStatus,
+      runtimeTruthStatus: item.status,
+      previewQaStatus: item.previewStatus === "needs_review" ? "needs_review" : item.previewStatus === "ready" ? "verified" : item.previewStatus,
+      productionQaStatus: item.completeVerified ? "pass" : item.previewStatus === "needs_review" ? "needs_review" : undefined,
+      reviewRequired: item.previewStatus === "needs_review",
+      reviewOverlay: item.previewStatus === "needs_review",
+      outputExists: canShowMedia,
+      blockers: canShowMedia ? [] : uniqueInOrder([
+        ...item.manifestSummary.blockers,
+        ...item.reportSummary.blockers,
+        blocked ? item.previewStatus : "",
+      ]),
+    };
   });
 }

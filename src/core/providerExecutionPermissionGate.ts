@@ -1,6 +1,6 @@
 import type { ProviderLiveGateItem, ProviderLiveGateState } from "./providerLiveGate";
-import type { CodexCliAdapterSpikeState } from "./codexCliAdapterSpike";
-import type { ProviderSlot, RequiredMode } from "./types";
+import type { CliAdapterSpikeState } from "./cliAdapterSpike";
+import type { BaseHardLocks, ProviderSlot, RequiredMode } from "./types";
 
 export const providerExecutionPermissionGateSchemaVersion = "0.1.0";
 
@@ -53,23 +53,16 @@ export interface ProviderExecutionPermissionRequest {
   noFileMutation: true;
 }
 
-export interface ProviderExecutionPermissionHardLocks {
-  dryRunOnly: true;
+export interface ProviderExecutionPermissionHardLocks extends BaseHardLocks {
   readOnly: true;
   reviewPlanOnly: true;
   actionTimeConfirmationRequired: true;
-  providerSubmissionForbidden: true;
   canSubmitProvider: false;
   providerSubmitAllowed: 0;
-  liveSubmitAllowed: false;
   credentialAccessAllowed: false;
   credentialStorage: false;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   noApiKeyCreation: true;
   noArbitraryProviderCommand: true;
-  noWorkerSpawn: true;
-  noFileMutation: true;
   fastModelForbidden: true;
   vipChannelForbidden: true;
   textToVideoMainPathForbidden: true;
@@ -128,26 +121,28 @@ export interface ProviderExecutionPermissionGateState {
 export interface BuildProviderExecutionPermissionGateStateInput {
   generatedAt: string;
   providerLiveGate: ProviderLiveGateState;
-  codexCliAdapterSpike?: CodexCliAdapterSpikeState;
+  cliAdapterSpike?: CliAdapterSpikeState;
 }
 
 const hardLocks: ProviderExecutionPermissionHardLocks = {
   dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   readOnly: true,
   reviewPlanOnly: true,
   actionTimeConfirmationRequired: true,
-  providerSubmissionForbidden: true,
   canSubmitProvider: false,
   providerSubmitAllowed: 0,
-  liveSubmitAllowed: false,
   credentialAccessAllowed: false,
   credentialStorage: false,
-  noCredentialRead: true,
-  noCredentialWrite: true,
+  credentialReadAllowedForSettings: true,
   noApiKeyCreation: true,
   noArbitraryProviderCommand: true,
-  noWorkerSpawn: true,
-  noFileMutation: true,
   fastModelForbidden: true,
   vipChannelForbidden: true,
   textToVideoMainPathForbidden: true,
@@ -217,15 +212,15 @@ function providerLiveGateSafetyBlockers(providerLiveGate: ProviderLiveGateState)
   ]);
 }
 
-function adapterSpikeStillLocked(codexCliAdapterSpike?: CodexCliAdapterSpikeState): boolean {
-  if (!codexCliAdapterSpike) return true;
-  return codexCliAdapterSpike.hardLocks.noActualCodexSpawn === true
-    && codexCliAdapterSpike.hardLocks.noActualCodexResume === true
-    && codexCliAdapterSpike.hardLocks.noProviderSubmit === true
-    && codexCliAdapterSpike.hardLocks.liveSubmitAllowed === false
-    && codexCliAdapterSpike.hardLocks.noCredentialAccess === true
-    && codexCliAdapterSpike.hardLocks.noFileMutation === true
-    && codexCliAdapterSpike.hardLocks.noFreeTextTask === true;
+function adapterSpikeStillLocked(cliAdapterSpike?: CliAdapterSpikeState): boolean {
+  if (!cliAdapterSpike) return true;
+  return cliAdapterSpike.hardLocks.noActualAgentSpawn === true
+    && cliAdapterSpike.hardLocks.noActualAgentResume === true
+    && cliAdapterSpike.hardLocks.noProviderSubmit === true
+    && cliAdapterSpike.hardLocks.liveSubmitAllowed === false
+    && cliAdapterSpike.hardLocks.noCredentialAccess === true
+    && cliAdapterSpike.hardLocks.noFileMutation === true
+    && cliAdapterSpike.hardLocks.noFreeTextTask === true;
 }
 
 function buildRequest(
@@ -237,7 +232,7 @@ function buildRequest(
     && item.liveSubmitAllowed === false
     && item.providerSubmissionForbidden === true
     && item.credentialStorage === false;
-  const adapterLocked = adapterSpikeStillLocked(input.codexCliAdapterSpike);
+  const adapterLocked = adapterSpikeStillLocked(input.cliAdapterSpike);
   const forbiddenModesAbsent = isForbiddenModesAbsent(input.providerLiveGate);
   const liveGateSafetyBlockers = providerLiveGateSafetyBlockers(input.providerLiveGate);
   const liveGateSafe = liveGateSafetyBlockers.length === 0;

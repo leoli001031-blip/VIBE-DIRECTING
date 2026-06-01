@@ -1,6 +1,7 @@
 import type { AssetLibrarySceneAssetPack, AssetLibrarySnapshot } from "./assetLibraryCrud";
 import type { ProjectStoreFactFile, ProjectStoreSnapshot } from "./projectStore";
 import type { ProjectRuntimeState } from "./projectState";
+import type { BaseHardLocks } from "./types";
 import type { ShotLayoutContract } from "./visualConsistency";
 import type { VoiceSourceLibraryState } from "./voiceSourceLibrary";
 
@@ -81,13 +82,9 @@ export interface ProjectFactsVisualConsistencySupport {
   };
 }
 
-export interface ProjectFactsIntegrationHardLocks {
-  dryRunOnly: true;
-  noFileMutation: true;
+export interface ProjectFactsIntegrationHardLocks extends BaseHardLocks {
   noDirectoryCreate: true;
   noProviderSubmit: true;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   noImageGeneration: true;
   noVideoGeneration: true;
   noTextToVideo: true;
@@ -152,11 +149,15 @@ export interface BuildProjectFactsIntegrationInput {
 
 const hardLocks: ProjectFactsIntegrationHardLocks = {
   dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
   noFileMutation: true,
-  noDirectoryCreate: true,
-  noProviderSubmit: true,
   noCredentialRead: true,
   noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
+  noDirectoryCreate: true,
+  noProviderSubmit: true,
   noImageGeneration: true,
   noVideoGeneration: true,
   noTextToVideo: true,

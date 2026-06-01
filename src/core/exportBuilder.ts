@@ -18,7 +18,11 @@ import type {
   TaskRun,
   DemoPackageFacts,
   DemoPackageMediaStatus,
+  DemoPackageDirectorStrategyEvidence,
+  DemoPackageReferenceEvidence,
+  DemoPackageVideoResult,
 } from "./types";
+import { SEEDANCE_ALL_AROUND_REFERENCE_ORDER, STORYBOARD_REFERENCE_PIPELINE_VERSION } from "./storyboardReferencePipeline";
 
 export const exportBuilderSchemaVersion = "0.1.0";
 
@@ -103,6 +107,10 @@ function safeId(value: string): string {
 
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function totalDuration(events: PreviewEvent[]): number {
@@ -441,6 +449,7 @@ function audioOutputPaths(audioPlanning?: AudioPlanningState): string[] {
   return uniqueSorted([
     ...(audioPlanning?.shotPlans || []).map((plan) => plan.outputPath || ""),
     ...(audioPlanning?.exportPackageSummary.plannedPaths || []),
+    ...(audioPlanning?.musicReferences || []).flatMap((reference) => [reference.analysisPath || "", reference.finalMixPath || ""]),
   ]);
 }
 
@@ -561,6 +570,324 @@ function mediaStatusForEvent(event?: PreviewEvent): DemoPackageMediaStatus {
   return "missing";
 }
 
+function videoOutputPath(path?: string): boolean {
+  return /\.(?:mp4|mov|webm)$/i.test(path || "");
+}
+
+function firstStringField(value: unknown, keys: string[]): string | undefined {
+  const wanted = new Set(keys.map((key) => key.toLowerCase()));
+  const seen = new Set<unknown>();
+  const visit = (current: unknown): string | undefined => {
+    if (!isRecord(current) || seen.has(current)) return undefined;
+    seen.add(current);
+    for (const [key, child] of Object.entries(current)) {
+      if (wanted.has(key.toLowerCase()) && typeof child === "string" && child.trim()) return child.trim();
+    }
+    for (const child of Object.values(current)) {
+      const found = Array.isArray(child)
+        ? child.map(visit).find(Boolean)
+        : visit(child);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  return visit(value);
+}
+
+function firstNumberField(value: unknown, keys: string[]): number | undefined {
+  const wanted = new Set(keys.map((key) => key.toLowerCase()));
+  const seen = new Set<unknown>();
+  const visit = (current: unknown): number | undefined => {
+    if (!isRecord(current) || seen.has(current)) return undefined;
+    seen.add(current);
+    for (const [key, child] of Object.entries(current)) {
+      if (!wanted.has(key.toLowerCase())) continue;
+      if (typeof child === "number" && Number.isFinite(child)) return child;
+      if (typeof child === "string" && child.trim() && Number.isFinite(Number(child))) return Number(child);
+    }
+    for (const child of Object.values(current)) {
+      const found = Array.isArray(child)
+        ? child.map(visit).find((item): item is number => typeof item === "number")
+        : visit(child);
+      if (typeof found === "number") return found;
+    }
+    return undefined;
+  };
+  return visit(value);
+}
+
+function firstRecordField(value: unknown, keys: string[]): Record<string, unknown> | undefined {
+  const wanted = new Set(keys.map((key) => key.toLowerCase()));
+  const seen = new Set<unknown>();
+  const visit = (current: unknown): Record<string, unknown> | undefined => {
+    if (!isRecord(current) || seen.has(current)) return undefined;
+    seen.add(current);
+    for (const [key, child] of Object.entries(current)) {
+      if (wanted.has(key.toLowerCase()) && isRecord(child)) return child;
+    }
+    for (const child of Object.values(current)) {
+      const found = Array.isArray(child)
+        ? child.map(visit).find(Boolean)
+        : visit(child);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  return visit(value);
+}
+
+function collectPathFields(value: unknown, keyPattern: RegExp): string[] {
+  const paths: string[] = [];
+  const seen = new Set<unknown>();
+  const visit = (current: unknown): void => {
+    if (Array.isArray(current)) {
+      current.forEach(visit);
+      return;
+    }
+    if (!isRecord(current) || seen.has(current)) return;
+    seen.add(current);
+    for (const [key, child] of Object.entries(current)) {
+      if (keyPattern.test(key) && typeof child === "string" && child.trim()) paths.push(child.trim());
+      visit(child);
+    }
+  };
+  visit(value);
+  return uniqueSorted(paths);
+}
+
+function normalizePathList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return uniqueSorted(value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())));
+  }
+  return typeof value === "string" && value.trim() ? [value.trim()] : [];
+}
+
+function firstStringArrayField(value: unknown, keys: string[]): string[] {
+  const wanted = new Set(keys.map((key) => key.toLowerCase()));
+  const seen = new Set<unknown>();
+  const visit = (current: unknown): string[] => {
+    if (!isRecord(current) || seen.has(current)) return [];
+    seen.add(current);
+    for (const [key, child] of Object.entries(current)) {
+      if (wanted.has(key.toLowerCase())) {
+        const values = normalizePathList(child);
+        if (values.length) return values;
+      }
+    }
+    for (const child of Object.values(current)) {
+      const found = Array.isArray(child)
+        ? child.flatMap((item) => visit(item))
+        : visit(child);
+      if (found.length) return found;
+    }
+    return [];
+  };
+  return visit(value);
+}
+
+function directorStrategyEvidenceFrom(value: unknown): DemoPackageDirectorStrategyEvidence | undefined {
+  const strategy = firstRecordField(value, ["directorStrategy", "director_strategy"]);
+  if (!strategy) return undefined;
+  const modificationSummary = firstStringArrayField(strategy, ["modificationSummary", "modification_summary"]);
+  const evidence: DemoPackageDirectorStrategyEvidence = {
+    rhythmProfile: firstStringField(strategy, ["rhythmProfile", "rhythm_profile"]),
+    rhythmLabel: firstStringField(strategy, ["rhythmLabel", "rhythm_label"]),
+    rhythmReason: firstStringField(strategy, ["rhythmReason", "rhythm_reason"]),
+    splitPolicy: firstStringField(strategy, ["splitPolicy", "split_policy"]),
+    splitLabel: firstStringField(strategy, ["splitLabel", "split_label"]),
+    actionSummary: firstStringField(strategy, ["actionSummary", "action_summary"]),
+    modificationSummary,
+    storyboardPromptPlanSummary: firstStringField(strategy, ["storyboardPromptPlanSummary", "storyboard_prompt_plan_summary"]),
+    videoPromptPlanSummary: firstStringField(strategy, ["videoPromptPlanSummary", "video_prompt_plan_summary"]),
+  };
+  return Object.values(evidence).some((item) => Array.isArray(item) ? item.length : Boolean(item)) ? evidence : undefined;
+}
+
+function referenceEvidenceFrom(value: unknown): DemoPackageReferenceEvidence | undefined {
+  const characterReferencePaths = firstStringArrayField(value, ["characterReferencePaths", "character_reference_paths"]);
+  const propReferencePaths = firstStringArrayField(value, ["propReferencePaths", "prop_reference_paths"]);
+  const evidence: DemoPackageReferenceEvidence = {
+    referencePolicyVersion: firstStringField(value, ["referencePolicyVersion", "schemaVersion", "reference_policy_version"]) || STORYBOARD_REFERENCE_PIPELINE_VERSION,
+    storyboardReferencePath: firstStringField(value, ["storyboardReferencePath", "storyboard_reference_path"]),
+    sceneReferencePath: firstStringField(value, ["sceneReferencePath", "sceneBaselinePath", "scene_reference_path", "scene_baseline_path"]),
+    characterReferencePaths,
+    propReferencePaths,
+    dialogueAudioPath: firstStringField(value, ["dialogueAudioPath", "dialogue_audio_path"]),
+    seedanceInputRoleOrder: firstStringArrayField(value, ["seedanceInputRoleOrder", "inputOrder", "seedance_input_role_order"]),
+    userFacingSummary: firstStringField(value, ["userFacingSummary", "user_facing_summary"]),
+    directorStrategy: directorStrategyEvidenceFrom(value),
+  };
+  const hasEvidence = Boolean(
+    evidence.storyboardReferencePath ||
+    evidence.sceneReferencePath ||
+    evidence.dialogueAudioPath ||
+    evidence.characterReferencePaths?.length ||
+    evidence.propReferencePaths?.length ||
+    evidence.seedanceInputRoleOrder?.length ||
+    evidence.userFacingSummary ||
+    evidence.directorStrategy,
+  );
+  if (!hasEvidence) return undefined;
+  if (!evidence.seedanceInputRoleOrder?.length && (evidence.storyboardReferencePath || evidence.dialogueAudioPath)) {
+    evidence.seedanceInputRoleOrder = [...SEEDANCE_ALL_AROUND_REFERENCE_ORDER];
+  }
+  return evidence;
+}
+
+function mergeReferenceEvidence(values: Array<DemoPackageReferenceEvidence | undefined>): DemoPackageReferenceEvidence | undefined {
+  const present = values.filter((value): value is DemoPackageReferenceEvidence => Boolean(value));
+  if (!present.length) return undefined;
+  const evidence: DemoPackageReferenceEvidence = {
+    referencePolicyVersion: present.find((item) => item.referencePolicyVersion)?.referencePolicyVersion || STORYBOARD_REFERENCE_PIPELINE_VERSION,
+    storyboardReferencePath: present.find((item) => item.storyboardReferencePath)?.storyboardReferencePath,
+    sceneReferencePath: present.find((item) => item.sceneReferencePath)?.sceneReferencePath,
+    characterReferencePaths: uniqueSorted(present.flatMap((item) => item.characterReferencePaths || [])),
+    propReferencePaths: uniqueSorted(present.flatMap((item) => item.propReferencePaths || [])),
+    dialogueAudioPath: present.find((item) => item.dialogueAudioPath)?.dialogueAudioPath,
+    seedanceInputRoleOrder: present.find((item) => item.seedanceInputRoleOrder?.length)?.seedanceInputRoleOrder,
+    userFacingSummary: present.find((item) => item.userFacingSummary)?.userFacingSummary,
+    directorStrategy: present.find((item) => item.directorStrategy)?.directorStrategy,
+  };
+  return evidence;
+}
+
+function taskLooksVideo(job: GenerationJob | undefined, run: TaskRun | undefined): boolean {
+  return Boolean(
+    job?.slot.startsWith("video.") ||
+    job?.requiredMode === "frames2video" ||
+    run?.expectedOutputs.some(videoOutputPath) ||
+    run?.actualOutputs.some(videoOutputPath) ||
+    /jimeng|dreamina|seedance|video/i.test(`${job?.providerId || ""} ${run?.providerId || ""}`),
+  );
+}
+
+function jobRunPairs(input: BuildExportBuilderStateInput): Array<{ job?: GenerationJob; run?: TaskRun }> {
+  const jobsById = new Map((input.jobs || []).map((job) => [job.id, job]));
+  const pairs: Array<{ job?: GenerationJob; run?: TaskRun }> = (input.taskRuns || []).map((run) => ({
+    job: jobsById.get(run.taskId),
+    run,
+  }));
+  const pairedJobIds = new Set(pairs.map((pair) => pair.job?.id).filter(Boolean));
+  pairs.push(
+    ...(input.jobs || [])
+      .filter((job) => !pairedJobIds.has(job.id))
+      .map((job) => ({ job, run: undefined })),
+  );
+  return pairs;
+}
+
+function taskPairForVideo(
+  input: BuildExportBuilderStateInput,
+  shotId: string,
+  videoPath: string | undefined,
+  event: PreviewEvent | undefined,
+): { job?: GenerationJob; run?: TaskRun } | undefined {
+  return jobRunPairs(input).find(({ job, run }) => {
+    if (!taskLooksVideo(job, run)) return false;
+    if (event?.sourceTaskId && (event.sourceTaskId === job?.id || event.sourceTaskId === run?.taskId)) return true;
+    const outputs = [...(run?.expectedOutputs || []), ...(run?.actualOutputs || []), job?.outputPath || ""].filter(Boolean);
+    return Boolean(videoPath && outputs.includes(videoPath)) || outputs.some((path) => path.includes(`/${shotId}`) || path.includes(`${shotId}_`));
+  });
+}
+
+function firstFrameProtectedPath(paths: string[], videoPath?: string): string | undefined {
+  const candidates = uniqueSorted(paths.filter((path) => videoOutputPath(path) && path !== videoPath));
+  return candidates.find((path) => /first[-_]?frame|firstframe|protected|hold/i.test(path));
+}
+
+function videoSummaryFields(summary: unknown) {
+  return {
+    submitId: firstStringField(summary, ["submitId", "submit_id"]),
+    providerTaskId: firstStringField(summary, ["providerTaskId", "provider_task_id", "taskId", "task_id"]),
+    outputVideoPath: firstStringField(summary, ["outputVideoPath", "output_video_path", "videoPath", "video_path"]),
+    outputVideoSha256: firstStringField(summary, ["outputVideoSha256", "output_video_sha256", "outputHash", "output_hash"]),
+    resumeCommand: firstStringField(summary, ["resumeCommand", "resume_command"]),
+    queryAttempts: firstNumberField(summary, ["queryAttempts", "query_attempts"]),
+    receiptPaths: collectPathFields(summary, /^(?:planPath|submitLogPath|receiptPath|summaryPath|reportPath)$/i),
+    queueLogPaths: collectPathFields(summary, /^(?:queryLogPath|queueLogPath|attemptLogPath)$/i),
+  };
+}
+
+function buildVideoResults(input: BuildExportBuilderStateInput, draftPreview: PreviewPlan): DemoPackageVideoResult[] {
+  const summary = videoSummaryFields(input.oneShotResultSummary);
+  const summaryReferenceEvidence = referenceEvidenceFrom(input.oneShotResultSummary);
+  const selectedShotId = input.selectedShotId || input.shots[0]?.id;
+  const results = input.shots.map((shot) => {
+    const event = draftPreview.events.find((item) => item.shotId === shot.id && item.type === "video_clip");
+    const summaryVideoPath = shot.id === selectedShotId ? summary.outputVideoPath : undefined;
+    const videoPath = videoPathForShot(shot, undefined, draftPreview.events) || summaryVideoPath;
+    const pair = taskPairForVideo(input, shot.id, videoPath, event);
+    const outputPaths = uniqueSorted([
+      ...(pair?.run?.actualOutputs || []),
+      ...(pair?.run?.expectedOutputs || []),
+      pair?.job?.outputPath || "",
+      videoPath || "",
+      summary.outputVideoPath || "",
+    ]);
+    const firstFrameProtectedVideoPath = firstFrameProtectedPath(outputPaths, videoPath);
+    const submitId = pair?.run?.submitId || pair?.job?.submitId || summary.submitId;
+    const providerTaskId = pair?.run?.providerTaskId || pair?.job?.providerTaskId || summary.providerTaskId;
+    const referenceEvidence = mergeReferenceEvidence([
+      referenceEvidenceFrom(pair?.job),
+      referenceEvidenceFrom(pair?.run),
+      shot.id === selectedShotId ? summaryReferenceEvidence : undefined,
+    ]);
+    const receiptPaths = uniqueSorted([
+      ...(pair?.job?.references || []).filter((reference) => /receipt|submit|report|summary|\.jsonl$/i.test(reference)),
+      ...(summary.receiptPaths || []),
+    ]);
+    const queueLogPaths = uniqueSorted([
+      ...(pair?.job?.references || []).filter((reference) => /query|queue|attempt|\.jsonl$/i.test(reference)),
+      ...(summary.queueLogPaths || []),
+    ]);
+
+    return {
+      id: `video_result_${safeId(shot.id)}`,
+      shotId: shot.id,
+      sourceTaskId: event?.sourceTaskId || pair?.job?.id || pair?.run?.taskId,
+      taskId: pair?.run?.taskId,
+      submitId,
+      providerTaskId,
+      reviewStatus: videoPath ? "needs_review" as const : "missing" as const,
+      videoPath,
+      firstFrameProtectedVideoPath,
+      outputHash: shot.id === selectedShotId ? summary.outputVideoSha256 : undefined,
+      receiptPaths,
+      queueLogPaths,
+      resumeCommand: shot.id === selectedShotId ? summary.resumeCommand : undefined,
+      queueAttempts: shot.id === selectedShotId ? summary.queryAttempts : undefined,
+      durationSeconds: event?.durationSeconds,
+      referenceEvidence,
+      autoPromoted: false as const,
+      notes: [
+        videoPath ? "Video output is recorded as a review candidate." : "Video output is missing.",
+        "Video output is not promoted automatically.",
+      ],
+    };
+  });
+
+  const shotIds = new Set(input.shots.map((shot) => shot.id));
+  const extraEvents = draftPreview.events.filter((event) => event.type === "video_clip" && event.mediaPath && (!event.shotId || !shotIds.has(event.shotId)));
+  return [
+    ...results,
+    ...extraEvents.map((event) => ({
+      id: `video_result_${safeId(event.id)}`,
+      shotId: event.shotId,
+      sourceTaskId: event.sourceTaskId,
+      reviewStatus: "needs_review" as const,
+      videoPath: event.mediaPath,
+      receiptPaths: summary.receiptPaths,
+      queueLogPaths: summary.queueLogPaths,
+      resumeCommand: summary.resumeCommand,
+      queueAttempts: summary.queryAttempts,
+      durationSeconds: event.durationSeconds,
+      referenceEvidence: summaryReferenceEvidence,
+      autoPromoted: false as const,
+      notes: ["Video output is recorded as a review candidate.", "Video output is not promoted automatically."],
+    })),
+  ];
+}
+
 function buildDemoPackageFacts(
   input: BuildExportBuilderStateInput,
   draftPreview: PreviewPlan,
@@ -612,6 +939,15 @@ function buildDemoPackageFacts(
           promptPath: job.promptPath,
           expectedOutputs: run?.expectedOutputs || (job.outputPath ? [job.outputPath] : []),
           actualOutputs: run?.actualOutputs || [],
+          submitId: run?.submitId || job.submitId,
+          providerTaskId: run?.providerTaskId || job.providerTaskId,
+          localStatus: run?.localStatus,
+          providerStatus: run?.providerStatus,
+          tempDirs: run?.tempDirs,
+          receiptPaths: job.references.filter((reference) => /receipt|submit|report|summary|\.jsonl$/i.test(reference)),
+          queueLogPaths: job.references.filter((reference) => /query|queue|attempt|\.jsonl$/i.test(reference)),
+          referenceEvidence: referenceEvidenceFrom(job),
+          lastEventAt: run?.lastEventAt,
           dryRunOnly: true as const,
           providerSubmissionForbidden: true as const,
         };
@@ -624,10 +960,18 @@ function buildDemoPackageFacts(
           providerId: run.providerId,
           expectedOutputs: run.expectedOutputs,
           actualOutputs: run.actualOutputs,
+          submitId: run.submitId,
+          providerTaskId: run.providerTaskId,
+          localStatus: run.localStatus,
+          providerStatus: run.providerStatus,
+          tempDirs: run.tempDirs,
+          referenceEvidence: referenceEvidenceFrom(run),
+          lastEventAt: run.lastEventAt,
           dryRunOnly: true as const,
           providerSubmissionForbidden: true as const,
         })),
     ],
+    videoResults: buildVideoResults(input, draftPreview),
     qaReports: [
       ...(input.generationHealthReports || []).map((report) => ({
         id: report.reportId,

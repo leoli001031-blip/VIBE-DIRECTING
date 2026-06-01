@@ -100,22 +100,25 @@ function selectedVideoCapability(
 }
 
 function buildFallbackPairDerivation(shot: ShotRecord): KeyframePairDerivation {
+  const endpointMode = shot.videoControlMode === "first_last_endpoint";
   const hasFrames = Boolean(
     shot.startFrame &&
-      shot.endFrame &&
+      (!endpointMode || shot.endFrame) &&
       !shot.issues.includes("missing_start_frame") &&
-      !shot.issues.includes("missing_end_frame"),
+      (!endpointMode || !shot.issues.includes("missing_end_frame")),
   );
   return {
     shotId: shot.id,
     startFrameId: shot.startFrame || `${shot.id}:start`,
-    endFrameId: shot.endFrame || `${shot.id}:end`,
-    endDerivationSource: hasFrames ? "start_frame" : "unknown",
-    validForI2vPair: hasFrames && shot.gates.pair === "PASS",
-    exceptionReason: hasFrames ? undefined : "Start or end keyframe is missing from runtime audit.",
+    endFrameId: endpointMode ? shot.endFrame || `${shot.id}:end` : shot.endFrame || `${shot.id}:end_not_required`,
+    endDerivationSource: endpointMode && hasFrames ? "start_frame" : "unknown",
+    validForI2vPair: hasFrames && (endpointMode ? shot.gates.pair === "PASS" : shot.gates.pair !== "FAIL"),
+    exceptionReason: hasFrames
+      ? endpointMode ? undefined : "First-frame video control does not require a separate end frame."
+      : endpointMode ? "Start or end keyframe is missing from runtime audit." : "Start keyframe is missing from runtime audit.",
     allowedDelta: ["motion", "micro-expression", "camera movement"],
     mustPreserve: ["character identity", "scene layout", "style capsule"],
-    mustNotAdd: ["new characters", "unapproved props", "text-to-video fallback"],
+    mustNotAdd: ["new characters", "unapproved props", "unrequested endpoint end frame"],
   };
 }
 
@@ -219,7 +222,7 @@ function motionEndpointChecks(input: {
       gateInputsPass ? "pass" : "blocked",
       true,
       gateInputsPass
-        ? "Motion gate inputs forbid bbox-only motion and satisfy required keyframe derivation facts."
+        ? "Motion gate inputs forbid bbox-only motion and satisfy the selected video-control requirements."
         : "Motion gate inputs do not satisfy bbox-only or required keyframe derivation constraints.",
       contract.shotId,
     ),
@@ -326,6 +329,8 @@ function buildReadinessGate(input: {
   const motionContractSource: "explicit" | "derived" = explicitMotionEndpointContract ? "explicit" : "derived";
   const startFramePresent = Boolean(shot.startFrame && !shot.issues.includes("missing_start_frame"));
   const endFramePresent = Boolean(shot.endFrame && !shot.issues.includes("missing_end_frame"));
+  const endFrameRequired = motionEndpointContract.whetherEndFrameRequired;
+  const pairReadyForSelectedMode = endFrameRequired ? derivation.validForI2vPair : startFramePresent && shot.gates.pair !== "FAIL";
   const hardIssues = matchingIssues(input.issues, shot, task?.job);
   const checks: VideoReadinessGateCheck[] = [
     check(
@@ -339,22 +344,33 @@ function buildReadinessGate(input: {
     check(
       "end_frame_present",
       "end frame present",
-      endFramePresent ? "pass" : "blocked",
-      true,
-      endFramePresent ? "Shot has an end frame reference." : "Shot is missing an end frame reference.",
+      endFrameRequired ? endFramePresent ? "pass" : "blocked" : "not_applicable",
+      endFrameRequired,
+      endFrameRequired
+        ? endFramePresent ? "Shot has an endpoint end frame reference." : "Shot selected endpoint mode but is missing an end frame reference."
+        : "Default first-frame video control does not require a separate end frame.",
       shot.endFrame || shot.id,
     ),
     check(
       "keyframe_pair_derivation_valid",
-      "keyframe pair derivation valid",
-      derivation.validForI2vPair ? "pass" : "blocked",
+      "selected frame control valid",
+      pairReadyForSelectedMode ? "pass" : "blocked",
       true,
-      derivation.validForI2vPair
-        ? "Start/end frame derivation is valid for I2V."
-        : "Start/end frame derivation is missing or invalid for I2V.",
+      pairReadyForSelectedMode
+        ? endFrameRequired ? "Start/end frame derivation is valid for endpoint video control." : "Start frame is ready for first-frame video control."
+        : endFrameRequired ? "Start/end frame derivation is missing or invalid for endpoint video control." : "Start frame is missing or blocked for first-frame video control.",
       shot.id,
     ),
-    requiredGateCheck("pair", shot.gates.pair, shot.id),
+    endFrameRequired
+      ? requiredGateCheck("pair", shot.gates.pair, shot.id)
+      : check(
+          "pair_gate_pass",
+          "pair gate PASS",
+          "not_applicable",
+          false,
+          "Pair gate is only required when explicit endpoint end-frame mode is selected.",
+          shot.id,
+        ),
     requiredGateCheck("story", shot.gates.story, shot.id),
     nonRequiredGateCheck("identity", shot.gates.identity, shot.id),
     nonRequiredGateCheck("scene", shot.gates.scene, shot.id),
@@ -448,7 +464,7 @@ function buildReadinessGate(input: {
     canSubmitToProvider: false,
     startFramePresent,
     endFramePresent,
-    keyframePairDerivation: derivation,
+    ...(endFrameRequired ? { keyframePairDerivation: derivation } : {}),
     motionEndpointContract,
     allowedNaGateFields,
     checks,
@@ -522,7 +538,10 @@ function buildVideoTaskPlan(input: {
     motionEndpointFacts: buildMotionEndpointFacts(gate.motionEndpointContract),
     promptConstraints: [
       "no bgm",
-      "start/end frames only",
+      "first frame plus motion prompt by default",
+      "protect first 0.5s: preserve first-frame composition and character proportions before camera movement",
+      "avoid stretching characters, changing focal length, or re-cropping during the protected opening",
+      "endpoint end frame only when explicitly selected",
       "no text-to-video fallback",
       "no fast model",
       "no VIP channel",

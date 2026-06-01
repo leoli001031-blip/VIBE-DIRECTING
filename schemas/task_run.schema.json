@@ -22,7 +22,7 @@
     "localStatus": { "$ref": "common.schema.json#/$defs/localTaskStatus" },
     "providerStatus": { "$ref": "common.schema.json#/$defs/providerTaskStatus" },
     "providerId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
-    "codexSessionId": { "type": "string" },
+    "agentSessionId": { "type": "string" },
     "submitId": { "type": "string" },
     "providerTaskId": { "type": "string" },
     "retryCount": { "type": "integer", "minimum": 0 },

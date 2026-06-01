@@ -1,4 +1,9 @@
 {
+  // P2-96: Strict checks that could be enabled in a future refactor:
+  //   - "noUncheckedIndexedAccess": true   (catches undefined from index access on arrays/records)
+  //   - "noUnusedLocals": true             (flags unused local variables)
+  //   - "noUnusedParameters": true          (flags unused function parameters)
+  // Enabling these may surface latent bugs but will require cleanup across the codebase.
   "compilerOptions": {
     "target": "ES2022",
     "useDefineForClassFields": true,
@@ -10,7 +15,7 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,

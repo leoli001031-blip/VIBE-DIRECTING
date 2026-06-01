@@ -8,6 +8,7 @@ import type {
   PreflightScope,
   ProjectSourceIndex,
   ReferenceAuthority,
+  VideoControlMode,
 } from "./types";
 
 function blocker(code: string, messageForUser: string, technicalDetail: string, target?: string): PreflightBlocker {
@@ -26,6 +27,7 @@ export interface PreflightInput {
   promptHash?: string;
   expectedOutputs?: string[];
   preflightScope?: PreflightScope;
+  videoControlMode?: VideoControlMode;
   checkedAt?: string;
 }
 
@@ -97,7 +99,12 @@ export function buildPreflightReport(input: PreflightInput): PreflightReport {
           : "draft_preview";
 
       try {
-        assertReferenceAllowed(sourceIndex, reference.id, mode);
+        try {
+          assertReferenceAllowed(sourceIndex, reference.id, mode);
+        } catch (idError) {
+          if (!reference.path || reference.path === reference.id) throw idError;
+          assertReferenceAllowed(sourceIndex, reference.path, mode);
+        }
       } catch (error) {
         blockers.push(
           blocker(
@@ -145,6 +152,8 @@ export function buildPreflightReport(input: PreflightInput): PreflightReport {
   }
 
   if (job.slot === "video.i2v") {
+    const videoControlMode = input.videoControlMode || "first_frame_default";
+    const requiresEndpointEndFrame = videoControlMode === "first_last_endpoint";
     if (rule?.executionState === "parked") {
       warnings.push(
         warning(
@@ -156,12 +165,12 @@ export function buildPreflightReport(input: PreflightInput): PreflightReport {
       );
     }
 
-    if (!keyframePairDerivation?.validForI2vPair) {
+    if (requiresEndpointEndFrame && !keyframePairDerivation?.validForI2vPair) {
       blockers.push(
         blocker(
           "invalid_keyframe_pair",
-          "首尾帧没有通过同镜头派生证明，不能进入视频生成。",
-          "keyframePairDerivation.validForI2vPair is false or missing.",
+          "这个镜头选择了明确终点模式，但首尾帧没有通过同镜头派生证明，不能进入视频生成。",
+          "videoControlMode is first_last_endpoint, but keyframePairDerivation.validForI2vPair is false or missing.",
           job.id,
         ),
       );

@@ -1,0 +1,104 @@
+# MVP RC Status
+
+Date: 2026-05-18
+
+## Product Shape
+
+Vibe Director Studio is a local-first Project.vibe desktop app. The MVP path does not require accounts or hosted workspaces.
+
+The main path is:
+
+1. Open a local project folder with `project.vibe`.
+2. Convert natural-language intent into a staged Project.vibe transaction.
+3. Require user confirmation before Project.vibe facts are written.
+4. Queue validated task envelopes only; raw free text cannot enter formal work.
+5. Run the owned Agent Loop from a validated envelope.
+6. Accept only structured results with receipt candidates for promotion.
+7. Use P6 Image2 through explicit preflight/live gates.
+8. Preview only verified or needs-review returned media.
+9. Export project-local receipts, reports, and media references.
+10. Package through Electron with the local runtime bundle unpacked.
+
+## RC Verification
+
+Run these from the repository root:
+
+```sh
+npm run verify:rc
+```
+
+`verify:rc` is the default RC entry. It runs focused UI verification plus `mvp-rc:smoke`, then the retained-artifact secret scan. The P6 preflight step inside the smoke must stop before provider submit and record `providerCalled=false` plus `runtimeExternalNetworkCallMade=false`.
+
+Real Lanyi submit/probe runs are retained only as human-approved live evidence. They are not part of default CI, `verify:mvp`, `verify:rc`, `verify:all`, or diagnostics/legacy aggregators.
+
+Latest local RC pass:
+
+- 2026-05-18: P0-P6 executable MVP pass landed. Review Tray now supports locking reviewed media as character, scene, prop, or shot reference; lock promotion writes Project.vibe review receipts, locked assets, locked visual memory, and current-shot asset bindings in one transaction. Export UI default copy now uses creator-facing package language while the worker keeps the reviewable export package with `Project.vibe`, locked assets, preview media, receipts, report, and manifest. App static entry no longer imports Diagnostics projections; the main browser entry built at about 158 kB uncompressed while Diagnostics stays lazy. Verification passed: `npm run minimal-ui:test`, `npm run current-project-ui-closed-loop:test`, `npm run export-worker:test`, `npm run mvp-demo-export:test`, `npm run verify:prototype`, `npm run verify:ui`, and `npm run package:smoke`.
+- 2026-05-18: P6 real small-project validation passed against Lanyi `gpt-image-2` with three scheduler-controlled one-shot requests at max concurrency 3. Report: `test_artifacts/p6-real-image2/p6-mvp-p0-p6-small-project-20260518-3shot/report.json`. It recorded `providerCalled=true`, `runtimeExternalNetworkCallMade=true`, `providerRequestedCount=3`, `providerReturnedCount=3`, `batchResultStatus=return_ingested`, `missingShotIds=[]`, `maxObservedConcurrency=3`, and `promotionAllowed=false`. Follow-up checks passed: `p6-real-image2:report-check --expect-live`, `p6-real-image2:preview-export-test` with 3 outputs / 3 review items / 12 writes, and `p6-real-image2:secret-scan`.
+- 2026-05-18: docs/alias guardrail update added `verify:mvp` and `verify:rc` as the default MVP/RC command surface. Deprecated aliases such as `verify:all`, `verify:provider-fast`, and `verify:subagent` now redirect through `verify:diagnostics:*`, while legacy routes remain diagnostics-only. This update did not run any real provider command.
+- 2026-05-18: P6 live Image2 submit now uses the existing retry scheduler instead of stopping after the first provider miss. The live harness submits bounded one-shot requests with default max concurrency 3, retry concurrency 2, and max auto retries 2; reports now include `retry-scheduler-state.json`, `retry-attempt-receipts.json`, `retrySummary`, and per-attempt receipt candidates. Mock live retry harness passed with two transient failures recovered into three returned outputs: `npm run p6-real-image2:retry-harness-test`. Regression passed: `npx tsc --noEmit --pretty false`, `npm run provider-retry-scheduler:test`, `npx tsx scripts/current-project-preview-projection-test.mts`, `npm run p6-real-image2:preflight -- --run-id=p6-retry-preflight-20260518 --shots=P6S01,P6S02,P6S03`, matching `p6-real-image2:report-check`, `npm run p6-real-image2:test`, `npm run p6-real-image2:preview-export-test -- --report=test_artifacts/p6-real-image2/small-project-morning-market-3shot-20260518/report.json`, and `npm run p6-real-image2:secret-scan`.
+- 2026-05-18: Post-cleanup real Lanyi regression passed. `p6-live-post-cleanup-1shot-20260518` completed a real `gpt-image-2` 1-shot return with `providerCalled=true`, `runtimeExternalNetworkCallMade=true`, `providerRequestedCount=1`, `providerReturnedCount=1`, `missingShotIds=[]`, one output, and `batchResultStatus=return_ingested`; `p6-real-image2:report-check` and `p6-real-image2:preview-export-test` both passed. Text-to-image concurrency 3 passed at `lanyi-image-generate-post-cleanup-c3-20260518` with `succeeded=3`, `failed=0`, `maxObservedConcurrency=3`, `fallbackToImageEdit=false`, and `promotionAllowed=false`. Reference edit concurrency 3 passed at `lanyi-reference-edit-post-cleanup-c3-20260518` with `succeeded=3`, `failed=0`, `maxObservedConcurrency=3`, `fallbackToTextToImage=false`, and `promotionAllowed=false`. `p6-real-image2:secret-scan` passed after the live runs.
+- 2026-05-18: Packaging/bundle cleanup pass landed before the next live provider test. `package:dir` and `package:smoke` now use `scripts/package-electron-local.mts`, which makes the local macOS lane explicit, suppresses the upstream Node `DEP0190` deprecation noise, removes the implicit "falling back to ad-hoc signature" message, and keeps notarization out of smoke. `package:release:preflight` now fails fast when Developer ID signing identity or Apple notarization credentials are missing. Vite source chunking moved the main app entry from about 997 kB to about 180 kB uncompressed without new chunk warnings. Verification passed: `bundle-split-contract:test`, `npx tsc --noEmit --pretty false`, `npm run build`, `npm run package:release:preflight` (expected missing-credential failure), and `npm run package:smoke`.
+- 2026-05-18: Image2 batch circuit-breaker projection is now wired into the current-project product path, not only the probe docs. The route exposes `current_project_image2_circuit_breaker_v1` with default concurrency 3, retry concurrency 2, `retry_downshift` support, and no promotion without review/receipts. Creator Desk now shows `Concurrency 3` plus `Retry downshifts to 2`; browser smoke confirmed the copy at `http://127.0.0.1:5174/`. Screenshot: `test_artifacts/creator-desk-circuit-breaker-smoke.png`. Verification passed: `runtime-api-current-project-image2-batch-plan:test`, `project-image2-batch-status:test`, `current-project-ui-closed-loop:test`, `minimal-ui:test`, `provider-retry-scheduler:test`, `npx tsc --noEmit --pretty false`, `verify:runtime-fast`, `verify:ui`, and `package:smoke`.
+- 2026-05-18: post-plan implementation pass completed Workstream A/B/C/D slices and TD2/TD5 cleanup. `npm run verify:prototype`, `npm run verify:ui`, `npm run package:smoke`, and `npm run p6-real-image2:secret-scan` passed. Browser smoke confirmed the default creator surface renders Script Planner, Batch Generation, and Review Tray with no provider/schema/queue/task-envelope terms inside the creator panels. Screenshot: `test_artifacts/creator-desk-ui-integrated-smoke.png`.
+- 2026-05-18: Project.vibe now has optional durable receipt ledgers for script planning, prompt/keyframe planning, batch receipts, and review receipts while old Project.vibe files remain compatible. Review/promotion now requires human review, source receipt, output hash, portable output path, and explicit promotion authorization before locked visual memory promotion.
+- 2026-05-18: Current-project Image2 batch planning now exposes `image.generate` max concurrency 3, retry concurrency 2, max auto retries 2, and reference edit concurrency 3. Provider retry attempt receipt candidates carry `inputHash`, `permissionReceiptId`, `expectedOutputPath`, and `shotId`; partial execution summarizes as `completed_with_missing` and cannot promote missing/late outputs.
+- 2026-05-18: Runtime API route layering started. `GET /api/runtime/status` and `GET/POST/DELETE /api/runtime/credentials` moved under `scripts/runtime-routes/`, with credential responses still masked and no provider submit from status/credential routes.
+- 2026-05-18: Real Lanyi integrated 1-shot first attempt `p6-lanyi-live-mvp-integrated-1shot-20260518-022956` failed with `network_error: fetch failed`; report: `test_artifacts/p6-real-image2/p6-lanyi-live-mvp-integrated-1shot-20260518-022956/report.json`. It recorded `providerRequestedCount=1`, `providerReturnedCount=0`, `missing=1`, and `promotionAllowed=false`.
+- 2026-05-18: Real Lanyi integrated 1-shot retry `p6-lanyi-live-mvp-integrated-1shot-retry-20260518-023308` succeeded; report: `test_artifacts/p6-real-image2/p6-lanyi-live-mvp-integrated-1shot-retry-20260518-023308/report.json`. It recorded `providerRequestedCount=1`, `providerReturnedCount=1`, `needsReview=1`, `missing=0`, `previewEligible=1`, and `promotionAllowed=false`. `p6-real-image2:report-check` and `p6-real-image2:preview-export-test` both passed for this report.
+- 2026-05-18: Real Lanyi `/v1/images/generations` integrated concurrency probe at 3 failed due provider/network instability; report: `test_artifacts/lanyi-image-generate-concurrency/lanyi-image-generate-mvp-integrated-c3-20260518-023503/report.json`. It recorded `succeeded=0`, `failed=3`, `maxObservedConcurrency=3`, each failure `network_error: fetch failed`, `fallbackToImageEdit=false`, and `promotionAllowed=false`.
+- 2026-05-18: Retry probe at concurrency 2 partially recovered; report: `test_artifacts/lanyi-image-generate-concurrency/lanyi-image-generate-mvp-integrated-retry-c2-20260518-023737/report.json`. It recorded `succeeded=1`, `failed=1`, `maxObservedConcurrency=2`, `fallbackToImageEdit=false`, and `promotionAllowed=false`. This confirms the product path needs the configured retry/downshift behavior and should not treat concurrency 3 as provider-stability proof.
+- 2026-05-18: Real Lanyi reference edit concurrency 3 passed using the integrated 1-shot output as reference; report: `test_artifacts/lanyi-reference-edit-concurrency/lanyi-reference-edit-mvp-integrated-c3-20260518-024011/report.json`. It recorded `succeeded=3`, `failed=0`, `maxObservedConcurrency=3`, `fallbackToTextToImage=false`, and `promotionAllowed=false`.
+- 2026-05-18: `npm run verify:prototype`, `npm run verify:ui`, and `npm run package:smoke` passed after the Project.vibe / Script Planner / Lanyi tool / reference edit policy integration round.
+- 2026-05-18: `npm run p6-real-image2:submit-live -- --run-id=p6-live-20260518-010937-1shot --shots=P6S01` completed a real Lanyi `gpt-image-2` 1-shot return. Report: `test_artifacts/p6-real-image2/p6-live-20260518-010937-1shot/report.json`.
+- 2026-05-18: the 1-shot report-check and Preview/Export bridge passed. The report recorded `providerCalled=true`, `runtimeExternalNetworkCallMade=true`, `providerRequestedCount=1`, `providerReturnedCount=1`, `needsReview=1`, `missing=0`, and `promotionAllowed=false`.
+- 2026-05-18: `npm run p6-real-image2:submit-live -- --run-id=p6-live-20260518-011223-3shot --shots=P6S01,P6S02,P6S03` completed a real Lanyi serial 3-shot run. Report: `test_artifacts/p6-real-image2/p6-live-20260518-011223-3shot/report.json`.
+- 2026-05-18: the 3-shot report-check passed with `providerRequestedCount=3`, `providerReturnedCount=1`, `batchResultStatus=partial_return_ingested`, `missingShotIds=P6S01,P6S03`, `needsReview=1`, `missing=2`, `maxConcurrency=1`, `maxAutoRetries=0`, and `promotionAllowed=false`. Preview/Export bridge now validates partial returns by matching returned media by `shotId` instead of assuming the first queue item is returned media.
+- 2026-05-18: `npm run lanyi-reference-edit-concurrency:probe -- --concurrency=3 --run-id=lanyi-reference-edit-20260518-011814-c3 --reference=test_artifacts/p6-real-image2/p6-live-20260518-010937-1shot/shots/P6S01/image2.png --timeout-ms=180000` passed against real Lanyi `/v1/images/edits`; report: `test_artifacts/lanyi-reference-edit-concurrency/lanyi-reference-edit-20260518-011814-c3/report.json`. It recorded `succeeded=3`, `failed=0`, `maxObservedConcurrency=3`, `fallbackToTextToImage=false`, and `promotionAllowed=false`.
+- 2026-05-18: `npm run lanyi-image-generate-concurrency:probe -- --concurrency=5 --run-id=lanyi-image-generate-20260518-013902-c5 --timeout-ms=180000` tested real Lanyi `/v1/images/generations` at five concurrent requests; report: `test_artifacts/lanyi-image-generate-concurrency/lanyi-image-generate-20260518-013902-c5/report.json`. It recorded `succeeded=3`, `failed=2`, `maxObservedConcurrency=5`, `avgElapsedMs=94065`, and the two failures were `network_error: fetch failed`. Five-concurrent text-to-image is therefore not a safe default without retry/backoff/missing-shot recovery.
+- 2026-05-18: follow-up `image.generate` probes compared two and three concurrent requests. `lanyi-image-generate-20260518-014331-c2` returned `succeeded=1`, `failed=1` with one `network_error: fetch failed`; `lanyi-image-generate-20260518-014555-c3` returned `succeeded=3`, `failed=0`, `maxObservedConcurrency=3`, and `avgElapsedMs=63415`. The default text-to-image policy is now `lanyi-image2`, `maxConcurrency=3`, retry concurrency 2, and auto-retry budget 2; five-concurrent remains experimental.
+- 2026-05-18: `npm run p6-real-image2:secret-scan` passed after adding `test_artifacts/lanyi-image-generate-concurrency` and `test_artifacts/lanyi-reference-edit-concurrency` to the default scan roots.
+- 2026-05-17: `npm run mvp-rc:smoke` passed. It covered `verify:prototype`, P6 contract test, P6 no-submit preflight, `package:smoke`, packaged launch contract, packaged GUI smoke, and unpacked runtime bundle verification. The latest generated no-submit report was `test_artifacts/p6-real-image2/p6-real-image2-2026-05-17T05-46-16-899Z/report.json`.
+- 2026-05-17: `npm run verify:ui` passed after the desktop UI polish round.
+- 2026-05-17: `npm run bundle-split-contract:test` passed. Historical note: this older build had the main app entry around 972 kB uncompressed; the 2026-05-18 cleanup split it down to about 180 kB.
+- 2026-05-17: `npm run mvp-main-chain:test` passed with `envelope=task_subagent_packet_image_shot_002` and `output=outputs/keyframes/shot_002.png`.
+- 2026-05-17: `npm run mvp-demo-export:test` passed, proving the sample Project.vibe export path with Project.vibe, locked assets, receipts, report, and preview/export package writes.
+- 2026-05-17: `npm run p6-real-image2:preflight -- --run-id=p6-preflight-mvp-final-1shot --shots=P6S01` and matching report-check passed with `providerCalled=false` and `runtimeExternalNetworkCallMade=false`.
+- 2026-05-17: `npm run p6-real-image2:submit-live -- --run-id=p6-lanyi-live-mvp-final-1shot --shots=P6S01` completed a real Lanyi `gpt-image-2` 1-shot return. Report: `test_artifacts/p6-real-image2/p6-lanyi-live-mvp-final-1shot/report.json`.
+- 2026-05-17: `npm run p6-real-image2:report-check -- --report=test_artifacts/p6-real-image2/p6-lanyi-live-mvp-final-1shot/report.json --expect-live` passed. The report recorded `providerCalled=true`, `runtimeExternalNetworkCallMade=true`, `providerRequestStrategy=serial_one_shot`, `providerRequestedCount=1`, `providerReturnedCount=1`, `needsReview=1`, `missing=0`, and `promotionAllowed=false`.
+- 2026-05-17: `npm run p6-real-image2:preview-export-test -- --report=test_artifacts/p6-real-image2/p6-lanyi-live-mvp-final-1shot/report.json` passed with 1 returned output, 1 review item, and 12 export writes.
+- 2026-05-17: `npm run p6-real-image2:submit-live -- --run-id=p6-lanyi-live-mvp-final-3shot --shots=P6S01,P6S02,P6S03` completed a real Lanyi `gpt-image-2` serial 3-shot run. Report: `test_artifacts/p6-real-image2/p6-lanyi-live-mvp-final-3shot/report.json`.
+- 2026-05-17: `npm run p6-real-image2:report-check -- --report=test_artifacts/p6-real-image2/p6-lanyi-live-mvp-final-3shot/report.json --expect-live` passed. The report recorded `providerRequestedCount=3`, `providerReturnedCount=1`, `batchResultStatus=partial_return_ingested`, `missingShotIds=P6S02,P6S03`, `needsReview=1`, `missing=2`, `providerRequestStrategy=serial_one_shot`, `maxConcurrency=1`, `maxAutoRetries=0`, and `promotionAllowed=false`.
+- 2026-05-17: `npm run p6-real-image2:preview-export-test -- --report=test_artifacts/p6-real-image2/p6-lanyi-live-mvp-final-3shot/report.json` passed with 1 returned output, 1 review item, and 12 export writes. This is a useful partial-return proof rather than a full-success 3-shot proof.
+- 2026-05-17: `npm run p6-real-image2:secret-scan` passed after the live runs.
+- 2026-05-17: `npm run agent-loop:test`, `npm run owned-agent-loop:test`, and `npm run prototype-agent-closed-loop:test` passed. The owned Agent Loop remains verified through mock/structured provider paths; a real chat LLM provider package is not yet wired as a live MVP gate.
+- 2026-05-17: `npm run package:smoke` passed and created `release/mac-arm64/Vibe Director Studio.app`.
+
+Previous retained evidence:
+
+- `npm run p6-real-image2:preflight -- --run-id=p6-rc-next-1shot --shots=P6S01` stopped at preflight with no provider call.
+- `npm run p6-real-image2:preflight -- --run-id=p6-rc-next-3shot --shots=P6S01,P6S02,P6S03` stopped at preflight with no provider call.
+- `npm run package:smoke` passed.
+- `npm run mvp-rc:smoke` passed and wrote P6 no-submit evidence to `test_artifacts/p6-real-image2/p6-real-image2-2026-05-16T04-53-48-476Z/report.json`.
+- `npm run verify:ui` passed.
+- `npm run p6-real-image2:test` passed.
+- `npm run p6-real-image2:submit-live -- --run-id=p6-lanyi-live-1shot-current-2 --shots=P6S01` completed a real Lanyi `gpt-image-2` 1-shot return. Report: `test_artifacts/p6-real-image2/p6-lanyi-live-1shot-current-2/report.json`.
+- `npm run p6-real-image2:report-check -- --report=test_artifacts/p6-real-image2/p6-lanyi-live-1shot-current-2/report.json --expect-live` passed. The report recorded `providerCalled=true`, `runtimeExternalNetworkCallMade=true`, `providerRequestStrategy=serial_one_shot`, one 1024x1024 PNG output, `needsReview=1`, and `promotionAllowed=false`.
+- `npm run p6-real-image2:preview-export-test -- --report=test_artifacts/p6-real-image2/p6-lanyi-live-1shot-current-2/report.json` passed. The real P6 report now projects into current-project Preview as an `image_hold`, carries `needs_review`, and feeds Export Worker preview media without provider submit.
+- `npm run p6-real-image2:preflight -- --run-id=p6-lanyi-live-3shot-current-preflight --shots=P6S01,P6S02,P6S03` and matching report-check passed with no provider call.
+- `npm run p6-real-image2:submit-live -- --run-id=p6-lanyi-live-3shot-current --shots=P6S01,P6S02,P6S03` completed a real Lanyi `gpt-image-2` 3-shot run. Report: `test_artifacts/p6-real-image2/p6-lanyi-live-3shot-current/report.json`.
+- `npm run p6-real-image2:report-check -- --report=test_artifacts/p6-real-image2/p6-lanyi-live-3shot-current/report.json --expect-live` passed. The report recorded `providerRequestedCount=3`, `providerReturnedCount=3`, `providerRequestStrategy=serial_one_shot`, three 1024x1024 PNG outputs, `needsReview=3`, `missing=0`, and `promotionAllowed=false`.
+- `npm run p6-real-image2:preview-export-test -- --report=test_artifacts/p6-real-image2/p6-lanyi-live-3shot-current/report.json` passed with three returned preview media references and no provider submit from Preview/Export.
+- `npm run p6-real-image2:secret-scan` passed after redacting an older `test_artifacts/lanyi-api-smoke/.../report.json` `apiKey` field.
+
+## Current Non-Blockers
+
+- Public macOS distribution still requires a real Developer ID signing identity and Apple notarization credentials. Local open-source smoke is intentionally ad-hoc and not notarized; `package:release:preflight` now guards the release lane.
+- The local package smoke no longer emits the upstream Electron Builder `DEP0190` warning.
+- The main app entry is now about 180 kB uncompressed. `core-runtime` remains about 808 kB uncompressed and should stay a v0.2 bundle-health watch item, but it no longer blocks MVP smoke.
+- Real chat LLM provider execution is not wired as a live gate. The owned Agent Loop is verified with validated envelopes, controlled file evidence, structured results, and receipt candidates through mock/structured provider paths.
+- Historical docs and audits still mention legacy CLI/subagent routes as archive context. The main README and landing docs should remain the source of truth for the MVP route.
+
+## Resolved RC Polish
+
+- Electron Builder now uses the local `build/icon.icns` app icon. The packaged macOS app reports `CFBundleIconFile => icon.icns`, and the app bundle includes `Contents/Resources/icon.icns`.

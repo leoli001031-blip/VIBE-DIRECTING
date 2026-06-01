@@ -1,3 +1,4 @@
+import { WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT } from "./statusConstants";
 import { compileImage2OneShotRealCallPayload, type Image2OneShotRealCallPayload } from "./providerAdapters/image2Adapter";
 import type { ImageReferenceDeliveryReceiptState } from "./imageReferenceDeliveryReceipt";
 import type { ImageReferenceTransportState } from "./imageReferenceTransport";
@@ -404,7 +405,7 @@ function expectedOutputDetected(input: BuildRealProviderOneShotStateInput, outpu
 function workerReportedMissingOutput(input: BuildRealProviderOneShotStateInput): boolean {
   return (input.watcherEvents || []).some(
     (event) =>
-      event.eventType === "worker_exit_without_expected_output" &&
+      event.eventType === WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT &&
       (event.taskId === input.adapterRequest.taskPlanId || event.taskId === input.requestPreview.taskPlanId || event.jobId === input.requestPreview.jobId),
   );
 }
@@ -486,8 +487,8 @@ function statusFor(input: BuildRealProviderOneShotStateInput, payload: Image2One
       status: providerClaimsDone || workerReportedMissingOutput(input) ? "output_missing" : "waiting_for_file",
       userReadableStatus: providerClaimsDone || workerReportedMissingOutput(input) ? "输出缺失" : "等待文件",
       userMessage: providerClaimsDone || workerReportedMissingOutput(input)
-        ? "Provider 已报告结束，但 watcher/manifest 没有看到期望输出；不能把任务标记完成。"
-        : "Image2 请求已提交，正在等待 sandbox 中出现期望输出文件。",
+        ? "外部服务已报告结束，但本地还没看到可用文件，所以不能标记完成。"
+        : "Image2 请求已提交，正在等待结果文件。",
     };
   }
 
@@ -495,14 +496,14 @@ function statusFor(input: BuildRealProviderOneShotStateInput, payload: Image2One
     return {
       status: "ready_for_formal_review",
       userReadableStatus: "需要复核",
-      userMessage: "输出已由 watcher、manifest 和 QA gate 回流，可进入人工复核/正式接收。",
+      userMessage: "输出已完成校验，可进入复核区。",
     };
   }
 
   return {
     status: "needs_review",
     userReadableStatus: "需要复核",
-    userMessage: "输出已回流，但还需要 manifest/QA/health gate 明确通过。",
+    userMessage: "输出已返回，但还需要完成校验。",
   };
 }
 

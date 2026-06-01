@@ -30,7 +30,7 @@ export function buildDirectorProgressStripState(summary: DirectorProgressStripSu
   let tone: DirectorProgressTone = "preparing";
   let label = "准备中";
   if (!hasItems) {
-    label = "准备中";
+    label = "等待开始";
   } else if (blocked > 0) {
     tone = "blocked";
     label = "有阻断";
@@ -46,7 +46,7 @@ export function buildDirectorProgressStripState(summary: DirectorProgressStripSu
   }
 
   const detail = !hasItems
-    ? "0 项"
+    ? "先写脚本或创建本地项目"
     : tone === "blocked"
       ? `${total} 项 · ${blocked} 项有阻断`
       : tone === "review"

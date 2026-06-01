@@ -108,9 +108,7 @@ export interface ProjectRuntimeValidation {
 export interface ProjectRuntimeHardLocks extends ProjectStoreHardLocks {
   noDirectoryCreate: true;
   noUserFileMove: true;
-  noFileMutation: true;
   noProviderSubmit: true;
-  noCredentialRead: true;
 }
 
 export interface ProjectRuntimePlan {
@@ -540,9 +538,7 @@ export function buildProjectRuntimePlan(input: ProjectRuntimeBuildInput = {}): P
       ...snapshot.hardLocks,
       noDirectoryCreate: true,
       noUserFileMove: true,
-      noFileMutation: true,
       noProviderSubmit: true,
-      noCredentialRead: true,
     },
     userFacingSummary: buildUserFacingSummary({
       mode,

@@ -8,6 +8,7 @@ import {
   type ArtifactTransactionGateResult,
 } from "./artifactTransactionGate";
 import type { AppendableTaskRunLedgerEvent, TaskRunLedgerLease } from "./taskRunLedger";
+import type { BaseHardLocks } from "./types";
 
 export const runtimeIngestShellSchemaVersion = "0.1.0";
 
@@ -32,12 +33,11 @@ export type RuntimeAppServerEventKind =
   | "disconnect"
   | "reconnect";
 
-export interface RuntimeIngestHardLocks {
+export interface RuntimeIngestHardLocks extends BaseHardLocks {
   liveTransportEnabled: false;
   canLaunchAppServer: false;
   ingestOnly: true;
   fsWatchDaemonEnabled: false;
-  providerSubmissionForbidden: true;
   workerSpawnForbidden: true;
 }
 
@@ -215,11 +215,18 @@ export interface RuntimeArtifactGateIngestResult {
 }
 
 export const runtimeIngestHardLocks: RuntimeIngestHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   liveTransportEnabled: false,
   canLaunchAppServer: false,
   ingestOnly: true,
   fsWatchDaemonEnabled: false,
-  providerSubmissionForbidden: true,
   workerSpawnForbidden: true,
 };
 

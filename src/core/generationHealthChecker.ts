@@ -1,3 +1,4 @@
+import { WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT, PROVIDER_READY_DERIVATIVE_DETECTED } from "./statusConstants";
 import type { FileSnapshot, FileSnapshotEntry, ManifestMatchReport } from "./manifestMatcher";
 import type {
   GenerationHealthCheckerFact,
@@ -119,7 +120,7 @@ function itemStatus(input: {
 }): GenerationHealthCheckerItemStatus {
   if (input.taskBlocked || input.health?.healthStatus === "blocked" || input.health?.healthStatus === "failed") return "blocked";
   if (input.postprocessRecoverable) return "postprocess_recoverable";
-  if (input.workerExitWithoutOutput) return "worker_exit_without_expected_output";
+  if (input.workerExitWithoutOutput) return WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT;
   if (!input.outputExists) return "waiting";
   if (!input.manifestMatched || !input.hashVerified || !input.dimensionsVerified || !input.readabilityVerified || !input.exitArtifactConsistent) {
     return "artifact_state_mismatch";
@@ -132,7 +133,7 @@ function nextAction(status: GenerationHealthCheckerItemStatus): string {
   if (status === "verified_success") return "All structured health facts agree; manual promotion gates may inspect this candidate.";
   if (status === "qa_missing") return "Attach explicit QA coverage for the expected output before promotion.";
   if (status === "postprocess_recoverable") return "Recover the temp/candidate artifact through mechanical postprocess, then rerun manifest and QA checks.";
-  if (status === "worker_exit_without_expected_output") return "Treat worker completion as untrusted and rerun or repair until expected output exists.";
+  if (status === WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT) return "Treat worker completion as untrusted and rerun or repair until expected output exists.";
   if (status === "artifact_state_mismatch") return "Refresh manifest metadata/hash/dimensions/readability facts and resolve mismatched artifact state.";
   if (status === "blocked") return "Resolve upstream generation blockers before health can pass.";
   return "Wait for expected output and manifest facts.";
@@ -156,7 +157,7 @@ export function buildGenerationHealthCheckerState(input: BuildGenerationHealthCh
     );
     const manifestStatus = manifest?.status || health?.manifestStatus || "missing_expected_output";
     const manifestMatched = matchedManifestStatuses.has(manifestStatus);
-    const tempOutputEvents = watcherEvents.filter((event) => ["temp_output_detected", "provider_ready_derivative_detected"].includes(event.eventType));
+    const tempOutputEvents = watcherEvents.filter((event) => ["temp_output_detected", PROVIDER_READY_DERIVATIVE_DETECTED].includes(event.eventType));
     const tempOutputExists = tempOutputEvents.length > 0 || Boolean(manifest?.recoverableOutputs.length);
     const postprocessRecoverable = manifestStatus === "postprocess_recoverable" || watcherEvents.some((event) => event.eventType === "postprocess_recoverable");
     const workerReportedSuccess = Boolean(
@@ -166,7 +167,7 @@ export function buildGenerationHealthCheckerState(input: BuildGenerationHealthCh
     );
     const workerExitWithoutOutput = !expectedOutputExists && (
       workerReportedSuccess ||
-      watcherEvents.some((event) => event.eventType === "worker_exit_without_expected_output")
+      watcherEvents.some((event) => event.eventType === WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT)
     );
     const qaCovered = health?.qaStatus === "pass";
     const hashVerified = Boolean(metadata?.hash) || manifestMatched;
@@ -233,7 +234,7 @@ export function buildGenerationHealthCheckerState(input: BuildGenerationHealthCh
     ];
     const blockers = uniqueSorted([
       ...taskPlan.blockers,
-      ...(status === "worker_exit_without_expected_output" ? ["Worker reported completion or exited, but expected output is missing."] : []),
+      ...(status === WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT ? ["Worker reported completion or exited, but expected output is missing."] : []),
       ...(status === "artifact_state_mismatch" ? ["Expected output, manifest metadata, readability, or exit status facts disagree."] : []),
       ...(status === "blocked" ? ["Generation task is blocked by upstream facts."] : []),
     ]);
@@ -279,7 +280,7 @@ export function buildGenerationHealthCheckerState(input: BuildGenerationHealthCh
       qaMissing: items.filter((item) => item.status === "qa_missing").length,
       waiting: items.filter((item) => item.status === "waiting").length,
       postprocessRecoverable: items.filter((item) => item.status === "postprocess_recoverable").length,
-      workerExitWithoutExpectedOutput: items.filter((item) => item.status === "worker_exit_without_expected_output").length,
+      workerExitWithoutExpectedOutput: items.filter((item) => item.status === WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT).length,
       artifactStateMismatch: items.filter((item) => item.status === "artifact_state_mismatch").length,
       blocked: items.filter((item) => item.status === "blocked").length,
       dryRunOnly: true,
@@ -288,14 +289,18 @@ export function buildGenerationHealthCheckerState(input: BuildGenerationHealthCh
     },
     hardLocks: {
       dryRunOnly: true,
-      diagnosticsOnly: true,
-      providerSubmissionForbidden: true,
       liveSubmitAllowed: false,
+      providerSubmissionForbidden: true,
+      noFileMutation: true,
+      noCredentialRead: true,
+      noCredentialWrite: true,
+      noShellExecution: true,
+      noWorkerSpawn: true,
+      diagnosticsOnly: true,
       workerSelfReportCannotComplete: true,
       expectedOutputRequired: true,
       manifestMetadataRequired: true,
       qaCoverageRequired: true,
-      noFileMutation: true,
     },
     dryRunOnly: true,
     diagnosticsOnly: true,

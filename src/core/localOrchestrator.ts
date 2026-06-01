@@ -1,4 +1,6 @@
+import { WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT } from "./statusConstants";
 import type {
+  BaseHardLocks,
   CheckpointResumeHarnessItem,
   CheckpointResumeHarnessState,
   FilesystemWatcherHarnessState,
@@ -14,6 +16,7 @@ import type {
   TaskEnvelope,
   TaskRun,
 } from "./types";
+import type { AgentActivityState } from "./agentRuntime";
 
 export const localOrchestratorSchemaVersion = "0.1.0";
 
@@ -39,7 +42,8 @@ export type LocalOrchestratorFactLayer =
   | "subagent_runner"
   | "local_orchestrator";
 
-export type LocalOrchestratorCodexActivityState =
+/** @deprecated Use AgentActivityState from agentRuntime.ts instead. */
+export type LocalOrchestratorAgentActivityState =
   | "not_started"
   | "ready_to_start"
   | "running_planned"
@@ -110,9 +114,9 @@ export interface LocalOrchestratorCompletionGate {
   blockers: string[];
 }
 
-export interface LocalOrchestratorCodexActivity {
-  state: LocalOrchestratorCodexActivityState;
-  codexSessionId?: string;
+export interface AgentActivitySlot {
+  state: LocalOrchestratorAgentActivityState;
+  sessionId?: string;
   retryCount: number;
   retryBudget: number;
   retriesRemaining: number;
@@ -147,14 +151,14 @@ export interface LocalOrchestratorQueueItem {
   expectedOutputs: string[];
   dependencies: string[];
   canExecute: false;
-  canSpawnCodex: false;
+  canSpawnAgent: false;
   dryRunOnly: true;
   planOnly: true;
   providerSubmissionForbidden: true;
   liveSubmitAllowed: false;
   noFileMutation: true;
   completionGate: LocalOrchestratorCompletionGate;
-  codexActivity: LocalOrchestratorCodexActivity;
+  agentActivity: AgentActivitySlot;
   autoContinue: LocalOrchestratorAutoContinueMarker;
   factChain: LocalOrchestratorFactChainEntry[];
   blockers: string[];
@@ -181,20 +185,13 @@ export interface LocalOrchestratorAutoContinuePlan {
   notes: string[];
 }
 
-export interface LocalOrchestratorHardLocks {
-  dryRunOnly: true;
+export interface LocalOrchestratorHardLocks extends BaseHardLocks {
   planOnly: true;
   noDaemon: true;
   daemonStarted: false;
-  noSpawnCodex: true;
+  noSpawnAgent: true;
   noSubprocess: true;
-  noShellExecution: true;
   noProviderExecution: true;
-  providerSubmissionForbidden: true;
-  liveSubmitAllowed: false;
-  noFileMutation: true;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   workerSelfReportCannotComplete: true;
   expectedOutputRequired: true;
   manifestRequired: true;
@@ -243,18 +240,19 @@ export interface LocalOrchestratorState {
 
 export const localOrchestratorHardLocks: LocalOrchestratorHardLocks = {
   dryRunOnly: true,
-  planOnly: true,
-  noDaemon: true,
-  daemonStarted: false,
-  noSpawnCodex: true,
-  noSubprocess: true,
-  noShellExecution: true,
-  noProviderExecution: true,
-  providerSubmissionForbidden: true,
   liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
   noFileMutation: true,
   noCredentialRead: true,
   noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
+  planOnly: true,
+  noDaemon: true,
+  daemonStarted: false,
+  noSpawnAgent: true,
+  noSubprocess: true,
+  noProviderExecution: true,
   workerSelfReportCannotComplete: true,
   expectedOutputRequired: true,
   manifestRequired: true,
@@ -431,7 +429,7 @@ function hasWorkerSelfReport(record: WorkRecord): boolean {
   return (
     record.taskRun?.localStatus === "succeeded" ||
     record.taskRun?.providerStatus === "success" ||
-    record.watcherStreams.some((stream) => stream.artifactClass === "worker_exit_without_expected_output")
+    record.watcherStreams.some((stream) => stream.artifactClass === WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT)
   );
 }
 
@@ -567,11 +565,11 @@ function hasReadyEvidence(record: WorkRecord): boolean {
   );
 }
 
-function buildCodexActivity(
+function buildAgentActivity(
   record: WorkRecord,
   gate: LocalOrchestratorCompletionGate,
   inputOptions: Required<Pick<BuildLocalOrchestratorOptions, "retryBudget" | "stallTimeoutSeconds" | "now">>,
-): LocalOrchestratorCodexActivity {
+): AgentActivitySlot {
   const retryCount = record.taskRun?.retryCount || 0;
   const retryBudget = inputOptions.retryBudget;
   const retriesRemaining = Math.max(0, retryBudget - retryCount);
@@ -590,7 +588,7 @@ function buildCodexActivity(
   const stalled = timeoutStalled || watcherStalled;
   const manualReviewRequired = stalled || gate.workerSelfReportOnly;
 
-  let state: LocalOrchestratorCodexActivityState = "not_started";
+  let state: LocalOrchestratorAgentActivityState = "not_started";
   if (gate.completeVerified) {
     state = "verified";
   } else if (stalled && retriesRemaining === 0) {
@@ -609,7 +607,7 @@ function buildCodexActivity(
 
   return {
     state,
-    codexSessionId: record.taskRun?.codexSessionId,
+    sessionId: record.taskRun?.sessionId,
     retryCount,
     retryBudget,
     retriesRemaining,
@@ -623,7 +621,7 @@ function buildCodexActivity(
     ]) as Array<"timeout" | "watcher_event">,
     manualReviewRequired,
     notes: uniqueSorted([
-      "Codex activity is represented as a plan/fact chain only; the orchestrator does not spawn Codex.",
+      "Agent activity is represented as a plan/fact chain only; the orchestrator does not spawn agent.",
       ...(record.taskRun?.localStatus === "connection_retrying" ? ["Reconnect is planned from taskRun.connection_retrying."] : []),
       ...(stalled ? [`Stall timeout is ${stallTimeoutSeconds}s with ${retriesRemaining} retry slot(s) remaining.`] : []),
       ...(gate.workerSelfReportOnly ? ["Worker self-report is evidence for review, not completion."] : []),
@@ -634,13 +632,13 @@ function buildCodexActivity(
 function rawStatusFor(
   record: WorkRecord,
   gate: LocalOrchestratorCompletionGate,
-  codexActivity: LocalOrchestratorCodexActivity,
+  agentActivity: AgentActivitySlot,
   hardBlockers: string[],
 ): LocalOrchestratorQueueStatus {
   if (gate.completeVerified) return "complete_verified";
   if (hardBlockers.length) return "blocked";
   if (isFailed(record)) return "failed";
-  if (codexActivity.manualReviewRequired || record.resumeItem?.manualReviewRequired || gate.workerSelfReportOnly) return "needs_review";
+  if (agentActivity.manualReviewRequired || record.resumeItem?.manualReviewRequired || gate.workerSelfReportOnly) return "needs_review";
   if (isQaPending(record, gate)) return "qa_pending";
   if (isActiveRun(record) || record.subagentSlot?.status === "planned") return "running_planned";
   if (hasOutputWait(record, gate)) return "waiting_output";
@@ -745,20 +743,20 @@ function factChainFor(record: WorkRecord, gate: LocalOrchestratorCompletionGate)
   return entries;
 }
 
-function nextActionFor(status: LocalOrchestratorQueueStatus, item: Pick<LocalOrchestratorQueueItem, "codexActivity" | "completionGate">): string {
+function nextActionFor(status: LocalOrchestratorQueueStatus, item: Pick<LocalOrchestratorQueueItem, "agentActivity" | "completionGate">): string {
   if (status === "complete_verified") return "Task is verified complete; auto-continue may mark the next queue item ready.";
   if (status === "blocked") return "Resolve blockers or let auto-continue skip to the next planned item.";
   if (status === "failed") return "Review failure facts and decide whether to create a rerun plan.";
   if (status === "needs_review") return "Manual review is required before this item can be considered complete or retried.";
   if (status === "qa_pending") return "Wait for explicit QA and promotion gate facts; worker self-report cannot satisfy this.";
   if (status === "waiting_output") return "Wait for expected output and manifest facts; no daemon or provider submit is started.";
-  if (status === "running_planned") return "Show the Codex activity fact chain while execution remains external to this harness.";
+  if (status === "running_planned") return "Show the agent activity fact chain while execution remains external to this harness.";
   if (status === "ready") return "Ready for the next planned worker packet; this harness does not execute it.";
-  if (item.codexActivity.state === "reconnect_planned") return "Reconnect is represented as a plan with retry budget; no subprocess is started.";
+  if (item.agentActivity.state === "reconnect_planned") return "Reconnect is represented as a plan with retry budget; no subprocess is started.";
   return "Waiting for previous queue item or missing packet facts.";
 }
 
-function warningsFor(record: WorkRecord, gate: LocalOrchestratorCompletionGate, codexActivity: LocalOrchestratorCodexActivity): string[] {
+function warningsFor(record: WorkRecord, gate: LocalOrchestratorCompletionGate, agentActivity: AgentActivitySlot): string[] {
   return uniqueSorted([
     ...(record.packet?.warnings || []),
     ...(record.envelope?.preflight.warnings.map((warning) => warning.messageForUser) || []),
@@ -770,7 +768,7 @@ function warningsFor(record: WorkRecord, gate: LocalOrchestratorCompletionGate, 
       ? [`Subagent coverage gap for ${record.subagentSlot.taskKind}: ${record.subagentSlot.envelopeStatus}.`]
       : []),
     ...(record.subagentSlot?.requirementChecks.filter((check) => !check.present).map((check) => `Subagent packet requirement missing: ${check.requirementId}.`) || []),
-    ...codexActivity.notes,
+    ...agentActivity.notes,
     ...gate.blockers.filter((blocker) => blocker !== "Expected output has not been observed yet."),
   ]);
 }
@@ -779,7 +777,7 @@ function createQueueItem(
   record: WorkRecord,
   rawQueueStatus: LocalOrchestratorQueueStatus,
   gate: LocalOrchestratorCompletionGate,
-  codexActivity: LocalOrchestratorCodexActivity,
+  agentActivity: AgentActivitySlot,
   hardBlockers: string[],
 ): LocalOrchestratorQueueItem {
   const placeholder: LocalOrchestratorQueueItem = {
@@ -797,14 +795,14 @@ function createQueueItem(
     expectedOutputs: expectedOutputsFor(record),
     dependencies: dependenciesFor(record),
     canExecute: false,
-    canSpawnCodex: false,
+    canSpawnAgent: false,
     dryRunOnly: true,
     planOnly: true,
     providerSubmissionForbidden: true,
     liveSubmitAllowed: false,
     noFileMutation: true,
     completionGate: gate,
-    codexActivity,
+    agentActivity,
     autoContinue: {
       eligibleAsNext: false,
       reason: "Auto-continue planning is evaluated after the full queue is sorted.",
@@ -815,10 +813,10 @@ function createQueueItem(
     nextAction: "",
     notes: [
       "Local Orchestrator is dry-run and plan-only.",
-      "It does not start a daemon, spawn Codex, execute shell commands, submit providers, or mutate files.",
+      "It does not start a daemon, spawn agent, execute shell commands, submit providers, or mutate files.",
     ],
   };
-  placeholder.warnings = warningsFor(record, gate, codexActivity);
+  placeholder.warnings = warningsFor(record, gate, agentActivity);
   placeholder.nextAction = nextActionFor(rawQueueStatus, placeholder);
   return placeholder;
 }
@@ -1046,10 +1044,10 @@ export function buildLocalOrchestratorState(input: BuildLocalOrchestratorInput):
   };
   const queue = buildRecords(input).map((record): LocalOrchestratorQueueItem => {
     const gate = buildCompletionGate(record);
-    const codexActivity = buildCodexActivity(record, gate, options);
+    const agentActivity = buildAgentActivity(record, gate, options);
     const hardBlockers = hardBlockersFor(record, gate);
-    const rawStatus = rawStatusFor(record, gate, codexActivity, hardBlockers);
-    return createQueueItem(record, rawStatus, gate, codexActivity, hardBlockers);
+    const rawStatus = rawStatusFor(record, gate, agentActivity, hardBlockers);
+    return createQueueItem(record, rawStatus, gate, agentActivity, hardBlockers);
   });
   const autoContinuePlan = applyAutoContinuePlan(queue, options);
   const count = (status: LocalOrchestratorQueueStatus) => queue.filter((item) => item.queueStatus === status).length;
@@ -1070,8 +1068,8 @@ export function buildLocalOrchestratorState(input: BuildLocalOrchestratorInput):
       failed: count("failed"),
       blocked: count("blocked"),
       completeVerified: count("complete_verified"),
-      manualReviewRequired: queue.filter((item) => item.codexActivity.manualReviewRequired).length,
-      stalled: queue.filter((item) => item.codexActivity.stalled).length,
+      manualReviewRequired: queue.filter((item) => item.agentActivity.manualReviewRequired).length,
+      stalled: queue.filter((item) => item.agentActivity.stalled).length,
       workerSelfReportOnly: queue.filter((item) => item.completionGate.workerSelfReportOnly).length,
       providerSubmissionForbidden: true,
       liveSubmitAllowed: false,
@@ -1090,7 +1088,7 @@ export function buildLocalOrchestratorState(input: BuildLocalOrchestratorInput):
       "Phase 10 Local Orchestrator is a dry-run/plan-only queue state machine.",
       "It can show the fact chain that makes a task look active, stalled, QA-pending, blocked, or verified.",
       ...subagentCoverageNotes(input),
-      "It never starts daemons, spawns Codex, executes shell commands, submits providers, reads credentials, or mutates files.",
+      "It never starts daemons, spawns agent, executes shell commands, submits providers, reads credentials, or mutates files.",
       `Queue statuses are fixed to ${statusOrder.join(", ")}.`,
     ],
   };

@@ -1,3 +1,4 @@
+import { unique } from "./collectionUtils";
 import { buildDirectorEditPlan, isPromptBypassIntent, type DirectorEditPlan, type DirectorEditSelection } from "./directorEdit";
 import { buildExportBuilderState, type ExportBuilderState } from "./exportBuilder";
 import {
@@ -7,12 +8,14 @@ import {
 } from "./localOrchestrator";
 import { buildProviderLiveGateState, type ProviderLiveGateState } from "./providerLiveGate";
 import { buildProjectTransactionRuntime, type ProjectTransactionRuntimeState } from "./projectTransaction";
+import type { KnowledgePackManifest } from "./knowledgeTypes";
 import type { ProjectRuntimeState } from "./projectState";
 import { buildTaskPackets, type BuiltTaskPacket, type TaskPacketBuilderState, type TaskPacketKind } from "./taskPacketBuilder";
 import type {
   AdapterContractState,
   AssetReadinessReport,
   AudioPlanningState,
+  BaseHardLocks,
   GenerationHealthReport,
   Image2AdapterRequest,
   ImageTaskPlan,
@@ -43,14 +46,11 @@ export interface BuildDirectorWorkflowStateInput {
   runtimeState: ProjectRuntimeState;
   userIntent: string;
   selection?: DirectorWorkflowSelectionInput;
+  knowledgeManifest?: KnowledgePackManifest;
   generatedAt?: string;
 }
 
-export interface DirectorWorkflowHardLocks {
-  dryRunOnly: true;
-  noFileMutation: true;
-  providerSubmissionForbidden: true;
-  liveSubmitAllowed: false;
+export interface DirectorWorkflowHardLocks extends BaseHardLocks {
   noFreeTextTask: true;
   validatedEnvelopeRequired: true;
   noCredentialAccess: true;
@@ -95,9 +95,13 @@ export interface DirectorWorkflowState {
 
 const hardLocks: DirectorWorkflowHardLocks = {
   dryRunOnly: true,
-  noFileMutation: true,
-  providerSubmissionForbidden: true,
   liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   noFreeTextTask: true,
   validatedEnvelopeRequired: true,
   noCredentialAccess: true,
@@ -109,10 +113,6 @@ const liveSubmitPattern =
 const credentialPattern =
   /\b(api\s*key|apikey|credential|secret|token|process\.env|env var)\b|密钥|凭证|令牌|环境变量|读.*key|读取.*key|读取.*凭证/i;
 const exportIntentPattern = /导出|素材包|rough\s*cut|export|fcpxml|edl|premiere|jianying|davinci/i;
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values.filter((value) => value.trim()).map((value) => value.trim()))).sort();
-}
 
 function emptyProviderRegistry(generatedAt: string): ProviderRegistry {
   return {
@@ -332,6 +332,7 @@ export function buildDirectorWorkflowState(input: BuildDirectorWorkflowStateInpu
     selectedAssetId,
     storyChangeTransaction: editPlan.transaction,
     requestedTaskKinds: requestedTaskKinds(editPlan),
+    knowledgeManifest: input.knowledgeManifest,
     generatedAt,
   });
   const orchestratorState = buildLocalOrchestratorState({

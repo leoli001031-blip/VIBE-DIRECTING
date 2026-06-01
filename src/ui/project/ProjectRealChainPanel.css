@@ -5,10 +5,12 @@
   grid-template-areas:
     "head tags thumbs"
     "select select thumbs"
+    "file file thumbs"
     "recent recent thumbs"
     "gate gate thumbs"
     "policy policy thumbs"
     "batch oneshot thumbs"
+    "flow flow thumbs"
     "evidence evidence thumbs"
     "permission permission thumbs"
     "report report thumbs"
@@ -77,7 +79,7 @@
 .project-real-chain-select {
   grid-area: select;
   display: grid;
-  grid-template-columns: auto minmax(120px, 1fr) auto;
+  grid-template-columns: auto minmax(120px, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -99,7 +101,7 @@
   padding: 0 10px;
   font: inherit;
   font-size: 12px;
-  outline: none;
+  outline: none; /* TODO: add :focus-visible fallback for keyboard navigation */
 }
 
 .project-real-chain-select input:focus {
@@ -125,6 +127,22 @@
 .project-real-chain-select button:disabled {
   opacity: 0.45;
   cursor: wait;
+}
+
+.project-real-chain-file {
+  grid-area: file;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-file small {
+  border: 1px solid rgba(37, 40, 34, 0.12);
+  background: rgba(255, 255, 255, 0.28);
+  color: rgba(37, 40, 34, 0.62);
+  padding: 4px 8px;
+  font-size: 11px;
 }
 
 .project-real-chain-recent {
@@ -297,6 +315,57 @@
   cursor: wait;
 }
 
+.project-real-chain-one-shot-flow {
+  grid-area: flow;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-real-chain-one-shot-flow span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid rgba(37, 40, 34, 0.12);
+  background: rgba(255, 255, 255, 0.24);
+  padding: 6px 7px;
+}
+
+.project-real-chain-one-shot-flow strong {
+  color: rgba(37, 40, 34, 0.78);
+  font-size: 11px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.project-real-chain-one-shot-flow small {
+  color: rgba(37, 40, 34, 0.52);
+  font-size: 10px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.project-real-chain-one-shot-flow span.done {
+  border-color: rgba(46, 118, 88, 0.2);
+  background: rgba(46, 118, 88, 0.055);
+}
+
+.project-real-chain-one-shot-flow span.active {
+  border-color: rgba(57, 101, 126, 0.22);
+  background: rgba(57, 101, 126, 0.06);
+}
+
+.project-real-chain-one-shot-flow span.review {
+  border-color: rgba(151, 117, 69, 0.24);
+  background: rgba(151, 117, 69, 0.065);
+}
+
+.project-real-chain-one-shot-flow span.blocked {
+  border-color: rgba(177, 75, 62, 0.22);
+  background: rgba(177, 75, 62, 0.06);
+}
+
 .project-real-chain-evidence {
   grid-area: evidence;
   display: flex;
@@ -370,7 +439,7 @@
   padding: 0 9px;
   font: inherit;
   font-size: 11px;
-  outline: none;
+  outline: none; /* TODO: add :focus-visible fallback for keyboard navigation */
 }
 
 .project-real-chain-permission input:focus {
@@ -552,7 +621,9 @@
 .preview-shell .project-real-chain-select button,
 .preview-shell .project-real-chain-recent button,
 .preview-shell .project-real-chain-tags small,
+.preview-shell .project-real-chain-file small,
 .preview-shell .project-real-chain-gates small,
+.preview-shell .project-real-chain-one-shot-flow span,
 .preview-shell .project-real-chain-evidence small,
 .preview-shell .project-real-chain-policy small,
 .preview-shell .project-real-chain-permission small {
@@ -560,6 +631,7 @@
 }
 
 .preview-shell .project-real-chain-tags small,
+.preview-shell .project-real-chain-file small,
 .preview-shell .project-real-chain-gates small,
 .preview-shell .project-real-chain-evidence small,
 .preview-shell .project-real-chain-policy small,
@@ -572,10 +644,15 @@
 .preview-shell .project-real-chain-batch small,
 .preview-shell .project-real-chain-one-shot span,
 .preview-shell .project-real-chain-one-shot small,
+.preview-shell .project-real-chain-one-shot-flow small,
 .preview-shell .project-real-chain-permission label,
 .preview-shell .project-real-chain-select label,
 .preview-shell .project-real-chain-recent span {
   color: rgba(242, 238, 230, 0.56);
+}
+
+.preview-shell .project-real-chain-one-shot-flow strong {
+  color: rgba(242, 238, 230, 0.82);
 }
 
 .preview-shell .project-real-chain-select input,
@@ -594,12 +671,14 @@
     grid-template-areas:
       "head"
       "select"
+      "file"
       "recent"
       "tags"
       "gate"
       "batch"
       "oneshot"
       "policy"
+      "flow"
       "evidence"
       "permission"
       "thumbs"
@@ -613,7 +692,14 @@
     justify-items: stretch;
   }
 
+  .project-real-chain-select {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
   .project-real-chain-permission > div,
+  .project-real-chain-select input,
+  .project-real-chain-select button,
   .project-real-chain-permission input,
   .project-real-chain-permission button {
     width: 100%;
@@ -622,6 +708,10 @@
 
   .project-real-chain-permission label {
     white-space: normal;
+  }
+
+  .project-real-chain-one-shot-flow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .project-real-chain-thumbs {

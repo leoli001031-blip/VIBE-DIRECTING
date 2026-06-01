@@ -18,7 +18,7 @@ export interface QueueGateResult {
 export type TaskRunEvent =
   | { type: "preflight_passed"; envelope: TaskEnvelope; at?: string }
   | { type: "preflight_blocked"; envelope: TaskEnvelope; at?: string }
-  | { type: "submit_requested"; envelope: TaskEnvelope; at?: string; codexSessionId?: string; submitId?: string }
+  | { type: "submit_requested"; envelope: TaskEnvelope; at?: string; agentSessionId?: string; submitId?: string }
   | { type: "provider_querying"; envelope: TaskEnvelope; at?: string; submitId?: string }
   | { type: "provider_queueing"; envelope: TaskEnvelope; at?: string }
   | { type: "provider_generating"; envelope: TaskEnvelope; at?: string }
@@ -206,7 +206,7 @@ export function transitionTaskRun(taskRun: TaskRun, event: TaskRunEvent): TaskRu
       if (!gate.canEnter) return withStatus(nextTaskRun, "pending_local", "not_submitted", event.at);
       return {
         ...withStatus(nextTaskRun, "submitted", "querying", event.at),
-        codexSessionId: event.codexSessionId || taskRun.codexSessionId,
+        agentSessionId: event.agentSessionId || taskRun.agentSessionId,
         submitId: event.submitId || taskRun.submitId,
       };
     }

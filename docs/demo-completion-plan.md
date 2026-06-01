@@ -1,5 +1,10 @@
 # Vibe Core Runtime Truth Layer Plan
 
+> Historical plan notice: this file captures the 2026-05-05 runtime-truth
+> pivot. The current MVP closure plan is
+> `docs/mvp-delivery-technical-debt-plan.md`; do not use this file as the
+> active worker brief without rechecking the current repo state.
+
 日期：2026-05-05
 
 本计划取代 2026-05-02 的“继续收束 demo / 继续跑真实生成”路线。刚才四个 subagent 审计的共同结论是：产品方向和骨架是对的，但现在最缺的不是再冲一次真实 provider，而是把 `project.vibe` 事实源、TaskRun runtime、真实 worker / watcher / QA / preview 回流做成一个可信闭环。

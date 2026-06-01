@@ -1,9 +1,10 @@
 {
+  "_note": "This manifest is ~408KB and is NOT bundled into the asar package. Keep it in resources/ and load at runtime.",
   "schemaVersion": "0.1.0",
-  "manifestVersion": "2026.05.07",
-  "generatedAt": "2026-05-07T00:00:00.000Z",
+  "manifestVersion": "2026.05.22",
+  "generatedAt": "2026-05-22T00:00:00.000Z",
   "knowledgeLibraryRoot": "resources/knowledge",
-  "manifestHash": "sha256:7152d335786dcf908b4ef06d2d81462dde28b78f42cbd878687ea3288e7f0bf2",
+  "manifestHash": "sha256:d5c088a867f0244f37743eac6a6a873406cda7d277e3177301cd60c6d57d42ac",
   "packs": [
     {
       "id": "agent/harness-engineering-for-vibe-director",
@@ -816,6 +817,298 @@
       ]
     },
     {
+      "id": "camera/imperfect-camera-motion",
+      "version": "1.0.0",
+      "hash": "sha256:312306063e5be6cc1cbb94b340a1877b4cd15229807b9466aa9a94e1cf030c98",
+      "path": "resources/knowledge/camera/imperfect-camera-motion.md",
+      "type": "external_imported",
+      "category": "camera",
+      "title": "Imperfect Camera Motion",
+      "summary": "更新时间：2026-05-22 用途：让 AI 视频镜头更像有人在拍，而不是过度完美的“神视角滑轨”。适合 Seedance / i2v 的镜头运动和分镜图运动箭头设计。 真实镜头不总是完美、平滑、全知。很多有电影感的镜头来自不完整视角： - 前景遮挡一部分主体。",
+      "tags": [
+        "camera",
+        "imperfect",
+        "motion",
+        "motion.md"
+      ],
+      "applicableTaskPurposes": [
+        "i2v",
+        "video",
+        "keyframe",
+        "video_generation",
+        "video_audit"
+      ],
+      "applicableProviderSlots": [
+        "image.generate",
+        "image.edit",
+        "video.i2v",
+        "video.t2v.experimental"
+      ],
+      "dependencies": [],
+      "conflicts": [],
+      "maxInjectionTokens": 600,
+      "trustLevel": "verified",
+      "verificationStatus": "verified",
+      "verificationReportId": "knowledge_import_report:deterministic_sha256_copy",
+      "conflictAcknowledged": false,
+      "enabled": true,
+      "defaultEnabled": false,
+      "createdAt": "2026-05-22T00:00:00.000Z",
+      "updatedAt": "2026-05-22T00:00:00.000Z",
+      "sourcePath": "camera/imperfect-camera-motion.md",
+      "snippets": [
+        {
+          "id": "imperfect-camera-motion-01",
+          "title": "Imperfect Camera Motion",
+          "summary": "更新时间：2026-05-22 用途：让 AI 视频镜头更像有人在拍，而不是过度完美的“神视角滑轨”。适合 Seedance / i2v 的镜头运动和分镜图运动箭头设计。",
+          "content": "# Imperfect Camera Motion\n\n更新时间：2026-05-22\n\n用途：让 AI 视频镜头更像有人在拍，而不是过度完美的“神视角滑轨”。适合 Seedance / i2v 的镜头运动和分镜图运动箭头设计。",
+          "keywords": [
+            "camera",
+            "imperfect",
+            "motion",
+            "motion.md"
+          ],
+          "hash": "sha256:1cb9ac9d96a7ce0e6c38343af1f6f3877206e37d782adf1712ce6574d20c8828",
+          "tokenEstimate": 29,
+          "sourceHeading": "Imperfect Camera Motion"
+        },
+        {
+          "id": "核心判断-02",
+          "title": "核心判断",
+          "summary": "真实镜头不总是完美、平滑、全知。很多有电影感的镜头来自不完整视角： - 前景遮挡一部分主体。 - 镜头慢半拍才跟上动作。",
+          "content": "## 核心判断\n\n真实镜头不总是完美、平滑、全知。很多有电影感的镜头来自不完整视角：\n\n- 前景遮挡一部分主体。\n- 镜头慢半拍才跟上动作。\n- 焦点从错误位置轻微找回主体。\n- 手持有轻微呼吸感，但不晃到影响观看。\n- 角色先入画，再让镜头确认动作。",
+          "keywords": [
+            "camera",
+            "imperfect",
+            "motion",
+            "motion.md",
+            "核心判断"
+          ],
+          "hash": "sha256:b856b67f6c0bb1f70706f59cef2b7eb9e668e741d6f3376ecfa413a982c30d06",
+          "tokenEstimate": 32,
+          "sourceHeading": "核心判断"
+        },
+        {
+          "id": "写法规则-03",
+          "title": "写法规则",
+          "summary": "用“观察方式”替代“高级运镜”。 弱写法： ```text",
+          "content": "## 写法规则\n\n用“观察方式”替代“高级运镜”。\n\n弱写法：\n\n```text\n电影感运镜，镜头高级，平滑推进。\n```\n\n强写法：\n\n```text\n镜头从门框后方观察，前景门框遮住画面左侧三分之一。\n少女抬眼后，镜头慢半拍轻微推进，焦点从手中的磁带转到她的眼睛。\n```",
+          "keywords": [
+            "camera",
+            "imperfect",
+            "motion",
+            "motion.md",
+            "写法规则"
+          ],
+          "hash": "sha256:373df54c06fd950012155e34e2b449d092067fe90c527e9d8648ab252bd3f49d",
+          "tokenEstimate": 35,
+          "sourceHeading": "写法规则"
+        },
+        {
+          "id": "节奏选择-04",
+          "title": "节奏选择",
+          "summary": "- 情绪段：慢半拍推进、轻微呼吸、焦点转移。 - 悬疑段：遮挡、延迟揭示、背后跟拍、局部先出现。 - 动作段：跟随不完全、轻微甩动、快速重新找回主体。",
+          "content": "## 节奏选择\n\n- 情绪段：慢半拍推进、轻微呼吸、焦点转移。\n- 悬疑段：遮挡、延迟揭示、背后跟拍、局部先出现。\n- 动作段：跟随不完全、轻微甩动、快速重新找回主体。\n- 喜剧段：动作后停一拍，镜头不要急着解释。",
+          "keywords": [
+            "camera",
+            "imperfect",
+            "motion",
+            "motion.md",
+            "节奏选择"
+          ],
+          "hash": "sha256:51ace0de822ddc6874ae286891ee5aba48afd48e3be275bef98f0913d8eaf8fc",
+          "tokenEstimate": 27,
+          "sourceHeading": "节奏选择"
+        },
+        {
+          "id": "禁忌-05",
+          "title": "禁忌",
+          "summary": "- 不要所有镜头都写“平滑推进”。 - 不要同时写固定机位和大幅跟拍。 - 不要要求模型在一个镜头里完成推、拉、摇、移、升降、变焦全部动作。",
+          "content": "## 禁忌\n\n- 不要所有镜头都写“平滑推进”。\n- 不要同时写固定机位和大幅跟拍。\n- 不要要求模型在一个镜头里完成推、拉、摇、移、升降、变焦全部动作。\n- 不要为了动感让镜头运动抢走主动作。",
+          "keywords": [
+            "camera",
+            "imperfect",
+            "motion",
+            "motion.md",
+            "禁忌"
+          ],
+          "hash": "sha256:76cfacdf2cd0650c98fa32fddfb64ed37a276a689368444322ab54eff1a74ede",
+          "tokenEstimate": 25,
+          "sourceHeading": "禁忌"
+        },
+        {
+          "id": "qa-检查-06",
+          "title": "QA 检查",
+          "summary": "- 运镜是否有明确观察位置。 - 运镜是否服务动作或情绪，而不是装饰。 - 运动是否和角色动作方向一致。",
+          "content": "## QA 检查\n\n- 运镜是否有明确观察位置。\n- 运镜是否服务动作或情绪，而不是装饰。\n- 运动是否和角色动作方向一致。\n- 是否保留了足够稳定的起始构图给 Seedance。",
+          "keywords": [
+            "camera",
+            "imperfect",
+            "motion",
+            "motion.md",
+            "qa",
+            "检查"
+          ],
+          "hash": "sha256:3ec7c8da837a42733755c2cc217011c742b9afabf3eb2181fc6a442a730fb04a",
+          "tokenEstimate": 23,
+          "sourceHeading": "QA 检查"
+        }
+      ]
+    },
+    {
+      "id": "camera/state-flow-motion-planning",
+      "version": "1.0.0",
+      "hash": "sha256:440203e3b6f3d2d5846755322d0b8aab432bb2957f5a59984f0628689af9e2f7",
+      "path": "resources/knowledge/camera/state-flow-motion-planning.md",
+      "type": "external_imported",
+      "category": "camera",
+      "title": "State Flow Motion Planning",
+      "summary": "更新时间：2026-05-22 用途：把动作从“动词清单”改成“状态流”，解决 Seedance / i2v 中人物动作平、乱、做不完的问题。 视频 prompt 不要堆动词。一个镜头应该有一个核心动词，加上动作前状态、动作触发、动作后状态。 推荐结构：",
+      "tags": [
+        "camera",
+        "flow",
+        "motion",
+        "planning",
+        "planning.md",
+        "state"
+      ],
+      "applicableTaskPurposes": [
+        "i2v",
+        "video",
+        "keyframe",
+        "video_generation",
+        "video_audit"
+      ],
+      "applicableProviderSlots": [
+        "image.generate",
+        "image.edit",
+        "video.i2v",
+        "video.t2v.experimental"
+      ],
+      "dependencies": [],
+      "conflicts": [],
+      "maxInjectionTokens": 600,
+      "trustLevel": "verified",
+      "verificationStatus": "verified",
+      "verificationReportId": "knowledge_import_report:deterministic_sha256_copy",
+      "conflictAcknowledged": false,
+      "enabled": true,
+      "defaultEnabled": false,
+      "createdAt": "2026-05-22T00:00:00.000Z",
+      "updatedAt": "2026-05-22T00:00:00.000Z",
+      "sourcePath": "camera/state-flow-motion-planning.md",
+      "snippets": [
+        {
+          "id": "state-flow-motion-planning-01",
+          "title": "State Flow Motion Planning",
+          "summary": "更新时间：2026-05-22 用途：把动作从“动词清单”改成“状态流”，解决 Seedance / i2v 中人物动作平、乱、做不完的问题。",
+          "content": "# State Flow Motion Planning\n\n更新时间：2026-05-22\n\n用途：把动作从“动词清单”改成“状态流”，解决 Seedance / i2v 中人物动作平、乱、做不完的问题。",
+          "keywords": [
+            "camera",
+            "flow",
+            "motion",
+            "planning",
+            "planning.md",
+            "state"
+          ],
+          "hash": "sha256:edbc7a3cfe6f81b351375191a1b7a171446655d547016efb90a24d657c3fe425",
+          "tokenEstimate": 26,
+          "sourceHeading": "State Flow Motion Planning"
+        },
+        {
+          "id": "核心判断-02",
+          "title": "核心判断",
+          "summary": "视频 prompt 不要堆动词。一个镜头应该有一个核心动词，加上动作前状态、动作触发、动作后状态。 推荐结构： ```text",
+          "content": "## 核心判断\n\n视频 prompt 不要堆动词。一个镜头应该有一个核心动词，加上动作前状态、动作触发、动作后状态。\n\n推荐结构：\n\n```text\n起始状态 -> 触发原因 -> 主动作 -> 微反应/结束状态\n```\n\n例如：\n\n```text\n少女低头握着旧磁带，手指已经收紧。\n少年停在右后方，没有立刻说话。\n少女因为听到脚步声抬眼，把磁带递到画面中央。\n少年停半秒才接住，少女肩膀放松一点。\n```",
+          "keywords": [
+            "camera",
+            "flow",
+            "motion",
+            "planning",
+            "planning.md",
+            "state",
+            "核心判断"
+          ],
+          "hash": "sha256:b75f3c97d4c84ec3d3a804c1a30cc9d6724b51dc46b29567224feb16d524121e",
+          "tokenEstimate": 51,
+          "sourceHeading": "核心判断"
+        },
+        {
+          "id": "为什么比动词清单稳-03",
+          "title": "为什么比动词清单稳",
+          "summary": "动词清单会让模型同时执行多个动作： ```text 少女走过去、抬头、递出磁带、微笑、少年接住、两人对视。",
+          "content": "## 为什么比动词清单稳\n\n动词清单会让模型同时执行多个动作：\n\n```text\n少女走过去、抬头、递出磁带、微笑、少年接住、两人对视。\n```\n\n状态流会让模型知道哪个动作是主动作，哪些只是前后状态：\n\n```text\n主动作是递出磁带。走近和对视不是独立事件，只作为递出前后的状态变化。\n```",
+          "keywords": [
+            "camera",
+            "flow",
+            "motion",
+            "planning",
+            "planning.md",
+            "state",
+            "为什么比动词清单稳"
+          ],
+          "hash": "sha256:5d654049a21c79f8e573d0e3816d9a68b3699bc68b3a6c3da1ccd2b01ae9cb31",
+          "tokenEstimate": 38,
+          "sourceHeading": "为什么比动词清单稳"
+        },
+        {
+          "id": "秒数和动作量-04",
+          "title": "秒数和动作量",
+          "summary": "- 4-6 秒：一个主动作，最多一个微反应。 - 7-10 秒：一个主动作加一个反应，或两个紧密相连的动作节点。 - 11-15 秒：可以是一个小段落，但必须保持同一空间、同一轴线、同一目标。",
+          "content": "## 秒数和动作量\n\n- 4-6 秒：一个主动作，最多一个微反应。\n- 7-10 秒：一个主动作加一个反应，或两个紧密相连的动作节点。\n- 11-15 秒：可以是一个小段落，但必须保持同一空间、同一轴线、同一目标。\n- 快切例外：短时长也可多切点，但每个切点都必须是同一动作链上的简单状态。",
+          "keywords": [
+            "camera",
+            "flow",
+            "motion",
+            "planning",
+            "planning.md",
+            "state",
+            "秒数和动作量"
+          ],
+          "hash": "sha256:5bcc8823cd8a5d12ad5398d80747bfa53ed743af76292c952d2d568dbee649fa",
+          "tokenEstimate": 37,
+          "sourceHeading": "秒数和动作量"
+        },
+        {
+          "id": "分镜图适配-05",
+          "title": "分镜图适配",
+          "summary": "分镜大主画面应该画“动作即将发生”的状态，而不是动作完成后的结果。 - 递东西：主画面画递出前手的位置，动作格画递出方向。 - 推门：主画面画手压在门把上，动作格画门缝和反应。",
+          "content": "## 分镜图适配\n\n分镜大主画面应该画“动作即将发生”的状态，而不是动作完成后的结果。\n\n- 递东西：主画面画递出前手的位置，动作格画递出方向。\n- 推门：主画面画手压在门把上，动作格画门缝和反应。\n- 跑动：主画面画重心压低准备冲出，动作格画方向线和对方反应。",
+          "keywords": [
+            "camera",
+            "flow",
+            "motion",
+            "planning",
+            "planning.md",
+            "state",
+            "分镜图适配"
+          ],
+          "hash": "sha256:fc94bd963f363583973aab28d5623c546d5f0f6d18cdddc9d41cff4c3f968b12",
+          "tokenEstimate": 33,
+          "sourceHeading": "分镜图适配"
+        },
+        {
+          "id": "qa-检查-06",
+          "title": "QA 检查",
+          "summary": "- 是否能指出唯一主动作。 - 是否有明确触发原因。 - 是否写了动作后微反应。",
+          "content": "## QA 检查\n\n- 是否能指出唯一主动作。\n- 是否有明确触发原因。\n- 是否写了动作后微反应。\n- 是否避免“然后、随后、接着”无限串联。\n- 画面是否像起始状态，而不是已经演完。",
+          "keywords": [
+            "camera",
+            "flow",
+            "motion",
+            "planning",
+            "planning.md",
+            "qa",
+            "state",
+            "检查"
+          ],
+          "hash": "sha256:d2679b3cdd6223584a031b33d8cde2ffd68fb0d218b23d7de87aabea9d52c4d4",
+          "tokenEstimate": 24,
+          "sourceHeading": "QA 检查"
+        }
+      ]
+    },
+    {
       "id": "color/core-color",
       "version": "1.0.0",
       "hash": "sha256:616d26ca6a4451a20b78f887b67797a7fe85347728813c181bdd2e11324decab",
@@ -1336,6 +1629,275 @@
           "hash": "sha256:ce29212a60832f8e36f0c4c61d3c9ccd3c1ba759471174cd8c47e77af7c6ffef",
           "tokenEstimate": 55,
           "sourceHeading": "12. Scale Contrast / 尺度对比"
+        }
+      ]
+    },
+    {
+      "id": "composition/multi-character-blocking",
+      "version": "1.0.0",
+      "hash": "sha256:bb9f165ff802c90261109c1f7a4c7fa4db8a9102f89e5f1741df67324da588ab",
+      "path": "resources/knowledge/composition/multi-character-blocking.md",
+      "type": "external_imported",
+      "category": "composition",
+      "title": "Multi Character Blocking",
+      "summary": "更新时间：2026-05-22 用途：处理多人镜头、双人关系镜头和递物/对视/追逐等场面，避免 AI 把所有人平均摆动、站位乱跳或反打方向错乱。 多人镜头先定轴线，再定谁行动、谁反应。 每个多人镜头必须回答：",
+      "tags": [
+        "blocking",
+        "blocking.md",
+        "character",
+        "composition",
+        "multi"
+      ],
+      "applicableTaskPurposes": [
+        "asset",
+        "keyframe",
+        "edit",
+        "qa",
+        "visual_generation",
+        "visual_audit",
+        "continuity_audit"
+      ],
+      "applicableProviderSlots": [],
+      "dependencies": [],
+      "conflicts": [],
+      "maxInjectionTokens": 600,
+      "trustLevel": "verified",
+      "verificationStatus": "verified",
+      "verificationReportId": "knowledge_import_report:deterministic_sha256_copy",
+      "conflictAcknowledged": false,
+      "enabled": true,
+      "defaultEnabled": false,
+      "createdAt": "2026-05-22T00:00:00.000Z",
+      "updatedAt": "2026-05-22T00:00:00.000Z",
+      "sourcePath": "composition/multi-character-blocking.md",
+      "snippets": [
+        {
+          "id": "multi-character-blocking-01",
+          "title": "Multi Character Blocking",
+          "summary": "更新时间：2026-05-22 用途：处理多人镜头、双人关系镜头和递物/对视/追逐等场面，避免 AI 把所有人平均摆动、站位乱跳或反打方向错乱。",
+          "content": "# Multi Character Blocking\n\n更新时间：2026-05-22\n\n用途：处理多人镜头、双人关系镜头和递物/对视/追逐等场面，避免 AI 把所有人平均摆动、站位乱跳或反打方向错乱。",
+          "keywords": [
+            "blocking",
+            "blocking.md",
+            "character",
+            "composition",
+            "multi"
+          ],
+          "hash": "sha256:7dbe0af9751e25468bc26681b522b139edc402c5a87896fc79e651c4aa6c8aa1",
+          "tokenEstimate": 26,
+          "sourceHeading": "Multi Character Blocking"
+        },
+        {
+          "id": "核心判断-02",
+          "title": "核心判断",
+          "summary": "多人镜头先定轴线，再定谁行动、谁反应。 每个多人镜头必须回答： - 轴线：两个人之间的连线、角色看向哪里、镜头在哪一侧。",
+          "content": "## 核心判断\n\n多人镜头先定轴线，再定谁行动、谁反应。\n\n每个多人镜头必须回答：\n\n- 轴线：两个人之间的连线、角色看向哪里、镜头在哪一侧。\n- 屏幕方向：谁在左，谁在右，是否保持不变。\n- 层次：谁在前景、中景、背景。\n- 行动者：这一镜里谁主动做事。\n- 反应者：另一个人如何用停顿、眼神、后退、接住、避开来反应。",
+          "keywords": [
+            "blocking",
+            "blocking.md",
+            "character",
+            "composition",
+            "multi",
+            "核心判断"
+          ],
+          "hash": "sha256:0634ca1f82def507aeedf4e393a401f2647073e5d8528672943df1791ff142e2",
+          "tokenEstimate": 40,
+          "sourceHeading": "核心判断"
+        },
+        {
+          "id": "双人镜头写法-03",
+          "title": "双人镜头写法",
+          "summary": "不要写成“两人对视、同时走近、同时递东西、情绪复杂”。这会让视频模型平均分配动作，人物像 NPC。 更稳的结构： ```text",
+          "content": "## 双人镜头写法\n\n不要写成“两人对视、同时走近、同时递东西、情绪复杂”。这会让视频模型平均分配动作，人物像 NPC。\n\n更稳的结构：\n\n```text\nA 在画面左前方先行动：把磁带递到画面中央。\nB 在画面右后方先不动，视线落到磁带上，停半秒后才伸手。\n镜头保持在轴线同一侧，不切换左右位置。\n```",
+          "keywords": [
+            "blocking",
+            "blocking.md",
+            "character",
+            "composition",
+            "multi",
+            "双人镜头写法"
+          ],
+          "hash": "sha256:b4baefbb3882cf0f1c2aa0fcfa5f5d0d1f59bf24e62e016cabaffa205b5d3940",
+          "tokenEstimate": 39,
+          "sourceHeading": "双人镜头写法"
+        },
+        {
+          "id": "日漫式拆法-04",
+          "title": "日漫式拆法",
+          "summary": "日漫情绪段通常不是一个中景拍完，而是关系镜头加插入特写： - 先用中景或过肩建立两人距离。 - 切手部或道具特写表现动作。",
+          "content": "## 日漫式拆法\n\n日漫情绪段通常不是一个中景拍完，而是关系镜头加插入特写：\n\n- 先用中景或过肩建立两人距离。\n- 切手部或道具特写表现动作。\n- 切眼神/嘴角/呼吸表现反应。\n- 再回到关系镜头收束。\n\n如果总时长只有 4-6 秒，不要把这些都塞进一个 Seedance clip。可以让分镜图提示这些切分，但视频 prompt 只保留一个主动作。",
+          "keywords": [
+            "blocking",
+            "blocking.md",
+            "character",
+            "composition",
+            "multi",
+            "日漫式拆法"
+          ],
+          "hash": "sha256:40ff1cfd89ea1160c3a53337425157111538f182d8b3f858eeab5303655b27fc",
+          "tokenEstimate": 44,
+          "sourceHeading": "日漫式拆法"
+        },
+        {
+          "id": "快切场景-05",
+          "title": "快切场景",
+          "summary": "动作强烈时，不能只按“秒数短就单镜头”处理。快切可以短，但每个切点仍要简单： - 每个切点只表达一个方向或冲突。 - 4 秒也可以是快切，但必须是同一动作链上的两三个清晰节点。",
+          "content": "## 快切场景\n\n动作强烈时，不能只按“秒数短就单镜头”处理。快切可以短，但每个切点仍要简单：\n\n- 每个切点只表达一个方向或冲突。\n- 4 秒也可以是快切，但必须是同一动作链上的两三个清晰节点。\n- 如果动作包含起身、奔跑、碰撞、反应、反击，拆成多个镜头或多个视频任务。",
+          "keywords": [
+            "blocking",
+            "blocking.md",
+            "character",
+            "composition",
+            "multi",
+            "快切场景"
+          ],
+          "hash": "sha256:996e5bdb342e8c7cb8ec7c02314f984c971bb894918b7067185b83842708bba1",
+          "tokenEstimate": 34,
+          "sourceHeading": "快切场景"
+        },
+        {
+          "id": "qa-检查-06",
+          "title": "QA 检查",
+          "summary": "- 是否明确谁行动、谁反应。 - 是否没有让两个人同时做复杂动作。 - 是否保持左右站位和视线方向。",
+          "content": "## QA 检查\n\n- 是否明确谁行动、谁反应。\n- 是否没有让两个人同时做复杂动作。\n- 是否保持左右站位和视线方向。\n- 是否说明道具在谁手里、何时进入画面中心。\n- 是否避免“随后切特写”这类未拆镜的混合描述。",
+          "keywords": [
+            "blocking",
+            "blocking.md",
+            "character",
+            "composition",
+            "multi",
+            "qa",
+            "检查"
+          ],
+          "hash": "sha256:8efc55a64948cbbf86596abdd2cbebcfd9f55b5d38841223adaf62be7617745e",
+          "tokenEstimate": 27,
+          "sourceHeading": "QA 检查"
+        }
+      ]
+    },
+    {
+      "id": "composition/visual-structure-decomposition",
+      "version": "1.0.0",
+      "hash": "sha256:2de5c3d06c1cad4c90ae5e77c1eb3699c701cf1bfbbb5f6c2e2e90449fe6ad9b",
+      "path": "resources/knowledge/composition/visual-structure-decomposition.md",
+      "type": "external_imported",
+      "category": "composition",
+      "title": "Visual Structure Decomposition",
+      "summary": "更新时间：2026-05-22 用途：把画面拆成可执行的导演事实，避免只写“日漫感、电影感、高级感”这类标签词。来源于 Super-i 提示词创作里“画面结构拆解法”的方法论沉淀。 生成分镜图或 Seedance 全能参考前，先拆画面结构，再写风格词。 一个镜头至少拆成：",
+      "tags": [
+        "composition",
+        "decomposition",
+        "decomposition.md",
+        "structure",
+        "visual"
+      ],
+      "applicableTaskPurposes": [
+        "asset",
+        "keyframe",
+        "edit",
+        "qa",
+        "visual_generation",
+        "visual_audit",
+        "continuity_audit"
+      ],
+      "applicableProviderSlots": [],
+      "dependencies": [],
+      "conflicts": [],
+      "maxInjectionTokens": 600,
+      "trustLevel": "verified",
+      "verificationStatus": "verified",
+      "verificationReportId": "knowledge_import_report:deterministic_sha256_copy",
+      "conflictAcknowledged": false,
+      "enabled": true,
+      "defaultEnabled": false,
+      "createdAt": "2026-05-22T00:00:00.000Z",
+      "updatedAt": "2026-05-22T00:00:00.000Z",
+      "sourcePath": "composition/visual-structure-decomposition.md",
+      "snippets": [
+        {
+          "id": "visual-structure-decomposition-01",
+          "title": "Visual Structure Decomposition",
+          "summary": "更新时间：2026-05-22 用途：把画面拆成可执行的导演事实，避免只写“日漫感、电影感、高级感”这类标签词。来源于 Super-i 提示词创作里“画面结构拆解法”的方法论沉淀。",
+          "content": "# Visual Structure Decomposition\n\n更新时间：2026-05-22\n\n用途：把画面拆成可执行的导演事实，避免只写“日漫感、电影感、高级感”这类标签词。来源于 Super-i 提示词创作里“画面结构拆解法”的方法论沉淀。",
+          "keywords": [
+            "composition",
+            "decomposition",
+            "decomposition.md",
+            "structure",
+            "visual"
+          ],
+          "hash": "sha256:73b78e3706db0f53209e4f2f6bcea6c877ff366437670c612297f6e3e8e56ed8",
+          "tokenEstimate": 32,
+          "sourceHeading": "Visual Structure Decomposition"
+        },
+        {
+          "id": "核心判断-02",
+          "title": "核心判断",
+          "summary": "生成分镜图或 Seedance 全能参考前，先拆画面结构，再写风格词。 一个镜头至少拆成： - 主体：谁是第一眼，谁是第二眼。",
+          "content": "## 核心判断\n\n生成分镜图或 Seedance 全能参考前，先拆画面结构，再写风格词。\n\n一个镜头至少拆成：\n\n- 主体：谁是第一眼，谁是第二眼。\n- 构图：主体在画面左/右/中，留白在哪里，前中后景怎么分层。\n- 机位：平视、俯视、仰视、过肩、侧后方、低机位。\n- 镜头距离：全景、中景、近景、特写、大特写。\n- 光线：主光方向、阴影方向、天气/时间带来的环境光。\n- 空间：角色、道具、门窗、桌面、道路、背景地标的相对位置。\n- 时间状态：动作发生前、动作中、动作后，画面是哪个瞬间。",
+          "keywords": [
+            "composition",
+            "decomposition",
+            "decomposition.md",
+            "structure",
+            "visual",
+            "核心判断"
+          ],
+          "hash": "sha256:aab29f5a6f5f386e99bd4e43e5deb6459758e8c695877744242526fbade79426",
+          "tokenEstimate": 62,
+          "sourceHeading": "核心判断"
+        },
+        {
+          "id": "写法规则-03",
+          "title": "写法规则",
+          "summary": "不要让模型从抽象风格词里反推构图。先给它画面结构，再给风格。 推荐顺序： 1. 先写“画面第一眼是什么”。",
+          "content": "## 写法规则\n\n不要让模型从抽象风格词里反推构图。先给它画面结构，再给风格。\n\n推荐顺序：\n\n1. 先写“画面第一眼是什么”。\n2. 再写“角色/道具在画面里的位置关系”。\n3. 再写“镜头怎么观察这个瞬间”。\n4. 最后写风格、材质、光影和情绪。\n\n错误写法：\n\n```text\n日漫电影感，青春感，氛围很好，镜头高级。\n```\n\n更稳写法：\n\n```text\n画面第一眼是画面左侧的短发少女半身侧脸，她站在雨后屋顶护栏前，右手握着旧磁带。\n少年在画面右后方半步距离，只露出肩线和伸出的手。\n镜头为中近景，略低于人物视线，背景城市天际线虚化，地面有雨水反光。\n```",
+          "keywords": [
+            "composition",
+            "decomposition",
+            "decomposition.md",
+            "structure",
+            "visual",
+            "写法规则"
+          ],
+          "hash": "sha256:1478293f897a5abd95198edd91d3cbba9eebf5d18d4e497201e41823c2acd771",
+          "tokenEstimate": 72,
+          "sourceHeading": "写法规则"
+        },
+        {
+          "id": "分镜图适配-04",
+          "title": "分镜图适配",
+          "summary": "分镜图不是最终彩色 keyframe。它应该把构图、屏幕方向、动作准备状态和镜头意图画清楚。 - 大主画面负责第一眼构图和空间关系。 - 小动作格只补充必要的手部、眼神、反应或环境动势。",
+          "content": "## 分镜图适配\n\n分镜图不是最终彩色 keyframe。它应该把构图、屏幕方向、动作准备状态和镜头意图画清楚。\n\n- 大主画面负责第一眼构图和空间关系。\n- 小动作格只补充必要的手部、眼神、反应或环境动势。\n- 不要把说明文字、时间码、表格和对白塞进图里。\n- 当画面信息过多时，优先删掉风格词，不删主体关系和动作状态。",
+          "keywords": [
+            "composition",
+            "decomposition",
+            "decomposition.md",
+            "structure",
+            "visual",
+            "分镜图适配"
+          ],
+          "hash": "sha256:a952bc4615894187832b1d537d6a9a89f1244b0752356fe5e6eb73083d8fb944",
+          "tokenEstimate": 41,
+          "sourceHeading": "分镜图适配"
+        },
+        {
+          "id": "qa-检查-05",
+          "title": "QA 检查",
+          "summary": "生成前检查： - 是否能一眼说出主画面第一眼。 - 人物/道具是否有明确左右、前后、远近关系。",
+          "content": "## QA 检查\n\n生成前检查：\n\n- 是否能一眼说出主画面第一眼。\n- 人物/道具是否有明确左右、前后、远近关系。\n- 当前画面是否是一个具体瞬间，而不是完整剧情摘要。\n- 风格词是否压过了构图事实。\n\n生成后检查：\n\n- 画面是否像一个镜头，而不是海报或设定集。\n- 角色站位是否能服务后续 Seedance 运动。\n- 参考图有没有把原图构图错误地带进当前镜头。",
+          "keywords": [
+            "composition",
+            "decomposition",
+            "decomposition.md",
+            "qa",
+            "structure",
+            "visual",
+            "检查"
+          ],
+          "hash": "sha256:303aad8a12ca509fa2e42afafc8b740fef5cb2ae8a76af15426b41bcc9e9a289",
+          "tokenEstimate": 46,
+          "sourceHeading": "QA 检查"
         }
       ]
     },
@@ -2179,6 +2741,153 @@
       ]
     },
     {
+      "id": "performance/action-motivation-microreaction",
+      "version": "1.0.0",
+      "hash": "sha256:63925fd662a8b0d0edbb1fa2eed4a5a5536fdefb8dedcbb98e17dbf3db556657",
+      "path": "resources/knowledge/performance/action-motivation-microreaction.md",
+      "type": "external_imported",
+      "category": "performance",
+      "title": "Action Motivation And Microreaction",
+      "summary": "更新时间：2026-05-22 用途：让角色有“活人感”，把表演从站桩、微笑、看镜头，改成有处境、有动机、有小反应的动作。 人物真实感不是更精致的脸，而是“她为什么在这一刻这么动”。 每个角色动作都要写：",
+      "tags": [
+        "action",
+        "and",
+        "microreaction",
+        "microreaction.md",
+        "motivation",
+        "performance"
+      ],
+      "applicableTaskPurposes": [
+        "script",
+        "keyframe",
+        "visual_generation",
+        "visual_audit"
+      ],
+      "applicableProviderSlots": [],
+      "dependencies": [],
+      "conflicts": [],
+      "maxInjectionTokens": 600,
+      "trustLevel": "verified",
+      "verificationStatus": "verified",
+      "verificationReportId": "knowledge_import_report:deterministic_sha256_copy",
+      "conflictAcknowledged": false,
+      "enabled": true,
+      "defaultEnabled": false,
+      "createdAt": "2026-05-22T00:00:00.000Z",
+      "updatedAt": "2026-05-22T00:00:00.000Z",
+      "sourcePath": "performance/action-motivation-microreaction.md",
+      "snippets": [
+        {
+          "id": "action-motivation-and-microreaction-01",
+          "title": "Action Motivation And Microreaction",
+          "summary": "更新时间：2026-05-22 用途：让角色有“活人感”，把表演从站桩、微笑、看镜头，改成有处境、有动机、有小反应的动作。",
+          "content": "# Action Motivation And Microreaction\n\n更新时间：2026-05-22\n\n用途：让角色有“活人感”，把表演从站桩、微笑、看镜头，改成有处境、有动机、有小反应的动作。",
+          "keywords": [
+            "action",
+            "and",
+            "microreaction",
+            "microreaction.md",
+            "motivation",
+            "performance"
+          ],
+          "hash": "sha256:ef0ddae2c08b999c40dd8038afbbd0bddac1c6b923866531bf51a8eed7ba7d1b",
+          "tokenEstimate": 26,
+          "sourceHeading": "Action Motivation And Microreaction"
+        },
+        {
+          "id": "核心判断-02",
+          "title": "核心判断",
+          "summary": "人物真实感不是更精致的脸，而是“她为什么在这一刻这么动”。 每个角色动作都要写： - 当前处境：角色现在处于什么压力或期待里。",
+          "content": "## 核心判断\n\n人物真实感不是更精致的脸，而是“她为什么在这一刻这么动”。\n\n每个角色动作都要写：\n\n- 当前处境：角色现在处于什么压力或期待里。\n- 动作动机：是什么触发了动作。\n- 身体反应：呼吸、肩膀、手指、重心、嘴角、眼皮如何轻微变化。\n- 视线方向：看人、看物、看画外、避开视线。",
+          "keywords": [
+            "action",
+            "and",
+            "microreaction",
+            "microreaction.md",
+            "motivation",
+            "performance",
+            "核心判断"
+          ],
+          "hash": "sha256:5c7d45db59ee4053d44e6d8b833c4831f91342577ee01a5fe048feecd1fa8127",
+          "tokenEstimate": 37,
+          "sourceHeading": "核心判断"
+        },
+        {
+          "id": "单人表演公式-03",
+          "title": "单人表演公式",
+          "summary": "```text 身份 + 处境 + 触发 + 主动作 + 微反应 + 镜头观察方式 ```",
+          "content": "## 单人表演公式\n\n```text\n身份 + 处境 + 触发 + 主动作 + 微反应 + 镜头观察方式\n```\n\n示例：\n\n```text\n短发少女站在雨后屋顶，手里握着旧磁带。\n她听到少年脚步声后没有马上抬头，先轻轻收紧手指。\n半秒后她抬眼看向画面右侧，呼吸让肩线轻微起伏。\n镜头中近景慢慢推进，保留她犹豫的停顿。\n```",
+          "keywords": [
+            "action",
+            "and",
+            "microreaction",
+            "microreaction.md",
+            "motivation",
+            "performance",
+            "单人表演公式"
+          ],
+          "hash": "sha256:903022d0218cbfeadfdfb051287e82fc283b1661c18507981daa53044419b003",
+          "tokenEstimate": 41,
+          "sourceHeading": "单人表演公式"
+        },
+        {
+          "id": "多人表演公式-04",
+          "title": "多人表演公式",
+          "summary": "多人镜头里只让一个人主动作，另一个人反应。 ```text A 行动：递出 / 后退 / 伸手 / 转身。",
+          "content": "## 多人表演公式\n\n多人镜头里只让一个人主动作，另一个人反应。\n\n```text\nA 行动：递出 / 后退 / 伸手 / 转身。\nB 反应：停顿 / 看向道具 / 皱眉 / 接住 / 避开。\n```\n\n不要写两个人同时“深情对视并走近又递东西”。这类描述会让动作平均化。",
+          "keywords": [
+            "action",
+            "and",
+            "microreaction",
+            "microreaction.md",
+            "motivation",
+            "performance",
+            "多人表演公式"
+          ],
+          "hash": "sha256:092358eca5ffeef53dcd4ef0c6c6ce5cd667451df7c4086d5985a4b968ea9e23",
+          "tokenEstimate": 34,
+          "sourceHeading": "多人表演公式"
+        },
+        {
+          "id": "微反应库-05",
+          "title": "微反应库",
+          "summary": "- 眨眼慢半拍。 - 指尖收紧后松开。 - 视线先看道具，再看对方。",
+          "content": "## 微反应库\n\n- 眨眼慢半拍。\n- 指尖收紧后松开。\n- 视线先看道具，再看对方。\n- 肩膀随呼吸轻微起伏。\n- 嘴角想说话但停住。\n- 重心从后脚移到前脚。\n- 接住道具后手腕微微下沉。",
+          "keywords": [
+            "action",
+            "and",
+            "microreaction",
+            "microreaction.md",
+            "motivation",
+            "performance",
+            "微反应库"
+          ],
+          "hash": "sha256:f3d0b209eddaa35166c954bf32cb4c16e6f611ed17268d9c15a0e2ff4b3bb4db",
+          "tokenEstimate": 24,
+          "sourceHeading": "微反应库"
+        },
+        {
+          "id": "qa-检查-06",
+          "title": "QA 检查",
+          "summary": "- 角色动作是否有触发原因。 - 微反应是否小而具体。 - 角色是否没有无意义地看镜头。",
+          "content": "## QA 检查\n\n- 角色动作是否有触发原因。\n- 微反应是否小而具体。\n- 角色是否没有无意义地看镜头。\n- 多人镜头是否避免同时复杂表演。",
+          "keywords": [
+            "action",
+            "and",
+            "microreaction",
+            "microreaction.md",
+            "motivation",
+            "performance",
+            "qa",
+            "检查"
+          ],
+          "hash": "sha256:92a3a98ad9e82e8cc5e2c19881b0061df86c62ad9116d919c21fc02e63f8c1b5",
+          "tokenEstimate": 18,
+          "sourceHeading": "QA 检查"
+        }
+      ]
+    },
+    {
       "id": "performance/core-performance",
       "version": "1.0.0",
       "hash": "sha256:7dd0ee35756d976bcf431bfd1982b39c3bd1770a025272377723f3dfb20506f9",
@@ -2536,6 +3245,334 @@
           "hash": "sha256:62120704b321df913201b66f386d56e905ce1477fcfbd5f6fe01e641cf6d5877",
           "tokenEstimate": 32,
           "sourceHeading": "Intake behavior"
+        }
+      ]
+    },
+    {
+      "id": "prompt/aigc-video-directing-workflow",
+      "version": "1.0.0",
+      "hash": "sha256:d1b78278fe9b90068c875a57e5a7f1b29485d4c52920c03b5d9ac6f298d78ef3",
+      "path": "resources/knowledge/prompt/aigc-video-directing-workflow.md",
+      "type": "external_imported",
+      "category": "prompt",
+      "title": "AIGC Video Directing Workflow",
+      "summary": "Super-i AIGC 视频教程沉淀：参考图职责分工、先素材分析再分镜、无字画面分层、动作动机/微反应和短视频时间线拆分。",
+      "tags": [
+        "aigc",
+        "commercial-video",
+        "prompt",
+        "reference-role",
+        "seedance",
+        "storyflow",
+        "timeline",
+        "video",
+        "分镜",
+        "动作动机",
+        "参考图",
+        "微反应",
+        "无字画面",
+        "时间线拆分",
+        "素材分析",
+        "职责分工"
+      ],
+      "applicableTaskPurposes": [
+        "keyframe",
+        "i2v",
+        "video",
+        "video_generation",
+        "visual_generation",
+        "visual_audit",
+        "regeneration_plan"
+      ],
+      "applicableProviderSlots": [
+        "image.generate",
+        "image.edit",
+        "image.reference_asset",
+        "video.i2v"
+      ],
+      "dependencies": [
+        {
+          "packId": "prompt/core-prompt-templates",
+          "optional": true,
+          "reason": "Base prompt compiler structure."
+        },
+        {
+          "packId": "visual-memory/reference-authority",
+          "optional": true,
+          "reason": "Reference images still need authority and QA state."
+        },
+        {
+          "packId": "keyframe-pair/action-continuity",
+          "optional": true,
+          "reason": "Timeline chunks should become bounded keyframe/video tasks."
+        }
+      ],
+      "conflicts": [],
+      "maxInjectionTokens": 720,
+      "trustLevel": "verified",
+      "verificationStatus": "verified",
+      "verificationReportId": "manual_distillation:super-i_export_ai_2026-05-21",
+      "conflictAcknowledged": false,
+      "enabled": true,
+      "defaultEnabled": false,
+      "createdAt": "2026-05-21T00:00:00.000Z",
+      "updatedAt": "2026-05-21T00:00:00.000Z",
+      "sourcePath": "prompt/aigc-video-directing-workflow.md",
+      "snippets": [
+        {
+          "id": "aigc-video-directing-workflow-01",
+          "title": "AIGC Video Directing Workflow",
+          "summary": "AIGC Video Directing Workflow 更新时间：20260521 用途：把 Superi 教程里对 Vibe Director 最有价值的 AIGC 视频经验沉淀成可注入规则。这个包只保留方法，不复制教程素材或大体积 assets。",
+          "content": "# AIGC Video Directing Workflow\n\n更新时间：2026-05-21\n\n用途：把 Super-i 教程里对 Vibe Director 最有价值的 AIGC 视频经验沉淀成可注入规则。这个包只保留方法，不复制教程素材或大体积 assets。",
+          "keywords": [
+            "aigc",
+            "AIGC",
+            "Directing",
+            "prompt",
+            "reference",
+            "seedance",
+            "shot",
+            "storyflow",
+            "timeline",
+            "video",
+            "Video",
+            "Workflow",
+            "分镜",
+            "动作动机",
+            "参考图",
+            "微反应",
+            "无字画面",
+            "时间线拆分",
+            "素材分析",
+            "职责分工"
+          ],
+          "hash": "sha256:d0a03232327dc0c9f9b314412b9c3bbd6f36e15c7f061d87cacc4cc05b5267f8",
+          "tokenEstimate": 34,
+          "sourceHeading": "AIGC Video Directing Workflow"
+        },
+        {
+          "id": "核心判断-02",
+          "title": "核心判断",
+          "summary": "核心判断 AIGC 视频生成不要从“一句完整大 prompt”直接开始。更稳的路径是： 1. 先把参考图、文本信息和视频目标拆成职责清楚的素材包。 2. 先做素材分析和视频策略判断，再生成分镜或时间线脚本。 3. 视频模型只负责无字画面、动作、镜头和视觉连续性；口播、字幕和品牌文字交给后期层。 4. 人物动作必须有行为动机和微反应，不要只写“站着、回头、微笑...",
+          "content": "## 核心判断\n\nAIGC 视频生成不要从“一句完整大 prompt”直接开始。更稳的路径是：\n\n1. 先把参考图、文本信息和视频目标拆成职责清楚的素材包。\n2. 先做素材分析和视频策略判断，再生成分镜或时间线脚本。\n3. 视频模型只负责无字画面、动作、镜头和视觉连续性；口播、字幕和品牌文字交给后期层。\n4. 人物动作必须有行为动机和微反应，不要只写“站着、回头、微笑”。\n5. 短视频按时间段拆成镜头单元，每段只承载一个视觉重点。",
+          "keywords": [
+            "aigc",
+            "prompt",
+            "reference",
+            "seedance",
+            "shot",
+            "storyflow",
+            "timeline",
+            "video",
+            "分镜",
+            "动作动机",
+            "参考图",
+            "微反应",
+            "无字画面",
+            "时间线拆分",
+            "核心判断",
+            "素材分析",
+            "职责分工"
+          ],
+          "hash": "sha256:b40ea9ebc7188026b5456a38003d4bc338a86084cafd1ac0a0e01d46befd94aa",
+          "tokenEstimate": 55,
+          "sourceHeading": "核心判断"
+        },
+        {
+          "id": "参考图职责分工-03",
+          "title": "参考图职责分工",
+          "summary": "参考图职责分工 每张参考图必须先被标注职责，不能默认当成“成片目标”。 参考类型 只负责 不负责 人物图 五官、年龄感、发型、气质、穿搭倾向、身份可信度 原背景、原构图、最终场景 产品图 颜色、版型、材质、结构细节、卖点证据 人物姿势、场景氛围、广告文案 场景图 空间、灯光方向、生产/生活环境、可信氛围 人物身份、产品细节 风格图 光感、色调、镜头质感、画面...",
+          "content": "## 参考图职责分工\n\n每张参考图必须先被标注职责，不能默认当成“成片目标”。\n\n| 参考类型 | 只负责 | 不负责 |\n|---|---|---|\n| 人物图 | 五官、年龄感、发型、气质、穿搭倾向、身份可信度 | 原背景、原构图、最终场景 |\n| 产品图 | 颜色、版型、材质、结构细节、卖点证据 | 人物姿势、场景氛围、广告文案 |\n| 场景图 | 空间、灯光方向、生产/生活环境、可信氛围 | 人物身份、产品细节 |\n| 风格图 | 光感、色调、镜头质感、画面密度 | 主体结构、故事动作 |\n\nPrompt 编译时要显式写出职责，例如：\n\n- `参考图1只用于老板人物形象，不使用其原始背景。`\n- `参考图2只用于服装颜色、版型、纽扣、袖口、纹理等产品细节。`\n- `参考图3作为主要工厂环境，人物需要自然融合到该环境中。`\n\n如果文本和参考图在同一维度上重复或冲突，优先让文本定义结构，让参考图约束单一视觉维度。参考图的价值是减少随机性，不是替代文本把需求说清楚。",
+          "keywords": [
+            "aigc",
+            "prompt",
+            "reference",
+            "seedance",
+            "shot",
+            "storyflow",
+            "timeline",
+            "video",
+            "分镜",
+            "动作动机",
+            "参考图",
+            "参考图职责分工",
+            "微反应",
+            "无字画面",
+            "时间线拆分",
+            "素材分析",
+            "职责分工"
+          ],
+          "hash": "sha256:db15647eda6fe8f909b564ceb1b293d2d4b99419e97f102aeffc7db36a2a89c9",
+          "tokenEstimate": 110,
+          "sourceHeading": "参考图职责分工"
+        },
+        {
+          "id": "先素材分析再分镜-04",
+          "title": "先素材分析再分镜",
+          "summary": "先素材分析再分镜 正式生成分镜前，先跑一轮只分析、不写脚本的素材策略。 素材分析至少回答： 人物适合承担什么角色：创始人、质检人、使用者、旁观者、被影响的人。 产品最适合被镜头证明的一个核心卖点是什么。 场景能提供什么信任背书或情绪背景。 文本信息里哪些卖点可以表达，哪些不能虚构。 这条视频的主目标是转化、信任、种草、情绪推进还是单一卖点强化。 哪些画面不该...",
+          "content": "## 先素材分析再分镜\n\n正式生成分镜前，先跑一轮只分析、不写脚本的素材策略。\n\n素材分析至少回答：\n\n- 人物适合承担什么角色：创始人、质检人、使用者、旁观者、被影响的人。\n- 产品最适合被镜头证明的一个核心卖点是什么。\n- 场景能提供什么信任背书或情绪背景。\n- 文本信息里哪些卖点可以表达，哪些不能虚构。\n- 这条视频的主目标是转化、信任、种草、情绪推进还是单一卖点强化。\n- 哪些画面不该出现，避免模型补出不存在的资质、价格、销量、品牌字样。\n\n第二步才把分析结果编译成 Story Flow / ShotSpec / Seedance 画面提示词。这样可以把“判断”和“生成”拆开，减少一上来就把参考图、卖点、口播、分镜全部混在一起的指令冲突。",
+          "keywords": [
+            "aigc",
+            "prompt",
+            "reference",
+            "seedance",
+            "shot",
+            "storyflow",
+            "timeline",
+            "video",
+            "先素材分析再分镜",
+            "分镜",
+            "动作动机",
+            "参考图",
+            "微反应",
+            "无字画面",
+            "时间线拆分",
+            "素材分析",
+            "职责分工"
+          ],
+          "hash": "sha256:ac8e6f91ed4c31c09fbb0d2be9449dd56958c78f0a5924676d3cc197645dba5d",
+          "tokenEstimate": 82,
+          "sourceHeading": "先素材分析再分镜"
+        },
+        {
+          "id": "无字画面分层-05",
+          "title": "无字画面分层",
+          "summary": "无字画面分层 视频生成提示词默认只描述画面，不让视频模型生成文字。 必须分层： 画面提示词：人物、产品、场景、动作、镜头运动、光线、构图、时长和画幅。 后期口播文案：单独字段，供剪辑或 TTS 使用。 字幕/品牌文字：后期图层，不进入 Seedance / i2v 画面 prompt。 硬性负约束： 无任何文字。 无字幕。 无标语。 无品牌字样。 无屏幕文字...",
+          "content": "## 无字画面分层\n\n视频生成提示词默认只描述画面，不让视频模型生成文字。\n\n必须分层：\n\n- `画面提示词`：人物、产品、场景、动作、镜头运动、光线、构图、时长和画幅。\n- `后期口播文案`：单独字段，供剪辑或 TTS 使用。\n- `字幕/品牌文字`：后期图层，不进入 Seedance / i2v 画面 prompt。\n\n硬性负约束：\n\n- 无任何文字。\n- 无字幕。\n- 无标语。\n- 无品牌字样。\n- 无屏幕文字。\n- 无海报文字。\n- 口播只作为后期声音参考，不要求模型在画面中呈现文字。",
+          "keywords": [
+            "aigc",
+            "prompt",
+            "reference",
+            "seedance",
+            "shot",
+            "storyflow",
+            "timeline",
+            "video",
+            "分镜",
+            "动作动机",
+            "参考图",
+            "微反应",
+            "无字画面",
+            "无字画面分层",
+            "时间线拆分",
+            "素材分析",
+            "职责分工"
+          ],
+          "hash": "sha256:0d023e157362a37be2b2cf274c7c1c0d5871f07f7c8cf852f3a2c3f5e554e746",
+          "tokenEstimate": 63,
+          "sourceHeading": "无字画面分层"
+        },
+        {
+          "id": "动作动机和微反应-06",
+          "title": "动作动机和微反应",
+          "summary": "动作动机和微反应 人物真实感来自“处境 动机 连续动作 微反应”，不是来自脸部细节堆砌。 单人物动作公式： 可注入的微反应包括： 自然眨眼、轻微呼吸、肩膀或衣袖随呼吸起伏。 眼神短暂停顿、视线从物件移向画外。 手指收紧、松开、翻看、轻触材质。 嘴部自然开合、轻微手势，但不生成文字。 身体重心小幅转移，动作克制，不夸张表演。 多人物镜头里，至少区分一个人行动、...",
+          "content": "## 动作动机和微反应\n\n人物真实感来自“处境 -> 动机 -> 连续动作 -> 微反应”，不是来自脸部细节堆砌。\n\n单人物动作公式：\n\n```text\n人物身份 + 具体场景 + 当前状态 + 动作原因 + 连续动作 + 微弱生命反应 + 镜头语言\n```\n\n可注入的微反应包括：\n\n- 自然眨眼、轻微呼吸、肩膀或衣袖随呼吸起伏。\n- 眼神短暂停顿、视线从物件移向画外。\n- 手指收紧、松开、翻看、轻触材质。\n- 嘴部自然开合、轻微手势，但不生成文字。\n- 身体重心小幅转移，动作克制，不夸张表演。\n\n多人物镜头里，至少区分一个人行动、另一个人反应。不要让所有角色同时平均运动。",
+          "keywords": [
+            "aigc",
+            "prompt",
+            "reference",
+            "seedance",
+            "shot",
+            "storyflow",
+            "timeline",
+            "video",
+            "分镜",
+            "动作动机",
+            "动作动机和微反应",
+            "参考图",
+            "微反应",
+            "无字画面",
+            "时间线拆分",
+            "素材分析",
+            "职责分工"
+          ],
+          "hash": "sha256:f4c9878de1eca5ccf52c772565f69d88b00ac1efd2662956fee19902101de92d",
+          "tokenEstimate": 73,
+          "sourceHeading": "动作动机和微反应"
+        },
+        {
+          "id": "时间线拆分-07",
+          "title": "时间线拆分",
+          "summary": "时间线拆分 短视频要按时间线拆成可执行镜头块，不把多个意图压进一个长 prompt。 15 秒商业短片的默认结构可用： 时间段 视觉任务 写法重点 03 秒 钩子或身份建立 一个最强画面，不塞完整背景介绍 37 秒 产品证据 细节、材质、使用动作或卖点证明 711 秒 场景/信任背书 工厂、空间、环境、他人反应或流程证据 1115 秒 收束和转化情绪 人物看...",
+          "content": "## 时间线拆分\n\n短视频要按时间线拆成可执行镜头块，不把多个意图压进一个长 prompt。\n\n15 秒商业短片的默认结构可用：\n\n| 时间段 | 视觉任务 | 写法重点 |\n|---|---|---|\n| 0-3 秒 | 钩子或身份建立 | 一个最强画面，不塞完整背景介绍 |\n| 3-7 秒 | 产品证据 | 细节、材质、使用动作或卖点证明 |\n| 7-11 秒 | 场景/信任背书 | 工厂、空间、环境、他人反应或流程证据 |\n| 11-15 秒 | 收束和转化情绪 | 人物看向镜头、完成动作、留出口播位置 |\n\n每个时间段都应包含：\n\n- 画面内容。\n- 镜头运动。\n- 画面目的。\n- 使用了哪些参考图及其职责。\n- 无字画面提示词。\n- 后期口播文案。\n\n时间段不是越细越好。对 5-10 秒视频，优先保留一个核心动作和一个从属动作；复杂动作拆成多个 keyframe pair 或多个视频任务。",
+          "keywords": [
+            "aigc",
+            "prompt",
+            "reference",
+            "seedance",
+            "shot",
+            "storyflow",
+            "timeline",
+            "video",
+            "分镜",
+            "动作动机",
+            "参考图",
+            "微反应",
+            "无字画面",
+            "时间线拆分",
+            "素材分析",
+            "职责分工"
+          ],
+          "hash": "sha256:166f0d98aa825a90abcb440aec2b9afd597b451f7669dbb5b8e29940655f11ca",
+          "tokenEstimate": 102,
+          "sourceHeading": "时间线拆分"
+        },
+        {
+          "id": "qa-检查-08",
+          "title": "QA 检查",
+          "summary": "QA 检查 生成前检查： 每张参考图是否只承担一个主要职责。 是否先有素材分析结论，再有分镜/时间线。 画面提示词是否剔除了字幕、品牌字、屏幕文字和后期口播。 人物是否有行为动机，而不是只有动作表面。 微反应是否克制且服务当前处境。 每个时间段是否只有一个视觉重点。 生成后检查： 人物是否被错误留在参考图原背景中。 产品细节是否被场景或人物参考污染。 场景是...",
+          "content": "## QA 检查\n\n生成前检查：\n\n- 每张参考图是否只承担一个主要职责。\n- 是否先有素材分析结论，再有分镜/时间线。\n- 画面提示词是否剔除了字幕、品牌字、屏幕文字和后期口播。\n- 人物是否有行为动机，而不是只有动作表面。\n- 微反应是否克制且服务当前处境。\n- 每个时间段是否只有一个视觉重点。\n\n生成后检查：\n\n- 人物是否被错误留在参考图原背景中。\n- 产品细节是否被场景或人物参考污染。\n- 场景是否出现未经提供的资质、销量、奖项、价格或品牌字样。\n- 口播/字幕是否误入画面。\n- 动作是否像状态流，而不是多个动词互相打架。",
+          "keywords": [
+            "aigc",
+            "prompt",
+            "QA",
+            "reference",
+            "seedance",
+            "shot",
+            "storyflow",
+            "timeline",
+            "video",
+            "分镜",
+            "动作动机",
+            "参考图",
+            "微反应",
+            "无字画面",
+            "时间线拆分",
+            "检查",
+            "素材分析",
+            "职责分工"
+          ],
+          "hash": "sha256:d7a113ebbee44e43b8e523d7f647f11c071e79daf23014e609d37811767906e9",
+          "tokenEstimate": 68,
+          "sourceHeading": "QA 检查"
+        },
+        {
+          "id": "参考来源-09",
+          "title": "参考来源",
+          "summary": "参考来源 Superi 导出教程索引：/Users/lichenhao/Desktop/刺猬星球/superiexport/ai/tutorialindex.csv Superi 教程结构分析：/Users/lichenhao/Desktop/刺猬星球/superiexport/ai/analysis.md Superi AI 可读正文：/Users/lic...",
+          "content": "## 参考来源\n\n- Super-i 导出教程索引：`/Users/lichenhao/Desktop/刺猬星球/super-i_export/ai/tutorial_index.csv`\n- Super-i 教程结构分析：`/Users/lichenhao/Desktop/刺猬星球/super-i_export/ai/analysis.md`\n- Super-i AI 可读正文：`/Users/lichenhao/Desktop/刺猬星球/super-i_export/ai/all_tutorials.jsonl`\n- 重点参考教程：`info-2834`、`info-2832`、`info-2829`、`info-2797`、`info-2794`、`info-2634`、`info-2597`",
+          "keywords": [
+            "aigc",
+            "prompt",
+            "reference",
+            "seedance",
+            "shot",
+            "storyflow",
+            "timeline",
+            "video",
+            "分镜",
+            "动作动机",
+            "参考图",
+            "参考来源",
+            "微反应",
+            "无字画面",
+            "时间线拆分",
+            "素材分析",
+            "职责分工"
+          ],
+          "hash": "sha256:023d783271a341dae5580ae5a54c4beb6ccbeddbae348df707513fc66b753a59",
+          "tokenEstimate": 89,
+          "sourceHeading": "参考来源"
         }
       ]
     },
@@ -5968,6 +7005,164 @@
           "hash": "sha256:0d4d02ed67d98df1cee3ff4e857a4610a6ca620164dd6a82e3acf9f0ef695526",
           "tokenEstimate": 47,
           "sourceHeading": "Image2 checkpoint"
+        }
+      ]
+    },
+    {
+      "id": "visual-memory/reference-dimension-locking",
+      "version": "1.0.0",
+      "hash": "sha256:6feb288708d8ebfce57f26ec3dce8f78f933c39400257d2ababf9add86e89185",
+      "path": "resources/knowledge/visual-memory/reference-dimension-locking.md",
+      "type": "external_imported",
+      "category": "qa",
+      "title": "Reference Dimension Locking",
+      "summary": "更新时间：2026-05-22 用途：把参考图从“一堆图全塞进去”改成“每张图只锁一个维度”，减少 Image2 / Seedance 参考冲突和角色漂移。 参考图不是最终画面目标，而是某个维度的锁。 每张图必须标注：",
+      "tags": [
+        "dimension",
+        "locking",
+        "locking.md",
+        "memory",
+        "reference",
+        "visual"
+      ],
+      "applicableTaskPurposes": [
+        "qa",
+        "audit",
+        "visual_audit",
+        "video_audit",
+        "continuity_audit",
+        "regeneration_plan",
+        "story_audit"
+      ],
+      "applicableProviderSlots": [
+        "image.generate",
+        "image.edit",
+        "image.reference_asset",
+        "video.i2v",
+        "audio.tts",
+        "audio.music"
+      ],
+      "dependencies": [],
+      "conflicts": [],
+      "maxInjectionTokens": 750,
+      "trustLevel": "verified",
+      "verificationStatus": "verified",
+      "verificationReportId": "knowledge_import_report:deterministic_sha256_copy",
+      "conflictAcknowledged": false,
+      "enabled": true,
+      "defaultEnabled": false,
+      "createdAt": "2026-05-22T00:00:00.000Z",
+      "updatedAt": "2026-05-22T00:00:00.000Z",
+      "sourcePath": "visual-memory/reference-dimension-locking.md",
+      "snippets": [
+        {
+          "id": "reference-dimension-locking-01",
+          "title": "Reference Dimension Locking",
+          "summary": "更新时间：2026-05-22 用途：把参考图从“一堆图全塞进去”改成“每张图只锁一个维度”，减少 Image2 / Seedance 参考冲突和角色漂移。",
+          "content": "# Reference Dimension Locking\n\n更新时间：2026-05-22\n\n用途：把参考图从“一堆图全塞进去”改成“每张图只锁一个维度”，减少 Image2 / Seedance 参考冲突和角色漂移。",
+          "keywords": [
+            "dimension",
+            "locking",
+            "locking.md",
+            "memory",
+            "reference",
+            "visual"
+          ],
+          "hash": "sha256:17c6ab1c079ccae44a84e0bdb7d5bb13684f9b3474412f45398d4f4cd30f99db",
+          "tokenEstimate": 28,
+          "sourceHeading": "Reference Dimension Locking"
+        },
+        {
+          "id": "核心判断-02",
+          "title": "核心判断",
+          "summary": "参考图不是最终画面目标，而是某个维度的锁。 每张图必须标注： - 锁什么：角色身份、发型、服装轮廓、场景天气、空间布局、道具形状、光线质感。",
+          "content": "## 核心判断\n\n参考图不是最终画面目标，而是某个维度的锁。\n\n每张图必须标注：\n\n- 锁什么：角色身份、发型、服装轮廓、场景天气、空间布局、道具形状、光线质感。\n- 不锁什么：原背景、原姿势、原构图、原镜头角度、无关道具、文字、水印。\n- 冲突时谁优先：角色图管身份，场景图管天气和空间，分镜图管动作和构图，道具图管物件外形。",
+          "keywords": [
+            "dimension",
+            "locking",
+            "locking.md",
+            "memory",
+            "reference",
+            "visual",
+            "核心判断"
+          ],
+          "hash": "sha256:6e9e382de361797f3423eb795bc1da7a5c5a64dff245ede4647f7dd365c59962",
+          "tokenEstimate": 41,
+          "sourceHeading": "核心判断"
+        },
+        {
+          "id": "全能参考优先级-03",
+          "title": "全能参考优先级",
+          "summary": "Seedance 全能参考推荐顺序： 1. 黑白分镜图：只管镜头顺序、构图、站位、动作方向、粗略切点。 2. 场景基准图：只管地点、天气、时间、空间氛围。",
+          "content": "## 全能参考优先级\n\nSeedance 全能参考推荐顺序：\n\n1. 黑白分镜图：只管镜头顺序、构图、站位、动作方向、粗略切点。\n2. 场景基准图：只管地点、天气、时间、空间氛围。\n3. 角色参考图：只管身份、发型、服装轮廓、年龄感、体型。\n4. 道具参考图：只管形状、比例、关键细节和手部交互。\n5. 音频参考：只管对白节奏、表演节奏或声音气质。\n\n如果分镜图里的人物和角色参考不一致，角色参考优先。分镜图里的临时人物只当占位。",
+          "keywords": [
+            "dimension",
+            "locking",
+            "locking.md",
+            "memory",
+            "reference",
+            "visual",
+            "全能参考优先级"
+          ],
+          "hash": "sha256:c1439c9988c8610ca8027e242abf0ef567794cfa11c29afc1e7e7991135b94e0",
+          "tokenEstimate": 54,
+          "sourceHeading": "全能参考优先级"
+        },
+        {
+          "id": "image2-分镜图用图策略-04",
+          "title": "Image2 分镜图用图策略",
+          "summary": "Image2 做黑白分镜时，不要把所有参考图当成强约束。 - 可以带一张场景基准图稳定天气、空间、环境。 - 可以带锁定角色/道具图防止身份和关键物件漂移。",
+          "content": "## Image2 分镜图用图策略\n\nImage2 做黑白分镜时，不要把所有参考图当成强约束。\n\n- 可以带一张场景基准图稳定天气、空间、环境。\n- 可以带锁定角色/道具图防止身份和关键物件漂移。\n- 不要让风格图、成片帧、失败候选图成为上游权威。\n- 不要把本地文件路径写进 prompt。",
+          "keywords": [
+            "dimension",
+            "image2",
+            "locking",
+            "locking.md",
+            "memory",
+            "reference",
+            "visual",
+            "分镜图用图策略"
+          ],
+          "hash": "sha256:b2839bb07aec445ada9157cc6329d21640e56639a33b1af7a8bc46605208831d",
+          "tokenEstimate": 37,
+          "sourceHeading": "Image2 分镜图用图策略"
+        },
+        {
+          "id": "常见失败-05",
+          "title": "常见失败",
+          "summary": "- 角色参考图带着原背景，导致新镜头场景污染。 - 场景参考图压过分镜构图，角色站位错乱。 - 分镜图里角色画错，Seedance 把分镜临时人物当真实角色。",
+          "content": "## 常见失败\n\n- 角色参考图带着原背景，导致新镜头场景污染。\n- 场景参考图压过分镜构图，角色站位错乱。\n- 分镜图里角色画错，Seedance 把分镜临时人物当真实角色。\n- 多张参考图同时管服装/身份/光影，模型混合出第三种人。",
+          "keywords": [
+            "dimension",
+            "locking",
+            "locking.md",
+            "memory",
+            "reference",
+            "visual",
+            "常见失败"
+          ],
+          "hash": "sha256:5ecd82ea735db3a8d5c5cf46ba297789e0235aa172e634541c872bef59feeefe",
+          "tokenEstimate": 30,
+          "sourceHeading": "常见失败"
+        },
+        {
+          "id": "qa-检查-06",
+          "title": "QA 检查",
+          "summary": "- 每张参考图是否只有一个主要职责。 - 是否有冲突优先级。 - 分镜图是否只管导演意图，不管角色最终身份。",
+          "content": "## QA 检查\n\n- 每张参考图是否只有一个主要职责。\n- 是否有冲突优先级。\n- 分镜图是否只管导演意图，不管角色最终身份。\n- 候选/失败/needs_review 图是否没有进入正向参考权威。",
+          "keywords": [
+            "dimension",
+            "locking",
+            "locking.md",
+            "memory",
+            "qa",
+            "reference",
+            "visual",
+            "检查"
+          ],
+          "hash": "sha256:9cd3679083c3d7b7b4e19fa34aa7f0b6b212c94d24d18a21fa8a4403536acdbe",
+          "tokenEstimate": 25,
+          "sourceHeading": "QA 检查"
         }
       ]
     }

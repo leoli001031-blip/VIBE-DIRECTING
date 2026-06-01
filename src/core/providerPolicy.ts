@@ -1,33 +1,74 @@
 import type { AuditIssue, GenerationJob, ProviderPolicy, ProviderRule } from "./types";
 
+export const IMAGE2_GENERATE_MAX_CONCURRENCY = 3;
+export const IMAGE2_GENERATE_RETRY_CONCURRENCY = 2;
+export const IMAGE2_GENERATE_MAX_AUTO_RETRIES = 2;
+export const IMAGE2_GENERATE_DEFAULT_ASPECT_RATIO = "16:9";
+export const JIMENG_VIDEO_DEFAULT_RESOLUTION = "720p";
+export const JIMENG_COMPATIBLE_VIDEO_720P_SIZE_PRESETS = {
+  "16:9": "1280x720",
+  "4:3": "960x720",
+  "1:1": "960x960",
+  "3:4": "720x960",
+  "9:16": "720x1280",
+  "21:9": "1456x624",
+} as const;
+export type JimengCompatibleVideoAspectRatio = keyof typeof JIMENG_COMPATIBLE_VIDEO_720P_SIZE_PRESETS;
+export const IMAGE2_GENERATE_SIZE_PRESETS = JIMENG_COMPATIBLE_VIDEO_720P_SIZE_PRESETS;
+export type Image2GenerateAspectRatio = keyof typeof IMAGE2_GENERATE_SIZE_PRESETS;
+export const IMAGE2_GENERATE_DEFAULT_SIZE = IMAGE2_GENERATE_SIZE_PRESETS[IMAGE2_GENERATE_DEFAULT_ASPECT_RATIO];
+export const IMAGE2_REFERENCE_EDIT_MAX_CONCURRENCY = 3;
+export const IMAGE2_REFERENCE_EDIT_RETRY_CONCURRENCY = 2;
+export const IMAGE2_REFERENCE_EDIT_MAX_AUTO_RETRIES = 2;
+
+export function isJimengCompatibleVideoAspectRatio(value: string | undefined): value is JimengCompatibleVideoAspectRatio {
+  return Boolean(value && value in JIMENG_COMPATIBLE_VIDEO_720P_SIZE_PRESETS);
+}
+
+export function isImage2GenerateAspectRatio(value: string | undefined): value is Image2GenerateAspectRatio {
+  return Boolean(value && value in IMAGE2_GENERATE_SIZE_PRESETS);
+}
+
+export function image2GenerateSizeForAspectRatio(aspectRatio: string | undefined): string {
+  return isImage2GenerateAspectRatio(aspectRatio)
+    ? IMAGE2_GENERATE_SIZE_PRESETS[aspectRatio]
+    : IMAGE2_GENERATE_DEFAULT_SIZE;
+}
+
+export function jimengCompatibleVideoInputSizeForAspectRatio(aspectRatio: string | undefined): string {
+  return isJimengCompatibleVideoAspectRatio(aspectRatio)
+    ? JIMENG_COMPATIBLE_VIDEO_720P_SIZE_PRESETS[aspectRatio]
+    : JIMENG_COMPATIBLE_VIDEO_720P_SIZE_PRESETS[IMAGE2_GENERATE_DEFAULT_ASPECT_RATIO];
+}
+
 export const defaultProviderPolicy: ProviderPolicy = {
   strictImageProvider: "registry_default",
   rules: [
     {
       slot: "image.generate",
-      activeProvider: "openai-image2-codex-cli",
+      activeProvider: "lanyi-image2",
       executionState: "active",
-      allowedProviders: ["openai-image2-codex-cli", "openai-image2-api"],
+      allowedProviders: ["lanyi-image2", "openai-image2-agent-cli", "openai-image2-api"],
       forbiddenProviders: ["dreamina", "jimeng", "seedream"],
       allowedModes: ["text2image"],
       forbiddenFallbacks: ["image2image_to_text2image"],
-      concurrency: "adapter",
+      concurrency: IMAGE2_GENERATE_MAX_CONCURRENCY,
     },
     {
       slot: "image.edit",
       activeProvider: "openai-image2-api",
       executionState: "active",
-      allowedProviders: ["openai-image2-codex-cli", "openai-image2-api"],
+      allowedProviders: ["openai-image2-agent-cli", "openai-image2-api"],
       forbiddenProviders: ["dreamina", "jimeng", "seedream"],
       allowedModes: ["image2image"],
       forbiddenFallbacks: ["image2image_to_text2image", "reference_edit_to_text2image"],
-      concurrency: "adapter",
+      concurrency: IMAGE2_REFERENCE_EDIT_MAX_CONCURRENCY,
     },
     {
       slot: "image.reference_asset",
       activeProvider: "openai-image2-api",
       executionState: "active",
-      allowedProviders: ["openai-image2-codex-cli", "openai-image2-api"],
+      allowedProviders: ["openai-image2-agent-cli", "openai-image2-api"],
       forbiddenProviders: ["dreamina", "jimeng", "seedream"],
       allowedModes: ["text2image", "image2image"],
       forbiddenFallbacks: ["image2image_to_text2image"],

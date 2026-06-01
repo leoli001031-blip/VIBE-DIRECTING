@@ -1,3 +1,4 @@
+import { WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT } from "./statusConstants";
 import type { FileSnapshot, ManifestMatchReport } from "./manifestMatcher";
 import type {
   CheckpointResumeDecision,
@@ -24,9 +25,13 @@ export interface BuildCheckpointResumeHarnessInput {
 
 export const checkpointResumeHarnessHardLocks: CheckpointResumeHarnessState["hardLocks"] = {
   dryRunOnly: true,
-  providerSubmissionForbidden: true,
   liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
   noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   noAutoSkipWithoutQa: true,
   workerSelfReportCannotComplete: true,
   tempCandidateCannotResumeAsFormal: true,
@@ -133,7 +138,7 @@ export function buildCheckpointResumeHarnessState(input: BuildCheckpointResumeHa
     const hasTempOrDerivative = watcherStreams.some((stream) =>
       ["temp_candidate", "provider_ready_derivative", "postprocess_recoverable"].includes(stream.artifactClass),
     );
-    const workerSelfReportOnly = watcherStreams.some((stream) => stream.artifactClass === "worker_exit_without_expected_output");
+    const workerSelfReportOnly = watcherStreams.some((stream) => stream.artifactClass === WORKER_EXIT_WITHOUT_EXPECTED_OUTPUT);
     const canPromoteToFormal = Boolean(promotion?.canPromoteToFormal);
     const blockedByGate = taskPlan.status === "blocked" || health?.healthStatus === "blocked" || health?.healthStatus === "failed";
     const formalGatePassed = canPromoteToFormal && manifestMatched && qaStatus === "pass" && !staleSource;

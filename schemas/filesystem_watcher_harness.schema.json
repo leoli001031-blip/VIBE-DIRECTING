@@ -28,7 +28,7 @@
       "items": { "$ref": "#/$defs/monitoredKind" },
       "uniqueItems": true,
       "allOf": [
-        { "contains": { "const": "codex_temp_generated_images" } },
+        { "contains": { "const": "agent_temp_generated_images" } },
         { "contains": { "const": "project_outputs" } },
         { "contains": { "const": "reports" } },
         { "contains": { "const": "videos" } },
@@ -86,7 +86,7 @@
   "$defs": {
     "monitoredKind": {
       "type": "string",
-      "enum": ["codex_temp_generated_images", "project_outputs", "reports", "videos", "audio"]
+      "enum": ["agent_temp_generated_images", "project_outputs", "reports", "videos", "audio"]
     },
     "artifactClass": {
       "type": "string",

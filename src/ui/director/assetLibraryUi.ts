@@ -16,6 +16,7 @@ export function cleanLabel(value: string) {
   return value
     .replace(/^asset_/i, "")
     .replace(/_/g, " ")
+    .replace(/\bshot\s+0*(\d+)\b/gi, "镜头 $1")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -40,16 +41,14 @@ export function safeAssetId(value: string, type: AssetLibraryAssetType) {
 }
 
 export function assetLibraryTypeLabel(type: AssetLibraryAssetType) {
-  if (type === "character") return "角色";
-  if (type === "scene") return "场景";
-  if (type === "style") return "风格";
-  if (type === "voice_anchor") return "音源";
-  return "道具";
+  if (type === "character") return "角色参考";
+  if (type === "scene") return "场景/天气参考";
+  if (type === "voice_anchor") return "音频参考";
+  return "道具参考";
 }
 
 export function assetLibraryStatusLabel(status: AssetLibraryUiStatus | AssetLibraryStatus) {
-  if (status === "review" || status === "needs_review") return "review";
-  return status;
+  return status === "locked" ? "已锁定" : "待复核";
 }
 
 export function uiStatusToAssetLibraryStatus(status: AssetLibraryUiStatus): AssetLibraryStatus {
@@ -74,9 +73,17 @@ export function pathOriginForUi(path?: string) {
   return path && /^(?:[A-Za-z]:[\\/]|\/|\/\/|~[\\/])/.test(path) ? "user_selected_import" as const : "project_root_relative" as const;
 }
 
+function blockedImportLabelForUi(sourceKind: string) {
+  if (sourceKind === "failed_output") return "失败画面";
+  if (sourceKind === "shot_output") return "镜头画面";
+  if (sourceKind === "contact_sheet") return "拼图参考";
+  if (sourceKind === "provider_temp_output") return "临时画面";
+  return "参考素材";
+}
+
 export function defaultAssetConstraints(type: AssetLibraryAssetType, name: string) {
   if (type === "character") return [`保持 ${cleanLabel(name)} 的身份、年龄感、发型和服装连续`];
-  if (type === "scene") return [`保持 ${cleanLabel(name)} 的空间布局、主要入口、光源方向和透视关系`];
+  if (type === "scene") return [`保持 ${cleanLabel(name)} 的天气、空间和环境一致，后续视频继续使用`];
   if (type === "style") return [`保持 ${cleanLabel(name)} 的色彩、光比、颗粒和纹理强度一致`];
   if (type === "voice_anchor") return [`保持 ${cleanLabel(name)} 的音色、语速和情绪区间一致`];
   return [`保持 ${cleanLabel(name)} 的形状、材质和使用方式一致`];
@@ -113,11 +120,11 @@ export function assetLibraryUserBlockers(library: AssetLibrarySnapshot) {
   const nonLocked = library.assets.filter((asset) => asset.status !== "locked" && asset.status !== "rejected");
   const noConstraints = library.assets.filter((asset) => !asset.textConstraints.length || asset.blockers.length);
   return uniqueStrings([
-    ...(lockedCharacters.length ? [] : ["缺主角参考"]),
-    ...(lockedScenes.length ? [] : ["缺场景 master"]),
-    ...nonLocked.map((asset) => `${cleanLabel(asset.name)} 未 locked，不能做正式参考`),
-    ...noConstraints.map((asset) => `${cleanLabel(asset.name)} 缺文本约束`),
-    ...library.blockedImports.map((item) => `${item.sourceKind} 已拦截：${item.reason}`),
-    ...validation.errors,
+    ...(lockedCharacters.length ? [] : ["缺角色参考"]),
+    ...(lockedScenes.length ? [] : ["缺场景/天气参考"]),
+    ...nonLocked.map((asset) => `${cleanLabel(asset.name)} 待复核`),
+    ...noConstraints.map((asset) => `${cleanLabel(asset.name)} 待补说明`),
+    ...library.blockedImports.map((item) => `${blockedImportLabelForUi(item.sourceKind)} 待复核`),
+    ...validation.errors.map(() => "参考信息待整理"),
   ]);
 }

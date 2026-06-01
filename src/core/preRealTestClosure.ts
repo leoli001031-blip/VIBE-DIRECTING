@@ -311,7 +311,7 @@ export function applyPreRealTestClosure(
       notes: ["Pre-real-test closure builds a handoff receipt only; it never performs provider transport."],
     },
     appServerCapability: {
-      runtimeKind: "codex_app_server",
+      runtimeKind: "agent_app_server",
       readiness: "ready",
       canUseImageRuntime: true,
       imageRuntimeAvailable: true,

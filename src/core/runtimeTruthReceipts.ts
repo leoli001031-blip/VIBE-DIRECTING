@@ -89,7 +89,7 @@ export interface SemanticQaReceiptV2Payload extends SemanticQaReceiptV2Facts {
   notes: string[];
 }
 
-const requiredQaGateKeys: SemanticQaGateKey[] = ["identity", "scene", "style", "story", "neighbor", "output"];
+const requiredQaGateKeys: SemanticQaGateKey[] = ["identity", "scene", "style", "story", "pair", "prop"];
 
 function normalizeSeverityCounts(counts: Partial<SemanticQaSeverityCounts> | undefined): SemanticQaSeverityCounts {
   return {

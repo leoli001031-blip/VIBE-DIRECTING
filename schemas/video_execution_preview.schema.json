@@ -12,7 +12,8 @@
         "no_vip_channel",
         "no_text_to_video_main_path",
         "no_bgm_in_video_prompt",
-        "start_end_frames_required",
+        "first_frame_video_default",
+        "endpoint_end_frame_optional",
         "subagent_must_use_packet"
       ]
     },

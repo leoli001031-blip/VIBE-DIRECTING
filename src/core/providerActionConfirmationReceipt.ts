@@ -1,4 +1,4 @@
-import type { ProviderSlot, RequiredMode } from "./types";
+import type { BaseHardLocks, ProviderSlot, RequiredMode } from "./types";
 import type {
   ProviderExecutionPermissionGateState,
   ProviderExecutionPermissionRequest,
@@ -88,26 +88,19 @@ export interface ProviderActionConfirmationReceipt {
   warnings: string[];
 }
 
-export interface ProviderActionConfirmationReceiptHardLocks {
-  dryRunOnly: true;
+export interface ProviderActionConfirmationReceiptHardLocks extends BaseHardLocks {
   readOnly: true;
   reviewShellOnly: true;
   receiptPlanOnly: true;
   actionTimeConfirmationRequired: true;
   finalExecutionGateRequired: true;
-  providerSubmissionForbidden: true;
   canSubmitProvider: false;
   providerSubmitAllowed: 0;
-  liveSubmitAllowed: false;
   credentialAccessAllowed: false;
   automaticSubmitAllowed: false;
   credentialStorage: false;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   noApiKeyCreation: true;
   noArbitraryProviderCommand: true;
-  noWorkerSpawn: true;
-  noFileMutation: true;
   fastModelForbidden: true;
   vipChannelForbidden: true;
   textToVideoMainPathForbidden: true;
@@ -180,24 +173,25 @@ export interface BuildProviderActionConfirmationReceiptStateInput {
 
 const hardLocks: ProviderActionConfirmationReceiptHardLocks = {
   dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   readOnly: true,
   reviewShellOnly: true,
   receiptPlanOnly: true,
   actionTimeConfirmationRequired: true,
   finalExecutionGateRequired: true,
-  providerSubmissionForbidden: true,
   canSubmitProvider: false,
   providerSubmitAllowed: 0,
-  liveSubmitAllowed: false,
   credentialAccessAllowed: false,
   automaticSubmitAllowed: false,
   credentialStorage: false,
-  noCredentialRead: true,
-  noCredentialWrite: true,
   noApiKeyCreation: true,
   noArbitraryProviderCommand: true,
-  noWorkerSpawn: true,
-  noFileMutation: true,
   fastModelForbidden: true,
   vipChannelForbidden: true,
   textToVideoMainPathForbidden: true,

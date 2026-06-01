@@ -1,4 +1,4 @@
-import type { ProviderSlot, RequiredMode } from "./types";
+import type { BaseHardLocks, ProviderSlot, RequiredMode } from "./types";
 import type {
   ProviderActionConfirmationReceipt,
   ProviderActionConfirmationReceiptRequest,
@@ -62,25 +62,19 @@ export interface ProviderExecutionHandoffItem {
   bgmInVideoPromptForbidden: true;
 }
 
-export interface ProviderExecutionHandoffHardLocks {
+export interface ProviderExecutionHandoffHardLocks extends BaseHardLocks {
   canSubmitProvider: false;
   providerSubmitAllowed: 0;
-  liveSubmitAllowed: false;
   credentialAccessAllowed: false;
   automaticSubmitAllowed: false;
   canSpawnWorker: false;
   fileMutationAllowed: false;
-  dryRunOnly: true;
   readOnly: true;
   handoffPlanOnly: true;
   finalActionGateRequired: true;
   noProviderSubmit: true;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   noApiKeyCreation: true;
   noArbitraryProviderCommand: true;
-  noWorkerSpawn: true;
-  noFileMutation: true;
   fastModelForbidden: true;
   vipChannelForbidden: true;
   textToVideoMainPathForbidden: true;
@@ -162,24 +156,26 @@ export interface BuildProviderExecutionHandoffStateInput {
 }
 
 const hardLocks: ProviderExecutionHandoffHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   canSubmitProvider: false,
   providerSubmitAllowed: 0,
-  liveSubmitAllowed: false,
   credentialAccessAllowed: false,
   automaticSubmitAllowed: false,
   canSpawnWorker: false,
   fileMutationAllowed: false,
-  dryRunOnly: true,
   readOnly: true,
   handoffPlanOnly: true,
   finalActionGateRequired: true,
   noProviderSubmit: true,
-  noCredentialRead: true,
-  noCredentialWrite: true,
   noApiKeyCreation: true,
   noArbitraryProviderCommand: true,
-  noWorkerSpawn: true,
-  noFileMutation: true,
   fastModelForbidden: true,
   vipChannelForbidden: true,
   textToVideoMainPathForbidden: true,

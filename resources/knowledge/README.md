@@ -41,6 +41,7 @@ prompt/core-prompt-templates.md
 - `performance/core-performance.md`：表演姿态和动作词库。
 - `qa/core-qa.md`：风格、运镜、连续性、参考污染 QA。
 - `prompt/core-prompt-templates.md`：Image 2 / Seedance 2.0 prompt 编译模板。
+- `prompt/aigc-video-directing-workflow.md`：Super-i AIGC 视频教程沉淀的小型工作流包：参考图职责、素材分析、无字画面、动作动机和时间线拆分。
 - `provider/model-capability-matrix.md`：模型能力矩阵，记录每个生成后端能做什么、不能做什么。
 - `provider/image2-provider-pack.md`：Image 2 关键帧和图像编辑后端规则。
 - `provider/seedance2-provider-pack.md`：Seedance 2.0 图生视频后端规则。

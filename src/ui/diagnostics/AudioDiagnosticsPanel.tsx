@@ -7,6 +7,7 @@ export function AudioDiagnosticsPanel({ audioPlanning }: { audioPlanning: AudioP
   const liveSlots = audioPlanning.providerSlots.filter((slot) => slot.liveSubmitAllowed).length;
   const registry = audioPlanning.voiceSourceRegistry;
   const exportSummary = audioPlanning.exportPackageSummary;
+  const ttsPlanning = audioPlanning.ttsProviderPlanning;
 
   return (
     <section className="machine-panel audio-diagnostics-panel">
@@ -19,6 +20,7 @@ export function AudioDiagnosticsPanel({ audioPlanning }: { audioPlanning: AudioP
         <Metric label="Preview Mix" value={`${audioPlanning.previewMix.eventCount}`} detail="placeholder event(s)" />
         <Metric label="Missing Output" value={`${audioPlanning.previewMix.missingOutputPathCount}`} detail="planned audio paths" />
         <Metric label="Provider Slots" value={`${plannedSlots}/${audioPlanning.providerSlots.length}`} detail={`${liveSlots} live · submit forbidden`} />
+        <Metric label="TTS Routes" value={`${ttsPlanning?.providers.length || 0}`} detail={`${ttsPlanning?.summary.submitDraftCount || 0} submit draft(s)`} />
       </div>
       <div className="audio-diagnostics-grid">
         <div>
@@ -43,6 +45,23 @@ export function AudioDiagnosticsPanel({ audioPlanning }: { audioPlanning: AudioP
           <CompactList
             items={audioPlanning.providerSlots.map((slot) => `${slot.slot} · ${slot.state} · live ${slot.liveSubmitAllowed ? "allowed" : "false"}`)}
             empty="No audio provider slots planned."
+          />
+        </div>
+        <div>
+          <h3>TTS Routes</h3>
+          <div className="field-grid compact">
+            <label>Preferred</label>
+            <span>{ttsPlanning?.preferredRoute || "none"}</span>
+            <label>Local</label>
+            <span>{ttsPlanning ? `${ttsPlanning.summary.maxLocalConcurrency} job` : "none"}</span>
+            <label>Cloud</label>
+            <span>{ttsPlanning ? `${ttsPlanning.summary.maxCloudConcurrency} jobs` : "none"}</span>
+            <label>Submit</label>
+            <span>{ttsPlanning?.summary.liveSubmitAllowed ? "allowed" : "gated"}</span>
+          </div>
+          <CompactList
+            items={(ttsPlanning?.providers || []).map((provider) => `${provider.label} · ${provider.executionSurface} · ${provider.outputFormat} · live ${provider.liveSubmitAllowed ? "allowed" : "false"}`)}
+            empty="No TTS routes prepared."
           />
         </div>
         <div>

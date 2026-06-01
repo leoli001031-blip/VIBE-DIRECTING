@@ -1,3 +1,4 @@
+import { unique } from "./collectionUtils";
 import type { DirectorWorkflowState } from "./directorWorkflow";
 import type { DirectorEditAffectedArtifact, DirectorEditPlan, DirectorEditSelection } from "./directorEdit";
 import type { ProjectRuntimeState } from "./projectState";
@@ -47,7 +48,7 @@ export interface ProjectTransactionSourceFacts {
   selectedScope: ProjectTransactionSelectedScopeFacts;
   selection: DirectorEditSelection;
   userIntent: string;
-  staleArtifactImpact: ProjectStaleArtifactImpactSummary;
+  staleArtifactImpact: ProjectArtifactInvalidationSummary;
   expectedTaskEnqueuePlan: ProjectExpectedTaskEnqueuePlanSummary;
   taskEnvelopeIds: string[];
   sourceRefs: string[];
@@ -129,18 +130,10 @@ export interface ProjectArtifactInvalidationSummary {
   affectedEnvelopeIds: string[];
   affectedExpectedOutputs: string[];
   staleArtifacts: ProjectStaleArtifactRef[];
+  staleArtifactCount: number;
+  requiresRegenerationCount: number;
   deleteForbidden: true;
   notes: string[];
-}
-
-export interface ProjectStaleArtifactImpactSummary {
-  changeKinds: ProjectTransactionChangeKind[];
-  staleArtifactCount: number;
-  affectedShotIds: string[];
-  affectedTaskRunIds: string[];
-  affectedEnvelopeIds: string[];
-  affectedExpectedOutputs: string[];
-  requiresRegenerationCount: number;
 }
 
 export interface ProjectTransactionComponent {
@@ -637,10 +630,6 @@ type ProjectStoreTypedValueMaterializationProjectStore = {
   };
 };
 
-function unique<T extends string>(values: T[]): T[] {
-  return Array.from(new Set(values.filter((value) => value.trim()).map((value) => value.trim()))).sort() as T[];
-}
-
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(",")}]`;
@@ -784,18 +773,6 @@ function selectedScopeFacts(selection: DirectorEditSelection): ProjectTransactio
   };
 }
 
-function staleArtifactImpact(invalidation: ProjectArtifactInvalidationSummary): ProjectStaleArtifactImpactSummary {
-  return {
-    changeKinds: invalidation.changeKinds,
-    staleArtifactCount: invalidation.staleArtifacts.length,
-    affectedShotIds: invalidation.affectedShotIds,
-    affectedTaskRunIds: invalidation.affectedTaskRunIds,
-    affectedEnvelopeIds: invalidation.affectedEnvelopeIds,
-    affectedExpectedOutputs: invalidation.affectedExpectedOutputs,
-    requiresRegenerationCount: invalidation.staleArtifacts.filter((artifact) => artifact.requiresRegeneration).length,
-  };
-}
-
 function expectedTaskEnqueuePlanSummary(taskEnqueue: ProjectTaskEnqueuePlan): ProjectExpectedTaskEnqueuePlanSummary {
   return {
     status: taskEnqueue.status,
@@ -863,7 +840,7 @@ function sourceFacts(
     selectedScope: selectedScopeFacts(input.workflowState.editPlan.selection),
     selection: input.workflowState.editPlan.selection,
     userIntent: input.workflowState.editPlan.userIntent,
-    staleArtifactImpact: staleArtifactImpact(invalidation),
+    staleArtifactImpact: invalidation,
     expectedTaskEnqueuePlan: expectedTaskEnqueuePlanSummary(taskEnqueue),
     taskEnvelopeIds,
     sourceRefs: unique(["director_workflow", input.workflowState.editPlan.id, input.workflowState.editPlan.transaction.id, sourceIndexHash, ...sourceIndexRefs]),
@@ -930,6 +907,8 @@ function invalidationSummary(editPlan: DirectorEditPlan, packetState: TaskPacket
     affectedEnvelopeIds,
     affectedExpectedOutputs,
     staleArtifacts,
+    staleArtifactCount: staleArtifacts.length,
+    requiresRegenerationCount: staleArtifacts.filter((artifact) => artifact.requiresRegeneration).length,
     deleteForbidden: true,
     notes: [
       "Artifacts are marked stale for user review; no output, sidecar, report, or preview file is deleted.",
@@ -1379,10 +1358,6 @@ export function stageProjectFactsForCommit(input: CommitProjectPendingTransactio
     providerCalled: false,
     workerSpawned: false,
   };
-}
-
-export function commitProjectPendingTransactionForRuntime(input: CommitProjectPendingTransactionForRuntimeInput): ProjectFactsStagedCommitReceipt {
-  return stageProjectFactsForCommit(input);
 }
 
 function projectStoreOperationIntentForRole(role: ProjectFactWriteRole): ProjectStorePatchOperationIntent | undefined {

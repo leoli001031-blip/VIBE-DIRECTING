@@ -9,6 +9,7 @@ import { summarizeSourceIndex, computeSourceIndexHash } from "./sourceIndex";
 import { buildTaskEnvelope } from "./taskEnvelope";
 import { canEnterReadyToSubmit, createTaskRunFromEnvelope, type QueueGateResult } from "./taskQueue";
 import type {
+  AssetRecord,
   GenerationJob,
   GateStatus,
   KeyframePairDerivation,
@@ -168,7 +169,7 @@ function buildVisualMemorySummary(audit: ProjectAudit): VisualMemorySummary {
 }
 
 function pathSnapshotFromAudit(audit: ProjectAudit): string[] {
-  const assetPaths = audit.assets.filter((asset) => asset.status !== "missing").map((asset) => asset.path);
+  const assetPaths = audit.assets.reduce((acc, asset) => { if (asset.status !== "missing") acc.push(asset.path); return acc; }, [] as string[]);
   const shotPaths = audit.shots.flatMap((shot) => {
     const paths: string[] = [];
     if (shot.startFrame && !shot.issues.includes("missing_start_frame")) paths.push(shot.startFrame);
@@ -184,13 +185,12 @@ function createSourceIndexFromAudit(audit: ProjectAudit, manifest: KnowledgePack
   if (audit.sourceIndex) return { ...audit.sourceIndex, sourceIndexHash: computeSourceIndexHash(audit.sourceIndex) };
 
   const lockedReferenceIds = audit.assets
-    .filter((asset) => asset.status !== "missing" && asset.lockedStatus === "locked" && asset.safeForFutureReference)
-    .map((asset) => asset.path);
+    .reduce((acc, asset) => { if (asset.status !== "missing" && asset.lockedStatus === "locked" && asset.safeForFutureReference) acc.push(asset.path); return acc; }, [] as string[]);
   const candidateReferenceIds = [
-    ...audit.assets.filter((asset) => asset.status !== "missing" && !lockedReferenceIds.includes(asset.path)).map((asset) => asset.path),
+    ...audit.assets.reduce((acc, asset) => { if (asset.status !== "missing" && !lockedReferenceIds.includes(asset.path)) acc.push(asset.path); return acc; }, [] as string[]),
     ...audit.shots.flatMap((shot) => [shot.startFrame, shot.endFrame].filter((path): path is string => Boolean(path))),
   ];
-  const failedReferenceIds = audit.assets.filter((asset) => asset.status === "missing").map((asset) => asset.path);
+  const failedReferenceIds = audit.assets.reduce((acc, asset) => { if (asset.status === "missing") acc.push(asset.path); return acc; }, [] as string[]);
   const packVersionBindings = Object.fromEntries(manifest.packs.map((pack) => [pack.id, { version: pack.version, hash: pack.hash }]));
   const index: ProjectSourceIndex = {
     projectId: audit.projectTitle.replace(/\s+/g, "-").toLowerCase() || "runtime-project",
@@ -199,7 +199,7 @@ function createSourceIndexFromAudit(audit: ProjectAudit, manifest: KnowledgePack
     currentProductionBibleId: audit.sourceTask || undefined,
     currentStoryFlowId: `${audit.projectRoot}/00_task/shot_spec.yaml`,
     currentVisualMemoryId: `${audit.projectRoot}/visual_memory`,
-    currentPromptHashes: Object.fromEntries(audit.jobs.filter((job) => job.promptPath).map((job) => [job.id, job.promptPath || ""])),
+    currentPromptHashes: Object.fromEntries(audit.jobs.reduce((acc, job) => { if (job.promptPath) acc.push([job.id, job.promptPath || ""]); return acc; }, [] as [string, string][])),
     lockedReferenceIds: uniqueSorted(lockedReferenceIds),
     candidateReferenceIds: uniqueSorted(candidateReferenceIds),
     rejectedReferenceIds: [],
@@ -207,8 +207,8 @@ function createSourceIndexFromAudit(audit: ProjectAudit, manifest: KnowledgePack
     confirmedDecisionIds: [],
     staleArtifactIds: [],
     knowledgeLibraryRoot: manifest.knowledgeLibraryRoot,
-    activeKnowledgePackIds: manifest.packs.filter((pack) => pack.enabled).map((pack) => pack.id),
-    disabledKnowledgePackIds: manifest.packs.filter((pack) => !pack.enabled).map((pack) => pack.id),
+    activeKnowledgePackIds: manifest.packs.reduce((acc, pack) => { if (pack.enabled) acc.push(pack.id); return acc; }, [] as string[]),
+    disabledKnowledgePackIds: manifest.packs.reduce((acc, pack) => { if (!pack.enabled) acc.push(pack.id); return acc; }, [] as string[]),
     knowledgeManifestHash: manifest.manifestHash,
     packVersionBindings,
     updatedAt: audit.importedAt,
@@ -217,21 +217,32 @@ function createSourceIndexFromAudit(audit: ProjectAudit, manifest: KnowledgePack
   return { ...index, sourceIndexHash: computeSourceIndexHash(index) };
 }
 
-function referenceFromPath(path: string, sourceIndex: ProjectSourceIndex): ReferenceAuthority {
+function referenceFromPath(path: string, sourceIndex: ProjectSourceIndex, assets: AssetRecord[] = []): ReferenceAuthority {
   const locked = sourceIndex.lockedReferenceIds.includes(path);
   const rejected = sourceIndex.rejectedReferenceIds.includes(path);
   const failed = sourceIndex.failedReferenceIds.includes(path);
+  const asset = assets.find((item) => item.id === path || item.path === path);
 
   return {
-    id: path,
-    path,
-    referenceRole: rejected || failed ? "rejected_case" : locked ? "identity_authority" : "temp_candidate",
+    id: asset?.id || path,
+    path: asset?.path || path,
+    referenceRole: rejected || failed
+      ? "rejected_case"
+      : asset?.type === "scene"
+        ? "scene_layout_authority"
+        : asset?.type === "style"
+          ? "style_authority"
+          : asset?.type === "prop"
+            ? "prop_authority"
+            : locked ? "identity_authority" : "temp_candidate",
     authorityScope: locked ? ["prompt_reference", "future_reference"] : ["draft_preview"],
     polarity: rejected || failed ? "negative" : "positive",
     lockedStatus: rejected || failed ? "rejected" : locked ? "locked" : "candidate",
     allowedUse: locked ? ["prompt_reference", "future_reference", "draft_preview"] : ["draft_preview"],
     canPromoteToFormal: locked,
     canUseAsFutureReference: locked,
+    textConstraints: asset?.textConstraints,
+    sourceRefs: asset?.sourceRefs,
     contaminationReason: locked ? undefined : "Reference has not passed formal authority lock.",
   };
 }
@@ -306,7 +317,7 @@ function buildTaskViews(audit: ProjectAudit, sourceIndex: ProjectSourceIndex, ma
     const routedContext = attachBudgetToRouteResult(routeResult, contextBudget);
     const envelope = buildTaskEnvelope(job, shot, audit.issues, {
       sourceIndex,
-      references: job.references.map((path) => referenceFromPath(path, sourceIndex)),
+      references: job.references.map((path) => referenceFromPath(path, sourceIndex, audit.assets)),
       keyframePairDerivation: buildKeyframePairDerivation(job, shot),
       knowledgeRouteResult: routedContext,
       contextBudget,

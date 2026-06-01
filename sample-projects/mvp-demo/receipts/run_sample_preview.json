@@ -1,0 +1,12 @@
+{
+  "id": "run_sample_preview",
+  "runKind": "agent_loop",
+  "status": "succeeded",
+  "summary": "Local Agent Loop sample receipt prepared from Project.vibe facts.",
+  "affectedShotIds": ["S01", "S02", "S03"],
+  "runtimeFixtureUsed": false,
+  "notes": [
+    "Demonstrates receipt evidence without provider submission.",
+    "Keeps Project.vibe as the source of truth."
+  ]
+}

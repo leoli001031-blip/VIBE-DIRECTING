@@ -12,6 +12,10 @@ export interface PreviewQueueItem {
   label: string;
 }
 
+export interface BuildMissingPreviewQueueFromShotsOptions {
+  durationSeconds?: number;
+}
+
 function formatShotNumber(id: string) {
   const match = id.match(/^A(\d+)_(\d+)$/i);
   if (!match) return id;
@@ -76,6 +80,29 @@ export function buildPreviewPlayerQueue(previewExport: ProjectPreviewExportState
         mediaPath: kind === "missing_placeholder" ? undefined : event.mediaPath,
         label: previewQueueLabel(event, kind),
       };
+    });
+}
+
+export function buildMissingPreviewQueueFromShots(
+  shots: ShotRecord[],
+  options: BuildMissingPreviewQueueFromShotsOptions = {},
+): PreviewQueueItem[] {
+  const fallbackDurationSeconds = Math.max(1, options.durationSeconds || 5);
+  let startSeconds = 0;
+  return shots
+    .filter((shot) => Boolean(shot.id))
+    .map((shot) => {
+      const durationSeconds = safeDurationSeconds(shot.durationSeconds || fallbackDurationSeconds);
+      const item: PreviewQueueItem = {
+        id: `local_story_placeholder_${shot.id}`,
+        kind: "missing_placeholder",
+        shotId: shot.id,
+        startSeconds,
+        durationSeconds,
+        label: formatShotNumber(shot.id),
+      };
+      startSeconds += durationSeconds;
+      return item;
     });
 }
 

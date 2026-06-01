@@ -1,3 +1,4 @@
+import { PROVIDER_CREDENTIALS_FORBIDDEN } from "./statusConstants";
 import type {
   ContextLevel,
   GateSet,
@@ -9,7 +10,7 @@ import type {
   SubagentTaskPurpose,
   TaskEnvelope,
 } from "./types";
-import { buildNonOverridableGateHashes, buildPolicyBinding } from "./envelopeValidator";
+import { buildInputHash, buildSubagentInputHash, buildNonOverridableGateHashes, buildPolicyBinding, envelopeSchemaVersion } from "./envelopeValidator";
 import type { ContextBudgetResult, KnowledgeInjectedSnippet, KnowledgeInjectionRecord, KnowledgeRouteResult } from "./knowledgeTypes";
 import type { KnowledgePackCategory } from "./knowledgeTypes";
 
@@ -120,6 +121,7 @@ export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): Su
     resultSchema: "subagent_result_v1";
     forbiddenActions: string[];
   } = {
+    schemaVersion: envelopeSchemaVersion,
     id: input.id,
     parentTaskId: input.parentTaskId,
     purpose: input.purpose,
@@ -220,7 +222,7 @@ export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): Su
       "no_free_text_worker",
       "provider_submit_forbidden",
       "live_submit_forbidden",
-      "provider_credentials_forbidden",
+      PROVIDER_CREDENTIALS_FORBIDDEN,
       "file_mutation_forbidden",
       ...(input.forbiddenActions || taskEnvelopeExtras.forbiddenActions || []),
     ],
@@ -232,5 +234,6 @@ export function buildSubagentTaskEnvelope(input: BuildSubagentEnvelopeInput): Su
     ...envelope,
     policyBinding,
     nonOverridableGateHashes: envelope.nonOverridableGateHashes || buildNonOverridableGateHashes(envelope.taskEnvelope),
+    inputHash: buildSubagentInputHash({ ...envelope, policyBinding }),
   };
 }

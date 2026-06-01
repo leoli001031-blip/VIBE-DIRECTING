@@ -1,4 +1,4 @@
-import type { ProviderSlot, RequiredMode } from "./types";
+import type { BaseHardLocks, ProviderSlot, RequiredMode } from "./types";
 
 export const providerSubmitPermissionReceiptSchemaVersion = "0.1.0";
 
@@ -29,19 +29,14 @@ export interface ProviderSubmitPermissionSubmitIntent {
   providerSubmitRequestState: ProviderSubmitRequestState;
 }
 
-export interface ProviderSubmitPermissionHardLocks {
+export interface ProviderSubmitPermissionHardLocks extends BaseHardLocks {
   defaultLocked: true;
   actualExecutionAllowed: false;
   canSubmitProvider: false;
   providerSubmitAllowed: 0;
   automaticSubmitAllowed: false;
-  liveSubmitAllowed: false;
   externalNetworkIoAllowed: false;
   credentialMaterialAccessAllowed: false;
-  noCredentialRead: true;
-  noCredentialWrite: true;
-  noWorkerSpawn: true;
-  noFileMutation: true;
   projectVibeMutationAllowed: false;
   maxConcurrency: 1;
   maxAutoRetries: 0;
@@ -100,18 +95,21 @@ export interface BuildProviderSubmitPermissionReceiptInput {
 }
 
 export const providerSubmitPermissionReceiptHardLocks: ProviderSubmitPermissionHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   defaultLocked: true,
   actualExecutionAllowed: false,
   canSubmitProvider: false,
   providerSubmitAllowed: 0,
   automaticSubmitAllowed: false,
-  liveSubmitAllowed: false,
   externalNetworkIoAllowed: false,
   credentialMaterialAccessAllowed: false,
-  noCredentialRead: true,
-  noCredentialWrite: true,
-  noWorkerSpawn: true,
-  noFileMutation: true,
   projectVibeMutationAllowed: false,
   maxConcurrency: 1,
   maxAutoRetries: 0,

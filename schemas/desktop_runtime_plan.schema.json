@@ -203,7 +203,7 @@
       "required": ["id", "executable", "status", "argumentSource", "userFreeTextShellAllowed", "liveSubmitAllowed", "notes"],
       "properties": {
         "id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
-        "executable": { "type": "string", "enum": ["codex", "ffmpeg", "ffprobe", "provider-cli"] },
+        "executable": { "type": "string", "enum": ["agent", "ffmpeg", "ffprobe", "provider-cli"] },
         "status": { "type": "string", "enum": ["planned", "disabled"] },
         "argumentSource": { "type": "string", "const": "validated_envelope_only" },
         "userFreeTextShellAllowed": { "type": "boolean", "const": false },

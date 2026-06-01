@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibecore.local/schemas/director_workflow.schema.json",
+  "title": "DirectorWorkflowState",
+  "type": "object",
+  "$comment": "P2-128: required fields 'generatedAt', 'summary', 'editPlan', and 'hardLocks' lack property definitions. 'hardLocks' is defined in $defs but not referenced via $ref. Add property definitions or link $defs/hardLocks before runtime validation.",
+  "required": ["schemaVersion", "generatedAt", "status", "summary", "editPlan", "hardLocks", "blockedReasons", "confirmationRequired"],
+  "properties": {
+    "schemaVersion": { "const": "0.1.0" },
+    "status": {
+      "enum": ["dry_run_ready", "pending_confirmation", "blocked", "blocked_missing_context"]
+    },
+    "blockedReasons": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "confirmationRequired": { "type": "boolean" }
+  },
+  "$defs": {
+    "hardLocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dryRunOnly": { "const": true },
+        "liveSubmitAllowed": { "const": false },
+        "providerSubmissionForbidden": { "const": true },
+        "noFileMutation": { "const": true },
+        "noCredentialRead": { "const": true },
+        "noCredentialWrite": { "const": true },
+        "noShellExecution": { "const": true },
+        "noWorkerSpawn": { "const": true },
+        "noFreeTextTask": { "const": true },
+        "validatedEnvelopeRequired": { "const": true },
+        "noCredentialAccess": { "const": true },
+        "noDaemonStart": { "const": true }
+      }
+    }
+  }
+}

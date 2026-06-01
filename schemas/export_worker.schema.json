@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vibecore.local/schemas/export_worker.schema.json",
   "title": "ExportWorkerState",
-  "description": "Phase 27 Export Worker MVP state. It allows only adapter-mediated create_directory and write_file operations for text manifests under project-root-relative exports/ or reports/exports/ paths.",
+  "description": "Phase 27 Export Worker MVP state. It allows adapter-mediated create_directory/write_file operations for manifests and copy_file operations for existing project-relative final-video media under exports/ or reports/exports/ paths.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -57,14 +57,26 @@
     },
     "operation": {
       "type": "string",
-      "enum": ["create_directory", "write_file"]
+      "enum": ["create_directory", "write_file", "copy_file"]
     },
     "entryKind": {
       "type": "string",
       "enum": [
         "export_directory",
         "export_manifest",
-        "storyboard_table",
+        "project_vibe",
+        "locked_assets_manifest",
+        "preview_media_manifest",
+        "receipts_manifest",
+	        "knowledge_references_manifest",
+	        "export_report",
+	        "video_manifest",
+	        "video_receipts_manifest",
+	        "video_report",
+	        "final_video_manifest",
+	        "final_video_file",
+	        "audio_manifest",
+	        "storyboard_table",
         "developer_archive",
         "rough_cut_timeline",
         "asset_package_manifest"
@@ -89,9 +101,12 @@
         "kind": { "$ref": "#/$defs/entryKind" },
         "operation": { "$ref": "#/$defs/operation" },
         "path": { "$ref": "#/$defs/exportPath" },
+        "sourcePath": { "$ref": "#/$defs/projectRelativeVideoPath" },
+        "shotId": { "type": "string" },
         "content": { "type": "string" },
         "contentHash": { "type": "string" },
-        "mimeType": { "type": "string", "enum": ["application/json", "text/tab-separated-values"] },
+        "sourceHash": { "type": "string" },
+        "mimeType": { "type": "string", "enum": ["application/json", "text/tab-separated-values", "text/markdown"] },
         "canExecute": { "type": "boolean" },
         "projectRootRelative": { "type": "boolean", "const": true },
         "notes": { "type": "array", "items": { "type": "string" } }
@@ -100,8 +115,16 @@
         {
           "if": { "properties": { "operation": { "const": "write_file" } } },
           "then": { "required": ["content", "contentHash", "mimeType"] }
+        },
+        {
+          "if": { "properties": { "operation": { "const": "copy_file" } } },
+          "then": { "required": ["sourcePath"] }
         }
       ]
+    },
+    "projectRelativeVideoPath": {
+      "type": "string",
+      "pattern": "^(?!redacted_(?:ref|path)#)(?![A-Za-z]:[\\\\/])(?!/)(?!//)(?!~[\\\\/])(?!.*(?:^|/)\\.\\.(?:/|$)).*\\.(?:mp4|mov|webm)$"
     },
     "manifestFile": {
       "type": "object",
@@ -110,7 +133,23 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["storyboard_table", "developer_archive", "rough_cut_timeline", "asset_package_manifest"]
+          "enum": [
+            "project_vibe",
+            "locked_assets_manifest",
+            "preview_media_manifest",
+            "receipts_manifest",
+	            "knowledge_references_manifest",
+	            "export_report",
+	            "video_manifest",
+	            "video_receipts_manifest",
+	            "video_report",
+	            "final_video_manifest",
+	            "audio_manifest",
+	            "storyboard_table",
+            "developer_archive",
+            "rough_cut_timeline",
+            "asset_package_manifest"
+          ]
         },
         "path": { "$ref": "#/$defs/exportPath" },
         "contentHash": { "type": "string" },
@@ -131,8 +170,12 @@
         "allowedOperations",
         "allowedDirectories",
         "allowedWritePaths",
+        "allowedCopyPaths",
+        "allowedCopySources",
         "files",
+        "mediaFiles",
         "blockedProfileKinds",
+        "mvpPackage",
         "source",
         "notes"
       ],
@@ -145,8 +188,8 @@
           "items": { "$ref": "#/$defs/profileKind" }
         },
         "readiness": { "$ref": "#/$defs/readiness" },
-        "writeFilesOnly": { "type": "boolean", "const": true },
-        "textOnly": { "type": "boolean", "const": true },
+        "writeFilesOnly": { "type": "boolean", "const": false },
+        "textOnly": { "type": "boolean", "const": false },
         "allowedOperations": {
           "type": "array",
           "items": { "$ref": "#/$defs/operation" }
@@ -159,14 +202,27 @@
           "type": "array",
           "items": { "$ref": "#/$defs/exportPath" }
         },
+        "allowedCopyPaths": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/exportPath" }
+        },
+        "allowedCopySources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/projectRelativeVideoPath" }
+        },
         "files": {
           "type": "array",
           "items": { "$ref": "#/$defs/manifestFile" }
+        },
+        "mediaFiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/mediaFile" }
         },
         "blockedProfileKinds": {
           "type": "array",
           "items": { "$ref": "#/$defs/profileKind" }
         },
+        "mvpPackage": { "$ref": "#/$defs/mvpPackage" },
         "source": {
           "type": "object",
           "additionalProperties": false,
@@ -182,10 +238,69 @@
         "notes": { "type": "array", "items": { "type": "string" } }
       }
     },
+    "mediaFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "sourcePath", "path", "copyStatus"],
+      "properties": {
+        "kind": { "type": "string", "const": "final_video_file" },
+        "sourcePath": { "$ref": "#/$defs/projectRelativeVideoPath" },
+        "path": { "$ref": "#/$defs/exportPath" },
+        "sourceHash": { "type": "string" },
+        "shotId": { "type": "string" },
+        "copyStatus": { "type": "string", "enum": ["copy_ready", "hash_unverified"] }
+      }
+    },
+    "mvpPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectVibeIncluded",
+        "lockedAssetCount",
+	        "previewMediaCount",
+	        "videoResultCount",
+	        "videoNeedsReviewCount",
+	        "videoApprovedCount",
+	        "videoMissingCount",
+	        "finalVideoCopyCount",
+	        "referenceEvidenceCount",
+	        "receiptCount",
+	        "knowledgeReferenceCount",
+	        "videoReportIncluded",
+	        "finalVideoManifestIncluded",
+	        "audioManifestIncluded",
+	        "reportIncluded"
+      ],
+      "properties": {
+        "projectVibeIncluded": { "type": "boolean" },
+        "lockedAssetCount": { "type": "integer", "minimum": 0 },
+	        "previewMediaCount": { "type": "integer", "minimum": 0 },
+	        "videoResultCount": { "type": "integer", "minimum": 0 },
+	        "videoNeedsReviewCount": { "type": "integer", "minimum": 0 },
+	        "videoApprovedCount": { "type": "integer", "minimum": 0 },
+	        "videoMissingCount": { "type": "integer", "minimum": 0 },
+	        "finalVideoCopyCount": { "type": "integer", "minimum": 0 },
+	        "referenceEvidenceCount": { "type": "integer", "minimum": 0 },
+	        "receiptCount": { "type": "integer", "minimum": 0 },
+	        "knowledgeReferenceCount": { "type": "integer", "minimum": 0 },
+	        "videoReportIncluded": { "type": "boolean" },
+	        "finalVideoManifestIncluded": { "type": "boolean" },
+	        "audioManifestIncluded": { "type": "boolean" },
+	        "reportIncluded": { "type": "boolean" }
+      }
+    },
     "hardLocks": {
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "dryRunOnly",
+        "liveSubmitAllowed",
+        "providerSubmissionForbidden",
+        "noFileMutation",
+        "noCredentialRead",
+        "noCredentialWrite",
+        "noShellExecution",
+        "noWorkerSpawn",
         "projectRootRelativeOnly",
         "exportScopeOnly",
         "noAbsolutePath",
@@ -194,13 +309,18 @@
         "noMove",
         "noMediaRender",
         "noProviderSubmit",
-        "liveSubmitAllowed",
-        "noCredentialRead",
-        "noCredentialWrite",
         "noArbitraryShell",
         "noUserFileOverwriteOutsideExport"
       ],
       "properties": {
+        "dryRunOnly": { "type": "boolean", "const": true },
+        "liveSubmitAllowed": { "type": "boolean", "const": false },
+        "providerSubmissionForbidden": { "type": "boolean", "const": true },
+        "noFileMutation": { "type": "boolean", "const": true },
+        "noCredentialRead": { "type": "boolean", "const": true },
+        "noCredentialWrite": { "type": "boolean", "const": true },
+        "noShellExecution": { "type": "boolean", "const": true },
+        "noWorkerSpawn": { "type": "boolean", "const": true },
         "projectRootRelativeOnly": { "type": "boolean", "const": true },
         "exportScopeOnly": { "type": "boolean", "const": true },
         "noAbsolutePath": { "type": "boolean", "const": true },
@@ -209,9 +329,6 @@
         "noMove": { "type": "boolean", "const": true },
         "noMediaRender": { "type": "boolean", "const": true },
         "noProviderSubmit": { "type": "boolean", "const": true },
-        "liveSubmitAllowed": { "type": "boolean", "const": false },
-        "noCredentialRead": { "type": "boolean", "const": true },
-        "noCredentialWrite": { "type": "boolean", "const": true },
         "noArbitraryShell": { "type": "boolean", "const": true },
         "noUserFileOverwriteOutsideExport": { "type": "boolean", "const": true }
       }

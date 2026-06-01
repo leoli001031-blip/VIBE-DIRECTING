@@ -7,6 +7,7 @@ import {
   type ProjectStoreSnapshot,
   type ProjectStoreValidationResult,
 } from "./projectStore";
+import type { BaseHardLocks } from "./types";
 
 export const projectStoreIoSchemaVersion = "0.1.0";
 export const projectStoreIoPhase = "phase19_real_project_store_io_gate";
@@ -14,7 +15,7 @@ export const projectStoreIoPhase = "phase19_real_project_store_io_gate";
 export type ProjectStoreIoMode = "create" | "open" | "save" | "rebuild_cache";
 export type ProjectStoreIoOperation = "create_directory" | "read_file" | "write_file";
 
-export interface ProjectStoreIoHardLocks {
+export interface ProjectStoreIoHardLocks extends BaseHardLocks {
   projectRootOnly: true;
   whitelistOnly: true;
   noAbsoluteContractPath: true;
@@ -24,8 +25,6 @@ export interface ProjectStoreIoHardLocks {
   noProviderSubmit: true;
   noImageGeneration: true;
   noVideoGeneration: true;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   noArbitraryShell: true;
   runtimeStateIsDerivedCache: true;
 }
@@ -126,6 +125,14 @@ const validEntryRoles: Array<ProjectStoreIoEntry["role"]> = [
 ];
 
 const hardLocks: ProjectStoreIoHardLocks = {
+  dryRunOnly: true,
+  liveSubmitAllowed: false,
+  providerSubmissionForbidden: true,
+  noFileMutation: true,
+  noCredentialRead: true,
+  noCredentialWrite: true,
+  noShellExecution: true,
+  noWorkerSpawn: true,
   projectRootOnly: true,
   whitelistOnly: true,
   noAbsoluteContractPath: true,
@@ -135,8 +142,6 @@ const hardLocks: ProjectStoreIoHardLocks = {
   noProviderSubmit: true,
   noImageGeneration: true,
   noVideoGeneration: true,
-  noCredentialRead: true,
-  noCredentialWrite: true,
   noArbitraryShell: true,
   runtimeStateIsDerivedCache: true,
 };
@@ -492,7 +497,7 @@ function validateGateEnvelope(gate: ProjectStoreIoGate): string[] {
     errors.push("Gate hardLocks must be an object.");
   } else {
     for (const key of Object.keys(hardLocks) as Array<keyof ProjectStoreIoHardLocks>) {
-      if (gate.hardLocks[key] !== true) errors.push(`Gate hard lock ${key} must be true.`);
+      if (gate.hardLocks[key] !== hardLocks[key]) errors.push(`Gate hard lock ${key} must be ${hardLocks[key]}.`);
     }
   }
 

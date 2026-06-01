@@ -1,3 +1,5 @@
+import type { BaseHardLocks } from "./types";
+
 export type ProjectStorePathOrigin = "project_root_relative" | "user_selected_import";
 
 export type ProjectStoreFactRole =
@@ -115,10 +117,8 @@ export interface ProjectStoreFileFactSourceSummary {
   notes: string[];
 }
 
-export interface ProjectStoreHardLocks {
-  dryRunOnly: true;
+export interface ProjectStoreHardLocks extends BaseHardLocks {
   inMemoryOnly: true;
-  noFileMutation: true;
   noDirectoryCreate: true;
   noDirectoryMove: true;
   noDirectoryDelete: true;
@@ -126,8 +126,6 @@ export interface ProjectStoreHardLocks {
   noProviderSubmit: true;
   noImageGeneration: true;
   noVideoGeneration: true;
-  noCredentialRead: true;
-  noCredentialWrite: true;
   projectVibeWriteAllowed: false;
   runtimeStateIsDerivedCache: true;
 }
@@ -427,8 +425,14 @@ export function createProjectStorePathRef(input: {
 function defaultHardLocks(): ProjectStoreHardLocks {
   return {
     dryRunOnly: true,
-    inMemoryOnly: true,
+    liveSubmitAllowed: false,
+    providerSubmissionForbidden: true,
     noFileMutation: true,
+    noCredentialRead: true,
+    noCredentialWrite: true,
+    noShellExecution: true,
+    noWorkerSpawn: true,
+    inMemoryOnly: true,
     noDirectoryCreate: true,
     noDirectoryMove: true,
     noDirectoryDelete: true,
@@ -436,8 +440,6 @@ function defaultHardLocks(): ProjectStoreHardLocks {
     noProviderSubmit: true,
     noImageGeneration: true,
     noVideoGeneration: true,
-    noCredentialRead: true,
-    noCredentialWrite: true,
     projectVibeWriteAllowed: false,
     runtimeStateIsDerivedCache: true,
   };
