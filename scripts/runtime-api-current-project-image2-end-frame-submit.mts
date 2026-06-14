@@ -76,7 +76,7 @@ function image2EndFrameRequestInput(url, body) {
   return {
     selectedShotId,
     selectedShotIds,
-    providerId: requestBodyString(body, ["providerId"]) || "lanyi-image2",
+    providerId: requestBodyString(body, ["providerId"]) || "apikey-fun-gpt55-responses-image",
     prompt: requestBodyString(body, ["prompt", "endFramePrompt"]),
     confirmation: isRecord(body?.confirmation) ? body.confirmation : undefined,
     mockProviderResult: mockProviderResult.enabled,
@@ -344,7 +344,7 @@ export function createRuntimeApiCurrentProjectImage2EndFrameSubmit(deps) {
       startFramePath ? "" : "请先生成并复核起始帧。",
       motionGuidance.hasExplicitEndpoint ? "" : "请先确认这个镜头的结束动作，再生成结束帧。",
       providerConfig ? "" : "未找到可用的出图配置。",
-      providerConfig?.credential?.keyStatus === "configured" && apiKey ? "" : "请先在设置里保存 Lanyi Key。",
+      providerConfig?.credential?.keyStatus === "configured" && apiKey ? "" : "请先在设置里保存生图 Key。",
       confirmationOk ? "" : "需要在提交前明确确认本次生成结束帧。",
       typeof writeCurrentProjectRuntimeBytes === "function" && typeof writeCurrentProjectRuntimeJson === "function" ? "" : "运行时写入能力不可用。",
     ]);
@@ -406,7 +406,7 @@ export function createRuntimeApiCurrentProjectImage2EndFrameSubmit(deps) {
         : {
           ok: true,
           bytes: MOCK_PNG,
-          providerRequestId: `mock_lanyi_image2_end_${Date.now()}`,
+          providerRequestId: `mock_apikey_fun_image2_end_${Date.now()}`,
           providerResponseMetadata: { mockProviderResult: true, returnedCount: 1 },
         }
       : await fetchImageEditBytesFromProvider({

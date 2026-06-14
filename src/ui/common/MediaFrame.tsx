@@ -36,5 +36,5 @@ export function MediaFrame({
     return <div className={`minimal-media-placeholder ${className}`}>{label}</div>;
   }
 
-  return <img className={className} src={mediaSrc} alt={alt} onError={() => setFailed(true)} />;
+  return <img className={className} src={mediaSrc} alt={alt} loading="lazy" decoding="async" onError={() => setFailed(true)} />;
 }

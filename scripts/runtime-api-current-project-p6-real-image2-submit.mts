@@ -2,7 +2,7 @@ import path from "node:path";
 import { buildP6RealImage2Plan, buildP6RealImage2ReturnIngest } from "../src/core/p6RealImage2ClosedLoop.ts";
 import { buildImage2CleanBasePrompt } from "../src/core/image2PromptBase.ts";
 import { IMAGE2_GENERATE_DEFAULT_ASPECT_RATIO, IMAGE2_GENERATE_DEFAULT_SIZE } from "../src/core/providerPolicy.ts";
-import { fetchLanyiImageViaResponsesStream } from "./lanyi-responses-stream-transport.mts";
+import { fetchApikeyFunImageViaResponses } from "./apikey-fun-responses-image-transport.mts";
 
 const CONFIRM_PHRASE = "submit-p6-image2";
 const MOCK_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=", "base64");
@@ -65,7 +65,7 @@ function p6SubmitRequestInput(url, body) {
     receipt: isRecord(body?.receipt) ? body.receipt : undefined,
     submitPermissionReceipt: isRecord(body?.submitPermissionReceipt) ? body.submitPermissionReceipt : undefined,
     confirmation: isRecord(body?.confirmation) ? body.confirmation : undefined,
-    providerId: requestBodyString(body, ["providerId"]) || "lanyi-image2",
+    providerId: requestBodyString(body, ["providerId"]) || "apikey-fun-gpt55-responses-image",
     submitMode: requestBodyString(body, ["submitMode", "mode"]) || "live",
     mockProviderResult: mockProviderResult.enabled,
     mockProviderResultStatus: mockProviderResult.status,
@@ -77,7 +77,7 @@ function p6SerialSubmitRequestInput(url, body) {
     ? body.selectedShotIds
     : asString(url.searchParams.get("selectedShotIds"))?.split(","));
   const shots = Array.isArray(body?.shots) ? body.shots.filter(isRecord) : [];
-  const providerId = requestBodyString(body, ["providerId"]) || "lanyi-image2";
+  const providerId = requestBodyString(body, ["providerId"]) || "apikey-fun-gpt55-responses-image";
   const fallbackMock = normalizeMockProviderResult(body?.mockProviderResult === undefined && body?.submitMode === "mock" ? true : body?.mockProviderResult);
   return {
     selectedShotIds,
@@ -134,7 +134,7 @@ export function image2ProviderTimeoutMs(env = process.env) {
   const candidates = [
     env.VIBE_IMAGE2_PROVIDER_TIMEOUT_MS,
     env.VIBE_P6_IMAGE2_TIMEOUT_MS,
-    env.LANYI_IMAGE2_TIMEOUT_MS,
+    env.APIKEY_FUN_IMAGE2_TIMEOUT_MS,
   ];
   for (const raw of candidates) {
     const parsed = Number(raw);
@@ -159,15 +159,53 @@ function fileNameForImagePath(filePath) {
 
 export async function fetchImageBytesFromProvider({ apiKey, baseUrl, model, prompt, size }) {
   const timeoutMs = image2ProviderTimeoutMs();
-  return fetchLanyiImageViaResponsesStream({
+  const result = await fetchApikeyFunImageViaResponses({
     apiKey,
-    baseUrl,
+    endpoint: baseUrl,
     model,
     prompt,
     size,
+    quality: "low",
+    stream: true,
     timeoutMs,
-    providerOperation: "responses.image_generation",
   });
+  if (!result.ok) {
+    return {
+      ok: false,
+      statusCode: result.statusCode,
+      errorType: result.errorType,
+      failureKind: result.errorType,
+      message: result.message,
+      diagnostic: result.diagnostic,
+      providerResponseMetadata: {
+        providerId: result.providerId,
+        transport: result.transport,
+        providerEndpoint: result.endpoint,
+        providerOperation: "responses.image_generation",
+        requestedModel: result.requestedModel,
+        returnedModel: result.returnedModel,
+        ...result.metadata,
+        returnedCount: 0,
+        retryable: result.errorType === "network_error" || result.errorType === "timeout" || result.errorType === "server_error",
+      },
+    };
+  }
+  return {
+    ok: true,
+    bytes: result.bytes,
+    providerRequestId: result.providerRequestId,
+    providerResponseMetadata: {
+      providerId: result.providerId,
+      transport: result.transport,
+      providerEndpoint: result.endpoint,
+      providerOperation: "responses.image_generation",
+      requestedModel: result.requestedModel,
+      returnedModel: result.returnedModel,
+      returnedCount: 1,
+      rawSseSha256: result.metadata.rawResponseSha256,
+      ...result.metadata,
+    },
+  };
 }
 
 export async function fetchImageEditBytesFromProvider({ apiKey, baseUrl, model, prompt, size, referenceImages }) {
@@ -192,16 +230,54 @@ export async function fetchImageEditBytesFromProvider({ apiKey, baseUrl, model, 
     };
   }
 
-  return fetchLanyiImageViaResponsesStream({
+  const result = await fetchApikeyFunImageViaResponses({
     apiKey,
-    baseUrl,
+    endpoint: baseUrl,
     model,
     prompt,
     size,
+    quality: "low",
+    stream: true,
     timeoutMs,
     referenceImages: images.slice(0, 3),
-    providerOperation: "responses.image_generation_reference",
   });
+  if (!result.ok) {
+    return {
+      ok: false,
+      statusCode: result.statusCode,
+      errorType: result.errorType,
+      failureKind: result.errorType,
+      message: result.message,
+      diagnostic: result.diagnostic,
+      providerResponseMetadata: {
+        providerId: result.providerId,
+        transport: result.transport,
+        providerEndpoint: result.endpoint,
+        providerOperation: "responses.image_generation_reference",
+        requestedModel: result.requestedModel,
+        returnedModel: result.returnedModel,
+        ...result.metadata,
+        returnedCount: 0,
+        retryable: result.errorType === "network_error" || result.errorType === "timeout" || result.errorType === "server_error",
+      },
+    };
+  }
+  return {
+    ok: true,
+    bytes: result.bytes,
+    providerRequestId: result.providerRequestId,
+    providerResponseMetadata: {
+      providerId: result.providerId,
+      transport: result.transport,
+      providerEndpoint: result.endpoint,
+      providerOperation: "responses.image_generation_reference",
+      requestedModel: result.requestedModel,
+      returnedModel: result.returnedModel,
+      returnedCount: 1,
+      rawSseSha256: result.metadata.rawResponseSha256,
+      ...result.metadata,
+    },
+  };
 }
 
 export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
@@ -316,7 +392,7 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
       handoff?.status === "ready_for_manual_transport" ? "" : "请先完成小样动作确认。",
       submitPermissionReceipt?.status === "pending_action_time_confirmation" ? "" : "请先生成许可回执。",
       providerConfig ? "" : "未找到可用的出图配置。",
-      providerConfig?.credential?.keyStatus === "configured" && apiKey ? "" : "请先在设置里保存 Lanyi Key。",
+      providerConfig?.credential?.keyStatus === "configured" && apiKey ? "" : "请先在设置里保存生图 Key。",
       confirmationOk ? "" : "需要在提交前明确确认本次只生成 1 张图。",
       input.imageCount === 1 && selectedShotIds.length === 1 ? "" : "P6 App 入口只允许 1-shot。",
       plan.status === "ready_for_live_submit" ? "" : plan.blockers[0],
@@ -398,7 +474,7 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
         : {
           ok: true,
           bytes: MOCK_PNG,
-          providerRequestId: `mock_lanyi_image2_${Date.now()}`,
+          providerRequestId: `mock_apikey_fun_image2_${Date.now()}`,
           providerResponseMetadata: { mockProviderResult: true, returnedCount: 1, semanticQaStatus: input.mockProviderResultStatus || "needs_review" },
         }
       : providerOperation === "image.edit"

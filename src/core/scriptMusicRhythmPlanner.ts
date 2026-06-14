@@ -117,9 +117,9 @@ function referenceStrategyFor(plan: DirectorRhythmPlan, durationSeconds: number)
 
 function totalDuration(input: BuildScriptMusicRhythmPlanInput, shotCount: number): number {
   const desired = Number(input.desiredTotalDurationSeconds || 0);
-  if (Number.isFinite(desired) && desired > 0) return clamp(round(desired), Math.max(4, shotCount * 3), 180);
+  if (Number.isFinite(desired) && desired > 0) return clamp(Math.round(desired), Math.max(4, shotCount * 4), 180);
   const musicDuration = Number(input.musicAnalysis?.durationSeconds || 0);
-  if (Number.isFinite(musicDuration) && musicDuration >= 4) return clamp(round(musicDuration), Math.max(4, shotCount * 3), 180);
+  if (Number.isFinite(musicDuration) && musicDuration >= 4) return clamp(Math.round(musicDuration), Math.max(4, shotCount * 4), 180);
   return clamp(shotCount * 5, 4, 180);
 }
 
@@ -159,6 +159,33 @@ function weightedTiming(weights: number[], totalDurationSeconds: number): number
   return points;
 }
 
+function executableDurationsFromTiming(timing: number[], shotCount: number, totalDurationSeconds: number): number[] {
+  const targetTotal = clamp(Math.round(totalDurationSeconds), shotCount * 4, shotCount * 15);
+  const rawDurations = Array.from({ length: shotCount }, (_, index) => {
+    const start = timing[index] ?? (targetTotal / shotCount) * index;
+    const end = timing[index + 1] ?? (targetTotal / shotCount) * (index + 1);
+    return clamp(end - start, 4, 15);
+  });
+  const values = rawDurations.map((duration) => clamp(Math.round(duration), 4, 15));
+  let delta = targetTotal - values.reduce((sum, value) => sum + value, 0);
+  const order = rawDurations
+    .map((duration, index) => ({ index, fraction: duration - Math.floor(duration) }))
+    .sort((left, right) => delta >= 0 ? right.fraction - left.fraction : left.fraction - right.fraction);
+  let cursor = 0;
+  while (delta !== 0 && cursor < order.length * 15) {
+    const index = order[cursor % Math.max(1, order.length)]?.index ?? 0;
+    if (delta > 0 && values[index]! < 15) {
+      values[index] += 1;
+      delta -= 1;
+    } else if (delta < 0 && values[index]! > 4) {
+      values[index] -= 1;
+      delta += 1;
+    }
+    cursor += 1;
+  }
+  return values;
+}
+
 export function buildScriptMusicRhythmPlan(input: BuildScriptMusicRhythmPlanInput): ScriptMusicRhythmPlan {
   const shotTexts = (input.shotTexts?.length ? input.shotTexts : splitScriptFallback(input.scriptText)).map(clean).filter(Boolean);
   const fallbackShotTexts = shotTexts.length ? shotTexts : ["整理一个清楚的开场镜头"];
@@ -174,10 +201,13 @@ export function buildScriptMusicRhythmPlan(input: BuildScriptMusicRhythmPlanInpu
     totalDurationSeconds: total,
   });
   const timing = musicTiming || weightedTiming(perShotPlans.map(densityWeight), total);
+  const executableDurations = executableDurationsFromTiming(timing, fallbackShotTexts.length, total);
+  let cursorSeconds = 0;
   const segments = fallbackShotTexts.map((text, index): ScriptMusicRhythmSegment => {
-    const startSeconds = timing[index] ?? round((total / fallbackShotTexts.length) * index);
-    const endSeconds = timing[index + 1] ?? round((total / fallbackShotTexts.length) * (index + 1));
-    const durationSeconds = round(clamp(endSeconds - startSeconds, 3, 15));
+    const startSeconds = cursorSeconds;
+    const durationSeconds = executableDurations[index] ?? 5;
+    const endSeconds = startSeconds + durationSeconds;
+    cursorSeconds = endSeconds;
     const plan = perShotPlans[index]!;
     const referenceStrategy = referenceStrategyFor(plan, durationSeconds);
     return {

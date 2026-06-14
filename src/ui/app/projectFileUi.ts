@@ -29,7 +29,7 @@ export function projectFileSelectionDetail(selection: ProjectFileSelectionStatus
     return selection.hasProjectVibe ? "当前项目已连接" : "会创建项目文件";
   }
   if (!canUseLocalProjectPicker && selection.status !== "error") {
-    return "浏览器预览可以先规划；补参考或提交视频需要在桌面 App 里选择本地项目文件夹。";
+    return "浏览器里可以先规划；生成参考或提交视频需要在桌面 App 里选择本地项目文件夹。";
   }
   if (selection.detail) return selection.detail;
   if (selection.status === "unavailable") return "当前环境没有项目选择器";

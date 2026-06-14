@@ -397,7 +397,7 @@ check(/onSelectShot\(item\.shotId\)/.test(previewBody), "timeline click must sel
 check(/<video/.test(previewBody) && /preview-stage-video/.test(previewBody), "video clips with mediaPath must render a video shell");
 check(/activeItem\?\.kind === "image_hold"[\s\S]*<MediaFrame/.test(previewBody), "image holds must render through MediaFrame");
 check(/activeItem\?\.kind === "video_clip" && activeItem\.mediaPath[\s\S]*<video/.test(previewBody), "video clips must replace the image hold render branch");
-check(/preview-stage-card/.test(previewBody) && />素材待补齐</.test(previewBody), "missing media must render only a light placeholder");
+check(/preview-stage-card/.test(previewBody) && />等待素材</.test(previewBody), "missing media must render only a light placeholder");
 check(!/blockedReasons|formalPreviewGate|requiredChecks|providerSubmissionForbidden|sourceTaskId/.test(previewBody), "Preview Player source must not surface engineering state branches");
 check(!/activeItem\?\.kind === "video_clip" \? "Clip"/.test(previewBody), "missing video placeholders must not show Clip copy");
 check(/preview-stage/.test(previewBody) && /preview-line/.test(previewBody), "MinimalPreview must render a large shell and a minimal timeline");

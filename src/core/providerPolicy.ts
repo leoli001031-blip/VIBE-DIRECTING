@@ -20,6 +20,7 @@ export const IMAGE2_GENERATE_DEFAULT_SIZE = IMAGE2_GENERATE_SIZE_PRESETS[IMAGE2_
 export const IMAGE2_REFERENCE_EDIT_MAX_CONCURRENCY = 3;
 export const IMAGE2_REFERENCE_EDIT_RETRY_CONCURRENCY = 2;
 export const IMAGE2_REFERENCE_EDIT_MAX_AUTO_RETRIES = 2;
+export const APIKEY_FUN_IMAGE_PROVIDER_ID = "apikey-fun-gpt55-responses-image";
 
 export function isJimengCompatibleVideoAspectRatio(value: string | undefined): value is JimengCompatibleVideoAspectRatio {
   return Boolean(value && value in JIMENG_COMPATIBLE_VIDEO_720P_SIZE_PRESETS);
@@ -46,9 +47,9 @@ export const defaultProviderPolicy: ProviderPolicy = {
   rules: [
     {
       slot: "image.generate",
-      activeProvider: "lanyi-image2",
+      activeProvider: APIKEY_FUN_IMAGE_PROVIDER_ID,
       executionState: "active",
-      allowedProviders: ["lanyi-image2", "openai-image2-agent-cli", "openai-image2-api"],
+      allowedProviders: [APIKEY_FUN_IMAGE_PROVIDER_ID, "openai-image2-agent-cli", "openai-image2-api"],
       forbiddenProviders: ["dreamina", "jimeng", "seedream"],
       allowedModes: ["text2image"],
       forbiddenFallbacks: ["image2image_to_text2image"],
@@ -56,9 +57,9 @@ export const defaultProviderPolicy: ProviderPolicy = {
     },
     {
       slot: "image.edit",
-      activeProvider: "openai-image2-api",
+      activeProvider: APIKEY_FUN_IMAGE_PROVIDER_ID,
       executionState: "active",
-      allowedProviders: ["openai-image2-agent-cli", "openai-image2-api"],
+      allowedProviders: [APIKEY_FUN_IMAGE_PROVIDER_ID, "openai-image2-agent-cli", "openai-image2-api"],
       forbiddenProviders: ["dreamina", "jimeng", "seedream"],
       allowedModes: ["image2image"],
       forbiddenFallbacks: ["image2image_to_text2image", "reference_edit_to_text2image"],
@@ -66,9 +67,9 @@ export const defaultProviderPolicy: ProviderPolicy = {
     },
     {
       slot: "image.reference_asset",
-      activeProvider: "openai-image2-api",
+      activeProvider: APIKEY_FUN_IMAGE_PROVIDER_ID,
       executionState: "active",
-      allowedProviders: ["openai-image2-agent-cli", "openai-image2-api"],
+      allowedProviders: [APIKEY_FUN_IMAGE_PROVIDER_ID, "openai-image2-agent-cli", "openai-image2-api"],
       forbiddenProviders: ["dreamina", "jimeng", "seedream"],
       allowedModes: ["text2image", "image2image"],
       forbiddenFallbacks: ["image2image_to_text2image"],

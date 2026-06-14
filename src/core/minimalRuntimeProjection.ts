@@ -135,14 +135,21 @@ function buildPreviewSummary(
   const returnedUnit = videoClipCount > 0 ? "段已返回" : "张已返回";
   const detail = [
     returned ? `${returned} ${returnedUnit}` : "",
-    queuedVideoPlaceholderCount ? `${queuedVideoPlaceholderCount} 段视频处理中` : "",
+    queuedVideoPlaceholderCount ? `${queuedVideoPlaceholderCount} 个视频任务处理中` : "",
     qaPendingCount ? `${qaPendingCount} 段等复核` : "",
     needsReviewCount ? `${needsReviewCount} 段需复核` : "",
-    missingPlaceholderCount ? `${missingPlaceholderCount} 段待补齐` : "",
+    missingPlaceholderCount ? `${missingPlaceholderCount} 个画面缺参考` : "",
   ].filter(Boolean).join("，") || "等待素材";
+  const shortLabel = queuedVideoPlaceholderCount
+    ? `视频任务 ${queuedVideoPlaceholderCount}`
+    : missingPlaceholderCount === items.length && missingPlaceholderCount > 0
+      ? `缺画面 ${missingPlaceholderCount}`
+      : items.length
+        ? `预览 ${items.length} 段`
+        : "暂无预览";
 
   return {
-    shortLabel: items.length ? `预览 ${items.length} 段` : "暂无预览",
+    shortLabel,
     detail,
     total: items.length,
     imageHoldCount,

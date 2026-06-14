@@ -259,7 +259,7 @@ function fallbackShot(identity: CurrentProjectWorkbenchIdentity): ShotRecord {
     actId: "current",
     sectionId: "current_project",
     title: identity.status === "bound" ? identity.displayTitle : "未选择项目",
-    storyFunction: identity.status === "bound" ? "当前项目投影 / 待补齐故事流" : "未选择项目 / 未同步",
+    storyFunction: identity.status === "bound" ? "当前项目投影 / 待写故事流" : "未选择项目 / 未同步",
     status: "blocked",
     gates: {
       identity: "UNKNOWN",
@@ -575,7 +575,7 @@ export function buildCurrentProjectWorkbenchProjection(
       detail: bound && !useStoryFacts
         ? facts?.storyFlow?.present && facts.storyFlow.readable === false
           ? "故事流读取失败"
-          : "待补齐故事流"
+          : "待写故事流"
         : bound
           ? `${shots.length} 个镜头来自当前项目`
           : "未同步",
@@ -584,12 +584,12 @@ export function buildCurrentProjectWorkbenchProjection(
       fallbackUsed: storyFallbackUsed,
     },
     assets: {
-      statusLabel: bound && visualReadable ? "当前项目资产" : bound ? "当前项目资产待补齐" : "未选择项目资产",
+      statusLabel: bound && visualReadable ? "当前项目资产" : bound ? "当前项目资产缺参考" : "未选择项目资产",
       detail: bound && visualReadable
         ? `${assetFacts.length} 个资产来自当前项目`
         : readinessCount
           ? `${readinessCount} 个复核参考来自当前项目，等待生成或锁定`
-          : "当前项目资产待补齐，等待生成或复核",
+          : "当前项目资产缺参考，等待生成或复核",
       lockedCount: counts.locked,
       candidateCount: counts.candidate,
       needsReviewCount: counts.needsReview,
@@ -632,26 +632,30 @@ export function applyCurrentProjectWorkbenchProjectionToRuntimeState(
       issues: shot.issues.filter((issue) => issue !== "missing_start_frame"),
     };
   });
-  const assetTypes = uniqueStrings(assetRecords.map((asset) => asset.type));
+  const assetSummaryByType = new Map<string, { total: number; existing: number; missing: number }>();
+  let existingAssetCount = 0;
+  for (const asset of assetRecords) {
+    const typeSummary = assetSummaryByType.get(asset.type) || { total: 0, existing: 0, missing: 0 };
+    typeSummary.total += 1;
+    if (asset.status === "missing") typeSummary.missing += 1;
+    else {
+      typeSummary.existing += 1;
+      existingAssetCount += 1;
+    }
+    assetSummaryByType.set(asset.type, typeSummary);
+  }
   const visualMemorySummary = {
     total: assetRecords.length,
-    existing: assetRecords.filter((asset) => asset.status !== "missing").length,
+    existing: existingAssetCount,
     locked: projection.assets.lockedCount,
     needsReview: projection.assets.candidateCount + projection.assets.needsReviewCount + projection.assets.rejectedCount,
     missing: projection.available ? projection.assets.missingCount : 0,
-    byType: assetTypes.map((type) => {
-      const typedAssets = assetRecords.filter((asset) => asset.type === type);
-      return {
-        type,
-        total: typedAssets.length,
-        existing: typedAssets.filter((asset) => asset.status !== "missing").length,
-        missing: typedAssets.filter((asset) => asset.status === "missing").length,
-      };
-    }),
+    byType: Array.from(assetSummaryByType.entries()).map(([type, summary]) => ({ type, ...summary })),
   };
   const lockedReferenceIds = projection.assetFacts.reduce((acc, asset) => { if (asset.status === "locked") acc.push(asset.id); return acc; }, [] as string[]);
   const candidateReferenceIds = projection.assetFacts.reduce((acc, asset) => { if (asset.status === "candidate" || asset.status === "needs_review") acc.push(asset.id); return acc; }, [] as string[]);
   const rejectedReferenceIds = projection.assetFacts.reduce((acc, asset) => { if (asset.status === "rejected") acc.push(asset.id); return acc; }, [] as string[]);
+  const projectedShotById = new Map(projection.shots.map((shot) => [shot.id, shot]));
 
   return {
     ...runtimeState,
@@ -695,7 +699,9 @@ export function applyCurrentProjectWorkbenchProjectionToRuntimeState(
     },
     storyFlow: {
       sections: projection.sections.map((section) => {
-        const sectionShots = projection.shots.filter((shot) => section.shotIds.includes(shot.id));
+        const sectionShots = section.shotIds
+          .map((shotId) => projectedShotById.get(shotId))
+          .filter((shot): shot is CurrentProjectWorkbenchProjection["shots"][number] => Boolean(shot));
         return {
           id: section.id,
           label: section.label,

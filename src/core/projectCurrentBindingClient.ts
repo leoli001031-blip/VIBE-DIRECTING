@@ -136,8 +136,7 @@ export async function loadCurrentProjectBindingStatus(): Promise<ProjectCurrentB
   try {
     const payload = await fetchRuntimeJson(projectCurrentBindingEndpoint);
     return deriveCurrentProjectBindingStatus(payload);
-  } catch (error) {
-    console.error("loadCurrentProjectBindingStatus failed:", error);
+  } catch {
     return {
       status: "unbound",
       message: projectMismatchMessage(),

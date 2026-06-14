@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleDashed, Image, MessageSquareText, Rows3, ShieldCheck, Sparkles } from "lucide-react";
+import { CheckCircle2, CircleDashed, Clapperboard, FolderOpen, Image, MessageSquareText, PackageCheck, PlayCircle, ShieldCheck, Sparkles } from "lucide-react";
 import type { ProjectRuntimeState } from "../../core/projectState";
 import type { ShotRecord } from "../../core/types";
 import type { CreatorDeskProjection } from "./creatorDeskTypes";
@@ -19,11 +19,6 @@ function viewLabel(view: DirectorView) {
   if (view === "preview") return "预览";
   if (view === "export") return "导出";
   return "故事流";
-}
-
-function gateReady(shot: ShotRecord | undefined, keys: Array<keyof ShotRecord["gates"]>) {
-  if (!shot) return false;
-  return keys.every((key) => shot.gates[key] === "PASS" || shot.gates[key] === "N/A");
 }
 
 function stepTone(input: { ready: boolean; active: boolean; blocked?: boolean; review?: boolean }): FlowTone {
@@ -50,48 +45,76 @@ export function DirectorWorkflowOverview({
   localProjectReady?: boolean;
 }) {
   const lockedAssets = runtimeState.visualMemory.assets.filter((asset) => asset.lockedStatus === "locked").length;
-  const frameReviewCount = creatorDesk?.framePlan.reviewCount || creatorDesk?.reviewTray.counts.needs_review || 0;
-  const missingFrames = creatorDesk?.framePlan.missingCount || creatorDesk?.batchGeneration.missingCount || 0;
   const videoReady = Boolean(selectedShot?.videoPath || runtimeState.previewExport.draftPreview.summary.eventCount > 0);
   const hasProjectContent = shots.length > 0 || lockedAssets > 0 || videoReady;
-  const selectedReady = Boolean(selectedShot && gateReady(selectedShot, ["identity", "scene", "prop", "story"]));
-  const selectedBlocked = Boolean(selectedShot?.status === "blocked" || selectedShot?.issues.some((issue) => /missing|缺|blocked/i.test(issue)));
+  const missingReferenceCount = Math.max(
+    creatorDesk?.reviewTray.counts.missing || 0,
+    creatorDesk?.batchGeneration.missingCount || 0,
+    creatorDesk?.framePlan.missingCount || 0,
+  );
+  const reviewCount = Math.max(
+    creatorDesk?.reviewTray.counts.needs_review || 0,
+    creatorDesk?.framePlan.reviewCount || 0,
+    creatorDesk?.videoStage.reviewCount || 0,
+  );
+  const preflightStatus = creatorDesk?.preflight.status;
+  const videoStage = creatorDesk?.videoStage;
+  const videoGeneration = videoStage?.generation;
+  const videoInProgress = videoStage?.status === "in_progress" || videoStage?.status === "recoverable";
+  const videoNeedsReview = videoStage?.status === "needs_review";
+  const videoComplete = videoStage?.status === "completed" || videoNeedsReview || videoReady;
+  const videoCanSubmit = preflightStatus === "ready" && videoStage?.status === "not_submitted";
+  const exportReady = currentView === "export" || videoComplete;
 
   const steps = [
     {
-      id: "script",
-      label: "脚本",
-      detail: shots.length ? `${shots.length} 个镜头` : "从文本开始",
-      tone: stepTone({ ready: shots.length > 0, active: currentView === "story" && !shots.length }),
+      id: "project",
+      label: "创建项目",
+      detail: localProjectReady ? "已连接" : "选择文件夹",
+      tone: stepTone({ ready: Boolean(localProjectReady), active: !localProjectReady }),
+      icon: <FolderOpen size={15} />,
+    },
+    {
+      id: "split",
+      label: "AI 拆分",
+      detail: shots.length ? `${shots.length} 个镜头` : "先发想法",
+      tone: stepTone({ ready: shots.length > 0, active: currentView === "story" && Boolean(localProjectReady) && !shots.length }),
       icon: <MessageSquareText size={15} />,
     },
     {
-      id: "assets",
-      label: "参考",
-      detail: lockedAssets ? `${lockedAssets} 个已锁定` : "角色 / 场景 / 道具",
-      tone: stepTone({ ready: lockedAssets > 0, active: currentView === "assets" }),
+      id: "references",
+      label: "生成参考",
+      detail: missingReferenceCount ? `${missingReferenceCount} 待补` : lockedAssets ? `${lockedAssets} 已通过` : "角色/场景/道具",
+      tone: stepTone({ ready: lockedAssets > 0 && missingReferenceCount === 0, active: currentView === "assets", blocked: missingReferenceCount > 0 }),
       icon: <Image size={15} />,
-    },
-    {
-      id: "storyboard",
-      label: "分镜",
-      detail: selectedShot ? selectedShot.title : "选择一个镜头",
-      tone: stepTone({ ready: selectedReady, active: currentView === "story" && Boolean(selectedShot), blocked: selectedBlocked }),
-      icon: <Rows3 size={15} />,
-    },
-    {
-      id: "frames",
-      label: "画面",
-      detail: missingFrames ? `${missingFrames} 个待补齐` : frameReviewCount ? `${frameReviewCount} 个待复核` : "画面参考优先",
-      tone: stepTone({ ready: videoReady || frameReviewCount === 0 && missingFrames === 0 && shots.length > 0, active: currentView === "preview", review: frameReviewCount > 0, blocked: missingFrames > 0 }),
-      icon: <Sparkles size={15} />,
     },
     {
       id: "review",
       label: "复核",
-      detail: videoReady ? "可继续预览" : "通过后再导出",
-      tone: stepTone({ ready: videoReady, active: currentView === "export", review: frameReviewCount > 0 }),
+      detail: reviewCount ? `${reviewCount} 待看` : shots.length ? "确认后继续" : "等内容",
+      tone: stepTone({ ready: shots.length > 0 && reviewCount === 0 && missingReferenceCount === 0, active: currentView === "assets" && reviewCount > 0, review: reviewCount > 0 }),
       icon: <ShieldCheck size={15} />,
+    },
+    {
+      id: "submit",
+      label: "提交视频",
+      detail: videoInProgress ? videoGeneration?.statusLabel || "处理中" : videoCanSubmit ? "可提交" : "参考通过后",
+      tone: stepTone({ ready: videoComplete, active: videoCanSubmit, review: videoInProgress }),
+      icon: <Clapperboard size={15} />,
+    },
+    {
+      id: "preview",
+      label: "预览",
+      detail: videoComplete ? "可播放" : "等视频回来",
+      tone: stepTone({ ready: videoComplete, active: currentView === "preview" }),
+      icon: <PlayCircle size={15} />,
+    },
+    {
+      id: "export",
+      label: "导出",
+      detail: exportReady ? "可交付" : "预览后导出",
+      tone: stepTone({ ready: exportReady, active: currentView === "export" }),
+      icon: <PackageCheck size={15} />,
     },
   ];
 

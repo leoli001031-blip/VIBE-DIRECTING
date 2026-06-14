@@ -1,5 +1,7 @@
 import { buildExportBuilderState } from "../src/core/exportBuilder.ts";
 import { buildExportWorkerState, executeExportWorkerPlan } from "../src/core/exportWorker.ts";
+import { buildLocalPreviewExportProjection } from "../src/core/localPreviewExportProjection.ts";
+import { projectVibeModelVersion, type ProjectVibeDocument } from "../src/project/types.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -172,5 +174,102 @@ assert(videoReport.includes("待复核: 1"), "video report must show needs_revie
 assert(videoReport.includes("已通过: 0"), "video report must show approved count");
 assert(videoReport.includes("缺失: 0"), "video report must show missing count");
 assert(videoReport.includes("e2ebfcfa3c6c77d4"), "video report must include submit_id for review");
+
+const approvedProjectVibe: ProjectVibeDocument = {
+  kind: "project_vibe_document",
+  modelVersion: projectVibeModelVersion,
+  manifest: {
+    projectId: "approved_video_export",
+    title: "Approved Video Export",
+    version: "0.1.0",
+    createdAt: generatedAt,
+    updatedAt: generatedAt,
+    sourceOfTruth: "project_vibe",
+    portableRoot: "project_root",
+    runtimeFixtureAuthority: false,
+  },
+  storyFlow: {
+    id: "story_flow_approved_video",
+    updatedAt: generatedAt,
+    sourceOfTruth: "project_vibe",
+    sections: [{ id: "opening", title: "Opening", summary: "One approved video.", sequenceIndex: 1, shotIds: ["MS01"] }],
+    shotOrder: ["MS01"],
+  },
+  visualMemory: {
+    id: "visual_memory_approved_video",
+    updatedAt: generatedAt,
+    sourceOfTruth: "project_vibe",
+    referencePolicy: {
+      temporaryOutputsMayBecomeAuthority: false,
+      runtimeFixturesMayBecomeAuthority: false,
+      lockedAssetsRequiredForGeneration: true,
+    },
+    entries: [],
+  },
+  shots: [],
+  assets: [],
+  runs: [],
+  receipts: {
+    scriptPlanningReceipts: [],
+    promptKeyframePlanningReceipts: [],
+    batchReceipts: [],
+    reviewReceipts: [],
+  },
+  sourceIndex: {
+    id: "source_index_approved_video",
+    updatedAt: generatedAt,
+    sourceOfTruth: "project_vibe",
+    manifestRef: "project.vibe#manifest",
+    storyFlowRef: "project.vibe#storyFlow",
+    visualMemoryRef: "project.vibe#visualMemory",
+    shotRefs: ["MS01"],
+    assetRefs: [],
+    runReceiptRefs: [],
+    reviewReceiptRefs: [],
+  },
+};
+
+const localApprovedProjection = buildLocalPreviewExportProjection({
+  runtimeState: {
+    generatedAt,
+    project: { title: "Approved Video Export", root: "." },
+    taskRuns: { jobs: [], runs: [], taskViews: [] },
+    manifestMatches: { reports: [] },
+    imagePipeline: { generationHealthReports: [], qaPromotionReports: [] },
+  } as any,
+  previewQueue: [
+    {
+      id: "preview_MS01",
+      kind: "video_clip",
+      shotId: "MS01",
+      label: "MS01",
+      mediaPath: rawVideoPath,
+      startSeconds: 0,
+      durationSeconds: 4,
+      status: "approved",
+      sourceReceiptId: "seedance_submit_e2ebfcfa3c6c77d4",
+      outputHash: "sha256:77df8280455ec698f8dfb195f5f2ce89c066794514ef8932c497cb05816c6876",
+    } as any,
+  ],
+  shots: [
+    {
+      id: "MS01",
+      actId: "A1",
+      sectionId: "opening",
+      title: "Jimeng live smoke",
+      storyFunction: "Check approved preview export.",
+      status: "ready",
+      gates: { identity: "PASS", scene: "PASS", pair: "PASS", story: "PASS", prop: "N/A", style: "PASS" },
+      issues: [],
+    },
+  ],
+  projectVibe: approvedProjectVibe,
+  projectRoot: ".",
+  selectedShotId: "MS01",
+  generatedAt,
+  exportRoot: "exports/local-approved-video",
+});
+assert(localApprovedProjection.exportWorker.manifest.mvpPackage.videoNeedsReviewCount === 0, "local export projection must not keep approved preview videos in review");
+assert(localApprovedProjection.exportWorker.manifest.mvpPackage.videoApprovedCount === 1, "local export projection must preserve approved preview video receipts");
 
 console.log(`video-export-package-test: ok (${result.executed.length} writes, ${worker.manifest.mvpPackage.videoNeedsReviewCount} needs_review)`);

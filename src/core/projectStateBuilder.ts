@@ -20,7 +20,7 @@ import { buildAgentCliMockRunnerState } from "./agentCliMockRunner";
 import { buildCliAdapterSpikeState } from "./cliAdapterSpike";
 import { buildWorkerRuntimeGateState } from "./workerRuntimeGate";
 import { buildBetaAcceptanceState } from "./betaAcceptance";
-import { buildExportWorkerState } from "./exportWorker";
+import { buildExportWorkerPlaceholderState } from "./exportWorkerPlaceholder";
 import { buildProjectFileCoreState } from "./projectFileCore";
 import { buildProjectFactsIntegrationState } from "./projectFactsIntegration";
 import { createProjectStoreSnapshot } from "./projectStore";
@@ -730,7 +730,7 @@ export function buildProjectRuntimeState(
     },
   });
   const runtimeTruthLayer = options.runtimeTruthLayer || (options.runtimeTruthLayerInput ? buildRuntimeTruthLayer(options.runtimeTruthLayerInput) : undefined);
-  const exportWorker = buildExportWorkerState({
+  const exportWorker = buildExportWorkerPlaceholderState({
     source: previewExport,
     exportRoot: "exports/export-worker",
     generatedAt,
@@ -1255,7 +1255,7 @@ export function withRuntimeDefaults(state: ProjectRuntimeState): ProjectRuntimeS
     });
   const exportWorker =
     state.exportWorker ||
-    buildExportWorkerState({
+    buildExportWorkerPlaceholderState({
       source: state.previewExport,
       exportRoot: "exports/export-worker",
       generatedAt: state.generatedAt,
@@ -1438,9 +1438,9 @@ function deriveNextStep(taskViews: RuntimeView["taskViews"]) {
 
 export function buildRuntimeViewFromProjectState(
   state: ProjectRuntimeState,
-  options: { selectedShotId?: string; knowledgeTestIntent?: string } = {},
+  options: { selectedShotId?: string; knowledgeTestIntent?: string; audit?: ProjectAudit } = {},
 ): RuntimeView {
-  const audit = auditFromProjectRuntimeState(state);
+  const audit = options.audit || auditFromProjectRuntimeState(state);
   const taskViews = state.taskRuns.taskViews.map((task) => ({
     ...task,
     shot: task.shotId ? state.storyFlow.shots.find((shot) => shot.id === task.shotId) : undefined,

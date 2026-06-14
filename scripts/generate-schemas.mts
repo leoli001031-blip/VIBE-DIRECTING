@@ -55,7 +55,7 @@ function extractConsts(sourcePath: string): Record<string, unknown> {
 for (const schemaName of refs) {
   const sourcePath = findSourceFile(schemaName);
   const consts = sourcePath ? extractConsts(sourcePath) : {};
-
+  
   const schema: any = {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     type: "object",
@@ -84,7 +84,7 @@ for (const schemaName of refs) {
 
   // Ensure basic required fields
   if (!schema.required.includes("schemaVersion")) schema.required.push("schemaVersion");
-
+  
   fs.writeFileSync(`${outDir}/${schemaName}`, JSON.stringify(schema, null, 2));
 }
 

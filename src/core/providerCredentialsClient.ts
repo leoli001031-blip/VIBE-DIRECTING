@@ -113,12 +113,17 @@ function normalizeCredentialEntry(payload: unknown): CredentialEntry | null {
   return isCredentialEntry(source) ? source : null;
 }
 
+function shouldLogProviderCredentialsError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return !/failed to fetch/i.test(message);
+}
+
 export async function loadCredentials(): Promise<CredentialsSnapshot> {
   try {
     const payload = await fetchRuntimeJson(credentialsEndpoint);
     return normalizeCredentialsSnapshot(payload);
   } catch (error) {
-    console.error("loadCredentials failed:", error);
+    if (shouldLogProviderCredentialsError(error)) console.error("loadCredentials failed:", error);
     return {};
   }
 }
@@ -128,7 +133,7 @@ export async function loadProviderConfigStatuses(): Promise<ProviderConfigStatus
     const payload = await fetchRuntimeJson(credentialsEndpoint);
     return normalizeProviderConfigStatuses(payload);
   } catch (error) {
-    console.error("loadProviderConfigStatuses failed:", error);
+    if (shouldLogProviderCredentialsError(error)) console.error("loadProviderConfigStatuses failed:", error);
     return [];
   }
 }

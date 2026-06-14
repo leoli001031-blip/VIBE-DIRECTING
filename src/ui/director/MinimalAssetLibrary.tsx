@@ -242,29 +242,44 @@ export function MinimalAssetLibrary({
       !workspaceCounts.scenes ? "场景/天气" : "",
       !workspaceCounts.props ? "独立道具" : "",
     ].filter(Boolean);
-    if (!missingParts.length) return "参考基本齐了。";
-    return `缺：${missingParts.join("、")}。细节会写进镜头里。`;
+    if (!missingParts.length) return "参考已齐；故事板只在需要的镜头生成。";
+    return `还缺 ${missingParts.join("、")}；Agent 会按镜头判断是否需要故事板。`;
   }
 
   function assetNextStepCopy() {
-    if (reviewCounts.needsReview > 0) return `${reviewCounts.needsReview} 个参考等你看。`;
-    if (reviewCounts.missing > 0) return `${reviewCounts.missing} 个参考待补。`;
+    if (reviewCounts.needsReview > 0) return "有参考等你看，先确认能不能继续使用。";
+    if (reviewCounts.missing > 0) return "有参考还没准备好，回到底部输入框让 AI 继续处理。";
     if (workspaceCounts.characters && workspaceCounts.scenes && reviewCounts.locked > 0) return "参考已准备好，可以回到故事页继续。";
     return "先放脚本和素材，AI 会整理参考。";
   }
 
-  function generationStatusCopy(message?: string) {
+	  function generationStatusCopy(message?: string) {
+	    if (assetGenerationAction?.status === "running") {
+	      return message || "正在生成参考，完成后会在下方待复核。通常需要几十秒到几分钟。";
+	    }
     if (!message) {
       if (!localProjectReady) return "先创建本地项目";
       if (assetGenerationAction?.keyConfigured === false) return "先去设置里连接生图服务";
       if (assetGenerationAction?.disabled) return "正在准备参考";
-      return "会补缺的参考，结果先给你看";
+      if (workspaceCounts.characters && workspaceCounts.scenes && workspaceCounts.props) return "参考已齐，需要重做时再点。";
+	      return "推荐直接在底部输入框说需求；需要手动操作时再展开这里。";
     }
-    if (/key|lanyi/i.test(message)) return "先去设置里连接生图服务";
+    if (/key|api/i.test(message)) return "先去设置里连接生图服务";
     if (/未选择项目|未同步|连接项目失败|项目文件已打开|请选择|先创建本地项目/i.test(message)) {
       return localProjectReady ? "正在连接项目" : "先创建本地项目";
     }
     return message;
+  }
+
+  function generationStatusTitle() {
+    if (assetGenerationAction?.status === "running") return "正在生成";
+    if (assetGenerationAction?.status === "blocked") return "生成失败";
+    if (assetGenerationAction?.status === "needs_review") return "等你复核";
+    if (assetGenerationAction?.status === "verified") return "参考已齐";
+    if (!localProjectReady) return "先选项目";
+    if (assetGenerationAction?.keyConfigured === false) return "待连接";
+    if (workspaceCounts.characters && workspaceCounts.scenes && workspaceCounts.props) return "参考已齐";
+    return "可生成";
   }
 
   return (
@@ -275,22 +290,32 @@ export function MinimalAssetLibrary({
           <small>{readOnlyDetail || "角色、场景、道具和故事板分开管理。"}</small>
         </div>
         {onGenerateAssets && (
-          <div className="asset-generation-action">
-            <button
-              disabled={assetGenerationAction?.disabled}
-              onClick={() => { void onGenerateAssets(); }}
-              aria-label="补齐项目参考素材"
-            >
-              {assetGenerationAction?.status === "running" ? "补齐中" : "补齐参考"}
-            </button>
+          <div
+            className={`asset-generation-action ${assetGenerationAction?.status || "idle"}`}
+            aria-live="polite"
+          >
+            <strong className="asset-generation-status">{generationStatusTitle()}</strong>
             <small>
               {generationStatusCopy(assetGenerationAction?.message)}
             </small>
             <small className="asset-generation-plan">{assetGenerationPlanCopy()}</small>
+            {localProjectReady && assetGenerationAction?.status !== "running" && (
+              <details className="asset-generation-manual">
+                <summary>高级操作</summary>
+                <button
+                  disabled={assetGenerationAction?.disabled}
+                  onClick={() => { void onGenerateAssets(); }}
+                  aria-label="手动生成缺少的参考图和故事板"
+                >
+                  生成缺少的参考
+                </button>
+                <small>日常建议直接在底部输入框告诉 Agent 要做什么。</small>
+              </details>
+            )}
           </div>
         )}
-        {!isReadOnly && <details className="asset-library-add" aria-label="添加参考">
-          <summary>手动添加</summary>
+        {!isReadOnly && localProjectReady && <details className="asset-library-add" aria-label="更多参考操作">
+          <summary>更多</summary>
           <div className="asset-library-toolbar">
             <select value={draft.assetType} onChange={(event) => setDraft({ ...draft, assetType: event.target.value as AssetLibraryAssetType })}>
               <option value="character">角色参考</option>
@@ -322,23 +347,23 @@ export function MinimalAssetLibrary({
       <section className="asset-workspace-strip" aria-label="工作区参考">
         <span>
           <small>角色参考</small>
-          <strong>{workspaceCounts.characters || "待补"}</strong>
+          <strong>{workspaceCounts.characters || "未放"}</strong>
           <em>身份外观</em>
         </span>
         <span>
           <small>场景/天气参考</small>
-          <strong>{workspaceCounts.scenes || "待补"}</strong>
+          <strong>{workspaceCounts.scenes || "未放"}</strong>
           <em>空间光线</em>
         </span>
         <span>
           <small>道具参考</small>
-          <strong>{workspaceCounts.props || "待补"}</strong>
+          <strong>{workspaceCounts.props || "未放"}</strong>
           <em>形状交互</em>
         </span>
         <span>
           <small>故事板参考</small>
-          <strong>{workspaceCounts.storyboards || "按需"}</strong>
-          <em>构图动作</em>
+          <strong>{workspaceCounts.storyboards || "按镜头"}</strong>
+          <em>需要时生成</em>
         </span>
         <span>
           <small>音频参考</small>
@@ -350,7 +375,7 @@ export function MinimalAssetLibrary({
         <section className="asset-edit-surface" aria-label="当前项目资产状态">
           <div>
             <span>当前项目</span>
-            <strong>资产待补齐</strong>
+            <strong>资产缺参考</strong>
             <small>等待生成或确认</small>
           </div>
           <small>{readOnlyDetail}</small>
@@ -382,48 +407,66 @@ export function MinimalAssetLibrary({
           </details>
         </section>
       )}
-      <section className="asset-library-section">
-        <span className="asset-section-label">角色参考</span>
+      <details className="asset-library-section">
+        <summary>
+          <span className="asset-section-label">角色参考</span>
+          <small>{workspaceCounts.characters || 0} 个 · 身份外观</small>
+        </summary>
         <div className="asset-feature-grid characters">
           {groups.characters.map((asset) => renderAssetCard(asset))}
           {!groups.characters.length && <div className="minimal-empty-line">还没有角色参考</div>}
         </div>
-      </section>
-      <section className="asset-library-section">
-        <span className="asset-section-label">场景/天气参考</span>
+      </details>
+      <details className="asset-library-section">
+        <summary>
+          <span className="asset-section-label">场景/天气参考</span>
+          <small>{workspaceCounts.scenes || 0} 个 · 空间光线</small>
+        </summary>
         <p className="minimal-empty-line">用于天气、空间、环境一致性。后续视频会继续使用。</p>
         <div className="asset-feature-grid scenes">
           {groups.scenes.map((asset) => renderAssetCard(asset, true))}
           {!groups.scenes.length && <div className="minimal-empty-line">还没有场景/天气参考</div>}
         </div>
-      </section>
-      <section className="asset-library-section compact">
-        <span className="asset-section-label">道具参考</span>
+      </details>
+      <details className="asset-library-section compact">
+        <summary>
+          <span className="asset-section-label">道具参考</span>
+          <small>{workspaceCounts.props || 0} 个 · 形状交互</small>
+        </summary>
         <p className="minimal-empty-line">道具尽量保持干净独立，别让它看起来像一个新镜头。</p>
         <div className="asset-feature-grid anchors">
           {groups.props.map((asset) => renderAssetCard(asset))}
           {!groups.props.length && <div className="minimal-empty-line">还没有道具参考</div>}
         </div>
-      </section>
+      </details>
       {groups.storyboards.length > 0 && (
-        <section className="asset-library-section compact">
-          <span className="asset-section-label">故事板参考</span>
+        <details className="asset-library-section compact">
+          <summary>
+            <span className="asset-section-label">故事板参考</span>
+            <small>{workspaceCounts.storyboards || 0} 个 · 构图动作</small>
+          </summary>
           <p className="minimal-empty-line">故事板管构图、动作和切镜；角色、场景、道具由锁定参考管。</p>
           <div className="asset-feature-grid anchors">
             {groups.storyboards.map((asset) => renderAssetCard(asset))}
           </div>
-        </section>
+        </details>
       )}
       {groups.styles.length > 0 && (
-        <section className="asset-library-section compact">
-          <span className="asset-section-label">风格参考</span>
+        <details className="asset-library-section compact">
+          <summary>
+            <span className="asset-section-label">风格参考</span>
+            <small>{groups.styles.length} 个 · 画面质感</small>
+          </summary>
           <div className="asset-feature-grid anchors">
             {groups.styles.map((asset) => renderAssetCard(asset, true))}
           </div>
-        </section>
+        </details>
       )}
-      <section className="asset-library-section compact">
-        <span className="asset-section-label">音频参考</span>
+      <details className="asset-library-section compact">
+        <summary>
+          <span className="asset-section-label">音频参考</span>
+          <small>{workspaceCounts.audio || 0} 个 · 台词节奏</small>
+        </summary>
         <div className="asset-audio-list">
           {groups.audioAnchors.map((asset) => (
             <div key={asset.id} className={`asset-audio-row ${asset.status}`}>
@@ -457,7 +500,7 @@ export function MinimalAssetLibrary({
           ))}
           {!workspaceCounts.audio && <div className="minimal-empty-line">还没有音频参考，需要配音或配乐时再拖进来。</div>}
         </div>
-      </section>
+      </details>
     </main>
   );
 }

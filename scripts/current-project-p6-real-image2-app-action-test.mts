@@ -124,7 +124,7 @@ function createFixture(fixtureRoot) {
     shotPlans: [{
       shotId,
       order: 1,
-      providerId: "lanyi-image2",
+      providerId: "apikey-fun-gpt55-responses-image",
       providerSlot: "image.generate",
       requiredMode: "text2image",
       frameRole: "start_frame",
@@ -173,7 +173,7 @@ async function preparePermission(baseUrl, fixtureRoot, shotId) {
       receiptId: confirm.payload.receipt.receiptId,
       transportMode: "agent_app_server",
       submitPermissionReceiptRequired: true,
-      credentialRef: "secret-store://providers/lanyi-image2/default",
+      credentialRef: "secret-store://providers/apikey-fun-gpt55-responses-image/default",
       maxProviderCallsPerReceipt: 1,
       actionTimeConfirmation: { required: true, userConfirmedAtActionTime: false },
     }),
@@ -190,7 +190,7 @@ function submitPayload(permissionPayload, extra = {}) {
     imageCount: 1,
     receipt: permissionPayload.receipt,
     submitPermissionReceipt: permissionPayload.submitPermissionReceipt,
-    providerId: "lanyi-image2",
+    providerId: "apikey-fun-gpt55-responses-image",
     mockProviderResult: true,
     ...extra,
   };
@@ -205,7 +205,7 @@ let child;
 try {
   child = spawnRuntimeServer({
     HOME: tempRoot,
-    VIBE_IMAGE2_API_KEY: "",
+    VIBE_APIKEY_FUN_API_KEY: "",
     VIBE_CORE_RUNTIME_API_PORT: "0",
     VIBE_CORE_CURRENT_PROJECT_BINDING_PATH: bindingPath,
   });
@@ -234,7 +234,7 @@ try {
 
   child = spawnRuntimeServer({
     HOME: tempRoot,
-    VIBE_IMAGE2_API_KEY: "fake-p6-test-key",
+    VIBE_APIKEY_FUN_API_KEY: "fake-p6-test-key",
     VIBE_CORE_RUNTIME_API_PORT: "0",
     VIBE_CORE_CURRENT_PROJECT_BINDING_PATH: bindingPath,
   });
@@ -248,7 +248,7 @@ try {
       selectedShotIds: [shotId],
       imageCount: 1,
       receipt: permissionPayload.receipt,
-      providerId: "lanyi-image2",
+      providerId: "apikey-fun-gpt55-responses-image",
       mockProviderResult: true,
       confirmation: { receiptId: "confirm_missing_receipt", confirmedAt: new Date().toISOString(), phrase: "submit-p6-image2", confirmed: true },
     }),

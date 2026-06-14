@@ -158,6 +158,12 @@ export function detectDirectorAgentPermissionIntent(userIntent: string): Directo
   return undefined;
 }
 
+export function directorAgentPermissionIntentDisallowsVideoSubmit(userIntent: string) {
+  const normalizedIntent = normalizedDirectorAgentPermissionIntent(userIntent);
+  if (!normalizedIntent) return false;
+  return hasPhrase(normalizedIntent, noVideoSubmitPhrases) || hasPhrase(normalizedIntent, noImageGenerationPhrases.filter((phrase) => /视频|即梦/.test(phrase)));
+}
+
 export function stripDirectorAgentPermissionControlPhrases(value: string) {
   return allControlPhrases.reduce((nextValue, phrase) => nextValue.replaceAll(phrase, ""), value);
 }

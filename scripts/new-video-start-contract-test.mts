@@ -97,6 +97,7 @@ const newVideoStartSource = stripComments(readText(newVideoStartPath));
 const agentPanelProjectionSource = stripComments(readText("src/ui/director/agentPanelProjection.ts"));
 const directorAgentActionSource = stripComments(readText("src/core/directorAgentAction.ts"));
 const directorModeSource = stripComments(readText("src/ui/director/DirectorModeShell.tsx"));
+const directorCssSource = stripComments(readText("src/styles/director.css"));
 const newVideoStart = findFunctionBody(newVideoStartSource, "NewVideoStart");
 const prepareDraft = findFunctionBody(newVideoStartSource, "prepareDraft");
 const confirmDraft = findFunctionBody(newVideoStartSource, "confirmDraft");
@@ -252,6 +253,15 @@ check(
   failures,
 );
 check(
+  /const activeVideoPermissionLabel = videoPermissionModeItems\.find/.test(newVideoStartSource)
+    && /new-video-agent-boundary-details/.test(newVideoStartSource)
+    && /执行范围/.test(newVideoStartSource)
+    && /<strong>\{activeVideoPermissionLabel\}<\/strong>/.test(newVideoStartSource)
+    && /aria-label="当前生成边界"/.test(newVideoStartSource),
+  "NewVideoStart must tuck execution controls into a concise advanced summary instead of exposing three mode buttons by default.",
+  failures,
+);
+check(
   /agentBoundaryInstruction\(draftToSubmit\.agentBoundaryMode\)/.test(prepareDraft),
   "NewVideoStart AI planning prompt must include the selected execution boundary.",
   failures,
@@ -262,32 +272,70 @@ check(
   failures,
 );
 check(
-  /const showStoryboardRows = storyboardRows\.length > 0/.test(newVideoStartSource)
-    && !/const showStoryboardRows = storyboardRows\.length > 0 && !storyboardPlanningRunning/.test(newVideoStartSource),
-  "NewVideoStart must keep showing the local storyboard rows while AI planning is still optimizing.",
+  /function visibleCharacterLabelsFromText/.test(newVideoStartSource)
+    && !/女车手\|女生/.test(newVideoStartSource)
+    && /splitVisibleReferenceLabels\(shot\.characters\)/.test(newVideoStartSource)
+    && /charactersFromShotText\(shotContext,\s*splitVisibleReferenceLabels\(fallback\.characters\)\)/.test(newVideoStartSource),
+  "NewVideoStart must infer visible characters from shot text instead of preserving an incorrect 无 field or mapping generic 女生 to 女车手.",
+  failures,
+);
+check(
+  /const showStoryboardRows = storyboardRows\.length > 0 && !storyboardPlanningRunning/.test(newVideoStartSource),
+  "NewVideoStart must hide rough local storyboard rows while AI planning is still optimizing, so users only review the final draft.",
   failures,
 );
 check(
   /storyboardPlanningRowsLabel\(storyboardRows\.length,\s*storyboardPlanningRunning\)/.test(newVideoStartSource),
-  "NewVideoStart must label local rows as an AI-optimizing draft instead of hiding them.",
+  "NewVideoStart must still label rows through the shared storyboard label helper once the final draft is visible.",
   failures,
 );
 check(
-  /if \(!localProjectBusy && !canCreateLocalProject\) return true/.test(newVideoStartSource)
-    && /当前是浏览器草稿/.test(newVideoStartSource),
-  "NewVideoStart must allow browser-only planning drafts instead of silently no-oping without an Electron project picker.",
+  /\.new-video-style-preflight:not\(\[open\]\) \.new-video-style-preflight-body\s*\{[\s\S]*display:\s*none/.test(directorCssSource),
+  "NewVideoStart style-research details must not expose disabled search buttons while collapsed.",
+  failures,
+);
+check(
+  /const showStylePreflight = Boolean\(styleResearchPreflight\)[\s\S]*styleResearchStatus !== "idle"[\s\S]*Boolean\(styleResearchResult\)[\s\S]*styleReferenceStatus === "saved"/.test(newVideoStartSource)
+    && /\{showStylePreflight && styleResearchPreflight && \(/.test(newVideoStartSource),
+  "NewVideoStart must not show the style-research branch as a constant default action before research is actually used.",
+  failures,
+);
+check(
+  /\.new-video-discussion:not\(\[open\]\) > :not\(summary\)[\s\S]*\.new-video-plan-details:not\(\[open\]\) > :not\(summary\)[\s\S]*display:\s*none/.test(directorCssSource),
+  "NewVideoStart collapsed discussion and detail sections must not expose internal planning controls.",
+  failures,
+);
+check(
+  /\.new-video-storyboard-actions\s*\{[\s\S]*display:\s*none/.test(directorCssSource),
+  "NewVideoStart storyboard row edit buttons must stay out of the default reading surface.",
+  failures,
+);
+check(
+  !/ensureLocalProjectForDraft/.test(newVideoStartSource)
+    && /当前是浏览器草稿/.test(newVideoStartSource)
+    && /确认时再选择项目文件夹/.test(newVideoStartSource),
+  "NewVideoStart must let AI planning run before asking for a local project folder.",
   failures,
 );
 check(
   /aria-label=\{`生成边界：\$\{item\.label\}`\}/.test(newVideoStartSource)
     && /aria-label="添加脚本、图片或音频文件"/.test(newVideoStartSource)
-    && /aria-label=\{storyboardPlanningStatus === "running" \? "正在拆分镜头" : "发送给 AI 导演"\}/.test(newVideoStartSource),
+    && /aria-label=\{composerPrimaryAriaLabel\}/.test(newVideoStartSource),
   "NewVideoStart composer controls must expose explicit accessible action labels.",
   failures,
 );
 check(
-  /aria-label=\{confirmed \? "草案已确认" : confirmPending \? "正在确认草案" : "确认新视频草案"\}/.test(newVideoStartSource),
-  "NewVideoStart draft confirmation must expose an explicit accessible action label.",
+  /composerConfirmsDraft[\s\S]*confirmDraft\s*:\s*submitComposer/.test(newVideoStartSource)
+    && /composerPrimaryAriaLabel[\s\S]*"确认新视频草案"/.test(newVideoStartSource),
+  "NewVideoStart bottom primary action must confirm a ready draft when no feedback text is entered.",
+  failures,
+);
+check(
+  /new-video-next-hint/.test(newVideoStartSource)
+    && /底部继续：确认进故事流/.test(newVideoStartSource)
+    && /确认进故事流/.test(newVideoStartSource)
+    && /已进入故事流/.test(newVideoStartSource),
+  "NewVideoStart draft confirmation must use a concrete creator-facing action label.",
   failures,
 );
 check(

@@ -171,6 +171,26 @@ const creatorDesk = buildCreatorDeskProjection({
 assert.equal(creatorDesk.reviewTray.items[0]?.assetId, "storyboard_reference_s02", "selected-shot storyboard reference should be first in review tray");
 assert.equal(creatorDesk.reviewTray.items[0]?.referenceKind, "storyboard_reference", "storyboard reference should be typed for creator UI");
 assert.equal(creatorDesk.reviewTray.items[0]?.assetType, "shot_reference", "storyboard reference should default to shot-reference locking");
+assert.equal(creatorDesk.videoStage.status, "not_submitted", "creator desk video stage should start as not submitted");
+
+const creatorDeskQueuedVideo = buildCreatorDeskProjection({
+  runtimeState,
+  previewItems: [{
+    id: "jimeng_video_s02",
+    shotId: "S02",
+    order: 1,
+    status: "waiting_for_video",
+    videoStatus: "queued",
+    submitId: "e2ebfcfa3c6c77d4",
+    queuePosition: 2085,
+    reviewRequired: true,
+  }] as any,
+  image2BatchState: { status: "ready_for_review", summary: undefined } as any,
+  selectedShotIds: ["S02"],
+});
+assert.equal(creatorDeskQueuedVideo.videoStage.status, "in_progress", "queued Seedance video should become a single in-progress video stage");
+assert.equal(creatorDeskQueuedVideo.videoStage.source, "preview_items", "preview queue should be the explicit source of queued video stage");
+assert.equal(creatorDeskQueuedVideo.videoStage.generation.status, "queued", "video stage should preserve the underlying Jimeng queued status");
 
 const newVideoStartSource = readFileSync("src/ui/director/NewVideoStart.tsx", "utf8");
 const creatorDeskPanelsSource = readFileSync("src/ui/director/CreatorDeskPanels.tsx", "utf8");

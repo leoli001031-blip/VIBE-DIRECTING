@@ -170,6 +170,17 @@ export async function writeProjectVibeSidecarText(
     };
   }
   try {
+    if (await sidecarTextIsUnchanged(adapter.adapter, sidecarPath, content)) {
+      return {
+        ok: true,
+        status: "written",
+        mode: adapter.mode,
+        targetId,
+        path: sidecarPath,
+        content,
+        errors: [],
+      };
+    }
     await adapter.adapter.writeFile(sidecarPath, content);
     return {
       ok: true,
@@ -189,6 +200,19 @@ export async function writeProjectVibeSidecarText(
       path: sidecarPath,
       errors: [error instanceof Error ? error.message : String(error)],
     };
+  }
+}
+
+async function sidecarTextIsUnchanged(
+  adapter: ProjectVibeStorageAdapter,
+  path: string,
+  content: string,
+): Promise<boolean> {
+  try {
+    if (adapter.existsFile && !(await adapter.existsFile(path))) return false;
+    return await adapter.readFile(path) === content;
+  } catch {
+    return false;
   }
 }
 

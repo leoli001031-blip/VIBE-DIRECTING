@@ -1,0 +1,303 @@
+{
+  "importedAt": "2026-05-02T12:00:00.000Z",
+  "projectTitle": "Small Project One Shot",
+  "projectRoot": "fixtures/small-project-one-shot",
+  "sourceTask": "fixtures/small-project-one-shot/tasks/small-project-one-shot.md",
+  "state": "ready_for_scoped_real_test_review",
+  "fileSnapshot": [
+    "fixtures/small-project-one-shot/assets/characters/nova/main.png",
+    "fixtures/small-project-one-shot/assets/scenes/elevated-platform/master.png",
+    "fixtures/small-project-one-shot/assets/styles/quiet-cinema/style.png",
+    "real-test-sandbox/small-project-one-shot/batch_001/shots/S01/start.png",
+    "real-test-sandbox/small-project-one-shot/batch_001/qa/S01_start.qa.json"
+  ],
+  "metrics": {
+    "expectedAssets": 3,
+    "existingAssets": 3,
+    "expectedKeyframes": 1,
+    "existingKeyframes": 1,
+    "expectedVideos": 0,
+    "existingVideos": 0,
+    "providerEvents": 0,
+    "dreaminaImageEvents": 0,
+    "forbiddenFallbackEvents": 0
+  },
+  "providerPolicy": {
+    "strictImageProvider": "registry_default",
+    "rules": [
+      {
+        "slot": "image.generate",
+        "activeProvider": "apikey-fun-gpt55-responses-image",
+        "executionState": "active",
+        "allowedProviders": [
+          "apikey-fun-gpt55-responses-image",
+          "openai-image2-agent-cli",
+          "openai-image2-api"
+        ],
+        "forbiddenProviders": [
+          "dreamina",
+          "jimeng",
+          "seedream"
+        ],
+        "allowedModes": [
+          "text2image"
+        ],
+        "forbiddenFallbacks": [
+          "image2image_to_text2image"
+        ],
+        "concurrency": 3
+      },
+      {
+        "slot": "image.edit",
+        "activeProvider": "apikey-fun-gpt55-responses-image",
+        "executionState": "active",
+        "allowedProviders": [
+          "apikey-fun-gpt55-responses-image",
+          "openai-image2-agent-cli",
+          "openai-image2-api"
+        ],
+        "forbiddenProviders": [
+          "dreamina",
+          "jimeng",
+          "seedream"
+        ],
+        "allowedModes": [
+          "image2image"
+        ],
+        "forbiddenFallbacks": [
+          "image2image_to_text2image",
+          "reference_edit_to_text2image"
+        ],
+        "concurrency": 3
+      },
+      {
+        "slot": "image.reference_asset",
+        "activeProvider": "apikey-fun-gpt55-responses-image",
+        "executionState": "active",
+        "allowedProviders": [
+          "apikey-fun-gpt55-responses-image",
+          "openai-image2-agent-cli",
+          "openai-image2-api"
+        ],
+        "forbiddenProviders": [
+          "dreamina",
+          "jimeng",
+          "seedream"
+        ],
+        "allowedModes": [
+          "text2image",
+          "image2image"
+        ],
+        "forbiddenFallbacks": [
+          "image2image_to_text2image"
+        ],
+        "concurrency": "adapter"
+      },
+      {
+        "slot": "video.i2v",
+        "activeProvider": "seedance2-provider",
+        "executionState": "parked",
+        "allowedProviders": [
+          "seedance2-provider",
+          "dreamina-seedance2"
+        ],
+        "forbiddenProviders": [],
+        "allowedModes": [
+          "frames2video"
+        ],
+        "forbiddenFallbacks": [
+          "frames2video_to_text2video"
+        ],
+        "concurrency": 1
+      },
+      {
+        "slot": "video.t2v.experimental",
+        "activeProvider": "none",
+        "executionState": "parked",
+        "allowedProviders": [],
+        "forbiddenProviders": [],
+        "allowedModes": [
+          "text2video"
+        ],
+        "forbiddenFallbacks": [],
+        "concurrency": 0
+      },
+      {
+        "slot": "video.extend",
+        "activeProvider": "none",
+        "executionState": "planned",
+        "allowedProviders": [],
+        "forbiddenProviders": [],
+        "allowedModes": [
+          "video2video"
+        ],
+        "forbiddenFallbacks": [],
+        "concurrency": 0
+      },
+      {
+        "slot": "video.edit",
+        "activeProvider": "none",
+        "executionState": "planned",
+        "allowedProviders": [],
+        "forbiddenProviders": [],
+        "allowedModes": [
+          "video2video"
+        ],
+        "forbiddenFallbacks": [],
+        "concurrency": 0
+      },
+      {
+        "slot": "audio.tts",
+        "activeProvider": "none",
+        "executionState": "planned",
+        "allowedProviders": [],
+        "forbiddenProviders": [],
+        "allowedModes": [
+          "tts"
+        ],
+        "forbiddenFallbacks": [],
+        "concurrency": 0
+      },
+      {
+        "slot": "audio.music",
+        "activeProvider": "none",
+        "executionState": "planned",
+        "allowedProviders": [],
+        "forbiddenProviders": [],
+        "allowedModes": [
+          "music"
+        ],
+        "forbiddenFallbacks": [],
+        "concurrency": 0
+      },
+      {
+        "slot": "local.postprocess",
+        "activeProvider": "ffmpeg-local",
+        "executionState": "available",
+        "allowedProviders": [
+          "ffmpeg-local",
+          "image-magick-local",
+          "system-image-tools"
+        ],
+        "forbiddenProviders": [
+          "opencv-semantic-repair"
+        ],
+        "allowedModes": [
+          "postprocess"
+        ],
+        "forbiddenFallbacks": [
+          "semantic_repair",
+          "identity_repair",
+          "scene_repair"
+        ],
+        "concurrency": "adapter"
+      },
+      {
+        "slot": "local.workflow",
+        "activeProvider": "none",
+        "executionState": "planned",
+        "allowedProviders": [],
+        "forbiddenProviders": [],
+        "allowedModes": [
+          "not_applicable"
+        ],
+        "forbiddenFallbacks": [],
+        "concurrency": 0
+      }
+    ]
+  },
+  "workflow": [
+    {
+      "id": "story",
+      "label": "Story Flow",
+      "status": "done",
+      "detail": "One-shot small project fixture with locked assets and one Image2 start-frame plan."
+    },
+    {
+      "id": "image2_review",
+      "label": "Image2 Review",
+      "status": "active",
+      "detail": "Scoped review only; no provider submit is opened."
+    }
+  ],
+  "assets": [
+    {
+      "id": "nova_identity_main",
+      "type": "character",
+      "name": "Nova main identity",
+      "path": "fixtures/small-project-one-shot/assets/characters/nova/main.png",
+      "status": "exists",
+      "lockedStatus": "locked",
+      "providerId": "openai-image2-agent-cli",
+      "requiredMode": "text2image",
+      "safeForFutureReference": true,
+      "dimensions": "16:9",
+      "issues": []
+    },
+    {
+      "id": "night_platform_master",
+      "type": "scene",
+      "name": "Rainy elevated platform master",
+      "path": "fixtures/small-project-one-shot/assets/scenes/elevated-platform/master.png",
+      "status": "exists",
+      "lockedStatus": "locked",
+      "providerId": "openai-image2-agent-cli",
+      "requiredMode": "text2image",
+      "safeForFutureReference": true,
+      "dimensions": "16:9",
+      "issues": []
+    },
+    {
+      "id": "quiet_cinema_style",
+      "type": "style",
+      "name": "Quiet low-texture cinema style",
+      "path": "fixtures/small-project-one-shot/assets/styles/quiet-cinema/style.png",
+      "status": "exists",
+      "lockedStatus": "locked",
+      "providerId": "openai-image2-agent-cli",
+      "requiredMode": "text2image",
+      "safeForFutureReference": true,
+      "dimensions": "16:9",
+      "issues": []
+    }
+  ],
+  "shots": [
+    {
+      "id": "S01",
+      "actId": "A1",
+      "sectionId": "A1",
+      "title": "Nova waits with a star-map card",
+      "storyFunction": "Establish Nova alone on a rainy elevated train platform at night, holding a glowing star-map card before deciding to leave.",
+      "startFrame": "real-test-sandbox/small-project-one-shot/batch_001/shots/S01/start.png",
+      "status": "ready",
+      "gates": {
+        "identity": "PASS",
+        "scene": "PASS",
+        "pair": "N/A",
+        "story": "PASS",
+        "prop": "N/A",
+        "style": "PASS"
+      },
+      "issues": []
+    }
+  ],
+  "jobs": [
+    {
+      "id": "S01_start_image2",
+      "slot": "image.generate",
+      "requiredMode": "text2image",
+      "providerId": "openai-image2-agent-cli",
+      "status": "planned",
+      "outputPath": "real-test-sandbox/small-project-one-shot/batch_001/shots/S01/start.png",
+      "promptPath": "fixtures/small-project-one-shot/prompts/S01_start.md",
+      "references": [
+        "fixtures/small-project-one-shot/assets/characters/nova/main.png",
+        "fixtures/small-project-one-shot/assets/scenes/elevated-platform/master.png",
+        "fixtures/small-project-one-shot/assets/styles/quiet-cinema/style.png"
+      ],
+      "issues": []
+    }
+  ],
+  "issues": [],
+  "contactSheets": {}
+}

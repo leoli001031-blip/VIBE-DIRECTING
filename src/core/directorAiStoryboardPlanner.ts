@@ -291,7 +291,19 @@ function inferredFunctionalCharacters(record: Record<string, unknown>) {
     if (/两名|两个|双人|对手|互相|并排|一前一后/.test(text)) return "两名车手";
     return "车手";
   }
-  return undefined;
+  const labels = [
+    /黑猫/u.test(text) ? "黑猫" : "",
+    /白猫/u.test(text) ? "白猫" : "",
+    !/黑猫|白猫/u.test(text) && /猫/u.test(text) ? "猫" : "",
+    /穿雨衣.{0,4}少女|雨衣.{0,8}少女/u.test(text) ? "穿雨衣的少女" : "",
+    !/穿雨衣.{0,4}少女|雨衣.{0,8}少女/u.test(text) && /女高中生|高中女生/u.test(text) ? "女高中生" : "",
+    !/穿雨衣.{0,4}少女|雨衣.{0,8}少女|女高中生|高中女生|少女/u.test(text) && /女生|女孩/u.test(text) ? "女生" : "",
+    !/穿雨衣.{0,4}少女|雨衣.{0,8}少女|女高中生|高中女生/u.test(text) && /少女/u.test(text) ? "少女" : "",
+    /男生|男孩/u.test(text) ? "男生" : "",
+    /少年/u.test(text) ? "少年" : "",
+    /机器人|机甲/u.test(text) ? "机器人" : "",
+  ].filter(Boolean);
+  return labels.length ? Array.from(new Set(labels)).join("、") : undefined;
 }
 
 function normalizedReferenceFields(record: Record<string, unknown>): {
@@ -315,12 +327,46 @@ function normalizedReferenceFields(record: Record<string, unknown>): {
   };
 }
 
-function extractRequestedShotCount(text: string): number | undefined {
+function parseLocalizedInteger(value: string): number | undefined {
+  const text = clean(value).replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
+  if (/^\d{1,3}$/u.test(text)) return Number(text);
+  const digits: Record<string, number> = {
+    一: 1,
+    二: 2,
+    两: 2,
+    俩: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+  };
+  if (digits[text] !== undefined) return digits[text];
+  if (text === "十") return 10;
+  const teen = text.match(/^十([一二两俩三四五六七八九])$/u);
+  if (teen) return 10 + (digits[teen[1]!] || 0);
+  const tens = text.match(/^([一二两俩三四五六七八九])十([一二两俩三四五六七八九])?$/u);
+  if (tens) return (digits[tens[1]!] || 0) * 10 + (tens[2] ? digits[tens[2]] || 0 : 0);
+  return undefined;
+}
+
+function countEnumeratedVideoSegments(text: string): number | undefined {
   const normalized = text.replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
-  const match = normalized.match(/(?:要|做|生成|输出|共|总共|大概|约)?\s*(\d{1,3})\s*(?:个|条|段)?\s*(?:镜头|分镜|shot|shots)/i);
-  if (!match) return undefined;
-  const count = Number(match[1]);
-  if (!Number.isFinite(count)) return undefined;
+  const matches = [...normalized.matchAll(/(?:^|[\n\r\s，,。；;])(?:视频|短片|片段|段落)\s*([0-9]{1,2})\s*[：:]/gu)];
+  const values = matches
+    .map((match) => Number(match[1]))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (values.length < 2) return undefined;
+  return Math.max(...values);
+}
+
+export function extractRequestedShotCount(text: string): number | undefined {
+  const normalized = text.replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
+  const match = normalized.match(/(?:要|做|生成|输出|共|总共|大概|约)?\s*([0-9]{1,3}|一|二|两|俩|三|四|五|六|七|八|九|十|十[一二两俩三四五六七八九]|[一二两俩三四五六七八九]十[一二两俩三四五六七八九]?)\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|视频|短片|片段|段落|shot|shots|clips?|cuts?)/i);
+  const count = match ? parseLocalizedInteger(match[1]!) : countEnumeratedVideoSegments(normalized);
+  if (count === undefined || !Number.isFinite(count)) return undefined;
   return Math.max(1, Math.min(MAX_AI_STORYBOARD_SHOTS, Math.round(count)));
 }
 

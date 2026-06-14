@@ -1,13 +1,15 @@
-import { Check, Eye, LockKeyhole, RefreshCw, Send, X } from "lucide-react";
+import { Check, Eye, LockKeyhole, RefreshCw, X } from "lucide-react";
 import type { DirectorQaUserFeedback } from "../../core/directorQaUserFeedback";
 import { formatShotNumber } from "./MinimalStoryFlow";
+import { agentProjectRequirementCopy } from "./agentProjectRequirementCopy";
+import type { DirectorView } from "./directorTypes";
 import type { CreatorDeskProjection, CreatorFrameStatus, CreatorReviewLockTarget, CreatorReviewStatus, CreatorReviewTrayItem } from "./creatorDeskTypes";
 
 const jimengExpectedWaitMinutes = 50;
 
 const reviewLabels: Record<CreatorReviewStatus, string> = {
   needs_review: "待复核",
-  missing: "待补齐",
+  missing: "缺参考",
   retry: "可重试",
   approved: "已通过",
   locked: "已锁定",
@@ -21,6 +23,17 @@ const reviewLockLabels: Record<CreatorReviewLockTarget, string> = {
 };
 
 const reviewLockTargets: CreatorReviewLockTarget[] = ["character", "scene", "prop", "shot_reference"];
+
+const agentFlowSteps = [
+  { id: "describe", label: "描述想法" },
+  { id: "plan", label: "拆故事流" },
+  { id: "reference", label: "准备参考" },
+  { id: "video", label: "提交与回流" },
+  { id: "delivery", label: "预览与导出" },
+] as const;
+
+type AgentFlowStepId = typeof agentFlowSteps[number]["id"];
+type AgentFlowTone = "done" | "active" | "review" | "waiting";
 
 function normalizedLabel(value: string) {
   return value.trim().toLowerCase().replace(/[\s-]+/g, "_");
@@ -37,7 +50,7 @@ function reviewStatusLabel(value: string) {
 }
 
 function plannerStatusLabel(value: string) {
-  return normalizedLabel(value) === "ready" ? "已确认" : "待补齐";
+  return normalizedLabel(value) === "ready" ? "已确认" : "待整理";
 }
 
 function plannerBrief(projection: CreatorDeskProjection["scriptPlanner"]) {
@@ -54,13 +67,13 @@ function missingQuestionLabel(value: string) {
 }
 
 function batchDetail(projection: CreatorDeskProjection["batchGeneration"]) {
-  return `${projection.readyCount}/${projection.plannedCount} 张可看 · ${projection.missingCount} 张待补`;
+  return `${projection.readyCount}/${projection.plannedCount} 张可看 · ${projection.missingCount} 张缺少`;
 }
 
 function frameStatusLabel(status: CreatorFrameStatus) {
   if (status === "approved") return "已通过";
   if (status === "needs_review") return "待复核";
-  if (status === "missing") return "待补齐";
+  if (status === "missing") return "缺画面";
   return "待准备";
 }
 
@@ -85,13 +98,13 @@ function safetyLabel(value: string) {
 }
 
 function retryLabel(value: string) {
-  return normalizedLabel(value).includes("retry") ? "重试缺的" : value || "重试缺的";
+  return normalizedLabel(value).includes("retry") ? "生成参考" : value || "生成参考";
 }
 
 function videoStatusClass(value: string) {
   const normalized = normalizedLabel(value);
   if (normalized === "completed") return "approved";
-  if (normalized === "recoverable") return "retry";
+  if (normalized === "recoverable" || normalized === "failed") return "retry";
   if (normalized === ["que", "ued"].join("") || normalized === "generating" || normalized === "submitted") return "needs_review";
   return "missing";
 }
@@ -108,12 +121,9 @@ function isVideoSentStatus(value: string) {
   return value === ["sub", "mitted"].join("");
 }
 
-function isActionMovingStatus(value: string) {
-  return value === ["run", "ning"].join("");
-}
-
 function videoMetricLabel(projection: CreatorDeskProjection["videoGeneration"]) {
   const waitingCount = videoWaitingCount(projection);
+  if (projection.failedCount > 0) return `${projection.failedCount} 段失败`;
   if (projection.recoverableCount > 0) return `${projection.recoverableCount} 可稍后恢复`;
   if (waitingCount > 0) return `${waitingCount} 排队中`;
   if (projection.generatingCount > 0) return `${projection.generatingCount} 生成中`;
@@ -122,36 +132,144 @@ function videoMetricLabel(projection: CreatorDeskProjection["videoGeneration"]) 
   return "未生成";
 }
 
+function inboxKindLabel(kind: CreatorDeskProjection["projectInbox"]["items"][number]["kind"]) {
+  if (kind === "script") return "脚本";
+  if (kind === "character") return "角色";
+  if (kind === "scene") return "场景";
+  if (kind === "prop") return "道具";
+  if (kind === "storyboard") return "故事板";
+  if (kind === "music") return "配乐";
+  if (kind === "voice") return "声音";
+  if (kind === "reference") return "参考";
+  return "待判断";
+}
+
+function confirmationTone(required: boolean) {
+  return required ? "needs_review" : "approved";
+}
+
 function pendingCount(projection: CreatorDeskProjection["reviewTray"]) {
   return projection.counts.needs_review + projection.counts.missing + projection.counts.retry;
 }
 
-function nextStepLabel(projection: CreatorDeskProjection) {
-  const { scriptPlanner, batchGeneration, framePlan, reviewTray, videoGeneration } = projection;
-  if (!scriptPlanner.shotCount) return "先描述故事";
-  if (videoGeneration.status === "recoverable") return "稍后恢复查询";
-  if (videoGeneration.status === ["que", "ued"].join("") || videoGeneration.status === "generating" || videoGeneration.status === "submitted") return "等待视频";
-  if (videoGeneration.status === "not_generated" && scriptPlanner.shotCount > 0 && !pendingCount(reviewTray)) return "提交视频";
-  if (batchGeneration.missingCount > 0 || reviewTray.counts.missing > 0) return "补齐画面";
-  if (reviewTray.counts.needs_review > 0) return "检查画面";
-  if (reviewTray.counts.retry > 0) return "重试画面";
-  if (videoGeneration.status === "not_generated" && scriptPlanner.shotCount > 0) return "提交视频";
-  return "继续创作";
-}
-
 function summaryLine(projection: CreatorDeskProjection) {
-  const { batchGeneration, reviewTray, videoGeneration } = projection;
+  const { batchGeneration, projectInbox, reviewTray } = projection;
+  const videoGeneration = projection.videoStage.generation;
+  if (videoGeneration.failedCount > 0) {
+    const activeCount = videoWaitingCount(videoGeneration) + videoGeneration.generatingCount + videoGeneration.submittedCount;
+    return activeCount > 0
+      ? `${videoGeneration.failedCount} 段失败 · ${activeCount} 段处理中`
+      : `${videoGeneration.failedCount} 段视频失败`;
+  }
   if (videoGeneration.status === "recoverable") return `${videoGeneration.recoverableCount || 1} 可稍后恢复`;
   if (videoGeneration.status === ["que", "ued"].join("")) return `${videoWaitingCount(videoGeneration) || 1} 个视频排队中`;
   if (videoGeneration.status === "generating") return `${videoGeneration.generatingCount || 1} 个视频生成中`;
   if (isVideoSentStatus(videoGeneration.status)) return `${videoGeneration.submittedCount || 1} 个视频已提交`;
   const parts = [
+    projectInbox.needsReviewCount ? `${projectInbox.needsReviewCount} 个素材待确认` : "",
     reviewTray.counts.needs_review ? `${reviewTray.counts.needs_review} 待复核` : "",
-    batchGeneration.missingCount || reviewTray.counts.missing ? `${Math.max(batchGeneration.missingCount, reviewTray.counts.missing)} 待补齐` : "",
+    batchGeneration.missingCount || reviewTray.counts.missing ? `${Math.max(batchGeneration.missingCount, reviewTray.counts.missing)} 个镜头缺画面` : "",
     reviewTray.counts.retry ? `${reviewTray.counts.retry} 可重试` : "",
     videoGeneration.status !== "not_generated" ? `视频${videoGeneration.statusLabel}` : "",
   ].filter(Boolean);
   return parts.join(" · ") || "没有待处理项";
+}
+
+function primaryActionLabel(value: string) {
+  const normalized = normalizedLabel(value);
+  if (normalized.includes("检查")) return "检查画面";
+  if (normalized.includes("补齐")) return "生成参考";
+  if (normalized.includes("恢复") || normalized.includes("查询")) return "查询结果";
+  if (normalized.includes("提交")) return "提交视频";
+  if (normalized.includes("导出")) return "查看交付";
+  if (normalized.includes("写")) return "写故事";
+  return value || "继续";
+}
+
+function agentFlowActiveStep(stage: CreatorDeskProjection["agentStage"]["stage"]): AgentFlowStepId {
+  if (stage === "empty") return "describe";
+  if (stage === "planning") return "plan";
+  if (stage === "reference_needed" || stage === "reference_running" || stage === "review_needed") return "reference";
+  if (stage === "video_ready" || stage === "video_running" || stage === "video_review") return "video";
+  return "delivery";
+}
+
+function agentFlowTone(step: AgentFlowStepId, projection: CreatorDeskProjection): AgentFlowTone {
+  const activeStep = agentFlowActiveStep(projection.agentStage.stage);
+  const order = agentFlowSteps.findIndex((item) => item.id === step);
+  const activeOrder = agentFlowSteps.findIndex((item) => item.id === activeStep);
+  if (step === activeStep) {
+    return projection.agentStage.stage === "review_needed" || projection.agentStage.stage === "video_review" ? "review" : "active";
+  }
+  return order < activeOrder ? "done" : "waiting";
+}
+
+function agentFlowDetail(step: AgentFlowStepId, projection: CreatorDeskProjection) {
+  if (step === "describe") return projection.scriptPlanner.shotCount ? "已收到" : "等你输入";
+  if (step === "plan") return projection.scriptPlanner.shotCount ? `${projection.scriptPlanner.shotCount} 镜头` : "待拆分";
+  if (step === "reference") {
+    if (projection.preflight.status === "needs_references") return projection.preflight.referenceSummary;
+    if (projection.preflight.status === "needs_review") return "先看画面";
+    return projection.preflight.referenceSummary;
+  }
+  if (step === "video") {
+    if (projection.videoStage.status === "not_submitted") return projection.preflight.status === "ready" ? "可提交" : "参考后";
+    return projection.videoStage.generation.statusLabel;
+  }
+  return projection.agentStage.stage === "export_ready" ? "可交付" : "视频后";
+}
+
+function skillPillTone(value: string) {
+  const normalized = normalizedLabel(value);
+  if (normalized.includes("故事板") || normalized.includes("storyboard")) return "storyboard";
+  if (normalized.includes("全能") || normalized.includes("omni")) return "omni";
+  return "neutral";
+}
+
+function agentSkillPills(projection: CreatorDeskProjection) {
+  const pills = [
+    projection.preflight.modeSummary,
+    projection.scriptPlanner.shotCount ? `故事 ${projection.scriptPlanner.shotCount} 镜头` : "先拆故事",
+    projection.preflight.referenceSummary,
+  ];
+  if (projection.videoStage.status !== "not_submitted") pills.push(projection.videoStage.generation.statusLabel);
+  return pills.filter(Boolean).slice(0, 4);
+}
+
+type AssetReconciliationItem = NonNullable<CreatorDeskProjection["assetReconciliation"]>["items"][number];
+
+function assetReconciliationStatusLabel(status: AssetReconciliationItem["status"]) {
+  if (status === "matched") return "已匹配";
+  if (status === "needs_review") return "待确认";
+  if (status === "ambiguous") return "要选择";
+  if (status === "missing") return "缺素材";
+  if (status === "merged") return "已并入";
+  return "未使用";
+}
+
+function assetReconciliationKindLabel(kind: AssetReconciliationItem["kind"]) {
+  if (kind === "character") return "角色";
+  if (kind === "scene") return "场景";
+  if (kind === "prop") return "道具";
+  if (kind === "storyboard_reference") return "故事板";
+  if (kind === "voice_reference") return "声音";
+  if (kind === "music_reference") return "配乐";
+  return "风格";
+}
+
+function assetReconciliationItemsForView(items: AssetReconciliationItem[]) {
+  const priority: Record<AssetReconciliationItem["status"], number> = {
+    missing: 0,
+    ambiguous: 1,
+    needs_review: 2,
+    matched: 3,
+    merged: 4,
+    unused: 5,
+  };
+  return [...items]
+    .filter((item) => item.status !== "unused")
+    .sort((left, right) => priority[left.status] - priority[right.status])
+    .slice(0, 6);
 }
 
 function itemLabel(item: CreatorReviewTrayItem) {
@@ -182,7 +300,7 @@ function hasHiddenInternalCopy(value: string) {
 }
 
 function itemDetail(item: CreatorReviewTrayItem) {
-  const fallback = item.status === "missing" ? "等待补齐可用画面" : "等待复核";
+  const fallback = item.status === "missing" ? "还没有可用画面" : "等待复核";
   const value = item.detail.trim();
   if (!value || hasHiddenInternalCopy(value)) return fallback;
   if (/^[A-Za-z\s.]+$/.test(value)) return fallback;
@@ -197,6 +315,14 @@ function defaultLockTarget(item: CreatorReviewTrayItem): CreatorReviewLockTarget
 
 function hasReviewEvidence(item: CreatorReviewTrayItem) {
   return Boolean(item.mediaPath && item.sourceReceiptId && item.outputHash);
+}
+
+function reviewItemIsVideo(item: CreatorReviewTrayItem) {
+  return /\.(?:mp4|mov|webm)(?:\?|$)/i.test(item.mediaPath || "");
+}
+
+function reviewItemTargetView(item: CreatorReviewTrayItem): DirectorView {
+  return reviewItemIsVideo(item) ? "preview" : "assets";
 }
 
 function reviewPromptSummary(item: CreatorReviewTrayItem) {
@@ -216,6 +342,26 @@ function reviewShortcutPriority(item: CreatorReviewTrayItem) {
         : 3;
   const evidence = hasReviewEvidence(item) ? 0 : 1;
   return storyboard + status + evidence;
+}
+
+function canApproveReviewItem(item: CreatorReviewTrayItem, onApproveItem?: (item: CreatorReviewTrayItem) => void | Promise<void>) {
+  return item.status === "needs_review" && hasReviewEvidence(item) && Boolean(onApproveItem);
+}
+
+function canRetryReviewItem(input: {
+  item: CreatorReviewTrayItem;
+  onRetryItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
+  onRetryMissing?: () => void;
+}) {
+  return (input.item.status === "needs_review" || input.item.status === "missing" || input.item.status === "retry")
+    && Boolean(input.item.shotId)
+    && Boolean(input.onRetryItem || input.onRetryMissing);
+}
+
+function canLockReviewItem(item: CreatorReviewTrayItem, onLockItem?: (item: CreatorReviewTrayItem, target: CreatorReviewLockTarget) => void | Promise<void>) {
+  return (item.status === "needs_review" || item.status === "approved")
+    && hasReviewEvidence(item)
+    && Boolean(onLockItem);
 }
 
 function QaFeedbackNotice({ feedback }: { feedback?: DirectorQaUserFeedback }) {
@@ -241,17 +387,23 @@ function QaFeedbackNotice({ feedback }: { feedback?: DirectorQaUserFeedback }) {
 
 export function CreatorDeskPanels({
   projection,
+  localProjectReady = true,
+  localProjectBusy = false,
+  canCreateLocalProject = false,
   referenceGenerationAction,
   onRetryMissing,
   videoSendAction,
-  onSendVideo,
   onRetryItem,
   onApproveItem,
   onRejectItem,
   onLockItem,
   onSelectItem,
+  onOpenView,
 }: {
   projection: CreatorDeskProjection;
+  localProjectReady?: boolean;
+  localProjectBusy?: boolean;
+  canCreateLocalProject?: boolean;
   referenceGenerationAction?: {
     status: "idle" | "running" | "blocked" | "needs_review" | "verified";
     message?: string;
@@ -263,6 +415,7 @@ export function CreatorDeskPanels({
     disabled?: boolean;
     ready?: boolean;
     canResume?: boolean;
+    suggestedActionLabel?: string;
     qaFeedback?: DirectorQaUserFeedback;
   };
   onRetryMissing?: () => void;
@@ -272,15 +425,35 @@ export function CreatorDeskPanels({
   onRejectItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
   onLockItem?: (item: CreatorReviewTrayItem, target: CreatorReviewLockTarget) => void | Promise<void>;
   onSelectItem?: (item: CreatorReviewTrayItem) => void;
+  onOpenView?: (view: DirectorView) => void;
 }) {
-  const { scriptPlanner, batchGeneration, framePlan, videoGeneration, reviewTray } = projection;
+  const { agentStage, agentCommand, scriptPlanner, batchGeneration, framePlan, videoStage, reviewTray } = projection;
+  const { projectObservation, projectInbox, defaultIntentRoute } = projection;
+  const videoGeneration = videoStage.generation;
   const { preflight } = projection;
+  const assetReconciliation = projection.assetReconciliation;
+  const assetReconciliationItems = assetReconciliationItemsForView(assetReconciliation?.items || []);
   const actionableCount = pendingCount(reviewTray);
   const videoWaiting = videoWaitingCount(videoGeneration);
   const currentVideoPosition = videoPosition(videoGeneration);
-  const videoCanResume = Boolean(videoSendAction?.canResume || videoGeneration.canResume);
+  const videoCanResume = Boolean(videoSendAction?.canResume || videoGeneration.canResume) && videoGeneration.status !== "completed";
+  const videoActionRelevant = videoGeneration.status !== "completed";
+  const referenceGenerationBusy = referenceGenerationAction?.status === "running";
   const generationActionBlocked = Boolean(batchGeneration.canRetryMissing && !onRetryMissing);
-  const nextActionCopy = generationActionBlocked ? "等你允许生成" : nextStepLabel(projection);
+  const projectRequirement = agentProjectRequirementCopy({ localProjectBusy, canCreateLocalProject });
+  const browserDraftLabel = localProjectBusy ? projectRequirement.label : "浏览器草稿";
+  const nextActionCopy = !localProjectReady
+    ? browserDraftLabel
+    : generationActionBlocked
+      ? "生成参考"
+      : agentCommand.label;
+  const displayPreflight = localProjectReady
+    ? preflight
+    : {
+        ...preflight,
+        summary: "当前是浏览器草稿，只能继续规划；生成参考或提交视频需要在桌面 App 里打开或新建本地项目。",
+        nextAction: "选择本地项目",
+      };
   const referenceNotice = referenceGenerationAction?.message && referenceGenerationAction.status !== "idle"
     ? referenceGenerationAction.status === "blocked"
       ? `参考生成失败：${referenceGenerationAction.message}`
@@ -298,61 +471,127 @@ export function CreatorDeskPanels({
       return itemLabel(left).localeCompare(itemLabel(right), "zh-Hans-CN");
     })
     .slice(0, 6);
+  const creatorStepHint = !localProjectReady
+    ? "可以继续说想法；生成参考、提交视频或导出前再准备本地项目。"
+    : referenceGenerationBusy
+      ? "参考正在生成，完成后会进入复核。"
+      : videoCanResume
+        ? "底部按钮会查询结果，不会重复提交。"
+        : agentCommand.kind === "submit_video"
+          ? "底部按钮会提交下一段，仍保持串行。"
+          : agentCommand.kind === "open_preview"
+            ? "底部按钮会进入预览。"
+          : agentCommand.kind === "open_export"
+            ? "底部按钮会进入交付。"
+          : agentCommand.kind === "open_review"
+            ? "先检查画面；也可以点下方卡片直接复核。"
+          : `看底部按钮继续：${primaryActionLabel(nextActionCopy)}。`;
+  const showAssetReconciliation = Boolean(assetReconciliation && (
+    assetReconciliation.summary.matched > 0
+    || assetReconciliation.summary.needsReview > 0
+    || assetReconciliation.summary.ambiguous > 0
+    || assetReconciliation.summary.merged > 0
+    || assetReconciliation.summary.unused > 0
+  ));
   return (
-    <section className="creator-desk-panels compact" aria-label="待处理">
+    <section className={`creator-desk-panels compact ${displayPreflight.status} ${agentStage.stage}`} aria-label="下一步">
       <div className="creator-desk-summary">
-        <div>
-          <span>待处理</span>
-          <strong>{preflight.nextAction}</strong>
-          <small>{preflight.summary}</small>
+        <div className="creator-step-copy">
+          <span>AI 导演建议</span>
+          <strong>{nextActionCopy}</strong>
+          <small>{localProjectReady ? agentStage.summary : displayPreflight.summary}</small>
+          <em>{localProjectReady ? agentStage.detail : summaryLine(projection)}</em>
         </div>
-        {batchGeneration.canRetryMissing && onRetryMissing ? (
-          <button onClick={onRetryMissing}>
-            <RefreshCw size={14} />
-            {nextActionCopy}
-          </button>
-        ) : (
-          <small className="creator-summary-next">{nextActionCopy}</small>
-        )}
+        <div className="creator-step-cta" aria-label="当前状态提示">
+          <small className="creator-summary-next">{creatorStepHint}</small>
+        </div>
       </div>
+      <section className="creator-agent-current-task" aria-label="Agent 当前任务">
+        <div>
+          <span>理解</span>
+          <strong>{projectObservation.currentTask.understanding}</strong>
+          <small>{projectObservation.story.detail}</small>
+        </div>
+        <div>
+          <span>缺口</span>
+          <strong>{projectObservation.currentTask.missing}</strong>
+          <small>参考状态：{projectObservation.references.label}</small>
+        </div>
+        <div>
+          <span>准备</span>
+          <strong>{projectObservation.currentTask.plan}</strong>
+          <small>当前意图：{defaultIntentRoute.label}</small>
+        </div>
+        <div className={confirmationTone(projectObservation.currentTask.confirmation.required)}>
+          <span>确认</span>
+          <strong>{projectObservation.currentTask.confirmation.label}</strong>
+          <small>{projectObservation.currentTask.confirmation.detail}</small>
+        </div>
+      </section>
+      {projectInbox.totalCount > 0 && (
+        <details
+          className="creator-project-inbox"
+          open={projectInbox.needsReviewCount > 0}
+        >
+          <summary>
+            <span>素材收件箱</span>
+            <strong>{projectInbox.summary}</strong>
+            <small>{projectInbox.nextAction}</small>
+          </summary>
+          <div>
+            {projectInbox.items.map((item) => (
+              <article key={item.id} className={item.needsReview ? "needs_review" : "approved"}>
+                <span>{inboxKindLabel(item.kind)}</span>
+                <strong>{item.label}</strong>
+                <small>{item.suggestedBinding}</small>
+              </article>
+            ))}
+          </div>
+        </details>
+      )}
+      {showAssetReconciliation && assetReconciliation && (
+        <details
+          className="creator-asset-reconciliation"
+        >
+          <summary>
+            <span>素材匹配</span>
+            <strong>{assetReconciliation.creatorSummary}</strong>
+            <small>{assetReconciliation.nextAction}</small>
+          </summary>
+          <div className="creator-asset-reconciliation-list">
+            {assetReconciliationItems.map((item) => (
+              <article key={item.id} className={item.status}>
+                <span>{assetReconciliationKindLabel(item.kind)}</span>
+                <strong>{item.label}</strong>
+                <small>{assetReconciliationStatusLabel(item.status)} · {item.detail}</small>
+              </article>
+            ))}
+          </div>
+        </details>
+      )}
       {referenceNotice && (
-        <div className={`creator-action-note ${referenceGenerationAction?.status || "idle"}`}>
-          {referenceNotice}
+        <div
+          className={`creator-action-note ${referenceGenerationAction?.status || "idle"}`}
+          role="status"
+          aria-live="polite"
+        >
+          {referenceGenerationAction?.status === "running" && <strong>参考生成中</strong>}
+          <span>{referenceNotice}</span>
         </div>
       )}
-
-      <div className={`creator-preflight-strip ${preflight.status}`} aria-label="生成前总览">
-        <div>
-          <span>生成前总览</span>
-          <strong>{preflight.modeSummary}</strong>
-          <small>{preflight.referenceSummary}</small>
-        </div>
-        <div>
-          {preflight.checks.map((check) => (
-            <small key={check.id} className={check.state}>
-              <b>{check.label}</b>
-              {check.detail}
-            </small>
-          ))}
-        </div>
-      </div>
 
       {reviewShortcutItems.length > 0 && (
         <details className="creator-review-shortcuts" aria-label="待复核快捷入口">
           <summary>
-            <span>优先查看</span>
+            <span>优先复核</span>
             <strong>{reviewShortcutItems.length} 项</strong>
             <small>{actionableCount > reviewShortcutItems.length ? `还有 ${actionableCount - reviewShortcutItems.length} 项在列表里` : "点开处理"}</small>
           </summary>
           <div>
             {reviewShortcutItems.map((item) => {
-              const canApprove = item.status === "needs_review" && hasReviewEvidence(item) && Boolean(onApproveItem);
-              const canRetry = (item.status === "needs_review" || item.status === "missing" || item.status === "retry")
-                && Boolean(item.shotId)
-                && Boolean(onRetryItem || onRetryMissing);
-              const canLock = (item.status === "needs_review" || item.status === "approved")
-                && hasReviewEvidence(item)
-                && Boolean(onLockItem);
+              const canApprove = canApproveReviewItem(item, onApproveItem);
+              const canRetry = canRetryReviewItem({ item, onRetryItem, onRetryMissing });
+              const canLock = canLockReviewItem(item, onLockItem);
               return (
                 <article key={item.id} className={`review-tray-item ${item.status}`}>
                   <button
@@ -410,8 +649,49 @@ export function CreatorDeskPanels({
         </details>
       )}
 
-      <details className="creator-desk-details">
-        <summary>更多状态</summary>
+      <details className="creator-status-details creator-agent-reasoning" aria-label="AI 导演判断">
+        <summary>
+          <span>AI 导演怎么判断</span>
+          <strong>{displayPreflight.modeSummary}</strong>
+          <small>{displayPreflight.referenceSummary}</small>
+        </summary>
+        <div className="creator-agent-flow" aria-label="AI 导演流程">
+          {agentFlowSteps.map((step) => {
+            const tone = agentFlowTone(step.id, projection);
+            return (
+              <div key={step.id} className={tone}>
+                <span>{step.label}</span>
+                <small>{agentFlowDetail(step.id, projection)}</small>
+              </div>
+            );
+          })}
+        </div>
+        <div className="creator-agent-skills" aria-label="Agent 选择的做法">
+          <span>Agent 选择的做法</span>
+          <div>
+            {agentSkillPills(projection).map((pill) => (
+              <small key={pill} className={skillPillTone(pill)}>{pill}</small>
+            ))}
+          </div>
+        </div>
+        <div className={`creator-preflight-strip ${displayPreflight.status}`} aria-label="生成前总览">
+          <div>
+            <span>当前进度</span>
+            <strong>{displayPreflight.modeSummary}</strong>
+            <small>{displayPreflight.referenceSummary}</small>
+          </div>
+          <div>
+            {displayPreflight.checks.map((check) => (
+              <small key={check.id} className={check.state}>
+                <b>{check.label}</b>
+                {check.detail}
+              </small>
+            ))}
+          </div>
+        </div>
+
+        <details className="creator-desk-details">
+          <summary>完整项目细节</summary>
         <div className="creator-desk-detail-grid">
           <div className="creator-desk-panel script-planner-panel">
             <div className="creator-panel-head">
@@ -443,7 +723,7 @@ export function CreatorDeskPanels({
             <div className="creator-panel-metrics">
               <span><b>{batchGeneration.plannedCount}</b> 计划</span>
               <span><b>{batchGeneration.readyCount}</b> 待看</span>
-              <span><b>{batchGeneration.missingCount}</b> 待补</span>
+              <span><b>{batchGeneration.missingCount}</b> 缺少</span>
             </div>
             <div className="batch-generation-actions">
               <small>{concurrencyLabel(batchGeneration.concurrencyLabel)}</small>
@@ -486,28 +766,29 @@ export function CreatorDeskPanels({
               <span>视频生成</span>
               <strong className={videoStatusClass(videoGeneration.status)}>{videoGeneration.statusLabel}</strong>
             </div>
-            <p>{videoGeneration.detail}</p>
+            <p>{videoCanResume ? "即梦已经收到任务，可以查询结果。" : videoGeneration.detail}</p>
             <div className="creator-panel-metrics">
               <span><b>{videoGeneration.completedCount}</b> 已完成</span>
               <span><b>{videoWaiting + videoGeneration.generatingCount + videoGeneration.submittedCount}</b> 进行中</span>
               <span><b>{videoGeneration.recoverableCount}</b> 可恢复</span>
+              <span><b>{videoGeneration.failedCount}</b> 失败</span>
             </div>
             <div className="batch-generation-actions">
               <small>{videoMetricLabel(videoGeneration)}</small>
               {videoGeneration.shortSubmitId && <small>编号 {videoGeneration.shortSubmitId}</small>}
               {currentVideoPosition !== undefined && currentVideoPosition > 0 && <small>前面约 {currentVideoPosition} 个任务</small>}
-              <small>{videoGeneration.canResume ? "可稍后恢复查询" : `即梦常见约 ${jimengExpectedWaitMinutes} 分钟，可以离开后恢复查询`}</small>
-              {videoSendAction && (
-                <button
-                  disabled={Boolean(videoSendAction.disabled) || !videoSendAction.ready || (isVideoSentStatus(videoSendAction.status) && !videoCanResume) || videoSendAction.status === "needs_review"}
-                  onClick={onSendVideo}
-                >
-                  {isActionMovingStatus(videoSendAction.status) ? <RefreshCw size={14} /> : <Send size={14} />}
-                  {isActionMovingStatus(videoSendAction.status) ? (videoCanResume ? "查询中" : "提交中") : videoCanResume ? "查询结果" : isVideoSentStatus(videoSendAction.status) ? "已提交" : "提交视频"}
-                </button>
+              {videoGeneration.status !== "completed" && (
+                <small>{videoGeneration.canResume ? "底部按钮可以查询结果，不会重复提交" : `即梦常见约 ${jimengExpectedWaitMinutes} 分钟，可以离开后恢复查询`}</small>
+              )}
+              {videoSendAction && videoActionRelevant && (
+                <small>{videoCanResume ? "需要取回结果时，用底部主按钮。" : "需要提交视频时，用底部主按钮。"}</small>
               )}
             </div>
-            {videoSendAction?.message && <small className="creator-action-message">{videoSendAction.message}</small>}
+            {videoSendAction?.message && videoActionRelevant && (
+              <small className="creator-action-message">
+                {videoCanResume ? "查询不会提交新任务。" : videoSendAction.message}
+              </small>
+            )}
             <QaFeedbackNotice feedback={videoSendAction?.qaFeedback} />
           </div>
 
@@ -522,72 +803,106 @@ export function CreatorDeskPanels({
               ))}
             </div>
             <div className="review-tray-list">
-              {reviewTray.items.length ? reviewTray.items.map((item) => (
-                <div key={item.id} className={`review-tray-item ${item.status}`}>
-                  <button
-                    type="button"
-                    className="review-tray-select"
-                    disabled={!item.shotId || !onSelectItem}
-                    onClick={() => onSelectItem?.(item)}
-                    aria-label={`选择${itemLabel(item)}：${itemDetail(item)}`}
-                  >
-                    <span>{itemLabel(item)}</span>
-                    <small>{itemDetail(item)}</small>
-                  </button>
-                  <div>
-                    <button
-                      disabled={item.status !== "needs_review" || !hasReviewEvidence(item) || !onApproveItem}
-                      onClick={() => onApproveItem?.(item)}
-                      aria-label={`${itemLabel(item)}：通过复核`}
-                    >
-                      <Check size={13} />
-                      通过
-                    </button>
-                    <button
-                      disabled={
-                        !(item.status === "needs_review" || item.status === "missing" || item.status === "retry")
-                        || !item.shotId
-                        || (!onRetryItem && !onRetryMissing)
-                      }
-                      onClick={() => item.status === "needs_review" ? onRetryItem?.(item) : (onRetryMissing?.() || onRetryItem?.(item))}
-                      aria-label={`${itemLabel(item)}：重试补齐`}
-                    >
-                      <RefreshCw size={13} />
-                      重试
-                    </button>
-                    <button
-                      disabled={item.status !== "needs_review" || !onRejectItem}
-                      onClick={() => onRejectItem?.(item)}
-                      aria-label={`${itemLabel(item)}：拒绝`}
-                    >
-                      <X size={13} />
-                      拒绝
-                    </button>
-                    {reviewLockTargets.map((target) => (
+              {reviewTray.items.length ? reviewTray.items.map((item) => {
+                  const canApprove = canApproveReviewItem(item, onApproveItem);
+                  const canRetry = canRetryReviewItem({ item, onRetryItem, onRetryMissing });
+                  const canLock = canLockReviewItem(item, onLockItem);
+                  const canReject = item.status === "needs_review" && Boolean(onRejectItem);
+                  const canShowPrompt = hasReviewEvidence(item);
+                  const hasActions = canApprove || canRetry || canLock || canReject || canShowPrompt;
+                  return (
+                    <div key={item.id} className={`review-tray-item ${item.status}`}>
                       <button
-                        key={target}
-                        disabled={
-                          !(item.status === "needs_review" || item.status === "approved")
-                          || !hasReviewEvidence(item)
-                          || !onLockItem
-                        }
-                        onClick={() => onLockItem?.(item, target)}
-                        aria-label={`${itemLabel(item)}：绑定为${reviewLockLabels[target]}`}
+                        type="button"
+                        className="review-tray-select"
+                        disabled={!item.shotId || !onSelectItem}
+                        onClick={() => onSelectItem?.(item)}
+                        aria-label={`选择${itemLabel(item)}：${itemDetail(item)}`}
                       >
-                        <LockKeyhole size={13} />
-                        绑定为{reviewLockLabels[target]}
+                        <span>{itemLabel(item)}</span>
+                        <small>{itemDetail(item)}</small>
                       </button>
-                    ))}
-                    <details className="review-prompt-popover">
-                      <summary>
-                        <Eye size={13} />
-                        查看说明
-                      </summary>
-                      <small>{reviewPromptSummary(item)}</small>
-                    </details>
-                  </div>
-                </div>
-              )) : (
+                      {hasActions ? (
+                        <div>
+                          {canLock ? (
+                            <button
+                              className="primary-review-action"
+                              onClick={() => onLockItem?.(item, defaultLockTarget(item))}
+                              aria-label={`${itemLabel(item)}：通过并锁定为${reviewLockLabels[defaultLockTarget(item)]}`}
+                            >
+                              <LockKeyhole size={13} />
+                              通过并锁定
+                            </button>
+                          ) : canApprove ? (
+                            <button
+                              className="primary-review-action"
+                              onClick={() => onApproveItem?.(item)}
+                              aria-label={`${itemLabel(item)}：通过复核`}
+                            >
+                              <Check size={13} />
+                              通过
+                            </button>
+                          ) : null}
+                          {canRetry && (
+                            <button
+                              onClick={() => item.status === "needs_review" ? onRetryItem?.(item) : (onRetryMissing?.() || onRetryItem?.(item))}
+                              aria-label={`${itemLabel(item)}：重试补齐`}
+                            >
+                              <RefreshCw size={13} />
+                              重试
+                            </button>
+                          )}
+                          {(canReject || canLock) && (
+                            <details className="review-more-actions">
+                              <summary>更多</summary>
+                              <div>
+                                {canReject && (
+                                  <button
+                                    onClick={() => onRejectItem?.(item)}
+                                    aria-label={`${itemLabel(item)}：拒绝`}
+                                  >
+                                    <X size={13} />
+                                    不采用
+                                  </button>
+                                )}
+                                {canLock && canApprove && (
+                                  <button
+                                    onClick={() => onApproveItem?.(item)}
+                                    aria-label={`${itemLabel(item)}：仅通过复核`}
+                                  >
+                                    <Check size={13} />
+                                    仅通过
+                                  </button>
+                                )}
+                                {canLock && reviewLockTargets.map((target) => (
+                                  <button
+                                    key={target}
+                                    onClick={() => onLockItem?.(item, target)}
+                                    aria-label={`${itemLabel(item)}：绑定为${reviewLockLabels[target]}`}
+                                  >
+                                    <LockKeyhole size={13} />
+                                    绑定为{reviewLockLabels[target]}
+                                  </button>
+                                ))}
+                              </div>
+                            </details>
+                          )}
+                          {canShowPrompt && (
+                            <details className="review-prompt-popover">
+                              <summary>
+                                <Eye size={13} />
+                                查看说明
+                              </summary>
+                              <small>{reviewPromptSummary(item)}</small>
+                            </details>
+                          )}
+                        </div>
+                      ) : (
+                        <small className="review-tray-waiting">缺参考，等生成或拖入素材后再复核。</small>
+                      )}
+                    </div>
+                  );
+                }) : (
                 <div className="review-tray-empty">
                   <span>暂无待复核项</span>
                   <small>确认写入后会出现在这里。</small>
@@ -596,6 +911,7 @@ export function CreatorDeskPanels({
             </div>
           </div>
         </div>
+      </details>
       </details>
     </section>
   );

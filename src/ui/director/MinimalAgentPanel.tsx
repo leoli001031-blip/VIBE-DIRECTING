@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
-import { CheckCircle2, ExternalLink, LockKeyhole, Pencil, Plus, RotateCcw, Search, Send, Sparkles, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { ArrowRight, CheckCircle2, ChevronDown, ExternalLink, LockKeyhole, MessageCircle, Pencil, Plus, RotateCcw, Search, Send, Sparkles, X } from "lucide-react";
 import {
   agentWebSearchSourceLabel,
   buildAgentWebResearchSuggestion,
@@ -26,6 +26,11 @@ import {
   type DirectorAgentToolHandoff,
 } from "../../core/directorAgentToolHandoff";
 import { buildDirectorAgentToolTrace } from "../../core/directorAgentToolTrace";
+import {
+  buildProjectInboxProjection,
+  buildProjectObservation,
+  routeProjectAgentIntent,
+} from "../../core/projectAgentWorkspace";
 import {
   buildDirectorFeedbackRecompile,
   type DirectorFeedbackRecompileResult,
@@ -74,10 +79,11 @@ import {
   directorFeedbackNeedsConcreteDirection,
 } from "./directorFeedbackUi";
 import {
-  directorSkillOverridePrompts,
   directorSkillSummaryForShot,
 } from "./directorSkillUi";
+import { agentProjectRequirementCopy } from "./agentProjectRequirementCopy";
 import type { DirectorView } from "./directorTypes";
+import type { CreatorAgentCommand } from "./creatorDeskTypes";
 import { formatShotNumber } from "./MinimalStoryFlow";
 import { usesEndpointEndFrame } from "./videoControlModeUi";
 
@@ -138,7 +144,12 @@ function isConcreteLocalAgentAction(action: DirectorAgentActionEnvelope) {
     || action.kind === "prepare_export"
     || action.kind === "request_style_research"
     || action.kind === "review_reference_asset"
-    || action.kind === "update_shot_strategy";
+    || action.kind === "update_shot_strategy"
+    || (action.kind === "revise_story_or_shot" && action.proposedChanges.length > 0);
+}
+
+function carriesProjectDraftChange(action: DirectorAgentActionEnvelope) {
+  return action.proposedChanges.some((change) => change.field === "projectDraft");
 }
 
 function choosePreparedAgentAction(
@@ -147,6 +158,10 @@ function choosePreparedAgentAction(
 ) {
   if (!stagedAction) return localAction;
   if (localAction.kind === "inspect_project_status" && stagedAction.kind !== "inspect_project_status") return localAction;
+  if (carriesProjectDraftChange(localAction) && !carriesProjectDraftChange(stagedAction)) return localAction;
+  if (localAction.kind === "revise_story_or_shot" && localAction.target.kind === "project" && stagedAction.target.kind !== "project") {
+    return localAction;
+  }
   if (localAction.kind !== stagedAction.kind && isConcreteLocalAgentAction(localAction)) return localAction;
   return stagedAction;
 }
@@ -176,7 +191,7 @@ function agentCapabilityItems(
     {
       id: "project",
       label: "项目",
-      value: availability.projectReady ? projectStatusLabel || "已连接" : "先打开项目",
+      value: availability.projectReady ? projectStatusLabel || "已连接" : "需要本地项目",
       tone: availability.projectReady ? "ready" : "blocked",
     },
     {
@@ -187,7 +202,7 @@ function agentCapabilityItems(
     },
     {
       id: "reference",
-      label: "补参考",
+      label: "生成参考",
       value: !contract.referenceGenerationAllowed
         ? "当前只规划"
         : !localProjectReady
@@ -355,6 +370,20 @@ function composerAttachmentLabel(kind: ComposerAttachmentKind) {
   return "文件";
 }
 
+function compactAgentScopeLabel(value: string) {
+  const cleaned = productScopeLabel(value);
+  const parts = cleaned.split(/\s*·\s*/u).map((part) => part.trim()).filter(Boolean);
+  const focus = [...parts].reverse().find((part) => /^(正在看|已选择|镜头|素材|段落|整个项目|导出)/u.test(part));
+  return focus || parts[parts.length - 1] || cleaned;
+}
+
+function compactAgentSelectionHint(value: string) {
+  return productScopeLabel(value)
+    .replace(/^已选中\s+正在看\s+/u, "正在看 ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function composerAttachmentUseHint(kind: ComposerAttachmentKind) {
   if (kind === "image") return "用途：作为参考素材，等待 Agent 归类为角色、场景、道具或镜头参考。";
   if (kind === "audio") return "用途：作为音频素材，等待 Agent 判断为配乐参考或声音参考。";
@@ -449,7 +478,7 @@ function agentActionTargetShotIds(action?: DirectorAgentActionEnvelope): string[
 function agentToolHandlerLabel(handler: DirectorAgentToolHandoff["handler"]) {
   if (handler === "project_vibe_patch") return "改项目";
   if (handler === "web_search") return "查资料";
-  if (handler === "image2_reference_generation") return "补参考";
+  if (handler === "image2_reference_generation") return "生成参考";
   if (handler === "seedance_video_submit") return "提交视频";
   if (handler === "project_export") return "导出";
   return "动作";
@@ -460,7 +489,7 @@ function agentReviewPrimaryLabel(action?: DirectorAgentActionEnvelope) {
   if (action.status === "blocked") return "需要补充";
   if (agentActionIsStatusInspection(action)) return "继续";
   if (action.kind === "request_style_research") return "确认查资料";
-  if (action.kind === "prepare_reference_generation") return "确认补参考";
+  if (action.kind === "prepare_reference_generation") return "确认生成参考";
   if (action.kind === "prepare_video_submit") {
     return action.executionContract.videoSubmitAllowed ? "确认提交" : "确认计划";
   }
@@ -556,7 +585,7 @@ function agentResultViewTarget(handoff?: DirectorAgentToolHandoff): AgentResultV
 function agentToolPreflightLabel(handoff: DirectorAgentToolHandoff) {
   const blockers = handoff.blockers.filter((blocker) => blocker !== "user_confirmation_required");
   if (!blockers.length) return undefined;
-  if (blockers.includes("project_not_ready")) return "先打开项目";
+  if (blockers.includes("project_not_ready")) return "需要本地项目";
   if (blockers.includes("web_search_not_ready")) return "先开启查资料";
   if (blockers.includes("reference_generation_not_ready")) return "先配置生图";
   if (blockers.includes("reference_generation_not_allowed")) return "当前只规划";
@@ -567,8 +596,12 @@ function agentToolPreflightLabel(handoff: DirectorAgentToolHandoff) {
   return "先处理阻断";
 }
 
-function agentToolHasPreflightBlocker(handoff?: DirectorAgentToolHandoff) {
-  return Boolean(handoff?.blockers.some((blocker) => blocker !== "user_confirmation_required"));
+function agentToolHasPreflightBlocker(handoff?: DirectorAgentToolHandoff, action?: DirectorAgentActionEnvelope) {
+  const blockers = handoff?.blockers.filter((blocker) => blocker !== "user_confirmation_required") || [];
+  if (action?.toolPlan.toolName === "project_vibe_patch") {
+    return blockers.some((blocker) => blocker !== "project_not_ready");
+  }
+  return Boolean(blockers.length);
 }
 
 function agentExpectedReceiptLabel(expectedReceipt: DirectorAgentToolHandoff["expectedReceipt"]) {
@@ -769,8 +802,8 @@ function agentActionDiffs(action?: DirectorAgentActionEnvelope) {
 
 function creatorProjectTaskLabel(value?: string) {
   if (!value) return undefined;
-  if (value.includes("有内容待补后入队")) return "补齐参考后继续";
-  if (value.includes("有内容待补")) return "先补参考";
+  if (value.includes("有内容待补后入队")) return "生成参考后继续";
+  if (value.includes("有内容待补")) return "先生成参考";
   if (value.includes("不用再执行")) return "只写项目";
   return value;
 }
@@ -795,7 +828,7 @@ function confirmedAgentResultFacts(run?: PrototypeAgentDemoRun, handoff?: Direct
         : result.projectSaved
         ? result.storageLabel || "已保存到项目"
         : result.projectVibeAdded
-          ? "已写入，保存待重试"
+          ? result.storageLabel || "已写入，保存待重试"
           : "还未写入",
     });
     if (result.projectImpactLabel) facts.push({ label: "影响", value: result.projectImpactLabel });
@@ -1133,6 +1166,8 @@ export function MinimalAgentPanel({
   projectScopeLabel,
   projectStatusLabel,
   localProjectReady = true,
+  localProjectBusy = false,
+  canCreateLocalProject = false,
   shot,
   selectedShots = [],
   asset,
@@ -1154,9 +1189,11 @@ export function MinimalAgentPanel({
   onSaveResearchAsReference,
   onCreateP6RealSample,
   onCreateImage2EndFrame,
+  onCreateLocalProject,
   onSendSeedanceVideo,
   onRunExport,
   onOpenResultView,
+  agentCommand,
   videoPermissionContract,
   onVideoPermissionContractChange,
   storyboardProjectPlanInput,
@@ -1166,6 +1203,8 @@ export function MinimalAgentPanel({
   projectScopeLabel?: string;
   projectStatusLabel?: string;
   localProjectReady?: boolean;
+  localProjectBusy?: boolean;
+  canCreateLocalProject?: boolean;
   shot?: ShotRecord;
   selectedShots?: ShotRecord[];
   asset?: AssetRecord;
@@ -1194,6 +1233,7 @@ export function MinimalAgentPanel({
     disabled?: boolean;
     ready?: boolean;
     canResume?: boolean;
+    suggestedActionLabel?: string;
     qaFeedback?: DirectorQaUserFeedback;
   };
   webSearchSettings?: AgentWebSearchSettings;
@@ -1206,11 +1246,13 @@ export function MinimalAgentPanel({
     userIntent: string;
   }) => KnowledgePack | Promise<KnowledgePack>;
   onRememberAgentActionLogItem?: (item: ProjectAgentActionLogItem) => void | Promise<void>;
+  onCreateLocalProject?: () => unknown | Promise<unknown>;
   onCreateP6RealSample?: (target?: AgentControlledToolInvocationTarget) => unknown | Promise<unknown>;
   onCreateImage2EndFrame?: () => void | Promise<void>;
   onSendSeedanceVideo?: (target?: AgentControlledToolInvocationTarget) => unknown | Promise<unknown>;
   onRunExport?: (target?: Pick<AgentControlledToolInvocationTarget, "agentToolTrace">) => unknown | Promise<unknown>;
   onOpenResultView?: (view: DirectorView) => void;
+  agentCommand?: CreatorAgentCommand;
   videoPermissionContract?: AgentVideoPermissionContract;
   onVideoPermissionContractChange?: (contract: AgentVideoPermissionContract) => void;
   storyboardProjectPlanInput?: StoryboardReferenceProjectPlannerInput;
@@ -1237,6 +1279,7 @@ export function MinimalAgentPanel({
   const [referenceStatus, setReferenceStatus] = useState<"idle" | "saving" | "saved" | "blocked">("idle");
   const [isPreparingPlan, setIsPreparingPlan] = useState(false);
   const [isRetryingTool, setIsRetryingTool] = useState(false);
+  const [isComposerCollapsed, setIsComposerCollapsed] = useState(false);
   const [preparedContext, setPreparedContext] = useState<PreparedComposerContext | undefined>();
   const [agentActionEnvelope, setAgentActionEnvelope] = useState<DirectorAgentActionEnvelope | undefined>();
   const [agentToolHandoff, setAgentToolHandoff] = useState<DirectorAgentToolHandoff | undefined>();
@@ -1252,6 +1295,7 @@ export function MinimalAgentPanel({
   const hasMultiShotSelection = scopedShotIds.length > 1;
   const hasSectionSelection = Boolean(sectionId && !scopedShotIds.length && !asset);
   const hasActiveSelection = hasBoundSelection || hasSectionSelection;
+  const currentSelectedShotId = scopedShotIds.length === 1 ? scopedShotIds[0] : shot?.id;
   const selectionHint = hasMultiShotSelection
     ? `已选中 ${localScopeLabel}。直接说这些镜头哪里不顺。`
     : shot
@@ -1263,6 +1307,8 @@ export function MinimalAgentPanel({
           : "写脚本、提需求，或点一段再说修改。";
   const displayedScopeLabel = workflow ? preparedContext?.scopeLabel || scopeLabel : scopeLabel;
   const displayedSelectionHint = workflow ? preparedContext?.selectionHint || selectionHint : selectionHint;
+  const displayedCompactScopeLabel = compactAgentScopeLabel(displayedScopeLabel);
+  const displayedCompactSelectionHint = compactAgentSelectionHint(displayedSelectionHint);
   const inputPlaceholder = hasActiveSelection
     ? "说这块怎么改..."
     : "写脚本、提需求，或拖入图片/音频/文档。";
@@ -1307,14 +1353,25 @@ export function MinimalAgentPanel({
   useEffect(() => {
     if (videoPermissionContract) setLocalVideoPermissionContract(videoPermissionContract);
   }, [videoPermissionContract]);
+  useEffect(() => {
+    if (text.trim() || attachments.length) {
+      setIsComposerCollapsed(false);
+    }
+  }, [attachments.length, text]);
   const activeVideoPermissionContract = localVideoPermissionContract;
   const localProjectReadyForTools = Boolean(localProjectReady);
+  const agentCommandKind = agentCommand?.kind;
   const showEndpointEndFrameControls = usesEndpointEndFrame(shot) || selectedShots.some(usesEndpointEndFrame);
-  const showRealSampleAction = Boolean(realSampleAction?.keyConfigured || realSampleAction?.status === "running" || realSampleAction?.status === "needs_review" || realSampleAction?.status === "verified");
-  const showEndFrameAction = showEndpointEndFrameControls && Boolean(endFrameAction?.keyConfigured || endFrameAction?.status === "running" || endFrameAction?.status === "needs_review" || endFrameAction?.status === "verified");
-  const showVideoAction = Boolean(videoSendAction && runtimeState.storyFlow.shots.length > 0);
+  const videoResultIsPrimary = videoCanResume || videoBusy || videoAlreadySent;
+  const showRealSampleAction = !videoResultIsPrimary && Boolean(agentCommandKind === "generate_references" || realSampleAction?.keyConfigured || realSampleAction?.status === "running" || realSampleAction?.status === "needs_review" || realSampleAction?.status === "verified");
+  const showEndFrameAction = !videoResultIsPrimary && showEndpointEndFrameControls && Boolean(endFrameAction?.keyConfigured || endFrameAction?.status === "running" || endFrameAction?.status === "needs_review" || endFrameAction?.status === "verified");
+  const showVideoAction = Boolean(videoSendAction && runtimeState.storyFlow.shots.length > 0 && (
+    agentCommandKind === "submit_video"
+    || agentCommandKind === "resume_video"
+    || agentCommandKind === "wait_video"
+    || agentCommandKind === undefined
+  ));
   const selectedSkillSummary = shot ? directorSkillSummaryForShot(shot) : undefined;
-  const selectedSkillOverrides = selectedSkillSummary ? directorSkillOverridePrompts(selectedSkillSummary.strategy) : [];
   const effectiveWebSearchReady = webSearchReady ?? webSearchSettings.enabled;
   function visibleVideoPermissionContractFor(contract: AgentVideoPermissionContract) {
     return agentVideoPermissionForUi(contract, {
@@ -1327,7 +1384,7 @@ export function MinimalAgentPanel({
   const currentVideoPermissionContract = videoPermissionContractForUi;
   const referenceGenerationBlockedByContract = !agentVideoPermissionAllowsReference(currentVideoPermissionContract);
   const referenceGenerationBlockedByProject = !localProjectReadyForTools;
-  const videoPermissionBlockedByContract = !agentVideoPermissionAllowsVideo(currentVideoPermissionContract);
+  const videoPermissionBlockedByContract = !videoCanResume && !agentVideoPermissionAllowsVideo(currentVideoPermissionContract);
   const videoPermissionBlockedByProject = !localProjectReadyForTools;
   const videoPermissionModeItems: Array<{ mode: AgentVideoPermissionMode; label: string }> = [
     { mode: "plan_only", label: "只规划" },
@@ -1335,20 +1392,21 @@ export function MinimalAgentPanel({
     { mode: "video_allowed", label: "可提交视频" },
   ];
   const realSampleLabel = realSampleBusy
-    ? "补齐中"
-    : referenceGenerationBlockedByContract
-      ? agentVideoPermissionLabel(currentVideoPermissionContract)
+    ? "生成中"
     : referenceGenerationBlockedByProject
       ? "先保存项目"
     : realSampleAction?.status === "needs_review"
       ? "等待复核"
       : realSampleAction?.status === "verified"
         ? "已完成"
-        : "补齐参考";
+        : "生成参考";
+  const idleActionHint = currentVideoPermissionContract.mode === "plan_only"
+    ? "点一下只会先整理成待确认计划。"
+    : currentVideoPermissionContract.mode === "reference_allowed"
+      ? "点一下会准备参考，视频仍要你确认。"
+      : "参考通过后，才会继续提交视频。";
   const endFrameLabel = endFrameBusy
     ? "生成中"
-    : referenceGenerationBlockedByContract
-      ? agentVideoPermissionLabel(currentVideoPermissionContract)
     : referenceGenerationBlockedByProject
       ? "先保存项目"
     : endFrameAction?.status === "needs_review"
@@ -1358,15 +1416,27 @@ export function MinimalAgentPanel({
         : "生成结束画面";
   const videoActionLabel = videoBusy
     ? videoCanResume ? "查询中" : "提交中"
-    : videoPermissionBlockedByContract
-      ? agentVideoPermissionLabel(currentVideoPermissionContract)
+    : videoCanResume
+      ? "查询结果"
+    : videoSendAction?.suggestedActionLabel
+      ? videoSendAction.suggestedActionLabel
     : videoPermissionBlockedByProject
       ? "先保存项目"
-      : videoCanResume
-      ? "查询结果"
       : videoAlreadySent
       ? "已提交"
       : "提交视频";
+  const agentBoundarySummaryLabel = videoCanResume
+    ? "可查询结果"
+    : videoBusy || videoAlreadySent || agentCommandKind === "wait_video"
+      ? "等待回流"
+      : agentVideoPermissionLabel(videoPermissionContractForUi);
+  const agentBoundaryDetail = videoCanResume
+    ? "即梦已收到任务；现在只查询结果，不会重复提交。"
+    : videoBusy
+      ? "正在处理视频任务，等结果回来后再继续。"
+      : videoAlreadySent
+        ? "视频已提交，等待结果。"
+        : agentVideoPermissionDetail(videoPermissionContractForUi);
 
   function canAutoFocusComposer() {
     if (typeof document === "undefined") return false;
@@ -1403,21 +1473,31 @@ export function MinimalAgentPanel({
     setResearchResult(undefined);
     setResearchStatus("idle");
     setReferenceStatus("idle");
+    setIsComposerCollapsed(false);
     setAgentActionLog([]);
     restoredAgentDraftIdRef.current = "";
     restoredAgentLogKeyRef.current = "";
     setStatus(hasComposerDraft ? "项目已切换，输入已清空" : "项目已切换，重新发送即可");
-  }, [hasComposerDraft, hasProjectBoundAgentState, runtimeProjectKey]);
+  }, [hasComposerDraft, hasProjectBoundAgentState, runtimeProjectKey, runtimeState.storyFlow.shots.length]);
 
   useEffect(() => {
+    if (!localProjectReadyForTools) {
+      restoredAgentLogKeyRef.current = "";
+      setAgentActionLog([]);
+      return;
+    }
     const restoredItems = (restoredAgentActionLog || []).slice(0, 4);
     const nextKey = agentActionLogKey(restoredItems);
     if (!nextKey || restoredAgentLogKeyRef.current === nextKey) return;
     restoredAgentLogKeyRef.current = nextKey;
     setAgentActionLog(restoredItems);
-  }, [restoredAgentActionLog]);
+  }, [localProjectReadyForTools, restoredAgentActionLog]);
 
   useEffect(() => {
+    if (!localProjectReadyForTools) {
+      restoredAgentDraftIdRef.current = "";
+      return;
+    }
     const draft = restoredAgentStagedPlanDraft;
     if (!draft || draft.status !== "active" || !draft.action || !draft.toolHandoff) return;
     if (restoredAgentDraftIdRef.current === draft.draftId) return;
@@ -1475,6 +1555,7 @@ export function MinimalAgentPanel({
   }, [
     activeVideoPermissionContract,
     hasPreparedAgentState,
+    localProjectReadyForTools,
     projectReferenceGuide,
     restoredAgentStagedPlanDraft,
     runtimeState,
@@ -1505,6 +1586,72 @@ export function MinimalAgentPanel({
     setStatus(agentVideoPermissionLabel(nextContract));
   }
 
+  function runFooterReferenceGeneration() {
+    if (!realSampleAction) return;
+    if (referenceGenerationBlockedByProject) {
+      setStatus("先打开或保存本地项目。");
+      return;
+    }
+    if (!realSampleAction.keyConfigured) {
+      setStatus("先配置生图 Key。");
+      return;
+    }
+    if (realSampleAction.disabled || realSampleBusy || !onCreateP6RealSample) {
+      setStatus(realSampleAction.message || (realSampleBusy ? "参考正在生成。" : "当前还不能生成参考。"));
+      return;
+    }
+    const nextContract = referenceGenerationBlockedByContract
+      ? agentVideoPermissionForMode("reference_allowed")
+      : currentVideoPermissionContract;
+    if (referenceGenerationBlockedByContract) updateVideoPermissionContract(nextContract);
+    setStatus("已发送参考任务。");
+    void onCreateP6RealSample({ scope: "project", videoPermissionContract: nextContract });
+  }
+
+  function runFooterEndFrameGeneration() {
+    if (!endFrameAction) return;
+    if (referenceGenerationBlockedByProject) {
+      setStatus("先打开或保存本地项目。");
+      return;
+    }
+    if (!endFrameAction.keyConfigured) {
+      setStatus("先配置生图 Key。");
+      return;
+    }
+    if (endFrameAction.disabled || endFrameBusy || !onCreateImage2EndFrame) {
+      setStatus(endFrameAction.message || (endFrameBusy ? "结束画面正在生成。" : "当前还不能生成结束画面。"));
+      return;
+    }
+    const nextContract = referenceGenerationBlockedByContract
+      ? agentVideoPermissionForMode("reference_allowed")
+      : currentVideoPermissionContract;
+    if (referenceGenerationBlockedByContract) updateVideoPermissionContract(nextContract);
+    setStatus("已发送结束画面任务。");
+    void onCreateImage2EndFrame();
+  }
+
+  function runFooterVideoAction() {
+    if (!videoSendAction) return;
+    if (videoPermissionBlockedByProject) {
+      setStatus("先打开或保存本地项目。");
+      return;
+    }
+    if (videoBusy || !onSendSeedanceVideo) {
+      setStatus(videoBusy ? "视频任务正在处理。" : "当前还不能提交视频。");
+      return;
+    }
+    if (!videoCanResume && (videoSendAction.disabled || !videoSendAction.ready || !videoSendAction.keyConfigured || videoAlreadySent)) {
+      setStatus(videoSendAction.message || "视频还不能提交。");
+      return;
+    }
+    const nextContract = videoPermissionBlockedByContract
+      ? agentVideoPermissionForMode("video_allowed")
+      : currentVideoPermissionContract;
+    if (videoPermissionBlockedByContract) updateVideoPermissionContract(nextContract);
+    setStatus(videoCanResume ? "开始查询视频结果。" : "开始提交视频。");
+    void onSendSeedanceVideo({ videoPermissionContract: nextContract });
+  }
+
   function updateText(value: string) {
     setText(value);
     setResearchResult(undefined);
@@ -1521,11 +1668,6 @@ export function MinimalAgentPanel({
     setLocalPrototypeAgentDemo(undefined);
     setIsRetryingTool(false);
     setStatus(value.trim() ? "继续写" : "等待输入");
-  }
-
-  function useSkillPrompt(prompt: string) {
-    updateText(prompt);
-    window.setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 0);
   }
 
   function continueFromAgentActionLog(item: AgentActionLogItem) {
@@ -1626,7 +1768,6 @@ export function MinimalAgentPanel({
         return;
       }
       setStatus("正在整理");
-      const singleSelectedShotId = scopedShotIds.length === 1 ? scopedShotIds[0] : shot?.id;
       const nextVideoPermissionContract = detectAgentVideoPermissionContract(userIntent, activeVideoPermissionContract);
       const nextActionVideoPermissionContract = visibleVideoPermissionContractFor(nextVideoPermissionContract);
       updateVideoPermissionContract(nextVideoPermissionContract);
@@ -1641,7 +1782,7 @@ export function MinimalAgentPanel({
         scopeLabel,
         selectionHint,
         userIntent,
-        selectedShotId: scopedShotIds.length <= 1 ? singleSelectedShotId : undefined,
+        selectedShotId: scopedShotIds.length <= 1 ? currentSelectedShotId : undefined,
         selectedShotIds: scopedShotIds.length > 1 ? scopedShotIds : undefined,
         selectedAssetId: asset?.id,
         sectionId: !scopedShotIds.length && !asset ? sectionId : undefined,
@@ -1913,6 +2054,7 @@ export function MinimalAgentPanel({
           skipConfirm: true,
           confirmationReceiptId: handoff.handoffId,
           confirmedAt: invocation.confirmation.confirmedAt,
+          videoPermissionContract: activeVideoPermissionContract,
           agentToolTrace,
         });
         const outcome = videoSubmitToolOutcome(result);
@@ -1958,9 +2100,10 @@ export function MinimalAgentPanel({
         const savedFeedbackRun: PrototypeAgentDemoRun = {
           status: "ready",
           result: {
-            label: "修改计划已写入项目",
+            label: localProjectReadyForTools ? "修改计划已写入项目" : "修改计划已加入浏览器草稿",
             projectVibeAdded: true,
-            projectSaved: true,
+            projectSaved: localProjectReadyForTools,
+            storageLabel: localProjectReadyForTools ? "已保存到项目" : "浏览器草稿",
             waitingReview: true,
             status: "ready",
           },
@@ -2092,60 +2235,315 @@ export function MinimalAgentPanel({
     }
   }
 
-  function handleNext() {
-    if (primaryDisabled) {
-      setStatus(primaryDisabledReason);
-      return;
-    }
-    if (hasComposerInput || !workflow || planPhase === "idle") {
-      void prepareChange();
-      return;
-    }
-    if (agentActionIsStatusInspection(agentActionEnvelope)) {
-      void continueFromStatusInspection();
-      return;
-    }
-    void confirmPlan();
-  }
-
   const actionBlocked = agentActionEnvelope?.status === "blocked";
   const readOnlyStatusInspection = agentActionIsStatusInspection(agentActionEnvelope);
   const displayedAgentToolHandoff = readOnlyStatusInspection ? undefined : agentToolHandoff;
-  const handoffPreflightBlocked = planPhase !== "confirmed" && agentToolHasPreflightBlocker(displayedAgentToolHandoff);
+  const handoffPreflightBlocked = planPhase !== "confirmed" && agentToolHasPreflightBlocker(displayedAgentToolHandoff, agentActionEnvelope);
   const confirmationBlocked = Boolean(actionBlocked || handoffPreflightBlocked);
   const canConfirm = workflowCanConfirm(workflow) && !confirmationBlocked && !readOnlyStatusInspection;
   const canConfirmFeedback = Boolean(directorFeedbackCanConfirm(feedbackRecompile) && onDirectorFeedbackConfirmed);
   const hasComposerInput = Boolean(text.trim() || attachments.length);
   const hasPreparedComposerInput = Boolean(preparedContext?.userIntent?.trim() || hasComposerInput);
   const canPreviewPrototypeDemo = Boolean(workflow && onPreviewPrototypeAgentDemo && hasPreparedComposerInput && !canConfirmFeedback && !readOnlyStatusInspection);
+  const canOfferFooterDirectAction = !hasComposerInput && !isPreparingPlan && (!workflow || planPhase === "confirmed");
+  const referenceFooterAction = showRealSampleAction && realSampleAction?.status !== "verified"
+    ? {
+        label: realSampleLabel,
+        disabled: referenceGenerationBlockedByProject || Boolean(realSampleAction?.disabled) || !realSampleAction?.keyConfigured || realSampleBusy || !onCreateP6RealSample,
+        disabledReason: referenceGenerationBlockedByProject
+          ? "先打开或保存本地项目。"
+          : !realSampleAction?.keyConfigured
+            ? "先配置生图 Key。"
+            : realSampleBusy
+              ? "参考正在生成。"
+              : realSampleAction?.message || "当前还不能生成参考。",
+        perform: runFooterReferenceGeneration,
+      }
+    : undefined;
+  const endFrameFooterAction = showEndFrameAction && endFrameAction?.status !== "verified"
+    ? {
+        label: endFrameLabel,
+        disabled: referenceGenerationBlockedByProject || Boolean(endFrameAction?.disabled) || !endFrameAction?.keyConfigured || endFrameBusy || !onCreateImage2EndFrame,
+        disabledReason: referenceGenerationBlockedByProject
+          ? "先打开或保存本地项目。"
+          : !endFrameAction?.keyConfigured
+            ? "先配置生图 Key。"
+            : endFrameBusy
+              ? "结束画面正在生成。"
+              : endFrameAction?.message || "当前还不能生成结束画面。",
+        perform: runFooterEndFrameGeneration,
+      }
+    : undefined;
+  const videoResumeFooterAction = showVideoAction && videoSendAction && videoCanResume
+    ? {
+        label: videoActionLabel,
+        disabled: videoPermissionBlockedByProject || videoBusy || !onSendSeedanceVideo,
+        disabledReason: videoPermissionBlockedByProject ? "先打开或保存本地项目。" : videoBusy ? "正在查询视频。" : "当前还不能查询视频。",
+        perform: runFooterVideoAction,
+      }
+    : undefined;
+  const videoSubmitFooterAction = showVideoAction && videoSendAction && videoSendAction.status !== "needs_review"
+    ? {
+        label: videoActionLabel,
+        disabled: videoPermissionBlockedByProject || Boolean(videoSendAction.disabled) || !videoSendAction.ready || !videoSendAction.keyConfigured || videoBusy || (videoAlreadySent && !videoCanResume) || !onSendSeedanceVideo,
+        disabledReason: videoPermissionBlockedByProject
+          ? "先打开或保存本地项目。"
+          : !videoSendAction.keyConfigured
+            ? "先配置即梦 Key。"
+            : videoBusy
+              ? "视频任务正在处理。"
+              : videoSendAction.message || "视频还不能提交。",
+        perform: runFooterVideoAction,
+      }
+    : undefined;
+  const openViewFooterAction = agentCommand && (
+    agentCommand.kind === "open_story"
+    || agentCommand.kind === "open_review"
+    || agentCommand.kind === "open_preview"
+    || agentCommand.kind === "open_export"
+  )
+    ? {
+        label: agentCommand.label,
+        disabled: !onOpenResultView,
+        disabledReason: "当前还不能切换视图。",
+        perform: () => {
+          onOpenResultView?.(agentCommand.targetView);
+          setStatus(agentCommand.summary);
+        },
+      }
+    : undefined;
+  const waitFooterAction = agentCommand && (
+    agentCommand.kind === "wait_references"
+    || agentCommand.kind === "wait_video"
+  )
+    ? {
+        label: agentCommand.label,
+        disabled: true,
+        disabledReason: agentCommand.detail || agentCommand.summary,
+        perform: () => setStatus(agentCommand.detail || agentCommand.summary),
+      }
+    : undefined;
+  const commandFooterDirectAction = agentCommandKind === "generate_references"
+    ? referenceFooterAction
+    : agentCommandKind === "submit_video"
+      ? videoSubmitFooterAction
+      : agentCommandKind === "resume_video"
+        ? videoResumeFooterAction
+        : openViewFooterAction || waitFooterAction;
+  const fallbackFooterDirectAction =
+    videoResumeFooterAction
+    || referenceFooterAction
+    || endFrameFooterAction
+    || videoSubmitFooterAction;
+  const footerDirectAction = canOfferFooterDirectAction
+    ? commandFooterDirectAction || fallbackFooterDirectAction
+    : undefined;
+  const canResolveProjectFromFooter = Boolean(canCreateLocalProject && onCreateLocalProject && !localProjectBusy);
+  const projectRequiredForWorkflow = !localProjectReadyForTools && !hasComposerInput && Boolean(footerDirectAction) && canResolveProjectFromFooter;
+  const projectBlockedWithoutFooterResolver = !localProjectReadyForTools
+    && !hasComposerInput
+    && Boolean(footerDirectAction)
+    && !canResolveProjectFromFooter;
+  const projectNeededForGeneratedStory = !localProjectReadyForTools
+    && !hasComposerInput
+    && runtimeState.storyFlow.shots.length > 0
+    && (
+      runtimeState.visualMemory.summary.missing > 0
+      || runtimeState.visualMemory.summary.needsReview > 0
+      || Boolean(videoSendAction?.ready)
+    );
+  const projectRequirement = agentProjectRequirementCopy({
+    localProjectBusy,
+    canCreateLocalProject: canResolveProjectFromFooter,
+  });
   const composerPrimaryIsFresh = hasComposerInput || !workflow || planPhase === "idle" || planPhase === "confirmed";
-  const primaryDisabled = composerPrimaryIsFresh
-    ? !hasComposerInput || isPreparingPlan
-    : readOnlyStatusInspection
-      ? false
-      : confirmationBlocked || (!canConfirm && !canPreviewPrototypeDemo && !canConfirmFeedback);
-  const primaryLabel = composerPrimaryIsFresh
-    ? isPreparingPlan ? "整理中" : "发送"
-    : readOnlyStatusInspection
-      ? "继续"
-      : agentReviewPrimaryLabel(agentActionEnvelope);
-  const primaryDisabledReason = !hasComposerInput && composerPrimaryIsFresh
-    ? "先写一句，或拖入文件。"
-    : isPreparingPlan
-      ? `${status || "正在整理"}，稍等一下。`
-      : actionBlocked && agentActionEnvelope
-        ? agentActionEnvelope.userFacingMessage
+  const composerProjectInbox = useMemo(
+    () => buildProjectInboxProjection({
+      assets: runtimeState.visualMemory.assets,
+    }),
+    [runtimeState.visualMemory.assets],
+  );
+  const selectedShotCountForObservation = selectedShots.length || (shot ? 1 : 0);
+  const composerProjectObservation = useMemo(
+    () => buildProjectObservation({
+      localProjectReady: localProjectReadyForTools,
+      projectTitle: runtimeState.project.title,
+      sectionCount: runtimeState.storyFlow.sections.length,
+      shotCount: runtimeState.storyFlow.shots.length,
+      selectedShotCount: selectedShotCountForObservation,
+      referenceMissingCount: runtimeState.visualMemory.summary.missing,
+      referenceReviewCount: runtimeState.visualMemory.summary.needsReview + composerProjectInbox.needsReviewCount,
+      referenceReadyCount: runtimeState.visualMemory.summary.locked,
+      videoStatus: videoSendAction?.status || "not_generated",
+      videoStatusLabel: videoSendAction?.suggestedActionLabel || "未提交视频",
+      videoDetail: videoSendAction?.message || "",
+      videoWaitingCount: videoSendAction?.status === "submitted" ? 1 : 0,
+      videoCompletedCount: videoSendAction?.status === "needs_review" ? 1 : 0,
+      videoReviewCount: videoSendAction?.status === "needs_review" ? 1 : 0,
+      videoCanResume,
+      image2Running: realSampleBusy || endFrameBusy,
+      inbox: composerProjectInbox,
+    }),
+    [
+      composerProjectInbox,
+      endFrameBusy,
+      localProjectReadyForTools,
+      realSampleBusy,
+      runtimeState.project.title,
+      runtimeState.storyFlow.sections.length,
+      runtimeState.storyFlow.shots.length,
+      runtimeState.visualMemory.summary.locked,
+      runtimeState.visualMemory.summary.missing,
+      runtimeState.visualMemory.summary.needsReview,
+      selectedShotCountForObservation,
+      videoCanResume,
+      videoSendAction?.message,
+      videoSendAction?.status,
+      videoSendAction?.suggestedActionLabel,
+    ],
+  );
+  const composerIntentRoute = routeProjectAgentIntent({
+    text,
+    hasSelection: hasActiveSelection,
+    hasAttachments: attachments.length > 0,
+    observation: composerProjectObservation,
+  });
+  const primaryOperation = (() => {
+    if (projectRequiredForWorkflow) {
+      const label = projectRequirement.label;
+      const disabledReason = projectRequirement.detail;
+      return {
+        label,
+        disabled: !canResolveProjectFromFooter,
+        disabledReason,
+        statusLine: canResolveProjectFromFooter ? `下一步：${label}` : disabledReason,
+        perform: () => {
+          setStatus("正在准备本地项目文件夹。");
+          void onCreateLocalProject?.();
+        },
+      };
+    }
+    if (projectBlockedWithoutFooterResolver) {
+      return {
+        label: "发送",
+        disabled: true,
+        disabledReason: "继续写想法也可以；生成参考、提交视频或导出前需要本地项目。",
+        statusLine: "故事草案已就绪；可以继续描述修改，生成前再打开项目。",
+        perform: () => {
+          void prepareChange();
+        },
+      };
+    }
+    if (projectNeededForGeneratedStory) {
+      return {
+        label: "发送",
+        disabled: true,
+        disabledReason: "继续写想法也可以；生成参考、提交视频或导出前需要本地项目。",
+        statusLine: "故事草案已就绪；可以继续描述修改，生成前再打开项目。",
+        perform: () => {
+          void prepareChange();
+        },
+      };
+    }
+    if (footerDirectAction) {
+      return {
+        label: footerDirectAction.label,
+        disabled: footerDirectAction.disabled,
+        disabledReason: footerDirectAction.disabledReason,
+        statusLine: footerDirectAction.disabled ? footerDirectAction.disabledReason : `下一步：${footerDirectAction.label}`,
+        perform: footerDirectAction.perform,
+      };
+    }
+    if (composerPrimaryIsFresh) {
+      const label = isPreparingPlan ? "整理中" : "发送";
+      const disabledReason = !hasComposerInput
+        ? "先写一句，或拖入文件。"
+        : `${status || "正在整理"}，稍等一下。`;
+      return {
+        label,
+        disabled: !hasComposerInput || isPreparingPlan,
+        disabledReason,
+        statusLine: !hasComposerInput || isPreparingPlan ? disabledReason : status || "等待输入",
+        perform: () => {
+          void prepareChange();
+        },
+      };
+    }
+    if (readOnlyStatusInspection) {
+      return {
+        label: "继续",
+        disabled: false,
+        disabledReason: "",
+        statusLine: status || "等待输入",
+        perform: () => {
+          void continueFromStatusInspection();
+        },
+      };
+    }
+    const disabled = confirmationBlocked || (!canConfirm && !canPreviewPrototypeDemo && !canConfirmFeedback);
+    const disabledReason = actionBlocked && agentActionEnvelope
+      ? agentActionEnvelope.userFacingMessage
       : handoffPreflightBlocked && displayedAgentToolHandoff
         ? agentToolPreflightLabel(displayedAgentToolHandoff) || "先处理阻断。"
-      : "当前不能发送。";
-  const showFooterPrimaryAction = composerPrimaryIsFresh;
-  const composerHint = text.trim()
-    ? `${text.trim().length} 字 · Cmd Enter 发送`
-    : attachments.length
-      ? `${attachments.length} 个文件 · Cmd Enter 发送`
+        : "当前不能发送。";
+    return {
+      label: agentReviewPrimaryLabel(agentActionEnvelope),
+      disabled,
+      disabledReason,
+      statusLine: disabled ? disabledReason : status || "等待输入",
+      perform: () => {
+        void confirmPlan();
+      },
+    };
+  })();
+  const primaryDisabled = primaryOperation.disabled;
+  const primaryLabel = primaryOperation.label;
+  const primaryDisabledReason = primaryOperation.disabledReason;
+  const statusLineText = primaryOperation.statusLine;
+  const primaryDisabledPrefix = !hasComposerInput && !isPreparingPlan ? "等待输入：" : "暂不能继续：";
+  const primaryAriaLabel = primaryDisabled
+    ? `${primaryLabel}：${primaryDisabledReason}`
+    : primaryLabel;
+  function handleNext() {
+    if (primaryDisabled) {
+      setStatus(primaryDisabledReason);
+      return;
+    }
+    primaryOperation.perform();
+  }
+  const showFooterPrimaryAction = true;
+	  const composerHint = projectRequiredForWorkflow
+	    ? canResolveProjectFromFooter
+	      ? `点右侧${primaryLabel}，再继续生成参考或提交视频。`
+	      : "当前仍可继续改想法；生成前要先准备本地项目。"
+	    : text.trim()
+      ? `识别为：${composerIntentRoute.label} · 点右侧${primaryLabel} · Cmd Enter 发送`
+      : attachments.length
+        ? `${attachments.length} 个文件 · ${composerIntentRoute.plan[0]} · 点右侧${primaryLabel}`
+        : projectBlockedWithoutFooterResolver
+          ? "先写一句想法，或拖入素材；我还能继续帮你规划。"
       : hasBoundSelection
-        ? "已选中内容，直接说改法"
-        : "直接说，或拖文件";
+        ? `已选中内容，直接说改法，点右侧${primaryLabel} · Cmd Enter 发送`
+        : `${composerProjectObservation.currentTask.plan} · 点右侧${primaryLabel}`;
+  if (isComposerCollapsed) {
+    return (
+      <aside className="minimal-agent-panel is-collapsed">
+        <button
+          type="button"
+          className="minimal-agent-expand-button"
+          onClick={() => {
+            setIsComposerCollapsed(false);
+          }}
+          aria-label="展开底部输入框"
+        >
+          <MessageCircle size={15} aria-hidden="true" />
+          <span>{displayedCompactScopeLabel}</span>
+          <small>{hasActiveSelection ? displayedCompactSelectionHint : "点开后输入脚本、文件或修改意见。"}</small>
+          <b>展开</b>
+        </button>
+      </aside>
+    );
+  }
   const badges = agentActionEnvelope?.status === "blocked"
     ? ["需要补充", "未执行"]
     : feedbackRecompile
@@ -2219,6 +2617,7 @@ export function MinimalAgentPanel({
     : workflow
     ? [...workflowPlanFacts(workflow), { label: "范围", value: "故事 / 镜头 / 复核" }]
     : [];
+  const visibleActionPlanFacts = planFacts.slice(0, 4);
   const actionDiffs = agentActionDiffs(agentActionEnvelope);
   const agentUnderstanding = agentActionEnvelope?.status === "blocked"
     ? preparedContext?.qaFeedback?.summary || agentActionEnvelope.userFacingMessage
@@ -2238,6 +2637,23 @@ export function MinimalAgentPanel({
   const actionConfirmationFacts = agentActionConfirmationFacts(agentActionEnvelope, displayedAgentToolHandoff, planPhase);
   const agentExecutionTrace = agentExecutionTraceItems(agentActionEnvelope, displayedAgentToolHandoff, planPhase);
   const agentStatusActionPath = agentActionPathItems(agentActionEnvelope, preparedContext?.qaFeedback);
+  const idleActionSuggestions = !workflow && !footerDirectAction && !hasComposerInput && runtimeState.storyFlow.shots.length > 0
+    ? directorAgentReadinessActions(buildDirectorAgentStateSnapshot({
+        runtimeState,
+        currentView: sectionId ? "section" : asset ? "reference" : "story",
+        selectedShotId: scopedShotIds.length <= 1 ? currentSelectedShotId : undefined,
+        selectedShotIds: scopedShotIds.length > 1 ? scopedShotIds : undefined,
+        selectedAssetId: asset?.id,
+        sectionId: !scopedShotIds.length && !asset ? sectionId : undefined,
+      }).projectReadiness).slice(0, 3).map((item) => ({
+        id: `${item.priority}:${item.kind}:${item.label}`,
+        step: agentActionPathStepLabel(item.priority),
+        label: item.label,
+        reason: item.reason,
+        priority: item.priority,
+        intent: suggestedIntentFromStatusAction(item.label, item.reason),
+      }))
+    : [];
   const enabledResearchSuggestion = buildAgentWebResearchSuggestion(text, { ...webSearchSettings, enabled: true });
   const researchSuggestion = effectiveWebSearchReady
     ? enabledResearchSuggestion
@@ -2248,7 +2664,7 @@ export function MinimalAgentPanel({
 	        ? "可以先查资料；去设置里连接联网查资料。不连接也能继续规划。"
 	        : "连接后可先整理外部资料；不影响本地规划。",
 	    };
-  const showResearchPrompt = Boolean(text.trim() && (enabledResearchSuggestion.shouldSuggest || researchResult || researchStatus !== "idle"));
+  const showResearchPrompt = Boolean(researchResult || researchStatus !== "idle");
   const researchBusy = researchStatus === "running";
   const researchLabel = researchStatus === "running"
     ? "正在查找"
@@ -2262,6 +2678,8 @@ export function MinimalAgentPanel({
     ? readOnlyStatusInspection ? "项目状态" : planPhase === "confirmed" ? "已确认" : "待确认"
     : "我先帮你整理";
   const showAgentNote = Boolean(workflow && planPhase !== "confirmed");
+  const agentActionTitle = agentActionEnvelope?.summary
+    || (feedbackRecompile ? "整理镜头修改" : preparedContext?.projectTaskLabel || "整理计划");
   const confirmedAgentResult = prototypeAgentProjection?.statusLabel
     || (agentToolHandoff ? agentToolResultLabel(agentToolHandoff) : "")
     || status;
@@ -2286,8 +2704,45 @@ export function MinimalAgentPanel({
     videoPermissionContractForUi,
     projectStatusLabel,
     localProjectReadyForTools,
-  );
+  ).map((item) => {
+    if (videoResultIsPrimary && item.id === "reference") {
+      return { ...item, value: "已够用", tone: "ready" as const };
+    }
+    if (videoCanResume && item.id === "video") {
+      return { ...item, value: "可查询", tone: "ready" as const };
+    }
+    if ((videoBusy || videoAlreadySent) && item.id === "video") {
+      return { ...item, value: videoBusy ? "处理中" : "已提交", tone: "waiting" as const };
+    }
+    if (item.id === "reference" && realSampleBusy) {
+      return { ...item, value: "生成中", tone: "waiting" as const };
+    }
+    return item;
+  });
   const visibleAgentCapabilityGlanceItems = agentCapabilityGlanceItems(visibleAgentCapabilityItems);
+  const hasVisibleActionCard = showAgentNote || showAgentResultNote || idleActionSuggestions.length > 0;
+  const generationDetailsLabel = videoCanResume
+    ? "可查询结果"
+    : agentCommandKind === "generate_references" || agentCommandKind === "submit_video" || agentCommandKind === "resume_video"
+      ? agentCommand?.label || "按需展开"
+      : "按需查看";
+  const realSampleDetailNeedsReview = agentCommandKind === "open_review" || realSampleAction?.status === "needs_review";
+  const showRealSampleDetailButton = realSampleDetailNeedsReview || !referenceGenerationBlockedByProject;
+  function openReferenceReviewFromDetails() {
+    onOpenResultView?.("assets");
+    setStatus("去参考页检查画面。");
+  }
+  function pointToMainReferenceAction() {
+    setStatus(referenceGenerationBlockedByProject ? "先打开或保存本地项目。" : "用底部主按钮生成参考。");
+  }
+  function pointToMainVideoAction() {
+    setStatus(videoCanResume ? "用底部主按钮查询视频结果。" : "用底部主按钮提交视频。");
+  }
+  const realSampleDetailAction = realSampleDetailNeedsReview
+    ? openReferenceReviewFromDetails
+    : pointToMainReferenceAction;
+  const realSampleDetailButtonLabel = realSampleDetailNeedsReview ? "打开复核" : "看主按钮";
+  const videoDetailButtonLabel = videoCanResume ? "看主按钮" : "看主按钮";
 
   async function lookupSources() {
     if (!effectiveWebSearchReady || !researchSuggestion.query || researchStatus === "running") return;
@@ -2335,101 +2790,134 @@ export function MinimalAgentPanel({
   }
 
   return (
-    <aside className="minimal-agent-panel">
-      <div className="minimal-agent-head">
-        <span>和 AI 导演说</span>
-        <strong>{displayedScopeLabel}</strong>
+    <aside className={`minimal-agent-panel ${hasVisibleActionCard ? "has-visible-action-card" : ""}`}>
+      <button
+        type="button"
+        className="minimal-agent-collapse-button"
+        onClick={() => {
+          setIsComposerCollapsed(true);
+        }}
+        aria-label="收起底部输入框"
+        title="收起底部输入框"
+      >
+        <ChevronDown size={13} aria-hidden="true" />
+        收起
+      </button>
+      <div className="minimal-agent-cockpit" aria-label="AI 导演工作台">
+        <div className="minimal-agent-cockpit-main">
+          <div className="minimal-agent-head">
+            <span>AI 导演</span>
+            <strong>{displayedCompactScopeLabel}</strong>
+          </div>
+          <section className="minimal-agent-selection-context" aria-label="当前选择">
+            <span>{hasActiveSelection ? "当前选择" : "怎么用"}</span>
+            <p>{displayedCompactSelectionHint}</p>
+            {displayedSelectionChips.length > 0 && (
+              <div className="minimal-agent-context-chips" aria-label="当前引用内容">
+                {displayedSelectionChips.map((item) => (
+                  <small key={`${item.label}:${item.value}`}>
+                    <b>{item.label}</b>
+                    {item.value}
+                  </small>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
       </div>
-      <section className="minimal-agent-selection-context" aria-label="当前选择">
-        <span>{hasActiveSelection ? "当前选择" : "怎么用"}</span>
-        <p>{displayedSelectionHint}</p>
-        {displayedSelectionChips.length > 0 && (
-          <div className="minimal-agent-context-chips" aria-label="当前引用内容">
-            {displayedSelectionChips.map((item) => (
-              <small key={`${item.label}:${item.value}`}>
-                <b>{item.label}</b>
-                {item.value}
+      <details className="minimal-agent-advanced-controls">
+        <summary>
+          <span>工作范围</span>
+          <strong>{agentBoundarySummaryLabel}</strong>
+          {selectedSkillSummary && <small>{selectedSkillSummary.label}</small>}
+        </summary>
+        <section className="minimal-agent-permission-mode minimal-agent-permission-menu" aria-label="更改工作范围">
+          <span>更改范围</span>
+        {videoPermissionModeItems.map((item) => (
+            <button
+              key={item.mode}
+              type="button"
+              className={videoPermissionContractForUi.mode === item.mode ? "is-active" : ""}
+              aria-label={`生成边界：${item.label}`}
+              aria-pressed={videoPermissionContractForUi.mode === item.mode}
+              disabled={Boolean(workflow)}
+              title={workflow ? "当前计划已生成，先点再改一下再切换边界。" : agentVideoPermissionDetail(agentVideoPermissionForMode(item.mode))}
+              onClick={() => selectVideoPermissionMode(item.mode)}
+            >
+              {item.label}
+            </button>
+          ))}
+          <small>{agentBoundaryDetail}</small>
+        </section>
+        {visibleAgentCapabilityGlanceItems.length > 0 && (
+          <div className="minimal-agent-capability-strip" aria-label="Agent 当前能力">
+            {visibleAgentCapabilityGlanceItems.map((item) => (
+              <small key={item.id} className={item.tone}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
               </small>
             ))}
           </div>
         )}
-      </section>
-      {selectedSkillSummary && (
-        <section className="minimal-agent-skill-context" aria-label="AI 选择的做法">
-          <div>
-            <span>AI 选择的做法</span>
-            <strong>{selectedSkillSummary.label}</strong>
-            <small>{selectedSkillSummary.reason}</small>
-          </div>
-          <div className="minimal-agent-skill-tags">
-            {selectedSkillSummary.skillTags.slice(0, 5).map((tag) => (
-              <small key={tag}>{tag}</small>
-            ))}
-          </div>
-          <div className="minimal-agent-skill-actions" aria-label="切换做法，先进入对话确认">
-            {selectedSkillOverrides.map((item) => (
-              <button key={item.strategy} type="button" onClick={() => useSkillPrompt(item.prompt)}>
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-      <div className="minimal-agent-permission-mode" aria-label="当前生成边界">
-        {videoPermissionModeItems.map((item) => (
-          <button
-            key={item.mode}
-            type="button"
-            className={videoPermissionContractForUi.mode === item.mode ? "is-active" : ""}
-            aria-pressed={videoPermissionContractForUi.mode === item.mode}
-            disabled={Boolean(workflow)}
-            title={workflow ? "当前计划已生成，先点再改一下再切换边界。" : agentVideoPermissionDetail(agentVideoPermissionForMode(item.mode))}
-            onClick={() => selectVideoPermissionMode(item.mode)}
-          >
-            {item.label}
-          </button>
-        ))}
-        <span>{agentVideoPermissionDetail(videoPermissionContractForUi)}</span>
-      </div>
-      {visibleAgentCapabilityGlanceItems.length > 0 && (
-        <div className="minimal-agent-capability-strip" aria-label="Agent 当前能力">
-          {visibleAgentCapabilityGlanceItems.map((item) => (
-            <small key={item.id} className={item.tone}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </small>
-          ))}
-        </div>
-      )}
-      {showAgentNote && (
-        <section className="minimal-agent-note has-plan" aria-label="AI 导演理解">
-          <span>{agentNoteLabel}</span>
-          <p>{agentUnderstanding}</p>
-          {agentExecutionTrace.length > 0 && (
-            <div className="minimal-agent-execution-trace" aria-label="Agent 执行路径">
-              {agentExecutionTrace.map((item) => (
-                <small key={`${item.label}:${item.value}`} className={item.tone}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </small>
+        {selectedSkillSummary && (
+          <section className="minimal-agent-skill-context" aria-label="AI 选择的做法">
+            <div>
+              <span>AI 选择的做法</span>
+              <strong>{selectedSkillSummary.label}</strong>
+              <small>{selectedSkillSummary.reason}</small>
+            </div>
+            <div className="minimal-agent-skill-tags">
+              {selectedSkillSummary.skillTags.slice(0, 5).map((tag) => (
+                <small key={tag}>{tag}</small>
               ))}
             </div>
-          )}
-          {agentStatusActionPath.length > 0 && (
-            <div className="minimal-agent-action-path" aria-label="后续动作路径">
-              {agentStatusActionPath.map((item) => (
+            <p className="minimal-agent-skill-hint">想换做法，直接在下面输入框说，比如“这一段改成快切”或“这里用全能参考”。</p>
+          </section>
+        )}
+        {idleActionSuggestions.length > 0 && (
+          <section className="minimal-agent-idle-actions" aria-label="Agent 建议下一步">
+            <div>
+              <span>建议下一步</span>
+              <small>{idleActionHint}</small>
+            </div>
+            <div>
+              {idleActionSuggestions.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   className={item.priority}
                   onClick={() => void continueFromStatusActionPath(item.intent)}
-                  title={`继续：${item.label}`}
+                  title={item.reason}
                 >
                   <span>{item.step}</span>
                   <strong>{item.label}</strong>
-                  <em>{item.reason}</em>
                 </button>
               ))}
+            </div>
+          </section>
+        )}
+      </details>
+      {showAgentNote && (
+        <section className="minimal-agent-note has-plan" aria-label="AI 导演理解">
+          <div className="minimal-agent-card-head">
+            <span>{agentNoteLabel}</span>
+            <strong>{agentActionTitle}</strong>
+          </div>
+          <div className="minimal-agent-card-block">
+            <small>理解</small>
+            <p>{agentUnderstanding}</p>
+          </div>
+          {visibleActionPlanFacts.length > 0 && (
+            <div className="minimal-agent-card-block">
+              <small>计划</small>
+              <div className="minimal-agent-plan is-inline">
+                {visibleActionPlanFacts.map((fact, index) => (
+                  <small key={`${fact.label}:${fact.value}:visible:${index}`}>
+                    <span>{fact.label}</span>
+                    <strong>{fact.value}</strong>
+                  </small>
+                ))}
+              </div>
             </div>
           )}
           {actionDiffs.length > 0 && (
@@ -2453,15 +2941,44 @@ export function MinimalAgentPanel({
               ))}
             </div>
           )}
-          <div className="minimal-agent-note-actions">
-            <button disabled={primaryDisabled} title={primaryDisabled ? primaryDisabledReason : primaryLabel} onClick={handleNext}>
-              <CheckCircle2 size={15} />
-              {primaryLabel}
-            </button>
-            <button type="button" className="secondary" onClick={revisePlan}>
-              再改一下
-            </button>
-          </div>
+          {(agentExecutionTrace.length > 0 || agentStatusActionPath.length > 0) && (
+            <details className="minimal-agent-evidence-details">
+              <summary>执行细节</summary>
+              {agentExecutionTrace.length > 0 && (
+                <div className="minimal-agent-execution-trace" aria-label="Agent 执行路径">
+                  {agentExecutionTrace.map((item) => (
+                    <small key={`${item.label}:${item.value}`} className={item.tone}>
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </small>
+                  ))}
+                </div>
+              )}
+              {agentStatusActionPath.length > 0 && (
+                <div className="minimal-agent-action-path" aria-label="后续动作路径">
+                  {agentStatusActionPath.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={item.priority}
+                      onClick={() => void continueFromStatusActionPath(item.intent)}
+                      title={`继续：${item.label}`}
+                    >
+                      <span>{item.step}</span>
+                      <strong>{item.label}</strong>
+                      <em>{item.reason}</em>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </details>
+	          )}
+	          <div className="minimal-agent-note-actions">
+	            <small>继续用底部主按钮：{primaryLabel}</small>
+	            <button type="button" className="secondary" onClick={revisePlan}>
+	              再改一下
+	            </button>
+	          </div>
         </section>
       )}
       {showAgentResultNote && (
@@ -2645,14 +3162,18 @@ export function MinimalAgentPanel({
           >
             <Plus size={15} aria-hidden="true" />
             添加文件
-          </button>
-          <small>{composerHint}</small>
-          {showFooterPrimaryAction && (
-            <button
+	          </button>
+	          <div className="minimal-agent-footer-copy" aria-label="底部主按钮说明">
+	            <small>{composerHint}</small>
+	            <strong>{primaryDisabled ? `${primaryDisabledPrefix}${primaryDisabledReason}` : `按下后：${statusLineText}`}</strong>
+	          </div>
+	          {showFooterPrimaryAction && (
+	            <button
+	              className="minimal-agent-send-button"
               disabled={primaryDisabled}
               title={primaryDisabled ? primaryDisabledReason : `${primaryLabel}，也可以按 Cmd Enter`}
               onClick={handleNext}
-              aria-label={primaryDisabled ? primaryDisabledReason : primaryLabel}
+              aria-label={primaryAriaLabel}
             >
               <Send size={15} />
               {primaryLabel}
@@ -2662,7 +3183,7 @@ export function MinimalAgentPanel({
       </div>
       <div className="minimal-agent-status-row">
         <span>状态</span>
-        <strong className="minimal-agent-status">{status}</strong>
+        <strong className="minimal-agent-status">{statusLineText}</strong>
         {projection && (
           <div className="minimal-state-dots agent" aria-label={projection.shortLabel}>
             {projection.progressDots.map((dot) => (
@@ -2732,86 +3253,93 @@ export function MinimalAgentPanel({
           ))}
         </div>
       )}
-      {showRealSampleAction && realSampleAction && (
-        <section className={`agent-real-sample-action ${realSampleAction.status}`} aria-label="项目参考补全">
-          <div>
-            <span>参考素材</span>
-            <strong>{realSampleLabel}</strong>
-            <small>{
-              referenceGenerationBlockedByContract
-                ? agentVideoPermissionDetail(currentVideoPermissionContract)
-                : referenceGenerationBlockedByProject
-                  ? "先把草稿保存到项目文件夹，再补参考。"
-                  : realSampleAction.message || "会检查当前故事，缺的参考会放进复核区。"
-            }</small>
-          </div>
-          <button
-            disabled={referenceGenerationBlockedByContract || referenceGenerationBlockedByProject || realSampleAction.disabled || !realSampleAction.keyConfigured || realSampleBusy}
-            onClick={() => {
-              if (referenceGenerationBlockedByContract || referenceGenerationBlockedByProject) return;
-              void onCreateP6RealSample?.();
-            }}
-            aria-label={referenceGenerationBlockedByContract ? "先切到允许参考生成的权限" : referenceGenerationBlockedByProject ? "先保存项目文件夹" : "补齐项目参考素材"}
-          >
-            {realSampleAction.keyConfigured ? <Sparkles size={15} /> : <LockKeyhole size={15} />}
-            补齐参考
-          </button>
-        </section>
-      )}
-      {showVideoAction && videoSendAction && (
-        <section className={`agent-real-sample-action ${videoSendAction.status}`} aria-label="视频生成">
-          <div>
-            <span>视频生成</span>
-            <strong>{videoActionLabel}</strong>
-            <small>{
-              videoPermissionBlockedByContract
-                ? agentVideoPermissionDetail(currentVideoPermissionContract)
-                : videoPermissionBlockedByProject
-                  ? "先把草稿保存到项目文件夹，再提交视频。"
-                  : videoSendAction.message || "会按当前故事板/全能参考策略提交；即梦排队时可以稍后恢复查询。"
-            }</small>
-            {videoSendAction.qaFeedback && videoSendAction.qaFeedback.status !== "clear" && (
-              <small title={videoSendAction.qaFeedback.primaryAction}>{videoSendAction.qaFeedback.summary}</small>
-            )}
-          </div>
-          <button
-            disabled={videoPermissionBlockedByContract || videoPermissionBlockedByProject || Boolean(videoSendAction.disabled) || !videoSendAction.ready || !videoSendAction.keyConfigured || videoBusy || (videoAlreadySent && !videoCanResume) || !onSendSeedanceVideo}
-            onClick={() => {
-              if (videoPermissionBlockedByContract || videoPermissionBlockedByProject) return;
-              void onSendSeedanceVideo?.();
-            }}
-            aria-label={videoPermissionBlockedByContract ? "先切到允许提交视频的权限" : videoPermissionBlockedByProject ? "先保存项目文件夹" : videoActionLabel}
-          >
-            {videoSendAction.keyConfigured ? <Send size={15} /> : <LockKeyhole size={15} />}
-            {videoActionLabel}
-          </button>
-        </section>
-      )}
-      {showEndFrameAction && endFrameAction && (
-        <section className={`agent-real-sample-action ${endFrameAction.status}`} aria-label="当前镜头特殊结束画面">
-          <div>
-            <span>特殊结束画面</span>
-            <strong>{endFrameLabel}</strong>
-            <small>{
-              referenceGenerationBlockedByContract
-                ? agentVideoPermissionDetail(currentVideoPermissionContract)
-                : referenceGenerationBlockedByProject
-                  ? "先把草稿保存到项目文件夹，再生成结束画面。"
-                  : endFrameAction.message || "只用于循环、变身或明确首尾控制；生成后先放到复核区。"
-            }</small>
-          </div>
-          <button
-            disabled={referenceGenerationBlockedByContract || referenceGenerationBlockedByProject || endFrameAction.disabled || !endFrameAction.keyConfigured || endFrameBusy}
-            onClick={() => {
-              if (referenceGenerationBlockedByContract || referenceGenerationBlockedByProject) return;
-              void onCreateImage2EndFrame?.();
-            }}
-            aria-label={referenceGenerationBlockedByContract ? "先切到允许参考生成的权限" : referenceGenerationBlockedByProject ? "先保存项目文件夹" : "生成当前镜头特殊结束画面"}
-          >
-            {endFrameAction.keyConfigured ? <Sparkles size={15} /> : <LockKeyhole size={15} />}
-            生成
-          </button>
-        </section>
+      {(showRealSampleAction || showVideoAction || showEndFrameAction) && (
+        <details className="minimal-agent-generation-details">
+          <summary>
+            <span>生成与提交</span>
+            <strong>{generationDetailsLabel}</strong>
+          </summary>
+          {showRealSampleAction && realSampleAction && (
+            <section className={`agent-real-sample-action ${realSampleAction.status}`} aria-label="项目参考补全">
+              <div>
+                <span>参考素材</span>
+                <strong>{realSampleLabel}</strong>
+                <small>{
+                  referenceGenerationBlockedByContract
+                    ? agentVideoPermissionDetail(currentVideoPermissionContract)
+                    : referenceGenerationBlockedByProject
+                      ? "先把草稿保存到项目文件夹，再生成参考。"
+                      : realSampleAction.message || "会检查当前故事，缺的参考会放进复核区。"
+                }</small>
+              </div>
+              {showRealSampleDetailButton && (
+                <button
+                  disabled={realSampleDetailNeedsReview
+                    ? !onOpenResultView
+                    : realSampleAction.disabled || !realSampleAction.keyConfigured || realSampleBusy}
+                  onClick={realSampleDetailAction}
+                  aria-label={realSampleDetailNeedsReview ? "打开参考复核" : "查看底部主按钮的参考生成动作"}
+                >
+                  {realSampleDetailNeedsReview ? <Sparkles size={15} /> : <ArrowRight size={15} />}
+                  {realSampleDetailButtonLabel}
+                </button>
+              )}
+            </section>
+          )}
+          {showVideoAction && videoSendAction && (
+            <section className={`agent-real-sample-action ${videoSendAction.status}`} aria-label="视频生成">
+              <div>
+                <span>视频生成</span>
+                <strong>{videoActionLabel}</strong>
+                <small>{
+                  videoCanResume
+                    ? videoSendAction.message || "即梦已经收到任务，可以随时查询结果。"
+                    : videoPermissionBlockedByContract
+                    ? agentVideoPermissionDetail(currentVideoPermissionContract)
+                    : videoPermissionBlockedByProject
+                      ? "先把草稿保存到项目文件夹，再提交视频。"
+                      : videoSendAction.message || "会按当前故事板/全能参考策略提交；即梦排队时可以稍后恢复查询。"
+                }</small>
+                {videoSendAction.qaFeedback && videoSendAction.qaFeedback.status !== "clear" && (
+                  <small title={videoSendAction.qaFeedback.primaryAction}>{videoSendAction.qaFeedback.summary}</small>
+                )}
+              </div>
+	              <button
+	                disabled={videoCanResume
+	                  ? videoPermissionBlockedByProject || videoBusy || !onSendSeedanceVideo
+	                  : videoPermissionBlockedByProject || Boolean(videoSendAction.disabled) || !videoSendAction.ready || !videoSendAction.keyConfigured || videoBusy || (videoAlreadySent && !videoCanResume) || !onSendSeedanceVideo}
+	                onClick={pointToMainVideoAction}
+	                aria-label={videoCanResume ? "查看底部主按钮的视频查询动作" : "查看底部主按钮的视频提交动作"}
+	              >
+	                <ArrowRight size={15} />
+	                {videoDetailButtonLabel}
+	              </button>
+            </section>
+          )}
+          {showEndFrameAction && endFrameAction && (
+            <section className={`agent-real-sample-action ${endFrameAction.status}`} aria-label="当前镜头特殊结束画面">
+              <div>
+                <span>特殊结束画面</span>
+                <strong>{endFrameLabel}</strong>
+                <small>{
+                  referenceGenerationBlockedByContract
+                    ? agentVideoPermissionDetail(currentVideoPermissionContract)
+                    : referenceGenerationBlockedByProject
+                      ? "先把草稿保存到项目文件夹，再生成结束画面。"
+                      : endFrameAction.message || "只用于循环、变身或明确首尾控制；生成后先放到复核区。"
+                }</small>
+              </div>
+              <button
+                disabled={referenceGenerationBlockedByProject || endFrameAction.disabled || !endFrameAction.keyConfigured || endFrameBusy}
+                onClick={runFooterEndFrameGeneration}
+                aria-label={referenceGenerationBlockedByContract ? "先继续准备参考" : referenceGenerationBlockedByProject ? "先保存项目文件夹" : "生成当前镜头特殊结束画面"}
+              >
+                {endFrameAction.keyConfigured ? <Sparkles size={15} /> : <LockKeyhole size={15} />}
+                生成
+              </button>
+            </section>
+          )}
+        </details>
       )}
     </aside>
   );

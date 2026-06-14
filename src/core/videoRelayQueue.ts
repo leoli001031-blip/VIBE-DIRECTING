@@ -147,6 +147,7 @@ export function buildVideoRelayQueueState(input: BuildVideoRelayQueueStateInput)
     nextReadyItemId: nextReadyItem?.id,
     autoSubmitAllowed: Boolean(input.storyboardConfirmed && !paused && !activeItems.length && nextReadyItem),
     resumeCommands: input.items
+      .filter((item) => active(item.status))
       .map((item) => item.resumeCommand || "")
       .filter(Boolean),
     items: input.items,

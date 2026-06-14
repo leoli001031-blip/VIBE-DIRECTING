@@ -14,6 +14,19 @@ const localAssetRoot = assetRootEnv
 
 function sourceManualChunk(id: string) {
   const normalizedId = id.replace(/\\/g, "/");
+  const exportRuntimeModules = [
+    `${srcRoot}core/exportWorker.ts`,
+    `${srcRoot}core/exportAction.ts`,
+    `${srcRoot}core/localPreviewExportProjection.ts`,
+    `${srcRoot}core/finalVideoPlan.ts`,
+    `${srcRoot}core/finalVideoRender.ts`,
+  ];
+  if (exportRuntimeModules.includes(normalizedId)) return "export-runtime";
+  const newVideoRuntimeModules = [
+    `${srcRoot}core/newVideoProjectVibePlanner.ts`,
+    `${srcRoot}core/scriptPlanner.ts`,
+  ];
+  if (newVideoRuntimeModules.includes(normalizedId)) return "new-video-runtime";
   if (normalizedId.startsWith(`${srcRoot}agent/`)) return "agent-runtime";
   if (normalizedId.startsWith(`${srcRoot}data/`)) return "demo-data";
   if (normalizedId.startsWith(`${srcRoot}project/`)) return "core-runtime";

@@ -141,6 +141,91 @@ assert(runtimeProjection.missingCount === 1, "provider self-report without outpu
 assert(runtimeProjection.items.find((item) => item.shotId === "S03")?.kind === "missing_placeholder", "provider self-report must not render media");
 assert(!JSON.stringify(runtimeProjection).includes("real-demo-005"), "projection must not leak legacy fixture identity");
 
+const approvedVideoProjection = buildCurrentProjectPreviewProjection({
+  summary: {
+    status: "preview_ready",
+    projectId: currentProject.projectId,
+    projectRoot: currentProject.projectRoot,
+    previewStatus: "preview_ready",
+    productionStatus: "ready",
+    previewItems: [
+      {
+        id: "runtime-approved-video",
+        shotId: "S01",
+        order: 1,
+        mediaPath: "video/seedance/demo-video.mp4",
+        outputExists: true,
+        status: "approved",
+        previewQaStatus: "approved",
+        productionQaStatus: "approved",
+        reviewRequired: false,
+      },
+    ],
+  },
+  previewPlan,
+});
+assert(approvedVideoProjection.items[0]?.kind === "video_clip", "approved mp4 output should be a video clip");
+assert(approvedVideoProjection.items[0]?.returned === true, "approved mp4 output should be preview-eligible");
+assert(approvedVideoProjection.items[0]?.reviewRequired === false, "approved mp4 output should not need review");
+assert(approvedVideoProjection.returnedCount === 1, "approved mp4 output should count as returned");
+assert(approvedVideoProjection.reviewCount === 0, "approved mp4 output should clear review count");
+
+const relayQueueProjection = buildCurrentProjectPreviewProjection({
+  summary: {
+    status: "preview_ready",
+    projectId: currentProject.projectId,
+    projectRoot: currentProject.projectRoot,
+  },
+  previewPlan,
+  relayQueue: {
+    schemaVersion: "0.1.0",
+    generatedAt: "2026-06-13T00:00:00.000Z",
+    queueId: "relay-preview-test",
+    storyboardConfirmed: true,
+    status: "complete",
+    maxConcurrentVideoJobs: 1,
+    authorizationPolicy: {
+      mode: "storyboard_confirmation_authorizes_serial_relay",
+      batchAuthorizationRequired: false,
+      perTaskAuthorizationRequired: false,
+      reviewStillRequired: true,
+      notes: [],
+    },
+    counts: {
+      total: 1,
+      ready: 0,
+      active: 0,
+      completed: 1,
+      failed: 0,
+      blocked: 0,
+    },
+    activeItemIds: [],
+    autoSubmitAllowed: false,
+    resumeCommands: [],
+    items: [{
+      id: "relay-s01",
+      shotId: "S01",
+      title: "Relay returned video",
+      status: "success",
+      modelVersion: "seedance-2.0",
+      videoResolution: "720p",
+      durationSeconds: 4,
+      referencePaths: [],
+      outputVideoPath: "/workspace/self-contained/videos/S01.mp4",
+      attemptCount: 1,
+      blockers: [],
+      notes: [],
+    }],
+    userSummary: "视频已完成，等待复核。",
+    notes: [],
+  },
+});
+const relayItem = relayQueueProjection.items.find((item) => item.shotId === "S01");
+assert(relayItem?.kind === "video_clip", "relay queue returned videos should create preview video cards");
+assert(relayItem?.reviewRequired === true, "relay queue returned videos should still require review");
+assert(relayItem?.videoGeneration.status === "completed", "relay queue returned videos should carry completed Seedance state");
+assert(relayQueueProjection.returnedCount >= 1, "relay queue returned videos should count as returned media");
+
 const defaultDurationProjection = buildCurrentProjectPreviewProjection({
   summary,
   previewPlan: { ...previewPlan, clips: previewPlan.clips.map(({ durationSeconds, ...clip }) => clip) },

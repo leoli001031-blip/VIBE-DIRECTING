@@ -45,13 +45,10 @@ import {
 import { buildSubagentWorkerRuntimePlan, type SubagentWorkerRuntimePlan } from "./core/subagentWorkerRuntime";
 import { ensureRuntimeEnvironment } from "./core/runtimeConfig";
 import { buildMinimalRuntimeProjection, type MinimalRuntimeProjection } from "./core/minimalRuntimeProjection";
-import {
-  buildNewVideoProjectVibeStagedTransaction,
-  commitNewVideoProjectVibeStagedTransaction,
-  type NewVideoProjectVibeStagedTransactionPreview,
-} from "./core/newVideoProjectVibePlanner";
+import type { NewVideoProjectVibeStagedTransactionPreview } from "./core/newVideoProjectVibePlanner";
 import { bindNewVideoAudioReferenceToRuntimeState } from "./core/newVideoAudioReferenceBinding";
 import { buildAudioPlanningState } from "./core/audioPlanning";
+import type { VideoRelayQueueState } from "./core/videoRelayQueue";
 import {
   applyDialogueAudioMaterialToRuntimeState,
   buildDialogueAudioMaterialProjectVibeTransaction,
@@ -158,8 +155,8 @@ import {
   saveProjectLocalKnowledgePack,
 } from "./core/projectLocalKnowledge";
 import type { KnowledgePack } from "./core/knowledgeTypes";
-import { runExportAction, type ExportActionState } from "./core/exportAction";
-import { buildLocalPreviewExportProjection } from "./core/localPreviewExportProjection";
+import type { ExportActionState } from "./core/exportAction";
+import type { LocalPreviewExportProjection } from "./core/localPreviewExportProjection";
 import {
   applyCurrentProjectWorkbenchProjectionToRuntimeState,
   buildCurrentProjectWorkbenchProjection,
@@ -1728,6 +1725,7 @@ function formatFrameRef(ref?: VideoExecutionPreviewRow["subagentPacketPreview"][
 const rememberedProjectRootStorageKey = "vibe-director:last-project-root";
 const recentProjectSelectionsStorageKey = "vibe-director:recent-projects";
 const autoRestoreRememberedProjectStorageKey = "vibe-director:auto-restore-project";
+const browserProjectDraftStorageKeyPrefix = "vibe-director:project-vibe:browser-draft";
 
 type RememberedProjectSelection = ProjectRootDialogSelection & {
   updatedAt?: string;
@@ -1750,6 +1748,20 @@ function projectIdFromLocalRoot(projectRoot?: string) {
   }
   const suffix = Math.abs(hash).toString(36);
   return `${slug || "local_project"}_${suffix || "0"}`;
+}
+
+function initialBrowserProjectDraftStorageKey() {
+  if (typeof window === "undefined") return `${browserProjectDraftStorageKeyPrefix}:session`;
+  const params = new URLSearchParams(window.location.search);
+  const caseId = params.get("case")?.trim();
+  const explicitFresh = params.get("fresh") === "1" || params.get("new") === "1";
+  const sessionId = explicitFresh
+    ? String(Date.now())
+    : params.get("ts")?.trim() || params.get("session")?.trim() || String(Date.now());
+  if (caseId || explicitFresh || params.has("ts") || params.has("session")) {
+    return `${browserProjectDraftStorageKeyPrefix}:session:${caseId || "fresh"}:${sessionId}`;
+  }
+  return `${browserProjectDraftStorageKeyPrefix}:session:${sessionId}`;
 }
 
 function createEmptyProjectVibeForProjectRoot(projectRoot?: string, displayName?: string): ProjectVibeDocument {
@@ -2142,8 +2154,10 @@ function App() {
   });
   const [recentProjectSelections, setRecentProjectSelections] = useState<RememberedProjectSelection[]>(() => readRecentProjectSelections());
   const rememberedProjectRestoreAttemptedRef = useRef(false);
-  const browserProjectDraftStorageKeyRef = useRef("vibe-director:project-vibe:current");
-  const localProjectReadyForUi = projectFileSelection.status === "selected" || runtimeProjectBinding.status === "bound";
+  const browserProjectDraftStorageKeyRef = useRef(initialBrowserProjectDraftStorageKey());
+  const browserDraftHasNoLocalProject = projectFileSelection.status === "unavailable";
+  const localProjectReadyForUi = projectFileSelection.status === "selected"
+    || (!browserDraftHasNoLocalProject && runtimeProjectBinding.status === "bound");
   const agentWebSearchReadyForUi = agentWebSearchReady(agentWebSearchSettings, providerConfigStatuses);
   const [realImage2Gate, setRealImage2Gate] = useState<RealImage2GateState | undefined>();
 
@@ -2381,9 +2395,7 @@ function App() {
   const canRememberProjectRootFromDialog = canRememberProjectRootDialog();
   const activeProjectFileRoot = projectFileSelection.status === "selected"
     ? projectFileSelection.projectRoot
-    : runtimeProjectBinding.status === "bound"
-      ? runtimeProjectBinding.projectRoot
-      : undefined;
+    : undefined;
   const projectFileStatusLabel = projectFileSelectionLabel(projectFileSelection, canChooseProjectRootFromDialog);
   const projectFileStatusDetail = projectFileSelectionDetail(
     projectFileSelection,
@@ -2413,9 +2425,16 @@ function App() {
     runtimeProjectBinding.projectRoot,
     selectedProjectRoot,
   ]);
-  const effectiveRuntimeProjectBinding = runtimeProjectBinding.status === "bound"
-    ? runtimeProjectBinding
-    : selectedProjectFallbackRuntimeBinding;
+  const effectiveRuntimeProjectBinding = projectFileSelection.status === "selected"
+    ? selectedProjectFallbackRuntimeBinding
+    : browserDraftHasNoLocalProject
+      ? {
+        status: "unbound" as const,
+        message: projectFileSelection.detail || "浏览器草稿，生成参考或提交视频前需要选择本地项目。",
+      }
+      : runtimeProjectBinding.status === "bound"
+        ? runtimeProjectBinding
+        : selectedProjectFallbackRuntimeBinding;
   const effectiveRuntimeProjectIdentity = effectiveRuntimeProjectBinding.status === "bound"
     ? {
       projectId: effectiveRuntimeProjectBinding.projectId,
@@ -2521,9 +2540,12 @@ function App() {
       : runtimeState,
     [currentProjectProjectionForRuntime, runtimeState, useCurrentProjectWorkbenchProjectionForRuntime],
   );
+  const projectRealChainRelayQueue = projectRealChainState.summary?.relayQueue
+    || (projectRealChainState as ProjectRealChainUiState & { relayQueue?: VideoRelayQueueState }).relayQueue;
   const currentProjectPreviewProjection = useMemo(() => buildCurrentProjectPreviewProjection({
     summary: projectRealChainState.summary,
     previewItems: projectRealChainState.summary?.previewItems,
+    relayQueue: projectRealChainRelayQueue,
     previewPlan: {
       clips: workbenchRuntimeState.storyFlow.shots.map((shot, index) => ({
         id: `story_duration_${shot.id}`,
@@ -2537,6 +2559,7 @@ function App() {
   }), [
     effectiveRuntimeProjectIdentity?.projectId,
     effectiveRuntimeProjectIdentity?.projectRoot,
+    projectRealChainRelayQueue,
     projectRealChainState.summary,
     workbenchRuntimeState.storyFlow.shots,
   ]);
@@ -2984,15 +3007,21 @@ function App() {
     }
     return sourceShots[0]?.id || "";
   }, [currentProjectWorkbenchProjection, selectedShotId, useCurrentProjectWorkbenchProjectionForRuntime, workbenchRuntimeState.storyFlow.shots]);
-  const runtimeAudit = useMemo(() => auditFromProjectRuntimeState(runtimeState), [runtimeState]);
+  const diagnosticsRuntimeNeeded = mode === "inspector" || showInspector;
+  const runtimeAudit = useMemo(
+    () => diagnosticsRuntimeNeeded ? auditFromProjectRuntimeState(runtimeState) : undefined,
+    [diagnosticsRuntimeNeeded, runtimeState],
+  );
   const runtimeView = useMemo(
-    () => buildRuntimeViewFromProjectState(runtimeState, { selectedShotId }),
-    [runtimeState, selectedShotId],
+    () => diagnosticsRuntimeNeeded && runtimeAudit
+      ? buildRuntimeViewFromProjectState(runtimeState, { selectedShotId, audit: runtimeAudit })
+      : undefined,
+    [diagnosticsRuntimeNeeded, runtimeAudit, runtimeState, selectedShotId],
   );
   const audit = useMemo(() => auditFromProjectRuntimeState(workbenchRuntimeState), [workbenchRuntimeState]);
   const view = useMemo(
-    () => buildRuntimeViewFromProjectState(workbenchRuntimeState, { selectedShotId: workbenchSelectedShotId }),
-    [workbenchRuntimeState, workbenchSelectedShotId],
+    () => buildRuntimeViewFromProjectState(workbenchRuntimeState, { selectedShotId: workbenchSelectedShotId, audit }),
+    [audit, workbenchRuntimeState, workbenchSelectedShotId],
   );
   // Trivial computation - useMemo overhead may exceed benefit
   const selectedShot = useMemo(() => audit.shots.find((shot) => shot.id === workbenchSelectedShotId), [audit.shots, workbenchSelectedShotId]);
@@ -3092,7 +3121,7 @@ function App() {
     return {
       ...state,
       label: "等待开始",
-      detail: "先写脚本或创建本地项目",
+      detail: "先写想法或拖入素材",
       tone: "preparing" as const,
       total: 0,
       preparing: 0,
@@ -3129,7 +3158,8 @@ function App() {
     previewItems: directorPreviewQueue,
     image2BatchState: projectImage2BatchState,
     selectedShotIds: workbenchSelectedShotIds,
-  }), [directorPreviewQueue, projectImage2BatchState, workbenchRuntimeState, workbenchSelectedShotIds]);
+    relayQueue: projectRealChainRelayQueue,
+  }), [directorPreviewQueue, projectImage2BatchState, projectRealChainRelayQueue, workbenchRuntimeState, workbenchSelectedShotIds]);
   const projectPlan = useMemo(
     () => buildMinimalProjectPlan(workbenchRuntimeState, topRuntimeProjection.shortLabel, topRuntimeProjection.progressDots),
     [topRuntimeProjection.progressDots, topRuntimeProjection.shortLabel, workbenchRuntimeState],
@@ -3141,7 +3171,7 @@ function App() {
   const resolvedActiveSectionId = activeSectionId
     || view.storySections.find((section) => selectedShot && section.shotIds.includes(selectedShot.id))?.id
     || view.storySections[0]?.id;
-  const localPreviewExportProjection = useMemo(() => buildLocalPreviewExportProjection({
+  const localPreviewExportInput = useMemo(() => ({
     runtimeState: workbenchRuntimeState,
     previewQueue: directorPreviewQueue,
     shots: audit.shots,
@@ -3160,6 +3190,20 @@ function App() {
     workbenchRuntimeState,
     workbenchSelectedShotId,
   ]);
+  const [localPreviewExportProjection, setLocalPreviewExportProjection] = useState<LocalPreviewExportProjection>();
+
+  useEffect(() => {
+    if (directorView !== "preview" && directorView !== "export") return undefined;
+    let cancelled = false;
+    import("./core/localPreviewExportProjection").then(({ buildLocalPreviewExportProjection }) => {
+      if (!cancelled) setLocalPreviewExportProjection(buildLocalPreviewExportProjection(localPreviewExportInput));
+    }).catch((error: unknown) => {
+      if (!cancelled) console.error("Failed to build local preview/export projection", error);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [directorView, localPreviewExportInput]);
 
   useEffect(() => {
     if (!view.storySections.length) return;
@@ -3268,7 +3312,7 @@ function App() {
       projectTaskLabel: queuedCount
         ? `${queuedCount} 个待处理`
         : parkedOrBlockedCount
-          ? "先补参考"
+          ? "先生成参考"
           : "无需生成任务",
     };
   }
@@ -3291,7 +3335,7 @@ function App() {
       projectTaskLabel: taskSummary.queued
         ? `确认后 ${taskSummary.queued} 个待处理`
         : parkedOrBlockedCount
-          ? "补齐参考后继续"
+          ? "生成参考后继续"
           : "确认后只改项目",
     };
   }
@@ -3314,6 +3358,10 @@ function App() {
     }
     const draftTargetId = buildProjectVibeDraftTargetId(draftTarget);
     const projectForNewVideo = projectVibeWithNewVideoTitle(prototypeProjectVibeRef.current, draft, context, generatedAt);
+    const {
+      buildNewVideoProjectVibeStagedTransaction,
+      commitNewVideoProjectVibeStagedTransaction,
+    } = await import("./core/newVideoProjectVibePlanner");
     const stagedTransaction = buildNewVideoProjectVibeStagedTransaction({
       project: projectForNewVideo,
       draft,
@@ -3447,16 +3495,23 @@ function App() {
   }
 
   async function runLocalExportAction(input?: { agentToolTrace?: ExportActionState["agentToolTrace"] }) {
+    let projection = localPreviewExportProjection;
+    if (!projection) {
+      const { buildLocalPreviewExportProjection } = await import("./core/localPreviewExportProjection");
+      projection = buildLocalPreviewExportProjection(localPreviewExportInput);
+      setLocalPreviewExportProjection(projection);
+    }
     setExportActionState({
       status: "running",
       label: "正在生成导出包",
-      exportRoot: localPreviewExportProjection.exportRoot,
-      plannedWriteCount: localPreviewExportProjection.exportWorker.entries.filter((entry) => entry.operation === "write_file").length,
+      exportRoot: projection.exportRoot,
+      plannedWriteCount: projection.exportWorker.entries.filter((entry) => entry.operation === "write_file").length,
     });
     const bridge = typeof window !== "undefined" ? window.vibeRuntime : undefined;
     try {
+      const { runExportAction } = await import("./core/exportAction");
       const nextState = await runExportAction({
-        worker: localPreviewExportProjection.exportWorker,
+        worker: projection.exportWorker,
         projectRoot: prototypeProjectDraftTarget.projectRoot || runtimeProjectIdentity?.projectRoot,
         bridge,
         agentToolTrace: input?.agentToolTrace,
@@ -3467,7 +3522,7 @@ function App() {
       const failedState: ExportActionState = {
         status: "failed",
         label: `导出失败: ${e instanceof Error ? e.message : "未知错误"}`,
-        exportRoot: localPreviewExportProjection.exportRoot,
+        exportRoot: projection.exportRoot,
       };
       setExportActionState(failedState);
       return failedState;
@@ -4315,7 +4370,9 @@ function App() {
     context?: NewVideoStartConfirmationContext,
     options: { reserveForImmediateSave?: boolean } = {},
   ): Promise<ProjectVibeDraftTarget | undefined> {
-    if (!canCreateLocalProjectFromDialog) return undefined;
+    if (!canCreateLocalProjectFromDialog) {
+      return createBrowserDraftProject(draft, context, options);
+    }
     const previousProjectFileSelection = projectFileSelection;
     setProjectFileSelection({
       status: "choosing",
@@ -4353,6 +4410,43 @@ function App() {
       setProjectSelectionStatus("error");
       return undefined;
     }
+  }
+
+  async function createBrowserDraftProject(
+    draft?: NewVideoStartDraft,
+    context?: NewVideoStartConfirmationContext,
+    options: { reserveForImmediateSave?: boolean } = {},
+  ): Promise<ProjectVibeDraftTarget> {
+    const displayName = projectDisplayNameFromDraft(draft, context) || "新视频";
+    const storageKey = `${browserProjectDraftStorageKeyPrefix}:${Date.now()}`;
+    browserProjectDraftStorageKeyRef.current = storageKey;
+    const target: ProjectVibeDraftTarget = {
+      storageKey,
+    };
+    const targetId = options.reserveForImmediateSave ? buildProjectVibeDraftTargetId(target) : undefined;
+
+    try {
+      await forgetCurrentProject();
+    } catch {
+      // The browser draft can still start even if the runtime binding is already unavailable.
+    }
+
+    setProjectPathInput("");
+    setProjectSelectionStatus("idle");
+    setProjectFileSelection({
+      status: "unavailable",
+      label: "浏览器草稿",
+      detail: "先规划故事；生成参考或提交视频前再选择本地项目。",
+    });
+    clearProjectSwitchEphemera();
+    setLoadedPrototypeProjectDraftTargetId(targetId);
+    applyProjectVibeProjectState(createEmptyProjectVibeForProjectRoot(undefined, displayName), target);
+    setProjectRealChainState({ status: "unavailable", message: "浏览器草稿，生成参考或提交视频前需要选择本地项目。" });
+    setProjectImage2BatchState({ status: "unavailable", message: "浏览器草稿，生成参考前需要选择本地项目。" });
+    setProjectImage2OneShotState({ status: "unavailable", message: "浏览器草稿，生成画面前需要选择本地项目。" });
+    setExportActionState({ status: "idle", label: "导出待准备" });
+    setDirectorView("story");
+    return target;
   }
 
   async function projectDraftTargetForNewVideoConfirmation(
@@ -4528,7 +4622,7 @@ function App() {
       await runProjectImage2Batch();
       return;
     }
-    await runImage2AssetGeneration();
+    await runImage2AssetGeneration({});
   }
   const { endFrameAction, runImage2EndFrame } = useImage2EndFrameAction({
     runtimeProjectIdentity,
@@ -4541,6 +4635,7 @@ function App() {
   const { videoSubmitAction, runSeedanceVideoSubmit } = useSeedanceVideoSubmitAction({
     runtimeProjectIdentity,
     runtimeState: workbenchRuntimeState,
+    realChainState: projectRealChainState,
     selectedShotIds: workbenchSelectedShotIds,
     providerConfigStatuses,
     setProviderConfigStatuses,
@@ -4646,7 +4741,9 @@ function App() {
           updatedAt: selection.updatedAt,
           hasProjectVibe: selection.hasProjectVibe,
         }))}
-        canCreateProject={canCreateLocalProjectFromDialog && projectFileSelection.status !== "choosing"}
+        canCreateProject={projectFileSelection.status !== "choosing"}
+        createProjectTitle={canCreateLocalProjectFromDialog ? "新建本地项目" : "新建浏览器草稿"}
+        createProjectAriaLabel={canCreateLocalProjectFromDialog ? "新建本地项目" : "新建浏览器草稿"}
         onCreateProject={() => { void createNewVideoLocalProject(undefined, undefined); }}
         canChooseProjectRoot={canChooseProjectRootFromDialog && projectFileSelection.status !== "choosing"}
         onChooseProjectRoot={chooseProjectFileRoot}
@@ -4679,8 +4776,8 @@ function App() {
           selectedShotId={workbenchSelectedShotId}
           selectedShotIds={workbenchSelectedShotIds}
           currentProjectPreviewItems={directorPreviewQueue}
-          localPreviewExport={localPreviewExportProjection.previewExport}
-          exportWorker={localPreviewExportProjection.exportWorker}
+          localPreviewExport={localPreviewExportProjection?.previewExport}
+          exportWorker={localPreviewExportProjection?.exportWorker}
           exportAction={exportActionState}
           previewEmptyStateLabel={currentProjectPreviewEmptyState.label}
           previewEmptyStateDetail={currentProjectPreviewEmptyState.detail}
@@ -4749,7 +4846,7 @@ function App() {
       )}
       {mode === "inspector" && (
         <Suspense fallback={null}>
-          <InspectorMode audit={runtimeAudit} view={runtimeView} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />
+          <InspectorMode audit={runtimeAudit || audit} view={runtimeView || view} runtimeState={runtimeState} selectedShot={selectedShot} selectedAsset={selectedAsset} />
         </Suspense>
       )}
       {showInspector && (
@@ -4761,10 +4858,10 @@ function App() {
             </button>
           </div>
           <div className="diagnostics-overlay-body">
-            <Suspense fallback={null}>
+            <Suspense fallback={<div className="settings-loading-state">正在打开设置...</div>}>
               <DiagnosticsMode
-                audit={runtimeAudit}
-                view={runtimeView}
+                audit={runtimeAudit || audit}
+                view={runtimeView || view}
                 runtimeState={runtimeState}
                 selectedShot={selectedShot}
                 selectedShotId={workbenchSelectedShotId}

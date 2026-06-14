@@ -1,3 +1,10 @@
+import type { AssetReconciliationProjection } from "../../core/assetReconciliation";
+import type {
+  ProjectInboxProjection,
+  ProjectIntentRoute,
+  ProjectObservationProjection,
+} from "../../core/projectAgentWorkspace";
+
 export type CreatorReviewStatus = "needs_review" | "missing" | "approved" | "retry" | "locked";
 export type CreatorReviewLockTarget = "character" | "scene" | "prop" | "shot_reference";
 
@@ -74,7 +81,7 @@ export type CreatorFramePlanProjection = {
   endpointCount: number;
 };
 
-export type CreatorVideoGenerationStatus = "not_generated" | "submitted" | "queued" | "generating" | "completed" | "recoverable";
+export type CreatorVideoGenerationStatus = "not_generated" | "submitted" | "queued" | "generating" | "completed" | "recoverable" | "failed";
 
 export type CreatorVideoGenerationProjection = {
   status: CreatorVideoGenerationStatus;
@@ -85,8 +92,19 @@ export type CreatorVideoGenerationProjection = {
   generatingCount: number;
   completedCount: number;
   recoverableCount: number;
+  failedCount: number;
+  queueSummary?: string;
   shortSubmitId?: string;
   queuePosition?: number;
+  canResume: boolean;
+  canContinueAfterFailure?: boolean;
+};
+
+export type CreatorVideoStageProjection = {
+  status: "not_submitted" | "in_progress" | "recoverable" | "needs_review" | "completed" | "failed";
+  source: "relay_queue" | "preview_items" | "none";
+  generation: CreatorVideoGenerationProjection;
+  reviewCount: number;
   canResume: boolean;
 };
 
@@ -108,11 +126,53 @@ export type CreatorPreflightProjection = {
   checks: CreatorPreflightCheck[];
 };
 
+export type CreatorAgentStage = {
+  stage:
+    | "empty"
+    | "planning"
+    | "reference_needed"
+    | "reference_running"
+    | "review_needed"
+    | "video_ready"
+    | "video_running"
+    | "video_review"
+    | "export_ready";
+  primaryAction: string;
+  summary: string;
+  detail: string;
+  targetView: "story" | "assets" | "preview" | "export";
+};
+
+export type CreatorAgentCommand = {
+  kind:
+    | "send_idea"
+    | "open_story"
+    | "generate_references"
+    | "wait_references"
+    | "open_review"
+    | "submit_video"
+    | "resume_video"
+    | "wait_video"
+    | "open_preview"
+    | "open_export";
+  label: string;
+  summary: string;
+  detail: string;
+  targetView: "story" | "assets" | "preview" | "export";
+};
+
 export type CreatorDeskProjection = {
+  agentStage: CreatorAgentStage;
+  agentCommand: CreatorAgentCommand;
+  projectObservation: ProjectObservationProjection;
+  projectInbox: ProjectInboxProjection;
+  defaultIntentRoute: ProjectIntentRoute;
+  assetReconciliation?: AssetReconciliationProjection;
   preflight: CreatorPreflightProjection;
   scriptPlanner: CreatorScriptPlannerProjection;
   batchGeneration: CreatorBatchGenerationProjection;
   framePlan: CreatorFramePlanProjection;
+  videoStage: CreatorVideoStageProjection;
   videoGeneration: CreatorVideoGenerationProjection;
   reviewTray: CreatorReviewTrayProjection;
 };

@@ -180,6 +180,7 @@ export interface DreaminaQueueInfo {
 export interface DreaminaTaskInfo {
   submitId?: string;
   status: JimengVideoCliStatus;
+  failureReason?: string;
   taskId?: string;
   queueInfo?: DreaminaQueueInfo;
   videoUrls: string[];
@@ -495,6 +496,7 @@ export function extractDreaminaTaskInfo(stdout = "", stderr = ""): DreaminaTaskI
   const videoUrls: string[] = [];
   const localMediaPaths: string[] = [];
   const statusCandidates: unknown[] = [];
+  const failureReasonCandidates: string[] = [];
   let submitId = "";
   let taskId = "";
   const queueInfo: DreaminaQueueInfo = {};
@@ -507,6 +509,7 @@ export function extractDreaminaTaskInfo(stdout = "", stderr = ""): DreaminaTaskI
       if (!submitId && /submit[_-]?id/.test(lowerKey)) submitId = value;
       if (!taskId && /task[_-]?id|gen[_-]?task[_-]?id/.test(lowerKey)) taskId = value;
       if (/status|gen_status|task_status/.test(lowerKey)) statusCandidates.push(value);
+      if (/fail(?:ure)?[_-]?reason|error[_-]?message|error|message/.test(lowerKey)) failureReasonCandidates.push(value);
       if (/queue[_-]?(idx|index|position)$/.test(lowerKey)) queueInfo.position = safePositiveNumber(leaf);
       if (/queue[_-]?length$/.test(lowerKey)) queueInfo.length = safePositiveNumber(leaf);
       if (/queue[_-]?status$/.test(lowerKey)) {
@@ -560,6 +563,11 @@ export function extractDreaminaTaskInfo(stdout = "", stderr = ""): DreaminaTaskI
   const status =
     statusCandidates.map(normalizeDreaminaStatus).find((candidate) => candidate !== "unknown") ||
     (submitId ? "submitted" : "unknown");
+  const failureReason =
+    failureReasonCandidates.find((candidate) => candidate && !/^fail(?:ed)?$/i.test(candidate)) ||
+    combined.match(/"fail[_-]?reason"\s*:\s*"([^"]+)"/i)?.[1] ||
+    combined.match(/\bfail[_-]?reason\b\s*[:=]\s*([^\r\n]+)/i)?.[1] ||
+    undefined;
 
   const regexVideoPaths = combined.match(/\S+\.(?:mp4|mov|webm)(?:\?\S*)?/gi) || [];
   for (const candidate of regexVideoPaths) {
@@ -571,6 +579,7 @@ export function extractDreaminaTaskInfo(stdout = "", stderr = ""): DreaminaTaskI
     submitId: submitId || undefined,
     taskId: taskId || undefined,
     status,
+    failureReason,
     queueInfo: queueInfo.position !== undefined || queueInfo.length !== undefined || queueInfo.status ? queueInfo : undefined,
     videoUrls: unique(videoUrls),
     localMediaPaths: unique(localMediaPaths),

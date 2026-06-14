@@ -33,7 +33,7 @@ export function buildDirectorProgressStripState(summary: DirectorProgressStripSu
     label = "等待开始";
   } else if (blocked > 0) {
     tone = "blocked";
-    label = "有阻断";
+    label = "待补齐";
   } else if (review > 0) {
     tone = "review";
     label = "等待复核";
@@ -46,9 +46,9 @@ export function buildDirectorProgressStripState(summary: DirectorProgressStripSu
   }
 
   const detail = !hasItems
-    ? "先写脚本或创建本地项目"
+    ? "先写想法或拖入素材"
     : tone === "blocked"
-      ? `${total} 项 · ${blocked} 项有阻断`
+      ? "还有内容待补齐"
       : tone === "review"
         ? `${total} 项 · ${review} 项等待复核`
         : tone === "working"
@@ -71,7 +71,7 @@ export function buildDirectorProgressStripState(summary: DirectorProgressStripSu
       { label: "准备中", value: preparing, tone: "preparing" },
       { label: "生成中", value: working, tone: "working" },
       { label: "等待复核", value: review, tone: "review" },
-      { label: "有阻断", value: blocked, tone: "blocked" },
+      { label: "待补齐", value: blocked, tone: "blocked" },
       { label: "已完成", value: complete, tone: "complete" },
     ],
   };
@@ -94,11 +94,11 @@ export function DirectorProgressStrip({ state }: { state: DirectorProgressStripS
         ))}
       </div>
       <div className="director-progress-counts" aria-label="处理状态">
-        {state.segments.map((segment) => (
+        {state.segments.filter((segment) => segment.value > 0).map((segment) => (
           <span key={segment.label} className={segment.value === 0 ? "is-empty" : undefined}>
             <i className={`director-progress-dot ${segment.tone}`} aria-hidden="true" />
             {segment.label}
-            <b>{segment.value} 项</b>
+            <b>{segment.value > 9 ? "多项" : `${segment.value} 项`}</b>
           </span>
         ))}
       </div>

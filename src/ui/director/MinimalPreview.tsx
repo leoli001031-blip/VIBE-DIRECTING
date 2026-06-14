@@ -13,12 +13,18 @@ import type { RuntimeView } from "../../core/runtimeView";
 import type { JimengVideoStatusProjection } from "../../core/jimengVideoCli";
 import { MediaFrame, toMediaSrc } from "../common/MediaFrame";
 import { formatShotNumber } from "./MinimalStoryFlow";
+import type { CreatorReviewTrayItem } from "./creatorDeskTypes";
 
 type DisplayItem = PreviewQueueItem & {
   reviewRequired?: boolean;
   previewQaStatus?: string;
   productionQaStatus?: string;
   status?: string;
+  sourceReceiptId?: string;
+  providerReceiptId?: string;
+  providerRequestId?: string;
+  outputHash?: string;
+  outputSha256?: string;
   videoGeneration?: JimengVideoStatusProjection;
 };
 
@@ -89,6 +95,27 @@ function previewVideoStageCopy(item?: DisplayItem) {
   };
 }
 
+function text(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function previewReviewTarget(item: DisplayItem | undefined, label: string): CreatorReviewTrayItem | undefined {
+  if (!item || item.kind !== "video_clip" || !item.mediaPath || !previewNeedsReview(item)) return undefined;
+  const sourceReceiptId = text(item.sourceReceiptId) || text(item.providerReceiptId) || text(item.providerRequestId);
+  const outputHash = text(item.outputHash) || text(item.outputSha256);
+  if (!sourceReceiptId || !outputHash) return undefined;
+  return {
+    id: item.id,
+    shotId: item.shotId,
+    label,
+    detail: "视频已回流",
+    status: "needs_review",
+    mediaPath: item.mediaPath,
+    sourceReceiptId,
+    outputHash,
+  };
+}
+
 export function MinimalPreview({
   previewExport,
   currentProjectPreviewItems,
@@ -98,6 +125,7 @@ export function MinimalPreview({
   shots,
   selectedShotId,
   onSelectShot,
+  onApprovePreviewItem,
 }: {
   previewExport: ProjectPreviewExportState;
   currentProjectPreviewItems?: PreviewQueueItem[];
@@ -107,6 +135,7 @@ export function MinimalPreview({
   shots: ShotRecord[];
   selectedShotId: string;
   onSelectShot: (id: string) => void;
+  onApprovePreviewItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
 }) {
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
@@ -121,12 +150,20 @@ export function MinimalPreview({
   const activeItem = getPreviewPlayerActiveItem(queue, currentTime) as DisplayItem | undefined;
   const activeLabel = previewItemLabel(activeItem);
   const activeNeedsReview = previewNeedsReview(activeItem);
+  const activeReviewTarget = previewReviewTarget(activeItem, activeLabel);
   const activeVideoStatusLabel = previewVideoStatusLabel(activeItem);
   const progress = total > 0 ? Math.min(100, Math.max(0, (currentTime / total) * 100)) : 0;
   const reviewCount = queue.filter((item) => previewNeedsReview(item as DisplayItem)).length;
+  const playableCount = queue.filter((item) => item.mediaPath && (item.kind === "image_hold" || item.kind === "video_clip")).length;
+  const canPlayPreview = playableCount > 0;
+  const missingCount = queue.length - playableCount;
   const previewStatusLabel = !queue.length
     ? "待准备"
-    : activeVideoStatusLabel || (reviewCount > 0 ? `${reviewCount} 个待复核` : "可播放");
+    : activeVideoStatusLabel || (reviewCount > 0
+      ? `${reviewCount} 个待复核`
+      : missingCount > 0
+        ? `${missingCount} 个视频任务待生成`
+        : "可播放");
 
   useEffect(() => {
     currentTimeRef.current = currentTime;
@@ -217,7 +254,7 @@ export function MinimalPreview({
   }, [activeItem?.id, activeItem?.kind, playing]);
 
   const togglePlaying = () => {
-    if (!queue.length) return;
+    if (!queue.length || !canPlayPreview) return;
     setPlaying((value) => {
       if (value) return false;
       setCurrentTime((time) => {
@@ -238,7 +275,7 @@ export function MinimalPreview({
   const missingCopy = previewVideoStageCopy(activeItem);
   const missingDiv = (
     <div className="preview-stage-card missing_placeholder">
-      {missingCopy.label === "还缺素材" ? <b>还缺素材</b> : <b>{missingCopy.label}</b>}
+      {missingCopy.label === "还缺素材" ? <b>等待素材</b> : <b>{missingCopy.label}</b>}
       <em>{missingCopy.detail}</em>
     </div>
   );
@@ -280,8 +317,29 @@ export function MinimalPreview({
             <em>{emptyStateDetail}</em>
           </div>
         )}
-        {activeNeedsReview && <b className="preview-review-badge">待复核</b>}
-        <button className="preview-play-button" onClick={togglePlaying} aria-label={playing ? "暂停预览" : "播放预览"}>
+        {activeNeedsReview && (
+          <div className="preview-review-actions">
+            <b className="preview-review-badge">待复核</b>
+            {activeReviewTarget && (
+              <button
+                className="preview-review-action"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void onApprovePreviewItem?.(activeReviewTarget);
+                }}
+              >
+                通过
+              </button>
+            )}
+          </div>
+        )}
+        <button
+          className="preview-play-button"
+          onClick={togglePlaying}
+          disabled={!canPlayPreview}
+          aria-label={canPlayPreview ? (playing ? "暂停预览" : "播放预览") : "等待视频生成"}
+          title={canPlayPreview ? undefined : "视频回来后才能播放"}
+        >
           {playing ? <PauseCircle size={42} /> : <Play size={42} />}
         </button>
       </section>
@@ -307,7 +365,14 @@ export function MinimalPreview({
           <i className="preview-line-progress" style={{ left: `${progress}%` }} />
         </div>
         <div className="preview-time-row">
-          <button onClick={togglePlaying} aria-label={playing ? "暂停预览" : "播放预览"}>{playing ? <PauseCircle size={17} /> : <Play size={17} />}</button>
+          <button
+            onClick={togglePlaying}
+            disabled={!canPlayPreview}
+            aria-label={canPlayPreview ? (playing ? "暂停预览" : "播放预览") : "等待视频生成"}
+            title={canPlayPreview ? undefined : "视频回来后才能播放"}
+          >
+            {playing ? <PauseCircle size={17} /> : <Play size={17} />}
+          </button>
           <button onClick={() => setMuted((value) => !value)} aria-label={muted ? "打开声音" : "静音"}>
             {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
           </button>

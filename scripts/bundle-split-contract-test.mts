@@ -96,6 +96,7 @@ function assertRenderedBehindSuspense(source: string, componentName: string) {
 }
 
 const appSource = stripComments(readText("src/App.tsx"));
+const projectStateBuilderSource = stripComments(readText("src/core/projectStateBuilder.ts"));
 const directorModeSource = stripComments(readText("src/ui/director/DirectorModeShell.tsx"));
 const viteConfigSource = stripComments(readText("vite.config.ts"));
 
@@ -103,6 +104,10 @@ assertNoStaticModuleImport(appSource, "./ui/diagnostics/DiagnosticsMode", "Diagn
 assertNoStaticModuleImport(appSource, "./ui/inspector/InspectorModeShell", "InspectorMode");
 assertNoStaticImportPrefix(appSource, "./ui/diagnostics/", "Diagnostics subpanels");
 assertNoStaticModuleImport(appSource, "./ui/project/ProjectRealChainPanel", "ProjectRealChainPanel");
+assertNoStaticModuleImport(appSource, "./core/localPreviewExportProjection", "LocalPreviewExportProjection");
+assertNoStaticModuleImport(appSource, "./core/exportAction", "ExportAction");
+assertNoStaticModuleImport(appSource, "./core/newVideoProjectVibePlanner", "NewVideoProjectVibePlanner");
+assertNoStaticModuleImport(projectStateBuilderSource, "./exportWorker", "ExportWorker full builder");
 assertLazyComponentImport(appSource, "DiagnosticsMode", "./ui/diagnostics/DiagnosticsMode");
 assertLazyComponentImport(appSource, "InspectorMode", "./ui/inspector/InspectorModeShell");
 assertRenderedBehindSuspense(appSource, "DiagnosticsMode");
@@ -116,18 +121,27 @@ assertRenderedDirectly(appSource, "MinimalTopNav");
 assertNoStaticModuleImport(directorModeSource, "./MinimalPreview", "MinimalPreview");
 assertNoStaticModuleImport(directorModeSource, "./MinimalAudioPlan", "MinimalAudioPlan");
 assertNoStaticModuleImport(directorModeSource, "./MinimalExport", "MinimalExport");
+assertNoStaticModuleImport(directorModeSource, "./NewVideoStart", "NewVideoStart");
 assertLazyComponentImport(directorModeSource, "MinimalPreview", "./MinimalPreview");
 assertLazyComponentImport(directorModeSource, "MinimalAudioPlan", "./MinimalAudioPlan");
 assertLazyComponentImport(directorModeSource, "MinimalExport", "./MinimalExport");
+assertLazyComponentImport(directorModeSource, "NewVideoStart", "./NewVideoStart");
 assertRenderedBehindSuspense(directorModeSource, "MinimalPreview");
 assertRenderedBehindSuspense(directorModeSource, "MinimalAudioPlan");
 assertRenderedBehindSuspense(directorModeSource, "MinimalExport");
+assertRenderedBehindSuspense(directorModeSource, "NewVideoStart");
 assertStaticComponentImport(directorModeSource, "MinimalStoryFlow", "./MinimalStoryFlow");
 assertStaticComponentImport(directorModeSource, "MinimalAgentPanel", "./MinimalAgentPanel");
 assertRenderedDirectly(directorModeSource, "MinimalStoryFlow");
 assertRenderedDirectly(directorModeSource, "MinimalAgentPanel");
 
-for (const chunkName of ["core-runtime", "agent-runtime", "demo-data"]) {
+for (const chunkName of [
+  "core-runtime",
+  "agent-runtime",
+  "demo-data",
+  "export-runtime",
+  "new-video-runtime",
+]) {
   assert(
     viteConfigSource.includes(`return "${chunkName}"`),
     `vite manualChunks must keep ${chunkName} out of the main browser entry chunk`,

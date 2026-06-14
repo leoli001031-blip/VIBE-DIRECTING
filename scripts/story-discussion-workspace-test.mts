@@ -137,6 +137,21 @@ assert(
 );
 assert(confirmedFeedback.turns.at(-1)?.text.includes("已确认"), "confirmation should append a creator-facing acknowledgement");
 
+const noAudioDraft = buildProjectIntakeDraft({
+  createdAt,
+  scriptText: "雨夜便利店门口，一只黑猫叼走收据，店员追到巷口，发现收据发出蓝光。",
+  styleNote: "悬疑、干净、克制。",
+});
+const noAudioWorkspace = buildStoryDiscussionWorkspace({
+  session: buildDirectorSessionFromIntake({
+    draft: noAudioDraft,
+    projection: buildIntakeStagedPlanProjection(noAudioDraft),
+    createdAt,
+  }),
+  createdAt,
+});
+assert(noAudioWorkspace.nextActionLabel !== "先补音频", "audio should be optional unless the user provides audio intent or audio assets");
+
 const sparseDraft = buildProjectIntakeDraft({ createdAt, scriptText: "" });
 const sparseSession = buildDirectorSessionFromIntake({
   draft: sparseDraft,

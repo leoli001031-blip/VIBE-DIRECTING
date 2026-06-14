@@ -13,7 +13,7 @@ import {
   type ProviderConfigStatus,
 } from "../../core/providerCredentialsClient";
 
-const IMAGE2_END_FRAME_PROVIDER_ID = "lanyi-image2";
+const IMAGE2_END_FRAME_PROVIDER_ID = "apikey-fun-gpt55-responses-image";
 const IMAGE2_END_FRAME_CONFIRM_PHRASE = "generate-image2-end-frame";
 
 export type Image2EndFrameActionStatus = "idle" | "running" | "blocked" | "needs_review" | "verified";

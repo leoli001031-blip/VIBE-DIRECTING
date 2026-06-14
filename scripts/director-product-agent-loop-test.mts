@@ -16,6 +16,13 @@ function assert(condition: unknown, message: string): asserts condition {
 
 const generatedAt = "2026-05-31T02:00:00.000Z";
 const projectRoot = "/tmp/director-product-agent-loop";
+const videoAllowedExecutionContract = {
+  mode: "video_allowed" as const,
+  referenceGenerationAllowed: true,
+  videoSubmitAllowed: true,
+  providerSubmitAllowed: true,
+  reason: "测试允许视频提交",
+};
 const fixtureText = readFileSync("test-fixtures/projects/agent-loop-minimal/project.vibe", "utf8");
 const opened = parseProjectVibeText(fixtureText);
 assert(opened.ok && opened.project, `fixture should open: ${opened.errors.join("; ")}`);
@@ -1148,13 +1155,7 @@ const videoLoop = runDirectorProductAgentLoop({
     currentView: "story",
     selectedShotId: "shot_002",
   },
-  executionContract: {
-    mode: "video_allowed",
-    referenceGenerationAllowed: true,
-    videoSubmitAllowed: true,
-    providerSubmitAllowed: true,
-    reason: "测试允许视频提交",
-  },
+  executionContract: videoAllowedExecutionContract,
   availability: {
     projectReady: true,
     webSearchReady: true,
@@ -1191,13 +1192,7 @@ const videoNotReadyLoop = runDirectorProductAgentLoop({
     currentView: "story",
     selectedShotId: "shot_002",
   },
-  executionContract: {
-    mode: "video_allowed",
-    referenceGenerationAllowed: true,
-    videoSubmitAllowed: true,
-    providerSubmitAllowed: true,
-    reason: "测试允许视频提交",
-  },
+  executionContract: videoAllowedExecutionContract,
   availability: {
     projectReady: true,
     webSearchReady: true,
@@ -1279,6 +1274,7 @@ const scopedRuleQaVideo = runDirectorProductAgentLoop({
     currentView: "story",
     selectedShotId: "shot_002",
   },
+  executionContract: videoAllowedExecutionContract,
   availability: {
     projectReady: true,
     webSearchReady: true,
@@ -1327,6 +1323,7 @@ const ruleQaBlockedVideo = runDirectorProductAgentLoop({
     currentView: "story",
     selectedShotId: "shot_002",
   },
+  executionContract: videoAllowedExecutionContract,
   availability: {
     projectReady: true,
     webSearchReady: true,
@@ -1412,6 +1409,7 @@ const textQaBlockedVideo = runDirectorProductAgentLoop({
     currentView: "story",
     selectedShotId: "shot_002",
   },
+  executionContract: videoAllowedExecutionContract,
   availability: {
     projectReady: true,
     webSearchReady: true,

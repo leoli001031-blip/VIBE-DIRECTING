@@ -54,8 +54,8 @@ function selectionPolicy(): NonNullable<ProviderRegistry["selectionPolicy"]> {
 export function buildDefaultProviderRegistry(generatedAt?: string): ProviderRegistry {
   const capabilities: ProviderCapability[] = [
     capability({
-      providerId: "lanyi-image2",
-      providerName: "Lanyi Image2",
+      providerId: "apikey-fun-gpt55-responses-image",
+      providerName: "Apikey.fun Image2",
       slot: "image.generate",
       requiredMode: "text2image",
       executionState: "active",
@@ -65,11 +65,11 @@ export function buildDefaultProviderRegistry(generatedAt?: string): ProviderRegi
       maxReferenceImages: 0,
       referenceImageInputRoles: [],
       forbiddenFallbacks: ["text2image_to_image2image", "image2image_to_text2image"],
-      notes: ["Owned Agent dry-run contract for gpt-image-2 generation; live submit remains gated outside default verification."],
+      notes: ["Owned Agent dry-run contract for Apikey.fun Image2 generation; live submit remains gated outside default verification."],
     }),
     capability({
-      providerId: "lanyi-image2",
-      providerName: "Lanyi Image2",
+      providerId: "apikey-fun-gpt55-responses-image",
+      providerName: "Apikey.fun Image2",
       slot: "image.edit",
       requiredMode: "image2image",
       executionState: "active",

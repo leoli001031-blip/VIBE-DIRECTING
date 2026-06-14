@@ -2771,6 +2771,10 @@ small {
   gap: 12px;
 }
 
+.diagnostics-overlay-body .diagnostics-layout > .diagnostics-advanced-panels {
+  display: none;
+}
+
 .settings-shell {
   max-width: 1040px;
   margin: 0 auto 14px;
@@ -2800,8 +2804,20 @@ small {
   font-size: 15px;
 }
 
+.settings-loading-state {
+  max-width: 1040px;
+  margin: 0 auto 14px;
+  border: 1px solid rgba(47, 39, 34, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 253, 248, 0.88);
+  color: rgba(86, 74, 63, 0.78);
+  font-weight: 750;
+  padding: 18px;
+  box-shadow: 0 18px 48px rgba(41, 31, 22, 0.08);
+}
+
 .settings-quick-grid {
-  display: grid;
+  display: none;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
@@ -2846,7 +2862,7 @@ small {
 }
 
 .settings-service-strip {
-  display: grid;
+  display: none;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 1px;
   margin-top: 10px;
@@ -2898,13 +2914,23 @@ small {
 }
 
 .settings-subdetails {
-  display: grid;
+  display: block;
   gap: 10px;
   min-width: 0;
   border: 1px solid rgba(47, 39, 34, 0.1);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.34);
   padding: 10px;
+}
+
+.settings-subdetails:not([open]) > :not(summary),
+.settings-advanced:not([open]) > :not(summary),
+.settings-raw-credentials:not([open]) > :not(summary) {
+  display: none !important;
+}
+
+.minimal-export .export-detail-disclosure:not([open]) > .export-profile-list {
+  display: none !important;
 }
 
 .settings-subdetails > summary {
@@ -3111,7 +3137,7 @@ small {
 }
 
 .settings-advanced {
-  display: grid;
+  display: block;
   gap: 12px;
   margin-top: 16px;
   border-top: 1px solid rgba(47, 39, 34, 0.1);
@@ -3132,12 +3158,32 @@ small {
   cursor: pointer;
   font-size: 13px;
   font-weight: 700;
+  list-style: none;
+}
+
+.settings-advanced > summary::-webkit-details-marker {
+  display: none;
 }
 
 .settings-advanced > summary small {
   color: rgba(47, 39, 34, 0.48);
   font-size: 12px;
   font-weight: 500;
+}
+
+.settings-advanced > summary::after {
+  content: "展开";
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(47, 39, 34, 0.06);
+  color: rgba(47, 39, 34, 0.58);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.settings-advanced[open] > summary::after {
+  content: "收起";
 }
 
 .diagnostics-advanced-grid {

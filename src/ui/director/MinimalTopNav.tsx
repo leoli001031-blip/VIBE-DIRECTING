@@ -69,6 +69,8 @@ export function MinimalTopNav({
   currentProjectPath,
   recentProjects,
   canCreateProject,
+  createProjectTitle,
+  createProjectAriaLabel,
   onCreateProject,
   canChooseProjectRoot,
   onChooseProjectRoot,
@@ -99,6 +101,8 @@ export function MinimalTopNav({
     hasProjectVibe?: boolean;
   }>;
   canCreateProject?: boolean;
+  createProjectTitle?: string;
+  createProjectAriaLabel?: string;
   onCreateProject?: () => void;
   canChooseProjectRoot?: boolean;
   onChooseProjectRoot?: () => void;
@@ -113,32 +117,42 @@ export function MinimalTopNav({
   const totalShots = sections.reduce((sum, section) => sum + section.shotCount, 0);
   const activeSection = sections.find((section) => section.id === activeSectionId) || sections[0];
   const storyLabel = activeSection ? shortSectionLabel(activeSection) : "故事";
+  const storyViewLabel = activeSection ? `故事 · ${storyLabel} · ${totalShots} 个镜头` : `故事 · ${totalShots} 个镜头`;
   const isEmptyProject = totalShots === 0;
   const projectTitleLabel = projectTitle || "新视频项目";
   const projectFolderReady = Boolean(projectRoot?.trim());
   const projectStorageBadge = projectFolderReady ? "本地" : "草稿";
-  const emptyProjectPrimary = projectFolderReady ? "本地项目已准备" : "还没有项目";
-  const emptyProjectSecondary = projectFolderReady ? "确认后会写到这里" : "先写脚本或打开项目";
+  const emptyProjectPrimary = projectFolderReady ? "本地已准备" : "浏览器草稿";
+  const emptyProjectSecondary = projectFolderReady ? "确认后写入项目" : "先写想法";
   const [projectControlOpen, setProjectControlOpen] = useState(false);
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const projectControlRef = useRef<HTMLDivElement>(null);
   const projectRootLabel = compactProjectPathLabel(projectRoot) || "尚未选择本地文件夹";
   const currentProjectPathLabel = compactProjectPathLabel(currentProjectPath);
   const projectContentSummary = isEmptyProject
     ? projectFolderReady
       ? "底部发送脚本后，会写入这个项目文件夹。"
-      : "先从底部发送脚本，或打开一个已有项目。"
-    : `${totalShots} 个镜头 · ${projectPlan.statusLabel}`;
+      : "先从底部发送想法或脚本，或打开已有项目。"
+    : `故事流 · ${totalShots} 个镜头 · ${projectPlan.statusLabel}`;
   const projectSaveSummary = currentProjectPathLabel || (projectFolderReady ? "确认草案后创建项目文件" : "尚未选择保存位置");
   const projectControlStatus = projectFolderReady
     ? isEmptyProject
       ? "已准备项目文件夹"
       : "项目已连接"
-    : isEmptyProject ? "还没有项目" : "浏览器草稿";
+    : "浏览器草稿";
   const projectPickerDisabled = Boolean(!canCreateProject && !canChooseProjectRoot);
-  const projectPickerDisabledCopy = projectFileStatusDetail || "浏览器预览可以先规划；补参考或提交视频需要在桌面 App 里选择本地项目文件夹。";
+  const projectPickerDisabledCopy = projectFileStatusDetail || "浏览器里可以先规划；生成参考或提交视频需要在桌面 App 里选择本地项目文件夹。";
   const recentProjectItems = (recentProjects || [])
     .filter((project) => project.projectRoot.trim())
     .slice(0, 6);
+  const showWorkspaceTabs = !isEmptyProject;
+  const exportDisabled = isEmptyProject;
+  const currentViewLabel = directorView === "assets" ? "参考" : directorView === "preview" ? "预览" : "故事";
+  const currentViewDetail = directorView === "assets"
+    ? "角色、场景、道具"
+    : directorView === "preview"
+      ? "回流与粗看"
+      : `${totalShots} 个镜头`;
 
   useEffect(() => {
     if (!projectControlOpen) return undefined;
@@ -163,6 +177,11 @@ export function MinimalTopNav({
     action?.();
   }
 
+  function openView(nextView: DirectorView) {
+    setViewMenuOpen(false);
+    onOpenDirectorView(nextView);
+  }
+
   return (
     <header className="minimal-topbar">
       <div className="minimal-topbar-left">
@@ -183,18 +202,9 @@ export function MinimalTopNav({
               <ChevronDown size={14} aria-hidden="true" />
             </span>
             <span className="project-plan-entry" aria-label="项目计划状态">
-              <strong>{isEmptyProject ? emptyProjectPrimary : "故事流"}</strong>
-              <span>{isEmptyProject ? emptyProjectSecondary : projectPlan.entryLabel}</span>
-              {!isEmptyProject && <span>{projectPlan.planLabel}</span>}
-              {!isEmptyProject && <span>{projectPlan.statusLabel}</span>}
+              <strong>{projectControlStatus}</strong>
+              <span>{isEmptyProject ? emptyProjectSecondary : projectContentSummary}</span>
             </span>
-            {!isEmptyProject && (
-              <span className="minimal-state-dots" aria-label={projectPlan.statusLabel}>
-                {projectPlan.progressDots.map((dot) => (
-                  <i key={dot.id} className={dot.tone} title={dot.label} />
-                ))}
-              </span>
-            )}
           </button>
           {projectControlOpen && (
             <div className="project-control-popover" role="dialog" aria-label="项目控制">
@@ -207,6 +217,13 @@ export function MinimalTopNav({
               <div className="project-control-summary" aria-label="项目状态">
                 <span>内容</span>
                 <strong>{projectContentSummary}</strong>
+                {!isEmptyProject && (
+                  <span className="minimal-state-dots" aria-label={projectPlan.statusLabel}>
+                    {projectPlan.progressDots.map((dot) => (
+                      <i key={dot.id} className={dot.tone} title={dot.label} />
+                    ))}
+                  </span>
+                )}
               </div>
               <div className="project-control-path">
                 <span>文件夹</span>
@@ -267,11 +284,11 @@ export function MinimalTopNav({
                     type="button"
                     disabled={!canCreateProject}
                     onClick={() => performProjectControlAction(onCreateProject)}
-                    title={canCreateProject ? "新建本地项目" : projectPickerDisabledCopy}
-                    aria-label="新建本地项目"
+                    title={canCreateProject ? createProjectTitle || "新建项目" : projectPickerDisabledCopy}
+                    aria-label={createProjectAriaLabel || "新建项目"}
                   >
                     <FolderPlus size={15} aria-hidden="true" />
-                    新建项目
+                    {createProjectTitle || "新建项目"}
                   </button>
                 )}
                 {onChooseProjectRoot && (
@@ -306,39 +323,58 @@ export function MinimalTopNav({
           )}
         </div>
       </div>
-      <nav className="minimal-nav" aria-label="导演视图">
-        <button
-          className={mode === "director" && directorView === "story" ? "active" : ""}
-          onClick={() => onOpenDirectorView("story")}
-          title={activeSection?.label || "故事"}
-          aria-label={`故事 · ${storyLabel} · ${totalShots} 个镜头`}
+      {showWorkspaceTabs && (
+        <details
+          className="minimal-nav minimal-nav-menu"
+          aria-label="项目内容"
+          open={viewMenuOpen}
+          onToggle={(event) => setViewMenuOpen(event.currentTarget.open)}
         >
-          <span className="minimal-section-label">故事</span>
-          <small className="minimal-section-count">{totalShots}</small>
-        </button>
+          <summary aria-label={`当前查看：${currentViewLabel}`}>
+            <span className="minimal-nav-label">查看</span>
+            <strong>{currentViewLabel}</strong>
+            <small>{currentViewDetail}</small>
+            <ChevronDown size={14} aria-hidden="true" />
+          </summary>
+          {viewMenuOpen && (
+            <div className="minimal-nav-menu-list">
+              <button
+                className={mode === "director" && directorView === "story" ? "active" : ""}
+                onClick={() => openView("story")}
+                title={activeSection?.label || "故事"}
+                aria-label={storyViewLabel}
+              >
+                <span className="minimal-section-label">故事</span>
+                <small className="minimal-section-count">{totalShots}</small>
+              </button>
+              <button
+                className={mode === "director" && directorView === "assets" ? "active" : ""}
+                onClick={() => openView("assets")}
+                aria-label="参考素材"
+              >
+                参考
+              </button>
+              <button
+                className={mode === "director" && directorView === "preview" ? "active" : ""}
+                onClick={() => openView("preview")}
+                aria-label="预览"
+              >
+                预览
+              </button>
+            </div>
+          )}
+        </details>
+      )}
+      <div className="minimal-topbar-actions">
         <button
-          className={mode === "director" && directorView === "assets" ? "active" : ""}
-          onClick={() => onOpenDirectorView("assets")}
-          aria-label="视觉记忆"
-        >
-          参考
-        </button>
-        <button
-          className={mode === "director" && directorView === "preview" ? "active" : ""}
-          onClick={() => onOpenDirectorView("preview")}
-          aria-label="交付"
-        >
-          交付
-        </button>
-        <button
-          className={mode === "director" && directorView === "export" ? "active" : ""}
+          className={`diagnostics-link topbar-export-action ${mode === "director" && directorView === "export" ? "active" : ""}`}
+          disabled={exportDisabled}
           onClick={() => onOpenDirectorView("export")}
+          title={exportDisabled ? "先写故事或打开项目，再导出。" : "导出"}
           aria-label="导出"
         >
           导出
         </button>
-      </nav>
-      <div className="minimal-topbar-actions">
         <button className={`diagnostics-link ${showInspector ? "active" : ""}`} onClick={onOpenInspector} aria-label="设置">
           <Settings size={18} aria-hidden="true" />
           <span className="settings-link-label">设置</span>

@@ -2,7 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { basename, extname } from "node:path";
 
 export const APIKEY_FUN_RESPONSES_IMAGE_PROVIDER_ID = "apikey-fun-gpt55-responses-image";
-export const APIKEY_FUN_RESPONSES_IMAGE_DEFAULT_BASE_URL = "https://api.apikey.fun/v1/responses";
+export const APIKEY_FUN_RESPONSES_IMAGE_PRIMARY_BASE_URL = "https://slb.apikey.fun/v1/responses";
+export const APIKEY_FUN_RESPONSES_IMAGE_FALLBACK_BASE_URL = "https://api.apikey.fun/v1/responses";
+export const APIKEY_FUN_RESPONSES_IMAGE_DEFAULT_BASE_URL = APIKEY_FUN_RESPONSES_IMAGE_PRIMARY_BASE_URL;
 export const APIKEY_FUN_RESPONSES_IMAGE_DEFAULT_MODEL = "gpt-5.5";
 
 export interface ApikeyFunReferenceImage {
@@ -15,6 +17,7 @@ export interface ApikeyFunReferenceImage {
 export interface ApikeyFunResponsesImageTransportInput {
   apiKey: string;
   endpoint?: string;
+  fallbackEndpoint?: string;
   model?: string;
   prompt: string;
   size?: string;
@@ -185,7 +188,22 @@ function modelFromJson(value: unknown): string | undefined {
   return typeof record.model === "string" ? record.model : undefined;
 }
 
-export async function fetchApikeyFunImageViaResponses(
+function fallbackEndpointFor(primaryEndpoint: string, explicitFallback?: string): string | undefined {
+  const fallback = normalizeEndpoint(explicitFallback || APIKEY_FUN_RESPONSES_IMAGE_FALLBACK_BASE_URL);
+  if (fallback === primaryEndpoint) return undefined;
+  if (primaryEndpoint.includes("://slb.apikey.fun/")) return fallback;
+  return explicitFallback ? fallback : undefined;
+}
+
+function shouldRetryOnFallback(result: ApikeyFunResponsesImageTransportResult) {
+  return !result.ok && (
+    result.errorType === "network_error"
+    || result.errorType === "timeout"
+    || result.errorType === "server_error"
+  );
+}
+
+async function fetchApikeyFunImageViaResponsesOnce(
   input: ApikeyFunResponsesImageTransportInput,
 ): Promise<ApikeyFunResponsesImageTransportResult> {
   const startedAt = Date.now();
@@ -382,6 +400,29 @@ export async function fetchApikeyFunImageViaResponses(
       rawResponseBytes: rawBytes.length,
       rawResponseSha256: sha256(rawBytes),
       referenceInputCount: referenceImages.length,
+    },
+  };
+}
+
+export async function fetchApikeyFunImageViaResponses(
+  input: ApikeyFunResponsesImageTransportInput,
+): Promise<ApikeyFunResponsesImageTransportResult> {
+  const primary = await fetchApikeyFunImageViaResponsesOnce(input);
+  const fallbackEndpoint = fallbackEndpointFor(primary.endpoint, input.fallbackEndpoint);
+  if (!fallbackEndpoint || !shouldRetryOnFallback(primary)) return primary;
+
+  const fallback = await fetchApikeyFunImageViaResponsesOnce({
+    ...input,
+    endpoint: fallbackEndpoint,
+  });
+  if (fallback.ok) return fallback;
+  return {
+    ...fallback,
+    diagnostic: {
+      ...(fallback.diagnostic || {}),
+      primaryEndpoint: primary.endpoint,
+      primaryErrorType: primary.ok ? undefined : primary.errorType,
+      primaryMessage: primary.ok ? undefined : primary.message,
     },
   };
 }

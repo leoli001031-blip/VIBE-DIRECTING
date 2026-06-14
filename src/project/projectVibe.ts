@@ -203,6 +203,9 @@ export async function saveProjectVibe(
   const directory = parentDirectory(path);
   if (directory && adapter.mkdir) await adapter.mkdir(directory);
   const serialized = serializeProjectVibe(project);
+  if (await storageTextIsUnchanged(adapter, path, serialized)) {
+    return { ok: true, path, factHash: hashProjectVibeFacts(project), validation, errors: [] };
+  }
   if (adapter.writeFileAtomic) await adapter.writeFileAtomic(path, serialized);
   else await adapter.writeFile(path, serialized);
   return { ok: true, path, factHash: hashProjectVibeFacts(project), validation, errors: [] };
@@ -210,6 +213,19 @@ export async function saveProjectVibe(
 
 export function serializeProjectVibe(project: ProjectVibeDocument): string {
   return `${JSON.stringify(project, null, 2)}\n`;
+}
+
+async function storageTextIsUnchanged(
+  adapter: ProjectVibeStorageAdapter,
+  path: string,
+  serialized: string,
+): Promise<boolean> {
+  try {
+    if (adapter.existsFile && !(await adapter.existsFile(path))) return false;
+    return await adapter.readFile(path) === serialized;
+  } catch {
+    return false;
+  }
 }
 
 export function applyProjectVibeTransaction(

@@ -23,7 +23,7 @@ function categoryLabel(category: string) {
   const labels: Record<string, string> = {
     audio_plan: "音频设计",
     bgm_export_plan: "配乐计划",
-    blocked_placeholders_when_draft: "待补齐画面",
+    blocked_placeholders_when_draft: "缺少画面",
     duration: "时长",
     gate_summary: "复核摘要",
     generation_health: "制作复核",
@@ -31,7 +31,7 @@ function categoryLabel(category: string) {
     keyframes: "关键帧",
     manifest_matches: "素材清单",
     media_status: "素材状态",
-    missing_placeholders_when_draft: "待补齐画面",
+    missing_placeholders_when_draft: "缺少画面",
     preview_event_refs: "预览段落",
     preview_timeline: "预览时间线",
     project_facts_snapshot: "项目快照",
@@ -69,7 +69,7 @@ function blockerLabel(reason: string) {
   if (/No prompt, task output, or QA paths/i.test(reason)) return "还没有可归档的制作记录。";
   if (/manifestMatched|manifest match/i.test(reason)) return "素材清单还未核对完成。";
   if (/pairQaPass|pair QA/i.test(reason)) return "关键画面对齐还需复核。";
-  if (/videoPresent|video output path|video task run/i.test(reason)) return "视频素材还未补齐。";
+  if (/videoPresent|video output path|video task run/i.test(reason)) return "视频还没回流或还没通过复核。";
   if (/Formal preview check failed/i.test(reason)) return "正式预览还有检查未完成。";
   return "还有制作检查未完成。";
 }
@@ -89,6 +89,10 @@ function futureTargetSummary(targets?: string[]) {
   const labels = Array.from(new Set((targets || []).map(targetLabel).filter((label) => label !== "后续接口")));
   if (!labels.length) return "";
   return labels.join("、");
+}
+
+function isChecklistExportLabel(label?: string) {
+  return /清[\s\S]{0,4}单|checklist|manifest/i.test(label || "");
 }
 
 function packageContentSummary(exportWorker?: ExportWorkerState) {
@@ -131,11 +135,18 @@ export function MinimalExport({
   const profiles = previewExport.exportProfiles;
 	  const gate = previewExport.formalPreviewGate;
 	  const hasEvents = previewExport.draftPreview.events.length > 0;
-	  const canExport = Boolean(onRunExport) && exportAction?.status !== "running" && Boolean(exportWorker?.manifest.mvpPackage.reportIncluded);
   const plannedFiles = exportWorker?.manifest.files.length || 0;
   const readyProfiles = profiles.filter((profile) => profile.readiness === "ready").length;
   const blockedProfiles = profiles.length - readyProfiles;
+	  const canExport = Boolean(onRunExport)
+    && exportAction?.status !== "running"
+    && Boolean(exportWorker?.manifest.mvpPackage.reportIncluded)
+    && readyProfiles > 0;
   const videoSummary = videoReviewSummary(exportWorker);
+  const checklistExport = isChecklistExportLabel(exportAction?.label);
+  const exportReadyLabel = exportAction?.status === "ready"
+    ? checklistExport ? "清单已生成" : "已生成包"
+    : canExport ? "可生成" : "未就绪";
 
   if (!localProjectReady) {
     return (
@@ -175,8 +186,8 @@ export function MinimalExport({
           <span>项目交付</span>
           <h3>素材包</h3>
         </div>
-        <span className="export-gate-status" data-status={gate.status}>
-          {gate.status === "pass" ? "就绪" : "未就绪"}
+        <span className="export-gate-status" data-status={exportAction?.status === "ready" || canExport ? "pass" : gate.status}>
+          {exportReadyLabel}
         </span>
       </div>
       <div className="export-action-row">
@@ -191,7 +202,7 @@ export function MinimalExport({
 	      <div className="export-summary-strip" aria-label="导出摘要">
         <span><strong>{plannedFiles}</strong><small>文件</small></span>
         <span><strong>{readyProfiles}</strong><small>可导出</small></span>
-        <span><strong>{blockedProfiles}</strong><small>待复核</small></span>
+        <span><strong>{blockedProfiles}</strong><small>未就绪</small></span>
         <span><strong>{exportWorker?.manifest.mvpPackage.knowledgeReferenceCount || 0}</strong><small>本片参考</small></span>
 	        <span><strong>{audioPlanning.shotPlans.length}</strong><small>音频计划</small></span>
 	      </div>
@@ -200,13 +211,13 @@ export function MinimalExport({
           视频记录：{videoSummary}
 	        </small>
 	      )}
-	      {exportAction && exportAction.status !== "idle" && (
+      {exportAction && exportAction.status !== "idle" && (
         <div className={`export-action-status ${exportAction.status}`}>
           <strong>{exportAction.label}</strong>
           <small className="muted-copy">
             {exportAction.status === "blocked" || exportAction.status === "failed"
               ? "先处理待确认内容。"
-              : `${exportAction.executedCount || 0} 步完成 · 素材包已生成`}
+              : `${exportAction.executedCount || 0} 步完成 · ${checklistExport ? "清单已生成" : "素材包已生成"}`}
           </small>
         </div>
       )}
@@ -215,42 +226,59 @@ export function MinimalExport({
         <p className="empty-state">还没有预览素材。先准备故事和参考。</p>
       )}
 
-      <div className="export-profile-list">
-        {profiles.map((profile) => {
-          const Icon = kindIcon(profile.kind);
-          const ready = profile.readiness === "ready";
-          const futureTargets = futureTargetSummary(profile.futureTargets);
+      <section className={`export-primary-summary ${canExport ? "ready" : "blocked"}`} aria-label="当前导出状态">
+        <div>
+          <strong>{canExport ? "素材包可以生成" : "素材包还没准备好"}</strong>
+          <small className="muted-copy">
+            {canExport
+              ? `${plannedFiles} 个文件 · ${packageContentSummary(exportWorker)}`
+              : gate.blockedReasons.length ? blockerLabel(gate.blockedReasons[0]) : "等待项目内容同步"}
+          </small>
+        </div>
+      </section>
 
-          return (
-            <div key={profile.profileId} className={`export-profile ${ready ? "ready" : "blocked"}`}>
-              <div className="export-profile-head">
-                <Icon size={16} />
-                <strong>{kindLabel(profile.kind)}</strong>
-                <span className={`status-label ${ready ? "ready" : "blocked"}`}>
-                  {ready ? "可导出" : "未就绪"}
-                </span>
-              </div>
-              <small className="muted-copy">
-                {profile.includedPaths.length} 个文件 · {categorySummary(profile.includedCategories)}
-              </small>
-              {profile.blockedReasons.length > 0 && (
-                <ul className="export-blockers">
-                  {profile.blockedReasons.slice(0, 3).map((reason, i) => (
-                    <li key={`${profile.profileId}-${i}`} className="muted-copy">{blockerLabel(reason)}</li>
-                  ))}
-                </ul>
-              )}
-              {futureTargets && (
+      <details className="export-detail-disclosure">
+        <summary>
+          <span>查看交付明细</span>
+          <small>{readyProfiles} 个可导出 · {blockedProfiles} 个未就绪</small>
+        </summary>
+        <div className="export-profile-list">
+          {profiles.map((profile) => {
+            const Icon = kindIcon(profile.kind);
+            const ready = profile.readiness === "ready";
+            const futureTargets = futureTargetSummary(profile.futureTargets);
+
+            return (
+              <div key={profile.profileId} className={`export-profile ${ready ? "ready" : "blocked"}`}>
+                <div className="export-profile-head">
+                  <Icon size={16} />
+                  <strong>{kindLabel(profile.kind)}</strong>
+                  <span className={`status-label ${ready ? "ready" : "blocked"}`}>
+                    {ready ? "可导出" : "未就绪"}
+                  </span>
+                </div>
                 <small className="muted-copy">
-                  后续可接入：{futureTargets}
+                  {(profile.kind === "asset_package" && !profile.includedPaths.length && plannedFiles > 0) ? plannedFiles : profile.includedPaths.length} 个文件 · {categorySummary(profile.includedCategories)}
                 </small>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                {profile.blockedReasons.length > 0 && (
+                  <ul className="export-blockers">
+                    {profile.blockedReasons.slice(0, 3).map((reason, i) => (
+                      <li key={`${profile.profileId}-${i}`} className="muted-copy">{blockerLabel(reason)}</li>
+                    ))}
+                  </ul>
+                )}
+                {futureTargets && (
+                  <small className="muted-copy">
+                    后续可接入：{futureTargets}
+                  </small>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </details>
 
-      {gate.blockedReasons.length > 0 && (
+      {!canExport && gate.blockedReasons.length > 0 && (
         <div className="export-gate-blockers">
           <small className="muted-copy">正式预览还需复核：</small>
           {gate.blockedReasons.slice(0, 5).map((reason, i) => (

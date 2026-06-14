@@ -25,7 +25,7 @@ function projectRealChainStatusLabel(status: ProjectRealChainUiStatus) {
   if (status === "needs_review") return "需要复核";
   if (status === "preview_ready_with_review") return "待复核";
   if (status === "production_needs_review") return "需要复核";
-  if (status === "blocked") return "有阻断";
+  if (status === "blocked") return "待补齐";
   return "未同步";
 }
 
@@ -131,13 +131,13 @@ function projectReviewCheckDetail(summary: ProjectImage2BatchPanelState["summary
 
 function projectPreviewReadyLabel(summary: ProjectRealChainPanelState["summary"]) {
   const status = `${summary?.previewStatus || ""} ${summary?.previewStatusLabel || ""}`.toLowerCase();
-  if (status.includes("blocked")) return "blocked";
-  return status.includes("ready") ? "ready" : "not_ready";
+  if (status.includes("blocked")) return "未就绪";
+  return status.includes("ready") ? "可预览" : "等待素材";
 }
 
 function projectProductionReviewLabel(summary: ProjectRealChainPanelState["summary"]) {
-  if (summary?.productionStatus === "blocked") return "blocked";
-  return summary?.productionStatus === "needs_review" ? "needs_review" : "clear";
+  if (summary?.productionStatus === "blocked") return "未就绪";
+  return summary?.productionStatus === "needs_review" ? "待复核" : "可继续";
 }
 
 function shortEvidenceToken(value?: string) {
@@ -440,19 +440,19 @@ export function ProjectRealChainPanel({
         <small>项目状态 {status}</small>
         <small>已观察输出 {returnedCount}/{plannedCount} 张</small>
         <small>{summary?.needsReviewCount ?? 0} 张需复核</small>
-        <small>Preview {previewLabel}</small>
-        <small>Production {productionLabel}</small>
+        <small>预览 {previewLabel}</small>
+        <small>成片 {productionLabel}</small>
       </div>
       {round5GateLabels.length > 0 && (
-        <div className="project-real-chain-gates" aria-label="Round 5 摘要">
+        <div className="project-real-chain-gates" aria-label="当前项目提示">
           {round5GateLabels.map((label) => (
             <small key={label}>{label}</small>
           ))}
         </div>
       )}
       {showStrictEditPreflight && (
-        <div className="project-real-chain-policy" aria-label="Round 5 strict edit preflight">
-          <small>ZP05 strict edit · {strictEditLabel}</small>
+        <div className="project-real-chain-policy" aria-label="特殊尾帧准备">
+          <small>特殊尾帧 · {strictEditLabel}</small>
           <button
             disabled={strictEditRunning}
             onClick={() => onPrepareStrictEditPreflight(strictEditTargetShotId)}
@@ -463,8 +463,8 @@ export function ProjectRealChainPanel({
         </div>
       )}
       {showRound5EndReturn && (
-        <div className={`project-real-chain-policy round5-end-return ${round5EndReturn.status}`} aria-label="Round 5 strict edit return status">
-          <small>Round 5 end · {round5EndReturn.label}</small>
+        <div className={`project-real-chain-policy round5-end-return ${round5EndReturn.status}`} aria-label="特殊尾帧结果">
+          <small>特殊尾帧 · {round5EndReturn.label}</small>
           <small>{round5EndReturn.detail}</small>
           <button disabled={running} onClick={onRun}>
             <RefreshCw size={14} />
@@ -485,7 +485,7 @@ export function ProjectRealChainPanel({
       </div>
       <div className="project-real-chain-one-shot">
         <div>
-          <span>P6 单镜头小样</span>
+          <span>单镜头小样</span>
           <strong>{sampleStatusLabel}</strong>
           <small>{image2OneShotState.status === "trigger_plan_prepared" ? "已进入等待动作阶段，下一步检查结果" : selectedShotId ? `镜头 ${selectedShotId}` : "选择镜头后开始"}</small>
         </div>
@@ -497,7 +497,7 @@ export function ProjectRealChainPanel({
           {sampleRunning ? "准备中" : sampleButtonLabel}
         </button>
       </div>
-      <div className="project-real-chain-one-shot-flow" aria-label="P6 单镜头流程">
+      <div className="project-real-chain-one-shot-flow" aria-label="单镜头流程">
         {sampleProgress.map((step) => (
           <span key={step.id} className={step.tone}>
             <strong>{step.label}</strong>
@@ -505,7 +505,7 @@ export function ProjectRealChainPanel({
           </span>
         ))}
       </div>
-      <div className={`project-real-chain-evidence ${image2OneShotState.status}`} aria-label="P6 结果状态">
+      <div className={`project-real-chain-evidence ${image2OneShotState.status}`} aria-label="单镜头结果状态">
         <small>{sampleEvidence.label}</small>
         <small>{sampleEvidence.detail}</small>
       </div>
@@ -546,7 +546,7 @@ export function ProjectRealChainPanel({
         </div>
       )}
       <small className="project-real-chain-report">
-        {displayTitle} · {summary ? "runtime 状态已同步" : "未同步"}
+        {displayTitle} · {summary ? "项目状态已同步" : "未同步"}
       </small>
       <div className="project-real-chain-messages">
         {!projectBound && <small className="project-real-chain-message">未选择项目/未同步</small>}

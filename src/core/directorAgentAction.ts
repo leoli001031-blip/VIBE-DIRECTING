@@ -2,6 +2,7 @@ import type { ProjectRuntimeState } from "./projectState";
 import type { DirectorProductionStrategyId } from "./directorProductionSkill";
 import {
   detectDirectorAgentPermissionIntent,
+  directorAgentPermissionIntentDisallowsVideoSubmit,
   stripDirectorAgentPermissionControlPhrases,
 } from "./directorAgentPermissionIntent";
 import type { AssetRecord, ShotRecord } from "./types";
@@ -190,11 +191,11 @@ export interface BuildDirectorAgentActionEnvelopeInput {
 }
 
 const defaultExecutionContract: DirectorAgentExecutionContract = {
-  mode: "video_allowed",
-  referenceGenerationAllowed: true,
-  videoSubmitAllowed: true,
-  providerSubmitAllowed: true,
-  reason: "当前允许在确认后继续生产动作",
+  mode: "plan_only",
+  referenceGenerationAllowed: false,
+  videoSubmitAllowed: false,
+  providerSubmitAllowed: false,
+  reason: "默认先只整理计划",
 };
 
 const strategyLabels: Record<DirectorProductionStrategyId, string> = {
@@ -279,7 +280,7 @@ export function buildDirectorAgentActionEnvelope(input: BuildDirectorAgentAction
     actionId: `agent_action_${compactId(createdAt)}_${kind}`,
     kind,
     status,
-    summary: summaryFor({ kind, target, strategy, status, snapshot: input.snapshot }),
+    summary: summaryFor({ kind, target, strategy, status, snapshot: input.snapshot, userIntent }),
     userFacingMessage: userFacingMessageFor({ kind, status, blockers, strategy, target, snapshot: input.snapshot }),
     target,
     proposedChanges,
@@ -308,6 +309,7 @@ export function classifyDirectorAgentAction(userIntent: string, snapshot?: Direc
   const normalizedRaw = normalizeText(userIntent);
   const normalized = normalizeText(stripControlOnlyPhrases(userIntent));
   const permissionIntent = detectDirectorAgentPermissionIntent(userIntent);
+  const videoSubmitDisallowed = directorAgentPermissionIntentDisallowsVideoSubmit(userIntent);
   if (!normalized && permissionIntent !== "video_allowed") return "revise_story_or_shot";
   const queuedContinueKind = queuedActionKindFromContinueIntent(normalized, snapshot);
   if (queuedContinueKind) return queuedContinueKind;
@@ -318,10 +320,10 @@ export function classifyDirectorAgentAction(userIntent: string, snapshot?: Direc
     containsAny(normalized, ["补参考", "补齐参考", "生成参考", "做参考", "生图", "生成图片", "生成画面", "补图", "补齐素材", "补齐这个项目", "补齐当前项目", "项目参考素材"]) ||
     containsAny(normalizedRaw, ["补参考", "补齐参考", "生成参考", "做参考", "补图", "补齐素材", "补齐这个项目", "补齐当前项目", "项目参考素材"])
   ) return "prepare_reference_generation";
-  if (
+  if (!videoSubmitDisallowed && (
     containsAny(normalized, ["提交视频", "生成视频", "生视频", "出视频", "即梦", "seedance", "jimeng"]) ||
     (permissionIntent === "video_allowed" && containsAny(normalizedRaw, ["提交视频", "生成视频", "生视频", "出视频", "即梦", "seedance", "jimeng"]))
-  ) return "prepare_video_submit";
+  )) return "prepare_video_submit";
   if (containsAny(normalized, ["查资料", "搜索", "联网", "websearch", "风格研究", "参考资料", "知识库"])) return "request_style_research";
   if (strategyFromIntent(userIntent)) return "update_shot_strategy";
   return "revise_story_or_shot";
@@ -443,13 +445,13 @@ function normalizeExecutionContractForIntent(
       reason: "创作者要求先只做规划",
     });
   }
-  if (permissionIntent === "reference_allowed" && base.mode === "video_allowed") {
+  if (permissionIntent === "reference_allowed" && (!input?.mode || base.mode === "video_allowed" || base.referenceGenerationAllowed)) {
     return normalizeExecutionContract({
       ...base,
       mode: "reference_allowed",
       referenceGenerationAllowed: true,
       videoSubmitAllowed: false,
-      providerSubmitAllowed: base.providerSubmitAllowed,
+      providerSubmitAllowed: input?.mode ? base.providerSubmitAllowed : true,
       reason: "创作者要求先不提交视频",
     });
   }
@@ -543,7 +545,7 @@ function targetFor(snapshot: DirectorAgentStateSnapshot, userIntent = ""): Direc
 
 function intentTargetsWholeProject(userIntent: string) {
   const normalized = normalizeText(stripControlOnlyPhrases(userIntent));
-  return containsAny(normalized, [
+  return intentStartsNewStory(userIntent) || containsAny(normalized, [
     "整个项目",
     "全项目",
     "当前项目",
@@ -557,6 +559,33 @@ function intentTargetsWholeProject(userIntent: string) {
     "补齐项目",
     "补齐全部",
     "补齐所有",
+    "新建项目",
+    "新项目",
+    "新建一个",
+    "重新做一个",
+    "重做一个",
+    "换个主题",
+    "新短片",
+    "新片子",
+    "完整项目",
+    "整个短片",
+    "整支片",
+  ]);
+}
+
+function intentStartsNewStory(userIntent: string) {
+  const normalized = normalizeText(stripControlOnlyPhrases(userIntent));
+  return containsAny(normalized, [
+    "新建项目",
+    "新项目",
+    "新建一个",
+    "重新做一个",
+    "重做一个",
+    "换个主题",
+    "新短片",
+    "新片子",
+    "新视频",
+    "另起一个",
   ]);
 }
 
@@ -683,6 +712,27 @@ function proposedChangesFor(input: {
       reason: "提交前需要已确认的故事板/全能参考和用户确认。",
     }];
   }
+  const normalizedIntent = normalizeText(stripControlOnlyPhrases(input.userIntent));
+  const hasConcreteCreatorIntent = Boolean(normalizedIntent)
+    && !isContinueIntent(normalizedIntent)
+    && !isProjectInspectionIntent(normalizedIntent);
+  const shotFieldChanges = shotFieldChangesFromIntent(input.userIntent);
+  if (input.kind === "revise_story_or_shot" && hasConcreteCreatorIntent) {
+    if (
+      shotFieldChanges.length &&
+      (input.target.kind === "shot" || input.target.kind === "multi_shot" || input.target.kind === "section")
+    ) {
+      return shotFieldChanges;
+    }
+    const scopedIntent = compactCreatorIntent(stripControlOnlyPhrases(input.userIntent));
+    return [{
+      field: input.target.kind === "project" ? "projectDraft" : "selectedScopeDraft",
+      to: scopedIntent || "整理为待确认修改",
+      reason: input.target.kind === "project"
+        ? "自然语言先进入 staged action，确认后才写入项目整体方向。"
+        : `自然语言先进入 staged action，确认后写入 ${input.target.label}。`,
+    }];
+  }
   if (input.kind === "revise_story_or_shot" && input.snapshot.projectReadiness.status === "needs_review") {
     return [{
       field: "reviewTray",
@@ -704,15 +754,7 @@ function proposedChangesFor(input: {
       reason: "导出 Project.vibe、素材、收据和报告。",
     }];
   }
-  const shotFieldChanges = shotFieldChangesFromIntent(input.userIntent);
-  if (
-    input.kind === "revise_story_or_shot" &&
-    shotFieldChanges.length &&
-    (input.target.kind === "shot" || input.target.kind === "multi_shot" || input.target.kind === "section")
-  ) {
-    return shotFieldChanges;
-  }
-  const scopedIntent = compactCreatorIntent(input.userIntent);
+  const scopedIntent = compactCreatorIntent(stripControlOnlyPhrases(input.userIntent));
   return [{
     field: input.target.kind === "project" ? "projectDraft" : "selectedScopeDraft",
     to: scopedIntent || "整理为待确认修改",
@@ -811,6 +853,7 @@ function summaryFor(input: {
   strategy?: DirectorProductionStrategyId;
   status: DirectorAgentActionStatus;
   snapshot: DirectorAgentStateSnapshot;
+  userIntent: string;
 }) {
   const prefix = input.status === "blocked" ? "需要补充：" : "已整理：";
   if (input.kind === "update_shot_strategy" && input.strategy) return `${prefix}${input.target.label} 改为${strategyLabels[input.strategy]}`;
@@ -820,6 +863,10 @@ function summaryFor(input: {
   if (input.kind === "prepare_video_submit") return `${prefix}准备提交 ${input.target.label} 的视频`;
   if (input.kind === "prepare_export") return `${prefix}准备导出项目素材包`;
   if (input.kind === "inspect_project_status") return `${prefix}检查当前项目状态`;
+  if (input.kind === "revise_story_or_shot" && input.target.kind !== "project") return `${prefix}${input.target.label} 的修改草案`;
+  if (input.kind === "revise_story_or_shot" && input.target.kind === "project") {
+    return `${prefix}${intentStartsNewStory(input.userIntent) ? "新故事草案" : `${input.target.label} 的修改草案`}`;
+  }
   if (input.snapshot.projectReadiness.status === "needs_review") return `${prefix}先复核参考`;
   if (input.snapshot.projectReadiness.status === "needs_story") return `${prefix}先整理故事草案`;
   return `${prefix}${input.target.label} 的修改草案`;
@@ -844,9 +891,10 @@ function userFacingMessageFor(input: {
     const queue = input.snapshot.projectReadiness.actionQueue.slice(0, 3).map((action) => action.label).join(" / ");
     return `当前：${input.snapshot.projectReadiness.summary}。建议下一步：${input.snapshot.projectReadiness.nextActionLabel}。后续可走：${queue || "继续整理"}。`;
   }
+  if (input.target.kind !== "project") return `我会先把反馈整理到 ${input.target.label}，确认后写入项目。`;
   if (input.snapshot.projectReadiness.status === "needs_review") return "当前有参考需要先看一眼，确认后我再继续往下做。";
   if (input.snapshot.projectReadiness.status === "needs_story") return "我会先把想法整理成故事草案，确认后再进入参考和视频。";
-  if (input.target.kind !== "project") return `我会先把反馈整理到 ${input.target.label}，确认后写入项目。`;
+  if (input.kind === "revise_story_or_shot") return "我会先整理成项目级草案，不会生成参考或提交视频。";
   return "我会先整理成待确认修改，不会直接写正式任务。";
 }
 
@@ -946,13 +994,24 @@ function isProjectInspectionIntent(normalized: string) {
 }
 
 function compactCreatorIntent(value: string) {
-  const normalized = value.replace(/\s+/g, " ").trim();
+  const normalized = cleanCreatorIntentRemainder(value);
   if (normalized.length <= 72) return normalized;
   return `${normalized.slice(0, 69)}...`;
 }
 
 function stripControlOnlyPhrases(value: string) {
   return stripDirectorAgentPermissionControlPhrases(value);
+}
+
+function cleanCreatorIntentRemainder(value: string) {
+  let normalized = value.replace(/\s+/g, " ").trim();
+  for (let index = 0; index < 3; index += 1) {
+    normalized = normalized.replace(/[，,、；;：:]\s*(也|并且|而且)?\s*([。.!！?？；;，,、])/g, "$2");
+  }
+  return normalized
+    .replace(/^[，,、；;：:。.!！?？\s]+/g, "")
+    .replace(/[，,、；;：:\s]+$/g, "")
+    .trim();
 }
 
 function formatShotNumberForAgent(id: string) {

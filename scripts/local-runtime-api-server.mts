@@ -546,6 +546,8 @@ const {
   runtimePolicy,
   runtimeFileUrl,
   existsSync,
+  readJsonIfPresent,
+  readFileSync,
   currentProjectStatusEndpoint,
 });
 
@@ -750,6 +752,8 @@ const {
   writeCurrentProjectRuntimeBytes,
   writeCurrentProjectRuntimeJson,
   writeJson,
+  readFileSync,
+  writeFileSync,
   running: () => running,
 });
 

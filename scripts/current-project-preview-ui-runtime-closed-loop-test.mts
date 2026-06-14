@@ -73,6 +73,7 @@ function assertPreviewClosedLoopAppContract() {
   const minimalPreviewSource = readText("src/ui/director/MinimalPreview.tsx");
   const directorModeSource = readText("src/ui/director/DirectorModeShell.tsx");
   assert(/buildCurrentProjectPreviewProjection\(\{[\s\S]*summary:\s*projectRealChainState\.summary[\s\S]*previewItems:\s*projectRealChainState\.summary\?\.previewItems/.test(appSource), "App must project current runtime summary previewItems for Preview");
+  assert(/const\s+projectRealChainRelayQueue[\s\S]*buildCurrentProjectPreviewProjection\(\{[\s\S]*relayQueue:\s*projectRealChainRelayQueue/.test(appSource), "App must project persisted relay queue items into Preview");
   assert(/const\s+currentProjectPreviewQueue\s*=\s*useMemo\(\(\)\s*=>\s*\{[\s\S]*const\s+base\s*=\s*effectiveRuntimeProjectBinding\.status\s*===\s*"bound"[\s\S]*currentProjectPreviewProjection\.queue[\s\S]*:\s*\[\]/.test(appSource), "App must fail closed when the current project is not bound");
   assert(/previewPlan:\s*\{[\s\S]*clips:\s*workbenchRuntimeState\.storyFlow\.shots\.map[\s\S]*durationSeconds:\s*shot\.durationSeconds/.test(appSource), "App must carry story-flow shot durations into the current project Preview projection");
   assert(/currentProjectPreviewEmptyState[\s\S]*directorPreviewQueue\.length[\s\S]*effectiveRuntimeProjectBinding\.status[\s\S]*currentProjectPreviewProjection\.available/.test(appSource), "App must derive Preview empty state from binding, projection availability, and visible preview items");

@@ -45,6 +45,7 @@ export interface RunExportActionInput {
 
 class MemoryExportAdapter implements ExportWorkerAdapter {
   readonly writes: ExportActionWrite[] = [];
+  readonly copies: ExportActionWrite[] = [];
 
   mkdir() {
     return undefined;
@@ -52,6 +53,10 @@ class MemoryExportAdapter implements ExportWorkerAdapter {
 
   writeFile(path: string, content: string) {
     this.writes.push({ path, content });
+  }
+
+  copyFile(sourcePath: string, destinationPath: string) {
+    this.copies.push({ path: destinationPath, content: sourcePath });
   }
 }
 

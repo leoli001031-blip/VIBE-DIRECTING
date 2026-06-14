@@ -17,7 +17,7 @@ import { MinimalAgentPanel } from "./MinimalAgentPanel";
 import { MinimalStoryFlow } from "./MinimalStoryFlow";
 import { CreatorDeskPanels } from "./CreatorDeskPanels";
 import { DirectorWorkflowOverview } from "./DirectorWorkflowOverview";
-import { NewVideoStart, type NewVideoStartConfirmationContext, type NewVideoStartDraft } from "./NewVideoStart";
+import type { NewVideoStartConfirmationContext, NewVideoStartDraft } from "./NewVideoStart";
 import type { DirectorView } from "./directorTypes";
 import {
   agentVideoSubmitContractAllowsReference as agentVideoPermissionAllowsReference,
@@ -51,6 +51,11 @@ const MinimalExport = lazy(() =>
     default: MinimalExport,
   })),
 );
+const NewVideoStart = lazy(() =>
+  import("./NewVideoStart").then(({ NewVideoStart }) => ({
+    default: NewVideoStart,
+  })),
+);
 
 function EmptyProjectSurface({
   title,
@@ -64,6 +69,26 @@ function EmptyProjectSurface({
       <strong>{title}</strong>
       <span>{detail}</span>
     </section>
+  );
+}
+
+function DirectorDetailDisclosure({
+  title,
+  detail,
+  children,
+}: {
+  title: string;
+  detail: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className="director-detail-disclosure" aria-label={title}>
+      <summary>
+        <span>{title}</span>
+        <small>{detail}</small>
+      </summary>
+      <div className="director-detail-disclosure-body">{children}</div>
+    </details>
   );
 }
 
@@ -156,6 +181,8 @@ export function DirectorMode({
     message?: string;
     disabled?: boolean;
     ready?: boolean;
+    canResume?: boolean;
+    suggestedActionLabel?: string;
     qaFeedback?: DirectorQaUserFeedback;
   };
   webSearchSettings?: AgentWebSearchSettings;
@@ -179,7 +206,7 @@ export function DirectorMode({
   onSelectShot: (id: string, additive?: boolean) => void;
   onProjectStoreApplyPlanReady?: (plan: ProjectFactsStagedApplyPlan) => void;
   onNewVideoDraftConfirmed?: (draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) => boolean | void | Promise<boolean | void>;
-  onCreateLocalProject?: (draft: NewVideoStartDraft) => unknown | Promise<unknown>;
+  onCreateLocalProject?: (draft?: NewVideoStartDraft) => unknown | Promise<unknown>;
   onRunExport?: (target?: Pick<AgentControlledToolInvocationTarget, "agentToolTrace">) => unknown | Promise<unknown>;
   onCreateP6RealSample?: (target?: AgentControlledToolInvocationTarget) => unknown | Promise<unknown>;
   onCreateImage2EndFrame?: () => void | Promise<void>;
@@ -222,23 +249,36 @@ export function DirectorMode({
     ? "已连接"
     : projectReady
       ? "浏览器草稿"
-      : "先打开项目";
+      : "需要本地项目";
   const agentShotBoundView = directorView === "story" || directorView === "preview" || directorView === "export";
   const [videoPermissionContract, setVideoPermissionContract] = useState<AgentVideoPermissionContract>(defaultAgentVideoPermissionContract);
-  const permissionProjectKey = [
-    runtimeState.project.root ? `root:${runtimeState.project.root}` : "",
-    runtimeState.sourceIndexSummary.projectId ? `id:${runtimeState.sourceIndexSummary.projectId}` : "",
-  ].filter(Boolean).join("::") || `title:${runtimeState.project.title || "browser_draft"}`;
+  const pendingConfirmedVideoPermissionContractRef = useRef<{
+    contract: AgentVideoPermissionContract;
+    confirmedAt: number;
+  } | undefined>(undefined);
+  const permissionProjectKey = runtimeState.project.root
+    ? `root:${runtimeState.project.root}`
+    : runtimeState.sourceIndexSummary.projectId
+      ? `id:${runtimeState.sourceIndexSummary.projectId}`
+      : `title:${runtimeState.project.title || "browser_draft"}`;
   const previousPermissionProjectKeyRef = useRef(permissionProjectKey);
   useEffect(() => {
     if (previousPermissionProjectKeyRef.current === permissionProjectKey) return;
     previousPermissionProjectKeyRef.current = permissionProjectKey;
+    const pendingConfirmedContract = pendingConfirmedVideoPermissionContractRef.current;
+    if (pendingConfirmedContract && Date.now() - pendingConfirmedContract.confirmedAt < 8_000) {
+      pendingConfirmedVideoPermissionContractRef.current = undefined;
+      setVideoPermissionContract(pendingConfirmedContract.contract);
+      return;
+    }
+    pendingConfirmedVideoPermissionContractRef.current = undefined;
     setVideoPermissionContract(defaultAgentVideoPermissionContract);
   }, [permissionProjectKey]);
   const videoPermissionAllowsSend = agentVideoPermissionAllowsVideo(videoPermissionContract);
   const videoPermissionAllowsReference = agentVideoPermissionAllowsReference(videoPermissionContract);
   const sessionVideoSendAction = useMemo(() => {
-    if (!videoSendAction || videoPermissionAllowsSend) return videoSendAction;
+    const queryOnly = Boolean(videoSendAction?.canResume);
+    if (!videoSendAction || videoPermissionAllowsSend || queryOnly) return videoSendAction;
     return {
       ...videoSendAction,
       disabled: true,
@@ -248,13 +288,24 @@ export function DirectorMode({
         : "当前先做参考，视频等你确认。",
     };
   }, [videoSendAction, videoPermissionAllowsSend, videoPermissionContract.mode]);
-  const sessionSendSeedanceVideo = videoPermissionAllowsSend ? onSendSeedanceVideo : undefined;
+  const sessionSendSeedanceVideo = videoPermissionAllowsSend || videoSendAction?.canResume
+    ? (target?: AgentControlledToolInvocationTarget) => onSendSeedanceVideo?.({
+      ...target,
+      videoPermissionContract,
+    })
+    : undefined;
   const sessionRetryMissingBatch = videoPermissionAllowsReference ? onRetryMissingBatch : undefined;
   const sessionRetryReviewItem = videoPermissionAllowsReference ? onRetryReviewItem : undefined;
+  const storyDetailLabel = [`${view.storySections.length} 个段落`, "点击查看分镜、模式和画面状态"].join(" · ");
+  const showCreatorDeskPanel = projectReady && creatorDesk && !showNewVideoStart && directorView === "story";
   async function confirmNewVideoDraft(draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) {
     const nextContract = draft.agentBoundaryMode
       ? agentVideoPermissionForMode(draft.agentBoundaryMode)
       : detectAgentVideoPermissionContract([draft.script, draft.style].filter(Boolean).join("\n"), videoPermissionContract);
+    pendingConfirmedVideoPermissionContractRef.current = {
+      contract: nextContract,
+      confirmedAt: Date.now(),
+    };
     setVideoPermissionContract(nextContract);
     return onNewVideoDraftConfirmed?.(draft, context);
   }
@@ -265,14 +316,39 @@ export function DirectorMode({
         <div className="director-workbar" aria-label="项目工作状态">
           {statusNode}
         </div>
-        <DirectorWorkflowOverview
-          runtimeState={runtimeState}
-          shots={projectReady ? audit.shots : []}
-          selectedShot={projectReady ? selectedShot : undefined}
-          currentView={directorView}
-          creatorDesk={projectReady ? creatorDesk : undefined}
-          localProjectReady={folderReady}
-        />
+        {showCreatorDeskPanel && (
+          <CreatorDeskPanels
+            projection={creatorDesk}
+            localProjectReady={folderReady}
+            localProjectBusy={localProjectBusy}
+            canCreateLocalProject={canCreateLocalProject}
+            onRetryMissing={sessionRetryMissingBatch}
+            referenceGenerationAction={realSampleAction}
+            videoSendAction={sessionVideoSendAction}
+            onSendVideo={sessionSendSeedanceVideo}
+            onRetryItem={sessionRetryReviewItem}
+            onApproveItem={onApproveReviewItem}
+            onRejectItem={onRejectReviewItem}
+            onLockItem={onLockReviewItem}
+            onSelectItem={(item) => item.shotId && onSelectShot(item.shotId)}
+            onOpenView={onOpenDirectorView}
+          />
+        )}
+        {!showCreatorDeskPanel && !showNewVideoStart && (
+          <DirectorDetailDisclosure
+            title="流程详情"
+            detail={creatorDesk?.agentStage.summary || (projectReady ? "AI 会带你推进下一步" : "先描述一个想法")}
+          >
+            <DirectorWorkflowOverview
+              runtimeState={runtimeState}
+              shots={projectReady ? audit.shots : []}
+              selectedShot={projectReady ? selectedShot : undefined}
+              currentView={directorView}
+              creatorDesk={projectReady ? creatorDesk : undefined}
+              localProjectReady={folderReady}
+            />
+          </DirectorDetailDisclosure>
+        )}
         {directorView === "assets" && (projectReady ? assetLibraryNode : (
             <EmptyProjectSurface
               title="还没有参考资产"
@@ -282,45 +358,39 @@ export function DirectorMode({
         {directorView === "story" && (
           <>
             {showNewVideoStart && (
-              <NewVideoStart
-                shots={shots}
-                projectDraftKey={runtimeState.project.root || runtimeState.sourceIndexSummary.projectId}
-                localProjectReady={folderReady}
-                localProjectBusy={localProjectBusy}
-                canCreateLocalProject={canCreateLocalProject}
-                availableKnowledgePacks={projectReferenceGuide?.packs}
-                webSearchSettings={webSearchSettings}
-                webSearchReady={webSearchReady}
-                onSaveResearchAsReference={onSaveResearchAsReference}
-                onCreateLocalProject={onCreateLocalProject}
-                onDraftConfirmed={confirmNewVideoDraft}
-                videoPermissionContract={videoPermissionContract}
-                onVideoPermissionContractChange={setVideoPermissionContract}
-              />
+              <Suspense fallback={<EmptyProjectSurface title="正在打开新项目入口" detail="稍等一下，输入框马上就好。" />}>
+                <NewVideoStart
+                  shots={shots}
+                  projectDraftKey={runtimeState.project.root || runtimeState.sourceIndexSummary.projectId}
+                  localProjectReady={folderReady}
+                  localProjectBusy={localProjectBusy}
+                  canCreateLocalProject={canCreateLocalProject}
+                  availableKnowledgePacks={projectReferenceGuide?.packs}
+                  webSearchSettings={webSearchSettings}
+                  webSearchReady={webSearchReady}
+                  onSaveResearchAsReference={onSaveResearchAsReference}
+                  onDraftConfirmed={confirmNewVideoDraft}
+                  videoPermissionContract={videoPermissionContract}
+                  onVideoPermissionContractChange={setVideoPermissionContract}
+                />
+              </Suspense>
             )}
             {!showNewVideoStart && (
-              <MinimalStoryFlow
-                sectionLabel={sectionLabel}
-                shots={shots}
-                assets={storyAssets}
-                selectedShotId={selectedShotId}
-                selectedShotIds={selectedShotIds}
-                onSelectShot={onSelectShot}
-              />
-            )}
-            {projectReady && creatorDesk && (
-              <CreatorDeskPanels
-                projection={creatorDesk}
-                onRetryMissing={sessionRetryMissingBatch}
-                referenceGenerationAction={realSampleAction}
-                videoSendAction={sessionVideoSendAction}
-                onSendVideo={sessionSendSeedanceVideo}
-                onRetryItem={sessionRetryReviewItem}
-                onApproveItem={onApproveReviewItem}
-                onRejectItem={onRejectReviewItem}
-                onLockItem={onLockReviewItem}
-                onSelectItem={(item) => item.shotId && onSelectShot(item.shotId)}
-              />
+              <DirectorDetailDisclosure
+                title="故事和镜头"
+                detail={storyDetailLabel}
+              >
+                <MinimalStoryFlow
+                  sectionLabel={sectionLabel}
+                  shots={shots}
+                  assets={storyAssets}
+                  previewItems={currentProjectPreviewItems}
+                  selectedShotId={selectedShotId}
+                  selectedShotIds={selectedShotIds}
+                  onSelectShot={onSelectShot}
+                  onOpenReferences={() => onOpenDirectorView?.("assets")}
+                />
+              </DirectorDetailDisclosure>
             )}
           </>
         )}
@@ -335,6 +405,7 @@ export function DirectorMode({
               shots={audit.shots}
               selectedShotId={selectedShotId}
               onSelectShot={onSelectShot}
+              onApprovePreviewItem={onApproveReviewItem}
             />
             <MinimalAudioPlan
               audioPlanning={runtimeState.audioPlanning}
@@ -373,6 +444,8 @@ export function DirectorMode({
             projectScopeLabel={projectReady ? projectScopeLabel : "新视频项目"}
             projectStatusLabel={agentProjectStatusLabel}
             localProjectReady={folderReady}
+            localProjectBusy={localProjectBusy}
+            canCreateLocalProject={canCreateLocalProject}
             shot={projectReady && agentShotBoundView ? selectedShot : undefined}
             selectedShots={projectReady && agentShotBoundView ? selectedShots : []}
             asset={projectReady && directorView === "assets" ? selectedAsset : undefined}
@@ -385,18 +458,20 @@ export function DirectorMode({
             onStagePrototypeAgentPlan={onStagePrototypeAgentPlan}
             onRememberAgentActionLogItem={onRememberAgentActionLogItem}
             onPreviewPrototypeAgentDemo={onPreviewPrototypeAgentDemo}
-            realSampleAction={directorView === "story" ? realSampleAction : undefined}
-            endFrameAction={directorView === "story" ? endFrameAction : undefined}
-            videoSendAction={directorView === "story" ? sessionVideoSendAction : undefined}
+            agentCommand={creatorDesk?.agentCommand}
+            realSampleAction={realSampleAction}
+            endFrameAction={endFrameAction}
+            videoSendAction={videoSendAction}
             webSearchSettings={webSearchSettings}
             webSearchReady={webSearchReady}
             projectReferenceGuide={projectReferenceGuide}
             storyboardProjectPlanInput={storyboardProjectPlanInput}
             onDirectorFeedbackConfirmed={onDirectorFeedbackConfirmed}
             onSaveResearchAsReference={onSaveResearchAsReference}
+            onCreateLocalProject={() => onCreateLocalProject?.()}
             onCreateP6RealSample={onCreateP6RealSample}
             onCreateImage2EndFrame={onCreateImage2EndFrame}
-            onSendSeedanceVideo={sessionSendSeedanceVideo}
+            onSendSeedanceVideo={onSendSeedanceVideo}
             onRunExport={onRunExport}
             onOpenResultView={onOpenDirectorView}
             videoPermissionContract={videoPermissionContract}

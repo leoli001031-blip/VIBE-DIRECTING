@@ -467,7 +467,7 @@ async function fetchResponsesPlanJson({ apiKey, endpoint, model, prompt }) {
 }
 
 async function fetchResponsesPlan({ apiKey, baseUrl, model, prompt }) {
-  const endpoint = baseUrl.replace(/\/+$/, "") || "https://api.apikey.fun/v1/responses";
+  const endpoint = baseUrl.replace(/\/+$/, "") || "https://slb.apikey.fun/v1/responses";
   try {
     return await fetchResponsesPlanStream({ apiKey, endpoint, model, prompt });
   } catch (streamError) {
@@ -510,22 +510,9 @@ function providerById(id, statuses, getProviderApiKey) {
     return {
       providerId: "apikey-fun-gpt55-responses-image",
       apiKey: apikeyFunKey,
-      baseUrl: asString(apikeyFunStatus.baseUrl, "https://api.apikey.fun/v1/responses"),
+      baseUrl: asString(apikeyFunStatus.baseUrl, "https://slb.apikey.fun/v1/responses"),
       model: asString(apikeyFunStatus.chatModel || apikeyFunStatus.imageModel, "gpt-5.5"),
       mode: "responses",
-    };
-  }
-
-  if (id === "lanyi-image2") {
-    const lanyiStatus = providerStatusById(statuses, "lanyi-image2");
-    const lanyiKey = getProviderApiKey("lanyi-image2");
-    if (!lanyiKey) return undefined;
-    return {
-      providerId: "lanyi-image2",
-      apiKey: lanyiKey,
-      baseUrl: asString(lanyiStatus.baseUrl, "https://lanyiapi.com"),
-      model: asString(lanyiStatus.chatModel, "claude-opus-4-6"),
-      mode: "chat",
     };
   }
 
@@ -543,13 +530,8 @@ function pickStoryboardProvider({ getProviderApiKey, getProviderConfigStatuses }
   const deepseek = providerById("deepseek-v4-pro", statuses, getProviderApiKey);
   if (deepseek) return deepseek;
 
-  const lanyi = providerById("lanyi-image2", statuses, getProviderApiKey);
-  if (lanyi && asString(process.env.VIBE_CHAT_MODEL)) return lanyi;
-
   const apikeyFun = providerById("apikey-fun-gpt55-responses-image", statuses, getProviderApiKey);
   if (apikeyFun) return apikeyFun;
-
-  if (lanyi) return lanyi;
 
   return undefined;
 }

@@ -10,6 +10,7 @@ const deepseekProviderId = "deepseek-v4-pro";
 const deepseekProviderAliases = [deepseekProviderId, "deepseek", "deepseek-v4", "deepseek-chat"];
 const apikeyFunProviderId = "apikey-fun-gpt55-responses-image";
 const apikeyFunProviderAliases = [apikeyFunProviderId, "apikey-fun", "apikey_fun", "gpt55-responses-image"];
+const apikeyFunPrimaryEndpoint = "https://slb.apikey.fun/v1/responses";
 const tavilyProviderId = "tavily-search";
 const tavilyProviderAliases = [tavilyProviderId, "tavily_search", "tavily"];
 const cloudTtsProviderId = "cloud-tts";
@@ -105,9 +106,9 @@ export function getAllCredentials(): Record<string, { providerId: string; label?
 export function getProviderApiKey(providerId: string): string | undefined {
   const providers = readCredentials().providers;
   if (providerId === apikeyFunProviderId || apikeyFunProviderAliases.includes(providerId)) {
-    const envKey = envValue("VIBE_APIKEY_FUN_API_KEY") || envValue("APIKEY_FUN_API_KEY");
+    const envKey = envValue("VIBE_APIKEY_FUN_API_KEY") || envValue("APIKEY_FUN_API_KEY") || envValue("VIBE_IMAGE2_API_KEY");
     if (envKey) return envKey;
-    const credential = apikeyFunProviderAliases.map((alias) => providers[alias]).find(Boolean);
+    const credential = [...apikeyFunProviderAliases, ...lanyiProviderAliases].map((alias) => providers[alias]).find(Boolean);
     return credential?.apiKey?.trim() || undefined;
   }
   if (providerId === tavilyProviderId || tavilyProviderAliases.includes(providerId)) {
@@ -149,12 +150,9 @@ function envOrDefault(name: string, fallback: string) {
 
 export function getProviderConfigStatuses(): ProviderConfigStatus[] {
   const credentials = getAllCredentials();
-  const providerId = lanyiProviderId;
-  const hasLocalKey = lanyiProviderAliases.some((alias) => credentials[alias]?.hasKey === true);
-  const hasEnvKey = Boolean(envValue("VIBE_IMAGE2_API_KEY"));
-  const hasEnvConfig = Boolean(envValue("VIBE_IMAGE2_BASE_URL") || envValue("VIBE_IMAGE2_MODEL") || envValue("VIBE_CHAT_MODEL"));
-  const hasApikeyFunLocalKey = apikeyFunProviderAliases.some((alias) => credentials[alias]?.hasKey === true);
-  const hasApikeyFunEnvKey = Boolean(envValue("VIBE_APIKEY_FUN_API_KEY") || envValue("APIKEY_FUN_API_KEY"));
+  const apikeyFunCredentialAliases = [...apikeyFunProviderAliases, ...lanyiProviderAliases];
+  const hasApikeyFunLocalKey = apikeyFunCredentialAliases.some((alias) => credentials[alias]?.hasKey === true);
+  const hasApikeyFunEnvKey = Boolean(envValue("VIBE_APIKEY_FUN_API_KEY") || envValue("APIKEY_FUN_API_KEY") || envValue("VIBE_IMAGE2_API_KEY"));
   const hasApikeyFunEnvConfig = Boolean(
     envValue("VIBE_APIKEY_FUN_RESPONSES_ENDPOINT")
     || envValue("APIKEY_FUN_RESPONSES_ENDPOINT")
@@ -187,25 +185,11 @@ export function getProviderConfigStatuses(): ProviderConfigStatus[] {
       },
     },
     {
-      providerId,
-      label: "Lanyi Image2",
-      baseUrl: envOrDefault("VIBE_IMAGE2_BASE_URL", "https://lanyiapi.com"),
-      imageModel: envOrDefault("VIBE_IMAGE2_MODEL", "gpt-image-2"),
-      chatModel: envOrDefault("VIBE_CHAT_MODEL", "claude-opus-4-6"),
-      source: hasEnvConfig ? "environment" : "default",
-      credential: {
-        envKey: "VIBE_IMAGE2_API_KEY",
-        keyStatus: hasEnvKey || hasLocalKey ? "configured" : "not_configured",
-        source: hasEnvKey ? "environment" : hasLocalKey ? "local_settings" : "none",
-        secretDisplayed: false,
-      },
-    },
-    {
       providerId: apikeyFunProviderId,
-      label: "Apikey.fun GPT-5.5 Images",
+      label: "Apikey.fun Image2",
       baseUrl: envValue("VIBE_APIKEY_FUN_RESPONSES_ENDPOINT")
         || envValue("APIKEY_FUN_RESPONSES_ENDPOINT")
-        || "https://api.apikey.fun/v1/responses",
+        || apikeyFunPrimaryEndpoint,
       imageModel: envValue("VIBE_APIKEY_FUN_IMAGE_MODEL") || envValue("APIKEY_FUN_IMAGE_MODEL") || "gpt-5.5",
       endpointMode: "responses_api",
       source: hasApikeyFunEnvConfig ? "environment" : "default",

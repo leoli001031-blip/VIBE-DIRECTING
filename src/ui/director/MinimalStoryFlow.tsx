@@ -1,9 +1,11 @@
+import { useMemo } from "react";
 import type { AssetRecord, ShotRecord } from "../../core/types";
 import { MediaFrame } from "../common/MediaFrame";
 import {
   directorSkillSummaryForShot,
   referenceStrategyDetail,
   referenceStrategyLabel,
+  referenceStrategyWorkflowHint,
   shotReferenceStrategy,
 } from "./directorSkillUi";
 import { usesEndpointEndFrame } from "./videoControlModeUi";
@@ -44,7 +46,7 @@ const storyFunctionLabels = ["开场", "信号", "选择", "行动", "揭示", "
 export function shortStoryFunction(shot: ShotRecord, index: number) {
   const value = shot.storyFunction.trim();
   if (shot.id === "CURRENT_PROJECT" || shot.issues.includes("current_project_story_pending")) {
-    return value.includes("未同步") ? "等待同步" : "待补齐故事流";
+    return value.includes("未同步") ? "等待同步" : "待写故事流";
   }
   if (/^setup$/i.test(value)) return "开场";
   if (/^[A-Za-z][A-Za-z\s-]{1,16}$/.test(value)) return value;
@@ -52,7 +54,16 @@ export function shortStoryFunction(shot: ShotRecord, index: number) {
 }
 
 function shotDisplayTitle(shot: ShotRecord, index: number) {
-  return cleanStoryText(shot.title) || shortStoryFunction(shot, index) || "未命名镜头";
+  const title = cleanStoryText(shot.title);
+  const primaryAction = cleanStoryText(shot.primaryAction || "");
+  const storyFunction = cleanStoryText(shot.storyFunction || "");
+  const looksLikeRawPrompt = (value: string) => value.length > 14 && /(?:做成|生成|视频|风格|秒|分镜|镜头|参考)/.test(value);
+  if (!title || looksLikeRawPrompt(title)) {
+    return [primaryAction, storyFunction].find((value) => value && !looksLikeRawPrompt(value))
+      || shortStoryFunction(shot, index)
+      || "未命名镜头";
+  }
+  return title;
 }
 
 function shotDisplayBrief(shot: ShotRecord) {
@@ -70,9 +81,9 @@ export function shotStatusTone(shot: ShotRecord) {
 }
 
 export function shotStatusLabel(shot: ShotRecord) {
-  if (shot.id === "CURRENT_PROJECT" || shot.issues.includes("current_project_story_pending")) return "待补齐";
+  if (shot.id === "CURRENT_PROJECT" || shot.issues.includes("current_project_story_pending")) return "待写故事";
   if (shot.status === "blocked" || shot.issues.some((issue) => issue.includes("missing"))) return "需复核";
-  if (shot.issues.length || shot.status === "video_missing") return "待补齐";
+  if (shot.issues.length || shot.status === "video_missing") return "缺画面";
   return "已就绪";
 }
 
@@ -91,13 +102,13 @@ function shotFrameStatus(shot: ShotRecord, phase: "start" | "end"): FrameUiStatu
 function frameStatusLabel(status: FrameUiStatus) {
   if (status === "approved") return "已通过";
   if (status === "needs_review") return "待复核";
-  if (status === "missing") return "待补齐";
+  if (status === "missing") return "缺画面";
   return "待准备";
 }
 
 function referenceStatusLabel(status?: AssetRecord["lockedStatus"]) {
   if (status === "locked") return "已锁定";
-  if (status === "not_generated") return "待补齐";
+  if (status === "not_generated") return "缺参考";
   return "待复核";
 }
 
@@ -121,7 +132,7 @@ export function shotSceneReferenceStatus(shot: ShotRecord): SceneReferenceUiStat
 
 function sceneReferenceStatusLabel(status: SceneReferenceUiStatus) {
   if (status === "locked") return "已锁定";
-  if (status === "missing") return "待补齐";
+  if (status === "missing") return "缺场景";
   return "待复核";
 }
 
@@ -139,7 +150,7 @@ function gateStatusTone(value: string) {
 
 function gateStatusLabel(value: string) {
   if (value === "PASS" || value === "N/A") return "已就绪";
-  if (value === "FAIL") return "待补齐";
+  if (value === "FAIL") return "缺参考";
   return "待确认";
 }
 
@@ -170,7 +181,7 @@ function currentShotReferenceUi(
         ? "不需要故事板"
         : shotStoryboardReference?.path
           ? referenceStatusLabel(shotStoryboardReference.lockedStatus)
-          : "待生成故事板",
+          : "缺故事板参考",
       tone: storyboardStatusTone,
     },
   };
@@ -198,21 +209,50 @@ function currentShotReadiness(shot: ShotRecord, displayReference?: ShotDisplayRe
     },
     {
       label: "画面参考",
-      value: displayReference?.statusLabel || "待补齐",
+      value: displayReference?.statusLabel || "缺画面",
       tone: visualTone,
       detail: "按这一镜的方式准备画面",
     },
   ];
 }
 
-function isStoryboardReferenceAsset(asset: AssetRecord) {
-  const searchable = [
+function assetHasVisualMedia(asset: AssetRecord) {
+  return /\.(?:png|jpe?g|webp|gif|avif)(?:\?|$)/i.test(asset.path || "");
+}
+
+function isTextOnlyStyleReferenceAsset(asset: AssetRecord) {
+  const text = [
     asset.id,
     asset.name,
     asset.path,
     ...(asset.textConstraints || []),
+    ...(asset.sourceRefs || []),
   ].join(" ").toLowerCase();
-  return /storyboard|分镜|故事板/.test(searchable) && Boolean(asset.path);
+  return !assetHasVisualMedia(asset) && (
+    text.includes("new_video_reference:style:text")
+    || text.includes("文字风格方向")
+    || text.includes("项目视觉风格")
+  );
+}
+
+function isUsableVisualReferenceAsset(asset: AssetRecord) {
+  return assetHasVisualMedia(asset) && !isTextOnlyStyleReferenceAsset(asset);
+}
+
+function isStoryboardReferenceAsset(asset: AssetRecord) {
+  const role = typeof asset.roleBinding?.role === "string" ? asset.roleBinding.role.toLowerCase() : "";
+  const type = typeof asset.type === "string" ? asset.type.toLowerCase() : "";
+  const searchable = [
+    asset.name,
+    asset.path,
+    asset.roleBinding?.role,
+    ...(asset.textConstraints || []),
+  ].join(" ").toLowerCase();
+  return isUsableVisualReferenceAsset(asset) && (
+    role === "storyboard_reference"
+    || type === "shot_reference"
+    || /storyboard_reference|故事板参考|分镜参考/.test(searchable)
+  );
 }
 
 function storyboardReferenceAssets(assets: AssetRecord[]) {
@@ -378,12 +418,12 @@ function assetMatchesShot(asset: AssetRecord, shot: ShotRecord) {
 
 function bestReferenceAssetForShot(assets: AssetRecord[], shot: ShotRecord) {
   const typed = (type: AssetRecord["type"]) =>
-    assets.find((asset) => asset.type === type && asset.path && !isStoryboardReferenceAsset(asset) && assetMatchesShot(asset, shot));
+    assets.find((asset) => asset.type === type && isUsableVisualReferenceAsset(asset) && !isStoryboardReferenceAsset(asset) && assetMatchesShot(asset, shot));
   return typed("scene") || typed("character") || typed("prop");
 }
 
 function bestReferenceAssetOfType(assets: AssetRecord[], shot: ShotRecord, type: AssetRecord["type"]) {
-  return assets.find((asset) => asset.type === type && asset.path && !isStoryboardReferenceAsset(asset) && assetMatchesShot(asset, shot));
+  return assets.find((asset) => asset.type === type && isUsableVisualReferenceAsset(asset) && !isStoryboardReferenceAsset(asset) && assetMatchesShot(asset, shot));
 }
 
 function representativeAssetOfType(assets: AssetRecord[], shots: ShotRecord[], type: AssetRecord["type"]) {
@@ -393,7 +433,7 @@ function representativeAssetOfType(assets: AssetRecord[], shots: ShotRecord[], t
 function representativeAssetsOfType(assets: AssetRecord[], shots: ShotRecord[], type: AssetRecord["type"], limit: number) {
   const shotIds = new Set(shots.map((shot) => shot.id));
   return assets
-    .filter((asset) => asset.type === type && asset.path && !isStoryboardReferenceAsset(asset))
+    .filter((asset) => asset.type === type && isUsableVisualReferenceAsset(asset) && !isStoryboardReferenceAsset(asset))
     .map((asset, index) => {
       const usedByShotRefs = asset.sourceRefs?.join(" ") || "";
       const text = [asset.id, asset.name, usedByShotRefs, ...assetUsedByShotIds(asset), ...(asset.textConstraints || [])].join(" ");
@@ -458,7 +498,7 @@ function shotDisplayReference(shot: ShotRecord, fallbackReference?: AssetRecord,
     return {
       src: undefined,
       label: referenceStrategyLabel(strategy),
-      statusLabel: "待生成故事板",
+      statusLabel: "缺故事板参考",
       statusTone: "missing" as const,
     };
   }
@@ -474,16 +514,79 @@ function shotDisplayReference(shot: ShotRecord, fallbackReference?: AssetRecord,
   return {
     src: undefined,
     label: shot.videoControlMode === "text_only_draft" ? "文字计划" : "画面参考",
-    statusLabel: "待补齐",
+    statusLabel: "缺画面",
     statusTone: "missing" as const,
   };
 }
 
 type ShotDisplayReference = ReturnType<typeof shotDisplayReference>;
+type ShotVideoState = { label: string; tone: "ok" | "warn" | "bad" };
+type PreviewTimelineItem = {
+  kind?: string;
+  shotId?: string;
+  mediaPath?: string;
+  videoGeneration?: { status?: string };
+  videoStatus?: string;
+  status?: string;
+  previewStatus?: string;
+  previewQaStatus?: string;
+  productionQaStatus?: string;
+  reviewRequired?: boolean;
+  returned?: boolean;
+  outputVideoPath?: string;
+};
 
-function currentShotState(shot: ShotRecord, displayReference?: ShotDisplayReference) {
+function shotReturnedVideoStateFromCandidates(candidates: PreviewTimelineItem[]): ShotVideoState | undefined {
+  const scorePreviewItem = (item: PreviewTimelineItem) => {
+    const statusText = [
+      item.status,
+      item.previewStatus,
+      item.previewQaStatus,
+      item.productionQaStatus,
+      item.videoStatus,
+      item.videoGeneration?.status,
+    ].filter(Boolean).join(" ").toLowerCase();
+    const hasVideo = item.kind === "video_clip"
+      || Boolean(item.outputVideoPath)
+      || /\.(?:mp4|mov|webm)(?:\?|$)/i.test(item.mediaPath || "");
+    let score = 0;
+    if (hasVideo) score += 100;
+    if (/approved|pass|ready/.test(statusText)) score += 40;
+    if (item.reviewRequired !== true) score += 20;
+    if (item.returned === true || /success|completed|returned|review/.test(statusText)) score += 10;
+    return score;
+  };
+  const previewItem = candidates.sort((left, right) => scorePreviewItem(right) - scorePreviewItem(left))[0];
+  if (!previewItem) return undefined;
+  const item = previewItem;
+  const statusText = [
+    item.kind,
+    item.status,
+    item.previewStatus,
+    item.previewQaStatus,
+    item.productionQaStatus,
+    item.videoStatus,
+    item.videoGeneration?.status,
+  ].filter(Boolean).join(" ").toLowerCase();
+  const hasVideo = item.kind === "video_clip"
+    || Boolean(item.outputVideoPath)
+    || /\.(?:mp4|mov|webm)(?:\?|$)/i.test(item.mediaPath || "");
+  if (hasVideo && item.reviewRequired !== true && /approved|pass|ready/.test(statusText)) {
+    return { label: "视频已通过", tone: "ok" };
+  }
+  if (hasVideo || /success|completed|returned|review/.test(statusText)) {
+    return { label: "视频待复核", tone: "warn" };
+  }
+  if (/queued|submitted|generating|recoverable/.test(statusText)) {
+    return { label: "视频处理中", tone: "warn" };
+  }
+  return undefined;
+}
+
+function currentShotState(shot: ShotRecord, displayReference?: ShotDisplayReference, videoState?: ShotVideoState) {
+  if (videoState) return videoState;
   if (!displayReference?.src) {
-    return { label: displayReference?.statusLabel || "待补齐", tone: "warn" as const };
+    return { label: displayReference?.statusLabel || "缺画面", tone: "warn" as const };
   }
   if (displayReference?.src && displayReference.statusLabel === "待复核") {
     return { label: "待复核", tone: "warn" as const };
@@ -528,7 +631,7 @@ function submittedReferenceBundle(assets: AssetRecord[], shots: ShotRecord[], sh
   ].filter((asset, index, list) => list.findIndex((item) => item.id === asset.id) === index).slice(0, 2);
   const ordered: Array<{ label: string; asset?: AssetRecord; missingLabel?: string }> = [
     ...(hasStoryboardReference
-      ? [{ label: "故事板", asset: sequenceStoryboard, missingLabel: "待生成故事板" }]
+      ? [{ label: "故事板", asset: sequenceStoryboard, missingLabel: "缺故事板参考" }]
       : []),
     ...sceneReferences.map((asset) => ({ label: "场景/天气", asset })),
     ...characterReferences.map((asset) => ({ label: "角色身份", asset })),
@@ -539,7 +642,7 @@ function submittedReferenceBundle(assets: AssetRecord[], shots: ShotRecord[], sh
     .map((item, index) => ({
       ...item,
       role: `图像${index + 1}`,
-      statusLabel: item.asset?.path ? referenceStatusLabel(item.asset.lockedStatus) : item.missingLabel || "待补齐",
+      statusLabel: item.asset?.path ? referenceStatusLabel(item.asset.lockedStatus) : item.missingLabel || "缺参考",
       statusTone: item.asset?.path ? referenceStatusTone(item.asset.lockedStatus) : "missing",
       id: item.asset?.id || `${shot.id}-${item.label}-missing`,
     }));
@@ -549,35 +652,82 @@ export function MinimalStoryFlow({
   sectionLabel,
   shots,
   assets = [],
+  previewItems = [],
   selectedShotId,
   selectedShotIds,
   onSelectShot,
+  onOpenReferences,
 }: {
   sectionLabel: string;
   shots: ShotRecord[];
   assets?: AssetRecord[];
+  previewItems?: PreviewTimelineItem[];
   selectedShotId: string;
   selectedShotIds: string[];
   onSelectShot: (id: string, additive?: boolean) => void;
+  onOpenReferences?: () => void;
 }) {
-  const selectedSet = new Set(selectedShotIds.length ? selectedShotIds : [selectedShotId]);
-  // Could memoize or compute once to avoid O(2n) scan
-  const currentShot = shots.find((shot) => shot.id === selectedShotId) || shots[0];
-  const currentIndex = currentShot ? shots.findIndex((shot) => shot.id === currentShot.id) : -1;
+  const selectedSet = useMemo(
+    () => new Set(selectedShotIds.length ? selectedShotIds : [selectedShotId]),
+    [selectedShotId, selectedShotIds],
+  );
+  const previewItemsByShotId = useMemo(() => {
+    const grouped = new Map<string, PreviewTimelineItem[]>();
+    previewItems.forEach((item) => {
+      if (!item.shotId) return;
+      const list = grouped.get(item.shotId) || [];
+      list.push(item);
+      grouped.set(item.shotId, list);
+    });
+    return grouped;
+  }, [previewItems]);
+  const shotCardViewModels = useMemo(() => shots.map((shot, index) => {
+    const storyboardReference = storyboardReferenceForShot(assets, shot);
+    const fallbackReference = bestReferenceAssetForShot(assets, shot);
+    const thumbnailReference = shotThumbnailReference(shot, fallbackReference, storyboardReference);
+    const cardState = currentShotState(
+      shot,
+      thumbnailReference,
+      shotReturnedVideoStateFromCandidates(previewItemsByShotId.get(shot.id) || []),
+    );
+    const strategy = shotReferenceStrategy(shot);
+    return {
+      shot,
+      index,
+      storyboardReference,
+      fallbackReference,
+      thumbnailReference,
+      cardState,
+      strategy,
+      displayNumber: displayShotNumber(shot.id),
+      displayTitle: shotDisplayTitle(shot, index),
+    };
+  }), [assets, previewItemsByShotId, shots]);
+  const currentShotView = shotCardViewModels.find((item) => item.shot.id === selectedShotId) || shotCardViewModels[0];
+  const currentShot = currentShotView?.shot;
+  const currentIndex = currentShotView?.index ?? -1;
   const currentRequiresEndFrame = usesEndpointEndFrame(currentShot);
   const currentStartStatus = currentShot ? shotFrameStatus(currentShot, "start") : "missing";
   const currentEndStatus = currentShot && currentRequiresEndFrame ? shotFrameStatus(currentShot, "end") : "missing";
   const currentSceneStatus = currentShot ? shotSceneReferenceStatus(currentShot) : "missing";
-  const currentStoryboardReference = currentShot ? storyboardReferenceForShot(assets, currentShot) : undefined;
-  const currentFallbackReference = currentShot ? bestReferenceAssetForShot(assets, currentShot) : undefined;
+  const currentStoryboardReference = currentShotView?.storyboardReference;
+  const currentFallbackReference = currentShotView?.fallbackReference;
   const currentDisplayReference = currentShot ? shotDisplayReference(currentShot, currentFallbackReference, currentStoryboardReference) : undefined;
+  const currentVideoState = currentShot ? shotReturnedVideoStateFromCandidates(previewItemsByShotId.get(currentShot.id) || []) : undefined;
   const referenceUi = currentShot ? currentShotReferenceUi(currentShot, currentSceneStatus, currentStoryboardReference) : undefined;
   const readiness = currentShot ? currentShotReadiness(currentShot, currentDisplayReference) : [];
-  const currentState = currentShot ? currentShotState(currentShot, currentDisplayReference) : undefined;
+  const currentState = currentShot ? currentShotState(currentShot, currentDisplayReference, currentVideoState) : undefined;
   const currentStrategy = currentShot ? shotReferenceStrategy(currentShot) : undefined;
   const currentSkillSummary = currentShot ? directorSkillSummaryForShot(currentShot) : undefined;
-  const currentReferenceSegment = currentShot ? referenceSegmentForShot(shots, currentShot) : [];
-  const currentSubmittedBundle = currentShot ? submittedReferenceBundle(assets, shots, currentShot) : [];
+  const currentReferenceSegment = useMemo(
+    () => currentShot ? referenceSegmentForShot(shots, currentShot) : [],
+    [currentShot, shots],
+  );
+  const currentSubmittedBundle = useMemo(
+    () => currentShot ? submittedReferenceBundle(assets, shots, currentShot) : [],
+    [assets, currentShot, shots],
+  );
+  const currentNeedsReferences = Boolean(currentShot && currentSubmittedBundle.some((item) => !item.asset?.path));
   const displaySection = cleanStoryText(sectionLabel) || "故事流";
   return (
     <main className="minimal-story-flow current-shot-flow">
@@ -599,7 +749,13 @@ export function MinimalStoryFlow({
               {currentStrategy && (
                 <div className="current-shot-strategy-row" aria-label="生成方式">
                   <b>{referenceStrategyLabel(currentStrategy)}</b>
-                  <small>{referenceStrategyDetail(currentStrategy)}</small>
+	                  <small>{referenceStrategyDetail(currentStrategy)}</small>
+	                  <small className="current-shot-strategy-workflow">{referenceStrategyWorkflowHint(currentStrategy)}</small>
+	                  {currentNeedsReferences && onOpenReferences && (
+	                    <button type="button" className="current-shot-reference-cta" onClick={onOpenReferences}>
+	                      去参考页处理
+	                    </button>
+	                  )}
                 </div>
               )}
               <p>{shotDisplayBrief(currentShot).slice(0, 96)}</p>
@@ -717,29 +873,24 @@ export function MinimalStoryFlow({
         </section>
       )}
       <div className="minimal-shot-grid filmstrip-shot-grid" aria-label="分镜胶片条">
-        {shots.map((shot, index) => {
-          const storyboardReference = storyboardReferenceForShot(assets, shot);
-          const fallbackReference = bestReferenceAssetForShot(assets, shot);
-          const thumbnailReference = shotThumbnailReference(shot, fallbackReference, storyboardReference);
-          const cardState = currentShotState(shot, thumbnailReference);
-          const strategy = shotReferenceStrategy(shot);
+        {shotCardViewModels.map(({ shot, displayNumber, displayTitle, thumbnailReference, cardState, strategy }) => {
           return (
             <button
               key={shot.id}
               className={`minimal-shot-card filmstrip-shot ${selectedSet.has(shot.id) ? "selected" : ""} ${selectedShotId === shot.id ? "primary" : ""}`}
               onClick={(event) => onSelectShot(shot.id, event.metaKey || event.ctrlKey || event.shiftKey)}
               aria-pressed={selectedSet.has(shot.id)}
-              aria-label={`选择镜头 ${displayShotNumber(shot.id)}：${shotDisplayTitle(shot, index)} · ${referenceStrategyLabel(strategy)} · ${cardState.label}`}
+              aria-label={`选择镜头 ${displayShotNumber(shot.id)}：${displayTitle} · ${referenceStrategyLabel(strategy)} · ${cardState.label}`}
             >
               <MediaFrame
                 src={thumbnailReference.src || (usesEndpointEndFrame(shot) ? shot.endFrame : undefined)}
                 alt={shot.title}
-                label={displayShotNumber(shot.id)}
+                label={displayNumber}
                 className="minimal-shot-image"
               />
               <span className="minimal-shot-caption">
-                <strong>{displayShotNumber(shot.id)}</strong>
-                <span>{shotDisplayTitle(shot, index)}</span>
+                <strong>{displayNumber}</strong>
+                <span>{displayTitle}</span>
                 <i className={`dot ${cardState.tone}`} aria-label={cardState.label} />
               </span>
               <small className="minimal-shot-strategy">{referenceStrategyLabel(strategy)}</small>

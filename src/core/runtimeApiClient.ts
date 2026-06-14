@@ -82,7 +82,9 @@ function runtimePayloadErrorDetail(payload: unknown): string {
     || firstString(payload.error);
 }
 
-async function runtimeHttpError(url: string, response: Response) {
+type RuntimeFetchResponse = Pick<Response, "ok" | "status" | "text" | "json">;
+
+async function runtimeHttpError(url: string, response: RuntimeFetchResponse) {
   let payload: unknown;
   let text = "";
   try {
@@ -213,7 +215,7 @@ async function waitForRuntimeApiReady(baseUrl: string) {
     let lastError = "";
     while (Date.now() - startedAt < runtimeReadyTimeoutMs) {
       try {
-        const response = await fetch(statusUrl, runtimeRequestInit());
+        const response = await runtimeFetch(statusUrl, runtimeRequestInit());
         if (response.ok) {
           const payload = await response.json().catch(() => undefined);
           if (isRecord(payload) && payload.ok === true) return;
@@ -248,7 +250,7 @@ async function fetchWithRuntimeStartupRetry(url: string, init?: RequestInit) {
   let lastError: unknown;
   while (Date.now() - startedAt < runtimeStartupRetryMs) {
     try {
-      return await fetch(url, runtimeRequestInit(init));
+      return await runtimeFetch(url, runtimeRequestInit(init));
     } catch (error) {
       if (!isRuntimeStartupFetchError(error)) throw error;
       lastError = error;
@@ -281,9 +283,52 @@ export function runtimeApiToken() {
 export function runtimeRequestInit(init?: RequestInit): RequestInit | undefined {
   const token = runtimeApiToken();
   if (!token) return init;
-  const headers = new Headers(init?.headers);
-  headers.set("x-vibe-runtime-token", token);
+  const headers = typeof Headers === "undefined"
+    ? { ...(isRecord(init?.headers) ? init?.headers as Record<string, string> : {}), "x-vibe-runtime-token": token }
+    : new Headers(init?.headers);
+  if (typeof Headers !== "undefined" && headers instanceof Headers) headers.set("x-vibe-runtime-token", token);
   return { ...init, headers };
+}
+
+function requestHeaders(init?: RequestInit) {
+  const headers = init?.headers;
+  if (!headers) return [];
+  if (typeof Headers !== "undefined" && headers instanceof Headers) return Array.from(headers.entries());
+  if (Array.isArray(headers)) return headers;
+  if (isRecord(headers)) return Object.entries(headers).filter((entry): entry is [string, string] => typeof entry[1] === "string");
+  return [];
+}
+
+function runtimeFetchWithXhr(url: string, init?: RequestInit): Promise<RuntimeFetchResponse> {
+  if (typeof XMLHttpRequest === "undefined") {
+    throw new Error("runtime fetch unavailable");
+  }
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(init?.method || "GET", url, true);
+    for (const [key, value] of requestHeaders(init)) xhr.setRequestHeader(key, value);
+    xhr.onload = () => {
+      const responseText = xhr.responseText || "";
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        text: async () => responseText,
+        json: async () => JSON.parse(responseText),
+      });
+    };
+    xhr.onerror = () => reject(new Error("runtime xhr request failed"));
+    xhr.ontimeout = () => reject(new Error("runtime xhr request timed out"));
+    init?.signal?.addEventListener("abort", () => {
+      xhr.abort();
+      reject(new Error("runtime xhr request aborted"));
+    }, { once: true });
+    xhr.send((init?.body as XMLHttpRequestBodyInit | null | undefined) ?? null);
+  });
+}
+
+function runtimeFetch(url: string, init?: RequestInit): Promise<RuntimeFetchResponse> {
+  if (typeof fetch === "function") return fetch(url, init);
+  return runtimeFetchWithXhr(url, init);
 }
 
 export function isRuntimeEndpointPath(url: string) {
@@ -293,19 +338,22 @@ export function isRuntimeEndpointPath(url: string) {
 export async function fetchRuntimeJson(url: string, init?: RequestInit): Promise<unknown> {
   const isRuntimeEndpoint = isRuntimeEndpointPath(url);
   const isElectronRuntime = hasElectronRuntimeBridge();
+  const fetchRuntimeResponse = (requestUrl: string) => isElectronRuntime || !isRuntimeEndpoint
+    ? fetchWithRuntimeStartupRetry(requestUrl, init)
+    : runtimeFetch(requestUrl, runtimeRequestInit(init));
   try {
     if (isRuntimeEndpoint) {
       const baseUrl = await prepareRuntimeApiRequest();
       if (isElectronRuntime && !baseUrl) throw new Error("Electron runtime API did not provide a base URL.");
     }
     const requestUrl = toRuntimeUrl(url);
-    const response = await fetchWithRuntimeStartupRetry(requestUrl, init);
+    const response = await fetchRuntimeResponse(requestUrl);
     if (!response.ok) throw await runtimeHttpError(url, response);
     return response.json() as Promise<unknown>;
   } catch (error) {
     if (isElectronRuntime || runtimeApiBaseUrl() || !isRuntimeEndpoint) throw error;
     const fallbackUrl = `${defaultRuntimeApiBaseUrl}${url}`;
-    const response = await fetchWithRuntimeStartupRetry(fallbackUrl, init);
+    const response = await fetchRuntimeResponse(fallbackUrl);
     if (!response.ok) throw await runtimeHttpError(fallbackUrl, response);
     return response.json() as Promise<unknown>;
   }

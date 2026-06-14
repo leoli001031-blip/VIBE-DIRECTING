@@ -162,6 +162,7 @@ function scopedShotIdsForAction(
   action: DirectorAgentActionEnvelope,
 ): string[] {
   if (action.target.kind === "shot" || action.target.kind === "multi_shot") return action.target.ids;
+  if (action.sourceContext.selectedShotIds.length) return action.sourceContext.selectedShotIds;
   if (action.target.kind === "section") {
     const targetSectionIds = new Set(action.target.ids);
     return input.project.storyFlow.sections

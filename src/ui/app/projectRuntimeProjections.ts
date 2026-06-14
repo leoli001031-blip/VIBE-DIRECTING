@@ -40,16 +40,30 @@ function assetRecordStatusToLibraryStatus(asset: AssetRecord): AssetLibraryStatu
   return "candidate";
 }
 
-function linkedShotIdsForAsset(asset: AssetRecord, state: ProjectRuntimeState) {
-  return uniqueStrings(
-    state.taskRuns.jobs
-      .filter((job) => job.references.includes(asset.path) || job.references.includes(asset.id))
-      .flatMap((job) =>
-        state.storyFlow.shots
-          .filter((shot) => job.id.startsWith(`${shot.id}_`) || job.outputPath === shot.startFrame || job.outputPath === shot.endFrame)
-          .map((shot) => shot.id),
-      ),
-  );
+type AssetShotLinkIndex = Map<string, string[]>;
+
+function appendShotLinks(index: AssetShotLinkIndex, ref: string, shotIds: string[]) {
+  const existing = index.get(ref) || [];
+  index.set(ref, existing.concat(shotIds));
+}
+
+function buildAssetShotLinkIndex(state: ProjectRuntimeState): AssetShotLinkIndex {
+  const index: AssetShotLinkIndex = new Map();
+  for (const job of state.taskRuns.jobs) {
+    const shotIds = state.storyFlow.shots
+      .filter((shot) => job.id.startsWith(`${shot.id}_`) || job.outputPath === shot.startFrame || job.outputPath === shot.endFrame)
+      .map((shot) => shot.id);
+    if (!shotIds.length) continue;
+    for (const ref of job.references) appendShotLinks(index, ref, shotIds);
+  }
+  return index;
+}
+
+function linkedShotIdsForAsset(asset: AssetRecord, index: AssetShotLinkIndex) {
+  return uniqueStrings([
+    ...(asset.path ? index.get(asset.path) || [] : []),
+    ...(index.get(asset.id) || []),
+  ]);
 }
 
 function projectRelativePreviewPath(path: string | undefined, projectRoot: string | undefined) {
@@ -70,6 +84,7 @@ export function createAssetLibraryFromRuntimeState(state: ProjectRuntimeState): 
     id: `${state.sourceIndex.projectId || "project"}_asset_library`,
     createdAt: generatedAt,
   });
+  const assetShotLinkIndex = buildAssetShotLinkIndex(state);
 
   for (const asset of state.visualMemory.assets) {
     const assetType = assetRecordTypeToLibraryType(asset.type);
@@ -84,7 +99,7 @@ export function createAssetLibraryFromRuntimeState(state: ProjectRuntimeState): 
       importId: asset.id,
       textConstraints: defaultAssetConstraints(assetType, asset.name),
       sourceRefs: [`runtime.visualMemory.assets:${asset.id}`],
-      usedByShotIds: linkedShotIdsForAsset(asset, state),
+      usedByShotIds: linkedShotIdsForAsset(asset, assetShotLinkIndex),
       updatedAt: generatedAt,
     });
     library = result.library;
@@ -206,12 +221,12 @@ function optionalPortablePath(path: string | undefined) {
 
 function projectVibeAssetIdsForShot(
   assets: AssetRecord[],
-  state: ProjectRuntimeState,
+  assetShotLinkIndex: AssetShotLinkIndex,
   shotId: string,
   kind: ProjectVibeAssetKind,
 ) {
   return assets
-    .filter((asset) => projectVibeAssetKind(asset.type) === kind && linkedShotIdsForAsset(asset, state).includes(shotId))
+    .filter((asset) => projectVibeAssetKind(asset.type) === kind && linkedShotIdsForAsset(asset, assetShotLinkIndex).includes(shotId))
     .map((asset) => asset.id);
 }
 
@@ -219,6 +234,7 @@ export function createProjectVibeFromRuntimeState(state: ProjectRuntimeState): P
   const generatedAt = state.generatedAt || new Date().toISOString();
   const projectId = state.sourceIndex.projectId || "current_project";
   const assets = state.visualMemory.assets;
+  const assetShotLinkIndex = buildAssetShotLinkIndex(state);
   const sections = state.storyFlow.sections.length
     ? state.storyFlow.sections.map((section, index) => ({
         id: section.id,
@@ -258,7 +274,7 @@ export function createProjectVibeFromRuntimeState(state: ProjectRuntimeState): P
           label: asset.name,
           status,
           textConstraints: asset.issues.length ? asset.issues : [asset.name],
-          usedByShotIds: linkedShotIdsForAsset(asset, state),
+          usedByShotIds: linkedShotIdsForAsset(asset, assetShotLinkIndex),
           canUseAsFutureReference: status === "locked" && asset.safeForFutureReference,
           sourceRefs: [`runtime.visualMemory.assets:${asset.id}`],
         };
@@ -269,9 +285,9 @@ export function createProjectVibeFromRuntimeState(state: ProjectRuntimeState): P
       sectionId: shot.sectionId && sectionIds.has(shot.sectionId) ? shot.sectionId : sections[0]?.id || "current_project",
       title: shot.title,
       intent: shot.storyFunction,
-      sceneAssetIds: projectVibeAssetIdsForShot(assets, state, shot.id, "scene"),
-      characterAssetIds: projectVibeAssetIdsForShot(assets, state, shot.id, "character"),
-      propAssetIds: projectVibeAssetIdsForShot(assets, state, shot.id, "prop"),
+      sceneAssetIds: projectVibeAssetIdsForShot(assets, assetShotLinkIndex, shot.id, "scene"),
+      characterAssetIds: projectVibeAssetIdsForShot(assets, assetShotLinkIndex, shot.id, "character"),
+      propAssetIds: projectVibeAssetIdsForShot(assets, assetShotLinkIndex, shot.id, "prop"),
       durationSeconds: 5,
       status: projectVibeShotStatus(shot),
       sourceRefs: ["runtime.storyFlow.shots", "runtime.visualMemory.assets"],
@@ -283,7 +299,7 @@ export function createProjectVibeFromRuntimeState(state: ProjectRuntimeState): P
       status: projectVibeAssetStatus(asset),
       path: optionalPortablePath(asset.path),
       textConstraints: asset.issues.length ? asset.issues : [asset.name],
-      usedByShotIds: linkedShotIdsForAsset(asset, state),
+      usedByShotIds: linkedShotIdsForAsset(asset, assetShotLinkIndex),
       sourceRefs: [`runtime.visualMemory.assets:${asset.id}`],
       lockedBy: asset.lockedStatus === "locked" ? "user" : undefined,
     })),

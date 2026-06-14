@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   currentProjectBindingIdentity,
   clearCurrentProjectBinding,
@@ -47,6 +47,54 @@ function unavailableProjectPanelState(message: string) {
   return { status: "unavailable" as const, message };
 }
 
+const activePreviewRefreshMs = 6_000;
+const idlePreviewRefreshMs = 30_000;
+const hiddenPreviewRefreshMs = 60_000;
+
+function activeStatusText(value: unknown) {
+  return typeof value === "string" && /running|submitted|generating|queued|processing|pending/i.test(value);
+}
+
+function projectRealChainNeedsActiveRefresh(state: ProjectRealChainPanelState) {
+  if (state.status === "running") return true;
+  const relayQueue = state.summary?.relayQueue;
+  if (relayQueue?.status === "running" || (relayQueue?.counts.active || 0) > 0) return true;
+  return (state.summary?.previewItems || []).some((item) => (
+    activeStatusText(item.status)
+    || activeStatusText(item.previewStatus)
+    || activeStatusText(item.videoStatus)
+    || activeStatusText(item.queueInfo?.status)
+    || activeStatusText(item.queue_info?.status)
+  ));
+}
+
+function projectRealChainRefreshKey(state: ProjectRealChainPanelState) {
+  const relayQueue = state.summary?.relayQueue;
+  const counts = relayQueue?.counts;
+  const activePreviewCount = (state.summary?.previewItems || []).filter((item) => (
+    activeStatusText(item.status)
+    || activeStatusText(item.previewStatus)
+    || activeStatusText(item.videoStatus)
+    || activeStatusText(item.queueInfo?.status)
+    || activeStatusText(item.queue_info?.status)
+  )).length;
+  return [
+    state.status,
+    relayQueue?.status || "",
+    counts?.active || 0,
+    counts?.ready || 0,
+    counts?.completed || 0,
+    counts?.failed || 0,
+    counts?.blocked || 0,
+    activePreviewCount,
+  ].join(":");
+}
+
+function previewRefreshDelayMs(state: ProjectRealChainPanelState) {
+  if (typeof document !== "undefined" && document.visibilityState !== "visible") return hiddenPreviewRefreshMs;
+  return projectRealChainNeedsActiveRefresh(state) ? activePreviewRefreshMs : idlePreviewRefreshMs;
+}
+
 export function useCurrentProjectRuntimePanels({
   selectedShotId,
   previewRefreshEnabled,
@@ -61,6 +109,20 @@ export function useCurrentProjectRuntimePanels({
   const [projectChoices, setProjectChoices] = useState<ProjectCurrentChoice[]>([]);
   const [projectSelectionStatus, setProjectSelectionStatus] = useState<ProjectSelectionStatus>("idle");
   const [authorizationRef, setAuthorizationRef] = useState("secret-store://providers/openai-image2/default");
+  const projectRealChainStateRef = useRef(projectRealChainState);
+
+  useEffect(() => {
+    projectRealChainStateRef.current = projectRealChainState;
+  }, [projectRealChainState]);
+
+  const realChainRefreshKey = useMemo(
+    () => projectRealChainRefreshKey(projectRealChainState),
+    [projectRealChainState],
+  );
+  const realChainNeedsActiveRefresh = useMemo(
+    () => projectRealChainNeedsActiveRefresh(projectRealChainState),
+    [realChainRefreshKey],
+  );
 
   const runtimeProjectIdentity = useMemo(
     () => currentProjectBindingIdentity(runtimeProjectBinding),
@@ -132,7 +194,7 @@ export function useCurrentProjectRuntimePanels({
   }, [selectedShotId, setUnavailableProjectPanels]);
 
   useEffect(() => {
-    if (runtimeProjectBinding.status === "bound") return undefined;
+    if (runtimeProjectBinding.status !== "loading") return undefined;
     let cancelled = false;
     let inFlight = false;
 
@@ -144,20 +206,24 @@ export function useCurrentProjectRuntimePanels({
         if (!cancelled && binding.status === "bound") {
           if (binding.projectRoot) setProjectPathInput((current) => current.trim() ? current : binding.projectRoot || current);
           await refreshCurrentProjectPanels(binding);
+        } else if (!cancelled) {
+          setRuntimeProjectBinding((current) => current.status === "loading" ? binding : current);
         }
-      } catch (error: unknown) {
-        if (!cancelled) console.error("Failed to recover current project binding", error);
+      } catch {
+        if (!cancelled) {
+          setRuntimeProjectBinding((current) => current.status === "loading"
+            ? { status: "unbound", message: "未选择项目/未同步。" }
+            : current);
+        }
       } finally {
         inFlight = false;
       }
     };
 
     const timeout = window.setTimeout(() => { void recoverBinding(); }, 500);
-    const interval = window.setInterval(() => { void recoverBinding(); }, 3000);
     return () => {
       cancelled = true;
       window.clearTimeout(timeout);
-      window.clearInterval(interval);
     };
   }, [
     refreshCurrentProjectPanels,
@@ -202,22 +268,53 @@ export function useCurrentProjectRuntimePanels({
   }, [runtimeProjectIdentity, selectedShotId, setUnavailableProjectPanels]);
 
   useEffect(() => {
-    if (!previewRefreshEnabled || runtimeProjectBinding.status !== "bound" || !runtimeProjectIdentity) return undefined;
+    if (
+      !previewRefreshEnabled
+      && !realChainNeedsActiveRefresh
+    ) return undefined;
+    if (runtimeProjectBinding.status !== "bound" || !runtimeProjectIdentity) return undefined;
     let cancelled = false;
-    const refreshPreview = async () => {
-      const nextState = await loadProjectRealChainStatus(runtimeProjectIdentity);
-      if (!cancelled) setProjectRealChainState(nextState);
+    let inFlight = false;
+    let timeout: number | undefined;
+    const clearScheduledRefresh = () => {
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      timeout = undefined;
     };
-    // Polling every 6s for preview refresh; rapid component switches may cause extra API calls before cleanup runs
-    const interval = window.setInterval(() => {
-      void refreshPreview();
-    }, 6000);
+    const scheduleRefresh = (delay = previewRefreshDelayMs(projectRealChainStateRef.current)) => {
+      clearScheduledRefresh();
+      if (!cancelled) timeout = window.setTimeout(() => { void refreshPreview(); }, delay);
+    };
+    const refreshPreview = async () => {
+      if (cancelled || inFlight) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        scheduleRefresh();
+        return;
+      }
+      inFlight = true;
+      try {
+        const nextState = await loadProjectRealChainStatus(runtimeProjectIdentity);
+        if (!cancelled) setProjectRealChainState(nextState);
+      } catch (error) {
+        if (!cancelled) console.error("Failed to refresh current project preview state", error);
+      } finally {
+        inFlight = false;
+        scheduleRefresh();
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") scheduleRefresh(250);
+    };
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", handleVisibilityChange);
+    scheduleRefresh();
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      clearScheduledRefresh();
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [
     previewRefreshEnabled,
+    realChainNeedsActiveRefresh,
+    realChainRefreshKey,
     runtimeProjectBinding.status,
     runtimeProjectIdentity?.projectId,
     runtimeProjectIdentity?.projectRoot,

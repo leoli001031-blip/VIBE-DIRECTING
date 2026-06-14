@@ -121,7 +121,7 @@ function createFixture(fixtureRoot) {
     shotPlans: shotIds.map((shotId, index) => ({
       shotId,
       order: index + 1,
-      providerId: "lanyi-image2",
+      providerId: "apikey-fun-gpt55-responses-image",
       providerSlot: "image.generate",
       requiredMode: "text2image",
       frameRole: "start_frame",
@@ -163,7 +163,7 @@ async function preparePermission(baseUrl, shotId) {
       receiptId: confirm.payload.receipt.receiptId,
       transportMode: "agent_app_server",
       submitPermissionReceiptRequired: true,
-      credentialRef: "secret-store://providers/lanyi-image2/default",
+      credentialRef: "secret-store://providers/apikey-fun-gpt55-responses-image/default",
       maxProviderCallsPerReceipt: 1,
       actionTimeConfirmation: { required: true, userConfirmedAtActionTime: false },
     }),
@@ -177,7 +177,7 @@ function serialShot(permissionPayload, status, index) {
     selectedShotId: permissionPayload.selectedShotId,
     receipt: permissionPayload.receipt,
     submitPermissionReceipt: permissionPayload.submitPermissionReceipt,
-    providerId: "lanyi-image2",
+    providerId: "apikey-fun-gpt55-responses-image",
     mockProviderResult: { status },
     confirmation: {
       receiptId: `confirm_serial_${index}`,
@@ -197,7 +197,7 @@ let child;
 try {
   child = spawnRuntimeServer({
     HOME: tempRoot,
-    VIBE_IMAGE2_API_KEY: "fake-p6-serial-test-key",
+    VIBE_APIKEY_FUN_API_KEY: "fake-p6-serial-test-key",
     VIBE_CORE_RUNTIME_API_PORT: "0",
     VIBE_CORE_CURRENT_PROJECT_BINDING_PATH: bindingPath,
   });
@@ -219,7 +219,7 @@ try {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       selectedShotIds: shotIds,
-      providerId: "lanyi-image2",
+      providerId: "apikey-fun-gpt55-responses-image",
       shots: [
         serialShot(permissions[0], "success", 1),
         serialShot(permissions[1], "needs_review", 2),

@@ -187,6 +187,41 @@ const smallCinemaStaged = buildNewVideoProjectVibeStagedTransaction({
   generatedAt,
 });
 assert(smallCinemaStaged.blocked === false, `small cinema story should confirm without extra manual fields: ${smallCinemaStaged.blockedReasons.join("; ")}`);
+const smallCinemaStyleAsset = smallCinemaStaged.patchOperations
+  .filter((operation) => operation.op === "upsert_asset")
+  .map((operation) => operation.asset)
+  .find((asset) => asset.kind === "style");
+assert(smallCinemaStyleAsset, "text-only style intent should become a project-level style candidate");
+assert(smallCinemaStyleAsset.textConstraints.some((item) => item.includes(smallCinemaStoryDraft.style)), "text-only style asset should preserve the user's style wording");
+assert(smallCinemaStyleAsset.usedByShotIds.length === smallCinemaStaged.planner.shots.length, "text-only style asset should bind across all planned shots");
+assert(
+  smallCinemaStaged.planner.shots.every((shot) => shot.sourceRefs.includes(`project.vibe#assets/${smallCinemaStyleAsset.id}`)),
+  "planned shots should inherit the text style asset source ref",
+);
+
+const styleWithExecutionBoundaryDraft = {
+  script: "雨夜旧书店里，戴耳机的高中女生在打工收摊前发现一本会自己翻页的旧书。书页里夹着一张发光车票，车票上的目的地正是她多年前失踪母亲最后去过的车站。店外浓雾压住街道，最后一班电车已经靠站，她必须在店主锁门前决定是否拿起车票追出去。",
+  style: "执行边界：按用户要求限制生成/提交。 节奏安静悬疑，两三个镜头即可，先只规划，不要生图不要提交视频",
+};
+const stagedWithExecutionBoundaryStyle = buildNewVideoProjectVibeStagedTransaction({
+  project: createProject(),
+  draft: styleWithExecutionBoundaryDraft,
+  generatedAt,
+});
+assert(stagedWithExecutionBoundaryStyle.blocked === false, `execution-boundary style draft should stage cleanly: ${stagedWithExecutionBoundaryStyle.blockedReasons.join("; ")}`);
+const executionBoundaryStyleAsset = stagedWithExecutionBoundaryStyle.patchOperations
+  .filter((operation) => operation.op === "upsert_asset")
+  .map((operation) => operation.asset)
+  .find((asset) => asset.kind === "style");
+assert(executionBoundaryStyleAsset, "mixed style/control wording should still create a style asset");
+const executionBoundaryStylePayload = JSON.stringify({
+  planner: stagedWithExecutionBoundaryStyle.planner,
+  styleAsset: executionBoundaryStyleAsset,
+});
+assert(executionBoundaryStylePayload.includes("节奏安静悬疑"), "creative style wording should survive permission-control cleanup");
+for (const forbiddenControlText of ["执行边界", "限制生成/提交", "先只规划", "只规划", "不要生图", "不要提交视频"]) {
+  assert(!executionBoundaryStylePayload.includes(forbiddenControlText), `permission control wording should not pollute creative facts: ${forbiddenControlText}`);
+}
 
 const confirmedDiscussionDeltas: StoryDiscussionDelta[] = [
   {
@@ -377,6 +412,10 @@ assert(stagedFromStoryboardTable.planner.shots[1]?.visibleClips === 1, "omni row
 assert(stagedFromStoryboardTable.planner.shots[1]?.storyboardPanels === 0, "omni rows should not create hidden storyboard panels");
 assert(stagedFromStoryboardTable.planner.shots.every((shot) => shot.videoControlMode === "reference_driven"), "new video storyboard rows should no longer fall back to first-frame mode");
 assert(stagedFromStoryboardTable.planner.shots[1]?.propGuidance?.includes("纸条"), "prop binding text should be preserved on the shot");
+assert(
+  stagedFromStoryboardTable.planner.shots.every((shot) => shot.directorFeedbackDirectives?.some((item) => item.includes(richDraft.style))),
+  "project visual style should be preserved as shot-level director guidance for downstream reference generation",
+);
 assert(
   stagedFromStoryboardTable.source.sourceRefs.some((ref) => ref.startsWith("storyboard_table:")),
   "staged source refs should keep storyboard table evidence",

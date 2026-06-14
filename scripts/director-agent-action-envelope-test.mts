@@ -209,9 +209,10 @@ const continueReference = buildDirectorAgentActionEnvelope({
   snapshot: selectedSnapshot,
   generatedAt: "2026-05-31T00:00:00.500Z",
 });
-assert(continueReference.status === "staged", "continue should stage when next action is allowed");
+assert(continueReference.status === "blocked", "default continue should not run reference generation without explicit permission");
 assert(continueReference.kind === "prepare_reference_generation", "continue should route to reference generation when references are missing");
 assert(continueReference.toolPlan.toolName === "image2_reference_generation", "continue reference route should use reference tool");
+assert(continueReference.toolPlan.providerSubmitAllowed === false, "default continue must stay plan-only and avoid provider submit");
 assert(continueReference.sourceContext.projectReadiness.status === "needs_references", "action should carry readiness context");
 assert(continueReference.sourceContext.selectedShotContexts[0]?.context.primaryAction === "她在清晨旧书店翻开旧书", "action source context should carry the selected shot creative context");
 
@@ -305,6 +306,28 @@ assert(selectedShotFeedback.proposedChanges[0]?.field === "selectedScopeDraft", 
 assert(selectedShotFeedback.proposedChanges[0]?.to.includes("压迫感"), "selected shot feedback diff should show the creator's concrete wording");
 assert(selectedShotFeedback.proposedChanges[0]?.reason.includes("清晨旧书店"), "selected shot feedback should say which target will receive the write");
 assert(selectedShotFeedback.userFacingMessage.includes("清晨旧书店"), "selected shot feedback should explain the selected target to the creator");
+
+const planOnlyScopedFeedback = buildDirectorAgentActionEnvelope({
+  userIntent: "把这一段改成更像90年代日漫赛车开场：低机位扫过湿地，车灯亮起，两个车手只露出手和眼神。只整理计划，不要生图，也不要提交视频。",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:01.060Z",
+});
+assert(planOnlyScopedFeedback.executionContract.mode === "plan_only", "scoped feedback with no-generation wording should keep plan-only boundary");
+assert(planOnlyScopedFeedback.proposedChanges[0]?.field === "selectedScopeDraft", "plan-only scoped feedback should still become a selected-scope draft");
+assert(planOnlyScopedFeedback.proposedChanges[0]?.to.includes("90年代日漫赛车开场"), "plan-only scoped feedback should keep the creator's concrete direction");
+assert(!planOnlyScopedFeedback.proposedChanges[0]?.to.includes("不要生图"), "permission control wording should not pollute the staged creative diff");
+assert(!planOnlyScopedFeedback.proposedChanges[0]?.to.includes("，，"), "stripped permission wording should not leave doubled punctuation");
+assert(!planOnlyScopedFeedback.proposedChanges[0]?.to.includes("也。"), "stripped permission wording should not leave dangling conjunctions");
+
+const newStoryNoVideoFeedback = buildDirectorAgentActionEnvelope({
+  userIntent: "新建一个 12 秒短片：雨夜便利店，两辆车启动。先帮我拆故事和参考模式，不要提交视频。",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:01.065Z",
+});
+assert(newStoryNoVideoFeedback.kind === "revise_story_or_shot", "new story with no-video wording should remain a project draft action");
+assert(newStoryNoVideoFeedback.target.kind === "project", "new story wording should override the currently selected shot");
+assert(newStoryNoVideoFeedback.summary.includes("新故事草案"), "new story project draft should be labeled as a new story");
+assert(newStoryNoVideoFeedback.toolPlan.toolName === "project_vibe_patch", "new story plan should only stage a project patch before generation");
 
 const selectedShotApprovalFeedback = buildDirectorAgentActionEnvelope({
   userIntent: "这个镜头通过了，节奏可以，先保持这个方向",
@@ -412,6 +435,16 @@ const blockedReference = buildDirectorAgentActionEnvelope({
 assert(blockedReference.status === "blocked", "plan-only should block reference generation");
 assert(blockedReference.toolPlan.toolName === "image2_reference_generation", "reference request should still be classified");
 assert(blockedReference.toolPlan.providerSubmitAllowed === false, "plan-only reference request must not submit provider");
+
+const defaultBlockedVideo = buildDirectorAgentActionEnvelope({
+  userIntent: "提交视频到即梦",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:02.050Z",
+});
+assert(defaultBlockedVideo.executionContract.mode === "plan_only", "core Agent should default to plan-only without an explicit boundary");
+assert(defaultBlockedVideo.status === "blocked", "default plan-only must block video submit");
+assert(defaultBlockedVideo.toolPlan.toolName === "seedance_video_submit", "video intent should still be classified while blocked");
+assert(defaultBlockedVideo.toolPlan.providerSubmitAllowed === false, "default plan-only video request must not submit provider");
 
 const directBoundedReference = buildDirectorAgentActionEnvelope({
   userIntent: "帮我补参考图，但先不要生图，也不要提交视频",

@@ -215,9 +215,18 @@ function identityKey(value) {
 }
 
 function assetIdentityKeys(asset) {
-  return uniqueStrings([asset?.id, asset?.name, asset?.displayName, asset?.roleId, asset?.sceneId])
+  return uniqueStrings([asset?.id, asset?.name, asset?.displayName, asset?.label, asset?.roleId, asset?.sceneId])
     .map(identityKey)
     .filter(Boolean);
+}
+
+function canonicalAssetReferenceIdForType(assets, referenceId, type) {
+  const key = identityKey(referenceId);
+  if (!key) return undefined;
+  const matches = assets.filter((asset) => assetIdentityKeys(asset).includes(key));
+  if (!matches.length) return referenceId;
+  const typed = matches.find((asset) => asset?.type === type);
+  return typed ? asString(typed.id || typed.name || typed.displayName || typed.label || referenceId) : undefined;
 }
 
 function providerConfigFor(statuses, providerId) {
@@ -279,11 +288,15 @@ function storyShots(projectFacts, workbenchFacts) {
 }
 
 function scopedAssetReferenceIds({ shot, shotId, assets, type }) {
-  const explicit = type === "scene"
+  const explicitRaw = type === "scene"
     ? textArray(shot.sceneAssetIds)
     : type === "character"
       ? textArray(shot.characterAssetIds)
       : textArray(shot.propAssetIds);
+  const explicit = explicitRaw.flatMap((id) => {
+    const canonical = canonicalAssetReferenceIdForType(assets, id, type);
+    return canonical ? [canonical] : [];
+  });
   const bound = assets
     .filter((asset) => asset?.type === type)
     .filter((asset) => assetUsedByShotIds(asset).includes(shotId))
@@ -986,12 +999,13 @@ function representativeAssetsOfType(assets, shots, type) {
       ].join(" ");
       const explicitOverlap = Array.from(shotIds).filter((shotId) => text.includes(shotId)).length;
       const semanticOverlap = shots.filter((shot) => assetMatchesShotForType(asset, shot, type)).length;
+      const matchScore = Math.max(explicitOverlap * 2, semanticOverlap);
       const lockedBonus = /locked|已锁定/i.test(`${asset.lockedStatus || ""} ${asset.status || ""}`) ? 0.25 : 0;
       const scenePenalty = type === "scene" ? assetSceneSpecificityPenalty(asset) : 0;
       return {
         asset,
         index,
-        score: Math.max(explicitOverlap * 2, semanticOverlap) + lockedBonus - scenePenalty,
+        score: matchScore > 0 ? matchScore + lockedBonus - scenePenalty : -scenePenalty,
       };
     })
     .sort((left, right) => right.score - left.score || left.index - right.index)
@@ -1029,6 +1043,7 @@ function assetRefs(workbenchFacts, source, scopedRepoPath, shots) {
     return [{
       role: type === "scene" ? "scene_reference" : type === "character" ? "character_reference" : "prop_reference",
       type,
+      id: asString(asset.id || asset.name || asset.displayName || asset.label, type),
       name: asString(asset.name || asset.displayName || asset.id, type),
       relativePath,
       filePath,
@@ -1728,7 +1743,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
       const ruleQaReport = runDirectorRuleQa({
         shots,
         assets: refs.map((ref) => ({
-          id: ref.name,
+          id: ref.id || ref.name,
           kind: ref.type,
           label: ref.name,
           usedByShotIds: shots.map((shot) => shot.id),
@@ -2150,6 +2165,10 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         shotId: shots[0]?.id,
         mediaType: "video",
         mediaPath: outputVideoPath,
+        sourceReceiptId: taskInfo.submitId ? `seedance_submit_${safePathSegment(taskInfo.submitId)}` : videoItemId,
+        providerReceiptId: taskInfo.submitId ? `seedance_submit_${safePathSegment(taskInfo.submitId)}` : videoItemId,
+        outputHash: outputVideoSha256,
+        outputSha256: outputVideoSha256,
         durationSeconds,
         status: outputVideoPath ? "returned_with_review_overlay" : statusForUi,
         videoStatus: status,
@@ -2170,6 +2189,10 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         videoStatus: status,
         submitId: taskInfo.submitId,
         taskId: taskInfo.taskId,
+        sourceReceiptId: taskInfo.submitId ? `seedance_submit_${safePathSegment(taskInfo.submitId)}` : videoItemId,
+        providerReceiptId: taskInfo.submitId ? `seedance_submit_${safePathSegment(taskInfo.submitId)}` : videoItemId,
+        outputHash: outputVideoSha256,
+        outputSha256: outputVideoSha256,
         queueInfo: taskInfo.queueInfo,
         relayQueueItemId,
         segmentId: activeSegment?.id,
@@ -2391,6 +2414,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
       : undefined;
     const outputVideoSha256 = outputVideoFilePath ? sha256File(outputVideoFilePath) : undefined;
     const relayStatus = relayStatusFromSeedance(status, outputVideoPath);
+    const failureReason = taskInfo.failureReason || "Seedance 最终生成失败。";
     const resumeCommand = activeItem.resumeCommand || (activeItem.submitId
       ? jimengResumeCommand({ submitId: activeItem.submitId, downloadDir: videoDir, cliPath: input.cliPath })
       : undefined);
@@ -2413,8 +2437,12 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         outputVideoPath,
         outputVideoSha256,
         localMediaPaths: outputVideoPath ? [outputVideoPath] : activeItem.localMediaPaths || [],
-        blockers: relayStatus === "failed" ? ["Seedance 查询失败，请检查即梦 CLI 登录状态。"] : [],
-        note: outputVideoPath ? "恢复查询已取回视频，仍需复核。" : "恢复查询未取回视频，继续保留 submitId。",
+        blockers: relayStatus === "failed" ? [failureReason] : [],
+        note: outputVideoPath
+          ? "恢复查询已取回视频，仍需复核。"
+          : relayStatus === "failed"
+            ? "恢复查询确认生成失败，保留 submitId 便于追查。"
+            : "恢复查询未取回视频，继续保留 submitId。",
       },
     });
     writeCurrentProjectRuntimeJson(relayQueueRelPath, relayQueue, source);
@@ -2429,6 +2457,9 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         ? existingPreviewPlan.previewItems.filter((item) => !belongsToActiveSegment(item))
         : [];
       const durationSeconds = activeSegment?.durationSeconds || activeItem.durationSeconds || activeShots.reduce((sum, shot) => sum + shot.durationSeconds, 0) || 5;
+      const providerReceiptId = (taskInfo.submitId || activeItem.submitId)
+        ? `seedance_submit_${safePathSegment(taskInfo.submitId || activeItem.submitId)}`
+        : videoItemId;
       const currentClip = {
         id: videoItemId,
         clipId: videoItemId,
@@ -2436,6 +2467,10 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         shotId: activeShots[0]?.id || activeItem.shotId,
         mediaType: "video",
         mediaPath: outputVideoPath,
+        sourceReceiptId: providerReceiptId,
+        providerReceiptId,
+        outputHash: outputVideoSha256,
+        outputSha256: outputVideoSha256,
         durationSeconds,
         status: "returned_with_review_overlay",
         videoStatus: "success",
@@ -2476,7 +2511,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
       }),
       endpoint: resumeEndpoint,
       status,
-      uiStatus: outputVideoPath ? "needs_review" : "submitted",
+      uiStatus: outputVideoPath ? "needs_review" : relayStatus === "failed" ? "failed" : "submitted",
       providerCalled: true,
       runtimeExternalNetworkCallMade: true,
       videoSubmitted: true,
@@ -2496,7 +2531,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
           ? "视频已回流，下一段已准备好，可以继续提交。"
           : "视频已回流，等待复核。"
         : relayStatus === "failed"
-          ? "查询失败，请检查即梦登录状态后重试。"
+          ? `即梦生成失败：${failureReason}`
           : "还在排队或生成中，已保留恢复查询入口。",
       ...extra,
     };

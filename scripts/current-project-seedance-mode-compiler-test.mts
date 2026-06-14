@@ -64,6 +64,8 @@ let projectFacts: any = {
         primaryAction: "两人隔着雨水反光对望。",
         actionTrigger: "远处列车灯闪一下。",
         microReaction: "少女眨眼，少年停住脚步。",
+        sceneAssetIds: ["scene_station"],
+        propAssetIds: ["vm_style_text", "文字风格方向"],
         characterGuidance: ["短发少女", "少年"],
         sceneGuidance: ["雨夜电车站"],
       },
@@ -80,6 +82,8 @@ let projectFacts: any = {
         primaryAction: "旧车票发光。",
         actionTrigger: "票面纹路突然亮起。",
         microReaction: "她的指尖收紧。",
+        sceneAssetIds: ["scene_station"],
+        propAssetIds: ["prop_ticket", "vm_style_text"],
         propGuidance: ["发蓝光的旧车票"],
       },
       {
@@ -96,6 +100,8 @@ let projectFacts: any = {
         sound: "音乐节奏参考，湿路脚步声。",
         seedanceDirection: "承接音乐节拍做快切，但不要让视频模型生成配乐。",
         actionBeats: ["远景看到列车进站", "脚步踏过雨水", "少女拉住少年手腕", "两人回头", "冲向黑色车门"],
+        sceneAssetIds: ["scene_station"],
+        propAssetIds: ["prop_ticket", "vm_style_text", "文字风格方向"],
         visibleClips: 3,
         storyboardPanels: 5,
         splitPolicy: "快切动作链",
@@ -110,9 +116,10 @@ let projectFacts: any = {
 const workbenchFacts: any = {
   visualMemory: {
     assets: [
-      { type: "scene", name: "雨夜电车站", path: `${runRootRelativePath}/assets/scene.png` },
-      { type: "character", name: "短发少女", path: `${runRootRelativePath}/assets/character.png` },
-      { type: "prop", name: "旧车票", path: `${runRootRelativePath}/assets/prop.png` },
+      { type: "style", id: "vm_style_text", name: "文字风格方向", textConstraints: ["1990s anime style lock"] },
+      { type: "scene", id: "scene_station", name: "雨夜电车站", path: `${runRootRelativePath}/assets/scene.png` },
+      { type: "character", id: "char_girl", name: "短发少女", path: `${runRootRelativePath}/assets/character.png` },
+      { type: "prop", id: "prop_ticket", name: "旧车票", path: `${runRootRelativePath}/assets/prop.png` },
     ],
   },
 };
@@ -255,6 +262,9 @@ assert(!/音乐|配乐|背景音乐|\bmusic\b|\bBGM\b|\bsoundtrack\b/i.test(seed
 assert(manifest.compilerMode === "storyboard_rapid_cut", "manifest compiler mode drifted");
 assert(manifest.ruleQaStatus === "pass" || manifest.ruleQaStatus === "warning", "Seedance submit should persist a non-blocking director rule QA report");
 assert(existsSync(path.resolve(repoRoot, manifest.ruleQaReportPath)), "director rule QA report should be written before provider submit");
+const ruleQaReport = JSON.parse(readFileSync(path.resolve(repoRoot, manifest.ruleQaReportPath), "utf8"));
+assert(!ruleQaReport.findings.some((finding: { code?: string; path?: string }) => finding.code === "missing_asset_reference"), "Rule QA should not report missing assets when refs use internal ids and style text assets are present");
+assert(!ruleQaReport.findings.some((finding: { path?: string }) => /vm_style_text|文字风格方向/.test(String(finding.path || ""))), "Text-only style assets must not pollute scene/character/prop reference checks");
 assert(manifest.textQaStatus === "pass" || manifest.textQaStatus === "needs_revision" || manifest.textQaStatus === "skipped", "Seedance submit should persist a non-blocking director text QA report");
 assert(existsSync(path.resolve(repoRoot, manifest.textQaReportPath)), "director text QA report should be written before Image2/Seedance submit");
 assert(manifest.ratio === "9:16", "manifest should preserve requested video ratio");

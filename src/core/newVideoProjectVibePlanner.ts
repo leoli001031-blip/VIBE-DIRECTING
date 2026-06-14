@@ -1,5 +1,6 @@
 import { buildScriptPlannerState, type ScriptPlannerResult } from "./scriptPlanner";
 import { stableKnowledgeHash } from "./knowledgeManifest";
+import { stripDirectorAgentPermissionControlPhrases } from "./directorAgentPermissionIntent";
 import type { DirectorSessionState } from "./directorSession";
 import type { StoryDiscussionDelta } from "./storyDiscussionWorkspace";
 import type { MusicRhythmAnalysis } from "./musicRhythmAnalysis";
@@ -185,7 +186,7 @@ function cleanProjectFactValue(value: unknown): string {
 
 function buildPlannerIdea(draft: NewVideoProjectVibeDraftLike): string {
   const script = clean(draft.script);
-  const style = clean(draft.style);
+  const style = cleanDraftStyle(draft.style);
   return [
     script,
     style ? `风格：${style}` : "",
@@ -802,6 +803,38 @@ function rebuildPlannerPatchOperations(planner: ScriptPlannerResult): ScriptPlan
   };
 }
 
+function draftVisualStyleDirectives(draft: NewVideoProjectVibeDraftLike): string[] {
+  const style = cleanDraftStyle(draft.style);
+  if (!style) return [];
+  return [`项目视觉风格：${style}`];
+}
+
+function cleanDraftStyle(value: unknown): string {
+  const rawStyle = cleanProjectFactValue(value).replace(/^(?:风格|画风|视觉风格|style)\s*[:：]\s*/iu, "");
+  const withoutExecutionBoundary = stripDirectorAgentPermissionControlPhrases(rawStyle)
+    .replace(/执行边界\s*[:：]\s*按用户要求限制生成\/提交[。；;,.，、\s]*/giu, "")
+    .replace(/执行边界\s*[:：][^。；;,.，、]*[。；;,.，、]*/giu, "")
+    .replace(/(?:^|[。；;,.，、\s])先(?=$|[。；;,.，、\s])/giu, " ")
+    .replace(/[。；;,.，、]\s*[。；;,.，、]+/g, "，")
+    .replace(/^[。；;,.，、\s]+|[。；;,.，、\s]+$/g, "");
+  return cleanProjectFactValue(withoutExecutionBoundary);
+}
+
+function applyDraftVisualStyleToPlanner(planner: ScriptPlannerResult, draft: NewVideoProjectVibeDraftLike): ScriptPlannerResult {
+  const styleDirectives = draftVisualStyleDirectives(draft);
+  if (!styleDirectives.length) return planner;
+  return rebuildPlannerPatchOperations({
+    ...planner,
+    shots: planner.shots.map((shot) => ({
+      ...shot,
+      directorFeedbackDirectives: unique([
+        ...(shot.directorFeedbackDirectives || []),
+        ...styleDirectives,
+      ]),
+    })),
+  });
+}
+
 function targetShotIndex(text: string, count: number): number {
   if (count <= 0) return -1;
   if (/第\s*(?:一|1)|第?1\s*(?:个|镜)|first|开头|开始/i.test(text)) return 0;
@@ -1164,7 +1197,7 @@ function referenceTextConstraints(input: {
     `${input.label}来自用户新视频入口，只能作为候选参考，不能替代已审核资产。`,
     clean(input.targetLabel) ? `${referenceKindLabel(input.kind)}目标：${shortNote(clean(input.targetLabel), 48)}` : "",
     clean(input.scopeLabel) ? `绑定范围：${clean(input.scopeLabel)}` : "",
-    input.kind === "style" && clean(input.draft.style) ? `风格方向：${shortNote(clean(input.draft.style), 48)}` : "",
+    input.kind === "style" && cleanDraftStyle(input.draft.style) ? `风格方向：${shortNote(cleanDraftStyle(input.draft.style), 48)}` : "",
     input.kind === "character" ? "用于主角身份和多视角准备。" : "",
     input.kind === "scene" ? "用于场景气氛和空间准备。" : "",
   ];
@@ -1255,7 +1288,7 @@ function buildReferenceAssets(input: {
   draftHash: string;
   planner: ScriptPlannerResult;
 }): ProjectVibeDocument["assets"] {
-  return (input.draft.references || [])
+  const uploadedAssets = (input.draft.references || [])
     .map((reference, index): ProjectVibeDocument["assets"][number] | undefined => {
       const binding = normalizedReferenceBinding(reference);
       if (!binding) return undefined;
@@ -1289,6 +1322,30 @@ function buildReferenceAssets(input: {
       };
     })
     .filter((asset): asset is ProjectVibeDocument["assets"][number] => Boolean(asset));
+  const style = cleanDraftStyle(input.draft.style);
+  const hasStyleAsset = uploadedAssets.some((asset) => asset.kind === "style");
+  if (!style || hasStyleAsset) return uploadedAssets;
+  const shotIds = input.planner.shots.map((shot) => shot.id);
+  return [
+    ...uploadedAssets,
+    {
+      id: `asset_${input.draftHash.replace(/^vck_/, "").slice(0, 10)}_style_text`,
+      kind: "style",
+      label: "文字风格方向",
+      status: "candidate",
+      textConstraints: unique([
+        `项目视觉风格：${style}`,
+        "这是一条用户文字风格约束，必须被角色、场景、道具、故事板和视频提示词继承。",
+      ]),
+      usedByShotIds: shotIds,
+      sourceRefs: unique([
+        `draft:${input.draftHash}`,
+        "new_video_reference:style:text",
+        `new_video_reference_target:style:${safeSourceRefToken(style) || "text_style"}`,
+        `script_planner:${input.planner.plannerId}`,
+      ]),
+    },
+  ];
 }
 
 function visualMemoryWithReferenceAssets(input: {
@@ -1562,8 +1619,9 @@ export function buildNewVideoProjectVibeStagedTransaction(
     generatedAt,
   });
   const deltaPlanner = applyConfirmedDiscussionDeltas(storyboardPlanner, nextDiscussionDeltas);
+  const styledPlanner = applyDraftVisualStyleToPlanner(deltaPlanner, input.draft);
   const referenceBinding = applyDraftReferenceBindings({
-    planner: deltaPlanner,
+    planner: styledPlanner,
     draft: input.draft,
     draftHash: nextDraftHash,
     project: baseProject,

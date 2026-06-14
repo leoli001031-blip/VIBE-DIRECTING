@@ -252,7 +252,7 @@ function laneForFocus(focus: StoryDiscussionTurnFocus): StoryDiscussionLaneId {
 }
 
 function nextActionForLanes(lanes: StoryDiscussionLane[]): string {
-  const waiting = lanes.find((lane) => lane.status === "waiting");
+  const waiting = lanes.find((lane) => lane.status === "waiting" && lane.id !== "audio");
   if (waiting) return `先补${waiting.label}`;
   const needsReference = lanes.find((lane) => lane.status === "needs_reference");
   if (needsReference) return `绑定${needsReference.label}`;

@@ -59,6 +59,22 @@ const sandboxWatchers = new Map<string, ReturnType<typeof fs.watch>>();
 const rootToWatchers = new Map<string, Set<string>>();
 let sandboxWatchCounter = 0;
 
+function sha256File(filePath: string): Promise<{ hash: string; size: number }> {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    let size = 0;
+    const stream = fs.createReadStream(filePath);
+    stream.on("data", (chunk) => {
+      size += chunk.length;
+      hash.update(chunk);
+    });
+    stream.on("error", reject);
+    stream.on("end", () => {
+      resolve({ hash: hash.digest("hex"), size });
+    });
+  });
+}
+
 function closeSandboxWatcher(watchId: string) {
   const watcher = sandboxWatchers.get(watchId);
   if (!watcher) return false;
@@ -447,16 +463,15 @@ function registerIpcHandlers() {
     if (!fs.existsSync(source)) {
       throw new Error(`file not found: ${source}`);
     }
-    fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.copyFileSync(source, destination);
-    const bytes = fs.readFileSync(destination);
-    const hash = crypto.createHash("sha256").update(bytes).digest("hex");
+    await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+    await fs.promises.copyFile(source, destination);
+    const { hash, size } = await sha256File(destination);
     return {
       copied: true,
       sourcePath: source,
       path: destination,
       hash,
-      size: bytes.length,
+      size,
     };
   });
 

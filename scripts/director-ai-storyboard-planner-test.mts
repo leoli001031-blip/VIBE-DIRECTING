@@ -1,5 +1,6 @@
 import {
   buildDirectorAiStoryboardPrompt,
+  extractRequestedShotCount,
   normalizeDirectorAiStoryboardPlan,
   splitCreativePlanningText,
 } from "../src/core/directorAiStoryboardPlanner.ts";
@@ -65,6 +66,17 @@ assert(prompt.includes("咖啡果、咖啡豆"), "prompt should force anthropomo
 assert(prompt.includes("车灯、轮胎、仪表"), "prompt should tell the LLM to keep object components out of standalone props");
 assert(prompt.includes("本地结构行 JSON"), "prompt should include local structure as hints only");
 assert(prompt.includes("标题、片名、项目名"), "prompt should tell the LLM that title metadata is not visual content");
+
+assert(extractRequestedShotCount("总共两个视频，每个 4 秒。视频1：女孩举纸飞机。视频2：纸飞机发光。") === 2, "explicit video segment counts should lock the generated shot count");
+assert(extractRequestedShotCount("视频1：开场。视频2：追逐。") === 2, "enumerated video labels should infer the generated shot count");
+const twoVideoPrompt = buildDirectorAiStoryboardPrompt({
+  scriptText: "总共两个视频，每个 4 秒，16:9。视频1：女孩站在便利店门口举起纸飞机。视频2：女孩放飞纸飞机，纸飞机泛起蓝光。",
+  structuralRows: [
+    { id: "video_1", title: "视频1", text: "女孩站在便利店门口举起纸飞机。", durationSeconds: 4 },
+    { id: "video_2", title: "视频2", text: "女孩放飞纸飞机，纸飞机泛起蓝光。", durationSeconds: 4 },
+  ],
+});
+assert(twoVideoPrompt.includes("用户已经明确要求 2 个镜头"), "prompt should treat explicit video counts as hard shot counts");
 
 const titleMetadataPrompt = buildDirectorAiStoryboardPrompt({
   scriptText: [
@@ -258,6 +270,18 @@ const inferredDriverNormalized = normalizeDirectorAiStoryboardPlan({
   }],
 });
 assert(inferredDriverNormalized.shots[0]!.characters === "白车车手、黑车车手", "unnamed recurring drivers should be inferred as functional character roles instead of staying pending");
+
+const visibleCharacterInferenceNormalized = normalizeDirectorAiStoryboardPlan({
+  shots: [{
+    title: "空地铁站听见海浪声",
+    characters: "无",
+    visualDescription: "凌晨的空地铁站，一个女生戴着耳机停在储物柜前，听见柜门缝里传来海浪声。",
+    primaryAction: "女生停住脚步看向储物柜。",
+    scene: "空地铁站",
+    props: "储物柜",
+  }],
+});
+assert(visibleCharacterInferenceNormalized.shots[0]!.characters === "女生", "visible human subjects in shot text should override an incorrect 无 character field");
 
 const racingAuthorityNormalized = normalizeDirectorAiStoryboardPlan({
   narrativeGoal: "用雨夜山路快切建立赛车对决，同时保护关键物道具。",

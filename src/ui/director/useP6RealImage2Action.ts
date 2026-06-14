@@ -16,8 +16,8 @@ import {
   type ProviderConfigStatus,
 } from "../../core/providerCredentialsClient";
 
-const P6_REAL_IMAGE2_PROVIDER_ID = "lanyi-image2";
-const P6_REAL_IMAGE2_CREDENTIAL_REF = "secret-store://providers/lanyi-image2/default";
+const P6_REAL_IMAGE2_PROVIDER_ID = "apikey-fun-gpt55-responses-image";
+const P6_REAL_IMAGE2_CREDENTIAL_REF = "secret-store://providers/apikey-fun-gpt55-responses-image/default";
 const P6_REAL_IMAGE2_CONFIRM_PHRASE = "submit-p6-image2";
 
 export type P6RealImage2ActionStatus = "idle" | "running" | "blocked" | "needs_review" | "verified";

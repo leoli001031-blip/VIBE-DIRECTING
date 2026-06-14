@@ -17,7 +17,6 @@ import {
 import type { ProjectRuntimeState } from "../../core/projectState";
 import type { DirectorAgentToolTrace } from "../../core/directorAgentToolTrace";
 
-const IMAGE2_ASSET_PROVIDER_ID = "lanyi-image2";
 const APIKEY_FUN_ASSET_PROVIDER_ID = "apikey-fun-gpt55-responses-image";
 const IMAGE2_ASSET_CONFIRM_PHRASE = "generate-image2-assets";
 
@@ -45,6 +44,7 @@ type UseImage2AssetGenerationActionInput = {
 };
 
 export type Image2AssetGenerationRunOptions = {
+  scope?: "project" | "selected_shots";
   selectedShotIds?: string[];
   selectedAssetId?: string;
   sectionId?: string;
@@ -65,14 +65,11 @@ function isAssetKeyConfigured(statuses: ProviderConfigStatus[]) {
 function preferredAssetProviderId(statuses: ProviderConfigStatus[]) {
   const apikeyFunConfigured = statuses.find((status) => status.providerId === APIKEY_FUN_ASSET_PROVIDER_ID)?.credential?.keyStatus === "configured";
   if (apikeyFunConfigured) return APIKEY_FUN_ASSET_PROVIDER_ID;
-  const lanyiConfigured = statuses.find((status) => status.providerId === IMAGE2_ASSET_PROVIDER_ID)?.credential?.keyStatus === "configured";
-  if (lanyiConfigured) return IMAGE2_ASSET_PROVIDER_ID;
   return undefined;
 }
 
 function assetProviderLabel(providerId: string | undefined) {
-  if (providerId === APIKEY_FUN_ASSET_PROVIDER_ID) return "GPT-5.5";
-  if (providerId === IMAGE2_ASSET_PROVIDER_ID) return "Image2";
+  if (providerId === APIKEY_FUN_ASSET_PROVIDER_ID) return "Image2";
   return "生成服务";
 }
 
@@ -80,19 +77,31 @@ function assetActionState(result: ProjectImage2AssetGenerationResult): Image2Ass
   if (result.status === "needs_review" || result.uiStatus === "needs_review") {
     return {
       status: "needs_review",
-      message: result.message || "参考已生成，先放在复核区。",
+      message: result.message || "参考已生成，去参考页看一眼，通过后再锁定。",
     };
   }
   if (result.status === "verified" || result.uiStatus === "verified") {
     return {
       status: "verified",
-      message: result.message || "参考已生成，先放在复核区。",
+      message: result.message || "参考已生成，可以继续做视频。",
     };
   }
   return {
     status: "blocked",
-    message: result.message || "参考生成未完成，可以稍后重试。",
+    message: result.message || "参考生成没有完成。已生成的内容会保留，可以稍后重试。",
   };
+}
+
+function friendlyAssetGenerationError(error: unknown) {
+  const raw = error instanceof Error ? error.message : "";
+  if (/key|api|token|credential|unauthor/i.test(raw)) return "先去设置里连接生图服务，然后再补参考。";
+  if (/timeout|timed out|network|fetch|socket|ECONN|ENOTFOUND|ETIMEDOUT/i.test(raw)) {
+    return "参考生成暂时中断。已生成的内容会保留，可以稍后重试。";
+  }
+  if (/未选择项目|未同步|连接项目失败|项目文件已打开|请选择|project/i.test(raw)) {
+    return "先打开或新建本地项目，再补参考。";
+  }
+  return raw || "参考生成失败，可以稍后重试。";
 }
 
 function uniqueShotIds(ids: Array<string | undefined>) {
@@ -157,11 +166,13 @@ function shotIdsForAsset(runtimeState: ProjectRuntimeState | undefined, assetId:
 
 function scopedAssetGenerationTarget(input: {
   runtimeState?: ProjectRuntimeState;
+  scope?: "project" | "selected_shots";
   selectedShotId?: string;
   selectedShotIds?: string[];
   selectedAssetId?: string;
   sectionId?: string;
 }) {
+  if (input.scope === "project") return assetGenerationTarget(undefined, undefined);
   const direct = uniqueShotIds([...(input.selectedShotIds || []), input.selectedShotId]);
   if (direct.length) return assetGenerationTarget(undefined, direct);
   const assetShotIds = shotIdsForAsset(input.runtimeState, input.selectedAssetId);
@@ -235,6 +246,7 @@ export function useImage2AssetGenerationAction({
     const target = options
       ? scopedAssetGenerationTarget({
           runtimeState,
+          scope: options.scope,
           selectedShotIds: options.selectedShotIds,
           selectedAssetId: options.selectedAssetId,
           sectionId: options.sectionId,
@@ -252,7 +264,10 @@ export function useImage2AssetGenerationAction({
     }
     const confirmedAt = options?.confirmedAt || new Date().toISOString();
 
-    setActionState({ status: "running", message: `正在用 ${assetProviderLabel(providerId)} 为${target.label}准备参考；结果先给你看。` });
+    setActionState({
+      status: "running",
+      message: `正在生成参考：${assetProviderLabel(providerId)} 会为${target.label}准备角色、场景、道具和故事板。通常需要几十秒到几分钟，完成后会进入参考页待复核。`,
+    });
     try {
       const submitted = await submitProjectImage2AssetGeneration(liveRuntimeProjectIdentity, {
         scope: target.scope,
@@ -276,7 +291,7 @@ export function useImage2AssetGenerationAction({
     } catch (error) {
       const nextState: Image2AssetGenerationActionState = {
         status: "blocked",
-        message: error instanceof Error ? error.message : "参考生成失败。",
+        message: friendlyAssetGenerationError(error),
       };
       setActionState(nextState);
       return nextState;
@@ -295,8 +310,8 @@ export function useImage2AssetGenerationAction({
     keyConfigured,
     status: actionState.status,
     message: actionState.message,
-    disabled: actionState.status === "running",
-  }), [actionState.message, actionState.status, keyConfigured]);
+    disabled: actionState.status === "running" || !runtimeProjectIdentity || !keyConfigured,
+  }), [actionState.message, actionState.status, keyConfigured, runtimeProjectIdentity]);
 
   return {
     assetGenerationAction,

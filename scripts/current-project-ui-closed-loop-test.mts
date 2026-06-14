@@ -164,12 +164,12 @@ function assertCreatorPanelContract() {
   assert(/连接项目/.test(surface), "ProjectRealChainPanel should expose connect project copy");
   assert(/已观察输出[\s\S]*returnedCount[\s\S]*plannedCount/.test(surface), "ProjectRealChainPanel should show observed output count");
   assert(/张需复核/.test(surface), "ProjectRealChainPanel should show needs-review image count");
-  assert(/Preview[\s\S]*ready/.test(surface), "ProjectRealChainPanel should expose preview ready state");
-  assert(/Production[\s\S]*needs_review/.test(surface), "ProjectRealChainPanel should expose production review state");
+  assert(/预览[\s\S]*可预览/.test(surface), "ProjectRealChainPanel should expose preview ready state");
+  assert(/成片[\s\S]*待复核/.test(surface), "ProjectRealChainPanel should expose production review state");
   assert(/<button disabled=\{disabled\} onClick=\{onRun\}>[\s\S]*同步状态/.test(panel), "sync status button must route to project status run-check");
   assert(/<button disabled=\{reviewDisabled\} onClick=\{onRunImage2Batch\}>[\s\S]*复核检查/.test(panel), "review check button must route to Image2 batch run-check");
   assert(/单镜头小样/.test(surface), "ProjectRealChainPanel should expose one-shot sample copy");
-  assert(/P6 单镜头小样/.test(surface), "ProjectRealChainPanel should expose P6 one-shot flow copy");
+  assert(/单镜头小样/.test(surface), "ProjectRealChainPanel should expose one-shot flow copy");
   assert(/准备小样包/.test(surface), "ProjectRealChainPanel should expose sample prepare copy");
   assert(/确认动作/.test(surface), "ProjectRealChainPanel should expose action confirmation copy");
   assert(/等待结果/.test(surface), "ProjectRealChainPanel should expose waiting-result copy");
@@ -196,14 +196,14 @@ function assertCreatorPanelContract() {
   assert(!/callImage2Provider|submitProvider|liveSubmit/.test(panel), "P6 panel must not directly trigger live generation");
   assert(/import\s+"\.\/ProjectRealChainPanel\.css"/.test(projectRealChainPanelSource), "ProjectRealChainPanel must import its extracted CSS");
   assert(/aria-label="当前项目状态"/.test(panel), "current project panel should use creator-facing status aria copy");
-  assert(/aria-label="P6 单镜头流程"/.test(panel), "P6 one-shot flow should have user-facing aria copy");
-  assert(/aria-label="P6 结果状态"/.test(panel), "P6 result status should have user-facing aria copy");
+  assert(/aria-label="单镜头流程"/.test(panel), "one-shot flow should have user-facing aria copy");
+  assert(/aria-label="单镜头结果状态"/.test(panel), "one-shot result status should have user-facing aria copy");
   assert(/aria-label="当前项目预览图"/.test(panel), "current project thumbnails should use creator-facing preview aria copy");
   assert(/\.project-real-chain-one-shot-flow\s*\{[\s\S]*grid-area:\s*flow[\s\S]*grid-template-columns:\s*repeat\(4/.test(stylesSource), "P6 flow should render as a stable four-step row");
   assert(/className="project-real-chain-messages"[\s\S]*className="project-real-chain-message"/.test(panel), "ProjectRealChainPanel should group messages before placing them in the grid");
   assert(/\.project-real-chain-messages\s*\{[\s\S]*grid-area:\s*message[\s\S]*display:\s*flex[\s\S]*flex-wrap:\s*wrap/.test(stylesSource), "project real-chain messages should share one wrapping grid item");
   assert(!/\.project-real-chain-message\s*\{[\s\S]{0,160}grid-area:\s*message/.test(stylesSource), "individual project real-chain messages must not claim the grid area");
-  assert(/displayTitle[\s\S]*runtime 状态已同步/.test(surface), "ProjectRealChainPanel should show the bound title for synced runtime status");
+  assert(/displayTitle[\s\S]*项目状态已同步/.test(surface), "ProjectRealChainPanel should show the bound title for synced project status");
   assert(/selectCurrentProjectBinding\(\{\s*projectRoot/.test(currentProjectRuntimeSurface), "current project hook must select the current project through the runtime helper");
   assert(/chooseProjectRoot\(\)/.test(app), "App must use the Electron project chooser when opening a project file root");
   assert(
@@ -273,6 +273,9 @@ function assertCreatorPanelContract() {
   assert(/rememberProjectRoot\(runtimeProjectBinding\.projectRoot\)/.test(app), "runtime-selected projects must be registered with the Electron file sandbox before local writes");
   assert(/Failed to remember runtime-selected project root/.test(app), "runtime-selected project sandbox registration must fail softly");
   assert(/projectDraftTargetForNewVideoConfirmation[\s\S]*rememberProjectRoot\(prototypeProjectDraftTarget\.projectRoot\)/.test(app), "new-video confirmation must re-register selected project folders before writing Project.vibe");
+  assert(/const\s+browserDraftHasNoLocalProject\s*=\s*projectFileSelection\.status\s*===\s*"unavailable"/.test(app), "browser drafts must explicitly mark that no local project is available");
+  assert(/localProjectReadyForUi\s*=\s*projectFileSelection\.status\s*===\s*"selected"[\s\S]*!\s*browserDraftHasNoLocalProject[\s\S]*runtimeProjectBinding\.status\s*===\s*"bound"/.test(app), "browser drafts must not inherit the previous runtime project as a local-ready project");
+  assert(/const\s+effectiveRuntimeProjectBinding\s*=\s*projectFileSelection\.status\s*===\s*"selected"[\s\S]*browserDraftHasNoLocalProject[\s\S]*status:\s*"unbound"[\s\S]*runtimeProjectBinding\.status\s*===\s*"bound"/.test(app), "browser drafts must not use stale runtime bindings when deriving current project workbench state");
   assert(/buildCurrentProjectWorkbenchProjection\(\{[\s\S]*binding:\s*effectiveRuntimeProjectBinding[\s\S]*realChainState:\s*projectRealChainState[\s\S]*image2BatchState:\s*projectImage2BatchState/.test(app), "App must derive the main workbench from current project runtime projection");
   assert(/applyCurrentProjectWorkbenchProjectionToRuntimeState\(runtimeState,\s*currentProjectProjectionForRuntime\)/.test(app), "App must bind Story Flow to the sanitized current project workbench projection");
   assert(/useCurrentProjectWorkbenchProjection\s*=\s*currentProjectWorkbenchProjection\.available/.test(app), "App must gate current-project projection so opened Project.vibe can remain the main state");
@@ -297,7 +300,7 @@ function assertCreatorPanelContract() {
   assert(/先复核参考素材，再提交视频/.test(appSource), "Video submit gate should use creator-facing review copy");
   assert(/videoSendAction=\{gatedVideoSubmitAction\}/.test(appSource), "DirectorMode must receive the gated video submit action");
   assert(/onRetryMissingBatch=\{runMissingVisualsFromStory\}/.test(app), "DirectorMode must route missing visuals through the story fallback handler");
-  assert(/hasRunnableBatch\s*=\s*retryCount\s*>\s*0[\s\S]*runProjectImage2Batch\(\)[\s\S]*runImage2AssetGeneration\(\)/.test(app), "Story fallback must only use the old batch runner for runnable retries and project reference generation otherwise");
+  assert(/hasRunnableBatch\s*=\s*retryCount\s*>\s*0[\s\S]*runProjectImage2Batch\(\)[\s\S]*runImage2AssetGeneration\(\{\}\)/.test(app), "Story fallback must only use the old batch runner for runnable retries and project-scoped reference generation otherwise");
   assert(/onRetryReviewItem=\{\(item\)\s*=>\s*applyCreatorReviewDecision\(item,\s*"retry"\)\}/.test(app), "DirectorMode must route per-item retry through Project.vibe review decisions");
   assert(/onRejectReviewItem=\{\(item\)\s*=>\s*applyCreatorReviewDecision\(item,\s*"reject"\)\}/.test(app), "DirectorMode must route reject through Project.vibe review decisions");
   assert(/submitCurrentProjectReviewDecision\(effectiveRuntimeProjectIdentity,\s*\{/.test(app), "review decisions must use the current project runtime route when a project folder is bound");
@@ -317,7 +320,10 @@ function assertCreatorPanelContract() {
   assert(/convenience_store[\s\S]*mountain_road/.test(minimalStoryFlowSource), "story flow scene matching should prefer convenience-store before mountain-road");
   assert(/function\s+isReferenceAssetPath/.test(minimalStoryFlowSource), "story flow must distinguish reusable reference assets from actual shot media");
   assert(/actualShotFramePath\(shot\.startFrame\)/.test(minimalStoryFlowSource), "story flow must not treat reference assets as real shot frames");
-  assert(/missingLabel:\s*"待生成故事板"/.test(minimalStoryFlowSource), "storyboard-mode reference bundles must reserve image 1 when the storyboard is not generated yet");
+  assert(/function\s+assetHasVisualMedia[\s\S]*png\|jpe\?g\|webp/.test(minimalStoryFlowSource), "story flow submitted-reference previews must only use real image media");
+  assert(/function\s+isTextOnlyStyleReferenceAsset[\s\S]*文字风格方向[\s\S]*项目视觉风格/.test(minimalStoryFlowSource), "story flow must filter text-only style placeholders from submitted references");
+  assert(/isUsableVisualReferenceAsset\(asset\)[\s\S]*!isStoryboardReferenceAsset\(asset\)[\s\S]*assetMatchesShot/.test(minimalStoryFlowSource), "story flow reference matching must ignore non-image placeholders");
+  assert(/missingLabel:\s*"缺故事板参考"/.test(minimalStoryFlowSource), "storyboard-mode reference bundles must reserve image 1 when the storyboard is not generated yet");
   assert(/statusLabel:\s*item\.asset\?\.path[\s\S]*item\.missingLabel/.test(minimalStoryFlowSource), "storyboard placeholder references must surface a user-facing missing state");
   assert(/storyboardStatusTone[\s\S]*strategy === "omni_reference" \? "ok" : "warn"/.test(minimalStoryFlowSource), "storyboard reference UI should not mark missing storyboard images as ready");
   assert(/没有拿到结果图，可以再次生成重试/.test(p6RealImage2ActionSource), "real Image2 UI action should tell the creator a failed result can be retried");
@@ -328,14 +334,23 @@ function assertCreatorPanelContract() {
   const creatorDeskPanelCopy = extractStringLiterals(creatorDeskPanelsSource);
   assert(/故事[\s\S]*画面[\s\S]*复核列表/.test(creatorDeskPanelsSource), "Creator desk must expose planner, preparation, and review panels in product copy");
   assert(/视频生成/.test(creatorDeskPanelsSource), "Creator desk must expose the video generation panel");
-  assert(/生成前总览[\s\S]*preflight\.modeSummary[\s\S]*preflight\.referenceSummary/.test(creatorDeskPanelsSource), "Creator desk must expose a compact preflight summary");
-  assert(/preflight:\s*buildCreatorPreflightProjection/.test(creatorDeskProjectionSource), "Creator desk projection must build preflight from the current workbench state");
+  assert(/生成前总览[\s\S]*displayPreflight\.modeSummary[\s\S]*displayPreflight\.referenceSummary/.test(creatorDeskPanelsSource), "Creator desk must expose a compact preflight summary");
+  assert(/const agentStage = buildCreatorAgentStage/.test(creatorDeskProjectionSource), "Creator desk projection must expose one Agent stage for the primary next action");
+  assert(/agentCommand:\s*buildCreatorAgentCommand\(agentStage\)/.test(creatorDeskProjectionSource), "Creator desk projection must expose one Agent command for the primary action");
+  assert(/const \{ agentStage,\s*agentCommand,[^}]*scriptPlanner/.test(creatorDeskPanelsSource), "Creator desk panels must read the unified Agent stage and command");
+  assert(/nextActionCopy[\s\S]*agentCommand\.label/.test(creatorDeskPanelsSource), "Creator desk summary copy must come from the unified Agent command");
+  assert(/agentCommand\.kind === "open_preview"/.test(creatorDeskPanelsSource), "Creator desk preview hint must follow the Agent command");
+  assert(/agentCommand\.kind === "open_export"/.test(creatorDeskPanelsSource), "Creator desk export hint must follow the Agent command");
+  assert(!/creator-primary-action|runCreatorPrimaryAction/.test(creatorDeskPanelsSource), "Creator desk summary must not duplicate the bottom primary action");
+  assert(/const preflight = buildCreatorPreflightProjection/.test(creatorDeskProjectionSource), "Creator desk projection must build preflight from the current workbench state");
   assert(/故事板叙事[\s\S]*故事板快切[\s\S]*全能参考/.test(creatorDeskProjectionSource), "Creator desk preflight must summarize the three generation modes");
+  assert(/function\s+isTextOnlyStyleAsset[\s\S]*new_video_reference:style:text[\s\S]*文字风格方向[\s\S]*项目视觉风格/.test(creatorDeskProjectionSource), "Creator desk must filter text-only style placeholders from review counts");
+  assert(/videoRecoverable[\s\S]*查询结果[\s\S]*视频已提交，可以查询结果/.test(creatorDeskProjectionSource), "Creator desk preflight must treat recoverable queued videos as queryable, not as a new submit state");
   for (const statusLabel of ["未生成", "已提交", "排队中", "生成中", "已完成", "可稍后恢复"]) {
     assert(new RegExp(statusLabel).test(creatorDeskPanelsSource), `Creator desk must expose ${statusLabel} video status`);
   }
   assert(/即梦常见约[\s\S]*分钟[\s\S]*可以离开后恢复查询/.test(creatorDeskPanelsSource), "Creator desk must describe long Jimeng waits with resume copy");
-  for (const statusLabel of ["待复核", "待补齐", "可重试", "已通过", "已锁定"]) {
+  for (const statusLabel of ["待复核", "缺参考", "可重试", "已通过", "已锁定"]) {
     assert(new RegExp(statusLabel).test(creatorDeskPanelCopy), `Creator desk must expose ${statusLabel}`);
   }
   for (const actionLabel of ["通过", "重试", "拒绝", "锁定", "绑定为", "查看说明"]) {
@@ -351,7 +366,10 @@ function assertCreatorPanelContract() {
   assert(!/Script Planner|Batch Generation|Review Tray|Needs review|Missing|Approved|Locked|Approve/.test(creatorDeskPanelCopy), "Creator desk panels must not expose English planner/review copy");
   assert(/concurrencyLabel:\s*"Concurrency 10"[\s\S]*retryLabel:\s*"Retry Missing"/.test(creatorDeskProjectionSource), "Creator batch projection must show concurrency 10 and Retry Missing");
   assert(/safetyLabel[\s\S]*Retry downshifts to/.test(creatorDeskProjectionSource), "Creator batch projection must expose retry downshift copy");
-  assert(/videoGeneration[\s\S]*buildCreatorVideoGenerationProjection/.test(creatorDeskProjectionSource), "Creator desk projection must include Jimeng video status");
+  assert(/videoStage[\s\S]*buildCreatorVideoStageProjection[\s\S]*videoGeneration\s*=\s*videoStage\.generation/.test(creatorDeskProjectionSource), "Creator desk projection must include a single Jimeng video stage");
+  assert(/const videoGeneration = videoStage\.generation/.test(creatorDeskPanelsSource), "Creator desk panels must read video state from the single video stage");
+  assert(/projectRealChainRelayQueue\s*=\s*projectRealChainState\.summary\?\.relayQueue[\s\S]*relayQueue:\s*projectRealChainRelayQueue/.test(app), "Creator desk must pass the persisted Seedance relay queue into the projection");
+  assert(/videoGenerationFromRelayQueue[\s\S]*relayQueue\.status\s*===\s*"complete"[\s\S]*"submitted"/.test(creatorDeskProjectionSource), "Creator desk projection must map the persisted relay queue to visible video status");
   assert(!/provider|schema|task[-\s]*envelope/i.test(creatorDeskPanelsSource), "Creator desk panels must not expose engineering terms");
   assert(/确认/.test(agentPanelContractSource), "Agent Panel confirmation action should use creator-facing confirmation copy");
   assert(/创作者路径/.test(agentPanelSource), "Agent Panel should label the default creator path");
@@ -1113,7 +1131,7 @@ assert(workbench004.identity.projectRoot.endsWith("/004"), "workbench root shoul
 assert(workbench004.shots.map((shot) => shot.id).join(",") === "S01", "Story Flow should come from selected 004 preview items");
 assert(workbench004.selectedScope.defaultShotId === "S01", "selected scope should fail closed to the current 004 shot when stale S07 is selected");
 assert(workbench004.assets.readOnlyProjection === true, "Asset Library should be a read-only current project projection until visual memory is present");
-assert(/当前项目资产待补齐|等待生成或锁定|等待生成或复核/.test(workbench004.assets.detail), "Asset Library should show current-project pending asset copy");
+assert(/当前项目资产缺参考|等待生成或锁定|等待生成或复核/.test(workbench004.assets.detail), "Asset Library should show current-project pending asset copy");
 assert(!JSON.stringify(workbench004).includes("/005"), "004 workbench projection must not include stale 005 root");
 
 const current004FactsRealChain = deriveProjectRealChainStatus({
@@ -1301,7 +1319,7 @@ const storyMissingProjection = buildCurrentProjectWorkbenchProjection({
   },
 });
 assert(storyMissingProjection.shots.map((shot) => shot.id).join(",") === "S01", "missing story_flow should safely fall back to current preview items");
-assert(/待补齐故事流/.test(storyMissingProjection.story.detail), "missing story_flow should show safe pending copy");
+assert(/待写故事流/.test(storyMissingProjection.story.detail), "missing story_flow should show safe pending copy");
 
 const storyUnreadableFacts = {
   ...workbenchFacts004,
@@ -1329,7 +1347,7 @@ const visualMissingProjection = buildCurrentProjectWorkbenchProjection({
   },
 });
 assert(visualMissingProjection.assets.readOnlyProjection === true, "missing visual_memory should keep read-only fallback");
-assert(/当前项目资产待补齐/.test(visualMissingProjection.assets.detail), "missing visual_memory should show safe asset fallback copy");
+assert(/当前项目资产缺参考/.test(visualMissingProjection.assets.detail), "missing visual_memory should show safe asset fallback copy");
 
 const emptyCurrentProjectFacts = {
   ...workbenchFacts004,
@@ -1388,7 +1406,7 @@ const stale005Under004 = buildCurrentProjectWorkbenchProjection({
 });
 assert(stale005Under004.identity.projectId === "real-demo-e2e-004", "stale status must not override selected 004 identity");
 assert(stale005Under004.shots[0].id === "CURRENT_PROJECT", "mismatched summaries should fall back to current project placeholder");
-assert(/待补齐故事流/.test(stale005Under004.shots[0].storyFunction), "Story Flow fallback should be current-project safe copy");
+assert(/待写故事流/.test(stale005Under004.shots[0].storyFunction), "Story Flow fallback should be current-project safe copy");
 assert(!JSON.stringify(stale005Under004).includes("/005"), "mismatched 005 data must not leak into the current 004 workbench");
 
 const workbench005 = buildCurrentProjectWorkbenchProjection({

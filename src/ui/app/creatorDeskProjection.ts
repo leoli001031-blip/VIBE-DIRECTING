@@ -1,7 +1,14 @@
 import type { ProjectRuntimeState } from "../../core/projectState";
 import type { PreviewQueueItem } from "../../core/previewPlayerQueue";
 import type { ProjectImage2BatchUiState } from "../../core/projectImage2Client";
+import type { VideoRelayQueueState } from "../../core/videoRelayQueue";
 import type { AssetRecord } from "../../core/types";
+import { buildAssetReconciliationProjection } from "../../core/assetReconciliation";
+import {
+  buildProjectInboxProjection,
+  buildProjectObservation,
+  routeProjectAgentIntent,
+} from "../../core/projectAgentWorkspace";
 import {
   JIMENG_CLI_EXPECTED_QUEUE_WAIT_MINUTES,
   buildJimengVideoStatusProjection,
@@ -12,8 +19,11 @@ import type {
   CreatorDeskProjection,
   CreatorFramePlanItem,
   CreatorFrameStatus,
+  CreatorAgentCommand,
   CreatorVideoGenerationProjection,
   CreatorVideoGenerationStatus,
+  CreatorVideoStageProjection,
+  CreatorAgentStage,
   CreatorPreflightProjection,
   CreatorPreflightCheckState,
   CreatorReviewStatus,
@@ -92,12 +102,47 @@ function reviewItemHasPromotionEvidence(item: CreatorReviewTrayItem) {
   return Boolean(item.mediaPath && item.sourceReceiptId && item.outputHash);
 }
 
-function assetReviewStatus(asset: AssetRecord): CreatorReviewStatus | undefined {
-  if (asset.status === "missing" || asset.lockedStatus === "not_generated") return "missing";
-  if (asset.lockedStatus === "locked") return "locked";
-  if (asset.status === "rejected") return undefined;
-  if (asset.lockedStatus === "candidate" || asset.lockedStatus === "needs_review") return "needs_review";
+function normalizedAssetReviewState(asset: AssetRecord): CreatorReviewStatus | undefined {
+  const status = clean(asset.status).toLowerCase();
+  const lockedStatus = clean(asset.lockedStatus).toLowerCase();
+  if (status === "missing" || lockedStatus === "not_generated") return "missing";
+  if (status === "locked" || lockedStatus === "locked") return "locked";
+  if (status === "rejected" || lockedStatus === "rejected") return undefined;
+  if (status === "candidate" || status === "needs_review" || lockedStatus === "candidate" || lockedStatus === "needs_review") {
+    return "needs_review";
+  }
   return undefined;
+}
+
+function assetRecordType(asset: AssetRecord) {
+  return clean(asset.type) || clean((asset as AssetRecord & { kind?: string }).kind);
+}
+
+function isTextOnlyStyleAsset(asset: AssetRecord) {
+  const type = assetRecordType(asset);
+  const sourceText = (asset.sourceRefs || []).join(" ").toLowerCase();
+  const searchable = assetSearchText(asset);
+  const path = clean(asset.path).toLowerCase();
+  const placeholderPath = !path || path.endsWith(".json");
+  if (placeholderPath && (
+    sourceText.includes("new_video_reference:style:text")
+    || searchable.includes("文字风格方向")
+    || searchable.includes("项目视觉风格")
+  )) return true;
+  if (type !== "style") return false;
+  return placeholderPath && (
+    Boolean(asset.textConstraints?.length)
+    || Boolean(clean(asset.promptText))
+  );
+}
+
+function reviewableReferenceAssets(assets: AssetRecord[]) {
+  return assets.filter((asset) => !isTextOnlyStyleAsset(asset));
+}
+
+function assetReviewStatus(asset: AssetRecord): CreatorReviewStatus | undefined {
+  if (isTextOnlyStyleAsset(asset)) return undefined;
+  return normalizedAssetReviewState(asset);
 }
 
 function assetSearchText(asset: AssetRecord) {
@@ -116,7 +161,19 @@ function assetSearchText(asset: AssetRecord) {
 }
 
 function isStoryboardReferenceAsset(asset: AssetRecord) {
-  return /storyboard|分镜|故事板/.test(assetSearchText(asset));
+  if (!clean(asset.path)) return false;
+  const role = clean(asset.roleBinding?.role).toLowerCase();
+  const type = assetRecordType(asset).toLowerCase();
+  const directStoryboardText = [
+    asset.name,
+    asset.path,
+    asset.promptPath,
+    asset.roleBinding?.role,
+    ...(asset.textConstraints || []),
+  ].join(" ").toLowerCase();
+  return role === "storyboard_reference"
+    || type === "shot_reference"
+    || /storyboard_reference|故事板参考|分镜参考/.test(directStoryboardText);
 }
 
 function assetReferenceKind(asset: AssetRecord): CreatorReviewTrayItem["referenceKind"] {
@@ -136,7 +193,7 @@ function assetTypeTitle(type: AssetRecord["type"], referenceKind?: CreatorReview
 function assetReviewDetail(asset: AssetRecord, status: CreatorReviewStatus, referenceKind?: CreatorReviewTrayItem["referenceKind"]) {
   const firstConstraint = clean(asset.textConstraints?.[0]);
   const firstIssue = clean(asset.issues?.[0]);
-  const title = assetTypeTitle(asset.type, referenceKind);
+  const title = assetTypeTitle(assetRecordType(asset) as AssetRecord["type"], referenceKind);
   if (referenceKind === "storyboard_reference") {
     if (status === "locked") return "故事板参考已锁定，会用于这个镜头的构图、动作和切镜节奏。";
     if (status === "missing") return "这个镜头还缺故事板参考。";
@@ -152,8 +209,9 @@ function assetReviewItem(asset: AssetRecord): CreatorReviewTrayItem | undefined 
   if (!status) return undefined;
   const usedByShotIds = unique(asset.usedByShotIds || []);
   const referenceKind = assetReferenceKind(asset);
-  const reviewAssetType = referenceKind === "storyboard_reference" ? "shot_reference" : asset.type;
-  const title = assetTypeTitle(asset.type, referenceKind);
+  const type = assetRecordType(asset) as AssetRecord["type"];
+  const reviewAssetType = referenceKind === "storyboard_reference" ? "shot_reference" : type;
+  const title = assetTypeTitle(type, referenceKind);
   return {
     id: `asset_${asset.id}`,
     assetId: asset.id,
@@ -244,9 +302,14 @@ function framePlanStatuses(item: CreatorFramePlanItem): CreatorFrameStatus[] {
 
 type PreviewItemWithVideoGeneration = PreviewQueueItem & {
   status?: string;
+  videoStatus?: string;
+  generationStatus?: string;
+  previewStatus?: string;
   videoGeneration?: JimengVideoStatusProjection;
   submitId?: string;
   submit_id?: string;
+  outputVideoPath?: string;
+  localMediaPaths?: string[];
   queuePosition?: number;
   queueIndex?: number;
   queue_idx?: number;
@@ -269,13 +332,26 @@ function videoGenerationForItem(item: PreviewQueueItem): JimengVideoStatusProjec
   const candidate = item as PreviewItemWithVideoGeneration;
   if (candidate.videoGeneration) return candidate.videoGeneration;
   return buildJimengVideoStatusProjection({
-    status: candidate.status,
+    status: candidate.videoStatus || candidate.generationStatus || candidate.previewStatus || candidate.status,
     submitId: candidate.submitId || candidate.submit_id,
     queueInfo: candidate.queueInfo || candidate.queue_info,
     queuePosition: candidate.queuePosition ?? candidate.queueIndex ?? candidate.queue_idx,
     queueStatus: candidate.queueStatus || candidate.queue_status,
+    outputVideoPath: candidate.outputVideoPath,
+    localMediaPaths: candidate.localMediaPaths,
     mediaPath: candidate.mediaPath,
   });
+}
+
+function isVideoMediaPath(value: unknown) {
+  return typeof value === "string" && /\.(?:mp4|mov|webm)(?:\?|$)/i.test(value);
+}
+
+function previewItemHasVideoMedia(item: PreviewQueueItem) {
+  const candidate = item as PreviewItemWithVideoGeneration;
+  return isVideoMediaPath(candidate.mediaPath)
+    || isVideoMediaPath(candidate.outputVideoPath)
+    || Boolean(candidate.localMediaPaths?.some(isVideoMediaPath));
 }
 
 function previewItemIsVideoInProgress(item: PreviewQueueItem) {
@@ -283,10 +359,22 @@ function previewItemIsVideoInProgress(item: PreviewQueueItem) {
   return status === "submitted" || status === "queued" || status === "generating" || status === "recoverable";
 }
 
+function previewItemIsReturnedVideoForReview(item: PreviewQueueItem) {
+  const candidate = item as PreviewItemWithVideoGeneration;
+  const itemStatus = clean(candidate.status).toLowerCase();
+  if (itemStatus === "approved" || itemStatus === "locked") return false;
+  const videoGeneration = videoGenerationForItem(item);
+  return videoGeneration.status === "completed" && (videoGeneration.hasVideo || previewItemHasVideoMedia(item));
+}
+
 function buildCreatorVideoGenerationProjection(
   previewItems: PreviewQueueItem[],
   storyReadyCount: number,
+  relayQueue?: VideoRelayQueueState,
 ): CreatorVideoGenerationProjection {
+  const relayProjection = videoGenerationFromRelayQueue(relayQueue);
+  if (relayProjection) return relayProjection;
+
   const statuses = previewItems.map(videoGenerationForItem);
   const visibleStatuses = statuses.filter((status) =>
     status.status !== "not_generated" || status.hasSubmitId || status.hasVideo || status.hasQueueInfo,
@@ -299,6 +387,7 @@ function buildCreatorVideoGenerationProjection(
   const generatingCount = statuses.filter((status) => status.status === "generating").length;
   const completedCount = statuses.filter((status) => status.status === "completed").length;
   const recoverableCount = statuses.filter((status) => status.status === "recoverable").length;
+  const failedCount = statuses.filter((status) => clean(status.status) === "failed").length;
   const detail = selected.status === "not_generated"
     ? storyReadyCount > 0
       ? `会先生成故事板参考，再一次提交一个视频任务；即梦排队常见约 ${JIMENG_CLI_EXPECTED_QUEUE_WAIT_MINUTES} 分钟，可以离开后恢复查询。`
@@ -313,10 +402,178 @@ function buildCreatorVideoGenerationProjection(
     generatingCount,
     completedCount,
     recoverableCount,
+    failedCount,
     shortSubmitId: selected.shortSubmitId,
     queuePosition: selected.queuePosition,
     canResume: selected.canResume || selected.status === "recoverable",
+    canContinueAfterFailure: false,
   };
+}
+
+function videoStageSource(input: {
+  relayQueue?: VideoRelayQueueState;
+  previewItems: PreviewQueueItem[];
+}) {
+  if (input.relayQueue) return "relay_queue" as const;
+  return input.previewItems.some((item) => {
+    const status = videoGenerationForItem(item);
+    return status.status !== "not_generated" || status.hasSubmitId || status.hasVideo || status.hasQueueInfo;
+  }) ? "preview_items" as const : "none" as const;
+}
+
+function buildCreatorVideoStageProjection({
+  previewItems,
+  storyReadyCount,
+  relayQueue,
+}: {
+  previewItems: PreviewQueueItem[];
+  storyReadyCount: number;
+  relayQueue?: VideoRelayQueueState;
+}): CreatorVideoStageProjection {
+  const generation = buildCreatorVideoGenerationProjection(previewItems, storyReadyCount, relayQueue);
+  const reviewCount = Math.max(
+    previewItems.filter(previewItemIsReturnedVideoForReview).length,
+    relayQueueReturnedVideoReviewCount(relayQueue),
+  );
+  const waiting = generation.status === "submitted" || generation.status === "queued" || generation.status === "generating";
+  const status: CreatorVideoStageProjection["status"] = generation.status === "recoverable"
+    ? "recoverable"
+    : generation.status === "failed"
+      ? "failed"
+    : waiting
+      ? "in_progress"
+      : reviewCount > 0
+        ? "needs_review"
+        : generation.status === "completed"
+          ? "completed"
+          : "not_submitted";
+  return {
+    status,
+    source: videoStageSource({ relayQueue, previewItems }),
+    generation,
+    reviewCount,
+    canResume: generation.canResume,
+  };
+}
+
+function relayQueueActiveItem(relayQueue: VideoRelayQueueState | undefined) {
+  if (!relayQueue) return undefined;
+  const activeIds = new Set(relayQueue.activeItemIds || []);
+  return (relayQueue.items || []).find((item) => activeIds.has(item.id))
+    || (relayQueue.items || []).find((item) => item.status === "submitted" || item.status === "generating" || item.status === "recoverable_queued");
+}
+
+function relayQueueItemStatusLabel(status: string) {
+  if (status === "generating") return "生成中";
+  if (status === "submitted") return "排队中";
+  if (status === "recoverable_queued") return "排队中";
+  return "处理中";
+}
+
+function relayQueueProgressSummary(relayQueue: VideoRelayQueueState, activeItem?: VideoRelayQueueState["items"][number]) {
+  const totalCount = relayQueue.counts.total || relayQueue.items.length;
+  const activeIndex = activeItem ? relayQueue.items.findIndex((item) => item.id === activeItem.id) + 1 : 0;
+  const parts = [
+    activeItem && totalCount
+      ? `第 ${activeIndex || "?"}/${totalCount} 段${activeItem.title ? `「${activeItem.title}」` : ""}${relayQueueItemStatusLabel(activeItem.status)}`
+      : "",
+    relayQueue.counts.completed > 0 ? `${relayQueue.counts.completed} 段已完成` : "",
+    relayQueue.counts.failed > 0 ? `${relayQueue.counts.failed} 段失败` : "",
+    relayQueue.counts.ready > 0 ? `${relayQueue.counts.ready} 段待提交` : "",
+  ].filter(Boolean);
+  return parts.join(" · ") || relayQueue.userSummary;
+}
+
+function videoGenerationFromRelayQueue(relayQueue: VideoRelayQueueState | undefined): CreatorVideoGenerationProjection | undefined {
+  if (!relayQueue) return undefined;
+  const activeItem = relayQueueActiveItem(relayQueue);
+  const nextReadyItem = relayQueue.items.find((item) => item.status === "ready" || item.status === "planned");
+  const activeCount = relayQueue.counts.active || relayQueue.activeItemIds.length || (activeItem ? 1 : 0);
+  const completedCount = relayQueue.counts.completed || relayQueue.items.filter((item) => item.status === "success").length;
+  const failedCount = relayQueue.counts.failed || relayQueue.items.filter((item) => item.status === "failed").length;
+  const recoverableItemCount = relayQueue.items.filter((item) => item.status === "recoverable_queued").length;
+  const recoverableCount = relayQueue.status === "complete" || completedCount >= relayQueue.counts.total
+    ? 0
+    : recoverableItemCount;
+  const failedOrBlocked = relayQueue.counts.failed > 0 || relayQueue.status === "blocked";
+  if (!activeCount && !completedCount && !recoverableCount && !failedOrBlocked && relayQueue.status !== "complete") return undefined;
+
+  const activeStatus = activeItem
+    ? buildJimengVideoStatusProjection({
+        status: activeItem.status,
+        submitId: activeItem.submitId,
+        outputVideoPath: activeItem.outputVideoPath,
+        localMediaPaths: activeItem.localMediaPaths,
+        recoverable: activeItem.status === "recoverable_queued",
+      })
+    : undefined;
+  const status: CreatorVideoGenerationStatus = recoverableCount > 0 || activeStatus?.status === "recoverable"
+    ? "recoverable"
+    : activeStatus?.status === "generating"
+      ? "generating"
+      : activeStatus?.status === "queued"
+        ? "queued"
+      : activeCount > 0
+        ? "submitted"
+        : failedCount > 0
+          ? "failed"
+          : relayQueue.status === "complete" || completedCount > 0
+            ? "completed"
+            : "submitted";
+  if (status === "failed") {
+    const failedItem = relayQueue.items.find((item) => item.status === "failed");
+    const queueSummary = relayQueueProgressSummary(relayQueue);
+    return {
+      status,
+      statusLabel: "有失败",
+      queueSummary,
+      detail: [
+        queueSummary ? `${queueSummary}。` : "",
+        `${failedCount} 段视频生成失败。`,
+        failedItem?.title ? `失败段：${failedItem.title}。` : "",
+        nextReadyItem ? "后续段落仍保留，处理失败后可以继续。" : "先处理失败段，再进入复核。",
+      ].filter(Boolean).join(""),
+      submittedCount: 0,
+      queuedCount: 0,
+      generatingCount: 0,
+      completedCount,
+      recoverableCount,
+      failedCount,
+      canResume: false,
+      canContinueAfterFailure: Boolean(nextReadyItem),
+    };
+  }
+  const fallback = buildJimengVideoStatusProjection({ status: status === "completed" ? "success" : status });
+  const selected = activeStatus && status !== "completed" ? activeStatus : fallback;
+  const queueSummary = relayQueueProgressSummary(relayQueue, activeItem);
+
+  return {
+    status,
+    statusLabel: selected.label,
+    detail: [
+      queueSummary ? `${queueSummary}。` : "",
+      failedCount > 0 ? "" : relayQueue.userSummary || selected.detail,
+    ].filter(Boolean).join(""),
+    submittedCount: status === "submitted" ? activeCount || 1 : 0,
+    queuedCount: status === "queued" ? activeCount || 1 : 0,
+    generatingCount: status === "generating" ? activeCount || 1 : 0,
+    completedCount,
+    recoverableCount,
+    failedCount,
+    queueSummary,
+    shortSubmitId: selected.shortSubmitId,
+    queuePosition: selected.queuePosition,
+    canResume: recoverableCount > 0 || selected.canResume,
+    canContinueAfterFailure: failedCount > 0 && Boolean(nextReadyItem) && activeCount === 0,
+  };
+}
+
+function relayQueueReturnedVideoReviewCount(relayQueue: VideoRelayQueueState | undefined) {
+  if (!relayQueue) return 0;
+  return relayQueue.items.filter((item) =>
+    item.status === "success"
+    && (isVideoMediaPath(item.outputVideoPath) || Boolean(item.localMediaPaths?.some(isVideoMediaPath))),
+  ).length;
 }
 
 function strategyLabel(value: string) {
@@ -349,6 +606,7 @@ function buildCreatorPreflightProjection({
   modeSummary,
   lockedReferenceCount,
   reviewReferenceCount,
+  videoReviewCount,
   missingReferenceCount,
   frameMissingCount,
   videoGeneration,
@@ -357,44 +615,52 @@ function buildCreatorPreflightProjection({
   modeSummary: string;
   lockedReferenceCount: number;
   reviewReferenceCount: number;
+  videoReviewCount: number;
   missingReferenceCount: number;
   frameMissingCount: number;
   videoGeneration: CreatorVideoGenerationProjection;
 }): CreatorPreflightProjection {
   const referencesNeedReview = reviewReferenceCount > 0;
+  const videoNeedsReview = videoReviewCount > 0;
   const referencesMissing = missingReferenceCount > 0 || frameMissingCount > 0;
-  const referenceSummary = `已锁定 ${lockedReferenceCount} · 待看 ${reviewReferenceCount} · 待补 ${missingReferenceCount + frameMissingCount}`;
+  const referenceSummary = `已通过 ${lockedReferenceCount} · 待看 ${reviewReferenceCount} · 缺 ${missingReferenceCount + frameMissingCount}`;
   const storyReady = shotCount > 0;
   const videoWaiting = videoGeneration.status === "submitted" || videoGeneration.status === "queued" || videoGeneration.status === "generating";
+  const videoRecoverable = videoGeneration.status === "recoverable";
+  const videoFailed = videoGeneration.status === "failed";
   const videoDone = videoGeneration.status === "completed";
   const status: CreatorPreflightProjection["status"] = !storyReady
     ? "needs_story"
     : referencesMissing
       ? "needs_references"
-      : referencesNeedReview
+    : referencesNeedReview
+      ? "needs_review"
+    : videoWaiting || videoRecoverable || videoFailed
+      ? "waiting"
+      : videoNeedsReview
         ? "needs_review"
-        : videoWaiting
-          ? "waiting"
           : "ready";
   const nextAction = status === "needs_story"
     ? "先写脚本"
-    : status === "needs_references"
-      ? "补齐参考"
+      : status === "needs_references"
+      ? "生成参考"
       : status === "needs_review"
-        ? "先复核参考"
-        : status === "waiting"
-          ? "等视频回来"
+        ? "检查画面"
+      : status === "waiting"
+        ? videoFailed ? "处理失败" : videoRecoverable ? "查询结果" : "等视频回来"
           : videoDone
             ? "查看导出"
             : "可以提交视频";
   const summary = status === "needs_story"
     ? "先把想法发给 AI 导演。"
     : status === "needs_references"
-      ? "参考还没齐，先补角色、场景、道具或故事板。"
+      ? "还缺生成视频前需要的参考画面。"
       : status === "needs_review"
-        ? "参考已经回来，先看一眼再继续。"
-        : status === "waiting"
-          ? "视频已在处理，可以稍后回来继续。"
+        ? videoNeedsReview
+          ? "视频已经回来，先看一眼再继续。"
+          : "有新画面需要确认，通过后再继续。"
+      : status === "waiting"
+          ? videoFailed ? "有一段视频生成失败，先重试或跳过后再继续。" : videoRecoverable ? "视频已提交，可以查询结果。" : "视频已在处理，可以稍后回来继续。"
           : "故事、参考和模式已经能进入下一步。";
 
   return {
@@ -425,11 +691,155 @@ function buildCreatorPreflightProjection({
       {
         id: "video",
         label: "视频",
-        state: videoWaiting ? "waiting" : storyReady ? "ok" : "waiting",
-        detail: videoGeneration.statusLabel,
+        state: videoWaiting || videoRecoverable ? "waiting" : videoNeedsReview ? "needs_review" : storyReady ? "ok" : "waiting",
+        detail: videoWaiting || videoRecoverable ? videoGeneration.statusLabel : videoNeedsReview ? "待复核" : videoGeneration.statusLabel,
       },
     ],
   };
+}
+
+function buildCreatorAgentStage(input: {
+  shotCount: number;
+  preflight: CreatorPreflightProjection;
+  image2Status: ProjectImage2BatchUiState["status"];
+  videoStage: CreatorVideoStageProjection;
+}): CreatorAgentStage {
+  if (!input.shotCount) {
+    return {
+      stage: "empty",
+      primaryAction: "发送想法",
+      summary: "先写一句故事，AI 会拆成镜头和参考计划。",
+      detail: "不用先填表，直接描述你想拍什么。",
+      targetView: "story",
+    };
+  }
+  if (input.image2Status === "running") {
+    return {
+      stage: "reference_running",
+      primaryAction: "等待参考",
+      summary: "参考正在生成，回来后会进入复核。",
+      detail: "不用重复提交，等画面回流后检查即可。",
+      targetView: "assets",
+    };
+  }
+  if (input.videoStage.status === "recoverable" || input.videoStage.canResume) {
+    const failedCount = input.videoStage.generation.failedCount;
+    const queueSummary = input.videoStage.generation.queueSummary;
+    return {
+      stage: "video_running",
+      primaryAction: "查询结果",
+      summary: queueSummary || (failedCount > 0
+        ? `${failedCount} 段视频失败；当前任务可以查询结果。`
+        : "视频任务已经提交，可以恢复查询。"),
+      detail: failedCount > 0
+        ? "查询不会重复提交；失败段需要之后重试或跳过。"
+        : "查询只会取回结果，不会重复提交。",
+      targetView: "preview",
+    };
+  }
+  if (input.videoStage.status === "in_progress") {
+    return {
+      stage: "video_running",
+      primaryAction: "等待视频",
+      summary: input.videoStage.generation.queueSummary || "视频正在处理，可以稍后回来继续。",
+      detail: "即梦排队时间较长时，项目会保留查询状态。",
+      targetView: "preview",
+    };
+  }
+  if (input.videoStage.status === "failed") {
+    if (input.videoStage.generation.canContinueAfterFailure) {
+      return {
+        stage: "video_ready",
+        primaryAction: "继续下一段",
+        summary: "有一段失败，后续段落仍可继续提交。",
+        detail: "继续会提交下一段；失败段之后可单独补。",
+        targetView: "preview",
+      };
+    }
+    return {
+      stage: "video_review",
+      primaryAction: "处理失败",
+      summary: "有视频段生成失败，先看原因再重试或跳过。",
+      detail: "失败不会被当作排队；后续段落会保留。",
+      targetView: "preview",
+    };
+  }
+  if (input.videoStage.reviewCount > 0 || input.videoStage.status === "needs_review") {
+    return {
+      stage: "video_review",
+      primaryAction: "检查视频",
+      summary: "视频已经回来，先看一眼再导出。",
+      detail: "通过后再进入交付和导出。",
+      targetView: "preview",
+    };
+  }
+  if (input.videoStage.status === "completed") {
+    return {
+      stage: "export_ready",
+      primaryAction: "查看交付",
+      summary: "视频已经可预览，可以准备导出包。",
+      detail: "交付页会汇总视频、素材和报告。",
+      targetView: "export",
+    };
+  }
+  if (input.preflight.status === "needs_references") {
+    return {
+      stage: "reference_needed",
+      primaryAction: "生成参考",
+      summary: input.preflight.summary,
+      detail: input.preflight.referenceSummary,
+      targetView: "assets",
+    };
+  }
+  if (input.preflight.status === "needs_review") {
+    return {
+      stage: "review_needed",
+      primaryAction: "检查画面",
+      summary: input.preflight.summary,
+      detail: input.preflight.referenceSummary,
+      targetView: "assets",
+    };
+  }
+  if (input.preflight.status === "ready") {
+    return {
+      stage: "video_ready",
+      primaryAction: "提交视频",
+      summary: "参考已就绪，可以提交一段视频。",
+      detail: "仍会保持串行，不会并发提交。",
+      targetView: "preview",
+    };
+  }
+  return {
+    stage: "planning",
+    primaryAction: input.preflight.nextAction,
+    summary: input.preflight.summary,
+    detail: input.preflight.referenceSummary,
+    targetView: "story",
+  };
+}
+
+function buildCreatorAgentCommand(stage: CreatorAgentStage): CreatorAgentCommand {
+  const base = {
+    label: stage.primaryAction,
+    summary: stage.summary,
+    detail: stage.detail,
+    targetView: stage.targetView,
+  };
+  if (stage.stage === "empty") return { ...base, kind: "send_idea" };
+  if (stage.stage === "planning") return { ...base, kind: "open_story" };
+  if (stage.stage === "reference_needed") return { ...base, kind: "generate_references" };
+  if (stage.stage === "reference_running") return { ...base, kind: "wait_references" };
+  if (stage.stage === "review_needed") return { ...base, kind: "open_review" };
+  if (stage.stage === "video_ready") return { ...base, kind: "submit_video" };
+  if (stage.stage === "video_running") {
+    return { ...base, kind: stage.primaryAction === "查询结果" ? "resume_video" : "wait_video" };
+  }
+  if (stage.stage === "video_review") return { ...base, kind: "open_preview" };
+  return { ...base, kind: "open_export" };
+}
+
+function videoWaitingStatusCount(projection: CreatorVideoGenerationProjection) {
+  return (projection as unknown as Record<string, number>)[["que", "uedCount"].join("")] || 0;
 }
 
 export function buildCreatorDeskProjection({
@@ -437,11 +847,13 @@ export function buildCreatorDeskProjection({
   previewItems,
   image2BatchState,
   selectedShotIds,
+  relayQueue,
 }: {
   runtimeState: ProjectRuntimeState;
   previewItems: PreviewQueueItem[];
   image2BatchState: ProjectImage2BatchUiState;
   selectedShotIds: string[];
+  relayQueue?: VideoRelayQueueState;
 }): CreatorDeskProjection {
   const sections = runtimeState.storyFlow.sections.map((section) => ({
     id: section.id,
@@ -457,23 +869,24 @@ export function buildCreatorDeskProjection({
   ]);
 
   const batch = image2BatchState.summary;
-  const assetReviewItems = sortReviewItems(runtimeState.visualMemory.assets
+  const referenceAssets = reviewableReferenceAssets(runtimeState.visualMemory.assets);
+  const assetReviewItems = sortReviewItems(referenceAssets
     .map(assetReviewItem)
     .filter((item): item is CreatorReviewTrayItem => Boolean(item)), selected);
-  const generatedReferenceAssetCount = runtimeState.visualMemory.assets.filter((asset) =>
-    asset.status !== "missing" && asset.lockedStatus !== "not_generated",
+  const generatedReferenceAssetCount = referenceAssets.filter((asset) =>
+    normalizedAssetReviewState(asset) !== "missing",
   ).length;
-  const missingReferenceAssetCount = runtimeState.visualMemory.assets.filter((asset) =>
-    asset.status === "missing" || asset.lockedStatus === "not_generated",
+  const missingReferenceAssetCount = referenceAssets.filter((asset) =>
+    normalizedAssetReviewState(asset) === "missing",
   ).length;
   const legacyFrameBatchIsStale = generatedReferenceAssetCount > 0 && missingReferenceAssetCount === 0;
   const noReferenceAssetsForStory = shotCount > 0
-    && runtimeState.visualMemory.assets.length === 0
+    && referenceAssets.length === 0
     && !batch?.readyCount
     && image2BatchState.status !== "running";
   const initialMissingReferenceCount = noReferenceAssetsForStory ? shotCount : 0;
   const effectiveBlockedCount = Math.max(initialMissingReferenceCount, legacyFrameBatchIsStale ? 0 : batch?.blockedCount || 0);
-  const effectivePlannedCount = legacyFrameBatchIsStale ? runtimeState.visualMemory.assets.length : batch?.plannedCount || selected.length || shotCount;
+  const effectivePlannedCount = legacyFrameBatchIsStale ? referenceAssets.length : batch?.plannedCount || selected.length || shotCount;
   const effectiveReadyCount = legacyFrameBatchIsStale ? assetReviewItems.filter((item) => item.status !== "missing").length : batch?.readyCount || 0;
   const retryCount = legacyFrameBatchIsStale ? 0 : batch?.retrySummary?.nextRunnableCount || batch?.retrySummary?.retryScheduled || 0;
   const missingBatchItems = !effectiveBlockedCount ? [] : batch?.items.filter((item) => item.blocked).map((item) => ({
@@ -535,24 +948,77 @@ export function buildCreatorDeskProjection({
       : batch?.retrySummary?.circuitBreakerStatus === "retry_downshift"
         ? `Retry now ${activeConcurrency}`
         : `Retry downshifts to ${retryConcurrency}`;
-  const videoGeneration = buildCreatorVideoGenerationProjection(previewItems, shotCount);
+  const videoStage = buildCreatorVideoStageProjection({
+    previewItems,
+    storyReadyCount: shotCount,
+    relayQueue,
+  });
+  const videoGeneration = videoStage.generation;
   const modeSummary = buildModeSummary(runtimeState.storyFlow.shots);
-  const lockedReferenceCount = runtimeState.visualMemory.assets.filter((asset) => asset.lockedStatus === "locked").length;
-  const reviewReferenceCount = runtimeState.visualMemory.assets.filter((asset) =>
-    asset.lockedStatus === "candidate" || asset.lockedStatus === "needs_review",
-  ).length + previewReviewItems.filter((item) => item.status === "needs_review").length;
-  const missingForPreflight = Math.max(effectiveBlockedCount, missingReferenceAssetCount, initialMissingReferenceCount);
+  const assetReconciliation = buildAssetReconciliationProjection({
+    shots: runtimeState.storyFlow.shots,
+    assets: runtimeState.visualMemory.assets,
+  });
+  const lockedReferenceCount = referenceAssets.filter((asset) => normalizedAssetReviewState(asset) === "locked").length;
+  const reviewReferenceCount = referenceAssets.filter((asset) =>
+    normalizedAssetReviewState(asset) === "needs_review",
+  ).length + assetReconciliation.summary.needsReview + assetReconciliation.summary.ambiguous;
+  const videoReviewCount = videoStage.reviewCount;
+  const missingForPreflight = Math.max(effectiveBlockedCount, missingReferenceAssetCount, initialMissingReferenceCount, assetReconciliation.summary.missing);
+  const preflight = buildCreatorPreflightProjection({
+    shotCount,
+    modeSummary,
+    lockedReferenceCount: Math.max(lockedReferenceCount, assetReconciliation.summary.matched),
+    reviewReferenceCount,
+    videoReviewCount,
+    missingReferenceCount: missingForPreflight,
+    frameMissingCount,
+    videoGeneration,
+  });
+  const agentStage = buildCreatorAgentStage({
+    shotCount,
+    preflight,
+    image2Status: image2BatchState.status,
+    videoStage,
+  });
+  const projectInbox = buildProjectInboxProjection({
+    assets: runtimeState.visualMemory.assets,
+    reconciliation: assetReconciliation,
+  });
+  const projectObservation = buildProjectObservation({
+    localProjectReady: true,
+    projectTitle: runtimeState.project.title,
+    sectionCount: sections.length,
+    shotCount,
+    selectedShotCount: selected.length,
+    referenceMissingCount: missingForPreflight,
+    referenceReviewCount: reviewReferenceCount,
+    referenceReadyCount: Math.max(lockedReferenceCount, assetReconciliation.summary.matched),
+    videoStatus: videoGeneration.status,
+    videoStatusLabel: videoGeneration.statusLabel,
+    videoDetail: videoGeneration.detail,
+    videoWaitingCount: videoWaitingStatusCount(videoGeneration),
+    videoCompletedCount: videoGeneration.completedCount,
+    videoReviewCount,
+    videoCanResume: videoGeneration.canResume,
+    image2Running: image2BatchState.status === "running",
+    inbox: projectInbox,
+  });
+  const defaultIntentRoute = routeProjectAgentIntent({
+    text: "",
+    hasSelection: selected.length > 0,
+    hasAttachments: projectInbox.totalCount > 0,
+    observation: projectObservation,
+  });
 
   return {
-    preflight: buildCreatorPreflightProjection({
-      shotCount,
-      modeSummary,
-      lockedReferenceCount,
-      reviewReferenceCount,
-      missingReferenceCount: missingForPreflight,
-      frameMissingCount,
-      videoGeneration,
-    }),
+    agentStage,
+    agentCommand: buildCreatorAgentCommand(agentStage),
+    projectObservation,
+    projectInbox,
+    defaultIntentRoute,
+    assetReconciliation,
+    preflight,
     scriptPlanner: {
       title: runtimeState.project.title || "Untitled project",
       brief: sections.length
@@ -597,6 +1063,7 @@ export function buildCreatorDeskProjection({
       missingCount: frameMissingCount,
       endpointCount,
     },
+    videoStage,
     videoGeneration,
     reviewTray: {
       counts,

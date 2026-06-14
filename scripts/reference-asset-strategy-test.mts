@@ -87,8 +87,10 @@ assert(classifyReferenceAssetText("雨后凌晨山脊", "scene").bucket === "sta
 assert(classifyReferenceAssetText("清晨", "scene").bucket === "scene_constraint", "time of day alone should be a scene constraint, not a scene asset");
 assert(!referenceAssetCandidates(["白色跑车驾驶者", "短发少女", "眼神"], "character").includes("白色跑车驾驶者"), "vehicle controller should not become character reference");
 assert(referenceAssetCandidates(["白色跑车驾驶者", "白车车手", "黑车车手", "短发少女", "白色双门车", "眼神"], "character").join("|") === "白车车手|黑车车手|短发少女", "functional driver roles and real character identities should remain");
+assert(referenceAssetCandidates(["戴黄色雨衣的小女孩；迷你送货机器人"], "character").join("|") === "戴黄色雨衣的小女孩|迷你送货机器人", "listed character identities should split into reusable subjects");
 assert(referenceAssetCandidates(["云南高原咖啡园", "清晨", "温暖城市咖啡馆内"], "scene").join("|") === "云南高原咖啡园|温暖城市咖啡馆内", "scene reference candidates should keep locations and drop time-only details");
 assert(referenceAssetCandidates(["山脚便利店", "同上", "白色双门车"], "scene").join("|") === "山脚便利店", "scene candidates should drop placeholders and vehicle objects");
+assert(referenceAssetCandidates(["自动售货机；水坑；迷你送货机器人"], "prop").join("|") === "自动售货机|迷你送货机器人", "listed props should split and drop scene-only details like puddles");
 
 const buckets = referenceConstraintBuckets(["车灯", "湿路", "白色跑车", "手指", "发光车票", "天空", "手机屏幕", "梯子", "电线", "检修盒"]);
 assert(buckets.standalone.join("|") === "白色跑车|发光车票", "standalone bucket mismatch");

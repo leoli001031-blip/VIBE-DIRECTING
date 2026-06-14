@@ -27,6 +27,10 @@ export const runtimeToolIds = ["agentCli", "image2Runtime", "ffmpeg", "ffprobe",
 
 type RuntimeToolId = (typeof runtimeToolIds)[number];
 
+const APIKEY_FUN_IMAGE_PROVIDER_ID = "apikey-fun-gpt55-responses-image";
+const APIKEY_FUN_PRIMARY_ENDPOINT = "https://slb.apikey.fun/v1/responses";
+const APIKEY_FUN_FALLBACK_ENDPOINT = "https://api.apikey.fun/v1/responses";
+
 const defaultToolPaths: Record<RuntimeToolId, RuntimeToolPath> = {
   agentCli: {
     id: "agent",
@@ -84,8 +88,8 @@ export function buildProviderEnablement(): RuntimeConfig["providerEnablement"] {
     {
       slot: "image.generate",
       state: "active",
-      activeProvider: "lanyi-image2",
-      allowedProviders: ["lanyi-image2", "openai-image2-agent-cli", "openai-image2-api"],
+      activeProvider: APIKEY_FUN_IMAGE_PROVIDER_ID,
+      allowedProviders: [APIKEY_FUN_IMAGE_PROVIDER_ID, "openai-image2-agent-cli", "openai-image2-api"],
       forbiddenProviders: ["dreamina", "jimeng", "seedream", "seedance"],
       liveSubmitAllowed: false,
       notes: [`Image generation slot defaults to ${IMAGE2_GENERATE_MAX_CONCURRENCY} concurrent requests at ${IMAGE2_GENERATE_DEFAULT_SIZE}; failed shots retry at ${IMAGE2_GENERATE_RETRY_CONCURRENCY} concurrent requests before remaining missing.`],
@@ -93,8 +97,8 @@ export function buildProviderEnablement(): RuntimeConfig["providerEnablement"] {
     {
       slot: "image.edit",
       state: "active",
-      activeProvider: "lanyi-image2",
-      allowedProviders: ["lanyi-image2", "openai-image2-agent-cli", "openai-image2-api"],
+      activeProvider: APIKEY_FUN_IMAGE_PROVIDER_ID,
+      allowedProviders: [APIKEY_FUN_IMAGE_PROVIDER_ID, "openai-image2-agent-cli", "openai-image2-api"],
       forbiddenProviders: ["dreamina", "jimeng", "seedream", "seedance"],
       liveSubmitAllowed: false,
       notes: [`Image edit slot remains Image2-only; reference edits default and cap at ${IMAGE2_REFERENCE_EDIT_MAX_CONCURRENCY} concurrent requests, retry at ${IMAGE2_REFERENCE_EDIT_RETRY_CONCURRENCY}, and allow no text-to-image fallback.`],
@@ -102,8 +106,8 @@ export function buildProviderEnablement(): RuntimeConfig["providerEnablement"] {
     {
       slot: "image.reference_asset",
       state: "active",
-      activeProvider: "lanyi-image2",
-      allowedProviders: ["lanyi-image2", "openai-image2-agent-cli", "openai-image2-api"],
+      activeProvider: APIKEY_FUN_IMAGE_PROVIDER_ID,
+      allowedProviders: [APIKEY_FUN_IMAGE_PROVIDER_ID, "openai-image2-agent-cli", "openai-image2-api"],
       forbiddenProviders: ["dreamina", "jimeng", "seedream", "seedance"],
       liveSubmitAllowed: false,
       notes: ["Reference assets can be planned against Image2 only."],
@@ -153,9 +157,9 @@ export function buildProviderEnablement(): RuntimeConfig["providerEnablement"] {
 export function buildProviderAdapterSettings(): ProviderAdapterSetting[] {
   return [
     {
-      id: "adapter-lanyi-image2",
-      label: "Lanyi Image2",
-      providerId: "lanyi-image2",
+      id: "adapter-apikey-fun-image2",
+      label: "Apikey.fun Image2",
+      providerId: APIKEY_FUN_IMAGE_PROVIDER_ID,
       slot: "image.generate",
       requiredMode: "text2image",
       state: "active",
@@ -173,7 +177,7 @@ export function buildProviderAdapterSettings(): ProviderAdapterSetting[] {
         cameraControl: "textual",
       },
       forbiddenRoutes: ["fast_model", "vip_channel", "text_to_video_main_path", "bgm_in_video_prompt", "live_submit"],
-      notes: ["Uses Image2-compatible generation through the configured base URL; key material stays outside Project.vibe and export packages."],
+      notes: [`Uses ${APIKEY_FUN_PRIMARY_ENDPOINT} by default and falls back to ${APIKEY_FUN_FALLBACK_ENDPOINT} on retryable transport failures; key material stays outside Project.vibe and export packages.`],
     },
     {
       id: "adapter-openai-image2-agent-cli",
@@ -335,12 +339,11 @@ export function buildProviderConfigs(): RuntimeProviderConfig[] {
       notes: ["Director planning model only. It plans shots and prompts; it does not submit image or video jobs."],
     },
     {
-      providerId: "lanyi-image2",
-      label: "Lanyi Image2",
+      providerId: APIKEY_FUN_IMAGE_PROVIDER_ID,
+      label: "Apikey.fun Image2",
       providerKind: "image",
-      baseUrl: "https://lanyiapi.com",
-      imageModel: "gpt-image-2",
-      chatModel: "claude-opus-4-6",
+      baseUrl: APIKEY_FUN_PRIMARY_ENDPOINT,
+      imageModel: "gpt-5.5",
       endpointMode: "responses_api",
       concurrencyPolicy: {
         imageGenerateMaxConcurrency: IMAGE2_GENERATE_MAX_CONCURRENCY,
@@ -357,12 +360,12 @@ export function buildProviderConfigs(): RuntimeProviderConfig[] {
       },
       source: "default",
       credential: {
-        envKey: "VIBE_IMAGE2_API_KEY",
+        envKey: "VIBE_APIKEY_FUN_API_KEY",
         keyStatus: "not_configured",
         source: "none",
         secretDisplayed: false,
       },
-      notes: ["Settings may show status and masked/local references, never raw key material."],
+      notes: [`Primary endpoint: ${APIKEY_FUN_PRIMARY_ENDPOINT}. Fallback endpoint: ${APIKEY_FUN_FALLBACK_ENDPOINT}. Settings may show status and masked/local references, never raw key material.`],
     },
     {
       providerId: "local-index-tts",

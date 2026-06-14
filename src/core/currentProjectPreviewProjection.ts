@@ -3,6 +3,7 @@ import {
   buildJimengVideoStatusProjection,
   type JimengVideoStatusProjection,
 } from "./jimengVideoCli";
+import type { VideoRelayQueueItem, VideoRelayQueueState } from "./videoRelayQueue";
 
 export const currentProjectPreviewProjectionSchemaVersion = "0.1.0";
 export const currentProjectPreviewProjectionSource = "current_project_runtime_truth" as const;
@@ -83,6 +84,12 @@ export interface CurrentProjectPreviewPlanClipInput {
   mediaPath?: string;
   imageUrl?: string;
   fileUrl?: string;
+  sourceReceiptId?: string;
+  providerReceiptId?: string;
+  providerRequestId?: string;
+  outputHash?: string;
+  outputSha256?: string;
+  providerOutputSha256?: string;
   durationSeconds?: number;
   duration_seconds?: number;
   duration?: number;
@@ -159,6 +166,7 @@ export interface BuildCurrentProjectPreviewProjectionInput {
   summary?: CurrentProjectPreviewSummaryInput;
   previewItems?: CurrentProjectPreviewItemInput[];
   previewPlan?: CurrentProjectPreviewPlanInput;
+  relayQueue?: VideoRelayQueueState;
   projectId?: string;
   projectRoot?: string;
   generatedAt?: string;
@@ -226,16 +234,22 @@ function statusLooksLikeSelfReport(value: string | undefined) {
 }
 
 function statusLooksPreviewEligible(value: string | undefined) {
-  return statusMatches(value, /^(complete_verified|verified|needs_review|returned|returned_with_review_overlay)$/);
+  return statusMatches(value, /^(complete_verified|verified|approved|pass|ready|success|needs_review|returned|returned_with_review_overlay)$/);
 }
 
 function itemMediaPath(item: CurrentProjectPreviewItemInput, clip: CurrentProjectPreviewPlanClipInput | undefined) {
-  return stringValue(item.imageUrl)
-    ?? stringValue(item.fileUrl)
-    ?? stringValue(item.mediaPath)
-    ?? stringValue(item.thumbnailUrl)
+  const directMediaPath = stringValue(item.mediaPath)
     ?? clipMediaPath(clip)
     ?? stringValue(item.expectedOutputPath);
+  const mediaType = String(item.mediaType || clip?.mediaType || clip?.type || "").toLowerCase();
+  if (mediaType.includes("video") || mediaLooksVideo(directMediaPath)) return directMediaPath
+    ?? stringValue(item.imageUrl)
+    ?? stringValue(item.fileUrl)
+    ?? stringValue(item.thumbnailUrl);
+  return stringValue(item.imageUrl)
+    ?? stringValue(item.fileUrl)
+    ?? directMediaPath
+    ?? stringValue(item.thumbnailUrl)
 }
 
 function itemLabel(shotId: string | undefined, index: number) {
@@ -250,7 +264,7 @@ function itemKind(
 ): PreviewQueueItemKind {
   if (blocked || !mediaPath) return "missing_placeholder";
   const mediaType = String(item.mediaType || clip?.mediaType || clip?.type || "").toLowerCase();
-  if (mediaType.includes("video")) return "video_clip";
+  if (mediaType.includes("video") || mediaLooksVideo(mediaPath)) return "video_clip";
   return "image_hold";
 }
 
@@ -329,14 +343,91 @@ function clipList(previewPlan: CurrentProjectPreviewPlanInput | undefined): Curr
   return (raw || []).map(asClip).filter((clip): clip is CurrentProjectPreviewPlanClipInput => Boolean(clip));
 }
 
+function relayItemStatusForPreview(item: VideoRelayQueueItem) {
+  if (item.status === "success") return "needs_review";
+  if (item.status === "recoverable_queued") return "queued";
+  return item.status;
+}
+
+function relayItemHasPreviewValue(item: VideoRelayQueueItem) {
+  return item.status === "submitted"
+    || item.status === "generating"
+    || item.status === "recoverable_queued"
+    || item.status === "success"
+    || item.status === "failed"
+    || item.status === "blocked";
+}
+
+function relayQueuePreviewItems(relayQueue: VideoRelayQueueState | undefined): CurrentProjectPreviewItemInput[] {
+  if (!relayQueue) return [];
+  return relayQueue.items
+    .filter(relayItemHasPreviewValue)
+    .map((item, index) => {
+      const localVideoPath = item.outputVideoPath || item.localMediaPaths?.find(mediaLooksVideo);
+      return {
+        id: `relay_${item.id}`,
+        shotId: item.shotId,
+        order: index + 1,
+        mediaType: "video",
+        mediaPath: localVideoPath,
+        outputVideoPath: item.outputVideoPath,
+        localMediaPaths: item.localMediaPaths,
+        status: relayItemStatusForPreview(item),
+        videoStatus: relayItemStatusForPreview(item),
+        submitId: item.submitId,
+        durationSeconds: item.durationSeconds,
+        reviewRequired: item.status === "success",
+        outputExists: item.status === "success" && Boolean(localVideoPath),
+        blockers: item.blockers,
+        recoverable: item.status === "recoverable_queued",
+      };
+    });
+}
+
+function mergeRuntimePreviewItems(
+  normalized: CurrentProjectPreviewItemInput[],
+  relayItems: CurrentProjectPreviewItemInput[],
+) {
+  if (!relayItems.length) return normalized;
+  if (!normalized.length) return relayItems;
+  const consumedRelayIds = new Set<string>();
+  const relayByShotId = byShotId(relayItems);
+  const merged = normalized.map((item) => {
+    const relay = item.shotId ? relayByShotId.get(item.shotId) : undefined;
+    if (!relay) return item;
+    consumedRelayIds.add(relay.id || relay.shotId || "");
+    return {
+      ...item,
+      ...relay,
+      id: item.id || relay.id,
+      order: item.order ?? relay.order,
+      sourceReceiptId: item.sourceReceiptId,
+      providerReceiptId: item.providerReceiptId,
+      providerRequestId: item.providerRequestId,
+      outputHash: item.outputHash,
+      outputSha256: item.outputSha256,
+      promptText: item.promptText,
+      promptPath: item.promptPath,
+      promptHash: item.promptHash,
+    };
+  });
+  return [
+    ...merged,
+    ...relayItems.filter((item) => !consumedRelayIds.has(item.id || item.shotId || "")),
+  ];
+}
+
 function previewItemList(
   summary: CurrentProjectPreviewSummaryInput | undefined,
   previewItems: CurrentProjectPreviewItemInput[] | undefined,
   clips: CurrentProjectPreviewPlanClipInput[],
+  relayQueue: VideoRelayQueueState | undefined,
 ): CurrentProjectPreviewItemInput[] {
   const explicit = previewItems?.length ? previewItems : summary?.previewItems;
   const normalized = (explicit || []).map(asPreviewItem).filter((item): item is CurrentProjectPreviewItemInput => Boolean(item));
-  if (normalized.length) return normalized;
+  const relayItems = relayQueuePreviewItems(relayQueue);
+  if (normalized.length) return mergeRuntimePreviewItems(normalized, relayItems);
+  if (relayItems.length) return relayItems;
   return clips
     .filter((clip) => Boolean(clip.shotId))
     .map((clip) => ({
@@ -347,6 +438,12 @@ function previewItemList(
       imageUrl: clip.imageUrl,
       fileUrl: clip.fileUrl,
       status: clip.status,
+      sourceReceiptId: clip.sourceReceiptId,
+      providerReceiptId: clip.providerReceiptId,
+      providerRequestId: clip.providerRequestId,
+      outputHash: clip.outputHash,
+      outputSha256: clip.outputSha256,
+      providerOutputSha256: clip.providerOutputSha256,
       previewQaStatus: clip.previewQaStatus,
       productionQaStatus: clip.productionQaStatus,
     }));
@@ -415,7 +512,7 @@ export function buildCurrentProjectPreviewProjection(
   const reviewShots = reviewShotSet(summary);
   let startSeconds = 0;
 
-  const items = sortedItems(previewItemList(summary, input.previewItems, clips)).map((item, index): CurrentProjectPreviewQueueItem => {
+  const items = sortedItems(previewItemList(summary, input.previewItems, clips, input.relayQueue)).map((item, index): CurrentProjectPreviewQueueItem => {
     const shotId = stringValue(item.shotId);
     const clip = shotId ? clipsByShotId.get(shotId) : undefined;
     const status = normalizeStatus(item.status, item.previewStatus, item.runtimeTruthStatus, clip?.status);
@@ -439,11 +536,11 @@ export function buildCurrentProjectPreviewProjection(
       source: currentProjectPreviewProjectionSource,
       order: numberValue(item.order) ?? numberValue(clip?.order) ?? index + 1,
       status,
-      sourceReceiptId: stringValue(item.sourceReceiptId) || stringValue(item.providerReceiptId) || stringValue(item.providerRequestId),
-      providerReceiptId: stringValue(item.providerReceiptId),
-      providerRequestId: stringValue(item.providerRequestId),
-      outputHash: stringValue(item.outputHash) || stringValue(item.outputSha256) || stringValue(item.providerOutputSha256),
-      outputSha256: stringValue(item.outputSha256) || stringValue(item.providerOutputSha256),
+      sourceReceiptId: stringValue(item.sourceReceiptId) || stringValue(item.providerReceiptId) || stringValue(item.providerRequestId) || stringValue(clip?.sourceReceiptId) || stringValue(clip?.providerReceiptId) || stringValue(clip?.providerRequestId),
+      providerReceiptId: stringValue(item.providerReceiptId) || stringValue(clip?.providerReceiptId),
+      providerRequestId: stringValue(item.providerRequestId) || stringValue(clip?.providerRequestId),
+      outputHash: stringValue(item.outputHash) || stringValue(item.outputSha256) || stringValue(item.providerOutputSha256) || stringValue(clip?.outputHash) || stringValue(clip?.outputSha256) || stringValue(clip?.providerOutputSha256),
+      outputSha256: stringValue(item.outputSha256) || stringValue(item.providerOutputSha256) || stringValue(clip?.outputSha256) || stringValue(clip?.providerOutputSha256),
       promptText: stringValue(item.promptText),
       promptPath: stringValue(item.promptPath),
       promptHash: stringValue(item.promptHash),

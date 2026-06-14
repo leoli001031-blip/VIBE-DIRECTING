@@ -13,6 +13,11 @@ import {
   fetchApikeyFunImageViaResponses,
 } from "./apikey-fun-responses-image-transport.mts";
 import { fetchImageBytesFromProvider, image2ProviderTimeoutMs } from "./runtime-api-current-project-p6-real-image2-submit.mts";
+import {
+  parseProjectVibeText,
+  refreshProjectVibeSourceIndex,
+  serializeProjectVibe,
+} from "../src/project/index.ts";
 
 const CONFIRM_PHRASE = "generate-image2-assets";
 const MOCK_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=", "base64");
@@ -199,7 +204,7 @@ function assetGenerateRequestInput(url, body) {
     selectedShotId,
     selectedShotIds,
     assetTypes: assetTypes.length ? assetTypes : ["character", "scene", "prop"],
-    providerId: requestBodyString(body, ["providerId"]) || "lanyi-image2",
+    providerId: requestBodyString(body, ["providerId"]) || "apikey-fun-gpt55-responses-image",
     agentTaskEnvelope: agentTaskEnvelopeFromRequest(body?.agentTaskEnvelope),
     confirmation: isRecord(body?.confirmation) ? body.confirmation : undefined,
     mockProviderResult: mockProviderResult.enabled,
@@ -263,6 +268,21 @@ function projectCharacterIdentityKeys(workbenchFacts, projectFacts) {
 
 function projectStyleHint(projectFacts) {
   const projectVibe = isRecord(projectFacts?.projectVibe) ? projectFacts.projectVibe : projectFacts;
+  const styleAssets = Array.isArray(projectVibe?.assets)
+    ? projectVibe.assets.filter((asset) => asset?.kind === "style" || asset?.type === "style")
+    : [];
+  const visualMemory = isRecord(projectFacts?.visualMemory) ? projectFacts.visualMemory : {};
+  const legacyStyle = isRecord(visualMemory?.style) ? visualMemory.style : undefined;
+  const styleFacts = uniqueStrings([
+    ...styleAssets.flatMap((asset) => [
+      asString(asset?.label),
+      asString(asset?.displayName),
+      ...(Array.isArray(asset?.textConstraints) ? asset.textConstraints : []),
+    ]),
+    asString(legacyStyle?.displayName),
+    asString(legacyStyle?.name),
+    ...(Array.isArray(legacyStyle?.textConstraints) ? legacyStyle.textConstraints : []),
+  ]);
   const evidenceRefs = Array.isArray(projectVibe?.receipts?.scriptPlanningReceipts)
     ? projectVibe.receipts.scriptPlanningReceipts.flatMap((receipt) => textArray(receipt?.evidenceRefs))
     : [];
@@ -272,9 +292,13 @@ function projectStyleHint(projectFacts) {
     asString(projectVibe?.manifest?.style),
     asString(projectVibe?.style),
     asString(projectVibe?.visualStyle),
+    ...styleFacts,
     ...evidenceRefs,
   ]).join(" ").replace(/[_-]+/g, " ");
   const hints = [];
+  if (styleFacts.length) {
+    hints.push(`Project visual style lock: ${styleFacts.slice(0, 6).join(" / ")}.`);
+  }
   if (/1990.*日本.*tv.*动画|日本\s*tv\s*动画|日漫|赛璐珞|手绘赛璐珞|cel\s*animation|cel-shaded|anime/i.test(raw)) {
     hints.push("风格锁定：1990年代日本TV动画，克制色彩，干净手绘赛璐珞上色，柔和手绘背景。");
   }
@@ -291,6 +315,8 @@ function richShotStoryText(rawShot, selected) {
     asString(rawShot?.summary),
     asString(rawShot?.storyFunction),
     asString(rawShot?.description),
+    ...textArray(rawShot?.directorFeedbackDirectives),
+    ...textArray(rawShot?.feedbackDirectives),
     ...textArray(rawShot?.characterGuidance),
     ...textArray(rawShot?.sceneGuidance),
     ...textArray(rawShot?.propGuidance),
@@ -311,15 +337,16 @@ function selectedShotFacts(workbenchFacts, projectFacts, selectedShotId) {
     ...textArray(rawShot?.roleIds),
     ...textArray(rawShot?.characterIds),
     ...textArray(rawShot?.characterAssetIds),
-  ]);
+  ]).filter((value) => !isPlaceholderReferenceText(value));
   const explicitPropIds = uniqueStrings([
     ...textArray(rawShot?.propIds),
     ...textArray(rawShot?.props),
     ...textArray(rawShot?.objectIds),
     ...textArray(rawShot?.propAssetIds),
-  ]);
+  ]).filter((value) => !isPlaceholderReferenceText(value));
   const knownCharacterKeys = projectCharacterIdentityKeys(workbenchFacts, projectFacts);
-  const rawPropReferences = explicitPropIds.length ? explicitPropIds : textArray(rawShot?.propGuidance);
+  const rawPropReferences = (explicitPropIds.length ? explicitPropIds : textArray(rawShot?.propGuidance))
+    .filter((value) => !isPlaceholderReferenceText(value));
   const propIdsThatAreCharacters = rawPropReferences.filter((id) => knownCharacterKeys.has(normalizedAssetIdentity(id)));
   const propReferenceCandidates = rawPropReferences.filter((id) => !knownCharacterKeys.has(normalizedAssetIdentity(id)));
   const propBuckets = referenceConstraintBuckets(propReferenceCandidates);
@@ -334,10 +361,11 @@ function selectedShotFacts(workbenchFacts, projectFacts, selectedShotId) {
       || asString(selected?.sectionId)
       || asString(rawShot?.sectionId),
     roleIds: referenceAssetCandidates(uniqueStrings([
-      ...(explicitRoleIds.length ? explicitRoleIds : textArray(rawShot?.characterGuidance)),
+      ...(explicitRoleIds.length ? explicitRoleIds : textArray(rawShot?.characterGuidance).filter((value) => !isPlaceholderReferenceText(value))),
       ...propIdsThatAreCharacters,
     ]), "character"),
     propIds: propBuckets.standalone,
+    propReferencesSource: explicitPropIds.length ? "explicit" : "guidance",
     objectDetailIds: propBuckets.objectConstraints,
     vehicleDetailIds: propBuckets.objectConstraints,
     sceneDetailIds: propBuckets.sceneConstraints,
@@ -449,6 +477,35 @@ function isStoryboardAssetRecord(asset) {
   return /storyboard|分镜/.test(text);
 }
 
+function isStyleAssetRecord(asset) {
+  if (!isRecord(asset)) return false;
+  const structuralText = uniqueStrings([
+    asset.kind,
+    asset.assetKind,
+    asset.assetType,
+    asset.type,
+    asset.category,
+    asset.roleBinding?.role,
+  ]).join(" ").toLowerCase();
+  if (/\bstyle\b|visual_style|style_reference|风格/.test(structuralText)) return true;
+  const identityText = uniqueStrings([
+    asset.id,
+    asset.assetId,
+    asset.label,
+    asset.name,
+    asset.displayName,
+  ]).join(" ").toLowerCase();
+  return /(^|[_\-\s])style($|[_\-\s])|style_text|visual_style|文字风格方向|视觉风格方向|画风方向/.test(identityText);
+}
+
+function visualMemoryRenderableType(asset) {
+  if (isStyleAssetRecord(asset) || isStoryboardAssetRecord(asset)) return undefined;
+  if (asset?.assetType === "character" || asset?.type === "character" || asset?.kind === "character") return "character";
+  if (asset?.assetType === "scene" || asset?.type === "scene" || asset?.kind === "scene") return "scene";
+  if (asset?.assetType === "prop" || asset?.type === "prop" || asset?.kind === "prop") return "prop";
+  return undefined;
+}
+
 function assetReferencePath(asset) {
   return asString(asset?.mainReferencePath) || asString(asset?.path) || asString(asset?.referencePath);
 }
@@ -481,6 +538,11 @@ function normalizedAssetIdentity(value) {
     .toLowerCase()
     .replace(/[\s_-]+/g, "")
     .trim();
+}
+
+function isPlaceholderReferenceText(value) {
+  const text = String(value || "").trim().toLowerCase();
+  return /^(无|没有|暂无|不需要|none|null|n\/a|na|同上|待补|待确认|unknown|tbd)$/i.test(text);
 }
 
 function assetIdentityKeys(spec) {
@@ -535,32 +597,34 @@ function assetSpecsForShot(workbenchFacts, selected, assetTypes) {
   const covered = new Set();
   let sceneCovered = false;
   for (const asset of assets) {
-    if (isStoryboardAssetRecord(asset)) continue;
-    if (!includeType(asset.type)) continue;
-    if (!assetMatchesShot(asset, selected)) continue;
+    if (isStyleAssetRecord(asset) || isStoryboardAssetRecord(asset)) continue;
+    const assetType = visualMemoryRenderableType(asset);
+    if (!assetType || !includeType(assetType)) continue;
+    const normalizedAsset = { ...asset, type: assetType };
+    if (!assetMatchesShot(normalizedAsset, selected)) continue;
     if (asset.status === "locked") {
-      covered.add(`${asset.type}:${asset.id}`);
-      if (asset.type === "scene") sceneCovered = true;
+      covered.add(`${assetType}:${asset.id}`);
+      if (assetType === "scene") sceneCovered = true;
       continue;
     }
     const existingPath = assetReferencePath(asset);
     if (existingPath && assetAlreadyBoundToShot(asset, selected)) {
-      covered.add(`${asset.type}:${asset.id}`);
-      if (asset.type === "scene") sceneCovered = true;
+      covered.add(`${assetType}:${asset.id}`);
+      if (assetType === "scene") sceneCovered = true;
       continue;
     }
     specs.push({
       id: asset.id,
-      type: asset.type,
-      name: asset.name || displayNameForId(asset.id, asset.type),
+      type: assetType,
+      name: asset.name || displayNameForId(asset.id, assetType),
       existingPath,
       existingOutputSha256: asset.outputHash || asset.outputSha256 || asset.generatedBy?.outputSha256,
       existingProviderObservationPath: asset.providerObservationPath || asset.generatedBy?.providerObservationPath,
       existingSemanticQaPath: asset.semanticQaPath || asset.generatedBy?.semanticQaPath,
       textConstraints: uniqueStrings([
         ...(Array.isArray(asset.textConstraints) ? asset.textConstraints : []),
-        ...(asset.type === "scene" ? (selected.sceneDetailIds || []) : []),
-        ...(asset.type === "prop" && isParentObjectReference(asset.id) ? (selected.objectDetailIds || selected.vehicleDetailIds || []) : []),
+        ...(assetType === "scene" ? (selected.sceneDetailIds || []) : []),
+        ...(assetType === "prop" && isParentObjectReference(asset.id) ? (selected.objectDetailIds || selected.vehicleDetailIds || []) : []),
       ]),
       usedByShotIds: [selected.shotId],
       relatedShotTitles: [selected.title],
@@ -599,7 +663,10 @@ function assetSpecsForShot(workbenchFacts, selected, assetTypes) {
       });
     }
   }
-  for (const id of selected.propIds) addMissing("prop", id);
+  const existingPropBindingForShot = [...seen].some((key) => key.startsWith("prop:"));
+  if (!(selected.propReferencesSource === "guidance" && existingPropBindingForShot)) {
+    for (const id of selected.propIds) addMissing("prop", id);
+  }
   return specs;
 }
 
@@ -754,7 +821,7 @@ function assetPrompt(spec, selected) {
   const relatedShotTitles = uniqueStrings(Array.isArray(spec.relatedShotTitles) ? spec.relatedShotTitles : []).slice(0, 6);
   const storyContexts = uniqueStrings(Array.isArray(spec.storyContexts) ? spec.storyContexts : []).slice(0, 6);
   return [
-    "reference_asset_prompt_v2: create a production reference asset, not a cinematic shot frame, not a storyboard panel, not final key art.",
+    "reference_asset_prompt_v3: create a production reference asset, not a cinematic shot frame, not a storyboard panel, not final key art.",
     `Asset type: ${typeLabel}. Asset name: ${spec.name}. Aspect ratio ${IMAGE2_GENERATE_DEFAULT_ASPECT_RATIO}.`,
     "The asset name and asset constraints are the source of truth for this image.",
     "The shot facts below are context only. Do not copy their full scene composition, actor pose, camera angle, or action as the asset image.",
@@ -763,19 +830,28 @@ function assetPrompt(spec, selected) {
     textConstraints.length ? `Asset constraints: ${textConstraints.join(" / ")}.` : "",
     styleGuard,
     spec.type === "character"
-      ? "Output exactly one character identity reference on a plain warm-white or light gray background. Neutral or slight three-quarter pose. Show face, hair, outfit silhouette, proportions, shoes, and carried items only when described. No background scene, no story action, no other people, no camera drama."
+      ? [
+        "Output one clean character model sheet / multi-view identity reference on a plain warm-white or light gray background.",
+        "Show the same character in 3-4 consistent views: front, three-quarter, side, and back.",
+        "Keep face, hair, outfit silhouette, proportions, shoes, and carried items consistent across all views.",
+        "Optional small expression or outfit-detail inset is allowed only if it helps identity.",
+        "No readable labels, no annotations, no background scene, no story action, no other people, no camera drama.",
+      ].join(" ")
       : "",
     spec.type === "scene"
       ? [
         `Output one clean environment background plate for this named scene only: ${spec.name}.`,
         "Show space layout, weather, time of day, light direction, atmosphere, floor/walls/windows/furniture or environmental anchors that belong to the named scene.",
+        "Do not make a multi-view sheet; this scene baseline should be one coherent environment plate.",
         "No character, no hand, no action beat, no prop close-up, no readable signage text, no panel borders, no labels.",
         ...sceneContaminationGuard(spec, selected),
       ].join(" ")
       : "",
     spec.type === "prop"
       ? [
-        `Output one isolated prop reference for this named prop only: ${spec.name}.`,
+        `Output one clean multi-angle prop/object reference sheet for this named prop only: ${spec.name}.`,
+        "Show the same object in 2-4 consistent angles: front/side/back or top/side/detail depending on shape.",
+        "If the prop is flat or simple, show front and back plus one edge/detail view rather than inventing extra story copies.",
         "Use a plain light background or simple object sheet. Show shape, material, scale cues, and interaction affordance.",
         "No hands, no character, no full environment, no panel borders, no labels, no readable text, no extra objects.",
         ...propContaminationGuard(spec, selected),
@@ -822,7 +898,7 @@ function storyboardPrompt(spec, selected) {
   ].filter(Boolean).join("\n");
 }
 
-function providerPromptAudit(prompt, requestPromptVersion = "reference_asset_prompt_v2") {
+function providerPromptAudit(prompt, requestPromptVersion = "reference_asset_prompt_v3") {
   return {
     requestPromptVersion,
     requestPromptText: prompt,
@@ -855,7 +931,8 @@ async function fetchAssetImageWithRetry(args) {
 function visualMemoryKeyForType(type) {
   if (type === "character") return "roles";
   if (type === "scene") return "scenes";
-  return "props";
+  if (type === "prop") return "props";
+  return undefined;
 }
 
 function resolveProjectMediaFile(source, value) {
@@ -884,20 +961,14 @@ function flattenVisualMemoryReferences(visualMemory) {
   }
   const genericAssets = Array.isArray(visualMemory.assets) ? visualMemory.assets : [];
   genericAssets.forEach((item) => {
-    const type = item?.assetType === "character" || item?.type === "character"
-      ? "character"
-      : item?.assetType === "scene" || item?.type === "scene"
-        ? "scene"
-        : "prop";
+    const type = visualMemoryRenderableType(item);
+    if (!type) return;
     refs.push({ ...item, type });
   });
   const entries = Array.isArray(visualMemory.entries) ? visualMemory.entries : [];
   entries.forEach((item) => {
-    const type = item?.assetType === "character" || item?.type === "character"
-      ? "character"
-      : item?.assetType === "scene" || item?.type === "scene"
-        ? "scene"
-        : "prop";
+    const type = visualMemoryRenderableType(item);
+    if (!type) return;
     refs.push({ ...item, type });
   });
   return refs;
@@ -1008,6 +1079,7 @@ function updateVisualMemoryAsset(visualMemory, result, selected) {
     return pruneVisualMemoryCrossTypeDuplicates(next);
   }
   const key = visualMemoryKeyForType(result.type);
+  if (!key) return pruneVisualMemoryCrossTypeDuplicates(next);
   const list = Array.isArray(next[key]) ? next[key] : [];
   const index = list.findIndex((item) => isRecord(item) && (item.id === result.id || item.roleId === result.id || item.sceneId === result.id));
   const base = index >= 0 ? list[index] : {};
@@ -1051,6 +1123,175 @@ function updateVisualMemoryAsset(visualMemory, result, selected) {
   return pruneVisualMemoryCrossTypeDuplicates(next);
 }
 
+function projectPortablePath(value, source) {
+  const text = asString(value)?.replace(/\\/g, "/");
+  if (!text) return undefined;
+  const rootPath = asString(source?.runRootPath);
+  const rootRelative = asString(source?.runRootRelativePath)?.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (path.isAbsolute(text) && rootPath) {
+    const relative = path.relative(rootPath, text).replace(/\\/g, "/");
+    if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) return relative;
+  }
+  let normalized = text.replace(/^\.\//, "");
+  if (rootRelative && normalized.startsWith(`${rootRelative}/`)) {
+    normalized = normalized.slice(rootRelative.length + 1);
+  }
+  if (!normalized || path.isAbsolute(normalized) || normalized.startsWith("../") || normalized.includes("/../")) return undefined;
+  return normalized;
+}
+
+function projectAssetKindForResult(result) {
+  if (result.type === "character" || result.type === "scene" || result.type === "prop") return result.type;
+  return "reference";
+}
+
+function projectRoleBindingForResult(result) {
+  if (result.type === "storyboard") {
+    return {
+      role: "storyboard_reference",
+      useFor: ["composition", "blocking", "camera", "timing"],
+      ignoreFor: ["character_identity", "scene_weather", "prop_design"],
+      priority: 1,
+      conflictRule: "故事板只管构图、动作和节奏；角色、场景、道具身份以对应参考为准。",
+    };
+  }
+  if (result.type === "character") {
+    return {
+      role: "character_identity",
+      useFor: ["face", "body", "outfit", "silhouette"],
+      ignoreFor: ["scene_weather", "camera", "storyboard_timing"],
+      priority: 2,
+      conflictRule: "角色参考只管身份、外形和服装，不替代场景、运镜或分镜节奏。",
+    };
+  }
+  if (result.type === "scene") {
+    return {
+      role: "scene_baseline",
+      useFor: ["location_layout", "weather", "light_direction", "color_temperature"],
+      ignoreFor: ["character_identity", "prop_design", "shot_timing"],
+      priority: 2,
+      conflictRule: "场景参考只管地点、天气和光线，不替代角色身份或道具设计。",
+    };
+  }
+  if (result.type === "prop") {
+    return {
+      role: "prop_reference",
+      useFor: ["shape", "material", "scale", "interaction_affordance"],
+      ignoreFor: ["scene_layout", "character_identity", "camera"],
+      priority: 2,
+      conflictRule: "道具参考只管物体外观和交互，不替代镜头构图或场景背景。",
+    };
+  }
+  return undefined;
+}
+
+function projectVibeAssetFromGeneratedResult(result, source) {
+  if (!isRecord(result) || result.status !== "needs_review") return undefined;
+  const id = asString(result.id);
+  const pathRef = projectPortablePath(result.path || result.outputFilePath, source);
+  if (!id || !pathRef) return undefined;
+  const sourceRefs = uniqueStrings([
+    projectPortablePath(result.providerObservationPath, source),
+    projectPortablePath(result.semanticQaPath, source),
+  ]);
+  return {
+    id,
+    kind: projectAssetKindForResult(result),
+    label: asString(result.name) || id,
+    status: "needs_review",
+    path: pathRef,
+    textConstraints: uniqueStrings(result.textConstraints || []),
+    usedByShotIds: uniqueStrings(result.usedByShotIds || []),
+    sourceRefs,
+    roleBinding: projectRoleBindingForResult(result),
+  };
+}
+
+function upsertById(items, item) {
+  const existing = Array.isArray(items) ? items : [];
+  const index = existing.findIndex((entry) => isRecord(entry) && entry.id === item.id);
+  if (index < 0) return [...existing, item];
+  const next = [...existing];
+  next[index] = {
+    ...next[index],
+    ...item,
+    textConstraints: uniqueStrings([...(next[index].textConstraints || []), ...(item.textConstraints || [])]),
+    usedByShotIds: uniqueStrings([...(next[index].usedByShotIds || []), ...(item.usedByShotIds || [])]),
+    sourceRefs: uniqueStrings([...(next[index].sourceRefs || []), ...(item.sourceRefs || [])]),
+  };
+  return next;
+}
+
+function visualMemoryEntryFromProjectAsset(asset) {
+  return {
+    id: `vm_${safePathSegment(asset.id)}`,
+    assetId: asset.id,
+    kind: asset.kind,
+    label: asset.label,
+    status: asset.status,
+    textConstraints: asset.textConstraints || [],
+    usedByShotIds: asset.usedByShotIds || [],
+    canUseAsFutureReference: false,
+    sourceRefs: asset.sourceRefs || [],
+    ...(asset.roleBinding ? { roleBinding: asset.roleBinding } : {}),
+  };
+}
+
+function appendId(values, id) {
+  return uniqueStrings([...(Array.isArray(values) ? values : []), id]);
+}
+
+function syncProjectVibeWithGeneratedAssets(source, results, generatedAt, deps) {
+  const successful = results
+    .map((result) => projectVibeAssetFromGeneratedResult(result, source))
+    .filter(Boolean);
+  if (!successful.length || !source?.projectVibePath) return { projectVibeWritten: false };
+  try {
+    const opened = parseProjectVibeText(deps.readFileSync(source.projectVibePath, "utf8"));
+    if (!opened.ok || !opened.project) {
+      return { projectVibeWritten: false, projectVibeError: opened.errors?.[0] || "project.vibe 无法读取。" };
+    }
+    const project = opened.project;
+    if (!Array.isArray(project.assets)) project.assets = [];
+    if (!Array.isArray(project.visualMemory.entries)) project.visualMemory.entries = [];
+    if (!Array.isArray(project.shots)) project.shots = [];
+
+    for (const asset of successful) {
+      project.assets = upsertById(project.assets, asset);
+      project.visualMemory.entries = upsertById(project.visualMemory.entries, visualMemoryEntryFromProjectAsset(asset));
+      const field = asset.kind === "character"
+        ? "characterAssetIds"
+        : asset.kind === "scene"
+          ? "sceneAssetIds"
+          : asset.kind === "prop"
+            ? "propAssetIds"
+            : undefined;
+      if (!field) continue;
+      const usedBy = new Set(asset.usedByShotIds || []);
+      project.shots = project.shots.map((shot) => (
+        isRecord(shot) && usedBy.has(shot.id)
+          ? { ...shot, [field]: appendId(shot[field], asset.id) }
+          : shot
+      ));
+    }
+
+    project.manifest = { ...project.manifest, updatedAt: generatedAt };
+    project.visualMemory.updatedAt = generatedAt;
+    refreshProjectVibeSourceIndex(project, generatedAt);
+    deps.writeFileSync(source.projectVibePath, serializeProjectVibe(project), "utf8");
+    return {
+      projectVibeWritten: true,
+      projectVibePath: source.projectVibeRelativePath,
+      projectVibeAssetIds: successful.map((asset) => asset.id),
+    };
+  } catch (error) {
+    return {
+      projectVibeWritten: false,
+      projectVibeError: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
   const {
     currentProjectImage2AssetGenerateEndpoint,
@@ -1066,6 +1307,8 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
     writeCurrentProjectRuntimeBytes,
     writeCurrentProjectRuntimeJson,
     writeJson,
+    readFileSync,
+    writeFileSync,
     running,
   } = deps;
 
@@ -1173,7 +1416,7 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
         continue;
       }
       const prompt = spec.type === "storyboard" ? storyboardPrompt(spec, selected) : assetPrompt(spec, selected);
-      const promptAudit = providerPromptAudit(prompt, spec.type === "storyboard" ? "storyboard_reference_prompt_v3" : "reference_asset_prompt_v2");
+      const promptAudit = providerPromptAudit(prompt, spec.type === "storyboard" ? "storyboard_reference_prompt_v3" : "reference_asset_prompt_v3");
       const referenceImages = spec.type === "storyboard" ? referenceImagesForStoryboardSpec(visualMemory, spec, source) : [];
       providerCalled = true;
       externalNetworkCallMade = externalNetworkCallMade || !input.mockProviderResult;
@@ -1191,7 +1434,7 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
           : {
             ok: true,
             bytes: MOCK_PNG,
-            providerRequestId: `mock_lanyi_image2_asset_${Date.now()}_${index + 1}`,
+            providerRequestId: `mock_apikey_fun_image2_asset_${Date.now()}_${index + 1}`,
             providerResponseMetadata: { mockProviderResult: true, returnedCount: 1 },
           }
         : await fetchAssetImageWithRetry({
@@ -1363,13 +1606,17 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
       writeCurrentProjectRuntimeJson(source.visualMemoryRelativePath, visualMemory, source);
     }
     const missing = results.filter((result) => result.status === "missing");
+    const projectVibeWrite = syncProjectVibeWithGeneratedAssets(source, results, generatedAt, {
+      readFileSync,
+      writeFileSync,
+    });
     return {
       ok: successful.length > 0 && missing.length === 0,
       ...runtimePolicy({
         runMode: "current_project_image2_asset_generate",
         providerCalled,
         prepareRan: false,
-        projectVibeWritten: false,
+        projectVibeWritten: projectVibeWrite.projectVibeWritten,
         liveSubmitAllowed: false,
         workerSpawnForbidden: true,
         dryRunOnly: input.mockProviderResult,
@@ -1396,7 +1643,7 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
       runtimeExternalNetworkCallMade: externalNetworkCallMade,
       formalPromotionBlocked: true,
       liveSubmitAllowed: false,
-      projectVibeWritten: false,
+      ...projectVibeWrite,
       visualMemoryWritten: successful.length > 0,
       workerSpawnForbidden: true,
       blockers: missing.map((result) => result.message).filter(Boolean),

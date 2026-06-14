@@ -35,6 +35,20 @@ function uniqueStrings(values: unknown[]): string[] {
   return [...new Set(values.map(clean).filter(Boolean))];
 }
 
+function splitReferenceCandidate(value: unknown): string[] {
+  const text = clean(value);
+  if (!text) return [];
+  const parts = text
+    .split(/[;；、,，|]+/u)
+    .map(clean)
+    .filter(Boolean);
+  return parts.length > 1 ? parts : [text];
+}
+
+function uniqueReferenceCandidates(values: unknown[]): string[] {
+  return uniqueStrings(values.flatMap(splitReferenceCandidate));
+}
+
 const characterControllerPattern =
   /(?:跑车|汽车|车辆|赛车|车|机甲|机器人|飞船|船|飞机|战机|坦克|SU7|Xiaomi|小米|Porsche|保时捷|GT3|911|car|vehicle|mecha|robot|spaceship|ship|aircraft).{0,8}(?:驾驶者|驾驶员|司机|车手|操作者|操作员|controller|driver|pilot|operator)$/i;
 
@@ -175,7 +189,7 @@ export function referenceConstraintBuckets(values: unknown[]): ReferenceConstrai
     shotDetails: [],
     ignoredDetails: [],
   };
-  for (const value of uniqueStrings(values)) {
+  for (const value of uniqueReferenceCandidates(values)) {
     const classification = classifyReferenceAssetText(value);
     if (classification.bucket === "standalone") buckets.standalone.push(value);
     else if (classification.bucket === "object_constraint") buckets.objectConstraints.push(value);
@@ -188,7 +202,7 @@ export function referenceConstraintBuckets(values: unknown[]): ReferenceConstrai
 }
 
 export function referenceAssetCandidates(values: unknown[], type: ReferenceAssetType): string[] {
-  const candidates = uniqueStrings(values);
+  const candidates = uniqueReferenceCandidates(values);
   if (type === "scene") {
     return candidates.filter((candidate) => classifyReferenceAssetText(candidate, "scene").bucket === "standalone");
   }

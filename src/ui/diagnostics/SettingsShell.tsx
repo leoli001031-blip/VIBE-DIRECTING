@@ -43,8 +43,7 @@ import {
 
 const providerCredentialAliases: Record<string, string[]> = {
   "deepseek-v4-pro": ["deepseek-v4-pro", "deepseek", "deepseek-v4", "deepseek-chat"],
-  "lanyi-image2": ["lanyi-image2", "lanyiapi-gpt-image-2", "openai-image2-api"],
-  "apikey-fun-gpt55-responses-image": ["apikey-fun-gpt55-responses-image", "apikey-fun", "apikey_fun", "gpt55-responses-image"],
+  "apikey-fun-gpt55-responses-image": ["apikey-fun-gpt55-responses-image", "apikey-fun", "apikey_fun", "gpt55-responses-image", "lanyi-image2", "lanyiapi-gpt-image-2", "openai-image2-api"],
   "tavily-search": ["tavily-search", "tavily_search", "tavily"],
   "cloud-tts": ["cloud-tts", "tts-cloud", "audio-tts"],
 };
@@ -168,6 +167,7 @@ export function SettingsShell({
   const [credFormApiKey, setCredFormApiKey] = useState("");
   const [credFormSaving, setCredFormSaving] = useState(false);
   const [servicePanelOpen, setServicePanelOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const resolvedWebSearchSettings = normalizeAgentWebSearchSettings(webSearchSettings);
 
   useEffect(() => {
@@ -184,9 +184,9 @@ export function SettingsShell({
   }, []);
 
   const credentialProviderIds = Object.keys(credentials);
+  const visibleCredentialProviderIds = credentialProviderIds.filter((providerId) => !["lanyi-image2", "lanyiapi-gpt-image-2", "openai-image2-api"].includes(providerId));
   const providerConfigById = new Map(providerConfigs.map((providerConfig) => [providerConfig.providerId, providerConfig]));
   const deepseekConfig = providerConfigById.get("deepseek-v4-pro");
-  const lanyiConfig = providerConfigById.get("lanyi-image2");
   const apikeyFunConfig = providerConfigById.get("apikey-fun-gpt55-responses-image");
   const tavilyConfig = providerConfigById.get("tavily-search");
   const cloudTtsConfig = providerConfigById.get("cloud-tts");
@@ -194,8 +194,7 @@ export function SettingsShell({
   const tavilyReady = Boolean(tavilyCredential?.hasKey || tavilyConfig?.credential?.keyStatus === "configured");
   const serviceKeyOptions = [
     { providerId: "deepseek-v4-pro", label: "规划模型" },
-    { providerId: "lanyi-image2", label: "Image2 生图" },
-    { providerId: "apikey-fun-gpt55-responses-image", label: "备用 GPT-5.5 生图" },
+    { providerId: "apikey-fun-gpt55-responses-image", label: "Image2 生图" },
     { providerId: "tavily-search", label: "联网查资料" },
     { providerId: "cloud-tts", label: "云端配音" },
   ];
@@ -218,22 +217,13 @@ export function SettingsShell({
       noKeyNote: "需要 AI 拆分镜时再填。",
     },
     {
-      id: "lanyi-image2",
-      title: "Image2 生图",
-      purpose: "用于生成角色、场景、道具和故事板图。",
-      config: lanyiConfig,
-      credential: credentialForProvider(credentials, "lanyi-image2"),
-      saveLabel: "Lanyi Image2",
-      noKeyNote: "真实生图前需要配置。",
-    },
-    {
       id: "apikey-fun-gpt55-responses-image",
-      title: "备用 GPT-5.5 生图",
-      purpose: "备用生图通道，Image2 不稳定时可以继续出图。",
+      title: "Image2 生图",
+      purpose: "用于生成角色、场景、道具和故事板图。默认走专线，必要时自动尝试普通线路。",
       config: apikeyFunConfig,
       credential: credentialForProvider(credentials, "apikey-fun-gpt55-responses-image"),
-      saveLabel: "Apikey.fun GPT-5.5 Images",
-      noKeyNote: "需要真实测试 GPT-5.5 生图时再填。",
+      saveLabel: "Apikey.fun Image2",
+      noKeyNote: "真实生图前需要配置。",
     },
     {
       id: "tavily-search",
@@ -341,8 +331,8 @@ export function SettingsShell({
         <span>设置</span>
       </div>
       <div className="settings-friendly-intro">
-        <strong>这里只放会影响创作的设置。</strong>
-        <span>普通使用只看项目、生成服务和查资料；排查信息默认收起。</span>
+        <strong>设置只保留两件事。</strong>
+        <span>连接创作服务，决定 AI 要不要查资料；排查信息收在高级里。</span>
       </div>
       <div className="settings-quick-grid">
         <div>
@@ -379,6 +369,114 @@ export function SettingsShell({
         })}
       </div>
       <div className="settings-user-section">
+        <div className="settings-group-title">创作服务</div>
+        <div className="settings-list credential-settings-list">
+          <div className="settings-readonly-note">
+            <strong>{credentialProviderIds.length ? `${credentialProviderIds.length} 个服务已连接` : "还没有连接生成服务"}</strong>
+            <small>真实生图、配音或提交视频前仍会确认。Key 只保存在本机。</small>
+          </div>
+          <details
+            className="settings-subdetails"
+            open={servicePanelOpen}
+            onToggle={(event) => setServicePanelOpen(event.currentTarget.open)}
+          >
+            <summary>
+              <span>连接或管理服务</span>
+              <small>{credentialProviderIds.length ? "平时不用展开" : "需要生图时再连接"}</small>
+            </summary>
+            <div className="service-connection-grid">
+              {serviceConnections.map((service) => {
+                const status = keyStatusForProvider(service.config, service.credential);
+                const keyless = "keyless" in service && service.keyless === true;
+                const ready = keyless || status !== "not_configured";
+                const credentialProviderId = service.credential?.providerId;
+                const canDelete = Boolean(credentialProviderId && status === "local_settings");
+                const statusTone = status === "not_configured" && !keyless ? "needs-key" : "ready";
+                return (
+                  <div key={service.id} className={`service-connection-card ${statusTone}`}>
+                    <div className="service-connection-head">
+                      <strong>{service.title}</strong>
+                      <span>{connectionActionLabel(service.id, ready)}</span>
+                    </div>
+                    <p>{service.purpose}</p>
+                    <small>{providerModelLine(service.config, keyless ? "即梦 / Seedance CLI 登录态" : "等待配置")}</small>
+                    {service.credential ? (
+                      <small>本机已保存：{service.credential.maskedKey} · {service.credential.updatedAt ? new Date(service.credential.updatedAt).toLocaleDateString() : "时间未知"}</small>
+                    ) : (
+                      <small>{service.noKeyNote}</small>
+                    )}
+                    {canDelete && credentialProviderId && (
+                      <button className="credential-delete-btn" onClick={async () => { await handleDeleteCredential(credentialProviderId); }}>
+                        删除这个连接
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <details className="settings-raw-credentials">
+              <summary>查看已保存连接</summary>
+              {visibleCredentialProviderIds.map((pid) => {
+                const entry = credentials[pid];
+              return (
+                <div key={pid}>
+                  <strong>{entry.label || entry.providerId}</strong>
+                  <small>{entry.maskedKey} · {entry.updatedAt ? new Date(entry.updatedAt).toLocaleDateString() : "时间未知"}</small>
+                  <button className="credential-delete-btn" onClick={async () => { await handleDeleteCredential(pid); }}>删除</button>
+                </div>
+              );
+              })}
+              {!visibleCredentialProviderIds.length && (
+                <div>
+                  <strong>暂无保存条目</strong>
+                  <small>连接服务后会在这里显示脱敏记录。</small>
+                </div>
+              )}
+            </details>
+            <div className="credential-add-form">
+              <strong>连接一个服务</strong>
+              <select value={credFormProviderId} onChange={(e) => setCredFormProviderId(e.currentTarget.value)}>
+                <option value="">选择服务</option>
+                {serviceKeyOptions.map((option) => (
+                  <option key={option.providerId} value={option.providerId}>{option.label}</option>
+                ))}
+              </select>
+              {selectedServiceConnection && (
+                <div className={`credential-selected-service ${selectedServiceReady ? "ready" : "needs-key"}`}>
+                  <strong>{selectedServiceConnection.title}</strong>
+                  <small>
+                    {selectedServiceConnection.id === "tavily-search"
+                      ? "连接后 AI 可以上网查风格、分镜和背景资料；不连接也能继续本地规划。"
+                      : selectedServiceConnection.purpose}
+                  </small>
+                  <span>{selectedServiceReady ? "已可用" : selectedServiceConnection.noKeyNote}</span>
+                </div>
+              )}
+              <input
+                type="password"
+                placeholder={credFormProviderId === "tavily-search" ? "粘贴 Tavily API Key" : "粘贴 API Key"}
+                value={credFormApiKey}
+                onChange={(e) => setCredFormApiKey(e.currentTarget.value)}
+              />
+              <button
+                disabled={!credFormProviderId || !credFormApiKey || credFormSaving}
+                onClick={async () => {
+                  if (!credFormProviderId || !credFormApiKey) return;
+                  setCredFormSaving(true);
+                  try {
+                    const label = serviceKeyOptions.find((option) => option.providerId === credFormProviderId)?.label || credFormProviderId;
+                    await handleSaveCredential(credFormProviderId, credFormApiKey, label);
+                    setCredFormApiKey("");
+                    setCredFormProviderId("");
+                  }
+                  finally { setCredFormSaving(false); }
+                }}
+              >
+                {credFormSaving ? "保存中..." : "保存"}
+              </button>
+            </div>
+          </details>
+        </div>
         <div className="settings-group-title">AI 查资料</div>
         <div className="settings-list web-search-settings-list">
           <div className="settings-readonly-note">
@@ -472,121 +570,19 @@ export function SettingsShell({
             </div>
           </details>
         </div>
-        <div className="settings-group-title">连接服务</div>
-        <div className="settings-list credential-settings-list">
-          <div className="settings-readonly-note">
-            <strong>{credentialProviderIds.length ? `${credentialProviderIds.length} 个服务已连接` : "还没有连接生成服务"}</strong>
-            <small>只保存在本机。真实生图或视频提交前仍会确认。</small>
-          </div>
-          <details
-            className="settings-subdetails"
-            open={servicePanelOpen || !credentialProviderIds.length}
-            onToggle={(event) => setServicePanelOpen(event.currentTarget.open)}
-          >
-            <summary>
-              <span>管理服务</span>
-              <small>{credentialProviderIds.length ? "平时不用展开" : "先连接一个服务"}</small>
-            </summary>
-            <div className="service-connection-grid">
-              {serviceConnections.map((service) => {
-                const status = keyStatusForProvider(service.config, service.credential);
-                const keyless = "keyless" in service && service.keyless === true;
-                const ready = keyless || status !== "not_configured";
-                const credentialProviderId = service.credential?.providerId;
-                const canDelete = Boolean(credentialProviderId && status === "local_settings");
-                const statusTone = status === "not_configured" && !keyless ? "needs-key" : "ready";
-                return (
-                  <div key={service.id} className={`service-connection-card ${statusTone}`}>
-                    <div className="service-connection-head">
-                      <strong>{service.title}</strong>
-                      <span>{connectionActionLabel(service.id, ready)}</span>
-                    </div>
-                    <p>{service.purpose}</p>
-                    <small>{providerModelLine(service.config, keyless ? "即梦 / Seedance CLI 登录态" : "等待配置")}</small>
-                    {service.credential ? (
-                      <small>本机已保存：{service.credential.maskedKey} · {service.credential.updatedAt ? new Date(service.credential.updatedAt).toLocaleDateString() : "时间未知"}</small>
-                    ) : (
-                      <small>{service.noKeyNote}</small>
-                    )}
-                    {canDelete && credentialProviderId && (
-                      <button className="credential-delete-btn" onClick={async () => { await handleDeleteCredential(credentialProviderId); }}>
-                        删除这个连接
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <details className="settings-raw-credentials">
-              <summary>查看已保存连接</summary>
-              {credentialProviderIds.map((pid) => {
-                const entry = credentials[pid];
-              return (
-                <div key={pid}>
-                  <strong>{entry.label || entry.providerId}</strong>
-                  <small>{entry.maskedKey} · {entry.updatedAt ? new Date(entry.updatedAt).toLocaleDateString() : "时间未知"}</small>
-                  <button className="credential-delete-btn" onClick={async () => { await handleDeleteCredential(pid); }}>删除</button>
-                </div>
-              );
-              })}
-              {!credentialProviderIds.length && (
-                <div>
-                  <strong>暂无保存条目</strong>
-                  <small>连接服务后会在这里显示脱敏记录。</small>
-                </div>
-              )}
-            </details>
-            <div className="credential-add-form">
-              <strong>连接一个服务</strong>
-              <select value={credFormProviderId} onChange={(e) => setCredFormProviderId(e.currentTarget.value)}>
-                <option value="">选择服务</option>
-                {serviceKeyOptions.map((option) => (
-                  <option key={option.providerId} value={option.providerId}>{option.label}</option>
-                ))}
-              </select>
-              {selectedServiceConnection && (
-                <div className={`credential-selected-service ${selectedServiceReady ? "ready" : "needs-key"}`}>
-                  <strong>{selectedServiceConnection.title}</strong>
-                  <small>
-                    {selectedServiceConnection.id === "tavily-search"
-                      ? "连接后 AI 可以上网查风格、分镜和背景资料；不连接也能继续本地规划。"
-                      : selectedServiceConnection.purpose}
-                  </small>
-                  <span>{selectedServiceReady ? "已可用" : selectedServiceConnection.noKeyNote}</span>
-                </div>
-              )}
-              <input
-                type="password"
-                placeholder={credFormProviderId === "tavily-search" ? "粘贴 Tavily API Key" : "粘贴 API Key"}
-                value={credFormApiKey}
-                onChange={(e) => setCredFormApiKey(e.currentTarget.value)}
-              />
-              <button
-                disabled={!credFormProviderId || !credFormApiKey || credFormSaving}
-                onClick={async () => {
-                  if (!credFormProviderId || !credFormApiKey) return;
-                  setCredFormSaving(true);
-                  try {
-                    const label = serviceKeyOptions.find((option) => option.providerId === credFormProviderId)?.label || credFormProviderId;
-                    await handleSaveCredential(credFormProviderId, credFormApiKey, label);
-                    setCredFormApiKey("");
-                    setCredFormProviderId("");
-                  }
-                  finally { setCredFormSaving(false); }
-                }}
-              >
-                {credFormSaving ? "保存中..." : "保存"}
-              </button>
-            </div>
-          </details>
-        </div>
       </div>
-      <details className="settings-advanced">
+      <details
+        className="settings-advanced"
+        open={advancedOpen}
+        onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+      >
         {/* TODO: add focus trap and aria-modal for accessibility */}
         <summary>
           <span>高级排查</span>
           <small>开发调试用，平时不用展开</small>
         </summary>
+        {advancedOpen && (
+          <>
       <div className="desktop-runtime-shell">
         <div className="row-head">
           <div className="audit-head desktop-runtime-title">
@@ -925,6 +921,8 @@ export function SettingsShell({
           <small>高级排查只显示状态，不再提供第二套添加/删除入口。</small>
         </div>
       </div>
+          </>
+        )}
       </details>
     </section>
   );

@@ -121,7 +121,7 @@ function createFixture(fixtureRoot) {
     shotPlans: [{
       shotId,
       order: 1,
-      providerId: "lanyi-image2",
+      providerId: "apikey-fun-gpt55-responses-image",
       providerSlot: "image.generate",
       expectedOutputPath: `${fixtureRoot}/outputs/shots/${shotId}/start.png`,
     }],
@@ -144,7 +144,7 @@ let child;
 try {
   child = spawnRuntimeServer({
     HOME: tempRoot,
-    VIBE_IMAGE2_API_KEY: "fake-end-frame-key",
+    VIBE_APIKEY_FUN_API_KEY: "fake-end-frame-key",
     VIBE_CORE_RUNTIME_API_PORT: "0",
     VIBE_CORE_CURRENT_PROJECT_BINDING_PATH: bindingPath,
   });
@@ -162,7 +162,7 @@ try {
     body: JSON.stringify({
       selectedShotId: shotId,
       selectedShotIds: [shotId],
-      providerId: "lanyi-image2",
+      providerId: "apikey-fun-gpt55-responses-image",
       mockProviderResult: true,
     }),
   });
@@ -175,7 +175,7 @@ try {
     body: JSON.stringify({
       selectedShotId: shotId,
       selectedShotIds: [shotId],
-      providerId: "lanyi-image2",
+      providerId: "apikey-fun-gpt55-responses-image",
       mockProviderResult: true,
       confirmation: {
         receiptId: "confirm_end_frame_mock_ok",
@@ -226,7 +226,7 @@ try {
     body: JSON.stringify({
       selectedShotId: shotId,
       selectedShotIds: [shotId],
-      providerId: "lanyi-image2",
+      providerId: "apikey-fun-gpt55-responses-image",
       mockProviderResult: true,
       confirmation: {
         receiptId: "confirm_end_frame_fallback_start",

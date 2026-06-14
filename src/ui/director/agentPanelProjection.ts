@@ -31,12 +31,14 @@ export type AgentVideoSubmitContract = {
 };
 
 export type AgentControlledToolInvocationTarget = {
+  scope?: "project" | "selected_shots";
   selectedShotIds?: string[];
   selectedAssetId?: string;
   sectionId?: string;
   skipConfirm?: boolean;
   confirmationReceiptId?: string;
   confirmedAt?: string;
+  videoPermissionContract?: AgentVideoSubmitContract;
   agentToolTrace?: DirectorAgentToolTrace;
 };
 
@@ -244,6 +246,7 @@ const HIGH_STALE_IMPACT_THRESHOLD = 4;
 function cleanLabel(value: string) {
   return value
     .replace(/\bCURRENT_PROJECT\b/g, "当前项目")
+    .replace(/\bshot[_\s-]*storyboard[_\s-]*(\d+)[_\s-]+(\d+)\b/gi, "镜头 $1-$2")
     .replace(/^asset_/i, "")
     .replace(/_/g, " ")
     .replace(/\bshot\s+[a-f0-9]+\s+(\d+)\b/gi, "镜头 $1")

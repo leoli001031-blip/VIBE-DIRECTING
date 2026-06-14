@@ -42,6 +42,7 @@ import {
   type AgentVideoSubmitMode,
 } from "./agentPanelProjection";
 import {
+  extractRequestedShotCount,
   splitCreativePlanningText,
   type DirectorAiStoryboardPlan,
   type DirectorAiStoryboardSeedRow,
@@ -282,12 +283,15 @@ function explicitTargetDurationSeconds(text: string) {
   return Math.max(1, Math.min(900, seconds));
 }
 
+function executableVideoDurationSeconds(value: unknown, fallback = 5) {
+  const parsed = typeof value === "number" ? value : Number.parseFloat(String(value || ""));
+  const safe = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  return Math.max(4, Math.min(15, Math.round(safe)));
+}
+
 function explicitShotCount(text: string) {
-  const normalized = text.replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
-  const match = normalized.match(/(\d{1,2})\s*(?:个|条|段)?\s*(?:镜头|分镜|shot|shots)/i);
-  if (!match) return undefined;
-  const count = Number(match[1]);
-  if (!Number.isFinite(count) || count <= 0) return undefined;
+  const count = extractRequestedShotCount(text);
+  if (count === undefined || !Number.isFinite(count) || count <= 0) return undefined;
   return Math.max(1, Math.min(24, Math.round(count)));
 }
 
@@ -449,6 +453,22 @@ function referenceBindingSummary(reference: NewVideoReferenceFile) {
   ].filter(Boolean).join(" · ");
 }
 
+function referenceInboxSuggestion(reference: NewVideoReferenceFile) {
+  if (reference.binding.scope === "shot_range") {
+    return `建议绑定到镜头 ${cleanText(reference.binding.shotRange) || "待填写"}`;
+  }
+  if (reference.binding.purpose === "character") return "建议作为角色身份参考";
+  if (reference.binding.purpose === "scene") return "建议作为场景/天气参考";
+  if (reference.binding.purpose === "prop") return "建议作为道具外观参考";
+  return "建议作为风格或画面参考";
+}
+
+function audioInboxSuggestion(role: NewVideoStartDraft["audioRole"]) {
+  return role === "music_reference"
+    ? "会用于节奏判断和最终配乐，不会交给视频模型"
+    : "会作为声音或台词参考，后续可绑定角色";
+}
+
 function stripSrtMarkup(value: string) {
   return value
     .split(/\r?\n/u)
@@ -457,8 +477,27 @@ function stripSrtMarkup(value: string) {
     .join("\n");
 }
 
+function enumeratedShotSegments(text: string): string[] {
+  const normalized = cleanText(text);
+  const matches = Array.from(normalized.matchAll(
+    /(?:第?\s*(?:[一二三四五六七八九十]|\d{1,2})\s*(?:段|镜|镜头|幕)|镜头\s*\d{1,2})[：:\s]*([^，,。；;\n]{2,80})/gu,
+  ));
+  return matches.map((match) => cleanText(match[1])).filter(Boolean);
+}
+
+function mostlyPlanningInstruction(text: string) {
+  const normalized = cleanText(text);
+  if (!normalized) return true;
+  const startsLikeInstruction = /^(?:做成|希望|需要|请|先不要|不要|风格|时长|总时长|目标|用|使用|走|生成|规划|分成|拆成)/u.test(normalized);
+  if (!startsLikeInstruction) return false;
+  return !/(车|人|猫|少女|男|女|门|手|眼|灯|雨|路|店|房|街|站|电车|书|票|出现|走|跑|看|拿|递|冲|启动|亮起|进入|转身)/u.test(normalized);
+}
+
 function scriptSegments(scriptText: string) {
-  return splitScriptIntoStoryboardBeats(scriptText).map(cleanText).filter(Boolean);
+  const rawSegments = splitScriptIntoStoryboardBeats(scriptText).map(cleanText).filter(Boolean);
+  const enumerated = rawSegments.flatMap(enumeratedShotSegments);
+  if (enumerated.length >= 2) return enumerated;
+  return rawSegments.filter((segment) => !mostlyPlanningInstruction(segment));
 }
 
 function sourceTextForShotFact(summary: string) {
@@ -543,16 +582,34 @@ function propsFromShotText(text: string, fallbackLabels: string[]) {
   return referenceAssetCandidates(fallbackLabels.filter((label) => label !== "录音材料"), "prop").slice(0, 3);
 }
 
-function charactersFromShotText(text: string, fallbackLabels: string[]) {
+function visibleCharacterLabelsFromText(text: string) {
   const labels = [
     /黑猫/u.test(text) ? "黑猫" : "",
     /白猫/u.test(text) ? "白猫" : "",
     !/黑猫|白猫/u.test(text) && /猫/u.test(text) ? "猫" : "",
     /穿雨衣.{0,4}少女|雨衣.{0,8}少女/u.test(text) ? "穿雨衣的少女" : "",
     !/穿雨衣.{0,4}少女|雨衣.{0,8}少女/u.test(text) && /女高中生|高中女生/u.test(text) ? "女高中生" : "",
-    !/穿雨衣.{0,4}少女|雨衣.{0,8}少女|女高中生|高中女生/u.test(text) && /少女/u.test(text) ? "少女" : "",
-    /女车手|女生/u.test(text) ? "女车手" : "",
+    /女车手/u.test(text) ? "女车手" : "",
     /男车手/u.test(text) ? "男车手" : "",
+    !/穿雨衣.{0,4}少女|雨衣.{0,8}少女|女高中生|高中女生|女车手|少女/u.test(text) && /女生|女孩/u.test(text) ? "女生" : "",
+    !/穿雨衣.{0,4}少女|雨衣.{0,8}少女|女高中生|高中女生/u.test(text) && /少女/u.test(text) ? "少女" : "",
+    !/男车手/u.test(text) && /男生|男孩/u.test(text) ? "男生" : "",
+    /少年/u.test(text) ? "少年" : "",
+    /机器人|机甲/u.test(text) ? "机器人" : "",
+  ].filter(Boolean);
+  return Array.from(new Set(labels));
+}
+
+function splitVisibleReferenceLabels(value: unknown) {
+  return cleanText(value)
+    .split(/[，、,;/；|]/u)
+    .map(cleanText)
+    .filter((label) => label && !/^(无|没有|待确认|none|n\/a)$/iu.test(label));
+}
+
+function charactersFromShotText(text: string, fallbackLabels: string[]) {
+  const labels = [
+    ...visibleCharacterLabelsFromText(text),
     ...fallbackLabels.filter((label) => text.includes(label) && !(label === "猫" && /黑猫|白猫|橘猫|狸花猫/u.test(text))),
   ].filter(Boolean);
   if (labels.length) return removeDriverlessCharacterLabels(Array.from(new Set(labels)).filter(Boolean), text);
@@ -746,7 +803,7 @@ function makeStoryboardRow(input: {
   const rowPropLabels = propsFromShotText(text, input.propLabels);
   const scene = sceneFromShotText(text, input.sceneLabels, input.index);
   const audioUsage = input.audioUsage;
-  const durationSeconds = input.durationSeconds || input.musicSegment?.durationSeconds || 5;
+  const durationSeconds = executableVideoDurationSeconds(input.durationSeconds || input.musicSegment?.durationSeconds, 5);
   const camera = cameraFromText(text, input.index);
   const visualDescription = visualDescriptionFromText({
     text,
@@ -869,7 +926,7 @@ function buildStoryboardRowsFromSession(
     id: `timecoded_segment_${index + 1}_${safeDraftId(beat.title)}`,
     text: beat.text,
     title: beat.title,
-    durationSeconds: Math.max(3, Math.min(15, beat.durationSeconds)),
+    durationSeconds: executableVideoDurationSeconds(beat.durationSeconds),
   })) : scriptSegments(draft.script).map((text, index) => ({
     id: `script_segment_${index + 1}_${safeDraftId(text)}`,
     text,
@@ -884,6 +941,7 @@ function buildStoryboardRowsFromSession(
     scriptText: draft.script,
     shotTexts: sourceRows.map((row) => row.text),
     userPreference: [draft.style, audioUsage].filter(Boolean).join("\n"),
+    desiredTotalDurationSeconds: explicitTargetDurationSeconds(`${draft.script}\n${draft.style}`),
     musicAnalysis: draft.audioRole === "music_reference" ? draft.musicAnalysis : undefined,
   });
 
@@ -931,7 +989,7 @@ function aiShotToStoryboardRow(
   fallbackRows: NewVideoStoryboardShot[],
 ): NewVideoStoryboardShot {
   const fallback = fallbackRows[index] || fallbackRows[0] || emptyStoryboardRow(index);
-  const durationSeconds = Math.max(3, Math.min(15, shot.durationSeconds || Number.parseFloat(fallback.duration) || 5));
+  const durationSeconds = executableVideoDurationSeconds(shot.durationSeconds || Number.parseFloat(fallback.duration) || 5);
   const executionMode = shot.executionMode as NewVideoStoryboardExecutionMode;
   const referenceStrategy = shot.referenceStrategy as NewVideoReferenceStrategy;
   const actionBeats = shot.actionBeats?.length
@@ -964,10 +1022,12 @@ function aiShotToStoryboardRow(
     shot.characters,
   ].map(cleanText).filter(Boolean).join(" ");
   const cleanedCharacterLabels = removeDriverlessCharacterLabels(
-    cleanText(shot.characters).split(/[，、,;/；|]/u).map(cleanText).filter(Boolean),
+    splitVisibleReferenceLabels(shot.characters),
     shotContext,
   );
-  const characters = cleanedCharacterLabels.join("、") || (hasDriverlessCue(shotContext) ? "无" : fallback.characters);
+  const contextCharacterLabels = charactersFromShotText(shotContext, splitVisibleReferenceLabels(fallback.characters));
+  const characters = cleanedCharacterLabels.join("、")
+    || (hasDriverlessCue(shotContext) ? "无" : contextCharacterLabels.join("、") || fallback.characters);
   const scene = mergeContextualScene(
     shot.scene,
     fallbackRows[index - 1]?.scene || fallback.scene,
@@ -1359,7 +1419,6 @@ export function NewVideoStart({
   localProjectReady,
   localProjectBusy,
   canCreateLocalProject,
-  onCreateLocalProject,
   onDraftConfirmed,
   availableKnowledgePacks,
   webSearchSettings = defaultAgentWebSearchSettings,
@@ -1375,7 +1434,6 @@ export function NewVideoStart({
   localProjectReady?: boolean;
   localProjectBusy?: boolean;
   canCreateLocalProject?: boolean;
-  onCreateLocalProject?: (draft: NewVideoStartDraft) => unknown | Promise<unknown>;
   onDraftConfirmed?: (draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) => boolean | void | Promise<boolean | void>;
   availableKnowledgePacks?: KnowledgePack[];
   webSearchSettings?: AgentWebSearchSettings;
@@ -1392,8 +1450,6 @@ export function NewVideoStart({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const planRef = useRef<HTMLDivElement>(null);
-  const autoProjectCreateRequestedRef = useRef(false);
-  const pendingPrepareAfterProjectSelectionRef = useRef(false);
   const composerStorageKey = useMemo(() => newVideoComposerDraftStorageKey(projectDraftKey), [projectDraftKey]);
   const composerStorageKeyRef = useRef(composerStorageKey);
   const initialComposerDraftRef = useRef(readStoredNewVideoComposerDraft(composerStorageKey));
@@ -1416,6 +1472,9 @@ export function NewVideoStart({
   const [scriptFileError, setScriptFileError] = useState("");
   const [storyboardRows, setStoryboardRows] = useState<NewVideoStoryboardShot[]>([]);
   const [storyboardBaselineRows, setStoryboardBaselineRows] = useState<NewVideoStoryboardShot[]>([]);
+  const [expandedStoryboardRowIds, setExpandedStoryboardRowIds] = useState<Set<string>>(() => new Set());
+  const [discussionDetailsOpen, setDiscussionDetailsOpen] = useState(false);
+  const [planDetailsOpen, setPlanDetailsOpen] = useState(false);
   const [storyboardPlanningSource, setStoryboardPlanningSource] = useState<"none" | "local_structure" | "ai_director">("none");
   const storyboardRowsRef = useRef(storyboardRows);
   const storyboardBaselineRowsRef = useRef(storyboardBaselineRows);
@@ -1443,6 +1502,21 @@ export function NewVideoStart({
   useEffect(() => {
     if (videoPermissionContract) setLocalVideoPermissionContract(videoPermissionContract);
   }, [videoPermissionContract]);
+  useEffect(() => {
+    const rowIds = new Set(storyboardRows.map((row) => row.id));
+    setExpandedStoryboardRowIds((current) => {
+      let changed = false;
+      const next = new Set<string>();
+      current.forEach((id) => {
+        if (rowIds.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? next : current;
+    });
+  }, [storyboardRows]);
   const activeVideoPermissionContract = localVideoPermissionContract;
   const draft = useMemo(
     () => ({
@@ -1485,7 +1559,7 @@ export function NewVideoStart({
   useEffect(() => {
     if (composerStorageKeyRef.current === composerStorageKey) return;
     composerStorageKeyRef.current = composerStorageKey;
-    if (projection || submittedDraft || confirmed || pendingPrepareAfterProjectSelectionRef.current) return;
+    if (projection || submittedDraft || confirmed) return;
     const stored = readStoredNewVideoComposerDraft(composerStorageKey);
     setScript(stored.script);
     setStyle(stored.style);
@@ -1512,19 +1586,6 @@ export function NewVideoStart({
     }
     if (!hasDraft && !projection && !confirmed) setIsOpen(false);
   }, [confirmed, hasDraft, isStartingProject, projection]);
-
-  useEffect(() => {
-    if (localProjectReady) autoProjectCreateRequestedRef.current = true;
-    if (!hasDraft && !localProjectReady && !localProjectBusy) autoProjectCreateRequestedRef.current = false;
-  }, [hasDraft, localProjectBusy, localProjectReady]);
-
-  useEffect(() => {
-    if (!localProjectReady || !pendingPrepareAfterProjectSelectionRef.current) return;
-    pendingPrepareAfterProjectSelectionRef.current = false;
-    window.setTimeout(() => {
-      void prepareDraft();
-    }, 0);
-  }, [localProjectReady]);
 
   useEffect(() => {
     const urls = Object.fromEntries(visualReferences.map((reference) => [
@@ -1724,37 +1785,16 @@ export function NewVideoStart({
     if (audioInputRef.current) audioInputRef.current.value = "";
   }
 
-  async function ensureLocalProjectForDraft(nextDraft: NewVideoStartDraft): Promise<boolean> {
-    if (localProjectReady) return true;
-    if (!localProjectBusy && !canCreateLocalProject) return true;
-    if (localProjectBusy || !canCreateLocalProject || !onCreateLocalProject) return false;
-    if (autoProjectCreateRequestedRef.current) return false;
-    autoProjectCreateRequestedRef.current = true;
-    try {
-      const result = await onCreateLocalProject(nextDraft);
-      const selected = Boolean(result);
-      if (!selected) autoProjectCreateRequestedRef.current = false;
-      return selected;
-    } catch {
-      autoProjectCreateRequestedRef.current = false;
-      return false;
-    }
-  }
-
   async function prepareDraft() {
     if (!hasDraft || storyboardPlanningStatus === "running") return;
     const draftToSubmit = draft;
     const planningDraft = draftForPlanning(draftToSubmit);
-    if (!localProjectReady && (localProjectBusy || canCreateLocalProject)) pendingPrepareAfterProjectSelectionRef.current = true;
-    const localProjectPrepared = await ensureLocalProjectForDraft(draftToSubmit);
-    if (!localProjectPrepared) return;
-    pendingPrepareAfterProjectSelectionRef.current = false;
     const intakeDraft = buildIntakeDraftFromNewVideoDraft(planningDraft);
     const nextProjection = buildIntakeStagedPlanProjection(intakeDraft);
     const nextSession = buildDirectorSessionFromIntake({ draft: intakeDraft, projection: nextProjection });
     const nextStyleResearchPreflight = buildCurrentStyleResearchPreflight({ draftOverride: planningDraft });
     const localStoryboardRows = buildStoryboardRowsFromSession(nextSession, planningDraft, nextStyleResearchPreflight);
-    setSubmittedDraft(draftToSubmit);
+    setSubmittedDraft(planningDraft);
     setScript("");
     setScriptFileName("");
     setScriptFileError("");
@@ -1772,8 +1812,7 @@ export function NewVideoStart({
     setDiscussionFeedback("");
     setConfirmed(false);
     setConfirmError("");
-    onStart?.(draftToSubmit);
-    void ensureLocalProjectForDraft(draftToSubmit);
+    onStart?.(planningDraft);
     window.setTimeout(() => {
       planRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
@@ -1955,7 +1994,7 @@ export function NewVideoStart({
       body: localProjectReady
         ? "项目文件夹已经准备好，但还没有正式故事。先写脚本或拖入脚本文件，我会整理成待确认草案。"
         : canCreateLocalProject
-          ? "还没有绑定项目文件夹。先写脚本或拖入脚本文件；首次发送时会让你选择项目文件夹。"
+          ? "还没有绑定项目文件夹。先写脚本或拖入脚本文件；我会先拆草案，确认时再选择项目文件夹。"
           : "当前是浏览器草稿。先写脚本或拖入脚本文件，我会先整理成待确认内容，确认时再保存项目。",
       next: "下一步：放入脚本或一句故事想法。",
     });
@@ -2015,7 +2054,7 @@ export function NewVideoStart({
       if (row.id !== id) return row;
       const nextRow = { ...row, [field]: value };
       if (field === "duration" || field === "executionMode" || field === "rhythmProfile") {
-        const durationSeconds = Number.parseFloat(String(nextRow.duration)) || 5;
+        const durationSeconds = executableVideoDurationSeconds(nextRow.duration);
         const visibleCutBudget = visibleCutBudgetFor({
           executionMode: nextRow.executionMode,
           durationSeconds,
@@ -2059,6 +2098,12 @@ export function NewVideoStart({
 
   function removeStoryboardRow(id: string) {
     setStoryboardRows((rows) => (rows.length <= 1 ? rows : rows.filter((row) => row.id !== id)));
+    setExpandedStoryboardRowIds((current) => {
+      if (!current.has(id)) return current;
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
     setConfirmed(false);
     setConfirmError("");
   }
@@ -2077,8 +2122,25 @@ export function NewVideoStart({
     setConfirmError("");
   }
 
+  function setStoryboardRowDetailOpen(id: string, open: boolean) {
+    setExpandedStoryboardRowIds((current) => {
+      if (open && current.has(id)) return current;
+      if (!open && !current.has(id)) return current;
+      const next = new Set(current);
+      if (open) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  }
+
   const requiredMissing = projection?.missingChecklist.some((item) => item.severity === "required") || false;
   const pendingDiscussionDeltaCount = discussionWorkspace?.stagedDeltas.filter((delta) => delta.status === "staged").length || 0;
+  useEffect(() => {
+    if (pendingDiscussionDeltaCount > 0) setDiscussionDetailsOpen(true);
+  }, [pendingDiscussionDeltaCount]);
   const workspaceStage = confirmed
     ? "已进入故事流"
     : directorSession?.workspace.stageLabel || (projection
@@ -2096,10 +2158,10 @@ export function NewVideoStart({
   const showLocalProjectAction = Boolean(localProjectReady || localProjectBusy || canCreateLocalProject || usesBrowserDraftProject);
   const localProjectLabel = localProjectReady
     ? "项目文件夹已准备"
-    : localProjectBusy
-      ? "正在选择文件夹"
+      : localProjectBusy
+        ? "正在选择文件夹"
       : canCreateLocalProject
-        ? "首次发送会选文件夹"
+        ? "确认时选文件夹"
         : "浏览器草稿";
   const storyboardPlanningLabel = storyboardPlanningStatus === "running"
     ? "AI 正在拆分"
@@ -2109,7 +2171,7 @@ export function NewVideoStart({
         ? "初步识别"
         : "镜头安排";
   const storyboardPlanningRunning = storyboardPlanningStatus === "running";
-  const showStoryboardRows = storyboardRows.length > 0;
+  const showStoryboardRows = storyboardRows.length > 0 && !storyboardPlanningRunning;
   const storyboardPlanningDetail = storyboardPlanningMessage || (storyboardPlanningSource === "ai_director"
     ? "AI 已整理好，确认前不会写入项目。"
     : storyboardPlanningSource === "local_structure"
@@ -2122,9 +2184,26 @@ export function NewVideoStart({
     : storyboardPlanningDetail;
   const composerIsFeedback = Boolean(projection && discussionWorkspace);
   const composerValue = composerIsFeedback ? discussionFeedback : script;
-  const composerDisabled = storyboardPlanningStatus === "running"
-    || (composerIsFeedback ? !discussionFeedback.trim() : !hasDraft);
-  const composerDisabledReason = storyboardPlanningStatus === "running"
+  const draftConfirmDisabled = requiredMissing || storyboardPlanningRunning || Boolean(pendingDiscussionDeltaCount) || confirmed || confirmPending || Boolean(localProjectBusy && !localProjectReady);
+  const draftConfirmDisabledReason = localProjectBusy && !localProjectReady
+    ? "本地项目正在准备，稍等一下就能确认。"
+    : storyboardPlanningRunning
+      ? "AI 正在拆分镜头，等草案出来后再确认。"
+    : requiredMissing
+      ? "先补脚本，再确认。"
+    : pendingDiscussionDeltaCount
+      ? "先确认待修改。"
+    : confirmed
+      ? "草案已经进入故事流。"
+    : "当前不能确认。";
+  const composerConfirmsDraft = Boolean(composerIsFeedback && !discussionFeedback.trim() && projection);
+  const composerDisabled = composerConfirmsDraft
+    ? draftConfirmDisabled
+    : storyboardPlanningStatus === "running"
+      || (composerIsFeedback ? !discussionFeedback.trim() : !hasDraft);
+  const composerDisabledReason = composerConfirmsDraft
+    ? draftConfirmDisabledReason
+    : storyboardPlanningStatus === "running"
     ? "AI 正在拆分镜头，完成后再继续发送。"
     : composerIsFeedback && !discussionFeedback.trim()
       ? "先说一句你想改哪里。"
@@ -2134,20 +2213,60 @@ export function NewVideoStart({
   const composerPlaceholder = composerIsFeedback
     ? "直接说哪里要改..."
     : "写脚本、风格或修改意见；也可以拖文件。";
+  const composerTitle = composerIsFeedback
+    ? "说想改哪里"
+    : projection
+      ? "继续和 AI 导演说"
+      : "写下你想拍什么";
+  const composerPrimaryLabel = storyboardPlanningStatus === "running"
+    ? "整理中"
+    : composerConfirmsDraft
+      ? confirmed ? "已进入故事流" : confirmPending ? "正在进入" : "确认进故事流"
+      : composerIsFeedback
+        ? "发送修改"
+        : "发送";
+  const composerPrimaryAriaLabel = storyboardPlanningStatus === "running"
+    ? "正在拆分镜头"
+    : composerConfirmsDraft
+      ? confirmed ? "草案已确认" : confirmPending ? "正在确认草案" : "确认新视频草案"
+      : composerIsFeedback ? "发送修改意见" : "发送给 AI 导演";
+  const composerPrimaryTitle = composerDisabled
+    ? composerDisabledReason
+    : composerConfirmsDraft
+      ? "确认后会进入故事流，不会直接生成。"
+      : composerIsFeedback
+        ? "发送修改意见给 AI 导演。"
+        : "让 AI 先拆故事、分镜和节奏，不会生图或提交视频。";
+  const composerStatusLine = composerDisabled
+    ? composerDisabledReason
+    : storyboardPlanningStatus === "running"
+      ? "正在拆分镜头"
+      : composerConfirmsDraft
+        ? `下一步：${composerPrimaryLabel}`
+        : projection
+          ? "可以继续修改，或确认进故事流。"
+        : hasDraft
+            ? "下一步：发送给 AI 导演"
+            : "等待输入";
   const composerHelper = storyboardPlanningStatus === "running"
     ? "正在拆分分镜，不会生图或提交视频。"
+      : composerConfirmsDraft
+        ? "草案没问题就确认；想改的话直接输入意见。"
       : composerIsFeedback
         ? "选中镜头或素材后，直接说你想怎么改。"
       : localProjectReady
         ? "拖入图片、音乐或脚本；音频会自动识别为配乐或声音参考；Cmd Enter 发送。"
-        : canCreateLocalProject
-          ? "拖入图片、音乐或脚本；音频会自动识别为配乐或声音参考；首次发送会先选项目文件夹。"
+      : canCreateLocalProject
+          ? "拖入图片、音乐或脚本；先拆草案，确认后再选择项目文件夹。"
           : "拖入图片、音乐或脚本；当前会先作为浏览器草稿规划，确认时再保存项目。";
   const videoPermissionModeItems: Array<{ mode: AgentVideoSubmitMode; label: string }> = [
     { mode: "plan_only", label: "只规划" },
     { mode: "reference_allowed", label: "可做参考" },
     { mode: "video_allowed", label: "可提交视频" },
   ];
+  const activeVideoPermissionLabel = videoPermissionModeItems.find((item) => item.mode === activeVideoPermissionContract.mode)?.label || "只规划";
+  const showStylePreflight = Boolean(styleResearchPreflight)
+    && (styleResearchStatus !== "idle" || Boolean(styleResearchResult) || styleReferenceStatus === "saved");
   const unifiedComposer = (
     <section
       className={`new-video-unified-composer ${projection ? "is-compact" : ""}`}
@@ -2158,7 +2277,7 @@ export function NewVideoStart({
       onDrop={handleWorkspaceDrop}
     >
       <label className="new-video-field new-video-composer-field">
-        <span>和 AI 导演说</span>
+        <span>{composerTitle}</span>
         <textarea
           value={composerValue}
           onChange={(event) => {
@@ -2177,23 +2296,29 @@ export function NewVideoStart({
           }}
         />
       </label>
-      <div className="minimal-agent-permission-mode" aria-label="当前生成边界">
-        {videoPermissionModeItems.map((item) => (
-          <button
-            key={item.mode}
-            type="button"
-            className={activeVideoPermissionContract.mode === item.mode ? "is-active" : ""}
-            aria-label={`生成边界：${item.label}`}
-            aria-pressed={activeVideoPermissionContract.mode === item.mode}
-            disabled={storyboardPlanningStatus === "running"}
-            title={agentVideoSubmitContractDetail(agentVideoSubmitContractForMode(item.mode))}
-            onClick={() => selectVideoPermissionMode(item.mode)}
-          >
-            {item.label}
-          </button>
-        ))}
-        <span>{agentVideoSubmitContractDetail(activeVideoPermissionContract)}</span>
-      </div>
+      <details className="new-video-agent-boundary-details">
+        <summary>
+          <span>执行范围</span>
+          <strong>{activeVideoPermissionLabel}</strong>
+        </summary>
+        <div className="minimal-agent-permission-mode" aria-label="当前生成边界">
+          {videoPermissionModeItems.map((item) => (
+            <button
+              key={item.mode}
+              type="button"
+              className={activeVideoPermissionContract.mode === item.mode ? "is-active" : ""}
+              aria-label={`生成边界：${item.label}`}
+              aria-pressed={activeVideoPermissionContract.mode === item.mode}
+              disabled={storyboardPlanningStatus === "running"}
+              title={agentVideoSubmitContractDetail(agentVideoSubmitContractForMode(item.mode))}
+              onClick={() => selectVideoPermissionMode(item.mode)}
+            >
+              {item.label}
+            </button>
+          ))}
+          <span>{agentVideoSubmitContractDetail(activeVideoPermissionContract)}</span>
+        </div>
+      </details>
       <div className="new-video-composer-bar">
         <input
           ref={workspaceInputRef}
@@ -2245,41 +2370,55 @@ export function NewVideoStart({
           className="new-video-asset-action new-video-primary-action"
           type="button"
           disabled={composerDisabled}
-          aria-label={storyboardPlanningStatus === "running" ? "正在拆分镜头" : "发送给 AI 导演"}
-          title={composerDisabled ? composerDisabledReason : "发送给 AI 导演"}
-          onClick={submitComposer}
+          aria-label={composerPrimaryAriaLabel}
+          title={composerPrimaryTitle}
+          onClick={composerConfirmsDraft ? confirmDraft : submitComposer}
         >
-          <Sparkles size={15} aria-hidden="true" />
-          {storyboardPlanningStatus === "running" ? "整理中" : "发送"}
+          {composerConfirmsDraft ? <CheckCircle2 size={15} aria-hidden="true" /> : <Sparkles size={15} aria-hidden="true" />}
+          {composerPrimaryLabel}
         </button>
         {scriptFileError && <small className="new-video-script-error">{scriptFileError}</small>}
       </div>
+      <div className="new-video-composer-status minimal-agent-status-row">
+        <span>状态</span>
+        <strong className="minimal-agent-status">{composerStatusLine}</strong>
+      </div>
       {(scriptFileName || references.length > 0 || audio) && (
-        <div className="new-video-composer-attachments" aria-label="已放入的材料">
-          {scriptFileName && (
-            <span>
-              <b>脚本</b>
-              <small>{scriptFileName}</small>
-            </span>
-          )}
-          {references.map((file, index) => (
-            <span key={file.id}>
-              <b>{referenceTypeLabels[file.type]}</b>
-              <small>{file.file.name}</small>
-              <button type="button" onClick={() => removeReference(index)} aria-label={`移除 ${file.file.name}`}>
-                <X size={12} aria-hidden="true" />
-              </button>
-            </span>
-          ))}
-          {audio && (
-            <span>
-              <b>{audioCopy.title}</b>
-              <small>{audio.name}</small>
-              <button type="button" onClick={() => updateAudio(undefined)} aria-label={`移除 ${audio.name}`}>
-                <X size={12} aria-hidden="true" />
-              </button>
-            </span>
-          )}
+        <div className="new-video-composer-inbox" aria-label="素材收件箱">
+          <div className="new-video-composer-inbox-head">
+            <span>素材收件箱</span>
+            <strong>{[scriptFileName, ...references, audio].filter(Boolean).length} 个素材</strong>
+            <small>AI 会先粗分用途，确认故事后再绑定到项目。</small>
+          </div>
+          <div className="new-video-composer-attachments" aria-label="素材分类和绑定建议">
+            {scriptFileName && (
+              <span>
+                <b>脚本</b>
+                <small>{scriptFileName}</small>
+                <em>会用于故事、镜头和节奏规划</em>
+              </span>
+            )}
+            {references.map((file, index) => (
+              <span key={file.id}>
+                <b>{referenceTypeLabels[file.type]}</b>
+                <small>{file.file.name}</small>
+                <em>{referenceInboxSuggestion(file)}</em>
+                <button type="button" onClick={() => removeReference(index)} aria-label={`移除 ${file.file.name}`}>
+                  <X size={12} aria-hidden="true" />
+                </button>
+              </span>
+            ))}
+            {audio && (
+              <span>
+                <b>{audioCopy.title}</b>
+                <small>{audio.name}</small>
+                <em>{audioInboxSuggestion(audioRole)}</em>
+                <button type="button" onClick={() => updateAudio(undefined)} aria-label={`移除 ${audio.name}`}>
+                  <X size={12} aria-hidden="true" />
+                </button>
+              </span>
+            )}
+          </div>
         </div>
       )}
     </section>
@@ -2303,6 +2442,20 @@ export function NewVideoStart({
         <Sparkles size={16} aria-hidden="true" />
       </summary>
       <div className="new-video-start-body">
+        {!projection && (
+          <section className="new-video-start-guide" aria-label="下一步">
+            <div>
+              <span>下一步</span>
+              <strong>{hasDraft ? "AI 拆分镜头" : "写一句故事，或拖入脚本/图片/音乐"}</strong>
+              <small>{localProjectLabel} · 这里只整理计划，确认前不会生图或提交视频。</small>
+            </div>
+            <ol>
+              <li>写想法</li>
+              <li>AI 拆镜头</li>
+              <li>确认进故事流</li>
+            </ol>
+          </section>
+        )}
           <div
             className={`new-video-workspace new-video-codex-composer ${isDraggingFiles ? "is-dragging" : ""}`}
             aria-label="新视频工作区"
@@ -2361,26 +2514,16 @@ export function NewVideoStart({
                 <strong>{projectionTitleForDisplay}</strong>
                 <small>{projection.summary.scriptPreview}</small>
               </div>
-              <button
-                type="button"
-                disabled={requiredMissing || storyboardPlanningRunning || Boolean(pendingDiscussionDeltaCount) || confirmed || confirmPending || Boolean(localProjectBusy && !localProjectReady)}
-                aria-label={confirmed ? "草案已确认" : confirmPending ? "正在确认草案" : "确认新视频草案"}
-                onClick={confirmDraft}
-                title={localProjectBusy && !localProjectReady
-                  ? "本地项目正在准备，稍等一下就能确认。"
-                  : storyboardPlanningRunning
-                    ? "AI 正在拆分镜头，等草案出来后再确认。"
-                  : requiredMissing
-                  ? "先补脚本，再确认。"
-                  : pendingDiscussionDeltaCount
-                    ? "先确认待修改。"
-                    : "确认后会进入故事流，不会直接生成。"}
-              >
-                <CheckCircle2 size={15} aria-hidden="true" />
-                {confirmed ? "已确认" : confirmPending ? "正在确认" : "确认"}
-              </button>
+              <div className="new-video-next-flow" aria-label="确认后的流程">
+                <span>确认后</span>
+                <strong>进入故事流，再生成参考</strong>
+                <small>确认草案不会生图或提交视频；后面会先看参考，再单独确认提交。</small>
+              </div>
+              <small className="new-video-next-hint">
+                {confirmed ? "已进入故事流" : confirmPending ? "正在进入故事流" : "底部继续：确认进故事流"}
+              </small>
             </div>
-            {styleResearchPreflight && (
+            {showStylePreflight && styleResearchPreflight && (
               <details
                 className="new-video-style-preflight"
                 aria-label="导演准备"
@@ -2460,114 +2603,144 @@ export function NewVideoStart({
                       <header className="new-video-storyboard-card-head">
                         <div className="new-video-storyboard-card-index">
                           <span>{index + 1}</span>
-                          <input
-                            value={row.shotNo}
-                            onChange={(event) => updateStoryboardRow(row.id, "shotNo", event.target.value)}
-                            aria-label={`第 ${index + 1} 个镜号`}
-                          />
+                          <small>{row.shotNo || `镜头 ${index + 1}`}</small>
                         </div>
-                        <input
-                          className="new-video-storyboard-title"
-                          value={row.title}
-                          onChange={(event) => updateStoryboardRow(row.id, "title", event.target.value)}
-                          aria-label={`第 ${index + 1} 个镜头标题`}
-                        />
-                        <div className="new-video-storyboard-actions">
-                          <button type="button" disabled={index === 0} onClick={() => moveStoryboardRow(row.id, -1)} aria-label={`上移第 ${index + 1} 个镜头`}>
-                            <ArrowUp size={13} aria-hidden="true" />
-                          </button>
-                          <button type="button" disabled={index === storyboardRows.length - 1} onClick={() => moveStoryboardRow(row.id, 1)} aria-label={`下移第 ${index + 1} 个镜头`}>
-                            <ArrowDown size={13} aria-hidden="true" />
-                          </button>
-                          <button type="button" onClick={() => addStoryboardRow(index)} aria-label={`在第 ${index + 1} 个镜头后新增镜头`}>
-                            <Plus size={13} aria-hidden="true" />
-                          </button>
-                          <button type="button" disabled={storyboardRows.length <= 1} onClick={() => removeStoryboardRow(row.id)} aria-label={`删除第 ${index + 1} 个镜头`}>
-                            <Trash2 size={13} aria-hidden="true" />
-                          </button>
+                        <div className="new-video-storyboard-title">
+                          <strong>{row.title || `镜头 ${index + 1}`}</strong>
+                          <small>{executableVideoDurationSeconds(row.duration)} 秒 · {row.shotSize || "景别待定"} · {DIRECTOR_RHYTHM_PROFILE_LABELS[row.rhythmProfile] || "节奏待定"}</small>
                         </div>
                       </header>
-                      <div className="new-video-storyboard-card-meta">
-                        <label>
-                          <span>时长</span>
-                          <div className="new-video-storyboard-duration">
-                            <input
-                              value={row.duration}
-                              onChange={(event) => updateStoryboardRow(row.id, "duration", event.target.value)}
-                              inputMode="decimal"
-                              aria-label={`第 ${index + 1} 个镜头时长`}
-                            />
-                            <small>秒</small>
-                          </div>
-                        </label>
-                        <label>
-                          <span>景别</span>
-                          <input
-                            value={row.shotSize}
-                            onChange={(event) => updateStoryboardRow(row.id, "shotSize", event.target.value)}
-                            aria-label={`第 ${index + 1} 个景别`}
-                          />
-                        </label>
-                        <label>
-                          <span>节奏</span>
-                          <select
-                            value={row.rhythmProfile}
-                            onChange={(event) => updateStoryboardRow(row.id, "rhythmProfile", event.target.value as DirectorRhythmProfile)}
-                            aria-label={`第 ${index + 1} 个节奏`}
-                          >
-                            {rhythmProfileOptions.map(([profile, label]) => (
-                              <option key={profile} value={profile}>{label}</option>
-                            ))}
-                          </select>
-                        </label>
+                      <div className="new-video-storyboard-readable">
+                        <p>{row.visualDescription || "画面描述待补。"}</p>
+                        <div>
+                          <small><b>动作</b>{row.primaryAction || "待填写"}</small>
+                          <small><b>角色</b>{row.characters || "待填写"}</small>
+                          <small><b>场景</b>{row.scene || "待填写"}</small>
+                          <small><b>道具</b>{row.props || "无"}</small>
+                        </div>
                         <div className="new-video-reference-strategy" aria-label={`第 ${index + 1} 个生成方式`}>
                           <span>生成方式</span>
                           <strong>{referenceStrategyLabels[row.referenceStrategy]}</strong>
                           <small>{referenceStrategyDescriptions[row.referenceStrategy]}</small>
                         </div>
                       </div>
-                      <textarea
-                        className="new-video-storyboard-visual"
-                        value={row.visualDescription}
-                        onChange={(event) => updateStoryboardRow(row.id, "visualDescription", event.target.value)}
-                        aria-label={`第 ${index + 1} 个画面描述`}
-                      />
-                      <div className="new-video-storyboard-card-grid">
-                        <label>
-                          <span>动作</span>
-                          <input
-                            value={row.primaryAction}
-                            onChange={(event) => updateStoryboardRow(row.id, "primaryAction", event.target.value)}
-                            aria-label={`第 ${index + 1} 个主动作`}
-                          />
-                        </label>
-                        <label>
-                          <span>角色</span>
-                          <input
-                            value={row.characters}
-                            onChange={(event) => updateStoryboardRow(row.id, "characters", event.target.value)}
-                            aria-label={`第 ${index + 1} 个镜头角色`}
-                          />
-                        </label>
-                        <label>
-                          <span>场景</span>
-                          <input
-                            value={row.scene}
-                            onChange={(event) => updateStoryboardRow(row.id, "scene", event.target.value)}
-                            aria-label={`第 ${index + 1} 个镜头场景`}
-                          />
-                        </label>
-                        <label>
-                          <span>道具</span>
-                          <input
-                            value={row.props}
-                            onChange={(event) => updateStoryboardRow(row.id, "props", event.target.value)}
-                            aria-label={`第 ${index + 1} 个镜头道具`}
-                          />
-                        </label>
-                      </div>
-                      <details className="new-video-storyboard-card-detail">
+                      <details
+                        className="new-video-storyboard-card-detail"
+                        open={expandedStoryboardRowIds.has(row.id)}
+                        onToggle={(event) => setStoryboardRowDetailOpen(row.id, event.currentTarget.open)}
+                      >
                         <summary>更多镜头细节</summary>
+                        {expandedStoryboardRowIds.has(row.id) && (
+                          <>
+                        <div className="new-video-storyboard-actions" aria-label={`第 ${index + 1} 个镜头调整`}>
+                          <button type="button" disabled={index === 0} onClick={() => moveStoryboardRow(row.id, -1)} aria-label={`上移第 ${index + 1} 个镜头`}>
+                            <ArrowUp size={13} aria-hidden="true" />
+                            上移
+                          </button>
+                          <button type="button" disabled={index === storyboardRows.length - 1} onClick={() => moveStoryboardRow(row.id, 1)} aria-label={`下移第 ${index + 1} 个镜头`}>
+                            <ArrowDown size={13} aria-hidden="true" />
+                            下移
+                          </button>
+                          <button type="button" onClick={() => addStoryboardRow(index)} aria-label={`在第 ${index + 1} 个镜头后新增镜头`}>
+                            <Plus size={13} aria-hidden="true" />
+                            增加
+                          </button>
+                          <button type="button" disabled={storyboardRows.length <= 1} onClick={() => removeStoryboardRow(row.id)} aria-label={`删除第 ${index + 1} 个镜头`}>
+                            <Trash2 size={13} aria-hidden="true" />
+                            删除
+                          </button>
+                        </div>
+                        <div className="new-video-storyboard-card-grid">
+                          <label>
+                            <span>镜号</span>
+                            <input
+                              value={row.shotNo}
+                              onChange={(event) => updateStoryboardRow(row.id, "shotNo", event.target.value)}
+                              aria-label={`第 ${index + 1} 个镜号`}
+                            />
+                          </label>
+                          <label>
+                            <span>标题</span>
+                            <input
+                              value={row.title}
+                              onChange={(event) => updateStoryboardRow(row.id, "title", event.target.value)}
+                              aria-label={`第 ${index + 1} 个镜头标题`}
+                            />
+                          </label>
+                          <label>
+                            <span>时长</span>
+                            <div className="new-video-storyboard-duration">
+                              <input
+                                value={row.duration}
+                                onChange={(event) => updateStoryboardRow(row.id, "duration", event.target.value)}
+                                onBlur={() => updateStoryboardRow(row.id, "duration", String(executableVideoDurationSeconds(row.duration)))}
+                                inputMode="numeric"
+                                aria-label={`第 ${index + 1} 个镜头时长`}
+                              />
+                              <small>秒</small>
+                            </div>
+                          </label>
+                          <label>
+                            <span>景别</span>
+                            <input
+                              value={row.shotSize}
+                              onChange={(event) => updateStoryboardRow(row.id, "shotSize", event.target.value)}
+                              aria-label={`第 ${index + 1} 个景别`}
+                            />
+                          </label>
+                          <label>
+                            <span>节奏</span>
+                            <select
+                              value={row.rhythmProfile}
+                              onChange={(event) => updateStoryboardRow(row.id, "rhythmProfile", event.target.value as DirectorRhythmProfile)}
+                              aria-label={`第 ${index + 1} 个节奏`}
+                            >
+                              {rhythmProfileOptions.map(([profile, label]) => (
+                                <option key={profile} value={profile}>{label}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="wide">
+                            <span>画面</span>
+                            <textarea
+                              value={row.visualDescription}
+                              onChange={(event) => updateStoryboardRow(row.id, "visualDescription", event.target.value)}
+                              aria-label={`第 ${index + 1} 个画面描述`}
+                            />
+                          </label>
+                          <label>
+                            <span>动作</span>
+                            <input
+                              value={row.primaryAction}
+                              onChange={(event) => updateStoryboardRow(row.id, "primaryAction", event.target.value)}
+                              aria-label={`第 ${index + 1} 个主动作`}
+                            />
+                          </label>
+                          <label>
+                            <span>角色</span>
+                            <input
+                              value={row.characters}
+                              onChange={(event) => updateStoryboardRow(row.id, "characters", event.target.value)}
+                              aria-label={`第 ${index + 1} 个镜头角色`}
+                            />
+                          </label>
+                          <label>
+                            <span>场景</span>
+                            <input
+                              value={row.scene}
+                              onChange={(event) => updateStoryboardRow(row.id, "scene", event.target.value)}
+                              aria-label={`第 ${index + 1} 个镜头场景`}
+                            />
+                          </label>
+                          <label>
+                            <span>道具</span>
+                            <input
+                              value={row.props}
+                              onChange={(event) => updateStoryboardRow(row.id, "props", event.target.value)}
+                              aria-label={`第 ${index + 1} 个镜头道具`}
+                            />
+                          </label>
+                        </div>
                         <div className="new-video-storyboard-card-grid">
                           <label>
                             <span>镜头</span>
@@ -2654,6 +2827,8 @@ export function NewVideoStart({
                             />
                           </label>
                         </div>
+                          </>
+                        )}
                       </details>
                     </article>
                   ))}
@@ -2661,85 +2836,100 @@ export function NewVideoStart({
               </section>
             )}
             {discussionWorkspace && (
-              <details className="new-video-discussion" aria-label="导演讨论与分镜" open={pendingDiscussionDeltaCount > 0}>
+              <details
+                className="new-video-discussion"
+                aria-label="导演讨论与分镜"
+                open={discussionDetailsOpen}
+                onToggle={(event) => setDiscussionDetailsOpen(event.currentTarget.open)}
+              >
                 <summary>
                   <span>导演讨论</span>
                   <strong>{discussionWorkspace.nextActionLabel}</strong>
                 </summary>
-                <div className="new-video-discussion-lanes" aria-label="整理方向">
-                  {discussionWorkspace.lanes.map((lane) => (
-                    <small key={lane.id} className={lane.status}>
-                      <span>{lane.label}</span>
-                      <b>{lane.count || "待补"}</b>
-                      <em>{discussionStatusLabel(lane.status)}</em>
-                    </small>
-                  ))}
-                </div>
-                <div className="new-video-discussion-turns" aria-label="讨论记录">
-                  {discussionWorkspace.turns.slice(-4).map((turn) => (
-                    <p key={turn.id} className={turn.role}>
-                      {turn.text}
-                    </p>
-                  ))}
-                </div>
-                {discussionWorkspace.stagedDeltas.length > 0 && (
-                  <div className="new-video-discussion-deltas" aria-label="待确认修改">
-                    {discussionWorkspace.stagedDeltas.slice(-4).map((delta) => (
-                      <small key={delta.id} className={delta.status}>
-                        <span>{discussionDeltaLaneLabel(discussionWorkspace, delta.laneId)}</span>
-                        <strong>{delta.label}</strong>
-                        <em>{delta.revisionSummary?.confirmationCopy || delta.summary}</em>
-                      </small>
-                    ))}
-                    <button type="button" disabled={!pendingDiscussionDeltaCount} onClick={confirmDiscussionDeltas}>
-                      {pendingDiscussionDeltaCount ? "确认修改" : "修改已确认"}
-                    </button>
-                  </div>
+                {discussionDetailsOpen && (
+                  <>
+                    <div className="new-video-discussion-lanes" aria-label="整理方向">
+                      {discussionWorkspace.lanes.map((lane) => (
+                        <small key={lane.id} className={lane.status}>
+                          <span>{lane.label}</span>
+                          <b>{lane.count || "待补"}</b>
+                          <em>{discussionStatusLabel(lane.status)}</em>
+                        </small>
+                      ))}
+                    </div>
+                    <div className="new-video-discussion-turns" aria-label="讨论记录">
+                      {discussionWorkspace.turns.slice(-4).map((turn) => (
+                        <p key={turn.id} className={turn.role}>
+                          {turn.text}
+                        </p>
+                      ))}
+                    </div>
+                    {discussionWorkspace.stagedDeltas.length > 0 && (
+                      <div className="new-video-discussion-deltas" aria-label="待确认修改">
+                        {discussionWorkspace.stagedDeltas.slice(-4).map((delta) => (
+                          <small key={delta.id} className={delta.status}>
+                            <span>{discussionDeltaLaneLabel(discussionWorkspace, delta.laneId)}</span>
+                            <strong>{delta.label}</strong>
+                            <em>{delta.revisionSummary?.confirmationCopy || delta.summary}</em>
+                          </small>
+                        ))}
+                        <button type="button" disabled={!pendingDiscussionDeltaCount} onClick={confirmDiscussionDeltas}>
+                          {pendingDiscussionDeltaCount ? "确认修改" : "修改已确认"}
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </details>
             )}
             {confirmError && <small className="new-video-confirm-error">{confirmError}</small>}
-            <details className="new-video-plan-details">
+            <details
+              className="new-video-plan-details"
+              open={planDetailsOpen}
+              onToggle={(event) => setPlanDetailsOpen(event.currentTarget.open)}
+            >
               <summary>更多细节</summary>
-              <div className="new-video-plan-detail-body">
-                <div className="new-video-plan-status">
-                  <small>{confirmed ? "已确认" : "待确认"}</small>
-                  <small>{requiredMissing ? "先补脚本，再确认。" : "确认后进入故事流，不会直接生成。"}</small>
-                </div>
-                <div className="new-video-plan-grid" aria-label="草案材料">
-                  <small>{referenceTypeCounts.character} 个主角参考</small>
-                  <small>{referenceTypeCounts.scene} 个场景参考</small>
-                  <small>{referenceTypeCounts.prop} 个道具参考</small>
-                  <small>{referenceTypeCounts.style} 个风格参考</small>
-                  <small>{projection.summary.assetCounts.audio} 个音频</small>
-                </div>
-                {stagedFacts.length > 0 && (
-                  <div className="new-video-staged-facts" aria-label="整理出的内容">
-                    {stagedFacts.map((fact) => (
-                      <small key={fact.id} className={fact.kind}>
-                        <span>{stagedFactLabels[fact.kind]}</span>
-                        <strong>{fact.label}</strong>
+              {planDetailsOpen && (
+                <div className="new-video-plan-detail-body">
+                  <div className="new-video-plan-status">
+                    <small>{confirmed ? "已确认" : "待确认"}</small>
+                    <small>{requiredMissing ? "先补脚本，再确认。" : "确认后进入故事流，不会直接生成。"}</small>
+                  </div>
+                  <div className="new-video-plan-grid" aria-label="草案材料">
+                    <small>{referenceTypeCounts.character} 个主角参考</small>
+                    <small>{referenceTypeCounts.scene} 个场景参考</small>
+                    <small>{referenceTypeCounts.prop} 个道具参考</small>
+                    <small>{referenceTypeCounts.style} 个风格参考</small>
+                    <small>{projection.summary.assetCounts.audio} 个音频</small>
+                  </div>
+                  {stagedFacts.length > 0 && (
+                    <div className="new-video-staged-facts" aria-label="整理出的内容">
+                      {stagedFacts.map((fact) => (
+                        <small key={fact.id} className={fact.kind}>
+                          <span>{stagedFactLabels[fact.kind]}</span>
+                          <strong>{fact.label}</strong>
+                        </small>
+                      ))}
+                    </div>
+                  )}
+                  {projection.missingChecklist.length > 0 && (
+                    <div className="new-video-checklist" aria-label="待补齐">
+                      {projection.missingChecklist.map((item) => (
+                        <small key={item.field} className={item.severity}>
+                          {item.label}
+                        </small>
+                      ))}
+                    </div>
+                  )}
+                  <div className="new-video-plan-steps" aria-label="整理计划">
+                    {projection.stagedPlan.map((step) => (
+                      <small key={step.id} className={step.status}>
+                        {step.label}
                       </small>
                     ))}
                   </div>
-                )}
-                {projection.missingChecklist.length > 0 && (
-                  <div className="new-video-checklist" aria-label="待补齐">
-                    {projection.missingChecklist.map((item) => (
-                      <small key={item.field} className={item.severity}>
-                        {item.label}
-                      </small>
-                    ))}
-                  </div>
-                )}
-                <div className="new-video-plan-steps" aria-label="整理计划">
-                  {projection.stagedPlan.map((step) => (
-                    <small key={step.id} className={step.status}>
-                      {step.label}
-                    </small>
-                  ))}
                 </div>
-              </div>
+              )}
             </details>
           </div>
         )}

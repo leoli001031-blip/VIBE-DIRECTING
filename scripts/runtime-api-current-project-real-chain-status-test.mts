@@ -28,6 +28,7 @@ const source = {
   sandboxSource: "fixture",
   bindingPathRelative: ".vibe/current-project.json",
   binding: { projectRoot: "fixtures/project" },
+  runRootPath: "/repo/fixtures/project",
   requestProjectRoot: "fixtures/project",
   requestContextSource: "query",
   requestProjectId: "fixture-project",
@@ -78,7 +79,7 @@ function baseProjection(overrides = {}) {
   };
 }
 
-function createFixtureApi({ projection, facts, round5ArtifactIngest, projectVibeExists = true }) {
+function createFixtureApi({ projection, facts, round5ArtifactIngest, projectVibeExists = true, jsonByPath = {} }) {
   return createRuntimeApiCurrentProjectRealChainStatus({
     currentProjectSource: () => source,
     projectProjectionFromSource: () => projection,
@@ -97,6 +98,7 @@ function createFixtureApi({ projection, facts, round5ArtifactIngest, projectVibe
     }),
     runtimeFileUrl: (relativePath) => `/api/runtime/files?path=${encodeURIComponent(relativePath)}`,
     existsSync: (filePath) => filePath === source.projectVibePath && projectVibeExists,
+    readJsonIfPresent: (filePath) => jsonByPath[filePath],
     currentProjectStatusEndpoint: "/api/runtime/projects/current/real-chain/status",
   });
 }
@@ -178,6 +180,108 @@ assert(availablePayload.actualImage2Triggered === true, "actual provider observa
 assert(availablePayload.previewItems.length === 1, "preview item projection should be preserved");
 assert(availablePayload.relayQueue?.status === "running", "video relay queue should be preserved for the UI");
 assert(availablePayload.nextAction === "review_needed_outputs_before_production_promotion", "review overlays should block promotion");
+
+const previewPlanVideoFacts = baseProjectFacts({
+  previewPlan: {
+    relayQueue: {
+      ...relayQueueFixture,
+      status: "complete",
+      counts: { total: 1, ready: 0, active: 0, completed: 1, failed: 0, blocked: 0 },
+      activeItemIds: [],
+      items: [{
+        id: "seedance_segment_1",
+        shotId: "S01",
+        status: "success",
+        submitId: "seedance-submit-1",
+        outputVideoPath: "fixtures/project/video/S01.mp4",
+        outputVideoSha256: "sha256:video-s01",
+        localMediaPaths: ["fixtures/project/video/S01.mp4"],
+      }],
+      userSummary: "视频队列已处理完，等待复核。",
+    },
+    previewItems: [{
+      id: "seedance_storyboard_video_segment_1",
+      shotId: "S01",
+      order: 1,
+      mediaType: "video",
+      mediaPath: "fixtures/project/video/S01.mp4",
+      durationSeconds: 4,
+      status: "returned_with_review_overlay",
+      videoStatus: "success",
+      submitId: "seedance-submit-1",
+      reviewRequired: true,
+    }],
+  },
+});
+const previewPlanVideoPayload = createFixtureApi({
+  projection: baseProjection({
+    projectFacts: previewPlanVideoFacts,
+    observations: [],
+    reviewShotIds: [],
+  }),
+}).currentProjectRealChainResponse({}, source);
+assert(previewPlanVideoPayload.previewItems.length === 1, "preview plan video items should be returned to the UI");
+assert(previewPlanVideoPayload.previewItems[0].mediaType === "video", "preview plan video item should keep mediaType=video");
+assert(previewPlanVideoPayload.previewItems[0].videoStatus === "success", "preview plan video item should keep videoStatus success");
+assert(previewPlanVideoPayload.previewItems[0].reviewRequired === true, "preview plan returned videos should remain reviewable");
+
+const approvedVideoPath = "fixtures/project/outputs/S01/video.mp4";
+const approvedVideoHash = "sha256:approved-video";
+const approvedReviewProjection = baseProjection({
+  project: {
+    ...project,
+    receipts: {
+      reviewReceipts: [
+        {
+          id: "review_S01_approved",
+          status: "approved",
+          humanReviewed: true,
+          shotId: "S01",
+          sourceReceiptId: "seedance_submit_fixture",
+          outputPath: approvedVideoPath,
+          outputHash: approvedVideoHash,
+        },
+      ],
+    },
+  },
+  status: "returned_with_review_overlay",
+  previewStatus: "returned_with_review_overlay",
+  productionStatus: "needs_review",
+  reviewShotIds: ["S01"],
+  observations: [
+    {
+      shotId: "S01",
+      order: 1,
+      expectedOutputPath: approvedVideoPath,
+      mediaType: "video",
+      outputHash: approvedVideoHash,
+      outputExists: true,
+      previewStatus: "returned_with_review_overlay",
+      previewQaStatus: "needs_review",
+      productionQaStatus: "needs_review",
+      reviewOverlay: true,
+      blockers: [],
+    },
+  ],
+  returnedObservations: [{ shotId: "S01" }],
+});
+const approvedReviewPayload = createFixtureApi({ projection: approvedReviewProjection }).currentProjectRealChainResponse({}, source);
+assert(approvedReviewPayload.status === "preview_ready", "approved review receipt should clear returned review overlay status");
+assert(approvedReviewPayload.productionStatus === "ready", "approved review receipt should clear production review status");
+assert(approvedReviewPayload.needsReviewCount === 0, "approved review receipt should remove shot from review count");
+assert(approvedReviewPayload.productionNeedsReviewShots.length === 0, "approved review receipt should remove production review shot");
+assert(approvedReviewPayload.previewItems[0].status === "approved", "approved review receipt should mark preview item approved");
+assert(approvedReviewPayload.previewItems[0].reviewOverlay === false, "approved review receipt should hide preview review overlay");
+assert(approvedReviewPayload.nextAction === "preview_projection_ready", "approved review receipt should unblock next action");
+
+const persistedQueuePayload = createFixtureApi({
+  projection: unavailableProjection,
+  jsonByPath: {
+    "/repo/fixtures/project/reports/video_relay_queue.json": relayQueueFixture,
+  },
+}).currentProjectRealChainResponse({}, source);
+assert(persistedQueuePayload.ok === false, "persisted relay queue should not fake preview projection availability");
+assert(persistedQueuePayload.relayQueue?.status === "running", "persisted video relay queue should be exposed even when preview projection is unavailable");
 
 const round5Facts = baseProjectFacts({
   primaryReportRelativePath: "fixtures/project/reports/round5_full_real_chain_report.json",

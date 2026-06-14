@@ -16,6 +16,10 @@ import {
   type ProviderConfigStatus,
 } from "../../core/providerCredentialsClient";
 import type { ProjectRuntimeState } from "../../core/projectState";
+import {
+  agentVideoSubmitContractAllowsVideo,
+  type AgentVideoSubmitContract,
+} from "./agentPanelProjection";
 
 const STORYBOARD_PROVIDER_ID = "apikey-fun-gpt55-responses-image";
 const SEEDANCE_SUBMIT_CONFIRM_PHRASE = "submit-seedance-video";
@@ -28,6 +32,7 @@ export type SeedanceVideoSubmitActionState = {
   message?: string;
   qaFeedback?: DirectorQaUserFeedback;
   canResume?: boolean;
+  suggestedActionLabel?: string;
 };
 
 export type SeedanceVideoSubmitActionView = SeedanceVideoSubmitActionState & {
@@ -39,6 +44,7 @@ export type SeedanceVideoSubmitActionView = SeedanceVideoSubmitActionState & {
 type UseSeedanceVideoSubmitActionInput = {
   runtimeProjectIdentity?: ProjectRuntimeIdentity;
   runtimeState?: ProjectRuntimeState;
+  realChainState?: ProjectRealChainUiState;
   selectedShotIds?: string[];
   providerConfigStatuses: ProviderConfigStatus[];
   setProviderConfigStatuses: (statuses: ProviderConfigStatus[]) => void;
@@ -54,6 +60,7 @@ export type SeedanceVideoSubmitRunOptions = {
   skipConfirm?: boolean;
   confirmationReceiptId?: string;
   confirmedAt?: string;
+  videoPermissionContract?: AgentVideoSubmitContract;
   agentToolTrace?: DirectorAgentToolTrace;
 };
 
@@ -110,10 +117,13 @@ function isStoryboardProviderConfigured(statuses: ProviderConfigStatus[]) {
 
 function relayQueueCanResume(relayQueue: ProjectSeedanceSubmitResult["relayQueue"] | undefined) {
   if (!relayQueue) return false;
-  if ((relayQueue.resumeCommands || []).length > 0) return true;
-  return (relayQueue.items || []).some((item) =>
-    Boolean(item.submitId || item.resumeCommand)
-    && ["submitted", "generating", "recoverable_queued"].includes(String(item.status || "")));
+  const items = relayQueue.items || [];
+  if (items.length) {
+    return items.some((item) =>
+      Boolean(item.submitId || item.resumeCommand)
+      && ["submitted", "generating", "recoverable_queued"].includes(String(item.status || "")));
+  }
+  return (relayQueue.resumeCommands || []).length > 0;
 }
 
 function resultCanResume(result: ProjectSeedanceSubmitResult) {
@@ -122,6 +132,23 @@ function resultCanResume(result: ProjectSeedanceSubmitResult) {
 
 function seedanceActionState(result: ProjectSeedanceSubmitResult): SeedanceVideoSubmitActionState {
   const canResume = resultCanResume(result);
+  if (result.status === "failed" || result.uiStatus === "failed") {
+    if (result.relayQueue?.autoSubmitAllowed) {
+      return {
+        status: "idle",
+        message: result.message || "有一段视频生成失败；继续会提交下一段，失败段之后可单独补。",
+        qaFeedback: result.qaFeedback,
+        canResume: false,
+        suggestedActionLabel: "继续下一段",
+      };
+    }
+    return {
+      status: "blocked",
+      message: result.message || "有一段视频生成失败，请先重试或跳过后再继续。",
+      qaFeedback: result.qaFeedback,
+      canResume: false,
+    };
+  }
   if ((result.outputVideoPath || result.status === "success" || result.uiStatus === "needs_review") && result.relayQueue?.autoSubmitAllowed) {
     return {
       status: "idle",
@@ -163,10 +190,28 @@ function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): Seedanc
   const canResume = relayQueueCanResume(relayQueue);
   if (relayQueue) {
     if (relayQueue.status === "running") {
+      const failedCount = relayQueue.counts?.failed || 0;
       return {
         status: "submitted",
-        message: relayQueue.userSummary || "即梦正在处理当前段，回来后会继续下一段。",
+        message: failedCount > 0
+          ? `${failedCount} 段失败；当前段已提交，等它回来后再处理。`
+          : relayQueue.userSummary || "即梦正在处理当前段，回来后会继续下一段。",
         canResume,
+      };
+    }
+    if (relayQueue.counts.failed > 0) {
+      if (relayQueue.autoSubmitAllowed) {
+        return {
+          status: "idle",
+          message: `${relayQueue.counts.failed} 段视频生成失败；继续会提交下一段，失败段之后可单独补。`,
+          canResume: false,
+          suggestedActionLabel: "继续下一段",
+        };
+      }
+      return {
+        status: "blocked",
+        message: `${relayQueue.counts.failed} 段视频生成失败，请先重试或跳过后再继续。`,
+        canResume: false,
       };
     }
     if (relayQueue.autoSubmitAllowed) {
@@ -210,6 +255,7 @@ function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): Seedanc
 export function useSeedanceVideoSubmitAction({
   runtimeProjectIdentity,
   runtimeState,
+  realChainState,
   selectedShotIds = [],
   providerConfigStatuses,
   setProviderConfigStatuses,
@@ -219,6 +265,14 @@ export function useSeedanceVideoSubmitAction({
 }: UseSeedanceVideoSubmitActionInput) {
   const [actionState, setActionState] = useState<SeedanceVideoSubmitActionState>({ status: "idle" });
   const keyConfigured = useMemo(() => isStoryboardProviderConfigured(providerConfigStatuses), [providerConfigStatuses]);
+  const runtimeActionState = useMemo(
+    () => realChainState ? seedanceActionStateFromRuntime(realChainState) : undefined,
+    [realChainState],
+  );
+  const effectiveActionState = useMemo(() => {
+    if (actionState.status === "running" || actionState.canResume) return actionState;
+    return runtimeActionState || actionState;
+  }, [actionState, runtimeActionState]);
 
   const runSeedanceVideoSubmit = useCallback(async (options?: SeedanceVideoSubmitRunOptions) => {
     if (!runtimeProjectIdentity) {
@@ -227,8 +281,8 @@ export function useSeedanceVideoSubmitAction({
       return nextState;
     }
 
-    if (actionState.status === "submitted" && actionState.canResume) {
-      setActionState({ ...actionState, status: "running", message: "正在查询 Seedance 结果。" });
+    if (effectiveActionState.status === "submitted" && effectiveActionState.canResume) {
+      setActionState({ ...effectiveActionState, status: "running", message: "正在查询 Seedance 结果。" });
       try {
         const resumed = await Promise.race([
           resumeProjectSeedanceVideo(runtimeProjectIdentity, { pollSeconds: 90 }),
@@ -249,6 +303,17 @@ export function useSeedanceVideoSubmitAction({
         setActionState(nextState);
         return nextState;
       }
+    }
+
+    if (options?.videoPermissionContract && !agentVideoSubmitContractAllowsVideo(options.videoPermissionContract)) {
+      const nextState: SeedanceVideoSubmitActionState = {
+        status: "blocked",
+        message: options.videoPermissionContract.mode === "plan_only"
+          ? "当前只规划，本轮不提交视频。"
+          : "当前先做参考，视频等你确认。",
+      };
+      setActionState(nextState);
+      return nextState;
     }
 
     const statuses = await loadProviderConfigStatuses();
@@ -331,21 +396,22 @@ export function useSeedanceVideoSubmitAction({
     openPreview,
     runtimeState,
     runtimeProjectIdentity,
-    actionState,
+    effectiveActionState,
     selectedShotIds,
     setProjectRealChainState,
     setProviderConfigStatuses,
   ]);
 
   const videoSubmitAction = useMemo<SeedanceVideoSubmitActionView>(() => ({
-    keyConfigured: keyConfigured || Boolean(actionState.canResume),
-    status: actionState.status,
-    message: actionState.message,
-    qaFeedback: actionState.qaFeedback,
-    canResume: actionState.canResume,
-    disabled: actionState.status === "running" || !runtimeProjectIdentity || (actionState.status === "submitted" && !actionState.canResume),
+    keyConfigured: keyConfigured || Boolean(effectiveActionState.canResume),
+    status: effectiveActionState.status,
+    message: effectiveActionState.message,
+    qaFeedback: effectiveActionState.qaFeedback,
+    canResume: effectiveActionState.canResume,
+    suggestedActionLabel: effectiveActionState.suggestedActionLabel,
+    disabled: effectiveActionState.status === "running" || !runtimeProjectIdentity || (effectiveActionState.status === "submitted" && !effectiveActionState.canResume),
     ready: Boolean(runtimeProjectIdentity),
-  }), [actionState.canResume, actionState.message, actionState.qaFeedback, actionState.status, keyConfigured, runtimeProjectIdentity]);
+  }), [effectiveActionState.canResume, effectiveActionState.message, effectiveActionState.qaFeedback, effectiveActionState.status, effectiveActionState.suggestedActionLabel, keyConfigured, runtimeProjectIdentity]);
 
   return {
     videoSubmitAction,

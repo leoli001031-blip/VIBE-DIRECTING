@@ -67,6 +67,14 @@ const referenceAllowed = normalizeDirectorAgentExecutionContract({
   reason: "允许先补参考",
 });
 
+const videoAllowed = normalizeDirectorAgentExecutionContract({
+  mode: "video_allowed",
+  referenceGenerationAllowed: true,
+  videoSubmitAllowed: true,
+  providerSubmitAllowed: true,
+  reason: "允许提交视频",
+});
+
 const referenceAction = buildDirectorAgentActionEnvelope({
   userIntent: "可以先补齐参考素材",
   snapshot,
@@ -166,10 +174,24 @@ const blockedReferenceHandoff = buildDirectorAgentToolHandoff({
 assert(blockedReferenceHandoff.status === "blocked", "blocked agent action must not become a ready tool handoff");
 assert(blockedReferenceHandoff.blockers.includes("agent_action_blocked"), "handoff should cite blocked staged action");
 
-const videoAction = buildDirectorAgentActionEnvelope({
+const defaultVideoAction = buildDirectorAgentActionEnvelope({
   userIntent: "现在可以提交视频到即梦",
   snapshot,
   generatedAt: "2026-05-31T01:00:03.000Z",
+});
+const defaultVideoHandoff = buildDirectorAgentToolHandoff({
+  action: defaultVideoAction,
+  userConfirmed: true,
+  availability: allReady,
+});
+assert(defaultVideoHandoff.status === "blocked", "default plan-only video submit must not become a ready handoff");
+assert(defaultVideoHandoff.blockers.includes("agent_action_blocked"), "default blocked video should preserve the action blocker");
+
+const videoAction = buildDirectorAgentActionEnvelope({
+  userIntent: "现在可以提交视频到即梦",
+  snapshot,
+  executionContract: videoAllowed,
+  generatedAt: "2026-05-31T01:00:03.100Z",
 });
 const videoNotReady = buildDirectorAgentToolHandoff({
   action: videoAction,

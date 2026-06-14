@@ -62,6 +62,13 @@ export function referenceStrategyDetail(strategy: DirectorSkillStrategy) {
   return "用角色、场景、道具和文字说明生成";
 }
 
+export function referenceStrategyWorkflowHint(strategy: DirectorSkillStrategy) {
+  if (strategy === "storyboard_narrative" || strategy === "storyboard_rapid_cut") {
+    return "下一步：去参考页生成参考。";
+  }
+  return "这段不会额外生成故事板。";
+}
+
 function strategyReason(shot: StrategyShot, strategy: DirectorSkillStrategy) {
   const visibleClips = positiveNumber(shot.visibleClips);
   const storyboardPanels = positiveNumber(shot.storyboardPanels);
@@ -101,25 +108,4 @@ export function directorSkillSummaryForShot(shot: ShotRecord) {
     reason: strategyReason(strategyShot, strategy),
     skillTags,
   };
-}
-
-export function directorSkillOverridePrompts(currentStrategy: DirectorSkillStrategy) {
-  const prompts = [
-    {
-      strategy: "storyboard_rapid_cut" as const,
-      label: "改成快切",
-      prompt: "这段改成故事板快切，拆清动作节点、运镜和可见剪辑节奏。",
-    },
-    {
-      strategy: "storyboard_narrative" as const,
-      label: "改成叙事",
-      prompt: "这段改成故事板叙事，重点锁构图、人物关系和情绪承接。",
-    },
-    {
-      strategy: "omni_reference" as const,
-      label: "改成简单参考",
-      prompt: "这段改成全能参考，只用场景、角色、道具和文字说明，不额外生成故事板。",
-    },
-  ];
-  return prompts.filter((item) => item.strategy !== currentStrategy);
 }

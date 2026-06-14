@@ -148,7 +148,7 @@ export interface Image2StoryboardReferencePlanInput {
 
 export interface Image2StoryboardReferencePlan {
   schemaVersion: string;
-  providerId: "lanyi-image2-responses-stream";
+  providerId: "apikey-fun-gpt55-responses-image";
   operation: "image2.storyboard_reference";
   shotId: string;
   outputSize: string;
@@ -1087,7 +1087,7 @@ export function buildImage2StoryboardReferencePlan(
 
   return {
     schemaVersion: STORYBOARD_REFERENCE_PIPELINE_VERSION,
-    providerId: "lanyi-image2-responses-stream",
+    providerId: "apikey-fun-gpt55-responses-image",
     operation: "image2.storyboard_reference",
 	    shotId: input.shotId,
 	    outputSize,
