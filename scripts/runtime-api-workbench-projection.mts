@@ -1,4 +1,5 @@
 import path from "node:path";
+import { buildProjectFolderInboxProjection } from "../src/core/projectAgentWorkspace.ts";
 
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -16,7 +17,9 @@ export function createRuntimeApiWorkbenchProjection({
   repoRoot,
   round5FullRealChainReportFileName,
   existsSync,
+  readdirSync,
   realpathSync,
+  statSync,
   pathWithinRoot,
   isPathInsideRealRoot,
   repoRelativePath,
@@ -31,6 +34,7 @@ export function createRuntimeApiWorkbenchProjection({
   if (!repoRoot) throw new Error("createRuntimeApiWorkbenchProjection requires repoRoot");
   if (typeof existsSync !== "function") throw new Error("createRuntimeApiWorkbenchProjection requires existsSync");
   if (typeof readJsonIfPresent !== "function") throw new Error("createRuntimeApiWorkbenchProjection requires readJsonIfPresent");
+  const canScanProjectFolder = typeof readdirSync === "function" && typeof statSync === "function";
 
   function readRuntimeJson(relativePath) {
     if (!relativePath) return undefined;
@@ -635,6 +639,134 @@ export function createRuntimeApiWorkbenchProjection({
     };
   }
 
+  function projectFolderFileEntries(source) {
+    if (!canScanProjectFolder || !source?.runRootPath || !existsSync(source.runRootPath)) return [];
+    const ignoredDirs = new Set([
+      ".git",
+      ".vibe-runtime",
+      "node_modules",
+      "project",
+      "reports",
+      "runtime",
+      "provider_observations",
+      "semantic_qa",
+      "outputs",
+      "tmp",
+      "temp",
+      "cache",
+      "candidates",
+      "drafts",
+    ]);
+    const allowedTopLevelDirs = new Set([
+      "assets",
+      "characters",
+      "character_refs",
+      "roles",
+      "cast",
+      "scenes",
+      "locations",
+      "environments",
+      "backgrounds",
+      "props",
+      "objects",
+      "items",
+      "storyboards",
+      "shotboards",
+      "boards",
+      "voices",
+      "voice_refs",
+      "dialogue",
+      "speech",
+      "audio",
+      "scripts",
+      "script",
+      "screenplay",
+      "subtitles",
+      "videos",
+      "clips",
+      "renders",
+      "exports",
+      "deliverables",
+      "final",
+      "角色",
+      "人物",
+      "场景",
+      "地点",
+      "环境",
+      "天气",
+      "道具",
+      "物件",
+      "分镜",
+      "故事板",
+      "声音",
+      "声线",
+      "配音",
+      "对白",
+      "脚本",
+      "台词",
+      "字幕",
+      "视频",
+      "回流视频",
+      "交付",
+      "导出",
+      "成片",
+    ]);
+    const entries = [];
+    const rootRealPath = realpathSync(source.runRootPath);
+    function visit(dirPath, depth, topLevelName) {
+      if (entries.length >= 400 || depth > 4) return;
+      let dirEntries = [];
+      try {
+        dirEntries = readdirSync(dirPath, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of dirEntries) {
+        if (entries.length >= 400) break;
+        if (!entry?.name || entry.name.startsWith(".")) continue;
+        const entryPath = path.join(dirPath, entry.name);
+        const relativePath = normalizeRelativePath(path.relative(source.runRootPath, entryPath));
+        const firstSegment = relativePath.split("/")[0];
+        const nextTopLevelName = topLevelName || firstSegment;
+        if (!topLevelName && !allowedTopLevelDirs.has(firstSegment)) continue;
+        if (entry.isDirectory()) {
+          if (ignoredDirs.has(entry.name.toLowerCase())) continue;
+          visit(entryPath, depth + 1, nextTopLevelName);
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        try {
+          const realPath = realpathSync(entryPath);
+          if (!isPathInsideRealRoot(realPath, rootRealPath)) continue;
+          const stats = statSync(entryPath);
+          entries.push({
+            path: relativePath,
+            sizeBytes: stats.size,
+            modifiedAt: stats.mtime instanceof Date ? stats.mtime.toISOString() : undefined,
+          });
+        } catch {
+          // Ignore files that disappear during a read-only status refresh.
+        }
+      }
+    }
+    visit(source.runRootPath, 0, "");
+    return entries;
+  }
+
+  function workbenchAssetFromFolderAsset(asset, index) {
+    return {
+      id: asset.id || `folder_asset_${index + 1}`,
+      type: asset.type || "unknown",
+      name: asset.name || asset.id || `素材 ${index + 1}`,
+      status: "needs_review",
+      path: portableWorkbenchPath(asset.path),
+      sourceKind: "project_folder_candidate",
+      textConstraints: Array.isArray(asset.textConstraints) ? asset.textConstraints : [],
+      usedByShotIds: Array.isArray(asset.usedByShotIds) ? asset.usedByShotIds : [],
+      sourceRefs: uniqueStrings(["project_folder_scan", ...(Array.isArray(asset.sourceRefs) ? asset.sourceRefs : [])]),
+    };
+  }
+
   function mergeProjectVibeAssetAuthority(visualAssets, projectVibeAssets) {
     const byId = new Map();
     for (const asset of visualAssets) byId.set(asset.id, asset);
@@ -813,6 +945,30 @@ export function createRuntimeApiWorkbenchProjection({
         .filter(Boolean)
       : [];
     const authoritativeVisualAssets = mergeProjectVibeAssetAuthority(visualAssets, projectVibeAssets);
+    const folderInbox = buildProjectFolderInboxProjection({
+      files: projectFolderFileEntries(source),
+      existingAssets: authoritativeVisualAssets.map((asset) => ({
+        id: asset.id,
+        type: asset.type,
+        name: asset.name,
+        path: asset.path || "",
+        status: asset.status === "missing" ? "missing" : asset.status === "rejected" ? "rejected" : "exists",
+        lockedStatus: asset.status === "locked"
+          ? "locked"
+          : asset.status === "candidate"
+            ? "candidate"
+            : asset.status === "missing"
+              ? "not_generated"
+              : "needs_review",
+        safeForFutureReference: asset.status === "locked",
+        issues: [],
+      })),
+    });
+    const folderAssets = folderInbox.discoveredAssets
+      .map(workbenchAssetFromFolderAsset)
+      .filter((asset) => asset.path);
+    const allVisualAssets = [...authoritativeVisualAssets, ...folderAssets];
+    const visualReadableWithFolderAssets = visualMemoryReadable || folderAssets.length > 0;
 
     return {
       schemaVersion: "vibe_core_current_project_workbench_facts_v1",
@@ -847,18 +1003,23 @@ export function createRuntimeApiWorkbenchProjection({
         shots: storyShots,
       },
       visualMemory: {
-        present: visualMemoryFact.present,
-        readable: visualMemoryReadable,
+        present: visualMemoryFact.present || folderAssets.length > 0,
+        readable: visualReadableWithFolderAssets,
         path: visualMemoryFact.path,
         fallbackFromProjectVibe: !visualMemoryFact.readable && Boolean(projectVibeVisualMemory),
-        assetCount: authoritativeVisualAssets.length,
-        assets: authoritativeVisualAssets,
+        folderScan: {
+          discoveredAssetCount: folderInbox.discoveredAssetCount,
+          ignoredCount: folderInbox.ignoredCount,
+          nextAction: folderInbox.nextAction,
+        },
+        assetCount: allVisualAssets.length,
+        assets: allVisualAssets,
         summary: {
-          locked: authoritativeVisualAssets.filter((asset) => asset.status === "locked").length,
-          candidate: authoritativeVisualAssets.filter((asset) => asset.status === "candidate").length,
-          needsReview: authoritativeVisualAssets.filter((asset) => asset.status === "needs_review").length,
-          rejected: authoritativeVisualAssets.filter((asset) => asset.status === "rejected").length,
-          missing: authoritativeVisualAssets.filter((asset) => asset.status === "missing").length,
+          locked: allVisualAssets.filter((asset) => asset.status === "locked").length,
+          candidate: allVisualAssets.filter((asset) => asset.status === "candidate").length,
+          needsReview: allVisualAssets.filter((asset) => asset.status === "needs_review").length,
+          rejected: allVisualAssets.filter((asset) => asset.status === "rejected").length,
+          missing: allVisualAssets.filter((asset) => asset.status === "missing").length,
         },
       },
       factsUsed: [
@@ -872,6 +1033,11 @@ export function createRuntimeApiWorkbenchProjection({
           name: visualMemoryFact.readable ? visualMemoryFact.name : "project_vibe.visual_memory",
           path: visualMemoryFact.readable ? visualMemoryFact.path : source.projectVibeRelativePath,
           usedFor: visualMemoryFact.usedFor,
+        }] : []),
+        ...(folderAssets.length ? [{
+          name: "project_folder_scan",
+          path: source.runRootRelativePath,
+          usedFor: ["asset_inbox"],
         }] : []),
       ].filter((fact, index, facts) => facts.findIndex((item) => item.name === fact.name && item.path === fact.path) === index),
       providerCalled: false,

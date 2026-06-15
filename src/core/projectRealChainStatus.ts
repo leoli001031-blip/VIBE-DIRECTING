@@ -186,6 +186,11 @@ export type ProjectWorkbenchFacts = {
     path?: string;
     assetCount: number;
     assets: ProjectWorkbenchAssetFact[];
+    folderScan?: {
+      discoveredAssetCount: number;
+      ignoredCount: number;
+      nextAction: string;
+    };
     summary?: {
       locked?: number;
       candidate?: number;

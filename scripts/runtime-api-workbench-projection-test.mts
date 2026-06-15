@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -177,6 +177,16 @@ try {
   writeFileSync(path.join(runRootPath, "outputs/shots/S01/start.png"), "png-bytes");
   mkdirSync(path.join(runRootPath, "outputs/shots/S02"), { recursive: true });
   writeFileSync(path.join(runRootPath, "outputs/shots/S02/start.png"), "project-relative-png-bytes");
+  mkdirSync(path.join(runRootPath, "characters/lin-an"), { recursive: true });
+  writeFileSync(path.join(runRootPath, "characters/lin-an/front.png"), "character-png");
+  mkdirSync(path.join(runRootPath, "scenes/rain-platform"), { recursive: true });
+  writeFileSync(path.join(runRootPath, "scenes/rain-platform/wide.jpg"), "scene-jpg");
+  mkdirSync(path.join(runRootPath, "storyboards"), { recursive: true });
+  writeFileSync(path.join(runRootPath, "storyboards/sequence.png"), "storyboard-png");
+  mkdirSync(path.join(runRootPath, "voices"), { recursive: true });
+  writeFileSync(path.join(runRootPath, "voices/heroine.wav"), "voice-wav");
+  mkdirSync(path.join(runRootPath, "reports"), { recursive: true });
+  writeFileSync(path.join(runRootPath, "reports/not-user-reference.png"), "internal-report-png");
 
   const boundary = createRuntimeApiBoundary({
     repoRoot,
@@ -186,7 +196,9 @@ try {
     repoRoot,
     round5FullRealChainReportFileName: "round5_full_real_chain_report.json",
     existsSync,
+    readdirSync,
     realpathSync,
+    statSync,
     pathWithinRoot: boundary.pathWithinRoot,
     isPathInsideRealRoot,
     repoRelativePath: boundary.repoRelativePath,
@@ -227,10 +239,12 @@ try {
   assert(workbenchFacts.storyFlow.shotCount === 2, "workbench storyFlow should normalize canonical shots");
   assert(workbenchFacts.storyFlow.sectionCount === 1, "workbench storyFlow should normalize sections");
   assert(workbenchFacts.storyFlow.shots[0]?.referenceStrategy === "storyboard_rapid_cut", "workbench storyFlow should preserve Project.vibe referenceStrategy");
-  assert(workbenchFacts.visualMemory.assetCount === 3, "workbench visualMemory should normalize assets");
+  assert(workbenchFacts.visualMemory.assetCount === 7, "workbench visualMemory should include normalized assets plus project-folder candidates");
 	  assert(workbenchFacts.visualMemory.summary.locked === 2, "workbench visualMemory should let Project.vibe locked assets override sidecar candidates");
 	  assert(workbenchFacts.visualMemory.summary.candidate === 0, "workbench visualMemory should not keep a sidecar candidate after Project.vibe locks the same asset");
-	  assert(workbenchFacts.visualMemory.summary.needsReview === 1, "workbench visualMemory should count needs_review assets");
+	  assert(workbenchFacts.visualMemory.summary.needsReview === 5, "workbench visualMemory should count needs_review assets including folder candidates");
+  assert(workbenchFacts.visualMemory.folderScan.discoveredAssetCount === 4, "workbench visualMemory should report project folder scan discoveries");
+  assert(workbenchFacts.factsUsed.some((fact) => fact.name === "project_folder_scan"), "workbench facts should record project folder scan as a read-only fact source");
 	  const sceneAsset = workbenchFacts.visualMemory.assets.find((asset) => asset.id === "scene_a");
 	  assert(sceneAsset?.status === "locked", "Project.vibe locked asset status should override stale sidecar status");
 	  assert(sceneAsset?.name === "Station Locked", "Project.vibe locked asset label should override stale sidecar label without leaking stale review status suffixes");
@@ -238,6 +252,11 @@ try {
 	  assert(sceneAsset?.outputHash === "sha-scene-a", "workbench asset facts should preserve generated asset hash evidence");
 	  assert(sceneAsset?.promptText === "Generate Station scene reference.", "workbench asset facts should preserve generated asset prompt text");
 	  assert(sceneAsset?.promptHash === "sha-prompt-scene-a", "workbench asset facts should preserve generated asset prompt hash");
+  const folderCharacter = workbenchFacts.visualMemory.assets.find((asset) => asset.path === "characters/lin-an/front.png");
+  assert(folderCharacter?.type === "character", "project folder scan should classify character directories as character assets");
+  assert(folderCharacter?.status === "needs_review", "project folder assets should require creator review before locking");
+  assert(folderCharacter?.sourceRefs.includes("project_folder_scan"), "project folder asset facts should keep scan provenance");
+  assert(!workbenchFacts.visualMemory.assets.some((asset) => asset.path?.includes("reports/not-user-reference")), "project folder scan must ignore internal report files");
   assert(workbenchFacts.providerCalled === false && workbenchFacts.projectVibeWritten === false, "workbench facts must stay read-only");
 } finally {
   rmSync(workingRoot, { recursive: true, force: true });

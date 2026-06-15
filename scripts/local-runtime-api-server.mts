@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 import path from "node:path";
@@ -521,7 +521,9 @@ const {
   repoRoot,
   round5FullRealChainReportFileName,
   existsSync,
+  readdirSync,
   realpathSync,
+  statSync,
   pathWithinRoot,
   isPathInsideRealRoot,
   repoRelativePath,
