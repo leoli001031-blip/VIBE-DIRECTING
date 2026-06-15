@@ -456,7 +456,8 @@ export function CreatorDeskPanels({
   const referenceGenerationBusy = referenceGenerationAction?.status === "running";
   const generationActionBlocked = Boolean(batchGeneration.canRetryMissing && !onRetryMissing);
   const projectRequirement = agentProjectRequirementCopy({ localProjectBusy, canCreateLocalProject });
-  const browserDraftLabel = localProjectBusy ? projectRequirement.label : "先写想法";
+  const hasStoryDraftForProject = scriptPlanner.shotCount > 0 || framePlan.items.length > 0;
+  const browserDraftLabel = hasStoryDraftForProject ? projectRequirement.label : "先写想法";
   const nextActionCopy = !localProjectReady
     ? browserDraftLabel
     : generationActionBlocked
@@ -466,8 +467,10 @@ export function CreatorDeskPanels({
     ? preflight
     : {
         ...preflight,
-        summary: "当前还没连接项目文件夹，可以继续整理；生成参考或视频前再打开或新建项目。",
-        nextAction: "选择本地项目",
+        summary: hasStoryDraftForProject
+          ? projectRequirement.detail
+          : "当前还没连接项目文件夹，可以继续整理；生成参考或视频前再打开或新建项目。",
+        nextAction: hasStoryDraftForProject ? projectRequirement.label : "选择本地项目",
       };
   const referenceNotice = referenceGenerationAction?.message && referenceGenerationAction.status !== "idle"
     ? referenceGenerationAction.status === "blocked"
@@ -487,7 +490,9 @@ export function CreatorDeskPanels({
     })
     .slice(0, 6);
   const creatorStepHint = !localProjectReady
-    ? "可以继续说想法；生成参考、视频或导出前再准备本地项目。"
+    ? hasStoryDraftForProject
+      ? projectRequirement.hint
+      : "可以继续说想法；生成参考、视频或导出前再准备本地项目。"
     : referenceGenerationBusy
       ? "参考正在生成，完成后会进入复核。"
       : videoCanResume
