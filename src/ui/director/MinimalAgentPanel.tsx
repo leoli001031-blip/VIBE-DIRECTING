@@ -1395,9 +1395,11 @@ export function MinimalAgentPanel({
     ? "生成中"
     : referenceGenerationBlockedByProject
       ? "先保存项目"
+    : referenceGenerationBlockedByContract
+      ? "允许做参考"
     : realSampleAction?.status === "needs_review"
       ? "等待复核"
-      : realSampleAction?.status === "verified"
+    : realSampleAction?.status === "verified"
         ? "已完成"
         : "生成参考";
   const idleActionHint = currentVideoPermissionContract.mode === "plan_only"
@@ -1409,6 +1411,8 @@ export function MinimalAgentPanel({
     ? "生成中"
     : referenceGenerationBlockedByProject
       ? "先保存项目"
+    : referenceGenerationBlockedByContract
+      ? "允许做参考"
     : endFrameAction?.status === "needs_review"
       ? "等待复核"
       : endFrameAction?.status === "verified"
@@ -1422,7 +1426,9 @@ export function MinimalAgentPanel({
       ? videoSendAction.suggestedActionLabel
     : videoPermissionBlockedByProject
       ? "先保存项目"
-      : videoAlreadySent
+    : videoPermissionBlockedByContract
+      ? "允许发视频"
+    : videoAlreadySent
       ? "已发送"
       : "发送视频";
   const agentBoundarySummaryLabel = videoCanResume
@@ -1592,6 +1598,12 @@ export function MinimalAgentPanel({
       setStatus("先打开或保存本地项目。");
       return;
     }
+    if (referenceGenerationBlockedByContract) {
+      const nextContract = agentVideoPermissionForMode("reference_allowed");
+      updateVideoPermissionContract(nextContract);
+      setStatus("已允许做参考，再点生成参考继续。");
+      return;
+    }
     if (!realSampleAction.keyConfigured) {
       setStatus("先在设置里连接图片服务。");
       return;
@@ -1600,18 +1612,20 @@ export function MinimalAgentPanel({
       setStatus(realSampleAction.message || (realSampleBusy ? "参考正在生成。" : "当前还不能生成参考。"));
       return;
     }
-    const nextContract = referenceGenerationBlockedByContract
-      ? agentVideoPermissionForMode("reference_allowed")
-      : currentVideoPermissionContract;
-    if (referenceGenerationBlockedByContract) updateVideoPermissionContract(nextContract);
     setStatus("已发送参考任务。");
-    void onCreateP6RealSample({ scope: "project", videoPermissionContract: nextContract });
+    void onCreateP6RealSample({ scope: "project", videoPermissionContract: currentVideoPermissionContract });
   }
 
   function runFooterEndFrameGeneration() {
     if (!endFrameAction) return;
     if (referenceGenerationBlockedByProject) {
       setStatus("先打开或保存本地项目。");
+      return;
+    }
+    if (referenceGenerationBlockedByContract) {
+      const nextContract = agentVideoPermissionForMode("reference_allowed");
+      updateVideoPermissionContract(nextContract);
+      setStatus("已允许做参考，再点生成结束画面继续。");
       return;
     }
     if (!endFrameAction.keyConfigured) {
@@ -1622,10 +1636,6 @@ export function MinimalAgentPanel({
       setStatus(endFrameAction.message || (endFrameBusy ? "结束画面正在生成。" : "当前还不能生成结束画面。"));
       return;
     }
-    const nextContract = referenceGenerationBlockedByContract
-      ? agentVideoPermissionForMode("reference_allowed")
-      : currentVideoPermissionContract;
-    if (referenceGenerationBlockedByContract) updateVideoPermissionContract(nextContract);
     setStatus("已发送结束画面任务。");
     void onCreateImage2EndFrame();
   }
@@ -1636,6 +1646,12 @@ export function MinimalAgentPanel({
       setStatus("先打开或保存本地项目。");
       return;
     }
+    if (!videoCanResume && videoPermissionBlockedByContract) {
+      const nextContract = agentVideoPermissionForMode("video_allowed");
+      updateVideoPermissionContract(nextContract);
+      setStatus("已允许发视频，再点发送视频继续。");
+      return;
+    }
     if (videoBusy || !onSendSeedanceVideo) {
       setStatus(videoBusy ? "视频任务正在处理。" : "当前还不能发送视频。");
       return;
@@ -1644,12 +1660,8 @@ export function MinimalAgentPanel({
       setStatus(videoSendAction.message || "视频还不能发送。");
       return;
     }
-    const nextContract = videoPermissionBlockedByContract
-      ? agentVideoPermissionForMode("video_allowed")
-      : currentVideoPermissionContract;
-    if (videoPermissionBlockedByContract) updateVideoPermissionContract(nextContract);
     setStatus(videoCanResume ? "开始查询视频结果。" : "开始发送视频。");
-    void onSendSeedanceVideo({ videoPermissionContract: nextContract });
+    void onSendSeedanceVideo({ videoPermissionContract: currentVideoPermissionContract });
   }
 
   function updateText(value: string) {
@@ -2249,9 +2261,11 @@ export function MinimalAgentPanel({
   const referenceFooterAction = showRealSampleAction && realSampleAction?.status !== "verified"
     ? {
         label: realSampleLabel,
-        disabled: referenceGenerationBlockedByProject || Boolean(realSampleAction?.disabled) || !realSampleAction?.keyConfigured || realSampleBusy || !onCreateP6RealSample,
+        disabled: referenceGenerationBlockedByProject || (!referenceGenerationBlockedByContract && (Boolean(realSampleAction?.disabled) || !realSampleAction?.keyConfigured || realSampleBusy || !onCreateP6RealSample)),
         disabledReason: referenceGenerationBlockedByProject
           ? "先打开或保存本地项目。"
+          : referenceGenerationBlockedByContract
+            ? ""
           : !realSampleAction?.keyConfigured
             ? "先在设置里连接图片服务。"
             : realSampleBusy
@@ -2263,9 +2277,11 @@ export function MinimalAgentPanel({
   const endFrameFooterAction = showEndFrameAction && endFrameAction?.status !== "verified"
     ? {
         label: endFrameLabel,
-        disabled: referenceGenerationBlockedByProject || Boolean(endFrameAction?.disabled) || !endFrameAction?.keyConfigured || endFrameBusy || !onCreateImage2EndFrame,
+        disabled: referenceGenerationBlockedByProject || (!referenceGenerationBlockedByContract && (Boolean(endFrameAction?.disabled) || !endFrameAction?.keyConfigured || endFrameBusy || !onCreateImage2EndFrame)),
         disabledReason: referenceGenerationBlockedByProject
           ? "先打开或保存本地项目。"
+          : referenceGenerationBlockedByContract
+            ? ""
           : !endFrameAction?.keyConfigured
             ? "先在设置里连接图片服务。"
             : endFrameBusy
@@ -2285,9 +2301,11 @@ export function MinimalAgentPanel({
   const videoSubmitFooterAction = showVideoAction && videoSendAction && videoSendAction.status !== "needs_review"
     ? {
         label: videoActionLabel,
-        disabled: videoPermissionBlockedByProject || Boolean(videoSendAction.disabled) || !videoSendAction.ready || !videoSendAction.keyConfigured || videoBusy || (videoAlreadySent && !videoCanResume) || !onSendSeedanceVideo,
+        disabled: videoPermissionBlockedByProject || (!videoPermissionBlockedByContract && (Boolean(videoSendAction.disabled) || !videoSendAction.ready || !videoSendAction.keyConfigured || videoBusy || (videoAlreadySent && !videoCanResume) || !onSendSeedanceVideo)),
         disabledReason: videoPermissionBlockedByProject
           ? "先打开或保存本地项目。"
+          : videoPermissionBlockedByContract
+            ? ""
           : !videoSendAction.keyConfigured
             ? "先在设置里连接即梦。"
             : videoBusy

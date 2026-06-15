@@ -3,7 +3,7 @@ import type { DirectorQaUserFeedback } from "../../core/directorQaUserFeedback";
 import { formatShotNumber } from "./MinimalStoryFlow";
 import { agentProjectRequirementCopy } from "./agentProjectRequirementCopy";
 import type { DirectorView } from "./directorTypes";
-import type { CreatorDeskProjection, CreatorFrameStatus, CreatorReviewLockTarget, CreatorReviewStatus, CreatorReviewTrayItem } from "./creatorDeskTypes";
+import type { CreatorAgentCommand, CreatorDeskProjection, CreatorFrameStatus, CreatorReviewLockTarget, CreatorReviewStatus, CreatorReviewTrayItem } from "./creatorDeskTypes";
 
 const jimengExpectedWaitMinutes = 50;
 
@@ -415,6 +415,7 @@ export function CreatorDeskPanels({
   referenceGenerationAction,
   onRetryMissing,
   videoSendAction,
+  agentCommandOverride,
   onRetryItem,
   onApproveItem,
   onRejectItem,
@@ -441,6 +442,7 @@ export function CreatorDeskPanels({
     suggestedActionLabel?: string;
     qaFeedback?: DirectorQaUserFeedback;
   };
+  agentCommandOverride?: CreatorAgentCommand;
   onRetryMissing?: () => void;
   onSendVideo?: () => unknown | Promise<unknown>;
   onRetryItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
@@ -452,6 +454,7 @@ export function CreatorDeskPanels({
   onOpenView?: (view: DirectorView) => void;
 }) {
   const { agentStage, agentCommand, scriptPlanner, batchGeneration, framePlan, videoStage, reviewTray } = projection;
+  const displayAgentCommand = agentCommandOverride || agentCommand;
   const { projectObservation, projectInbox, defaultIntentRoute } = projection;
   const videoGeneration = videoStage.generation;
   const { preflight } = projection;
@@ -463,15 +466,12 @@ export function CreatorDeskPanels({
   const videoCanResume = Boolean(videoSendAction?.canResume || videoGeneration.canResume) && videoGeneration.status !== "completed";
   const videoActionRelevant = videoGeneration.status !== "completed";
   const referenceGenerationBusy = referenceGenerationAction?.status === "running";
-  const generationActionBlocked = Boolean(batchGeneration.canRetryMissing && !onRetryMissing);
   const projectRequirement = agentProjectRequirementCopy({ localProjectBusy, canCreateLocalProject });
   const hasStoryDraftForProject = scriptPlanner.shotCount > 0 || framePlan.items.length > 0;
   const browserDraftLabel = hasStoryDraftForProject ? projectRequirement.label : "先写想法";
   const nextActionCopy = !localProjectReady
     ? browserDraftLabel
-    : generationActionBlocked
-      ? "生成参考"
-      : agentCommand.label;
+    : displayAgentCommand.label;
   const displayPreflight = localProjectReady
     ? preflight
     : {
@@ -506,13 +506,13 @@ export function CreatorDeskPanels({
       ? "参考正在生成，完成后会进入复核。"
       : videoCanResume
         ? "底部按钮会查询结果，不会重复发送。"
-        : agentCommand.kind === "submit_video"
+        : displayAgentCommand.kind === "submit_video"
           ? "底部按钮会发送下一段，仍然一次只跑一段。"
-          : agentCommand.kind === "open_preview"
+          : displayAgentCommand.kind === "open_preview"
             ? "底部按钮会进入预览。"
-          : agentCommand.kind === "open_export"
+          : displayAgentCommand.kind === "open_export"
             ? "底部按钮会进入交付。"
-          : agentCommand.kind === "open_review"
+          : displayAgentCommand.kind === "open_review"
             ? "先检查画面；也可以点下方卡片直接复核。"
           : `看底部按钮继续：${primaryActionLabel(nextActionCopy)}。`;
   const showAssetReconciliation = Boolean(assetReconciliation && (

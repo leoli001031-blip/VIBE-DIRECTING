@@ -34,7 +34,7 @@ import {
   type StagePrototypeAgentPlanInput,
   type StagePrototypeAgentPlanResult,
 } from "./agentPanelProjection";
-import type { CreatorDeskProjection, CreatorReviewLockTarget, CreatorReviewTrayItem } from "./creatorDeskTypes";
+import type { CreatorAgentCommand, CreatorDeskProjection, CreatorReviewLockTarget, CreatorReviewTrayItem } from "./creatorDeskTypes";
 import type { MinimalAudioPlanDialogueAudioCreated } from "./MinimalAudioPlan";
 
 const MinimalPreview = lazy(() =>
@@ -325,6 +325,29 @@ export function DirectorMode({
     : undefined;
   const sessionRetryMissingBatch = videoPermissionAllowsReference ? onRetryMissingBatch : undefined;
   const sessionRetryReviewItem = videoPermissionAllowsReference ? onRetryReviewItem : undefined;
+  const visibleAgentCommand = useMemo<CreatorAgentCommand | undefined>(() => {
+    const command = creatorDesk?.agentCommand;
+    if (!command) return undefined;
+    if (command.kind === "generate_references" && !videoPermissionAllowsReference) {
+      return {
+        ...command,
+        label: "允许做参考",
+        summary: "先打开参考生成权限。",
+        detail: "当前工作范围是先整理。允许做参考后，再由你确认生成参考。",
+      };
+    }
+    if (command.kind === "submit_video" && !videoPermissionAllowsSend) {
+      return {
+        ...command,
+        label: "允许发视频",
+        summary: "先打开视频发送权限。",
+        detail: videoPermissionContract.mode === "plan_only"
+          ? "当前工作范围是先整理。允许发视频后，再由你确认发送。"
+          : "当前先做参考。允许发视频后，再由你确认发送。",
+      };
+    }
+    return command;
+  }, [creatorDesk?.agentCommand, videoPermissionAllowsReference, videoPermissionAllowsSend, videoPermissionContract.mode]);
   const storyDetailLabel = [`${view.storySections.length} 个段落`, "点击查看分镜、模式和画面状态"].join(" · ");
   const showCreatorDeskPanel = projectReady && creatorDesk && !showNewVideoStart && directorView === "story";
   useEffect(() => {
@@ -341,12 +364,11 @@ export function DirectorMode({
     videoSendAction: sessionVideoSendAction,
     videoStage: creatorDesk?.videoStage,
     agentStage: creatorDesk?.agentStage,
-    agentCommand: creatorDesk?.agentCommand,
+    agentCommand: visibleAgentCommand,
     newVideoStatus,
     exportAction,
     exportWorker,
   }), [
-    creatorDesk?.agentCommand,
     creatorDesk?.agentStage,
     creatorDesk?.videoStage,
     directorView,
@@ -360,6 +382,7 @@ export function DirectorMode({
     realSampleAction,
     runtimeState,
     sessionVideoSendAction,
+    visibleAgentCommand,
   ]);
   async function confirmNewVideoDraft(draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) {
     const nextContract = draft.agentBoundaryMode
@@ -388,6 +411,7 @@ export function DirectorMode({
             onRetryMissing={sessionRetryMissingBatch}
             referenceGenerationAction={realSampleAction}
             videoSendAction={sessionVideoSendAction}
+            agentCommandOverride={visibleAgentCommand}
             onSendVideo={sessionSendSeedanceVideo}
             onRetryItem={sessionRetryReviewItem}
             onApproveItem={onApproveReviewItem}
@@ -531,7 +555,7 @@ export function DirectorMode({
             onStagePrototypeAgentPlan={onStagePrototypeAgentPlan}
             onRememberAgentActionLogItem={onRememberAgentActionLogItem}
             onPreviewPrototypeAgentDemo={onPreviewPrototypeAgentDemo}
-            agentCommand={creatorDesk?.agentCommand}
+            agentCommand={visibleAgentCommand}
             realSampleAction={realSampleAction}
             endFrameAction={endFrameAction}
             videoSendAction={videoSendAction}

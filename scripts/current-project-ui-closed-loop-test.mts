@@ -582,9 +582,9 @@ function assertCreatorPanelContract() {
   assert(/const agentStage = buildCreatorAgentStage/.test(creatorDeskProjectionSource), "Creator desk projection must expose one Agent stage for the primary next action");
   assert(/agentCommand:\s*buildCreatorAgentCommand\(agentStage\)/.test(creatorDeskProjectionSource), "Creator desk projection must expose one Agent command for the primary action");
   assert(/const \{ agentStage,\s*agentCommand,[^}]*scriptPlanner/.test(creatorDeskPanelsSource), "Creator desk panels must read the unified Agent stage and command");
-  assert(/nextActionCopy[\s\S]*agentCommand\.label/.test(creatorDeskPanelsSource), "Creator desk summary copy must come from the unified Agent command");
-  assert(/agentCommand\.kind === "open_preview"/.test(creatorDeskPanelsSource), "Creator desk preview hint must follow the Agent command");
-  assert(/agentCommand\.kind === "open_export"/.test(creatorDeskPanelsSource), "Creator desk export hint must follow the Agent command");
+  assert(/displayAgentCommand[\s\S]*nextActionCopy[\s\S]*displayAgentCommand\.label/.test(creatorDeskPanelsSource), "Creator desk summary copy must come from the boundary-aware Agent command");
+  assert(/displayAgentCommand\.kind === "open_preview"/.test(creatorDeskPanelsSource), "Creator desk preview hint must follow the Agent command");
+  assert(/displayAgentCommand\.kind === "open_export"/.test(creatorDeskPanelsSource), "Creator desk export hint must follow the Agent command");
   assert(!/creator-primary-action|runCreatorPrimaryAction/.test(creatorDeskPanelsSource), "Creator desk summary must not duplicate the bottom primary action");
   assert(/const preflight = buildCreatorPreflightProjection/.test(creatorDeskProjectionSource), "Creator desk projection must build preflight from the current workbench state");
   assert(/故事板叙事[\s\S]*故事板快切[\s\S]*全能参考/.test(creatorDeskProjectionSource), "Creator desk preflight must summarize the three generation modes");

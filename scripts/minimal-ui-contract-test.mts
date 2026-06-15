@@ -404,13 +404,14 @@ checkMessage(requireWithin(projectStatusViewModel, /!input\.folderReady && input
 checkMessage(requireWithin(projectStatusViewModelSource, /!input\.folderReady && input\.projectReady && \/生成\|提交\|导出\/\.test\(rawAgentFact\)[\s\S]*先保存项目/, "Blocked generate/submit/export actions in browser drafts should be summarized as saving the project first"));
 checkMessage(requireWithin(projectStatusViewModelSource, /label:\s*"AI 导演"/, "Project status facts should use creator-facing AI director label"));
 checkMessage(requireWithin(projectStatusViewModelSource, /if \(missing > 0\) return "角色、场景、道具或故事板参考待生成"/, "Local projects should surface missing references before review when references are missing"));
-checkMessage(requireWithin(projectStatusViewModel, /shouldGenerateReferences[\s\S]*参考待生成[\s\S]*missingReferences[\s\S]*生成参考/, "Local projects should prioritize generating missing references instead of routing users to review"));
+checkMessage(requireWithin(projectStatusViewModel, /missingReferenceNextAction[\s\S]*input\.agentCommand\?\.kind === "generate_references"[\s\S]*input\.agentCommand\.label[\s\S]*生成参考[\s\S]*missingReferences[\s\S]*missingReferenceNextAction/, "Local projects should prioritize boundary-aware reference generation guidance instead of routing users to review"));
 checkMessage(requireWithin(projectStatusViewModelSource, /audioFactLabel[\s\S]*声音参考/, "Project status view model must summarize voice references in creator-facing copy"));
 check(!/\b(real-chain|relay\s+queue|Project\.vibe|provider)\b/i.test(extractStringLiterals(projectStatusViewModelSource)), "Project status view model copy must hide engineering state sources");
 checkMessage(requireWithin(directorModeSource, /function\s+ProjectStatusSummary\s*\(/, "DirectorMode must render the project status summary component"));
 checkMessage(requireWithin(directorMode, /className="director-workbar"[\s\S]*<ProjectStatusSummary\s+status=\{projectStatusView\}/, "Director workbar must render the unified project status summary"));
 checkMessage(requireWithin(directorMode, /buildProjectStatusViewModel\(\{[\s\S]*videoStage:\s*creatorDesk\?\.videoStage/, "DirectorMode must feed CreatorDesk videoStage into the unified project status"));
-checkMessage(requireWithin(directorMode, /buildProjectStatusViewModel\(\{[\s\S]*agentStage:\s*creatorDesk\?\.agentStage[\s\S]*agentCommand:\s*creatorDesk\?\.agentCommand/, "DirectorMode must feed CreatorDesk Agent guidance into the unified project status"));
+checkMessage(requireWithin(directorMode, /visibleAgentCommand[\s\S]*允许做参考[\s\S]*允许发视频/, "DirectorMode must adapt CreatorDesk Agent guidance to the visible execution boundary"));
+checkMessage(requireWithin(directorMode, /buildProjectStatusViewModel\(\{[\s\S]*agentStage:\s*creatorDesk\?\.agentStage[\s\S]*agentCommand:\s*visibleAgentCommand/, "DirectorMode must feed boundary-aware Agent guidance into the unified project status"));
 checkMessage(requireWithin(directorMode, /const \[newVideoStatus, setNewVideoStatus\] = useState<NewVideoStartStatus \| undefined>\(\)/, "DirectorMode must track fresh-project planning status from the composer"));
 checkMessage(requireWithin(directorMode, /newVideoStatus,\s*[\s\S]*exportAction/, "DirectorMode must feed fresh-project planning status into the unified project status"));
 check(!/className="director-workbar"[\s\S]{0,200}\{statusNode\}/.test(directorMode), "Director workbar must not duplicate the legacy status node");
@@ -517,7 +518,7 @@ checkMessage(requireWithin(creatorDeskPanelsSource, /完整项目细节[\s\S]*cr
 checkMessage(requireWithin(creatorDeskPanelsSource, /displayPreflight\.checks\.map/, "CreatorDeskPanels must render preflight checks from the shared projection"));
 checkMessage(requireWithin(creatorDeskProjection, /const agentStage = buildCreatorAgentStage/, "creator desk projection must expose a single Agent stage for the primary next action"));
 checkMessage(requireWithin(creatorDeskProjection, /agentCommand:\s*buildCreatorAgentCommand\(agentStage\)/, "creator desk projection must expose a single Agent command for the primary CTA"));
-checkMessage(requireWithin(creatorDeskPanelsSource, /nextActionCopy[\s\S]*agentCommand\.label/, "CreatorDeskPanels summary copy must come from the Agent command"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /displayAgentCommand[\s\S]*nextActionCopy[\s\S]*displayAgentCommand\.label/, "CreatorDeskPanels summary copy must come from the boundary-aware Agent command"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /agentProjectRequirementCopy\(\{ localProjectBusy, canCreateLocalProject \}\)/, "CreatorDeskPanels must share browser-draft/local-project requirement copy with the bottom Agent button"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /const hasStoryDraftForProject = scriptPlanner\.shotCount > 0 \|\| framePlan\.items\.length > 0/, "CreatorDeskPanels must distinguish empty drafts from confirmed browser stories"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /browserDraftLabel = hasStoryDraftForProject \? projectRequirement\.label : "先写想法"[\s\S]*nextActionCopy = !localProjectReady[\s\S]*browserDraftLabel/, "CreatorDeskPanels should point confirmed browser stories to local-project setup instead of saying to write another idea"));
@@ -535,8 +536,8 @@ checkMessage(requireWithin(assetReconciliationSource, /summary\.merged > 0[\s\S]
 checkMessage(requireWithin(creatorDeskPanelsSource, /assetReconciliation\.summary\.missing > 0[\s\S]*assetReconciliation\.summary\.merged > 0/, "CreatorDeskPanels must show asset matching when references are missing or merged"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /Math\.max\(batchGeneration\.missingCount, reviewTray\.counts\.missing\)\} 个镜头缺画面/, "CreatorDeskPanels missing-frame summary must use creator-facing quantity copy"));
 check(!/className="creator-agent-glance"/.test(creatorDeskPanelsSource), "CreatorDeskPanels must not show a second always-visible Agent flow above the current task");
-checkMessage(requireWithin(creatorDeskPanelsSource, /agentCommand\.kind === "open_preview"[\s\S]*预览/, "CreatorDeskPanels preview hint must follow the Agent command"));
-checkMessage(requireWithin(creatorDeskPanelsSource, /agentCommand\.kind === "open_export"[\s\S]*交付/, "CreatorDeskPanels export hint must follow the Agent command"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /displayAgentCommand\.kind === "open_preview"[\s\S]*预览/, "CreatorDeskPanels preview hint must follow the Agent command"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /displayAgentCommand\.kind === "open_export"[\s\S]*交付/, "CreatorDeskPanels export hint must follow the Agent command"));
 checkMessage(requireWithin(directorModeSource, /!showCreatorDeskPanel && !showNewVideoStart[\s\S]*<DirectorDetailDisclosure[\s\S]*title="流程详情"/, "DirectorMode must hide the workflow disclosure when the Agent current-task panel or new-video composer is the primary surface"));
 checkMessage(requireWithin(creatorDeskProjection, /const preflight = buildCreatorPreflightProjection/, "creator desk projection must derive the shared preflight summary"));
 checkMessage(requireWithin(creatorDeskProjectionSource, /故事板叙事[\s\S]*故事板快切[\s\S]*全能参考/, "creator preflight must summarize the three reference modes"));

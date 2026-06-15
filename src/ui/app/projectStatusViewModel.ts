@@ -46,6 +46,7 @@ type CreatorAgentStageLike = {
 };
 
 type CreatorAgentCommandLike = {
+  kind?: string;
   label?: string;
   summary?: string;
   detail?: string;
@@ -337,6 +338,9 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
       : shouldReviewAndGenerateReferences
         ? "先复核，再补缺口"
       : "确认素材";
+    const missingReferenceNextAction = input.agentCommand?.kind === "generate_references"
+      ? input.agentCommand.label || "生成参考"
+      : "生成参考";
     return {
       stage: referenceStage,
       doing: assetWaiting,
@@ -346,7 +350,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
         : input.referenceGenerationAction?.status === "running"
           ? "去参考页看进度"
           : missingReferences
-            ? "生成参考"
+            ? missingReferenceNextAction
             : "去参考页确认可用素材",
       tone: blocked ? "blocked" : input.referenceGenerationAction?.status === "running" ? "working" : "waiting",
       issue: blocked ? actionMessage(input.referenceGenerationAction) : undefined,
