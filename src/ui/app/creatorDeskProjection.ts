@@ -470,16 +470,21 @@ function relayQueueItemStatusLabel(status: string) {
   return "处理中";
 }
 
-function relayQueueProgressSummary(relayQueue: VideoRelayQueueState, activeItem?: VideoRelayQueueState["items"][number]) {
+function relayQueueProgressSummary(
+  relayQueue: VideoRelayQueueState,
+  activeItem?: VideoRelayQueueState["items"][number],
+  options: { readyLabel?: string } = {},
+) {
   const totalCount = relayQueue.counts.total || relayQueue.items.length;
   const activeIndex = activeItem ? relayQueue.items.findIndex((item) => item.id === activeItem.id) + 1 : 0;
+  const readyLabel = options.readyLabel || "待发送";
   const parts = [
     activeItem && totalCount
       ? `第 ${activeIndex || "?"}/${totalCount} 段${activeItem.title ? `「${activeItem.title}」` : ""}${relayQueueItemStatusLabel(activeItem.status)}`
       : "",
     relayQueue.counts.completed > 0 ? `${relayQueue.counts.completed} 段已完成` : "",
     relayQueue.counts.failed > 0 ? `${relayQueue.counts.failed} 段失败` : "",
-    relayQueue.counts.ready > 0 ? `${relayQueue.counts.ready} 段待发送` : "",
+    relayQueue.counts.ready > 0 ? `${relayQueue.counts.ready} 段${readyLabel}` : "",
   ].filter(Boolean);
   return parts.join(" · ") || relayQueue.userSummary;
 }
@@ -522,7 +527,7 @@ function videoGenerationFromRelayQueue(relayQueue: VideoRelayQueueState | undefi
             : "submitted";
   if (status === "failed") {
     const failedItem = relayQueue.items.find((item) => item.status === "failed");
-    const queueSummary = relayQueueProgressSummary(relayQueue);
+    const queueSummary = relayQueueProgressSummary(relayQueue, undefined, { readyLabel: "待提交" });
     return {
       status,
       statusLabel: "有失败",
@@ -681,7 +686,7 @@ function buildCreatorPreflightProjection({
       ? "还缺生成视频前需要的参考画面。"
       : status === "needs_review"
         ? videoNeedsReview
-          ? "视频结果已出，先看一眼再继续。"
+          ? "视频已经回来，先看一眼再继续。"
           : "有新画面需要确认，通过后再继续。"
       : status === "waiting"
           ? videoFailed ? "有一段视频生成失败，先重试或跳过后再继续。" : videoRecoverable ? "视频已发送，可以查询结果。" : "视频已在处理，可以稍后继续。"
@@ -772,11 +777,12 @@ function buildCreatorAgentStage(input: {
   }
   if (input.videoStage.status === "failed") {
     if (input.videoStage.generation.canContinueAfterFailure) {
+      const queueSummary = input.videoStage.generation.queueSummary;
       return {
         stage: "video_ready",
         primaryAction: "继续下一段",
-        summary: "有一段失败，后续段落仍可继续发送。",
-        detail: "继续会发送下一段；失败段之后可单独补。",
+        summary: queueSummary || "有一段失败，后续段落仍可继续发送。",
+        detail: "继续会提交下一段；失败段之后可单独补。",
         targetView: "preview",
       };
     }
