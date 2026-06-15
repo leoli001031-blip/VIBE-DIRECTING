@@ -394,6 +394,8 @@ checkMessage(requireWithin(projectStatusViewModelSource, /export\s+function\s+bu
 checkMessage(requireWithin(projectStatusViewModel, /stage[\s\S]*doing[\s\S]*waitingFor[\s\S]*nextAction/, "Project status view model must explain current stage, current work, waiting state, and next action"));
 checkMessage(requireWithin(projectStatusViewModelSource, /videoStage\?:[\s\S]*CreatorVideoStageLike/, "Project status view model must accept the creator desk video stage"));
 checkMessage(requireWithin(projectStatusViewModelSource, /videoStage\.generation\?\.queueSummary/, "Project status view model must summarize serial video queue progress from the unified video stage"));
+checkMessage(requireWithin(projectStatusViewModelSource, /referenceBatch\?:[\s\S]*ReferenceBatchProgressLike/, "Project status view model must accept reference generation batch progress"));
+checkMessage(requireWithin(projectStatusViewModelSource, /referenceProgressLabel[\s\S]*plannedCount[\s\S]*readyCount[\s\S]*missingCount[\s\S]*retryCount/, "Project status view model must turn reference generation progress into creator-facing copy"));
 checkMessage(requireWithin(projectStatusViewModelSource, /videoTaskFactsForStatus[\s\S]*taskFacts[\s\S]*失败原因[\s\S]*提交号[\s\S]*下一步/, "Project status view model must surface key video task evidence without exposing raw task internals"));
 checkMessage(requireWithin(projectStatusViewModelSource, /agentCommand\?:[\s\S]*CreatorAgentCommandLike/, "Project status view model must accept the current Agent suggestion"));
 checkMessage(requireWithin(projectStatusViewModelSource, /newVideoStatus\?:[\s\S]*NewVideoEntryStatusLike/, "Project status view model must accept the fresh new-video planning status"));
@@ -410,6 +412,7 @@ check(!/\b(real-chain|relay\s+queue|Project\.vibe|provider)\b/i.test(extractStri
 checkMessage(requireWithin(directorModeSource, /function\s+ProjectStatusSummary\s*\(/, "DirectorMode must render the project status summary component"));
 checkMessage(requireWithin(directorMode, /className="director-workbar"[\s\S]*<ProjectStatusSummary\s+status=\{projectStatusView\}/, "Director workbar must render the unified project status summary"));
 checkMessage(requireWithin(directorMode, /buildProjectStatusViewModel\(\{[\s\S]*videoStage:\s*creatorDesk\?\.videoStage/, "DirectorMode must feed CreatorDesk videoStage into the unified project status"));
+checkMessage(requireWithin(directorMode, /buildProjectStatusViewModel\(\{[\s\S]*referenceBatch:\s*creatorDesk\?\.batchGeneration/, "DirectorMode must feed CreatorDesk reference generation progress into the unified project status"));
 checkMessage(requireWithin(directorMode, /visibleAgentCommand[\s\S]*允许做参考[\s\S]*允许发视频/, "DirectorMode must adapt CreatorDesk Agent guidance to the visible execution boundary"));
 checkMessage(requireWithin(directorMode, /buildProjectStatusViewModel\(\{[\s\S]*agentStage:\s*creatorDesk\?\.agentStage[\s\S]*agentCommand:\s*visibleAgentCommand/, "DirectorMode must feed boundary-aware Agent guidance into the unified project status"));
 checkMessage(requireWithin(directorMode, /<MinimalAgentPanel[\s\S]*agentCommand=\{visibleAgentCommand\}[\s\S]*projectObservation=\{projectReady \? creatorDesk\?\.projectObservation : undefined\}/, "DirectorMode must pass the unified CreatorDesk observation into the bottom Agent composer"));

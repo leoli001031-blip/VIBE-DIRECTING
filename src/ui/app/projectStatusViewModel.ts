@@ -52,6 +52,15 @@ type CreatorAgentCommandLike = {
   detail?: string;
 };
 
+type ReferenceBatchProgressLike = {
+  statusLabel?: string;
+  detail?: string;
+  plannedCount?: number;
+  readyCount?: number;
+  missingCount?: number;
+  retryCount?: number;
+};
+
 type NewVideoEntryStatusLike = {
   status: "empty" | "drafting" | "planning" | "ready" | "blocked" | "confirmed";
   title: string;
@@ -83,6 +92,7 @@ export interface ProjectStatusViewModelInput {
   endFrameAction?: ReferenceActionState;
   videoSendAction?: VideoActionState;
   videoStage?: CreatorVideoStageLike;
+  referenceBatch?: ReferenceBatchProgressLike;
   agentStage?: CreatorAgentStageLike;
   agentCommand?: CreatorAgentCommandLike;
   newVideoStatus?: NewVideoEntryStatusLike;
@@ -154,22 +164,53 @@ function audioFactLabel(runtimeState: ProjectRuntimeState) {
   return `${dialogueShotCount} 个镜头有台词`;
 }
 
-function referenceFactLabel(summary: ProjectRuntimeState["visualMemory"]["summary"]) {
+function safeCount(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+}
+
+function referenceProgressLabel(batch?: ReferenceBatchProgressLike) {
+  if (!batch) return "";
+  const planned = safeCount(batch.plannedCount);
+  const ready = safeCount(batch.readyCount);
+  const missing = safeCount(batch.missingCount);
+  const retry = safeCount(batch.retryCount);
+  const parts = [
+    planned > 0 ? `${ready}/${planned} 张可看` : ready > 0 ? `${ready} 张可看` : "",
+    missing > 0 ? `${missing} 张缺少` : "",
+    retry > 0 ? `${retry} 可重试` : "",
+  ].filter(Boolean);
+  if (parts.length) return parts.join(" · ");
+  return batch.detail?.trim() || batch.statusLabel?.trim() || "";
+}
+
+function referenceFactLabel(
+  summary: ProjectRuntimeState["visualMemory"]["summary"],
+  batch?: ReferenceBatchProgressLike,
+  actionStatus?: ActionStatus,
+) {
   const locked = summary.locked || 0;
   const review = summary.needsReview || 0;
   const missing = summary.missing || 0;
-  if (missing > 0 && review > 0) return "待看，也有待生成";
-  if (missing > 0) return "待生成";
-  if (review > 0) return "待看";
-  if (locked > 0) return "已可用";
-  return "待整理";
+  const progress = referenceProgressLabel(batch);
+  const base = missing > 0 && review > 0
+    ? "待看，也有待生成"
+    : missing > 0
+      ? "待生成"
+      : review > 0
+        ? "待看"
+        : locked > 0
+          ? "已可用"
+          : "待整理";
+  if (actionStatus === "running") return progress ? `生成中 · ${progress}` : "生成中";
+  return progress && (missing > 0 || review > 0) ? `${base} · ${progress}` : base;
 }
 
 function assetWaitingLabel(input: ProjectStatusViewModelInput) {
   const { visualMemory } = input.runtimeState;
   const missing = visualMemory.summary.missing;
   const review = visualMemory.summary.needsReview;
-  if (input.referenceGenerationAction?.status === "running") return "参考图正在生成";
+  const progress = referenceProgressLabel(input.referenceBatch);
+  if (input.referenceGenerationAction?.status === "running") return progress ? `参考正在生成：${progress}` : "参考图正在生成";
   if (input.referenceGenerationAction?.status === "blocked") return actionMessage(input.referenceGenerationAction, "参考生成被拦住");
   if (input.referenceGenerationAction?.status === "ready" && missing > 0) return "角色、场景、道具或故事板参考待生成";
   if (review > 0) return "参考待看";
@@ -219,7 +260,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
   const facts = [
     { label: "项目", value: input.folderReady ? folderLabel : "先写想法" },
     { label: "镜头", value: browserDraftActive && shotCount > 0 ? `草案 ${countLabel(shotCount, "个")}` : countLabel(shotCount, "个") },
-    { label: "参考", value: browserDraftActive && draftReferenceCount > 0 ? `已放入 ${draftReferenceCount} 个` : referenceFactLabel(assetSummary) },
+    { label: "参考", value: browserDraftActive && draftReferenceCount > 0 ? `已放入 ${draftReferenceCount} 个` : referenceFactLabel(assetSummary, input.referenceBatch, input.referenceGenerationAction?.status) },
     audioFact ? { label: "声音", value: audioFact } : undefined,
     videoFact ? { label: "视频", value: videoFact } : undefined,
     ...videoTaskFacts,

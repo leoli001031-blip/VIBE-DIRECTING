@@ -363,6 +363,7 @@ export function DirectorMode({
     endFrameAction,
     videoSendAction: sessionVideoSendAction,
     videoStage: creatorDesk?.videoStage,
+    referenceBatch: creatorDesk?.batchGeneration,
     agentStage: creatorDesk?.agentStage,
     agentCommand: visibleAgentCommand,
     newVideoStatus,
@@ -370,6 +371,7 @@ export function DirectorMode({
     exportWorker,
   }), [
     creatorDesk?.agentStage,
+    creatorDesk?.batchGeneration,
     creatorDesk?.videoStage,
     directorView,
     endFrameAction,

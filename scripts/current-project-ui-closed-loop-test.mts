@@ -271,6 +271,33 @@ function assertUnifiedProjectStatusVideoStage() {
   assert(localProjectMissingReferenceStatus.doing === "角色、场景、道具或故事板参考待生成", "missing reference state should explain the creative reference categories");
   assert(localProjectMissingReferenceStatus.nextAction === "生成参考", "local project next action should generate references before routing to review");
 
+  const localProjectRunningReferenceStatus = buildProjectStatusViewModel({
+    runtimeState: {
+      ...runtimeState,
+      visualMemory: {
+        ...runtimeState.visualMemory,
+        summary: { locked: 1, needsReview: 1, missing: 2 },
+      },
+    },
+    folderReady: true,
+    projectReady: true,
+    directorView: "story",
+    referenceGenerationAction: {
+      status: "running",
+      message: "参考正在生成。",
+    },
+    referenceBatch: {
+      plannedCount: 4,
+      readyCount: 1,
+      missingCount: 2,
+      retryCount: 1,
+    },
+  });
+  assert(localProjectRunningReferenceStatus.stage === "参考生成中", "running reference generation should drive the top status");
+  assert(localProjectRunningReferenceStatus.doing.includes("1/4 张可看"), "running reference generation should expose returned/planned progress");
+  assert(localProjectRunningReferenceStatus.doing.includes("2 张缺少"), "running reference generation should expose missing reference progress");
+  assert(localProjectRunningReferenceStatus.facts.some((fact) => fact.label === "参考" && fact.value.includes("生成中") && fact.value.includes("1/4 张可看")), "project facts should carry reference generation progress");
+
   const localProjectMixedReferenceStatus = buildProjectStatusViewModel({
     runtimeState: {
       ...runtimeState,
