@@ -73,6 +73,37 @@ function assetProviderLabel(providerId: string | undefined) {
   return "生成服务";
 }
 
+function referenceTypeLabel(type: string) {
+  if (type === "character") return "角色";
+  if (type === "scene") return "场景";
+  if (type === "prop") return "道具";
+  if (type === "storyboard") return "故事板";
+  if (type === "style") return "风格";
+  return type || "参考";
+}
+
+function missingReferenceTypeSummary(runtimeState: ProjectRuntimeState | undefined) {
+  const byType = runtimeState?.visualMemory.summary.byType || [];
+  const missingTypes = byType
+    .filter((item) => item.missing > 0)
+    .map((item) => referenceTypeLabel(item.type));
+  return Array.from(new Set(missingTypes)).slice(0, 4).join("、");
+}
+
+function assetGenerationProgressMessage(input: {
+  providerId: string | undefined;
+  runtimeState?: ProjectRuntimeState;
+  targetLabel: string;
+}) {
+  const missingCount = input.runtimeState?.visualMemory.summary.missing || 0;
+  const missingTypes = missingReferenceTypeSummary(input.runtimeState);
+  const scope = input.targetLabel === "整个项目" ? "整个项目" : input.targetLabel;
+  const missingCopy = missingCount > 0
+    ? `补 ${missingCount} 个参考${missingTypes ? `：${missingTypes}` : ""}`
+    : "准备角色、场景、关键道具和故事板";
+  return `正在生成参考：${assetProviderLabel(input.providerId)} 正在为${scope}${missingCopy}。完成后去参考页复核；不用重复点击。`;
+}
+
 function assetActionState(result: ProjectImage2AssetGenerationResult): Image2AssetGenerationActionState {
   if (result.status === "needs_review" || result.uiStatus === "needs_review") {
     return {
@@ -266,7 +297,11 @@ export function useImage2AssetGenerationAction({
 
     setActionState({
       status: "running",
-      message: `正在生成参考：${assetProviderLabel(providerId)} 会为${target.label}准备角色、场景、道具和故事板。通常需要几十秒到几分钟，完成后会进入参考页待复核。`,
+      message: assetGenerationProgressMessage({
+        providerId,
+        runtimeState,
+        targetLabel: target.label,
+      }),
     });
     try {
       const submitted = await submitProjectImage2AssetGeneration(liveRuntimeProjectIdentity, {

@@ -8724,6 +8724,40 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   white-space: normal;
 }
 
+.minimal-agent-input-footer,
+.director-bottom-composer .minimal-agent-input-footer,
+.new-video-composer-bar,
+.minimal-director.composer-only .new-video-composer-bar,
+.new-video-bottom-portal .new-video-composer-bar {
+  grid-template-columns: max-content max-content;
+  grid-template-areas:
+    "file action"
+    "copy copy";
+  justify-content: space-between;
+  align-items: center;
+}
+
+.minimal-agent-file-button,
+.new-video-composer-bar > .new-video-asset-action:not(.new-video-primary-action) {
+  grid-area: file;
+}
+
+.minimal-agent-footer-copy,
+.new-video-composer-bar > small:not(.new-video-script-error) {
+  grid-area: copy;
+}
+
+.minimal-agent-send-button,
+.new-video-primary-action {
+  grid-area: action;
+  justify-self: end;
+}
+
+.minimal-agent-footer-copy,
+.new-video-composer-bar > small:not(.new-video-script-error) {
+  max-width: 100%;
+}
+
 .new-video-composer-status {
   min-height: 24px;
   color: rgba(87, 72, 61, 0.66);
