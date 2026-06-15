@@ -1,4 +1,5 @@
 import {
+  buildProjectFolderInboxProjection,
   buildProjectInboxProjection,
   buildProjectObservation,
   routeProjectAgentIntent,
@@ -163,6 +164,44 @@ assert(inbox.items.some((item) => item.suggestedBinding.includes("镜头 1")), "
 const emptyInbox = buildProjectInboxProjection({ assets: [] });
 assert(emptyInbox.summary.includes("声音参考"), "empty inbox should ask for voice reference instead of music");
 assert(!emptyInbox.summary.includes("音乐"), "music analysis/mixing should stay out of the demo inbox copy");
+
+const folderInbox = buildProjectFolderInboxProjection({
+  files: [
+    { path: "characters/lin-an/front.png", sizeBytes: 1024 },
+    { path: "scenes/rain-station/wide.jpg" },
+    { path: "props/glowing-ticket.webp" },
+    { path: "storyboards/shot-01-board.png" },
+    { path: "voices/heroine.wav" },
+    { path: "scripts/episode-01.md" },
+    { path: "videos/returned-shot.mp4" },
+    { path: "exports/final-package.zip" },
+    { path: ".DS_Store" },
+    { path: "../outside.png" },
+  ],
+  existingAssets: [
+    asset({
+      id: "existing_prop",
+      type: "prop",
+      name: "已存在道具",
+      path: "props/existing.png",
+      lockedStatus: "locked",
+    }),
+  ],
+});
+
+assert(folderInbox.discoveredAssetCount === 8, "folder scan should discover supported project files and ignore hidden/outside files");
+assert(folderInbox.ignoredCount === 2, "folder scan should count hidden or out-of-scope files as ignored");
+assert(folderInbox.discoveredAssets.every((item) => !item.path.startsWith("/")), "folder scan must keep project-relative paths instead of leaking local absolute paths");
+assert(folderInbox.items.some((item) => item.kind === "character" && item.label === "front.png"), "folder scan should classify character folders");
+assert(folderInbox.items.some((item) => item.kind === "scene" && item.label === "wide.jpg"), "folder scan should classify scene folders");
+assert(folderInbox.items.some((item) => item.kind === "prop" && item.label === "glowing-ticket.webp"), "folder scan should classify prop folders");
+assert(folderInbox.items.some((item) => item.kind === "storyboard" && item.suggestedBinding.includes("故事板参考")), "folder scan should surface storyboards as reviewable planning references");
+assert(folderInbox.items.some((item) => item.kind === "voice" && item.label === "heroine.wav"), "folder scan should classify voice folders");
+assert(folderInbox.items.some((item) => item.kind === "script" && item.label === "episode-01.md"), "folder scan should classify scripts");
+assert(folderInbox.items.some((item) => item.kind === "video" && item.label === "returned-shot.mp4"), "folder scan should classify returned videos");
+assert(folderInbox.items.some((item) => item.kind === "export" && item.label === "final-package.zip"), "folder scan should classify export packages");
+assert(folderInbox.summary.includes("从项目文件夹识别到 8 个可用素材"), "folder scan summary should explain the takeover result in human language");
+assert(folderInbox.nextAction.includes("确认后再继续生成"), "folder scan next action should make the next step obvious");
 
 const legacyMusicInbox = buildProjectInboxProjection({
   assets: [],

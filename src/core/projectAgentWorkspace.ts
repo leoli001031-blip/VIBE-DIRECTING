@@ -100,6 +100,24 @@ export interface BuildProjectInboxInput {
   reconciliation?: AssetReconciliationProjection;
 }
 
+export interface ProjectFolderFileEntry {
+  path: string;
+  sizeBytes?: number;
+  modifiedAt?: string;
+}
+
+export interface BuildProjectFolderInboxInput {
+  files: ProjectFolderFileEntry[];
+  existingAssets?: AssetRecord[];
+  reconciliation?: AssetReconciliationProjection;
+}
+
+export interface ProjectFolderInboxProjection extends ProjectInboxProjection {
+  discoveredAssetCount: number;
+  discoveredAssets: AssetRecord[];
+  ignoredCount: number;
+}
+
 export interface BuildProjectObservationInput {
   localProjectReady: boolean;
   projectTitle: string;
@@ -176,8 +194,36 @@ function pathExtension(value: string) {
   return match?.[1] || "";
 }
 
+function pathBasename(value: string) {
+  const normalized = clean(value).replace(/\\/g, "/");
+  return normalized.split("/").filter(Boolean).pop() || normalized || "未命名素材";
+}
+
 function hasAudioExtension(value: string) {
   return ["wav", "mp3", "m4a", "aac", "flac", "ogg"].includes(pathExtension(value));
+}
+
+function isSupportedProjectFolderFile(value: string) {
+  return [
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+    "wav",
+    "mp3",
+    "m4a",
+    "aac",
+    "flac",
+    "ogg",
+    "txt",
+    "md",
+    "srt",
+    "mp4",
+    "mov",
+    "webm",
+    "mkv",
+    "zip",
+  ].includes(pathExtension(value));
 }
 
 function hasVoiceReferenceSignal(value: string) {
@@ -229,6 +275,22 @@ function assetFolderSignal(asset: AssetRecord): ProjectInboxKind | undefined {
   return undefined;
 }
 
+function assetTypeForInboxKind(kind: ProjectInboxKind): AssetRecord["type"] {
+  if (kind === "character") return "character";
+  if (kind === "scene") return "scene";
+  if (kind === "prop") return "prop";
+  return "unknown";
+}
+
+function roleBindingForFolderAsset(kind: ProjectInboxKind, searchText: string): AssetRecord["roleBinding"] | undefined {
+  if (kind === "storyboard") return { role: "storyboard_reference", useFor: [], ignoreFor: [] };
+  if (kind === "voice") return { role: "voice_reference", useFor: [], ignoreFor: ["music"] };
+  if (kind === "reference" && hasMusicReferenceSignal(searchText)) {
+    return { role: "music_reference", useFor: [], ignoreFor: ["video_model"] };
+  }
+  return undefined;
+}
+
 function projectInboxKindForAsset(asset: AssetRecord): ProjectInboxKind {
   const searchable = compact(assetSearchText(asset));
   const hasVoiceSignal = hasVoiceReferenceSignal(searchable);
@@ -276,7 +338,9 @@ function assetBindingLabel(asset: AssetRecord) {
   const kind = projectInboxKindForAsset(asset);
   if (shots.length) return `建议绑定到 ${shotBindingCopy(shots)}`;
   if (kind === "reference" && hasMusicReferenceSignal(compact(assetSearchText(asset)))) return "暂不进视频模型；需要配乐时留到后期";
-  if (role && role !== "music_reference") return `建议作为${role}`;
+  if (role === "storyboard_reference") return "建议作为故事板参考，先确认对应镜头";
+  if (role === "voice_reference") return "建议作为声音参考，先确认对应角色";
+  if (role && role !== "music_reference") return "建议先确认用途";
   if (kind === "reference") return "建议作为风格或画面参考";
   if (kind === "voice") return "建议作为声音参考";
   if (kind === "video") return "建议作为回流视频或剪辑素材";
@@ -353,6 +417,73 @@ export function buildProjectInboxProjection(input: BuildProjectInboxInput): Proj
       : items.length
         ? "素材已可供 Agent 规划使用。"
         : "拖入素材或直接描述项目想法。",
+  };
+}
+
+function projectFolderAssetId(filePath: string, index: number) {
+  const key = clean(filePath)
+    .replace(/\\/g, "/")
+    .replace(/^[./]+/, "")
+    .replace(/[^a-zA-Z0-9\u4e00-\u9fa5]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 72);
+  return `folder_asset_${key || index + 1}`;
+}
+
+function assetRecordFromProjectFolderFile(file: ProjectFolderFileEntry, index: number): AssetRecord | undefined {
+  const rawPath = clean(file.path).replace(/\\/g, "/");
+  if (!rawPath || rawPath.startsWith("/") || rawPath.startsWith("../") || rawPath.includes("/../")) return undefined;
+  const normalizedPath = rawPath.replace(/^\.\//, "");
+  if (/(^|\/)\./.test(normalizedPath)) return undefined;
+  if (!isSupportedProjectFolderFile(normalizedPath)) return undefined;
+
+  const shell: AssetRecord = {
+    id: projectFolderAssetId(normalizedPath, index),
+    type: "unknown",
+    name: pathBasename(normalizedPath),
+    path: normalizedPath,
+    status: "exists",
+    lockedStatus: "needs_review",
+    safeForFutureReference: true,
+    issues: [],
+    sourceRefs: ["project_folder_scan"],
+  };
+  const kind = projectInboxKindForAsset(shell);
+  const searchText = compact(assetSearchText(shell));
+  return {
+    ...shell,
+    type: assetTypeForInboxKind(kind),
+    roleBinding: roleBindingForFolderAsset(kind, searchText),
+    textConstraints: [
+      `从项目文件夹识别为${inboxKindLabel(kind)}素材，正式使用前需要确认。`,
+      file.sizeBytes ? `文件大小 ${file.sizeBytes} bytes` : "",
+      file.modifiedAt ? `修改时间 ${file.modifiedAt}` : "",
+    ].map(clean).filter(Boolean),
+  };
+}
+
+export function buildProjectFolderInboxProjection(input: BuildProjectFolderInboxInput): ProjectFolderInboxProjection {
+  const existingAssets = input.existingAssets || [];
+  const existingPaths = new Set(existingAssets.map((asset) => clean(asset.path).replace(/\\/g, "/").replace(/^[./]+/, "")));
+  const discoveredAssets = input.files
+    .map(assetRecordFromProjectFolderFile)
+    .filter((asset): asset is AssetRecord => Boolean(asset))
+    .filter((asset) => !existingPaths.has(clean(asset.path)));
+  const inbox = buildProjectInboxProjection({
+    assets: [...existingAssets, ...discoveredAssets],
+    reconciliation: input.reconciliation,
+  });
+  return {
+    ...inbox,
+    discoveredAssetCount: discoveredAssets.length,
+    discoveredAssets,
+    ignoredCount: Math.max(0, input.files.length - discoveredAssets.length),
+    summary: discoveredAssets.length
+      ? `从项目文件夹识别到 ${discoveredAssets.length} 个可用素材，${inbox.needsReviewCount} 个需要确认用途。`
+      : inbox.summary,
+    nextAction: discoveredAssets.length
+      ? "先看一眼这些素材怎么绑定，确认后再继续生成。"
+      : inbox.nextAction,
   };
 }
 
