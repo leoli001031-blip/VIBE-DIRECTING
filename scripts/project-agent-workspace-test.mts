@@ -148,6 +148,7 @@ assert(inbox.items.some((item) => item.kind === "voice" && item.label.includes("
 assert(inbox.items.some((item) => item.assetId === "voice_ref" && item.shotIds?.includes("shot_1")), "voice inbox item should remain selectable and keep shot binding context");
 assert(inbox.items.some((item) => item.assetId === "white_car" && item.shotIds?.includes("shot_1")), "asset inbox item should expose asset and shot ids for correction selection");
 assert(inbox.items.some((item) => item.assetId === "folder_character" && item.kind === "character"), "character folders should classify imported images as character references");
+assert(inbox.items.some((item) => item.assetId === "folder_character" && item.originLabel === "项目素材"), "ordinary project assets should keep project-material provenance");
 assert(inbox.items.some((item) => item.assetId === "folder_scene" && item.kind === "scene"), "scene folders should classify imported images as scene references");
 assert(inbox.items.some((item) => item.assetId === "folder_prop" && item.kind === "prop"), "prop folders should classify imported images as prop references");
 assert(inbox.items.some((item) => item.assetId === "folder_script" && item.kind === "script"), "script folders should classify text files as scripts");
@@ -193,6 +194,7 @@ assert(folderInbox.discoveredAssetCount === 8, "folder scan should discover supp
 assert(folderInbox.ignoredCount === 2, "folder scan should count hidden or out-of-scope files as ignored");
 assert(folderInbox.discoveredAssets.every((item) => !item.path.startsWith("/")), "folder scan must keep project-relative paths instead of leaking local absolute paths");
 assert(folderInbox.items.some((item) => item.kind === "character" && item.label === "front.png"), "folder scan should classify character folders");
+assert(folderInbox.items.some((item) => item.kind === "character" && item.origin === "project_folder" && item.originLabel === "项目文件夹"), "folder scan inbox items should show they came from the project folder");
 assert(folderInbox.items.some((item) => item.kind === "scene" && item.label === "wide.jpg"), "folder scan should classify scene folders");
 assert(folderInbox.items.some((item) => item.kind === "prop" && item.label === "glowing-ticket.webp"), "folder scan should classify prop folders");
 assert(folderInbox.items.some((item) => item.kind === "storyboard" && item.suggestedBinding.includes("故事板参考")), "folder scan should surface storyboards as reviewable planning references");

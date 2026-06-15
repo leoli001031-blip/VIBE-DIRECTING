@@ -806,7 +806,7 @@
 
 .creator-inbox-select {
   display: grid;
-  grid-template-columns: 52px minmax(0, 0.42fr) minmax(0, 1fr);
+  grid-template-columns: minmax(86px, 0.34fr) minmax(0, 0.48fr) minmax(0, 1fr);
   gap: 8px;
   align-items: center;
   width: 100%;
@@ -828,7 +828,7 @@
 }
 
 .creator-inbox-correction {
-  padding-left: 60px;
+  padding-left: 94px;
   white-space: normal;
   overflow: visible;
   text-overflow: clip;

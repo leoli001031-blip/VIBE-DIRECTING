@@ -289,6 +289,11 @@ function inboxCorrectionHint(item: ProjectInboxItem) {
   return `点选后可说：这个素材应该当什么用${target}`;
 }
 
+function inboxMetaLabel(item: ProjectInboxItem) {
+  const kind = inboxKindLabel(item.kind);
+  return item.originLabel ? `${kind} · ${item.originLabel}` : kind;
+}
+
 function itemLabel(item: CreatorReviewTrayItem) {
   const shotLabel = item.shotId ? `镜头 ${formatShotNumber(item.shotId)}` : "";
   if (item.referenceKind === "storyboard_reference") {
@@ -559,7 +564,7 @@ export function CreatorDeskPanels({
           open={projectInbox.needsReviewCount > 0}
         >
           <summary>
-            <span>素材收件箱</span>
+            <span>项目素材</span>
             <strong>{projectInbox.summary}</strong>
             <small>{projectInbox.nextAction}</small>
           </summary>
@@ -573,7 +578,7 @@ export function CreatorDeskPanels({
                   onClick={() => onSelectInboxItem?.(item)}
                   aria-label={`选择素材${item.label}：${inboxCorrectionHint(item)}`}
                 >
-                  <span>{inboxKindLabel(item.kind)}</span>
+                  <span>{inboxMetaLabel(item)}</span>
                   <strong>{item.label}</strong>
                   <small>{item.suggestedBinding}</small>
                 </button>

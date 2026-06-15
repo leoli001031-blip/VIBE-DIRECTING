@@ -40,6 +40,8 @@ export interface ProjectInboxItem {
   assetId?: string;
   shotIds?: string[];
   kind: ProjectInboxKind;
+  origin: "project_folder" | "project_asset" | "generated_reference" | "reconciliation";
+  originLabel: string;
   label: string;
   detail: string;
   suggestedBinding: string;
@@ -332,11 +334,22 @@ function assetNeedsReview(asset: AssetRecord) {
     || asset.status === "generated";
 }
 
+function assetInboxOrigin(asset: AssetRecord): Pick<ProjectInboxItem, "origin" | "originLabel"> {
+  const sourceRefs = asset.sourceRefs || [];
+  if (sourceRefs.includes("project_folder_scan")) {
+    return { origin: "project_folder", originLabel: "项目文件夹" };
+  }
+  if (asset.sourceReceiptId || asset.outputHash || asset.promptHash || asset.promptText || asset.promptPath) {
+    return { origin: "generated_reference", originLabel: "生成参考" };
+  }
+  return { origin: "project_asset", originLabel: "项目素材" };
+}
+
 function assetBindingLabel(asset: AssetRecord) {
   const role = clean(asset.roleBinding?.role);
   const shots = (asset.usedByShotIds || asset.roleBinding?.useFor || []).map(clean).filter(Boolean);
   const kind = projectInboxKindForAsset(asset);
-  if (shots.length) return `建议绑定到 ${shotBindingCopy(shots)}`;
+  if (shots.length) return `建议用于 ${shotBindingCopy(shots)}`;
   if (kind === "reference" && hasMusicReferenceSignal(compact(assetSearchText(asset)))) return "暂不进视频模型；需要配乐时留到后期";
   if (role === "storyboard_reference") return "建议作为故事板参考，先确认对应镜头";
   if (role === "voice_reference") return "建议作为声音参考，先确认对应角色";
@@ -353,13 +366,15 @@ function inboxItemFromAsset(asset: AssetRecord): ProjectInboxItem | undefined {
   if (asset.status === "missing" || asset.status === "planned" || asset.status === "rejected") return undefined;
   const kind = projectInboxKindForAsset(asset);
   const shotIds = unique([...(asset.usedByShotIds || []), ...(asset.roleBinding?.useFor || [])]);
+  const origin = assetInboxOrigin(asset);
   return {
     id: `asset:${asset.id}`,
     assetId: asset.id,
     shotIds,
     kind,
+    ...origin,
     label: asset.name || inboxKindLabel(kind),
-    detail: `${inboxKindLabel(kind)} · ${asset.lockedStatus === "locked" ? "已可复用" : "等待确认用途"}`,
+    detail: `${origin.originLabel} · ${inboxKindLabel(kind)} · ${asset.lockedStatus === "locked" ? "已可复用" : "等待确认用途"}`,
     suggestedBinding: assetBindingLabel(asset),
     confidence: asset.type === "unknown" ? "medium" : "high",
     needsReview: assetNeedsReview(asset),
@@ -383,9 +398,11 @@ function inboxItemFromReconciliation(item: AssetReconciliationItem): ProjectInbo
     assetId: item.assetIds[0],
     shotIds: item.shotIds,
     kind,
+    origin: "reconciliation",
+    originLabel: "匹配建议",
     label: item.label,
     detail: `${inboxKindLabel(kind)} · ${item.status === "ambiguous" ? "用途不够确定" : "等待确认"}`,
-    suggestedBinding: item.shotIds.length ? `建议绑定到 ${shotBindingCopy(item.shotIds)}` : "建议先确认用途",
+    suggestedBinding: item.shotIds.length ? `建议用于 ${shotBindingCopy(item.shotIds)}` : "建议先确认用途",
     confidence: item.confidence,
     needsReview: true,
     source: "reconciliation",
@@ -405,15 +422,18 @@ export function buildProjectInboxProjection(input: BuildProjectInboxInput): Proj
     return true;
   }).slice(0, 16);
   const needsReviewCount = items.filter((item) => item.needsReview).length;
+  const projectFolderCount = items.filter((item) => item.origin === "project_folder").length;
   return {
     totalCount: items.length,
     needsReviewCount,
     items,
-    summary: items.length
+    summary: projectFolderCount
+      ? `项目文件夹里发现 ${projectFolderCount} 个素材，${needsReviewCount} 个还要看一眼。`
+      : items.length
       ? `${items.length} 个素材已进入项目，${needsReviewCount} 个需要确认用途。`
       : "还没有放入素材；可以把脚本、图片、声音参考或素材文件夹拖到底部输入框。",
     nextAction: needsReviewCount
-      ? "先确认素材要绑定到哪里。"
+      ? "先确认这些素材分别怎么用。"
       : items.length
         ? "素材已可供 Agent 规划使用。"
         : "拖入素材或直接描述项目想法。",
@@ -482,7 +502,7 @@ export function buildProjectFolderInboxProjection(input: BuildProjectFolderInbox
       ? `从项目文件夹识别到 ${discoveredAssets.length} 个可用素材，${inbox.needsReviewCount} 个需要确认用途。`
       : inbox.summary,
     nextAction: discoveredAssets.length
-      ? "先看一眼这些素材怎么绑定，确认后再继续生成。"
+      ? "先看一眼这些素材怎么用，确认后再继续生成。"
       : inbox.nextAction,
   };
 }
@@ -578,7 +598,7 @@ export function buildProjectObservation(input: BuildProjectObservationInput): Pr
       : needsReferenceGeneration
         ? "先生成角色、场景、关键道具或故事板参考。"
         : needsAssetReview
-          ? "先复核参考和素材绑定，再继续生成视频。"
+          ? "先复核参考和素材用途，再继续生成视频。"
           : needsVideoSubmit
             ? "提交前做一次检查，通过后串行提交视频。"
             : video.status === "recoverable"
@@ -640,7 +660,7 @@ export function routeProjectAgentIntent(input: {
     return { kind: "reference", label: "生成参考", target: "assets", confirmation: "reference_generation", plan: ["判断缺少的角色、场景或道具参考", "确认生成范围", "生成后进入复核"] };
   }
   if (!text && input.hasAttachments) {
-    return { kind: "reference", label: "整理素材", target: "assets", confirmation: "asset_review", plan: ["识别拖入文件", "建议绑定到角色、场景或镜头", "需要时请你确认"] };
+    return { kind: "reference", label: "整理素材", target: "assets", confirmation: "asset_review", plan: ["识别拖入文件", "建议作为角色、场景、道具或镜头参考", "需要时请你确认"] };
   }
   if (!text) {
     return { kind: "status", label: "检查项目", target: "story", confirmation: input.observation.currentTask.confirmation.kind, plan: [input.observation.currentTask.understanding, input.observation.currentTask.plan] };
