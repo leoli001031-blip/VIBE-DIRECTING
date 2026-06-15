@@ -286,6 +286,15 @@ const submitRoute = routeProjectAgentIntent({
 assert(submitRoute.kind === "video", "video intent should route to video preparation");
 assert(submitRoute.confirmation === "video_submit", "video submit should require confirmation");
 
+const explicitFirstVideoRoute = routeProjectAgentIntent({
+  text: "现在可以提交第一段视频",
+  hasSelection: false,
+  hasAttachments: false,
+  observation,
+});
+assert(explicitFirstVideoRoute.kind === "video", "explicit first-segment video permission should route to video preparation");
+assert(explicitFirstVideoRoute.confirmation === "video_submit", "explicit video permission should still keep the confirmation boundary");
+
 const continueRoute = routeProjectAgentIntent({
   text: "没问题，继续",
   hasSelection: false,
@@ -303,6 +312,15 @@ const referenceOnlyRoute = routeProjectAgentIntent({
 });
 assert(referenceOnlyRoute.kind === "reference", "no-video reference-only wording should route to reference preparation");
 assert(referenceOnlyRoute.confirmation === "reference_generation", "reference-only wording should keep video submission blocked");
+
+const generateReferenceOnlyRoute = routeProjectAgentIntent({
+  text: "先不要提交视频，只生成参考图",
+  hasSelection: false,
+  hasAttachments: false,
+  observation,
+});
+assert(generateReferenceOnlyRoute.kind === "reference", "reference-only generation wording must not be confused with video generation");
+assert(generateReferenceOnlyRoute.confirmation === "reference_generation", "reference-only generation wording should stay inside reference confirmation");
 
 const shotRevisionRoute = routeProjectAgentIntent({
   text: "第二个镜头再压迫一点",
@@ -337,5 +355,61 @@ const attachmentRoute = routeProjectAgentIntent({
 });
 assert(attachmentRoute.kind === "reference", "attachments should route to material organization");
 assert(attachmentRoute.confirmation === "asset_review", "attachments should lead to review before binding");
+
+const videoReadyObservation = buildProjectObservation({
+  localProjectReady: true,
+  projectTitle: "山路短片",
+  sectionCount: 1,
+  shotCount: shots.length,
+  selectedShotCount: 0,
+  referenceMissingCount: 0,
+  referenceReviewCount: 0,
+  referenceReadyCount: 4,
+  videoStatus: "not_generated",
+  videoStatusLabel: "未提交视频",
+  videoDetail: "参考已经就绪。",
+  videoWaitingCount: 0,
+  videoCompletedCount: 0,
+  videoReviewCount: 0,
+  videoCanResume: false,
+  image2Running: false,
+});
+
+const continueToVideoRoute = routeProjectAgentIntent({
+  text: "没问题，继续",
+  hasSelection: false,
+  hasAttachments: false,
+  observation: videoReadyObservation,
+});
+assert(continueToVideoRoute.kind === "video", "continue intent should submit only after observation says video is ready");
+assert(continueToVideoRoute.confirmation === "video_submit", "continue-to-video must still require video confirmation");
+
+const recoverableVideoObservation = buildProjectObservation({
+  localProjectReady: true,
+  projectTitle: "山路短片",
+  sectionCount: 1,
+  shotCount: shots.length,
+  selectedShotCount: 0,
+  referenceMissingCount: 0,
+  referenceReviewCount: 0,
+  referenceReadyCount: 4,
+  videoStatus: "submitted",
+  videoStatusLabel: "已发送",
+  videoDetail: "即梦任务已提交。",
+  videoWaitingCount: 0,
+  videoCompletedCount: 0,
+  videoReviewCount: 0,
+  videoCanResume: true,
+  image2Running: false,
+});
+
+const continueToQueryRoute = routeProjectAgentIntent({
+  text: "可以，继续",
+  hasSelection: false,
+  hasAttachments: false,
+  observation: recoverableVideoObservation,
+});
+assert(continueToQueryRoute.kind === "video_status", "continue intent should query recoverable submitted video instead of resubmitting");
+assert(continueToQueryRoute.confirmation === "none", "video result query should not ask for another submit confirmation");
 
 console.log("project-agent-workspace-test: ok");
