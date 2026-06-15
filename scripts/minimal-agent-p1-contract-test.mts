@@ -481,6 +481,7 @@ assert(/selectedAssetId:\s*options\.selectedAssetId/.test(image2AssetActionSourc
 assert(/sectionId:\s*options\.sectionId/.test(image2AssetActionSource), "Agent-triggered Image2 reference generation must pass selected section scope into target resolution");
 assert(/function missingReferenceTypeSummary/.test(image2AssetActionSource), "Image2 reference generation running copy must summarize missing reference types");
 assert(/完成后去参考页复核；不用重复点击/.test(image2AssetActionSource), "Image2 reference generation running copy must tell users where progress will appear and avoid repeated clicks");
+assert(!/补 \$\{missingCount\} 个参考/.test(image2AssetActionSource), "Image2 reference generation running copy must avoid narrow exact counts that can conflict with project-level missing counts");
 assert(/shotIdsForAsset\(input\.runtimeState,\s*input\.selectedAssetId\)/.test(scopedAssetGenerationTarget), "Image2 reference generation must resolve selected assets to bound shots");
 assert(/shotIdsForSection\(input\.runtimeState,\s*input\.sectionId\)/.test(scopedAssetGenerationTarget), "Image2 reference generation must resolve selected sections to shot ids");
 assert(/input\.scope === "project"[\s\S]*assetGenerationTarget\(undefined,\s*undefined\)/.test(scopedAssetGenerationTarget), "Image2 reference generation must preserve explicit project-level scope");

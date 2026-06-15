@@ -95,11 +95,11 @@ function assetGenerationProgressMessage(input: {
   runtimeState?: ProjectRuntimeState;
   targetLabel: string;
 }) {
-  const missingCount = input.runtimeState?.visualMemory.summary.missing || 0;
+  const hasMissingReferences = (input.runtimeState?.visualMemory.summary.missing || 0) > 0;
   const missingTypes = missingReferenceTypeSummary(input.runtimeState);
   const scope = input.targetLabel === "整个项目" ? "整个项目" : input.targetLabel;
-  const missingCopy = missingCount > 0
-    ? `补 ${missingCount} 个参考${missingTypes ? `：${missingTypes}` : ""}`
+  const missingCopy = hasMissingReferences
+    ? `补齐缺的参考${missingTypes ? `：${missingTypes}` : ""}`
     : "准备角色、场景、关键道具和故事板";
   return `正在生成参考：${assetProviderLabel(input.providerId)} 正在为${scope}${missingCopy}。完成后去参考页复核；不用重复点击。`;
 }
