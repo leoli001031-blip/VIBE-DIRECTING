@@ -36,6 +36,7 @@ export type ProjectSelectionStatus = "idle" | "connecting" | "connected" | "erro
 
 export type ConnectCurrentProjectOptions = {
   projectFileRootSelected?: boolean;
+  createIfMissing?: boolean;
 };
 
 type UseCurrentProjectRuntimePanelsInput = {
@@ -351,6 +352,7 @@ export function useCurrentProjectRuntimePanels({
         projectRoot,
         projectId: choice?.projectId,
         displayName: choice?.displayName,
+        createIfMissing: options.createIfMissing === true,
       });
       if (binding.projectRoot) setProjectPathInput(binding.projectRoot);
       await refreshCurrentProjectPanels(binding);

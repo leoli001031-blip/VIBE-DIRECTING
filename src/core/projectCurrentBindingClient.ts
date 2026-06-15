@@ -29,6 +29,7 @@ export type SelectCurrentProjectInput = {
   projectRoot: string;
   projectId?: string;
   displayName?: string;
+  createIfMissing?: boolean;
 };
 
 export type ProjectCurrentChoice = {
@@ -165,6 +166,7 @@ export async function selectCurrentProjectBinding(input: SelectCurrentProjectInp
       projectRoot,
       projectId: input.projectId?.trim() || undefined,
       displayName: input.displayName?.trim() || undefined,
+      createIfMissing: input.createIfMissing === true,
     }),
   }));
   const payload = await response.json().catch(() => undefined);

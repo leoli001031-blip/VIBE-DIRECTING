@@ -159,6 +159,25 @@ try {
   });
   assert(blockedExternal.statusCode === 403, "external project roots must stay blocked without explicit allowance");
 
+  const browserDraftRoot = ".vibe-runtime/browser-projects/browser-draft-test";
+  const browserDraftSelected = selectApi.selectCurrentProjectBindingResponse({
+    projectRoot: browserDraftRoot,
+    projectId: "browser_draft_test",
+    displayName: "Browser Draft Test",
+    createIfMissing: true,
+  });
+  assert(browserDraftSelected.statusCode === 200, "safe browser draft project roots should be creatable");
+  assert(existsSync(path.join(repoRoot, browserDraftRoot)), "safe browser draft project folder should be created under repo runtime storage");
+  assert(browserDraftSelected.payload.currentProject.projectRoot === browserDraftRoot, "safe browser draft binding should stay repo-relative");
+
+  const blockedUnsafeCreate = selectApi.selectCurrentProjectBindingResponse({
+    projectRoot: "projects/missing-browser-draft",
+    projectId: "unsafe_browser_draft_test",
+    displayName: "Unsafe Browser Draft Test",
+    createIfMissing: true,
+  });
+  assert(blockedUnsafeCreate.statusCode === 403, "createIfMissing must not create arbitrary missing repo paths");
+
   const externalBoundary = createRuntimeApiBoundary({
     repoRoot,
     repoRootRealPath: realpathSync(repoRoot),

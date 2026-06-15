@@ -404,6 +404,17 @@ function projectDisplayNameFromDraft(draft?: NewVideoStartDraft, context?: NewVi
   return "新视频";
 }
 
+function browserRuntimeProjectRootFromDraft(draft?: NewVideoStartDraft, context?: NewVideoStartConfirmationContext) {
+  const displayName = projectDisplayNameFromDraft(draft, context);
+  const slug = displayName
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 36) || "project";
+  return `.vibe-runtime/browser-projects/${slug}-${Date.now()}`;
+}
+
 function projectPathFromRuntimeBinding(projectRoot?: string, projectVibePath?: string) {
   const root = projectRoot?.trim().replace(/\\/g, "/").replace(/\/+$/, "");
   const vibePath = projectVibePath?.trim().replace(/\\/g, "/");
@@ -2401,7 +2412,9 @@ function App() {
   const normalizedSelectedProjectRoot = normalizeProjectRootForUiCompare(selectedProjectRoot);
   const selectedProjectFallbackRuntimeBinding = useMemo(() => {
     if (!selectedProjectRoot) return runtimeProjectBinding;
-    const displayName = selectedProjectRoot.split(/[\\/]/).filter(Boolean).at(-1) || "未命名项目";
+    const displayName = projectFileSelection.status === "selected" && projectFileSelection.displayName
+      ? projectFileSelection.displayName
+      : selectedProjectRoot.split(/[\\/]/).filter(Boolean).at(-1) || "未命名项目";
     return {
       status: "bound" as const,
       projectRoot: selectedProjectRoot,
@@ -3335,6 +3348,9 @@ function App() {
       });
       throw new Error(message);
     }
+    const runtimeSaveIdentity = draftTarget.projectRoot
+      ? { projectRoot: draftTarget.projectRoot }
+      : effectiveRuntimeProjectIdentity;
     const draftTargetId = buildProjectVibeDraftTargetId(draftTarget);
     const projectForNewVideo = projectVibeWithNewVideoTitle(prototypeProjectVibeRef.current, draft, context, generatedAt);
     const {
@@ -3382,14 +3398,14 @@ function App() {
     }
 
     let saveResult = await saveProjectVibeDraft(draftTarget, result.project);
-    if (effectiveRuntimeProjectIdentity?.projectRoot) {
-      const runtimeSave = await saveCurrentProjectVibeToRuntime(effectiveRuntimeProjectIdentity, result.project);
+    if (runtimeSaveIdentity?.projectRoot) {
+      const runtimeSave = await saveCurrentProjectVibeToRuntime(runtimeSaveIdentity, result.project);
       if (runtimeSave.ok) {
         saveResult = {
           ...saveResult,
           ok: true,
           status: "saved",
-          targetId: `runtime-current-project:${runtimeSave.projectRoot || effectiveRuntimeProjectIdentity.projectRoot}`,
+          targetId: `runtime-current-project:${runtimeSave.projectRoot || runtimeSaveIdentity.projectRoot}`,
           path: runtimeSave.projectVibePath || saveResult.path,
           factHash: result.patch.receipt.afterFactHash || saveResult.factHash,
           validation: {
@@ -4428,6 +4444,71 @@ function App() {
     return target;
   }
 
+  async function createBrowserRuntimeProject(
+    draft: NewVideoStartDraft,
+    context: NewVideoStartConfirmationContext,
+    options: { reserveForImmediateSave?: boolean } = {},
+  ): Promise<ProjectVibeDraftTarget | undefined> {
+    const displayName = projectDisplayNameFromDraft(draft, context) || "新视频";
+    const projectRoot = browserRuntimeProjectRootFromDraft(draft, context);
+    const projectPath = "project.vibe";
+    const target: ProjectVibeDraftTarget = {
+      projectRoot,
+      projectPath,
+      storageKey: prototypeProjectDraftStorageKeyValue,
+    };
+    const targetId = options.reserveForImmediateSave ? buildProjectVibeDraftTargetId(target) : undefined;
+
+    setProjectFileSelection({
+      status: "choosing",
+      label: "准备项目",
+      detail: "正在创建本地演示项目",
+    });
+
+    try {
+      await connectCurrentProject({
+        projectRoot,
+        displayName,
+      }, {
+        createIfMissing: true,
+        projectFileRootSelected: true,
+      });
+      setProjectPathInput(projectRoot);
+      setLoadedPrototypeProjectDraftTargetId(targetId);
+      setProjectFileSelection({
+        status: "selected",
+        label: "切换项目",
+        detail: "项目已准备，确认后会保存",
+        projectRoot,
+        projectPath,
+        projectVibePath: `${projectRoot}/${projectPath}`,
+        hasProjectVibe: false,
+        displayName,
+      });
+      setRecentProjectSelections(writeRememberedProjectSelection({
+        cancelled: false,
+        projectRoot,
+        projectPath,
+        projectVibePath: `${projectRoot}/${projectPath}`,
+        hasProjectVibe: false,
+        displayName,
+      }));
+      clearProjectSwitchEphemera();
+      applyProjectVibeProjectState(createEmptyProjectVibeForProjectRoot(projectRoot, displayName), target);
+      setDirectorView("story");
+      return target;
+    } catch (error) {
+      setProjectFileSelection({
+        status: "unavailable",
+        label: "先写想法",
+        detail: error instanceof Error
+          ? "当前浏览器不能创建项目；请在桌面 App 选择项目文件夹。"
+          : "当前浏览器不能创建项目；请在桌面 App 选择项目文件夹。",
+      });
+      return undefined;
+    }
+  }
+
   async function projectDraftTargetForNewVideoConfirmation(
     draft: NewVideoStartDraft,
     context: NewVideoStartConfirmationContext,
@@ -4468,6 +4549,8 @@ function App() {
     if (canChooseProjectRootFromDialog) {
       throw new Error("先新建或打开本地项目，再确认草案。");
     }
+    const runtimeDraftTarget = await createBrowserRuntimeProject(draft, context, { reserveForImmediateSave: true });
+    if (runtimeDraftTarget) return runtimeDraftTarget;
     return prototypeProjectDraftTarget;
   }
 

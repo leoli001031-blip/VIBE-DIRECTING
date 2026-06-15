@@ -24,6 +24,20 @@ function requestBodyString(body, names) {
   return undefined;
 }
 
+function requestBodyBoolean(body, names) {
+  if (!isRecord(body)) return false;
+  for (const name of names) {
+    if (body[name] === true) return true;
+  }
+  const project = body.project;
+  if (isRecord(project)) {
+    for (const name of names) {
+      if (project[name] === true) return true;
+    }
+  }
+  return false;
+}
+
 function firstExistingPath(paths, existsSync) {
   return paths.find((filePath) => existsSync(filePath));
 }
@@ -172,11 +186,28 @@ export function createRuntimeApiCurrentProjectBinding({
     };
   }
 
-  function validateSelectableProjectRoot(projectRoot) {
+  function safeBrowserDraftProjectRoot(projectRoot) {
+    const normalized = normalize(projectRoot || "").replace(/^\/+/g, "");
+    if (!normalized || normalized.includes("..") || path.isAbsolute(projectRoot || "")) return undefined;
+    if (!normalized.startsWith(".vibe-runtime/browser-projects/")) return undefined;
+    const configuredPath = resolveRepoInputPath(normalized);
+    if (!pathWithinRoot(configuredPath, repoRoot)) return undefined;
+    return configuredPath;
+  }
+
+  function validateSelectableProjectRoot(projectRoot, options = {}) {
     if (typeof projectRoot !== "string" || !projectRoot.trim()) {
       throw new Error("projectRoot is required.");
     }
-    const configuredPath = resolveRepoInputPath(projectRoot.trim());
+    const configuredPath = options.createIfMissing
+      ? safeBrowserDraftProjectRoot(projectRoot.trim())
+      : resolveRepoInputPath(projectRoot.trim());
+    if (!configuredPath) {
+      throw new Error("Project root can only be created inside .vibe-runtime/browser-projects.");
+    }
+    if (options.createIfMissing && !existsSync(configuredPath)) {
+      mkdirSync(configuredPath, { recursive: true });
+    }
     if (!existsSync(configuredPath)) {
       throw new Error(`Project root does not exist: ${projectRoot}`);
     }
@@ -192,7 +223,9 @@ export function createRuntimeApiCurrentProjectBinding({
   }
 
   function writeCurrentProjectBinding(input = {}) {
-    const source = validateSelectableProjectRoot(input.projectRoot);
+    const source = validateSelectableProjectRoot(input.projectRoot, {
+      createIfMissing: input.createIfMissing === true,
+    });
     const bindingPath = currentProjectBindingPath();
     const selectedAt = now();
     const binding = {
@@ -531,9 +564,10 @@ export function createRuntimeApiCurrentProjectBinding({
     const projectRoot = requestBodyString(requestBody, ["projectRoot", "projectRootPath"]);
     const projectId = requestBodyString(requestBody, ["projectId"]);
     const displayName = requestBodyString(requestBody, ["displayName", "name"]);
+    const createIfMissing = requestBodyBoolean(requestBody, ["createIfMissing"]);
 
     try {
-      const { bindingPath, binding, source } = writeCurrentProjectBinding({ projectRoot, projectId, displayName });
+      const { bindingPath, binding, source } = writeCurrentProjectBinding({ projectRoot, projectId, displayName, createIfMissing });
       const project = projectIdentityFromSource(source);
       return {
         statusCode: 200,
