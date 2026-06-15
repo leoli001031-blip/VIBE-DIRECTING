@@ -2358,18 +2358,21 @@ export function NewVideoStart({
     : projection
       ? "继续和 AI 导演说"
       : "写下你想拍什么";
+  const composerConcreteActionLabel = composerConfirmsDraft
+    ? confirmed ? "已进入故事流" : confirmPending ? "正在进入故事流" : "确认进故事流"
+    : composerIsFeedback
+      ? "发送修改意见"
+      : "发送给 AI 导演";
   const composerPrimaryLabel = storyboardPlanningStatus === "running"
     ? "整理中"
     : composerConfirmsDraft
-      ? confirmed ? "已进入故事流" : confirmPending ? "正在进入" : "确认进故事流"
-      : composerIsFeedback
-        ? "发送修改"
-        : "发送";
+      ? "确认"
+      : "发送";
   const composerPrimaryAriaLabel = storyboardPlanningStatus === "running"
     ? "正在拆镜头"
-    : composerConfirmsDraft
-      ? confirmed ? "已进入故事流" : confirmPending ? "正在进入故事流" : "确认进故事流"
-      : composerIsFeedback ? "发送修改意见" : "发送给 AI 导演";
+    : composerPrimaryLabel === "确认"
+      ? `确认：${composerConcreteActionLabel}`
+      : composerConcreteActionLabel;
   const composerPrimaryTitle = composerDisabled
     ? composerDisabledReason
     : composerConfirmsDraft
@@ -2382,7 +2385,7 @@ export function NewVideoStart({
     : storyboardPlanningStatus === "running"
       ? "正在拆镜头"
       : composerConfirmsDraft
-        ? `下一步：${composerPrimaryLabel}`
+        ? `下一步：${composerConcreteActionLabel}`
         : projection
           ? "可以继续修改，或确认进故事流。"
         : hasDraft

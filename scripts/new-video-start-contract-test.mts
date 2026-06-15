@@ -376,8 +376,10 @@ check(
 );
 check(
   /composerConfirmsDraft[\s\S]*confirmDraft\s*:\s*submitComposer/.test(newVideoStartSource)
-    && /composerPrimaryAriaLabel[\s\S]*"确认进故事流"/.test(newVideoStartSource),
-  "NewVideoStart bottom primary action must confirm a ready draft when no feedback text is entered.",
+    && /composerConcreteActionLabel[\s\S]*"确认进故事流"/.test(newVideoStartSource)
+    && /composerPrimaryLabel[\s\S]*composerConfirmsDraft[\s\S]*\? "确认"/.test(newVideoStartSource)
+    && /composerPrimaryAriaLabel[\s\S]*`确认：\$\{composerConcreteActionLabel\}`/.test(newVideoStartSource),
+  "NewVideoStart bottom primary action must use a generic confirm button while preserving the concrete draft action in accessible copy.",
   failures,
 );
 check(

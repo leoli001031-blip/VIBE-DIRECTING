@@ -2578,16 +2578,20 @@ export function MinimalAgentPanel({
   }
   const composerInputUsesNextAction = hasComposerInput && composerContinueIntent && primaryLabel !== "发送";
   const footerPrimaryUsesAgentNext = (!hasComposerInput && primaryLabel !== "发送") || composerInputUsesNextAction;
-  const footerPrimaryLabel = hasComposerInput && !composerInputUsesNextAction ? (isPreparingPlan ? "整理中" : "发送") : primaryLabel;
+  const footerPrimaryLabel = hasComposerInput && !composerInputUsesNextAction
+    ? (isPreparingPlan ? "整理中" : "发送")
+    : footerPrimaryUsesAgentNext
+      ? "确认"
+      : primaryLabel;
   const footerPrimaryDisabled = hasComposerInput && !composerInputUsesNextAction ? sendDisabled : primaryDisabled;
   const footerPrimaryDisabledReason = hasComposerInput && !composerInputUsesNextAction ? sendDisabledReason : primaryDisabledReason;
   const footerPrimaryAriaLabel = footerPrimaryDisabled
     ? `${footerPrimaryLabel}：${footerPrimaryDisabledReason}`
-    : footerPrimaryUsesAgentNext ? primaryAriaLabel : sendAriaLabel;
+    : footerPrimaryUsesAgentNext ? `确认：${primaryAriaLabel}` : sendAriaLabel;
   const footerPrimaryTitle = footerPrimaryDisabled
     ? footerPrimaryDisabledReason
     : footerPrimaryUsesAgentNext
-      ? `继续：${primaryLabel}`
+      ? `确认后继续：${primaryLabel}`
       : "发送给 AI 导演，也可以按 Cmd Enter";
   const footerStatusCopy = composerInputUsesNextAction
     ? `识别为继续：${primaryLabel}`
@@ -2600,11 +2604,11 @@ export function MinimalAgentPanel({
         : `按下后：${statusLineText}`;
   const composerHint = projectRequiredForWorkflow
     ? canResolveProjectFromFooter
-      ? `可以先点${primaryLabel}，也可以继续写想法。`
+      ? `可以点确认继续：${primaryLabel}；也可以继续写想法。`
       : "当前仍可继续改想法；生成前要先准备本地项目。"
     : text.trim()
       ? composerInputUsesNextAction
-        ? `识别为继续 · 点${primaryLabel}或 Cmd Enter`
+        ? "识别为继续 · 点确认或 Cmd Enter"
         : `识别为：${composerIntentRoute.label} · 点发送或 Cmd Enter`
       : attachments.length
         ? `${attachments.length} 个文件 · ${composerIntentRoute.plan[0]} · 点发送`
@@ -2612,10 +2616,10 @@ export function MinimalAgentPanel({
           ? "先写一句想法，或拖入素材；我还能继续帮你整理。"
           : hasBoundSelection
             ? footerPrimaryUsesAgentNext
-              ? `已选中内容，直接说改法；也可以点${primaryLabel}`
+              ? "已选中内容，直接说改法；也可以点确认继续"
               : "已选中内容，直接说改法，点发送或 Cmd Enter"
             : footerPrimaryUsesAgentNext
-              ? `${composerProjectObservation.currentTask.plan} · 可点${primaryLabel}`
+              ? `${composerProjectObservation.currentTask.plan} · 点确认继续`
               : `${composerProjectObservation.currentTask.plan} · 点发送`;
   if (isComposerCollapsed) {
     return (
