@@ -1195,6 +1195,7 @@ export function MinimalAgentPanel({
   onSendSeedanceVideo,
   onRunExport,
   onOpenResultView,
+  onRetryMissingBatch,
   agentCommand,
   projectObservation,
   videoPermissionContract,
@@ -1255,6 +1256,7 @@ export function MinimalAgentPanel({
   onSendSeedanceVideo?: (target?: AgentControlledToolInvocationTarget) => unknown | Promise<unknown>;
   onRunExport?: (target?: Pick<AgentControlledToolInvocationTarget, "agentToolTrace">) => unknown | Promise<unknown>;
   onOpenResultView?: (view: DirectorView) => void;
+  onRetryMissingBatch?: () => void | Promise<void>;
   agentCommand?: CreatorAgentCommand;
   projectObservation?: ProjectObservationProjection;
   videoPermissionContract?: AgentVideoPermissionContract;
@@ -1614,6 +1616,11 @@ export function MinimalAgentPanel({
     }
     if (realSampleAction.disabled || realSampleBusy || !onCreateP6RealSample) {
       setStatus(realSampleAction.message || (realSampleBusy ? "参考正在生成。" : "当前还不能生成参考。"));
+      return;
+    }
+    if (runtimeState.visualMemory.summary.missing > 0 && onRetryMissingBatch) {
+      setStatus("正在补齐故事流里的参考画面。");
+      void onRetryMissingBatch();
       return;
     }
     setStatus("已发送参考任务。");

@@ -575,6 +575,7 @@ export function DirectorMode({
             onSendSeedanceVideo={onSendSeedanceVideo}
             onRunExport={onRunExport}
             onOpenResultView={onOpenDirectorView}
+            onRetryMissingBatch={sessionRetryMissingBatch}
             videoPermissionContract={videoPermissionContract}
             onVideoPermissionContractChange={setVideoPermissionContract}
           />
