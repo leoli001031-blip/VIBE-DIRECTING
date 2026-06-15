@@ -556,6 +556,7 @@ export function DirectorMode({
             onRememberAgentActionLogItem={onRememberAgentActionLogItem}
             onPreviewPrototypeAgentDemo={onPreviewPrototypeAgentDemo}
             agentCommand={visibleAgentCommand}
+            projectObservation={projectReady ? creatorDesk?.projectObservation : undefined}
             realSampleAction={realSampleAction}
             endFrameAction={endFrameAction}
             videoSendAction={videoSendAction}

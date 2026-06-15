@@ -31,6 +31,7 @@ import {
   buildProjectObservation,
   isContinueIntent,
   routeProjectAgentIntent,
+  type ProjectObservationProjection,
 } from "../../core/projectAgentWorkspace";
 import {
   buildDirectorFeedbackRecompile,
@@ -1195,6 +1196,7 @@ export function MinimalAgentPanel({
   onRunExport,
   onOpenResultView,
   agentCommand,
+  projectObservation,
   videoPermissionContract,
   onVideoPermissionContractChange,
   storyboardProjectPlanInput,
@@ -1254,6 +1256,7 @@ export function MinimalAgentPanel({
   onRunExport?: (target?: Pick<AgentControlledToolInvocationTarget, "agentToolTrace">) => unknown | Promise<unknown>;
   onOpenResultView?: (view: DirectorView) => void;
   agentCommand?: CreatorAgentCommand;
+  projectObservation?: ProjectObservationProjection;
   videoPermissionContract?: AgentVideoPermissionContract;
   onVideoPermissionContractChange?: (contract: AgentVideoPermissionContract) => void;
   storyboardProjectPlanInput?: StoryboardReferenceProjectPlannerInput;
@@ -2395,29 +2398,33 @@ export function MinimalAgentPanel({
   );
   const selectedShotCountForObservation = selectedShots.length || (shot ? 1 : 0);
   const composerProjectObservation = useMemo(
-    () => buildProjectObservation({
-      localProjectReady: localProjectReadyForTools,
-      projectTitle: runtimeState.project.title,
-      sectionCount: runtimeState.storyFlow.sections.length,
-      shotCount: runtimeState.storyFlow.shots.length,
-      selectedShotCount: selectedShotCountForObservation,
-      referenceMissingCount: runtimeState.visualMemory.summary.missing,
-      referenceReviewCount: runtimeState.visualMemory.summary.needsReview + composerProjectInbox.needsReviewCount,
-      referenceReadyCount: runtimeState.visualMemory.summary.locked,
-      videoStatus: videoSendAction?.status || "not_generated",
-      videoStatusLabel: videoSendAction?.suggestedActionLabel || "未发送视频",
-      videoDetail: videoSendAction?.message || "",
-      videoWaitingCount: videoSendAction?.status === "submitted" ? 1 : 0,
-      videoCompletedCount: videoSendAction?.status === "needs_review" ? 1 : 0,
-      videoReviewCount: videoSendAction?.status === "needs_review" ? 1 : 0,
-      videoCanResume,
-      image2Running: realSampleBusy || endFrameBusy,
-      inbox: composerProjectInbox,
-    }),
+    () => {
+      if (projectObservation) return projectObservation;
+      return buildProjectObservation({
+        localProjectReady: localProjectReadyForTools,
+        projectTitle: runtimeState.project.title,
+        sectionCount: runtimeState.storyFlow.sections.length,
+        shotCount: runtimeState.storyFlow.shots.length,
+        selectedShotCount: selectedShotCountForObservation,
+        referenceMissingCount: runtimeState.visualMemory.summary.missing,
+        referenceReviewCount: runtimeState.visualMemory.summary.needsReview + composerProjectInbox.needsReviewCount,
+        referenceReadyCount: runtimeState.visualMemory.summary.locked,
+        videoStatus: videoSendAction?.status || "not_generated",
+        videoStatusLabel: videoSendAction?.suggestedActionLabel || "未发送视频",
+        videoDetail: videoSendAction?.message || "",
+        videoWaitingCount: videoSendAction?.status === "submitted" ? 1 : 0,
+        videoCompletedCount: videoSendAction?.status === "needs_review" ? 1 : 0,
+        videoReviewCount: videoSendAction?.status === "needs_review" ? 1 : 0,
+        videoCanResume,
+        image2Running: realSampleBusy || endFrameBusy,
+        inbox: composerProjectInbox,
+      });
+    },
     [
       composerProjectInbox,
       endFrameBusy,
       localProjectReadyForTools,
+      projectObservation,
       realSampleBusy,
       runtimeState.project.title,
       runtimeState.storyFlow.sections.length,
