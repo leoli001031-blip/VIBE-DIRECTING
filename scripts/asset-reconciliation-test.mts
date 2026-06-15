@@ -146,4 +146,48 @@ const emptyProjection = buildAssetReconciliationProjection({ shots: [], assets: 
 assert(emptyProjection.creatorSummary === "当前没有需要匹配的素材。", "empty reconciliation summary should not tell users to write story again");
 assert(emptyProjection.nextAction === "继续整理", "empty reconciliation next action should stay generic");
 
+const folderProjection = buildAssetReconciliationProjection({
+  shots: [
+    shot({
+      id: "shot_folder_1",
+      title: "素材文件夹接管",
+      referenceStrategy: "storyboard_narrative",
+      characterGuidance: ["戴耳机的高中女生"],
+      sceneGuidance: ["雨夜天桥"],
+      propGuidance: ["发光车票"],
+    }),
+  ],
+  assets: [
+    asset({
+      id: "folder_character_candidate",
+      type: "unknown",
+      name: "lin-an.png",
+      path: "/project/characters/lin-an.png",
+    }),
+    asset({
+      id: "folder_scene_candidate",
+      type: "unknown",
+      name: "rain-bridge.png",
+      path: "/project/scenes/rain-bridge.png",
+    }),
+    asset({
+      id: "folder_prop_candidate",
+      type: "unknown",
+      name: "ticket.png",
+      path: "/project/props/ticket.png",
+    }),
+    asset({
+      id: "folder_storyboard_candidate",
+      type: "unknown",
+      name: "bridge-board.png",
+      path: "/project/storyboards/bridge-board.png",
+    }),
+  ],
+});
+
+assert(folderProjection.items.find((item) => item.label === "戴耳机的高中女生")?.status === "needs_review", "character folder assets should become review candidates for character requirements");
+assert(folderProjection.items.find((item) => item.label === "雨夜天桥")?.status === "needs_review", "scene folder assets should become review candidates for scene requirements");
+assert(folderProjection.items.find((item) => item.label === "发光车票")?.status === "needs_review", "prop folder assets should become review candidates for prop requirements");
+assert(folderProjection.items.some((item) => item.kind === "storyboard_reference" && item.status === "needs_review"), "storyboard folder assets should become review candidates for storyboard requirements");
+
 console.log("asset-reconciliation-test: ok");

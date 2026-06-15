@@ -114,6 +114,18 @@ function hasMusicReferenceSignal(value: string) {
   return /music_reference|\b(bgm|music|song|score|soundtrack|eurobeat|ost)\b|背景音乐|配乐|音乐|歌曲/.test(value);
 }
 
+function assetFolderReferenceKind(asset: AssetRecord): AssetReconciliationKind | undefined {
+  const normalized = clean(asset.path)
+    .replace(/\\/g, "/")
+    .toLowerCase();
+  if (/(^|\/)(characters?|character_refs?|roles?|cast|角色|人物)(\/|$)/.test(normalized)) return "character";
+  if (/(^|\/)(scenes?|locations?|environments?|backgrounds?|场景|地点|环境|天气)(\/|$)/.test(normalized)) return "scene";
+  if (/(^|\/)(props?|objects?|items?|道具|物件)(\/|$)/.test(normalized)) return "prop";
+  if (/(^|\/)(storyboards?|shotboards?|boards?|分镜|故事板)(\/|$)/.test(normalized)) return "storyboard_reference";
+  if (/(^|\/)(voices?|voice_refs?|dialogue|speech|audio\/voice|声音|声线|配音|对白)(\/|$)/.test(normalized)) return "voice_reference";
+  return undefined;
+}
+
 function assetKind(asset: AssetRecord): AssetReconciliationKind | undefined {
   const searchable = `${sourceText(asset)} ${roleText(asset)}`.toLowerCase();
   const hasVoiceSignal = hasVoiceReferenceSignal(searchable);
@@ -124,6 +136,8 @@ function assetKind(asset: AssetRecord): AssetReconciliationKind | undefined {
   if (hasMusicSignal) return undefined;
   if (/\.(wav|mp3|m4a|aac|flac|ogg)$/.test(audioPath)) return "voice_reference";
   if (asset.type === "character" || asset.type === "scene" || asset.type === "prop" || asset.type === "style") return asset.type;
+  const folderKind = assetFolderReferenceKind(asset);
+  if (folderKind) return folderKind;
   return undefined;
 }
 
@@ -169,6 +183,7 @@ function scoreCandidate(requirement: AssetRequirement, asset: AssetRecord): Cand
     if (requirement.kind === "storyboard_reference" || requirement.kind === "voice_reference" || requirement.kind === "music_reference") exact = true;
   }
   if (hasShotOverlap(requirement, asset)) score += 4;
+  if (score === 0 && assetFolderReferenceKind(asset) === requirement.kind) score += 4;
   if (requirement.shotIds.some((id) => searchable.includes(compact(id)))) {
     score += 3;
     if (requirement.kind === "storyboard_reference" || requirement.kind === "voice_reference" || requirement.kind === "music_reference") exact = true;

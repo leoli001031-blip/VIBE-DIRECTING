@@ -97,6 +97,42 @@ const assets = [
     name: "quiet anime style",
     path: "/project/assets/style.png",
   }),
+  asset({
+    id: "folder_character",
+    type: "unknown",
+    name: "lin-an.png",
+    path: "/project/characters/lin-an.png",
+  }),
+  asset({
+    id: "folder_scene",
+    type: "unknown",
+    name: "rain-station.png",
+    path: "/project/scenes/rain-station.png",
+  }),
+  asset({
+    id: "folder_prop",
+    type: "unknown",
+    name: "glowing-ticket.png",
+    path: "/project/props/glowing-ticket.png",
+  }),
+  asset({
+    id: "folder_script",
+    type: "unknown",
+    name: "pilot.md",
+    path: "/project/scripts/pilot.md",
+  }),
+  asset({
+    id: "folder_video",
+    type: "unknown",
+    name: "returned-shot.mp4",
+    path: "/project/videos/returned-shot.mp4",
+  }),
+  asset({
+    id: "folder_export",
+    type: "unknown",
+    name: "final-package.zip",
+    path: "/project/exports/final-package.zip",
+  }),
 ];
 
 const reconciliation = buildAssetReconciliationProjection({ shots, assets });
@@ -110,6 +146,14 @@ assert(inbox.items.some((item) => item.label.includes("eurobeat") && item.sugges
 assert(inbox.items.some((item) => item.kind === "voice" && item.label.includes("不是配乐")), "voice references that mention not-music should stay voice assets");
 assert(inbox.items.some((item) => item.assetId === "voice_ref" && item.shotIds?.includes("shot_1")), "voice inbox item should remain selectable and keep shot binding context");
 assert(inbox.items.some((item) => item.assetId === "white_car" && item.shotIds?.includes("shot_1")), "asset inbox item should expose asset and shot ids for correction selection");
+assert(inbox.items.some((item) => item.assetId === "folder_character" && item.kind === "character"), "character folders should classify imported images as character references");
+assert(inbox.items.some((item) => item.assetId === "folder_scene" && item.kind === "scene"), "scene folders should classify imported images as scene references");
+assert(inbox.items.some((item) => item.assetId === "folder_prop" && item.kind === "prop"), "prop folders should classify imported images as prop references");
+assert(inbox.items.some((item) => item.assetId === "folder_script" && item.kind === "script"), "script folders should classify text files as scripts");
+assert(inbox.items.some((item) => item.assetId === "folder_video" && item.kind === "video"), "video folders should classify returned clips as video materials");
+assert(inbox.items.some((item) => item.assetId === "folder_export" && item.kind === "export"), "export folders should classify final packages as delivery materials");
+assert(inbox.items.some((item) => item.assetId === "folder_video" && item.suggestedBinding.includes("回流视频")), "video folder items should explain they are returned clips or edit materials");
+assert(inbox.items.some((item) => item.assetId === "folder_export" && item.suggestedBinding.includes("交付页")), "export folder items should route to delivery review");
 assert(!inbox.items.some((item) => item.suggestedBinding.includes("配乐参考")), "demo inbox should not expose music-reference routing");
 assert(inbox.items.every((item) => item.suggestedBinding), "inbox items should explain suggested binding");
 assert(!inbox.items.some((item) => item.suggestedBinding.includes("参考参考")), "style/reference inbox copy must not say 参考参考");
@@ -164,9 +208,9 @@ const observation = buildProjectObservation({
 });
 
 assert(observation.currentTask.understanding.includes("2 个镜头"), "observation should explain current story count");
-assert(observation.currentTask.confirmation.kind === "reference_generation", "missing references should require reference generation confirmation");
-assert(observation.nextAction.includes("生成"), "observation should recommend generating references first");
-assert(observation.references.detail.includes("角色、场景、道具或故事板参考"), "observation should explain the missing reference categories");
+assert(observation.currentTask.confirmation.kind === "asset_review", "project-folder materials should be reviewed before generating new references");
+assert(observation.nextAction.includes("复核"), "observation should recommend reviewing reusable folder materials before generating more");
+assert(observation.references.detail.includes("需要你看一眼"), "observation should explain that folder-classified references need review");
 
 const runningObservation = buildProjectObservation({
   localProjectReady: true,

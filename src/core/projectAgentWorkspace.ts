@@ -12,6 +12,8 @@ export type ProjectInboxKind =
   | "prop"
   | "storyboard"
   | "voice"
+  | "video"
+  | "export"
   | "reference"
   | "unknown";
 
@@ -212,6 +214,21 @@ function assetSearchText(asset: AssetRecord) {
   ].map(clean).join(" ");
 }
 
+function assetFolderSignal(asset: AssetRecord): ProjectInboxKind | undefined {
+  const normalized = clean(asset.path)
+    .replace(/\\/g, "/")
+    .toLowerCase();
+  if (/(^|\/)(characters?|character_refs?|roles?|cast|角色|人物)(\/|$)/.test(normalized)) return "character";
+  if (/(^|\/)(scenes?|locations?|environments?|backgrounds?|场景|地点|环境|天气)(\/|$)/.test(normalized)) return "scene";
+  if (/(^|\/)(props?|objects?|items?|道具|物件)(\/|$)/.test(normalized)) return "prop";
+  if (/(^|\/)(storyboards?|shotboards?|boards?|分镜|故事板)(\/|$)/.test(normalized)) return "storyboard";
+  if (/(^|\/)(voices?|voice_refs?|dialogue|speech|audio\/voice|声音|声线|配音|对白)(\/|$)/.test(normalized)) return "voice";
+  if (/(^|\/)(scripts?|script|screenplay|subtitles?|脚本|台词|字幕)(\/|$)/.test(normalized)) return "script";
+  if (/(^|\/)(exports?|deliverables?|final|交付|导出|成片)(\/|$)/.test(normalized)) return "export";
+  if (/(^|\/)(videos?|clips?|renders?|回流视频|视频)(\/|$)/.test(normalized)) return "video";
+  return undefined;
+}
+
 function projectInboxKindForAsset(asset: AssetRecord): ProjectInboxKind {
   const searchable = compact(assetSearchText(asset));
   const hasVoiceSignal = hasVoiceReferenceSignal(searchable);
@@ -224,8 +241,11 @@ function projectInboxKindForAsset(asset: AssetRecord): ProjectInboxKind {
   if (asset.type === "scene") return "scene";
   if (asset.type === "prop") return "prop";
   if (asset.type === "style") return "reference";
+  const folderSignal = assetFolderSignal(asset);
+  if (folderSignal) return folderSignal;
   const extension = pathExtension(asset.path);
   if (["txt", "md", "srt"].includes(extension)) return "script";
+  if (["mp4", "mov", "webm", "mkv"].includes(extension)) return "video";
   if (["png", "jpg", "jpeg", "webp"].includes(extension)) return "reference";
   return "unknown";
 }
@@ -237,6 +257,8 @@ function inboxKindLabel(kind: ProjectInboxKind) {
   if (kind === "prop") return "道具";
   if (kind === "storyboard") return "故事板";
   if (kind === "voice") return "声音";
+  if (kind === "video") return "视频";
+  if (kind === "export") return "交付";
   if (kind === "reference") return "参考";
   return "待判断";
 }
@@ -257,6 +279,8 @@ function assetBindingLabel(asset: AssetRecord) {
   if (role && role !== "music_reference") return `建议作为${role}`;
   if (kind === "reference") return "建议作为风格或画面参考";
   if (kind === "voice") return "建议作为声音参考";
+  if (kind === "video") return "建议作为回流视频或剪辑素材";
+  if (kind === "export") return "建议放入交付页核对";
   if (asset.type !== "unknown") return `建议作为${inboxKindLabel(kind)}参考`;
   return "需要 Agent 判断用途";
 }
@@ -315,7 +339,7 @@ export function buildProjectInboxProjection(input: BuildProjectInboxInput): Proj
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, 8);
+  }).slice(0, 16);
   const needsReviewCount = items.filter((item) => item.needsReview).length;
   return {
     totalCount: items.length,
@@ -392,7 +416,7 @@ export function buildProjectObservation(input: BuildProjectObservationInput): Pr
   const needsProject = !input.localProjectReady;
   const needsReferenceGeneration = !input.image2Running && input.referenceMissingCount > 0;
   const needsAssetReview = !input.image2Running && (input.referenceReviewCount > 0 || Boolean(input.inbox?.needsReviewCount));
-  const needsVideoSubmit = video.status === "ready";
+  const needsVideoSubmit = !input.image2Running && video.status === "ready";
   const confirmationKind: ProjectAgentConfirmationKind = needsProject
     ? "project"
     : needsReferenceGeneration

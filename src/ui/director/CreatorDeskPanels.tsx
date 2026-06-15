@@ -139,6 +139,8 @@ function inboxKindLabel(kind: CreatorDeskProjection["projectInbox"]["items"][num
   if (kind === "prop") return "道具";
   if (kind === "storyboard") return "故事板";
   if (kind === "voice") return "声音";
+  if (kind === "video") return "视频";
+  if (kind === "export") return "交付";
   if (kind === "reference") return "参考";
   return "待判断";
 }
@@ -281,6 +283,8 @@ function inboxCorrectionHint(item: ProjectInboxItem) {
   if (item.kind === "scene") return `点选后可说：这是哪个场景或天气${target}`;
   if (item.kind === "prop") return `点选后可说：这是哪个道具${target}`;
   if (item.kind === "storyboard") return `点选后可说：这张故事板给哪一段用${target}`;
+  if (item.kind === "video") return `点选后可说：这是哪一段回流视频或剪辑素材${target}`;
+  if (item.kind === "export") return "点选后可说：这是最终成片、交付文件还是剪辑工程";
   if (item.kind === "script") return "点选后可说：这是脚本、台词还是修改意见";
   return `点选后可说：这个素材应该当什么用${target}`;
 }
