@@ -5479,13 +5479,21 @@
 
 .asset-next-step-strip {
   display: grid;
-  grid-template-columns: 84px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   border: 1px solid var(--studio-line);
   border-radius: 8px;
   background: rgba(255, 252, 246, 0.72);
   padding: 10px 12px;
+}
+
+.asset-next-step-strip > div {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .asset-next-step-strip span {
@@ -5499,6 +5507,25 @@
   font-size: 13px;
   font-weight: 700;
   line-height: 1.5;
+}
+
+.asset-review-all-button {
+  justify-self: end;
+  min-height: 30px;
+  border: 1px solid rgba(53, 104, 95, 0.36);
+  border-radius: 999px;
+  background: var(--studio-accent-soft);
+  color: var(--studio-accent);
+  cursor: pointer;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 780;
+  white-space: nowrap;
+}
+
+.asset-review-all-button:hover {
+  border-color: rgba(53, 104, 95, 0.54);
+  background: rgba(53, 104, 95, 0.15);
 }
 
 .asset-workspace-strip span {

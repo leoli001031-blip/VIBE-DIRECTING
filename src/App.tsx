@@ -2331,6 +2331,53 @@ function App() {
     }
   }
 
+  async function markAllReviewAssetsLocked(assetIds: string[]) {
+    const uniqueAssetIds = Array.from(new Set(assetIds.filter(Boolean)));
+    if (!uniqueAssetIds.length) return;
+    const reviewAssetIds = uniqueAssetIds.filter((assetId) => {
+      const asset = assetLibrary.assets.find((candidate) => candidate.id === assetId);
+      return asset?.status === "review" || asset?.status === "candidate";
+    });
+    if (!reviewAssetIds.length) return;
+
+    const updatedAt = new Date().toISOString();
+    let nextLibrary = assetLibrary;
+    let selectedId = reviewAssetIds[0];
+    for (const assetId of reviewAssetIds) {
+      const result = markAssetLibraryAssetStatus(nextLibrary, assetId, uiStatusToAssetLibraryStatus("locked"), updatedAt);
+      nextLibrary = result.library;
+      selectedId = result.asset?.id || selectedId;
+    }
+    applyAssetLibraryMutation(nextLibrary, selectedId);
+
+    const shouldWriteCurrentProject = (useCurrentProjectAssetProjection || useCurrentProjectWorkbenchProjectionForRuntime)
+      && currentProjectWorkbenchProjection.assets.visualMemoryReadable;
+    if (!shouldWriteCurrentProject) return;
+
+    const failedAssetIds: string[] = [];
+    for (const assetId of reviewAssetIds) {
+      const writeResult = await markCurrentProjectAssetStatus(effectiveRuntimeProjectIdentity, {
+        assetId,
+        status: "locked",
+      });
+      if (!writeResult.ok) failedAssetIds.push(assetId);
+    }
+    if (failedAssetIds.length) {
+      setLatestPrototypeAgentDemo({
+        status: "error",
+        result: {
+          label: `${failedAssetIds.length} 个参考状态没有写入项目`,
+          status: "请重新打开项目后再试一次。",
+        },
+      });
+      return;
+    }
+    if (effectiveRuntimeProjectIdentity) {
+      const refreshed = await loadProjectRealChainStatus(effectiveRuntimeProjectIdentity);
+      setProjectRealChainState(refreshed);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
     const loadTarget = runtimeLoadTarget();
@@ -4899,6 +4946,7 @@ function App() {
               onAddAsset={addAsset}
               onUpdateAsset={updateAsset}
               onMarkAssetStatus={markAssetStatus}
+              onMarkAllReviewAssetsLocked={markAllReviewAssetsLocked}
               assetGenerationAction={assetGenerationAction}
               onGenerateAssets={runImage2AssetGeneration}
               localProjectReady={localProjectReadyForUi}

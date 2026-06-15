@@ -1233,9 +1233,15 @@ checkMessage(requireWithin(directorCreatorFacingCopy, /生成[\s\S]*参考/, "Im
 checkMessage(requireWithin(directorCreatorFacingCopy, /结果先给你看/, "Generation actions should explain review behavior in user language"));
 checkMessage(requireWithin(minimalAssetLibrary, /aria-label=\{`选择参考素材 \$\{cleanLabel\(asset\.name\)\} ·/, "Asset cards must expose clear accessible selection labels"));
 checkMessage(requireWithin(minimalAssetLibrary, /<details className="asset-generation-manual"[\s\S]*aria-label="手动生成缺少的参考图和故事板"/, "Asset generation action manual recovery must stay behind disclosure"));
+checkMessage(requireWithin(minimalAssetLibrarySource, /onMarkAllReviewAssetsLocked\?:\s*\(assetIds:\s*string\[\]\)/, "Asset Library must accept a batch reference review action"));
+checkMessage(requireWithin(minimalAssetLibrarySource, /const reviewableAssets = library\.assets\.filter[\s\S]*asset\.status === "review"[\s\S]*asset\.status === "candidate"/, "Asset Library batch review must only target reviewable generated references"));
+checkMessage(requireWithin(minimalAssetLibrary, /className="asset-review-all-button"[\s\S]*全部通过/, "Asset Library must expose one clear batch approve action for generated references"));
+checkMessage(requireWithin(stylesSource, /\.asset-review-all-button\s*\{[\s\S]*white-space:\s*nowrap/, "Asset Library batch approve action must stay visible and not wrap away"));
 checkMessage(requireWithin(minimalAssetLibrary, /className="asset-library-advanced"[\s\S]*placeholder="手填路径（可选）"[\s\S]*placeholder="补充说明（可选）"/, "Asset Library manual path and notes must stay behind advanced add controls"));
 checkMessage(requireWithin(minimalAssetLibrary, /className="asset-library-advanced asset-library-selected-advanced"[\s\S]*aria-label="编辑补充说明"/, "Asset Library selected notes editor must stay behind advanced controls"));
 checkMessage(requireWithin(appSource, /voiceSourceLibrary=\{workbenchRuntimeState\.voiceSourceLibrary\}/, "Asset Library receives workspace voice references"));
+checkMessage(requireWithin(appSource, /async function markAllReviewAssetsLocked\(assetIds: string\[\]\)[\s\S]*let nextLibrary = assetLibrary[\s\S]*for \(const assetId of reviewAssetIds\)[\s\S]*markCurrentProjectAssetStatus/, "App must batch-lock review assets from one fresh library snapshot and write them back to the current project"));
+checkMessage(requireWithin(appSource, /onMarkAllReviewAssetsLocked=\{markAllReviewAssetsLocked\}/, "App must wire batch reference approval into the Asset Library"));
 for (const label of ["type", "authority", "future", "shots"]) {
   check(!new RegExp(`<dt>${label}</dt>|>${label}<`).test(minimalAssetLibrary), `Director Clean Mode asset cards must not expose ${label} metadata`);
 }

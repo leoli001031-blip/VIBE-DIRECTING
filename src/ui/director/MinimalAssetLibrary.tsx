@@ -34,6 +34,7 @@ export function MinimalAssetLibrary({
   onAddAsset,
   onUpdateAsset,
   onMarkAssetStatus,
+  onMarkAllReviewAssetsLocked,
   assetGenerationAction,
   onGenerateAssets,
   localProjectReady = true,
@@ -47,6 +48,7 @@ export function MinimalAssetLibrary({
   onAddAsset: (input: AddAssetLibraryAssetInput) => void;
   onUpdateAsset: (assetId: string, input: UpdateAssetLibraryAssetInput) => void;
   onMarkAssetStatus: (assetId: string, status: AssetLibraryUiStatus) => void | Promise<void>;
+  onMarkAllReviewAssetsLocked?: (assetIds: string[]) => void | Promise<void>;
   assetGenerationAction?: Image2AssetGenerationActionView;
   onGenerateAssets?: () => unknown | Promise<unknown>;
   localProjectReady?: boolean;
@@ -90,6 +92,7 @@ export function MinimalAssetLibrary({
     needsReview: library.assets.filter((asset) => asset.status === "review" || asset.status === "candidate").length,
     missing: library.assets.filter((asset) => asset.status === "missing").length,
   };
+  const reviewableAssets = library.assets.filter((asset) => asset.status === "review" || asset.status === "candidate");
   const blockers = assetLibraryUserBlockers(library);
   const blockerLabel = blockers.length
     ? "待复核"
@@ -341,8 +344,20 @@ export function MinimalAssetLibrary({
         <span title={blockerLabel}>{blockerLabel}</span>
       </div>
       <section className="asset-next-step-strip" aria-label="下一步">
-        <span>下一步</span>
-        <strong>{assetNextStepCopy()}</strong>
+        <div>
+          <span>下一步</span>
+          <strong>{assetNextStepCopy()}</strong>
+        </div>
+        {!isReadOnly && reviewableAssets.length > 0 && onMarkAllReviewAssetsLocked && (
+          <button
+            type="button"
+            className="asset-review-all-button"
+            onClick={() => { void onMarkAllReviewAssetsLocked(reviewableAssets.map((asset) => asset.id)); }}
+            aria-label={`全部通过并锁定 ${reviewableAssets.length} 个待复核参考`}
+          >
+            全部通过
+          </button>
+        )}
       </section>
       <section className="asset-workspace-strip" aria-label="工作区参考">
         <span>
