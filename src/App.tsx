@@ -1769,6 +1769,15 @@ function isFreshProjectSessionRequested() {
   return params.get("fresh") === "1" || params.get("new") === "1";
 }
 
+function newVideoComposerResetKeyFromUrl() {
+  if (typeof window === "undefined") return undefined;
+  const params = new URLSearchParams(window.location.search);
+  if (isFreshProjectSessionRequested()) return "fresh-session";
+  const caseId = params.get("case")?.trim();
+  const sessionId = params.get("ts")?.trim() || params.get("session")?.trim();
+  return caseId && sessionId ? `case-session:${caseId}:${sessionId}` : undefined;
+}
+
 function createEmptyProjectVibeForProjectRoot(projectRoot?: string, displayName?: string): ProjectVibeDocument {
   const now = new Date().toISOString();
   const title = displayName?.trim() || projectFolderName(projectRoot) || "新视频项目";
@@ -4972,7 +4981,7 @@ function App() {
           localProjectReady={localProjectReadyForUi}
           localProjectBusy={projectFileSelection.status === "choosing"}
           canCreateLocalProject={canCreateLocalProjectFromDialog && projectFileSelection.status !== "choosing"}
-          newVideoComposerResetKey={isFreshProjectSessionRequested() ? "fresh-session" : undefined}
+          newVideoComposerResetKey={newVideoComposerResetKeyFromUrl()}
           onProjectStoreApplyPlanReady={(plan) => {
             setLatestProjectStoreApplyPlan(plan);
           }}
