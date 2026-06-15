@@ -157,7 +157,7 @@ assert(/Promise\.all\(attachments\.map\(attachmentIntentLine\)\)/.test(composerI
 assert(/await composerIntentFromInput\(text,\s*attachments\)/.test(prepareChange), "send must wait for script attachment contents before staging");
 assert(/正在读取脚本/.test(prepareChange), "send must show a readable status while importing script attachments");
 assert(/aria-label="添加脚本、图片或声音参考"/.test(minimalAgentPanelSource), "Agent composer file button must expose a clear accessible label");
-assert(/const primaryAriaLabel = primaryDisabled[\s\S]*primaryDisabledReason[\s\S]*aria-label=\{primaryAriaLabel\}/.test(minimalAgentPanelSource), "Agent composer primary button must expose the action or blocker as an accessible label");
+assert(/const primaryAriaLabel = primaryDisabled[\s\S]*primaryDisabledReason[\s\S]*const footerPrimaryAriaLabel[\s\S]*aria-label=\{footerPrimaryAriaLabel\}/.test(minimalAgentPanelSource), "Agent composer primary button must expose the action or blocker as an accessible label");
 assert(/preparedContext\?\.userIntent\?\.trim\(\) \|\| await composerIntentFromInput\(text,\s*attachments\)/.test(minimalAgentPanelSource), "confirmation fallback must preserve imported script contents");
 assert(/catch\s*\(error\)\s*\{[\s\S]*Failed to stage Product Agent plan[\s\S]*resetPreparedComposerState\("整理失败，请重试"\)[\s\S]*return;/.test(prepareChange), "Product Agent staging failures must stop instead of falling back to an unbacked local plan");
 assert(/按发送前检查修改/.test(intentWithQaRevisionHint), "QA revision hints must use creator-facing wording");
@@ -457,9 +457,10 @@ assert(/!localProjectReady \? "先保存项目" : availability\.exportReady/.tes
 assert(/const projectNeededForGeneratedStory = !localProjectReadyForTools[\s\S]*runtimeState\.storyFlow\.shots\.length > 0[\s\S]*runtimeState\.visualMemory\.summary\.missing > 0/.test(minimalAgentPanelSource), "bottom Agent composer must detect when a browser draft has become a real story that needs a local project before generation");
 assert(/if \(projectNeededForGeneratedStory\)[\s\S]*label: "发送"[\s\S]*disabled:\s*true[\s\S]*生成参考、视频或导出前需要本地项目/.test(minimalAgentPanelSource), "bottom Agent composer must keep the single send entry visible and explain local project requirements after story planning");
 assert(/if \(projectBlockedWithoutFooterResolver\)[\s\S]*label: "发送"[\s\S]*disabled:\s*true[\s\S]*生成参考、视频或导出前需要本地项目/.test(minimalAgentPanelSource), "bottom Agent composer must not replace the main send entry with a project action when local project controls are unavailable");
-assert(/const showFooterSuggestedAction = !hasComposerInput[\s\S]*primaryLabel !== "发送"/.test(minimalAgentPanelSource), "empty-composer suggested actions must not replace the fixed send button");
+assert(/const footerPrimaryUsesAgentNext = !hasComposerInput[\s\S]*primaryLabel !== "发送"/.test(minimalAgentPanelSource), "empty-composer next actions must be folded into the single bottom primary button");
 assert(/function handleSend\(\)[\s\S]*void prepareChange\(\)/.test(minimalAgentPanelSource), "fixed send button must route typed text or attachments through the Agent planner");
-assert(/className="minimal-agent-suggested-button"[\s\S]*onClick=\{handleNext\}[\s\S]*className="minimal-agent-send-button"[\s\S]*onClick=\{handleSend\}/.test(minimalAgentPanelSource), "bottom composer must render suggested action and send as separate controls");
+assert(/className="minimal-agent-send-button"[\s\S]*onClick=\{hasComposerInput \? handleSend : handleNext\}/.test(minimalAgentPanelSource), "bottom composer must render one primary control that either sends text or continues the next action");
+assert(!/className="minimal-agent-suggested-button"/.test(minimalAgentPanelSource), "bottom composer must not render a second suggested-action button");
 assert(/aria-label="现在能做"/.test(minimalAgentPanelSource), "Agent details must show a compact current capability list");
 assert(/visibleAgentCapabilityItems\.map/.test(minimalAgentPanelSource), "Agent capability list must be rendered from live availability");
 assert(/const attentionItems = items\.filter\(\(item\) => item\.tone !== "ready"\)/.test(agentCapabilityGlanceItems), "Agent capability glance should prioritize blocked or waiting capabilities");
@@ -499,7 +500,7 @@ assert(!/<button disabled=\{primaryDisabled\}[\s\S]*\{primaryLabel\}[\s\S]*<\/bu
 assert(/if\s*\(composerPrimaryIsFresh\)\s*\{[\s\S]*void prepareChange\(\)/.test(minimalAgentPanelSource), "typing into the bottom composer must start a fresh request through the unified primary operation instead of re-confirming the old action");
 assert(/isPreparingPlan[\s\S]*status \|\| "正在整理"[\s\S]*稍等一下/.test(minimalAgentPanelSource), "disabled composer action should explain the current preparation state instead of a generic blocker");
 assert(/const composerPrimaryIsFresh = hasComposerInput \|\| !workflow \|\| planPhase === "idle" \|\| planPhase === "confirmed"/.test(minimalAgentPanelSource), "fresh input and confirmed Agent results must show the bottom composer send action as a fresh entry point");
-assert(/const showFooterPrimaryAction = true/.test(minimalAgentPanelSource), "bottom composer primary button must stay visible in fresh and review states");
+assert(/const footerPrimaryLabel = hasComposerInput \?/.test(minimalAgentPanelSource), "bottom composer primary button must stay visible and adapt between send and next-action states");
 assert(/event\.preventDefault\(\);[\s\S]*handleNext\(\);/.test(minimalAgentPanelSource), "Cmd Enter should reuse the primary action handler so disabled states show their reason");
 assert(/blocker !== "user_confirmation_required"/.test(agentToolHasPreflightBlocker), "pre-confirmation tool blockers must ignore the normal confirmation-required blocker");
 assert(/const handoffPreflightBlocked = planPhase !== "confirmed" && agentToolHasPreflightBlocker\(displayedAgentToolHandoff,\s*agentActionEnvelope\)/.test(minimalAgentPanelSource), "confirmation gating must detect visible tool readiness blockers before the user confirms");

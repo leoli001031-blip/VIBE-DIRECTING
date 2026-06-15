@@ -665,7 +665,7 @@ checkMessage(requireWithin(stylesSource, /\.director-bottom-composer \.minimal-a
 checkMessage(requireWithin(stylesSource, /:has\(\.project-control-popover\)[\s\S]*\.new-video-bottom-portal[\s\S]*pointer-events:\s*none/, "Project control popover must temporarily move the bottom composer out of the way"));
 checkMessage(requireWithin(stylesSource, /body:has\(\.project-control-popover\) \.minimal-director\.composer-only \.new-video-unified-composer[\s\S]*opacity:\s*0/, "Project control popover must hide the new-project composer, not just the portal wrapper"));
 checkMessage(requireWithin(minimalAgentPanelSource, /const primaryDisabledPrefix = !hasComposerInput && !isPreparingPlan \? "等待输入：" : "暂不能继续："/, "Bottom composer must distinguish empty input from a real blocker"));
-checkMessage(requireWithin(minimalAgentPanelSource, /const footerStatusCopy = hasComposerInput[\s\S]*按发送交给 AI 导演[\s\S]*建议动作：/, "Bottom composer must explain both fixed send and suggested actions"));
+checkMessage(requireWithin(minimalAgentPanelSource, /const footerStatusCopy = hasComposerInput[\s\S]*按发送交给 AI 导演[\s\S]*建议动作：/, "Bottom composer must explain send input and the current next action"));
 checkMessage(requireWithin(stylesSource, /\.minimal-agent-footer-copy[\s\S]*text-overflow:\s*ellipsis/, "Bottom composer primary-button explanation must stay compact and non-overlapping"));
 checkMessage(requireWithin(stylesSource, /\.creator-desk-panels\s*\{[\s\S]*position:\s*sticky/, "Creator desk must promote the next Agent step into the main workspace"));
 checkMessage(requireWithin(stylesSource, /\.creator-step-cta/, "Creator desk must expose a dedicated next-step status area"));
@@ -695,12 +695,12 @@ checkMessage(requireWithin(minimalAgentPanelSource, /已选中内容，直接说
 checkMessage(requireWithin(minimalAgentLanguageSurface, /写脚本、提需求/, "MinimalAgentPanel must keep one normal chat entry for project-wide feedback"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /说这块怎么改/, "MinimalAgentPanel selected input placeholder"));
 checkMessage(requireWithin(minimalAgentPanelSource, /textareaRef\.current\?\.focus/, "MinimalAgentPanel should focus the composer after selection or file add"));
-checkMessage(requireWithin(minimalAgentPanelSource, /const showFooterSuggestedAction = !hasComposerInput[\s\S]*primaryLabel !== "发送"/, "MinimalAgentPanel must split suggested actions from the fixed send button"));
+checkMessage(requireWithin(minimalAgentPanelSource, /const footerPrimaryUsesAgentNext = !hasComposerInput[\s\S]*primaryLabel !== "发送"/, "MinimalAgentPanel must fold suggested actions into one bottom primary button"));
 checkMessage(requireWithin(minimalAgentPanelSource, /function handleSend\(\)[\s\S]*void prepareChange\(\)/, "MinimalAgentPanel fixed send button must always route typed text or files to the Agent"));
-checkMessage(requireWithin(minimalAgentPanelSource, /showFooterPrimaryAction\s*=\s*true[\s\S]*aria-label=\{sendAriaLabel\}[\s\S]*<Send[\s\S]*发送/, "MinimalAgentPanel composer must expose one fixed visible send button"));
+checkMessage(requireWithin(minimalAgentPanelSource, /className="minimal-agent-send-button"[\s\S]*aria-label=\{footerPrimaryAriaLabel\}[\s\S]*\{footerPrimaryLabel\}/, "MinimalAgentPanel composer must expose one visible primary action button"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /发送[\s\S]*确认修改/, "MinimalAgentPanel confirmation action labels"));
-checkMessage(requireWithin(minimalAgentPanelSource, /showFooterSuggestedAction[\s\S]*className="minimal-agent-suggested-button"[\s\S]*aria-label=\{primaryAriaLabel\}/, "MinimalAgentPanel suggested action must be separate from the send button"));
-checkMessage(requireWithin(minimalAgentPanelSource, /const primaryAriaLabel = primaryDisabled[\s\S]*primaryDisabledReason[\s\S]*aria-label=\{primaryAriaLabel\}/, "MinimalAgentPanel suggested action must keep a short button name while status explains disabled reasons"));
+checkMessage(requireWithin(minimalAgentPanelSource, /onClick=\{hasComposerInput \? handleSend : handleNext\}/, "MinimalAgentPanel primary action must either send text or continue the next action"));
+checkMessage(requireWithin(minimalAgentPanelSource, /const primaryAriaLabel = primaryDisabled[\s\S]*primaryDisabledReason[\s\S]*footerPrimaryAriaLabel/, "MinimalAgentPanel primary action must keep blocker details in accessible labels"));
 checkMessage(requireWithin(minimalAgentPanelSource, /const composerPrimaryIsFresh = hasComposerInput \|\| !workflow \|\| planPhase === "idle" \|\| planPhase === "confirmed"[\s\S]*void prepareChange\(\)/, "MinimalAgentPanel must let new bottom input replace a pending staged plan through the unified primary operation"));
 checkMessage(requireWithin(minimalAgentPanelSource, /function\s+revisePlan[\s\S]*previousIntent[\s\S]*setText\(previousIntent\)/, "MinimalAgentPanel must restore the last feedback text when the creator chooses to revise"));
 checkMessage(requireWithin(minimalAgentPanelSource, /创作者路径/, "MinimalAgentPanel must label the creator path"));

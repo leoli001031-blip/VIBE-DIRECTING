@@ -2525,11 +2525,21 @@ export function MinimalAgentPanel({
     }
     primaryOperation.perform();
   }
-  const showFooterPrimaryAction = true;
-  const showFooterSuggestedAction = !hasComposerInput && primaryLabel !== "发送";
+  const footerPrimaryUsesAgentNext = !hasComposerInput && primaryLabel !== "发送";
+  const footerPrimaryLabel = hasComposerInput ? (isPreparingPlan ? "整理中" : "发送") : primaryLabel;
+  const footerPrimaryDisabled = hasComposerInput ? sendDisabled : primaryDisabled;
+  const footerPrimaryDisabledReason = hasComposerInput ? sendDisabledReason : primaryDisabledReason;
+  const footerPrimaryAriaLabel = footerPrimaryDisabled
+    ? `${footerPrimaryLabel}：${footerPrimaryDisabledReason}`
+    : footerPrimaryUsesAgentNext ? primaryAriaLabel : sendAriaLabel;
+  const footerPrimaryTitle = footerPrimaryDisabled
+    ? footerPrimaryDisabledReason
+    : footerPrimaryUsesAgentNext
+      ? `继续：${primaryLabel}`
+      : "发送给 AI 导演，也可以按 Cmd Enter";
   const footerStatusCopy = hasComposerInput
     ? "按发送交给 AI 导演"
-    : showFooterSuggestedAction
+    : footerPrimaryUsesAgentNext
       ? `建议动作：${primaryLabel}`
       : primaryDisabled
         ? `${primaryDisabledPrefix}${primaryDisabledReason}`
@@ -2545,10 +2555,10 @@ export function MinimalAgentPanel({
         : projectBlockedWithoutFooterResolver
           ? "先写一句想法，或拖入素材；我还能继续帮你整理。"
           : hasBoundSelection
-            ? showFooterSuggestedAction
+            ? footerPrimaryUsesAgentNext
               ? `已选中内容，直接说改法；也可以点${primaryLabel}`
               : "已选中内容，直接说改法，点发送或 Cmd Enter"
-            : showFooterSuggestedAction
+            : footerPrimaryUsesAgentNext
               ? `${composerProjectObservation.currentTask.plan} · 可点${primaryLabel}`
               : `${composerProjectObservation.currentTask.plan} · 点发送`;
   if (isComposerCollapsed) {
@@ -3194,31 +3204,17 @@ export function MinimalAgentPanel({
             <small>{composerHint}</small>
             <strong>{footerStatusCopy}</strong>
           </div>
-          {showFooterSuggestedAction && (
-            <button
-              type="button"
-              className="minimal-agent-suggested-button"
-              disabled={primaryDisabled}
-              title={primaryDisabled ? primaryDisabledReason : primaryLabel}
-              onClick={handleNext}
-              aria-label={primaryAriaLabel}
-            >
-              {primaryLabel}
-            </button>
-          )}
-          {showFooterPrimaryAction && (
-            <button
-              type="button"
-              className="minimal-agent-send-button"
-              disabled={sendDisabled}
-              title={sendDisabled ? sendDisabledReason : "发送给 AI 导演，也可以按 Cmd Enter"}
-              onClick={handleSend}
-              aria-label={sendAriaLabel}
-            >
-              <Send size={15} />
-              发送
-            </button>
-          )}
+          <button
+            type="button"
+            className="minimal-agent-send-button"
+            disabled={footerPrimaryDisabled}
+            title={footerPrimaryTitle}
+            onClick={hasComposerInput ? handleSend : handleNext}
+            aria-label={footerPrimaryAriaLabel}
+          >
+            {footerPrimaryUsesAgentNext ? <ArrowRight size={15} /> : <Send size={15} />}
+            {footerPrimaryLabel}
+          </button>
         </div>
       </div>
       <div className="minimal-agent-status-row">
