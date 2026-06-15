@@ -519,6 +519,9 @@ checkMessage(requireWithin(creatorDeskPanelsSource, /displayPreflight\.checks\.m
 checkMessage(requireWithin(creatorDeskProjection, /const agentStage = buildCreatorAgentStage/, "creator desk projection must expose a single Agent stage for the primary next action"));
 checkMessage(requireWithin(creatorDeskProjection, /agentCommand:\s*buildCreatorAgentCommand\(agentStage\)/, "creator desk projection must expose a single Agent command for the primary CTA"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /displayAgentCommand[\s\S]*nextActionCopy[\s\S]*displayAgentCommand\.label/, "CreatorDeskPanels summary copy must come from the boundary-aware Agent command"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /const batchGenerationActionLabel = displayAgentCommand\.kind === "generate_references"[\s\S]*displayAgentCommand\.label[\s\S]*retryLabel\(batchGeneration\.retryLabel\)/, "CreatorDeskPanels batch action label must follow the boundary-aware Agent command"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /displayAgentCommand\.kind === "generate_references" \? \([\s\S]*底部按钮：\{batchGenerationActionLabel\}/, "CreatorDeskPanels must route reference generation through bottom-button guidance instead of a second execution button"));
+check(!creatorDeskPanelsSource.includes("canRunBatchGeneration") && !creatorDeskPanelsSource.includes("<button onClick={onRetryMissing}"), "CreatorDeskPanels details must not expose a second batch reference generation button");
 checkMessage(requireWithin(creatorDeskPanelsSource, /agentProjectRequirementCopy\(\{ localProjectBusy, canCreateLocalProject \}\)/, "CreatorDeskPanels must share browser-draft/local-project requirement copy with the bottom Agent button"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /const hasStoryDraftForProject = scriptPlanner\.shotCount > 0 \|\| framePlan\.items\.length > 0/, "CreatorDeskPanels must distinguish empty drafts from confirmed browser stories"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /browserDraftLabel = hasStoryDraftForProject \? projectRequirement\.label : "先写想法"[\s\S]*nextActionCopy = !localProjectReady[\s\S]*browserDraftLabel/, "CreatorDeskPanels should point confirmed browser stories to local-project setup instead of saying to write another idea"));
@@ -528,6 +531,7 @@ checkMessage(requireWithin(creatorDeskPanelsSource, /描述想法[\s\S]*拆故�
 checkMessage(requireWithin(creatorDeskPanelsSource, /AI 导演选择的做法[\s\S]*agentSkillPills/, "CreatorDeskPanels must explain the AI director selected skills near the status summary"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /creator-agent-current-task[\s\S]*AI 导演当前任务[\s\S]*理解[\s\S]*缺口[\s\S]*准备[\s\S]*确认/, "CreatorDeskPanels must make the four-part current AI director task the main visible surface"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /function summaryLine[\s\S]*projectInbox\.needsReviewCount[\s\S]*个素材待确认[\s\S]*没有待处理项/, "CreatorDeskPanels summary must prioritize ProjectInbox review work before saying there is nothing pending"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /function canRetryReviewItem[\s\S]*input\.item\.status === "needs_review" \|\| input\.item\.status === "retry"[\s\S]*Boolean\(input\.onRetryItem \|\| input\.onRetryMissing\)/, "CreatorDeskPanels must not show per-shot retry buttons for merely missing references"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /点选后可说/, "Project inbox items must explain natural-language correction through the bottom Agent composer"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /creator-inbox-select[\s\S]*onSelectInboxItem\?\.\(item\)/, "Project inbox items must be selectable instead of static labels"));
 checkMessage(requireWithin(directorModeSource, /onSelectInboxItem=\{\(item\)[\s\S]*item\.assetId[\s\S]*onSelectAsset\(item\.assetId\)[\s\S]*onOpenDirectorView\?\.\("assets"\)/, "DirectorMode must select inbox assets in the existing asset context instead of opening another feedback UI"));
@@ -545,6 +549,8 @@ for (const statusLabel of ["未生成", "已发送", "排队中", "生成中", "
   checkMessage(requireWithin(creatorDeskPanelsSource, new RegExp(statusLabel), `CreatorDeskPanels must expose ${statusLabel} video status`));
 }
 checkMessage(requireWithin(creatorDeskPanelsSource, /即梦常见约[\s\S]*分钟[\s\S]*可以离开后查询结果/, "CreatorDeskPanels must explain long video waits with resume copy"));
+check(!/会先生成故事板参考/.test(creatorDeskProjectionSource), "Creator desk video copy must not imply every video path starts with storyboard references");
+checkMessage(requireWithin(creatorDeskProjectionSource, /会先准备所需参考画面[\s\S]*一次发送一个视频任务/, "Creator desk video copy must stay reference-mode neutral"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /const videoCanResume = Boolean\(videoSendAction\?\.canResume \|\| videoGeneration\.canResume\)/, "CreatorDeskPanels must merge runtime and action resume readiness"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /videoCanResume[\s\S]*底部按钮可以查询结果，不会重复发送/, "CreatorDeskPanels must explain resumable Seedance jobs without exposing a second query button"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /需要取回结果时，点底部发送[\s\S]*需要发送视频时，点底部发送/, "CreatorDeskPanels must route video execution to the bottom Agent button"));

@@ -375,7 +375,7 @@ function canRetryReviewItem(input: {
   onRetryItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
   onRetryMissing?: () => void;
 }) {
-  return (input.item.status === "needs_review" || input.item.status === "missing" || input.item.status === "retry")
+  return (input.item.status === "needs_review" || input.item.status === "retry")
     && Boolean(input.item.shotId)
     && Boolean(input.onRetryItem || input.onRetryMissing);
 }
@@ -466,6 +466,9 @@ export function CreatorDeskPanels({
   const videoCanResume = Boolean(videoSendAction?.canResume || videoGeneration.canResume) && videoGeneration.status !== "completed";
   const videoActionRelevant = videoGeneration.status !== "completed";
   const referenceGenerationBusy = referenceGenerationAction?.status === "running";
+  const batchGenerationActionLabel = displayAgentCommand.kind === "generate_references"
+    ? displayAgentCommand.label
+    : retryLabel(batchGeneration.retryLabel);
   const projectRequirement = agentProjectRequirementCopy({ localProjectBusy, canCreateLocalProject });
   const hasStoryDraftForProject = scriptPlanner.shotCount > 0 || framePlan.items.length > 0;
   const browserDraftLabel = hasStoryDraftForProject ? projectRequirement.label : "先写想法";
@@ -767,10 +770,9 @@ export function CreatorDeskPanels({
             <div className="batch-generation-actions">
               <small>{concurrencyLabel(batchGeneration.concurrencyLabel)}</small>
               <small>{safetyLabel(batchGeneration.safetyLabel)}</small>
-              <button disabled={!batchGeneration.canRetryMissing || !onRetryMissing} onClick={onRetryMissing}>
-                <RefreshCw size={14} />
-                {retryLabel(batchGeneration.retryLabel)}
-              </button>
+              {displayAgentCommand.kind === "generate_references" ? (
+                <small>底部按钮：{batchGenerationActionLabel}</small>
+              ) : null}
             </div>
           </div>
 

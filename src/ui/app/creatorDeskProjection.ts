@@ -451,7 +451,7 @@ function buildCreatorVideoGenerationProjection(
   const failedCount = statuses.filter((status) => clean(status.status) === "failed").length;
   const detail = selected.status === "not_generated"
     ? storyReadyCount > 0
-      ? `会先生成故事板参考，再一次发送一个视频任务；即梦排队常见约 ${JIMENG_CLI_EXPECTED_QUEUE_WAIT_MINUTES} 分钟，可以离开后查询结果。`
+      ? `会先准备所需参考画面，再一次发送一个视频任务；即梦排队常见约 ${JIMENG_CLI_EXPECTED_QUEUE_WAIT_MINUTES} 分钟，可以离开后查询结果。`
       : "先确认故事流，再发送视频。"
     : selected.detail;
   return {
