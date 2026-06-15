@@ -66,6 +66,7 @@ import {
   type AgentWebSearchSettings,
 } from "../../core/agentWebSearchClient";
 import { classifyDirectorAgentAction } from "../../core/directorAgentAction";
+import { detectDirectorAgentPermissionIntent } from "../../core/directorAgentPermissionIntent";
 import type { ShotRecord } from "../../core/types";
 
 type IntakeVisualReferenceKind = Extract<IntakeReferenceAssetType, "image" | "style" | "character" | "scene">;
@@ -1763,7 +1764,15 @@ export function NewVideoStart({
     setScriptFileName("");
     setScriptFileError("");
     setScript(value);
-    publish({ ...draft, script: value });
+    const detectedBoundaryMode = syncVideoPermissionFromIntent(`${value}\n${style}`);
+    publish({ ...draft, script: value, agentBoundaryMode: detectedBoundaryMode || activeVideoPermissionContract.mode });
+  }
+
+  function syncVideoPermissionFromIntent(value: string) {
+    const detectedMode = detectDirectorAgentPermissionIntent(value);
+    if (!detectedMode) return undefined;
+    if (detectedMode !== activeVideoPermissionContract.mode) selectVideoPermissionMode(detectedMode);
+    return detectedMode;
   }
 
   function openWorkspacePicker() {
@@ -1794,8 +1803,9 @@ export function NewVideoStart({
     try {
       const nextScript = await readScriptFile(file);
       if (nextScript == null) return;
+      const detectedBoundaryMode = syncVideoPermissionFromIntent(`${nextScript}\n${style}`);
       setScript(nextScript);
-      publish({ ...draft, script: nextScript });
+      publish({ ...draft, script: nextScript, agentBoundaryMode: detectedBoundaryMode || activeVideoPermissionContract.mode });
     } finally {
       if (scriptInputRef.current) scriptInputRef.current.value = "";
     }
@@ -1846,6 +1856,8 @@ export function NewVideoStart({
     const nextAudio = audioFile || audio;
     const nextAudioRole = inferAudioRole(nextAudio, nextScript || style);
 
+    const detectedBoundaryMode = syncVideoPermissionFromIntent(`${nextScript}\n${style}`);
+
     setScript(nextScript);
     setReferences(nextReferences);
     setAudio(nextAudio);
@@ -1856,6 +1868,7 @@ export function NewVideoStart({
       references: nextReferences,
       audio: nextAudio,
       audioRole: nextAudioRole,
+      agentBoundaryMode: detectedBoundaryMode || activeVideoPermissionContract.mode,
     });
     if (workspaceInputRef.current) workspaceInputRef.current.value = "";
   }
@@ -2409,6 +2422,7 @@ export function NewVideoStart({
           value={composerValue}
           onChange={(event) => {
             if (composerIsFeedback) {
+              syncVideoPermissionFromIntent(event.target.value);
               setDiscussionFeedback(event.target.value);
               return;
             }

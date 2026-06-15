@@ -107,6 +107,7 @@ const tableRowSummary = findFunctionBody(newVideoStartSource, "tableRowSummary")
 const cleanPlanningSummaryValue = findFunctionBody(newVideoStartSource, "cleanPlanningSummaryValue");
 const shouldHandleEmptyProjectStatusIntent = findFunctionBody(newVideoStartSource, "shouldHandleEmptyProjectStatusIntent");
 const showEmptyProjectStatusNotice = findFunctionBody(newVideoStartSource, "showEmptyProjectStatusNotice");
+const syncVideoPermissionFromIntent = findFunctionBody(newVideoStartSource, "syncVideoPermissionFromIntent");
 const confirmNewVideoDraft = findFunctionBody(directorModeSource, "confirmNewVideoDraft");
 const visibleCopy = extractStringLiterals(newVideoStart);
 const failures: string[] = [];
@@ -205,6 +206,20 @@ check(
   /agentBoundaryMode\?:\s*AgentVideoSubmitMode/.test(newVideoStartSource)
     && /agentBoundaryMode:\s*activeVideoPermissionContract\.mode/.test(newVideoStartSource),
   "NewVideoStart drafts must carry the creator-selected Agent execution boundary.",
+  failures,
+);
+check(
+  /detectDirectorAgentPermissionIntent/.test(newVideoStartSource)
+    && /const detectedMode = detectDirectorAgentPermissionIntent\(value\)/.test(syncVideoPermissionFromIntent)
+    && /selectVideoPermissionMode\(detectedMode\)/.test(syncVideoPermissionFromIntent),
+  "NewVideoStart must detect natural-language generation boundaries from the unified composer.",
+  failures,
+);
+check(
+  /syncVideoPermissionFromIntent\(`\$\{value\}\\n\$\{style\}`\)/.test(newVideoStartSource)
+    && /syncVideoPermissionFromIntent\(`\$\{nextScript\}\\n\$\{style\}`\)/.test(newVideoStartSource)
+    && /agentBoundaryMode:\s*detectedBoundaryMode \|\| activeVideoPermissionContract\.mode/.test(newVideoStartSource),
+  "NewVideoStart must preserve detected reference/video boundaries when typing, importing, or dropping a script.",
   failures,
 );
 check(
