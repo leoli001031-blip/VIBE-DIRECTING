@@ -2338,12 +2338,6 @@ export function MinimalAgentPanel({
   const footerDirectAction = canOfferFooterDirectAction
     ? commandFooterDirectAction || fallbackFooterDirectAction
     : undefined;
-  const canResolveProjectFromFooter = Boolean(canCreateLocalProject && onCreateLocalProject && !localProjectBusy);
-  const projectRequiredForWorkflow = !localProjectReadyForTools && !hasComposerInput && Boolean(footerDirectAction) && canResolveProjectFromFooter;
-  const projectBlockedWithoutFooterResolver = !localProjectReadyForTools
-    && !hasComposerInput
-    && Boolean(footerDirectAction)
-    && !canResolveProjectFromFooter;
   const projectNeededForGeneratedStory = !localProjectReadyForTools
     && !hasComposerInput
     && runtimeState.storyFlow.shots.length > 0
@@ -2352,6 +2346,15 @@ export function MinimalAgentPanel({
       || runtimeState.visualMemory.summary.needsReview > 0
       || Boolean(videoSendAction?.ready)
     );
+  const canCreateProjectFromFooter = Boolean(canCreateLocalProject && onCreateLocalProject);
+  const canResolveProjectFromFooter = canCreateProjectFromFooter && !localProjectBusy;
+  const projectNeedsLocalFolder = !localProjectReadyForTools
+    && !hasComposerInput
+    && (Boolean(footerDirectAction) || projectNeededForGeneratedStory);
+  const projectRequiredForWorkflow = projectNeedsLocalFolder && (canCreateProjectFromFooter || localProjectBusy);
+  const projectBlockedWithoutFooterResolver = projectNeedsLocalFolder
+    && !canCreateProjectFromFooter
+    && !localProjectBusy;
   const projectRequirement = agentProjectRequirementCopy({
     localProjectBusy,
     canCreateLocalProject: canResolveProjectFromFooter,
@@ -2424,17 +2427,6 @@ export function MinimalAgentPanel({
       };
     }
     if (projectBlockedWithoutFooterResolver) {
-      return {
-        label: "发送",
-        disabled: true,
-        disabledReason: "继续写想法也可以；生成参考、视频或导出前需要本地项目。",
-        statusLine: "故事草案已就绪；可以继续描述修改，生成前再打开项目。",
-        perform: () => {
-          void prepareChange();
-        },
-      };
-    }
-    if (projectNeededForGeneratedStory) {
       return {
         label: "发送",
         disabled: true,
