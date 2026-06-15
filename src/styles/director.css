@@ -7608,6 +7608,12 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   display: none;
 }
 
+.minimal-director.composer-only .new-video-composer-field,
+.new-video-bottom-portal .new-video-composer-field {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .minimal-director.composer-only .new-video-composer-field textarea {
   min-height: 78px;
   max-height: 160px;
@@ -7627,6 +7633,7 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   padding: 10px 12px;
 }
 
+.minimal-director.composer-only .new-video-composer-bar,
 .new-video-bottom-portal .new-video-composer-bar {
   position: sticky;
   bottom: 0;
