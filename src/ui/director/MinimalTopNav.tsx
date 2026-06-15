@@ -122,6 +122,7 @@ export function MinimalTopNav({
   const projectTitleLabel = projectTitle || "新视频项目";
   const projectFolderReady = Boolean(projectRoot?.trim());
   const unsavedProjectContent = !projectFolderReady && !isEmptyProject;
+  const projectControlButtonLabel = !projectFolderReady && isEmptyProject ? "打开或新建项目" : projectTitleLabel;
   const projectStorageBadge = projectFolderReady ? "本地" : "暂存";
   const emptyProjectPrimary = projectFolderReady ? "本地已准备" : "先写想法";
   const emptyProjectSecondary = projectFolderReady ? "确认后写入项目" : "先写想法";
@@ -206,11 +207,11 @@ export function MinimalTopNav({
           <button
             className="project-title-button"
             onClick={() => setProjectControlOpen((open) => !open)}
-            aria-label={`项目控制：${projectTitleLabel}，${projectControlStatus}`}
+            aria-label={`项目控制：${projectControlButtonLabel}，${projectControlStatus}`}
             aria-expanded={projectControlOpen}
           >
             <span className="project-title-row">
-              <span className="project-title-text">{projectTitleLabel}</span>
+              <span className="project-title-text">{projectControlButtonLabel}</span>
               <em className={`project-title-storage ${projectFolderReady ? "local" : "draft"}`}>{projectStorageBadge}</em>
               <ChevronDown size={14} aria-hidden="true" />
             </span>
