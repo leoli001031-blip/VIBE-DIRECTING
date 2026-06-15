@@ -8842,7 +8842,7 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 
 .minimal-agent-input-footer {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -8879,27 +8879,6 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 .minimal-agent-input-footer button:last-child {
   justify-self: end;
   white-space: nowrap;
-}
-
-.minimal-agent-suggested-button {
-  min-height: 34px;
-  max-width: 128px;
-  overflow: hidden;
-  border-color: rgba(122, 85, 40, 0.22);
-  background: rgba(255, 252, 246, 0.74);
-  color: rgba(47, 39, 34, 0.74);
-  font-weight: 760; /* Non-standard weight - verify render on all platforms */
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.minimal-agent-suggested-button:hover:not(:disabled) {
-  border-color: rgba(122, 85, 40, 0.42);
-  color: var(--studio-accent);
-}
-
-.minimal-agent-suggested-button:disabled {
-  color: rgba(87, 72, 61, 0.42);
 }
 
 .minimal-agent-input .minimal-agent-file-button {

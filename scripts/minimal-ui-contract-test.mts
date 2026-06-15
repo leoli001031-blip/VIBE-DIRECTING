@@ -669,6 +669,8 @@ checkMessage(requireWithin(stylesSource, /body:has\(\.project-control-popover\) 
 checkMessage(requireWithin(minimalAgentPanelSource, /const primaryDisabledPrefix = !hasComposerInput && !isPreparingPlan \? "等待输入：" : "暂不能继续："/, "Bottom composer must distinguish empty input from a real blocker"));
 checkMessage(requireWithin(minimalAgentPanelSource, /const footerStatusCopy = hasComposerInput[\s\S]*按发送交给 AI 导演[\s\S]*建议动作：/, "Bottom composer must explain send input and the current next action"));
 checkMessage(requireWithin(stylesSource, /\.minimal-agent-footer-copy[\s\S]*text-overflow:\s*ellipsis/, "Bottom composer primary-button explanation must stay compact and non-overlapping"));
+checkMessage(requireWithin(stylesSource, /\.minimal-agent-input-footer\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(0,\s*1fr\) auto;/, "Bottom Agent composer footer must reserve exactly one primary-action column"));
+check(!/\.minimal-agent-suggested-button/.test(stylesSource), "Bottom Agent composer must not keep stale suggested-action button styles");
 checkMessage(requireWithin(stylesSource, /\.creator-desk-panels\s*\{[\s\S]*position:\s*sticky/, "Creator desk must promote the next Agent step into the main workspace"));
 checkMessage(requireWithin(stylesSource, /\.creator-step-cta/, "Creator desk must expose a dedicated next-step status area"));
 checkMessage(requireWithin(stylesSource, /\.creator-agent-current-task[\s\S]*grid-template-columns:\s*48px/, "Creator desk must style the four-part current Agent task as the visible decision surface"));
