@@ -29,6 +29,7 @@ import { buildDirectorAgentToolTrace } from "../../core/directorAgentToolTrace";
 import {
   buildProjectInboxProjection,
   buildProjectObservation,
+  isContinueIntent,
   routeProjectAgentIntent,
 } from "../../core/projectAgentWorkspace";
 import {
@@ -2255,6 +2256,7 @@ export function MinimalAgentPanel({
   const canConfirm = workflowCanConfirm(workflow) && !confirmationBlocked && !readOnlyStatusInspection;
   const canConfirmFeedback = Boolean(directorFeedbackCanConfirm(feedbackRecompile) && onDirectorFeedbackConfirmed);
   const hasComposerInput = Boolean(text.trim() || attachments.length);
+  const composerContinueIntent = Boolean(text.trim() && isContinueIntent(text));
   const hasPreparedComposerInput = Boolean(preparedContext?.userIntent?.trim() || hasComposerInput);
   const canPreviewPrototypeDemo = Boolean(workflow && onPreviewPrototypeAgentDemo && hasPreparedComposerInput && !canConfirmFeedback && !readOnlyStatusInspection);
   const canOfferFooterDirectAction = !hasComposerInput && !isPreparingPlan && (!workflow || planPhase === "confirmed");
@@ -2353,8 +2355,15 @@ export function MinimalAgentPanel({
     || referenceFooterAction
     || endFrameFooterAction
     || videoSubmitFooterAction;
+  const availableFooterDirectAction = commandFooterDirectAction || fallbackFooterDirectAction;
   const footerDirectAction = canOfferFooterDirectAction
-    ? commandFooterDirectAction || fallbackFooterDirectAction
+    ? availableFooterDirectAction
+    : undefined;
+  const typedContinueFooterDirectAction = hasComposerInput
+    && composerContinueIntent
+    && !isPreparingPlan
+    && (!workflow || planPhase === "confirmed")
+    ? availableFooterDirectAction
     : undefined;
   const projectNeededForGeneratedStory = !localProjectReadyForTools
     && !hasComposerInput
@@ -2464,6 +2473,38 @@ export function MinimalAgentPanel({
         perform: footerDirectAction.perform,
       };
     }
+    if (hasComposerInput && composerContinueIntent && workflow && planPhase !== "confirmed") {
+      const disabled = confirmationBlocked || (!canConfirm && !canPreviewPrototypeDemo && !canConfirmFeedback);
+      const disabledReason = actionBlocked && agentActionEnvelope
+        ? agentActionEnvelope.userFacingMessage
+        : handoffPreflightBlocked && displayedAgentToolHandoff
+          ? agentToolPreflightLabel(displayedAgentToolHandoff) || "先处理阻断。"
+          : "当前不能确认。";
+      return {
+        label: agentReviewPrimaryLabel(agentActionEnvelope),
+        disabled,
+        disabledReason,
+        statusLine: disabled ? disabledReason : "识别为继续，确认当前草案。",
+        perform: () => {
+          setText("");
+          void confirmPlan();
+        },
+      };
+    }
+    if (typedContinueFooterDirectAction) {
+      return {
+        label: typedContinueFooterDirectAction.label,
+        disabled: typedContinueFooterDirectAction.disabled,
+        disabledReason: typedContinueFooterDirectAction.disabledReason,
+        statusLine: typedContinueFooterDirectAction.disabled
+          ? typedContinueFooterDirectAction.disabledReason
+          : `识别为继续，执行：${typedContinueFooterDirectAction.label}`,
+        perform: () => {
+          setText("");
+          typedContinueFooterDirectAction.perform();
+        },
+      };
+    }
     if (composerPrimaryIsFresh) {
       const label = isPreparingPlan ? "整理中" : "发送";
       const disabledReason = !hasComposerInput
@@ -2535,10 +2576,11 @@ export function MinimalAgentPanel({
     }
     primaryOperation.perform();
   }
-  const footerPrimaryUsesAgentNext = !hasComposerInput && primaryLabel !== "发送";
-  const footerPrimaryLabel = hasComposerInput ? (isPreparingPlan ? "整理中" : "发送") : primaryLabel;
-  const footerPrimaryDisabled = hasComposerInput ? sendDisabled : primaryDisabled;
-  const footerPrimaryDisabledReason = hasComposerInput ? sendDisabledReason : primaryDisabledReason;
+  const composerInputUsesNextAction = hasComposerInput && composerContinueIntent && primaryLabel !== "发送";
+  const footerPrimaryUsesAgentNext = (!hasComposerInput && primaryLabel !== "发送") || composerInputUsesNextAction;
+  const footerPrimaryLabel = hasComposerInput && !composerInputUsesNextAction ? (isPreparingPlan ? "整理中" : "发送") : primaryLabel;
+  const footerPrimaryDisabled = hasComposerInput && !composerInputUsesNextAction ? sendDisabled : primaryDisabled;
+  const footerPrimaryDisabledReason = hasComposerInput && !composerInputUsesNextAction ? sendDisabledReason : primaryDisabledReason;
   const footerPrimaryAriaLabel = footerPrimaryDisabled
     ? `${footerPrimaryLabel}：${footerPrimaryDisabledReason}`
     : footerPrimaryUsesAgentNext ? primaryAriaLabel : sendAriaLabel;
@@ -2547,7 +2589,9 @@ export function MinimalAgentPanel({
     : footerPrimaryUsesAgentNext
       ? `继续：${primaryLabel}`
       : "发送给 AI 导演，也可以按 Cmd Enter";
-  const footerStatusCopy = hasComposerInput
+  const footerStatusCopy = composerInputUsesNextAction
+    ? `识别为继续：${primaryLabel}`
+    : hasComposerInput
     ? "按发送交给 AI 导演"
     : footerPrimaryUsesAgentNext
       ? `建议动作：${primaryLabel}`
@@ -2559,7 +2603,9 @@ export function MinimalAgentPanel({
       ? `可以先点${primaryLabel}，也可以继续写想法。`
       : "当前仍可继续改想法；生成前要先准备本地项目。"
     : text.trim()
-      ? `识别为：${composerIntentRoute.label} · 点发送或 Cmd Enter`
+      ? composerInputUsesNextAction
+        ? `识别为继续 · 点${primaryLabel}或 Cmd Enter`
+        : `识别为：${composerIntentRoute.label} · 点发送或 Cmd Enter`
       : attachments.length
         ? `${attachments.length} 个文件 · ${composerIntentRoute.plan[0]} · 点发送`
         : projectBlockedWithoutFooterResolver
@@ -3194,7 +3240,7 @@ export function MinimalAgentPanel({
           onKeyDown={(event) => {
             if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
               event.preventDefault();
-              if (hasComposerInput) handleSend();
+              if (hasComposerInput && !composerInputUsesNextAction) handleSend();
               else handleNext();
             }
           }}
@@ -3219,7 +3265,7 @@ export function MinimalAgentPanel({
             className="minimal-agent-send-button"
             disabled={footerPrimaryDisabled}
             title={footerPrimaryTitle}
-            onClick={hasComposerInput ? handleSend : handleNext}
+            onClick={hasComposerInput && !composerInputUsesNextAction ? handleSend : handleNext}
             aria-label={footerPrimaryAriaLabel}
           >
             {footerPrimaryUsesAgentNext ? <ArrowRight size={15} /> : <Send size={15} />}

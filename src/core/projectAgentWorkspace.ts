@@ -160,7 +160,7 @@ function routeContinueFromObservation(observation: ProjectObservationProjection)
   return { kind: "status", label: "继续当前任务", target: "story", confirmation: observation.currentTask.confirmation.kind, plan: basePlan };
 }
 
-function isContinueIntent(text: string) {
+export function isContinueIntent(text: string) {
   return /^(好|好的|可以|行|没问题|没毛病|ok|OK|确认|通过|继续|下一步|就这样|就按这个)(了|吧|啊|呀|，|。|！|!|,|\s)*$/u.test(text)
     || /(没问题|可以|确认|通过).{0,8}(继续|下一步)/u.test(text)
     || /(继续|下一步).{0,8}(没问题|可以|确认|通过)/u.test(text);

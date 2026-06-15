@@ -616,6 +616,9 @@ function assertCreatorPanelContract() {
   assert(/videoGenerationFromRelayQueue[\s\S]*relayQueue\.status\s*===\s*"complete"[\s\S]*"submitted"/.test(creatorDeskProjectionSource), "Creator desk projection must map the persisted relay queue to visible video status");
   assert(!/provider|schema|task[-\s]*envelope/i.test(creatorDeskPanelsSource), "Creator desk panels must not expose engineering terms");
   assert(/确认/.test(agentPanelContractSource), "Agent Panel confirmation action should use creator-facing confirmation copy");
+  assert(/isContinueIntent/.test(agentPanelSource), "Agent Panel should recognize natural-language continue/confirmation input");
+  assert(/composerInputUsesNextAction[\s\S]*composerContinueIntent[\s\S]*primaryLabel !== "发送"/.test(agentPanelSource), "Agent Panel should route typed 'continue' intents to the current next action instead of plain send");
+  assert(/onClick=\{hasComposerInput && !composerInputUsesNextAction \? handleSend : handleNext\}/.test(agentPanelSource), "Agent Panel send button should execute the next action for typed continue intents");
   assert(/创作者路径/.test(agentPanelSource), "Agent Panel should label the default creator path");
   assert(/描述修改[\s\S]*生成计划[\s\S]*确认应用/.test(agentPanelSource), "Agent Panel should expose the simplified creator path");
   assert(/修改计划详情/.test(agentPanelSource), "Agent Panel should keep staged plan details behind disclosure");
