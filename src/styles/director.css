@@ -7416,7 +7416,8 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   background: rgba(255, 255, 255, 0.72);
   box-shadow: 0 -10px 22px rgba(255, 252, 246, 0.8);
   max-height: 82px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 8px 10px;
 }
 
@@ -7457,6 +7458,7 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 }
 
 .director-bottom-composer .minimal-agent-input-footer {
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
   gap: 8px;
   padding-top: 6px;
 }
@@ -7467,6 +7469,8 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 
 .director-bottom-composer .minimal-agent-send-button,
 .minimal-agent-send-button {
+  justify-self: end;
+  flex-shrink: 0;
   min-width: 88px;
   min-height: 34px;
   border-color: rgba(122, 85, 40, 0.28);
@@ -8535,6 +8539,7 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   display: grid;
   gap: 10px;
   min-width: 0;
+  overflow-x: hidden;
   border: 1px solid rgba(221, 208, 192, 0.86);
   border-radius: 10px;
   background: rgba(255, 252, 246, 0.86);
@@ -8587,7 +8592,7 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 
 .new-video-composer-bar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) max-content;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -8601,6 +8606,12 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   font-size: 11px;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.new-video-primary-action {
+  justify-self: end;
+  min-width: 96px;
+  flex-shrink: 0;
 }
 
 .new-video-composer-bar .new-video-script-error {
@@ -9212,6 +9223,20 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 }
 
 @media (max-width: 720px) {
+  .minimal-agent-input-footer {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+
+  .minimal-agent-footer-copy {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+
+  .minimal-agent-send-button {
+    grid-column: 2;
+    justify-self: end;
+  }
+
   .new-video-composer-bar {
     grid-template-columns: minmax(0, 1fr) max-content;
   }

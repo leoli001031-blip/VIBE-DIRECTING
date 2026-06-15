@@ -479,7 +479,7 @@ checkMessage(requireWithin(newVideoStartSource, /<details\s+className="new-video
 checkMessage(requireWithin(newVideoStartSource, /className="new-video-asset-action new-video-primary-action"[\s\S]*composerPrimaryLabel/, "NewVideoStart bottom composer must expose one fixed primary action"));
 checkMessage(requireWithin(newVideoStartSource, /composerPrimaryTitle[\s\S]*先让 AI 导演拆故事、分镜和节奏/, "NewVideoStart fixed send action must explain that Agent planning happens after send"));
 checkMessage(requireWithin(newVideoStartSource, /aria-label=\{composerPrimaryAriaLabel\}[\s\S]*\{composerPrimaryLabel\}/, "NewVideoStart composer must expose one explicit visible send button"));
-checkMessage(requireWithin(stylesSource, /\.new-video-composer-bar\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(0,\s*1fr\) max-content/, "NewVideoStart composer bar must reserve a non-collapsing send-button column"));
+checkMessage(requireWithin(stylesSource, /\.new-video-composer-bar\s*\{[\s\S]*grid-template-columns:\s*max-content minmax\(0,\s*1fr\) max-content/, "NewVideoStart composer bar must reserve a non-collapsing send-button column"));
 checkMessage(requireWithin(stylesSource, /\.new-video-primary-action\s*\{[\s\S]*flex:\s*0 0 auto[\s\S]*background:\s*#7a5528/, "NewVideoStart send button must use a visible fixed background and not shrink away"));
 checkMessage(requireWithin(stylesSource, /\.new-video-primary-action\s*\{[\s\S]*white-space:\s*nowrap/, "NewVideoStart send button label must not wrap or collapse"));
 check(!/className="new-video-start-footer"[\s\S]*<button[\s\S]*发送/.test(newVideoStartSource), "NewVideoStart footer must not duplicate the composer submit action");
@@ -669,7 +669,9 @@ checkMessage(requireWithin(stylesSource, /body:has\(\.project-control-popover\) 
 checkMessage(requireWithin(minimalAgentPanelSource, /const primaryDisabledPrefix = !hasComposerInput && !isPreparingPlan \? "等待输入：" : "暂不能继续："/, "Bottom composer must distinguish empty input from a real blocker"));
 checkMessage(requireWithin(minimalAgentPanelSource, /const footerStatusCopy = hasComposerInput[\s\S]*按发送交给 AI 导演[\s\S]*建议动作：/, "Bottom composer must explain send input and the current next action"));
 checkMessage(requireWithin(stylesSource, /\.minimal-agent-footer-copy[\s\S]*text-overflow:\s*ellipsis/, "Bottom composer primary-button explanation must stay compact and non-overlapping"));
-checkMessage(requireWithin(stylesSource, /\.minimal-agent-input-footer\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(0,\s*1fr\) auto;/, "Bottom Agent composer footer must reserve exactly one primary-action column"));
+checkMessage(requireWithin(stylesSource, /\.minimal-agent-input-footer\s*\{[\s\S]*grid-template-columns:\s*max-content minmax\(0,\s*1fr\) max-content;/, "Bottom Agent composer footer must reserve a fixed visible primary-action column"));
+checkMessage(requireWithin(stylesSource, /\.director-bottom-composer \.minimal-agent-input\s*\{[\s\S]*overflow-x:\s*hidden;[\s\S]*overflow-y:\s*auto;/, "Bottom Agent composer must prevent horizontal overflow from hiding the primary action"));
+checkMessage(requireWithin(stylesSource, /\.new-video-composer-bar\s*\{[\s\S]*grid-template-columns:\s*max-content minmax\(0,\s*1fr\) max-content;/, "New project composer footer must reserve a fixed visible primary-action column"));
 check(!/\.minimal-agent-suggested-button/.test(stylesSource), "Bottom Agent composer must not keep stale suggested-action button styles");
 checkMessage(requireWithin(stylesSource, /\.creator-desk-panels\s*\{[\s\S]*position:\s*sticky/, "Creator desk must promote the next Agent step into the main workspace"));
 checkMessage(requireWithin(stylesSource, /\.creator-step-cta/, "Creator desk must expose a dedicated next-step status area"));
