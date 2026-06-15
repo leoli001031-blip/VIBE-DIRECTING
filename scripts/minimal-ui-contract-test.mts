@@ -1400,7 +1400,7 @@ checkMessage(requireWithin(minimalTopNav, /aria-label=\{`项目控制：\$\{proj
 checkMessage(requireWithin(minimalTopNavSource, /function\s+recentProjectMetaLabel[\s\S]*有项目文件[\s\S]*待初始化/, "top nav recent projects must show project-file status"));
 checkMessage(requireWithin(minimalTopNavSource, /function\s+formatRecentProjectUpdatedAt[\s\S]*刚刚[\s\S]*分钟前[\s\S]*小时前/, "top nav recent projects must show compact recency copy"));
 checkMessage(requireWithin(minimalTopNavSource, /const projectFolderReady = Boolean\(projectRoot\?\.trim\(\)\)/, "top nav project folder readiness must come from the actual project root"));
-checkMessage(requireWithin(minimalTopNavSource, /projectStorageBadge[\s\S]*本地[\s\S]*暂存/, "top nav project title must expose whether the current work is local or draft"));
+checkMessage(requireWithin(minimalTopNavSource, /projectStorageBadge[\s\S]*本地[\s\S]*未连接/, "top nav project title must expose whether the current work is local or not connected"));
 checkMessage(requireWithin(minimalTopNavSource, /projectControlStatus[\s\S]*未连接项目/, "top nav project popover must distinguish unsaved drafts from local projects"));
 checkMessage(requireWithin(stylesSource, /\.project-title-storage[\s\S]*\.project-title-storage\.local[\s\S]*\.project-title-storage\.draft/, "top nav local/draft badge must have stable visual states"));
 check(!/const emptyProjectPrimary = canForgetProject/.test(minimalTopNavSource), "top nav empty-project wording must not infer local folder readiness from the close-project action");

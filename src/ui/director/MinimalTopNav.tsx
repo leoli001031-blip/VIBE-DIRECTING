@@ -123,7 +123,7 @@ export function MinimalTopNav({
   const projectFolderReady = Boolean(projectRoot?.trim());
   const unsavedProjectContent = !projectFolderReady && !isEmptyProject;
   const projectControlButtonLabel = !projectFolderReady && isEmptyProject ? "打开或新建项目" : projectTitleLabel;
-  const projectStorageBadge = projectFolderReady ? "本地" : "暂存";
+  const projectStorageBadge = projectFolderReady ? "本地" : "未连接";
   const emptyProjectPrimary = projectFolderReady ? "本地已准备" : "先写想法";
   const emptyProjectSecondary = projectFolderReady ? "确认后写入项目" : "先写想法";
   const [projectControlOpen, setProjectControlOpen] = useState(false);
