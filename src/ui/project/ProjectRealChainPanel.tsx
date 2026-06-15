@@ -25,7 +25,7 @@ function projectRealChainStatusLabel(status: ProjectRealChainUiStatus) {
   if (status === "needs_review") return "需要复核";
   if (status === "preview_ready_with_review") return "待复核";
   if (status === "production_needs_review") return "需要复核";
-  if (status === "blocked") return "待补齐";
+  if (status === "blocked") return "待处理";
   return "未同步";
 }
 
@@ -113,7 +113,7 @@ function projectRealChainVisibleItems(
 function projectReviewCheckStatusLabel(state: ProjectImage2BatchPanelState) {
   if (state.status === "running") return "同步中";
   if (state.status === "ready_for_review") return "可复核";
-  if (state.status === "blocked") return "待补齐";
+  if (state.status === "blocked") return "待处理";
   return "未同步";
 }
 
@@ -126,7 +126,7 @@ function projectReviewCheckDetail(summary: ProjectImage2BatchPanelState["summary
   const safetyText = defaultConcurrency && retryConcurrency
     ? ` · 默认 ${defaultConcurrency} 并发，重试 ${retryConcurrency}`
     : "";
-  return `${summary.readyCount}/${summary.plannedCount} 可复核 · ${summary.blockedCount} 待补齐${retryText}${safetyText}`;
+  return `${summary.readyCount}/${summary.plannedCount} 可复核 · ${summary.blockedCount} 待处理${retryText}${safetyText}`;
 }
 
 function projectPreviewReadyLabel(summary: ProjectRealChainPanelState["summary"]) {
@@ -158,16 +158,16 @@ function projectPermissionReceiptLabel(summary?: ProjectImage2OneShotStatus) {
     const state = summary.submitPermissionReceipt?.status === "pending_action_time_confirmation"
       ? "待动作确认"
       : summary.submitPermissionReceipt?.status === "blocked"
-        ? "待补齐"
+        ? "待处理"
         : "已准备";
     return {
       label: `授权票据 ${state}`,
-      tone: state === "待补齐" ? "blocked" : "ready",
+      tone: state === "待处理" ? "blocked" : "ready",
     };
   }
   if (summary?.submitPermissionReceiptRequested || (summary?.permissionBlockers?.length || 0) > 0) {
     return {
-      label: "授权票据 待补齐",
+      label: "授权票据 待处理",
       tone: "blocked",
     };
   }
@@ -184,7 +184,7 @@ function projectOneShotStatusLabel(status: ProjectImage2OneShotUiStatus) {
   if (status === "trigger_plan_prepared" || status === "waiting_file") return "等待结果";
   if (status === "needs_review") return "需复核";
   if (status === "missing") return "未发现结果";
-  if (status === "blocked") return "待补齐";
+  if (status === "blocked") return "待处理";
   if (status === "ready_to_prepare") return "可开始";
   return "未同步";
 }
@@ -222,7 +222,7 @@ function projectOneShotProgress(
     {
       id: "permission",
       label: "许可回执",
-      detail: permissionPresent ? "已生成，等待动作确认" : permissionRequested ? "需要补齐授权引用" : waiting ? "可生成回执" : "确认动作后可生成",
+      detail: permissionPresent ? "已生成，等待动作确认" : permissionRequested ? "需要补上授权引用" : waiting ? "可生成回执" : "确认动作后可生成",
       tone: permissionPresent ? "done" : permissionRequested ? "blocked" : waiting ? "active" : "idle",
     },
     {

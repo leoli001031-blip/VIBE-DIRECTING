@@ -61,11 +61,12 @@ const hookCopy = extractStringLiterals([
   findFunctionBody(hookSource, "useLocalQwen3TtsCloneAction"),
 ].join("\n"));
 
-assert(componentSource.includes("useLocalQwen3TtsCloneAction"), "Audio Plan UI should use the voice clone action hook");
-assert(componentSource.includes("checked={voiceCloneAction.authorized}"), "voice clone authorization checkbox should be bound to action state");
-assert(componentSource.includes("disabled={voiceCloneAction.disabled}"), "voice clone button should be disabled until allowed");
-assert(componentSource.includes(`voiceCloneAction.status === "needs_reference"`), "voice clone authorization should stay disabled until a safe audio reference is configured");
-assert(componentSource.includes("onClick={() => { void runLocalQwen3TtsClone(); }}"), "voice clone should only run from a user click");
+assert(!componentSource.includes("useLocalQwen3TtsCloneAction"), "Demo Audio Plan UI should not expose the local voice-clone action");
+assert(!componentSource.includes("checked={voiceCloneAction.authorized}"), "Demo Audio Plan UI should not show a voice-clone authorization checkbox");
+assert(!componentSource.includes("disabled={voiceCloneAction.disabled}"), "Demo Audio Plan UI should not show a local voice-clone button");
+assert(!componentSource.includes("runLocalQwen3TtsClone"), "Demo Audio Plan UI should not run local Qwen TTS from the main path");
+assert(componentSource.includes("声音参考会随 Seedance 请求一起用于锁定角色声线"), "Demo Audio Plan UI should explain voice references are sent to the video model");
+assert(componentSource.includes("当前 demo 不在本地生成配音"), "Demo Audio Plan UI should park local TTS in user-facing copy");
 
 assert(hookSource.includes("permissionReceiptId"), "voice clone request must include permissionReceiptId");
 assert(hookSource.includes("confirmationToken"), "voice clone request must include confirmationToken");
@@ -79,8 +80,12 @@ const beforeRunBody = hookBody.slice(0, hookBody.indexOf("const runLocalQwen3Tts
 assert(!beforeRunBody.includes("generateLocalQwen3TtsClone("), "voice clone must not auto-submit before the user action is created");
 assert(!/useEffect\s*\(/.test(hookSource), "voice clone hook should not use an effect to submit work");
 
-for (const requiredCopy of ["待设置", "待授权", "可生成", "生成中", "完成", "失败", "声音克隆", "生成克隆配音", "请先选择或配置一段已授权的声音参考"]) {
-  assert(`${componentSource}\n${hookSource}`.includes(requiredCopy), `missing user-facing voice clone copy: ${requiredCopy}`);
+for (const requiredCopy of ["待设置", "待授权", "可生成", "生成中", "完成", "失败", "请先选择或配置一段已授权的声音参考"]) {
+  assert(hookSource.includes(requiredCopy), `missing parked voice clone hook copy: ${requiredCopy}`);
+}
+
+for (const forbiddenMainPathCopy of ["声音克隆", "生成克隆配音", "克隆配音"]) {
+  assert(!componentCopy.includes(forbiddenMainPathCopy), `Demo Audio Plan UI must not expose local TTS copy: ${forbiddenMainPathCopy}`);
 }
 
 for (const forbiddenCopy of [

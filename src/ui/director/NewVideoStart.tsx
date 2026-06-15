@@ -48,7 +48,6 @@ import {
   type DirectorAiStoryboardSeedRow,
   type DirectorAiStoryboardShot,
 } from "../../core/directorAiStoryboardPlanner";
-import type { MusicRhythmAnalysis } from "../../core/musicRhythmAnalysis";
 import { ensureMinimumDefaultKnowledgePacks } from "../../core/knowledgeDefaults";
 import type { KnowledgePack } from "../../core/knowledgeTypes";
 import {
@@ -104,9 +103,17 @@ export type NewVideoStartDraft = {
   style: string;
   references: NewVideoReferenceFile[];
   audio?: File;
-  audioRole?: "voice_reference" | "music_reference";
-  musicAnalysis?: MusicRhythmAnalysis;
+  audioRole?: "voice_reference";
   agentBoundaryMode?: AgentVideoSubmitMode;
+};
+
+export type NewVideoStartStatus = {
+  status: "empty" | "drafting" | "planning" | "ready" | "blocked" | "confirmed";
+  title: string;
+  detail: string;
+  nextAction: string;
+  draftShotCount?: number;
+  draftReferenceCount?: number;
 };
 
 export type NewVideoStoryboardShot = {
@@ -174,7 +181,7 @@ const stagedFactLabels: Record<DirectorStagedFactKind, string> = {
   prop_candidate: "道具",
   style_reference: "风格参考",
   image_reference: "参考图",
-  audio_need: "音频",
+  audio_need: "声音",
   reference_binding: "绑定用途",
   shot_draft: "镜头草案",
 };
@@ -274,12 +281,54 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const englishDurationNumbers: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  twenty: 20,
+  thirty: 30,
+  forty: 40,
+  fifty: 50,
+  sixty: 60,
+  ninety: 90,
+};
+
+function englishDurationNumber(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const normalized = value.toLowerCase().replace(/[-_]+/g, " ").trim();
+  const direct = englishDurationNumbers[normalized];
+  if (direct !== undefined) return direct;
+  const parts = normalized.split(/\s+/u);
+  if (parts.length === 2) {
+    const tens = englishDurationNumbers[parts[0]!];
+    const ones = englishDurationNumbers[parts[1]!];
+    if (tens !== undefined && tens >= 20 && ones !== undefined && ones > 0 && ones < 10) {
+      return tens + ones;
+    }
+  }
+  return undefined;
+}
+
 function explicitTargetDurationSeconds(text: string) {
   const normalized = text.replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
-  const match = normalized.match(/(\d{1,3})\s*(?:秒|s|sec|seconds)/i);
-  if (!match) return undefined;
-  const seconds = Number(match[1]);
-  if (!Number.isFinite(seconds) || seconds <= 0) return undefined;
+  const numericMatch = normalized.match(/(\d{1,3})\s*(?:秒|s|sec|seconds)/i);
+  const englishMatch = normalized.match(/\b([a-z]+(?:[-\s][a-z]+)?)\s*(?:second|seconds|sec)\b/i);
+  const seconds = numericMatch
+    ? Number(numericMatch[1])
+    : englishDurationNumber(englishMatch?.[1]);
+  if (seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) return undefined;
   return Math.max(1, Math.min(900, seconds));
 }
 
@@ -299,61 +348,20 @@ function localFileUri(file: File) {
   return `local-file://${encodeURIComponent(file.name)}`;
 }
 
-function browserMusicAnalysisCandidate(file: File): MusicRhythmAnalysis {
-  const safeName = file.name
-    .replace(/\.[^.]+$/u, "")
-    .replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gi, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 32) || "music";
-  const analysisId = `music_analysis_${safeName}_${Math.abs(file.size || 0).toString(36)}`;
-  return {
-    schemaVersion: "0.1.0",
-    analysisId,
-    source: {
-      label: file.name,
-      safeRef: `music_reference:${analysisId}`,
-      mimeType: file.type || undefined,
-      sizeBytes: file.size,
-    },
-    sampleRate: 8000,
-    windowSeconds: 1,
-    energyCurve: [],
-    sections: [],
-    recommendedCutPoints: [],
-    rhythmTags: ["music_reference_pending_runtime_analysis"],
-    warnings: ["duration_unknown_until_runtime_analysis", "energy_curve_pending_runtime_ffmpeg_analysis"],
-    projectRelativeAnalysisPath: `audio/music-analysis/${analysisId}.json`,
-    noRawPathStored: true,
-    videoProviderPolicy: {
-      noBgmForVideoProvider: true,
-      usedFor: ["rhythm_planning", "final_export_bgm"],
-    },
-  };
-}
-
 function inferAudioRole(file: File | undefined, contextText = ""): NewVideoStartDraft["audioRole"] {
   if (!file) return undefined;
-  const fileText = `${file.name} ${file.type}`.toLowerCase();
-  const context = contextText.toLowerCase();
-  if (/配乐|音乐|背景乐|歌曲|bgm|music|song|ost|soundtrack|beat|rhythm/i.test(fileText)) return "music_reference";
-  if (/旁白|对白|台词|配音|音色|音频克隆|声音|人声|voice|vocal|dialogue|narration|speaker|tts|clone/i.test(fileText)) return "voice_reference";
-  if (/这段音频.{0,12}(配乐|音乐|背景乐)|这首歌|音乐参考|配乐参考|use this as (music|bgm|soundtrack)/i.test(context)) return "music_reference";
-  if (/这段音频.{0,12}(旁白|对白|配音|音色|声音)|声音参考|配音参考|voice reference|speaker reference/i.test(context)) return "voice_reference";
+  void contextText;
+  // Demo path: all uploaded audio is treated as a voice reference for the video
+  // model. Music rhythm analysis and final-mix BGM are parked for later.
   return "voice_reference";
 }
 
 function audioRoleCopy(role: NewVideoStartDraft["audioRole"]) {
-  if (role === "music_reference") {
-    return {
-      title: "配乐参考",
-      detail: "已识别为配乐参考，会用于节奏和最终导出，不会直接交给视频模型。",
-      short: "用于节奏规划和最终成片配乐",
-    };
-  }
+  void role;
   return {
     title: "声音参考",
-    detail: "已识别为声音参考，会用于角色/旁白配音准备，不会直接交给视频模型。",
-    short: "用于配音、音色或对白准备",
+    detail: "已识别为声音参考，会绑定到角色或旁白，并随视频请求一起用于锁定声线。",
+    short: "用于角色声线、语气和对白质感",
   };
 }
 
@@ -464,9 +472,8 @@ function referenceInboxSuggestion(reference: NewVideoReferenceFile) {
 }
 
 function audioInboxSuggestion(role: NewVideoStartDraft["audioRole"]) {
-  return role === "music_reference"
-    ? "会用于节奏判断和最终配乐，不会交给视频模型"
-    : "会作为声音或台词参考，后续可绑定角色";
+  void role;
+  return "会作为声音或台词参考，后续可绑定角色并随视频请求使用";
 }
 
 function stripSrtMarkup(value: string) {
@@ -794,7 +801,7 @@ function makeStoryboardRow(input: {
   sceneLabels: string[];
   propLabels: string[];
   audioUsage: string;
-  musicSegment?: ScriptMusicRhythmSegment;
+  scriptRhythmSegment?: ScriptMusicRhythmSegment;
   sourceFactId?: string;
   styleResearchPreflight?: StyleResearchPreflight;
 }): NewVideoStoryboardShot {
@@ -803,7 +810,7 @@ function makeStoryboardRow(input: {
   const rowPropLabels = propsFromShotText(text, input.propLabels);
   const scene = sceneFromShotText(text, input.sceneLabels, input.index);
   const audioUsage = input.audioUsage;
-  const durationSeconds = executableVideoDurationSeconds(input.durationSeconds || input.musicSegment?.durationSeconds, 5);
+  const durationSeconds = executableVideoDurationSeconds(input.durationSeconds || input.scriptRhythmSegment?.durationSeconds, 5);
   const camera = cameraFromText(text, input.index);
   const visualDescription = visualDescriptionFromText({
     text,
@@ -831,13 +838,9 @@ function makeStoryboardRow(input: {
       notes: [input.text, styleResearchLines].filter(Boolean).join("\n"),
     },
     durationSeconds,
-    musicAnalysis: input.musicSegment ? {
-      rhythmTags: ["music_reference"],
-      durationSeconds,
-    } : undefined,
   });
-  const rhythmProfile = input.musicSegment?.rhythmProfile || rhythmPlan.rhythmProfile;
-  const rhythmReason = input.musicSegment?.reason || rhythmPlan.rhythmReason;
+  const rhythmProfile = input.scriptRhythmSegment?.rhythmProfile || rhythmPlan.rhythmProfile;
+  const rhythmReason = input.scriptRhythmSegment?.reason || rhythmPlan.rhythmReason;
   const primaryAction = primaryActionFromText(text);
   const actionTrigger = actionTriggerFromText(text);
   const microReaction = microReactionFromText(text);
@@ -857,7 +860,7 @@ function makeStoryboardRow(input: {
     rhythmProfile,
     text,
   });
-  const segmentReferenceStrategy = input.musicSegment?.referenceStrategy || referenceStrategy;
+  const segmentReferenceStrategy = input.scriptRhythmSegment?.referenceStrategy || referenceStrategy;
   const actionBeats = storyboardActionBeats({
     primaryAction,
     actionTrigger,
@@ -937,12 +940,11 @@ function buildStoryboardRowsFromSession(
   const sourceRows: Array<{ id: string; text: string; title?: string; durationSeconds?: number; sourceFactId?: string }> = timecodedBeats.length || scriptRows.length >= factRows.length
     ? scriptRows
     : factRows;
-  const musicPlan = buildScriptMusicRhythmPlan({
+  const scriptRhythmPlan = buildScriptMusicRhythmPlan({
     scriptText: draft.script,
     shotTexts: sourceRows.map((row) => row.text),
     userPreference: [draft.style, audioUsage].filter(Boolean).join("\n"),
     desiredTotalDurationSeconds: explicitTargetDurationSeconds(`${draft.script}\n${draft.style}`),
-    musicAnalysis: draft.audioRole === "music_reference" ? draft.musicAnalysis : undefined,
   });
 
   return sourceRows.map((row, index) => makeStoryboardRow({
@@ -955,7 +957,7 @@ function buildStoryboardRowsFromSession(
     sceneLabels,
     propLabels,
     audioUsage,
-    musicSegment: musicPlan.segments[index],
+    scriptRhythmSegment: scriptRhythmPlan.segments[index],
     sourceFactId: row.sourceFactId,
     styleResearchPreflight,
   }));
@@ -1189,7 +1191,7 @@ function discussionStatusLabel(status: StoryDiscussionLaneStatus) {
   if (status === "ready") return "已整理";
   if (status === "needs_reference") return "待绑定";
   if (status === "needs_decision") return "待确认";
-  return "待补充";
+  return "待完善";
 }
 
 function discussionDeltaLaneLabel(workspace: StoryDiscussionWorkspace, laneId: string) {
@@ -1239,9 +1241,9 @@ function planningSummaryPart(label: string, value: string | undefined) {
 }
 
 function agentBoundaryInstruction(mode?: AgentVideoSubmitMode) {
-  if (mode === "plan_only") return "当前边界：只做脚本、分镜和节奏规划，不要安排生图或视频提交。";
-  if (mode === "reference_allowed") return "当前边界：可以规划参考资产和生图，但不要安排视频提交。";
-  return "当前边界：故事和参考通过后，可以继续规划视频提交。";
+  if (mode === "plan_only") return "当前边界：只整理故事、镜头和节奏，不要安排生图或视频提交。";
+  if (mode === "reference_allowed") return "当前边界：可以整理参考并安排生图，但不要安排视频提交。";
+  return "当前边界：故事和参考通过后，可以继续安排视频提交。";
 }
 
 function tableRowSummary(row: NewVideoStoryboardShot, index: number) {
@@ -1401,7 +1403,7 @@ function workspaceWithStoryboardTable(
         role: "user" as const,
         focus: "storyboard" as const,
         createdAt,
-        text: "确认镜头安排中的镜号、时长、景别、镜头、主动作、触发原因、微反应、节奏、字幕、音效、角色、场景、道具和音频用途。",
+        text: "确认镜头安排中的镜号、时长、景别、镜头、主动作、触发原因、微反应、节奏、字幕、音效、角色、场景、道具和声音参考用途。",
         sourceRefs: [`storyboard_table:${workspace.workspaceId}`],
         rawTextMayBecomeProjectFact: false as const,
       },
@@ -1414,7 +1416,9 @@ function workspaceWithStoryboardTable(
 export function NewVideoStart({
   shots,
   projectDraftKey,
+  composerResetKey,
   onDraftChange,
+  onStatusChange,
   onStart,
   localProjectReady,
   localProjectBusy,
@@ -1429,7 +1433,9 @@ export function NewVideoStart({
 }: {
   shots: ShotRecord[];
   projectDraftKey?: string;
+  composerResetKey?: string;
   onDraftChange?: (draft: NewVideoStartDraft) => void;
+  onStatusChange?: (status: NewVideoStartStatus) => void;
   onStart?: (draft: NewVideoStartDraft) => void;
   localProjectReady?: boolean;
   localProjectBusy?: boolean;
@@ -1452,7 +1458,8 @@ export function NewVideoStart({
   const planRef = useRef<HTMLDivElement>(null);
   const composerStorageKey = useMemo(() => newVideoComposerDraftStorageKey(projectDraftKey), [projectDraftKey]);
   const composerStorageKeyRef = useRef(composerStorageKey);
-  const initialComposerDraftRef = useRef(readStoredNewVideoComposerDraft(composerStorageKey));
+  const composerResetKeyRef = useRef<string | undefined>(undefined);
+  const initialComposerDraftRef = useRef(composerResetKey ? { script: "", style: "" } : readStoredNewVideoComposerDraft(composerStorageKey));
   const pendingReferenceTypeRef = useRef<NewVideoReferenceKind>("image");
   const [script, setScript] = useState(initialComposerDraftRef.current.script);
   const [style, setStyle] = useState(initialComposerDraftRef.current.style);
@@ -1475,6 +1482,7 @@ export function NewVideoStart({
   const [expandedStoryboardRowIds, setExpandedStoryboardRowIds] = useState<Set<string>>(() => new Set());
   const [discussionDetailsOpen, setDiscussionDetailsOpen] = useState(false);
   const [planDetailsOpen, setPlanDetailsOpen] = useState(false);
+  const [boundaryDetailsOpen, setBoundaryDetailsOpen] = useState(false);
   const [storyboardPlanningSource, setStoryboardPlanningSource] = useState<"none" | "local_structure" | "ai_director">("none");
   const storyboardRowsRef = useRef(storyboardRows);
   const storyboardBaselineRowsRef = useRef(storyboardBaselineRows);
@@ -1498,7 +1506,79 @@ export function NewVideoStart({
     videoPermissionContract || defaultAgentVideoSubmitContract,
   );
   const hasDraft = Boolean(script.trim() || style.trim() || references.length || audio);
+  const draftReferenceCount = references.length + (audio ? 1 : 0);
+  const entryStatus = useMemo<NewVideoStartStatus>(() => {
+    if (confirmed) {
+      return {
+        status: "confirmed",
+        title: "草案已进入故事流",
+        detail: "可以在故事页继续改镜头，后面再做参考和视频。",
+        nextAction: "继续在底部说要改哪里",
+        draftShotCount: storyboardRows.length,
+        draftReferenceCount,
+      };
+    }
+    if (storyboardPlanningStatus === "running") {
+      return {
+        status: "planning",
+        title: "AI 正在拆镜头",
+        detail: storyboardPlanningElapsedSeconds >= 8
+          ? `正在整理故事、节奏和镜头。已等待 ${storyboardPlanningElapsedSeconds} 秒。`
+          : "正在整理故事、节奏和镜头，不会生图或提交视频。",
+        nextAction: "等草案出来后复核",
+        draftReferenceCount,
+      };
+    }
+    if (storyboardPlanningStatus === "blocked") {
+      return {
+        status: "blocked",
+        title: "分镜暂时没整理好",
+        detail: storyboardPlanningMessage || "可以换个说法，或稍后重新发送。",
+        nextAction: "修改后重新发送",
+        draftShotCount: storyboardRows.length,
+        draftReferenceCount,
+      };
+    }
+    if (projection || storyboardRows.length > 0 || submittedDraft) {
+      return {
+        status: "ready",
+        title: "草案待确认",
+        detail: "AI 已经拆出故事和镜头，确认前不会写入项目。",
+        nextAction: "确认进故事流，或直接说修改意见",
+        draftShotCount: storyboardRows.length,
+        draftReferenceCount,
+      };
+    }
+    if (hasDraft) {
+      return {
+        status: "drafting",
+        title: "想法已放入",
+        detail: "还没有交给 AI 拆镜头。",
+        nextAction: "点发送，让 Agent 先拆故事和节奏",
+        draftReferenceCount,
+      };
+    }
+    return {
+      status: "empty",
+      title: "准备开始",
+      detail: "还没有故事想法或素材。",
+      nextAction: "写一句想法，或拖入脚本/图片/声音参考",
+    };
+  }, [
+    confirmed,
+    draftReferenceCount,
+    hasDraft,
+    projection,
+    storyboardPlanningElapsedSeconds,
+    storyboardPlanningMessage,
+    storyboardPlanningStatus,
+    storyboardRows.length,
+    submittedDraft,
+  ]);
   const effectiveWebSearchReady = webSearchReady ?? webSearchSettings.enabled;
+  useEffect(() => {
+    onStatusChange?.(entryStatus);
+  }, [entryStatus, onStatusChange]);
   useEffect(() => {
     if (videoPermissionContract) setLocalVideoPermissionContract(videoPermissionContract);
   }, [videoPermissionContract]);
@@ -1525,7 +1605,6 @@ export function NewVideoStart({
       references,
       audio,
       audioRole,
-      musicAnalysis: audio && audioRole === "music_reference" ? browserMusicAnalysisCandidate(audio) : undefined,
       agentBoundaryMode: activeVideoPermissionContract.mode,
     }),
     [activeVideoPermissionContract.mode, audio, audioRole, references, script, style],
@@ -1557,6 +1636,42 @@ export function NewVideoStart({
   const hasWorkspaceMaterials = Boolean(visualReferences.length || audio);
 
   useEffect(() => {
+    if (!composerResetKey || composerResetKeyRef.current === composerResetKey) return;
+    composerResetKeyRef.current = composerResetKey;
+    clearStoredNewVideoComposerDraft(composerStorageKey);
+    setScript("");
+    setStyle("");
+    setReferences([]);
+    setAudio(undefined);
+    setAudioRole(undefined);
+    setScriptFileName("");
+    setScriptFileError("");
+    setSubmittedDraft(undefined);
+    setProjection(undefined);
+    setDirectorSession(undefined);
+    setDiscussionWorkspace(undefined);
+    setStyleResearchPreflight(undefined);
+    setDiscussionFeedback("");
+    setStoryboardRows([]);
+    setStoryboardBaselineRows([]);
+    setStoryboardPlanningSource("none");
+    setStoryboardPlanningStatus("idle");
+    setStoryboardPlanningMessage("");
+    setStyleResearchResult(undefined);
+    setStyleResearchStatus("idle");
+    setStyleReferenceStatus("idle");
+    setConfirmed(false);
+    onDraftChange?.({
+      script: "",
+      style: "",
+      references: [],
+      audio: undefined,
+      audioRole: undefined,
+      agentBoundaryMode: activeVideoPermissionContract.mode,
+    });
+  }, [activeVideoPermissionContract.mode, composerResetKey, composerStorageKey, onDraftChange]);
+
+  useEffect(() => {
     if (composerStorageKeyRef.current === composerStorageKey) return;
     composerStorageKeyRef.current = composerStorageKey;
     if (projection || submittedDraft || confirmed) return;
@@ -1574,7 +1689,6 @@ export function NewVideoStart({
       references: [],
       audio: undefined,
       audioRole: undefined,
-      musicAnalysis: undefined,
       agentBoundaryMode: activeVideoPermissionContract.mode,
     });
   }, [activeVideoPermissionContract.mode, composerStorageKey, confirmed, onDraftChange, projection, submittedDraft]);
@@ -1734,7 +1848,6 @@ export function NewVideoStart({
       references: nextReferences,
       audio: nextAudio,
       audioRole: nextAudioRole,
-      musicAnalysis: nextAudio && nextAudioRole === "music_reference" ? browserMusicAnalysisCandidate(nextAudio) : undefined,
     });
     if (workspaceInputRef.current) workspaceInputRef.current.value = "";
   }
@@ -1780,7 +1893,6 @@ export function NewVideoStart({
       ...draft,
       audio: file,
       audioRole: nextAudioRole,
-      musicAnalysis: file && nextAudioRole === "music_reference" ? browserMusicAnalysisCandidate(file) : undefined,
     });
     if (audioInputRef.current) audioInputRef.current.value = "";
   }
@@ -1826,7 +1938,7 @@ export function NewVideoStart({
           explicitShotCount(`${draftToSubmit.script}\n${draftToSubmit.style}`)
             ? `用户明确要求 ${explicitShotCount(`${draftToSubmit.script}\n${draftToSubmit.style}`)} 个镜头，AI 输出的 shots 数组必须保持这个数量。`
             : "",
-          planningDraft.audioRole === "music_reference" ? "用户放入了配乐参考，节奏可以受音乐影响，但不要把 BGM 写给视频模型。" : "",
+          planningDraft.audio ? "用户放入了声音参考，请把它视为角色声线/语气参考，不要当作配乐、BGM 或节奏音乐。" : "",
         ].filter(Boolean).join("\n"),
         targetDurationSeconds: explicitTargetDurationSeconds(`${draftToSubmit.script}\n${draftToSubmit.style}`)
           || localStoryboardRows.reduce((sum, row) => sum + (Number.parseFloat(row.duration) || 0), 0)
@@ -1933,7 +2045,7 @@ export function NewVideoStart({
           "用户正在修改当前新视频草案。请直接输出修正后的完整分镜表，不要只记录反馈。",
           `用户反馈：${feedbackText}`,
           agentBoundaryInstruction(activeDraft.agentBoundaryMode),
-          planningDraft.audioRole === "music_reference" ? "用户放入了配乐参考，节奏可以受音乐影响，但不要把 BGM 写给视频模型。" : "",
+          planningDraft.audio ? "用户放入了声音参考，请把它视为角色声线/语气参考，不要当作配乐、BGM 或节奏音乐。" : "",
         ].filter(Boolean).join("\n"),
         targetDurationSeconds: explicitTargetDurationSeconds(`${activeDraft.script}\n${activeDraft.style}`)
           || storyboardRows.reduce((sum, row) => sum + (Number.parseFloat(row.duration) || 0), 0)
@@ -1995,7 +2107,7 @@ export function NewVideoStart({
         ? "项目文件夹已经准备好，但还没有正式故事。先写脚本或拖入脚本文件，我会整理成待确认草案。"
         : canCreateLocalProject
           ? "还没有绑定项目文件夹。先写脚本或拖入脚本文件；我会先拆草案，确认时再选择项目文件夹。"
-          : "当前是浏览器草稿。先写脚本或拖入脚本文件，我会先整理成待确认内容，确认时再保存项目。",
+          : "当前是未保存草稿。先写脚本或拖入脚本文件，我会先整理成待确认内容；生成参考前请在桌面 App 选择项目。",
       next: "下一步：放入脚本或一句故事想法。",
     });
   }
@@ -2152,7 +2264,7 @@ export function NewVideoStart({
     ? `${directorSession.workspace.visualReferenceCount} 张参考图${directorSession.workspace.audioReferenceCount ? ` · 1 段${audioCopy.title}` : ""}`
     : references.length || audio
     ? `${references.length} 张参考图${audio ? ` · 1 段${audioCopy.title}` : ""}`
-    : "参考和音乐会显示在这里";
+    : "参考和声音素材会显示在这里";
   const stagedFacts = visibleStagedFacts(directorSession);
   const usesBrowserDraftProject = !localProjectReady && !localProjectBusy && !canCreateLocalProject;
   const showLocalProjectAction = Boolean(localProjectReady || localProjectBusy || canCreateLocalProject || usesBrowserDraftProject);
@@ -2162,7 +2274,7 @@ export function NewVideoStart({
         ? "正在选择文件夹"
       : canCreateLocalProject
         ? "确认时选文件夹"
-        : "浏览器草稿";
+        : "未保存草稿";
   const storyboardPlanningLabel = storyboardPlanningStatus === "running"
     ? "AI 正在拆分"
     : storyboardPlanningSource === "ai_director"
@@ -2208,13 +2320,13 @@ export function NewVideoStart({
     : composerIsFeedback && !discussionFeedback.trim()
       ? "先说一句你想改哪里。"
       : !composerIsFeedback && !hasDraft
-        ? "先写一句想法，或拖入脚本、图片、音乐。"
+        ? "先写一句想法，或拖入脚本、图片、声音参考。"
         : "";
   const composerPlaceholder = composerIsFeedback
     ? "直接说哪里要改..."
     : "写脚本、风格或修改意见；也可以拖文件。";
   const composerTitle = composerIsFeedback
-    ? "说想改哪里"
+    ? "和 AI 导演说"
     : projection
       ? "继续和 AI 导演说"
       : "写下你想拍什么";
@@ -2228,7 +2340,7 @@ export function NewVideoStart({
   const composerPrimaryAriaLabel = storyboardPlanningStatus === "running"
     ? "正在拆分镜头"
     : composerConfirmsDraft
-      ? confirmed ? "草案已确认" : confirmPending ? "正在确认草案" : "确认新视频草案"
+      ? confirmed ? "已进入故事流" : confirmPending ? "正在进入故事流" : "确认进故事流"
       : composerIsFeedback ? "发送修改意见" : "发送给 AI 导演";
   const composerPrimaryTitle = composerDisabled
     ? composerDisabledReason
@@ -2255,16 +2367,16 @@ export function NewVideoStart({
       : composerIsFeedback
         ? "选中镜头或素材后，直接说你想怎么改。"
       : localProjectReady
-        ? "拖入图片、音乐或脚本；音频会自动识别为配乐或声音参考；Cmd Enter 发送。"
+        ? "拖入图片、声音参考或脚本；声音参考会绑定到角色，不会当作配乐。"
       : canCreateLocalProject
-          ? "拖入图片、音乐或脚本；先拆草案，确认后再选择项目文件夹。"
-          : "拖入图片、音乐或脚本；当前会先作为浏览器草稿规划，确认时再保存项目。";
+          ? "拖入图片、声音参考或脚本；先拆草案，确认后再选择项目文件夹。"
+          : "拖入图片、声音参考或脚本；当前会先作为未保存草稿整理，生成参考前请在桌面 App 选择项目。";
   const videoPermissionModeItems: Array<{ mode: AgentVideoSubmitMode; label: string }> = [
-    { mode: "plan_only", label: "只规划" },
-    { mode: "reference_allowed", label: "可做参考" },
+    { mode: "plan_only", label: "只整理" },
+    { mode: "reference_allowed", label: "可生成参考" },
     { mode: "video_allowed", label: "可提交视频" },
   ];
-  const activeVideoPermissionLabel = videoPermissionModeItems.find((item) => item.mode === activeVideoPermissionContract.mode)?.label || "只规划";
+  const activeVideoPermissionLabel = videoPermissionModeItems.find((item) => item.mode === activeVideoPermissionContract.mode)?.label || "只整理";
   const showStylePreflight = Boolean(styleResearchPreflight)
     && (styleResearchStatus !== "idle" || Boolean(styleResearchResult) || styleReferenceStatus === "saved");
   const unifiedComposer = (
@@ -2296,28 +2408,34 @@ export function NewVideoStart({
           }}
         />
       </label>
-      <details className="new-video-agent-boundary-details">
+      <details
+        className="new-video-agent-boundary-details"
+        open={boundaryDetailsOpen}
+        onToggle={(event) => setBoundaryDetailsOpen(event.currentTarget.open)}
+      >
         <summary>
-          <span>执行范围</span>
+          <span>当前模式</span>
           <strong>{activeVideoPermissionLabel}</strong>
         </summary>
-        <div className="minimal-agent-permission-mode" aria-label="当前生成边界">
-          {videoPermissionModeItems.map((item) => (
-            <button
-              key={item.mode}
-              type="button"
-              className={activeVideoPermissionContract.mode === item.mode ? "is-active" : ""}
-              aria-label={`生成边界：${item.label}`}
-              aria-pressed={activeVideoPermissionContract.mode === item.mode}
-              disabled={storyboardPlanningStatus === "running"}
-              title={agentVideoSubmitContractDetail(agentVideoSubmitContractForMode(item.mode))}
-              onClick={() => selectVideoPermissionMode(item.mode)}
-            >
-              {item.label}
-            </button>
-          ))}
-          <span>{agentVideoSubmitContractDetail(activeVideoPermissionContract)}</span>
-        </div>
+        {boundaryDetailsOpen && (
+          <div className="minimal-agent-permission-mode" aria-label="当前执行模式">
+            {videoPermissionModeItems.map((item) => (
+              <button
+                key={item.mode}
+                type="button"
+                className={activeVideoPermissionContract.mode === item.mode ? "is-active" : ""}
+                aria-label={`执行模式：${item.label}`}
+                aria-pressed={activeVideoPermissionContract.mode === item.mode}
+                disabled={storyboardPlanningStatus === "running"}
+                title={agentVideoSubmitContractDetail(agentVideoSubmitContractForMode(item.mode))}
+                onClick={() => selectVideoPermissionMode(item.mode)}
+              >
+                {item.label}
+              </button>
+            ))}
+            <span>{agentVideoSubmitContractDetail(activeVideoPermissionContract)}</span>
+          </div>
+        )}
       </details>
       <div className="new-video-composer-bar">
         <input
@@ -2358,7 +2476,7 @@ export function NewVideoStart({
           accept="audio/*"
           onChange={(event) => updateAudio(event.currentTarget.files?.[0])}
         />
-        <button className="new-video-asset-action" type="button" onClick={openWorkspacePicker} aria-label="添加脚本、图片或音频文件">
+        <button className="new-video-asset-action" type="button" onClick={openWorkspacePicker} aria-label="添加脚本、图片或声音参考">
           <Plus size={16} aria-hidden="true" />
           添加文件
         </button>
@@ -2443,11 +2561,11 @@ export function NewVideoStart({
       </summary>
       <div className="new-video-start-body">
         {!projection && (
-          <section className="new-video-start-guide" aria-label="下一步">
+          <section className="new-video-start-guide" aria-label="开始方式">
             <div>
-              <span>下一步</span>
-              <strong>{hasDraft ? "AI 拆分镜头" : "写一句故事，或拖入脚本/图片/音乐"}</strong>
-              <small>{localProjectLabel} · 这里只整理计划，确认前不会生图或提交视频。</small>
+              <span>开始方式</span>
+              <strong>{hasDraft ? "发送后交给 AI 拆镜头" : "把故事和素材放到底部"}</strong>
+              <small>{localProjectLabel} · 这里只整理草稿，确认前不会生图或提交视频。</small>
             </div>
             <ol>
               <li>写想法</li>
@@ -2611,7 +2729,7 @@ export function NewVideoStart({
                         </div>
                       </header>
                       <div className="new-video-storyboard-readable">
-                        <p>{row.visualDescription || "画面描述待补。"}</p>
+                        <p>{row.visualDescription || "画面描述待完善。"}</p>
                         <div>
                           <small><b>动作</b>{row.primaryAction || "待填写"}</small>
                           <small><b>角色</b>{row.characters || "待填写"}</small>
@@ -2819,11 +2937,11 @@ export function NewVideoStart({
                             />
                           </label>
                           <label>
-                            <span>音频</span>
+                            <span>声音参考</span>
                             <input
                               value={row.audioUsage}
                               onChange={(event) => updateStoryboardRow(row.id, "audioUsage", event.target.value)}
-                              aria-label={`第 ${index + 1} 个镜头音频用途`}
+                              aria-label={`第 ${index + 1} 个镜头声音参考用途`}
                             />
                           </label>
                         </div>
@@ -2852,7 +2970,7 @@ export function NewVideoStart({
                       {discussionWorkspace.lanes.map((lane) => (
                         <small key={lane.id} className={lane.status}>
                           <span>{lane.label}</span>
-                          <b>{lane.count || "待补"}</b>
+                          <b>{lane.count || "待生成"}</b>
                           <em>{discussionStatusLabel(lane.status)}</em>
                         </small>
                       ))}
@@ -2888,7 +3006,7 @@ export function NewVideoStart({
               open={planDetailsOpen}
               onToggle={(event) => setPlanDetailsOpen(event.currentTarget.open)}
             >
-              <summary>更多细节</summary>
+              <summary>查看草案细节</summary>
               {planDetailsOpen && (
                 <div className="new-video-plan-detail-body">
                   <div className="new-video-plan-status">
@@ -2900,7 +3018,7 @@ export function NewVideoStart({
                     <small>{referenceTypeCounts.scene} 个场景参考</small>
                     <small>{referenceTypeCounts.prop} 个道具参考</small>
                     <small>{referenceTypeCounts.style} 个风格参考</small>
-                    <small>{projection.summary.assetCounts.audio} 个音频</small>
+                    <small>{projection.summary.assetCounts.audio} 段声音参考</small>
                   </div>
                   {stagedFacts.length > 0 && (
                     <div className="new-video-staged-facts" aria-label="整理出的内容">
@@ -2913,7 +3031,7 @@ export function NewVideoStart({
                     </div>
                   )}
                   {projection.missingChecklist.length > 0 && (
-                    <div className="new-video-checklist" aria-label="待补齐">
+                    <div className="new-video-checklist" aria-label="待生成">
                       {projection.missingChecklist.map((item) => (
                         <small key={item.field} className={item.severity}>
                           {item.label}

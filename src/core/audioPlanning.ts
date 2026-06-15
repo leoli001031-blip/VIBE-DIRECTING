@@ -9,7 +9,6 @@ import type {
   RuntimeVoiceSource,
   ShotRecord,
 } from "./types";
-import { buildTtsProviderPlanningState } from "./ttsProviderPlanning";
 
 export const audioPlanningSchemaVersion = "0.1.0";
 
@@ -113,7 +112,7 @@ function buildShotPlan(shot: ShotRecord, sources: RuntimeVoiceSource[], previewE
     ambienceBrief: ambienceBrief || (shot.storyFunction
       ? `Ambience placeholder should support the story function: ${shot.storyFunction}`
       : "Ambience placeholder reserved for this shot."),
-    bgmProfile: "配乐不交给视频模型；如有配乐参考，会用于节奏规划和最终导出混音。",
+    bgmProfile: "视频模型不生成配乐；声音参考只用于角色声线、语气和对白表现。",
     musicAllowed: false,
     targetDurationSeconds: durationSeconds,
     fadeInSeconds: 0,
@@ -223,7 +222,7 @@ function buildProviderSlots(config: RuntimeConfig): AudioProviderSlotSummary[] {
       liveSubmitAllowed: false,
       notes: [
         ...slot.notes,
-        "Phase 6 keeps audio providers planned/read-only; provider submission is forbidden.",
+        "当前 demo 主链路不执行音频 provider；声音参考只随视频请求作为声线参考。",
       ],
     }));
 }
@@ -236,13 +235,13 @@ function buildAudioReferencePolicy(): AudioPlanningState["referencePolicy"] {
     musicReferenceBinding: "rhythm_and_final_mix",
     musicNeverEntersVideoPrompt: true,
     videoProviderPayloadIncludesMusic: false,
-    defaultTtsRoute: "local_qwen3_tts_clone",
+    defaultTtsRoute: "parked_in_demo",
     reviewActions: ["listen", "review", "replace"],
     notes: [
-      "voice_reference binds only to a character or narrator TTS plan.",
-      "music_reference is rhythm planning plus final export mix only.",
-      "Music references must not be copied into video prompt text or provider payloads.",
-      "Generated TTS outputs should be playable, reviewable, and replaceable before export promotion.",
+      "voice_reference binds to a character or narrator as video-model audio reference in the demo path.",
+      "local TTS, voice cloning, automatic mixing, and music analysis stay outside the current demo path.",
+      "music_reference is treated as ordinary reference/post idea and never enters video prompts or provider payloads.",
+      "Generated TTS outputs and final music mixes are not produced by the main demo path.",
     ],
   };
 }
@@ -254,10 +253,6 @@ export function buildAudioPlanningState(input: BuildAudioPlanningStateInput): Au
   const shotPlans = input.shots.map((shot) => buildShotPlan(shot, sources, previewEvents));
   const audioEvents = buildAudioPreviewEvents(shotPlans, input.shots, previewEvents);
   const missingOutputPathCount = shotPlans.filter((plan) => !plan.outputPath).length;
-  const ttsProviderPlanning = buildTtsProviderPlanningState({
-    generatedAt: input.generatedAt,
-    shotPlans,
-  });
 
   return {
     schemaVersion: audioPlanningSchemaVersion,
@@ -266,11 +261,11 @@ export function buildAudioPlanningState(input: BuildAudioPlanningStateInput): Au
     musicReferences,
     postMixPolicy: {
       musicReferenceCount: musicReferences.length,
-      finalMixMusicAllowed: musicReferences.length > 0,
+      finalMixMusicAllowed: false,
       videoProviderBgmAllowed: false,
       notes: [
-        "配乐参考只用于节奏规划和最终导出混音。",
-        "视频模型提示词仍然保持 no BGM / no music。",
+        "当前 demo 不做自动配乐混音；音乐文件只作为普通参考或后期想法留存。",
+        "视频模型提示词保持 no BGM / no music。",
       ],
     },
     referencePolicy: buildAudioReferencePolicy(),
@@ -293,23 +288,18 @@ export function buildAudioPlanningState(input: BuildAudioPlanningStateInput): Au
       noBgmForVideoProvider: true,
       ambienceSfxPlaceholderAllowed: true,
       bgmHandledBy: "audio_plan_or_post_import",
-      summary: "Video provider prompts default to no BGM; music belongs in audio planning or post import.",
+      summary: "Video provider prompts default to no BGM; voice reference may be attached only for character voice/tone.",
     },
     providerSlots: buildProviderSlots(input.runtimeConfig),
-    ttsProviderPlanning,
     exportPackageSummary: {
       status: "planned",
       includedInExportProfiles: ["asset_package", "developer_archive"],
-      plannedCategories: ["audio_plan", "voice_source_registry_summary", "music_reference_summary", "preview_mix_placeholder", "tts_provider_config", "no_bgm_video_policy"],
-      plannedPaths: [
-        ...ttsProviderPlanning.submitPlanDrafts.map((draft) => draft.expectedOutputPath),
-        ...musicReferences.flatMap((reference) => [reference.analysisPath || "", reference.finalMixPath || ""]).filter(Boolean),
-      ],
-      blockedReasons: ["No real narration, dialogue, ambience, or music output files are written until explicit permission receipt and runtime execution."],
+      plannedCategories: ["audio_plan", "voice_source_registry_summary", "video_model_voice_reference_policy", "no_bgm_video_policy"],
+      plannedPaths: [],
+      blockedReasons: ["当前 demo 不生成本地 TTS、不混音、不做音乐分析；声音参考只随视频请求作为声线参考。"],
       notes: [
         "Export/package code can include the audio plan contract without copying generated audio files.",
-        "TTS output paths are planned as project-relative targets for later local IndexTTS or cloud TTS execution.",
-        "Developer archive should preserve the plan and policy summary for later provider implementation.",
+        "Developer archive should preserve the no-BGM policy and video-model voice-reference binding summary.",
       ],
       dryRunOnly: true,
       providerSubmissionForbidden: true,
@@ -317,10 +307,10 @@ export function buildAudioPlanningState(input: BuildAudioPlanningStateInput): Au
     dryRunOnly: true,
     providerSubmissionForbidden: true,
     notes: [
-      "Audio planning prepares local Qwen3 voice cloning, local IndexTTS fallback, and cloud TTS routes, but submit remains gated.",
-      "TTS and music provider slots remain planned and liveSubmitAllowed=false until an explicit permission receipt.",
+      "Audio planning only carries voice-reference metadata for video-model submission.",
+      "No local TTS, voice clone, automatic mix, or music analysis is executed from the main demo path.",
       "BGM is not mixed into video provider prompts.",
-      musicReferences.length ? "Imported music is planned for rhythm and final export mix only." : "",
+      musicReferences.length ? "Imported music remains a general reference/post idea and is not automatically analyzed or mixed." : "",
     ].filter(Boolean),
   };
 }

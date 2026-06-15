@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Database, Gauge, Layers3, PauseCircle, PlugZap, ShieldAlert } from "lucide-react";
 import type { ProjectAudit, ShotRecord } from "../../core/types";
 import type { RuntimeView, TaskRuntimeView } from "../../core/runtimeView";
@@ -361,6 +361,7 @@ export function DiagnosticsMode({
   onProviderConfigStatusesChange?: (statuses: ProviderConfigStatus[]) => void;
 }) {
   const firstQueueBlocker = view.taskViews.find((task) => task.queueGate.status === "blocked" && task.queueGate.blockers[0])?.queueGate.blockers[0];
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   return (
     <div className="diagnostics-layout">
@@ -371,87 +372,94 @@ export function DiagnosticsMode({
         onWebSearchSettingsChange={onWebSearchSettingsChange}
         onProviderConfigStatusesChange={onProviderConfigStatusesChange}
       />
-      <details className="settings-advanced diagnostics-advanced-panels">
+      <details
+        className="settings-advanced diagnostics-advanced-panels"
+        open={advancedOpen}
+        onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+      >
         <summary>
           <span>运行诊断</span>
           <small>排查生成、队列、导出和运行时问题时再打开</small>
+          <small className="settings-disclosure-state">{advancedOpen ? "收起" : "展开"}</small>
         </summary>
-        <div className="diagnostics-advanced-grid">
-          <DirectorProgressStrip
-            state={buildDirectorProgressStripState(buildLocalOrchestratorUiSummary(runtimeState))}
-          />
-          <ProjectFactsStrip
-            summary={projectFacts}
-            mode={projectFactsMode}
-            applyPlan={latestProjectStoreApplyPlan}
-            onModeChange={onProjectFactsModeChange}
-          />
-          <ProjectRealChainPanel
-            state={projectRealChainState}
-            image2BatchState={projectImage2BatchState}
-            image2OneShotState={projectImage2OneShotState}
-            strictEditPreflightState={strictEditPreflightState}
-            selectedShotId={selectedShotId}
-            projectTitle={runtimeState.project.title}
-            runtimeProjectBinding={runtimeProjectBinding}
-            projectPathInput={projectPathInput}
-            projectChoices={projectChoices}
-            projectSelectionStatus={projectSelectionStatus}
-            canChooseProjectRoot={canChooseProjectRoot}
-            projectFileStatusLabel={projectFileStatusLabel}
-            projectFileStatusDetail={projectFileStatusDetail}
-            authorizationRef={authorizationRef}
-            onProjectPathChange={onProjectPathChange}
-            onSelectProjectChoice={onSelectProjectChoice}
-            onChooseProjectRoot={onChooseProjectRoot}
-            onConnectProject={onConnectProject}
-            onRun={onRunProjectRealChain}
-            onRunImage2Batch={onRunProjectImage2Batch}
-            onPrepareStrictEditPreflight={onPrepareStrictEditPreflight}
-            onPrepareImage2OneShot={onPrepareImage2OneShot}
-            onAuthorizationRefChange={onAuthorizationRefChange}
-            onPrepareImage2OneShotPermissionReceipt={onPrepareImage2OneShotPermissionReceipt}
-            onConfirmImage2OneShot={onConfirmImage2OneShot}
-            onCheckImage2OneShotReturn={onCheckImage2OneShotReturn}
-          />
-          <VideoPrepareSummaryStrip runtimeState={runtimeState} selectedShot={selectedShot} />
-          <ProviderDock audit={audit} />
-          <Panel label="Image Pipeline"><ImagePipelineDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Generation Health Checker"><GenerationHealthCheckerDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Prompt Conflict Checker"><PromptConflictCheckerDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Generation Harness"><GenerationHarnessDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Filesystem Watcher"><FilesystemWatcherDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Checkpoint Resume"><CheckpointResumeDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="QA Harness"><QaHarnessDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Tool Runtime Harness"><ToolRuntimeHarnessDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Video Planning"><VideoPlanningDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Video Execution Preview"><VideoExecutionPreviewDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Adapter Contracts"><AdapterContractDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Subagent Worker Runtime"><SubagentWorkerRuntimeDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Agent CLI Mock Runner"><AgentCliMockRunnerDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="CLI Adapter Spike"><CliAdapterSpikeDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Export Worker"><ExportWorkerDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Image2 Keyframe Runtime"><Image2KeyframeRuntimeDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Visual Consistency Contract"><VisualConsistencyContractDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Full Task Subagent Packet Planner"><FullTaskSubagentPacketPlannerDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Knowledge Pack User Management"><KnowledgePackUserManagementDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Worker Runtime Gate"><WorkerRuntimeGateDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Provider Closed Loop Shell"><ProviderClosedLoopShellDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Beta Acceptance"><BetaAcceptanceDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Real Pilot"><RealPilotDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Audio Diagnostics"><AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} /></Panel>
-          <Panel label="Voice Audio Settings"><VoiceAudioSettingsDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Provider Enablement Gate"><ProviderEnablementGateDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Provider Execution Permission Gate"><ProviderExecutionPermissionGateDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Provider Action Confirmation Receipt"><ProviderActionConfirmationReceiptDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Provider Execution Handoff"><ProviderExecutionHandoffDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Local Orchestrator"><LocalOrchestratorDiagnostics runtimeState={runtimeState} /></Panel>
-          <Panel label="Preview Export"><PreviewExportDiagnostics previewExport={runtimeState.previewExport} /></Panel>
-          <DiagnosticsQueueTaskRunsSection view={view} />
-          <DiagnosticsPreflightBlockersSection view={view} firstQueueBlocker={firstQueueBlocker} />
-          <DiagnosticsManifestSourceIndexSection audit={audit} view={view} runtimeState={runtimeState} />
-          <KnowledgePackManager view={view} />
-        </div>
+        {advancedOpen && (
+          <div className="diagnostics-advanced-grid">
+            <DirectorProgressStrip
+              state={buildDirectorProgressStripState(buildLocalOrchestratorUiSummary(runtimeState))}
+            />
+            <ProjectFactsStrip
+              summary={projectFacts}
+              mode={projectFactsMode}
+              applyPlan={latestProjectStoreApplyPlan}
+              onModeChange={onProjectFactsModeChange}
+            />
+            <ProjectRealChainPanel
+              state={projectRealChainState}
+              image2BatchState={projectImage2BatchState}
+              image2OneShotState={projectImage2OneShotState}
+              strictEditPreflightState={strictEditPreflightState}
+              selectedShotId={selectedShotId}
+              projectTitle={runtimeState.project.title}
+              runtimeProjectBinding={runtimeProjectBinding}
+              projectPathInput={projectPathInput}
+              projectChoices={projectChoices}
+              projectSelectionStatus={projectSelectionStatus}
+              canChooseProjectRoot={canChooseProjectRoot}
+              projectFileStatusLabel={projectFileStatusLabel}
+              projectFileStatusDetail={projectFileStatusDetail}
+              authorizationRef={authorizationRef}
+              onProjectPathChange={onProjectPathChange}
+              onSelectProjectChoice={onSelectProjectChoice}
+              onChooseProjectRoot={onChooseProjectRoot}
+              onConnectProject={onConnectProject}
+              onRun={onRunProjectRealChain}
+              onRunImage2Batch={onRunProjectImage2Batch}
+              onPrepareStrictEditPreflight={onPrepareStrictEditPreflight}
+              onPrepareImage2OneShot={onPrepareImage2OneShot}
+              onAuthorizationRefChange={onAuthorizationRefChange}
+              onPrepareImage2OneShotPermissionReceipt={onPrepareImage2OneShotPermissionReceipt}
+              onConfirmImage2OneShot={onConfirmImage2OneShot}
+              onCheckImage2OneShotReturn={onCheckImage2OneShotReturn}
+            />
+            <VideoPrepareSummaryStrip runtimeState={runtimeState} selectedShot={selectedShot} />
+            <ProviderDock audit={audit} />
+            <Panel label="Image Pipeline"><ImagePipelineDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Generation Health Checker"><GenerationHealthCheckerDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Prompt Conflict Checker"><PromptConflictCheckerDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Generation Harness"><GenerationHarnessDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Filesystem Watcher"><FilesystemWatcherDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Checkpoint Resume"><CheckpointResumeDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="QA Harness"><QaHarnessDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Tool Runtime Harness"><ToolRuntimeHarnessDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Video Planning"><VideoPlanningDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Video Execution Preview"><VideoExecutionPreviewDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Adapter Contracts"><AdapterContractDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Subagent Worker Runtime"><SubagentWorkerRuntimeDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Agent CLI Mock Runner"><AgentCliMockRunnerDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="CLI Adapter Spike"><CliAdapterSpikeDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Export Worker"><ExportWorkerDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Image2 Keyframe Runtime"><Image2KeyframeRuntimeDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Visual Consistency Contract"><VisualConsistencyContractDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Full Task Subagent Packet Planner"><FullTaskSubagentPacketPlannerDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Knowledge Pack User Management"><KnowledgePackUserManagementDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Worker Runtime Gate"><WorkerRuntimeGateDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Provider Closed Loop Shell"><ProviderClosedLoopShellDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Beta Acceptance"><BetaAcceptanceDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Real Pilot"><RealPilotDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Audio Diagnostics"><AudioDiagnosticsPanel audioPlanning={runtimeState.audioPlanning} /></Panel>
+            <Panel label="Voice Audio Settings"><VoiceAudioSettingsDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Provider Enablement Gate"><ProviderEnablementGateDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Provider Execution Permission Gate"><ProviderExecutionPermissionGateDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Provider Action Confirmation Receipt"><ProviderActionConfirmationReceiptDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Provider Execution Handoff"><ProviderExecutionHandoffDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Local Orchestrator"><LocalOrchestratorDiagnostics runtimeState={runtimeState} /></Panel>
+            <Panel label="Preview Export"><PreviewExportDiagnostics previewExport={runtimeState.previewExport} /></Panel>
+            <DiagnosticsQueueTaskRunsSection view={view} />
+            <DiagnosticsPreflightBlockersSection view={view} firstQueueBlocker={firstQueueBlocker} />
+            <DiagnosticsManifestSourceIndexSection audit={audit} view={view} runtimeState={runtimeState} />
+            <KnowledgePackManager view={view} />
+          </div>
+        )}
       </details>
     </div>
   );

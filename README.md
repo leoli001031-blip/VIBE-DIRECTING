@@ -4,33 +4,41 @@ Local-first, open-source friendly AI video director desk for Project.vibe projec
 
 Note: `public/media/` contains two uncompressed PNGs (`asset_contact_sheet.png` ~1.3MB, `keyframe_pair_contact_sheet.png` ~1.9MB). Consider compressing or converting to WebP for production.
 
-## Current Entry
+## Current Demo Entry
 
-- App root: this repository root.
-- Main project contract: `Project.vibe` in a project folder.
-- Demo project: `sample-projects/mvp-demo/project.vibe`.
-- Local dev: `npm run dev -- --port 5174`.
-- Current development baseline: `docs/mvp-integration-development-plan.md`.
-- Next delivery / technical-debt plan: `docs/mvp-delivery-technical-debt-plan.md`.
-- Local artifact retention rules: `docs/mvp-artifact-retention.md`.
-- MVP sample smoke/export: `npm run mvp-demo-export:test`.
-- Main MVP verification: `npm run verify:mvp`.
-- Release-candidate verification: `npm run verify:rc`.
-- Build check: `npm run build`.
-- RC checklist: `docs/mvp-rc-checklist.md`.
+- Canonical development root: `/Users/lichenhao/Desktop/new vibe directing`.
+- Durable project contract: `Project.vibe` inside the selected project folder.
+- Current demo architecture: `docs/current-demo-architecture.md`.
+- Recording runbook: `docs/demo-recording-runbook.md`.
+- Local dev: `npm run dev -- --port 5178`.
+- Local runtime: `npm run local-runtime-api`.
+- Main demo gate: `npm run demo:ready:test`.
+- Focused UI gates: `npm run minimal-ui:test` and
+  `npm run current-project-ui-closed-loop:test`.
+- Local runtime cleanup: `npm run runtime:prune` previews cleanup, and
+  `npm run runtime:prune:apply` deletes scoped generated artifacts. Safety is
+  covered by `npm run runtime:prune:test`.
+- NPM script map: `npm run scripts:groups`; parked audio/TTS/music work is
+  grouped under `deferred`.
 
-The intended MVP user path is:
+The current demo path is Agent-first:
 
-1. Open or copy a local project folder that contains `project.vibe`.
-2. Review story flow, locked visual memory, shots, and receipts from Project.vibe facts.
-3. Ask the owned Agent Loop for a local prototype action against those facts.
-4. Run P6 Image2 through explicit preflight/live gates; preflight is safe and live submit requires credentials plus confirmation.
-5. Preview the resulting receipt and export a project-local text package.
-6. Package the same local-first app with Electron when desktop sign-off is needed.
+1. Open or create a local project folder.
+2. Type an idea or drop files into the bottom input.
+3. Let the Agent classify materials, split shots, choose a reference strategy,
+   and propose the next action.
+4. Review generated character, scene, prop, voice reference, and storyboard
+   materials.
+5. Submit Seedance/Jimeng video jobs serially when the project is ready.
+6. Review returned clips in preview and inspect export readiness.
 
-This path should stay useful as a local tool with project-root-relative files, explicit receipts, and controlled provider boundaries.
+The demo deliberately does not expose local TTS, voice cloning, final music
+mixing, or music-rhythm analysis as the main path. Uploaded human-voice audio is
+treated as a `voice_reference` for the video model, not as BGM.
 
-Old Codex/Claude CLI and subagent routes are legacy diagnostics only. They can help investigate old receipts or compatibility scripts, but they are not the MVP product route and should not be the first path in new worker briefs. Deprecated aliases such as `verify:all`, `verify:provider-fast`, and `verify:subagent` are retained only as diagnostics redirects; new handoffs should use `verify:mvp` or `verify:rc`.
+Old Codex/Claude CLI, subagent, P6 Image2, TTS, and music-analysis routes are
+diagnostics or deferred feature lanes. They can help investigate old receipts or
+compatibility scripts, but they are not the first path for a new demo handoff.
 
 ## Release / Package
 

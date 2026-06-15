@@ -96,6 +96,7 @@ function findFunctionNames(source, pattern) {
 
 const appPath = "src/App.tsx";
 const projectFileUiPath = "src/ui/app/projectFileUi.ts";
+const projectStatusViewModelPath = "src/ui/app/projectStatusViewModel.ts";
 const directorModePath = "src/ui/director/DirectorModeShell.tsx";
 const directorProgressStripPath = "src/ui/director/DirectorProgressStrip.tsx";
 const directorWorkflowOverviewPath = "src/ui/director/DirectorWorkflowOverview.tsx";
@@ -150,6 +151,7 @@ const contractDocPath = "docs/ui/minimal-director-ui-contract.md";
 
 const appSource = stripComments(readText(appPath));
 const projectFileUiSource = stripComments(readText(projectFileUiPath));
+const projectStatusViewModelSource = stripComments(readText(projectStatusViewModelPath));
 const directorModeSource = stripComments(readText(directorModePath));
 const directorProgressStripSource = stripComments(readText(directorProgressStripPath));
 const directorWorkflowOverviewSource = stripComments(readText(directorWorkflowOverviewPath));
@@ -253,6 +255,7 @@ const projectFactsStrip = findFunctionBody(projectFactsStripSource, "ProjectFact
 const projectStoreSnapshotForUi = findFunctionBody(appSource, "buildProjectStoreSnapshotForUi");
 const projectFactsUiSummary = findFunctionBody(appSource, "buildProjectFactsUiSummary");
 const confirmNewVideoProjectVibeDraft = findFunctionBody(appSource, "confirmNewVideoProjectVibeDraft");
+const projectStatusViewModel = findFunctionBody(projectStatusViewModelSource, "buildProjectStatusViewModel");
 const confirmImage2OneShot = currentProjectRuntimeHookSource;
 const minimalAssetLibrary = findFunctionBody(minimalAssetLibrarySource, "MinimalAssetLibrary");
 const assetSourceKindForPath = findFunctionBody(assetLibraryUiSource, "assetSourceKindForPath");
@@ -266,6 +269,7 @@ const minimalAudioPlan = [
   findFunctionBody(minimalAudioPlanSource, "MinimalAudioPlan"),
   findFunctionBody(minimalAudioPlanSource, "MinimalAudioPlanContent"),
 ].join("\n");
+const shotAudioInspector = findFunctionBody(appSource, "ShotAudioInspector");
 const minimalProjectPlan = findFunctionBody(appSource, "buildMinimalProjectPlan");
 const agentReceiptStatusLabel = findFunctionBody(agentPanelProjectionSource, "agentReceiptStatusLabel");
 const agentReceiptCountSummary = findFunctionBody(agentPanelProjectionSource, "agentReceiptCountSummary");
@@ -384,12 +388,36 @@ checkMessage(requireWithin(contractDoc, /Diagnostics/i, "diagnostics boundary in
 checkMessage(requireWithin(directorModeSource, /function\s+DirectorMode\s*\(/, "DirectorMode component"));
 checkMessage(requireWithin(appSource, /import\s+\{\s*DirectorMode\s*\}\s+from\s+"\.\/ui\/director\/DirectorModeShell"/, "App must import extracted DirectorModeShell component"));
 checkMessage(requireWithin(appBody, /<DirectorMode\b/, "App must mount extracted DirectorMode component"));
+checkMessage(requireWithin(projectStatusViewModelSource, /export\s+function\s+buildProjectStatusViewModel\s*\(/, "Project status view model must expose a single creator-facing status builder"));
+checkMessage(requireWithin(projectStatusViewModel, /stage[\s\S]*doing[\s\S]*waitingFor[\s\S]*nextAction/, "Project status view model must explain current stage, current work, waiting state, and next action"));
+checkMessage(requireWithin(projectStatusViewModelSource, /videoStage\?:[\s\S]*CreatorVideoStageLike/, "Project status view model must accept the creator desk video stage"));
+checkMessage(requireWithin(projectStatusViewModelSource, /videoStage\.generation\?\.queueSummary/, "Project status view model must summarize serial video queue progress from the unified video stage"));
+checkMessage(requireWithin(projectStatusViewModelSource, /agentCommand\?:[\s\S]*CreatorAgentCommandLike/, "Project status view model must accept the current Agent suggestion"));
+checkMessage(requireWithin(projectStatusViewModelSource, /newVideoStatus\?:[\s\S]*NewVideoEntryStatusLike/, "Project status view model must accept the fresh new-video planning status"));
+checkMessage(requireWithin(projectStatusViewModel, /newVideoStatus\.status === "planning"[\s\S]*正在拆镜头/, "Project status view model must show active fresh-project planning instead of empty-project copy"));
+checkMessage(requireWithin(projectStatusViewModelSource, /draftShotCount\?:\s*number/, "Fresh new-video status should carry draft shot counts for the unified status facts"));
+checkMessage(requireWithin(projectStatusViewModel, /草案 \$\{countLabel\(shotCount, "个"\)\}/, "Project status facts should show draft shot counts before the project is confirmed"));
+checkMessage(requireWithin(projectStatusViewModel, /!input\.folderReady && input\.projectReady[\s\S]*需要本地项目[\s\S]*点左上角项目，选择本地文件夹/, "Confirmed browser drafts must ask users to choose a local project folder before generation actions"));
+checkMessage(requireWithin(projectStatusViewModelSource, /!input\.folderReady && input\.projectReady && \/生成\|提交\|导出\/\.test\(rawAgentFact\)[\s\S]*先保存项目/, "Blocked generate/submit/export actions in browser drafts should be summarized as saving the project first"));
+checkMessage(requireWithin(projectStatusViewModelSource, /referenceGenerationAction\?\.status === "ready" && missing > 0[\s\S]*参考待生成/, "Local projects should surface missing references before review when generation is ready"));
+checkMessage(requireWithin(projectStatusViewModel, /readyToGenerateMissing[\s\S]*参考待生成[\s\S]*生成参考/, "Local projects should prioritize generating missing references when the reference action is ready"));
+checkMessage(requireWithin(projectStatusViewModelSource, /audioFactLabel[\s\S]*声音参考/, "Project status view model must summarize voice references in creator-facing copy"));
+check(!/\b(real-chain|relay\s+queue|Project\.vibe|provider)\b/i.test(extractStringLiterals(projectStatusViewModelSource)), "Project status view model copy must hide engineering state sources");
+checkMessage(requireWithin(directorModeSource, /function\s+ProjectStatusSummary\s*\(/, "DirectorMode must render the project status summary component"));
+checkMessage(requireWithin(directorMode, /className="director-workbar"[\s\S]*<ProjectStatusSummary\s+status=\{projectStatusView\}/, "Director workbar must render the unified project status summary"));
+checkMessage(requireWithin(directorMode, /buildProjectStatusViewModel\(\{[\s\S]*videoStage:\s*creatorDesk\?\.videoStage/, "DirectorMode must feed CreatorDesk videoStage into the unified project status"));
+checkMessage(requireWithin(directorMode, /buildProjectStatusViewModel\(\{[\s\S]*agentStage:\s*creatorDesk\?\.agentStage[\s\S]*agentCommand:\s*creatorDesk\?\.agentCommand/, "DirectorMode must feed CreatorDesk Agent guidance into the unified project status"));
+checkMessage(requireWithin(directorMode, /const \[newVideoStatus, setNewVideoStatus\] = useState<NewVideoStartStatus \| undefined>\(\)/, "DirectorMode must track fresh-project planning status from the composer"));
+checkMessage(requireWithin(directorMode, /newVideoStatus,\s*[\s\S]*exportAction/, "DirectorMode must feed fresh-project planning status into the unified project status"));
+check(!/className="director-workbar"[\s\S]{0,200}\{statusNode\}/.test(directorMode), "Director workbar must not duplicate the legacy status node");
+checkMessage(requireWithin(stylesSource, /\.project-status-summary\s*\{[\s\S]*grid-template-columns:[\s\S]*\.project-status-summary-facts/, "Unified project status summary needs responsive styling"));
+check(!/\.director-workbar\s*,[\s\S]{0,120}display:\s*none/.test(stylesSource), "Director workbar must stay visible for the unified project status");
 checkMessage(requireWithin(directorProgressStripSource, /function\s+DirectorProgressStrip\s*\(/, "Phase 35 Director progress strip component"));
 checkMessage(requireWithin(directorProgressStripSource, /function\s+buildDirectorProgressStripState\s*\(/, "Phase 35 Director progress strip state builder"));
-checkMessage(requireWithin(appSource, /from\s+"\.\/ui\/director\/DirectorProgressStrip"/, "App must import extracted DirectorProgressStrip module"));
+check(!/from\s+"\.\/ui\/director\/DirectorProgressStrip"/.test(appSource), "App must not import the legacy progress strip into the default Director surface");
 check(!/function\s+DirectorProgressStrip\s*\(/.test(appSource), "App must not keep DirectorProgressStrip component after extraction");
 checkMessage(requireWithin(minimalDirectorStatusDotSource, /function\s+MinimalDirectorStatusDot\s*\(/, "minimal director status dot component"));
-checkMessage(requireWithin(appSource, /import\s+\{\s*MinimalDirectorStatusDot\s*\}\s+from\s+"\.\/ui\/director\/MinimalDirectorStatusDot"/, "App must import extracted minimal director status dot component"));
+check(!/MinimalDirectorStatusDot/.test(appSource), "App must not mount the legacy compact status dot on the default Director surface");
 checkMessage(requireWithin(minimalTopNavSource, /function\s+MinimalTopNav\s*\(/, "MinimalTopNav component"));
 checkMessage(requireWithin(appSource, /import\s+\{\s*MinimalTopNav\s*\}\s+from\s+"\.\/ui\/director\/MinimalTopNav"/, "App must import extracted MinimalTopNav component"));
 checkMessage(requireWithin(appBody, /<MinimalTopNav\b/, "App must mount extracted MinimalTopNav component"));
@@ -413,6 +441,11 @@ checkMessage(requireWithin(directorMode, /<NewVideoStart[\s\S]*shots=\{shots\}[\
 checkMessage(requireWithin(directorModeSource, /NewVideoStartConfirmationContext[\s\S]*onNewVideoDraftConfirmed\?:[\s\S]*Promise<boolean \| void>/, "DirectorMode must expose async new-video confirmation context"));
 check(!/buildDirectorWorkflowState|confirmAgentPlanProjection/.test(directorModeSource), "New-video entry must not reuse the old agent projection path in DirectorMode");
 checkMessage(requireWithin(appSource, /import type \{\s*NewVideoProjectVibeStagedTransactionPreview\s*\} from "\.\/core\/newVideoProjectVibePlanner"/, "App must keep the staged Project.vibe new-video preview type"));
+checkMessage(requireWithin(appSource, /function\s+isFreshProjectSessionRequested\(\)[\s\S]*params\.get\("fresh"\)\s*===\s*"1"[\s\S]*params\.get\("new"\)\s*===\s*"1"[\s\S]*function\s+shouldAutoRestoreRememberedProject\(\)[\s\S]*isFreshProjectSessionRequested\(\)[\s\S]*return\s+false/, "Fresh/new browser sessions must not auto-restore the last project"));
+checkMessage(requireWithin(appSource, /freshProjectSessionResetAttemptedRef[\s\S]*isFreshProjectSessionRequested\(\)[\s\S]*rememberedProjectRestoreAttemptedRef\.current\s*=\s*true[\s\S]*forgetCurrentProject\(\)[\s\S]*resetAllProjectState\(\)[\s\S]*新项目待开始/, "Fresh/new browser sessions must clear stale runtime project bindings and return to the new-project state"));
+checkMessage(requireWithin(appSource, /newVideoComposerResetKey=\{isFreshProjectSessionRequested\(\) \? "fresh-session" : undefined\}/, "Fresh/new browser sessions must reset the new-video composer draft"));
+checkMessage(requireWithin(directorModeSource, /newVideoComposerResetKey\?:\s*string[\s\S]*composerResetKey=\{newVideoComposerResetKey\}/, "DirectorMode must forward fresh composer reset state to NewVideoStart"));
+checkMessage(requireWithin(newVideoStartSource, /composerResetKey\?:\s*string[\s\S]*clearStoredNewVideoComposerDraft\(composerStorageKey\)[\s\S]*setScript\(""\)[\s\S]*setStyle\(""\)/, "NewVideoStart must clear stale composer text when a fresh session is requested"));
 checkMessage(requireWithin(appSource, /await import\("\.\/core\/newVideoProjectVibePlanner"\)[\s\S]*buildNewVideoProjectVibeStagedTransaction[\s\S]*commitNewVideoProjectVibeStagedTransaction/, "App must lazy-load staged Project.vibe new-video helpers"));
 checkMessage(requireWithin(appBody, /useRef<NewVideoProjectVibeStagedTransactionPreview \| undefined>\(undefined\)/, "App must hold the latest new-video staged transaction"));
 checkMessage(requireWithin(confirmNewVideoProjectVibeDraft, /buildNewVideoProjectVibeStagedTransaction[\s\S]*newVideoStagedTransactionRef\.current[\s\S]*commitNewVideoProjectVibeStagedTransaction[\s\S]*saveProjectVibeDraft[\s\S]*applyProjectVibeProjectState/, "App new-video confirmation must stage, commit, save, then refresh Project.vibe state"));
@@ -423,25 +456,28 @@ checkMessage(requireWithin(newVideoStartSource, /buildIntakeStagedPlanProjection
 checkMessage(requireWithin(newVideoStartSource, /buildStoryDiscussionWorkspace[\s\S]*confirmStoryDiscussionDeltas[\s\S]*stageStoryDiscussionTurn/, "NewVideoStart must expose the discussion workspace path"));
 checkMessage(requireWithin(newVideoStartSource, /stagedDeltas[\s\S]*待确认修改/, "NewVideoStart must surface staged discussion deltas for confirmation"));
 checkMessage(requireWithin(newVideoStartSource, /确认修改[\s\S]*修改已确认/, "NewVideoStart must let users confirm staged discussion deltas before draft confirmation"));
-for (const label of ["从新视频开始", "和 AI 导演说", "主角参考", "风格参考", "场景参考", "道具参考", "添加文件", "拖入图片、音乐或脚本", "AI 拆分", "确认时选文件夹"]) {
+for (const label of ["从新视频开始", "和 AI 导演说", "主角参考", "风格参考", "场景参考", "道具参考", "添加文件", "拖入图片、声音参考或脚本", "AI 拆分", "确认时选文件夹"]) {
   checkMessage(requireWithin(newVideoStartSource, new RegExp(label), `NewVideoStart must expose ${label}`));
 }
 checkMessage(requireWithin(newVideoStartSource, /待确认/, "NewVideoStart must expose pending draft copy inside details"));
 checkMessage(requireWithin(newVideoStartSource, /确认/, "NewVideoStart must expose the confirm draft action"));
 checkMessage(requireWithin(newVideoStartSource, /已确认|已进入故事流/, "NewVideoStart must expose confirmed draft copy"));
-for (const label of ["导演讨论", "角色", "场景", "音频", "分镜", "发送", "确认修改"]) {
+for (const label of ["导演讨论", "角色", "场景", "声音", "分镜", "发送", "确认修改"]) {
   checkMessage(requireWithin(newVideoStartSource, new RegExp(label), `NewVideoStart discussion workspace must expose ${label}`));
 }
 checkMessage(requireWithin(newVideoStartSource, /不会直接生成/, "NewVideoStart must state the intake draft does not directly generate"));
 check(!/Project\.vibe|task[-\s]*envelope|provider|schema|queue|credential/i.test(extractStringLiterals(newVideoStartSource)), "NewVideoStart default copy must hide engineering terms");
 checkMessage(requireWithin(newVideoStartSource, /referenceBindingPurposeLabels[\s\S]*prop:\s*"道具"[\s\S]*referenceBindingScopeLabels[\s\S]*whole_video:\s*"全片"[\s\S]*shot_range:\s*"指定镜头"[\s\S]*绑定用途/, "NewVideoStart reference images must expose editable purpose and shot-scope binding"));
-checkMessage(requireWithin(newVideoStartSource, /声音参考[\s\S]*配乐参考/, "NewVideoStart audio copy must distinguish voice and music references"));
+checkMessage(requireWithin(newVideoStartSource, /声音参考[\s\S]*角色声线[\s\S]*不会当作配乐/, "NewVideoStart audio copy must treat uploaded audio as voice reference on the demo path"));
 check(!/Voice\s+Source\s+Library/i.test(extractStringLiterals(newVideoStartSource)), "NewVideoStart default copy must not expose Voice Source Library");
+checkMessage(requireWithin(newVideoStartSource, /new-video-start-guide[\s\S]*aria-label="开始方式"[\s\S]*把故事和素材放到底部/, "Empty new-project guide should describe the input entry, while the unified status owns the next action"));
+check(!/new-video-start-guide[\s\S]{0,220}aria-label="下一步"/.test(newVideoStartSource), "Empty new-project guide must not duplicate the unified next-action surface");
 checkMessage(requireWithin(newVideoStartSource, /className="new-video-composer-inbox"[\s\S]*素材收件箱[\s\S]*AI 会先粗分用途[\s\S]*referenceInboxSuggestion[\s\S]*audioInboxSuggestion/, "NewVideoStart dropped files must show a creator-facing inbox with classification and binding suggestions"));
 checkMessage(requireWithin(stylesSource, /\.new-video-composer-inbox[\s\S]*\.new-video-composer-inbox-head[\s\S]*\.new-video-composer-attachments span em/, "NewVideoStart inbox needs dedicated styling for suggested bindings"));
 checkMessage(requireWithin(newVideoStartSource, /<details\s+className="new-video-file-details"[\s\S]*className="new-video-file-list"/, "NewVideoStart selected material list must be behind details"));
-checkMessage(requireWithin(newVideoStartSource, /className="new-video-asset-action new-video-primary-action"[\s\S]*AI 拆分/, "NewVideoStart bottom composer must expose the single planning action"));
-checkMessage(requireWithin(newVideoStartSource, /Cmd Enter 发送/, "NewVideoStart composer must expose the keyboard send shortcut"));
+checkMessage(requireWithin(newVideoStartSource, /className="new-video-asset-action new-video-primary-action"[\s\S]*composerPrimaryLabel/, "NewVideoStart bottom composer must expose one fixed primary action"));
+checkMessage(requireWithin(newVideoStartSource, /composerPrimaryTitle[\s\S]*让 AI 先拆故事、分镜和节奏/, "NewVideoStart fixed send action must explain that Agent planning happens after send"));
+checkMessage(requireWithin(newVideoStartSource, /aria-label=\{composerPrimaryAriaLabel\}[\s\S]*\{composerPrimaryLabel\}/, "NewVideoStart composer must expose one explicit visible send button"));
 check(!/className="new-video-start-footer"[\s\S]*<button[\s\S]*发送/.test(newVideoStartSource), "NewVideoStart footer must not duplicate the composer submit action");
 checkMessage(requireWithin(newVideoStartSource, /className="new-video-plan-summary"[\s\S]*projectionTitleForDisplay[\s\S]*projection\.summary\.scriptPreview[\s\S]*new-video-next-hint/, "NewVideoStart organized draft default must show only title, short preview, and a bottom-action hint"));
 checkMessage(requireWithin(newVideoStartSource, /className="new-video-next-flow"[\s\S]*确认后[\s\S]*进入故事流，再生成参考[\s\S]*不会生图或提交视频[\s\S]*单独确认提交/, "NewVideoStart organized draft must explain the post-confirm next step"));
@@ -471,12 +507,15 @@ checkMessage(requireWithin(creatorDeskProjection, /const agentStage = buildCreat
 checkMessage(requireWithin(creatorDeskProjection, /agentCommand:\s*buildCreatorAgentCommand\(agentStage\)/, "creator desk projection must expose a single Agent command for the primary CTA"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /nextActionCopy[\s\S]*agentCommand\.label/, "CreatorDeskPanels summary copy must come from the Agent command"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /agentProjectRequirementCopy\(\{ localProjectBusy, canCreateLocalProject \}\)/, "CreatorDeskPanels must share browser-draft/local-project requirement copy with the bottom Agent button"));
-checkMessage(requireWithin(creatorDeskPanelsSource, /browserDraftLabel[\s\S]*"浏览器草稿"[\s\S]*nextActionCopy = !localProjectReady[\s\S]*browserDraftLabel/, "CreatorDeskPanels should label browser drafts as a planning state instead of a hard blocker"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /browserDraftLabel[\s\S]*"未保存草稿"[\s\S]*nextActionCopy = !localProjectReady[\s\S]*browserDraftLabel/, "CreatorDeskPanels should label unsaved drafts as a planning state instead of a hard blocker"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /可以继续说想法；生成参考、提交视频或导出前再准备本地项目/, "CreatorDeskPanels browser-draft hint must say planning can continue"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /描述想法[\s\S]*拆故事流[\s\S]*准备参考[\s\S]*提交与回流[\s\S]*预览与导出/, "CreatorDeskPanels must expose the Agent-first five-stage path"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /Agent 选择的做法[\s\S]*agentSkillPills/, "CreatorDeskPanels must explain the Agent-selected skills near the status summary"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /creator-agent-current-task[\s\S]*Agent 当前任务[\s\S]*理解[\s\S]*缺口[\s\S]*准备[\s\S]*确认/, "CreatorDeskPanels must make the four-part current Agent task the main visible surface"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /function summaryLine[\s\S]*projectInbox\.needsReviewCount[\s\S]*个素材待确认[\s\S]*没有待处理项/, "CreatorDeskPanels summary must prioritize ProjectInbox review work before saying there is nothing pending"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /点选后可说/, "Project inbox items must explain natural-language correction through the bottom Agent composer"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /creator-inbox-select[\s\S]*onSelectInboxItem\?\.\(item\)/, "Project inbox items must be selectable instead of static labels"));
+checkMessage(requireWithin(directorModeSource, /onSelectInboxItem=\{\(item\)[\s\S]*item\.assetId[\s\S]*onSelectAsset\(item\.assetId\)[\s\S]*onOpenDirectorView\?\.\("assets"\)/, "DirectorMode must select inbox assets in the existing asset context instead of opening another feedback UI"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /Math\.max\(batchGeneration\.missingCount, reviewTray\.counts\.missing\)\} 个镜头缺画面/, "CreatorDeskPanels missing-frame summary must use creator-facing quantity copy"));
 check(!/className="creator-agent-glance"/.test(creatorDeskPanelsSource), "CreatorDeskPanels must not show a second always-visible Agent flow above the current task");
 checkMessage(requireWithin(creatorDeskPanelsSource, /agentCommand\.kind === "open_preview"[\s\S]*预览/, "CreatorDeskPanels preview hint must follow the Agent command"));
@@ -490,7 +529,7 @@ for (const statusLabel of ["未生成", "已提交", "排队中", "生成中", "
 checkMessage(requireWithin(creatorDeskPanelsSource, /即梦常见约[\s\S]*分钟[\s\S]*可以离开后恢复查询/, "CreatorDeskPanels must explain long video waits with resume copy"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /const videoCanResume = Boolean\(videoSendAction\?\.canResume \|\| videoGeneration\.canResume\)/, "CreatorDeskPanels must merge runtime and action resume readiness"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /videoCanResume[\s\S]*底部按钮可以查询结果，不会重复提交/, "CreatorDeskPanels must explain resumable Seedance jobs without exposing a second query button"));
-checkMessage(requireWithin(creatorDeskPanelsSource, /需要取回结果时，用底部主按钮[\s\S]*需要提交视频时，用底部主按钮/, "CreatorDeskPanels must route video execution to the bottom Agent button"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /需要取回结果时，点底部发送[\s\S]*需要提交视频时，点底部发送/, "CreatorDeskPanels must route video execution to the bottom Agent button"));
 check(!/onClick=\{onSendVideo\}|videoSendAction\.suggestedActionLabel/.test(creatorDeskPanelsSource), "CreatorDeskPanels must not own video submit/query execution");
 check(!/creator-primary-action|runCreatorPrimaryAction/.test(creatorDeskPanelsSource), "CreatorDeskPanels must not expose a second primary execution button");
 check(!/creator-command-chip/.test(creatorDeskPanelsSource), "CreatorDeskPanels must avoid repeating the primary action in a second status chip");
@@ -514,7 +553,7 @@ for (const lockLabel of ["角色参考", "场景参考", "道具参考", "本镜
 checkMessage(requireWithin(creatorDeskPanelsSource, /review-tray-select[\s\S]*onSelectItem\?\.\(item\)/, "Review Tray items must be selectable instead of opening a separate feedback box"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /review-tray-select[\s\S]*aria-label=\{`选择\$\{itemLabel\(item\)\}：/, "Review Tray item buttons must expose a clear accessible selection label"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /aria-label=\{`\$\{itemLabel\(item\)\}：通过复核`\}/, "Review Tray approve buttons must expose action-specific aria labels"));
-checkMessage(requireWithin(creatorDeskPanelsSource, /aria-label=\{`\$\{itemLabel\(item\)\}：重试补齐`\}/, "Review Tray retry buttons must expose action-specific aria labels"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /aria-label=\{`\$\{itemLabel\(item\)\}：重新生成`\}/, "Review Tray retry buttons must expose action-specific aria labels"));
 checkMessage(requireWithin(stylesSource, /review-tray-select/, "Review Tray selected-item button must have neutral styling"));
 checkMessage(requireWithin(appBody, /onRetryReviewItem=\{\(item\)\s*=>\s*applyCreatorReviewDecision\(item,\s*"retry"\)\}[\s\S]*onRejectReviewItem=\{\(item\)\s*=>\s*applyCreatorReviewDecision\(item,\s*"reject"\)\}/, "App must route per-item retry/reject through Project.vibe review decisions"));
 checkMessage(requireWithin(appBody, /onLockReviewItem=\{\(item,\s*target\)\s*=>\s*applyCreatorReviewDecision\(item,\s*"lock",\s*target\)\}/, "App must route lock target through Project.vibe review decisions"));
@@ -538,13 +577,13 @@ checkMessage(requireWithin(realImage2GateDiagnostics, /Image2 Gate[\s\S]*Shot[\s
 checkMessage(requireWithin(stylesSource, /\.real-image2-gate-details/, "Diagnostics Image2 gate detail styling"));
 check(!/\.minimal-gate-panel/.test(stylesSource), "Default Director gate panel styling must be removed");
 check(!/<DirectorProgressStrip\s+runtimeState=\{runtimeState\}\s*\/>/.test(directorMode), "Director Clean Mode must not keep the detailed progress strip mounted on the three main pages");
-checkMessage(requireWithin(appBody, /state=\{workbenchProgressState\}/, "App must pass the compact creator status dot into DirectorMode"));
-checkMessage(requireWithin(directorMode, /\{statusNode\}/, "DirectorMode must render the injected compact creator status dot"));
+check(!/state=\{workbenchProgressState\}/.test(appBody), "App must not pass a second status source into DirectorMode");
+check(!/\bstatusNode\b/.test(directorModeSource), "DirectorMode must rely on ProjectStatusSummary instead of the legacy status node prop");
 checkMessage(requireWithin(diagnosticsMode, /<DirectorProgressStrip\s+state=\{buildDirectorProgressStripState\(\s*buildLocalOrchestratorUiSummary\(runtimeState\)\s*\)\}\s*\/>/, "Diagnostics must keep the detailed runtime progress strip"));
-checkMessage(requireWithin(appBody, /buildDirectorProgressStripState\(\s*buildLocalOrchestratorUiSummary\(workbenchRuntimeState\)\s*\)/, "compact director status dot derives from runtime progress state in App"));
+check(!/buildDirectorProgressStripState\(\s*buildLocalOrchestratorUiSummary\(workbenchRuntimeState\)\s*\)/.test(appBody), "App must not compute a hidden legacy progress state for the default Director surface");
 checkMessage(requireWithin(minimalDirectorStatusDotSource, /state\s*:\s*DirectorProgressStripState/, "compact director status dot must receive presentational progress state"));
 check(!/state\.segments\.map/.test(minimalDirectorStatusDot), "compact director status dot must not render detailed progress counts");
-checkMessage(requireWithin(appBody, /buildDirectorProgressStripState\(\s*buildLocalOrchestratorUiSummary\(/, "Phase 35 progress strip must derive from Phase 34 runtime summary"));
+checkMessage(requireWithin(diagnosticsMode, /buildDirectorProgressStripState\(\s*buildLocalOrchestratorUiSummary\(/, "Phase 35 progress strip must derive from Phase 34 runtime summary inside Diagnostics"));
 check(
   !/readDirectorProgressOverride|progressRecord|stateRecord\.directorProgress|uiRecord\.directorProgress/.test(directorProgressStripState),
   "Phase 35 progress strip must not accept UI-only progress overrides",
@@ -558,7 +597,7 @@ checkMessage(requireWithin(directorProgressStrip, /项目处理进度/, "Phase 3
 checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /准备中/, "Phase 35 progress strip preparing label"));
 checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /生成中/, "Phase 35 progress strip working label"));
 checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /等待复核/, "Phase 35 progress strip review label"));
-checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /待补齐/, "Phase 35 progress strip blocked label"));
+checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /待处理/, "Phase 35 progress strip blocked label"));
 checkMessage(requireWithin(`${directorProgressStrip}\n${directorProgressStripState}`, /已完成/, "Phase 35 progress strip complete label"));
 checkMessage(requireWithin(directorProgressStrip, /director-progress-track/, "Phase 35 progress strip visual track"));
 checkMessage(requireWithin(directorProgressStrip, /state\.segments\.map/, "Phase 35 progress strip must render all five summary segments"));
@@ -622,7 +661,7 @@ checkMessage(requireWithin(stylesSource, /\.director-bottom-composer \.minimal-a
 checkMessage(requireWithin(stylesSource, /:has\(\.project-control-popover\)[\s\S]*\.new-video-bottom-portal[\s\S]*pointer-events:\s*none/, "Project control popover must temporarily move the bottom composer out of the way"));
 checkMessage(requireWithin(stylesSource, /body:has\(\.project-control-popover\) \.minimal-director\.composer-only \.new-video-unified-composer[\s\S]*opacity:\s*0/, "Project control popover must hide the new-project composer, not just the portal wrapper"));
 checkMessage(requireWithin(minimalAgentPanelSource, /const primaryDisabledPrefix = !hasComposerInput && !isPreparingPlan \? "等待输入：" : "暂不能继续："/, "Bottom composer must distinguish empty input from a real blocker"));
-checkMessage(requireWithin(minimalAgentPanelSource, /minimal-agent-footer-copy[\s\S]*primaryDisabledPrefix[\s\S]*按下后：/, "Bottom composer must explain what the primary button will do or why it is blocked"));
+checkMessage(requireWithin(minimalAgentPanelSource, /const footerStatusCopy = hasComposerInput[\s\S]*按发送交给 Agent[\s\S]*建议动作：/, "Bottom composer must explain both fixed send and suggested actions"));
 checkMessage(requireWithin(stylesSource, /\.minimal-agent-footer-copy[\s\S]*text-overflow:\s*ellipsis/, "Bottom composer primary-button explanation must stay compact and non-overlapping"));
 checkMessage(requireWithin(stylesSource, /\.creator-desk-panels\s*\{[\s\S]*position:\s*sticky/, "Creator desk must promote the next Agent step into the main workspace"));
 checkMessage(requireWithin(stylesSource, /\.creator-step-cta/, "Creator desk must expose a dedicated next-step status area"));
@@ -649,10 +688,12 @@ checkMessage(requireWithin(minimalAgentPanelSource, /已选中内容，直接说
 checkMessage(requireWithin(minimalAgentLanguageSurface, /写脚本、提需求/, "MinimalAgentPanel must keep one normal chat entry for project-wide feedback"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /说这块怎么改/, "MinimalAgentPanel selected input placeholder"));
 checkMessage(requireWithin(minimalAgentPanelSource, /textareaRef\.current\?\.focus/, "MinimalAgentPanel should focus the composer after selection or file add"));
-checkMessage(requireWithin(minimalAgentPanelSource, /Cmd Enter 发送/, "MinimalAgentPanel composer must expose the keyboard send shortcut"));
+checkMessage(requireWithin(minimalAgentPanelSource, /const showFooterSuggestedAction = !hasComposerInput[\s\S]*primaryLabel !== "发送"/, "MinimalAgentPanel must split suggested actions from the fixed send button"));
+checkMessage(requireWithin(minimalAgentPanelSource, /function handleSend\(\)[\s\S]*void prepareChange\(\)/, "MinimalAgentPanel fixed send button must always route typed text or files to the Agent"));
+checkMessage(requireWithin(minimalAgentPanelSource, /showFooterPrimaryAction\s*=\s*true[\s\S]*aria-label=\{sendAriaLabel\}[\s\S]*<Send[\s\S]*发送/, "MinimalAgentPanel composer must expose one fixed visible send button"));
 checkMessage(requireWithin(minimalAgentLanguageSurface, /发送[\s\S]*确认修改/, "MinimalAgentPanel confirmation action labels"));
-checkMessage(requireWithin(minimalAgentPanelSource, /showFooterPrimaryAction\s*=\s*true[\s\S]*<Send/, "MinimalAgentPanel must keep one clear bottom action visible in every composer state"));
-checkMessage(requireWithin(minimalAgentPanelSource, /const primaryAriaLabel = primaryDisabled[\s\S]*primaryDisabledReason[\s\S]*aria-label=\{primaryAriaLabel\}/, "MinimalAgentPanel visible bottom action must keep a short button name while status explains disabled reasons"));
+checkMessage(requireWithin(minimalAgentPanelSource, /showFooterSuggestedAction[\s\S]*className="minimal-agent-suggested-button"[\s\S]*aria-label=\{primaryAriaLabel\}/, "MinimalAgentPanel suggested action must be separate from the send button"));
+checkMessage(requireWithin(minimalAgentPanelSource, /const primaryAriaLabel = primaryDisabled[\s\S]*primaryDisabledReason[\s\S]*aria-label=\{primaryAriaLabel\}/, "MinimalAgentPanel suggested action must keep a short button name while status explains disabled reasons"));
 checkMessage(requireWithin(minimalAgentPanelSource, /const composerPrimaryIsFresh = hasComposerInput \|\| !workflow \|\| planPhase === "idle" \|\| planPhase === "confirmed"[\s\S]*void prepareChange\(\)/, "MinimalAgentPanel must let new bottom input replace a pending staged plan through the unified primary operation"));
 checkMessage(requireWithin(minimalAgentPanelSource, /function\s+revisePlan[\s\S]*previousIntent[\s\S]*setText\(previousIntent\)/, "MinimalAgentPanel must restore the last feedback text when the creator chooses to revise"));
 checkMessage(requireWithin(minimalAgentPanelSource, /创作者路径/, "MinimalAgentPanel must label the creator path"));
@@ -694,23 +735,38 @@ checkMessage(requireWithin(minimalTopNav, /aria-label="预览"[\s\S]*>\s*预览\
 checkMessage(requireWithin(minimalTopNav, /viewMenuOpen && \([\s\S]*className="minimal-nav-menu-list"[\s\S]*aria-label="参考素材"[\s\S]*aria-label="预览"/, "Top content menu list must render only while the menu is open"));
 checkMessage(requireWithin(stylesSource, /\.minimal-nav\.minimal-nav-menu:not\(\[open\]\) \.minimal-nav-menu-list\s*\{[\s\S]*display:\s*none/, "Top content menu list must stay hidden while the menu is closed"));
 checkMessage(requireWithin(minimalTopNav, /topbar-export-action[\s\S]*aria-label="导出"[\s\S]*>\s*导出\s*</, "Export must remain a constant topbar action"));
-checkMessage(requireWithin(minimalTopNav, /aria-label=\{createProjectAriaLabel \|\| "新建项目"\}[\s\S]*新建项目/, "Project control create action must have a clear accessible label"));
+checkMessage(requireWithin(minimalTopNav, /const exportDisabled = isEmptyProject \|\| !projectFolderReady/, "Browser drafts with shots must not enable export before a local project folder exists"));
+checkMessage(requireWithin(minimalTopNav, /先保存为本地项目，再导出/, "Export disabled copy must point browser drafts to saving a local project first"));
+checkMessage(requireWithin(minimalTopNav, /createProjectDisplayTitle[\s\S]*另开新草稿[\s\S]*createProjectDisplayAriaLabel[\s\S]*另开新草稿，不保存当前故事/, "Project control create action must not look like saving the current unsaved story"));
 checkMessage(requireWithin(minimalTopNav, /aria-label="打开本地项目"[\s\S]*打开项目/, "Project control open action must have a clear accessible label"));
 checkMessage(requireWithin(minimalTopNav, /aria-label="设置"[\s\S]*settings-link-label">设置/, "One Creator Loop settings entry should use product copy"));
 checkMessage(requireWithin(settingsShell, /使用联网资料/, "Settings must expose external research as a creator-facing choice"));
 checkMessage(requireWithin(settingsShell, /联网查资料待配置/, "Settings must explain missing research connection in product copy"));
 checkMessage(requireWithin(settingsShell, /连接联网查资料/, "Settings must let creators jump from missing research connection to the service connection form"));
+checkMessage(requireWithin(settingsShell, /声音参考已准备[\s\S]*需要时再拖声音参考/, "Settings voice summary must treat audio only as voice reference on the demo path"));
+checkMessage(requireWithin(settingsShell, /readyServiceConnectionCount[\s\S]*个创作服务可用/, "Settings service count must use visible creator services instead of raw stored credentials"));
+check(!/serviceKeyOptions[\s\S]*cloud-tts/.test(settingsShell), "Settings default service picker must not expose cloud TTS on the demo path");
+check(!/serviceConnections[\s\S]*云端配音/.test(settingsShell), "Settings default service cards must not expose cloud dubbing on the demo path");
+check(!/真实生图、配音或提交视频/.test(settingsShell), "Settings default confirmation copy must not imply a local/cloud dubbing path");
+checkMessage(requireWithin(minimalAudioPlan, /本版不做本地配音[\s\S]*锁定角色声线、语气和说话质感[\s\S]*no BGM/, "Audio plan must describe uploaded audio as video-model voice reference only"));
+check(!/生成克隆配音|克隆配音没有生成成功|正在生成本镜头克隆配音/.test(minimalAudioPlan), "Default audio plan must not expose parked local voice-clone actions");
+check(!/音乐分析|自动混音|finalMixMusicAllowed \? "（配乐只在后期导出使用）"/.test(minimalAudioPlan), "Default audio plan must not expose parked music analysis or automatic mixing on the demo path");
+checkMessage(requireWithin(stylesSource, /:has\(\.project-control-popover\)[\s\S]*\.director-bottom-composer[\s\S]*opacity:\s*0[\s\S]*pointer-events:\s*none/, "Opening the project picker must hide the bottom composer so project controls are not covered"));
+checkMessage(requireWithin(settingsShell, /settings-disclosure-state[\s\S]*advancedOpen \? "收起" : "展开"/, "Settings advanced disclosure state must be real DOM copy"));
+check(!/settings-advanced\s*>\s*summary::after/.test(stylesSource), "Settings must not use pseudo-content for disclosure state");
 checkMessage(requireWithin(settingsShell, /function enableTavilySearch\(\)[\s\S]*setServicePanelOpen\(true\)[\s\S]*setCredFormProviderId\("tavily-search"\)/, "Choosing online research should immediately open the missing Tavily connection step"));
-checkMessage(requireWithin(settingsShell, /没有联网查资料也能继续规划/, "Settings must explain that Tavily is optional for the planning path"));
+checkMessage(requireWithin(settingsShell, /没有联网查资料也能继续整理/, "Settings must explain that Tavily is optional for the planning path"));
 checkMessage(requireWithin(settingsShell, /不连接也能继续本地规划/, "Settings must explain the Tavily tradeoff in the selected service helper"));
 checkMessage(requireWithin(settingsShell, /setCredFormProviderId\("tavily-search"\)/, "Settings missing-research-key action must preselect the Tavily service key"));
 checkMessage(requireWithin(settingsShell, /open=\{servicePanelOpen\}/, "Settings service panel must open from the missing research key action"));
 checkMessage(requireWithin(settingsShell, /onProviderConfigStatusesChange\?\.\(providerStatuses\)/, "Settings must refresh parent provider readiness after saving or deleting a service key"));
 checkMessage(requireWithin(settingsShell, /providerId\s*===\s*"tavily-search"[\s\S]*updateWebSearchSettings\(\{\s*enabled:\s*true,\s*provider:\s*"tavily_search",\s*allowNetwork:\s*true/, "Saving a Tavily key should immediately enable real web research"));
 checkMessage(requireWithin(diagnosticsMode, /onProviderConfigStatusesChange=\{onProviderConfigStatusesChange\}/, "DiagnosticsMode must pass provider readiness refresh into Settings"));
+checkMessage(requireWithin(diagnosticsMode, /const \[advancedOpen, setAdvancedOpen\] = useState\(false\)/, "Diagnostics advanced panels must stay unmounted until opened"));
+checkMessage(requireWithin(diagnosticsMode, /\{advancedOpen && \([\s\S]*diagnostics-advanced-grid/, "Diagnostics advanced grid must render only after the disclosure opens"));
 checkMessage(requireWithin(appSource, /onProviderConfigStatusesChange=\{setProviderConfigStatuses\}/, "App must let Settings refresh Agent web-search readiness after credential changes"));
 checkMessage(requireWithin(minimalAgentPanel, /连接联网查资料/, "Agent panel must make external research discoverable before it is enabled"));
-checkMessage(requireWithin(minimalAgentPanel, /不连接也能继续规划/, "Agent panel must explain the Tavily tradeoff without blocking planning"));
+checkMessage(requireWithin(minimalAgentPanel, /不连接也能继续整理/, "Agent panel must explain the Tavily tradeoff without blocking planning"));
 checkMessage(requireWithin(appSource, /agentWebSearchReadyForUi[\s\S]*webSearchReady=\{agentWebSearchReadyForUi\}/, "Director must pass credential-aware web-search readiness to the Agent surface"));
 checkMessage(requireWithin(newVideoStartSource, /effectiveWebSearchReady[\s\S]*补好 Key/, "New video research action must not look available when a search key is missing"));
 checkMessage(requireWithin(minimalTopNav, /shortSectionLabel\s*\(/, "Top navigation story section tabs must use compact section labels"));
@@ -730,8 +786,10 @@ for (const label of ["素材包", "复核记录", "预览媒体", "项目文件"
   checkMessage(requireWithin(minimalExportSource, new RegExp(label), `Export view must use creator-facing ${label} copy`));
 }
 check(!/提示质检|prompt QA|导出清单已生成|export_manifest/i.test(extractStringLiterals(minimalExportSource)), "Export view default copy must hide engineering export labels");
-checkMessage(requireWithin(minimalAudioPlan, /配乐[\s\S]*淡入[\s\S]*淡出/, "Audio plan must use creator-facing audio copy"));
-check(!/Formal gate blockers|paths|音频 plan|Fade in|Fade out/.test(extractStringLiterals(`${minimalExport}\n${minimalAudioPlan}`)), "Export/Audio views must not expose engineering copy");
+checkMessage(requireWithin(minimalExport, /声音参考随视频模型使用，配乐留到后期/, "Export audio summary must match current demo voice-reference strategy"));
+checkMessage(requireWithin(minimalAudioPlan, /声音边界[\s\S]*淡入[\s\S]*淡出/, "Audio plan must use creator-facing audio copy"));
+checkMessage(requireWithin(shotAudioInspector, /声音参考[\s\S]*配乐边界[\s\S]*视频模型不生成配乐/, "Shot audio inspector must use voice-reference demo copy"));
+check(!/Formal gate blockers|paths|音频 plan|Fade in|Fade out|TTS\s+|music\s+\{|linkedMusicJobId|linkedTtsJobId/.test(extractStringLiterals(`${minimalExport}\n${minimalAudioPlan}\n${shotAudioInspector}`)), "Export/Audio views must not expose engineering copy");
 
 const defaultDirectorSurfaceText = extractStringLiterals(`${minimalTopNav}\n${directorMode}\n${minimalPreview}\n${minimalProjectPlan}`);
 for (const [term, pattern] of [
@@ -1115,7 +1173,7 @@ checkMessage(requireWithin(projectFactsStrip, /save/, "Round 2 save plan action"
 checkMessage(requireWithin(projectStoreSnapshotForUi, /createProjectStoreSnapshot/, "Round 2 Project Store snapshot builder"));
 checkMessage(requireWithin(projectFactsUiSummary, /buildProjectStoreIoGate/, "Round 2 Project Store IO gate builder"));
 checkMessage(requireWithin(projectFactsUiSummary, /saveProjectStoreSnapshot/, "Round 2 Project Store save plan builder"));
-for (const label of ["角色参考", "场景/天气参考", "道具参考", "音频参考", "待复核", "已锁定"]) {
+for (const label of ["角色参考", "场景/天气参考", "道具参考", "声音参考", "待复核", "已锁定"]) {
   checkMessage(requireWithin(minimalAssetLibrary, new RegExp(label), `Asset Library default ${label} slot copy`));
 }
 const minimalAssetLibraryCopy = extractStringLiterals(minimalAssetLibrary);
@@ -1143,7 +1201,7 @@ for (const [label, pattern] of [
   ["候选", /候选/],
   ["visible review copy", />\s*review\s*</i],
   ["Voice Source Library", /Voice\s+Source\s+Library/i],
-  ["voice role copy", /角色音色|音乐方向|环境声|声音风格|旁白/],
+  ["voice role copy", /角色音色|音乐方向|环境声|声音风格|旁白|音频参考|配乐/],
   ["audio reuse copy", /可复用/],
 ]) {
   check(!pattern.test(minimalAssetLibraryCopy), `Asset Library default copy must not expose ${label}`);
@@ -1158,7 +1216,7 @@ for (const [label, pattern] of [
 ]) {
   check(!pattern.test(directorCreatorFacingCopy), `Director creator-facing copy must not expose ${label}`);
 }
-checkMessage(requireWithin(directorCreatorFacingCopy, /补齐[\s\S]*参考/, "Image generation confirmation must use creator-facing copy"));
+checkMessage(requireWithin(directorCreatorFacingCopy, /生成[\s\S]*参考/, "Image generation confirmation must use creator-facing copy"));
 checkMessage(requireWithin(directorCreatorFacingCopy, /结果先给你看/, "Generation actions should explain review behavior in user language"));
 checkMessage(requireWithin(minimalAssetLibrary, /aria-label=\{`选择参考素材 \$\{cleanLabel\(asset\.name\)\} ·/, "Asset cards must expose clear accessible selection labels"));
 checkMessage(requireWithin(minimalAssetLibrary, /<details className="asset-generation-manual"[\s\S]*aria-label="手动生成缺少的参考图和故事板"/, "Asset generation action manual recovery must stay behind disclosure"));
@@ -1286,12 +1344,12 @@ checkMessage(requireWithin(stylesSource, /\.project-real-chain-permission\s*\{[\
 checkMessage(requireWithin(stylesSource, /@media \(max-width:\s*1040px\)[\s\S]*\.project-real-chain-panel\s*\{[\s\S]*grid-template-areas:[\s\S]*"batch"[\s\S]*"oneshot"[\s\S]*"policy"[\s\S]*"evidence"[\s\S]*"permission"/, "mobile current-project grid template must include the one-shot area before permission row"));
 checkMessage(requireWithin(stylesSource, /@media \(max-width:\s*1040px\)[\s\S]*\.project-real-chain-permission\s*\{[\s\S]*grid-template-columns:\s*1fr[\s\S]*justify-items:\s*stretch[\s\S]*\.project-real-chain-permission > div,\s*[\s\S]*\.project-real-chain-permission input,\s*[\s\S]*\.project-real-chain-permission button\s*\{[\s\S]*width:\s*100%[\s\S]*box-sizing:\s*border-box/, "permission receipt row children should fill narrow mobile layout"));
 check(!/\.project-real-chain-message\s*\{[\s\S]{0,160}grid-area:\s*message/.test(stylesSource), "individual current project chain messages must not claim the grid area");
-checkMessage(requireWithin(minimalTopNav, /aria-label="项目计划状态"/, "top nav project plan status aria label should be localized"));
+checkMessage(requireWithin(minimalTopNav, /aria-label=\{`项目控制：\$\{projectTitleLabel\}，\$\{projectControlStatus\}`\}/, "top nav project button should expose project title and storage status without crowding visible chrome"));
 checkMessage(requireWithin(minimalTopNavSource, /function\s+recentProjectMetaLabel[\s\S]*有项目文件[\s\S]*待初始化/, "top nav recent projects must show project-file status"));
 checkMessage(requireWithin(minimalTopNavSource, /function\s+formatRecentProjectUpdatedAt[\s\S]*刚刚[\s\S]*分钟前[\s\S]*小时前/, "top nav recent projects must show compact recency copy"));
 checkMessage(requireWithin(minimalTopNavSource, /const projectFolderReady = Boolean\(projectRoot\?\.trim\(\)\)/, "top nav project folder readiness must come from the actual project root"));
 checkMessage(requireWithin(minimalTopNavSource, /projectStorageBadge[\s\S]*本地[\s\S]*草稿/, "top nav project title must expose whether the current work is local or draft"));
-checkMessage(requireWithin(minimalTopNavSource, /projectControlStatus[\s\S]*浏览器草稿/, "top nav project popover must distinguish browser drafts from local projects"));
+checkMessage(requireWithin(minimalTopNavSource, /projectControlStatus[\s\S]*未保存草稿/, "top nav project popover must distinguish unsaved drafts from local projects"));
 checkMessage(requireWithin(stylesSource, /\.project-title-storage[\s\S]*\.project-title-storage\.local[\s\S]*\.project-title-storage\.draft/, "top nav local/draft badge must have stable visual states"));
 check(!/const emptyProjectPrimary = canForgetProject/.test(minimalTopNavSource), "top nav empty-project wording must not infer local folder readiness from the close-project action");
 check(!/const projectRootLabel = compactProjectPathLabel\(projectRoot\) \|\| \(canForgetProject/.test(minimalTopNavSource), "top nav project root label must not claim a local folder is connected without projectRoot");
@@ -1304,11 +1362,12 @@ checkMessage(requireWithin(minimalTopNavSource, /project-control-recent-remove[\
 checkMessage(requireWithin(minimalTopNavSource, /const active = Boolean\(projectRoot && project\.projectRoot === projectRoot\)[\s\S]*const removeDisabled = active \|\| !onRemoveRecentProject[\s\S]*当前项目请用退出项目/, "recent project removal must route the active project through the explicit exit-project action"));
 checkMessage(requireWithin(minimalTopNavSource, /project-control-recent-empty[\s\S]*打开或新建项目后，会在这里快速切换/, "top nav project control must show an empty state for recent projects"));
 checkMessage(requireWithin(appSource, /projectFileSelectionDetail\([\s\S]*canChooseProjectRootFromDialog\s*\|\|\s*canCreateLocalProjectFromDialog/, "project file status detail must use real local-project picker availability"));
-checkMessage(requireWithin(appSource, /createProjectTitle=\{canCreateLocalProjectFromDialog \? "新建本地项目" : "新建浏览器草稿"\}/, "project control create action must explain browser drafts when no local picker exists"));
+checkMessage(requireWithin(appSource, /createProjectTitle="新建项目"[\s\S]*createProjectAriaLabel="新建项目"/, "project control create action must use one clear new-project label instead of exposing browser draft internals"));
+checkMessage(requireWithin(minimalTopNavSource, /当前故事还没保存[\s\S]*另开草稿不会保存它[\s\S]*生成参考前请先在桌面 App 选择本地项目文件夹/, "unsaved story project control must warn before opening a blank draft"));
 checkMessage(requireWithin(appSource, /if \(!canCreateLocalProjectFromDialog\) \{[\s\S]*return createBrowserDraftProject\(draft, context, options\)/, "new project action must fall back to a clean browser draft outside Electron"));
 checkMessage(requireWithin(appSource, /async function removeRecentProjectRecord[\s\S]*window\.vibeRuntime\?\.forgetProject\?\.\(normalizedRoot\)[\s\S]*setRecentProjectSelections\(clearRememberedProjectRoot\(normalizedRoot\)\)/, "recent project removal must clear both runtime and local remembered project records"));
-checkMessage(requireWithin(projectFileUiSource, /!canUseLocalProjectPicker[\s\S]*浏览器里可以先规划[\s\S]*if \(selection\.detail\)/, "browser preview project detail must not be hidden by stale project-picker detail"));
-checkMessage(requireWithin(minimalTopNavSource, /projectPickerDisabledCopy[\s\S]*浏览器里可以先规划[\s\S]*project-control-action-note/, "top nav disabled project actions must explain browser preview drafts"));
+checkMessage(requireWithin(projectFileUiSource, /!canUseLocalProjectPicker[\s\S]*可以先整理草稿[\s\S]*if \(selection\.detail\)/, "preview project detail must not be hidden by stale project-picker detail"));
+checkMessage(requireWithin(minimalTopNavSource, /projectPickerDisabledCopy[\s\S]*可以先整理草稿[\s\S]*project-control-action-note/, "top nav disabled project actions must explain unsaved drafts"));
 checkMessage(requireWithin(stylesSource, /\.project-control-summary\s*\{[\s\S]*border-top:[\s\S]*padding-top:/, "top nav project control summary must have a distinct readable row"));
 checkMessage(requireWithin(stylesSource, /\.project-control-recent-meta\s*\{[\s\S]*font-family:\s*inherit/, "top nav recent project metadata should read like product copy, not a path"));
 checkMessage(requireWithin(stylesSource, /\.project-control-recent-empty\s*\{[\s\S]*line-height:/, "top nav recent project empty state must be readable"));

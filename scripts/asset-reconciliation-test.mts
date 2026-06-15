@@ -97,11 +97,20 @@ const projection = buildAssetReconciliationProjection({
     asset({
       id: "voice_jp",
       type: "unknown",
-      name: "日语女生声音",
+      name: "日语女生声音，不是配乐",
       path: "/project/audio/voice-reference.wav",
       lockedStatus: "needs_review",
       roleBinding: { role: "voice_reference", useFor: ["shot_1"], ignoreFor: [] },
       sourceRefs: ["imported:file:voice-reference.wav"],
+    }),
+    asset({
+      id: "eurobeat_music",
+      type: "unknown",
+      name: "eurobeat 配乐.wav",
+      path: "/project/audio/eurobeat.wav",
+      lockedStatus: "needs_review",
+      roleBinding: { role: "music_reference", useFor: [], ignoreFor: [] },
+      sourceRefs: ["imported:file:eurobeat.wav"],
     }),
     asset({
       id: "storyboard_1",
@@ -128,11 +137,13 @@ assert(byLabel("轮胎")?.status === "merged", "tires should be merged into pare
 assert(byLabel("指尖")?.status === "merged", "body details should be merged into character/action");
 assert(projection.items.some((item) => item.kind === "storyboard_reference" && item.status === "matched"), "storyboard mode should require and match storyboard reference");
 assert(projection.items.some((item) => item.kind === "voice_reference" && item.status === "needs_review"), "dialogue should require a voice reference candidate");
+assert(!projection.items.some((item) => item.kind === "music_reference" && item.label.includes("不是配乐")), "not-music voice references must not be reconciled as music");
+assert(!projection.items.some((item) => item.kind === "voice_reference" && item.label.includes("eurobeat")), "obvious music assets must not be reconciled as character voice references");
 assert(projection.creatorSummary.includes("已匹配"), "creator summary should be human-readable");
 assert(projection.nextAction === "让 AI 准备参考", "missing standalone props should drive Agent reference preparation");
 
 const emptyProjection = buildAssetReconciliationProjection({ shots: [], assets: [] });
 assert(emptyProjection.creatorSummary === "当前没有需要匹配的素材。", "empty reconciliation summary should not tell users to write story again");
-assert(emptyProjection.nextAction === "继续规划", "empty reconciliation next action should stay generic");
+assert(emptyProjection.nextAction === "继续整理", "empty reconciliation next action should stay generic");
 
 console.log("asset-reconciliation-test: ok");

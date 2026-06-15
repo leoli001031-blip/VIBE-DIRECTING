@@ -134,7 +134,7 @@ const hardLocks: StoryDiscussionWorkspace["hardLocks"] = {
 const laneLabels: Record<StoryDiscussionLaneId, string> = {
   characters: "角色",
   scenes: "场景",
-  audio: "音频",
+  audio: "声音",
   storyboard: "分镜",
 };
 
@@ -184,7 +184,7 @@ function strongestStatus(statuses: StoryDiscussionLaneStatus[]): StoryDiscussion
 function statusQuestion(laneId: StoryDiscussionLaneId, status: StoryDiscussionLaneStatus, count: number): string {
   if (!count) return emptyQuestions[laneId];
   if (status === "needs_reference") {
-    if (laneId === "audio") return "先确认音频用途，后面可以接 TTS 或音色克隆。";
+    if (laneId === "audio") return "先确认声音参考会绑定到哪个角色或旁白。";
     if (laneId === "characters") return "角色候选已识别，下一步绑定主角参考图。";
     return "场景候选已识别，下一步绑定场景参考。";
   }
@@ -230,7 +230,7 @@ function inferFocus(text: string): StoryDiscussionTurnFocus {
 function focusLabel(focus: StoryDiscussionTurnFocus): string {
   if (focus === "character") return "角色";
   if (focus === "scene") return "场景";
-  if (focus === "audio") return "音频";
+  if (focus === "audio") return "声音";
   if (focus === "storyboard") return "分镜";
   return "草案";
 }
@@ -238,7 +238,7 @@ function focusLabel(focus: StoryDiscussionTurnFocus): string {
 function responseForFocus(focus: StoryDiscussionTurnFocus): string {
   if (focus === "character") return "我先把这条反馈挂到角色整理里，下一步会检查主角参考和多视角需求。";
   if (focus === "scene") return "我先把这条反馈挂到场景整理里，下一步会看哪些场景需要参考图或 master。";
-  if (focus === "audio") return "我先把这条反馈挂到音频整理里，后面可以接旁白、TTS 或音色参考。";
+  if (focus === "audio") return "我先把这条反馈挂到声音参考里，后面会绑定角色、旁白或对白表现。";
   if (focus === "storyboard") return "我先把这条反馈挂到分镜整理里，下一步可以调整镜头顺序和节奏。";
   return "我先把这条反馈放进草案讨论里，等你确认后再进入故事流。";
 }
@@ -253,11 +253,11 @@ function laneForFocus(focus: StoryDiscussionTurnFocus): StoryDiscussionLaneId {
 
 function nextActionForLanes(lanes: StoryDiscussionLane[]): string {
   const waiting = lanes.find((lane) => lane.status === "waiting" && lane.id !== "audio");
-  if (waiting) return `先补${waiting.label}`;
+  if (waiting) return `可以继续说明${waiting.label}`;
   const needsReference = lanes.find((lane) => lane.status === "needs_reference");
-  if (needsReference) return `绑定${needsReference.label}`;
+  if (needsReference) return `可以补充${needsReference.label}参考`;
   const needsDecision = lanes.find((lane) => lane.status === "needs_decision");
-  if (needsDecision) return `确认${needsDecision.label}`;
+  if (needsDecision) return `需要确认${needsDecision.label}`;
   return "确认草案";
 }
 
@@ -414,8 +414,8 @@ function deltasForTurn(workspace: StoryDiscussionWorkspace, turn: StoryDiscussio
       turn,
       kind: "audio_clone_source",
       laneId: "audio",
-      label: "音色克隆来源",
-      summary: `用户反馈：「${text}」。把反馈作为音色参考用途，后续确认后再进入音频资产准备。`,
+      label: "声音参考来源",
+      summary: `用户反馈：「${text}」。把反馈作为声音参考用途，后续确认后再绑定到角色、旁白或对白表现。`,
       targetItems: audioItems,
     }));
   } else if (/音频|旁白|对白|配音|声音|tts|audio|voice/i.test(text)) {
@@ -424,8 +424,8 @@ function deltasForTurn(workspace: StoryDiscussionWorkspace, turn: StoryDiscussio
       turn,
       kind: "audio_usage_note",
       laneId: "audio",
-      label: "音频用途",
-      summary: `用户反馈：「${text}」。把反馈作为音频用途说明，后续确认后再绑定到分镜或角色。`,
+      label: "声音用途",
+      summary: `用户反馈：「${text}」。把反馈作为声音用途说明，后续确认后再绑定到分镜或角色。`,
       targetItems: audioItems,
     }));
   }
@@ -549,7 +549,7 @@ export function buildStoryDiscussionWorkspace(input: BuildStoryDiscussionWorkspa
         focus: "general",
         createdAt,
         text: input.session.workspace.scriptReady
-          ? "我已经把脚本、素材和分镜草案整理出来了。你可以直接说想调整角色、场景、音频或分镜。"
+          ? "我已经把脚本、素材和分镜草案整理出来了。你可以直接说想调整角色、场景、声音或分镜。"
           : "先放入脚本，我再帮你拆分镜和绑定素材。",
         sourceRefs: [`director_session:${input.session.sessionId}`],
         rawTextMayBecomeProjectFact: false,

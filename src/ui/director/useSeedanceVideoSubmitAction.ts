@@ -309,7 +309,7 @@ export function useSeedanceVideoSubmitAction({
       const nextState: SeedanceVideoSubmitActionState = {
         status: "blocked",
         message: options.videoPermissionContract.mode === "plan_only"
-          ? "当前只规划，本轮不提交视频。"
+          ? "当前只整理，本轮不提交视频。"
           : "当前先做参考，视频等你确认。",
       };
       setActionState(nextState);

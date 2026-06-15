@@ -94,12 +94,12 @@ function assetActionState(result: ProjectImage2AssetGenerationResult): Image2Ass
 
 function friendlyAssetGenerationError(error: unknown) {
   const raw = error instanceof Error ? error.message : "";
-  if (/key|api|token|credential|unauthor/i.test(raw)) return "先去设置里连接生图服务，然后再补参考。";
+  if (/key|api|token|credential|unauthor/i.test(raw)) return "先去设置里连接生图服务，然后再生成参考。";
   if (/timeout|timed out|network|fetch|socket|ECONN|ENOTFOUND|ETIMEDOUT/i.test(raw)) {
     return "参考生成暂时中断。已生成的内容会保留，可以稍后重试。";
   }
   if (/未选择项目|未同步|连接项目失败|项目文件已打开|请选择|project/i.test(raw)) {
-    return "先打开或新建本地项目，再补参考。";
+    return "先打开或新建本地项目，再生成参考。";
   }
   return raw || "参考生成失败，可以稍后重试。";
 }

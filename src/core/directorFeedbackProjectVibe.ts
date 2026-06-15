@@ -64,6 +64,15 @@ function plannerRoleBinding(
   binding: ProjectVibeDocument["assets"][number]["roleBinding"],
 ): StoryboardReferenceRoleBinding | undefined {
   if (!binding) return undefined;
+  if (binding.role === "voice_reference" || binding.role === "audio_reference") {
+    return {
+      role: "dialogue_audio",
+      useFor: binding.useFor,
+      ignoreFor: binding.ignoreFor,
+      priority: binding.priority,
+      conflictRule: binding.conflictRule,
+    };
+  }
   if (
     binding.role !== "scene_baseline"
     && binding.role !== "character_identity"
@@ -98,7 +107,10 @@ function isDialogueAudioProjectAsset(asset: ProjectVibeDocument["assets"][number
   if (asset.status === "missing" || asset.status === "rejected") return false;
   const role = clean(asset.roleBinding?.role).toLowerCase();
   const haystack = [asset.id, asset.label, asset.path, ...asset.textConstraints].map(clean).join(" ").toLowerCase();
-  return role === "dialogue_audio" || /(^|[^a-z])dialogue_audio([^a-z]|$)|对白音频|台词音频|tts/.test(haystack);
+  return role === "dialogue_audio"
+    || role === "voice_reference"
+    || role === "audio_reference"
+    || /(^|[^a-z])(dialogue_audio|voice_reference|audio_reference)([^a-z]|$)|声音参考|音色|声线|配音|对白音频|台词音频|tts/.test(haystack);
 }
 
 function transcriptFromAsset(asset: ProjectVibeDocument["assets"][number]): string | undefined {

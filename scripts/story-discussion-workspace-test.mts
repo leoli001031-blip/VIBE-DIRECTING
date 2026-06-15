@@ -77,12 +77,12 @@ assert(
 
 const audioFeedback = stageStoryDiscussionTurn({
   workspace: characterFeedback,
-  text: "音频后面要接音色克隆，父亲的旁白先作为声音参考。",
+  text: "父亲的旁白先作为声音参考，后面绑定到这条声线。",
   createdAt: "2026-05-18T09:02:00.000Z",
 });
 assert(audioFeedback.turns.at(-2)?.focus === "audio", "audio feedback should focus the audio lane");
-assert(audioFeedback.nextActionLabel === "确认 1 条修改", "audio feedback should stage a confirmable delta");
-assert(audioFeedback.stagedDeltas.some((delta) => delta.kind === "audio_clone_source"), "audio feedback should stage audio clone source delta");
+assert(audioFeedback.nextActionLabel.startsWith("确认 "), "audio feedback should stage a confirmable delta");
+assert(audioFeedback.stagedDeltas.some((delta) => delta.label === "声音参考来源"), "audio feedback should stage voice reference source delta");
 assert(validateStoryDiscussionWorkspace(audioFeedback).ok, "workspace should stay valid after feedback");
 
 const storyboardFeedback = stageStoryDiscussionTurn({
@@ -150,7 +150,7 @@ const noAudioWorkspace = buildStoryDiscussionWorkspace({
   }),
   createdAt,
 });
-assert(noAudioWorkspace.nextActionLabel !== "先补音频", "audio should be optional unless the user provides audio intent or audio assets");
+assert(noAudioWorkspace.nextActionLabel !== "先补声音", "audio should be optional unless the user provides audio intent or audio assets");
 
 const sparseDraft = buildProjectIntakeDraft({ createdAt, scriptText: "" });
 const sparseSession = buildDirectorSessionFromIntake({

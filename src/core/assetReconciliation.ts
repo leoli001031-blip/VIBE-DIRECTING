@@ -106,14 +106,24 @@ function roleText(asset: AssetRecord) {
   ].map(clean).join(" ").toLowerCase();
 }
 
+function hasVoiceReferenceSignal(value: string) {
+  return /voice_reference|audio_reference|dialogue_audio|voice|speaker|dialogue|speech|tts|音色|声音|声线|人声|语音|配音|对白|台词/.test(value);
+}
+
+function hasMusicReferenceSignal(value: string) {
+  return /music_reference|\b(bgm|music|song|score|soundtrack|eurobeat|ost)\b|背景音乐|配乐|音乐|歌曲/.test(value);
+}
+
 function assetKind(asset: AssetRecord): AssetReconciliationKind | undefined {
   const searchable = `${sourceText(asset)} ${roleText(asset)}`.toLowerCase();
-  if (/storyboard|故事板|分镜/.test(searchable)) return "storyboard_reference";
-  if (/music|bgm|配乐|歌曲|soundtrack|score/.test(searchable)) return "music_reference";
-  if (/voice|speaker|dialogue|tts|音色|声音|配音|对白|台词/.test(searchable)) return "voice_reference";
-  if (asset.type === "character" || asset.type === "scene" || asset.type === "prop" || asset.type === "style") return asset.type;
+  const hasVoiceSignal = hasVoiceReferenceSignal(searchable);
+  const hasMusicSignal = hasMusicReferenceSignal(searchable);
   const audioPath = clean(asset.path).toLowerCase();
+  if (/storyboard|故事板|分镜/.test(searchable)) return "storyboard_reference";
+  if (hasVoiceSignal) return "voice_reference";
+  if (hasMusicSignal) return undefined;
   if (/\.(wav|mp3|m4a|aac|flac|ogg)$/.test(audioPath)) return "voice_reference";
+  if (asset.type === "character" || asset.type === "scene" || asset.type === "prop" || asset.type === "style") return asset.type;
   return undefined;
 }
 
@@ -219,11 +229,6 @@ function addMerged(items: AssetReconciliationItem[], input: {
 function shotRequiresVoice(shot: ShotRecord) {
   const audio = `${clean(shot.audioUsage)} ${clean(shot.sound)}`.toLowerCase();
   return Boolean(shot.dialogueLines?.some(clean)) || /voice|dialogue|tts|配音|对白|台词|人声|旁白/.test(audio);
-}
-
-function shotRequiresMusicReference(shot: ShotRecord) {
-  const audio = `${clean(shot.audioUsage)} ${clean(shot.sound)}`.toLowerCase();
-  return /music|bgm|score|soundtrack|配乐|歌曲|音乐/.test(audio);
 }
 
 export function buildAssetRequirementsFromStory(shots: ShotRecord[]): {
@@ -332,15 +337,6 @@ export function buildAssetRequirementsFromStory(shots: ShotRecord[]): {
         reason: "镜头包含台词或配音意图，需要确认声音素材。",
       });
     }
-    if (shotRequiresMusicReference(shot)) {
-      addRequirement(requirements, {
-        kind: "music_reference",
-        label: "配乐参考",
-        shotId: shot.id,
-        source: "story",
-        reason: "音乐只用于节奏或最终混音，不交给视频模型。",
-      });
-    }
   }
 
   return {
@@ -359,7 +355,7 @@ function itemFromRequirement(requirement: AssetRequirement, candidates: Candidat
       kind: requirement.kind,
       label: requirement.label,
       status: "missing",
-      detail: "还没有找到可用素材，需要补齐或拖入项目。",
+      detail: "还没有找到可用素材，需要生成或拖入项目。",
       shotIds: requirement.shotIds,
       assetIds: [],
       confidence: "low",
@@ -440,7 +436,7 @@ function creatorSummary(summary: AssetReconciliationProjection["summary"]) {
 }
 
 function nextAction(summary: AssetReconciliationProjection["summary"]) {
-  if (!summary.total) return "继续规划";
+  if (!summary.total) return "继续整理";
   if (summary.missing > 0) return "让 AI 准备参考";
   if (summary.needsReview + summary.ambiguous > 0) return "确认素材匹配";
   return "素材已就绪";

@@ -153,10 +153,10 @@ assert(readyState.audioSettingSummary.previewEventCount === 2, "audio preview ev
 assert(readyState.audioSettingSummary.missingOutputCount === 2, "missing output count mismatch");
 assert(readyState.audioSettingSummary.providerSlotStates.length === 2, "provider slot states missing");
 assert(readyState.audioSettingSummary.providerSlotStates.every((slot) => slot.liveSubmitAllowed === false), "provider slots must keep liveSubmitAllowed false");
-assert(readyState.audioSettingSummary.ttsProviderRoutesReady === 3, "local/cloud TTS provider routes should be prepared");
-assert(readyState.audioSettingSummary.ttsLocalMaxConcurrency === 1, "local IndexTTS concurrency mismatch");
-assert(readyState.audioSettingSummary.ttsCloudMaxConcurrency === 3, "cloud TTS concurrency mismatch");
-assert(readyState.audioSettingSummary.ttsSubmitDraftCount === 0, "empty narration fixture should not create TTS submit drafts");
+assert(readyState.audioSettingSummary.ttsProviderRoutesReady === 0, "demo audio planning should not prepare local/cloud TTS provider routes");
+assert(readyState.audioSettingSummary.ttsLocalMaxConcurrency === 0, "demo audio planning should not expose local TTS concurrency");
+assert(readyState.audioSettingSummary.ttsCloudMaxConcurrency === 0, "demo audio planning should not expose cloud TTS concurrency");
+assert(readyState.audioSettingSummary.ttsSubmitDraftCount === 0, "demo audio planning should not create TTS submit drafts");
 assert(readyState.videoProviderAudioPolicy.noBgmForVideoProvider === true, "video provider no-BGM policy missing");
 assert(readyState.videoProviderAudioPolicy.musicAllowed === false, "video provider musicAllowed must be false");
 assert(readyState.videoProviderAudioPolicy.bgmHandledBy === "audio_plan_or_post_import", "BGM route must stay audio plan/post import");

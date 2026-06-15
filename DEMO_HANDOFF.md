@@ -15,6 +15,10 @@ Current demo scope is frozen around the creator-facing loop:
 
 Do not expand scope before the demo is stable. TTS, music rhythm, web search, image QA, and advanced project management are follow-up lanes unless the user explicitly asks.
 
+For recording, use `docs/demo-recording-runbook.md` as the current operation
+script. This handoff file is the engineering scope summary; the runbook is the
+creator-facing demo flow.
+
 ## Fast Demo Guardrail
 
 Run this after changing planner, prompt compiler, reference generation, review tray, or minimal UI:

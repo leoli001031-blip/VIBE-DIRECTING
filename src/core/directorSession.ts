@@ -315,6 +315,36 @@ function isTimecodeLine(line: string): RegExpMatchArray | null {
   return line.match(/^\s*(\d{1,2}:\d{2}(?::\d{2})?(?:[,.]\d+)?)\s*(?:-|–|—|~|至|到|-->)\s*(\d{1,2}:\d{2}(?::\d{2})?(?:[,.]\d+)?)\s*$/u);
 }
 
+function cleanInlineStoryboardBeat(value: string): string {
+  const withoutLead = clean(value
+    .replace(/^[：:\s,，、是]+/u, "")
+    .replace(/[。！？!?；;，,\s]+$/u, ""));
+  const firstSentence = withoutLead
+    .split(/[。！？!?；;]/u)
+    .map(clean)
+    .find(Boolean) || withoutLead;
+  return clean(firstSentence
+    .replace(/(?:需要|请|希望|整体|风格|画风|要求|不需要|不要|先不要|不用|让\s*(?:Agent|AI)|由\s*(?:Agent|AI))[^。！？!?；;]*$/iu, "")
+    .replace(/[。！？!?；;，,\s]+$/u, ""));
+}
+
+function extractInlineStoryboardBeats(scriptText: string): string[] {
+  const normalized = clean(scriptText.replace(/\r?\n+/gu, " "));
+  if (!normalized) return [];
+  const markerPattern = /(?:第\s*(?:[一二三四五六七八九十]|\d{1,2})\s*(?:段|幕|镜|镜头)|镜头\s*\d{1,2}|shot\s*\d{1,2})\s*(?:是|为|[:：])?/giu;
+  const markers = Array.from(normalized.matchAll(markerPattern));
+  if (markers.length < 2) return [];
+
+  return markers
+    .map((match, index) => {
+      const start = (match.index ?? 0) + match[0].length;
+      const end = markers[index + 1]?.index ?? normalized.length;
+      return cleanInlineStoryboardBeat(normalized.slice(start, end));
+    })
+    .filter((beat) => beat.length >= 2 && !/^(?:需要|请|希望|风格|画风|要求|Agent|AI)$/iu.test(beat))
+    .slice(0, 24);
+}
+
 export function extractTimecodedStoryboardBeats(scriptText: string): TimecodedStoryboardBeat[] {
   const normalized = scriptText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
   if (!normalized) return [];
@@ -379,6 +409,8 @@ export function splitScriptIntoStoryboardBeats(scriptText: string): string[] {
   if (!normalized) return [];
   const timecodedBeats = extractTimecodedStoryboardBeats(normalized);
   if (timecodedBeats.length) return timecodedBeats.map((beat) => beat.text);
+  const inlineBeats = extractInlineStoryboardBeats(normalized);
+  if (inlineBeats.length >= 2) return inlineBeats;
   const withoutMarkdown = normalized
     .split(/\n/u)
     .map((line) => line.replace(/^#{1,6}\s+/u, "").replace(/^[-*+]\s+/u, "").trim())

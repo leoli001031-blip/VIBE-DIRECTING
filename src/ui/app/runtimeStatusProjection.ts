@@ -492,7 +492,7 @@ function motionTypeLabel(type?: string) {
     reveal_or_occlusion: "揭示",
     transform_or_state_change: "状态变化",
   };
-  return type ? labels[type] || type : "未规划";
+  return type ? labels[type] || type : "未整理";
 }
 
 function motionContractFromGate(gate?: VideoReadinessGateState): MotionEndpointContract | undefined {
@@ -566,7 +566,7 @@ export function motionContractSummaryForGate(gate?: VideoReadinessGateState, pla
   return {
     shotId: gate?.shotId || plan?.shotId || "project",
     motionType: "missing",
-    motionLabel: "未规划",
+    motionLabel: "未整理",
     endFrameRequired: false,
     contractStatus: "missing",
     bodyMechanicsRequired: false,

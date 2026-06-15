@@ -174,11 +174,6 @@ import {
 } from "./core/realImage2Gate";
 import { formatShotNumber } from "./ui/director/MinimalStoryFlow";
 import { MinimalTopNav } from "./ui/director/MinimalTopNav";
-import { MinimalDirectorStatusDot } from "./ui/director/MinimalDirectorStatusDot";
-import {
-  DirectorProgressStrip,
-  buildDirectorProgressStripState,
-} from "./ui/director/DirectorProgressStrip";
 import { DirectorMode } from "./ui/director/DirectorModeShell";
 import { MinimalAssetLibrary } from "./ui/director/MinimalAssetLibrary";
 import type {
@@ -219,7 +214,6 @@ import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { CompactList, Metric, StatusPill, statusLabel } from "./ui/common/DiagnosticsPrimitives";
 import type { ProjectFactsUiMode, ProjectFactsUiSummary } from "./ui/diagnostics/ProjectFactsStrip";
 import {
-  buildLocalOrchestratorUiSummary,
   firstMotionEndpointNotice,
   getImagePipeline,
   getVideoExecutionPreview,
@@ -363,7 +357,7 @@ function projectDraftUsesBrowserStorage(target: ProjectVibeDraftTarget, mode?: s
 }
 
 function projectDraftRecordLabel(target: ProjectVibeDraftTarget, mode?: string) {
-  return projectDraftUsesBrowserStorage(target, mode) ? "浏览器草稿" : "本地项目";
+  return projectDraftUsesBrowserStorage(target, mode) ? "未保存草稿" : "本地项目";
 }
 
 function projectDraftLoadingLabel(target: ProjectVibeDraftTarget, mode?: string) {
@@ -376,7 +370,7 @@ function projectDraftRestoredLabel(target: ProjectVibeDraftTarget, mode: string 
 }
 
 function projectDraftMissingLabel(target: ProjectVibeDraftTarget, mode?: string) {
-  return projectDraftUsesBrowserStorage(target, mode) ? "浏览器草稿待开始" : "本地项目待保存";
+  return projectDraftUsesBrowserStorage(target, mode) ? "未保存草稿待开始" : "本地项目待保存";
 }
 
 function looksLikeProjectInstruction(value?: string) {
@@ -610,7 +604,7 @@ function buildProjectFactsUiSummary(
 
 function exportStatusLabel(status: string) {
   if (status === "ready") return "可导出";
-  if (status === "blocked") return "需要补齐";
+  if (status === "blocked") return "需要处理";
   if (status === "draft_only") return "可预览";
   return "已计划";
 }
@@ -1173,17 +1167,17 @@ function findAudioPlan(audioPlanning: AudioPlanningState, shotId?: string) {
 }
 
 function voiceSourceLabel(audioPlanning: AudioPlanningState, sourceId?: string | null) {
-  if (!sourceId) return "none";
+  if (!sourceId) return "未绑定";
   return audioPlanning.voiceSourceRegistry.sources.find((source) => source.id === sourceId)?.label || sourceId;
 }
 
 function audioPlanBadges(plan?: AudioPlan) {
-  if (!plan) return ["Audio planned"];
+  if (!plan) return ["声音已规划"];
   return [
-    plan.ambienceBrief.trim() ? "Ambience" : undefined,
-    plan.narrationText.trim() ? "Narration" : undefined,
-    plan.dialogueLines.length ? "Dialogue" : undefined,
-    plan.musicAllowed ? "Music planned" : "No music",
+    plan.ambienceBrief.trim() ? "环境声" : undefined,
+    plan.narrationText.trim() ? "旁白" : undefined,
+    plan.dialogueLines.length ? "对白" : undefined,
+    "视频不生成配乐",
   ].filter((item): item is string => Boolean(item));
 }
 
@@ -1663,10 +1657,10 @@ export function EnvelopePreview({ task }: { task?: TaskRuntimeView }) {
 }
 
 export function ShotAudioInspector({ audioPlanning, selectedShot }: { audioPlanning: AudioPlanningState; selectedShot?: ShotRecord }) {
-  if (!selectedShot) return <p className="muted-copy">Select a shot to inspect its audio plan.</p>;
+  if (!selectedShot) return <p className="muted-copy">先点选一个镜头，再查看声音参考。</p>;
 
   const plan = findAudioPlan(audioPlanning, selectedShot.id);
-  if (!plan) return <p className="muted-copy">No audio plan found for {selectedShot.id}.</p>;
+  if (!plan) return <p className="muted-copy">这个镜头还没有声音参考计划。</p>;
 
   return (
     <div className="shot-audio-inspector">
@@ -1676,29 +1670,23 @@ export function ShotAudioInspector({ audioPlanning, selectedShot }: { audioPlann
         ))}
       </div>
       <div className="field-grid compact">
-        <label>Narration</label>
-        <span>{plan.narrationText || "none planned"}</span>
-        <label>Dialogue</label>
-        <span>{plan.dialogueLines.length ? `${plan.dialogueLines.length} line(s)` : "none planned"}</span>
-        <label>Voice</label>
+        <label>旁白</label>
+        <span>{plan.narrationText || "暂未设置"}</span>
+        <label>对白</label>
+        <span>{plan.dialogueLines.length ? `${plan.dialogueLines.length} 句` : "暂未设置"}</span>
+        <label>声音参考</label>
         <span>{voiceSourceLabel(audioPlanning, plan.voiceSourceId)}</span>
-        <label>Delivery</label>
+        <label>表演提示</label>
         <span>{plan.deliveryNotes}</span>
-        <label>Ambience</label>
+        <label>环境声</label>
         <span>{plan.ambienceBrief}</span>
-        <label>BGM</label>
-        <span>{plan.bgmProfile}</span>
-        <label>Music</label>
-        <span>{plan.musicAllowed ? "allowed in audio plan" : "not allowed for video provider"}</span>
-        <label>Timing</label>
-        <span>{formatDuration(plan.targetDurationSeconds)} · fade {plan.fadeInSeconds || 0}s/{plan.fadeOutSeconds || 0}s</span>
-        <label>Output</label>
-        <span>{plan.outputPath || "missing placeholder output"}</span>
-        <label>Jobs</label>
-        <span>TTS {plan.linkedTtsJobId || "none"} · music {plan.linkedMusicJobId || "none"}</span>
-        <label>QA</label>
+        <label>配乐边界</label>
+        <span>视频模型不生成配乐；声音参考只用于锁定角色声线。</span>
+        <label>时长</label>
+        <span>{formatDuration(plan.targetDurationSeconds)} · 淡入 {plan.fadeInSeconds || 0}s / 淡出 {plan.fadeOutSeconds || 0}s</span>
+        <label>复核</label>
         <span>{plan.audioQaStatus}</span>
-        <label>No BGM</label>
+        <label>视频声音</label>
         <span>{audioPlanning.videoProviderPolicy.summary}</span>
       </div>
       {plan.dialogueLines.length > 0 && (
@@ -1754,7 +1742,7 @@ function initialBrowserProjectDraftStorageKey() {
   if (typeof window === "undefined") return `${browserProjectDraftStorageKeyPrefix}:session`;
   const params = new URLSearchParams(window.location.search);
   const caseId = params.get("case")?.trim();
-  const explicitFresh = params.get("fresh") === "1" || params.get("new") === "1";
+  const explicitFresh = isFreshProjectSessionRequested();
   const sessionId = explicitFresh
     ? String(Date.now())
     : params.get("ts")?.trim() || params.get("session")?.trim() || String(Date.now());
@@ -1762,6 +1750,12 @@ function initialBrowserProjectDraftStorageKey() {
     return `${browserProjectDraftStorageKeyPrefix}:session:${caseId || "fresh"}:${sessionId}`;
   }
   return `${browserProjectDraftStorageKeyPrefix}:session:${sessionId}`;
+}
+
+function isFreshProjectSessionRequested() {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.get("fresh") === "1" || params.get("new") === "1";
 }
 
 function createEmptyProjectVibeForProjectRoot(projectRoot?: string, displayName?: string): ProjectVibeDocument {
@@ -1812,6 +1806,7 @@ function readRememberedProjectSelection(): ProjectRootDialogSelection | undefine
 function shouldAutoRestoreRememberedProject() {
   if (typeof window === "undefined") return false;
   try {
+    if (isFreshProjectSessionRequested()) return false;
     return window.localStorage.getItem(autoRestoreRememberedProjectStorageKey) === "true";
   } catch {
     return false;
@@ -2154,6 +2149,7 @@ function App() {
   });
   const [recentProjectSelections, setRecentProjectSelections] = useState<RememberedProjectSelection[]>(() => readRecentProjectSelections());
   const rememberedProjectRestoreAttemptedRef = useRef(false);
+  const freshProjectSessionResetAttemptedRef = useRef(false);
   const browserProjectDraftStorageKeyRef = useRef(initialBrowserProjectDraftStorageKey());
   const browserDraftHasNoLocalProject = projectFileSelection.status === "unavailable";
   const localProjectReadyForUi = projectFileSelection.status === "selected"
@@ -2430,7 +2426,7 @@ function App() {
     : browserDraftHasNoLocalProject
       ? {
         status: "unbound" as const,
-        message: projectFileSelection.detail || "浏览器草稿，生成参考或提交视频前需要选择本地项目。",
+        message: projectFileSelection.detail || "未保存草稿，生成参考或提交视频前需要选择本地项目。",
       }
       : runtimeProjectBinding.status === "bound"
         ? runtimeProjectBinding
@@ -3075,7 +3071,7 @@ function App() {
     if (effectiveRuntimeProjectBinding.status !== "bound") {
       return {
         label: "当前故事还没有可播放素材",
-        detail: "素材回流前，会先显示当前故事流的待补齐位置。",
+        detail: "素材回来前，会先显示当前故事还缺哪些画面。",
       };
     }
     if (currentProjectPreviewProjection.available) {
@@ -3115,23 +3111,6 @@ function App() {
     workbenchSelectedShotId,
     workbenchSelectedShotIds.length,
   ]);
-  const workbenchProgressState = useMemo(() => {
-    const state = buildDirectorProgressStripState(buildLocalOrchestratorUiSummary(workbenchRuntimeState));
-    if (!isEmptyFallbackWorkbench) return state;
-    return {
-      ...state,
-      label: "等待开始",
-      detail: "先写想法或拖入素材",
-      tone: "preparing" as const,
-      total: 0,
-      preparing: 0,
-      working: 0,
-      review: 0,
-      blocked: 0,
-      complete: 0,
-      segments: state.segments.map((segment) => ({ ...segment, value: 0 })),
-    };
-  }, [isEmptyFallbackWorkbench, workbenchRuntimeState]);
   const workbenchAssetReadOnlyDetail = useCurrentProjectWorkbenchProjectionForRuntime
     && currentProjectWorkbenchProjection.assets.readOnlyProjection
     ? currentProjectWorkbenchProjection.assets.detail
@@ -3277,8 +3256,8 @@ function App() {
       return "项目未写入：这次修改还没形成可执行任务，请说得再具体一点。";
     }
     if (normalized.includes("knowledge_trace")) return "项目未写入：缺少项目依据，请先重新整理故事或参考。";
-    if (normalized.includes("free_text")) return "项目未写入：不能把原话直接当任务，请先让 AI 整理计划。";
-    if (normalized.includes("provider") || normalized.includes("submit")) return "项目未写入：这次像是在直接生成，请先切到只规划或可提交视频。";
+    if (normalized.includes("free_text")) return "项目未写入：不能把原话直接当任务，请先让 AI 整理成草稿。";
+    if (normalized.includes("provider") || normalized.includes("submit")) return "项目未写入：这次像是在直接生成，请先切到只整理或可提交视频。";
     if (normalized.includes("save") || normalized.includes("保存")) return "项目未写入：保存失败，请检查项目文件夹后重试。";
     return "项目未写入：需要复核后再试。";
   }
@@ -3380,7 +3359,7 @@ function App() {
       const message = newVideoDraftFriendlyError(stagedTransaction.blockedReasons);
       prototypeProjectDraftStatusRef.current = ({
         status: "error",
-        label: "草案还需要补齐",
+        label: "草案还需要处理",
         targetId: draftTargetId,
         error: message,
       });
@@ -3773,10 +3752,10 @@ function App() {
           label: promotionMode
             ? "锁定前还需要完整复核凭证"
             : retryMode
-              ? "重试前需要补齐镜头信息"
+              ? "重试前需要补上镜头信息"
               : rejectMode
-                ? "拒绝前需要补齐复核信息"
-                : "需要补齐复核信息",
+                ? "拒绝前需要补上复核信息"
+                : "需要补上复核信息",
           projectVibeAdded: false,
           waitingReview: true,
           status: "needs_review",
@@ -4435,15 +4414,15 @@ function App() {
     setProjectSelectionStatus("idle");
     setProjectFileSelection({
       status: "unavailable",
-      label: "浏览器草稿",
-      detail: "先规划故事；生成参考或提交视频前再选择本地项目。",
+      label: "未保存草稿",
+      detail: "可以先整理草稿；当前浏览器不能打开本地文件夹，生成参考或提交视频前请在桌面 App 选择项目。",
     });
     clearProjectSwitchEphemera();
     setLoadedPrototypeProjectDraftTargetId(targetId);
     applyProjectVibeProjectState(createEmptyProjectVibeForProjectRoot(undefined, displayName), target);
-    setProjectRealChainState({ status: "unavailable", message: "浏览器草稿，生成参考或提交视频前需要选择本地项目。" });
-    setProjectImage2BatchState({ status: "unavailable", message: "浏览器草稿，生成参考前需要选择本地项目。" });
-    setProjectImage2OneShotState({ status: "unavailable", message: "浏览器草稿，生成画面前需要选择本地项目。" });
+    setProjectRealChainState({ status: "unavailable", message: "可以先整理草稿；生成参考或提交视频前，请在桌面 App 选择项目。" });
+    setProjectImage2BatchState({ status: "unavailable", message: "可以先整理草稿；生成参考前，请在桌面 App 选择项目。" });
+    setProjectImage2OneShotState({ status: "unavailable", message: "可以先整理草稿；生成画面前，请在桌面 App 选择项目。" });
     setExportActionState({ status: "idle", label: "导出待准备" });
     setDirectorView("story");
     return target;
@@ -4496,8 +4475,8 @@ function App() {
     if (!canChooseProjectRootFromDialog) {
       setProjectFileSelection({
         status: "unavailable",
-        label: "浏览器草稿",
-        detail: "当前环境没有项目选择器",
+        label: "未保存草稿",
+        detail: "可以先整理草稿；生成参考或提交视频前请在桌面 App 选择项目。",
       });
       return;
     }
@@ -4572,6 +4551,40 @@ function App() {
     setActiveSectionId(undefined);
     setDirectorView("story");
   }
+
+  useEffect(() => {
+    if (!isFreshProjectSessionRequested() || freshProjectSessionResetAttemptedRef.current) return undefined;
+    freshProjectSessionResetAttemptedRef.current = true;
+    rememberedProjectRestoreAttemptedRef.current = true;
+
+    let cancelled = false;
+    async function resetFreshProjectSession() {
+      try {
+        await forgetCurrentProject();
+      } catch {
+        // The UI reset below is still the source of truth for a fresh local session.
+      }
+      if (cancelled) return;
+      resetAllProjectState();
+      setProjectPathInput("");
+      setProjectSelectionStatus("idle");
+      setProjectRealChainState({ status: "unavailable", message: "新项目待开始。" });
+      setProjectImage2BatchState({ status: "unavailable", message: "新项目待开始。" });
+      setProjectImage2OneShotState({ status: "unavailable", message: "新项目待开始。" });
+    }
+
+    void resetFreshProjectSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    forgetCurrentProject,
+    setProjectImage2BatchState,
+    setProjectImage2OneShotState,
+    setProjectPathInput,
+    setProjectRealChainState,
+    setProjectSelectionStatus,
+  ]);
 
   async function forgetProjectFileRoot() {
     const projectRootToForget = projectFileSelection.status === "selected" ? projectFileSelection.projectRoot : undefined;
@@ -4742,8 +4755,8 @@ function App() {
           hasProjectVibe: selection.hasProjectVibe,
         }))}
         canCreateProject={projectFileSelection.status !== "choosing"}
-        createProjectTitle={canCreateLocalProjectFromDialog ? "新建本地项目" : "新建浏览器草稿"}
-        createProjectAriaLabel={canCreateLocalProjectFromDialog ? "新建本地项目" : "新建浏览器草稿"}
+        createProjectTitle="新建项目"
+        createProjectAriaLabel="新建项目"
         onCreateProject={() => { void createNewVideoLocalProject(undefined, undefined); }}
         canChooseProjectRoot={canChooseProjectRootFromDialog && projectFileSelection.status !== "choosing"}
         onChooseProjectRoot={chooseProjectFileRoot}
@@ -4794,11 +4807,6 @@ function App() {
           projectContentReady={projectContentReadyForUi}
           directorView={directorView}
           activeSectionId={resolvedActiveSectionId}
-          statusNode={
-            <MinimalDirectorStatusDot
-              state={workbenchProgressState}
-            />
-          }
           assetLibraryNode={
             <MinimalAssetLibrary
               library={workbenchAssetLibrary}
@@ -4826,12 +4834,14 @@ function App() {
           onApproveReviewItem={(item) => applyCreatorReviewDecision(item, "approve")}
           onRejectReviewItem={(item) => applyCreatorReviewDecision(item, "reject")}
           onLockReviewItem={(item, target) => applyCreatorReviewDecision(item, "lock", target)}
+          onSelectAsset={setSelectedAssetId}
           onOpenDirectorView={openDirectorView}
           onNewVideoDraftConfirmed={confirmNewVideoProjectVibeDraft}
           onCreateLocalProject={(draft) => createNewVideoLocalProject(draft, undefined, { reserveForImmediateSave: true })}
           localProjectReady={localProjectReadyForUi}
           localProjectBusy={projectFileSelection.status === "choosing"}
           canCreateLocalProject={canCreateLocalProjectFromDialog && projectFileSelection.status !== "choosing"}
+          newVideoComposerResetKey={isFreshProjectSessionRequested() ? "fresh-session" : undefined}
           onProjectStoreApplyPlanReady={(plan) => {
             setLatestProjectStoreApplyPlan(plan);
           }}

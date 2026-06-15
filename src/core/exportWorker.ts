@@ -1188,7 +1188,7 @@ function referenceEvidenceSummary(evidence: DemoPackageReferenceEvidence | undef
     safe.sceneReferencePath ? `场景/天气参考：${safe.sceneReferencePath}` : "",
     safe.characterReferencePaths?.length ? `角色参考：${safe.characterReferencePaths.join(", ")}` : "",
     safe.propReferencePaths?.length ? `道具参考：${safe.propReferencePaths.join(", ")}` : "",
-    safe.dialogueAudioPath ? `音频参考：${safe.dialogueAudioPath}` : "",
+    safe.dialogueAudioPath ? `声音参考：${safe.dialogueAudioPath}` : "",
     directorStrategySummary(safe.directorStrategy),
     safe.userFacingSummary || "",
   ].filter(Boolean);

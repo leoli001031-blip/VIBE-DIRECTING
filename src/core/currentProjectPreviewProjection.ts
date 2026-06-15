@@ -24,6 +24,7 @@ export interface CurrentProjectPreviewItemInput {
   providerOutputSha256?: string;
   promptText?: string;
   promptPath?: string;
+  referencePaths?: string[];
   promptHash?: string;
   durationSeconds?: number;
   duration_seconds?: number;
@@ -129,6 +130,7 @@ export interface CurrentProjectPreviewQueueItem extends PreviewQueueItem {
   outputSha256?: string;
   promptText?: string;
   promptPath?: string;
+  referencePaths?: string[];
   promptHash?: string;
   previewStatus?: string;
   runtimeTruthStatus?: string;
@@ -375,6 +377,8 @@ function relayQueuePreviewItems(relayQueue: VideoRelayQueueState | undefined): C
         status: relayItemStatusForPreview(item),
         videoStatus: relayItemStatusForPreview(item),
         submitId: item.submitId,
+        promptPath: item.promptPath,
+        referencePaths: item.referencePaths,
         durationSeconds: item.durationSeconds,
         reviewRequired: item.status === "success",
         outputExists: item.status === "success" && Boolean(localVideoPath),
@@ -407,8 +411,9 @@ function mergeRuntimePreviewItems(
       outputHash: item.outputHash,
       outputSha256: item.outputSha256,
       promptText: item.promptText,
-      promptPath: item.promptPath,
-      promptHash: item.promptHash,
+      promptPath: item.promptPath || relay.promptPath,
+      referencePaths: item.referencePaths?.length ? item.referencePaths : relay.referencePaths,
+      promptHash: item.promptHash || relay.promptHash,
     };
   });
   return [
@@ -543,6 +548,7 @@ export function buildCurrentProjectPreviewProjection(
       outputSha256: stringValue(item.outputSha256) || stringValue(item.providerOutputSha256) || stringValue(clip?.outputSha256) || stringValue(clip?.providerOutputSha256),
       promptText: stringValue(item.promptText),
       promptPath: stringValue(item.promptPath),
+      referencePaths: Array.isArray(item.referencePaths) ? item.referencePaths : undefined,
       promptHash: stringValue(item.promptHash),
       previewStatus: item.previewStatus || clip?.status,
       runtimeTruthStatus: item.runtimeTruthStatus,

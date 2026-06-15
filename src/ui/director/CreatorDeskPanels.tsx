@@ -138,7 +138,6 @@ function inboxKindLabel(kind: CreatorDeskProjection["projectInbox"]["items"][num
   if (kind === "scene") return "场景";
   if (kind === "prop") return "道具";
   if (kind === "storyboard") return "故事板";
-  if (kind === "music") return "配乐";
   if (kind === "voice") return "声音";
   if (kind === "reference") return "参考";
   return "待判断";
@@ -237,6 +236,7 @@ function agentSkillPills(projection: CreatorDeskProjection) {
 }
 
 type AssetReconciliationItem = NonNullable<CreatorDeskProjection["assetReconciliation"]>["items"][number];
+type ProjectInboxItem = CreatorDeskProjection["projectInbox"]["items"][number];
 
 function assetReconciliationStatusLabel(status: AssetReconciliationItem["status"]) {
   if (status === "matched") return "已匹配";
@@ -253,7 +253,7 @@ function assetReconciliationKindLabel(kind: AssetReconciliationItem["kind"]) {
   if (kind === "prop") return "道具";
   if (kind === "storyboard_reference") return "故事板";
   if (kind === "voice_reference") return "声音";
-  if (kind === "music_reference") return "配乐";
+  if (kind === "music_reference") return "后期声音";
   return "风格";
 }
 
@@ -270,6 +270,19 @@ function assetReconciliationItemsForView(items: AssetReconciliationItem[]) {
     .filter((item) => item.status !== "unused")
     .sort((left, right) => priority[left.status] - priority[right.status])
     .slice(0, 6);
+}
+
+function inboxCorrectionHint(item: ProjectInboxItem) {
+  const target = item.shotIds?.length
+    ? `，已关联 ${item.shotIds.slice(0, 2).map((id) => `镜头 ${formatShotNumber(id)}`).join("、")}${item.shotIds.length > 2 ? ` 等 ${item.shotIds.length} 个镜头` : ""}`
+    : "";
+  if (item.kind === "voice") return `点选后可说：这是某个角色的声音参考${target}`;
+  if (item.kind === "character") return `点选后可说：这是哪个角色${target}`;
+  if (item.kind === "scene") return `点选后可说：这是哪个场景或天气${target}`;
+  if (item.kind === "prop") return `点选后可说：这是哪个道具${target}`;
+  if (item.kind === "storyboard") return `点选后可说：这张故事板给哪一段用${target}`;
+  if (item.kind === "script") return "点选后可说：这是脚本、台词还是修改意见";
+  return `点选后可说：这个素材应该当什么用${target}`;
 }
 
 function itemLabel(item: CreatorReviewTrayItem) {
@@ -398,6 +411,7 @@ export function CreatorDeskPanels({
   onRejectItem,
   onLockItem,
   onSelectItem,
+  onSelectInboxItem,
   onOpenView,
 }: {
   projection: CreatorDeskProjection;
@@ -425,6 +439,7 @@ export function CreatorDeskPanels({
   onRejectItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
   onLockItem?: (item: CreatorReviewTrayItem, target: CreatorReviewLockTarget) => void | Promise<void>;
   onSelectItem?: (item: CreatorReviewTrayItem) => void;
+  onSelectInboxItem?: (item: ProjectInboxItem) => void;
   onOpenView?: (view: DirectorView) => void;
 }) {
   const { agentStage, agentCommand, scriptPlanner, batchGeneration, framePlan, videoStage, reviewTray } = projection;
@@ -441,7 +456,7 @@ export function CreatorDeskPanels({
   const referenceGenerationBusy = referenceGenerationAction?.status === "running";
   const generationActionBlocked = Boolean(batchGeneration.canRetryMissing && !onRetryMissing);
   const projectRequirement = agentProjectRequirementCopy({ localProjectBusy, canCreateLocalProject });
-  const browserDraftLabel = localProjectBusy ? projectRequirement.label : "浏览器草稿";
+  const browserDraftLabel = localProjectBusy ? projectRequirement.label : "未保存草稿";
   const nextActionCopy = !localProjectReady
     ? browserDraftLabel
     : generationActionBlocked
@@ -451,7 +466,7 @@ export function CreatorDeskPanels({
     ? preflight
     : {
         ...preflight,
-        summary: "当前是浏览器草稿，只能继续规划；生成参考或提交视频需要在桌面 App 里打开或新建本地项目。",
+        summary: "当前是未保存草稿，只能继续整理；生成参考或提交视频需要在桌面 App 里打开或新建本地项目。",
         nextAction: "选择本地项目",
       };
   const referenceNotice = referenceGenerationAction?.message && referenceGenerationAction.status !== "idle"
@@ -541,9 +556,18 @@ export function CreatorDeskPanels({
           <div>
             {projectInbox.items.map((item) => (
               <article key={item.id} className={item.needsReview ? "needs_review" : "approved"}>
-                <span>{inboxKindLabel(item.kind)}</span>
-                <strong>{item.label}</strong>
-                <small>{item.suggestedBinding}</small>
+                <button
+                  type="button"
+                  className="creator-inbox-select"
+                  disabled={!onSelectInboxItem || (!item.assetId && !(item.shotIds && item.shotIds.length))}
+                  onClick={() => onSelectInboxItem?.(item)}
+                  aria-label={`选择素材${item.label}：${inboxCorrectionHint(item)}`}
+                >
+                  <span>{inboxKindLabel(item.kind)}</span>
+                  <strong>{item.label}</strong>
+                  <small>{item.suggestedBinding}</small>
+                </button>
+                <small className="creator-inbox-correction">{inboxCorrectionHint(item)}</small>
               </article>
             ))}
           </div>
@@ -617,7 +641,7 @@ export function CreatorDeskPanels({
                     {canRetry && (
                       <button
                         onClick={() => item.status === "needs_review" ? onRetryItem?.(item) : (onRetryMissing?.() || onRetryItem?.(item))}
-                        aria-label={`${itemLabel(item)}：重试补齐`}
+                        aria-label={`${itemLabel(item)}：重新生成`}
                       >
                         <RefreshCw size={13} />
                         重试
@@ -781,7 +805,7 @@ export function CreatorDeskPanels({
                 <small>{videoGeneration.canResume ? "底部按钮可以查询结果，不会重复提交" : `即梦常见约 ${jimengExpectedWaitMinutes} 分钟，可以离开后恢复查询`}</small>
               )}
               {videoSendAction && videoActionRelevant && (
-                <small>{videoCanResume ? "需要取回结果时，用底部主按钮。" : "需要提交视频时，用底部主按钮。"}</small>
+                <small>{videoCanResume ? "需要取回结果时，点底部发送。" : "需要提交视频时，点底部发送。"}</small>
               )}
             </div>
             {videoSendAction?.message && videoActionRelevant && (
@@ -846,7 +870,7 @@ export function CreatorDeskPanels({
                           {canRetry && (
                             <button
                               onClick={() => item.status === "needs_review" ? onRetryItem?.(item) : (onRetryMissing?.() || onRetryItem?.(item))}
-                              aria-label={`${itemLabel(item)}：重试补齐`}
+                              aria-label={`${itemLabel(item)}：重新生成`}
                             >
                               <RefreshCw size={13} />
                               重试

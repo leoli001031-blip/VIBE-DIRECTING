@@ -204,7 +204,7 @@ function agentCapabilityItems(
       id: "reference",
       label: "生成参考",
       value: !contract.referenceGenerationAllowed
-        ? "当前只规划"
+        ? "当前只整理"
         : !localProjectReady
           ? "先保存项目"
         : availability.referenceGenerationReady
@@ -365,7 +365,7 @@ function composerAttachmentKind(file: File): ComposerAttachmentKind {
 function composerAttachmentLabel(kind: ComposerAttachmentKind) {
   if (kind === "script") return "脚本";
   if (kind === "image") return "图片";
-  if (kind === "audio") return "音频";
+  if (kind === "audio") return "声音";
   if (kind === "video") return "视频";
   return "文件";
 }
@@ -386,7 +386,7 @@ function compactAgentSelectionHint(value: string) {
 
 function composerAttachmentUseHint(kind: ComposerAttachmentKind) {
   if (kind === "image") return "用途：作为参考素材，等待 Agent 归类为角色、场景、道具或镜头参考。";
-  if (kind === "audio") return "用途：作为音频素材，等待 Agent 判断为配乐参考或声音参考。";
+  if (kind === "audio") return "用途：作为声音参考，等待 Agent 绑定到角色、旁白或对白。";
   if (kind === "video") return "用途：作为视频参考，等待 Agent 提取节奏、构图或风格信息。";
   if (kind === "file") return "用途：作为补充材料，等待 Agent 先整理再确认。";
   return "";
@@ -588,7 +588,7 @@ function agentToolPreflightLabel(handoff: DirectorAgentToolHandoff) {
   if (blockers.includes("project_not_ready")) return "需要本地项目";
   if (blockers.includes("web_search_not_ready")) return "先开启查资料";
   if (blockers.includes("reference_generation_not_ready")) return "先配置生图";
-  if (blockers.includes("reference_generation_not_allowed")) return "当前只规划";
+  if (blockers.includes("reference_generation_not_allowed")) return "当前只整理";
   if (blockers.includes("video_submit_not_ready")) return "先准备视频";
   if (blockers.includes("video_submit_not_allowed")) return "当前不能提交";
   if (blockers.includes("export_not_ready")) return "先准备导出";
@@ -613,8 +613,8 @@ function agentExpectedReceiptLabel(expectedReceipt: DirectorAgentToolHandoff["ex
 }
 
 function agentExecutionModeLabel(action: DirectorAgentActionEnvelope) {
-  if (action.executionContract.mode === "plan_only") return "只规划";
-  if (action.executionContract.mode === "reference_allowed") return "可做参考";
+  if (action.executionContract.mode === "plan_only") return "只整理";
+  if (action.executionContract.mode === "reference_allowed") return "可生成参考";
   return "可提交视频";
 }
 
@@ -908,7 +908,7 @@ function referenceGenerationToolOutcome(value: unknown): ConfirmedAgentToolRunOu
   }
   return {
     status: "completed",
-    label: state?.message || "参考已开始补齐",
+    label: state?.message || "参考已开始生成",
     projectRecordPreserved: true,
     waitingReview: true,
     previewReady: false,
@@ -1061,7 +1061,7 @@ function confirmedToolRunResult(
     };
   }
   if (handoff.handler === "image2_reference_generation") {
-    const label = toolRunOutcome?.status === "completed" ? toolRunOutcome.label : "参考已开始补齐";
+    const label = toolRunOutcome?.status === "completed" ? toolRunOutcome.label : "参考已开始生成";
     return {
       status: toolRunOutcome?.resultStatus || "running",
       result: {
@@ -1311,7 +1311,7 @@ export function MinimalAgentPanel({
   const displayedCompactSelectionHint = compactAgentSelectionHint(displayedSelectionHint);
   const inputPlaceholder = hasActiveSelection
     ? "说这块怎么改..."
-    : "写脚本、提需求，或拖入图片/音频/文档。";
+    : "写脚本、提需求，或拖入图片/声音参考/文档。";
   const liveSelectionChips = selectionContextChips({
     shot,
     selectedShots,
@@ -1387,8 +1387,8 @@ export function MinimalAgentPanel({
   const videoPermissionBlockedByContract = !videoCanResume && !agentVideoPermissionAllowsVideo(currentVideoPermissionContract);
   const videoPermissionBlockedByProject = !localProjectReadyForTools;
   const videoPermissionModeItems: Array<{ mode: AgentVideoPermissionMode; label: string }> = [
-    { mode: "plan_only", label: "只规划" },
-    { mode: "reference_allowed", label: "可做参考" },
+    { mode: "plan_only", label: "只整理" },
+    { mode: "reference_allowed", label: "可生成参考" },
     { mode: "video_allowed", label: "可提交视频" },
   ];
   const realSampleLabel = realSampleBusy
@@ -1540,7 +1540,7 @@ export function MinimalAgentPanel({
     setLocalPrototypeAgentDemo({
       status: "ready",
       result: {
-        label: draft.action.status === "blocked" ? "待补充计划已恢复" : "待确认计划已恢复",
+        label: draft.action.status === "blocked" ? "待处理计划已恢复" : "待确认计划已恢复",
         projectRestored: true,
         projectVibeAdded: false,
         projectSaved: false,
@@ -2100,10 +2100,10 @@ export function MinimalAgentPanel({
         const savedFeedbackRun: PrototypeAgentDemoRun = {
           status: "ready",
           result: {
-            label: localProjectReadyForTools ? "修改计划已写入项目" : "修改计划已加入浏览器草稿",
+            label: localProjectReadyForTools ? "修改计划已写入项目" : "修改计划已加入未保存草稿",
             projectVibeAdded: true,
             projectSaved: localProjectReadyForTools,
-            storageLabel: localProjectReadyForTools ? "已保存到项目" : "浏览器草稿",
+            storageLabel: localProjectReadyForTools ? "已保存到项目" : "未保存草稿",
             waitingReview: true,
             status: "ready",
           },
@@ -2504,6 +2504,20 @@ export function MinimalAgentPanel({
   const primaryAriaLabel = primaryDisabled
     ? `${primaryLabel}：${primaryDisabledReason}`
     : primaryLabel;
+  const sendDisabledReason = isPreparingPlan
+    ? `${status || "正在整理"}，稍等一下。`
+    : !hasComposerInput
+      ? "先写一句，或拖入文件。"
+      : "";
+  const sendDisabled = Boolean(sendDisabledReason);
+  const sendAriaLabel = sendDisabled ? `发送：${sendDisabledReason}` : "发送";
+  function handleSend() {
+    if (sendDisabled) {
+      setStatus(sendDisabledReason);
+      return;
+    }
+    void prepareChange();
+  }
   function handleNext() {
     if (primaryDisabled) {
       setStatus(primaryDisabledReason);
@@ -2512,19 +2526,31 @@ export function MinimalAgentPanel({
     primaryOperation.perform();
   }
   const showFooterPrimaryAction = true;
-	  const composerHint = projectRequiredForWorkflow
-	    ? canResolveProjectFromFooter
-	      ? `点右侧${primaryLabel}，再继续生成参考或提交视频。`
-	      : "当前仍可继续改想法；生成前要先准备本地项目。"
-	    : text.trim()
-      ? `识别为：${composerIntentRoute.label} · 点右侧${primaryLabel} · Cmd Enter 发送`
+  const showFooterSuggestedAction = !hasComposerInput && primaryLabel !== "发送";
+  const footerStatusCopy = hasComposerInput
+    ? "按发送交给 Agent"
+    : showFooterSuggestedAction
+      ? `建议动作：${primaryLabel}`
+      : primaryDisabled
+        ? `${primaryDisabledPrefix}${primaryDisabledReason}`
+        : `按下后：${statusLineText}`;
+  const composerHint = projectRequiredForWorkflow
+    ? canResolveProjectFromFooter
+      ? `可以先点${primaryLabel}，也可以继续写想法。`
+      : "当前仍可继续改想法；生成前要先准备本地项目。"
+    : text.trim()
+      ? `识别为：${composerIntentRoute.label} · 点发送或 Cmd Enter`
       : attachments.length
-        ? `${attachments.length} 个文件 · ${composerIntentRoute.plan[0]} · 点右侧${primaryLabel}`
+        ? `${attachments.length} 个文件 · ${composerIntentRoute.plan[0]} · 点发送`
         : projectBlockedWithoutFooterResolver
-          ? "先写一句想法，或拖入素材；我还能继续帮你规划。"
-      : hasBoundSelection
-        ? `已选中内容，直接说改法，点右侧${primaryLabel} · Cmd Enter 发送`
-        : `${composerProjectObservation.currentTask.plan} · 点右侧${primaryLabel}`;
+          ? "先写一句想法，或拖入素材；我还能继续帮你整理。"
+          : hasBoundSelection
+            ? showFooterSuggestedAction
+              ? `已选中内容，直接说改法；也可以点${primaryLabel}`
+              : "已选中内容，直接说改法，点发送或 Cmd Enter"
+            : showFooterSuggestedAction
+              ? `${composerProjectObservation.currentTask.plan} · 可点${primaryLabel}`
+              : `${composerProjectObservation.currentTask.plan} · 点发送`;
   if (isComposerCollapsed) {
     return (
       <aside className="minimal-agent-panel is-collapsed">
@@ -2581,7 +2607,7 @@ export function MinimalAgentPanel({
         { label: "对象", value: agentActionEnvelope.target.label },
         { label: "进度", value: agentActionEnvelope.sourceContext.projectReadiness.summary },
         { label: "模式", value: agentActionEnvelope.sourceContext.projectReadiness.modeSummary },
-        { label: "权限", value: agentActionEnvelope.executionContract.mode === "plan_only" ? "只规划" : agentActionEnvelope.executionContract.mode === "reference_allowed" ? "可做参考" : "可提交视频" },
+        { label: "权限", value: agentActionEnvelope.executionContract.mode === "plan_only" ? "只整理" : agentActionEnvelope.executionContract.mode === "reference_allowed" ? "可生成参考" : "可提交视频" },
       ]
     : [];
   const handoffFacts = displayedAgentToolHandoff
@@ -2661,8 +2687,8 @@ export function MinimalAgentPanel({
 	      ...enabledResearchSuggestion,
 	      label: enabledResearchSuggestion.shouldSuggest ? "可先查资料" : "查资料未开启",
 	      detail: enabledResearchSuggestion.shouldSuggest
-	        ? "可以先查资料；去设置里连接联网查资料。不连接也能继续规划。"
-	        : "连接后可先整理外部资料；不影响本地规划。",
+        ? "可以先查资料；去设置里连接联网查资料。不连接也能继续整理。"
+        : "连接后可先整理外部资料；不影响本地整理。",
 	    };
   const showResearchPrompt = Boolean(researchResult || researchStatus !== "idle");
   const researchBusy = researchStatus === "running";
@@ -2733,16 +2759,16 @@ export function MinimalAgentPanel({
     setStatus("去参考页检查画面。");
   }
   function pointToMainReferenceAction() {
-    setStatus(referenceGenerationBlockedByProject ? "先打开或保存本地项目。" : "用底部主按钮生成参考。");
+    setStatus(referenceGenerationBlockedByProject ? "先打开或保存本地项目。" : "点底部发送，让 Agent 生成参考。");
   }
   function pointToMainVideoAction() {
-    setStatus(videoCanResume ? "用底部主按钮查询视频结果。" : "用底部主按钮提交视频。");
+    setStatus(videoCanResume ? "点底部发送，继续查询视频结果。" : "点底部发送，让 Agent 提交视频。");
   }
   const realSampleDetailAction = realSampleDetailNeedsReview
     ? openReferenceReviewFromDetails
     : pointToMainReferenceAction;
-  const realSampleDetailButtonLabel = realSampleDetailNeedsReview ? "打开复核" : "看主按钮";
-  const videoDetailButtonLabel = videoCanResume ? "看主按钮" : "看主按钮";
+  const realSampleDetailButtonLabel = realSampleDetailNeedsReview ? "打开复核" : "回到底部";
+  const videoDetailButtonLabel = "回到底部";
 
   async function lookupSources() {
     if (!effectiveWebSearchReady || !researchSuggestion.query || researchStatus === "running") return;
@@ -2838,7 +2864,7 @@ export function MinimalAgentPanel({
               key={item.mode}
               type="button"
               className={videoPermissionContractForUi.mode === item.mode ? "is-active" : ""}
-              aria-label={`生成边界：${item.label}`}
+              aria-label={`执行模式：${item.label}`}
               aria-pressed={videoPermissionContractForUi.mode === item.mode}
               disabled={Boolean(workflow)}
               title={workflow ? "当前计划已生成，先点再改一下再切换边界。" : agentVideoPermissionDetail(agentVideoPermissionForMode(item.mode))}
@@ -2974,7 +3000,7 @@ export function MinimalAgentPanel({
             </details>
 	          )}
 	          <div className="minimal-agent-note-actions">
-	            <small>继续用底部主按钮：{primaryLabel}</small>
+	            <small>继续点底部发送：{primaryLabel}</small>
 	            <button type="button" className="secondary" onClick={revisePlan}>
 	              再改一下
 	            </button>
@@ -3105,7 +3131,7 @@ export function MinimalAgentPanel({
               </button>
             )}
             {researchResult && <small>{referenceStatus === "saved" ? "后续整理会参考它。" : "采用前会先让你确认。"}</small>}
-	            {!effectiveWebSearchReady && <small>在设置里连接联网查资料；不连接也能继续规划。</small>}
+	            {!effectiveWebSearchReady && <small>在设置里连接联网查资料；不连接也能继续整理。</small>}
             {researchStatus === "blocked" && <small>暂时没有查到，稍后可重试。</small>}
             {referenceStatus === "blocked" && <small>保存失败，可重试。</small>}
           </div>
@@ -3148,7 +3174,8 @@ export function MinimalAgentPanel({
           onKeyDown={(event) => {
             if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
               event.preventDefault();
-              handleNext();
+              if (hasComposerInput) handleSend();
+              else handleNext();
             }
           }}
           placeholder={inputPlaceholder}
@@ -3158,25 +3185,38 @@ export function MinimalAgentPanel({
             type="button"
             className="minimal-agent-file-button"
             onClick={() => fileInputRef.current?.click()}
-            aria-label="添加脚本、图片或音频文件"
+            aria-label="添加脚本、图片或声音参考"
           >
             <Plus size={15} aria-hidden="true" />
             添加文件
 	          </button>
-	          <div className="minimal-agent-footer-copy" aria-label="底部主按钮说明">
-	            <small>{composerHint}</small>
-	            <strong>{primaryDisabled ? `${primaryDisabledPrefix}${primaryDisabledReason}` : `按下后：${statusLineText}`}</strong>
-	          </div>
-	          {showFooterPrimaryAction && (
-	            <button
-	              className="minimal-agent-send-button"
+          <div className="minimal-agent-footer-copy" aria-label="底部主按钮说明">
+            <small>{composerHint}</small>
+            <strong>{footerStatusCopy}</strong>
+          </div>
+          {showFooterSuggestedAction && (
+            <button
+              type="button"
+              className="minimal-agent-suggested-button"
               disabled={primaryDisabled}
-              title={primaryDisabled ? primaryDisabledReason : `${primaryLabel}，也可以按 Cmd Enter`}
+              title={primaryDisabled ? primaryDisabledReason : primaryLabel}
               onClick={handleNext}
               aria-label={primaryAriaLabel}
             >
-              <Send size={15} />
               {primaryLabel}
+            </button>
+          )}
+          {showFooterPrimaryAction && (
+            <button
+              type="button"
+              className="minimal-agent-send-button"
+              disabled={sendDisabled}
+              title={sendDisabled ? sendDisabledReason : "发送给 Agent，也可以按 Cmd Enter"}
+              onClick={handleSend}
+              aria-label={sendAriaLabel}
+            >
+              <Send size={15} />
+              发送
             </button>
           )}
         </div>

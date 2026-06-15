@@ -95,6 +95,24 @@ assert(
   "storyboard beat splitting should keep the final playback and door beat",
 );
 
+const casualSegmentBeats = splitScriptIntoStoryboardBeats(
+  "做一个 12 秒 90 年代日漫风短片。夜晚的自动售货机旁，一个戴耳机的女生捡到一枚会发光的旧游戏币。第一段是安静发现，第二段是游戏币亮起，第三段是她抬头看见街角出现一台旧街机。需要 Agent 自己判断镜头节奏和参考模式。",
+);
+assert(
+  casualSegmentBeats.length === 3,
+  `inline 第一段/第二段/第三段 should become exactly 3 story beats, got ${casualSegmentBeats.length}: ${casualSegmentBeats.join(" | ")}`,
+);
+assert(casualSegmentBeats[0] === "安静发现", "first inline segment should strip marker text");
+assert(casualSegmentBeats[1] === "游戏币亮起", "second inline segment should strip marker text");
+assert(
+  casualSegmentBeats[2] === "她抬头看见街角出现一台旧街机",
+  "inline segment parser should strip trailing Agent planning instructions",
+);
+assert(
+  casualSegmentBeats.every((beat) => !/Agent|需要|日漫风|12 秒/u.test(beat)),
+  "inline segment parser should not turn meta requirements into storyboard beats",
+);
+
 const raceScript = `[Intro]
 [Classic Synth Brass Riff]
 Five...

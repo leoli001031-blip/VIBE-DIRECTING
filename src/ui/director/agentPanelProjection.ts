@@ -47,7 +47,7 @@ export const defaultAgentVideoSubmitContract: AgentVideoSubmitContract = {
   mode: "plan_only",
   videoSubmitAllowed: false,
   referenceGenerationAllowed: false,
-  reason: "默认先只规划",
+  reason: "默认先只整理",
 };
 
 const videoAllowedAgentVideoSubmitContract: AgentVideoSubmitContract = {
@@ -65,7 +65,7 @@ export function agentVideoSubmitContractForMode(mode: AgentVideoSubmitMode): Age
       mode,
       videoSubmitAllowed: false,
       referenceGenerationAllowed: false,
-      reason: "创作者手动切到只规划",
+      reason: "创作者手动切到只整理",
     };
   }
   if (mode === "reference_allowed") {
@@ -91,7 +91,7 @@ export function detectAgentVideoSubmitContract(
       mode: "plan_only",
       videoSubmitAllowed: false,
       referenceGenerationAllowed: false,
-      reason: "创作者要求先只做规划",
+      reason: "创作者要求先只整理，不执行生成",
     };
   }
   if (permissionIntent === "reference_allowed") {
@@ -119,7 +119,7 @@ export function agentVideoSubmitContractForUi(
       mode: "reference_allowed",
       videoSubmitAllowed: false,
       referenceGenerationAllowed: true,
-      reason: "当前先补齐参考",
+      reason: "当前先生成参考",
     };
   }
   return {
@@ -132,8 +132,8 @@ export function agentVideoSubmitContractForUi(
 }
 
 export function agentVideoSubmitContractLabel(contract: AgentVideoSubmitContract) {
-  if (contract.mode === "plan_only") return "只规划";
-  if (contract.mode === "reference_allowed") return "可做参考";
+  if (contract.mode === "plan_only") return "只整理";
+  if (contract.mode === "reference_allowed") return "可生成参考";
   return "可提交视频";
 }
 
@@ -146,8 +146,8 @@ export function agentVideoSubmitContractAllowsReference(contract: AgentVideoSubm
 }
 
 export function agentVideoSubmitContractDetail(contract: AgentVideoSubmitContract) {
-  if (contract.mode === "plan_only") return "当前只整理计划，不会提交视频。";
-  if (contract.mode === "reference_allowed") return "可以先做参考，视频等你确认。";
+  if (contract.mode === "plan_only") return "我先帮你整理故事和镜头，不会生成或提交。";
+  if (contract.mode === "reference_allowed") return "可以生成参考，视频等你确认后再提交。";
   return "故事和参考通过后，可以提交视频。";
 }
 
@@ -335,8 +335,8 @@ export function buildAgentPanelProjection(
 
 export function agentReceiptStatusLabel(receipt: ProjectConfirmedProjectionReceipt) {
   if (receipt.queuedCount > 0) return "已加入计划".replace("计划", "项目计划");
-  if (receipt.status === "blocked_missing_knowledge_trace") return "缺少资产约束，需补齐";
-  if (receipt.status === "blocked_queue") return "需补齐";
+  if (receipt.status === "blocked_missing_knowledge_trace") return "缺少资产约束，需处理";
+  if (receipt.status === "blocked_queue") return "需处理";
   if (receipt.status === "blocked_not_confirmed") return "等待复核";
   if (receipt.parkedCount > 0 && receipt.queuedCount === 0) return PROJECT_RECORDED_LABEL;
   return PROJECT_RECORDED_LABEL;
@@ -451,7 +451,7 @@ export function agentProjectionBadges(projection: MinimalRuntimeProjection, plan
 export function agentProjectionNextStep(projection: MinimalRuntimeProjection, planPhase: AgentPlanPhase, canConfirm: boolean) {
   if (planPhase === "confirmed") return `${agentDisplayCountSummary(projection)}，等待复核。`;
   if (canConfirm) return "确认后只会加入计划，后续结果先复核。".replace("加入计划", "加入项目计划");
-  if (projection.counts.blocked > 0) return "缺少资产约束，需补齐。";
+  if (projection.counts.blocked > 0) return "缺少资产约束，需处理。";
   return "确认后只会加入计划，后续结果先复核。".replace("加入计划", "加入项目计划");
 }
 

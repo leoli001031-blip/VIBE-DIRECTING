@@ -168,7 +168,7 @@ export const DIRECTOR_PRODUCTION_STRATEGY_CONTRACTS: Record<DirectorProductionSt
     referenceImageTypes: ["scene_baseline", "character_identity", "prop_reference", "dialogue_audio", "text_direction"],
     promptStructure: [
       "不生成故事板或单张起始帧",
-      "直接使用场景/角色/关键道具/音频参考",
+      "直接使用场景/角色/关键道具/声音参考",
       "Seedance 文本提示保持短主动作、触发原因和表演节奏",
     ],
     visibleCutSemantics: "visible cuts are normally none; at most one reaction/insert cut if the user or planner explicitly asks for it.",

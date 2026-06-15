@@ -98,9 +98,8 @@ const audioPlanning = buildAudioPlanningState({
   }],
   runtimeConfig,
 });
-assert(audioPlanning.ttsProviderPlanning?.providers.length === 3, "audio planning must include TTS provider routes");
-assert(audioPlanning.ttsProviderPlanning?.preferredRoute === "local_qwen3_tts_clone", "audio planning should prefer Qwen3 voice cloning");
-assert(audioPlanning.exportPackageSummary.plannedCategories.includes("tts_provider_config"), "export summary should include TTS provider config");
+assert(!audioPlanning.ttsProviderPlanning, "demo audio planning must not attach TTS provider routes by default");
+assert(!audioPlanning.exportPackageSummary.plannedCategories.includes("tts_provider_config"), "demo export summary should not include TTS provider config");
 
 const dialogueAudioPlanning = buildAudioPlanningState({
   generatedAt,
@@ -113,8 +112,7 @@ const dialogueAudioPlanning = buildAudioPlanningState({
 });
 assert(dialogueAudioPlanning.shotPlans[0]?.dialogueLines[0] === "ねえ、見て", "storyboard subtitle should become dialogue text");
 assert(dialogueAudioPlanning.shotPlans[0]?.ambienceBrief === "雨水滴落", "storyboard sound should become ambience brief");
-assert(dialogueAudioPlanning.ttsProviderPlanning?.submitPlanDrafts.length === 1, "dialogue text should create a Qwen3 TTS submit draft");
-assert(dialogueAudioPlanning.ttsProviderPlanning?.submitPlanDrafts[0]?.routePreference[0] === "local_qwen3_tts_clone", "dialogue TTS draft should prefer Qwen3");
+assert(!dialogueAudioPlanning.ttsProviderPlanning, "dialogue text should stay as video-model voice-reference metadata on the demo path");
 
 const serialized = JSON.stringify({ runtimeConfig, ttsPlanning, audioPlanning });
 for (const forbidden of ["VIBE_TTS_API_KEY=", "sk-", "tvly-", "actual-api-key"]) {

@@ -121,8 +121,9 @@ export function MinimalTopNav({
   const isEmptyProject = totalShots === 0;
   const projectTitleLabel = projectTitle || "新视频项目";
   const projectFolderReady = Boolean(projectRoot?.trim());
+  const unsavedProjectContent = !projectFolderReady && !isEmptyProject;
   const projectStorageBadge = projectFolderReady ? "本地" : "草稿";
-  const emptyProjectPrimary = projectFolderReady ? "本地已准备" : "浏览器草稿";
+  const emptyProjectPrimary = projectFolderReady ? "本地已准备" : "未保存草稿";
   const emptyProjectSecondary = projectFolderReady ? "确认后写入项目" : "先写想法";
   const [projectControlOpen, setProjectControlOpen] = useState(false);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
@@ -139,14 +140,26 @@ export function MinimalTopNav({
     ? isEmptyProject
       ? "已准备项目文件夹"
       : "项目已连接"
-    : "浏览器草稿";
+    : "未保存草稿";
   const projectPickerDisabled = Boolean(!canCreateProject && !canChooseProjectRoot);
-  const projectPickerDisabledCopy = projectFileStatusDetail || "浏览器里可以先规划；生成参考或提交视频需要在桌面 App 里选择本地项目文件夹。";
+  const projectPickerDisabledCopy = projectFileStatusDetail || "可以先整理草稿；当前浏览器不能打开本地文件夹，生成参考或提交视频前请在桌面 App 选择项目。";
+  const createProjectDisplayTitle = unsavedProjectContent
+    ? "另开新草稿"
+    : createProjectTitle || "新建项目";
+  const createProjectDisplayAriaLabel = unsavedProjectContent
+    ? "另开新草稿，不保存当前故事"
+    : createProjectAriaLabel || "新建项目";
+  const createProjectActionTitle = unsavedProjectContent
+    ? "会开始一个空草稿；当前故事不会保存到本地项目。"
+    : canCreateProject ? createProjectTitle || "新建项目" : projectPickerDisabledCopy;
   const recentProjectItems = (recentProjects || [])
     .filter((project) => project.projectRoot.trim())
     .slice(0, 6);
   const showWorkspaceTabs = !isEmptyProject;
-  const exportDisabled = isEmptyProject;
+  const exportDisabled = isEmptyProject || !projectFolderReady;
+  const exportDisabledTitle = !projectFolderReady
+    ? "先保存为本地项目，再导出。"
+    : "先写故事或打开项目，再导出。";
   const currentViewLabel = directorView === "assets" ? "参考" : directorView === "preview" ? "预览" : "故事";
   const currentViewDetail = directorView === "assets"
     ? "角色、场景、道具"
@@ -193,17 +206,13 @@ export function MinimalTopNav({
           <button
             className="project-title-button"
             onClick={() => setProjectControlOpen((open) => !open)}
-            aria-label="项目控制"
+            aria-label={`项目控制：${projectTitleLabel}，${projectControlStatus}`}
             aria-expanded={projectControlOpen}
           >
             <span className="project-title-row">
               <span className="project-title-text">{projectTitleLabel}</span>
               <em className={`project-title-storage ${projectFolderReady ? "local" : "draft"}`}>{projectStorageBadge}</em>
               <ChevronDown size={14} aria-hidden="true" />
-            </span>
-            <span className="project-plan-entry" aria-label="项目计划状态">
-              <strong>{projectControlStatus}</strong>
-              <span>{isEmptyProject ? emptyProjectSecondary : projectContentSummary}</span>
             </span>
           </button>
           {projectControlOpen && (
@@ -284,11 +293,11 @@ export function MinimalTopNav({
                     type="button"
                     disabled={!canCreateProject}
                     onClick={() => performProjectControlAction(onCreateProject)}
-                    title={canCreateProject ? createProjectTitle || "新建项目" : projectPickerDisabledCopy}
-                    aria-label={createProjectAriaLabel || "新建项目"}
+                    title={createProjectActionTitle}
+                    aria-label={createProjectDisplayAriaLabel}
                   >
                     <FolderPlus size={15} aria-hidden="true" />
-                    {createProjectTitle || "新建项目"}
+                    {createProjectDisplayTitle}
                   </button>
                 )}
                 {onChooseProjectRoot && (
@@ -317,6 +326,14 @@ export function MinimalTopNav({
                 )}
                 {projectPickerDisabled && (
                   <small className="project-control-action-note">{projectPickerDisabledCopy}</small>
+                )}
+                {unsavedProjectContent && (
+                  <small className="project-control-action-note">
+                    当前故事还没保存；另开草稿不会保存它。生成参考前请先在桌面 App 选择本地项目文件夹。
+                  </small>
+                )}
+                {!projectPickerDisabled && onChooseProjectRoot && !canChooseProjectRoot && (
+                  <small className="project-control-action-note">打开已有项目需要桌面文件选择器；当前环境可以先继续整理草稿。</small>
                 )}
               </div>
             </div>
@@ -370,7 +387,7 @@ export function MinimalTopNav({
           className={`diagnostics-link topbar-export-action ${mode === "director" && directorView === "export" ? "active" : ""}`}
           disabled={exportDisabled}
           onClick={() => onOpenDirectorView("export")}
-          title={exportDisabled ? "先写故事或打开项目，再导出。" : "导出"}
+          title={exportDisabled ? exportDisabledTitle : "导出"}
           aria-label="导出"
         >
           导出

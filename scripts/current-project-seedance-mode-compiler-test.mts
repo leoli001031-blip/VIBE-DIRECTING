@@ -35,9 +35,11 @@ const tinyPng = Buffer.from(
 const scenePath = path.join(runRootPath, "assets/scene.png");
 const characterPath = path.join(runRootPath, "assets/character.png");
 const propPath = path.join(runRootPath, "assets/prop.png");
+const voicePath = path.join(runRootPath, "assets/girl-voice.wav");
 writeFile(scenePath, tinyPng);
 writeFile(characterPath, tinyPng);
 writeFile(propPath, tinyPng);
+writeFile(voicePath, Buffer.from("voice reference sample"));
 
 const source = {
   runRootPath,
@@ -120,6 +122,14 @@ const workbenchFacts: any = {
       { type: "scene", id: "scene_station", name: "雨夜电车站", path: `${runRootRelativePath}/assets/scene.png` },
       { type: "character", id: "char_girl", name: "短发少女", path: `${runRootRelativePath}/assets/character.png` },
       { type: "prop", id: "prop_ticket", name: "旧车票", path: `${runRootRelativePath}/assets/prop.png` },
+      {
+        type: "audio",
+        id: "voice_girl",
+        name: "少女声音参考",
+        path: `${runRootRelativePath}/assets/girl-voice.wav`,
+        roleBinding: { role: "voice_reference", useFor: ["S01", "S02", "S03"], ignoreFor: ["music", "bgm"] },
+        textConstraints: ["voice_reference: 用来锁少女声线、语气和说话质感，不是配乐。"],
+      },
     ],
   },
 };
@@ -226,6 +236,8 @@ const storyboardPrompt = readFileSync(path.resolve(repoRoot, response.storyboard
 const seedancePrompt = readFileSync(path.resolve(repoRoot, response.promptPath), "utf8");
 const manifestPath = path.join(path.dirname(path.resolve(repoRoot, response.promptPath)), "input-manifest.json");
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+const submitPlanPath = path.join(path.dirname(path.resolve(repoRoot, response.promptPath)), "submit-plan.json");
+const submitPlan = JSON.parse(readFileSync(submitPlanPath, "utf8"));
 const submitProgressPath = path.join(path.dirname(path.resolve(repoRoot, response.promptPath)), "submit-progress.json");
 const submitProgress = JSON.parse(readFileSync(submitProgressPath, "utf8"));
 
@@ -256,8 +268,18 @@ assert(seedancePrompt.includes("Do not render storyboard artifacts"), "Seedance 
 assert(seedancePrompt.includes("clear action readability"), "Seedance prompt should derive the style tail from action rhythm instead of using one fixed mood");
 assert(!seedancePrompt.includes("quiet suspense. No photorealism"), "Seedance prompt must not use the old hardcoded quiet-suspense style tail for every genre");
 assert(seedancePrompt.includes("No music, no BGM"), "Seedance prompt must keep provider video free of BGM");
-const seedancePromptWithoutNoBgmLine = seedancePrompt.replace(/No music, no BGM, no subtitles\./g, "");
-assert(!/音乐|配乐|背景音乐|\bmusic\b|\bBGM\b|\bsoundtrack\b/i.test(seedancePromptWithoutNoBgmLine), "Seedance prompt must sanitize music-planning language outside the no-BGM guard line");
+assert(seedancePrompt.includes("speaking character voice line"), "Seedance prompt must explain voice-reference usage");
+assert(seedancePrompt.includes("Do not use it as BGM"), "Seedance prompt must prevent voice reference from becoming BGM");
+const seedancePromptWithoutAudioGuards = seedancePrompt
+  .replace(/No music, no BGM, no subtitles\./g, "")
+  .replace(/Use the attached audio reference[^\n]+/g, "");
+assert(!/音乐|配乐|背景音乐|\bmusic\b|\bBGM\b|\bsoundtrack\b/i.test(seedancePromptWithoutAudioGuards), "Seedance prompt must sanitize music-planning language outside explicit no-BGM/audio-reference guard lines");
+assert(manifest.audioReferenceCount === 1, "input manifest should record one voice reference");
+assert(manifest.audioReferences?.[0]?.role === "dialogue_audio", "input manifest should expose voice reference as dialogue_audio");
+assert(submitPlan.args.includes("--audio"), "Seedance submit plan should pass voice reference as --audio");
+assert(submitPlan.args[submitPlan.args.indexOf("--audio") + 1]?.endsWith("girl-voice.wav"), "Seedance submit plan should point --audio to the voice reference file");
+assert(submitPlan.audioReferences?.[0]?.type === "voice_reference", "Seedance submit plan should describe the audio as voice_reference");
+assert(submitProgress.referencePaths?.some((item: string) => item.endsWith("girl-voice.wav")), "submit progress should include the voice reference path");
 
 assert(manifest.compilerMode === "storyboard_rapid_cut", "manifest compiler mode drifted");
 assert(manifest.ruleQaStatus === "pass" || manifest.ruleQaStatus === "warning", "Seedance submit should persist a non-blocking director rule QA report");
@@ -394,6 +416,94 @@ assert(narrativeSeedancePrompt.includes("Create exactly 3 visible clip(s) in the
 assert(narrativeSeedancePrompt.includes("Use the 3 storyboard panel(s) only as internal staging"), "Seedance prompt must separate storyboard panels from final clips");
 assert(narrativeSeedancePrompt.includes("weather, light direction"), "Seedance prompt must not hardcode rainy scene guidance");
 assert(!narrativeSeedancePrompt.includes("rainy atmosphere"), "old rainy scene-reference wording leaked back");
+
+projectFacts = {
+  projectVibe: {
+    shots: [
+      {
+        id: "F01",
+        storyboardGroupId: "fractional_duration_sequence",
+        title: "旧机器亮起",
+        durationSeconds: 3.5,
+        executionMode: "action_insert",
+        referenceStrategy: "omni_reference",
+        intent: "旧书店角落的自动售票机忽然亮起。",
+        camera: "固定近景，轻微推近机器灯光。",
+        primaryAction: "旧机器亮起。",
+        sceneGuidance: ["清晨旧书店"],
+      },
+      {
+        id: "F02",
+        storyboardGroupId: "fractional_duration_sequence",
+        title: "投币吐出票",
+        durationSeconds: 4.4,
+        executionMode: "action_insert",
+        referenceStrategy: "omni_reference",
+        intent: "硬币落入机器，发光车票缓慢吐出。",
+        camera: "手部和出票口特写。",
+        primaryAction: "机器吐出发光车票。",
+        sceneGuidance: ["清晨旧书店"],
+      },
+      {
+        id: "F03",
+        storyboardGroupId: "fractional_duration_sequence",
+        title: "抬头见电车",
+        durationSeconds: 5.6,
+        executionMode: "relationship_wide",
+        referenceStrategy: "storyboard_narrative",
+        intent: "少女抬头，窗外雾中电车经过。",
+        camera: "从车票光连续转向窗外。",
+        primaryAction: "她抬头看见雾中电车。",
+        sceneGuidance: ["清晨旧书店"],
+      },
+    ],
+  },
+};
+
+const fractionalRunRootRelativePath = ".vibe-runtime/test-current-project-seedance-mode-compiler-fractional";
+const fractionalRunRootPath = path.resolve(repoRoot, fractionalRunRootRelativePath);
+rmSync(fractionalRunRootPath, { recursive: true, force: true });
+mkdirSync(fractionalRunRootPath, { recursive: true });
+writeFile(path.join(fractionalRunRootPath, "assets/scene.png"), tinyPng);
+workbenchFacts.visualMemory.assets = [
+  { type: "scene", id: "scene_bookstore", name: "清晨旧书店", path: `${fractionalRunRootRelativePath}/assets/scene.png` },
+];
+const fractionalSource = {
+  ...source,
+  runRootPath: fractionalRunRootPath,
+  runRootRelativePath: fractionalRunRootRelativePath,
+  projectVibePath: path.join(fractionalRunRootPath, "project/project.vibe"),
+  projectVibeRelativePath: `${fractionalRunRootRelativePath}/project/project.vibe`,
+  previewPlanPath: path.join(fractionalRunRootPath, "reports/preview_plan.json"),
+  previewPlanRelativePath: `${fractionalRunRootRelativePath}/reports/preview_plan.json`,
+};
+const fractionalResponse = await route.currentProjectSeedanceSubmitResponse({
+  confirmation: {
+    confirmed: true,
+    phrase: "submit-seedance-video",
+    receiptId: "receipt_test_fractional",
+    confirmedAt: "2026-05-23T00:00:00.000Z",
+  },
+  modelVersion: "seedance2.0",
+  videoResolution: "720p",
+  ratio: "16:9",
+  pollSeconds: 30,
+  providerId: APIKEY_FUN_RESPONSES_IMAGE_PROVIDER_ID,
+  mockProviderResult: true,
+  cliPath: "/bin/echo",
+}, {}, fractionalSource);
+assert(fractionalResponse.ok === true, `fractional duration submit should pass: ${JSON.stringify(fractionalResponse)}`);
+const fractionalManifestPath = path.join(path.dirname(path.resolve(repoRoot, fractionalResponse.promptPath)), "input-manifest.json");
+const fractionalManifest = JSON.parse(readFileSync(fractionalManifestPath, "utf8"));
+const fractionalSubmitPlanPath = path.join(path.dirname(path.resolve(repoRoot, fractionalResponse.promptPath)), "submit-plan.json");
+const fractionalSubmitPlan = JSON.parse(readFileSync(fractionalSubmitPlanPath, "utf8"));
+assert(
+  fractionalManifest.shots.map((shot: { durationSeconds: number }) => shot.durationSeconds).join(",") === "4,4,6",
+  "runtime submit should quantize imported fractional shot durations to executable integer seconds",
+);
+assert(fractionalManifest.durationSeconds === 14, "runtime submit total duration should follow quantized shot durations");
+assert(fractionalSubmitPlan.args[fractionalSubmitPlan.args.indexOf("--duration") + 1] === "14", "Seedance CLI duration should be an executable integer total");
+assert(!/\b\d+\.\d+s\b/.test(readFileSync(path.resolve(repoRoot, fractionalResponse.promptPath), "utf8")), "Seedance prompt should not expose fractional second durations");
 
 projectFacts = {
   projectVibe: {
@@ -567,6 +677,7 @@ projectFacts = {
     shots: [
       {
         id: "G01",
+        storyboardGroupId: "same_group_different_scene_should_split",
         title: "旧书店翻书",
         durationSeconds: 4,
         executionMode: "relationship_wide",
@@ -580,6 +691,7 @@ projectFacts = {
       },
       {
         id: "G02",
+        storyboardGroupId: "same_group_different_scene_should_split",
         title: "雾中站台",
         durationSeconds: 5,
         executionMode: "relationship_wide",
@@ -665,7 +777,7 @@ const groupedResponse = await route.currentProjectSeedanceSubmitResponse({
 assert(groupedResponse.ok === true, `grouped submit should pass: ${JSON.stringify(groupedResponse)}`);
 const groupedManifestPath = path.join(path.dirname(path.resolve(repoRoot, groupedResponse.promptPath)), "input-manifest.json");
 const groupedManifest = JSON.parse(readFileSync(groupedManifestPath, "utf8"));
-assert(groupedManifest.segmentPlan.length === 2, "different scene clusters should create two reference segments");
+assert(groupedManifest.segmentPlan.length === 2, "different scene clusters should create two reference segments even when storyboardGroupId matches");
 assert(groupedManifest.activeSegmentId === "segment_2", "selected shot should submit its own scene segment");
 assert(groupedManifest.shots.length === 1 && groupedManifest.shots[0].id === "G02", "active segment should not mix unrelated scenes into one storyboard/video prompt");
 assert(groupedManifest.references.some((ref: { role: string; name: string }) => ref.role === "scene_reference" && ref.name === "雾中电车站台"), "active segment should use its own scene baseline reference");

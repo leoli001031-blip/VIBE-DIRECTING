@@ -122,7 +122,7 @@ export function MinimalAssetLibrary({
       return { useFor: "物体外观、尺度、交互方式", ignoreFor: "不负责人物、背景和切镜" };
     }
     if (assetType === "voice_anchor") {
-      return { useFor: "台词节奏和声音气质", ignoreFor: "不负责画面设计" };
+      return { useFor: "角色声线、语气和对白质感", ignoreFor: "不负责画面设计" };
     }
     return { useFor: "光感、色调、画面密度", ignoreFor: "不替代主体设定" };
   }
@@ -187,7 +187,7 @@ export function MinimalAssetLibrary({
               <dd>{roleCopy.ignoreFor}</dd>
             </div>
           </dl>
-          <p>{asset.textConstraints[0] || "待补说明"}</p>
+          <p>{asset.textConstraints[0] || "说明待完善"}</p>
         </button>
         {!isReadOnly && (
           <div className="asset-card-review-actions" aria-label={`${cleanLabel(asset.name)} 复核操作`}>
@@ -366,9 +366,9 @@ export function MinimalAssetLibrary({
           <em>需要时生成</em>
         </span>
         <span>
-          <small>音频参考</small>
+          <small>声音参考</small>
           <strong>{workspaceCounts.audio || "可选"}</strong>
-          <em>台词节奏</em>
+          <em>角色声线</em>
         </span>
       </section>
       {readOnlyDetail && (
@@ -464,15 +464,15 @@ export function MinimalAssetLibrary({
       )}
       <details className="asset-library-section compact">
         <summary>
-          <span className="asset-section-label">音频参考</span>
-          <small>{workspaceCounts.audio || 0} 个 · 台词节奏</small>
+          <span className="asset-section-label">声音参考</span>
+          <small>{workspaceCounts.audio || 0} 个 · 角色声线</small>
         </summary>
         <div className="asset-audio-list">
           {groups.audioAnchors.map((asset) => (
             <div key={asset.id} className={`asset-audio-row ${asset.status}`}>
               <span>
                 <strong>{cleanLabel(asset.name)}</strong>
-                <small>音频参考</small>
+                <small>声音参考</small>
               </span>
               <p>{asset.textConstraints[0] || "待确认授权"}</p>
               <small>{assetLibraryStatusLabel(asset.status)} · {assetRoleCopy(asset).useFor}</small>
@@ -482,23 +482,23 @@ export function MinimalAssetLibrary({
             <div key={source.id} className={`asset-audio-row ${source.status}`}>
               <span>
                 <strong>{cleanLabel(source.displayName)}</strong>
-                <small>音频参考</small>
+                <small>声音参考</small>
               </span>
               <p>{source.textConstraints[0] || "待确认授权"}</p>
-              <small>{voiceStatusLabel(source.status)} · 台词节奏和声音气质</small>
+              <small>{voiceStatusLabel(source.status)} · 角色声线、语气和说话质感</small>
               {source.status !== "locked" && source.status !== "rejected" && onLockVoiceSource && (
                 <button
                   type="button"
                   className="asset-audio-lock"
                   onClick={() => { void onLockVoiceSource(source.id); }}
-                  aria-label={`${cleanLabel(source.displayName)}：确认音频授权`}
+                  aria-label={`${cleanLabel(source.displayName)}：确认声音参考授权`}
                 >
-                  确认授权
+                  锁定声音参考
                 </button>
               )}
             </div>
           ))}
-          {!workspaceCounts.audio && <div className="minimal-empty-line">还没有音频参考，需要配音或配乐时再拖进来。</div>}
+          {!workspaceCounts.audio && <div className="minimal-empty-line">还没有声音参考；需要锁角色声线时再拖进来。</div>}
         </div>
       </details>
     </main>

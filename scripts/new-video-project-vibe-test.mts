@@ -97,7 +97,7 @@ const musicDraft = {
   musicAnalysis: {
     schemaVersion: "0.1.0" as const,
     analysisId: "music_analysis_project_test",
-    source: { label: "配乐参考", safeRef: "music_reference:project_test" },
+    source: { label: "旧音频参考", safeRef: "music_reference:project_test" },
     durationSeconds: 20,
     sampleRate: 8000,
     windowSeconds: 1,
@@ -330,16 +330,16 @@ const stagedWithMusic = buildNewVideoProjectVibeStagedTransaction({
   generatedAt,
 });
 assert(stagedWithMusic.blocked === false, `music draft should stage cleanly: ${stagedWithMusic.blockedReasons.join("; ")}`);
-assert(stagedWithMusic.summary.musicReferenceCount === 1, "music draft should count a staged music reference");
-assert(stagedWithMusic.summary.audioReferenceCount >= 1, "music draft should still carry safe audio evidence");
-assert(stagedWithMusic.source.sourceRefs.includes("music_reference:new_video_music_reference_1"), "music evidence should be part of staged source refs");
-assert(stagedWithMusic.source.sourceRefs.includes("music_analysis:music_analysis_project_test"), "music analysis id should be part of staged source refs");
+assert(stagedWithMusic.summary.musicReferenceCount === 0, "legacy music-role draft should not count as a music reference on the demo path");
+assert(stagedWithMusic.summary.audioReferenceCount === 1, "legacy music-role draft should still carry safe audio evidence");
+assert(stagedWithMusic.source.sourceRefs.includes("audio_reference:new_video_audio_reference_1"), "legacy music-role evidence should be downgraded to safe audio reference");
+assert(!stagedWithMusic.source.sourceRefs.some((ref) => ref.startsWith("music_reference:") || ref.startsWith("music_analysis:")), "demo path must not stage music reference or music analysis refs");
 
 const storyboardTableRows = [
   {
     id: "storyboard_row_rooftop_1",
     shotNo: "1-1",
-    duration: "8",
+    duration: "7.6",
     shotSize: "全景",
     camera: "平视远景，雨后天台缓慢推进",
     visualDescription: "短发少女站在雨后天台左侧，右手握着旧磁带，远处城市被薄雾压低。",
@@ -402,10 +402,14 @@ assert(stagedFromStoryboardTable.blocked === false, `storyboard table should sta
 assert(stagedFromStoryboardTable.summary.shotCount === storyboardTableRows.length, "storyboard table rows should replace generated planner shots");
 assert(stagedFromStoryboardTable.planner.shots[0]?.id.startsWith("shot_storyboard_1-1"), "storyboard shot ids should prefer readable shot numbers over internal AI row ids");
 assert(stagedFromStoryboardTable.planner.shots[0]?.title === "雨后台天", "first storyboard row title should become the Project.vibe shot title");
-assert(stagedFromStoryboardTable.planner.shots[0]?.durationSeconds === 8, "edited storyboard duration should become shot duration");
+assert(stagedFromStoryboardTable.planner.shots[0]?.durationSeconds === 8, "edited storyboard duration should be quantized to an executable integer shot duration");
+assert(stagedFromStoryboardTable.planner.shots.every((shot) => Number.isInteger(shot.durationSeconds)), "storyboard draft shot durations should not persist fractional seconds into Project.vibe");
 assert(stagedFromStoryboardTable.planner.shots[0]?.camera === storyboardTableRows[0].camera, "edited camera language should be preserved");
 assert(stagedFromStoryboardTable.planner.shots[0]?.primaryAction === storyboardTableRows[0].primaryAction, "primary action should be promoted from the table");
+assert(stagedFromStoryboardTable.planner.shots[0]?.actionBeats?.join("|") === storyboardTableRows[0].primaryAction, "storyboard rows without explicit actionBeats should fall back to the primary action only");
 assert(stagedFromStoryboardTable.planner.shots[1]?.executionMode === "action_insert", "execution mode should be promoted from the table");
+assert(!stagedFromStoryboardTable.planner.shots[1]?.actionBeats?.includes(storyboardTableRows[1].actionTrigger), "action trigger must not pollute actionBeats");
+assert(!stagedFromStoryboardTable.planner.shots[1]?.actionBeats?.includes(storyboardTableRows[1].microReaction), "micro reaction must not pollute actionBeats");
 assert(stagedFromStoryboardTable.planner.shots[0]?.visibleClips === 1, "narrative storyboard rows should persist one visible clip");
 assert(stagedFromStoryboardTable.planner.shots[0]?.storyboardPanels === 1, "narrative storyboard rows should persist one storyboard panel");
 assert(stagedFromStoryboardTable.planner.shots[1]?.visibleClips === 1, "omni rows should persist one visible clip");

@@ -876,7 +876,7 @@ export interface AudioReferencePolicySummary {
   musicReferenceBinding: "rhythm_and_final_mix";
   musicNeverEntersVideoPrompt: true;
   videoProviderPayloadIncludesMusic: false;
-  defaultTtsRoute: "local_qwen3_tts_clone";
+  defaultTtsRoute: "parked_in_demo" | "local_qwen3_tts_clone";
   reviewActions: Array<"listen" | "review" | "replace">;
   notes: string[];
 }

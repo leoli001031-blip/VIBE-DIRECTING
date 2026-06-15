@@ -43,7 +43,7 @@ export function safeAssetId(value: string, type: AssetLibraryAssetType) {
 export function assetLibraryTypeLabel(type: AssetLibraryAssetType) {
   if (type === "character") return "角色参考";
   if (type === "scene") return "场景/天气参考";
-  if (type === "voice_anchor") return "音频参考";
+  if (type === "voice_anchor") return "声音参考";
   return "道具参考";
 }
 
@@ -123,7 +123,7 @@ export function assetLibraryUserBlockers(library: AssetLibrarySnapshot) {
     ...(lockedCharacters.length ? [] : ["缺角色参考"]),
     ...(lockedScenes.length ? [] : ["缺场景/天气参考"]),
     ...nonLocked.map((asset) => `${cleanLabel(asset.name)} 待复核`),
-    ...noConstraints.map((asset) => `${cleanLabel(asset.name)} 待补说明`),
+    ...noConstraints.map((asset) => `${cleanLabel(asset.name)} 说明待完善`),
     ...library.blockedImports.map((item) => `${blockedImportLabelForUi(item.sourceKind)} 待复核`),
     ...validation.errors.map(() => "参考信息待整理"),
   ]);

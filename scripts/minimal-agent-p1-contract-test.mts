@@ -149,14 +149,14 @@ assert(/MAX_COMPOSER_SCRIPT_CHARS/.test(minimalAgentPanelSource), "script attach
 assert(/attachment\.kind !== "script"/.test(attachmentIntentLine), "non-script attachments must stay as asset references instead of prompt text");
 assert(/composerAttachmentUseHint\(attachment\.kind\)/.test(attachmentIntentLine), "non-script attachments must carry a creator-facing use hint into the Agent intent");
 assert(/角色、场景、道具或镜头参考/.test(composerAttachmentUseHint), "image attachments must be described as reference material to classify");
-assert(/配乐参考或声音参考/.test(composerAttachmentUseHint), "audio attachments must be described as music or voice material");
+assert(/声音参考[\s\S]*角色、旁白或对白/.test(composerAttachmentUseHint), "audio attachments must be described as voice reference material");
 assert(/节奏、构图或风格信息/.test(composerAttachmentUseHint), "video attachments must be described as video reference material");
 assert(/await attachment\.file\.text\(\)/.test(attachmentIntentLine), "script attachments must read their file body into the staged Agent intent");
 assert(/读取失败，请直接粘贴脚本正文/.test(attachmentIntentLine), "script attachment read failures must be creator-facing");
 assert(/Promise\.all\(attachments\.map\(attachmentIntentLine\)\)/.test(composerIntentFromInput), "composer intent must resolve async attachment text before staging");
 assert(/await composerIntentFromInput\(text,\s*attachments\)/.test(prepareChange), "send must wait for script attachment contents before staging");
 assert(/正在读取脚本/.test(prepareChange), "send must show a readable status while importing script attachments");
-assert(/aria-label="添加脚本、图片或音频文件"/.test(minimalAgentPanelSource), "Agent composer file button must expose a clear accessible label");
+assert(/aria-label="添加脚本、图片或声音参考"/.test(minimalAgentPanelSource), "Agent composer file button must expose a clear accessible label");
 assert(/const primaryAriaLabel = primaryDisabled[\s\S]*primaryDisabledReason[\s\S]*aria-label=\{primaryAriaLabel\}/.test(minimalAgentPanelSource), "Agent composer primary button must expose the action or blocker as an accessible label");
 assert(/preparedContext\?\.userIntent\?\.trim\(\) \|\| await composerIntentFromInput\(text,\s*attachments\)/.test(minimalAgentPanelSource), "confirmation fallback must preserve imported script contents");
 assert(/catch\s*\(error\)\s*\{[\s\S]*Failed to stage Product Agent plan[\s\S]*resetPreparedComposerState\("整理失败，请重试"\)[\s\S]*return;/.test(prepareChange), "Product Agent staging failures must stop instead of falling back to an unbacked local plan");
@@ -265,7 +265,7 @@ assert((appSource.match(/agentActionEnvelope:\s*productAgentLoop\.action/g) || [
 assert(/handoff\?\.status === "handled_by_project_write"[\s\S]*修改已写入项目[\s\S]*previewReady:\s*false/.test(confirmedToolRunResult), "project-only handoffs must show project-write status instead of generic preview-ready copy");
 assert(/handoff\.status !== "ready"[\s\S]*previewReady:\s*true/.test(confirmedToolRunResult), "non-tool confirmations may still fall back to preview-ready status");
 assert(/handoff\.handler === "web_search"[\s\S]*资料已整理，等你确认[\s\S]*previewReady:\s*false/.test(confirmedToolRunResult), "web-search tool results must not pretend a preview was generated");
-assert(/handoff\.handler === "image2_reference_generation"[\s\S]*参考已开始补齐[\s\S]*previewReady:\s*false/.test(confirmedToolRunResult), "reference-generation tool results must not pretend a preview was generated");
+assert(/handoff\.handler === "image2_reference_generation"[\s\S]*参考已开始生成[\s\S]*previewReady:\s*false/.test(confirmedToolRunResult), "reference-generation tool results must not pretend a preview was generated");
 assert(/handoff\.handler === "seedance_video_submit"[\s\S]*视频已提交，排队后回到预览[\s\S]*previewReady:\s*false/.test(confirmedToolRunResult), "video-submit tool results must preserve queue semantics instead of preview-ready status");
 assert(/handoff\.handler === "project_export"[\s\S]*toolRunOutcome\?\.label \|\| "导出已开始"[\s\S]*previewReady:\s*false/.test(confirmedToolRunResult), "export tool results must reflect the real export outcome and not pretend a preview was generated");
 assert(/handoff\.handler === "project_export"[\s\S]*status:\s*toolRunOutcome\?\.resultStatus \|\| "running"/.test(confirmedToolRunResult), "export tool results must preserve the real ready/running status inside the visible result");
@@ -357,7 +357,7 @@ assert(/agentToolHandlerLabel\(action\.toolPlan\.toolName\)/.test(agentNextContr
 assert(/project_not_ready[\s\S]*需要本地项目/.test(agentToolPreflightLabel), "pre-confirmation handoff should show missing project before confirmation");
 assert(/web_search_not_ready[\s\S]*先开启查资料/.test(agentToolPreflightLabel), "pre-confirmation handoff should show disabled web search before confirmation");
 assert(/reference_generation_not_ready[\s\S]*先配置生图/.test(agentToolPreflightLabel), "pre-confirmation handoff should show unavailable reference generation before confirmation");
-assert(/reference_generation_not_allowed[\s\S]*当前只规划/.test(agentToolPreflightLabel), "pre-confirmation handoff should show plan-only reference boundary before confirmation");
+assert(/reference_generation_not_allowed[\s\S]*当前只整理/.test(agentToolPreflightLabel), "pre-confirmation handoff should show plan-only reference boundary before confirmation");
 assert(/video_submit_not_ready[\s\S]*先准备视频/.test(agentToolPreflightLabel), "pre-confirmation handoff should show unavailable video submit before confirmation");
 assert(/video_submit_not_allowed[\s\S]*当前不能提交/.test(agentToolPreflightLabel), "pre-confirmation handoff should show no-video boundary before confirmation");
 assert(/export_not_ready[\s\S]*先准备导出/.test(agentToolPreflightLabel), "pre-confirmation handoff should show unavailable export before confirmation");
@@ -451,12 +451,15 @@ assert(/onClick=\{continueNextAfterConfirmedAction\}[\s\S]*继续下一步/.test
 assert(/onVideoPermissionContractChange\?\.\(nextContract\)/.test(updateVideoPermissionContract), "MinimalAgentPanel must expose contract updates to the session owner");
 assert(/availability\.projectReady[\s\S]*projectStatusLabel[\s\S]*需要本地项目/.test(agentCapabilityItems), "Agent capability list must surface project readiness and browser-draft status copy");
 assert(/availability\.webSearchReady[\s\S]*设置里开启/.test(agentCapabilityItems), "Agent capability list must surface web-search readiness without provider wording");
-assert(/contract\.referenceGenerationAllowed[\s\S]*当前只规划[\s\S]*!localProjectReady[\s\S]*先保存项目[\s\S]*availability\.referenceGenerationReady/.test(agentCapabilityItems), "Agent capability list must respect reference-generation boundary, local project readiness, and provider readiness");
+assert(/contract\.referenceGenerationAllowed[\s\S]*当前只整理[\s\S]*!localProjectReady[\s\S]*先保存项目[\s\S]*availability\.referenceGenerationReady/.test(agentCapabilityItems), "Agent capability list must respect reference-generation boundary, local project readiness, and provider readiness");
 assert(/contract\.videoSubmitAllowed[\s\S]*等你允许[\s\S]*!localProjectReady[\s\S]*先保存项目[\s\S]*availability\.videoSubmitReady/.test(agentCapabilityItems), "Agent capability list must respect video-submission boundary, local project readiness, and provider readiness");
 assert(/!localProjectReady \? "先保存项目" : availability\.exportReady/.test(agentCapabilityItems), "Agent capability list must not call export ready before a local project exists");
 assert(/const projectNeededForGeneratedStory = !localProjectReadyForTools[\s\S]*runtimeState\.storyFlow\.shots\.length > 0[\s\S]*runtimeState\.visualMemory\.summary\.missing > 0/.test(minimalAgentPanelSource), "bottom Agent composer must detect when a browser draft has become a real story that needs a local project before generation");
 assert(/if \(projectNeededForGeneratedStory\)[\s\S]*label: "发送"[\s\S]*disabled:\s*true[\s\S]*生成参考、提交视频或导出前需要本地项目/.test(minimalAgentPanelSource), "bottom Agent composer must keep the single send entry visible and explain local project requirements after story planning");
 assert(/if \(projectBlockedWithoutFooterResolver\)[\s\S]*label: "发送"[\s\S]*disabled:\s*true[\s\S]*生成参考、提交视频或导出前需要本地项目/.test(minimalAgentPanelSource), "bottom Agent composer must not replace the main send entry with a project action when local project controls are unavailable");
+assert(/const showFooterSuggestedAction = !hasComposerInput[\s\S]*primaryLabel !== "发送"/.test(minimalAgentPanelSource), "empty-composer suggested actions must not replace the fixed send button");
+assert(/function handleSend\(\)[\s\S]*void prepareChange\(\)/.test(minimalAgentPanelSource), "fixed send button must route typed text or attachments through the Agent planner");
+assert(/className="minimal-agent-suggested-button"[\s\S]*onClick=\{handleNext\}[\s\S]*className="minimal-agent-send-button"[\s\S]*onClick=\{handleSend\}/.test(minimalAgentPanelSource), "bottom composer must render suggested action and send as separate controls");
 assert(/aria-label="现在能做"/.test(minimalAgentPanelSource), "Agent details must show a compact current capability list");
 assert(/visibleAgentCapabilityItems\.map/.test(minimalAgentPanelSource), "Agent capability list must be rendered from live availability");
 assert(/const attentionItems = items\.filter\(\(item\) => item\.tone !== "ready"\)/.test(agentCapabilityGlanceItems), "Agent capability glance should prioritize blocked or waiting capabilities");
@@ -491,7 +494,7 @@ assert(/agentActionEnvelope\?\.status === "blocked"/.test(minimalAgentPanelSourc
 assert(/action\.status === "blocked"[\s\S]*return "需要补充"/.test(agentReviewPrimaryLabel), "blocked staged actions must show a creator-facing blocked button label");
 assert(/actionBlocked && agentActionEnvelope[\s\S]*agentActionEnvelope\.userFacingMessage/.test(minimalAgentPanelSource), "blocked staged actions must expose the concrete Agent blocker as the disabled button reason");
 assert(/if\s*\(\s*primaryDisabled\s*\)[\s\S]*setStatus\(primaryDisabledReason\)[\s\S]*return;/.test(handleNext), "primary action handler must not bypass disabled confirmation state");
-assert(/继续用底部主按钮：\{primaryLabel\}/.test(minimalAgentPanelSource), "staged Agent cards must point to the bottom primary button instead of rendering a second primary action");
+assert(/继续点底部发送：\{primaryLabel\}/.test(minimalAgentPanelSource), "staged Agent cards must point to the bottom primary button instead of rendering a second primary action");
 assert(!/<button disabled=\{primaryDisabled\}[\s\S]*\{primaryLabel\}[\s\S]*<\/button>/.test(minimalAgentPanelSource), "staged Agent cards must not duplicate the bottom primary button");
 assert(/if\s*\(composerPrimaryIsFresh\)\s*\{[\s\S]*void prepareChange\(\)/.test(minimalAgentPanelSource), "typing into the bottom composer must start a fresh request through the unified primary operation instead of re-confirming the old action");
 assert(/isPreparingPlan[\s\S]*status \|\| "正在整理"[\s\S]*稍等一下/.test(minimalAgentPanelSource), "disabled composer action should explain the current preparation state instead of a generic blocker");
@@ -544,7 +547,7 @@ assert(/projectImpactLabel:\s*"分镜、提示词和文本复核"/.test(minimalA
 assert(/projectTaskLabel:\s*pack\?\.title \|\| "已加入项目参考"/.test(minimalAgentPanelSource), "saved research should surface the saved reference title");
 
 assert(/export type AgentVideoSubmitContract/.test(agentPanelProjectionSource), "agentPanelProjection must define the session contract type");
-assert(/defaultAgentVideoSubmitContract[\s\S]*mode:\s*"plan_only"[\s\S]*videoSubmitAllowed:\s*false[\s\S]*referenceGenerationAllowed:\s*false[\s\S]*默认先只规划/.test(agentPanelProjectionSource), "Agent session must default to plan-only until the creator explicitly opens generation");
+assert(/defaultAgentVideoSubmitContract[\s\S]*mode:\s*"plan_only"[\s\S]*videoSubmitAllowed:\s*false[\s\S]*referenceGenerationAllowed:\s*false[\s\S]*默认先只整理/.test(agentPanelProjectionSource), "Agent session must default to plan-only until the creator explicitly opens generation");
 assert(/videoAllowedAgentVideoSubmitContract[\s\S]*mode:\s*"video_allowed"[\s\S]*videoSubmitAllowed:\s*true[\s\S]*referenceGenerationAllowed:\s*true/.test(agentPanelProjectionSource), "video-allowed mode must stay available as an explicit creator boundary");
 assert(/detectDirectorAgentPermissionIntent/.test(agentPanelProjectionSource), "Agent panel contract detection must use the shared permission intent classifier");
 assert(/videoSubmitAllowed:\s*false/.test(detectVideoContract), "plan-only detection must write videoSubmitAllowed=false");
@@ -559,14 +562,14 @@ for (const phrase of ["先不要提交视频", "先不要提交视频测试", "�
 for (const phrase of ["不要真实生图", "只看规划", "只跑文本", "跑到生图前"]) {
   assert(directorAgentPermissionIntentSource.includes(phrase), `plan-only control phrases must include ${phrase}`);
 }
-for (const phrase of ["可做参考", "可以做参考", "允许做参考", "只补参考图"]) {
+for (const phrase of ["可做参考", "可以做参考", "允许做参考", "可生成参考", "可以生成参考", "允许生成参考", "只补参考图"]) {
   assert(directorAgentPermissionIntentSource.includes(phrase), `reference boundary phrases must include ${phrase}`);
 }
 assert(/function isDirectorAgentPermissionControlOnlyIntent/.test(directorAgentPermissionIntentSource), "pure Agent boundary commands need a shared control-only classifier");
 assert(/isDirectorAgentPermissionControlOnlyIntent\(userIntent\)[\s\S]*resetPreparedComposerState\(agentVideoPermissionLabel\(nextActionVideoPermissionContract\)\)[\s\S]*setText\(""\)[\s\S]*setAttachments\(\[\]\)[\s\S]*return;/.test(prepareChange), "pure Agent boundary commands should update the execution boundary without staging a Project.vibe edit");
 assert(/agentVideoSubmitContractAllowsReference/.test(agentPanelProjectionSource), "session contract must expose reference-generation permission");
-assert(/可做参考[\s\S]*可提交视频/.test(labelVideoContract), "mode labels must include reference and video states");
-assert(/不会提交视频/.test(detailVideoContract), "plan-only detail must say video will not be submitted");
+assert(/可生成参考[\s\S]*可提交视频/.test(labelVideoContract), "mode labels must include reference and video states");
+assert(/不会生成或提交/.test(detailVideoContract), "plan-only detail must say generation and video submission stay off");
 assert(/shots:\s*shots\.map\(summarizeShotIndexItem\)/.test(directorAgentActionSource), "Agent snapshot must keep a project shot index for text-target resolution");
 assert(/shotIdsMentionedInIntent/.test(directorAgentActionSource), "Agent action builder must resolve explicit shot mentions from natural language");
 assert(/sourceContextShotIds/.test(directorAgentActionSource), "Agent action source context must carry resolved shot targets");
@@ -575,7 +578,7 @@ assert(/minimal-agent-permission-menu/.test(minimalAgentPanelSource), "MinimalAg
 assert(/aria-label="AI 选择的做法"[\s\S]*AI 选择的做法/.test(minimalAgentPanelSource), "selected strategy should be shown as the AI chosen approach, not an internal skill term");
 assert(/minimal-agent-skill-hint[\s\S]*想换做法[\s\S]*直接在下面输入框说/.test(minimalAgentPanelSource), "strategy changes should be requested through natural-language Agent input instead of manual skill buttons");
 assert(!/minimal-agent-skill-actions|selectedSkillOverrides|directorSkillOverridePrompts/.test(minimalAgentPanelSource), "MinimalAgentPanel must not expose manual skill override controls in the Agent-first path");
-assert(/只规划[\s\S]*可做参考[\s\S]*可提交视频/.test(minimalAgentPanelSource), "MinimalAgentPanel must show the three creator-facing modes");
+assert(/只整理[\s\S]*可生成参考[\s\S]*可提交视频/.test(minimalAgentPanelSource), "MinimalAgentPanel must show the three creator-facing modes");
 assert(/const currentVideoPermissionContract = videoPermissionContractForUi/.test(minimalAgentPanelSource), "visible permission boundary must drive current Agent actions");
 assert(/function visibleVideoPermissionContractFor\(contract: AgentVideoPermissionContract\)[\s\S]*agentVideoPermissionForUi\(contract/.test(minimalAgentPanelSource), "visible permission boundary must be reusable for newly staged actions");
 assert(/referenceGenerationBlockedByContract\s*=\s*!agentVideoPermissionAllowsReference\(currentVideoPermissionContract\)/.test(minimalAgentPanelSource), "reference actions must follow the visible permission boundary");
@@ -593,7 +596,7 @@ assert(/disabled=\{referenceGenerationBlockedByProject \|\| endFrameAction\.disa
 assert(/disabled=\{videoCanResume[\s\S]*\?\s*videoPermissionBlockedByProject[\s\S]*:\s*videoPermissionBlockedByProject \|\| Boolean\(videoSendAction\.disabled\)/.test(minimalAgentPanelSource), "video detail button should not be disabled only because the current boundary is plan-only");
 assert(/\(videoAlreadySent && !videoCanResume\)/.test(minimalAgentPanelSource), "resumable submitted video jobs must not be disabled as already-sent");
 assert(/const realSampleDetailAction = realSampleDetailNeedsReview[\s\S]*openReferenceReviewFromDetails[\s\S]*pointToMainReferenceAction/.test(minimalAgentPanelSource), "reference detail button must route review-ready assets to review and otherwise point back to the bottom primary action");
-assert(/function pointToMainVideoAction\(\)[\s\S]*用底部主按钮查询视频结果[\s\S]*用底部主按钮提交视频/.test(minimalAgentPanelSource), "video detail button must explain the bottom primary action instead of submitting from details");
+assert(/function pointToMainVideoAction\(\)[\s\S]*点底部发送，继续查询视频结果[\s\S]*点底部发送，让 Agent 提交视频/.test(minimalAgentPanelSource), "video detail button must explain the bottom primary action instead of submitting from details");
 assert(/onClick=\{pointToMainVideoAction\}/.test(minimalAgentPanelSource), "video detail button must not execute submit/query directly");
 assert(/onClick=\{runFooterEndFrameGeneration\}/.test(minimalAgentPanelSource), "end-frame detail button must reuse the single footer action path");
 assert(/\.minimal-agent-permission-mode/.test(stylesSource), "three-mode status needs styling");

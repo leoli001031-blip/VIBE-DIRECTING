@@ -383,7 +383,10 @@ for (const shot of pack.shots) {
 }
 
 const rs06b = pack.shots.find((shot) => shot.shotId === "RS06B");
-assert(rs06b?.seedanceVideoPlan.inputs.audio.length === 1, "RS06B should carry dialogue audio as timing reference");
+assert(rs06b?.seedanceVideoPlan.inputs.audio.length === 1, "RS06B should carry voice reference audio for the speaking character");
+assert(rs06b?.seedanceVideoPlan.prompt.includes("speaking character voice reference"), "RS06B Seedance prompt should describe uploaded audio as voice reference");
+assert(rs06b?.seedanceVideoPlan.prompt.includes("do not use it as BGM"), "RS06B Seedance prompt should prevent voice reference from becoming BGM");
+assert(rs06b?.seedanceVideoPlan.referencePolicy.dialogueAudioRole.includes("voice line"), "RS06B reference policy should describe audio as voice-line authority");
 assert(rs06b?.seedanceVideoPlan.durationSeconds === 4, "RS06B duration should come from script plan");
 assert(rs06b?.productionSkillPlan.strategyId === "omni_reference", "RS06B short hand insert should use omni reference instead of a single start frame");
 assert(!rs06b?.image2StoryboardPlan, "RS06B omni reference should not create an Image2 storyboard/start-frame plan");

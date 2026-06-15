@@ -11,7 +11,6 @@ export type ProjectInboxKind =
   | "scene"
   | "prop"
   | "storyboard"
-  | "music"
   | "voice"
   | "reference"
   | "unknown";
@@ -36,6 +35,8 @@ export type ProjectAgentConfirmationKind =
 
 export interface ProjectInboxItem {
   id: string;
+  assetId?: string;
+  shotIds?: string[];
   kind: ProjectInboxKind;
   label: string;
   detail: string;
@@ -121,6 +122,17 @@ function clean(value: unknown) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
 }
 
+function referenceMissingDetail(count: number) {
+  if (count <= 0) return "暂时不需要额外参考。";
+  return count > 1
+    ? "还需要整理角色、场景、道具或故事板参考；生成前会请你确认范围。"
+    : "还需要整理一个角色、场景、道具或故事板参考；生成前会请你确认。";
+}
+
+function unique(values: Array<string | undefined>) {
+  return [...new Set(values.map(clean).filter(Boolean))];
+}
+
 function compact(value: unknown) {
   return clean(value).toLowerCase();
 }
@@ -128,6 +140,31 @@ function compact(value: unknown) {
 function pathExtension(value: string) {
   const match = value.toLowerCase().match(/\.([a-z0-9]+)$/);
   return match?.[1] || "";
+}
+
+function hasAudioExtension(value: string) {
+  return ["wav", "mp3", "m4a", "aac", "flac", "ogg"].includes(pathExtension(value));
+}
+
+function hasVoiceReferenceSignal(value: string) {
+  return /voice_reference|audio_reference|dialogue_audio|\b(voice|tts|speaker|dialogue|speech)\b|音色|声音|声线|人声|语音|配音|对白|台词/.test(value);
+}
+
+function hasMusicReferenceSignal(value: string) {
+  return /music_reference|\b(bgm|music|song|score|soundtrack|eurobeat|ost)\b|背景音乐|配乐|音乐|歌曲/.test(value);
+}
+
+function shotDisplayLabel(value: string) {
+  const cleaned = clean(value)
+    .replace(/^shot_storyboard_/i, "")
+    .replace(/^shot_/i, "")
+    .replace(/_/g, "-");
+  return cleaned ? `镜头 ${cleaned}` : "这个镜头";
+}
+
+function shotBindingCopy(shotIds: string[]) {
+  const visible = shotIds.slice(0, 3).map(shotDisplayLabel);
+  return `${visible.join("、")}${shotIds.length > 3 ? ` 等 ${shotIds.length} 个镜头` : ""}`;
 }
 
 function assetSearchText(asset: AssetRecord) {
@@ -145,16 +182,18 @@ function assetSearchText(asset: AssetRecord) {
 
 function projectInboxKindForAsset(asset: AssetRecord): ProjectInboxKind {
   const searchable = compact(assetSearchText(asset));
-  const extension = pathExtension(asset.path);
+  const hasVoiceSignal = hasVoiceReferenceSignal(searchable);
+  const hasMusicSignal = hasMusicReferenceSignal(searchable);
   if (/\b(storyboard|panel|shotboard)\b|故事板|分镜/.test(searchable)) return "storyboard";
-  if (/music_reference|\b(bgm|song|score|soundtrack)\b|配乐|音乐|歌曲/.test(searchable)) return "music";
-  if (/voice_reference|\b(voice|tts|speaker|dialogue)\b|音色|声音|配音|对白|台词/.test(searchable)) return "voice";
+  if (hasVoiceSignal) return "voice";
+  if (hasMusicSignal) return "reference";
+  if (hasAudioExtension(asset.path)) return "voice";
   if (asset.type === "character") return "character";
   if (asset.type === "scene") return "scene";
   if (asset.type === "prop") return "prop";
   if (asset.type === "style") return "reference";
+  const extension = pathExtension(asset.path);
   if (["txt", "md", "srt"].includes(extension)) return "script";
-  if (["wav", "mp3", "m4a", "aac", "flac", "ogg"].includes(extension)) return "voice";
   if (["png", "jpg", "jpeg", "webp"].includes(extension)) return "reference";
   return "unknown";
 }
@@ -165,7 +204,6 @@ function inboxKindLabel(kind: ProjectInboxKind) {
   if (kind === "scene") return "场景";
   if (kind === "prop") return "道具";
   if (kind === "storyboard") return "故事板";
-  if (kind === "music") return "配乐";
   if (kind === "voice") return "声音";
   if (kind === "reference") return "参考";
   return "待判断";
@@ -182,10 +220,10 @@ function assetBindingLabel(asset: AssetRecord) {
   const role = clean(asset.roleBinding?.role);
   const shots = (asset.usedByShotIds || asset.roleBinding?.useFor || []).map(clean).filter(Boolean);
   const kind = projectInboxKindForAsset(asset);
-  if (shots.length) return `建议绑定到 ${shots.slice(0, 3).join("、")}${shots.length > 3 ? ` 等 ${shots.length} 处` : ""}`;
-  if (role) return `建议作为${role}`;
+  if (shots.length) return `建议绑定到 ${shotBindingCopy(shots)}`;
+  if (kind === "reference" && hasMusicReferenceSignal(compact(assetSearchText(asset)))) return "暂不进视频模型；需要配乐时留到后期";
+  if (role && role !== "music_reference") return `建议作为${role}`;
   if (kind === "reference") return "建议作为风格或画面参考";
-  if (kind === "music") return "建议作为配乐参考";
   if (kind === "voice") return "建议作为声音参考";
   if (asset.type !== "unknown") return `建议作为${inboxKindLabel(kind)}参考`;
   return "需要 Agent 判断用途";
@@ -194,8 +232,11 @@ function assetBindingLabel(asset: AssetRecord) {
 function inboxItemFromAsset(asset: AssetRecord): ProjectInboxItem | undefined {
   if (asset.status === "missing" || asset.status === "planned" || asset.status === "rejected") return undefined;
   const kind = projectInboxKindForAsset(asset);
+  const shotIds = unique([...(asset.usedByShotIds || []), ...(asset.roleBinding?.useFor || [])]);
   return {
     id: `asset:${asset.id}`,
+    assetId: asset.id,
+    shotIds,
     kind,
     label: asset.name || inboxKindLabel(kind),
     detail: `${inboxKindLabel(kind)} · ${asset.lockedStatus === "locked" ? "已可复用" : "等待确认用途"}`,
@@ -211,7 +252,7 @@ function inboxItemFromReconciliation(item: AssetReconciliationItem): ProjectInbo
   const kind = item.kind === "storyboard_reference"
     ? "storyboard"
     : item.kind === "music_reference"
-      ? "music"
+      ? "reference"
       : item.kind === "voice_reference"
         ? "voice"
         : item.kind === "style"
@@ -219,10 +260,12 @@ function inboxItemFromReconciliation(item: AssetReconciliationItem): ProjectInbo
           : item.kind;
   return {
     id: `reconciliation:${item.id}`,
+    assetId: item.assetIds[0],
+    shotIds: item.shotIds,
     kind,
     label: item.label,
     detail: `${inboxKindLabel(kind)} · ${item.status === "ambiguous" ? "用途不够确定" : "等待确认"}`,
-    suggestedBinding: item.shotIds.length ? `建议绑定到 ${item.shotIds.slice(0, 3).join("、")}` : "建议先确认用途",
+    suggestedBinding: item.shotIds.length ? `建议绑定到 ${shotBindingCopy(item.shotIds)}` : "建议先确认用途",
     confidence: item.confidence,
     needsReview: true,
     source: "reconciliation",
@@ -248,7 +291,7 @@ export function buildProjectInboxProjection(input: BuildProjectInboxInput): Proj
     items,
     summary: items.length
       ? `${items.length} 个素材已进入项目，${needsReviewCount} 个需要确认用途。`
-      : "还没有放入素材；可以把脚本、图片、音乐直接拖到底部输入框。",
+      : "还没有放入素材；可以把脚本、图片、声音参考或素材文件夹拖到底部输入框。",
     nextAction: needsReviewCount
       ? "先确认素材要绑定到哪里。"
       : items.length
@@ -300,7 +343,7 @@ export function buildProjectObservation(input: BuildProjectObservationInput): Pr
     ? {
         status: "missing" as const,
         label: "参考不完整",
-        detail: `缺少 ${input.referenceMissingCount} 项参考，生成前会请你确认。`,
+        detail: referenceMissingDetail(input.referenceMissingCount),
       }
     : input.referenceReviewCount > 0
       ? {
@@ -346,7 +389,7 @@ export function buildProjectObservation(input: BuildProjectObservationInput): Pr
     : input.image2Running
       ? "等待参考生成完成，完成后进入复核。"
       : needsReferenceGeneration
-        ? "先补齐角色、场景、关键道具或故事板参考。"
+        ? "先生成角色、场景、关键道具或故事板参考。"
         : needsAssetReview
           ? "先复核参考和素材绑定，再继续生成视频。"
           : needsVideoSubmit
@@ -407,7 +450,7 @@ export function routeProjectAgentIntent(input: {
     return { kind: "research", label: "查资料", target: "story", confirmation: "none", plan: ["整理检索问题", "保存可用资料", "等你确认后写入项目"] };
   }
   if (/补.*参考|生成.*参考|角色图|场景图|道具图|故事板/.test(text)) {
-    return { kind: "reference", label: "补齐参考", target: "assets", confirmation: "reference_generation", plan: ["判断缺少的参考", "确认生成范围", "生成后进入复核"] };
+    return { kind: "reference", label: "生成参考", target: "assets", confirmation: "reference_generation", plan: ["判断缺少的角色、场景或道具参考", "确认生成范围", "生成后进入复核"] };
   }
   if (!text && input.hasAttachments) {
     return { kind: "reference", label: "整理素材", target: "assets", confirmation: "asset_review", plan: ["识别拖入文件", "建议绑定到角色、场景或镜头", "需要时请你确认"] };

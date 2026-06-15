@@ -415,7 +415,7 @@ export function createRuntimeApiCurrentProjectP6RealImage2Submit(deps) {
         projectionKind: "current_project_p6_real_image2_submit",
         status: "blocked",
         uiStatus: "blocked",
-        userLabel: "待补齐",
+        userLabel: "待处理",
         currentProject: statusProjection.currentProject,
         requestContext: statusProjection.requestContext,
         projectRootMode: source.projectRootMode,

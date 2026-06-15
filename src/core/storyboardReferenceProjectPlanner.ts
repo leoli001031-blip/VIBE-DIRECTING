@@ -165,7 +165,7 @@ function projectAssetRole(kind: string | undefined, role: string | undefined): S
   if (normalized === "character" || normalized === "character_identity") return "character_identity";
   if (normalized === "prop" || normalized === "prop_reference") return "prop_reference";
   if (normalized === "storyboard" || normalized === "storyboard_reference") return "storyboard_reference";
-  if (normalized === "dialogue_audio") return "dialogue_audio";
+  if (normalized === "dialogue_audio" || normalized === "voice_reference" || normalized === "audio_reference") return "dialogue_audio";
   return undefined;
 }
 
@@ -360,8 +360,8 @@ export function buildStoryboardReferenceProjectPlan(
 
     const shotAudio = audioForShot(audioReferences, shot.id);
     const dialogueAudio = toAudioReference(shotAudio);
-    if (shotAudio && !dialogueAudio) warnings.push(`镜头 ${shot.id} 的对白音频缺少文件路径，视频阶段会先不带音频。`);
-    if (!dialogueAudio) warnings.push(`镜头 ${shot.id} 还没有可用的对白音频；口型和表演节奏需要后续补齐。`);
+    if (shotAudio && !dialogueAudio) warnings.push(`镜头 ${shot.id} 的声音参考缺少文件路径，视频阶段会先不带音频。`);
+    if (!dialogueAudio) warnings.push(`镜头 ${shot.id} 还没有可用的声音参考；口型、声线和表演节奏需要后续补齐。`);
     const directorPlan = directorPlanForShot(input, shot);
     const hasExplicitRhythmOverride = Boolean(shot.rhythmProfile || shot.rhythmReason || shot.actionDensity || shot.splitPolicy);
     const productionSkillPlan = buildDirectorProductionSkillPlan({

@@ -359,7 +359,7 @@ assert(projectInspection.kind === "inspect_project_status", "status questions sh
 assert(projectInspection.toolPlan.toolName === "project_vibe_patch", "status inspection should stay in the safe project lane");
 assert(projectInspection.toolPlan.providerSubmitAllowed === false, "status inspection must not call providers");
 assert(projectInspection.proposedChanges.some((change) => change.field === "projectStatus"), "status inspection should expose readiness as a proposed fact");
-assert(projectInspection.proposedChanges.some((change) => change.field === "nextActions" && change.to.includes("现在补齐参考")), "status inspection should expose the Agent action queue");
+assert(projectInspection.proposedChanges.some((change) => change.field === "nextActions" && change.to.includes("现在生成参考")), "status inspection should expose the Agent action queue");
 assert(projectInspection.userFacingMessage.includes("建议下一步"), "status inspection should return a user-readable next step");
 assert(projectInspection.userFacingMessage.includes("后续可走"), "status inspection should summarize more than one possible next action");
 
@@ -469,6 +469,8 @@ assert(isDirectorAgentPermissionControlOnlyIntent("先不要提交视频测试")
 assert(isDirectorAgentPermissionControlOnlyIntent("视频先不用跑") === true, "colloquial no-video wording should be treated as a control-only Agent command");
 assert(detectDirectorAgentPermissionIntent("可做参考") === "reference_allowed", "typed reference boundary wording should infer reference-only");
 assert(isDirectorAgentPermissionControlOnlyIntent("可做参考") === true, "pure reference boundary wording should be treated as a control-only Agent command");
+assert(detectDirectorAgentPermissionIntent("可生成参考") === "reference_allowed", "visible reference-generation wording should infer reference-only");
+assert(isDirectorAgentPermissionControlOnlyIntent("可生成参考") === true, "visible reference-generation wording should be treated as a control-only Agent command");
 assert(isDirectorAgentPermissionControlOnlyIntent("可提交视频") === true, "pure video permission wording should be treated as a control-only Agent command");
 assert(isDirectorAgentPermissionControlOnlyIntent("提交视频") === false, "bare submit-video wording must remain an Agent action");
 assert(isDirectorAgentPermissionControlOnlyIntent("先补参考") === false, "bare reference-generation wording must remain an Agent action");
@@ -491,7 +493,7 @@ const boundedReference = buildDirectorAgentActionEnvelope({
 });
 assert(boundedReference.kind === "prepare_reference_generation", "control phrases should not turn a reference request into video submit");
 assert(boundedReference.status === "blocked", "bounded reference request should still obey plan-only");
-assert(boundedReference.userFacingMessage.includes("不能补参考"), "bounded reference request should explain the reference blocker");
+assert(boundedReference.userFacingMessage.includes("还不能生成参考"), "bounded reference request should explain the reference blocker");
 
 const directNoVideoReference = buildDirectorAgentActionEnvelope({
   userIntent: "帮我补参考图，但先不要提交视频",
@@ -536,7 +538,7 @@ const blockedVideo = buildDirectorAgentActionEnvelope({
 assert(blockedVideo.status === "blocked", "reference-only contract should block video submit");
 assert(blockedVideo.toolPlan.toolName === "seedance_video_submit", "video intent should be classified");
 assert(blockedVideo.toolPlan.providerSubmitAllowed === false, "blocked video request must not submit provider");
-assert(blockedVideo.blockers.some((item) => item.includes("补齐参考")), "video submit should wait for missing references");
+assert(blockedVideo.blockers.some((item) => item.includes("生成并复核参考")), "video submit should wait for missing references");
 
 const noShotSnapshot = buildDirectorAgentStateSnapshot({
   runtimeState: {
@@ -568,7 +570,7 @@ const continueNoAsset = buildDirectorAgentActionEnvelope({
   generatedAt: "2026-05-31T00:00:04.625Z",
 });
 assert(noAssetSnapshot.projectReadiness.status === "needs_references", "shots without any reference projection should need references");
-assert(noAssetSnapshot.projectReadiness.actionQueue[0]?.label === "补齐参考", "no-reference projects should queue reference generation first");
+assert(noAssetSnapshot.projectReadiness.actionQueue[0]?.label === "生成参考", "no-reference projects should queue reference generation first");
 assert(continueNoAsset.kind === "prepare_reference_generation", "continue should not submit video when no references exist");
 
 const needsReviewOnlySnapshot = buildDirectorAgentStateSnapshot({

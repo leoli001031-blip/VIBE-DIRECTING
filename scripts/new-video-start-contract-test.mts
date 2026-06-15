@@ -130,6 +130,13 @@ check(
   failures,
 );
 check(
+  /englishDurationNumbers/.test(newVideoStartSource)
+    && /twelve:\s*12/.test(newVideoStartSource)
+    && /englishDurationNumber\(englishMatch\?\.\[1\]\)/.test(newVideoStartSource),
+  "NewVideoStart must recognize common English duration phrases such as 'twelve seconds' as target duration.",
+  failures,
+);
+check(
   /(setScript|updateScript)\s*\(/.test(newVideoStart),
   "NewVideoStart script import path must write imported text into the script draft.",
   failures,
@@ -176,9 +183,22 @@ check(
 check(
   /inferAudioRole/.test(newVideoStartSource)
     && /voice_reference/.test(newVideoStartSource)
-    && /music_reference/.test(newVideoStartSource)
-    && newVideoStartSource.includes("音频会自动识别为配乐或声音参考"),
-  "NewVideoStart must infer music vs voice audio without implying every audio file is BGM.",
+    && newVideoStartSource.includes("声音参考会绑定到角色"),
+  "NewVideoStart must treat uploaded audio as voice reference on the demo path.",
+  failures,
+);
+const inferAudioRoleBody = findFunctionBody(newVideoStartSource, "inferAudioRole");
+check(
+  inferAudioRoleBody.indexOf("voice_reference") >= 0
+    && !/music_reference|bgm|配乐|音乐/i.test(inferAudioRoleBody),
+  "NewVideoStart audio inference must not route uploaded audio into music/BGM analysis on the demo path.",
+  failures,
+);
+check(
+  !/musicAnalysis/.test(newVideoStartSource)
+    && !/music_reference/.test(newVideoStartSource)
+    && /scriptRhythmSegment/.test(newVideoStartSource),
+  "NewVideoStart must keep script rhythm planning separate from parked music analysis and music-reference routing.",
   failures,
 );
 check(
@@ -188,15 +208,29 @@ check(
   failures,
 );
 check(
+  /export type NewVideoStartStatus/.test(newVideoStartSource)
+    && /onStatusChange\?:\s*\(status:\s*NewVideoStartStatus\)\s*=>\s*void/.test(newVideoStartSource)
+    && /onStatusChange\?\.\(entryStatus\)/.test(newVideoStartSource),
+  "NewVideoStart must report fresh-project planning status to the unified project status bar.",
+  failures,
+);
+check(
+  /draftShotCount\?:\s*number/.test(newVideoStartSource)
+    && /draftReferenceCount\?:\s*number/.test(newVideoStartSource)
+    && /draftShotCount:\s*storyboardRows\.length/.test(newVideoStartSource),
+  "NewVideoStart status must include draft shot/reference counts for the top status facts.",
+  failures,
+);
+check(
   /defaultAgentVideoSubmitContract[\s\S]*mode:\s*"plan_only"[\s\S]*videoSubmitAllowed:\s*false[\s\S]*referenceGenerationAllowed:\s*false/.test(agentPanelProjectionSource),
   "NewVideoStart must inherit a plan-only default boundary before the creator explicitly allows generation.",
   failures,
 );
 check(
-  /aria-label="当前生成边界"/.test(newVideoStartSource)
+  /aria-label="当前执行模式"/.test(newVideoStartSource)
     && /aria-pressed=\{activeVideoPermissionContract\.mode === item\.mode\}/.test(newVideoStartSource)
     && /onClick=\{\(\) => selectVideoPermissionMode\(item\.mode\)\}/.test(newVideoStartSource),
-  "NewVideoStart must expose direct execution-boundary controls in the unified input.",
+  "NewVideoStart must keep execution-boundary controls available inside the unified input.",
   failures,
 );
 check(
@@ -255,10 +289,11 @@ check(
 check(
   /const activeVideoPermissionLabel = videoPermissionModeItems\.find/.test(newVideoStartSource)
     && /new-video-agent-boundary-details/.test(newVideoStartSource)
-    && /执行范围/.test(newVideoStartSource)
+    && /当前模式/.test(newVideoStartSource)
     && /<strong>\{activeVideoPermissionLabel\}<\/strong>/.test(newVideoStartSource)
-    && /aria-label="当前生成边界"/.test(newVideoStartSource),
-  "NewVideoStart must tuck execution controls into a concise advanced summary instead of exposing three mode buttons by default.",
+    && /boundaryDetailsOpen && \(/.test(newVideoStartSource)
+    && /aria-label="当前执行模式"/.test(newVideoStartSource),
+  "NewVideoStart must tuck execution controls into a lazy advanced summary instead of exposing three mode buttons by default.",
   failures,
 );
 check(
@@ -312,21 +347,21 @@ check(
 );
 check(
   !/ensureLocalProjectForDraft/.test(newVideoStartSource)
-    && /当前是浏览器草稿/.test(newVideoStartSource)
+    && /当前是未保存草稿/.test(newVideoStartSource)
     && /确认时再选择项目文件夹/.test(newVideoStartSource),
   "NewVideoStart must let AI planning run before asking for a local project folder.",
   failures,
 );
 check(
-  /aria-label=\{`生成边界：\$\{item\.label\}`\}/.test(newVideoStartSource)
-    && /aria-label="添加脚本、图片或音频文件"/.test(newVideoStartSource)
+  /aria-label=\{`执行模式：\$\{item\.label\}`\}/.test(newVideoStartSource)
+    && /aria-label="添加脚本、图片或声音参考"/.test(newVideoStartSource)
     && /aria-label=\{composerPrimaryAriaLabel\}/.test(newVideoStartSource),
   "NewVideoStart composer controls must expose explicit accessible action labels.",
   failures,
 );
 check(
   /composerConfirmsDraft[\s\S]*confirmDraft\s*:\s*submitComposer/.test(newVideoStartSource)
-    && /composerPrimaryAriaLabel[\s\S]*"确认新视频草案"/.test(newVideoStartSource),
+    && /composerPrimaryAriaLabel[\s\S]*"确认进故事流"/.test(newVideoStartSource),
   "NewVideoStart bottom primary action must confirm a ready draft when no feedback text is entered.",
   failures,
 );

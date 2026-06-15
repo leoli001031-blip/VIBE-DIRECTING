@@ -49,7 +49,7 @@ function countBy<T extends string>(values: T[]): Record<T, number> {
 
 function statusTitle(value: CreatorReviewStatus) {
   if (value === "needs_review") return "待复核";
-  if (value === "missing") return "待补齐";
+  if (value === "missing") return "待生成";
   if (value === "approved") return "已通过";
   if (value === "retry") return "可重试";
   return "已锁定";
@@ -266,11 +266,11 @@ function frameStatusLabel(status: ShotRecord["status"], hasFrame: boolean, phase
 }
 
 function frameNextAction(item: Pick<CreatorFramePlanItem, "startStatus" | "endStatus" | "requiresEndFrame">) {
-  if (item.startStatus === "missing") return "补齐镜头参考";
+  if (item.startStatus === "missing") return "生成镜头参考";
   if (item.startStatus === "pending") return "先准备镜头参考";
   if (item.startStatus === "needs_review") return "复核镜头参考";
   if (!item.requiresEndFrame) return "准备视频";
-  if (item.endStatus === "missing") return "补齐尾帧参考";
+  if (item.endStatus === "missing") return "生成尾帧参考";
   if (item.endStatus === "pending") return "再准备尾帧参考";
   if (item.endStatus === "needs_review") return "复核尾帧参考";
   return "画面已通过";
@@ -601,6 +601,25 @@ function preflightState(
   return needsReview ? "needs_review" : "missing";
 }
 
+function preflightReferenceSummary({
+  lockedReferenceCount,
+  reviewReferenceCount,
+  missingReferenceCount,
+  frameMissingCount,
+}: {
+  lockedReferenceCount: number;
+  reviewReferenceCount: number;
+  missingReferenceCount: number;
+  frameMissingCount: number;
+}) {
+  const missing = missingReferenceCount + frameMissingCount;
+  if (missing > 0 && reviewReferenceCount > 0) return "参考待看，也有参考待生成";
+  if (missing > 0) return "参考待生成";
+  if (reviewReferenceCount > 0) return "参考待看";
+  if (lockedReferenceCount > 0) return "参考已可用";
+  return "参考待整理";
+}
+
 function buildCreatorPreflightProjection({
   shotCount,
   modeSummary,
@@ -623,7 +642,12 @@ function buildCreatorPreflightProjection({
   const referencesNeedReview = reviewReferenceCount > 0;
   const videoNeedsReview = videoReviewCount > 0;
   const referencesMissing = missingReferenceCount > 0 || frameMissingCount > 0;
-  const referenceSummary = `已通过 ${lockedReferenceCount} · 待看 ${reviewReferenceCount} · 缺 ${missingReferenceCount + frameMissingCount}`;
+  const referenceSummary = preflightReferenceSummary({
+    lockedReferenceCount,
+    reviewReferenceCount,
+    missingReferenceCount,
+    frameMissingCount,
+  });
   const storyReady = shotCount > 0;
   const videoWaiting = videoGeneration.status === "submitted" || videoGeneration.status === "queued" || videoGeneration.status === "generating";
   const videoRecoverable = videoGeneration.status === "recoverable";

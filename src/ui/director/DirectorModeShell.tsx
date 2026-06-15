@@ -13,11 +13,12 @@ import type { AssetRecord, ProjectAudit, ShotRecord } from "../../core/types";
 import type { KnowledgePack, KnowledgePackManifest } from "../../core/knowledgeTypes";
 import type { AgentWebSearchResult, AgentWebSearchSettings } from "../../core/agentWebSearchClient";
 import type { DirectorQaUserFeedback } from "../../core/directorQaUserFeedback";
+import { buildProjectStatusViewModel, type ProjectStatusViewModel } from "../app/projectStatusViewModel";
 import { MinimalAgentPanel } from "./MinimalAgentPanel";
 import { MinimalStoryFlow } from "./MinimalStoryFlow";
 import { CreatorDeskPanels } from "./CreatorDeskPanels";
 import { DirectorWorkflowOverview } from "./DirectorWorkflowOverview";
-import type { NewVideoStartConfirmationContext, NewVideoStartDraft } from "./NewVideoStart";
+import type { NewVideoStartConfirmationContext, NewVideoStartDraft, NewVideoStartStatus } from "./NewVideoStart";
 import type { DirectorView } from "./directorTypes";
 import {
   agentVideoSubmitContractAllowsReference as agentVideoPermissionAllowsReference,
@@ -92,6 +93,31 @@ function DirectorDetailDisclosure({
   );
 }
 
+function ProjectStatusSummary({ status }: { status: ProjectStatusViewModel }) {
+  return (
+    <section className={`project-status-summary ${status.tone}`} aria-label="当前项目状态">
+      <div className="project-status-summary-main">
+        <span>{status.stage}</span>
+        <strong>{status.doing}</strong>
+        <small>等待：{status.waitingFor}</small>
+      </div>
+      <div className="project-status-summary-next">
+        <span>下一步</span>
+        <strong>{status.nextAction}</strong>
+        {status.issue && <small>{status.issue}</small>}
+      </div>
+      <div className="project-status-summary-facts" aria-label="项目概览">
+        {status.facts.map((fact) => (
+          <span key={fact.label}>
+            <small>{fact.label}</small>
+            <strong>{fact.value}</strong>
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function DirectorMode({
   audit,
   view,
@@ -122,11 +148,12 @@ export function DirectorMode({
   projectContentReady,
   localProjectBusy,
   canCreateLocalProject,
+  newVideoComposerResetKey,
   directorView,
   activeSectionId,
-  statusNode,
   assetLibraryNode,
   onSelectShot,
+  onSelectAsset,
   onProjectStoreApplyPlanReady,
   onNewVideoDraftConfirmed,
   onCreateLocalProject,
@@ -199,11 +226,12 @@ export function DirectorMode({
   projectContentReady?: boolean;
   localProjectBusy?: boolean;
   canCreateLocalProject?: boolean;
+  newVideoComposerResetKey?: string;
   directorView: DirectorView;
   activeSectionId?: string;
-  statusNode: ReactNode;
   assetLibraryNode: ReactNode;
   onSelectShot: (id: string, additive?: boolean) => void;
+  onSelectAsset?: (id: string) => void;
   onProjectStoreApplyPlanReady?: (plan: ProjectFactsStagedApplyPlan) => void;
   onNewVideoDraftConfirmed?: (draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) => boolean | void | Promise<boolean | void>;
   onCreateLocalProject?: (draft?: NewVideoStartDraft) => unknown | Promise<unknown>;
@@ -248,10 +276,11 @@ export function DirectorMode({
   const agentProjectStatusLabel = folderReady
     ? "已连接"
     : projectReady
-      ? "浏览器草稿"
+      ? "未保存草稿"
       : "需要本地项目";
   const agentShotBoundView = directorView === "story" || directorView === "preview" || directorView === "export";
   const [videoPermissionContract, setVideoPermissionContract] = useState<AgentVideoPermissionContract>(defaultAgentVideoPermissionContract);
+  const [newVideoStatus, setNewVideoStatus] = useState<NewVideoStartStatus | undefined>();
   const pendingConfirmedVideoPermissionContractRef = useRef<{
     contract: AgentVideoPermissionContract;
     confirmedAt: number;
@@ -284,7 +313,7 @@ export function DirectorMode({
       disabled: true,
       ready: false,
       message: videoPermissionContract.mode === "plan_only"
-        ? "当前只规划，不会提交视频。"
+        ? "当前只整理，不会生成或提交。"
         : "当前先做参考，视频等你确认。",
     };
   }, [videoSendAction, videoPermissionAllowsSend, videoPermissionContract.mode]);
@@ -298,6 +327,40 @@ export function DirectorMode({
   const sessionRetryReviewItem = videoPermissionAllowsReference ? onRetryReviewItem : undefined;
   const storyDetailLabel = [`${view.storySections.length} 个段落`, "点击查看分镜、模式和画面状态"].join(" · ");
   const showCreatorDeskPanel = projectReady && creatorDesk && !showNewVideoStart && directorView === "story";
+  useEffect(() => {
+    if (!showNewVideoStart && newVideoStatus) setNewVideoStatus(undefined);
+  }, [newVideoStatus, showNewVideoStart]);
+  const projectStatusView = useMemo(() => buildProjectStatusViewModel({
+    runtimeState,
+    folderReady,
+    projectReady,
+    localProjectBusy,
+    directorView,
+    referenceGenerationAction: realSampleAction,
+    endFrameAction,
+    videoSendAction: sessionVideoSendAction,
+    videoStage: creatorDesk?.videoStage,
+    agentStage: creatorDesk?.agentStage,
+    agentCommand: creatorDesk?.agentCommand,
+    newVideoStatus,
+    exportAction,
+    exportWorker,
+  }), [
+    creatorDesk?.agentCommand,
+    creatorDesk?.agentStage,
+    creatorDesk?.videoStage,
+    directorView,
+    endFrameAction,
+    exportAction,
+    exportWorker,
+    folderReady,
+    localProjectBusy,
+    newVideoStatus,
+    projectReady,
+    realSampleAction,
+    runtimeState,
+    sessionVideoSendAction,
+  ]);
   async function confirmNewVideoDraft(draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) {
     const nextContract = draft.agentBoundaryMode
       ? agentVideoPermissionForMode(draft.agentBoundaryMode)
@@ -314,7 +377,7 @@ export function DirectorMode({
     <div className={`minimal-director ${directorView} ${showAgentPanel ? "has-bottom-composer" : "composer-only"}`}>
       <div className="minimal-director-main">
         <div className="director-workbar" aria-label="项目工作状态">
-          {statusNode}
+          <ProjectStatusSummary status={projectStatusView} />
         </div>
         {showCreatorDeskPanel && (
           <CreatorDeskPanels
@@ -331,6 +394,14 @@ export function DirectorMode({
             onRejectItem={onRejectReviewItem}
             onLockItem={onLockReviewItem}
             onSelectItem={(item) => item.shotId && onSelectShot(item.shotId)}
+            onSelectInboxItem={(item) => {
+              if (item.assetId && onSelectAsset) {
+                onSelectAsset(item.assetId);
+                onOpenDirectorView?.("assets");
+                return;
+              }
+              if (item.shotIds?.[0]) onSelectShot(item.shotIds[0]);
+            }}
             onOpenView={onOpenDirectorView}
           />
         )}
@@ -362,6 +433,7 @@ export function DirectorMode({
                 <NewVideoStart
                   shots={shots}
                   projectDraftKey={runtimeState.project.root || runtimeState.sourceIndexSummary.projectId}
+                  composerResetKey={newVideoComposerResetKey}
                   localProjectReady={folderReady}
                   localProjectBusy={localProjectBusy}
                   canCreateLocalProject={canCreateLocalProject}
@@ -369,6 +441,7 @@ export function DirectorMode({
                   webSearchSettings={webSearchSettings}
                   webSearchReady={webSearchReady}
                   onSaveResearchAsReference={onSaveResearchAsReference}
+                  onStatusChange={setNewVideoStatus}
                   onDraftConfirmed={confirmNewVideoDraft}
                   videoPermissionContract={videoPermissionContract}
                   onVideoPermissionContractChange={setVideoPermissionContract}

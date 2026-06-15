@@ -1102,7 +1102,7 @@ export function buildImage2StoryboardReferencePlan(
       maxSceneBaselineImages: 1,
       characterAndPropReferencesDeferredToVideo: false,
 	      userFacingSummary: isOmniReferenceMode
-	        ? "全能参考模式不生成额外分镜图：直接使用场景、角色、道具和可选对白音频参考，再用结构化提示词驱动视频。"
+	        ? "全能参考模式不生成额外分镜图：直接使用场景、角色、道具和可选对白声音参考，再用结构化提示词驱动视频。"
 	        : isRapidCutStoryboard
 	          ? "故事板快切使用已锁定场景、角色和道具参考：用粗分镜预演镜头切点、动作方向和节奏，并在视频阶段剥离所有标注。"
 	          : "故事板叙事使用已锁定场景、角色和道具参考：主分镜格交代空间关系，小分镜格交代动作承接，并提前避免角色外观漂移。",
@@ -1187,8 +1187,8 @@ export function buildSeedanceStoryboardVideoPlan(input: SeedanceStoryboardVideoP
       ? "- The storyboard may be rough or semi-abstract; character references define the final identity, not the temporary storyboard mannequin."
       : undefined,
     storyboardReference
-      ? "- All-around reference anti-blend rule: do not average the uploaded images into one mixed moodboard. Each reference keeps its own job; use the storyboard for layout/motion, the scene baseline for environment/weather, character references for identity, prop references for objects, and audio only for timing."
-      : "- All-around reference anti-blend rule: do not average the uploaded images into one mixed moodboard. Each reference keeps its own job; use written direction for layout/motion, the scene baseline for environment/weather, character references for identity, prop references for objects, and audio only for timing.",
+      ? "- All-around reference anti-blend rule: do not average the uploaded images into one mixed moodboard. Each reference keeps its own job; use the storyboard for layout/motion, the scene baseline for environment/weather, character references for identity, prop references for objects, and audio only for voice/timing."
+      : "- All-around reference anti-blend rule: do not average the uploaded images into one mixed moodboard. Each reference keeps its own job; use written direction for layout/motion, the scene baseline for environment/weather, character references for identity, prop references for objects, and audio only for voice/timing.",
     sceneBaseline
       ? `- Image ${sceneImageIndex} is the scene baseline. Use it for location, weather, time of day, spatial continuity, and atmosphere. ${storyboardReference ? "Do not let it override the storyboard composition." : "It is the environment authority for this omni-reference shot."}`
       : "- No scene baseline image is attached; use the written prompt for location and weather continuity.",
@@ -1199,8 +1199,8 @@ export function buildSeedanceStoryboardVideoPlan(input: SeedanceStoryboardVideoP
       ? `- Prop reference image${propReferences.length > 1 ? "s" : ""} ${propImageIndexes.length ? `(${imageNumberRange(propImageIndexes[0]!, propImageIndexes.length)}) ` : ""}keep important object appearance only. They are not storyboard panels, scene frames, camera cues, or separate video shots.`
       : "- No prop reference image is attached.",
     dialogueAudio
-      ? "- The uploaded audio is dialogue timing and performance reference. The speaking character should match the audio timing naturally."
-      : "- No dialogue audio is attached.",
+      ? "- The uploaded audio is the speaking character voice reference. Use it for voice line, tone, speech rhythm, mouth timing, dialogue timing and performance texture only; do not use it as BGM, soundtrack, score, music, or a sound effect."
+      : "- No voice/dialogue audio reference is attached.",
     input.dialogueTranscript ? `Dialogue transcript: ${input.dialogueTranscript}` : undefined,
     "",
     ...propReferenceSafetyLines(propReferences),
@@ -1224,7 +1224,7 @@ export function buildSeedanceStoryboardVideoPlan(input: SeedanceStoryboardVideoP
       ? "Identity conflict rule: do not let a rough storyboard heroine or placeholder design replace the locked character design."
       : "Identity conflict rule: do not let written shorthand or scene mood change the locked character design.",
     "",
-    "Audio constraints: no BGM, no music, no song, no added soundtrack. Music references belong to rhythm planning and final export mixing, not the video provider prompt. Keep room for later dialogue, TTS, ambient sound, and manual sound design.",
+    "Audio constraints: no BGM, no music, no song, no added soundtrack. Uploaded audio in this demo path is voice reference only and must not become music, rhythm backing, final-mix BGM, or sound effects. Keep room for later dialogue, ambient sound, and manual sound design.",
     "Output constraints: no subtitles, no on-screen text, no watermark, no manga page, no photorealism, no live action conversion.",
   ]);
 
@@ -1266,16 +1266,16 @@ export function buildSeedanceStoryboardVideoPlan(input: SeedanceStoryboardVideoP
       sceneBaselineRole: "location, weather, time of day, environment continuity, atmosphere",
       characterReferenceRole: "face, hairstyle, outfit, body design, identity, and silhouette",
       propReferenceRole: "important object appearance",
-      dialogueAudioRole: "dialogue timing and performance",
+      dialogueAudioRole: "voice line, speech rhythm, mouth timing, and performance texture",
       roleBindings: uniqueRoleBindings([...images, ...audio]),
       strategyPackIds: [...STORYBOARD_REFERENCE_STRATEGY_PACK_IDS],
 	      referenceDimensionRule: storyboardReference
-	        ? "All-around references are role-scoped: storyboard controls layout/motion, scene controls environment/weather, character controls identity, prop controls objects, audio controls timing only."
-	        : "All-around references are role-scoped: written direction controls layout/motion, scene controls environment/weather, character controls identity, prop controls objects, audio controls timing only.",
+	        ? "All-around references are role-scoped: storyboard controls layout/motion, scene controls environment/weather, character controls identity, prop controls objects, audio controls voice and timing only."
+	        : "All-around references are role-scoped: written direction controls layout/motion, scene controls environment/weather, character controls identity, prop controls objects, audio controls voice and timing only.",
       maxConcurrentVideoJobs: JIMENG_CLI_DEFAULT_MAX_CONCURRENT_VIDEO_JOBS,
 	      userFacingSummary: storyboardReference
 	        ? "视频生成使用分镜图控制构图和动作，用场景参考稳住天气环境，用角色/道具参考锁身份和物件；每类参考只承担自己的职责。"
-	        : "视频生成使用场景、角色、道具和可选对白音频参考，再用文字导演提示控制构图和动作；不额外上传故事板或单张起始帧。",
+	        : "视频生成使用场景、角色、道具和可选对白声音参考，再用文字导演提示控制构图和动作；不额外上传故事板或单张起始帧。",
     },
     queuePolicy: {
       providerAsync: true,

@@ -354,7 +354,7 @@ assert(returnedVideoProjection.videoGeneration.status === "completed", "returned
 assert(returnedVideoProjection.preflight.status === "needs_review", "returned video preview items should put the shared preflight into review state");
 assert(returnedVideoProjection.preflight.summary === "视频已经回来，先看一眼再继续。", "returned video review should be explained from the shared projection, not a UI fallback");
 assert(returnedVideoProjection.preflight.checks.find((check) => check.id === "video")?.detail === "待复核", "returned video preview items should show video as waiting for review");
-assert(returnedVideoProjection.preflight.checks.find((check) => check.id === "references")?.detail.includes("待看 0"), "returned videos must not inflate reference-review counts");
+assert(returnedVideoProjection.preflight.checks.find((check) => check.id === "references")?.state !== "needs_review", "returned videos must not inflate reference-review counts");
 assert(returnedVideoProjection.agentCommand.kind === "open_preview", "returned videos should keep the primary Agent command on preview review");
 
 const emptyProjection = buildCreatorDeskProjection({

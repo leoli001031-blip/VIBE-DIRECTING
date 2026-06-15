@@ -3171,8 +3171,7 @@ small {
   font-weight: 500;
 }
 
-.settings-advanced > summary::after {
-  content: "展开";
+.settings-disclosure-state {
   flex: 0 0 auto;
   border-radius: 999px;
   background: rgba(47, 39, 34, 0.06);
@@ -3180,10 +3179,6 @@ small {
   padding: 4px 8px;
   font-size: 11px;
   font-weight: 800;
-}
-
-.settings-advanced[open] > summary::after {
-  content: "收起";
 }
 
 .diagnostics-advanced-grid {

@@ -40,6 +40,7 @@ const DEFAULT_MODEL_VERSION = "seedance2.0";
 const DEFAULT_RATIO = "16:9";
 const DEFAULT_POLL_SECONDS = 90;
 const MAX_REFERENCE_IMAGE_BYTES = 50 * 1024 * 1024; // 50MB
+const MAX_REFERENCE_AUDIO_BYTES = 20 * 1024 * 1024; // 20MB
 
 function isTransientStoryboardImageFailure(result) {
   return result?.ok === false && ["network_error", "timeout", "rate_limit", "server_error"].includes(result.errorType);
@@ -108,6 +109,11 @@ function asString(value, fallback = "") {
 function asNumber(value, fallback) {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function executableVideoDurationSeconds(value, fallback = 4) {
+  const parsed = asNumber(value, fallback);
+  return Math.max(4, Math.round(parsed || fallback));
 }
 
 function textArray(value) {
@@ -255,7 +261,7 @@ function storyShots(projectFacts, workbenchFacts) {
     return {
       id: shotId,
       title: asString(shot.title || shot.name || shot.label, `镜头 ${index + 1}`),
-      durationSeconds: asNumber(shot.durationSeconds || shot.duration || shot.seconds, 4),
+      durationSeconds: executableVideoDurationSeconds(shot.durationSeconds || shot.duration || shot.seconds, 4),
       intent: asString(shot.intent || shot.storyFunction || shot.description || shot.summary),
       camera: asString(shot.camera || shot.lens || shot.framing),
       primaryAction: asString(shot.primaryAction || shot.action),
@@ -299,6 +305,12 @@ function scopedAssetReferenceIds({ shot, shotId, assets, type }) {
   });
   const bound = assets
     .filter((asset) => asset?.type === type)
+    .filter((asset) => {
+      const text = [asset?.id, asset?.name, ...(asset?.textConstraints || [])].join(" ");
+      if (type === "character") return !isVehicleControllerLabel(text);
+      if (type === "prop") return isStandalonePropReference(text);
+      return true;
+    })
     .filter((asset) => assetUsedByShotIds(asset).includes(shotId))
     .flatMap((asset) => uniqueStrings([asset?.id, asset?.name, asset?.displayName, asset?.roleId, asset?.sceneId]));
   return uniqueStrings([...explicit, ...bound]);
@@ -606,6 +618,15 @@ function seedanceShotCamera(shot, compilePlan) {
   return seedanceContinuousShotText(shot.camera, compilePlan);
 }
 
+function formatTimelineSecond(value) {
+  const rounded = Math.round(Number(value) * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function formatTimelineRange(start, end) {
+  return `${formatTimelineSecond(start)}-${formatTimelineSecond(end)}s`;
+}
+
 function timeRanges(shots) {
   let cursor = 0;
   return shots.map((shot, index) => {
@@ -616,7 +637,7 @@ function timeRanges(shots) {
       index: index + 1,
       start,
       end,
-      label: `${start.toFixed(1)}-${end.toFixed(1)}s`,
+      label: formatTimelineRange(start, end),
       shot,
     };
   });
@@ -828,7 +849,7 @@ function storyboardPanelRows(shots, compilePlan) {
         shot,
         start,
         end,
-        label: `${start.toFixed(1)}-${end.toFixed(1)}s`,
+        label: formatTimelineRange(start, end),
         beatLabel: beatLabels[index],
         panelWithinShot: index + 1,
         panelCountForShot: count,
@@ -1014,6 +1035,91 @@ function representativeAssetsOfType(assets, shots, type) {
     .map((item) => item.asset);
 }
 
+function fileExtension(value) {
+  const match = asString(value).toLowerCase().match(/\.([a-z0-9]+)(?:$|\?)/);
+  return match?.[1] || "";
+}
+
+function isAudioExtension(value) {
+  return ["wav", "mp3", "m4a", "aac", "flac", "ogg"].includes(fileExtension(value));
+}
+
+function assetText(asset) {
+  return [
+    asset?.id,
+    asset?.name,
+    asset?.displayName,
+    asset?.label,
+    asset?.path,
+    asset?.type,
+    asset?.roleBinding?.role,
+    ...(asset?.roleBinding?.useFor || []),
+    ...(asset?.sourceRefs || []),
+    ...(asset?.textConstraints || []),
+  ].map(asString).join(" ");
+}
+
+function hasVoiceReferenceSignal(text) {
+  return /voice_reference|audio_reference|dialogue_audio|\b(voice|speaker|dialogue|speech)\b|声音参考|音色|声线|人声|语音|配音|对白|台词/i.test(text);
+}
+
+function isMusicReferenceAsset(asset) {
+  const text = assetText(asset);
+  if (hasVoiceReferenceSignal(text)) return false;
+  return /music_reference|\b(bgm|music|song|score|soundtrack)\b|配乐|音乐|歌曲/i.test(text);
+}
+
+function isVoiceReferenceAsset(asset) {
+  if (!asset?.path) return false;
+  const text = assetText(asset);
+  if (hasVoiceReferenceSignal(text)) return true;
+  if (isMusicReferenceAsset(asset)) return false;
+  return isAudioExtension(asset.path) && /\b(audio|dialogue|speech)\b|声音|语音|人声|对白|台词/i.test(text);
+}
+
+function audioAssetMatchesShot(asset, shots) {
+  const shotIds = new Set(shots.map((shot) => shot.id));
+  const explicit = new Set([
+    ...assetUsedByShotIds(asset),
+    ...(asset?.roleBinding?.useFor || []),
+  ].map(asString).filter(Boolean));
+  if (!explicit.size) return true;
+  return Array.from(shotIds).some((shotId) => explicit.has(shotId) || assetText(asset).includes(shotId));
+}
+
+function audioRefs(workbenchFacts, source, scopedRepoPath, shots) {
+  const assets = Array.isArray(workbenchFacts?.visualMemory?.assets) ? workbenchFacts.visualMemory.assets : [];
+  return assets
+    .filter((asset) => asset?.status !== "missing" && asset?.status !== "rejected")
+    .filter(isVoiceReferenceAsset)
+    .filter((asset) => audioAssetMatchesShot(asset, shots))
+    .slice(0, 1)
+    .flatMap((asset) => {
+      const relativePath = asString(asset.path).replace(/^\.\//, "");
+      let filePath;
+      try {
+        filePath = scopedRepoPath(relativePath);
+      } catch {
+        filePath = path.resolve(source.runRootPath, relativePath);
+      }
+      if (!existsSync(filePath)) {
+        filePath = path.resolve(source.runRootPath, relativePath);
+      }
+      if (!existsSync(filePath)) return [];
+      if (statSync(filePath).size > MAX_REFERENCE_AUDIO_BYTES) return [];
+      return [{
+        role: "dialogue_audio",
+        type: "voice_reference",
+        id: asString(asset.id || asset.name || asset.displayName || asset.label, "voice_reference"),
+        name: asString(asset.name || asset.displayName || asset.id, "声音参考"),
+        relativePath,
+        filePath,
+        sha256: sha256File(filePath),
+        mimeType: inferMime(filePath),
+      }];
+    });
+}
+
 function assetRefs(workbenchFacts, source, scopedRepoPath, shots) {
   const assets = Array.isArray(workbenchFacts?.visualMemory?.assets) ? workbenchFacts.visualMemory.assets : [];
   const preferred = ["scene", "character", "prop"];
@@ -1052,6 +1158,53 @@ function assetRefs(workbenchFacts, source, scopedRepoPath, shots) {
     }];
     });
   });
+}
+
+function qaAssets(workbenchFacts, refs, shots) {
+  const shotIds = new Set(shots.map((shot) => asString(shot.id)).filter(Boolean));
+  const referencedAssetIds = Array.from(new Set(shots.flatMap((shot) => [
+    ...(Array.isArray(shot.characterAssetIds) ? shot.characterAssetIds : []),
+    ...(Array.isArray(shot.sceneAssetIds) ? shot.sceneAssetIds : []),
+    ...(Array.isArray(shot.propAssetIds) ? shot.propAssetIds : []),
+  ]).map(asString).filter(Boolean)));
+  const indexedAssets = Array.isArray(workbenchFacts?.visualMemory?.assets) ? workbenchFacts.visualMemory.assets : [];
+  const seen = new Set();
+  const items = [];
+  function push(item) {
+    const id = asString(item.id || item.assetId || item.name || item.label);
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    items.push(item);
+  }
+  for (const asset of indexedAssets) {
+    const id = asString(asset?.id || asset?.assetId || asset?.name || asset?.label);
+    const kind = asString(asset?.kind || asset?.type);
+    if (!id || !kind) continue;
+    const matchedReferenceIds = referencedAssetIds.filter((referenceId) => assetMatchesExplicitReference(asset, referenceId));
+    if (!matchedReferenceIds.length) continue;
+    const usedByShotIds = assetUsedByShotIds(asset).filter((shotId) => shotIds.has(shotId));
+    const qaItem = {
+      id,
+      kind,
+      label: asString(asset?.label || asset?.name || asset?.displayName || id),
+      usedByShotIds: usedByShotIds.length ? usedByShotIds : Array.from(shotIds),
+      sourceRefs: Array.isArray(asset?.sourceRefs) ? asset.sourceRefs : [],
+    };
+    push(qaItem);
+    for (const referenceId of matchedReferenceIds) {
+      if (referenceId !== id) push({ ...qaItem, id: referenceId });
+    }
+  }
+  for (const ref of refs) {
+    push({
+      id: ref.id || ref.name,
+      kind: ref.type,
+      label: ref.name,
+      usedByShotIds: Array.from(shotIds),
+      sourceRefs: [ref.relativePath],
+    });
+  }
+  return items;
 }
 
 function buildStoryboardPrompt(shots, refs, compilePlan) {
@@ -1125,7 +1278,7 @@ function timingPlan(shots, compilePlan) {
     const start = cursor;
     const end = cursor + shot.durationSeconds;
     cursor = end;
-    const time = `${start.toFixed(1)}-${end.toFixed(1)}s`;
+    const time = formatTimelineRange(start, end);
     return `${time}: visible cut ${index + 1}/${shots.length}, ${safeSeedanceProviderText(shot.title)}. ${safeSeedanceProviderText(shot.primaryAction || shot.intent || "")}`.trim();
   });
 }
@@ -1146,7 +1299,7 @@ function visibleClipRows(shots, compilePlan) {
         shot,
         start,
         end,
-        label: `${start.toFixed(1)}-${end.toFixed(1)}s`,
+        label: formatTimelineRange(start, end),
         beatLabel: beatLabels[index],
         clipWithinShot: index + 1,
         clipCountForShot: count,
@@ -1240,7 +1393,7 @@ function seedanceStyleLine(shots, compilePlan) {
   return `${clauses.join(", ")}.`;
 }
 
-function buildSeedancePrompt({ shots, refs, durationSeconds, compilePlan, hasStoryboardReference }) {
+function buildSeedancePrompt({ shots, refs, audioReferences, durationSeconds, compilePlan, hasStoryboardReference }) {
   const timing = timingPlan(shots, compilePlan);
   const primaryPanelCount = storyboardPrimaryPanelCount(shots, compilePlan);
   const finalVisibleClipCount = visibleClipCount(shots, compilePlan);
@@ -1285,6 +1438,9 @@ function buildSeedancePrompt({ shots, refs, durationSeconds, compilePlan, hasSto
       ? "If Image 1 contains production annotation colors, interpret them internally only: RED=camera/lens/framing/camera move, BLUE=body movement/path/turn, GREEN=prop/cloth/environment/motion-system path, ORANGE=impact/burst/danger, PURPLE=timing/pause/acceleration."
       : "",
     ...referenceLines,
+    audioReferences?.length
+      ? "Use the attached audio reference only for the speaking character voice line, tone, speech rhythm, mouth timing, and performance texture. Do not use it as BGM, soundtrack, score, music, or a sound effect."
+      : "",
     "Timing:",
     ...timing,
     compilePlan.strategyId === "storyboard_rapid_cut" ? "Visible cut direction:" : "Shot direction:",
@@ -1294,7 +1450,7 @@ function buildSeedancePrompt({ shots, refs, durationSeconds, compilePlan, hasSto
   ].filter(Boolean).join("\n");
 }
 
-function referenceBundlePolicy({ shots, refs, compilePlan, hasStoryboardReference }) {
+function referenceBundlePolicy({ shots, refs, audioReferences, compilePlan, hasStoryboardReference }) {
   return {
     schemaVersion: "current_project_reference_bundle_policy_v1",
     videoTaskScope: {
@@ -1328,6 +1484,12 @@ function referenceBundlePolicy({ shots, refs, compilePlan, hasStoryboardReferenc
       selectedCount: refs.filter((ref) => ref.type === "prop").length,
       detailRule: "Dependent details such as body parts, object components, weather, light, road shine, mist, reflections, buttons, wheels, pages, screens, and similar sub-parts should stay as constraints on the parent character/object/scene unless they are the actual standalone subject.",
       mustNotControl: ["storyboard panels", "scene background", "visible cut count"],
+    },
+    voiceReferences: {
+      role: "speaking_voice_and_timing_authority",
+      selectedCount: audioReferences.length,
+      providerUse: "Pass only bound voice_reference/dialogue_audio assets as audio references for this video unit.",
+      mustNotControl: ["BGM", "music", "soundtrack", "sound effects", "scene layout", "visible cut count"],
     },
   };
 }
@@ -1717,6 +1879,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
 
     try {
       const compilePlan = sequenceCompilePlan(shots, refs);
+      const audioReferences = audioRefs(workbenchFacts, source, scopedRepoPath, shots);
 
       // Music may drive the edit rhythm or final export mix, but provider video
       // generation must stay no-BGM. Keep the source planning text valid and
@@ -1728,6 +1891,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
 	      const seedancePrompt = buildSeedancePrompt({
 	        shots,
 	        refs,
+	        audioReferences,
 	        durationSeconds,
 	        compilePlan,
 	        hasStoryboardReference,
@@ -1735,6 +1899,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
 	      const referenceBundle = referenceBundlePolicy({
 	        shots,
 	        refs,
+	        audioReferences,
 	        compilePlan,
 	        hasStoryboardReference,
 	      });
@@ -1742,13 +1907,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
       const textQaReportRelPath = `${receiptsRoot}/director-text-qa.json`;
       const ruleQaReport = runDirectorRuleQa({
         shots,
-        assets: refs.map((ref) => ({
-          id: ref.id || ref.name,
-          kind: ref.type,
-          label: ref.name,
-          usedByShotIds: shots.map((shot) => shot.id),
-          sourceRefs: [ref.relativePath],
-        })),
+        assets: qaAssets(workbenchFacts, refs, shots),
         seedancePrompts: [{
           compilerMode: compilePlan.strategyId,
           visibleClips: visibleClipCount(shots, compilePlan),
@@ -1979,6 +2138,15 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
           path: ref.relativePath,
           sha256: ref.sha256,
         })),
+        audioReferenceCount: audioReferences.length,
+        audioReferences: audioReferences.map((ref) => ({
+          role: ref.role,
+          type: ref.type,
+          name: ref.name,
+          path: ref.relativePath,
+          sha256: ref.sha256,
+          mimeType: ref.mimeType,
+        })),
         shots: shots.map((shot) => ({
           id: shot.id,
           title: shot.title,
@@ -1990,6 +2158,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
       const activeReferencePaths = [
         ...(hasStoryboardReference ? [storyboardRelPath] : []),
         ...refs.map((ref) => ref.relativePath),
+        ...audioReferences.map((ref) => ref.relativePath),
       ];
       const inputImages = [
         ...(hasStoryboardReference ? [{ role: "storyboard_reference", filePath: storyboardFilePath }] : []),
@@ -2001,6 +2170,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
       const args = [
         "multimodal2video",
         ...inputImages.flatMap((image) => ["--image", image.filePath]),
+        ...audioReferences.flatMap((clip) => ["--audio", clip.filePath]),
         "--prompt", seedancePrompt,
         "--duration", String(durationSeconds),
         "--ratio", input.ratio,
@@ -2015,6 +2185,14 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
 	        expectedQueueWaitMinutes: 50,
 	        maxConcurrentVideoJobs: 1,
 	        referenceBundle,
+	        audioReferences: audioReferences.map((ref) => ({
+	          role: ref.role,
+	          type: ref.type,
+	          name: ref.name,
+	          path: ref.relativePath,
+	          sha256: ref.sha256,
+	          mimeType: ref.mimeType,
+	        })),
 	        activeSegmentId: activeSegment?.id,
 	        segmentPlan,
 		        rawSecretStored: false,

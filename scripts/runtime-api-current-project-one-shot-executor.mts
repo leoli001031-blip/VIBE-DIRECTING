@@ -439,7 +439,7 @@ export function createRuntimeApiCurrentProjectOneShotExecutor(deps) {
       project: statusProjection.project,
       status,
       uiStatus: status,
-      userLabel: status === "mock_output_returned_needs_review" ? "需要复核" : status === "blocked" ? "待补齐" : "执行器就绪",
+      userLabel: status === "mock_output_returned_needs_review" ? "需要复核" : status === "blocked" ? "待处理" : "执行器就绪",
       actualImage2Triggered: false,
       selectedShotId: input.selectedShotId,
       expectedOutputPath,

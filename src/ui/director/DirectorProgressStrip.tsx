@@ -33,7 +33,7 @@ export function buildDirectorProgressStripState(summary: DirectorProgressStripSu
     label = "等待开始";
   } else if (blocked > 0) {
     tone = "blocked";
-    label = "待补齐";
+    label = "待处理";
   } else if (review > 0) {
     tone = "review";
     label = "等待复核";
@@ -48,7 +48,7 @@ export function buildDirectorProgressStripState(summary: DirectorProgressStripSu
   const detail = !hasItems
     ? "先写想法或拖入素材"
     : tone === "blocked"
-      ? "还有内容待补齐"
+      ? "还有内容需要处理"
       : tone === "review"
         ? `${total} 项 · ${review} 项等待复核`
         : tone === "working"
@@ -71,7 +71,7 @@ export function buildDirectorProgressStripState(summary: DirectorProgressStripSu
       { label: "准备中", value: preparing, tone: "preparing" },
       { label: "生成中", value: working, tone: "working" },
       { label: "等待复核", value: review, tone: "review" },
-      { label: "待补齐", value: blocked, tone: "blocked" },
+      { label: "待处理", value: blocked, tone: "blocked" },
       { label: "已完成", value: complete, tone: "complete" },
     ],
   };

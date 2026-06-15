@@ -59,8 +59,8 @@ const confirmedAudioCloneDelta: StoryDiscussionDelta = {
   id: "discussion_delta_audio_clone",
   kind: "audio_clone_source",
   laneId: "audio",
-  label: "音色克隆来源",
-  summary: "用户反馈：「父亲旁白用这段音频做音色参考。」把反馈作为音色参考用途。",
+  label: "声线参考来源",
+  summary: "用户反馈：「父亲旁白用这段音频做声线参考。」把反馈作为声音参考用途。",
   status: "confirmed",
   createdAt: generatedAt,
   confirmedAt: generatedAt,
@@ -95,7 +95,7 @@ assert(result.source.providerSubmissionForbidden === true && result.source.liveS
 assert(result.evidenceRefs.includes("audio_reference:new_video_audio_reference_1"), "audio binding should expose safe evidence refs");
 assert(
   result.runtimeState.runtime.config.voiceSources.some((source) => source.id === result.source?.id && source.kind === "tts_voice"),
-  "runtime config should receive a TTS-compatible voice source placeholder",
+  "runtime config should receive a voice-reference-compatible source placeholder",
 );
 assert(
   result.runtimeState.audioPlanning.shotPlans.every((plan) => plan.voiceSourceId === result.source?.id),
@@ -106,7 +106,13 @@ assert(
   result.runtimeState.audioPlanning.referencePolicy?.voiceReferenceBinding === "character_or_narrator",
   "voice_reference should bind only to a character or narrator route",
 );
-assert(result.runtimeState.audioPlanning.referencePolicy?.defaultTtsRoute === "local_qwen3_tts_clone", "Qwen3 TTS clone should be the default multilingual TTS route");
+assert(result.runtimeState.audioPlanning.referencePolicy?.defaultTtsRoute === "parked_in_demo", "demo path should park local TTS and use uploaded audio as video-model voice reference");
+assert(!result.runtimeState.audioPlanning.ttsProviderPlanning, "demo audio planning should not prepare local/cloud TTS routes");
+assert(result.runtimeState.audioPlanning.postMixPolicy?.finalMixMusicAllowed === false, "demo audio planning must not enable final music mixing");
+assert(
+  !result.runtimeState.audioPlanning.exportPackageSummary.plannedCategories.some((category) => /tts|music|mix/i.test(category)),
+  "demo export categories must stay voice-reference/no-BGM only",
+);
 assert(result.runtimeState.voiceAudioSettings.voiceSourceSummary.candidate >= 1, "voice/audio settings should surface the candidate source");
 assert(validateVoiceSourceLibraryState(result.runtimeState.voiceSourceLibrary, generatedAt).ok, "voice source library should validate");
 
@@ -135,34 +141,21 @@ const music = bindNewVideoAudioReferenceToRuntimeState({
   generatedAt,
   draft: {
     script: "一位摄影师带着城市节奏走向清晨。",
-    style: "音乐卡点但不交给视频模型",
+    style: "旧草稿里误标了音乐，但当前 demo 主链路只保留声音参考",
     references: [],
     audio: { name: "secret-city-music.wav" },
     audioRole: "music_reference",
   },
 });
-assert(music.applied, "music reference should be applied to audio planning");
-assert(!music.source, "music reference should not become a voice source");
-assert(music.runtimeState.audioPlanning.musicReferences?.length === 1, "music reference should enter post/export music references");
-assert(music.runtimeState.audioPlanning.musicReferences?.[0]?.referenceRole === "music_reference", "music should be tagged as music_reference");
+assert(music.applied, "legacy music-role audio should still be accepted as a safe voice reference");
+assert(music.source, "legacy music-role audio should become a candidate voice source on the demo path");
+assert(!music.runtimeState.audioPlanning.musicReferences?.length, "demo path must not create music-reference planning");
 assert(
-  music.runtimeState.audioPlanning.musicReferences?.[0]?.usedFor.join("|") === "rhythm_planning|final_export_mix",
-  "music_reference should only be used for rhythm planning and final export mix",
+  music.runtimeState.runtime.config.voiceSources.length === runtimeState.runtime.config.voiceSources.length + 1,
+  "legacy music-role audio should add one candidate voice reference source",
 );
-assert(
-  music.runtimeState.audioPlanning.musicReferences?.[0]?.forbiddenFor.includes("video_prompt"),
-  "music_reference must be forbidden from video prompt use",
-);
-assert(music.runtimeState.audioPlanning.postMixPolicy?.finalMixMusicAllowed === true, "music should be planned for final mix");
-assert(music.runtimeState.audioPlanning.videoProviderPolicy.musicAllowed === false, "music reference must not enable video provider BGM");
-assert(music.runtimeState.audioPlanning.referencePolicy?.musicNeverEntersVideoPrompt === true, "audio policy must forbid music in video prompts");
-assert(music.runtimeState.audioPlanning.referencePolicy?.videoProviderPayloadIncludesMusic === false, "audio policy must forbid music in video provider payloads");
-assert(
-  music.runtimeState.runtime.config.voiceSources.length === runtimeState.runtime.config.voiceSources.length,
-  "music reference must not add a TTS voice source",
-);
-assert(JSON.stringify(music.runtimeState.audioPlanning).includes("audio/music-analysis/"), "music reference should plan a safe analysis path");
-assert(!/secret-city-music/i.test(JSON.stringify(music.runtimeState.audioPlanning)), "music planning must not leak local music filenames");
+assert(!JSON.stringify(music.runtimeState.audioPlanning).includes("audio/music-analysis/"), "demo path must not plan music analysis");
+assert(!/secret-city-music/i.test(JSON.stringify(music.runtimeState.audioPlanning)), "voice reference planning must not leak local audio filenames");
 
 console.log(
   `new-video-audio-reference-test: source=${result.source.id}, shotPlans=${result.runtimeState.audioPlanning.shotPlans.length}.`,

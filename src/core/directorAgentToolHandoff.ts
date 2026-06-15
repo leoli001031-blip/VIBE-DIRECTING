@@ -247,7 +247,7 @@ function handoffMessage(status: DirectorAgentToolHandoffStatus, handler: Directo
   if (status === "handled_by_project_write") return "修改已写入项目，后续工具不需要额外执行。";
   if (status === "blocked") return blockerMessage(primaryBlockerForMessage(blockers));
   if (handler === "web_search") return "开始查资料，结果会先进入待确认参考。";
-  if (handler === "image2_reference_generation") return "开始补参考，结果会先进入复核。";
+  if (handler === "image2_reference_generation") return "开始生成参考，结果会先进入复核。";
   if (handler === "seedance_video_submit") return "开始提交视频，排队结果会回到预览。";
   if (handler === "project_export") return "开始导出素材包。";
   return "已准备执行。";
@@ -262,7 +262,7 @@ function blockerMessage(blocker: string) {
   if (blocker === "project_not_ready") return "请先打开或创建项目文件夹。";
   if (blocker === "web_search_not_ready") return "查资料还没开启。";
   if (blocker === "reference_generation_not_ready") return "参考生成还不可用。";
-  if (blocker === "reference_generation_not_allowed") return "当前不允许补参考。";
+  if (blocker === "reference_generation_not_allowed") return "当前还不能生成参考。";
   if (blocker === "video_submit_not_ready") return "视频提交还没准备好。";
   if (blocker === "video_submit_not_allowed") return "当前不允许提交视频。";
   if (blocker === "export_not_ready") return "导出还没准备好。";

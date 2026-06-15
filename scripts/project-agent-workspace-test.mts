@@ -85,6 +85,13 @@ const assets = [
     roleBinding: { role: "music_reference", useFor: [], ignoreFor: [] },
   }),
   asset({
+    id: "voice_ref",
+    type: "unknown",
+    name: "少女声音参考，不是配乐.wav",
+    path: "/project/audio/voice-not-music.wav",
+    roleBinding: { role: "voice_reference", useFor: ["shot_1"], ignoreFor: ["music"] },
+  }),
+  asset({
     id: "style_ref",
     type: "style",
     name: "quiet anime style",
@@ -97,9 +104,44 @@ const inbox = buildProjectInboxProjection({ assets, reconciliation });
 
 assert(inbox.totalCount >= 3, "inbox should show imported/project assets");
 assert(inbox.items.some((item) => item.kind === "storyboard"), "storyboard references should enter the inbox");
-assert(inbox.items.some((item) => item.kind === "music"), "music references should enter the inbox");
+assert(inbox.items.some((item) => item.kind === "reference" && item.label.includes("eurobeat")), "obvious music files should stay out of the voice-reference path");
+assert(!inbox.items.some((item) => item.kind === "voice" && item.label.includes("eurobeat")), "music-like audio must not be sent as a character voice reference");
+assert(inbox.items.some((item) => item.label.includes("eurobeat") && item.suggestedBinding.includes("后期")), "music-like audio should be parked as later post audio");
+assert(inbox.items.some((item) => item.kind === "voice" && item.label.includes("不是配乐")), "voice references that mention not-music should stay voice assets");
+assert(inbox.items.some((item) => item.assetId === "voice_ref" && item.shotIds?.includes("shot_1")), "voice inbox item should remain selectable and keep shot binding context");
+assert(inbox.items.some((item) => item.assetId === "white_car" && item.shotIds?.includes("shot_1")), "asset inbox item should expose asset and shot ids for correction selection");
+assert(!inbox.items.some((item) => item.suggestedBinding.includes("配乐参考")), "demo inbox should not expose music-reference routing");
 assert(inbox.items.every((item) => item.suggestedBinding), "inbox items should explain suggested binding");
 assert(!inbox.items.some((item) => item.suggestedBinding.includes("参考参考")), "style/reference inbox copy must not say 参考参考");
+assert(!inbox.items.some((item) => /shot_/.test(item.suggestedBinding)), "inbox binding copy must not expose raw shot ids");
+assert(inbox.items.some((item) => item.suggestedBinding.includes("镜头 1")), "inbox binding copy should use human-readable shot labels");
+
+const emptyInbox = buildProjectInboxProjection({ assets: [] });
+assert(emptyInbox.summary.includes("声音参考"), "empty inbox should ask for voice reference instead of music");
+assert(!emptyInbox.summary.includes("音乐"), "music analysis/mixing should stay out of the demo inbox copy");
+
+const legacyMusicInbox = buildProjectInboxProjection({
+  assets: [],
+  reconciliation: {
+    summary: { total: 1, matched: 0, needsReview: 1, missing: 0, merged: 0, unused: 0, ambiguous: 0 },
+    items: [{
+      id: "legacy_music",
+      kind: "music_reference",
+      label: "旧项目配乐参考",
+      status: "needs_review",
+      detail: "旧版本留下的配乐参考",
+      shotIds: ["shot_1"],
+      assetIds: [],
+      confidence: "low",
+      source: "project_assets",
+      reason: "legacy_music_reference",
+    }],
+    creatorSummary: "legacy",
+    nextAction: "legacy",
+  },
+});
+assert(legacyMusicInbox.items.some((item) => item.kind === "reference" && item.label.includes("配乐")), "legacy music references should be displayed as general references");
+assert(!legacyMusicInbox.items.some((item) => item.kind === "voice"), "legacy music references must not be reinterpreted as character voice");
 
 const observation = buildProjectObservation({
   localProjectReady: true,
@@ -123,8 +165,8 @@ const observation = buildProjectObservation({
 
 assert(observation.currentTask.understanding.includes("2 个镜头"), "observation should explain current story count");
 assert(observation.currentTask.confirmation.kind === "reference_generation", "missing references should require reference generation confirmation");
-assert(observation.nextAction.includes("补齐"), "observation should recommend filling references first");
-assert(observation.references.detail.includes(String(reconciliation.summary.missing)), "observation should surface missing reference count");
+assert(observation.nextAction.includes("生成"), "observation should recommend generating references first");
+assert(observation.references.detail.includes("角色、场景、道具或故事板参考"), "observation should explain the missing reference categories");
 
 const runningObservation = buildProjectObservation({
   localProjectReady: true,

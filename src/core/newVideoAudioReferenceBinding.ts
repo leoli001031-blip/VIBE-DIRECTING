@@ -2,7 +2,7 @@ import { buildAudioPlanningState } from "./audioPlanning";
 import type { NewVideoProjectVibeDraftLike } from "./newVideoProjectVibePlanner";
 import type { ProjectRuntimeState } from "./projectState";
 import type { StoryDiscussionDelta } from "./storyDiscussionWorkspace";
-import type { AudioPlanningState, MusicReferenceSummary } from "./types";
+import type { AudioPlanningState } from "./types";
 import {
   addVoiceSource,
   toRuntimeVoiceSources,
@@ -51,36 +51,12 @@ function audioSourceId(input: BindNewVideoAudioReferenceInput): string {
   return `new_video_audio_${stableKnowledgeHash(`${projectId}:new_video_audio_reference`).slice(4, 12)}`;
 }
 
-function audioRole(input: BindNewVideoAudioReferenceInput): "voice_reference" | "music_reference" {
-  return input.draft.audioRole === "music_reference" ? "music_reference" : "voice_reference";
-}
-
-function musicReferenceSummary(input: BindNewVideoAudioReferenceInput): MusicReferenceSummary {
-  const sourceId = audioSourceId(input).replace("new_video_audio_", "new_video_music_");
-  return {
-    id: sourceId,
-    label: "配乐参考 1",
-    status: "candidate",
-    referenceRole: "music_reference",
-    usage: "rhythm_and_final_mix",
-    usedFor: ["rhythm_planning", "final_export_mix"],
-    forbiddenFor: ["video_prompt", "video_provider_payload"],
-    analysisPath: `audio/music-analysis/${sourceId}.json`,
-    finalMixPath: "audio/music/final-music-reference",
-    noRawPathStored: true,
-    sourceRefs: [
-      `music_reference:${sourceId}`,
-      "audio_reference:new_video_music_reference_1",
-    ],
-  };
-}
-
 function audioTextConstraints(input: BindNewVideoAudioReferenceInput): string[] {
   return unique([
-    "用户上传音频参考，只能作为后续音色讨论和 TTS 计划的候选来源。",
+    "用户上传声音参考，只能作为角色/旁白声线、语气和视频对白表现参考。",
     "候选音源：授权状态未确认前不能锁定、不能正式生成、不能提交 provider。",
-    hasAudioCloneIntent(input.discussionDeltas) ? "已确认讨论提到音色克隆，先作为候选角色音源绑定。" : "",
-    hasAudioUsageIntent(input.discussionDeltas) ? "已确认讨论提到音频用途，进入音频计划但不进入视频 provider prompt。" : "",
+    hasAudioCloneIntent(input.discussionDeltas) ? "已确认讨论提到声线参考，先作为候选角色音源绑定。" : "",
+    hasAudioUsageIntent(input.discussionDeltas) ? "已确认讨论提到音频用途，进入声音参考计划，不作为配乐或 BGM。" : "",
   ]);
 }
 
@@ -110,36 +86,10 @@ export function bindNewVideoAudioReferenceToRuntimeState(
   }
 
   const generatedAt = input.generatedAt || input.runtimeState.generatedAt || new Date().toISOString();
-  if (audioRole(input) === "music_reference") {
-    const musicReference = musicReferenceSummary(input);
-    const audioPlanning = buildAudioPlanningState({
-      generatedAt,
-      shots: input.runtimeState.storyFlow.shots,
-      runtimeConfig: input.runtimeState.runtime.config,
-      previewEvents: input.runtimeState.previewEvents,
-      musicReferences: [musicReference],
-    });
-    const voiceAudioSettings = buildVoiceAudioSettingsState({
-      generatedAt,
-      voiceSourceLibrary: input.runtimeState.voiceSourceLibrary,
-      audioPlanning,
-    });
-    return {
-      runtimeState: {
-        ...input.runtimeState,
-        generatedAt,
-        audioPlanning,
-        voiceAudioSettings,
-      },
-      applied: true,
-      evidenceRefs: musicReference.sourceRefs,
-    };
-  }
-
   const sourceId = audioSourceId(input);
   const result = addVoiceSource(input.runtimeState.voiceSourceLibrary, {
     id: sourceId,
-    displayName: "音频参考 1",
+    displayName: "声音参考 1",
     provider: "user_audio_reference",
     providerVoiceId: sourceId,
     language: "unspecified",

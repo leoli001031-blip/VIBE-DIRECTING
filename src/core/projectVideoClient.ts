@@ -38,9 +38,12 @@ export type ProjectSeedanceRelayQueueItem = {
   shotId?: string;
   title?: string;
   status?: string;
+  promptPath?: string;
+  referencePaths?: string[];
   submitId?: string;
   resumeCommand?: string;
   outputVideoPath?: string;
+  localMediaPaths?: string[];
 };
 
 export type ProjectSeedanceSubmitResult = {

@@ -798,7 +798,7 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
         : status === "needs_review"
           ? "需要复核"
           : status === "blocked"
-            ? "待补齐"
+            ? "待处理"
             : "准备小样包";
 
     return {
@@ -1106,7 +1106,7 @@ export function createRuntimeApiCurrentProjectImage2Handoff({
       project: statusProjection.project,
       status: ok ? "trigger_plan_prepared" : "blocked",
       uiStatus: ok ? "trigger_plan_prepared" : "blocked",
-      userLabel: ok ? "等待回流" : "待补齐",
+      userLabel: ok ? "等待回流" : "待处理",
       selectedShotId: transportPlan.selectedShotId,
       selectedShotIds: transportPlan.selectedShotIds,
       receiptId: transportPlan.receiptId,

@@ -35,6 +35,9 @@ fact source; runtime-state and test artifacts are derived evidence.
    artifact directory.
 5. Never write raw API keys into reports, manifests, Project.vibe files, or
    exported packages.
+6. Use `npm run runtime:prune` before sharing a demo workspace when local test
+   runs have accumulated. It is a dry run by default. Use
+   `npm run runtime:prune:apply` only after reviewing the candidate list.
 
 ## Current Secret Scan Roots
 

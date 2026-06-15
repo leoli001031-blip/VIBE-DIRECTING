@@ -172,7 +172,7 @@ export function MinimalExport({
           <span><strong>0</strong><small>可导出</small></span>
           <span><strong>0</strong><small>待复核</small></span>
           <span><strong>0</strong><small>本片参考</small></span>
-          <span><strong>0</strong><small>音频计划</small></span>
+          <span><strong>0</strong><small>声音参考</small></span>
         </div>
         <p className="empty-state">先创建或打开项目。导出包会包含项目文件、锁定素材、预览和报告。</p>
       </section>
@@ -204,7 +204,7 @@ export function MinimalExport({
         <span><strong>{readyProfiles}</strong><small>可导出</small></span>
         <span><strong>{blockedProfiles}</strong><small>未就绪</small></span>
         <span><strong>{exportWorker?.manifest.mvpPackage.knowledgeReferenceCount || 0}</strong><small>本片参考</small></span>
-	        <span><strong>{audioPlanning.shotPlans.length}</strong><small>音频计划</small></span>
+	        <span><strong>{audioPlanning.shotPlans.length}</strong><small>声音参考</small></span>
 	      </div>
 	      {videoSummary && (
 	        <small className="muted-copy">
@@ -289,7 +289,7 @@ export function MinimalExport({
 
       <div className="export-audio-summary">
         <small className="muted-copy">
-          音频设计：{audioPlanning.shotPlans.length} 个镜头 · 配乐：{audioPlanning.postMixPolicy?.finalMixMusicAllowed ? "最终导出使用" : "未添加"}
+          声音计划：{audioPlanning.shotPlans.length} 个镜头 · 声音参考随视频模型使用，配乐留到后期
         </small>
       </div>
     </section>

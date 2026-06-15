@@ -54,6 +54,12 @@ const running = buildVideoRelayQueueState({
     item("video_001", "recoverable_queued", {
       submitId: "submit-001",
       resumeCommand: "dreamina query_result --submit_id=submit-001 --download_dir=video/001",
+      promptPath: "runs/demo/prompts/video_001.md",
+      referencePaths: [
+        "runs/demo/storyboards/video_001.png",
+        "runs/demo/scenes/rainy-store.png",
+        "runs/demo/characters/hero.png",
+      ],
     }),
     item("video_002", "ready"),
   ],
@@ -62,6 +68,10 @@ assert(running.status === "running", "queued provider task should mark relay run
 assert(running.autoSubmitAllowed === false, "relay must not submit another job while one is active");
 assert(running.activeItemIds.join(",") === "video_001", "active item mismatch");
 assert(running.resumeCommands.length === 1, "resume command should be preserved");
+assert(running.items[0]?.shotId === "shot_001", "active queue item must preserve shot id");
+assert(running.items[0]?.submitId === "submit-001", "active queue item must preserve submit id");
+assert(running.items[0]?.promptPath === "runs/demo/prompts/video_001.md", "active queue item must preserve prompt path");
+assert(running.items[0]?.referencePaths.length === 3, "active queue item must preserve the reference list");
 
 const resumedNext = buildVideoRelayQueueState({
   generatedAt,
@@ -70,12 +80,22 @@ const resumedNext = buildVideoRelayQueueState({
     item("video_001", "success", {
       submitId: "submit-001",
       resumeCommand: "dreamina query_result --submit_id=submit-001 --download_dir=video/001",
+      promptPath: "runs/demo/prompts/video_001.md",
+      referencePaths: [
+        "runs/demo/storyboards/video_001.png",
+        "runs/demo/scenes/rainy-store.png",
+        "runs/demo/characters/hero.png",
+      ],
+      outputVideoPath: "runs/demo/video/video_001.mp4",
+      localMediaPaths: ["runs/demo/video/video_001.mp4"],
     }),
     item("video_002", "ready"),
   ],
 });
 assert(resumedNext.autoSubmitAllowed === true, "relay should continue after previous success");
 assert(resumedNext.nextReadyItemId === "video_002", "relay should move to the next item after success");
+assert(resumedNext.items[0]?.outputVideoPath === "runs/demo/video/video_001.mp4", "returned queue item must preserve local video path");
+assert(resumedNext.items[0]?.localMediaPaths?.[0] === "runs/demo/video/video_001.mp4", "returned queue item must preserve local media list");
 
 const failedWithNextReady = buildVideoRelayQueueState({
   generatedAt,

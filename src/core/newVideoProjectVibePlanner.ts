@@ -255,9 +255,7 @@ function draftHash(draft: NewVideoProjectVibeDraftLike): string {
 
 function draftAudioReferenceIds(draft: NewVideoProjectVibeDraftLike): string[] {
   if (!draft.audio) return [];
-  return draft.audioRole === "music_reference"
-    ? ["music_reference:new_video_music_reference_1", draft.musicAnalysis?.analysisId ? `music_analysis:${draft.musicAnalysis.analysisId}` : ""].filter(Boolean)
-    : ["audio_reference:new_video_audio_reference_1"];
+  return ["audio_reference:new_video_audio_reference_1"];
 }
 
 function draftReferenceAssetKind(type?: string): ProjectVibeAssetKind | undefined {
@@ -585,7 +583,7 @@ function storyboardDraftQaBlockers(rows: NewVideoProjectVibeStoryboardDraftShotL
 function storyboardDurationSeconds(row: NewVideoProjectVibeStoryboardDraftShotLike): number {
   const parsed = Number.parseFloat(clean(row.duration));
   if (!Number.isFinite(parsed) || parsed <= 0) return 5;
-  return Math.max(1, Math.min(60, Math.round(parsed * 10) / 10));
+  return Math.max(4, Math.min(15, Math.round(parsed)));
 }
 
 function positiveInteger(value: unknown): number | undefined {
@@ -594,13 +592,46 @@ function positiveInteger(value: unknown): number | undefined {
   return Math.max(0, Math.min(12, parsed));
 }
 
-function storyboardActionBeats(row: NewVideoProjectVibeStoryboardDraftShotLike): string[] {
-  return unique([
-    ...(Array.isArray(row.actionBeats) ? row.actionBeats.map((item) => cleanProjectFactValue(item)) : []),
-    cleanProjectFactValue(row.primaryAction),
+function compactActionBeatKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[，。！？、,.!?;；:："'“”‘’`~\s_-]+/gu, "")
+    .trim();
+}
+
+function actionBeatLooksLikeContext(value: string): boolean {
+  return /^(?:触发|原因|动机|微反应|反应|情绪|氛围|节奏判断|声音|音频)[:：]/u.test(value)
+    || /氛围.*(?:吸引|驱动|促使)|前一镜.*(?:延续|承接)|上一镜.*(?:延续|承接)/u.test(value);
+}
+
+function cleanStoryboardActionBeats(
+  rawBeats: string[],
+  row: NewVideoProjectVibeStoryboardDraftShotLike,
+): string[] {
+  const contextKeys = new Set([
     cleanProjectFactValue(row.actionTrigger),
     cleanProjectFactValue(row.microReaction),
-  ].filter(Boolean)).slice(0, 12);
+    cleanProjectFactValue(row.rhythmReason),
+    cleanProjectFactValue(row.audioUsage),
+  ].map(compactActionBeatKey).filter(Boolean));
+  return unique(rawBeats
+    .map((beat) => cleanProjectFactValue(beat))
+    .filter((beat) => {
+      if (!beat || actionBeatLooksLikeContext(beat)) return false;
+      const key = compactActionBeatKey(beat);
+      return !contextKeys.has(key);
+    }))
+    .slice(0, 12);
+}
+
+function storyboardActionBeats(row: NewVideoProjectVibeStoryboardDraftShotLike): string[] {
+  const explicit = Array.isArray(row.actionBeats) ? row.actionBeats.map((item) => cleanProjectFactValue(item)).filter(Boolean) : [];
+  const cleaned = cleanStoryboardActionBeats(
+    explicit.length ? explicit : [cleanProjectFactValue(row.primaryAction)].filter(Boolean),
+    row,
+  );
+  if (cleaned.length) return cleaned;
+  return cleanProjectFactValue(row.primaryAction) ? [cleanProjectFactValue(row.primaryAction)] : [];
 }
 
 function storyboardReferenceStrategy(row: NewVideoProjectVibeStoryboardDraftShotLike): ProjectVibeShot["referenceStrategy"] | undefined {
@@ -1149,10 +1180,10 @@ function applyDiscussionDelta(planner: ScriptPlannerResult, delta: StoryDiscussi
     return applyGlobalPlanningDelta(planner, delta, "场景参考绑定已进入分镜准备约束。");
   }
   if (delta.kind === "audio_clone_source") {
-    return applyGlobalPlanningDelta(planner, delta, "音色克隆来源已作为后续配音准备约束。");
+    return applyGlobalPlanningDelta(planner, delta, "声音参考已作为角色声线和对白表现约束。");
   }
   if (delta.kind === "audio_usage_note") {
-    return applyGlobalPlanningDelta(planner, delta, "音频用途已作为后续配音和分镜节奏约束。");
+    return applyGlobalPlanningDelta(planner, delta, "声音用途已作为对白表现和分镜节奏约束。");
   }
   return applyGlobalPlanningDelta(planner, delta, "已确认的讨论反馈进入故事流准备。");
 }
@@ -1407,6 +1438,30 @@ function bindReferenceAssetsToPlannerShots(
   });
 }
 
+function filterPlannerShotAssetIds(
+  ids: string[],
+  assetsById: Map<string, ProjectVibeDocument["assets"][number]>,
+  expectedKind: ProjectVibeAssetKind,
+): string[] {
+  return unique(ids.filter((id) => assetsById.get(id)?.kind === expectedKind));
+}
+
+function sanitizePlannerAssetReferences(
+  planner: ScriptPlannerResult,
+  assets: ProjectVibeDocument["assets"],
+): ScriptPlannerResult {
+  const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
+  return rebuildPlannerPatchOperations({
+    ...planner,
+    shots: planner.shots.map((shot) => ({
+      ...shot,
+      characterAssetIds: filterPlannerShotAssetIds(shot.characterAssetIds, assetsById, "character"),
+      sceneAssetIds: filterPlannerShotAssetIds(shot.sceneAssetIds, assetsById, "scene"),
+      propAssetIds: filterPlannerShotAssetIds(shot.propAssetIds, assetsById, "prop"),
+    })),
+  });
+}
+
 function applyDraftReferenceBindings(input: {
   planner: ScriptPlannerResult;
   draft: NewVideoProjectVibeDraftLike;
@@ -1441,7 +1496,10 @@ function applyDraftReferenceBindings(input: {
       `script_planner:${plannerWithRefId.plannerId}`,
     ]),
   }));
-  const planner = bindReferenceAssetsToPlannerShots(plannerWithRefId, referenceAssets);
+  const planner = sanitizePlannerAssetReferences(
+    bindReferenceAssetsToPlannerShots(plannerWithRefId, referenceAssets),
+    [...input.project.assets, ...referenceAssets],
+  );
   return {
     planner,
     referenceAssets,
@@ -1717,7 +1775,7 @@ export function buildNewVideoProjectVibeStagedTransaction(
       shotCount: planner.shots.length,
       referenceAssetCount: referenceAssets.length,
       audioReferenceCount: audioReferenceIds.length,
-      musicReferenceCount: input.draft.audioRole === "music_reference" && input.draft.audio ? 1 : 0,
+      musicReferenceCount: 0,
       patchOperationCount: operations.length,
       selectedShotId: planner.shots[0]?.id,
       stagedFactCount: stagedFactIds.length,

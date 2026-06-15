@@ -48,11 +48,168 @@ import {
   buildCurrentProjectPreviewProjection,
 } from "../src/core/currentProjectPreviewProjection.ts";
 import { createAssetLibraryFromCurrentProjectWorkbench } from "../src/ui/app/projectRuntimeProjections.ts";
+import { buildProjectStatusViewModel } from "../src/ui/app/projectStatusViewModel.ts";
 import { assetLibraryAssetToRecord } from "../src/ui/director/assetLibraryUi.ts";
 import { toMediaSrc } from "../src/ui/common/MediaFrame.tsx";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function assertUnifiedProjectStatusVideoStage() {
+  const runtimeState = {
+    project: { root: "/tmp/vibe-demo", title: "Demo" },
+    storyFlow: { shots: [{ id: "shot_1" }, { id: "shot_2" }] },
+    visualMemory: {
+      summary: { locked: 3, needsReview: 0, missing: 0 },
+      assets: [
+        { id: "voice_asset_1", roleBinding: { role: "voice_reference", useFor: ["shot_1"], ignoreFor: [] } },
+      ],
+    },
+    audioPlanning: {
+      shotPlans: [
+        { narrationText: "", dialogueLines: ["我们走吧。"] },
+        { narrationText: "", dialogueLines: [] },
+      ],
+      voiceSourceRegistry: {
+        sources: [
+          { id: "voice_1", label: "少女声音参考", kind: "voice_library", status: "planned", notes: [] },
+        ],
+      },
+    },
+  };
+  const status = buildProjectStatusViewModel({
+    runtimeState,
+    folderReady: true,
+    projectReady: true,
+    directorView: "story",
+    videoStage: {
+      status: "in_progress",
+      canResume: false,
+      reviewCount: 0,
+      generation: {
+        statusLabel: "排队中",
+        detail: "视频正在处理，可以稍后回来继续。",
+        queueSummary: "第 1/2 段「霓虹启动」排队中 · 1 段待提交",
+        completedCount: 0,
+        failedCount: 0,
+        canResume: false,
+      },
+    },
+    agentStage: {
+      summary: "Agent 正在按串行队列推进",
+      detail: "第一段完成后再提交第二段",
+    },
+    agentCommand: {
+      label: "查询视频结果",
+      summary: "继续回流",
+      detail: "不会重复提交",
+    },
+  });
+  assert(status.stage === "视频生成中", "unified project status should prioritize active video stage");
+  assert(status.doing.includes("第 1/2 段"), "unified project status should show serial queue progress");
+  assert(status.facts.some((fact) => fact.label === "视频" && fact.value.includes("1 段待提交")), "project facts should include the video queue summary");
+  assert(status.facts.some((fact) => fact.label === "声音" && fact.value.includes("声音参考")), "project facts should include voice reference status");
+  assert(status.facts.some((fact) => fact.label === "Agent" && fact.value === "查询视频结果"), "project facts should include the current Agent suggestion");
+
+  const recoverableStatus = buildProjectStatusViewModel({
+    runtimeState,
+    folderReady: true,
+    projectReady: true,
+    directorView: "story",
+    videoStage: {
+      status: "recoverable",
+      canResume: true,
+      reviewCount: 0,
+    },
+  });
+  const videoFact = recoverableStatus.facts.find((fact) => fact.label === "视频")?.value || "";
+  assert(videoFact === "可查询回流", "project status facts should translate recoverable video state into creator-facing copy");
+  assert(!/recoverable|not_submitted|complete/.test(videoFact), "project status facts must not expose raw video queue enums");
+
+  const browserDraftPlanningStatus = buildProjectStatusViewModel({
+    runtimeState,
+    folderReady: false,
+    projectReady: false,
+    directorView: "story",
+    newVideoStatus: {
+      status: "planning",
+      title: "AI 正在拆镜头",
+      detail: "正在整理故事、节奏和镜头，不会生图或提交视频。",
+      nextAction: "等草案出来后复核",
+    },
+  });
+  assert(browserDraftPlanningStatus.stage === "正在拆镜头", "fresh browser draft status should show active AI planning");
+  assert(browserDraftPlanningStatus.nextAction === "等草案出来后复核", "fresh browser draft status should explain the next review step");
+  assert(!browserDraftPlanningStatus.doing.includes("还没有连接"), "active browser draft status must not keep the empty-project copy");
+
+  const browserDraftReadyStatus = buildProjectStatusViewModel({
+    runtimeState,
+    folderReady: false,
+    projectReady: false,
+    directorView: "story",
+    newVideoStatus: {
+      status: "ready",
+      title: "草案待确认",
+      detail: "AI 已经拆出故事和镜头，确认前不会写入项目。",
+      nextAction: "确认进故事流，或直接说修改意见",
+      draftShotCount: 3,
+      draftReferenceCount: 2,
+    },
+  });
+  assert(browserDraftReadyStatus.facts.find((fact) => fact.label === "镜头")?.value === "草案 3 个", "fresh ready draft status should show draft shot count instead of empty project count");
+  assert(browserDraftReadyStatus.facts.find((fact) => fact.label === "参考")?.value === "已放入 2 个", "fresh ready draft status should show dropped draft reference count");
+
+  const browserDraftConfirmedStatus = buildProjectStatusViewModel({
+    runtimeState: {
+      ...runtimeState,
+      visualMemory: {
+        ...runtimeState.visualMemory,
+        summary: { locked: 0, needsReview: 1, missing: 3 },
+      },
+    },
+    folderReady: false,
+    projectReady: true,
+    directorView: "story",
+    referenceGenerationAction: {
+      status: "ready",
+      message: "准备先生成角色、场景、关键道具或故事板参考。",
+    },
+    agentCommand: {
+      label: "生成参考",
+      summary: "补画面",
+      detail: "准备生成参考",
+    },
+  });
+  assert(browserDraftConfirmedStatus.stage === "需要本地项目", "confirmed browser draft should ask for a local project before reference work");
+  assert(browserDraftConfirmedStatus.nextAction === "点左上角项目，选择本地文件夹", "confirmed browser draft should point to the project entry");
+  assert(!browserDraftConfirmedStatus.nextAction.includes("参考页"), "confirmed browser draft must not route users to reference review before a local project exists");
+  assert(browserDraftConfirmedStatus.facts.find((fact) => fact.label === "Agent")?.value === "先保存项目", "browser draft facts should not show a blocked generate/submit command as the Agent action");
+
+  const localProjectMissingReferenceStatus = buildProjectStatusViewModel({
+    runtimeState: {
+      ...runtimeState,
+      visualMemory: {
+        ...runtimeState.visualMemory,
+        summary: { locked: 1, needsReview: 1, missing: 3 },
+      },
+    },
+    folderReady: true,
+    projectReady: true,
+    directorView: "story",
+    referenceGenerationAction: {
+      status: "ready",
+      message: "准备先生成角色、场景、关键道具或故事板参考。",
+    },
+    agentCommand: {
+      label: "生成参考",
+      summary: "补画面",
+      detail: "准备生成参考",
+    },
+  });
+  assert(localProjectMissingReferenceStatus.stage === "参考待生成", "local projects with missing references should prioritize generating references when generation is ready");
+  assert(localProjectMissingReferenceStatus.doing === "角色、场景、道具或故事板参考待生成", "missing reference state should explain the creative reference categories");
+  assert(localProjectMissingReferenceStatus.nextAction === "生成参考", "local project next action should generate references before routing to review");
 }
 
 function readText(path) {
@@ -103,6 +260,7 @@ function assertCreatorPanelContract() {
   const currentProjectRuntimeHookSource = readText("src/ui/app/useCurrentProjectRuntimePanels.ts");
   const minimalTopNavSource = readText("src/ui/director/MinimalTopNav.tsx");
   const directorModeSource = readText("src/ui/director/DirectorModeShell.tsx");
+  const projectStatusViewModelSource = readText("src/ui/app/projectStatusViewModel.ts");
   const creatorDeskPanelsSource = readText("src/ui/director/CreatorDeskPanels.tsx");
   const creatorDeskProjectionSource = readText("src/ui/app/creatorDeskProjection.ts");
   const workbenchProjectionSource = readText("src/core/currentProjectWorkbenchProjection.ts");
@@ -331,6 +489,8 @@ function assertCreatorPanelContract() {
   assert(/import\s+\{\s*DirectorMode\s*\}\s+from\s+"\.\/ui\/director\/DirectorModeShell"/.test(appSource), "App must mount the extracted DirectorModeShell");
   assert(/import\s+\{\s*MinimalAgentPanel\s*\}\s+from\s+"\.\/MinimalAgentPanel"/.test(directorModeSource), "DirectorMode must mount the extracted MinimalAgentPanel");
   assert(/import\s+\{\s*CreatorDeskPanels\s*\}\s+from\s+"\.\/CreatorDeskPanels"/.test(directorModeSource), "DirectorMode must mount the creator desk panels");
+  assert(/buildProjectStatusViewModel\(\{[\s\S]*videoStage:\s*creatorDesk\?\.videoStage/.test(directorModeSource), "DirectorMode must feed CreatorDesk videoStage into the unified project status");
+  assert(/videoStage\.generation\?\.queueSummary/.test(projectStatusViewModelSource), "Unified project status must summarize serial video queue progress");
   const creatorDeskPanelCopy = extractStringLiterals(creatorDeskPanelsSource);
   assert(/故事[\s\S]*画面[\s\S]*复核列表/.test(creatorDeskPanelsSource), "Creator desk must expose planner, preparation, and review panels in product copy");
   assert(/视频生成/.test(creatorDeskPanelsSource), "Creator desk must expose the video generation panel");
@@ -606,6 +766,65 @@ assert(jimengPreview.queue[0].videoGeneration.status === "queued", "Jimeng previ
 assert(jimengPreview.queue[0].videoGeneration.shortSubmitId === "e2ebfcfa", "Jimeng preview item should expose short submit id");
 assert(jimengPreview.queue[0].videoGeneration.queuePosition === 2085, "Jimeng preview item should preserve visible position");
 assert(/恢复查询/.test(jimengPreview.queue[0].videoGeneration.detail), "Jimeng queued copy should explain resume query");
+
+const relayQueuePreview = buildCurrentProjectPreviewProjection({
+  relayQueue: {
+    schemaVersion: "0.1.0",
+    generatedAt: "2026-06-02T11:46:10.867Z",
+    queueId: "relay_test",
+    storyboardConfirmed: true,
+    status: "running",
+    maxConcurrentVideoJobs: 1,
+    authorizationPolicy: {
+      mode: "storyboard_confirmation_authorizes_serial_relay",
+      batchAuthorizationRequired: false,
+      perTaskAuthorizationRequired: false,
+      reviewStillRequired: true,
+      notes: [],
+    },
+    counts: { total: 2, ready: 1, active: 1, completed: 0, failed: 0, blocked: 0 },
+    activeItemIds: ["relay_MS01"],
+    nextReadyItemId: "relay_MS02",
+    autoSubmitAllowed: true,
+    resumeCommands: ["resume relay_MS01"],
+    userSummary: "第一段正在即梦排队，完成后再提交第二段。",
+    notes: [],
+    items: [
+      {
+        id: "relay_MS01",
+        shotId: "MS01",
+        title: "霓虹启动",
+        status: "submitted",
+        modelVersion: "seedance2.0",
+        videoResolution: "720p",
+        durationSeconds: 4,
+        promptPath: "runtime/receipts/MS01_seedance_prompt.md",
+        referencePaths: ["runtime/references/MS01_storyboard.png", "runtime/references/car_white.png"],
+        submitId: "adde7eb0-c7aa-4348-ada7-a859c24cf55a",
+        localMediaPaths: [],
+        attemptCount: 1,
+        blockers: [],
+        notes: [],
+      },
+      {
+        id: "relay_MS02",
+        shotId: "MS02",
+        title: "弯道擦肩",
+        status: "ready",
+        modelVersion: "seedance2.0",
+        videoResolution: "720p",
+        durationSeconds: 4,
+        referencePaths: [],
+        attemptCount: 0,
+        blockers: [],
+        notes: [],
+      },
+    ],
+  },
+});
+assert(relayQueuePreview.queue[0].promptPath === "runtime/receipts/MS01_seedance_prompt.md", "relay queue preview must preserve prompt evidence");
+assert(relayQueuePreview.queue[0].referencePaths?.length === 2, "relay queue preview must preserve reference evidence");
+assert(relayQueuePreview.queue[0].videoGeneration.status === "submitted", "relay queue preview must expose active submitted status");
 
 const realChainMatched = guardProjectRealChainUiStateForCurrentProject(
   { status: realChain.uiStatus, summary: realChain },
@@ -1445,5 +1664,7 @@ assert(unboundWorkbench.available === false, "unbound workbench must fail closed
 assert(unboundWorkbench.identity.displayTitle === "未选择项目", "unbound workbench should not show fallback project identity");
 assert(unboundWorkbench.shots[0].id === "CURRENT_PROJECT", "unbound workbench should not show fallback story shots");
 assert(!JSON.stringify(unboundWorkbench).includes("005"), "unbound workbench must not include demo 005 state");
+
+assertUnifiedProjectStatusVideoStage();
 
 console.log("Current project UI closed-loop test passed. Binding-first UI blocks unbound/stale summaries without provider calls.");

@@ -225,7 +225,7 @@ function directorProgressFor(status: ReturnType<typeof buildProviderHandoffStatu
   }
   if (status.status === "blocked") {
     return {
-      label: "待补齐",
+      label: "待处理",
       detail: "1 个 Image2 小样 · 需要复核",
       tone: "blocked",
       total: 1,

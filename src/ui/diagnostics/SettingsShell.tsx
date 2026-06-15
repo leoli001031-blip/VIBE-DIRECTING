@@ -45,7 +45,6 @@ const providerCredentialAliases: Record<string, string[]> = {
   "deepseek-v4-pro": ["deepseek-v4-pro", "deepseek", "deepseek-v4", "deepseek-chat"],
   "apikey-fun-gpt55-responses-image": ["apikey-fun-gpt55-responses-image", "apikey-fun", "apikey_fun", "gpt55-responses-image", "lanyi-image2", "lanyiapi-gpt-image-2", "openai-image2-api"],
   "tavily-search": ["tavily-search", "tavily_search", "tavily"],
-  "cloud-tts": ["cloud-tts", "tts-cloud", "audio-tts"],
 };
 
 function providerAliases(providerId: string) {
@@ -92,7 +91,6 @@ function conciseKeyStatus(status: string, keyless?: boolean) {
 function connectionActionLabel(providerId: string, ready: boolean) {
   if (ready) return "可用";
   if (providerId === "tavily-search") return "待连接";
-  if (providerId === "cloud-tts") return "可稍后";
   return "待配置";
 }
 
@@ -189,14 +187,12 @@ export function SettingsShell({
   const deepseekConfig = providerConfigById.get("deepseek-v4-pro");
   const apikeyFunConfig = providerConfigById.get("apikey-fun-gpt55-responses-image");
   const tavilyConfig = providerConfigById.get("tavily-search");
-  const cloudTtsConfig = providerConfigById.get("cloud-tts");
   const tavilyCredential = credentialForProvider(credentials, "tavily-search");
   const tavilyReady = Boolean(tavilyCredential?.hasKey || tavilyConfig?.credential?.keyStatus === "configured");
   const serviceKeyOptions = [
     { providerId: "deepseek-v4-pro", label: "规划模型" },
     { providerId: "apikey-fun-gpt55-responses-image", label: "Image2 生图" },
     { providerId: "tavily-search", label: "联网查资料" },
-    { providerId: "cloud-tts", label: "云端配音" },
   ];
   const imageProviders = providerConfigs.filter((providerConfig) => (
     providerConfig.imageModel &&
@@ -205,7 +201,6 @@ export function SettingsShell({
     providerConfig.providerId !== "tavily-search"
   ));
   const videoProviders = providerAdapters.filter((adapter) => adapter.slot.startsWith("video."));
-  const ttsProviders = providerConfigs.filter((providerConfig) => providerConfig.ttsModel || providerConfig.localCommand || providerConfig.cloudEndpoint);
   const serviceConnections = [
     {
       id: "deepseek-v4-pro",
@@ -235,15 +230,6 @@ export function SettingsShell({
       noKeyNote: "需要让 AI 查外部资料时再配置。",
     },
     {
-      id: "cloud-tts",
-      title: "云端配音",
-      purpose: "给后续云端配音或声音克隆预留。本地配音不需要 Key。",
-      config: cloudTtsConfig,
-      credential: credentialForProvider(credentials, "cloud-tts"),
-      saveLabel: "Cloud TTS",
-      noKeyNote: "暂时不用云端配音可以先不填。",
-    },
-    {
       id: "jimeng-video",
       title: "视频生成",
       purpose: "Seedance / 即梦走本机登录。提交前仍会确认。",
@@ -261,6 +247,10 @@ export function SettingsShell({
   const selectedServiceReady = selectedServiceConnection
     ? ("keyless" in selectedServiceConnection && selectedServiceConnection.keyless === true) || selectedServiceStatus !== "not_configured"
     : false;
+  const readyServiceConnectionCount = serviceConnections.filter((service) => {
+    const keyless = "keyless" in service && service.keyless === true;
+    return keyless || keyStatusForProvider(service.config, service.credential) !== "not_configured";
+  }).length;
   const isFallbackProject = runtimeState.stateSource?.kind === "fallback-audit";
   const quickProjectTitle = isFallbackProject ? "新视频项目" : (runtimeState.project.title || "新视频项目");
   const quickProjectRootValue = isFallbackProject
@@ -280,7 +270,7 @@ export function SettingsShell({
   const quickVideoStatus = videoProviders.length
     ? "视频可提交"
     : "还没有视频通道";
-  const quickVoiceStatus = voiceSources.length || ttsProviders.length ? "声音可准备" : "稍后再配音";
+  const quickVoiceStatus = voiceSources.length ? "声音参考已准备" : "需要时再拖声音参考";
   const webSearchStatusLabel = !resolvedWebSearchSettings.enabled
     ? "AI 查资料已关闭"
     : resolvedWebSearchSettings.provider === "tavily_search" && !tavilyReady
@@ -353,7 +343,7 @@ export function SettingsShell({
         <div>
           <span>声音</span>
           <strong>{quickVoiceStatus}</strong>
-          <small>{voiceSources.length} 个音频参考 · {ttsProviders.length ? `${ttsProviders.length} 个配音配置` : "配音可以稍后配置"}</small>
+          <small>{voiceSources.length} 个声音参考 · 视频请求只用来锁角色声线</small>
         </div>
       </div>
       <div className="settings-service-strip" aria-label="服务状态">
@@ -372,8 +362,8 @@ export function SettingsShell({
         <div className="settings-group-title">创作服务</div>
         <div className="settings-list credential-settings-list">
           <div className="settings-readonly-note">
-            <strong>{credentialProviderIds.length ? `${credentialProviderIds.length} 个服务已连接` : "还没有连接生成服务"}</strong>
-            <small>真实生图、配音或提交视频前仍会确认。Key 只保存在本机。</small>
+            <strong>{readyServiceConnectionCount ? `${readyServiceConnectionCount} 个创作服务可用` : "还没有连接生成服务"}</strong>
+            <small>真实生图或提交视频前仍会确认。Key 只保存在本机。</small>
           </div>
           <details
             className="settings-subdetails"
@@ -382,7 +372,7 @@ export function SettingsShell({
           >
             <summary>
               <span>连接或管理服务</span>
-              <small>{credentialProviderIds.length ? "平时不用展开" : "需要生图时再连接"}</small>
+              <small>{readyServiceConnectionCount ? "平时不用展开" : "需要生图时再连接"}</small>
             </summary>
             <div className="service-connection-grid">
               {serviceConnections.map((service) => {
@@ -482,7 +472,7 @@ export function SettingsShell({
           <div className="settings-readonly-note">
             <strong>{webSearchStatusLabel}</strong>
             <small>
-              {agentWebSearchSourceLabel(resolvedWebSearchSettings)} · 查到的资料会先等你确认。没有联网查资料也能继续规划。
+              {agentWebSearchSourceLabel(resolvedWebSearchSettings)} · 查到的资料会先等你确认。没有联网查资料也能继续整理。
               {resolvedWebSearchSettings.provider === "tavily_search" && !tavilyReady ? " 需要联网时再连接这个服务。" : ""}
             </small>
           </div>
@@ -580,6 +570,7 @@ export function SettingsShell({
         <summary>
           <span>高级排查</span>
           <small>开发调试用，平时不用展开</small>
+          <small className="settings-disclosure-state">{advancedOpen ? "收起" : "展开"}</small>
         </summary>
         {advancedOpen && (
           <>

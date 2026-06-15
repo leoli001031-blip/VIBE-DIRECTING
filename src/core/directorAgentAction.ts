@@ -490,7 +490,7 @@ function assetLockedStatusLabel(status: NonNullable<DirectorAgentStateSnapshot["
   if (status === "locked") return "已锁定";
   if (status === "candidate") return "候选";
   if (status === "needs_review") return "待复核";
-  return "待补齐";
+  return "待处理";
 }
 
 function targetFor(snapshot: DirectorAgentStateSnapshot, userIntent = ""): DirectorAgentActionTarget {
@@ -608,9 +608,9 @@ function actionBlockers(input: {
     input.kind === "review_reference_asset" && input.target.kind !== "asset" ? "请先选中一个参考素材，再复核。" : "",
     input.kind === "review_reference_asset" && !assetReviewDecision ? "没有识别到要通过还是退回这个参考。" : "",
     input.kind === "review_reference_asset" && assetReviewDecision === "locked" && selectedAssetStatus === "locked" ? "这个参考已经锁定了，不需要再确认。" : "",
-    input.kind === "prepare_reference_generation" && !input.executionContract.referenceGenerationAllowed ? "当前是只规划模式，不能补参考。" : "",
+    input.kind === "prepare_reference_generation" && !input.executionContract.referenceGenerationAllowed ? "当前是只整理模式，还不能生成参考。" : "",
     input.kind === "prepare_video_submit" && readiness.status === "needs_story" ? "先整理故事流，再提交视频。" : "",
-    input.kind === "prepare_video_submit" && readiness.status === "needs_references" ? "先补齐参考，再提交视频。" : "",
+    input.kind === "prepare_video_submit" && readiness.status === "needs_references" ? "先生成并复核参考，再提交视频。" : "",
     input.kind === "prepare_video_submit" && readiness.status === "needs_review" ? "先复核参考，再提交视频。" : "",
     input.kind === "prepare_video_submit" && !input.executionContract.videoSubmitAllowed ? "当前还不能提交视频，需要你先允许。" : "",
   ];
@@ -858,7 +858,7 @@ function summaryFor(input: {
   const prefix = input.status === "blocked" ? "需要补充：" : "已整理：";
   if (input.kind === "update_shot_strategy" && input.strategy) return `${prefix}${input.target.label} 改为${strategyLabels[input.strategy]}`;
   if (input.kind === "request_style_research") return `${prefix}先查资料，再形成可确认参考`;
-  if (input.kind === "prepare_reference_generation") return `${prefix}为 ${input.target.label} 补齐参考`;
+  if (input.kind === "prepare_reference_generation") return `${prefix}为 ${input.target.label} 生成参考`;
   if (input.kind === "review_reference_asset") return `${prefix}复核 ${input.target.label}`;
   if (input.kind === "prepare_video_submit") return `${prefix}准备提交 ${input.target.label} 的视频`;
   if (input.kind === "prepare_export") return `${prefix}准备导出项目素材包`;
@@ -883,7 +883,7 @@ function userFacingMessageFor(input: {
   if (input.status === "blocked") return input.blockers[0] || "需要补充一点信息。";
   if (input.kind === "update_shot_strategy" && input.strategy) return `我会先把这段改成${strategyLabels[input.strategy]}，确认后再写入项目。`;
   if (input.kind === "request_style_research") return "我会先查资料并整理成参考，采用前会让你确认。";
-  if (input.kind === "prepare_reference_generation") return "我会先准备补参考计划，生成结果会进入复核。";
+  if (input.kind === "prepare_reference_generation") return "我会先准备参考生成计划，生成结果会进入复核。";
   if (input.kind === "review_reference_asset") return "我会先把这张参考的复核决定整理好，确认后写入项目。";
   if (input.kind === "prepare_video_submit") return "我会准备视频提交计划，提交前需要你确认。";
   if (input.kind === "prepare_export") return "我会准备导出素材包，导出内容会可复核。";
@@ -1118,11 +1118,11 @@ function buildAgentProjectReadiness(shots: ShotRecord[], assets: AssetRecord[]):
     return {
       status: "needs_references",
       nextActionKind: "prepare_reference_generation",
-      nextActionLabel: "补齐参考",
+      nextActionLabel: "生成参考",
       actionQueue: [
         {
           kind: "prepare_reference_generation",
-          label: "补齐参考",
+          label: "生成参考",
           reason: `还有 ${counts.missingReferences} 个参考没有形成可复核素材。`,
           priority: "now",
         },
@@ -1137,11 +1137,11 @@ function buildAgentProjectReadiness(shots: ShotRecord[], assets: AssetRecord[]):
         {
           kind: "prepare_video_submit",
           label: "准备视频",
-          reason: "参考补齐并复核后，再进入视频提交前检查。",
+          reason: "参考生成并复核后，再进入视频提交前检查。",
           priority: "later",
         },
       ],
-      summary: `还有 ${counts.missingReferences} 个参考待补齐`,
+      summary: `还有 ${counts.missingReferences} 个参考待生成`,
       modeSummary: summarizeReferenceStrategies(shots),
       referenceSummary: summarizeReferenceCounts(counts),
       ...counts,
@@ -1236,7 +1236,7 @@ function summarizeReferenceStrategies(shots: ShotRecord[]) {
 }
 
 function summarizeReferenceCounts(counts: ReturnType<typeof referenceCounts>) {
-  return `已锁定 ${counts.lockedReferences} / 待复核 ${counts.needsReviewReferences} / 待补齐 ${counts.missingReferences}`;
+  return `已锁定 ${counts.lockedReferences} / 待复核 ${counts.needsReviewReferences} / 待生成 ${counts.missingReferences}`;
 }
 
 function actionQueueLabel(action: DirectorAgentSuggestedAction) {

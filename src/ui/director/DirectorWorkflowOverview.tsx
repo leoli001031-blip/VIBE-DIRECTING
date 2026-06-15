@@ -84,7 +84,7 @@ export function DirectorWorkflowOverview({
     {
       id: "references",
       label: "生成参考",
-      detail: missingReferenceCount ? `${missingReferenceCount} 待补` : lockedAssets ? `${lockedAssets} 已通过` : "角色/场景/道具",
+      detail: missingReferenceCount ? `${missingReferenceCount} 待生成` : lockedAssets ? `${lockedAssets} 已通过` : "角色/场景/道具",
       tone: stepTone({ ready: lockedAssets > 0 && missingReferenceCount === 0, active: currentView === "assets", blocked: missingReferenceCount > 0 }),
       icon: <Image size={15} />,
     },

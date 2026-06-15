@@ -51,7 +51,7 @@ const item: ProjectAgentActionLogItem = {
   id: "agent_action_001",
   title: "补齐参考",
   scope: "镜头 1-2",
-  result: "参考已开始补齐",
+  result: "参考已开始生成",
   nextStep: "去参考区看进度",
   resultView: { view: "assets", label: "去参考" },
   followUpIntent: "继续刚才的动作：补齐参考\n我想调整：",

@@ -27,7 +27,30 @@ function sourceManualChunk(id: string) {
     `${srcRoot}core/scriptPlanner.ts`,
   ];
   if (newVideoRuntimeModules.includes(normalizedId)) return "new-video-runtime";
-  if (normalizedId.startsWith(`${srcRoot}agent/`)) return "agent-runtime";
+  if (normalizedId.startsWith(`${srcRoot}agent/`)) {
+    if (
+      normalizedId.includes("/image2Tool.ts")
+      || normalizedId.includes("/lanyiImage2AgentTool.ts")
+      || normalizedId.includes("/jimengTool.ts")
+      || normalizedId.includes("/webSearchTool.ts")
+    ) return "agent-provider-tools";
+    if (
+      normalizedId.includes("/directorProductAgentLoop.ts")
+      || normalizedId.includes("/directorAgentProviderTools.ts")
+      || normalizedId.includes("/directorAgentPlan.ts")
+    ) return "agent-product-loop";
+    if (
+      normalizedId.includes("/ownedAgentLoop.ts")
+      || normalizedId.includes("/ownedAgentImage2SubmitPlan.ts")
+    ) return "agent-owned-loop";
+    if (
+      normalizedId.includes("/agentLoop.ts")
+      || normalizedId.includes("/toolRegistry.ts")
+      || normalizedId.includes("/sessionManager.ts")
+      || normalizedId.includes("/llmProvider.ts")
+    ) return "agent-loop-core";
+    return "agent-runtime";
+  }
   if (normalizedId.startsWith(`${srcRoot}data/`)) return "demo-data";
   if (normalizedId.startsWith(`${srcRoot}project/`)) return "core-runtime";
   if (normalizedId.startsWith(`${srcRoot}core/`)) return "core-runtime";
@@ -45,7 +68,7 @@ export default defineConfig({
     },
   },
   build: {
-    // Intentional threshold: core-runtime chunk (~1059 KB) currently exceeds this limit.
+    // Intentional threshold: large Agent/provider chunks remain visible while we finish splitting legacy surfaces.
     // Kept at 1000 to surface the warning without breaking the build.
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
