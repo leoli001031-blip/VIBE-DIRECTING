@@ -3,6 +3,7 @@ import type { DirectorQaUserFeedback } from "../../core/directorQaUserFeedback";
 import { formatShotNumber } from "./MinimalStoryFlow";
 import { agentProjectRequirementCopy } from "./agentProjectRequirementCopy";
 import type { DirectorView } from "./directorTypes";
+import type { ProjectStatusViewModel } from "../app/projectStatusViewModel";
 import type { CreatorAgentCommand, CreatorDeskProjection, CreatorFrameStatus, CreatorReviewLockTarget, CreatorReviewStatus, CreatorReviewTrayItem } from "./creatorDeskTypes";
 
 const jimengExpectedWaitMinutes = 50;
@@ -423,6 +424,7 @@ export function CreatorDeskPanels({
   onSelectItem,
   onSelectInboxItem,
   onOpenView,
+  projectStatusView,
 }: {
   projection: CreatorDeskProjection;
   localProjectReady?: boolean;
@@ -443,6 +445,7 @@ export function CreatorDeskPanels({
     qaFeedback?: DirectorQaUserFeedback;
   };
   agentCommandOverride?: CreatorAgentCommand;
+  projectStatusView?: ProjectStatusViewModel;
   onRetryMissing?: () => void;
   onSendVideo?: () => unknown | Promise<unknown>;
   onRetryItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
@@ -472,9 +475,12 @@ export function CreatorDeskPanels({
   const projectRequirement = agentProjectRequirementCopy({ localProjectBusy, canCreateLocalProject });
   const hasStoryDraftForProject = scriptPlanner.shotCount > 0 || framePlan.items.length > 0;
   const browserDraftLabel = hasStoryDraftForProject ? projectRequirement.label : "先写想法";
-  const nextActionCopy = !localProjectReady
+  const statusNextAction = projectStatusView?.nextAction?.trim();
+  const statusSummary = projectStatusView?.doing?.trim();
+  const statusDetail = projectStatusView?.waitingFor?.trim();
+  const nextActionCopy = statusNextAction || (!localProjectReady
     ? browserDraftLabel
-    : displayAgentCommand.label;
+    : displayAgentCommand.label);
   const displayPreflight = localProjectReady
     ? preflight
     : {
@@ -501,7 +507,9 @@ export function CreatorDeskPanels({
       return itemLabel(left).localeCompare(itemLabel(right), "zh-Hans-CN");
     })
     .slice(0, 6);
-  const creatorStepHint = !localProjectReady
+  const creatorStepHint = projectStatusView
+    ? "底部输入框会接着这个状态处理。"
+    : !localProjectReady
     ? hasStoryDraftForProject
       ? projectRequirement.hint
       : "可以继续说想法；生成参考、视频或导出前再准备本地项目。"
@@ -532,8 +540,8 @@ export function CreatorDeskPanels({
         <div className="creator-step-copy">
           <span>AI 导演建议</span>
           <strong>{nextActionCopy}</strong>
-          <small>{localProjectReady ? agentStage.summary : displayPreflight.summary}</small>
-          <em>{localProjectReady ? agentStage.detail : summaryLine(projection)}</em>
+          <small>{statusSummary || (localProjectReady ? agentStage.summary : displayPreflight.summary)}</small>
+          <em>{statusDetail || (localProjectReady ? agentStage.detail : summaryLine(projection))}</em>
         </div>
         <div className="creator-step-cta" aria-label="当前状态提示">
           <small className="creator-summary-next">{creatorStepHint}</small>

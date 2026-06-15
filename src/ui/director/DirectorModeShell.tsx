@@ -412,6 +412,7 @@ export function DirectorMode({
             referenceGenerationAction={realSampleAction}
             videoSendAction={sessionVideoSendAction}
             agentCommandOverride={visibleAgentCommand}
+            projectStatusView={projectStatusView}
             onSendVideo={sessionSendSeedanceVideo}
             onRetryItem={sessionRetryReviewItem}
             onApproveItem={onApproveReviewItem}
