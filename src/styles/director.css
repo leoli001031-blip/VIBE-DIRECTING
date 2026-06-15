@@ -8688,6 +8688,28 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   flex-shrink: 0;
 }
 
+.minimal-director.composer-only .new-video-composer-bar,
+.new-video-bottom-portal .new-video-composer-bar {
+  grid-template-columns: max-content minmax(96px, 1fr) max-content;
+  overflow: hidden;
+}
+
+.minimal-director.composer-only .new-video-composer-bar > small,
+.new-video-bottom-portal .new-video-composer-bar > small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.minimal-director.composer-only .new-video-primary-action,
+.new-video-bottom-portal .new-video-primary-action {
+  display: inline-flex;
+  max-width: 132px;
+  min-width: 92px;
+  position: relative;
+  z-index: 1;
+}
+
 .new-video-composer-bar .new-video-script-error {
   grid-column: 1 / -1;
   color: #9a4a36;

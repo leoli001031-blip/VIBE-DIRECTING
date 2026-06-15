@@ -65,7 +65,7 @@ const vehicleObjectPattern =
   /跑车|汽车|车辆|赛车|双门车|SU7|Xiaomi|小米|Porsche|保时捷|GT3|911|(?:^|[\s_-])(?:car|vehicle)(?:$|[\s_-])/i;
 
 const bodyOrPerformanceDetailPattern =
-  /(?:^|[\s'_-])(?:hand|hands|finger|fingers|fingertips|eyes?|gaze|eyeline|face|facial expression|hair|feet|foot|profile|shoulders?|sleeves?|breath|blink|mouth|lips|posture|gesture|coat|jacket|dress|skirt|hat|glasses|shoes?|boots?)(?:$|[\s'_-])|(?:的)?(?:手|手指|指尖|眼睛|眼神|视线|脸部|面部|脸|表情|头发|发丝|脚|脚步|背影|侧脸|肩|肩膀|衣袖|袖口|呼吸|眨眼|嘴唇|姿态|手势|雨衣|风衣|大衣|校服|制服|外套|夹克|衬衫|上衣|裤子|长裤|短裤|连衣裙|礼服|毛衣|卫衣|裙子|裙|围巾|领巾|帽子|发箍|眼镜|墨镜|鞋|靴|雨靴)$/i;
+  /(?:^|[\s'_-])(?:hand|hands|finger|fingers|fingertips|eyes?|gaze|eyeline|face|facial expression|hair|feet|foot|profile|shoulders?|sleeves?|breath|blink|mouth|lips|posture|gesture|coat|jacket|dress|skirt|hat|glasses|headphones?|earphones?|earbuds?|headset|shoes?|boots?)(?:$|[\s'_-])|(?:的)?(?:手|手指|指尖|眼睛|眼神|视线|脸部|面部|脸|表情|头发|发丝|脚|脚步|背影|侧脸|肩|肩膀|衣袖|袖口|呼吸|眨眼|嘴唇|姿态|手势|雨衣|风衣|大衣|校服|制服|外套|夹克|衬衫|上衣|裤子|长裤|短裤|连衣裙|礼服|毛衣|卫衣|裙子|裙|围巾|领巾|帽子|发箍|眼镜|墨镜|耳机|耳机线|入耳式耳机|头戴式耳机|鞋|靴|雨靴)$/i;
 
 const sceneStateDetailPattern =
   /^(?:清晨|早晨|白天|中午|下午|傍晚|黄昏|深夜|夜晚|黎明)$|积水|水坑|水洼|水迹|湿路|路面|地面|路肩|远山|山体|山林|山影|山轮廓|天空|天光|天色|地平线|云层|云朵|雨雾|雨线|雾|薄雾|烟尘|灰尘|天气|光线|色温|晨光|夕阳|微白|霓虹|灯牌|反光|倒影|水花|水面|护栏|弯道|树影|路灯|阴影|高光|订单高峰感|atmosphere|mist|fog|rain|weather|road surface|reflection|reflections?|sky|cloud|haze|dust|neon|signage|streetlight|shadow|highlight|lighting|color temperature/i;
@@ -77,13 +77,16 @@ const sceneLocationSubjectPattern =
   /咖啡园|咖啡馆|咖啡店|书店|图书馆|学校|天台|屋顶|便利店|山路|山脊|公路|街道|巷|庭院|车内|驾驶席|室内|门口|吧台|舞台|剧院|车站|站台|房间|教室|走廊|rooftop|bookstore|cafe|coffee\s*shop|school|station|platform|courtyard|theater|street|road|room|interior/i;
 
 const objectSpatialScenePattern =
-  /(?:竹篮|咖啡豆堆|咖啡豆|拿铁杯|杯|旧书|书页|车票|磁带盒|手机|车|跑车|书桌|桌|道具|物件)(?:里|内|中|旁|边|前|后|附近|周围|上方|下方)|(?:里|内|中|旁|边|前|后|附近|周围|上方|下方).*(?:竹篮|咖啡豆堆|咖啡豆|拿铁杯|杯|旧书|书页|车票|磁带盒|手机|车|跑车|书桌|桌|道具|物件)/i;
+  /(?:竹篮|咖啡豆堆|咖啡豆|拿铁杯|杯|旧书|书页|车票|磁带盒|手机|车|跑车|自动贩卖机|自动售货机|贩卖机|售货机|vending\s*machine|书桌|桌|道具|物件)(?:里|内|中|旁|边|前|后|附近|周围|上方|下方)|(?:里|内|中|旁|边|前|后|附近|周围|上方|下方).*(?:竹篮|咖啡豆堆|咖啡豆|拿铁杯|杯|旧书|书页|车票|磁带盒|手机|车|跑车|自动贩卖机|自动售货机|贩卖机|售货机|vending\s*machine|书桌|桌|道具|物件)/i;
+
+const relativeSceneDetailPattern =
+  /^(?:背景是|背景为|后方|后面|远处|远方|画面深处|后方远处可见|远处可见|隐约可见|轮廓|剪影).+|.+(?:轮廓|剪影|远处可见|隐约可见)$/i;
 
 const objectComponentDetailPattern =
   /车灯|尾灯|大灯|轮胎|车轮|油门|刹车|踏板|方向盘|仪表|后视镜|车窗|雨刷|引擎|发动机|排气|车门|车牌|书页|封面|书脊|书架|门把|门锁|窗户|橱窗|玻璃窗|楼层灯|指示灯|导视灯|警示灯|安全灯|电梯镜面|琴键|琴槌|乐谱架|烘焙机观察窗|筛网区域|屏幕|按钮|按键|镜头|表盘|枪口|扳机|刀刃|剑柄|肩带|拉链|手套|杯盖|瓶盖|轮廓边|headlights?|taillights?|tires?|wheels?|steering|dashboard|pedal|doors?|windows?|wipers?|engine|exhaust|license plate|page|cover|spine|bookshelf|shelf|window|display window|door handle|mirror|piano keys?|hammer|screen|button|keypad|lens|dial|trigger|barrel|blade|handle|strap|zipper|gloves?/i;
 
 const parentObjectPattern =
-  /跑车|汽车|车辆|赛车|车|SU7|Xiaomi|小米|Porsche|保时捷|GT3|911|书|旧书|车票|票|磁带|盒|箱|招牌|霓虹招牌|手机|相机|枪|刀|剑|扇|伞|包|杯|瓶|钥匙|机器人|机甲|道具|物件|car|vehicle|book|ticket|cassette|phone|camera|gun|sword|fan|umbrella|bag|cup|bottle|key|robot|mecha|sign|toolbox|prop|object/i;
+  /跑车|汽车|车辆|赛车|车|SU7|Xiaomi|小米|Porsche|保时捷|GT3|911|书|旧书|车票|票|磁带|盒|箱|招牌|霓虹招牌|自动贩卖机|自动售货机|贩卖机|售货机|手机|相机|枪|刀|剑|扇|伞|包|杯|瓶|钥匙|机器人|机甲|道具|物件|car|vehicle|book|ticket|cassette|vending\s*machine|phone|camera|gun|sword|fan|umbrella|bag|cup|bottle|key|robot|mecha|sign|toolbox|prop|object/i;
 
 const heroObjectPattern =
   /跑车|汽车|车辆|赛车|双门车|车\b|SU7|Xiaomi|小米|Porsche|保时捷|GT3|911|机器人|机甲|咖啡豆|咖啡果|吉祥物|玩偶|产品|主物件|hero\s*object|mascot|product|robot|mecha|car|vehicle/i;
@@ -163,6 +166,9 @@ export function classifyReferenceAssetText(value: unknown, requestedType?: Refer
   }
   if (requestedType === "scene" && objectSpatialScenePattern.test(text)) {
     return { bucket: "scene_constraint", reason: "object_relative_area_belongs_to_parent_scene", normalizedText };
+  }
+  if (requestedType === "scene" && relativeSceneDetailPattern.test(text)) {
+    return { bucket: "scene_constraint", reason: "relative_background_detail_belongs_to_parent_scene", normalizedText };
   }
   if (isSceneDetailReference(text)) {
     return { bucket: "scene_constraint", reason: "environment_state_belongs_to_scene_baseline", normalizedText };

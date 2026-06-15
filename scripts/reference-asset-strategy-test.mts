@@ -55,6 +55,8 @@ assert(bucket("眼神") === "character_constraint", "gaze should not become a st
 assert(bucket("嘴唇") === "character_constraint", "lips should not become a standalone prop image");
 assert(bucket("透明雨衣") === "character_constraint", "costume pieces should stay character constraints instead of prop assets");
 assert(bucket("复古风衣") === "character_constraint", "coats should stay character constraints instead of prop assets");
+assert(bucket("耳机") === "character_constraint", "wearable headphones should stay character constraints instead of prop assets");
+assert(bucket("耳机线") === "character_constraint", "headphone cable should stay attached to the character/performance, not become a prop asset");
 
 assert(isStandalonePropReference("白色跑车"), "whole object should be uploadable as prop reference");
 assert(!isStandalonePropReference("车灯"), "object component should not be uploadable as standalone prop reference");
@@ -65,6 +67,7 @@ assert(!isStandalonePropReference("检修盒"), "repair hatch should not be uplo
 assert(!isStandalonePropReference("湿路"), "scene detail should not be uploadable as standalone prop reference");
 assert(!isStandalonePropReference("手"), "body detail should not be uploadable as standalone prop reference");
 assert(!isStandalonePropReference("透明雨衣"), "clothing should not be uploadable as standalone prop reference");
+assert(!isStandalonePropReference("耳机"), "wearable audio accessories should not be generated as standalone prop references by default");
 assert(isParentObjectReference("白色跑车"), "car should be recognized as parent object");
 assert(isParentObjectReference("旧书"), "book should be recognized as parent object");
 assert(isHeroObjectReference("白色双门车"), "whole vehicles should be recognized as hero objects");
@@ -80,6 +83,10 @@ assert(classifyReferenceAssetText("同上", "scene").bucket === "ignored", "cont
 assert(classifyReferenceAssetText("霓虹灯牌闪烁", "scene").bucket === "scene_constraint", "sign flicker should remain a scene/action constraint when it appears in the scene field");
 assert(classifyReferenceAssetText("竹篮内", "scene").bucket === "scene_constraint", "object-relative areas should not become standalone scene references");
 assert(classifyReferenceAssetText("拿铁杯旁", "scene").bucket === "scene_constraint", "prop-relative areas should remain scene constraints");
+assert(classifyReferenceAssetText("自动贩卖机旁", "scene").bucket === "scene_constraint", "vending-machine-relative scene labels should remain parent scene constraints");
+assert(classifyReferenceAssetText("老旧的自动贩卖机前", "scene").bucket === "scene_constraint", "vending-machine foreground labels should not become separate scene baselines");
+assert(classifyReferenceAssetText("后方远处可见轨道和月台轮廓", "scene").bucket === "scene_constraint", "distant background silhouettes should stay scene constraints");
+assert(classifyReferenceAssetText("背景是末班列车", "scene").bucket === "scene_constraint", "background transit details should not become separate scene baselines");
 assert(classifyReferenceAssetText("云南高原咖啡园", "scene").bucket === "standalone", "location scenes with 云南 should remain scene baseline subjects");
 assert(classifyReferenceAssetText("云南高原咖啡园竹篮里", "scene").bucket === "standalone", "scene labels with a real location plus local prop context should stay usable as scene baselines");
 assert(classifyReferenceAssetText("城市咖啡馆内靠窗桌位", "scene").bucket === "standalone", "interior location labels should stay scene baselines even when they mention a table area");
@@ -90,12 +97,12 @@ assert(referenceAssetCandidates(["白色跑车驾驶者", "白车车手", "黑�
 assert(referenceAssetCandidates(["戴黄色雨衣的小女孩；迷你送货机器人"], "character").join("|") === "戴黄色雨衣的小女孩|迷你送货机器人", "listed character identities should split into reusable subjects");
 assert(referenceAssetCandidates(["云南高原咖啡园", "清晨", "温暖城市咖啡馆内"], "scene").join("|") === "云南高原咖啡园|温暖城市咖啡馆内", "scene reference candidates should keep locations and drop time-only details");
 assert(referenceAssetCandidates(["山脚便利店", "同上", "白色双门车"], "scene").join("|") === "山脚便利店", "scene candidates should drop placeholders and vehicle objects");
-assert(referenceAssetCandidates(["自动售货机；水坑；迷你送货机器人"], "prop").join("|") === "自动售货机|迷你送货机器人", "listed props should split and drop scene-only details like puddles");
+assert(referenceAssetCandidates(["自动售货机；水坑；迷你送货机器人；耳机"], "prop").join("|") === "自动售货机|迷你送货机器人", "listed props should split and drop scene-only or wearable details");
 
-const buckets = referenceConstraintBuckets(["车灯", "湿路", "白色跑车", "手指", "发光车票", "天空", "手机屏幕", "梯子", "电线", "检修盒"]);
+const buckets = referenceConstraintBuckets(["车灯", "湿路", "白色跑车", "手指", "发光车票", "天空", "手机屏幕", "梯子", "电线", "检修盒", "耳机"]);
 assert(buckets.standalone.join("|") === "白色跑车|发光车票", "standalone bucket mismatch");
 assert(buckets.objectConstraints.join("|") === "车灯|手机屏幕|梯子|电线|检修盒", "object constraint bucket mismatch");
 assert(buckets.sceneConstraints.join("|") === "湿路|天空", "scene constraint bucket mismatch");
-assert(buckets.characterConstraints.join("|") === "手指", "character constraint bucket mismatch");
+assert(buckets.characterConstraints.join("|") === "手指|耳机", "character constraint bucket mismatch");
 
 console.log("reference-asset-strategy-test: ok");
