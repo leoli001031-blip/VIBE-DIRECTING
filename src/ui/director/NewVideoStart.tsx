@@ -266,6 +266,14 @@ function writeStoredNewVideoComposerDraft(storageKey: string, draft: NewVideoSta
   }
 }
 
+function isDraftConfirmationIntent(value: string) {
+  const normalized = cleanText(value).toLowerCase();
+  if (!normalized || normalized.length > 48) return false;
+  const wantsToContinue = /(没问题|可以|确认|通过|继续|下一步|进入故事流|ok|okay|no problem|lets go)/i.test(normalized);
+  if (!wantsToContinue) return false;
+  return !/(但是|不过|先别|不要|别|不行|不对|有问题|不太|改|修改|调整|换|加|删|删除|重做|重新|希望|想要)/.test(normalized);
+}
+
 function clearStoredNewVideoComposerDraft(storageKey: string) {
   if (typeof window === "undefined") return;
   try {
@@ -2077,6 +2085,11 @@ export function NewVideoStart({
   function submitComposer() {
     if (storyboardPlanningStatus === "running") return;
     if (projection && discussionWorkspace) {
+      if (isDraftConfirmationIntent(discussionFeedback)) {
+        setDiscussionFeedback("");
+        void confirmDraft();
+        return;
+      }
       void sendDiscussionFeedback();
       return;
     }
@@ -2128,6 +2141,7 @@ export function NewVideoStart({
 
   async function confirmDraft() {
     if (!projection || !directorSession || confirmPending || confirmed) return;
+    if (isDraftConfirmationIntent(discussionFeedback)) setDiscussionFeedback("");
     if (discussionWorkspace?.stagedDeltas.some((delta) => delta.status === "staged")) {
       setConfirmError("先确认待修改。");
       return;
@@ -2308,7 +2322,8 @@ export function NewVideoStart({
     : confirmed
       ? "草案已经进入故事流。"
     : "当前不能确认。";
-  const composerConfirmsDraft = Boolean(composerIsFeedback && !discussionFeedback.trim() && projection);
+  const composerTextConfirmsDraft = Boolean(composerIsFeedback && isDraftConfirmationIntent(discussionFeedback));
+  const composerConfirmsDraft = Boolean(composerIsFeedback && projection && (!discussionFeedback.trim() || composerTextConfirmsDraft));
   const composerDisabled = composerConfirmsDraft
     ? draftConfirmDisabled
     : storyboardPlanningStatus === "running"
@@ -2363,7 +2378,7 @@ export function NewVideoStart({
   const composerHelper = storyboardPlanningStatus === "running"
     ? "正在拆分镜头，不会生成。"
       : composerConfirmsDraft
-        ? "草案没问题就确认；想改的话直接输入意见。"
+        ? "草案没问题就确认，或直接说“没问题，继续”。想改就描述要改哪里。"
       : composerIsFeedback
         ? "选中镜头或素材后，直接说你想怎么改。"
       : localProjectReady

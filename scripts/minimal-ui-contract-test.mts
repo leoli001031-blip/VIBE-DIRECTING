@@ -479,6 +479,9 @@ checkMessage(requireWithin(newVideoStartSource, /<details\s+className="new-video
 checkMessage(requireWithin(newVideoStartSource, /className="new-video-asset-action new-video-primary-action"[\s\S]*composerPrimaryLabel/, "NewVideoStart bottom composer must expose one fixed primary action"));
 checkMessage(requireWithin(newVideoStartSource, /composerPrimaryTitle[\s\S]*先让 AI 导演拆故事、分镜和节奏/, "NewVideoStart fixed send action must explain that Agent planning happens after send"));
 checkMessage(requireWithin(newVideoStartSource, /aria-label=\{composerPrimaryAriaLabel\}[\s\S]*\{composerPrimaryLabel\}/, "NewVideoStart composer must expose one explicit visible send button"));
+checkMessage(requireWithin(stylesSource, /\.new-video-composer-bar\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(0,\s*1fr\) max-content/, "NewVideoStart composer bar must reserve a non-collapsing send-button column"));
+checkMessage(requireWithin(stylesSource, /\.new-video-primary-action\s*\{[\s\S]*flex:\s*0 0 auto[\s\S]*background:\s*#7a5528/, "NewVideoStart send button must use a visible fixed background and not shrink away"));
+checkMessage(requireWithin(stylesSource, /\.new-video-primary-action\s*\{[\s\S]*white-space:\s*nowrap/, "NewVideoStart send button label must not wrap or collapse"));
 check(!/className="new-video-start-footer"[\s\S]*<button[\s\S]*发送/.test(newVideoStartSource), "NewVideoStart footer must not duplicate the composer submit action");
 checkMessage(requireWithin(newVideoStartSource, /className="new-video-plan-summary"[\s\S]*projectionTitleForDisplay[\s\S]*projection\.summary\.scriptPreview[\s\S]*new-video-next-hint/, "NewVideoStart organized draft default must show only title, short preview, and a bottom-action hint"));
 checkMessage(requireWithin(newVideoStartSource, /className="new-video-next-flow"[\s\S]*确认后[\s\S]*进入故事流，再生成参考[\s\S]*不会生成[\s\S]*单独确认视频/, "NewVideoStart organized draft must explain the post-confirm next step"));
@@ -679,6 +682,9 @@ checkMessage(requireWithin(newVideoStart, /composerDisabledReason/, "NewVideoSta
 checkMessage(requireWithin(newVideoStart, /composerHelper/, "NewVideoStart composer must keep helper copy contextual"));
 checkMessage(requireWithin(newVideoStart, /title=\{composerPrimaryTitle\}/, "NewVideoStart send action should expose disabled reason or the current bottom action"));
 checkMessage(requireWithin(newVideoStart, /composerConfirmsDraft[\s\S]*confirmDraft\s*:\s*submitComposer/, "NewVideoStart bottom action must confirm a ready draft instead of duplicating a second top CTA"));
+checkMessage(requireWithin(newVideoStartSource, /function isDraftConfirmationIntent/, "NewVideoStart ready draft must classify natural-language confirmation"));
+checkMessage(requireWithin(newVideoStart, /isDraftConfirmationIntent\(discussionFeedback\)/, "NewVideoStart ready draft must route confirmation text through the composer"));
+checkMessage(requireWithin(newVideoStart, /草案没问题就确认，或直接说“没问题，继续”/, "NewVideoStart ready draft helper must explain natural-language confirmation"));
 checkMessage(requireWithin(newVideoStart, /new-video-next-hint[\s\S]*底部继续：确认进故事流/, "NewVideoStart plan summary must point to the bottom action instead of exposing a second primary button"));
 checkMessage(requireWithin(minimalAgentPanelSource, /buildDirectorFeedbackRecompile/, "MinimalAgentPanel must compile selected-shot feedback into a structured recompile"));
 checkMessage(requireWithin(minimalAgentPanelSource, /onDirectorFeedbackConfirmed/, "MinimalAgentPanel must confirm structured feedback through the Project.vibe callback"));

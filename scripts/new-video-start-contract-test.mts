@@ -366,6 +366,14 @@ check(
   failures,
 );
 check(
+  /function isDraftConfirmationIntent/.test(newVideoStartSource)
+    && /isDraftConfirmationIntent\(discussionFeedback\)/.test(newVideoStartSource)
+    && /void confirmDraft\(\)/.test(newVideoStartSource)
+    && /草案没问题就确认，或直接说“没问题，继续”/.test(newVideoStartSource),
+  "NewVideoStart must let users confirm a ready draft by typing a natural-language next-step intent.",
+  failures,
+);
+check(
   /new-video-next-hint/.test(newVideoStartSource)
     && /底部继续：确认进故事流/.test(newVideoStartSource)
     && /确认进故事流/.test(newVideoStartSource)

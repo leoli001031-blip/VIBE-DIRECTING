@@ -7570,10 +7570,13 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   justify-content: center;
   gap: 6px;
   justify-self: end;
-  min-width: 74px;
+  flex: 0 0 auto;
+  min-width: 92px;
+  max-width: max-content;
   border-color: rgba(122, 85, 60, 0.28);
-  background: var(--studio-accent);
+  background: #7a5528;
   color: #fffaf3;
+  white-space: nowrap;
 }
 
 .new-video-primary-action:disabled {
@@ -8584,7 +8587,7 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 
 .new-video-composer-bar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) max-content;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -9226,5 +9229,20 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   .current-frame-pair,
   .shot-reference-strip {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .new-video-composer-bar {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+
+  .new-video-composer-bar small {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+
+  .new-video-primary-action {
+    min-width: 86px;
   }
 }
