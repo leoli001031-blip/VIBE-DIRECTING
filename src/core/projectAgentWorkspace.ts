@@ -118,6 +118,38 @@ export interface BuildProjectObservationInput {
   inbox?: ProjectInboxProjection;
 }
 
+function routeContinueFromObservation(observation: ProjectObservationProjection): ProjectIntentRoute {
+  const basePlan = [observation.currentTask.understanding, observation.currentTask.plan].filter(Boolean);
+  if (observation.currentTask.confirmation.kind === "reference_generation") {
+    return { kind: "reference", label: "继续准备参考", target: "assets", confirmation: "reference_generation", plan: basePlan };
+  }
+  if (observation.currentTask.confirmation.kind === "asset_review") {
+    return { kind: "reference", label: "继续复核素材", target: "assets", confirmation: "asset_review", plan: basePlan };
+  }
+  if (observation.currentTask.confirmation.kind === "video_submit") {
+    return { kind: "video", label: "继续准备视频", target: "preview", confirmation: "video_submit", plan: basePlan };
+  }
+  if (observation.currentTask.confirmation.kind === "export") {
+    return { kind: "export", label: "继续导出", target: "export", confirmation: "export", plan: basePlan };
+  }
+  if (observation.video.status === "recoverable" || observation.video.status === "running") {
+    return { kind: "video_status", label: "继续查询视频", target: "preview", confirmation: "none", plan: ["读取已提交任务", "查询回流状态", "更新预览"] };
+  }
+  return { kind: "status", label: "继续当前任务", target: "story", confirmation: observation.currentTask.confirmation.kind, plan: basePlan };
+}
+
+function isContinueIntent(text: string) {
+  return /^(好|好的|可以|行|没问题|没毛病|ok|OK|确认|通过|继续|下一步|就这样|就按这个)(了|吧|啊|呀|，|。|！|!|,|\s)*$/u.test(text)
+    || /(没问题|可以|确认|通过).{0,8}(继续|下一步)/u.test(text)
+    || /(继续|下一步).{0,8}(没问题|可以|确认|通过)/u.test(text);
+}
+
+function isShotRevisionIntent(text: string) {
+  const mentionsShot = /第[一二三四五六七八九十\d]+个?镜头|镜头\s*[一二三四五六七八九十\d]+|这一段|这段/u.test(text);
+  const asksChange = /改|调整|重写|替换|删|加|优化|再|更|一点|压迫|紧张|轻松|慢|快|远|近|特写|全景|推近|拉远|日漫|节奏|构图|动作/u.test(text);
+  return mentionsShot && asksChange;
+}
+
 function clean(value: unknown) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
 }
@@ -446,7 +478,7 @@ export function routeProjectAgentIntent(input: {
   if (!directorAgentPermissionIntentDisallowsVideoSubmit(text) && /提交|生成视频|生视频|seedance|即梦/.test(text)) {
     return { kind: "video", label: "准备视频", target: "preview", confirmation: "video_submit", plan: ["检查故事和参考", "编译视频提示词", "确认后串行提交"] };
   }
-  if (/查资料|搜索|参考.*风格|研究/.test(text)) {
+  if (/查资料|查一下|搜一下|搜索|参考.*风格|研究|((分镜|风格|镜头|节奏).{0,8}怎么做)/.test(text)) {
     return { kind: "research", label: "查资料", target: "story", confirmation: "none", plan: ["整理检索问题", "保存可用资料", "等你确认后写入项目"] };
   }
   if (/补.*参考|生成.*参考|角色图|场景图|道具图|故事板/.test(text)) {
@@ -458,10 +490,13 @@ export function routeProjectAgentIntent(input: {
   if (!text) {
     return { kind: "status", label: "检查项目", target: "story", confirmation: input.observation.currentTask.confirmation.kind, plan: [input.observation.currentTask.understanding, input.observation.currentTask.plan] };
   }
+  if (isContinueIntent(text)) {
+    return routeContinueFromObservation(input.observation);
+  }
   if (newStoryIntent) {
     return { kind: "story", label: "整理新故事", target: "story", confirmation: "none", plan: ["理解新片方向", "重拆故事段落和镜头", "生成前先给你看草案"] };
   }
-  if (input.hasSelection || /改|调整|重写|替换|删|加|优化/.test(text)) {
+  if (input.hasSelection || isShotRevisionIntent(text) || /改|调整|重写|替换|删|加|优化/.test(text)) {
     return { kind: "revision", label: "修改当前内容", target: "story", confirmation: "none", plan: ["读取当前选中内容", "整理成可确认修改", "确认后写入项目"] };
   }
   return { kind: "story", label: "整理故事", target: "story", confirmation: "none", plan: ["理解你的想法", "拆成故事段落和镜头", "生成前先给你看草案"] };

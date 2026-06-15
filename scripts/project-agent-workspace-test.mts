@@ -201,6 +201,40 @@ const submitRoute = routeProjectAgentIntent({
 assert(submitRoute.kind === "video", "video intent should route to video preparation");
 assert(submitRoute.confirmation === "video_submit", "video submit should require confirmation");
 
+const continueRoute = routeProjectAgentIntent({
+  text: "没问题，继续",
+  hasSelection: false,
+  hasAttachments: false,
+  observation,
+});
+assert(continueRoute.kind === "reference", "simple continue wording should follow the observed next project action");
+assert(continueRoute.confirmation === observation.currentTask.confirmation.kind, "continue route should preserve the current confirmation boundary");
+
+const referenceOnlyRoute = routeProjectAgentIntent({
+  text: "先别生成视频，只补参考",
+  hasSelection: false,
+  hasAttachments: false,
+  observation,
+});
+assert(referenceOnlyRoute.kind === "reference", "no-video reference-only wording should route to reference preparation");
+assert(referenceOnlyRoute.confirmation === "reference_generation", "reference-only wording should keep video submission blocked");
+
+const shotRevisionRoute = routeProjectAgentIntent({
+  text: "第二个镜头再压迫一点",
+  hasSelection: false,
+  hasAttachments: false,
+  observation,
+});
+assert(shotRevisionRoute.kind === "revision", "shot-specific creative notes should route to revision even without a selected card");
+
+const styleResearchRoute = routeProjectAgentIntent({
+  text: "查一下这种 90 年代日漫分镜怎么做",
+  hasSelection: false,
+  hasAttachments: false,
+  observation,
+});
+assert(styleResearchRoute.kind === "research", "style/storyboard research wording should route to research");
+
 const noSubmitStoryRoute = routeProjectAgentIntent({
   text: "新建一个 12 秒短片，先帮我拆故事、判断参考模式，不要提交视频。",
   hasSelection: true,
