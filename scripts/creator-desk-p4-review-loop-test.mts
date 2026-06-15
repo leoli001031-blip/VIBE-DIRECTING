@@ -225,7 +225,7 @@ assert(lockedProjection.reviewTray.counts.needs_review === 0, "locking reference
 assert(lockedProjection.reviewTray.counts.locked === 3, "locking references should refresh locked counts");
 assert(lockedProjection.videoGeneration.status === "not_generated", "after lock, video plan should be ready to submit rather than already submitted");
 assert(lockedProjection.agentCommand.kind === "submit_video", "locked references should make the primary Agent command submit video");
-assert(lockedProjection.agentCommand.label === "提交视频", "video-ready projects should use one submit-video primary label");
+assert(lockedProjection.agentCommand.label === "发送视频", "video-ready projects should use one submit-video primary label");
 const lockedProjectVibe = createProjectVibeFromRuntimeState(lockedRuntimeState);
 assert(lockedProjectVibe.assets.every((asset) => asset.status === "locked"), "Project.vibe projection should refresh locked assets");
 assert(lockedProjectVibe.visualMemory.entries.every((entry) => entry.status === "locked" && entry.canUseAsFutureReference), "locked visual memory should become future-reference safe");
@@ -380,7 +380,7 @@ assert(/重试/.test(creatorDeskPanelsSource), "Review Tray should expose retry 
 assert(/绑定为\{reviewLockLabels\[target\]\}/.test(creatorDeskPanelsSource), "Review Tray should expose object binding targets");
 assert(/查看说明/.test(creatorDeskPanelsSource), "Review Tray should expose prompt review entry");
 assert(/needs_review/.test(creatorDeskPanelsSource) && /hasHiddenInternalCopy/.test(creatorDeskPanelsSource), "Review Tray should hide raw needs_review copy from item details");
-assert(/input\.preflight\.status === "ready"[\s\S]*primaryAction:\s*"提交视频"/.test(creatorDeskProjectionSource), "Creator desk should surface submit-video as the Agent stage after review clears");
+assert(/input\.preflight\.status === "ready"[\s\S]*primaryAction:\s*"发送视频"/.test(creatorDeskProjectionSource), "Creator desk should surface submit-video as the Agent stage after review clears");
 assert(/function\s+previewItemIsReturnedVideoForReview[\s\S]*videoNeedsReview[\s\S]*视频已经回来，先看一眼再继续/.test(creatorDeskProjectionSource), "Creator desk should derive returned-video review state inside the shared projection");
 assert(!/function\s+reviewTrayHasReturnedVideo/.test(creatorDeskPanelsSource), "Creator desk panel should not patch returned-video state from the review tray");
 

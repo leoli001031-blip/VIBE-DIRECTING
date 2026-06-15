@@ -357,7 +357,7 @@ function projectDraftUsesBrowserStorage(target: ProjectVibeDraftTarget, mode?: s
 }
 
 function projectDraftRecordLabel(target: ProjectVibeDraftTarget, mode?: string) {
-  return projectDraftUsesBrowserStorage(target, mode) ? "未保存草稿" : "本地项目";
+  return projectDraftUsesBrowserStorage(target, mode) ? "暂存想法" : "本地项目";
 }
 
 function projectDraftLoadingLabel(target: ProjectVibeDraftTarget, mode?: string) {
@@ -370,7 +370,7 @@ function projectDraftRestoredLabel(target: ProjectVibeDraftTarget, mode: string 
 }
 
 function projectDraftMissingLabel(target: ProjectVibeDraftTarget, mode?: string) {
-  return projectDraftUsesBrowserStorage(target, mode) ? "未保存草稿待开始" : "本地项目待保存";
+  return projectDraftUsesBrowserStorage(target, mode) ? "先写想法" : "本地项目待保存";
 }
 
 function looksLikeProjectInstruction(value?: string) {
@@ -2426,7 +2426,7 @@ function App() {
     : browserDraftHasNoLocalProject
       ? {
         status: "unbound" as const,
-        message: projectFileSelection.detail || "未保存草稿，生成参考或提交视频前需要选择本地项目。",
+        message: projectFileSelection.detail || "先整理想法；生成前需要选择本地项目。",
       }
       : runtimeProjectBinding.status === "bound"
         ? runtimeProjectBinding
@@ -3071,7 +3071,7 @@ function App() {
     if (effectiveRuntimeProjectBinding.status !== "bound") {
       return {
         label: "当前故事还没有可播放素材",
-        detail: "素材回来前，会先显示当前故事还缺哪些画面。",
+        detail: "素材结果出来前，会先显示当前故事还缺哪些画面。",
       };
     }
     if (currentProjectPreviewProjection.available) {
@@ -3246,9 +3246,9 @@ function App() {
     const normalized = message.toLowerCase();
     if (projectVibeWritten) {
       if (normalized.includes("agent loop") || normalized.includes("preview") || normalized.includes("promoted")) {
-        return "项目记录已保留，预览生成需要复核。";
+        return "项目已保留，预览需要确认。";
       }
-      return "项目记录已保留，需要复核。";
+      return "项目已保留，需要确认。";
     }
     if (normalized.includes("project_not_ready")) return "项目未写入：请先打开或创建项目文件夹。";
     if (normalized.includes("selected shot") || normalized.includes("选择镜头")) return "项目未写入：请先选中一个镜头。";
@@ -3257,7 +3257,7 @@ function App() {
     }
     if (normalized.includes("knowledge_trace")) return "项目未写入：缺少项目依据，请先重新整理故事或参考。";
     if (normalized.includes("free_text")) return "项目未写入：不能把原话直接当任务，请先让 AI 整理成草稿。";
-    if (normalized.includes("provider") || normalized.includes("submit")) return "项目未写入：这次像是在直接生成，请先切到只整理或可提交视频。";
+    if (normalized.includes("provider") || normalized.includes("submit")) return "项目未写入：这次像是在直接生成，请先调整工作范围。";
     if (normalized.includes("save") || normalized.includes("保存")) return "项目未写入：保存失败，请检查项目文件夹后重试。";
     return "项目未写入：需要复核后再试。";
   }
@@ -3282,7 +3282,7 @@ function App() {
     const queuedCount = creativeLoop.queuedTaskRunIds.length;
     const parkedOrBlockedCount = creativeLoop.parkedTaskRunIds.length + creativeLoop.blockedTaskRunIds.length;
     return {
-      projectRecordLabel: creativeLoop.runReceipt ? "已留下项目记录" : undefined,
+      projectRecordLabel: creativeLoop.runReceipt ? "项目已保留" : undefined,
       projectImpactLabel: affectedShotIds.length
         ? affectedShotIds.length <= 3
           ? affectedShotIds.map((shotId) => `镜头 ${formatShotNumber(shotId)}`).join("、")
@@ -3305,7 +3305,7 @@ function App() {
     const taskSummary = stage.taskEnqueuePlan.summary;
     const parkedOrBlockedCount = taskSummary.parked + taskSummary.blocked + taskSummary.missingKnowledgeTrace;
     return {
-      projectRecordLabel: stage.status === "blocked" ? "暂不写项目" : "确认后留下项目记录",
+      projectRecordLabel: stage.status === "blocked" ? "暂不写项目" : "确认后保存到项目",
       projectImpactLabel: affectedShotIds.length
         ? affectedShotIds.length <= 3
           ? affectedShotIds.map((shotId) => `镜头 ${formatShotNumber(shotId)}`).join("、")
@@ -3797,7 +3797,7 @@ function App() {
       setLatestPrototypeAgentDemo({
         status: "error",
         result: {
-          label: patchResult.receipt.errors[0] || "复核记录未写入",
+          label: patchResult.receipt.errors[0] || "确认结果未写入",
           projectVibeAdded: false,
           waitingReview: true,
           status: "error",
@@ -3826,7 +3826,7 @@ function App() {
     }
     prototypeProjectDraftStatusRef.current = ({
       status: saveResult.status,
-      label: saveResult.ok ? "复核记录已写入项目" : "复核记录保存待重试",
+      label: saveResult.ok ? "确认结果已写入项目" : "确认结果保存待重试",
       targetId: saveResult.targetId,
       factHash: saveResult.factHash,
       error: saveResult.errors[0],
@@ -3839,8 +3839,8 @@ function App() {
           : retryMode
             ? "已写入重试请求"
             : rejectMode
-              ? "已写入拒绝记录"
-              : "已写入复核记录",
+              ? "已写入拒绝结果"
+              : "已写入确认结果",
         projectVibeAdded: patchResult.receipt.status === "applied",
         projectSaved: saveResult.ok,
         storageLabel: saveResult.ok ? "已保存到项目" : "项目保存待重试",
@@ -4132,7 +4132,7 @@ function App() {
         setLatestPrototypeAgentDemo({
           status: "ready",
           result: {
-            label: confirmedSaveResult.ok ? "修改已写入项目" : "修改已记录，保存待重试",
+            label: confirmedSaveResult.ok ? "修改已写入项目" : "修改已暂存，保存待重试",
             projectVibeAdded: true,
             projectSaved: confirmedSaveResult.ok,
             storageLabel: confirmedSaveResult.ok ? "已保存到项目" : "项目保存待重试",
@@ -4213,7 +4213,7 @@ function App() {
           label,
           projectVibeAdded: projectVibeWritten,
           projectSaved: projectVibeWritten,
-          storageLabel: projectVibeWritten ? "项目记录已保留" : undefined,
+          storageLabel: projectVibeWritten ? "项目已保留" : undefined,
           waitingReview: true,
           status: "error",
         },
@@ -4414,15 +4414,15 @@ function App() {
     setProjectSelectionStatus("idle");
     setProjectFileSelection({
       status: "unavailable",
-      label: "未保存草稿",
-      detail: "可以先整理草稿；当前浏览器不能打开本地文件夹，生成参考或提交视频前请在桌面 App 选择项目。",
+      label: "先写想法",
+      detail: "可以先整理想法；当前浏览器不能打开本地文件夹，生成前请在桌面 App 选择项目。",
     });
     clearProjectSwitchEphemera();
     setLoadedPrototypeProjectDraftTargetId(targetId);
     applyProjectVibeProjectState(createEmptyProjectVibeForProjectRoot(undefined, displayName), target);
-    setProjectRealChainState({ status: "unavailable", message: "可以先整理草稿；生成参考或提交视频前，请在桌面 App 选择项目。" });
-    setProjectImage2BatchState({ status: "unavailable", message: "可以先整理草稿；生成参考前，请在桌面 App 选择项目。" });
-    setProjectImage2OneShotState({ status: "unavailable", message: "可以先整理草稿；生成画面前，请在桌面 App 选择项目。" });
+    setProjectRealChainState({ status: "unavailable", message: "可以先整理想法；生成前请在桌面 App 选择项目。" });
+    setProjectImage2BatchState({ status: "unavailable", message: "可以先整理想法；生成参考前请在桌面 App 选择项目。" });
+    setProjectImage2OneShotState({ status: "unavailable", message: "可以先整理想法；生成画面前请在桌面 App 选择项目。" });
     setExportActionState({ status: "idle", label: "导出待准备" });
     setDirectorView("story");
     return target;
@@ -4475,8 +4475,8 @@ function App() {
     if (!canChooseProjectRootFromDialog) {
       setProjectFileSelection({
         status: "unavailable",
-        label: "未保存草稿",
-        detail: "可以先整理草稿；生成参考或提交视频前请在桌面 App 选择项目。",
+        label: "先写想法",
+        detail: "可以先整理想法；生成前请在桌面 App 选择项目。",
       });
       return;
     }
@@ -4669,7 +4669,7 @@ function App() {
       ...videoSubmitAction,
       disabled: true,
       ready: false,
-      message: "先复核参考素材，再提交视频。",
+      message: "先确认参考素材，再发送视频。",
     };
   }, [pendingReferenceReviewCount, videoSubmitAction]);
 
@@ -4911,7 +4911,7 @@ function App() {
                 <details className="settings-advanced diagnostics-advanced-panels">
                   <summary>
                     <span>Image2 许可闸门</span>
-                    <small>真实提交排查用，平时不用打开</small>
+                    <small>真实发送排查用，平时不用打开</small>
                   </summary>
                   <div className="diagnostics-advanced-grid">
                     <RealImage2GateDiagnostics

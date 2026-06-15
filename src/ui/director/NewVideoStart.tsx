@@ -360,7 +360,7 @@ function audioRoleCopy(role: NewVideoStartDraft["audioRole"]) {
   void role;
   return {
     title: "声音参考",
-    detail: "已识别为声音参考，会绑定到角色或旁白，并随视频请求一起用于锁定声线。",
+    detail: "已识别为声音参考，会绑定到角色或旁白，生成视频时用来锁定声线。",
     short: "用于角色声线、语气和对白质感",
   };
 }
@@ -473,7 +473,7 @@ function referenceInboxSuggestion(reference: NewVideoReferenceFile) {
 
 function audioInboxSuggestion(role: NewVideoStartDraft["audioRole"]) {
   void role;
-  return "会作为声音或台词参考，后续可绑定角色并随视频请求使用";
+  return "会作为声音或台词参考，后续可绑定角色并随视频使用";
 }
 
 function stripSrtMarkup(value: string) {
@@ -1241,9 +1241,9 @@ function planningSummaryPart(label: string, value: string | undefined) {
 }
 
 function agentBoundaryInstruction(mode?: AgentVideoSubmitMode) {
-  if (mode === "plan_only") return "当前边界：只整理故事、镜头和节奏，不要安排生图或视频提交。";
-  if (mode === "reference_allowed") return "当前边界：可以整理参考并安排生图，但不要安排视频提交。";
-  return "当前边界：故事和参考通过后，可以继续安排视频提交。";
+  if (mode === "plan_only") return "先只整理故事、镜头和节奏，不会生成。";
+  if (mode === "reference_allowed") return "可以准备参考图，但不会发送视频。";
+  return "故事和参考确认后，可以继续发送视频。";
 }
 
 function tableRowSummary(row: NewVideoStoryboardShot, index: number) {
@@ -1524,7 +1524,7 @@ export function NewVideoStart({
         title: "AI 正在拆镜头",
         detail: storyboardPlanningElapsedSeconds >= 8
           ? `正在整理故事、节奏和镜头。已等待 ${storyboardPlanningElapsedSeconds} 秒。`
-          : "正在整理故事、节奏和镜头，不会生图或提交视频。",
+          : "正在整理故事、节奏和镜头，不会生成。",
         nextAction: "等草案出来后复核",
         draftReferenceCount,
       };
@@ -1554,7 +1554,7 @@ export function NewVideoStart({
         status: "drafting",
         title: "想法已放入",
         detail: "还没有交给 AI 拆镜头。",
-        nextAction: "点发送，让 Agent 先拆故事和节奏",
+        nextAction: "点发送，让 AI 导演先拆故事和节奏",
         draftReferenceCount,
       };
     }
@@ -1959,7 +1959,7 @@ export function NewVideoStart({
       setStoryboardPlanningStatus("fallback");
       setStoryboardPlanningStartedAt(undefined);
       setStoryboardPlanningMessage(error instanceof Error && /key|配置|API/i.test(error.message)
-        ? "AI 分镜还没跑起来：先显示本地初步识别。配置好 Key 后再试。"
+        ? "AI 分镜还没跑起来：先显示本地初步识别。配置好密钥后再试。"
         : "AI 分镜这次没有完成，当前保留本地初步识别；可以直接改，或稍后再发送重试。");
     }
   }
@@ -2069,7 +2069,7 @@ export function NewVideoStart({
       setStoryboardPlanningStatus("ready");
       setStoryboardPlanningStartedAt(undefined);
       setStoryboardPlanningMessage(error instanceof Error && /key|配置|API/i.test(error.message)
-        ? "AI 修改还没跑起来：先保留你的反馈，配置好 Key 后再试。"
+        ? "AI 修改还没跑起来：先保留你的反馈，配置好密钥后再试。"
         : "AI 修改这次没有完成，已先保留你的反馈。");
     }
   }
@@ -2107,7 +2107,7 @@ export function NewVideoStart({
         ? "项目文件夹已经准备好，但还没有正式故事。先写脚本或拖入脚本文件，我会整理成待确认草案。"
         : canCreateLocalProject
           ? "还没有绑定项目文件夹。先写脚本或拖入脚本文件；我会先拆草案，确认时再选择项目文件夹。"
-          : "当前是未保存草稿。先写脚本或拖入脚本文件，我会先整理成待确认内容；生成参考前请在桌面 App 选择项目。",
+          : "当前还没连接项目。先写脚本或拖入脚本文件，我会先整理成待确认内容；生成参考前请在桌面 App 选择项目。",
       next: "下一步：放入脚本或一句故事想法。",
     });
   }
@@ -2274,7 +2274,7 @@ export function NewVideoStart({
         ? "正在选择文件夹"
       : canCreateLocalProject
         ? "确认时选文件夹"
-        : "未保存草稿";
+        : "先写想法";
   const storyboardPlanningLabel = storyboardPlanningStatus === "running"
     ? "AI 正在拆分"
     : storyboardPlanningSource === "ai_director"
@@ -2292,7 +2292,7 @@ export function NewVideoStart({
   const storyboardPlanningRunningDetail = storyboardPlanningRunning
     ? `${storyboardPlanningDetail || "正在整理内容。"} ${storyboardPlanningElapsedSeconds >= 8
       ? `已等待 ${storyboardPlanningElapsedSeconds} 秒，网络慢时可能要 1-3 分钟。`
-      : "只整理分镜，不会生图或提交视频。"}`
+      : "先整理分镜，不会生成。"}`
     : storyboardPlanningDetail;
   const composerIsFeedback = Boolean(projection && discussionWorkspace);
   const composerValue = composerIsFeedback ? discussionFeedback : script;
@@ -2338,7 +2338,7 @@ export function NewVideoStart({
         ? "发送修改"
         : "发送";
   const composerPrimaryAriaLabel = storyboardPlanningStatus === "running"
-    ? "正在拆分镜头"
+    ? "正在拆镜头"
     : composerConfirmsDraft
       ? confirmed ? "已进入故事流" : confirmPending ? "正在进入故事流" : "确认进故事流"
       : composerIsFeedback ? "发送修改意见" : "发送给 AI 导演";
@@ -2348,11 +2348,11 @@ export function NewVideoStart({
       ? "确认后会进入故事流，不会直接生成。"
       : composerIsFeedback
         ? "发送修改意见给 AI 导演。"
-        : "让 AI 先拆故事、分镜和节奏，不会生图或提交视频。";
+        : "先让 AI 导演拆故事、分镜和节奏，不会生成。";
   const composerStatusLine = composerDisabled
     ? composerDisabledReason
     : storyboardPlanningStatus === "running"
-      ? "正在拆分镜头"
+      ? "正在拆镜头"
       : composerConfirmsDraft
         ? `下一步：${composerPrimaryLabel}`
         : projection
@@ -2361,22 +2361,22 @@ export function NewVideoStart({
             ? "下一步：发送给 AI 导演"
             : "等待输入";
   const composerHelper = storyboardPlanningStatus === "running"
-    ? "正在拆分分镜，不会生图或提交视频。"
+    ? "正在拆分镜头，不会生成。"
       : composerConfirmsDraft
         ? "草案没问题就确认；想改的话直接输入意见。"
       : composerIsFeedback
         ? "选中镜头或素材后，直接说你想怎么改。"
       : localProjectReady
-        ? "拖入图片、声音参考或脚本；声音参考会绑定到角色，不会当作配乐。"
+        ? "拖入图片、声音或脚本；声音会用于角色声线，不会当作配乐。"
       : canCreateLocalProject
-          ? "拖入图片、声音参考或脚本；先拆草案，确认后再选择项目文件夹。"
-          : "拖入图片、声音参考或脚本；当前会先作为未保存草稿整理，生成参考前请在桌面 App 选择项目。";
+          ? "拖入图片、声音或脚本；先拆草案，确认后再选择项目文件夹。"
+          : "拖入图片、声音或脚本；现在先整理想法，生成前再选择项目文件夹。";
   const videoPermissionModeItems: Array<{ mode: AgentVideoSubmitMode; label: string }> = [
-    { mode: "plan_only", label: "只整理" },
-    { mode: "reference_allowed", label: "可生成参考" },
-    { mode: "video_allowed", label: "可提交视频" },
+    { mode: "plan_only", label: "先整理" },
+    { mode: "reference_allowed", label: "可做参考" },
+    { mode: "video_allowed", label: "可发视频" },
   ];
-  const activeVideoPermissionLabel = videoPermissionModeItems.find((item) => item.mode === activeVideoPermissionContract.mode)?.label || "只整理";
+  const activeVideoPermissionLabel = videoPermissionModeItems.find((item) => item.mode === activeVideoPermissionContract.mode)?.label || "先整理";
   const showStylePreflight = Boolean(styleResearchPreflight)
     && (styleResearchStatus !== "idle" || Boolean(styleResearchResult) || styleReferenceStatus === "saved");
   const unifiedComposer = (
@@ -2414,17 +2414,17 @@ export function NewVideoStart({
         onToggle={(event) => setBoundaryDetailsOpen(event.currentTarget.open)}
       >
         <summary>
-          <span>当前模式</span>
+          <span>工作范围</span>
           <strong>{activeVideoPermissionLabel}</strong>
         </summary>
         {boundaryDetailsOpen && (
-          <div className="minimal-agent-permission-mode" aria-label="当前执行模式">
+          <div className="minimal-agent-permission-mode" aria-label="当前工作范围">
             {videoPermissionModeItems.map((item) => (
               <button
                 key={item.mode}
                 type="button"
                 className={activeVideoPermissionContract.mode === item.mode ? "is-active" : ""}
-                aria-label={`执行模式：${item.label}`}
+                aria-label={`工作范围：${item.label}`}
                 aria-pressed={activeVideoPermissionContract.mode === item.mode}
                 disabled={storyboardPlanningStatus === "running"}
                 title={agentVideoSubmitContractDetail(agentVideoSubmitContractForMode(item.mode))}
@@ -2476,7 +2476,7 @@ export function NewVideoStart({
           accept="audio/*"
           onChange={(event) => updateAudio(event.currentTarget.files?.[0])}
         />
-        <button className="new-video-asset-action" type="button" onClick={openWorkspacePicker} aria-label="添加脚本、图片或声音参考">
+        <button className="new-video-asset-action" type="button" onClick={openWorkspacePicker} aria-label="添加脚本、图片或声音">
           <Plus size={16} aria-hidden="true" />
           添加文件
         </button>
@@ -2506,7 +2506,7 @@ export function NewVideoStart({
           <div className="new-video-composer-inbox-head">
             <span>素材收件箱</span>
             <strong>{[scriptFileName, ...references, audio].filter(Boolean).length} 个素材</strong>
-            <small>AI 会先粗分用途，确认故事后再绑定到项目。</small>
+            <small>AI 导演会先判断用途，确认故事后再放进项目。</small>
           </div>
           <div className="new-video-composer-attachments" aria-label="素材分类和绑定建议">
             {scriptFileName && (
@@ -2555,7 +2555,7 @@ export function NewVideoStart({
       <summary>
         <span>
           <strong>{isStartingProject ? "从新视频开始" : "新视频"}</strong>
-          <small>{hasDraft ? "草稿已准备" : "脚本、素材和修改都放下面"}</small>
+          <small>{hasDraft ? "内容已准备" : "脚本、素材和修改都放下面"}</small>
         </span>
         <Sparkles size={16} aria-hidden="true" />
       </summary>
@@ -2564,12 +2564,12 @@ export function NewVideoStart({
           <section className="new-video-start-guide" aria-label="开始方式">
             <div>
               <span>开始方式</span>
-              <strong>{hasDraft ? "发送后交给 AI 拆镜头" : "把故事和素材放到底部"}</strong>
-              <small>{localProjectLabel} · 这里只整理草稿，确认前不会生图或提交视频。</small>
+              <strong>{hasDraft ? "发送后让 AI 导演拆镜头" : "把故事和素材放到底部"}</strong>
+              <small>{localProjectLabel} · 这里只整理想法，确认前不会生成。</small>
             </div>
             <ol>
               <li>写想法</li>
-              <li>AI 拆镜头</li>
+              <li>AI 导演拆镜头</li>
               <li>确认进故事流</li>
             </ol>
           </section>
@@ -2635,7 +2635,7 @@ export function NewVideoStart({
               <div className="new-video-next-flow" aria-label="确认后的流程">
                 <span>确认后</span>
                 <strong>进入故事流，再生成参考</strong>
-                <small>确认草案不会生图或提交视频；后面会先看参考，再单独确认提交。</small>
+                <small>确认草案不会生成；后面会先看参考，再单独确认视频。</small>
               </div>
               <small className="new-video-next-hint">
                 {confirmed ? "已进入故事流" : confirmPending ? "正在进入故事流" : "底部继续：确认进故事流"}
@@ -2658,7 +2658,7 @@ export function NewVideoStart({
                     <button
                       type="button"
                       disabled={!effectiveWebSearchReady || styleResearchStatus === "running"}
-                      title={!effectiveWebSearchReady ? "先在设置里开启联网资料并补好 Key。" : "查找风格、分镜和镜头方法资料。"}
+                      title={!effectiveWebSearchReady ? "先在设置里开启联网资料并补好密钥。" : "查找风格、分镜和镜头方法资料。"}
                       onClick={() => { void lookupStyleResearch(); }}
                     >
                       <Search size={14} aria-hidden="true" />
@@ -2677,7 +2677,7 @@ export function NewVideoStart({
                     )}
                     <small>
                       {!effectiveWebSearchReady
-                        ? "在设置里开启并补好 Key 后，可以先查风格和分镜方法。"
+                        ? "在设置里开启并补好密钥后，可以先查风格和分镜方法。"
                         : styleResearchStatus === "blocked"
                           ? "这次没有查到可用资料，可换一个风格描述再试。"
                           : styleReferenceStatus === "saved"

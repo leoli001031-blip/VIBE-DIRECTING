@@ -90,7 +90,7 @@ function assertUnifiedProjectStatusVideoStage() {
       generation: {
         statusLabel: "排队中",
         detail: "视频正在处理，可以稍后回来继续。",
-        queueSummary: "第 1/2 段「霓虹启动」排队中 · 1 段待提交",
+        queueSummary: "第 1/2 段「霓虹启动」排队中 · 1 段待发送",
         completedCount: 0,
         failedCount: 0,
         canResume: false,
@@ -98,19 +98,19 @@ function assertUnifiedProjectStatusVideoStage() {
     },
     agentStage: {
       summary: "Agent 正在按串行队列推进",
-      detail: "第一段完成后再提交第二段",
+      detail: "第一段完成后再发送第二段",
     },
     agentCommand: {
       label: "查询视频结果",
-      summary: "继续回流",
-      detail: "不会重复提交",
+      summary: "继续查询",
+      detail: "不会重复发送",
     },
   });
   assert(status.stage === "视频生成中", "unified project status should prioritize active video stage");
   assert(status.doing.includes("第 1/2 段"), "unified project status should show serial queue progress");
-  assert(status.facts.some((fact) => fact.label === "视频" && fact.value.includes("1 段待提交")), "project facts should include the video queue summary");
+  assert(status.facts.some((fact) => fact.label === "视频" && fact.value.includes("1 段待发送")), "project facts should include the video queue summary");
   assert(status.facts.some((fact) => fact.label === "声音" && fact.value.includes("声音参考")), "project facts should include voice reference status");
-  assert(status.facts.some((fact) => fact.label === "Agent" && fact.value === "查询视频结果"), "project facts should include the current Agent suggestion");
+  assert(status.facts.some((fact) => fact.label === "AI 导演" && fact.value === "查询视频结果"), "project facts should include the current AI director suggestion");
 
   const recoverableStatus = buildProjectStatusViewModel({
     runtimeState,
@@ -124,7 +124,7 @@ function assertUnifiedProjectStatusVideoStage() {
     },
   });
   const videoFact = recoverableStatus.facts.find((fact) => fact.label === "视频")?.value || "";
-  assert(videoFact === "可查询回流", "project status facts should translate recoverable video state into creator-facing copy");
+  assert(videoFact === "可查询结果", "project status facts should translate recoverable video state into creator-facing copy");
   assert(!/recoverable|not_submitted|complete/.test(videoFact), "project status facts must not expose raw video queue enums");
 
   const browserDraftPlanningStatus = buildProjectStatusViewModel({
@@ -135,7 +135,7 @@ function assertUnifiedProjectStatusVideoStage() {
     newVideoStatus: {
       status: "planning",
       title: "AI 正在拆镜头",
-      detail: "正在整理故事、节奏和镜头，不会生图或提交视频。",
+      detail: "正在整理故事、节奏和镜头，不会生成。",
       nextAction: "等草案出来后复核",
     },
   });
@@ -184,7 +184,7 @@ function assertUnifiedProjectStatusVideoStage() {
   assert(browserDraftConfirmedStatus.stage === "需要本地项目", "confirmed browser draft should ask for a local project before reference work");
   assert(browserDraftConfirmedStatus.nextAction === "点左上角项目，选择本地文件夹", "confirmed browser draft should point to the project entry");
   assert(!browserDraftConfirmedStatus.nextAction.includes("参考页"), "confirmed browser draft must not route users to reference review before a local project exists");
-  assert(browserDraftConfirmedStatus.facts.find((fact) => fact.label === "Agent")?.value === "先保存项目", "browser draft facts should not show a blocked generate/submit command as the Agent action");
+  assert(browserDraftConfirmedStatus.facts.find((fact) => fact.label === "AI 导演")?.value === "先保存项目", "browser draft facts should not show a blocked generate/submit command as the AI director action");
 
   const localProjectMissingReferenceStatus = buildProjectStatusViewModel({
     runtimeState: {
@@ -313,7 +313,7 @@ function assertCreatorPanelContract() {
   assert(/项目文件状态/.test(panel), "ProjectRealChainPanel should expose project file status");
   assert(/最近项目/.test(surface), "ProjectRealChainPanel should expose recent projects copy");
   assert(/onRemoveRecentProject/.test(minimalTopNavSource), "Top project control must let creators remove a recent project record");
-  assert(/移除这条项目记录，不删除本地文件/.test(minimalTopNavSource), "Recent project removal must explain that local files are not deleted");
+  assert(/从列表移除，不删除本地文件/.test(minimalTopNavSource), "Recent project removal must explain that local files are not deleted");
   assert(/const\s+projectTitleLabel\s*=\s*projectTitle\s*\|\|\s*"新视频项目"/.test(minimalTopNavSource), "Top project control must show the selected empty project name instead of forcing generic new-project copy");
   assert(/function\s+compactProjectPathLabel/.test(minimalTopNavSource), "Top project control should compact local paths before showing them");
   assert(/title=\{projectRoot\}/.test(minimalTopNavSource), "Top project control should keep the full current project path available as hover text");
@@ -455,7 +455,7 @@ function assertCreatorPanelContract() {
   assert(/pendingReferenceReviewCount/.test(appSource), "App must block video submit while references still need review");
   assert(/pendingReferenceReviewCount\s*=\s*workbenchRuntimeState\.visualMemory\.assets\.filter/.test(appSource), "Video submit gate must derive reference blockers from visual memory assets");
   assert(!/pendingReferenceReviewCount[\s\S]{0,260}framePlan\.(?:reviewCount|missingCount)/.test(appSource), "Video submit gate must not treat missing video/shot outputs as reference review blockers");
-  assert(/先复核参考素材，再提交视频/.test(appSource), "Video submit gate should use creator-facing review copy");
+  assert(/先确认参考素材，再发送视频/.test(appSource), "Video submit gate should use creator-facing review copy");
   assert(/videoSendAction=\{gatedVideoSubmitAction\}/.test(appSource), "DirectorMode must receive the gated video submit action");
   assert(/onRetryMissingBatch=\{runMissingVisualsFromStory\}/.test(app), "DirectorMode must route missing visuals through the story fallback handler");
   assert(/hasRunnableBatch\s*=\s*retryCount\s*>\s*0[\s\S]*runProjectImage2Batch\(\)[\s\S]*runImage2AssetGeneration\(\{\}\)/.test(app), "Story fallback must only use the old batch runner for runnable retries and project-scoped reference generation otherwise");
@@ -505,11 +505,11 @@ function assertCreatorPanelContract() {
   assert(/const preflight = buildCreatorPreflightProjection/.test(creatorDeskProjectionSource), "Creator desk projection must build preflight from the current workbench state");
   assert(/故事板叙事[\s\S]*故事板快切[\s\S]*全能参考/.test(creatorDeskProjectionSource), "Creator desk preflight must summarize the three generation modes");
   assert(/function\s+isTextOnlyStyleAsset[\s\S]*new_video_reference:style:text[\s\S]*文字风格方向[\s\S]*项目视觉风格/.test(creatorDeskProjectionSource), "Creator desk must filter text-only style placeholders from review counts");
-  assert(/videoRecoverable[\s\S]*查询结果[\s\S]*视频已提交，可以查询结果/.test(creatorDeskProjectionSource), "Creator desk preflight must treat recoverable queued videos as queryable, not as a new submit state");
-  for (const statusLabel of ["未生成", "已提交", "排队中", "生成中", "已完成", "可稍后恢复"]) {
+  assert(/videoRecoverable[\s\S]*查询结果[\s\S]*视频已发送，可以查询结果/.test(creatorDeskProjectionSource), "Creator desk preflight must treat recoverable queued videos as queryable, not as a new submit state");
+  for (const statusLabel of ["未生成", "已发送", "排队中", "生成中", "已完成", "可稍后恢复"]) {
     assert(new RegExp(statusLabel).test(creatorDeskPanelsSource), `Creator desk must expose ${statusLabel} video status`);
   }
-  assert(/即梦常见约[\s\S]*分钟[\s\S]*可以离开后恢复查询/.test(creatorDeskPanelsSource), "Creator desk must describe long Jimeng waits with resume copy");
+  assert(/即梦常见约[\s\S]*分钟[\s\S]*可以离开后查询结果/.test(creatorDeskPanelsSource), "Creator desk must describe long Jimeng waits with resume copy");
   for (const statusLabel of ["待复核", "缺参考", "可重试", "已通过", "已锁定"]) {
     assert(new RegExp(statusLabel).test(creatorDeskPanelCopy), `Creator desk must expose ${statusLabel}`);
   }
@@ -537,11 +537,11 @@ function assertCreatorPanelContract() {
   assert(/修改计划详情/.test(agentPanelSource), "Agent Panel should keep staged plan details behind disclosure");
   assert(/故事 \/ 镜头 \/ 复核/.test(agentPanelSource), "Agent Panel should name staged plan write targets in user copy");
   assert(
-    /等待写入项目事实|已加入项目计划|已记录到项目/.test(agentPanelContractSource),
+    /等待写入项目事实|已加入项目计划|已写入项目/.test(agentPanelContractSource),
     "Agent Panel confirmation receipt should expose pending project plan write status",
   );
   assert(
-    /已准备写入|已加入项目计划|已记录到项目/.test(agentPanelContractSource),
+    /已准备写入|已加入项目计划|已写入项目/.test(agentPanelContractSource),
     "Agent Panel staged commit receipt should expose creator-facing ready-to-write copy",
   );
   assert(/stageProjectFactsForCommit/.test(agentPanelContractSource), "Agent Panel confirmation should use staged project facts commit API");
@@ -985,7 +985,7 @@ const oneShotTriggerPayload = {
   ...oneShotConfirmPayload,
   status: "trigger_plan_prepared",
   uiStatus: "trigger_plan_prepared",
-  userLabel: "等待回流",
+  userLabel: "等待结果",
   returnSource: "dry_run_projection_only",
   persistedState: {
     receiptPresent: true,
@@ -1253,7 +1253,7 @@ try {
 
   const triggerPreparedOneShot = await prepareProjectImage2OneShotTrigger(project005RuntimeIdentity, confirmedOneShot.receipt);
   assert(triggerPreparedOneShot.status === "trigger_plan_prepared", "one-shot trigger helper should prepare app-server handoff");
-  assert(triggerPreparedOneShot.summary?.userLabel === "等待回流", "one-shot trigger helper should use waiting return copy");
+  assert(triggerPreparedOneShot.summary?.userLabel === "等待结果", "one-shot trigger helper should use waiting return copy");
   assert(triggerPreparedOneShot.summary?.providerCalled === false, "one-shot trigger helper must not call provider");
   const defaultTriggerCall = runtimeFetchCalls
     .filter((item) => item.method === "POST" && item.path === projectImage2OneShotPrepareTriggerEndpoint)

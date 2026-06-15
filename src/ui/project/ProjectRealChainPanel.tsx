@@ -256,7 +256,7 @@ function projectOneShotEvidence(status: ProjectImage2OneShotUiStatus, summary?: 
   if (status === "handoff_prepared" || status === "trigger_plan_prepared" || status === "waiting_file") {
     return {
       label: "等待外部动作完成后检查结果",
-      detail: summary.submitPermissionReceiptPresent ? "许可回执已就绪，仍不会在这里直接提交" : "可先生成许可回执或等待动作完成",
+      detail: summary.submitPermissionReceiptPresent ? "许可回执已就绪，仍不会在这里直接发送" : "可先生成许可回执或等待动作完成",
     };
   }
   if (status === "prepared") {

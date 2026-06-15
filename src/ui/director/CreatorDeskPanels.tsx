@@ -28,7 +28,7 @@ const agentFlowSteps = [
   { id: "describe", label: "描述想法" },
   { id: "plan", label: "拆故事流" },
   { id: "reference", label: "准备参考" },
-  { id: "video", label: "提交与回流" },
+  { id: "video", label: "发送与预览" },
   { id: "delivery", label: "预览与导出" },
 ] as const;
 
@@ -127,7 +127,7 @@ function videoMetricLabel(projection: CreatorDeskProjection["videoGeneration"]) 
   if (projection.recoverableCount > 0) return `${projection.recoverableCount} 可稍后恢复`;
   if (waitingCount > 0) return `${waitingCount} 排队中`;
   if (projection.generatingCount > 0) return `${projection.generatingCount} 生成中`;
-  if (projection.submittedCount > 0) return `${projection.submittedCount} 已提交`;
+  if (projection.submittedCount > 0) return `${projection.submittedCount} 已发送`;
   if (projection.completedCount > 0) return `${projection.completedCount} 已完成`;
   return "未生成";
 }
@@ -163,7 +163,7 @@ function summaryLine(projection: CreatorDeskProjection) {
   if (videoGeneration.status === "recoverable") return `${videoGeneration.recoverableCount || 1} 可稍后恢复`;
   if (videoGeneration.status === ["que", "ued"].join("")) return `${videoWaitingCount(videoGeneration) || 1} 个视频排队中`;
   if (videoGeneration.status === "generating") return `${videoGeneration.generatingCount || 1} 个视频生成中`;
-  if (isVideoSentStatus(videoGeneration.status)) return `${videoGeneration.submittedCount || 1} 个视频已提交`;
+  if (isVideoSentStatus(videoGeneration.status)) return `${videoGeneration.submittedCount || 1} 个视频已发送`;
   const parts = [
     projectInbox.needsReviewCount ? `${projectInbox.needsReviewCount} 个素材待确认` : "",
     reviewTray.counts.needs_review ? `${reviewTray.counts.needs_review} 待复核` : "",
@@ -179,7 +179,7 @@ function primaryActionLabel(value: string) {
   if (normalized.includes("检查")) return "检查画面";
   if (normalized.includes("补齐")) return "生成参考";
   if (normalized.includes("恢复") || normalized.includes("查询")) return "查询结果";
-  if (normalized.includes("提交")) return "提交视频";
+  if (normalized.includes("提交") || normalized.includes("发送")) return "发送视频";
   if (normalized.includes("导出")) return "查看交付";
   if (normalized.includes("写")) return "写故事";
   return value || "继续";
@@ -212,7 +212,7 @@ function agentFlowDetail(step: AgentFlowStepId, projection: CreatorDeskProjectio
     return projection.preflight.referenceSummary;
   }
   if (step === "video") {
-    if (projection.videoStage.status === "not_submitted") return projection.preflight.status === "ready" ? "可提交" : "参考后";
+    if (projection.videoStage.status === "not_submitted") return projection.preflight.status === "ready" ? "可发送" : "参考后";
     return projection.videoStage.generation.statusLabel;
   }
   return projection.agentStage.stage === "export_ready" ? "可交付" : "视频后";
@@ -456,7 +456,7 @@ export function CreatorDeskPanels({
   const referenceGenerationBusy = referenceGenerationAction?.status === "running";
   const generationActionBlocked = Boolean(batchGeneration.canRetryMissing && !onRetryMissing);
   const projectRequirement = agentProjectRequirementCopy({ localProjectBusy, canCreateLocalProject });
-  const browserDraftLabel = localProjectBusy ? projectRequirement.label : "未保存草稿";
+  const browserDraftLabel = localProjectBusy ? projectRequirement.label : "先写想法";
   const nextActionCopy = !localProjectReady
     ? browserDraftLabel
     : generationActionBlocked
@@ -466,7 +466,7 @@ export function CreatorDeskPanels({
     ? preflight
     : {
         ...preflight,
-        summary: "当前是未保存草稿，只能继续整理；生成参考或提交视频需要在桌面 App 里打开或新建本地项目。",
+        summary: "当前还没连接项目文件夹，可以继续整理；生成参考或视频前再打开或新建项目。",
         nextAction: "选择本地项目",
       };
   const referenceNotice = referenceGenerationAction?.message && referenceGenerationAction.status !== "idle"
@@ -487,13 +487,13 @@ export function CreatorDeskPanels({
     })
     .slice(0, 6);
   const creatorStepHint = !localProjectReady
-    ? "可以继续说想法；生成参考、提交视频或导出前再准备本地项目。"
+    ? "可以继续说想法；生成参考、视频或导出前再准备本地项目。"
     : referenceGenerationBusy
       ? "参考正在生成，完成后会进入复核。"
       : videoCanResume
-        ? "底部按钮会查询结果，不会重复提交。"
+        ? "底部按钮会查询结果，不会重复发送。"
         : agentCommand.kind === "submit_video"
-          ? "底部按钮会提交下一段，仍保持串行。"
+          ? "底部按钮会发送下一段，仍然一次只跑一段。"
           : agentCommand.kind === "open_preview"
             ? "底部按钮会进入预览。"
           : agentCommand.kind === "open_export"
@@ -521,7 +521,7 @@ export function CreatorDeskPanels({
           <small className="creator-summary-next">{creatorStepHint}</small>
         </div>
       </div>
-      <section className="creator-agent-current-task" aria-label="Agent 当前任务">
+      <section className="creator-agent-current-task" aria-label="AI 导演当前任务">
         <div>
           <span>理解</span>
           <strong>{projectObservation.currentTask.understanding}</strong>
@@ -690,8 +690,8 @@ export function CreatorDeskPanels({
             );
           })}
         </div>
-        <div className="creator-agent-skills" aria-label="Agent 选择的做法">
-          <span>Agent 选择的做法</span>
+        <div className="creator-agent-skills" aria-label="AI 导演选择的做法">
+          <span>AI 导演选择的做法</span>
           <div>
             {agentSkillPills(projection).map((pill) => (
               <small key={pill} className={skillPillTone(pill)}>{pill}</small>
@@ -802,15 +802,15 @@ export function CreatorDeskPanels({
               {videoGeneration.shortSubmitId && <small>编号 {videoGeneration.shortSubmitId}</small>}
               {currentVideoPosition !== undefined && currentVideoPosition > 0 && <small>前面约 {currentVideoPosition} 个任务</small>}
               {videoGeneration.status !== "completed" && (
-                <small>{videoGeneration.canResume ? "底部按钮可以查询结果，不会重复提交" : `即梦常见约 ${jimengExpectedWaitMinutes} 分钟，可以离开后恢复查询`}</small>
+                <small>{videoGeneration.canResume ? "底部按钮可以查询结果，不会重复发送" : `即梦常见约 ${jimengExpectedWaitMinutes} 分钟，可以离开后查询结果`}</small>
               )}
               {videoSendAction && videoActionRelevant && (
-                <small>{videoCanResume ? "需要取回结果时，点底部发送。" : "需要提交视频时，点底部发送。"}</small>
+                <small>{videoCanResume ? "需要取回结果时，点底部发送。" : "需要发送视频时，点底部发送。"}</small>
               )}
             </div>
             {videoSendAction?.message && videoActionRelevant && (
               <small className="creator-action-message">
-                {videoCanResume ? "查询不会提交新任务。" : videoSendAction.message}
+                {videoCanResume ? "查询不会发送新任务。" : videoSendAction.message}
               </small>
             )}
             <QaFeedbackNotice feedback={videoSendAction?.qaFeedback} />

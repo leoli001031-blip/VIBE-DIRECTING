@@ -97,15 +97,15 @@ export function DirectorWorkflowOverview({
     },
     {
       id: "submit",
-      label: "提交视频",
-      detail: videoInProgress ? videoGeneration?.statusLabel || "处理中" : videoCanSubmit ? "可提交" : "参考通过后",
+      label: "发送视频",
+      detail: videoInProgress ? videoGeneration?.statusLabel || "处理中" : videoCanSubmit ? "可发送" : "参考通过后",
       tone: stepTone({ ready: videoComplete, active: videoCanSubmit, review: videoInProgress }),
       icon: <Clapperboard size={15} />,
     },
     {
       id: "preview",
       label: "预览",
-      detail: videoComplete ? "可播放" : "等视频回来",
+      detail: videoComplete ? "可播放" : "等结果出来",
       tone: stepTone({ ready: videoComplete, active: currentView === "preview" }),
       icon: <PlayCircle size={15} />,
     },

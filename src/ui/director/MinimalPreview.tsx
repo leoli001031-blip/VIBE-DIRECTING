@@ -86,7 +86,7 @@ function previewVideoStageCopy(item?: DisplayItem) {
   if (!previewVideoStatusVisible(item) || !video) {
     return {
       label: "还缺素材",
-      detail: "画面或视频还没回来。",
+    detail: "画面或视频结果还没出来。",
     };
   }
   return {
@@ -108,7 +108,7 @@ function previewReviewTarget(item: DisplayItem | undefined, label: string): Crea
     id: item.id,
     shotId: item.shotId,
     label,
-    detail: "视频已回流",
+    detail: "视频结果已出",
     status: "needs_review",
     mediaPath: item.mediaPath,
     sourceReceiptId,
@@ -338,7 +338,7 @@ export function MinimalPreview({
           onClick={togglePlaying}
           disabled={!canPlayPreview}
           aria-label={canPlayPreview ? (playing ? "暂停预览" : "播放预览") : "等待视频生成"}
-          title={canPlayPreview ? undefined : "视频回来后才能播放"}
+          title={canPlayPreview ? undefined : "视频结果出来后才能播放"}
         >
           {playing ? <PauseCircle size={42} /> : <Play size={42} />}
         </button>
@@ -369,7 +369,7 @@ export function MinimalPreview({
             onClick={togglePlaying}
             disabled={!canPlayPreview}
             aria-label={canPlayPreview ? (playing ? "暂停预览" : "播放预览") : "等待视频生成"}
-            title={canPlayPreview ? undefined : "视频回来后才能播放"}
+            title={canPlayPreview ? undefined : "视频结果出来后才能播放"}
           >
             {playing ? <PauseCircle size={17} /> : <Play size={17} />}
           </button>

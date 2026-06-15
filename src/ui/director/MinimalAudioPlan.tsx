@@ -35,10 +35,10 @@ function spokenAudioPath(plan: AudioPlan, audioPlanning: AudioPlanningState) {
 }
 
 function audioReviewCopy(plan: AudioPlan) {
-  if (!plan.outputPath) return "还没有回流的对白音频。";
-  if (plan.audioQaStatus === "PASS") return "已回流，可试听复核。";
-  if (plan.audioQaStatus === "FAIL") return "复核未通过，可替换声音参考后重新提交视频。";
-  return "已回流，等待试听复核。";
+  if (!plan.outputPath) return "还没有对白音频。";
+  if (plan.audioQaStatus === "PASS") return "已生成，可试听确认。";
+  if (plan.audioQaStatus === "FAIL") return "确认未通过，可替换声音参考后重新发送视频。";
+  return "已生成，等待试听确认。";
 }
 
 function voiceReferenceCopy(plan: AudioPlan, audioPlanning: AudioPlanningState) {
@@ -46,7 +46,7 @@ function voiceReferenceCopy(plan: AudioPlan, audioPlanning: AudioPlanningState) 
     ? audioPlanning.voiceSourceRegistry.sources.find((item) => item.id === plan.voiceSourceId)
     : undefined;
   if (!source) return "还没有绑定声音参考；需要锁角色声线时，把授权音源拖到底部输入框。";
-  return `已绑定 ${source.label || source.id}，提交视频时只作为声线、语气和说话质感参考。`;
+  return `已绑定 ${source.label || source.id}，发送视频时只作为声线、语气和说话质感参考。`;
 }
 
 export function MinimalAudioPlan({
@@ -155,7 +155,7 @@ function MinimalAudioPlanContent({
               {voiceReferenceCopy(plan, audioPlanning)}
             </p>
             <p className="muted-copy">
-              本版不做本地配音；声音参考只随视频请求锁定角色声线、语气和说话质感，并继续保持 no BGM。
+              本版不做本地配音；声音参考只在生成视频时锁定角色声线、语气和说话质感，视频本身不加配乐。
             </p>
             {audioSrc && (
               <div className="audio-review-player">

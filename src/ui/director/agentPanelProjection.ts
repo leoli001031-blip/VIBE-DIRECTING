@@ -47,7 +47,7 @@ export const defaultAgentVideoSubmitContract: AgentVideoSubmitContract = {
   mode: "plan_only",
   videoSubmitAllowed: false,
   referenceGenerationAllowed: false,
-  reason: "默认先只整理",
+  reason: "默认先整理",
 };
 
 const videoAllowedAgentVideoSubmitContract: AgentVideoSubmitContract = {
@@ -55,7 +55,7 @@ const videoAllowedAgentVideoSubmitContract: AgentVideoSubmitContract = {
   mode: "video_allowed",
   videoSubmitAllowed: true,
   referenceGenerationAllowed: true,
-  reason: "创作者允许故事通过后提交视频",
+  reason: "创作者允许故事通过后发送视频",
 };
 
 export function agentVideoSubmitContractForMode(mode: AgentVideoSubmitMode): AgentVideoSubmitContract {
@@ -65,7 +65,7 @@ export function agentVideoSubmitContractForMode(mode: AgentVideoSubmitMode): Age
       mode,
       videoSubmitAllowed: false,
       referenceGenerationAllowed: false,
-      reason: "创作者手动切到只整理",
+      reason: "创作者手动切到先整理",
     };
   }
   if (mode === "reference_allowed") {
@@ -91,7 +91,7 @@ export function detectAgentVideoSubmitContract(
       mode: "plan_only",
       videoSubmitAllowed: false,
       referenceGenerationAllowed: false,
-      reason: "创作者要求先只整理，不执行生成",
+      reason: "创作者要求先整理，不执行生成",
     };
   }
   if (permissionIntent === "reference_allowed") {
@@ -100,7 +100,7 @@ export function detectAgentVideoSubmitContract(
       mode: "reference_allowed",
       videoSubmitAllowed: false,
       referenceGenerationAllowed: true,
-      reason: "创作者要求先不提交视频",
+      reason: "创作者要求先不发送视频",
     };
   }
   if (permissionIntent === "video_allowed") return videoAllowedAgentVideoSubmitContract;
@@ -132,9 +132,9 @@ export function agentVideoSubmitContractForUi(
 }
 
 export function agentVideoSubmitContractLabel(contract: AgentVideoSubmitContract) {
-  if (contract.mode === "plan_only") return "只整理";
-  if (contract.mode === "reference_allowed") return "可生成参考";
-  return "可提交视频";
+  if (contract.mode === "plan_only") return "先整理";
+  if (contract.mode === "reference_allowed") return "可做参考";
+  return "可发视频";
 }
 
 export function agentVideoSubmitContractAllowsVideo(contract: AgentVideoSubmitContract) {
@@ -146,9 +146,9 @@ export function agentVideoSubmitContractAllowsReference(contract: AgentVideoSubm
 }
 
 export function agentVideoSubmitContractDetail(contract: AgentVideoSubmitContract) {
-  if (contract.mode === "plan_only") return "我先帮你整理故事和镜头，不会生成或提交。";
-  if (contract.mode === "reference_allowed") return "可以生成参考，视频等你确认后再提交。";
-  return "故事和参考通过后，可以提交视频。";
+  if (contract.mode === "plan_only") return "我先帮你整理故事和镜头，不会生成或发送。";
+  if (contract.mode === "reference_allowed") return "可以生成参考，视频等你确认后再发送。";
+  return "故事和参考通过后，可以发送视频。";
 }
 
 export type PrototypeAgentDemoStatus =
@@ -238,9 +238,9 @@ export type PrototypeAgentDemoProjection = {
 
 const PROJECT_PLAN_ADDED_LABEL = "已加入项目计划";
 const PROJECT_RESTORED_LABEL = "已恢复项目";
-const PROJECT_RECORDED_LABEL = "已记录到项目";
+const PROJECT_RECORDED_LABEL = "已写入项目";
 const PROJECT_SAVED_LABEL = "已保存到项目";
-const PREVIEW_READY_REVIEW_LABEL = "预览已生成、等待复核";
+const PREVIEW_READY_REVIEW_LABEL = "预览已生成、等待确认";
 const HIGH_STALE_IMPACT_THRESHOLD = 4;
 
 function cleanLabel(value: string) {

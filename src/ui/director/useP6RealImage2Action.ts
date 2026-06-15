@@ -73,7 +73,7 @@ function submittedActionState(submitted: ProjectImage2OneShotUiState): P6RealIma
   }
   return {
     status: "blocked",
-    message: submitted.summary?.retryHint || submitted.message || "真实出图提交未完成，可以稍后重试。",
+    message: submitted.summary?.retryHint || submitted.message || "图片生成未完成，可以稍后重试。",
   };
 }
 
@@ -102,16 +102,16 @@ export function useP6RealImage2Action({
     const statuses = await loadProviderConfigStatuses();
     setProviderConfigStatuses(statuses);
     if (!isP6RealImage2KeyConfigured(statuses)) {
-      setActionState({ status: "blocked", message: "先去设置里连接生图服务。" });
+      setActionState({ status: "blocked", message: "先去设置里连接图片服务。" });
       return;
     }
 
-    if (!confirmAction("要生成 1 张画面小样吗？\n\n会调用真实生图，结果先给你看。")) {
-      setActionState({ status: "blocked", message: "已取消，本次没有提交。" });
+    if (!confirmAction("要生成 1 张画面小样吗？\n\n会调用图片服务，结果先给你看。")) {
+      setActionState({ status: "blocked", message: "已取消，本次没有生成。" });
       return;
     }
 
-    setActionState({ status: "running", message: "正在准备并提交 1 张真实小样；如果网络中断，可以稍后再次生成。" });
+    setActionState({ status: "running", message: "正在准备并生成 1 张小样；如果网络中断，可以稍后再次生成。" });
     let nextState = oneShotState;
     try {
       if (!(nextState.receipt || nextState.summary?.receipt)) {
@@ -157,7 +157,7 @@ export function useP6RealImage2Action({
     } catch (error) {
       setActionState({
         status: "blocked",
-        message: error instanceof Error ? error.message : "真实出图提交失败。",
+        message: error instanceof Error ? error.message : "图片生成失败。",
       });
     }
   }, [

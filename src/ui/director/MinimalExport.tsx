@@ -13,7 +13,7 @@ function kindIcon(kind: string) {
 
 function kindLabel(kind: string): string {
   if (kind === "asset_package") return "素材包";
-  if (kind === "developer_archive") return "复核记录";
+  if (kind === "developer_archive") return "确认结果";
   if (kind === "storyboard_table") return "分镜表";
   if (kind === "rough_cut_timeline") return "粗剪时间线";
   return "导出项目";
@@ -25,8 +25,8 @@ function categoryLabel(category: string) {
     bgm_export_plan: "配乐计划",
     blocked_placeholders_when_draft: "缺少画面",
     duration: "时长",
-    gate_summary: "复核摘要",
-    generation_health: "制作复核",
+    gate_summary: "确认摘要",
+    generation_health: "制作检查",
     image_holds: "静帧画面",
     keyframes: "关键帧",
     manifest_matches: "素材清单",
@@ -35,11 +35,11 @@ function categoryLabel(category: string) {
     preview_event_refs: "预览段落",
     preview_timeline: "预览时间线",
     project_facts_snapshot: "项目快照",
-    prompt_qa_trace: "创作复核",
-    prompt_request_previews: "创作记录",
-    prompts: "创作记录",
-    qa_promotion: "复核结论",
-    qa_reports: "复核记录",
+    prompt_qa_trace: "创作检查",
+    prompt_request_previews: "创作过程",
+    prompts: "创作过程",
+    qa_promotion: "确认结论",
+    qa_reports: "确认结果",
     reference_assets: "参考素材",
     rough_cut_proxy_plan: "粗剪草案",
     selected_keyframes: "选中关键帧",
@@ -47,7 +47,7 @@ function categoryLabel(category: string) {
     story_function: "故事功能",
     storyboard_table: "分镜表",
     task_outputs: "输出素材",
-    task_runs: "制作记录",
+    task_runs: "制作过程",
     video_clips: "视频片段",
     videos: "视频素材",
   };
@@ -66,10 +66,10 @@ function blockerLabel(reason: string) {
   if (/No asset or task output paths/i.test(reason)) return "还没有可打包的素材。";
   if (/No assets are available/i.test(reason)) return "还没有可打包的素材。";
   if (/No shots are available/i.test(reason)) return "还没有可导出的镜头。";
-  if (/No prompt, task output, or QA paths/i.test(reason)) return "还没有可归档的制作记录。";
+  if (/No prompt, task output, or QA paths/i.test(reason)) return "还没有可归档的制作结果。";
   if (/manifestMatched|manifest match/i.test(reason)) return "素材清单还未核对完成。";
-  if (/pairQaPass|pair QA/i.test(reason)) return "关键画面对齐还需复核。";
-  if (/videoPresent|video output path|video task run/i.test(reason)) return "视频还没回流或还没通过复核。";
+  if (/pairQaPass|pair QA/i.test(reason)) return "关键画面对齐还需确认。";
+  if (/videoPresent|video output path|video task run/i.test(reason)) return "视频结果还没出来或还没确认。";
   if (/Formal preview check failed/i.test(reason)) return "正式预览还有检查未完成。";
   return "还有制作检查未完成。";
 }
@@ -102,8 +102,8 @@ function packageContentSummary(exportWorker?: ExportWorkerState) {
 	    exportWorker.manifest.mvpPackage.lockedAssetCount ? "锁定素材" : "",
     exportWorker.manifest.mvpPackage.knowledgeReferenceCount ? "本片参考" : "",
     exportWorker.manifest.mvpPackage.previewMediaCount ? "预览媒体" : "",
-    exportWorker.manifest.mvpPackage.videoResultCount ? "视频生成记录" : "",
-    exportWorker.manifest.mvpPackage.receiptCount ? "复核记录" : "",
+    exportWorker.manifest.mvpPackage.videoResultCount ? "视频结果" : "",
+    exportWorker.manifest.mvpPackage.receiptCount ? "确认结果" : "",
     exportWorker.manifest.mvpPackage.reportIncluded ? "制作报告" : "",
   ].filter(Boolean);
   return parts.length ? parts.join("、") : "等待项目内容同步";
@@ -114,7 +114,7 @@ function videoReviewSummary(exportWorker?: ExportWorkerState) {
   const review = exportWorker.manifest.mvpPackage.videoNeedsReviewCount;
   const approved = exportWorker.manifest.mvpPackage.videoApprovedCount;
   const missing = exportWorker.manifest.mvpPackage.videoMissingCount;
-  return `${review} 待复核 · ${approved} 已通过 · ${missing} 缺失 · 可稍后继续查询`;
+  return `${review} 待确认 · ${approved} 已通过 · ${missing} 缺失 · 可稍后继续查询`;
 }
 
 export function MinimalExport({
@@ -208,7 +208,7 @@ export function MinimalExport({
 	      </div>
 	      {videoSummary && (
 	        <small className="muted-copy">
-          视频记录：{videoSummary}
+          视频结果：{videoSummary}
 	        </small>
 	      )}
       {exportAction && exportAction.status !== "idle" && (

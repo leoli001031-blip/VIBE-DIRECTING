@@ -71,12 +71,12 @@ for (const { name, source } of visibleUiSources) {
   }
 }
 
-assertIncludes(newVideoStart, "添加脚本、图片或声音参考", "P1 new-video entry must expose add-file as one main input action");
+assertIncludes(newVideoStart, "添加脚本、图片或声音", "P1 new-video entry must expose add-file as one main input action");
 assertIncludes(newVideoStart, "发送给 AI 导演", "P1 new-video entry must expose a clear send action");
 assertIncludes(minimalAgentPanel, "minimal-agent-send-button", "P1 Agent panel must keep a fixed bottom send button");
 assertIncludes(minimalAgentPanel, "minimal-agent-suggested-button", "P1 suggested action must be separate from the fixed send button");
-assertIncludes(agentPanelProjection, "只整理", "P1 visible mode copy should use creator language");
-assertIncludes(agentPanelProjection, "可生成参考", "P1 visible mode copy should use reference-generation language");
+assertIncludes(agentPanelProjection, "先整理", "P1 visible mode copy should use creator language");
+assertIncludes(agentPanelProjection, "可做参考", "P1 visible mode copy should use reference-generation language");
 
 assertIncludes(assetReconciliation, "hasVoiceReferenceSignal", "P3 asset binding must classify voice references");
 assertIncludes(assetReconciliation, "hasMusicReferenceSignal", "P3 asset binding must keep obvious music out of voice references");

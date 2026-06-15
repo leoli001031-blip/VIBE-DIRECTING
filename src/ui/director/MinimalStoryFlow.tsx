@@ -811,7 +811,7 @@ export function MinimalStoryFlow({
           {currentSubmittedBundle.length > 0 && (
             <div className="submitted-reference-strip" aria-label="实际会用的参考">
               <div>
-                <small>提交用参考</small>
+                <small>视频参考</small>
                 <strong>
                   {currentReferenceSegment.length > 1 ? `本段 ${currentReferenceSegment.length} 镜头共用` : "本镜头使用"}
                 </strong>

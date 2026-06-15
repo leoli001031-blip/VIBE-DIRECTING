@@ -90,12 +90,12 @@ export function useImage2EndFrameAction({
     const statuses = await loadProviderConfigStatuses();
     setProviderConfigStatuses(statuses);
     if (!isEndFrameKeyConfigured(statuses)) {
-      setActionState({ status: "blocked", message: "先去设置里连接生图服务。" });
+      setActionState({ status: "blocked", message: "先去设置里连接图片服务。" });
       return;
     }
 
     if (!confirmAction("要生成特殊结束画面吗？\n\n只适合循环、变身或明确首尾控制。结果先给你看。")) {
-      setActionState({ status: "blocked", message: "已取消，本次没有提交。" });
+      setActionState({ status: "blocked", message: "已取消，本次没有生成。" });
       return;
     }
 

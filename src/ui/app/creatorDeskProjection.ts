@@ -390,8 +390,8 @@ function buildCreatorVideoGenerationProjection(
   const failedCount = statuses.filter((status) => clean(status.status) === "failed").length;
   const detail = selected.status === "not_generated"
     ? storyReadyCount > 0
-      ? `会先生成故事板参考，再一次提交一个视频任务；即梦排队常见约 ${JIMENG_CLI_EXPECTED_QUEUE_WAIT_MINUTES} 分钟，可以离开后恢复查询。`
-      : "先确认故事流，再提交视频。"
+      ? `会先生成故事板参考，再一次发送一个视频任务；即梦排队常见约 ${JIMENG_CLI_EXPECTED_QUEUE_WAIT_MINUTES} 分钟，可以离开后查询结果。`
+      : "先确认故事流，再发送视频。"
     : selected.detail;
   return {
     status: selected.status as CreatorVideoGenerationStatus,
@@ -479,7 +479,7 @@ function relayQueueProgressSummary(relayQueue: VideoRelayQueueState, activeItem?
       : "",
     relayQueue.counts.completed > 0 ? `${relayQueue.counts.completed} 段已完成` : "",
     relayQueue.counts.failed > 0 ? `${relayQueue.counts.failed} 段失败` : "",
-    relayQueue.counts.ready > 0 ? `${relayQueue.counts.ready} 段待提交` : "",
+    relayQueue.counts.ready > 0 ? `${relayQueue.counts.ready} 段待发送` : "",
   ].filter(Boolean);
   return parts.join(" · ") || relayQueue.userSummary;
 }
@@ -671,20 +671,20 @@ function buildCreatorPreflightProjection({
       : status === "needs_review"
         ? "检查画面"
       : status === "waiting"
-        ? videoFailed ? "处理失败" : videoRecoverable ? "查询结果" : "等视频回来"
+        ? videoFailed ? "处理失败" : videoRecoverable ? "查询结果" : "等视频结果"
           : videoDone
             ? "查看导出"
-            : "可以提交视频";
+            : "可以发送视频";
   const summary = status === "needs_story"
     ? "先把想法发给 AI 导演。"
     : status === "needs_references"
       ? "还缺生成视频前需要的参考画面。"
       : status === "needs_review"
         ? videoNeedsReview
-          ? "视频已经回来，先看一眼再继续。"
+          ? "视频结果已出，先看一眼再继续。"
           : "有新画面需要确认，通过后再继续。"
       : status === "waiting"
-          ? videoFailed ? "有一段视频生成失败，先重试或跳过后再继续。" : videoRecoverable ? "视频已提交，可以查询结果。" : "视频已在处理，可以稍后回来继续。"
+          ? videoFailed ? "有一段视频生成失败，先重试或跳过后再继续。" : videoRecoverable ? "视频已发送，可以查询结果。" : "视频已在处理，可以稍后继续。"
           : "故事、参考和模式已经能进入下一步。";
 
   return {
@@ -741,8 +741,8 @@ function buildCreatorAgentStage(input: {
     return {
       stage: "reference_running",
       primaryAction: "等待参考",
-      summary: "参考正在生成，回来后会进入复核。",
-      detail: "不用重复提交，等画面回流后检查即可。",
+      summary: "参考正在生成，完成后会进入确认。",
+      detail: "不用重复发送，等画面出来后检查即可。",
       targetView: "assets",
     };
   }
@@ -754,10 +754,10 @@ function buildCreatorAgentStage(input: {
       primaryAction: "查询结果",
       summary: queueSummary || (failedCount > 0
         ? `${failedCount} 段视频失败；当前任务可以查询结果。`
-        : "视频任务已经提交，可以恢复查询。"),
+        : "视频任务已经发送，可以继续查询。"),
       detail: failedCount > 0
-        ? "查询不会重复提交；失败段需要之后重试或跳过。"
-        : "查询只会取回结果，不会重复提交。",
+        ? "查询不会重复发送；失败段需要之后重试或跳过。"
+        : "查询只会取回结果，不会重复发送。",
       targetView: "preview",
     };
   }
@@ -765,7 +765,7 @@ function buildCreatorAgentStage(input: {
     return {
       stage: "video_running",
       primaryAction: "等待视频",
-      summary: input.videoStage.generation.queueSummary || "视频正在处理，可以稍后回来继续。",
+      summary: input.videoStage.generation.queueSummary || "视频正在处理，可以稍后继续。",
       detail: "即梦排队时间较长时，项目会保留查询状态。",
       targetView: "preview",
     };
@@ -775,8 +775,8 @@ function buildCreatorAgentStage(input: {
       return {
         stage: "video_ready",
         primaryAction: "继续下一段",
-        summary: "有一段失败，后续段落仍可继续提交。",
-        detail: "继续会提交下一段；失败段之后可单独补。",
+        summary: "有一段失败，后续段落仍可继续发送。",
+        detail: "继续会发送下一段；失败段之后可单独补。",
         targetView: "preview",
       };
     }
@@ -792,7 +792,7 @@ function buildCreatorAgentStage(input: {
     return {
       stage: "video_review",
       primaryAction: "检查视频",
-      summary: "视频已经回来，先看一眼再导出。",
+      summary: "视频结果已出，先看一眼再导出。",
       detail: "通过后再进入交付和导出。",
       targetView: "preview",
     };
@@ -827,9 +827,9 @@ function buildCreatorAgentStage(input: {
   if (input.preflight.status === "ready") {
     return {
       stage: "video_ready",
-      primaryAction: "提交视频",
-      summary: "参考已就绪，可以提交一段视频。",
-      detail: "仍会保持串行，不会并发提交。",
+      primaryAction: "发送视频",
+      summary: "参考已就绪，可以发送一段视频。",
+      detail: "仍会保持串行，不会并发发送。",
       targetView: "preview",
     };
   }

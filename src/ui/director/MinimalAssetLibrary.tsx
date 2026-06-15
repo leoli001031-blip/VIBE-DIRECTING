@@ -243,7 +243,7 @@ export function MinimalAssetLibrary({
       !workspaceCounts.props ? "独立道具" : "",
     ].filter(Boolean);
     if (!missingParts.length) return "参考已齐；故事板只在需要的镜头生成。";
-    return `还缺 ${missingParts.join("、")}；Agent 会按镜头判断是否需要故事板。`;
+    return `还缺 ${missingParts.join("、")}；AI 导演会按镜头判断是否需要故事板。`;
   }
 
   function assetNextStepCopy() {
@@ -259,12 +259,12 @@ export function MinimalAssetLibrary({
 	    }
     if (!message) {
       if (!localProjectReady) return "先创建本地项目";
-      if (assetGenerationAction?.keyConfigured === false) return "先去设置里连接生图服务";
+      if (assetGenerationAction?.keyConfigured === false) return "先去设置里连接图片服务";
       if (assetGenerationAction?.disabled) return "正在准备参考";
       if (workspaceCounts.characters && workspaceCounts.scenes && workspaceCounts.props) return "参考已齐，需要重做时再点。";
 	      return "推荐直接在底部输入框说需求；需要手动操作时再展开这里。";
     }
-    if (/key|api/i.test(message)) return "先去设置里连接生图服务";
+    if (/key|api/i.test(message)) return "先去设置里连接图片服务";
     if (/未选择项目|未同步|连接项目失败|项目文件已打开|请选择|先创建本地项目/i.test(message)) {
       return localProjectReady ? "正在连接项目" : "先创建本地项目";
     }
@@ -309,7 +309,7 @@ export function MinimalAssetLibrary({
                 >
                   生成缺少的参考
                 </button>
-                <small>日常建议直接在底部输入框告诉 Agent 要做什么。</small>
+                <small>日常建议直接在底部输入框告诉 AI 导演要做什么。</small>
               </details>
             )}
           </div>

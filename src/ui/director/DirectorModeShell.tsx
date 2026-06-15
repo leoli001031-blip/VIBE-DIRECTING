@@ -276,7 +276,7 @@ export function DirectorMode({
   const agentProjectStatusLabel = folderReady
     ? "已连接"
     : projectReady
-      ? "未保存草稿"
+      ? "先写想法"
       : "需要本地项目";
   const agentShotBoundView = directorView === "story" || directorView === "preview" || directorView === "export";
   const [videoPermissionContract, setVideoPermissionContract] = useState<AgentVideoPermissionContract>(defaultAgentVideoPermissionContract);
@@ -313,7 +313,7 @@ export function DirectorMode({
       disabled: true,
       ready: false,
       message: videoPermissionContract.mode === "plan_only"
-        ? "当前只整理，不会生成或提交。"
+        ? "先整理，不会生成或发送。"
         : "当前先做参考，视频等你确认。",
     };
   }, [videoSendAction, videoPermissionAllowsSend, videoPermissionContract.mode]);
@@ -488,7 +488,7 @@ export function DirectorMode({
           </Suspense> : (
             <EmptyProjectSurface
               title="还没有预览"
-              detail="画面和视频回来后，会在这里播放。"
+              detail="画面和视频结果出来后，会在这里播放。"
             />
           )
         )}

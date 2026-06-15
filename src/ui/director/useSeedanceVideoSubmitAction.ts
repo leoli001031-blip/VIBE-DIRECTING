@@ -104,10 +104,10 @@ function scopedVideoShotIds(input: {
   if (direct.length) return { shotIds: direct };
   const assetShotIds = shotIdsForAsset(input.runtimeState, input.selectedAssetId);
   if (assetShotIds.length) return { shotIds: assetShotIds };
-  if (input.selectedAssetId) return { shotIds: [], blocker: "这个素材还没有绑定到镜头，不能直接提交视频。" };
+  if (input.selectedAssetId) return { shotIds: [], blocker: "这个素材还没有绑定到镜头，不能直接发送视频。" };
   const sectionShotIds = shotIdsForSection(input.runtimeState, input.sectionId);
   if (sectionShotIds.length) return { shotIds: sectionShotIds };
-  if (input.sectionId) return { shotIds: [], blocker: "这个段落还没有可提交的镜头。" };
+  if (input.sectionId) return { shotIds: [], blocker: "这个段落还没有可发送的镜头。" };
   return { shotIds: [] };
 }
 
@@ -136,7 +136,7 @@ function seedanceActionState(result: ProjectSeedanceSubmitResult): SeedanceVideo
     if (result.relayQueue?.autoSubmitAllowed) {
       return {
         status: "idle",
-        message: result.message || "有一段视频生成失败；继续会提交下一段，失败段之后可单独补。",
+        message: result.message || "有一段视频生成失败；继续会发送下一段，失败段之后可单独补。",
         qaFeedback: result.qaFeedback,
         canResume: false,
         suggestedActionLabel: "继续下一段",
@@ -152,14 +152,14 @@ function seedanceActionState(result: ProjectSeedanceSubmitResult): SeedanceVideo
   if ((result.outputVideoPath || result.status === "success" || result.uiStatus === "needs_review") && result.relayQueue?.autoSubmitAllowed) {
     return {
       status: "idle",
-      message: result.message || "本段视频已生成，下一段可以继续提交。",
+      message: result.message || "本段视频已生成，下一段可以继续发送。",
       qaFeedback: result.qaFeedback,
     };
   }
   if (result.videoSubmitted || result.status === "submitted" || result.status === "queued" || result.status === "generating" || result.status === "timed_out") {
     return {
       status: "submitted",
-      message: result.message || result.relayQueue?.userSummary || "视频已提交，即梦排队中；可以稍后恢复查询。",
+      message: result.message || result.relayQueue?.userSummary || "视频已发送，即梦排队中；可以稍后查询结果。",
       qaFeedback: result.qaFeedback,
       canResume,
     };
@@ -174,14 +174,14 @@ function seedanceActionState(result: ProjectSeedanceSubmitResult): SeedanceVideo
   }
   return {
     status: "blocked",
-    message: result.qaFeedback?.summary || result.message || "视频提交未完成，可以稍后重试。",
+    message: result.qaFeedback?.summary || result.message || "视频发送未完成，可以稍后重试。",
     qaFeedback: result.qaFeedback,
   };
 }
 
 function timeoutAfter(ms: number): Promise<never> {
   return new Promise((_, reject) => {
-    window.setTimeout(() => reject(new Error("视频已经提交检查中，正在刷新项目状态。")), ms);
+    window.setTimeout(() => reject(new Error("视频已经发送，正在刷新项目状态。")), ms);
   });
 }
 
@@ -194,8 +194,8 @@ function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): Seedanc
       return {
         status: "submitted",
         message: failedCount > 0
-          ? `${failedCount} 段失败；当前段已提交，等它回来后再处理。`
-          : relayQueue.userSummary || "即梦正在处理当前段，回来后会继续下一段。",
+          ? `${failedCount} 段失败；当前段已发送，等结果出来后再处理。`
+          : relayQueue.userSummary || "即梦正在处理当前段，结果出来后会继续下一段。",
         canResume,
       };
     }
@@ -203,7 +203,7 @@ function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): Seedanc
       if (relayQueue.autoSubmitAllowed) {
         return {
           status: "idle",
-          message: `${relayQueue.counts.failed} 段视频生成失败；继续会提交下一段，失败段之后可单独补。`,
+        message: `${relayQueue.counts.failed} 段视频生成失败；继续会发送下一段，失败段之后可单独补。`,
           canResume: false,
           suggestedActionLabel: "继续下一段",
         };
@@ -217,7 +217,7 @@ function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): Seedanc
     if (relayQueue.autoSubmitAllowed) {
       return {
         status: "idle",
-        message: relayQueue.userSummary || "下一段已准备好，可以继续提交。",
+        message: relayQueue.userSummary || "下一段已准备好，可以继续发送。",
         canResume,
       };
     }
@@ -249,7 +249,7 @@ function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): Seedanc
   });
   return hasReturnedVideo
     ? { status: "needs_review", message: "视频已生成，等待复核。", canResume }
-    : { status: "submitted", message: "视频已提交，即梦排队中；可以稍后恢复查询。", canResume };
+    : { status: "submitted", message: "视频已发送，即梦排队中；可以稍后查询结果。", canResume };
 }
 
 export function useSeedanceVideoSubmitAction({
@@ -309,7 +309,7 @@ export function useSeedanceVideoSubmitAction({
       const nextState: SeedanceVideoSubmitActionState = {
         status: "blocked",
         message: options.videoPermissionContract.mode === "plan_only"
-          ? "当前只整理，本轮不提交视频。"
+          ? "先整理，本轮不发送视频。"
           : "当前先做参考，视频等你确认。",
       };
       setActionState(nextState);
@@ -324,8 +324,8 @@ export function useSeedanceVideoSubmitAction({
       return nextState;
     }
 
-    if (!options?.skipConfirm && !confirmAction("要提交当前故事到 Seedance 2.0 720p 吗？\n\n即梦可能排队很久，提交后可以稍后回来查。")) {
-      const nextState: SeedanceVideoSubmitActionState = { status: "blocked", message: "已取消，本次没有提交。" };
+    if (!options?.skipConfirm && !confirmAction("要把当前故事发送到 Seedance 2.0 720p 吗？\n\n即梦可能排队很久，发送后可以稍后查询结果。")) {
+      const nextState: SeedanceVideoSubmitActionState = { status: "blocked", message: "已取消，本次没有发送。" };
       setActionState(nextState);
       return nextState;
     }
@@ -345,7 +345,7 @@ export function useSeedanceVideoSubmitAction({
     }
     const submitShotIds = scopedTarget.shotIds;
     const confirmedAt = options?.confirmedAt || new Date().toISOString();
-    setActionState({ status: "running", message: "正在生成故事板参考并提交 Seedance 2.0 720p。" });
+    setActionState({ status: "running", message: "正在生成故事板参考，并发送到 Seedance 2.0 720p。" });
     try {
       const submitted = await Promise.race([
         submitProjectSeedanceVideo(runtimeProjectIdentity, {
@@ -386,7 +386,7 @@ export function useSeedanceVideoSubmitAction({
       }
       const nextState: SeedanceVideoSubmitActionState = {
         status: "blocked",
-        message: error instanceof Error ? error.message : "视频提交失败。",
+        message: error instanceof Error ? error.message : "视频发送失败。",
       };
       setActionState(nextState);
       return nextState;

@@ -183,7 +183,7 @@ check(
 check(
   /inferAudioRole/.test(newVideoStartSource)
     && /voice_reference/.test(newVideoStartSource)
-    && newVideoStartSource.includes("声音参考会绑定到角色"),
+    && newVideoStartSource.includes("声音参考，会绑定到角色"),
   "NewVideoStart must treat uploaded audio as voice reference on the demo path.",
   failures,
 );
@@ -227,7 +227,7 @@ check(
   failures,
 );
 check(
-  /aria-label="当前执行模式"/.test(newVideoStartSource)
+  /aria-label="当前工作范围"/.test(newVideoStartSource)
     && /aria-pressed=\{activeVideoPermissionContract\.mode === item\.mode\}/.test(newVideoStartSource)
     && /onClick=\{\(\) => selectVideoPermissionMode\(item\.mode\)\}/.test(newVideoStartSource),
   "NewVideoStart must keep execution-boundary controls available inside the unified input.",
@@ -289,10 +289,10 @@ check(
 check(
   /const activeVideoPermissionLabel = videoPermissionModeItems\.find/.test(newVideoStartSource)
     && /new-video-agent-boundary-details/.test(newVideoStartSource)
-    && /当前模式/.test(newVideoStartSource)
+    && /工作范围/.test(newVideoStartSource)
     && /<strong>\{activeVideoPermissionLabel\}<\/strong>/.test(newVideoStartSource)
     && /boundaryDetailsOpen && \(/.test(newVideoStartSource)
-    && /aria-label="当前执行模式"/.test(newVideoStartSource),
+    && /aria-label="当前工作范围"/.test(newVideoStartSource),
   "NewVideoStart must tuck execution controls into a lazy advanced summary instead of exposing three mode buttons by default.",
   failures,
 );
@@ -347,14 +347,14 @@ check(
 );
 check(
   !/ensureLocalProjectForDraft/.test(newVideoStartSource)
-    && /当前是未保存草稿/.test(newVideoStartSource)
+    && /当前还没连接项目/.test(newVideoStartSource)
     && /确认时再选择项目文件夹/.test(newVideoStartSource),
   "NewVideoStart must let AI planning run before asking for a local project folder.",
   failures,
 );
 check(
-  /aria-label=\{`执行模式：\$\{item\.label\}`\}/.test(newVideoStartSource)
-    && /aria-label="添加脚本、图片或声音参考"/.test(newVideoStartSource)
+  /aria-label=\{`工作范围：\$\{item\.label\}`\}/.test(newVideoStartSource)
+    && /aria-label="添加脚本、图片或声音"/.test(newVideoStartSource)
     && /aria-label=\{composerPrimaryAriaLabel\}/.test(newVideoStartSource),
   "NewVideoStart composer controls must expose explicit accessible action labels.",
   failures,

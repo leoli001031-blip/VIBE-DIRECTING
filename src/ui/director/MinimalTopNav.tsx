@@ -122,8 +122,8 @@ export function MinimalTopNav({
   const projectTitleLabel = projectTitle || "新视频项目";
   const projectFolderReady = Boolean(projectRoot?.trim());
   const unsavedProjectContent = !projectFolderReady && !isEmptyProject;
-  const projectStorageBadge = projectFolderReady ? "本地" : "草稿";
-  const emptyProjectPrimary = projectFolderReady ? "本地已准备" : "未保存草稿";
+  const projectStorageBadge = projectFolderReady ? "本地" : "暂存";
+  const emptyProjectPrimary = projectFolderReady ? "本地已准备" : "先写想法";
   const emptyProjectSecondary = projectFolderReady ? "确认后写入项目" : "先写想法";
   const [projectControlOpen, setProjectControlOpen] = useState(false);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
@@ -140,9 +140,9 @@ export function MinimalTopNav({
     ? isEmptyProject
       ? "已准备项目文件夹"
       : "项目已连接"
-    : "未保存草稿";
+    : "未连接项目";
   const projectPickerDisabled = Boolean(!canCreateProject && !canChooseProjectRoot);
-  const projectPickerDisabledCopy = projectFileStatusDetail || "可以先整理草稿；当前浏览器不能打开本地文件夹，生成参考或提交视频前请在桌面 App 选择项目。";
+  const projectPickerDisabledCopy = projectFileStatusDetail || "可以先整理想法；生成参考或视频前，再在桌面 App 选择项目文件夹。";
   const createProjectDisplayTitle = unsavedProjectContent
     ? "另开新草稿"
     : createProjectTitle || "新建项目";
@@ -164,7 +164,7 @@ export function MinimalTopNav({
   const currentViewDetail = directorView === "assets"
     ? "角色、场景、道具"
     : directorView === "preview"
-      ? "回流与粗看"
+      ? "看结果"
       : `${totalShots} 个镜头`;
 
   useEffect(() => {
@@ -200,7 +200,7 @@ export function MinimalTopNav({
       <div className="minimal-topbar-left">
         <div className="identity-top">
           <img className="identity-signature" src="/zc-signature.png" alt="" aria-hidden="true" />
-          <span className="identity-name">Vibe Director<span className="identity-separator"> / </span>本地创作台</span>
+          <span className="identity-name">Vibe Director<span className="identity-separator"> / </span>导演台</span>
         </div>
         <div className="project-control" ref={projectControlRef}>
           <button
@@ -221,7 +221,7 @@ export function MinimalTopNav({
                 <span>当前项目</span>
                 <strong>{projectTitleLabel}</strong>
                 <small>{projectControlStatus}</small>
-                <p>这里切换本地项目；退出或移除记录都不会删除文件。</p>
+                <p>这里切换本地项目；退出或从列表移除都不会删除文件。</p>
               </div>
               <div className="project-control-summary" aria-label="项目状态">
                 <span>内容</span>
@@ -270,8 +270,8 @@ export function MinimalTopNav({
                             type="button"
                             className="project-control-recent-remove"
                             disabled={removeDisabled}
-                            title={active ? "当前项目请用退出项目，不删除本地文件" : "移除这条项目记录，不删除本地文件"}
-                            aria-label={active ? `当前项目 ${project.displayName || "未命名项目"} 请用退出项目` : `移除 ${project.displayName || "未命名项目"} 的项目记录`}
+                            title={active ? "当前项目请用退出项目，不删除本地文件" : "从列表移除，不删除本地文件"}
+                            aria-label={active ? `当前项目 ${project.displayName || "未命名项目"} 请用退出项目` : `从列表移除 ${project.displayName || "未命名项目"}`}
                             onClick={(event) => {
                               event.stopPropagation();
                               onRemoveRecentProject?.(project.projectRoot);
@@ -318,7 +318,7 @@ export function MinimalTopNav({
                     className="project-control-danger"
                     onClick={() => performProjectControlAction(onForgetProject)}
                     title="退出当前项目，不删除本地文件"
-                    aria-label="关闭当前项目记录"
+                    aria-label="关闭当前项目"
                   >
                     <Trash2 size={15} aria-hidden="true" />
                     退出项目

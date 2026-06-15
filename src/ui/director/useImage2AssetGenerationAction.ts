@@ -94,7 +94,7 @@ function assetActionState(result: ProjectImage2AssetGenerationResult): Image2Ass
 
 function friendlyAssetGenerationError(error: unknown) {
   const raw = error instanceof Error ? error.message : "";
-  if (/key|api|token|credential|unauthor/i.test(raw)) return "先去设置里连接生图服务，然后再生成参考。";
+  if (/key|api|token|credential|unauthor/i.test(raw)) return "先去设置里连接图片服务，然后再生成参考。";
   if (/timeout|timed out|network|fetch|socket|ECONN|ENOTFOUND|ETIMEDOUT/i.test(raw)) {
     return "参考生成暂时中断。已生成的内容会保留，可以稍后重试。";
   }
@@ -238,7 +238,7 @@ export function useImage2AssetGenerationAction({
     setProviderConfigStatuses(statuses);
     const providerId = preferredAssetProviderId(statuses);
     if (!providerId) {
-      const nextState: Image2AssetGenerationActionState = { status: "blocked", message: "先去设置里连接生图服务。" };
+      const nextState: Image2AssetGenerationActionState = { status: "blocked", message: "先去设置里连接图片服务。" };
       setActionState(nextState);
       return nextState;
     }
@@ -258,7 +258,7 @@ export function useImage2AssetGenerationAction({
       return nextState;
     }
     if (!options?.skipConfirm && !confirmAction(`要为${target.label}准备画面参考吗？\n\n会补角色、场景、关键道具和需要的故事板。细节动作会留在镜头说明里。结果会先进入复核区，不会自动锁定。`)) {
-      const nextState: Image2AssetGenerationActionState = { status: "blocked", message: "已取消，本次没有提交。" };
+      const nextState: Image2AssetGenerationActionState = { status: "blocked", message: "已取消，本次没有生成。" };
       setActionState(nextState);
       return nextState;
     }

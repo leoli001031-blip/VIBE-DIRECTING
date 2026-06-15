@@ -65,7 +65,7 @@ function keyStatusForProvider(providerConfig: ProviderConfigStatus | undefined, 
 function connectionStatusLabel(status: string, fallback = "需要配置") {
   if (status === "local_settings") return "已保存";
   if (status === "environment") return "环境变量已配置";
-  if (status === "not_required") return "不需要 Key";
+  if (status === "not_required") return "不需要密钥";
   if (status === "configured") return "已配置";
   return fallback;
 }
@@ -191,7 +191,7 @@ export function SettingsShell({
   const tavilyReady = Boolean(tavilyCredential?.hasKey || tavilyConfig?.credential?.keyStatus === "configured");
   const serviceKeyOptions = [
     { providerId: "deepseek-v4-pro", label: "规划模型" },
-    { providerId: "apikey-fun-gpt55-responses-image", label: "Image2 生图" },
+    { providerId: "apikey-fun-gpt55-responses-image", label: "Image2 图片" },
     { providerId: "tavily-search", label: "联网查资料" },
   ];
   const imageProviders = providerConfigs.filter((providerConfig) => (
@@ -205,20 +205,20 @@ export function SettingsShell({
     {
       id: "deepseek-v4-pro",
       title: "规划模型",
-      purpose: "负责拆脚本、定节奏、选生成方式；不直接生图或提交视频。",
+      purpose: "负责拆脚本、定节奏、选生成方式；不直接生成图片或视频。",
       config: deepseekConfig,
       credential: credentialForProvider(credentials, "deepseek-v4-pro"),
       saveLabel: "DeepSeek v4 Pro",
-      noKeyNote: "需要 AI 拆分镜时再填。",
+      noKeyNote: "需要 AI 拆镜头时再填。",
     },
     {
       id: "apikey-fun-gpt55-responses-image",
-      title: "Image2 生图",
+      title: "Image2 图片",
       purpose: "用于生成角色、场景、道具和故事板图。默认走专线，必要时自动尝试普通线路。",
       config: apikeyFunConfig,
       credential: credentialForProvider(credentials, "apikey-fun-gpt55-responses-image"),
       saveLabel: "Apikey.fun Image2",
-      noKeyNote: "真实生图前需要配置。",
+      noKeyNote: "生成图片前需要配置。",
     },
     {
       id: "tavily-search",
@@ -232,11 +232,11 @@ export function SettingsShell({
     {
       id: "jimeng-video",
       title: "视频生成",
-      purpose: "Seedance / 即梦走本机登录。提交前仍会确认。",
+      purpose: "Seedance / 即梦走本机登录。发送前仍会确认。",
       config: undefined,
       credential: undefined,
       saveLabel: "",
-      noKeyNote: "不用在这里保存 Key。",
+      noKeyNote: "不用在这里保存密钥。",
       keyless: true,
     },
   ];
@@ -265,10 +265,10 @@ export function SettingsShell({
     return Boolean(localCredential?.hasKey || keyStatus === "configured" || keyStatus === "not_required");
   }).length;
   const quickImageStatus = imageProviders.length
-    ? configuredImageProviderCount > 0 ? "生图可用" : "生图待配置"
+    ? configuredImageProviderCount > 0 ? "图片可用" : "图片待配置"
     : "还没有图片服务";
   const quickVideoStatus = videoProviders.length
-    ? "视频可提交"
+    ? "视频可发送"
     : "还没有视频通道";
   const quickVoiceStatus = voiceSources.length ? "声音参考已准备" : "需要时再拖声音参考";
   const webSearchStatusLabel = !resolvedWebSearchSettings.enabled
@@ -321,8 +321,8 @@ export function SettingsShell({
         <span>设置</span>
       </div>
       <div className="settings-friendly-intro">
-        <strong>设置只保留两件事。</strong>
-        <span>连接创作服务，决定 AI 要不要查资料；排查信息收在高级里。</span>
+        <strong>设置里只放常用项。</strong>
+        <span>连接图片、视频和查资料服务；排查信息收在高级里。</span>
       </div>
       <div className="settings-quick-grid">
         <div>
@@ -338,12 +338,12 @@ export function SettingsShell({
         <div>
           <span>视频生成</span>
           <strong>{quickVideoStatus}</strong>
-          <small>{videoProviders.length ? `${videoProviders.length} 个通道 · 提交前确认` : "即梦登录后可提交"}</small>
+          <small>{videoProviders.length ? `${videoProviders.length} 个通道 · 发送前确认` : "即梦登录后可发送"}</small>
         </div>
         <div>
           <span>声音</span>
           <strong>{quickVoiceStatus}</strong>
-          <small>{voiceSources.length} 个声音参考 · 视频请求只用来锁角色声线</small>
+          <small>{voiceSources.length} 个声音参考 · 只用于角色声线</small>
         </div>
       </div>
       <div className="settings-service-strip" aria-label="服务状态">
@@ -363,7 +363,7 @@ export function SettingsShell({
         <div className="settings-list credential-settings-list">
           <div className="settings-readonly-note">
             <strong>{readyServiceConnectionCount ? `${readyServiceConnectionCount} 个创作服务可用` : "还没有连接生成服务"}</strong>
-            <small>真实生图或提交视频前仍会确认。Key 只保存在本机。</small>
+            <small>生成图片或视频前都会再确认。密钥只保存在本机。</small>
           </div>
           <details
             className="settings-subdetails"
@@ -372,7 +372,7 @@ export function SettingsShell({
           >
             <summary>
               <span>连接或管理服务</span>
-              <small>{readyServiceConnectionCount ? "平时不用展开" : "需要生图时再连接"}</small>
+              <small>{readyServiceConnectionCount ? "平时不用展开" : "需要生成时再连接"}</small>
             </summary>
             <div className="service-connection-grid">
               {serviceConnections.map((service) => {
@@ -444,7 +444,7 @@ export function SettingsShell({
               )}
               <input
                 type="password"
-                placeholder={credFormProviderId === "tavily-search" ? "粘贴 Tavily API Key" : "粘贴 API Key"}
+                placeholder={credFormProviderId === "tavily-search" ? "粘贴 Tavily 密钥" : "粘贴服务密钥"}
                 value={credFormApiKey}
                 onChange={(e) => setCredFormApiKey(e.currentTarget.value)}
               />
