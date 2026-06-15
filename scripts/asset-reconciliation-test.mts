@@ -184,6 +184,18 @@ const folderProjection = buildAssetReconciliationProjection({
       name: "bridge-board.png",
       path: "/project/storyboards/bridge-board.png",
     }),
+    asset({
+      id: "folder_style_candidate",
+      type: "unknown",
+      name: "eva-storyboard-skill.md",
+      path: "/project/skills/eva-storyboard-skill.md",
+    }),
+    asset({
+      id: "folder_music_candidate",
+      type: "unknown",
+      name: "eurobeat.wav",
+      path: "/project/audio/music/eurobeat.wav",
+    }),
   ],
 });
 
@@ -191,5 +203,7 @@ assert(folderProjection.items.find((item) => item.label === "戴耳机的高中�
 assert(folderProjection.items.find((item) => item.label === "雨夜天桥")?.status === "needs_review", "scene folder assets should become review candidates for scene requirements");
 assert(folderProjection.items.find((item) => item.label === "发光车票")?.status === "needs_review", "prop folder assets should become review candidates for prop requirements");
 assert(folderProjection.items.some((item) => item.kind === "storyboard_reference" && item.status === "needs_review"), "storyboard folder assets should become review candidates for storyboard requirements");
+assert(folderProjection.items.some((item) => item.kind === "style" && item.label === "eva-storyboard-skill.md" && item.status === "unused"), "skills/style folder assets should stay available as style references");
+assert(!folderProjection.items.some((item) => item.kind === "voice_reference" && item.label === "eurobeat.wav"), "music folder audio must not become a voice reference candidate");
 
 console.log("asset-reconciliation-test: ok");

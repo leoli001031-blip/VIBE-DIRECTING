@@ -173,6 +173,9 @@ const folderInbox = buildProjectFolderInboxProjection({
     { path: "props/glowing-ticket.webp" },
     { path: "storyboards/shot-01-board.png" },
     { path: "voices/heroine.wav" },
+    { path: "audio/music/eurobeat.wav" },
+    { path: "styles/90s-anime-look.md" },
+    { path: "skills/storyboard-rapid-cut.md" },
     { path: "scripts/episode-01.md" },
     { path: "videos/returned-shot.mp4" },
     { path: "exports/final-package.zip" },
@@ -190,7 +193,7 @@ const folderInbox = buildProjectFolderInboxProjection({
   ],
 });
 
-assert(folderInbox.discoveredAssetCount === 8, "folder scan should discover supported project files and ignore hidden/outside files");
+assert(folderInbox.discoveredAssetCount === 11, "folder scan should discover supported project files and ignore hidden/outside files");
 assert(folderInbox.ignoredCount === 2, "folder scan should count hidden or out-of-scope files as ignored");
 assert(folderInbox.discoveredAssets.every((item) => !item.path.startsWith("/")), "folder scan must keep project-relative paths instead of leaking local absolute paths");
 assert(folderInbox.items.some((item) => item.kind === "character" && item.label === "front.png"), "folder scan should classify character folders");
@@ -199,10 +202,15 @@ assert(folderInbox.items.some((item) => item.kind === "scene" && item.label === 
 assert(folderInbox.items.some((item) => item.kind === "prop" && item.label === "glowing-ticket.webp"), "folder scan should classify prop folders");
 assert(folderInbox.items.some((item) => item.kind === "storyboard" && item.suggestedBinding.includes("故事板参考")), "folder scan should surface storyboards as reviewable planning references");
 assert(folderInbox.items.some((item) => item.kind === "voice" && item.label === "heroine.wav"), "folder scan should classify voice folders");
+assert(folderInbox.items.some((item) => item.kind === "reference" && item.label === "eurobeat.wav" && item.suggestedBinding.includes("后期")), "folder scan should keep audio/music files as parked post audio references");
+assert(!folderInbox.items.some((item) => item.kind === "voice" && item.label === "eurobeat.wav"), "folder scan must not treat music-folder audio as a character voice reference");
+assert(folderInbox.items.some((item) => item.kind === "reference" && item.label === "90s-anime-look.md" && item.suggestedBinding.includes("风格")), "folder scan should classify style folders as style references");
+assert(folderInbox.items.some((item) => item.kind === "reference" && item.label === "storyboard-rapid-cut.md" && item.suggestedBinding.includes("分镜方法")), "folder scan should classify skills folders as directing-method references");
+assert(folderInbox.discoveredAssets.some((item) => item.path === "styles/90s-anime-look.md" && item.type === "style" && item.roleBinding?.role === "style_reference"), "folder scan should preserve style/skill assets as reusable style references");
 assert(folderInbox.items.some((item) => item.kind === "script" && item.label === "episode-01.md"), "folder scan should classify scripts");
 assert(folderInbox.items.some((item) => item.kind === "video" && item.label === "returned-shot.mp4"), "folder scan should classify returned videos");
 assert(folderInbox.items.some((item) => item.kind === "export" && item.label === "final-package.zip"), "folder scan should classify export packages");
-assert(folderInbox.summary.includes("从项目文件夹识别到 8 个可用素材"), "folder scan summary should explain the takeover result in human language");
+assert(folderInbox.summary.includes("从项目文件夹识别到 11 个可用素材"), "folder scan summary should explain the takeover result in human language");
 assert(folderInbox.nextAction.includes("确认后再继续生成"), "folder scan next action should make the next step obvious");
 
 const legacyMusicInbox = buildProjectInboxProjection({

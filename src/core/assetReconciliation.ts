@@ -111,7 +111,11 @@ function hasVoiceReferenceSignal(value: string) {
 }
 
 function hasMusicReferenceSignal(value: string) {
-  return /music_reference|\b(bgm|music|song|score|soundtrack|eurobeat|ost)\b|背景音乐|配乐|音乐|歌曲/.test(value);
+  return /music_reference|\b(bgm|music|song|score|soundtrack|eurobeat|ost|post_audio)\b|背景音乐|配乐|音乐|歌曲|后期声音/.test(value);
+}
+
+function hasStyleReferenceSignal(value: string) {
+  return /style_reference|\b(styles?|looks?|moodboards?|skills?)\b|风格|画风|技能|分镜方法|参考方法/.test(value);
 }
 
 function assetFolderReferenceKind(asset: AssetRecord): AssetReconciliationKind | undefined {
@@ -121,8 +125,10 @@ function assetFolderReferenceKind(asset: AssetRecord): AssetReconciliationKind |
   if (/(^|\/)(characters?|character_refs?|roles?|cast|角色|人物)(\/|$)/.test(normalized)) return "character";
   if (/(^|\/)(scenes?|locations?|environments?|backgrounds?|场景|地点|环境|天气)(\/|$)/.test(normalized)) return "scene";
   if (/(^|\/)(props?|objects?|items?|道具|物件)(\/|$)/.test(normalized)) return "prop";
+  if (/(^|\/)(styles?|style_refs?|looks?|moodboards?|skills?|风格|画风|技能|方法)(\/|$)/.test(normalized)) return "style";
   if (/(^|\/)(storyboards?|shotboards?|boards?|分镜|故事板)(\/|$)/.test(normalized)) return "storyboard_reference";
   if (/(^|\/)(voices?|voice_refs?|dialogue|speech|audio\/voice|声音|声线|配音|对白)(\/|$)/.test(normalized)) return "voice_reference";
+  if (/(^|\/)(music|bgm|scores?|soundtracks?|ost|audio\/music|post_audio|后期声音|配乐|音乐|歌曲)(\/|$)/.test(normalized)) return "music_reference";
   return undefined;
 }
 
@@ -131,12 +137,16 @@ function assetKind(asset: AssetRecord): AssetReconciliationKind | undefined {
   const hasVoiceSignal = hasVoiceReferenceSignal(searchable);
   const hasMusicSignal = hasMusicReferenceSignal(searchable);
   const audioPath = clean(asset.path).toLowerCase();
+  const folderKind = assetFolderReferenceKind(asset);
+  if (folderKind === "style") return "style";
+  if (folderKind === "music_reference") return undefined;
+  if (folderKind && asset.type === "unknown") return folderKind;
   if (/storyboard|故事板|分镜/.test(searchable)) return "storyboard_reference";
   if (hasVoiceSignal) return "voice_reference";
   if (hasMusicSignal) return undefined;
+  if (hasStyleReferenceSignal(searchable)) return "style";
   if (/\.(wav|mp3|m4a|aac|flac|ogg)$/.test(audioPath)) return "voice_reference";
   if (asset.type === "character" || asset.type === "scene" || asset.type === "prop" || asset.type === "style") return asset.type;
-  const folderKind = assetFolderReferenceKind(asset);
   if (folderKind) return folderKind;
   return undefined;
 }
