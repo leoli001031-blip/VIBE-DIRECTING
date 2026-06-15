@@ -2836,10 +2836,10 @@ export function MinimalAgentPanel({
     setStatus("去参考页检查画面。");
   }
   function pointToMainReferenceAction() {
-    setStatus(referenceGenerationBlockedByProject ? "先打开或保存本地项目。" : "点底部发送，让 AI 导演生成参考。");
+    setStatus(referenceGenerationBlockedByProject ? "先打开或保存本地项目。" : "点下方「发送」，让 AI 导演生成参考。");
   }
   function pointToMainVideoAction() {
-    setStatus(videoCanResume ? "点底部发送，继续查询视频结果。" : "点底部发送，让 AI 导演发送视频。");
+    setStatus(videoCanResume ? "点下方「发送」，继续查询视频结果。" : "点下方「发送」，让 AI 导演发送视频。");
   }
   const realSampleDetailAction = realSampleDetailNeedsReview
     ? openReferenceReviewFromDetails
@@ -3077,7 +3077,7 @@ export function MinimalAgentPanel({
             </details>
 	          )}
 	          <div className="minimal-agent-note-actions">
-	            <small>继续点底部发送：{primaryLabel}</small>
+	            <small>继续点下方「{primaryLabel}」</small>
 	            <button type="button" className="secondary" onClick={revisePlan}>
 	              再改一下
 	            </button>
@@ -3267,7 +3267,7 @@ export function MinimalAgentPanel({
             <Plus size={15} aria-hidden="true" />
             添加文件
 	          </button>
-          <div className="minimal-agent-footer-copy" aria-label="底部主按钮说明">
+          <div className="minimal-agent-footer-copy" aria-label="下方主动作说明">
             <small>{composerHint}</small>
             <strong>{footerStatusCopy}</strong>
           </div>
@@ -3381,7 +3381,7 @@ export function MinimalAgentPanel({
                     ? !onOpenResultView
                     : realSampleAction.disabled || !realSampleAction.keyConfigured || realSampleBusy}
                   onClick={realSampleDetailAction}
-                  aria-label={realSampleDetailNeedsReview ? "打开参考复核" : "查看底部主按钮的参考生成动作"}
+                  aria-label={realSampleDetailNeedsReview ? "打开参考复核" : "查看下方发送的参考生成动作"}
                 >
                   {realSampleDetailNeedsReview ? <Sparkles size={15} /> : <ArrowRight size={15} />}
                   {realSampleDetailButtonLabel}
@@ -3412,7 +3412,7 @@ export function MinimalAgentPanel({
 	                  ? videoPermissionBlockedByProject || videoBusy || !onSendSeedanceVideo
 	                  : videoPermissionBlockedByProject || Boolean(videoSendAction.disabled) || !videoSendAction.ready || !videoSendAction.keyConfigured || videoBusy || (videoAlreadySent && !videoCanResume) || !onSendSeedanceVideo}
 	                onClick={pointToMainVideoAction}
-	                aria-label={videoCanResume ? "查看底部主按钮的视频查询动作" : "查看底部主按钮的视频发送动作"}
+	                aria-label={videoCanResume ? "查看下方发送的视频查询动作" : "查看下方发送的视频发送动作"}
 	              >
 	                <ArrowRight size={15} />
 	                {videoDetailButtonLabel}

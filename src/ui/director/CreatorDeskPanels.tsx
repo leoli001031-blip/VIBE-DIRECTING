@@ -513,19 +513,19 @@ export function CreatorDeskPanels({
     ? hasStoryDraftForProject
       ? projectRequirement.hint
       : "可以继续说想法；生成参考、视频或导出前再准备本地项目。"
-    : referenceGenerationBusy
-      ? "参考正在生成，完成后会进入复核。"
+      : referenceGenerationBusy
+        ? "参考正在生成，完成后会进入复核。"
       : videoCanResume
-        ? "底部按钮会查询结果，不会重复发送。"
+        ? "点下方「发送」查询结果，不会重复发送。"
         : displayAgentCommand.kind === "submit_video"
-          ? "底部按钮会发送下一段，仍然一次只跑一段。"
+          ? "点下方「发送」发送下一段，仍然一次只跑一段。"
           : displayAgentCommand.kind === "open_preview"
-            ? "底部按钮会进入预览。"
+            ? "点下方「发送」进入预览。"
           : displayAgentCommand.kind === "open_export"
-            ? "底部按钮会进入交付。"
+            ? "点下方「发送」进入交付。"
           : displayAgentCommand.kind === "open_review"
             ? "先检查画面；也可以点下方卡片直接复核。"
-          : `看底部按钮继续：${primaryActionLabel(nextActionCopy)}。`;
+          : `点下方「${primaryActionLabel(nextActionCopy)}」继续。`;
   const showAssetReconciliation = Boolean(assetReconciliation && (
     assetReconciliation.summary.matched > 0
     || assetReconciliation.summary.needsReview > 0
@@ -779,7 +779,7 @@ export function CreatorDeskPanels({
               <small>{concurrencyLabel(batchGeneration.concurrencyLabel)}</small>
               <small>{safetyLabel(batchGeneration.safetyLabel)}</small>
               {displayAgentCommand.kind === "generate_references" ? (
-                <small>底部按钮：{batchGenerationActionLabel}</small>
+                <small>下方动作：{batchGenerationActionLabel}</small>
               ) : null}
             </div>
           </div>
@@ -827,10 +827,10 @@ export function CreatorDeskPanels({
               {videoGeneration.shortSubmitId && <small>编号 {videoGeneration.shortSubmitId}</small>}
               {currentVideoPosition !== undefined && currentVideoPosition > 0 && <small>前面约 {currentVideoPosition} 个任务</small>}
               {videoGeneration.status !== "completed" && (
-                <small>{videoGeneration.canResume ? "底部按钮可以查询结果，不会重复发送" : `即梦常见约 ${jimengExpectedWaitMinutes} 分钟，可以离开后查询结果`}</small>
+                <small>{videoGeneration.canResume ? "点下方「发送」查询结果，不会重复发送" : `即梦常见约 ${jimengExpectedWaitMinutes} 分钟，可以离开后查询结果`}</small>
               )}
               {videoSendAction && videoActionRelevant && (
-                <small>{videoCanResume ? "需要取回结果时，点底部发送。" : "需要发送视频时，点底部发送。"}</small>
+                <small>{videoCanResume ? "需要取回结果时，点下方「发送」。" : "需要发送视频时，点下方「发送」。"}</small>
               )}
             </div>
             {videoGeneration.taskFacts.length > 0 && (

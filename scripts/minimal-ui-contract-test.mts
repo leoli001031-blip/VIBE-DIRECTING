@@ -529,7 +529,7 @@ checkMessage(requireWithin(creatorDeskProjection, /agentCommand:\s*buildCreatorA
 checkMessage(requireWithin(creatorDeskPanelsSource, /statusNextAction = projectStatusView\?\.nextAction[\s\S]*nextActionCopy = statusNextAction[\s\S]*displayAgentCommand\.label/, "CreatorDeskPanels summary copy must prefer unified project status and only fall back to the boundary-aware Agent command"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /statusSummary = projectStatusView\?\.doing[\s\S]*statusDetail = projectStatusView\?\.waitingFor[\s\S]*statusSummary \|\|[\s\S]*statusDetail \|\|/, "CreatorDeskPanels visible summary/detail must use the same project status as the workbar"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /const batchGenerationActionLabel = displayAgentCommand\.kind === "generate_references"[\s\S]*displayAgentCommand\.label[\s\S]*retryLabel\(batchGeneration\.retryLabel\)/, "CreatorDeskPanels batch action label must follow the boundary-aware Agent command"));
-checkMessage(requireWithin(creatorDeskPanelsSource, /displayAgentCommand\.kind === "generate_references" \? \([\s\S]*底部按钮：\{batchGenerationActionLabel\}/, "CreatorDeskPanels must route reference generation through bottom-button guidance instead of a second execution button"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /displayAgentCommand\.kind === "generate_references" \? \([\s\S]*下方动作：\{batchGenerationActionLabel\}/, "CreatorDeskPanels must route reference generation through clear bottom composer guidance instead of a second execution button"));
 check(!creatorDeskPanelsSource.includes("canRunBatchGeneration") && !creatorDeskPanelsSource.includes("<button onClick={onRetryMissing}"), "CreatorDeskPanels details must not expose a second batch reference generation button");
 checkMessage(requireWithin(creatorDeskPanelsSource, /agentProjectRequirementCopy\(\{ localProjectBusy, canCreateLocalProject \}\)/, "CreatorDeskPanels must share browser-draft/local-project requirement copy with the bottom Agent button"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /const hasStoryDraftForProject = scriptPlanner\.shotCount > 0 \|\| framePlan\.items\.length > 0/, "CreatorDeskPanels must distinguish empty drafts from confirmed browser stories"));
@@ -561,13 +561,13 @@ checkMessage(requireWithin(creatorDeskPanelsSource, /即梦常见约[\s\S]*分�
 check(!/会先生成故事板参考/.test(creatorDeskProjectionSource), "Creator desk video copy must not imply every video path starts with storyboard references");
 checkMessage(requireWithin(creatorDeskProjectionSource, /会先准备所需参考画面[\s\S]*一次发送一个视频任务/, "Creator desk video copy must stay reference-mode neutral"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /const videoCanResume = Boolean\(videoSendAction\?\.canResume \|\| videoGeneration\.canResume\)/, "CreatorDeskPanels must merge runtime and action resume readiness"));
-checkMessage(requireWithin(creatorDeskPanelsSource, /videoCanResume[\s\S]*底部按钮可以查询结果，不会重复发送/, "CreatorDeskPanels must explain resumable Seedance jobs without exposing a second query button"));
-checkMessage(requireWithin(creatorDeskPanelsSource, /需要取回结果时，点底部发送[\s\S]*需要发送视频时，点底部发送/, "CreatorDeskPanels must route video execution to the bottom Agent button"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /videoCanResume[\s\S]*点下方「发送」查询结果，不会重复发送/, "CreatorDeskPanels must explain resumable Seedance jobs without exposing a second query button"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /需要取回结果时，点下方「发送」[\s\S]*需要发送视频时，点下方「发送」/, "CreatorDeskPanels must route video execution to the bottom Agent composer"));
 check(!/onClick=\{onSendVideo\}|videoSendAction\.suggestedActionLabel/.test(creatorDeskPanelsSource), "CreatorDeskPanels must not own video submit/query execution");
 check(!/creator-primary-action|runCreatorPrimaryAction/.test(creatorDeskPanelsSource), "CreatorDeskPanels must not expose a second primary execution button");
 check(!/creator-command-chip/.test(creatorDeskPanelsSource), "CreatorDeskPanels must avoid repeating the primary action in a second status chip");
 checkMessage(requireWithin(creatorDeskPanelsSource, /creator-summary-next[\s\S]*creatorStepHint/, "CreatorDeskPanels summary must keep short bottom-button guidance beside the status"));
-checkMessage(requireWithin(creatorDeskPanelsSource, /底部按钮会查询结果[\s\S]*底部按钮会发送下一段/, "CreatorDeskPanels must point users to the bottom Agent button for execution"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /点下方「发送」查询结果[\s\S]*点下方「发送」发送下一段/, "CreatorDeskPanels must point users to the bottom Agent composer for execution"));
 checkMessage(requireWithin(minimalAgentPanelSource, /const footerDirectAction = canOfferFooterDirectAction/, "MinimalAgentPanel must own the single visible generation/submission action"));
 checkMessage(requireWithin(minimalAgentPanelSource, /runFooterReferenceGeneration[\s\S]*agentVideoPermissionForMode\("reference_allowed"\)/, "bottom reference action must grant reference permission before running"));
 checkMessage(requireWithin(minimalAgentPanelSource, /runFooterVideoAction[\s\S]*agentVideoPermissionForMode\("video_allowed"\)/, "bottom video action must grant video permission before running"));
@@ -1406,7 +1406,7 @@ checkMessage(requireWithin(stylesSource, /\.project-title-storage[\s\S]*\.projec
 check(!/const emptyProjectPrimary = canForgetProject/.test(minimalTopNavSource), "top nav empty-project wording must not infer local folder readiness from the close-project action");
 check(!/const projectRootLabel = compactProjectPathLabel\(projectRoot\) \|\| \(canForgetProject/.test(minimalTopNavSource), "top nav project root label must not claim a local folder is connected without projectRoot");
 check(!/const projectControlStatus = canForgetProject/.test(minimalTopNavSource), "top nav project status must not infer project binding from canForgetProject");
-checkMessage(requireWithin(minimalTopNavSource, /projectContentSummary[\s\S]*底部发送脚本[\s\S]*projectPlan\.statusLabel/, "top nav project control must explain current project content state"));
+checkMessage(requireWithin(minimalTopNavSource, /projectContentSummary[\s\S]*下方发送脚本[\s\S]*projectPlan\.statusLabel/, "top nav project control must explain current project content state"));
 checkMessage(requireWithin(minimalTopNavSource, /projectSaveSummary[\s\S]*确认草案后创建项目文件[\s\S]*保存文件/, "top nav project control must explain where the local project file will be saved"));
 checkMessage(requireWithin(minimalTopNavSource, /这里切换本地项目[\s\S]*不会删除文件/, "top nav project control must explain project switching without destructive wording"));
 checkMessage(requireWithin(minimalTopNavSource, /退出[\s\S]*不删除本地文件/, "top nav project close action must be creator-facing and non-destructive"));

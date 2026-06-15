@@ -497,7 +497,7 @@ assert(/agentActionEnvelope\?\.status === "blocked"/.test(minimalAgentPanelSourc
 assert(/action\.status === "blocked"[\s\S]*return "需要补充"/.test(agentReviewPrimaryLabel), "blocked staged actions must show a creator-facing blocked button label");
 assert(/actionBlocked && agentActionEnvelope[\s\S]*agentActionEnvelope\.userFacingMessage/.test(minimalAgentPanelSource), "blocked staged actions must expose the concrete Agent blocker as the disabled button reason");
 assert(/if\s*\(\s*primaryDisabled\s*\)[\s\S]*setStatus\(primaryDisabledReason\)[\s\S]*return;/.test(handleNext), "primary action handler must not bypass disabled confirmation state");
-assert(/继续点底部发送：\{primaryLabel\}/.test(minimalAgentPanelSource), "staged Agent cards must point to the bottom primary button instead of rendering a second primary action");
+assert(/继续点下方「\{primaryLabel\}」/.test(minimalAgentPanelSource), "staged Agent cards must point to the bottom composer action instead of rendering a second primary action");
 assert(!/<button disabled=\{primaryDisabled\}[\s\S]*\{primaryLabel\}[\s\S]*<\/button>/.test(minimalAgentPanelSource), "staged Agent cards must not duplicate the bottom primary button");
 assert(/if\s*\(composerPrimaryIsFresh\)\s*\{[\s\S]*void prepareChange\(\)/.test(minimalAgentPanelSource), "typing into the bottom composer must start a fresh request through the unified primary operation instead of re-confirming the old action");
 assert(/isPreparingPlan[\s\S]*status \|\| "正在整理"[\s\S]*稍等一下/.test(minimalAgentPanelSource), "disabled composer action should explain the current preparation state instead of a generic blocker");
@@ -602,7 +602,7 @@ assert(/disabled=\{referenceGenerationBlockedByProject \|\| endFrameAction\.disa
 assert(/disabled=\{videoCanResume[\s\S]*\?\s*videoPermissionBlockedByProject[\s\S]*:\s*videoPermissionBlockedByProject \|\| Boolean\(videoSendAction\.disabled\)/.test(minimalAgentPanelSource), "video detail button should not be disabled only because the current boundary is plan-only");
 assert(/\(videoAlreadySent && !videoCanResume\)/.test(minimalAgentPanelSource), "resumable submitted video jobs must not be disabled as already-sent");
 assert(/const realSampleDetailAction = realSampleDetailNeedsReview[\s\S]*openReferenceReviewFromDetails[\s\S]*pointToMainReferenceAction/.test(minimalAgentPanelSource), "reference detail button must route review-ready assets to review and otherwise point back to the bottom primary action");
-assert(/function pointToMainVideoAction\(\)[\s\S]*点底部发送，继续查询视频结果[\s\S]*点底部发送，让 AI 导演发送视频/.test(minimalAgentPanelSource), "video detail button must explain the bottom primary action instead of submitting from details");
+assert(/function pointToMainVideoAction\(\)[\s\S]*点下方「发送」，继续查询视频结果[\s\S]*点下方「发送」，让 AI 导演发送视频/.test(minimalAgentPanelSource), "video detail button must explain the bottom primary action instead of submitting from details");
 assert(/onClick=\{pointToMainVideoAction\}/.test(minimalAgentPanelSource), "video detail button must not execute submit/query directly");
 assert(/onClick=\{runFooterEndFrameGeneration\}/.test(minimalAgentPanelSource), "end-frame detail button must reuse the single footer action path");
 assert(/\.minimal-agent-permission-mode/.test(stylesSource), "three-mode status needs styling");

@@ -66,7 +66,7 @@ const visibleUiSources = [
 ].map(([name, source]) => ({ name, source }));
 
 for (const { name, source } of visibleUiSources) {
-  for (const forbidden of ["整理草案", "补齐画面", "用底部主按钮", "看主按钮", "当前是只规划模式", "不能补参考"]) {
+  for (const forbidden of ["整理草案", "补齐画面", "用底部主按钮", "看主按钮", "底部按钮", "点底部发送", "底部主按钮", "当前是只规划模式", "不能补参考"]) {
     assert(!source.includes(forbidden), `${name} should not expose old workflow copy: ${forbidden}`);
   }
 }

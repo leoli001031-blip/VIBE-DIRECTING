@@ -386,7 +386,7 @@ function fact(label: string, value: unknown, tone: CreatorVideoTaskFact["tone"] 
 
 function videoTaskNextAction(status: CreatorVideoGenerationStatus, options: { hasReadyNext?: boolean; canResume?: boolean }) {
   if (status === "failed") return options.hasReadyNext ? "继续下一段，失败段稍后单独补" : "看失败原因后重试或跳过";
-  if (status === "recoverable") return "点底部按钮查询结果，不会重复发送";
+  if (status === "recoverable") return "点下方「发送」查询结果，不会重复发送";
   if (status === "submitted" || status === "queued" || status === "generating") return "等待回流，稍后查询结果";
   if (status === "completed") return "去预览复核，确认后导出";
   return "参考和复核通过后再发送视频";

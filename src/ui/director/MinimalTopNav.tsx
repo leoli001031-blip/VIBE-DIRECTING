@@ -133,8 +133,8 @@ export function MinimalTopNav({
   const currentProjectPathLabel = compactProjectPathLabel(currentProjectPath);
   const projectContentSummary = isEmptyProject
     ? projectFolderReady
-      ? "底部发送脚本后，会写入这个项目文件夹。"
-      : "先从底部发送想法或脚本，或打开已有项目。"
+      ? "下方发送脚本后，会写入这个项目文件夹。"
+      : "先在下方发送想法或脚本，或打开已有项目。"
     : `故事流 · ${totalShots} 个镜头 · ${projectPlan.statusLabel}`;
   const projectSaveSummary = currentProjectPathLabel || (projectFolderReady ? "确认草案后创建项目文件" : "尚未选择保存位置");
   const projectControlStatus = projectFolderReady

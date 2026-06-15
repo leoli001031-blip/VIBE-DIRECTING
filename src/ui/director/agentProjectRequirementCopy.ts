@@ -13,7 +13,7 @@ export function agentProjectRequirementCopy(input: {
     return {
       label: "新建本地项目",
       detail: "生成参考、视频或导出前，需要先准备本地项目文件夹。",
-      hint: "点底部按钮新建本地项目，再继续。",
+      hint: "点下方「新建本地项目」，再继续。",
     };
   }
   return {
