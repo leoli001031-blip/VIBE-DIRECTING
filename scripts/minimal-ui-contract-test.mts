@@ -403,8 +403,8 @@ checkMessage(requireWithin(projectStatusViewModel, /草案 \$\{countLabel\(shotC
 checkMessage(requireWithin(projectStatusViewModel, /!input\.folderReady && input\.projectReady[\s\S]*需要本地项目[\s\S]*点左上角项目，选择本地文件夹/, "Confirmed browser drafts must ask users to choose a local project folder before generation actions"));
 checkMessage(requireWithin(projectStatusViewModelSource, /!input\.folderReady && input\.projectReady && \/生成\|提交\|导出\/\.test\(rawAgentFact\)[\s\S]*先保存项目/, "Blocked generate/submit/export actions in browser drafts should be summarized as saving the project first"));
 checkMessage(requireWithin(projectStatusViewModelSource, /label:\s*"AI 导演"/, "Project status facts should use creator-facing AI director label"));
-checkMessage(requireWithin(projectStatusViewModelSource, /referenceGenerationAction\?\.status === "ready" && missing > 0[\s\S]*参考待生成/, "Local projects should surface missing references before review when generation is ready"));
-checkMessage(requireWithin(projectStatusViewModel, /readyToGenerateMissing[\s\S]*参考待生成[\s\S]*生成参考/, "Local projects should prioritize generating missing references when the reference action is ready"));
+checkMessage(requireWithin(projectStatusViewModelSource, /if \(missing > 0\) return "角色、场景、道具或故事板参考待生成"/, "Local projects should surface missing references before review when references are missing"));
+checkMessage(requireWithin(projectStatusViewModel, /shouldGenerateReferences[\s\S]*参考待生成[\s\S]*missingReferences[\s\S]*生成参考/, "Local projects should prioritize generating missing references instead of routing users to review"));
 checkMessage(requireWithin(projectStatusViewModelSource, /audioFactLabel[\s\S]*声音参考/, "Project status view model must summarize voice references in creator-facing copy"));
 check(!/\b(real-chain|relay\s+queue|Project\.vibe|provider)\b/i.test(extractStringLiterals(projectStatusViewModelSource)), "Project status view model copy must hide engineering state sources");
 checkMessage(requireWithin(directorModeSource, /function\s+ProjectStatusSummary\s*\(/, "DirectorMode must render the project status summary component"));

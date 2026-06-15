@@ -315,16 +315,37 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
   const assetWaiting = assetWaitingLabel(input);
   if (assetWaiting) {
     const blocked = input.referenceGenerationAction?.status === "blocked";
-    const readyToGenerateMissing = input.referenceGenerationAction?.status === "ready" && input.runtimeState.visualMemory.summary.missing > 0;
+    const missingReferences = input.runtimeState.visualMemory.summary.missing > 0;
+    const referencesNeedReview = input.runtimeState.visualMemory.summary.needsReview > 0;
+    const shouldGenerateReferences = missingReferences && !referencesNeedReview;
+    const shouldReviewAndGenerateReferences = missingReferences && referencesNeedReview;
+    const referenceStage = blocked
+      ? "参考待处理"
+      : input.referenceGenerationAction?.status === "running"
+        ? "参考生成中"
+      : shouldReviewAndGenerateReferences
+        ? "参考待看，也有待生成"
+      : shouldGenerateReferences
+        ? "参考待生成"
+      : "参考待看";
+    const referenceWaitingFor = blocked
+      ? "按提示处理条件"
+      : input.referenceGenerationAction?.status === "running"
+        ? "图片结果"
+      : shouldGenerateReferences
+        ? "确认生成参考范围"
+      : shouldReviewAndGenerateReferences
+        ? "先复核，再补缺口"
+      : "确认素材";
     return {
-      stage: blocked ? "参考待处理" : input.referenceGenerationAction?.status === "running" ? "参考生成中" : readyToGenerateMissing ? "参考待生成" : "参考待看",
+      stage: referenceStage,
       doing: assetWaiting,
-      waitingFor: blocked ? "按提示处理条件" : input.referenceGenerationAction?.status === "running" ? "图片结果" : readyToGenerateMissing ? "确认生成参考范围" : "确认素材",
+      waitingFor: referenceWaitingFor,
       nextAction: blocked
         ? actionMessage(input.referenceGenerationAction, "调整后重试")
         : input.referenceGenerationAction?.status === "running"
           ? "去参考页看进度"
-          : readyToGenerateMissing
+          : missingReferences
             ? "生成参考"
             : "去参考页确认可用素材",
       tone: blocked ? "blocked" : input.referenceGenerationAction?.status === "running" ? "working" : "waiting",

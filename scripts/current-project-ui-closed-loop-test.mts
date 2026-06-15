@@ -251,7 +251,7 @@ function assertUnifiedProjectStatusVideoStage() {
       ...runtimeState,
       visualMemory: {
         ...runtimeState.visualMemory,
-        summary: { locked: 1, needsReview: 1, missing: 3 },
+        summary: { locked: 1, needsReview: 0, missing: 3 },
       },
     },
     folderReady: true,
@@ -270,6 +270,30 @@ function assertUnifiedProjectStatusVideoStage() {
   assert(localProjectMissingReferenceStatus.stage === "参考待生成", "local projects with missing references should prioritize generating references when generation is ready");
   assert(localProjectMissingReferenceStatus.doing === "角色、场景、道具或故事板参考待生成", "missing reference state should explain the creative reference categories");
   assert(localProjectMissingReferenceStatus.nextAction === "生成参考", "local project next action should generate references before routing to review");
+
+  const localProjectMixedReferenceStatus = buildProjectStatusViewModel({
+    runtimeState: {
+      ...runtimeState,
+      visualMemory: {
+        ...runtimeState.visualMemory,
+        summary: { locked: 1, needsReview: 1, missing: 3 },
+      },
+    },
+    folderReady: true,
+    projectReady: true,
+    directorView: "story",
+    referenceGenerationAction: {
+      status: "ready",
+      message: "准备先生成角色、场景、关键道具或故事板参考。",
+    },
+    agentCommand: {
+      label: "生成参考",
+      summary: "补画面",
+      detail: "准备生成参考",
+    },
+  });
+  assert(localProjectMixedReferenceStatus.stage === "参考待看，也有待生成", "local projects should not call mixed review and missing references only review");
+  assert(localProjectMixedReferenceStatus.waitingFor === "先复核，再补缺口", "mixed reference state should explain the order clearly");
 }
 
 function readText(path) {
