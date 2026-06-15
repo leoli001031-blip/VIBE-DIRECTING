@@ -7284,13 +7284,15 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 }
 
 .new-video-bottom-portal .new-video-unified-composer {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto auto auto;
   border-radius: 18px;
   background: rgba(255, 252, 246, 0.94);
   box-shadow: 0 18px 48px rgba(82, 62, 42, 0.18);
   padding: 12px 14px;
   backdrop-filter: blur(18px);
   max-height: var(--director-bottom-composer-max-height);
-  overflow: auto;
+  overflow: hidden;
 }
 
 .director-bottom-composer .minimal-agent-panel,
@@ -7554,11 +7556,14 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 }
 
 .minimal-director.composer-only .new-video-unified-composer {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto auto auto;
   border-radius: 18px;
   background: rgba(255, 252, 246, 0.94);
   box-shadow: 0 18px 48px rgba(82, 62, 42, 0.18);
   padding: 12px 14px;
   backdrop-filter: blur(18px);
+  overflow: hidden;
 }
 
 .minimal-director.composer-only .new-video-composer-field span {
@@ -8612,9 +8617,12 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 
 .new-video-composer-field textarea {
   min-height: 142px;
+  max-height: min(22vh, 180px);
   border-color: rgba(221, 208, 192, 0.92);
   background: rgba(255, 255, 255, 0.72);
   font-size: 14px;
+  overflow-y: auto;
+  resize: none;
 }
 
 .new-video-composer-bar {
