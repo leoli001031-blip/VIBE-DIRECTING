@@ -510,6 +510,7 @@ export function CreatorDeskPanels({
     assetReconciliation.summary.matched > 0
     || assetReconciliation.summary.needsReview > 0
     || assetReconciliation.summary.ambiguous > 0
+    || assetReconciliation.summary.missing > 0
     || assetReconciliation.summary.merged > 0
     || assetReconciliation.summary.unused > 0
   ));

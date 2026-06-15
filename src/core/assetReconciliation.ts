@@ -432,13 +432,15 @@ function unusedAssetItems(assets: AssetRecord[], matchedAssetIds: Set<string>): 
 
 function creatorSummary(summary: AssetReconciliationProjection["summary"]) {
   if (!summary.total) return "当前没有需要匹配的素材。";
-  return `已匹配 ${summary.matched} · 待确认 ${summary.needsReview + summary.ambiguous} · 缺 ${summary.missing}`;
+  const mergedCopy = summary.merged > 0 ? ` · 已并入 ${summary.merged}` : "";
+  return `已匹配 ${summary.matched} · 待确认 ${summary.needsReview + summary.ambiguous} · 缺 ${summary.missing}${mergedCopy}`;
 }
 
 function nextAction(summary: AssetReconciliationProjection["summary"]) {
   if (!summary.total) return "继续整理";
   if (summary.missing > 0) return "让 AI 准备参考";
   if (summary.needsReview + summary.ambiguous > 0) return "确认素材匹配";
+  if (summary.merged > 0) return "局部细节已并入主体参考";
   return "素材已就绪";
 }
 
