@@ -2405,6 +2405,16 @@ export function NewVideoStart({
     { mode: "video_allowed", label: "可发视频" },
   ];
   const activeVideoPermissionLabel = videoPermissionModeItems.find((item) => item.mode === activeVideoPermissionContract.mode)?.label || "先整理";
+  const confirmedFlowTitle = activeVideoPermissionContract.mode === "plan_only"
+    ? "进入故事流，不会生成"
+    : activeVideoPermissionContract.mode === "reference_allowed"
+      ? "进入故事流，再生成参考"
+      : "进入故事流，参考通过后可发视频";
+  const confirmedFlowDetail = activeVideoPermissionContract.mode === "plan_only"
+    ? "确认草案只会写入故事流；生成参考和发送视频都要你再说。"
+    : activeVideoPermissionContract.mode === "reference_allowed"
+      ? "确认草案不会发送视频；后面会先看参考，再单独确认视频。"
+      : "确认草案不会立刻发送；故事和参考通过后再发送视频。";
   const showStylePreflight = Boolean(styleResearchPreflight)
     && (styleResearchStatus !== "idle" || Boolean(styleResearchResult) || styleReferenceStatus === "saved");
   const unifiedComposer = (
@@ -2663,8 +2673,8 @@ export function NewVideoStart({
               </div>
               <div className="new-video-next-flow" aria-label="确认后的流程">
                 <span>确认后</span>
-                <strong>进入故事流，再生成参考</strong>
-                <small>确认草案不会生成；后面会先看参考，再单独确认视频。</small>
+                <strong>{confirmedFlowTitle}</strong>
+                <small>{confirmedFlowDetail}</small>
               </div>
               <small className="new-video-next-hint">
                 {confirmed ? "已进入故事流" : confirmPending ? "正在进入故事流" : "底部继续：确认进故事流"}

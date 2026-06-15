@@ -491,7 +491,8 @@ checkMessage(requireWithin(stylesSource, /\.new-video-primary-action\s*\{[\s\S]*
 checkMessage(requireWithin(stylesSource, /\.new-video-primary-action\s*\{[\s\S]*white-space:\s*nowrap/, "NewVideoStart send button label must not wrap or collapse"));
 check(!/className="new-video-start-footer"[\s\S]*<button[\s\S]*发送/.test(newVideoStartSource), "NewVideoStart footer must not duplicate the composer submit action");
 checkMessage(requireWithin(newVideoStartSource, /className="new-video-plan-summary"[\s\S]*projectionTitleForDisplay[\s\S]*projection\.summary\.scriptPreview[\s\S]*new-video-next-hint/, "NewVideoStart organized draft default must show only title, short preview, and a bottom-action hint"));
-checkMessage(requireWithin(newVideoStartSource, /className="new-video-next-flow"[\s\S]*确认后[\s\S]*进入故事流，再生成参考[\s\S]*不会生成[\s\S]*单独确认视频/, "NewVideoStart organized draft must explain the post-confirm next step"));
+checkMessage(requireWithin(newVideoStartSource, /confirmedFlowTitle[\s\S]*进入故事流，不会生成[\s\S]*进入故事流，再生成参考[\s\S]*进入故事流，参考通过后可发视频/, "NewVideoStart organized draft must explain the post-confirm next step for each execution boundary"));
+checkMessage(requireWithin(newVideoStartSource, /confirmedFlowDetail[\s\S]*生成参考和发送视频都要你再说[\s\S]*不会发送视频[\s\S]*参考通过后再发送视频/, "NewVideoStart organized draft must keep post-confirm copy aligned with the execution boundary"));
 {
   const storyboardHeader = /<header className="new-video-storyboard-card-head">([\s\S]*?)<\/header>/.exec(newVideoStartSource)?.[1] || "";
   check(!/new-video-storyboard-actions/.test(storyboardHeader), "NewVideoStart storyboard row edit buttons must stay out of the main card header");

@@ -559,6 +559,9 @@ assert(/mode:\s*"reference_allowed"[\s\S]*videoSubmitAllowed:\s*false[\s\S]*refe
 for (const phrase of ["先不要生图", "不生图", "不生图不提交视频", "不走生图生视频", "不跑生图生视频", "只拆分镜", "只规划", "只做计划"]) {
   assert(directorAgentPermissionIntentSource.includes(phrase), `plan-only phrases must include ${phrase}`);
 }
+for (const phrase of ["不要生成参考", "先不要生成参考", "不要做参考图", "先不要补参考", "先别补参考图"]) {
+  assert(directorAgentPermissionIntentSource.includes(phrase), `no-reference-generation phrases must include ${phrase}`);
+}
 for (const phrase of ["先不要提交视频", "先不要提交视频测试", "先不提交视频", "不提交视频", "不要生视频", "先别提交", "先不跑视频", "先不用跑视频", "视频先不用跑", "视频先不用管", "不提交到即梦", "跑到视频前"]) {
   assert(directorAgentPermissionIntentSource.includes(phrase), `no-video phrases must include ${phrase}`);
 }
