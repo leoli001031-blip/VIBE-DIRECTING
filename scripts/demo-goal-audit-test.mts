@@ -118,6 +118,8 @@ assertIncludes(architectureDoc, "npm run scripts:groups", "P7 docs must document
 assertIncludes(architectureDoc, "npm run runtime:prune", "P7 docs must document runtime prune entry");
 
 assert(scripts["demo:goal-audit:test"], "demo goal audit script must be registered");
+assert(scripts["demo:main-chain-status-flow:test"], "demo main-chain status flow test must be registered");
+assert(demoReady.includes("demo:main-chain-status-flow:test"), "demo:ready must include the main-chain status flow gate");
 assert(demoReady.includes("demo:goal-audit:test"), "demo:ready must include the demo goal audit gate");
 assert(demoReady.includes("mvp-full-chain-local:smoke"), "demo:ready must include the local full-chain smoke gate");
 assert(!demoReady.includes("music-rhythm-analysis:test"), "demo:ready must not include parked music rhythm analysis");

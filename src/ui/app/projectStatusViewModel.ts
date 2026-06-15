@@ -434,6 +434,28 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     };
   }
 
+  if (input.exportAction?.status === "ready") {
+    return {
+      stage: "导出已完成",
+      doing: exportActionMessage(input.exportAction, "交付包已生成"),
+      waitingFor: "最后复核交付内容",
+      nextAction: "去交付页查看导出包",
+      tone: "ready",
+      facts,
+    };
+  }
+
+  if (input.exportWorker?.readiness === "ready") {
+    return {
+      stage: "可以导出",
+      doing: "视频和项目资料已经可以打包",
+      waitingFor: "确认生成交付包",
+      nextAction: "去交付页导出",
+      tone: "ready",
+      facts,
+    };
+  }
+
   return {
     stage: input.agentCommand?.label ? "下一步已整理" : "可以继续",
     doing: input.agentStage?.summary?.trim() || `当前在${sectionName(input.directorView)}页查看项目`,
