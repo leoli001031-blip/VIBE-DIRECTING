@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { IMAGE2_GENERATE_DEFAULT_ASPECT_RATIO, IMAGE2_GENERATE_DEFAULT_SIZE } from "../src/core/providerPolicy.ts";
 import {
+  classifyReferenceAssetText,
   isParentObjectReference,
   isStandalonePropReference,
   referenceAssetCandidates,
@@ -350,16 +351,21 @@ function selectedShotFacts(workbenchFacts, projectFacts, selectedShotId) {
   const propIdsThatAreCharacters = rawPropReferences.filter((id) => knownCharacterKeys.has(normalizedAssetIdentity(id)));
   const propReferenceCandidates = rawPropReferences.filter((id) => !knownCharacterKeys.has(normalizedAssetIdentity(id)));
   const propBuckets = referenceConstraintBuckets(propReferenceCandidates);
+  const rawSceneReferences = textArray(rawShot?.sceneGuidance)
+    .filter((value) => !isPlaceholderReferenceText(value));
+  const sceneBuckets = referenceConstraintBuckets(rawSceneReferences, "scene");
+  const explicitSceneIds = uniqueStrings([
+    asString(selected?.sceneId),
+    asString(rawShot?.sceneId),
+    ...textArray(rawShot?.sceneAssetIds),
+  ]).filter((value) => !isPlaceholderReferenceText(value));
+  const explicitSceneId = explicitSceneIds.find((value) => classifyReferenceAssetText(value, "scene").bucket === "standalone");
+  const primarySceneId = explicitSceneId || sceneBuckets.standalone[0];
   return {
     shotId,
     title: asString(selected?.title) || asString(rawShot?.title) || asString(rawShot?.name) || shotId || "当前镜头",
     storyFunction: uniqueStrings([richShotStoryText(rawShot, selected), projectStyleHint(projectFacts)]).join(" "),
-    sceneId: asString(selected?.sceneId)
-      || asString(rawShot?.sceneId)
-      || textArray(rawShot?.sceneAssetIds)[0]
-      || textArray(rawShot?.sceneGuidance)[0]
-      || asString(selected?.sectionId)
-      || asString(rawShot?.sectionId),
+    sceneId: primarySceneId,
     roleIds: referenceAssetCandidates(uniqueStrings([
       ...(explicitRoleIds.length ? explicitRoleIds : textArray(rawShot?.characterGuidance).filter((value) => !isPlaceholderReferenceText(value))),
       ...propIdsThatAreCharacters,
@@ -368,10 +374,14 @@ function selectedShotFacts(workbenchFacts, projectFacts, selectedShotId) {
     propReferencesSource: explicitPropIds.length ? "explicit" : "guidance",
     objectDetailIds: propBuckets.objectConstraints,
     vehicleDetailIds: propBuckets.objectConstraints,
-    sceneDetailIds: propBuckets.sceneConstraints,
+    sceneDetailIds: uniqueStrings([
+      ...sceneBuckets.standalone.slice(primarySceneId ? 1 : 0),
+      ...sceneBuckets.sceneConstraints,
+      ...propBuckets.sceneConstraints,
+    ]),
     characterDetailIds: propBuckets.characterConstraints,
     shotDetailIds: propBuckets.shotDetails,
-    ignoredDetailIds: propBuckets.ignoredDetails,
+    ignoredDetailIds: uniqueStrings([...sceneBuckets.ignoredDetails, ...propBuckets.ignoredDetails]),
     referenceStrategy: asString(rawShot?.referenceStrategy) || asString(selected?.referenceStrategy),
     visibleClips: asPositiveNumber(rawShot?.visibleClips) || asPositiveNumber(selected?.visibleClips),
     storyboardPanels: asPositiveNumber(rawShot?.storyboardPanels) || asPositiveNumber(selected?.storyboardPanels),
@@ -384,6 +394,24 @@ function selectedShotFacts(workbenchFacts, projectFacts, selectedShotId) {
     actionTrigger: asString(rawShot?.actionTrigger),
     microReaction: asString(rawShot?.microReaction),
   };
+}
+
+function carryForwardSceneBaselines(selectedShots) {
+  let activeSceneId;
+  let activeSceneDetailIds = [];
+  return selectedShots.map((shot) => {
+    if (shot.sceneId) {
+      activeSceneId = shot.sceneId;
+      activeSceneDetailIds = shot.sceneDetailIds || [];
+      return shot;
+    }
+    if (!activeSceneId) return shot;
+    return {
+      ...shot,
+      sceneId: activeSceneId,
+      sceneDetailIds: uniqueStrings([...(activeSceneDetailIds || []), ...(shot.sceneDetailIds || [])]),
+    };
+  });
 }
 
 function sceneClusterForText(value) {
@@ -437,7 +465,7 @@ function selectedShotFactsForInput(workbenchFacts, projectFacts, input) {
   if (input.scope === "project") {
     const shotIds = allProjectShotIds(workbenchFacts, projectFacts);
     const facts = shotIds.map((shotId) => selectedShotFacts(workbenchFacts, projectFacts, shotId)).filter((shot) => shot.shotId);
-    if (facts.length) return facts;
+    if (facts.length) return carryForwardSceneBaselines(facts);
   }
   const selectedIds = uniqueStrings(input.selectedShotIds?.length ? input.selectedShotIds : input.selectedShotId ? [input.selectedShotId] : []);
   if (selectedIds.length) {

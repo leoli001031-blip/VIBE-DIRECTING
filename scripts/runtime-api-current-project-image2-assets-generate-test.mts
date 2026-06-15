@@ -343,6 +343,63 @@ function createWhaleTramFixture(fixtureRoot) {
   return shotId;
 }
 
+function createVendingTicketFixture(fixtureRoot) {
+  const shotIds = ["V001", "V002", "V003"];
+  writeJson(`${fixtureRoot}/project/project.vibe`, {
+    schemaVersion: "current_project_image2_asset_generate_project_vibe_v1",
+    projectId: "current_project_image2_asset_generate_vending_ticket",
+    runId: "image2-assets-generate-vending-ticket",
+    title: "Midnight Vending Ticket",
+  });
+  writeJson(`${fixtureRoot}/project/story_flow.json`, {
+    schemaVersion: "current_project_image2_asset_generate_story_flow_v1",
+    sections: [{ id: "act_vending_ticket", label: "Vending Ticket", shotIds }],
+    shots: [
+      {
+        id: shotIds[0],
+        title: "售货机吐出发光车票",
+        sectionId: "act_vending_ticket",
+        storyFunction: "午夜天桥下，老旧自动售货机忽然吐出一张发光车票，蓝光落在湿地上。",
+        sceneGuidance: ["午夜天桥下", "旧自动售货机前"],
+        characterGuidance: ["戴耳机的女高中生"],
+        propGuidance: ["发光车票"],
+        order: 1,
+      },
+      {
+        id: shotIds[1],
+        title: "少女拾起蓝光指引",
+        sectionId: "act_vending_ticket",
+        storyFunction: "少女在售货机旁蹲下，蓝光沿着积水指向月台方向。",
+        sceneGuidance: ["售货机旁", "地面有积水", "背景天桥钢架"],
+        characterGuidance: ["戴耳机的女高中生"],
+        propGuidance: ["发光车票"],
+        order: 2,
+      },
+      {
+        id: shotIds[2],
+        title: "追光跑向末班电车",
+        sectionId: "act_vending_ticket",
+        storyFunction: "她追着蓝光跑向天桥下月台，最后一班电车正缓缓启动。",
+        sceneGuidance: ["天桥下月台", "最后一班电车正缓缓启动"],
+        characterGuidance: ["戴耳机的女高中生"],
+        propGuidance: ["发光车票"],
+        order: 3,
+      },
+    ],
+  });
+  writeJson(`${fixtureRoot}/project/visual_memory.json`, {
+    schemaVersion: "current_project_image2_asset_generate_visual_memory_v1",
+    roles: [],
+    scenes: [],
+    props: [],
+  });
+  writeJson(`${fixtureRoot}/project/source_index.json`, {
+    schemaVersion: "current_project_image2_asset_generate_source_index_v1",
+    refs: [`${fixtureRoot}/project/project.vibe`, `${fixtureRoot}/project/story_flow.json`, `${fixtureRoot}/project/visual_memory.json`],
+  });
+  return shotIds;
+}
+
 const fixtureRoot = `real-test-sandbox/current-project-image2-assets-generate/${Date.now()}`;
 const tempRoot = mkdtempSync(path.join(tmpdir(), "vibe-image2-assets-"));
 const bindingPath = path.join(tempRoot, "current-project.local.json");
@@ -680,6 +737,39 @@ try {
   const whaleVisualMemory = readJson(repoPath(`${whaleFixtureRoot}/project/visual_memory.json`));
   assert(whaleVisualMemory.scenes.some((scene) => scene.id === "scene_whale_tram_ocean"), "visual memory should add whale-tram ocean scene");
   assert(!whaleVisualMemory.scenes.find((scene) => scene.id === "scene_lighthouse_interior")?.usedByShotIds.includes(whaleShotId), "explicit whale-tram scene must not attach to lighthouse interior");
+
+  const vendingFixtureRoot = `real-test-sandbox/current-project-image2-assets-generate-vending-ticket/${Date.now()}`;
+  createVendingTicketFixture(vendingFixtureRoot);
+  const vendingSelect = await fetchJson(`${baseUrl}/api/runtime/projects/select`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ projectRoot: vendingFixtureRoot, projectId: "current_project_image2_asset_generate_vending_ticket", displayName: "Midnight Vending Ticket" }),
+  });
+  assert(vendingSelect.response.status === 200, "vending-ticket fixture should bind");
+  const vendingGenerated = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-assets/generate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      scope: "project",
+      providerId: "apikey-fun-gpt55-responses-image",
+      assetTypes: ["character", "scene", "prop"],
+      mockProviderResult: true,
+      confirmation: {
+        receiptId: "confirm_assets_vending_ticket_mock_ok",
+        confirmedAt: new Date().toISOString(),
+        phrase: "generate-image2-assets",
+        confirmed: true,
+      },
+    }),
+  });
+  assert(vendingGenerated.response.status === 200, `vending-ticket asset generation should pass: ${vendingGenerated.payload.message}`);
+  assert(vendingGenerated.payload.generatedAssetCount === 4, "vending-ticket project should create one character, two real scene baselines, and one ticket prop");
+  assert(!vendingGenerated.payload.assets.some((asset) => /售货机旁|自动售货机前|地面有积水/u.test(`${asset.id} ${asset.name}`)), "relative scene labels must not become standalone generated assets");
+  const vendingVisualMemory = readJson(repoPath(`${vendingFixtureRoot}/project/visual_memory.json`));
+  assert(vendingVisualMemory.roles.length === 1, "vending-ticket project should dedupe the shared heroine");
+  assert(vendingVisualMemory.props.length === 1, "vending-ticket project should dedupe the shared glowing ticket prop");
+  assert(vendingVisualMemory.scenes.length === 2, "vending-ticket project should keep only the two real scene baselines");
+  assert(vendingVisualMemory.scenes.some((scene) => scene.usedByShotIds.includes("V002")), "relative middle shot should attach to the carried scene baseline");
 
   console.log(`runtime-api-current-project-image2-assets-generate-test: ok ${fixtureRoot}`);
 } finally {

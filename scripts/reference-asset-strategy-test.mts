@@ -87,6 +87,7 @@ assert(classifyReferenceAssetText("自动贩卖机旁", "scene").bucket === "sce
 assert(classifyReferenceAssetText("老旧的自动贩卖机前", "scene").bucket === "scene_constraint", "vending-machine foreground labels should not become separate scene baselines");
 assert(classifyReferenceAssetText("后方远处可见轨道和月台轮廓", "scene").bucket === "scene_constraint", "distant background silhouettes should stay scene constraints");
 assert(classifyReferenceAssetText("背景是末班列车", "scene").bucket === "scene_constraint", "background transit details should not become separate scene baselines");
+assert(classifyReferenceAssetText("背景天桥钢架", "scene").bucket === "scene_constraint", "background structure cues should not become separate scene baselines");
 assert(classifyReferenceAssetText("云南高原咖啡园", "scene").bucket === "standalone", "location scenes with 云南 should remain scene baseline subjects");
 assert(classifyReferenceAssetText("云南高原咖啡园竹篮里", "scene").bucket === "standalone", "scene labels with a real location plus local prop context should stay usable as scene baselines");
 assert(classifyReferenceAssetText("城市咖啡馆内靠窗桌位", "scene").bucket === "standalone", "interior location labels should stay scene baselines even when they mention a table area");

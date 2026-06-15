@@ -48,7 +48,7 @@ const projection = buildAssetReconciliationProjection({
       title: "山路启动",
       referenceStrategy: "storyboard_rapid_cut",
       characterGuidance: ["白车车手", "黑车车手"],
-      sceneGuidance: ["山脚便利店外山路", "雨雾"],
+      sceneGuidance: ["山脚便利店外山路", "雨雾", "自动售货机旁"],
       propGuidance: ["白色双门车", "黑色双门车", "车灯", "轮胎", "指尖"],
       dialogueLines: ["行くぞ。"],
     }),
@@ -135,6 +135,8 @@ assert(byLabel("发光车票")?.status === "missing", "missing standalone ticket
 assert(byLabel("车灯")?.status === "merged", "vehicle lights should be merged into parent car/action");
 assert(byLabel("轮胎")?.status === "merged", "tires should be merged into parent car/action");
 assert(byLabel("指尖")?.status === "merged", "body details should be merged into character/action");
+assert(byLabel("雨雾")?.status === "merged", "weather details should be merged into the scene baseline");
+assert(byLabel("自动售货机旁")?.status === "merged", "object-relative scene labels should be merged into the scene baseline");
 assert(projection.items.some((item) => item.kind === "storyboard_reference" && item.status === "matched"), "storyboard mode should require and match storyboard reference");
 assert(projection.items.some((item) => item.kind === "voice_reference" && item.status === "needs_review"), "dialogue should require a voice reference candidate");
 assert(!projection.items.some((item) => item.kind === "music_reference" && item.label.includes("不是配乐")), "not-music voice references must not be reconciled as music");

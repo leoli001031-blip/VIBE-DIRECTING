@@ -255,7 +255,8 @@ export function buildAssetRequirementsFromStory(shots: ShotRecord[]): {
 
   for (const shot of shots) {
     const characterCandidates = referenceAssetCandidates(shot.characterGuidance || [], "character");
-    const sceneCandidates = referenceAssetCandidates(shot.sceneGuidance || [], "scene");
+    const sceneBuckets = referenceConstraintBuckets(shot.sceneGuidance || [], "scene");
+    const sceneCandidates = sceneBuckets.standalone;
     const propBuckets = referenceConstraintBuckets(shot.propGuidance || []);
 
     for (const label of characterCandidates) {
@@ -286,13 +287,31 @@ export function buildAssetRequirementsFromStory(shots: ShotRecord[]): {
         reason: "镜头有明确地点或天气基准，需要场景参考。",
       });
     }
-    if (!sceneCandidates.length && firstUseful(shot.sceneGuidance || [])) {
-      addRequirement(requirements, {
+    for (const label of sceneBuckets.sceneConstraints) {
+      addMerged(mergedItems, {
         kind: "scene",
-        label: firstUseful(shot.sceneGuidance || []),
+        label,
         shotId: shot.id,
-        source: "story",
-        reason: "镜头有场景描述，需要确认是否已有场景参考。",
+        detail: "已并入场景/天气参考，不单独生成素材。",
+        reason: "scene_constraint",
+      });
+    }
+    for (const label of sceneBuckets.objectConstraints) {
+      addMerged(mergedItems, {
+        kind: "prop",
+        label,
+        shotId: shot.id,
+        detail: "已并入父级道具或动作说明，不单独生成参考。",
+        reason: "object_constraint",
+      });
+    }
+    for (const label of sceneBuckets.characterConstraints) {
+      addMerged(mergedItems, {
+        kind: "character",
+        label,
+        shotId: shot.id,
+        detail: "已并入角色外观或表演说明，不单独生成参考。",
+        reason: "character_constraint",
       });
     }
 

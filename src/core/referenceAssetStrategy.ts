@@ -80,7 +80,7 @@ const objectSpatialScenePattern =
   /(?:竹篮|咖啡豆堆|咖啡豆|拿铁杯|杯|旧书|书页|车票|磁带盒|手机|车|跑车|自动贩卖机|自动售货机|贩卖机|售货机|vending\s*machine|书桌|桌|道具|物件)(?:里|内|中|旁|边|前|后|附近|周围|上方|下方)|(?:里|内|中|旁|边|前|后|附近|周围|上方|下方).*(?:竹篮|咖啡豆堆|咖啡豆|拿铁杯|杯|旧书|书页|车票|磁带盒|手机|车|跑车|自动贩卖机|自动售货机|贩卖机|售货机|vending\s*machine|书桌|桌|道具|物件)/i;
 
 const relativeSceneDetailPattern =
-  /^(?:背景是|背景为|后方|后面|远处|远方|画面深处|后方远处可见|远处可见|隐约可见|轮廓|剪影).+|.+(?:轮廓|剪影|远处可见|隐约可见)$/i;
+  /^(?:背景|前景|中景|背景是|背景为|后方|后面|远处|远方|画面深处|后方远处可见|远处可见|隐约可见|轮廓|剪影).+|.+(?:轮廓|剪影|远处可见|隐约可见|作为背景|当作背景)$/i;
 
 const objectComponentDetailPattern =
   /车灯|尾灯|大灯|轮胎|车轮|油门|刹车|踏板|方向盘|仪表|后视镜|车窗|雨刷|引擎|发动机|排气|车门|车牌|书页|封面|书脊|书架|门把|门锁|窗户|橱窗|玻璃窗|楼层灯|指示灯|导视灯|警示灯|安全灯|电梯镜面|琴键|琴槌|乐谱架|烘焙机观察窗|筛网区域|屏幕|按钮|按键|镜头|表盘|枪口|扳机|刀刃|剑柄|肩带|拉链|手套|杯盖|瓶盖|轮廓边|headlights?|taillights?|tires?|wheels?|steering|dashboard|pedal|doors?|windows?|wipers?|engine|exhaust|license plate|page|cover|spine|bookshelf|shelf|window|display window|door handle|mirror|piano keys?|hammer|screen|button|keypad|lens|dial|trigger|barrel|blade|handle|strap|zipper|gloves?/i;
@@ -186,7 +186,7 @@ export function isStandalonePropReference(value: unknown): boolean {
   return classifyReferenceAssetText(value).bucket === "standalone";
 }
 
-export function referenceConstraintBuckets(values: unknown[]): ReferenceConstraintBuckets {
+export function referenceConstraintBuckets(values: unknown[], requestedType?: ReferenceAssetType): ReferenceConstraintBuckets {
   const buckets: ReferenceConstraintBuckets = {
     standalone: [],
     objectConstraints: [],
@@ -196,7 +196,7 @@ export function referenceConstraintBuckets(values: unknown[]): ReferenceConstrai
     ignoredDetails: [],
   };
   for (const value of uniqueReferenceCandidates(values)) {
-    const classification = classifyReferenceAssetText(value);
+    const classification = classifyReferenceAssetText(value, requestedType);
     if (classification.bucket === "standalone") buckets.standalone.push(value);
     else if (classification.bucket === "object_constraint") buckets.objectConstraints.push(value);
     else if (classification.bucket === "scene_constraint") buckets.sceneConstraints.push(value);
