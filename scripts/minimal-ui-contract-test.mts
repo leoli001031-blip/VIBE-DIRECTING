@@ -394,6 +394,7 @@ checkMessage(requireWithin(projectStatusViewModelSource, /export\s+function\s+bu
 checkMessage(requireWithin(projectStatusViewModel, /stage[\s\S]*doing[\s\S]*waitingFor[\s\S]*nextAction/, "Project status view model must explain current stage, current work, waiting state, and next action"));
 checkMessage(requireWithin(projectStatusViewModelSource, /videoStage\?:[\s\S]*CreatorVideoStageLike/, "Project status view model must accept the creator desk video stage"));
 checkMessage(requireWithin(projectStatusViewModelSource, /videoStage\.generation\?\.queueSummary/, "Project status view model must summarize serial video queue progress from the unified video stage"));
+checkMessage(requireWithin(projectStatusViewModelSource, /videoTaskFactsForStatus[\s\S]*taskFacts[\s\S]*失败原因[\s\S]*提交号[\s\S]*下一步/, "Project status view model must surface key video task evidence without exposing raw task internals"));
 checkMessage(requireWithin(projectStatusViewModelSource, /agentCommand\?:[\s\S]*CreatorAgentCommandLike/, "Project status view model must accept the current Agent suggestion"));
 checkMessage(requireWithin(projectStatusViewModelSource, /newVideoStatus\?:[\s\S]*NewVideoEntryStatusLike/, "Project status view model must accept the fresh new-video planning status"));
 checkMessage(requireWithin(projectStatusViewModel, /newVideoStatus\.status === "planning"[\s\S]*正在拆镜头/, "Project status view model must show active fresh-project planning instead of empty-project copy"));

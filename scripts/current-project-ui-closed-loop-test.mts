@@ -94,6 +94,11 @@ function assertUnifiedProjectStatusVideoStage() {
         completedCount: 0,
         failedCount: 0,
         canResume: false,
+        taskFacts: [
+          { label: "当前段", value: "霓虹启动" },
+          { label: "提交号", value: "adde7eb0" },
+          { label: "下一步", value: "等待回流，稍后查询结果" },
+        ],
       },
     },
     agentStage: {
@@ -109,8 +114,63 @@ function assertUnifiedProjectStatusVideoStage() {
   assert(status.stage === "视频生成中", "unified project status should prioritize active video stage");
   assert(status.doing.includes("第 1/2 段"), "unified project status should show serial queue progress");
   assert(status.facts.some((fact) => fact.label === "视频" && fact.value.includes("1 段待发送")), "project facts should include the video queue summary");
+  assert(status.facts.some((fact) => fact.label === "当前段" && fact.value === "霓虹启动"), "project facts should include the active video segment");
+  assert(status.facts.some((fact) => fact.label === "提交号" && fact.value === "adde7eb0"), "project facts should include the video submit id");
+  assert(status.facts.some((fact) => fact.label === "下一步" && fact.value.includes("查询结果")), "project facts should include video next-step guidance");
   assert(status.facts.some((fact) => fact.label === "声音" && fact.value.includes("声音参考")), "project facts should include voice reference status");
   assert(status.facts.some((fact) => fact.label === "AI 导演" && fact.value === "查询视频结果"), "project facts should include the current AI director suggestion");
+
+  const failedStatus = buildProjectStatusViewModel({
+    runtimeState,
+    folderReady: true,
+    projectReady: true,
+    directorView: "preview",
+    videoStage: {
+      status: "failed",
+      canResume: false,
+      reviewCount: 0,
+      generation: {
+        statusLabel: "有失败",
+        detail: "1 段视频生成失败。",
+        completedCount: 0,
+        failedCount: 1,
+        canResume: false,
+        taskFacts: [
+          { label: "当前段", value: "失败段" },
+          { label: "失败原因", value: "生成失败，可重试" },
+          { label: "下一步", value: "看失败原因后重试或跳过" },
+        ],
+      },
+    },
+  });
+  assert(failedStatus.stage === "视频待处理", "failed video task facts should still drive the top status");
+  assert(failedStatus.facts.some((fact) => fact.label === "失败原因" && fact.value.includes("生成失败")), "failed video status should expose the failure reason in top facts");
+
+  const returnedStatus = buildProjectStatusViewModel({
+    runtimeState,
+    folderReady: true,
+    projectReady: true,
+    directorView: "preview",
+    videoStage: {
+      status: "needs_review",
+      canResume: false,
+      reviewCount: 1,
+      generation: {
+        statusLabel: "已完成",
+        detail: "视频结果已出。",
+        completedCount: 1,
+        failedCount: 0,
+        canResume: false,
+        taskFacts: [
+          { label: "当前段", value: "第一段" },
+          { label: "输出", value: "video/first.mp4" },
+          { label: "下一步", value: "去预览复核，确认后导出" },
+        ],
+      },
+    },
+  });
+  assert(returnedStatus.stage === "视频待确认", "returned videos should route top status to review");
+  assert(returnedStatus.facts.some((fact) => fact.label === "输出" && fact.value.includes("video/first.mp4")), "returned video status should expose output path evidence in top facts");
 
   const recoverableStatus = buildProjectStatusViewModel({
     runtimeState,

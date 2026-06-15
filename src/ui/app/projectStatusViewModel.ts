@@ -32,6 +32,11 @@ type CreatorVideoStageLike = {
     completedCount?: number;
     failedCount?: number;
     canResume?: boolean;
+    taskFacts?: Array<{
+      label: string;
+      value: string;
+      tone?: "neutral" | "active" | "success" | "warning" | "danger";
+    }>;
   };
 };
 
@@ -119,6 +124,21 @@ function videoStageFactLabel(stage: CreatorVideoStageLike) {
   return "";
 }
 
+function videoTaskFactsForStatus(stage?: CreatorVideoStageLike): Array<{ label: string; value: string }> {
+  const sourceFacts = stage?.generation?.taskFacts || [];
+  if (!stage || !sourceFacts.length) return [];
+  const priority = stage.status === "failed"
+    ? ["当前段", "失败原因", "下一步", "提交号"]
+    : stage.status === "completed" || stage.status === "needs_review"
+      ? ["当前段", "输出", "下一步", "提交号"]
+      : ["当前段", "提交号", "下一步"];
+  return priority
+    .map((label) => sourceFacts.find((fact) => fact.label === label))
+    .filter((fact): fact is { label: string; value: string } => Boolean(fact?.value?.trim()))
+    .slice(0, 4)
+    .map((fact) => ({ label: fact.label, value: fact.value }));
+}
+
 function exportActionMessage(action?: ExportActionState, fallback = "") {
   return action?.detail?.trim() || action?.label?.trim() || fallback;
 }
@@ -189,6 +209,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
   const videoFact = videoStage && videoStage.status !== "not_submitted"
     ? videoStage.generation?.queueSummary || videoStageFactLabel(videoStage)
     : "";
+  const videoTaskFacts = videoTaskFactsForStatus(videoStage);
   const audioFact = audioFactLabel(runtimeState);
   const rawAgentFact = input.agentCommand?.label?.trim() || input.agentStage?.summary?.trim() || "";
   const agentFact = !input.folderReady && input.projectReady && /生成|提交|导出/.test(rawAgentFact)
@@ -200,6 +221,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     { label: "参考", value: browserDraftActive && draftReferenceCount > 0 ? `已放入 ${draftReferenceCount} 个` : referenceFactLabel(assetSummary) },
     audioFact ? { label: "声音", value: audioFact } : undefined,
     videoFact ? { label: "视频", value: videoFact } : undefined,
+    ...videoTaskFacts,
     agentFact ? { label: "AI 导演", value: agentFact } : undefined,
   ].filter((fact): fact is { label: string; value: string } => Boolean(fact));
 
