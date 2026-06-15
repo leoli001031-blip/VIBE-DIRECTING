@@ -577,6 +577,9 @@ checkMessage(requireWithin(creatorDeskProjection, /concurrencyLabel:\s*"Concurre
 checkMessage(requireWithin(creatorDeskProjection, /safetyLabel[\s\S]*Retry downshifts to/, "creator batch projection must expose retry downshift copy"));
 checkMessage(requireWithin(creatorDeskProjection, /videoStage[\s\S]*buildCreatorVideoStageProjection[\s\S]*videoGeneration\s*=\s*videoStage\.generation/, "creator desk projection must carry a single video stage with Jimeng generation status"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /const videoGeneration = videoStage\.generation/, "CreatorDeskPanels must read video state from the single video stage projection"));
+checkMessage(requireWithin(creatorDeskProjectionSource, /function videoTaskFactsForRelayQueue[\s\S]*taskFacts:\s*videoTaskFactsForRelayQueue/, "Creator desk video projection must surface recoverable task evidence from the relay queue"));
+checkMessage(requireWithin(creatorDeskProjectionSource, /fact\("提交号"[\s\S]*fact\("输入参考"[\s\S]*fact\("失败原因"[\s\S]*fact\("下一步"/, "Creator desk video task facts must include submit id, reference inputs, failure reason, and next step"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /className="video-task-facts"[\s\S]*aria-label="视频任务状态"[\s\S]*fact\.label[\s\S]*fact\.value/, "Creator desk video panel must render creator-facing task evidence"));
 check(!/function\s+(selectedScopeLabel|buildAgentPanelProjection|confirmAgentPlanProjection|agentProjectionBadges|agentProjectionNextStep|agentReceiptStatusLabel|agentReceiptCountSummary)\s*\(/.test(appSource), "App must not keep MinimalAgentPanel helper functions after extraction");
 checkMessage(requireWithin(diagnosticsModeSource, /function\s+DiagnosticsMode\s*\(/, "DiagnosticsMode component"));
 checkMessage(requireWithin(appBody, /showInspector\s*&&/, "Diagnostics entry in App mode switch/rendering"));

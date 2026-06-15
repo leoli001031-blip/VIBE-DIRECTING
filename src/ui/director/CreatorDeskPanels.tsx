@@ -818,6 +818,16 @@ export function CreatorDeskPanels({
                 <small>{videoCanResume ? "需要取回结果时，点底部发送。" : "需要发送视频时，点底部发送。"}</small>
               )}
             </div>
+            {videoGeneration.taskFacts.length > 0 && (
+              <div className="video-task-facts" aria-label="视频任务状态">
+                {videoGeneration.taskFacts.map((fact) => (
+                  <small key={`${fact.label}:${fact.value}`} className={fact.tone || "neutral"} title={fact.title || fact.value}>
+                    <span>{fact.label}</span>
+                    <strong>{fact.value}</strong>
+                  </small>
+                ))}
+              </div>
+            )}
             {videoSendAction?.message && videoActionRelevant && (
               <small className="creator-action-message">
                 {videoCanResume ? "查询不会发送新任务。" : videoSendAction.message}

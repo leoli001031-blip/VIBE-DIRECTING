@@ -23,6 +23,7 @@ import type {
   CreatorVideoGenerationProjection,
   CreatorVideoGenerationStatus,
   CreatorVideoStageProjection,
+  CreatorVideoTaskFact,
   CreatorAgentStage,
   CreatorPreflightProjection,
   CreatorPreflightCheckState,
@@ -301,6 +302,9 @@ function framePlanStatuses(item: CreatorFramePlanItem): CreatorFrameStatus[] {
 }
 
 type PreviewItemWithVideoGeneration = PreviewQueueItem & {
+  id?: string;
+  shotId?: string;
+  title?: string;
   status?: string;
   videoStatus?: string;
   generationStatus?: string;
@@ -367,6 +371,63 @@ function previewItemIsReturnedVideoForReview(item: PreviewQueueItem) {
   return videoGeneration.status === "completed" && (videoGeneration.hasVideo || previewItemHasVideoMedia(item));
 }
 
+function compactTaskPath(value: string) {
+  const cleanValue = clean(value);
+  if (!cleanValue) return "";
+  const parts = cleanValue.split(/[\\/]+/).filter(Boolean);
+  return parts.length > 3 ? parts.slice(-3).join("/") : cleanValue;
+}
+
+function fact(label: string, value: unknown, tone: CreatorVideoTaskFact["tone"] = "neutral", title?: string): CreatorVideoTaskFact | undefined {
+  const cleanValue = clean(value);
+  if (!cleanValue) return undefined;
+  return { label, value: cleanValue, tone, title };
+}
+
+function videoTaskNextAction(status: CreatorVideoGenerationStatus, options: { hasReadyNext?: boolean; canResume?: boolean }) {
+  if (status === "failed") return options.hasReadyNext ? "继续下一段，失败段稍后单独补" : "看失败原因后重试或跳过";
+  if (status === "recoverable") return "点底部按钮查询结果，不会重复发送";
+  if (status === "submitted" || status === "queued" || status === "generating") return "等待回流，稍后查询结果";
+  if (status === "completed") return "去预览复核，确认后导出";
+  return "参考和复核通过后再发送视频";
+}
+
+function videoTaskFactsForRelayQueue(
+  relayQueue: VideoRelayQueueState | undefined,
+  status: CreatorVideoGenerationStatus,
+  activeItem?: VideoRelayQueueState["items"][number],
+): CreatorVideoTaskFact[] {
+  if (!relayQueue) return [];
+  const failedItem = relayQueue.items.find((item) => item.status === "failed");
+  const returnedItem = relayQueue.items.find((item) => item.status === "success" && (item.outputVideoPath || item.localMediaPaths?.length));
+  const nextReadyItem = relayQueue.items.find((item) => item.status === "ready" || item.status === "planned");
+  const item = activeItem || failedItem || returnedItem || nextReadyItem;
+  const outputPath = item?.outputVideoPath || item?.localMediaPaths?.find(isVideoMediaPath) || "";
+  const blockers = item?.blockers?.filter(Boolean).join("；") || "";
+  return [
+    fact("当前段", item?.title || item?.shotId || item?.id, status === "failed" ? "danger" : status === "completed" ? "success" : "active"),
+    fact("提交号", item?.submitId, "active"),
+    item?.referencePaths?.length ? fact("输入参考", `${item.referencePaths.length} 张参考`, "neutral", item.referencePaths.join("\n")) : undefined,
+    outputPath ? fact("输出", compactTaskPath(outputPath), "success", outputPath) : undefined,
+    fact("失败原因", blockers, "danger"),
+    fact("下一步", videoTaskNextAction(status, { hasReadyNext: Boolean(nextReadyItem), canResume: status === "recoverable" }), status === "failed" ? "warning" : "neutral"),
+  ].filter(Boolean) as CreatorVideoTaskFact[];
+}
+
+function videoTaskFactsForPreviewItem(
+  item: PreviewItemWithVideoGeneration | undefined,
+  status: CreatorVideoGenerationStatus,
+): CreatorVideoTaskFact[] {
+  if (!item) return [];
+  const outputPath = item.outputVideoPath || item.localMediaPaths?.find(isVideoMediaPath) || (isVideoMediaPath(item.mediaPath) ? item.mediaPath : "");
+  return [
+    fact("当前段", item.title || item.shotId || item.id, status === "completed" ? "success" : "active"),
+    fact("提交号", item.submitId || item.submit_id, "active"),
+    outputPath ? fact("输出", compactTaskPath(outputPath), "success", outputPath) : undefined,
+    fact("下一步", videoTaskNextAction(status, { canResume: status === "recoverable" }), status === "failed" ? "warning" : "neutral"),
+  ].filter(Boolean) as CreatorVideoTaskFact[];
+}
+
 function buildCreatorVideoGenerationProjection(
   previewItems: PreviewQueueItem[],
   storyReadyCount: number,
@@ -405,6 +466,7 @@ function buildCreatorVideoGenerationProjection(
     failedCount,
     shortSubmitId: selected.shortSubmitId,
     queuePosition: selected.queuePosition,
+    taskFacts: videoTaskFactsForPreviewItem(primary ? (previewItems[statuses.indexOf(primary)] as PreviewItemWithVideoGeneration | undefined) : undefined, selected.status as CreatorVideoGenerationStatus),
     canResume: selected.canResume || selected.status === "recoverable",
     canContinueAfterFailure: false,
   };
@@ -544,6 +606,7 @@ function videoGenerationFromRelayQueue(relayQueue: VideoRelayQueueState | undefi
       completedCount,
       recoverableCount,
       failedCount,
+      taskFacts: videoTaskFactsForRelayQueue(relayQueue, status, failedItem),
       canResume: false,
       canContinueAfterFailure: Boolean(nextReadyItem),
     };
@@ -568,6 +631,7 @@ function videoGenerationFromRelayQueue(relayQueue: VideoRelayQueueState | undefi
     queueSummary,
     shortSubmitId: selected.shortSubmitId,
     queuePosition: selected.queuePosition,
+    taskFacts: videoTaskFactsForRelayQueue(relayQueue, status, activeItem),
     canResume: recoverableCount > 0 || selected.canResume,
     canContinueAfterFailure: failedCount > 0 && Boolean(nextReadyItem) && activeCount === 0,
   };

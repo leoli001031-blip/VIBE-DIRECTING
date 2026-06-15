@@ -269,7 +269,7 @@ const partialRelayProjection = buildCreatorDeskProjection({
     activeItemIds: ["seedance_segment_2"],
     items: [
       { id: "seedance_segment_1", segmentId: "seedance_segment_1", shotId: "S01", status: "success", submitId: "first-submit", localMediaPaths: ["video/first.mp4"], outputVideoPath: "video/first.mp4" },
-      { id: "seedance_segment_2", segmentId: "seedance_segment_2", shotId: "S02", status: "recoverable_queued", submitId: "second-submit", localMediaPaths: [] },
+      { id: "seedance_segment_2", segmentId: "seedance_segment_2", shotId: "S02", title: "第二段", status: "recoverable_queued", submitId: "second-submit", referencePaths: ["refs/s02_storyboard.png", "refs/s02_character.png"], localMediaPaths: [] },
     ],
     resumeCommands: ["dreamina query_result --submit_id=first-submit"],
     autoSubmitAllowed: false,
@@ -280,6 +280,10 @@ const partialRelayProjection = buildCreatorDeskProjection({
 assert(partialRelayProjection.videoGeneration.status !== "completed", "a partially completed relay queue with an active segment must not look fully complete");
 assert(partialRelayProjection.preflight.checks.find((check) => check.id === "video")?.state === "waiting", "active relay queues should keep the preflight video check waiting");
 assert(partialRelayProjection.videoGeneration.queueSummary?.includes("第 2/2 段") && partialRelayProjection.videoGeneration.queueSummary.includes("排队中"), "active relay queues should expose a human-readable current segment summary");
+assert(partialRelayProjection.videoGeneration.taskFacts.some((fact) => fact.label === "当前段" && fact.value === "第二段"), "active relay queues should expose the current segment as task evidence");
+assert(partialRelayProjection.videoGeneration.taskFacts.some((fact) => fact.label === "提交号" && fact.value === "second-submit"), "active relay queues should expose the submit id as task evidence");
+assert(partialRelayProjection.videoGeneration.taskFacts.some((fact) => fact.label === "输入参考" && fact.value === "2 张参考"), "active relay queues should expose reference input evidence");
+assert(partialRelayProjection.videoGeneration.taskFacts.some((fact) => fact.label === "下一步" && fact.value.includes("查询结果")), "active relay queues should expose a user-facing next step");
 assert(partialRelayProjection.agentCommand.kind === "resume_video", "recoverable active relay queues should route the primary Agent command to result query");
 assert(partialRelayProjection.agentCommand.label === "查询结果", "recoverable active relay queues should not expose duplicate submit copy");
 
@@ -305,6 +309,8 @@ const failedWithNextRelayProjection = buildCreatorDeskProjection({
 assert(failedWithNextRelayProjection.videoGeneration.status === "failed", "failed relay queues with no active item should not look recoverable or running");
 assert(failedWithNextRelayProjection.videoGeneration.canContinueAfterFailure, "failed relay queues with a ready next segment should expose continue-after-failure intent");
 assert(failedWithNextRelayProjection.videoGeneration.queueSummary?.includes("1 段失败") && failedWithNextRelayProjection.videoGeneration.queueSummary.includes("1 段待提交"), "failed relay queues should summarize failed and ready segments together");
+assert(failedWithNextRelayProjection.videoGeneration.taskFacts.some((fact) => fact.label === "失败原因" && fact.value.includes("generation failed")), "failed relay queues should expose failure reasons as task evidence");
+assert(failedWithNextRelayProjection.videoGeneration.taskFacts.some((fact) => fact.label === "下一步" && fact.value.includes("继续下一段")), "failed relay queues should expose continue-next guidance as task evidence");
 assert(failedWithNextRelayProjection.agentStage.primaryAction === "继续下一段", "Agent primary action should tell the user they can continue the next segment after a failure");
 assert(failedWithNextRelayProjection.agentCommand.kind === "submit_video", "continue-after-failure should still route through the serial video submit action");
 
@@ -328,6 +334,7 @@ const completedRelayProjection = buildCreatorDeskProjection({
 });
 assert(completedRelayProjection.videoGeneration.status === "completed", "completed relay queues should project completed video status");
 assert(completedRelayProjection.videoGeneration.recoverableCount === 0, "completed relay queues must not treat historical resume commands as active recoverable work");
+assert(completedRelayProjection.videoGeneration.taskFacts.some((fact) => fact.label === "输出" && fact.value.includes("video/first.mp4")), "completed relay queues should expose returned video output evidence");
 assert(completedRelayProjection.preflight.status === "needs_review", "completed relay queues with local videos should require video review even before preview items sync");
 assert(completedRelayProjection.preflight.checks.find((check) => check.id === "video")?.detail === "待复核", "completed relay videos should enter the shared video review check");
 assert(completedRelayProjection.agentCommand.kind === "open_preview", "completed videos that still need review should route the primary Agent command to preview review");

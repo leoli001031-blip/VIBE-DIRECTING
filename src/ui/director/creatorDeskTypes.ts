@@ -83,6 +83,13 @@ export type CreatorFramePlanProjection = {
 
 export type CreatorVideoGenerationStatus = "not_generated" | "submitted" | "queued" | "generating" | "completed" | "recoverable" | "failed";
 
+export type CreatorVideoTaskFact = {
+  label: string;
+  value: string;
+  title?: string;
+  tone?: "neutral" | "active" | "success" | "warning" | "danger";
+};
+
 export type CreatorVideoGenerationProjection = {
   status: CreatorVideoGenerationStatus;
   statusLabel: string;
@@ -96,6 +103,7 @@ export type CreatorVideoGenerationProjection = {
   queueSummary?: string;
   shortSubmitId?: string;
   queuePosition?: number;
+  taskFacts: CreatorVideoTaskFact[];
   canResume: boolean;
   canContinueAfterFailure?: boolean;
 };

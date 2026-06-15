@@ -1176,6 +1176,7 @@
 .creator-panel-metrics,
 .review-tray-counts,
 .batch-generation-actions,
+.video-task-facts,
 .script-planner-sections,
 .frame-plan-list {
   display: flex;
@@ -1187,6 +1188,7 @@
 .creator-panel-metrics span,
 .review-tray-counts small,
 .batch-generation-actions small,
+.video-task-facts small,
 .script-planner-sections small {
   border: 1px solid var(--warm-line);
   padding: 5px 7px;
@@ -1197,6 +1199,42 @@
 
 .creator-panel-metrics b {
   color: rgba(47, 39, 34, 0.88);
+}
+
+.video-task-facts small {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  gap: 5px;
+}
+
+.video-task-facts small span {
+  color: rgba(124, 111, 99, 0.72);
+  font-weight: 700;
+}
+
+.video-task-facts small strong {
+  max-width: min(240px, 48vw);
+  overflow: hidden;
+  color: rgba(47, 39, 34, 0.82);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-task-facts small.active {
+  border-color: rgba(122, 85, 40, 0.28);
+  background: rgba(122, 85, 40, 0.08);
+}
+
+.video-task-facts small.success {
+  border-color: rgba(53, 104, 95, 0.24);
+  background: rgba(53, 104, 95, 0.08);
+}
+
+.video-task-facts small.warning,
+.video-task-facts small.danger {
+  border-color: rgba(138, 75, 47, 0.26);
+  background: rgba(138, 75, 47, 0.08);
 }
 
 .script-planner-sections .missing,
@@ -8502,6 +8540,7 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 .creator-panel-metrics span,
 .review-tray-counts small,
 .batch-generation-actions small,
+.video-task-facts small,
 .script-planner-sections small,
 .frame-plan-item b,
 .minimal-frame-status small {
