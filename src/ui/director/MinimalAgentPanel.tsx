@@ -1621,7 +1621,7 @@ export function MinimalAgentPanel({
         return;
       }
       setStatus("已确认，正在发送参考任务。");
-      void onCreateP6RealSample({ scope: "project", videoPermissionContract: nextContract });
+      void onCreateP6RealSample({ scope: "project", videoPermissionContract: nextContract, skipConfirm: true });
       return;
     }
     if (!realSampleAction.keyConfigured) {
@@ -1638,7 +1638,7 @@ export function MinimalAgentPanel({
       return;
     }
     setStatus("已发送参考任务。");
-    void onCreateP6RealSample({ scope: "project", videoPermissionContract: currentVideoPermissionContract });
+    void onCreateP6RealSample({ scope: "project", videoPermissionContract: currentVideoPermissionContract, skipConfirm: true });
   }
 
   function runFooterEndFrameGeneration() {

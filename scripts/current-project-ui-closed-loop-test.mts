@@ -571,7 +571,7 @@ function assertCreatorPanelContract() {
   assert(/先确认参考素材，再发送视频/.test(appSource), "Video submit gate should use creator-facing review copy");
   assert(/videoSendAction=\{gatedVideoSubmitAction\}/.test(appSource), "DirectorMode must receive the gated video submit action");
   assert(/onRetryMissingBatch=\{runMissingVisualsFromStory\}/.test(app), "DirectorMode must route missing visuals through the story fallback handler");
-  assert(/hasRunnableBatch\s*=\s*retryCount\s*>\s*0[\s\S]*runProjectImage2Batch\(\)[\s\S]*runImage2AssetGeneration\(\{\}\)/.test(app), "Story fallback must only use the old batch runner for runnable retries and project-scoped reference generation otherwise");
+  assert(/hasRunnableBatch\s*=\s*retryCount\s*>\s*0[\s\S]*runProjectImage2Batch\(\)[\s\S]*runImage2AssetGeneration\(\{ skipConfirm: true \}\)/.test(app), "Story fallback must only use the old batch runner for runnable retries and project-scoped reference generation otherwise");
   assert(/onRetryReviewItem=\{\(item\)\s*=>\s*applyCreatorReviewDecision\(item,\s*"retry"\)\}/.test(app), "DirectorMode must route per-item retry through Project.vibe review decisions");
   assert(/onRejectReviewItem=\{\(item\)\s*=>\s*applyCreatorReviewDecision\(item,\s*"reject"\)\}/.test(app), "DirectorMode must route reject through Project.vibe review decisions");
   assert(/submitCurrentProjectReviewDecision\(effectiveRuntimeProjectIdentity,\s*\{/.test(app), "review decisions must use the current project runtime route when a project folder is bound");

@@ -4774,7 +4774,7 @@ function App() {
       await runProjectImage2Batch();
       return;
     }
-    await runImage2AssetGeneration({});
+    await runImage2AssetGeneration({ skipConfirm: true });
   }
   const { endFrameAction, runImage2EndFrame } = useImage2EndFrameAction({
     runtimeProjectIdentity,
