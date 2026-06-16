@@ -2459,7 +2459,7 @@ export function MinimalAgentPanel({
         shotCount: runtimeState.storyFlow.shots.length,
         selectedShotCount: selectedShotCountForObservation,
         referenceMissingCount: runtimeState.visualMemory.summary.missing,
-        referenceReviewCount: runtimeState.visualMemory.summary.needsReview + composerProjectInbox.needsReviewCount,
+        referenceReviewCount: Math.max(runtimeState.visualMemory.summary.needsReview, composerProjectInbox.needsReviewCount),
         referenceReadyCount: runtimeState.visualMemory.summary.locked,
         videoStatus: videoSendAction?.status || "not_generated",
         videoStatusLabel: videoSendAction?.suggestedActionLabel || "未发送视频",

@@ -1054,9 +1054,11 @@ export function buildCreatorDeskProjection({
     assets: runtimeState.visualMemory.assets,
   });
   const lockedReferenceCount = referenceAssets.filter((asset) => normalizedAssetReviewState(asset) === "locked").length;
-  const reviewReferenceCount = referenceAssets.filter((asset) =>
+  const referenceAssetReviewCount = referenceAssets.filter((asset) =>
     normalizedAssetReviewState(asset) === "needs_review",
-  ).length + assetReconciliation.summary.needsReview + assetReconciliation.summary.ambiguous;
+  ).length;
+  const reconciliationReviewCount = assetReconciliation.summary.needsReview + assetReconciliation.summary.ambiguous;
+  const reviewReferenceCount = Math.max(referenceAssetReviewCount, reconciliationReviewCount);
   const videoReviewCount = videoStage.reviewCount;
   const missingForPreflight = Math.max(effectiveBlockedCount, missingReferenceAssetCount, initialMissingReferenceCount, assetReconciliation.summary.missing);
   const preflight = buildCreatorPreflightProjection({

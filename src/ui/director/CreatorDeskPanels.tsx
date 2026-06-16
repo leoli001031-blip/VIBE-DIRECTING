@@ -511,6 +511,7 @@ export function CreatorDeskPanels({
       return itemLabel(left).localeCompare(itemLabel(right), "zh-Hans-CN");
     })
     .slice(0, 6);
+  const projectInboxDefaultOpen = projectInbox.needsReviewCount > 0 && reviewShortcutItems.length === 0;
   const referenceGenerationNeedsPermission =
     displayAgentCommand.kind === "generate_references" && /允许/.test(displayAgentCommand.label);
   const creatorStepHint = projectStatusView
@@ -613,8 +614,9 @@ export function CreatorDeskPanels({
       </section>
       {projectInbox.totalCount > 0 && (
         <details
+          key={`project-inbox-${projectInboxDefaultOpen ? "open" : "closed"}`}
           className="creator-project-inbox"
-          open={projectInbox.needsReviewCount > 0}
+          open={projectInboxDefaultOpen}
         >
           <summary>
             <span>项目素材</span>

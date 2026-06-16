@@ -161,6 +161,8 @@ assert(inbox.items.every((item) => item.suggestedBinding), "inbox items should e
 assert(!inbox.items.some((item) => item.suggestedBinding.includes("参考参考")), "style/reference inbox copy must not say 参考参考");
 assert(!inbox.items.some((item) => /shot_/.test(item.suggestedBinding)), "inbox binding copy must not expose raw shot ids");
 assert(inbox.items.some((item) => item.suggestedBinding.includes("镜头 1")), "inbox binding copy should use human-readable shot labels");
+assert(inbox.summary.includes("参考匹配"), "inbox summary should distinguish matching suggestions from raw project materials");
+assert(!inbox.summary.includes("素材已进入项目"), "inbox summary should not call reconciliation suggestions imported project materials");
 
 const emptyInbox = buildProjectInboxProjection({ assets: [] });
 assert(emptyInbox.summary.includes("声音参考"), "empty inbox should ask for voice reference instead of music");
@@ -265,6 +267,8 @@ assert(observation.currentTask.understanding.includes("2 个镜头"), "observati
 assert(observation.currentTask.confirmation.kind === "asset_review", "project-folder materials should be reviewed before generating new references");
 assert(observation.nextAction.includes("复核"), "observation should recommend reviewing reusable folder materials before generating more");
 assert(observation.references.detail.includes("需要你看一眼"), "observation should explain that folder-classified references need review");
+assert(observation.currentTask.missing.includes("项参考需要复核"), "observation gap should use the same reference-review count as the review shortcut");
+assert(!observation.currentTask.missing.includes("素材用途需要确认"), "observation gap should not mix reconciliation totals into the main next step");
 
 const runningObservation = buildProjectObservation({
   localProjectReady: true,

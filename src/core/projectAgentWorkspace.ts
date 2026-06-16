@@ -183,6 +183,12 @@ function referenceMissingDetail(count: number) {
     : "还需要整理一个角色、场景、道具或故事板参考；生成前会请你确认。";
 }
 
+function assetReviewMissingDetail(input: Pick<BuildProjectObservationInput, "referenceReviewCount" | "inbox">) {
+  if (input.referenceReviewCount > 0) return `${input.referenceReviewCount} 项参考需要复核。`;
+  if (input.inbox?.needsReviewCount) return `${input.inbox.needsReviewCount} 个素材用途需要确认。`;
+  return "有参考或素材用途需要确认。";
+}
+
 function unique(values: Array<string | undefined>) {
   return [...new Set(values.map(clean).filter(Boolean))];
 }
@@ -445,17 +451,21 @@ export function buildProjectInboxProjection(input: BuildProjectInboxInput): Proj
   }).slice(0, 16);
   const needsReviewCount = items.filter((item) => item.needsReview).length;
   const projectFolderCount = items.filter((item) => item.origin === "project_folder").length;
+  const reconciliationCount = items.filter((item) => item.origin === "reconciliation").length;
+  const projectAssetCount = items.length - reconciliationCount;
   return {
     totalCount: items.length,
     needsReviewCount,
     items,
     summary: projectFolderCount
       ? `项目文件夹里发现 ${projectFolderCount} 个素材，${needsReviewCount} 个还要看一眼。`
+      : reconciliationCount
+        ? `${reconciliationCount} 项参考匹配${projectAssetCount ? `，${projectAssetCount} 个项目素材` : ""}，${needsReviewCount} 项要看一眼。`
       : items.length
       ? `${items.length} 个素材已进入项目，${needsReviewCount} 个需要确认用途。`
       : "还没有放入素材；可以把脚本、图片、声音参考或素材文件夹拖到底部输入框。",
     nextAction: needsReviewCount
-      ? "先确认这些素材分别怎么用。"
+      ? reconciliationCount ? "先复核匹配建议和参考用途。" : "先确认这些素材分别怎么用。"
       : items.length
         ? "素材已可供 Agent 规划使用。"
         : "拖入素材或直接描述项目想法。",
@@ -610,9 +620,7 @@ export function buildProjectObservation(input: BuildProjectObservationInput): Pr
       : needsReferenceGeneration
       ? references.detail
       : needsAssetReview
-        ? input.inbox?.needsReviewCount
-          ? `${input.inbox.needsReviewCount} 个素材用途需要确认。`
-          : references.detail
+        ? assetReviewMissingDetail(input)
         : "暂时没有明显缺口。";
   const plan = needsProject
     ? "先选择或新建项目文件夹。"
