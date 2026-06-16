@@ -8750,6 +8750,7 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 .minimal-agent-file-button,
 .new-video-composer-bar > .new-video-asset-action:not(.new-video-primary-action) {
   grid-area: file;
+  justify-self: start;
 }
 
 .minimal-agent-footer-copy,
