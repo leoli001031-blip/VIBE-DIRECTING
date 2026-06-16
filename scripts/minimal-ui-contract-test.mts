@@ -482,6 +482,7 @@ checkMessage(requireWithin(newVideoStartSource, /referenceBindingPurposeLabels[\
 checkMessage(requireWithin(newVideoStartSource, /声音参考[\s\S]*生成视频时用来锁定声线/, "NewVideoStart audio copy must treat uploaded audio as voice reference on the demo path"));
 check(!/Voice\s+Source\s+Library/i.test(extractStringLiterals(newVideoStartSource)), "NewVideoStart default copy must not expose Voice Source Library");
 checkMessage(requireWithin(newVideoStartSource, /new-video-start-guide[\s\S]*aria-label="开始方式"[\s\S]*把故事和素材放到底部/, "Empty new-project guide should describe the input entry, while the unified status owns the next action"));
+checkMessage(requireWithin(newVideoStartSource, /localProjectLabel = storyboardPlanningStatus === "running"[\s\S]*"正在整理"[\s\S]*"先写想法"/, "NewVideoStart planning state must not leave the local-project hint saying to write an idea after the idea was sent"));
 check(!/new-video-start-guide[\s\S]{0,220}aria-label="下一步"/.test(newVideoStartSource), "Empty new-project guide must not duplicate the unified next-action surface");
 checkMessage(requireWithin(newVideoStartSource, /className="new-video-composer-inbox"[\s\S]*素材收件箱[\s\S]*AI 导演会先判断用途[\s\S]*referenceInboxSuggestion[\s\S]*audioInboxSuggestion/, "NewVideoStart dropped files must show a creator-facing inbox with classification and binding suggestions"));
 checkMessage(requireWithin(stylesSource, /\.new-video-composer-inbox[\s\S]*\.new-video-composer-inbox-head[\s\S]*\.new-video-composer-attachments span em/, "NewVideoStart inbox needs dedicated styling for suggested bindings"));

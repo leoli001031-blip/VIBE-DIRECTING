@@ -201,6 +201,7 @@ function assertUnifiedProjectStatusVideoStage() {
   });
   assert(browserDraftPlanningStatus.stage === "正在拆镜头", "fresh browser draft status should show active AI planning");
   assert(browserDraftPlanningStatus.nextAction === "等草案出来后复核", "fresh browser draft status should explain the next review step");
+  assert(browserDraftPlanningStatus.facts.find((fact) => fact.label === "项目")?.value === "正在整理", "fresh planning status should not keep saying to write an idea after send");
   assert(browserDraftPlanningStatus.facts.find((fact) => fact.label === "AI 导演")?.value === "正在拆镜头", "fresh planning status should not keep stale send-input action copy");
   assert(!browserDraftPlanningStatus.doing.includes("还没有连接"), "active browser draft status must not keep the empty-project copy");
 
@@ -218,6 +219,7 @@ function assertUnifiedProjectStatusVideoStage() {
       draftReferenceCount: 2,
     },
   });
+  assert(browserDraftReadyStatus.facts.find((fact) => fact.label === "项目")?.value === "草案待确认", "fresh ready draft status should keep project facts aligned with confirmation");
   assert(browserDraftReadyStatus.facts.find((fact) => fact.label === "镜头")?.value === "草案 3 个", "fresh ready draft status should show draft shot count instead of empty project count");
   assert(browserDraftReadyStatus.facts.find((fact) => fact.label === "参考")?.value === "已放入 2 个", "fresh ready draft status should show dropped draft reference count");
   assert(browserDraftReadyStatus.facts.find((fact) => fact.label === "AI 导演")?.value === "确认草案", "fresh ready draft status should tell users to confirm the draft");

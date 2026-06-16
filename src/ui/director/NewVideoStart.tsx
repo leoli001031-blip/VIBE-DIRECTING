@@ -2295,8 +2295,10 @@ export function NewVideoStart({
   const stagedFacts = visibleStagedFacts(directorSession);
   const usesBrowserDraftProject = !localProjectReady && !localProjectBusy && !canCreateLocalProject;
   const showLocalProjectAction = Boolean(localProjectReady || localProjectBusy || canCreateLocalProject || usesBrowserDraftProject);
-  const localProjectLabel = localProjectReady
-    ? "项目文件夹已准备"
+  const localProjectLabel = storyboardPlanningStatus === "running"
+    ? "正在整理"
+    : localProjectReady
+      ? "项目文件夹已准备"
       : localProjectBusy
         ? "正在选择文件夹"
       : canCreateLocalProject

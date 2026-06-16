@@ -78,6 +78,7 @@ status = view({
 });
 assert.equal(status.stage, "正在拆镜头", "planning draft should have a clear active state");
 assert.equal(status.nextAction, "等草案出来后复核", "planning draft should tell the user to wait for review");
+assert.equal(factValue(status, "项目"), "正在整理", "planning draft should not tell the user to write an idea after send");
 assert.equal(factValue(status, "AI 导演"), "正在拆镜头", "planning draft should not keep stale send-input action copy");
 
 status = view({
@@ -91,6 +92,7 @@ status = view({
   },
 });
 assert.equal(status.stage, "草案待确认", "ready draft should ask for confirmation instead of jumping to generation");
+assert.equal(factValue(status, "项目"), "草案待确认", "ready draft should keep the project fact aligned with the pending confirmation state");
 assert.equal(factValue(status, "镜头"), "草案 3 个", "ready draft should expose draft shot count");
 assert.equal(factValue(status, "参考"), "已放入 2 个", "ready draft should expose draft reference count");
 assert.equal(factValue(status, "AI 导演"), "确认草案", "ready draft should expose the confirmation action in top facts");

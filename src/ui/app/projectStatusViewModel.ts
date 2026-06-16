@@ -173,6 +173,15 @@ function newVideoAgentFact(status?: NewVideoEntryStatusLike) {
   return "继续描述";
 }
 
+function newVideoProjectFact(status?: NewVideoEntryStatusLike) {
+  if (!status || status.status === "empty") return "先写想法";
+  if (status.status === "planning") return "正在整理";
+  if (status.status === "ready") return "草案待确认";
+  if (status.status === "blocked") return "草案待处理";
+  if (status.status === "confirmed") return "故事已确认";
+  return "草案中";
+}
+
 function safeCount(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
 }
@@ -269,7 +278,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
       ? "先保存项目"
       : rawAgentFact;
   const facts = [
-    { label: "项目", value: input.folderReady ? folderLabel : "先写想法" },
+    { label: "项目", value: input.folderReady ? folderLabel : browserDraftActive ? newVideoProjectFact(input.newVideoStatus) : "先写想法" },
     { label: "镜头", value: browserDraftActive && shotCount > 0 ? `草案 ${countLabel(shotCount, "个")}` : countLabel(shotCount, "个") },
     { label: "参考", value: browserDraftActive && draftReferenceCount > 0 ? `已放入 ${draftReferenceCount} 个` : referenceFactLabel(assetSummary, input.referenceBatch, input.referenceGenerationAction?.status) },
     audioFact ? { label: "声音", value: audioFact } : undefined,
