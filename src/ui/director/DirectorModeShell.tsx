@@ -331,19 +331,19 @@ export function DirectorMode({
     if (command.kind === "generate_references" && !videoPermissionAllowsReference) {
       return {
         ...command,
-        label: "确认生成参考",
-        summary: "先生成参考，视频不会发送。",
-        detail: "当前工作范围是先整理。确认后只生成参考，不会发送视频。",
+        label: "允许生成参考",
+        summary: "参考还缺，等你允许后再生成。",
+        detail: "当前工作范围是先整理。确认允许后只生成参考，不会发送视频。",
       };
     }
     if (command.kind === "submit_video" && !videoPermissionAllowsSend) {
       return {
         ...command,
-        label: "确认发送视频",
-        summary: "确认后提交视频，按串行队列执行。",
+        label: "允许发送视频",
+        summary: "等你允许后提交视频，按串行队列执行。",
         detail: videoPermissionContract.mode === "plan_only"
-          ? "当前工作范围是先整理。确认后会提交视频。"
-          : "当前先做参考。确认后会提交视频。",
+          ? "当前工作范围是先整理。确认允许后会提交视频。"
+          : "当前先做参考。确认允许后会提交视频。",
       };
     }
     return command;

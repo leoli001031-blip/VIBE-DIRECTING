@@ -1402,7 +1402,7 @@ export function MinimalAgentPanel({
     : referenceGenerationBlockedByProject
       ? "先保存项目"
     : referenceGenerationBlockedByContract
-      ? "确认生成参考"
+      ? "允许生成参考"
     : realSampleAction?.status === "needs_review"
       ? "等待复核"
     : realSampleAction?.status === "verified"
@@ -1418,7 +1418,7 @@ export function MinimalAgentPanel({
     : referenceGenerationBlockedByProject
       ? "先保存项目"
     : referenceGenerationBlockedByContract
-      ? "确认生成结束画面"
+      ? "允许生成结束画面"
     : endFrameAction?.status === "needs_review"
       ? "等待复核"
       : endFrameAction?.status === "verified"
@@ -1433,7 +1433,7 @@ export function MinimalAgentPanel({
     : videoPermissionBlockedByProject
       ? "先保存项目"
     : videoPermissionBlockedByContract
-      ? "确认发送视频"
+      ? "允许发送视频"
     : videoAlreadySent
       ? "已发送"
       : "发送视频";

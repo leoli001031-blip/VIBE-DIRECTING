@@ -510,6 +510,8 @@ export function CreatorDeskPanels({
       return itemLabel(left).localeCompare(itemLabel(right), "zh-Hans-CN");
     })
     .slice(0, 6);
+  const referenceGenerationNeedsPermission =
+    displayAgentCommand.kind === "generate_references" && /允许/.test(displayAgentCommand.label);
   const creatorStepHint = projectStatusView
     ? "底部输入框会接着这个状态处理。"
     : !localProjectReady
@@ -541,6 +543,17 @@ export function CreatorDeskPanels({
           detail: "不用重复点击，完成后去参考页复核。",
         },
       }
+    : referenceGenerationNeedsPermission
+      ? {
+          ...projectObservation.currentTask,
+          plan: "等你允许后再生成参考。",
+          confirmation: {
+            ...projectObservation.currentTask.confirmation,
+            required: true,
+            label: "等待你允许",
+            detail: "当前仍是先整理；你允许后才会生成参考。",
+          },
+        }
     : projectObservation.currentTask;
   const displayPreflightReferenceSummary = referenceGenerationBusy
     ? "参考生成中"

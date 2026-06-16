@@ -275,6 +275,31 @@ function assertUnifiedProjectStatusVideoStage() {
   assert(localProjectMissingReferenceStatus.doing === "角色、场景、道具或故事板参考待生成", "missing reference state should explain the creative reference categories");
   assert(localProjectMissingReferenceStatus.nextAction === "生成参考", "local project next action should generate references before routing to review");
 
+  const planOnlyMissingReferenceStatus = buildProjectStatusViewModel({
+    runtimeState: {
+      ...runtimeState,
+      visualMemory: {
+        ...runtimeState.visualMemory,
+        summary: { locked: 0, needsReview: 0, missing: 3 },
+      },
+    },
+    folderReady: true,
+    projectReady: true,
+    directorView: "story",
+    referenceGenerationAction: {
+      status: "ready",
+      message: "准备先生成角色、场景、关键道具或故事板参考。",
+    },
+    agentCommand: {
+      kind: "generate_references",
+      label: "允许生成参考",
+      summary: "参考还缺，等你允许后再生成。",
+      detail: "当前工作范围是先整理。",
+    },
+  });
+  assert(planOnlyMissingReferenceStatus.waitingFor === "等待你允许生成参考", "plan-only missing references should ask for permission instead of implying generation is already the next step");
+  assert(planOnlyMissingReferenceStatus.nextAction === "允许生成参考", "plan-only missing references should expose permission wording as the next action");
+
   const localProjectRunningReferenceStatus = buildProjectStatusViewModel({
     runtimeState: {
       ...runtimeState,
@@ -617,6 +642,7 @@ function assertCreatorPanelContract() {
   assert(/displayAgentCommand\.kind === "open_preview"/.test(creatorDeskPanelsSource), "Creator desk preview hint must follow the Agent command");
   assert(/displayAgentCommand\.kind === "open_export"/.test(creatorDeskPanelsSource), "Creator desk export hint must follow the Agent command");
   assert(/const displayCurrentTask = referenceGenerationBusy[\s\S]*参考正在生成，不需要重复操作[\s\S]*label:\s*"正在生成参考"[\s\S]*displayCurrentTask\.confirmation/.test(creatorDeskPanelsSource), "Creator desk current task must not keep asking for reference confirmation while reference generation is already running");
+  assert(/referenceGenerationNeedsPermission[\s\S]*等你允许后再生成参考[\s\S]*label:\s*"等待你允许"/.test(creatorDeskPanelsSource), "Creator desk current task must show permission wording when the user asked to plan only");
   assert(/const displayPreflightReferenceSummary = referenceGenerationBusy[\s\S]*参考生成中[\s\S]*displayPreflightReferenceSummary/.test(creatorDeskPanelsSource), "Creator desk preflight summary must show the same reference running state");
   assert(/const displayPreflightChecks = referenceGenerationBusy[\s\S]*state:\s*"waiting" as const[\s\S]*正在生成参考，完成后进入复核/.test(creatorDeskPanelsSource), "Creator desk preflight checks must not show stale missing-reference copy while generation is running");
   assert(/agentFlowDetail\(step\.id,\s*projection,\s*displayPreflightReferenceSummary\)/.test(creatorDeskPanelsSource), "Creator desk reasoning flow must use the displayed reference summary");

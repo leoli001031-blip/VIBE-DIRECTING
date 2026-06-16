@@ -381,6 +381,10 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     const referencesNeedReview = input.runtimeState.visualMemory.summary.needsReview > 0;
     const shouldGenerateReferences = missingReferences && !referencesNeedReview;
     const shouldReviewAndGenerateReferences = missingReferences && referencesNeedReview;
+    const missingReferenceNextAction = input.agentCommand?.kind === "generate_references"
+      ? input.agentCommand.label || "生成参考"
+      : "生成参考";
+    const referenceGenerationNeedsPermission = /允许/.test(missingReferenceNextAction);
     const referenceStage = blocked
       ? "参考待处理"
       : input.referenceGenerationAction?.status === "running"
@@ -395,13 +399,10 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
       : input.referenceGenerationAction?.status === "running"
         ? "图片结果"
       : shouldGenerateReferences
-        ? "确认生成参考范围"
+        ? referenceGenerationNeedsPermission ? "等待你允许生成参考" : "确认生成参考范围"
       : shouldReviewAndGenerateReferences
         ? "先复核，再补缺口"
       : "确认素材";
-    const missingReferenceNextAction = input.agentCommand?.kind === "generate_references"
-      ? input.agentCommand.label || "生成参考"
-      : "生成参考";
     return {
       stage: referenceStage,
       doing: assetWaiting,
