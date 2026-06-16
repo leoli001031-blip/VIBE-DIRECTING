@@ -339,6 +339,15 @@ const generateReferenceOnlyRoute = routeProjectAgentIntent({
 assert(generateReferenceOnlyRoute.kind === "reference", "reference-only generation wording must not be confused with video generation");
 assert(generateReferenceOnlyRoute.confirmation === "reference_generation", "reference-only generation wording should stay inside reference confirmation");
 
+const planOnlyNoReferenceRoute = routeProjectAgentIntent({
+  text: "做一个 12 秒短片，先只整理故事、镜头和节奏，不生成参考，不发送视频。",
+  hasSelection: false,
+  hasAttachments: false,
+  observation,
+});
+assert(planOnlyNoReferenceRoute.kind === "story", "plan-only no-reference wording must not route to reference generation");
+assert(planOnlyNoReferenceRoute.label === "整理新故事", "plan-only no-reference wording should start a project-level draft");
+
 const shotRevisionRoute = routeProjectAgentIntent({
   text: "第二个镜头再压迫一点",
   hasSelection: false,
@@ -363,6 +372,15 @@ const noSubmitStoryRoute = routeProjectAgentIntent({
 });
 assert(noSubmitStoryRoute.kind === "story", "new-story wording with no-video boundary must not route to video preparation");
 assert(noSubmitStoryRoute.label === "整理新故事", "new-story wording should ignore the selected shot and start a project-level draft");
+
+const naturalNewStoryRoute = routeProjectAgentIntent({
+  text: "做一个 12 秒 90 年代日漫感小短片：午夜天桥下，一台旧自动售货机吐出一张发光车票。先只整理故事、镜头和节奏，不生成参考，不发送视频。",
+  hasSelection: true,
+  hasAttachments: false,
+  observation,
+});
+assert(naturalNewStoryRoute.kind === "story", "natural new-video wording must not be captured as selected-shot revision");
+assert(naturalNewStoryRoute.label === "整理新故事", "natural new-video wording should start a project-level draft even when a shot is selected");
 
 const attachmentRoute = routeProjectAgentIntent({
   text: "",

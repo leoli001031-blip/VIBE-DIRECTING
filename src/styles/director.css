@@ -8738,10 +8738,8 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 .new-video-composer-bar,
 .minimal-director.composer-only .new-video-composer-bar,
 .new-video-bottom-portal .new-video-composer-bar {
-  grid-template-columns: minmax(0, 1fr) max-content;
-  grid-template-areas:
-    "file action"
-    "copy copy";
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  grid-template-areas: "file copy action";
   justify-content: space-between;
   align-items: center;
   gap: 8px 12px;
@@ -8767,6 +8765,7 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 .minimal-agent-footer-copy,
 .new-video-composer-bar > small:not(.new-video-script-error) {
   max-width: 100%;
+  min-width: 0;
 }
 
 .new-video-composer-status {
@@ -9001,10 +9000,8 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 
 .minimal-agent-input-footer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
-  grid-template-areas:
-    "file action"
-    "copy copy";
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  grid-template-areas: "file copy action";
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -9376,6 +9373,9 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 @media (max-width: 720px) {
   .minimal-agent-input-footer {
     grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-areas:
+      "file action"
+      "copy copy";
   }
 
   .minimal-agent-footer-copy {

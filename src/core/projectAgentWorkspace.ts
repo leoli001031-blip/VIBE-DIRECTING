@@ -3,7 +3,10 @@ import type {
   AssetReconciliationItem,
   AssetReconciliationProjection,
 } from "./assetReconciliation";
-import { directorAgentPermissionIntentDisallowsVideoSubmit } from "./directorAgentPermissionIntent";
+import {
+  detectDirectorAgentPermissionIntent,
+  directorAgentPermissionIntentDisallowsVideoSubmit,
+} from "./directorAgentPermissionIntent";
 
 export type ProjectInboxKind =
   | "script"
@@ -674,7 +677,10 @@ export function routeProjectAgentIntent(input: {
   observation: ProjectObservationProjection;
 }): ProjectIntentRoute {
   const text = compact(input.text);
-  const newStoryIntent = /新建|新项目|新片|新短片|新视频|重新做|重做|换个主题|完整项目|整个短片|整支片|另起/.test(text);
+  const permissionIntent = detectDirectorAgentPermissionIntent(text);
+  const referenceGenerationDisallowed = permissionIntent === "plan_only";
+  const newStoryIntent = /新建|新项目|新片|新短片|新视频|重新做|重做|换个主题|完整项目|整个短片|整支片|另起/.test(text)
+    || /(?:做|来|生成|制作|创建|拍)(?:一个|一支|一条|一段)?.{0,18}(?:短片|视频|项目|片子|故事)/.test(text);
   if (/导出|交付|打包|export/.test(text)) {
     return { kind: "export", label: "导出项目", target: "export", confirmation: "export", plan: ["检查可导出内容", "整理交付文件", "生成报告"] };
   }
@@ -687,7 +693,7 @@ export function routeProjectAgentIntent(input: {
   if (/查资料|查一下|搜一下|搜索|参考.*风格|研究|((分镜|风格|镜头|节奏).{0,8}怎么做)/.test(text)) {
     return { kind: "research", label: "查资料", target: "story", confirmation: "none", plan: ["整理检索问题", "保存可用资料", "等你确认后写入项目"] };
   }
-  if (/补.*参考|生成.*参考|角色图|场景图|道具图|故事板/.test(text)) {
+  if (!referenceGenerationDisallowed && /补.*参考|生成.*参考|角色图|场景图|道具图|故事板/.test(text)) {
     return { kind: "reference", label: "生成参考", target: "assets", confirmation: "reference_generation", plan: ["判断缺少的角色、场景或道具参考", "确认生成范围", "生成后进入复核"] };
   }
   if (!text && input.hasAttachments) {

@@ -2655,7 +2655,7 @@ export function MinimalAgentPanel({
   const footerStatusCopy = composerInputUsesNextAction
     ? `识别为继续：${primaryLabel}`
     : hasComposerInput
-    ? "按发送交给 AI 导演"
+    ? `识别为：${composerIntentRoute.label}`
     : footerPrimaryUsesAgentNext
       ? `建议动作：${primaryLabel}`
       : primaryDisabled
@@ -2667,8 +2667,8 @@ export function MinimalAgentPanel({
       : "当前仍可继续改想法；生成前要先准备本地项目。"
     : text.trim()
       ? composerInputUsesNextAction
-        ? "识别为继续 · 点确认或 Cmd Enter"
-        : `识别为：${composerIntentRoute.label} · 点发送或 Cmd Enter`
+        ? "点确认或 Cmd Enter"
+        : "点发送或 Cmd Enter，交给 AI 导演整理"
       : attachments.length
         ? `${attachments.length} 个文件 · ${composerIntentRoute.plan[0]} · 点发送`
         : projectBlockedWithoutFooterResolver
