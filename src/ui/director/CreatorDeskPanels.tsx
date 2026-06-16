@@ -69,10 +69,16 @@ function missingQuestionLabel(value: string) {
 }
 
 function batchDetail(projection: CreatorDeskProjection["batchGeneration"]) {
-  if (normalizedLabel(projection.statusLabel) === "running") {
-    return `参考正在生成 · ${projection.readyCount}/${projection.plannedCount} 张可看`;
+  const plannedCount = Math.max(projection.plannedCount, projection.readyCount + projection.missingCount);
+  if (isBatchGenerationRunning(projection)) {
+    return `参考正在生成 · ${projection.readyCount}/${plannedCount} 张可看`;
   }
-  return `${projection.readyCount}/${projection.plannedCount} 张可看 · ${projection.missingCount} 张缺少`;
+  return `${projection.readyCount}/${plannedCount} 张可看 · ${projection.missingCount} 张缺少`;
+}
+
+function isBatchGenerationRunning(projection: CreatorDeskProjection["batchGeneration"]) {
+  const normalized = normalizedLabel(projection.statusLabel);
+  return normalized === "running" || normalized.includes("生成中") || normalized.includes("正在生成");
 }
 
 function frameStatusLabel(status: CreatorFrameStatus) {
@@ -191,6 +197,43 @@ function primaryActionLabel(value: string) {
   if (normalized.includes("导出")) return "查看交付";
   if (normalized.includes("写")) return "写故事";
   return value || "继续";
+}
+
+function uniqueShotCount(items: Array<{ shotIds?: string[] }>) {
+  const ids = new Set<string>();
+  for (const item of items) {
+    for (const shotId of item.shotIds || []) ids.add(shotId);
+  }
+  return ids.size;
+}
+
+function creatorAssetSummaryForView(assetReconciliation: CreatorDeskProjection["assetReconciliation"]) {
+  if (!assetReconciliation || !assetReconciliation.summary.total) return "素材会由 AI 自动判断用途";
+  const visibleItems = assetReconciliation.items.filter((item) => item.status !== "unused");
+  const missingItems = visibleItems.filter((item) => item.status === "missing");
+  const reviewCount = assetReconciliation.summary.needsReview + assetReconciliation.summary.ambiguous;
+  const matchedCount = assetReconciliation.summary.matched;
+  const missingShotCount = uniqueShotCount(missingItems);
+  if (missingItems.length > 0) {
+    return missingShotCount > 0
+      ? `${missingShotCount} 个镜头待准备参考`
+      : "有参考待准备";
+  }
+  if (reviewCount > 0) return `${reviewCount} 个素材待确认`;
+  if (matchedCount > 0) return `${matchedCount} 个素材已匹配`;
+  if (assetReconciliation.summary.merged > 0) return "细节已放进主素材";
+  return "素材已就绪";
+}
+
+function creatorAssetNextActionForView(
+  assetReconciliation: CreatorDeskProjection["assetReconciliation"],
+  batchGeneration: CreatorDeskProjection["batchGeneration"],
+) {
+  if (!assetReconciliation || !assetReconciliation.summary.total) return "继续整理";
+  if (isBatchGenerationRunning(batchGeneration)) return "正在生成参考";
+  if (assetReconciliation.summary.missing > 0) return "点确认后准备参考";
+  if (assetReconciliation.summary.needsReview + assetReconciliation.summary.ambiguous > 0) return "点开确认素材";
+  return assetReconciliation.nextAction;
 }
 
 function agentFlowActiveStep(stage: CreatorDeskProjection["agentStage"]["stage"]): AgentFlowStepId {
@@ -467,6 +510,8 @@ export function CreatorDeskPanels({
   const { preflight } = projection;
   const assetReconciliation = projection.assetReconciliation;
   const assetReconciliationItems = assetReconciliationItemsForView(assetReconciliation?.items || []);
+  const assetReconciliationSummary = creatorAssetSummaryForView(assetReconciliation);
+  const assetReconciliationNextAction = creatorAssetNextActionForView(assetReconciliation, batchGeneration);
   const actionableCount = pendingCount(reviewTray);
   const videoWaiting = videoWaitingCount(videoGeneration);
   const currentVideoPosition = videoPosition(videoGeneration);
@@ -649,8 +694,8 @@ export function CreatorDeskPanels({
         >
           <summary>
             <span>素材匹配</span>
-            <strong>{assetReconciliation.creatorSummary}</strong>
-            <small>{assetReconciliation.nextAction}</small>
+            <strong>{assetReconciliationSummary}</strong>
+            <small>{assetReconciliationNextAction}</small>
           </summary>
           <div className="creator-asset-reconciliation-list">
             {assetReconciliationItems.map((item) => (

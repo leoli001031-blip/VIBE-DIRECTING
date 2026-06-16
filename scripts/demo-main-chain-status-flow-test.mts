@@ -130,6 +130,16 @@ assert.match(status.doing, /2 张缺少/, "running reference generation should s
 assert.match(factValue(status, "参考"), /生成中.*1\/3 张可看/, "reference facts should carry progress");
 
 status = view({
+  runtimeState: runtimeState({ shotCount: 3, summary: { locked: 0, needsReview: 0, missing: 3 } }),
+  folderReady: true,
+  projectReady: true,
+  referenceGenerationAction: { status: "running", message: "参考正在生成。" },
+  referenceBatch: { plannedCount: 1, readyCount: 0, missingCount: 3, retryCount: 0 },
+});
+assert.match(status.doing, /0\/3 张可看/, "reference generation progress should not undercount planned images when missing exceeds planned");
+assert.match(factValue(status, "参考"), /生成中.*0\/3 张可看/, "reference facts should use the same normalized reference progress");
+
+status = view({
   runtimeState: runtimeState({ shotCount: 3, summary: { locked: 0, needsReview: 3, missing: 0 } }),
   folderReady: true,
   projectReady: true,

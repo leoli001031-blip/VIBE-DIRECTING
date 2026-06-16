@@ -58,6 +58,15 @@ const NewVideoStart = lazy(() =>
   })),
 );
 
+function creatorReferenceGapCount(creatorDesk?: CreatorDeskProjection) {
+  const missingItems = creatorDesk?.assetReconciliation?.items.filter((item) => item.status === "missing") || [];
+  const shotIds = new Set<string>();
+  for (const item of missingItems) {
+    for (const shotId of item.shotIds || []) shotIds.add(shotId);
+  }
+  return shotIds.size || creatorDesk?.assetReconciliation?.summary.missing;
+}
+
 function EmptyProjectSurface({
   title,
   detail,
@@ -364,6 +373,8 @@ export function DirectorMode({
     videoSendAction: sessionVideoSendAction,
     videoStage: creatorDesk?.videoStage,
     referenceBatch: creatorDesk?.batchGeneration,
+    framePlan: creatorDesk?.framePlan,
+    referenceGapCount: creatorReferenceGapCount(creatorDesk),
     agentStage: creatorDesk?.agentStage,
     agentCommand: visibleAgentCommand,
     newVideoStatus,
@@ -372,6 +383,8 @@ export function DirectorMode({
   }), [
     creatorDesk?.agentStage,
     creatorDesk?.batchGeneration,
+    creatorDesk?.framePlan,
+    creatorDesk?.assetReconciliation,
     creatorDesk?.videoStage,
     directorView,
     endFrameAction,

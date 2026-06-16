@@ -3116,9 +3116,9 @@
   --studio-accent-soft: #e4f0ec;
   --studio-warn: #a06a25;
   --studio-danger: #b85c4d;
-  --director-bottom-composer-max-height: min(28vh, 220px);
-  --director-bottom-composer-space: clamp(158px, 32vh, 248px);
-  --director-bottom-composer-scroll-space: clamp(190px, 36vh, 280px);
+  --director-bottom-composer-max-height: min(34vh, 300px);
+  --director-bottom-composer-space: clamp(190px, 38vh, 328px);
+  --director-bottom-composer-scroll-space: clamp(220px, 42vh, 360px);
   background: var(--studio-bg);
   color: var(--studio-ink);
 }
@@ -7482,13 +7482,16 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 }
 
 .director-bottom-composer .minimal-agent-input {
+  display: grid;
+  grid-template-rows: auto minmax(30px, 1fr) auto;
+  gap: 6px;
   position: sticky;
   bottom: 0;
   z-index: 5;
   border-radius: 11px;
   background: rgba(255, 255, 255, 0.72);
   box-shadow: 0 -10px 22px rgba(255, 252, 246, 0.8);
-  max-height: 82px;
+  max-height: 132px;
   overflow-x: hidden;
   overflow-y: auto;
   padding: 8px 10px;
@@ -8745,6 +8748,22 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   gap: 8px 12px;
 }
 
+.minimal-director.composer-only .new-video-unified-composer,
+.new-video-bottom-portal .new-video-unified-composer {
+  grid-template-rows: minmax(52px, 1fr) auto auto auto auto;
+}
+
+.minimal-director.composer-only .new-video-composer-bar,
+.new-video-bottom-portal .new-video-composer-bar,
+.director-bottom-composer .minimal-agent-input-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  border-top: 1px solid rgba(221, 208, 192, 0.72);
+  background: rgba(255, 252, 246, 0.96);
+  padding-top: 8px;
+}
+
 .minimal-agent-file-button,
 .new-video-composer-bar > .new-video-asset-action:not(.new-video-primary-action) {
   grid-area: file;
@@ -8916,8 +8935,10 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+  max-height: 42px;
   min-width: 0;
   margin-top: 10px;
+  overflow-y: auto;
 }
 
 .new-video-composer-attachments span {

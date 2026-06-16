@@ -61,6 +61,10 @@ type ReferenceBatchProgressLike = {
   retryCount?: number;
 };
 
+type FramePlanProgressLike = {
+  missingCount?: number;
+};
+
 type NewVideoEntryStatusLike = {
   status: "empty" | "drafting" | "planning" | "ready" | "blocked" | "confirmed";
   title: string;
@@ -93,6 +97,8 @@ export interface ProjectStatusViewModelInput {
   videoSendAction?: VideoActionState;
   videoStage?: CreatorVideoStageLike;
   referenceBatch?: ReferenceBatchProgressLike;
+  framePlan?: FramePlanProgressLike;
+  referenceGapCount?: number;
   agentStage?: CreatorAgentStageLike;
   agentCommand?: CreatorAgentCommandLike;
   newVideoStatus?: NewVideoEntryStatusLike;
@@ -188,9 +194,9 @@ function safeCount(value: unknown) {
 
 function referenceProgressLabel(batch?: ReferenceBatchProgressLike) {
   if (!batch) return "";
-  const planned = safeCount(batch.plannedCount);
   const ready = safeCount(batch.readyCount);
   const missing = safeCount(batch.missingCount);
+  const planned = Math.max(safeCount(batch.plannedCount), ready + missing);
   const retry = safeCount(batch.retryCount);
   const parts = [
     planned > 0 ? `${ready}/${planned} 张可看` : ready > 0 ? `${ready} 张可看` : "",
@@ -199,6 +205,12 @@ function referenceProgressLabel(batch?: ReferenceBatchProgressLike) {
   ].filter(Boolean);
   if (parts.length) return parts.join(" · ");
   return batch.detail?.trim() || batch.statusLabel?.trim() || "";
+}
+
+function missingCountFromReferenceProgress(progress: string) {
+  const match = progress.match(/(\d+)\s*张缺少/u);
+  if (!match) return 0;
+  return safeCount(Number(match[1]));
 }
 
 function referenceFactLabel(
@@ -228,11 +240,18 @@ function assetWaitingLabel(input: ProjectStatusViewModelInput) {
   const missing = visualMemory.summary.missing;
   const review = visualMemory.summary.needsReview;
   const progress = referenceProgressLabel(input.referenceBatch);
+  const displayedMissing = Math.max(
+    safeCount(input.referenceGapCount),
+    safeCount(input.framePlan?.missingCount),
+    safeCount(input.referenceBatch?.missingCount),
+    missingCountFromReferenceProgress(progress),
+    missing,
+  );
   if (input.referenceGenerationAction?.status === "running") return progress ? `参考正在生成：${progress}` : "参考图正在生成";
   if (input.referenceGenerationAction?.status === "blocked") return actionMessage(input.referenceGenerationAction, "参考生成被拦住");
-  if (input.referenceGenerationAction?.status === "ready" && missing > 0) return "角色、场景、道具或故事板参考待生成";
+  if (input.referenceGenerationAction?.status === "ready" && displayedMissing > 0) return `还缺 ${displayedMissing} 张画面参考`;
   if (review > 0) return "参考待看";
-  if (missing > 0) return "角色、场景、道具或故事板参考待生成";
+  if (displayedMissing > 0) return `还缺 ${displayedMissing} 张画面参考`;
   return "";
 }
 

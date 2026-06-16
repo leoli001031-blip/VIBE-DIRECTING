@@ -272,7 +272,7 @@ function assertUnifiedProjectStatusVideoStage() {
     },
   });
   assert(localProjectMissingReferenceStatus.stage === "参考待生成", "local projects with missing references should prioritize generating references when generation is ready");
-  assert(localProjectMissingReferenceStatus.doing === "角色、场景、道具或故事板参考待生成", "missing reference state should explain the creative reference categories");
+  assert(localProjectMissingReferenceStatus.doing === "还缺 3 张画面参考", "missing reference state should explain the creative reference gap");
   assert(localProjectMissingReferenceStatus.nextAction === "生成参考", "local project next action should generate references before routing to review");
 
   const planOnlyMissingReferenceStatus = buildProjectStatusViewModel({
