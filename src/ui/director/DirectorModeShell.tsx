@@ -339,11 +339,11 @@ export function DirectorMode({
     if (command.kind === "submit_video" && !videoPermissionAllowsSend) {
       return {
         ...command,
-        label: "允许发视频",
-        summary: "先打开视频发送权限。",
+        label: "确认发送视频",
+        summary: "确认后提交视频，按串行队列执行。",
         detail: videoPermissionContract.mode === "plan_only"
-          ? "当前工作范围是先整理。允许发视频后，再由你确认发送。"
-          : "当前先做参考。允许发视频后，再由你确认发送。",
+          ? "当前工作范围是先整理。确认后会提交视频。"
+          : "当前先做参考。确认后会提交视频。",
       };
     }
     return command;

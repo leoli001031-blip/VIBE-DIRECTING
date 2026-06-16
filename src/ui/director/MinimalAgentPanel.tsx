@@ -1433,7 +1433,7 @@ export function MinimalAgentPanel({
     : videoPermissionBlockedByProject
       ? "先保存项目"
     : videoPermissionBlockedByContract
-      ? "允许发视频"
+      ? "确认发送视频"
     : videoAlreadySent
       ? "已发送"
       : "发送视频";
@@ -1683,7 +1683,16 @@ export function MinimalAgentPanel({
     if (!videoCanResume && videoPermissionBlockedByContract) {
       const nextContract = agentVideoPermissionForMode("video_allowed");
       updateVideoPermissionContract(nextContract);
-      setStatus("已允许发视频，再点发送视频继续。");
+      if (videoBusy || !onSendSeedanceVideo) {
+        setStatus(videoBusy ? "视频任务正在处理。" : "当前还不能发送视频。");
+        return;
+      }
+      if (videoSendAction.disabled || !videoSendAction.ready || !videoSendAction.keyConfigured || videoAlreadySent) {
+        setStatus(videoSendAction.message || "视频还不能发送。");
+        return;
+      }
+      setStatus("已确认，开始发送视频。");
+      void onSendSeedanceVideo({ videoPermissionContract: nextContract });
       return;
     }
     if (videoBusy || !onSendSeedanceVideo) {
