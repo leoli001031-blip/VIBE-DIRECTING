@@ -7311,6 +7311,7 @@
 .app-shell.minimal-shell:has(.project-control-popover) .new-video-bottom-portal,
 .app-shell.minimal-shell:has(.project-control-popover) .minimal-director.composer-only .new-video-unified-composer,
 body:has(.project-control-popover) .director-bottom-composer,
+body:has(.project-control-popover) .new-video-unified-composer,
 body:has(.project-control-popover) .minimal-director.composer-only .new-video-unified-composer,
 body:has(.project-control-popover) .new-video-bottom-portal {
   opacity: 0;
