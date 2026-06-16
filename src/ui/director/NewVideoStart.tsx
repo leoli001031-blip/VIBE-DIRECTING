@@ -1531,7 +1531,7 @@ export function NewVideoStart({
       return {
         status: "planning",
         title: "AI 正在拆镜头",
-        detail: storyboardPlanningElapsedSeconds >= 8
+        detail: storyboardPlanningElapsedSeconds >= 30
           ? `正在整理故事、节奏和镜头。已等待 ${storyboardPlanningElapsedSeconds} 秒。`
           : "正在整理故事、节奏和镜头，不会生成。",
         nextAction: "等草案出来后复核",
@@ -2317,7 +2317,7 @@ export function NewVideoStart({
       ? "这是本地初步识别，可继续让 AI 拆分。"
       : "");
   const storyboardPlanningRunningDetail = storyboardPlanningRunning
-    ? `${storyboardPlanningDetail || "正在整理内容。"} ${storyboardPlanningElapsedSeconds >= 8
+    ? `${storyboardPlanningDetail || "正在整理内容。"} ${storyboardPlanningElapsedSeconds >= 30
       ? `已等待 ${storyboardPlanningElapsedSeconds} 秒，网络慢时可能要 1-3 分钟。`
       : "先整理分镜，不会生成。"}`
     : storyboardPlanningDetail;

@@ -198,6 +198,7 @@ assert(!/整理草案/.test(newVideoStartSource), "new-video composer should not
 assert(/和 AI 导演说/.test(newVideoStartSource), "new-video screen should keep the unified creator input language");
 assert(/发送/.test(newVideoStartSource), "new-video composer should expose a single send action");
 assert(/已等待/.test(newVideoStartSource), "AI planning should show elapsed waiting feedback instead of a silent spinner");
+assert(/storyboardPlanningElapsedSeconds >= 30[\s\S]*已等待/.test(newVideoStartSource), "AI planning should only show exact elapsed seconds after a meaningful wait");
 assert(/不会生成/.test(newVideoStartSource), "AI planning waiting copy should make the safe boundary clear");
 assert(/故事板参考/.test(creatorDeskPanelsSource), "creator desk should surface storyboard references as creator-facing review items");
 
