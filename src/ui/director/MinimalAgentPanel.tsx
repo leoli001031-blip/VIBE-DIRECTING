@@ -2270,6 +2270,18 @@ export function MinimalAgentPanel({
   const hasPreparedComposerInput = Boolean(preparedContext?.userIntent?.trim() || hasComposerInput);
   const canPreviewPrototypeDemo = Boolean(workflow && onPreviewPrototypeAgentDemo && hasPreparedComposerInput && !canConfirmFeedback && !readOnlyStatusInspection);
   const canOfferFooterDirectAction = !hasComposerInput && !isPreparingPlan && (!workflow || planPhase === "confirmed");
+  const hasReferenceItemsToReview = runtimeState.visualMemory.summary.needsReview > 0;
+  const referenceReviewFooterAction = hasReferenceItemsToReview
+    ? {
+        label: "去参考复核",
+        disabled: !onOpenResultView,
+        disabledReason: "当前还不能切换到参考页。",
+        perform: () => {
+          onOpenResultView?.("assets");
+          setStatus("先确认这些参考能不能用。");
+        },
+      }
+    : undefined;
   const referenceFooterAction = showRealSampleAction && realSampleAction?.status !== "verified"
     ? {
         label: realSampleLabel,
@@ -2362,6 +2374,7 @@ export function MinimalAgentPanel({
         : openViewFooterAction || waitFooterAction;
   const fallbackFooterDirectAction =
     videoResumeFooterAction
+    || referenceReviewFooterAction
     || referenceFooterAction
     || endFrameFooterAction
     || videoSubmitFooterAction;

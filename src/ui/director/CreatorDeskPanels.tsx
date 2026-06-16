@@ -349,8 +349,7 @@ function reviewItemTargetView(item: CreatorReviewTrayItem): DirectorView {
 }
 
 function reviewPromptSummary(item: CreatorReviewTrayItem) {
-  if (item.promptText) return item.promptText;
-  if (item.promptPath || item.promptHash) return "有生成说明，可展开查看。";
+  if (item.promptText || item.promptPath || item.promptHash) return "生成说明已记录在项目里。这里先只看画面是否可用。";
   return "还没有生成说明。";
 }
 

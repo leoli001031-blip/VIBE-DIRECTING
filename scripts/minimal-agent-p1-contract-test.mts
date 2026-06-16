@@ -57,6 +57,7 @@ const directorAgentActionSource = stripComments(readText("src/core/directorAgent
 const directorModeSource = stripComments(readText("src/ui/director/DirectorModeShell.tsx"));
 const image2AssetActionSource = stripComments(readText("src/ui/director/useImage2AssetGenerationAction.ts"));
 const seedanceVideoSubmitActionSource = stripComments(readText("src/ui/director/useSeedanceVideoSubmitAction.ts"));
+const creatorDeskPanelsSource = stripComments(readText("src/ui/director/CreatorDeskPanels.tsx"));
 const stylesSource = stripComments(readText("src/styles/director.css"));
 
 const suggestedIntentFromStatusInspection = findFunctionBody(minimalAgentPanelSource, "suggestedIntentFromStatusInspection");
@@ -122,6 +123,7 @@ const intentWithQaRevisionHint = findFunctionBody(minimalAgentPanelSource, "inte
 const revisePlan = findFunctionBody(minimalAgentPanelSource, "revisePlan");
 const agentActionFieldLabel = findFunctionBody(minimalAgentPanelSource, "agentActionFieldLabel");
 const preparedSelectionContextChips = findFunctionBody(minimalAgentPanelSource, "preparedSelectionContextChips");
+const reviewPromptSummary = findFunctionBody(creatorDeskPanelsSource, "reviewPromptSummary");
 
 assert(/setText\(""\)/.test(prepareChange), "MinimalAgentPanel must clear text after sending");
 assert(/setAttachments\(\[\]\)/.test(prepareChange), "MinimalAgentPanel must clear attachments after sending");
@@ -463,6 +465,11 @@ assert(/const footerPrimaryUsesAgentNext = \(!hasComposerInput[\s\S]*primaryLabe
 assert(/function handleSend\(\)[\s\S]*void prepareChange\(\)/.test(minimalAgentPanelSource), "fixed send button must route typed text or attachments through the Agent planner");
 assert(/className="minimal-agent-send-button"[\s\S]*onClick=\{hasComposerInput && !composerInputUsesNextAction \? handleSend : handleNext\}/.test(minimalAgentPanelSource), "bottom composer must render one primary control that sends new text or continues recognized next-action intent");
 assert(!/className="minimal-agent-suggested-button"/.test(minimalAgentPanelSource), "bottom composer must not render a second suggested-action button");
+assert(/const hasReferenceItemsToReview = runtimeState\.visualMemory\.summary\.needsReview > 0/.test(minimalAgentPanelSource), "bottom composer must detect generated references waiting for review");
+assert(/const referenceReviewFooterAction = hasReferenceItemsToReview/.test(minimalAgentPanelSource), "bottom composer must expose reference review as a first-class next action");
+assert(/videoResumeFooterAction[\s\S]*\|\| referenceReviewFooterAction[\s\S]*\|\| referenceFooterAction/.test(minimalAgentPanelSource), "bottom composer must prioritize reviewing generated references before asking to generate more references");
+assert(!/return item\.promptText/.test(reviewPromptSummary), "reference review details must not expose raw provider prompts in the main UI");
+assert(/生成说明已记录在项目里/.test(reviewPromptSummary), "reference review details should summarize prompt evidence in creator-facing language");
 assert(/aria-label="现在能做"/.test(minimalAgentPanelSource), "Agent details must show a compact current capability list");
 assert(/visibleAgentCapabilityItems\.map/.test(minimalAgentPanelSource), "Agent capability list must be rendered from live availability");
 assert(/const attentionItems = items\.filter\(\(item\) => item\.tone !== "ready"\)/.test(agentCapabilityGlanceItems), "Agent capability glance should prioritize blocked or waiting capabilities");
