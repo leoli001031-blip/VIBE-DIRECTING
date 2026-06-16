@@ -210,13 +210,13 @@ function agentFlowTone(step: AgentFlowStepId, projection: CreatorDeskProjection)
   return order < activeOrder ? "done" : "waiting";
 }
 
-function agentFlowDetail(step: AgentFlowStepId, projection: CreatorDeskProjection) {
+function agentFlowDetail(step: AgentFlowStepId, projection: CreatorDeskProjection, referenceSummary: string) {
   if (step === "describe") return projection.scriptPlanner.shotCount ? "已收到" : "等你输入";
   if (step === "plan") return projection.scriptPlanner.shotCount ? `${projection.scriptPlanner.shotCount} 镜头` : "待拆分";
   if (step === "reference") {
-    if (projection.preflight.status === "needs_references") return projection.preflight.referenceSummary;
+    if (projection.preflight.status === "needs_references") return referenceSummary;
     if (projection.preflight.status === "needs_review") return "先看画面";
-    return projection.preflight.referenceSummary;
+    return referenceSummary;
   }
   if (step === "video") {
     if (projection.videoStage.status === "not_submitted") return projection.preflight.status === "ready" ? "可发送" : "参考后";
@@ -232,11 +232,11 @@ function skillPillTone(value: string) {
   return "neutral";
 }
 
-function agentSkillPills(projection: CreatorDeskProjection) {
+function agentSkillPills(projection: CreatorDeskProjection, referenceSummary: string) {
   const pills = [
     projection.preflight.modeSummary,
     projection.scriptPlanner.shotCount ? `故事 ${projection.scriptPlanner.shotCount} 镜头` : "先拆故事",
-    projection.preflight.referenceSummary,
+    referenceSummary,
   ];
   if (projection.videoStage.status !== "not_submitted") pills.push(projection.videoStage.generation.statusLabel);
   return pills.filter(Boolean).slice(0, 4);
@@ -529,6 +529,31 @@ export function CreatorDeskPanels({
           : displayAgentCommand.kind === "open_review"
             ? "先检查画面；也可以点下方卡片直接复核。"
           : `点下方「${primaryActionLabel(nextActionCopy)}」继续。`;
+  const displayCurrentTask = referenceGenerationBusy
+    ? {
+        ...projectObservation.currentTask,
+        missing: "参考正在生成，不需要重复操作。",
+        plan: "等待参考生成完成，完成后进入复核。",
+        confirmation: {
+          kind: "none" as const,
+          required: false,
+          label: "正在生成参考",
+          detail: "不用重复点击，完成后去参考页复核。",
+        },
+      }
+    : projectObservation.currentTask;
+  const displayPreflightReferenceSummary = referenceGenerationBusy
+    ? "参考生成中"
+    : displayPreflight.referenceSummary;
+  const displayPreflightChecks = referenceGenerationBusy
+    ? displayPreflight.checks.map((check) => check.id === "references"
+      ? {
+          ...check,
+          state: "waiting" as const,
+          detail: "正在生成参考，完成后进入复核",
+        }
+      : check)
+    : displayPreflight.checks;
   const showAssetReconciliation = Boolean(assetReconciliation && (
     assetReconciliation.summary.matched > 0
     || assetReconciliation.summary.needsReview > 0
@@ -553,23 +578,23 @@ export function CreatorDeskPanels({
       <section className="creator-agent-current-task" aria-label="AI 导演当前任务">
         <div>
           <span>理解</span>
-          <strong>{projectObservation.currentTask.understanding}</strong>
+          <strong>{displayCurrentTask.understanding}</strong>
           <small>{projectObservation.story.detail}</small>
         </div>
         <div>
           <span>缺口</span>
-          <strong>{projectObservation.currentTask.missing}</strong>
+          <strong>{displayCurrentTask.missing}</strong>
           <small>参考状态：{projectObservation.references.label}</small>
         </div>
         <div>
           <span>准备</span>
-          <strong>{projectObservation.currentTask.plan}</strong>
+          <strong>{displayCurrentTask.plan}</strong>
           <small>当前意图：{defaultIntentRoute.label}</small>
         </div>
-        <div className={confirmationTone(projectObservation.currentTask.confirmation.required)}>
+        <div className={confirmationTone(displayCurrentTask.confirmation.required)}>
           <span>确认</span>
-          <strong>{projectObservation.currentTask.confirmation.label}</strong>
-          <small>{projectObservation.currentTask.confirmation.detail}</small>
+          <strong>{displayCurrentTask.confirmation.label}</strong>
+          <small>{displayCurrentTask.confirmation.detail}</small>
         </div>
       </section>
       {projectInbox.totalCount > 0 && (
@@ -706,7 +731,7 @@ export function CreatorDeskPanels({
         <summary>
           <span>AI 导演怎么判断</span>
           <strong>{displayPreflight.modeSummary}</strong>
-          <small>{displayPreflight.referenceSummary}</small>
+          <small>{displayPreflightReferenceSummary}</small>
         </summary>
         <div className="creator-agent-flow" aria-label="AI 导演流程">
           {agentFlowSteps.map((step) => {
@@ -714,7 +739,7 @@ export function CreatorDeskPanels({
             return (
               <div key={step.id} className={tone}>
                 <span>{step.label}</span>
-                <small>{agentFlowDetail(step.id, projection)}</small>
+                <small>{agentFlowDetail(step.id, projection, displayPreflightReferenceSummary)}</small>
               </div>
             );
           })}
@@ -722,7 +747,7 @@ export function CreatorDeskPanels({
         <div className="creator-agent-skills" aria-label="AI 导演选择的做法">
           <span>AI 导演选择的做法</span>
           <div>
-            {agentSkillPills(projection).map((pill) => (
+            {agentSkillPills(projection, displayPreflightReferenceSummary).map((pill) => (
               <small key={pill} className={skillPillTone(pill)}>{pill}</small>
             ))}
           </div>
@@ -731,10 +756,10 @@ export function CreatorDeskPanels({
           <div>
             <span>当前进度</span>
             <strong>{displayPreflight.modeSummary}</strong>
-            <small>{displayPreflight.referenceSummary}</small>
+            <small>{displayPreflightReferenceSummary}</small>
           </div>
           <div>
-            {displayPreflight.checks.map((check) => (
+            {displayPreflightChecks.map((check) => (
               <small key={check.id} className={check.state}>
                 <b>{check.label}</b>
                 {check.detail}

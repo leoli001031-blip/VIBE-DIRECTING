@@ -521,7 +521,7 @@ checkMessage(requireWithin(directorMode, /storyboardProjectPlanInput=\{storyboar
 const creatorDeskPanelCopy = extractStringLiterals(creatorDeskPanelsSource);
 checkMessage(requireWithin(creatorDeskPanelsSource, /故事[\s\S]*画面[\s\S]*复核列表/, "CreatorDeskPanels must expose creator-facing planner, preparation, and review panels"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /视频生成/, "CreatorDeskPanels must expose the video generation panel"));
-checkMessage(requireWithin(creatorDeskPanelsSource, /AI 导演怎么判断[\s\S]*displayPreflight\.modeSummary[\s\S]*displayPreflight\.referenceSummary/, "CreatorDeskPanels must expose one Agent reasoning disclosure with mode/reference summary"));
+checkMessage(requireWithin(creatorDeskPanelsSource, /AI 导演怎么判断[\s\S]*displayPreflight\.modeSummary[\s\S]*displayPreflightReferenceSummary/, "CreatorDeskPanels must expose one Agent reasoning disclosure with mode/reference summary"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /完整项目细节[\s\S]*creator-desk-detail-grid/, "CreatorDeskPanels must nest full project details behind the Agent reasoning disclosure"));
 checkMessage(requireWithin(creatorDeskPanelsSource, /displayPreflight\.checks\.map/, "CreatorDeskPanels must render preflight checks from the shared projection"));
 checkMessage(requireWithin(creatorDeskProjection, /const agentStage = buildCreatorAgentStage/, "creator desk projection must expose a single Agent stage for the primary next action"));
