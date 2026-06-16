@@ -42,6 +42,7 @@ function normalizedLabel(value: string) {
 
 function reviewStatusLabel(value: string) {
   const normalized = normalizedLabel(value);
+  if (normalized === "running") return "生成中";
   if (normalized === "needs_review") return reviewLabels.needs_review;
   if (normalized === "missing") return reviewLabels.missing;
   if (normalized === "retry") return reviewLabels.retry;
@@ -68,6 +69,9 @@ function missingQuestionLabel(value: string) {
 }
 
 function batchDetail(projection: CreatorDeskProjection["batchGeneration"]) {
+  if (normalizedLabel(projection.statusLabel) === "running") {
+    return `参考正在生成 · ${projection.readyCount}/${projection.plannedCount} 张可看`;
+  }
   return `${projection.readyCount}/${projection.plannedCount} 张可看 · ${projection.missingCount} 张缺少`;
 }
 

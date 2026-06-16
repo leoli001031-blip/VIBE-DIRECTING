@@ -257,6 +257,8 @@ const referenceRunningProjection = buildCreatorDeskProjection({
 });
 assert(referenceRunningProjection.agentCommand.kind === "wait_references", "running reference generation should disable the primary Agent command as a wait state");
 assert(referenceRunningProjection.agentCommand.label === "等待参考", "running reference generation should not expose another generate button");
+assert(referenceRunningProjection.batchGeneration.statusLabel === "Running", "running reference generation should show a generation-in-progress visual state");
+assert(referenceRunningProjection.batchGeneration.missingCount === 0, "running reference generation should not look like a missing-reference blocker");
 
 const partialRelayProjection = buildCreatorDeskProjection({
   runtimeState: lockedRuntimeState,

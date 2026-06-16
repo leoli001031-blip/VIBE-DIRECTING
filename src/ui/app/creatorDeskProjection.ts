@@ -1126,15 +1126,15 @@ export function buildCreatorDeskProjection({
       missingQuestions,
     },
     batchGeneration: {
-      statusLabel: batch
+      statusLabel: image2BatchState.status === "running"
+        ? "Running"
+        : batch
         ? effectiveReadyCount > 0
           ? "Needs review"
           : effectiveBlockedCount > 0
             ? "Missing"
             : "Approved"
-        : image2BatchState.status === "running"
-          ? "Needs review"
-          : "Missing",
+        : "Missing",
       detail: batch
         ? `${effectiveReadyCount}/${effectivePlannedCount} ready · ${effectiveBlockedCount} missing`
         : image2BatchState.message || "Connect a project to prepare the next batch.",
