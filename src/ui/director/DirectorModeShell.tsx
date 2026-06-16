@@ -331,9 +331,9 @@ export function DirectorMode({
     if (command.kind === "generate_references" && !videoPermissionAllowsReference) {
       return {
         ...command,
-        label: "允许做参考",
-        summary: "先打开参考生成权限。",
-        detail: "当前工作范围是先整理。允许做参考后，再由你确认生成参考。",
+        label: "确认生成参考",
+        summary: "先生成参考，视频不会发送。",
+        detail: "当前工作范围是先整理。确认后只生成参考，不会发送视频。",
       };
     }
     if (command.kind === "submit_video" && !videoPermissionAllowsSend) {

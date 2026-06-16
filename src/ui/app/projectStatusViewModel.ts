@@ -164,6 +164,15 @@ function audioFactLabel(runtimeState: ProjectRuntimeState) {
   return `${dialogueShotCount} 个镜头有台词`;
 }
 
+function newVideoAgentFact(status?: NewVideoEntryStatusLike) {
+  if (!status || status.status === "empty") return "";
+  if (status.status === "planning") return "正在拆镜头";
+  if (status.status === "ready") return "确认草案";
+  if (status.status === "blocked") return "处理草案";
+  if (status.status === "confirmed") return "写入故事流";
+  return "继续描述";
+}
+
 function safeCount(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
 }
@@ -254,9 +263,11 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
   const videoTaskFacts = videoTaskFactsForStatus(videoStage);
   const audioFact = audioFactLabel(runtimeState);
   const rawAgentFact = input.agentCommand?.label?.trim() || input.agentStage?.summary?.trim() || "";
-  const agentFact = !input.folderReady && input.projectReady && /生成|提交|导出/.test(rawAgentFact)
-    ? "先保存项目"
-    : rawAgentFact;
+  const agentFact = browserDraftActive
+    ? newVideoAgentFact(input.newVideoStatus)
+    : !input.folderReady && input.projectReady && /生成|提交|导出/.test(rawAgentFact)
+      ? "先保存项目"
+      : rawAgentFact;
   const facts = [
     { label: "项目", value: input.folderReady ? folderLabel : "先写想法" },
     { label: "镜头", value: browserDraftActive && shotCount > 0 ? `草案 ${countLabel(shotCount, "个")}` : countLabel(shotCount, "个") },

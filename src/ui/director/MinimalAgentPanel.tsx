@@ -1402,7 +1402,7 @@ export function MinimalAgentPanel({
     : referenceGenerationBlockedByProject
       ? "先保存项目"
     : referenceGenerationBlockedByContract
-      ? "允许做参考"
+      ? "确认生成参考"
     : realSampleAction?.status === "needs_review"
       ? "等待复核"
     : realSampleAction?.status === "verified"
@@ -1418,7 +1418,7 @@ export function MinimalAgentPanel({
     : referenceGenerationBlockedByProject
       ? "先保存项目"
     : referenceGenerationBlockedByContract
-      ? "允许做参考"
+      ? "确认生成结束画面"
     : endFrameAction?.status === "needs_review"
       ? "等待复核"
       : endFrameAction?.status === "verified"
@@ -1607,7 +1607,21 @@ export function MinimalAgentPanel({
     if (referenceGenerationBlockedByContract) {
       const nextContract = agentVideoPermissionForMode("reference_allowed");
       updateVideoPermissionContract(nextContract);
-      setStatus("已允许做参考，再点生成参考继续。");
+      if (!realSampleAction.keyConfigured) {
+        setStatus("已确认参考权限。先在设置里连接图片服务。");
+        return;
+      }
+      if (realSampleAction.disabled || realSampleBusy || !onCreateP6RealSample) {
+        setStatus(realSampleAction.message || (realSampleBusy ? "参考正在生成。" : "当前还不能生成参考。"));
+        return;
+      }
+      if (runtimeState.visualMemory.summary.missing > 0 && onRetryMissingBatch) {
+        setStatus("已确认，正在生成参考。");
+        void onRetryMissingBatch();
+        return;
+      }
+      setStatus("已确认，正在发送参考任务。");
+      void onCreateP6RealSample({ scope: "project", videoPermissionContract: nextContract });
       return;
     }
     if (!realSampleAction.keyConfigured) {
@@ -1636,7 +1650,16 @@ export function MinimalAgentPanel({
     if (referenceGenerationBlockedByContract) {
       const nextContract = agentVideoPermissionForMode("reference_allowed");
       updateVideoPermissionContract(nextContract);
-      setStatus("已允许做参考，再点生成结束画面继续。");
+      if (!endFrameAction.keyConfigured) {
+        setStatus("已确认参考权限。先在设置里连接图片服务。");
+        return;
+      }
+      if (endFrameAction.disabled || endFrameBusy || !onCreateImage2EndFrame) {
+        setStatus(endFrameAction.message || (endFrameBusy ? "结束画面正在生成。" : "当前还不能生成结束画面。"));
+        return;
+      }
+      setStatus("已确认，正在发送结束画面任务。");
+      void onCreateImage2EndFrame();
       return;
     }
     if (!endFrameAction.keyConfigured) {
