@@ -155,7 +155,7 @@ export function MinimalTopNav({
     : canCreateProject ? createProjectTitle || "新建项目" : projectPickerDisabledCopy;
   const recentProjectItems = (recentProjects || [])
     .filter((project) => project.projectRoot.trim())
-    .slice(0, 6);
+    .slice(0, 4);
   const showWorkspaceTabs = !isEmptyProject;
   const exportDisabled = isEmptyProject || !projectFolderReady;
   const exportDisabledTitle = !projectFolderReady

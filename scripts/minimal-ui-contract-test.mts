@@ -1410,6 +1410,7 @@ checkMessage(requireWithin(minimalTopNavSource, /function\s+formatRecentProjectU
 checkMessage(requireWithin(minimalTopNavSource, /const projectFolderReady = Boolean\(projectRoot\?\.trim\(\)\)/, "top nav project folder readiness must come from the actual project root"));
 checkMessage(requireWithin(minimalTopNavSource, /projectStorageBadge[\s\S]*本地[\s\S]*未连接/, "top nav project title must expose whether the current work is local or not connected"));
 checkMessage(requireWithin(minimalTopNavSource, /projectControlStatus[\s\S]*未连接项目/, "top nav project popover must distinguish unsaved drafts from local projects"));
+checkMessage(requireWithin(minimalTopNavSource, /recentProjectItems[\s\S]*\.slice\(0,\s*4\)/, "top nav project control must keep the recent-project list short enough for demo use"));
 checkMessage(requireWithin(stylesSource, /\.project-title-storage[\s\S]*\.project-title-storage\.local[\s\S]*\.project-title-storage\.draft/, "top nav local/draft badge must have stable visual states"));
 check(!/const emptyProjectPrimary = canForgetProject/.test(minimalTopNavSource), "top nav empty-project wording must not infer local folder readiness from the close-project action");
 check(!/const projectRootLabel = compactProjectPathLabel\(projectRoot\) \|\| \(canForgetProject/.test(minimalTopNavSource), "top nav project root label must not claim a local folder is connected without projectRoot");
