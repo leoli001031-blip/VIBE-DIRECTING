@@ -2323,7 +2323,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
           outputVideoPath,
           outputVideoSha256,
           localMediaPaths: outputVideoPath ? [outputVideoPath] : [],
-          note: outputVideoPath ? "本段视频已回流，仍需复核。" : "本段已提交给即梦，等待回流。",
+	          note: outputVideoPath ? "本段视频已返回，仍需复核。" : "本段已提交给即梦，等待结果。",
         },
       });
       writeCurrentProjectRuntimeJson(relayQueueRelPath, relayQueue, source);
@@ -2445,10 +2445,10 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         resumeCommand,
         message: outputVideoPath
           ? relayQueue.autoSubmitAllowed
-            ? "本段视频已回流，下一段已准备好，可以继续提交。"
-            : "视频已回流，等待复核。"
+	            ? "本段视频已返回，下一段已准备好，可以继续提交。"
+	            : "视频已返回，等待复核。"
           : referenceSegments.length > 1
-            ? `已提交第 ${referenceSegments.findIndex((segment) => segment.id === activeSegment?.id) + 1}/${referenceSegments.length} 段；不同场景会分段处理，回来后继续下一段。`
+	            ? `已提交第 ${referenceSegments.findIndex((segment) => segment.id === activeSegment?.id) + 1}/${referenceSegments.length} 段；不同场景会分段处理，结果出来后继续下一段。`
             : "视频已提交，即梦排队中；可以稍后恢复查询。",
       };
       writeCurrentProjectRuntimeJson(reportRelPath, report, source);
@@ -2706,8 +2706,8 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
       resumeCommand,
       message: outputVideoPath
         ? relayQueue.autoSubmitAllowed
-          ? "视频已回流，下一段已准备好，可以继续提交。"
-          : "视频已回流，等待复核。"
+	          ? "视频已返回，下一段已准备好，可以继续提交。"
+	          : "视频已返回，等待复核。"
         : relayStatus === "failed"
           ? `即梦生成失败：${failureReason}`
           : "还在排队或生成中，已保留恢复查询入口。",

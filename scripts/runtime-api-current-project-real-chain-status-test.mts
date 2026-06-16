@@ -143,7 +143,7 @@ const relayQueueFixture = {
   autoSubmitAllowed: false,
   resumeCommands: [],
   items: [],
-  userSummary: "即梦正在处理当前任务，回来后会继续下一个。",
+  userSummary: "即梦正在处理当前任务，结果出来后会继续下一个。",
   notes: [],
 };
 const availableFacts = baseProjectFacts({

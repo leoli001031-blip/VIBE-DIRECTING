@@ -159,7 +159,7 @@ status = view({
       taskFacts: [
         { label: "当前段", value: "蓝光车票" },
         { label: "提交号", value: "seedance-001" },
-        { label: "下一步", value: "等待回流，稍后查询结果" },
+        { label: "下一步", value: "等待结果，稍后查询" },
       ],
     },
   },
