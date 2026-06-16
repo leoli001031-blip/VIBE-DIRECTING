@@ -409,6 +409,7 @@ function assertCreatorPanelContract() {
   const agentPanelProjectionSource = readText("src/ui/director/agentPanelProjection.ts");
   const p6RealImage2ActionSource = readText("src/ui/director/useP6RealImage2Action.ts");
   const image2AssetGenerationActionSource = readText("src/ui/director/useImage2AssetGenerationAction.ts");
+  const projectImage2ActionsSource = readText("src/core/projectImage2Actions.ts");
   const projectRealChainPanelSource = readText("src/ui/project/ProjectRealChainPanel.tsx");
   const agentPanelContractSource = `${agentPanelSource}\n${agentPanelProjectionSource}`;
   const stylesSource = `${readText("src/styles.css")}\n${readText("src/ui/project/ProjectRealChainPanel.css")}`;
@@ -568,6 +569,8 @@ function assertCreatorPanelContract() {
   assert(/loadProjectImage2BatchPlan\(runtimeProjectIdentity\)/.test(currentProjectRuntimeSurface), "current project hook must guard Image2 batch status by runtime binding identity");
   assert(/runProjectRealChainCheck\(runtimeProjectIdentity\)/.test(currentProjectRuntimeSurface), "current project hook run-check must use runtime binding identity");
   assert(/runProjectImage2BatchCheck\(runtimeProjectIdentity\)/.test(currentProjectRuntimeSurface), "current project hook Image2 check must use runtime binding identity");
+  assert(/PROJECT_IMAGE2_ASSET_GENERATION_TIMEOUT_MS\s*=\s*90_000/.test(projectImage2ActionsSource), "Image2 asset generation must have a demo-safe request timeout");
+  assert(/timeoutSignal\(PROJECT_IMAGE2_ASSET_GENERATION_TIMEOUT_MS\)[\s\S]*signal:\s*timeout\.signal[\s\S]*timeout\.clear\(\)/.test(projectImage2ActionsSource), "Image2 asset generation must abort long runtime requests and leave the button recoverable");
   assert(/rememberProjectRoot\(runtimeProjectBinding\.projectRoot\)/.test(app), "runtime-selected projects must be registered with the Electron file sandbox before local writes");
   assert(/Failed to remember runtime-selected project root/.test(app), "runtime-selected project sandbox registration must fail softly");
   assert(/projectDraftTargetForNewVideoConfirmation[\s\S]*rememberProjectRoot\(prototypeProjectDraftTarget\.projectRoot\)/.test(app), "new-video confirmation must re-register selected project folders before writing Project.vibe");

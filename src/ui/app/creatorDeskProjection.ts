@@ -141,6 +141,10 @@ function reviewableReferenceAssets(assets: AssetRecord[]) {
   return assets.filter((asset) => !isTextOnlyStyleAsset(asset));
 }
 
+function assetHasVisualMedia(asset: AssetRecord) {
+  return /\.(?:png|jpe?g|webp|gif)$/i.test(clean(asset.path));
+}
+
 function assetReviewStatus(asset: AssetRecord): CreatorReviewStatus | undefined {
   if (isTextOnlyStyleAsset(asset)) return undefined;
   return normalizedAssetReviewState(asset);
@@ -967,21 +971,25 @@ export function buildCreatorDeskProjection({
   const assetReviewItems = sortReviewItems(referenceAssets
     .map(assetReviewItem)
     .filter((item): item is CreatorReviewTrayItem => Boolean(item)), selected);
-  const generatedReferenceAssetCount = referenceAssets.filter((asset) =>
-    normalizedAssetReviewState(asset) !== "missing",
+  const visualReferenceAssetCount = referenceAssets.filter((asset) =>
+    normalizedAssetReviewState(asset) !== "missing" && assetHasVisualMedia(asset),
   ).length;
   const missingReferenceAssetCount = referenceAssets.filter((asset) =>
-    normalizedAssetReviewState(asset) === "missing",
+    normalizedAssetReviewState(asset) === "missing" || !assetHasVisualMedia(asset),
   ).length;
-  const legacyFrameBatchIsStale = generatedReferenceAssetCount > 0 && missingReferenceAssetCount === 0;
+  const legacyFrameBatchIsStale = visualReferenceAssetCount > 0 && missingReferenceAssetCount === 0;
   const noReferenceAssetsForStory = shotCount > 0
     && referenceAssets.length === 0
     && !batch?.readyCount
     && image2BatchState.status !== "running";
   const initialMissingReferenceCount = noReferenceAssetsForStory ? shotCount : 0;
-  const effectiveBlockedCount = Math.max(initialMissingReferenceCount, legacyFrameBatchIsStale ? 0 : batch?.blockedCount || 0);
-  const effectivePlannedCount = legacyFrameBatchIsStale ? referenceAssets.length : batch?.plannedCount || selected.length || shotCount;
-  const effectiveReadyCount = legacyFrameBatchIsStale ? assetReviewItems.filter((item) => item.status !== "missing").length : batch?.readyCount || 0;
+  const effectiveBlockedCount = Math.max(initialMissingReferenceCount, missingReferenceAssetCount, legacyFrameBatchIsStale ? 0 : batch?.blockedCount || 0);
+  const effectivePlannedCount = legacyFrameBatchIsStale
+    ? visualReferenceAssetCount
+    : Math.max(batch?.plannedCount || 0, visualReferenceAssetCount + missingReferenceAssetCount, selected.length || shotCount);
+  const effectiveReadyCount = legacyFrameBatchIsStale
+    ? assetReviewItems.filter((item) => item.status !== "missing" && /\.(?:png|jpe?g|webp|gif)$/i.test(clean(item.mediaPath))).length
+    : Math.min(batch?.readyCount || visualReferenceAssetCount, effectivePlannedCount);
   const retryCount = legacyFrameBatchIsStale ? 0 : batch?.retrySummary?.nextRunnableCount || batch?.retrySummary?.retryScheduled || 0;
   const missingBatchItems = !effectiveBlockedCount ? [] : batch?.items.filter((item) => item.blocked).map((item) => ({
     id: `missing_${item.shotId}`,

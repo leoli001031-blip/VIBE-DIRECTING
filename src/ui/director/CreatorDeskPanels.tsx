@@ -228,8 +228,10 @@ function creatorAssetSummaryForView(assetReconciliation: CreatorDeskProjection["
 function creatorAssetNextActionForView(
   assetReconciliation: CreatorDeskProjection["assetReconciliation"],
   batchGeneration: CreatorDeskProjection["batchGeneration"],
+  referenceGenerationBusy: boolean,
 ) {
   if (!assetReconciliation || !assetReconciliation.summary.total) return "继续整理";
+  if (referenceGenerationBusy) return "正在生成参考";
   if (isBatchGenerationRunning(batchGeneration)) return "正在生成参考";
   if (assetReconciliation.summary.missing > 0) return "点确认后准备参考";
   if (assetReconciliation.summary.needsReview + assetReconciliation.summary.ambiguous > 0) return "点开确认素材";
@@ -510,14 +512,14 @@ export function CreatorDeskPanels({
   const { preflight } = projection;
   const assetReconciliation = projection.assetReconciliation;
   const assetReconciliationItems = assetReconciliationItemsForView(assetReconciliation?.items || []);
-  const assetReconciliationSummary = creatorAssetSummaryForView(assetReconciliation);
-  const assetReconciliationNextAction = creatorAssetNextActionForView(assetReconciliation, batchGeneration);
   const actionableCount = pendingCount(reviewTray);
   const videoWaiting = videoWaitingCount(videoGeneration);
   const currentVideoPosition = videoPosition(videoGeneration);
   const videoCanResume = Boolean(videoSendAction?.canResume || videoGeneration.canResume) && videoGeneration.status !== "completed";
   const videoActionRelevant = videoGeneration.status !== "completed";
   const referenceGenerationBusy = referenceGenerationAction?.status === "running";
+  const assetReconciliationSummary = creatorAssetSummaryForView(assetReconciliation);
+  const assetReconciliationNextAction = creatorAssetNextActionForView(assetReconciliation, batchGeneration, referenceGenerationBusy);
   const batchGenerationActionLabel = displayAgentCommand.kind === "generate_references"
     ? displayAgentCommand.label
     : retryLabel(batchGeneration.retryLabel);

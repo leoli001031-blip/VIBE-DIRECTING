@@ -37,8 +37,16 @@ import type {
   ProjectP6RealImage2SubmitInput,
 } from "./projectImage2Types";
 
+const PROJECT_IMAGE2_ASSET_GENERATION_TIMEOUT_MS = 90_000;
+
 async function unavailableImage2BatchState(message: string): Promise<ProjectImage2BatchUiState> {
   return { status: "unavailable", message };
+}
+
+function timeoutSignal(ms: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ms);
+  return { signal: controller.signal, clear: () => clearTimeout(timeout) };
 }
 
 export async function loadProjectImage2BatchPlan(expected?: ProjectRuntimeIdentity): Promise<ProjectImage2BatchUiState> {
@@ -248,10 +256,12 @@ export async function submitProjectImage2AssetGeneration(
     return { ok: false, status: "blocked", uiStatus: "blocked", message: "请先明确确认本次生成。" };
   }
 
+  const timeout = timeoutSignal(PROJECT_IMAGE2_ASSET_GENERATION_TIMEOUT_MS);
   try {
     return await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2AssetGenerateEndpoint, expected), {
       method: "POST",
       headers: { "content-type": "application/json" },
+      signal: timeout.signal,
       body: JSON.stringify({
         scope: input.scope,
         selectedShotId: input.selectedShotId,
@@ -265,12 +275,17 @@ export async function submitProjectImage2AssetGeneration(
     }) as ProjectImage2AssetGenerationResult;
   } catch (err) {
     console.error("submitProjectImage2AssetGeneration failed:", err);
+    const timedOut = err instanceof Error && /aborted|abort|timeout|timed out/i.test(err.message);
     return {
       ok: false,
       status: "blocked",
       uiStatus: "blocked",
-      message: runtimeErrorMessage(err, "参考生成失败。"),
+      message: timedOut
+        ? "参考生成暂时中断。已生成的内容会保留，可以稍后重试。"
+        : runtimeErrorMessage(err, "参考生成失败。"),
     };
+  } finally {
+    timeout.clear();
   }
 }
 
