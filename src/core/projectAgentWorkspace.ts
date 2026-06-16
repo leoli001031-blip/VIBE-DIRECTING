@@ -545,16 +545,16 @@ export function buildProjectFolderInboxProjection(input: BuildProjectFolderInbox
 
 function observationVideoStatus(input: BuildProjectObservationInput): ProjectObservationProjection["video"] {
   if (input.videoCompletedCount > 0 && input.videoWaitingCount === 0 && input.videoReviewCount === 0) {
-    return { status: "done", label: "视频已回流", detail: input.videoDetail || "可以预览并准备导出。" };
+    return { status: "done", label: "视频已返回", detail: input.videoDetail || "可以预览并准备导出。" };
   }
   if (input.videoReviewCount > 0) {
-    return { status: "review", label: "视频待复核", detail: "先看回流结果，再决定是否导出或重试。" };
+    return { status: "review", label: "视频待复核", detail: "先看视频结果，再决定是否导出或重试。" };
   }
   if (input.videoCanResume) {
     return { status: "recoverable", label: "可查询结果", detail: "即梦任务已提交，查询不会重复提交。" };
   }
   if (input.videoWaitingCount > 0 || /submitted|queued|generating|running|in_progress/.test(input.videoStatus)) {
-    return { status: "running", label: "视频排队中", detail: input.videoDetail || "保持串行等待回流。" };
+    return { status: "running", label: "视频排队中", detail: input.videoDetail || "保持串行等待结果。" };
   }
   if (/failed/.test(input.videoStatus)) {
     return { status: "failed", label: "视频失败", detail: input.videoDetail || "需要检查失败原因后重试。" };

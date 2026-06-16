@@ -143,6 +143,17 @@ function videoMetricLabel(projection: CreatorDeskProjection["videoGeneration"]) 
   return "未生成";
 }
 
+function hasActiveVideoTask(projection: CreatorDeskProjection["videoGeneration"]) {
+  return projection.canResume
+    || videoWaitingCount(projection) > 0
+    || projection.generatingCount > 0
+    || projection.submittedCount > 0
+    || projection.status === "recoverable"
+    || projection.status === ["que", "ued"].join("")
+    || projection.status === "generating"
+    || isVideoSentStatus(projection.status);
+}
+
 function inboxKindLabel(kind: CreatorDeskProjection["projectInbox"]["items"][number]["kind"]) {
   if (kind === "script") return "脚本";
   if (kind === "character") return "角色";
@@ -516,6 +527,7 @@ export function CreatorDeskPanels({
   const videoWaiting = videoWaitingCount(videoGeneration);
   const currentVideoPosition = videoPosition(videoGeneration);
   const videoCanResume = Boolean(videoSendAction?.canResume || videoGeneration.canResume) && videoGeneration.status !== "completed";
+  const videoTaskActive = hasActiveVideoTask(videoGeneration);
   const videoActionRelevant = videoGeneration.status !== "completed";
   const referenceGenerationBusy = referenceGenerationAction?.status === "running";
   const assetReconciliationSummary = creatorAssetSummaryForView(assetReconciliation);
@@ -558,7 +570,7 @@ export function CreatorDeskPanels({
       return itemLabel(left).localeCompare(itemLabel(right), "zh-Hans-CN");
     })
     .slice(0, 6);
-  const projectInboxDefaultOpen = projectInbox.needsReviewCount > 0 && reviewShortcutItems.length === 0;
+  const projectInboxDefaultOpen = !videoTaskActive && projectInbox.needsReviewCount > 0 && reviewShortcutItems.length === 0;
   const referenceGenerationNeedsPermission =
     displayAgentCommand.kind === "generate_references" && /允许/.test(displayAgentCommand.label);
   const creatorStepHint = projectStatusView
@@ -580,7 +592,19 @@ export function CreatorDeskPanels({
           : displayAgentCommand.kind === "open_review"
             ? "先复核参考；也可以点下方卡片直接处理。"
           : `点下方「${primaryActionLabel(nextActionCopy)}」继续。`;
-  const displayCurrentTask = referenceGenerationBusy
+  const displayCurrentTask = videoTaskActive
+    ? {
+        ...projectObservation.currentTask,
+        missing: videoCanResume ? "视频已提交，等待取回结果。" : "视频正在处理。",
+        plan: videoCanResume ? "点发送查询结果，不会重复提交。" : "等待即梦处理完成。",
+        confirmation: {
+          kind: "none" as const,
+          required: false,
+          label: videoCanResume ? "查询结果" : "等待视频",
+          detail: videoCanResume ? "查询只取回结果，不会发送新任务。" : "可以离开，稍后查询。",
+        },
+      }
+    : referenceGenerationBusy
     ? {
         ...projectObservation.currentTask,
         missing: "参考正在生成，不需要重复操作。",
@@ -625,7 +649,10 @@ export function CreatorDeskPanels({
     || assetReconciliation.summary.unused > 0
   ));
   return (
-    <section className={`creator-desk-panels compact ${displayPreflight.status} ${agentStage.stage}`} aria-label="下一步">
+    <section
+      className={`creator-desk-panels compact ${displayPreflight.status} ${agentStage.stage}`}
+      aria-label={`下一步：${nextActionCopy}`}
+    >
       <div className="creator-desk-summary">
         <div className="creator-step-copy">
           <span>AI 导演建议</span>
@@ -858,12 +885,12 @@ export function CreatorDeskPanels({
           <div className="creator-desk-panel batch-generation-panel">
             <div className="creator-panel-head">
               <span>画面</span>
-              <strong>{reviewStatusLabel(batchGeneration.statusLabel)}</strong>
+              <strong>{videoTaskActive ? "已用于视频" : reviewStatusLabel(batchGeneration.statusLabel)}</strong>
             </div>
-            <p>{batchDetail(batchGeneration)}</p>
+            <p>{videoTaskActive ? "参考已经进入本轮视频任务，结果出来后继续看。" : batchDetail(batchGeneration)}</p>
             <div className="creator-panel-metrics">
               <span><b>{batchGeneration.plannedCount}</b> 计划</span>
-              <span><b>{batchGeneration.readyCount}</b> 待看</span>
+              <span><b>{batchGeneration.readyCount}</b> {videoTaskActive ? "可用" : "待看"}</span>
               <span><b>{batchGeneration.missingCount}</b> 缺少</span>
             </div>
             <div className="batch-generation-actions">
@@ -878,9 +905,9 @@ export function CreatorDeskPanels({
           <div className="creator-desk-panel frame-plan-panel">
             <div className="creator-panel-head">
               <span>镜头画面</span>
-              <strong>{framePlan.readyCount ? `${framePlan.readyCount} 已通过` : "画面到视频"}</strong>
+              <strong>{videoTaskActive ? "视频处理中" : framePlan.readyCount ? `${framePlan.readyCount} 已通过` : "画面到视频"}</strong>
             </div>
-            <p>{framePlanBrief(framePlan)}</p>
+            <p>{videoTaskActive ? "当前段已发送给即梦；后续段会按队列继续处理。" : framePlanBrief(framePlan)}</p>
             <div className="frame-plan-list">
               {framePlan.items.length ? framePlan.items.map((item) => (
                 <div key={item.shotId} className="frame-plan-item">

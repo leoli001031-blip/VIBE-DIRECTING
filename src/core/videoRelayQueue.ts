@@ -156,7 +156,7 @@ export function buildVideoRelayQueueState(input: BuildVideoRelayQueueStateInput)
       : paused
         ? "视频生成已暂停，可以稍后继续。"
         : activeItems.length
-          ? "即梦正在处理当前任务，回来后会继续下一个。"
+          ? "即梦正在处理当前任务，结果出来后会继续下一个。"
           : nextReadyItem
             ? "已准备好提交下一个视频任务。"
             : allDone

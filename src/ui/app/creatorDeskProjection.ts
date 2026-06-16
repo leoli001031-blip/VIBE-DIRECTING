@@ -382,6 +382,14 @@ function compactTaskPath(value: string) {
   return parts.length > 3 ? parts.slice(-3).join("/") : cleanValue;
 }
 
+function creatorFacingVideoText(value: string) {
+  return clean(value)
+    .replace(/等待回流/g, "等待结果")
+    .replace(/回流结果/g, "视频结果")
+    .replace(/视频已回流/g, "视频已返回")
+    .replace(/回来后/g, "结果出来后");
+}
+
 function fact(label: string, value: unknown, tone: CreatorVideoTaskFact["tone"] = "neutral", title?: string): CreatorVideoTaskFact | undefined {
   const cleanValue = clean(value);
   if (!cleanValue) return undefined;
@@ -391,7 +399,7 @@ function fact(label: string, value: unknown, tone: CreatorVideoTaskFact["tone"] 
 function videoTaskNextAction(status: CreatorVideoGenerationStatus, options: { hasReadyNext?: boolean; canResume?: boolean }) {
   if (status === "failed") return options.hasReadyNext ? "继续下一段，失败段稍后单独补" : "看失败原因后重试或跳过";
   if (status === "recoverable") return "点下方「发送」查询结果，不会重复发送";
-  if (status === "submitted" || status === "queued" || status === "generating") return "等待回流，稍后查询结果";
+  if (status === "submitted" || status === "queued" || status === "generating") return "等待结果，稍后查询";
   if (status === "completed") return "去预览复核，确认后导出";
   return "参考和复核通过后再发送视频";
 }
@@ -552,7 +560,7 @@ function relayQueueProgressSummary(
     relayQueue.counts.failed > 0 ? `${relayQueue.counts.failed} 段失败` : "",
     relayQueue.counts.ready > 0 ? `${relayQueue.counts.ready} 段${readyLabel}` : "",
   ].filter(Boolean);
-  return parts.join(" · ") || relayQueue.userSummary;
+  return parts.join(" · ") || creatorFacingVideoText(relayQueue.userSummary);
 }
 
 function videoGenerationFromRelayQueue(relayQueue: VideoRelayQueueState | undefined): CreatorVideoGenerationProjection | undefined {
@@ -624,7 +632,7 @@ function videoGenerationFromRelayQueue(relayQueue: VideoRelayQueueState | undefi
     statusLabel: selected.label,
     detail: [
       queueSummary ? `${queueSummary}。` : "",
-      failedCount > 0 ? "" : relayQueue.userSummary || selected.detail,
+      failedCount > 0 ? "" : creatorFacingVideoText(relayQueue.userSummary) || selected.detail,
     ].filter(Boolean).join(""),
     submittedCount: status === "submitted" ? activeCount || 1 : 0,
     queuedCount: status === "queued" ? activeCount || 1 : 0,

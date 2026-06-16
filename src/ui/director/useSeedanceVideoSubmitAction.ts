@@ -25,6 +25,14 @@ const STORYBOARD_PROVIDER_ID = "apikey-fun-gpt55-responses-image";
 const SEEDANCE_SUBMIT_CONFIRM_PHRASE = "submit-seedance-video";
 const SEEDANCE_SUBMIT_UI_TIMEOUT_MS = 180_000;
 
+function creatorFacingVideoMessage(value: string | undefined, fallback: string) {
+  return (value || fallback)
+    .replace(/等待回流/g, "等待结果")
+    .replace(/回流结果/g, "视频结果")
+    .replace(/视频已回流/g, "视频已返回")
+    .replace(/回来后/g, "结果出来后");
+}
+
 export type SeedanceVideoSubmitActionStatus = "idle" | "running" | "blocked" | "submitted" | "needs_review";
 
 export type SeedanceVideoSubmitActionState = {
@@ -159,7 +167,7 @@ function seedanceActionState(result: ProjectSeedanceSubmitResult): SeedanceVideo
   if (result.videoSubmitted || result.status === "submitted" || result.status === "queued" || result.status === "generating" || result.status === "timed_out") {
     return {
       status: "submitted",
-      message: result.message || result.relayQueue?.userSummary || "视频已发送，即梦排队中；可以稍后查询结果。",
+      message: creatorFacingVideoMessage(result.message || result.relayQueue?.userSummary, "视频已发送，即梦排队中；可以稍后查询结果。"),
       qaFeedback: result.qaFeedback,
       canResume,
     };
@@ -195,7 +203,7 @@ function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): Seedanc
         status: "submitted",
         message: failedCount > 0
           ? `${failedCount} 段失败；当前段已发送，等结果出来后再处理。`
-          : relayQueue.userSummary || "即梦正在处理当前段，结果出来后会继续下一段。",
+          : creatorFacingVideoMessage(relayQueue.userSummary, "即梦正在处理当前段，结果出来后会继续下一段。"),
         canResume,
       };
     }
@@ -217,21 +225,21 @@ function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): Seedanc
     if (relayQueue.autoSubmitAllowed) {
       return {
         status: "idle",
-        message: relayQueue.userSummary || "下一段已准备好，可以继续发送。",
+        message: creatorFacingVideoMessage(relayQueue.userSummary, "下一段已准备好，可以继续发送。"),
         canResume,
       };
     }
     if (relayQueue.status === "complete") {
       return {
         status: "needs_review",
-        message: relayQueue.userSummary || "视频队列已处理完，等待复核。",
+        message: creatorFacingVideoMessage(relayQueue.userSummary, "视频队列已处理完，等待复核。"),
         canResume,
       };
     }
     if (relayQueue.status === "blocked" || relayQueue.counts.failed > 0) {
       return {
         status: "blocked",
-        message: relayQueue.userSummary || "视频队列需要处理后再继续。",
+        message: creatorFacingVideoMessage(relayQueue.userSummary, "视频队列需要处理后再继续。"),
         canResume,
       };
     }

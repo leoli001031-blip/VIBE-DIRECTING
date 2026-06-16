@@ -89,7 +89,7 @@ function assertUnifiedProjectStatusVideoStage() {
       reviewCount: 0,
       generation: {
         statusLabel: "排队中",
-        detail: "视频正在处理，可以稍后回来继续。",
+        detail: "视频正在处理，可以稍后查询结果。",
         queueSummary: "第 1/2 段「霓虹启动」排队中 · 1 段待发送",
         completedCount: 0,
         failedCount: 0,
@@ -97,7 +97,7 @@ function assertUnifiedProjectStatusVideoStage() {
         taskFacts: [
           { label: "当前段", value: "霓虹启动" },
           { label: "提交号", value: "adde7eb0" },
-          { label: "下一步", value: "等待回流，稍后查询结果" },
+          { label: "下一步", value: "等待结果，稍后查询" },
         ],
       },
     },
@@ -116,7 +116,7 @@ function assertUnifiedProjectStatusVideoStage() {
   assert(status.facts.some((fact) => fact.label === "视频" && fact.value.includes("1 段待发送")), "project facts should include the video queue summary");
   assert(status.facts.some((fact) => fact.label === "当前段" && fact.value === "霓虹启动"), "project facts should include the active video segment");
   assert(status.facts.some((fact) => fact.label === "提交号" && fact.value === "adde7eb0"), "project facts should include the video submit id");
-  assert(status.facts.some((fact) => fact.label === "下一步" && fact.value.includes("查询结果")), "project facts should include video next-step guidance");
+  assert(status.facts.some((fact) => fact.label === "下一步" && fact.value.includes("查询")), "project facts should include video next-step guidance");
   assert(status.facts.some((fact) => fact.label === "声音" && fact.value.includes("声音参考")), "project facts should include voice reference status");
   assert(status.facts.some((fact) => fact.label === "AI 导演" && fact.value === "查询视频结果"), "project facts should include the current AI director suggestion");
 
@@ -644,7 +644,7 @@ function assertCreatorPanelContract() {
   assert(/displayAgentCommand[\s\S]*nextActionCopy[\s\S]*displayAgentCommand\.label/.test(creatorDeskPanelsSource), "Creator desk summary copy must come from the boundary-aware Agent command");
   assert(/displayAgentCommand\.kind === "open_preview"/.test(creatorDeskPanelsSource), "Creator desk preview hint must follow the Agent command");
   assert(/displayAgentCommand\.kind === "open_export"/.test(creatorDeskPanelsSource), "Creator desk export hint must follow the Agent command");
-  assert(/const displayCurrentTask = referenceGenerationBusy[\s\S]*参考正在生成，不需要重复操作[\s\S]*label:\s*"正在生成参考"[\s\S]*displayCurrentTask\.confirmation/.test(creatorDeskPanelsSource), "Creator desk current task must not keep asking for reference confirmation while reference generation is already running");
+  assert(/const displayCurrentTask = videoTaskActive[\s\S]*查询结果[\s\S]*referenceGenerationBusy[\s\S]*参考正在生成，不需要重复操作[\s\S]*label:\s*"正在生成参考"[\s\S]*displayCurrentTask\.confirmation/.test(creatorDeskPanelsSource), "Creator desk current task must prioritize active video work and must not keep asking for reference confirmation while reference generation is already running");
   assert(/referenceGenerationNeedsPermission[\s\S]*等你允许后再生成参考[\s\S]*label:\s*"等待你允许"/.test(creatorDeskPanelsSource), "Creator desk current task must show permission wording when the user asked to plan only");
   assert(/const displayPreflightReferenceSummary = referenceGenerationBusy[\s\S]*参考生成中[\s\S]*displayPreflightReferenceSummary/.test(creatorDeskPanelsSource), "Creator desk preflight summary must show the same reference running state");
   assert(/const displayPreflightChecks = referenceGenerationBusy[\s\S]*state:\s*"waiting" as const[\s\S]*正在生成参考，完成后进入复核/.test(creatorDeskPanelsSource), "Creator desk preflight checks must not show stale missing-reference copy while generation is running");
