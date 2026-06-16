@@ -738,7 +738,7 @@ function buildCreatorPreflightProjection({
       : status === "needs_references"
       ? "生成参考"
       : status === "needs_review"
-        ? "检查画面"
+        ? videoNeedsReview ? "检查视频" : "复核参考"
       : status === "waiting"
         ? videoFailed ? "处理失败" : videoRecoverable ? "查询结果" : "等视频结果"
           : videoDone
@@ -888,7 +888,7 @@ function buildCreatorAgentStage(input: {
   if (input.preflight.status === "needs_review") {
     return {
       stage: "review_needed",
-      primaryAction: "检查画面",
+      primaryAction: "复核参考",
       summary: input.preflight.summary,
       detail: input.preflight.referenceSummary,
       targetView: "assets",

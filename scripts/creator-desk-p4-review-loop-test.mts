@@ -170,7 +170,7 @@ const projection = buildCreatorDeskProjection({
 });
 
 assert(projection.agentCommand.kind === "open_review", "needs-review references should route the primary Agent command to review");
-assert(projection.agentCommand.label === "检查画面", "needs-review references should use creator-facing review copy");
+assert(projection.agentCommand.label === "复核参考", "needs-review references should use creator-facing review copy");
 assert(projection.reviewTray.counts.needs_review === 4, "generated asset references and returned shot reference should all enter review");
 assert(!projection.reviewTray.items.some((item) => item.id === "stale_s02_without_receipt"), "shot previews without receipt/hash evidence should not create disabled review buttons");
 const storyboardItem = projection.reviewTray.items.find((item) => item.assetId === "storyboard_reference_s01");

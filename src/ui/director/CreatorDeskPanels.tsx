@@ -183,6 +183,7 @@ function summaryLine(projection: CreatorDeskProjection) {
 
 function primaryActionLabel(value: string) {
   const normalized = normalizedLabel(value);
+  if (normalized.includes("复核")) return "复核参考";
   if (normalized.includes("检查")) return "检查画面";
   if (normalized.includes("补齐")) return "生成参考";
   if (normalized.includes("恢复") || normalized.includes("查询")) return "查询结果";
@@ -529,7 +530,7 @@ export function CreatorDeskPanels({
           : displayAgentCommand.kind === "open_export"
             ? "点下方「发送」进入交付。"
           : displayAgentCommand.kind === "open_review"
-            ? "先检查画面；也可以点下方卡片直接复核。"
+            ? "先复核参考；也可以点下方卡片直接处理。"
           : `点下方「${primaryActionLabel(nextActionCopy)}」继续。`;
   const displayCurrentTask = referenceGenerationBusy
     ? {
