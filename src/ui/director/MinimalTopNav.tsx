@@ -240,54 +240,6 @@ export function MinimalTopNav({
                 <strong title={projectRoot}>{projectRootLabel}</strong>
                 <small title={currentProjectPath || projectSaveSummary}>保存文件：{projectSaveSummary}</small>
               </div>
-              <div className="project-control-recent">
-                <span>最近项目</span>
-                {recentProjectItems.length > 0 ? (
-                  <div className="project-control-recent-list">
-                    {recentProjectItems.map((project) => {
-                      const active = Boolean(projectRoot && project.projectRoot === projectRoot);
-                      const metaLabel = recentProjectMetaLabel(project);
-                      const removeDisabled = active || !onRemoveRecentProject;
-                      return (
-                        <div
-                          key={project.projectRoot}
-                          className={`project-control-recent-item${active ? " active" : ""}`}
-                        >
-                          <button
-                            type="button"
-                            className="project-control-recent-open"
-                            disabled={active || !onOpenRecentProject}
-                            onClick={() => performProjectControlAction(() => onOpenRecentProject?.(project))}
-                            aria-label={`打开项目 ${project.displayName || "未命名项目"}`}
-                          >
-                            <strong>
-                              <span>{project.displayName || "未命名项目"}</span>
-                              {active && <em className="project-control-current-badge">当前</em>}
-                            </strong>
-                            <small title={project.projectRoot}>{compactProjectPathLabel(project.projectRoot)}</small>
-                            {metaLabel && <small className="project-control-recent-meta">{metaLabel}</small>}
-                          </button>
-                          <button
-                            type="button"
-                            className="project-control-recent-remove"
-                            disabled={removeDisabled}
-                            title={active ? "当前项目请用退出项目，不删除本地文件" : "从列表移除，不删除本地文件"}
-                            aria-label={active ? `当前项目 ${project.displayName || "未命名项目"} 请用退出项目` : `从列表移除 ${project.displayName || "未命名项目"}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onRemoveRecentProject?.(project.projectRoot);
-                            }}
-                          >
-                            <Trash2 size={13} aria-hidden="true" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <small className="project-control-recent-empty">打开或新建项目后，会在这里快速切换。</small>
-                )}
-              </div>
               <div className="project-control-actions">
                 {onCreateProject && (
                   <button
@@ -335,6 +287,54 @@ export function MinimalTopNav({
                 )}
                 {!projectPickerDisabled && onChooseProjectRoot && !canChooseProjectRoot && (
                   <small className="project-control-action-note">打开已有项目需要桌面文件选择器；当前环境可以先继续整理草稿。</small>
+                )}
+              </div>
+              <div className="project-control-recent">
+                <span>最近项目</span>
+                {recentProjectItems.length > 0 ? (
+                  <div className="project-control-recent-list">
+                    {recentProjectItems.map((project) => {
+                      const active = Boolean(projectRoot && project.projectRoot === projectRoot);
+                      const metaLabel = recentProjectMetaLabel(project);
+                      const removeDisabled = active || !onRemoveRecentProject;
+                      return (
+                        <div
+                          key={project.projectRoot}
+                          className={`project-control-recent-item${active ? " active" : ""}`}
+                        >
+                          <button
+                            type="button"
+                            className="project-control-recent-open"
+                            disabled={active || !onOpenRecentProject}
+                            onClick={() => performProjectControlAction(() => onOpenRecentProject?.(project))}
+                            aria-label={`打开项目 ${project.displayName || "未命名项目"}`}
+                          >
+                            <strong>
+                              <span>{project.displayName || "未命名项目"}</span>
+                              {active && <em className="project-control-current-badge">当前</em>}
+                            </strong>
+                            <small title={project.projectRoot}>{compactProjectPathLabel(project.projectRoot)}</small>
+                            {metaLabel && <small className="project-control-recent-meta">{metaLabel}</small>}
+                          </button>
+                          <button
+                            type="button"
+                            className="project-control-recent-remove"
+                            disabled={removeDisabled}
+                            title={active ? "当前项目请用退出项目，不删除本地文件" : "从列表移除，不删除本地文件"}
+                            aria-label={active ? `当前项目 ${project.displayName || "未命名项目"} 请用退出项目` : `从列表移除 ${project.displayName || "未命名项目"}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onRemoveRecentProject?.(project.projectRoot);
+                            }}
+                          >
+                            <Trash2 size={13} aria-hidden="true" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <small className="project-control-recent-empty">打开或新建项目后，会在这里快速切换。</small>
                 )}
               </div>
             </div>

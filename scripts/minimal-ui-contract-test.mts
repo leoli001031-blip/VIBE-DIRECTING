@@ -791,6 +791,7 @@ checkMessage(requireWithin(minimalTopNav, /const exportDisabled = isEmptyProject
 checkMessage(requireWithin(minimalTopNav, /先保存为本地项目，再导出/, "Export disabled copy must point browser drafts to saving a local project first"));
 checkMessage(requireWithin(minimalTopNav, /createProjectDisplayTitle[\s\S]*另开新草稿[\s\S]*createProjectDisplayAriaLabel[\s\S]*另开新草稿，不保存当前故事/, "Project control create action must not look like saving the current unsaved story"));
 checkMessage(requireWithin(minimalTopNav, /aria-label="打开本地项目"[\s\S]*打开项目/, "Project control open action must have a clear accessible label"));
+checkMessage(requireWithin(minimalTopNav, /project-control-actions[\s\S]*aria-label=\{createProjectDisplayAriaLabel\}[\s\S]*project-control-recent/, "Project control primary actions must appear before the recent-project list"));
 checkMessage(requireWithin(minimalTopNav, /aria-label="设置"[\s\S]*settings-link-label">设置/, "One Creator Loop settings entry should use product copy"));
 checkMessage(requireWithin(settingsShell, /使用联网资料/, "Settings must expose external research as a creator-facing choice"));
 checkMessage(requireWithin(settingsShell, /联网查资料待配置/, "Settings must explain missing research connection in product copy"));
