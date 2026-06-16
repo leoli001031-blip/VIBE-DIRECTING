@@ -179,6 +179,9 @@ const folderInbox = buildProjectFolderInboxProjection({
     { path: "scripts/episode-01.md" },
     { path: "videos/returned-shot.mp4" },
     { path: "exports/final-package.zip" },
+    { path: "assets/generated/character_asset_auto.png" },
+    { path: "assets/generated/scene_scene_asset_auto.png" },
+    { path: "assets/generated/prop_asset_auto.png" },
     { path: ".DS_Store" },
     { path: "../outside.png" },
   ],
@@ -194,8 +197,10 @@ const folderInbox = buildProjectFolderInboxProjection({
 });
 
 assert(folderInbox.discoveredAssetCount === 11, "folder scan should discover supported project files and ignore hidden/outside files");
-assert(folderInbox.ignoredCount === 2, "folder scan should count hidden or out-of-scope files as ignored");
+assert(folderInbox.ignoredCount === 5, "folder scan should count hidden, out-of-scope, and app-generated files as ignored");
 assert(folderInbox.discoveredAssets.every((item) => !item.path.startsWith("/")), "folder scan must keep project-relative paths instead of leaking local absolute paths");
+assert(!folderInbox.discoveredAssets.some((item) => item.path.startsWith("assets/generated/")), "folder scan must not re-ingest app-generated reference outputs as user project materials");
+assert(!folderInbox.items.some((item) => item.label.includes("asset_auto")), "app-generated reference outputs must not appear as extra review cards");
 assert(folderInbox.items.some((item) => item.kind === "character" && item.label === "front.png"), "folder scan should classify character folders");
 assert(folderInbox.items.some((item) => item.kind === "character" && item.origin === "project_folder" && item.originLabel === "项目文件夹"), "folder scan inbox items should show they came from the project folder");
 assert(folderInbox.items.some((item) => item.kind === "scene" && item.label === "wide.jpg"), "folder scan should classify scene folders");

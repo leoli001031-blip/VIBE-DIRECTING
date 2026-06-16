@@ -228,6 +228,14 @@ function isSupportedProjectFolderFile(value: string) {
   ].includes(pathExtension(value));
 }
 
+function isSystemManagedProjectFolderPath(value: string) {
+  const normalized = clean(value)
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "")
+    .toLowerCase();
+  return normalized.startsWith("assets/generated/");
+}
+
 function hasVoiceReferenceSignal(value: string) {
   return /voice_reference|audio_reference|dialogue_audio|\b(voice|tts|speaker|dialogue|speech)\b|音色|声音|声线|人声|语音|配音|对白|台词/.test(value);
 }
@@ -469,6 +477,7 @@ function assetRecordFromProjectFolderFile(file: ProjectFolderFileEntry, index: n
   if (!rawPath || rawPath.startsWith("/") || rawPath.startsWith("../") || rawPath.includes("/../")) return undefined;
   const normalizedPath = rawPath.replace(/^\.\//, "");
   if (/(^|\/)\./.test(normalizedPath)) return undefined;
+  if (isSystemManagedProjectFolderPath(normalizedPath)) return undefined;
   if (!isSupportedProjectFolderFile(normalizedPath)) return undefined;
 
   const shell: AssetRecord = {
