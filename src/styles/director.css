@@ -8678,9 +8678,12 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 
 .new-video-composer-bar {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-areas:
+    "file action"
+    "copy copy";
   align-items: center;
-  gap: 8px;
+  gap: 8px 12px;
   min-width: 0;
   border-top: 1px solid rgba(221, 208, 192, 0.72);
   padding-top: 10px;
@@ -8702,7 +8705,7 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 
 .minimal-director.composer-only .new-video-composer-bar,
 .new-video-bottom-portal .new-video-composer-bar {
-  grid-template-columns: max-content minmax(96px, 1fr) max-content;
+  grid-template-columns: minmax(0, 1fr) max-content;
   overflow: hidden;
 }
 
@@ -8716,7 +8719,7 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 .minimal-director.composer-only .new-video-primary-action,
 .new-video-bottom-portal .new-video-primary-action {
   display: inline-flex;
-  max-width: 132px;
+  max-width: none;
   min-width: 92px;
   position: relative;
   z-index: 1;
@@ -8734,12 +8737,13 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 .new-video-composer-bar,
 .minimal-director.composer-only .new-video-composer-bar,
 .new-video-bottom-portal .new-video-composer-bar {
-  grid-template-columns: max-content max-content;
+  grid-template-columns: minmax(0, 1fr) max-content;
   grid-template-areas:
     "file action"
     "copy copy";
   justify-content: space-between;
   align-items: center;
+  gap: 8px 12px;
 }
 
 .minimal-agent-file-button,
@@ -8995,7 +8999,10 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 
 .minimal-agent-input-footer {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-areas:
+    "file action"
+    "copy copy";
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -9009,7 +9016,7 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .minimal-agent-footer-copy {
