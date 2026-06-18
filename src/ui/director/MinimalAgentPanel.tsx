@@ -2033,6 +2033,8 @@ export function MinimalAgentPanel({
   }
 
   function currentAgentToolAvailability(): DirectorAgentToolAvailability {
+    const confirmedVideoSubmitAllowed = agentActionEnvelope?.kind === "prepare_video_submit"
+      && agentActionEnvelope.executionContract.videoSubmitAllowed;
     return buildVibeAgentProductToolAvailability({
       localProjectReady: localProjectReadyForTools,
       webSearchReady: effectiveWebSearchReady,
@@ -2041,7 +2043,7 @@ export function MinimalAgentPanel({
       referenceGenerationDisabled: realSampleAction?.disabled,
       referenceGenerationBusy: realSampleBusy,
       videoSubmitCallbackReady: Boolean(onSendSeedanceVideo),
-      videoSubmitReady: videoSendAction?.ready,
+      videoSubmitReady: Boolean(videoSendAction?.ready || confirmedVideoSubmitAllowed),
       videoSubmitKeyConfigured: videoSendAction?.keyConfigured,
       videoAlreadySent,
       videoCanResume,
@@ -3587,7 +3589,10 @@ export function MinimalAgentPanel({
                 </div>
               )}
               {message.role === "confirmation" && message.id === latestConfirmationMessageId && agentNextActionAvailable && (() => {
-                const confirmationAction = minimalAgentConfirmationAction(message, primaryLabel);
+                const currentConfirmationIsVideoQuery = videoQueryMode || /查询/.test(primaryLabel) || /查询结果|不会重复提交/.test(footerStatusCopy);
+                const confirmationAction = currentConfirmationIsVideoQuery
+                  ? minimalAgentConfirmationAction({ ...message, actionKind: "query_video_result" }, primaryLabel)
+                  : minimalAgentConfirmationAction(message, primaryLabel);
                 return (
                   <div className="minimal-agent-message-actions">
 	                    <button

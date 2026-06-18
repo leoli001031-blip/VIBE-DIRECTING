@@ -121,8 +121,8 @@ function ProjectStatusSummary({ status }: { status: ProjectStatusViewModel }) {
           : status.issue && <small>{status.issue}</small>}
       </div>
       <div className="project-status-summary-facts" aria-label="项目概览">
-        {status.facts.map((fact) => (
-          <span key={fact.label}>
+        {status.facts.map((fact, index) => (
+          <span key={`${fact.label}:${fact.value}:${index}`}>
             <small>{fact.label}</small>
             <strong>{fact.value}</strong>
           </span>
@@ -130,6 +130,29 @@ function ProjectStatusSummary({ status }: { status: ProjectStatusViewModel }) {
       </div>
     </section>
   );
+}
+
+function projectStatusViewWithActiveVideo(status: ProjectStatusViewModel, creatorDesk?: CreatorDeskProjection): ProjectStatusViewModel {
+  const videoStage = creatorDesk?.videoStage;
+  if (!videoStage || (videoStage.status !== "in_progress" && videoStage.status !== "recoverable")) return status;
+  const generation = videoStage.generation;
+  const canQuery = videoStage.canResume || videoStage.status === "recoverable";
+  const doing = generation.queueSummary || generation.detail || generation.statusLabel || "Seedance 2.0 VIP 已提交，后台等待";
+  const videoFact = generation.shortSubmitId ? `提交号 ${generation.shortSubmitId}` : generation.statusLabel;
+  const facts = [
+    ...status.facts.filter((fact) => fact.label !== "AI 导演" && fact.label !== "视频"),
+    videoFact ? { label: "视频", value: videoFact } : undefined,
+  ].filter((fact): fact is { label: string; value: string } => Boolean(fact));
+  return {
+    ...status,
+    stage: canQuery ? "视频待查询" : "视频生成中",
+    doing,
+    waitingFor: canQuery ? "查询视频结果" : "视频结果",
+    nextAction: canQuery ? "确认查询结果" : "等结果出来后看预览",
+    tone: canQuery ? "ready" : "working",
+    issue: undefined,
+    facts,
+  };
 }
 
 export function DirectorMode({
@@ -384,7 +407,7 @@ export function DirectorMode({
     () => buildVibeAgentTimelineStatusView(restoredAgentTimelineEntries),
     [restoredAgentTimelineEntries],
   );
-  const projectStatusView = useMemo(() => buildProjectStatusViewModel({
+  const rawProjectStatusView = useMemo(() => buildProjectStatusViewModel({
     runtimeState,
     folderReady,
     projectReady,
@@ -423,6 +446,10 @@ export function DirectorMode({
     agentTimelineStatusView,
     visibleAgentCommand,
   ]);
+  const projectStatusView = useMemo(
+    () => projectStatusViewWithActiveVideo(rawProjectStatusView, creatorDesk),
+    [creatorDesk, rawProjectStatusView],
+  );
   async function confirmNewVideoDraft(draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) {
     const nextContract = draft.agentBoundaryMode
       ? agentVideoPermissionForMode(draft.agentBoundaryMode)

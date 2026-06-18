@@ -237,6 +237,28 @@ assert(refreshedQueuePayload.relayQueue?.items?.[0]?.queuePosition === 4721, "pe
 assert(refreshedQueuePayload.previewItems[0]?.queueInfo?.position === 4721, "preview items should inherit refreshed relay queue position");
 assert(refreshedQueuePayload.previewItems[0]?.videoStatus === "queued", "recoverable queued relay state should remain creator-facing queued");
 
+const activeQueueOverFailedProjectionPayload = createFixtureApi({
+  projection: baseProjection({
+    status: "failed",
+    previewStatus: "failed",
+    productionStatus: "failed",
+    projectFacts: baseProjectFacts({
+      previewPlan: {
+        relayQueue: stalePreviewRelayQueue,
+      },
+    }),
+    observations: [],
+    reviewShotIds: [],
+  }),
+  jsonByPath: {
+    "/repo/fixtures/project/reports/video_relay_queue.json": stalePreviewRelayQueue,
+  },
+}).currentProjectRealChainResponse({}, source);
+assert(activeQueueOverFailedProjectionPayload.status === "submitted", "active submitted relay task should override stale failed top-level status");
+assert(activeQueueOverFailedProjectionPayload.previewStatus === "submitted", "active submitted relay task should override stale failed preview status");
+assert(activeQueueOverFailedProjectionPayload.productionStatus === "submitted", "active submitted relay task should override stale failed production status");
+assert(activeQueueOverFailedProjectionPayload.nextAction === "query_active_video_task", "active submitted relay task should guide the Agent/UI to query instead of resubmit");
+
 const sceneCoverageBlockedReport = {
   status: "text_qa_blocked",
   activeSegmentId: "segment_2",

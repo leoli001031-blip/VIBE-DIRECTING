@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import {
   buildDirectorAgentStateSnapshot,
 } from "../src/core/directorAgentAction";
@@ -711,6 +712,25 @@ const restored = loadVibeAgentTimelineFromProjectRoot({
 assert.equal(restored.entries.length, confirmedActionTimeline.entries.length);
 assert.equal(restored.entries.some((entry) => entry.type === "state_change" && entry.status === "waiting"), true);
 assert.equal(restored.entries.some((entry) => entry.type === "action_result" && entry.toolName === "generate_references"), true);
+
+const otherPersistRoot = "/tmp/vibe-agent-core-other-project";
+const staleSaveResult = saveVibeAgentTimelineToProjectRoot(otherPersistRoot, {
+  ...confirmedActionTimeline,
+  projectRoot: persistRoot,
+});
+assert.equal(staleSaveResult.ok, true);
+assert.ok(staleSaveResult.path);
+const staleTimelineOnDisk = JSON.parse(fs.readFileSync(staleSaveResult.path, "utf8"));
+fs.writeFileSync(staleSaveResult.path, `${JSON.stringify({
+  ...staleTimelineOnDisk,
+  projectRoot: persistRoot,
+}, null, 2)}\n`);
+const sameIdDifferentRoot = loadVibeAgentTimelineFromProjectRoot({
+  projectId: "agent-core-demo",
+  projectTitle: "Agent Core Demo",
+  projectRoot: otherPersistRoot,
+});
+assert.equal(sameIdDifferentRoot.entries.length, 0, "same projectId with a different projectRoot must not restore stale Agent messages");
 
 const intakeEntries = buildVibeAgentIntakeTimelineEntries({
   createdAt: "2026-06-17T08:02:00.000Z",

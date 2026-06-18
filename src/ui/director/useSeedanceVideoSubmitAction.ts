@@ -21,10 +21,12 @@ import {
   agentVideoSubmitContractAllowsVideo,
   type AgentVideoSubmitContract,
 } from "./agentPanelProjection";
+import { JIMENG_CLI_VIP_MODEL_VERSION } from "../../core/jimengVideoCli";
 
 const STORYBOARD_PROVIDER_ID = "apikey-fun-gpt55-responses-image";
 const SEEDANCE_SUBMIT_CONFIRM_PHRASE = "submit-seedance-video";
 const SEEDANCE_SUBMIT_UI_TIMEOUT_MS = 180_000;
+const SEEDANCE_TEST_MODEL_LABEL = "Seedance 2.0 VIP 720p";
 
 function creatorFacingVideoMessage(value: string | undefined, fallback: string) {
   return (value || fallback)
@@ -131,7 +133,7 @@ function relayQueueCanResume(relayQueue: ProjectSeedanceSubmitResult["relayQueue
   if (items.length) {
     return items.some((item) =>
       Boolean(item.submitId || item.resumeCommand)
-      && ["submitted", "generating", "recoverable_queued"].includes(String(item.status || "")));
+      && ["submitting", "submitted", "queued", "running", "generating", "polling", "recoverable_queued"].includes(String(item.status || "")));
   }
   return (relayQueue.resumeCommands || []).length > 0;
 }
@@ -166,10 +168,19 @@ function seedanceActionState(result: ProjectSeedanceSubmitResult): SeedanceVideo
       qaFeedback: result.qaFeedback,
     };
   }
-  if (result.videoSubmitted || result.status === "submitted" || result.status === "queued" || result.status === "generating" || result.status === "timed_out") {
+  if (
+    result.videoSubmitted
+    || result.status === "submitting"
+    || result.status === "submitted"
+    || result.status === "queued"
+    || result.status === "running"
+    || result.status === "generating"
+    || result.status === "polling"
+    || result.status === "timed_out"
+  ) {
     return {
       status: "submitted",
-      message: creatorFacingVideoMessage(result.message || result.relayQueue?.userSummary, "视频已发送，即梦排队中；可以稍后查询结果。"),
+      message: creatorFacingVideoMessage(result.message || result.relayQueue?.userSummary, `${SEEDANCE_TEST_MODEL_LABEL} 已提交，后台等待；可以稍后查询结果。`),
       qaFeedback: result.qaFeedback,
       canResume,
     };
@@ -293,10 +304,10 @@ function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): Seedanc
     }
   }
   const items = state.summary?.previewItems || [];
-  const hasSubmittedVideo = items.some((item) => {
+    const hasSubmittedVideo = items.some((item) => {
     const statusText = `${item.status || ""} ${item.previewStatus || ""} ${item.videoStatus || ""}`;
     return Boolean(item.submitId || item.outputVideoPath || item.mediaPath)
-      || /queued|submitted|generating|success|returned|review/i.test(statusText);
+      || /submitting|queued|submitted|running|generating|polling|success|returned|review/i.test(statusText);
   });
   if (!hasSubmittedVideo) return undefined;
   const hasReturnedVideo = items.some((item) => {
@@ -305,7 +316,7 @@ function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): Seedanc
   });
   return hasReturnedVideo
     ? { status: "needs_review", message: "视频已生成，等待复核。", canResume }
-    : { status: "submitted", message: "视频已发送，即梦排队中；可以稍后查询结果。", canResume };
+    : { status: "submitted", message: `${SEEDANCE_TEST_MODEL_LABEL} 已提交，后台等待；可以稍后查询结果。`, canResume };
 }
 
 export function useSeedanceVideoSubmitAction({
@@ -338,7 +349,7 @@ export function useSeedanceVideoSubmitAction({
     }
 
     if (effectiveActionState.status === "submitted" && effectiveActionState.canResume) {
-      setActionState({ ...effectiveActionState, status: "running", message: "正在查询 Seedance 结果。" });
+      setActionState({ ...effectiveActionState, status: "running", message: "正在查询当前 Seedance 任务，不会重复提交。" });
       try {
         const resumed = await Promise.race([
           resumeProjectSeedanceVideo(runtimeProjectIdentity, { pollSeconds: 90 }),
@@ -380,7 +391,7 @@ export function useSeedanceVideoSubmitAction({
       return nextState;
     }
 
-    if (!options?.skipConfirm && !confirmAction("要把当前故事发送到 Seedance 2.0 720p 吗？\n\n即梦可能排队很久，发送后可以稍后查询结果。")) {
+    if (!options?.skipConfirm && !confirmAction(`要提交 1 条代表性视频到 ${SEEDANCE_TEST_MODEL_LABEL} 吗？\n\n本轮不会批量提交；拿到提交号后就进入后台等待，可以稍后查询结果。`)) {
       const nextState: SeedanceVideoSubmitActionState = { status: "blocked", message: "已取消，本次没有发送。" };
       setActionState(nextState);
       return nextState;
@@ -401,12 +412,12 @@ export function useSeedanceVideoSubmitAction({
     }
     const submitShotIds = scopedTarget.shotIds;
     const confirmedAt = options?.confirmedAt || new Date().toISOString();
-    setActionState({ status: "running", message: "正在生成故事板参考，并发送到 Seedance 2.0 720p。" });
+    setActionState({ status: "running", message: `正在准备 1 条代表性视频，并发送到 ${SEEDANCE_TEST_MODEL_LABEL}。` });
     try {
       const submitted = await Promise.race([
         submitProjectSeedanceVideo(runtimeProjectIdentity, {
           providerId: STORYBOARD_PROVIDER_ID,
-          modelVersion: "seedance2.0",
+          modelVersion: JIMENG_CLI_VIP_MODEL_VERSION,
           videoResolution: "720p",
             ratio: "16:9",
             pollSeconds: 90,

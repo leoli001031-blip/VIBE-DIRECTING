@@ -311,6 +311,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     ? videoStage.generation?.queueSummary || videoStageFactLabel(videoStage)
     : "";
   const videoTaskFacts = videoTaskFactsForStatus(videoStage);
+  const currentVideoWaiting = videoWaitingLabel(input);
   const audioFact = audioFactLabel(runtimeState);
   const rawAgentFact = input.agentCommand?.label?.trim() || input.agentStage?.summary?.trim() || "";
   const agentFact = browserDraftActive
@@ -350,15 +351,17 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
 
   if (input.agentTimelineStatus) {
     const timelineStatus = input.agentTimelineStatus;
-    return {
-      stage: timelineStatus.stage,
-      doing: timelineStatus.doing,
-      waitingFor: timelineStatus.waitingFor,
-      nextAction: timelineStatus.nextAction,
-      tone: timelineStatus.tone,
-      issue: timelineStatus.tone === "blocked" ? timelineStatus.waitingFor : undefined,
-      facts: timelineStatus.facts.length ? timelineStatus.facts : facts,
-    };
+    if (!videoTaskActive && !currentVideoWaiting) {
+      return {
+        stage: timelineStatus.stage,
+        doing: timelineStatus.doing,
+        waitingFor: timelineStatus.waitingFor,
+        nextAction: timelineStatus.nextAction,
+        tone: timelineStatus.tone,
+        issue: timelineStatus.tone === "blocked" ? timelineStatus.waitingFor : undefined,
+        facts: timelineStatus.facts.length ? timelineStatus.facts : facts,
+      };
+    }
   }
 
   if (!input.folderReady && !input.projectReady) {
@@ -473,7 +476,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     };
   }
 
-  const videoWaiting = videoWaitingLabel(input);
+  const videoWaiting = currentVideoWaiting;
   if (videoWaiting) {
     const blocked = input.videoStage?.status === "failed" || input.videoSendAction?.status === "blocked";
     const needsReview = input.videoStage?.status === "needs_review" || input.videoSendAction?.status === "needs_review";

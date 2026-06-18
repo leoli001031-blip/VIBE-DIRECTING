@@ -677,6 +677,42 @@ assert(continueVideoQuery.toolPlan.toolName === "seedance_video_submit", "query 
 assert(continueVideoQuery.toolPlan.providerSubmitAllowed === false, "query should never create a new provider submit");
 assert(/查询/.test(continueVideoQuery.summary), "query action should be creator-facing as a result check");
 
+const representativeVideoDoneSnapshot = buildDirectorAgentStateSnapshot({
+  runtimeState: {
+    ...runtimeState,
+    visualMemory: {
+      assets: runtimeState.visualMemory.assets.map((asset) => ({
+        ...asset,
+        status: "generated",
+        lockedStatus: "locked",
+        safeForFutureReference: true,
+      })),
+    },
+  } as unknown as ProjectRuntimeState,
+  currentView: "story",
+  videoStatus: "completed",
+  videoCompletedCount: 1,
+  videoDetail: "代表性视频已返回；后续段保持等待。",
+});
+const continueAfterRepresentativeVideo = buildDirectorAgentActionEnvelope({
+  userIntent: "继续",
+  snapshot: representativeVideoDoneSnapshot,
+  generatedAt: "2026-05-31T00:00:04.770Z",
+});
+assert(
+  continueAfterRepresentativeVideo.kind === "inspect_project_status",
+  "plain continue after a representative video should inspect status instead of submitting another segment",
+);
+const explicitNextSegmentSubmit = buildDirectorAgentActionEnvelope({
+  userIntent: "继续提交下一段视频，验证串行队列",
+  snapshot: representativeVideoDoneSnapshot,
+  generatedAt: "2026-05-31T00:00:04.771Z",
+});
+assert(
+  explicitNextSegmentSubmit.kind === "prepare_video_submit",
+  "explicit next-segment wording should still allow a second serial submit",
+);
+
 const legacyReadySnapshot = {
   ...readySnapshot,
   projectReadiness: {

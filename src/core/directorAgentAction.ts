@@ -351,6 +351,7 @@ export function classifyDirectorAgentAction(userIntent: string, snapshot?: Direc
   const queuedContinueKind = queuedActionKindFromContinueIntent(normalized, snapshot);
   if (queuedContinueKind && containsAny(normalized, ["按项目状态继续", "项目状态继续"])) return queuedContinueKind;
   if (isVideoQueryIntent(normalized, snapshot)) return "query_video_result";
+  if (!videoSubmitDisallowed && explicitlyRequestsMoreVideoSubmit(normalized)) return "prepare_video_submit";
   if (isProjectInspectionIntent(normalized)) return "inspect_project_status";
   if (containsAny(normalized, ["导出", "素材包", "finalmp4", "finalvideo", "export"])) return "prepare_export";
   if (shouldClassifyAssetReviewIntent(userIntent, snapshot)) return "review_reference_asset";
@@ -592,7 +593,7 @@ function normalizeDirectorAgentVideoStatus(value?: string): DirectorAgentVideoSt
   if (!normalized || containsAny(normalized, ["未发送", "notgenerated", "notsubmitted", "idle"])) return "idle";
   if (containsAny(normalized, ["可发送", "ready"])) return "ready";
   if (containsAny(normalized, ["可查询", "recoverable", "resume", "resumable"])) return "recoverable";
-  if (containsAny(normalized, ["排队", "已发送", "submitted", "queued"])) return "submitted";
+  if (containsAny(normalized, ["提交中", "排队", "已发送", "submitted", "submitting", "queued", "polling"])) return "submitted";
   if (containsAny(normalized, ["生成中", "running", "generating", "inprogress", "processing"])) return "running";
   if (containsAny(normalized, ["待复核", "needsreview", "review"])) return "needs_review";
   if (containsAny(normalized, ["完成", "success", "completed", "done"])) return "completed";
@@ -605,6 +606,23 @@ function videoStateCanQuery(videoState: DirectorAgentVideoState) {
     || videoState.status === "recoverable"
     || videoState.status === "running"
     || videoState.status === "submitted";
+}
+
+function explicitlyRequestsMoreVideoSubmit(normalized: string) {
+  return containsAny(normalized, [
+    "继续提交",
+    "继续发送",
+    "再提交",
+    "再发送",
+    "发下一段",
+    "提交下一段",
+    "下一段视频",
+    "第二条视频",
+    "验证串行",
+    "串行队列",
+    "完整跑",
+    "跑完整",
+  ]);
 }
 
 function isVideoQueryIntent(normalized: string, snapshot?: DirectorAgentStateSnapshot) {
@@ -1029,7 +1047,7 @@ function userFacingMessageFor(input: {
   if (input.kind === "request_style_research") return "我会先查资料并整理成参考，采用前会让你确认。";
 	  if (input.kind === "prepare_reference_generation") return "我会先准备参考生成计划，生成结果会进入复核。";
 	  if (input.kind === "review_reference_asset") return "我会先把这张参考的复核决定整理好，确认后写入项目。";
-	  if (input.kind === "prepare_video_submit") return "我会准备视频提交计划，提交前需要你确认。";
+	  if (input.kind === "prepare_video_submit") return "我会准备 1 条代表性视频提交计划，默认走 Seedance 2.0 VIP 720p；提交前需要你确认。";
 	  if (input.kind === "query_video_result") return "我会查询已提交视频的回流状态，不会重复发送新任务。";
 	  if (input.kind === "prepare_export") return "我会准备导出素材包，导出内容会可复核。";
   if (input.kind === "inspect_project_status") {
@@ -1465,6 +1483,7 @@ function queuedActionKindFromContinueIntent(
 	const queue = directorAgentReadinessActions(snapshot.projectReadiness);
 	if (isContinueIntent(normalized)) {
 	  if (videoStateCanQuery(snapshot.videoState)) return "query_video_result";
+	  if (snapshot.videoState.completedCount > 0 && !explicitlyRequestsMoreVideoSubmit(normalized)) return "inspect_project_status";
 	  return (queue.find((item) => item.priority === "now") || queue[0])?.kind || snapshot.projectReadiness.nextActionKind;
 	}
   if (!containsAny(normalized, ["按项目状态继续", "项目状态继续"])) return undefined;

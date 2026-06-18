@@ -355,13 +355,20 @@ function clipList(previewPlan: CurrentProjectPreviewPlanInput | undefined): Curr
 
 function relayItemStatusForPreview(item: VideoRelayQueueItem) {
   if (item.status === "success") return "needs_review";
+  if (item.status === "submitting") return "submitted";
+  if (item.status === "running") return "generating";
+  if (item.status === "polling") return "queued";
   if (item.status === "recoverable_queued") return "queued";
   return item.status;
 }
 
 function relayItemHasPreviewValue(item: VideoRelayQueueItem) {
-  return item.status === "submitted"
+  return item.status === "submitting"
+    || item.status === "submitted"
+    || item.status === "queued"
+    || item.status === "running"
     || item.status === "generating"
+    || item.status === "polling"
     || item.status === "recoverable_queued"
     || item.status === "success"
     || item.status === "failed"
@@ -394,7 +401,7 @@ function relayQueuePreviewItems(relayQueue: VideoRelayQueueState | undefined): C
         reviewRequired: item.status === "success",
         outputExists: item.status === "success" && Boolean(localVideoPath),
         blockers: item.blockers,
-        recoverable: item.status === "recoverable_queued",
+        recoverable: item.status === "recoverable_queued" || item.status === "polling",
       };
     });
 }

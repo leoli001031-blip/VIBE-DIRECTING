@@ -1,4 +1,5 @@
 import { buildVideoRelayQueueState, type VideoRelayQueueItem } from "../src/core/videoRelayQueue.ts";
+import { JIMENG_CLI_VIP_MODEL_VERSION } from "../src/core/jimengVideoCli.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -12,7 +13,7 @@ function item(id: string, status: VideoRelayQueueItem["status"], extra: Partial<
     shotId: id.replace(/^video_/, "shot_"),
     title: `镜头 ${id}`,
     status,
-    modelVersion: "seedance2.0",
+    modelVersion: JIMENG_CLI_VIP_MODEL_VERSION,
     videoResolution: "720p",
     durationSeconds: 8,
     promptPath: `prompts/${id}.md`,
@@ -76,6 +77,23 @@ assert(running.items[0]?.queuePosition === 2085, "active queue item must preserv
 assert(running.items[0]?.queueInfo?.status === "Queueing", "active queue item must preserve queue info");
 assert(running.items[0]?.promptPath === "runs/demo/prompts/video_001.md", "active queue item must preserve prompt path");
 assert(running.items[0]?.referencePaths.length === 3, "active queue item must preserve the reference list");
+
+for (const activeStatus of ["submitting", "submitted", "queued", "running", "generating", "polling"] as const) {
+  const activeQueue = buildVideoRelayQueueState({
+    generatedAt,
+    storyboardConfirmed: true,
+    items: [
+      item(`video_${activeStatus}`, activeStatus, {
+        submitId: activeStatus === "submitting" ? undefined : `submit-${activeStatus}`,
+        resumeCommand: activeStatus === "submitting" ? undefined : `dreamina query_result --submit_id=submit-${activeStatus} --download_dir=video/${activeStatus}`,
+      }),
+      item("video_waiting", "ready"),
+    ],
+  });
+  assert(activeQueue.status === "running", `${activeStatus} should count as an active Seedance task`);
+  assert(activeQueue.autoSubmitAllowed === false, `${activeStatus} must block another serial submit`);
+  assert(activeQueue.activeItemIds.length === 1, `${activeStatus} active item should be exposed`);
+}
 
 const resumedNext = buildVideoRelayQueueState({
   generatedAt,

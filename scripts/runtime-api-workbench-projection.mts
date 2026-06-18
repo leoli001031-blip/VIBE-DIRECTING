@@ -549,7 +549,10 @@ export function createRuntimeApiWorkbenchProjection({
 
   function workbenchAssetFromRecord(item, type, sourceRef, index) {
     if (!isRecord(item)) return undefined;
-    const id = firstTextValue(item, ["id", "assetId", "roleId", "sceneId", "styleId"]) || `${type}_${index + 1}`;
+    const idKeys = String(sourceRef || "").startsWith("visual_memory.entries")
+      ? ["assetId", "id", "roleId", "sceneId", "styleId"]
+      : ["id", "assetId", "roleId", "sceneId", "styleId"];
+    const id = firstTextValue(item, idKeys) || `${type}_${index + 1}`;
     const pathValue = firstTextValue(item, ["mainReferencePath", "path", "sourcePath", "referencePath"]);
     const authority = isRecord(item.referenceAuthority) ? item.referenceAuthority : undefined;
     const authorityPath = firstTextValue(authority, ["path"]);
@@ -609,6 +612,21 @@ export function createRuntimeApiWorkbenchProjection({
       ]),
       rejectedReason: firstTextValue(item, ["rejectedReason"]) || firstTextValue(authority, ["rejectedReason"]),
     };
+  }
+
+  function normalizeNonBlockingTextStyleAsset(asset) {
+    if (
+      asset?.type === "style"
+      && !asset.path
+      && (asset.status === "candidate" || asset.status === "needs_review")
+    ) {
+      return {
+        ...asset,
+        status: "locked",
+        sourceRefs: uniqueStrings([...(asset.sourceRefs || []), "text_style_constraint#non_blocking"]),
+      };
+    }
+    return asset;
   }
 
   function projectVibeSourceRefValue(sourceRefs, prefix) {
@@ -814,12 +832,12 @@ export function createRuntimeApiWorkbenchProjection({
     }
     const genericAssets = Array.isArray(visualMemory.assets) ? visualMemory.assets : [];
     genericAssets.forEach((item, index) => {
-      const asset = workbenchAssetFromRecord(item, normalizeWorkbenchAssetType([item?.type, item?.assetType, item?.roleBinding?.role].filter(Boolean).join(" ")), `visual_memory.assets:${index}`, index);
+      const asset = workbenchAssetFromRecord(item, normalizeWorkbenchAssetType([item?.kind, item?.type, item?.assetType, item?.roleBinding?.role].filter(Boolean).join(" ")), `visual_memory.assets:${index}`, index);
       if (asset) assets.push(asset);
     });
     const entries = Array.isArray(visualMemory.entries) ? visualMemory.entries : [];
     entries.forEach((item, index) => {
-      const asset = workbenchAssetFromRecord(item, normalizeWorkbenchAssetType([item?.type, item?.assetType, item?.roleBinding?.role].filter(Boolean).join(" ")), `visual_memory.entries:${index}`, index);
+      const asset = workbenchAssetFromRecord(item, normalizeWorkbenchAssetType([item?.kind, item?.type, item?.assetType, item?.roleBinding?.role].filter(Boolean).join(" ")), `visual_memory.entries:${index}`, index);
       if (asset) assets.push(asset);
     });
     const seen = new Set();
@@ -944,7 +962,8 @@ export function createRuntimeApiWorkbenchProjection({
         .map((asset, index) => workbenchAssetFromProjectVibeAsset(asset, index))
         .filter(Boolean)
       : [];
-    const authoritativeVisualAssets = mergeProjectVibeAssetAuthority(visualAssets, projectVibeAssets);
+    const authoritativeVisualAssets = mergeProjectVibeAssetAuthority(visualAssets, projectVibeAssets)
+      .map(normalizeNonBlockingTextStyleAsset);
     const folderInbox = buildProjectFolderInboxProjection({
       files: projectFolderFileEntries(source),
       existingAssets: authoritativeVisualAssets.map((asset) => ({

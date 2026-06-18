@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { APIKEY_FUN_RESPONSES_IMAGE_PROVIDER_ID } from "./apikey-fun-responses-image-transport.mts";
 import { createRuntimeApiCurrentProjectSeedanceSubmit } from "./runtime-routes/current-project-seedance-submit.mts";
+import { JIMENG_CLI_VIP_MODEL_VERSION } from "../src/core/jimengVideoCli.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -134,7 +135,8 @@ const workbenchFacts: any = {
   },
 };
 
-const route = createRuntimeApiCurrentProjectSeedanceSubmit({
+function createSeedanceTestRoute(overrides = {}) {
+  return createRuntimeApiCurrentProjectSeedanceSubmit({
   endpoint: "/api/runtime/projects/current/seedance/submit",
   repoRoot,
   currentProjectRouteContext: async () => undefined,
@@ -166,7 +168,11 @@ const route = createRuntimeApiCurrentProjectSeedanceSubmit({
   writeJson: () => undefined,
   running: false,
   setRunning: () => undefined,
-});
+  ...overrides,
+  });
+}
+
+const route = createSeedanceTestRoute();
 
 const agentTaskEnvelope = {
   id: "agent_tool_task_seedance_submit_test_001",
@@ -307,6 +313,171 @@ assert(strategyByShot.get("S02") === "omni_reference", "compiler should honor th
 assert(strategyByShot.get("S03") === "storyboard_rapid_cut", "compiler should honor the AI-selected rapid-cut strategy");
 assert(manifest.videoResolution === "720p", "video resolution should stay 720p in this lane");
 assert(manifest.modelVersion === "seedance2.0", "model version should stay normal seedance2.0");
+
+const defaultVipRunRootRelativePath = ".vibe-runtime/test-current-project-seedance-mode-compiler-default-vip";
+const defaultVipRunRootPath = path.resolve(repoRoot, defaultVipRunRootRelativePath);
+rmSync(defaultVipRunRootPath, { recursive: true, force: true });
+mkdirSync(defaultVipRunRootPath, { recursive: true });
+const defaultVipSource = {
+  runRootPath: defaultVipRunRootPath,
+  runRootRelativePath: defaultVipRunRootRelativePath,
+  projectVibePath: path.join(defaultVipRunRootPath, "project/project.vibe"),
+  projectVibeRelativePath: `${defaultVipRunRootRelativePath}/project/project.vibe`,
+  previewPlanPath: path.join(defaultVipRunRootPath, "reports/preview_plan.json"),
+  previewPlanRelativePath: `${defaultVipRunRootRelativePath}/reports/preview_plan.json`,
+};
+const defaultVipResponse = await route.currentProjectSeedanceSubmitResponse({
+  confirmation: {
+    confirmed: true,
+    phrase: "submit-seedance-video",
+    receiptId: "receipt_default_vip_test",
+    confirmedAt: "2026-05-23T00:00:01.000Z",
+  },
+  videoResolution: "720p",
+  ratio: "16:9",
+  pollSeconds: 30,
+  providerId: APIKEY_FUN_RESPONSES_IMAGE_PROVIDER_ID,
+  agentTaskEnvelope,
+  mockProviderResult: true,
+  cliPath: "/bin/echo",
+}, {}, defaultVipSource);
+assert(defaultVipResponse.ok === true, `default VIP mock submit should pass: ${JSON.stringify(defaultVipResponse)}`);
+const defaultVipManifestPath = path.join(path.dirname(path.resolve(repoRoot, defaultVipResponse.promptPath)), "input-manifest.json");
+const defaultVipManifest = JSON.parse(readFileSync(defaultVipManifestPath, "utf8"));
+assert(defaultVipManifest.modelVersion === JIMENG_CLI_VIP_MODEL_VERSION, "real-test submit path should default to Seedance 2.0 VIP");
+assert(defaultVipManifest.videoResolution === "720p", "real-test VIP submit path should still default to 720p");
+assert(defaultVipManifest.submitPolicy?.representativeSegmentsSubmittedThisRequest === 1, "default VIP lane should document representative-only real submits");
+assert(defaultVipResponse.relayQueue?.items?.some((item: { modelVersion: string }) => item.modelVersion === JIMENG_CLI_VIP_MODEL_VERSION), "relay queue should persist the VIP model version");
+
+const timeoutRunRootRelativePath = ".vibe-runtime/test-current-project-seedance-mode-compiler-submit-timeout";
+const timeoutRunRootPath = path.resolve(repoRoot, timeoutRunRootRelativePath);
+rmSync(timeoutRunRootPath, { recursive: true, force: true });
+mkdirSync(timeoutRunRootPath, { recursive: true });
+const timeoutScenePath = path.join(timeoutRunRootPath, "assets/scene.png");
+const timeoutCharacterPath = path.join(timeoutRunRootPath, "assets/character.png");
+const timeoutPropPath = path.join(timeoutRunRootPath, "assets/prop.png");
+writeFile(timeoutScenePath, tinyPng);
+writeFile(timeoutCharacterPath, tinyPng);
+writeFile(timeoutPropPath, tinyPng);
+workbenchFacts.visualMemory.assets = [
+  { type: "style", id: "vm_style_text", name: "文字风格方向", textConstraints: ["1990s anime style lock"] },
+  { type: "scene", id: "scene_station", name: "雨夜电车站", path: `${timeoutRunRootRelativePath}/assets/scene.png` },
+  { type: "character", id: "char_girl", name: "短发少女", path: `${timeoutRunRootRelativePath}/assets/character.png` },
+  { type: "prop", id: "prop_ticket", name: "旧车票", path: `${timeoutRunRootRelativePath}/assets/prop.png` },
+];
+const timeoutSource = {
+  runRootPath: timeoutRunRootPath,
+  runRootRelativePath: timeoutRunRootRelativePath,
+  projectVibePath: path.join(timeoutRunRootPath, "project/project.vibe"),
+  projectVibeRelativePath: `${timeoutRunRootRelativePath}/project/project.vibe`,
+  previewPlanPath: path.join(timeoutRunRootPath, "reports/preview_plan.json"),
+  previewPlanRelativePath: `${timeoutRunRootRelativePath}/reports/preview_plan.json`,
+};
+const timeoutRoute = createSeedanceTestRoute({
+  runCommand: async () => ({
+    exitCode: 0,
+    stdout: JSON.stringify({
+      submit_id: "timeout-submit-001",
+      gen_status: "fail",
+      fail_reason: "do request: Post \"https://jimeng.jianying.com/dreamina/cli/v1/video_generate\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
+    }),
+    stderr: "",
+    timedOut: false,
+    durationMs: 123,
+  }),
+});
+const timeoutResponse = await timeoutRoute.currentProjectSeedanceSubmitResponse({
+  confirmation: {
+    confirmed: true,
+    phrase: "submit-seedance-video",
+    receiptId: "receipt_timeout_submit",
+    confirmedAt: "2026-05-23T00:00:02.000Z",
+  },
+  videoResolution: "720p",
+  ratio: "16:9",
+  pollSeconds: 30,
+  providerId: APIKEY_FUN_RESPONSES_IMAGE_PROVIDER_ID,
+  agentTaskEnvelope,
+  mockProviderResult: true,
+  cliPath: "/bin/echo",
+}, {}, timeoutSource);
+assert(timeoutResponse.ok === true, `submit-id timeout should stay recoverable: ${JSON.stringify(timeoutResponse)}`);
+assert(timeoutResponse.submitId === "timeout-submit-001", "recoverable timeout submit should preserve submitId");
+assert(timeoutResponse.status === "recoverable_queued", "submit-id timeout should be treated as recoverable queue state");
+assert(timeoutResponse.uiStatus === "queued", "submit-id timeout should show as queued to the UI");
+assert(timeoutResponse.relayQueue?.status === "running", "recoverable submitId should keep the relay queue active");
+assert(timeoutResponse.relayQueue?.counts?.active === 1, "recoverable submitId should count as one active task");
+assert(timeoutResponse.relayQueue?.autoSubmitAllowed === false, "recoverable submitId must block another serial submit");
+assert(timeoutResponse.relayQueue?.resumeCommands?.[0]?.includes("timeout-submit-001"), "recoverable submitId should expose a resume command");
+assert(timeoutResponse.relayQueue?.items?.some((item: { status: string; submitId?: string }) =>
+  item.status === "polling" && item.submitId === "timeout-submit-001"
+), "recoverable timeout should persist as an active polling queue item");
+
+const duplicateWhileRecoverable = await timeoutRoute.currentProjectSeedanceSubmitResponse({
+  confirmation: {
+    confirmed: true,
+    phrase: "submit-seedance-video",
+    receiptId: "receipt_timeout_duplicate",
+    confirmedAt: "2026-05-23T00:00:03.000Z",
+  },
+  videoResolution: "720p",
+  ratio: "16:9",
+  pollSeconds: 30,
+  providerId: APIKEY_FUN_RESPONSES_IMAGE_PROVIDER_ID,
+  agentTaskEnvelope,
+  mockProviderResult: true,
+  cliPath: "/bin/echo",
+}, {}, timeoutSource);
+assert(duplicateWhileRecoverable.ok === false, "recoverable active submitId should block duplicate submits");
+assert(duplicateWhileRecoverable.relayQueue?.status === "running", "blocked duplicate should expose the running active queue");
+assert(String(duplicateWhileRecoverable.message || "").includes("已有视频段正在排队或生成"), "duplicate block should tell the user it will not submit again");
+
+writeJson(path.join(timeoutRunRootPath, "reports/video_relay_queue.json"), {
+  items: [
+    {
+      id: "seedance_segment_1",
+      segmentId: "segment_1",
+      shotId: "S01",
+      shotIds: ["S01"],
+      title: "雨站对望",
+      status: "failed",
+      modelVersion: JIMENG_CLI_VIP_MODEL_VERSION,
+      videoResolution: "720p",
+      durationSeconds: 6,
+      promptPath: `${timeoutRunRootRelativePath}/video/timeout/receipts/seedance_prompt.md`,
+      referencePaths: [],
+      submitId: "legacy-timeout-submit-001",
+      resumeCommand: `dreamina query_result --submit_id=legacy-timeout-submit-001 --download_dir=${path.join(timeoutRunRootPath, "video/timeout/video")}`,
+      attemptCount: 1,
+      blockers: [],
+      notes: ["本段已提交给 Seedance 2.0 VIP，后台排队或生成中。"],
+    },
+    {
+      id: "seedance_segment_2",
+      segmentId: "segment_2",
+      shotId: "S02",
+      shotIds: ["S02"],
+      title: "车票发光",
+      status: "ready",
+      modelVersion: JIMENG_CLI_VIP_MODEL_VERSION,
+      videoResolution: "720p",
+      durationSeconds: 4,
+      referencePaths: [],
+      attemptCount: 0,
+      blockers: [],
+      notes: [],
+    },
+  ],
+});
+const legacyTimeoutResume = await timeoutRoute.currentProjectSeedanceResumeResponse({
+  pollSeconds: 30,
+  relayQueueItemId: "seedance_segment_1",
+  mockProviderResult: true,
+  cliPath: "/bin/echo",
+}, {}, timeoutSource);
+assert(legacyTimeoutResume.ok === true, `legacy submitId failure should be queryable: ${JSON.stringify(legacyTimeoutResume)}`);
+assert(legacyTimeoutResume.outputVideoPath, "legacy recoverable query should be able to bind returned video");
+assert(legacyTimeoutResume.relayQueue?.counts?.completed === 1, "legacy recoverable query should move the item out of active state after success");
 
 projectFacts = {
   projectVibe: {

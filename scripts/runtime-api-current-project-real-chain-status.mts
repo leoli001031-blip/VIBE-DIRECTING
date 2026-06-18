@@ -41,8 +41,20 @@ export function createRuntimeApiCurrentProjectRealChainStatus(deps) {
     return undefined;
   }
 
+  function activeRelayStatus(status) {
+    return [
+      "submitting",
+      "submitted",
+      "queued",
+      "running",
+      "generating",
+      "polling",
+      "recoverable_queued",
+    ].includes(String(status || ""));
+  }
+
   function relayStatusCounts(items) {
-    const active = items.filter((item) => ["submitted", "generating", "recoverable_queued"].includes(String(item?.status)));
+    const active = items.filter((item) => activeRelayStatus(item?.status));
     const ready = items.filter((item) => ["planned", "ready"].includes(String(item?.status)) && !(Array.isArray(item?.blockers) && item.blockers.length));
     const completed = items.filter((item) => item?.status === "success");
     const failed = items.filter((item) => item?.status === "failed");
@@ -140,7 +152,7 @@ export function createRuntimeApiCurrentProjectRealChainStatus(deps) {
       };
     });
     const counts = relayStatusCounts(updatedItems);
-    const activeItems = updatedItems.filter((item) => ["submitted", "generating", "recoverable_queued"].includes(String(item?.status)));
+    const activeItems = updatedItems.filter((item) => activeRelayStatus(item?.status));
     const nextReadyItem = updatedItems.find((item) => ["planned", "ready"].includes(String(item?.status)) && !(Array.isArray(item?.blockers) && item.blockers.length));
     return {
       ...relayQueue,
@@ -158,6 +170,18 @@ export function createRuntimeApiCurrentProjectRealChainStatus(deps) {
     return Array.isArray(relayQueue?.items) ? relayQueue.items : [];
   }
 
+  function relayActiveResponseStatus(relayQueue) {
+    const activeItems = relayItems(relayQueue).filter((item) => activeRelayStatus(item?.status));
+    if (!activeItems.length) return undefined;
+    if (activeItems.some((item) => ["running", "generating"].includes(String(item?.status || "")))) return "running";
+    if (activeItems.some((item) => ["submitted", "submitting"].includes(String(item?.status || "")))) return "submitted";
+    return "queued";
+  }
+
+  function shouldLetActiveRelayOverride(status) {
+    return ["failed", "blocked", "unavailable"].includes(String(status || ""));
+  }
+
   function relayEvidenceFor(relayQueue, item) {
     const mediaPath = item?.expectedOutputPath || item?.mediaPath || item?.outputVideoPath;
     const shotId = item?.shotId;
@@ -171,7 +195,11 @@ export function createRuntimeApiCurrentProjectRealChainStatus(deps) {
       sourceReceiptId: submitId ? `seedance_submit_${submitId}` : undefined,
       providerReceiptId: submitId ? `seedance_submit_${submitId}` : undefined,
       submitId,
-      videoStatus: match.status === "recoverable_queued" ? "queued" : match.status,
+      videoStatus: match.status === "recoverable_queued" || match.status === "polling"
+        ? "queued"
+        : match.status === "running"
+          ? "generating"
+          : match.status,
       queueInfo: match.queueInfo,
       queuePosition: match.queuePosition,
       outputHash: typeof match.outputVideoSha256 === "string" ? match.outputVideoSha256 : undefined,
@@ -352,9 +380,20 @@ export function createRuntimeApiCurrentProjectRealChainStatus(deps) {
       : projection.ok
         ? projection.productionStatus
         : "unavailable";
-    const resolvedPreviewStatus = statusAfterReviewReceipt(basePreviewStatus, hadReviewShots, pendingReviewShotIds, "preview_ready");
-    const resolvedProductionStatus = statusAfterReviewReceipt(baseProductionStatus, hadReviewShots, pendingReviewShotIds, "ready");
-    const resolvedReportStatus = statusAfterReviewReceipt(resolvedStatus, hadReviewShots, pendingReviewShotIds, "preview_ready");
+    const relayActiveStatus = resolvedOk ? relayActiveResponseStatus(relayQueue) : undefined;
+    const reviewResolvedPreviewStatus = statusAfterReviewReceipt(basePreviewStatus, hadReviewShots, pendingReviewShotIds, "preview_ready");
+    const reviewResolvedProductionStatus = statusAfterReviewReceipt(baseProductionStatus, hadReviewShots, pendingReviewShotIds, "ready");
+    const reviewResolvedReportStatus = statusAfterReviewReceipt(resolvedStatus, hadReviewShots, pendingReviewShotIds, "preview_ready");
+    const activeRelayOverridesReport = relayActiveStatus && shouldLetActiveRelayOverride(reviewResolvedReportStatus);
+    const resolvedPreviewStatus = relayActiveStatus && shouldLetActiveRelayOverride(reviewResolvedPreviewStatus)
+      ? relayActiveStatus
+      : reviewResolvedPreviewStatus;
+    const resolvedProductionStatus = relayActiveStatus && shouldLetActiveRelayOverride(reviewResolvedProductionStatus)
+      ? relayActiveStatus
+      : reviewResolvedProductionStatus;
+    const resolvedReportStatus = activeRelayOverridesReport
+      ? relayActiveStatus
+      : reviewResolvedReportStatus;
     const plannedImageCount = observations.length || round5ArtifactIngest?.uiSummary?.totalShots || 0;
     const returnedImageCount = projection.returnedObservations.length || round5ArtifactIngest?.uiSummary?.observedStarts || 0;
     const blockerCount = projection.blockedObservations.length || round5ArtifactIngest?.uiSummary?.nextActions?.length || 0;
@@ -457,7 +496,9 @@ export function createRuntimeApiCurrentProjectRealChainStatus(deps) {
       round5ArtifactIngest,
       observations,
       previewItems: planPreviewItems.length ? planPreviewItems : observationPreviewItems,
-      nextAction: preferRound5Status
+      nextAction: activeRelayOverridesReport
+        ? "query_active_video_task"
+        : preferRound5Status
         ? "round5_artifact_gates_require_review"
         : projection.ok
         ? pendingReviewShotIds.length

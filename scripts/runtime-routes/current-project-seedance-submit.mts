@@ -5,12 +5,14 @@ import { spawn } from "node:child_process";
 
 import {
   extractDreaminaTaskInfo,
+  JIMENG_CLI_DEFAULT_VIDEO_RESOLUTION,
+  JIMENG_CLI_SUPPORTED_MODEL_VERSIONS,
+  JIMENG_CLI_VIP_MODEL_VERSION,
   jimengResumeCommand,
   normalizeDreaminaStatus,
 } from "../../src/core/jimengVideoCli.ts";
 import {
   IMAGE2_GENERATE_DEFAULT_SIZE,
-  JIMENG_VIDEO_DEFAULT_RESOLUTION,
 } from "../../src/core/providerPolicy.ts";
 import {
   APIKEY_FUN_RESPONSES_IMAGE_DEFAULT_BASE_URL,
@@ -36,7 +38,7 @@ import {
 } from "../../src/core/referenceAssetStrategy.ts";
 
 const CONFIRM_PHRASE = "submit-seedance-video";
-const DEFAULT_MODEL_VERSION = "seedance2.0";
+const DEFAULT_MODEL_VERSION = JIMENG_CLI_VIP_MODEL_VERSION;
 const DEFAULT_RATIO = "16:9";
 const DEFAULT_POLL_SECONDS = 90;
 const MAX_REFERENCE_IMAGE_BYTES = 50 * 1024 * 1024; // 50MB
@@ -421,20 +423,63 @@ function segmentTitle(segment) {
 }
 
 function activeRelayStatus(status) {
-  return status === "submitted" || status === "generating" || status === "recoverable_queued";
+  return [
+    "submitting",
+    "submitted",
+    "queued",
+    "running",
+    "generating",
+    "polling",
+    "recoverable_queued",
+  ].includes(String(status || ""));
 }
 
 function terminalRelayStatus(status) {
   return status === "success" || status === "failed" || status === "blocked";
 }
 
+function recoverableLegacyFailedRelayItem(item) {
+  if (!item || item.status !== "failed" || !item.submitId || !item.resumeCommand) return false;
+  if (Array.isArray(item.blockers) && item.blockers.length > 0) return false;
+  const notes = Array.isArray(item.notes) ? item.notes.join("\n") : "";
+  return /已提交给\s*Seedance|后台排队|生成中|可恢复|query_result/i.test(notes);
+}
+
+function effectiveRelayItemStatus(item) {
+  return recoverableLegacyFailedRelayItem(item) ? "polling" : item?.status;
+}
+
 function relayStatusFromSeedance(status, outputVideoPath) {
   if (outputVideoPath || status === "success") return "success";
-  if (status === "generating") return "generating";
-  if (status === "queued" || status === "submitted") return "submitted";
-  if (status === "timed_out" || status === "recoverable_queued") return "recoverable_queued";
+  if (status === "generating") return "running";
+  if (status === "queued") return "queued";
+  if (status === "submitted") return "submitted";
+  if (status === "timed_out" || status === "recoverable_queued") return "polling";
   if (status === "submit_failed" || status === "failed" || status === "blocked") return "failed";
   return "submitted";
+}
+
+function recoverableInitialSubmitFailure(taskInfo, submitResult) {
+  if (!taskInfo?.submitId) return false;
+  const normalizedStatus = normalizeDreaminaStatus(taskInfo.status);
+  if (normalizedStatus === "timed_out") return true;
+  if (normalizedStatus !== "failed") return false;
+  const diagnostic = [
+    taskInfo.failureReason,
+    submitResult?.stdout,
+    submitResult?.stderr,
+  ].filter(Boolean).join("\n").toLowerCase();
+  return submitResult?.timedOut === true
+    || /timeout|timed out|deadline|awaiting headers|client\.timeout|econnreset|etimedout|socket hang up|network/i.test(diagnostic);
+}
+
+function providerSubmitStatus({ taskInfo, submitResult, hasVideo }) {
+  if (hasVideo) return "success";
+  const normalizedStatus = normalizeDreaminaStatus(taskInfo.status || (taskInfo.submitId ? "submitted" : "unknown"));
+  if (taskInfo.submitId && (normalizedStatus === "success" || recoverableInitialSubmitFailure(taskInfo, submitResult))) {
+    return "recoverable_queued";
+  }
+  return normalizedStatus;
 }
 
 function relayQueueItemsForSegments({
@@ -451,7 +496,7 @@ function relayQueueItemsForSegments({
   return segments.map((segment) => {
     const existing = existingBySegment.get(segment.id) || {};
     const update = segment.id === activeSegmentId ? activeUpdate || {} : {};
-    const status = update.status || existing.status || "ready";
+    const status = update.status || effectiveRelayItemStatus(existing) || "ready";
     return {
       id: segmentItemId(segment),
       segmentId: segment.id,
@@ -509,7 +554,7 @@ function activeRelayQueueItem(existingQueue, relayQueueItemId) {
     const selected = items.find((item) => item?.id === relayQueueItemId || item?.segmentId === relayQueueItemId);
     if (selected) return selected;
   }
-  return items.find((item) => activeRelayStatus(item?.status) && item?.submitId);
+  return items.find((item) => activeRelayStatus(effectiveRelayItemStatus(item)) && item?.submitId);
 }
 
 function resumeDownloadDirFromCommand(command, fallbackDir) {
@@ -519,7 +564,7 @@ function resumeDownloadDirFromCommand(command, fallbackDir) {
 }
 
 function chooseSegmentForSubmission({ segments, existingQueue, selectedShotIds }) {
-  const activeItem = (existingQueue?.items || []).find((item) => activeRelayStatus(item.status));
+  const activeItem = (existingQueue?.items || []).find((item) => activeRelayStatus(effectiveRelayItemStatus(item)));
   if (activeItem) {
     return {
       blockedByActive: activeItem,
@@ -1682,7 +1727,7 @@ function seedanceSubmitRequestInput(body) {
   return {
     confirmation,
     modelVersion: asString(input?.modelVersion, DEFAULT_MODEL_VERSION),
-    videoResolution: asString(input?.videoResolution, JIMENG_VIDEO_DEFAULT_RESOLUTION),
+    videoResolution: asString(input?.videoResolution, JIMENG_CLI_DEFAULT_VIDEO_RESOLUTION),
     ratio: asString(input?.ratio, DEFAULT_RATIO),
     durationSeconds: asNumber(input?.durationSeconds, undefined),
     pollSeconds: Math.max(30, Math.floor(asNumber(input?.pollSeconds, DEFAULT_POLL_SECONDS))),
@@ -1738,6 +1783,13 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
   }
 
   async function currentProjectSeedanceSubmitResponse(input, extra = {}, source) {
+    input = {
+      ...input,
+      modelVersion: asString(input?.modelVersion, DEFAULT_MODEL_VERSION),
+      videoResolution: asString(input?.videoResolution, JIMENG_CLI_DEFAULT_VIDEO_RESOLUTION),
+      ratio: asString(input?.ratio, DEFAULT_RATIO),
+      pollSeconds: Math.max(30, Math.floor(asNumber(input?.pollSeconds, DEFAULT_POLL_SECONDS))),
+    };
     const submittedAt = new Date().toISOString();
     const projectFacts = readProjectFacts(source);
     const workbenchFacts = currentProjectWorkbenchFacts(source, projectFacts);
@@ -1822,12 +1874,12 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
 
     const blockers = uniqueStrings([
       shots.length ? "" : "当前项目没有可提交的视频镜头。",
-      segmentChoice.blockedByActive ? `已有视频段正在排队或生成：${segmentChoice.blockedByActive.title || segmentChoice.blockedByActive.id}` : "",
+      segmentChoice.blockedByActive ? `已有视频段正在排队或生成：${segmentChoice.blockedByActive.title || segmentChoice.blockedByActive.id}。我会查询这条任务，不会重复提交。` : "",
       confirmationOk ? "" : "需要确认后才能提交视频。",
       providerConfig ? "" : "未找到故事板生成服务配置。",
       providerConfig?.credential?.keyStatus === "configured" && apiKey ? "" : "请先在设置里保存生成服务 Key。",
       input.videoResolution === "720p" ? "" : "当前分辨率配置为 720p，避免误触高成本分辨率。",
-      input.modelVersion === DEFAULT_MODEL_VERSION ? "" : "当前仅支持普通 Seedance 2.0 提交，不使用 VIP。",
+      JIMENG_CLI_SUPPORTED_MODEL_VERSIONS.includes(input.modelVersion) ? "" : "当前视频模型档位不支持，请选择 Seedance 2.0 或 VIP 档。",
       ...agentTaskEnvelopeBlockers(input.agentTaskEnvelope),
     ]);
     const runId = `seedance_${new Date().toISOString().replace(/[:.]/g, "-")}`;
@@ -2160,6 +2212,12 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
           durationSeconds: shot.durationSeconds,
           primaryAction: shot.primaryAction,
         })),
+        submitPolicy: {
+          lane: input.modelVersion === JIMENG_CLI_VIP_MODEL_VERSION ? "seedance_vip_representative_test" : "seedance_manual_model_selection",
+          maxConcurrentVideoJobs: 1,
+          representativeSegmentsSubmittedThisRequest: 1,
+          note: "真实测试默认只提交当前代表性视频段；后续段保持 planned/ready，除非用户明确继续提交。",
+        },
       }, source);
 
       const activeReferencePaths = [
@@ -2191,6 +2249,11 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
 		        args,
 	        expectedQueueWaitMinutes: 50,
 	        maxConcurrentVideoJobs: 1,
+	        submitPolicy: {
+	          lane: input.modelVersion === JIMENG_CLI_VIP_MODEL_VERSION ? "seedance_vip_representative_test" : "seedance_manual_model_selection",
+	          representativeSubmitOnly: true,
+	          noBatchSubmit: true,
+	        },
 	        referenceBundle,
 	        audioReferences: audioReferences.map((ref) => ({
 	          role: ref.role,
@@ -2212,11 +2275,11 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         generatedAt: submittedAt,
         activeSegmentId: activeSegment?.id,
         activeUpdate: {
-          status: "submitted",
+          status: "submitting",
           attempted: true,
           promptPath: promptRelPath,
           referencePaths: activeReferencePaths,
-          note: "本段已开始提交给即梦，等待任务号或视频回流。",
+          note: "本段正在提交给 Seedance 2.0 VIP，等待任务号。",
         },
       });
       writeCurrentProjectRuntimeJson(relayQueueRelPath, queueingRelayQueue, source);
@@ -2253,12 +2316,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         await downloadDreaminaVideoUrls(taskInfo.videoUrls, videoDir);
         videoFiles = findVideoFiles(videoDir);
       }
-      const normalizedStatus = normalizeDreaminaStatus(taskInfo.status || (taskInfo.submitId ? "submitted" : "unknown"));
-      const status = videoFiles.length
-        ? "success"
-        : normalizedStatus === "success" && taskInfo.submitId
-          ? "recoverable_queued"
-          : normalizedStatus;
+      const status = providerSubmitStatus({ taskInfo, submitResult: submit, hasVideo: videoFiles.length > 0 });
       if (submit.exitCode !== 0 && !taskInfo.submitId && !videoFiles.length) {
         const relayQueue = relayQueueForSegments({
           segments: referenceSegments,
@@ -2311,7 +2369,13 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         ? path.relative(source.runRootPath, outputVideoFilePath).replace(/\\/g, "/")
         : undefined;
       const outputVideoSha256 = outputVideoFilePath ? sha256File(outputVideoFilePath) : undefined;
-      const statusForUi = status === "success" ? "needs_review" : status === "timed_out" || status === "recoverable_queued" ? "submitted" : status;
+      const statusForUi = status === "success"
+        ? "needs_review"
+        : status === "timed_out" || status === "recoverable_queued"
+          ? "queued"
+          : status === "generating"
+            ? "generating"
+            : status;
       const resumeCommand = taskInfo.submitId ? jimengResumeCommand({ submitId: taskInfo.submitId, downloadDir: videoDir, cliPath: input.cliPath }) : undefined;
       const relayStatus = relayStatusFromSeedance(status, outputVideoPath);
       const relayQueue = relayQueueForSegments({
@@ -2332,7 +2396,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
           outputVideoPath,
           outputVideoSha256,
           localMediaPaths: outputVideoPath ? [outputVideoPath] : [],
-	          note: outputVideoPath ? "本段视频已返回，仍需复核。" : "本段已提交给即梦，等待结果。",
+	          note: outputVideoPath ? "本段视频已返回，仍需复核。" : "本段已提交给 Seedance 2.0 VIP，后台排队或生成中。",
         },
       });
       writeCurrentProjectRuntimeJson(relayQueueRelPath, relayQueue, source);
@@ -2454,11 +2518,11 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         resumeCommand,
         message: outputVideoPath
           ? relayQueue.autoSubmitAllowed
-	            ? "本段视频已返回，下一段已准备好，可以继续提交。"
+	            ? "本段视频已返回；后续段已准备好，需要你明确确认后再提交。"
 	            : "视频已返回，等待复核。"
           : referenceSegments.length > 1
-	            ? `已提交第 ${referenceSegments.findIndex((segment) => segment.id === activeSegment?.id) + 1}/${referenceSegments.length} 段；不同场景会分段处理，结果出来后继续下一段。`
-            : "视频已提交，即梦排队中；可以稍后恢复查询。",
+	            ? `Seedance 2.0 VIP 已提交代表性第 ${referenceSegments.findIndex((segment) => segment.id === activeSegment?.id) + 1}/${referenceSegments.length} 段；本轮不批量提交，后台等待结果即可。`
+            : "Seedance 2.0 VIP 已提交，后台排队或生成中；可以稍后查询结果。",
       };
       writeCurrentProjectRuntimeJson(reportRelPath, report, source);
       return report;
@@ -2498,7 +2562,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
     const blockers = uniqueStrings([
       activeItem ? "" : "当前没有可恢复查询的视频任务。",
       activeItem?.submitId ? "" : "当前视频任务没有 submitId，不能恢复查询。",
-      activeRelayStatus(activeItem?.status) ? "" : "当前视频任务不在排队或生成中。",
+      activeRelayStatus(effectiveRelayItemStatus(activeItem)) ? "" : "当前视频任务不在排队或生成中。",
     ]);
 
     const baseRelayQueue = relayQueueForSegments({
@@ -2506,7 +2570,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
       existingQueue: existingRelayQueue,
       input: {
         modelVersion: activeItem?.modelVersion || DEFAULT_MODEL_VERSION,
-        videoResolution: activeItem?.videoResolution || JIMENG_VIDEO_DEFAULT_RESOLUTION,
+        videoResolution: activeItem?.videoResolution || JIMENG_CLI_DEFAULT_VIDEO_RESOLUTION,
       },
       generatedAt: checkedAt,
       storyboardConfirmed: true,
@@ -2594,7 +2658,13 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
       ? "success"
       : normalizedStatus === "failed"
         ? "failed"
-        : "recoverable_queued";
+        : normalizedStatus === "generating"
+          ? "generating"
+          : normalizedStatus === "queued"
+            ? "queued"
+            : normalizedStatus === "submitted"
+              ? "submitted"
+              : "recoverable_queued";
     const outputVideoFilePath = videoFiles[0];
     const outputVideoPath = outputVideoFilePath
       ? path.relative(source.runRootPath, outputVideoFilePath).replace(/\\/g, "/")
@@ -2610,7 +2680,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
       existingQueue: existingRelayQueue,
       input: {
         modelVersion: activeItem.modelVersion || DEFAULT_MODEL_VERSION,
-        videoResolution: activeItem.videoResolution || JIMENG_VIDEO_DEFAULT_RESOLUTION,
+        videoResolution: activeItem.videoResolution || JIMENG_CLI_DEFAULT_VIDEO_RESOLUTION,
       },
       generatedAt: checkedAt,
       activeSegmentId,
@@ -2700,7 +2770,15 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
       }),
       endpoint: resumeEndpoint,
       status,
-      uiStatus: outputVideoPath ? "needs_review" : relayStatus === "failed" ? "failed" : "submitted",
+      uiStatus: outputVideoPath
+        ? "needs_review"
+        : relayStatus === "failed"
+          ? "failed"
+          : relayStatus === "running"
+            ? "generating"
+            : relayStatus === "queued" || relayStatus === "polling" || relayStatus === "recoverable_queued"
+              ? "queued"
+              : "submitted",
       providerCalled: true,
       runtimeExternalNetworkCallMade: true,
       videoSubmitted: true,
@@ -2717,11 +2795,11 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
       resumeCommand,
       message: outputVideoPath
         ? relayQueue.autoSubmitAllowed
-	          ? "视频已返回，下一段已准备好，可以继续提交。"
+	          ? "视频已返回；后续段已准备好，需要你明确确认后再提交。"
 	          : "视频已返回，等待复核。"
         : relayStatus === "failed"
           ? `即梦生成失败：${failureReason}`
-          : "还在排队或生成中，已保留恢复查询入口。",
+          : "Seedance 2.0 VIP 还在排队或生成中，已保留恢复查询入口。",
       ...extra,
     };
     writeCurrentProjectRuntimeJson(reportRelPath, report, source);

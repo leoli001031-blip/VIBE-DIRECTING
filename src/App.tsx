@@ -2541,10 +2541,7 @@ function App() {
       ? runtimeProjectBinding
       : projectFileSelection.status === "selected"
         ? selectedProjectIsBrowserDraft
-          ? {
-            status: "unbound" as const,
-            message: "这是临时演示项目；生成参考、视频或导出前请打开本地项目文件夹。",
-          }
+          ? selectedProjectFallbackRuntimeBinding
           : selectedProjectFallbackRuntimeBinding
       : browserDraftHasNoLocalProject
         ? {
@@ -3203,6 +3200,12 @@ function App() {
         const parsed = parseVibeAgentTimelineDocument(JSON.parse(result.content));
         if (!parsed.ok || !parsed.timeline) return;
         if (expectedProjectId && parsed.timeline.projectId !== expectedProjectId) return;
+        if (
+          parsed.timeline.projectRoot
+          && normalizeProjectRootForUiCompare(parsed.timeline.projectRoot) !== normalizeProjectRootForUiCompare(runtimeProjectBinding.projectRoot)
+        ) {
+          return;
+        }
         runtimeAgentTimelineRestoreKeyRef.current = restoreKey;
         setRestoredAgentTimelineEntries(parsed.timeline.entries);
       } catch (error) {
@@ -3884,6 +3887,20 @@ function App() {
     const promotionMode = mode === "lock";
     const retryMode = mode === "retry";
     const rejectMode = mode === "reject";
+    if (item.assetId && (promotionMode || rejectMode)) {
+      await markAssetStatus(item.assetId, promotionMode ? "locked" : "rejected");
+      setLatestPrototypeAgentDemo({
+        status: "preview_ready",
+        result: {
+          label: promotionMode ? "参考已锁定" : "参考已不采用",
+          projectVibeAdded: true,
+          waitingReview: false,
+          previewReady: true,
+          status: promotionMode ? "locked" : "rejected",
+        },
+      });
+      return;
+    }
     const requiresHashBoundOutput = mode === "approve" || promotionMode;
     if (requiresHashBoundOutput && (!item.mediaPath || !item.sourceReceiptId || !item.outputHash)) {
       setLatestPrototypeAgentDemo({

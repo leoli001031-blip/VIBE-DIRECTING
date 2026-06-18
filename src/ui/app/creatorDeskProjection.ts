@@ -549,12 +549,24 @@ function relayQueueActiveItem(relayQueue: VideoRelayQueueState | undefined) {
   if (!relayQueue) return undefined;
   const activeIds = new Set(relayQueue.activeItemIds || []);
   return (relayQueue.items || []).find((item) => activeIds.has(item.id))
-    || (relayQueue.items || []).find((item) => item.status === "submitted" || item.status === "generating" || item.status === "recoverable_queued");
+    || (relayQueue.items || []).find((item) =>
+      item.status === "submitting"
+      || item.status === "submitted"
+      || item.status === "queued"
+      || item.status === "running"
+      || item.status === "generating"
+      || item.status === "polling"
+      || item.status === "recoverable_queued"
+    );
 }
 
 function relayQueueItemStatusLabel(status: string) {
+  if (status === "submitting") return "提交中";
+  if (status === "running") return "生成中";
   if (status === "generating") return "生成中";
-  if (status === "submitted") return "排队中";
+  if (status === "queued") return "排队中";
+  if (status === "submitted") return "已提交";
+  if (status === "polling") return "等待查询";
   if (status === "recoverable_queued") return "排队中";
   return "处理中";
 }
@@ -564,6 +576,13 @@ function relayQueueActiveStatusLabel(item: VideoRelayQueueState["items"][number]
   if (providerStatus === "generating") return "生成中";
   if (providerStatus === "queued") return "排队中";
   return relayQueueItemStatusLabel(item.status);
+}
+
+function relayQueueProviderStatusForProjection(status: string) {
+  if (status === "submitting") return "submitted";
+  if (status === "running") return "generating";
+  if (status === "polling") return "queued";
+  return status;
 }
 
 function relayQueueProgressSummary(
@@ -594,7 +613,7 @@ function videoGenerationFromRelayQueue(relayQueue: VideoRelayQueueState | undefi
   const completedCount = relayQueue.counts.completed || relayQueue.items.filter((item) => item.status === "success").length;
   const failedCount = relayQueue.counts.failed || relayQueue.items.filter((item) => item.status === "failed").length;
   const blockedCount = relayQueue.counts.blocked || relayQueue.items.filter((item) => item.status === "blocked").length;
-  const recoverableItemCount = relayQueue.items.filter((item) => item.status === "recoverable_queued").length;
+  const recoverableItemCount = relayQueue.items.filter((item) => item.status === "recoverable_queued" || item.status === "polling").length;
   const recoverableCount = relayQueue.status === "complete" || completedCount >= relayQueue.counts.total
     ? 0
     : recoverableItemCount;
@@ -621,13 +640,13 @@ function videoGenerationFromRelayQueue(relayQueue: VideoRelayQueueState | undefi
 
   const activeStatus = activeItem
     ? buildJimengVideoStatusProjection({
-        status: activeItem.status,
+        status: relayQueueProviderStatusForProjection(activeItem.status),
         submitId: activeItem.submitId,
         queueInfo: activeItem.queueInfo,
         queuePosition: activeItem.queuePosition,
         outputVideoPath: activeItem.outputVideoPath,
         localMediaPaths: activeItem.localMediaPaths,
-        recoverable: activeItem.status === "recoverable_queued",
+        recoverable: activeItem.status === "recoverable_queued" || activeItem.status === "polling",
       })
     : undefined;
   const status: CreatorVideoGenerationStatus = activeStatus?.status === "queued"

@@ -240,9 +240,9 @@ try {
   assert(workbenchFacts.storyFlow.sectionCount === 1, "workbench storyFlow should normalize sections");
   assert(workbenchFacts.storyFlow.shots[0]?.referenceStrategy === "storyboard_rapid_cut", "workbench storyFlow should preserve Project.vibe referenceStrategy");
   assert(workbenchFacts.visualMemory.assetCount === 7, "workbench visualMemory should include normalized assets plus project-folder candidates");
-	  assert(workbenchFacts.visualMemory.summary.locked === 2, "workbench visualMemory should let Project.vibe locked assets override sidecar candidates");
+	  assert(workbenchFacts.visualMemory.summary.locked === 3, "workbench visualMemory should let Project.vibe locked assets and text style constraints override sidecar candidates");
 	  assert(workbenchFacts.visualMemory.summary.candidate === 0, "workbench visualMemory should not keep a sidecar candidate after Project.vibe locks the same asset");
-	  assert(workbenchFacts.visualMemory.summary.needsReview === 5, "workbench visualMemory should count needs_review assets including folder candidates");
+	  assert(workbenchFacts.visualMemory.summary.needsReview === 4, "workbench visualMemory should count needs_review assets including folder candidates, but not text-only style constraints");
   assert(workbenchFacts.visualMemory.folderScan.discoveredAssetCount === 4, "workbench visualMemory should report project folder scan discoveries");
   assert(workbenchFacts.factsUsed.some((fact) => fact.name === "project_folder_scan"), "workbench facts should record project folder scan as a read-only fact source");
 	  const sceneAsset = workbenchFacts.visualMemory.assets.find((asset) => asset.id === "scene_a");
@@ -252,6 +252,8 @@ try {
 	  assert(sceneAsset?.outputHash === "sha-scene-a", "workbench asset facts should preserve generated asset hash evidence");
 	  assert(sceneAsset?.promptText === "Generate Station scene reference.", "workbench asset facts should preserve generated asset prompt text");
 	  assert(sceneAsset?.promptHash === "sha-prompt-scene-a", "workbench asset facts should preserve generated asset prompt hash");
+  const textStyleAsset = workbenchFacts.visualMemory.assets.find((asset) => asset.id === "style_a");
+  assert(textStyleAsset?.status === "locked", "text-only style constraints should not block reference review or video submit");
   const folderCharacter = workbenchFacts.visualMemory.assets.find((asset) => asset.path === "characters/lin-an/front.png");
   assert(folderCharacter?.type === "character", "project folder scan should classify character directories as character assets");
   assert(folderCharacter?.status === "needs_review", "project folder assets should require creator review before locking");

@@ -81,10 +81,16 @@ export async function saveProjectAgentTimeline(
   target: ProjectVibeDraftTarget,
   timeline: VibeAgentTimelineDocument,
 ): Promise<ProjectAgentTimelineWriteResult> {
-  const serialized = `${JSON.stringify(timeline, null, 2)}\n`;
+  const normalizedTimeline = target.projectRoot
+    ? {
+        ...timeline,
+        projectRoot: normalizeProjectAgentRoot(target.projectRoot),
+      }
+    : timeline;
+  const serialized = `${JSON.stringify(normalizedTimeline, null, 2)}\n`;
   if (target.projectRoot) {
     const runtimeWrite = await saveCurrentProjectAgentTimelineTextToRuntime({
-      projectId: timeline.projectId,
+      projectId: normalizedTimeline.projectId,
       projectRoot: target.projectRoot,
     }, serialized);
     if (runtimeWrite.ok) {
@@ -92,7 +98,7 @@ export async function saveProjectAgentTimeline(
         ok: true,
         status: "written",
         path: runtimeWrite.path || projectAgentTimelinePath,
-        timeline,
+        timeline: normalizedTimeline,
         errors: [],
       };
     }
@@ -132,6 +138,19 @@ function parseProjectAgentTimelineText(
         errors: ["Agent timeline belongs to another project."],
       };
     }
+    if (
+      parsed.timeline.projectRoot
+      && fallback.projectRoot
+      && normalizeProjectAgentRoot(parsed.timeline.projectRoot) !== normalizeProjectAgentRoot(fallback.projectRoot)
+    ) {
+      return {
+        ok: false,
+        status: "project_mismatch",
+        path: input.path,
+        timeline: fallback,
+        errors: ["Agent timeline belongs to another project folder."],
+      };
+    }
     return { ok: true, status: "restored", path: input.path, timeline: parsed.timeline, errors: [] };
   } catch (error) {
     return {
@@ -155,4 +174,8 @@ function createProjectAgentTimeline(input: {
     projectRoot: input.projectRoot,
     generatedAt: input.generatedAt,
   });
+}
+
+function normalizeProjectAgentRoot(value: string) {
+  return value.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
 }

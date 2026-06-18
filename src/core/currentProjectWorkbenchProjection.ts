@@ -359,22 +359,34 @@ function visualMemoryReadable(facts?: ProjectWorkbenchFacts) {
 }
 
 function assetCounts(assetFacts: ProjectWorkbenchAssetFact[]) {
+  const effectiveFacts = assetFacts.map((asset) => ({ ...asset, status: effectiveAssetStatus(asset) }));
   return {
-    locked: assetFacts.filter((asset) => asset.status === "locked").length,
-    candidate: assetFacts.filter((asset) => asset.status === "candidate").length,
-    needsReview: assetFacts.filter((asset) => asset.status === "needs_review").length,
-    rejected: assetFacts.filter((asset) => asset.status === "rejected").length,
-    missing: assetFacts.filter((asset) => asset.status === "missing").length,
+    locked: effectiveFacts.filter((asset) => asset.status === "locked").length,
+    candidate: effectiveFacts.filter((asset) => asset.status === "candidate").length,
+    needsReview: effectiveFacts.filter((asset) => asset.status === "needs_review").length,
+    rejected: effectiveFacts.filter((asset) => asset.status === "rejected").length,
+    missing: effectiveFacts.filter((asset) => asset.status === "missing").length,
   };
 }
 
+function isNonBlockingTextStyleFact(asset: ProjectWorkbenchAssetFact) {
+  return asset.type === "style"
+    && !cleanString(asset.path)
+    && (asset.status === "candidate" || asset.status === "needs_review");
+}
+
+function effectiveAssetStatus(asset: ProjectWorkbenchAssetFact) {
+  return isNonBlockingTextStyleFact(asset) ? "locked" : asset.status;
+}
+
 function assetFactToRecord(asset: ProjectWorkbenchAssetFact, projectRoot?: string): AssetRecord {
+  const status = effectiveAssetStatus(asset);
   const lockedStatus: AssetRecord["lockedStatus"] =
-    asset.status === "locked"
+    status === "locked"
       ? "locked"
-      : asset.status === "candidate"
+      : status === "candidate"
         ? "candidate"
-        : asset.status === "missing"
+        : status === "missing"
           ? "not_generated"
           : "needs_review";
   return {
@@ -382,7 +394,7 @@ function assetFactToRecord(asset: ProjectWorkbenchAssetFact, projectRoot?: strin
     type: asset.type,
     name: asset.name,
     path: resolveProjectMediaPath(asset.path, projectRoot) || `visual_memory/${asset.id}.json`,
-    status: asset.status === "missing" ? "missing" : asset.status === "rejected" ? "rejected" : "exists",
+    status: status === "missing" ? "missing" : status === "rejected" ? "rejected" : "exists",
     lockedStatus,
     providerId: "current-project-visual-memory",
     sourceReceiptId: asset.sourceReceiptId,
@@ -391,14 +403,14 @@ function assetFactToRecord(asset: ProjectWorkbenchAssetFact, projectRoot?: strin
     promptPath: asset.promptPath,
     promptHash: asset.promptHash,
     usedByShotIds: asset.usedByShotIds,
-    safeForFutureReference: asset.status === "locked",
+    safeForFutureReference: status === "locked",
     textConstraints: asset.textConstraints,
     sourceRefs: asset.sourceRefs,
     issues: uniqueStrings([
-      ...(asset.status === "candidate" ? ["candidate_draft_only"] : []),
-      ...(asset.status === "needs_review" ? ["needs_review"] : []),
-      ...(asset.status === "rejected" ? [asset.rejectedReason || "rejected_reference"] : []),
-      ...(asset.status === "missing" ? ["missing_reference"] : []),
+      ...(status === "candidate" ? ["candidate_draft_only"] : []),
+      ...(status === "needs_review" ? ["needs_review"] : []),
+      ...(status === "rejected" ? [asset.rejectedReason || "rejected_reference"] : []),
+      ...(status === "missing" ? ["missing_reference"] : []),
     ]),
   };
 }
@@ -652,9 +664,13 @@ export function applyCurrentProjectWorkbenchProjectionToRuntimeState(
     missing: projection.available ? projection.assets.missingCount : 0,
     byType: Array.from(assetSummaryByType.entries()).map(([type, summary]) => ({ type, ...summary })),
   };
-  const lockedReferenceIds = projection.assetFacts.reduce((acc, asset) => { if (asset.status === "locked") acc.push(asset.id); return acc; }, [] as string[]);
-  const candidateReferenceIds = projection.assetFacts.reduce((acc, asset) => { if (asset.status === "candidate" || asset.status === "needs_review") acc.push(asset.id); return acc; }, [] as string[]);
-  const rejectedReferenceIds = projection.assetFacts.reduce((acc, asset) => { if (asset.status === "rejected") acc.push(asset.id); return acc; }, [] as string[]);
+  const lockedReferenceIds = projection.assetFacts.reduce((acc, asset) => { if (effectiveAssetStatus(asset) === "locked") acc.push(asset.id); return acc; }, [] as string[]);
+  const candidateReferenceIds = projection.assetFacts.reduce((acc, asset) => {
+    const status = effectiveAssetStatus(asset);
+    if (status === "candidate" || status === "needs_review") acc.push(asset.id);
+    return acc;
+  }, [] as string[]);
+  const rejectedReferenceIds = projection.assetFacts.reduce((acc, asset) => { if (effectiveAssetStatus(asset) === "rejected") acc.push(asset.id); return acc; }, [] as string[]);
   const projectedShotById = new Map(projection.shots.map((shot) => [shot.id, shot]));
 
   return {

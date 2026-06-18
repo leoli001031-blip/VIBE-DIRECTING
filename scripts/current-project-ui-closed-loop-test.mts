@@ -857,13 +857,14 @@ const queryPath = projectRuntimeRequestPath(currentEndpoint, {
   projectId: "最后一班星图",
   projectRoot: "/Users/lichenhao/Desktop/Vibe Director/runtime-tests/full_generation_10shot_two_act_20260429",
 });
-assert(queryPath === currentEndpoint, "current project requests must not carry project id/root query params");
+assert(queryPath.includes(`${currentEndpoint}?`), "current project requests should keep the endpoint and append request identity");
+assert(queryPath.includes("projectRoot=") && queryPath.includes("projectId="), "current project requests should carry project id/root query params");
 assert(
   projectRuntimeRequestPath(projectRound5StrictEditReturnEndpoint, {
     projectId: "round5_zero_planning_anime_signal",
     projectRoot: "real-test-sandbox/round5-zero-project-planning-anime/runs/run-2026-05-09T11-09-28-642Z",
-  }) === round5StrictEditReturnEndpoint,
-  "Round 5 strict-edit return requests must use the current-project endpoint without 005 sample query params",
+  }).includes(`${round5StrictEditReturnEndpoint}?`),
+  "Round 5 strict-edit return requests should keep the current-project endpoint and append request identity",
 );
 
 function currentProjectBindingResponse(project) {
@@ -1595,6 +1596,12 @@ try {
     ["GET", projectCurrentBindingEndpoint],
     ["GET", projectCurrentChoicesEndpoint],
     ["POST", projectCurrentSelectEndpoint],
+  ]) {
+    const call = runtimeFetchCalls.find((item) => item.method === method && item.path === endpoint);
+    assert(call, `frontend should call ${method} ${endpoint}`);
+    assert(!call.search.includes("projectRoot=") && !call.search.includes("projectId="), `${method} ${endpoint} should not carry project query params`);
+  }
+  for (const [method, endpoint] of [
     ["GET", projectRealChainStatusEndpoint],
     ["POST", projectRealChainRunCheckEndpoint],
     ["GET", projectImage2BatchPlanEndpoint],
@@ -1607,7 +1614,7 @@ try {
   ]) {
     const call = runtimeFetchCalls.find((item) => item.method === method && item.path === endpoint);
     assert(call, `frontend should call ${method} ${endpoint}`);
-    assert(!call.search.includes("projectRoot=") && !call.search.includes("projectId="), `${method} ${endpoint} should not carry project query params`);
+    assert(call.search.includes("projectRoot=") || call.search.includes("projectId="), `${method} ${endpoint} should carry project identity query params`);
   }
   const selectCall = runtimeFetchCalls.find((item) => item.method === "POST" && item.path === projectCurrentSelectEndpoint);
   assert(selectCall?.body && JSON.parse(String(selectCall.body)).projectRoot === project005RuntimeIdentity.projectRoot, "connect project should send selected projectRoot");

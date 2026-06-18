@@ -114,14 +114,17 @@ export function createAssetLibraryFromCurrentProjectWorkbench(projection: Curren
     createdAt: new Date().toISOString(),
   });
   for (const asset of projection.assetFacts) {
+    const effectiveStatus = asset.type === "style" && !asset.path && (asset.status === "candidate" || asset.status === "needs_review")
+      ? "locked"
+      : asset.status;
     const status: AssetLibraryStatus =
-      asset.status === "needs_review"
+      effectiveStatus === "needs_review"
         ? "review"
-        : asset.status === "missing"
+        : effectiveStatus === "missing"
           ? "missing"
-          : asset.status === "rejected"
+          : effectiveStatus === "rejected"
             ? "rejected"
-            : asset.status;
+            : effectiveStatus;
     const detectedSourceKind = asset.path ? assetSourceKindForPath(asset.path) : "manual_definition";
     const draftOnlySource = ["provider_temp_output", "failed_output", "shot_output", "contact_sheet"].includes(asset.sourceKind || detectedSourceKind);
     const sourceKind = draftOnlySource ? "manual_definition" : detectedSourceKind;

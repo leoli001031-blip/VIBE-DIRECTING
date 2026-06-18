@@ -193,11 +193,30 @@ const staleRuntimeStatusPayload = {
 
 let requests = [];
 let responseByUrl = new Map();
+function requestPath(urlText) {
+  return new URL(urlText, "http://127.0.0.1:8790").pathname;
+}
+function requestUrlWithoutSearch(urlText) {
+  const parsed = new URL(urlText, "http://127.0.0.1:8790");
+  return `${parsed.origin}${parsed.pathname}`;
+}
+function requestSearchParams(urlText) {
+  return new URL(urlText, "http://127.0.0.1:8790").searchParams;
+}
+function assertCurrentProjectRuntimeRequest(request) {
+  const params = requestSearchParams(request.url);
+  assert(params.get("projectRoot") === currentProject.projectRoot, "current runtime request should carry the selected project root");
+  assert(params.get("projectId") === currentProject.projectId, "current runtime request should carry the selected project id");
+  assert(!request.url.includes(staleProject.projectId), "current runtime request must not carry stale project id");
+  assert(!request.url.includes(staleProject.projectRoot), "current runtime request must not carry stale project root");
+}
 globalThis.fetch = async (url, init) => {
   const urlText = String(url);
   requests.push({ url: urlText, method: init?.method || "GET" });
   assert(!/image2|seedance|jimeng|sora|provider/i.test(urlText), `provider or worker-like URL must not be requested: ${urlText}`);
-  const payload = responseByUrl.get(urlText);
+  const payload = responseByUrl.get(urlText)
+    || responseByUrl.get(requestUrlWithoutSearch(urlText))
+    || responseByUrl.get(requestPath(urlText));
   return payload ? okJson(payload) : { ok: false, status: 404, json: async () => ({ status: "missing" }) };
 };
 
@@ -235,8 +254,8 @@ assert(mismatchedState.status === "unavailable", "mismatched runtime status must
 assert(!mismatchedState.summary, "mismatched runtime status must not leak stale 005 summary");
 assert(mismatchedProjection.queue.length === 0, "mismatched Preview projection must not show stale 005 or fallback previewExport items");
 assert(!JSON.stringify(mismatchedProjection).includes(staleProject.projectId), "mismatched Preview projection must not include stale 005 identity");
-assert(requests.map((request) => request.url).join(",") === `${projectCurrentBindingEndpoint},${projectRealChainStatusEndpoint}`, "bound status should use current runtime endpoints only");
-assert(requests.every((request) => !request.url.includes("?")), "current runtime endpoints must not carry arbitrary project query params");
+assert(requests.map((request) => requestPath(request.url)).join(",") === `${projectCurrentBindingEndpoint},${projectRealChainStatusEndpoint}`, "bound status should use current runtime endpoints only");
+assertCurrentProjectRuntimeRequest(requests[1]);
 assertProductCopy(mismatchedState.message);
 
 responseByUrl = new Map([

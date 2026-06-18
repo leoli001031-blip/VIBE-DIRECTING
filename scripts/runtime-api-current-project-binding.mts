@@ -216,9 +216,13 @@ export function createRuntimeApiCurrentProjectBinding({
       throw new Error("projectRoot must be a project directory or project.vibe inside the repository.");
     }
     return resolveProjectSource(configuredPath, {
-      projectRootMode: "runtime_current_project_binding",
-      sourceLabel: "runtime endpoint / current project binding validation",
+      projectRootMode: options.projectRootMode || "runtime_current_project_binding",
+      sourceLabel: options.sourceLabel || "runtime endpoint / current project binding validation",
       ignoreReportEnv: true,
+      requestContextSource: options.requestContextSource,
+      requestProjectId: options.projectId,
+      requestProjectIdSource: options.projectIdSource,
+      requestProjectRoot: projectRoot,
     });
   }
 
@@ -405,14 +409,26 @@ export function createRuntimeApiCurrentProjectBinding({
     };
   }
 
-  function currentProjectSourceResult() {
+  function currentProjectSourceResult(requestContext = {}) {
     try {
+      const requestedProjectRoot = asString(requestContext.projectRoot);
+      if (requestedProjectRoot) {
+        return {
+          source: validateSelectableProjectRoot(requestedProjectRoot, {
+            projectRootMode: "runtime_current_project_request",
+            sourceLabel: "runtime endpoint / request project root",
+            requestContextSource: "request",
+            projectId: asString(requestContext.projectId),
+            projectIdSource: asString(requestContext.projectIdSource),
+          }),
+        };
+      }
       return { source: currentProjectSource() };
     } catch (error) {
       return {
         error,
         message: error instanceof Error ? error.message : "Current project root is unavailable.",
-        unbound: error?.code === "CURRENT_PROJECT_UNBOUND",
+        unbound: !requestContext.projectRoot && error?.code === "CURRENT_PROJECT_UNBOUND",
         bindingState: error?.bindingState,
       };
     }

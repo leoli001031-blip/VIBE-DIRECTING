@@ -3,8 +3,12 @@ export const videoRelayQueueSchemaVersion = "0.1.0";
 export type VideoRelayQueueItemStatus =
   | "planned"
   | "ready"
+  | "submitting"
   | "submitted"
+  | "queued"
+  | "running"
   | "generating"
+  | "polling"
   | "recoverable_queued"
   | "success"
   | "failed"
@@ -73,7 +77,13 @@ export interface BuildVideoRelayQueueStateInput {
 }
 
 function active(status: VideoRelayQueueItemStatus): boolean {
-  return status === "submitted" || status === "generating" || status === "recoverable_queued";
+  return status === "submitting"
+    || status === "submitted"
+    || status === "queued"
+    || status === "running"
+    || status === "generating"
+    || status === "polling"
+    || status === "recoverable_queued";
 }
 
 function ready(status: VideoRelayQueueItemStatus): boolean {
@@ -158,9 +168,11 @@ export function buildVideoRelayQueueState(input: BuildVideoRelayQueueStateInput)
       : paused
         ? "视频生成已暂停，可以稍后继续。"
         : activeItems.length
-          ? "即梦正在处理当前任务，结果出来后会继续下一个。"
+          ? activeItems[0]?.status === "submitting"
+            ? "正在提交 Seedance 2.0 VIP，拿到提交号后会进入后台队列。"
+            : "Seedance 2.0 VIP 已接管当前视频任务；排队或生成时只查询结果，不重复提交。"
           : nextReadyItem
-            ? "已准备好提交下一个视频任务。"
+            ? "后续视频段已准备好，需要你明确确认后再提交。"
             : allDone
               ? "视频队列已处理完，等待复核。"
               : "视频队列已准备，等待可提交任务。",

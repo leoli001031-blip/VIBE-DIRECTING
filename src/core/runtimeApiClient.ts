@@ -140,8 +140,14 @@ export function projectMismatchMessage() {
 }
 
 export function projectRuntimeRequestPath(endpoint: string, expected?: ProjectRuntimeIdentity) {
-  void expected;
-  return endpoint;
+  const params = new URLSearchParams();
+  const projectRoot = String(expected?.projectRoot || "").trim();
+  const projectId = String(expected?.projectId || "").trim();
+  if (projectRoot) params.set("projectRoot", projectRoot);
+  if (projectId) params.set("projectId", projectId);
+  const query = params.toString();
+  if (!query) return endpoint;
+  return `${endpoint}${endpoint.includes("?") ? "&" : "?"}${query}`;
 }
 
 function normalizeRuntimeApiBaseUrl(value: unknown) {

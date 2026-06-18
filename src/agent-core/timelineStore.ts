@@ -26,6 +26,12 @@ export function loadVibeAgentTimelineFromProjectRoot(input: VibeAgentTimelineSee
     const parsed = parseVibeAgentTimelineDocument(JSON.parse(fs.readFileSync(filePath, "utf8")));
     if (!parsed.ok || !parsed.timeline) return createVibeAgentTimelineDocument(input);
     if (parsed.timeline.projectId !== input.projectId) return createVibeAgentTimelineDocument(input);
+    if (
+      parsed.timeline.projectRoot
+      && normalizeProjectRoot(parsed.timeline.projectRoot) !== normalizeProjectRoot(projectRoot)
+    ) {
+      return createVibeAgentTimelineDocument(input);
+    }
     return parsed.timeline;
   } catch {
     return createVibeAgentTimelineDocument(input);
@@ -41,9 +47,16 @@ export function saveVibeAgentTimelineToProjectRoot(
   const filePath = path.join(root, vibeAgentTimelineRelativePath);
   try {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, `${JSON.stringify(timeline, null, 2)}\n`);
+    fs.writeFileSync(filePath, `${JSON.stringify({
+      ...timeline,
+      projectRoot: normalizeProjectRoot(root),
+    }, null, 2)}\n`);
     return { ok: true, path: filePath };
   } catch (error) {
     return { ok: false, path: filePath, error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+function normalizeProjectRoot(value: string) {
+  return value.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
 }
