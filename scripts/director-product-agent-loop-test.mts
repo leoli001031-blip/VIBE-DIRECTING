@@ -1065,6 +1065,125 @@ assert(broadNoVideoReferenceLoop.status === "tool_ready", "broader no-video word
 assert(broadNoVideoReferenceLoop.action.executionContract.mode === "reference_allowed", "broader no-video wording should keep video submit disabled");
 assert(broadNoVideoReferenceLoop.action.toolPlan.toolName === "image2_reference_generation", "broader no-video reference command should not route to video submit");
 
+const missingReferenceProject = structuredClone(project);
+missingReferenceProject.assets = missingReferenceProject.assets.map((asset) =>
+  asset.id === "asset_scene_station"
+    ? {
+        ...asset,
+        status: "missing",
+        lockedStatus: "not_generated",
+      }
+    : asset,
+);
+const missingReferenceRuntimeState = buildProjectRuntimeStateFromProjectVibe({
+  project: missingReferenceProject,
+  projectRoot,
+  projectPath: projectVibeFileName,
+  generatedAt,
+});
+const continueMissingReferenceLoop = runDirectorProductAgentLoop({
+  project: missingReferenceProject,
+  runtimeState: missingReferenceRuntimeState,
+  userIntent: "继续",
+  userConfirmed: false,
+  generatedAt,
+  projectRoot,
+  projectPath: projectVibeFileName,
+  selection: {
+    currentView: "story",
+    selectedShotId: "shot_002",
+  },
+  availability: {
+    projectReady: true,
+    webSearchReady: true,
+    referenceGenerationReady: true,
+    videoSubmitReady: true,
+    exportReady: true,
+  },
+});
+assert(continueMissingReferenceLoop.status === "awaiting_confirmation", "continue should ask before generating missing references");
+assert(continueMissingReferenceLoop.action.kind === "prepare_reference_generation", "continue should choose missing reference generation before video");
+assert(continueMissingReferenceLoop.action.executionContract.mode === "reference_allowed", "continue should stage a reference permission request");
+assert(continueMissingReferenceLoop.action.status === "staged", "continue reference action should be staged, not blocked");
+assert(continueMissingReferenceLoop.toolHandoff.status === "blocked", "unconfirmed continue reference action should not expose invocation yet");
+assert(continueMissingReferenceLoop.toolHandoff.blockers.length === 1 && continueMissingReferenceLoop.toolHandoff.blockers[0] === "user_confirmation_required", "continue reference action should only wait for confirmation");
+
+const explicitTextOnlyEditWithMissingReferences = runDirectorProductAgentLoop({
+  project: missingReferenceProject,
+  runtimeState: missingReferenceRuntimeState,
+  userIntent: "把这个镜头标题改成「蓝光车票追逐」，只写项目，不生成参考。",
+  userConfirmed: false,
+  generatedAt,
+  projectRoot,
+  projectPath: projectVibeFileName,
+  selection: {
+    currentView: "story",
+    selectedShotId: "shot_002",
+  },
+  availability: {
+    projectReady: true,
+    webSearchReady: true,
+    referenceGenerationReady: true,
+    videoSubmitReady: true,
+    exportReady: true,
+  },
+});
+assert(explicitTextOnlyEditWithMissingReferences.status === "awaiting_confirmation", "explicit text-only edit should still wait for confirmation");
+assert(explicitTextOnlyEditWithMissingReferences.action.kind === "revise_story_or_shot", "explicit text-only edit must not be swallowed by missing-reference continue logic");
+assert(explicitTextOnlyEditWithMissingReferences.action.toolPlan.toolName === "project_vibe_patch", "explicit text-only edit should stay in the Project.vibe patch lane");
+assert(explicitTextOnlyEditWithMissingReferences.action.toolPlan.providerSubmitAllowed === false, "explicit text-only edit must not call Image2 or Seedance");
+
+const confirmedContinueMissingReferenceLoop = runDirectorProductAgentLoop({
+  project: missingReferenceProject,
+  runtimeState: missingReferenceRuntimeState,
+  userIntent: "继续",
+  userConfirmed: true,
+  generatedAt,
+  projectRoot,
+  projectPath: projectVibeFileName,
+  selection: {
+    currentView: "story",
+    selectedShotId: "shot_002",
+  },
+  availability: {
+    projectReady: true,
+    webSearchReady: true,
+    referenceGenerationReady: true,
+    videoSubmitReady: true,
+    exportReady: true,
+  },
+});
+assert(confirmedContinueMissingReferenceLoop.status === "tool_ready", "confirmed continue should prepare reference generation");
+assert(confirmedContinueMissingReferenceLoop.toolInvocationReady === true, "confirmed continue reference action should expose the controlled invocation");
+assert(confirmedContinueMissingReferenceLoop.toolHandoff.handler === "image2_reference_generation", "confirmed continue should invoke the Image2 reference lane");
+assert(confirmedContinueMissingReferenceLoop.providerCalled === false && confirmedContinueMissingReferenceLoop.workerSpawned === false, "confirmed continue reference action must still be handed off, not executed inline");
+
+const continueReadyVideoLoop = runDirectorProductAgentLoop({
+  project,
+  runtimeState,
+  userIntent: "继续",
+  userConfirmed: false,
+  generatedAt,
+  projectRoot,
+  projectPath: projectVibeFileName,
+  selection: {
+    currentView: "story",
+    selectedShotId: "shot_002",
+  },
+  availability: {
+    projectReady: true,
+    webSearchReady: true,
+    referenceGenerationReady: true,
+    videoSubmitReady: true,
+    exportReady: true,
+  },
+});
+assert(continueReadyVideoLoop.status === "awaiting_confirmation", "continue on a ready project should ask before video submit");
+assert(continueReadyVideoLoop.action.kind === "prepare_video_submit", "continue on a ready project should prepare video submit");
+assert(continueReadyVideoLoop.action.executionContract.mode === "video_allowed", "continue video action should stage an explicit video permission request");
+assert(continueReadyVideoLoop.action.status === "staged", "continue video action should be staged, not blocked");
+assert(continueReadyVideoLoop.toolHandoff.blockers.length === 1 && continueReadyVideoLoop.toolHandoff.blockers[0] === "user_confirmation_required", "continue video action should only wait for confirmation");
+
 const taskEnvelopeTamperedLoop = runDirectorProductAgentLoop({
   project,
   runtimeState,
@@ -1179,6 +1298,38 @@ assert(videoLoop.nextProject?.shots.find((shot) => shot.id === "shot_002")?.inte
 assert(videoLoop.projectVibeWritten === true, "video loop should write Project.vibe before tool invocation");
 assert(videoLoop.toolInvocationReady === true, "video loop should expose a controlled tool invocation only after Project.vibe writeback");
 assert(videoLoop.providerCalled === false && videoLoop.workerSpawned === false, "product Agent loop must not call Seedance directly");
+
+const videoQueryLoop = runDirectorProductAgentLoop({
+  project,
+  runtimeState,
+  userIntent: "继续",
+  userConfirmed: true,
+  generatedAt,
+  projectRoot,
+  projectPath: projectVibeFileName,
+  selection: {
+    currentView: "story",
+    selectedShotId: "shot_002",
+  },
+  executionContract: videoAllowedExecutionContract,
+  availability: {
+    projectReady: true,
+    webSearchReady: true,
+    referenceGenerationReady: true,
+    videoSubmitReady: true,
+    exportReady: true,
+  },
+  videoStatus: "submitted",
+  videoCanResume: true,
+  videoWaitingCount: 1,
+  videoDetail: "Seedance 已提交，可以查询结果。",
+});
+assert(videoQueryLoop.status === "tool_ready", "recoverable video continue should prepare a query tool action");
+assert(videoQueryLoop.action.kind === "query_video_result", "recoverable video continue should query instead of creating another submit action");
+assert(videoQueryLoop.action.toolPlan.providerSubmitAllowed === false, "video query must not open a new provider submit");
+assert(videoQueryLoop.toolHandoff.status === "ready", "confirmed video query handoff should be ready");
+assert(videoQueryLoop.toolHandoff.invocation?.taskEnvelope.handler === "seedance_video_submit", "video query keeps the runtime-compatible Seedance envelope");
+assert(videoQueryLoop.toolHandoff.invocation?.taskEnvelope.providerSubmitAllowed === false, "video query envelope must not allow provider submit");
 
 const videoNotReadyLoop = runDirectorProductAgentLoop({
   project,

@@ -1,6 +1,8 @@
 import type { ExportActionState } from "../../core/exportAction";
 import type { ExportWorkerState } from "../../core/exportWorker";
 import type { ProjectRuntimeState } from "../../core/projectState";
+import { videoBlockerRecoveryAdvice } from "../../core/videoBlockerRecovery";
+import type { VibeAgentTimelineStatusView } from "../../agent-core";
 import type { DirectorView } from "../director/directorTypes";
 
 type ActionStatus = "idle" | "running" | "blocked" | "needs_review" | "verified" | "submitted" | "failed" | "ready";
@@ -101,6 +103,7 @@ export interface ProjectStatusViewModelInput {
   referenceGapCount?: number;
   agentStage?: CreatorAgentStageLike;
   agentCommand?: CreatorAgentCommandLike;
+  agentTimelineStatus?: VibeAgentTimelineStatusView;
   newVideoStatus?: NewVideoEntryStatusLike;
   exportAction?: ExportActionState;
   exportWorker?: ExportWorkerState;
@@ -145,10 +148,10 @@ function videoTaskFactsForStatus(stage?: CreatorVideoStageLike): Array<{ label: 
   const sourceFacts = stage?.generation?.taskFacts || [];
   if (!stage || !sourceFacts.length) return [];
   const priority = stage.status === "failed"
-    ? ["当前段", "失败原因", "下一步", "提交号"]
+    ? ["当前段", "原因", "建议", "失败原因", "下一步"]
     : stage.status === "completed" || stage.status === "needs_review"
       ? ["当前段", "输出", "下一步", "提交号"]
-      : ["当前段", "提交号", "下一步"];
+      : ["当前段", "排队", "查询", "提交号"];
   return priority
     .map((label) => sourceFacts.find((fact) => fact.label === label))
     .filter((fact): fact is { label: string; value: string } => Boolean(fact?.value?.trim()))
@@ -156,8 +159,19 @@ function videoTaskFactsForStatus(stage?: CreatorVideoStageLike): Array<{ label: 
     .map((fact) => ({ label: fact.label, value: fact.value }));
 }
 
+function videoTaskFactValue(stage: CreatorVideoStageLike | undefined, label: string) {
+  return stage?.generation?.taskFacts?.find((fact) => fact.label === label)?.value?.trim() || "";
+}
+
 function exportActionMessage(action?: ExportActionState, fallback = "") {
   return action?.detail?.trim() || action?.label?.trim() || fallback;
+}
+
+function exportWorkerCanPrepareDelivery(worker?: ExportWorkerState) {
+  if (!worker || worker.blockers?.length) return false;
+  if (worker.readiness === "ready") return true;
+  const mvpPackage = worker.manifest?.mvpPackage;
+  return Boolean(mvpPackage?.reportIncluded && (worker.manifest?.files?.length || 0) > 0);
 }
 
 function audioFactLabel(runtimeState: ProjectRuntimeState) {
@@ -285,6 +299,14 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
   const draftReferenceCount = browserDraftActive ? input.newVideoStatus?.draftReferenceCount || 0 : 0;
   const folderLabel = compactPath(runtimeState.project.root);
   const videoStage = input.videoStage;
+  const videoTaskActive = Boolean(videoStage && (
+    videoStage.status === "in_progress"
+    || videoStage.status === "recoverable"
+  )) || Boolean(input.videoSendAction && (
+    input.videoSendAction.status === "submitted"
+    || input.videoSendAction.status === "running"
+    || input.videoSendAction.canResume
+  ));
   const videoFact = videoStage && videoStage.status !== "not_submitted"
     ? videoStage.generation?.queueSummary || videoStageFactLabel(videoStage)
     : "";
@@ -293,11 +315,20 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
   const rawAgentFact = input.agentCommand?.label?.trim() || input.agentStage?.summary?.trim() || "";
   const agentFact = browserDraftActive
     ? newVideoAgentFact(input.newVideoStatus)
+    : videoTaskActive
+      ? ""
     : !input.folderReady && input.projectReady && /生成|提交|导出/.test(rawAgentFact)
       ? "先保存项目"
       : rawAgentFact;
+  const projectFact = input.folderReady
+    ? folderLabel
+    : browserDraftActive
+      ? newVideoProjectFact(input.newVideoStatus)
+      : input.projectReady && shotCount > 0
+        ? "临时项目"
+        : "先写想法";
   const facts = [
-    { label: "项目", value: input.folderReady ? folderLabel : browserDraftActive ? newVideoProjectFact(input.newVideoStatus) : "先写想法" },
+    { label: "项目", value: projectFact },
     { label: "镜头", value: browserDraftActive && shotCount > 0 ? `草案 ${countLabel(shotCount, "个")}` : countLabel(shotCount, "个") },
     { label: "参考", value: browserDraftActive && draftReferenceCount > 0 ? `已放入 ${draftReferenceCount} 个` : referenceFactLabel(assetSummary, input.referenceBatch, input.referenceGenerationAction?.status) },
     audioFact ? { label: "声音", value: audioFact } : undefined,
@@ -314,6 +345,19 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
       nextAction: "完成后继续在底部对话框描述下一步",
       tone: "working",
       facts,
+    };
+  }
+
+  if (input.agentTimelineStatus) {
+    const timelineStatus = input.agentTimelineStatus;
+    return {
+      stage: timelineStatus.stage,
+      doing: timelineStatus.doing,
+      waitingFor: timelineStatus.waitingFor,
+      nextAction: timelineStatus.nextAction,
+      tone: timelineStatus.tone,
+      issue: timelineStatus.tone === "blocked" ? timelineStatus.waitingFor : undefined,
+      facts: timelineStatus.facts.length ? timelineStatus.facts : facts,
     };
   }
 
@@ -372,17 +416,79 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     };
   }
 
+  if (input.exportAction?.status === "running") {
+    return {
+      stage: "导出中",
+      doing: "正在整理交付包",
+      waitingFor: "导出完成",
+      nextAction: "完成后到交付页查看",
+      tone: "working",
+      facts,
+    };
+  }
+
+  if (input.exportAction?.status === "failed") {
+    return {
+      stage: "导出失败",
+      doing: exportActionMessage(input.exportAction, "交付包生成失败"),
+      waitingFor: "重新导出",
+      nextAction: "去交付页重试",
+      tone: "blocked",
+      issue: exportActionMessage(input.exportAction),
+      facts,
+    };
+  }
+
+  if (input.exportAction?.status === "ready") {
+    return {
+      stage: "导出已完成",
+      doing: exportActionMessage(input.exportAction, "交付包已生成"),
+      waitingFor: "最后复核交付内容",
+      nextAction: "去交付页查看导出包",
+      tone: "ready",
+      facts,
+    };
+  }
+
+  if (input.directorView === "export" && input.exportWorker?.readiness === "blocked") {
+    return {
+      stage: "交付待处理",
+      doing: input.exportWorker.blockers[0] || "交付包还缺素材或视频结果",
+      waitingFor: "补上交付条件",
+      nextAction: "回到故事或预览页处理缺口",
+      tone: "blocked",
+      issue: input.exportWorker.blockers[0],
+      facts,
+    };
+  }
+
+  if (input.directorView === "export" && exportWorkerCanPrepareDelivery(input.exportWorker)) {
+    return {
+      stage: "可以导出",
+      doing: "视频和项目资料已经可以打包",
+      waitingFor: "确认导出",
+      nextAction: "去交付页导出",
+      tone: "ready",
+      facts,
+    };
+  }
+
   const videoWaiting = videoWaitingLabel(input);
   if (videoWaiting) {
     const blocked = input.videoStage?.status === "failed" || input.videoSendAction?.status === "blocked";
     const needsReview = input.videoStage?.status === "needs_review" || input.videoSendAction?.status === "needs_review";
     const recoverable = input.videoStage?.status === "recoverable" || input.videoSendAction?.canResume;
     const completed = input.videoStage?.status === "completed";
+    const blockedByQa = blocked && /提交前|参考|QA|待处理/.test(`${input.videoStage?.generation?.statusLabel || ""} ${input.videoStage?.generation?.detail || ""} ${actionMessage(input.videoSendAction)}`);
+    const blockedAdvice = videoTaskFactValue(input.videoStage, "建议")
+      || (blockedByQa ? videoBlockerRecoveryAdvice(input.videoStage?.generation?.detail || actionMessage(input.videoSendAction)) : "");
     return {
       stage: blocked ? "视频待处理" : needsReview ? "视频待确认" : completed ? "视频结果已出" : recoverable ? "视频待查询" : "视频生成中",
       doing: videoWaiting,
-      waitingFor: blocked ? "重试或跳过失败段" : needsReview ? "确认视频结果" : completed ? "确认交付" : recoverable ? "查询视频结果" : "视频结果",
-      nextAction: recoverable
+      waitingFor: blockedByQa ? "补参考或修改这一段" : blocked ? "重试或跳过失败段" : needsReview ? "确认视频结果" : completed ? "确认交付" : recoverable ? "查询视频结果" : "视频结果",
+      nextAction: blockedByQa
+        ? blockedAdvice || "在底部说明要补什么参考，或让 AI 改这一段"
+        : recoverable
         ? "继续查询结果"
         : completed
           ? "去交付页查看"
@@ -439,17 +545,6 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     };
   }
 
-  if (input.exportAction?.status === "running") {
-    return {
-      stage: "导出中",
-      doing: "正在整理交付包",
-      waitingFor: "导出完成",
-      nextAction: "完成后到交付页查看",
-      tone: "working",
-      facts,
-    };
-  }
-
   if (input.exportWorker?.readiness === "blocked") {
     return {
       stage: "交付待处理",
@@ -458,29 +553,6 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
       nextAction: "回到故事或预览页处理缺口",
       tone: "blocked",
       issue: input.exportWorker.blockers[0],
-      facts,
-    };
-  }
-
-  if (input.exportAction?.status === "failed") {
-    return {
-      stage: "导出失败",
-      doing: exportActionMessage(input.exportAction, "交付包生成失败"),
-      waitingFor: "重新导出",
-      nextAction: "去交付页重试",
-      tone: "blocked",
-      issue: exportActionMessage(input.exportAction),
-      facts,
-    };
-  }
-
-  if (input.exportAction?.status === "ready") {
-    return {
-      stage: "导出已完成",
-      doing: exportActionMessage(input.exportAction, "交付包已生成"),
-      waitingFor: "最后复核交付内容",
-      nextAction: "去交付页查看导出包",
-      tone: "ready",
       facts,
     };
   }

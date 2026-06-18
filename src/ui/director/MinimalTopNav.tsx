@@ -66,6 +66,7 @@ export function MinimalTopNav({
   projectFileStatusLabel,
   projectFileStatusDetail,
   projectRoot,
+  projectStorageKind,
   currentProjectPath,
   recentProjects,
   canCreateProject,
@@ -92,6 +93,7 @@ export function MinimalTopNav({
   projectFileStatusLabel?: string;
   projectFileStatusDetail?: string;
   projectRoot?: string;
+  projectStorageKind?: "local" | "temporary" | "unbound";
   currentProjectPath?: string;
   recentProjects?: Array<{
     projectRoot: string;
@@ -120,25 +122,31 @@ export function MinimalTopNav({
   const storyViewLabel = activeSection ? `故事 · ${storyLabel} · ${totalShots} 个镜头` : `故事 · ${totalShots} 个镜头`;
   const isEmptyProject = totalShots === 0;
   const projectTitleLabel = projectTitle || "新视频项目";
-  const projectFolderReady = Boolean(projectRoot?.trim());
+  const storageKind = projectStorageKind || (projectRoot?.trim() ? "local" : "unbound");
+  const projectFolderReady = storageKind !== "unbound";
+  const projectIsTemporary = storageKind === "temporary";
   const unsavedProjectContent = !projectFolderReady && !isEmptyProject;
   const projectControlButtonLabel = !projectFolderReady && isEmptyProject ? "打开或新建项目" : projectTitleLabel;
-  const projectStorageBadge = projectFolderReady ? "本地" : "未连接";
-  const emptyProjectPrimary = projectFolderReady ? "本地已准备" : "先写想法";
-  const emptyProjectSecondary = projectFolderReady ? "确认后写入项目" : "先写想法";
+  const projectStorageBadge = projectIsTemporary ? "临时" : projectFolderReady ? "本地" : "未连接";
   const [projectControlOpen, setProjectControlOpen] = useState(false);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const projectControlRef = useRef<HTMLDivElement>(null);
-  const projectRootLabel = compactProjectPathLabel(projectRoot) || "尚未选择本地文件夹";
+  const projectRootLabel = projectIsTemporary ? "临时演示项目" : compactProjectPathLabel(projectRoot) || "尚未选择本地文件夹";
   const currentProjectPathLabel = compactProjectPathLabel(currentProjectPath);
   const projectContentSummary = isEmptyProject
-    ? projectFolderReady
+    ? projectIsTemporary
+      ? "可以继续整理故事；生成参考、视频或导出前请打开本地项目。"
+      : projectFolderReady
       ? "下方发送脚本后，会写入这个项目文件夹。"
       : "先在下方发送想法或脚本，或打开已有项目。"
     : `故事流 · ${totalShots} 个镜头 · ${projectPlan.statusLabel}`;
-  const projectSaveSummary = currentProjectPathLabel || (projectFolderReady ? "确认草案后创建项目文件" : "尚未选择保存位置");
+  const projectSaveSummary = projectIsTemporary
+    ? "临时保存，正式生成前请打开本地项目"
+    : currentProjectPathLabel || (projectFolderReady ? "确认草案后创建项目文件" : "尚未选择保存位置");
   const projectControlStatus = projectFolderReady
-    ? isEmptyProject
+    ? projectIsTemporary
+      ? "临时项目已连接"
+      : isEmptyProject
       ? "已准备项目文件夹"
       : "项目已连接"
     : "未连接项目";
@@ -157,16 +165,26 @@ export function MinimalTopNav({
     .filter((project) => project.projectRoot.trim())
     .slice(0, 4);
   const showWorkspaceTabs = !isEmptyProject;
-  const exportDisabled = isEmptyProject || !projectFolderReady;
-  const exportDisabledTitle = !projectFolderReady
+  const exportDisabled = isEmptyProject || !projectFolderReady || projectIsTemporary;
+  const exportDisabledTitle = projectIsTemporary
+    ? "先保存为本地项目，再导出。"
+    : !projectFolderReady
     ? "先保存为本地项目，再导出。"
     : "先写故事或打开项目，再导出。";
-  const currentViewLabel = directorView === "assets" ? "参考" : directorView === "preview" ? "预览" : "故事";
-  const currentViewDetail = directorView === "assets"
-    ? "角色、场景、道具"
+  const currentViewLabel = directorView === "assets"
+    ? "参考"
     : directorView === "preview"
-      ? "看结果"
-      : `${totalShots} 个镜头`;
+      ? "视频"
+      : directorView === "export"
+        ? "导出"
+        : "故事";
+  const currentViewDetail = directorView === "assets"
+      ? "角色、场景、道具"
+    : directorView === "preview"
+      ? "看视频"
+      : directorView === "export"
+        ? "项目资料包"
+        : `${totalShots} 个镜头`;
 
   useEffect(() => {
     if (!projectControlOpen) return undefined;
@@ -212,7 +230,7 @@ export function MinimalTopNav({
           >
             <span className="project-title-row">
               <span className="project-title-text">{projectControlButtonLabel}</span>
-              <em className={`project-title-storage ${projectFolderReady ? "local" : "draft"}`}>{projectStorageBadge}</em>
+              <em className={`project-title-storage ${projectIsTemporary ? "temporary" : projectFolderReady ? "local" : "draft"}`}>{projectStorageBadge}</em>
               <ChevronDown size={14} aria-hidden="true" />
             </span>
           </button>
@@ -375,9 +393,9 @@ export function MinimalTopNav({
               <button
                 className={mode === "director" && directorView === "preview" ? "active" : ""}
                 onClick={() => openView("preview")}
-                aria-label="预览"
+                aria-label="视频"
               >
-                预览
+                视频
               </button>
             </div>
           )}

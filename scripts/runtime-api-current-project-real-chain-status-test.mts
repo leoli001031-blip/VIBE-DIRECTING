@@ -79,7 +79,7 @@ function baseProjection(overrides = {}) {
   };
 }
 
-function createFixtureApi({ projection, facts, round5ArtifactIngest, projectVibeExists = true, jsonByPath = {} }) {
+function createFixtureApi({ projection, facts, round5ArtifactIngest, projectVibeExists = true, jsonByPath = {}, textByPath = {} }) {
   return createRuntimeApiCurrentProjectRealChainStatus({
     currentProjectSource: () => source,
     projectProjectionFromSource: () => projection,
@@ -99,6 +99,10 @@ function createFixtureApi({ projection, facts, round5ArtifactIngest, projectVibe
     runtimeFileUrl: (relativePath) => `/api/runtime/files?path=${encodeURIComponent(relativePath)}`,
     existsSync: (filePath) => filePath === source.projectVibePath && projectVibeExists,
     readJsonIfPresent: (filePath) => jsonByPath[filePath],
+    readFileSync: (filePath) => {
+      if (filePath in textByPath) return textByPath[filePath];
+      throw new Error(`missing text fixture: ${filePath}`);
+    },
     currentProjectStatusEndpoint: "/api/runtime/projects/current/real-chain/status",
   });
 }
@@ -180,6 +184,165 @@ assert(availablePayload.actualImage2Triggered === true, "actual provider observa
 assert(availablePayload.previewItems.length === 1, "preview item projection should be preserved");
 assert(availablePayload.relayQueue?.status === "running", "video relay queue should be preserved for the UI");
 assert(availablePayload.nextAction === "review_needed_outputs_before_production_promotion", "review overlays should block promotion");
+
+const stalePreviewRelayQueue = {
+  ...relayQueueFixture,
+  generatedAt: "2026-06-16T14:28:36.893Z",
+  items: [{
+    id: "seedance_segment_1",
+    shotId: "S01",
+    status: "submitted",
+    submitId: "seedance-submit-1",
+    queueInfo: { position: 8877, status: "Queueing" },
+    queuePosition: 8877,
+  }],
+};
+const refreshedPersistedRelayQueue = {
+  ...relayQueueFixture,
+  generatedAt: "2026-06-16T16:44:16.014Z",
+  items: [{
+    id: "seedance_segment_1",
+    shotId: "S01",
+    status: "recoverable_queued",
+    submitId: "seedance-submit-1",
+    queueInfo: { position: 4721, status: "Queueing" },
+    queuePosition: 4721,
+  }],
+};
+const refreshedQueuePayload = createFixtureApi({
+  projection: baseProjection({
+    projectFacts: baseProjectFacts({
+      previewPlan: {
+        relayQueue: stalePreviewRelayQueue,
+        previewItems: [{
+          id: "seedance_storyboard_video_segment_1",
+          shotId: "S01",
+          order: 1,
+          mediaType: "video",
+          status: "queued",
+          videoStatus: "queued",
+          submitId: "seedance-submit-1",
+          queueInfo: { position: 8877, status: "Queueing" },
+        }],
+      },
+    }),
+    observations: [],
+    reviewShotIds: [],
+  }),
+  jsonByPath: {
+    "/repo/fixtures/project/reports/video_relay_queue.json": refreshedPersistedRelayQueue,
+  },
+}).currentProjectRealChainResponse({}, source);
+assert(refreshedQueuePayload.relayQueue?.items?.[0]?.queuePosition === 4721, "persisted relay queue should override stale preview-plan queue state");
+assert(refreshedQueuePayload.previewItems[0]?.queueInfo?.position === 4721, "preview items should inherit refreshed relay queue position");
+assert(refreshedQueuePayload.previewItems[0]?.videoStatus === "queued", "recoverable queued relay state should remain creator-facing queued");
+
+const sceneCoverageBlockedReport = {
+  status: "text_qa_blocked",
+  activeSegmentId: "segment_2",
+  videoSubmitted: false,
+  message: "场景参考“车站/站台环境”只能生成站台区域，但镜头要求从“深夜街道”开始奔跑并带出站台，参考无法覆盖街道部分。",
+  blockers: [
+    "场景参考“车站/站台环境”只能生成站台区域，但镜头要求从“深夜街道”开始奔跑并带出站台，参考无法覆盖街道部分。",
+  ],
+};
+const blockedSegmentRelayQueue = {
+  ...relayQueueFixture,
+  status: "idle",
+  activeItemIds: [],
+  nextReadyItemId: "seedance_segment_2",
+  autoSubmitAllowed: true,
+  counts: { total: 2, ready: 1, active: 0, completed: 1, failed: 0, blocked: 0 },
+  items: [
+    { id: "seedance_segment_1", segmentId: "segment_1", shotId: "S01", shotIds: ["S01"], status: "success", blockers: [] },
+    { id: "seedance_segment_2", segmentId: "segment_2", shotId: "S02", shotIds: ["S02"], status: "ready", blockers: [] },
+  ],
+};
+const recoveredSceneReferencePayload = createFixtureApi({
+  projection: baseProjection({
+    projectFacts: baseProjectFacts({ previewPlan: { relayQueue: blockedSegmentRelayQueue } }),
+  }),
+  jsonByPath: {
+    "/repo/fixtures/project/reports/video_relay_queue.json": blockedSegmentRelayQueue,
+    "/repo/fixtures/project/reports/seedance_submit_report.json": sceneCoverageBlockedReport,
+  },
+  textByPath: {
+    "/repo/fixtures/project/project/project.vibe": JSON.stringify({
+      kind: "project_vibe_document",
+      modelVersion: "project_vibe_minimal_v1",
+      manifest: {
+        projectId: "fixture-project",
+        title: "Fixture",
+        version: "0.1.0",
+        createdAt: "2026-06-16T00:00:00.000Z",
+        updatedAt: "2026-06-16T00:00:00.000Z",
+        sourceOfTruth: "project_vibe",
+        portableRoot: "project_root",
+        runtimeFixtureAuthority: false,
+      },
+      storyFlow: {
+        id: "story_flow_current",
+        updatedAt: "2026-06-16T00:00:00.000Z",
+        sourceOfTruth: "project_vibe",
+        sections: [],
+        shotOrder: [],
+      },
+      visualMemory: {
+        id: "visual_memory_current",
+        updatedAt: "2026-06-16T00:00:00.000Z",
+        sourceOfTruth: "project_vibe",
+        referencePolicy: {
+          temporaryOutputsMayBecomeAuthority: false,
+          runtimeFixturesMayBecomeAuthority: false,
+          lockedAssetsRequiredForGeneration: true,
+        },
+        entries: [],
+      },
+      shots: [],
+      assets: [
+        {
+          id: "scene_train_station",
+          kind: "scene",
+          label: "车站/站台环境",
+          status: "locked",
+          usedByShotIds: ["S02"],
+        },
+        {
+          id: "scene_recovery_S02",
+          kind: "scene",
+          label: "午夜街道至站台",
+          status: "locked",
+          usedByShotIds: ["S02"],
+          textConstraints: ["recoveryReference:scene", "scene_train_station"],
+          sourceRefs: ["provider_observations/assets/scene_recovery_S02.json"],
+        },
+      ],
+      runs: [],
+      receipts: {
+        scriptPlanningReceipts: [],
+        promptKeyframePlanningReceipts: [],
+        batchReceipts: [],
+        reviewReceipts: [],
+      },
+      sourceIndex: {
+        id: "source_index_current",
+        updatedAt: "2026-06-16T00:00:00.000Z",
+        sourceOfTruth: "project_vibe",
+        manifestRef: "project.vibe#manifest",
+        storyFlowRef: "project.vibe#storyFlow",
+        visualMemoryRef: "project.vibe#visualMemory",
+        shotRefs: [],
+        assetRefs: [],
+        runReceiptRefs: [],
+      },
+    }),
+  },
+}).currentProjectRealChainResponse({}, source);
+const recoveredSegment = recoveredSceneReferencePayload.relayQueue?.items?.find((item) => item.id === "seedance_segment_2");
+assert(recoveredSegment?.status === "ready", "locked recovery scene reference should restore a QA-blocked relay item to ready");
+assert(recoveredSegment?.blockers?.length === 0, "locked recovery scene reference should clear stale scene-coverage blockers");
+assert(recoveredSceneReferencePayload.relayQueue?.autoSubmitAllowed === true, "recovered relay item should be submittable again");
+assert(recoveredSceneReferencePayload.relayQueue?.userSummary === "补充参考已复核，可以继续提交视频。", "recovered relay queue should explain the next submit step");
 
 const previewPlanVideoFacts = baseProjectFacts({
   previewPlan: {

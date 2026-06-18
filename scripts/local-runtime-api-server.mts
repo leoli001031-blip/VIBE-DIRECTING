@@ -133,6 +133,8 @@ const knownProjectFixtureRoots = fixtureRootsFromEnv(runtimeEnv("VIBE_DIRECTOR_K
   "real-test-sandbox/real-demo-e2e/002-anime-pressure",
   "real-test-sandbox/real-demo-e2e/001",
 ]);
+const currentProjectAgentTimelineEndpoint = `${runtimeBasePath}/projects/current/agent-timeline`;
+const currentProjectAgentTimelineSidecarPath = ".vibe-runtime/agent-timeline.json";
 
 let running = false;
 
@@ -478,6 +480,83 @@ async function handleCurrentProjectSaveProjectVibeRoute(req, res, url) {
       projectVibePath: context.source.projectVibeRelativePath,
       title: projectTitle,
     },
+  });
+  return true;
+}
+
+async function handleCurrentProjectAgentTimelineRoute(req, res, url) {
+  if (url.pathname !== currentProjectAgentTimelineEndpoint) return false;
+  if (req.method !== "GET" && req.method !== "POST") {
+    writeJson(res, 405, {
+      ok: false,
+      ...runtimePolicy(),
+      endpoint: currentProjectAgentTimelineEndpoint,
+      status: "method_not_allowed",
+      message: "Method not allowed.",
+    });
+    return true;
+  }
+  const context = await currentProjectRouteContext(req, res, url, currentProjectAgentTimelineEndpoint);
+  if (!context) return true;
+  const sidecarPath = path.join(context.source.runRootPath, currentProjectAgentTimelineSidecarPath);
+  if (!isPathInsideRealRoot(sidecarPath, context.source.runRootPath)) {
+    writeJson(res, 403, blockedCurrentProjectResponse(currentProjectAgentTimelineEndpoint, context.requestContext, {
+      status: "forbidden",
+      message: "Agent timeline path is outside the current project.",
+    }));
+    return true;
+  }
+
+  if (req.method === "GET") {
+    if (!existsSync(sidecarPath)) {
+      writeJson(res, 404, {
+        ok: false,
+        ...runtimePolicy(),
+        endpoint: currentProjectAgentTimelineEndpoint,
+        status: "missing",
+        providerCalled: false,
+        videoSubmitted: false,
+        projectRoot: context.source.runRootRelativePath,
+        path: currentProjectAgentTimelineSidecarPath,
+        message: "Agent timeline sidecar not found.",
+      });
+      return true;
+    }
+    writeJson(res, 200, {
+      ok: true,
+      ...runtimePolicy(),
+      endpoint: currentProjectAgentTimelineEndpoint,
+      status: "read",
+      providerCalled: false,
+      videoSubmitted: false,
+      projectRoot: context.source.runRootRelativePath,
+      path: currentProjectAgentTimelineSidecarPath,
+      content: readFileSync(sidecarPath, "utf8"),
+    });
+    return true;
+  }
+
+  const content = typeof context.body?.content === "string" ? context.body.content : undefined;
+  if (content == null) {
+    writeJson(res, 400, blockedCurrentProjectResponse(currentProjectAgentTimelineEndpoint, context.requestContext, {
+      status: "bad_request",
+      message: "content is required.",
+    }));
+    return true;
+  }
+  mkdirSync(path.dirname(sidecarPath), { recursive: true });
+  const tempPath = `${sidecarPath}.tmp-${process.pid}-${Date.now()}`;
+  writeFileSync(tempPath, content, "utf8");
+  renameSync(tempPath, sidecarPath);
+  writeJson(res, 200, {
+    ok: true,
+    ...runtimePolicy(),
+    endpoint: currentProjectAgentTimelineEndpoint,
+    status: "written",
+    providerCalled: false,
+    videoSubmitted: false,
+    projectRoot: context.source.runRootRelativePath,
+    path: currentProjectAgentTimelineSidecarPath,
   });
   return true;
 }
@@ -944,6 +1023,77 @@ function writeJson(res, statusCode, payload) {
   res.end(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
+function validJsonpCallbackName(value) {
+  return typeof value === "string" && /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(value);
+}
+
+function validJsonpRequestId(value) {
+  return typeof value === "string" && /^[0-9A-Za-z_-]{1,96}$/.test(value);
+}
+
+async function handleRuntimeJsonpRoute(req, res, url) {
+  if (url.pathname !== `${runtimeBasePath}/jsonp`) return false;
+  if (req.method !== "GET") {
+    writeJson(res, 405, {
+      ok: false,
+      ...runtimePolicy(),
+      endpoint: `${runtimeBasePath}/jsonp`,
+      status: "method_not_allowed",
+      message: "Method not allowed.",
+    });
+    return true;
+  }
+
+  const callback = url.searchParams.get("callback") || "";
+  const requestId = url.searchParams.get("id") || "";
+  const targetPath = url.searchParams.get("path") || "";
+  if (
+    !(validJsonpCallbackName(callback) || validJsonpRequestId(requestId))
+    || !targetPath.startsWith(`${runtimeBasePath}/`)
+    || targetPath.startsWith(`${runtimeBasePath}/jsonp`)
+  ) {
+    writeJson(res, 400, {
+      ok: false,
+      ...runtimePolicy(),
+      endpoint: `${runtimeBasePath}/jsonp`,
+      status: "bad_request",
+      message: "Invalid JSONP runtime request.",
+    });
+    return true;
+  }
+
+  const targetUrl = new URL(targetPath, `http://${host}:${port}`);
+  const response = await fetch(targetUrl, {
+    method: "GET",
+    headers: {
+      origin: isTrustedLocalOrigin(String(req.headers.origin || "")) ? String(req.headers.origin || "") : `http://${host}:${port}`,
+    },
+  });
+  const text = await response.text();
+  let payload;
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    payload = {
+      ok: false,
+      ...runtimePolicy(),
+      endpoint: targetPath,
+      status: "bad_response",
+      message: "Runtime endpoint did not return JSON.",
+    };
+  }
+  res.writeHead(200, corsHeaders("application/javascript; charset=utf-8", res.runtimeAllowedOrigin));
+  const serializedPayload = JSON.stringify(payload);
+  if (validJsonpCallbackName(callback)) {
+    res.end(`${callback}(${serializedPayload});\n`);
+    return true;
+  }
+  res.end(
+    `window.dispatchEvent(new CustomEvent("vibe-runtime-jsonp",{detail:{id:${JSON.stringify(requestId)},payload:${serializedPayload}}}));\n`,
+  );
+  return true;
+}
+
 const {
   responseFromReport,
   handleRun,
@@ -1076,6 +1226,7 @@ async function handleRequest(req, res) {
     writeJson(res, 204, {});
     return;
   }
+  if (await handleRuntimeJsonpRoute(req, res, url)) return;
   if (handleRuntimeApiStatusRoute(req, res, url)) return;
   if (req.method === "GET" && url.pathname === runtimeFileEndpoint) {
     serveRuntimeFile(req, res, url.searchParams.get("path") || "", { scope: url.searchParams.get("scope") || undefined });
@@ -1083,6 +1234,7 @@ async function handleRequest(req, res) {
   }
   if (await handleCurrentProjectBindingRoute(req, res, url)) return;
   if (await handleCurrentProjectSaveProjectVibeRoute(req, res, url)) return;
+  if (await handleCurrentProjectAgentTimelineRoute(req, res, url)) return;
   if (await handleCurrentProjectReadCheckRoute(req, res, url)) return;
   if (await handleCurrentProjectOneShotRoute(req, res, url)) return;
   if (await handleCurrentProjectOneShotReturnRoute(req, res, url)) return;

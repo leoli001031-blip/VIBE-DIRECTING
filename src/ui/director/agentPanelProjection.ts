@@ -15,6 +15,7 @@ import {
   type ProjectFactsStagedApplyPlan,
 } from "../../core/projectTransaction";
 import type { AssetRecord, ShotRecord } from "../../core/types";
+import type { VibeAgentTimelineEntry } from "../../agent-core/types";
 import { formatShotNumber } from "./MinimalStoryFlow";
 
 export type AgentPlanPhase = "idle" | "review" | "confirmed";
@@ -35,6 +36,7 @@ export type AgentControlledToolInvocationTarget = {
   selectedShotIds?: string[];
   selectedAssetId?: string;
   sectionId?: string;
+  assetTypes?: Array<"character" | "scene" | "prop" | "storyboard">;
   skipConfirm?: boolean;
   confirmationReceiptId?: string;
   confirmedAt?: string;
@@ -205,14 +207,21 @@ export type StagePrototypeAgentPlanInput = {
   selectedShotIds?: string[];
   selectedAssetId?: string;
   sectionId?: string;
-  videoPermissionContract?: AgentVideoSubmitContract;
-  generatedAt?: string;
-  availability?: Partial<DirectorAgentToolAvailability>;
+	videoPermissionContract?: AgentVideoSubmitContract;
+	videoStatus?: string;
+	videoCanResume?: boolean;
+	videoWaitingCount?: number;
+	videoCompletedCount?: number;
+	videoReviewCount?: number;
+	videoDetail?: string;
+	generatedAt?: string;
+	availability?: Partial<DirectorAgentToolAvailability>;
 };
 
 export type StagePrototypeAgentPlanResult = {
   agentActionEnvelope?: DirectorAgentActionEnvelope;
   agentToolHandoff?: DirectorAgentToolHandoff;
+  agentTimelineEntries?: VibeAgentTimelineEntry[];
   qaFeedback?: DirectorQaUserFeedback;
   projectRecordLabel?: string;
   projectImpactLabel?: string;
@@ -224,6 +233,7 @@ export type StagePrototypeAgentPlanResult = {
 export type PreviewPrototypeAgentDemoResult = {
   agentActionEnvelope?: DirectorAgentActionEnvelope;
   agentToolHandoff?: DirectorAgentToolHandoff;
+  agentTimelineEntries?: VibeAgentTimelineEntry[];
   projectVibeWritten?: boolean;
   projectRecordLabel?: string;
   projectImpactLabel?: string;

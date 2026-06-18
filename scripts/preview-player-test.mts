@@ -392,6 +392,7 @@ check(/buildMinimalRuntimeProjection\s*\(/.test(previewBody), "MinimalPreview mu
 check(/previewSummary\.detail/.test(previewBody), "MinimalPreview must show a short preview summary");
 check(/currentTime/.test(previewBody) && /requestAnimationFrame/.test(previewBody), "Preview Play must advance currentTime");
 check(/getPreviewPlayerActiveItem\s*\(/.test(previewBody), "MinimalPreview must choose active item by currentTime");
+check(/priorityItem/.test(previewBody) && /autoFocusedItemKeyRef/.test(previewBody), "MinimalPreview must focus the item that needs review or result querying first");
 check(/selectPreviewItem/.test(previewBody) && /setCurrentTime\(item\.startSeconds\)/.test(previewBody), "timeline click must seek currentTime");
 check(/onSelectShot\(item\.shotId\)/.test(previewBody), "timeline click must select the clicked shot");
 check(/<video/.test(previewBody) && /preview-stage-video/.test(previewBody), "video clips with mediaPath must render a video shell");

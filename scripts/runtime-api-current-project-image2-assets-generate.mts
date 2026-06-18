@@ -205,12 +205,19 @@ function assetGenerateRequestInput(url, body) {
     selectedShotId,
     selectedShotIds,
     assetTypes: assetTypes.length ? assetTypes : ["character", "scene", "prop"],
+    forceAssetTypes: forceAssetTypesForAgentReference(body?.agentTaskEnvelope, assetTypes),
     providerId: requestBodyString(body, ["providerId"]) || "apikey-fun-gpt55-responses-image",
     agentTaskEnvelope: agentTaskEnvelopeFromRequest(body?.agentTaskEnvelope),
     confirmation: isRecord(body?.confirmation) ? body.confirmation : undefined,
     mockProviderResult: mockProviderResult.enabled,
     mockProviderResultStatus: mockProviderResult.status,
   };
+}
+
+function forceAssetTypesForAgentReference(agentTaskEnvelope, assetTypes) {
+  if (!isRecord(agentTaskEnvelope)) return [];
+  if (agentTaskEnvelope.handler !== "image2_reference_generation") return [];
+  return assetTypes.length === 1 ? assetTypes : [];
 }
 
 function rawStoryShots(storyFlow) {
@@ -618,7 +625,51 @@ function nonPhotographicStyleGuard(selected) {
   ].join(" ");
 }
 
-function assetSpecsForShot(workbenchFacts, selected, assetTypes) {
+function firstLabeledFact(text, label) {
+  const match = String(text || "").match(new RegExp(`${label}[:：]([^。；;\\n]+)`));
+  return match?.[1]?.trim();
+}
+
+function recoveryAssetName(type, selected) {
+  if (type === "scene") {
+    return firstLabeledFact(selected.storyFunction, "场景")
+      || displayNameForId(selected.sceneId || selected.title || "场景参考", "scene");
+  }
+  if (type === "character") {
+    return selected.roleIds?.[0]
+      || firstLabeledFact(selected.storyFunction, "角色")
+      || displayNameForId(selected.title || "角色参考", "character");
+  }
+  if (type === "prop") {
+    return selected.propIds?.[0]
+      || firstLabeledFact(selected.storyFunction, "道具")
+      || displayNameForId(selected.title || "道具参考", "prop");
+  }
+  return "";
+}
+
+function recoveryAssetSpec(type, selected) {
+  const shotId = selected.shotId || selected.title;
+  if (!shotId) return undefined;
+  const name = recoveryAssetName(type, selected);
+  if (!name) return undefined;
+  return {
+    id: `${type}_recovery_${safePathSegment(shotId)}`,
+    type,
+    name,
+    textConstraints: uniqueStrings([
+      `recoveryReference:${type}`,
+      type === "scene" ? selected.sceneId : "",
+      ...(type === "scene" ? (selected.sceneDetailIds || []) : []),
+      ...(type === "prop" ? (selected.objectDetailIds || selected.vehicleDetailIds || []) : []),
+    ]),
+    usedByShotIds: [selected.shotId],
+    relatedShotTitles: [selected.title],
+    storyContexts: [selected.storyFunction],
+  };
+}
+
+function assetSpecsForShot(workbenchFacts, selected, assetTypes, forceAssetTypes = []) {
   const assets = Array.isArray(workbenchFacts?.visualMemory?.assets) ? workbenchFacts.visualMemory.assets : [];
   const specs = [];
   const includeType = (type) => assetTypes.includes(type);
@@ -695,6 +746,14 @@ function assetSpecsForShot(workbenchFacts, selected, assetTypes) {
   if (!(selected.propReferencesSource === "guidance" && existingPropBindingForShot)) {
     for (const id of selected.propIds) addMissing("prop", id);
   }
+  for (const type of forceAssetTypes) {
+    const hasNewSpec = specs.some((spec) => spec.type === type);
+    if (hasNewSpec || !includeType(type)) continue;
+    const recoverySpec = recoveryAssetSpec(type, selected);
+    if (!recoverySpec || seen.has(`${recoverySpec.type}:${recoverySpec.id}`)) continue;
+    seen.add(`${recoverySpec.type}:${recoverySpec.id}`);
+    specs.push(recoverySpec);
+  }
   return specs;
 }
 
@@ -710,10 +769,10 @@ function mergeAssetSpec(existing, incoming) {
   };
 }
 
-function assetSpecsForShots(workbenchFacts, selectedShots, assetTypes) {
+function assetSpecsForShots(workbenchFacts, selectedShots, assetTypes, forceAssetTypes = []) {
   const byKey = new Map();
   for (const selected of selectedShots) {
-    for (const spec of assetSpecsForShot(workbenchFacts, selected, assetTypes)) {
+    for (const spec of assetSpecsForShot(workbenchFacts, selected, assetTypes, forceAssetTypes)) {
       const key = `${spec.type}:${spec.id}`;
       byKey.set(key, byKey.has(key) ? mergeAssetSpec(byKey.get(key), spec) : spec);
     }
@@ -794,9 +853,9 @@ function storyboardSpecsForShots(workbenchFacts, selectedShots, assetTypes) {
   });
 }
 
-function generationSpecsForShots(workbenchFacts, selectedShots, assetTypes) {
+function generationSpecsForShots(workbenchFacts, selectedShots, assetTypes, forceAssetTypes = []) {
   return [
-    ...assetSpecsForShots(workbenchFacts, selectedShots, assetTypes),
+    ...assetSpecsForShots(workbenchFacts, selectedShots, assetTypes, forceAssetTypes),
     ...storyboardSpecsForShots(workbenchFacts, selectedShots, assetTypes),
   ];
 }
@@ -1359,7 +1418,7 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
       && confirmation.phrase === CONFIRM_PHRASE
       && Boolean(asString(confirmation.receiptId))
       && Boolean(asString(confirmation.confirmedAt));
-    const specs = generationSpecsForShots(workbenchFacts, selectedShots, input.assetTypes);
+    const specs = generationSpecsForShots(workbenchFacts, selectedShots, input.assetTypes, input.forceAssetTypes);
     const blockers = uniqueStrings([
       selectedShotIds.length ? "" : "项目里还没有可补参考的镜头。",
       providerConfig ? "" : "未找到可用的出图配置。",

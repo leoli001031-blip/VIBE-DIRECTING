@@ -97,12 +97,15 @@ function isChecklistExportLabel(label?: string) {
 
 function packageContentSummary(exportWorker?: ExportWorkerState) {
   if (!exportWorker) return "等待项目内容同步";
-	  const parts = [
-	    exportWorker.manifest.mvpPackage.projectVibeIncluded ? "项目文件" : "",
-	    exportWorker.manifest.mvpPackage.lockedAssetCount ? "锁定素材" : "",
+  const videoResultLabel = exportWorker.manifest.mvpPackage.videoResultCount
+    ? exportWorker.manifest.mvpPackage.videoMissingCount > 0 ? "视频状态" : "视频结果"
+    : "";
+  const parts = [
+    exportWorker.manifest.mvpPackage.projectVibeIncluded ? "项目文件" : "",
+    exportWorker.manifest.mvpPackage.lockedAssetCount ? "锁定素材" : "",
     exportWorker.manifest.mvpPackage.knowledgeReferenceCount ? "本片参考" : "",
     exportWorker.manifest.mvpPackage.previewMediaCount ? "预览媒体" : "",
-    exportWorker.manifest.mvpPackage.videoResultCount ? "视频结果" : "",
+    videoResultLabel,
     exportWorker.manifest.mvpPackage.receiptCount ? "确认结果" : "",
     exportWorker.manifest.mvpPackage.reportIncluded ? "制作报告" : "",
   ].filter(Boolean);
@@ -115,6 +118,28 @@ function videoReviewSummary(exportWorker?: ExportWorkerState) {
   const approved = exportWorker.manifest.mvpPackage.videoApprovedCount;
   const missing = exportWorker.manifest.mvpPackage.videoMissingCount;
   return `${review} 待确认 · ${approved} 已通过 · ${missing} 缺失 · 可稍后继续查询`;
+}
+
+function exportReadyDetail(exportWorker: ExportWorkerState | undefined, plannedFiles: number) {
+  if (!exportWorker) return "等待项目内容同步";
+  const missing = exportWorker.manifest.mvpPackage.videoMissingCount;
+  const needsReview = exportWorker.manifest.mvpPackage.videoNeedsReviewCount;
+  if (missing > 0) return `${plannedFiles} 个文件 · 视频还在回流，先打包项目文件、参考和制作报告`;
+  if (needsReview > 0) return `${plannedFiles} 个文件 · 视频需要复核，确认后再导出最终成片`;
+  return `${plannedFiles} 个文件 · ${packageContentSummary(exportWorker)}`;
+}
+
+function exportActionVisibleLabel(action: ExportActionState | undefined, checklistExport: boolean, fallbackLabel: string) {
+  if (!action || action.status === "idle") return fallbackLabel;
+  if (checklistExport && action.status === "ready") return "交付清单已生成";
+  return action.label;
+}
+
+function exportActionVisibleDetail(action: ExportActionState | undefined, checklistExport: boolean, packageGeneratedLabel: string) {
+  if (!action) return "";
+  if (action.status === "blocked" || action.status === "failed") return "先处理待确认内容。";
+  if (checklistExport) return `${action.executedCount || 0} 步完成 · 清单已整理好`;
+  return `${action.executedCount || 0} 步完成 · ${packageGeneratedLabel}`;
 }
 
 export function MinimalExport({
@@ -144,17 +169,27 @@ export function MinimalExport({
     && readyProfiles > 0;
   const videoSummary = videoReviewSummary(exportWorker);
   const checklistExport = isChecklistExportLabel(exportAction?.label);
+  const finalVideoPending = Boolean((exportWorker?.manifest.mvpPackage.videoMissingCount || 0) > 0
+    || (exportWorker?.manifest.mvpPackage.videoNeedsReviewCount || 0) > 0);
+  const packageLabel = finalVideoPending ? "项目资料包" : "交付包";
+  const packageGeneratedLabel = finalVideoPending ? "资料包已生成" : "交付包已生成";
+  const videoSummaryLabel = finalVideoPending ? "视频状态" : "视频结果";
+  const blockedProfileLabel = canExport ? "后续可做" : "待处理";
+  const exportPackageReady = exportAction?.status === "ready" || /已生成/.test(exportAction?.label || "");
+  const exportPackageReadyLabel = checklistExport ? "交付清单已生成" : packageGeneratedLabel;
+  const exportActionLabel = exportActionVisibleLabel(exportAction, checklistExport, packageGeneratedLabel);
+  const exportActionDetail = exportActionVisibleDetail(exportAction, checklistExport, packageGeneratedLabel);
   const exportReadyLabel = exportAction?.status === "ready"
     ? checklistExport ? "清单已生成" : "已生成包"
-    : canExport ? "可生成" : "未就绪";
+    : canExport ? `可生成${packageLabel}` : "未就绪";
 
   if (!localProjectReady) {
     return (
       <section className="minimal-export">
         <div className="export-head">
           <div>
-            <span>项目交付</span>
-            <h3>素材包</h3>
+            <span>交付准备</span>
+            <h3>项目资料包</h3>
           </div>
           <span className="export-gate-status" data-status="blocked">
             先创建项目
@@ -163,7 +198,7 @@ export function MinimalExport({
         <div className="export-action-row">
           <button className="export-run-button" disabled>
             <Download size={16} aria-hidden="true" />
-            <span>生成素材包</span>
+            <span>生成资料包</span>
           </button>
           <small className="muted-copy">创建或打开项目后，这里会整理交付文件。</small>
         </div>
@@ -183,8 +218,8 @@ export function MinimalExport({
     <section className="minimal-export">
       <div className="export-head">
         <div>
-          <span>项目交付</span>
-          <h3>素材包</h3>
+          <span>交付准备</span>
+          <h3>{packageLabel}</h3>
         </div>
         <span className="export-gate-status" data-status={exportAction?.status === "ready" || canExport ? "pass" : gate.status}>
           {exportReadyLabel}
@@ -193,7 +228,7 @@ export function MinimalExport({
       <div className="export-action-row">
         <button className="export-run-button" disabled={!canExport} onClick={() => { void onRunExport?.(); }}>
           <Download size={16} aria-hidden="true" />
-          <span>{exportAction?.status === "running" ? "正在生成" : "生成素材包"}</span>
+          <span>{exportAction?.status === "running" ? "正在生成" : exportPackageReady ? `重新生成${packageLabel}` : `生成${packageLabel}`}</span>
         </button>
         <small className="muted-copy">
           {plannedFiles ? `${plannedFiles} 个文件 · ${packageContentSummary(exportWorker)} · ${exportWorker?.exportRoot || "exports"}` : "等待项目内容同步"}
@@ -202,22 +237,20 @@ export function MinimalExport({
 	      <div className="export-summary-strip" aria-label="导出摘要">
         <span><strong>{plannedFiles}</strong><small>文件</small></span>
         <span><strong>{readyProfiles}</strong><small>可导出</small></span>
-        <span><strong>{blockedProfiles}</strong><small>未就绪</small></span>
+        <span><strong>{blockedProfiles}</strong><small>{blockedProfileLabel}</small></span>
         <span><strong>{exportWorker?.manifest.mvpPackage.knowledgeReferenceCount || 0}</strong><small>本片参考</small></span>
 	        <span><strong>{audioPlanning.shotPlans.length}</strong><small>声音参考</small></span>
 	      </div>
 	      {videoSummary && (
 	        <small className="muted-copy">
-          视频结果：{videoSummary}
+          {videoSummaryLabel}：{videoSummary}
 	        </small>
 	      )}
       {exportAction && exportAction.status !== "idle" && (
         <div className={`export-action-status ${exportAction.status}`}>
-          <strong>{exportAction.label}</strong>
+          <strong>{exportActionLabel}</strong>
           <small className="muted-copy">
-            {exportAction.status === "blocked" || exportAction.status === "failed"
-              ? "先处理待确认内容。"
-              : `${exportAction.executedCount || 0} 步完成 · ${checklistExport ? "清单已生成" : "素材包已生成"}`}
+            {exportActionDetail}
           </small>
         </div>
       )}
@@ -228,10 +261,10 @@ export function MinimalExport({
 
       <section className={`export-primary-summary ${canExport ? "ready" : "blocked"}`} aria-label="当前导出状态">
         <div>
-          <strong>{canExport ? "素材包可以生成" : "素材包还没准备好"}</strong>
+          <strong>{exportPackageReady ? exportPackageReadyLabel : canExport ? `${packageLabel}可以生成` : "资料包还没准备好"}</strong>
           <small className="muted-copy">
             {canExport
-              ? `${plannedFiles} 个文件 · ${packageContentSummary(exportWorker)}`
+              ? exportReadyDetail(exportWorker, plannedFiles)
               : gate.blockedReasons.length ? blockerLabel(gate.blockedReasons[0]) : "等待项目内容同步"}
           </small>
         </div>
@@ -240,7 +273,7 @@ export function MinimalExport({
       <details className="export-detail-disclosure">
         <summary>
           <span>查看交付明细</span>
-          <small>{readyProfiles} 个可导出 · {blockedProfiles} 个未就绪</small>
+          <small>{readyProfiles} 个可导出 · {blockedProfiles} 个{blockedProfileLabel}</small>
         </summary>
         <div className="export-profile-list">
           {profiles.map((profile) => {
@@ -254,7 +287,7 @@ export function MinimalExport({
                   <Icon size={16} />
                   <strong>{kindLabel(profile.kind)}</strong>
                   <span className={`status-label ${ready ? "ready" : "blocked"}`}>
-                    {ready ? "可导出" : "未就绪"}
+                    {ready ? "可导出" : blockedProfileLabel}
                   </span>
                 </div>
                 <small className="muted-copy">

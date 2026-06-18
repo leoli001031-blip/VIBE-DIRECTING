@@ -656,7 +656,9 @@ export function createRuntimeApiDirectorStoryboardPlanRoute({
         usage: result.usage,
       });
       const recovery = recoverDirectorStoryboardPlanFromText(result.content);
-      const plan = normalizeDirectorAiStoryboardPlan(recovery.rawPlan);
+      const plan = normalizeDirectorAiStoryboardPlan(recovery.rawPlan, {
+        targetDurationSeconds: typeof body.targetDurationSeconds === "number" ? body.targetDurationSeconds : undefined,
+      });
       writeEvidence(runtimeRoot, path.join(evidenceDir, "plan.json"), plan);
       if (recovery.partialRecovered) {
         writeEvidence(runtimeRoot, path.join(evidenceDir, "recovery.json"), {

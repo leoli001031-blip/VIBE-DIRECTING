@@ -54,6 +54,8 @@ const running = buildVideoRelayQueueState({
     item("video_001", "recoverable_queued", {
       submitId: "submit-001",
       resumeCommand: "dreamina query_result --submit_id=submit-001 --download_dir=video/001",
+      queueInfo: { position: 2085, status: "Queueing" },
+      queuePosition: 2085,
       promptPath: "runs/demo/prompts/video_001.md",
       referencePaths: [
         "runs/demo/storyboards/video_001.png",
@@ -70,6 +72,8 @@ assert(running.activeItemIds.join(",") === "video_001", "active item mismatch");
 assert(running.resumeCommands.length === 1, "resume command should be preserved");
 assert(running.items[0]?.shotId === "shot_001", "active queue item must preserve shot id");
 assert(running.items[0]?.submitId === "submit-001", "active queue item must preserve submit id");
+assert(running.items[0]?.queuePosition === 2085, "active queue item must preserve queue position");
+assert(running.items[0]?.queueInfo?.status === "Queueing", "active queue item must preserve queue info");
 assert(running.items[0]?.promptPath === "runs/demo/prompts/video_001.md", "active queue item must preserve prompt path");
 assert(running.items[0]?.referencePaths.length === 3, "active queue item must preserve the reference list");
 

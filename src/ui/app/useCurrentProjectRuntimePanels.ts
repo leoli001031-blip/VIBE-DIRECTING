@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   currentProjectBindingIdentity,
+  currentProjectBindingStatusFromBootstrap,
   clearCurrentProjectBinding,
   loadCurrentProjectBindingStatus,
   loadCurrentProjectChoices,
@@ -105,7 +106,9 @@ export function useCurrentProjectRuntimePanels({
   const [projectImage2OneShotState, setProjectImage2OneShotState] = useState<ProjectImage2OneShotPanelState>({ status: "unavailable" });
   const [strictEditPreflightState, setStrictEditPreflightState] = useState<ProjectRound5StrictEditPreflightPanelState>({ status: "idle" });
   const [providerConfigStatuses, setProviderConfigStatuses] = useState<ProviderConfigStatus[]>([]);
-  const [runtimeProjectBinding, setRuntimeProjectBinding] = useState<ProjectCurrentBindingStatus>({ status: "loading" });
+  const [runtimeProjectBinding, setRuntimeProjectBinding] = useState<ProjectCurrentBindingStatus>(
+    () => currentProjectBindingStatusFromBootstrap() || { status: "loading" },
+  );
   const [projectPathInput, setProjectPathInput] = useState("");
   const [projectChoices, setProjectChoices] = useState<ProjectCurrentChoice[]>([]);
   const [projectSelectionStatus, setProjectSelectionStatus] = useState<ProjectSelectionStatus>("idle");

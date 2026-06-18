@@ -170,14 +170,7 @@ assert(approvedVideoProjection.items[0]?.reviewRequired === false, "approved mp4
 assert(approvedVideoProjection.returnedCount === 1, "approved mp4 output should count as returned");
 assert(approvedVideoProjection.reviewCount === 0, "approved mp4 output should clear review count");
 
-const relayQueueProjection = buildCurrentProjectPreviewProjection({
-  summary: {
-    status: "preview_ready",
-    projectId: currentProject.projectId,
-    projectRoot: currentProject.projectRoot,
-  },
-  previewPlan,
-  relayQueue: {
+const returnedRelayQueue = {
     schemaVersion: "0.1.0",
     generatedAt: "2026-06-13T00:00:00.000Z",
     queueId: "relay-preview-test",
@@ -218,13 +211,50 @@ const relayQueueProjection = buildCurrentProjectPreviewProjection({
     }],
     userSummary: "视频已完成，等待复核。",
     notes: [],
+  } as const;
+
+const relayQueueProjection = buildCurrentProjectPreviewProjection({
+  summary: {
+    status: "preview_ready",
+    projectId: currentProject.projectId,
+    projectRoot: currentProject.projectRoot,
   },
+  previewPlan,
+  relayQueue: returnedRelayQueue,
 });
 const relayItem = relayQueueProjection.items.find((item) => item.shotId === "S01");
 assert(relayItem?.kind === "video_clip", "relay queue returned videos should create preview video cards");
 assert(relayItem?.reviewRequired === true, "relay queue returned videos should still require review");
 assert(relayItem?.videoGeneration.status === "completed", "relay queue returned videos should carry completed Seedance state");
 assert(relayQueueProjection.returnedCount >= 1, "relay queue returned videos should count as returned media");
+
+const approvedMergedRelayProjection = buildCurrentProjectPreviewProjection({
+  summary: {
+    status: "preview_ready",
+    projectId: currentProject.projectId,
+    projectRoot: currentProject.projectRoot,
+    previewItems: [{
+      id: "runtime-approved-relay-video",
+      shotId: "S01",
+      order: 1,
+      mediaPath: "/workspace/self-contained/videos/S01.mp4",
+      outputExists: true,
+      status: "approved",
+      previewQaStatus: "approved",
+      productionQaStatus: "approved",
+      reviewRequired: false,
+      sourceReceiptId: "seedance_submit_relay_s01",
+      outputHash: "sha256:relay-s01",
+    }],
+  },
+  previewPlan,
+  relayQueue: returnedRelayQueue,
+});
+const approvedMergedRelayItem = approvedMergedRelayProjection.items.find((item) => item.shotId === "S01");
+assert(approvedMergedRelayItem?.kind === "video_clip", "approved merged relay video should stay playable");
+assert(approvedMergedRelayItem?.status === "approved", "approved preview state must not be overwritten by relay success");
+assert(approvedMergedRelayItem?.reviewRequired === false, "approved preview item must not become needs-review after relay merge");
+assert(approvedMergedRelayProjection.reviewCount === 0, "approved merged relay video should clear preview review count");
 
 const defaultDurationProjection = buildCurrentProjectPreviewProjection({
   summary,

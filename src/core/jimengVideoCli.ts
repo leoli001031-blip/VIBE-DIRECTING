@@ -330,6 +330,7 @@ export function buildJimengVideoStatusProjection(input: JimengVideoStatusProject
   const queueLength = safePositiveNumber(input.queueLength) ?? queue.length;
   const queueStatus = stringValue(input.queueStatus) ?? queue.status;
   const status = normalizeDreaminaStatus(input.status);
+  const providerQueueStatus = normalizeDreaminaStatus(queueStatus);
   const hasVideo = Boolean(
     stringValue(input.videoPath)
     || stringValue(input.outputVideoPath)
@@ -340,15 +341,18 @@ export function buildJimengVideoStatusProjection(input: JimengVideoStatusProject
   const hasQueueInfo = queuePosition !== undefined || queueLength !== undefined || Boolean(queueStatus);
   const canResume = Boolean(submitId && !hasVideo);
 
+  const generatingByProvider = status === "generating" || providerQueueStatus === "generating";
+  const queuedByProvider = status === "queued" || providerQueueStatus === "queued" || (hasQueueInfo && queuePosition !== 0);
+  const recoverableWithoutQueue = input.timedOut === true || status === "timed_out" || (input.recoverable === true && !queuedByProvider && !generatingByProvider);
   const userStatus: JimengVideoUserStatus = hasVideo || status === "success"
     ? "completed"
-    : input.timedOut === true || input.recoverable === true || status === "timed_out"
+    : generatingByProvider
+      ? "generating"
+    : queuedByProvider
+      ? "queued"
+    : recoverableWithoutQueue
       ? "recoverable"
-      : status === "queued" || (hasQueueInfo && queuePosition !== 0)
-        ? "queued"
-        : status === "generating"
-          ? "generating"
-          : submitId || status === "submitted"
+        : submitId || status === "submitted"
             ? "submitted"
             : "not_generated";
 

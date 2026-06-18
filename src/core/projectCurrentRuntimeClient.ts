@@ -9,13 +9,17 @@ export type {
 
 export {
   currentProjectBindingIdentity,
+  currentProjectBindingStatusFromBootstrap,
   deriveCurrentProjectBindingStatus,
   deriveCurrentProjectChoices,
   loadCurrentProjectBindingStatus,
   loadCurrentProjectChoices,
+  loadCurrentProjectAgentTimelineTextFromRuntime,
   projectCurrentBindingEndpoint,
+  projectCurrentAgentTimelineEndpoint,
   projectCurrentChoicesEndpoint,
   projectCurrentSelectEndpoint,
+  saveCurrentProjectAgentTimelineTextToRuntime,
   selectCurrentProjectBinding,
   clearCurrentProjectBinding,
 } from "./projectCurrentBindingClient";

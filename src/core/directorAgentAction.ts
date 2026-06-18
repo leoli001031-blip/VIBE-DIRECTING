@@ -17,6 +17,7 @@ export type DirectorAgentActionKind =
   | "request_style_research"
   | "prepare_reference_generation"
   | "prepare_video_submit"
+  | "query_video_result"
   | "prepare_export";
 
 export type DirectorAgentActionStatus = "staged" | "blocked";
@@ -111,7 +112,27 @@ export interface DirectorAgentStateSnapshot {
     candidate: number;
     missing: number;
   };
+  videoState: DirectorAgentVideoState;
   projectReadiness: DirectorAgentProjectReadiness;
+}
+
+export type DirectorAgentVideoStatus =
+  | "idle"
+  | "ready"
+  | "submitted"
+  | "running"
+  | "recoverable"
+  | "needs_review"
+  | "completed"
+  | "failed";
+
+export interface DirectorAgentVideoState {
+  status: DirectorAgentVideoStatus;
+  canResume: boolean;
+  waitingCount: number;
+  completedCount: number;
+  reviewCount: number;
+  detail?: string;
 }
 
 export interface DirectorAgentActionTarget {
@@ -170,6 +191,7 @@ export interface DirectorAgentActionEnvelope {
     sectionId?: string;
     totalShots: number;
     projectReadiness: DirectorAgentProjectReadiness;
+    videoState: DirectorAgentVideoState;
   };
   createdAt: string;
 }
@@ -181,6 +203,12 @@ export interface BuildDirectorAgentStateSnapshotInput {
   selectedShotIds?: string[];
   selectedAssetId?: string;
   sectionId?: string;
+  videoStatus?: string;
+  videoCanResume?: boolean;
+  videoWaitingCount?: number;
+  videoCompletedCount?: number;
+  videoReviewCount?: number;
+  videoDetail?: string;
 }
 
 export interface BuildDirectorAgentActionEnvelopeInput {
@@ -222,6 +250,8 @@ export function buildDirectorAgentStateSnapshot(input: BuildDirectorAgentStateSn
   const selectedSection = input.sectionId
     ? input.runtimeState.storyFlow.sections.find((section) => section.id === input.sectionId)
     : undefined;
+  const videoState = normalizeDirectorAgentVideoState(input);
+  const counts = referenceCounts(shots, assets);
 
   return {
     projectTitle: input.runtimeState.project.title || "未命名项目",
@@ -248,20 +278,26 @@ export function buildDirectorAgentStateSnapshot(input: BuildDirectorAgentStateSn
       shotIds: selectedSection.shotIds,
     } : undefined,
     assetCounts: {
-      locked: assets.filter((asset) => asset.lockedStatus === "locked").length,
-      needsReview: assets.filter((asset) => asset.lockedStatus === "needs_review").length,
+      locked: counts.lockedReferences,
+      needsReview: counts.needsReviewReferences,
       candidate: assets.filter((asset) => asset.lockedStatus === "candidate").length,
-      missing: assets.filter((asset) => asset.lockedStatus === "not_generated" || asset.status === "missing").length,
+      missing: counts.missingReferences,
     },
-    projectReadiness: buildAgentProjectReadiness(shots, assets),
+    videoState,
+    projectReadiness: buildAgentProjectReadiness(shots, assets, counts),
   };
 }
 
 export function buildDirectorAgentActionEnvelope(input: BuildDirectorAgentActionEnvelopeInput): DirectorAgentActionEnvelope {
   const createdAt = input.generatedAt || new Date().toISOString();
   const userIntent = input.userIntent.trim();
-  const executionContract = normalizeExecutionContractForIntent(input.executionContract, userIntent);
   const kind = classifyDirectorAgentAction(userIntent, input.snapshot);
+  const executionContract = normalizeExecutionContractForAction({
+    kind,
+    base: normalizeExecutionContractForIntent(input.executionContract, userIntent),
+    explicitInput: input.executionContract,
+    userIntent,
+  });
   const target = targetFor(input.snapshot, userIntent);
   const strategy = strategyFromIntent(userIntent);
   const blockers = actionBlockers({ kind, target, strategy, executionContract, userIntent, snapshot: input.snapshot });
@@ -300,6 +336,7 @@ export function buildDirectorAgentActionEnvelope(input: BuildDirectorAgentAction
       sectionId: input.snapshot.sectionId,
       totalShots: input.snapshot.totalShots,
       projectReadiness: input.snapshot.projectReadiness,
+      videoState: input.snapshot.videoState,
     },
     createdAt,
   };
@@ -312,20 +349,26 @@ export function classifyDirectorAgentAction(userIntent: string, snapshot?: Direc
   const videoSubmitDisallowed = directorAgentPermissionIntentDisallowsVideoSubmit(userIntent);
   if (!normalized && permissionIntent !== "video_allowed") return "revise_story_or_shot";
   const queuedContinueKind = queuedActionKindFromContinueIntent(normalized, snapshot);
-  if (queuedContinueKind) return queuedContinueKind;
+  if (queuedContinueKind && containsAny(normalized, ["按项目状态继续", "项目状态继续"])) return queuedContinueKind;
+  if (isVideoQueryIntent(normalized, snapshot)) return "query_video_result";
   if (isProjectInspectionIntent(normalized)) return "inspect_project_status";
   if (containsAny(normalized, ["导出", "素材包", "finalmp4", "finalvideo", "export"])) return "prepare_export";
   if (shouldClassifyAssetReviewIntent(userIntent, snapshot)) return "review_reference_asset";
-  if (
-    containsAny(normalized, ["补参考", "补齐参考", "生成参考", "做参考", "生图", "生成图片", "生成画面", "补图", "补齐素材", "补齐这个项目", "补齐当前项目", "项目参考素材"]) ||
-    containsAny(normalizedRaw, ["补参考", "补齐参考", "生成参考", "做参考", "补图", "补齐素材", "补齐这个项目", "补齐当前项目", "项目参考素材"])
-  ) return "prepare_reference_generation";
+  const referenceGenerationRequested =
+    isReferenceGenerationIntent(normalized, { includeImageShortcuts: true })
+    || (
+      !disallowsReferenceGenerationIntent(normalizedRaw)
+      && isReferenceGenerationIntent(normalizedRaw, { includeImageShortcuts: false })
+    );
+  if (strategyFromIntent(userIntent) && !referenceGenerationRequested) return "update_shot_strategy";
+  if (isExplicitProjectWriteIntent(normalized, normalizedRaw) && !referenceGenerationRequested) return "revise_story_or_shot";
+  if (referenceGenerationRequested) return "prepare_reference_generation";
   if (!videoSubmitDisallowed && (
     containsAny(normalized, ["提交视频", "生成视频", "生视频", "出视频", "即梦", "seedance", "jimeng"]) ||
     (permissionIntent === "video_allowed" && containsAny(normalizedRaw, ["提交视频", "生成视频", "生视频", "出视频", "即梦", "seedance", "jimeng"]))
   )) return "prepare_video_submit";
   if (containsAny(normalized, ["查资料", "搜索", "联网", "websearch", "风格研究", "参考资料", "知识库"])) return "request_style_research";
-  if (strategyFromIntent(userIntent)) return "update_shot_strategy";
+  if (queuedContinueKind) return queuedContinueKind;
   return "revise_story_or_shot";
 }
 
@@ -458,6 +501,51 @@ function normalizeExecutionContractForIntent(
   return base;
 }
 
+function normalizeExecutionContractForAction(input: {
+  kind: DirectorAgentActionKind;
+  base: DirectorAgentExecutionContract;
+  explicitInput?: Partial<DirectorAgentExecutionContract>;
+  userIntent: string;
+}): DirectorAgentExecutionContract {
+  const permissionIntent = detectDirectorAgentPermissionIntent(input.userIntent);
+  if (permissionIntent === "plan_only" || input.explicitInput?.mode) return input.base;
+  if (input.kind === "prepare_reference_generation" && input.base.mode === "plan_only") {
+    return normalizeExecutionContract({
+      ...input.base,
+      mode: "reference_allowed",
+      referenceGenerationAllowed: true,
+      videoSubmitAllowed: false,
+      providerSubmitAllowed: true,
+      reason: "Agent 建议先生成参考，确认后才会执行",
+    });
+  }
+  if (
+    input.kind === "prepare_video_submit"
+    && input.base.mode === "plan_only"
+    && !directorAgentPermissionIntentDisallowsVideoSubmit(input.userIntent)
+  ) {
+    return normalizeExecutionContract({
+      ...input.base,
+      mode: "video_allowed",
+      referenceGenerationAllowed: true,
+      videoSubmitAllowed: true,
+      providerSubmitAllowed: true,
+      reason: "Agent 建议提交视频，确认后才会执行",
+    });
+  }
+  if (input.kind === "query_video_result" && input.base.mode === "plan_only") {
+    return normalizeExecutionContract({
+      ...input.base,
+      mode: "plan_only",
+      referenceGenerationAllowed: false,
+      videoSubmitAllowed: false,
+      providerSubmitAllowed: false,
+      reason: "Agent 建议查询已提交视频的回流状态，不会重复提交新任务",
+    });
+  }
+  return input.base;
+}
+
 function strategyFromIntent(userIntent: string): DirectorProductionStrategyId | undefined {
   const normalized = normalizeText(stripControlOnlyPhrases(userIntent));
   if (containsAny(normalized, ["故事板快切", "快切", "rapidcut", "动作预演", "预演故事板"])) return "storyboard_rapid_cut";
@@ -484,6 +572,44 @@ function shouldClassifyAssetReviewIntent(userIntent: string, snapshot?: Director
   }
   if (snapshot?.currentView === "reference") return true;
   return explicitlyMentionsReferenceAsset;
+}
+
+function normalizeDirectorAgentVideoState(input: BuildDirectorAgentStateSnapshotInput): DirectorAgentVideoState {
+  const status = normalizeDirectorAgentVideoStatus(input.videoStatus);
+  const canResume = Boolean(input.videoCanResume) || status === "recoverable";
+  return {
+    status: canResume && status === "submitted" ? "recoverable" : status,
+    canResume,
+    waitingCount: Math.max(0, input.videoWaitingCount || 0),
+    completedCount: Math.max(0, input.videoCompletedCount || 0),
+    reviewCount: Math.max(0, input.videoReviewCount || 0),
+    detail: cleanOptional(input.videoDetail),
+  };
+}
+
+function normalizeDirectorAgentVideoStatus(value?: string): DirectorAgentVideoStatus {
+  const normalized = normalizeText(value || "");
+  if (!normalized || containsAny(normalized, ["未发送", "notgenerated", "notsubmitted", "idle"])) return "idle";
+  if (containsAny(normalized, ["可发送", "ready"])) return "ready";
+  if (containsAny(normalized, ["可查询", "recoverable", "resume", "resumable"])) return "recoverable";
+  if (containsAny(normalized, ["排队", "已发送", "submitted", "queued"])) return "submitted";
+  if (containsAny(normalized, ["生成中", "running", "generating", "inprogress", "processing"])) return "running";
+  if (containsAny(normalized, ["待复核", "needsreview", "review"])) return "needs_review";
+  if (containsAny(normalized, ["完成", "success", "completed", "done"])) return "completed";
+  if (containsAny(normalized, ["失败", "failed", "error"])) return "failed";
+  return "idle";
+}
+
+function videoStateCanQuery(videoState: DirectorAgentVideoState) {
+  return videoState.canResume
+    || videoState.status === "recoverable"
+    || videoState.status === "running"
+    || videoState.status === "submitted";
+}
+
+function isVideoQueryIntent(normalized: string, snapshot?: DirectorAgentStateSnapshot) {
+  void snapshot;
+  return containsAny(normalized, ["查询视频", "查视频", "查结果", "查询结果", "回流", "回来了吗", "视频状态", "即梦状态", "seedance状态", "取回结果"]);
 }
 
 function assetLockedStatusLabel(status: NonNullable<DirectorAgentStateSnapshot["selectedAsset"]>["lockedStatus"]) {
@@ -611,11 +737,12 @@ function actionBlockers(input: {
     input.kind === "prepare_reference_generation" && !input.executionContract.referenceGenerationAllowed ? "当前是只整理模式，还不能生成参考。" : "",
     input.kind === "prepare_video_submit" && readiness.status === "needs_story" ? "先整理故事流，再提交视频。" : "",
     input.kind === "prepare_video_submit" && readiness.status === "needs_references" ? "先生成并复核参考，再提交视频。" : "",
-    input.kind === "prepare_video_submit" && readiness.status === "needs_review" ? "先复核参考，再提交视频。" : "",
-    input.kind === "prepare_video_submit" && !input.executionContract.videoSubmitAllowed ? "当前还不能提交视频，需要你先允许。" : "",
-  ];
-  return uniqueStrings(blockers.filter(Boolean));
-}
+	    input.kind === "prepare_video_submit" && readiness.status === "needs_review" ? "先复核参考，再提交视频。" : "",
+	    input.kind === "prepare_video_submit" && !input.executionContract.videoSubmitAllowed ? "当前还不能提交视频，需要你先允许。" : "",
+	    input.kind === "query_video_result" && !videoStateCanQuery(input.snapshot.videoState) ? "当前没有可查询的视频任务。" : "",
+	  ];
+	  return uniqueStrings(blockers.filter(Boolean));
+	}
 
 function missingScopedTargetBlocker(
   kind: DirectorAgentActionKind,
@@ -705,13 +832,20 @@ function proposedChangesFor(input: {
         : "确认后这个参考不会作为后续可用资产，会等待重做或替换。",
     }];
   }
-  if (input.kind === "prepare_video_submit") {
-    return [{
-      field: "videoQueue",
-      to: "准备提交当前镜头或段落的视频任务",
-      reason: "提交前需要已确认的故事板/全能参考和用户确认。",
-    }];
-  }
+	  if (input.kind === "prepare_video_submit") {
+	    return [{
+	      field: "videoQueue",
+	      to: "准备提交当前镜头或段落的视频任务",
+	      reason: "提交前需要已确认的故事板/全能参考和用户确认。",
+	    }];
+	  }
+	  if (input.kind === "query_video_result") {
+	    return [{
+	      field: "videoQueue",
+	      to: "查询已提交视频的回流状态",
+	      reason: "只取回现有 submit id 的结果，不会重复提交新视频任务。",
+	    }];
+	  }
   const normalizedIntent = normalizeText(stripControlOnlyPhrases(input.userIntent));
   const hasConcreteCreatorIntent = Boolean(normalizedIntent)
     && !isContinueIntent(normalizedIntent)
@@ -820,16 +954,25 @@ function toolPlanFor(kind: DirectorAgentActionKind, contract: DirectorAgentExecu
       expectedReceipt: "image_reference_receipt",
     };
   }
-  if (kind === "prepare_video_submit") {
-    return {
-      toolName: "seedance_video_submit",
+	  if (kind === "prepare_video_submit") {
+	    return {
+	      toolName: "seedance_video_submit",
       taskEnvelopeRequired: true,
       userConfirmationRequired: true,
       providerSubmitAllowed: contract.videoSubmitAllowed && contract.providerSubmitAllowed,
-      expectedReceipt: "video_submit_receipt",
-    };
-  }
-  if (kind === "prepare_export") {
+	      expectedReceipt: "video_submit_receipt",
+	    };
+	  }
+	  if (kind === "query_video_result") {
+	    return {
+	      toolName: "seedance_video_submit",
+	      taskEnvelopeRequired: true,
+	      userConfirmationRequired: true,
+	      providerSubmitAllowed: false,
+	      expectedReceipt: "video_submit_receipt",
+	    };
+	  }
+	  if (kind === "prepare_export") {
     return {
       toolName: "project_export",
       taskEnvelopeRequired: true,
@@ -859,9 +1002,10 @@ function summaryFor(input: {
   if (input.kind === "update_shot_strategy" && input.strategy) return `${prefix}${input.target.label} 改为${strategyLabels[input.strategy]}`;
   if (input.kind === "request_style_research") return `${prefix}先查资料，再形成可确认参考`;
   if (input.kind === "prepare_reference_generation") return `${prefix}为 ${input.target.label} 生成参考`;
-  if (input.kind === "review_reference_asset") return `${prefix}复核 ${input.target.label}`;
-  if (input.kind === "prepare_video_submit") return `${prefix}准备提交 ${input.target.label} 的视频`;
-  if (input.kind === "prepare_export") return `${prefix}准备导出项目素材包`;
+	  if (input.kind === "review_reference_asset") return `${prefix}复核 ${input.target.label}`;
+	  if (input.kind === "prepare_video_submit") return `${prefix}准备提交 ${input.target.label} 的视频`;
+	  if (input.kind === "query_video_result") return `${prefix}查询 ${input.target.label} 的视频结果`;
+	  if (input.kind === "prepare_export") return `${prefix}准备导出项目素材包`;
   if (input.kind === "inspect_project_status") return `${prefix}检查当前项目状态`;
   if (input.kind === "revise_story_or_shot" && input.target.kind !== "project") return `${prefix}${input.target.label} 的修改草案`;
   if (input.kind === "revise_story_or_shot" && input.target.kind === "project") {
@@ -883,10 +1027,11 @@ function userFacingMessageFor(input: {
   if (input.status === "blocked") return input.blockers[0] || "需要补充一点信息。";
   if (input.kind === "update_shot_strategy" && input.strategy) return `我会先把这段改成${strategyLabels[input.strategy]}，确认后再写入项目。`;
   if (input.kind === "request_style_research") return "我会先查资料并整理成参考，采用前会让你确认。";
-  if (input.kind === "prepare_reference_generation") return "我会先准备参考生成计划，生成结果会进入复核。";
-  if (input.kind === "review_reference_asset") return "我会先把这张参考的复核决定整理好，确认后写入项目。";
-  if (input.kind === "prepare_video_submit") return "我会准备视频提交计划，提交前需要你确认。";
-  if (input.kind === "prepare_export") return "我会准备导出素材包，导出内容会可复核。";
+	  if (input.kind === "prepare_reference_generation") return "我会先准备参考生成计划，生成结果会进入复核。";
+	  if (input.kind === "review_reference_asset") return "我会先把这张参考的复核决定整理好，确认后写入项目。";
+	  if (input.kind === "prepare_video_submit") return "我会准备视频提交计划，提交前需要你确认。";
+	  if (input.kind === "query_video_result") return "我会查询已提交视频的回流状态，不会重复发送新任务。";
+	  if (input.kind === "prepare_export") return "我会准备导出素材包，导出内容会可复核。";
   if (input.kind === "inspect_project_status") {
     const queue = input.snapshot.projectReadiness.actionQueue.slice(0, 3).map((action) => action.label).join(" / ");
     return `当前：${input.snapshot.projectReadiness.summary}。建议下一步：${input.snapshot.projectReadiness.nextActionLabel}。后续可走：${queue || "继续整理"}。`;
@@ -904,6 +1049,71 @@ function normalizeText(value: string) {
 
 function containsAny(value: string, phrases: string[]) {
   return phrases.some((phrase) => value.includes(normalizeText(phrase)));
+}
+
+function isReferenceGenerationIntent(value: string, options: { includeImageShortcuts: boolean }) {
+  const imageShortcut = options.includeImageShortcuts
+    ? containsAny(value, ["生图", "生成图片", "生成画面", "补图"])
+    : false;
+  return (
+    containsAny(value, ["补参考", "补齐参考", "生成参考", "做参考", "补齐素材", "补齐这个项目", "补齐当前项目", "项目参考素材"]) ||
+    imageShortcut ||
+    /(?:补|生成|做).{0,16}参考/.test(value) ||
+    /(?:补|生成|做).{0,12}(?:角色图|场景图|道具图|故事板|分镜图)/.test(value)
+  );
+}
+
+function disallowsReferenceGenerationIntent(normalizedRaw: string) {
+  return containsAny(normalizedRaw, [
+    "不要生成参考",
+    "不生成参考",
+    "先不要生成参考",
+    "先不生成参考",
+    "不用生成参考",
+    "不要生成参考图",
+    "不生成参考图",
+    "不要补参考",
+    "先不要补参考",
+    "不生成图片",
+    "不要生成图片",
+    "不生成画面",
+    "不生图",
+    "不要生图",
+    "不调用生图模型",
+  ]);
+}
+
+function isExplicitProjectWriteIntent(normalized: string, normalizedRaw: string) {
+  const writeOnlyIntent = containsAny(normalizedRaw, [
+    "只写项目",
+    "只写project",
+    "只改项目",
+    "只改文字",
+    "只整理",
+    "不要生成参考",
+    "不生成参考",
+    "先不生成参考",
+    "不生成图片",
+    "不生图",
+    "不要生图",
+    "不调用生图模型",
+  ]);
+  const editIntent = containsAny(normalized, [
+    "改成",
+    "改为",
+    "修改",
+    "调整",
+    "重命名",
+    "改标题",
+    "标题改",
+    "名字改",
+    "把这个镜头",
+    "把这段",
+    "这个镜头",
+    "这一段",
+    "这段",
+  ]);
+  return writeOnlyIntent || editIntent;
 }
 
 function isProjectInspectionIntent(normalized: string) {
@@ -1086,8 +1296,11 @@ function shotIdsMentionedInIntent(userIntent: string, snapshot: DirectorAgentSta
   );
 }
 
-function buildAgentProjectReadiness(shots: ShotRecord[], assets: AssetRecord[]): DirectorAgentProjectReadiness {
-  const counts = referenceCounts(shots, assets);
+function buildAgentProjectReadiness(
+  shots: ShotRecord[],
+  assets: AssetRecord[],
+  counts = referenceCounts(shots, assets),
+): DirectorAgentProjectReadiness {
   if (!shots.length) {
     return {
       status: "needs_story",
@@ -1248,11 +1461,12 @@ function queuedActionKindFromContinueIntent(
   normalized: string,
   snapshot?: DirectorAgentStateSnapshot,
 ): DirectorAgentActionKind | undefined {
-  if (!snapshot) return undefined;
-  const queue = directorAgentReadinessActions(snapshot.projectReadiness);
-  if (isContinueIntent(normalized)) {
-    return (queue.find((item) => item.priority === "now") || queue[0])?.kind || snapshot.projectReadiness.nextActionKind;
-  }
+	if (!snapshot) return undefined;
+	const queue = directorAgentReadinessActions(snapshot.projectReadiness);
+	if (isContinueIntent(normalized)) {
+	  if (videoStateCanQuery(snapshot.videoState)) return "query_video_result";
+	  return (queue.find((item) => item.priority === "now") || queue[0])?.kind || snapshot.projectReadiness.nextActionKind;
+	}
   if (!containsAny(normalized, ["按项目状态继续", "项目状态继续"])) return undefined;
   const mentioned = queue.find((item) => normalized.includes(normalizeText(item.label)));
   return mentioned?.kind || queue[0]?.kind || snapshot.projectReadiness.nextActionKind;

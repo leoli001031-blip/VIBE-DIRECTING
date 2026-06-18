@@ -326,9 +326,59 @@ function runtimeFetchWithXhr(url: string, init?: RequestInit): Promise<RuntimeFe
   });
 }
 
+function runtimeFetchWithJsonp(url: string, init?: RequestInit): Promise<RuntimeFetchResponse> {
+  const method = String(init?.method || "GET").toUpperCase();
+  if (method !== "GET" || typeof document === "undefined" || typeof window === "undefined") {
+    throw new Error("runtime fetch unavailable");
+  }
+  const parsed = new URL(url, window.location.href);
+  if (!isRuntimeEndpointPath(parsed.pathname) || parsed.pathname === `${projectRuntimeBasePath}/jsonp`) {
+    throw new Error("runtime fetch unavailable");
+  }
+
+  return new Promise((resolve, reject) => {
+    const requestId = `jsonp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement("script");
+    let timeout: number | undefined;
+    const cleanup = () => {
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      window.removeEventListener("vibe-runtime-jsonp", handleRuntimeJsonpEvent);
+      script.remove();
+    };
+    const handleRuntimeJsonpEvent = (event: Event) => {
+      const detail = (event as CustomEvent<{ id?: string; payload?: unknown }>).detail;
+      if (!detail || detail.id !== requestId) return;
+      cleanup();
+      const payload = detail.payload;
+      const text = JSON.stringify(payload ?? {});
+      resolve({
+        ok: true,
+        status: 200,
+        text: async () => text,
+        json: async () => payload,
+      });
+    };
+    window.addEventListener("vibe-runtime-jsonp", handleRuntimeJsonpEvent);
+    script.onerror = () => {
+      cleanup();
+      reject(new Error("runtime jsonp request failed"));
+    };
+    timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("runtime jsonp request timed out"));
+    }, 5000);
+    const jsonpUrl = new URL(`${projectRuntimeBasePath}/jsonp`, parsed.origin);
+    jsonpUrl.searchParams.set("id", requestId);
+    jsonpUrl.searchParams.set("path", `${parsed.pathname}${parsed.search}`);
+    script.src = jsonpUrl.toString();
+    document.head.appendChild(script);
+  });
+}
+
 function runtimeFetch(url: string, init?: RequestInit): Promise<RuntimeFetchResponse> {
   if (typeof fetch === "function") return fetch(url, init);
-  return runtimeFetchWithXhr(url, init);
+  if (typeof XMLHttpRequest !== "undefined") return runtimeFetchWithXhr(url, init);
+  return runtimeFetchWithJsonp(url, init);
 }
 
 export function isRuntimeEndpointPath(url: string) {

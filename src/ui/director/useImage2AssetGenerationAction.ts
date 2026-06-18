@@ -8,6 +8,7 @@ import {
 } from "../../core/projectCurrentRuntimeClient";
 import {
   submitProjectImage2AssetGeneration,
+  type ProjectImage2AssetGenerationInput,
   type ProjectImage2AssetGenerationResult,
 } from "../../core/projectImage2Client";
 import {
@@ -48,6 +49,7 @@ export type Image2AssetGenerationRunOptions = {
   selectedShotIds?: string[];
   selectedAssetId?: string;
   sectionId?: string;
+  assetTypes?: ProjectImage2AssetGenerationInput["assetTypes"];
   skipConfirm?: boolean;
   confirmationReceiptId?: string;
   confirmedAt?: string;
@@ -309,7 +311,7 @@ export function useImage2AssetGenerationAction({
         selectedShotId: target.selectedShotId,
         selectedShotIds: target.selectedShotIds,
         providerId,
-        assetTypes: ["character", "scene", "prop", "storyboard"],
+        assetTypes: options?.assetTypes?.length ? options.assetTypes : ["character", "scene", "prop", "storyboard"],
         agentTaskEnvelope: options?.agentToolTrace,
         confirmation: {
           receiptId: options?.confirmationReceiptId || `image2_asset_ui_${Date.now()}`,

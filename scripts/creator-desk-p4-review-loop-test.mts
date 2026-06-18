@@ -312,7 +312,7 @@ const failedWithNextRelayProjection = buildCreatorDeskProjection({
 assert(failedWithNextRelayProjection.videoGeneration.status === "failed", "failed relay queues with no active item should not look recoverable or running");
 assert(failedWithNextRelayProjection.videoGeneration.canContinueAfterFailure, "failed relay queues with a ready next segment should expose continue-after-failure intent");
 assert(failedWithNextRelayProjection.videoGeneration.queueSummary?.includes("1 段失败") && failedWithNextRelayProjection.videoGeneration.queueSummary.includes("1 段待提交"), "failed relay queues should summarize failed and ready segments together");
-assert(failedWithNextRelayProjection.videoGeneration.taskFacts.some((fact) => fact.label === "失败原因" && fact.value.includes("generation failed")), "failed relay queues should expose failure reasons as task evidence");
+assert(failedWithNextRelayProjection.videoGeneration.taskFacts.some((fact) => fact.label === "原因" && fact.value.includes("generation failed")), "failed relay queues should expose failure reasons as task evidence");
 assert(failedWithNextRelayProjection.videoGeneration.taskFacts.some((fact) => fact.label === "下一步" && fact.value.includes("继续下一段")), "failed relay queues should expose continue-next guidance as task evidence");
 assert(failedWithNextRelayProjection.agentStage.primaryAction === "继续下一段", "Agent primary action should tell the user they can continue the next segment after a failure");
 assert(failedWithNextRelayProjection.agentCommand.kind === "submit_video", "continue-after-failure should still route through the serial video submit action");
@@ -342,6 +342,30 @@ assert(completedRelayProjection.preflight.status === "needs_review", "completed 
 assert(completedRelayProjection.preflight.checks.find((check) => check.id === "video")?.detail === "待复核", "completed relay videos should enter the shared video review check");
 assert(completedRelayProjection.agentCommand.kind === "open_preview", "completed videos that still need review should route the primary Agent command to preview review");
 assert(completedRelayProjection.agentCommand.label === "检查视频", "completed videos that need review should not jump directly to export");
+
+const multiReturnedRelayProjection = buildCreatorDeskProjection({
+  runtimeState: lockedRuntimeState,
+  previewItems: [],
+  image2BatchState: { status: "ready_for_review", summary: { ...image2BatchState.summary, readyCount: 0, plannedCount: 3, blockedCount: 0, items: [] } } as any,
+  selectedShotIds: ["S03"],
+  relayQueue: {
+    status: "complete",
+    counts: { total: 3, ready: 0, active: 0, completed: 3, failed: 0, blocked: 0 },
+    activeItemIds: [],
+    items: [
+      { id: "seedance_segment_1", segmentId: "seedance_segment_1", shotId: "S01", title: "第一段", status: "success", submitId: "first-submit", localMediaPaths: ["video/first.mp4"], outputVideoPath: "video/first.mp4" },
+      { id: "seedance_segment_2", segmentId: "seedance_segment_2", shotId: "S02", title: "第二段", status: "success", submitId: "second-submit", localMediaPaths: ["video/second.mp4"], outputVideoPath: "video/second.mp4" },
+      { id: "seedance_segment_3", segmentId: "seedance_segment_3", shotId: "S03", title: "第三段", status: "success", submitId: "third-submit", localMediaPaths: ["video/third.mp4"], outputVideoPath: "video/third.mp4" },
+    ],
+    resumeCommands: [],
+    autoSubmitAllowed: false,
+    storyboardConfirmed: true,
+    maxConcurrentVideoJobs: 1,
+  } as any,
+});
+assert(multiReturnedRelayProjection.videoGeneration.taskFacts.some((fact) => fact.label === "当前段" && fact.value === "第三段"), "completed multi-segment relay queues should expose the latest returned segment as current review evidence");
+assert(multiReturnedRelayProjection.videoGeneration.taskFacts.some((fact) => fact.label === "输出" && fact.value.includes("video/third.mp4")), "completed multi-segment relay queues should expose the latest returned video output evidence");
+assert(multiReturnedRelayProjection.videoGeneration.taskFacts.some((fact) => fact.label === "提交号" && fact.value === "third-submit"), "completed multi-segment relay queues should expose the latest submit id as evidence");
 
 const returnedVideoProjection = buildCreatorDeskProjection({
   runtimeState: lockedRuntimeState,

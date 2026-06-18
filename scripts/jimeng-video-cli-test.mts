@@ -172,6 +172,15 @@ assert(queuedProjection.shortSubmitId === "abc123", "submit id short code mismat
 assert(/前面约 2085 个任务/.test(queuedProjection.detail), "queued projection must show visible position");
 assert(/50 分钟/.test(queuedProjection.detail), "queued projection must show expected long wait");
 assert(/恢复查询/.test(queuedProjection.detail), "queued projection must explain resume query");
+const generatingProjection = buildJimengVideoStatusProjection({
+  status: "recoverable_queued",
+  submitId: "abc123",
+  queueInfo: { position: 0, status: "Generating", length: 0 },
+  recoverable: true,
+});
+assert(generatingProjection.status === "generating", "provider Generating queue state should override recoverable queued fallback");
+assert(generatingProjection.label === "生成中", "provider Generating queue state should use generating label");
+assert(!/排队中/.test(generatingProjection.detail), "provider Generating queue state should not keep queued copy");
 
 const successInfo = extractDreaminaTaskInfo("", `status=success\nsaved to /tmp/out/movie.mp4\nsubmit_id=done456`);
 assert(successInfo.submitId === "done456", "regex submit_id parser failed");

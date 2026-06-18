@@ -251,7 +251,7 @@ export function MinimalAssetLibrary({
 
   function assetNextStepCopy() {
     if (reviewCounts.needsReview > 0) return "有参考等你看，先确认能不能继续使用。";
-    if (reviewCounts.missing > 0) return "有参考还没准备好，回到底部输入框让 AI 继续处理。";
+    if (reviewCounts.missing > 0) return "有参考还没准备好，在消息里让 AI 继续处理。";
     if (workspaceCounts.characters && workspaceCounts.scenes && reviewCounts.locked > 0) return "参考已准备好，可以回到故事页继续。";
     return "先放脚本和素材，AI 会整理参考。";
   }

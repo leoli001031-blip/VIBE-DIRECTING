@@ -7,7 +7,7 @@ import {
   projectCurrentProjectImage2ProviderRetryScheduler,
   summarizeCurrentProjectImage2BatchExecution,
 } from "../src/core/currentProjectImage2Batch.ts";
-import { runExportAction } from "../src/core/exportAction.ts";
+import { runExportAction, type ExportActionBridge } from "../src/core/exportAction.ts";
 import { buildLocalPreviewExportProjection } from "../src/core/localPreviewExportProjection.ts";
 import {
   buildNewVideoProjectVibeStagedTransaction,
@@ -415,6 +415,40 @@ assert.ok(
   "export manifest should preserve Agent tool trace when export is Agent-triggered",
 );
 
+const bridgeExportWrites: Array<{ path: string; data: string }> = [];
+const bridgeExportCopies: Array<{ sourcePath: string; path: string }> = [];
+const bridgeProjectRoot = "/mock/desktop-project";
+const bridgeExportAction = await runExportAction({
+  worker: exportProjection.exportWorker,
+  projectRoot: bridgeProjectRoot,
+  bridge: {
+    async sandboxWriteFile(filePath: string, data: string) {
+      bridgeExportWrites.push({ path: filePath, data });
+      return { written: true, path: filePath, hash: sha256(data) };
+    },
+    async sandboxCopyFile(sourcePath: string, destinationPath: string) {
+      bridgeExportCopies.push({ sourcePath, path: destinationPath });
+      return { copied: true, sourcePath, path: destinationPath, hash: sha256(`${sourcePath}->${destinationPath}`), size: 1 };
+    },
+  } satisfies ExportActionBridge,
+});
+assert.equal(bridgeExportAction.status, "ready", "desktop bridge export action should finish");
+assert.equal(bridgeExportAction.label, "导出包已生成", "desktop bridge export action should use real package copy");
+assert.equal(bridgeExportAction.detail, "已写入当前项目的 exports 文件夹。", "desktop bridge export action should explain local folder output");
+assert.ok(!bridgeExportAction.writes?.length, "desktop bridge export action should not fall back to browser memory writes");
+assert.ok(
+  bridgeExportWrites.some((write) => write.path === `${bridgeProjectRoot}/exports/new-video-golden-path/Project.vibe`),
+  "desktop bridge export action should write Project.vibe into the project export folder",
+);
+assert.ok(
+  bridgeExportWrites.some((write) => write.path === `${bridgeProjectRoot}/exports/new-video-golden-path/export_manifest.json`),
+  "desktop bridge export action should write export_manifest.json into the project export folder",
+);
+assert.ok(
+  bridgeExportCopies.every((copy) => copy.sourcePath.startsWith(`${bridgeProjectRoot}/`) && copy.path.startsWith(`${bridgeProjectRoot}/exports/new-video-golden-path/`)),
+  "desktop bridge export copies must stay inside the project root and export folder",
+);
+
 console.log(
   JSON.stringify(
     {
@@ -428,6 +462,7 @@ console.log(
       reviewReceipts: reviewedProject.receipts?.reviewReceipts.length || 0,
       lockGateStatus: blockedAutoLock.status,
       exportWrites: exportAction.writes?.length || 0,
+      bridgeExportWrites: bridgeExportWrites.length,
       exportManifestPath: exportAction.manifestPath,
     },
     null,

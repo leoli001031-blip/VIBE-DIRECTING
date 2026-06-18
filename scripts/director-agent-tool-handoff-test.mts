@@ -184,8 +184,9 @@ const defaultVideoHandoff = buildDirectorAgentToolHandoff({
   userConfirmed: true,
   availability: allReady,
 });
-assert(defaultVideoHandoff.status === "blocked", "default plan-only video submit must not become a ready handoff");
-assert(defaultVideoHandoff.blockers.includes("agent_action_blocked"), "default blocked video should preserve the action blocker");
+assert(defaultVideoHandoff.status === "ready", "confirmed explicit video submit can become a ready handoff");
+assert(defaultVideoHandoff.invocation?.taskEnvelope.handler === "seedance_video_submit", "confirmed explicit video submit should keep the Seedance handler");
+assert(defaultVideoHandoff.invocation?.taskEnvelope.providerSubmitAllowed === true, "confirmed explicit video submit should preserve provider-submit permission");
 
 const videoAction = buildDirectorAgentActionEnvelope({
   userIntent: "现在可以提交视频到即梦",

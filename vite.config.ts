@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -57,9 +58,58 @@ function sourceManualChunk(id: string) {
   return undefined;
 }
 
+function currentProjectBindingBootstrapPlugin() {
+  function bindingJson() {
+    const bindingPath = resolve(projectRoot, ".vibe-runtime/current-project.local.json");
+    if (!existsSync(bindingPath)) return "";
+    try {
+      return JSON.stringify(JSON.parse(readFileSync(bindingPath, "utf8"))).replace(/</g, "\\u003c");
+    } catch {
+      return "";
+    }
+  }
+
+  function bindingScript() {
+    const serialized = bindingJson();
+    return serialized ? `window.__VIBE_CURRENT_PROJECT_BINDING__=${serialized};\n` : "";
+  }
+
+  return {
+    name: "vibe-current-project-binding-bootstrap",
+    configureServer(server) {
+      server.middlewares.use("/vibe-current-project-binding.js", (_req, res) => {
+        const body = bindingScript();
+        res.statusCode = body ? 200 : 204;
+        res.setHeader("content-type", "application/javascript; charset=utf-8");
+        res.setHeader("cache-control", "no-store");
+        res.end(body);
+      });
+    },
+    transformIndexHtml() {
+      const serialized = bindingJson();
+      if (!serialized) return [];
+      return [
+        {
+          tag: "meta",
+          attrs: {
+            name: "vibe-current-project-binding",
+            content: encodeURIComponent(serialized),
+          },
+          injectTo: "head-prepend" as const,
+        },
+        {
+          tag: "script",
+          attrs: { src: "/vibe-current-project-binding.js" },
+          injectTo: "head-prepend" as const,
+        },
+      ];
+    },
+  };
+}
+
 export default defineConfig({
   base: "./",
-  plugins: [react()],
+  plugins: [currentProjectBindingBootstrapPlugin(), react()],
   server: {
     port: 5174, // Intentional default dev-server port.
     strictPort: false,

@@ -23,6 +23,8 @@ export interface VideoRelayQueueItem {
   referencePaths: string[];
   submitId?: string;
   resumeCommand?: string;
+  queueInfo?: Record<string, unknown>;
+  queuePosition?: number;
   outputVideoPath?: string;
   outputVideoSha256?: string;
   localMediaPaths?: string[];

@@ -16,6 +16,7 @@ import {
   type ProviderConfigStatus,
 } from "../../core/providerCredentialsClient";
 import type { ProjectRuntimeState } from "../../core/projectState";
+import { appendVideoBlockerRecoveryAdvice } from "../../core/videoBlockerRecovery";
 import {
   agentVideoSubmitContractAllowsVideo,
   type AgentVideoSubmitContract,
@@ -41,6 +42,7 @@ export type SeedanceVideoSubmitActionState = {
   qaFeedback?: DirectorQaUserFeedback;
   canResume?: boolean;
   suggestedActionLabel?: string;
+  recoveryTargetShotIds?: string[];
 };
 
 export type SeedanceVideoSubmitActionView = SeedanceVideoSubmitActionState & {
@@ -193,12 +195,38 @@ function timeoutAfter(ms: number): Promise<never> {
   });
 }
 
+function realChainStillNeedsReview(state: ProjectRealChainUiState) {
+  const summary = state.summary as (ProjectRealChainUiState["summary"] & {
+    needsReviewCount?: number;
+    reviewShotIds?: unknown[];
+    needsReviewShotIds?: unknown[];
+    reviewOverlayShots?: unknown[];
+    previewItems?: Array<Record<string, unknown>>;
+  }) | undefined;
+  if (!summary) return true;
+  if (typeof summary.needsReviewCount === "number") return summary.needsReviewCount > 0;
+  if (Array.isArray(summary.reviewShotIds) && summary.reviewShotIds.length) return true;
+  if (Array.isArray(summary.needsReviewShotIds) && summary.needsReviewShotIds.length) return true;
+  if (Array.isArray(summary.reviewOverlayShots) && summary.reviewOverlayShots.length) return true;
+  if (Array.isArray(summary.previewItems) && summary.previewItems.length) {
+    return summary.previewItems.some((item) => {
+      const statusText = `${item.status || ""} ${item.previewStatus || ""} ${item.productionQaStatus || ""}`.toLowerCase();
+      return item.reviewRequired === true
+        || item.reviewOverlay === true
+        || statusText.includes("needs_review")
+        || statusText.includes("returned_with_review_overlay");
+    });
+  }
+  return /needs_review|returned_with_review_overlay/i.test(`${summary.uiStatus || ""} ${summary.previewStatus || ""} ${summary.productionStatus || ""}`);
+}
+
 function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): SeedanceVideoSubmitActionState | undefined {
-  const relayQueue = state.summary?.relayQueue;
+  const relayQueue = state.summary?.relayQueue
+    || (state as ProjectRealChainUiState & { relayQueue?: ProjectSeedanceSubmitResult["relayQueue"] }).relayQueue;
   const canResume = relayQueueCanResume(relayQueue);
   if (relayQueue) {
+    const failedCount = relayQueue.counts?.failed || 0;
     if (relayQueue.status === "running") {
-      const failedCount = relayQueue.counts?.failed || 0;
       return {
         status: "submitted",
         message: failedCount > 0
@@ -207,18 +235,18 @@ function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): Seedanc
         canResume,
       };
     }
-    if (relayQueue.counts.failed > 0) {
+    if (failedCount > 0) {
       if (relayQueue.autoSubmitAllowed) {
         return {
           status: "idle",
-        message: `${relayQueue.counts.failed} 段视频生成失败；继续会发送下一段，失败段之后可单独补。`,
+        message: `${failedCount} 段视频生成失败；继续会发送下一段，失败段之后可单独补。`,
           canResume: false,
           suggestedActionLabel: "继续下一段",
         };
       }
       return {
         status: "blocked",
-        message: `${relayQueue.counts.failed} 段视频生成失败，请先重试或跳过后再继续。`,
+        message: `${failedCount} 段视频生成失败，请先重试或跳过后再继续。`,
         canResume: false,
       };
     }
@@ -230,17 +258,37 @@ function seedanceActionStateFromRuntime(state: ProjectRealChainUiState): Seedanc
       };
     }
     if (relayQueue.status === "complete") {
+      if (!realChainStillNeedsReview(state)) {
+        return {
+          status: "idle",
+          message: "视频已通过，可以导出。",
+          canResume: false,
+          suggestedActionLabel: "查看交付",
+        };
+      }
       return {
         status: "needs_review",
         message: creatorFacingVideoMessage(relayQueue.userSummary, "视频队列已处理完，等待复核。"),
         canResume,
       };
     }
-    if (relayQueue.status === "blocked" || relayQueue.counts.failed > 0) {
+    if (relayQueue.status === "blocked" || failedCount > 0) {
+      const blockedItem = (relayQueue.items || []).find((item) => {
+        const blockers = (item as { blockers?: unknown }).blockers;
+        return item.status === "blocked" || (Array.isArray(blockers) && blockers.length);
+      });
+      const blockedItemShotIds = Array.isArray((blockedItem as { shotIds?: unknown })?.shotIds)
+        ? (blockedItem as { shotIds?: string[] }).shotIds || []
+        : [];
+      const recoveryTargetShotIds = uniqueShotIds([
+        ...blockedItemShotIds,
+        blockedItem?.shotId || "",
+      ]);
       return {
         status: "blocked",
-        message: creatorFacingVideoMessage(relayQueue.userSummary, "视频队列需要处理后再继续。"),
+        message: appendVideoBlockerRecoveryAdvice(creatorFacingVideoMessage(relayQueue.userSummary, "视频队列需要处理后再继续。")),
         canResume,
+        recoveryTargetShotIds,
       };
     }
   }
@@ -278,7 +326,7 @@ export function useSeedanceVideoSubmitAction({
     [realChainState],
   );
   const effectiveActionState = useMemo(() => {
-    if (actionState.status === "running" || actionState.canResume) return actionState;
+    if (actionState.status === "running" || actionState.status === "blocked" || actionState.canResume) return actionState;
     return runtimeActionState || actionState;
   }, [actionState, runtimeActionState]);
 
@@ -417,9 +465,10 @@ export function useSeedanceVideoSubmitAction({
     qaFeedback: effectiveActionState.qaFeedback,
     canResume: effectiveActionState.canResume,
     suggestedActionLabel: effectiveActionState.suggestedActionLabel,
+    recoveryTargetShotIds: effectiveActionState.recoveryTargetShotIds,
     disabled: effectiveActionState.status === "running" || !runtimeProjectIdentity || (effectiveActionState.status === "submitted" && !effectiveActionState.canResume),
     ready: Boolean(runtimeProjectIdentity),
-  }), [effectiveActionState.canResume, effectiveActionState.message, effectiveActionState.qaFeedback, effectiveActionState.status, effectiveActionState.suggestedActionLabel, keyConfigured, runtimeProjectIdentity]);
+  }), [effectiveActionState.canResume, effectiveActionState.message, effectiveActionState.qaFeedback, effectiveActionState.recoveryTargetShotIds, effectiveActionState.status, effectiveActionState.suggestedActionLabel, keyConfigured, runtimeProjectIdentity]);
 
   return {
     videoSubmitAction,

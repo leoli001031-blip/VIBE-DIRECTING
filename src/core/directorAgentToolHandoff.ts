@@ -147,12 +147,12 @@ export function buildDirectorAgentToolHandoff(input: BuildDirectorAgentToolHando
   const taskEnvelope = buildToolTaskEnvelope({ action, handoffId, confirmedAt, handler, targetSummary });
 
   return {
-    schemaVersion: DIRECTOR_AGENT_TOOL_HANDOFF_SCHEMA_VERSION,
-    handoffId,
-    actionId: action.actionId,
-    status,
-    handler,
-    userFacingMessage: handoffMessage(status, handler, blockers),
+	    schemaVersion: DIRECTOR_AGENT_TOOL_HANDOFF_SCHEMA_VERSION,
+	    handoffId,
+	    actionId: action.actionId,
+	    status,
+	    handler,
+	    userFacingMessage: handoffMessage(status, handler, blockers, action.kind),
     blockers,
     projectWriteRequiredBeforeInvocation: true,
     taskEnvelopeRequired: action.toolPlan.taskEnvelopeRequired,
@@ -216,9 +216,9 @@ function buildToolTaskEnvelope(input: {
   };
 }
 
-function preflightPolicyForHandler(handler: DirectorAgentToolHandler): DirectorAgentToolPreflightPolicy {
-  const videoSubmit = handler === "seedance_video_submit";
-  return {
+	function preflightPolicyForHandler(handler: DirectorAgentToolHandler): DirectorAgentToolPreflightPolicy {
+	  const videoSubmit = handler === "seedance_video_submit";
+	  return {
     projectWriteReceiptRequired: true,
     ruleQaRequired: videoSubmit,
     textQaRequired: videoSubmit,
@@ -228,28 +228,35 @@ function preflightPolicyForHandler(handler: DirectorAgentToolHandler): DirectorA
 }
 
 function handoffBlockers(input: BuildDirectorAgentToolHandoffInput): string[] {
-  const { action, availability, userConfirmed } = input;
-  const handler = action.toolPlan.toolName;
-  return uniqueStrings([
+	const { action, availability, userConfirmed } = input;
+	const handler = action.toolPlan.toolName;
+	const queryVideoResult = action.kind === "query_video_result";
+	return uniqueStrings([
     action.status === "blocked" ? "agent_action_blocked" : "",
     userConfirmed ? "" : "user_confirmation_required",
     availability.projectReady ? "" : "project_not_ready",
     handler === "web_search" && !availability.webSearchReady ? "web_search_not_ready" : "",
-    handler === "image2_reference_generation" && !availability.referenceGenerationReady ? "reference_generation_not_ready" : "",
-    handler === "image2_reference_generation" && !action.toolPlan.providerSubmitAllowed ? "reference_generation_not_allowed" : "",
+	    handler === "image2_reference_generation" && !availability.referenceGenerationReady ? "reference_generation_not_ready" : "",
+	    handler === "image2_reference_generation" && !action.toolPlan.providerSubmitAllowed ? "reference_generation_not_allowed" : "",
     handler === "seedance_video_submit" && !availability.videoSubmitReady ? "video_submit_not_ready" : "",
-    handler === "seedance_video_submit" && !action.toolPlan.providerSubmitAllowed ? "video_submit_not_allowed" : "",
+    handler === "seedance_video_submit" && !queryVideoResult && !action.toolPlan.providerSubmitAllowed ? "video_submit_not_allowed" : "",
     handler === "project_export" && !availability.exportReady ? "export_not_ready" : "",
-  ]);
-}
+	  ]);
+	}
 
-function handoffMessage(status: DirectorAgentToolHandoffStatus, handler: DirectorAgentToolHandler, blockers: string[]) {
-  if (status === "handled_by_project_write") return "修改已写入项目，后续工具不需要额外执行。";
-  if (status === "blocked") return blockerMessage(primaryBlockerForMessage(blockers));
-  if (handler === "web_search") return "开始查资料，结果会先进入待确认参考。";
-  if (handler === "image2_reference_generation") return "开始生成参考，结果会先进入复核。";
-  if (handler === "seedance_video_submit") return "开始提交视频，排队结果会回到预览。";
-  if (handler === "project_export") return "开始导出素材包。";
+function handoffMessage(
+  status: DirectorAgentToolHandoffStatus,
+  handler: DirectorAgentToolHandler,
+  blockers: string[],
+  actionKind?: string,
+) {
+	  if (status === "handled_by_project_write") return "修改已写入项目，后续工具不需要额外执行。";
+	  if (status === "blocked") return blockerMessage(primaryBlockerForMessage(blockers));
+	  if (handler === "web_search") return "开始查资料，结果会先进入待确认参考。";
+	  if (handler === "image2_reference_generation") return "开始生成参考，结果会先进入复核。";
+	  if (actionKind === "query_video_result") return "开始查询视频结果，不会重复发送新任务。";
+	  if (handler === "seedance_video_submit") return "开始提交视频，排队结果会回到预览。";
+	  if (handler === "project_export") return "开始导出素材包。";
   return "已准备执行。";
 }
 
@@ -261,11 +268,12 @@ function blockerMessage(blocker: string) {
   if (blocker === "user_confirmation_required") return "需要你先确认这次动作。";
   if (blocker === "project_not_ready") return "请先打开或创建项目文件夹。";
   if (blocker === "web_search_not_ready") return "查资料还没开启。";
-  if (blocker === "reference_generation_not_ready") return "参考生成还不可用。";
-  if (blocker === "reference_generation_not_allowed") return "当前还不能生成参考。";
-  if (blocker === "video_submit_not_ready") return "视频提交还没准备好。";
-  if (blocker === "video_submit_not_allowed") return "当前不允许提交视频。";
-  if (blocker === "export_not_ready") return "导出还没准备好。";
+	  if (blocker === "reference_generation_not_ready") return "参考生成还不可用。";
+	  if (blocker === "reference_generation_not_allowed") return "当前还不能生成参考。";
+	  if (blocker === "video_submit_not_ready") return "视频提交还没准备好。";
+	  if (blocker === "video_submit_not_allowed") return "当前不允许提交视频。";
+	  if (blocker === "video_query_not_ready") return "当前没有可查询的视频任务。";
+	  if (blocker === "export_not_ready") return "导出还没准备好。";
   if (blocker === "agent_action_blocked") return "这次动作还没有通过检查。";
   return "当前动作还不能执行。";
 }

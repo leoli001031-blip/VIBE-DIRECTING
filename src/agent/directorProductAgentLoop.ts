@@ -64,7 +64,13 @@ export interface RunDirectorProductAgentLoopInput {
   agentActionEnvelope?: DirectorAgentActionEnvelope;
   agentToolHandoff?: DirectorAgentToolHandoff;
   textQaReport?: DirectorTextQaReport;
-  knowledgeManifest?: KnowledgePackManifest;
+	knowledgeManifest?: KnowledgePackManifest;
+	videoStatus?: string;
+	videoCanResume?: boolean;
+	videoWaitingCount?: number;
+	videoCompletedCount?: number;
+	videoReviewCount?: number;
+	videoDetail?: string;
 }
 
 export interface DirectorProductAgentLoopResult {
@@ -93,10 +99,16 @@ function snapshotInputFor(input: RunDirectorProductAgentLoopInput): BuildDirecto
     runtimeState: input.runtimeState,
     currentView: input.selection?.currentView,
     selectedShotId: input.selection?.selectedShotId,
-    selectedShotIds: input.selection?.selectedShotIds,
-    selectedAssetId: input.selection?.selectedAssetId,
-    sectionId: input.selection?.sectionId,
-  };
+	    selectedShotIds: input.selection?.selectedShotIds,
+	    selectedAssetId: input.selection?.selectedAssetId,
+	    sectionId: input.selection?.sectionId,
+	    videoStatus: input.videoStatus,
+	    videoCanResume: input.videoCanResume,
+	    videoWaitingCount: input.videoWaitingCount,
+	    videoCompletedCount: input.videoCompletedCount,
+	    videoReviewCount: input.videoReviewCount,
+	    videoDetail: input.videoDetail,
+	  };
 }
 
 function availabilityFor(input: RunDirectorProductAgentLoopInput): DirectorAgentToolAvailability {

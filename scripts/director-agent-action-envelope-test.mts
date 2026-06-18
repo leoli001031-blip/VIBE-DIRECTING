@@ -209,10 +209,10 @@ const continueReference = buildDirectorAgentActionEnvelope({
   snapshot: selectedSnapshot,
   generatedAt: "2026-05-31T00:00:00.500Z",
 });
-assert(continueReference.status === "blocked", "default continue should not run reference generation without explicit permission");
+assert(continueReference.status === "staged", "default continue should stage a reference-generation confirmation instead of running directly");
 assert(continueReference.kind === "prepare_reference_generation", "continue should route to reference generation when references are missing");
 assert(continueReference.toolPlan.toolName === "image2_reference_generation", "continue reference route should use reference tool");
-assert(continueReference.toolPlan.providerSubmitAllowed === false, "default continue must stay plan-only and avoid provider submit");
+assert(continueReference.requiresUserConfirmation === true, "default continue must still require user confirmation before provider work");
 assert(continueReference.sourceContext.projectReadiness.status === "needs_references", "action should carry readiness context");
 assert(continueReference.sourceContext.selectedShotContexts[0]?.context.primaryAction === "她在清晨旧书店翻开旧书", "action source context should carry the selected shot creative context");
 
@@ -441,10 +441,10 @@ const defaultBlockedVideo = buildDirectorAgentActionEnvelope({
   snapshot: selectedSnapshot,
   generatedAt: "2026-05-31T00:00:02.050Z",
 });
-assert(defaultBlockedVideo.executionContract.mode === "plan_only", "core Agent should default to plan-only without an explicit boundary");
-assert(defaultBlockedVideo.status === "blocked", "default plan-only must block video submit");
-assert(defaultBlockedVideo.toolPlan.toolName === "seedance_video_submit", "video intent should still be classified while blocked");
-assert(defaultBlockedVideo.toolPlan.providerSubmitAllowed === false, "default plan-only video request must not submit provider");
+assert(defaultBlockedVideo.executionContract.mode === "video_allowed", "explicit video intent should stage a confirmable video boundary");
+assert(defaultBlockedVideo.status === "blocked", "explicit video intent should still respect project readiness blockers");
+assert(defaultBlockedVideo.toolPlan.toolName === "seedance_video_submit", "video intent should still be classified as Seedance submit");
+assert(defaultBlockedVideo.requiresUserConfirmation === true, "video submit must still require user confirmation");
 
 const directBoundedReference = buildDirectorAgentActionEnvelope({
   userIntent: "帮我补参考图，但先不要生图，也不要提交视频",
@@ -512,6 +512,24 @@ const broadNoVideoReference = buildDirectorAgentActionEnvelope({
 });
 assert(broadNoVideoReference.executionContract.mode === "reference_allowed", "core Agent should infer reference-only from broader no-video wording");
 assert(broadNoVideoReference.status === "staged", "broader no-video wording should still allow reference preparation");
+
+const naturalSceneReference = buildDirectorAgentActionEnvelope({
+  userIntent: "补一张覆盖完整行动范围的场景参考",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:02.820Z",
+});
+assert(naturalSceneReference.kind === "prepare_reference_generation", "natural separated reference wording should classify as reference generation");
+assert(naturalSceneReference.status === "staged", "natural separated reference wording should stage a confirmable reference plan");
+assert(naturalSceneReference.requiresUserConfirmation === true, "natural reference generation must still require confirmation");
+
+const copyableRecoveryReference = buildDirectorAgentActionEnvelope({
+  userIntent: "只补参考，补一张覆盖完整行动范围的场景/天气参考，先不要提交视频",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:02.840Z",
+});
+assert(copyableRecoveryReference.kind === "prepare_reference_generation", "copyable recovery advice should classify as reference generation");
+assert(copyableRecoveryReference.executionContract.mode === "reference_allowed", "copyable recovery advice should infer reference-only mode");
+assert(copyableRecoveryReference.status === "staged", "copyable recovery advice should allow reference preparation");
 
 const referenceAllowed = normalizeDirectorAgentExecutionContract({
   mode: "reference_allowed",
@@ -630,6 +648,34 @@ assert(readySnapshot.projectReadiness.actionQueue[0]?.kind === "prepare_video_su
 assert(readySnapshot.projectReadiness.actionQueue.some((action) => action.kind === "prepare_export"), "ready projects should keep export available as a follow-up action");
 assert(continueVideo.kind === "prepare_video_submit", "continue should route ready projects to video submit plan");
 assert(continueVideo.toolPlan.toolName === "seedance_video_submit", "ready continue should use video submit tool");
+
+const recoverableVideoSnapshot = buildDirectorAgentStateSnapshot({
+  runtimeState: {
+    ...runtimeState,
+    visualMemory: {
+      assets: runtimeState.visualMemory.assets.map((asset) => ({
+        ...asset,
+        status: "generated",
+        lockedStatus: "locked",
+        safeForFutureReference: true,
+      })),
+    },
+  } as unknown as ProjectRuntimeState,
+  currentView: "story",
+  videoStatus: "submitted",
+  videoCanResume: true,
+  videoWaitingCount: 1,
+  videoDetail: "Seedance 已提交，可以查询结果。",
+});
+const continueVideoQuery = buildDirectorAgentActionEnvelope({
+  userIntent: "继续",
+  snapshot: recoverableVideoSnapshot,
+  generatedAt: "2026-05-31T00:00:04.760Z",
+});
+assert(continueVideoQuery.kind === "query_video_result", "continue should query existing Seedance jobs before preparing a new submit");
+assert(continueVideoQuery.toolPlan.toolName === "seedance_video_submit", "query should keep the runtime-compatible Seedance handler");
+assert(continueVideoQuery.toolPlan.providerSubmitAllowed === false, "query should never create a new provider submit");
+assert(/查询/.test(continueVideoQuery.summary), "query action should be creator-facing as a result check");
 
 const legacyReadySnapshot = {
   ...readySnapshot,

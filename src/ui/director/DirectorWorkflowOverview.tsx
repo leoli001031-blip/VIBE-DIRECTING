@@ -45,8 +45,14 @@ export function DirectorWorkflowOverview({
   localProjectReady?: boolean;
 }) {
   const lockedAssets = runtimeState.visualMemory.assets.filter((asset) => asset.lockedStatus === "locked").length;
-  const videoReady = Boolean(selectedShot?.videoPath || runtimeState.previewExport.draftPreview.summary.eventCount > 0);
-  const hasProjectContent = shots.length > 0 || lockedAssets > 0 || videoReady;
+  const videoStage = creatorDesk?.videoStage;
+  const videoGeneration = videoStage?.generation;
+  const videoReturned = Boolean(selectedShot?.videoPath)
+    || videoStage?.status === "needs_review"
+    || videoStage?.status === "completed"
+    || (videoGeneration?.completedCount || 0) > 0
+    || (videoStage?.reviewCount || 0) > 0;
+  const hasProjectContent = shots.length > 0 || lockedAssets > 0 || videoReturned;
   const missingReferenceCount = Math.max(
     creatorDesk?.reviewTray.counts.missing || 0,
     creatorDesk?.batchGeneration.missingCount || 0,
@@ -58,13 +64,11 @@ export function DirectorWorkflowOverview({
     creatorDesk?.videoStage.reviewCount || 0,
   );
   const preflightStatus = creatorDesk?.preflight.status;
-  const videoStage = creatorDesk?.videoStage;
-  const videoGeneration = videoStage?.generation;
   const videoInProgress = videoStage?.status === "in_progress" || videoStage?.status === "recoverable";
   const videoNeedsReview = videoStage?.status === "needs_review";
-  const videoComplete = videoStage?.status === "completed" || videoNeedsReview || videoReady;
+  const videoComplete = videoReturned || videoNeedsReview;
   const videoCanSubmit = preflightStatus === "ready" && videoStage?.status === "not_submitted";
-  const exportReady = currentView === "export" || videoComplete;
+  const exportReady = videoComplete;
 
   const steps = [
     {
@@ -112,7 +116,7 @@ export function DirectorWorkflowOverview({
     {
       id: "export",
       label: "导出",
-      detail: exportReady ? "可交付" : "预览后导出",
+      detail: exportReady ? "可交付" : videoInProgress ? "等视频结果" : "预览后导出",
       tone: stepTone({ ready: exportReady, active: currentView === "export" }),
       icon: <PackageCheck size={15} />,
     },

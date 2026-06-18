@@ -81,6 +81,11 @@ function previewVideoStatusLabel(item?: DisplayItem) {
   return previewVideoStatusVisible(item) && video ? `视频${video.label}` : "";
 }
 
+function previewVideoNeedsAttention(item?: DisplayItem) {
+  const status = item?.videoGeneration?.status;
+  return status === "queued" || status === "submitted" || status === "generating" || status === "recoverable";
+}
+
 function previewVideoStageCopy(item?: DisplayItem) {
   const video = item?.videoGeneration;
   if (!previewVideoStatusVisible(item) || !video) {
@@ -141,6 +146,7 @@ export function MinimalPreview({
   const [muted, setMuted] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const currentTimeRef = useRef(0);
+  const autoFocusedItemKeyRef = useRef("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fallbackQueue = useMemo(() => buildPreviewPlayerQueue(previewExport, shots), [previewExport, shots]);
   const queue = currentProjectPreviewItems ?? fallbackQueue;
@@ -155,15 +161,30 @@ export function MinimalPreview({
   const progress = total > 0 ? Math.min(100, Math.max(0, (currentTime / total) * 100)) : 0;
   const reviewCount = queue.filter((item) => previewNeedsReview(item as DisplayItem)).length;
   const playableCount = queue.filter((item) => item.mediaPath && (item.kind === "image_hold" || item.kind === "video_clip")).length;
+  const queuedVideoTaskCount = queue.filter((item) => {
+    if (item.kind !== "missing_placeholder") return false;
+    const video = (item as DisplayItem).videoGeneration;
+    return video?.status === "queued" || video?.status === "submitted" || video?.status === "generating" || video?.status === "recoverable";
+  }).length;
   const canPlayPreview = playableCount > 0;
   const missingCount = queue.length - playableCount;
   const previewStatusLabel = !queue.length
     ? "待准备"
+    : queuedVideoTaskCount > 0
+      ? `${queuedVideoTaskCount} 个视频任务处理中`
     : activeVideoStatusLabel || (reviewCount > 0
       ? `${reviewCount} 个待复核`
       : missingCount > 0
         ? `${missingCount} 个视频任务待生成`
         : "可播放");
+  const priorityItem = useMemo(() => {
+    const items = queue as DisplayItem[];
+    return items.find((item) => previewNeedsReview(item))
+      || items.find((item) => previewVideoNeedsAttention(item));
+  }, [queue]);
+  const priorityItemKey = priorityItem
+    ? `${priorityItem.id}:${priorityItem.status || ""}:${priorityItem.videoGeneration?.status || ""}`
+    : "";
 
   useEffect(() => {
     currentTimeRef.current = currentTime;
@@ -219,6 +240,14 @@ export function MinimalPreview({
       return nextTime;
     });
   }, [playing, queue, selectedShotId]);
+
+  useEffect(() => {
+    if (!priorityItem || playing || autoFocusedItemKeyRef.current === priorityItemKey) return;
+    autoFocusedItemKeyRef.current = priorityItemKey;
+    currentTimeRef.current = priorityItem.startSeconds;
+    setCurrentTime(priorityItem.startSeconds);
+    if (priorityItem.shotId) onSelectShot(priorityItem.shotId);
+  }, [onSelectShot, playing, priorityItem, priorityItemKey]);
 
   useEffect(() => {
     if (playing && activeItem?.shotId && activeItem.shotId !== selectedShotId) onSelectShot(activeItem.shotId);
@@ -294,7 +323,7 @@ export function MinimalPreview({
     <main className="minimal-preview-view">
       <div className="minimal-preview-head">
         <div>
-          <b>预览</b>
+          <b>视频</b>
           <h2>{activeLabel}</h2>
         </div>
         <div className="preview-status-strip" aria-label="预览状态">

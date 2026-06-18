@@ -164,7 +164,7 @@ export async function runExportAction(input: RunExportActionInput): Promise<Expo
   return {
     status: "ready",
     label: input.bridge && input.projectRoot ? "导出包已生成" : "导出清单已生成",
-    detail: input.bridge && input.projectRoot ? "已写入当前项目的 exports 文件夹。" : "当前环境已生成可测试的导出清单。",
+    detail: input.bridge && input.projectRoot ? "已写入当前项目的 exports 文件夹。" : "已整理好本次项目交付清单。",
     exportRoot: worker.exportRoot,
     manifestPath: manifestPath(worker),
     executedCount: result.executed.length,

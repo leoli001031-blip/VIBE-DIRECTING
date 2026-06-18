@@ -242,10 +242,10 @@ check(
   failures,
 );
 check(
-  /aria-label="当前工作范围"/.test(newVideoStartSource)
-    && /aria-pressed=\{activeVideoPermissionContract\.mode === item\.mode\}/.test(newVideoStartSource)
-    && /onClick=\{\(\) => selectVideoPermissionMode\(item\.mode\)\}/.test(newVideoStartSource),
-  "NewVideoStart must keep execution-boundary controls available inside the unified input.",
+  !/aria-label="当前工作范围"/.test(newVideoStartSource)
+    && /detectDirectorAgentPermissionIntent/.test(newVideoStartSource)
+    && /selectVideoPermissionMode\(detectedMode\)/.test(syncVideoPermissionFromIntent),
+  "NewVideoStart must keep execution boundary control in natural-language Agent intent, not composer mode buttons.",
   failures,
 );
 check(
@@ -291,9 +291,56 @@ check(
 check(
   /writeStoredNewVideoComposerDraft/.test(showEmptyProjectStatusNotice)
     && /onDraftChange\?\./.test(showEmptyProjectStatusNotice)
+    && /userText/.test(showEmptyProjectStatusNotice)
     && visibleCopy.includes("当前还没有故事流")
     && visibleCopy.includes("下一步：放入脚本或一句故事想法。"),
-  "NewVideoStart empty-project status handling must clear the standalone query and show a creator-facing next step.",
+  "NewVideoStart empty-project status handling must clear the standalone query and show a creator-facing Agent reply.",
+  failures,
+);
+check(
+  /role:\s*"user"\s*\|\s*"assistant"\s*\|\s*"tool"\s*\|\s*"confirmation"/.test(newVideoStartSource)
+    && /id:\s*"tool-read-input"/.test(newVideoStartSource)
+    && /id:\s*"tool-scan-materials"/.test(newVideoStartSource)
+    && /id:\s*"tool-plan-next"/.test(newVideoStartSource)
+    && /id:\s*"confirmation-draft"/.test(newVideoStartSource),
+  "NewVideoStart must render a real Agent-like message chain: user input, tool events, assistant reply, and confirmation request.",
+  failures,
+);
+check(
+  /buildVibeAgentIntakeTimelineEntries/.test(newVideoStartSource)
+    && /isVibeAgentIntakeTimelineEntry/.test(newVideoStartSource)
+    && /onRememberAgentTimelineEntries\?:/.test(newVideoStartSource)
+    && /restoredAgentTimelineEntries\?:/.test(newVideoStartSource),
+  "NewVideoStart must use the shared Agent timeline contract instead of only local synthetic messages.",
+  failures,
+);
+check(
+  /rememberNewVideoAgentTimeline\(buildVibeAgentIntakeTimelineEntries\(\{[\s\S]*phase:\s*"planning_started"/.test(prepareDraft)
+    && /phase:\s*"planning_ready"/.test(prepareDraft)
+    && /phase:\s*"planning_blocked"/.test(prepareDraft)
+    && /phase:\s*"draft_confirmed"/.test(confirmDraft)
+    && /phase:\s*"status_inspection"/.test(showEmptyProjectStatusNotice),
+  "NewVideoStart must persist intake Agent turns for planning start, ready, blocked, status inspection, and draft confirmation.",
+  failures,
+);
+check(
+  /visibleTimelineEntries\.map\(newVideoAgentMessageFromTimelineEntry\)/.test(newVideoStartSource)
+    && /displayAgentMessages = timelineAgentMessages\.length \? timelineAgentMessages : agentMessages/.test(newVideoStartSource),
+  "NewVideoStart must render persisted timeline entries before falling back to local message synthesis.",
+  failures,
+);
+check(
+  /inspect_project/.test(newVideoStartSource)
+    && /plan_next_action/.test(newVideoStartSource)
+    && /write_agent_message/.test(newVideoStartSource)
+    && /write_project/.test(newVideoStartSource)
+    && /生成参考图、提交视频和导出都还要再确认/.test(newVideoStartSource),
+  "NewVideoStart Agent thread must explain tool semantics and confirmation boundaries before generation.",
+  failures,
+);
+check(
+  /\.new-video-agent-message\.tool[\s\S]*\.new-video-agent-message\.confirmation/.test(directorCssSource),
+  "NewVideoStart Agent thread must visually distinguish tool events and confirmation requests.",
   failures,
 );
 check(
@@ -302,13 +349,11 @@ check(
   failures,
 );
 check(
-  /const activeVideoPermissionLabel = videoPermissionModeItems\.find/.test(newVideoStartSource)
-    && /new-video-agent-boundary-details/.test(newVideoStartSource)
-    && /工作范围/.test(newVideoStartSource)
-    && /<strong>\{activeVideoPermissionLabel\}<\/strong>/.test(newVideoStartSource)
-    && /boundaryDetailsOpen && \(/.test(newVideoStartSource)
-    && /aria-label="当前工作范围"/.test(newVideoStartSource),
-  "NewVideoStart must tuck execution controls into a lazy advanced summary instead of exposing three mode buttons by default.",
+  !/new-video-agent-boundary-details/.test(newVideoStartSource)
+    && /detectDirectorAgentPermissionIntent/.test(newVideoStartSource)
+    && /syncVideoPermissionFromIntent/.test(newVideoStartSource)
+    && /agentBoundaryInstruction\(draftToSubmit\.agentBoundaryMode\)/.test(prepareDraft),
+  "NewVideoStart must keep execution scope in natural-language Agent intent instead of mounting mode buttons in the composer.",
   failures,
 );
 check(
@@ -368,8 +413,7 @@ check(
   failures,
 );
 check(
-  /aria-label=\{`工作范围：\$\{item\.label\}`\}/.test(newVideoStartSource)
-    && /aria-label="添加脚本、图片或声音"/.test(newVideoStartSource)
+  /aria-label="添加脚本、图片或声音"/.test(newVideoStartSource)
     && /aria-label=\{composerPrimaryAriaLabel\}/.test(newVideoStartSource),
   "NewVideoStart composer controls must expose explicit accessible action labels.",
   failures,

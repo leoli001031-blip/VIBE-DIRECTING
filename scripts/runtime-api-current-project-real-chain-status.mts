@@ -28,6 +28,132 @@ export function createRuntimeApiCurrentProjectRealChainStatus(deps) {
     return undefined;
   }
 
+  function readLatestSeedanceSubmitReport(source) {
+    if (typeof readJsonIfPresent !== "function") return undefined;
+    const candidates = [
+      source?.runRootPath ? `${source.runRootPath}/reports/seedance_submit_report.json` : undefined,
+      source?.runRootRelativePath ? `${source.runRootRelativePath}/reports/seedance_submit_report.json` : undefined,
+    ].filter(Boolean);
+    for (const candidate of candidates) {
+      const report = readJsonIfPresent(candidate);
+      if (report && typeof report === "object") return report;
+    }
+    return undefined;
+  }
+
+  function relayStatusCounts(items) {
+    const active = items.filter((item) => ["submitted", "generating", "recoverable_queued"].includes(String(item?.status)));
+    const ready = items.filter((item) => ["planned", "ready"].includes(String(item?.status)) && !(Array.isArray(item?.blockers) && item.blockers.length));
+    const completed = items.filter((item) => item?.status === "success");
+    const failed = items.filter((item) => item?.status === "failed");
+    const blocked = items.filter((item) => item?.status === "blocked");
+    return {
+      total: items.length,
+      ready: ready.length,
+      active: active.length,
+      completed: completed.length,
+      failed: failed.length,
+      blocked: blocked.length,
+    };
+  }
+
+  function cleanText(value) {
+    return typeof value === "string" ? value.trim() : "";
+  }
+
+  function uniqueStrings(values) {
+    return Array.from(new Set(values.map(cleanText).filter(Boolean)));
+  }
+
+  function projectAssets(project) {
+    return Array.isArray(project?.assets) ? project.assets : [];
+  }
+
+  function assetKind(asset) {
+    return cleanText(asset?.kind || asset?.type).toLowerCase();
+  }
+
+  function assetText(asset) {
+    return uniqueStrings([
+      asset?.id,
+      asset?.label,
+      asset?.name,
+      asset?.path,
+      ...(Array.isArray(asset?.textConstraints) ? asset.textConstraints : []),
+      ...(Array.isArray(asset?.sourceRefs) ? asset.sourceRefs : []),
+    ]).join(" ").toLowerCase();
+  }
+
+  function lockedRecoverySceneReferenceFor(project, item, message) {
+    const shotIds = uniqueStrings([
+      item?.shotId,
+      ...(Array.isArray(item?.shotIds) ? item.shotIds : []),
+    ]);
+    if (!shotIds.length) return undefined;
+    const messageText = cleanText(message).toLowerCase();
+    return projectAssets(project).find((asset) => {
+      if (assetKind(asset) !== "scene") return false;
+      if (cleanText(asset?.status).toLowerCase() !== "locked") return false;
+      const usedByShotIds = Array.isArray(asset?.usedByShotIds) ? asset.usedByShotIds : [];
+      if (!usedByShotIds.some((shotId) => shotIds.includes(cleanText(shotId)))) return false;
+      const searchable = assetText(asset);
+      if (!/recoveryreference:scene|scene_recovery|recovery/.test(searchable)) return false;
+      const constraints = Array.isArray(asset?.textConstraints) ? asset.textConstraints.map(cleanText).filter(Boolean) : [];
+      const targetHints = constraints.filter((value) => value !== "recoveryReference:scene");
+      if (!targetHints.length) return true;
+      return targetHints.some((hint) => messageText.includes(hint.toLowerCase()) || searchable.includes(hint.toLowerCase()));
+    });
+  }
+
+  function relayQueueWithLatestSubmitBlocker(relayQueue, report, project) {
+    const reportStatus = String(report?.status || "");
+    const blockers = Array.isArray(report?.blockers)
+      ? report.blockers.filter((item) => typeof item === "string" && item.trim())
+      : [];
+    const message = firstCleanString(report?.message, blockers[0]);
+    if (!relayQueue || !message || report?.videoSubmitted === true || !/blocked/i.test(reportStatus)) return relayQueue;
+    const activeSegmentId = firstCleanString(report?.activeSegmentId);
+    const items = relayItems(relayQueue);
+    const fallbackTarget = relayQueue.nextReadyItemId
+      || items.find((item) => item?.status === "ready" || item?.status === "planned")?.id;
+    const updatedItems = items.map((item) => {
+      const matchesSegment = activeSegmentId && (item?.segmentId === activeSegmentId || item?.id === activeSegmentId);
+      const matchesFallback = !activeSegmentId && fallbackTarget && item?.id === fallbackTarget;
+      if (!matchesSegment && !matchesFallback) return item;
+      const recoveryReference = lockedRecoverySceneReferenceFor(project, item, message);
+      if (recoveryReference) {
+        return {
+          ...item,
+          status: "ready",
+          blockers: [],
+          notes: Array.from(new Set([
+            ...(Array.isArray(item?.notes) ? item.notes : []),
+            `补充场景参考已锁定：${firstCleanString(recoveryReference.label, recoveryReference.id) || "场景参考"}`,
+          ])),
+        };
+      }
+      return {
+        ...item,
+        status: "blocked",
+        blockers: Array.from(new Set([...(Array.isArray(item?.blockers) ? item.blockers : []), message])),
+        notes: Array.from(new Set([...(Array.isArray(item?.notes) ? item.notes : []), "视频提交前 QA 拦截，需先修复后再提交。"])),
+      };
+    });
+    const counts = relayStatusCounts(updatedItems);
+    const activeItems = updatedItems.filter((item) => ["submitted", "generating", "recoverable_queued"].includes(String(item?.status)));
+    const nextReadyItem = updatedItems.find((item) => ["planned", "ready"].includes(String(item?.status)) && !(Array.isArray(item?.blockers) && item.blockers.length));
+    return {
+      ...relayQueue,
+      status: counts.blocked > 0 ? "blocked" : relayQueue.status,
+      counts,
+      activeItemIds: activeItems.map((item) => item.id).filter(Boolean),
+      nextReadyItemId: nextReadyItem?.id,
+      autoSubmitAllowed: Boolean(counts.blocked === 0 && activeItems.length === 0 && nextReadyItem),
+      userSummary: counts.blocked > 0 ? `视频提交前被拦住：${message}` : "补充参考已复核，可以继续提交视频。",
+      items: updatedItems,
+    };
+  }
+
   function relayItems(relayQueue) {
     return Array.isArray(relayQueue?.items) ? relayQueue.items : [];
   }
@@ -44,6 +170,10 @@ export function createRuntimeApiCurrentProjectRealChainStatus(deps) {
     return {
       sourceReceiptId: submitId ? `seedance_submit_${submitId}` : undefined,
       providerReceiptId: submitId ? `seedance_submit_${submitId}` : undefined,
+      submitId,
+      videoStatus: match.status === "recoverable_queued" ? "queued" : match.status,
+      queueInfo: match.queueInfo,
+      queuePosition: match.queuePosition,
       outputHash: typeof match.outputVideoSha256 === "string" ? match.outputVideoSha256 : undefined,
       outputSha256: typeof match.outputVideoSha256 === "string" ? match.outputVideoSha256 : undefined,
     };
@@ -61,13 +191,21 @@ export function createRuntimeApiCurrentProjectRealChainStatus(deps) {
   }
 
   function projectWithReviewReceipts(source, fallbackProject) {
-    if (projectReviewReceipts(fallbackProject).length || typeof readFileSync !== "function" || !source?.projectVibePath) {
+    if (typeof readFileSync !== "function" || !source?.projectVibePath) {
       return fallbackProject;
     }
     try {
       const opened = parseProjectVibeText(readFileSync(source.projectVibePath, "utf8"));
-      if (opened.ok && opened.project?.receipts) {
-        return { ...fallbackProject, receipts: opened.project.receipts };
+      if (opened.project) {
+        return {
+          ...fallbackProject,
+          assets: Array.isArray(fallbackProject?.assets) && fallbackProject.assets.length
+            ? fallbackProject.assets
+            : opened.project.assets,
+          receipts: projectReviewReceipts(fallbackProject).length
+            ? fallbackProject.receipts
+            : opened.project.receipts,
+        };
       }
     } catch {
       // Status projection stays read-only and should not fail just because Project.vibe is temporarily unreadable.
@@ -142,9 +280,10 @@ export function createRuntimeApiCurrentProjectRealChainStatus(deps) {
       promptText: item?.promptText,
       promptHash: item?.promptHash,
       durationSeconds: item?.durationSeconds,
-      videoStatus: item?.videoStatus || (videoLike ? "success" : undefined),
-      submitId: item?.submitId,
-      queueInfo: item?.queueInfo,
+      videoStatus: relayEvidence.videoStatus || item?.videoStatus || (videoLike ? "success" : undefined),
+      submitId: item?.submitId || relayEvidence.submitId,
+      queueInfo: relayEvidence.queueInfo || item?.queueInfo,
+      queuePosition: relayEvidence.queuePosition ?? item?.queuePosition,
       localMediaPaths: item?.localMediaPaths,
       outputVideoPath: item?.outputVideoPath,
       outputExists: item?.outputExists,
@@ -162,7 +301,12 @@ export function createRuntimeApiCurrentProjectRealChainStatus(deps) {
     const projection = projectProjectionFromSource(source);
     const { project, projectFacts, observations } = projection;
     const reviewProject = projectWithReviewReceipts(source, project);
-    const relayQueue = projectFacts.previewPlan?.relayQueue || readPersistedRelayQueue(source);
+    const latestSeedanceSubmitReport = readLatestSeedanceSubmitReport(source);
+    const relayQueue = relayQueueWithLatestSubmitBlocker(
+      readPersistedRelayQueue(source) || projectFacts.previewPlan?.relayQueue,
+      latestSeedanceSubmitReport,
+      reviewProject,
+    );
     const previewPlanReviewItems = previewPlanItems(projectFacts).filter(previewPlanItemNeedsReview);
     const needsReviewShotIds = Array.from(new Set([
       ...projection.reviewShotIds,
@@ -309,6 +453,7 @@ export function createRuntimeApiCurrentProjectRealChainStatus(deps) {
       runtimeTruthLayerPath: source.runtimeTruthLayerRelativePath,
       previewPlanPath: source.previewPlanRelativePath,
       relayQueue,
+      latestSeedanceSubmitReport,
       round5ArtifactIngest,
       observations,
       previewItems: planPreviewItems.length ? planPreviewItems : observationPreviewItems,

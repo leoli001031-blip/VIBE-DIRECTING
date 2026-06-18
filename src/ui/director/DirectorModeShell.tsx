@@ -4,6 +4,8 @@ import type { ExportActionState } from "../../core/exportAction";
 import type { ExportWorkerState } from "../../core/exportWorker";
 import type { ProjectRuntimeState } from "../../core/projectState";
 import type { ProjectAgentActionLogItem, ProjectAgentStagedPlanDraft } from "../../project";
+import { buildVibeAgentTimelineStatusView } from "../../agent-core";
+import type { VibeAgentTimelineEntry } from "../../agent-core/types";
 import type { ProjectPreviewExportState } from "../../core/types";
 import type { ProjectFactsStagedApplyPlan } from "../../core/projectTransaction";
 import type { RuntimeView } from "../../core/runtimeView";
@@ -103,6 +105,7 @@ function DirectorDetailDisclosure({
 }
 
 function ProjectStatusSummary({ status }: { status: ProjectStatusViewModel }) {
+  const videoQueryActive = status.stage === "视频待查询";
   return (
     <section className={`project-status-summary ${status.tone}`} aria-label="当前项目状态">
       <div className="project-status-summary-main">
@@ -111,9 +114,11 @@ function ProjectStatusSummary({ status }: { status: ProjectStatusViewModel }) {
         <small>等待：{status.waitingFor}</small>
       </div>
       <div className="project-status-summary-next">
-        <span>下一步</span>
-        <strong>{status.nextAction}</strong>
-        {status.issue && <small>{status.issue}</small>}
+        <span>{videoQueryActive ? "操作" : "下一步"}</span>
+        <strong>{videoQueryActive ? "确认查询" : status.nextAction}</strong>
+        {videoQueryActive
+          ? <small>查询只取回结果，不会重复提交</small>
+          : status.issue && <small>{status.issue}</small>}
       </div>
       <div className="project-status-summary-facts" aria-label="项目概览">
         {status.facts.map((fact) => (
@@ -180,8 +185,10 @@ export function DirectorMode({
   latestPrototypeAgentDemo,
   restoredAgentStagedPlanDraft,
   restoredAgentActionLog,
+  restoredAgentTimelineEntries,
   onStagePrototypeAgentPlan,
   onRememberAgentActionLogItem,
+  onRememberAgentTimelineEntries,
   onPreviewPrototypeAgentDemo,
 }: {
   audit: ProjectAudit;
@@ -220,6 +227,7 @@ export function DirectorMode({
     canResume?: boolean;
     suggestedActionLabel?: string;
     qaFeedback?: DirectorQaUserFeedback;
+    recoveryTargetShotIds?: string[];
   };
   webSearchSettings?: AgentWebSearchSettings;
   webSearchReady?: boolean;
@@ -258,8 +266,10 @@ export function DirectorMode({
   latestPrototypeAgentDemo?: PrototypeAgentDemoRun;
   restoredAgentStagedPlanDraft?: ProjectAgentStagedPlanDraft;
   restoredAgentActionLog?: ProjectAgentActionLogItem[];
+  restoredAgentTimelineEntries?: VibeAgentTimelineEntry[];
   onStagePrototypeAgentPlan?: (input: StagePrototypeAgentPlanInput) => StagePrototypeAgentPlanResult | void | Promise<StagePrototypeAgentPlanResult | void>;
   onRememberAgentActionLogItem?: (item: ProjectAgentActionLogItem) => void | Promise<void>;
+  onRememberAgentTimelineEntries?: (entries: VibeAgentTimelineEntry[]) => void | Promise<void>;
   onPreviewPrototypeAgentDemo?: (input: PreviewPrototypeAgentDemoInput) => PreviewPrototypeAgentDemoResult | void | Promise<PreviewPrototypeAgentDemoResult | void>;
 }) {
   const folderReady = Boolean(localProjectReady);
@@ -316,7 +326,7 @@ export function DirectorMode({
   const videoPermissionAllowsReference = agentVideoPermissionAllowsReference(videoPermissionContract);
   const sessionVideoSendAction = useMemo(() => {
     const queryOnly = Boolean(videoSendAction?.canResume);
-    if (!videoSendAction || videoPermissionAllowsSend || queryOnly) return videoSendAction;
+    if (!videoSendAction || videoPermissionAllowsSend || queryOnly || videoSendAction.status === "blocked") return videoSendAction;
     return {
       ...videoSendAction,
       disabled: true,
@@ -345,6 +355,14 @@ export function DirectorMode({
         detail: "当前工作范围是先整理。确认允许后只生成参考，不会发送视频。",
       };
     }
+    if (command.kind === "submit_video" && videoSendAction?.status === "blocked") {
+      return {
+        ...command,
+        label: "先处理视频问题",
+        summary: "这一段还不能直接发送。",
+        detail: videoSendAction.message || "先补参考或修改这一段，再继续提交视频。",
+      };
+    }
     if (command.kind === "submit_video" && !videoPermissionAllowsSend) {
       return {
         ...command,
@@ -356,12 +374,16 @@ export function DirectorMode({
       };
     }
     return command;
-  }, [creatorDesk?.agentCommand, videoPermissionAllowsReference, videoPermissionAllowsSend, videoPermissionContract.mode]);
+  }, [creatorDesk?.agentCommand, videoPermissionAllowsReference, videoPermissionAllowsSend, videoPermissionContract.mode, videoSendAction?.message, videoSendAction?.status]);
   const storyDetailLabel = [`${view.storySections.length} 个段落`, "点击查看分镜、模式和画面状态"].join(" · ");
   const showCreatorDeskPanel = projectReady && creatorDesk && !showNewVideoStart && directorView === "story";
   useEffect(() => {
     if (!showNewVideoStart && newVideoStatus) setNewVideoStatus(undefined);
   }, [newVideoStatus, showNewVideoStart]);
+  const agentTimelineStatusView = useMemo(
+    () => buildVibeAgentTimelineStatusView(restoredAgentTimelineEntries),
+    [restoredAgentTimelineEntries],
+  );
   const projectStatusView = useMemo(() => buildProjectStatusViewModel({
     runtimeState,
     folderReady,
@@ -377,6 +399,7 @@ export function DirectorMode({
     referenceGapCount: creatorReferenceGapCount(creatorDesk),
     agentStage: creatorDesk?.agentStage,
     agentCommand: visibleAgentCommand,
+    agentTimelineStatus: agentTimelineStatusView,
     newVideoStatus,
     exportAction,
     exportWorker,
@@ -397,6 +420,7 @@ export function DirectorMode({
     realSampleAction,
     runtimeState,
     sessionVideoSendAction,
+    agentTimelineStatusView,
     visibleAgentCommand,
   ]);
   async function confirmNewVideoDraft(draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) {
@@ -485,6 +509,8 @@ export function DirectorMode({
                   onDraftConfirmed={confirmNewVideoDraft}
                   videoPermissionContract={videoPermissionContract}
                   onVideoPermissionContractChange={setVideoPermissionContract}
+                  restoredAgentTimelineEntries={restoredAgentTimelineEntries}
+                  onRememberAgentTimelineEntries={onRememberAgentTimelineEntries}
                 />
               </Suspense>
             )}
@@ -556,6 +582,7 @@ export function DirectorMode({
             runtimeState={runtimeState}
             projectScopeLabel={projectReady ? projectScopeLabel : "新视频项目"}
             projectStatusLabel={agentProjectStatusLabel}
+            currentView={directorView}
             localProjectReady={folderReady}
             localProjectBusy={localProjectBusy}
             canCreateLocalProject={canCreateLocalProject}
@@ -568,11 +595,14 @@ export function DirectorMode({
             latestPrototypeAgentDemo={latestPrototypeAgentDemo}
             restoredAgentStagedPlanDraft={restoredAgentStagedPlanDraft}
             restoredAgentActionLog={restoredAgentActionLog}
+            restoredAgentTimelineEntries={restoredAgentTimelineEntries}
             onStagePrototypeAgentPlan={onStagePrototypeAgentPlan}
             onRememberAgentActionLogItem={onRememberAgentActionLogItem}
+            onRememberAgentTimelineEntries={onRememberAgentTimelineEntries}
             onPreviewPrototypeAgentDemo={onPreviewPrototypeAgentDemo}
             agentCommand={visibleAgentCommand}
             projectObservation={projectReady ? creatorDesk?.projectObservation : undefined}
+            projectStatusView={projectStatusView}
             realSampleAction={realSampleAction}
             endFrameAction={endFrameAction}
             videoSendAction={videoSendAction}

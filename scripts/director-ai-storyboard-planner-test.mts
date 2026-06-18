@@ -57,7 +57,7 @@ assert(prompt.includes("不要把每个小切点都拆成单独 shot"), "prompt 
 assert(prompt.includes("visibleClips 是最终视频里可见剪辑段数量"), "prompt should define visibleClips/storyboardPanels/actionBeats");
 assert(prompt.includes("storyboardPanels 多于 visibleClips"), "prompt should explain extra storyboard panels are internal action planning");
 assert(prompt.includes("建议输出约"), "prompt should include a restrained shot-count target");
-assert(prompt.includes("建议输出约 3 个 shots"), "short scripts should not be nudged toward too many shots");
+assert(prompt.includes("建议输出约 2 个 shots"), "short scripts should stay within executable 4s-minimum video segments");
 assert(prompt.includes("所有字段必须短句化"), "prompt should keep AI output compact enough for large scripts");
 assert(prompt.includes("不要使用英文双引号"), "prompt should protect JSON strings from raw dialogue quotes");
 assert(prompt.includes("不要把车、手机、书、票、道具写进 characters"), "prompt should prevent object references from becoming characters");
@@ -481,10 +481,25 @@ const halfSecondDriftNormalized = normalizeDirectorAiStoryboardPlan({
   ],
 });
 const halfSecondDriftSum = Math.round(halfSecondDriftNormalized.shots.reduce((sum, shot) => sum + shot.durationSeconds, 0) * 10) / 10;
-assert(halfSecondDriftSum === 12, "three video-generation shots should quantize to executable 4s minimum durations instead of fractional seconds");
+assert(halfSecondDriftSum === 10, "short plans should merge excess shots before quantizing to executable video durations");
+assert(halfSecondDriftNormalized.shots.length === 2, "10s plans should not keep three separate 4s-minimum video shots");
 assert(halfSecondDriftNormalized.shots.every((shot) => Number.isInteger(shot.durationSeconds)), "video-generation shot durations should be integer seconds");
 assert(halfSecondDriftNormalized.warnings.some((warning) => warning.includes("归一化")), "half-second duration drift should leave a warning");
-assert(halfSecondDriftNormalized.warnings.some((warning) => warning.includes("最近可执行总时长 12s")), "infeasible requested totals should explain the executable duration adjustment");
+assert(halfSecondDriftNormalized.warnings.some((warning) => warning.includes("合并为 2 个可执行段")), "short plans should explain shot merging");
+
+const authoritativeTargetNormalized = normalizeDirectorAiStoryboardPlan({
+  totalDurationSeconds: 12,
+  shots: [
+    { title: "黑猫跑过", durationSeconds: 4, primaryAction: "黑猫叼着车票跑过" },
+    { title: "车票发光", durationSeconds: 4, primaryAction: "发光车票特写" },
+    { title: "少女追赶", durationSeconds: 4, primaryAction: "少女追上黑猫" },
+  ],
+}, {
+  targetDurationSeconds: 8,
+});
+const authoritativeTargetSum = Math.round(authoritativeTargetNormalized.shots.reduce((sum, shot) => sum + shot.durationSeconds, 0) * 10) / 10;
+assert(authoritativeTargetNormalized.shots.length === 2, "explicit user target should override AI-expanded total duration and merge excess shots");
+assert(authoritativeTargetSum === 8, "explicit 8s target should stay 8s after executable-duration normalization");
 
 const manyShots = normalizeDirectorAiStoryboardPlan({
   totalDurationSeconds: 320,

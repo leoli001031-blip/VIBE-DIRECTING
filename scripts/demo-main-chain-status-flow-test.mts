@@ -105,6 +105,7 @@ status = view({
 });
 assert.equal(status.stage, "需要本地项目", "confirmed story should not generate references before a local project folder is bound");
 assert.equal(status.nextAction, "点左上角项目，选择本地文件夹", "unbound confirmed story should point to project selection");
+assert.equal(factValue(status, "项目"), "临时项目", "unbound confirmed story should show it is a temporary project instead of asking for another idea");
 assert.equal(factValue(status, "AI 导演"), "先保存项目", "blocked generation should be translated into save-project guidance");
 
 status = view({

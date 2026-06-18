@@ -53,6 +53,8 @@ export interface CurrentProjectPreviewItemInput {
   queue_length?: number;
   queueStatus?: string;
   queue_status?: string;
+  attemptCount?: number;
+  attempt_count?: number;
   outputVideoPath?: string;
   videoPath?: string;
   videoUrl?: string;
@@ -107,6 +109,8 @@ export interface CurrentProjectPreviewPlanClipInput {
   queue_length?: number;
   queueStatus?: string;
   queue_status?: string;
+  attemptCount?: number;
+  attempt_count?: number;
   previewQaStatus?: string;
   productionQaStatus?: string;
 }
@@ -295,9 +299,13 @@ function itemHasVideoGenerationEvidence(
     || item.queuePosition !== undefined
     || item.queueIndex !== undefined
     || item.queue_idx !== undefined
+    || item.attemptCount !== undefined
+    || item.attempt_count !== undefined
     || clip?.queuePosition !== undefined
     || clip?.queueIndex !== undefined
     || clip?.queue_idx !== undefined
+    || clip?.attemptCount !== undefined
+    || clip?.attempt_count !== undefined
     || item.outputVideoPath
     || item.videoPath
     || item.videoUrl
@@ -377,6 +385,9 @@ function relayQueuePreviewItems(relayQueue: VideoRelayQueueState | undefined): C
         status: relayItemStatusForPreview(item),
         videoStatus: relayItemStatusForPreview(item),
         submitId: item.submitId,
+        queueInfo: item.queueInfo,
+        queuePosition: item.queuePosition,
+        attemptCount: item.attemptCount,
         promptPath: item.promptPath,
         referencePaths: item.referencePaths,
         durationSeconds: item.durationSeconds,
@@ -405,6 +416,12 @@ function mergeRuntimePreviewItems(
       ...relay,
       id: item.id || relay.id,
       order: item.order ?? relay.order,
+      status: item.reviewRequired === false ? item.status : relay.status,
+      videoStatus: relay.videoStatus || item.videoStatus,
+      reviewRequired: item.reviewRequired === false ? false : relay.reviewRequired,
+      reviewOverlay: item.reviewRequired === false ? false : relay.reviewOverlay,
+      previewQaStatus: item.reviewRequired === false ? item.previewQaStatus : relay.previewQaStatus,
+      productionQaStatus: item.reviewRequired === false ? item.productionQaStatus : relay.productionQaStatus,
       sourceReceiptId: item.sourceReceiptId,
       providerReceiptId: item.providerReceiptId,
       providerRequestId: item.providerRequestId,

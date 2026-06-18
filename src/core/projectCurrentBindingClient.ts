@@ -7,14 +7,22 @@ import {
   projectRuntimeBasePath,
   projectRuntimeRequestPath,
   runtimeRequestInit,
+  RuntimeHttpError,
   toRuntimeUrl,
   type ProjectRuntimeIdentity,
 } from "./runtimeApiClient";
+
+declare global {
+  interface Window {
+    __VIBE_CURRENT_PROJECT_BINDING__?: unknown;
+  }
+}
 
 export const projectCurrentBindingEndpoint = `${projectRuntimeBasePath}/projects/current`;
 export const projectCurrentSelectEndpoint = `${projectRuntimeBasePath}/projects/select`;
 export const projectCurrentChoicesEndpoint = `${projectRuntimeBasePath}/projects/recent`;
 export const projectCurrentSaveProjectVibeEndpoint = `${projectRuntimeBasePath}/projects/current/project-vibe/save`;
+export const projectCurrentAgentTimelineEndpoint = `${projectRuntimeBasePath}/projects/current/agent-timeline`;
 
 export type ProjectCurrentBindingStatus = {
   status: "loading" | "bound" | "unbound";
@@ -112,6 +120,44 @@ export function currentProjectBindingIdentity(binding: ProjectCurrentBindingStat
   return hasProjectRuntimeIdentity(identity) ? identity : undefined;
 }
 
+export function currentProjectBindingStatusFromBootstrap(): ProjectCurrentBindingStatus | undefined {
+  if (typeof window === "undefined") return undefined;
+  const binding = isRecord(window.__VIBE_CURRENT_PROJECT_BINDING__)
+    ? window.__VIBE_CURRENT_PROJECT_BINDING__
+    : currentProjectBindingFromMeta();
+  const projectRoot = stringRecordValue(binding, ["projectRoot", "projectRootRelativePath"]);
+  if (!projectRoot) return undefined;
+  return deriveCurrentProjectBindingStatus({
+    ok: true,
+    status: "bound",
+    currentProject: {
+      bound: true,
+      binding,
+      projectRoot,
+      projectRootRelativePath: stringRecordValue(binding, ["projectRootRelativePath"]) || projectRoot,
+      projectVibeRelativePath: stringRecordValue(binding, ["projectVibeRelativePath", "projectVibePath"]),
+      project: {
+        title: stringRecordValue(binding, ["displayName", "projectTitle", "title", "name"]),
+        projectId: stringRecordValue(binding, ["projectId", "id"]),
+        projectRoot,
+        projectVibePath: stringRecordValue(binding, ["projectVibeRelativePath", "projectVibePath"]),
+      },
+    },
+  });
+}
+
+function currentProjectBindingFromMeta(): Record<string, unknown> | undefined {
+  if (typeof document === "undefined") return undefined;
+  const encoded = document.querySelector<HTMLMetaElement>('meta[name="vibe-current-project-binding"]')?.content;
+  if (!encoded) return undefined;
+  try {
+    const parsed = JSON.parse(decodeURIComponent(encoded));
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function deriveCurrentProjectChoices(payload: unknown): ProjectCurrentChoice[] {
   if (!isRecord(payload) || !Array.isArray(payload.choices)) return [];
   const choices: ProjectCurrentChoice[] = [];
@@ -138,6 +184,8 @@ export async function loadCurrentProjectBindingStatus(): Promise<ProjectCurrentB
     const payload = await fetchRuntimeJson(projectCurrentBindingEndpoint);
     return deriveCurrentProjectBindingStatus(payload);
   } catch {
+    const bootstrapped = currentProjectBindingStatusFromBootstrap();
+    if (bootstrapped) return bootstrapped;
     return {
       status: "unbound",
       message: projectMismatchMessage(),
@@ -221,6 +269,62 @@ export async function saveCurrentProjectVibeToRuntime(
     projectVibePath: stringRecordValue(payload, ["projectVibePath"]) || stringRecordValue(projectRecord, ["projectVibePath"]),
     projectId: stringRecordValue(payload, ["projectId"]) || stringRecordValue(projectRecord, ["projectId", "id"]),
     projectTitle: stringRecordValue(payload, ["projectTitle"]) || stringRecordValue(projectRecord, ["projectTitle", "title", "name"]),
+    message: stringRecordValue(payload, ["message"]),
+  };
+}
+
+export async function loadCurrentProjectAgentTimelineTextFromRuntime(
+  expected: ProjectRuntimeIdentity | undefined,
+): Promise<{
+  ok: boolean;
+  status?: string;
+  path?: string;
+  content?: string;
+  message?: string;
+}> {
+  if (!hasProjectRuntimeIdentity(expected)) {
+    return { ok: false, status: "blocked", message: projectMismatchMessage() };
+  }
+  try {
+    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectCurrentAgentTimelineEndpoint, expected));
+    if (!isRecord(payload)) return { ok: false, status: "blocked", message: "Agent timeline 读取失败。" };
+    return {
+      ok: payload.ok === true,
+      status: stringRecordValue(payload, ["status"]),
+      path: stringRecordValue(payload, ["path"]),
+      content: stringRecordValue(payload, ["content"]),
+      message: stringRecordValue(payload, ["message"]),
+    };
+  } catch (error) {
+    if (error instanceof RuntimeHttpError && error.status === 404) {
+      return { ok: false, status: "missing", message: error.detail };
+    }
+    return { ok: false, status: "error", message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export async function saveCurrentProjectAgentTimelineTextToRuntime(
+  expected: ProjectRuntimeIdentity | undefined,
+  content: string,
+): Promise<{
+  ok: boolean;
+  status?: string;
+  path?: string;
+  message?: string;
+}> {
+  if (!hasProjectRuntimeIdentity(expected)) {
+    return { ok: false, status: "blocked", message: projectMismatchMessage() };
+  }
+  const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectCurrentAgentTimelineEndpoint, expected), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  if (!isRecord(payload)) return { ok: false, status: "blocked", message: "Agent timeline 保存失败。" };
+  return {
+    ok: payload.ok === true,
+    status: stringRecordValue(payload, ["status"]),
+    path: stringRecordValue(payload, ["path"]),
     message: stringRecordValue(payload, ["message"]),
   };
 }

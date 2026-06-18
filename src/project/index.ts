@@ -4,6 +4,7 @@ export * from "./projectVibeRuntimeState";
 export * from "./projectVibeCreativeLoop";
 export * from "./projectAgentStagedPlanDraft";
 export * from "./projectAgentActionLog";
+export * from "./projectAgentTimeline";
 export {
   buildProjectAgentStagedPlanDraft,
   clearProjectAgentStagedPlanDraft,
@@ -18,6 +19,11 @@ export {
   parseProjectAgentActionLogDocument,
   rememberProjectAgentActionLogItem,
 } from "./projectAgentActionLog";
+export {
+  openProjectAgentTimeline,
+  projectAgentTimelinePath,
+  saveProjectAgentTimeline,
+} from "./projectAgentTimeline";
 export type {
   ProjectAgentStagedPlanDraft,
   ProjectAgentStagedPlanRestoreResult,
@@ -36,3 +42,8 @@ export type {
   ProjectAgentActionLogWriteResult,
   SaveProjectAgentActionLogItemInput,
 } from "./projectAgentActionLog";
+export type {
+  ProjectAgentTimelineOpenResult,
+  ProjectAgentTimelineOpenStatus,
+  ProjectAgentTimelineWriteResult,
+} from "./projectAgentTimeline";

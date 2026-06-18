@@ -1034,6 +1034,88 @@ assert(genericSceneManifest.segmentPlan.length === 1, "shared bound scene asset 
 assert(genericSceneManifest.shots.length === 2, "selected shot should keep its explicit storyboard group when both shots share the same bound scene asset");
 assert(genericSceneManifest.references.some((ref: { role: string; name: string }) => ref.role === "scene_reference" && ref.name === "蓝盐档案厅"), "grouped unknown scene should use the bound scene baseline reference");
 
+const mirrorCharacterRunRootRelativePath = ".vibe-runtime/test-current-project-seedance-mode-compiler-mirror-character";
+const mirrorCharacterRunRootPath = path.resolve(repoRoot, mirrorCharacterRunRootRelativePath);
+rmSync(mirrorCharacterRunRootPath, { recursive: true, force: true });
+mkdirSync(mirrorCharacterRunRootPath, { recursive: true });
+writeFile(path.join(mirrorCharacterRunRootPath, "assets/train-door.png"), tinyPng);
+writeFile(path.join(mirrorCharacterRunRootPath, "assets/main-girl.png"), tinyPng);
+writeFile(path.join(mirrorCharacterRunRootPath, "assets/other-girl.png"), tinyPng);
+const mirrorCharacterSource = {
+  ...source,
+  runRootPath: mirrorCharacterRunRootPath,
+  runRootRelativePath: mirrorCharacterRunRootRelativePath,
+  projectVibePath: path.join(mirrorCharacterRunRootPath, "project/project.vibe"),
+  projectVibeRelativePath: `${mirrorCharacterRunRootRelativePath}/project/project.vibe`,
+  previewPlanPath: path.join(mirrorCharacterRunRootPath, "reports/preview_plan.json"),
+  previewPlanRelativePath: `${mirrorCharacterRunRootRelativePath}/reports/preview_plan.json`,
+};
+projectFacts = {
+  projectVibe: {
+    shots: [
+      {
+        id: "M01",
+        title: "车门关闭回望自我",
+        durationSeconds: 4,
+        executionMode: "single_continuous_shot",
+        referenceStrategy: "omni_reference",
+        rhythmProfile: "anime_emotion",
+        intent: "列车门关闭瞬间，高中女生回头看见另一个一模一样的自己。",
+        camera: "车门内侧轻微推进到女生瞳孔。",
+        primaryAction: "高中女生在车门关闭刹那回头看见另一个自己。",
+        sceneGuidance: ["列车门口"],
+        characterGuidance: ["高中女生", "另一个高中女生"],
+        characterAssetIds: ["另一个高中女生"],
+      },
+    ],
+  },
+};
+workbenchFacts.visualMemory.assets = [
+  {
+    type: "scene",
+    name: "列车门口",
+    path: `${mirrorCharacterRunRootRelativePath}/assets/train-door.png`,
+    usedByShotIds: ["M01"],
+  },
+  {
+    type: "character",
+    name: "高中女生",
+    path: `${mirrorCharacterRunRootRelativePath}/assets/main-girl.png`,
+    usedByShotIds: ["M00"],
+  },
+  {
+    type: "character",
+    name: "另一个高中女生",
+    path: `${mirrorCharacterRunRootRelativePath}/assets/other-girl.png`,
+    usedByShotIds: ["M01"],
+  },
+];
+const mirrorCharacterResponse = await route.currentProjectSeedanceSubmitResponse({
+  confirmation: {
+    confirmed: true,
+    phrase: "submit-seedance-video",
+    receiptId: "receipt_test_mirror_character",
+    confirmedAt: "2026-05-23T00:00:00.000Z",
+  },
+  selectedShotIds: ["M01"],
+  modelVersion: "seedance2.0",
+  videoResolution: "720p",
+  ratio: "16:9",
+  pollSeconds: 30,
+  providerId: APIKEY_FUN_RESPONSES_IMAGE_PROVIDER_ID,
+  mockProviderResult: true,
+  cliPath: "/bin/echo",
+}, {}, mirrorCharacterSource);
+
+assert(mirrorCharacterResponse.ok === true, `mirror character submit should pass: ${JSON.stringify(mirrorCharacterResponse)}`);
+const mirrorCharacterManifestPath = path.join(path.dirname(path.resolve(repoRoot, mirrorCharacterResponse.promptPath)), "input-manifest.json");
+const mirrorCharacterManifest = JSON.parse(readFileSync(mirrorCharacterManifestPath, "utf8"));
+const mirrorCharacterNames = mirrorCharacterManifest.references
+  .filter((ref: { role: string }) => ref.role === "character_reference")
+  .map((ref: { name: string }) => ref.name);
+assert(mirrorCharacterNames.includes("高中女生"), "character guidance should recover an existing locked main-character reference even when characterAssetIds names only the mirror");
+assert(mirrorCharacterNames.includes("另一个高中女生"), "explicit mirror character reference should still be preserved");
+
 const longProjectShotCount = 36;
 projectFacts = {
   projectVibe: {

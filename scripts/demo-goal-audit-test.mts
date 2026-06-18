@@ -74,7 +74,7 @@ for (const { name, source } of visibleUiSources) {
 assertIncludes(newVideoStart, "添加脚本、图片或声音", "P1 new-video entry must expose add-file as one main input action");
 assertIncludes(newVideoStart, "发送给 AI 导演", "P1 new-video entry must expose a clear send action");
 assertIncludes(minimalAgentPanel, "minimal-agent-send-button", "P1 Agent panel must keep a fixed bottom send button");
-assertIncludes(minimalAgentPanel, "footerPrimaryUsesAgentNext", "P1 next actions must fold into the single bottom primary button");
+assertIncludes(minimalAgentPanel, "agentNextActionAvailable", "P1 Agent panel must keep next actions in Agent task cards, separate from the send button");
 assert(!minimalAgentPanel.includes("minimal-agent-suggested-button"), "P1 Agent panel must not reintroduce a second suggested-action button");
 assertIncludes(agentPanelProjection, "先整理", "P1 visible mode copy should use creator language");
 assertIncludes(agentPanelProjection, "可做参考", "P1 visible mode copy should use reference-generation language");

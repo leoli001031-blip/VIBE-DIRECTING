@@ -468,6 +468,8 @@ function relayQueueItemsForSegments({
       referencePaths: update.referencePaths || existing.referencePaths || [],
       submitId: update.submitId || existing.submitId,
       resumeCommand: update.resumeCommand || existing.resumeCommand,
+      queueInfo: update.queueInfo || existing.queueInfo,
+      queuePosition: update.queuePosition ?? update.queueInfo?.position ?? existing.queuePosition ?? existing.queueInfo?.position,
       outputVideoPath: update.outputVideoPath || existing.outputVideoPath,
       outputVideoSha256: update.outputVideoSha256 || existing.outputVideoSha256,
       localMediaPaths: update.localMediaPaths || existing.localMediaPaths || [],
@@ -973,7 +975,8 @@ function assetMatchesShotForType(asset, shot, type) {
   if (type === "prop" && !isStandalonePropReference(assetText)) return false;
   const explicitReferenceIds = shotExplicitReferenceIds(shot, type);
   if (explicitReferenceIds.length) {
-    return explicitReferenceIds.some((id) => assetMatchesExplicitReference(asset, id));
+    if (explicitReferenceIds.some((id) => assetMatchesExplicitReference(asset, id))) return true;
+    if (type !== "character") return false;
   }
   if (type === "scene") {
     const assetCluster = sceneClusterForText(assetText);
@@ -1940,6 +1943,8 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
           compilerModeLabel: compilePlan.strategyLabel,
           activeSegmentId: activeSegment?.id,
           segmentPlan,
+          relayQueuePath: relayQueueRelPath,
+          relayQueue: baseRelayQueue,
           ruleQaReportPath: ruleQaReportRelPath,
           ruleQaReport,
           blockers: ruleQaReport.findings
@@ -2000,6 +2005,8 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
           compilerModeLabel: compilePlan.strategyLabel,
           activeSegmentId: activeSegment?.id,
           segmentPlan,
+          relayQueuePath: relayQueueRelPath,
+          relayQueue: baseRelayQueue,
           ruleQaReportPath: ruleQaReportRelPath,
           ruleQaReport,
           textQaReportPath: textQaReportRelPath,
@@ -2320,6 +2327,8 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
 	          referencePaths: activeReferencePaths,
           submitId: taskInfo.submitId,
           resumeCommand,
+          queueInfo: taskInfo.queueInfo,
+          queuePosition: taskInfo.queueInfo?.position,
           outputVideoPath,
           outputVideoSha256,
           localMediaPaths: outputVideoPath ? [outputVideoPath] : [],
@@ -2612,6 +2621,8 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         referencePaths: activeItem.referencePaths,
         submitId: taskInfo.submitId || activeItem.submitId,
         resumeCommand,
+        queueInfo: taskInfo.queueInfo,
+        queuePosition: taskInfo.queueInfo?.position,
         outputVideoPath,
         outputVideoSha256,
         localMediaPaths: outputVideoPath ? [outputVideoPath] : activeItem.localMediaPaths || [],

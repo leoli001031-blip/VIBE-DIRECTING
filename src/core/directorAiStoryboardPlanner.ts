@@ -78,6 +78,10 @@ export interface DirectorAiStoryboardPlan {
   warnings: string[];
 }
 
+export interface NormalizeDirectorAiStoryboardPlanOptions {
+  targetDurationSeconds?: number;
+}
+
 const executionModes = new Set<DirectorAiStoryboardExecutionMode>([
   "single_continuous_shot",
   "relationship_wide",
@@ -105,6 +109,15 @@ const rhythmProfiles = new Set<DirectorRhythmProfile>([
 
 function clean(value: unknown): string {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+}
+
+function shortText(value: unknown, maxLength = 160): string {
+  const text = clean(value);
+  return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text;
+}
+
+function uniqueJoined(values: unknown[], separator = "、", maxLength = 220): string {
+  return shortText(Array.from(new Set(values.map(clean).filter(Boolean))).join(separator), maxLength);
 }
 
 function cleanMultiline(value: unknown, maxLength = 24000): string {
@@ -639,6 +652,80 @@ function inheritPendingSubjects(shots: DirectorAiStoryboardShot[]): DirectorAiSt
   });
 }
 
+function fitShotCountToExecutableDuration(
+  shots: DirectorAiStoryboardShot[],
+  requestedTotalSeconds: number | undefined,
+): { shots: DirectorAiStoryboardShot[]; warning?: string } {
+  const requestedTotal = Number(requestedTotalSeconds || 0);
+  if (!shots.length || !Number.isFinite(requestedTotal) || requestedTotal <= 0) return { shots };
+  const maxExecutableShots = Math.max(1, Math.floor(requestedTotal / VIDEO_MODEL_MIN_SHOT_SECONDS));
+  if (shots.length <= maxExecutableShots) return { shots };
+  const targetCount = Math.max(1, Math.min(maxExecutableShots, shots.length));
+  const merged = Array.from({ length: targetCount }, (_, index) => {
+    const start = Math.floor((index * shots.length) / targetCount);
+    const end = Math.floor(((index + 1) * shots.length) / targetCount);
+    return mergeStoryboardShotGroup(shots.slice(start, Math.max(start + 1, end)), index);
+  });
+  return {
+    shots: merged,
+    warning: `目标 ${Math.round(requestedTotal)}s 最多适合 ${targetCount} 个可提交视频段，已将 ${shots.length} 个相邻镜头合并为 ${targetCount} 个可执行段。`,
+  };
+}
+
+function mergeStoryboardShotGroup(
+  group: DirectorAiStoryboardShot[],
+  index: number,
+): DirectorAiStoryboardShot {
+  const first = group[0]!;
+  if (group.length === 1) return { ...first, shotNo: `1-${index + 1}` };
+  const hasRapidCut = group.some((shot) => shot.referenceStrategy === "storyboard_rapid_cut" || shot.executionMode === "planned_cut_sequence");
+  const hasStoryboard = group.some((shot) => shot.referenceStrategy === "storyboard_narrative");
+  const actionBeats = group.flatMap((shot) => [
+    ...shot.actionBeats,
+    shot.primaryAction,
+  ].map(clean).filter(Boolean));
+  const referenceStrategy: DirectorAiStoryboardReferenceStrategy = hasRapidCut
+    ? "storyboard_rapid_cut"
+    : hasStoryboard ? "storyboard_narrative" : first.referenceStrategy;
+  const executionMode: DirectorAiStoryboardExecutionMode = hasRapidCut
+    ? "planned_cut_sequence"
+    : group.some((shot) => shot.executionMode === "relationship_wide")
+      ? "relationship_wide"
+      : first.executionMode;
+  const durationSeconds = group.reduce((sum, shot) => sum + shot.durationSeconds, 0);
+  const visibleClips = Math.max(1, group.reduce((sum, shot) => sum + Math.max(1, shot.visibleClips || 1), 0));
+  const storyboardPanels = Math.max(
+    referenceStrategy === "omni_reference" ? 1 : 2,
+    group.reduce((sum, shot) => sum + Math.max(1, shot.storyboardPanels || 1), 0),
+  );
+  return {
+    ...first,
+    shotNo: `1-${index + 1}`,
+    title: uniqueJoined(group.map((shot) => shot.title), " / ", 120) || first.title,
+    durationSeconds,
+    camera: shortText(group.map((shot) => shot.camera).join(" -> "), 220) || first.camera,
+    visualDescription: shortText(group.map((shot) => shot.visualDescription).join("；"), 420) || first.visualDescription,
+    primaryAction: shortText(group.map((shot) => shot.primaryAction).join("；"), 220) || first.primaryAction,
+    actionTrigger: shortText(group.map((shot) => shot.actionTrigger).join("；"), 180) || first.actionTrigger,
+    microReaction: shortText(group.map((shot) => shot.microReaction).join("；"), 180) || first.microReaction,
+    executionMode,
+    referenceStrategy,
+    visibleCutBudget: hasRapidCut ? `${visibleClips} 个最终可见剪辑，${storyboardPanels} 个故事板面板作为动作规划` : first.visibleCutBudget,
+    visibleClips,
+    storyboardPanels,
+    actionBeats: Array.from(new Set(actionBeats)).slice(0, 12),
+    subtitle: uniqueJoined(group.map((shot) => shot.subtitle).filter((value) => clean(value) !== "-"), " / ", 160) || "-",
+    sound: uniqueJoined(group.map((shot) => shot.sound), "；", 180) || first.sound,
+    characters: uniqueJoined(group.map((shot) => shot.characters).filter((value) => clean(value) !== "无"), "、", 160) || "无",
+    scene: uniqueJoined(group.map((shot) => shot.scene), "；", 220) || first.scene,
+    props: uniqueJoined(group.map((shot) => shot.props).filter((value) => clean(value) !== "无"), "、", 160) || "无",
+    audioUsage: uniqueJoined(group.map((shot) => shot.audioUsage), "；", 180) || first.audioUsage,
+    rhythmProfile: hasRapidCut ? "action_fast_cut" : first.rhythmProfile,
+    rhythmReason: shortText(group.map((shot) => shot.rhythmReason).join("；"), 220) || first.rhythmReason,
+    sourceRowIds: Array.from(new Set(group.flatMap((shot) => shot.sourceRowIds))),
+  };
+}
+
 function normalizeShot(raw: unknown, index: number): DirectorAiStoryboardShot | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const record = raw as Record<string, unknown>;
@@ -683,7 +770,10 @@ function normalizeShot(raw: unknown, index: number): DirectorAiStoryboardShot | 
   };
 }
 
-export function normalizeDirectorAiStoryboardPlan(raw: unknown): DirectorAiStoryboardPlan {
+export function normalizeDirectorAiStoryboardPlan(
+  raw: unknown,
+  options: NormalizeDirectorAiStoryboardPlanOptions = {},
+): DirectorAiStoryboardPlan {
   const parsed = typeof raw === "string" ? extractJsonObject(raw) : raw;
   const record = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
   const shots = (Array.isArray(record.shots) ? record.shots : [])
@@ -692,13 +782,14 @@ export function normalizeDirectorAiStoryboardPlan(raw: unknown): DirectorAiStory
     .slice(0, MAX_AI_STORYBOARD_SHOTS);
   if (!shots.length) throw new Error("director_ai_storyboard_shots_missing");
   const requestedTotal = clampNumber(
-    record.totalDurationSeconds,
+    options.targetDurationSeconds ?? record.totalDurationSeconds,
     shots.reduce((sum, shot) => sum + shot.durationSeconds, 0),
     1,
     900,
   );
   const inheritedShots = inheritPendingSubjects(shots);
-  const durationNormalized = normalizeDurationsToTotal(inheritedShots, requestedTotal);
+  const executableShotCount = fitShotCountToExecutableDuration(inheritedShots, requestedTotal);
+  const durationNormalized = normalizeDurationsToTotal(executableShotCount.shots, requestedTotal);
   return {
     schemaVersion: DIRECTOR_AI_STORYBOARD_PLAN_VERSION,
     planningSource: "ai_director_validated",
@@ -707,6 +798,7 @@ export function normalizeDirectorAiStoryboardPlan(raw: unknown): DirectorAiStory
     shots: durationNormalized.shots,
     warnings: [
       ...stringList(record.warnings),
+      executableShotCount.warning,
       durationNormalized.warning,
     ].filter(Boolean) as string[],
   };
@@ -731,9 +823,10 @@ export function buildDirectorAiStoryboardPrompt(input: DirectorAiStoryboardPlanI
       props: row.props,
     }))
     .filter((row) => row.title || row.text || row.characters || row.scene || row.props);
-	  const suggestedShotCount = (() => {
+	const suggestedShotCount = (() => {
 	    const duration = Number(totalDuration || 0);
 	    if (requestedShotCount) return requestedShotCount;
+	    if (duration > 0 && duration < VIDEO_MODEL_MIN_SHOT_SECONDS * 3) return Math.max(1, Math.floor(duration / VIDEO_MODEL_MIN_SHOT_SECONDS));
 	    if (duration > 0 && duration <= 12) return 3;
 	    if (duration > 0 && duration <= 30) return 4;
 	    if (duration > 0 && duration <= 60) return 6;
