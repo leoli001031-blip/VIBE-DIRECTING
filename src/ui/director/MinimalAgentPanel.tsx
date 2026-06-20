@@ -1016,11 +1016,13 @@ function visibleMinimalAgentMessages(messages: MinimalAgentMessage[]): {
     && !minimalAgentMessageIsInlineSelectionContextCard(message)
   ));
   const currentMessages = dedupeMinimalAgentMessages(compactedMessages.length ? compactedMessages : filteredMessages);
-  if (currentMessages.length <= MAX_VISIBLE_AGENT_THREAD_MESSAGES) {
-    return { messages: currentMessages, hiddenCount: 0 };
-  }
   const latestUserIndex = currentMessages.map((message) => message.role).lastIndexOf("user");
-  const visible = latestUserIndex >= 0 ? currentMessages.slice(latestUserIndex) : currentMessages.slice(-MAX_VISIBLE_AGENT_THREAD_MESSAGES);
+  const turnFocusedMessages = latestUserIndex >= 0
+    ? currentMessages.slice(latestUserIndex)
+    : currentMessages;
+  const visible = turnFocusedMessages.length <= MAX_VISIBLE_AGENT_THREAD_MESSAGES
+    ? turnFocusedMessages
+    : turnFocusedMessages.slice(-MAX_VISIBLE_AGENT_THREAD_MESSAGES);
   const bounded = visible.length > MAX_VISIBLE_AGENT_THREAD_MESSAGES ? visible.slice(-MAX_VISIBLE_AGENT_THREAD_MESSAGES) : visible;
   return {
     messages: bounded,
