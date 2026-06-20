@@ -113,14 +113,6 @@ function countLabel(count: number, unit: string) {
   return `${Math.max(0, count)} ${unit}`;
 }
 
-function compactPath(value?: string) {
-  const clean = value?.trim();
-  if (!clean) return "未选择";
-  const parts = clean.split(/[\\/]/).filter(Boolean);
-  if (parts.length <= 2) return clean;
-  return `.../${parts.slice(-2).join("/")}`;
-}
-
 function sectionName(view: DirectorView) {
   if (view === "assets") return "参考";
   if (view === "preview") return "预览";
@@ -310,7 +302,6 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     ? { ...assetSummary, missing: displayedReferenceMissing }
     : assetSummary;
   const draftReferenceCount = browserDraftActive ? input.newVideoStatus?.draftReferenceCount || 0 : 0;
-  const folderLabel = compactPath(runtimeState.project.root);
   const videoStage = input.videoStage;
   const videoTaskActive = Boolean(videoStage && (
     videoStage.status === "in_progress"
@@ -336,7 +327,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
       ? "先保存项目"
       : rawAgentFact;
   const projectFact = input.folderReady
-    ? folderLabel
+    ? "已连接"
     : browserDraftActive
       ? newVideoProjectFact(input.newVideoStatus)
       : input.projectReady && shotCount > 0

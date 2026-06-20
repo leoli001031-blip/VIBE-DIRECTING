@@ -117,6 +117,7 @@ status = view({
 });
 assert.equal(status.stage, "参考待生成", "local project with missing references should route to reference generation");
 assert.equal(status.nextAction, "生成参考", "missing references should expose one clear generation action");
+assert.equal(factValue(status, "项目"), "已连接", "Agent-facing status facts should not expose local project paths");
 
 status = view({
   runtimeState: runtimeState({ shotCount: 3, summary: { locked: 1, needsReview: 0, missing: 2 } }),
