@@ -139,7 +139,7 @@ export function buildVibeAgentConfirmedActionToolResultEntry(input: {
     id: `agent_tool_result_confirmed_${suffix}`,
     type: "tool_result",
     createdAt: input.generatedAt,
-    title: blocked ? "工具返回：需要处理" : "工具返回",
+    title: blocked ? "执行结果：需要处理" : "执行结果",
     body,
     lifecycle: lifecycleForOutcome(input.outcome),
     toolName: "run_confirmed_action",
@@ -197,14 +197,14 @@ export function buildVibeAgentConfirmedActionStartedEntry(input: {
       { label: "对象", value: selectedContext.label },
       { label: "范围", value: affectedScopeLabel(input.action) },
       { label: "状态", value: "执行中" },
-      { label: "下一步", value: "等待工具结果" },
+      { label: "下一步", value: "等待执行结果" },
     ],
     details: {
       selectedContext,
       dispatcherTool: dispatchPlan.dispatcherTool,
       executorTool: dispatchPlan.executorTool,
       retry: input.retry === true,
-      next: "等待工具结果",
+      next: "等待执行结果",
     },
   };
 }
@@ -636,7 +636,7 @@ function buildExecutionBoundaryResultEntry(
     : completedObservation
       ? immediateObservationNextLabel(dispatchPlan.executorTool)
     : input.userConfirmed
-      ? "等待工具结果"
+      ? "等待执行结果"
       : input.permissionDecision.requiresConfirmation
         ? "等你确认"
         : "可以继续";
@@ -712,7 +712,7 @@ function executionBoundaryBodyFor(input: {
     return `这一步暂时不能执行。我会先说明阻断原因，不会修改项目，也不会调用生成服务。`;
   }
   const confirmation = input.userConfirmed
-    ? "你已经确认，我会进入执行链路。"
+    ? "你已经确认，我会开始执行。"
     : input.requiresConfirmation
       ? "我会停在这里等你确认。"
       : "这一步只做读取或整理，可以直接继续。";
@@ -935,7 +935,7 @@ function buildConfirmationRequestEntry(
     id: `agent_confirmation_${suffix}`,
     type: "confirmation_request",
     createdAt: input.generatedAt,
-    title: `行动卡片：${confirmationActionTitleFor(input.action)}`,
+    title: `请确认：${confirmationActionTitleFor(input.action)}`,
     body: confirmationBodyFor(input.action),
     lifecycle: "waiting_for_confirmation",
     toolName: "request_user_confirmation",
@@ -965,7 +965,7 @@ function buildConfirmedActionEntries(
       type: "state_change",
       createdAt: input.generatedAt,
       title: "执行中",
-      body: `已进入现有安全执行链路：${dispatchPlan.description}。工具返回后会再写入结果。`,
+      body: `已通过确认，正在执行：${dispatchPlan.description}。完成后我会把结果写回消息流。`,
       lifecycle: "running",
       toolName: dispatchPlan.executorTool,
       actionKind: input.action.kind,
@@ -975,13 +975,13 @@ function buildConfirmedActionEntries(
         { label: "动作", value: dispatchPlan.label },
         { label: "对象", value: selectedContext.label },
         { label: "范围", value: affectedScopeLabel(input.action) },
-        { label: "下一步", value: "等待工具结果" },
+        { label: "下一步", value: "等待执行结果" },
       ],
       details: {
         selectedContext,
         executorTool: dispatchPlan.executorTool,
         expectedReceipt: input.action.toolPlan.expectedReceipt,
-        next: "等待工具结果",
+        next: "等待执行结果",
       },
     },
   ];

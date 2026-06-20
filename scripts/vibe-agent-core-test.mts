@@ -516,7 +516,7 @@ assert.equal(emptyReferenceClassifyResult?.facts?.some((fact) => fact.label === 
 assert.equal(emptyReferenceClassifyResult?.details?.next, "确认范围后生成参考");
 const planOnlyConfirmation = planOnlyTurn.timeline.entries.find((entry) => entry.type === "confirmation_request");
 assert.ok(planOnlyConfirmation);
-assert.match(planOnlyConfirmation?.title || "", /行动卡片：确认生成参考/u);
+assert.match(planOnlyConfirmation?.title || "", /请确认：确认生成参考/u);
 assert.equal(planOnlyConfirmation?.lifecycle, "waiting_for_confirmation");
 assert.equal(planOnlyConfirmation?.actionKind, planOnlyTurn.action.kind);
 assert.equal(planOnlyConfirmation?.facts?.some((fact) => fact.label === "动作" && fact.value === planOnlyTurn.action.summary), true);
@@ -1334,7 +1334,7 @@ const actualStartedContext = actualStartedEntry.details?.selectedContext as { id
 assert.equal(actualStartedEntry.facts?.some((fact) => fact.label === "范围"), true);
 assert.equal(actualStartedEntry.facts?.some((fact) => fact.label === "对象" && fact.value === actualStartedContext?.label), true);
 assert.equal(actualStartedEntry.facts?.some((fact) => fact.label === "状态" && fact.value === "执行中"), true);
-assert.equal(actualStartedEntry.facts?.some((fact) => fact.label === "下一步" && fact.value === "等待工具结果"), true);
+assert.equal(actualStartedEntry.facts?.some((fact) => fact.label === "下一步" && fact.value === "等待执行结果"), true);
 assert.deepEqual(actualStartedContext?.ids, confirmedTurn.action.target.ids);
 assert.equal(actualToolResultEntry.type, "tool_result");
 assert.equal(actualToolResultEntry.toolName, "run_confirmed_action");

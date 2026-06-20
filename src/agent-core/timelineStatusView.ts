@@ -45,7 +45,7 @@ export function buildVibeAgentTimelineStatusView(
     return {
       stage: "Agent 正在执行",
       doing: entry.body,
-      waitingFor: next || "工具返回结果",
+      waitingFor: next || "执行结果",
       nextAction: "完成后我会写入结果",
       tone: "working",
       facts,

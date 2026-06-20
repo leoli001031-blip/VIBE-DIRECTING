@@ -85,7 +85,7 @@ const timeline = appendVibeAgentTimelineEntries(
       id: "agent_tool_result_confirmed_write",
       type: "tool_result",
       createdAt: generatedAt,
-      title: "工具返回",
+      title: "执行结果",
       body: "修改已写入项目",
       toolName: "run_confirmed_action",
       actionKind: "revise_story_or_shot",

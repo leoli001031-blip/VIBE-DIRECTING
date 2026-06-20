@@ -231,8 +231,8 @@ function executionResultFor(input: {
     return {
       lifecycle: input.lifecycle,
       status: "running" as const,
-      summary: "已确认，正在进入执行链路。",
-      next: "我会把工具结果写回消息流，并提示下一步。",
+      summary: "已确认，正在执行。",
+      next: "我会把执行结果写回消息流，并提示下一步。",
     };
   }
   return {

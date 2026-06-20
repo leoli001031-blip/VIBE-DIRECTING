@@ -467,7 +467,7 @@ function minimalAgentMessageStageLabel(message: MinimalAgentMessage) {
     if (message.toolName === "classify_assets" || message.toolName === "scan_assets") return "素材识别";
     if (message.toolName === "plan_story") return "故事规划";
     if (message.toolName === "plan_next_action") return "下一步";
-    return "工具结果";
+    return "执行结果";
   }
   if (message.role === "assistant" && /理解/.test(message.title)) return "理解";
   if (message.role === "assistant") return "回复";
