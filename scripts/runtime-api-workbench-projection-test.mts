@@ -185,6 +185,10 @@ try {
   writeFileSync(path.join(runRootPath, "storyboards/sequence.png"), "storyboard-png");
   mkdirSync(path.join(runRootPath, "voices"), { recursive: true });
   writeFileSync(path.join(runRootPath, "voices/heroine.wav"), "voice-wav");
+  mkdirSync(path.join(runRootPath, "prompts"), { recursive: true });
+  writeFileSync(path.join(runRootPath, "prompts/S01_seedance.md"), "seedance prompt");
+  mkdirSync(path.join(runRootPath, "receipts"), { recursive: true });
+  writeJson(path.join(runRootPath, "receipts/S01_submit.json"), { submitId: "submit-s01" });
   mkdirSync(path.join(runRootPath, "reports"), { recursive: true });
   writeFileSync(path.join(runRootPath, "reports/not-user-reference.png"), "internal-report-png");
 
@@ -239,11 +243,11 @@ try {
   assert(workbenchFacts.storyFlow.shotCount === 2, "workbench storyFlow should normalize canonical shots");
   assert(workbenchFacts.storyFlow.sectionCount === 1, "workbench storyFlow should normalize sections");
   assert(workbenchFacts.storyFlow.shots[0]?.referenceStrategy === "storyboard_rapid_cut", "workbench storyFlow should preserve Project.vibe referenceStrategy");
-  assert(workbenchFacts.visualMemory.assetCount === 7, "workbench visualMemory should include normalized assets plus project-folder candidates");
+  assert(workbenchFacts.visualMemory.assetCount === 9, "workbench visualMemory should include normalized assets plus project-folder candidates");
 	  assert(workbenchFacts.visualMemory.summary.locked === 3, "workbench visualMemory should let Project.vibe locked assets and text style constraints override sidecar candidates");
 	  assert(workbenchFacts.visualMemory.summary.candidate === 0, "workbench visualMemory should not keep a sidecar candidate after Project.vibe locks the same asset");
-	  assert(workbenchFacts.visualMemory.summary.needsReview === 4, "workbench visualMemory should count needs_review assets including folder candidates, but not text-only style constraints");
-  assert(workbenchFacts.visualMemory.folderScan.discoveredAssetCount === 4, "workbench visualMemory should report project folder scan discoveries");
+	  assert(workbenchFacts.visualMemory.summary.needsReview === 6, "workbench visualMemory should count needs_review assets including folder candidates, but not text-only style constraints");
+  assert(workbenchFacts.visualMemory.folderScan.discoveredAssetCount === 6, "workbench visualMemory should report project folder scan discoveries");
   assert(workbenchFacts.factsUsed.some((fact) => fact.name === "project_folder_scan"), "workbench facts should record project folder scan as a read-only fact source");
 	  const sceneAsset = workbenchFacts.visualMemory.assets.find((asset) => asset.id === "scene_a");
 	  assert(sceneAsset?.status === "locked", "Project.vibe locked asset status should override stale sidecar status");
@@ -258,6 +262,10 @@ try {
   assert(folderCharacter?.type === "character", "project folder scan should classify character directories as character assets");
   assert(folderCharacter?.status === "needs_review", "project folder assets should require creator review before locking");
   assert(folderCharacter?.sourceRefs.includes("project_folder_scan"), "project folder asset facts should keep scan provenance");
+  const folderPrompt = workbenchFacts.visualMemory.assets.find((asset) => asset.path === "prompts/S01_seedance.md");
+  assert(folderPrompt?.roleBinding?.role === "prompt_reference", "runtime workbench should classify project prompt folders as prompt references");
+  const folderReceipt = workbenchFacts.visualMemory.assets.find((asset) => asset.path === "receipts/S01_submit.json");
+  assert(folderReceipt?.roleBinding?.role === "generation_receipt", "runtime workbench should classify project receipt folders as generation receipts");
   assert(!workbenchFacts.visualMemory.assets.some((asset) => asset.path?.includes("reports/not-user-reference")), "project folder scan must ignore internal report files");
   assert(workbenchFacts.providerCalled === false && workbenchFacts.projectVibeWritten === false, "workbench facts must stay read-only");
 } finally {

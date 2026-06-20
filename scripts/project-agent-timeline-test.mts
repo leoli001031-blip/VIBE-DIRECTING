@@ -30,7 +30,10 @@ class MemoryStorage {
 }
 
 const storage = new MemoryStorage();
-(globalThis as unknown as { window: { localStorage: MemoryStorage } }).window = { localStorage: storage };
+(globalThis as unknown as { window: { localStorage: MemoryStorage; location: { hostname: string; port: string } } }).window = {
+  localStorage: storage,
+  location: { hostname: "example.test", port: "" },
+};
 
 const generatedAt = "2026-06-18T08:00:00.000Z";
 const project = createProjectVibe({
@@ -143,5 +146,47 @@ assert.equal(invalid.ok, false);
 assert.equal(invalid.status, "invalid");
 assert.equal(invalid.timeline.projectId, "agent-timeline-demo");
 assert.equal(invalid.timeline.entries.length, 0);
+
+const runtimeRelativeRoot = ".vibe-runtime/browser-projects/agent-timeline-demo";
+const runtimeAbsoluteRoot = `/Users/lichenhao/Desktop/new vibe directing/${runtimeRelativeRoot}`;
+const rootScopedTarget = {
+  storageKey: "project-agent-timeline-root-test",
+  projectPath: projectVibeFileName,
+  projectRoot: runtimeRelativeRoot,
+};
+const rootTimeline = appendVibeAgentTimelineEntries(
+  createVibeAgentTimelineDocument({
+    projectId: project.manifest.projectId,
+    projectTitle: project.manifest.title,
+    projectRoot: runtimeRelativeRoot,
+    generatedAt,
+  }),
+  [
+    {
+      id: "agent_action_report_relative_root",
+      type: "action_result",
+      createdAt: generatedAt,
+      title: "结果卡片：项目已更新",
+      body: "修改已写入项目",
+      toolName: "write_project",
+      actionKind: "revise_story_or_shot",
+      status: "done",
+    },
+  ] satisfies VibeAgentTimelineEntry[],
+  generatedAt,
+);
+const rootSaved = await saveProjectAgentTimeline(rootScopedTarget, rootTimeline);
+assert.equal(rootSaved.ok, true);
+const rootRestored = await openProjectAgentTimeline({
+  ...rootScopedTarget,
+  projectRoot: runtimeAbsoluteRoot,
+}, {
+  project,
+  projectRoot: runtimeAbsoluteRoot,
+  generatedAt,
+});
+assert.equal(rootRestored.ok, true);
+assert.equal(rootRestored.status, "restored");
+assert.equal(rootRestored.timeline.entries.some((entry) => entry.id === "agent_action_report_relative_root"), true);
 
 console.log("project-agent-timeline-test: ok");

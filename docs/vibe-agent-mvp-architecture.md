@@ -159,7 +159,7 @@ The new-project entry path has also been verified without provider calls:
    assistant explanation, and stops at the Image2 reference confirmation.
 6. The created project stores both `project.vibe` and
    `.vibe-runtime/agent-timeline.json`; the final timeline entries are
-   `scan_assets`, `plan_next_action`, `write_agent_message`, and
+   `classify_assets`, `plan_next_action`, `write_agent_message`, and
    `request_user_confirmation`.
 
 ## Next Slice

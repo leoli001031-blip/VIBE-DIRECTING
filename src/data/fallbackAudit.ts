@@ -29,7 +29,7 @@ export const fallbackAudit: ProjectAudit = {
       severity: "warning",
       type: "qa_gap",
       title: "还没有打开项目",
-      detail: "先从底部输入框写脚本，或打开一个本地项目文件夹。",
+      detail: "先在 AI 导演输入框写脚本，或打开一个本地项目文件夹。",
       recommendation: "创建或打开项目后，这里会恢复 Project.vibe 的真实内容。",
     },
   ],

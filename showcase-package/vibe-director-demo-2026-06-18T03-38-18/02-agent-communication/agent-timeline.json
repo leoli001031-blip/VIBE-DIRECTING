@@ -1,0 +1,243 @@
+{
+  "schemaVersion": "vibe_agent_timeline/0.1.0",
+  "projectId": "新视频项目",
+  "projectTitle": "雨夜自动售货机前，一个戴耳机的女孩发现汽水罐里滚出...",
+  "projectRoot": ".vibe-runtime/browser-projects/project-1781737355707",
+  "updatedAt": "2026-06-18T02:01:35.827Z",
+  "entries": [
+    {
+      "id": "agent_user_20260618t020135827z",
+      "type": "user_message",
+      "createdAt": "2026-06-18T02:01:35.827Z",
+      "title": "你",
+      "body": "继续，提交 1 条代表性视频到 Seedance 2.0 VIP 720p，拿到 submitId 就停，不批量提交。",
+      "status": "done"
+    },
+    {
+      "id": "agent_tool_call_inspect_20260618t020135827z",
+      "type": "tool_call",
+      "createdAt": "2026-06-18T02:01:35.827Z",
+      "title": "读取项目",
+      "body": "Agent 正在读取故事、参考素材和队列状态。",
+      "toolName": "inspect_project",
+      "status": "done"
+    },
+    {
+      "id": "agent_tool_result_inspect_20260618t020135827z",
+      "type": "tool_result",
+      "createdAt": "2026-06-18T02:01:35.827Z",
+      "title": "项目状态",
+      "body": "还有 2 个参考待复核",
+      "toolName": "inspect_project",
+      "status": "done",
+      "facts": [
+        {
+          "label": "镜头",
+          "value": "2 个"
+        },
+        {
+          "label": "缺参考",
+          "value": "0 个"
+        },
+        {
+          "label": "待复核",
+          "value": "2 个"
+        },
+        {
+          "label": "视频",
+          "value": "idle"
+        }
+      ]
+    },
+    {
+      "id": "agent_tool_call_scan_assets_20260618t020135827z",
+      "type": "tool_call",
+      "createdAt": "2026-06-18T02:01:35.827Z",
+      "title": "检查素材",
+      "body": "Agent 正在判断角色、场景、道具和镜头参考还缺什么。",
+      "toolName": "scan_assets",
+      "status": "done"
+    },
+    {
+      "id": "agent_tool_result_scan_assets_20260618t020135827z",
+      "type": "tool_result",
+      "createdAt": "2026-06-18T02:01:35.827Z",
+      "title": "素材检查结果",
+      "body": "发现 2 个参考需要复核。",
+      "toolName": "scan_assets",
+      "status": "done",
+      "facts": [
+        {
+          "label": "缺参考",
+          "value": "0 个"
+        },
+        {
+          "label": "待复核",
+          "value": "2 个"
+        },
+        {
+          "label": "已锁定",
+          "value": "3 个"
+        }
+      ]
+    },
+    {
+      "id": "agent_tool_call_plan_20260618t020135827z",
+      "type": "tool_call",
+      "createdAt": "2026-06-18T02:01:35.827Z",
+      "title": "判断下一步",
+      "body": "Agent 会结合用户意图、项目状态和权限边界选择一个待确认动作。",
+      "toolName": "plan_next_action",
+      "status": "done"
+    },
+    {
+      "id": "agent_tool_result_plan_20260618t020135827z",
+      "type": "tool_result",
+      "createdAt": "2026-06-18T02:01:35.827Z",
+      "title": "下一步判断",
+      "body": "需要补充：准备提交 雨夜偶遇发光车票 的视频",
+      "toolName": "plan_next_action",
+      "actionKind": "prepare_video_submit",
+      "actionId": "agent_action_2026_06_18t02_01_35_827z_prepare_video_submit",
+      "status": "blocked",
+      "facts": [
+        {
+          "label": "动作",
+          "value": "prepare_video_submit"
+        },
+        {
+          "label": "目标",
+          "value": "雨夜偶遇发光车票"
+        },
+        {
+          "label": "权限",
+          "value": "这个动作会写入项目或调用生成链路，需要先等用户确认。"
+        }
+      ]
+    },
+    {
+      "id": "agent_tool_call_write_message_20260618t020135827z",
+      "type": "tool_call",
+      "createdAt": "2026-06-18T02:01:35.827Z",
+      "title": "组织回复",
+      "body": "Agent 正在把观察和下一步整理成给创作者看的回复。",
+      "toolName": "write_agent_message",
+      "status": "done"
+    },
+    {
+      "id": "agent_assistant_20260618t020135827z",
+      "type": "assistant_message",
+      "createdAt": "2026-06-18T02:01:35.827Z",
+      "title": "AI 导演",
+      "body": "先复核参考，再提交视频。",
+      "actionKind": "prepare_video_submit",
+      "actionId": "agent_action_2026_06_18t02_01_35_827z_prepare_video_submit",
+      "confirmationRequired": true,
+      "status": "blocked",
+      "facts": [
+        {
+          "label": "下一步",
+          "value": "需要补充：准备提交 雨夜偶遇发光车票 的视频"
+        },
+        {
+          "label": "建议队列",
+          "value": "复核参考 / 准备视频 / 导出素材包"
+        },
+        {
+          "label": "权限",
+          "value": "这个动作会写入项目或调用生成链路，需要先等用户确认。"
+        }
+      ]
+    },
+    {
+      "id": "agent_tool_call_request_confirmation_20260618t020135827z",
+      "type": "tool_call",
+      "createdAt": "2026-06-18T02:01:35.827Z",
+      "title": "请求确认",
+      "body": "Agent 已暂停执行，等你确认后才会继续。",
+      "toolName": "request_user_confirmation",
+      "actionKind": "prepare_video_submit",
+      "actionId": "agent_action_2026_06_18t02_01_35_827z_prepare_video_submit",
+      "confirmationRequired": true,
+      "confirmationToken": "confirm:agent_action_2026_06_18t02_01_35_827z_prepare_video_submit:video_submit_receipt",
+      "status": "waiting",
+      "facts": [
+        {
+          "label": "动作",
+          "value": "需要补充：准备提交 雨夜偶遇发光车票 的视频"
+        },
+        {
+          "label": "目标",
+          "value": "雨夜偶遇发光车票"
+        },
+        {
+          "label": "影响",
+          "value": "1 个镜头"
+        },
+        {
+          "label": "调用",
+          "value": "Seedance / 视频提交"
+        }
+      ],
+      "details": {
+        "next": "等你确认后再执行",
+        "actionSummary": "需要补充：准备提交 雨夜偶遇发光车票 的视频",
+        "targetKind": "shot",
+        "targetIds": [
+          "shot_storyboard_1-1"
+        ],
+        "affectedShotIds": [
+          "shot_storyboard_1-1"
+        ],
+        "toolName": "seedance_video_submit",
+        "expectedReceipt": "video_submit_receipt",
+        "providerSubmitAllowed": false
+      }
+    },
+    {
+      "id": "agent_confirmation_20260618t020135827z",
+      "type": "confirmation_request",
+      "createdAt": "2026-06-18T02:01:35.827Z",
+      "title": "等待确认",
+      "body": "我准备提交 雨夜偶遇发光车票 的视频。确认后才会进入 Seedance 串行队列，不会并发重复提交。",
+      "toolName": "request_user_confirmation",
+      "actionKind": "prepare_video_submit",
+      "actionId": "agent_action_2026_06_18t02_01_35_827z_prepare_video_submit",
+      "confirmationRequired": true,
+      "confirmationToken": "confirm:agent_action_2026_06_18t02_01_35_827z_prepare_video_submit:video_submit_receipt",
+      "status": "waiting",
+      "facts": [
+        {
+          "label": "动作",
+          "value": "需要补充：准备提交 雨夜偶遇发光车票 的视频"
+        },
+        {
+          "label": "目标",
+          "value": "雨夜偶遇发光车票"
+        },
+        {
+          "label": "影响",
+          "value": "1 个镜头"
+        },
+        {
+          "label": "调用",
+          "value": "Seedance / 视频提交"
+        }
+      ],
+      "details": {
+        "next": "等你确认后再执行",
+        "actionSummary": "需要补充：准备提交 雨夜偶遇发光车票 的视频",
+        "targetKind": "shot",
+        "targetIds": [
+          "shot_storyboard_1-1"
+        ],
+        "affectedShotIds": [
+          "shot_storyboard_1-1"
+        ],
+        "toolName": "seedance_video_submit",
+        "expectedReceipt": "video_submit_receipt",
+        "providerSubmitAllowed": false
+      }
+    }
+  ]
+}

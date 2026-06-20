@@ -1,6 +1,24 @@
 export type DirectorAgentPermissionIntentMode = "plan_only" | "reference_allowed" | "video_allowed";
 
 const noImageGenerationPhrases = [
+  "只告诉我",
+  "只跟我说",
+  "只说明",
+  "只解释",
+  "只分析",
+  "只给建议",
+  "只给我建议",
+  "先不要执行",
+  "不要执行",
+  "别执行",
+  "不执行",
+  "先别执行",
+  "先不要写项目",
+  "不要写项目",
+  "不写项目",
+  "别写项目",
+  "只看下一步",
+  "只告诉下一步",
   "不要生图",
   "先不要生图",
   "不生图",
@@ -183,6 +201,37 @@ export function directorAgentPermissionIntentDisallowsVideoSubmit(userIntent: st
   const normalizedIntent = normalizedDirectorAgentPermissionIntent(userIntent);
   if (!normalizedIntent) return false;
   return hasPhrase(normalizedIntent, noVideoSubmitPhrases) || hasPhrase(normalizedIntent, noImageGenerationPhrases.filter((phrase) => /视频|即梦/.test(phrase)));
+}
+
+export function isDirectorAgentExplainOnlyIntent(value: string) {
+  const normalizedIntent = normalizedDirectorAgentPermissionIntent(value);
+  if (!normalizedIntent) return false;
+  return hasPhrase(normalizedIntent, [
+    "只告诉我",
+    "只跟我说",
+    "只说明",
+    "只解释",
+    "只分析",
+    "只给建议",
+    "只给我建议",
+    "先不要执行",
+    "不要执行",
+    "别执行",
+    "不执行",
+    "先别执行",
+    "先不要写项目",
+    "不要写项目",
+    "不写项目",
+    "别写项目",
+    "只看下一步",
+    "只告诉下一步",
+    "告诉我接下来",
+    "告诉我下一步",
+    "接下来要做什么",
+    "下一步要做什么",
+    "接下来该怎么做",
+    "下一步该怎么做",
+  ]);
 }
 
 export function stripDirectorAgentPermissionControlPhrases(value: string) {

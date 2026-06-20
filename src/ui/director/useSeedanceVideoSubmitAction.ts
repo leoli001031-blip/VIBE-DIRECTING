@@ -25,7 +25,7 @@ import { JIMENG_CLI_VIP_MODEL_VERSION } from "../../core/jimengVideoCli";
 
 const STORYBOARD_PROVIDER_ID = "apikey-fun-gpt55-responses-image";
 const SEEDANCE_SUBMIT_CONFIRM_PHRASE = "submit-seedance-video";
-const SEEDANCE_SUBMIT_UI_TIMEOUT_MS = 180_000;
+const SEEDANCE_SUBMIT_UI_TIMEOUT_MS = 300_000;
 const SEEDANCE_TEST_MODEL_LABEL = "Seedance 2.0 VIP 720p";
 
 function creatorFacingVideoMessage(value: string | undefined, fallback: string) {
@@ -392,7 +392,7 @@ export function useSeedanceVideoSubmitAction({
     }
 
     if (!options?.skipConfirm && !confirmAction(`要提交 1 条代表性视频到 ${SEEDANCE_TEST_MODEL_LABEL} 吗？\n\n本轮不会批量提交；拿到提交号后就进入后台等待，可以稍后查询结果。`)) {
-      const nextState: SeedanceVideoSubmitActionState = { status: "blocked", message: "已取消，本次没有发送。" };
+      const nextState: SeedanceVideoSubmitActionState = { status: "idle", message: "已取消，本次没有发送；需要时可以重新确认。" };
       setActionState(nextState);
       return nextState;
     }

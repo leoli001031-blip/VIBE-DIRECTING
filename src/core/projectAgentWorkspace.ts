@@ -6,7 +6,9 @@ import type {
 import {
   detectDirectorAgentPermissionIntent,
   directorAgentPermissionIntentDisallowsVideoSubmit,
+  isDirectorAgentExplainOnlyIntent,
 } from "./directorAgentPermissionIntent";
+import { directorIntentStartsFreshVideoDraft } from "./directorFreshDraftIntent";
 
 export type ProjectInboxKind =
   | "script"
@@ -16,6 +18,8 @@ export type ProjectInboxKind =
   | "storyboard"
   | "voice"
   | "video"
+  | "prompt"
+  | "receipt"
   | "export"
   | "reference"
   | "unknown";
@@ -48,6 +52,8 @@ export interface ProjectInboxItem {
   label: string;
   detail: string;
   suggestedBinding: string;
+  suggestedAction: string;
+  reason: string;
   confidence: "high" | "medium" | "low";
   needsReview: boolean;
   source: "asset" | "reconciliation";
@@ -60,6 +66,8 @@ export interface ProjectInboxProjection {
   needsReviewCount: number;
   items: ProjectInboxItem[];
 }
+
+const PROJECT_INBOX_ITEM_PREVIEW_LIMIT = 24;
 
 export interface ProjectObservationProjection {
   story: {
@@ -200,8 +208,8 @@ function compact(value: unknown) {
   return clean(value).toLowerCase();
 }
 
-function pathExtension(value: string) {
-  const match = value.toLowerCase().match(/\.([a-z0-9]+)$/);
+function pathExtension(value: unknown) {
+  const match = clean(value).toLowerCase().match(/\.([a-z0-9]+)$/);
   return match?.[1] || "";
 }
 
@@ -210,7 +218,7 @@ function pathBasename(value: string) {
   return normalized.split("/").filter(Boolean).pop() || normalized || "未命名素材";
 }
 
-function hasAudioExtension(value: string) {
+function hasAudioExtension(value: unknown) {
   return ["wav", "mp3", "m4a", "aac", "flac", "ogg"].includes(pathExtension(value));
 }
 
@@ -233,6 +241,7 @@ function isSupportedProjectFolderFile(value: string) {
     "mov",
     "webm",
     "mkv",
+    "json",
     "zip",
   ].includes(pathExtension(value));
 }
@@ -257,6 +266,18 @@ function hasStyleReferenceSignal(value: string) {
   return /style_reference|\b(styles?|looks?|moodboards?|skills?)\b|风格|画风|技能|分镜方法|参考方法/.test(value);
 }
 
+function hasScriptTextSignal(value: string) {
+  return /\b(scripts?|screenplays?|dialogues?|dialogs?|lines?|subtitles?|captions?)\b|脚本|台词|字幕|对白/.test(value);
+}
+
+function hasFineDetailReferenceSignal(value: string) {
+  return /(?:^|[\s/_-])(?:detail|details|closeups?|insert|cutaway|part|parts|component|fragment|texture|pose|gesture|expression|reaction)(?:[\s/_-]|$)|局部|细节|特写|插入镜头|动作瞬间|表情|姿态|手势|质感|纹理|(?:^|[\s/_-])(?:headlights?|taillights?|brake[-_\s]?lights?|wheels?|tires?|tyres?|rims?|windows?|mirrors?|logos?|badges?|license[-_\s]?plates?)(?:[\s/_-]|$)|车灯|尾灯|刹车灯|轮胎|车轮|轮毂|车窗|后视镜|车标|车牌|(?:^|[\s/_-])(?:hands?|fingers?|eyes?|mouth|lips|hair|sleeves?|collars?|cuffs?|feet|shoes?)(?:[\s/_-]|$)|手部|手指|指尖|眼神|眼睛|嘴唇|头发|袖口|衣领|脚步|鞋底|(?:^|[\s/_-])(?:rain|fog|mist|smoke|steam|shadow|shadows|reflection|reflections|splash|splashes|spark|glow|light[-_\s]?streaks?)(?:[\s/_-]|$)|雨水|雾气|烟雾|阴影|反光|倒影|水花|火花|光斑|光线/.test(value);
+}
+
+function fineDetailBindingCopy() {
+  return "这是局部细节、动作或状态参考，建议并入主体资产或镜头说明，不单独生成参考。";
+}
+
 function shotDisplayLabel(value: string) {
   const cleaned = clean(value)
     .replace(/^shot_storyboard_/i, "")
@@ -268,6 +289,58 @@ function shotDisplayLabel(value: string) {
 function shotBindingCopy(shotIds: string[]) {
   const visible = shotIds.slice(0, 3).map(shotDisplayLabel);
   return `${visible.join("、")}${shotIds.length > 3 ? ` 等 ${shotIds.length} 个镜头` : ""}`;
+}
+
+function projectScopeSegmentLabel(segment: string): string | undefined {
+  const raw = clean(segment);
+  if (!raw) return undefined;
+  const normalized = raw.toLowerCase();
+  const generic = new Set([
+    "act",
+    "acts",
+    "chapter",
+    "chapters",
+    "episode",
+    "episodes",
+    "section",
+    "sections",
+    "sequence",
+    "sequences",
+    "scene",
+    "scenes",
+    "shot",
+    "shots",
+    "镜头",
+    "章节",
+    "段落",
+    "序列",
+    "场次",
+  ]);
+  if (generic.has(normalized)) return undefined;
+  const display = raw.replace(/[_-]+/g, " ");
+  if (/^(act|chapter|chap|episode|ep)[-_\s]?\w+/i.test(raw) || /第.+[章节集幕]|章节|篇章/.test(raw)) {
+    return `章节 ${display}`;
+  }
+  if (/^(sequence|seq|section|scene)[-_\s]?\w+/i.test(raw) || /段落|序列|场次|分段/.test(raw)) {
+    return `段落 ${display}`;
+  }
+  if (/^(shot|cut)[-_\s]?\w+/i.test(raw) || /镜头/.test(raw)) {
+    return `镜头 ${display}`;
+  }
+  return undefined;
+}
+
+function projectPathScopeLabel(asset: AssetRecord) {
+  const segments = clean(asset.path)
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter(Boolean)
+    .slice(0, -1);
+  return unique(segments.map(projectScopeSegmentLabel)).slice(0, 3).join(" / ");
+}
+
+function appendScopeHint(text: string, scopeLabel: string) {
+  return scopeLabel ? `${text} 路径提示：${scopeLabel}。` : text;
 }
 
 function assetSearchText(asset: AssetRecord) {
@@ -283,18 +356,36 @@ function assetSearchText(asset: AssetRecord) {
   ].map(clean).join(" ");
 }
 
+function assetHasVisualOrAudioMedia(asset: AssetRecord) {
+  return /\.(?:png|jpe?g|webp|gif|avif|mp3|m4a|wav|mp4|mov|webm|mkv)(?:\?|$)/i.test(clean(asset.path));
+}
+
+function isTextOnlyStyleAsset(asset: AssetRecord) {
+  if (asset.type !== "style") return false;
+  const sourceText = (asset.sourceRefs || []).join(" ").toLowerCase();
+  const searchable = assetSearchText(asset).toLowerCase();
+  return !assetHasVisualOrAudioMedia(asset) && (
+    sourceText.includes("new_video_reference:style:text")
+    || searchable.includes("文字风格方向")
+    || searchable.includes("项目视觉风格")
+  );
+}
+
 function assetFolderSignal(asset: AssetRecord): ProjectInboxKind | undefined {
   const normalized = clean(asset.path)
     .replace(/\\/g, "/")
     .toLowerCase();
   if (/(^|\/)(characters?|character_refs?|roles?|cast|角色|人物)(\/|$)/.test(normalized)) return "character";
   if (/(^|\/)(scenes?|locations?|environments?|backgrounds?|场景|地点|环境|天气)(\/|$)/.test(normalized)) return "scene";
+  if (/(^|\/)(vehicles?|cars?|autos?|汽车|车辆|赛车)(\/|$)/.test(normalized)) return "prop";
   if (/(^|\/)(props?|objects?|items?|道具|物件)(\/|$)/.test(normalized)) return "prop";
   if (/(^|\/)(styles?|style_refs?|looks?|moodboards?|skills?|风格|画风|技能|方法)(\/|$)/.test(normalized)) return "reference";
   if (/(^|\/)(storyboards?|shotboards?|boards?|分镜|故事板)(\/|$)/.test(normalized)) return "storyboard";
   if (/(^|\/)(voices?|voice_refs?|dialogue|speech|audio\/voice|声音|声线|配音|对白)(\/|$)/.test(normalized)) return "voice";
   if (/(^|\/)(music|bgm|scores?|soundtracks?|ost|audio\/music|post_audio|后期声音|配乐|音乐|歌曲)(\/|$)/.test(normalized)) return "reference";
   if (/(^|\/)(scripts?|script|screenplay|subtitles?|脚本|台词|字幕)(\/|$)/.test(normalized)) return "script";
+  if (/(^|\/)(prompts?|prompt-packs?|提示词|请求)(\/|$)/.test(normalized)) return "prompt";
+  if (/(^|\/)(receipts?|reports?|evidence|submit-ids?|提交证据|回执|证据|报告)(\/|$)/.test(normalized)) return "receipt";
   if (/(^|\/)(exports?|deliverables?|final|交付|导出|成片)(\/|$)/.test(normalized)) return "export";
   if (/(^|\/)(videos?|clips?|renders?|回流视频|视频)(\/|$)/.test(normalized)) return "video";
   return undefined;
@@ -309,8 +400,11 @@ function assetTypeForFolderAsset(kind: ProjectInboxKind, searchText: string): As
 }
 
 function roleBindingForFolderAsset(kind: ProjectInboxKind, searchText: string): AssetRecord["roleBinding"] | undefined {
+  if (kind !== "scene" && hasFineDetailReferenceSignal(searchText)) return { role: "detail_reference", useFor: [], ignoreFor: ["standalone_reference"] };
   if (kind === "storyboard") return { role: "storyboard_reference", useFor: [], ignoreFor: [] };
   if (kind === "voice") return { role: "voice_reference", useFor: [], ignoreFor: ["music"] };
+  if (kind === "prompt") return { role: "prompt_reference", useFor: [], ignoreFor: ["voice", "music"] };
+  if (kind === "receipt") return { role: "generation_receipt", useFor: [], ignoreFor: ["video_model", "voice", "music"] };
   if (kind === "reference" && hasMusicReferenceSignal(searchText)) {
     return { role: "music_reference", useFor: [], ignoreFor: ["video_model"] };
   }
@@ -322,12 +416,19 @@ function roleBindingForFolderAsset(kind: ProjectInboxKind, searchText: string): 
 
 function projectInboxKindForAsset(asset: AssetRecord): ProjectInboxKind {
   const searchable = assetSearchText(asset).toLowerCase();
+  const extension = pathExtension(asset.path);
+  const isTextDocument = ["txt", "md", "srt"].includes(extension);
   const hasVoiceSignal = hasVoiceReferenceSignal(searchable);
   const hasMusicSignal = hasMusicReferenceSignal(searchable);
   const folderSignal = assetFolderSignal(asset);
+  if (folderSignal !== "scene" && hasFineDetailReferenceSignal(searchable)) return "reference";
   if (folderSignal === "reference" && (hasStyleReferenceSignal(searchable) || hasMusicSignal)) return "reference";
+  if (folderSignal === "prompt") return "prompt";
+  if (folderSignal === "receipt") return "receipt";
+  if (folderSignal === "storyboard") return "storyboard";
+  if (folderSignal === "script" || (isTextDocument && hasScriptTextSignal(searchable))) return "script";
   if (/\b(storyboard|panel|shotboard)\b|故事板|分镜/.test(searchable)) return "storyboard";
-  if (hasVoiceSignal) return "voice";
+  if (hasVoiceSignal && !isTextDocument) return "voice";
   if (hasMusicSignal) return "reference";
   if (hasStyleReferenceSignal(searchable)) return "reference";
   if (hasAudioExtension(asset.path)) return "voice";
@@ -336,8 +437,7 @@ function projectInboxKindForAsset(asset: AssetRecord): ProjectInboxKind {
   if (asset.type === "prop") return "prop";
   if (asset.type === "style") return "reference";
   if (folderSignal) return folderSignal;
-  const extension = pathExtension(asset.path);
-  if (["txt", "md", "srt"].includes(extension)) return "script";
+  if (isTextDocument) return "script";
   if (["mp4", "mov", "webm", "mkv"].includes(extension)) return "video";
   if (["png", "jpg", "jpeg", "webp"].includes(extension)) return "reference";
   return "unknown";
@@ -351,6 +451,8 @@ function inboxKindLabel(kind: ProjectInboxKind) {
   if (kind === "storyboard") return "故事板";
   if (kind === "voice") return "声音";
   if (kind === "video") return "视频";
+  if (kind === "prompt") return "提示词";
+  if (kind === "receipt") return "生成证据";
   if (kind === "export") return "交付";
   if (kind === "reference") return "参考";
   return "待判断";
@@ -379,25 +481,76 @@ function assetBindingLabel(asset: AssetRecord) {
   const shots = (asset.usedByShotIds || asset.roleBinding?.useFor || []).map(clean).filter(Boolean);
   const kind = projectInboxKindForAsset(asset);
   const searchable = assetSearchText(asset).toLowerCase();
-  if (shots.length) return `建议用于 ${shotBindingCopy(shots)}`;
-  if (kind === "reference" && hasMusicReferenceSignal(searchable)) return "暂不进视频模型；需要配乐时留到后期";
-  if (kind === "reference" && hasStyleReferenceSignal(searchable)) return "建议作为风格或分镜方法参考，先确认适用范围";
-  if (role === "storyboard_reference") return "建议作为故事板参考，先确认对应镜头";
-  if (role === "voice_reference") return "建议作为声音参考，先确认对应角色";
-  if (role && role !== "music_reference") return "建议先确认用途";
-  if (kind === "reference") return "建议作为风格或画面参考";
-  if (kind === "voice") return "建议作为声音参考";
-  if (kind === "video") return "建议作为回流视频或剪辑素材";
-  if (kind === "export") return "建议放入交付页核对";
-  if (asset.type !== "unknown") return `建议作为${inboxKindLabel(kind)}参考`;
-  return "需要 Agent 判断用途";
+  const scopeLabel = projectPathScopeLabel(asset);
+  if (kind !== "scene" && (role === "detail_reference" || hasFineDetailReferenceSignal(searchable))) return appendScopeHint(fineDetailBindingCopy(), scopeLabel);
+  if (shots.length) return appendScopeHint(`建议用于 ${shotBindingCopy(shots)}`, scopeLabel);
+  if (kind === "reference" && hasMusicReferenceSignal(searchable)) return appendScopeHint("暂不进视频模型；需要配乐时留到后期", scopeLabel);
+  if (kind === "reference" && hasStyleReferenceSignal(searchable)) return appendScopeHint("建议作为风格或分镜方法参考，先确认适用范围", scopeLabel);
+  if (role === "storyboard_reference") return appendScopeHint("建议作为故事板参考，先确认对应镜头", scopeLabel);
+  if (role === "voice_reference") return appendScopeHint("建议作为声音参考，先确认对应角色", scopeLabel);
+  if (role && role !== "music_reference") return appendScopeHint("建议先确认用途", scopeLabel);
+  if (kind === "reference") return appendScopeHint("建议作为风格或画面参考", scopeLabel);
+  if (kind === "voice") return appendScopeHint("建议作为声音参考", scopeLabel);
+  if (kind === "video") return appendScopeHint("建议作为回流视频或剪辑素材", scopeLabel);
+  if (kind === "prompt") return appendScopeHint("建议作为提示词证据，先确认对应镜头", scopeLabel);
+  if (kind === "receipt") return appendScopeHint("建议作为生成证据，不直接交给视频模型", scopeLabel);
+  if (kind === "export") return appendScopeHint("建议放入交付页核对", scopeLabel);
+  if (kind === "character" || kind === "scene" || kind === "prop") return appendScopeHint(`建议作为${inboxKindLabel(kind)}参考`, scopeLabel);
+  if (asset.type !== "unknown") return appendScopeHint(`建议作为${inboxKindLabel(kind)}参考`, scopeLabel);
+  return appendScopeHint("需要 Agent 判断用途", scopeLabel);
+}
+
+function assetSuggestedAction(asset: AssetRecord, kind: ProjectInboxKind) {
+  const searchable = assetSearchText(asset).toLowerCase();
+  if (kind !== "scene" && (asset.roleBinding?.role === "detail_reference" || hasFineDetailReferenceSignal(searchable))) {
+    return "并入主体或镜头说明";
+  }
+  if (kind === "script") return "作为故事输入";
+  if (kind === "storyboard") return "确认对应镜头";
+  if (kind === "voice") return "确认对应角色";
+  if (kind === "prompt") return "作为提示词证据";
+  if (kind === "receipt") return "作为生成证据";
+  if (kind === "export") return "放入交付核对";
+  if (kind === "video") return "放入预览或剪辑";
+  if (kind === "reference" && hasMusicReferenceSignal(searchable)) return "留到后期声音";
+  if (kind === "reference" && hasStyleReferenceSignal(searchable)) return "确认风格适用范围";
+  if (kind === "character" || kind === "scene" || kind === "prop") return `作为${inboxKindLabel(kind)}参考`;
+  return "确认用途";
+}
+
+function assetInboxReason(asset: AssetRecord, kind: ProjectInboxKind) {
+  const searchable = assetSearchText(asset).toLowerCase();
+  const folderSignal = assetFolderSignal(asset);
+  const scopeLabel = projectPathScopeLabel(asset);
+  if (kind !== "scene" && (asset.roleBinding?.role === "detail_reference" || hasFineDetailReferenceSignal(searchable))) {
+    return appendScopeHint("文件名或目录像局部细节、动作瞬间或状态，不适合单独变成可复用参考。", scopeLabel);
+  }
+  if (folderSignal) {
+    return appendScopeHint("先按项目文件夹目录和文件名判断，正式绑定前仍让你确认。", scopeLabel);
+  }
+  if (asset.sourceReceiptId || asset.outputHash || asset.promptHash || asset.promptText || asset.promptPath) {
+    return appendScopeHint("这是生成链路留下的素材，通常可复用，但还需要复核画面是否符合当前项目。", scopeLabel);
+  }
+  if (kind === "reference" && hasMusicReferenceSignal(searchable)) {
+    return appendScopeHint("音乐不会交给视频模型，只作为后期或节奏参考保留。", scopeLabel);
+  }
+  if (kind === "prompt" || kind === "receipt") {
+    return appendScopeHint("这是过程证据，不直接当成画面参考。", scopeLabel);
+  }
+  if (asset.type === "unknown") {
+    return appendScopeHint("素材类型不够明确，需要你确认它应该服务哪一块。", scopeLabel);
+  }
+  return appendScopeHint("根据素材类型和已有绑定推断，确认后可进入后续规划。", scopeLabel);
 }
 
 function inboxItemFromAsset(asset: AssetRecord): ProjectInboxItem | undefined {
   if (asset.status === "missing" || asset.status === "planned" || asset.status === "rejected") return undefined;
+  if (isTextOnlyStyleAsset(asset)) return undefined;
   const kind = projectInboxKindForAsset(asset);
   const shotIds = unique([...(asset.usedByShotIds || []), ...(asset.roleBinding?.useFor || [])]);
   const origin = assetInboxOrigin(asset);
+  const detailReference = asset.roleBinding?.role === "detail_reference";
+  const scopeLabel = projectPathScopeLabel(asset);
   return {
     id: `asset:${asset.id}`,
     assetId: asset.id,
@@ -405,9 +558,13 @@ function inboxItemFromAsset(asset: AssetRecord): ProjectInboxItem | undefined {
     kind,
     ...origin,
     label: asset.name || inboxKindLabel(kind),
-    detail: `${origin.originLabel} · ${inboxKindLabel(kind)} · ${asset.lockedStatus === "locked" ? "已可复用" : "等待确认用途"}`,
+    detail: detailReference
+      ? `${origin.originLabel} · ${scopeLabel ? `${scopeLabel} · ` : ""}局部细节 · 建议并入主体或镜头说明`
+      : `${origin.originLabel} · ${scopeLabel ? `${scopeLabel} · ` : ""}${inboxKindLabel(kind)} · ${asset.lockedStatus === "locked" ? "已可复用" : "等待确认用途"}`,
     suggestedBinding: assetBindingLabel(asset),
-    confidence: asset.type === "unknown" ? "medium" : "high",
+    suggestedAction: assetSuggestedAction(asset, kind),
+    reason: assetInboxReason(asset, kind),
+    confidence: detailReference ? "low" : asset.type === "unknown" ? "medium" : "high",
     needsReview: assetNeedsReview(asset),
     source: "asset",
   };
@@ -434,6 +591,10 @@ function inboxItemFromReconciliation(item: AssetReconciliationItem): ProjectInbo
     label: item.label,
     detail: `${inboxKindLabel(kind)} · ${item.status === "ambiguous" ? "用途不够确定" : "等待确认"}`,
     suggestedBinding: item.shotIds.length ? `建议用于 ${shotBindingCopy(item.shotIds)}` : "建议先确认用途",
+    suggestedAction: item.shotIds.length ? "确认对应镜头" : "确认用途",
+    reason: item.status === "ambiguous"
+      ? "同一个素材可能对应多个用途，需要你确认后再写入项目。"
+      : "匹配系统认为它需要复核，确认后再进入后续生成。",
     confidence: item.confidence,
     needsReview: true,
     source: "reconciliation",
@@ -446,18 +607,19 @@ export function buildProjectInboxProjection(input: BuildProjectInboxInput): Proj
     .map(inboxItemFromReconciliation)
     .filter((item): item is ProjectInboxItem => Boolean(item));
   const seen = new Set<string>();
-  const items = [...reconciliationItems, ...assetItems].filter((item) => {
+  const allItems = [...reconciliationItems, ...assetItems].filter((item) => {
     const key = `${item.kind}:${item.label}:${item.suggestedBinding}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, 16);
-  const needsReviewCount = items.filter((item) => item.needsReview).length;
-  const projectFolderCount = items.filter((item) => item.origin === "project_folder").length;
-  const reconciliationCount = items.filter((item) => item.origin === "reconciliation").length;
-  const projectAssetCount = items.length - reconciliationCount;
+  });
+  const items = allItems.slice(0, PROJECT_INBOX_ITEM_PREVIEW_LIMIT);
+  const needsReviewCount = allItems.filter((item) => item.needsReview).length;
+  const projectFolderCount = allItems.filter((item) => item.origin === "project_folder").length;
+  const reconciliationCount = allItems.filter((item) => item.origin === "reconciliation").length;
+  const projectAssetCount = allItems.length - reconciliationCount;
   return {
-    totalCount: items.length,
+    totalCount: allItems.length,
     needsReviewCount,
     items,
     summary: projectFolderCount
@@ -466,7 +628,7 @@ export function buildProjectInboxProjection(input: BuildProjectInboxInput): Proj
         ? `${reconciliationCount} 项参考匹配${projectAssetCount ? `，${projectAssetCount} 个项目素材` : ""}，${needsReviewCount} 项要看一眼。`
       : items.length
       ? `${items.length} 个素材已进入项目，${needsReviewCount} 个需要确认用途。`
-      : "还没有放入素材；可以把脚本、图片、声音参考或素材文件夹拖到底部输入框。",
+      : "还没有放入素材；可以把脚本、图片、声音参考或素材文件夹拖到 AI 导演输入框。",
     nextAction: needsReviewCount
       ? reconciliationCount ? "先复核匹配建议和参考用途。" : "先确认这些素材分别怎么用。"
       : items.length
@@ -679,8 +841,17 @@ export function routeProjectAgentIntent(input: {
   const text = compact(input.text);
   const permissionIntent = detectDirectorAgentPermissionIntent(text);
   const referenceGenerationDisallowed = permissionIntent === "plan_only";
-  const newStoryIntent = /新建|新项目|新片|新短片|新视频|重新做|重做|换个主题|完整项目|整个短片|整支片|另起/.test(text)
-    || /(?:做|来|生成|制作|创建|拍)(?:一个|一支|一条|一段)?.{0,18}(?:短片|视频|项目|片子|故事)/.test(text);
+  const newStoryIntent = directorIntentStartsFreshVideoDraft(text)
+    || /完整项目|整个短片|整支片/.test(text);
+  if (isDirectorAgentExplainOnlyIntent(text)) {
+    return {
+      kind: "status",
+      label: "说明下一步",
+      target: "story",
+      confirmation: "none",
+      plan: ["读取当前项目", "说明接下来建议", "不写项目、不生成参考、不提交视频"],
+    };
+  }
   if (/导出|交付|打包|export/.test(text)) {
     return { kind: "export", label: "导出项目", target: "export", confirmation: "export", plan: ["检查可导出内容", "整理交付文件", "生成报告"] };
   }
@@ -695,6 +866,9 @@ export function routeProjectAgentIntent(input: {
   }
   if (!referenceGenerationDisallowed && /补.*参考|生成.*参考|角色图|场景图|道具图|故事板/.test(text)) {
     return { kind: "reference", label: "生成参考", target: "assets", confirmation: "reference_generation", plan: ["判断缺少的角色、场景或道具参考", "确认生成范围", "生成后进入复核"] };
+  }
+  if (/(?:素材|文件|参考素材|项目材料|拖入文件).{0,16}(?:整理|分类|归类|绑定|匹配|建议|识别)|(?:整理|分类|归类|绑定|匹配|识别).{0,16}(?:素材|文件|参考素材|项目材料|拖入文件)|绑定建议/.test(text)) {
+    return { kind: "reference", label: "整理素材", target: "assets", confirmation: "asset_review", plan: ["读取当前素材", "给出角色、场景、道具或声音绑定建议", "等你确认后再写入项目"] };
   }
   if (!text && input.hasAttachments) {
     return { kind: "reference", label: "整理素材", target: "assets", confirmation: "asset_review", plan: ["识别拖入文件", "建议作为角色、场景、道具或镜头参考", "需要时请你确认"] };

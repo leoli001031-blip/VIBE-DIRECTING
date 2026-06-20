@@ -1,0 +1,22 @@
+全能参考 video request.
+Use the attached references and written direction only.
+Create exactly 1 continuous visible clip.
+Total duration: 5s.
+No text overlays, subtitles, logos, watermarks, UI, panels, prompt artifacts, or storyboard marks.
+
+Use Image 1 only as environment reference: ZC学院校门、樱花、夕阳、明亮通透的校园空气感、建筑布局、光线方向和色温。Do not copy any unwanted text or signage from the reference.
+Use Image 2 only as protagonist identity reference: 无脸日漫男主、普通高中男生身形、深色短发、普通校服、观众代入位。Do not force detailed facial features.
+
+Timing:
+0-5s: visible clip 1/1, ZC学院开场. 男主站在校门前，抬头看向学院，像被卷入一部恋爱喜剧的第一秒。
+
+Shot direction:
+Camera starts with a wide establishing view of ZC Academy under warm afternoon light, then slowly pushes in toward the faceless male protagonist standing near the lower foreground. Cherry blossoms drift softly across frame. The protagonist is seen mostly from behind or three-quarter back view; he lifts his head slightly toward the school gate. Keep the movement calm, cinematic, and OP-like.
+
+Performance:
+The protagonist should feel ordinary and slightly overwhelmed, not heroic. His posture is small against the bright academy.
+
+Style:
+TV anime series cel style, clean flat color areas with hard-edged shading, visible clean ink line art, animation key visual aesthetic, CloverWorks / A-1 Pictures-like studio anime look, vibrant but not fluorescent. No photorealism, no glossy 3D, no game render, no painterly rendering.
+
+No music, no BGM, no subtitles.

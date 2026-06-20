@@ -28,13 +28,16 @@ import {
   type ProjectTransactionRuntimeState,
 } from "../core/projectTransaction";
 import type { BuiltTaskPacket, TaskPacketValidationReceipt } from "../core/taskPacketBuilder";
+import type { AssetRecord } from "../core/types";
 import { applyProjectVibeTransaction, hashProjectVibeFacts } from "./projectVibe";
 import { buildProjectRuntimeStateFromProjectVibe } from "./projectVibeRuntimeState";
 import type {
   ProjectVibeAsset,
   ProjectVibeAssetStatus,
   ProjectVibeDocument,
+  ProjectVibeAssetKind,
   ProjectVibePatchOperation,
+  ProjectVibeReferenceRoleBinding,
   ProjectVibeRunReceipt,
   ProjectVibeShot,
   ProjectVibeShotStatus,
@@ -359,10 +362,11 @@ function targetSectionShotIdsFor(input: ProjectVibeCreativeLoopInput): string[] 
 function targetAssetIdsFor(input: ProjectVibeCreativeLoopInput): string[] {
   const actionTarget = input.agentActionEnvelope?.target;
   const existingAssetIds = new Set(input.project.assets.map((asset) => asset.id));
+  const runtimeAssetIds = new Set((input.runtimeState?.visualMemory.assets || []).map((asset) => asset.id));
   return unique([
     ...(actionTarget?.kind === "asset" ? actionTarget.ids : []),
     input.selectedAssetId,
-  ]).filter((assetId) => existingAssetIds.has(assetId));
+  ]).filter((assetId) => existingAssetIds.has(assetId) || runtimeAssetIds.has(assetId));
 }
 
 const projectDirectionAssetId = "asset_project_direction";
@@ -414,6 +418,7 @@ function runReceiptFor(input: ProjectVibeCreativeLoopInput, params: {
   const writesShotFeedbackDirective = shouldWriteShotFeedbackDirective(input);
   const writesShotIntentFact = shouldWriteShotIntentFact(input);
   const writesProposedShotField = shouldWriteAgentProposedShotFields(input);
+  const writesAssetRoleBinding = Boolean(agentProposedAssetRoleBindingLabel(input));
   return {
     id: runId,
     runKind: "agent_loop",
@@ -437,6 +442,7 @@ function runReceiptFor(input: ProjectVibeCreativeLoopInput, params: {
       ...affectedAssetIds.map((assetId) => `project.vibe#assets/${assetId}`),
       ...affectedAssetIds.map((assetId) => `project.vibe#assets/${assetId}/textConstraints`),
       ...(agentProposedAssetStatus(input) ? affectedAssetIds.map((assetId) => `project.vibe#assets/${assetId}/status`) : []),
+      ...(writesAssetRoleBinding ? affectedAssetIds.map((assetId) => `project.vibe#assets/${assetId}/roleBinding`) : []),
       ...(writesShotFeedbackDirective
         ? params.affectedShotIds.map((shotId) => `project.vibe#shots/${shotId}/directorFeedbackDirectives`)
         : []),
@@ -587,6 +593,216 @@ function agentProposedAssetStatus(input: ProjectVibeCreativeLoopInput): ProjectV
     .find(Boolean);
 }
 
+function agentProposedAssetRoleBindingLabel(input: ProjectVibeCreativeLoopInput): string | undefined {
+  if (input.agentActionEnvelope?.toolPlan.toolName !== "project_vibe_patch") return undefined;
+  return input.agentActionEnvelope.proposedChanges
+    .map((change) => change.field === "assetRoleBinding" ? change.to.trim() : undefined)
+    .find(Boolean);
+}
+
+function roleBindingTemplate(label: string): ProjectVibeReferenceRoleBinding | undefined {
+  const normalized = label.toLowerCase().replace(/[，。！？、,.!?;；:："'“”‘’`~\s_-]+/g, "");
+  if (normalized.includes("角色") || normalized.includes("人物") || normalized.includes("女主") || normalized.includes("男主") || normalized.includes("character")) {
+    return {
+      role: "character_identity",
+      useFor: ["identity", "face", "hair", "outfit", "silhouette"],
+      ignoreFor: ["camera_path", "scene_weather", "storyboard_timing"],
+      priority: 1,
+      conflictRule: "Character references control identity only; storyboard, scene, and prop references keep their own authority.",
+    };
+  }
+  if (normalized.includes("场景") || normalized.includes("天气") || normalized.includes("环境") || normalized.includes("地点") || normalized.includes("空间") || normalized.includes("scene")) {
+    return {
+      role: "scene_baseline",
+      useFor: ["location", "layout", "weather", "lighting", "color_temperature"],
+      ignoreFor: ["character_identity", "prop_design", "storyboard_timing"],
+      priority: 1,
+      conflictRule: "Scene references control space, weather, and light; they do not redesign characters or props.",
+    };
+  }
+  if (normalized.includes("道具") || normalized.includes("物体") || normalized.includes("物件") || normalized.includes("车辆") || normalized.includes("整车") || normalized.includes("prop") || normalized.includes("object") || normalized.includes("vehicle")) {
+    return {
+      role: "prop_reference",
+      useFor: ["object_shape", "material", "scale", "interaction"],
+      ignoreFor: ["character_identity", "camera_path", "scene_weather"],
+      priority: 1,
+      conflictRule: "Prop references control the object appearance only; they should not become extra shots or backgrounds.",
+    };
+  }
+  if (normalized.includes("故事板") || normalized.includes("分镜") || normalized.includes("storyboard") || normalized.includes("shotboard")) {
+    return {
+      role: "storyboard_reference",
+      useFor: ["composition", "blocking", "camera", "timing"],
+      ignoreFor: ["character_identity", "scene_weather", "prop_design"],
+      priority: 1,
+      conflictRule: "Storyboards guide motion and layout only; locked character, scene, and prop references remain authoritative.",
+    };
+  }
+  if (normalized.includes("声音") || normalized.includes("声线") || normalized.includes("音源") || normalized.includes("配音") || normalized.includes("voice")) {
+    return {
+      role: "voice_reference",
+      useFor: ["speaker_identity", "dialogue_voice", "delivery"],
+      ignoreFor: ["music", "bgm", "visual_identity"],
+      priority: 1,
+      conflictRule: "Voice references control spoken voice only; they do not authorize music or visual design.",
+    };
+  }
+  if (normalized.includes("配乐") || normalized.includes("音乐") || normalized.includes("bgm") || normalized.includes("music")) {
+    return {
+      role: "music_reference",
+      useFor: ["post_export_music", "rhythm_reference"],
+      ignoreFor: ["video_model", "dialogue_voice", "visual_identity"],
+      priority: 1,
+      conflictRule: "Music references are for rhythm or final export only; Seedance video prompts must still stay no BGM.",
+    };
+  }
+  if (normalized.includes("风格") || normalized.includes("画风") || normalized.includes("美术") || normalized.includes("style")) {
+    return {
+      role: "style_reference",
+      useFor: ["visual_style", "palette", "rendering_language"],
+      ignoreFor: ["dialogue_voice", "music"],
+      priority: 1,
+      conflictRule: "Style references guide look and rendering language; they do not replace character, scene, or prop references.",
+    };
+  }
+  if (normalized.includes("提示词") || normalized.includes("prompt")) {
+    return {
+      role: "prompt_reference",
+      useFor: ["prompt_evidence", "language_rules"],
+      ignoreFor: ["voice", "music", "visual_identity"],
+      priority: 1,
+      conflictRule: "Prompt references are evidence for language rules only; they are not visual references.",
+    };
+  }
+  if (normalized.includes("证据") || normalized.includes("回执") || normalized.includes("receipt") || normalized.includes("submitid")) {
+    return {
+      role: "generation_receipt",
+      useFor: ["provider_receipt", "audit_trail"],
+      ignoreFor: ["video_model", "voice", "music"],
+      priority: 1,
+      conflictRule: "Generation receipts document provenance only; they should never be sent as creative references.",
+    };
+  }
+  if (normalized.includes("视频") || normalized.includes("成片") || normalized.includes("回流") || normalized.includes("clip")) {
+    return {
+      role: "video_reference",
+      useFor: ["generated_clip", "review", "preview"],
+      ignoreFor: ["character_identity", "scene_weather", "prop_design"],
+      priority: 1,
+      conflictRule: "Returned videos are review outputs unless explicitly promoted; they should not silently become identity references.",
+    };
+  }
+  if (normalized.includes("交付") || normalized.includes("导出") || normalized.includes("展示包") || normalized.includes("export")) {
+    return {
+      role: "export_reference",
+      useFor: ["delivery_package", "showcase"],
+      ignoreFor: ["video_model", "voice", "music"],
+      priority: 1,
+      conflictRule: "Export files are delivery artifacts only; they should not become generation inputs.",
+    };
+  }
+  return undefined;
+}
+
+function projectVibeKindFromRuntimeAsset(asset: AssetRecord): ProjectVibeAssetKind {
+  if (asset.type === "character" || asset.type === "scene" || asset.type === "prop" || asset.type === "style") return asset.type;
+  return "reference";
+}
+
+function projectVibeStatusFromRuntimeAsset(asset: AssetRecord): ProjectVibeAssetStatus {
+  if (asset.status === "rejected") return "rejected";
+  if (asset.status === "missing") return "missing";
+  if (asset.lockedStatus === "locked") return "locked";
+  if (asset.lockedStatus === "candidate") return "candidate";
+  return "needs_review";
+}
+
+function roleBindingFromRuntimeAsset(asset: AssetRecord): ProjectVibeReferenceRoleBinding | undefined {
+  const role = asset.roleBinding?.role?.trim();
+  if (!role) return undefined;
+  const template = roleBindingTemplate(role);
+  if (template) {
+    return {
+      ...template,
+      useFor: unique([...template.useFor, ...(asset.roleBinding?.useFor || [])]),
+      ignoreFor: unique([...template.ignoreFor, ...(asset.roleBinding?.ignoreFor || [])]),
+    };
+  }
+  return {
+    role,
+    useFor: unique(asset.roleBinding?.useFor || []),
+    ignoreFor: unique(asset.roleBinding?.ignoreFor || []),
+    priority: 2,
+    conflictRule: "Project-folder asset role was imported from Agent classification and still respects explicit creator confirmation.",
+  };
+}
+
+function runtimeAssetFor(input: ProjectVibeCreativeLoopInput, assetId: string): AssetRecord | undefined {
+  return input.runtimeState?.visualMemory.assets.find((asset) => asset.id === assetId);
+}
+
+function projectRelativeRuntimeAssetPath(runtimePath: string | undefined, projectRoot: string | undefined): string | undefined {
+  const cleanedPath = runtimePath?.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!cleanedPath) return undefined;
+  const cleanedRoot = projectRoot?.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const relativePath = cleanedRoot && cleanedPath.startsWith(`${cleanedRoot}/`)
+    ? cleanedPath.slice(cleanedRoot.length + 1)
+    : cleanedPath;
+  return relativePath && !relativePath.startsWith("/") && !relativePath.includes("../") ? relativePath : undefined;
+}
+
+function promotedProjectAssetFromRuntimeAsset(
+  input: ProjectVibeCreativeLoopInput,
+  assetId: string,
+  runRef: string,
+  affectedShotIds: string[],
+): ProjectVibeAsset | undefined {
+  const runtimeAsset = runtimeAssetFor(input, assetId);
+  if (!runtimeAsset) return undefined;
+  const projectRelativePath = projectRelativeRuntimeAssetPath(runtimeAsset.path, input.projectRoot);
+  return {
+    id: runtimeAsset.id,
+    kind: projectVibeKindFromRuntimeAsset(runtimeAsset),
+    label: runtimeAsset.name || runtimeAsset.id,
+    status: projectVibeStatusFromRuntimeAsset(runtimeAsset),
+    ...(projectRelativePath ? { path: projectRelativePath } : {}),
+    textConstraints: unique(runtimeAsset.textConstraints || []),
+    usedByShotIds: unique([...(runtimeAsset.usedByShotIds || []), ...affectedShotIds]),
+    sourceRefs: unique([
+      ...(runtimeAsset.sourceRefs || []),
+      runRef,
+      `project.vibe#assets/${runtimeAsset.id}`,
+    ]),
+    ...(runtimeAsset.lockedStatus === "locked" ? { lockedBy: "user" as const } : {}),
+    ...(roleBindingFromRuntimeAsset(runtimeAsset) ? { roleBinding: roleBindingFromRuntimeAsset(runtimeAsset) } : {}),
+  };
+}
+
+function assetRoleBindingFromAgentChange(
+  input: ProjectVibeCreativeLoopInput,
+  asset: ProjectVibeAsset,
+  affectedShotIds: string[],
+): ProjectVibeReferenceRoleBinding | undefined {
+  const template = roleBindingTemplate(agentProposedAssetRoleBindingLabel(input) || "");
+  if (!template) return undefined;
+  const existing = asset.roleBinding;
+  const keepExistingDetails = existing?.role === template.role;
+  return {
+    role: template.role,
+    useFor: unique([
+      ...(keepExistingDetails ? existing?.useFor || [] : []),
+      ...template.useFor,
+      ...affectedShotIds,
+    ]),
+    ignoreFor: unique([
+      ...template.ignoreFor,
+      ...(keepExistingDetails ? existing?.ignoreFor || [] : []),
+    ]),
+    priority: keepExistingDetails ? existing?.priority ?? template.priority : template.priority,
+    conflictRule: keepExistingDetails ? existing?.conflictRule || template.conflictRule : template.conflictRule,
+  };
+}
+
 function applyAgentProposedAssetChanges(
   asset: ProjectVibeAsset,
   input: ProjectVibeCreativeLoopInput,
@@ -594,10 +810,12 @@ function applyAgentProposedAssetChanges(
   affectedShotIds: string[],
 ): ProjectVibeAsset {
   const proposedStatus = agentProposedAssetStatus(input);
+  const proposedRoleBinding = assetRoleBindingFromAgentChange(input, asset, affectedShotIds);
   return {
     ...asset,
     ...(proposedStatus ? { status: proposedStatus } : {}),
     ...(proposedStatus ? { lockedBy: proposedStatus === "locked" ? "user" as const : undefined } : {}),
+    ...(proposedRoleBinding ? { roleBinding: proposedRoleBinding } : {}),
     textConstraints: confirmedCreativeConstraint(asset.textConstraints, input.userIntent),
     usedByShotIds: unique([...asset.usedByShotIds, ...affectedShotIds]),
     sourceRefs: unique([
@@ -605,6 +823,7 @@ function applyAgentProposedAssetChanges(
       runRef,
       `project.vibe#assets/${asset.id}/textConstraints`,
       ...(proposedStatus ? [`project.vibe#assets/${asset.id}/status`] : []),
+      ...(proposedRoleBinding ? [`project.vibe#assets/${asset.id}/roleBinding`] : []),
     ]),
   };
 }
@@ -699,7 +918,10 @@ function patchOperationsFor(input: ProjectVibeCreativeLoopInput, runReceipt: Pro
       })
     : [];
   const selectedAssetOperations = targetAssetIdsFor(input)
-    .map((assetId) => input.project.assets.find((asset) => asset.id === assetId))
+    .map((assetId) =>
+      input.project.assets.find((asset) => asset.id === assetId) ||
+      promotedProjectAssetFromRuntimeAsset(input, assetId, runRef, runReceipt.affectedShotIds),
+    )
     .filter((asset): asset is ProjectVibeAsset => Boolean(asset))
     .map((asset) => ({
       op: "upsert_asset" as const,

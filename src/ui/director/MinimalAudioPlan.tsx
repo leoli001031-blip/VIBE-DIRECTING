@@ -45,7 +45,7 @@ function voiceReferenceCopy(plan: AudioPlan, audioPlanning: AudioPlanningState) 
   const source = plan.voiceSourceId
     ? audioPlanning.voiceSourceRegistry.sources.find((item) => item.id === plan.voiceSourceId)
     : undefined;
-  if (!source) return "还没有绑定声音参考；需要锁角色声线时，把授权音源拖到底部输入框。";
+  if (!source) return "还没有绑定声音参考；需要锁角色声线时，把授权音源拖到 AI 导演输入框。";
   return `已绑定 ${source.label || source.id}，发送视频时只作为声线、语气和说话质感参考。`;
 }
 

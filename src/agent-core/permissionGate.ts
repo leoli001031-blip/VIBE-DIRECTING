@@ -1,4 +1,5 @@
 import type { DirectorAgentActionEnvelope } from "../core/directorAgentAction";
+import { directorActionCompilesVideoRequest } from "./actionDispatch";
 import type {
   VibeAgentPermissionDecision,
   VibeAgentPermissionMode,
@@ -16,8 +17,27 @@ function hasPermission(current: VibeAgentPermissionMode, required: VibeAgentPerm
   return permissionRank[current] >= permissionRank[required];
 }
 
+function permissionModeCopy(mode: VibeAgentPermissionMode) {
+  if (mode === "plan_only") return "当前只允许整理计划";
+  if (mode === "project_write_allowed") return "允许写入项目";
+  if (mode === "reference_allowed") return "允许生成参考";
+  if (mode === "video_allowed") return "允许提交视频";
+  if (mode === "export_allowed") return "允许导出交付包";
+  return "当前权限";
+}
+
+function requiredPermissionCopy(mode: VibeAgentPermissionMode) {
+  if (mode === "project_write_allowed") return "需要你确认后，才能写入项目";
+  if (mode === "reference_allowed") return "需要你允许生成参考";
+  if (mode === "video_allowed") return "需要你允许提交视频";
+  if (mode === "export_allowed") return "需要你允许导出交付包";
+  return "可以直接整理计划";
+}
+
 export function requiredPermissionForDirectorAction(action: DirectorAgentActionEnvelope): VibeAgentPermissionMode {
-  if (action.kind === "prepare_video_submit") return "video_allowed";
+  if (action.kind === "prepare_video_submit") {
+    return directorActionCompilesVideoRequest(action) ? "project_write_allowed" : "video_allowed";
+  }
   if (action.kind === "query_video_result") return "project_write_allowed";
   if (action.kind === "prepare_reference_generation") return "reference_allowed";
   if (action.kind === "prepare_export") return "export_allowed";
@@ -35,7 +55,7 @@ export function evaluateVibeAgentPermission(input: {
     return {
       allowed: false,
       requiresConfirmation: true,
-      reason: `当前权限是 ${input.permissionMode}，动作 ${input.action.kind} 至少需要 ${required}。`,
+      reason: `${permissionModeCopy(input.permissionMode)}；${requiredPermissionCopy(required)}。`,
     };
   }
   if (input.action.kind === "inspect_project_status") {

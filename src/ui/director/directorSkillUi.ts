@@ -1,4 +1,7 @@
 import type { ShotRecord } from "../../core/types";
+import {
+  buildDirectorProductionSkillPlan,
+} from "../../core/directorProductionSkill";
 
 export type DirectorSkillStrategy = "omni_reference" | "storyboard_narrative" | "storyboard_rapid_cut";
 
@@ -41,13 +44,17 @@ function unique(items: string[]) {
 }
 
 export function shotReferenceStrategy(shot: ShotRecord): DirectorSkillStrategy {
+  return explicitShotReferenceStrategy(shot) || "omni_reference";
+}
+
+export function explicitShotReferenceStrategy(shot: ShotRecord): DirectorSkillStrategy | undefined {
   const raw = clean((shot as StrategyShot).referenceStrategy);
   if (raw === "storyboard_rapid_cut") return "storyboard_rapid_cut";
   if (raw === "storyboard_narrative") return "storyboard_narrative";
   if (raw === "omni_reference") return "omni_reference";
   if (/故事板快切/.test(shot.seedanceDirection || "")) return "storyboard_rapid_cut";
   if (/故事板叙事/.test(shot.seedanceDirection || "")) return "storyboard_narrative";
-  return "omni_reference";
+  return undefined;
 }
 
 export function referenceStrategyLabel(strategy: DirectorSkillStrategy) {
@@ -59,14 +66,14 @@ export function referenceStrategyLabel(strategy: DirectorSkillStrategy) {
 export function referenceStrategyDetail(strategy: DirectorSkillStrategy) {
   if (strategy === "storyboard_narrative") return "用故事板控制构图和人物关系";
   if (strategy === "storyboard_rapid_cut") return "用故事板控制快切和动作";
-  return "用角色、场景、道具和文字说明生成";
+  return "用角色、场景、道具和文字说明锁定画面";
 }
 
 export function referenceStrategyWorkflowHint(strategy: DirectorSkillStrategy) {
   if (strategy === "storyboard_narrative" || strategy === "storyboard_rapid_cut") {
     return "下一步：去参考页生成参考。";
   }
-  return "这段不会额外生成故事板。";
+  return "不需要额外故事板，生成前仍会等待确认。";
 }
 
 function strategyReason(shot: StrategyShot, strategy: DirectorSkillStrategy) {
@@ -84,17 +91,39 @@ function strategyReason(shot: StrategyShot, strategy: DirectorSkillStrategy) {
 }
 
 export function directorSkillSummaryForShot(shot: ShotRecord) {
-  const strategy = shotReferenceStrategy(shot);
+  const plan = buildDirectorProductionSkillPlan({
+    shotId: shot.id,
+    title: shot.title,
+    durationSeconds: shot.durationSeconds,
+    shotText: unique([
+      shot.storyFunction || "",
+      shot.seedanceDirection || "",
+      shot.primaryAction || "",
+      shot.actionTrigger || "",
+      shot.microReaction || "",
+    ]).join("\n"),
+    executionMode: shot.executionMode,
+    referenceStrategy: (shot as StrategyShot).referenceStrategy as DirectorSkillStrategy | undefined,
+    actionBeats: shot.actionBeats,
+    camera: shot.camera,
+    visualDescription: shot.seedanceDirection || shot.storyFunction,
+    assetState: {
+      scene: shot.sceneGuidance?.length ? "locked" : "candidate",
+      characters: shot.characterGuidance?.length ? "locked" : "candidate",
+      props: shot.propGuidance?.length ? "locked" : "candidate",
+    },
+  });
+  const strategy = plan.strategyId;
   const strategyShot = shot as StrategyShot;
   const visibleClips = positiveNumber(strategyShot.visibleClips);
   const storyboardPanels = positiveNumber(strategyShot.storyboardPanels);
   const duration = positiveNumber(shot.durationSeconds);
   const skillTags = unique([
-    referenceStrategyLabel(strategy),
+    plan.strategyLabel,
     duration ? `${duration}s` : "",
     visibleClips && visibleClips > 1 ? `${visibleClips} 个可见剪辑` : "",
     storyboardPanels && storyboardPanels > 0 ? `故事板 ${storyboardPanels} 格` : "",
-    rhythmLabels[clean(shot.rhythmProfile)] || "",
+    rhythmLabels[clean(shot.rhythmProfile)] || plan.rhythmLabel || "",
     executionLabels[clean(shot.executionMode)] || "",
     shot.sceneGuidance?.length ? "场景连续" : "",
     shot.characterGuidance?.length ? "角色一致" : "",
@@ -103,9 +132,9 @@ export function directorSkillSummaryForShot(shot: ShotRecord) {
 
   return {
     strategy,
-    label: referenceStrategyLabel(strategy),
+    label: plan.strategyLabel,
     detail: referenceStrategyDetail(strategy),
-    reason: strategyReason(strategyShot, strategy),
+    reason: plan.reasons[0] || strategyReason(strategyShot, strategy),
     skillTags,
   };
 }

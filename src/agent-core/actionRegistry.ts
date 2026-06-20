@@ -13,14 +13,32 @@ export const vibeAgentActionRegistry: Record<VibeAgentToolName, VibeAgentActionD
     requiresConfirmation: false,
     minimumPermission: "plan_only",
   },
-  scan_assets: {
-    id: "scan_assets",
-    label: "检查素材缺口",
-    description: "根据当前镜头和素材状态判断缺角色、场景、道具还是复核。",
+  classify_assets: {
+    id: "classify_assets",
+    label: "整理素材",
+    description: "扫描项目素材，把图片、声音、视频、脚本和证据分成可确认的用途建议。",
     mutatesProject: false,
     callsProvider: false,
     requiresConfirmation: false,
     minimumPermission: "plan_only",
+  },
+  scan_assets: {
+    id: "scan_assets",
+    label: "检查素材缺口",
+    description: "兼容旧时间线记录；新 Agent Turn 使用 classify_assets。",
+    mutatesProject: false,
+    callsProvider: false,
+    requiresConfirmation: false,
+    minimumPermission: "plan_only",
+  },
+  plan_story: {
+    id: "plan_story",
+    label: "拆故事",
+    description: "把想法整理成故事段落、镜头和适合的导演 Skills。",
+    mutatesProject: true,
+    callsProvider: false,
+    requiresConfirmation: true,
+    minimumPermission: "project_write_allowed",
   },
   plan_next_action: {
     id: "plan_next_action",
@@ -30,6 +48,15 @@ export const vibeAgentActionRegistry: Record<VibeAgentToolName, VibeAgentActionD
     callsProvider: false,
     requiresConfirmation: false,
     minimumPermission: "plan_only",
+  },
+  revise_shot: {
+    id: "revise_shot",
+    label: "改这一段",
+    description: "根据当前点选的镜头、段落或素材，重写对应项目内容。",
+    mutatesProject: true,
+    callsProvider: false,
+    requiresConfirmation: true,
+    minimumPermission: "project_write_allowed",
   },
   write_agent_message: {
     id: "write_agent_message",
@@ -42,8 +69,8 @@ export const vibeAgentActionRegistry: Record<VibeAgentToolName, VibeAgentActionD
   },
   write_project: {
     id: "write_project",
-    label: "写项目",
-    description: "把已确认的故事、镜头、策略或复核结果写回 Project.vibe。",
+    label: "修改项目",
+    description: "把已确认的故事、镜头、策略或复核结果写回项目记录。",
     mutatesProject: true,
     callsProvider: false,
     requiresConfirmation: true,
@@ -66,6 +93,15 @@ export const vibeAgentActionRegistry: Record<VibeAgentToolName, VibeAgentActionD
     callsProvider: true,
     requiresConfirmation: true,
     minimumPermission: "reference_allowed",
+  },
+  compile_video_request: {
+    id: "compile_video_request",
+    label: "准备视频请求",
+    description: "把镜头、参考、Skills 和 QA 结果编译成可复核的视频请求，不直接提交。",
+    mutatesProject: true,
+    callsProvider: false,
+    requiresConfirmation: true,
+    minimumPermission: "project_write_allowed",
   },
   submit_video: {
     id: "submit_video",
@@ -94,6 +130,24 @@ export const vibeAgentActionRegistry: Record<VibeAgentToolName, VibeAgentActionD
     requiresConfirmation: true,
     minimumPermission: "export_allowed",
   },
+  export_showcase: {
+    id: "export_showcase",
+    label: "导出展示包",
+    description: "导出软件截图、参考、prompt、submit id、视频段和展示说明。",
+    mutatesProject: true,
+    callsProvider: false,
+    requiresConfirmation: true,
+    minimumPermission: "export_allowed",
+  },
+  save_skill: {
+    id: "save_skill",
+    label: "保存导演经验",
+    description: "把当前成功做法沉淀成项目 Skill 草稿，确认后写入 skill-index。",
+    mutatesProject: true,
+    callsProvider: false,
+    requiresConfirmation: true,
+    minimumPermission: "project_write_allowed",
+  },
   request_user_confirmation: {
     id: "request_user_confirmation",
     label: "请求确认",
@@ -115,7 +169,9 @@ export const vibeAgentActionRegistry: Record<VibeAgentToolName, VibeAgentActionD
 };
 
 export function listVibeAgentActionNames(): VibeAgentToolName[] {
-  return Object.keys(vibeAgentActionRegistry).sort() as VibeAgentToolName[];
+  return Object.keys(vibeAgentActionRegistry)
+    .filter((name) => name !== "scan_assets")
+    .sort() as VibeAgentToolName[];
 }
 
 export function getVibeAgentActionDescriptor(name: VibeAgentToolName): VibeAgentActionDescriptor {

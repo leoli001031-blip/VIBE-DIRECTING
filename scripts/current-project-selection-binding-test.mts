@@ -10,6 +10,8 @@ import {
   projectCurrentBindingEndpoint,
   projectCurrentSelectEndpoint,
   projectImage2BatchPlanEndpoint,
+  projectImage2BatchRunCheckEndpoint,
+  projectRealChainRunCheckEndpoint,
   projectRealChainStatusEndpoint,
   runProjectImage2BatchCheck,
   runProjectRealChainCheck,
@@ -119,10 +121,16 @@ const current004Image2Payload = {
 
 let requests = [];
 let responseByUrl = new Map();
+function requestPath(urlText) {
+  return new URL(urlText, "http://127.0.0.1:8790").pathname;
+}
+function requestSearchParams(urlText) {
+  return new URL(urlText, "http://127.0.0.1:8790").searchParams;
+}
 globalThis.fetch = async (url, init) => {
   const urlText = String(url);
   requests.push({ url: urlText, method: init?.method || "GET", body: init?.body ? JSON.parse(String(init.body)) : undefined });
-  const payload = responseByUrl.get(urlText);
+  const payload = responseByUrl.get(urlText) || responseByUrl.get(requestPath(urlText));
   if (!payload) {
     return { ok: false, status: 404, json: async () => ({ status: "missing" }) };
   }
@@ -215,8 +223,9 @@ assert(identity004?.projectRoot === project004.projectRoot, "004 binding should 
 const staleStatus = await loadProjectRealChainStatus(identity004);
 assert(staleStatus.status === "unavailable", "stale 005 status must be blocked under 004 binding");
 assert(!staleStatus.summary, "stale 005 status must not leak a summary under 004 binding");
-assert(requests[1].url === projectRealChainStatusEndpoint, "real-chain status must use current endpoint without query");
-assert(!requests[1].url.includes("?"), "real-chain status request must not carry projectRoot query");
+assert(requestPath(requests[1].url) === projectRealChainStatusEndpoint, "real-chain status must use current endpoint");
+assert(requestSearchParams(requests[1].url).get("projectRoot") === project004.projectRoot, "real-chain status request must carry selected projectRoot query");
+assert(requestSearchParams(requests[1].url).get("projectId") === project004.projectId, "real-chain status request must carry selected projectId query");
 
 responseByUrl = new Map([
   [projectCurrentBindingEndpoint, currentProjectBindingResponse(project004)],
@@ -228,7 +237,11 @@ const freshStatus = await loadProjectRealChainStatus(identity004);
 assert(freshStatus.status === "production_needs_review", "matching 004 status should pass under 004 binding");
 const image2Status = await loadProjectImage2BatchPlan(identity004);
 assert(image2Status.status === "ready_for_review", "matching 004 Image2 plan should pass under 004 binding");
-assert(requests.every((request) => !request.url.includes("?")), "current project load requests must not carry query params");
+const freshRealChainRequest = requests.find((request) => request.method === "GET" && requestPath(request.url) === projectRealChainStatusEndpoint);
+const freshImage2Request = requests.find((request) => request.method === "GET" && requestPath(request.url) === projectImage2BatchPlanEndpoint);
+assert(requestSearchParams(freshRealChainRequest?.url || "").get("projectRoot") === project004.projectRoot, "current project real-chain load must carry selected projectRoot query");
+assert(requestSearchParams(freshRealChainRequest?.url || "").get("projectId") === project004.projectId, "current project real-chain load must carry selected projectId query");
+assert(!requestSearchParams(freshImage2Request?.url || "").has("projectRoot") && !requestSearchParams(freshImage2Request?.url || "").has("projectId"), "Image2 batch plan should keep using runtime-selected current project without identity query");
 
 responseByUrl = new Map([
   ["/api/runtime/projects/current/real-chain/run-check", current004RealChainPayload],
@@ -240,7 +253,11 @@ const runImage2 = await runProjectImage2BatchCheck(identity004);
 assert(runStatus.status === "production_needs_review", "run check should pass matching 004 status");
 assert(runImage2.status === "ready_for_review", "Image2 run check should pass matching 004 status");
 assert(requests.map((request) => request.method).join(",") === "POST,POST", "run checks must use POST");
-assert(requests.every((request) => !request.url.includes("?projectRoot") && !request.url.includes("?projectId")), "run checks must not pass arbitrary project identity query params");
+const realChainRunRequest = requests.find((request) => request.method === "POST" && requestPath(request.url) === projectRealChainRunCheckEndpoint);
+const image2RunRequest = requests.find((request) => request.method === "POST" && requestPath(request.url) === projectImage2BatchRunCheckEndpoint);
+assert(requestSearchParams(realChainRunRequest?.url || "").get("projectRoot") === project004.projectRoot, "real-chain run-check must carry selected projectRoot query");
+assert(requestSearchParams(realChainRunRequest?.url || "").get("projectId") === project004.projectId, "real-chain run-check must carry selected projectId query");
+assert(!requestSearchParams(image2RunRequest?.url || "").has("projectRoot") && !requestSearchParams(image2RunRequest?.url || "").has("projectId"), "Image2 run-check should keep using runtime-selected current project without identity query");
 
 globalThis.window = {
   location: { hostname: "127.0.0.1", port: "5173" },

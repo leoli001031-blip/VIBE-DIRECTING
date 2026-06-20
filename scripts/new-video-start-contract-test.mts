@@ -102,6 +102,7 @@ const newVideoStart = findFunctionBody(newVideoStartSource, "NewVideoStart");
 const prepareDraft = findFunctionBody(newVideoStartSource, "prepareDraft");
 const confirmDraft = findFunctionBody(newVideoStartSource, "confirmDraft");
 const selectVideoPermissionMode = findFunctionBody(newVideoStartSource, "selectVideoPermissionMode");
+const sendDiscussionFeedback = findFunctionBody(newVideoStartSource, "sendDiscussionFeedback");
 const submitComposer = findFunctionBody(newVideoStartSource, "submitComposer");
 const tableRowSummary = findFunctionBody(newVideoStartSource, "tableRowSummary");
 const cleanPlanningSummaryValue = findFunctionBody(newVideoStartSource, "cleanPlanningSummaryValue");
@@ -145,6 +146,21 @@ check(
 check(
   visibleCopy.includes("镜头安排"),
   "NewVideoStart must render the visible field label \"镜头安排\" before final draft confirmation.",
+  failures,
+);
+check(
+  /showComposerSurface = composerPlacement !== "draft_only"/.test(newVideoStartSource),
+  "NewVideoStart Agent-first mode must keep draft discussion in the right-side Agent rail instead of remounting a middle composer.",
+  failures,
+);
+check(
+  /showInlineAgentThread = composerPlacement !== "draft_only" && displayAgentMessages\.length > 0/.test(newVideoStartSource),
+  "NewVideoStart Agent-first mode must not duplicate the Agent message flow in the middle canvas.",
+  failures,
+);
+check(
+  /showMiddleDiscussionWorkspace = composerPlacement !== "draft_only" && Boolean\(discussionWorkspace\)/.test(newVideoStartSource),
+  "NewVideoStart Agent-first mode must keep draft discussion in the right-side Agent rail instead of duplicating it in the middle canvas.",
   failures,
 );
 check(
@@ -209,6 +225,34 @@ check(
   failures,
 );
 check(
+  /sendDiscussionFeedback\(feedbackOverride\?: string\)/.test(newVideoStartSource)
+    && /const feedbackText = \(feedbackOverride \?\? discussionFeedback\)\.trim\(\)/.test(sendDiscussionFeedback)
+    && /if \(!feedbackOverride\) setDiscussionFeedback\(""\)/.test(sendDiscussionFeedback),
+  "NewVideoStart must let the right-side Agent send feedback into the current draft without mutating the local composer text.",
+  failures,
+);
+check(
+  /用户正在修改当前新视频草案/.test(sendDiscussionFeedback)
+    && /请直接输出修正后的完整分镜表/.test(sendDiscussionFeedback),
+  "NewVideoStart discussion feedback must ask the planner to revise the current draft instead of treating feedback as a new idea.",
+  failures,
+);
+check(
+  /if \(projection && discussionWorkspace\) \{[\s\S]*isDraftConfirmationIntent\(commandText\)[\s\S]*void confirmDraft\(\);[\s\S]*void sendDiscussionFeedback\(commandText\);[\s\S]*return;[\s\S]*const detectedBoundaryMode/.test(newVideoStartSource),
+  "right-side Agent messages after a draft exists must update that draft before any new-draft planning path can run.",
+  failures,
+);
+check(
+  /type NewVideoStartAgentIntakeCommand = \{[\s\S]*mode\?: "replace_draft" \| "continue_current_draft"/.test(newVideoStartSource),
+  "NewVideoStart Agent intake command must distinguish replacing text from continuing the current prepared draft.",
+  failures,
+);
+check(
+  /agentIntakeCommand\?\.mode === "continue_current_draft"[\s\S]*if \(hasDraft\) \{[\s\S]*void prepareDraft\(\);[\s\S]*\} else \{[\s\S]*showNoReadyDraftNotice\("继续整理"\)[\s\S]*\}[\s\S]*return;[\s\S]*const commandText = agentIntakeCommand\?\.text\.trim\(\)/.test(newVideoStartSource),
+  "NewVideoStart must continue an already-prepared draft before reading Agent command text as a new idea.",
+  failures,
+);
+check(
   /detectDirectorAgentPermissionIntent/.test(newVideoStartSource)
     && /const detectedMode = detectDirectorAgentPermissionIntent\(value\)/.test(syncVideoPermissionFromIntent)
     && /selectVideoPermissionMode\(detectedMode\)/.test(syncVideoPermissionFromIntent),
@@ -257,11 +301,23 @@ check(
 );
 check(
   /classifyDirectorAgentAction/.test(newVideoStartSource)
+    && /shouldHandleNewVideoStatusIntent/.test(newVideoStartSource)
     && /inspect_project_status/.test(shouldHandleEmptyProjectStatusIntent)
     && /现在项目怎么样/.test(directorAgentActionSource)
-    && /showEmptyProjectStatusNotice/.test(submitComposer)
+    && /showNewVideoStatusNotice/.test(submitComposer)
     && /prepareDraft/.test(submitComposer),
   "NewVideoStart must route empty-project status/continue questions to a status notice instead of treating them as scripts.",
+  failures,
+);
+check(
+  /shouldHandleNewVideoStatusIntent\(commandText\)[\s\S]*showNewVideoStatusNotice\(commandText\)[\s\S]*return[\s\S]*if \(projection && discussionWorkspace\)/.test(newVideoStart),
+  "NewVideoStart must also route Agent-side intake status questions to status inspection before preparing a draft.",
+  failures,
+);
+check(
+  /function showCurrentDraftStatusNotice[\s\S]*这里只是检查状态[\s\S]*不会把这句话当成新脚本[\s\S]*buildVibeAgentIntakeTimelineEntries/.test(newVideoStartSource)
+    && /phase:\s*"status_inspection"[\s\S]*assistantBody:\s*`当前草案有/.test(newVideoStartSource),
+  "NewVideoStart status inspection must report existing draft status without changing the draft.",
   failures,
 );
 check(
@@ -324,6 +380,23 @@ check(
   failures,
 );
 check(
+  /const timelineCreatedAt = new Date\(\)\.toISOString\(\)/.test(prepareDraft)
+    && /createdAt:\s*timelineCreatedAt[\s\S]*phase:\s*"planning_started"/.test(prepareDraft)
+    && /createdAt:\s*timelineCreatedAt[\s\S]*phase:\s*"planning_ready"/.test(prepareDraft)
+    && /createdAt:\s*timelineCreatedAt[\s\S]*phase:\s*"planning_blocked"/.test(prepareDraft)
+    && /const feedbackTimelineCreatedAt = new Date\(\)\.toISOString\(\)/.test(sendDiscussionFeedback)
+    && /createdAt:\s*feedbackTimelineCreatedAt[\s\S]*phase:\s*"planning_started"/.test(sendDiscussionFeedback)
+    && /createdAt:\s*feedbackTimelineCreatedAt[\s\S]*phase:\s*"planning_ready"/.test(sendDiscussionFeedback)
+    && /createdAt:\s*feedbackTimelineCreatedAt[\s\S]*phase:\s*"planning_blocked"/.test(sendDiscussionFeedback),
+  "NewVideoStart must reuse one timeline turn id when a planning turn moves from running to ready or blocked.",
+  failures,
+);
+check(
+  /understandingBody:\s*"你想按这条修改意见重排当前草案/.test(sendDiscussionFeedback),
+  "NewVideoStart feedback turns must explicitly tell the user the Agent is revising the current draft, not starting a new project.",
+  failures,
+);
+check(
   /visibleTimelineEntries\.map\(newVideoAgentMessageFromTimelineEntry\)/.test(newVideoStartSource)
     && /displayAgentMessages = timelineAgentMessages\.length \? timelineAgentMessages : agentMessages/.test(newVideoStartSource),
   "NewVideoStart must render persisted timeline entries before falling back to local message synthesis.",
@@ -331,11 +404,17 @@ check(
 );
 check(
   /inspect_project/.test(newVideoStartSource)
-    && /plan_next_action/.test(newVideoStartSource)
+    && /plan_story/.test(newVideoStartSource)
     && /write_agent_message/.test(newVideoStartSource)
-    && /write_project/.test(newVideoStartSource)
+    && /写入故事流/.test(newVideoStartSource)
     && /生成参考图、提交视频和导出都还要再确认/.test(newVideoStartSource),
-  "NewVideoStart Agent thread must explain tool semantics and confirmation boundaries before generation.",
+  "NewVideoStart Agent thread must explain creator-facing action semantics and confirmation boundaries before generation.",
+  failures,
+);
+check(
+  /disabled=\{!pendingDiscussionDeltaCount \|\| storyboardPlanningRunning\}/.test(newVideoStartSource)
+    && /storyboardPlanningRunning \? "正在重排" : pendingDiscussionDeltaCount \? "确认修改" : "修改已确认"/.test(newVideoStartSource),
+  "NewVideoStart must not show a clickable confirm-modification action while AI is still reworking the draft.",
   failures,
 );
 check(
@@ -397,7 +476,7 @@ check(
 );
 check(
   /\.new-video-discussion:not\(\[open\]\) > :not\(summary\)[\s\S]*\.new-video-plan-details:not\(\[open\]\) > :not\(summary\)[\s\S]*display:\s*none/.test(directorCssSource),
-  "NewVideoStart collapsed discussion and detail sections must not expose internal planning controls.",
+  "NewVideoStart collapsed discussion and detail sections must not expose internal planning controls outside the Agent rail.",
   failures,
 );
 check(
@@ -420,10 +499,10 @@ check(
 );
 check(
   /composerConfirmsDraft[\s\S]*confirmDraft\s*:\s*submitComposer/.test(newVideoStartSource)
-    && /composerConcreteActionLabel[\s\S]*"确认进故事流"/.test(newVideoStartSource)
+    && /composerConcreteActionLabel[\s\S]*"确认写入故事流"/.test(newVideoStartSource)
     && /composerPrimaryLabel[\s\S]*composerConfirmsDraft[\s\S]*\? "确认"/.test(newVideoStartSource)
     && /composerPrimaryAriaLabel[\s\S]*`确认：\$\{composerConcreteActionLabel\}`/.test(newVideoStartSource),
-  "NewVideoStart bottom primary action must use a generic confirm button while preserving the concrete draft action in accessible copy.",
+  "NewVideoStart primary action must use a generic confirm button while preserving the concrete draft action in accessible copy.",
   failures,
 );
 check(
@@ -435,11 +514,11 @@ check(
   failures,
 );
 check(
-  /new-video-next-hint/.test(newVideoStartSource)
-    && /底部继续：确认进故事流/.test(newVideoStartSource)
-    && /确认进故事流/.test(newVideoStartSource)
+  /planSummaryActionHint[\s\S]*storyboardPlanningStatus === "running"[\s\S]*"草案出来后可确认"[\s\S]*"确认写入故事流"/.test(newVideoStartSource)
+    && /new-video-next-hint[\s\S]*planSummaryActionHint/.test(newVideoStartSource)
+    && !/继续确认进故事流/.test(newVideoStartSource)
     && /已进入故事流/.test(newVideoStartSource),
-  "NewVideoStart draft confirmation must use a concrete creator-facing action label.",
+  "NewVideoStart draft confirmation hint must wait during planning and use a concrete action only when ready.",
   failures,
 );
 check(

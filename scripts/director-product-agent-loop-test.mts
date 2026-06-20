@@ -516,6 +516,7 @@ const stagedAssetFeedback = runDirectorProductAgentLoop({
 assert(stagedAssetFeedback.status === "awaiting_confirmation", "asset feedback should stage before writing");
 assert(stagedAssetFeedback.action.target.kind === "asset", "asset feedback should target the selected asset");
 assert(stagedAssetFeedback.projectVibeWritten === false, "staged asset feedback must not mutate Project.vibe");
+assert(stagedAssetFeedback.action.proposedChanges.some((change) => change.field === "assetRoleBinding" && change.to === "角色参考"), "asset feedback should stage a role binding when the creator names the asset role");
 
 const confirmedAssetFeedback = runDirectorProductAgentLoop({
   project,
@@ -544,10 +545,97 @@ assert(confirmedAssetFeedback.toolInvocationReady === false, "asset feedback sho
 const patchedAsset = confirmedAssetFeedback.nextProject?.assets.find((asset) => asset.id === "asset_char_mira");
 assert(patchedAsset?.textConstraints.some((item) => item.includes("表情更警觉")), "confirmed asset feedback should persist as an asset constraint");
 assert(patchedAsset?.sourceRefs.some((item) => item.includes("textConstraints")), "asset feedback should carry text constraint evidence");
+assert(patchedAsset?.roleBinding?.role === "character_identity", "confirmed asset feedback should write the selected asset role binding");
+assert(patchedAsset?.roleBinding?.useFor.includes("identity"), "asset role binding should carry reusable character identity scope");
+assert(patchedAsset?.sourceRefs.some((item) => item.includes("roleBinding")), "asset feedback should carry role binding evidence");
 assert(confirmedAssetFeedback.nextRuntimeState?.visualMemory.assets.find((asset) => asset.id === "asset_char_mira")?.textConstraints?.some((item) => item.includes("表情更警觉")), "confirmed asset feedback should rebuild runtime visual memory projection");
+assert(confirmedAssetFeedback.nextRuntimeState?.visualMemory.assets.find((asset) => asset.id === "asset_char_mira")?.roleBinding?.role === "character_identity", "runtime projection should show the confirmed asset role binding");
 const patchedVisualMemoryEntry = confirmedAssetFeedback.nextProject?.visualMemory.entries.find((entry) => entry.assetId === "asset_char_mira");
 assert(patchedVisualMemoryEntry?.textConstraints.some((item) => item.includes("表情更警觉")), "asset feedback should stay mirrored in visual memory");
+assert(patchedVisualMemoryEntry?.roleBinding?.role === "character_identity", "asset role binding should stay mirrored in visual memory");
 assert(confirmedAssetFeedback.confirmResult?.runReceipt?.evidenceRefs.includes("project.vibe#assets/asset_char_mira"), "run receipt should cite the selected asset");
+assert(confirmedAssetFeedback.confirmResult?.runReceipt?.evidenceRefs.includes("project.vibe#assets/asset_char_mira/roleBinding"), "run receipt should cite role binding evidence");
+
+const folderScannedAssetId = "folder_asset_assets_characters_demo_hero_character_md";
+const runtimeStateWithFolderAsset = {
+  ...runtimeState,
+  visualMemory: {
+    ...runtimeState.visualMemory,
+    assets: [
+      ...runtimeState.visualMemory.assets,
+      {
+        id: folderScannedAssetId,
+        type: "character",
+        name: "demo-hero-character.md",
+        path: `${projectRoot}/assets/characters/demo-hero-character.md`,
+        status: "exists",
+        lockedStatus: "needs_review",
+        providerId: "project-folder",
+        safeForFutureReference: true,
+        textConstraints: ["从项目文件夹识别为角色素材，正式使用前需要确认。"],
+        sourceRefs: ["project_folder_scan"],
+        issues: ["needs_review"],
+      },
+    ],
+  },
+} as typeof runtimeState;
+const stagedFolderAssetFeedback = runDirectorProductAgentLoop({
+  project,
+  runtimeState: runtimeStateWithFolderAsset,
+  userIntent: "这是主角角色参考，给当前镜头用",
+  userConfirmed: false,
+  generatedAt,
+  projectRoot,
+  projectPath: projectVibeFileName,
+  selection: {
+    currentView: "reference",
+    selectedAssetId: folderScannedAssetId,
+  },
+  availability: {
+    projectReady: true,
+    webSearchReady: true,
+    referenceGenerationReady: true,
+    videoSubmitReady: true,
+    exportReady: true,
+  },
+});
+assert(stagedFolderAssetFeedback.status === "awaiting_confirmation", "folder-scanned asset feedback should stage before writing");
+assert(stagedFolderAssetFeedback.action.target.kind === "asset", "folder-scanned asset feedback should target the selected asset");
+assert(stagedFolderAssetFeedback.action.proposedChanges.some((change) => change.field === "assetRoleBinding" && change.to === "角色参考"), "folder-scanned asset feedback should stage the confirmed role binding");
+
+const confirmedFolderAssetFeedback = runDirectorProductAgentLoop({
+  project,
+  runtimeState: runtimeStateWithFolderAsset,
+  userIntent: stagedFolderAssetFeedback.action.sourceContext.userIntent,
+  userConfirmed: true,
+  generatedAt,
+  projectRoot,
+  projectPath: projectVibeFileName,
+  selection: {
+    currentView: "reference",
+    selectedAssetId: folderScannedAssetId,
+  },
+  availability: {
+    projectReady: true,
+    webSearchReady: true,
+    referenceGenerationReady: true,
+    videoSubmitReady: true,
+    exportReady: true,
+  },
+  agentActionEnvelope: stagedFolderAssetFeedback.action,
+});
+const promotedFolderAsset = confirmedFolderAssetFeedback.nextProject?.assets.find((asset) => asset.id === folderScannedAssetId);
+assert(confirmedFolderAssetFeedback.status === "project_patch_written", "confirmed folder-scanned asset feedback should write Project.vibe");
+assert(promotedFolderAsset, "confirmed folder-scanned asset feedback should promote the folder material into Project.vibe assets");
+assert(promotedFolderAsset?.kind === "character", "promoted folder material should keep the inferred character kind");
+assert(promotedFolderAsset?.path === "assets/characters/demo-hero-character.md", "promoted folder material should keep its project-relative path");
+assert(promotedFolderAsset?.roleBinding?.role === "character_identity", "promoted folder material should receive the confirmed character role binding");
+assert(promotedFolderAsset?.textConstraints.some((item) => item.includes("这是主角角色参考")), "promoted folder material should keep the creator confirmation as an asset constraint");
+assert(confirmedFolderAssetFeedback.nextProject?.visualMemory.entries.some((entry) =>
+  entry.assetId === folderScannedAssetId && entry.roleBinding?.role === "character_identity"
+), "promoted folder material should be mirrored into visual memory");
+assert(confirmedFolderAssetFeedback.confirmResult?.runReceipt?.evidenceRefs.includes(`project.vibe#assets/${folderScannedAssetId}`), "run receipt should cite the promoted folder asset");
+assert(confirmedFolderAssetFeedback.confirmResult?.runReceipt?.evidenceRefs.includes(`project.vibe#assets/${folderScannedAssetId}/roleBinding`), "run receipt should cite promoted asset role binding evidence");
 
 const alreadyLockedAssetApproval = runDirectorProductAgentLoop({
   project,
@@ -824,6 +912,60 @@ const stagedProjectFeedback = runDirectorProductAgentLoop({
 assert(stagedProjectFeedback.status === "awaiting_confirmation", "project feedback should stage before writing");
 assert(stagedProjectFeedback.action.target.kind === "project", "project feedback without a selection should target the whole project");
 assert(stagedProjectFeedback.projectVibeWritten === false, "staged project feedback must not mutate Project.vibe");
+
+const selectedShotProjectReference = runDirectorProductAgentLoop({
+  project,
+  runtimeState,
+  userIntent: "继续补齐这个项目缺失的视频参考：角色、场景和关键道具。只生成参考，不提交视频。",
+  userConfirmed: false,
+  generatedAt,
+  projectRoot,
+  projectPath: projectVibeFileName,
+  selection: {
+    currentView: "story",
+    selectedShotId: "shot_002",
+  },
+  availability: {
+    projectReady: true,
+    webSearchReady: true,
+    referenceGenerationReady: true,
+    videoSubmitReady: true,
+    exportReady: true,
+  },
+});
+assert(selectedShotProjectReference.status === "awaiting_confirmation", "whole-project reference request should stage before writing");
+assert(selectedShotProjectReference.action.kind === "prepare_reference_generation", "whole-project reference request should prepare reference generation");
+assert(selectedShotProjectReference.action.target.kind === "project", "explicit project reference request must not inherit the selected shot target");
+
+const confirmedSelectedShotProjectReference = runDirectorProductAgentLoop({
+  project,
+  runtimeState,
+  userIntent: selectedShotProjectReference.action.sourceContext.userIntent,
+  userConfirmed: true,
+  generatedAt,
+  projectRoot,
+  projectPath: projectVibeFileName,
+  selection: {
+    currentView: "story",
+    selectedShotId: "shot_002",
+  },
+  availability: {
+    projectReady: true,
+    webSearchReady: true,
+    referenceGenerationReady: true,
+    videoSubmitReady: true,
+    exportReady: true,
+  },
+  agentActionEnvelope: selectedShotProjectReference.action,
+});
+assert(confirmedSelectedShotProjectReference.status === "tool_ready", "confirmed whole-project reference request should prepare the reference tool");
+assert(confirmedSelectedShotProjectReference.toolHandoff.invocation?.targetSummary.kind === "project", "whole-project reference handoff should remain project-scoped");
+assert(confirmedSelectedShotProjectReference.toolHandoff.invocation?.selectedShotIds.length === 0, "whole-project reference handoff must not carry the UI-selected shot");
+assert(confirmedSelectedShotProjectReference.toolHandoff.invocation?.taskEnvelope.sourceContext.selectedShotIds.length === 0, "whole-project reference task envelope must not carry the UI-selected shot");
+assert(
+  (confirmedSelectedShotProjectReference.confirmResult?.runReceipt?.affectedShotIds.length || 0) > 1,
+  "whole-project reference writeback should affect the project, not only the selected shot",
+);
 
 const blockedMissingShotFeedbackLoop = runDirectorProductAgentLoop({
   project,

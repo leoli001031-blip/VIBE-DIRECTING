@@ -1,0 +1,35 @@
+[
+  {
+    "id": "shot_storyboard_1-1",
+    "title": "雨夜偶遇发光车票",
+    "durationSeconds": 6,
+    "referenceStrategy": "omni_reference",
+    "status": "planned",
+    "primaryAction": "女孩发现发光车票，身体微倾准备捡起",
+    "sceneGuidance": [
+      "雨夜街边自动售货机前"
+    ],
+    "characterGuidance": [
+      "戴耳机的女孩"
+    ],
+    "propGuidance": [
+      "发光车票"
+    ]
+  },
+  {
+    "id": "shot_storyboard_1-2",
+    "title": "末班电车亮灯",
+    "durationSeconds": 4,
+    "referenceStrategy": "omni_reference",
+    "status": "planned",
+    "primaryAction": "电车亮灯驶近，完成命运宣告",
+    "sceneGuidance": [
+      "雨夜街道",
+      "远处电车轨道"
+    ],
+    "characterGuidance": [
+      "戴耳机的女孩"
+    ],
+    "propGuidance": []
+  }
+]

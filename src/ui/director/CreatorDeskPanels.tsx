@@ -162,6 +162,8 @@ function inboxKindLabel(kind: CreatorDeskProjection["projectInbox"]["items"][num
   if (kind === "storyboard") return "故事板";
   if (kind === "voice") return "声音";
   if (kind === "video") return "视频";
+  if (kind === "prompt") return "提示词";
+  if (kind === "receipt") return "生成证据";
   if (kind === "export") return "交付";
   if (kind === "reference") return "参考";
   return "待判断";
@@ -244,7 +246,7 @@ function creatorAssetNextActionForView(
   if (!assetReconciliation || !assetReconciliation.summary.total) return "继续整理";
   if (referenceGenerationBusy) return "正在生成参考";
   if (isBatchGenerationRunning(batchGeneration)) return "正在生成参考";
-  if (assetReconciliation.summary.missing > 0) return "点确认后准备参考";
+  if (assetReconciliation.summary.missing > 0) return "确认后准备参考";
   if (assetReconciliation.summary.needsReview + assetReconciliation.summary.ambiguous > 0) return "点开确认素材";
   return assetReconciliation.nextAction;
 }
@@ -350,6 +352,8 @@ function inboxCorrectionHint(item: ProjectInboxItem) {
   if (item.kind === "prop") return `点选后可说：这是哪个道具${target}`;
   if (item.kind === "storyboard") return `点选后可说：这张故事板给哪一段用${target}`;
   if (item.kind === "video") return `点选后可说：这是哪一段回流视频或剪辑素材${target}`;
+  if (item.kind === "prompt") return `点选后可说：这份提示词对应哪一段${target}`;
+  if (item.kind === "receipt") return `点选后可说：这是哪次生成的证据${target}`;
   if (item.kind === "export") return "点选后可说：这是最终成片、交付文件还是剪辑工程";
   if (item.kind === "script") return "点选后可说：这是脚本、台词还是修改意见";
   return `点选后可说：这个素材应该当什么用${target}`;
@@ -530,18 +534,36 @@ export function CreatorDeskPanels({
   const actionableCount = pendingCount(reviewTray);
   const videoWaiting = videoWaitingCount(videoGeneration);
   const currentVideoPosition = videoPosition(videoGeneration);
-  const videoCanResume = Boolean(videoSendAction?.canResume || videoGeneration.canResume) && videoGeneration.status !== "completed";
-  const videoTaskActive = hasActiveVideoTask(videoGeneration);
   const projectStatusStage = projectStatusView?.stage || "";
+  const videoSubmitCancelled = videoSendAction?.status === "blocked" && /已取消，本次没有发送/.test(videoSendAction.message || "");
+  const projectVideoBlocked = Boolean(
+    projectStatusStage.startsWith("视频待处理")
+      || projectStatusStage === "动作需要处理"
+      || (videoSendAction?.status === "blocked" && !videoSubmitCancelled)
+      || videoGeneration.status === "failed",
+  );
+  const videoReturnedForReview = videoStage.status === "needs_review" || videoStage.status === "completed";
+  const videoCanResume = Boolean(videoSendAction?.canResume || videoGeneration.canResume || videoStage.canResume) && !videoReturnedForReview;
+  const videoTaskActive = !videoReturnedForReview && hasActiveVideoTask(videoGeneration);
+  const displayVideoTaskActive = videoTaskActive && !projectVideoBlocked;
   const projectStatusExportCopy = `${projectStatusView?.nextAction || ""} ${projectStatusView?.waitingFor || ""}`;
+  const videoReviewTakingFocus = videoReturnedForReview
+    || projectStatusStage === "视频待确认"
+    || projectStatusStage === "视频结果已出";
   const exportFlowTakingFocus = Boolean(
     projectStatusStage === "可以导出"
       || projectStatusStage.startsWith("导出")
       || (projectStatusStage === "视频结果已出" && /交付|导出/.test(projectStatusExportCopy)),
   );
-  const videoFlowTakingFocus = !exportFlowTakingFocus && (videoTaskActive || videoCanResume || Boolean(projectStatusView?.stage?.startsWith("视频")));
+  const videoFlowTakingFocus = !exportFlowTakingFocus && (
+    videoReviewTakingFocus
+      || projectVideoBlocked
+      || displayVideoTaskActive
+      || videoCanResume
+      || Boolean(projectStatusView?.stage?.startsWith("视频"))
+  );
   const primaryFlowTakingFocus = exportFlowTakingFocus || videoFlowTakingFocus;
-  const videoActionRelevant = videoGeneration.status !== "completed";
+  const videoActionRelevant = !videoReturnedForReview && videoGeneration.status !== "completed";
   const referenceGenerationBusy = referenceGenerationAction?.status === "running";
   const projectRequirement = agentProjectRequirementCopy({ localProjectBusy, canCreateLocalProject });
   const hasStoryDraftForProject = scriptPlanner.shotCount > 0 || framePlan.items.length > 0;
@@ -557,7 +579,8 @@ export function CreatorDeskPanels({
   const statusSummary = projectStatusView?.doing?.trim();
   const statusDetail = projectStatusView?.waitingFor?.trim();
   const submitVideoCommandVisible =
-    commandIsSubmitVideo(displayAgentCommand) || /发送视频|提交视频/.test(normalizedLabel(statusNextAction || ""));
+    !projectVideoBlocked
+    && (commandIsSubmitVideo(displayAgentCommand) || /发送视频|提交视频/.test(normalizedLabel(statusNextAction || "")));
   const nextActionCopy = videoCanResume
     ? "查询结果"
     : statusNextAction || (!localProjectReady
@@ -593,10 +616,10 @@ export function CreatorDeskPanels({
         .slice(0, 6);
   const showProjectInbox = projectInbox.totalCount > 0 && !submitVideoCommandVisible && !primaryFlowTakingFocus;
   const projectInboxDefaultOpen = showProjectInbox && projectInbox.needsReviewCount > 0 && reviewShortcutItems.length === 0;
-  const displayProjectInboxSummary = videoTaskActive
+  const displayProjectInboxSummary = displayVideoTaskActive
     ? `${projectInbox.totalCount} 个素材已在项目中`
     : projectInbox.summary;
-  const displayProjectInboxNextAction = videoTaskActive
+  const displayProjectInboxNextAction = displayVideoTaskActive
     ? "视频处理中，不需要再确认用途；想调整时再展开查看。"
     : projectInbox.nextAction;
   const referenceGenerationNeedsPermission =
@@ -605,13 +628,21 @@ export function CreatorDeskPanels({
   const activeVideoQueryFact = videoGeneration.taskFacts.find((fact) => fact.label === "查询")?.value;
   const activeVideoProgressParts = [activeVideoLineFact, activeVideoQueryFact].filter(Boolean);
   const activeVideoProgressSummary = (videoGeneration as unknown as Record<string, string | undefined>)[["que", "ueSummary"].join("")];
-  const activeVideoProgressSubject = videoGeneration.status === "generating"
+  const activeVideoProgressSubject = videoReviewTakingFocus
+    ? "视频结果已出"
+    : projectVideoBlocked
+    ? "视频需要处理"
+    : videoGeneration.status === "failed"
+    ? "视频提交失败"
+    : videoGeneration.status === "generating"
     ? "视频生成中"
     : videoGeneration.status === ["que", "ued"].join("")
       ? "视频排队中"
       : "视频处理中";
   const activeVideoProgressCopy = activeVideoProgressParts.length
     ? `${activeVideoProgressSubject}，${activeVideoProgressParts.join("；")}。`
+    : projectVideoBlocked
+      ? projectStatusView?.doing || videoSendAction?.message || "视频没有提交成功，需要先处理问题。"
     : activeVideoProgressSummary
       ? `${activeVideoProgressSummary}。`
       : videoCanResume
@@ -626,16 +657,16 @@ export function CreatorDeskPanels({
       : referenceGenerationBusy
         ? "参考正在生成，完成后会进入复核。"
       : videoCanResume
-        ? "点消息里的「查询结果」，不会重复发送。"
+        ? "在消息中确认「查询结果」，不会重复发送。"
       : submitVideoCommandVisible
-          ? "点消息里的确认发送下一段，仍然一次只跑一段。"
+          ? "在消息中确认发送下一段，仍然一次只跑一段。"
           : displayAgentCommand.kind === "open_preview"
             ? "在消息里确认后进入预览。"
           : displayAgentCommand.kind === "open_export"
             ? "在消息里确认后进入交付。"
           : displayAgentCommand.kind === "open_review"
-            ? "先复核参考；也可以点消息里的任务处理。"
-          : `点消息里的「${primaryActionLabel(nextActionCopy)}」继续。`;
+            ? "先复核参考；也可以在消息中继续处理。"
+          : `在消息中确认「${primaryActionLabel(nextActionCopy)}」继续。`;
   const displayCurrentTask = exportFlowTakingFocus
     ? {
         ...projectObservation.currentTask,
@@ -648,11 +679,23 @@ export function CreatorDeskPanels({
           detail: "继续输入可以修改项目；不需要再重复提交视频。",
         },
       }
-    : videoTaskActive
+    : projectVideoBlocked
+    ? {
+        ...projectObservation.currentTask,
+        missing: projectStatusView?.doing || "视频提交失败，需要处理后再继续。",
+        plan: projectStatusView?.nextAction || "检查即梦登录或 CLI 权限后重试，也可以跳过这一段。",
+        confirmation: {
+          kind: "none" as const,
+          required: false,
+          label: "先处理失败",
+          detail: projectStatusView?.waitingFor || "重试或跳过失败段。",
+        },
+      }
+    : displayVideoTaskActive
     ? {
         ...projectObservation.currentTask,
         missing: activeVideoProgressCopy,
-        plan: videoCanResume ? "点确认查询结果，不会重复提交。" : "等待即梦处理完成。",
+        plan: videoCanResume ? "确认查询结果，不会重复提交。" : "等待即梦处理完成。",
         confirmation: {
           kind: "none" as const,
           required: false,
@@ -710,7 +753,9 @@ export function CreatorDeskPanels({
     : projectObservation.currentTask;
   const displayIntentLabel = exportFlowTakingFocus
     ? "交付复核"
-    : videoTaskActive
+    : projectVideoBlocked
+    ? "处理视频"
+    : displayVideoTaskActive
     ? videoCanResume ? "查询视频" : "等待视频"
     : !localProjectReady
       ? hasStoryDraftForProject ? "准备项目" : "整理想法"
@@ -725,7 +770,11 @@ export function CreatorDeskPanels({
   const reasoningDisclosureLabel = videoFlowTakingFocus ? "视频进度" : "AI 导演怎么判断";
   const reasoningDisclosureSummary = videoFlowTakingFocus ? activeVideoProgressSubject : displayPreflight.modeSummary;
   const reasoningDisclosureDetail = videoFlowTakingFocus
-    ? activeVideoProgressParts.join(" · ") || activeVideoProgressSummary || (videoCanResume ? "点底部确认查询结果" : "等待视频结果")
+    ? videoReviewTakingFocus
+      ? projectStatusView?.waitingFor || "确认视频结果"
+      : projectVideoBlocked
+        ? projectStatusView?.waitingFor || "按提示处理后再继续"
+      : activeVideoProgressParts.join(" · ") || activeVideoProgressSummary || (videoCanResume ? "点右侧确认查询结果" : "等待视频结果")
     : displayPreflightReferenceSummary;
   const displayPreflightChecks = referenceGenerationBusy
     ? displayPreflight.checks.map((check) => check.id === "references"
@@ -988,19 +1037,19 @@ export function CreatorDeskPanels({
           <div className="creator-desk-panel batch-generation-panel">
             <div className="creator-panel-head">
               <span>画面</span>
-              <strong>{videoTaskActive ? "已用于视频" : reviewStatusLabel(batchGeneration.statusLabel)}</strong>
+              <strong>{displayVideoTaskActive ? "已用于视频" : reviewStatusLabel(batchGeneration.statusLabel)}</strong>
             </div>
-            <p>{videoTaskActive ? "参考已经进入本轮视频任务，结果出来后继续看。" : batchDetail(batchGeneration)}</p>
+            <p>{displayVideoTaskActive ? "参考已经进入本轮视频任务，结果出来后继续看。" : batchDetail(batchGeneration)}</p>
             <div className="creator-panel-metrics">
               <span><b>{batchGeneration.plannedCount}</b> 计划</span>
-              <span><b>{batchGeneration.readyCount}</b> {videoTaskActive ? "可用" : "待看"}</span>
+              <span><b>{batchGeneration.readyCount}</b> {displayVideoTaskActive ? "可用" : "待看"}</span>
               <span><b>{batchGeneration.missingCount}</b> 缺少</span>
             </div>
             <div className="batch-generation-actions">
               <small>{concurrencyLabel(batchGeneration.concurrencyLabel)}</small>
               <small>{safetyLabel(batchGeneration.safetyLabel)}</small>
               {displayAgentCommand.kind === "generate_references" ? (
-                <small>下方动作：{batchGenerationActionLabel}</small>
+                <small>Agent 建议：{batchGenerationActionLabel}</small>
               ) : null}
             </div>
           </div>
@@ -1008,9 +1057,9 @@ export function CreatorDeskPanels({
           <div className="creator-desk-panel frame-plan-panel">
             <div className="creator-panel-head">
               <span>镜头画面</span>
-              <strong>{videoTaskActive ? "视频处理中" : framePlan.readyCount ? `${framePlan.readyCount} 已通过` : "画面到视频"}</strong>
+              <strong>{projectVideoBlocked ? "视频未提交" : displayVideoTaskActive ? "视频处理中" : framePlan.readyCount ? `${framePlan.readyCount} 已通过` : "画面到视频"}</strong>
             </div>
-            <p>{videoTaskActive ? "当前段已发送给即梦；后续段会按队列继续处理。" : framePlanBrief(framePlan)}</p>
+            <p>{projectVideoBlocked ? "刚才的视频请求被拦下了，处理后再发送。" : displayVideoTaskActive ? "当前段已发送给即梦；后续段会按队列继续处理。" : framePlanBrief(framePlan)}</p>
             <div className="frame-plan-list">
               {framePlan.items.length ? framePlan.items.map((item) => (
                 <div key={item.shotId} className="frame-plan-item">
@@ -1048,10 +1097,10 @@ export function CreatorDeskPanels({
               {videoGeneration.shortSubmitId && <small>编号 {videoGeneration.shortSubmitId}</small>}
               {currentVideoPosition !== undefined && currentVideoPosition > 0 && <small>前面约 {currentVideoPosition} 个任务</small>}
               {videoGeneration.status !== "completed" && videoGeneration.status !== "failed" && (
-                <small>{videoGeneration.canResume ? "点消息里的「查询结果」，不会重复发送" : `即梦常见约 ${jimengExpectedWaitMinutes} 分钟，可以离开后查询结果`}</small>
+	                <small>{videoGeneration.canResume ? "在消息中确认「查询结果」，不会重复发送" : `即梦常见约 ${jimengExpectedWaitMinutes} 分钟，可以离开后查询结果`}</small>
               )}
               {videoSendAction && videoActionRelevant && (
-                <small>{videoCanResume ? "需要取回结果时，点消息里的查询任务。" : videoGeneration.status === "failed" ? "先处理这一段，再继续提交视频。" : "需要发送视频时，点消息里的确认任务。"}</small>
+	                <small>{videoCanResume ? "需要取回结果时，在消息中确认查询。" : videoGeneration.status === "failed" ? "先处理这一段，再继续提交视频。" : "需要发送视频时，在消息中确认发送。"}</small>
               )}
             </div>
             {videoGeneration.taskFacts.length > 0 && (

@@ -111,6 +111,7 @@ const stagedAssetLoop = runDirectorProductAgentLoop({
 });
 assert(stagedAssetLoop.status === "awaiting_confirmation", "selected asset Agent loop should stage a confirmable plan");
 assert(stagedAssetLoop.action.target.kind === "asset", "selected asset Agent plan should target the selected asset");
+assert(stagedAssetLoop.action.proposedChanges.some((change) => change.field === "assetRoleBinding" && change.to === "角色参考"), "selected asset Agent plan should preserve natural-language asset role binding");
 
 const draft = buildProjectAgentStagedPlanDraft({
   project,

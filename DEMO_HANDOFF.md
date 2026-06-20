@@ -3,7 +3,8 @@
 Current demo scope is frozen around the creator-facing loop:
 
 1. Create or open a local project folder.
-2. Send one natural-language script / idea through the unified bottom composer.
+2. Send one natural-language script / idea through the right-side Agent
+   composer.
 3. Let AI plan shots and choose one of three reference strategies:
    - `storyboard_narrative`
    - `storyboard_rapid_cut`
@@ -18,6 +19,14 @@ Do not expand scope before the demo is stable. TTS, music rhythm, web search, im
 For recording, use `docs/demo-recording-runbook.md` as the current operation
 script. This handoff file is the engineering scope summary; the runbook is the
 creator-facing demo flow.
+
+For the shortest current-state read, use
+`docs/agent-kernel-v1-demo-status.md`. It says what the demo can claim, what is
+bounded, and what should not be promised yet.
+
+Before recording, walk through `docs/demo-final-rehearsal-checklist.md`. It is
+the operator-facing proof list for fresh project setup, Agent messages, Skills,
+references, serial Seedance submit/query, preview, and export.
 
 ## Fast Demo Guardrail
 
@@ -39,7 +48,8 @@ It covers:
 
 ## Known Non-Blocking Items
 
-- Real Seedance queue recovery still needs long-running provider validation.
+- Real Seedance queue recovery still needs occasional long-running provider
+  validation.
 - `core-runtime` bundle is still large; it is a warning, not a demo blocker.
 - Packaged app uses local ad-hoc signing, not notarization.
 - Project management is usable but still not as smooth as Codex-style recent project switching.

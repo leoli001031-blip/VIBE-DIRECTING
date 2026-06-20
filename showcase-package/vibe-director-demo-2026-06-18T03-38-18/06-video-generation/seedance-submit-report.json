@@ -1,0 +1,158 @@
+{
+  "ok": true,
+  "schemaVersion": "vibe_core_local_runtime_api_v1",
+  "source": "runtime_endpoint",
+  "basePath": "/api/runtime",
+  "security": {
+    "originPolicy": "localhost_or_no_origin_only",
+    "tokenRequired": false,
+    "legacyRunEnabled": false
+  },
+  "tokenRequired": false,
+  "providerCalled": true,
+  "prepareRan": false,
+  "projectVibeWritten": false,
+  "liveSubmitAllowed": true,
+  "dryRunOnly": true,
+  "workerSpawnForbidden": true,
+  "videoSubmitted": true,
+  "runMode": "current_project_seedance_submit",
+  "endpoint": "/api/runtime/projects/current/seedance/submit",
+  "status": "failed",
+  "uiStatus": "failed",
+  "runtimeExternalNetworkCallMade": true,
+  "storyboardGenerated": true,
+  "outputRoot": ".vibe-runtime/browser-projects/project-1781737355707/video/seedance_2026-06-18T02-21-04-805Z",
+  "compilerMode": "omni_reference",
+  "compilerModeLabel": "全能参考",
+  "compilerReasons": [
+    "沿用 AI 分镜规划选择的参考模式：全能参考。"
+  ],
+  "ruleQaReportPath": ".vibe-runtime/browser-projects/project-1781737355707/video/seedance_2026-06-18T02-21-04-805Z/receipts/director-rule-qa.json",
+  "ruleQaStatus": "pass",
+  "textQaReportPath": ".vibe-runtime/browser-projects/project-1781737355707/video/seedance_2026-06-18T02-21-04-805Z/receipts/director-text-qa.json",
+  "textQaStatus": "pass",
+  "activeSegmentId": "segment_1",
+  "segmentPlan": [
+    {
+      "id": "segment_1",
+      "sceneClusterKey": "street",
+      "sceneLabel": "街道",
+      "shotIds": [
+        "shot_storyboard_1-1"
+      ],
+      "durationSeconds": 6,
+      "active": true
+    },
+    {
+      "id": "segment_2",
+      "sceneClusterKey": "scene_asset_scenestreet_街道环境",
+      "sceneLabel": "scene_street / 街道环境",
+      "shotIds": [
+        "shot_storyboard_1-2"
+      ],
+      "durationSeconds": 4,
+      "active": false
+    }
+  ],
+  "relayQueuePath": ".vibe-runtime/browser-projects/project-1781737355707/reports/video_relay_queue.json",
+  "relayQueue": {
+    "schemaVersion": "0.1.0",
+    "generatedAt": "2026-06-18T02:21:04.794Z",
+    "queueId": "seedance_segment_relay_queue",
+    "storyboardConfirmed": true,
+    "status": "idle",
+    "maxConcurrentVideoJobs": 1,
+    "authorizationPolicy": {
+      "mode": "storyboard_confirmation_authorizes_serial_relay",
+      "batchAuthorizationRequired": false,
+      "perTaskAuthorizationRequired": false,
+      "reviewStillRequired": true,
+      "notes": [
+        "Once the user confirms the storyboard/reference plan, the relay may submit the next video job serially.",
+        "No extra batch authorization or per-task authorization is required for this queue.",
+        "Returned videos still enter review and are not auto-promoted."
+      ]
+    },
+    "counts": {
+      "total": 2,
+      "ready": 1,
+      "active": 0,
+      "completed": 0,
+      "failed": 1,
+      "blocked": 0
+    },
+    "activeItemIds": [],
+    "nextReadyItemId": "seedance_segment_2",
+    "autoSubmitAllowed": true,
+    "resumeCommands": [],
+    "items": [
+      {
+        "id": "seedance_segment_1",
+        "segmentId": "segment_1",
+        "shotId": "shot_storyboard_1-1",
+        "shotIds": [
+          "shot_storyboard_1-1"
+        ],
+        "sceneClusterKey": "street",
+        "sceneLabel": "街道",
+        "title": "雨夜偶遇发光车票",
+        "status": "failed",
+        "modelVersion": "seedance2.0_vip",
+        "videoResolution": "720p",
+        "durationSeconds": 6,
+        "promptPath": ".vibe-runtime/browser-projects/project-1781737355707/video/seedance_2026-06-18T02-21-04-805Z/receipts/seedance_prompt.md",
+        "referencePaths": [
+          "assets/generated/scene_scene_street.png",
+          "assets/generated/character_asset_cd6da79884.png",
+          "assets/generated/prop_asset_151e3ffce0.png"
+        ],
+        "submitId": "8c00dfe3-f5a8-41d1-9ba5-460d5af223c0",
+        "resumeCommand": "dreamina query_result --submit_id=8c00dfe3-f5a8-41d1-9ba5-460d5af223c0 --download_dir=/Users/lichenhao/Desktop/new vibe directing/.vibe-runtime/browser-projects/project-1781737355707/video/seedance_2026-06-18T02-21-04-805Z/video",
+        "localMediaPaths": [],
+        "attemptCount": 1,
+        "blockers": [],
+        "notes": [
+          "镜头：shot_storyboard_1-1",
+          "单镜头视频段；可复用同一场景基准图。",
+          "本段已提交给 Seedance 2.0 VIP，后台排队或生成中。"
+        ]
+      },
+      {
+        "id": "seedance_segment_2",
+        "segmentId": "segment_2",
+        "shotId": "shot_storyboard_1-2",
+        "shotIds": [
+          "shot_storyboard_1-2"
+        ],
+        "sceneClusterKey": "scene_asset_scenestreet_街道环境",
+        "sceneLabel": "scene_street / 街道环境",
+        "title": "末班电车亮灯",
+        "status": "ready",
+        "modelVersion": "seedance2.0_vip",
+        "videoResolution": "720p",
+        "durationSeconds": 4,
+        "referencePaths": [],
+        "localMediaPaths": [],
+        "attemptCount": 0,
+        "blockers": [],
+        "notes": [
+          "镜头：shot_storyboard_1-2",
+          "单镜头视频段；可复用同一场景基准图。"
+        ]
+      }
+    ],
+    "userSummary": "后续视频段已准备好，需要你明确确认后再提交。",
+    "notes": [
+      "Jimeng/Seedance is treated as a serial provider: maxConcurrentVideoJobs=1.",
+      "Queue state should be persisted beside Project.vibe/runtime state before a packaged app auto-runner is enabled.",
+      "Use saved submitId/resumeCommand to recover queued jobs instead of resubmitting."
+    ]
+  },
+  "promptPath": ".vibe-runtime/browser-projects/project-1781737355707/video/seedance_2026-06-18T02-21-04-805Z/receipts/seedance_prompt.md",
+  "submitLogPath": ".vibe-runtime/browser-projects/project-1781737355707/video/seedance_2026-06-18T02-21-04-805Z/receipts/dreamina-submit.json",
+  "previewPlanPath": ".vibe-runtime/browser-projects/project-1781737355707/reports/preview_plan.json",
+  "submitId": "8c00dfe3-f5a8-41d1-9ba5-460d5af223c0",
+  "resumeCommand": "dreamina query_result --submit_id=8c00dfe3-f5a8-41d1-9ba5-460d5af223c0 --download_dir=/Users/lichenhao/Desktop/new vibe directing/.vibe-runtime/browser-projects/project-1781737355707/video/seedance_2026-06-18T02-21-04-805Z/video",
+  "message": "Seedance 2.0 VIP 已提交代表性第 1/2 段；本轮不批量提交，后台等待结果即可。"
+}

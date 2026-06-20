@@ -1,0 +1,26 @@
+{
+  "submit_id": "83bf52d2-3fd2-49b1-8489-3a7933a9b749",
+  "prompt": "全能参考 video request.\nUse the attached references and written direction only.\nCreate exactly 1 continuous visible clip. Do not create extra visible cuts from reference images.\nTotal duration: 6s.\nNo text overlays, subtitles, logos, watermarks, UI, panels, or prompt artifacts.\n\nUse Image 1 only as environment reference: rainy night color mood and soft reflected light. Adapt it to a train interior and window reflection; do not turn the environment image into an extra shot.\nUse Image 2 only as character identity reference. Preserve the headphone girl identity, hair, age impression, outfit silhouette, and 2D anime face category.\nUse Image 3 only as object appearance reference for 发光车票 inside the described action. Do not render it as a catalog image, extra insert, split screen, or standalone clip.\n\nTiming:\n0-6s: visible cut 1/1, 车窗里出现另一个自己. 电车驶入微亮天色，女孩在车窗反射里看见另一个自己。\n\nShot direction:\nCut 4: 车窗里出现另一个自己\nduration: 6s, one continuous clip\nvisual: 空荡的末班电车内，戴耳机的少女坐在靠窗位置，手里握着微微发光的车票。窗外雨夜渐渐变成冷蓝色清晨，玻璃上先映出她疲惫的侧脸，随后反射里短暂出现另一个一模一样的她，站在车厢另一端安静望着她。女孩慢慢抬眼，车票光芒在她指尖和窗玻璃之间跳动。\ncamera: 靠窗中近景，缓慢推近她的侧脸和车窗反射，最后停在她意识到异样的一瞬。\naction: 电车驶入微亮天色，女孩在车窗反射里看见另一个自己。\ntrigger: 窗外第一道晨光穿过雨痕，车票光芒突然和车窗反射重合。\nreaction: 她呼吸停住，眼神从茫然变成惊讶，但动作很克制。\ncharacter cue: 戴耳机的女孩 / 车窗反射里的另一个自己\nenvironment cue: 空荡末班电车 / 雨夜转向微亮清晨\nobject cue: 发光车票\n\nStyle: original 1990s Japanese TV anime look, restrained color, clean cel shading, soft painted backgrounds, handmade 2D animation feel, quiet emotional restraint, subtle eye and hand acting, natural pauses, No photorealism, no glossy 3D, no game render.\nNo music, no BGM, no subtitles.",
+  "gen_status": "success",
+  "result_json": {
+    "images": [],
+    "videos": [
+      {
+        "path": ".vibe-runtime/browser-projects/project-1781737355707/video/showcase_4shot_2026-06-18/shot_4/video/83bf52d2-3fd2-49b1-8489-3a7933a9b749_video_1.mp4",
+        "fps": 24,
+        "width": 1280,
+        "height": 720,
+        "format": "mp4",
+        "duration": 6.042
+      }
+    ]
+  },
+  "credit_count": 84,
+  "queue_info": {
+    "queue_idx": 0,
+    "priority": 1,
+    "queue_status": "Finish",
+    "queue_length": 0,
+    "debug_info": "{\"have_no_dreamina_queue_name\":false,\"dreamina_matrix_queue_name\":\"dreamina_fusion_video40_pro_vision\",\"dreamina_matrix_req_key\":\"DreaminaFusion:Video40_Pro_Vision_unified_edit_720p\",\"dreamina_matrix_second_req_key\":\"\",\"have_no_queue_name\":true,\"queue_name\":\"\",\"matrix_req_key\":\"\",\"matrix_second_req_key\":\"\"}"
+  }
+}

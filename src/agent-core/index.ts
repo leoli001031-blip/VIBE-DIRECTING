@@ -11,7 +11,7 @@ export * from "./permissionGate";
 export * from "./productExecutionAdapter";
 export * from "./runtimeAdapter";
 export * from "./runAgentTurn";
-export * from "./timelineStore";
+export * from "./timelineDocument";
 export * from "./timelineStatusView";
 export * from "./toolEvents";
 export * from "./types";

@@ -124,6 +124,33 @@ function assertUnifiedProjectStatusVideoStage() {
   assert(status.facts.some((fact) => fact.label === "声音" && fact.value.includes("声音参考")), "project facts should include voice reference status");
   assert(!status.facts.some((fact) => fact.label === "AI 导演" && fact.value === "查询视频结果"), "active video facts should not duplicate the bottom query action");
 
+  const cancelledSubmitStatus = buildProjectStatusViewModel({
+    runtimeState,
+    folderReady: true,
+    projectReady: true,
+    directorView: "story",
+    videoSendAction: {
+      status: "idle",
+      message: "已取消，本次没有发送；需要时可以重新确认。",
+    },
+  });
+  assert(cancelledSubmitStatus.stage !== "视频待处理", "cancelled video confirmation must not become a video problem state");
+  assert(!cancelledSubmitStatus.waitingFor.includes("补参考"), "cancelled video confirmation must not ask users to fix references");
+  assert(!cancelledSubmitStatus.nextAction.includes("补参考"), "cancelled video confirmation must remain retryable instead of routing to reference recovery");
+
+  const legacyBlockedCancelledSubmitStatus = buildProjectStatusViewModel({
+    runtimeState,
+    folderReady: true,
+    projectReady: true,
+    directorView: "story",
+    videoSendAction: {
+      status: "blocked",
+      message: "已取消，本次没有发送。",
+    },
+  });
+  assert(legacyBlockedCancelledSubmitStatus.stage !== "视频待处理", "legacy cancelled video confirmation records must not reopen a blocked video lane");
+  assert(!legacyBlockedCancelledSubmitStatus.waitingFor.includes("补参考"), "legacy cancelled video confirmations must not ask users to fix references");
+
   const failedStatus = buildProjectStatusViewModel({
     runtimeState,
     folderReady: true,
@@ -149,6 +176,8 @@ function assertUnifiedProjectStatusVideoStage() {
   });
   assert(failedStatus.stage === "视频待处理", "failed video task facts should still drive the top status");
   assert(failedStatus.facts.some((fact) => fact.label === "失败原因" && fact.value.includes("生成失败")), "failed video status should expose the failure reason in top facts");
+  assert(failedStatus.nextAction.includes("检查即梦登录"), "plain provider failures should guide users to fix provider/login state instead of adding references");
+  assert(!failedStatus.nextAction.includes("补参考"), "plain provider failures must not be misclassified as reference QA blockers");
 
   const qaBlockedStatus = buildProjectStatusViewModel({
     runtimeState,
@@ -168,7 +197,7 @@ function assertUnifiedProjectStatusVideoStage() {
         taskFacts: [
           { label: "当前段", value: "追逐蓝光奔向列车" },
           { label: "原因", value: "场景参考无法覆盖深夜街道到站台入口。" },
-          { label: "建议", value: "可以在底部说：只补参考，补一张覆盖完整行动范围的场景/天气参考，先不要提交视频；也可以让 AI 把这一段改到现有场景内。" },
+          { label: "建议", value: "可以在右侧输入框说：只补参考，补一张覆盖完整行动范围的场景/天气参考，先不要提交视频；也可以让 AI 把这一段改到现有场景内。" },
           { label: "下一步", value: "先补参考或改这一段，再提交" },
         ],
       },
@@ -354,6 +383,40 @@ function assertUnifiedProjectStatusVideoStage() {
   assert(localProjectMissingReferenceStatus.doing === "还缺 3 张画面参考", "missing reference state should explain the creative reference gap");
   assert(localProjectMissingReferenceStatus.nextAction === "生成参考", "local project next action should generate references before routing to review");
 
+  const frameGapMustOverrideLockedReferenceStatus = buildProjectStatusViewModel({
+    runtimeState: {
+      ...runtimeState,
+      visualMemory: {
+        ...runtimeState.visualMemory,
+        summary: { locked: 1, needsReview: 0, missing: 0 },
+      },
+    },
+    folderReady: true,
+    projectReady: true,
+    directorView: "story",
+    framePlan: { missingCount: 3 },
+    referenceGenerationAction: {
+      status: "ready",
+      message: "准备先生成角色、场景、关键道具或故事板参考。",
+    },
+    agentCommand: {
+      label: "生成参考",
+      summary: "补画面",
+      detail: "准备生成参考",
+    },
+    agentTimelineStatus: {
+      stage: "AI 导演",
+      doing: "旧消息里说参考可看。",
+      waitingFor: "你的下一句指令",
+      nextAction: "去参考页确认可用素材",
+      tone: "ready",
+      facts: [{ label: "参考", value: "已可用" }],
+    },
+  });
+  assert(frameGapMustOverrideLockedReferenceStatus.stage === "参考待生成", "frame/storyboard gaps must override optimistic locked-reference status");
+  assert(frameGapMustOverrideLockedReferenceStatus.facts.find((fact) => fact.label === "参考")?.value !== "已可用", "missing frame references must not show reference facts as usable");
+  assert(frameGapMustOverrideLockedReferenceStatus.nextAction === "生成参考", "missing frame references must not route users to review usable assets");
+
   const planOnlyMissingReferenceStatus = buildProjectStatusViewModel({
     runtimeState: {
       ...runtimeState,
@@ -371,13 +434,13 @@ function assertUnifiedProjectStatusVideoStage() {
     },
     agentCommand: {
       kind: "generate_references",
-      label: "允许生成参考",
-      summary: "参考还缺，等你允许后再生成。",
-      detail: "当前工作范围是先整理。",
+      label: "确认生成参考",
+      summary: "参考还缺，确认后再生成。",
+      detail: "当前执行方式是只出计划。",
     },
   });
-  assert(planOnlyMissingReferenceStatus.waitingFor === "等待你允许生成参考", "plan-only missing references should ask for permission instead of implying generation is already the next step");
-  assert(planOnlyMissingReferenceStatus.nextAction === "允许生成参考", "plan-only missing references should expose permission wording as the next action");
+  assert(planOnlyMissingReferenceStatus.waitingFor === "等待你确认生成参考", "plan-only missing references should ask for confirmation instead of implying generation is already the next step");
+  assert(planOnlyMissingReferenceStatus.nextAction === "确认生成参考", "plan-only missing references should expose confirmation wording as the next action");
 
   const localProjectRunningReferenceStatus = buildProjectStatusViewModel({
     runtimeState: {
@@ -649,6 +712,9 @@ function assertCreatorPanelContract() {
   assert(/useState<ProjectCurrentBindingStatus>\(\s*\(\)\s*=>\s*currentProjectBindingStatusFromBootstrap\(\)/.test(currentProjectRuntimeSurface), "current project hook must initialize from bootstrapped binding before async runtime fetch");
   assert(/__VIBE_CURRENT_PROJECT_BINDING__/.test(viteConfigSource), "Vite dev preview must bootstrap the current project binding for restricted browser surfaces");
   assert(/vibe-current-project-binding/.test(viteConfigSource), "Vite dev preview must also expose current project binding through DOM metadata");
+  assert(/"Cache-Control":\s*"no-store"/.test(viteConfigSource), "Vite dev preview must not let stale HTML/module cache hide current Agent UI changes");
+  assert(/function noStoreDevCachePlugin\(\)[\s\S]*res\.writeHead[\s\S]*Cache-Control",\s*"no-store"[\s\S]*Pragma",\s*"no-cache"[\s\S]*Expires",\s*"0"/.test(viteConfigSource), "Vite dev preview must force no-store on transformed module responses, not only HTML headers");
+  assert(/plugins:\s*\[noStoreDevCachePlugin\(\),\s*currentProjectBindingBootstrapPlugin\(\),\s*react\(\)\]/.test(viteConfigSource), "Vite dev preview cache guard must run before other dev middleware");
   assert(/currentProjectBindingStatusFromBootstrap[\s\S]*__VIBE_CURRENT_PROJECT_BINDING__[\s\S]*currentProjectBindingFromMeta[\s\S]*deriveCurrentProjectBindingStatus/.test(currentProjectBindingClientSource), "frontend must fall back to the bootstrapped current project binding when runtime fetch is unavailable");
   assert(currentProjectBindingClientSource.includes('querySelector<HTMLMetaElement>(\'meta[name="vibe-current-project-binding"]\')'), "frontend must read DOM metadata when the browser hides injected window globals");
   assert(/projectCurrentAgentTimelineEndpoint/.test(currentProjectBindingClientSource), "current project client must expose an Agent timeline runtime endpoint");
@@ -674,7 +740,7 @@ function assertCreatorPanelContract() {
   assert(/setLoadedPrototypeProjectDraftTargetId\(prototypeProjectDraftTargetId\);\s*loadedPrototypeProjectDraftStorageModeRef\.current\s*=\s*"browser"/.test(app), "browser draft restore must mark the loaded storage mode as browser");
   assert(/loadedPrototypeProjectDraftTargetId === prototypeProjectDraftTargetId[\s\S]*loadedPrototypeProjectDraftStorageModeRef\.current === "local"/.test(app), "local project restore must not be skipped by an earlier browser draft load");
   assert(/setLoadedPrototypeProjectDraftTargetId\(prototypeProjectDraftTargetId\);\s*loadedPrototypeProjectDraftStorageModeRef\.current\s*=\s*"local"/.test(app), "local project restore must mark the loaded storage mode as local after reading Project.vibe sidecars");
-  assert(/loadCurrentProjectAgentTimelineTextFromRuntime\(\{[\s\S]*projectId:\s*expectedProjectId[\s\S]*projectRoot:\s*runtimeProjectBinding\.projectRoot[\s\S]*parseVibeAgentTimelineDocument\(JSON\.parse\(result\.content\)\)[\s\S]*setRestoredAgentTimelineEntries\(parsed\.timeline\.entries\)/.test(app), "runtime-bound projects must restore Agent timeline through the runtime sidecar when browser file storage is unavailable");
+  assert(/openProjectAgentTimeline\(prototypeProjectDraftTarget,\s*\{[\s\S]*project:\s*prototypeProjectVibeRef\.current[\s\S]*projectRoot:\s*runtimeProjectBinding\.projectRoot[\s\S]*setRestoredAgentTimelineEntries\(timelineOpen\.timeline\.entries\)/.test(app), "runtime-bound projects must restore Agent timeline through the unified sidecar resolver");
   assert(/if\s*\(runtimeProjectBinding\.status !== "bound" \|\| !runtimeProjectBinding\.projectRoot\) return;[\s\S]*if\s*\(selectedProjectIsLocalProject\) return;[\s\S]*setProjectFileSelection\(\{[\s\S]*runtimeProjectBinding\.projectRoot/.test(app), "runtime-bound local projects must replace temporary browser drafts in project selection");
   assert(/if\s*\(selectedProjectUsesBrowserDraftStorage\)\s*\{[\s\S]*草案已临时保存[\s\S]*setLoadedPrototypeProjectDraftTargetId\(prototypeProjectDraftTargetId\)[\s\S]*restoreBrowserDraftStateAndAgentSidecars[\s\S]*return \(\) =>/.test(app), "browser draft restore must use the temporary-project path without creating an empty local project");
   assert(/restoreBrowserDraftStateAndAgentSidecars[\s\S]*openProjectVibeDraft\(prototypeProjectDraftTarget\)[\s\S]*if\s*\(result\.ok && result\.project\)[\s\S]*applyProjectVibeProjectState\(result\.project, prototypeProjectDraftTarget\)/.test(app), "browser draft restore must recover the saved story before restoring Agent messages");
@@ -714,6 +780,11 @@ function assertCreatorPanelContract() {
   assert(/onRetryReviewItem=\{\(item\)\s*=>\s*applyCreatorReviewDecision\(item,\s*"retry"\)\}/.test(app), "DirectorMode must route per-item retry through Project.vibe review decisions");
   assert(/onRejectReviewItem=\{\(item\)\s*=>\s*applyCreatorReviewDecision\(item,\s*"reject"\)\}/.test(app), "DirectorMode must route reject through Project.vibe review decisions");
   assert(/submitCurrentProjectReviewDecision\(effectiveRuntimeProjectIdentity,\s*\{/.test(app), "review decisions must use the current project runtime route when a project folder is bound");
+  assert(/if \(item\.assetId && rejectMode\)/.test(app), "asset-backed rejects may use the fast asset-status path");
+  assert(!/item\.assetId && \(promotionMode \|\| rejectMode\)/.test(app), "Review Tray locks must not bypass the Project.vibe review decision route");
+  assert(/function projectRelativeReviewMediaPath/.test(appSource), "Review decisions must normalize media paths to project-relative paths");
+  assert(/outputPath:\s*reviewMediaPath/.test(app), "Review decision outputPath must use the project-relative media path");
+  assert(!/outputPath:\s*item\.mediaPath/.test(app), "Review decisions must not write raw item.mediaPath into Project.vibe");
   assert(/onRunProjectRealChain=\{runProjectRealChain\}/.test(appSource), "DirectorMode must pass runtime status run-check handler to the project panel");
   assert(/onRunProjectImage2Batch=\{runProjectImage2Batch\}/.test(appSource), "DirectorMode must pass Image2 batch run-check handler to the project panel");
   assert(/function\s+assetGenerationTarget/.test(image2AssetGenerationActionSource), "Reference completion must derive its target from the current selection");
@@ -738,9 +809,11 @@ function assertCreatorPanelContract() {
   assert(/storyboardStatusTone[\s\S]*strategy === "omni_reference" \? "ok" : "warn"/.test(minimalStoryFlowSource), "storyboard reference UI should not mark missing storyboard images as ready");
   assert(/没有拿到结果图，可以再次生成重试/.test(p6RealImage2ActionSource), "real Image2 UI action should tell the creator a failed result can be retried");
   assert(/如果网络中断，可以稍后再次生成/.test(p6RealImage2ActionSource), "real Image2 running copy should set retry expectation for long network requests");
-  assert(/import\s+\{\s*DirectorMode\s*\}\s+from\s+"\.\/ui\/director\/DirectorModeShell"/.test(appSource), "App must mount the extracted DirectorModeShell");
+  assert(/import\s+\{\s*DirectorMode\s*\}\s+from\s+"\.\/ui\/director\/DirectorModeShell(?:AgentKernel(?:V\d+)?)?"/.test(appSource), "App must mount the extracted DirectorModeShell");
   assert(/import\s+\{\s*MinimalAgentPanel\s*\}\s+from\s+"\.\/MinimalAgentPanel"/.test(directorModeSource), "DirectorMode must mount the extracted MinimalAgentPanel");
+  assert(!/\?agent-kernel-v\d+/.test(directorModeSource), "DirectorMode must not pin Agent UI imports with fixed query strings");
   assert(/import\s+\{\s*CreatorDeskPanels\s*\}\s+from\s+"\.\/CreatorDeskPanels"/.test(directorModeSource), "DirectorMode must mount the creator desk panels");
+  assert(/const storySections = \(view\.storySections \|\| \[\]\)[\s\S]*runtimeShotIds\.has\(shotId\)/.test(directorModeSource), "DirectorMode must tolerate missing story sections and keep them aligned with runtime shots");
   assert(/buildProjectStatusViewModel\(\{[\s\S]*videoStage:\s*creatorDesk\?\.videoStage/.test(directorModeSource), "DirectorMode must feed CreatorDesk videoStage into the unified project status");
   assert(/videoStage\.generation\?\.queueSummary/.test(projectStatusViewModelSource), "Unified project status must summarize serial video queue progress");
   const creatorDeskPanelCopy = extractStringLiterals(creatorDeskPanelsSource);
@@ -753,7 +826,13 @@ function assertCreatorPanelContract() {
   assert(/displayAgentCommand[\s\S]*nextActionCopy[\s\S]*displayAgentCommand\.label/.test(creatorDeskPanelsSource), "Creator desk summary copy must come from the boundary-aware Agent command");
   assert(/displayAgentCommand\.kind === "open_preview"/.test(creatorDeskPanelsSource), "Creator desk preview hint must follow the Agent command");
   assert(/displayAgentCommand\.kind === "open_export"/.test(creatorDeskPanelsSource), "Creator desk export hint must follow the Agent command");
-  assert(/const displayCurrentTask = exportFlowTakingFocus[\s\S]*交付内容已经整理好[\s\S]*videoTaskActive[\s\S]*查询结果[\s\S]*referenceGenerationBusy[\s\S]*参考正在生成，不需要重复操作[\s\S]*label:\s*"正在生成参考"[\s\S]*displayCurrentTask\.confirmation/.test(creatorDeskPanelsSource), "Creator desk current task must prioritize export/video/reference work and must not keep asking for stale confirmations");
+  assert(/const displayVideoTaskActive = videoTaskActive && !projectVideoBlocked/.test(creatorDeskPanelsSource), "Creator desk must not present QA-blocked submit attempts as active video generation");
+  assert(/videoSubmitCancelled[\s\S]*已取消，本次没有发送[\s\S]*videoSendAction\?\.status === "blocked" && !videoSubmitCancelled/.test(creatorDeskPanelsSource), "Creator desk must not treat legacy cancelled video confirmations as blocked video work");
+  assert(/const displayCurrentTask = exportFlowTakingFocus[\s\S]*交付内容已经整理好[\s\S]*projectVideoBlocked[\s\S]*先处理失败[\s\S]*displayVideoTaskActive[\s\S]*查询结果[\s\S]*referenceGenerationBusy[\s\S]*参考正在生成，不需要重复操作[\s\S]*label:\s*"正在生成参考"[\s\S]*displayCurrentTask\.confirmation/.test(creatorDeskPanelsSource), "Creator desk current task must prioritize export/blocked-video/active-video/reference work and must not keep asking for stale confirmations");
+  assert(/const videoReturnedForReview = videoStage\.status === "needs_review" \|\| videoStage\.status === "completed"[\s\S]*const videoCanResume = Boolean\(videoSendAction\?\.canResume \|\| videoGeneration\.canResume \|\| videoStage\.canResume\) && !videoReturnedForReview[\s\S]*const videoTaskActive = !videoReturnedForReview && hasActiveVideoTask\(videoGeneration\)/.test(creatorDeskPanelsSource), "Creator desk query affordance and active-task copy must stop once a video result is ready to review");
+  assert(/const videoActionRelevant = !videoReturnedForReview && videoGeneration\.status !== "completed"/.test(creatorDeskPanelsSource), "Creator desk must not show stale submit/query action messages after a video result returns for review");
+  assert(/const videoReviewTakingFocus = videoReturnedForReview[\s\S]*projectStatusStage === "视频待确认"[\s\S]*projectStatusStage === "视频结果已出"[\s\S]*const videoFlowTakingFocus = !exportFlowTakingFocus && \([\s\S]*videoReviewTakingFocus[\s\S]*projectVideoBlocked[\s\S]*displayVideoTaskActive/.test(creatorDeskPanelsSource), "Creator desk must keep returned or blocked video state in the video lane without treating it as an active queue");
+  assert(/const activeVideoProgressSubject = videoReviewTakingFocus[\s\S]*\? "视频结果已出"[\s\S]*const reasoningDisclosureDetail = videoFlowTakingFocus[\s\S]*videoReviewTakingFocus[\s\S]*projectStatusView\?\.waitingFor \|\| "确认视频结果"/.test(creatorDeskPanelsSource), "Creator desk video explanation must say returned videos are ready for review instead of still processing");
   assert(/!localProjectReady[\s\S]*还没有本地项目文件夹[\s\S]*projectRequirement\.label[\s\S]*referenceGenerationNeedsPermission/.test(creatorDeskPanelsSource), "Creator desk must ask for a local project before showing reference-generation permission copy");
   assert(/referenceGenerationNeedsPermission[\s\S]*等你允许后再生成参考[\s\S]*label:\s*"等待你允许"/.test(creatorDeskPanelsSource), "Creator desk current task must show permission wording when the user asked to plan only");
   assert(/function\s+commandIsSubmitVideo\([\s\S]*发送视频\|提交视频/.test(creatorDeskPanelsSource), "Creator desk must detect the visible submit-video command even when it is permission-wrapped");
@@ -799,7 +878,7 @@ function assertCreatorPanelContract() {
   assert(/const projectStatusStage = projectStatusView\?\.stage \|\| ""/.test(creatorDeskPanelsSource), "Creator desk must normalize the unified project status stage before focus decisions");
   assert(/const projectStatusExportCopy = `\$\{projectStatusView\?\.nextAction \|\| ""\} \$\{projectStatusView\?\.waitingFor \|\| ""\}`/.test(creatorDeskPanelsSource), "Creator desk must inspect export-facing next-action copy before focus decisions");
   assert(/const exportFlowTakingFocus = Boolean\([\s\S]*projectStatusStage === "可以导出"[\s\S]*projectStatusStage\.startsWith\("导出"\)[\s\S]*projectStatusStage === "视频结果已出" && \/交付\|导出\/\.test\(projectStatusExportCopy\)/.test(creatorDeskPanelsSource), "Creator desk must treat export-ready/export-complete and completed-video-to-delivery as the primary visible workflow");
-  assert(/const videoFlowTakingFocus = !exportFlowTakingFocus && \(videoTaskActive \|\| videoCanResume \|\| Boolean\(projectStatusView\?\.stage\?\.startsWith\("视频"\)\)\)/.test(creatorDeskPanelsSource), "Creator desk must let export status override stale queued/queryable video cues");
+  assert(/const videoFlowTakingFocus = !exportFlowTakingFocus && \([\s\S]*videoReviewTakingFocus[\s\S]*projectVideoBlocked[\s\S]*displayVideoTaskActive[\s\S]*videoCanResume[\s\S]*Boolean\(projectStatusView\?\.stage\?\.startsWith\("视频"\)\)/.test(creatorDeskPanelsSource), "Creator desk must let export status override stale queued/queryable video cues while keeping returned or blocked videos in review focus");
   assert(/const primaryFlowTakingFocus = exportFlowTakingFocus \|\| videoFlowTakingFocus/.test(creatorDeskPanelsSource), "Creator desk must use one primary-flow gate for hiding side suggestions");
   assert(/const showAssetReconciliation = Boolean\(assetReconciliation && \(\s*primaryFlowTakingFocus[\s\S]*\? false/.test(creatorDeskPanelsSource), "Creator desk must hide asset suggestions while export or video is the primary workflow");
   assert(/const\s+showProjectInbox\s*=\s*projectInbox\.totalCount > 0 && !submitVideoCommandVisible && !primaryFlowTakingFocus/.test(creatorDeskPanelsSource), "Creator desk must keep project inbox suggestions out of the way while the primary action is sending video or showing export");
@@ -815,7 +894,13 @@ function assertCreatorPanelContract() {
   assert(/videoBlockedRecoveryScopedIntent[\s\S]*`镜头 \$\{formatShotNumber\(videoBlockedRecoveryTargetShots\[0\]\.id\)\} \$\{videoBlockedRecoveryTargetShots\[0\]\.title\}/.test(agentPanelSource), "Agent Panel should put the blocked shot number and title into recovery intent");
   assert(/videoBlockedRecoveryFooterAction[\s\S]*prepareChange\(videoBlockedRecoveryScopedIntent,\s*\{[\s\S]*selectedShotIds:\s*videoSendAction\?\.recoveryTargetShotIds/.test(agentPanelSource), "Agent Panel should continue from a video QA blocker using the blocked shot target, not the currently selected shot");
   assert(/const availableFooterDirectAction = referenceReviewFooterAction \|\| videoBlockedRecoveryFooterAction \|\| commandFooterDirectAction \|\| fallbackFooterDirectAction/.test(agentPanelSource), "Agent Panel should take creators to pending reference review before offering another video blocker recovery run");
+  assert(/videoSubmitCancelled[\s\S]*已取消，本次没有发送[\s\S]*videoSubmissionBlocked = videoSendAction\?\.status === "blocked" && !videoSubmitCancelled/.test(agentPanelSource), "Agent Panel must not treat legacy cancelled video confirmations as blocked submit failures");
+  assert(/videoSubmitCancelled[\s\S]*command\.kind === "submit_video" && videoSendAction\?\.status === "blocked" && !videoSubmitCancelled/.test(directorModeSource), "Director shell must not rewrite legacy cancelled video confirmations into video-problem commands");
+  assert(/const referencesUsableForAgent = referencesReadyAfterReview \|\| timelineShowsReferenceReady/.test(agentPanelSource), "Agent Panel must treat later reference-ready Agent messages as usable reference evidence");
+  assert(/const referenceFooterAction = showRealSampleAction && !referencesUsableForAgent && realSampleAction\?\.status !== "verified"/.test(agentPanelSource), "Agent Panel must not offer a stale generate-reference confirmation once references are already usable");
   const seedanceSubmitActionSource = fs.readFileSync("src/ui/director/useSeedanceVideoSubmitAction.ts", "utf8");
+  assert(/SEEDANCE_SUBMIT_UI_TIMEOUT_MS\s*=\s*300_000/.test(seedanceSubmitActionSource), "Seedance UI timeout must match the runtime CLI minimum to avoid false failures during long queues");
+  assert(/!options\?\.skipConfirm[\s\S]*status:\s*"idle"[\s\S]*已取消，本次没有发送；需要时可以重新确认/.test(seedanceSubmitActionSource), "Cancelling the video confirmation must stay retryable instead of turning into a blocked video problem");
   assert(/recoveryTargetShotIds/.test(seedanceSubmitActionSource), "Seedance action state should expose blocked shot ids for recovery");
   assert(/recoveryTargetShotIds:\s*effectiveActionState\.recoveryTargetShotIds/.test(seedanceSubmitActionSource), "Seedance action view should return blocked shot ids to the Agent panel");
   assert(/state\.summary\?\.relayQueue[\s\S]*state as ProjectRealChainUiState & \{ relayQueue\?: ProjectSeedanceSubmitResult\["relayQueue"\] \}[\s\S]*\.relayQueue/.test(seedanceSubmitActionSource), "Seedance action state should read persisted relay queues from both summary and top-level runtime status");
@@ -825,7 +910,7 @@ function assertCreatorPanelContract() {
   assert(/videoFocusScopeLabel[\s\S]*正在等视频结果[\s\S]*videoFocusSelectionHint[\s\S]*点确认只查询结果，不会重复提交/.test(agentPanelSource), "Agent Panel should show the active video task instead of the selected shot while waiting for queued video");
   assert(/正在看\|正在等\|正在发送/.test(agentPanelSource), "Agent Panel compact scope label should preserve active video focus copy");
   assert(/const displayedScopeLabel = exportResultIsPrimary && exportFocusScopeLabel[\s\S]*\? exportFocusScopeLabel[\s\S]*: videoResultIsPrimary && videoFocusScopeLabel[\s\S]*\? videoFocusScopeLabel[\s\S]*: baseDisplayedScopeLabel/.test(agentPanelSource), "Agent Panel should let export/video primary tasks replace the selected-shot scope in the bottom composer");
-  assert(/const displayedSelectionChips = exportResultIsPrimary \|\| videoResultIsPrimary[\s\S]*\? \[\]/.test(agentPanelSource), "Agent Panel should hide selected-shot chips while video/export is the current primary task");
+  assert(/const displayedSelectionChips = workflow && preparedSelectionChips\.length \? preparedSelectionChips : liveSelectionChips/.test(agentPanelSource), "Agent Panel should keep selected-shot chips visible while video/export is the current primary task");
   assert(/<span>\{exportResultIsPrimary \|\| videoResultIsPrimary \? "当前任务" : hasActiveSelection \? "当前选择" : "怎么用"\}<\/span>/.test(agentPanelSource), "Agent Panel should label queued video or export as the current task, not the current selection");
   assert(/创作者路径/.test(agentPanelSource), "Agent Panel should label the default creator path");
   assert(/描述修改[\s\S]*生成计划[\s\S]*确认应用/.test(agentPanelSource), "Agent Panel should expose the simplified creator path");
@@ -1499,6 +1584,8 @@ try {
   assert(selectedBinding.status === "bound", "frontend should connect project through runtime select");
 
   const loadedStatus = await loadProjectRealChainStatus(project005RuntimeIdentity);
+  const loadedStatusRequest = runtimeFetchCalls.find((call) => call.method === "GET" && call.path === projectRealChainStatusEndpoint);
+  assert(loadedStatusRequest?.search.includes("projectRoot=") && loadedStatusRequest.search.includes("projectId="), "current project status must request the selected project identity instead of relying on global binding");
   assert(loadedStatus.status === "production_needs_review", "sync status should load preview/production state");
   assert(loadedStatus.summary?.returnedImageCount === 8, "sync status should show returned image count");
   assert(loadedStatus.summary?.needsReviewCount === 2, "sync status should show needs-review count");
@@ -1507,6 +1594,8 @@ try {
   assert(loadedStatus.summary?.workbenchFacts?.projectVibeWritten === false, "sync status must preserve projectVibeWritten=false");
 
   const checkedStatus = await runProjectRealChainCheck(project005RuntimeIdentity);
+  const checkedStatusRequest = runtimeFetchCalls.find((call) => call.method === "POST" && call.path === projectRealChainRunCheckEndpoint);
+  assert(checkedStatusRequest?.search.includes("projectRoot=") && checkedStatusRequest.search.includes("projectId="), "current project run-check must request the selected project identity instead of relying on global binding");
   assert(checkedStatus.status === "production_needs_review", "sync status button should call real-chain run-check");
   assert(checkedStatus.summary?.providerCalled === false, "real-chain run-check must not call provider");
   assert(checkedStatus.summary?.prepareRan === false, "real-chain run-check must not run prepare");
@@ -1596,6 +1685,8 @@ try {
     ["GET", projectCurrentBindingEndpoint],
     ["GET", projectCurrentChoicesEndpoint],
     ["POST", projectCurrentSelectEndpoint],
+    ["GET", projectImage2BatchPlanEndpoint],
+    ["POST", projectImage2BatchRunCheckEndpoint],
   ]) {
     const call = runtimeFetchCalls.find((item) => item.method === method && item.path === endpoint);
     assert(call, `frontend should call ${method} ${endpoint}`);
@@ -1604,8 +1695,12 @@ try {
   for (const [method, endpoint] of [
     ["GET", projectRealChainStatusEndpoint],
     ["POST", projectRealChainRunCheckEndpoint],
-    ["GET", projectImage2BatchPlanEndpoint],
-    ["POST", projectImage2BatchRunCheckEndpoint],
+  ]) {
+    const call = runtimeFetchCalls.find((item) => item.method === method && item.path === endpoint);
+    assert(call, `frontend should call ${method} ${endpoint}`);
+    assert(call.search.includes("projectRoot=") && call.search.includes("projectId="), `${method} ${endpoint} should carry selected project query params`);
+  }
+  for (const [method, endpoint] of [
     ["GET", projectImage2OneShotStatusEndpoint],
     ["POST", projectImage2OneShotPrepareEndpoint],
     ["POST", projectImage2OneShotConfirmEndpoint],
@@ -1827,6 +1922,31 @@ const workbench004FactsOnly = buildCurrentProjectWorkbenchProjection({
 });
 assert(workbench004FactsOnly.assets.readOnlyProjection === false, "workbench-only facts should populate Asset Library even before a video run");
 assert(workbench004FactsOnly.assetFacts.map((asset) => asset.id).join(",") === "char_naya,char_ivo,scene_archive,style_quiet", "workbench-only facts should preserve asset projection");
+const projectVibeFallbackVisualFacts = {
+  ...workbenchFacts004,
+  visualMemory: {
+    ...workbenchFacts004.visualMemory,
+    present: false,
+    readable: true,
+    fallbackFromProjectVibe: true,
+    path: `${workbenchFacts004.projectRoot}/project/visual_memory.json`,
+  },
+};
+const projectVibeFallbackVisualProjection = buildCurrentProjectWorkbenchProjection({
+  binding: boundBinding,
+  realChainState: {
+    status: "unavailable",
+    summary: deriveProjectRealChainStatus({
+      status: "unavailable",
+      message: "No sidecar visual_memory.json, but Project.vibe assets are readable.",
+      workbenchFacts: projectVibeFallbackVisualFacts,
+    }, "runtime_endpoint"),
+  },
+  image2BatchState: image2Mismatch,
+  selectedShotId: "S01",
+});
+assert(projectVibeFallbackVisualProjection.assets.readOnlyProjection === false, "Project.vibe fallback visual memory should populate Asset Library even when sidecar visual_memory.json is absent");
+assert(projectVibeFallbackVisualProjection.assetFacts.length === workbenchFacts004.visualMemory.assets.length, "Project.vibe fallback visual memory must keep readable assets");
 assert(workbench004Facts.assets.needsReviewCount === 1, "needs_review asset count should be preserved");
 assert(workbench004Facts.assets.rejectedCount === 1, "rejected asset count should be preserved");
 assert(!JSON.stringify(workbench004Facts).includes("char_mika"), "004 visual_memory facts must not leak 005 assets");

@@ -170,6 +170,16 @@ assert(approveReference.toolPlan.providerSubmitAllowed === false, "asset review 
 assert(approveReference.proposedChanges[0]?.field === "assetStatus", "asset review should propose an asset status change");
 assert(approveReference.proposedChanges[0]?.to === "已锁定", "reference approval should lock the selected asset");
 
+const bindSelectedReference = buildDirectorAgentActionEnvelope({
+  userIntent: "这个素材是道具参考，后面给当前镜头用",
+  snapshot: selectedAssetSnapshot,
+  generatedAt: "2026-05-31T00:00:00.205Z",
+});
+assert(bindSelectedReference.kind === "revise_story_or_shot", "selected asset role binding should stay in the project patch lane");
+assert(bindSelectedReference.target.kind === "asset" && bindSelectedReference.target.ids[0] === "asset_candidate_ticket", "asset role binding should target the selected asset");
+assert(bindSelectedReference.proposedChanges.some((change) => change.field === "assetRoleBinding" && change.to === "道具参考"), "asset role binding should become a structured proposed change");
+assert(bindSelectedReference.toolPlan.toolName === "project_vibe_patch", "asset role binding should write Project.vibe only after confirmation");
+
 const lockedAssetSnapshot = buildDirectorAgentStateSnapshot({
   runtimeState,
   currentView: "reference",
@@ -306,6 +316,20 @@ assert(selectedShotFeedback.proposedChanges[0]?.field === "selectedScopeDraft", 
 assert(selectedShotFeedback.proposedChanges[0]?.to.includes("压迫感"), "selected shot feedback diff should show the creator's concrete wording");
 assert(selectedShotFeedback.proposedChanges[0]?.reason.includes("清晨旧书店"), "selected shot feedback should say which target will receive the write");
 assert(selectedShotFeedback.userFacingMessage.includes("清晨旧书店"), "selected shot feedback should explain the selected target to the creator");
+assert(selectedShotFeedback.userFacingMessage.includes("镜头 1-1"), "selected shot feedback should include the visible shot number in Agent replies");
+assert(!selectedShotFeedback.userFacingMessage.includes("�"), "selected shot feedback must not show replacement characters in Chinese titles");
+assert(!selectedShotFeedback.summary.includes("�"), "selected shot summary must not show replacement characters in Chinese titles");
+
+const explainOnlySelectedShotFeedback = buildDirectorAgentActionEnvelope({
+  userIntent: "继续下一步，但先不要提交视频，只告诉我接下来要做什么。",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:01.055Z",
+});
+assert(explainOnlySelectedShotFeedback.kind === "inspect_project_status", "explain-only next-step wording must inspect instead of staging a selected-shot write");
+assert(explainOnlySelectedShotFeedback.toolPlan.toolName === "project_vibe_patch", "explain-only inspection should stay in the local project-read lane");
+assert(explainOnlySelectedShotFeedback.executionContract.mode === "plan_only", "explain-only wording should keep plan-only execution boundary");
+assert(explainOnlySelectedShotFeedback.proposedChanges[0]?.field === "projectStatus", "explain-only wording should summarize project status instead of creating a selected-scope draft");
+assert(!explainOnlySelectedShotFeedback.summary.includes("修改草案"), "explain-only wording must not look like a pending Project.vibe edit");
 
 const planOnlyScopedFeedback = buildDirectorAgentActionEnvelope({
   userIntent: "把这一段改成更像90年代日漫赛车开场：低机位扫过湿地，车灯亮起，两个车手只露出手和眼神。只整理计划，不要生图，也不要提交视频。",
@@ -371,6 +395,15 @@ const projectHowIsIt = buildDirectorAgentActionEnvelope({
 assert(projectHowIsIt.kind === "inspect_project_status", "short project-health questions should inspect project state instead of becoming project direction edits");
 assert(projectHowIsIt.toolPlan.providerSubmitAllowed === false, "project-health inspection must not call providers");
 assert(projectHowIsIt.proposedChanges.some((change) => change.field === "projectStatus"), "project-health inspection should expose readiness as a proposed fact");
+
+const projectAssetInventory = buildDirectorAgentActionEnvelope({
+  userIntent: "整理一下当前素材，告诉我哪些能直接用，哪些需要确认。",
+  snapshot: noSelectionSnapshot,
+  generatedAt: "2026-05-31T00:00:01.160Z",
+});
+assert(projectAssetInventory.kind === "inspect_project_status", "asset inventory questions should inspect project state before mutating the project");
+assert(projectAssetInventory.toolPlan.providerSubmitAllowed === false, "asset inventory inspection must not call providers");
+assert(projectAssetInventory.proposedChanges.some((change) => change.field === "referenceStatus"), "asset inventory inspection should expose reference status");
 
 const projectNextQuestion = buildDirectorAgentActionEnvelope({
   userIntent: "接下来该做什么？",
@@ -465,6 +498,7 @@ assert(broadPlanOnlyBoundary.toolPlan.providerSubmitAllowed === false, "broad pl
 
 assert(detectDirectorAgentPermissionIntent("请先不要提交视频测试，也不要真实生图。") === "plan_only", "combined no-video/no-real-image wording should infer plan-only");
 assert(detectDirectorAgentPermissionIntent("只做故事规划，不要生成参考，也不要提交视频。") === "plan_only", "no-reference plus no-video wording should infer plan-only");
+assert(detectDirectorAgentPermissionIntent("只告诉我接下来要做什么。") === "plan_only", "explain-only wording should infer plan-only");
 assert(isDirectorAgentPermissionControlOnlyIntent("只看规划") === true, "pure planning boundary wording should be treated as a control-only Agent command");
 assert(isDirectorAgentPermissionControlOnlyIntent("先不要提交视频测试") === true, "pure no-video testing wording should be treated as a control-only Agent command");
 assert(isDirectorAgentPermissionControlOnlyIntent("视频先不用跑") === true, "colloquial no-video wording should be treated as a control-only Agent command");
@@ -591,6 +625,13 @@ const continueNoAsset = buildDirectorAgentActionEnvelope({
 assert(noAssetSnapshot.projectReadiness.status === "needs_references", "shots without any reference projection should need references");
 assert(noAssetSnapshot.projectReadiness.actionQueue[0]?.label === "生成参考", "no-reference projects should queue reference generation first");
 assert(continueNoAsset.kind === "prepare_reference_generation", "continue should not submit video when no references exist");
+
+const naturalDraftConfirmationContinue = buildDirectorAgentActionEnvelope({
+  userIntent: "没问题，继续确认进故事流。",
+  snapshot: noAssetSnapshot,
+  generatedAt: "2026-05-31T00:00:04.626Z",
+});
+assert(naturalDraftConfirmationContinue.kind === "prepare_reference_generation", "natural draft confirmation should follow the project next-step queue instead of becoming a shot revision");
 
 const needsReviewOnlySnapshot = buildDirectorAgentStateSnapshot({
   runtimeState: {

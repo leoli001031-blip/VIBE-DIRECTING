@@ -8,6 +8,7 @@ import type { VibeAgentProductToolInvocationTarget } from "./confirmedProductAct
 
 export interface VibeAgentProductExecutionAdapter<TValue = unknown> {
   writeProject?: VibeAgentConfirmedActionHandler<TValue>;
+  compileVideoRequest?: VibeAgentConfirmedActionHandler<TValue>;
   researchStyle?: VibeAgentConfirmedActionHandler<TValue>;
   generateReferences?: VibeAgentConfirmedActionHandler<TValue>;
   submitVideo?: VibeAgentConfirmedActionHandler<TValue>;
@@ -20,11 +21,17 @@ export function buildVibeAgentProductExecutionHandlers<TValue>(
 ): VibeAgentConfirmedActionHandlers<TValue> {
   const handlers: VibeAgentConfirmedActionHandlers<TValue> = {};
   if (adapter.writeProject) handlers.write_project = adapter.writeProject;
+  if (adapter.compileVideoRequest || adapter.writeProject) {
+    handlers.compile_video_request = adapter.compileVideoRequest || adapter.writeProject;
+  }
   if (adapter.researchStyle) handlers.research_style = adapter.researchStyle;
   if (adapter.generateReferences) handlers.generate_references = adapter.generateReferences;
   if (adapter.submitVideo) handlers.submit_video = adapter.submitVideo;
   if (adapter.queryVideo) handlers.query_video = adapter.queryVideo;
-  if (adapter.exportProject) handlers.export_project = adapter.exportProject;
+  if (adapter.exportProject) {
+    handlers.export_showcase = adapter.exportProject;
+    handlers.export_project = adapter.exportProject;
+  }
   return handlers;
 }
 

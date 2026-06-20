@@ -19,6 +19,7 @@ export interface DirectorAgentToolAvailability {
   webSearchReady: boolean;
   referenceGenerationReady: boolean;
   videoSubmitReady: boolean;
+  videoSubmitBlockers?: string[];
   exportReady: boolean;
 }
 
@@ -144,6 +145,7 @@ export function buildDirectorAgentToolHandoff(input: BuildDirectorAgentToolHando
     ids: action.target.ids,
     label: action.target.label,
   };
+  const selectedShotIds = selectedShotIdsForToolInvocation(action);
   const taskEnvelope = buildToolTaskEnvelope({ action, handoffId, confirmedAt, handler, targetSummary });
 
   return {
@@ -161,7 +163,7 @@ export function buildDirectorAgentToolHandoff(input: BuildDirectorAgentToolHando
       ? {
           taskEnvelope,
           userIntent: action.sourceContext.userIntent,
-          selectedShotIds: action.sourceContext.selectedShotIds,
+          selectedShotIds,
           selectedAssetId: action.sourceContext.selectedAssetId,
           sectionId: action.sourceContext.sectionId,
           targetSummary,
@@ -184,6 +186,7 @@ function buildToolTaskEnvelope(input: {
   handler: DirectorAgentToolHandler;
   targetSummary: DirectorAgentToolInvocationPayload["targetSummary"];
 }): DirectorAgentToolTaskEnvelope {
+  const selectedShotIds = selectedShotIdsForToolInvocation(input.action);
   const taskEnvelopeId = `agent_tool_task_${compactId(input.action.actionId)}_${compactId(input.handler)}`;
   const baseEnvelope = {
     id: taskEnvelopeId,
@@ -203,7 +206,7 @@ function buildToolTaskEnvelope(input: {
       projectTitle: input.action.sourceContext.projectTitle,
       projectRoot: input.action.sourceContext.projectRoot,
       currentView: input.action.sourceContext.currentView,
-      selectedShotIds: input.action.sourceContext.selectedShotIds,
+      selectedShotIds,
       selectedAssetId: input.action.sourceContext.selectedAssetId,
       sectionId: input.action.sourceContext.sectionId,
       totalShots: input.action.sourceContext.totalShots,
@@ -214,6 +217,12 @@ function buildToolTaskEnvelope(input: {
     ...baseEnvelope,
     inputHash: stableHash(baseEnvelope),
   };
+}
+
+function selectedShotIdsForToolInvocation(action: DirectorAgentActionEnvelope) {
+  if (action.target.kind === "project") return [];
+  if (action.target.kind === "shot" || action.target.kind === "multi_shot") return action.target.ids;
+  return action.sourceContext.selectedShotIds;
 }
 
 	function preflightPolicyForHandler(handler: DirectorAgentToolHandler): DirectorAgentToolPreflightPolicy {
@@ -239,6 +248,7 @@ function handoffBlockers(input: BuildDirectorAgentToolHandoffInput): string[] {
 	    handler === "image2_reference_generation" && !availability.referenceGenerationReady ? "reference_generation_not_ready" : "",
 	    handler === "image2_reference_generation" && !action.toolPlan.providerSubmitAllowed ? "reference_generation_not_allowed" : "",
     handler === "seedance_video_submit" && !availability.videoSubmitReady ? "video_submit_not_ready" : "",
+    ...(handler === "seedance_video_submit" && !availability.videoSubmitReady ? availability.videoSubmitBlockers || [] : []),
     handler === "seedance_video_submit" && !queryVideoResult && !action.toolPlan.providerSubmitAllowed ? "video_submit_not_allowed" : "",
     handler === "project_export" && !availability.exportReady ? "export_not_ready" : "",
 	  ]);
@@ -261,7 +271,11 @@ function handoffMessage(
 }
 
 function primaryBlockerForMessage(blockers: string[]) {
-  return blockers.find((blocker) => blocker !== "user_confirmation_required") || blockers[0] || "blocked";
+  const nonConfirmationBlockers = blockers.filter((blocker) => blocker !== "user_confirmation_required");
+  return nonConfirmationBlockers.find((blocker) => blocker.startsWith("video_submit_") && blocker !== "video_submit_not_ready")
+    || nonConfirmationBlockers[0]
+    || blockers[0]
+    || "blocked";
 }
 
 function blockerMessage(blocker: string) {
@@ -270,6 +284,11 @@ function blockerMessage(blocker: string) {
   if (blocker === "web_search_not_ready") return "查资料还没开启。";
 	  if (blocker === "reference_generation_not_ready") return "参考生成还不可用。";
 	  if (blocker === "reference_generation_not_allowed") return "当前还不能生成参考。";
+	  if (blocker === "video_submit_missing_project") return "先选择项目文件夹，再提交视频。";
+	  if (blocker === "video_submit_callback_missing") return "视频提交入口还不可用。";
+	  if (blocker === "video_submit_missing_references") return "先补齐角色、场景或道具参考，再提交视频。";
+	  if (blocker === "video_submit_key_missing") return "先在设置里保存生成服务 Key。";
+	  if (blocker === "video_submit_already_sent") return "已有视频任务，先查询结果或复核回流。";
 	  if (blocker === "video_submit_not_ready") return "视频提交还没准备好。";
 	  if (blocker === "video_submit_not_allowed") return "当前不允许提交视频。";
 	  if (blocker === "video_query_not_ready") return "当前没有可查询的视频任务。";

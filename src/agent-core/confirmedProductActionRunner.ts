@@ -117,6 +117,7 @@ export async function runRegisteredConfirmedVibeAgentProductAction<
     userConfirmed: input.userConfirmed,
     handlers: buildVibeAgentProductExecutionHandlers({
       writeProject: runThroughProductRunner,
+      compileVideoRequest: runThroughProductRunner,
       researchStyle: runThroughProductRunner,
       generateReferences: runThroughProductRunner,
       submitVideo: runThroughProductRunner,
@@ -183,9 +184,12 @@ export async function runConfirmedVibeAgentProductAction<
     input.recoveryHint,
   ]).join("\n");
   const agentToolTrace = toolTraceResult.trace;
-  const invocationShotIds = invocation.targetSummary.kind === "shot" || invocation.targetSummary.kind === "multi_shot"
-    ? invocation.targetSummary.ids
-    : invocation.selectedShotIds;
+  const invocationScope = invocation.targetSummary.kind === "project" ? "project" : "selected_shots";
+  const invocationShotIds = invocation.targetSummary.kind === "project"
+    ? undefined
+    : invocation.targetSummary.kind === "shot" || invocation.targetSummary.kind === "multi_shot"
+      ? invocation.targetSummary.ids
+      : invocation.selectedShotIds;
 
   try {
     if (handoff.handler === "web_search") {
@@ -195,6 +199,7 @@ export async function runConfirmedVibeAgentProductAction<
     if (isDirectorAgentReferenceGenerationHandler(handoff.handler)) {
       if (!input.createReferences) return missingHandlerOutcome(handoff.handler, input.setStatus);
       const result = await input.createReferences({
+        scope: invocationScope,
         selectedShotIds: invocationShotIds,
         selectedAssetId: invocation.selectedAssetId,
         sectionId: invocation.sectionId,
@@ -215,6 +220,7 @@ export async function runConfirmedVibeAgentProductAction<
         : input.submitVideo;
       if (!runVideoAction) return missingHandlerOutcome(handoff.handler, input.setStatus);
       const result = await runVideoAction({
+        scope: invocationScope,
         selectedShotIds: invocationShotIds,
         selectedAssetId: invocation.selectedAssetId,
         sectionId: invocation.sectionId,

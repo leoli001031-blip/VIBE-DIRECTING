@@ -20,6 +20,7 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
   audioCount?: number;
   shotCount?: number;
   permissionMode?: VibeAgentPermissionMode;
+  understandingBody?: string;
   assistantBody?: string;
   assistantNext?: string;
 }): VibeAgentTimelineEntry[] {
@@ -38,6 +39,23 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
       details: { intakePhase: input.phase },
     },
     {
+      id: `new_video_understanding_${suffix}`,
+      type: "assistant_message",
+      createdAt: input.createdAt,
+      title: "我理解为",
+      body: input.understandingBody || intakeUnderstandingBody(input.phase),
+      lifecycle: intakeUnderstandingLifecycle(input.phase),
+      status: input.phase === "planning_blocked" ? "blocked" : "done",
+      facts: [
+        { label: "动作", value: intakeUnderstandingAction(input.phase) },
+        { label: "边界", value: "确认前不会生成参考图、提交视频或导出" },
+      ],
+      details: {
+        intakePhase: input.phase,
+        next: input.phase === "status_inspection" ? "只读取状态，不把这句话当脚本" : "继续检查项目和素材",
+      },
+    },
+    {
       id: `new_video_tool_read_${suffix}`,
       type: "tool_call",
       createdAt: input.createdAt,
@@ -54,8 +72,10 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
       title: "识别素材",
       body: materialCount > 0
         ? "素材已进入本轮上下文，确认前不会写入正式项目。"
+        : input.phase === "status_inspection"
+          ? "这次只做状态检查，不会把文字当成脚本或素材。"
         : "当前没有额外素材，先根据文字拆故事和镜头。",
-      toolName: "scan_assets",
+      toolName: "classify_assets",
       status: "done",
       facts: [
         { label: "图片", value: `${input.imageCount ?? 0} 个` },
@@ -69,7 +89,7 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
       createdAt: input.createdAt,
       title: planTitle(input.phase),
       body: planBody(input.phase),
-      toolName: "plan_next_action",
+      toolName: intakePlanToolName(input.phase),
       status: input.phase === "planning_blocked" ? "blocked" : input.phase === "planning_started" ? "waiting" : "done",
       facts: [
         { label: "镜头", value: shotCount ? `${shotCount} 个` : "待拆分" },
@@ -107,7 +127,7 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
       confirmationRequired: true,
       status: "waiting",
       facts: [
-        { label: "动作", value: "write_project" },
+        { label: "确认", value: "写入故事流" },
         { label: "镜头", value: shotCount ? `${shotCount} 个` : "待确认" },
       ],
       details: {
@@ -138,6 +158,10 @@ function permissionLabel(mode?: VibeAgentPermissionMode) {
   if (mode === "export_allowed") return "可导出";
   if (mode === "project_write_allowed") return "可写项目";
   return "先整理";
+}
+
+function intakePlanToolName(phase: VibeAgentIntakeTimelinePhase) {
+  return phase === "status_inspection" ? "plan_next_action" : "plan_story";
 }
 
 function planTitle(phase: VibeAgentIntakeTimelinePhase) {
@@ -178,4 +202,41 @@ function assistantNextFact(phase: VibeAgentIntakeTimelinePhase) {
   if (phase === "planning_blocked") return "重试或修改";
   if (phase === "draft_confirmed") return "继续推进";
   return "放入故事";
+}
+
+function intakeUnderstandingAction(phase: VibeAgentIntakeTimelinePhase) {
+  if (phase === "status_inspection") return "检查项目状态";
+  if (phase === "draft_collected") return "整理输入";
+  if (phase === "planning_started") return "拆故事和镜头";
+  if (phase === "planning_ready") return "复核草案";
+  if (phase === "planning_blocked") return "说明阻断原因";
+  if (phase === "draft_confirmed") return "写入故事流";
+  return "整理输入";
+}
+
+function intakeUnderstandingBody(phase: VibeAgentIntakeTimelinePhase) {
+  if (phase === "status_inspection") {
+    return "你想让我只检查当前项目状态。我会读取项目和入口状态，不会把这句话当成脚本，也不会生成参考或提交视频。";
+  }
+  if (phase === "planning_started") {
+    return "你想让我把输入整理成可复核的故事和镜头草案。这里只做规划，确认前不会生成参考或提交视频。";
+  }
+  if (phase === "planning_ready") {
+    return "你想先看一版草案。我会停在确认前，等你决定写入、修改或继续。";
+  }
+  if (phase === "planning_blocked") {
+    return "这次输入还不足以稳定推进。我会说明哪里卡住，并保留当前内容方便你继续改。";
+  }
+  if (phase === "draft_confirmed") {
+    return "你确认了草案。我会把它写入故事流，但参考生成和视频提交仍然需要单独确认。";
+  }
+  return "你想先把想法和素材交给 AI 导演整理。我会先归纳，不会直接执行生成。";
+}
+
+function intakeUnderstandingLifecycle(phase: VibeAgentIntakeTimelinePhase) {
+  if (phase === "planning_blocked") return "needs_user_input" as const;
+  if (phase === "planning_started") return "running" as const;
+  if (phase === "planning_ready") return "waiting_for_confirmation" as const;
+  if (phase === "draft_confirmed") return "succeeded" as const;
+  return "proposed" as const;
 }

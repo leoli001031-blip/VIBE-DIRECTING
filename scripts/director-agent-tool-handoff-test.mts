@@ -197,10 +197,12 @@ const videoAction = buildDirectorAgentActionEnvelope({
 const videoNotReady = buildDirectorAgentToolHandoff({
   action: videoAction,
   userConfirmed: true,
-  availability: { ...allReady, videoSubmitReady: false },
+  availability: { ...allReady, videoSubmitReady: false, videoSubmitBlockers: ["video_submit_missing_references"] },
 });
 assert(videoNotReady.status === "blocked", "video submit should respect tool availability");
 assert(videoNotReady.blockers.includes("video_submit_not_ready"), "video submit handoff should explain readiness blocker");
+assert(videoNotReady.blockers.includes("video_submit_missing_references"), "video submit handoff should preserve the concrete readiness blocker");
+assert(videoNotReady.userFacingMessage === "先补齐角色、场景或道具参考，再提交视频。", "video submit handoff should tell the user how to recover");
 const videoReady = buildDirectorAgentToolHandoff({
   action: videoAction,
   userConfirmed: true,

@@ -1,0 +1,273 @@
+{
+  "schemaVersion": "vibe_showcase_asset_manifest_v1",
+  "generatedAt": "2026-06-18T03:50:51.485Z",
+  "packageRoot": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/vibe-director-demo-2026-06-18T03-38-18",
+  "projectRoot": "/Users/lichenhao/Desktop/new vibe directing/.vibe-runtime/browser-projects/project-1781737355707",
+  "projectTitle": "雨夜自动售货机前，一个戴耳机的女孩发现汽水罐里滚出...",
+  "currentVideoStatus": {
+    "queueStatus": "running",
+    "activeItemIds": [
+      "seedance_segment_1"
+    ],
+    "activeSubmitId": "8c00dfe3-f5a8-41d1-9ba5-460d5af223c0",
+    "localVideoAvailable": false
+  },
+  "entries": [
+    {
+      "relativePath": "01-input/original-idea.md",
+      "type": "caption",
+      "sourcePath": null,
+      "suggestedUse": "展示页辅助说明",
+      "caption": "01-input/original-idea.md",
+      "sha256": "22495d245df7cbc27899785683faf4002fa48d4aa6d37fd154c70659b57bb099"
+    },
+    {
+      "relativePath": "01-input/uploaded-assets.md",
+      "type": "caption",
+      "sourcePath": null,
+      "suggestedUse": "展示页辅助说明",
+      "caption": "01-input/uploaded-assets.md",
+      "sha256": "bf9a361e28210c3b00f9c6af066c38f567c0f275ac980b23502208c4400a30a7"
+    },
+    {
+      "relativePath": "02-agent-communication/agent-timeline-summary.md",
+      "type": "caption",
+      "sourcePath": null,
+      "suggestedUse": "展示页辅助说明",
+      "caption": "02-agent-communication/agent-timeline-summary.md",
+      "sha256": "a6d7d0f3efc4aec3592a0f1f52da55d38633a8d0a16da0bd0137482197086526"
+    },
+    {
+      "relativePath": "02-agent-communication/agent-timeline.json",
+      "type": "source",
+      "sourcePath": null,
+      "suggestedUse": "展示页辅助说明",
+      "caption": "02-agent-communication/agent-timeline.json",
+      "sha256": "af6fea945b628b2e1ecc2ed3db0f6f1a0fd086a3f5838cfab77b54a5d7dbe934"
+    },
+    {
+      "relativePath": "03-project-structure/preview_plan.json",
+      "type": "source",
+      "sourcePath": null,
+      "suggestedUse": "展示页辅助说明",
+      "caption": "03-project-structure/preview_plan.json",
+      "sha256": "b4a674a608ee332bc6c6b646dc14f60e0d68877aaa45ec425a985c61127e18ad"
+    },
+    {
+      "relativePath": "03-project-structure/project-summary.md",
+      "type": "caption",
+      "sourcePath": null,
+      "suggestedUse": "展示页辅助说明",
+      "caption": "03-project-structure/project-summary.md",
+      "sha256": "26c5831d6969984ecb2f7d97892cc199d22009d44265ae73e8704e0281e409c2"
+    },
+    {
+      "relativePath": "03-project-structure/shots.json",
+      "type": "source",
+      "sourcePath": null,
+      "suggestedUse": "展示页辅助说明",
+      "caption": "03-project-structure/shots.json",
+      "sha256": "6528f8663bee4178df6141de8c1b9f8c8be55175ee22229b165fc5508ae83e0b"
+    },
+    {
+      "relativePath": "04-reference-assets/character-girl.png",
+      "type": "reference",
+      "sourcePath": null,
+      "suggestedUse": "展示角色/场景/道具参考资产",
+      "caption": "戴耳机女孩的角色参考。",
+      "sha256": "4b06c6b5972425745ce0166e55c55a8d355311cf3dfc1a7423b3e0f08bdfc007"
+    },
+    {
+      "relativePath": "04-reference-assets/prop-glowing-ticket.png",
+      "type": "reference",
+      "sourcePath": null,
+      "suggestedUse": "展示角色/场景/道具参考资产",
+      "caption": "发光车票的道具参考。",
+      "sha256": "78788b0d778417f616f25bf53236940ab6dbab9c4ea461f0eefa80b6052f4f9d"
+    },
+    {
+      "relativePath": "04-reference-assets/reference-assets.md",
+      "type": "caption",
+      "sourcePath": null,
+      "suggestedUse": "展示页辅助说明",
+      "caption": "04-reference-assets/reference-assets.md",
+      "sha256": "1f288dc4fd25cd214426dbae7c034b010e1c0f73152a4d8fd5e6b23bb0f2ab4a"
+    },
+    {
+      "relativePath": "04-reference-assets/scene-rain-street.png",
+      "type": "reference",
+      "sourcePath": null,
+      "suggestedUse": "展示角色/场景/道具参考资产",
+      "caption": "雨夜街道与自动售货机的场景参考。",
+      "sha256": "dbea57c3386ac698df5457414c704a13ca1783f25e4c6f30468dbb5bb5ea1ad2"
+    },
+    {
+      "relativePath": "05-storyboard-and-prompts/director-rule-qa.json",
+      "type": "prompt",
+      "sourcePath": null,
+      "suggestedUse": "展示视频生成请求和编译摘要",
+      "caption": "05-storyboard-and-prompts/director-rule-qa.json",
+      "sha256": "55454843c4f07508c2d39d830444278a4bfaca30abbcfff1cfbbb6d8dbbee4f1"
+    },
+    {
+      "relativePath": "05-storyboard-and-prompts/director-text-qa.json",
+      "type": "prompt",
+      "sourcePath": null,
+      "suggestedUse": "展示视频生成请求和编译摘要",
+      "caption": "05-storyboard-and-prompts/director-text-qa.json",
+      "sha256": "dff589f578d1c2066a5a2c820f25f0ee533a0f3aaca922ea4d17db40a9f65f92"
+    },
+    {
+      "relativePath": "05-storyboard-and-prompts/prompt-summary.json",
+      "type": "prompt",
+      "sourcePath": null,
+      "suggestedUse": "展示视频生成请求和编译摘要",
+      "caption": "05-storyboard-and-prompts/prompt-summary.json",
+      "sha256": "edb22aa25efc8d9a5889c5134d364d3279eca1a44f9eaa11526e946c289b05ba"
+    },
+    {
+      "relativePath": "05-storyboard-and-prompts/prompt-summary.md",
+      "type": "prompt",
+      "sourcePath": null,
+      "suggestedUse": "展示视频生成请求和编译摘要",
+      "caption": "05-storyboard-and-prompts/prompt-summary.md",
+      "sha256": "65c1a9538e5c7eea2f95991dcb33f52f4346fc747b0d54d75bae106376386c5b"
+    },
+    {
+      "relativePath": "05-storyboard-and-prompts/seedance_prompt.md",
+      "type": "prompt",
+      "sourcePath": null,
+      "suggestedUse": "展示视频生成请求和编译摘要",
+      "caption": "提交给 Seedance 的完整 prompt。",
+      "sha256": "4bf93450f48a745b4ea8ddd030aa1b94e5633f8af58badbfbeda711d318ad749"
+    },
+    {
+      "relativePath": "06-video-generation/dreamina-resume-query.json",
+      "type": "receipt",
+      "sourcePath": null,
+      "suggestedUse": "作为真实链路证据和排查材料",
+      "caption": "06-video-generation/dreamina-resume-query.json",
+      "sha256": "4b354d4529a9a566f568ace2624e999ce3516e75ee6d0a3dc9437c195729e8b1"
+    },
+    {
+      "relativePath": "06-video-generation/dreamina-submit.json",
+      "type": "receipt",
+      "sourcePath": null,
+      "suggestedUse": "作为真实链路证据和排查材料",
+      "caption": "06-video-generation/dreamina-submit.json",
+      "sha256": "22442e8e27af6be9a89dba37cd70026dce6f32840a74b688f07a21d75fe433b1"
+    },
+    {
+      "relativePath": "06-video-generation/input-manifest.json",
+      "type": "receipt",
+      "sourcePath": null,
+      "suggestedUse": "作为真实链路证据和排查材料",
+      "caption": "06-video-generation/input-manifest.json",
+      "sha256": "002faa9b589da6b6ea72d21bd480ab3636e253b5e543650a197590b0923eddb0"
+    },
+    {
+      "relativePath": "06-video-generation/seedance-resume-report.json",
+      "type": "receipt",
+      "sourcePath": null,
+      "suggestedUse": "作为真实链路证据和排查材料",
+      "caption": "06-video-generation/seedance-resume-report.json",
+      "sha256": "1cc0c85283662cc7dff7bdc3c39174e6d90228c972928bf74cabcc1375f92f30"
+    },
+    {
+      "relativePath": "06-video-generation/seedance-submit-report.json",
+      "type": "receipt",
+      "sourcePath": null,
+      "suggestedUse": "作为真实链路证据和排查材料",
+      "caption": "06-video-generation/seedance-submit-report.json",
+      "sha256": "e04962fe1a53f6c189485b131cf4a32c120b68d11af965351918f2dc566bc0a1"
+    },
+    {
+      "relativePath": "06-video-generation/video-status.md",
+      "type": "receipt",
+      "sourcePath": null,
+      "suggestedUse": "作为真实链路证据和排查材料",
+      "caption": "Seedance 提交和可恢复查询状态。",
+      "sha256": "683d21b307f347a0025cad03fe9674338bb02f5db54568ff7e6f530258ab7653"
+    },
+    {
+      "relativePath": "06-video-generation/video_relay_queue.json",
+      "type": "receipt",
+      "sourcePath": null,
+      "suggestedUse": "作为真实链路证据和排查材料",
+      "caption": "06-video-generation/video_relay_queue.json",
+      "sha256": "764c51d271e306defdb61b0a282f43f887d8e0db6a94543875be691d338df188"
+    },
+    {
+      "relativePath": "07-final-output/video-pending.md",
+      "type": "caption",
+      "sourcePath": null,
+      "suggestedUse": "展示页辅助说明",
+      "caption": "视频未回流时的占位说明。",
+      "sha256": "6ae920c223565435e00717a481fc2c7c9d6dfc7fb41fd066035f2696128219a7"
+    },
+    {
+      "relativePath": "PACKAGE_PATH.txt",
+      "type": "source",
+      "sourcePath": null,
+      "suggestedUse": "展示页辅助说明",
+      "caption": "PACKAGE_PATH.txt",
+      "sha256": "3a469ea236bd64a59b0a01d8b79e1559c9c3d01a76d427c8c16601505de42672"
+    },
+    {
+      "relativePath": "captions.md",
+      "type": "caption",
+      "sourcePath": null,
+      "suggestedUse": "展示页辅助说明",
+      "caption": "captions.md",
+      "sha256": "080c6086f22b0b248ad58033389509f3c7f6a9e311e939b2bbd3a113803ec96c"
+    },
+    {
+      "relativePath": "screenshots/00-input-draft.png",
+      "type": "screenshot",
+      "sourcePath": null,
+      "suggestedUse": "展示页首屏或开场录屏说明",
+      "caption": "一句想法进入统一输入框。",
+      "sha256": "05ba90a0993c42616132818bd2940aa5261c0c2dc952f7872619664eefc97b59"
+    },
+    {
+      "relativePath": "screenshots/01-agent-status-and-story.png",
+      "type": "screenshot",
+      "sourcePath": null,
+      "suggestedUse": "展示 Agent 消息流、项目状态和视频队列",
+      "caption": "Agent 消息流、项目状态和视频队列同屏呈现。",
+      "sha256": "3e089e99041d61c74aaf9892499f89bb35e75c81f0014685e6205c15d2494d8f"
+    },
+    {
+      "relativePath": "screenshots/06-export-and-delivery.png",
+      "type": "screenshot",
+      "sourcePath": null,
+      "suggestedUse": "展示交付页和视频未回流时的资料包状态",
+      "caption": "项目资料包可先交付，视频回流后再补。",
+      "sha256": "2b07a75873123efe2d76b83e0e1f1d9dc6f359d79b257e75511195948659d616"
+    },
+    {
+      "relativePath": "showcase-outline.md",
+      "type": "caption",
+      "sourcePath": null,
+      "suggestedUse": "展示页辅助说明",
+      "caption": "showcase-outline.md",
+      "sha256": "c15ce777f2feb8a890e1174dbf80c977c5900264dc3ffdb54173f2756a205640"
+    },
+    {
+      "relativePath": "source-receipts/project.vibe.json",
+      "type": "source",
+      "sourcePath": null,
+      "suggestedUse": "展示页辅助说明",
+      "caption": "source-receipts/project.vibe.json",
+      "sha256": "950e108c04abdb8a4f1863ea89a1039173d3c10f6d4a91dd59d05538cb3c8fc0"
+    },
+    {
+      "relativePath": "05-storyboard-and-prompts/storyboard-note.md",
+      "type": "caption",
+      "sourcePath": null,
+      "suggestedUse": "解释本次 demo 为什么没有单独故事板图",
+      "caption": "本片段采用全能参考模式，没有单独故事板图。",
+      "sha256": "061d94608359dbfb749edce7236d2a399d48690e6ed2d4911896cc2fd88ab86d"
+    }
+  ]
+}

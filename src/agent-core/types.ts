@@ -25,17 +25,44 @@ export type VibeAgentEntryType =
 
 export type VibeAgentToolName =
   | "inspect_project"
+  | "classify_assets"
   | "scan_assets"
+  | "plan_story"
   | "plan_next_action"
+  | "revise_shot"
   | "write_agent_message"
   | "write_project"
   | "research_style"
   | "generate_references"
+  | "compile_video_request"
   | "submit_video"
   | "query_video"
+  | "export_showcase"
   | "export_project"
+  | "save_skill"
   | "request_user_confirmation"
   | "run_confirmed_action";
+
+export type VibeAgentActionLifecycleStatus =
+  | "proposed"
+  | "waiting_for_confirmation"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "needs_user_input";
+
+export type VibeAgentKernelActionName =
+  | "inspect_project"
+  | "classify_assets"
+  | "plan_story"
+  | "revise_shot"
+  | "generate_references"
+  | "compile_video_request"
+  | "submit_video"
+  | "query_video"
+  | "export_showcase"
+  | "save_skill";
 
 export interface VibeAgentFact {
   label: string;
@@ -48,6 +75,7 @@ export interface VibeAgentTimelineEntry {
   createdAt: string;
   title: string;
   body: string;
+  lifecycle?: VibeAgentActionLifecycleStatus;
   facts?: VibeAgentFact[];
   toolName?: VibeAgentToolName;
   actionKind?: DirectorAgentActionKind;
@@ -71,7 +99,10 @@ export interface VibeAgentProjectSnapshot {
   projectId: string;
   projectTitle: string;
   projectRoot?: string;
+  totalSections: number;
   totalShots: number;
+  totalAssets: number;
+  skillCount: number;
   missingReferences: number;
   needsReviewReferences: number;
   lockedReferences: number;
@@ -84,6 +115,97 @@ export interface VibeAgentProjectSnapshot {
   currentView?: string;
   selectedShotIds: string[];
   selectedAssetId?: string;
+  assetInbox?: VibeAgentAssetInboxSnapshot;
+}
+
+export interface VibeAgentAssetInboxSnapshot {
+  summary: string;
+  nextAction: string;
+  totalCount: number;
+  needsReviewCount: number;
+  kindSummary: VibeAgentAssetKindSummary[];
+  items: VibeAgentAssetInboxItem[];
+}
+
+export interface VibeAgentAssetKindSummary {
+  kind: string;
+  label: string;
+  count: number;
+}
+
+export interface VibeAgentAssetInboxItem {
+  kind: string;
+  label: string;
+  detail: string;
+  suggestedBinding: string;
+  suggestedAction: string;
+  reason: string;
+  confidence: "high" | "medium" | "low";
+  needsReview: boolean;
+  originLabel: string;
+  assetId?: string;
+  shotIds?: string[];
+}
+
+export interface VibeAgentSelectedContext {
+  kind: "project" | "section" | "shot" | "multi_shot" | "asset" | "video" | "export";
+  label: string;
+  ids: string[];
+}
+
+export interface VibeAgentKernelAction {
+  name: VibeAgentKernelActionName;
+  label: string;
+  lifecycle: VibeAgentActionLifecycleStatus;
+  target: VibeAgentSelectedContext;
+  requiresConfirmation: boolean;
+  mutatesProject: boolean;
+  callsProvider: boolean;
+  costLabel: string;
+}
+
+export type VibeAgentExecutionCostRisk =
+  | "none"
+  | "project_write"
+  | "external_provider"
+  | "external_video_submission";
+
+export interface VibeAgentExecutionBoundary {
+  mutatesProject: boolean;
+  callsProvider: boolean;
+  submitsExternalTask: boolean;
+  requiresConfirmation: boolean;
+  costRisk: VibeAgentExecutionCostRisk;
+  summary: string;
+}
+
+export interface VibeAgentExecutionResultSummary {
+  lifecycle: VibeAgentActionLifecycleStatus;
+  status: "blocked" | "awaiting_confirmation" | "ready_to_run" | "running" | "succeeded" | "failed" | "cancelled";
+  summary: string;
+  next: string;
+}
+
+export interface VibeAgentKernelTurn {
+  userMessage: string;
+  agentUnderstanding: string;
+  projectStateSummary: string;
+  projectHierarchy: string;
+  projectDiagnostics: string[];
+  selectedContext: VibeAgentSelectedContext;
+  proposedActions: VibeAgentKernelAction[];
+  executionBoundary: VibeAgentExecutionBoundary;
+  executionResult: VibeAgentExecutionResultSummary;
+  requiredConfirmation: boolean;
+  executionCost: string;
+  externalSubmissionRisk: string;
+  resultSummary: string;
+  nextSuggestion: string;
+  relatedShots: string[];
+  relatedAssets: string[];
+  relatedSkills: string[];
+  createdOrUpdatedFiles: string[];
+  errors: string[];
 }
 
 export interface VibeAgentActionDescriptor {
@@ -122,6 +244,7 @@ export interface VibeAgentTurnResult {
   action: DirectorAgentActionEnvelope;
   projectSnapshot: VibeAgentProjectSnapshot;
   permissionDecision: VibeAgentPermissionDecision;
+  kernelTurn: VibeAgentKernelTurn;
   timeline: VibeAgentTimelineDocument;
   pendingConfirmationToken?: string;
 }

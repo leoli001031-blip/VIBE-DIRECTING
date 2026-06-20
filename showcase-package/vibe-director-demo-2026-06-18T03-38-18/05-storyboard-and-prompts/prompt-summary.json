@@ -1,0 +1,45 @@
+{
+  "compilerMode": "omni_reference",
+  "compilerModeLabel": "全能参考",
+  "modelVersion": "seedance2.0_vip",
+  "videoResolution": "720p",
+  "durationSeconds": 6,
+  "ratio": "16:9",
+  "storyboardAspectRatio": "16:9",
+  "ruleQaStatus": "pass",
+  "textQaStatus": "pass",
+  "submitPolicy": {
+    "lane": "seedance_vip_representative_test",
+    "maxConcurrentVideoJobs": 1,
+    "representativeSegmentsSubmittedThisRequest": 1,
+    "note": "真实测试默认只提交当前代表性视频段；后续段保持 planned/ready，除非用户明确继续提交。"
+  },
+  "references": [
+    {
+      "role": "scene_reference",
+      "name": "街道环境",
+      "path": "assets/generated/scene_scene_street.png",
+      "sha256": "sha256:dbea57c3386ac698df5457414c704a13ca1783f25e4c6f30468dbb5bb5ea1ad2"
+    },
+    {
+      "role": "character_reference",
+      "name": "戴耳机的女孩",
+      "path": "assets/generated/character_asset_cd6da79884.png",
+      "sha256": "sha256:4b06c6b5972425745ce0166e55c55a8d355311cf3dfc1a7423b3e0f08bdfc007"
+    },
+    {
+      "role": "prop_reference",
+      "name": "发光车票",
+      "path": "assets/generated/prop_asset_151e3ffce0.png",
+      "sha256": "sha256:78788b0d778417f616f25bf53236940ab6dbab9c4ea461f0eefa80b6052f4f9d"
+    }
+  ],
+  "shots": [
+    {
+      "id": "shot_storyboard_1-1",
+      "title": "雨夜偶遇发光车票",
+      "durationSeconds": 6,
+      "primaryAction": "女孩发现发光车票，身体微倾准备捡起"
+    }
+  ]
+}

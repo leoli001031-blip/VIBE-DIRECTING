@@ -7,6 +7,7 @@ import {
   fetchRuntimeJson,
   hasProjectRuntimeIdentity,
   projectRuntimeRequestPath,
+  runtimeErrorMessage,
   type ProjectRuntimeIdentity,
 } from "./runtimeApiClient";
 import {
@@ -125,7 +126,12 @@ export async function submitProjectSeedanceVideo(
     };
   } catch (error) {
     console.error("submitProjectSeedanceVideo failed:", error);
-    return { ok: false, status: "blocked", uiStatus: "blocked", message: "视频提交未完成，请检查生成服务、即梦登录和项目参考。" };
+    return {
+      ok: false,
+      status: "blocked",
+      uiStatus: "blocked",
+      message: runtimeErrorMessage(error, "视频提交未完成，请检查即梦登录、CLI 权限或稍后重试。"),
+    };
   }
 }
 

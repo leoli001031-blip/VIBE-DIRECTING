@@ -1,6 +1,6 @@
 # Demo Recording Runbook
 
-Updated: 2026-06-15
+Updated: 2026-06-20
 
 This is the recording-facing guide for the current Vibe Director demo. It is
 not a product roadmap and should stay aligned with `README.md` and
@@ -10,7 +10,8 @@ not a product roadmap and should stay aligned with `README.md` and
 
 Show Vibe Director as a local-first video director Agent:
 
-- the creator gives an idea, script, images, or voice reference in one input;
+- the creator gives an idea, script, images, or voice reference in the right
+  Agent conversation;
 - the Agent decides what the project needs;
 - the app generates and reviews reference material;
 - the app compiles Seedance-ready video requests;
@@ -29,13 +30,18 @@ Use the canonical repo:
 cd "/Users/lichenhao/Desktop/new vibe directing"
 ```
 
+Use `docs/demo-final-rehearsal-checklist.md` as the live rehearsal checklist.
+The runbook below is the recording story; the checklist is the observable
+proof list before you press record.
+
 Run the quick gates:
 
 ```bash
 npm run demo:goal-audit:test
+npm run director-fresh-draft-intent:test
 npm run minimal-ui:test
 npm run current-project-ui-closed-loop:test
-npm run seedance-two-video-evidence:test
+npm run current-project-preview-ui-runtime-closed-loop:test
 ```
 
 For a fuller confidence pass, run:
@@ -47,15 +53,30 @@ npm run demo:ready:test
 Start the local app:
 
 ```bash
-npm run local-runtime-api
-npm run dev -- --port 5178
+npm run dev:full
 ```
 
 Open:
 
 ```text
-http://127.0.0.1:5178/
+http://127.0.0.1:5174/
 ```
+
+`dev:full` will reuse an already-running local runtime API on
+`127.0.0.1:8790` and start only the missing dev server. This avoids the common
+demo problem where a stale runtime process makes the front end fail to start.
+If `5174` is already occupied, `dev:full` checks whether the existing Vite
+server is fresh enough for recording. If it reports a stale frontend, stop the
+old Vite process using the PID and `kill` command printed by the terminal,
+rerun `npm run dev:full`, then verify the canonical recording URL with:
+
+```bash
+VIBE_FRONTEND_URL=http://127.0.0.1:5174/ npm run demo:artifact-freshness:test
+```
+
+If macOS or the current shell refuses the printed `kill` command, close the old
+terminal tab that started Vite, or quit the matching Node/Vite process from
+Activity Monitor, then rerun the same two commands above.
 
 Avoid opening settings, diagnostics, provider credentials, or raw prompt files
 while recording unless the segment is intentionally about engineering details.
@@ -65,10 +86,10 @@ while recording unless the segment is intentionally about engineering details.
 Use a small project with two or three video units. It is enough to show the
 Agent loop without waiting on a long provider queue.
 
-Paste this into the bottom input:
+Paste this into the right Agent composer:
 
 ```text
-做一个 10 秒的 90 年代日本 TV 动画风短片：深夜山路便利店外，一辆白色跑车和一辆黑色跑车准备起跑。便利店霓虹灯闪烁，雨后路面反光，低机位扫过车灯、轮胎和湿地，最后两辆车冲出弯道。整体紧张但克制，不要真人写实，不要 3D 游戏感。先帮我拆镜头、判断需要哪些参考素材，并生成可复核的参考。
+做一个 10 秒的 90 年代日本 TV 动画风短片：深夜山路便利店外，一辆白色跑车和一辆黑色跑车准备起跑。便利店霓虹灯闪烁，雨后路面反光，低机位扫过车灯、轮胎和湿地，最后两辆车冲出弯道。整体紧张但克制，不要真人写实，不要 3D 游戏感。先帮我拆镜头、判断需要哪些参考素材，不要提交视频。
 ```
 
 If a live provider queue would slow down the recording, show the returned
@@ -87,9 +108,13 @@ The evidence project path is:
 ## Recording Flow
 
 1. Open or create a local project folder.
-2. Point out that the bottom input is the main control surface.
+2. Point out the three-column contract: left project, center results, right
+   Agent conversation.
 3. Paste the project idea and send it.
-4. Show the Agent plan: shots, materials, and selected reference strategies.
+4. Show the Agent reply: what it understood, what it will do, what still needs
+   confirmation, and which Skills it recommends. The confirmation card should
+   read like a short Agent reply, for example: "I am about to change this shot;
+   this will not submit video until you confirm."
 5. Show reference generation and review:
    - character / object / scene references;
    - storyboard references when the Agent chooses storyboard mode;
@@ -98,10 +123,15 @@ The evidence project path is:
    - `omni_reference`: simple action with scene, character, and object anchors.
    - `storyboard_narrative`: ordered story progression and emotional beats.
    - `storyboard_rapid_cut`: dense action, quick cuts, or commercial rhythm.
+   Keep this short on screen: the right rail shows the three Skill groups first,
+   and the longer Skill explanation can stay folded unless you want to point at
+   the exact rules.
 7. Show the review/lock step.
 8. Show Seedance submit readiness and serial queue status.
-9. If a returned clip is available, show preview and export readiness.
-10. Close by showing that the project lives in a folder with `Project.vibe`.
+9. Select a shot or asset, then say "这个不对，重做这个" or a targeted
+   change. Show that the Agent knows what "this" refers to.
+10. If a returned clip is available, show preview and export readiness.
+11. Close by showing that the project lives in a folder with `Project.vibe`.
 
 ## Talk Track
 
@@ -114,7 +144,7 @@ Opening:
 When showing the input:
 
 ```text
-我不希望用户去理解一堆按钮。用户只需要把想法、脚本、图片或者声音参考放进这里，Agent 会判断这是角色、场景、道具、故事板还是声音参考。
+我不希望用户去理解一堆按钮。用户只需要在右侧跟 Agent 说话，或者把脚本、图片、声音参考拖进来。Agent 会判断这是角色、场景、道具、故事板还是声音参考。
 ```
 
 When showing skills:
@@ -148,8 +178,13 @@ Closing:
 ## If Something Goes Wrong
 
 - If the UI looks stale, restart the dev server and reload the browser.
-- If a project picker or modal covers the composer, close the picker first; the
-  composer intentionally hides behind project selection.
+- If the right Agent rail looks stale, restart the dev server and reload the
+  browser. Avoid switching between old `localhost` and `127.0.0.1` tabs.
+- If references are already usable but the right rail still asks to
+  `确认生成参考`, reload once. The expected state is a `参考可用` result card
+  plus next actions, not another reference-generation confirmation.
+- If a project picker or modal covers the Agent composer, close the picker
+  first; project selection is intentionally modal.
 - If Seedance is still queued, show serial queue status and use the two-video
   evidence project for returned-clip proof.
 - If a generated reference is wrong, treat it as a review moment: reject or ask

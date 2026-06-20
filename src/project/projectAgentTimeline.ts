@@ -57,12 +57,21 @@ export async function openProjectAgentTimeline(
       projectRoot: target.projectRoot,
     })
     : undefined;
-  if (runtimeRead?.ok && runtimeRead.content != null) {
-    return parseProjectAgentTimelineText(runtimeRead.content, fallback, {
+  const runtimeOpen = runtimeRead?.ok && runtimeRead.content != null
+    ? parseProjectAgentTimelineText(runtimeRead.content, fallback, {
       path: runtimeRead.path || projectAgentTimelinePath,
-    });
-  }
+    })
+    : undefined;
   const readResult = await readProjectVibeSidecarText(target, projectAgentTimelinePath);
+  const sidecarOpen = readResult.ok && readResult.content != null
+    ? parseProjectAgentTimelineText(readResult.content, fallback, {
+      path: readResult.path,
+    })
+    : undefined;
+  const restored = selectLatestProjectAgentTimelineOpenResult(runtimeOpen, sidecarOpen);
+  if (restored) return restored;
+  if (runtimeOpen) return runtimeOpen;
+  if (sidecarOpen) return sidecarOpen;
   if (!readResult.ok || readResult.content == null) {
     return {
       ok: false,
@@ -88,19 +97,23 @@ export async function saveProjectAgentTimeline(
       }
     : timeline;
   const serialized = `${JSON.stringify(normalizedTimeline, null, 2)}\n`;
+  let runtimeWriteError: string | undefined;
+  let runtimeWriteOk = false;
+  let runtimeWritePath: string | undefined;
   if (target.projectRoot) {
-    const runtimeWrite = await saveCurrentProjectAgentTimelineTextToRuntime({
-      projectId: normalizedTimeline.projectId,
-      projectRoot: target.projectRoot,
-    }, serialized);
-    if (runtimeWrite.ok) {
-      return {
-        ok: true,
-        status: "written",
-        path: runtimeWrite.path || projectAgentTimelinePath,
-        timeline: normalizedTimeline,
-        errors: [],
-      };
+    try {
+      const runtimeWrite = await saveCurrentProjectAgentTimelineTextToRuntime({
+        projectId: normalizedTimeline.projectId,
+        projectRoot: target.projectRoot,
+      }, serialized);
+      if (runtimeWrite.ok) {
+        runtimeWriteOk = true;
+        runtimeWritePath = runtimeWrite.path || projectAgentTimelinePath;
+      } else {
+        runtimeWriteError = runtimeWrite.message || runtimeWrite.status;
+      }
+    } catch (error) {
+      runtimeWriteError = error instanceof Error ? error.message : String(error);
     }
   }
   const writeResult = await writeProjectVibeSidecarText(
@@ -108,12 +121,21 @@ export async function saveProjectAgentTimeline(
     projectAgentTimelinePath,
     serialized,
   );
+  if (runtimeWriteOk) {
+    return {
+      ok: true,
+      status: "written",
+      path: runtimeWritePath || writeResult.path,
+      timeline: normalizedTimeline,
+      errors: [],
+    };
+  }
   return {
     ok: writeResult.ok,
     status: writeResult.ok ? "written" : writeResult.status === "unavailable" ? "unavailable" : "error",
     path: writeResult.path,
     timeline: writeResult.ok ? timeline : undefined,
-    errors: writeResult.errors,
+    errors: writeResult.ok ? [] : [runtimeWriteError, ...writeResult.errors].filter((item): item is string => Boolean(item)),
   };
 }
 
@@ -163,6 +185,23 @@ function parseProjectAgentTimelineText(
   }
 }
 
+function selectLatestProjectAgentTimelineOpenResult(
+  ...results: Array<ProjectAgentTimelineOpenResult | undefined>
+) {
+  const restored = results.filter((result): result is ProjectAgentTimelineOpenResult => Boolean(result?.ok));
+  if (!restored.length) return undefined;
+  return restored.reduce((latest, result) => {
+    const latestTime = projectAgentTimelineUpdatedAtMs(latest.timeline);
+    const resultTime = projectAgentTimelineUpdatedAtMs(result.timeline);
+    return resultTime > latestTime ? result : latest;
+  });
+}
+
+function projectAgentTimelineUpdatedAtMs(timeline: VibeAgentTimelineDocument) {
+  const updatedAt = Date.parse(timeline.updatedAt);
+  return Number.isFinite(updatedAt) ? updatedAt : 0;
+}
+
 function createProjectAgentTimeline(input: {
   project: ProjectVibeDocument;
   projectRoot?: string;
@@ -177,5 +216,8 @@ function createProjectAgentTimeline(input: {
 }
 
 function normalizeProjectAgentRoot(value: string) {
-  return value.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+  const normalized = value.trim().replace(/\\/g, "/").replace(/\/+$/g, "").replace(/^\.\//, "");
+  const runtimeRootIndex = normalized.indexOf(".vibe-runtime/");
+  if (runtimeRootIndex >= 0) return normalized.slice(runtimeRootIndex);
+  return normalized;
 }

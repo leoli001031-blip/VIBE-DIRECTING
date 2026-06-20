@@ -1,7 +1,7 @@
 import { buildScriptPlannerState, type ScriptPlannerResult } from "./scriptPlanner";
 import { stableKnowledgeHash } from "./knowledgeManifest";
 import { stripDirectorAgentPermissionControlPhrases } from "./directorAgentPermissionIntent";
-import type { DirectorSessionState } from "./directorSession";
+import { normalizeCharacterCandidate, type DirectorSessionState } from "./directorSession";
 import type { StoryDiscussionDelta } from "./storyDiscussionWorkspace";
 import type { MusicRhythmAnalysis } from "./musicRhythmAnalysis";
 import {
@@ -21,6 +21,10 @@ import type {
   ProjectVibeTransaction,
   ProjectVibeTransactionReceipt,
 } from "../project/types";
+import {
+  classifyReferenceAssetText,
+  referenceAssetCandidates,
+} from "./referenceAssetStrategy";
 
 export type NewVideoReferenceBindingKind = "character" | "scene" | "prop" | "style" | "reference";
 
@@ -426,8 +430,41 @@ function sourceTurnFromSession(
   };
 }
 
+function stagedFactEvidenceIdsFromSession(
+  directorSession?: BuildNewVideoProjectVibeStagedTransactionInput["directorSession"],
+): string[] | undefined {
+  if (!directorSession) return undefined;
+  return directorSession.stagedFacts
+    .filter((fact) => {
+      if (fact.kind !== "character_candidate") return true;
+      const label = clean(fact.label);
+      const normalized = normalizeCharacterCandidate(label);
+      const idMarker = "_character_candidate_";
+      const markerIndex = fact.id.lastIndexOf(idMarker);
+      const idCandidate = markerIndex >= 0
+        ? clean(fact.id.slice(markerIndex + idMarker.length).replace(/_\d+$/u, ""))
+        : "";
+      const normalizedIdCandidate = normalizeCharacterCandidate(idCandidate);
+      return Boolean(
+        label
+          && normalized
+          && label === normalized
+          && (!idCandidate || idCandidate === normalizedIdCandidate),
+      );
+    })
+    .map((fact) => fact.id);
+}
+
 function unique(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)));
+}
+
+function hasActionPrefixedCharacterCandidateRef(ref: string): boolean {
+  const marker = "_character_candidate_";
+  const markerIndex = ref.lastIndexOf(marker);
+  if (markerIndex < 0) return false;
+  const candidate = clean(ref.slice(markerIndex + marker.length).replace(/_\d+$/u, ""));
+  return Boolean(candidate && normalizeCharacterCandidate(candidate) !== candidate);
 }
 
 function shortNote(value: string, maxLength = 72): string {
@@ -702,6 +739,26 @@ function storyboardShotIntent(row: NewVideoProjectVibeStoryboardDraftShotLike, i
   ].filter(Boolean).join("。");
 }
 
+function storyboardCharacterLabels(row: NewVideoProjectVibeStoryboardDraftShotLike): string[] {
+  return referenceAssetCandidates(splitStoryboardList(row.characters), "character");
+}
+
+function storyboardSceneLabels(row: NewVideoProjectVibeStoryboardDraftShotLike): string[] {
+  const candidates = referenceAssetCandidates(splitStoryboardList(row.scene), "scene");
+  return candidates.length ? candidates : [];
+}
+
+function storyboardPropLabels(row: NewVideoProjectVibeStoryboardDraftShotLike): string[] {
+  const rawCharacters = splitStoryboardList(row.characters);
+  const objectLabelsFromCharacterField = rawCharacters.filter(
+    (label) => classifyReferenceAssetText(label, "character").bucket === "object_constraint",
+  );
+  return referenceAssetCandidates([
+    ...splitStoryboardList(row.props),
+    ...objectLabelsFromCharacterField,
+  ], "prop");
+}
+
 function applyStoryboardDraftToPlanner(input: {
   planner: ScriptPlannerResult;
   storyboardDraft?: NewVideoProjectVibeStoryboardDraftShotLike[];
@@ -724,9 +781,9 @@ function applyStoryboardDraftToPlanner(input: {
     const sectionId = claimPlannerId(`sec_storyboard_${rowToken}`, usedSectionIds);
     const shotId = claimPlannerId(`shot_storyboard_${rowToken}`, usedShotIds);
     const title = storyboardShotTitle(row, index);
-    const characters = splitStoryboardList(row.characters);
-    const scenes = splitStoryboardList(row.scene);
-    const props = splitStoryboardList(row.props);
+    const characters = storyboardCharacterLabels(row);
+    const scenes = storyboardSceneLabels(row);
+    const props = storyboardPropLabels(row);
     const visualAnchor = shortNote([
       cleanProjectFactValue(row.shotSize),
       cleanProjectFactValue(row.scene),
@@ -1535,7 +1592,7 @@ function buildSourceRefs(input: {
     ...(input.discussionDeltaIds || []).map((id) => `discussion_delta:${id}`),
     ...(input.audioReferenceIds || []),
     ...(input.sourceTurn?.sourceRefs || []),
-  ]);
+  ]).filter((ref) => !hasActionPrefixedCharacterCandidateRef(ref));
 }
 
 function confirmedDiscussionDeltas(deltas?: StoryDiscussionDelta[]): StoryDiscussionDelta[] {
@@ -1561,7 +1618,7 @@ function buildScriptPlanningReceipt(input: {
     sectionIds: input.planner.sections.map((section) => section.id),
     shotIds: input.planner.shots.map((shot) => shot.id),
     blockerCount: input.planner.qaBlockers.filter((blocker) => blocker.severity === "blocker").length,
-    evidenceRefs: unique(input.evidenceRefs),
+    evidenceRefs: unique(input.evidenceRefs).filter((ref) => !hasActionPrefixedCharacterCandidateRef(ref)),
     providerSelfReportUsed: false,
     runtimeFixtureUsed: false,
   };
@@ -1694,7 +1751,7 @@ export function buildNewVideoProjectVibeStagedTransaction(
     discussionDeltas: input.discussionDeltas,
     generatedAt,
   });
-  const stagedFactIds = input.directorSession?.stagedFacts.map((fact) => fact.id)
+  const stagedFactIds = stagedFactEvidenceIdsFromSession(input.directorSession)
     || fallbackStagedFactIds({ draft: input.draft, planner, draftHash: nextDraftHash });
   const discussionDeltaIds = nextDiscussionDeltas.map((delta) => delta.id);
   const audioReferenceIds = draftAudioReferenceIds(input.draft);

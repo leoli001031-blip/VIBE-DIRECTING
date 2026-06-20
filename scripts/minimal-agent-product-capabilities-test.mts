@@ -173,7 +173,7 @@ const outcome = await runMinimalAgentConfirmedProductAction({
 });
 
 assert.equal(outcome.status, "completed");
-assert.equal(outcome.label, "参考生成已进入复核");
+assert.equal(outcome.label, "参考生成中，等待结果回到参考页。");
 assert.equal(referenceTargets.length, 1);
 assert.equal(referenceTargets[0]?.skipConfirm, true);
 assert.equal(referenceTargets[0]?.confirmationReceiptId, handoffLog[0]);
@@ -182,7 +182,38 @@ assert.equal(referenceTargets[0]?.agentToolTrace?.handler, "image2_reference_gen
 assert.equal(referenceTargets[0]?.agentToolTrace?.expectedReceipt, "image_reference_receipt");
 assert.deepEqual(referenceTargets[0]?.selectedShotIds, ["shot_1"]);
 assert.deepEqual(referenceTargets[0]?.assetTypes, ["scene"]);
-assert.equal(statusLog.includes("参考生成已进入复核"), true);
+assert.equal(statusLog.includes("参考生成中，等待结果回到参考页。"), true);
+
+const returnedReferenceStatusLog: string[] = [];
+const returnedReferenceOutcome = await runMinimalAgentConfirmedProductAction({
+  action,
+  userIntent: "继续",
+  availability: {
+    projectReady: true,
+    webSearchReady: false,
+    referenceGenerationReady: true,
+    videoSubmitReady: false,
+    exportReady: false,
+  },
+  videoPermissionContract,
+  webSearchSettings,
+  setStatus: (status) => returnedReferenceStatusLog.push(status),
+  setAgentToolHandoff: () => undefined,
+  setResearchStatus: () => undefined,
+  setReferenceStatus: () => undefined,
+  setResearchResult: () => undefined,
+  createReferences: () => ({
+    status: "needs_review",
+    message: "参考生成已进入复核",
+    outputPath: "references/shot_1_scene.png",
+  }),
+});
+
+assert.equal(returnedReferenceOutcome.status, "completed");
+assert.equal(returnedReferenceOutcome.label, "参考生成已进入复核");
+assert.equal(returnedReferenceOutcome.waitingReview, true);
+assert.equal(returnedReferenceOutcome.resultStatus, "ready");
+assert.equal(returnedReferenceStatusLog.includes("参考生成已进入复核"), true);
 
 const adapterStatusLog: string[] = [];
 const adapterReferenceTargets: AgentControlledToolInvocationTarget[] = [];
@@ -203,7 +234,7 @@ const minimalProductAdapter = buildMinimalAgentProductAdapter({
   setResearchResult: () => undefined,
   createReferences: (target) => {
     if (target) adapterReferenceTargets.push(target);
-    return { status: "needs_review", message: "adapter reference ok" };
+    return { status: "needs_review", message: "adapter reference ok", outputPath: "references/adapter-scene.png" };
   },
 });
 const adapterOutcome = await minimalProductAdapter.runConfirmedAction({

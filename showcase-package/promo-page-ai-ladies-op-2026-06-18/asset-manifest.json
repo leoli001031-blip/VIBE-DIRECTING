@@ -1,0 +1,103 @@
+{
+  "project": "AI大小姐们想让我告白 OP",
+  "purpose": "promo-page-assets",
+  "showcasePage": "index.html",
+  "finalVideo": {
+    "master": "hero/ai-ladies-op-final-muted.mp4",
+    "web": "web/ai-ladies-op-final-web.mp4",
+    "poster": "web/hero-poster.jpg",
+    "durationSeconds": 32.1,
+    "audio": "none"
+  },
+  "hero": {
+    "timelineContact": "hero/ai-ladies-op-timeline-contact.png",
+    "poster": "hero/hero-poster.png"
+  },
+  "shots": [
+    {
+      "id": "shot-01",
+      "title": "ZC学院开场",
+      "video": "shots/shot-01-academy-opening-muted.mp4",
+      "contact": "stills/shot-01-contact.png",
+      "prompt": "prompts/shot-01-prompt.md"
+    },
+    {
+      "id": "shot-02",
+      "title": "Claude / GPT 对位",
+      "video": "shots/shot-02-claude-gpt-duel-muted.mp4",
+      "contact": "stills/shot-02-contact.png",
+      "prompt": "prompts/shot-02-prompt.md"
+    },
+    {
+      "id": "shot-03",
+      "title": "Gemini / 豆包闯入",
+      "video": "shots/shot-03-gemini-doubao-burst-muted.mp4",
+      "contact": "stills/shot-03-contact.png",
+      "prompt": "prompts/shot-03-prompt.md"
+    },
+    {
+      "id": "shot-04",
+      "title": "DeepSeek / MiniMax / Kimi 三连",
+      "video": "shots/shot-04-three-heroine-flash-muted.mp4",
+      "contact": "stills/shot-04-contact.png",
+      "prompt": "prompts/shot-04-prompt.md"
+    },
+    {
+      "id": "shot-05",
+      "title": "社团室全员据点",
+      "video": "shots/shot-05-clubroom-team-muted.mp4",
+      "contact": "stills/shot-05-contact.png",
+      "prompt": "prompts/shot-05-prompt.md"
+    },
+    {
+      "id": "shot-06",
+      "title": "核心三女主 Hook",
+      "video": "shots/shot-06-core3-hook-muted.mp4",
+      "contact": "stills/shot-06-contact.png",
+      "prompt": "prompts/shot-06-prompt-final-core3.md"
+    }
+  ],
+  "referenceGrids": {
+    "characters": "references/character-reference-grid.png",
+    "scenes": "references/scene-reference-grid.png"
+  },
+  "software": {
+    "screenshots": [
+      {
+        "id": "entry",
+        "title": "统一输入与 Agent 消息区",
+        "path": "software-ui/01-current-entry-viewport.png"
+      },
+      {
+        "id": "references",
+        "title": "参考资产页",
+        "path": "software-ui/02-reference-assets.png"
+      },
+      {
+        "id": "video-status",
+        "title": "视频提交与回流状态",
+        "path": "software-ui/03-video-preview-status.png"
+      },
+      {
+        "id": "export",
+        "title": "导出页",
+        "path": "software-ui/04-export-page.png"
+      },
+      {
+        "id": "story-flow",
+        "title": "故事流与镜头状态",
+        "path": "software-ui/05-story-flow.png"
+      }
+    ]
+  },
+  "copy": {
+    "pageCopy": "copy/page-copy.md",
+    "conceptPositioning": "copy/concept-positioning.md",
+    "softwareScreenshotNotes": "copy/software-screenshot-notes.md",
+    "pageSectionOutline": "copy/page-section-outline.md"
+  },
+  "evidence": {
+    "runState": "evidence/run-state.json",
+    "submitIds": "evidence/submit-ids.md"
+  }
+}

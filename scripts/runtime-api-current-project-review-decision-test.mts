@@ -95,7 +95,7 @@ try {
         id: "preview_s01",
         shotId: "S01",
         label: "Ticket insert",
-        mediaPath: "runs/demo/S01/output.png",
+        mediaPath: "project-root/runs/demo/S01/output.png",
         sourceReceiptId: "provider_receipt_s01",
         outputHash: "sha256-lock",
       },
@@ -104,7 +104,7 @@ try {
         assetId: "旧书",
         assetKind: "prop",
         label: "Ticket insert",
-        outputPath: "runs/demo/S01/output.png",
+        outputPath: "project-root/runs/demo/S01/output.png",
         sourceReceiptId: "provider_receipt_s01",
         outputHash: "sha256-lock",
       },
@@ -122,6 +122,7 @@ try {
   const lockedProject = loadProject(projectVibePath);
   assert(lockedProject.receipts?.reviewReceipts.some((receipt) => receipt.id === "review_lock_s01" && receipt.status === "approved"), "lock should append approved review receipt");
   assert(lockedProject.assets.some((asset) => asset.id === "旧书" && asset.kind === "prop" && asset.status === "locked"), "lock should upsert locked prop asset");
+  assert(lockedProject.assets.some((asset) => asset.id === "旧书" && asset.path === "runs/demo/S01/output.png"), "lock should persist project-relative output paths");
   assert(lockedProject.visualMemory.entries.some((entry) => entry.assetId === "旧书" && entry.canUseAsFutureReference), "lock should update visual memory");
   assert(lockedProject.shots.some((shot) => shot.id === "S01" && shot.status === "ready" && shot.propAssetIds?.includes("旧书")), "lock should attach the asset back to the source shot");
 

@@ -1,0 +1,197 @@
+{
+  "schemaVersion": "ai_ladies_op_asset_index_v1",
+  "generatedAt": "2026-06-18T05:20:11.469Z",
+  "sourceProject": "/Users/lichenhao/Desktop/AI大小姐们想让我告白",
+  "global": {
+    "model": "seedance2.0_vip",
+    "ratio": "16:9",
+    "resolution": "720p",
+    "serialSubmissionOnly": true,
+    "submitVideoNow": false
+  },
+  "shots": [
+    {
+      "id": "shot_01",
+      "title": "ZC学院开场",
+      "durationSeconds": 5,
+      "prompt": "02-prompts/shot_01_zc_academy_opening.md",
+      "references": [
+        {
+          "image": 1,
+          "role": "scene",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/scenes/academy_2026-05-26T17-37-13-227Z.png"
+        },
+        {
+          "image": 2,
+          "role": "character:protagonist",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/protagonist/identity_ref/protagonist_identity_ref_2026-05-26T16-17-35-187Z.png"
+        }
+      ]
+    },
+    {
+      "id": "shot_02",
+      "title": "Claude / GPT 对位",
+      "durationSeconds": 5,
+      "prompt": "02-prompts/shot_02_claude_gpt_duel.md",
+      "references": [
+        {
+          "image": 1,
+          "role": "scene",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/scenes/corridor_2026-05-31T00-00-00-000Z.png"
+        },
+        {
+          "image": 2,
+          "role": "character:claude",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/claude/identity_ref/claude_identity_ref_2026-05-26T15-54-10-516Z.png"
+        },
+        {
+          "image": 3,
+          "role": "character:gpt",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/gpt/identity_ref/gpt_identity_ref_2026-05-26T16-26-06-230Z.png"
+        }
+      ]
+    },
+    {
+      "id": "shot_03",
+      "title": "Gemini / 豆包闯入",
+      "durationSeconds": 4,
+      "prompt": "02-prompts/shot_03_gemini_doubao_burst.md",
+      "references": [
+        {
+          "image": 1,
+          "role": "scene",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/scenes/clubroom_2026-05-26T17-38-35-441Z.png"
+        },
+        {
+          "image": 2,
+          "role": "character:gemini",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/gemini/identity_ref/gemini_identity_ref_2026-05-26T16-26-06-254Z.png"
+        },
+        {
+          "image": 3,
+          "role": "character:doubao",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/doubao/identity_ref/doubao_2026-05-26T16-47-11-806Z.png"
+        },
+        {
+          "image": 4,
+          "role": "character:protagonist_optional",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/protagonist/identity_ref/protagonist_identity_ref_2026-05-26T16-17-35-187Z.png"
+        }
+      ]
+    },
+    {
+      "id": "shot_04",
+      "title": "DeepSeek / MiniMax / Kimi 三连",
+      "durationSeconds": 6,
+      "prompt": "02-prompts/shot_04_three_heroine_flash.md",
+      "references": [
+        {
+          "image": 1,
+          "role": "scene:sports_field",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/scenes/sports_field_2026-05-26T19-02-41-467Z.png"
+        },
+        {
+          "image": 2,
+          "role": "scene:rooftop",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/scenes/rooftop_2026-05-26T19-03-39-418Z.png"
+        },
+        {
+          "image": 3,
+          "role": "character:deepseek",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/deepseek/identity_ref/deepseek_identity_ref_2026-05-26T16-09-56-411Z.png"
+        },
+        {
+          "image": 4,
+          "role": "character:minimax",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/minimax/identity_ref/minimax_identity_ref_2026-05-26T16-13-10-882Z.png"
+        },
+        {
+          "image": 5,
+          "role": "character:kimi",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/kimi/identity_ref/kimi_identity_ref_2026-05-26T16-13-10-884Z.png"
+        }
+      ]
+    },
+    {
+      "id": "shot_05",
+      "title": "社团室全员据点",
+      "durationSeconds": 6,
+      "prompt": "02-prompts/shot_05_clubroom_team.md",
+      "references": [
+        {
+          "image": 1,
+          "role": "scene",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/scenes/clubroom_2026-05-26T17-38-35-441Z.png"
+        },
+        {
+          "image": 2,
+          "role": "character:protagonist",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/protagonist/identity_ref/protagonist_identity_ref_2026-05-26T16-17-35-187Z.png"
+        },
+        {
+          "image": 3,
+          "role": "character:gpt",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/gpt/identity_ref/gpt_identity_ref_2026-05-26T16-26-06-230Z.png"
+        },
+        {
+          "image": 4,
+          "role": "character:gemini",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/gemini/identity_ref/gemini_identity_ref_2026-05-26T16-26-06-254Z.png"
+        },
+        {
+          "image": 5,
+          "role": "character:doubao",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/doubao/identity_ref/doubao_2026-05-26T16-47-11-806Z.png"
+        },
+        {
+          "image": 6,
+          "role": "character:minimax",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/minimax/identity_ref/minimax_identity_ref_2026-05-26T16-13-10-882Z.png"
+        }
+      ]
+    },
+    {
+      "id": "shot_06",
+      "title": "男主被包围的 OP Hook",
+      "durationSeconds": 6,
+      "prompt": "02-prompts/shot_06_confession_pressure_hook.md",
+      "references": [
+        {
+          "image": 1,
+          "role": "scene",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/scenes/academy_2026-05-26T17-37-13-227Z.png"
+        },
+        {
+          "image": 2,
+          "role": "character:protagonist",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/protagonist/identity_ref/protagonist_identity_ref_2026-05-26T16-17-35-187Z.png"
+        },
+        {
+          "image": 3,
+          "role": "character:claude",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/claude/identity_ref/claude_identity_ref_2026-05-26T15-54-10-516Z.png"
+        },
+        {
+          "image": 4,
+          "role": "character:gpt",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/gpt/identity_ref/gpt_identity_ref_2026-05-26T16-26-06-230Z.png"
+        },
+        {
+          "image": 5,
+          "role": "character:gemini",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/gemini/identity_ref/gemini_identity_ref_2026-05-26T16-26-06-254Z.png"
+        },
+        {
+          "image": 6,
+          "role": "character:deepseek",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/deepseek/identity_ref/deepseek_identity_ref_2026-05-26T16-09-56-411Z.png"
+        },
+        {
+          "image": 7,
+          "role": "character:doubao",
+          "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/doubao/identity_ref/doubao_2026-05-26T16-47-11-806Z.png"
+        }
+      ]
+    }
+  ]
+}

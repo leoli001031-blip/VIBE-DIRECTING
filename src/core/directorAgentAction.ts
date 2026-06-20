@@ -3,8 +3,14 @@ import type { DirectorProductionStrategyId } from "./directorProductionSkill";
 import {
   detectDirectorAgentPermissionIntent,
   directorAgentPermissionIntentDisallowsVideoSubmit,
+  isDirectorAgentExplainOnlyIntent,
   stripDirectorAgentPermissionControlPhrases,
 } from "./directorAgentPermissionIntent";
+import {
+  buildProjectInboxProjection,
+  type ProjectInboxKind,
+  type ProjectInboxProjection,
+} from "./projectAgentWorkspace";
 import type { AssetRecord, ShotRecord } from "./types";
 
 export const DIRECTOR_AGENT_ACTION_SCHEMA_VERSION = "director_agent_action/0.1.0";
@@ -86,7 +92,10 @@ export interface DirectorAgentStateSnapshot {
   projectTitle: string;
   projectRoot?: string;
   currentView?: string;
+  sectionCount: number;
   totalShots: number;
+  totalAssets: number;
+  skillCount: number;
   shots: DirectorAgentShotSummary[];
   selectedShotIds: string[];
   selectedAssetId?: string;
@@ -112,8 +121,38 @@ export interface DirectorAgentStateSnapshot {
     candidate: number;
     missing: number;
   };
+  assetInbox: DirectorAgentAssetInboxSnapshot;
   videoState: DirectorAgentVideoState;
   projectReadiness: DirectorAgentProjectReadiness;
+}
+
+export interface DirectorAgentAssetInboxSnapshot {
+  summary: string;
+  nextAction: string;
+  totalCount: number;
+  needsReviewCount: number;
+  kindSummary: DirectorAgentAssetKindSummary[];
+  items: DirectorAgentAssetInboxItem[];
+}
+
+export interface DirectorAgentAssetKindSummary {
+  kind: ProjectInboxKind;
+  label: string;
+  count: number;
+}
+
+export interface DirectorAgentAssetInboxItem {
+  kind: ProjectInboxKind;
+  label: string;
+  detail: string;
+  suggestedBinding: string;
+  suggestedAction: string;
+  reason: string;
+  confidence: "high" | "medium" | "low";
+  needsReview: boolean;
+  originLabel: string;
+  assetId?: string;
+  shotIds?: string[];
 }
 
 export type DirectorAgentVideoStatus =
@@ -237,6 +276,8 @@ const unknownStrategyLabel = "待判断";
 export function buildDirectorAgentStateSnapshot(input: BuildDirectorAgentStateSnapshotInput): DirectorAgentStateSnapshot {
   const shots = input.runtimeState.storyFlow.shots;
   const assets = input.runtimeState.visualMemory.assets;
+  const sectionCount = input.runtimeState.storyFlow.sections?.length ?? 0;
+  const skillCount = new Set(shots.map((shot) => shot.referenceStrategy).filter(Boolean)).size;
   const selectedShotIds = uniqueStrings([
     ...(input.selectedShotIds || []),
     input.selectedShotId || "",
@@ -252,12 +293,16 @@ export function buildDirectorAgentStateSnapshot(input: BuildDirectorAgentStateSn
     : undefined;
   const videoState = normalizeDirectorAgentVideoState(input);
   const counts = referenceCounts(shots, assets);
+  const assetInbox = summarizeAgentAssetInbox(buildProjectInboxProjection({ assets }));
 
   return {
     projectTitle: input.runtimeState.project.title || "未命名项目",
     projectRoot: input.runtimeState.project.root,
     currentView: input.currentView,
+    sectionCount,
     totalShots: shots.length,
+    totalAssets: assets.length,
+    skillCount,
     shots: shots.map(summarizeShotIndexItem),
     selectedShotIds,
     selectedAssetId: selectedAsset?.id,
@@ -283,9 +328,61 @@ export function buildDirectorAgentStateSnapshot(input: BuildDirectorAgentStateSn
       candidate: assets.filter((asset) => asset.lockedStatus === "candidate").length,
       missing: counts.missingReferences,
     },
+    assetInbox,
     videoState,
     projectReadiness: buildAgentProjectReadiness(shots, assets, counts),
   };
+}
+
+function summarizeAgentAssetInbox(inbox: ProjectInboxProjection): DirectorAgentAssetInboxSnapshot {
+  return {
+    summary: inbox.summary,
+    nextAction: inbox.nextAction,
+    totalCount: inbox.totalCount,
+    needsReviewCount: inbox.needsReviewCount,
+    kindSummary: summarizeInboxKinds(inbox),
+    items: inbox.items.slice(0, 4).map((item) => ({
+      kind: item.kind,
+      label: item.label,
+      detail: item.detail,
+      suggestedBinding: item.suggestedBinding,
+      suggestedAction: item.suggestedAction,
+      reason: item.reason,
+      confidence: item.confidence,
+      needsReview: item.needsReview,
+      originLabel: item.originLabel,
+      assetId: item.assetId,
+      shotIds: item.shotIds,
+    })),
+  };
+}
+
+function summarizeInboxKinds(inbox: ProjectInboxProjection): DirectorAgentAssetKindSummary[] {
+  const counts = new Map<ProjectInboxKind, number>();
+  for (const item of inbox.items) counts.set(item.kind, (counts.get(item.kind) || 0) + 1);
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([kind, count]) => ({
+      kind,
+      label: agentInboxKindLabel(kind),
+      count,
+    }));
+}
+
+function agentInboxKindLabel(kind: ProjectInboxKind) {
+  if (kind === "script") return "脚本";
+  if (kind === "character") return "角色";
+  if (kind === "scene") return "场景";
+  if (kind === "prop") return "道具";
+  if (kind === "storyboard") return "故事板";
+  if (kind === "voice") return "声音";
+  if (kind === "video") return "视频";
+  if (kind === "prompt") return "提示词";
+  if (kind === "receipt") return "生成证据";
+  if (kind === "export") return "交付";
+  if (kind === "reference") return "参考";
+  return "待判断";
 }
 
 export function buildDirectorAgentActionEnvelope(input: BuildDirectorAgentActionEnvelopeInput): DirectorAgentActionEnvelope {
@@ -317,7 +414,7 @@ export function buildDirectorAgentActionEnvelope(input: BuildDirectorAgentAction
     kind,
     status,
     summary: summaryFor({ kind, target, strategy, status, snapshot: input.snapshot, userIntent }),
-    userFacingMessage: userFacingMessageFor({ kind, status, blockers, strategy, target, snapshot: input.snapshot }),
+    userFacingMessage: userFacingMessageFor({ kind, status, blockers, strategy, target, snapshot: input.snapshot, userIntent }),
     target,
     proposedChanges,
     blockers,
@@ -348,10 +445,12 @@ export function classifyDirectorAgentAction(userIntent: string, snapshot?: Direc
   const permissionIntent = detectDirectorAgentPermissionIntent(userIntent);
   const videoSubmitDisallowed = directorAgentPermissionIntentDisallowsVideoSubmit(userIntent);
   if (!normalized && permissionIntent !== "video_allowed") return "revise_story_or_shot";
+  if (isDirectorAgentExplainOnlyIntent(userIntent)) return "inspect_project_status";
   const queuedContinueKind = queuedActionKindFromContinueIntent(normalized, snapshot);
   if (queuedContinueKind && containsAny(normalized, ["按项目状态继续", "项目状态继续"])) return queuedContinueKind;
   if (isVideoQueryIntent(normalized, snapshot)) return "query_video_result";
   if (!videoSubmitDisallowed && explicitlyRequestsMoreVideoSubmit(normalized)) return "prepare_video_submit";
+  if (isAssetClassificationIntent(userIntent)) return "inspect_project_status";
   if (isProjectInspectionIntent(normalized)) return "inspect_project_status";
   if (containsAny(normalized, ["导出", "素材包", "finalmp4", "finalvideo", "export"])) return "prepare_export";
   if (shouldClassifyAssetReviewIntent(userIntent, snapshot)) return "review_reference_asset";
@@ -562,6 +661,23 @@ function assetReviewDecisionFromIntent(userIntent: string): "locked" | "rejected
   return undefined;
 }
 
+function assetRoleBindingLabelFromIntent(userIntent: string): string | undefined {
+  const normalized = normalizeText(stripControlOnlyPhrases(userIntent));
+  if (!normalized) return undefined;
+  if (containsAny(normalized, ["故事板参考", "分镜参考", "分镜图参考", "storyboard", "shotboard"])) return "故事板参考";
+  if (containsAny(normalized, ["声音参考", "声线参考", "音源参考", "配音参考", "对白音频", "voice reference", "voice"])) return "声音参考";
+  if (containsAny(normalized, ["配乐参考", "音乐参考", "bgm参考", "bgm", "music"])) return "后期配乐";
+  if (containsAny(normalized, ["风格参考", "画风参考", "美术参考", "look reference", "style"])) return "风格参考";
+  if (containsAny(normalized, ["提示词参考", "prompt参考", "prompt"])) return "提示词参考";
+  if (containsAny(normalized, ["生成证据", "回执", "receipt", "submit id", "submitid"])) return "生成证据";
+  if (containsAny(normalized, ["交付文件", "导出文件", "展示包", "export"])) return "交付文件";
+  if (containsAny(normalized, ["回流视频", "成片段落", "视频段", "生成视频", "video clip"])) return "回流视频";
+  if (containsAny(normalized, ["场景参考", "天气参考", "环境参考", "地点参考", "空间参考", "scene reference", "environment"])) return "场景参考";
+  if (containsAny(normalized, ["道具参考", "物体参考", "物件参考", "车辆参考", "整车参考", "prop reference", "object reference", "vehicle reference"])) return "道具参考";
+  if (containsAny(normalized, ["角色参考", "人物参考", "女主参考", "男主参考", "主角参考", "角色身份", "人物身份", "character reference", "identity reference"])) return "角色参考";
+  return undefined;
+}
+
 function shouldClassifyAssetReviewIntent(userIntent: string, snapshot?: DirectorAgentStateSnapshot): boolean {
   if (!assetReviewDecisionFromIntent(userIntent)) return false;
 
@@ -573,6 +689,10 @@ function shouldClassifyAssetReviewIntent(userIntent: string, snapshot?: Director
   }
   if (snapshot?.currentView === "reference") return true;
   return explicitlyMentionsReferenceAsset;
+}
+
+function isAssetClassificationIntent(value: string) {
+  return /(?:素材|文件|参考素材|项目材料|拖入文件).{0,16}(?:整理|分类|归类|绑定|匹配|建议|识别)|(?:整理|分类|归类|绑定|匹配|识别).{0,16}(?:素材|文件|参考素材|项目材料|拖入文件)|绑定建议/u.test(value);
 }
 
 function normalizeDirectorAgentVideoState(input: BuildDirectorAgentStateSnapshotInput): DirectorAgentVideoState {
@@ -685,6 +805,37 @@ function targetFor(snapshot: DirectorAgentStateSnapshot, userIntent = ""): Direc
     ids: [],
     label: snapshot.projectTitle,
   };
+}
+
+type DirectorAgentTargetLabelContext = {
+  projectTitle: string;
+  selectedShot?: DirectorAgentShotSummary;
+  shots?: DirectorAgentShotSummary[];
+  selectedShotContexts?: DirectorAgentShotSummary[];
+};
+
+export function directorAgentDisplayTargetLabel(target: DirectorAgentActionTarget, snapshot: DirectorAgentTargetLabelContext) {
+  const rawLabel = cleanDisplayText(target.label);
+  const labelHasReplacementCharacter = rawLabel.includes("\uFFFD");
+  if (target.kind === "shot" && target.ids.length === 1) {
+    const shotId = target.ids[0] || "";
+    const shotPool = snapshot.shots || snapshot.selectedShotContexts || [];
+    const shot = shotPool.find((item) => item.id === shotId);
+    const displayNumber = shot?.displayNumber || snapshot.selectedShot?.displayNumber || formatShotNumberForAgent(shotId);
+    const title = cleanDisplayText(shot?.title || snapshot.selectedShot?.title || (labelHasReplacementCharacter ? "" : rawLabel));
+    return ["镜头", displayNumber, title].filter(Boolean).join(" ");
+  }
+  if (labelHasReplacementCharacter) {
+    if (target.kind === "asset") return "当前素材";
+    if (target.kind === "section") return "当前段落";
+    if (target.kind === "multi_shot") return `${target.ids.length || 2} 个镜头`;
+    return snapshot.projectTitle || "当前项目";
+  }
+  return rawLabel || snapshot.projectTitle || "当前项目";
+}
+
+function cleanDisplayText(value?: string) {
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
 }
 
 function intentTargetsWholeProject(userIntent: string) {
@@ -841,14 +992,22 @@ function proposedChangesFor(input: {
   if (input.kind === "review_reference_asset") {
     const decision = assetReviewDecisionFromIntent(input.userIntent);
     if (decision === "locked" && input.snapshot.selectedAsset?.lockedStatus === "locked") return [];
-    return [{
+    const roleBindingLabel = assetRoleBindingLabelFromIntent(input.userIntent);
+    return [
+      {
       field: "assetStatus",
       from: input.snapshot.selectedAsset?.lockedStatus ? assetLockedStatusLabel(input.snapshot.selectedAsset.lockedStatus) : undefined,
       to: decision === "locked" ? "已锁定" : "退回复做",
       reason: decision === "locked"
         ? "确认后这个参考会作为后续可用资产。"
         : "确认后这个参考不会作为后续可用资产，会等待重做或替换。",
-    }];
+      },
+      ...(roleBindingLabel ? [{
+        field: "assetRoleBinding",
+        to: roleBindingLabel,
+        reason: "确认后写入这个素材在项目里的用途，后续编译会按这个角色使用它。",
+      }] : []),
+    ];
   }
 	  if (input.kind === "prepare_video_submit") {
 	    return [{
@@ -870,6 +1029,22 @@ function proposedChangesFor(input: {
     && !isProjectInspectionIntent(normalizedIntent);
   const shotFieldChanges = shotFieldChangesFromIntent(input.userIntent);
   if (input.kind === "revise_story_or_shot" && hasConcreteCreatorIntent) {
+    const roleBindingLabel = input.target.kind === "asset" ? assetRoleBindingLabelFromIntent(input.userIntent) : undefined;
+    if (roleBindingLabel) {
+      const scopedIntent = compactCreatorIntent(stripControlOnlyPhrases(input.userIntent));
+      return [
+        {
+          field: "assetRoleBinding",
+          to: roleBindingLabel,
+          reason: "确认后写入这个素材在项目里的用途，后续编译会按这个角色使用它。",
+        },
+        {
+          field: "selectedScopeDraft",
+          to: scopedIntent || "整理为待确认修改",
+          reason: `自然语言先进入 staged action，确认后写入 ${directorAgentDisplayTargetLabel(input.target, input.snapshot)}。`,
+        },
+      ];
+    }
     if (
       shotFieldChanges.length &&
       (input.target.kind === "shot" || input.target.kind === "multi_shot" || input.target.kind === "section")
@@ -882,7 +1057,7 @@ function proposedChangesFor(input: {
       to: scopedIntent || "整理为待确认修改",
       reason: input.target.kind === "project"
         ? "自然语言先进入 staged action，确认后才写入项目整体方向。"
-        : `自然语言先进入 staged action，确认后写入 ${input.target.label}。`,
+        : `自然语言先进入 staged action，确认后写入 ${directorAgentDisplayTargetLabel(input.target, input.snapshot)}。`,
     }];
   }
   if (input.kind === "revise_story_or_shot" && input.snapshot.projectReadiness.status === "needs_review") {
@@ -912,7 +1087,7 @@ function proposedChangesFor(input: {
     to: scopedIntent || "整理为待确认修改",
     reason: input.target.kind === "project"
       ? "自然语言先进入 staged action，确认后才写入项目整体方向。"
-      : `自然语言先进入 staged action，确认后写入 ${input.target.label}。`,
+      : `自然语言先进入 staged action，确认后写入 ${directorAgentDisplayTargetLabel(input.target, input.snapshot)}。`,
   }];
 }
 
@@ -1017,21 +1192,26 @@ function summaryFor(input: {
   userIntent: string;
 }) {
   const prefix = input.status === "blocked" ? "需要补充：" : "已整理：";
-  if (input.kind === "update_shot_strategy" && input.strategy) return `${prefix}${input.target.label} 改为${strategyLabels[input.strategy]}`;
+  const targetLabel = directorAgentDisplayTargetLabel(input.target, input.snapshot);
+  if (input.kind === "update_shot_strategy" && input.strategy) return `${prefix}${targetLabel} 改为${strategyLabels[input.strategy]}`;
   if (input.kind === "request_style_research") return `${prefix}先查资料，再形成可确认参考`;
-  if (input.kind === "prepare_reference_generation") return `${prefix}为 ${input.target.label} 生成参考`;
-	  if (input.kind === "review_reference_asset") return `${prefix}复核 ${input.target.label}`;
-	  if (input.kind === "prepare_video_submit") return `${prefix}准备提交 ${input.target.label} 的视频`;
-	  if (input.kind === "query_video_result") return `${prefix}查询 ${input.target.label} 的视频结果`;
+  if (input.kind === "prepare_reference_generation") return `${prefix}为 ${targetLabel} 生成参考`;
+	  if (input.kind === "review_reference_asset") return `${prefix}复核 ${targetLabel}`;
+	  if (input.kind === "prepare_video_submit") return `${prefix}准备提交 ${targetLabel} 的视频`;
+	  if (input.kind === "query_video_result") return `${prefix}查询 ${targetLabel} 的视频结果`;
 	  if (input.kind === "prepare_export") return `${prefix}准备导出项目素材包`;
-  if (input.kind === "inspect_project_status") return `${prefix}检查当前项目状态`;
-  if (input.kind === "revise_story_or_shot" && input.target.kind !== "project") return `${prefix}${input.target.label} 的修改草案`;
+  if (input.kind === "inspect_project_status") {
+    return isAssetClassificationIntent(input.userIntent)
+      ? `${prefix}整理项目素材绑定建议`
+      : `${prefix}检查当前项目状态`;
+  }
+  if (input.kind === "revise_story_or_shot" && input.target.kind !== "project") return `${prefix}${targetLabel} 的修改草案`;
   if (input.kind === "revise_story_or_shot" && input.target.kind === "project") {
-    return `${prefix}${intentStartsNewStory(input.userIntent) ? "新故事草案" : `${input.target.label} 的修改草案`}`;
+    return `${prefix}${intentStartsNewStory(input.userIntent) ? "新故事草案" : `${targetLabel} 的修改草案`}`;
   }
   if (input.snapshot.projectReadiness.status === "needs_review") return `${prefix}先复核参考`;
   if (input.snapshot.projectReadiness.status === "needs_story") return `${prefix}先整理故事草案`;
-  return `${prefix}${input.target.label} 的修改草案`;
+  return `${prefix}${targetLabel} 的修改草案`;
 }
 
 function userFacingMessageFor(input: {
@@ -1041,6 +1221,7 @@ function userFacingMessageFor(input: {
   strategy?: DirectorProductionStrategyId;
   target: DirectorAgentActionTarget;
   snapshot: DirectorAgentStateSnapshot;
+  userIntent: string;
 }) {
   if (input.status === "blocked") return input.blockers[0] || "需要补充一点信息。";
   if (input.kind === "update_shot_strategy" && input.strategy) return `我会先把这段改成${strategyLabels[input.strategy]}，确认后再写入项目。`;
@@ -1051,10 +1232,14 @@ function userFacingMessageFor(input: {
 	  if (input.kind === "query_video_result") return "我会查询已提交视频的回流状态，不会重复发送新任务。";
 	  if (input.kind === "prepare_export") return "我会准备导出素材包，导出内容会可复核。";
   if (input.kind === "inspect_project_status") {
+    if (isAssetClassificationIntent(input.userIntent)) {
+      return "我会先整理当前素材的用途和绑定建议，不会生成参考，也不会提交视频。";
+    }
     const queue = input.snapshot.projectReadiness.actionQueue.slice(0, 3).map((action) => action.label).join(" / ");
     return `当前：${input.snapshot.projectReadiness.summary}。建议下一步：${input.snapshot.projectReadiness.nextActionLabel}。后续可走：${queue || "继续整理"}。`;
   }
-  if (input.target.kind !== "project") return `我会先把反馈整理到 ${input.target.label}，确认后写入项目。`;
+  const targetLabel = directorAgentDisplayTargetLabel(input.target, input.snapshot);
+  if (input.target.kind !== "project") return `我会先把反馈整理到 ${targetLabel}，确认后写入项目。`;
   if (input.snapshot.projectReadiness.status === "needs_review") return "当前有参考需要先看一眼，确认后我再继续往下做。";
   if (input.snapshot.projectReadiness.status === "needs_story") return "我会先把想法整理成故事草案，确认后再进入参考和视频。";
   if (input.kind === "revise_story_or_shot") return "我会先整理成项目级草案，不会生成参考或提交视频。";
@@ -1143,6 +1328,23 @@ function isProjectInspectionIntent(normalized: string) {
     "现在能做什么",
     "当前可以做什么",
     "现在可以做什么",
+    "整理素材",
+    "整理一下素材",
+    "整理当前素材",
+    "整理一下当前素材",
+    "盘点素材",
+    "盘点一下素材",
+    "检查素材",
+    "检查一下素材",
+    "当前素材",
+    "哪些能直接用",
+    "哪些可以直接用",
+    "哪些需要确认",
+    "哪些还要确认",
+    "素材能不能用",
+    "素材够不够",
+    "参考够不够",
+    "参考素材够不够",
     "下一步做什么",
     "下一步该做什么",
     "下一步能做什么",
@@ -1496,6 +1698,8 @@ function isContinueIntent(normalized: string) {
   const compact = normalized
     .replace(/^(可以|好的|好啊|好|ok|okay|那就|那|就|直接|你来|帮我|请)+/, "")
     .replace(/(一下吧|一下|吧)$/g, "");
+  if (/(没问题|可以|确认|通过|ok|okay).{0,8}(继续|下一步|进入故事流|确认进故事流)/.test(compact)) return true;
+  if (/(继续|下一步|进入故事流|确认进故事流).{0,8}(没问题|可以|确认|通过|ok|okay)/.test(compact)) return true;
   return [
     "继续",
     "继续吧",

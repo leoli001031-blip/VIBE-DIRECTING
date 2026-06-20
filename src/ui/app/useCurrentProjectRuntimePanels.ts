@@ -411,8 +411,9 @@ export function useCurrentProjectRuntimePanels({
 
   const runProjectImage2Batch = useCallback(async () => {
     if (!runtimeProjectIdentity) {
-      setProjectImage2BatchState(unavailableProjectPanelState("未选择项目/未同步。"));
-      return;
+      const nextState = unavailableProjectPanelState("未选择项目/未同步。");
+      setProjectImage2BatchState(nextState);
+      return nextState;
     }
     setProjectImage2BatchState((current) => ({
       ...current,
@@ -421,6 +422,7 @@ export function useCurrentProjectRuntimePanels({
     }));
     const nextState = await runProjectImage2BatchCheck(runtimeProjectIdentity);
     setProjectImage2BatchState(nextState);
+    return nextState;
   }, [runtimeProjectIdentity]);
 
   const prepareStrictEditPreflight = useCallback(async (shotId: string) => {

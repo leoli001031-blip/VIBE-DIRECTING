@@ -1,0 +1,157 @@
+{
+  "schemaVersion": "current_project_seedance_submit_input_manifest_v1",
+  "submittedAt": "2026-06-18T02:21:04.794Z",
+  "modelVersion": "seedance2.0_vip",
+  "videoResolution": "720p",
+  "ratio": "16:9",
+  "storyboardAspectRatio": "16:9",
+  "storyboardOutputSize": "1280x720",
+  "durationSeconds": 6,
+  "activeSegmentId": "segment_1",
+  "segmentPlan": [
+    {
+      "id": "segment_1",
+      "sceneClusterKey": "street",
+      "sceneLabel": "街道",
+      "shotIds": [
+        "shot_storyboard_1-1"
+      ],
+      "durationSeconds": 6,
+      "active": true
+    },
+    {
+      "id": "segment_2",
+      "sceneClusterKey": "scene_asset_scenestreet_街道环境",
+      "sceneLabel": "scene_street / 街道环境",
+      "shotIds": [
+        "shot_storyboard_1-2"
+      ],
+      "durationSeconds": 4,
+      "active": false
+    }
+  ],
+  "compilerMode": "omni_reference",
+  "compilerModeLabel": "全能参考",
+  "compilerReasons": [
+    "沿用 AI 分镜规划选择的参考模式：全能参考。"
+  ],
+  "ruleQaReportPath": ".vibe-runtime/browser-projects/project-1781737355707/video/seedance_2026-06-18T02-21-04-805Z/receipts/director-rule-qa.json",
+  "ruleQaStatus": "pass",
+  "textQaReportPath": ".vibe-runtime/browser-projects/project-1781737355707/video/seedance_2026-06-18T02-21-04-805Z/receipts/director-text-qa.json",
+  "textQaStatus": "pass",
+  "referenceBundle": {
+    "schemaVersion": "current_project_reference_bundle_policy_v1",
+    "videoTaskScope": {
+      "shotIds": [
+        "shot_storyboard_1-1"
+      ],
+      "durationSeconds": 6,
+      "strategyId": "omni_reference",
+      "strategyLabel": "全能参考",
+      "oneBundlePerProviderSubmit": true
+    },
+    "sceneBaseline": {
+      "role": "location_weather_light_authority",
+      "reusableAcrossShots": true,
+      "reusableAcrossCameraAngles": true,
+      "groupingRule": "Same location, weather, light, time of day, and spatial anchors may share one scene baseline even when framing or camera direction changes.",
+      "mustNotControl": [
+        "visible cut count",
+        "storyboard grouping",
+        "character identity",
+        "prop catalog"
+      ],
+      "selectedCount": 1
+    },
+    "storyboardReference": {
+      "role": "video_task_motion_and_timing_authority",
+      "generatedForCurrentProviderSubmitOnly": false,
+      "groupingRule": "A storyboard reference belongs to one explicit video generation task or planned sequence, not to every shot in the same scene.",
+      "mustNotControl": [
+        "scene weather",
+        "scene identity",
+        "character identity",
+        "prop identity"
+      ]
+    },
+    "characterReferences": {
+      "role": "identity_and_silhouette_authority",
+      "selectedCount": 1,
+      "mustNotControl": [
+        "camera path",
+        "scene weather",
+        "visible cut count"
+      ]
+    },
+    "propReferences": {
+      "role": "object_appearance_authority",
+      "selectedCount": 1,
+      "detailRule": "Dependent details such as body parts, object components, weather, light, road shine, mist, reflections, buttons, wheels, pages, screens, and similar sub-parts should stay as constraints on the parent character/object/scene unless they are the actual standalone subject.",
+      "mustNotControl": [
+        "storyboard panels",
+        "scene background",
+        "visible cut count"
+      ]
+    },
+    "voiceReferences": {
+      "role": "speaking_voice_and_timing_authority",
+      "selectedCount": 0,
+      "providerUse": "Pass only bound voice_reference/dialogue_audio assets as audio references for this video unit.",
+      "mustNotControl": [
+        "BGM",
+        "music",
+        "soundtrack",
+        "sound effects",
+        "scene layout",
+        "visible cut count"
+      ]
+    }
+  },
+  "shotStrategies": [
+    {
+      "shotId": "shot_storyboard_1-1",
+      "strategyId": "omni_reference",
+      "strategyLabel": "全能参考",
+      "rhythmProfile": "lyrical_observation",
+      "splitPolicy": "hold_single_shot",
+      "panelCountIntent": 0
+    }
+  ],
+  "referenceImageCount": 3,
+  "references": [
+    {
+      "role": "scene_reference",
+      "name": "街道环境",
+      "path": "assets/generated/scene_scene_street.png",
+      "sha256": "sha256:dbea57c3386ac698df5457414c704a13ca1783f25e4c6f30468dbb5bb5ea1ad2"
+    },
+    {
+      "role": "character_reference",
+      "name": "戴耳机的女孩",
+      "path": "assets/generated/character_asset_cd6da79884.png",
+      "sha256": "sha256:4b06c6b5972425745ce0166e55c55a8d355311cf3dfc1a7423b3e0f08bdfc007"
+    },
+    {
+      "role": "prop_reference",
+      "name": "发光车票",
+      "path": "assets/generated/prop_asset_151e3ffce0.png",
+      "sha256": "sha256:78788b0d778417f616f25bf53236940ab6dbab9c4ea461f0eefa80b6052f4f9d"
+    }
+  ],
+  "audioReferenceCount": 0,
+  "audioReferences": [],
+  "shots": [
+    {
+      "id": "shot_storyboard_1-1",
+      "title": "雨夜偶遇发光车票",
+      "durationSeconds": 6,
+      "primaryAction": "女孩发现发光车票，身体微倾准备捡起"
+    }
+  ],
+  "submitPolicy": {
+    "lane": "seedance_vip_representative_test",
+    "maxConcurrentVideoJobs": 1,
+    "representativeSegmentsSubmittedThisRequest": 1,
+    "note": "真实测试默认只提交当前代表性视频段；后续段保持 planned/ready，除非用户明确继续提交。"
+  }
+}

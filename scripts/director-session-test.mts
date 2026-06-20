@@ -169,6 +169,10 @@ assert(
   "character candidates should drop leading action words such as 带一个",
 );
 assert(
+  !catCinemaSession.stagedFacts.some((fact) => fact.kind === "character_candidate" && fact.label.includes("引少女")),
+  "character candidates should not preserve action-prefixed labels such as 引少女",
+);
+assert(
   !catCinemaSession.stagedFacts.some((fact) => fact.kind === "character_candidate" && fact.label === "猫"),
   "generic animal labels should not duplicate a more specific animal performer",
 );
@@ -179,6 +183,24 @@ assert(
 assert(
   catCinemaSession.stagedFacts.some((fact) => fact.kind === "scene_candidate" && fact.label === "老电影院"),
   "cinema locations should remain scene candidates",
+);
+
+const actionPrefixedCharacterDraft = buildProjectIntakeDraft({
+  createdAt: "2026-05-18T00:00:00.000Z",
+  scriptText: "雨夜旧电影院门口，黑猫叼电影票，引少女走进亮灯放映厅。",
+});
+const actionPrefixedCharacterSession = buildDirectorSessionFromIntake({
+  draft: actionPrefixedCharacterDraft,
+  projection: buildIntakeStagedPlanProjection(actionPrefixedCharacterDraft),
+  projectId: "action_prefixed_character",
+});
+assert(
+  actionPrefixedCharacterSession.stagedFacts.some((fact) => fact.kind === "character_candidate" && fact.label === "少女"),
+  "action-prefixed human labels should normalize to the underlying character subject",
+);
+assert(
+  !actionPrefixedCharacterSession.stagedFacts.some((fact) => fact.kind === "character_candidate" && fact.label === "引少女"),
+  "action-prefixed human labels should not become standalone character candidates",
 );
 
 const sparseDraft = buildProjectIntakeDraft({

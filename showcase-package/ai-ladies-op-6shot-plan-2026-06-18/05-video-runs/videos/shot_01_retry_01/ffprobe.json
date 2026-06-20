@@ -1,0 +1,22 @@
+{
+    "programs": [
+
+    ],
+    "stream_groups": [
+
+    ],
+    "streams": [
+        {
+            "avg_frame_rate": "0/0"
+        },
+        {
+            "width": 1280,
+            "height": 720,
+            "avg_frame_rate": "7260/301"
+        }
+    ],
+    "format": {
+        "duration": "5.085011",
+        "size": "4546389"
+    }
+}

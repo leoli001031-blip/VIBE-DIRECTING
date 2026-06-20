@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "vibe_showcase_plan_manifest_v1",
+  "generatedAt": "2026-06-18T05:22:06.315Z",
+  "packageRoot": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18",
+  "fileCount": 12,
+  "files": [
+    {
+      "path": "01-plan/asset-map.md",
+      "bytes": 2832,
+      "sha256": "12e601f3d9e673fe30f6a0b4163794594fa1b2020eddc9c32bd5a27598a6e520"
+    },
+    {
+      "path": "01-plan/op-6shot-plan.md",
+      "bytes": 4141,
+      "sha256": "841ef289844d28b8c3204eda3369910cd6143ed2ca40bd88f97dda2580dd9561"
+    },
+    {
+      "path": "02-prompts/shot_01_zc_academy_opening.md",
+      "bytes": 2142,
+      "sha256": "851fe81ac28b210d6b3a04ad8c02e966620107b6eda7ac9c6f733c1d5a00605f"
+    },
+    {
+      "path": "02-prompts/shot_02_claude_gpt_duel.md",
+      "bytes": 2385,
+      "sha256": "d01167862377ab876a8078f42268dfe911d92989ca6d1e2110a0f03f2fcdd9e1"
+    },
+    {
+      "path": "02-prompts/shot_03_gemini_doubao_burst.md",
+      "bytes": 2580,
+      "sha256": "48b416139444f96f496ff681dff29925e62950528faa7bf8b1c077385d1289a1"
+    },
+    {
+      "path": "02-prompts/shot_04_three_heroine_flash.md",
+      "bytes": 2977,
+      "sha256": "67552a1a609e2c53b1e7282f07550c03339c152db2efabddf89d52bf9f9de418"
+    },
+    {
+      "path": "02-prompts/shot_05_clubroom_team.md",
+      "bytes": 3148,
+      "sha256": "4546a3f9dbe1b53cdca44d18a2dd7b5923e6341cd22dd632d776655dea49ff4b"
+    },
+    {
+      "path": "02-prompts/shot_06_confession_pressure_hook.md",
+      "bytes": 3459,
+      "sha256": "f2ac4a0b7e20deb7d9c084f98b59829a783793017ea95b5f31298f98821e63a6"
+    },
+    {
+      "path": "03-assets/asset-index.json",
+      "bytes": 7793,
+      "sha256": "467173b8780fe1f68ed002ef68a063828e4bdee3e23a96458266d9314ac7ef3b"
+    },
+    {
+      "path": "04-review/review-checklist.md",
+      "bytes": 1167,
+      "sha256": "2839a3820e6790968fda675e5290e19a8f529a035a36c4e3b459c0b1d1999dfc"
+    },
+    {
+      "path": "04-review/submit-command-preview.md",
+      "bytes": 6072,
+      "sha256": "44015625ec122c8410a3919691ab01b13137cc9825697a8e8958ebc013f357ee"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1274,
+      "sha256": "dbe222600fcf6988ee6fea426f37a556a2b316b124a78b595784d169fc1a1092"
+    }
+  ]
+}

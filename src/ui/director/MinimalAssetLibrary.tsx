@@ -76,6 +76,10 @@ export function MinimalAssetLibrary({
     audioAnchors: library.assets.filter((asset) => asset.assetType === "voice_anchor"),
   };
   const selectedAsset = library.assets.find((asset) => asset.id === selectedAssetId);
+  const visualPreviewAssets = library.assets.filter((asset) => {
+    const record = assetLibraryAssetToRecord(asset);
+    return Boolean(record.path) && asset.assetType !== "style" && asset.assetType !== "voice_anchor";
+  });
   const audioSources = (voiceSourceLibrary?.sources || []).filter((source) => {
     const searchable = [source.id, source.displayName].join(" ").toLowerCase();
     return !/voice[-_\s]*registry[-_\s]*placeholder|placeholder/.test(searchable);
@@ -265,7 +269,7 @@ export function MinimalAssetLibrary({
       if (assetGenerationAction?.keyConfigured === false) return "先去设置里连接图片服务";
       if (assetGenerationAction?.disabled) return "正在准备参考";
       if (workspaceCounts.characters && workspaceCounts.scenes && workspaceCounts.props) return "参考已齐，需要重做时再点。";
-	      return "推荐直接在底部输入框说需求；需要手动操作时再展开这里。";
+	      return "推荐直接在右侧输入框说需求；需要手动操作时再展开这里。";
     }
     if (/key|api/i.test(message)) return "先去设置里连接图片服务";
     if (/未选择项目|未同步|连接项目失败|项目文件已打开|请选择|先创建本地项目/i.test(message)) {
@@ -312,7 +316,7 @@ export function MinimalAssetLibrary({
                 >
                   生成缺少的参考
                 </button>
-                <small>日常建议直接在底部输入框告诉 AI 导演要做什么。</small>
+                <small>日常建议直接在右侧输入框告诉 AI 导演要做什么。</small>
               </details>
             )}
           </div>
@@ -336,6 +340,40 @@ export function MinimalAssetLibrary({
           </div>
         </details>}
       </div>
+      {visualPreviewAssets.length > 0 && (
+        <section className="asset-generated-gallery" aria-label="已生成参考图">
+          <div className="asset-generated-gallery-heading">
+            <span>生成结果</span>
+            <strong>{visualPreviewAssets.length} 张参考图</strong>
+            <small>角色、场景和道具都先在这里复核。</small>
+          </div>
+          <div className="asset-generated-gallery-grid">
+            {visualPreviewAssets.map((asset) => {
+              const record = assetLibraryAssetToRecord(asset);
+              return (
+                <button
+                  key={asset.id}
+                  className={`asset-generated-preview ${selectedAssetId === asset.id ? "selected" : ""}`}
+                  type="button"
+                  onClick={() => onSelectAsset(asset.id)}
+                  aria-label={`查看生成参考图 ${cleanLabel(asset.name)}`}
+                >
+                  <MediaFrame
+                    src={record.path}
+                    alt={asset.name}
+                    label={cleanLabel(asset.name)}
+                    className="asset-generated-preview-image"
+                  />
+                  <span>
+                    <strong>{cleanLabel(asset.name)}</strong>
+                    <small>{assetLibraryTypeLabel(asset.assetType)} · {assetLibraryStatusLabel(asset.status)}</small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
       <div className="asset-status-strip" aria-label="参考状态">
         <span><i className="dot warn" /> 待复核</span>
         <span><i className="dot ok" /> 已锁定</span>

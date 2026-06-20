@@ -102,6 +102,32 @@ export interface ProjectVibeReviewPromotionTransactionResult {
 }
 
 const portablePathPattern = /^(?!\/|~\/|[A-Za-z]:[\\/]|\/\/)(?!.*(?:^|\/)\.\.(?:\/|$))[^?#\n\r]+$/;
+const actionPrefixedCharacterCandidatePattern = /_character_candidate_(?:引|领|带|追|拉|推|抱|扶|递|拿|举|看|望|跟|陪|叫|喊|牵|遇见|遇到|看见|发现|靠近|走向|跑向|冲向|转向|看向|望向)(?:着)?(?:少女|少年|女孩|男孩|女生|男生|女高中生|男高中生|高中生|女主|男主|主角|角色|她|他|两人|众人|人群|老人|孩子|店主|司机|骑手)(?:_\d+)?$/u;
+
+function sanitizeProjectVibeEvidenceRefs(refs: string[]): string[] {
+  return uniqueSorted(refs.filter((ref) => !actionPrefixedCharacterCandidatePattern.test(ref)));
+}
+
+function sanitizeScriptPlanningReceipt(
+  receipt: ProjectVibeReceiptLedger["scriptPlanningReceipts"][number],
+): ProjectVibeReceiptLedger["scriptPlanningReceipts"][number] {
+  return {
+    ...receipt,
+    evidenceRefs: sanitizeProjectVibeEvidenceRefs(receipt.evidenceRefs),
+  };
+}
+
+function sanitizeProjectVibeForSave(project: ProjectVibeDocument): ProjectVibeDocument {
+  if (!project.receipts) return project;
+  const receipts = receiptLedger(project);
+  return {
+    ...project,
+    receipts: {
+      ...receipts,
+      scriptPlanningReceipts: receipts.scriptPlanningReceipts.map(sanitizeScriptPlanningReceipt),
+    },
+  };
+}
 
 export function createProjectVibe(input: CreateProjectVibeInput): ProjectVibeDocument {
   const createdAt = input.createdAt || new Date().toISOString();
@@ -195,20 +221,21 @@ export async function saveProjectVibe(
   project: ProjectVibeDocument,
   path = projectVibeFileName,
 ): Promise<ProjectVibeSaveResult> {
-  const validation = validateProjectVibe(project);
+  const sanitizedProject = sanitizeProjectVibeForSave(project);
+  const validation = validateProjectVibe(sanitizedProject);
   if (!validation.ok) {
-    return { ok: false, path, factHash: hashProjectVibeFacts(project), validation, errors: validation.errors };
+    return { ok: false, path, factHash: hashProjectVibeFacts(sanitizedProject), validation, errors: validation.errors };
   }
 
   const directory = parentDirectory(path);
   if (directory && adapter.mkdir) await adapter.mkdir(directory);
-  const serialized = serializeProjectVibe(project);
+  const serialized = serializeProjectVibe(sanitizedProject);
   if (await storageTextIsUnchanged(adapter, path, serialized)) {
-    return { ok: true, path, factHash: hashProjectVibeFacts(project), validation, errors: [] };
+    return { ok: true, path, factHash: hashProjectVibeFacts(sanitizedProject), validation, errors: [] };
   }
   if (adapter.writeFileAtomic) await adapter.writeFileAtomic(path, serialized);
   else await adapter.writeFile(path, serialized);
-  return { ok: true, path, factHash: hashProjectVibeFacts(project), validation, errors: [] };
+  return { ok: true, path, factHash: hashProjectVibeFacts(sanitizedProject), validation, errors: [] };
 }
 
 export function serializeProjectVibe(project: ProjectVibeDocument): string {
@@ -753,7 +780,7 @@ function applyOperation(
 
   const receipts = ensureReceiptLedger(project);
   if (operation.op === "append_script_planning_receipt") {
-    receipts.scriptPlanningReceipts = upsertById(receipts.scriptPlanningReceipts, operation.receipt);
+    receipts.scriptPlanningReceipts = upsertById(receipts.scriptPlanningReceipts, sanitizeScriptPlanningReceipt(operation.receipt));
     touched.receiptIds?.push(operation.receipt.id);
     return;
   }

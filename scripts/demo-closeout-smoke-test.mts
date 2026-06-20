@@ -195,7 +195,9 @@ assert.equal(creatorDeskQueuedVideo.videoStage.generation.status, "queued", "vid
 const newVideoStartSource = readFileSync("src/ui/director/NewVideoStart.tsx", "utf8");
 const creatorDeskPanelsSource = readFileSync("src/ui/director/CreatorDeskPanels.tsx", "utf8");
 assert(!/整理草案/.test(newVideoStartSource), "new-video composer should not expose the old draft-organize button copy");
-assert(/和 AI 导演说/.test(newVideoStartSource), "new-video screen should keep the unified creator input language");
+assert(/showComposerSurface = composerPlacement !== "draft_only"/.test(newVideoStartSource), "Agent-first new-video path should keep the middle canvas as results, not a second input surface");
+assert(/showInlineAgentThread = composerPlacement !== "draft_only" && displayAgentMessages\.length > 0/.test(newVideoStartSource), "Agent-first new-video path should keep message flow in the right Agent rail");
+assert(/showMiddleDiscussionWorkspace = composerPlacement !== "draft_only" && Boolean\(discussionWorkspace\)/.test(newVideoStartSource), "Agent-first new-video path should keep draft discussion in the right Agent rail");
 assert(/发送/.test(newVideoStartSource), "new-video composer should expose a single send action");
 assert(/已等待/.test(newVideoStartSource), "AI planning should show elapsed waiting feedback instead of a silent spinner");
 assert(/storyboardPlanningElapsedSeconds >= 30[\s\S]*已等待/.test(newVideoStartSource), "AI planning should only show exact elapsed seconds after a meaningful wait");

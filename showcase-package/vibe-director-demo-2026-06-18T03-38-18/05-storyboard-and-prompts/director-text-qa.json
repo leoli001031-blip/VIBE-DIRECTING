@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "director_text_qa_v1",
+  "status": "pass",
+  "providerCalled": true,
+  "runtimeExternalNetworkCallMade": true,
+  "model": "deepseek-v4-pro",
+  "providerId": "deepseek-v4-pro",
+  "transport": "chat_completions_stream",
+  "summary": "文本规划逻辑一致，参考模式使用正确，无阻塞性问题。",
+  "blockerCount": 0,
+  "warningCount": 0,
+  "infoCount": 0,
+  "findings": [],
+  "rewriteHints": [],
+  "rawStatus": "pass"
+}

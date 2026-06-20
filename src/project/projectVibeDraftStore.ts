@@ -1,10 +1,25 @@
 import type { ElectronBridge } from "../core/electronBridge";
 import {
+  projectCurrentBindingEndpoint,
+  projectCurrentSaveProjectVibeEndpoint,
+} from "../core/projectCurrentBindingClient";
+import {
+  fetchRuntimeJson,
+  prepareRuntimeApiRequest,
+  projectRuntimeBasePath,
+  projectRuntimeRequestPath,
+  runtimeApiBaseUrl,
+  runtimeRequestInit,
+  toRuntimeUrl,
+} from "../core/runtimeApiClient";
+import {
   hashProjectVibeFacts,
   isPortableProjectPath,
   openProjectVibe,
+  parseProjectVibeText,
   refreshProjectVibeSourceIndex,
   saveProjectVibe,
+  validateProjectVibe,
 } from "./projectVibe";
 import {
   projectVibeFileName,
@@ -18,7 +33,7 @@ import {
   type ProjectVibeStorageAdapter,
 } from "./types";
 
-export type ProjectVibeDraftStorageMode = "electron_project_file" | "browser_local";
+export type ProjectVibeDraftStorageMode = "electron_project_file" | "runtime_project_file" | "browser_local";
 
 export interface ProjectVibeDraftTarget {
   projectRoot?: string;
@@ -53,13 +68,16 @@ export interface ProjectVibeSidecarTextResult {
 type BrowserStorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export function projectVibeDraftTargetId(target: ProjectVibeDraftTarget = {}): string {
-  if (target.projectRoot && electronBridge()) {
+  if (target.projectRoot && (electronBridge() || runtimeProjectFileAccessAvailable(target))) {
     return `project-file:${normalizeProjectRootForDisplay(target.projectRoot)}/${projectPathForTarget(target)}`;
   }
   return `browser-draft:${browserStorageKey(target)}`;
 }
 
 export async function openProjectVibeDraft(target: ProjectVibeDraftTarget = {}): Promise<ProjectVibeDraftOpenResult> {
+  const runtimeProjectFileOpen = await openProjectVibeDraftThroughRuntime(target);
+  if (runtimeProjectFileOpen) return runtimeProjectFileOpen;
+
   const adapter = createProjectVibeDraftStorageAdapter(target);
   const targetId = projectVibeDraftTargetId(target);
   if (!adapter) {
@@ -68,7 +86,7 @@ export async function openProjectVibeDraft(target: ProjectVibeDraftTarget = {}):
 
   try {
     const result = await openProjectVibe(adapter.adapter, projectPathForTarget(target));
-    const sidecarVisualMemory = result.project
+    const sidecarVisualMemory = result.project && projectVibeShouldProbeSidecarVisualMemory(result.project)
       ? await readProjectSidecarVisualMemory(adapter.adapter, projectPathForTarget(target))
       : undefined;
     const mergedProject = result.project && sidecarVisualMemory
@@ -444,15 +462,15 @@ export function mergeProjectVibeWithSidecarVisualMemory(
   }, project.manifest.updatedAt);
 }
 
+function projectVibeShouldProbeSidecarVisualMemory(project: ProjectVibeDocument) {
+  return project.assets.length === 0 && project.visualMemory.entries.length === 0;
+}
+
 async function readProjectSidecarVisualMemory(
   adapter: ProjectVibeStorageAdapter,
   projectPath: string,
 ): Promise<unknown | undefined> {
-  const normalizedPath = projectPathForTarget({ projectPath });
-  const base = normalizedPath.includes("/")
-    ? normalizedPath.split("/").slice(0, -1).join("/")
-    : "";
-  const sidecarPath = `${base ? `${base}/` : ""}visual_memory.json`;
+  const sidecarPath = projectSidecarVisualMemoryPath(projectPath);
   try {
     if (adapter.existsFile && !(await adapter.existsFile(sidecarPath))) return undefined;
     const content = await adapter.readFile(sidecarPath);
@@ -462,10 +480,21 @@ async function readProjectSidecarVisualMemory(
   }
 }
 
+function projectSidecarVisualMemoryPath(projectPath: string) {
+  const normalizedPath = projectPathForTarget({ projectPath });
+  const base = normalizedPath.includes("/")
+    ? normalizedPath.split("/").slice(0, -1).join("/")
+    : "";
+  return `${base ? `${base}/` : ""}visual_memory.json`;
+}
+
 export async function saveProjectVibeDraft(
   target: ProjectVibeDraftTarget,
   project: ProjectVibeDocument,
 ): Promise<ProjectVibeDraftSaveResult> {
+  const runtimeProjectFileSave = await saveProjectVibeDraftThroughRuntime(target, project);
+  if (runtimeProjectFileSave) return runtimeProjectFileSave;
+
   const adapter = createProjectVibeDraftStorageAdapter(target);
   const targetId = projectVibeDraftTargetId(target);
   if (!adapter) {
@@ -508,6 +537,167 @@ export async function saveProjectVibeDraft(
         warnings: [],
         checkedAt: new Date().toISOString(),
       },
+      errors: [error instanceof Error ? error.message : String(error)],
+    };
+  }
+}
+
+function normalizedProjectRoot(value: string | undefined) {
+  return normalizeProjectRootForDisplay(value || "").toLowerCase();
+}
+
+async function runtimeProjectFileBindingMatchesTarget(target: ProjectVibeDraftTarget) {
+  if (!target.projectRoot) return false;
+  const payload = await fetchRuntimeJson(projectCurrentBindingEndpoint);
+  if (!isRecord(payload)) return false;
+  const currentProject = isRecord(payload.currentProject) ? payload.currentProject : undefined;
+  const binding = isRecord(currentProject?.binding) ? currentProject.binding : undefined;
+  const projectRoot = textValue(currentProject?.projectRoot)
+    || textValue(currentProject?.projectRootRelativePath)
+    || textValue(binding?.projectRoot)
+    || textValue(binding?.projectRootRelativePath);
+  return Boolean(projectRoot && normalizedProjectRoot(projectRoot) === normalizedProjectRoot(target.projectRoot));
+}
+
+async function readRuntimeCurrentProjectFileText(target: ProjectVibeDraftTarget, path: string) {
+  if (!target.projectRoot) throw new Error("Project root is required before reading Project.vibe.");
+  if (typeof fetch !== "function") throw new Error("Runtime Project.vibe file read requires fetch.");
+  const matchesTarget = await runtimeProjectFileBindingMatchesTarget(target);
+  if (!matchesTarget) {
+    throw new Error("当前浏览器连接的项目和要打开的项目不一致，请重新打开或选择项目。");
+  }
+  await prepareRuntimeApiRequest();
+  const endpoint = `${projectRuntimeBasePath}/files?scope=current-project&path=${encodeURIComponent(projectPathForTarget({ projectPath: path }))}`;
+  const response = await fetch(toRuntimeUrl(endpoint), runtimeRequestInit());
+  if (response.status === 404) throw new Error(`Project.vibe draft not found: ${path}`);
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(detail.trim() || `Runtime Project.vibe file read failed: HTTP ${response.status}`);
+  }
+  return response.text();
+}
+
+async function readRuntimeSidecarVisualMemory(target: ProjectVibeDraftTarget, projectPath: string) {
+  try {
+    const content = await readRuntimeCurrentProjectFileText(target, projectSidecarVisualMemoryPath(projectPath));
+    return JSON.parse(content);
+  } catch {
+    return undefined;
+  }
+}
+
+async function openProjectVibeDraftThroughRuntime(
+  target: ProjectVibeDraftTarget,
+): Promise<ProjectVibeDraftOpenResult | undefined> {
+  if (!runtimeProjectFileAccessAvailable(target)) return undefined;
+  const targetId = projectVibeDraftTargetId(target);
+  const projectPath = projectPathForTarget(target);
+  try {
+    const serialized = await readRuntimeCurrentProjectFileText(target, projectPath);
+    const result = parseProjectVibeText(serialized);
+    const sidecarVisualMemory = result.project && projectVibeShouldProbeSidecarVisualMemory(result.project)
+      ? await readRuntimeSidecarVisualMemory(target, projectPath)
+      : undefined;
+    const mergedProject = result.project && sidecarVisualMemory
+      ? mergeProjectVibeWithSidecarVisualMemory(result.project, sidecarVisualMemory, target)
+      : result.project;
+    return {
+      ...result,
+      project: mergedProject,
+      status: result.ok && result.project ? "restored" : "error",
+      mode: "runtime_project_file",
+      targetId,
+      factHash: mergedProject ? hashProjectVibeFacts(mergedProject) : undefined,
+      sidecarVisualMemoryMerged: Boolean(mergedProject && mergedProject !== result.project),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: isMissingStorageError(error) ? "missing" : "error",
+      mode: "runtime_project_file",
+      targetId,
+      errors: [error instanceof Error ? error.message : String(error)],
+    };
+  }
+}
+
+function runtimeProjectFileAccessAvailable(target: ProjectVibeDraftTarget) {
+  if (!target.projectRoot || electronBridge()) return false;
+  try {
+    return Boolean(runtimeApiBaseUrl());
+  } catch {
+    return false;
+  }
+}
+
+async function saveProjectVibeDraftThroughRuntime(
+  target: ProjectVibeDraftTarget,
+  project: ProjectVibeDocument,
+): Promise<ProjectVibeDraftSaveResult | undefined> {
+  if (!runtimeProjectFileAccessAvailable(target)) return undefined;
+  const path = projectPathForTarget(target);
+  const factHash = hashProjectVibeFacts(project);
+  const validation = validateProjectVibe(project);
+  const targetId = projectVibeDraftTargetId(target);
+  if (!validation.ok) {
+    return {
+      ok: false,
+      status: "error",
+      mode: "runtime_project_file",
+      targetId,
+      path,
+      factHash,
+      validation,
+      errors: validation.errors,
+    };
+  }
+
+  try {
+    const payload = await fetchRuntimeJson(
+      projectRuntimeRequestPath(projectCurrentSaveProjectVibeEndpoint, { projectRoot: target.projectRoot }),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectRoot: target.projectRoot,
+          project,
+        }),
+      },
+    );
+    if (!isRecord(payload) || payload.ok !== true) {
+      const message = isRecord(payload) && typeof payload.message === "string"
+        ? payload.message
+        : "Runtime Project.vibe save failed.";
+      return {
+        ok: false,
+        status: "error",
+        mode: "runtime_project_file",
+        targetId,
+        path,
+        factHash,
+        validation,
+        errors: [message],
+      };
+    }
+    return {
+      ok: true,
+      status: "saved",
+      mode: "runtime_project_file",
+      targetId,
+      path,
+      factHash,
+      validation,
+      errors: [],
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: "error",
+      mode: "runtime_project_file",
+      targetId,
+      path,
+      factHash,
+      validation,
       errors: [error instanceof Error ? error.message : String(error)],
     };
   }

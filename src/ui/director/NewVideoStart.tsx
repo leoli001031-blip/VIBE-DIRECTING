@@ -173,6 +173,12 @@ export type NewVideoStartConfirmationContext = {
   storyboardDraft?: NewVideoStoryboardShot[];
 };
 
+export type NewVideoStartAgentIntakeCommand = {
+  id: string;
+  text: string;
+  mode?: "replace_draft" | "continue_current_draft";
+};
+
 const referenceTypeLabels: Record<NewVideoReferenceKind, string> = {
   character: "主角参考",
   style: "风格参考",
@@ -238,7 +244,7 @@ const referenceStrategyLabels: Record<NewVideoReferenceStrategy, string> = {
 const referenceStrategyDescriptions: Record<NewVideoReferenceStrategy, string> = {
   storyboard_narrative: "用故事板锁构图、人物关系、情绪承接和镜头顺序。",
   storyboard_rapid_cut: "用粗故事板锁快切、动作节点、运镜和节奏。",
-  omni_reference: "直接用角色、场景、道具和文字导演提示生成视频。",
+  omni_reference: "用角色、场景、道具和文字导演提示锁定这段画面，生成前仍会等待确认。",
 };
 
 function storyboardPlanningRowsLabel(count: number, planningRunning: boolean) {
@@ -1517,6 +1523,8 @@ export function NewVideoStart({
   onVideoPermissionContractChange,
   restoredAgentTimelineEntries,
   onRememberAgentTimelineEntries,
+  agentIntakeCommand,
+  composerPlacement = "portal",
 }: {
   shots: ShotRecord[];
   projectDraftKey?: string;
@@ -1539,6 +1547,8 @@ export function NewVideoStart({
   onVideoPermissionContractChange?: (contract: AgentVideoSubmitContract) => void;
   restoredAgentTimelineEntries?: VibeAgentTimelineEntry[];
   onRememberAgentTimelineEntries?: (entries: VibeAgentTimelineEntry[]) => void | Promise<void>;
+  agentIntakeCommand?: NewVideoStartAgentIntakeCommand;
+  composerPlacement?: "portal" | "inline" | "draft_only";
 }) {
   const workspaceInputRef = useRef<HTMLInputElement>(null);
   const scriptInputRef = useRef<HTMLInputElement>(null);
@@ -1550,6 +1560,7 @@ export function NewVideoStart({
   const composerResetKeyRef = useRef<string | undefined>(undefined);
   const initialComposerDraftRef = useRef(composerResetKey ? { script: "", style: "" } : readStoredNewVideoComposerDraft(composerStorageKey));
   const pendingReferenceTypeRef = useRef<NewVideoReferenceKind>("image");
+  const handledAgentIntakeCommandIdRef = useRef("");
   const [script, setScript] = useState(initialComposerDraftRef.current.script);
   const [style, setStyle] = useState(initialComposerDraftRef.current.style);
   const [references, setReferences] = useState<NewVideoReferenceFile[]>([]);
@@ -1602,7 +1613,7 @@ export function NewVideoStart({
         status: "confirmed",
         title: "草案已进入故事流",
         detail: "可以在故事页继续改镜头，后面再做参考和视频。",
-        nextAction: "继续在底部说要改哪里",
+        nextAction: "继续在输入框说要改哪里",
         draftShotCount: storyboardRows.length,
         draftReferenceCount,
       };
@@ -1633,7 +1644,7 @@ export function NewVideoStart({
         status: "ready",
         title: "草案待确认",
         detail: "AI 已经拆出故事和镜头，确认前不会写入项目。",
-        nextAction: "确认进故事流，或直接说修改意见",
+        nextAction: "确认写入故事流，或直接说修改意见",
         draftShotCount: storyboardRows.length,
         draftReferenceCount,
       };
@@ -2006,9 +2017,15 @@ export function NewVideoStart({
     if (audioInputRef.current) audioInputRef.current.value = "";
   }
 
-  async function prepareDraft() {
-    if (!hasDraft || storyboardPlanningStatus === "running") return;
-    const draftToSubmit = draft;
+  async function prepareDraft(draftOverride?: NewVideoStartDraft) {
+    const draftToSubmit = draftOverride || draft;
+    const hasOverrideDraft = Boolean(
+      draftOverride?.script.trim()
+      || draftOverride?.style.trim()
+      || draftOverride?.references.length
+      || draftOverride?.audio,
+    );
+    if ((!hasOverrideDraft && !hasDraft) || storyboardPlanningStatus === "running") return;
     const planningDraft = draftForPlanning(draftToSubmit);
     const intakeDraft = buildIntakeDraftFromNewVideoDraft(planningDraft);
     const nextProjection = buildIntakeStagedPlanProjection(intakeDraft);
@@ -2033,8 +2050,9 @@ export function NewVideoStart({
     setDiscussionFeedback("");
     setConfirmed(false);
     setConfirmError("");
+    const timelineCreatedAt = new Date().toISOString();
     rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
-      createdAt: new Date().toISOString(),
+      createdAt: timelineCreatedAt,
       phase: "planning_started",
       userMessage: userMessageFromNewVideoDraft(planningDraft),
       materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
@@ -2074,7 +2092,7 @@ export function NewVideoStart({
       setStoryboardPlanningStartedAt(undefined);
       setStoryboardPlanningMessage("AI 已重新拆分镜头、节奏和生成方式。确认前仍是草案。");
       rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
-        createdAt: new Date().toISOString(),
+        createdAt: timelineCreatedAt,
         phase: "planning_ready",
         userMessage: userMessageFromNewVideoDraft(planningDraft),
         materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
@@ -2093,7 +2111,7 @@ export function NewVideoStart({
         : "AI 分镜这次没有完成，当前保留本地初步识别；可以直接改，或稍后再发送重试。";
       setStoryboardPlanningMessage(fallbackMessage);
       rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
-        createdAt: new Date().toISOString(),
+        createdAt: timelineCreatedAt,
         phase: "planning_blocked",
         userMessage: userMessageFromNewVideoDraft(planningDraft),
         materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
@@ -2163,22 +2181,36 @@ export function NewVideoStart({
     }
   }
 
-  async function sendDiscussionFeedback() {
-    if (!discussionWorkspace || !discussionFeedback.trim()) return;
+  async function sendDiscussionFeedback(feedbackOverride?: string) {
+    const feedbackText = (feedbackOverride ?? discussionFeedback).trim();
+    if (!discussionWorkspace || !feedbackText) return;
     if (storyboardPlanningStatus === "running") return;
-    const feedbackText = discussionFeedback.trim();
     const stagedWorkspace = stageStoryDiscussionTurn({
       workspace: discussionWorkspace,
       text: feedbackText,
       createdAt: new Date().toISOString(),
     });
     setDiscussionWorkspace(stagedWorkspace);
-    setDiscussionFeedback("");
+    if (!feedbackOverride) setDiscussionFeedback("");
     const planningDraft = draftForPlanning(activeDraft);
     setStoryboardPlanningStatus("running");
     setStoryboardPlanningStartedAt(Date.now());
     setStoryboardPlanningElapsedSeconds(0);
     setStoryboardPlanningMessage("正在按你的反馈重排分镜。");
+    const feedbackTimelineCreatedAt = new Date().toISOString();
+    rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
+      createdAt: feedbackTimelineCreatedAt,
+      phase: "planning_started",
+      userMessage: feedbackText,
+      materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
+      imageCount: planningDraft.references.length,
+      audioCount: planningDraft.audio ? 1 : 0,
+      shotCount: storyboardRows.length,
+      permissionMode: vibePermissionModeFromAgentVideoMode(activeDraft.agentBoundaryMode),
+      understandingBody: "你想按这条修改意见重排当前草案。我会基于现有镜头调整，不会当成一个全新的项目想法。",
+      assistantBody: "我会按这条反馈更新当前草案。这里只改分镜规划，不会生成参考图，也不会发送视频。",
+      assistantNext: "更新完成后你可以继续确认或再改。",
+    }));
     try {
       const aiPlan = await requestDirectorAiStoryboardPlan({
         scriptText: planningDraft.script,
@@ -2207,17 +2239,48 @@ export function NewVideoStart({
         workspace: stagedWorkspace,
         createdAt: new Date().toISOString(),
       }));
+      rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
+        createdAt: feedbackTimelineCreatedAt,
+        phase: "planning_ready",
+        userMessage: feedbackText,
+        materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
+        imageCount: planningDraft.references.length,
+        audioCount: planningDraft.audio ? 1 : 0,
+        shotCount: aiRows.length,
+        permissionMode: vibePermissionModeFromAgentVideoMode(activeDraft.agentBoundaryMode),
+        understandingBody: "你想按这条修改意见重排当前草案。我已经把它应用到新的分镜草案里。",
+        assistantBody: `我按反馈更新好了草案：现在是 ${aiRows.length || "若干"} 个镜头。确认前仍不会写入项目，也不会生成参考或视频。`,
+        assistantNext: "觉得可以就确认；想改就继续说。",
+      }));
     } catch (error) {
       setStoryboardPlanningStatus("ready");
       setStoryboardPlanningStartedAt(undefined);
-      setStoryboardPlanningMessage(error instanceof Error && /key|配置|API/i.test(error.message)
+      const failedMessage = error instanceof Error && /key|配置|API/i.test(error.message)
         ? "AI 修改还没跑起来：先保留你的反馈，配置好密钥后再试。"
-        : "AI 修改这次没有完成，已先保留你的反馈。");
+        : "AI 修改这次没有完成，已先保留你的反馈。";
+      setStoryboardPlanningMessage(failedMessage);
+      rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
+        createdAt: feedbackTimelineCreatedAt,
+        phase: "planning_blocked",
+        userMessage: feedbackText,
+        materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
+        imageCount: planningDraft.references.length,
+        audioCount: planningDraft.audio ? 1 : 0,
+        shotCount: storyboardRows.length,
+        permissionMode: vibePermissionModeFromAgentVideoMode(activeDraft.agentBoundaryMode),
+        understandingBody: "你想按这条修改意见重排当前草案。我先保留这条意见，等你重试或继续修改。",
+        assistantBody: failedMessage,
+        assistantNext: "你可以换个说法继续改，或先按当前草案确认。",
+      }));
     }
   }
 
   function submitComposer() {
     if (storyboardPlanningStatus === "running") return;
+    if (shouldHandleNewVideoStatusIntent(discussionFeedback || script)) {
+      showNewVideoStatusNotice(discussionFeedback || script);
+      return;
+    }
     if (projection && discussionWorkspace) {
       if (isDraftConfirmationIntent(discussionFeedback)) {
         setDiscussionFeedback("");
@@ -2234,6 +2297,59 @@ export function NewVideoStart({
     void prepareDraft();
   }
 
+  useEffect(() => {
+    const commandId = agentIntakeCommand?.id;
+    if (!commandId || handledAgentIntakeCommandIdRef.current === commandId) return;
+    handledAgentIntakeCommandIdRef.current = commandId;
+    if (agentIntakeCommand?.mode === "continue_current_draft") {
+      if (hasDraft) {
+        void prepareDraft();
+      } else {
+        showNoReadyDraftNotice("继续整理");
+      }
+      return;
+    }
+    const commandText = agentIntakeCommand?.text.trim();
+    if (!commandText) return;
+    if (shouldHandleNewVideoStatusIntent(commandText)) {
+      showNewVideoStatusNotice(commandText);
+      return;
+    }
+    if (projection && discussionWorkspace) {
+      if (isDraftConfirmationIntent(commandText)) {
+        setDiscussionFeedback("");
+        void confirmDraft();
+        return;
+      }
+      void sendDiscussionFeedback(commandText);
+      return;
+    }
+    if (isDraftConfirmationIntent(commandText)) {
+      showNoReadyDraftNotice(commandText);
+      return;
+    }
+    const detectedBoundaryMode = syncVideoPermissionFromIntent(commandText);
+    const nextDraft: NewVideoStartDraft = {
+      ...draft,
+      script: commandText,
+      style: "",
+      references,
+      audio,
+      audioRole,
+      agentBoundaryMode: detectedBoundaryMode || activeVideoPermissionContract.mode,
+    };
+    setScript(commandText);
+    setStyle("");
+    publish(nextDraft);
+    void prepareDraft(nextDraft);
+  }, [agentIntakeCommand?.id]);
+
+  function shouldHandleNewVideoStatusIntent(value: string) {
+    const normalized = cleanText(value);
+    if (!normalized || normalized.length > 80) return false;
+    return classifyDirectorAgentAction(normalized) === "inspect_project_status";
+  }
+
   function shouldHandleEmptyProjectStatusIntent(value: string) {
     const normalized = cleanText(value);
     if (!isStartingProject || references.length || audio || scriptFileName || style.trim()) return false;
@@ -2241,8 +2357,41 @@ export function NewVideoStart({
     return classifyDirectorAgentAction(normalized) === "inspect_project_status";
   }
 
-  function showEmptyProjectStatusNotice() {
-    const userText = shortAgentMessageText(script, "看看现在项目状态");
+  function showNewVideoStatusNotice(value: string) {
+    if (projection || submittedDraft || storyboardRows.length > 0) {
+      showCurrentDraftStatusNotice(value);
+      return;
+    }
+    showEmptyProjectStatusNotice(value);
+  }
+
+  function showCurrentDraftStatusNotice(value: string) {
+    const userText = shortAgentMessageText(value, "看看现在项目状态");
+    const shotCount = storyboardRows.length || entryStatus.draftShotCount || 0;
+    setDiscussionFeedback("");
+    setScript("");
+    setEmptyProjectAgentNotice({
+      userText,
+      title: "当前草案待确认",
+      body: `我看到当前草案有 ${shotCount || "若干"} 个镜头。这里只是检查状态，不会把这句话当成新脚本，也不会生成参考或提交视频。`,
+      next: "可以继续说哪里要改，或确认写入故事流；生成参考和视频仍要单独确认。",
+    });
+    rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
+      createdAt: new Date().toISOString(),
+      phase: "status_inspection",
+      userMessage: userText,
+      materialCount: 0,
+      imageCount: 0,
+      audioCount: 0,
+      shotCount,
+      permissionMode: vibePermissionModeFromAgentVideoMode(activeVideoPermissionContract.mode),
+      assistantBody: `当前草案有 ${shotCount || "若干"} 个镜头。这里只做状态检查，不会生成参考或提交视频。`,
+      assistantNext: "继续说哪里要改，或确认写入故事流。",
+    }));
+  }
+
+  function showEmptyProjectStatusNotice(value = script) {
+    const userText = shortAgentMessageText(value, "看看现在项目状态");
     const nextDraft = { ...draft, script: "" };
     setScript("");
     setScriptFileName("");
@@ -2274,6 +2423,27 @@ export function NewVideoStart({
           ? "还没有绑定项目文件夹。先写脚本或拖入脚本文件；我会先拆草案，确认时再选择项目文件夹。"
           : "当前还没连接项目。先写脚本或拖入脚本文件，我会先整理成待确认内容；生成参考前请在桌面 App 选择项目。",
       assistantNext: "下一步：放入脚本或一句故事想法。",
+    }));
+  }
+
+  function showNoReadyDraftNotice(userText: string) {
+    setEmptyProjectAgentNotice({
+      userText,
+      title: "还没有可确认的草案",
+      body: "先说你想拍什么，或拖入脚本文件。我会先整理故事、镜头和节奏，草案出来后再确认。",
+      next: "下一步：写一句故事想法。",
+    });
+    rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
+      createdAt: new Date().toISOString(),
+      phase: "status_inspection",
+      userMessage: userText,
+      materialCount: references.length + (audio ? 1 : 0),
+      imageCount: references.length,
+      audioCount: audio ? 1 : 0,
+      shotCount: 0,
+      permissionMode: vibePermissionModeFromAgentVideoMode(activeVideoPermissionContract.mode),
+      assistantBody: "还没有可确认的草案。先说你想拍什么，或拖入脚本文件。我会先整理故事、镜头和节奏，草案出来后再确认。",
+      assistantNext: "下一步：写一句故事想法。",
     }));
   }
 
@@ -2505,12 +2675,12 @@ export function NewVideoStart({
     ? "直接说哪里要改..."
     : "写脚本、风格或修改意见；也可以拖文件。";
   const composerTitle = composerIsFeedback
-    ? "和 AI 导演说"
+    ? "继续修改"
     : projection
-      ? "继续和 AI 导演说"
+      ? "继续改草案"
       : "写下你想拍什么";
   const composerConcreteActionLabel = composerConfirmsDraft
-    ? confirmed ? "已进入故事流" : confirmPending ? "正在进入故事流" : "确认进故事流"
+    ? confirmed ? "已进入故事流" : confirmPending ? "正在进入故事流" : "确认写入故事流"
     : composerIsFeedback
       ? "发送修改意见"
       : "发送给 AI 导演";
@@ -2529,7 +2699,9 @@ export function NewVideoStart({
   const composerPrimaryTitle = composerDisabled
     ? composerDisabledReason
     : composerConfirmsDraft
-      ? "确认后会进入故事流，不会直接生成。"
+      ? localProjectReady
+        ? "确认后会进入故事流，不会直接生成。"
+        : "确认前会先让你选择项目文件夹；不会生成参考或发送视频。"
       : composerIsFeedback
         ? "发送修改意见给 AI 导演。"
         : "先让 AI 导演拆故事、分镜和节奏，不会生成。";
@@ -2540,7 +2712,7 @@ export function NewVideoStart({
       : composerConfirmsDraft
         ? `下一步：${composerConcreteActionLabel}`
         : projection
-          ? "可以继续修改，或确认进故事流。"
+        ? "可以继续修改，或确认写入故事流。"
         : hasDraft
             ? "下一步：发送给 AI 导演"
             : "等待输入";
@@ -2565,6 +2737,13 @@ export function NewVideoStart({
     : activeVideoPermissionContract.mode === "reference_allowed"
       ? "确认草案不会发送视频；后面会先看参考，再单独确认视频。"
       : "确认草案不会立刻发送；故事和参考通过后再发送视频。";
+  const planSummaryActionHint = storyboardPlanningStatus === "running"
+    ? "草案出来后可确认"
+    : confirmed
+      ? "已进入故事流"
+      : confirmPending
+        ? "正在进入故事流"
+        : "确认写入故事流";
   const agentReply = useMemo<NewVideoAgentReply | undefined>(() => {
     const shotCount = storyboardRows.length || entryStatus.draftShotCount || 0;
     const referenceCount = entryStatus.draftReferenceCount || 0;
@@ -2594,7 +2773,7 @@ export function NewVideoStart({
       return {
         title: "我已经把草案放进故事流",
         body: `当前故事流里有 ${shotCount || "若干"} 个镜头。接下来你可以继续让我改镜头，也可以让我开始补参考。`,
-        next: "继续在底部说你想改哪里，或说“开始补参考”。",
+        next: "继续在输入框说你想改哪里，或说“开始补参考”。",
         facts: [
           { label: "镜头", value: shotCount ? `${shotCount} 个` : "已进入故事流" },
           { label: "生成", value: "还没有发送视频" },
@@ -2701,14 +2880,14 @@ export function NewVideoStart({
       messages.push({
         id: "tool-plan-next",
         role: "tool",
-        title: storyboardPlanningStatus === "running" ? "正在拆镜头" : "判断下一步",
+        title: storyboardPlanningStatus === "running" ? "正在拆镜头" : projection || storyboardRows.length > 0 || submittedDraft ? "草案已完成" : "准备拆故事",
         body: storyboardPlanningStatus === "running"
           ? "我正在把输入拆成故事节奏、镜头顺序和参考策略。"
           : projection || storyboardRows.length > 0 || submittedDraft
             ? "我已经完成草案规划，现在停在复核和确认这一步。"
             : "下一步会先拆故事、镜头和节奏，不会直接生成参考或视频。",
         facts: [
-          { label: "动作", value: storyboardPlanningStatus === "running" ? "plan_next_action" : "write_agent_message" },
+          { label: "动作", value: "plan_story" },
           { label: "镜头", value: storyboardRows.length ? `${storyboardRows.length} 个` : "待拆分" },
         ],
       });
@@ -2719,7 +2898,7 @@ export function NewVideoStart({
         role: "assistant",
         title: `AI 导演：${agentReply.title}`,
         body: agentReply.body,
-        facts: agentReply.facts,
+        facts: [{ label: "动作", value: "write_agent_message" }, ...(agentReply.facts || [])],
         next: agentReply.next,
       });
     }
@@ -2730,7 +2909,7 @@ export function NewVideoStart({
         title: "等待确认",
         body: "确认后我只会把草案写入故事流；生成参考图、提交视频和导出都还要再确认。",
         facts: [
-          { label: "动作", value: "write_project" },
+          { label: "确认", value: "写入故事流" },
           { label: "下一步", value: composerConcreteActionLabel },
         ],
         next: "可以点确认，也可以直接说要改哪里。",
@@ -2906,10 +3085,13 @@ export function NewVideoStart({
       )}
     </section>
   );
-  const composerSurface = typeof document === "undefined"
+  const showComposerSurface = composerPlacement !== "draft_only";
+  const composerSurface = composerPlacement === "inline" || composerPlacement === "draft_only" || typeof document === "undefined"
     ? unifiedComposer
     : createPortal(<div className="new-video-bottom-portal">{unifiedComposer}</div>, document.body);
   const projectionTitleForDisplay = projection ? planSummaryTitleForDisplay(projection.summary.title, activeDraft.script) : "";
+  const showInlineAgentThread = composerPlacement !== "draft_only" && displayAgentMessages.length > 0;
+  const showMiddleDiscussionWorkspace = composerPlacement !== "draft_only" && Boolean(discussionWorkspace);
 
   return (
     <details
@@ -2920,7 +3102,7 @@ export function NewVideoStart({
       <summary>
         <span>
           <strong>{isStartingProject ? "从新视频开始" : "新视频"}</strong>
-          <small>{hasDraft ? "内容已准备" : "脚本、素材和修改都放下面"}</small>
+          <small>{hasDraft ? "内容已准备" : composerPlacement === "draft_only" ? "先和右侧 AI 导演说" : "脚本、素材和修改都放输入框"}</small>
         </span>
         <Sparkles size={16} aria-hidden="true" />
       </summary>
@@ -2929,13 +3111,13 @@ export function NewVideoStart({
           <section className="new-video-start-guide" aria-label="开始方式">
             <div>
               <span>开始方式</span>
-              <strong>{hasDraft ? "发送后让 AI 导演拆镜头" : "把故事和素材放到底部"}</strong>
+              <strong>{composerPlacement === "draft_only" && !projection ? "在右侧和 AI 导演说" : hasDraft ? "发送后让 AI 导演拆镜头" : "把故事和素材放进输入框"}</strong>
               <small>{localProjectLabel} · 这里只整理想法，确认前不会生成。</small>
             </div>
             <ol>
               <li>写想法</li>
               <li>AI 导演拆镜头</li>
-              <li>确认进故事流</li>
+              <li>确认写入故事流</li>
             </ol>
           </section>
         )}
@@ -2947,7 +3129,13 @@ export function NewVideoStart({
             onDragLeave={(event) => handleWorkspaceDrag(event, false)}
             onDrop={handleWorkspaceDrop}
           >
-            {composerSurface}
+            {showComposerSurface ? composerSurface : (
+              <section className="new-video-agent-entry-hint" aria-label="右侧 Agent 入口">
+              <span>输入入口</span>
+              <strong>右侧和 AI 导演说</strong>
+                <p>把想法、脚本、图片或声音发给右侧 Agent。AI 会先整理故事和镜头，确认前不会生成。</p>
+              </section>
+            )}
         </div>
         {(references.length > 0 || audio) && (
           <details className="new-video-file-details">
@@ -2990,7 +3178,7 @@ export function NewVideoStart({
             <small>{emptyProjectAgentNotice.next}</small>
           </section>
         )}
-        {displayAgentMessages.length > 0 && (
+        {showInlineAgentThread && (
           <section className="new-video-agent-thread new-video-agent-reply" aria-label="和 AI 导演的对话" aria-live="polite">
             <span>和 AI 导演的对话</span>
             <div className="new-video-agent-messages">
@@ -3027,7 +3215,7 @@ export function NewVideoStart({
                 <small>{confirmedFlowDetail}</small>
               </div>
               <small className="new-video-next-hint">
-                {confirmed ? "已进入故事流" : confirmPending ? "正在进入故事流" : "底部继续：确认进故事流"}
+                {planSummaryActionHint}
               </small>
             </div>
             {showStylePreflight && styleResearchPreflight && (
@@ -3342,15 +3530,15 @@ export function NewVideoStart({
                 </div>
               </section>
             )}
-            {discussionWorkspace && (
+            {showMiddleDiscussionWorkspace && discussionWorkspace && (
               <details
                 className="new-video-discussion"
-                aria-label="导演讨论与分镜"
+                aria-label="修改建议与分镜"
                 open={discussionDetailsOpen}
                 onToggle={(event) => setDiscussionDetailsOpen(event.currentTarget.open)}
               >
                 <summary>
-                  <span>导演讨论</span>
+                  <span>修改建议</span>
                   <strong>{discussionWorkspace.nextActionLabel}</strong>
                 </summary>
                 {discussionDetailsOpen && (
@@ -3380,8 +3568,13 @@ export function NewVideoStart({
                             <em>{delta.revisionSummary?.confirmationCopy || delta.summary}</em>
                           </small>
                         ))}
-                        <button type="button" disabled={!pendingDiscussionDeltaCount} onClick={confirmDiscussionDeltas}>
-                          {pendingDiscussionDeltaCount ? "确认修改" : "修改已确认"}
+                        <button
+                          type="button"
+                          disabled={!pendingDiscussionDeltaCount || storyboardPlanningRunning}
+                          onClick={confirmDiscussionDeltas}
+                          title={storyboardPlanningRunning ? "AI 正在按这条意见重排，完成后再确认。" : undefined}
+                        >
+                          {storyboardPlanningRunning ? "正在重排" : pendingDiscussionDeltaCount ? "确认修改" : "修改已确认"}
                         </button>
                       </div>
                     )}
@@ -3395,7 +3588,7 @@ export function NewVideoStart({
               open={planDetailsOpen}
               onToggle={(event) => setPlanDetailsOpen(event.currentTarget.open)}
             >
-              <summary>查看草案细节</summary>
+              <summary>查看细节</summary>
               {planDetailsOpen && (
                 <div className="new-video-plan-detail-body">
                   <div className="new-video-plan-status">

@@ -1,0 +1,6 @@
+file '/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_01_retry_01/212ebca8-5f14-4319-b5fb-687fb0bf1c4d_video_1_muted.mp4'
+file '/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_02/dab67696-0713-4090-ae1f-45a9dc8f5748_video_1_muted.mp4'
+file '/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_03/4887228d-9284-4b78-9880-27002ba77711_video_1_muted.mp4'
+file '/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_04/a7d57d3d-ace8-4f9d-ba5f-1e3dea17defa_video_1_muted.mp4'
+file '/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_05/719ae7fb-ec59-4c05-8f90-9ee613762d92_video_1_muted.mp4'
+file '/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_06_retry_core3/ee5b3e6c-f8fc-437e-9048-fed1bf95afec_video_1_muted.mp4'

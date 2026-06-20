@@ -107,12 +107,33 @@ function currentProjectBindingBootstrapPlugin() {
   };
 }
 
+function noStoreDevCachePlugin() {
+  return {
+    name: "vibe-no-store-dev-cache",
+    configureServer(server) {
+      server.middlewares.use((_req, res, next) => {
+        const originalWriteHead = res.writeHead.bind(res);
+        res.writeHead = ((...args: unknown[]) => {
+          res.setHeader("Cache-Control", "no-store");
+          res.setHeader("Pragma", "no-cache");
+          res.setHeader("Expires", "0");
+          return originalWriteHead(...args as Parameters<typeof originalWriteHead>);
+        }) as typeof res.writeHead;
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
   base: "./",
-  plugins: [currentProjectBindingBootstrapPlugin(), react()],
+  plugins: [noStoreDevCachePlugin(), currentProjectBindingBootstrapPlugin(), react()],
   server: {
     port: 5174, // Intentional default dev-server port.
     strictPort: false,
+    headers: {
+      "Cache-Control": "no-store",
+    },
     fs: {
       allow: [projectRoot, localAssetRoot],
     },

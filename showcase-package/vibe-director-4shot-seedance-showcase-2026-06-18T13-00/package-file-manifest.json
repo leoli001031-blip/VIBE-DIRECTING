@@ -1,0 +1,148 @@
+{
+  "schemaVersion": "vibe_showcase_package_file_manifest_v1",
+  "generatedAt": "2026-06-18T05:03:10.488Z",
+  "packageRoot": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/vibe-director-4shot-seedance-showcase-2026-06-18T13-00",
+  "fileCount": 28,
+  "files": [
+    {
+      "path": "01-project-plan/showcase_4shot_plan.md",
+      "bytes": 1301,
+      "sha256": "e9f881eaff3f12f71578ca9b2a2a4cfd21f8a28e7220938527c2cd8cb365a6cb"
+    },
+    {
+      "path": "02-reference-assets/character-headphone-girl.png",
+      "bytes": 1878823,
+      "sha256": "4b06c6b5972425745ce0166e55c55a8d355311cf3dfc1a7423b3e0f08bdfc007"
+    },
+    {
+      "path": "02-reference-assets/prop-glowing-ticket.png",
+      "bytes": 1932732,
+      "sha256": "78788b0d778417f616f25bf53236940ab6dbab9c4ea461f0eefa80b6052f4f9d"
+    },
+    {
+      "path": "02-reference-assets/scene-rain-street.png",
+      "bytes": 2173816,
+      "sha256": "dbea57c3386ac698df5457414c704a13ca1783f25e4c6f30468dbb5bb5ea1ad2"
+    },
+    {
+      "path": "03-seedance-prompts/shot_1_seedance_prompt.md",
+      "bytes": 1787,
+      "sha256": "4bf93450f48a745b4ea8ddd030aa1b94e5633f8af58badbfbeda711d318ad749"
+    },
+    {
+      "path": "03-seedance-prompts/shot_2_seedance_prompt.md",
+      "bytes": 2046,
+      "sha256": "b08b47c18583e3dcd25b48462734527ae31136448e5f5c286dd1ec4ce373d669"
+    },
+    {
+      "path": "03-seedance-prompts/shot_3_seedance_prompt.md",
+      "bytes": 2073,
+      "sha256": "ba82ebbc796f1c75cbd5c1a6928fe19e1b5db258ac595566a4b589a073c74e51"
+    },
+    {
+      "path": "03-seedance-prompts/shot_4_seedance_prompt.md",
+      "bytes": 2216,
+      "sha256": "967ff1e33c957e0be0645a57d857013fb4244962b12c4c13e40eae0ec83fd4b6"
+    },
+    {
+      "path": "04-generated-videos/combined_4shot_preview.mp4",
+      "bytes": 31148633,
+      "sha256": "aae6aa8ceb92bb37cef05efb50e38772a553efe9f2d5b8539926568120d521fb"
+    },
+    {
+      "path": "04-generated-videos/shot_1_rainy_ticket.mp4",
+      "bytes": 9406814,
+      "sha256": "44f307d58d3404952d98d1933f1771e632c8db500355878cebdd35b837832d6f"
+    },
+    {
+      "path": "04-generated-videos/shot_2_follow_blue_light.mp4",
+      "bytes": 8892475,
+      "sha256": "0a8586e8445e1c4285910b413b273a02e4ef25e97863c12af561ccf166e7f544"
+    },
+    {
+      "path": "04-generated-videos/shot_3_platform_gate.mp4",
+      "bytes": 5984587,
+      "sha256": "94b94468f67ae1d8727912e3dc2a7d93ed8d250867b1bcf7639d975a70eb60d3"
+    },
+    {
+      "path": "04-generated-videos/shot_4_window_reflection.mp4",
+      "bytes": 6870724,
+      "sha256": "f2401b3990fd92397d2df59ad4b3e5ff3b74b4c2fb77724d677023cb67f38e56"
+    },
+    {
+      "path": "05-receipts/shot_1_dreamina-submit.json",
+      "bytes": 1980,
+      "sha256": "fb592d3c2570d22968e888264d3c5143cc7e723fb4277d8ab40117e3b9344e99"
+    },
+    {
+      "path": "05-receipts/shot_2_dreamina-submit.json",
+      "bytes": 2243,
+      "sha256": "55cf9dd0aaa396d7965a2f0a00a337dfc3df9b4909e646995dcda52634ccb4d3"
+    },
+    {
+      "path": "05-receipts/shot_2_query-latest.json",
+      "bytes": 3028,
+      "sha256": "dc078528a8600a48fdb753f8edf79be374eb401c200d11038bd81c1e3002af46"
+    },
+    {
+      "path": "05-receipts/shot_3_dreamina-submit.json",
+      "bytes": 2270,
+      "sha256": "6ec60d8998a575dcbcea34539a4e17b1f5a8c06e4bb10e06976fd7ac868839a8"
+    },
+    {
+      "path": "05-receipts/shot_3_query-latest.json",
+      "bytes": 3055,
+      "sha256": "f5c941dffc4171cc616473e0d7bcfaa3338f7193c61d403e9b78d43b5de473a3"
+    },
+    {
+      "path": "05-receipts/shot_4_dreamina-submit.json",
+      "bytes": 2413,
+      "sha256": "9a3701e3ae003d448055811e884a24ff5e4b33ece2c7774a7244ff6d6c0de61b"
+    },
+    {
+      "path": "05-receipts/shot_4_query-latest.json",
+      "bytes": 3198,
+      "sha256": "b37abdf3c9a661c4657f1d5e442ab76ba9601dfd25ee684f57e4c1713327f60d"
+    },
+    {
+      "path": "06-thumbnails/combined_preview_thumb.png",
+      "bytes": 910599,
+      "sha256": "2401207eed5a04c70872a43693ce002bfb3fef650b2558cd0e5fd989ed1addd4"
+    },
+    {
+      "path": "06-thumbnails/four_shot_contact_sheet.png",
+      "bytes": 1079184,
+      "sha256": "96579cdff7e00b5c207568f23d8ebd041873f87e3098bc67652f2ad60babae25"
+    },
+    {
+      "path": "06-thumbnails/shot_1_thumb.png",
+      "bytes": 915705,
+      "sha256": "1c56a73cb6afee1b87e7f9e8d6815398c3be49e41ac2079e8236e57407cf88a8"
+    },
+    {
+      "path": "06-thumbnails/shot_2_thumb.png",
+      "bytes": 784839,
+      "sha256": "95b5f2fcea8f9e824ebb9d7e84030d1103eb526dbab751c6fcaa94576c1f35e4"
+    },
+    {
+      "path": "06-thumbnails/shot_3_thumb.png",
+      "bytes": 655581,
+      "sha256": "e3b222fbf916639e9d3720250b144a3710dd01015194aee4c468e0489f33d80c"
+    },
+    {
+      "path": "06-thumbnails/shot_4_thumb.png",
+      "bytes": 776378,
+      "sha256": "f3bf2b510cf46681230f15e645bad48b65bcde1fcb2df00485a9e382ffa09b74"
+    },
+    {
+      "path": "demo-recording-flow.md",
+      "bytes": 1466,
+      "sha256": "7b4c71530f19678cbc50507fc2ffe10f298699d1aa42453a20e4f32e46b48487"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1593,
+      "sha256": "6c7c454d549519b128b9fd39d62ad5d937121add90a5776849640e5beb17860a"
+    }
+  ]
+}

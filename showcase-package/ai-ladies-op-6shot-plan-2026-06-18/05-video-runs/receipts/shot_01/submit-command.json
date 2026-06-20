@@ -1,0 +1,41 @@
+{
+  "command": "dreamina",
+  "args": [
+    "multimodal2video",
+    "--image",
+    "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/scenes/academy_2026-05-26T17-37-13-227Z.png",
+    "--image",
+    "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/protagonist/identity_ref/protagonist_identity_ref_2026-05-26T16-17-35-187Z.png",
+    "--prompt",
+    "全能参考 video request.\nUse the attached references and written direction only.\nCreate exactly 1 continuous visible clip.\nTotal duration: 5s.\nNo text overlays, subtitles, logos, watermarks, UI, panels, prompt artifacts, or storyboard marks.\n\nUse Image 1 only as environment reference: ZC学院校门、樱花、夕阳、明亮通透的校园空气感、建筑布局、光线方向和色温。Do not copy any unwanted text or signage from the reference.\nUse Image 2 only as protagonist identity reference: 无脸日漫男主、普通高中男生身形、深色短发、普通校服、观众代入位。Do not force detailed facial features.\n\nTiming:\n0-5s: visible clip 1/1, ZC学院开场. 男主站在校门前，抬头看向学院，像被卷入一部恋爱喜剧的第一秒。\n\nShot direction:\nCamera starts with a wide establishing view of ZC Academy under warm afternoon light, then slowly pushes in toward the faceless male protagonist standing near the lower foreground. Cherry blossoms drift softly across frame. The protagonist is seen mostly from behind or three-quarter back view; he lifts his head slightly toward the school gate. Keep the movement calm, cinematic, and OP-like.\n\nPerformance:\nThe protagonist should feel ordinary and slightly overwhelmed, not heroic. His posture is small against the bright academy.\n\nStyle:\nTV anime series cel style, clean flat color areas with hard-edged shading, visible clean ink line art, animation key visual aesthetic, CloverWorks / A-1 Pictures-like studio anime look, vibrant but not fluorescent. No photorealism, no glossy 3D, no game render, no painterly rendering.\n\nNo music, no BGM, no subtitles.",
+    "--duration",
+    "5",
+    "--ratio",
+    "16:9",
+    "--video_resolution",
+    "720p",
+    "--model_version",
+    "seedance2.0_vip",
+    "--poll",
+    "0"
+  ],
+  "startedAt": "2026-06-18T05:24:44.853Z",
+  "shot": {
+    "id": "shot_01",
+    "title": "ZC学院开场",
+    "durationSeconds": 5,
+    "prompt": "02-prompts/shot_01_zc_academy_opening.md",
+    "references": [
+      {
+        "image": 1,
+        "role": "scene",
+        "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/scenes/academy_2026-05-26T17-37-13-227Z.png"
+      },
+      {
+        "image": 2,
+        "role": "character:protagonist",
+        "path": "/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/protagonist/identity_ref/protagonist_identity_ref_2026-05-26T16-17-35-187Z.png"
+      }
+    ]
+  }
+}

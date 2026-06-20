@@ -465,6 +465,76 @@ try {
     "roundtrip runtime state should rebuild selected shot intent from Project.vibe facts",
   );
 
+  const folderScannedAssetId = "folder_asset_assets_characters_demo_hero_character_md";
+  const runtimeWithFolderAsset = {
+    ...restoredRuntime,
+    visualMemory: {
+      ...restoredRuntime.visualMemory,
+      assets: [
+        ...restoredRuntime.visualMemory.assets,
+        {
+          id: folderScannedAssetId,
+          type: "character",
+          name: "demo-hero-character.md",
+          path: `${tempRoot}/assets/characters/demo-hero-character.md`,
+          status: "exists",
+          lockedStatus: "needs_review",
+          providerId: "project-folder",
+          safeForFutureReference: true,
+          textConstraints: ["从项目文件夹识别为角色素材，正式使用前需要确认。"],
+          sourceRefs: ["project_folder_scan"],
+          issues: ["needs_review"],
+        },
+      ],
+    },
+  } as typeof restoredRuntime;
+  const folderAssetAction = buildDirectorAgentActionEnvelope({
+    userIntent: "这是主角角色参考，给当前镜头用",
+    snapshot: buildDirectorAgentStateSnapshot({
+      runtimeState: runtimeWithFolderAsset,
+      selectedAssetId: folderScannedAssetId,
+      currentView: "reference",
+    }),
+    generatedAt,
+  });
+  assert(folderAssetAction.status === "staged", `folder-scanned asset action should stage: ${folderAssetAction.blockers.join("; ")}`);
+  assert(folderAssetAction.target.kind === "asset", "folder-scanned asset action should target the selected project-folder material");
+  const confirmedFolderAsset = confirmProjectVibeCreativeLoop({
+    project,
+    runtimeState: runtimeWithFolderAsset,
+    userIntent: "这是主角角色参考，给当前镜头用",
+    selectedAssetId: folderScannedAssetId,
+    generatedAt,
+    projectRoot: tempRoot,
+    projectPath: projectVibeFileName,
+    userConfirmed: true,
+    agentActionEnvelope: folderAssetAction,
+  });
+  assert(confirmedFolderAsset.status === "project_facts_written", `folder-scanned asset should write Project.vibe facts: ${confirmedFolderAsset.blockedReasons.join("; ")}`);
+  const promotedFolderAsset = confirmedFolderAsset.nextProject?.assets.find((asset) => asset.id === folderScannedAssetId);
+  assert(promotedFolderAsset, "folder-scanned asset should be promoted into Project.vibe assets");
+  assert(promotedFolderAsset.kind === "character", "promoted folder-scanned asset should keep the inferred character kind");
+  assert(promotedFolderAsset.path === "assets/characters/demo-hero-character.md", "promoted folder-scanned asset should keep its project-relative path");
+  assert(promotedFolderAsset.roleBinding?.role === "character_identity", "promoted folder-scanned asset should keep the confirmed character role binding");
+  assert(
+    confirmedFolderAsset.nextProject?.visualMemory.entries.some((entry) =>
+      entry.assetId === folderScannedAssetId && entry.roleBinding?.role === "character_identity"
+    ),
+    "promoted folder-scanned asset should be mirrored into Project.vibe visual memory",
+  );
+  assert(
+    confirmedFolderAsset.runReceipt?.evidenceRefs.includes(`project.vibe#assets/${folderScannedAssetId}`),
+    "folder-scanned asset run receipt should cite the promoted Project.vibe asset",
+  );
+  const folderAssetSave = await saveLocalProjectVibe(tempRoot, confirmedFolderAsset.nextProject, projectVibeFileName);
+  assert(folderAssetSave.ok, `promoted folder-scanned asset Project.vibe should save: ${folderAssetSave.errors.join("; ")}`);
+  const folderAssetOpen = await openLocalProjectVibe(tempRoot, projectVibeFileName);
+  assert(folderAssetOpen.ok && folderAssetOpen.project, `promoted folder-scanned asset Project.vibe should reopen: ${folderAssetOpen.errors.join("; ")}`);
+  assert(
+    folderAssetOpen.project.assets.some((asset) => asset.id === folderScannedAssetId && asset.roleBinding?.role === "character_identity"),
+    "reopened Project.vibe should retain the promoted folder-scanned asset role binding",
+  );
+
   const unsafe = confirmProjectVibeCreativeLoop({
     project,
     userIntent: "直接调用 provider 真实生成并跳过确认",

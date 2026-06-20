@@ -31,6 +31,34 @@ function uniqueStringArray(value) {
   return Array.from(new Set(stringArray(value)));
 }
 
+function projectRelativeReviewOutputPath(value, projectRoot) {
+  let candidate = asString(value)?.replace(/\\/g, "/");
+  if (!candidate) return undefined;
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.pathname.endsWith("/api/runtime/files")) {
+      candidate = asString(parsed.searchParams.get("path"))?.replace(/\\/g, "/") || candidate;
+    }
+  } catch {
+    // Plain project paths are expected here.
+  }
+  const root = asString(projectRoot)?.replace(/\\/g, "/").replace(/^\.?\//, "").replace(/\/+$/, "") || "";
+  const normalizedCandidate = candidate
+    .replace(/^file:\/+/, "")
+    .replace(/^\.?\//, "")
+    .replace(/\/+/g, "/");
+  if (root && normalizedCandidate.startsWith(`${root}/`)) {
+    return normalizedCandidate.slice(root.length + 1) || undefined;
+  }
+  const rootIndex = root ? normalizedCandidate.indexOf(`/${root}/`) : -1;
+  if (rootIndex >= 0) {
+    return normalizedCandidate.slice(rootIndex + root.length + 2) || undefined;
+  }
+  return normalizedCandidate && !normalizedCandidate.startsWith("/") && !normalizedCandidate.includes("../")
+    ? normalizedCandidate
+    : undefined;
+}
+
 function reviewDecisionRequestInput(url, body) {
   const item = isRecord(body?.item) ? body.item : {};
   const candidate = isRecord(body?.candidate) ? body.candidate : {};
@@ -131,9 +159,13 @@ export function createRuntimeApiCurrentProjectReviewDecision(deps) {
       };
     }
 
+    const candidate = {
+      ...input.candidate,
+      outputPath: projectRelativeReviewOutputPath(input.candidate.outputPath, source.runRootRelativePath),
+    };
     const staged = buildProjectVibeReviewPromotionTransaction({
       project: opened.project,
-      candidate: input.candidate,
+      candidate,
       decision: input.decision,
       transactionId: input.transactionId,
       receiptId: input.receiptId,
@@ -156,9 +188,9 @@ export function createRuntimeApiCurrentProjectReviewDecision(deps) {
     }
 
     if (action === "lock") {
-      const assetKind = asString(input.decision.assetKind || input.candidate.assetKind)?.toLowerCase();
-      const assetId = input.candidate.assetId;
-      const shotIds = uniqueStringArray(input.decision.usedByShotIds?.length ? input.decision.usedByShotIds : input.candidate.shotId ? [input.candidate.shotId] : []);
+      const assetKind = asString(input.decision.assetKind || candidate.assetKind)?.toLowerCase();
+      const assetId = candidate.assetId;
+      const shotIds = uniqueStringArray(input.decision.usedByShotIds?.length ? input.decision.usedByShotIds : candidate.shotId ? [candidate.shotId] : []);
       if (assetId && shotIds.length && (assetKind === "character" || assetKind === "scene" || assetKind === "prop")) {
         for (const shotId of shotIds) {
           const sourceShot = opened.project.shots.find((shot) => shot.id === shotId);

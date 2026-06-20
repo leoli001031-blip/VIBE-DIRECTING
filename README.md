@@ -9,7 +9,9 @@ Note: `public/media/` contains two uncompressed PNGs (`asset_contact_sheet.png` 
 - Canonical development root: `/Users/lichenhao/Desktop/new vibe directing`.
 - Durable project contract: `Project.vibe` inside the selected project folder.
 - Current demo architecture: `docs/current-demo-architecture.md`.
+- Agent Kernel v1 demo status: `docs/agent-kernel-v1-demo-status.md`.
 - Recording runbook: `docs/demo-recording-runbook.md`.
+- Final rehearsal checklist: `docs/demo-final-rehearsal-checklist.md`.
 - Local dev: `npm run dev -- --port 5178`.
 - Local runtime: `npm run local-runtime-api`.
 - Main demo gate: `npm run demo:ready:test`.

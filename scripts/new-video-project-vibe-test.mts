@@ -428,6 +428,93 @@ assert(
   stagedFromStoryboardTable.patchOperations.some((operation) => operation.op === "append_script_planning_receipt"),
   "storyboard table confirmations should persist a script planning receipt",
 );
+const actionPhraseCharacterDraft = buildNewVideoProjectVibeStagedTransaction({
+  project: createProject(),
+  draft: {
+    script: "12秒90年代日漫短片：雨夜旧电影院门口，黑猫叼电影票，引少女走进亮灯放映厅。",
+    style: "90年代日漫、雨夜、旧电影院",
+    references: [],
+  },
+  storyboardDraft: [{
+    shotNo: "1-1",
+    duration: "12",
+    shotSize: "中景",
+    camera: "从电影院门口慢慢推进",
+    visualDescription: "雨夜旧电影院门口，黑猫叼着电影票，引少女走进亮灯放映厅。",
+    primaryAction: "黑猫叼电影票，引少女走进放映厅",
+    referenceStrategy: "storyboard_narrative",
+    visibleCutBudget: "1 个最终可见剪辑",
+    title: "雨夜入场",
+    characters: "黑猫、少女、引少女",
+    scene: "雨夜旧电影院门口",
+    props: "电影票",
+  }],
+  directorSession: {
+    sessionId: "session_action_phrase_character",
+    projectId: "new_video_project_vibe",
+    turns: [{
+      id: "turn_action_phrase_character",
+      role: "user",
+      scope: "script",
+      createdAt: generatedAt,
+      text: "12秒90年代日漫短片：雨夜旧电影院门口，黑猫叼电影票，引少女走进亮灯放映厅。",
+      attachmentRefs: [],
+      sourceRefs: ["intake:action_phrase_character", "staged_fact:legacy_character_candidate_引少女_2"],
+      rawTextMayBecomeProjectFact: false,
+    }],
+    stagedFacts: [{
+      id: "fact_character_candidate_黑猫",
+      kind: "character_candidate",
+      label: "黑猫",
+      status: "staged",
+      summary: "从脚本中识别出的角色候选。",
+      sourceTurnId: "turn_action_phrase_character",
+      sourceAssetIds: [],
+      needsUserConfirmation: true,
+      canWriteProjectFactNow: false,
+    }, {
+      id: "fact_character_candidate_引少女_clean_label",
+      kind: "character_candidate",
+      label: "少女",
+      status: "staged",
+      summary: "旧链路已经清理 label，但 fact id 仍残留动作短语。",
+      sourceTurnId: "turn_action_phrase_character",
+      sourceAssetIds: [],
+      needsUserConfirmation: true,
+      canWriteProjectFactNow: false,
+    }, {
+      id: "fact_character_candidate_引少女",
+      kind: "character_candidate",
+      label: "引少女",
+      status: "staged",
+      summary: "旧链路误把动作短语识别为角色候选。",
+      sourceTurnId: "turn_action_phrase_character",
+      sourceAssetIds: [],
+      needsUserConfirmation: true,
+      canWriteProjectFactNow: false,
+    }],
+  },
+  generatedAt,
+});
+const actionPhraseShot = actionPhraseCharacterDraft.planner.shots[0];
+assert(actionPhraseShot?.characterGuidance.join("|") === "黑猫|少女", "action-prefixed character phrases should not become Project.vibe character facts");
+assert(actionPhraseCharacterDraft.patchOperations
+  .filter((operation) => operation.op === "upsert_shot")
+  .every((operation) => operation.shot.characterGuidance.join("|") === "黑猫|少女"
+    && !operation.shot.characterAssetIds.includes("引少女")), "action-prefixed character phrase should not leak into character guidance or asset bindings");
+assert(
+  !actionPhraseCharacterDraft.source.sourceRefs.some((ref) => ref.includes("character_candidate_引少女")),
+  "action-prefixed character staged facts should not leak into Project.vibe evidence refs",
+);
+assert(
+  actionPhraseCharacterDraft.source.sourceRefs.some((ref) => ref.includes("character_candidate_黑猫")),
+  "clean character staged facts should stay in Project.vibe evidence refs",
+);
+const actionPhraseReceipt = actionPhraseCharacterDraft.patchOperations.find((operation) => operation.op === "append_script_planning_receipt")?.receipt;
+assert(
+  !actionPhraseReceipt?.evidenceRefs.some((ref) => ref.includes("character_candidate_引少女")),
+  "script planning receipts should sanitize action-prefixed character evidence refs at the receipt boundary",
+);
 const committedStoryboardTable = commitNewVideoProjectVibeStagedTransaction({
   project: storyboardTableProject,
   stagedTransaction: stagedFromStoryboardTable,

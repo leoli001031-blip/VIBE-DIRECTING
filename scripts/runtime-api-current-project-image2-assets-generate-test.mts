@@ -121,7 +121,7 @@ function createFixture(fixtureRoot) {
       propIds: ["char_mika", "prop_glowing_ticket"],
       storyFunction: "旧书店书桌前，Mika 发现夹在书页里的发光车票，蓝色微光照亮她的指尖。",
       sceneGuidance: ["旧书店书桌前", "堆叠旧书", "清晨冷光"],
-      characterGuidance: ["女高中生的手"],
+      characterGuidance: ["女高中生（手部）"],
       propGuidance: ["发光车票"],
       order: 2,
     },
@@ -530,6 +530,9 @@ try {
   assert(projectAfterGeneration.assets.every((asset) => asset.status === "needs_review"), "generated project.vibe assets should wait for review");
   assert(projectAfterGeneration.visualMemory.entries.every((entry) => entry.canUseAsFutureReference === false), "unreviewed references must not become future authority");
   assert(projectAfterGeneration.assets.every((asset) => !asset.path.startsWith(fixtureRoot)), "project.vibe asset paths should be project-root-relative");
+  assert(projectAfterGeneration.assets.every((asset) => asset.sourceReceiptId), "generated project.vibe assets should carry source receipt evidence for review locking");
+  assert(projectAfterGeneration.assets.every((asset) => asset.outputHash), "generated project.vibe assets should carry output hashes for review locking");
+  assert(projectAfterGeneration.assets.every((asset) => asset.providerObservationPath), "generated project.vibe assets should expose provider observation paths");
   const firstShotAfterGeneration = projectAfterGeneration.shots.find((shot) => shot.id === shotId);
   assert(firstShotAfterGeneration.characterAssetIds.includes("char_mika"), "project.vibe shot should bind generated character asset");
   assert(firstShotAfterGeneration.sceneAssetIds.includes("scene_morning_bookstore"), "project.vibe shot should bind generated scene asset");

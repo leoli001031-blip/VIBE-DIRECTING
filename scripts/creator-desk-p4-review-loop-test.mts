@@ -230,6 +230,21 @@ assert(lockedProjection.agentCommand.label === "发送视频", "video-ready proj
 const lockedProjectVibe = createProjectVibeFromRuntimeState(lockedRuntimeState);
 assert(lockedProjectVibe.assets.every((asset) => asset.status === "locked"), "Project.vibe projection should refresh locked assets");
 assert(lockedProjectVibe.visualMemory.entries.every((entry) => entry.status === "locked" && entry.canUseAsFutureReference), "locked visual memory should become future-reference safe");
+const projectRootPrefixedRuntimeState = {
+  ...runtimeState,
+  visualMemory: {
+    ...runtimeState.visualMemory,
+    assets: runtimeState.visualMemory.assets.map((asset: any) => ({
+      ...asset,
+      path: `projects/p4/${asset.path}`,
+    })),
+  },
+};
+const projectRootPrefixedVibe = createProjectVibeFromRuntimeState(projectRootPrefixedRuntimeState);
+assert(
+  projectRootPrefixedVibe.assets.every((asset) => asset.path && !asset.path.startsWith("projects/p4/")),
+  "Project.vibe projection should store project-relative asset paths, not project-root-prefixed paths",
+);
 
 const noReferenceRuntimeState = {
   ...runtimeState,

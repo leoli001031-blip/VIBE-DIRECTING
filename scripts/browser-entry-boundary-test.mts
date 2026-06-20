@@ -175,12 +175,20 @@ if (!/script\s+src=["']\/startup-watchdog\.js["']/.test(indexHtml)) {
   failures.push("index.html must load the CSP-safe startup watchdog before the React module");
 }
 
+if (/\?agent-kernel-v\d+/.test(indexHtml)) {
+  failures.push("index.html must not pin the browser entry module with a fixed Agent kernel query string");
+}
+
 if (!/window\.setTimeout/.test(startupWatchdogSource) || !/启动时间有点久/.test(startupWatchdogSource) || !/window\.location\.reload/.test(startupWatchdogSource)) {
   failures.push("public/startup-watchdog.js must turn a stalled startup into a recoverable user message");
 }
 
 if (!/import\s+\{\s*ErrorBoundary\s*\}\s+from\s+["']\.\/ui\/ErrorBoundary["']/.test(mainSource)) {
   failures.push("src/main.tsx must import the top-level ErrorBoundary");
+}
+
+if (/\?agent-kernel-v\d+/.test(mainSource)) {
+  failures.push("src/main.tsx must not pin browser entry imports with fixed query strings");
 }
 
 if (!/<ErrorBoundary\s+fallbackLabel=["']应用启动["'][\s\S]*<App\s*\/>[\s\S]*<\/ErrorBoundary>/.test(mainSource)) {

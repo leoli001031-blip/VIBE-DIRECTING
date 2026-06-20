@@ -404,7 +404,7 @@ function fact(label: string, value: unknown, tone: CreatorVideoTaskFact["tone"] 
 
 function videoTaskNextAction(status: CreatorVideoGenerationStatus, options: { hasReadyNext?: boolean; canResume?: boolean; blocked?: boolean }) {
   if (status === "failed") return options.blocked ? "先补参考或改这一段，再提交" : options.hasReadyNext ? "继续下一段，失败段稍后单独补" : "看原因后重试或跳过";
-  if (status === "recoverable") return "点消息里的「查询结果」，不会重复发送";
+  if (status === "recoverable") return "在消息中确认「查询结果」，不会重复发送";
   if (status === "submitted" || status === "queued" || status === "generating") return "等待结果，稍后查询";
   if (status === "completed") return "去预览复核，确认后导出";
   return "参考和复核通过后再发送视频";

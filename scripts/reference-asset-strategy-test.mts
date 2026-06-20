@@ -51,6 +51,8 @@ assert(bucket("远山轮廓") === "scene_constraint", "distant mountain silhouet
 assert(bucket("路肩") === "scene_constraint", "road shoulder should belong to scene baseline, not a body shoulder");
 
 assert(bucket("手指") === "character_constraint", "fingers should not become a standalone prop image");
+assert(classifyReferenceAssetText("女高中生（手部）", "character").bucket === "character_constraint", "parenthesized body-part labels should not become character assets");
+assert(classifyReferenceAssetText("女高中生手部", "character").bucket === "character_constraint", "body-part suffix labels should not become character assets");
 assert(bucket("眼神") === "character_constraint", "gaze should not become a standalone prop image");
 assert(bucket("嘴唇") === "character_constraint", "lips should not become a standalone prop image");
 assert(bucket("透明雨衣") === "character_constraint", "costume pieces should stay character constraints instead of prop assets");
@@ -95,6 +97,9 @@ assert(classifyReferenceAssetText("雨后凌晨山脊", "scene").bucket === "sta
 assert(classifyReferenceAssetText("清晨", "scene").bucket === "scene_constraint", "time of day alone should be a scene constraint, not a scene asset");
 assert(!referenceAssetCandidates(["白色跑车驾驶者", "短发少女", "眼神"], "character").includes("白色跑车驾驶者"), "vehicle controller should not become character reference");
 assert(referenceAssetCandidates(["白色跑车驾驶者", "白车车手", "黑车车手", "短发少女", "白色双门车", "眼神"], "character").join("|") === "白车车手|黑车车手|短发少女", "functional driver roles and real character identities should remain");
+assert(referenceAssetCandidates(["黑猫", "少女", "引少女"], "character").join("|") === "黑猫|少女", "verb-prefixed character phrases should collapse back to the existing character");
+assert(referenceAssetCandidates(["黑猫", "少女", "黑猫叼电影票", "少女走进亮灯放映厅"], "character").join("|") === "黑猫|少女", "character plus action phrases should not become separate reusable character assets");
+assert(!referenceAssetCandidates(["女高中生（手部）"], "character").length, "selected-shot body-part character labels should be filtered out");
 assert(referenceAssetCandidates(["戴黄色雨衣的小女孩；迷你送货机器人"], "character").join("|") === "戴黄色雨衣的小女孩|迷你送货机器人", "listed character identities should split into reusable subjects");
 assert(referenceAssetCandidates(["云南高原咖啡园", "清晨", "温暖城市咖啡馆内"], "scene").join("|") === "云南高原咖啡园|温暖城市咖啡馆内", "scene reference candidates should keep locations and drop time-only details");
 assert(referenceAssetCandidates(["山脚便利店", "同上", "白色双门车"], "scene").join("|") === "山脚便利店", "scene candidates should drop placeholders and vehicle objects");

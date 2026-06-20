@@ -3,10 +3,10 @@ import type { AssetRecord, ShotRecord } from "../../core/types";
 import { MediaFrame } from "../common/MediaFrame";
 import {
   directorSkillSummaryForShot,
+  explicitShotReferenceStrategy,
   referenceStrategyDetail,
   referenceStrategyLabel,
   referenceStrategyWorkflowHint,
-  shotReferenceStrategy,
 } from "./directorSkillUi";
 import { usesEndpointEndFrame } from "./videoControlModeUi";
 
@@ -159,10 +159,10 @@ function currentShotReferenceUi(
   sceneStatus: SceneReferenceUiStatus,
   shotStoryboardReference?: AssetRecord,
 ) {
-  const strategy = shotReferenceStrategy(shot);
+  const strategy = explicitShotReferenceStrategy(shot);
   const storyboardStatusTone = shotStoryboardReference?.path
     ? referenceStatusTone(shotStoryboardReference.lockedStatus)
-    : strategy === "omni_reference" ? "ok" : "warn";
+    : !strategy || strategy === "omni_reference" ? "ok" : "warn";
   return {
     identity: {
       label: shot.gates.identity === "PASS" ? "已锁定" : gateStatusLabel(shot.gates.identity),
@@ -177,7 +177,9 @@ function currentShotReferenceUi(
       tone: gateStatusTone(shot.gates.prop),
     },
     story: {
-      label: strategy === "omni_reference"
+      label: !strategy
+        ? "待判断"
+        : strategy === "omni_reference"
         ? "不需要故事板"
         : shotStoryboardReference?.path
           ? referenceStatusLabel(shotStoryboardReference.lockedStatus)
@@ -474,13 +476,17 @@ function referenceLabelForType(type?: AssetRecord["type"]) {
   return "画面参考";
 }
 
+function explicitStrategyLabel(strategy?: ReturnType<typeof explicitShotReferenceStrategy>) {
+  return strategy ? referenceStrategyLabel(strategy) : "待判断";
+}
+
 function shotDisplayReference(shot: ShotRecord, fallbackReference?: AssetRecord, shotStoryboardReference?: AssetRecord) {
-  const strategy = shotReferenceStrategy(shot);
+  const strategy = explicitShotReferenceStrategy(shot);
   const actualStartFrame = actualShotFramePath(shot.startFrame);
   if (actualStartFrame) {
     return {
       src: actualStartFrame,
-      label: strategy === "omni_reference" ? "画面参考" : referenceStrategyLabel(strategy),
+      label: !strategy || strategy === "omni_reference" ? "画面参考" : referenceStrategyLabel(strategy),
       statusLabel: frameStatusLabel(shotFrameStatus(shot, "start")),
       statusTone: shotFrameStatus(shot, "start"),
     };
@@ -489,12 +495,12 @@ function shotDisplayReference(shot: ShotRecord, fallbackReference?: AssetRecord,
     const statusTone = referenceStatusTone(shotStoryboardReference.lockedStatus);
     return {
       src: shotStoryboardReference.path,
-      label: referenceStrategyLabel(strategy),
+      label: strategy ? referenceStrategyLabel(strategy) : "故事板参考",
       statusLabel: referenceStatusLabel(shotStoryboardReference.lockedStatus),
       statusTone,
     };
   }
-  if (strategy !== "omni_reference") {
+  if (strategy && strategy !== "omni_reference") {
     return {
       src: undefined,
       label: referenceStrategyLabel(strategy),
@@ -615,7 +621,8 @@ function shotThumbnailReference(shot: ShotRecord, fallbackReference?: AssetRecor
 
 function submittedReferenceBundle(assets: AssetRecord[], shots: ShotRecord[], shot: ShotRecord) {
   const segmentShots = referenceSegmentForShot(shots, shot);
-  const hasStoryboardReference = shotReferenceStrategy(shot) !== "omni_reference";
+  const explicitStrategy = explicitShotReferenceStrategy(shot);
+  const hasStoryboardReference = Boolean(explicitStrategy && explicitStrategy !== "omni_reference");
   const sequenceStoryboard = hasStoryboardReference ? storyboardReferenceForShot(assets, shot) || sequenceStoryboardReference(assets) : undefined;
   const sceneReferences = [
     ...representativeAssetsOfType(assets, segmentShots, "scene", 1),
@@ -690,7 +697,8 @@ export function MinimalStoryFlow({
       thumbnailReference,
       shotReturnedVideoStateFromCandidates(previewItemsByShotId.get(shot.id) || []),
     );
-    const strategy = shotReferenceStrategy(shot);
+    const strategy = explicitShotReferenceStrategy(shot);
+    const strategyLabel = explicitStrategyLabel(strategy);
     return {
       shot,
       index,
@@ -699,6 +707,7 @@ export function MinimalStoryFlow({
       thumbnailReference,
       cardState,
       strategy,
+      strategyLabel,
       displayNumber: displayShotNumber(shot.id),
       displayTitle: shotDisplayTitle(shot, index),
     };
@@ -717,7 +726,7 @@ export function MinimalStoryFlow({
   const referenceUi = currentShot ? currentShotReferenceUi(currentShot, currentSceneStatus, currentStoryboardReference) : undefined;
   const readiness = currentShot ? currentShotReadiness(currentShot, currentDisplayReference) : [];
   const currentState = currentShot ? currentShotState(currentShot, currentDisplayReference, currentVideoState) : undefined;
-  const currentStrategy = currentShot ? shotReferenceStrategy(currentShot) : undefined;
+  const currentStrategy = currentShot ? explicitShotReferenceStrategy(currentShot) : undefined;
   const currentSkillSummary = currentShot ? directorSkillSummaryForShot(currentShot) : undefined;
   const currentReferenceSegment = useMemo(
     () => currentShot ? referenceSegmentForShot(shots, currentShot) : [],
@@ -765,9 +774,9 @@ export function MinimalStoryFlow({
             </small>
           </div>
           {currentSkillSummary && (
-            <section className="current-shot-skill-panel" aria-label="AI 选择的做法">
+            <section className="current-shot-skill-panel" aria-label="Agent 推荐的做法">
               <div>
-                <span>AI 选择的做法</span>
+                <span>Agent 推荐的做法</span>
                 <strong>{currentSkillSummary.label}</strong>
                 <p>{currentSkillSummary.reason}</p>
               </div>
@@ -873,14 +882,14 @@ export function MinimalStoryFlow({
         </section>
       )}
       <div className="minimal-shot-grid filmstrip-shot-grid" aria-label="分镜胶片条">
-        {shotCardViewModels.map(({ shot, displayNumber, displayTitle, thumbnailReference, cardState, strategy }) => {
+        {shotCardViewModels.map(({ shot, displayNumber, displayTitle, thumbnailReference, cardState, strategyLabel }) => {
           return (
             <button
               key={shot.id}
               className={`minimal-shot-card filmstrip-shot ${selectedSet.has(shot.id) ? "selected" : ""} ${selectedShotId === shot.id ? "primary" : ""}`}
               onClick={(event) => onSelectShot(shot.id, event.metaKey || event.ctrlKey || event.shiftKey)}
               aria-pressed={selectedSet.has(shot.id)}
-              aria-label={`选择镜头 ${displayShotNumber(shot.id)}：${displayTitle} · ${referenceStrategyLabel(strategy)} · ${cardState.label}`}
+              aria-label={`选择镜头 ${displayShotNumber(shot.id)}：${displayTitle} · ${strategyLabel} · ${cardState.label}`}
             >
               <MediaFrame
                 src={thumbnailReference.src || (usesEndpointEndFrame(shot) ? shot.endFrame : undefined)}
@@ -893,7 +902,7 @@ export function MinimalStoryFlow({
                 <span>{displayTitle}</span>
                 <i className={`dot ${cardState.tone}`} aria-label={cardState.label} />
               </span>
-              <small className="minimal-shot-strategy">{referenceStrategyLabel(strategy)}</small>
+              <small className="minimal-shot-strategy">{strategyLabel}</small>
               <span className="minimal-frame-status" aria-label="镜头状态">
                 <small className={cardState.tone}>{cardState.label}</small>
               </span>

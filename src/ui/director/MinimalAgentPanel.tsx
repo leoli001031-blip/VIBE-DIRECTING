@@ -11,12 +11,20 @@ import {
 import {
   buildDirectorAgentActionEnvelope,
   buildDirectorAgentStateSnapshot,
+  directorAgentDisplayTargetLabel,
   directorAgentExecutionContractFromCreatorBoundary,
   directorAgentReadinessActions,
   type DirectorAgentActionEnvelope,
   type DirectorAgentSuggestedAction,
 } from "../../core/directorAgentAction";
-import { isDirectorAgentPermissionControlOnlyIntent } from "../../core/directorAgentPermissionIntent";
+import {
+  directorIntentCanStartNewVideoPlanningWithoutProject,
+  directorIntentStartsFreshVideoDraft,
+} from "../../core/directorFreshDraftIntent";
+import {
+  isDirectorAgentExplainOnlyIntent,
+  isDirectorAgentPermissionControlOnlyIntent,
+} from "../../core/directorAgentPermissionIntent";
 import type { DirectorQaUserFeedback } from "../../core/directorQaUserFeedback";
 import {
   type DirectorAgentToolAvailability,
@@ -53,7 +61,12 @@ import type { ProjectRuntimeState } from "../../core/projectState";
 import type { ProjectFactsStagedApplyPlan } from "../../core/projectTransaction";
 import type { StoryboardReferenceProjectPlannerInput } from "../../core/storyboardReferenceProjectPlanner";
 import type { AssetRecord, ShotRecord } from "../../core/types";
-import type { VibeAgentPermissionMode, VibeAgentTimelineEntry } from "../../agent-core/types";
+import type {
+  VibeAgentExecutionResultSummary,
+  VibeAgentKernelTurn,
+  VibeAgentPermissionMode,
+  VibeAgentTimelineEntry,
+} from "../../agent-core/types";
 import type { ProjectAgentActionLogItem, ProjectAgentStagedPlanDraft } from "../../project";
 import { videoBlockerRecoveryIntent } from "../../core/videoBlockerRecovery";
 import {
@@ -70,6 +83,7 @@ import {
   confirmAgentPlanProjection,
   defaultAgentVideoSubmitContract as defaultAgentVideoPermissionContract,
   detectAgentVideoSubmitContract as detectAgentVideoPermissionContract,
+  isCommittedNewVideoDraftAgentRun,
   type AgentControlledToolInvocationTarget,
   productScopeLabel,
   selectedScopeLabel,
@@ -93,6 +107,17 @@ import {
   directorFeedbackNeedsConcreteDirection,
 } from "./directorFeedbackUi";
 import {
+  buildDirectorSkillCardFromShot,
+  createDirectorSkillStackIndex,
+  DIRECTOR_SKILL_STACK_INDEX_PATH,
+  directorSkillCardMarkdown,
+  directorSkillFileName,
+  parseDirectorSkillStackIndex,
+  serializeDirectorSkillStackIndex,
+  upsertDirectorSkillStackIndex,
+  type DirectorSkillStackItem,
+} from "../../core/directorSkillLibrary";
+import {
   directorSkillSummaryForShot,
 } from "./directorSkillUi";
 import { agentProjectRequirementCopy } from "./agentProjectRequirementCopy";
@@ -110,38 +135,405 @@ type MinimalAgentMessage = {
   title: string;
   body: string;
   status?: VibeAgentTimelineEntry["status"];
+  lifecycle?: VibeAgentTimelineEntry["lifecycle"];
   toolName?: VibeAgentTimelineEntry["toolName"];
   actionKind?: VibeAgentTimelineEntry["actionKind"];
+  actionId?: VibeAgentTimelineEntry["actionId"];
   facts?: Array<{ label: string; value: string }>;
+  resultView?: DirectorView;
+  executionResult?: VibeAgentExecutionResultSummary;
   next?: string;
+  assetActions?: MinimalAgentAssetAction[];
+  assetActionOverflow?: {
+    label: string;
+    detail: string;
+  };
+  assetInboxSummary?: MinimalAgentAssetInboxSummary;
+  skillRecommendations?: MinimalAgentSkillRecommendation[];
 };
 
+type MinimalAgentAssetAction = {
+  id: string;
+  label: string;
+  detail: string;
+  intent: string;
+  selectedAssetId?: string;
+  selectedShotIds?: string[];
+};
+
+type MinimalAgentSkillRecommendation = {
+  label: string;
+  reason: string;
+  affectedShots: string[];
+  impact: string[];
+};
+
+type MinimalAgentAssetInboxSummary = {
+  summary: string;
+  nextAction: string;
+  totalCount: number;
+  needsReviewCount: number;
+  kindLabels: string[];
+};
+
+const MAX_VISIBLE_AGENT_THREAD_MESSAGES = 12;
+const NEW_VIDEO_DRAFT_CONFIRM_LABEL = "确认写入故事流";
+
+type DirectorSkillCardDraft = NonNullable<ReturnType<typeof buildDirectorSkillCardFromShot>>;
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function stringArrayValue(value: unknown) {
+  return Array.isArray(value) ? value.map(stringValue).filter(Boolean) : [];
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function minimalAgentDisplayableReferencePath(path: string | undefined) {
+  const value = path?.trim();
+  if (!value || /\.json(?:[?#].*)?$/i.test(value)) return undefined;
+  if (/^(?:https?:|data:|blob:|file:)/i.test(value)) return value;
+  if (/\.(?:png|jpe?g|webp|gif|avif|bmp|tiff?|svg|mp4|mov|m4v|webm)(?:[?#].*)?$/i.test(value)) return value;
+  return undefined;
+}
+
+function minimalAgentAssetHasDisplayableReference(asset: AssetRecord) {
+  return Boolean(minimalAgentDisplayableReferencePath(asset.path))
+    && (asset.status === "exists" || asset.status === "generated" || asset.lockedStatus === "needs_review" || asset.lockedStatus === "locked");
+}
+
+function minimalAgentInboxKindLabel(kind: string) {
+  if (kind === "script") return "脚本";
+  if (kind === "character") return "角色";
+  if (kind === "scene") return "场景";
+  if (kind === "prop") return "道具";
+  if (kind === "storyboard") return "故事板";
+  if (kind === "voice") return "声音";
+  if (kind === "video") return "视频";
+  if (kind === "prompt") return "提示词";
+  if (kind === "receipt") return "回执";
+  if (kind === "export") return "交付包";
+  if (kind === "reference") return "参考";
+  return "其他";
+}
+
+function minimalAgentAssetInboxSummaryFromTimelineEntry(entry: VibeAgentTimelineEntry): MinimalAgentAssetInboxSummary | undefined {
+  if (entry.toolName !== "classify_assets" && entry.toolName !== "scan_assets") return undefined;
+  const assetInbox = isPlainRecord(entry.details?.assetInbox) ? entry.details.assetInbox : undefined;
+  if (!assetInbox) return undefined;
+  const items = Array.isArray(assetInbox.items) ? assetInbox.items : [];
+  const kindLabels = [...new Set(items
+    .map((item) => isPlainRecord(item) ? minimalAgentInboxKindLabel(stringValue(item.kind)) : "")
+    .filter(Boolean))].slice(0, 6);
+  const totalCount = numberValue(assetInbox.totalCount) || items.length;
+  const needsReviewCount = numberValue(assetInbox.needsReviewCount);
+  if (totalCount <= 0 && needsReviewCount <= 0 && !kindLabels.length) return undefined;
+  const summary = stringValue(assetInbox.summary) || (items.length ? `识别到 ${items.length} 个项目素材。` : "");
+  if (!summary && !kindLabels.length) return undefined;
+  return {
+    summary,
+    nextAction: stringValue(assetInbox.nextAction) || "确认素材用途后继续。",
+    totalCount,
+    needsReviewCount,
+    kindLabels,
+  };
+}
+
+function minimalAgentAssetActionsFromTimelineEntry(entry: VibeAgentTimelineEntry): MinimalAgentAssetAction[] {
+  if (entry.toolName !== "classify_assets" && entry.toolName !== "scan_assets") return [];
+  const assetInbox = isPlainRecord(entry.details?.assetInbox) ? entry.details.assetInbox : undefined;
+  const items = Array.isArray(assetInbox?.items) ? assetInbox.items : [];
+  return items
+    .map((item, index): MinimalAgentAssetAction | undefined => {
+      if (!isPlainRecord(item) || item.needsReview !== true) return undefined;
+      const label = stringValue(item.label) || `素材 ${index + 1}`;
+      const suggestedBinding = stringValue(item.suggestedBinding) || "建议先确认用途";
+      const suggestedAction = stringValue(item.suggestedAction) || "确认用途";
+      const reason = stringValue(item.reason);
+      const detail = stringValue(item.detail) || suggestedBinding;
+      const selectedAssetId = stringValue(item.assetId);
+      const selectedShotIds = stringArrayValue(item.shotIds);
+      if (!selectedAssetId && !selectedShotIds.length) return undefined;
+      return {
+        id: stringValue(item.id) || `asset_action_${index + 1}`,
+        label: `确认 ${label} · ${suggestedAction}`,
+        detail: reason ? `${suggestedBinding}。判断理由：${reason}` : suggestedBinding,
+        intent: `确认这个素材用途：${label}。建议动作：${suggestedAction}。${suggestedBinding}${reason ? `。判断理由：${reason}` : ""}`,
+        selectedAssetId: selectedAssetId || undefined,
+        selectedShotIds: selectedShotIds.length ? selectedShotIds : undefined,
+      };
+    })
+    .filter((item): item is MinimalAgentAssetAction => Boolean(item))
+    .slice(0, 3);
+}
+
+function minimalAgentAssetActionOverflowFromTimelineEntry(
+  entry: VibeAgentTimelineEntry,
+  visibleActionCount: number,
+): MinimalAgentMessage["assetActionOverflow"] {
+  if (entry.toolName !== "classify_assets" && entry.toolName !== "scan_assets") return undefined;
+  const assetInbox = isPlainRecord(entry.details?.assetInbox) ? entry.details.assetInbox : undefined;
+  const needsReviewCount = numberValue(assetInbox?.needsReviewCount);
+  const remainingCount = Math.max(0, needsReviewCount - visibleActionCount);
+  if (!remainingCount) return undefined;
+  return {
+    label: `还有 ${remainingCount} 个素材待确认`,
+    detail: "去参考页可以继续逐个看，不会生成参考或提交视频。",
+  };
+}
+
+function minimalAgentSkillRecommendationsFromTimelineEntry(entry: VibeAgentTimelineEntry): MinimalAgentSkillRecommendation[] {
+  const rawRecommendations = Array.isArray(entry.details?.skillRecommendations)
+    ? entry.details.skillRecommendations
+    : [];
+  return rawRecommendations
+    .map((item): MinimalAgentSkillRecommendation | undefined => {
+      if (!isPlainRecord(item)) return undefined;
+      const label = stringValue(item.label) || stringValue(item.strategy);
+      const reason = stringValue(item.reason);
+      const affectedShots = stringArrayValue(item.affectedShots);
+      const impact = stringArrayValue(item.impact);
+      if (!label || !reason) return undefined;
+      return {
+        label,
+        reason,
+        affectedShots,
+        impact,
+      };
+    })
+    .filter((item): item is MinimalAgentSkillRecommendation => Boolean(item))
+    .slice(0, 3);
+}
+
+function cleanMinimalAgentMessageCopy(value: string) {
+  return value
+    .replace(/不会提交\s*(?:Seedance|即梦)(?:\s*视频任务)?/g, "不提交视频")
+    .replace(/会提交外部视频任务/g, "会提交 Seedance 视频任务")
+    .replace(/不会提交外部视频任务/g, "不提交视频")
+    .replace(/可能产生生成成本/g, "会调用生成或联网服务")
+    .replace(/无生成成本/g, "不调用生成服务")
+    .replace(/会调用图片生成/g, "会调用参考生成")
+    .replace(/参考任务已准备，等待生成结果回到参考页。?/g, "参考生成中，等待结果回到参考页。")
+    .replace(/参考任务已准备，等待生成结果。?/g, "参考生成中，等待结果回到参考页。")
+    .replace(/^参考任务已准备$/g, "参考生成中")
+    .replace(/正在生成参考：Image2 正在为整个项目准备角色、场景、关键道具和故事板。完成后去参考页复核；不用重复点击。?/g, "参考任务已交给图片服务，等图片回到参考页后再复核。")
+    .replace(/不生成，只整理请求/g, "只准备视频请求")
+    .replace(/initialize logs failed:[\s\S]*?operation not permitted/g, "即梦 CLI 日志目录没有写入权限，视频未提交。")
+    .replace(/\d+\s*项参考已通过，可以准备视频。?/g, "参考已通过，可以准备视频。")
+    .replace(/\d+\s*项参考已通过/g, "参考已通过")
+    .replace(/视频提交未完成，请检查生成服务、即梦登录和项目参考。?/g, "视频提交未完成，请检查即梦登录、CLI 权限或稍后重试。")
+    .replace(/可以调整后重试，或继续描述要改哪里。?/g, "检查即梦登录、CLI 权限或稍后重试；也可以跳过这一段。");
+}
+
+function legacyReferenceGenerationPreparedMessage(entry: VibeAgentTimelineEntry) {
+  if (entry.toolName !== "generate_references") return false;
+  const combined = `${entry.title} ${entry.body} ${typeof entry.details?.next === "string" ? entry.details.next : ""}`;
+  return /参考任务已准备|等待生成结果|正在生成参考/.test(combined) && !/参考已生成|需要复核|可用/.test(combined);
+}
+
+function agentFactDisplayValue(fact: { label: string; value: string }) {
+  const cleaned = cleanMinimalAgentMessageCopy(fact.value);
+  if (fact.label !== "视频" && fact.label !== "状态") return cleaned;
+  const normalized = cleaned.trim().toLowerCase();
+  if (!normalized || normalized === "idle" || normalized === "not_generated") return "未提交";
+  if (normalized === "ready") return "可准备";
+  if (normalized === "submitted" || normalized === "queued") return "已排队";
+  if (normalized === "running" || normalized === "generating" || normalized === "in_progress") return "生成中";
+  if (normalized === "recoverable") return "可查询结果";
+  if (normalized === "needs_review" || normalized === "review") return "待复核";
+  if (normalized === "completed" || normalized === "done") return "已完成";
+  if (normalized === "failed") return "失败";
+  return cleaned;
+}
+
+function stableIntentBoundaryFacts(entry: VibeAgentTimelineEntry) {
+  if (!entry.facts?.length) return entry.facts;
+  const shouldKeepPreConfirmationBoundary = entry.type === "user_message"
+    || entry.type === "assistant_message";
+  if (!shouldKeepPreConfirmationBoundary) return entry.facts;
+  return entry.facts.map((fact) => (
+    fact.label === "边界" && /权限和用户确认都已满足/.test(fact.value)
+      ? { ...fact, value: "当前只允许整理计划；需要你确认后，才能写入项目。" }
+      : fact
+  ));
+}
+
+function minimalAgentVisibleFacts(message: MinimalAgentMessage) {
+  if (!message.facts?.length) return [];
+  const executionSummary = cleanMinimalAgentMessageCopy(message.executionResult?.summary || message.body).trim();
+  const executionNext = cleanMinimalAgentMessageCopy(message.executionResult?.next || message.next || "").trim();
+  const hasVisibleNext = Boolean(message.executionResult?.next || message.next);
+  const hiddenConfirmationLabels = minimalAgentMessageRequestsActionConfirmation(message)
+    ? new Set(["成本", "外部提交", "写入"])
+    : new Set<string>();
+  return message.facts.filter((fact) => {
+    const label = fact.label.trim();
+    const value = agentFactDisplayValue(fact).trim();
+    if (!value) return false;
+    if (hiddenConfirmationLabels.has(label)) return false;
+    if (/下一步/.test(label) && (hasVisibleNext || value === executionNext)) return false;
+    if (/状态/.test(label) && value === executionSummary) return false;
+    return true;
+  });
+}
+
+function timelineResultView(entry: VibeAgentTimelineEntry): DirectorView | undefined {
+  const resultView = entry.details?.resultView;
+  if (resultView === "assets" || resultView === "preview" || resultView === "export") return resultView;
+  const viewFact = entry.facts?.find((fact) => fact.label === "查看")?.value || "";
+  if (/参考/.test(viewFact)) return "assets";
+  if (/预览/.test(viewFact)) return "preview";
+  if (/交付|导出/.test(viewFact)) return "export";
+  return undefined;
+}
+
+function timelineExecutionResult(entry: VibeAgentTimelineEntry): VibeAgentExecutionResultSummary | undefined {
+  const executionResult = isPlainRecord(entry.details?.executionResult) ? entry.details.executionResult : undefined;
+  if (!executionResult) return undefined;
+  const lifecycle = stringValue(executionResult.lifecycle);
+  const status = stringValue(executionResult.status);
+  const summary = stringValue(executionResult.summary);
+  const next = stringValue(executionResult.next);
+  const lifecycleValues: VibeAgentExecutionResultSummary["lifecycle"][] = [
+    "proposed",
+    "waiting_for_confirmation",
+    "running",
+    "succeeded",
+    "failed",
+    "cancelled",
+    "needs_user_input",
+  ];
+  const statusValues: VibeAgentExecutionResultSummary["status"][] = [
+    "blocked",
+    "awaiting_confirmation",
+    "ready_to_run",
+    "running",
+    "succeeded",
+    "failed",
+    "cancelled",
+  ];
+  if (!lifecycleValues.includes(lifecycle as VibeAgentExecutionResultSummary["lifecycle"])) return undefined;
+  if (!statusValues.includes(status as VibeAgentExecutionResultSummary["status"])) return undefined;
+  if (!summary) return undefined;
+  return {
+    lifecycle: lifecycle as VibeAgentExecutionResultSummary["lifecycle"],
+    status: status as VibeAgentExecutionResultSummary["status"],
+    summary: cleanMinimalAgentMessageCopy(summary),
+    next: cleanMinimalAgentMessageCopy(next),
+  };
+}
+
+function executionResultStatusLabel(status: VibeAgentExecutionResultSummary["status"]) {
+  if (status === "blocked") return "需要处理";
+  if (status === "awaiting_confirmation") return "等你确认";
+  if (status === "ready_to_run") return "可执行";
+  if (status === "running") return "执行中";
+  if (status === "succeeded") return "已完成";
+  if (status === "failed") return "失败";
+  if (status === "cancelled") return "已取消";
+  return "结果";
+}
+
+function minimalAgentMessageRequestsActionConfirmation(message: MinimalAgentMessage) {
+  return message.role === "confirmation"
+    || (
+      message.toolName === "request_user_confirmation"
+      && (message.status === "waiting" || message.lifecycle === "waiting_for_confirmation")
+    );
+}
+
+function minimalAgentMessageStageLabel(message: MinimalAgentMessage) {
+  if (message.role === "user") return "输入";
+  if (minimalAgentMessageRequestsActionConfirmation(message)) return "需要确认";
+  if (message.entryType === "action_result") {
+    return message.status === "blocked" ? "执行受阻" : "执行结果";
+  }
+  if (message.entryType === "state_change") {
+    return message.lifecycle === "running" || message.title === "执行中" ? "执行状态" : "项目状态";
+  }
+  if (message.entryType === "tool_call") return "正在处理";
+  if (message.entryType === "tool_result") {
+    if (message.title === "推荐 Skills") return "推荐方法";
+    if (message.title === "执行边界") return "执行边界";
+    if (message.toolName === "inspect_project") return "项目状态";
+    if (message.toolName === "classify_assets" || message.toolName === "scan_assets") return "素材识别";
+    if (message.toolName === "plan_story") return "故事规划";
+    if (message.toolName === "plan_next_action") return "下一步";
+    return "工具结果";
+  }
+  if (message.role === "assistant" && /理解/.test(message.title)) return "理解";
+  if (message.role === "assistant") return "回复";
+  return "";
+}
+
+function minimalAgentMessageTitleLabel(message: MinimalAgentMessage) {
+  const title = cleanMinimalAgentMessageCopy(message.title);
+  const stage = minimalAgentMessageStageLabel(message);
+  if (!title || !stage) return title;
+  if (minimalAgentMessageRequestsActionConfirmation(message) && title === "请求确认") {
+    return minimalAgentConfirmationAction(message, "确认执行").label;
+  }
+  const status = minimalAgentMessageStatusLabel(message);
+  if (status && title === status) return "";
+  if (title === stage) return "";
+  if (title.startsWith(stage)) {
+    const remainder = cleanMinimalAgentMessageCopy(title.slice(stage.length));
+    if (status && remainder === status) return "";
+    return remainder || "";
+  }
+  return title;
+}
+
 function minimalAgentMessageFromTimelineEntry(entry: VibeAgentTimelineEntry): MinimalAgentMessage {
-  const next = typeof entry.details?.next === "string" ? entry.details.next : undefined;
+  const executionResult = timelineExecutionResult(entry);
+  const next = cleanMinimalAgentMessageCopy(executionResult?.next || (typeof entry.details?.next === "string" ? entry.details.next : "") || "") || undefined;
+  const assetInboxSummary = minimalAgentAssetInboxSummaryFromTimelineEntry(entry);
+  const assetActions = minimalAgentAssetActionsFromTimelineEntry(entry);
+  const assetActionOverflow = minimalAgentAssetActionOverflowFromTimelineEntry(entry, assetActions.length);
+  const skillRecommendations = minimalAgentSkillRecommendationsFromTimelineEntry(entry);
   if (entry.type === "user_message") {
     return {
       id: entry.id,
       entryType: entry.type,
       role: "user",
       title: entry.title,
-      body: entry.body,
+      body: cleanMinimalAgentMessageCopy(entry.body),
       status: entry.status,
-      facts: entry.facts,
+      lifecycle: entry.lifecycle,
+      facts: stableIntentBoundaryFacts(entry),
       actionKind: entry.actionKind,
+      actionId: entry.actionId,
       next,
     };
   }
   if (entry.type === "tool_call" || entry.type === "tool_result" || entry.type === "action_result" || entry.type === "state_change") {
+    const legacyReferenceRunning = legacyReferenceGenerationPreparedMessage(entry);
     return {
       id: entry.id,
-      entryType: entry.type,
+      entryType: legacyReferenceRunning ? "state_change" : entry.type,
       role: "tool",
-      title: entry.title,
-      body: entry.body,
-      status: entry.status,
+      title: legacyReferenceRunning ? "参考生成中" : cleanMinimalAgentMessageCopy(entry.title),
+      body: cleanMinimalAgentMessageCopy(entry.body),
+      status: legacyReferenceRunning ? "waiting" : entry.status,
+      lifecycle: legacyReferenceRunning ? "running" : entry.lifecycle,
       toolName: entry.toolName,
       actionKind: entry.actionKind,
+      actionId: entry.actionId,
       facts: entry.facts,
+      resultView: timelineResultView(entry),
+      executionResult,
+      assetInboxSummary,
+      assetActions,
+      assetActionOverflow,
+      skillRecommendations,
       next,
     };
   }
@@ -151,10 +543,12 @@ function minimalAgentMessageFromTimelineEntry(entry: VibeAgentTimelineEntry): Mi
       entryType: entry.type,
       role: "confirmation",
       title: entry.title,
-      body: entry.body,
+      body: cleanMinimalAgentMessageCopy(entry.body),
       status: entry.status,
+      lifecycle: entry.lifecycle,
       toolName: entry.toolName,
       actionKind: entry.actionKind,
+      actionId: entry.actionId,
       facts: entry.facts,
       next: next || "确认后我再执行，不会自动调用生成服务。",
     };
@@ -164,15 +558,30 @@ function minimalAgentMessageFromTimelineEntry(entry: VibeAgentTimelineEntry): Mi
     entryType: entry.type,
     role: "assistant",
     title: entry.title,
-    body: entry.body,
+    body: cleanMinimalAgentMessageCopy(entry.body),
     status: entry.status,
+    lifecycle: entry.lifecycle,
     actionKind: entry.actionKind,
-    facts: entry.facts,
+    actionId: entry.actionId,
+    facts: stableIntentBoundaryFacts(entry),
     next: next || (entry.confirmationRequired ? "等你确认后继续。" : undefined),
   };
 }
 
 function minimalAgentMessageStatusLabel(message: MinimalAgentMessage) {
+  if (
+    message.role === "assistant"
+    && message.entryType === "assistant_message"
+    && (
+      message.lifecycle === "running"
+      || message.lifecycle === "waiting_for_confirmation"
+      || message.lifecycle === "proposed"
+    )
+  ) return "";
+  const lifecycleLabel = minimalAgentMessageLifecycleLabel(message.lifecycle);
+  if (lifecycleLabel) return lifecycleLabel;
+  if (message.role === "user") return "";
+  if (message.role === "assistant" && message.status === "done") return "";
   if (message.status === "waiting") {
     return message.toolName === "run_confirmed_action" ? "执行中" : "等待";
   }
@@ -185,19 +594,32 @@ function minimalAgentMessageStatusLabel(message: MinimalAgentMessage) {
   return "";
 }
 
+function minimalAgentMessageLifecycleLabel(lifecycle?: MinimalAgentMessage["lifecycle"]) {
+  if (lifecycle === "proposed") return "已提议";
+  if (lifecycle === "waiting_for_confirmation") return "待确认";
+  if (lifecycle === "running") return "执行中";
+  if (lifecycle === "succeeded") return "已完成";
+  if (lifecycle === "failed") return "失败";
+  if (lifecycle === "cancelled") return "已取消";
+  if (lifecycle === "needs_user_input") return "需补充";
+  return "";
+}
+
 function minimalAgentConfirmationAction(message: MinimalAgentMessage, fallbackLabel: string) {
-  const providerFact = message.facts?.find((fact) => fact.label === "调用")?.value || "";
-  const impactFact = message.facts?.find((fact) => fact.label === "影响")?.value || "";
+  const providerFact = minimalAgentFactValue(message, ["外部提交", "执行", "调用", "成本"]);
+  const impactFact = minimalAgentFactValue(message, ["目标", "影响"]);
+  const writeFact = minimalAgentFactValue(message, ["写入"]);
+  const writeHint = writeFact && writeFact !== "不写文件" ? `，预计保存到${writeFact}` : "";
   if (message.actionKind === "prepare_reference_generation") {
     return {
       label: /Image2|参考生成/.test(providerFact) ? "确认生成参考" : "确认参考计划",
-      hint: `确认后处理${impactFact || "当前镜头"}，${providerFact || "不会自动提交视频"}。`,
+      hint: `确认后处理${impactFact || "当前镜头"}，${providerFact || "不会自动提交视频"}${writeHint}。`,
     };
   }
   if (message.actionKind === "prepare_video_submit") {
     return {
       label: /Seedance|视频提交/.test(providerFact) ? "确认提交视频" : "确认视频计划",
-      hint: `确认后处理${impactFact || "当前镜头"}，${providerFact || "会按当前权限执行"}。`,
+      hint: `确认后处理${impactFact || "当前镜头"}，${providerFact || "会按当前权限执行"}${writeHint}。`,
     };
   }
   if (message.actionKind === "query_video_result") {
@@ -212,16 +634,98 @@ function minimalAgentConfirmationAction(message: MinimalAgentMessage, fallbackLa
       hint: "确认后生成本地交付包和报告。",
     };
   }
+  if (message.actionKind === "revise_story_or_shot") {
+    return {
+      label: "确认修改",
+      hint: `确认后保存这版修改到${writeFact || impactFact || "当前镜头"}，不会自动生成参考或提交视频。`,
+    };
+  }
+  if (message.actionKind === "update_shot_strategy") {
+    return {
+      label: "确认方式",
+      hint: `确认后更新${impactFact || "当前镜头"}的生成方式。`,
+    };
+  }
+  if (message.actionKind === "review_reference_asset") {
+    return {
+      label: "确认复核",
+      hint: "确认后保存这次复核结果。",
+    };
+  }
+  if (message.actionKind === "inspect_project_status") {
+    return {
+      label: "继续",
+      hint: "继续读取项目状态，不会调用生成服务。",
+    };
+  }
+  if (/写入项目|写项目|改项目|只写项目/.test(providerFact) || /写入项目|修改项目/.test(`${message.body} ${message.next || ""}`)) {
+    return {
+      label: "确认修改",
+      hint: `确认后保存这版修改到${writeFact || impactFact || "当前镜头"}，不会自动生成参考或提交视频。`,
+    };
+  }
   if (message.actionKind === "request_style_research") {
     return {
       label: "确认查资料",
       hint: "确认后联网查资料，结果会先回到消息流里。",
     };
   }
+  if (/草案|故事流|写入故事/.test(`${message.title} ${message.body} ${message.next || ""}`)) {
+    return {
+      label: NEW_VIDEO_DRAFT_CONFIRM_LABEL,
+      hint: "确认后只保存到故事流，不会生成参考或提交视频。",
+    };
+  }
   return {
-    label: fallbackLabel,
-    hint: `确认后继续：${fallbackLabel}`,
+    label: "确认执行",
+    hint: "确认后继续当前消息里的动作，不会切换到其他推荐任务。",
   };
+}
+
+function minimalAgentFactValue(message: MinimalAgentMessage, labels: string[]) {
+  const value = message.facts?.find((fact) => labels.includes(fact.label))?.value || "";
+  return cleanMinimalAgentMessageCopy(value);
+}
+
+function minimalAgentConfirmationBoundary(message: MinimalAgentMessage) {
+  const targetFact = minimalAgentFactValue(message, ["目标", "影响"]);
+  const costFact = minimalAgentFactValue(message, ["成本", "调用", "执行"]);
+  const writeFact = minimalAgentFactValue(message, ["写入"]);
+  const externalFact = minimalAgentFactValue(message, ["外部提交"]);
+  const parts = [
+    targetFact ? `这次只补 ${targetFact}` : "",
+    costFact ? (costFact === "参考生成" ? "会生成参考图" : costFact) : "",
+    writeFact && writeFact !== "不写文件" ? `结果保存到 ${writeFact}` : "",
+    externalFact ? externalFact : "",
+  ].filter(Boolean);
+  return parts.length ? cleanMinimalAgentMessageCopy(`确认前再核对：${parts.join("；")}。`) : "";
+}
+
+function minimalAgentConfirmationReadableBody(message: MinimalAgentMessage) {
+  const confirmationAction = minimalAgentConfirmationAction(message, "确认执行");
+  const actionLabel = confirmationAction.label.replace(/^确认/, "") || "继续这一步";
+  const targetFact = minimalAgentFactValue(message, ["目标", "影响"]);
+  const writeFact = minimalAgentFactValue(message, ["写入"]);
+  const providerFact = minimalAgentFactValue(message, ["外部提交", "执行", "调用", "成本"]);
+  const combinedCopy = cleanMinimalAgentMessageCopy(`${message.body} ${message.next || ""} ${confirmationAction.hint} ${providerFact}`);
+  const actionLine = `我准备${actionLabel}${targetFact ? `，范围是${targetFact}` : ""}。`;
+  const writeLine = writeFact && writeFact !== "不写文件" ? `结果会保存到${writeFact}。` : "";
+  if (/不会.*提交视频|不会自动提交视频|不提交视频/.test(combinedCopy)) {
+    return `${actionLine}${writeLine}这一步不会提交视频，确认后才执行。`;
+  }
+  if (/不会.*生成参考|不会生成参考|无生成成本|不调用生成服务|只保存|只查询/.test(combinedCopy)) {
+    return `${actionLine}${writeLine}这一步不会调用生成服务，确认后才执行。`;
+  }
+  if (/Seedance|Image2|联网|外部|提交|生成|调用/.test(combinedCopy)) {
+    return `${actionLine}${writeLine}这一步会调用外部服务，确认后才执行。`;
+  }
+  return `${actionLine}${writeLine}确认后才执行。`;
+}
+
+function minimalAgentMessageBody(message: MinimalAgentMessage) {
+  return minimalAgentMessageRequestsActionConfirmation(message)
+    ? minimalAgentConfirmationReadableBody(message)
+    : cleanMinimalAgentMessageCopy(message.body);
 }
 
 function minimalAgentMessageNeedsLocalProject(message: MinimalAgentMessage) {
@@ -238,6 +742,8 @@ function minimalAgentMessageCompletedToolAction(message: MinimalAgentMessage) {
   if (message.entryType !== "action_result" || message.status !== "done") return false;
   return message.toolName === "generate_references"
     || message.toolName === "submit_video"
+    || message.toolName === "query_video"
+    || message.toolName === "export_showcase"
     || message.toolName === "export_project";
 }
 
@@ -246,28 +752,356 @@ function minimalAgentMessageBlockedToolAction(message: MinimalAgentMessage) {
   return message.toolName === "generate_references"
     || message.toolName === "submit_video"
     || message.toolName === "query_video"
+    || message.toolName === "export_showcase"
     || message.toolName === "export_project";
 }
 
+function minimalAgentMessageFinalToolAction(message: MinimalAgentMessage) {
+  return minimalAgentMessageCompletedToolAction(message) || minimalAgentMessageBlockedToolAction(message);
+}
+
+function minimalAgentMessageRequestsSkillSave(message: MinimalAgentMessage) {
+  return message.role === "confirmation" && message.toolName === "save_skill";
+}
+
+function isNewVideoDraftConfirmationLabel(value: string) {
+  return value.includes("确认继续") || value.includes(NEW_VIDEO_DRAFT_CONFIRM_LABEL) || value.includes("写入故事流");
+}
+
+function minimalAgentMessageClosesConfirmation(message: MinimalAgentMessage) {
+  if (message.entryType === "action_result") return message.lifecycle !== "running" && message.status !== "waiting";
+  if (message.entryType !== "tool_result" || message.toolName !== "run_confirmed_action") return false;
+  return message.lifecycle !== "running" && message.status !== "waiting";
+}
+
+function minimalAgentMessageMatchesConfirmationAction(message: MinimalAgentMessage, confirmation: MinimalAgentMessage) {
+  const messageToolName = message.toolName || "";
+  const confirmationToolName = confirmation.toolName || "";
+  const confirmationActionKind = confirmation.actionKind || "";
+  if (message.actionId && confirmation.actionId) return message.actionId === confirmation.actionId;
+  if (messageToolName === "generate_references") {
+    return confirmationToolName === "generate_references" || confirmationActionKind === "prepare_reference_generation";
+  }
+  if (messageToolName === "submit_video") {
+    return confirmationToolName === "submit_video" || confirmationActionKind === "prepare_video_submit";
+  }
+  if (messageToolName === "query_video") {
+    return confirmationToolName === "query_video" || confirmationActionKind === "query_video_result";
+  }
+  if (messageToolName === "export_showcase" || messageToolName === "export_project") {
+    return confirmationToolName === messageToolName || confirmationActionKind === "prepare_export";
+  }
+  return Boolean(messageToolName && confirmationToolName && messageToolName === confirmationToolName);
+}
+
+function minimalAgentMessageInvalidatesConfirmation(message: MinimalAgentMessage, confirmation: MinimalAgentMessage) {
+  if (message.id.startsWith("direct_product_")) return minimalAgentMessageMatchesConfirmationAction(message, confirmation);
+  if (message.entryType !== "state_change" || message.status !== "done") return false;
+  return message.id.startsWith("selection_context_") || message.id.startsWith("execution_boundary_");
+}
+
+function minimalAgentConfirmationSuperseded(
+  messages: MinimalAgentMessage[],
+  index: number,
+) {
+  const message = messages[index];
+  if (!message || message.role !== "confirmation") return false;
+  return messages.slice(index + 1).some((candidate) => {
+    if (minimalAgentMessageInvalidatesConfirmation(candidate, message)) return true;
+    if (!minimalAgentMessageClosesConfirmation(candidate)) return false;
+    if (message.actionId && candidate.actionId) return message.actionId === candidate.actionId;
+    if (candidate.toolName === "run_confirmed_action") return false;
+    return minimalAgentMessageMatchesConfirmationAction(candidate, message);
+  });
+}
+
+function dedupeMinimalAgentMessages(messages: MinimalAgentMessage[]) {
+  const seen = new Set<string>();
+  return messages.filter((message) => {
+    if (!message.id.startsWith("direct_product_") || message.status === "waiting") return true;
+    const key = [
+      message.entryType,
+      message.toolName,
+      message.title,
+      message.body,
+      message.status,
+    ].join("\u0000");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function completedToolActionView(message: MinimalAgentMessage): { view: DirectorView; label: string } | undefined {
+  if (message.resultView === "assets") return { view: "assets", label: "去参考页" };
+  if (message.resultView === "preview") return { view: "preview", label: "去预览页" };
+  if (message.resultView === "export") return { view: "export", label: "去交付页" };
   if (message.toolName === "generate_references") return { view: "assets", label: "去参考页" };
   if (message.toolName === "submit_video") return { view: "preview", label: "去预览页" };
+  if (message.toolName === "query_video") return { view: "preview", label: "去预览页" };
+  if (message.toolName === "export_showcase") return { view: "export", label: "去交付页" };
   if (message.toolName === "export_project") return { view: "export", label: "去交付页" };
   return undefined;
+}
+
+function agentMessageNextIntent(message: MinimalAgentMessage, fallback = "继续") {
+  return cleanMinimalAgentMessageCopy(message.executionResult?.next?.trim() || message.next?.trim() || fallback);
+}
+
+function agentMessageConfirmationIntent(message: MinimalAgentMessage, actionLabel: string) {
+  const action = minimalAgentFactValue(message, ["动作"]) || actionLabel || "当前动作";
+  const target = minimalAgentFactValue(message, ["目标", "引用", "影响"]);
+  const boundary = minimalAgentFactValue(message, ["外部提交", "成本", "执行"]);
+  return [
+    `确认执行：${action}`,
+    target ? `目标：${target}` : "",
+    boundary ? `边界：${boundary}` : "",
+  ].filter(Boolean).join("。");
+}
+
+function agentMessageRevisionIntent(message: MinimalAgentMessage) {
+  const summary = cleanMinimalAgentMessageCopy(message.executionResult?.summary?.trim() || message.body.trim());
+  const next = agentMessageNextIntent(message, "调整后重试");
+  if (summary && next) {
+    return `刚才这一步没通过：${summary}\n请按这个方向继续改：${next}`;
+  }
+  return next || summary || "调整后重试";
+}
+
+function cleanEmptyComposerStatusLine(value: string, hasComposerInput: boolean) {
+  if (hasComposerInput) return value;
+  const looksLikeLegacyReadyDraft = value.includes("故事草案") && value.includes("已就绪");
+  if (looksLikeLegacyReadyDraft) return "等待输入：先写一句想法，确认前不会生成。";
+  return value;
+}
+
+function minimalAgentMessageIsCompletedProcessCard(message: MinimalAgentMessage) {
+  if (message.entryType !== "tool_call") return false;
+  if (message.toolName === "request_user_confirmation" || message.toolName === "run_confirmed_action") return false;
+  if (message.status === "waiting" || message.status === "blocked") return false;
+  if (message.lifecycle === "running" || message.lifecycle === "waiting_for_confirmation") return false;
+  return true;
+}
+
+function minimalAgentMessageHasResultCard(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
+  if (message.entryType !== "tool_result" || message.toolName !== "run_confirmed_action") return false;
+  if (message.lifecycle === "running" || message.lifecycle === "waiting_for_confirmation") return false;
+  return messages.some((candidate) =>
+    candidate.entryType === "action_result"
+    && (!message.actionId || !candidate.actionId || candidate.actionId === message.actionId)
+  );
+}
+
+function minimalAgentMessageHasFinalActionResult(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
+  return messages.some((candidate) => (
+    candidate.entryType === "action_result"
+    && candidate.status !== "waiting"
+    && candidate.lifecycle !== "running"
+    && (!message.actionId || !candidate.actionId || candidate.actionId === message.actionId)
+  ));
+}
+
+function minimalAgentMessageIsSupersededProcessCard(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
+  if (!minimalAgentMessageHasFinalActionResult(messages, message)) return false;
+  if (message.toolName === "run_confirmed_action" && message.entryType !== "action_result") return true;
+  if (message.id.startsWith("execution_boundary_")) return true;
+  if (message.title === "执行边界") return true;
+  if (message.entryType === "state_change" && (message.lifecycle === "running" || message.title === "执行中")) return true;
+  return false;
+}
+
+function minimalAgentMessageHasLaterFinalActionResult(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
+  const messageIndex = messages.indexOf(message);
+  return messages.some((candidate, index) => (
+    index > messageIndex
+    && candidate.entryType === "action_result"
+    && candidate.status !== "waiting"
+    && candidate.lifecycle !== "running"
+    && (!message.actionId || !candidate.actionId || candidate.actionId === message.actionId)
+  ));
+}
+
+function minimalAgentConfirmationRequestsOverlap(left: MinimalAgentMessage, right: MinimalAgentMessage) {
+  if (!minimalAgentMessageRequestsActionConfirmation(left) || !minimalAgentMessageRequestsActionConfirmation(right)) return false;
+  if (left.actionId && right.actionId && left.actionId === right.actionId) return true;
+  const leftAction = minimalAgentFactValue(left, ["动作"]) || left.actionKind || left.toolName || "";
+  const rightAction = minimalAgentFactValue(right, ["动作"]) || right.actionKind || right.toolName || "";
+  const leftTarget = minimalAgentFactValue(left, ["目标", "影响"]);
+  const rightTarget = minimalAgentFactValue(right, ["目标", "影响"]);
+  return Boolean(leftAction && rightAction && leftAction === rightAction && leftTarget && rightTarget && leftTarget === rightTarget);
+}
+
+function minimalAgentMessageHasLaterConfirmationRequest(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
+  const messageIndex = messages.indexOf(message);
+  const messageIsConfirmationRequest = minimalAgentMessageRequestsActionConfirmation(message);
+  return messages.some((candidate, index) => (
+    index > messageIndex
+    && minimalAgentMessageRequestsActionConfirmation(candidate)
+    && (candidate.status === "waiting" || candidate.lifecycle === "waiting_for_confirmation")
+    && (
+      messageIsConfirmationRequest
+        ? minimalAgentConfirmationRequestsOverlap(message, candidate)
+        : (!message.actionId || !candidate.actionId || candidate.actionId === message.actionId)
+    )
+  ));
+}
+
+function minimalAgentMessageIsSupersededObservationCard(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
+  if (message.entryType !== "tool_result") return false;
+  if (message.lifecycle === "running" || message.lifecycle === "waiting_for_confirmation") return false;
+  if (message.status === "waiting" || message.status === "blocked") return false;
+  const toolIsObservation = message.toolName === "inspect_project"
+    || message.toolName === "classify_assets"
+    || message.toolName === "scan_assets"
+    || message.toolName === "plan_next_action";
+  return toolIsObservation && minimalAgentMessageHasLaterFinalActionResult(messages, message);
+}
+
+function minimalAgentMessageIsSupersededConfirmationPrepCard(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
+  if (!minimalAgentMessageHasLaterConfirmationRequest(messages, message)) return false;
+  const isObservationTool = message.entryType === "tool_result" && (
+    message.toolName === "inspect_project"
+    || message.toolName === "classify_assets"
+    || message.toolName === "scan_assets"
+    || message.toolName === "plan_next_action"
+  );
+  return isObservationTool
+    || message.id.startsWith("execution_boundary_")
+    || message.title === "执行边界";
+}
+
+function minimalAgentConfirmationMessageIsStaleAfterLaterResult(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
+  if (!minimalAgentMessageRequestsActionConfirmation(message)) return false;
+  if (message.status !== "waiting" && message.lifecycle !== "waiting_for_confirmation") return false;
+  const messageIndex = messages.indexOf(message);
+  return messages.some((candidate, index) => (
+    index > messageIndex
+    && candidate.role !== "user"
+    && candidate.entryType === "action_result"
+    && candidate.status !== "waiting"
+    && candidate.lifecycle !== "running"
+    && candidate.lifecycle !== "waiting_for_confirmation"
+    && minimalAgentMessageMatchesConfirmationAction(candidate, message)
+  ));
+}
+
+function minimalAgentRequestConfirmationToolCallIsSuperseded(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
+  if (message.entryType !== "tool_call" || message.toolName !== "request_user_confirmation") return false;
+  if (message.status !== "waiting" && message.lifecycle !== "waiting_for_confirmation") return false;
+  return messages.some((candidate) => (
+    candidate.entryType === "confirmation_request"
+    && candidate.toolName === "request_user_confirmation"
+    && (candidate.status === "waiting" || candidate.lifecycle === "waiting_for_confirmation")
+    && (!message.actionId || !candidate.actionId || candidate.actionId === message.actionId)
+  ));
+}
+
+function minimalAgentMessageIsInlineSelectionContextCard(message: MinimalAgentMessage) {
+  return message.entryType === "state_change" && message.id.startsWith("selection_context_");
 }
 
 function visibleMinimalAgentMessages(messages: MinimalAgentMessage[]): {
   messages: MinimalAgentMessage[];
   hiddenCount: number;
 } {
-  if (messages.length <= 20) return { messages, hiddenCount: 0 };
-  const latestUserIndex = messages.map((message) => message.role).lastIndexOf("user");
-  const visible = latestUserIndex >= 0 ? messages.slice(latestUserIndex) : messages.slice(-12);
-  const bounded = visible.length > 20 ? visible.slice(-20) : visible;
+  const filteredMessages = messages.filter((_, index) => !minimalAgentConfirmationSuperseded(messages, index));
+  const compactedMessages = filteredMessages.filter((message) => (
+    !minimalAgentMessageIsCompletedProcessCard(message)
+    && !minimalAgentMessageHasResultCard(filteredMessages, message)
+    && !minimalAgentMessageIsSupersededProcessCard(filteredMessages, message)
+    && !minimalAgentMessageIsSupersededObservationCard(filteredMessages, message)
+    && !minimalAgentMessageIsSupersededConfirmationPrepCard(filteredMessages, message)
+    && !minimalAgentConfirmationMessageIsStaleAfterLaterResult(filteredMessages, message)
+    && !minimalAgentRequestConfirmationToolCallIsSuperseded(filteredMessages, message)
+    && !minimalAgentMessageIsInlineSelectionContextCard(message)
+  ));
+  const currentMessages = dedupeMinimalAgentMessages(compactedMessages.length ? compactedMessages : filteredMessages);
+  if (currentMessages.length <= MAX_VISIBLE_AGENT_THREAD_MESSAGES) {
+    return { messages: currentMessages, hiddenCount: 0 };
+  }
+  const latestUserIndex = currentMessages.map((message) => message.role).lastIndexOf("user");
+  const visible = latestUserIndex >= 0 ? currentMessages.slice(latestUserIndex) : currentMessages.slice(-MAX_VISIBLE_AGENT_THREAD_MESSAGES);
+  const bounded = visible.length > MAX_VISIBLE_AGENT_THREAD_MESSAGES ? visible.slice(-MAX_VISIBLE_AGENT_THREAD_MESSAGES) : visible;
   return {
     messages: bounded,
-    hiddenCount: Math.max(0, messages.length - bounded.length),
+    hiddenCount: Math.max(0, currentMessages.length - bounded.length),
   };
+}
+
+function minimalAgentReferenceReviewMessageIsStale(message: MinimalAgentMessage, referencesReadyAfterReview: boolean) {
+  if (!referencesReadyAfterReview || message.role === "user") return false;
+  const text = minimalAgentMessageSearchText(message);
+  return /复核|需要复核|等你复核|去参考页复核|参考待复核/.test(text) && !/参考可用/.test(text);
+}
+
+function minimalAgentMessageSearchText(message: MinimalAgentMessage) {
+  const factText = message.facts?.map((fact) => `${fact.label} ${fact.value}`).join(" ") || "";
+  const executionText = message.executionResult
+    ? `${message.executionResult.summary} ${message.executionResult.next || ""}`
+    : "";
+  return `${message.title} ${message.body} ${message.next || ""} ${factText} ${executionText}`;
+}
+
+function minimalAgentMessageHasLaterReferenceReady(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
+  const messageIndex = messages.indexOf(message);
+  return messages.some((candidate, index) => {
+    if (index <= messageIndex || candidate.role === "user") return false;
+    return /参考可用/.test(minimalAgentMessageSearchText(candidate));
+  });
+}
+
+function minimalAgentReferenceGenerationConfirmationIsStale(
+  messages: MinimalAgentMessage[],
+  message: MinimalAgentMessage,
+  referencesReadyAfterReview: boolean,
+) {
+  if (message.role === "user") return false;
+  const text = minimalAgentMessageSearchText(message);
+  const looksLikeReferenceGenerationConfirmation = minimalAgentMessageRequestsActionConfirmation(message)
+    || /需要确认|请求确认|等你确认|待确认/.test(text);
+  if (!looksLikeReferenceGenerationConfirmation) return false;
+  return (referencesReadyAfterReview || minimalAgentMessageHasLaterReferenceReady(messages, message))
+    && /补齐参考|生成参考|参考生成/.test(text)
+    && !/参考可用/.test(text);
+}
+
+function minimalAgentReferenceCompletionMessageIsStale(message: MinimalAgentMessage, referencesReadyAfterReview: boolean) {
+  if (message.role === "user") return false;
+  const text = minimalAgentMessageSearchText(message);
+  if (/参考已通过|可以准备视频/.test(text) && !/参考可用/.test(text)) return true;
+  if (referencesReadyAfterReview || message.toolName !== "generate_references") return false;
+  return /参考可用/.test(text);
+}
+
+function minimalAgentReferenceBlockedMessageIsStale(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
+  if (message.role === "user") return false;
+  const text = minimalAgentMessageSearchText(message);
+  const isBlockedReferenceMessage = (
+    message.status === "blocked"
+    || message.lifecycle === "needs_user_input"
+    || message.lifecycle === "failed"
+    || /参考生成暂时中断|参考生成没有完成|结果卡片：需要处理/.test(text)
+  ) && /生成参考|参考生成/.test(text);
+  if (!isBlockedReferenceMessage) return false;
+  const messageIndex = messages.indexOf(message);
+  return messages.some((candidate, index) => {
+    if (index <= messageIndex || candidate.role === "user") return false;
+    const candidateText = minimalAgentMessageSearchText(candidate);
+    return /参考已生成|参考图已经回到参考页|\d+\s*项参考需要复核|参考已齐/.test(candidateText);
+  });
+}
+
+function latestVisibleTimelineConfirmationMessage(
+  entries: VibeAgentTimelineEntry[],
+  referencesReadyAfterReview = false,
+) {
+  const messages = entries.map(minimalAgentMessageFromTimelineEntry);
+  const stateAwareMessages = messages.filter((message) =>
+    !minimalAgentReferenceGenerationConfirmationIsStale(messages, message, referencesReadyAfterReview)
+  );
+  return [...visibleMinimalAgentMessages(stateAwareMessages).messages]
+    .reverse()
+    .find(minimalAgentMessageRequestsActionConfirmation);
 }
 
 function mergeVibeAgentTimelineEntries(
@@ -380,8 +1214,530 @@ function buildLocalProjectSetupTimelineEntries(input: {
   ];
 }
 
+function buildSelectionChangedTimelineEntry(input: {
+  createdAt: string;
+  selectionKey: string;
+  label: string;
+  hint: string;
+  facts: Array<{ label: string; value: string }>;
+}): VibeAgentTimelineEntry {
+  const selectionId = input.selectionKey.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 72) || "selection";
+  return {
+    id: `selection_context_${selectionId}`,
+    type: "state_change",
+    createdAt: input.createdAt,
+    title: "当前讨论对象已切换",
+    body: `现在说“这个”时，我会指向${input.label}。${input.hint}`,
+    lifecycle: "succeeded",
+    status: "done",
+    facts: [
+      { label: "这个指向", value: input.label },
+      ...input.facts,
+    ].slice(0, 4),
+    details: {
+      deicticCue: input.label,
+      next: "直接说改法，或说“继续下一步”。",
+    },
+  };
+}
+
+function committedNewVideoDraftMessage(run?: PrototypeAgentDemoRun): MinimalAgentMessage | undefined {
+  if (!isCommittedNewVideoDraftAgentRun(run)) return undefined;
+  const result = run?.result;
+  return {
+    id: "new_video_draft_committed_result",
+    entryType: "action_result",
+    role: "tool",
+    title: "草案已写入故事流",
+    body: result?.label || "确认后的草案已经写入项目故事流。接下来可以继续修改镜头，或让 Agent 安排下一步。",
+    lifecycle: "succeeded",
+    status: "done",
+    toolName: "write_project",
+    facts: [
+      { label: "写入", value: result?.storageLabel || "故事流" },
+      { label: "状态", value: result?.status || "已保存到项目" },
+      { label: "下一步", value: "继续修改或生成参考" },
+    ],
+    next: "可以直接说要改哪里，或让 Agent 继续安排参考和视频。",
+  };
+}
+
+function storyFlowReadyMessage(shotCount: number): MinimalAgentMessage | undefined {
+  if (shotCount <= 0) return undefined;
+  return {
+    id: "project_story_flow_ready_state",
+    entryType: "state_change",
+    role: "tool",
+    title: "故事流已准备",
+    body: `当前项目已有 ${shotCount} 个镜头。你可以点选镜头后直接说“这个”哪里不对，也可以让 Agent 继续安排下一步。`,
+    lifecycle: "succeeded",
+    status: "done",
+    toolName: "inspect_project",
+    facts: [
+      { label: "镜头", value: `${shotCount} 个` },
+      { label: "下一步", value: "修改镜头或生成参考" },
+    ],
+    next: "直接说要改哪里，或让 Agent 继续安排参考和视频。",
+  };
+}
+
+function buildExecutionBoundaryChangedTimelineEntry(input: {
+  createdAt: string;
+  contract: AgentVideoPermissionContract;
+}): VibeAgentTimelineEntry {
+  const label = agentVideoPermissionLabel(input.contract);
+  const detail = agentVideoPermissionDetail(input.contract);
+  const next = input.contract.mode === "video_allowed"
+    ? "你可以继续说“发送视频”，我仍会在提交前确认。"
+    : input.contract.mode === "reference_allowed"
+      ? "你可以继续说“补参考”，视频提交仍会单独确认。"
+      : "我只会整理计划，不会生成参考或提交视频。";
+  return {
+    id: `execution_boundary_${input.contract.mode}_${input.createdAt}`,
+    type: "state_change",
+    createdAt: input.createdAt,
+    title: "执行方式已切换",
+    body: `已切换为“${label}”。${detail}`,
+    lifecycle: "succeeded",
+    status: "done",
+    facts: [
+      { label: "执行方式", value: label },
+      { label: "生成参考", value: input.contract.referenceGenerationAllowed ? "允许" : "不生成" },
+      { label: "提交视频", value: input.contract.videoSubmitAllowed ? "允许" : "不提交" },
+    ],
+    details: { next },
+  };
+}
+
+type DirectProductActionToolName = Extract<
+  NonNullable<VibeAgentTimelineEntry["toolName"]>,
+  "generate_references" | "submit_video" | "query_video" | "export_showcase" | "export_project"
+>;
+
+type DirectProductActionCopy = {
+  toolName: DirectProductActionToolName;
+  startedTitle: string;
+  startedBody: string;
+  completedTitle: string;
+  completedBody: string;
+  failedTitle: string;
+  next: string;
+  facts?: Array<{ label: string; value: string }>;
+};
+
+function directProductActionFailureNext(input: DirectProductActionCopy, message: string) {
+  if (input.toolName !== "submit_video") return "可以调整后重试，或继续描述要改哪里。";
+  if (/提交前|补参考|场景参考|参考无法|QA|画面参考/.test(message)) {
+    return "按提示补参考或调整这一段后再重试。";
+  }
+  return "检查即梦登录、CLI 权限或稍后重试；也可以跳过这一段。";
+}
+
+function buildDirectProductActionTimelineEntry(input: {
+  createdAt: string;
+  phase: "started" | "running" | "completed" | "failed" | "blocked";
+  toolName: DirectProductActionToolName;
+  title: string;
+  body: string;
+  next: string;
+  facts?: Array<{ label: string; value: string }>;
+  dedupeKey?: string;
+}): VibeAgentTimelineEntry {
+  const rawSuffix = input.dedupeKey || input.createdAt;
+  const suffix = rawSuffix.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 72).toLowerCase() || "now";
+  const phaseLabel = input.phase === "started"
+    ? "started"
+    : input.phase === "running"
+      ? "running"
+      : input.phase === "completed"
+      ? "completed"
+      : input.phase === "blocked"
+        ? "blocked"
+        : "failed";
+  return {
+    id: `direct_product_${input.toolName}_${phaseLabel}_${suffix}`,
+    type: input.phase === "started" ? "tool_call" : input.phase === "running" ? "state_change" : "action_result",
+    createdAt: input.createdAt,
+    title: input.title,
+    body: input.body,
+    lifecycle: input.phase === "started"
+      ? "running"
+      : input.phase === "running"
+        ? "running"
+      : input.phase === "completed"
+        ? "succeeded"
+        : input.phase === "blocked"
+          ? "needs_user_input"
+          : "failed",
+    toolName: input.toolName,
+    status: input.phase === "started" || input.phase === "running" ? "waiting" : input.phase === "completed" ? "done" : "blocked",
+    facts: [
+      ...(input.facts || []),
+      { label: "下一步", value: input.next },
+    ].slice(0, 4),
+    details: { next: input.next },
+  };
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  if (!value || (typeof value !== "object" && typeof value !== "function")) return false;
+  return typeof (value as { then?: unknown }).then === "function";
+}
+
+function directProductActionResultStatus(result: unknown) {
+  if (!isPlainRecord(result)) return "";
+  return (stringValue(result.uiStatus) || stringValue(result.status)).toLowerCase();
+}
+
+function directProductActionResultMessage(result: unknown) {
+  if (!isPlainRecord(result)) return "";
+  return stringValue(result.message)
+    || stringValue(result.summary)
+    || stringValue(result.label);
+}
+
+function resolveDirectProductActionResult(input: DirectProductActionCopy, result: unknown) {
+  const status = directProductActionResultStatus(result);
+  const explicitFailure = isPlainRecord(result) && result.ok === false;
+  const message = directProductActionResultMessage(result);
+  if (explicitFailure || ["blocked", "missing", "failed", "error", "unavailable"].includes(status)) {
+    return {
+      phase: "failed" as const,
+      title: input.failedTitle,
+      body: message || "动作没有成功执行。",
+      next: directProductActionFailureNext(input, message),
+      status: message || "动作没有成功执行。",
+    };
+  }
+  if (status === "needs_review" || status === "ready_for_review") {
+    return {
+      phase: "completed" as const,
+      title: input.completedTitle,
+      body: message || input.completedBody,
+      next: "先去复核结果，确认后再继续。",
+      status: message || input.completedBody,
+    };
+  }
+  if (status === "verified" || status === "completed" || status === "done") {
+    return {
+      phase: "completed" as const,
+      title: input.completedTitle,
+      body: message || input.completedBody,
+      next: input.next,
+      status: message || input.completedBody,
+    };
+  }
+  return {
+    phase: "completed" as const,
+    title: input.completedTitle,
+    body: input.completedBody,
+    next: input.next,
+    status: "",
+  };
+}
+
+function referenceDirectProductActionState(status: string | undefined, message: string | undefined) {
+  const normalized = stringValue(status).toLowerCase();
+  const cleanMessage = stringValue(message);
+  if (normalized === "needs_review") {
+    return {
+      phase: "completed" as const,
+      title: "参考已生成，等你复核",
+      body: cleanMessage || "参考图已经回到参考页，先确认能不能用，再继续视频。",
+      next: "去参考页复核。",
+      status: cleanMessage || "参考已生成，等你复核。",
+    };
+  }
+  if (normalized === "blocked") {
+    return {
+      phase: "failed" as const,
+      title: "参考生成没有完成",
+      body: cleanMessage || "参考生成暂时中断。已生成的内容会保留，可以稍后重试。",
+      next: "看原因后重试，或直接告诉我怎么调整。",
+      status: cleanMessage || "参考生成没有完成。",
+    };
+  }
+  if (normalized === "running" || normalized === "prepared") {
+    return {
+      phase: "running" as const,
+      title: "参考生成中",
+      body: cleanMessage || "参考任务已交给图片服务，等图片回到参考页后再复核。",
+      next: "等参考结果，或去参考页查看进度。",
+      status: cleanMessage || "参考生成中，等待结果回到参考页。",
+    };
+  }
+  if (normalized === "verified") {
+    return {
+      phase: "completed" as const,
+      title: "参考可用",
+      body: cleanMessage || "参考已经确认，可以继续准备视频。",
+      next: "继续下一步。",
+      status: cleanMessage || "参考可用。",
+    };
+  }
+  return undefined;
+}
+
+function videoDirectProductActionState(
+  status: string | undefined,
+  message: string | undefined,
+  canResume: boolean,
+  suggestedActionLabel: string | undefined,
+) {
+  const normalized = stringValue(status).toLowerCase();
+  const cleanMessage = stringValue(message);
+  const actionLabel = stringValue(suggestedActionLabel);
+  if (normalized === "needs_review") {
+    return {
+      phase: "completed" as const,
+      toolName: "query_video" as const,
+      title: "视频结果已回到预览页",
+      body: cleanMessage || "视频已经回到预览页，先看结果，通过后再继续下一步。",
+      next: "去预览页复核。",
+      status: cleanMessage || "视频结果待确认。",
+    };
+  }
+  if (normalized === "submitted" && canResume) {
+    return {
+      phase: "completed" as const,
+      toolName: "query_video" as const,
+      title: "视频可以查询结果",
+      body: cleanMessage || "Seedance 任务已经提交过。现在只查询结果，不会重复提交。",
+      next: actionLabel || "查询结果。",
+      status: cleanMessage || "视频可以查询结果。",
+    };
+  }
+  if (normalized === "submitted") {
+    return {
+      phase: "completed" as const,
+      toolName: "submit_video" as const,
+      title: "视频已提交，等待结果",
+      body: cleanMessage || "视频任务已经进入 Seedance 队列，回流后会在预览页显示。",
+      next: "等结果回流后去预览页复核。",
+      status: cleanMessage || "视频已提交。",
+    };
+  }
+  if (normalized === "blocked") {
+    return {
+      phase: "failed" as const,
+      toolName: "submit_video" as const,
+      title: "视频任务需要处理",
+      body: cleanMessage || "视频任务暂时不能继续。先按提示处理后再重试。",
+      next: "按提示修复后再继续。",
+      status: cleanMessage || "视频任务需要处理。",
+    };
+  }
+  return undefined;
+}
+
 function intentNeedsLocalProjectBeforeTooling(value: string) {
-  return /继续|下一步|生成|参考|视频|导出|补齐|发送|执行|开始|可以|确认/.test(value.trim());
+  const text = value.trim();
+  if (isDirectorAgentExplainOnlyIntent(text)) return false;
+  return /继续|下一步|生成|参考|视频|导出|补齐|发送|执行|开始|可以|确认/.test(text);
+}
+
+function intentCanStartNewVideoPlanningWithoutProject(value: string) {
+  if (isDirectorAgentExplainOnlyIntent(value)) return false;
+  return directorIntentCanStartNewVideoPlanningWithoutProject(value);
+}
+
+function intentStartsFreshVideoDraft(value: string) {
+  if (isDirectorAgentExplainOnlyIntent(value)) return false;
+  return directorIntentStartsFreshVideoDraft(value);
+}
+
+function intentContinuesCurrentProject(value: string) {
+  const text = value.trim();
+  if (!text) return false;
+  if (/(新建|新项目|新视频|新短片|另起|换个主题|换一个项目|全新|重新开始)/u.test(text)) return false;
+  return isContinueIntent(text)
+    || /^(继续|下一步|接着|往下)(了|吧|啊|呀|，|。|！|!|,|\s|$)/u.test(text)
+    || /(继续|下一步).{0,24}(检查|处理|推进|参考|视频|导出|生成|提交|发送)/u.test(text);
+}
+
+function shouldRouteToReadyNewVideoDraft(value: string) {
+  const text = value.trim();
+  if (!text) return false;
+  return text.length <= 600;
+}
+
+function isNewVideoDraftConfirmationRouteIntent(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized.length > 80) return false;
+  if (/(生成|补齐|参考|生图|提交|发送|视频|seedance|即梦|导出|素材|角色|场景|道具|故事板|不要|别|不提交|只)/u.test(normalized)) return false;
+  const confirms = /(没问题|可以|确认|通过|继续|下一步|进入故事流|ok|okay|no problem|lets go)/i.test(normalized);
+  if (!confirms) return false;
+  return !/(但是|不过|先别|不要|别|不行|不对|有问题|不太|改|修改|调整|换|加|删|删除|重做|重新|希望|想要)/u.test(normalized);
+}
+
+function isSaveDirectorSkillIntent(value: string) {
+  const text = value.trim();
+  return /(沉淀|保存|记住|收进|加入|保留).{0,12}(skill|Skill|技能|导演经验|做法)/u.test(text)
+    || /(skill|Skill|技能|导演经验|做法).{0,12}(沉淀|保存|记住|收进|加入|保留)/u.test(text);
+}
+
+function browserSkillStorageKey(projectTitle: string, fileName: string) {
+  return `vibe.director.skills.${projectTitle || "project"}.${fileName}`;
+}
+
+function browserSkillIndexStorageKey(projectKey: string) {
+  return `vibe.director.skillIndex.${projectKey || "project"}`;
+}
+
+function buildSkillSaveTimelineEntries(input: {
+  userIntent: string;
+  title: string;
+  body: string;
+  status: "done" | "blocked";
+  path?: string;
+  mode?: string;
+  next?: string;
+  includeUserMessage?: boolean;
+}): VibeAgentTimelineEntry[] {
+  const createdAt = new Date().toISOString();
+  const suffix = createdAt.replace(/[^a-z0-9]+/gi, "").slice(0, 24).toLowerCase();
+  const entries: VibeAgentTimelineEntry[] = [
+    {
+      id: `skill_save_user_${suffix}`,
+      type: "user_message",
+      createdAt,
+      title: "你",
+      body: input.userIntent,
+      status: "done",
+    },
+    {
+      id: `skill_save_call_${suffix}`,
+      type: "tool_call",
+      createdAt,
+      title: "保存导演经验",
+      body: "Agent 正在把当前镜头的做法整理成可复用的 Skill 草稿。",
+      toolName: "save_skill",
+      status: input.status,
+      lifecycle: input.status === "done" ? "succeeded" : "needs_user_input",
+      facts: [
+        { label: "动作", value: "保存 Skill 草稿" },
+        { label: "位置", value: input.path || "未保存" },
+      ],
+    },
+    {
+      id: `skill_save_result_${suffix}`,
+      type: "action_result",
+      createdAt,
+      title: input.title,
+      body: input.body,
+      toolName: "save_skill",
+      status: input.status,
+      lifecycle: input.status === "done" ? "succeeded" : "needs_user_input",
+      facts: [
+        { label: "保存方式", value: input.mode || "未保存" },
+        { label: "文件", value: input.path || "无" },
+      ],
+      details: input.next ? { next: input.next } : undefined,
+    },
+  ];
+  return input.includeUserMessage === false ? entries.slice(1) : entries;
+}
+
+function buildSkillSaveConfirmationTimelineEntries(input: {
+  userIntent: string;
+  skillName: string;
+  fileName: string;
+  summary: string;
+}): VibeAgentTimelineEntry[] {
+  const createdAt = new Date().toISOString();
+  const suffix = createdAt.replace(/[^a-z0-9]+/gi, "").slice(0, 24).toLowerCase();
+  const relativePath = `skills/${input.fileName}`;
+  const actionId = `save_skill_${suffix}`;
+  return [
+    {
+      id: `skill_save_user_${suffix}`,
+      type: "user_message",
+      createdAt,
+      title: "你",
+      body: input.userIntent,
+      status: "done",
+    },
+    {
+      id: `skill_save_draft_${suffix}`,
+      type: "assistant_message",
+      createdAt,
+      title: "AI 导演：Skill 草稿已整理",
+      body: `我会把当前做法沉淀成「${input.skillName}」。这只是保存导演经验，不会生成参考或提交视频。`,
+      toolName: "save_skill",
+      lifecycle: "proposed",
+      status: "waiting",
+      facts: [
+        { label: "Skill", value: input.skillName },
+        { label: "文件", value: relativePath },
+        { label: "用途", value: input.summary },
+      ],
+      details: { next: "确认后写入项目 Skills 和 skill-index。" },
+    },
+    {
+      id: `skill_save_confirm_${suffix}`,
+      type: "confirmation_request",
+      createdAt,
+      title: "行动卡片：保存 Skill 草稿",
+      body: `确认后，我会把「${input.skillName}」写入项目 Skills，并更新 skill-index。`,
+      toolName: "save_skill",
+      actionId,
+      lifecycle: "waiting_for_confirmation",
+      status: "waiting",
+      confirmationRequired: true,
+      facts: [
+        { label: "动作", value: "保存导演经验" },
+        { label: "写入", value: "skills/ 和 skill-index" },
+        { label: "文件", value: relativePath },
+        { label: "成本", value: "无生成成本" },
+      ],
+      details: { next: "等你确认后保存。" },
+    },
+  ];
+}
+
+function buildSkillSaveRunningTimelineEntry(input: {
+  fileName: string;
+  skillName: string;
+}): VibeAgentTimelineEntry {
+  const createdAt = new Date().toISOString();
+  const suffix = createdAt.replace(/[^a-z0-9]+/gi, "").slice(0, 24).toLowerCase() || "now";
+  return {
+    id: `skill_save_running_${suffix}`,
+    type: "tool_call",
+    createdAt,
+    title: "保存导演经验",
+    body: `Agent 正在把「${input.skillName}」写入项目 Skills。`,
+    toolName: "save_skill",
+    lifecycle: "running",
+    status: "waiting",
+    facts: [
+      { label: "动作", value: "保存导演经验" },
+      { label: "文件", value: `skills/${input.fileName}` },
+    ],
+    details: { next: "保存完成后会回到消息流。" },
+  };
+}
+
+function buildSkillSaveCancelledTimelineEntry(input: {
+  skillName: string;
+}): VibeAgentTimelineEntry {
+  const createdAt = new Date().toISOString();
+  const suffix = createdAt.replace(/[^a-z0-9]+/gi, "").slice(0, 24).toLowerCase() || "now";
+  return {
+    id: `skill_save_cancelled_${suffix}`,
+    type: "action_result",
+    createdAt,
+    title: "AI 导演：Skill 保存已暂停",
+    body: `这次先不保存「${input.skillName}」。你可以调整说法后再让我沉淀成 Skill。`,
+    toolName: "save_skill",
+    lifecycle: "cancelled",
+    status: "done",
+    facts: [
+      { label: "动作", value: "暂停保存 Skill" },
+      { label: "下一步", value: "调整后再发送" },
+    ],
+    details: { next: "可以继续改这条导演经验。" },
+  };
 }
 
 function withProjectGuide(input: DirectorWorkflowInput, projectGuide?: KnowledgePackManifest): DirectorWorkflowInput {
@@ -416,6 +1772,13 @@ type PreparedComposerContext = {
   projectRecordLabel?: string;
   projectImpactLabel?: string;
   projectTaskLabel?: string;
+};
+
+type ComposerSelectionOverride = {
+  selectedShotId?: string;
+  selectedShotIds?: string[];
+  selectedAssetId?: string;
+  sectionId?: string;
 };
 
 function feedbackWithSubmitCheckContext(feedback: string, check?: DirectorQaUserFeedback): string {
@@ -521,6 +1884,7 @@ function agentCapabilityItems(
   projectStatusLabel?: string,
   localProjectReady = availability.projectReady,
 ) {
+  const videoSubmitWaitLabel = videoSubmitBlockerLabel(availability.videoSubmitBlockers?.[0]) || "先准备视频";
   return [
     {
       id: "project",
@@ -538,7 +1902,7 @@ function agentCapabilityItems(
       id: "reference",
       label: "生成参考",
       value: !contract.referenceGenerationAllowed
-        ? "先整理"
+        ? "只出计划"
         : !localProjectReady
           ? "先保存项目"
         : availability.referenceGenerationReady
@@ -561,7 +1925,7 @@ function agentCapabilityItems(
           ? "先保存项目"
         : availability.videoSubmitReady
           ? "可用"
-          : "先准备视频",
+          : videoSubmitWaitLabel,
       tone: !contract.videoSubmitAllowed
         ? "blocked"
         : !localProjectReady
@@ -579,9 +1943,66 @@ function agentCapabilityItems(
   ];
 }
 
+function videoSubmitBlockerLabel(blocker?: string) {
+  if (blocker === "video_submit_missing_project") return "先保存项目";
+  if (blocker === "video_submit_callback_missing") return "入口不可用";
+  if (blocker === "video_submit_missing_references") return "先补参考";
+  if (blocker === "video_submit_key_missing") return "先保存 Key";
+  if (blocker === "video_submit_already_sent") return "先查结果";
+  return "";
+}
+
+function videoSubmitBlockerAgentReply(blocker?: string) {
+  if (blocker === "video_submit_missing_project") {
+    return {
+      body: "我还没有拿到本地项目文件夹。先选择或创建项目后，我才能整理素材、补参考和提交视频。",
+      next: "先打开或保存项目文件夹。",
+    };
+  }
+  if (blocker === "video_submit_callback_missing") {
+    return {
+      body: "视频提交入口还不可用。我可以先继续整理故事、参考和 Seedance 请求。",
+      next: "先检查运行状态，或继续让我整理项目。",
+    };
+  }
+  if (blocker === "video_submit_missing_references") {
+    return {
+      body: "现在还不能发视频：这个项目还缺可用的角色、场景或道具参考。先补参考，再提交会更稳。",
+      next: "建议先说“补齐参考”，我会整理要生成或绑定的素材。",
+    };
+  }
+  if (blocker === "video_submit_key_missing") {
+    return {
+      body: "现在还不能发视频：生成服务 Key 还没有准备好。故事和参考可以继续整理，但提交前要先连好服务。",
+      next: "先去设置里保存 Key，或继续只做计划。",
+    };
+  }
+  if (blocker === "video_submit_already_sent") {
+    return {
+      body: "这段视频已经发送过了。现在更适合查询结果或去预览页复核，不要重复提交。",
+      next: "建议先查询结果。",
+    };
+  }
+  return undefined;
+}
+
 function agentCapabilityGlanceItems(items: ReturnType<typeof agentCapabilityItems>) {
   const attentionItems = items.filter((item) => item.tone !== "ready");
   return (attentionItems.length ? attentionItems : items.filter((item) => item.id !== "project")).slice(0, 3);
+}
+
+function agentKernelCapabilityItem(turn: VibeAgentKernelTurn): ReturnType<typeof agentCapabilityItems>[number] {
+  const status = turn.executionResult.status;
+  if (status === "blocked") {
+    return { id: "kernel-turn", label: "本轮", value: "需处理", tone: "blocked" };
+  }
+  if (status === "awaiting_confirmation") {
+    return { id: "kernel-turn", label: "本轮", value: "等确认", tone: "waiting" };
+  }
+  if (status === "running") {
+    return { id: "kernel-turn", label: "本轮", value: "执行中", tone: "waiting" };
+  }
+  return { id: "kernel-turn", label: "本轮", value: "可继续", tone: "ready" };
 }
 
 function intentWithQaRevisionHint(intent: string | undefined, feedback?: DirectorQaUserFeedback) {
@@ -722,7 +2143,7 @@ function composerAttachmentUseHint(kind: ComposerAttachmentKind) {
   if (kind === "image") return "用途：作为参考素材，等待 AI 导演归类为角色、场景、道具或镜头参考。";
   if (kind === "audio") return "用途：作为声音参考，等待 AI 导演绑定到角色、旁白或对白。";
   if (kind === "video") return "用途：作为视频参考，等待 AI 导演提取节奏、构图或风格信息。";
-  if (kind === "file") return "用途：作为补充材料，等待 AI 导演先整理再确认。";
+  if (kind === "file") return "用途：作为提示词、生成证据或补充材料，等待 AI 导演先整理再确认。";
   return "";
 }
 
@@ -840,7 +2261,7 @@ function agentActionIsStatusInspection(action?: DirectorAgentActionEnvelope): ac
 
 function agentToolRecordLabel(handoff: DirectorAgentToolHandoff) {
   if (handoff.status === "handled_by_project_write") return "已写入项目";
-  if (agentToolOnlyNeedsConfirmation(handoff)) return "确认后写项目";
+  if (agentToolOnlyNeedsConfirmation(handoff)) return "确认后修改项目";
   if (handoff.status === "ready") return "先保存项目，再执行动作";
   return "已保存计划，动作未开始";
 }
@@ -854,9 +2275,9 @@ function agentShotScopeLabel(shotIds: string[]) {
 
 function agentTargetScopeLabel(action?: DirectorAgentActionEnvelope) {
   if (!action) return "整个项目";
-  if (action.target.kind === "shot" && action.target.ids[0]) return agentShotScopeLabel([action.target.ids[0]]);
+  if (action.target.kind === "shot" && action.target.ids[0]) return directorAgentDisplayTargetLabel(action.target, action.sourceContext);
   if (action.target.kind === "multi_shot") return agentShotScopeLabel(action.target.ids);
-  return action.target.label || "整个项目";
+  return directorAgentDisplayTargetLabel(action.target, action.sourceContext) || "整个项目";
 }
 
 function agentToolScopeLabel(handoff: DirectorAgentToolHandoff, action?: DirectorAgentActionEnvelope) {
@@ -896,7 +2317,7 @@ function agentToolPreflightLabel(handoff: DirectorAgentToolHandoff) {
   if (blockers.includes("project_not_ready")) return "需要本地项目";
   if (blockers.includes("web_search_not_ready")) return "先开启查资料";
   if (blockers.includes("reference_generation_not_ready")) return "先连接图片服务";
-  if (blockers.includes("reference_generation_not_allowed")) return "先整理";
+  if (blockers.includes("reference_generation_not_allowed")) return "只出计划";
 	  if (blockers.includes("video_submit_not_ready")) return "先准备视频";
 	  if (blockers.includes("video_submit_not_allowed")) return "当前不能发送";
   if (blockers.includes("export_not_ready")) return "先准备导出";
@@ -921,9 +2342,9 @@ function agentExpectedReceiptLabel(expectedReceipt: DirectorAgentToolHandoff["ex
 }
 
 function agentExecutionModeLabel(action: DirectorAgentActionEnvelope) {
-  if (action.executionContract.mode === "plan_only") return "先整理";
-  if (action.executionContract.mode === "reference_allowed") return "可做参考";
-  return "可发视频";
+  if (action.executionContract.mode === "plan_only") return "只出计划";
+  if (action.executionContract.mode === "reference_allowed") return "生成参考";
+  return "提交视频";
 }
 
 function agentConfirmedProjectWriteLabel(
@@ -962,7 +2383,7 @@ function agentNextControlledStepLabel(
 	    if (preflightLabel) return preflightLabel;
 	  }
 	  if (action.kind === "query_video_result") return "查询视频";
-	  if (action.toolPlan.toolName === "project_vibe_patch") return "只写项目";
+	  if (action.toolPlan.toolName === "project_vibe_patch") return "写入项目";
   return agentToolHandlerLabel(action.toolPlan.toolName);
 }
 
@@ -1011,7 +2432,7 @@ function agentExecutionTraceItems(
         tone: "done",
       },
       {
-        label: "写项目",
+        label: "修改项目",
         value: "不写入项目",
         tone: "done",
       },
@@ -1038,7 +2459,7 @@ function agentExecutionTraceItems(
       tone: action.status === "blocked" ? "blocked" : "done",
     },
     {
-      label: "写项目",
+      label: "修改项目",
       value: agentConfirmedProjectWriteLabel(action, handoff, planPhase),
       tone: action.status === "blocked"
         ? "blocked"
@@ -1075,6 +2496,7 @@ function agentActionFieldLabel(field: string) {
   if (field === "knowledgeReferences") return "资料参考";
   if (field === "referenceAssets") return "参考素材";
   if (field === "assetStatus") return "素材状态";
+  if (field === "assetRoleBinding") return "素材用途";
   if (field === "videoQueue") return "视频队列";
   if (field === "reviewTray") return "复核内容";
   if (field === "storyDraft") return "故事草案";
@@ -1097,7 +2519,7 @@ function creatorProjectTaskLabel(value?: string) {
   if (!value) return undefined;
   if (value.includes("有内容待补后入队")) return "生成参考后继续";
   if (value.includes("有内容待补")) return "先生成参考";
-  if (value.includes("不用再执行")) return "只写项目";
+  if (value.includes("不用再执行")) return "写入项目";
   return value;
 }
 
@@ -1229,7 +2651,7 @@ function confirmedToolRunResult(
     };
   }
   if (handoff.handler === "image2_reference_generation") {
-    const label = toolRunOutcome?.status === "completed" ? toolRunOutcome.label : "参考已开始生成";
+    const label = toolRunOutcome?.status === "completed" ? toolRunOutcome.label : "参考任务已启动";
     return {
       status: toolRunOutcome?.resultStatus || "running",
       result: {
@@ -1369,6 +2791,11 @@ export function MinimalAgentPanel({
   onCreateP6RealSample,
   onCreateImage2EndFrame,
   onCreateLocalProject,
+  onStartNewVideoDraftFromAgent,
+  onContinueNewVideoDraftFromAgent,
+  newVideoDraftPendingForAgent = false,
+  newVideoDraftPlanningForAgent = false,
+  newVideoDraftReadyForAgent = false,
   onSendSeedanceVideo,
   onRunExport,
   onOpenResultView,
@@ -1433,12 +2860,17 @@ export function MinimalAgentPanel({
   }) => KnowledgePack | Promise<KnowledgePack>;
   onRememberAgentActionLogItem?: (item: ProjectAgentActionLogItem) => void | Promise<void>;
   onCreateLocalProject?: () => unknown | Promise<unknown>;
+  onStartNewVideoDraftFromAgent?: (userIntent: string) => unknown | Promise<unknown>;
+  onContinueNewVideoDraftFromAgent?: () => unknown | Promise<unknown>;
+  newVideoDraftPendingForAgent?: boolean;
+  newVideoDraftPlanningForAgent?: boolean;
+  newVideoDraftReadyForAgent?: boolean;
   onCreateP6RealSample?: (target?: AgentControlledToolInvocationTarget) => unknown | Promise<unknown>;
   onCreateImage2EndFrame?: () => void | Promise<void>;
   onSendSeedanceVideo?: (target?: AgentControlledToolInvocationTarget) => unknown | Promise<unknown>;
   onRunExport?: (target?: Pick<AgentControlledToolInvocationTarget, "agentToolTrace">) => unknown | Promise<unknown>;
   onOpenResultView?: (view: DirectorView) => void;
-  onRetryMissingBatch?: () => void | Promise<void>;
+  onRetryMissingBatch?: () => unknown | Promise<unknown>;
   agentCommand?: CreatorAgentCommand;
   projectObservation?: ProjectObservationProjection;
   projectStatusView?: ProjectStatusViewModel;
@@ -1449,12 +2881,14 @@ export function MinimalAgentPanel({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const agentThreadRef = useRef<HTMLElement>(null);
   const previousSelectionFocusKeyRef = useRef("");
   const previousRuntimeProjectKeyRef = useRef("");
   const restoredAgentDraftIdRef = useRef("");
   const restoredAgentLogKeyRef = useRef("");
   const restoredAgentTimelineKeyRef = useRef("");
   const resumeAgentAfterLocalProjectSetupRef = useRef(false);
+  const savedSkillStackProjectKeyRef = useRef("");
   const [text, setText] = useState("");
   // File objects in React state can cause memory leaks; consider using a ref or blob URL instead
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -1467,6 +2901,8 @@ export function MinimalAgentPanel({
   const [feedbackRecompile, setFeedbackRecompile] = useState<DirectorFeedbackRecompileResult | undefined>();
   const [researchResult, setResearchResult] = useState<AgentWebSearchResult | undefined>();
   const [researchStatus, setResearchStatus] = useState<"idle" | "running" | "ready" | "blocked">("idle");
+  const [advancedControlsOpen, setAdvancedControlsOpen] = useState(false);
+  const [generationDetailsOpen, setGenerationDetailsOpen] = useState(false);
   const [referenceStatus, setReferenceStatus] = useState<"idle" | "saving" | "saved" | "blocked">("idle");
   const [isPreparingPlan, setIsPreparingPlan] = useState(false);
   const [isRetryingTool, setIsRetryingTool] = useState(false);
@@ -1475,7 +2911,14 @@ export function MinimalAgentPanel({
   const [agentActionEnvelope, setAgentActionEnvelope] = useState<DirectorAgentActionEnvelope | undefined>();
   const [agentToolHandoff, setAgentToolHandoff] = useState<DirectorAgentToolHandoff | undefined>();
   const [agentTimelineEntries, setAgentTimelineEntries] = useState<VibeAgentTimelineEntry[]>([]);
+  const [latestAgentKernelTurn, setLatestAgentKernelTurn] = useState<VibeAgentKernelTurn | undefined>();
   const [agentActionLog, setAgentActionLog] = useState<AgentActionLogItem[]>([]);
+  const [savedSkillStack, setSavedSkillStack] = useState<DirectorSkillStackItem[]>([]);
+  const [pendingSkillSaveRequest, setPendingSkillSaveRequest] = useState<{
+    userIntent: string;
+    card: DirectorSkillCardDraft;
+    fileName: string;
+  } | undefined>();
   const [localVideoPermissionContract, setLocalVideoPermissionContract] = useState<AgentVideoPermissionContract>(
     videoPermissionContract || defaultAgentVideoPermissionContract,
   );
@@ -1522,7 +2965,8 @@ export function MinimalAgentPanel({
   const realSampleBusy = realSampleAction?.status === "running";
   const endFrameBusy = endFrameAction?.status === "running";
   const videoBusy = videoSendAction?.status === "running";
-  const videoSubmissionBlocked = videoSendAction?.status === "blocked";
+  const videoSubmitCancelled = videoSendAction?.status === "blocked" && /已取消，本次没有发送/.test(videoSendAction.message || "");
+  const videoSubmissionBlocked = videoSendAction?.status === "blocked" && !videoSubmitCancelled;
   const videoBlockedRecoveryIntent = videoSubmissionBlocked ? videoBlockerRecoveryIntent(videoSendAction?.message) : "";
   const videoBlockedRecoveryTargetShots = (videoSendAction?.recoveryTargetShotIds || [])
     .map((shotId) => runtimeState.storyFlow.shots.find((item) => item.id === shotId))
@@ -1536,6 +2980,48 @@ export function MinimalAgentPanel({
     runtimeState.project.root ? `root:${runtimeState.project.root}` : "",
     runtimeState.sourceIndexSummary.projectId ? `id:${runtimeState.sourceIndexSummary.projectId}` : "",
   ].filter(Boolean).join("::") || `title:${runtimeState.project.title || "unbound"}`;
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSkillStack() {
+      const projectRoot = runtimeState.project.root?.trim();
+      const bridge = typeof window !== "undefined" ? window.vibeRuntime : undefined;
+      if (projectRoot && bridge?.sandboxReadFile) {
+        try {
+          const indexPath = `${projectRoot.replace(/\/+$/g, "")}/${DIRECTOR_SKILL_STACK_INDEX_PATH}`;
+          const result = await bridge.sandboxReadFile(indexPath);
+          const parsedIndex = parseDirectorSkillStackIndex(result.content);
+          if (!cancelled && parsedIndex.skills.length > 0) {
+            savedSkillStackProjectKeyRef.current = runtimeProjectKey;
+            setSavedSkillStack(parsedIndex.skills);
+            return;
+          }
+        } catch {
+          // Missing skill-index.json is a normal state for a fresh project.
+        }
+      }
+      if (typeof window !== "undefined" && window.localStorage) {
+        const content = window.localStorage.getItem(browserSkillIndexStorageKey(runtimeProjectKey));
+        if (!cancelled) {
+          if (content) {
+            savedSkillStackProjectKeyRef.current = runtimeProjectKey;
+            setSavedSkillStack(parseDirectorSkillStackIndex(content).skills);
+          } else if (savedSkillStackProjectKeyRef.current !== runtimeProjectKey) {
+            savedSkillStackProjectKeyRef.current = runtimeProjectKey;
+            setSavedSkillStack([]);
+          }
+        }
+        return;
+      }
+      if (!cancelled && savedSkillStackProjectKeyRef.current !== runtimeProjectKey) {
+        savedSkillStackProjectKeyRef.current = runtimeProjectKey;
+        setSavedSkillStack([]);
+      }
+    }
+    void loadSkillStack();
+    return () => {
+      cancelled = true;
+    };
+  }, [runtimeProjectKey, runtimeState.project.root]);
   const hasPreparedAgentState = Boolean(
     workflow
     || projection
@@ -1557,9 +3043,40 @@ export function MinimalAgentPanel({
   }, [attachments.length, text]);
   const activeVideoPermissionContract = localVideoPermissionContract;
   const localProjectReadyForTools = Boolean(localProjectReady);
+  const currentProjectHasStoryContext = Boolean(
+    runtimeState.storyFlow.shots.length > 0
+      || selectedShots.length > 0
+      || shot
+      || projectObservation?.story.status === "selected",
+  );
   const agentCommandKind = agentCommand?.kind;
   const projectStatusStage = projectStatusView?.stage || "";
   const projectStatusExportCopy = `${projectStatusView?.nextAction || ""} ${projectStatusView?.waitingFor || ""}`;
+  const newVideoDraftStatusCopy = [
+    projectStatusView?.stage,
+    projectStatusView?.doing,
+    projectStatusView?.nextAction,
+    projectStatusView?.waitingFor,
+  ].filter(Boolean).join(" ");
+  const newVideoDraftTimelineCopy = agentTimelineEntries.slice(-6).map((entry) => [
+    entry.title,
+    entry.body,
+    typeof entry.details?.next === "string" ? entry.details.next : "",
+    ...(entry.facts || []).map((fact) => `${fact.label}:${fact.value}`),
+  ].filter(Boolean).join(" ")).join(" ");
+  const newVideoDraftBusyForAgent = newVideoDraftPendingForAgent || newVideoDraftPlanningForAgent;
+  const readyNewVideoDraftForAgent = Boolean(
+    runtimeState.storyFlow.shots.length === 0
+      && !newVideoDraftBusyForAgent
+      && (
+        newVideoDraftReadyForAgent
+        || (
+          !localProjectReadyForTools
+          && /等待确认|草案|确认.*故事流/.test(`${newVideoDraftStatusCopy} ${newVideoDraftTimelineCopy}`)
+        )
+      ),
+  );
+  const activeNewVideoDraftConfirmation = readyNewVideoDraftForAgent;
   const exportResultIsPrimary = Boolean(
     projectStatusStage === "导出已完成"
       || projectStatusStage === "可以导出"
@@ -1570,15 +3087,63 @@ export function MinimalAgentPanel({
     || /查询/.test(videoSendAction?.suggestedActionLabel || "");
   const showEndpointEndFrameControls = usesEndpointEndFrame(shot) || selectedShots.some(usesEndpointEndFrame);
   const videoResultIsPrimary = !exportResultIsPrimary && (videoQueryMode || videoBusy || videoAlreadySent);
-  const showRealSampleAction = !exportResultIsPrimary && !videoResultIsPrimary && Boolean(agentCommandKind === "generate_references" || realSampleAction?.keyConfigured || realSampleAction?.status === "running" || realSampleAction?.status === "needs_review" || realSampleAction?.status === "verified");
-  const showEndFrameAction = !exportResultIsPrimary && !videoResultIsPrimary && showEndpointEndFrameControls && Boolean(endFrameAction?.keyConfigured || endFrameAction?.status === "running" || endFrameAction?.status === "needs_review" || endFrameAction?.status === "verified");
-  const showVideoAction = !exportResultIsPrimary && Boolean(videoSendAction && runtimeState.storyFlow.shots.length > 0 && (
+  const readOnlyAgentStatusInspection = agentActionIsStatusInspection(agentActionEnvelope);
+  const showRealSampleAction = !readOnlyAgentStatusInspection && !exportResultIsPrimary && !videoResultIsPrimary && Boolean(agentCommandKind === "generate_references" || realSampleAction?.keyConfigured || realSampleAction?.status === "running" || realSampleAction?.status === "needs_review" || realSampleAction?.status === "verified");
+  const showEndFrameAction = !readOnlyAgentStatusInspection && !exportResultIsPrimary && !videoResultIsPrimary && showEndpointEndFrameControls && Boolean(endFrameAction?.keyConfigured || endFrameAction?.status === "running" || endFrameAction?.status === "needs_review" || endFrameAction?.status === "verified");
+  const showVideoAction = !readOnlyAgentStatusInspection && !exportResultIsPrimary && Boolean(videoSendAction && runtimeState.storyFlow.shots.length > 0 && (
     agentCommandKind === "submit_video"
     || agentCommandKind === "resume_video"
     || agentCommandKind === "wait_video"
     || agentCommandKind === undefined
   ));
-  const selectedSkillSummary = !exportResultIsPrimary && !videoResultIsPrimary && shot ? directorSkillSummaryForShot(shot) : undefined;
+  const selectedSkillSummary = shot ? directorSkillSummaryForShot(shot) : undefined;
+  const selectedSkillCard = useMemo(
+    () => shot ? buildDirectorSkillCardFromShot(shot, { projectTitle: runtimeState.project.title }) : undefined,
+    [runtimeState.project.title, shot],
+  );
+  const selectedSkillDraftFile = selectedSkillCard ? directorSkillFileName(selectedSkillCard) : "";
+  const selectedSkillSavedInTimeline = Boolean(selectedSkillCard && selectedSkillDraftFile && agentTimelineEntries.some((entry) => (
+    /Skill 草稿已/.test(entry.title)
+    && (
+      entry.body.includes(selectedSkillCard.name)
+      || entry.facts?.some((fact) => fact.value.includes(selectedSkillDraftFile))
+    )
+  )));
+  const selectedSkillAlreadySaved = Boolean(
+    selectedSkillCard
+    && (savedSkillStack.some((item) => item.id === selectedSkillCard.id) || selectedSkillSavedInTimeline),
+  );
+  const savedSkillNames = savedSkillStack.length
+    ? savedSkillStack.slice(0, 3).map((item) => item.name)
+    : selectedSkillAlreadySaved && selectedSkillCard
+      ? [selectedSkillCard.name]
+      : [];
+  const visibleSavedSkillCount = savedSkillStack.length || savedSkillNames.length;
+  const showSkillStack = Boolean(selectedSkillSummary || visibleSavedSkillCount || runtimeState.storyFlow.shots.length > 0);
+  const projectLoadedSkillLabel = visibleSavedSkillCount
+    ? `已加载 ${visibleSavedSkillCount} 个：${savedSkillNames.join("、")}${visibleSavedSkillCount > savedSkillNames.length ? "…" : ""}`
+    : "还没有保存的项目 Skill";
+  const recommendedSkillLabel = selectedSkillSummary?.label === "故事板快切"
+    ? "动作节点和可见剪辑先对齐"
+    : selectedSkillSummary?.label === "故事板叙事"
+      ? "按镜头顺序稳住叙事"
+      : "锁定主体，再让模型补表演";
+  const selectedSkillOneLine = selectedSkillCard?.summary || selectedSkillSummary?.detail || "按当前镜头选择合适的导演方法。";
+  const selectedSkillImpactLabel = selectedSkillCard?.appliesTo?.length
+    ? selectedSkillCard.appliesTo.join(" / ")
+    : "故事规划 / Seedance prompt / QA";
+  const selectedSkillUseWhenLabel = selectedSkillCard?.useWhen?.[0] || selectedSkillSummary?.reason || "镜头需要明确的导演方法时使用。";
+  const selectedSkillAvoidWhenLabel = selectedSkillCard?.avoidWhen?.[0] || "镜头很简单时，不要过度增加约束。";
+  const selectedSkillSourceLabel = selectedSkillCard?.createdFrom?.shotTitle
+    ? `${selectedSkillCard.createdFrom.shotId || "当前镜头"} · ${selectedSkillCard.createdFrom.shotTitle}`
+    : shot
+      ? `${shot.id} · ${shot.title}`
+      : "点选镜头后显示来源。";
+  const mySkillActionLabel = selectedSkillAlreadySaved
+    ? "当前做法已在项目里。"
+    : selectedSkillCard
+      ? `可把当前做法保存为 ${selectedSkillCard.name}。`
+      : "点一个镜头后，可以说“把这个沉淀成 Skill”。";
   const effectiveWebSearchReady = webSearchReady ?? webSearchSettings.enabled;
   function visibleVideoPermissionContractFor(contract: AgentVideoPermissionContract) {
     return agentVideoPermissionForUi(contract, {
@@ -1594,20 +3159,215 @@ export function MinimalAgentPanel({
   const videoPermissionBlockedByContract = !videoQueryMode && !agentVideoPermissionAllowsVideo(currentVideoPermissionContract);
   const videoPermissionBlockedByProject = !localProjectReadyForTools;
   const videoPermissionModeItems: Array<{ mode: AgentVideoPermissionMode; label: string }> = [
-    { mode: "plan_only", label: "先整理" },
-    { mode: "reference_allowed", label: "可做参考" },
-    { mode: "video_allowed", label: "可发视频" },
+    { mode: "plan_only", label: "只出计划" },
+    { mode: "reference_allowed", label: "生成参考" },
+    { mode: "video_allowed", label: "提交视频" },
   ];
+
+  function clearSkillSaveComposerInput() {
+    setText("");
+    setAttachments([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function requestSelectedSkillDraftSave(userIntent: string) {
+    const projectRoot = runtimeState.project.root?.trim();
+    if (!selectedSkillCard || !selectedSkillDraftFile) {
+      rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
+        userIntent,
+        title: "AI 导演：先选一个镜头",
+        body: "我可以把当前镜头的做法沉淀成 Skill，但现在还没有选中可保存的镜头。",
+        status: "blocked",
+        next: "先在中间点一个镜头，再说“把这个沉淀成 Skill”。",
+      }));
+      clearSkillSaveComposerInput();
+      setStatus("先选镜头");
+      return;
+    }
+
+    if (!localProjectReadyForTools || !projectRoot) {
+      rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
+        userIntent,
+        title: "AI 导演：需要本地项目",
+        body: "Skill 草稿需要保存到当前项目里。先打开或新建一个项目文件夹，再让我保存这条导演经验。",
+        status: "blocked",
+        path: `skills/${selectedSkillDraftFile}`,
+        next: "左上角打开或新建项目后，再说“把这个沉淀成 Skill”。",
+      }));
+      clearSkillSaveComposerInput();
+      setStatus("需要本地项目");
+      return;
+    }
+
+    setPendingSkillSaveRequest({
+      userIntent,
+      card: selectedSkillCard,
+      fileName: selectedSkillDraftFile,
+    });
+    rememberAgentTimelineEntries(buildSkillSaveConfirmationTimelineEntries({
+      userIntent,
+      skillName: selectedSkillCard.name,
+      fileName: selectedSkillDraftFile,
+      summary: selectedSkillCard.summary,
+    }));
+    clearSkillSaveComposerInput();
+    setStatus("等你确认保存 Skill");
+  }
+
+  async function saveSelectedSkillDraft(userIntent: string, input?: {
+    card?: DirectorSkillCardDraft;
+    fileName?: string;
+    includeUserMessage?: boolean;
+  }) {
+    const projectRoot = runtimeState.project.root?.trim();
+    const projectTitle = runtimeState.project.title || "当前项目";
+    const skillCard = input?.card || selectedSkillCard;
+    const skillFileName = input?.fileName || selectedSkillDraftFile;
+    if (!skillCard || !skillFileName) {
+      rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
+        userIntent,
+        title: "AI 导演：先选一个镜头",
+        body: "我可以把当前镜头的做法沉淀成 Skill，但现在还没有选中可保存的镜头。",
+        status: "blocked",
+        next: "先在中间点一个镜头，再说“把这个沉淀成 Skill”。",
+        includeUserMessage: input?.includeUserMessage,
+      }));
+      clearSkillSaveComposerInput();
+      setStatus("先选镜头");
+      return;
+    }
+
+    if (!localProjectReadyForTools || !projectRoot) {
+      rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
+        userIntent,
+        title: "AI 导演：需要本地项目",
+        body: "Skill 草稿需要保存到当前项目里。先打开或新建一个项目文件夹，再让我保存这条导演经验。",
+        status: "blocked",
+        path: `skills/${skillFileName}`,
+        next: "左上角打开或新建项目后，再说“把这个沉淀成 Skill”。",
+        includeUserMessage: input?.includeUserMessage,
+      }));
+      clearSkillSaveComposerInput();
+      setStatus("需要本地项目");
+      return;
+    }
+
+    const relativePath = `skills/${skillFileName}`;
+    const markdown = directorSkillCardMarkdown(skillCard);
+    const savedAt = new Date().toISOString();
+    const nextSkillIndex = upsertDirectorSkillStackIndex(
+      createDirectorSkillStackIndex(savedSkillStack),
+      { card: skillCard, fileName: skillFileName, savedAt },
+    );
+    const bridge = typeof window !== "undefined" ? window.vibeRuntime : undefined;
+    try {
+      rememberAgentTimelineEntries([buildSkillSaveRunningTimelineEntry({
+        fileName: skillFileName,
+        skillName: skillCard.name,
+      })]);
+      if (bridge?.sandboxWriteFile) {
+        const targetPath = `${projectRoot.replace(/\/+$/g, "")}/${relativePath}`;
+        await bridge.sandboxWriteFile(targetPath, markdown);
+        await bridge.sandboxWriteFile(
+          `${projectRoot.replace(/\/+$/g, "")}/${DIRECTOR_SKILL_STACK_INDEX_PATH}`,
+          serializeDirectorSkillStackIndex(nextSkillIndex),
+        );
+        savedSkillStackProjectKeyRef.current = runtimeProjectKey;
+        setSavedSkillStack(nextSkillIndex.skills);
+        rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
+          userIntent,
+          title: "AI 导演：Skill 草稿已保存",
+          body: `我已经把当前镜头的做法保存成导演经验卡：${skillCard.name}。以后可以作为项目里的方法参考继续使用。`,
+          status: "done",
+          path: relativePath,
+          mode: "项目文件",
+          next: "需要的话，可以继续说“这个 Skill 用到下一段”。",
+          includeUserMessage: input?.includeUserMessage,
+        }));
+      } else if (typeof window !== "undefined" && window.localStorage) {
+        window.localStorage.setItem(browserSkillStorageKey(projectTitle, skillFileName), markdown);
+        window.localStorage.setItem(browserSkillIndexStorageKey(runtimeProjectKey), serializeDirectorSkillStackIndex(nextSkillIndex));
+        savedSkillStackProjectKeyRef.current = runtimeProjectKey;
+        setSavedSkillStack(nextSkillIndex.skills);
+        rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
+          userIntent,
+          title: "AI 导演：Skill 草稿已暂存",
+          body: `我已经把当前镜头的做法暂存在浏览器里：${skillCard.name}。打开桌面版项目后可以再写入项目文件夹。`,
+          status: "done",
+          path: relativePath,
+          mode: "浏览器暂存",
+          next: "想继续项目，就直接说下一步要改哪里。",
+          includeUserMessage: input?.includeUserMessage,
+        }));
+      } else {
+        throw new Error("当前环境不能写入项目文件，也不能使用浏览器暂存。");
+      }
+      setPendingSkillSaveRequest(undefined);
+      setStatus("Skill 已保存");
+    } catch (error) {
+      rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
+        userIntent,
+        title: "AI 导演：保存失败",
+        body: error instanceof Error ? error.message : "Skill 草稿没有保存成功，可以重试。",
+        status: "blocked",
+        path: relativePath,
+        next: "检查项目文件夹权限后，再说“保存这个 Skill”。",
+        includeUserMessage: input?.includeUserMessage,
+      }));
+      setStatus("保存失败");
+    } finally {
+      clearSkillSaveComposerInput();
+    }
+  }
+
+  async function confirmPendingSkillSave() {
+    if (!pendingSkillSaveRequest) {
+      setStatus("没有待保存的 Skill");
+      return;
+    }
+    await saveSelectedSkillDraft(pendingSkillSaveRequest.userIntent, {
+      card: pendingSkillSaveRequest.card,
+      fileName: pendingSkillSaveRequest.fileName,
+      includeUserMessage: false,
+    });
+  }
+
+  function revisePendingSkillSave() {
+    if (!pendingSkillSaveRequest) {
+      setStatus("没有待修改的 Skill 草稿");
+      return;
+    }
+    rememberAgentTimelineEntries([buildSkillSaveCancelledTimelineEntry({
+      skillName: pendingSkillSaveRequest.card.name,
+    })]);
+    setText(pendingSkillSaveRequest.userIntent);
+    setPendingSkillSaveRequest(undefined);
+    textareaRef.current?.focus();
+    setStatus("可以调整后再发送");
+  }
+
+  const referenceMissingCount = runtimeState.visualMemory.summary.missing;
+  const referenceLockedCount = runtimeState.visualMemory.summary.locked;
+  const referenceReviewCount = runtimeState.visualMemory.summary.needsReview;
+  const referenceDisplayableCount = runtimeState.visualMemory.assets.filter(minimalAgentAssetHasDisplayableReference).length;
+  const referenceNeedsReview = referenceReviewCount > 0;
+  const referencesReadyAfterReview = referenceLockedCount > 0 && referenceDisplayableCount > 0 && referenceMissingCount === 0 && !referenceNeedsReview;
+  const timelineShowsReferenceReady = agentTimelineEntries.some((entry) =>
+    entry.toolName === "generate_references" && /参考可用/.test(`${entry.title} ${entry.body} ${entry.details?.next || ""}`),
+  );
+  const referencesUsableForAgent = referencesReadyAfterReview || timelineShowsReferenceReady;
   const realSampleLabel = realSampleBusy
     ? "生成中"
+    : referenceNeedsReview
+      ? "等待复核"
     : referenceGenerationBlockedByProject
       ? "先保存项目"
     : referenceGenerationBlockedByContract
-      ? "允许生成参考"
+      ? "确认生成参考"
     : realSampleAction?.status === "needs_review"
       ? "等待复核"
     : realSampleAction?.status === "verified"
-        ? "已完成"
+        ? referenceDisplayableCount > 0 ? "已完成" : "等待结果"
         : "生成参考";
   const idleActionHint = currentVideoPermissionContract.mode === "plan_only"
     ? "点一下只会先整理成待确认计划。"
@@ -1619,7 +3379,7 @@ export function MinimalAgentPanel({
     : referenceGenerationBlockedByProject
       ? "先保存项目"
     : referenceGenerationBlockedByContract
-      ? "允许生成结束画面"
+      ? "确认生成结束画面"
     : endFrameAction?.status === "needs_review"
       ? "等待复核"
       : endFrameAction?.status === "verified"
@@ -1636,7 +3396,7 @@ export function MinimalAgentPanel({
     : videoPermissionBlockedByProject
       ? "先保存项目"
     : videoPermissionBlockedByContract
-      ? "允许发送视频"
+      ? "确认提交视频"
     : videoAlreadySent
       ? "已发送"
       : "发送视频";
@@ -1686,9 +3446,7 @@ export function MinimalAgentPanel({
     : baseDisplayedSelectionHint;
   const displayedCompactScopeLabel = compactAgentScopeLabel(displayedScopeLabel);
   const displayedCompactSelectionHint = compactAgentSelectionHint(displayedSelectionHint);
-  const displayedSelectionChips = exportResultIsPrimary || videoResultIsPrimary
-    ? []
-    : workflow && preparedSelectionChips.length ? preparedSelectionChips : liveSelectionChips;
+  const displayedSelectionChips = workflow && preparedSelectionChips.length ? preparedSelectionChips : liveSelectionChips;
   const showAgentActionLog = agentActionLog.length > 0 && !videoResultIsPrimary && !exportResultIsPrimary;
 
   function canAutoFocusComposer() {
@@ -1710,7 +3468,6 @@ export function MinimalAgentPanel({
     }
     if (previousRuntimeProjectKeyRef.current === runtimeProjectKey) return;
     previousRuntimeProjectKeyRef.current = runtimeProjectKey;
-    if (!hasProjectBoundAgentState) return;
     setText("");
     setAttachments([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -1733,6 +3490,7 @@ export function MinimalAgentPanel({
     restoredAgentLogKeyRef.current = "";
     restoredAgentTimelineKeyRef.current = "";
     setStatus(hasComposerDraft ? "项目已切换，输入已清空" : "项目已切换，重新发送即可");
+    setLatestAgentKernelTurn(undefined);
   }, [hasComposerDraft, hasProjectBoundAgentState, runtimeProjectKey, runtimeState.storyFlow.shots.length]);
 
   useEffect(() => {
@@ -1751,7 +3509,12 @@ export function MinimalAgentPanel({
   useEffect(() => {
     const restoredEntries = restoredAgentTimelineEntries || [];
     const nextKey = agentTimelineKey(restoredEntries);
-    if (!nextKey || restoredAgentTimelineKeyRef.current === nextKey) return;
+    if (!nextKey) {
+      restoredAgentTimelineKeyRef.current = "";
+      setAgentTimelineEntries([]);
+      return;
+    }
+    if (restoredAgentTimelineKeyRef.current === nextKey) return;
     restoredAgentTimelineKeyRef.current = nextKey;
     setAgentTimelineEntries(restoredEntries);
   }, [restoredAgentTimelineEntries]);
@@ -1833,9 +3596,16 @@ export function MinimalAgentPanel({
     }
     if (previousSelectionFocusKeyRef.current === selectionFocusKey) return;
     previousSelectionFocusKeyRef.current = selectionFocusKey;
+    rememberAgentTimelineEntries([buildSelectionChangedTimelineEntry({
+      createdAt: new Date().toISOString(),
+      selectionKey: selectionFocusKey,
+      label: localScopeLabel,
+      hint: selectionHint,
+      facts: liveSelectionChips,
+    })]);
     if (!canAutoFocusComposer()) return;
     window.setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 0);
-  }, [asset?.id, hasBoundSelection, scopedShotKey, sectionId, selectionFocusKey, shot?.id, text, workflow]);
+  }, [asset?.id, hasBoundSelection, localScopeLabel, scopedShotKey, sectionId, selectionFocusKey, selectionHint, shot?.id, text, workflow]);
 
   function updateVideoPermissionContract(nextContract: AgentVideoPermissionContract) {
     setLocalVideoPermissionContract(nextContract);
@@ -1845,117 +3615,289 @@ export function MinimalAgentPanel({
   function selectVideoPermissionMode(mode: AgentVideoPermissionMode) {
     if (workflow) return;
     const nextContract = agentVideoPermissionForMode(mode);
+    if (activeVideoPermissionContract.mode !== nextContract.mode) {
+      rememberAgentTimelineEntries([buildExecutionBoundaryChangedTimelineEntry({
+        createdAt: new Date().toISOString(),
+        contract: nextContract,
+      })]);
+    }
     updateVideoPermissionContract(nextContract);
     setStatus(agentVideoPermissionLabel(nextContract));
   }
 
   function runFooterReferenceGeneration() {
     if (!realSampleAction) return;
+    const referenceTask = {
+      toolName: "generate_references" as DirectProductActionToolName,
+      startedTitle: "参考任务已启动",
+      startedBody: "已确认，Agent 正在把参考生成任务交给图片服务。",
+      completedTitle: "参考任务已发送",
+      completedBody: "参考任务已交给生成队列，完成后会在参考页显示。",
+      failedTitle: "参考生成没有完成",
+      next: "等参考图完成后，到参考页复核。",
+      facts: [
+        { label: "动作", value: "生成参考" },
+        { label: "范围", value: "当前项目" },
+      ],
+    };
     if (referenceGenerationBlockedByProject) {
-      setStatus("先打开或保存本地项目。");
+      rememberBlockedDirectProductAction({
+        toolName: referenceTask.toolName,
+        title: "还不能生成参考",
+        body: "先选择或创建项目文件夹，这样 Agent 才能把参考图写回项目。",
+        next: "选择项目文件夹后，再点生成参考。",
+        facts: referenceTask.facts,
+        status: "需要本地项目",
+      });
       return;
     }
     if (referenceGenerationBlockedByContract) {
       const nextContract = agentVideoPermissionForMode("reference_allowed");
       updateVideoPermissionContract(nextContract);
       if (!realSampleAction.keyConfigured) {
-        setStatus("已确认参考权限。先在设置里连接图片服务。");
+        rememberBlockedDirectProductAction({
+          toolName: referenceTask.toolName,
+          title: "还不能生成参考",
+          body: "已允许生成参考，但图片服务还没有连接。先去设置里连接图片服务。",
+          next: "连接图片服务后，再点生成参考。",
+          facts: referenceTask.facts,
+          status: "需要图片服务",
+        });
         return;
       }
       if (realSampleAction.disabled || realSampleBusy || !onCreateP6RealSample) {
-        setStatus(realSampleAction.message || (realSampleBusy ? "参考正在生成。" : "当前还不能生成参考。"));
+        const message = realSampleAction.message || (realSampleBusy ? "参考正在生成。" : "当前还不能生成参考。");
+        rememberBlockedDirectProductAction({
+          toolName: referenceTask.toolName,
+          title: "参考任务还不能开始",
+          body: message,
+          next: "等当前任务结束，或按提示补齐条件后再试。",
+          facts: referenceTask.facts,
+          status: message,
+        });
         return;
       }
       if (runtimeState.visualMemory.summary.missing > 0 && onRetryMissingBatch) {
         setStatus("已确认，正在生成参考。");
-        void onRetryMissingBatch();
+        runVisibleDirectProductAction(referenceTask, () => onRetryMissingBatch());
         return;
       }
       setStatus("已确认，正在发送参考任务。");
-      void onCreateP6RealSample({ scope: "project", videoPermissionContract: nextContract, skipConfirm: true });
+      runVisibleDirectProductAction(referenceTask, () => onCreateP6RealSample({ scope: "project", videoPermissionContract: nextContract, skipConfirm: true }));
       return;
     }
     if (!realSampleAction.keyConfigured) {
-      setStatus("先在设置里连接图片服务。");
+      rememberBlockedDirectProductAction({
+        toolName: referenceTask.toolName,
+        title: "还不能生成参考",
+        body: "图片服务还没有连接。先去设置里连接图片服务。",
+        next: "连接图片服务后，再点生成参考。",
+        facts: referenceTask.facts,
+        status: "需要图片服务",
+      });
       return;
     }
     if (realSampleAction.disabled || realSampleBusy || !onCreateP6RealSample) {
-      setStatus(realSampleAction.message || (realSampleBusy ? "参考正在生成。" : "当前还不能生成参考。"));
+      const message = realSampleAction.message || (realSampleBusy ? "参考正在生成。" : "当前还不能生成参考。");
+      rememberBlockedDirectProductAction({
+        toolName: referenceTask.toolName,
+        title: "参考任务还不能开始",
+        body: message,
+        next: "等当前任务结束，或按提示补齐条件后再试。",
+        facts: referenceTask.facts,
+        status: message,
+      });
       return;
     }
     if (runtimeState.visualMemory.summary.missing > 0 && onRetryMissingBatch) {
       setStatus("正在补齐故事流里的参考画面。");
-      void onRetryMissingBatch();
+      runVisibleDirectProductAction(referenceTask, () => onRetryMissingBatch());
       return;
     }
     setStatus("已发送参考任务。");
-    void onCreateP6RealSample({ scope: "project", videoPermissionContract: currentVideoPermissionContract, skipConfirm: true });
+    runVisibleDirectProductAction(referenceTask, () => onCreateP6RealSample({ scope: "project", videoPermissionContract: currentVideoPermissionContract, skipConfirm: true }));
   }
 
   function runFooterEndFrameGeneration() {
     if (!endFrameAction) return;
+    const endFrameTask = {
+      toolName: "generate_references" as DirectProductActionToolName,
+      startedTitle: "结束画面任务已启动",
+      startedBody: "已确认，Agent 正在把结束画面任务交给图片服务。",
+      completedTitle: "结束画面任务已发送",
+      completedBody: "结束画面任务已交给生成队列，完成后会在参考页显示。",
+      failedTitle: "结束画面任务发送失败",
+      next: "等结束画面完成后，到参考页复核。",
+      facts: [
+        { label: "动作", value: "生成结束画面" },
+        { label: "范围", value: "当前镜头" },
+      ],
+    };
     if (referenceGenerationBlockedByProject) {
-      setStatus("先打开或保存本地项目。");
+      rememberBlockedDirectProductAction({
+        toolName: endFrameTask.toolName,
+        title: "还不能生成结束画面",
+        body: "先选择或创建项目文件夹，这样 Agent 才能把结束画面写回项目。",
+        next: "选择项目文件夹后，再生成结束画面。",
+        facts: endFrameTask.facts,
+        status: "需要本地项目",
+      });
       return;
     }
     if (referenceGenerationBlockedByContract) {
       const nextContract = agentVideoPermissionForMode("reference_allowed");
       updateVideoPermissionContract(nextContract);
       if (!endFrameAction.keyConfigured) {
-        setStatus("已确认参考权限。先在设置里连接图片服务。");
+        rememberBlockedDirectProductAction({
+          toolName: endFrameTask.toolName,
+          title: "还不能生成结束画面",
+          body: "已允许生成参考，但图片服务还没有连接。先去设置里连接图片服务。",
+          next: "连接图片服务后，再生成结束画面。",
+          facts: endFrameTask.facts,
+          status: "需要图片服务",
+        });
         return;
       }
       if (endFrameAction.disabled || endFrameBusy || !onCreateImage2EndFrame) {
-        setStatus(endFrameAction.message || (endFrameBusy ? "结束画面正在生成。" : "当前还不能生成结束画面。"));
+        const message = endFrameAction.message || (endFrameBusy ? "结束画面正在生成。" : "当前还不能生成结束画面。");
+        rememberBlockedDirectProductAction({
+          toolName: endFrameTask.toolName,
+          title: "结束画面任务还不能开始",
+          body: message,
+          next: "等当前任务结束，或按提示补齐条件后再试。",
+          facts: endFrameTask.facts,
+          status: message,
+        });
         return;
       }
       setStatus("已确认，正在发送结束画面任务。");
-      void onCreateImage2EndFrame();
+      runVisibleDirectProductAction(endFrameTask, () => onCreateImage2EndFrame());
       return;
     }
     if (!endFrameAction.keyConfigured) {
-      setStatus("先在设置里连接图片服务。");
+      rememberBlockedDirectProductAction({
+        toolName: endFrameTask.toolName,
+        title: "还不能生成结束画面",
+        body: "图片服务还没有连接。先去设置里连接图片服务。",
+        next: "连接图片服务后，再生成结束画面。",
+        facts: endFrameTask.facts,
+        status: "需要图片服务",
+      });
       return;
     }
     if (endFrameAction.disabled || endFrameBusy || !onCreateImage2EndFrame) {
-      setStatus(endFrameAction.message || (endFrameBusy ? "结束画面正在生成。" : "当前还不能生成结束画面。"));
+      const message = endFrameAction.message || (endFrameBusy ? "结束画面正在生成。" : "当前还不能生成结束画面。");
+      rememberBlockedDirectProductAction({
+        toolName: endFrameTask.toolName,
+        title: "结束画面任务还不能开始",
+        body: message,
+        next: "等当前任务结束，或按提示补齐条件后再试。",
+        facts: endFrameTask.facts,
+        status: message,
+      });
       return;
     }
     setStatus("已发送结束画面任务。");
-    void onCreateImage2EndFrame();
+    runVisibleDirectProductAction(endFrameTask, () => onCreateImage2EndFrame());
   }
 
   function runFooterVideoAction() {
     if (!videoSendAction) return;
+    const videoTask = videoQueryMode
+      ? {
+          toolName: "query_video" as DirectProductActionToolName,
+          startedTitle: "开始查询视频结果",
+          startedBody: "Agent 正在查询已经提交的视频任务，不会重复提交。",
+          completedTitle: "查询请求已发送",
+          completedBody: "查询请求已交给运行时，完成后会在预览页显示。",
+          failedTitle: "查询请求失败",
+          next: "等结果完成后，到预览页复核。",
+          facts: [
+            { label: "动作", value: "查询视频" },
+            { label: "范围", value: "当前视频任务" },
+          ],
+        }
+      : {
+          toolName: "submit_video" as DirectProductActionToolName,
+          startedTitle: "开始发送视频",
+          startedBody: "已确认，Agent 正在把视频任务交给 Seedance 串行队列。",
+          completedTitle: "视频任务已发送",
+          completedBody: "视频任务已交给 Seedance 队列，完成后会在预览页显示。",
+          failedTitle: "视频任务发送失败",
+          next: "等 Seedance 回流后，到预览页复核。",
+          facts: [
+            { label: "动作", value: "发送视频" },
+            { label: "范围", value: "当前镜头" },
+          ],
+        };
     if (videoPermissionBlockedByProject) {
-      setStatus("先打开或保存本地项目。");
+      rememberBlockedDirectProductAction({
+        toolName: videoTask.toolName,
+        title: videoQueryMode ? "还不能查询视频" : "还不能发送视频",
+        body: "先选择或创建项目文件夹，这样 Agent 才能读取任务状态并写回结果。",
+        next: "选择项目文件夹后，再继续视频任务。",
+        facts: videoTask.facts,
+        status: "需要本地项目",
+      });
       return;
     }
     if (!videoQueryMode && videoPermissionBlockedByContract) {
       const nextContract = agentVideoPermissionForMode("video_allowed");
       updateVideoPermissionContract(nextContract);
       if (videoBusy || !onSendSeedanceVideo) {
-        setStatus(videoBusy ? "视频任务正在处理。" : "当前还不能发送视频。");
+        const message = videoBusy ? "视频任务正在处理。" : "当前还不能发送视频。";
+        rememberBlockedDirectProductAction({
+          toolName: videoTask.toolName,
+          title: "视频任务还不能开始",
+          body: message,
+          next: "等当前任务结束，或按提示补齐条件后再试。",
+          facts: videoTask.facts,
+          status: message,
+        });
         return;
       }
       if (videoSendAction.disabled || !videoSendAction.ready || !videoSendAction.keyConfigured || videoAlreadySent) {
-        setStatus(videoSendAction.message || "视频还不能发送。");
+        const message = videoSendAction.message || "视频还不能发送。";
+        rememberBlockedDirectProductAction({
+          toolName: videoTask.toolName,
+          title: "视频还不能发送",
+          body: message,
+          next: "按提示补齐条件后，再点发送视频。",
+          facts: videoTask.facts,
+          status: message,
+        });
         return;
       }
       setStatus("已确认，开始发送视频。");
-      void onSendSeedanceVideo({ videoPermissionContract: nextContract });
+      runVisibleDirectProductAction(videoTask, () => onSendSeedanceVideo({ videoPermissionContract: nextContract }));
       return;
     }
     if (videoBusy || !onSendSeedanceVideo) {
-      setStatus(videoBusy ? "视频任务正在处理。" : "当前还不能发送视频。");
+      const message = videoBusy ? "视频任务正在处理。" : "当前还不能发送视频。";
+      rememberBlockedDirectProductAction({
+        toolName: videoTask.toolName,
+        title: videoQueryMode ? "视频查询还不能开始" : "视频任务还不能开始",
+        body: message,
+        next: "等当前任务结束，或按提示补齐条件后再试。",
+        facts: videoTask.facts,
+        status: message,
+      });
       return;
     }
     if (!videoQueryMode && (videoSendAction.disabled || !videoSendAction.ready || !videoSendAction.keyConfigured || videoAlreadySent)) {
-      setStatus(videoSendAction.message || "视频还不能发送。");
+      const message = videoSendAction.message || "视频还不能发送。";
+      rememberBlockedDirectProductAction({
+        toolName: videoTask.toolName,
+        title: "视频还不能发送",
+        body: message,
+        next: "按提示补齐条件后，再点发送视频。",
+        facts: videoTask.facts,
+        status: message,
+      });
       return;
     }
     setStatus(videoQueryMode ? "开始查询视频结果。" : "开始发送视频。");
-    void onSendSeedanceVideo({ videoPermissionContract: currentVideoPermissionContract });
+    runVisibleDirectProductAction(videoTask, () => onSendSeedanceVideo({ videoPermissionContract: currentVideoPermissionContract }));
   }
 
   function updateText(value: string) {
@@ -1980,6 +3922,21 @@ export function MinimalAgentPanel({
     resetPreparedComposerState("继续写");
     setText(item.followUpIntent);
     window.setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 0);
+  }
+
+  function currentComposerSelectionOverride(): ComposerSelectionOverride {
+    if (scopedShotIds.length > 1) return { selectedShotIds: scopedShotIds };
+    if (currentSelectedShotId) return { selectedShotId: currentSelectedShotId };
+    if (asset?.id) return { selectedAssetId: asset.id };
+    if (sectionId && !scopedShotIds.length && !asset) return { sectionId };
+    return {};
+  }
+
+  function selectionOverrideFromAssetAction(action: MinimalAgentAssetAction): ComposerSelectionOverride {
+    if (action.selectedAssetId) return { selectedAssetId: action.selectedAssetId };
+    if (action.selectedShotIds?.length === 1) return { selectedShotId: action.selectedShotIds[0] };
+    if (action.selectedShotIds?.length) return { selectedShotIds: action.selectedShotIds };
+    return currentComposerSelectionOverride();
   }
 
   function openAgentResultView() {
@@ -2064,12 +4021,7 @@ export function MinimalAgentPanel({
     addComposerFiles(event.dataTransfer.files);
   }
 
-  async function prepareChange(intentOverride?: string, selectionOverride?: {
-    selectedShotId?: string;
-    selectedShotIds?: string[];
-    selectedAssetId?: string;
-    sectionId?: string;
-  }) {
+  async function prepareChange(intentOverride?: string, selectionOverride?: ComposerSelectionOverride) {
     if (isPreparingPlan) return;
     setIsPreparingPlan(true);
     try {
@@ -2080,6 +4032,51 @@ export function MinimalAgentPanel({
         : await composerIntentFromInput(text, attachments);
       if (!userIntent) {
         setStatus("先写一句，或拖文件");
+        return;
+      }
+      if (isSaveDirectorSkillIntent(userIntent)) {
+        requestSelectedSkillDraftSave(userIntent);
+        return;
+      }
+      const currentProjectContinueIntent = currentProjectHasStoryContext
+        && intentContinuesCurrentProject(userIntent);
+      if (onStartNewVideoDraftFromAgent && !currentProjectContinueIntent && intentStartsFreshVideoDraft(userIntent)) {
+        setStatus("开始新草案");
+        setText("");
+        setAttachments([]);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        await onStartNewVideoDraftFromAgent(userIntent);
+        return;
+      }
+      if (
+        (readyNewVideoDraftForAgent || (
+          !localProjectReadyForTools
+          && runtimeState.storyFlow.shots.length === 0
+          && isNewVideoDraftConfirmationRouteIntent(userIntent)
+        ))
+        && onStartNewVideoDraftFromAgent
+        && !currentProjectContinueIntent
+        && runtimeState.storyFlow.shots.length === 0
+        && shouldRouteToReadyNewVideoDraft(userIntent)
+      ) {
+        setStatus("交给当前草案");
+        setText("");
+        setAttachments([]);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        await onStartNewVideoDraftFromAgent(userIntent);
+        return;
+      }
+      if (
+        !localProjectReadyForTools
+        && !currentProjectHasStoryContext
+        && onStartNewVideoDraftFromAgent
+        && intentCanStartNewVideoPlanningWithoutProject(userIntent)
+      ) {
+        setStatus("正在拆镜头");
+        setText("");
+        setAttachments([]);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        await onStartNewVideoDraftFromAgent(userIntent);
         return;
       }
       if (!localProjectReadyForTools && intentNeedsLocalProjectBeforeTooling(userIntent)) {
@@ -2188,6 +4185,9 @@ export function MinimalAgentPanel({
       if (stagedAgentPlan?.agentTimelineEntries?.length) {
         setAgentTimelineEntries(stagedAgentPlan.agentTimelineEntries);
       }
+      if (stagedAgentPlan?.agentKernelTurn) {
+        setLatestAgentKernelTurn(stagedAgentPlan.agentKernelTurn);
+      }
       const nextAgentActionEnvelope = choosePreparedAgentAction(
         localAgentActionEnvelope,
         stagedAgentPlan?.agentActionEnvelope,
@@ -2262,7 +4262,7 @@ export function MinimalAgentPanel({
     if (!resumeAgentAfterLocalProjectSetupRef.current || !localProjectReadyForTools) return;
     resumeAgentAfterLocalProjectSetupRef.current = false;
     setStatus("继续检查项目");
-    void prepareChange("继续");
+    void prepareChange("继续", currentComposerSelectionOverride());
   }, [localProjectReadyForTools, runtimeProjectKey]);
 
   function revisePlan() {
@@ -2278,6 +4278,26 @@ export function MinimalAgentPanel({
     setIsRetryingTool(false);
     if (previousIntent) setText(previousIntent);
     setStatus(previousIntent || text.trim() ? "继续写" : "等待输入");
+  }
+
+  function reviseFromAgentMessage(message: MinimalAgentMessage) {
+    const previousIntent = intentWithQaRevisionHint(preparedContext?.userIntent, preparedContext?.qaFeedback);
+    const revisionIntent = [previousIntent, agentMessageRevisionIntent(message)]
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join("\n\n");
+    setWorkflow(undefined);
+    setProjection(undefined);
+    setFeedbackRecompile(undefined);
+    setPreparedContext(undefined);
+    setAgentActionEnvelope(undefined);
+    setAgentToolHandoff(undefined);
+    setPlanPhase("idle");
+    setLocalPrototypeAgentDemo(undefined);
+    setIsRetryingTool(false);
+    setText(revisionIntent);
+    setStatus(revisionIntent ? "继续改这一步" : "等待输入");
+    window.setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 0);
   }
 
   function closeReadOnlyAgentStatus() {
@@ -2296,13 +4316,13 @@ export function MinimalAgentPanel({
   async function continueFromStatusInspection() {
     const nextIntent = suggestedIntentFromStatusInspection(agentActionEnvelope, preparedContext?.qaFeedback);
     closeReadOnlyAgentStatus();
-    if (nextIntent) await prepareChange(nextIntent);
+    if (nextIntent) await prepareChange(nextIntent, currentComposerSelectionOverride());
   }
 
   async function continueFromStatusActionPath(intent: string) {
     const nextIntent = intent.trim();
     closeReadOnlyAgentStatus();
-    if (nextIntent) await prepareChange(nextIntent);
+    if (nextIntent) await prepareChange(nextIntent, currentComposerSelectionOverride());
   }
 
   async function inspectNextAfterConfirmedAction() {
@@ -2315,7 +4335,7 @@ export function MinimalAgentPanel({
     setPlanPhase("idle");
     setLocalPrototypeAgentDemo(undefined);
     setIsRetryingTool(false);
-    await prepareChange("现在项目怎么样");
+    await prepareChange("现在项目怎么样", currentComposerSelectionOverride());
   }
 
   async function continueNextAfterConfirmedAction() {
@@ -2328,7 +4348,7 @@ export function MinimalAgentPanel({
     setPlanPhase("idle");
     setLocalPrototypeAgentDemo(undefined);
     setIsRetryingTool(false);
-    await prepareChange("下一步");
+    await prepareChange("下一步", currentComposerSelectionOverride());
   }
 
   function buildConfirmedAgentToolHandoff(action: DirectorAgentActionEnvelope | undefined) {
@@ -2386,6 +4406,171 @@ export function MinimalAgentPanel({
     void onRememberAgentTimelineEntries?.(entries);
   }
 
+  function rememberDirectProductAction(input: {
+    phase: "started" | "running" | "completed" | "failed" | "blocked";
+    toolName: DirectProductActionToolName;
+    title: string;
+    body: string;
+    next: string;
+    facts?: Array<{ label: string; value: string }>;
+    dedupeKey?: string;
+  }) {
+    rememberAgentTimelineEntries([buildDirectProductActionTimelineEntry({
+      createdAt: new Date().toISOString(),
+      ...input,
+    })]);
+  }
+
+  function rememberBlockedDirectProductAction(input: {
+    toolName: DirectProductActionToolName;
+    title: string;
+    body: string;
+    next: string;
+    facts?: Array<{ label: string; value: string }>;
+    status?: string;
+  }) {
+    rememberDirectProductAction({
+      phase: "blocked",
+      toolName: input.toolName,
+      title: input.title,
+      body: input.body,
+      next: input.next,
+      facts: input.facts,
+    });
+    setStatus(input.status || input.body);
+  }
+
+  useEffect(() => {
+    const timelineShowsReferenceReview = agentTimelineEntries.some((entry) =>
+      entry.toolName === "generate_references" && /复核/.test(`${entry.title} ${entry.body}`),
+    );
+    const visibleReferenceStatus = realSampleAction?.status === "verified" && referenceDisplayableCount === 0
+      ? "running"
+      : realSampleAction?.status;
+    const projectedReferenceStatus = referenceNeedsReview
+      ? "needs_review"
+      : referencesReadyAfterReview && timelineShowsReferenceReview
+        ? "verified"
+        : visibleReferenceStatus;
+    const projectedReferenceMessage = referenceNeedsReview
+      ? `${referenceReviewCount} 项参考需要复核。`
+      : referencesReadyAfterReview && timelineShowsReferenceReview
+        ? "参考可用，下一步可以发送视频。"
+      : realSampleAction?.status === "verified" && referenceDisplayableCount === 0
+        ? "参考生成中，等待结果回到参考页。"
+        : realSampleAction?.message;
+    const projectedState = referenceDirectProductActionState(projectedReferenceStatus, projectedReferenceMessage);
+    if (!projectedState) return;
+    const alreadyVisible = agentTimelineEntries.some((entry) =>
+      entry.toolName === "generate_references"
+      && entry.title === projectedState.title
+      && entry.body === projectedState.body
+    );
+    if (alreadyVisible) return;
+    rememberDirectProductAction({
+      phase: projectedState.phase,
+      toolName: "generate_references",
+      title: projectedState.title,
+      body: projectedState.body,
+      next: projectedState.next,
+      dedupeKey: `reference_state_${projectedReferenceStatus || "unknown"}`,
+      facts: [
+        { label: "动作", value: "生成参考" },
+        { label: "状态", value: projectedState.status },
+      ],
+    });
+    setStatus(projectedState.status);
+  }, [
+    agentTimelineEntries,
+    realSampleAction?.message,
+    realSampleAction?.status,
+    referenceDisplayableCount,
+    referenceLockedCount,
+    referenceNeedsReview,
+    referenceReviewCount,
+    referencesReadyAfterReview,
+  ]);
+
+  useEffect(() => {
+    const projectedState = videoDirectProductActionState(
+      videoSendAction?.status,
+      videoSendAction?.message,
+      videoCanResume,
+      videoSendAction?.suggestedActionLabel,
+    );
+    if (!projectedState) return;
+    const alreadyVisible = agentTimelineEntries.some((entry) =>
+      entry.toolName === projectedState.toolName
+      && entry.title === projectedState.title
+      && entry.body === projectedState.body
+    );
+    if (alreadyVisible) return;
+    rememberDirectProductAction({
+      phase: projectedState.phase,
+      toolName: projectedState.toolName,
+      title: projectedState.title,
+      body: projectedState.body,
+      next: projectedState.next,
+      dedupeKey: `video_state_${videoSendAction?.status || "unknown"}_${videoCanResume ? "resume" : "normal"}`,
+      facts: [
+        { label: "动作", value: projectedState.toolName === "query_video" ? "查询视频" : "发送视频" },
+        { label: "状态", value: projectedState.status },
+      ],
+    });
+    setStatus(projectedState.status);
+  }, [
+    agentTimelineEntries,
+    videoCanResume,
+    videoSendAction?.message,
+    videoSendAction?.status,
+    videoSendAction?.suggestedActionLabel,
+  ]);
+
+  function runVisibleDirectProductAction(input: DirectProductActionCopy, performTask: () => unknown | PromiseLike<unknown>) {
+    rememberDirectProductAction({
+      phase: "started",
+      toolName: input.toolName,
+      title: input.startedTitle,
+      body: input.startedBody,
+      next: input.next,
+      facts: input.facts,
+    });
+    const markCompleted = (result?: unknown) => {
+      const resolved = resolveDirectProductActionResult(input, result);
+      rememberDirectProductAction({
+        phase: resolved.phase,
+        toolName: input.toolName,
+        title: resolved.title,
+        body: resolved.body,
+        next: resolved.next,
+        facts: input.facts,
+      });
+      if (resolved.status) setStatus(resolved.status);
+    };
+    const markFailed = (error: unknown) => {
+      const message = error instanceof Error && error.message.trim() ? error.message.trim() : "动作没有成功执行。";
+      rememberDirectProductAction({
+        phase: "failed",
+        toolName: input.toolName,
+        title: input.failedTitle,
+        body: message,
+        next: directProductActionFailureNext(input, message),
+        facts: input.facts,
+      });
+      setStatus(message);
+    };
+    try {
+      const result = performTask();
+      if (isPromiseLike(result)) {
+        void Promise.resolve(result).then(markCompleted).catch(markFailed);
+      } else {
+        markCompleted(result);
+      }
+    } catch (error) {
+      markFailed(error);
+    }
+  }
+
   async function runConfirmedAgentTool(
     action: DirectorAgentActionEnvelope | undefined,
     userIntent: string,
@@ -2434,6 +4619,7 @@ export function MinimalAgentPanel({
     setStatus(canConfirmFeedback ? "正在保存修改" : canPreviewPrototypeDemo ? "正在整理预览" : "已加入待处理");
     if (confirmed) onProjectStoreApplyPlanReady?.(confirmed.applyPlan);
     if (canConfirmFeedback && feedbackRecompile && onDirectorFeedbackConfirmed) {
+      rememberConfirmedToolStart(agentActionEnvelope);
       try {
         await onDirectorFeedbackConfirmed(feedbackRecompile);
         setStatus("修改已保存");
@@ -2450,6 +4636,14 @@ export function MinimalAgentPanel({
         };
         setLocalPrototypeAgentDemo(savedFeedbackRun);
         if (agentActionEnvelope) {
+          rememberConfirmedToolOutcome(agentActionEnvelope, {
+            status: "completed",
+            label: savedFeedbackRun.result?.label || "修改计划已写入项目",
+            projectRecordPreserved: true,
+            waitingReview: true,
+            previewReady: false,
+            resultStatus: "ready",
+          });
           rememberConfirmedAgentActionLogItem(
             agentActionLogItemFromResult(agentActionEnvelope, agentToolHandoff, savedFeedbackRun, "confirmed"),
           );
@@ -2467,6 +4661,13 @@ export function MinimalAgentPanel({
         };
         setLocalPrototypeAgentDemo(failedFeedbackRun);
         if (agentActionEnvelope) {
+          rememberConfirmedToolOutcome(agentActionEnvelope, {
+            status: "failed",
+            label: failedFeedbackRun.result?.label || "修改保存失败，项目已保留。",
+            projectRecordPreserved: true,
+            waitingReview: true,
+            previewReady: false,
+          });
           rememberConfirmedAgentActionLogItem(
             agentActionLogItemFromResult(agentActionEnvelope, agentToolHandoff, failedFeedbackRun, "confirmed"),
           );
@@ -2501,6 +4702,9 @@ export function MinimalAgentPanel({
       });
       if (previewResult?.agentTimelineEntries?.length) {
         setAgentTimelineEntries(previewResult.agentTimelineEntries);
+      }
+      if (previewResult?.agentKernelTurn) {
+        setLatestAgentKernelTurn(previewResult.agentKernelTurn);
       }
       const authoritativeAgentActionEnvelope = previewResult?.agentActionEnvelope || agentActionEnvelope;
       if (authoritativeAgentActionEnvelope) {
@@ -2554,6 +4758,13 @@ export function MinimalAgentPanel({
       };
       setLocalPrototypeAgentDemo(failedRun);
       if (agentActionEnvelope) {
+        rememberConfirmedToolOutcome(agentActionEnvelope, {
+          status: "failed",
+          label: errorMessage,
+          projectRecordPreserved: true,
+          waitingReview: true,
+          previewReady: false,
+        });
         rememberConfirmedAgentActionLogItem(
           agentActionLogItemFromResult(agentActionEnvelope, confirmedAgentToolHandoff || agentToolHandoff, failedRun, "confirmed"),
         );
@@ -2593,6 +4804,13 @@ export function MinimalAgentPanel({
         },
       };
       setLocalPrototypeAgentDemo(failedRetryRun);
+      rememberConfirmedToolOutcome(agentActionEnvelope, {
+        status: "failed",
+        label: failedRetryRun.result?.label || "重试失败，项目已保留。",
+        projectRecordPreserved: true,
+        waitingReview: true,
+        previewReady: false,
+      });
       rememberConfirmedAgentActionLogItem(
         agentActionLogItemFromResult(agentActionEnvelope, refreshedHandoff, failedRetryRun, "confirmed"),
       );
@@ -2602,7 +4820,7 @@ export function MinimalAgentPanel({
   }
 
   const actionBlocked = agentActionEnvelope?.status === "blocked";
-  const readOnlyStatusInspection = agentActionIsStatusInspection(agentActionEnvelope);
+  const readOnlyStatusInspection = readOnlyAgentStatusInspection;
   const displayedAgentToolHandoff = readOnlyStatusInspection ? undefined : agentToolHandoff;
   const handoffPreflightBlocked = planPhase !== "confirmed" && agentToolHasPreflightBlocker(displayedAgentToolHandoff, agentActionEnvelope);
   const confirmationBlocked = Boolean(actionBlocked || handoffPreflightBlocked);
@@ -2625,7 +4843,7 @@ export function MinimalAgentPanel({
         },
       }
     : undefined;
-  const referenceFooterAction = showRealSampleAction && realSampleAction?.status !== "verified"
+  const referenceFooterAction = showRealSampleAction && !referencesUsableForAgent && realSampleAction?.status !== "verified"
     ? {
         label: realSampleLabel,
         disabled: referenceGenerationBlockedByProject || (!referenceGenerationBlockedByContract && (Boolean(realSampleAction?.disabled) || !realSampleAction?.keyConfigured || realSampleBusy || !onCreateP6RealSample)),
@@ -2741,6 +4959,20 @@ export function MinimalAgentPanel({
   const footerDirectAction = canOfferFooterDirectAction
     ? availableFooterDirectAction
     : undefined;
+  function footerDirectActionBoundaryFor(action?: typeof availableFooterDirectAction) {
+    if (!action) return "";
+    if (
+      referenceGenerationBlockedByContract
+      && (action.label === realSampleLabel || action.label === endFrameLabel)
+    ) {
+      return "当前是只出计划；点上方确认才会生成参考。";
+    }
+    if (videoPermissionBlockedByContract && action.label === videoActionLabel) {
+      return "当前是只出计划；点上方确认才会提交视频。";
+    }
+    return "";
+  }
+  const footerDirectActionBoundaryNotice = footerDirectActionBoundaryFor(footerDirectAction);
   const projectNeededForGeneratedStory = !localProjectReadyForTools
     && !hasComposerInput
     && runtimeState.storyFlow.shots.length > 0
@@ -2772,6 +5004,45 @@ export function MinimalAgentPanel({
   const agentTimelineNextLine = agentTimelineStatusView
     ? `${agentTimelineStatusView.stage}：${agentTimelineStatusView.nextAction}`
     : "";
+  const visibleTimelineConfirmationMessage = useMemo(
+    () => latestVisibleTimelineConfirmationMessage(agentTimelineEntries, referencesUsableForAgent),
+    [agentTimelineEntries, referencesUsableForAgent],
+  );
+  const latestNewVideoDraftCommitted = isCommittedNewVideoDraftAgentRun(latestPrototypeAgentDemo);
+  const currentTimelineConfirmationLabel = !latestNewVideoDraftCommitted
+    && visibleTimelineConfirmationMessage
+    ? minimalAgentConfirmationAction(visibleTimelineConfirmationMessage, NEW_VIDEO_DRAFT_CONFIRM_LABEL).label
+    : "";
+  const hasAgentTimelineConfirmation = Boolean(
+    visibleTimelineConfirmationMessage
+    || agentTimelineEntries.some((entry) => entry.type === "confirmation_request" && entry.status !== "done"),
+  );
+  const timelineNewVideoDraftConfirmationReady = Boolean(
+    !latestNewVideoDraftCommitted
+      && !newVideoDraftBusyForAgent
+      && visibleTimelineConfirmationMessage
+      && currentTimelineConfirmationLabel
+      && isNewVideoDraftConfirmationLabel(currentTimelineConfirmationLabel)
+      && /等待确认|草案|确认|故事流/.test([
+        agentTimelineStatusLine,
+        agentTimelineNextLine,
+        visibleTimelineConfirmationMessage?.body,
+        visibleTimelineConfirmationMessage?.next,
+      ].filter(Boolean).join(" ")),
+  );
+  const visibleNewVideoDraftConfirmation = Boolean(
+    !latestNewVideoDraftCommitted
+      && !newVideoDraftBusyForAgent
+      && visibleTimelineConfirmationMessage
+      && currentTimelineConfirmationLabel
+      && isNewVideoDraftConfirmationLabel(currentTimelineConfirmationLabel)
+      && /等待确认|草案|确认|故事流/.test([
+        agentTimelineStatusLine,
+        agentTimelineNextLine,
+        visibleTimelineConfirmationMessage?.body,
+        visibleTimelineConfirmationMessage?.next,
+      ].filter(Boolean).join(" ")),
+  );
   const composerPrimaryIsFresh = hasComposerInput || !workflow || planPhase === "idle" || planPhase === "confirmed";
   const composerProjectInbox = useMemo(
     () => buildProjectInboxProjection({
@@ -2842,12 +5113,33 @@ export function MinimalAgentPanel({
         },
       };
     }
+    if (activeNewVideoDraftConfirmation || visibleNewVideoDraftConfirmation) {
+      const disabled = Boolean(!onStartNewVideoDraftFromAgent || hasComposerInput || attachments.length || isPreparingPlan);
+      const disabledReason = isPreparingPlan
+        ? "正在整理，稍等一下。"
+        : hasComposerInput || attachments.length
+          ? "先发送或清空当前输入，再确认草案。"
+          : !onStartNewVideoDraftFromAgent
+            ? "当前不能从消息里确认草案。"
+            : "";
+      return {
+        label: NEW_VIDEO_DRAFT_CONFIRM_LABEL,
+        disabled,
+        disabledReason,
+        statusLine: disabled ? disabledReason : `下一步：${NEW_VIDEO_DRAFT_CONFIRM_LABEL}`,
+        perform: () => {
+          onStartNewVideoDraftFromAgent?.(NEW_VIDEO_DRAFT_CONFIRM_LABEL);
+        },
+      };
+    }
     if (projectBlockedWithoutFooterResolver) {
       return {
         label: "发送",
         disabled: true,
         disabledReason: "继续写想法也可以；生成参考、视频或导出前需要本地项目。",
-        statusLine: "故事草案已就绪；可以继续描述修改，生成前再打开项目。",
+        statusLine: hasComposerInput
+          ? "想法已写好；生成前再选择项目文件夹。"
+          : "等待输入：先写一句想法，确认前不会生成。",
         perform: () => {
           void prepareChange();
         },
@@ -2858,7 +5150,7 @@ export function MinimalAgentPanel({
         label: footerDirectAction.label,
         disabled: footerDirectAction.disabled,
         disabledReason: footerDirectAction.disabledReason,
-        statusLine: footerDirectAction.disabled ? footerDirectAction.disabledReason : `下一步：${footerDirectAction.label}`,
+        statusLine: footerDirectAction.disabled ? footerDirectAction.disabledReason : footerDirectActionBoundaryNotice || `下一步：${footerDirectAction.label}`,
         perform: footerDirectAction.perform,
       };
     }
@@ -2912,16 +5204,44 @@ export function MinimalAgentPanel({
   const primaryAriaLabel = primaryDisabled
     ? `${primaryLabel}：${primaryDisabledReason}`
     : primaryLabel;
+  const canContinuePendingNewVideoDraft = Boolean(
+    newVideoDraftPendingForAgent
+      && onContinueNewVideoDraftFromAgent
+      && !hasComposerInput
+      && !attachments.length,
+  );
   const sendDisabledReason = isPreparingPlan
     ? `${status || "正在整理"}，稍等一下。`
-    : !hasComposerInput
+    : newVideoDraftPlanningForAgent
+      ? "AI 正在拆镜头，等草案出来后再继续。"
+    : !hasComposerInput && !canContinuePendingNewVideoDraft
       ? "先写一句，或拖入文件。"
       : "";
   const sendDisabled = Boolean(sendDisabledReason);
-  const sendAriaLabel = sendDisabled ? `发送：${sendDisabledReason}` : "发送";
+  const sendAriaLabel = "发送";
   function handleSend() {
     if (sendDisabled) {
       setStatus(sendDisabledReason);
+      return;
+    }
+    if (canContinuePendingNewVideoDraft) {
+      setStatus("正在拆故事和镜头。");
+      void onContinueNewVideoDraftFromAgent?.();
+      return;
+    }
+    const continueDirectAction = composerContinueIntent && !attachments.length
+      ? availableFooterDirectAction
+      : undefined;
+    if (continueDirectAction) {
+      setText("");
+      setAttachments([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (continueDirectAction.disabled) {
+        setStatus(continueDirectAction.disabledReason);
+        return;
+      }
+      setStatus(footerDirectActionBoundaryFor(continueDirectAction) || `下一步：${continueDirectAction.label}`);
+      continueDirectAction.perform();
       return;
     }
     void prepareChange();
@@ -2933,7 +5253,26 @@ export function MinimalAgentPanel({
     }
     primaryOperation.perform();
   }
-  const agentNextActionAvailable = !hasComposerInput && primaryLabel !== "发送";
+  const agentNextActionAvailable = !hasComposerInput && primaryLabel !== "发送" && !readOnlyStatusInspection;
+  const statusReadyNewVideoDraftConfirmation = Boolean(
+    !latestNewVideoDraftCommitted
+      && !newVideoDraftBusyForAgent
+      && !visibleTimelineConfirmationMessage
+      && projectStatusView?.stage === "等待确认"
+      && /确认|草案|故事流|写入故事流/.test(`${newVideoDraftStatusCopy} ${newVideoDraftTimelineCopy}`),
+  );
+  const footerNewVideoDraftConfirmationReady = Boolean(
+    !latestNewVideoDraftCommitted
+      && (
+        (isNewVideoDraftConfirmationLabel(currentTimelineConfirmationLabel) && timelineNewVideoDraftConfirmationReady)
+        || statusReadyNewVideoDraftConfirmation
+      ),
+  );
+  const visibleConfirmationActionAvailable = agentNextActionAvailable
+    || visibleNewVideoDraftConfirmation
+    || Boolean(visibleTimelineConfirmationMessage && !hasComposerInput && !isPreparingPlan);
+  const showFooterNextActionButton = (agentNextActionAvailable && !hasComposerInput) || footerNewVideoDraftConfirmationReady;
+  const footerNextLabel = footerNewVideoDraftConfirmationReady ? currentTimelineConfirmationLabel || NEW_VIDEO_DRAFT_CONFIRM_LABEL : primaryLabel;
   const footerPrimaryLabel = isPreparingPlan ? "整理中" : "发送";
   const footerPrimaryDisabled = sendDisabled;
   const footerPrimaryDisabledReason = sendDisabledReason;
@@ -2941,17 +5280,30 @@ export function MinimalAgentPanel({
   const footerPrimaryTitle = footerPrimaryDisabled
     ? footerPrimaryDisabledReason
     : "发送给 AI 导演，也可以按 Cmd Enter";
+  const footerSelectionTargetCopy = hasActiveSelection
+    ? agentNextActionAvailable && !hasComposerInput
+      ? `输入文字会引用：${displayedCompactScopeLabel}；上方确认按行动卡范围执行。`
+      : `输入文字会引用：${displayedCompactScopeLabel}`
+    : "";
   const footerActionIsVideoQuery = agentNextActionAvailable && videoQueryMode;
   const footerStatusCopy = hasComposerInput
     ? `识别为：${composerIntentRoute.label}`
+    : canContinuePendingNewVideoDraft
+      ? "内容已准备，点发送让 AI 导演拆故事"
+    : agentTimelineStatusView?.stage === "等待确认" && currentTimelineConfirmationLabel
+      ? `消息里等待你确认：${currentTimelineConfirmationLabel || NEW_VIDEO_DRAFT_CONFIRM_LABEL}`
+    : currentTimelineConfirmationLabel
+      ? `消息里等待你确认：${currentTimelineConfirmationLabel}`
     : footerActionIsVideoQuery
       ? "消息里可以查询结果，不会重复提交"
     : referenceReviewFooterAction && agentNextActionAvailable
       ? "消息里建议先去参考复核"
     : videoBlockedRecoveryFooterAction && agentNextActionAvailable && primaryLabel === videoBlockedRecoveryFooterAction.label
       ? "消息里建议补参考，不会提交视频"
-    : agentNextActionAvailable
-      ? `消息里有下一步：${primaryLabel}`
+    : footerDirectActionBoundaryNotice && !hasAgentTimelineConfirmation
+      ? footerDirectActionBoundaryNotice
+    : showFooterNextActionButton
+      ? "消息里有下一步建议，也可以继续写想法。"
     : agentTimelineNextLine
       ? agentTimelineNextLine
     : primaryDisabled
@@ -2959,11 +5311,13 @@ export function MinimalAgentPanel({
       : `按下后：${statusLineText}`;
   const displayStatusLineText = footerActionIsVideoQuery
     ? "等待即梦结果"
-    : agentTimelineStatusLine || statusLineText;
+    : cleanEmptyComposerStatusLine(agentTimelineStatusLine || statusLineText, hasComposerInput);
   const composerHint = projectRequiredForWorkflow
-    ? canResolveProjectFromFooter
-      ? `可以点消息里的「${primaryLabel}」继续；也可以继续写想法。`
+      ? canResolveProjectFromFooter
+      ? `可以在消息中确认「${footerNextLabel}」继续；也可以继续写想法。`
       : "当前仍可继续改想法；生成前要先准备本地项目。"
+    : canContinuePendingNewVideoDraft
+      ? "内容已准备，点发送让 AI 导演拆故事和镜头。"
     : text.trim()
       ? "点发送或 Cmd Enter，交给 AI 导演整理"
       : attachments.length
@@ -2972,16 +5326,22 @@ export function MinimalAgentPanel({
           ? "先写一句想法，或拖入素材；我还能继续帮你整理。"
           : videoBlockedRecoveryFooterAction
             ? referenceReviewFooterAction && agentNextActionAvailable
-              ? "先去参考复核，确认素材能不能用。"
-              : "点消息里的补参考，不会提交视频；也可以直接说改法。"
-          : videoQueryMode
-            ? "点消息里的查询结果，不会重复提交"
+          ? "先去参考复核，确认素材能不能用。"
+          : footerDirectActionBoundaryNotice && !hasAgentTimelineConfirmation
+            ? `${footerDirectActionBoundaryNotice} 也可以继续说改法。`
+          : "需要时在消息中确认补参考；不会提交视频，也可以直接说改法。"
+        : videoQueryMode
+            ? "可以在消息中查询结果，不会重复提交"
           : hasBoundSelection
-            ? agentNextActionAvailable
-              ? "已选中内容，直接说改法；也可以点消息里的确认继续"
-              : "已选中内容，直接说改法，点发送或 Cmd Enter"
-            : agentNextActionAvailable
-              ? `${composerProjectObservation.currentTask.plan} · 点消息里的确认继续`
+            ? showFooterNextActionButton && currentTimelineConfirmationLabel
+              ? "已选中内容，直接说改法；确认前不会执行。"
+              : showFooterNextActionButton
+              ? "已选中内容，直接说改法。"
+                : "已选中内容，直接说改法，或说“继续下一步”。"
+            : showFooterNextActionButton && currentTimelineConfirmationLabel
+              ? `${composerProjectObservation.currentTask.plan} · 等待你确认`
+              : showFooterNextActionButton
+                ? `${composerProjectObservation.currentTask.plan} · 也可以继续补充想法`
               : `${composerProjectObservation.currentTask.plan} · 点发送`;
   const footerHintCopy = composerHint.trim() === footerStatusCopy.trim() ? "" : composerHint;
   if (isComposerCollapsed) {
@@ -2993,7 +5353,7 @@ export function MinimalAgentPanel({
           onClick={() => {
             setIsComposerCollapsed(false);
           }}
-          aria-label="展开底部输入框"
+          aria-label="展开 AI 导演对话区"
         >
           <MessageCircle size={15} aria-hidden="true" />
           <span>{displayedCompactScopeLabel}</span>
@@ -3037,10 +5397,10 @@ export function MinimalAgentPanel({
   const actionFacts = agentActionEnvelope
     ? [
         { label: "动作", value: agentActionEnvelope.summary },
-        { label: "对象", value: agentActionEnvelope.target.label },
+        { label: "对象", value: directorAgentDisplayTargetLabel(agentActionEnvelope.target, agentActionEnvelope.sourceContext) },
         { label: "进度", value: agentActionEnvelope.sourceContext.projectReadiness.summary },
         { label: "模式", value: agentActionEnvelope.sourceContext.projectReadiness.modeSummary },
-        { label: "工作范围", value: agentActionEnvelope.executionContract.mode === "plan_only" ? "先整理" : agentActionEnvelope.executionContract.mode === "reference_allowed" ? "可做参考" : "可发视频" },
+        { label: "执行方式", value: agentExecutionModeLabel(agentActionEnvelope) },
       ]
     : [];
   const handoffFacts = displayedAgentToolHandoff
@@ -3069,10 +5429,10 @@ export function MinimalAgentPanel({
     ? actionFacts
     : handoffFacts.length
     ? [...handoffFacts, ...stagedProjectFacts, ...actionFacts.slice(0, 1)]
-    : feedbackFacts.length
-    ? feedbackFacts
     : actionFacts.length
       ? [...actionFacts, ...stagedProjectFacts]
+    : feedbackFacts.length
+    ? feedbackFacts
     : workflow
     ? [...workflowPlanFacts(workflow), { label: "范围", value: "故事 / 镜头 / 复核" }]
     : [];
@@ -3080,12 +5440,12 @@ export function MinimalAgentPanel({
   const actionDiffs = agentActionDiffs(agentActionEnvelope);
   const agentUnderstanding = agentActionEnvelope?.status === "blocked"
     ? preparedContext?.qaFeedback?.summary || agentActionEnvelope.userFacingMessage
+    : agentActionEnvelope
+      ? agentActionEnvelope.userFacingMessage
     : feedbackRecompile
     ? directorFeedbackCanConfirm(feedbackRecompile)
       ? "已整理好。确认前不会生成。"
       : "还不够明确。请说清楚要改角色、动作、分镜、场景还是声音。"
-    : agentActionEnvelope
-      ? agentActionEnvelope.userFacingMessage
     : preparedContext?.userIntent?.trim()
     ? `已整理成待确认修改：${preparedContext.userIntent.trim()}`
     : text.trim()
@@ -3142,7 +5502,7 @@ export function MinimalAgentPanel({
   const agentNoteLabel = workflow
     ? readOnlyStatusInspection ? "项目状态" : planPhase === "confirmed" ? "已确认" : "待确认"
     : "我先帮你整理";
-  const showAgentNote = Boolean(workflow && planPhase !== "confirmed");
+  const showAgentNote = Boolean(workflow && planPhase !== "confirmed" && agentTimelineEntries.length === 0);
   const agentActionTitle = agentActionEnvelope?.summary
     || (feedbackRecompile ? "整理镜头修改" : preparedContext?.projectTaskLabel || "整理计划");
   const confirmedAgentResult = prototypeAgentProjection?.statusLabel
@@ -3184,24 +5544,36 @@ export function MinimalAgentPanel({
     }
     return item;
   });
-  const visibleAgentCapabilityGlanceItems = agentCapabilityGlanceItems(visibleAgentCapabilityItems);
+  const visibleAgentCapabilityGlanceItems = agentCapabilityGlanceItems(
+    latestAgentKernelTurn
+      ? [agentKernelCapabilityItem(latestAgentKernelTurn), ...visibleAgentCapabilityItems]
+      : visibleAgentCapabilityItems,
+  );
+  const videoSubmitReadinessReply = agentVideoPermissionAllowsVideo(videoPermissionContractForUi)
+    ? videoSubmitBlockerAgentReply(currentAgentToolAvailability().videoSubmitBlockers?.[0])
+    : undefined;
   const hasVisibleActionCard = showAgentNote || showAgentResultNote || idleActionSuggestions.length > 0;
   const generationDetailsLabel = videoCanResume
     ? "可查询结果"
     : agentCommandKind === "generate_references" || agentCommandKind === "submit_video" || agentCommandKind === "resume_video"
       ? agentCommand?.label || "按需展开"
       : "按需查看";
-  const realSampleDetailNeedsReview = agentCommandKind === "open_review" || realSampleAction?.status === "needs_review";
+  const realSampleDetailNeedsReview = referenceNeedsReview || agentCommandKind === "open_review" || realSampleAction?.status === "needs_review";
   const showRealSampleDetailButton = realSampleDetailNeedsReview || !referenceGenerationBlockedByProject;
   const passiveAgentReply = !showAgentNote && !showAgentResultNote && projectStatusView
     ? {
-      title: projectStatusView.stage,
-      body: [
+      title: videoSubmitReadinessReply ? "视频提交前检查" : projectStatusView.stage,
+      body: videoSubmitReadinessReply?.body || [
         projectStatusView.doing,
         projectStatusView.waitingFor ? `现在等你：${projectStatusView.waitingFor}` : "",
       ].filter(Boolean).join("。"),
-      next: projectStatusView.nextAction,
-      facts: projectStatusView.facts.slice(0, 3),
+      next: videoSubmitReadinessReply?.next || projectStatusView.nextAction,
+      facts: videoSubmitReadinessReply
+        ? [
+          { label: "视频", value: videoSubmitBlockerLabel(currentAgentToolAvailability().videoSubmitBlockers?.[0]) || "先准备" },
+          { label: "下一步", value: videoSubmitReadinessReply.next },
+        ]
+        : projectStatusView.facts.slice(0, 3),
     }
     : undefined;
   const showPassiveAgentReply = Boolean(passiveAgentReply && (
@@ -3210,6 +5582,99 @@ export function MinimalAgentPanel({
     || passiveAgentReply.next
   ));
   const fullAgentThreadMessages: MinimalAgentMessage[] = agentTimelineEntries.map(minimalAgentMessageFromTimelineEntry);
+  const storyFlowMessage = committedNewVideoDraftMessage(latestPrototypeAgentDemo) || storyFlowReadyMessage(runtimeState.storyFlow.shots.length);
+  if (storyFlowMessage && !fullAgentThreadMessages.some((message) => (
+    message.id === storyFlowMessage.id
+    || /草案.*故事流|故事流.*草案|故事流已准备/.test(`${message.title} ${message.body}`)
+  ))) {
+    fullAgentThreadMessages.unshift(storyFlowMessage);
+  }
+  const footerActionConfirmationMessage = (() => {
+    if (hasComposerInput || hasAgentTimelineConfirmation || projectRequiredForWorkflow) return undefined;
+    if (footerNewVideoDraftConfirmationReady) {
+      return {
+        id: "footer_action_new_video_draft",
+        entryType: "confirmation_request",
+        role: "confirmation",
+        title: "建议行动：写入故事流",
+        body: "草案已经准备好。确认后只写入故事流，不会生成参考，也不会提交视频。",
+        lifecycle: "waiting_for_confirmation",
+        status: "waiting",
+        toolName: "write_project",
+        facts: [
+          { label: "目标", value: "当前草案" },
+          { label: "写入", value: "故事流" },
+          { label: "外部提交", value: "不提交视频" },
+        ],
+        next: "确认后进入项目故事流。",
+      } satisfies MinimalAgentMessage;
+    }
+    const action = availableFooterDirectAction;
+    if (!action || action.disabled) return undefined;
+    if (action === referenceFooterAction || action === endFrameFooterAction) {
+      const targetLabel = "当前项目缺少的参考";
+      return {
+        id: `footer_action_reference_${action.label}`,
+        entryType: "confirmation_request",
+        role: "confirmation",
+        title: "建议行动：补齐参考",
+        body: "我已经看完当前项目，下一步适合先把缺少的参考图补齐。确认前不会生成图片，也不会提交视频。",
+        lifecycle: "waiting_for_confirmation",
+        status: "waiting",
+        toolName: "generate_references",
+        actionKind: "prepare_reference_generation",
+        facts: [
+          { label: "目标", value: targetLabel },
+          { label: "执行", value: "参考生成" },
+          { label: "外部提交", value: "不提交视频" },
+        ],
+        next: "确认后生成参考；也可以继续输入修改意见。",
+      } satisfies MinimalAgentMessage;
+    }
+    const targetLabel = hasBoundSelection ? displayedCompactScopeLabel : "当前项目";
+    if (action === videoSubmitFooterAction) {
+      return {
+        id: "footer_action_video_submit",
+        entryType: "confirmation_request",
+        role: "confirmation",
+        title: "建议行动：提交视频",
+        body: "参考和故事已经够用，下一步可以编译并串行提交当前视频任务。确认前不会发送到即梦。",
+        lifecycle: "waiting_for_confirmation",
+        status: "waiting",
+        toolName: "submit_video",
+        actionKind: "prepare_video_submit",
+        facts: [
+          { label: "目标", value: targetLabel },
+          { label: "执行", value: "Seedance 视频提交" },
+          { label: "外部提交", value: "确认后才提交" },
+        ],
+        next: "确认后只提交当前队列允许的一段视频。",
+      } satisfies MinimalAgentMessage;
+    }
+    if (action === videoResumeFooterAction) {
+      return {
+        id: "footer_action_video_query",
+        entryType: "confirmation_request",
+        role: "confirmation",
+        title: "建议行动：查询视频结果",
+        body: "已有视频任务在队列里，下一步适合查询回流状态。这个动作不会重复提交视频。",
+        lifecycle: "waiting_for_confirmation",
+        status: "waiting",
+        toolName: "query_video",
+        actionKind: "query_video_result",
+        facts: [
+          { label: "目标", value: "已有视频任务" },
+          { label: "执行", value: "查询结果" },
+          { label: "外部提交", value: "不会重复提交" },
+        ],
+        next: "确认后查询已有任务结果。",
+      } satisfies MinimalAgentMessage;
+    }
+    return undefined;
+  })();
+  if (footerActionConfirmationMessage && !fullAgentThreadMessages.some((message) => message.role === "confirmation")) {
+    fullAgentThreadMessages.push(footerActionConfirmationMessage);
+  }
   const threadUserIntent = preparedContext?.userIntent?.trim() || (hasComposerInput ? text.trim() : "");
   if (!fullAgentThreadMessages.length && (showAgentNote || showAgentResultNote) && threadUserIntent) {
     fullAgentThreadMessages.push({
@@ -3226,7 +5691,7 @@ export function MinimalAgentPanel({
 	      title: `AI 导演：${agentActionTitle}`,
 	      body: agentUnderstanding,
 	      facts: visibleActionPlanFacts.slice(0, 3),
-	      next: agentNextActionAvailable ? `点这条消息里的「${primaryLabel}」继续。` : "可以继续写想法。",
+	      next: agentNextActionAvailable ? `在这条消息中确认「${primaryLabel}」后继续。` : "可以继续写想法。",
 	    });
   } else if (!agentTimelineEntries.length && showAgentResultNote) {
     fullAgentThreadMessages.push({
@@ -3247,25 +5712,50 @@ export function MinimalAgentPanel({
       next: passiveAgentReply.next,
     });
   }
+  const threadShowsReferenceReady = fullAgentThreadMessages.some((message) =>
+    message.role !== "user" && /参考可用/.test(minimalAgentMessageSearchText(message))
+  );
+  const threadReferencesUsableForAgent = referencesUsableForAgent || threadShowsReferenceReady;
+  const stateAwareAgentThreadMessages = fullAgentThreadMessages.filter((message) =>
+    !minimalAgentReferenceReviewMessageIsStale(message, threadReferencesUsableForAgent)
+    && !minimalAgentReferenceGenerationConfirmationIsStale(fullAgentThreadMessages, message, threadReferencesUsableForAgent)
+    && !minimalAgentReferenceCompletionMessageIsStale(message, threadReferencesUsableForAgent)
+    && !minimalAgentReferenceBlockedMessageIsStale(fullAgentThreadMessages, message)
+  );
   const {
     messages: agentThreadMessages,
     hiddenCount: hiddenAgentThreadMessageCount,
-  } = visibleMinimalAgentMessages(fullAgentThreadMessages);
+  } = visibleMinimalAgentMessages(stateAwareAgentThreadMessages);
+  const totalHiddenAgentThreadMessageCount = hiddenAgentThreadMessageCount;
+  const latestAgentThreadMessageId = agentThreadMessages.at(-1)?.id || "";
+  useEffect(() => {
+    const thread = agentThreadRef.current;
+    if (!thread || !latestAgentThreadMessageId) return;
+    window.requestAnimationFrame(() => {
+      thread.scrollTop = thread.scrollHeight;
+    });
+  }, [latestAgentThreadMessageId, agentThreadMessages.length]);
   const latestConfirmationMessageId = [...agentThreadMessages]
     .reverse()
-    .find((message) => message.role === "confirmation")?.id;
+    .find(minimalAgentMessageRequestsActionConfirmation)?.id;
+  const latestSkillSaveConfirmationMessageId = [...agentThreadMessages]
+    .reverse()
+    .find(minimalAgentMessageRequestsSkillSave)?.id;
   const latestLocalProjectBlockedMessageId = [...agentThreadMessages]
     .reverse()
     .find(minimalAgentMessageNeedsLocalProject)?.id;
   const latestLocalProjectReadyMessageId = [...agentThreadMessages]
     .reverse()
     .find(minimalAgentMessageCompletedLocalProjectSetup)?.id;
-  const latestCompletedToolActionMessageId = [...agentThreadMessages]
+  const latestFinalToolActionMessage = [...agentThreadMessages]
     .reverse()
-    .find(minimalAgentMessageCompletedToolAction)?.id;
-  const latestBlockedToolActionMessageId = [...agentThreadMessages]
-    .reverse()
-    .find(minimalAgentMessageBlockedToolAction)?.id;
+    .find(minimalAgentMessageFinalToolAction);
+  const latestCompletedToolActionMessageId = latestFinalToolActionMessage && minimalAgentMessageCompletedToolAction(latestFinalToolActionMessage)
+    ? latestFinalToolActionMessage.id
+    : undefined;
+  const latestBlockedToolActionMessageId = latestFinalToolActionMessage && minimalAgentMessageBlockedToolAction(latestFinalToolActionMessage)
+    ? latestFinalToolActionMessage.id
+    : undefined;
   async function startLocalProjectSetupFromMessage() {
     if (!canResolveProjectFromFooter) {
       setStatus(localProjectBusy ? "正在准备本地项目文件夹。" : "当前还不能选择项目文件夹。");
@@ -3304,16 +5794,30 @@ export function MinimalAgentPanel({
     setStatus("去参考页检查画面。");
   }
   function pointToMainReferenceAction() {
-    setStatus(referenceGenerationBlockedByProject ? "先打开或保存本地项目。" : `点消息里的「${primaryLabel}」，让 AI 导演生成参考。`);
+    if (agentNextActionAvailable && /参考|生成/.test(primaryLabel)) {
+      handleNext();
+      return;
+    }
+    setStatus(referenceGenerationBlockedByProject ? "先打开或保存本地项目。" : `在消息中确认「${primaryLabel}」，我再生成参考。`);
   }
   function pointToMainVideoAction() {
-    setStatus(videoCanResume ? "点消息里的「查询结果」，继续查询视频结果。" : `点消息里的「${primaryLabel}」，让 AI 导演发送视频。`);
+    if (agentNextActionAvailable && /视频|发送|查询|补参考/.test(primaryLabel)) {
+      handleNext();
+      return;
+    }
+    setStatus(videoCanResume ? "在消息中确认「查询结果」，我继续取回视频。" : `在消息中确认「${primaryLabel}」，我再发送视频。`);
   }
   const realSampleDetailAction = realSampleDetailNeedsReview
     ? openReferenceReviewFromDetails
     : pointToMainReferenceAction;
-  const realSampleDetailButtonLabel = realSampleDetailNeedsReview ? "打开复核" : "看任务";
-  const videoDetailButtonLabel = "看任务";
+  const realSampleDetailButtonLabel = realSampleDetailNeedsReview ? "打开复核" : "去确认生成";
+  const videoDetailButtonLabel = videoQueryMode
+    ? "查询结果"
+    : videoSubmissionBlocked
+      ? "处理阻塞"
+      : videoPermissionBlockedByContract
+        ? "去确认发送"
+        : "发送视频";
 
   async function lookupSources() {
     if (!effectiveWebSearchReady || !researchSuggestion.query || researchStatus === "running") return;
@@ -3368,8 +5872,8 @@ export function MinimalAgentPanel({
         onClick={() => {
           setIsComposerCollapsed(true);
         }}
-        aria-label="收起底部输入框"
-        title="收起底部输入框"
+        aria-label="收起 AI 导演对话区"
+        title="收起 AI 导演对话区"
       >
         <ChevronDown size={13} aria-hidden="true" />
         收起
@@ -3396,31 +5900,94 @@ export function MinimalAgentPanel({
           </section>
         </div>
       </div>
-      <details className="minimal-agent-advanced-controls">
-        <summary>
-          <span>工作范围</span>
-          <strong>{agentBoundarySummaryLabel}</strong>
-          {selectedSkillSummary && <small>{selectedSkillSummary.label}</small>}
-        </summary>
-        <section className="minimal-agent-permission-mode minimal-agent-permission-menu" aria-label="更改工作范围">
-          <span>更改范围</span>
-        {videoPermissionModeItems.map((item) => (
-            <button
-              key={item.mode}
-              type="button"
-              className={videoPermissionContractForUi.mode === item.mode ? "is-active" : ""}
-              aria-label={`工作范围：${item.label}`}
-              aria-pressed={videoPermissionContractForUi.mode === item.mode}
-              disabled={Boolean(workflow)}
-              title={workflow ? "当前计划已生成，先点再改一下再切换边界。" : agentVideoPermissionDetail(agentVideoPermissionForMode(item.mode))}
-              onClick={() => selectVideoPermissionMode(item.mode)}
-            >
-              {item.label}
-            </button>
-          ))}
-          <small>{agentBoundaryDetail}</small>
+      {showSkillStack && (
+        <section className="minimal-agent-skill-stack" aria-label="当前导演技能">
+          <div>
+            <span>导演经验</span>
+            <strong>{selectedSkillSummary?.label || "项目 Skills"}</strong>
+          </div>
+          <small>{selectedSkillSummary?.reason || "Agent 会按当前镜头和素材，选择合适的导演方法。"}</small>
+          {selectedSkillSummary && (
+            <div className="minimal-agent-skill-tags">
+              {selectedSkillSummary.skillTags.slice(0, 5).map((tag) => (
+                <small key={tag}>{tag}</small>
+              ))}
+            </div>
+          )}
+          <div className="minimal-agent-skill-groups" aria-label="项目 Skills">
+            <small>
+              <b>当前项目已加载</b>
+              {projectLoadedSkillLabel}
+            </small>
+            <small>
+              <b>Agent 推荐</b>
+              {selectedSkillSummary ? `${selectedSkillSummary.label}：${recommendedSkillLabel}` : "先点一个镜头，我会解释适合的做法。"}
+            </small>
+            <small>
+              <b>我的 Skills</b>
+              {mySkillActionLabel}
+            </small>
+          </div>
+          {(selectedSkillCard || selectedSkillSummary) && (
+            <details className="minimal-agent-skill-detail" aria-label="Skill 使用说明">
+              <summary>
+                <span>Skill 说明</span>
+                <strong>展开</strong>
+              </summary>
+              <small>
+                <b>做什么</b>
+                {selectedSkillOneLine}
+              </small>
+              <small>
+                <b>作用于</b>
+                {selectedSkillImpactLabel}
+              </small>
+              <small>
+                <b>适合</b>
+                {selectedSkillUseWhenLabel}
+              </small>
+              <small>
+                <b>别用在</b>
+                {selectedSkillAvoidWhenLabel}
+              </small>
+              <small>
+                <b>使用镜头</b>
+                {selectedSkillSourceLabel}
+              </small>
+            </details>
+          )}
         </section>
-        {visibleAgentCapabilityGlanceItems.length > 0 && (
+      )}
+      <details
+        className="minimal-agent-advanced-controls"
+        open={advancedControlsOpen}
+        onToggle={(event) => setAdvancedControlsOpen(event.currentTarget.open)}
+      >
+        <summary>
+          <span>执行方式</span>
+          <strong>{agentBoundarySummaryLabel}</strong>
+        </summary>
+        {advancedControlsOpen && (
+          <section className="minimal-agent-permission-mode minimal-agent-permission-menu" aria-label="更改执行方式">
+            <span>切换方式</span>
+            {videoPermissionModeItems.map((item) => (
+              <button
+                key={item.mode}
+                type="button"
+                className={videoPermissionContractForUi.mode === item.mode ? "is-active" : ""}
+                aria-label={`执行方式：${item.label}`}
+                aria-pressed={videoPermissionContractForUi.mode === item.mode}
+                disabled={Boolean(workflow)}
+                title={workflow ? "当前计划已生成，先点再改一下再切换边界。" : agentVideoPermissionDetail(agentVideoPermissionForMode(item.mode))}
+                onClick={() => selectVideoPermissionMode(item.mode)}
+              >
+                {item.label}
+              </button>
+            ))}
+            <small>{agentBoundaryDetail}</small>
+          </section>
+        )}
+        {advancedControlsOpen && visibleAgentCapabilityGlanceItems.length > 0 && (
           <div className="minimal-agent-capability-strip" aria-label="AI 导演当前能力">
             {visibleAgentCapabilityGlanceItems.map((item) => (
               <small key={item.id} className={item.tone}>
@@ -3430,22 +5997,7 @@ export function MinimalAgentPanel({
             ))}
           </div>
         )}
-        {selectedSkillSummary && (
-          <section className="minimal-agent-skill-context" aria-label="AI 选择的做法">
-            <div>
-              <span>AI 选择的做法</span>
-              <strong>{selectedSkillSummary.label}</strong>
-              <small>{selectedSkillSummary.reason}</small>
-            </div>
-            <div className="minimal-agent-skill-tags">
-              {selectedSkillSummary.skillTags.slice(0, 5).map((tag) => (
-                <small key={tag}>{tag}</small>
-              ))}
-            </div>
-            <p className="minimal-agent-skill-hint">想换做法，直接在下面输入框说，比如“这一段改成快切”或“这里用全能参考”。</p>
-          </section>
-        )}
-        {idleActionSuggestions.length > 0 && (
+        {advancedControlsOpen && idleActionSuggestions.length > 0 && (
           <section className="minimal-agent-idle-actions" aria-label="AI 导演建议下一步">
             <div>
               <span>建议下一步</span>
@@ -3469,37 +6021,138 @@ export function MinimalAgentPanel({
         )}
       </details>
       {agentThreadMessages.length > 0 && (
-        <section className="minimal-agent-thread" aria-label="和 AI 导演的对话" aria-live="polite">
+        <section ref={agentThreadRef} className="minimal-agent-thread" aria-label="和 AI 导演的对话" aria-live="polite">
           <span>和 AI 导演的对话</span>
-          {hiddenAgentThreadMessageCount > 0 && (
+          {totalHiddenAgentThreadMessageCount > 0 && (
             <small className="minimal-agent-thread-history">
               前面的记录已保存，这里只显示最近一次推进。
             </small>
           )}
-          {agentThreadMessages.map((message) => (
+          {agentThreadMessages.map((message) => {
+            const messageBody = minimalAgentMessageBody(message);
+            return (
             <article key={message.id} className={`minimal-agent-message ${message.role}`}>
               <div className="minimal-agent-message-head">
-                <strong>{message.title}</strong>
+                <div className="minimal-agent-message-title">
+                  <small className="minimal-agent-message-stage">{minimalAgentMessageStageLabel(message)}</small>
+                  {minimalAgentMessageTitleLabel(message) && (
+                    <strong>{minimalAgentMessageTitleLabel(message)}</strong>
+                  )}
+                </div>
                 {minimalAgentMessageStatusLabel(message) && (
                   <small className={`minimal-agent-message-status ${message.status}`}>
                     {minimalAgentMessageStatusLabel(message)}
                   </small>
                 )}
               </div>
-              <p>{message.body}</p>
-              {message.facts && message.facts.length > 0 && (
+              <p>{messageBody}</p>
+              {message.executionResult && (
+                <div
+                  className={`minimal-agent-execution-result ${message.executionResult.status}`}
+                  aria-label={`${message.title}执行回执`}
+                >
+                  <small>
+                    <span>结果</span>
+                    <strong>
+                      {executionResultStatusLabel(message.executionResult.status)}：{cleanMinimalAgentMessageCopy(message.executionResult.summary)}
+                    </strong>
+                  </small>
+                  {message.executionResult.next && (
+                    <small>
+                      <span>下一步</span>
+                      <strong>{cleanMinimalAgentMessageCopy(message.executionResult.next)}</strong>
+                    </small>
+                  )}
+                </div>
+              )}
+              {minimalAgentVisibleFacts(message).length > 0 && (
                 <div className="minimal-agent-plan is-inline" aria-label={`${message.title}摘要`}>
-                  {message.facts.map((fact) => (
+                  {minimalAgentVisibleFacts(message).map((fact) => (
                     <small key={`${message.id}:${fact.label}:${fact.value}`}>
                       <span>{fact.label}</span>
-                      <strong>{fact.value}</strong>
+                      <strong>{agentFactDisplayValue(fact)}</strong>
                     </small>
                   ))}
                 </div>
               )}
-              {message.next && <em>{message.next}</em>}
+              {message.skillRecommendations && message.skillRecommendations.length > 0 && (
+                <div className="minimal-agent-skill-recommendations" aria-label="推荐方法说明">
+                  {message.skillRecommendations.map((skill) => (
+                    <small key={`${message.id}:${skill.label}`}>
+                      <strong>{skill.label}</strong>
+                      <span>{skill.reason}</span>
+                      <em>
+                        影响{skill.affectedShots.length ? ` ${skill.affectedShots.join("、")}` : "当前目标"}
+                        {skill.impact.length ? `；作用于 ${skill.impact.join(" / ")}` : ""}
+                      </em>
+                    </small>
+                  ))}
+                </div>
+              )}
+              {message.assetInboxSummary && (
+                <div className="minimal-agent-asset-inbox-summary" aria-label="素材识别摘要">
+                  <small>
+                    <strong>{message.assetInboxSummary.summary}</strong>
+                    <span>{message.assetInboxSummary.nextAction}</span>
+                  </small>
+                  <small>
+                    <span>类型</span>
+                    <strong>
+                      {message.assetInboxSummary.kindLabels.length
+                        ? message.assetInboxSummary.kindLabels.join(" / ")
+                        : "待确认"}
+                    </strong>
+                  </small>
+                  <small>
+                    <span>待确认</span>
+                    <strong>
+                      {message.assetInboxSummary.needsReviewCount
+                        ? `${message.assetInboxSummary.needsReviewCount} 个`
+                        : "没有"}
+                    </strong>
+                  </small>
+                </div>
+              )}
+              {message.assetActions && message.assetActions.length > 0 && (
+                <div className="minimal-agent-message-actions asset-actions" aria-label="素材用途建议">
+                  {message.assetActions.map((action) => (
+                    <button
+                      key={`${message.id}:${action.id}`}
+                      type="button"
+                      className="secondary"
+                      onClick={() => void prepareChange(action.intent, selectionOverrideFromAssetAction(action))}
+                      disabled={isPreparingPlan}
+                      title={action.detail}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                  {message.assetActionOverflow && (
+                    <small className="minimal-agent-action-hint">
+                      {message.assetActionOverflow.label}。{message.assetActionOverflow.detail}
+                    </small>
+                  )}
+                </div>
+              )}
+              {message.next && !message.executionResult && <em>{cleanMinimalAgentMessageCopy(message.next)}</em>}
               {message.id === latestCompletedToolActionMessageId && (() => {
                 const resultView = completedToolActionView(message);
+                const nextIntent = agentMessageNextIntent(message);
+                const resultNextAction = availableFooterDirectAction && !availableFooterDirectAction.disabled
+                  ? availableFooterDirectAction
+                  : undefined;
+                const resultNextLabel = resultNextAction?.label || "按建议继续";
+                const resultNextTitle = resultNextAction
+                  ? footerDirectActionBoundaryFor(resultNextAction) || `执行下一步：${resultNextAction.label}`
+                  : `把「${nextIntent}」发给 AI 导演，并保留当前选中内容。`;
+                const continueFromCompletedToolAction = () => {
+                  if (resultNextAction) {
+                    setStatus(footerDirectActionBoundaryFor(resultNextAction) || `下一步：${resultNextAction.label}`);
+                    resultNextAction.perform();
+                    return;
+                  }
+                  void prepareChange(nextIntent, currentComposerSelectionOverride());
+                };
                 return (
                   <div className="minimal-agent-message-actions">
                     {resultView && (
@@ -3518,11 +6171,11 @@ export function MinimalAgentPanel({
                     <button
                       type="button"
                       className={resultView ? "secondary" : undefined}
-                      onClick={() => void prepareChange("继续")}
+                      onClick={continueFromCompletedToolAction}
                       disabled={isPreparingPlan}
-                      title={isPreparingPlan ? "正在整理项目状态。" : "让 AI 导演继续判断下一步。"}
+                      title={isPreparingPlan ? "正在整理项目状态。" : resultNextTitle}
                     >
-                      继续下一步
+                      {resultNextLabel}
                     </button>
                   </div>
                 );
@@ -3539,21 +6192,21 @@ export function MinimalAgentPanel({
                       再试一次
                     </button>
                   )}
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={revisePlan}
-                    title="把刚才的意图放回输入框继续修改。"
-                  >
-                    继续修改
-                  </button>
+	                  <button
+	                    type="button"
+	                    className="secondary"
+	                    onClick={() => reviseFromAgentMessage(message)}
+	                    title="把这次失败原因和下一步建议放回输入框继续修改。"
+	                  >
+	                    继续修改
+	                  </button>
                 </div>
               )}
               {message.id === latestLocalProjectReadyMessageId && localProjectReadyForTools && (
                 <div className="minimal-agent-message-actions">
                   <button
                     type="button"
-                    onClick={() => void prepareChange("继续")}
+                    onClick={() => void prepareChange("继续", currentComposerSelectionOverride())}
                     disabled={isPreparingPlan}
                     title={isPreparingPlan ? "正在整理项目状态。" : "让 AI 导演重新检查项目，并判断下一步。"}
                   >
@@ -3563,8 +6216,8 @@ export function MinimalAgentPanel({
               )}
               {message.id === latestLocalProjectBlockedMessageId && !localProjectReadyForTools && (
                 <div className="minimal-agent-message-actions">
-	                  <button
-	                    type="button"
+		                  <button
+		                    type="button"
 	                    onClick={startLocalProjectSetupFromMessage}
 	                    disabled={!canResolveProjectFromFooter}
 	                    title={canResolveProjectFromFooter ? "选择项目文件夹后，我会接着当前故事继续。" : localProjectBusy ? "正在准备本地项目文件夹。" : "当前环境暂时不能选择项目文件夹。"}
@@ -3585,32 +6238,106 @@ export function MinimalAgentPanel({
                     }}
                   >
                     先继续改文字
+	                  </button>
+                </div>
+              )}
+              {minimalAgentMessageRequestsSkillSave(message) && message.id === latestSkillSaveConfirmationMessageId && (
+                <div className="minimal-agent-message-actions">
+                  <button
+                    type="button"
+                    onClick={() => void confirmPendingSkillSave()}
+                    disabled={!pendingSkillSaveRequest}
+                    title={pendingSkillSaveRequest ? "确认后写入项目 Skills 和 skill-index。" : "这条 Skill 保存请求已经处理。"}
+                  >
+                    确认保存 Skill
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={revisePendingSkillSave}
+                    disabled={!pendingSkillSaveRequest}
+                    title="先不保存，把这句话放回输入框继续改。"
+                  >
+                    再改一下
                   </button>
                 </div>
               )}
-              {message.role === "confirmation" && message.id === latestConfirmationMessageId && agentNextActionAvailable && (() => {
+              {minimalAgentMessageRequestsActionConfirmation(message) && message.id === latestConfirmationMessageId && !minimalAgentMessageRequestsSkillSave(message) && (visibleConfirmationActionAvailable || !hasComposerInput) && (() => {
                 const currentConfirmationIsVideoQuery = videoQueryMode || /查询/.test(primaryLabel) || /查询结果|不会重复提交/.test(footerStatusCopy);
                 const confirmationAction = currentConfirmationIsVideoQuery
                   ? minimalAgentConfirmationAction({ ...message, actionKind: "query_video_result" }, primaryLabel)
                   : minimalAgentConfirmationAction(message, primaryLabel);
+                const confirmationBoundary = minimalAgentConfirmationBoundary(message);
+                const confirmationIsFooterAction = message.id.startsWith("footer_action_");
+                const confirmationMatchesPrimaryAction = Boolean(
+                  agentNextActionAvailable
+                  && message.actionId
+                  && agentActionEnvelope?.actionId
+                  && message.actionId === agentActionEnvelope.actionId
+                );
+                const confirmationUsesPrimaryAction = visibleNewVideoDraftConfirmation
+                  || confirmationMatchesPrimaryAction
+                  || (agentNextActionAvailable && confirmationIsFooterAction);
+                const confirmationDisabled = visibleNewVideoDraftConfirmation
+                  ? Boolean(!onStartNewVideoDraftFromAgent || hasComposerInput || attachments.length || isPreparingPlan)
+                  : confirmationUsesPrimaryAction
+                    ? primaryDisabled
+                    : Boolean(hasComposerInput || attachments.length || isPreparingPlan);
+                const confirmationDisabledReason = visibleNewVideoDraftConfirmation
+                  ? isPreparingPlan
+                    ? "正在整理，稍等一下。"
+                    : hasComposerInput || attachments.length
+                      ? "先发送或清空当前输入，再确认草案。"
+                      : !onStartNewVideoDraftFromAgent
+                        ? "当前不能从消息里确认草案。"
+                        : ""
+                  : confirmationUsesPrimaryAction
+                    ? primaryDisabledReason
+                    : hasComposerInput || attachments.length
+                      ? "先发送或清空当前输入，再确认这条消息。"
+                      : isPreparingPlan
+                        ? "正在整理，稍等一下。"
+                        : "";
+                const confirmationButtonLabel = confirmationUsesPrimaryAction ? confirmationAction.label : "继续确认";
+                const confirmationButtonHint = confirmationUsesPrimaryAction
+                  ? confirmationAction.hint
+                  : "这条确认来自历史消息，我会先按它重新整理一次，再让你确认执行。";
+                const runConfirmationAction = () => {
+                  if (confirmationUsesPrimaryAction) {
+                    handleNext();
+                    return;
+                  }
+                  void prepareChange(agentMessageConfirmationIntent(message, confirmationAction.label), currentComposerSelectionOverride());
+                };
                 return (
                   <div className="minimal-agent-message-actions">
-	                    <button
-	                      type="button"
-	                      onClick={handleNext}
-	                      disabled={primaryDisabled}
-	                      title={primaryDisabled ? primaryDisabledReason : confirmationAction.hint}
-	                    >
-                      {confirmationAction.label}
+                    {confirmationBoundary && (
+                      <small className="minimal-agent-confirmation-boundary">
+                        {confirmationBoundary}
+                      </small>
+                    )}
+                    <button
+                      type="button"
+                      onClick={runConfirmationAction}
+                      disabled={confirmationDisabled}
+                      title={confirmationDisabled ? confirmationDisabledReason : confirmationButtonHint}
+                    >
+                      {confirmationButtonLabel}
                     </button>
-                    <button type="button" className="secondary" onClick={revisePlan}>
-                      直接修改
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => reviseFromAgentMessage(message)}
+                      title="先不确认，把这次想法放回输入框继续改。"
+                    >
+                      再改一下
                     </button>
                   </div>
                 );
               })()}
             </article>
-          ))}
+            );
+          })}
         </section>
       )}
       {showAgentNote && (
@@ -3630,7 +6357,7 @@ export function MinimalAgentPanel({
                 {visibleActionPlanFacts.map((fact, index) => (
                   <small key={`${fact.label}:${fact.value}:visible:${index}`}>
                     <span>{fact.label}</span>
-                    <strong>{fact.value}</strong>
+                    <strong>{agentFactDisplayValue(fact)}</strong>
                   </small>
                 ))}
               </div>
@@ -3652,7 +6379,7 @@ export function MinimalAgentPanel({
               {actionConfirmationFacts.map((fact) => (
                 <small key={`${fact.label}:${fact.value}`}>
                   <span>{fact.label}</span>
-                  <strong>{fact.value}</strong>
+                  <strong>{agentFactDisplayValue(fact)}</strong>
                 </small>
               ))}
             </div>
@@ -3690,7 +6417,7 @@ export function MinimalAgentPanel({
             </details>
 	          )}
 	          <div className="minimal-agent-note-actions">
-	            <small>{agentNextActionAvailable ? "确认后我再执行；底部只负责继续对话。" : "可以继续写想法。"}</small>
+	            <small>{agentNextActionAvailable ? "确认后我再执行；输入框只负责继续对话。" : "可以继续写想法。"}</small>
               {agentNextActionAvailable && (
                 <button
                   type="button"
@@ -3716,7 +6443,7 @@ export function MinimalAgentPanel({
               {confirmedAgentResultFactsList.map((fact) => (
                 <small key={`${fact.label}:${fact.value}`}>
                   <span>{fact.label}</span>
-                  <strong>{fact.value}</strong>
+                  <strong>{agentFactDisplayValue(fact)}</strong>
                 </small>
               ))}
             </div>
@@ -3882,12 +6609,18 @@ export function MinimalAgentPanel({
 	            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
 	              event.preventDefault();
 	              if (hasComposerInput) handleSend();
-	              else setStatus("先写一句，或点消息里的确认按钮。");
+	              else setStatus("先写一句，或在消息中确认。");
 	            }
 	          }}
           placeholder={inputPlaceholder}
         />
-        <div className="minimal-agent-input-footer">
+        <div
+          className="minimal-agent-input-footer"
+          data-agent-footer-action={showFooterNextActionButton ? "true" : "false"}
+          data-agent-footer-draft={footerNewVideoDraftConfirmationReady ? "true" : "false"}
+          data-agent-footer-confirmation-label={currentTimelineConfirmationLabel || ""}
+          data-agent-project-status-stage={projectStatusView?.stage || ""}
+        >
           <button
             type="button"
             className="minimal-agent-file-button"
@@ -3897,21 +6630,22 @@ export function MinimalAgentPanel({
             <Plus size={15} aria-hidden="true" />
             添加文件
           </button>
-          <div className="minimal-agent-footer-copy" aria-label="下方主动作说明">
+          <div className="minimal-agent-footer-copy" aria-label="当前输入提示">
+            {footerSelectionTargetCopy && <small className="minimal-agent-footer-target">{footerSelectionTargetCopy}</small>}
             {footerHintCopy && <small>{footerHintCopy}</small>}
             <strong>{footerStatusCopy}</strong>
           </div>
           <button
             type="button"
-	            className="minimal-agent-send-button"
-	            disabled={footerPrimaryDisabled}
-	            title={footerPrimaryTitle}
-	            onClick={handleSend}
-	            aria-label={footerPrimaryAriaLabel}
-	          >
-	            <Send size={15} />
-	            {footerPrimaryLabel}
-	          </button>
+            className="minimal-agent-send-button"
+            disabled={footerPrimaryDisabled}
+            title={footerPrimaryTitle}
+            onClick={handleSend}
+            aria-label={footerPrimaryAriaLabel}
+          >
+            <Send size={15} />
+            {footerPrimaryLabel}
+          </button>
         </div>
       </div>
       <div className="minimal-agent-status-row">
@@ -3926,7 +6660,7 @@ export function MinimalAgentPanel({
         )}
       </div>
       <details className="minimal-agent-details">
-        <summary>这次会改什么</summary>
+        <summary>{readOnlyStatusInspection ? "这次检查了什么" : "这次会改什么"}</summary>
         <div className="minimal-agent-badges" aria-label="修改摘要">
           {badges.map((badge) => (
             <small key={badge}>{badge}</small>
@@ -3960,7 +6694,7 @@ export function MinimalAgentPanel({
             {planFacts.map((fact, index) => (
               <small key={`${fact.label}:${fact.value}:${index}`}>
                 <span>{fact.label}</span>
-                <strong>{fact.value}</strong>
+                <strong>{agentFactDisplayValue(fact)}</strong>
               </small>
             ))}
           </div>
@@ -3987,18 +6721,24 @@ export function MinimalAgentPanel({
         </div>
       )}
       {(showRealSampleAction || showVideoAction || showEndFrameAction) && (
-        <details className="minimal-agent-generation-details">
+        <details
+          className="minimal-agent-generation-details"
+          open={generationDetailsOpen}
+          onToggle={(event) => setGenerationDetailsOpen(event.currentTarget.open)}
+        >
           <summary>
-            <span>生成</span>
+            <span>Agent 可代办</span>
             <strong>{generationDetailsLabel}</strong>
           </summary>
-          {showRealSampleAction && realSampleAction && (
+          {generationDetailsOpen && showRealSampleAction && realSampleAction && (
             <section className={`agent-real-sample-action ${realSampleAction.status}`} aria-label="项目参考补全">
               <div>
-                <span>参考素材</span>
+                <span>参考图</span>
                 <strong>{realSampleLabel}</strong>
                 <small>{
-                  referenceGenerationBlockedByContract
+                  referenceNeedsReview
+                    ? `${referenceReviewCount} 项参考等你复核。`
+                  : referenceGenerationBlockedByContract
                     ? agentVideoPermissionDetail(currentVideoPermissionContract)
                     : referenceGenerationBlockedByProject
                       ? "先把草稿保存到项目文件夹，再生成参考。"
@@ -4011,7 +6751,7 @@ export function MinimalAgentPanel({
                     ? !onOpenResultView
                     : realSampleAction.disabled || !realSampleAction.keyConfigured || realSampleBusy}
                   onClick={realSampleDetailAction}
-                  aria-label={realSampleDetailNeedsReview ? "打开参考复核" : "查看下方发送的参考生成动作"}
+                  aria-label={realSampleDetailNeedsReview ? "打开参考复核" : "查看参考生成确认动作"}
                 >
                   {realSampleDetailNeedsReview ? <Sparkles size={15} /> : <ArrowRight size={15} />}
                   {realSampleDetailButtonLabel}
@@ -4019,10 +6759,10 @@ export function MinimalAgentPanel({
               )}
             </section>
           )}
-          {showVideoAction && videoSendAction && (
-            <section className={`agent-real-sample-action ${videoSendAction.status}`} aria-label="视频生成">
+          {generationDetailsOpen && showVideoAction && videoSendAction && (
+            <section className={`agent-real-sample-action ${videoSendAction.status}`} aria-label="视频任务">
               <div>
-                <span>视频生成</span>
+                <span>视频</span>
                 <strong>{videoActionLabel}</strong>
                 <small>{
                   videoQueryMode
@@ -4049,10 +6789,10 @@ export function MinimalAgentPanel({
 	              </button>
             </section>
           )}
-          {showEndFrameAction && endFrameAction && (
-            <section className={`agent-real-sample-action ${endFrameAction.status}`} aria-label="当前镜头特殊结束画面">
+          {generationDetailsOpen && showEndFrameAction && endFrameAction && (
+            <section className={`agent-real-sample-action ${endFrameAction.status}`} aria-label="当前镜头结束画面">
               <div>
-                <span>特殊结束画面</span>
+                <span>结束画面</span>
                 <strong>{endFrameLabel}</strong>
                 <small>{
                   referenceGenerationBlockedByContract
@@ -4065,7 +6805,7 @@ export function MinimalAgentPanel({
               <button
                 disabled={referenceGenerationBlockedByProject || endFrameAction.disabled || !endFrameAction.keyConfigured || endFrameBusy}
                 onClick={runFooterEndFrameGeneration}
-                aria-label={referenceGenerationBlockedByContract ? "先继续准备参考" : referenceGenerationBlockedByProject ? "先保存项目文件夹" : "生成当前镜头特殊结束画面"}
+                aria-label={referenceGenerationBlockedByContract ? "先继续准备参考" : referenceGenerationBlockedByProject ? "先保存项目文件夹" : "生成当前镜头结束画面"}
               >
                 {endFrameAction.keyConfigured ? <Sparkles size={15} /> : <LockKeyhole size={15} />}
                 生成

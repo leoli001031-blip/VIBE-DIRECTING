@@ -223,9 +223,9 @@ function inferProtagonist(scriptText: string): string | undefined {
   return normalizeCharacterCandidate(match?.[1]) || undefined;
 }
 
-function normalizeCharacterCandidate(value: unknown): string {
+export function normalizeCharacterCandidate(value: unknown): string {
   return clean(value)
-    .replace(/^(?:带着?|领着?|跟着?|牵着?|遇见|遇到|看见|发现|和|与)/u, "")
+    .replace(/^(?:引|领|带|追|拉|推|抱|扶|递|拿|举|看|望|跟|陪|叫|喊|牵|叼|咬|撞|靠近|走向|跑向|冲向|转向|看向|望向|带着?|领着?|跟着?|牵着?|遇见|遇到|看见|发现|和|与)/u, "")
     .replace(/^(?:一个|一位|一名|这位|那个)/u, "");
 }
 

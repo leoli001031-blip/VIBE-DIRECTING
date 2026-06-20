@@ -93,8 +93,13 @@ import {
   type DirectorAgentActionEnvelope,
 } from "./core/directorAgentAction";
 import { runVibeAgentTurn } from "./agent-core/runAgentTurn";
-import { appendVibeAgentTimelineEntries, parseVibeAgentTimelineDocument } from "./agent-core/timelineDocument";
-import type { VibeAgentPermissionMode, VibeAgentTimelineEntry } from "./agent-core/types";
+import { appendVibeAgentTimelineEntries } from "./agent-core/timelineDocument";
+import type {
+  VibeAgentKernelTurn,
+  VibeAgentPermissionMode,
+  VibeAgentTimelineDocument,
+  VibeAgentTimelineEntry,
+} from "./agent-core/types";
 import type { DirectorRuleQaReport } from "./core/directorRuleQa";
 import { runDirectorTextQa } from "./core/directorTextQaClient";
 import type { DirectorTextQaReport } from "./core/directorTextQa";
@@ -139,7 +144,6 @@ import {
 } from "./project/projectRootDialog";
 import { buildCurrentProjectPreviewProjection } from "./core/currentProjectPreviewProjection";
 import {
-  loadCurrentProjectAgentTimelineTextFromRuntime,
   loadProjectRealChainStatus,
   type ProjectRealChainUiState,
   type ProjectWorkbenchStoryShotFact,
@@ -183,7 +187,7 @@ import {
 } from "./core/realImage2Gate";
 import { formatShotNumber } from "./ui/director/MinimalStoryFlow";
 import { MinimalTopNav } from "./ui/director/MinimalTopNav";
-import { DirectorMode } from "./ui/director/DirectorModeShell";
+import { DirectorMode } from "./ui/director/DirectorModeShellAgentKernelV5";
 import { MinimalAssetLibrary } from "./ui/director/MinimalAssetLibrary";
 import type {
   AssetLibraryUiStatus,
@@ -370,6 +374,34 @@ function isBrowserDraftProjectRoot(projectRoot?: string) {
   return normalized === ".vibe-runtime/browser-projects"
     || normalized.startsWith(".vibe-runtime/browser-projects/")
     || normalized.includes("/.vibe-runtime/browser-projects/");
+}
+
+function projectRelativeReviewMediaPath(mediaPath: string | undefined, projectRoot?: string) {
+  let candidate = mediaPath?.trim().replace(/\\/g, "/") || "";
+  if (!candidate) return undefined;
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.pathname.endsWith("/api/runtime/files")) {
+      candidate = parsed.searchParams.get("path")?.trim().replace(/\\/g, "/") || candidate;
+    }
+  } catch {
+    // Plain project paths are expected here.
+  }
+  const root = projectRoot?.trim().replace(/\\/g, "/").replace(/^\.?\//, "").replace(/\/+$/, "") || "";
+  const normalizedCandidate = candidate
+    .replace(/^file:\/+/, "")
+    .replace(/^\.?\//, "")
+    .replace(/\/+/g, "/");
+  if (root && normalizedCandidate.startsWith(`${root}/`)) {
+    return normalizedCandidate.slice(root.length + 1) || undefined;
+  }
+  const rootIndex = root ? normalizedCandidate.indexOf(`/${root}/`) : -1;
+  if (rootIndex >= 0) {
+    return normalizedCandidate.slice(rootIndex + root.length + 2) || undefined;
+  }
+  return normalizedCandidate && !normalizedCandidate.startsWith("/") && !normalizedCandidate.includes("../")
+    ? normalizedCandidate
+    : undefined;
 }
 
 function projectDraftRecordLabel(target: ProjectVibeDraftTarget, mode?: string) {
@@ -2126,6 +2158,7 @@ function App() {
   const [restoredAgentStagedPlanDraft, setRestoredAgentStagedPlanDraft] = useState<ProjectAgentStagedPlanDraft | undefined>();
   const [restoredAgentActionLog, setRestoredAgentActionLog] = useState<ProjectAgentActionLogItem[]>([]);
   const [restoredAgentTimelineEntries, setRestoredAgentTimelineEntries] = useState<VibeAgentTimelineEntry[]>([]);
+  const agentTimelineWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [agentWebSearchSettings, setAgentWebSearchSettings] = useState<AgentWebSearchSettings>(() => loadAgentWebSearchSettings());
   const [projectLocalKnowledgePacks, setProjectLocalKnowledgePacks] = useState<KnowledgePack[]>(() =>
     loadProjectLocalKnowledgePacks(fallbackRuntimeState.sourceIndex.projectId),
@@ -3192,22 +3225,20 @@ function App() {
     let cancelled = false;
     async function restoreRuntimeAgentTimeline() {
       try {
-        const result = await loadCurrentProjectAgentTimelineTextFromRuntime({
-          projectId: expectedProjectId,
+        const timelineOpen = await openProjectAgentTimeline(prototypeProjectDraftTarget, {
+          project: prototypeProjectVibeRef.current,
           projectRoot: runtimeProjectBinding.projectRoot,
         });
-        if (cancelled || !result.ok || !result.content) return;
-        const parsed = parseVibeAgentTimelineDocument(JSON.parse(result.content));
-        if (!parsed.ok || !parsed.timeline) return;
-        if (expectedProjectId && parsed.timeline.projectId !== expectedProjectId) return;
+        if (cancelled || !timelineOpen.ok) return;
+        if (expectedProjectId && timelineOpen.timeline.projectId !== expectedProjectId) return;
         if (
-          parsed.timeline.projectRoot
-          && normalizeProjectRootForUiCompare(parsed.timeline.projectRoot) !== normalizeProjectRootForUiCompare(runtimeProjectBinding.projectRoot)
+          timelineOpen.timeline.projectRoot
+          && normalizeProjectRootForUiCompare(timelineOpen.timeline.projectRoot) !== normalizeProjectRootForUiCompare(runtimeProjectBinding.projectRoot)
         ) {
           return;
         }
         runtimeAgentTimelineRestoreKeyRef.current = restoreKey;
-        setRestoredAgentTimelineEntries(parsed.timeline.entries);
+        setRestoredAgentTimelineEntries(timelineOpen.timeline.entries);
       } catch (error) {
         console.warn("Failed to restore runtime Agent timeline", error);
       }
@@ -3218,6 +3249,7 @@ function App() {
     };
   }, [
     runtimeBindingIsLocalProject,
+    prototypeProjectDraftTarget,
     runtimeProjectBinding.projectId,
     runtimeProjectBinding.projectRoot,
     runtimeProjectBinding.projectVibePath,
@@ -3496,7 +3528,7 @@ function App() {
     }
     if (normalized.includes("knowledge_trace")) return "项目未写入：缺少项目依据，请先重新整理故事或参考。";
     if (normalized.includes("free_text")) return "项目未写入：不能把原话直接当任务，请先让 AI 整理成草稿。";
-    if (normalized.includes("provider") || normalized.includes("submit")) return "项目未写入：这次像是在直接生成，请先调整工作范围。";
+    if (normalized.includes("provider") || normalized.includes("submit")) return "项目未写入：这次像是在直接生成，请先切到合适的执行方式。";
     if (normalized.includes("save") || normalized.includes("保存")) return "项目未写入：保存失败，请检查项目文件夹后重试。";
     return "项目未写入：需要复核后再试。";
   }
@@ -3563,7 +3595,11 @@ function App() {
     action?: DirectorAgentActionEnvelope,
 	  ): VibeAgentPermissionMode {
 	    if (action?.kind === "prepare_export") return "export_allowed";
-	    if (action?.kind === "prepare_video_submit") return "video_allowed";
+	    if (action?.kind === "prepare_video_submit") {
+        return input.videoPermissionContract?.mode === "video_allowed" && action.executionContract.videoSubmitAllowed
+          ? "video_allowed"
+          : "project_write_allowed";
+      }
 	    if (action?.kind === "query_video_result") return "project_write_allowed";
 	    if (action?.kind === "prepare_reference_generation") return "reference_allowed";
     if (input.videoPermissionContract?.mode === "video_allowed") return "video_allowed";
@@ -3576,11 +3612,50 @@ function App() {
     videoPermissionContract?: StagePrototypeAgentPlanInput["videoPermissionContract"];
   }): VibeAgentPermissionMode {
     if (input.action?.kind === "prepare_export") return "export_allowed";
-    if (input.action?.kind === "prepare_video_submit") return "video_allowed";
+    if (input.action?.kind === "prepare_video_submit") {
+      return input.videoPermissionContract?.mode === "video_allowed" && input.action.executionContract.videoSubmitAllowed
+        ? "video_allowed"
+        : "project_write_allowed";
+    }
     if (input.action?.kind === "prepare_reference_generation") return "reference_allowed";
     if (input.videoPermissionContract?.mode === "video_allowed") return "video_allowed";
     if (input.videoPermissionContract?.mode === "reference_allowed") return "reference_allowed";
     return "project_write_allowed";
+  }
+
+  function currentAgentTimelineProjectIdentity() {
+    const runtimeProjectId = effectiveRuntimeProjectBinding.status === "bound"
+      ? effectiveRuntimeProjectBinding.projectId
+      : undefined;
+    const runtimeProjectTitle = effectiveRuntimeProjectBinding.status === "bound"
+      ? effectiveRuntimeProjectBinding.projectTitle
+      : undefined;
+    const projectId = runtimeProjectId || prototypeProjectVibeRef.current.manifest.projectId;
+    const projectTitle = runtimeProjectTitle || prototypeProjectVibeRef.current.manifest.title;
+    return { projectId, projectTitle };
+  }
+
+  function projectForAgentTimeline(project: ProjectVibeDocument): ProjectVibeDocument {
+    const { projectId, projectTitle } = currentAgentTimelineProjectIdentity();
+    if (!projectId || project.manifest.projectId === projectId) return project;
+    return {
+      ...project,
+      manifest: {
+        ...project.manifest,
+        projectId,
+        title: projectTitle || project.manifest.title,
+      },
+    };
+  }
+
+  function timelineForCurrentProject(timeline: VibeAgentTimelineDocument): VibeAgentTimelineDocument {
+    const { projectId, projectTitle } = currentAgentTimelineProjectIdentity();
+    if (!projectId || timeline.projectId === projectId) return timeline;
+    return {
+      ...timeline,
+      projectId,
+      projectTitle: projectTitle || timeline.projectTitle,
+    };
   }
 
   async function confirmNewVideoProjectVibeDraft(draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) {
@@ -3887,22 +3962,26 @@ function App() {
     const promotionMode = mode === "lock";
     const retryMode = mode === "retry";
     const rejectMode = mode === "reject";
-    if (item.assetId && (promotionMode || rejectMode)) {
-      await markAssetStatus(item.assetId, promotionMode ? "locked" : "rejected");
+    if (item.assetId && rejectMode) {
+      await markAssetStatus(item.assetId, "rejected");
       setLatestPrototypeAgentDemo({
         status: "preview_ready",
         result: {
-          label: promotionMode ? "参考已锁定" : "参考已不采用",
+          label: "参考已不采用",
           projectVibeAdded: true,
           waitingReview: false,
           previewReady: true,
-          status: promotionMode ? "locked" : "rejected",
+          status: "rejected",
         },
       });
       return;
     }
+    const reviewMediaPath = projectRelativeReviewMediaPath(
+      item.mediaPath,
+      prototypeProjectDraftTarget.projectRoot || effectiveRuntimeProjectIdentity?.projectRoot,
+    );
     const requiresHashBoundOutput = mode === "approve" || promotionMode;
-    if (requiresHashBoundOutput && (!item.mediaPath || !item.sourceReceiptId || !item.outputHash)) {
+    if (requiresHashBoundOutput && (!reviewMediaPath || !item.sourceReceiptId || !item.outputHash)) {
       setLatestPrototypeAgentDemo({
         status: "error",
         result: {
@@ -3947,7 +4026,7 @@ function App() {
             assetId,
             assetType: item.assetType,
             label: projectLabel,
-            mediaPath: item.mediaPath,
+            mediaPath: reviewMediaPath,
             sourceReceiptId: item.sourceReceiptId,
             outputHash: item.outputHash,
             status: item.status,
@@ -3957,11 +4036,11 @@ function App() {
             assetId,
             assetKind: promotionMode ? lockAssetKind : undefined,
             label: projectLabel,
-            outputPath: item.mediaPath,
+            outputPath: reviewMediaPath,
             outputHash: item.outputHash,
             sourceReceiptId: item.sourceReceiptId,
             missingOutput: item.status === "missing" || retryMode,
-            evidenceRefs: item.mediaPath ? [`preview#${item.id}`] : [`review_item#${item.id}`],
+            evidenceRefs: reviewMediaPath ? [`preview#${item.id}`] : [`review_item#${item.id}`],
           },
           decision: {
             assetKind: promotionMode ? lockAssetKind : "reference",
@@ -4000,11 +4079,11 @@ function App() {
         assetId,
         assetKind: promotionMode ? lockAssetKind : undefined,
         label: projectLabel,
-        outputPath: item.mediaPath,
+        outputPath: reviewMediaPath,
         outputHash: item.outputHash,
         sourceReceiptId: item.sourceReceiptId,
         missingOutput: item.status === "missing" || retryMode,
-        evidenceRefs: item.mediaPath ? [`preview#${item.id}`] : [`review_item#${item.id}`],
+        evidenceRefs: reviewMediaPath ? [`preview#${item.id}`] : [`review_item#${item.id}`],
       },
       decision: {
         status: retryMode ? "retry_requested" : rejectMode ? "rejected" : "approved",
@@ -4212,15 +4291,16 @@ function App() {
         textQaReport,
       });
     }
+    const timelineProject = projectForAgentTimeline(sourceProject);
     const existingAgentTimeline = await openProjectAgentTimeline(prototypeProjectDraftTarget, {
-      project: sourceProject,
+      project: timelineProject,
       projectRoot: prototypeProjectDraftTarget.projectRoot,
       generatedAt: now,
     });
     const vibeAgentTurn = runVibeAgentTurn({
       userMessage: input.userIntent.trim(),
-      projectId: sourceProject.manifest.projectId,
-      projectTitle: sourceRuntimeState.project.title,
+      projectId: timelineProject.manifest.projectId,
+      projectTitle: timelineProject.manifest.title || sourceRuntimeState.project.title,
       projectRoot: prototypeProjectDraftTarget.projectRoot,
       snapshot: buildDirectorAgentStateSnapshot({
         runtimeState: sourceRuntimeState,
@@ -4241,11 +4321,7 @@ function App() {
       generatedAt: now,
       previousTimeline: existingAgentTimeline.timeline,
     });
-    const saveAgentTimelineResult = await saveProjectAgentTimeline(prototypeProjectDraftTarget, vibeAgentTurn.timeline);
-    if (!saveAgentTimelineResult.ok) {
-      console.warn("Failed to save Agent timeline", saveAgentTimelineResult.errors[0]);
-    }
-    setRestoredAgentTimelineEntries(vibeAgentTurn.timeline.entries);
+    await saveAgentTimelineDocumentQueued(vibeAgentTurn.timeline, "Failed to save Agent timeline");
     const projectRecordSummary = prototypeAgentStageProjectRecordSummary(productAgentLoop.stageResult);
     if (productAgentLoop.status === "awaiting_confirmation" || productAgentLoop.status === "blocked") {
       const draft = buildProjectAgentStagedPlanDraft({
@@ -4276,6 +4352,7 @@ function App() {
       agentActionEnvelope: productAgentLoop.action,
       agentToolHandoff: productAgentLoop.toolHandoff,
       agentTimelineEntries: vibeAgentTurn.timeline.entries,
+      agentKernelTurn: vibeAgentTurn.kernelTurn,
       qaFeedback: productAgentLoop.qaFeedback,
       ...projectRecordSummary,
       status: productAgentLoop.status,
@@ -4297,16 +4374,17 @@ function App() {
       selectedAssetId?: string;
       sectionId?: string;
     };
-  }): Promise<VibeAgentTimelineEntry[]> {
+  }): Promise<{ entries: VibeAgentTimelineEntry[]; kernelTurn: VibeAgentKernelTurn }> {
+    const timelineProject = projectForAgentTimeline(input.project);
     const existingAgentTimeline = await openProjectAgentTimeline(prototypeProjectDraftTarget, {
-      project: input.project,
+      project: timelineProject,
       projectRoot: prototypeProjectDraftTarget.projectRoot,
       generatedAt: input.generatedAt,
     });
     const vibeAgentTurn = runVibeAgentTurn({
       userMessage: input.userIntent,
-      projectId: input.project.manifest.projectId,
-      projectTitle: input.runtimeState.project.title,
+      projectId: timelineProject.manifest.projectId,
+      projectTitle: timelineProject.manifest.title || input.runtimeState.project.title,
       projectRoot: prototypeProjectDraftTarget.projectRoot,
       snapshot: buildDirectorAgentStateSnapshot({
         runtimeState: input.runtimeState,
@@ -4325,33 +4403,68 @@ function App() {
       generatedAt: input.generatedAt,
       previousTimeline: existingAgentTimeline.timeline,
     });
-    const saveAgentTimelineResult = await saveProjectAgentTimeline(prototypeProjectDraftTarget, vibeAgentTurn.timeline);
-    if (!saveAgentTimelineResult.ok) {
-      console.warn("Failed to save confirmed Agent timeline", saveAgentTimelineResult.errors[0]);
-    }
-    setRestoredAgentTimelineEntries(vibeAgentTurn.timeline.entries);
-    return vibeAgentTurn.timeline.entries;
+    await saveAgentTimelineDocumentQueued(vibeAgentTurn.timeline, "Failed to save confirmed Agent timeline");
+    return {
+      entries: vibeAgentTurn.timeline.entries,
+      kernelTurn: vibeAgentTurn.kernelTurn,
+    };
   }
 
   async function rememberVibeAgentTimelineEntries(entries: VibeAgentTimelineEntry[]) {
     if (!entries.length) return;
-    const project = prototypeProjectVibeRef.current;
-    const generatedAt = entries[entries.length - 1]?.createdAt || new Date().toISOString();
-    const existingAgentTimeline = await openProjectAgentTimeline(prototypeProjectDraftTarget, {
-      project,
-      projectRoot: prototypeProjectDraftTarget.projectRoot,
-      generatedAt,
+    await enqueueAgentTimelineWrite(async () => {
+      const project = projectForAgentTimeline(prototypeProjectVibeRef.current);
+      const generatedAt = entries[entries.length - 1]?.createdAt || new Date().toISOString();
+      const existingAgentTimeline = await openProjectAgentTimeline(prototypeProjectDraftTarget, {
+        project,
+        projectRoot: prototypeProjectDraftTarget.projectRoot,
+        generatedAt,
+      });
+      if (
+        existingAgentTimeline.status !== "restored"
+        && existingAgentTimeline.timeline.entries.length === 0
+        && agentTimelineEntriesAreContextOnly(entries)
+      ) {
+        return;
+      }
+      const nextTimeline = appendVibeAgentTimelineEntries(
+        existingAgentTimeline.timeline,
+        entries,
+        generatedAt,
+      );
+      const saveAgentTimelineResult = await saveProjectAgentTimeline(prototypeProjectDraftTarget, nextTimeline);
+      if (!saveAgentTimelineResult.ok) {
+        console.warn("Failed to save Agent timeline entries", saveAgentTimelineResult.errors[0]);
+      }
+      setRestoredAgentTimelineEntries(nextTimeline.entries);
     });
-    const nextTimeline = appendVibeAgentTimelineEntries(
-      existingAgentTimeline.timeline,
-      entries,
-      generatedAt,
+  }
+
+  async function saveAgentTimelineDocumentQueued(
+    timeline: VibeAgentTimelineDocument,
+    failureMessage: string,
+  ) {
+    await enqueueAgentTimelineWrite(async () => {
+      const currentTimeline = timelineForCurrentProject(timeline);
+      const saveAgentTimelineResult = await saveProjectAgentTimeline(prototypeProjectDraftTarget, currentTimeline);
+      if (!saveAgentTimelineResult.ok) {
+        console.warn(failureMessage, saveAgentTimelineResult.errors[0]);
+      }
+      setRestoredAgentTimelineEntries(currentTimeline.entries);
+    });
+  }
+
+  async function enqueueAgentTimelineWrite(write: () => Promise<void>) {
+    const nextWrite = agentTimelineWriteQueueRef.current.then(write, write);
+    agentTimelineWriteQueueRef.current = nextWrite.catch(() => undefined);
+    await nextWrite;
+  }
+
+  function agentTimelineEntriesAreContextOnly(entries: VibeAgentTimelineEntry[]) {
+    return entries.every((entry) =>
+      entry.id.startsWith("selection_context_")
+      || entry.id.startsWith("execution_boundary_")
     );
-    const saveAgentTimelineResult = await saveProjectAgentTimeline(prototypeProjectDraftTarget, nextTimeline);
-    if (!saveAgentTimelineResult.ok) {
-      console.warn("Failed to save Agent timeline entries", saveAgentTimelineResult.errors[0]);
-    }
-    setRestoredAgentTimelineEntries(nextTimeline.entries);
   }
 
   async function preparePrototypeAgentDemo(input: PreviewPrototypeAgentDemoInput): Promise<PreviewPrototypeAgentDemoResult> {
@@ -4387,13 +4500,27 @@ function App() {
         selectedAssetId: input.selectedAssetId,
         sectionId: input.sectionId,
       };
-      const sourceRuntimeState = buildProjectRuntimeStateFromProjectVibe({
+      const projectRuntimeState = buildProjectRuntimeStateFromProjectVibe({
         project: sourceProject,
         projectRoot: prototypeProjectDraftTarget.projectRoot,
         projectPath: prototypeProjectDraftTarget.projectPath,
         generatedAt: now,
         knowledgeManifest: productAgentKnowledgeManifest,
       });
+      const projectAssetIds = new Set(projectRuntimeState.visualMemory.assets.map((asset) => asset.id));
+      const projectedAssets = workbenchRuntimeState.visualMemory.assets.filter((asset) => !projectAssetIds.has(asset.id));
+      const sourceRuntimeState = projectedAssets.length
+        ? {
+            ...projectRuntimeState,
+            visualMemory: {
+              ...projectRuntimeState.visualMemory,
+              assets: [
+                ...projectRuntimeState.visualMemory.assets,
+                ...projectedAssets,
+              ],
+            },
+          }
+        : projectRuntimeState;
       const productAgentLoopInput = {
         project: sourceProject,
         runtimeState: sourceRuntimeState,
@@ -4496,7 +4623,7 @@ function App() {
         setProjectRealChainState((current) =>
           syncProjectRealChainStoryFactsFromProjectVibe(current, creativeLoop.nextProject!),
         );
-        const agentTimelineEntries = await recordConfirmedVibeAgentTurn({
+        const confirmedAgentTurn = await recordConfirmedVibeAgentTurn({
           project: creativeLoop.nextProject,
           runtimeState: confirmedRuntimeState,
           userIntent,
@@ -4521,7 +4648,8 @@ function App() {
         return {
           agentActionEnvelope: productAgentLoop.action,
           agentToolHandoff: confirmedAgentToolHandoff,
-          agentTimelineEntries,
+          agentTimelineEntries: confirmedAgentTurn.entries,
+          agentKernelTurn: confirmedAgentTurn.kernelTurn,
           projectVibeWritten: confirmedSaveResult.ok,
           ...projectRecordSummary,
           status: "ready",
@@ -4533,7 +4661,7 @@ function App() {
         setProjectRealChainState((current) =>
           syncProjectRealChainStoryFactsFromProjectVibe(current, creativeLoop.nextProject!),
         );
-        const agentTimelineEntries = await recordConfirmedVibeAgentTurn({
+        const confirmedAgentTurn = await recordConfirmedVibeAgentTurn({
           project: creativeLoop.nextProject,
           runtimeState: confirmedRuntimeState,
           userIntent,
@@ -4557,7 +4685,8 @@ function App() {
         return {
           agentActionEnvelope: productAgentLoop.action,
           agentToolHandoff: confirmedAgentToolHandoff,
-          agentTimelineEntries,
+          agentTimelineEntries: confirmedAgentTurn.entries,
+          agentKernelTurn: confirmedAgentTurn.kernelTurn,
           projectVibeWritten: confirmedSaveResult.ok,
           ...projectRecordSummary,
           status: "ready",
@@ -4589,7 +4718,7 @@ function App() {
           now,
         ),
       });
-      const agentTimelineEntries = await recordConfirmedVibeAgentTurn({
+      const confirmedAgentTurn = await recordConfirmedVibeAgentTurn({
         project: result.nextProject,
         runtimeState: resultRuntimeState,
         userIntent,
@@ -4635,7 +4764,8 @@ function App() {
       return {
         agentActionEnvelope: productAgentLoop.action,
         agentToolHandoff: confirmedAgentToolHandoff,
-        agentTimelineEntries,
+        agentTimelineEntries: confirmedAgentTurn.entries,
+        agentKernelTurn: confirmedAgentTurn.kernelTurn,
         projectVibeWritten: saveResult.ok,
         ...projectRecordSummary,
         status: "preview_ready",
@@ -5138,10 +5268,9 @@ function App() {
     const retryCount = batch?.retrySummary?.nextRunnableCount || batch?.retrySummary?.retryScheduled || 0;
     const hasRunnableBatch = retryCount > 0;
     if (hasRunnableBatch) {
-      await runProjectImage2Batch();
-      return;
+      return await runProjectImage2Batch();
     }
-    await runImage2AssetGeneration({ skipConfirm: true });
+    return await runImage2AssetGeneration({ skipConfirm: true });
   }
   const { endFrameAction, runImage2EndFrame } = useImage2EndFrameAction({
     runtimeProjectIdentity,
@@ -5343,9 +5472,10 @@ function App() {
           onApproveReviewItem={(item) => applyCreatorReviewDecision(item, "approve")}
           onRejectReviewItem={(item) => applyCreatorReviewDecision(item, "reject")}
           onLockReviewItem={(item, target) => applyCreatorReviewDecision(item, "lock", target)}
-          onSelectAsset={setSelectedAssetId}
-          onOpenDirectorView={openDirectorView}
-          onNewVideoDraftConfirmed={confirmNewVideoProjectVibeDraft}
+	          onSelectAsset={setSelectedAssetId}
+	          onOpenDirectorView={openDirectorView}
+	          onOpenSection={openSection}
+	          onNewVideoDraftConfirmed={confirmNewVideoProjectVibeDraft}
           onCreateLocalProject={(draft) => createNewVideoLocalProject(draft, undefined, { reserveForImmediateSave: true })}
           localProjectReady={localProjectReadyForUi}
           localProjectBusy={localProjectBusyForUi}

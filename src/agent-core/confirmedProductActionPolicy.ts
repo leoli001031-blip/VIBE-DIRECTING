@@ -21,6 +21,16 @@ export interface VibeAgentProductToolAvailabilityInput {
   exportCallbackReady: boolean;
 }
 
+function videoSubmitBlockersFor(input: VibeAgentProductToolAvailabilityInput): string[] {
+  return [
+    input.localProjectReady ? "" : "video_submit_missing_project",
+    input.videoSubmitCallbackReady ? "" : "video_submit_callback_missing",
+    input.videoSubmitReady ? "" : "video_submit_missing_references",
+    input.videoSubmitKeyConfigured ? "" : "video_submit_key_missing",
+    input.videoAlreadySent && !input.videoCanResume ? "video_submit_already_sent" : "",
+  ].filter(Boolean);
+}
+
 export function buildVibeAgentProductToolAvailability(
   input: VibeAgentProductToolAvailabilityInput,
 ): DirectorAgentToolAvailability {
@@ -32,17 +42,19 @@ export function buildVibeAgentProductToolAvailability(
       || (input.referenceGenerationKeyConfigured && !input.referenceGenerationDisabled && !input.referenceGenerationBusy)
     )
   );
+  const videoSubmitReady = Boolean(
+    input.localProjectReady
+    && input.videoSubmitCallbackReady
+    && input.videoSubmitReady
+    && input.videoSubmitKeyConfigured
+    && (!input.videoAlreadySent || input.videoCanResume)
+  );
   return {
     projectReady: input.localProjectReady,
     webSearchReady: input.webSearchReady,
     referenceGenerationReady,
-    videoSubmitReady: Boolean(
-      input.localProjectReady
-      && input.videoSubmitCallbackReady
-      && input.videoSubmitReady
-      && input.videoSubmitKeyConfigured
-      && (!input.videoAlreadySent || input.videoCanResume)
-    ),
+    videoSubmitReady,
+    videoSubmitBlockers: videoSubmitReady ? [] : videoSubmitBlockersFor(input),
     exportReady: Boolean(input.localProjectReady && input.exportCallbackReady),
   };
 }

@@ -136,6 +136,15 @@ function effectiveSelectionFor(
   input: RunDirectorProductAgentLoopInput,
   action: DirectorAgentActionEnvelope,
 ): DirectorProductAgentLoopSelection {
+  if (action.target.kind === "project") {
+    return {
+      ...input.selection,
+      selectedShotId: undefined,
+      selectedShotIds: undefined,
+      selectedAssetId: undefined,
+      sectionId: undefined,
+    };
+  }
   const actionShotIds = action.target.kind === "shot" || action.target.kind === "multi_shot"
     ? action.target.ids
     : [];

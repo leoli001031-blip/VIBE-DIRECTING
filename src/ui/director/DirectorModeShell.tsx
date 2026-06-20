@@ -20,7 +20,12 @@ import { MinimalAgentPanel } from "./MinimalAgentPanel";
 import { MinimalStoryFlow } from "./MinimalStoryFlow";
 import { CreatorDeskPanels } from "./CreatorDeskPanels";
 import { DirectorWorkflowOverview } from "./DirectorWorkflowOverview";
-import type { NewVideoStartConfirmationContext, NewVideoStartDraft, NewVideoStartStatus } from "./NewVideoStart";
+import type {
+  NewVideoStartAgentIntakeCommand,
+  NewVideoStartConfirmationContext,
+  NewVideoStartDraft,
+  NewVideoStartStatus,
+} from "./NewVideoStart";
 import type { DirectorView } from "./directorTypes";
 import {
   agentVideoSubmitContractAllowsReference as agentVideoPermissionAllowsReference,
@@ -28,6 +33,7 @@ import {
   agentVideoSubmitContractForMode as agentVideoPermissionForMode,
   defaultAgentVideoSubmitContract as defaultAgentVideoPermissionContract,
   detectAgentVideoSubmitContract as detectAgentVideoPermissionContract,
+  isCommittedNewVideoDraftAgentRun,
   type AgentControlledToolInvocationTarget,
   type AgentVideoSubmitContract as AgentVideoPermissionContract,
   type PrototypeAgentDemoRun,
@@ -36,7 +42,7 @@ import {
   type StagePrototypeAgentPlanInput,
   type StagePrototypeAgentPlanResult,
 } from "./agentPanelProjection";
-import type { CreatorAgentCommand, CreatorDeskProjection, CreatorReviewLockTarget, CreatorReviewTrayItem } from "./creatorDeskTypes";
+import type { CreatorAgentCommand, CreatorDeskProjection, CreatorReviewLockTarget, CreatorReviewTrayItem, CreatorVideoStageProjection } from "./creatorDeskTypes";
 import type { MinimalAudioPlanDialogueAudioCreated } from "./MinimalAudioPlan";
 
 const MinimalPreview = lazy(() =>
@@ -61,12 +67,54 @@ const NewVideoStart = lazy(() =>
 );
 
 function creatorReferenceGapCount(creatorDesk?: CreatorDeskProjection) {
+  const visibleMissing = Math.max(
+    creatorDesk?.batchGeneration?.missingCount || 0,
+    creatorDesk?.framePlan?.missingCount || 0,
+  );
+  if (visibleMissing > 0) return visibleMissing;
   const missingItems = creatorDesk?.assetReconciliation?.items.filter((item) => item.status === "missing") || [];
   const shotIds = new Set<string>();
   for (const item of missingItems) {
     for (const shotId of item.shotIds || []) shotIds.add(shotId);
   }
   return shotIds.size || creatorDesk?.assetReconciliation?.summary.missing;
+}
+
+function directorProjectRailVideoLabel(videoStage?: CreatorVideoStageProjection) {
+  const generation = videoStage?.generation;
+  if (!videoStage || videoStage.status === "not_submitted") {
+    if ((generation?.completedCount || 0) > 0) return `${generation?.completedCount} 已完成`;
+    return "未生成";
+  }
+  if (videoStage.status === "failed") return "待处理";
+  if (videoStage.status === "recoverable") return "可查询";
+  if (videoStage.status === "needs_review") return `${videoStage.reviewCount || generation?.completedCount || 1} 待看`;
+  if (videoStage.status === "completed") return `${generation?.completedCount || videoStage.reviewCount || 1} 可预览`;
+  if (generation?.status === "queued") return "排队中";
+  if (generation?.status === "generating") return "生成中";
+  if (generation?.status === "submitted") return "已发送";
+  return "处理中";
+}
+
+function directorProjectRailReferenceLabel(
+  creatorDesk: CreatorDeskProjection | undefined,
+  assetCount: number,
+  referenceGapCount = 0,
+) {
+  const summary = creatorDesk?.assetReconciliation?.summary;
+  const displayedMissing = Math.max(0, Math.round(referenceGapCount));
+  if (displayedMissing > 0) return `缺 ${displayedMissing} 张`;
+  if ((summary?.missing || 0) > 0) return `缺 ${summary?.missing} 张`;
+  if ((summary?.needsReview || 0) > 0) return `${summary?.needsReview} 待看`;
+  if ((summary?.matched || 0) > 0) return `${summary?.matched} 可用`;
+  return assetCount > 0 ? `${assetCount} 张` : "未放";
+}
+
+function displayableReferenceAssetCount(assets: ProjectRuntimeState["visualMemory"]["assets"]) {
+  return assets.filter((asset) => {
+    if (asset.type === "style") return false;
+    return /\.(png|jpe?g|webp|gif)$/i.test(asset.path);
+  }).length;
 }
 
 function EmptyProjectSurface({
@@ -132,6 +180,103 @@ function ProjectStatusSummary({ status }: { status: ProjectStatusViewModel }) {
   );
 }
 
+function DirectorProjectRail({
+  projectTitle,
+  projectStatus,
+  directorView,
+  sections,
+  activeSectionId,
+  totalShots,
+  referenceLabel,
+  videoLabel,
+  projectReady,
+  onOpenDirectorView,
+  onOpenSection,
+}: {
+  projectTitle: string;
+  projectStatus: ProjectStatusViewModel;
+  directorView: DirectorView;
+  sections: RuntimeView["storySections"];
+  activeSectionId?: string;
+  totalShots: number;
+  referenceLabel: string;
+  videoLabel: string;
+  projectReady: boolean;
+  onOpenDirectorView?: (view: DirectorView) => void;
+  onOpenSection: (sectionId: string) => void;
+}) {
+  const visibleSections = sections.slice(0, 6);
+  const extraSectionCount = Math.max(0, sections.length - visibleSections.length);
+  return (
+    <aside className="director-project-rail" aria-label="项目导航">
+      <div className="director-project-rail-head">
+        <span>项目</span>
+        <strong title={projectTitle}>{projectTitle}</strong>
+        <small>{projectStatus.stage} · {projectStatus.waitingFor}</small>
+      </div>
+      <nav className="director-project-rail-nav" aria-label="项目内容">
+        <button
+          type="button"
+          className={directorView === "story" ? "active" : ""}
+          onClick={() => onOpenDirectorView?.("story")}
+          disabled={!projectReady}
+        >
+          <span>故事</span>
+          <small>{totalShots} 镜头</small>
+        </button>
+        <button
+          type="button"
+          className={directorView === "assets" ? "active" : ""}
+          onClick={() => onOpenDirectorView?.("assets")}
+          disabled={!projectReady}
+        >
+          <span>参考</span>
+          <small>{referenceLabel}</small>
+        </button>
+        <button
+          type="button"
+          className={directorView === "preview" ? "active" : ""}
+          onClick={() => onOpenDirectorView?.("preview")}
+          disabled={!projectReady}
+        >
+          <span>视频</span>
+          <small>{videoLabel}</small>
+        </button>
+        <button
+          type="button"
+          className={directorView === "export" ? "active" : ""}
+          onClick={() => onOpenDirectorView?.("export")}
+          disabled={!projectReady}
+        >
+          <span>交付</span>
+          <small>展示包</small>
+        </button>
+      </nav>
+      {projectReady && visibleSections.length > 0 && (
+        <div className="director-project-rail-sections" aria-label="故事段落">
+          <span>段落</span>
+          {visibleSections.map((section) => (
+            <button
+              key={section.id}
+              type="button"
+              className={section.id === activeSectionId ? "active" : ""}
+              onClick={() => {
+                onOpenDirectorView?.("story");
+                onOpenSection(section.id);
+              }}
+              title={section.label}
+            >
+              <strong>{section.label}</strong>
+              <small>{section.shotCount} 镜头</small>
+            </button>
+          ))}
+          {extraSectionCount > 0 && <small>还有 {extraSectionCount} 个段落，在故事页继续看。</small>}
+        </div>
+      )}
+    </aside>
+  );
+}
+
 function projectStatusViewWithActiveVideo(status: ProjectStatusViewModel, creatorDesk?: CreatorDeskProjection): ProjectStatusViewModel {
   const videoStage = creatorDesk?.videoStage;
   if (!videoStage || (videoStage.status !== "in_progress" && videoStage.status !== "recoverable")) return status;
@@ -152,6 +297,20 @@ function projectStatusViewWithActiveVideo(status: ProjectStatusViewModel, creato
     tone: canQuery ? "ready" : "working",
     issue: undefined,
     facts,
+  };
+}
+
+function projectStatusViewWithCommittedDraft(status: ProjectStatusViewModel, committed: boolean): ProjectStatusViewModel {
+  if (!committed || status.stage !== "等待确认") return status;
+  const copy = [status.doing, status.waitingFor, status.nextAction, ...status.facts.map((fact) => `${fact.label}:${fact.value}`)].join(" ");
+  if (!/草案|故事流|写入/.test(copy)) return status;
+  return {
+    ...status,
+    stage: "故事流已更新",
+    doing: "草案已写入故事流",
+    waitingFor: "你的下一句指令",
+    nextAction: "继续说要改哪里，或让 AI 开始补参考",
+    tone: "ready",
   };
 }
 
@@ -191,6 +350,7 @@ export function DirectorMode({
   assetLibraryNode,
   onSelectShot,
   onSelectAsset,
+  onOpenSection,
   onProjectStoreApplyPlanReady,
   onNewVideoDraftConfirmed,
   onCreateLocalProject,
@@ -272,6 +432,7 @@ export function DirectorMode({
   assetLibraryNode: ReactNode;
   onSelectShot: (id: string, additive?: boolean) => void;
   onSelectAsset?: (id: string) => void;
+  onOpenSection: (sectionId: string) => void;
   onProjectStoreApplyPlanReady?: (plan: ProjectFactsStagedApplyPlan) => void;
   onNewVideoDraftConfirmed?: (draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) => boolean | void | Promise<boolean | void>;
   onCreateLocalProject?: (draft?: NewVideoStartDraft) => unknown | Promise<unknown>;
@@ -280,7 +441,7 @@ export function DirectorMode({
   onCreateImage2EndFrame?: () => void | Promise<void>;
   onSendSeedanceVideo?: (target?: AgentControlledToolInvocationTarget) => unknown | Promise<unknown>;
   onDialogueAudioCreated?: (input: MinimalAudioPlanDialogueAudioCreated) => void | Promise<void>;
-  onRetryMissingBatch?: () => void | Promise<void>;
+  onRetryMissingBatch?: () => unknown | Promise<unknown>;
   onRetryReviewItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
   onApproveReviewItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
   onRejectReviewItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
@@ -297,8 +458,19 @@ export function DirectorMode({
 }) {
   const folderReady = Boolean(localProjectReady);
   const projectReady = projectContentReady ?? folderReady;
+  const runtimeShotIds = new Set(runtimeState.storyFlow.shots.map((shot) => shot.id));
+  const storySections = (view.storySections || [])
+    .map((section) => {
+      const shotIds = section.shotIds.filter((shotId) => runtimeShotIds.has(shotId));
+      return {
+        ...section,
+        shotIds,
+        shotCount: shotIds.length,
+      };
+    })
+    .filter((section) => section.shotIds.length > 0);
   const activeSection = projectReady
-    ? view.storySections.find((section) => section.id === activeSectionId) || view.storySections[0]
+    ? storySections.find((section) => section.id === activeSectionId) || storySections[0]
     : undefined;
   const sectionLabel = directorView === "story" ? "故事流" : (activeSection?.label || "故事流");
   const agentSectionLabel = directorView === "assets"
@@ -309,12 +481,11 @@ export function DirectorMode({
         ? "导出"
         : sectionLabel;
   const scopedShots = directorView === "story" || !activeSection
-    ? audit.shots
-    : audit.shots.filter((shot) => activeSection.shotIds.includes(shot.id));
+    ? runtimeState.storyFlow.shots
+    : runtimeState.storyFlow.shots.filter((shot) => activeSection.shotIds.includes(shot.id));
   const shots = projectReady ? scopedShots : [];
-  const storyAssets = projectReady ? audit.assets : [];
-  const showNewVideoStart = !projectReady || shots.length === 0;
-  const showAgentPanel = !(directorView === "story" && showNewVideoStart);
+  const storyAssets = projectReady ? runtimeState.visualMemory.assets : [];
+  const showAgentPanel = true;
   const agentProjectStatusLabel = folderReady
     ? "已连接"
     : projectReady
@@ -323,6 +494,9 @@ export function DirectorMode({
   const agentShotBoundView = directorView === "story" || directorView === "preview" || directorView === "export";
   const [videoPermissionContract, setVideoPermissionContract] = useState<AgentVideoPermissionContract>(defaultAgentVideoPermissionContract);
   const [newVideoStatus, setNewVideoStatus] = useState<NewVideoStartStatus | undefined>();
+  const [agentIntakeCommand, setAgentIntakeCommand] = useState<NewVideoStartAgentIntakeCommand | undefined>();
+  const [agentNewVideoDraftActive, setAgentNewVideoDraftActive] = useState(false);
+  const showNewVideoStart = !projectReady || shots.length === 0 || agentNewVideoDraftActive;
   const pendingConfirmedVideoPermissionContractRef = useRef<{
     contract: AgentVideoPermissionContract;
     confirmedAt: number;
@@ -367,18 +541,19 @@ export function DirectorMode({
     : undefined;
   const sessionRetryMissingBatch = videoPermissionAllowsReference ? onRetryMissingBatch : undefined;
   const sessionRetryReviewItem = videoPermissionAllowsReference ? onRetryReviewItem : undefined;
+  const videoSubmitCancelled = videoSendAction?.status === "blocked" && /已取消，本次没有发送/.test(videoSendAction.message || "");
   const visibleAgentCommand = useMemo<CreatorAgentCommand | undefined>(() => {
     const command = creatorDesk?.agentCommand;
     if (!command) return undefined;
     if (command.kind === "generate_references" && !videoPermissionAllowsReference) {
       return {
         ...command,
-        label: "允许生成参考",
-        summary: "参考还缺，等你允许后再生成。",
-        detail: "当前工作范围是先整理。确认允许后只生成参考，不会发送视频。",
+        label: "确认生成参考",
+        summary: "参考还缺，确认后再生成。",
+        detail: "当前执行方式是只出计划。确认后只生成参考，不会发送视频。",
       };
     }
-    if (command.kind === "submit_video" && videoSendAction?.status === "blocked") {
+    if (command.kind === "submit_video" && videoSendAction?.status === "blocked" && !videoSubmitCancelled) {
       return {
         ...command,
         label: "先处理视频问题",
@@ -389,16 +564,16 @@ export function DirectorMode({
     if (command.kind === "submit_video" && !videoPermissionAllowsSend) {
       return {
         ...command,
-        label: "允许发送视频",
-        summary: "等你允许后提交视频，按串行队列执行。",
+        label: "确认提交视频",
+        summary: "确认后提交视频，按串行队列执行。",
         detail: videoPermissionContract.mode === "plan_only"
-          ? "当前工作范围是先整理。确认允许后会提交视频。"
-          : "当前先做参考。确认允许后会提交视频。",
+          ? "当前执行方式是只出计划。确认后会提交视频。"
+          : "当前先做参考。确认后会提交视频。",
       };
     }
     return command;
-  }, [creatorDesk?.agentCommand, videoPermissionAllowsReference, videoPermissionAllowsSend, videoPermissionContract.mode, videoSendAction?.message, videoSendAction?.status]);
-  const storyDetailLabel = [`${view.storySections.length} 个段落`, "点击查看分镜、模式和画面状态"].join(" · ");
+  }, [creatorDesk?.agentCommand, videoPermissionAllowsReference, videoPermissionAllowsSend, videoPermissionContract.mode, videoSendAction?.message, videoSendAction?.status, videoSubmitCancelled]);
+  const storyDetailLabel = [`${storySections.length} 个段落`, "点击查看分镜、模式和画面状态"].join(" · ");
   const showCreatorDeskPanel = projectReady && creatorDesk && !showNewVideoStart && directorView === "story";
   useEffect(() => {
     if (!showNewVideoStart && newVideoStatus) setNewVideoStatus(undefined);
@@ -447,8 +622,19 @@ export function DirectorMode({
     visibleAgentCommand,
   ]);
   const projectStatusView = useMemo(
-    () => projectStatusViewWithActiveVideo(rawProjectStatusView, creatorDesk),
-    [creatorDesk, rawProjectStatusView],
+    () => projectStatusViewWithCommittedDraft(
+      projectStatusViewWithActiveVideo(rawProjectStatusView, creatorDesk),
+      isCommittedNewVideoDraftAgentRun(latestPrototypeAgentDemo),
+    ),
+    [creatorDesk, latestPrototypeAgentDemo, rawProjectStatusView],
+  );
+  const projectRailTitle = runtimeState.project.title || projectScopeLabel || "新视频项目";
+  const projectRailVideoLabel = directorProjectRailVideoLabel(creatorDesk?.videoStage);
+  const projectRailReferenceGapCount = creatorReferenceGapCount(creatorDesk);
+  const projectRailReferenceLabel = directorProjectRailReferenceLabel(
+    creatorDesk,
+    displayableReferenceAssetCount(runtimeState.visualMemory.assets),
+    projectRailReferenceGapCount,
   );
   async function confirmNewVideoDraft(draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) {
     const nextContract = draft.agentBoundaryMode
@@ -459,11 +645,52 @@ export function DirectorMode({
       confirmedAt: Date.now(),
     };
     setVideoPermissionContract(nextContract);
-    return onNewVideoDraftConfirmed?.(draft, context);
+    const result = await onNewVideoDraftConfirmed?.(draft, context);
+    if (result !== false) {
+      setAgentNewVideoDraftActive(false);
+      setAgentIntakeCommand(undefined);
+    }
+    return result;
+  }
+
+  function startNewVideoFromAgent(userIntent: string) {
+    const text = userIntent.trim();
+    if (!text) return;
+    onOpenDirectorView?.("story");
+    setAgentNewVideoDraftActive(true);
+    setNewVideoStatus(undefined);
+    setAgentIntakeCommand({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      text,
+    });
+  }
+
+  function continueNewVideoDraftFromAgent() {
+    onOpenDirectorView?.("story");
+    setAgentNewVideoDraftActive(true);
+    setNewVideoStatus(undefined);
+    setAgentIntakeCommand({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      text: "",
+      mode: "continue_current_draft",
+    });
   }
 
   return (
-    <div className={`minimal-director ${directorView} ${showAgentPanel ? "has-bottom-composer" : "composer-only"}`}>
+    <div className={`minimal-director ${directorView} ${showAgentPanel ? "has-agent-rail" : "composer-only"}`}>
+      <DirectorProjectRail
+        projectTitle={projectRailTitle}
+        projectStatus={projectStatusView}
+        directorView={directorView}
+        sections={storySections}
+        activeSectionId={activeSection?.id}
+        totalShots={runtimeState.storyFlow.shots.length}
+        referenceLabel={projectRailReferenceLabel}
+        videoLabel={projectRailVideoLabel}
+        projectReady={projectReady}
+        onOpenDirectorView={onOpenDirectorView}
+        onOpenSection={onOpenSection}
+      />
       <div className="minimal-director-main">
         <div className="director-workbar" aria-label="项目工作状态">
           <ProjectStatusSummary status={projectStatusView} />
@@ -514,7 +741,7 @@ export function DirectorMode({
         {directorView === "assets" && (projectReady ? assetLibraryNode : (
             <EmptyProjectSurface
               title="还没有参考资产"
-              detail="在底部写脚本或拖文件，确认后会出现在这里。"
+              detail="先在右侧和 AI 导演说清楚项目，确认后参考会出现在这里。"
           />
         ))}
         {directorView === "story" && (
@@ -538,6 +765,8 @@ export function DirectorMode({
                   onVideoPermissionContractChange={setVideoPermissionContract}
                   restoredAgentTimelineEntries={restoredAgentTimelineEntries}
                   onRememberAgentTimelineEntries={onRememberAgentTimelineEntries}
+                  agentIntakeCommand={agentIntakeCommand}
+                  composerPlacement="draft_only"
                 />
               </Suspense>
             )}
@@ -567,7 +796,7 @@ export function DirectorMode({
               currentProjectPreviewItems={currentProjectPreviewItems}
               emptyStateLabel={previewEmptyStateLabel}
               emptyStateDetail={previewEmptyStateDetail}
-              sections={view.storySections}
+              sections={storySections}
               shots={audit.shots}
               selectedShotId={selectedShotId}
               onSelectShot={onSelectShot}
@@ -598,13 +827,13 @@ export function DirectorMode({
           </Suspense> : (
             <EmptyProjectSurface
               title="还没有可导出的内容"
-              detail="先从底部开始一个项目，确认后再导出。"
+              detail="先和 AI 导演开始一个项目，确认后再导出。"
             />
           )
         )}
       </div>
       {showAgentPanel && (
-        <div className="director-bottom-composer" aria-label="底部对话框">
+        <div className="director-agent-rail" aria-label="AI 导演对话区">
           <MinimalAgentPanel
             runtimeState={runtimeState}
             projectScopeLabel={projectReady ? projectScopeLabel : "新视频项目"}
@@ -640,6 +869,11 @@ export function DirectorMode({
             onDirectorFeedbackConfirmed={onDirectorFeedbackConfirmed}
             onSaveResearchAsReference={onSaveResearchAsReference}
             onCreateLocalProject={() => onCreateLocalProject?.()}
+            onStartNewVideoDraftFromAgent={startNewVideoFromAgent}
+            onContinueNewVideoDraftFromAgent={continueNewVideoDraftFromAgent}
+            newVideoDraftPendingForAgent={showNewVideoStart && newVideoStatus?.status === "drafting"}
+            newVideoDraftPlanningForAgent={showNewVideoStart && newVideoStatus?.status === "planning"}
+            newVideoDraftReadyForAgent={showNewVideoStart && newVideoStatus?.status === "ready"}
             onCreateP6RealSample={onCreateP6RealSample}
             onCreateImage2EndFrame={onCreateImage2EndFrame}
             onSendSeedanceVideo={onSendSeedanceVideo}

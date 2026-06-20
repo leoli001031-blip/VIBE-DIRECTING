@@ -172,14 +172,14 @@ export function MinimalTopNav({
     ? "先保存为本地项目，再导出。"
     : "先写故事或打开项目，再导出。";
   const currentViewLabel = directorView === "assets"
-    ? "参考"
+    ? "参考图"
     : directorView === "preview"
       ? "视频"
       : directorView === "export"
         ? "导出"
         : "故事";
   const currentViewDetail = directorView === "assets"
-      ? "角色、场景、道具"
+      ? "看生成图"
     : directorView === "preview"
       ? "看视频"
       : directorView === "export"
@@ -207,11 +207,6 @@ export function MinimalTopNav({
   function performProjectControlAction(action?: () => void) {
     setProjectControlOpen(false);
     action?.();
-  }
-
-  function openView(nextView: DirectorView) {
-    setViewMenuOpen(false);
-    onOpenDirectorView(nextView);
   }
 
   return (
@@ -366,17 +361,22 @@ export function MinimalTopNav({
           open={viewMenuOpen}
           onToggle={(event) => setViewMenuOpen(event.currentTarget.open)}
         >
-          <summary aria-label={`当前查看：${currentViewLabel}`}>
+          <summary aria-label={`项目内容，当前查看：${currentViewLabel}，${currentViewDetail}`}>
             <span className="minimal-nav-label">查看</span>
             <strong>{currentViewLabel}</strong>
             <small>{currentViewDetail}</small>
             <ChevronDown size={14} aria-hidden="true" />
           </summary>
           {viewMenuOpen && (
-            <div className="minimal-nav-menu-list">
+            <div className="minimal-nav-menu-list" role="menu" aria-label="切换项目内容">
               <button
+                type="button"
+                role="menuitem"
                 className={mode === "director" && directorView === "story" ? "active" : ""}
-                onClick={() => openView("story")}
+                onClick={() => {
+                  setViewMenuOpen(false);
+                  onOpenDirectorView("story");
+                }}
                 title={activeSection?.label || "故事"}
                 aria-label={storyViewLabel}
               >
@@ -384,15 +384,25 @@ export function MinimalTopNav({
                 <small className="minimal-section-count">{totalShots}</small>
               </button>
               <button
+                type="button"
+                role="menuitem"
                 className={mode === "director" && directorView === "assets" ? "active" : ""}
-                onClick={() => openView("assets")}
+                onClick={() => {
+                  setViewMenuOpen(false);
+                  onOpenDirectorView("assets");
+                }}
                 aria-label="参考素材"
               >
-                参考
+                参考素材
               </button>
               <button
+                type="button"
+                role="menuitem"
                 className={mode === "director" && directorView === "preview" ? "active" : ""}
-                onClick={() => openView("preview")}
+                onClick={() => {
+                  setViewMenuOpen(false);
+                  onOpenDirectorView("preview");
+                }}
                 aria-label="视频"
               >
                 视频

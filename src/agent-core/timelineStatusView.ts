@@ -29,6 +29,19 @@ export function buildVibeAgentTimelineStatusView(
         facts,
       };
     }
+    if (entry.type === "assistant_message") {
+      const awaitingConfirmation = entry.confirmationRequired === true
+        || entry.lifecycle === "waiting_for_confirmation"
+        || entry.toolName === "save_skill";
+      return {
+        stage: awaitingConfirmation ? normalizedAssistantStage(entry.title) : "AI 导演",
+        doing: entry.body,
+        waitingFor: awaitingConfirmation ? "你的确认" : "你的下一句指令",
+        nextAction: next || (awaitingConfirmation ? "确认后继续" : "继续描述"),
+        tone: awaitingConfirmation ? "waiting" : "ready",
+        facts,
+      };
+    }
     return {
       stage: "Agent 正在执行",
       doing: entry.body,
@@ -45,6 +58,16 @@ export function buildVibeAgentTimelineStatusView(
       waitingFor: entry.type === "action_result" ? "重试或继续修改" : "补充信息",
       nextAction: next || (entry.type === "action_result" ? "调整后重试" : "按提示处理后继续"),
       tone: "blocked",
+      facts,
+    };
+  }
+  if (entry.lifecycle === "cancelled") {
+    return {
+      stage: "动作已取消",
+      doing: entry.body,
+      waitingFor: "新的指令",
+      nextAction: next || "继续描述要做什么",
+      tone: "ready",
       facts,
     };
   }
@@ -91,8 +114,7 @@ export function buildVibeAgentTimelineStatusView(
 function latestStatusEntry(entries: VibeAgentTimelineEntry[] | undefined) {
   if (!entries?.length) return undefined;
   return [...entries].reverse().find((entry) =>
-    entry.type !== "user_message"
-    && (entry.type !== "state_change" || entry.status !== "done")
+    entry.type !== "user_message" && !isInlineSelectionContextEntry(entry)
   );
 }
 
@@ -105,4 +127,8 @@ function timelineEntryNext(entry: VibeAgentTimelineEntry) {
 function normalizedAssistantStage(title: string) {
   const cleaned = title.replace(/^AI\s*导演[:：]?\s*/, "").trim();
   return cleaned ? `AI 导演：${cleaned}` : "AI 导演";
+}
+
+function isInlineSelectionContextEntry(entry: VibeAgentTimelineEntry) {
+  return entry.type === "state_change" && entry.id.startsWith("selection_context_");
 }

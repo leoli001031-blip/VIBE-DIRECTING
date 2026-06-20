@@ -216,10 +216,9 @@ function projectVibeShotStatus(shot: ShotRecord): ProjectVibeShotStatus {
   return "planned";
 }
 
-function optionalPortablePath(path: string | undefined) {
-  if (!path) return undefined;
-  const normalized = path.replace(/\\/g, "/");
-  return isPortableProjectPath(normalized) ? normalized : undefined;
+function optionalPortablePath(path: string | undefined, projectRoot?: string) {
+  const relative = projectRelativePreviewPath(path, projectRoot);
+  return relative && isPortableProjectPath(relative) ? relative : undefined;
 }
 
 function projectVibeAssetIdsForShot(
@@ -300,7 +299,7 @@ export function createProjectVibeFromRuntimeState(state: ProjectRuntimeState): P
       kind: projectVibeAssetKind(asset.type),
       label: asset.name,
       status: projectVibeAssetStatus(asset),
-      path: optionalPortablePath(asset.path),
+      path: optionalPortablePath(asset.path, state.project.root),
       textConstraints: asset.issues.length ? asset.issues : [asset.name],
       usedByShotIds: linkedShotIdsForAsset(asset, assetShotLinkIndex),
       sourceRefs: [`runtime.visualMemory.assets:${asset.id}`],

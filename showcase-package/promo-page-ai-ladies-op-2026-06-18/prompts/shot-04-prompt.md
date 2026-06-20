@@ -1,0 +1,53 @@
+# Shot 04 Seedance Prompt — DeepSeek / MiniMax / Kimi 三连
+
+## Reference Order
+
+1. Image 1: `/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/scenes/sports_field_2026-05-26T19-02-41-467Z.png`
+2. Image 2: `/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/scenes/rooftop_2026-05-26T19-03-39-418Z.png`
+3. Image 3: `/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/deepseek/identity_ref/deepseek_identity_ref_2026-05-26T16-09-56-411Z.png`
+4. Image 4: `/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/minimax/identity_ref/minimax_identity_ref_2026-05-26T16-13-10-882Z.png`
+5. Image 5: `/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/kimi/identity_ref/kimi_identity_ref_2026-05-26T16-13-10-884Z.png`
+
+## Settings
+
+- model: `seedance2.0_vip`
+- ratio: `16:9`
+- resolution: `720p`
+- duration: `6s`
+- BGM: no
+
+## Prompt
+
+```text
+全能参考 video request.
+Use the attached references and written direction only.
+Create exactly 3 visible micro-cuts inside one 6-second OP montage clip. Do not create more than 3 visible cuts.
+Total duration: 6s.
+No text overlays, subtitles, logos, watermarks, UI, panels, prompt artifacts, or storyboard marks.
+
+Use Image 1 only as sports field environment reference: sunset track, energetic open space, warm light.
+Use Image 2 only as rooftop environment reference: sunset rooftop, skyline, calm wind, emotional openness.
+Use Image 3 only as DeepSeek identity reference: light blue hair, gentle younger-sister feeling, soft serious eyes.
+Use Image 4 only as MiniMax identity reference: red short hair, action-oriented big-sister energy, bright confident expression.
+Use Image 5 only as Kimi identity reference: silver-white long hair, pale moonlike cool aura, quiet distant expression.
+
+Timing:
+0-2s: visible cut 1/3, DeepSeek turns back gently in a quiet school corridor or shaded school path, soft blue color accent.
+2-4s: visible cut 2/3, MiniMax runs across the sports field toward camera, energetic and bright, red hair catching sunlight.
+4-6s: visible cut 3/3, Kimi stands on the rooftop in wind, silver hair moving softly, calm eyes lifting toward camera.
+
+Shot direction:
+This is an OP character flash montage built from anime layouts, not a moving real camera. Each character gets one clear visual memory point. Use fixed or nearly fixed compositions, clean cut transitions, pose-driven character animation, hair / cloth wind layers, and simple 2D background parallax only. Keep identity stable and do not merge the three girls. No text, no labels. The cuts should feel rhythmic but not chaotic.
+
+Performance:
+DeepSeek: gentle回头, small sincere smile.
+MiniMax: confident sprint forward, lively open expression.
+Kimi: quiet stillness, minimal motion, hair and uniform moving in wind.
+
+Style:
+TV anime series cel style, clean flat color areas with hard-edged shading, visible clean ink line art, animation key visual aesthetic, CloverWorks / A-1 Pictures-like studio anime look, vibrant but not fluorescent. No photorealism, no glossy 3D, no game render, no painterly rendering.
+
+Audio rule:
+No background music, no soundtrack, no score, no song, no generated singing, no subtitles. Keep the clip ready for later editing and external audio.
+No BGM.
+```

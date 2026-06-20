@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "ai_ladies_op_seedance_run_state_v1",
+  "startedAt": "2026-06-18T05:24:22.739Z",
+  "status": "generated_needs_review",
+  "runRoot": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs",
+  "shots": [
+    {
+      "id": "shot_01",
+      "title": "ZC学院开场",
+      "durationSeconds": 5,
+      "status": "completed_needs_anime_camera_retry",
+      "submitId": "5b8e1938-b305-4910-a630-a066dc743e03",
+      "videoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_01/5b8e1938-b305-4910-a630-a066dc743e03_video_1.mp4",
+      "issue": "motion feels like smooth real-camera / 3D dolly rather than Japanese TV anime OP compositing",
+      "retryPromptPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/02-prompts/shot_01_zc_academy_opening.md",
+      "retry": {
+        "id": "shot_01_retry_01",
+        "status": "success_needs_user_review",
+        "submitId": "212ebca8-5f14-4319-b5fb-687fb0bf1c4d",
+        "videoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_01_retry_01/212ebca8-5f14-4319-b5fb-687fb0bf1c4d_video_1.mp4",
+        "mutedVideoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_01_retry_01/212ebca8-5f14-4319-b5fb-687fb0bf1c4d_video_1_muted.mp4",
+        "contactSheetPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_01_retry_01/shot_01_retry_01_contact_sheet.png",
+        "note": "prompt revised to anime OP cut grammar; generated low-level audio track was stripped in muted copy"
+      }
+    },
+    {
+      "id": "shot_02",
+      "title": "Claude / GPT 对位",
+      "durationSeconds": 5,
+      "status": "success_needs_user_review",
+      "submitId": "dab67696-0713-4090-ae1f-45a9dc8f5748",
+      "failedUploadAttemptSubmitId": "9989d267-1534-46d7-8c63-be3c48f99976",
+      "videoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_02/dab67696-0713-4090-ae1f-45a9dc8f5748_video_1.mp4",
+      "mutedVideoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_02/dab67696-0713-4090-ae1f-45a9dc8f5748_video_1_muted.mp4",
+      "contactSheetPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_02/shot_02_contact_sheet.png"
+    },
+    {
+      "id": "shot_03",
+      "title": "Gemini / 豆包闯入",
+      "durationSeconds": 4,
+      "status": "success_needs_user_review",
+      "submitId": "4887228d-9284-4b78-9880-27002ba77711",
+      "failedUploadAttemptSubmitId": "dd598d28-d8a2-4445-8b16-215fd7881305",
+      "videoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_03/4887228d-9284-4b78-9880-27002ba77711_video_1.mp4",
+      "mutedVideoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_03/4887228d-9284-4b78-9880-27002ba77711_video_1_muted.mp4",
+      "contactSheetPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_03/shot_03_contact_sheet.png"
+    },
+    {
+      "id": "shot_04",
+      "title": "DeepSeek / MiniMax / Kimi 三连",
+      "durationSeconds": 6,
+      "status": "success_needs_user_review",
+      "submitId": "a7d57d3d-ace8-4f9d-ba5f-1e3dea17defa",
+      "videoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_04/a7d57d3d-ace8-4f9d-ba5f-1e3dea17defa_video_1.mp4",
+      "mutedVideoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_04/a7d57d3d-ace8-4f9d-ba5f-1e3dea17defa_video_1_muted.mp4",
+      "contactSheetPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_04/shot_04_contact_sheet.png"
+    },
+    {
+      "id": "shot_05",
+      "title": "社团室全员据点",
+      "durationSeconds": 6,
+      "status": "success_needs_user_review",
+      "submitId": "719ae7fb-ec59-4c05-8f90-9ee613762d92",
+      "videoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_05/719ae7fb-ec59-4c05-8f90-9ee613762d92_video_1.mp4",
+      "mutedVideoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_05/719ae7fb-ec59-4c05-8f90-9ee613762d92_video_1_muted.mp4",
+      "contactSheetPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_05/shot_05_contact_sheet.png"
+    },
+    {
+      "id": "shot_06",
+      "title": "男主被包围的 OP Hook",
+      "durationSeconds": 6,
+      "status": "success_needs_user_review",
+      "submitId": "ac5de791-9652-4754-b9c8-adf7debc253f",
+      "videoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_06/ac5de791-9652-4754-b9c8-adf7debc253f_video_1.mp4",
+      "mutedVideoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_06/ac5de791-9652-4754-b9c8-adf7debc253f_video_1_muted.mp4",
+      "contactSheetPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_06/shot_06_contact_sheet.png",
+      "issue": "original final group overloaded characters and duplicated at least one heroine",
+      "retry": {
+        "id": "shot_06_retry_core3",
+        "status": "success_needs_user_review",
+        "submitId": "ee5b3e6c-f8fc-437e-9048-fed1bf95afec",
+        "videoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_06_retry_core3/ee5b3e6c-f8fc-437e-9048-fed1bf95afec_video_1.mp4",
+        "mutedVideoPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_06_retry_core3/ee5b3e6c-f8fc-437e-9048-fed1bf95afec_video_1_muted.mp4",
+        "contactSheetPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/05-video-runs/videos/shot_06_retry_core3/shot_06_retry_core3_contact_sheet.png",
+        "promptPath": "/Users/lichenhao/Desktop/new vibe directing/showcase-package/ai-ladies-op-6shot-plan-2026-06-18/02-prompts/shot_06_confession_pressure_hook_retry_core3.md",
+        "note": "reduced final hook to protagonist plus Claude/GPT/Gemini to avoid duplicate crowd characters"
+      }
+    }
+  ]
+}

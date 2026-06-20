@@ -49,6 +49,40 @@ function uniqueReferenceCandidates(values: unknown[]): string[] {
   return uniqueStrings(values.flatMap(splitReferenceCandidate));
 }
 
+const characterActionPrefixPattern =
+  /^(?:引|领|带|追|拉|推|抱|扶|递|拿|举|看|望|跟|陪|叫|喊|牵|叼|咬|撞|靠近|走向|跑向|冲向|转向|看向|望向|追着|跟着|带着|引导|牵着|拉着|推着|抱着|递给|拿着)$/u;
+
+const characterActionSuffixPattern =
+  /^(?:走|跑|冲|追|跟|看|望|转|停|回头|低头|抬头|走进|跑进|冲进|走向|跑向|冲向|看向|望向|转向|靠近|离开|拿起|放下|递出|伸手|抬手|回身|回望|追出去|走进去|跑出去|进入|离开|经过|穿过|叼|咬|叼着|咬着|抱着|拉着|推着|跟着|带着).*/u;
+
+function looksLikeActionDecoratedCharacter(candidate: string, subject: string): boolean {
+  const full = clean(candidate);
+  const base = clean(subject);
+  if (!full || !base || full === base || full.length <= base.length) return false;
+  if (full.endsWith(base)) {
+    const prefix = full.slice(0, -base.length).replace(/[的地得\s]+$/u, "");
+    return characterActionPrefixPattern.test(prefix);
+  }
+  if (full.startsWith(base)) {
+    const suffix = full.slice(base.length).replace(/^[的地得\s]+/u, "");
+    return characterActionSuffixPattern.test(suffix);
+  }
+  const index = full.indexOf(base);
+  if (index <= 0) return false;
+  const prefix = full.slice(0, index).replace(/[的地得\s]+$/u, "");
+  const suffix = full.slice(index + base.length).replace(/^[的地得\s]+/u, "");
+  return characterActionPrefixPattern.test(prefix) || characterActionSuffixPattern.test(suffix);
+}
+
+function removeActionDecoratedCharacterCandidates(candidates: string[]): string[] {
+  return candidates.filter((candidate) => {
+    const normalized = clean(candidate);
+    if (!normalized) return false;
+    return !candidates.some((other) =>
+      clean(other) !== normalized && looksLikeActionDecoratedCharacter(normalized, other));
+  });
+}
+
 const characterControllerPattern =
   /(?:跑车|汽车|车辆|赛车|车|机甲|机器人|飞船|船|飞机|战机|坦克|SU7|Xiaomi|小米|Porsche|保时捷|GT3|911|car|vehicle|mecha|robot|spaceship|ship|aircraft).{0,8}(?:驾驶者|驾驶员|司机|车手|操作者|操作员|controller|driver|pilot|operator)$/i;
 
@@ -65,7 +99,10 @@ const vehicleObjectPattern =
   /跑车|汽车|车辆|赛车|双门车|SU7|Xiaomi|小米|Porsche|保时捷|GT3|911|(?:^|[\s_-])(?:car|vehicle)(?:$|[\s_-])/i;
 
 const bodyOrPerformanceDetailPattern =
-  /(?:^|[\s'_-])(?:hand|hands|finger|fingers|fingertips|eyes?|gaze|eyeline|face|facial expression|hair|feet|foot|profile|shoulders?|sleeves?|breath|blink|mouth|lips|posture|gesture|coat|jacket|dress|skirt|hat|glasses|headphones?|earphones?|earbuds?|headset|shoes?|boots?)(?:$|[\s'_-])|(?:的)?(?:手|手指|指尖|眼睛|眼神|视线|脸部|面部|脸|表情|头发|发丝|脚|脚步|背影|侧脸|肩|肩膀|衣袖|袖口|呼吸|眨眼|嘴唇|姿态|手势|雨衣|风衣|大衣|校服|制服|外套|夹克|衬衫|上衣|裤子|长裤|短裤|连衣裙|礼服|毛衣|卫衣|裙子|裙|围巾|领巾|帽子|发箍|眼镜|墨镜|耳机|耳机线|入耳式耳机|头戴式耳机|鞋|靴|雨靴)$/i;
+  /(?:^|[\s'_-])(?:hand|hands|finger|fingers|fingertips|eyes?|gaze|eyeline|face|facial expression|hair|feet|foot|profile|shoulders?|sleeves?|breath|blink|mouth|lips|posture|gesture|coat|jacket|dress|skirt|hat|glasses|headphones?|earphones?|earbuds?|headset|shoes?|boots?)(?:$|[\s'_-])|(?:的)?(?:手|手部|手指|指尖|眼睛|眼部|眼神|视线|脸部|面部|脸|表情|头发|发丝|脚|脚步|背影|侧脸|肩|肩膀|衣袖|袖口|呼吸|眨眼|嘴唇|姿态|手势|雨衣|风衣|大衣|校服|制服|外套|夹克|衬衫|上衣|裤子|长裤|短裤|连衣裙|礼服|毛衣|卫衣|裙子|裙|围巾|领巾|帽子|发箍|眼镜|墨镜|耳机|耳机线|入耳式耳机|头戴式耳机|鞋|靴|雨靴)$/i;
+
+const parenthesizedBodyOrPerformanceDetailPattern =
+  /[（(][^）)]*(?:hand|hands|finger|fingers|fingertips|eyes?|gaze|eyeline|face|facial expression|hair|profile|body part|close[-\s]*up|手|手部|手指|指尖|眼睛|眼部|眼神|视线|脸部|面部|脸|表情|侧脸|背影|局部|特写)[^）)]*[）)]$/i;
 
 const sceneStateDetailPattern =
   /^(?:清晨|早晨|白天|中午|下午|傍晚|黄昏|深夜|夜晚|黎明)$|积水|水坑|水洼|水迹|湿路|路面|地面|路肩|远山|山体|山林|山影|山轮廓|天空|天光|天色|地平线|云层|云朵|雨雾|雨线|雾|薄雾|烟尘|灰尘|天气|光线|色温|晨光|夕阳|微白|霓虹|灯牌|反光|倒影|水花|水面|护栏|弯道|树影|路灯|阴影|高光|订单高峰感|atmosphere|mist|fog|rain|weather|road surface|reflection|reflections?|sky|cloud|haze|dust|neon|signage|streetlight|shadow|highlight|lighting|color temperature/i;
@@ -109,7 +146,7 @@ export function isVehicleObjectReference(value: unknown): boolean {
 export function isBodyPartOrShotDetailReference(value: unknown): boolean {
   const text = clean(value);
   if (functionalVehicleCharacterPattern.test(text)) return false;
-  return bodyOrPerformanceDetailPattern.test(text);
+  return bodyOrPerformanceDetailPattern.test(text) || parenthesizedBodyOrPerformanceDetailPattern.test(text);
 }
 
 export function isSceneDetailReference(value: unknown): boolean {
@@ -213,13 +250,13 @@ export function referenceAssetCandidates(values: unknown[], type: ReferenceAsset
     return candidates.filter((candidate) => classifyReferenceAssetText(candidate, "scene").bucket === "standalone");
   }
   if (type === "character") {
-    return candidates.filter((candidate) => {
+    return removeActionDecoratedCharacterCandidates(candidates.filter((candidate) => {
       const classification = classifyReferenceAssetText(candidate, "character");
       return classification.bucket !== "character_constraint"
         && classification.bucket !== "scene_constraint"
         && classification.bucket !== "object_constraint"
         && classification.bucket !== "ignored";
-    });
+    }));
   }
   return referenceConstraintBuckets(candidates).standalone;
 }

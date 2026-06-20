@@ -260,6 +260,64 @@ assert(receiptPatch.project.receipts?.reviewReceipts.length === 1, "review recei
 assert(receiptPatch.project.sourceIndex.scriptPlanningReceiptRefs?.includes("project.vibe#receipts/scriptPlanning/script_receipt_001"), "source index should include script planning receipt refs");
 assert(receiptPatch.project.sourceIndex.reviewReceiptRefs?.includes("project.vibe#receipts/reviews/review_receipt_needs_review_001"), "source index should include review receipt refs");
 
+const dirtyReceiptPatch = applyProjectVibeTransaction(receiptProject, {
+  id: "txn_dirty_script_receipt_refs",
+  actor: "system",
+  reason: "Append a script planning receipt with stale intake evidence refs.",
+  createdAt: "2026-05-18T01:03:00.000Z",
+  operations: [
+    {
+      op: "append_script_planning_receipt",
+      receipt: {
+        id: "script_receipt_dirty_refs",
+        kind: "script_planning",
+        createdAt: "2026-05-18T01:02:50.000Z",
+        plannerId: "script_planner",
+        sourceFactHash: receiptProjectHash,
+        scriptBriefId: "brief_dirty_refs",
+        sectionIds: ["section_receipts"],
+        shotIds: ["shot_receipt"],
+        blockerCount: 0,
+        evidenceRefs: [
+          "staged_fact:intake_雨夜旧电影院_黑猫叼电影票_引少女_character_candidate_黑猫_1",
+          "staged_fact:intake_雨夜旧电影院_黑猫叼电影票_引少女_character_candidate_引少女_2",
+          "staged_fact:intake_雨夜旧电影院_黑猫叼电影票_引少女_character_candidate_望月_3",
+        ],
+        providerSelfReportUsed: false,
+        runtimeFixtureUsed: false,
+      },
+    },
+  ],
+});
+const dirtyReceipt = dirtyReceiptPatch.project.receipts?.scriptPlanningReceipts.find((receipt) => receipt.id === "script_receipt_dirty_refs");
+assert(dirtyReceiptPatch.receipt.status === "applied", `dirty receipt patch should apply: ${dirtyReceiptPatch.receipt.errors.join("; ")}`);
+assert(dirtyReceipt !== undefined, "dirty receipt should be appended");
+assert(
+  dirtyReceipt.evidenceRefs.some((ref) => ref.includes("character_candidate_黑猫")),
+  "transaction sanitizer should keep valid character candidate evidence refs",
+);
+assert(
+  dirtyReceipt.evidenceRefs.some((ref) => ref.includes("character_candidate_望月")),
+  "transaction sanitizer should keep name-like character candidate evidence refs",
+);
+assert(
+  !dirtyReceipt.evidenceRefs.some((ref) => ref.includes("character_candidate_引少女")),
+  "transaction sanitizer should drop action-prefixed character candidate evidence refs",
+);
+
+const dirtyTempRoot = mkdtempSync(join(tmpdir(), "project-vibe-dirty-receipt-"));
+try {
+  const adapter = createDiskAdapter(dirtyTempRoot);
+  const dirtySaveResult = await saveProjectVibe(adapter, dirtyReceiptPatch.project, projectVibeFileName);
+  assert(dirtySaveResult.ok, `dirty receipt save should pass: ${dirtySaveResult.errors.join("; ")}`);
+  const savedText = readFileSync(join(dirtyTempRoot, projectVibeFileName), "utf8");
+  assert(savedText.includes("character_candidate_黑猫"), "saved project should keep clean character candidate evidence refs");
+  assert(savedText.includes("character_candidate_望月"), "saved project should keep name-like character candidate evidence refs");
+  assert(!savedText.includes("character_candidate_引少女"), "saved project should not persist action-prefixed character candidate evidence refs");
+} finally {
+  rmSync(dirtyTempRoot, { recursive: true, force: true });
+}
+
 const blockedProviderPromotion = buildProviderReviewPromotionTransaction({
   project: receiptPatch.project,
   candidate: {

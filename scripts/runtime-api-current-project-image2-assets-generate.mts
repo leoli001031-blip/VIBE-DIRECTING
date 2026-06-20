@@ -340,12 +340,22 @@ function selectedShotFacts(workbenchFacts, projectFacts, selectedShotId) {
     : shots[0];
   const shotId = selectedShotId || selected?.id;
   const rawShot = rawProjectShotById(projectFacts, shotId);
+  const richStoryText = richShotStoryText(rawShot, selected);
+  const storyRoleReferences = labeledFactItems(richStoryText, "角色");
+  const storyPropReferences = labeledFactItems(richStoryText, "道具");
+  const storySceneReference = firstLabeledFact(richStoryText, "场景");
   const explicitRoleIds = uniqueStrings([
     ...textArray(selected?.roleIds),
     ...textArray(rawShot?.roleIds),
     ...textArray(rawShot?.characterIds),
     ...textArray(rawShot?.characterAssetIds),
   ]).filter((value) => !isPlaceholderReferenceText(value));
+  const rawCharacterReferences = (explicitRoleIds.length ? explicitRoleIds : uniqueStrings([
+    ...textArray(rawShot?.characterGuidance),
+    ...storyRoleReferences,
+  ]))
+    .filter((value) => !isPlaceholderReferenceText(value));
+  const characterBuckets = referenceConstraintBuckets(rawCharacterReferences, "character");
   const explicitPropIds = uniqueStrings([
     ...textArray(rawShot?.propIds),
     ...textArray(rawShot?.props),
@@ -353,12 +363,18 @@ function selectedShotFacts(workbenchFacts, projectFacts, selectedShotId) {
     ...textArray(rawShot?.propAssetIds),
   ]).filter((value) => !isPlaceholderReferenceText(value));
   const knownCharacterKeys = projectCharacterIdentityKeys(workbenchFacts, projectFacts);
-  const rawPropReferences = (explicitPropIds.length ? explicitPropIds : textArray(rawShot?.propGuidance))
+  const rawPropReferences = (explicitPropIds.length ? explicitPropIds : uniqueStrings([
+    ...textArray(rawShot?.propGuidance),
+    ...storyPropReferences,
+  ]))
     .filter((value) => !isPlaceholderReferenceText(value));
   const propIdsThatAreCharacters = rawPropReferences.filter((id) => knownCharacterKeys.has(normalizedAssetIdentity(id)));
   const propReferenceCandidates = rawPropReferences.filter((id) => !knownCharacterKeys.has(normalizedAssetIdentity(id)));
   const propBuckets = referenceConstraintBuckets(propReferenceCandidates);
-  const rawSceneReferences = textArray(rawShot?.sceneGuidance)
+  const rawSceneReferences = uniqueStrings([
+    ...textArray(rawShot?.sceneGuidance),
+    storySceneReference,
+  ])
     .filter((value) => !isPlaceholderReferenceText(value));
   const sceneBuckets = referenceConstraintBuckets(rawSceneReferences, "scene");
   const explicitSceneIds = uniqueStrings([
@@ -371,24 +387,25 @@ function selectedShotFacts(workbenchFacts, projectFacts, selectedShotId) {
   return {
     shotId,
     title: asString(selected?.title) || asString(rawShot?.title) || asString(rawShot?.name) || shotId || "当前镜头",
-    storyFunction: uniqueStrings([richShotStoryText(rawShot, selected), projectStyleHint(projectFacts)]).join(" "),
+    storyFunction: uniqueStrings([richStoryText, projectStyleHint(projectFacts)]).join(" "),
     sceneId: primarySceneId,
     roleIds: referenceAssetCandidates(uniqueStrings([
-      ...(explicitRoleIds.length ? explicitRoleIds : textArray(rawShot?.characterGuidance).filter((value) => !isPlaceholderReferenceText(value))),
+      ...characterBuckets.standalone,
       ...propIdsThatAreCharacters,
     ]), "character"),
     propIds: propBuckets.standalone,
     propReferencesSource: explicitPropIds.length ? "explicit" : "guidance",
-    objectDetailIds: propBuckets.objectConstraints,
-    vehicleDetailIds: propBuckets.objectConstraints,
+    objectDetailIds: uniqueStrings([...propBuckets.objectConstraints, ...characterBuckets.objectConstraints]),
+    vehicleDetailIds: uniqueStrings([...propBuckets.objectConstraints, ...characterBuckets.objectConstraints]),
     sceneDetailIds: uniqueStrings([
       ...sceneBuckets.standalone.slice(primarySceneId ? 1 : 0),
       ...sceneBuckets.sceneConstraints,
       ...propBuckets.sceneConstraints,
+      ...characterBuckets.sceneConstraints,
     ]),
-    characterDetailIds: propBuckets.characterConstraints,
-    shotDetailIds: propBuckets.shotDetails,
-    ignoredDetailIds: uniqueStrings([...sceneBuckets.ignoredDetails, ...propBuckets.ignoredDetails]),
+    characterDetailIds: uniqueStrings([...propBuckets.characterConstraints, ...characterBuckets.characterConstraints]),
+    shotDetailIds: uniqueStrings([...propBuckets.shotDetails, ...characterBuckets.shotDetails]),
+    ignoredDetailIds: uniqueStrings([...sceneBuckets.ignoredDetails, ...propBuckets.ignoredDetails, ...characterBuckets.ignoredDetails]),
     referenceStrategy: asString(rawShot?.referenceStrategy) || asString(selected?.referenceStrategy),
     visibleClips: asPositiveNumber(rawShot?.visibleClips) || asPositiveNumber(selected?.visibleClips),
     storyboardPanels: asPositiveNumber(rawShot?.storyboardPanels) || asPositiveNumber(selected?.storyboardPanels),
@@ -628,6 +645,15 @@ function nonPhotographicStyleGuard(selected) {
 function firstLabeledFact(text, label) {
   const match = String(text || "").match(new RegExp(`${label}[:：]([^。；;\\n]+)`));
   return match?.[1]?.trim();
+}
+
+function labeledFactItems(text, label) {
+  const fact = firstLabeledFact(text, label);
+  if (!fact) return [];
+  return uniqueStrings(fact
+    .split(/[、,，/]+/)
+    .map((item) => item.trim())
+    .filter(Boolean));
 }
 
 function recoveryAssetName(type, selected) {
@@ -1277,9 +1303,18 @@ function projectVibeAssetFromGeneratedResult(result, source) {
   const id = asString(result.id);
   const pathRef = projectPortablePath(result.path || result.outputFilePath, source);
   if (!id || !pathRef) return undefined;
+  const providerObservationPath = projectPortablePath(result.providerObservationPath, source);
+  const semanticQaPath = projectPortablePath(result.semanticQaPath, source);
+  const outputSha256 = asString(result.outputSha256);
+  const sourceReceiptId = asString(result.sourceReceiptId)
+    || asString(result.providerReceiptId)
+    || asString(result.providerRequestId)
+    || providerObservationPath;
   const sourceRefs = uniqueStrings([
-    projectPortablePath(result.providerObservationPath, source),
-    projectPortablePath(result.semanticQaPath, source),
+    providerObservationPath,
+    semanticQaPath,
+    sourceReceiptId ? `receipt#${sourceReceiptId}` : undefined,
+    outputSha256 ? `output_hash#${outputSha256}` : undefined,
   ]);
   return {
     id,
@@ -1290,6 +1325,20 @@ function projectVibeAssetFromGeneratedResult(result, source) {
     textConstraints: uniqueStrings(result.textConstraints || []),
     usedByShotIds: uniqueStrings(result.usedByShotIds || []),
     sourceRefs,
+    sourceReceiptId,
+    outputHash: outputSha256,
+    outputSha256,
+    providerObservationPath,
+    semanticQaPath,
+    generatedBy: {
+      providerId: asString(result.providerId),
+      providerSlot: result.type === "storyboard" ? "image.storyboard_reference" : "image.reference_asset",
+      providerOperation: "image.generate",
+      generatedAt: asString(result.generatedAt),
+      providerObservationPath,
+      semanticQaPath,
+      outputSha256,
+    },
     roleBinding: projectRoleBindingForResult(result),
   };
 }
@@ -1679,6 +1728,7 @@ export function createRuntimeApiCurrentProjectImage2AssetGenerate(deps) {
         usedByShotIds: spec.usedByShotIds || [selected.shotId].filter(Boolean),
         textConstraints: spec.textConstraints || [],
         providerId: input.providerId,
+        providerRequestId: providerResult.providerRequestId,
         generatedAt,
         providerObservationPath,
         semanticQaPath,

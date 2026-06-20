@@ -88,6 +88,20 @@ export interface ProjectVibeAsset {
   textConstraints: string[];
   usedByShotIds: string[];
   sourceRefs: string[];
+  sourceReceiptId?: string;
+  outputHash?: string;
+  outputSha256?: string;
+  providerObservationPath?: string;
+  semanticQaPath?: string;
+  generatedBy?: {
+    providerId?: string;
+    providerSlot?: string;
+    providerOperation?: string;
+    generatedAt?: string;
+    providerObservationPath?: string;
+    semanticQaPath?: string;
+    outputSha256?: string;
+  };
   lockedBy?: "user" | "agent_loop";
   roleBinding?: ProjectVibeReferenceRoleBinding;
 }

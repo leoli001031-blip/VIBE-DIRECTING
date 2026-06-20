@@ -15,7 +15,7 @@ import {
   type ProjectFactsStagedApplyPlan,
 } from "../../core/projectTransaction";
 import type { AssetRecord, ShotRecord } from "../../core/types";
-import type { VibeAgentTimelineEntry } from "../../agent-core/types";
+import type { VibeAgentKernelTurn, VibeAgentTimelineEntry } from "../../agent-core/types";
 import { formatShotNumber } from "./MinimalStoryFlow";
 
 export type AgentPlanPhase = "idle" | "review" | "confirmed";
@@ -134,9 +134,9 @@ export function agentVideoSubmitContractForUi(
 }
 
 export function agentVideoSubmitContractLabel(contract: AgentVideoSubmitContract) {
-  if (contract.mode === "plan_only") return "先整理";
-  if (contract.mode === "reference_allowed") return "可做参考";
-  return "可发视频";
+  if (contract.mode === "plan_only") return "只出计划";
+  if (contract.mode === "reference_allowed") return "生成参考";
+  return "提交视频";
 }
 
 export function agentVideoSubmitContractAllowsVideo(contract: AgentVideoSubmitContract) {
@@ -184,6 +184,17 @@ export type PrototypeAgentDemoRun = {
   result?: PrototypeAgentDemoResult;
 };
 
+// Kept exported for both the Agent message rail and the workbench status bar.
+export function isCommittedNewVideoDraftAgentRun(run?: PrototypeAgentDemoRun) {
+  const result = run?.result;
+  if (run?.status !== "ready" || !result?.projectVibeAdded || !result.projectSaved) return false;
+  return /草案|故事流|项目/.test([
+    result.label,
+    result.storageLabel,
+    result.status,
+  ].filter(Boolean).join(" "));
+}
+
 export type PreviewPrototypeAgentDemoInput = {
   userIntent: string;
   scopeLabel: string;
@@ -222,6 +233,7 @@ export type StagePrototypeAgentPlanResult = {
   agentActionEnvelope?: DirectorAgentActionEnvelope;
   agentToolHandoff?: DirectorAgentToolHandoff;
   agentTimelineEntries?: VibeAgentTimelineEntry[];
+  agentKernelTurn?: VibeAgentKernelTurn;
   qaFeedback?: DirectorQaUserFeedback;
   projectRecordLabel?: string;
   projectImpactLabel?: string;
@@ -234,6 +246,7 @@ export type PreviewPrototypeAgentDemoResult = {
   agentActionEnvelope?: DirectorAgentActionEnvelope;
   agentToolHandoff?: DirectorAgentToolHandoff;
   agentTimelineEntries?: VibeAgentTimelineEntry[];
+  agentKernelTurn?: VibeAgentKernelTurn;
   projectVibeWritten?: boolean;
   projectRecordLabel?: string;
   projectImpactLabel?: string;

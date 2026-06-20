@@ -355,7 +355,7 @@ function storyFlowMissing(facts?: ProjectWorkbenchFacts) {
 }
 
 function visualMemoryReadable(facts?: ProjectWorkbenchFacts) {
-  return facts?.visualMemory?.present === true && facts.visualMemory.readable === true;
+  return facts?.visualMemory?.readable === true;
 }
 
 function assetCounts(assetFacts: ProjectWorkbenchAssetFact[]) {
@@ -571,8 +571,8 @@ export function buildCurrentProjectWorkbenchProjection(
       : "current_project_no_preview_items";
   const storyFallbackUsed = !useStoryFacts;
   const readinessCount = referenceReadinessCount(input.image2BatchState);
-  const visualPresent = facts?.visualMemory?.present === true;
   const visualReadable = visualMemoryReadable(facts);
+  const visualPresent = facts?.visualMemory?.present === true || visualReadable;
   const assetFacts = visualReadable ? facts?.visualMemory?.assets || [] : [];
   const counts = assetCounts(assetFacts);
   const selectedScope = selectedShotScope(shots, input, identity);

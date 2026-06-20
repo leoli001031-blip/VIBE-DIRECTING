@@ -132,6 +132,10 @@ function actionMessage(action?: { message?: string }, fallback = "") {
   return action?.message?.trim() || fallback;
 }
 
+function videoSubmitWasCancelled(action?: VideoActionState) {
+  return action?.status === "blocked" && /已取消，本次没有发送/.test(actionMessage(action));
+}
+
 function videoStageFactLabel(stage: CreatorVideoStageLike) {
   const generation = stage.generation;
   const summary = generation?.queueSummary?.trim() || generation?.statusLabel?.trim();
@@ -227,6 +231,17 @@ function missingCountFromReferenceProgress(progress: string) {
   return safeCount(Number(match[1]));
 }
 
+function referenceDisplayedMissingCount(input: ProjectStatusViewModelInput) {
+  const progress = referenceProgressLabel(input.referenceBatch);
+  return Math.max(
+    safeCount(input.referenceGapCount),
+    safeCount(input.framePlan?.missingCount),
+    safeCount(input.referenceBatch?.missingCount),
+    missingCountFromReferenceProgress(progress),
+    input.runtimeState.visualMemory.summary.missing || 0,
+  );
+}
+
 function referenceFactLabel(
   summary: ProjectRuntimeState["visualMemory"]["summary"],
   batch?: ReferenceBatchProgressLike,
@@ -251,16 +266,9 @@ function referenceFactLabel(
 
 function assetWaitingLabel(input: ProjectStatusViewModelInput) {
   const { visualMemory } = input.runtimeState;
-  const missing = visualMemory.summary.missing;
   const review = visualMemory.summary.needsReview;
   const progress = referenceProgressLabel(input.referenceBatch);
-  const displayedMissing = Math.max(
-    safeCount(input.referenceGapCount),
-    safeCount(input.framePlan?.missingCount),
-    safeCount(input.referenceBatch?.missingCount),
-    missingCountFromReferenceProgress(progress),
-    missing,
-  );
+  const displayedMissing = referenceDisplayedMissingCount(input);
   if (input.referenceGenerationAction?.status === "running") return progress ? `参考正在生成：${progress}` : "参考图正在生成";
   if (input.referenceGenerationAction?.status === "blocked") return actionMessage(input.referenceGenerationAction, "参考生成被拦住");
   if (input.referenceGenerationAction?.status === "ready" && displayedMissing > 0) return `还缺 ${displayedMissing} 张画面参考`;
@@ -285,6 +293,7 @@ function videoWaitingLabel(input: ProjectStatusViewModelInput) {
   if (!video) return "";
   if (video.status === "submitted" || video.status === "running") return "视频正在排队或生成";
   if (video.status === "needs_review") return "视频结果已出，等待确认";
+  if (videoSubmitWasCancelled(video)) return "";
   if (video.status === "blocked") return actionMessage(video, "视频暂时不能发送");
   return "";
 }
@@ -296,6 +305,10 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     ? input.newVideoStatus.draftShotCount
     : runtimeState.storyFlow.shots.length;
   const assetSummary = runtimeState.visualMemory.summary;
+  const displayedReferenceMissing = referenceDisplayedMissingCount(input);
+  const displayAssetSummary = displayedReferenceMissing > safeCount(assetSummary.missing)
+    ? { ...assetSummary, missing: displayedReferenceMissing }
+    : assetSummary;
   const draftReferenceCount = browserDraftActive ? input.newVideoStatus?.draftReferenceCount || 0 : 0;
   const folderLabel = compactPath(runtimeState.project.root);
   const videoStage = input.videoStage;
@@ -312,6 +325,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     : "";
   const videoTaskFacts = videoTaskFactsForStatus(videoStage);
   const currentVideoWaiting = videoWaitingLabel(input);
+  const currentAssetWaiting = assetWaitingLabel(input);
   const audioFact = audioFactLabel(runtimeState);
   const rawAgentFact = input.agentCommand?.label?.trim() || input.agentStage?.summary?.trim() || "";
   const agentFact = browserDraftActive
@@ -331,7 +345,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
   const facts = [
     { label: "项目", value: projectFact },
     { label: "镜头", value: browserDraftActive && shotCount > 0 ? `草案 ${countLabel(shotCount, "个")}` : countLabel(shotCount, "个") },
-    { label: "参考", value: browserDraftActive && draftReferenceCount > 0 ? `已放入 ${draftReferenceCount} 个` : referenceFactLabel(assetSummary, input.referenceBatch, input.referenceGenerationAction?.status) },
+    { label: "参考", value: browserDraftActive && draftReferenceCount > 0 ? `已放入 ${draftReferenceCount} 个` : referenceFactLabel(displayAssetSummary, input.referenceBatch, input.referenceGenerationAction?.status) },
     audioFact ? { label: "声音", value: audioFact } : undefined,
     videoFact ? { label: "视频", value: videoFact } : undefined,
     ...videoTaskFacts,
@@ -343,7 +357,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
       stage: "正在处理",
       doing: "项目正在保存或同步",
       waitingFor: "等待当前动作完成",
-      nextAction: "完成后继续在底部对话框描述下一步",
+      nextAction: "完成后继续在右侧输入框描述下一步",
       tone: "working",
       facts,
     };
@@ -351,7 +365,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
 
   if (input.agentTimelineStatus) {
     const timelineStatus = input.agentTimelineStatus;
-    if (!videoTaskActive && !currentVideoWaiting) {
+    if (!videoTaskActive && !currentVideoWaiting && !currentAssetWaiting) {
       return {
         stage: timelineStatus.stage,
         doing: timelineStatus.doing,
@@ -391,7 +405,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
       stage: "准备开始",
       doing: "还没有连接本地项目",
       waitingFor: "一个想法、脚本，或一个项目文件夹",
-      nextAction: "在底部输入想法，或点左上角打开项目",
+      nextAction: "在右侧输入想法，或点左上角打开项目",
       tone: "waiting",
       facts,
     };
@@ -402,7 +416,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
       stage: "准备故事",
       doing: input.folderReady ? "项目文件夹已连接" : "正在整理想法",
       waitingFor: "故事想法、脚本或素材",
-      nextAction: "把想法写到底部输入框，AI 导演会先拆镜头",
+      nextAction: "把想法写进右侧输入框，AI 导演会先拆镜头",
       tone: "waiting",
       facts,
     };
@@ -478,11 +492,11 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
 
   const videoWaiting = currentVideoWaiting;
   if (videoWaiting) {
-    const blocked = input.videoStage?.status === "failed" || input.videoSendAction?.status === "blocked";
+    const blocked = input.videoStage?.status === "failed" || (input.videoSendAction?.status === "blocked" && !videoSubmitWasCancelled(input.videoSendAction));
     const needsReview = input.videoStage?.status === "needs_review" || input.videoSendAction?.status === "needs_review";
     const recoverable = input.videoStage?.status === "recoverable" || input.videoSendAction?.canResume;
     const completed = input.videoStage?.status === "completed";
-    const blockedByQa = blocked && /提交前|参考|QA|待处理/.test(`${input.videoStage?.generation?.statusLabel || ""} ${input.videoStage?.generation?.detail || ""} ${actionMessage(input.videoSendAction)}`);
+    const blockedByQa = blocked && /提交前|补参考|场景参考|参考无法|QA|画面参考/.test(`${input.videoStage?.generation?.statusLabel || ""} ${input.videoStage?.generation?.detail || ""} ${actionMessage(input.videoSendAction)}`);
     const blockedAdvice = videoTaskFactValue(input.videoStage, "建议")
       || (blockedByQa ? videoBlockerRecoveryAdvice(input.videoStage?.generation?.detail || actionMessage(input.videoSendAction)) : "");
     return {
@@ -490,7 +504,9 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
       doing: videoWaiting,
       waitingFor: blockedByQa ? "补参考或修改这一段" : blocked ? "重试或跳过失败段" : needsReview ? "确认视频结果" : completed ? "确认交付" : recoverable ? "查询视频结果" : "视频结果",
       nextAction: blockedByQa
-        ? blockedAdvice || "在底部说明要补什么参考，或让 AI 改这一段"
+        ? blockedAdvice || "在右侧输入框说明要补什么参考，或让 AI 改这一段"
+        : blocked
+          ? "检查即梦登录或 CLI 权限后重试，也可以跳过这一段"
         : recoverable
         ? "继续查询结果"
         : completed
@@ -502,17 +518,17 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     };
   }
 
-  const assetWaiting = assetWaitingLabel(input);
+  const assetWaiting = currentAssetWaiting;
   if (assetWaiting) {
     const blocked = input.referenceGenerationAction?.status === "blocked";
-    const missingReferences = input.runtimeState.visualMemory.summary.missing > 0;
+    const missingReferences = displayedReferenceMissing > 0;
     const referencesNeedReview = input.runtimeState.visualMemory.summary.needsReview > 0;
     const shouldGenerateReferences = missingReferences && !referencesNeedReview;
     const shouldReviewAndGenerateReferences = missingReferences && referencesNeedReview;
     const missingReferenceNextAction = input.agentCommand?.kind === "generate_references"
       ? input.agentCommand.label || "生成参考"
       : "生成参考";
-    const referenceGenerationNeedsPermission = /允许/.test(missingReferenceNextAction);
+    const referenceGenerationNeedsPermission = /确认|允许/.test(missingReferenceNextAction);
     const referenceStage = blocked
       ? "参考待处理"
       : input.referenceGenerationAction?.status === "running"
@@ -527,7 +543,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
       : input.referenceGenerationAction?.status === "running"
         ? "图片结果"
       : shouldGenerateReferences
-        ? referenceGenerationNeedsPermission ? "等待你允许生成参考" : "确认生成参考范围"
+        ? referenceGenerationNeedsPermission ? "等待你确认生成参考" : "确认生成参考范围"
       : shouldReviewAndGenerateReferences
         ? "先复核，再补缺口"
       : "确认素材";
@@ -575,7 +591,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     stage: input.agentCommand?.label ? "下一步已整理" : "可以继续",
     doing: input.agentStage?.summary?.trim() || `当前在${sectionName(input.directorView)}页查看项目`,
     waitingFor: input.agentStage?.detail?.trim() || "你的修改意见、素材，或视频发送许可",
-    nextAction: input.agentCommand?.label?.trim() || "直接在底部告诉 AI 导演要改哪里",
+    nextAction: input.agentCommand?.label?.trim() || "直接在右侧告诉 AI 导演要改哪里",
     tone: "ready",
     facts,
   };

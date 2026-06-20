@@ -19,6 +19,7 @@ tmp/
 console-*.txt
 console-*.log
 *.log
+*.zip
 
 # Local screenshots / one-off debugging artifacts
 /breakpoint-*

@@ -48,6 +48,7 @@ import { createRuntimeApiDirectorTextQaRoute } from "./runtime-routes/director-t
 import { createRuntimeApiLocalIndexTtsRoute } from "./runtime-routes/local-index-tts.mts";
 import { createRuntimeApiLocalQwen3TtsCloneRoute } from "./runtime-routes/local-qwen3-tts-clone.mts";
 import { createRuntimeApiStatusRoute } from "./runtime-routes/status.mts";
+import { saveProjectVibe } from "../src/project/projectVibe.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -455,11 +456,29 @@ async function handleCurrentProjectSaveProjectVibeRoute(req, res, url) {
     return true;
   }
 
-  mkdirSync(path.dirname(context.source.projectVibePath), { recursive: true });
-  const serialized = `${JSON.stringify(project, null, 2)}\n`;
-  const tempPath = `${context.source.projectVibePath}.tmp-${process.pid}-${Date.now()}`;
-  writeFileSync(tempPath, serialized, "utf8");
-  renameSync(tempPath, context.source.projectVibePath);
+  const saveResult = await saveProjectVibe({
+    existsFile: (filePath) => existsSync(filePath),
+    mkdir: (dirPath) => mkdirSync(dirPath, { recursive: true }),
+    readFile: (filePath) => readFileSync(filePath, "utf8"),
+    writeFile: (filePath, content) => {
+      mkdirSync(path.dirname(filePath), { recursive: true });
+      writeFileSync(filePath, content, "utf8");
+    },
+    writeFileAtomic: (filePath, content) => {
+      mkdirSync(path.dirname(filePath), { recursive: true });
+      const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+      writeFileSync(tempPath, content, "utf8");
+      renameSync(tempPath, filePath);
+    },
+  }, project, context.source.projectVibePath);
+  if (!saveResult.ok) {
+    writeJson(res, 400, blockedCurrentProjectResponse(currentProjectSaveProjectVibeEndpoint, context.requestContext, {
+      status: "bad_request",
+      message: saveResult.errors.join("; ") || "Project.vibe validation failed.",
+      validation: saveResult.validation,
+    }));
+    return true;
+  }
   const projectId = asString(project.manifest?.projectId) || asString(project.projectId);
   const projectTitle = asString(project.manifest?.title) || asString(project.title);
   writeJson(res, 200, {
@@ -472,6 +491,7 @@ async function handleCurrentProjectSaveProjectVibeRoute(req, res, url) {
     videoSubmitted: false,
     projectRoot: context.source.runRootRelativePath,
     projectVibePath: context.source.projectVibeRelativePath,
+    factHash: saveResult.factHash,
     projectId,
     projectTitle,
     project: {

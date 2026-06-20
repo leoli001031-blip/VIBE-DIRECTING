@@ -1,0 +1,60 @@
+# Shot 05 Seedance Prompt — 社团室全员据点
+
+## Reference Order
+
+1. Image 1: `/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/scenes/clubroom_2026-05-26T17-38-35-441Z.png`
+2. Image 2: `/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/protagonist/identity_ref/protagonist_identity_ref_2026-05-26T16-17-35-187Z.png`
+3. Image 3: `/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/gpt/identity_ref/gpt_identity_ref_2026-05-26T16-26-06-230Z.png`
+4. Image 4: `/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/gemini/identity_ref/gemini_identity_ref_2026-05-26T16-26-06-254Z.png`
+5. Image 5: `/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/doubao/identity_ref/doubao_2026-05-26T16-47-11-806Z.png`
+6. Image 6: `/Users/lichenhao/Desktop/AI大小姐们想让我告白/assets/characters/minimax/identity_ref/minimax_identity_ref_2026-05-26T16-13-10-882Z.png`
+
+## Settings
+
+- model: `seedance2.0_vip`
+- ratio: `16:9`
+- resolution: `720p`
+- duration: `6s`
+- BGM: no
+
+## Prompt
+
+```text
+全能参考 video request.
+Use the attached references and written direction only.
+Create exactly 3 visible anime cuts inside one OP ensemble sequence. Do not create more than 3 visible cuts.
+Total duration: 6s.
+No text overlays, subtitles, logos, watermarks, UI, panels, prompt artifacts, or storyboard marks.
+
+Use Image 1 only as environment reference: ZC学院社团室、暖光、电脑、白板、便签、桌面杂物、创作据点氛围.
+Use Image 2 only as protagonist identity reference: faceless male protagonist, ordinary student, seated or standing in the middle as viewer surrogate.
+Use Image 3 only as GPT identity reference: dark green long straight hair, cool precise posture.
+Use Image 4 only as Gemini identity reference: blue-purple long hair, playful chaos.
+Use Image 5 only as Doubao identity reference: black bob hair, warm friendly face.
+Use Image 6 only as MiniMax identity reference: red short hair, energetic action leader.
+
+Anime camera rule:
+Use anime OP ensemble staging: still insert, medium character layout, final group memory frame. Avoid smooth pull-back, real-camera dolly, 3D room fly-through, or live-action camera movement. Keep composition readable and identity-separated.
+
+Timing:
+0.0-1.8s: visible cut 1/3, 桌面创作插入. 电脑、便签、草图和杯子堆在桌上，几只手进入画面，节奏像 OP 的工作台插入镜头。
+1.8-3.8s: visible cut 2/3, 男主被信息包围. 男主在中心，GPT 指向平板，Gemini 从侧边凑近，豆包递出点子，MiniMax做夸张手势。
+3.8-6.0s: visible cut 3/3, 社团室团队定格. 全员形成清楚的群像构图，每个人保留自己的发色、姿态和位置，结束在温暖但忙乱的 OP 记忆帧。
+
+Shot direction:
+Use cut-based ensemble staging, not a continuous reveal. First show the table insert, then the protagonist surrounded by suggestions, then the final readable group layout. Keep everyone visually distinct and positioned clearly. This is a warm ensemble workspace shot, not a chaotic crowd.
+
+Performance:
+Protagonist: small nervous posture.
+GPT: precise and calm.
+Gemini: playful and too close to the table.
+Doubao: friendly and approachable.
+MiniMax: loud energetic gesture.
+
+Style:
+TV anime series cel style, clean flat color areas with hard-edged shading, visible clean ink line art, animation key visual aesthetic, CloverWorks / A-1 Pictures-like studio anime look, vibrant but not fluorescent. No photorealism, no glossy 3D, no game render, no painterly rendering.
+
+Audio rule:
+No background music, no soundtrack, no score, no song, no generated singing, no subtitles. Keep the clip ready for later editing and external audio.
+No BGM.
+```

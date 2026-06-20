@@ -1,0 +1,595 @@
+{
+  "kind": "project_vibe_document",
+  "modelVersion": "project_vibe_minimal_v1",
+  "manifest": {
+    "projectId": "新视频项目",
+    "title": "雨夜自动售货机前，一个戴耳机的女孩发现汽水罐里滚出...",
+    "version": "2026-05-30T21:27:10.262Z",
+    "createdAt": "2026-05-30T21:27:10.262Z",
+    "updatedAt": "2026-06-18T02:00:57.775Z",
+    "sourceOfTruth": "project_vibe",
+    "portableRoot": "project_root",
+    "runtimeFixtureAuthority": false
+  },
+  "storyFlow": {
+    "id": "story_flow_current",
+    "updatedAt": "2026-06-17T23:02:35.707Z",
+    "sourceOfTruth": "project_vibe",
+    "sections": [
+      {
+        "id": "sec_storyboard_1-1",
+        "title": "雨夜偶遇发光车票",
+        "summary": "镜号：1-1。时长：6 秒。景别：中景。镜头：固定机位，从略侧角度轻微推近。画面：雨夜自动售货机前，戴耳机的少女略微侧对镜头，低头注视脚下滚落的汽水罐，一张泛着金色微光的车票从罐口滑出，雨珠在车票表面跳动。主动作：女孩发现发光车票，身体微倾准备捡起。触发：汽水罐意外滚出异物引起注意。微反应：眼神微动，口中呼出一缕白雾。行动反应：参考策略：全能参考；直接用角…",
+        "sequenceIndex": 0,
+        "shotIds": [
+          "shot_storyboard_1-1"
+        ]
+      },
+      {
+        "id": "sec_storyboard_1-2",
+        "title": "末班电车亮灯",
+        "summary": "镜号：1-2。时长：4 秒。景别：全景。镜头：固定机位缓慢拉远，焦点聚向电车灯光。画面：雨夜街道积水倒映霓虹，远处末班电车在雨幕中缓缓驶来，前灯晕开一团淡金色光雾，与车票微光呼应。主动作：电车亮灯驶近，完成命运宣告。触发：车票现身后的场景转折。行动反应：参考策略：全能参考；直接用角色、场景、道具和文字导演提示生成视频。；主动作：电车亮灯驶近，完成命运宣告；…",
+        "sequenceIndex": 1,
+        "shotIds": [
+          "shot_storyboard_1-2"
+        ]
+      }
+    ],
+    "shotOrder": [
+      "shot_storyboard_1-1",
+      "shot_storyboard_1-2"
+    ]
+  },
+  "visualMemory": {
+    "id": "visual_memory_current",
+    "updatedAt": "2026-06-18T02:00:57.775Z",
+    "sourceOfTruth": "project_vibe",
+    "referencePolicy": {
+      "temporaryOutputsMayBecomeAuthority": false,
+      "runtimeFixturesMayBecomeAuthority": false,
+      "lockedAssetsRequiredForGeneration": true
+    },
+    "entries": [
+      {
+        "id": "vm_asset_a85ef654_style_text",
+        "assetId": "asset_a85ef654_style_text",
+        "kind": "style",
+        "label": "文字风格方向",
+        "status": "candidate",
+        "textConstraints": [
+          "项目视觉风格：做一个 10 秒 90 年代日漫感小短片 先只整理故事、镜头和节奏，不发送视频",
+          "这是一条用户文字风格约束，必须被角色、场景、道具、故事板和视频提示词继承。"
+        ],
+        "usedByShotIds": [
+          "shot_storyboard_1-1",
+          "shot_storyboard_1-2"
+        ],
+        "canUseAsFutureReference": false,
+        "sourceRefs": [
+          "draft:vck_a85ef654",
+          "new_video_reference:style:text",
+          "new_video_reference_target:style:做一个_10_秒_90_年代日漫感小短片_先只整理故事_镜头和节奏_不发送视频",
+          "script_planner:script_plan_899617c7_storyboard_ca6622_refs_0e53fb",
+          "project.vibe#assets/asset_a85ef654_style_text"
+        ]
+      },
+      {
+        "id": "vm_asset_cd6da79884",
+        "assetId": "戴耳机的女孩",
+        "kind": "character",
+        "label": "戴耳机的女孩",
+        "status": "locked",
+        "textConstraints": [],
+        "usedByShotIds": [
+          "shot_storyboard_1-1",
+          "shot_storyboard_1-2"
+        ],
+        "canUseAsFutureReference": true,
+        "sourceRefs": [
+          "provider_observations/assets/character_asset_cd6da79884.json",
+          "semantic_qa/assets/character_asset_cd6da79884.json",
+          "project/visual_memory.json#戴耳机的女孩",
+          "project.vibe#receipts/reviews/review_戴耳机的女孩_20260618015953"
+        ],
+        "roleBinding": {
+          "role": "character_identity",
+          "useFor": [
+            "face",
+            "body",
+            "outfit",
+            "silhouette"
+          ],
+          "ignoreFor": [
+            "scene_weather",
+            "camera",
+            "storyboard_timing"
+          ],
+          "priority": 2,
+          "conflictRule": "角色参考只管身份、外形和服装，不替代场景、运镜或分镜节奏。"
+        }
+      },
+      {
+        "id": "vm_asset_151e3ffce0",
+        "assetId": "发光车票",
+        "kind": "prop",
+        "label": "发光车票",
+        "status": "locked",
+        "textConstraints": [],
+        "usedByShotIds": [
+          "shot_storyboard_1-1"
+        ],
+        "canUseAsFutureReference": true,
+        "sourceRefs": [
+          "provider_observations/assets/prop_asset_151e3ffce0.json",
+          "semantic_qa/assets/prop_asset_151e3ffce0.json",
+          "project/visual_memory.json#发光车票",
+          "project.vibe#receipts/reviews/review_发光车票_20260618020030"
+        ],
+        "roleBinding": {
+          "role": "prop_reference",
+          "useFor": [
+            "shape",
+            "material",
+            "scale",
+            "interaction_affordance"
+          ],
+          "ignoreFor": [
+            "scene_layout",
+            "character_identity",
+            "camera"
+          ],
+          "priority": 2,
+          "conflictRule": "道具参考只管物体外观和交互，不替代镜头构图或场景背景。"
+        }
+      },
+      {
+        "id": "vm_scene_street",
+        "assetId": "scene_street",
+        "kind": "scene",
+        "label": "街道环境",
+        "status": "locked",
+        "textConstraints": [
+          "雨夜街道",
+          "远处电车轨道"
+        ],
+        "usedByShotIds": [
+          "shot_storyboard_1-2"
+        ],
+        "canUseAsFutureReference": true,
+        "sourceRefs": [
+          "provider_observations/assets/scene_scene_street.json",
+          "semantic_qa/assets/scene_scene_street.json",
+          "project/visual_memory.json#scene_street",
+          "project.vibe#receipts/reviews/review_scene_street_20260618020057"
+        ],
+        "roleBinding": {
+          "role": "scene_baseline",
+          "useFor": [
+            "location_layout",
+            "weather",
+            "light_direction",
+            "color_temperature"
+          ],
+          "ignoreFor": [
+            "character_identity",
+            "prop_design",
+            "shot_timing"
+          ],
+          "priority": 2,
+          "conflictRule": "场景参考只管地点、天气和光线，不替代角色身份或道具设计。"
+        }
+      }
+    ]
+  },
+  "shots": [
+    {
+      "id": "shot_storyboard_1-1",
+      "sectionId": "sec_storyboard_1-1",
+      "title": "雨夜偶遇发光车票",
+      "intent": "镜号：1-1。时长：6 秒。景别：中景。镜头：固定机位，从略侧角度轻微推近。画面：雨夜自动售货机前，戴耳机的少女略微侧对镜头，低头注视脚下滚落的汽水罐，一张泛着金色微光的车票从罐口滑出，雨珠在车票表面跳动。主动作：女孩发现发光车票，身体微倾准备捡起。触发：汽水罐意外滚出异物引起注意。微反应：眼神微动，口中呼出一缕白雾。行动反应：参考策略：全能参考；直接用角色、场景、道具和文字导演提示生成视频。；主动作：女孩发现发光车票，身体微倾准备捡起；触发：汽水罐意外滚出异物引起注意；微反应：眼神微动，口中呼出一缕白雾；镜头节奏：单镜推进，1 个最终可见剪辑。。剪辑：1 个最终可见剪辑。声音：雨声，自动售货机低频嗡鸣，远处隐约电车声。角色：戴耳机的女孩。场景：雨夜街边自动售货机前。道具：发光车票",
+      "camera": "固定机位，从略侧角度轻微推近",
+      "videoControlMode": "reference_driven",
+      "executionMode": "single_continuous_shot",
+      "rhythmProfile": "anime_emotion",
+      "splitPolicy": "1 个最终可见剪辑",
+      "visibleClips": 1,
+      "storyboardPanels": 0,
+      "actionBeats": [
+        "发现罐中滚出车票",
+        "惊讶视线追随",
+        "上半身前倾伸手"
+      ],
+      "primaryAction": "女孩发现发光车票，身体微倾准备捡起",
+      "actionTrigger": "汽水罐意外滚出异物引起注意",
+      "microReaction": "眼神微动，口中呼出一缕白雾",
+      "seedanceDirection": "参考策略：全能参考；直接用角色、场景、道具和文字导演提示生成视频。；主动作：女孩发现发光车票，身体微倾准备捡起；触发：汽水罐意外滚出异物引起注意；微反应：眼神微动，口中呼出一缕白雾；镜头节奏：单镜推进，1 个最终可见剪辑。",
+      "sound": "雨声，自动售货机低频嗡鸣，远处隐约电车声",
+      "audioUsage": "环境声",
+      "dialogueLines": [],
+      "referenceStrategy": "omni_reference",
+      "directorFeedbackDirectives": [
+        "节奏判断：凝滞的发现瞬间，用静谧带出梦幻感",
+        "音频用途：环境声",
+        "项目视觉风格：做一个 10 秒 90 年代日漫感小短片 先只整理故事、镜头和节奏，不发送视频"
+      ],
+      "characterGuidance": [
+        "戴耳机的女孩"
+      ],
+      "sceneGuidance": [
+        "雨夜街边自动售货机前"
+      ],
+      "propGuidance": [
+        "发光车票"
+      ],
+      "sceneAssetIds": [],
+      "characterAssetIds": [
+        "戴耳机的女孩"
+      ],
+      "propAssetIds": [
+        "发光车票"
+      ],
+      "durationSeconds": 6,
+      "status": "planned",
+      "sourceRefs": [
+        "storyboard_table:ca6622",
+        "storyboard_row:1-1",
+        "script_planner:script_plan_899617c7",
+        "project.vibe#assets/asset_a85ef654_style_text"
+      ]
+    },
+    {
+      "id": "shot_storyboard_1-2",
+      "sectionId": "sec_storyboard_1-2",
+      "title": "末班电车亮灯",
+      "intent": "镜号：1-2。时长：4 秒。景别：全景。镜头：固定机位缓慢拉远，焦点聚向电车灯光。画面：雨夜街道积水倒映霓虹，远处末班电车在雨幕中缓缓驶来，前灯晕开一团淡金色光雾，与车票微光呼应。主动作：电车亮灯驶近，完成命运宣告。触发：车票现身后的场景转折。行动反应：参考策略：全能参考；直接用角色、场景、道具和文字导演提示生成视频。；主动作：电车亮灯驶近，完成命运宣告；触发：车票现身后的场景转折；微反应：-；镜头节奏：单镜推进，1 个最终可见剪辑。。剪辑：1 个最终可见剪辑。声音：电车行驶的嗡嗡声，雨声持续。角色：戴耳机的女孩。场景：雨夜街道，远处电车轨道",
+      "camera": "固定机位缓慢拉远，焦点聚向电车灯光",
+      "videoControlMode": "reference_driven",
+      "executionMode": "single_continuous_shot",
+      "rhythmProfile": "anime_emotion",
+      "splitPolicy": "1 个最终可见剪辑",
+      "visibleClips": 1,
+      "storyboardPanels": 0,
+      "actionBeats": [
+        "电车灯在雨中亮起",
+        "光晕扩散，车辆缓缓靠近"
+      ],
+      "primaryAction": "电车亮灯驶近，完成命运宣告",
+      "actionTrigger": "车票现身后的场景转折",
+      "seedanceDirection": "参考策略：全能参考；直接用角色、场景、道具和文字导演提示生成视频。；主动作：电车亮灯驶近，完成命运宣告；触发：车票现身后的场景转折；微反应：-；镜头节奏：单镜推进，1 个最终可见剪辑。",
+      "sound": "电车行驶的嗡嗡声，雨声持续",
+      "audioUsage": "环境声",
+      "dialogueLines": [],
+      "referenceStrategy": "omni_reference",
+      "directorFeedbackDirectives": [
+        "节奏判断：扩大的空间与灯光强化期待感，余韵渐收",
+        "音频用途：环境声",
+        "项目视觉风格：做一个 10 秒 90 年代日漫感小短片 先只整理故事、镜头和节奏，不发送视频"
+      ],
+      "characterGuidance": [
+        "戴耳机的女孩"
+      ],
+      "sceneGuidance": [
+        "雨夜街道",
+        "远处电车轨道"
+      ],
+      "propGuidance": [],
+      "sceneAssetIds": [
+        "scene_street"
+      ],
+      "characterAssetIds": [
+        "戴耳机的女孩"
+      ],
+      "propAssetIds": [],
+      "durationSeconds": 4,
+      "status": "planned",
+      "sourceRefs": [
+        "storyboard_table:ca6622",
+        "storyboard_row:1-2",
+        "script_planner:script_plan_899617c7",
+        "project.vibe#assets/asset_a85ef654_style_text"
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "id": "asset_a85ef654_style_text",
+      "kind": "style",
+      "label": "文字风格方向",
+      "status": "candidate",
+      "textConstraints": [
+        "项目视觉风格：做一个 10 秒 90 年代日漫感小短片 先只整理故事、镜头和节奏，不发送视频",
+        "这是一条用户文字风格约束，必须被角色、场景、道具、故事板和视频提示词继承。"
+      ],
+      "usedByShotIds": [
+        "shot_storyboard_1-1",
+        "shot_storyboard_1-2"
+      ],
+      "sourceRefs": [
+        "draft:vck_a85ef654",
+        "new_video_reference:style:text",
+        "new_video_reference_target:style:做一个_10_秒_90_年代日漫感小短片_先只整理故事_镜头和节奏_不发送视频",
+        "script_planner:script_plan_899617c7_storyboard_ca6622_refs_0e53fb"
+      ]
+    },
+    {
+      "id": "戴耳机的女孩",
+      "kind": "character",
+      "label": "戴耳机的女孩",
+      "status": "locked",
+      "path": "assets/generated/character_asset_cd6da79884.png",
+      "textConstraints": [],
+      "usedByShotIds": [
+        "shot_storyboard_1-1",
+        "shot_storyboard_1-2"
+      ],
+      "sourceRefs": [
+        "provider_observations/assets/character_asset_cd6da79884.json",
+        "semantic_qa/assets/character_asset_cd6da79884.json",
+        "project/visual_memory.json#戴耳机的女孩"
+      ],
+      "roleBinding": {
+        "role": "character_identity",
+        "useFor": [
+          "face",
+          "body",
+          "outfit",
+          "silhouette"
+        ],
+        "ignoreFor": [
+          "scene_weather",
+          "camera",
+          "storyboard_timing"
+        ],
+        "priority": 2,
+        "conflictRule": "角色参考只管身份、外形和服装，不替代场景、运镜或分镜节奏。"
+      },
+      "lockedBy": "user"
+    },
+    {
+      "id": "发光车票",
+      "kind": "prop",
+      "label": "发光车票",
+      "status": "locked",
+      "path": "assets/generated/prop_asset_151e3ffce0.png",
+      "textConstraints": [],
+      "usedByShotIds": [
+        "shot_storyboard_1-1"
+      ],
+      "sourceRefs": [
+        "provider_observations/assets/prop_asset_151e3ffce0.json",
+        "semantic_qa/assets/prop_asset_151e3ffce0.json",
+        "project/visual_memory.json#发光车票"
+      ],
+      "roleBinding": {
+        "role": "prop_reference",
+        "useFor": [
+          "shape",
+          "material",
+          "scale",
+          "interaction_affordance"
+        ],
+        "ignoreFor": [
+          "scene_layout",
+          "character_identity",
+          "camera"
+        ],
+        "priority": 2,
+        "conflictRule": "道具参考只管物体外观和交互，不替代镜头构图或场景背景。"
+      },
+      "lockedBy": "user"
+    },
+    {
+      "id": "scene_street",
+      "kind": "scene",
+      "label": "街道环境",
+      "status": "locked",
+      "path": "assets/generated/scene_scene_street.png",
+      "textConstraints": [
+        "雨夜街道",
+        "远处电车轨道"
+      ],
+      "usedByShotIds": [
+        "shot_storyboard_1-2"
+      ],
+      "sourceRefs": [
+        "provider_observations/assets/scene_scene_street.json",
+        "semantic_qa/assets/scene_scene_street.json",
+        "project/visual_memory.json#scene_street"
+      ],
+      "roleBinding": {
+        "role": "scene_baseline",
+        "useFor": [
+          "location_layout",
+          "weather",
+          "light_direction",
+          "color_temperature"
+        ],
+        "ignoreFor": [
+          "character_identity",
+          "prop_design",
+          "shot_timing"
+        ],
+        "priority": 2,
+        "conflictRule": "场景参考只管地点、天气和光线，不替代角色身份或道具设计。"
+      },
+      "lockedBy": "user"
+    }
+  ],
+  "runs": [],
+  "receipts": {
+    "scriptPlanningReceipts": [
+      {
+        "id": "script_plan_script_plan_05c3c49b_storyboard_1584cf",
+        "kind": "script_planning",
+        "createdAt": "2026-05-30T21:34:58.068Z",
+        "plannerId": "script_plan_05c3c49b_storyboard_1584cf",
+        "sourceFactHash": "pv_9b8ee5ac",
+        "sectionIds": [
+          "sec_storyboard_1-1",
+          "sec_storyboard_1-2",
+          "sec_storyboard_1-3"
+        ],
+        "shotIds": [
+          "shot_storyboard_1-1",
+          "shot_storyboard_1-2",
+          "shot_storyboard_1-3"
+        ],
+        "blockerCount": 0,
+        "evidenceRefs": [
+          "project.vibe#manifest",
+          "project.vibe#storyFlow",
+          "draft:vck_f48687ea",
+          "script_planner:script_plan_05c3c49b_storyboard_1584cf",
+          "director_session:session_local_project_intake_做一个_12_秒的_90_年代日漫短片_雨夜便利店外_一只黑猫叼着",
+          "director_turn:intake_做一个_12_秒的_90_年代日漫短片_雨夜便利店外_一只黑猫叼着发光车票跳上公交站牌_女高中生_turn_user_intake",
+          "staged_fact:intake_做一个_12_秒的_90_年代日漫短片_雨夜便利店外_一只黑猫叼着发光车票跳上公交站牌_女高中生_script_brief",
+          "staged_fact:intake_做一个_12_秒的_90_年代日漫短片_雨夜便利店外_一只黑猫叼着发光车票跳上公交站牌_女高中生_scene_candidate_雨夜街边_1",
+          "staged_fact:intake_做一个_12_秒的_90_年代日漫短片_雨夜便利店外_一只黑猫叼着发光车票跳上公交站牌_女高中生_scene_candidate_便利店_2",
+          "staged_fact:intake_做一个_12_秒的_90_年代日漫短片_雨夜便利店外_一只黑猫叼着发光车票跳上公交站牌_女高中生_shot_draft_镜头_1_做一个_12_秒的_90_年代日漫短片_雨夜便利店外_一只黑猫叼着发光车票跳上公交站牌_女高中生追_1",
+          "staged_fact:intake_做一个_12_秒的_90_年代日漫短片_雨夜便利店外_一只黑猫叼着发光车票跳上公交站牌_女高中生_shot_draft_镜头_2_希望节奏前半安静_2",
+          "staged_fact:intake_做一个_12_秒的_90_年代日漫短片_雨夜便利店外_一只黑猫叼着发光车票跳上公交站牌_女高中生_shot_draft_镜头_3_最后_4_秒有一点快切悬疑感_3",
+          "staged_fact:intake_做一个_12_秒的_90_年代日漫短片_雨夜便利店外_一只黑猫叼着发光车票跳上公交站牌_女高中生_shot_draft_镜头_4_先不要提交视频测试_只拆分镜和规划参考素材_4",
+          "storyboard_table:1584cf",
+          "intake:intake_做一个_12_秒的_90_年代日漫短片_雨夜便利店外_一只黑猫叼着发光车票跳上公交站牌_女高中生"
+        ],
+        "providerSelfReportUsed": false,
+        "runtimeFixtureUsed": false
+      },
+      {
+        "id": "script_plan_script_plan_899617c7_storyboard_ca6622_refs_0e53fb",
+        "kind": "script_planning",
+        "createdAt": "2026-06-17T23:02:35.707Z",
+        "plannerId": "script_plan_899617c7_storyboard_ca6622_refs_0e53fb",
+        "sourceFactHash": "pv_5297037a",
+        "sectionIds": [
+          "sec_storyboard_1-1",
+          "sec_storyboard_1-2"
+        ],
+        "shotIds": [
+          "shot_storyboard_1-1",
+          "shot_storyboard_1-2"
+        ],
+        "blockerCount": 0,
+        "evidenceRefs": [
+          "project.vibe#manifest",
+          "project.vibe#storyFlow",
+          "draft:vck_a85ef654",
+          "script_planner:script_plan_899617c7_storyboard_ca6622_refs_0e53fb",
+          "director_session:session_local_project_intake_雨夜自动售货机前_一个戴耳机的女孩发现汽水罐里滚出发光车票_远处末",
+          "director_turn:intake_雨夜自动售货机前_一个戴耳机的女孩发现汽水罐里滚出发光车票_远处末班电车亮灯_做一个_10_秒__turn_user_intake",
+          "staged_fact:intake_雨夜自动售货机前_一个戴耳机的女孩发现汽水罐里滚出发光车票_远处末班电车亮灯_做一个_10_秒__script_brief",
+          "staged_fact:intake_雨夜自动售货机前_一个戴耳机的女孩发现汽水罐里滚出发光车票_远处末班电车亮灯_做一个_10_秒__character_candidate_戴耳机的女孩_1",
+          "staged_fact:intake_雨夜自动售货机前_一个戴耳机的女孩发现汽水罐里滚出发光车票_远处末班电车亮灯_做一个_10_秒__scene_candidate_雨夜街边_1",
+          "staged_fact:intake_雨夜自动售货机前_一个戴耳机的女孩发现汽水罐里滚出发光车票_远处末班电车亮灯_做一个_10_秒__prop_candidate_车票_1",
+          "staged_fact:intake_雨夜自动售货机前_一个戴耳机的女孩发现汽水罐里滚出发光车票_远处末班电车亮灯_做一个_10_秒__shot_draft_镜头_1_雨夜自动售货机前_一个戴耳机的女孩发现汽水罐里滚出发光车票_远处末班电车亮灯_1",
+          "staged_fact:intake_雨夜自动售货机前_一个戴耳机的女孩发现汽水罐里滚出发光车票_远处末班电车亮灯_做一个_10_秒__visual_style",
+          "storyboard_table:ca6622",
+          "intake:intake_雨夜自动售货机前_一个戴耳机的女孩发现汽水罐里滚出发光车票_远处末班电车亮灯_做一个_10_秒_",
+          "project.vibe#assets/asset_a85ef654_style_text"
+        ],
+        "providerSelfReportUsed": false,
+        "runtimeFixtureUsed": false
+      }
+    ],
+    "promptKeyframePlanningReceipts": [],
+    "batchReceipts": [],
+    "reviewReceipts": [
+      {
+        "id": "review_戴耳机的女孩_20260618015953",
+        "createdAt": "2026-06-18T01:59:53.278Z",
+        "status": "approved",
+        "reviewerId": "runtime_user",
+        "humanReviewed": true,
+        "assetId": "戴耳机的女孩",
+        "sourceReceiptId": ".vibe-runtime/browser-projects/project-1781737355707/provider_observations/assets/character_asset_cd6da79884.json",
+        "outputPath": "assets/generated/character_asset_cd6da79884.png",
+        "outputHash": "sha256:4b06c6b5972425745ce0166e55c55a8d355311cf3dfc1a7423b3e0f08bdfc007",
+        "retryRequested": false,
+        "lateOutput": false,
+        "providerSelfReportIgnored": true,
+        "promotionAuthorized": true,
+        "promotionAuthorizedBy": "runtime_user",
+        "promotionAuthorizedAt": "2026-06-18T01:59:53.278Z",
+        "evidenceRefs": [
+          "provider_observations/assets/character_asset_cd6da79884.json",
+          "semantic_qa/assets/character_asset_cd6da79884.json"
+        ],
+        "blockers": []
+      },
+      {
+        "id": "review_发光车票_20260618020030",
+        "createdAt": "2026-06-18T02:00:30.928Z",
+        "status": "approved",
+        "reviewerId": "local_user",
+        "humanReviewed": true,
+        "assetId": "发光车票",
+        "sourceReceiptId": ".vibe-runtime/browser-projects/project-1781737355707/provider_observations/assets/prop_asset_151e3ffce0.json",
+        "outputPath": "assets/generated/prop_asset_151e3ffce0.png",
+        "outputHash": "sha256:78788b0d778417f616f25bf53236940ab6dbab9c4ea461f0eefa80b6052f4f9d",
+        "retryRequested": false,
+        "lateOutput": false,
+        "providerSelfReportIgnored": true,
+        "promotionAuthorized": true,
+        "promotionAuthorizedBy": "local_user",
+        "promotionAuthorizedAt": "2026-06-18T02:00:30.928Z",
+        "evidenceRefs": [
+          "provider_observations/assets/prop_asset_151e3ffce0.json",
+          "semantic_qa/assets/prop_asset_151e3ffce0.json"
+        ],
+        "blockers": []
+      },
+      {
+        "id": "review_scene_street_20260618020057",
+        "createdAt": "2026-06-18T02:00:57.775Z",
+        "status": "approved",
+        "reviewerId": "local_user",
+        "humanReviewed": true,
+        "assetId": "scene_street",
+        "sourceReceiptId": ".vibe-runtime/browser-projects/project-1781737355707/provider_observations/assets/scene_scene_street.json",
+        "outputPath": "assets/generated/scene_scene_street.png",
+        "outputHash": "sha256:dbea57c3386ac698df5457414c704a13ca1783f25e4c6f30468dbb5bb5ea1ad2",
+        "retryRequested": false,
+        "lateOutput": false,
+        "providerSelfReportIgnored": true,
+        "promotionAuthorized": true,
+        "promotionAuthorizedBy": "local_user",
+        "promotionAuthorizedAt": "2026-06-18T02:00:57.775Z",
+        "evidenceRefs": [
+          "provider_observations/assets/scene_scene_street.json",
+          "semantic_qa/assets/scene_scene_street.json"
+        ],
+        "blockers": []
+      }
+    ]
+  },
+  "sourceIndex": {
+    "id": "source_index_current",
+    "updatedAt": "2026-06-18T02:00:57.775Z",
+    "sourceOfTruth": "project_vibe",
+    "manifestRef": "project.vibe#manifest",
+    "storyFlowRef": "project.vibe#storyFlow",
+    "visualMemoryRef": "project.vibe#visualMemory",
+    "shotRefs": [
+      "project.vibe#shots/shot_storyboard_1-1",
+      "project.vibe#shots/shot_storyboard_1-2"
+    ],
+    "assetRefs": [
+      "project.vibe#assets/asset_a85ef654_style_text",
+      "project.vibe#assets/scene_street",
+      "project.vibe#assets/发光车票",
+      "project.vibe#assets/戴耳机的女孩"
+    ],
+    "runReceiptRefs": [],
+    "scriptPlanningReceiptRefs": [
+      "project.vibe#receipts/scriptPlanning/script_plan_script_plan_05c3c49b_storyboard_1584cf",
+      "project.vibe#receipts/scriptPlanning/script_plan_script_plan_899617c7_storyboard_ca6622_refs_0e53fb"
+    ],
+    "promptKeyframePlanningReceiptRefs": [],
+    "batchReceiptRefs": [],
+    "reviewReceiptRefs": [
+      "project.vibe#receipts/reviews/review_scene_street_20260618020057",
+      "project.vibe#receipts/reviews/review_发光车票_20260618020030",
+      "project.vibe#receipts/reviews/review_戴耳机的女孩_20260618015953"
+    ]
+  }
+}
