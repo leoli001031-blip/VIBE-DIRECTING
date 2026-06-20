@@ -243,8 +243,13 @@ check(
   failures,
 );
 check(
-  /type NewVideoStartAgentIntakeCommand = \{[\s\S]*mode\?: "replace_draft" \| "continue_current_draft"/.test(newVideoStartSource),
+  /type NewVideoStartAgentIntakeCommand = \{[\s\S]*mode\?: "replace_draft" \| "continue_current_draft" \| "confirm_current_draft"/.test(newVideoStartSource),
   "NewVideoStart Agent intake command must distinguish replacing text from continuing the current prepared draft.",
+  failures,
+);
+check(
+  /agentIntakeCommand\?\.mode === "confirm_current_draft"[\s\S]*projection && directorSession && !confirmed[\s\S]*void confirmDraft\(\)[\s\S]*showNoReadyDraftNotice\("确认写入故事流"\)[\s\S]*return;[\s\S]*agentIntakeCommand\?\.mode === "continue_current_draft"/.test(newVideoStartSource),
+  "NewVideoStart must let the right-side Agent confirm the current prepared draft without treating the confirmation label as a new idea.",
   failures,
 );
 check(

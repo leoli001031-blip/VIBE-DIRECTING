@@ -1036,6 +1036,13 @@ function minimalAgentReferenceReviewMessageIsStale(message: MinimalAgentMessage,
   return /复核|需要复核|等你复核|去参考页复核|参考待复核/.test(text) && !/参考可用/.test(text);
 }
 
+function minimalAgentReferenceReviewMessageIsPremature(message: MinimalAgentMessage, referenceHasReviewableAssets: boolean) {
+  if (referenceHasReviewableAssets || message.role === "user") return false;
+  const text = minimalAgentMessageSearchText(message);
+  return /参考已生成|参考图已经回到参考页|\d+\s*项参考需要复核|去参考页复核|等你复核/.test(text)
+    && !/参考可用/.test(text);
+}
+
 function minimalAgentMessageSearchText(message: MinimalAgentMessage) {
   const factText = message.facts?.map((fact) => `${fact.label} ${fact.value}`).join(" ") || "";
   const executionText = message.executionResult
@@ -1396,6 +1403,18 @@ function directProductActionResultMessage(result: unknown) {
   return stringValue(result.message)
     || stringValue(result.summary)
     || stringValue(result.label);
+}
+
+function agentActionLogItemIsPrematureReferenceReview(item: AgentActionLogItem, referenceHasReviewableAssets: boolean) {
+  if (referenceHasReviewableAssets) return false;
+  const text = [
+    item.title,
+    item.result,
+    item.nextStep,
+    item.resultView?.label,
+  ].map((part) => stringValue(part)).join(" ");
+  return /参考已生成|参考图已经回到参考页|\d+\s*项参考需要复核|去参考页复核|等你复核/.test(text)
+    && !/参考可用/.test(text);
 }
 
 function resolveDirectProductActionResult(input: DirectProductActionCopy, result: unknown) {
@@ -2794,6 +2813,7 @@ export function MinimalAgentPanel({
   onCreateLocalProject,
   onStartNewVideoDraftFromAgent,
   onContinueNewVideoDraftFromAgent,
+  onConfirmNewVideoDraftFromAgent,
   newVideoDraftPendingForAgent = false,
   newVideoDraftPlanningForAgent = false,
   newVideoDraftReadyForAgent = false,
@@ -2863,6 +2883,7 @@ export function MinimalAgentPanel({
   onCreateLocalProject?: () => unknown | Promise<unknown>;
   onStartNewVideoDraftFromAgent?: (userIntent: string) => unknown | Promise<unknown>;
   onContinueNewVideoDraftFromAgent?: () => unknown | Promise<unknown>;
+  onConfirmNewVideoDraftFromAgent?: () => unknown | Promise<unknown>;
   newVideoDraftPendingForAgent?: boolean;
   newVideoDraftPlanningForAgent?: boolean;
   newVideoDraftReadyForAgent?: boolean;
@@ -2959,9 +2980,12 @@ export function MinimalAgentPanel({
   }
   const preparedSelectionChips = preparedSelectionContextChips({ context: preparedContext, runtimeState });
   const selectionFocusKey = [scopedShotKey, shot?.id, asset?.id, sectionId].filter(Boolean).join("::");
-  const prototypeAgentDemo = planPhase === "confirmed" && localPrototypeAgentDemo
-    ? localPrototypeAgentDemo
-    : latestPrototypeAgentDemo || localPrototypeAgentDemo;
+  const latestNewVideoDraftCommittedForProjection = isCommittedNewVideoDraftAgentRun(latestPrototypeAgentDemo);
+  const prototypeAgentDemo = latestNewVideoDraftCommittedForProjection
+    ? latestPrototypeAgentDemo
+    : planPhase === "confirmed" && localPrototypeAgentDemo
+      ? localPrototypeAgentDemo
+      : latestPrototypeAgentDemo || localPrototypeAgentDemo;
   const prototypeAgentProjection = buildPrototypeAgentDemoProjection(prototypeAgentDemo);
   const realSampleBusy = realSampleAction?.status === "running";
   const endFrameBusy = endFrameAction?.status === "running";
@@ -2981,6 +3005,15 @@ export function MinimalAgentPanel({
     runtimeState.project.root ? `root:${runtimeState.project.root}` : "",
     runtimeState.sourceIndexSummary.projectId ? `id:${runtimeState.sourceIndexSummary.projectId}` : "",
   ].filter(Boolean).join("::") || `title:${runtimeState.project.title || "unbound"}`;
+  useEffect(() => {
+    if (latestNewVideoDraftCommittedForProjection && localPrototypeAgentDemo) {
+      setLocalPrototypeAgentDemo(undefined);
+    }
+  }, [latestNewVideoDraftCommittedForProjection, localPrototypeAgentDemo]);
+  useEffect(() => {
+    if (!latestNewVideoDraftCommittedForProjection || text.trim() || attachments.length) return;
+    setStatus("草案已写入故事流");
+  }, [attachments.length, latestNewVideoDraftCommittedForProjection, text]);
   useEffect(() => {
     let cancelled = false;
     async function loadSkillStack() {
@@ -3352,6 +3385,7 @@ export function MinimalAgentPanel({
   const referenceReviewCount = runtimeState.visualMemory.summary.needsReview;
   const referenceDisplayableCount = runtimeState.visualMemory.assets.filter(minimalAgentAssetHasDisplayableReference).length;
   const referenceNeedsReview = referenceReviewCount > 0;
+  const referenceHasReviewableAssets = referenceNeedsReview && referenceDisplayableCount > 0;
   const referencesReadyAfterReview = referenceLockedCount > 0 && referenceDisplayableCount > 0 && referenceMissingCount === 0 && !referenceNeedsReview;
   const timelineShowsReferenceReady = agentTimelineEntries.some((entry) =>
     entry.toolName === "generate_references" && /参考可用/.test(`${entry.title} ${entry.body} ${entry.details?.next || ""}`),
@@ -3359,7 +3393,7 @@ export function MinimalAgentPanel({
   const referencesUsableForAgent = referencesReadyAfterReview || timelineShowsReferenceReady;
   const realSampleLabel = realSampleBusy
     ? "生成中"
-    : referenceNeedsReview
+    : referenceHasReviewableAssets
       ? "等待复核"
     : referenceGenerationBlockedByProject
       ? "先保存项目"
@@ -3448,7 +3482,10 @@ export function MinimalAgentPanel({
   const displayedCompactScopeLabel = compactAgentScopeLabel(displayedScopeLabel);
   const displayedCompactSelectionHint = compactAgentSelectionHint(displayedSelectionHint);
   const displayedSelectionChips = workflow && preparedSelectionChips.length ? preparedSelectionChips : liveSelectionChips;
-  const showAgentActionLog = agentActionLog.length > 0 && !videoResultIsPrimary && !exportResultIsPrimary;
+  const visibleAgentActionLog = agentActionLog.filter((item) =>
+    !agentActionLogItemIsPrematureReferenceReview(item, referenceHasReviewableAssets)
+  );
+  const showAgentActionLog = visibleAgentActionLog.length > 0 && !videoResultIsPrimary && !exportResultIsPrimary;
 
   function canAutoFocusComposer() {
     if (typeof document === "undefined") return false;
@@ -4438,15 +4475,17 @@ export function MinimalAgentPanel({
     const timelineShowsReferenceReview = agentTimelineEntries.some((entry) =>
       entry.toolName === "generate_references" && /复核/.test(`${entry.title} ${entry.body}`),
     );
-    const visibleReferenceStatus = realSampleAction?.status === "verified" && referenceDisplayableCount === 0
-      ? "running"
-      : realSampleAction?.status;
-    const projectedReferenceStatus = referenceNeedsReview
+    const visibleReferenceStatus = realSampleAction?.status === "needs_review" && !referenceHasReviewableAssets
+      ? undefined
+      : realSampleAction?.status === "verified" && referenceDisplayableCount === 0
+        ? "running"
+        : realSampleAction?.status;
+    const projectedReferenceStatus = referenceHasReviewableAssets
       ? "needs_review"
       : referencesReadyAfterReview && timelineShowsReferenceReview
         ? "verified"
         : visibleReferenceStatus;
-    const projectedReferenceMessage = referenceNeedsReview
+    const projectedReferenceMessage = referenceHasReviewableAssets
       ? `${referenceReviewCount} 项参考需要复核。`
       : referencesReadyAfterReview && timelineShowsReferenceReview
         ? "参考可用，下一步可以发送视频。"
@@ -4480,6 +4519,7 @@ export function MinimalAgentPanel({
     realSampleAction?.status,
     referenceDisplayableCount,
     referenceLockedCount,
+    referenceHasReviewableAssets,
     referenceNeedsReview,
     referenceReviewCount,
     referencesReadyAfterReview,
@@ -4825,7 +4865,7 @@ export function MinimalAgentPanel({
   const hasPreparedComposerInput = Boolean(preparedContext?.userIntent?.trim() || hasComposerInput);
   const canPreviewPrototypeDemo = Boolean(workflow && onPreviewPrototypeAgentDemo && hasPreparedComposerInput && !canConfirmFeedback && !readOnlyStatusInspection);
   const canOfferFooterDirectAction = !hasComposerInput && !isPreparingPlan && (!workflow || planPhase === "confirmed");
-  const hasReferenceItemsToReview = runtimeState.visualMemory.summary.needsReview > 0;
+  const hasReferenceItemsToReview = referenceHasReviewableAssets;
   const referenceReviewFooterAction = hasReferenceItemsToReview
     ? {
         label: "去参考复核",
@@ -4977,9 +5017,11 @@ export function MinimalAgentPanel({
     );
   const canCreateProjectFromFooter = Boolean(canCreateLocalProject && onCreateLocalProject);
   const canResolveProjectFromFooter = canCreateProjectFromFooter && !localProjectBusy;
+  const footerActionRequiresExistingStory = Boolean(footerDirectAction)
+    && runtimeState.storyFlow.shots.length > 0;
   const projectNeedsLocalFolder = !localProjectReadyForTools
     && !hasComposerInput
-    && (Boolean(footerDirectAction) || projectNeededForGeneratedStory);
+    && (footerActionRequiresExistingStory || projectNeededForGeneratedStory);
   const projectRequiredForWorkflow = projectNeedsLocalFolder && (canCreateProjectFromFooter || localProjectBusy);
   const projectBlockedWithoutFooterResolver = projectNeedsLocalFolder
     && !canCreateProjectFromFooter
@@ -4988,9 +5030,15 @@ export function MinimalAgentPanel({
     localProjectBusy,
     canCreateLocalProject: canResolveProjectFromFooter,
   });
+  const stateAwareAgentTimelineEntries = useMemo(
+    () => agentTimelineEntries.filter((entry) =>
+      !minimalAgentReferenceReviewMessageIsPremature(minimalAgentMessageFromTimelineEntry(entry), referenceHasReviewableAssets)
+    ),
+    [agentTimelineEntries, referenceHasReviewableAssets],
+  );
   const agentTimelineStatusView = useMemo(
-    () => buildVibeAgentTimelineStatusView(agentTimelineEntries),
-    [agentTimelineEntries],
+    () => buildVibeAgentTimelineStatusView(stateAwareAgentTimelineEntries),
+    [stateAwareAgentTimelineEntries],
   );
   const agentTimelineStatusLine = agentTimelineStatusView
     ? `${agentTimelineStatusView.stage}：${agentTimelineStatusView.doing}`
@@ -4999,8 +5047,8 @@ export function MinimalAgentPanel({
     ? `${agentTimelineStatusView.stage}：${agentTimelineStatusView.nextAction}`
     : "";
   const visibleTimelineConfirmationMessage = useMemo(
-    () => latestVisibleTimelineConfirmationMessage(agentTimelineEntries, referencesUsableForAgent),
-    [agentTimelineEntries, referencesUsableForAgent],
+    () => latestVisibleTimelineConfirmationMessage(stateAwareAgentTimelineEntries, referencesUsableForAgent),
+    [referencesUsableForAgent, stateAwareAgentTimelineEntries],
   );
   const latestNewVideoDraftCommitted = isCommittedNewVideoDraftAgentRun(latestPrototypeAgentDemo);
   const currentTimelineConfirmationLabel = !latestNewVideoDraftCommitted
@@ -5009,7 +5057,7 @@ export function MinimalAgentPanel({
     : "";
   const hasAgentTimelineConfirmation = Boolean(
     visibleTimelineConfirmationMessage
-    || agentTimelineEntries.some((entry) => entry.type === "confirmation_request" && entry.status !== "done"),
+    || stateAwareAgentTimelineEntries.some((entry) => entry.type === "confirmation_request" && entry.status !== "done"),
   );
   const timelineNewVideoDraftConfirmationReady = Boolean(
     !latestNewVideoDraftCommitted
@@ -5108,12 +5156,13 @@ export function MinimalAgentPanel({
       };
     }
     if (activeNewVideoDraftConfirmation || visibleNewVideoDraftConfirmation) {
-      const disabled = Boolean(!onStartNewVideoDraftFromAgent || hasComposerInput || attachments.length || isPreparingPlan);
+      const confirmDraftFromAgent = onConfirmNewVideoDraftFromAgent || (() => onStartNewVideoDraftFromAgent?.(NEW_VIDEO_DRAFT_CONFIRM_LABEL));
+      const disabled = Boolean((!onConfirmNewVideoDraftFromAgent && !onStartNewVideoDraftFromAgent) || hasComposerInput || attachments.length || isPreparingPlan);
       const disabledReason = isPreparingPlan
         ? "正在整理，稍等一下。"
         : hasComposerInput || attachments.length
           ? "先发送或清空当前输入，再确认草案。"
-          : !onStartNewVideoDraftFromAgent
+          : (!onConfirmNewVideoDraftFromAgent && !onStartNewVideoDraftFromAgent)
             ? "当前不能从消息里确认草案。"
             : "";
       return {
@@ -5122,7 +5171,7 @@ export function MinimalAgentPanel({
         disabledReason,
         statusLine: disabled ? disabledReason : `下一步：${NEW_VIDEO_DRAFT_CONFIRM_LABEL}`,
         perform: () => {
-          onStartNewVideoDraftFromAgent?.(NEW_VIDEO_DRAFT_CONFIRM_LABEL);
+          void confirmDraftFromAgent();
         },
       };
     }
@@ -5252,8 +5301,13 @@ export function MinimalAgentPanel({
     !latestNewVideoDraftCommitted
       && !newVideoDraftBusyForAgent
       && !visibleTimelineConfirmationMessage
-      && projectStatusView?.stage === "等待确认"
-      && /确认|草案|故事流|写入故事流/.test(`${newVideoDraftStatusCopy} ${newVideoDraftTimelineCopy}`),
+      && (
+        newVideoDraftReadyForAgent
+        || (
+          projectStatusView?.stage === "等待确认"
+          && /确认|草案|故事流|写入故事流/.test(`${newVideoDraftStatusCopy} ${newVideoDraftTimelineCopy}`)
+        )
+      ),
   );
   const footerNewVideoDraftConfirmationReady = Boolean(
     !latestNewVideoDraftCommitted
@@ -5288,6 +5342,8 @@ export function MinimalAgentPanel({
       ? `消息里等待你确认：${currentTimelineConfirmationLabel || NEW_VIDEO_DRAFT_CONFIRM_LABEL}`
     : currentTimelineConfirmationLabel
       ? `消息里等待你确认：${currentTimelineConfirmationLabel}`
+    : footerNewVideoDraftConfirmationReady
+      ? `消息里等待你确认：${NEW_VIDEO_DRAFT_CONFIRM_LABEL}`
     : footerActionIsVideoQuery
       ? "消息里可以查询结果，不会重复提交"
     : referenceReviewFooterAction && agentNextActionAvailable
@@ -5306,7 +5362,9 @@ export function MinimalAgentPanel({
   const displayStatusLineText = footerActionIsVideoQuery
     ? "等待即梦结果"
     : cleanEmptyComposerStatusLine(agentTimelineStatusLine || statusLineText, hasComposerInput);
-  const composerHint = projectRequiredForWorkflow
+  const composerHint = footerNewVideoDraftConfirmationReady
+    ? "草案没问题就在消息里确认；想改就继续说。"
+    : projectRequiredForWorkflow
       ? canResolveProjectFromFooter
       ? `可以在消息中确认「${footerNextLabel}」继续；也可以继续写想法。`
       : "当前仍可继续改想法；生成前要先准备本地项目。"
@@ -5552,7 +5610,7 @@ export function MinimalAgentPanel({
     : agentCommandKind === "generate_references" || agentCommandKind === "submit_video" || agentCommandKind === "resume_video"
       ? agentCommand?.label || "按需展开"
       : "按需查看";
-  const realSampleDetailNeedsReview = referenceNeedsReview || agentCommandKind === "open_review" || realSampleAction?.status === "needs_review";
+  const realSampleDetailNeedsReview = referenceHasReviewableAssets || agentCommandKind === "open_review" || realSampleAction?.status === "needs_review";
   const showRealSampleDetailButton = realSampleDetailNeedsReview || !referenceGenerationBlockedByProject;
   const passiveAgentReply = !showAgentNote && !showAgentResultNote && projectStatusView
     ? {
@@ -5720,6 +5778,7 @@ export function MinimalAgentPanel({
   const threadReferencesUsableForAgent = referencesUsableForAgent || threadShowsReferenceReady;
   const stateAwareAgentThreadMessages = fullAgentThreadMessages.filter((message) =>
     !minimalAgentReferenceReviewMessageIsStale(message, threadReferencesUsableForAgent)
+    && !minimalAgentReferenceReviewMessageIsPremature(message, referenceHasReviewableAssets)
     && !minimalAgentReferenceGenerationConfirmationIsStale(fullAgentThreadMessages, message, threadReferencesUsableForAgent)
     && !minimalAgentReferenceCompletionMessageIsStale(message, threadReferencesUsableForAgent)
     && !minimalAgentReferenceBlockedMessageIsStale(fullAgentThreadMessages, message)
@@ -6280,7 +6339,7 @@ export function MinimalAgentPanel({
                   || confirmationMatchesPrimaryAction
                   || (agentNextActionAvailable && confirmationIsFooterAction);
                 const confirmationDisabled = visibleNewVideoDraftConfirmation
-                  ? Boolean(!onStartNewVideoDraftFromAgent || hasComposerInput || attachments.length || isPreparingPlan)
+                  ? Boolean((!onConfirmNewVideoDraftFromAgent && !onStartNewVideoDraftFromAgent) || hasComposerInput || attachments.length || isPreparingPlan)
                   : confirmationUsesPrimaryAction
                     ? primaryDisabled
                     : Boolean(hasComposerInput || attachments.length || isPreparingPlan);
@@ -6289,7 +6348,7 @@ export function MinimalAgentPanel({
                     ? "正在整理，稍等一下。"
                     : hasComposerInput || attachments.length
                       ? "先发送或清空当前输入，再确认草案。"
-                      : !onStartNewVideoDraftFromAgent
+                      : (!onConfirmNewVideoDraftFromAgent && !onStartNewVideoDraftFromAgent)
                         ? "当前不能从消息里确认草案。"
                         : ""
                   : confirmationUsesPrimaryAction
@@ -6491,7 +6550,7 @@ export function MinimalAgentPanel({
         <section className="minimal-agent-action-log" aria-label="最近动作">
           <span>最近动作</span>
           <div>
-            {agentActionLog.map((item) => {
+            {visibleAgentActionLog.map((item) => {
               const displayTitle = creatorFacingActionLogText(item.title, "刚才的动作");
               const displayScope = creatorFacingActionLogText(item.scope, "当前项目");
               const displayResult = creatorFacingActionLogText(item.result);
@@ -6737,7 +6796,7 @@ export function MinimalAgentPanel({
                 <span>参考图</span>
                 <strong>{realSampleLabel}</strong>
                 <small>{
-                  referenceNeedsReview
+                  referenceHasReviewableAssets
                     ? `${referenceReviewCount} 项参考等你复核。`
                   : referenceGenerationBlockedByContract
                     ? agentVideoPermissionDetail(currentVideoPermissionContract)

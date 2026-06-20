@@ -676,6 +676,17 @@ export function DirectorMode({
     });
   }
 
+  function confirmNewVideoDraftFromAgent() {
+    onOpenDirectorView?.("story");
+    setAgentNewVideoDraftActive(true);
+    setNewVideoStatus(undefined);
+    setAgentIntakeCommand({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      text: "确认写入故事流",
+      mode: "confirm_current_draft",
+    });
+  }
+
   return (
     <div className={`minimal-director ${directorView} ${showAgentPanel ? "has-agent-rail" : "composer-only"}`}>
       <DirectorProjectRail
@@ -871,6 +882,7 @@ export function DirectorMode({
             onCreateLocalProject={() => onCreateLocalProject?.()}
             onStartNewVideoDraftFromAgent={startNewVideoFromAgent}
             onContinueNewVideoDraftFromAgent={continueNewVideoDraftFromAgent}
+            onConfirmNewVideoDraftFromAgent={confirmNewVideoDraftFromAgent}
             newVideoDraftPendingForAgent={showNewVideoStart && newVideoStatus?.status === "drafting"}
             newVideoDraftPlanningForAgent={showNewVideoStart && newVideoStatus?.status === "planning"}
             newVideoDraftReadyForAgent={showNewVideoStart && newVideoStatus?.status === "ready"}

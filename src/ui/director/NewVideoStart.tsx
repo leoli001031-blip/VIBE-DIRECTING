@@ -176,7 +176,7 @@ export type NewVideoStartConfirmationContext = {
 export type NewVideoStartAgentIntakeCommand = {
   id: string;
   text: string;
-  mode?: "replace_draft" | "continue_current_draft";
+  mode?: "replace_draft" | "continue_current_draft" | "confirm_current_draft";
 };
 
 const referenceTypeLabels: Record<NewVideoReferenceKind, string> = {
@@ -2301,6 +2301,14 @@ export function NewVideoStart({
     const commandId = agentIntakeCommand?.id;
     if (!commandId || handledAgentIntakeCommandIdRef.current === commandId) return;
     handledAgentIntakeCommandIdRef.current = commandId;
+    if (agentIntakeCommand?.mode === "confirm_current_draft") {
+      if (projection && directorSession && !confirmed) {
+        void confirmDraft();
+      } else {
+        showNoReadyDraftNotice("确认写入故事流");
+      }
+      return;
+    }
     if (agentIntakeCommand?.mode === "continue_current_draft") {
       if (hasDraft) {
         void prepareDraft();

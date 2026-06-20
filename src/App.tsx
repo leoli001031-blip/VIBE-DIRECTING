@@ -2646,13 +2646,15 @@ function App() {
     && currentProjectWorkbenchProjection.shots.length === 1
     && currentProjectWorkbenchProjection.shots[0]?.id === "CURRENT_PROJECT"
     && currentProjectWorkbenchProjection.shots[0]?.issues.includes("current_project_story_pending");
-  const currentProjectProjectionHasUsableContent = currentProjectWorkbenchProjection.previewItemCount > 0
+  const currentProjectProjectionHasUsableContent = !currentProjectHasOnlyPlaceholder && (
+    currentProjectWorkbenchProjection.previewItemCount > 0
     || currentProjectWorkbenchProjection.assetFacts.length > 0
     || currentProjectWorkbenchProjection.sections.length > 0
     || currentProjectWorkbenchProjection.shots.some((shot) => (
       shot.id !== "CURRENT_PROJECT"
       || !shot.issues.includes("current_project_story_pending")
-    ));
+    ))
+  );
   const runtimeStateHasProjectContent = runtimeState.storyFlow.shots.length > 0
     || runtimeState.storyFlow.sections.length > 0
     || runtimeState.visualMemory.assets.length > 0;
@@ -3676,7 +3678,7 @@ function App() {
     }
     const runtimeSaveIdentity = draftTarget.projectRoot
       ? { projectRoot: draftTarget.projectRoot }
-      : effectiveRuntimeProjectIdentity;
+      : undefined;
     const draftTargetId = buildProjectVibeDraftTargetId(draftTarget);
     const projectForNewVideo = projectVibeWithNewVideoTitle(prototypeProjectVibeRef.current, draft, context, generatedAt);
     const {
@@ -4915,7 +4917,7 @@ function App() {
     options: { reserveForImmediateSave?: boolean } = {},
   ): Promise<ProjectVibeDraftTarget | undefined> {
     if (!canCreateLocalProjectFromDialog) {
-      return createBrowserDraftProject(draft, context, options);
+      return createBrowserRuntimeProject(draft, context, options);
     }
     const previousProjectFileSelection = projectFileSelection;
     setProjectFileSelection({
@@ -4994,8 +4996,8 @@ function App() {
   }
 
   async function createBrowserRuntimeProject(
-    draft: NewVideoStartDraft,
-    context: NewVideoStartConfirmationContext,
+    draft?: NewVideoStartDraft,
+    context?: NewVideoStartConfirmationContext,
     options: { reserveForImmediateSave?: boolean } = {},
   ): Promise<ProjectVibeDraftTarget | undefined> {
     const displayName = projectDisplayNameFromDraft(draft, context) || "新视频";
@@ -5015,13 +5017,16 @@ function App() {
     });
 
     try {
-      await connectCurrentProject({
+      const binding = await connectCurrentProject({
         projectRoot,
         displayName,
       }, {
         createIfMissing: true,
         projectFileRootSelected: true,
       });
+      if (!binding || binding.status !== "bound") {
+        return createBrowserDraftProject(draft, context, options);
+      }
       setProjectPathInput(projectRoot);
       setLoadedPrototypeProjectDraftTargetId(targetId);
       setProjectFileSelection({
@@ -5063,6 +5068,11 @@ function App() {
     context: NewVideoStartConfirmationContext,
   ): Promise<ProjectVibeDraftTarget> {
     if (projectFileSelection.status === "selected") {
+      if (selectedProjectIsBrowserDraft && !canChooseProjectRootFromDialog) {
+        return {
+          storageKey: browserProjectDraftStorageKeyRef.current || prototypeProjectDraftStorageKeyValue,
+        };
+      }
       if (!canRememberProjectRootFromDialog || !prototypeProjectDraftTarget.projectRoot) {
         return prototypeProjectDraftTarget;
       }

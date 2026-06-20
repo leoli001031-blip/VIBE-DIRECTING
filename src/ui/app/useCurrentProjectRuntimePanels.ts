@@ -332,7 +332,7 @@ export function useCurrentProjectRuntimePanels({
     if (!projectRoot) {
       setProjectSelectionStatus("error");
       setUnavailableProjectPanels("请输入项目路径。");
-      return;
+      return undefined;
     }
     setProjectPathInput(projectRoot);
 
@@ -362,6 +362,7 @@ export function useCurrentProjectRuntimePanels({
       const choices = await loadCurrentProjectChoices();
       setProjectChoices(choices);
       setProjectSelectionStatus("connected");
+      return binding;
     } catch {
       const message = options.projectFileRootSelected
         ? "项目文件已打开，运行时同步暂不可用。"
@@ -369,6 +370,7 @@ export function useCurrentProjectRuntimePanels({
       setRuntimeProjectBinding({ status: "unbound", message });
       setUnavailableProjectPanels(message);
       setProjectSelectionStatus(options.projectFileRootSelected ? "connected" : "error");
+      return undefined;
     }
   }, [projectPathInput, refreshCurrentProjectPanels, setUnavailableProjectPanels]);
 

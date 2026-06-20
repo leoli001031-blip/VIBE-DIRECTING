@@ -756,6 +756,7 @@ function assertCreatorPanelContract() {
   assert(/useCurrentProjectWorkbenchProjection\s*=\s*currentProjectWorkbenchProjection\.available/.test(app), "App must gate current-project projection so opened Project.vibe can remain the main state");
   assert(/currentProjectHasOnlyPlaceholder[\s\S]*CURRENT_PROJECT[\s\S]*current_project_story_pending/.test(app), "App must recognize the current-project placeholder shot as an empty project shell");
   assert(/currentProjectProjectionForRuntime[\s\S]*shots:\s*\[\][\s\S]*sections:\s*\[\]/.test(app), "Empty current-project placeholders must clear stale story and section state before rendering");
+  assert(/const\s+currentProjectProjectionHasUsableContent\s*=\s*!currentProjectHasOnlyPlaceholder[\s\S]*currentProjectWorkbenchProjection\.sections\.length > 0/.test(app), "Current-project placeholder sections must not count as usable content that can overwrite a newly confirmed browser draft story");
   assert(/normalizeProjectRootForUiCompare/.test(appSource), "App must normalize project roots before comparing current-project projections");
   assert(/\/\.vibe-runtime\//.test(appSource), "App project-root comparison must collapse absolute and repo-relative .vibe-runtime roots");
   assert(!/const\s+currentProjectProjectionMatchesSelectedRoot\s*=\s*runtimeCurrentProjectIsBound/.test(app), "App must not let a bound runtime projection bypass selected project-root matching");
