@@ -48,6 +48,7 @@ import {
   buildProjectObservation,
   isContinueIntent,
   routeProjectAgentIntent,
+  type ProjectInboxProjection,
   type ProjectObservationProjection,
 } from "../../core/projectAgentWorkspace";
 import {
@@ -244,6 +245,41 @@ function minimalAgentAssetInboxSummaryFromTimelineEntry(entry: VibeAgentTimeline
     totalCount,
     needsReviewCount,
     kindLabels,
+  };
+}
+
+function minimalAgentAssetInboxSummaryFromProjection(inbox: ProjectInboxProjection): MinimalAgentAssetInboxSummary | undefined {
+  if (inbox.totalCount <= 0 && inbox.needsReviewCount <= 0 && !inbox.items.length) return undefined;
+  const kindLabels = [...new Set(inbox.items.map((item) => minimalAgentInboxKindLabel(item.kind)))].slice(0, 6);
+  return {
+    summary: inbox.summary,
+    nextAction: inbox.nextAction,
+    totalCount: inbox.totalCount,
+    needsReviewCount: inbox.needsReviewCount,
+    kindLabels,
+  };
+}
+
+function projectInboxAgentMessage(inbox: ProjectInboxProjection): MinimalAgentMessage | undefined {
+  const assetInboxSummary = minimalAgentAssetInboxSummaryFromProjection(inbox);
+  if (!assetInboxSummary) return undefined;
+  const examples = inbox.items.slice(0, 3).map((item) => `${item.label}：${item.suggestedBinding}`);
+  return {
+    id: `project_inbox_status_${inbox.totalCount}_${inbox.needsReviewCount}`,
+    entryType: "tool_result",
+    role: "assistant",
+    title: "素材已识别",
+    body: assetInboxSummary.summary,
+    lifecycle: inbox.needsReviewCount ? "needs_user_input" : "succeeded",
+    status: inbox.needsReviewCount ? "waiting" : "done",
+    toolName: "classify_assets",
+    facts: [
+      { label: "分类", value: assetInboxSummary.kindLabels.join("、") || "待判断" },
+      { label: "待确认", value: inbox.needsReviewCount ? `${inbox.needsReviewCount} 个` : "没有" },
+      examples.length ? { label: "示例", value: examples.join("；") } : undefined,
+    ].filter((item): item is { label: string; value: string } => Boolean(item)),
+    next: assetInboxSummary.nextAction,
+    assetInboxSummary,
   };
 }
 
@@ -5640,6 +5676,14 @@ export function MinimalAgentPanel({
     || /草案.*故事流|故事流.*草案|故事流已准备/.test(`${message.title} ${message.body}`)
   ))) {
     fullAgentThreadMessages.unshift(storyFlowMessage);
+  }
+  const projectInboxMessage = projectInboxAgentMessage(composerProjectInbox);
+  if (projectInboxMessage && !fullAgentThreadMessages.some((message) => (
+    message.id === projectInboxMessage.id
+    || message.assetInboxSummary
+    || /素材已识别|项目素材/.test(`${message.title} ${message.body}`)
+  ))) {
+    fullAgentThreadMessages.push(projectInboxMessage);
   }
   const footerActionConfirmationMessage = (() => {
     if (hasComposerInput || projectRequiredForWorkflow) return undefined;
