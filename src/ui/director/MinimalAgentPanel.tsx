@@ -5584,7 +5584,7 @@ export function MinimalAgentPanel({
     fullAgentThreadMessages.unshift(storyFlowMessage);
   }
   const footerActionConfirmationMessage = (() => {
-    if (hasComposerInput || hasAgentTimelineConfirmation || projectRequiredForWorkflow) return undefined;
+    if (hasComposerInput || projectRequiredForWorkflow) return undefined;
     if (footerNewVideoDraftConfirmationReady) {
       return {
         id: "footer_action_new_video_draft",
@@ -5666,7 +5666,15 @@ export function MinimalAgentPanel({
     }
     return undefined;
   })();
-  if (footerActionConfirmationMessage && !fullAgentThreadMessages.some((message) => message.role === "confirmation")) {
+  const shouldAppendFooterActionConfirmationMessage = Boolean(
+    footerActionConfirmationMessage
+      && (
+        footerActionConfirmationMessage.id === "footer_action_new_video_draft"
+          ? !fullAgentThreadMessages.some((message) => message.id === footerActionConfirmationMessage.id)
+          : !fullAgentThreadMessages.some((message) => message.role === "confirmation")
+      ),
+  );
+  if (footerActionConfirmationMessage && shouldAppendFooterActionConfirmationMessage) {
     fullAgentThreadMessages.push(footerActionConfirmationMessage);
   }
   const threadUserIntent = preparedContext?.userIntent?.trim() || (hasComposerInput ? text.trim() : "");
