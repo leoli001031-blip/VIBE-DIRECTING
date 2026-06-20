@@ -167,7 +167,7 @@ function intakePlanToolName(phase: VibeAgentIntakeTimelinePhase) {
 function planTitle(phase: VibeAgentIntakeTimelinePhase) {
   if (phase === "planning_started") return "正在拆镜头";
   if (phase === "planning_ready") return "草案已完成";
-  if (phase === "planning_blocked") return "规划遇到问题";
+  if (phase === "planning_blocked") return "先给你本地草案";
   if (phase === "draft_confirmed") return "草案已写入";
   return "判断下一步";
 }
@@ -175,7 +175,7 @@ function planTitle(phase: VibeAgentIntakeTimelinePhase) {
 function planBody(phase: VibeAgentIntakeTimelinePhase) {
   if (phase === "planning_started") return "Agent 正在把输入拆成故事节奏、镜头顺序和参考策略。";
   if (phase === "planning_ready") return "Agent 已完成草案规划，现在停在复核和确认这一步。";
-  if (phase === "planning_blocked") return "Agent 暂时没有完成规划，已保留当前输入和可见状态。";
+  if (phase === "planning_blocked") return "Agent 已先按本地规则整理出可用草案，后面仍可重拆或继续修改。";
   if (phase === "draft_confirmed") return "Agent 已把确认后的草案交给项目写入链路。";
   return "Agent 会先判断是否已有故事流，或是否需要先放入脚本。";
 }
@@ -183,7 +183,7 @@ function planBody(phase: VibeAgentIntakeTimelinePhase) {
 function assistantBody(phase: VibeAgentIntakeTimelinePhase, shotCount: number) {
   if (phase === "planning_started") return "我正在整理故事、镜头和节奏。这里只做规划，不会生成参考图，也不会发送视频。";
   if (phase === "planning_ready") return `我拆好了一个草案：${shotCount || "若干"} 个镜头。确认前不会写入项目，也不会生成参考或视频。`;
-  if (phase === "planning_blocked") return "这次没有整理完整。你可以换个说法重新发送，或者先按当前内容继续改。";
+  if (phase === "planning_blocked") return "我先整理出一版本地草案。你可以直接改，也可以稍后让我重拆镜头。";
   if (phase === "draft_confirmed") return "我已经把草案放进故事流。接下来可以继续改镜头，或让我开始补参考。";
   return "我先看了当前项目状态。下一步先放入脚本或一句故事想法。";
 }
@@ -191,7 +191,7 @@ function assistantBody(phase: VibeAgentIntakeTimelinePhase, shotCount: number) {
 function assistantNext(phase: VibeAgentIntakeTimelinePhase) {
   if (phase === "planning_started") return "草案出来后，你可以确认，也可以直接说哪里要改。";
   if (phase === "planning_ready") return "觉得可以就确认；想改就直接说。";
-  if (phase === "planning_blocked") return "修改输入后重新发送。";
+  if (phase === "planning_blocked") return "直接说哪里要改，或让我重拆镜头。";
   if (phase === "draft_confirmed") return "继续说你想改哪里，或说“开始补参考”。";
   return "放入脚本或一句故事想法。";
 }
@@ -199,7 +199,7 @@ function assistantNext(phase: VibeAgentIntakeTimelinePhase) {
 function assistantNextFact(phase: VibeAgentIntakeTimelinePhase) {
   if (phase === "planning_started") return "等待草案";
   if (phase === "planning_ready") return "等待确认";
-  if (phase === "planning_blocked") return "重试或修改";
+  if (phase === "planning_blocked") return "继续修改";
   if (phase === "draft_confirmed") return "继续推进";
   return "放入故事";
 }
@@ -209,7 +209,7 @@ function intakeUnderstandingAction(phase: VibeAgentIntakeTimelinePhase) {
   if (phase === "draft_collected") return "整理输入";
   if (phase === "planning_started") return "拆故事和镜头";
   if (phase === "planning_ready") return "复核草案";
-  if (phase === "planning_blocked") return "说明阻断原因";
+  if (phase === "planning_blocked") return "说明当前草案";
   if (phase === "draft_confirmed") return "写入故事流";
   return "整理输入";
 }

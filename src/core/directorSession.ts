@@ -424,7 +424,52 @@ export function splitScriptIntoStoryboardBeats(scriptText: string): string[] {
     .map((part) => clean(part.replace(/^[，,\s]+|[，,\s]+$/gu, "")))
     .filter(Boolean);
   if (segments.length > 1) return segments.slice(0, 10);
+  const implicitActionBeats = splitImplicitActionIdea(segments[0] || withoutMarkdown);
+  if (implicitActionBeats.length > 1) return implicitActionBeats.slice(0, 10);
   return withoutMarkdown.split(/\n+/u).map(clean).filter(Boolean).slice(0, 10);
+}
+
+const implicitActionVerbPattern =
+  /(出现|吐出|露出|亮起|打开|掉出|推出|伸出|发现|看见|抬头|转身|跑向|冲向|走向|驶向|奔向|追着|跟着|沿着|进入|穿过|启动|驶过|停下|递|接|拿|放|推|按|望向|看向)/u;
+
+function actorCueForCompoundMotion(prefix: string) {
+  const cleaned = clean(prefix);
+  const actor = cleaned.match(/((?:戴|穿|背|拿)[^，,。！？!?；;]{0,18}?(?:女高中生|女生|女孩|少女|男生|男孩|少年|黑猫|白猫|猫|机器人|车|主角)|(?:女高中生|女生|女孩|少女|男生|男孩|少年|黑猫|白猫|猫|机器人|主角|她|他|它|两人|汽车|电车|车))$/u)?.[1];
+  return actor ? clean(actor) : "";
+}
+
+function splitCompoundMotionBeat(beat: string): string[] {
+  const cleaned = clean(beat);
+  const match = cleaned.match(/^(.{4,80}?)(追着|跟着|沿着|带着)(.{1,24}?)(跑向|冲向|走向|驶向|奔向|进入|穿过)(.{2,80})$/u);
+  if (!match) return [cleaned];
+  const subject = actorCueForCompoundMotion(match[1] || "");
+  const first = clean(`${match[1] || ""}${match[2] || ""}${match[3] || ""}`);
+  const second = clean(`${subject}${match[4] || ""}${match[5] || ""}`);
+  return [first, second].filter(Boolean);
+}
+
+function splitImplicitActionIdea(text: string): string[] {
+  const cleaned = clean(text);
+  if (!cleaned) return [];
+  const commaParts = cleaned.split(/[，,]/u).map(clean).filter(Boolean);
+  if (commaParts.length < 2) return splitCompoundMotionBeat(cleaned);
+  const beats: string[] = [];
+  let leadingContext = "";
+  for (const part of commaParts) {
+    if (implicitActionVerbPattern.test(part)) {
+      beats.push(clean([leadingContext, part].filter(Boolean).join("，")));
+      leadingContext = "";
+      continue;
+    }
+    if (!beats.length) {
+      leadingContext = clean([leadingContext, part].filter(Boolean).join("，"));
+    } else {
+      beats[beats.length - 1] = clean(`${beats[beats.length - 1]}，${part}`);
+    }
+  }
+  if (leadingContext && beats.length) beats[beats.length - 1] = clean(`${beats[beats.length - 1]}，${leadingContext}`);
+  const expanded = beats.flatMap(splitCompoundMotionBeat).filter(Boolean);
+  return expanded.length > 1 ? expanded : [cleaned];
 }
 
 function inferShotDrafts(scriptText: string): string[] {

@@ -113,6 +113,17 @@ assert(
   "inline segment parser should not turn meta requirements into storyboard beats",
 );
 
+const implicitIdeaBeats = splitScriptIntoStoryboardBeats(
+  "午夜天桥下，一台旧自动售货机吐出一张发光车票，戴耳机的女高中生追着蓝光跑向第一班电车。",
+);
+assert(
+  implicitIdeaBeats.length >= 3,
+  `implicit one-sentence ideas should split into action beats, got ${implicitIdeaBeats.length}: ${implicitIdeaBeats.join(" | ")}`,
+);
+assert(implicitIdeaBeats[0]?.includes("自动售货机") && implicitIdeaBeats[0]?.includes("发光车票"), "first implicit beat should keep the object trigger");
+assert(implicitIdeaBeats.some((beat) => beat.includes("女高中生") && beat.includes("蓝光")), "implicit beats should keep the character chase");
+assert(implicitIdeaBeats.some((beat) => beat.includes("第一班电车")), "implicit beats should keep the destination or result beat");
+
 const raceScript = `[Intro]
 [Classic Synth Brass Riff]
 Five...

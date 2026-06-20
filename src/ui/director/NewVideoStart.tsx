@@ -2107,8 +2107,8 @@ export function NewVideoStart({
       setStoryboardPlanningStatus("fallback");
       setStoryboardPlanningStartedAt(undefined);
       const fallbackMessage = error instanceof Error && /key|配置|API/i.test(error.message)
-        ? "AI 分镜还没跑起来：先显示本地初步识别。配置好密钥后再试。"
-        : "AI 分镜这次没有完成，当前保留本地初步识别；可以直接改，或稍后再发送重试。";
+        ? "已先整理成本地草案。配置好 AI Key 后，可以再让 AI 导演重拆镜头。"
+        : "已先整理成本地草案。你可以直接改，也可以稍后让 AI 导演重拆镜头。";
       setStoryboardPlanningMessage(fallbackMessage);
       rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
         createdAt: timelineCreatedAt,
@@ -2760,11 +2760,11 @@ export function NewVideoStart({
     }
     if (storyboardPlanningStatus === "blocked") {
       return {
-        title: "这次没有整理完整",
-        body: storyboardPlanningMessage || "AI 分镜这次没有完成。你可以换个说法重新发送，或者先按当前内容继续改。",
-        next: "修改输入后重新发送。",
+        title: "先给你一版可用草案",
+        body: storyboardPlanningMessage || "已先整理成本地草案。你可以换个说法重新发送，或者先按当前内容继续改。",
+        next: "直接说哪里要改，或稍后让 AI 导演重拆镜头。",
         facts: [
-          { label: "状态", value: "需要重试" },
+          { label: "状态", value: "可继续修改" },
           { label: "已保留", value: shotCount ? `${shotCount} 个初步镜头` : "当前输入" },
         ],
       };
