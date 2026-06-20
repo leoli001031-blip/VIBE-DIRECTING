@@ -141,6 +141,8 @@ type MinimalAgentMessage = {
   actionKind?: VibeAgentTimelineEntry["actionKind"];
   actionId?: VibeAgentTimelineEntry["actionId"];
   facts?: Array<{ label: string; value: string }>;
+  confirmationFacts?: Array<{ label: string; value: string }>;
+  confirmationBoundary?: string;
   resultView?: DirectorView;
   executionResult?: VibeAgentExecutionResultSummary;
   next?: string;
@@ -419,6 +421,13 @@ function minimalAgentVisibleFacts(message: MinimalAgentMessage) {
     if (/状态/.test(label) && value === executionSummary) return false;
     return true;
   });
+}
+
+function minimalAgentMessageConfirmationFacts(message: MinimalAgentMessage) {
+  if (message.confirmationFacts?.length) return message.confirmationFacts;
+  if (!minimalAgentMessageRequestsActionConfirmation(message)) return [];
+  const confirmationLabels = new Set(["写入", "下一步", "范围", "边界", "结果"]);
+  return (message.facts || []).filter((fact) => confirmationLabels.has(fact.label.trim()));
 }
 
 function timelineResultView(entry: VibeAgentTimelineEntry): DirectorView | undefined {
@@ -5806,6 +5815,10 @@ export function MinimalAgentPanel({
 	      title: `AI 导演：${agentActionTitle}`,
 	      body: agentUnderstanding,
 	      facts: visibleActionPlanFacts.slice(0, 3),
+	      confirmationFacts: actionConfirmationFacts,
+	      confirmationBoundary: actionConfirmationFacts.length
+	        ? "确认前不会执行；确认后只按下面这一步推进。"
+	        : undefined,
 	      next: agentNextActionAvailable ? `在这条消息中确认「${primaryLabel}」后继续。` : "可以继续写想法。",
 	    });
   } else if (!agentTimelineEntries.length && showAgentResultNote) {
@@ -6185,6 +6198,22 @@ export function MinimalAgentPanel({
                 <div className="minimal-agent-plan is-inline" aria-label={`${message.title}摘要`}>
                   {minimalAgentVisibleFacts(message).map((fact) => (
                     <small key={`${message.id}:${fact.label}:${fact.value}`}>
+                      <span>{fact.label}</span>
+                      <strong>{agentFactDisplayValue(fact)}</strong>
+                    </small>
+                  ))}
+                </div>
+              )}
+              {minimalAgentMessageConfirmationFacts(message).length > 0 && (
+                <div className="minimal-agent-confirmation-strip is-message" aria-label="这条消息确认后动作">
+                  {message.confirmationBoundary && (
+                    <small className="minimal-agent-confirmation-boundary-copy">
+                      <span>确认</span>
+                      <strong>{message.confirmationBoundary}</strong>
+                    </small>
+                  )}
+                  {minimalAgentMessageConfirmationFacts(message).map((fact) => (
+                    <small key={`${message.id}:confirm:${fact.label}:${fact.value}`}>
                       <span>{fact.label}</span>
                       <strong>{agentFactDisplayValue(fact)}</strong>
                     </small>

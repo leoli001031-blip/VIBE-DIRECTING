@@ -8708,6 +8708,16 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   min-width: 0;
 }
 
+.minimal-agent-confirmation-strip.is-message {
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  margin-top: 3px;
+}
+
+.minimal-agent-confirmation-strip.is-message .minimal-agent-confirmation-boundary-copy {
+  grid-column: 1 / -1;
+  background: rgba(255, 252, 246, 0.7);
+}
+
 .minimal-agent-confirmation-strip small {
   display: grid;
   gap: 3px;

@@ -504,8 +504,12 @@ assert(/handoffMatchesAction\(stagedAgentPlan\?\.agentToolHandoff,\s*nextAgentAc
 assert(/aria-label="待确认改动"/.test(minimalAgentPanelSource), "Agent panel must show staged diffs before confirmation");
 assert(/aria-label="待确认改动明细"/.test(minimalAgentPanelSource), "Agent details must retain full staged diffs");
 assert(/aria-label="确认后动作"/.test(minimalAgentPanelSource), "Agent panel must show the post-confirmation action path before confirmation");
+assert(/aria-label="这条消息确认后动作"/.test(minimalAgentPanelSource), "Agent message cards must carry their own confirmation contract");
 assert(/aria-label="AI 导演执行路径"/.test(minimalAgentPanelSource), "Agent panel must show a visible read-stage-write-tool trace");
 assert(/minimal-agent-confirmation-strip/.test(minimalAgentPanelSource), "Agent confirmation facts must have a dedicated visible strip");
+assert(/function minimalAgentMessageConfirmationFacts/.test(minimalAgentPanelSource), "Agent message cards must derive confirmation facts in one helper");
+assert(/confirmationFacts:\s*actionConfirmationFacts/.test(minimalAgentPanelSource), "synthetic Agent plan messages must include the same confirmation facts as the standalone card");
+assert(/confirmationBoundary:\s*actionConfirmationFacts\.length/.test(minimalAgentPanelSource), "synthetic Agent plan messages must explain the pre-confirmation boundary inside the message");
 assert(/minimal-agent-execution-trace/.test(minimalAgentPanelSource), "Agent execution trace must have a dedicated visible strip");
 assert(/label:\s*"写入"[\s\S]*agentConfirmedProjectWriteLabel/.test(agentActionConfirmationFacts), "confirmation strip must state project write behavior");
 assert(/label:\s*"下一步"[\s\S]*agentNextControlledStepLabel/.test(agentActionConfirmationFacts), "confirmation strip must state the next controlled action");
@@ -542,6 +546,7 @@ assert(/image_reference_receipt[\s\S]*参考已保存/.test(agentExpectedReceipt
 assert(/minimal-agent-diff/.test(stylesSource), "staged Agent diffs need dedicated styling");
 assert(/minimal-agent-result-facts/.test(stylesSource), "confirmed Agent result facts need dedicated styling");
 assert(/\.minimal-agent-confirmation-strip/.test(stylesSource), "post-confirmation action path needs dedicated styling");
+assert(/\.minimal-agent-confirmation-strip\.is-message/.test(stylesSource), "message-level confirmation facts need compact inline styling");
 assert(/\.minimal-agent-execution-trace/.test(stylesSource), "Agent execution trace needs dedicated styling");
 assert(/\.minimal-agent-execution-trace small\.blocked/.test(stylesSource), "Agent execution trace must distinguish blocked steps");
 assert(/\.minimal-agent-action-path/.test(stylesSource), "Agent status action path needs dedicated styling");
