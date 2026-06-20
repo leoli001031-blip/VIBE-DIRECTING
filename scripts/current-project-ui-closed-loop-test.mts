@@ -491,6 +491,7 @@ function assertUnifiedProjectStatusVideoStage() {
     },
   });
   assert(localProjectMixedReferenceStatus.stage === "参考待看，也有待生成", "local projects should not call mixed review and missing references only review");
+  assert(localProjectMixedReferenceStatus.doing === "1 张待看，3 张待补", "mixed reference state should not repeat the stage copy as the current task");
   assert(localProjectMixedReferenceStatus.waitingFor === "先复核，再补缺口", "mixed reference state should explain the order clearly");
 }
 

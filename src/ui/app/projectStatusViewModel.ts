@@ -263,6 +263,7 @@ function assetWaitingLabel(input: ProjectStatusViewModelInput) {
   const displayedMissing = referenceDisplayedMissingCount(input);
   if (input.referenceGenerationAction?.status === "running") return progress ? `参考正在生成：${progress}` : "参考图正在生成";
   if (input.referenceGenerationAction?.status === "blocked") return actionMessage(input.referenceGenerationAction, "参考生成被拦住");
+  if (review > 0 && displayedMissing > 0) return `${review} 张待看，${displayedMissing} 张待补`;
   if (input.referenceGenerationAction?.status === "ready" && displayedMissing > 0) return `还缺 ${displayedMissing} 张画面参考`;
   if (review > 0) return "参考待看";
   if (displayedMissing > 0) return `还缺 ${displayedMissing} 张画面参考`;
