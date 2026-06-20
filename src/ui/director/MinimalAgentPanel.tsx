@@ -264,7 +264,7 @@ function minimalAgentAssetActionsFromTimelineEntry(entry: VibeAgentTimelineEntry
       if (!selectedAssetId && !selectedShotIds.length) return undefined;
       return {
         id: stringValue(item.id) || `asset_action_${index + 1}`,
-        label: `确认 ${label} · ${suggestedAction}`,
+        label: `${label} · ${suggestedAction}`,
         detail: reason ? `${suggestedBinding}。判断理由：${reason}` : suggestedBinding,
         intent: `确认这个素材用途：${label}。建议动作：${suggestedAction}。${suggestedBinding}${reason ? `。判断理由：${reason}` : ""}`,
         selectedAssetId: selectedAssetId || undefined,
@@ -3090,7 +3090,7 @@ export function MinimalAgentPanel({
   const showEndpointEndFrameControls = usesEndpointEndFrame(shot) || selectedShots.some(usesEndpointEndFrame);
   const videoResultIsPrimary = !exportResultIsPrimary && (videoQueryMode || videoBusy || videoAlreadySent);
   const readOnlyAgentStatusInspection = agentActionIsStatusInspection(agentActionEnvelope);
-  const showRealSampleAction = !readOnlyAgentStatusInspection && !exportResultIsPrimary && !videoResultIsPrimary && Boolean(agentCommandKind === "generate_references" || realSampleAction?.keyConfigured || realSampleAction?.status === "running" || realSampleAction?.status === "needs_review" || realSampleAction?.status === "verified");
+  const showRealSampleAction = currentProjectHasStoryContext && !readOnlyAgentStatusInspection && !exportResultIsPrimary && !videoResultIsPrimary && Boolean(agentCommandKind === "generate_references" || realSampleAction?.keyConfigured || realSampleAction?.status === "running" || realSampleAction?.status === "needs_review" || realSampleAction?.status === "verified");
   const showEndFrameAction = !readOnlyAgentStatusInspection && !exportResultIsPrimary && !videoResultIsPrimary && showEndpointEndFrameControls && Boolean(endFrameAction?.keyConfigured || endFrameAction?.status === "running" || endFrameAction?.status === "needs_review" || endFrameAction?.status === "verified");
   const showVideoAction = !readOnlyAgentStatusInspection && !exportResultIsPrimary && Boolean(videoSendAction && runtimeState.storyFlow.shots.length > 0 && (
     agentCommandKind === "submit_video"
@@ -3932,13 +3932,6 @@ export function MinimalAgentPanel({
     if (asset?.id) return { selectedAssetId: asset.id };
     if (sectionId && !scopedShotIds.length && !asset) return { sectionId };
     return {};
-  }
-
-  function selectionOverrideFromAssetAction(action: MinimalAgentAssetAction): ComposerSelectionOverride {
-    if (action.selectedAssetId) return { selectedAssetId: action.selectedAssetId };
-    if (action.selectedShotIds?.length === 1) return { selectedShotId: action.selectedShotIds[0] };
-    if (action.selectedShotIds?.length) return { selectedShotIds: action.selectedShotIds };
-    return currentComposerSelectionOverride();
   }
 
   function openAgentResultView() {
@@ -6116,19 +6109,18 @@ export function MinimalAgentPanel({
                 </div>
               )}
               {message.assetActions && message.assetActions.length > 0 && (
-                <div className="minimal-agent-message-actions asset-actions" aria-label="素材用途建议">
-                  {message.assetActions.map((action) => (
-                    <button
-                      key={`${message.id}:${action.id}`}
-                      type="button"
-                      className="secondary"
-                      onClick={() => void prepareChange(action.intent, selectionOverrideFromAssetAction(action))}
-                      disabled={isPreparingPlan}
-                      title={action.detail}
-                    >
-                      {action.label}
-                    </button>
-                  ))}
+                <div className="minimal-agent-material-suggestions" aria-label="素材用途建议">
+                  <small className="minimal-agent-action-hint">
+                    我先把建议列出来，不会直接改素材。需要采用时，直接说“确认这些素材用途”。
+                  </small>
+                  <ul>
+                    {message.assetActions.map((action) => (
+                      <li key={`${message.id}:${action.id}`}>
+                        <strong>{action.label}</strong>
+                        <span>{action.detail}</span>
+                      </li>
+                    ))}
+                  </ul>
                   {message.assetActionOverflow && (
                     <small className="minimal-agent-action-hint">
                       {message.assetActionOverflow.label}。{message.assetActionOverflow.detail}

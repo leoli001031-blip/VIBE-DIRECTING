@@ -8469,6 +8469,47 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   overflow-wrap: anywhere;
 }
 
+.minimal-agent-material-suggestions {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid rgba(150, 93, 55, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 252, 246, 0.52);
+  padding: 8px;
+}
+
+.minimal-agent-material-suggestions ul {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.minimal-agent-material-suggestions li {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.minimal-agent-material-suggestions strong {
+  color: rgba(47, 39, 34, 0.78);
+  font-size: 12px;
+  font-weight: 840;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.minimal-agent-material-suggestions span {
+  color: rgba(124, 111, 99, 0.72);
+  font-size: 11px;
+  font-weight: 740;
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+}
+
 .minimal-agent-card-head {
   display: flex;
   align-items: baseline;
