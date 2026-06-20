@@ -1087,6 +1087,16 @@ function minimalAgentMessageSearchText(message: MinimalAgentMessage) {
   return `${message.title} ${message.body} ${message.next || ""} ${factText} ${executionText}`;
 }
 
+function minimalAgentThreadHasUserIntent(messages: MinimalAgentMessage[], userIntent: string) {
+  const compactIntent = shortAgentPanelMessageText(userIntent).trim();
+  if (!compactIntent) return true;
+  const intentLead = compactIntent.slice(0, 48);
+  return messages.some((message) => (
+    message.role === "user"
+    && cleanMinimalAgentMessageCopy(message.body).includes(intentLead)
+  ));
+}
+
 function minimalAgentMessageHasLaterReferenceReady(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
   const messageIndex = messages.indexOf(message);
   return messages.some((candidate, index) => {
@@ -5779,9 +5789,10 @@ export function MinimalAgentPanel({
   if (footerActionConfirmationMessage && shouldAppendFooterActionConfirmationMessage) {
     fullAgentThreadMessages.push(footerActionConfirmationMessage);
   }
-  const threadUserIntent = preparedContext?.userIntent?.trim() || (hasComposerInput ? text.trim() : "");
-  if (!fullAgentThreadMessages.length && (showAgentNote || showAgentResultNote) && threadUserIntent) {
-    fullAgentThreadMessages.push({
+  const threadUserIntent = preparedContext?.userIntent?.trim()
+    || ((showAgentNote || showAgentResultNote) && hasComposerInput ? text.trim() : "");
+  if (threadUserIntent && !minimalAgentThreadHasUserIntent(fullAgentThreadMessages, threadUserIntent)) {
+    fullAgentThreadMessages.unshift({
       id: "user-intent",
       role: "user",
       title: "你",
