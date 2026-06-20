@@ -1612,13 +1612,13 @@ function buildSkillSaveTimelineEntries(input: {
       type: "tool_call",
       createdAt,
       title: "保存导演经验",
-      body: "Agent 正在把当前镜头的做法整理成可复用的 Skill 草稿。",
+      body: "我正在把当前镜头的做法整理成可复用的导演经验。",
       toolName: "save_skill",
       status: input.status,
       lifecycle: input.status === "done" ? "succeeded" : "needs_user_input",
       facts: [
-        { label: "动作", value: "保存 Skill 草稿" },
-        { label: "位置", value: input.path || "未保存" },
+        { label: "动作", value: "保存导演经验" },
+        { label: "位置", value: input.path ? "项目 Skills" : "未保存" },
       ],
     },
     {
@@ -1632,7 +1632,7 @@ function buildSkillSaveTimelineEntries(input: {
       lifecycle: input.status === "done" ? "succeeded" : "needs_user_input",
       facts: [
         { label: "保存方式", value: input.mode || "未保存" },
-        { label: "文件", value: input.path || "无" },
+        { label: "位置", value: input.path ? "项目 Skills" : "未保存" },
       ],
       details: input.next ? { next: input.next } : undefined,
     },
@@ -1648,7 +1648,6 @@ function buildSkillSaveConfirmationTimelineEntries(input: {
 }): VibeAgentTimelineEntry[] {
   const createdAt = new Date().toISOString();
   const suffix = createdAt.replace(/[^a-z0-9]+/gi, "").slice(0, 24).toLowerCase();
-  const relativePath = `skills/${input.fileName}`;
   const actionId = `save_skill_${suffix}`;
   return [
     {
@@ -1663,24 +1662,24 @@ function buildSkillSaveConfirmationTimelineEntries(input: {
       id: `skill_save_draft_${suffix}`,
       type: "assistant_message",
       createdAt,
-      title: "AI 导演：Skill 草稿已整理",
+      title: "AI 导演：导演经验已整理",
       body: `我会把当前做法沉淀成「${input.skillName}」。这只是保存导演经验，不会生成参考或提交视频。`,
       toolName: "save_skill",
       lifecycle: "proposed",
       status: "waiting",
       facts: [
-        { label: "Skill", value: input.skillName },
-        { label: "文件", value: relativePath },
+        { label: "名称", value: input.skillName },
+        { label: "保存到", value: "项目 Skills" },
         { label: "用途", value: input.summary },
       ],
-      details: { next: "确认后写入项目 Skills 和 skill-index。" },
+      details: { next: "确认后保存到项目 Skills。" },
     },
     {
       id: `skill_save_confirm_${suffix}`,
       type: "confirmation_request",
       createdAt,
-      title: "行动卡片：保存 Skill 草稿",
-      body: `确认后，我会把「${input.skillName}」写入项目 Skills，并更新 skill-index。`,
+      title: "保存导演经验？",
+      body: `确认后，我会把「${input.skillName}」保存到这个项目的 Skills 里。`,
       toolName: "save_skill",
       actionId,
       lifecycle: "waiting_for_confirmation",
@@ -1688,8 +1687,8 @@ function buildSkillSaveConfirmationTimelineEntries(input: {
       confirmationRequired: true,
       facts: [
         { label: "动作", value: "保存导演经验" },
-        { label: "写入", value: "skills/ 和 skill-index" },
-        { label: "文件", value: relativePath },
+        { label: "保存到", value: "项目 Skills" },
+        { label: "不会做", value: "不生成参考、不提交视频" },
         { label: "成本", value: "无生成成本" },
       ],
       details: { next: "等你确认后保存。" },
@@ -1708,13 +1707,13 @@ function buildSkillSaveRunningTimelineEntry(input: {
     type: "tool_call",
     createdAt,
     title: "保存导演经验",
-    body: `Agent 正在把「${input.skillName}」写入项目 Skills。`,
+    body: `我正在把「${input.skillName}」保存到项目 Skills。`,
     toolName: "save_skill",
     lifecycle: "running",
     status: "waiting",
     facts: [
       { label: "动作", value: "保存导演经验" },
-      { label: "文件", value: `skills/${input.fileName}` },
+      { label: "保存到", value: "项目 Skills" },
     ],
     details: { next: "保存完成后会回到消息流。" },
   };
@@ -3105,7 +3104,7 @@ export function MinimalAgentPanel({
   );
   const selectedSkillDraftFile = selectedSkillCard ? directorSkillFileName(selectedSkillCard) : "";
   const selectedSkillSavedInTimeline = Boolean(selectedSkillCard && selectedSkillDraftFile && agentTimelineEntries.some((entry) => (
-    /Skill 草稿已/.test(entry.title)
+    /导演经验已/.test(entry.title)
     && (
       entry.body.includes(selectedSkillCard.name)
       || entry.facts?.some((fact) => fact.value.includes(selectedSkillDraftFile))
@@ -3191,7 +3190,7 @@ export function MinimalAgentPanel({
       rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
         userIntent,
         title: "AI 导演：需要本地项目",
-        body: "Skill 草稿需要保存到当前项目里。先打开或新建一个项目文件夹，再让我保存这条导演经验。",
+        body: "这条导演经验需要保存到当前项目里。先打开或新建一个项目文件夹，再让我保存。",
         status: "blocked",
         path: `skills/${selectedSkillDraftFile}`,
         next: "左上角打开或新建项目后，再说“把这个沉淀成 Skill”。",
@@ -3213,7 +3212,7 @@ export function MinimalAgentPanel({
       summary: selectedSkillCard.summary,
     }));
     clearSkillSaveComposerInput();
-    setStatus("等你确认保存 Skill");
+    setStatus("等你确认保存导演经验");
   }
 
   async function saveSelectedSkillDraft(userIntent: string, input?: {
@@ -3243,7 +3242,7 @@ export function MinimalAgentPanel({
       rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
         userIntent,
         title: "AI 导演：需要本地项目",
-        body: "Skill 草稿需要保存到当前项目里。先打开或新建一个项目文件夹，再让我保存这条导演经验。",
+        body: "这条导演经验需要保存到当前项目里。先打开或新建一个项目文件夹，再让我保存。",
         status: "blocked",
         path: `skills/${skillFileName}`,
         next: "左上角打开或新建项目后，再说“把这个沉淀成 Skill”。",
@@ -3278,7 +3277,7 @@ export function MinimalAgentPanel({
         setSavedSkillStack(nextSkillIndex.skills);
         rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
           userIntent,
-          title: "AI 导演：Skill 草稿已保存",
+          title: "AI 导演：导演经验已保存",
           body: `我已经把当前镜头的做法保存成导演经验卡：${skillCard.name}。以后可以作为项目里的方法参考继续使用。`,
           status: "done",
           path: relativePath,
@@ -3293,7 +3292,7 @@ export function MinimalAgentPanel({
         setSavedSkillStack(nextSkillIndex.skills);
         rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
           userIntent,
-          title: "AI 导演：Skill 草稿已暂存",
+          title: "AI 导演：导演经验已暂存",
           body: `我已经把当前镜头的做法暂存在浏览器里：${skillCard.name}。打开桌面版项目后可以再写入项目文件夹。`,
           status: "done",
           path: relativePath,
@@ -3310,7 +3309,7 @@ export function MinimalAgentPanel({
       rememberAgentTimelineEntries(buildSkillSaveTimelineEntries({
         userIntent,
         title: "AI 导演：保存失败",
-        body: error instanceof Error ? error.message : "Skill 草稿没有保存成功，可以重试。",
+        body: error instanceof Error ? error.message : "导演经验没有保存成功，可以重试。",
         status: "blocked",
         path: relativePath,
         next: "检查项目文件夹权限后，再说“保存这个 Skill”。",
@@ -3336,7 +3335,7 @@ export function MinimalAgentPanel({
 
   function revisePendingSkillSave() {
     if (!pendingSkillSaveRequest) {
-      setStatus("没有待修改的 Skill 草稿");
+      setStatus("没有待修改的导演经验");
       return;
     }
     rememberAgentTimelineEntries([buildSkillSaveCancelledTimelineEntry({
@@ -6241,9 +6240,9 @@ export function MinimalAgentPanel({
                     type="button"
                     onClick={() => void confirmPendingSkillSave()}
                     disabled={!pendingSkillSaveRequest}
-                    title={pendingSkillSaveRequest ? "确认后写入项目 Skills 和 skill-index。" : "这条 Skill 保存请求已经处理。"}
+                    title={pendingSkillSaveRequest ? "确认后保存到项目 Skills。" : "这条保存请求已经处理。"}
                   >
-                    确认保存 Skill
+                    确认保存
                   </button>
                   <button
                     type="button"

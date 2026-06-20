@@ -88,6 +88,7 @@ const agentToolScopeLabel = findFunctionBody(minimalAgentPanelSource, "agentTool
 const agentToolReceiptLabel = findFunctionBody(minimalAgentPanelSource, "agentToolReceiptLabel");
 const agentToolFollowUpLabel = findFunctionBody(minimalAgentPanelSource, "agentToolFollowUpLabel");
 const agentResultViewTarget = findFunctionBody(minimalAgentPanelSource, "agentResultViewTarget");
+const buildSkillSaveConfirmationTimelineEntries = findFunctionBody(minimalAgentPanelSource, "buildSkillSaveConfirmationTimelineEntries");
 const openAgentResultView = findFunctionBody(minimalAgentPanelSource, "openAgentResultView");
 const agentActionConfirmationFacts = findFunctionBody(minimalAgentPanelSource, "agentActionConfirmationFacts");
 const agentExecutionTraceItems = findFunctionBody(minimalAgentPanelSource, "agentExecutionTraceItems");
@@ -798,7 +799,7 @@ assert(/isSaveDirectorSkillIntent/.test(minimalAgentPanelSource), "Agent rail mu
 assert(/requestSelectedSkillDraftSave\(userIntent\)[\s\S]*return;/.test(minimalAgentPanelSource), "save-Skill intent should request confirmation before the generic planning workflow");
 assert(/buildSkillSaveConfirmationTimelineEntries[\s\S]*type:\s*"confirmation_request"[\s\S]*toolName:\s*"save_skill"[\s\S]*confirmationRequired:\s*true/.test(minimalAgentPanelSource), "save-Skill intent must create an Agent confirmation card before writing files");
 assert(/function confirmPendingSkillSave[\s\S]*saveSelectedSkillDraft\(pendingSkillSaveRequest\.userIntent[\s\S]*includeUserMessage:\s*false/.test(minimalAgentPanelSource), "save-Skill confirmation must be the only path that writes the prepared Skill draft");
-assert(/minimalAgentMessageRequestsSkillSave\(message\)[\s\S]*确认保存 Skill[\s\S]*再改一下/.test(minimalAgentPanelSource), "save-Skill confirmation card must expose clear Agent-first actions");
+assert(/minimalAgentMessageRequestsSkillSave\(message\)[\s\S]*确认保存[\s\S]*再改一下/.test(minimalAgentPanelSource), "save-Skill confirmation card must expose clear Agent-first actions");
 assert(/directorSkillCardMarkdown\(skillCard\)/.test(minimalAgentPanelSource), "saved Skills must use the structured Skill-card markdown contract");
 assert(/sandboxWriteFile/.test(minimalAgentPanelSource), "desktop projects must be able to save Skill drafts into the project folder");
 assert(/`skills\/\$\{selectedSkillDraftFile\}`/.test(minimalAgentPanelSource), "Skill drafts should save under the project skills folder");
@@ -807,9 +808,11 @@ assert(/parseDirectorSkillStackIndex/.test(minimalAgentPanelSource), "Agent rail
 assert(/upsertDirectorSkillStackIndex/.test(minimalAgentPanelSource), "saving a Skill should update the project Skill Stack index");
 assert(/serializeDirectorSkillStackIndex/.test(minimalAgentPanelSource), "project Skill Stack index should be written as the shared schema");
 assert(/savedSkillStackProjectKeyRef/.test(minimalAgentPanelSource), "project Skill Stack state must be scoped by project key so async empty loads cannot hide a saved Skill");
-assert(/selectedSkillSavedInTimeline[\s\S]*\/Skill 草稿已\/\.test\(entry\.title\)/.test(minimalAgentPanelSource), "My Skills panel should also respect a visible successful save message when the project index is not immediately readable");
+assert(/selectedSkillSavedInTimeline[\s\S]*\/导演经验已\/\.test\(entry\.title\)/.test(minimalAgentPanelSource), "My Skills panel should also respect a visible successful save message when the project index is not immediately readable");
 assert(/visibleSavedSkillCount[\s\S]*已加载/.test(minimalAgentPanelSource), "My Skills panel should show saved project Skills, not only the current draft");
-assert(/Skill 草稿已保存|Skill 草稿已暂存/.test(minimalAgentPanelSource), "Agent message flow should report the Skill save result");
+assert(/导演经验已保存|导演经验已暂存/.test(minimalAgentPanelSource), "Agent message flow should report the Skill save result");
+assert(/function buildSkillSaveConfirmationTimelineEntries[\s\S]*不会生成参考或提交视频[\s\S]*确认后保存到项目 Skills[\s\S]*保存导演经验？[\s\S]*保存到这个项目的 Skills[\s\S]*不生成参考、不提交视频/.test(minimalAgentPanelSource), "save-Skill confirmation copy should explain the action without exposing skill-index or project file paths");
+assert(!/skill-index|skills\//.test(buildSkillSaveConfirmationTimelineEntries), "save-Skill confirmation messages must not expose project file implementation details");
 assert(!/minimal-agent-skill-hint|AI 选择的做法/.test(minimalAgentPanelSource), "selected strategy should not be buried in an advanced debug-style panel");
 assert(!/minimal-agent-skill-actions|selectedSkillOverrides|directorSkillOverridePrompts/.test(minimalAgentPanelSource), "MinimalAgentPanel must not expose manual skill override controls in the Agent-first path");
 assert(/只出计划[\s\S]*生成参考[\s\S]*提交视频/.test(minimalAgentPanelSource), "MinimalAgentPanel must show the three creator-facing modes");
