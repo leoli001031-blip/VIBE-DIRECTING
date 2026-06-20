@@ -1200,7 +1200,7 @@ function blockedOrFailedNextStepLabel(executorTool: string) {
   if (executorTool === "export_project" || executorTool === "export_showcase") return "检查视频段和导出设置后重试";
   if (executorTool === "research_style") return "换关键词或检查搜索设置后重试";
   if (executorTool === "write_project") return "修改后重新确认";
-  if (executorTool === "save_skill") return "修改 Skill 草稿后重试";
+  if (executorTool === "save_skill") return "修改导演经验后重试";
   if (executorTool === "classify_assets" || executorTool === "scan_assets") return "检查项目文件后重试";
   if (executorTool === "inspect_project") return "重新打开项目后重试";
   if (executorTool === "plan_story" || executorTool === "plan_next_action" || executorTool === "revise_shot") return "调整描述后重试";
@@ -1311,7 +1311,7 @@ function resultCardTitleFor(
   if (executorTool === "export_project" || executorTool === "export_showcase") return "结果卡片：展示包已导出";
   if (executorTool === "compile_video_request") return "结果卡片：视频请求已准备";
   if (executorTool === "research_style") return "结果卡片：资料已整理";
-  if (executorTool === "save_skill") return "结果卡片：Skill 已保存";
+  if (executorTool === "save_skill") return "结果卡片：导演经验已保存";
   if (executorTool === "write_project") return "结果卡片：项目已更新";
   return "结果卡片：动作完成";
 }

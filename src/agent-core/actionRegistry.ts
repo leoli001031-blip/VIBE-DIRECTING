@@ -142,7 +142,7 @@ export const vibeAgentActionRegistry: Record<VibeAgentToolName, VibeAgentActionD
   save_skill: {
     id: "save_skill",
     label: "保存导演经验",
-    description: "把当前成功做法沉淀成项目 Skill 草稿，确认后写入 skill-index。",
+    description: "把当前成功做法沉淀成项目里的导演经验，确认后保存到项目 Skills。",
     mutatesProject: true,
     callsProvider: false,
     requiresConfirmation: true,

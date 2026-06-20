@@ -539,19 +539,19 @@ const assistantDraftWaitingStatus = buildVibeAgentTimelineStatusView([
     id: "skill_save_draft_waiting",
     type: "assistant_message",
     createdAt: "2026-06-17T08:00:30.500Z",
-    title: "AI 导演：Skill 草稿已整理",
-    body: "我会把当前做法沉淀成可复用 Skill。确认前不会生成参考或提交视频。",
+    title: "AI 导演：导演经验已整理",
+    body: "我会把当前做法沉淀成可复用导演经验。确认前不会生成参考或提交视频。",
     toolName: "save_skill",
     lifecycle: "proposed",
     status: "waiting",
     facts: [
-      { label: "Skill", value: "雨夜停顿" },
-      { label: "下一步", value: "确认后写入项目 Skills 和 skill-index。" },
+      { label: "名称", value: "雨夜停顿" },
+      { label: "下一步", value: "确认后保存到项目 Skills。" },
     ],
-    details: { next: "确认后写入项目 Skills 和 skill-index。" },
+    details: { next: "确认后保存到项目 Skills。" },
   },
 ]);
-assert.equal(assistantDraftWaitingStatus?.stage, "AI 导演：Skill 草稿已整理");
+assert.equal(assistantDraftWaitingStatus?.stage, "AI 导演：导演经验已整理");
 assert.equal(assistantDraftWaitingStatus?.waitingFor, "你的确认");
 assert.equal(assistantDraftWaitingStatus?.tone, "waiting");
 assert.notEqual(assistantDraftWaitingStatus?.stage, "Agent 正在执行");
