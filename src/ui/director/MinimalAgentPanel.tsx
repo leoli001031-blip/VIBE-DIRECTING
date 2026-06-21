@@ -266,6 +266,7 @@ function projectInboxAgentMessage(inbox: ProjectInboxProjection): MinimalAgentMe
   const assetInboxSummary = minimalAgentAssetInboxSummaryFromProjection(inbox);
   if (!assetInboxSummary) return undefined;
   const examples = inbox.items.slice(0, 3).map((item) => `${item.label}：${item.suggestedBinding}`);
+  const assetActions = minimalAgentAssetActionsFromProjection(inbox);
   return {
     id: `project_inbox_status_${inbox.totalCount}_${inbox.needsReviewCount}`,
     entryType: "tool_result",
@@ -282,6 +283,37 @@ function projectInboxAgentMessage(inbox: ProjectInboxProjection): MinimalAgentMe
     ].filter((item): item is { label: string; value: string } => Boolean(item)),
     next: assetInboxSummary.nextAction,
     assetInboxSummary,
+    assetActions,
+    assetActionOverflow: minimalAgentAssetActionOverflowFromProjection(inbox, assetActions.length),
+  };
+}
+
+function minimalAgentAssetActionsFromProjection(inbox: ProjectInboxProjection): MinimalAgentAssetAction[] {
+  const reviewItems = inbox.items.filter((item) => item.needsReview);
+  const visibleItems = (reviewItems.length ? reviewItems : inbox.items).slice(0, 3);
+  return visibleItems.map((item, index): MinimalAgentAssetAction | undefined => {
+    if (!item.assetId && !item.shotIds?.length) return undefined;
+    const reason = item.reason.trim();
+    return {
+      id: item.id || `project_inbox_asset_${index + 1}`,
+      label: `${item.label} · ${item.suggestedAction}`,
+      detail: reason ? `${item.suggestedBinding}。判断理由：${reason}` : item.suggestedBinding,
+      intent: `确认这个素材用途：${item.label}。建议动作：${item.suggestedAction}。${item.suggestedBinding}${reason ? `。判断理由：${reason}` : ""}`,
+      selectedAssetId: item.assetId,
+      selectedShotIds: item.shotIds?.length ? item.shotIds : undefined,
+    };
+  }).filter((item): item is MinimalAgentAssetAction => Boolean(item));
+}
+
+function minimalAgentAssetActionOverflowFromProjection(
+  inbox: ProjectInboxProjection,
+  visibleActionCount: number,
+): MinimalAgentMessage["assetActionOverflow"] {
+  const remainingCount = Math.max(0, inbox.needsReviewCount - visibleActionCount);
+  if (!remainingCount) return undefined;
+  return {
+    label: `还有 ${remainingCount} 个素材待确认`,
+    detail: "去参考页可以继续逐个看；不确认前不会改绑定、生成参考或提交视频。",
   };
 }
 
