@@ -3423,6 +3423,10 @@ export function MinimalAgentPanel({
   const selectedSkillImpactLabel = selectedSkillCard?.appliesTo?.length
     ? selectedSkillCard.appliesTo.join(" / ")
     : "故事规划 / Seedance prompt / QA";
+  const selectedSkillReasonLabel = selectedSkillSummary?.reason.replace(/[。！？!?.]+$/u, "");
+  const agentRecommendedSkillCopy = selectedSkillSummary
+    ? `${selectedSkillSummary.label}：${recommendedSkillLabel}。原因：${selectedSkillReasonLabel}。影响 ${selectedSkillImpactLabel}`
+    : "先点一个镜头，我会解释适合的做法。";
   const selectedSkillUseWhenLabel = selectedSkillCard?.useWhen?.[0] || selectedSkillSummary?.reason || "镜头需要明确的导演方法时使用。";
   const selectedSkillAvoidWhenLabel = selectedSkillCard?.avoidWhen?.[0] || "镜头很简单时，不要过度增加约束。";
   const selectedSkillSourceLabel = selectedSkillCard?.createdFrom?.shotTitle
@@ -6410,7 +6414,7 @@ export function MinimalAgentPanel({
             </small>
             <small>
               <b>Agent 推荐</b>
-              {selectedSkillSummary ? `${selectedSkillSummary.label}：${recommendedSkillLabel}` : "先点一个镜头，我会解释适合的做法。"}
+              {agentRecommendedSkillCopy}
             </small>
             <small>
               <b>我的 Skills</b>
