@@ -31,6 +31,12 @@ function compactProjectPathLabel(value?: string) {
   return `.../${parts.slice(-2).join("/")}`;
 }
 
+function recentProjectFolderLabel(value?: string) {
+  const cleaned = value?.trim();
+  if (!cleaned) return "";
+  return cleaned.split(/[\\/]/).filter(Boolean).at(-1) || "";
+}
+
 function formatRecentProjectUpdatedAt(value?: string) {
   if (!value) return "";
   const time = Date.parse(value);
@@ -53,6 +59,19 @@ function recentProjectMetaLabel(project: { updatedAt?: string; hasProjectVibe?: 
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+function recentProjectNameKey(project: { displayName?: string }) {
+  return (project.displayName || "未命名项目").trim() || "未命名项目";
+}
+
+function recentProjectDisplayLabel(
+  project: { displayName?: string; projectRoot: string; updatedAt?: string; hasProjectVibe?: boolean },
+  duplicateNameCounts: Map<string, number>,
+) {
+  const name = recentProjectNameKey(project);
+  if ((duplicateNameCounts.get(name) || 0) <= 1) return name;
+  return `${name} · ${recentProjectFolderLabel(project.projectRoot) || recentProjectMetaLabel(project) || "同名项目"}`;
 }
 
 export function MinimalTopNav({
@@ -164,6 +183,11 @@ export function MinimalTopNav({
   const recentProjectItems = (recentProjects || [])
     .filter((project) => project.projectRoot.trim())
     .slice(0, 4);
+  const recentProjectDuplicateNameCounts = recentProjectItems.reduce((counts, project) => {
+    const name = recentProjectNameKey(project);
+    counts.set(name, (counts.get(name) || 0) + 1);
+    return counts;
+  }, new Map<string, number>());
   const showWorkspaceTabs = !isEmptyProject;
   const exportDisabled = isEmptyProject || !projectFolderReady || projectIsTemporary;
   const exportDisabledTitle = projectIsTemporary
@@ -310,6 +334,7 @@ export function MinimalTopNav({
                       const active = Boolean(projectRoot && project.projectRoot === projectRoot);
                       const metaLabel = recentProjectMetaLabel(project);
                       const removeDisabled = active || !onRemoveRecentProject;
+                      const displayLabel = recentProjectDisplayLabel(project, recentProjectDuplicateNameCounts);
                       return (
                         <div
                           key={project.projectRoot}
@@ -320,10 +345,10 @@ export function MinimalTopNav({
                             className="project-control-recent-open"
                             disabled={active || !onOpenRecentProject}
                             onClick={() => performProjectControlAction(() => onOpenRecentProject?.(project))}
-                            aria-label={`打开项目 ${project.displayName || "未命名项目"}`}
+                            aria-label={`打开项目 ${displayLabel}`}
                           >
                             <strong>
-                              <span>{project.displayName || "未命名项目"}</span>
+                              <span>{displayLabel}</span>
                               {active && <em className="project-control-current-badge">当前</em>}
                             </strong>
                             <small title={project.projectRoot}>{compactProjectPathLabel(project.projectRoot)}</small>
