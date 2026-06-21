@@ -436,11 +436,20 @@ function stableIntentBoundaryFacts(entry: VibeAgentTimelineEntry) {
   ));
 }
 
+function minimalAgentCompactFactLabels(message: MinimalAgentMessage) {
+  if (message.role === "user") return new Set<string>();
+  if (message.entryType === "assistant_message" && message.title === "我理解为") {
+    return new Set<string>();
+  }
+  return undefined;
+}
+
 function minimalAgentVisibleFacts(message: MinimalAgentMessage) {
   if (!message.facts?.length) return [];
   const executionSummary = cleanMinimalAgentMessageCopy(message.executionResult?.summary || message.body).trim();
   const executionNext = cleanMinimalAgentMessageCopy(message.executionResult?.next || message.next || "").trim();
   const hasVisibleNext = Boolean(message.executionResult?.next || message.next);
+  const compactLabels = minimalAgentCompactFactLabels(message);
   const hiddenConfirmationLabels = minimalAgentMessageRequestsActionConfirmation(message)
     ? new Set(["成本", "外部提交", "写入", "保存"])
     : new Set<string>();
@@ -448,6 +457,7 @@ function minimalAgentVisibleFacts(message: MinimalAgentMessage) {
     const label = fact.label.trim();
     const value = agentFactDisplayValue(fact).trim();
     if (!value) return false;
+    if (compactLabels && !compactLabels.has(label)) return false;
     if (hiddenConfirmationLabels.has(label)) return false;
     if (/下一步/.test(label) && (hasVisibleNext || value === executionNext)) return false;
     if (/状态/.test(label) && value === executionSummary) return false;
@@ -555,6 +565,7 @@ function minimalAgentMessageTitleLabel(message: MinimalAgentMessage) {
   const title = cleanMinimalAgentMessageCopy(message.title);
   const stage = minimalAgentMessageStageLabel(message);
   if (!title || !stage) return title;
+  if (message.entryType === "assistant_message" && stage === "理解") return "";
   if (minimalAgentMessageRequestsActionConfirmation(message) && title === "请求确认") {
     return minimalAgentConfirmationAction(message, "确认执行").label;
   }
