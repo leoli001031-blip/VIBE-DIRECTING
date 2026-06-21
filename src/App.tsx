@@ -93,7 +93,10 @@ import {
   type DirectorAgentActionEnvelope,
 } from "./core/directorAgentAction";
 import { runVibeAgentTurn } from "./agent-core/runAgentTurn";
-import { appendVibeAgentTimelineEntries } from "./agent-core/timelineDocument";
+import {
+  appendVibeAgentTimelineEntries,
+  createVibeAgentTimelineDocument,
+} from "./agent-core/timelineDocument";
 import type {
   VibeAgentKernelTurn,
   VibeAgentPermissionMode,
@@ -3814,6 +3817,35 @@ function App() {
         status: "ready",
       },
     });
+    const committedTimeline = createVibeAgentTimelineDocument({
+      projectId: result.project.manifest.projectId,
+      projectTitle: result.project.manifest.title,
+      projectRoot: draftTarget.projectRoot,
+      generatedAt,
+    });
+    const committedTimelineEntry: VibeAgentTimelineEntry = {
+      id: `new_video_draft_committed_${generatedAt.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase()}`,
+      type: "action_result",
+      createdAt: generatedAt,
+      title: "草案已写入故事流",
+      body: `我已经把这版草案写入故事流：${result.project.shots.length} 个镜头。接下来可以点选镜头继续修改，或确认生成参考。`,
+      toolName: "write_project",
+      status: "done",
+      lifecycle: "succeeded",
+      facts: [
+        { label: "镜头", value: `${result.project.shots.length} 个` },
+        { label: "下一步", value: "点选镜头修改，或确认生成参考" },
+      ],
+      details: {
+        next: "继续在右侧说要改哪里，或说“开始补参考”。",
+      },
+    };
+    const freshTimeline = appendVibeAgentTimelineEntries(committedTimeline, [committedTimelineEntry], generatedAt);
+    const saveAgentTimelineResult = await saveProjectAgentTimeline(draftTarget, freshTimeline);
+    if (!saveAgentTimelineResult.ok) {
+      console.warn("Failed to reset Agent timeline after new-video draft commit", saveAgentTimelineResult.errors[0]);
+    }
+    setRestoredAgentTimelineEntries(freshTimeline.entries);
     return true;
   }
 

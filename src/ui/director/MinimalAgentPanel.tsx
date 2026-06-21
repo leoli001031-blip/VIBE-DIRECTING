@@ -1323,9 +1323,9 @@ function buildSelectionChangedTimelineEntry(input: {
   hint: string;
   facts: Array<{ label: string; value: string }>;
 }): VibeAgentTimelineEntry {
-  const selectionId = input.selectionKey.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 72) || "selection";
+  const selectionId = selectionContextMessageId(input.selectionKey);
   return {
-    id: `selection_context_${selectionId}`,
+    id: selectionId,
     type: "state_change",
     createdAt: input.createdAt,
     title: "当前讨论对象已切换",
@@ -1341,6 +1341,11 @@ function buildSelectionChangedTimelineEntry(input: {
       next: "直接说改法，或说“继续下一步”。",
     },
   };
+}
+
+function selectionContextMessageId(selectionKey: string) {
+  const selectionId = selectionKey.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 72) || "selection";
+  return `selection_context_${selectionId}`;
 }
 
 function committedNewVideoDraftMessage(run?: PrototypeAgentDemoRun): MinimalAgentMessage | undefined {
@@ -3684,6 +3689,15 @@ export function MinimalAgentPanel({
 
   useEffect(() => {
     const restoredEntries = restoredAgentTimelineEntries || [];
+    if (
+      latestNewVideoDraftCommittedForProjection
+      && restoredEntries.length > 0
+      && !restoredEntries.some((entry) => entry.id.startsWith("new_video_draft_committed_"))
+    ) {
+      restoredAgentTimelineKeyRef.current = "new_video_draft_committed";
+      setAgentTimelineEntries([]);
+      return;
+    }
     if (latestNewVideoDraftCommittedForProjection && !restoredEntries.length) {
       restoredAgentTimelineKeyRef.current = "new_video_draft_committed";
       setAgentTimelineEntries([]);
@@ -5791,6 +5805,15 @@ export function MinimalAgentPanel({
     || /素材已识别|项目素材/.test(`${message.title} ${message.body}`)
   ))) {
     fullAgentThreadMessages.push(projectInboxMessage);
+  }
+  if (hasBoundSelection && selectionFocusKey && !fullAgentThreadMessages.some((message) => message.id === selectionContextMessageId(selectionFocusKey))) {
+    fullAgentThreadMessages.push(minimalAgentMessageFromTimelineEntry(buildSelectionChangedTimelineEntry({
+      createdAt: "1970-01-01T00:00:00.000Z",
+      selectionKey: selectionFocusKey,
+      label: localScopeLabel,
+      hint: selectionHint,
+      facts: liveSelectionChips,
+    })));
   }
   const footerActionConfirmationMessage = (() => {
     if (hasComposerInput || projectRequiredForWorkflow) return undefined;

@@ -2634,14 +2634,14 @@ export function NewVideoStart({
   const storyboardPlanningLabel = storyboardPlanningStatus === "running"
     ? "AI 正在拆分"
     : storyboardPlanningSource === "ai_director"
-      ? "AI 分镜草案"
+      ? "待确认草案"
       : storyboardPlanningSource === "local_structure"
         ? "初步识别"
         : "镜头安排";
   const storyboardPlanningRunning = storyboardPlanningStatus === "running";
   const showStoryboardRows = storyboardRows.length > 0 && !storyboardPlanningRunning;
   const storyboardPlanningDetail = storyboardPlanningMessage || (storyboardPlanningSource === "ai_director"
-    ? "AI 已整理好，确认前不会写入项目。"
+    ? "AI 已整理好，确认后才会写入项目，左侧故事数也会随之更新。"
     : storyboardPlanningSource === "local_structure"
       ? "这是本地初步识别，可继续让 AI 拆分。"
       : "");
@@ -2791,10 +2791,10 @@ export function NewVideoStart({
     if (projection || storyboardRows.length > 0 || submittedDraft) {
       return {
         title: "我拆好了一个草案",
-        body: `我先把想法整理成 ${shotCount || "若干"} 个镜头，并判断每段更适合用故事板还是全能参考。确认前不会写入项目，也不会生成参考或视频。`,
+        body: `我先把想法整理成 ${shotCount || "若干"} 个待确认镜头，并判断每段更适合用故事板还是全能参考。确认前不会写入项目，也不会生成参考或视频。`,
         next: "觉得可以就点确认；想改就直接在下面说。",
         facts: [
-          { label: "镜头", value: shotCount ? `${shotCount} 个` : "待确认" },
+          { label: "草案", value: shotCount ? `${shotCount} 个镜头待确认` : "待确认" },
           { label: "素材", value: referenceCount ? `${referenceCount} 个已放入` : "未放入素材" },
         ],
       };
@@ -3217,6 +3217,13 @@ export function NewVideoStart({
                 <strong>{projectionTitleForDisplay}</strong>
                 <small>{projection.summary.scriptPreview}</small>
               </div>
+              {!confirmed && (
+                <div className="new-video-next-flow" aria-label="草案状态">
+                  <span>当前状态</span>
+                  <strong>待确认草案</strong>
+                  <small>还没有写入故事流；确认后左侧故事数才会更新。</small>
+                </div>
+              )}
               <div className="new-video-next-flow" aria-label="确认后的流程">
                 <span>确认后</span>
                 <strong>{confirmedFlowTitle}</strong>
