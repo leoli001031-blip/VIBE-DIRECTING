@@ -1741,9 +1741,13 @@ function videoDirectProductActionState(
       phase: "completed" as const,
       toolName: "query_video" as const,
       title: "视频结果已回到预览页",
-      body: cleanMessage || "视频已经回到预览页，先看结果，通过后再继续下一步。",
+      body: cleanMessage || "视频已回流到预览页。先复核这一段，确认后再继续下一段或导出。",
       next: "去预览页复核。",
       status: cleanMessage || "视频结果待确认。",
+      facts: [
+        { label: "阶段", value: "已回流" },
+        { label: "查看", value: "预览页" },
+      ],
     };
   }
   if (normalized === "submitted" && canResume) {
@@ -1751,9 +1755,13 @@ function videoDirectProductActionState(
       phase: "completed" as const,
       toolName: "query_video" as const,
       title: "视频可以查询结果",
-      body: cleanMessage || "Seedance 任务已经提交过。现在只查询结果，不会重复提交。",
+      body: cleanMessage || "这个视频任务已经提交过。现在只查询结果，不会重复提交。",
       next: actionLabel || "查询结果。",
       status: cleanMessage || "视频可以查询结果。",
+      facts: [
+        { label: "阶段", value: "可查询" },
+        { label: "保护", value: "不会重复提交" },
+      ],
     };
   }
   if (normalized === "submitted") {
@@ -1761,9 +1769,13 @@ function videoDirectProductActionState(
       phase: "completed" as const,
       toolName: "submit_video" as const,
       title: "视频已提交，等待结果",
-      body: cleanMessage || "视频任务已经进入 Seedance 队列，回流后会在预览页显示。",
+      body: cleanMessage || "视频任务已串行提交到即梦。等结果回流后，会在预览页显示。",
       next: "等结果回流后去预览页复核。",
       status: cleanMessage || "视频已提交。",
+      facts: [
+        { label: "阶段", value: "排队中" },
+        { label: "方式", value: "串行提交" },
+      ],
     };
   }
   if (normalized === "blocked") {
@@ -1774,6 +1786,10 @@ function videoDirectProductActionState(
       body: cleanMessage || "视频任务暂时不能继续。先按提示处理后再重试。",
       next: "按提示修复后再继续。",
       status: cleanMessage || "视频任务需要处理。",
+      facts: [
+        { label: "阶段", value: "需要处理" },
+        { label: "动作", value: "先修复条件" },
+      ],
     };
   }
   return undefined;
@@ -4173,11 +4189,11 @@ export function MinimalAgentPanel({
       : {
           toolName: "submit_video" as DirectProductActionToolName,
           startedTitle: "开始发送视频",
-          startedBody: "已确认，Agent 正在把视频任务交给 Seedance 串行队列。",
+          startedBody: "已确认，Agent 正在串行提交当前视频任务。",
           completedTitle: "视频任务已发送",
-          completedBody: "视频任务已交给 Seedance 队列，完成后会在预览页显示。",
+          completedBody: "视频任务已提交，完成后会在预览页显示。",
           failedTitle: "视频任务发送失败",
-          next: "等 Seedance 回流后，到预览页复核。",
+          next: "等结果回流后，到预览页复核。",
           facts: [
             { label: "动作", value: "发送视频" },
             { label: "范围", value: "当前镜头" },
@@ -4861,7 +4877,7 @@ export function MinimalAgentPanel({
       body: projectedState.body,
       next: projectedState.next,
       dedupeKey: `video_state_${videoSendAction?.status || "unknown"}_${videoCanResume ? "resume" : "normal"}`,
-      facts: [
+      facts: projectedState.facts || [
         { label: "动作", value: projectedState.toolName === "query_video" ? "查询视频" : "发送视频" },
         { label: "状态", value: projectedState.status },
       ],
