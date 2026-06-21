@@ -347,6 +347,17 @@ function pendingAgentConfirmationLabel(entry?: VibeAgentTimelineEntry) {
   return entry.title?.trim() || "确认当前消息";
 }
 
+function currentAgentCommandConfirmationLabel(command?: CreatorAgentCommand) {
+  if (!command) return "";
+  const copy = [command.kind, command.label, command.summary, command.detail].filter(Boolean).join(" ");
+  const negativeVideoCopy = /不(?:会|要)?(?:提交|发送)视频|不提交视频|不发送视频/.test(copy);
+  const negativeReferenceCopy = /不(?:会|要)?生成参考|不生成参考/.test(copy);
+  if (/generate_references/.test(command.kind || "") || (/生成参考|补参考|参考/.test(copy) && !negativeReferenceCopy)) return "确认生成参考";
+  if (/submit_video/.test(command.kind || "") || (/提交视频|发送视频|Seedance/.test(copy) && !negativeVideoCopy)) return "确认提交视频";
+  if (/open_export|prepare_export|\bexport\b/.test(command.kind || "") || /导出|交付/.test(copy)) return "确认导出";
+  return "";
+}
+
 function projectStatusViewWithPendingAgentConfirmation(
   status: ProjectStatusViewModel,
   label: string,
@@ -735,6 +746,14 @@ export function DirectorMode({
     [restoredAgentTimelineEntries],
   );
   const pendingAgentConfirmationCopy = pendingAgentConfirmationLabel(pendingAgentConfirmation);
+  const currentCommandConfirmationCopy = currentAgentCommandConfirmationLabel(visibleAgentCommand);
+  const staleProjectEditConfirmation = /确认方式|确认修改/.test(pendingAgentConfirmationCopy);
+  const displayedPendingAgentConfirmationCopy = currentCommandConfirmationCopy
+    && pendingAgentConfirmationCopy
+    && staleProjectEditConfirmation
+    && currentCommandConfirmationCopy !== pendingAgentConfirmationCopy
+    ? currentCommandConfirmationCopy
+    : pendingAgentConfirmationCopy;
   const rawProjectStatusView = useMemo(() => buildProjectStatusViewModel({
     runtimeState,
     folderReady,
@@ -788,7 +807,7 @@ export function DirectorMode({
   const activeProjectStatusView = newVideoEntryStatusView || projectStatusView;
   const displayedProjectStatusView: ProjectStatusViewModel = projectStatusViewWithPendingAgentConfirmation(
     activeProjectStatusView,
-    agentPendingAction ? "确认当前消息" : pendingAgentConfirmationCopy,
+    agentPendingAction ? "确认当前消息" : displayedPendingAgentConfirmationCopy,
   );
   const pendingDraftRailTitle = showNewVideoStart ? pendingNewVideoDraftTitle(newVideoStatus) || restoredNewVideoDraft?.title || "" : "";
   const projectNavReady = projectReady && !showNewVideoStart;

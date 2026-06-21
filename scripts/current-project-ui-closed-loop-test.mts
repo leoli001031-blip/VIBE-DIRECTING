@@ -820,6 +820,8 @@ function assertCreatorPanelContract() {
   assert(/import\s+\{\s*CreatorDeskPanels\s*\}\s+from\s+"\.\/CreatorDeskPanels"/.test(directorModeSource), "DirectorMode must mount the creator desk panels");
   assert(/const storySections = \(view\.storySections \|\| \[\]\)[\s\S]*runtimeShotIds\.has\(shotId\)/.test(directorModeSource), "DirectorMode must tolerate missing story sections and keep them aligned with runtime shots");
   assert(/buildProjectStatusViewModel\(\{[\s\S]*videoStage:\s*creatorDesk\?\.videoStage/.test(directorModeSource), "DirectorMode must feed CreatorDesk videoStage into the unified project status");
+  assert(/function\s+currentAgentCommandConfirmationLabel[\s\S]*generate_references[\s\S]*确认生成参考[\s\S]*submit_video[\s\S]*确认提交视频/.test(directorModeSource), "DirectorMode must derive the current confirmation boundary from the visible Agent command");
+  assert(/staleProjectEditConfirmation[\s\S]*确认方式\|确认修改[\s\S]*displayedPendingAgentConfirmationCopy[\s\S]*currentCommandConfirmationCopy[\s\S]*staleProjectEditConfirmation[\s\S]*projectStatusViewWithPendingAgentConfirmation/.test(directorModeSource), "DirectorMode must let the current Agent command override stale edit confirmations without stealing story-draft confirmation");
   assert(/videoStage\.generation\?\.queueSummary/.test(projectStatusViewModelSource), "Unified project status must summarize serial video queue progress");
   const creatorDeskPanelCopy = extractStringLiterals(creatorDeskPanelsSource);
   assert(/故事[\s\S]*画面[\s\S]*复核列表/.test(creatorDeskPanelsSource), "Creator desk must expose planner, preparation, and review panels in product copy");
