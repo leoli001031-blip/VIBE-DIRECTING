@@ -3536,7 +3536,7 @@ function App() {
     }
     if (normalized.includes("knowledge_trace")) return "项目未写入：缺少项目依据，请先重新整理故事或参考。";
     if (normalized.includes("free_text")) return "项目未写入：不能把原话直接当任务，请先让 AI 整理成草稿。";
-    if (normalized.includes("provider") || normalized.includes("submit")) return "项目未写入：这次像是在直接生成，请先切到合适的执行方式。";
+    if (normalized.includes("provider") || normalized.includes("submit")) return "项目未写入：这次像是在直接生成，请先切到合适的可做范围。";
     if (normalized.includes("save") || normalized.includes("保存")) return "项目未写入：保存失败，请检查项目文件夹后重试。";
     return "项目未写入：需要复核后再试。";
   }

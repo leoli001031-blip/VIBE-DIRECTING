@@ -60,7 +60,7 @@ multimodal image QA, or fully automatic batch production.
 - If an action will submit Seedance/Jimeng, the card must say that it submits an
   external video task.
 - The three permission modes must remain visible in creator language:
-  `只出计划`, `生成参考`, `提交视频`.
+  `先整理`, `生成参考`, `提交视频`.
 
 ## 4. Check Selection Context
 

@@ -25,7 +25,7 @@ actions, and see the Agent explain what changed.
   proposed actions, confirmation cards, running/result cards, errors, and next
   suggestions.
 - The composer keeps a visible `发送` button; Command Enter is only a shortcut.
-- The three permission modes are visible in creator language: `只出计划`,
+- The three permission modes are visible in creator language: `先整理`,
   `生成参考`, and `提交视频`.
 - The Agent can scan a project folder, classify common materials, explain
   reference gaps, and suggest bindings.
@@ -76,7 +76,7 @@ passed the in-app Codex browser smoke on 2026-06-21:
 - An explicit explain-only message was routed as project reading: no project
   write, no reference generation, and no video submission.
 - The live page still showed the three creator-facing permission modes:
-  `只出计划`, `生成参考`, and `提交视频`.
+  `先整理`, `生成参考`, and `提交视频`.
 
 ## Do Not Claim Yet
 

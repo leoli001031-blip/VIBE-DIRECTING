@@ -550,7 +550,7 @@ export function DirectorMode({
         ...command,
         label: "确认生成参考",
         summary: "参考还缺，确认后再生成。",
-        detail: "当前执行方式是只出计划。确认后只生成参考，不会发送视频。",
+        detail: "现在我只整理方案。确认后只生成参考，不会发送视频。",
       };
     }
     if (command.kind === "submit_video" && videoSendAction?.status === "blocked" && !videoSubmitCancelled) {
@@ -567,7 +567,7 @@ export function DirectorMode({
         label: "确认提交视频",
         summary: "确认后提交视频，按串行队列执行。",
         detail: videoPermissionContract.mode === "plan_only"
-          ? "当前执行方式是只出计划。确认后会提交视频。"
+          ? "现在我只整理方案。确认后会提交视频。"
           : "当前先做参考。确认后会提交视频。",
       };
     }

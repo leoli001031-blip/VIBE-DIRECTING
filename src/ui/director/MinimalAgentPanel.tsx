@@ -1398,17 +1398,17 @@ function buildExecutionBoundaryChangedTimelineEntry(input: {
     ? "你可以继续说“发送视频”，我仍会在提交前确认。"
     : input.contract.mode === "reference_allowed"
       ? "你可以继续说“补参考”，视频提交仍会单独确认。"
-      : "我只会整理计划，不会生成参考或提交视频。";
+      : "我现在只整理故事和镜头，不会生成参考或提交视频。";
   return {
     id: `execution_boundary_${input.contract.mode}_${input.createdAt}`,
     type: "state_change",
     createdAt: input.createdAt,
-    title: "执行方式已切换",
+    title: "可做范围已切换",
     body: `已切换为“${label}”。${detail}`,
     lifecycle: "succeeded",
     status: "done",
     facts: [
-      { label: "执行方式", value: label },
+      { label: "当前范围", value: label },
       { label: "生成参考", value: input.contract.referenceGenerationAllowed ? "允许" : "不生成" },
       { label: "提交视频", value: input.contract.videoSubmitAllowed ? "允许" : "不提交" },
     ],
@@ -2020,7 +2020,7 @@ function agentCapabilityItems(
       id: "reference",
       label: "生成参考",
       value: !contract.referenceGenerationAllowed
-        ? "只出计划"
+        ? "先整理"
         : !localProjectReady
           ? "先保存项目"
         : availability.referenceGenerationReady
@@ -2435,7 +2435,7 @@ function agentToolPreflightLabel(handoff: DirectorAgentToolHandoff) {
   if (blockers.includes("project_not_ready")) return "需要本地项目";
   if (blockers.includes("web_search_not_ready")) return "先开启查资料";
   if (blockers.includes("reference_generation_not_ready")) return "先连接图片服务";
-  if (blockers.includes("reference_generation_not_allowed")) return "只出计划";
+  if (blockers.includes("reference_generation_not_allowed")) return "先整理";
 	  if (blockers.includes("video_submit_not_ready")) return "先准备视频";
 	  if (blockers.includes("video_submit_not_allowed")) return "当前不能发送";
   if (blockers.includes("export_not_ready")) return "先准备导出";
@@ -2460,7 +2460,7 @@ function agentExpectedReceiptLabel(expectedReceipt: DirectorAgentToolHandoff["ex
 }
 
 function agentExecutionModeLabel(action: DirectorAgentActionEnvelope) {
-  if (action.executionContract.mode === "plan_only") return "只出计划";
+  if (action.executionContract.mode === "plan_only") return "先整理";
   if (action.executionContract.mode === "reference_allowed") return "生成参考";
   return "提交视频";
 }
@@ -3331,7 +3331,7 @@ export function MinimalAgentPanel({
   const videoPermissionBlockedByContract = !videoQueryMode && !agentVideoPermissionAllowsVideo(currentVideoPermissionContract);
   const videoPermissionBlockedByProject = !localProjectReadyForTools;
   const videoPermissionModeItems: Array<{ mode: AgentVideoPermissionMode; label: string }> = [
-    { mode: "plan_only", label: "只出计划" },
+    { mode: "plan_only", label: "先整理" },
     { mode: "reference_allowed", label: "生成参考" },
     { mode: "video_allowed", label: "提交视频" },
   ];
@@ -5156,10 +5156,10 @@ export function MinimalAgentPanel({
       referenceGenerationBlockedByContract
       && (action.label === realSampleLabel || action.label === endFrameLabel)
     ) {
-      return "当前是只出计划；点上方确认才会生成参考。";
+      return "现在我只整理方案；确认这张卡才会生成参考。";
     }
     if (videoPermissionBlockedByContract && action.label === videoActionLabel) {
-      return "当前是只出计划；点上方确认才会提交视频。";
+      return "现在我只整理方案；确认这张卡才会提交视频。";
     }
     return "";
   }
@@ -5609,7 +5609,7 @@ export function MinimalAgentPanel({
         { label: "对象", value: directorAgentDisplayTargetLabel(agentActionEnvelope.target, agentActionEnvelope.sourceContext) },
         { label: "进度", value: agentActionEnvelope.sourceContext.projectReadiness.summary },
         { label: "模式", value: agentActionEnvelope.sourceContext.projectReadiness.modeSummary },
-        { label: "执行方式", value: agentExecutionModeLabel(agentActionEnvelope) },
+        { label: "当前范围", value: agentExecutionModeLabel(agentActionEnvelope) },
       ]
     : [];
   const handoffFacts = displayedAgentToolHandoff
@@ -6228,18 +6228,18 @@ export function MinimalAgentPanel({
         onToggle={(event) => setAdvancedControlsOpen(event.currentTarget.open)}
       >
         <summary>
-          <span>执行方式</span>
+          <span>我现在会</span>
           <strong>{agentBoundarySummaryLabel}</strong>
         </summary>
         {advancedControlsOpen && (
-          <section className="minimal-agent-permission-mode minimal-agent-permission-menu" aria-label="更改执行方式">
-            <span>切换方式</span>
+          <section className="minimal-agent-permission-mode minimal-agent-permission-menu" aria-label="更改 AI 导演可做范围">
+            <span>可做范围</span>
             {videoPermissionModeItems.map((item) => (
               <button
                 key={item.mode}
                 type="button"
                 className={videoPermissionContractForUi.mode === item.mode ? "is-active" : ""}
-                aria-label={`执行方式：${item.label}`}
+                aria-label={`AI 导演可做范围：${item.label}`}
                 aria-pressed={videoPermissionContractForUi.mode === item.mode}
                 disabled={Boolean(workflow)}
                 title={workflow ? "当前计划已生成，先点再改一下再切换边界。" : agentVideoPermissionDetail(agentVideoPermissionForMode(item.mode))}

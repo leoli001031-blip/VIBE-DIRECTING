@@ -144,7 +144,7 @@ assertIncludes(agentFirstGoalAudit, "Skill block height", "agent-first audit mus
 assertIncludes(agentFirstGoalAudit, "Agent thread moved up", "agent-first audit must record the right rail message-flow priority check");
 assertIncludes(agentFirstGoalAudit, "Seedance VIP 720p serial submit", "agent-first audit must record the final rehearsal provider boundary");
 assertIncludes(agentFirstGoalAudit, "final-rehearsal-check", "agent-first audit must record the final rehearsal live UI check");
-assertIncludes(agentFirstGoalAudit, "`只出计划 / 生成参考 / 提交视频`", "agent-first audit must record the visible permission modes in the final rehearsal");
+assertIncludes(agentFirstGoalAudit, "`先整理 / 生成参考 / 提交视频`", "agent-first audit must record the visible permission modes in the final rehearsal");
 assertIncludes(agentFirstGoalAudit, "stale workflow/engineering copy", "agent-first audit must record the final rehearsal copy check");
 assertIncludes(agentFirstGoalAudit, "Entry Freshness Recheck", "agent-first audit must record the stale-entry live UI check");
 assertIncludes(agentFirstGoalAudit, "no longer exposes `对象：/成本：/写入：/外部：`", "agent-first audit must record the confirmation boundary wording fix");
@@ -165,7 +165,7 @@ assertIncludes(finalRehearsalChecklist, "The first message should clear after se
 assertIncludes(finalRehearsalChecklist, "If an action will spend generation cost", "final rehearsal checklist must protect provider-cost confirmation boundaries");
 assertIncludes(finalRehearsalChecklist, "这句话会引用：...", "final rehearsal checklist must protect selected-context feedback");
 assertIncludes(finalRehearsalChecklist, "non-first shot such as `镜头 1-2`", "final rehearsal checklist must protect non-first-shot selected-context feedback");
-assertIncludes(finalRehearsalChecklist, "`只出计划`, `生成参考`, `提交视频`", "final rehearsal checklist must protect the three permission modes");
+assertIncludes(finalRehearsalChecklist, "`先整理`, `生成参考`, `提交视频`", "final rehearsal checklist must protect the three permission modes");
 assertIncludes(finalRehearsalChecklist, "`当前项目已加载`", "final rehearsal checklist must protect the current-project Skills group");
 assertIncludes(finalRehearsalChecklist, "`Agent 推荐`", "final rehearsal checklist must protect the recommended Skills group");
 assertIncludes(finalRehearsalChecklist, "`我的 Skills`", "final rehearsal checklist must protect the user Skills group");
@@ -222,7 +222,7 @@ assertIncludes(minimalAgentPanel, "agentNextActionAvailable", "P1 Agent panel mu
 assert(!minimalAgentPanel.includes("minimal-agent-suggested-button"), "P1 Agent panel must not reintroduce a second suggested-action button");
 assertIncludes(minimalAgentPanel, "minimal-agent-asset-inbox-summary", "P1 Agent panel must explain material scanning in the message flow");
 assertMatches(minimalAgentPanel, /totalCount <= 0 && needsReviewCount <= 0/, "P1 material-scan summary must not render misleading empty-state cards");
-assertIncludes(agentPanelProjection, "只出计划", "P1 visible mode copy should use creator language");
+assertIncludes(agentPanelProjection, "先整理", "P1 visible mode copy should use creator language");
 assertIncludes(agentPanelProjection, "生成参考", "P1 visible mode copy should use reference-generation language");
 assertIncludes(agentPanelProjection, "提交视频", "P1 visible mode copy should use video-submission language");
 

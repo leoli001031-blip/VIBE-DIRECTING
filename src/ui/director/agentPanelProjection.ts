@@ -134,7 +134,7 @@ export function agentVideoSubmitContractForUi(
 }
 
 export function agentVideoSubmitContractLabel(contract: AgentVideoSubmitContract) {
-  if (contract.mode === "plan_only") return "只出计划";
+  if (contract.mode === "plan_only") return "先整理";
   if (contract.mode === "reference_allowed") return "生成参考";
   return "提交视频";
 }

@@ -436,7 +436,7 @@ function assertUnifiedProjectStatusVideoStage() {
       kind: "generate_references",
       label: "确认生成参考",
       summary: "参考还缺，确认后再生成。",
-      detail: "当前执行方式是只出计划。",
+      detail: "现在我只整理方案。",
     },
   });
   assert(planOnlyMissingReferenceStatus.waitingFor === "等待你确认生成参考", "plan-only missing references should ask for confirmation instead of implying generation is already the next step");

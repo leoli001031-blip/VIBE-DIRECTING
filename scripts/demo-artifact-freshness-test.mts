@@ -20,7 +20,7 @@ const staleUiCopies = [
   },
   {
     text: "工作范围",
-    reason: "Agent permission controls now use creator-facing “执行方式”.",
+    reason: "Agent permission controls now use creator-facing “我现在会”.",
   },
 ];
 
