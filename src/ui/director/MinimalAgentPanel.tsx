@@ -2334,6 +2334,19 @@ function assetTypeLabel(value?: AssetRecord["type"]) {
   return "素材";
 }
 
+function selectionHierarchyValue(input: {
+  shot?: ShotRecord;
+  selectedShots: ShotRecord[];
+  asset?: AssetRecord;
+  sectionLabel?: string;
+}) {
+  if (input.selectedShots.length > 1) return input.sectionLabel ? "项目 / 段落 / 镜头组" : "项目 / 镜头组";
+  if (input.shot) return input.sectionLabel ? "项目 / 段落 / 镜头" : "项目 / 镜头";
+  if (input.asset) return "项目 / 素材";
+  if (input.sectionLabel) return "项目 / 段落";
+  return "项目";
+}
+
 function selectionContextChips(input: {
   shot?: ShotRecord;
   selectedShots: ShotRecord[];
@@ -2344,12 +2357,14 @@ function selectionContextChips(input: {
     const shotLabels = input.selectedShots.slice(0, 3).map((item) => formatShotNumber(item.id)).join("、");
     const suffix = input.selectedShots.length > 3 ? ` +${input.selectedShots.length - 3}` : "";
     return [
+      { label: "层级", value: selectionHierarchyValue(input) },
       { label: "范围", value: `${input.selectedShots.length} 个镜头` },
       { label: "镜头", value: `${shotLabels}${suffix}` },
     ];
   }
   if (input.shot) {
     return [
+      { label: "层级", value: selectionHierarchyValue(input) },
       { label: "镜头", value: `${formatShotNumber(input.shot.id)} · ${input.shot.title || "未命名"}` },
       { label: "方式", value: referenceStrategyLabel(input.shot.referenceStrategy) },
       input.shot.durationSeconds ? { label: "时长", value: `${input.shot.durationSeconds}s` } : undefined,
@@ -2357,12 +2372,14 @@ function selectionContextChips(input: {
   }
   if (input.asset) {
     return [
+      { label: "层级", value: selectionHierarchyValue(input) },
       { label: "素材", value: productScopeLabel(input.asset.name || input.asset.id) },
       { label: "类型", value: assetTypeLabel(input.asset.type) },
     ];
   }
   if (input.sectionLabel) {
     return [
+      { label: "层级", value: selectionHierarchyValue(input) },
       { label: "段落", value: productScopeLabel(input.sectionLabel) },
     ];
   }
@@ -2375,23 +2392,31 @@ function preparedSelectionContextChips(input: {
 }) {
   const context = input.context;
   if (!context) return [];
+  const selectedSection = context.sectionId
+    ? input.runtimeState.storyFlow.sections.find((item) => item.id === context.sectionId)
+    : undefined;
+  const sectionLabel = selectedSection?.label || context.scopeLabel;
   const shotIds = [...new Set([...(context.selectedShotIds || []), context.selectedShotId].filter(Boolean) as string[])];
   if (shotIds.length > 1) {
     const selectedShots = shotIds
       .map((shotId) => input.runtimeState.storyFlow.shots.find((item) => item.id === shotId))
       .filter((shot): shot is ShotRecord => Boolean(shot));
-    if (selectedShots.length === shotIds.length) return selectionContextChips({ selectedShots });
+    if (selectedShots.length === shotIds.length) return selectionContextChips({ selectedShots, sectionLabel });
     const shotLabels = shotIds.slice(0, 3).map((shotId) => formatShotNumber(shotId)).join("、");
     const suffix = shotIds.length > 3 ? ` +${shotIds.length - 3}` : "";
     return [
+      { label: "层级", value: sectionLabel ? "项目 / 段落 / 镜头组" : "项目 / 镜头组" },
       { label: "范围", value: `${shotIds.length} 个镜头` },
       { label: "镜头", value: `${shotLabels}${suffix}` },
     ];
   }
   if (shotIds.length === 1) {
     const selectedShot = input.runtimeState.storyFlow.shots.find((item) => item.id === shotIds[0]);
-    if (selectedShot) return selectionContextChips({ shot: selectedShot, selectedShots: [] });
-    return [{ label: "镜头", value: formatShotNumber(shotIds[0] || "") }];
+    if (selectedShot) return selectionContextChips({ shot: selectedShot, selectedShots: [], sectionLabel });
+    return [
+      { label: "层级", value: sectionLabel ? "项目 / 段落 / 镜头" : "项目 / 镜头" },
+      { label: "镜头", value: formatShotNumber(shotIds[0] || "") },
+    ];
   }
   if (context.selectedAssetId) {
     const selectedAsset = input.runtimeState.visualMemory.assets.find((item) => item.id === context.selectedAssetId);
@@ -2399,8 +2424,10 @@ function preparedSelectionContextChips(input: {
     return [{ label: "素材", value: productScopeLabel(context.selectedAssetId) }];
   }
   if (context.sectionId) {
-    const selectedSection = input.runtimeState.storyFlow.sections.find((item) => item.id === context.sectionId);
-    return [{ label: "段落", value: productScopeLabel(selectedSection?.label || context.scopeLabel || context.sectionId) }];
+    return [
+      { label: "层级", value: "项目 / 段落" },
+      { label: "段落", value: productScopeLabel(selectedSection?.label || context.scopeLabel || context.sectionId) },
+    ];
   }
   return [];
 }
@@ -3293,7 +3320,7 @@ export function MinimalAgentPanel({
     shot,
     selectedShots,
     asset,
-    sectionLabel: hasSectionSelection ? sectionLabel : undefined,
+    sectionLabel,
   });
   const agentShotSwitcherItems = useMemo(() => {
     if (!onSelectShot) return [];

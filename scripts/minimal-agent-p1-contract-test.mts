@@ -131,6 +131,7 @@ const planSummaryTitleForDisplay = findFunctionBody(newVideoStartSource, "planSu
 const detectVideoContract = findFunctionBody(agentPanelProjectionSource, "detectAgentVideoSubmitContract");
 const labelVideoContract = findFunctionBody(agentPanelProjectionSource, "agentVideoSubmitContractLabel");
 const detailVideoContract = findFunctionBody(agentPanelProjectionSource, "agentVideoSubmitContractDetail");
+const selectionHierarchyValue = findFunctionBody(minimalAgentPanelSource, "selectionHierarchyValue");
 const selectionContextChips = findFunctionBody(minimalAgentPanelSource, "selectionContextChips");
 const directorMode = findFunctionBody(directorModeSource, "DirectorMode");
 const scopedAssetGenerationTarget = findFunctionBody(image2AssetActionSource, "scopedAssetGenerationTarget");
@@ -303,9 +304,14 @@ assert(/scopedShotIds\.length > 1[\s\S]*selectedShotIds:\s*scopedShotIds/.test(c
 assert(/currentSelectedShotId[\s\S]*selectedShotId:\s*currentSelectedShotId/.test(currentComposerSelectionOverride), "current Agent selection override must preserve single-shot context");
 assert(/asset\?\.id[\s\S]*selectedAssetId:\s*asset\.id/.test(currentComposerSelectionOverride), "current Agent selection override must preserve selected asset context");
 assert(/sectionId && !scopedShotIds\.length && !asset[\s\S]*return \{ sectionId \}/.test(currentComposerSelectionOverride), "current Agent selection override must preserve selected section context");
+assert(/selectedShots\.length > 1[\s\S]*项目 \/ 段落 \/ 镜头组[\s\S]*项目 \/ 镜头组/.test(selectionHierarchyValue), "selection hierarchy must distinguish project, section, and multi-shot scope");
+assert(/input\.shot[\s\S]*项目 \/ 段落 \/ 镜头[\s\S]*项目 \/ 镜头/.test(selectionHierarchyValue), "selection hierarchy must explain whether a selected shot belongs to a section");
+assert(/input\.asset[\s\S]*项目 \/ 素材/.test(selectionHierarchyValue), "selection hierarchy must explain asset scope in the Agent thread");
+assert(/label:\s*"层级"[\s\S]*selectionHierarchyValue\(input\)/.test(selectionContextChips), "selection context chips must put project hierarchy into visible Agent facts");
 assert(/input\.shot\.referenceStrategy/.test(selectionContextChips), "shot context chips must show the selected generation mode");
 assert(/input\.asset\.type/.test(selectionContextChips), "asset context chips must show the selected asset type");
 assert(/input\.sectionLabel/.test(selectionContextChips), "section context chips must show selected section context");
+assert(/const sectionLabel = selectedSection\?\.label \|\| context\.scopeLabel/.test(preparedSelectionContextChips), "prepared Agent chips must preserve section labels when explaining selected shot scope");
 assert(/runtimeState\.storyFlow\.shots/.test(preparedSelectionContextChips), "prepared Agent chips must resolve shot ids against current Project.vibe state");
 assert(/runtimeState\.visualMemory\.assets/.test(preparedSelectionContextChips), "prepared Agent chips must resolve asset ids against current visual memory");
 assert(/\.minimal-agent-context-chips/.test(stylesSource), "selected context chips need dedicated styling");
