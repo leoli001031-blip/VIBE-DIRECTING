@@ -327,6 +327,18 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     : !input.folderReady && input.projectReady && /生成|提交|导出/.test(rawAgentFact)
       ? "先保存项目"
       : rawAgentFact;
+  const hasReferenceEvidence = draftReferenceCount > 0
+    || displayAssetSummary.locked > 0
+    || displayAssetSummary.needsReview > 0
+    || (shotCount > 0 && displayAssetSummary.missing > 0)
+    || input.referenceGenerationAction?.status === "running"
+    || safeCount(input.referenceBatch?.readyCount) > 0
+    || safeCount(input.referenceBatch?.retryCount) > 0;
+  const referenceFact = browserDraftActive && draftReferenceCount > 0
+    ? `已放入 ${draftReferenceCount} 个`
+    : hasReferenceEvidence
+      ? referenceFactLabel(displayAssetSummary, input.referenceBatch, input.referenceGenerationAction?.status)
+      : "还没有参考";
   const projectFact = input.folderReady
     ? "已连接"
     : browserDraftActive
@@ -337,7 +349,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
   const facts = [
     { label: "项目", value: projectFact },
     { label: "镜头", value: browserDraftActive && shotCount > 0 ? `草案 ${countLabel(shotCount, "个")}` : countLabel(shotCount, "个") },
-    { label: "参考", value: browserDraftActive && draftReferenceCount > 0 ? `已放入 ${draftReferenceCount} 个` : referenceFactLabel(displayAssetSummary, input.referenceBatch, input.referenceGenerationAction?.status) },
+    { label: "参考", value: referenceFact },
     audioFact ? { label: "声音", value: audioFact } : undefined,
     videoFact ? { label: "视频", value: videoFact } : undefined,
     ...videoTaskFacts,

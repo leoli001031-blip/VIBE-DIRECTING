@@ -5531,7 +5531,7 @@ export function MinimalAgentPanel({
               ? `${composerProjectObservation.currentTask.plan} · 等待你确认`
               : showFooterNextActionButton
                 ? `${composerProjectObservation.currentTask.plan} · 也可以继续补充想法`
-              : `${composerProjectObservation.currentTask.plan} · 点发送`;
+                : "先写一句想法，或拖入素材；AI 会先整理故事和镜头。";
   const footerHintCopy = composerHint.trim() === footerStatusCopy.trim() ? "" : composerHint;
   if (isComposerCollapsed) {
     return (

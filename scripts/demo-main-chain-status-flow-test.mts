@@ -69,6 +69,14 @@ assert.equal(status.stage, "准备开始", "fresh entry should explain that the 
 assert.match(status.nextAction, /底部输入想法|打开项目/, "fresh entry should point to the bottom composer or project entry");
 
 status = view({
+  runtimeState: runtimeState({ shotCount: 0, summary: { locked: 0, needsReview: 0, missing: 1 } }),
+  folderReady: true,
+  projectReady: true,
+});
+assert.equal(status.stage, "准备故事", "empty local project should wait for story input before reference work");
+assert.equal(factValue(status, "参考"), "还没有参考", "empty local project should not show fake 0/1 reference progress before shots exist");
+
+status = view({
   newVideoStatus: {
     status: "planning",
     title: "AI 正在拆镜头",
