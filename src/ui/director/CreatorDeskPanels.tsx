@@ -535,6 +535,7 @@ export function CreatorDeskPanels({
   const videoWaiting = videoWaitingCount(videoGeneration);
   const currentVideoPosition = videoPosition(videoGeneration);
   const projectStatusStage = projectStatusView?.stage || "";
+  const agentConfirmationTakingFocus = projectStatusStage === "等待你确认";
   const videoSubmitCancelled = videoSendAction?.status === "blocked" && /已取消，本次没有发送/.test(videoSendAction.message || "");
   const projectVideoBlocked = Boolean(
     projectStatusStage.startsWith("视频待处理")
@@ -562,7 +563,7 @@ export function CreatorDeskPanels({
       || videoCanResume
       || Boolean(projectStatusView?.stage?.startsWith("视频"))
   );
-  const primaryFlowTakingFocus = exportFlowTakingFocus || videoFlowTakingFocus;
+  const primaryFlowTakingFocus = agentConfirmationTakingFocus || exportFlowTakingFocus || videoFlowTakingFocus;
   const videoActionRelevant = !videoReturnedForReview && videoGeneration.status !== "completed";
   const referenceGenerationBusy = referenceGenerationAction?.status === "running";
   const projectRequirement = agentProjectRequirementCopy({ localProjectBusy, canCreateLocalProject });
@@ -649,7 +650,9 @@ export function CreatorDeskPanels({
         ? "视频已提交，等待取回结果。"
         : "视频正在处理。";
   const creatorStepHint = projectStatusView
-    ? "消息流会接着这个状态处理。"
+    ? agentConfirmationTakingFocus
+      ? "先处理右侧确认卡；中间只保留项目结果。"
+      : "消息流会接着这个状态处理。"
     : !localProjectReady
     ? hasStoryDraftForProject
       ? projectRequirement.hint
@@ -667,7 +670,19 @@ export function CreatorDeskPanels({
           : displayAgentCommand.kind === "open_review"
             ? "先复核参考；也可以在消息中继续处理。"
           : `在消息中确认「${primaryActionLabel(nextActionCopy)}」继续。`;
-  const displayCurrentTask = exportFlowTakingFocus
+  const displayCurrentTask = agentConfirmationTakingFocus
+    ? {
+        ...projectObservation.currentTask,
+        missing: projectStatusView?.doing || "右侧还有一条消息等你确认。",
+        plan: projectStatusView?.nextAction || "先处理当前确认。",
+        confirmation: {
+          kind: "explicit" as const,
+          required: true,
+          label: projectStatusView?.nextAction || "确认当前消息",
+          detail: projectStatusView?.waitingFor || "确认前不会执行。",
+        },
+      }
+    : exportFlowTakingFocus
     ? {
         ...projectObservation.currentTask,
         missing: "交付内容已经整理好。",
@@ -753,6 +768,8 @@ export function CreatorDeskPanels({
     : projectObservation.currentTask;
   const displayIntentLabel = exportFlowTakingFocus
     ? "交付复核"
+    : agentConfirmationTakingFocus
+    ? "等待确认"
     : projectVideoBlocked
     ? "处理视频"
     : displayVideoTaskActive

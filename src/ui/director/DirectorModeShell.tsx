@@ -317,6 +317,46 @@ function projectStatusViewWithCommittedDraft(status: ProjectStatusViewModel, com
   };
 }
 
+function latestPendingAgentConfirmation(entries?: VibeAgentTimelineEntry[]) {
+  return [...(entries || [])].reverse().find((entry) => (
+    entry.type === "confirmation_request"
+    && entry.status !== "done"
+    && entry.lifecycle !== "succeeded"
+    && entry.lifecycle !== "cancelled"
+  ));
+}
+
+function pendingAgentConfirmationLabel(entry?: VibeAgentTimelineEntry) {
+  if (!entry) return "";
+  const copy = [entry.title, entry.body, entry.toolName, entry.actionKind].filter(Boolean).join(" ");
+  if (/方式|update_shot_strategy/.test(copy)) return "确认方式";
+  if (/修改|revise_story_or_shot|write_project/.test(copy)) return "确认修改";
+  if (/查询|query_video/.test(copy)) return "确认查询结果";
+  if (/提交视频|发送视频|submit_video|Seedance/.test(copy)) return "确认提交视频";
+  if (/生成参考|参考|generate_references/.test(copy)) return "确认生成参考";
+  if (/导出|交付|export/.test(copy)) return "确认导出";
+  if (/Skill|导演经验|save_skill/.test(copy)) return "确认保存 Skill";
+  if (/草案|故事流|故事/.test(copy)) return "确认故事";
+  return entry.title?.trim() || "确认当前消息";
+}
+
+function projectStatusViewWithPendingAgentConfirmation(
+  status: ProjectStatusViewModel,
+  label: string,
+): ProjectStatusViewModel {
+  if (!label) return status;
+  return {
+    ...status,
+    stage: "等待你确认",
+    doing: `右侧消息里有「${label}」`,
+    waitingFor: "先确认当前卡，或继续说明怎么改",
+    nextAction: label,
+    tone: "waiting",
+    issue: undefined,
+    facts: status.facts.map((fact) => fact.label === "AI 导演" ? { ...fact, value: label } : fact),
+  };
+}
+
 function pendingNewVideoDraftTitle(status?: NewVideoStartStatus) {
   if (!status) return "";
   const title = status.draftTitle?.trim();
@@ -683,6 +723,11 @@ export function DirectorMode({
     () => buildVibeAgentTimelineStatusView(restoredAgentTimelineEntries),
     [restoredAgentTimelineEntries],
   );
+  const pendingAgentConfirmation = useMemo(
+    () => latestPendingAgentConfirmation(restoredAgentTimelineEntries),
+    [restoredAgentTimelineEntries],
+  );
+  const pendingAgentConfirmationCopy = pendingAgentConfirmationLabel(pendingAgentConfirmation);
   const rawProjectStatusView = useMemo(() => buildProjectStatusViewModel({
     runtimeState,
     folderReady,
@@ -734,17 +779,10 @@ export function DirectorMode({
     [newVideoStatus, restoredNewVideoDraft, showNewVideoStart],
   );
   const activeProjectStatusView = newVideoEntryStatusView || projectStatusView;
-  const displayedProjectStatusView: ProjectStatusViewModel = agentPendingAction
-    ? {
-        ...activeProjectStatusView,
-        stage: "待确认操作",
-        doing: "右侧有一条待确认动作",
-        waitingFor: "先确认，或继续说明怎么改",
-        nextAction: "在右侧处理",
-        tone: "waiting",
-        issue: undefined,
-      }
-    : activeProjectStatusView;
+  const displayedProjectStatusView: ProjectStatusViewModel = projectStatusViewWithPendingAgentConfirmation(
+    activeProjectStatusView,
+    agentPendingAction ? "确认当前消息" : pendingAgentConfirmationCopy,
+  );
   const pendingDraftRailTitle = showNewVideoStart ? pendingNewVideoDraftTitle(newVideoStatus) || restoredNewVideoDraft?.title || "" : "";
   const projectNavReady = projectReady && !showNewVideoStart;
   const projectNavSections = showNewVideoStart ? [] : storySections;
