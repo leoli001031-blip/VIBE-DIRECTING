@@ -1691,8 +1691,6 @@ try {
     ["GET", projectCurrentBindingEndpoint],
     ["GET", projectCurrentChoicesEndpoint],
     ["POST", projectCurrentSelectEndpoint],
-    ["GET", projectImage2BatchPlanEndpoint],
-    ["POST", projectImage2BatchRunCheckEndpoint],
   ]) {
     const call = runtimeFetchCalls.find((item) => item.method === method && item.path === endpoint);
     assert(call, `frontend should call ${method} ${endpoint}`);
@@ -1701,6 +1699,8 @@ try {
   for (const [method, endpoint] of [
     ["GET", projectRealChainStatusEndpoint],
     ["POST", projectRealChainRunCheckEndpoint],
+    ["GET", projectImage2BatchPlanEndpoint],
+    ["POST", projectImage2BatchRunCheckEndpoint],
   ]) {
     const call = runtimeFetchCalls.find((item) => item.method === method && item.path === endpoint);
     assert(call, `frontend should call ${method} ${endpoint}`);

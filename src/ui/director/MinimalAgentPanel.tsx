@@ -500,6 +500,9 @@ function minimalAgentVisibleFacts(message: MinimalAgentMessage) {
   const executionSummary = cleanMinimalAgentMessageCopy(message.executionResult?.summary || message.body).trim();
   const executionNext = cleanMinimalAgentMessageCopy(message.executionResult?.next || message.next || "").trim();
   const hasVisibleNext = Boolean(message.executionResult?.next || message.next);
+  const keepInlineNextFact = message.entryType === "action_result"
+    && message.toolName === "write_project"
+    && /故事已保存到项目/.test(message.title);
   const compactLabels = minimalAgentCompactFactLabels(message);
   const hiddenConfirmationLabels = minimalAgentMessageRequestsActionConfirmation(message)
     ? new Set(["成本", "外部提交", "写入", "保存"])
@@ -510,7 +513,7 @@ function minimalAgentVisibleFacts(message: MinimalAgentMessage) {
     if (!value) return false;
     if (compactLabels && !compactLabels.has(label)) return false;
     if (hiddenConfirmationLabels.has(label)) return false;
-    if (/下一步/.test(label) && (hasVisibleNext || value === executionNext)) return false;
+    if (/下一步/.test(label) && !keepInlineNextFact && (hasVisibleNext || value === executionNext)) return false;
     if (/状态/.test(label) && value === executionSummary) return false;
     return true;
   });

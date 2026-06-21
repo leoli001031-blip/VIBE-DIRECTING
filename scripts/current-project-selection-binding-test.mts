@@ -241,7 +241,8 @@ const freshRealChainRequest = requests.find((request) => request.method === "GET
 const freshImage2Request = requests.find((request) => request.method === "GET" && requestPath(request.url) === projectImage2BatchPlanEndpoint);
 assert(requestSearchParams(freshRealChainRequest?.url || "").get("projectRoot") === project004.projectRoot, "current project real-chain load must carry selected projectRoot query");
 assert(requestSearchParams(freshRealChainRequest?.url || "").get("projectId") === project004.projectId, "current project real-chain load must carry selected projectId query");
-assert(!requestSearchParams(freshImage2Request?.url || "").has("projectRoot") && !requestSearchParams(freshImage2Request?.url || "").has("projectId"), "Image2 batch plan should keep using runtime-selected current project without identity query");
+assert(requestSearchParams(freshImage2Request?.url || "").get("projectRoot") === project004.projectRoot, "current project Image2 batch plan must carry selected projectRoot query");
+assert(requestSearchParams(freshImage2Request?.url || "").get("projectId") === project004.projectId, "current project Image2 batch plan must carry selected projectId query");
 
 responseByUrl = new Map([
   ["/api/runtime/projects/current/real-chain/run-check", current004RealChainPayload],
@@ -257,7 +258,8 @@ const realChainRunRequest = requests.find((request) => request.method === "POST"
 const image2RunRequest = requests.find((request) => request.method === "POST" && requestPath(request.url) === projectImage2BatchRunCheckEndpoint);
 assert(requestSearchParams(realChainRunRequest?.url || "").get("projectRoot") === project004.projectRoot, "real-chain run-check must carry selected projectRoot query");
 assert(requestSearchParams(realChainRunRequest?.url || "").get("projectId") === project004.projectId, "real-chain run-check must carry selected projectId query");
-assert(!requestSearchParams(image2RunRequest?.url || "").has("projectRoot") && !requestSearchParams(image2RunRequest?.url || "").has("projectId"), "Image2 run-check should keep using runtime-selected current project without identity query");
+assert(requestSearchParams(image2RunRequest?.url || "").get("projectRoot") === project004.projectRoot, "Image2 run-check must carry selected projectRoot query");
+assert(requestSearchParams(image2RunRequest?.url || "").get("projectId") === project004.projectId, "Image2 run-check must carry selected projectId query");
 
 globalThis.window = {
   location: { hostname: "127.0.0.1", port: "5173" },

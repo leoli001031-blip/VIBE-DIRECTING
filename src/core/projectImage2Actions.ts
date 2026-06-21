@@ -55,7 +55,7 @@ export async function loadProjectImage2BatchPlan(expected?: ProjectRuntimeIdenti
   }
 
   try {
-    const payload = await fetchRuntimeJson(projectImage2BatchPlanEndpoint);
+    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2BatchPlanEndpoint, expected));
     const summary = deriveProjectImage2BatchPlanStatus(payload);
     return guardProjectImage2BatchUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (err) {
@@ -72,7 +72,7 @@ export async function runProjectImage2BatchCheck(expected?: ProjectRuntimeIdenti
   }
 
   try {
-    const payload = await fetchRuntimeJson(projectImage2BatchRunCheckEndpoint, { method: "POST" });
+    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2BatchRunCheckEndpoint, expected), { method: "POST" });
     const summary = deriveProjectImage2BatchPlanStatus(payload);
     return guardProjectImage2BatchUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (err) {
