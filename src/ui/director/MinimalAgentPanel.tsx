@@ -1695,6 +1695,11 @@ function referenceDirectProductActionState(status: string | undefined, message: 
       body: cleanMessage || "参考图已经回到参考页，先确认能不能用，再继续视频。",
       next: "去参考页复核。",
       status: cleanMessage || "参考已生成，等你复核。",
+      facts: [
+        { label: "阶段", value: "已回到参考页" },
+        { label: "查看", value: "参考页" },
+        { label: "保护", value: "先复核再用于视频" },
+      ],
     };
   }
   if (normalized === "blocked") {
@@ -1704,6 +1709,10 @@ function referenceDirectProductActionState(status: string | undefined, message: 
       body: cleanMessage || "参考生成暂时中断。已生成的内容会保留，可以稍后重试。",
       next: "看原因后重试，或直接告诉我怎么调整。",
       status: cleanMessage || "参考生成没有完成。",
+      facts: [
+        { label: "阶段", value: "需要处理" },
+        { label: "动作", value: "看原因后重试" },
+      ],
     };
   }
   if (normalized === "running" || normalized === "prepared") {
@@ -1713,6 +1722,10 @@ function referenceDirectProductActionState(status: string | undefined, message: 
       body: cleanMessage || "参考任务已交给图片服务，等图片回到参考页后再复核。",
       next: "等参考结果，或去参考页查看进度。",
       status: cleanMessage || "参考生成中，等待结果回到参考页。",
+      facts: [
+        { label: "阶段", value: "生成中" },
+        { label: "查看", value: "参考页" },
+      ],
     };
   }
   if (normalized === "verified") {
@@ -1722,6 +1735,10 @@ function referenceDirectProductActionState(status: string | undefined, message: 
       body: cleanMessage || "参考已经确认，可以继续准备视频。",
       next: "继续下一步。",
       status: cleanMessage || "参考可用。",
+      facts: [
+        { label: "阶段", value: "可用于视频" },
+        { label: "下一步", value: "准备视频" },
+      ],
     };
   }
   return undefined;
@@ -4863,7 +4880,7 @@ export function MinimalAgentPanel({
       body: projectedState.body,
       next: projectedState.next,
       dedupeKey: `reference_state_${projectedReferenceStatus || "unknown"}`,
-      facts: [
+      facts: projectedState.facts || [
         { label: "动作", value: "生成参考" },
         { label: "状态", value: projectedState.status },
       ],
