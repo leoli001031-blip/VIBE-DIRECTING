@@ -2834,6 +2834,14 @@ function agentTimelineKey(entries: VibeAgentTimelineEntry[] | undefined) {
   return (entries || []).map((entry) => `${entry.id}:${entry.createdAt}`).join("|");
 }
 
+function agentStoryFlowKey(shots: ShotRecord[]) {
+  return shots.map((item) => [
+    item.id,
+    item.title,
+    item.primaryAction,
+  ].filter(Boolean).join(":")).join("|");
+}
+
 export function MinimalAgentPanel({
   runtimeState,
   projectScopeLabel,
@@ -2966,6 +2974,7 @@ export function MinimalAgentPanel({
   const restoredAgentDraftIdRef = useRef("");
   const restoredAgentLogKeyRef = useRef("");
   const restoredAgentTimelineKeyRef = useRef("");
+  const committedNewVideoDraftResetKeyRef = useRef("");
   const resumeAgentAfterLocalProjectSetupRef = useRef(false);
   const savedSkillStackProjectKeyRef = useRef("");
   const [text, setText] = useState("");
@@ -3049,6 +3058,7 @@ export function MinimalAgentPanel({
   const preparedSelectionChips = preparedSelectionContextChips({ context: preparedContext, runtimeState });
   const selectionFocusKey = [scopedShotKey, shot?.id, asset?.id, sectionId].filter(Boolean).join("::");
   const latestNewVideoDraftCommittedForProjection = isCommittedNewVideoDraftAgentRun(latestPrototypeAgentDemo);
+  const currentStoryFlowKey = agentStoryFlowKey(runtimeState.storyFlow.shots);
   const prototypeAgentDemo = latestNewVideoDraftCommittedForProjection
     ? latestPrototypeAgentDemo
     : planPhase === "confirmed" && localPrototypeAgentDemo
@@ -3078,6 +3088,23 @@ export function MinimalAgentPanel({
       setLocalPrototypeAgentDemo(undefined);
     }
   }, [latestNewVideoDraftCommittedForProjection, localPrototypeAgentDemo]);
+  useEffect(() => {
+    if (!latestNewVideoDraftCommittedForProjection || !currentStoryFlowKey) return;
+    const nextResetKey = `${runtimeProjectKey}:${currentStoryFlowKey}`;
+    if (committedNewVideoDraftResetKeyRef.current === nextResetKey) return;
+    committedNewVideoDraftResetKeyRef.current = nextResetKey;
+    setWorkflow(undefined);
+    setProjection(undefined);
+    setFeedbackRecompile(undefined);
+    setPreparedContext(undefined);
+    setAgentActionEnvelope(undefined);
+    setAgentToolHandoff(undefined);
+    setPlanPhase("idle");
+    setAgentTimelineEntries([]);
+    setAgentActionLog([]);
+    restoredAgentLogKeyRef.current = "new_video_draft_committed";
+    restoredAgentTimelineKeyRef.current = "new_video_draft_committed";
+  }, [currentStoryFlowKey, latestNewVideoDraftCommittedForProjection, runtimeProjectKey]);
   useEffect(() => {
     if (!latestNewVideoDraftCommittedForProjection || text.trim() || attachments.length) return;
     setStatus("草案已写入故事流");
@@ -3605,14 +3632,24 @@ export function MinimalAgentPanel({
       setAgentActionLog([]);
       return;
     }
+    if (latestNewVideoDraftCommittedForProjection) {
+      restoredAgentLogKeyRef.current = "new_video_draft_committed";
+      setAgentActionLog([]);
+      return;
+    }
     const restoredItems = (restoredAgentActionLog || []).slice(0, 4);
     const nextKey = agentActionLogKey(restoredItems);
     if (!nextKey || restoredAgentLogKeyRef.current === nextKey) return;
     restoredAgentLogKeyRef.current = nextKey;
     setAgentActionLog(restoredItems);
-  }, [localProjectReadyForTools, restoredAgentActionLog]);
+  }, [latestNewVideoDraftCommittedForProjection, localProjectReadyForTools, restoredAgentActionLog]);
 
   useEffect(() => {
+    if (latestNewVideoDraftCommittedForProjection) {
+      restoredAgentTimelineKeyRef.current = "new_video_draft_committed";
+      setAgentTimelineEntries([]);
+      return;
+    }
     const restoredEntries = restoredAgentTimelineEntries || [];
     const nextKey = agentTimelineKey(restoredEntries);
     if (!nextKey) {
@@ -3623,7 +3660,7 @@ export function MinimalAgentPanel({
     if (restoredAgentTimelineKeyRef.current === nextKey) return;
     restoredAgentTimelineKeyRef.current = nextKey;
     setAgentTimelineEntries(restoredEntries);
-  }, [restoredAgentTimelineEntries]);
+  }, [latestNewVideoDraftCommittedForProjection, restoredAgentTimelineEntries]);
 
   useEffect(() => {
     if (!localProjectReadyForTools) {
