@@ -5450,13 +5450,13 @@ export function MinimalAgentPanel({
       referenceGenerationBlockedByContract
       && (action.label === realSampleLabel || action.label === endFrameLabel)
     ) {
-      return "现在我只整理方案；确认这张卡才会生成参考。";
+      return "还不会生成参考；确认这张卡才会开始。";
     }
     if (videoPermissionBlockedByContract && action.label === videoActionLabel) {
-      return "现在我只整理方案；确认这张卡才会提交视频。";
+      return "还不会提交视频；确认这张卡才会发送。";
     }
     if (action === exportFooterAction) {
-      return "现在我只整理方案；确认这张卡才会导出交付包。";
+      return "还不会导出；确认这张卡才会生成交付包。";
     }
     return "";
   }
@@ -5505,8 +5505,7 @@ export function MinimalAgentPanel({
     [referencesUsableForAgent, stateAwareAgentTimelineEntries],
   );
   const latestNewVideoDraftCommitted = isCommittedNewVideoDraftAgentRun(latestPrototypeAgentDemo);
-  const currentTimelineConfirmationLabel = !latestNewVideoDraftCommitted
-    && visibleTimelineConfirmationMessage
+  const currentTimelineConfirmationLabel = visibleTimelineConfirmationMessage
     ? minimalAgentConfirmationAction(visibleTimelineConfirmationMessage, NEW_VIDEO_DRAFT_CONFIRM_LABEL).label
     : "";
   const hasAgentTimelineConfirmation = Boolean(
@@ -5814,6 +5813,14 @@ export function MinimalAgentPanel({
   const footerPrimaryTitle = footerPrimaryDisabled
     ? footerPrimaryDisabledReason
     : "发送给 AI 导演，也可以按 Cmd Enter";
+  const displayedAgentBoundaryConfirmationLabel = currentTimelineConfirmationLabel
+    || (!hasComposerInput && showFooterNextActionButton && footerDirectActionBoundaryNotice ? primaryLabel : "");
+  const displayedAgentBoundarySummaryLabel = displayedAgentBoundaryConfirmationLabel
+    ? "等你确认"
+    : agentBoundarySummaryLabel;
+  const displayedAgentBoundaryDetail = displayedAgentBoundaryConfirmationLabel
+    ? `当前等待你确认「${displayedAgentBoundaryConfirmationLabel}」。确认前不会执行；也可以继续说改法。`
+    : agentBoundaryDetail;
   const footerSelectionTargetCopy = hasActiveSelection
     ? agentNextActionAvailable && !hasComposerInput
       ? `你发出的下一句话会指向：${displayedCompactScopeLabel}；上方确认卡仍按卡片范围执行。`
@@ -6626,7 +6633,7 @@ export function MinimalAgentPanel({
       >
         <summary>
           <span>我现在会</span>
-          <strong>{agentBoundarySummaryLabel}</strong>
+          <strong>{displayedAgentBoundarySummaryLabel}</strong>
         </summary>
         {advancedControlsOpen && (
           <section className="minimal-agent-permission-mode minimal-agent-permission-menu" aria-label="更改 AI 导演可做范围">
@@ -6645,7 +6652,7 @@ export function MinimalAgentPanel({
                 {item.label}
               </button>
             ))}
-            <small>{agentBoundaryDetail}</small>
+            <small>{displayedAgentBoundaryDetail}</small>
           </section>
         )}
         {advancedControlsOpen && visibleAgentCapabilityGlanceItems.length > 0 && (
@@ -7324,7 +7331,7 @@ export function MinimalAgentPanel({
           className="minimal-agent-input-footer"
           data-agent-footer-action={showFooterNextActionButton ? "true" : "false"}
           data-agent-footer-draft={footerNewVideoDraftConfirmationReady ? "true" : "false"}
-          data-agent-footer-confirmation-label={currentTimelineConfirmationLabel || ""}
+          data-agent-footer-confirmation-label={displayedAgentBoundaryConfirmationLabel || ""}
           data-agent-project-status-stage={projectStatusView?.stage || ""}
         >
           <button
