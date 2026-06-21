@@ -1124,6 +1124,16 @@ function visibleMinimalAgentMessages(messages: MinimalAgentMessage[]): {
   };
 }
 
+function minimalAgentThreadNeedsStatusReply(messages: MinimalAgentMessage[]) {
+  const latestUserIndex = messages.map((message) => message.role).lastIndexOf("user");
+  const currentTurnMessages = latestUserIndex >= 0 ? messages.slice(latestUserIndex + 1) : messages;
+  if (!currentTurnMessages.length) return true;
+  return !currentTurnMessages.some((message) => (
+    message.role === "assistant"
+    || message.role === "confirmation"
+  ));
+}
+
 function minimalAgentReferenceReviewMessageIsStale(message: MinimalAgentMessage, referencesReadyAfterReview: boolean) {
   if (!referencesReadyAfterReview || message.role === "user") return false;
   const text = minimalAgentMessageSearchText(message);
@@ -5975,7 +5985,7 @@ export function MinimalAgentPanel({
       facts: confirmedAgentResultFactsList.slice(0, 3),
       next: canRetryConfirmedTool ? "可以重试，或继续下一步。" : "可以继续下一步，或继续修改。",
     });
-  } else if (!agentTimelineEntries.length && showPassiveAgentReply && passiveAgentReply) {
+  } else if (showPassiveAgentReply && passiveAgentReply && minimalAgentThreadNeedsStatusReply(fullAgentThreadMessages)) {
     fullAgentThreadMessages.push({
       id: "assistant-status",
       role: "assistant",
@@ -5997,10 +6007,24 @@ export function MinimalAgentPanel({
     && !minimalAgentReferenceBlockedMessageIsStale(fullAgentThreadMessages, message)
     && !minimalAgentSelectionContextMessageIsOutsideActiveScope(message, selectionFocusKey, hasBoundSelection)
   );
-  const {
-    messages: agentThreadMessages,
-    hiddenCount: hiddenAgentThreadMessageCount,
-  } = visibleMinimalAgentMessages(stateAwareAgentThreadMessages);
+  const visibleAgentThreadResult = visibleMinimalAgentMessages(stateAwareAgentThreadMessages);
+  let agentThreadMessages = visibleAgentThreadResult.messages;
+  const hiddenAgentThreadMessageCount = visibleAgentThreadResult.hiddenCount;
+  const projectedStatusReplyMessage = showPassiveAgentReply
+    && passiveAgentReply
+    && minimalAgentThreadNeedsStatusReply(agentThreadMessages)
+    ? {
+      id: "assistant-visible-status",
+      role: "assistant" as const,
+      title: `AI 导演：${passiveAgentReply.title}`,
+      body: passiveAgentReply.body,
+      facts: passiveAgentReply.facts,
+      next: passiveAgentReply.next,
+    } satisfies MinimalAgentMessage
+    : undefined;
+  if (projectedStatusReplyMessage) {
+    agentThreadMessages = [...agentThreadMessages, projectedStatusReplyMessage];
+  }
   const totalHiddenAgentThreadMessageCount = hiddenAgentThreadMessageCount;
   const latestAgentThreadMessageId = agentThreadMessages.at(-1)?.id || "";
   useEffect(() => {
