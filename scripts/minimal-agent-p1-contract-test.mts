@@ -438,7 +438,7 @@ assert(/agentCommandKind === "submit_video"[\s\S]*\? referenceReviewFooterAction
 assert(/const availableFooterDirectAction = referenceReviewFooterAction \|\| videoBlockedRecoveryFooterAction \|\| commandFooterDirectAction \|\| fallbackFooterDirectAction/.test(minimalAgentPanelSource), "footer direct actions must take the creator to pending reference review before offering another recovery run");
 assert(/handler === "web_search" \|\| handoff\.handler === "image2_reference_generation"\) return \{ view: "assets", label: "去参考" \}/.test(agentResultViewTarget), "web research and reference generation results should route creators to references");
 assert(/seedance_video_submit[\s\S]*view: "preview"[\s\S]*label: "去预览"/.test(agentResultViewTarget), "video submit results should route creators to preview");
-assert(/project_export[\s\S]*view: "export"[\s\S]*label: "去导出"/.test(agentResultViewTarget), "export results should route creators to export");
+assert(/project_export[\s\S]*view: "export"[\s\S]*label: "去交付页"/.test(agentResultViewTarget), "export results should route creators to the delivery page");
 assert(/project_vibe_patch[\s\S]*view: "story"[\s\S]*label: "回故事"/.test(agentResultViewTarget), "project patch results should route creators back to story");
 assert(/entry\.facts\?\.find\(\(fact\) => fact\.label === "查看"\)\?\.value/.test(minimalAgentPanelSource), "persisted Agent result messages must recover result navigation from creator-facing facts when details are missing");
 assert(/查看[\s\S]*参考[\s\S]*return "assets"[\s\S]*预览[\s\S]*return "preview"[\s\S]*交付\|导出[\s\S]*return "export"/.test(minimalAgentPanelSource), "Agent result fact navigation must route to references, preview, and delivery");

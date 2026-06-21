@@ -167,23 +167,23 @@ export function MinimalTopNav({
   const showWorkspaceTabs = !isEmptyProject;
   const exportDisabled = isEmptyProject || !projectFolderReady || projectIsTemporary;
   const exportDisabledTitle = projectIsTemporary
-    ? "先保存为本地项目，再导出。"
+    ? "先保存为本地项目，再查看交付。"
     : !projectFolderReady
-    ? "先保存为本地项目，再导出。"
-    : "先写故事或打开项目，再导出。";
+      ? "先保存为本地项目，再查看交付。"
+      : "先写故事或打开项目，再查看交付。";
   const currentViewLabel = directorView === "assets"
     ? "参考图"
     : directorView === "preview"
       ? "视频"
       : directorView === "export"
-        ? "导出"
+        ? "交付"
         : "故事";
   const currentViewDetail = directorView === "assets"
       ? "看生成图"
     : directorView === "preview"
       ? "看视频"
       : directorView === "export"
-        ? "项目资料包"
+        ? "项目交付"
         : `${totalShots} 个镜头`;
 
   useEffect(() => {
@@ -416,10 +416,10 @@ export function MinimalTopNav({
           className={`diagnostics-link topbar-export-action ${mode === "director" && directorView === "export" ? "active" : ""}`}
           disabled={exportDisabled}
           onClick={() => onOpenDirectorView("export")}
-          title={exportDisabled ? exportDisabledTitle : "导出"}
-          aria-label="导出"
+          title={exportDisabled ? exportDisabledTitle : "查看交付页"}
+          aria-label="交付"
         >
-          导出
+          交付
         </button>
         <button className={`diagnostics-link ${showInspector ? "active" : ""}`} onClick={onOpenInspector} aria-label="设置">
           <Settings size={18} aria-hidden="true" />

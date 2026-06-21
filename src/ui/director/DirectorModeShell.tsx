@@ -570,7 +570,7 @@ export function DirectorMode({
     : directorView === "preview"
       ? "预览"
       : directorView === "export"
-        ? "导出"
+        ? "交付"
         : sectionLabel;
   const scopedShots = directorView === "story" || !activeSection
     ? runtimeState.storyFlow.shots

@@ -2448,7 +2448,7 @@ function agentResultViewTarget(handoff?: DirectorAgentToolHandoff): AgentResultV
   if (!handoff) return undefined;
 	  if (handoff.handler === "web_search" || handoff.handler === "image2_reference_generation") return { view: "assets", label: "去参考" };
 	  if (handoff.handler === "seedance_video_submit") return { view: "preview", label: "去预览" };
-	  if (handoff.handler === "project_export") return { view: "export", label: "去导出" };
+	  if (handoff.handler === "project_export") return { view: "export", label: "去交付页" };
   if (handoff.handler === "project_vibe_patch") return { view: "story", label: "回故事" };
   return undefined;
 }

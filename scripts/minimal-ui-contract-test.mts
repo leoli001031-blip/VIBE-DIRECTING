@@ -1026,10 +1026,10 @@ checkMessage(requireWithin(minimalTopNav, /minimal-nav-label">查看[\s\S]*aria-
 checkMessage(requireWithin(minimalTopNav, /aria-label="视频"[\s\S]*>\s*视频\s*</, "Top content menu video view must use product copy"));
 checkMessage(requireWithin(minimalTopNav, /viewMenuOpen && \([\s\S]*className="minimal-nav-menu-list"[\s\S]*aria-label="参考素材"[\s\S]*aria-label="视频"/, "Top content menu list must render only while the menu is open"));
 checkMessage(requireWithin(stylesSource, /\.minimal-nav\.minimal-nav-menu:not\(\[open\]\) \.minimal-nav-menu-list\s*\{[\s\S]*display:\s*none/, "Top content menu list must stay hidden while the menu is closed"));
-checkMessage(requireWithin(minimalTopNav, /directorView === "export"[\s\S]*\? "导出"[\s\S]*\? "项目资料包"/, "Top content menu summary must reflect the export view instead of falling back to story"));
-checkMessage(requireWithin(minimalTopNav, /topbar-export-action[\s\S]*aria-label="导出"[\s\S]*>\s*导出\s*</, "Export must remain a constant topbar action"));
+checkMessage(requireWithin(minimalTopNav, /directorView === "export"[\s\S]*\? "交付"[\s\S]*\? "项目交付"/, "Top content menu summary must reflect the delivery view instead of falling back to story"));
+checkMessage(requireWithin(minimalTopNav, /topbar-export-action[\s\S]*title=\{exportDisabled \? exportDisabledTitle : "查看交付页"\}[\s\S]*aria-label="交付"[\s\S]*>\s*交付\s*</, "The constant topbar action must open delivery, not look like a direct export command"));
 checkMessage(requireWithin(minimalTopNav, /const exportDisabled = isEmptyProject \|\| !projectFolderReady/, "Browser drafts with shots must not enable export before a local project folder exists"));
-checkMessage(requireWithin(minimalTopNav, /先保存为本地项目，再导出/, "Export disabled copy must point browser drafts to saving a local project first"));
+checkMessage(requireWithin(minimalTopNav, /先保存为本地项目，再查看交付/, "Delivery disabled copy must point browser drafts to saving a local project first"));
 checkMessage(requireWithin(minimalTopNav, /createProjectDisplayTitle[\s\S]*另开新草稿[\s\S]*createProjectDisplayAriaLabel[\s\S]*另开新草稿，不保存当前故事/, "Project control create action must not look like saving the current unsaved story"));
 checkMessage(requireWithin(minimalTopNav, /aria-label="打开本地项目"[\s\S]*打开项目/, "Project control open action must have a clear accessible label"));
 checkMessage(requireWithin(minimalTopNav, /project-control-actions[\s\S]*aria-label=\{createProjectDisplayAriaLabel\}[\s\S]*project-control-recent/, "Project control primary actions must appear before the recent-project list"));
