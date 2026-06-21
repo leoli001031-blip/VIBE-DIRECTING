@@ -738,7 +738,7 @@ checkMessage(requireWithin(agentPanelProjectionSource, /function\s+agentProjecti
 checkMessage(requireWithin(minimalAgentPanel, /agentProjectionNextStep\s*\([^)]*canConfirm/, "MinimalAgentPanel must pass the confirmation guard into projection next-step copy"));
 checkMessage(requireWithin(minimalAgentPanel, /minimal-agent-selection-context/, "MinimalAgentPanel must show selected context before feedback"));
 checkMessage(requireWithin(stylesSource, /minimal-agent-selection-context/, "MinimalAgentPanel selected context must have styling"));
-checkMessage(requireWithin(minimalAgentPanelSource, /footerSelectionTargetCopy[\s\S]*你发出的下一句话会指向：\$\{displayedCompactScopeLabel\}；上方确认卡仍按卡片范围执行。[\s\S]*minimal-agent-footer-target/, "MinimalAgentPanel input footer must distinguish typed selection feedback from the current confirmation card scope"));
+checkMessage(requireWithin(minimalAgentPanelSource, /footerSelectionTargetCopy[\s\S]*你说“这个”时，我会理解为：\$\{displayedCompactScopeLabel\}；确认卡只执行它写明的动作。[\s\S]*minimal-agent-footer-target/, "MinimalAgentPanel input footer must distinguish typed selection feedback from the current confirmation card scope"));
 checkMessage(requireWithin(stylesSource, /minimal-agent-footer-target/, "MinimalAgentPanel selected-reference footer hint must be styled"));
 checkMessage(requireWithin(minimalAgentPanelSource, /const showSkillStack = Boolean\(selectedSkillSummary \|\| visibleSavedSkillCount \|\| runtimeState\.storyFlow\.shots\.length > 0\)/, "Skills panel must stay visible as a project capability surface after a story exists"));
 checkMessage(requireWithin(minimalAgentPanelSource, /const projectLoadedSkillLabel = visibleSavedSkillCount[\s\S]*已加载[\s\S]*还没有保存的项目 Skill/, "Skills panel must show the current project loaded Skills state"));

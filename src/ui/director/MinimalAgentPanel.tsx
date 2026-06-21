@@ -5505,13 +5505,13 @@ export function MinimalAgentPanel({
       referenceGenerationBlockedByContract
       && (action.label === realSampleLabel || action.label === endFrameLabel)
     ) {
-      return "还不会生成参考；确认这张卡才会开始。";
+      return "确认前不会生成参考；点消息里的确认才会开始。";
     }
     if (videoPermissionBlockedByContract && action.label === videoActionLabel) {
-      return "还不会提交视频；确认这张卡才会发送。";
+      return "确认前不会提交视频；点消息里的确认才会发送。";
     }
     if (action === exportFooterAction) {
-      return "还不会导出；确认这张卡才会生成交付包。";
+      return "确认前不会导出；点消息里的确认才会生成交付包。";
     }
     return "";
   }
@@ -5878,8 +5878,8 @@ export function MinimalAgentPanel({
     : agentBoundaryDetail;
   const footerSelectionTargetCopy = hasActiveSelection
     ? agentNextActionAvailable && !hasComposerInput
-      ? `你发出的下一句话会指向：${displayedCompactScopeLabel}；上方确认卡仍按卡片范围执行。`
-      : `你发出的下一句话会指向：${displayedCompactScopeLabel}`
+      ? `你说“这个”时，我会理解为：${displayedCompactScopeLabel}；确认卡只执行它写明的动作。`
+      : `你说“这个”时，我会理解为：${displayedCompactScopeLabel}`
     : "";
   const footerActionIsVideoQuery = agentNextActionAvailable && videoQueryMode;
   const footerStatusCopy = hasComposerInput
