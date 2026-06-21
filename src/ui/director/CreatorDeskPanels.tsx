@@ -847,7 +847,7 @@ export function CreatorDeskPanels({
         <div>
           <span>准备</span>
           <strong>{displayCurrentTask.plan}</strong>
-          <small>当前意图：{displayIntentLabel}</small>
+          <small>现在在做：{displayIntentLabel}</small>
         </div>
         <div className={confirmationTone(displayCurrentTask.confirmation.required)}>
           <span>确认</span>

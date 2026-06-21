@@ -191,7 +191,7 @@ assert(/\\d\+\\s\*项参考已通过，可以准备视频/.test(cleanMinimalAgen
 assert(/const cleaned = cleanMinimalAgentMessageCopy\(fact\.value\)[\s\S]*return cleaned/.test(agentFactDisplayValue), "Agent fact renderer must pass legacy copy through the creator-facing copy cleaner");
 assert(/body:\s*cleanMinimalAgentMessageCopy\(entry\.body\)/.test(minimalAgentPanelSource), "Agent timeline messages must render old persisted copy through the creator-facing copy cleaner");
 assert(/agentFactDisplayValue\(fact\)/.test(minimalAgentPanelSource), "Agent facts must render through a creator-facing value sanitizer");
-for (const expected of ["已提议", "待确认", "执行中", "已完成", "失败", "已取消", "需补充"]) {
+for (const expected of ["已提议", "待确认", "处理中", "已完成", "失败", "已取消", "需补充"]) {
   assert(minimalAgentMessageLifecycleLabel.includes(expected), `Agent message lifecycle label must include ${expected}`);
 }
 assert(/message\.role === "assistant"[\s\S]*message\.entryType === "assistant_message"[\s\S]*message\.lifecycle === "running"[\s\S]*message\.lifecycle === "waiting_for_confirmation"[\s\S]*message\.lifecycle === "proposed"[\s\S]*return ""/.test(minimalAgentPanelSource), "plain Agent understanding/reply messages must not show misleading action-state badges after the real action card exists");
@@ -203,7 +203,7 @@ assert(/title="先不确认，把这次想法放回输入框继续改。"[\s\S]*
 assert(/minimalAgentMessageRequestsActionConfirmation\(message\)[\s\S]*latestConfirmationMessageId[\s\S]*onClick=\{\(\) => reviseFromAgentMessage\(message\)\}[\s\S]*title="先不确认，把这次想法放回输入框继续改。"/.test(minimalAgentPanelSource), "restored Agent confirmation cards must revise from the clicked message instead of relying on stale prepared context");
 assert(!/>\s*直接修改\s*<\/button>/.test(minimalAgentPanelSource), "Agent confirmation card must not expose ambiguous direct-modify wording");
 assert(/function stableIntentBoundaryFacts[\s\S]*user_message[\s\S]*assistant_message[\s\S]*权限和用户确认都已满足[\s\S]*当前只允许整理计划；需要你确认后，才能写入项目。[\s\S]*facts:\s*stableIntentBoundaryFacts\(entry\)/.test(minimalAgentPanelSource), "user and assistant planning messages must not mutate their original confirmation boundary after an action succeeds");
-assert(/minimalAgentFactValue\(message,\s*\["外部提交",\s*"执行",\s*"调用",\s*"成本"\]\)/.test(minimalAgentPanelSource), "Agent confirmation fallback must read creator-facing submission facts as well as legacy call facts");
+assert(/minimalAgentFactValue\(message,\s*\["外部提交",\s*"会做",\s*"执行",\s*"调用",\s*"成本"\]\)/.test(minimalAgentPanelSource), "Agent confirmation fallback must read creator-facing submission facts as well as legacy call facts");
 assert(/minimalAgentFactValue\(message,\s*\["目标",\s*"影响"\]\)[\s\S]*minimalAgentFactValue\(message,\s*\["写入"\]\)/.test(minimalAgentPanelSource), "Agent confirmation fallback must reuse the visible target and write facts from the message flow");
 assert(/function minimalAgentConfirmationReadableBody[\s\S]*minimalAgentConfirmationAction\(message,\s*"确认执行"\)[\s\S]*我准备[\s\S]*确认后才执行/.test(minimalAgentPanelSource), "Agent confirmation card body must summarize the intended action in creator-facing chat copy");
 assert(/const projectOnlyChange = message\.actionKind === "revise_story_or_shot"[\s\S]*message\.actionKind === "update_shot_strategy"[\s\S]*这一步只更新项目草案，不会生成参考或提交视频/.test(minimalAgentPanelSource), "shot strategy updates must read as project-only edits instead of external provider calls");

@@ -575,8 +575,8 @@ function timelineExecutionResult(entry: VibeAgentTimelineEntry): VibeAgentExecut
 function executionResultStatusLabel(status: VibeAgentExecutionResultSummary["status"]) {
   if (status === "blocked") return "需要处理";
   if (status === "awaiting_confirmation") return "等你确认";
-  if (status === "ready_to_run") return "可执行";
-  if (status === "running") return "执行中";
+  if (status === "ready_to_run") return "准备好了";
+  if (status === "running") return "处理中";
   if (status === "succeeded") return "已完成";
   if (status === "failed") return "失败";
   if (status === "cancelled") return "已取消";
@@ -595,21 +595,21 @@ function minimalAgentMessageStageLabel(message: MinimalAgentMessage) {
   if (message.role === "user") return "输入";
   if (minimalAgentMessageRequestsActionConfirmation(message)) return "需要确认";
   if (message.entryType === "action_result") {
-    return message.status === "blocked" ? "执行受阻" : "执行结果";
+    return message.status === "blocked" ? "需要处理" : "完成结果";
   }
   if (message.entryType === "state_change") {
     if (message.id.startsWith("selection_context_")) return "当前选择";
-    return message.lifecycle === "running" || message.title === "执行中" ? "执行状态" : "项目状态";
+    return message.lifecycle === "running" || message.title === "执行中" ? "正在处理" : "项目状态";
   }
   if (message.entryType === "tool_call") return "正在处理";
   if (message.entryType === "tool_result") {
     if (message.title === "推荐 Skills") return "推荐方法";
-    if (message.title === "执行边界") return "执行边界";
+    if (message.title === "执行边界") return "确认范围";
     if (message.toolName === "inspect_project") return "项目状态";
     if (message.toolName === "classify_assets" || message.toolName === "scan_assets") return "素材识别";
     if (message.toolName === "plan_story") return "故事规划";
     if (message.toolName === "plan_next_action") return "下一步";
-    return "执行结果";
+    return "完成结果";
   }
   if (message.role === "assistant" && /理解/.test(message.title)) return "理解";
   if (message.role === "assistant") return "回复";
@@ -626,6 +626,7 @@ function minimalAgentMessageTitleLabel(message: MinimalAgentMessage) {
   }
   const status = minimalAgentMessageStatusLabel(message);
   if (status && title === status) return "";
+  if (stage === "确认范围" && title === "执行边界") return "";
   if (title === stage) return "";
   if (title.startsWith(stage)) {
     const remainder = cleanMinimalAgentMessageCopy(title.slice(stage.length));
@@ -726,7 +727,7 @@ function minimalAgentMessageStatusLabel(message: MinimalAgentMessage) {
   if (message.role === "user") return "";
   if (message.role === "assistant" && message.status === "done") return "";
   if (message.status === "waiting") {
-    return message.toolName === "run_confirmed_action" ? "执行中" : "等待";
+    return message.toolName === "run_confirmed_action" ? "处理中" : "等待";
   }
   if (message.status === "blocked") {
     return message.entryType === "action_result" ? "可重试" : "需处理";
@@ -740,7 +741,7 @@ function minimalAgentMessageStatusLabel(message: MinimalAgentMessage) {
 function minimalAgentMessageLifecycleLabel(lifecycle?: MinimalAgentMessage["lifecycle"]) {
   if (lifecycle === "proposed") return "已提议";
   if (lifecycle === "waiting_for_confirmation") return "待确认";
-  if (lifecycle === "running") return "执行中";
+  if (lifecycle === "running") return "处理中";
   if (lifecycle === "succeeded") return "已完成";
   if (lifecycle === "failed") return "失败";
   if (lifecycle === "cancelled") return "已取消";
@@ -749,7 +750,7 @@ function minimalAgentMessageLifecycleLabel(lifecycle?: MinimalAgentMessage["life
 }
 
 function minimalAgentConfirmationAction(message: MinimalAgentMessage, fallbackLabel: string) {
-  const providerFact = minimalAgentFactValue(message, ["外部提交", "执行", "调用", "成本"]);
+  const providerFact = minimalAgentFactValue(message, ["外部提交", "会做", "执行", "调用", "成本"]);
   const impactFact = minimalAgentFactValue(message, ["目标", "影响"]);
   const writeFact = minimalAgentFactValue(message, ["写入", "保存"]);
   const writeHint = writeFact && writeFact !== "不写文件" ? `，预计保存到${writeFact}` : "";
@@ -843,8 +844,8 @@ function minimalAgentConfirmationTargetPhrase(message: MinimalAgentMessage, targ
 
 function minimalAgentConfirmationCostPhrase(costFact: string) {
   if (!costFact) return "";
-  if (costFact === "参考生成") return "会生成参考图";
-  if (/Seedance|视频提交/.test(costFact)) return "会提交 Seedance 视频任务";
+  if (/参考生成|生成参考/.test(costFact)) return "会生成参考图";
+  if (/Seedance|视频提交|提交视频/.test(costFact)) return "会提交 Seedance 视频任务";
   if (/查询/.test(costFact)) return "只查询已有任务";
   if (/导出/.test(costFact)) return "会生成交付包";
   return costFact;
@@ -852,7 +853,7 @@ function minimalAgentConfirmationCostPhrase(costFact: string) {
 
 function minimalAgentConfirmationBoundary(message: MinimalAgentMessage) {
   const targetFact = minimalAgentFactValue(message, ["目标", "影响"]);
-  const costFact = minimalAgentFactValue(message, ["成本", "调用", "执行"]);
+  const costFact = minimalAgentFactValue(message, ["成本", "调用", "会做", "执行"]);
   const writeFact = minimalAgentFactValue(message, ["写入", "保存"]);
   const externalFact = minimalAgentFactValue(message, ["外部提交"]);
   const parts = [
@@ -869,7 +870,7 @@ function minimalAgentConfirmationReadableBody(message: MinimalAgentMessage) {
   const actionLabel = confirmationAction.label.replace(/^确认/, "") || "继续这一步";
   const targetFact = minimalAgentFactValue(message, ["目标", "影响"]);
   const writeFact = minimalAgentFactValue(message, ["写入"]);
-  const providerFact = minimalAgentFactValue(message, ["外部提交", "执行", "调用", "成本"]);
+  const providerFact = minimalAgentFactValue(message, ["外部提交", "会做", "执行", "调用", "成本"]);
   const combinedCopy = cleanMinimalAgentMessageCopy(`${message.body} ${message.next || ""} ${confirmationAction.hint} ${providerFact}`);
   const projectOnlyChange = message.actionKind === "revise_story_or_shot"
     || message.actionKind === "update_shot_strategy"
@@ -1024,9 +1025,9 @@ function agentMessageNextIntent(message: MinimalAgentMessage, fallback = "继续
 }
 
 function agentMessageConfirmationIntent(message: MinimalAgentMessage, actionLabel: string) {
-  const action = minimalAgentFactValue(message, ["动作"]) || actionLabel || "当前动作";
+  const action = minimalAgentFactValue(message, ["动作", "会做"]) || actionLabel || "当前动作";
   const target = minimalAgentFactValue(message, ["目标", "引用", "影响"]);
-  const boundary = minimalAgentFactValue(message, ["外部提交", "成本", "执行"]);
+  const boundary = minimalAgentFactValue(message, ["外部提交", "成本", "会做", "执行"]);
   return [
     `确认执行：${action}`,
     target ? `目标：${target}` : "",
@@ -6290,7 +6291,7 @@ export function MinimalAgentPanel({
         actionKind: "prepare_reference_generation",
         facts: [
           { label: "目标", value: targetLabel },
-          { label: "执行", value: "参考生成" },
+          { label: "会做", value: "生成参考" },
           { label: "外部提交", value: "不提交视频" },
         ],
         next: "确认后生成参考；也可以继续输入修改意见。",
@@ -6310,7 +6311,7 @@ export function MinimalAgentPanel({
         actionKind: "prepare_video_submit",
         facts: [
           { label: "目标", value: targetLabel },
-          { label: "执行", value: "Seedance 视频提交" },
+          { label: "会做", value: "提交 Seedance 视频" },
           { label: "外部提交", value: "确认后才提交" },
         ],
         next: "确认后只提交当前队列允许的一段视频。",
@@ -6329,7 +6330,7 @@ export function MinimalAgentPanel({
         actionKind: "query_video_result",
         facts: [
           { label: "目标", value: "已有视频任务" },
-          { label: "执行", value: "查询结果" },
+          { label: "会做", value: "查询结果" },
           { label: "外部提交", value: "不会重复提交" },
         ],
         next: "确认后查询已有任务结果。",
