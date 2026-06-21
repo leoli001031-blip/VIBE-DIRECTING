@@ -1454,6 +1454,9 @@ type DirectProductActionCopy = {
 };
 
 function directProductActionFailureNext(input: DirectProductActionCopy, message: string) {
+  if (input.toolName === "export_project" || input.toolName === "export_showcase") {
+    return "检查交付页和导出设置后重试；也可以继续告诉我哪里要调整。";
+  }
   if (input.toolName !== "submit_video") return "可以调整后重试，或继续描述要改哪里。";
   if (/提交前|补参考|场景参考|参考无法|QA|画面参考/.test(message)) {
     return "按提示补参考或调整这一段后再重试。";
@@ -5159,7 +5162,20 @@ export function MinimalAgentPanel({
           ? "先打开或保存本地项目。"
           : "当前还不能导出交付包。",
         perform: () => {
-          void onRunExport?.();
+          const exportTask: DirectProductActionCopy = {
+            toolName: "export_project",
+            startedTitle: "开始导出交付包",
+            startedBody: "我会把当前项目资料、视频和报告整理成一个交付包。",
+            completedTitle: "交付包已导出",
+            completedBody: "交付包已经生成，可以去交付页查看。",
+            failedTitle: "交付包没有导出",
+            next: "去交付页查看结果，或继续告诉我哪里要调整。",
+            facts: [
+              { label: "目标", value: "当前项目" },
+              { label: "动作", value: "导出交付包" },
+            ],
+          };
+          runVisibleDirectProductAction(exportTask, () => onRunExport?.());
           setStatus("正在导出交付包。");
         },
       }
