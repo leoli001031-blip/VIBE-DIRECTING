@@ -177,6 +177,8 @@ type MinimalAgentAssetInboxSummary = {
   totalCount: number;
   needsReviewCount: number;
   kindLabels: string[];
+  bindingPreviewLabels: string[];
+  foldedDetailLabels: string[];
 };
 
 const MAX_VISIBLE_AGENT_THREAD_MESSAGES = 12;
@@ -228,6 +230,35 @@ function minimalAgentInboxKindLabel(kind: string) {
   return "其他";
 }
 
+function minimalAgentAssetInboxBindingPreviewLabels(items: unknown[]) {
+  const records = items.filter(isPlainRecord);
+  const reviewRecords = records.filter((item) => item.needsReview === true);
+  return (reviewRecords.length ? reviewRecords : records)
+    .map((item) => {
+      const label = stringValue(item.label) || "素材";
+      const action = stringValue(item.suggestedAction);
+      const binding = stringValue(item.suggestedBinding);
+      if (!action && !binding) return "";
+      return `${label} → ${action || binding}${action && binding ? ` / ${binding}` : ""}`;
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
+function minimalAgentAssetInboxFoldedDetailLabels(items: unknown[]) {
+  return items
+    .filter(isPlainRecord)
+    .filter((item) => /细节|不单独生成参考|并入主体|镜头说明/.test([
+      item.detail,
+      item.suggestedBinding,
+      item.suggestedAction,
+      item.reason,
+    ].map(stringValue).join(" ")))
+    .map((item) => stringValue(item.label) || "细节参考")
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
 function minimalAgentAssetInboxSummaryFromTimelineEntry(entry: VibeAgentTimelineEntry): MinimalAgentAssetInboxSummary | undefined {
   if (entry.toolName !== "classify_assets" && entry.toolName !== "scan_assets") return undefined;
   const assetInbox = isPlainRecord(entry.details?.assetInbox) ? entry.details.assetInbox : undefined;
@@ -247,6 +278,8 @@ function minimalAgentAssetInboxSummaryFromTimelineEntry(entry: VibeAgentTimeline
     totalCount,
     needsReviewCount,
     kindLabels,
+    bindingPreviewLabels: minimalAgentAssetInboxBindingPreviewLabels(items),
+    foldedDetailLabels: minimalAgentAssetInboxFoldedDetailLabels(items),
   };
 }
 
@@ -259,6 +292,8 @@ function minimalAgentAssetInboxSummaryFromProjection(inbox: ProjectInboxProjecti
     totalCount: inbox.totalCount,
     needsReviewCount: inbox.needsReviewCount,
     kindLabels,
+    bindingPreviewLabels: minimalAgentAssetInboxBindingPreviewLabels(inbox.items),
+    foldedDetailLabels: minimalAgentAssetInboxFoldedDetailLabels(inbox.items),
   };
 }
 
@@ -6620,6 +6655,18 @@ export function MinimalAgentPanel({
                         : "没有"}
                     </strong>
                   </small>
+                  {message.assetInboxSummary.bindingPreviewLabels.length > 0 && (
+                    <small>
+                      <span>建议绑定</span>
+                      <strong>{message.assetInboxSummary.bindingPreviewLabels.join("；")}</strong>
+                    </small>
+                  )}
+                  {message.assetInboxSummary.foldedDetailLabels.length > 0 && (
+                    <small>
+                      <span>并入镜头</span>
+                      <strong>{message.assetInboxSummary.foldedDetailLabels.join("、")}</strong>
+                    </small>
+                  )}
                 </div>
               )}
               {message.assetActions && message.assetActions.length > 0 && (
