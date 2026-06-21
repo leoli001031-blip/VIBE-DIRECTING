@@ -122,12 +122,12 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
       type: "confirmation_request",
       createdAt: input.createdAt,
       title: "等待确认",
-      body: "确认后只会把草案写入故事流；生成参考图、提交视频和导出都还要再确认。",
+      body: "确认后只会把草案保存到项目；生成参考图、提交视频和导出都还要再确认。",
       toolName: "request_user_confirmation",
       confirmationRequired: true,
       status: "waiting",
       facts: [
-        { label: "确认", value: "写入故事流" },
+        { label: "确认", value: "保存到项目" },
         { label: "镜头", value: shotCount ? `${shotCount} 个` : "待确认" },
       ],
       details: {
@@ -210,7 +210,7 @@ function intakeUnderstandingAction(phase: VibeAgentIntakeTimelinePhase) {
   if (phase === "planning_started") return "拆故事和镜头";
   if (phase === "planning_ready") return "复核草案";
   if (phase === "planning_blocked") return "说明当前草案";
-  if (phase === "draft_confirmed") return "写入故事流";
+  if (phase === "draft_confirmed") return "保存到项目";
   return "整理输入";
 }
 
@@ -228,7 +228,7 @@ function intakeUnderstandingBody(phase: VibeAgentIntakeTimelinePhase) {
     return "这次输入还不足以稳定推进。我会说明哪里卡住，并保留当前内容方便你继续改。";
   }
   if (phase === "draft_confirmed") {
-    return "你确认了草案。我会把它写入故事流，但参考生成和视频提交仍然需要单独确认。";
+    return "你确认了草案。我会把它保存到项目，但参考生成和视频提交仍然需要单独确认。";
   }
   return "你想先把想法和素材交给 AI 导演整理。我会先归纳，不会直接执行生成。";
 }

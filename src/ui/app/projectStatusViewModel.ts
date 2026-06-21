@@ -185,7 +185,7 @@ function newVideoAgentFact(status?: NewVideoEntryStatusLike) {
   if (status.status === "planning") return "正在拆镜头";
   if (status.status === "ready") return "确认草案";
   if (status.status === "blocked") return "处理草案";
-  if (status.status === "confirmed") return "写入故事流";
+  if (status.status === "confirmed") return "保存到项目";
   return "继续描述";
 }
 

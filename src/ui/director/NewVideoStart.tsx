@@ -1653,7 +1653,7 @@ export function NewVideoStart({
         status: "ready",
         title: "草案待确认",
         detail: "AI 已经拆出故事和镜头，确认前不会写入项目。",
-        nextAction: "确认写入故事流，或直接说修改意见",
+        nextAction: "确认这版故事，或直接说修改意见",
         draftShotCount: storyboardRows.length,
         draftReferenceCount,
       };
@@ -2314,7 +2314,7 @@ export function NewVideoStart({
       if (projection && directorSession && !confirmed) {
         void confirmDraft();
       } else {
-        showNoReadyDraftNotice("确认写入故事流");
+        showNoReadyDraftNotice("确认这版故事");
       }
       return;
     }
@@ -2391,7 +2391,7 @@ export function NewVideoStart({
       userText,
       title: "当前草案待确认",
       body: `我看到当前草案有 ${shotCount || "若干"} 个镜头。这里只是检查状态，不会把这句话当成新脚本，也不会生成参考或提交视频。`,
-      next: "可以继续说哪里要改，或确认写入故事流；生成参考和视频仍要单独确认。",
+      next: "可以继续说哪里要改，或确认这版故事；生成参考和视频仍要单独确认。",
     });
     rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
       createdAt: new Date().toISOString(),
@@ -2403,7 +2403,7 @@ export function NewVideoStart({
       shotCount,
       permissionMode: vibePermissionModeFromAgentVideoMode(activeVideoPermissionContract.mode),
       assistantBody: `当前草案有 ${shotCount || "若干"} 个镜头。这里只做状态检查，不会生成参考或提交视频。`,
-      assistantNext: "继续说哪里要改，或确认写入故事流。",
+      assistantNext: "继续说哪里要改，或确认这版故事。",
     }));
   }
 
@@ -2697,7 +2697,7 @@ export function NewVideoStart({
       ? "继续改草案"
       : "写下你想拍什么";
   const composerConcreteActionLabel = composerConfirmsDraft
-    ? confirmed ? "已进入故事流" : confirmPending ? "正在进入故事流" : "确认写入故事流"
+    ? confirmed ? "已保存到项目" : confirmPending ? "正在保存到项目" : "确认这版故事"
     : composerIsFeedback
       ? "发送修改意见"
       : "发送给 AI 导演";
@@ -2717,7 +2717,7 @@ export function NewVideoStart({
     ? composerDisabledReason
     : composerConfirmsDraft
       ? localProjectReady
-        ? "确认后会进入故事流，不会直接生成。"
+        ? "确认后会保存到项目，不会直接生成。"
         : "确认前会先让你选择项目文件夹；不会生成参考或发送视频。"
       : composerIsFeedback
         ? "发送修改意见给 AI 导演。"
@@ -2729,7 +2729,7 @@ export function NewVideoStart({
       : composerConfirmsDraft
         ? `下一步：${composerConcreteActionLabel}`
         : projection
-        ? "可以继续修改，或确认写入故事流。"
+        ? "可以继续修改，或确认这版故事。"
         : hasDraft
             ? "下一步：发送给 AI 导演"
             : "等待输入";
@@ -2745,22 +2745,22 @@ export function NewVideoStart({
           ? "拖入图片、声音或脚本；先拆草案，确认后再选择项目文件夹。"
           : "拖入图片、声音或脚本；现在先整理想法，生成前再选择项目文件夹。";
   const confirmedFlowTitle = activeVideoPermissionContract.mode === "plan_only"
-    ? "进入故事流，不会生成"
+    ? "保存到项目，不会生成"
     : activeVideoPermissionContract.mode === "reference_allowed"
-      ? "进入故事流，再生成参考"
-      : "进入故事流，参考通过后可发视频";
+      ? "保存到项目，再生成参考"
+      : "保存到项目，参考通过后可发视频";
   const confirmedFlowDetail = activeVideoPermissionContract.mode === "plan_only"
-    ? "确认草案只会写入故事流；生成参考和发送视频都要你再说。"
+    ? "确认草案只会保存到项目；生成参考和发送视频都要你再说。"
     : activeVideoPermissionContract.mode === "reference_allowed"
       ? "确认草案不会发送视频；后面会先看参考，再单独确认视频。"
       : "确认草案不会立刻发送；故事和参考通过后再发送视频。";
   const planSummaryActionHint = storyboardPlanningStatus === "running"
     ? "草案出来后可确认"
     : confirmed
-      ? "已进入故事流"
+      ? "已保存到项目"
       : confirmPending
-        ? "正在进入故事流"
-        : "确认写入故事流";
+        ? "正在保存到项目"
+        : "确认这版故事";
   const agentReply = useMemo<NewVideoAgentReply | undefined>(() => {
     const shotCount = storyboardRows.length || entryStatus.draftShotCount || 0;
     const referenceCount = entryStatus.draftReferenceCount || 0;
@@ -2924,9 +2924,9 @@ export function NewVideoStart({
         id: "confirmation-draft",
         role: "confirmation",
         title: "等待确认",
-        body: "确认后我只会把草案写入故事流；生成参考图、提交视频和导出都还要再确认。",
+        body: "确认后我只会把草案保存到项目；生成参考图、提交视频和导出都还要再确认。",
         facts: [
-          { label: "确认", value: "写入故事流" },
+          { label: "确认", value: "保存到项目" },
           { label: "下一步", value: composerConcreteActionLabel },
         ],
         next: "可以点确认，也可以直接说要改哪里。",
@@ -3134,7 +3134,7 @@ export function NewVideoStart({
             <ol>
               <li>写想法</li>
               <li>AI 导演拆镜头</li>
-              <li>确认写入故事流</li>
+              <li>确认这版故事</li>
             </ol>
           </section>
         )}
@@ -3230,7 +3230,7 @@ export function NewVideoStart({
                 <div className="new-video-next-flow" aria-label="草案状态">
                   <span>当前状态</span>
                   <strong>待确认草案</strong>
-                  <small>还没有写入故事流；确认后左侧故事数才会更新。</small>
+                  <small>还没有保存到项目；确认后左侧故事数才会更新。</small>
                 </div>
               )}
               <div className="new-video-next-flow" aria-label="确认后的流程">
@@ -3617,7 +3617,7 @@ export function NewVideoStart({
                 <div className="new-video-plan-detail-body">
                   <div className="new-video-plan-status">
                     <small>{confirmed ? "已确认" : "待确认"}</small>
-                    <small>{requiredMissing ? "先补脚本，再确认。" : "确认后进入故事流，不会直接生成。"}</small>
+                    <small>{requiredMissing ? "先补脚本，再确认。" : "确认后保存到项目，不会直接生成。"}</small>
                   </div>
                   <div className="new-video-plan-grid" aria-label="草案材料">
                     <small>{referenceTypeCounts.character} 个主角参考</small>

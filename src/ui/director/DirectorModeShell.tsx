@@ -306,8 +306,8 @@ function projectStatusViewWithCommittedDraft(status: ProjectStatusViewModel, com
   if (!/草案|故事流|写入/.test(copy)) return status;
   return {
     ...status,
-    stage: "故事流已更新",
-    doing: "草案已写入故事流",
+    stage: "项目故事已更新",
+    doing: "故事已保存到项目",
     waitingFor: "你的下一句指令",
     nextAction: "继续说要改哪里，或让 AI 开始补参考",
     tone: "ready",
@@ -682,7 +682,7 @@ export function DirectorMode({
     setNewVideoStatus(undefined);
     setAgentIntakeCommand({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      text: "确认写入故事流",
+      text: "确认这版故事",
       mode: "confirm_current_draft",
     });
   }

@@ -3813,7 +3813,7 @@ function App() {
     setLatestPrototypeAgentDemo({
       status: "ready",
       result: {
-        label: "草案已写入故事流",
+        label: "故事已保存到项目",
         projectVibeAdded: true,
         projectSaved: true,
         storageLabel: "已保存到项目",
@@ -3830,8 +3830,8 @@ function App() {
       id: `new_video_draft_committed_${generatedAt.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase()}`,
       type: "action_result",
       createdAt: generatedAt,
-      title: "草案已写入故事流",
-      body: `我已经把这版草案写入故事流：${result.project.shots.length} 个镜头。接下来可以点选镜头继续修改，或确认生成参考。`,
+      title: "故事已保存到项目",
+      body: `我已经把这版故事和镜头保存到项目：${result.project.shots.length} 个镜头。接下来可以点选镜头继续修改，或确认生成参考。`,
       toolName: "write_project",
       status: "done",
       lifecycle: "succeeded",

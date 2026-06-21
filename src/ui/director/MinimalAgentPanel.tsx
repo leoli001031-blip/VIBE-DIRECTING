@@ -180,7 +180,7 @@ type MinimalAgentAssetInboxSummary = {
 };
 
 const MAX_VISIBLE_AGENT_THREAD_MESSAGES = 12;
-const NEW_VIDEO_DRAFT_CONFIRM_LABEL = "确认写入故事流";
+const NEW_VIDEO_DRAFT_CONFIRM_LABEL = "确认这版故事";
 
 type DirectorSkillCardDraft = NonNullable<ReturnType<typeof buildDirectorSkillCardFromShot>>;
 
@@ -442,7 +442,7 @@ function minimalAgentVisibleFacts(message: MinimalAgentMessage) {
   const executionNext = cleanMinimalAgentMessageCopy(message.executionResult?.next || message.next || "").trim();
   const hasVisibleNext = Boolean(message.executionResult?.next || message.next);
   const hiddenConfirmationLabels = minimalAgentMessageRequestsActionConfirmation(message)
-    ? new Set(["成本", "外部提交", "写入"])
+    ? new Set(["成本", "外部提交", "写入", "保存"])
     : new Set<string>();
   return message.facts.filter((fact) => {
     const label = fact.label.trim();
@@ -685,7 +685,7 @@ function minimalAgentMessageLifecycleLabel(lifecycle?: MinimalAgentMessage["life
 function minimalAgentConfirmationAction(message: MinimalAgentMessage, fallbackLabel: string) {
   const providerFact = minimalAgentFactValue(message, ["外部提交", "执行", "调用", "成本"]);
   const impactFact = minimalAgentFactValue(message, ["目标", "影响"]);
-  const writeFact = minimalAgentFactValue(message, ["写入"]);
+  const writeFact = minimalAgentFactValue(message, ["写入", "保存"]);
   const writeHint = writeFact && writeFact !== "不写文件" ? `，预计保存到${writeFact}` : "";
   if (message.actionKind === "prepare_reference_generation") {
     return {
@@ -750,7 +750,7 @@ function minimalAgentConfirmationAction(message: MinimalAgentMessage, fallbackLa
   if (/草案|故事流|写入故事/.test(`${message.title} ${message.body} ${message.next || ""}`)) {
     return {
       label: NEW_VIDEO_DRAFT_CONFIRM_LABEL,
-      hint: "确认后只保存到故事流，不会生成参考或提交视频。",
+      hint: "确认后只保存到项目，不会生成参考或提交视频。",
     };
   }
   return {
@@ -767,7 +767,7 @@ function minimalAgentFactValue(message: MinimalAgentMessage, labels: string[]) {
 function minimalAgentConfirmationBoundary(message: MinimalAgentMessage) {
   const targetFact = minimalAgentFactValue(message, ["目标", "影响"]);
   const costFact = minimalAgentFactValue(message, ["成本", "调用", "执行"]);
-  const writeFact = minimalAgentFactValue(message, ["写入"]);
+  const writeFact = minimalAgentFactValue(message, ["写入", "保存"]);
   const externalFact = minimalAgentFactValue(message, ["外部提交"]);
   const parts = [
     targetFact ? `这次只补 ${targetFact}` : "",
@@ -785,7 +785,8 @@ function minimalAgentConfirmationReadableBody(message: MinimalAgentMessage) {
   const writeFact = minimalAgentFactValue(message, ["写入"]);
   const providerFact = minimalAgentFactValue(message, ["外部提交", "执行", "调用", "成本"]);
   const combinedCopy = cleanMinimalAgentMessageCopy(`${message.body} ${message.next || ""} ${confirmationAction.hint} ${providerFact}`);
-  const actionLine = `我准备${actionLabel}${targetFact ? `，范围是${targetFact}` : ""}。`;
+  const readableActionLabel = actionLabel.startsWith("这版") ? `确认${actionLabel}` : actionLabel;
+  const actionLine = `我准备${readableActionLabel}${targetFact ? `，范围是${targetFact}` : ""}。`;
   const writeLine = writeFact && writeFact !== "不写文件" ? `结果会保存到${writeFact}。` : "";
   if (/不会.*提交视频|不会自动提交视频|不提交视频/.test(combinedCopy)) {
     return `${actionLine}${writeLine}这一步不会提交视频，确认后才执行。`;
@@ -842,7 +843,7 @@ function minimalAgentMessageRequestsSkillSave(message: MinimalAgentMessage) {
 }
 
 function isNewVideoDraftConfirmationLabel(value: string) {
-  return value.includes("确认继续") || value.includes(NEW_VIDEO_DRAFT_CONFIRM_LABEL) || value.includes("写入故事流");
+  return value.includes("确认继续") || value.includes(NEW_VIDEO_DRAFT_CONFIRM_LABEL) || value.includes("写入故事流") || value.includes("保存到项目");
 }
 
 function minimalAgentMessageClosesConfirmation(message: MinimalAgentMessage) {
@@ -1355,8 +1356,8 @@ function committedNewVideoDraftMessage(run?: PrototypeAgentDemoRun): MinimalAgen
     id: "new_video_draft_committed_result",
     entryType: "action_result",
     role: "tool",
-    title: "草案已写入故事流",
-    body: result?.label || "确认后的草案已经写入项目故事流。接下来可以继续修改镜头，或让 Agent 安排下一步。",
+    title: "故事已保存到项目",
+    body: result?.label || "这版故事和镜头已经保存到项目。接下来可以继续修改镜头，或让 Agent 安排下一步。",
     lifecycle: "succeeded",
     status: "done",
     toolName: "write_project",
@@ -3150,7 +3151,7 @@ export function MinimalAgentPanel({
   }, [currentStoryFlowKey, latestNewVideoDraftCommittedForProjection, runtimeProjectKey]);
   useEffect(() => {
     if (!latestNewVideoDraftCommittedForProjection || text.trim() || attachments.length) return;
-    setStatus("草案已写入故事流");
+    setStatus("故事已保存到项目");
   }, [attachments.length, latestNewVideoDraftCommittedForProjection, text]);
   useEffect(() => {
     let cancelled = false;
@@ -5462,7 +5463,7 @@ export function MinimalAgentPanel({
         newVideoDraftReadyForAgent
         || (
           projectStatusView?.stage === "等待确认"
-          && /确认|草案|故事流|写入故事流/.test(`${newVideoDraftStatusCopy} ${newVideoDraftTimelineCopy}`)
+          && /确认|草案|故事流|写入故事流|保存到项目/.test(`${newVideoDraftStatusCopy} ${newVideoDraftTimelineCopy}`)
         )
       ),
   );
@@ -5822,17 +5823,17 @@ export function MinimalAgentPanel({
         id: "footer_action_new_video_draft",
         entryType: "confirmation_request",
         role: "confirmation",
-        title: "建议行动：写入故事流",
-        body: "草案已经准备好。确认后只写入故事流，不会生成参考，也不会提交视频。",
+        title: "建议行动：确认这版故事",
+        body: "草案已经准备好。确认后只保存到项目，不会生成参考，也不会提交视频。",
         lifecycle: "waiting_for_confirmation",
         status: "waiting",
         toolName: "write_project",
         facts: [
           { label: "目标", value: "当前草案" },
-          { label: "写入", value: "故事流" },
+          { label: "保存", value: "项目" },
           { label: "外部提交", value: "不提交视频" },
         ],
-        next: "确认后进入项目故事流。",
+        next: "确认后保存到项目。",
       } satisfies MinimalAgentMessage;
     }
     const action = availableFooterDirectAction;

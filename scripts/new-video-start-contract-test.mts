@@ -248,7 +248,7 @@ check(
   failures,
 );
 check(
-  /agentIntakeCommand\?\.mode === "confirm_current_draft"[\s\S]*projection && directorSession && !confirmed[\s\S]*void confirmDraft\(\)[\s\S]*showNoReadyDraftNotice\("确认写入故事流"\)[\s\S]*return;[\s\S]*agentIntakeCommand\?\.mode === "continue_current_draft"/.test(newVideoStartSource),
+  /agentIntakeCommand\?\.mode === "confirm_current_draft"[\s\S]*projection && directorSession && !confirmed[\s\S]*void confirmDraft\(\)[\s\S]*showNoReadyDraftNotice\("确认这版故事"\)[\s\S]*return;[\s\S]*agentIntakeCommand\?\.mode === "continue_current_draft"/.test(newVideoStartSource),
   "NewVideoStart must let the right-side Agent confirm the current prepared draft without treating the confirmation label as a new idea.",
   failures,
 );
@@ -417,7 +417,7 @@ check(
   /inspect_project/.test(newVideoStartSource)
     && /plan_story/.test(newVideoStartSource)
     && /write_agent_message/.test(newVideoStartSource)
-    && /写入故事流/.test(newVideoStartSource)
+    && /保存到项目/.test(newVideoStartSource)
     && /生成参考图、提交视频和导出都还要再确认/.test(newVideoStartSource),
   "NewVideoStart Agent thread must explain creator-facing action semantics and confirmation boundaries before generation.",
   failures,
@@ -510,7 +510,7 @@ check(
 );
 check(
   /composerConfirmsDraft[\s\S]*confirmDraft\s*:\s*submitComposer/.test(newVideoStartSource)
-    && /composerConcreteActionLabel[\s\S]*"确认写入故事流"/.test(newVideoStartSource)
+    && /composerConcreteActionLabel[\s\S]*"确认这版故事"/.test(newVideoStartSource)
     && /composerPrimaryLabel[\s\S]*composerConfirmsDraft[\s\S]*\? "确认"/.test(newVideoStartSource)
     && /composerPrimaryAriaLabel[\s\S]*`确认：\$\{composerConcreteActionLabel\}`/.test(newVideoStartSource),
   "NewVideoStart primary action must use a generic confirm button while preserving the concrete draft action in accessible copy.",
@@ -525,10 +525,10 @@ check(
   failures,
 );
 check(
-  /planSummaryActionHint[\s\S]*storyboardPlanningStatus === "running"[\s\S]*"草案出来后可确认"[\s\S]*"确认写入故事流"/.test(newVideoStartSource)
+  /planSummaryActionHint[\s\S]*storyboardPlanningStatus === "running"[\s\S]*"草案出来后可确认"[\s\S]*"确认这版故事"/.test(newVideoStartSource)
     && /new-video-next-hint[\s\S]*planSummaryActionHint/.test(newVideoStartSource)
     && !/继续确认进故事流/.test(newVideoStartSource)
-    && /已进入故事流/.test(newVideoStartSource),
+    && /已保存到项目/.test(newVideoStartSource),
   "NewVideoStart draft confirmation hint must wait during planning and use a concrete action only when ready.",
   failures,
 );
