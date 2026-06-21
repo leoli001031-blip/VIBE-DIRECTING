@@ -5113,7 +5113,8 @@ function App() {
     draft: NewVideoStartDraft,
     context: NewVideoStartConfirmationContext,
   ): Promise<ProjectVibeDraftTarget> {
-    if (projectFileSelection.status === "selected") {
+    const shouldUseSelectedProject = draft.projectTargetMode !== "new_project";
+    if (shouldUseSelectedProject && projectFileSelection.status === "selected") {
       if (selectedProjectIsBrowserDraft && !canChooseProjectRootFromDialog) {
         return {
           storageKey: browserProjectDraftStorageKeyRef.current || prototypeProjectDraftStorageKeyValue,

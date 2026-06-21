@@ -248,6 +248,12 @@ check(
   failures,
 );
 check(
+  /projectTargetMode\?:\s*"new_project" \| "current_project"/.test(newVideoStartSource)
+    && /projectTargetMode:\s*agentIntakeCommand\?\.projectTargetMode/.test(newVideoStartSource),
+  "Agent-started new-video drafts must carry the intended project target through planning and confirmation.",
+  failures,
+);
+check(
   /agentIntakeCommand\?\.mode === "confirm_current_draft"[\s\S]*projection && directorSession && !confirmed[\s\S]*void confirmDraft\(\)[\s\S]*showNoReadyDraftNotice\("确认这版故事"\)[\s\S]*return;[\s\S]*agentIntakeCommand\?\.mode === "continue_current_draft"/.test(newVideoStartSource),
   "NewVideoStart must let the right-side Agent confirm the current prepared draft without treating the confirmation label as a new idea.",
   failures,

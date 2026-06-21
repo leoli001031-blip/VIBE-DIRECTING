@@ -125,6 +125,7 @@ export type NewVideoStartDraft = {
   audio?: File;
   audioRole?: "voice_reference";
   agentBoundaryMode?: AgentVideoSubmitMode;
+  projectTargetMode?: "new_project" | "current_project";
 };
 
 export type NewVideoStartStatus = {
@@ -178,6 +179,7 @@ export type NewVideoStartAgentIntakeCommand = {
   id: string;
   text: string;
   mode?: "replace_draft" | "continue_current_draft" | "confirm_current_draft";
+  projectTargetMode?: "new_project" | "current_project";
 };
 
 const referenceTypeLabels: Record<NewVideoReferenceKind, string> = {
@@ -2440,6 +2442,7 @@ export function NewVideoStart({
       audio,
       audioRole,
       agentBoundaryMode: detectedBoundaryMode || activeVideoPermissionContract.mode,
+      projectTargetMode: agentIntakeCommand?.projectTargetMode,
     };
     setScript(commandText);
     setStyle("");
