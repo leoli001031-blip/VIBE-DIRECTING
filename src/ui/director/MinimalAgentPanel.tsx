@@ -3668,7 +3668,7 @@ export function MinimalAgentPanel({
   const visibleAgentActionLog = agentActionLog.filter((item) =>
     !agentActionLogItemIsPrematureReferenceReview(item, referenceHasReviewableAssets)
   );
-  const showAgentActionLog = visibleAgentActionLog.length > 0 && !videoResultIsPrimary && !exportResultIsPrimary;
+  const standaloneAgentActionLogAllowed = visibleAgentActionLog.length > 0 && !videoResultIsPrimary && !exportResultIsPrimary;
 
   function canAutoFocusComposer() {
     if (typeof document === "undefined") return false;
@@ -6051,6 +6051,10 @@ export function MinimalAgentPanel({
   if (projectedStatusReplyMessage) {
     agentThreadMessages = [...agentThreadMessages, projectedStatusReplyMessage];
   }
+  const visibleAgentActionLogMirroredInThread = visibleAgentActionLog.some((item) =>
+    agentThreadMessages.some((message) => message.actionId === item.id || message.id.includes(item.id))
+  );
+  const showStandaloneAgentActionLog = standaloneAgentActionLogAllowed && !visibleAgentActionLogMirroredInThread;
   const totalHiddenAgentThreadMessageCount = hiddenAgentThreadMessageCount;
   const latestAgentThreadMessageId = agentThreadMessages.at(-1)?.id || "";
   useEffect(() => {
@@ -6850,7 +6854,7 @@ export function MinimalAgentPanel({
           </div>
         </section>
       )}
-      {showAgentActionLog && (
+      {showStandaloneAgentActionLog && (
         <section className="minimal-agent-action-log" aria-label="最近动作">
           <span>最近动作</span>
           <div>

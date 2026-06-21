@@ -10453,13 +10453,13 @@ body:has(.project-control-popover) .new-video-bottom-portal {
 
   .director-agent-rail {
     position: static;
-    max-height: none;
-    order: -1;
+    max-height: min(720px, calc(100vh - 112px));
+    order: -3;
   }
 
   .director-agent-rail .minimal-agent-panel,
   .preview-shell .director-agent-rail .minimal-agent-panel {
-    max-height: none;
+    max-height: inherit;
   }
 }
 
