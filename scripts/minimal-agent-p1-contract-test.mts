@@ -198,7 +198,7 @@ assert(/message\.role === "assistant"[\s\S]*message\.entryType === "assistant_me
 assert(/message\.actionKind === "revise_story_or_shot"[\s\S]*label: "确认修改"/.test(minimalAgentPanelSource), "Agent message confirmation must label project edits as confirmation edits, not footer next-actions");
 assert(/directorAgentDisplayTargetLabel/.test(agentTargetScopeLabel), "Agent target scope labels must use the shared creator-facing target label helper");
 assert(/directorAgentDisplayTargetLabel\(agentActionEnvelope\.target,\s*agentActionEnvelope\.sourceContext\)/.test(minimalAgentPanelSource), "Agent action facts must show the same creator-facing target label as the message body");
-assert(/message\.actionKind === "update_shot_strategy"[\s\S]*label: "确认方式"/.test(minimalAgentPanelSource), "Agent message confirmation must label shot strategy updates directly");
+assert(/message\.actionKind === "update_shot_strategy"[\s\S]*label: "确认修改方式"/.test(minimalAgentPanelSource), "Agent message confirmation must label shot strategy updates directly");
 assert(/title="先不确认，把这次想法放回输入框继续改。"[\s\S]*再改一下/.test(minimalAgentPanelSource), "Agent confirmation secondary action must read as revising the current request, not a direct write shortcut");
 assert(/minimalAgentMessageRequestsActionConfirmation\(message\)[\s\S]*latestConfirmationMessageId[\s\S]*onClick=\{\(\) => reviseFromAgentMessage\(message\)\}[\s\S]*title="先不确认，把这次想法放回输入框继续改。"/.test(minimalAgentPanelSource), "restored Agent confirmation cards must revise from the clicked message instead of relying on stale prepared context");
 assert(!/>\s*直接修改\s*<\/button>/.test(minimalAgentPanelSource), "Agent confirmation card must not expose ambiguous direct-modify wording");
@@ -206,6 +206,7 @@ assert(/function stableIntentBoundaryFacts[\s\S]*user_message[\s\S]*assistant_me
 assert(/minimalAgentFactValue\(message,\s*\["外部提交",\s*"执行",\s*"调用",\s*"成本"\]\)/.test(minimalAgentPanelSource), "Agent confirmation fallback must read creator-facing submission facts as well as legacy call facts");
 assert(/minimalAgentFactValue\(message,\s*\["目标",\s*"影响"\]\)[\s\S]*minimalAgentFactValue\(message,\s*\["写入"\]\)/.test(minimalAgentPanelSource), "Agent confirmation fallback must reuse the visible target and write facts from the message flow");
 assert(/function minimalAgentConfirmationReadableBody[\s\S]*minimalAgentConfirmationAction\(message,\s*"确认执行"\)[\s\S]*我准备[\s\S]*确认后才执行/.test(minimalAgentPanelSource), "Agent confirmation card body must summarize the intended action in creator-facing chat copy");
+assert(/const projectOnlyChange = message\.actionKind === "revise_story_or_shot"[\s\S]*message\.actionKind === "update_shot_strategy"[\s\S]*这一步只更新项目草案，不会生成参考或提交视频/.test(minimalAgentPanelSource), "shot strategy updates must read as project-only edits instead of external provider calls");
 assert(/function minimalAgentMessageBody[\s\S]*minimalAgentMessageRequestsActionConfirmation\(message\)[\s\S]*minimalAgentConfirmationReadableBody\(message\)[\s\S]*cleanMinimalAgentMessageCopy\(message\.body\)/.test(minimalAgentPanelSource), "Agent confirmation messages must render the readable confirmation body without changing normal message copy");
 assert(/\/写入项目\|写项目\|改项目\|只写项目\/\.test\(providerFact\)[\s\S]*label: "确认修改"/.test(minimalAgentPanelSource), "Agent confirmation fallback must use confirmation facts before footer next-action labels");
 assert(/label: "确认执行"[\s\S]*不会切换到其他推荐任务/.test(minimalAgentPanelSource), "Unknown confirmation messages must not borrow the footer next-action label");
@@ -529,7 +530,7 @@ assert(/action\.kind === "prepare_reference_generation"[\s\S]*确认生成参考
 assert(/action\.kind === "prepare_video_submit"[\s\S]*executionContract\.videoSubmitAllowed[\s\S]*确认发送[\s\S]*确认计划/.test(agentReviewPrimaryLabel), "video staged actions must distinguish plan-only planning from real submission");
 assert(/action\.kind === "prepare_export"[\s\S]*确认导出/.test(agentReviewPrimaryLabel), "export staged actions must use a creator-facing export confirmation label");
 assert(/action\.kind === "review_reference_asset"[\s\S]*确认复核/.test(agentReviewPrimaryLabel), "reference review staged actions must use a creator-facing review confirmation label");
-assert(/action\.kind === "update_shot_strategy"[\s\S]*确认方式/.test(agentReviewPrimaryLabel), "shot mode edits must use a creator-facing mode confirmation label");
+assert(/action\.kind === "update_shot_strategy"[\s\S]*确认修改方式/.test(agentReviewPrimaryLabel), "shot mode edits must use a creator-facing mode confirmation label");
 assert(/agentActionIsStatusInspection\(nextAgentActionEnvelope\)[\s\S]*\? "已检查项目状态"/.test(minimalAgentPanelSource), "read-only project status inspections must show a finished status after analysis");
 assert(/function suggestedIntentFromStatusInspection/.test(minimalAgentPanelSource), "read-only project status inspections must provide a recommended next Agent intent");
 assert(/nextCandidate\?\.label \|\| readiness\.nextActionLabel/.test(suggestedIntentFromStatusInspection), "status-inspection continuation must map readiness to the next creator-facing action");

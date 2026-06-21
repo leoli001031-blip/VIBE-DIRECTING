@@ -785,8 +785,8 @@ function minimalAgentConfirmationAction(message: MinimalAgentMessage, fallbackLa
   }
   if (message.actionKind === "update_shot_strategy") {
     return {
-      label: "确认方式",
-      hint: `确认后更新${impactFact || "当前镜头"}的生成方式。`,
+      label: "确认修改方式",
+      hint: `确认后只更新${impactFact || "当前镜头"}的生成方式，不会生成参考或提交视频。`,
     };
   }
   if (message.actionKind === "review_reference_asset") {
@@ -871,9 +871,20 @@ function minimalAgentConfirmationReadableBody(message: MinimalAgentMessage) {
   const writeFact = minimalAgentFactValue(message, ["写入"]);
   const providerFact = minimalAgentFactValue(message, ["外部提交", "执行", "调用", "成本"]);
   const combinedCopy = cleanMinimalAgentMessageCopy(`${message.body} ${message.next || ""} ${confirmationAction.hint} ${providerFact}`);
-  const readableActionLabel = actionLabel.startsWith("这版") ? `确认${actionLabel}` : actionLabel;
+  const projectOnlyChange = message.actionKind === "revise_story_or_shot"
+    || message.actionKind === "update_shot_strategy"
+    || message.toolName === "write_project"
+    || /写入项目|写项目|改项目|只写项目|修改项目/.test(providerFact);
+  const readableActionLabel = message.actionKind === "update_shot_strategy"
+    ? "更新生成方式"
+    : actionLabel.startsWith("这版")
+      ? `确认${actionLabel}`
+      : actionLabel;
   const actionLine = `我准备${readableActionLabel}${targetFact ? `，范围是${targetFact}` : ""}。`;
   const writeLine = writeFact && writeFact !== "不写文件" ? `结果会保存到${writeFact}。` : "";
+  if (projectOnlyChange) {
+    return `${actionLine}${writeLine}这一步只更新项目草案，不会生成参考或提交视频。`;
+  }
   if (/不会.*提交视频|不会自动提交视频|不提交视频/.test(combinedCopy)) {
     return `${actionLine}${writeLine}这一步不会提交视频，确认后才执行。`;
   }
@@ -2611,13 +2622,13 @@ function agentReviewPrimaryLabel(action?: DirectorAgentActionEnvelope) {
   if (agentActionIsStatusInspection(action)) return "继续";
   if (action.kind === "request_style_research") return "确认查资料";
   if (action.kind === "prepare_reference_generation") return "确认生成参考";
-	  if (action.kind === "prepare_video_submit") {
-	    return action.executionContract.videoSubmitAllowed ? "确认发送" : "确认计划";
-	  }
-	  if (action.kind === "query_video_result") return "确认查询";
-	  if (action.kind === "prepare_export") return "确认导出";
+  if (action.kind === "prepare_video_submit") {
+    return action.executionContract.videoSubmitAllowed ? "确认发送" : "确认计划";
+  }
+  if (action.kind === "query_video_result") return "确认查询";
+  if (action.kind === "prepare_export") return "确认导出";
   if (action.kind === "review_reference_asset") return "确认复核";
-  if (action.kind === "update_shot_strategy") return "确认方式";
+  if (action.kind === "update_shot_strategy") return "确认修改方式";
   return "确认修改";
 }
 
