@@ -499,6 +499,7 @@ assert(broadPlanOnlyBoundary.toolPlan.providerSubmitAllowed === false, "broad pl
 assert(detectDirectorAgentPermissionIntent("请先不要提交视频测试，也不要真实生图。") === "plan_only", "combined no-video/no-real-image wording should infer plan-only");
 assert(detectDirectorAgentPermissionIntent("只做故事规划，不要生成参考，也不要提交视频。") === "plan_only", "no-reference plus no-video wording should infer plan-only");
 assert(detectDirectorAgentPermissionIntent("只整理故事和镜头，不生成参考，不提交视频。") === "plan_only", "organize-only wording should infer plan-only");
+assert(detectDirectorAgentPermissionIntent("先整理故事和镜头，不生成参考，不提交视频。") === "plan_only", "natural organize-first wording should infer plan-only");
 assert(detectDirectorAgentPermissionIntent("只告诉我接下来要做什么。") === "plan_only", "explain-only wording should infer plan-only");
 assert(isDirectorAgentPermissionControlOnlyIntent("只看规划") === true, "pure planning boundary wording should be treated as a control-only Agent command");
 assert(isDirectorAgentPermissionControlOnlyIntent("先不要提交视频测试") === true, "pure no-video testing wording should be treated as a control-only Agent command");

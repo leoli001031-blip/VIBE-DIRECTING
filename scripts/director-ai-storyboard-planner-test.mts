@@ -127,6 +127,14 @@ assert(!organizeOnlyBrief.storyText.includes("不生成参考"), "no-reference c
 assert(!organizeOnlyBrief.storyText.includes("不提交视频"), "no-video controls must not become storyboard story text");
 assert(organizeOnlyBrief.directiveText.includes("只整理故事和镜头"), "organize-only controls should be preserved as planning preference text");
 
+const naturalPlanOnlyBrief = splitCreativePlanningText("做一个 8 秒 90 年代日漫感小短片：雨夜旧车站，一只黑猫把发光车票推到戴耳机少女脚边。先整理故事和镜头，不生成参考，不提交视频。");
+assert(naturalPlanOnlyBrief.storyText.includes("雨夜旧车站"), "natural plan-only wording should keep the creative story setting");
+assert(naturalPlanOnlyBrief.storyText.includes("黑猫把发光车票推到戴耳机少女脚边"), "natural plan-only wording should keep the creative action");
+assert(!naturalPlanOnlyBrief.storyText.includes("先整理故事和镜头"), "natural plan-only wording must not become a storyboard beat");
+assert(!naturalPlanOnlyBrief.storyText.includes("不生成参考"), "natural no-reference controls must not become storyboard story text");
+assert(!naturalPlanOnlyBrief.storyText.includes("不提交视频"), "natural no-video controls must not become storyboard story text");
+assert(naturalPlanOnlyBrief.directiveText.includes("先整理故事和镜头"), "natural plan-only wording should be preserved as planning preference text");
+
 const strategyOnlyBrief = splitCreativePlanningText("做一个 20 秒短片：深夜海边自动售货机旁，一个送报少女发现机器吐出一枚发热的蓝色硬币。她沿着防波堤追着硬币滚动的光，看到远处灯塔像在发送摩斯电码。先做规划和分镜策略，不提交视频。");
 assert(strategyOnlyBrief.storyText.includes("自动售货机旁"), "story text should keep the creative opening before strategy-only controls");
 assert(!strategyOnlyBrief.storyText.includes("先做规划"), "strategy-only controls must not appear in story text");
