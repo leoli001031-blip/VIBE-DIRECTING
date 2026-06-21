@@ -507,6 +507,7 @@ export function DirectorMode({
   const [newVideoStatus, setNewVideoStatus] = useState<NewVideoStartStatus | undefined>();
   const [agentIntakeCommand, setAgentIntakeCommand] = useState<NewVideoStartAgentIntakeCommand | undefined>();
   const [agentNewVideoDraftActive, setAgentNewVideoDraftActive] = useState(false);
+  const [agentPendingAction, setAgentPendingAction] = useState(false);
   const showNewVideoStart = !projectReady || shots.length === 0 || agentNewVideoDraftActive;
   const pendingConfirmedVideoPermissionContractRef = useRef<{
     contract: AgentVideoPermissionContract;
@@ -585,7 +586,7 @@ export function DirectorMode({
     return command;
   }, [creatorDesk?.agentCommand, videoPermissionAllowsReference, videoPermissionAllowsSend, videoPermissionContract.mode, videoSendAction?.message, videoSendAction?.status, videoSubmitCancelled]);
   const storyDetailLabel = [`${storySections.length} 个段落`, "点击查看分镜、模式和画面状态"].join(" · ");
-  const showCreatorDeskPanel = projectReady && creatorDesk && !showNewVideoStart && directorView === "story";
+  const showCreatorDeskPanel = projectReady && creatorDesk && !showNewVideoStart && directorView === "story" && !agentPendingAction;
   useEffect(() => {
     if (!showNewVideoStart && newVideoStatus) {
       setNewVideoStatus(undefined);
@@ -642,6 +643,17 @@ export function DirectorMode({
     ),
     [creatorDesk, latestPrototypeAgentDemo, rawProjectStatusView],
   );
+  const displayedProjectStatusView: ProjectStatusViewModel = agentPendingAction
+    ? {
+        ...projectStatusView,
+        stage: "待确认操作",
+        doing: "右侧有一条待确认动作",
+        waitingFor: "先确认，或继续说明怎么改",
+        nextAction: "在右侧处理",
+        tone: "waiting",
+        issue: undefined,
+      }
+    : projectStatusView;
   const pendingDraftRailTitle = showNewVideoStart ? pendingNewVideoDraftTitle(newVideoStatus) : "";
   const projectRailTitle = pendingDraftRailTitle || runtimeState.project.title || projectScopeLabel || "新视频项目";
   const projectRailVideoLabel = directorProjectRailVideoLabel(creatorDesk?.videoStage);
@@ -711,7 +723,7 @@ export function DirectorMode({
     <div className={`minimal-director ${directorView} ${showAgentPanel ? "has-agent-rail" : "composer-only"}`}>
       <DirectorProjectRail
         projectTitle={projectRailTitle}
-        projectStatus={projectStatusView}
+        projectStatus={displayedProjectStatusView}
         directorView={directorView}
         sections={storySections}
         activeSectionId={activeSection?.id}
@@ -724,7 +736,7 @@ export function DirectorMode({
       />
       <div className="minimal-director-main">
         <div className="director-workbar" aria-label="项目工作状态">
-          <ProjectStatusSummary status={projectStatusView} />
+          <ProjectStatusSummary status={displayedProjectStatusView} />
         </div>
         {showCreatorDeskPanel && (
           <CreatorDeskPanels
@@ -736,7 +748,7 @@ export function DirectorMode({
             referenceGenerationAction={realSampleAction}
             videoSendAction={sessionVideoSendAction}
             agentCommandOverride={visibleAgentCommand}
-            projectStatusView={projectStatusView}
+            projectStatusView={displayedProjectStatusView}
             onSendVideo={sessionSendSeedanceVideo}
             onRetryItem={sessionRetryReviewItem}
             onApproveItem={onApproveReviewItem}
@@ -890,7 +902,7 @@ export function DirectorMode({
             onPreviewPrototypeAgentDemo={onPreviewPrototypeAgentDemo}
             agentCommand={visibleAgentCommand}
             projectObservation={projectReady ? creatorDesk?.projectObservation : undefined}
-            projectStatusView={projectStatusView}
+            projectStatusView={displayedProjectStatusView}
             realSampleAction={realSampleAction}
             endFrameAction={endFrameAction}
             videoSendAction={videoSendAction}
@@ -915,6 +927,7 @@ export function DirectorMode({
             onRetryMissingBatch={onRetryMissingBatch}
             videoPermissionContract={videoPermissionContract}
             onVideoPermissionContractChange={setVideoPermissionContract}
+            onPendingAgentActionChange={setAgentPendingAction}
           />
         </div>
       )}

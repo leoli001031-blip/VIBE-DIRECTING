@@ -192,7 +192,7 @@ export function splitCreativePlanningText(value: unknown, maxLength = 24000): { 
         directives.push("执行边界：按用户要求限制生成/提交。");
       }
       const withoutInlineDirectives = prefixed.line.replace(
-        /(^|[，,；;。.!?！？\s])((?:我)?(?:想要|希望|偏向|请先|先查一下|查一下|先做|先看|先整理|先拆|先规划|参考|类似|像|不要|不用|先不要|先不|先只|只要|只做|只看|只拆|只整理|不生图|不生成|不提交|不跑|不走生图|跑到视频前|风格|画风|节奏)[^。.!?！？\n]*)/gu,
+        /(^|[，,；;。.!?！？\s])(((?:我)?(?:想要|希望|偏向|请先|先查一下|查一下|先做|先看|先整理|先拆|先规划|参考|类似|像|不要|不用|先不要|先不|先只|只要|只做|只看|只拆|只整理|不生图|不生成|不提交|不跑|不走生图|跑到视频前|风格|画风|节奏)|(?:(?:拆成|分成|分为|切成|规划成|做成)\s*(?:[0-9０-９]{1,3}|一|二|两|俩|三|四|五|六|七|八|九|十|十[一二两俩三四五六七八九]|[一二两俩三四五六七八九]十[一二两俩三四五六七八九]?)\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|视频|短片|片段|段落|shots?|clips?|cuts?)))[^。.!?！？\n]*)/gu,
         (match, separator: string, clause: string) => {
           if (!isOperationDirectiveClause(clause)) return match;
           directives.push(clean(clause));

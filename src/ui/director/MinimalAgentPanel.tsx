@@ -2936,6 +2936,7 @@ export function MinimalAgentPanel({
   onVideoPermissionContractChange,
   storyboardProjectPlanInput,
   onDirectorFeedbackConfirmed,
+  onPendingAgentActionChange,
 }: {
   runtimeState: ProjectRuntimeState;
   projectScopeLabel?: string;
@@ -3009,6 +3010,7 @@ export function MinimalAgentPanel({
   onVideoPermissionContractChange?: (contract: AgentVideoPermissionContract) => void;
   storyboardProjectPlanInput?: StoryboardReferenceProjectPlannerInput;
   onDirectorFeedbackConfirmed?: (recompile: DirectorFeedbackRecompileResult) => void | Promise<void>;
+  onPendingAgentActionChange?: (pending: boolean) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -4840,12 +4842,14 @@ export function MinimalAgentPanel({
             agentActionLogItemFromResult(agentActionEnvelope, agentToolHandoff, savedFeedbackRun, "confirmed"),
           );
         }
-      } catch {
-        setStatus("保存失败");
+      } catch (error) {
+        console.error("Director feedback save failed", error);
+        const failureDetail = error instanceof Error && error.message.trim() ? error.message.trim() : "修改保存失败";
+        setStatus(`保存失败：${failureDetail}`);
         const failedFeedbackRun: PrototypeAgentDemoRun = {
           status: "error",
           result: {
-            label: "修改保存失败",
+            label: `修改保存失败：${failureDetail}`,
             projectVibeAdded: false,
             waitingReview: true,
             status: "error",
@@ -5713,6 +5717,9 @@ export function MinimalAgentPanel({
     ? readOnlyStatusInspection ? "项目状态" : planPhase === "confirmed" ? "已确认" : "待确认"
     : "我先帮你整理";
   const showAgentNote = Boolean(workflow && planPhase !== "confirmed" && agentTimelineEntries.length === 0);
+  useEffect(() => {
+    onPendingAgentActionChange?.(showAgentNote);
+  }, [onPendingAgentActionChange, showAgentNote]);
   const agentActionTitle = agentActionEnvelope?.summary
     || (feedbackRecompile ? "整理镜头修改" : preparedContext?.projectTaskLabel || "整理计划");
   const confirmedAgentResult = prototypeAgentProjection?.statusLabel
@@ -5818,6 +5825,7 @@ export function MinimalAgentPanel({
   }
   const footerActionConfirmationMessage = (() => {
     if (hasComposerInput || projectRequiredForWorkflow) return undefined;
+    if (showAgentNote || showAgentResultNote || preparedContext?.userIntent?.trim()) return undefined;
     if (footerNewVideoDraftConfirmationReady) {
       return {
         id: "footer_action_new_video_draft",

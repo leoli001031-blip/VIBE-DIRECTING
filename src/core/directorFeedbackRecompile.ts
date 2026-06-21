@@ -142,6 +142,17 @@ function explicitReferenceStrategyOverride(feedback: string): DirectorProduction
   return undefined;
 }
 
+function explicitShotRewrite(feedback: string): string | undefined {
+  const match = feedback.match(/(?:改成|改为|换成|调整成|变成)([^。！？!?；;\n]{4,160})/u);
+  return clean(match?.[1]);
+}
+
+function titleFromRewrite(rewrite: string): string {
+  const normalized = clean(rewrite);
+  if (normalized.length <= 24) return normalized;
+  return `${normalized.slice(0, 24)}...`;
+}
+
 function rhythmProfileFor(categories: DirectorFeedbackCategory[], shot: StoryboardReferenceProjectPlannerShot): DirectorRhythmProfile | undefined {
   if (categories.includes("shot_split") && /快切|动作|冲|跑|追|打|fast|action/i.test(clean(shot.intent))) return "action_fast_cut";
   if (categories.includes("shot_split") || categories.includes("flat_action")) return "anime_emotion";
@@ -165,9 +176,15 @@ function patchForFeedback(
   const characterGuidance: string[] = [];
   const sceneGuidance: string[] = [];
   const propGuidance: string[] = [];
+  const requestedRewrite = explicitShotRewrite(feedback);
   // actionBeats compiled from director feedback; consider making the beat extraction configurable
   const actionBeats = [...(shot.actionBeats || [])];
   const warnings: string[] = [];
+
+  if (requestedRewrite) {
+    feedbackDirectives.push(`用户明确要求本镜头改成：${requestedRewrite}`);
+    actionBeats.push(requestedRewrite);
+  }
 
   if (categories.includes("identity_drift")) {
     characterGuidance.push(
@@ -244,11 +261,11 @@ function patchForFeedback(
   const executionMode = categories.includes("shot_split")
     ? "planned_cut_sequence"
     : shot.executionMode;
-  const primaryAction = shot.primaryAction || clean(shot.intent) || "保留当前主动作并让动作前状态更清楚";
+  const primaryAction = requestedRewrite || shot.primaryAction || clean(shot.intent) || "保留当前主动作并让动作前状态更清楚";
   const actionTrigger = shot.actionTrigger || (categories.includes("flat_action") ? "角色受到可见诱因后才开始动作" : undefined);
   const microReaction = shot.microReaction || (categories.includes("flat_action") ? "角色出现眼神、呼吸、手指或肩膀的细微反应" : undefined);
   const seedanceDirection = cleanLines([
-    shot.seedanceDirection || shot.intent,
+    requestedRewrite ? `本镜头现在改为：${requestedRewrite}` : shot.seedanceDirection || shot.intent,
     ...feedbackDirectives,
     ...sceneGuidance,
     categories.includes("no_bgm") ? "no BGM, no music, no added soundtrack." : undefined,
@@ -267,6 +284,10 @@ function patchForFeedback(
   if (splitPolicy) patch.splitPolicy = splitPolicy;
   if (executionMode) patch.executionMode = executionMode;
   if (primaryAction) patch.primaryAction = primaryAction;
+  if (requestedRewrite) {
+    patch.title = titleFromRewrite(requestedRewrite);
+    patch.intent = requestedRewrite;
+  }
   if (actionTrigger) patch.actionTrigger = actionTrigger;
   if (microReaction) patch.microReaction = microReaction;
   if (strategyOverride) {

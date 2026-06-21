@@ -196,6 +196,7 @@ export function buildProjectVibeStoryboardPlannerInput(
 function mergePatchedShot(source: ProjectVibeShot, patch: StoryboardReferenceProjectPlannerShot, feedbackId: string): ProjectVibeShot {
   return {
     ...source,
+    title: clean(patch.title) || source.title,
     intent: clean(patch.intent) || source.intent,
     camera: clean(patch.camera) || source.camera,
     executionMode: clean(patch.executionMode) || source.executionMode,

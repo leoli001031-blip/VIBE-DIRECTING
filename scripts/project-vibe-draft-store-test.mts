@@ -224,6 +224,42 @@ try {
     "runtime draft target id should describe the project file, not browser storage",
   );
 
+  const runtimeFailureStorage = createLocalStorageShim();
+  installWindowShim({
+    localStorage: runtimeFailureStorage.storage,
+    location: { hostname: "127.0.0.1", port: "5174" },
+  });
+  (globalThis as { fetch?: unknown }).fetch = async () => {
+    throw new TypeError("Failed to fetch");
+  };
+  const runtimeFailureTarget = {
+    projectRoot: ".vibe-runtime/browser-projects/runtime-offline",
+    storageKey: "test:runtime-offline-fallback",
+  };
+  const runtimeFailureSave = await saveProjectVibeDraft(runtimeFailureTarget, browserProject);
+  assert(runtimeFailureSave.ok, "browser-managed project roots should fall back to browser local storage when runtime save is offline");
+  assert(runtimeFailureSave.mode === "browser_local", "runtime network failure fallback should be explicit browser local storage");
+  assert(
+    runtimeFailureStorage.values.has("test:runtime-offline-fallback:project.vibe"),
+    "runtime network failure fallback should write the browser draft key",
+  );
+
+  const realProjectFailureStorage = createLocalStorageShim();
+  installWindowShim({
+    localStorage: realProjectFailureStorage.storage,
+    location: { hostname: "127.0.0.1", port: "5174" },
+  });
+  (globalThis as { fetch?: unknown }).fetch = async () => {
+    throw new TypeError("Failed to fetch");
+  };
+  const realProjectFailureSave = await saveProjectVibeDraft({
+    projectRoot: "/tmp/real-vibe-project",
+    storageKey: "test:runtime-offline-should-not-fallback",
+  }, browserProject);
+  assert(!realProjectFailureSave.ok, "real project roots should not silently fall back to browser local storage when runtime save is offline");
+  assert(realProjectFailureSave.mode === "runtime_project_file", "real project runtime failures should stay in runtime project-file mode");
+  assert(!realProjectFailureStorage.values.size, "real project runtime failures must not write browser local storage");
+
   const electronStorage = createLocalStorageShim();
   const electronFiles = new Map<string, string>();
   installWindowShim({

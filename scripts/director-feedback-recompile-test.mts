@@ -94,6 +94,19 @@ assert(result.stagedShotPatch.characterGuidance?.some((item) => /Locked characte
 assert(result.stagedShotPatch.sceneGuidance?.some((item) => /scene baseline/i.test(item)), "scene/reference conflict guidance missing");
 assert(result.stagedShotPatch.seedanceDirection?.includes("no BGM"), "seedance direction should preserve no BGM");
 
+const rewriteResult = buildDirectorFeedbackRecompile({
+  feedback: "这个不对，动作太平了。改成她猛地停下回头，发现电车门正在关闭，车票的蓝光照到她的耳机线。只修改当前镜头。",
+  targetShotId: "S01",
+  projectPlanInput,
+  createdAt: generatedAt,
+});
+assert(rewriteResult.status === "ready_for_confirmation", "explicit rewrite feedback should be ready");
+assert(rewriteResult.stagedShotPatch.intent?.includes("电车门正在关闭"), "explicit rewrite should update visible shot intent");
+assert(rewriteResult.stagedShotPatch.title?.includes("猛地停下回头"), "explicit rewrite should update visible shot title");
+assert(rewriteResult.stagedShotPatch.primaryAction?.includes("电车门正在关闭"), "explicit rewrite should update primary action");
+assert(rewriteResult.stagedShotPatch.seedanceDirection?.includes("本镜头现在改为"), "explicit rewrite should lead video direction");
+assert(rewriteResult.stagedShotPatch.feedbackDirectives?.some((item) => item.includes("用户明确要求本镜头改成")), "explicit rewrite directive missing");
+
 assert(result.recompiledProjectPlan?.providerCalled === false, "recompiled project plan must not call providers");
 assert(result.recompiledShotPlan, "recompiled shot plan missing");
 assert(result.recompiledShotPlan?.directorPlan.rhythmProfile === "anime_emotion", "recompiled director plan should inherit patched rhythm");

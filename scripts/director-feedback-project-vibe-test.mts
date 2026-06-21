@@ -73,4 +73,23 @@ const rebuiltShot = rebuiltPlannerInput.shots.find((shot) => shot.id === "shot_0
 assert(rebuiltShot?.feedbackDirectives?.length, "rebuilt planner input should preserve feedback directives");
 assert(rebuiltShot?.seedanceDirection?.includes("no BGM"), "rebuilt planner input should preserve video direction");
 
+const rewriteRecompile = buildDirectorFeedbackRecompile({
+  feedback: "这个不对，动作太平了。改成她猛地停下回头，发现电车门正在关闭，车票的蓝光照到她的耳机线。只修改当前镜头。",
+  targetShotId: "shot_002",
+  projectPlanInput: plannerInput,
+  createdAt,
+});
+assert(rewriteRecompile.status === "ready_for_confirmation", "explicit rewrite should stage");
+const rewriteApplied = applyDirectorFeedbackRecompileToProjectVibe({
+  project,
+  recompile: rewriteRecompile,
+  createdAt,
+});
+assert(rewriteApplied.status === "applied", "explicit rewrite should apply");
+const rewriteShot = rewriteApplied.project.shots.find((shot) => shot.id === "shot_002");
+assert(rewriteShot?.intent.includes("电车门正在关闭"), "explicit rewrite should persist visible shot intent");
+assert(rewriteShot?.title.includes("猛地停下回头"), "explicit rewrite should persist visible shot title");
+assert(rewriteShot?.primaryAction?.includes("电车门正在关闭"), "explicit rewrite should persist primary action");
+assert(rewriteShot?.seedanceDirection?.includes("本镜头现在改为"), "explicit rewrite should persist Seedance direction");
+
 console.log("director-feedback-project-vibe-test: Project.vibe feedback apply passed.");

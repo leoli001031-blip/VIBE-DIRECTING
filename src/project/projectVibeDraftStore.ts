@@ -493,17 +493,21 @@ export async function saveProjectVibeDraft(
   project: ProjectVibeDocument,
 ): Promise<ProjectVibeDraftSaveResult> {
   const runtimeProjectFileSave = await saveProjectVibeDraftThroughRuntime(target, project);
-  if (runtimeProjectFileSave) return runtimeProjectFileSave;
+  const fallbackToBrowserDraft = Boolean(runtimeProjectFileSave && shouldFallbackRuntimeSaveToBrowserDraft(target, runtimeProjectFileSave));
+  if (runtimeProjectFileSave && !fallbackToBrowserDraft) return runtimeProjectFileSave;
 
-  const adapter = createProjectVibeDraftStorageAdapter(target);
-  const targetId = projectVibeDraftTargetId(target);
+  const effectiveTarget = fallbackToBrowserDraft
+    ? { projectPath: target.projectPath, storageKey: target.storageKey }
+    : target;
+  const adapter = createProjectVibeDraftStorageAdapter(effectiveTarget);
+  const targetId = projectVibeDraftTargetId(effectiveTarget);
   if (!adapter) {
     return {
       ok: false,
       status: "unavailable",
       mode: undefined,
       targetId,
-      path: projectPathForTarget(target),
+      path: projectPathForTarget(effectiveTarget),
       factHash: hashProjectVibeFacts(project),
       validation: {
         ok: false,
@@ -516,7 +520,7 @@ export async function saveProjectVibeDraft(
   }
 
   try {
-    const result = await saveProjectVibe(adapter.adapter, project, projectPathForTarget(target));
+    const result = await saveProjectVibe(adapter.adapter, project, projectPathForTarget(effectiveTarget));
     return {
       ...result,
       status: result.ok ? "saved" : "error",
@@ -529,7 +533,7 @@ export async function saveProjectVibeDraft(
       status: "error",
       mode: adapter.mode,
       targetId,
-      path: projectPathForTarget(target),
+      path: projectPathForTarget(effectiveTarget),
       factHash: hashProjectVibeFacts(project),
       validation: {
         ok: false,
@@ -540,6 +544,21 @@ export async function saveProjectVibeDraft(
       errors: [error instanceof Error ? error.message : String(error)],
     };
   }
+}
+
+function isBrowserManagedProjectRoot(projectRoot: string | undefined) {
+  const normalized = normalizeProjectRootForDisplay(projectRoot || "").toLowerCase();
+  return normalized === ".vibe-runtime/browser-projects"
+    || normalized.startsWith(".vibe-runtime/browser-projects/")
+    || normalized.includes("/.vibe-runtime/browser-projects/");
+}
+
+function shouldFallbackRuntimeSaveToBrowserDraft(
+  target: ProjectVibeDraftTarget,
+  result: ProjectVibeDraftSaveResult,
+) {
+  if (result.ok || result.mode !== "runtime_project_file" || !isBrowserManagedProjectRoot(target.projectRoot)) return false;
+  return result.errors.some((error) => /failed to fetch|fetch failed|networkerror|load failed/i.test(error));
 }
 
 function normalizedProjectRoot(value: string | undefined) {

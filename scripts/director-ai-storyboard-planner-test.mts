@@ -135,6 +135,13 @@ assert(!naturalPlanOnlyBrief.storyText.includes("不生成参考"), "natural no-
 assert(!naturalPlanOnlyBrief.storyText.includes("不提交视频"), "natural no-video controls must not become storyboard story text");
 assert(naturalPlanOnlyBrief.directiveText.includes("先整理故事和镜头"), "natural plan-only wording should be preserved as planning preference text");
 
+const requestedShotCountBrief = splitCreativePlanningText("做一个 12 秒 90 年代日漫感小短片：雨夜天桥下，戴耳机的女高中生追着一张发光车票跑向最后一班电车。拆成 3 个镜头，先只整理故事和镜头，不生成参考，不提交视频。");
+assert(requestedShotCountBrief.storyText.includes("雨夜天桥下"), "requested shot count wording should keep the real story setting");
+assert(requestedShotCountBrief.storyText.includes("女高中生追着一张发光车票"), "requested shot count wording should keep the real story action");
+assert(!requestedShotCountBrief.storyText.includes("拆成 3 个镜头"), "requested shot count wording must not become a storyboard beat");
+assert(requestedShotCountBrief.directiveText.includes("拆成 3 个镜头"), "requested shot count wording should be preserved as planning preference text");
+assert(extractRequestedShotCount(`${requestedShotCountBrief.storyText}\n${requestedShotCountBrief.directiveText}`) === 3, "requested shot count should remain available to the AI planning prompt after directive split");
+
 const strategyOnlyBrief = splitCreativePlanningText("做一个 20 秒短片：深夜海边自动售货机旁，一个送报少女发现机器吐出一枚发热的蓝色硬币。她沿着防波堤追着硬币滚动的光，看到远处灯塔像在发送摩斯电码。先做规划和分镜策略，不提交视频。");
 assert(strategyOnlyBrief.storyText.includes("自动售货机旁"), "story text should keep the creative opening before strategy-only controls");
 assert(!strategyOnlyBrief.storyText.includes("先做规划"), "strategy-only controls must not appear in story text");

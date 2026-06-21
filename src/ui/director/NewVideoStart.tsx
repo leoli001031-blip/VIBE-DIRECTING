@@ -608,6 +608,81 @@ function scriptSegments(scriptText: string) {
   return rawSegments.filter((segment) => !mostlyPlanningInstruction(segment));
 }
 
+function compoundMotionStoryboardCandidates(scriptText: string) {
+  const source = cleanText(scriptText);
+  const candidates: string[] = [];
+  const actor = "(?:戴|穿|背|拿)?[^，,。；;!?！？]{0,24}?(?:女高中生|女生|女孩|少女|男生|男孩|少年|黑猫|白猫|猫|机器人|主角|她|他|它|两人|汽车|电车|车)";
+  const pathObject = "[^，,。；;!?！？]{1,28}?";
+  const destination = "[^，,。；;!?！？]{2,60}";
+  const matches = Array.from(source.matchAll(new RegExp(`(${actor})(追着|跟着|沿着|带着)(${pathObject})(跑向|冲向|走向|驶向|奔向|进入|穿过)(${destination})`, "gu")));
+  for (const match of matches) {
+    const subject = cleanText(match[1]);
+    const pathObject = cleanText(match[3]);
+    const destination = cleanText(match[5]);
+    if (!subject || !pathObject || !destination) continue;
+    candidates.push(
+      `${subject}注意到${pathObject}`,
+      `${subject}${match[2]}${pathObject}`,
+      `${subject}${match[4]}${destination}`,
+    );
+  }
+  return Array.from(new Set(candidates.map(cleanText).filter(Boolean)));
+}
+
+function localStoryboardBeatCandidates(scriptText: string) {
+  const source = cleanText(scriptText);
+  const actionMatches = Array.from(source.matchAll(
+    /(?:发现|看见|捡到|追着|跑向|走向|冲向|递给|推到|打开|掉出|亮起|驶入|驶出|停在)[^，,。；;!?！？]{2,56}/gu,
+  )).map((match) => match[0]);
+  const endingMatches = Array.from(source.matchAll(
+    /(?:最后|结尾|跑向|走向|看见|抵达|进入|停在)[^，,。；;!?！？]{2,56}/gu,
+  )).map((match) => match[0]);
+  const candidates = [
+    ...splitScriptIntoStoryboardBeats(source),
+    ...source.split(/[，,；;]/u),
+    ...actionMatches,
+    ...endingMatches,
+  ];
+  return Array.from(new Set(candidates.map(cleanText).filter((segment) => segment && !mostlyPlanningInstruction(segment))));
+}
+
+function expandScriptRowsToRequestedCount(
+  rows: Array<{ id: string; text: string; title?: string; durationSeconds?: number; sourceFactId?: string }>,
+  draft: NewVideoStartDraft,
+) {
+  const requestedCount = explicitShotCount(`${draft.script}\n${draft.style}`);
+  if (!requestedCount || rows.length >= requestedCount) return rows;
+  const compoundCandidates = compoundMotionStoryboardCandidates(draft.script);
+  if (compoundCandidates.length >= requestedCount) {
+    return compoundCandidates.slice(0, requestedCount).map((text, index) => ({
+      id: `requested_compound_segment_${index + 1}_${safeDraftId(text)}`,
+      text,
+      title: undefined,
+      durationSeconds: undefined,
+    }));
+  }
+  const nextRows = [...rows];
+  const candidates = localStoryboardBeatCandidates(draft.script);
+  for (const candidate of candidates) {
+    if (nextRows.length >= requestedCount) break;
+    const duplicate = nextRows.some((row) => row.text.includes(candidate) || candidate.includes(row.text));
+    if (!duplicate) {
+      nextRows.push({
+        id: `requested_segment_${nextRows.length + 1}_${safeDraftId(candidate)}`,
+        text: candidate,
+      });
+    }
+  }
+  while (nextRows.length < requestedCount && nextRows.length > 0) {
+    const source = nextRows[nextRows.length - 1]!;
+    nextRows.push({
+      id: `requested_segment_${nextRows.length + 1}_${safeDraftId(source.text)}`,
+      text: `延续动作：${source.text}`,
+    });
+  }
+  return nextRows;
+}
+
 function sourceTextForShotFact(summary: string) {
   return cleanText(summary
     .replace(/^镜头\s*\d+\s*[：:]\s*/u, "")
@@ -1031,12 +1106,12 @@ function buildStoryboardRowsFromSession(
     text: beat.text,
     title: beat.title,
     durationSeconds: executableVideoDurationSeconds(beat.durationSeconds),
-  })) : scriptSegments(draft.script).map((text, index) => ({
+  })) : expandScriptRowsToRequestedCount(scriptSegments(draft.script).map((text, index) => ({
     id: `script_segment_${index + 1}_${safeDraftId(text)}`,
     text,
     title: undefined,
     durationSeconds: undefined,
-  }));
+  })), draft);
   const factRows = shotFacts.map((fact) => ({ id: fact.id, text: fact.summary, title: undefined, durationSeconds: undefined, sourceFactId: fact.id }));
   const sourceRows: Array<{ id: string; text: string; title?: string; durationSeconds?: number; sourceFactId?: string }> = timecodedBeats.length || scriptRows.length >= factRows.length
     ? scriptRows
