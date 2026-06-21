@@ -1349,8 +1349,8 @@ function buildSelectionChangedTimelineEntry(input: {
     id: selectionId,
     type: "state_change",
     createdAt: input.createdAt,
-    title: "当前讨论对象已切换",
-    body: `现在说“这个”时，我会指向${input.label}。${input.hint}`,
+    title: "我知道你在说哪里了",
+    body: `现在你说“这个”，我会理解为${input.label}。${input.hint}`,
     lifecycle: "succeeded",
     status: "done",
     facts: [
@@ -5582,8 +5582,8 @@ export function MinimalAgentPanel({
     : "发送给 AI 导演，也可以按 Cmd Enter";
   const footerSelectionTargetCopy = hasActiveSelection
     ? agentNextActionAvailable && !hasComposerInput
-      ? `输入文字会引用：${displayedCompactScopeLabel}；上方确认按行动卡范围执行。`
-      : `输入文字会引用：${displayedCompactScopeLabel}`
+      ? `你发出的下一句话会指向：${displayedCompactScopeLabel}；上方确认卡仍按卡片范围执行。`
+      : `你发出的下一句话会指向：${displayedCompactScopeLabel}`
     : "";
   const footerActionIsVideoQuery = agentNextActionAvailable && videoQueryMode;
   const footerStatusCopy = hasComposerInput
@@ -5913,12 +5913,15 @@ export function MinimalAgentPanel({
       facts: liveSelectionChips,
     })));
   }
+  const latestAgentTimelineUserEntryId = [...agentTimelineEntries].reverse().find((entry) => entry.type === "user_message")?.id || "";
+  const footerNewVideoDraftConfirmationId = `footer_action_new_video_draft_${(latestAgentTimelineUserEntryId || newVideoDraftStatusCopy || "current")
+    .replace(/[^a-z0-9_-]+/gi, "_")
+    .slice(0, 80)}`;
   const footerActionConfirmationMessage = (() => {
-    if (hasComposerInput || projectRequiredForWorkflow) return undefined;
-    if (showAgentNote || showAgentResultNote || preparedContext?.userIntent?.trim()) return undefined;
+    if (hasComposerInput) return undefined;
     if (footerNewVideoDraftConfirmationReady) {
       return {
-        id: "footer_action_new_video_draft",
+        id: footerNewVideoDraftConfirmationId,
         entryType: "confirmation_request",
         role: "confirmation",
         title: "建议行动：确认这版故事",
@@ -5934,6 +5937,8 @@ export function MinimalAgentPanel({
         next: "确认后保存到项目。",
       } satisfies MinimalAgentMessage;
     }
+    if (projectRequiredForWorkflow) return undefined;
+    if (showAgentNote || showAgentResultNote || preparedContext?.userIntent?.trim()) return undefined;
     const action = availableFooterDirectAction;
     if (!action || action.disabled) return undefined;
     if (action === referenceFooterAction || action === endFrameFooterAction) {
@@ -6019,7 +6024,7 @@ export function MinimalAgentPanel({
   const shouldAppendFooterActionConfirmationMessage = Boolean(
     footerActionConfirmationMessage
       && (
-        footerActionConfirmationMessage.id === "footer_action_new_video_draft"
+        footerActionConfirmationMessage.id.startsWith("footer_action_new_video_draft")
           ? !fullAgentThreadMessages.some((message) => message.id === footerActionConfirmationMessage.id)
           : !fullAgentThreadMessages.some((message) => message.role === "confirmation")
       ),
@@ -6102,6 +6107,13 @@ export function MinimalAgentPanel({
     : undefined;
   if (projectedStatusReplyMessage) {
     agentThreadMessages = [...agentThreadMessages, projectedStatusReplyMessage];
+  }
+  if (
+    footerActionConfirmationMessage
+    && !agentThreadMessages.some((message) => message.id === footerActionConfirmationMessage.id)
+    && !hasComposerInput
+  ) {
+    agentThreadMessages = [...agentThreadMessages, footerActionConfirmationMessage];
   }
   const visibleAgentActionLogMirroredInThread = visibleAgentActionLog.some((item) =>
     agentThreadMessages.some((message) => message.actionId === item.id || message.id.includes(item.id))
@@ -6689,21 +6701,24 @@ export function MinimalAgentPanel({
                   : minimalAgentConfirmationAction(message, primaryLabel);
                 const confirmationBoundary = minimalAgentConfirmationBoundary(message);
                 const confirmationIsFooterAction = message.id.startsWith("footer_action_");
+                const confirmationIsNewVideoDraftAction = message.id.startsWith("footer_action_new_video_draft") || visibleNewVideoDraftConfirmation;
                 const confirmationMatchesPrimaryAction = Boolean(
                   agentNextActionAvailable
                   && message.actionId
                   && agentActionEnvelope?.actionId
                   && message.actionId === agentActionEnvelope.actionId
                 );
-                const confirmationUsesPrimaryAction = visibleNewVideoDraftConfirmation
-                  || confirmationMatchesPrimaryAction
-                  || (agentNextActionAvailable && confirmationIsFooterAction);
-                const confirmationDisabled = visibleNewVideoDraftConfirmation
+                const confirmationUsesPrimaryAction = !confirmationIsNewVideoDraftAction
+                  && (
+                    confirmationMatchesPrimaryAction
+                    || (agentNextActionAvailable && confirmationIsFooterAction)
+                  );
+                const confirmationDisabled = confirmationIsNewVideoDraftAction
                   ? Boolean((!onConfirmNewVideoDraftFromAgent && !onStartNewVideoDraftFromAgent) || hasComposerInput || attachments.length || isPreparingPlan)
                   : confirmationUsesPrimaryAction
                     ? primaryDisabled
                     : Boolean(hasComposerInput || attachments.length || isPreparingPlan);
-                const confirmationDisabledReason = visibleNewVideoDraftConfirmation
+                const confirmationDisabledReason = confirmationIsNewVideoDraftAction
                   ? isPreparingPlan
                     ? "正在整理，稍等一下。"
                     : hasComposerInput || attachments.length
@@ -6718,11 +6733,20 @@ export function MinimalAgentPanel({
                       : isPreparingPlan
                         ? "正在整理，稍等一下。"
                         : "";
-                const confirmationButtonLabel = confirmationUsesPrimaryAction ? confirmationAction.label : "继续确认";
-                const confirmationButtonHint = confirmationUsesPrimaryAction
+                const confirmationButtonLabel = confirmationIsNewVideoDraftAction
+                  ? confirmationAction.label
+                  : confirmationUsesPrimaryAction ? confirmationAction.label : "继续确认";
+                const confirmationButtonHint = confirmationIsNewVideoDraftAction
+                  ? confirmationAction.hint
+                  : confirmationUsesPrimaryAction
                   ? confirmationAction.hint
                   : "这条确认来自历史消息，我会先按它重新整理一次，再让你确认执行。";
                 const runConfirmationAction = () => {
+                  if (confirmationIsNewVideoDraftAction) {
+                    const confirmDraftFromAgent = onConfirmNewVideoDraftFromAgent || (() => onStartNewVideoDraftFromAgent?.(NEW_VIDEO_DRAFT_CONFIRM_LABEL));
+                    void confirmDraftFromAgent();
+                    return;
+                  }
                   if (confirmationUsesPrimaryAction) {
                     handleNext();
                     return;
