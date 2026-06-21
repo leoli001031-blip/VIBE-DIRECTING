@@ -1068,6 +1068,16 @@ function minimalAgentMessageIsSupersededConfirmationPrepCard(messages: MinimalAg
     || message.title === "执行边界";
 }
 
+function minimalAgentMessageIsSupersededAssistantReplyCard(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
+  if (message.entryType !== "assistant_message" || message.title !== "AI 导演") return false;
+  const messageIndex = messages.indexOf(message);
+  return messages.some((candidate, index) => (
+    index > messageIndex
+    && minimalAgentMessageRequestsActionConfirmation(candidate)
+    && (!message.actionId || !candidate.actionId || candidate.actionId === message.actionId)
+  ));
+}
+
 function minimalAgentConfirmationMessageIsStaleAfterLaterResult(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
   if (!minimalAgentMessageRequestsActionConfirmation(message)) return false;
   if (message.status !== "waiting" && message.lifecycle !== "waiting_for_confirmation") return false;
@@ -1153,6 +1163,7 @@ function visibleMinimalAgentMessages(messages: MinimalAgentMessage[]): {
     && !minimalAgentMessageIsSupersededProcessCard(filteredMessages, message)
     && !minimalAgentMessageIsSupersededObservationCard(filteredMessages, message)
     && !minimalAgentMessageIsSupersededConfirmationPrepCard(filteredMessages, message)
+    && !minimalAgentMessageIsSupersededAssistantReplyCard(filteredMessages, message)
     && !minimalAgentConfirmationMessageIsStaleAfterLaterResult(filteredMessages, message)
     && !minimalAgentRequestConfirmationToolCallIsSuperseded(filteredMessages, message)
     && !minimalAgentMessageIsSupersededSelectionContextCard(filteredMessages, message)
