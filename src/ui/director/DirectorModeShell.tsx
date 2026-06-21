@@ -352,6 +352,58 @@ function restoredNewVideoDraftSummary(entries?: VibeAgentTimelineEntry[]) {
   };
 }
 
+function newVideoEntryProjectStatusView(
+  status?: NewVideoStartStatus,
+  restored?: { title: string; shotCount?: number },
+): ProjectStatusViewModel {
+  const draftShotCount = status?.draftShotCount || restored?.shotCount || 0;
+  const draftReferenceCount = status?.draftReferenceCount || 0;
+  const rawStatusKind = status?.status;
+  const restoredDraftActive = Boolean(restored);
+  const statusKind = rawStatusKind && (rawStatusKind !== "empty" || !restoredDraftActive)
+    ? rawStatusKind
+    : restoredDraftActive
+      ? "ready"
+      : "empty";
+  const statusTitle = rawStatusKind === "empty" && restoredDraftActive ? undefined : status?.title;
+  const statusDetail = rawStatusKind === "empty" && restoredDraftActive ? undefined : status?.detail;
+  const statusNextAction = rawStatusKind === "empty" && restoredDraftActive ? undefined : status?.nextAction;
+  const stage = statusKind === "planning"
+    ? "正在拆镜头"
+    : statusKind === "ready"
+      ? "草案待确认"
+      : statusKind === "blocked"
+        ? "草案待处理"
+        : statusKind === "confirmed"
+          ? "故事已保存"
+          : statusKind === "drafting"
+            ? "想法已放入"
+            : "准备开始";
+  const tone: ProjectStatusViewModel["tone"] = statusKind === "planning"
+    ? "working"
+    : statusKind === "blocked"
+      ? "blocked"
+      : "waiting";
+  const doing = statusTitle || restored?.title || "先和 AI 导演说你想拍什么";
+  const waitingFor = statusDetail || (restored ? "确认这版故事，或直接说哪里要改" : "一个故事想法、脚本或素材");
+  const nextAction = statusNextAction || (restored ? "确认这版故事，或继续修改" : "在右侧输入，AI 会先拆故事和镜头");
+  const facts = [
+    { label: "项目", value: "新视频" },
+    { label: "镜头", value: draftShotCount > 0 ? `草案 ${draftShotCount} 个` : "0 个" },
+    { label: "参考", value: draftReferenceCount > 0 ? `${draftReferenceCount} 个素材` : "待确认" },
+    { label: "AI 导演", value: statusKind === "planning" ? "正在拆镜头" : "先整理" },
+  ];
+  return {
+    stage,
+    doing,
+    waitingFor,
+    nextAction,
+    tone,
+    issue: statusKind === "blocked" ? waitingFor : undefined,
+    facts,
+  };
+}
+
 export function DirectorMode({
   audit,
   view,
@@ -677,9 +729,14 @@ export function DirectorMode({
     ),
     [creatorDesk, latestPrototypeAgentDemo, rawProjectStatusView],
   );
+  const newVideoEntryStatusView = useMemo(
+    () => showNewVideoStart ? newVideoEntryProjectStatusView(newVideoStatus, restoredNewVideoDraft) : undefined,
+    [newVideoStatus, restoredNewVideoDraft, showNewVideoStart],
+  );
+  const activeProjectStatusView = newVideoEntryStatusView || projectStatusView;
   const displayedProjectStatusView: ProjectStatusViewModel = agentPendingAction
     ? {
-        ...projectStatusView,
+        ...activeProjectStatusView,
         stage: "待确认操作",
         doing: "右侧有一条待确认动作",
         waitingFor: "先确认，或继续说明怎么改",
@@ -687,12 +744,12 @@ export function DirectorMode({
         tone: "waiting",
         issue: undefined,
       }
-    : projectStatusView;
+    : activeProjectStatusView;
   const pendingDraftRailTitle = showNewVideoStart ? pendingNewVideoDraftTitle(newVideoStatus) || restoredNewVideoDraft?.title || "" : "";
   const projectNavReady = projectReady && !showNewVideoStart;
   const projectNavSections = showNewVideoStart ? [] : storySections;
   const projectNavShotCount = showNewVideoStart ? (newVideoStatus?.draftShotCount || restoredNewVideoDraft?.shotCount || 0) : runtimeState.storyFlow.shots.length;
-  const projectRailTitle = pendingDraftRailTitle || runtimeState.project.title || projectScopeLabel || "新视频项目";
+  const projectRailTitle = showNewVideoStart ? pendingDraftRailTitle || "新视频项目" : runtimeState.project.title || projectScopeLabel || "新视频项目";
   const projectRailVideoLabel = directorProjectRailVideoLabel(creatorDesk?.videoStage);
   const projectRailReferenceGapCount = creatorReferenceGapCount(creatorDesk);
   const projectRailReferenceLabel = directorProjectRailReferenceLabel(

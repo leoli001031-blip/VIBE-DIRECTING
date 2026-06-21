@@ -766,6 +766,7 @@ function assertCreatorPanelContract() {
   assert(!/setProjectRealChainState\(\(current\)\s*=>\s*\(\{\s*\.\.\.current[\s\S]*正在连接当前项目/.test(currentProjectRuntimeHookSource), "project switching must not preserve previous real-chain summary while connecting");
   assert(!/useCurrentProjectWorkbenchProjection[\s\S]{0,260}currentProjectProjectionHasStoryContent/.test(app), "Empty current projects must still use the current-project projection to clear stale story and asset state");
   assert(/const\s+isEmptyFallbackWorkbench\s*=\s*selectedProjectHasNoContent/.test(app), "Selected empty projects must return to the new-video entry instead of showing a fake story shot");
+  assert(/const\s+directorNewVideoEntryActive\s*=\s*mode === "director" && Boolean\(directorNewVideoStatus\)[\s\S]*visibleProjectTitle\s*=\s*pendingDraftTitleForNav\(directorNewVideoStatus\) \|\| \(directorNewVideoEntryActive \? "新视频项目" : visibleProjectTitleBase\)/.test(app), "Top project control title must follow the active new-video entry instead of showing stale project copy");
   assert(/assetLibraryNode=\{\s*<MinimalAssetLibrary[\s\S]*readOnlyDetail=\{workbenchAssetReadOnlyDetail\}/.test(app), "App must bind Asset Library fallback copy through the effective workbench detail");
   assert(/projectScopeLabel=\{workbenchProjectScopeLabel\}/.test(app), "App must bind Agent scope through the effective workbench label");
   assert(/runtimeState=\{workbenchRuntimeState\}/.test(app), "DirectorMode must receive the current project workbench runtime state");

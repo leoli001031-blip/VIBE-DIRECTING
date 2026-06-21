@@ -3322,7 +3322,8 @@ function App() {
     : isEmptyFallbackWorkbench
       ? "新视频项目"
       : audit.projectTitle;
-  const visibleProjectTitle = pendingDraftTitleForNav(directorNewVideoStatus) || visibleProjectTitleBase;
+  const directorNewVideoEntryActive = mode === "director" && Boolean(directorNewVideoStatus);
+  const visibleProjectTitle = pendingDraftTitleForNav(directorNewVideoStatus) || (directorNewVideoEntryActive ? "新视频项目" : visibleProjectTitleBase);
   const projectControlRoot = projectFileSelection.status === "selected"
     ? projectFileSelection.projectRoot
     : effectiveRuntimeProjectBinding.status === "bound"
