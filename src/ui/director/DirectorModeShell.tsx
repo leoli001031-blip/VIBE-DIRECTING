@@ -856,6 +856,7 @@ export function DirectorMode({
             shot={projectReady && agentShotBoundView ? selectedShot : undefined}
             selectedShots={projectReady && agentShotBoundView ? selectedShots : []}
             asset={projectReady && directorView === "assets" ? selectedAsset : undefined}
+            onSelectShot={projectReady ? onSelectShot : undefined}
             sectionLabel={agentSectionLabel}
             sectionId={projectReady && directorView === "story" && !selectedShot ? activeSection?.id : undefined}
             onProjectStoreApplyPlanReady={onProjectStoreApplyPlanReady}

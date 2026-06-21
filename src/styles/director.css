@@ -7978,6 +7978,48 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   font-weight: 850;
 }
 
+.minimal-agent-shot-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.minimal-agent-shot-switcher button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 156px;
+  min-height: 28px;
+  border: 1px solid rgba(122, 85, 60, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 252, 246, 0.68);
+  color: rgba(47, 39, 34, 0.72);
+  padding: 0 9px;
+  cursor: pointer;
+}
+
+.minimal-agent-shot-switcher button.selected {
+  border-color: rgba(47, 39, 34, 0.5);
+  background: rgba(47, 39, 34, 0.9);
+  color: #fffaf0;
+}
+
+.minimal-agent-shot-switcher strong {
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.minimal-agent-shot-switcher span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .minimal-agent-skill-stack {
   display: grid;
   gap: 8px;

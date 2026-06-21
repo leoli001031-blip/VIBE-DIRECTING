@@ -2876,6 +2876,7 @@ export function MinimalAgentPanel({
   onRunExport,
   onOpenResultView,
   onRetryMissingBatch,
+  onSelectShot,
   agentCommand,
   projectObservation,
   projectStatusView,
@@ -2948,6 +2949,7 @@ export function MinimalAgentPanel({
   onRunExport?: (target?: Pick<AgentControlledToolInvocationTarget, "agentToolTrace">) => unknown | Promise<unknown>;
   onOpenResultView?: (view: DirectorView) => void;
   onRetryMissingBatch?: () => unknown | Promise<unknown>;
+  onSelectShot?: (id: string, additive?: boolean) => void;
   agentCommand?: CreatorAgentCommand;
   projectObservation?: ProjectObservationProjection;
   projectStatusView?: ProjectStatusViewModel;
@@ -3028,6 +3030,17 @@ export function MinimalAgentPanel({
     asset,
     sectionLabel: hasSectionSelection ? sectionLabel : undefined,
   });
+  const agentShotSwitcherItems = useMemo(() => {
+    if (!onSelectShot) return [];
+    return runtimeState.storyFlow.shots.slice(0, 12).map((item) => ({
+      id: item.id,
+      label: formatShotNumber(item.id),
+      title: shortAgentPanelMessageText(
+        cleanMinimalAgentMessageCopy(item.title || item.primaryAction || item.storyFunction || ""),
+        formatShotNumber(item.id),
+      ),
+    }));
+  }, [onSelectShot, runtimeState.storyFlow.shots]);
 
   function rememberConfirmedAgentActionLogItem(item: AgentActionLogItem) {
     setAgentActionLog((items) => rememberAgentActionLogItem(items, item));
@@ -6024,6 +6037,30 @@ export function MinimalAgentPanel({
                     {item.value}
                   </small>
                 ))}
+              </div>
+            )}
+            {agentShotSwitcherItems.length > 1 && (
+              <div className="minimal-agent-shot-switcher" aria-label="切换当前镜头">
+                {agentShotSwitcherItems.map((item) => {
+                  const selected = currentSelectedShotId === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={selected ? "selected" : undefined}
+                      onClick={() => {
+                        onSelectShot?.(item.id);
+                        setStatus(`正在看 ${item.label}，可以直接说这一段怎么改。`);
+                      }}
+                      aria-pressed={selected}
+                      aria-label={`切换到镜头 ${item.label}：${item.title}`}
+                      title={`切换到镜头 ${item.label}：${item.title}`}
+                    >
+                      <strong>{item.label}</strong>
+                      <span>{item.title}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </section>

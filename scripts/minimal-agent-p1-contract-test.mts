@@ -277,6 +277,9 @@ assert(/<strong>\{displayedCompactScopeLabel\}<\/strong>/.test(minimalAgentPanel
 assert(/hasActiveSelection \? "当前选择" : "怎么用"/.test(minimalAgentPanelSource), "selection header must reflect shot, asset, and section context");
 assert(/hasActiveSelection[\s\S]*\? "说这块怎么改/.test(minimalAgentPanelSource), "composer placeholder must recognize selected sections as editable context");
 assert(/aria-label="当前引用内容"/.test(minimalAgentPanelSource), "Agent composer must expose selected context chips accessibly");
+assert(/aria-label="切换当前镜头"/.test(minimalAgentPanelSource), "right-side Agent rail must expose a compact shot switcher for selected-shot feedback");
+assert(/onSelectShot\?\.\(item\.id\)/.test(minimalAgentPanelSource), "Agent shot switcher must update the active shot before natural-language feedback");
+assert(/<MinimalAgentPanel[\s\S]*onSelectShot=\{projectReady \? onSelectShot : undefined\}/.test(directorMode), "Director shell must wire shot selection into the Agent rail");
 assert(/const footerSelectionTargetCopy = hasActiveSelection[\s\S]*输入文字会引用：\$\{displayedCompactScopeLabel\}；上方确认按行动卡范围执行。[\s\S]*输入文字会引用：\$\{displayedCompactScopeLabel\}/.test(minimalAgentPanelSource), "Agent composer footer must distinguish typed selection feedback from the current confirmation card scope");
 assert(/minimal-agent-footer-target/.test(stylesSource), "Agent composer selected-reference footer hint needs dedicated styling");
 assert(/scopedShotIds\.length > 1[\s\S]*selectedShotIds:\s*scopedShotIds/.test(currentComposerSelectionOverride), "current Agent selection override must preserve multi-shot context");
@@ -289,6 +292,7 @@ assert(/input\.sectionLabel/.test(selectionContextChips), "section context chips
 assert(/runtimeState\.storyFlow\.shots/.test(preparedSelectionContextChips), "prepared Agent chips must resolve shot ids against current Project.vibe state");
 assert(/runtimeState\.visualMemory\.assets/.test(preparedSelectionContextChips), "prepared Agent chips must resolve asset ids against current visual memory");
 assert(/\.minimal-agent-context-chips/.test(stylesSource), "selected context chips need dedicated styling");
+assert(/\.minimal-agent-shot-switcher/.test(stylesSource), "right-side Agent rail shot switcher needs dedicated styling");
 assert(/\.director-agent-rail \.minimal-agent-context-chips\s*\{[\s\S]*display:\s*flex/.test(stylesSource), "right-side Agent rail must keep selected context chips visible");
 assert(!/\.director-agent-rail \.minimal-agent-selection-context span,\s*\.director-agent-rail \.minimal-agent-context-chips\s*\{[\s\S]*display:\s*none/.test(stylesSource), "right-side Agent rail must not hide the selected context label and chips");
 assert(/MAX_COMPOSER_SCRIPT_CHARS/.test(minimalAgentPanelSource), "script attachments must have a bounded text read");
