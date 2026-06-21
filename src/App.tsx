@@ -2253,8 +2253,7 @@ function App() {
     status: "idle",
     label: "打开项目",
   });
-  const projectFileSelectionRef = useRef(projectFileSelection);
-  projectFileSelectionRef.current = projectFileSelection;
+  const freshProjectSessionRequested = isFreshProjectSessionRequested();
   const [recentProjectSelections, setRecentProjectSelections] = useState<RememberedProjectSelection[]>(() => readRecentProjectSelections());
   const rememberedProjectRestoreAttemptedRef = useRef(false);
   const freshProjectSessionResetAttemptedRef = useRef(false);
@@ -2265,7 +2264,8 @@ function App() {
   const runtimeBindingHasProjectVibe = runtimeProjectBinding.status === "bound" && Boolean(runtimeProjectBinding.projectVibePath);
   const runtimeBindingIsLocalProject = runtimeProjectBinding.status === "bound"
     && Boolean(runtimeProjectBinding.projectRoot)
-    && (!runtimeBindingIsBrowserDraft || runtimeBindingHasProjectVibe);
+    && (!runtimeBindingIsBrowserDraft || runtimeBindingHasProjectVibe)
+    && (!freshProjectSessionRequested || projectFileSelection.status === "selected");
   const selectedProjectMatchesRuntimeBinding = projectFileSelection.status === "selected"
     && normalizeProjectRootForUiCompare(projectFileSelection.projectRoot) === normalizeProjectRootForUiCompare(runtimeProjectBinding.projectRoot);
   const selectedProjectUsesBrowserDraftStorage = selectedProjectIsBrowserDraft
@@ -2970,6 +2970,7 @@ function App() {
 
   useEffect(() => {
     if (runtimeProjectBinding.status !== "bound" || !runtimeProjectBinding.projectRoot) return;
+    if (freshProjectSessionRequested && projectFileSelection.status !== "selected") return;
     if (selectedProjectIsLocalProject) return;
     const projectPath = projectPathFromRuntimeBinding(runtimeProjectBinding.projectRoot, runtimeProjectBinding.projectVibePath);
     setProjectPathInput(runtimeProjectBinding.projectRoot);
@@ -3009,6 +3010,7 @@ function App() {
     canRememberProjectRootFromDialog,
     projectFileSelection.projectRoot,
     projectFileSelection.status,
+    freshProjectSessionRequested,
     selectedProjectIsLocalProject,
     runtimeProjectBinding.projectRoot,
     runtimeProjectBinding.projectTitle,
@@ -3251,6 +3253,7 @@ function App() {
 
   useEffect(() => {
     if (!runtimeBindingIsLocalProject || !runtimeProjectBinding.projectRoot) return undefined;
+    if (freshProjectSessionRequested && projectFileSelection.status !== "selected") return undefined;
     const expectedProjectId = runtimeProjectBinding.projectId;
     const restoreKey = [
       runtimeProjectBinding.projectRoot,
@@ -3285,6 +3288,8 @@ function App() {
     };
   }, [
     runtimeBindingIsLocalProject,
+    freshProjectSessionRequested,
+    projectFileSelection.status,
     prototypeProjectDraftTarget,
     runtimeProjectBinding.projectId,
     runtimeProjectBinding.projectRoot,
@@ -5264,25 +5269,24 @@ function App() {
   }
 
   useEffect(() => {
-    if (!isFreshProjectSessionRequested() || freshProjectSessionResetAttemptedRef.current) return undefined;
+    if (!freshProjectSessionRequested || freshProjectSessionResetAttemptedRef.current) return undefined;
     freshProjectSessionResetAttemptedRef.current = true;
     rememberedProjectRestoreAttemptedRef.current = true;
+    resetAllProjectState();
+    setProjectPathInput("");
+    setProjectSelectionStatus("idle");
+    setProjectRealChainState({ status: "unavailable", message: "新项目待开始。" });
+    setProjectImage2BatchState({ status: "unavailable", message: "新项目待开始。" });
+    setProjectImage2OneShotState({ status: "unavailable", message: "新项目待开始。" });
 
     let cancelled = false;
     async function resetFreshProjectSession() {
       try {
         await forgetCurrentProject();
       } catch {
-        // The UI reset below is still the source of truth for a fresh local session.
+        // The UI reset above is still the source of truth for a fresh local session.
       }
       if (cancelled) return;
-      if (prototypeProjectVibeRef.current.shots.length > 0 || projectFileSelectionRef.current.status === "selected") return;
-      resetAllProjectState();
-      setProjectPathInput("");
-      setProjectSelectionStatus("idle");
-      setProjectRealChainState({ status: "unavailable", message: "新项目待开始。" });
-      setProjectImage2BatchState({ status: "unavailable", message: "新项目待开始。" });
-      setProjectImage2OneShotState({ status: "unavailable", message: "新项目待开始。" });
     }
 
     void resetFreshProjectSession();
@@ -5290,6 +5294,7 @@ function App() {
       cancelled = true;
     };
   }, [
+    freshProjectSessionRequested,
     forgetCurrentProject,
     setProjectImage2BatchState,
     setProjectImage2OneShotState,

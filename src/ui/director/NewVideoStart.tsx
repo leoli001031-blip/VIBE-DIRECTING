@@ -3336,8 +3336,8 @@ export function NewVideoStart({
               {!confirmed && (
                 <div className="new-video-next-flow" aria-label="草案状态">
                   <span>当前状态</span>
-                  <strong>待确认草案</strong>
-                  <small>还没有保存到项目；确认后左侧故事数才会更新。</small>
+                  <strong>{storyboardPlanningRunning ? "正在整理镜头" : "待确认草案"}</strong>
+                  <small>{storyboardPlanningRunning ? "AI 还在整理镜头，完成后再确认。" : "还没有保存到项目；确认后左侧故事数才会更新。"}</small>
                 </div>
               )}
               <div className="new-video-next-flow" aria-label="确认后的流程">
