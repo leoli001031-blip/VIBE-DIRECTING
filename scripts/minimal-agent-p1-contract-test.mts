@@ -50,6 +50,7 @@ function findFunctionBody(source: string, functionName: string) {
 }
 
 const minimalAgentPanelSource = stripComments(readText("src/ui/director/MinimalAgentPanel.tsx"));
+const newVideoStartSource = stripComments(readText("src/ui/director/NewVideoStart.tsx"));
 const agentPanelProjectionSource = stripComments(readText("src/ui/director/agentPanelProjection.ts"));
 const appSource = stripComments(readText("src/App.tsx"));
 const directorAgentPermissionIntentSource = stripComments(readText("src/core/directorAgentPermissionIntent.ts"));
@@ -126,6 +127,7 @@ const continueFromStatusActionPath = findFunctionBody(minimalAgentPanelSource, "
 const currentComposerSelectionOverride = findFunctionBody(minimalAgentPanelSource, "currentComposerSelectionOverride");
 const updateVideoPermissionContract = findFunctionBody(minimalAgentPanelSource, "updateVideoPermissionContract");
 const selectVideoPermissionMode = findFunctionBody(minimalAgentPanelSource, "selectVideoPermissionMode");
+const planSummaryTitleForDisplay = findFunctionBody(newVideoStartSource, "planSummaryTitleForDisplay");
 const detectVideoContract = findFunctionBody(agentPanelProjectionSource, "detectAgentVideoSubmitContract");
 const labelVideoContract = findFunctionBody(agentPanelProjectionSource, "agentVideoSubmitContractLabel");
 const detailVideoContract = findFunctionBody(agentPanelProjectionSource, "agentVideoSubmitContractDetail");
@@ -175,6 +177,7 @@ assert(/function minimalAgentMessageInvalidatesConfirmation\(message: MinimalAge
 assert(/minimalAgentMessageInvalidatesConfirmation\(candidate,\s*message\)[\s\S]*minimalAgentMessageClosesConfirmation[\s\S]*minimalAgentMessageMatchesConfirmationAction\(candidate,\s*message\)/.test(minimalAgentPanelSource), "Confirmation filtering must prefer the latest matching Agent context over stale confirmation cards without hiding unrelated confirmations");
 assert(/rememberAgentTimelineEntries\(\[buildSelectionChangedTimelineEntry\(\{[\s\S]*selectionKey:\s*selectionFocusKey[\s\S]*label:\s*localScopeLabel[\s\S]*hint:\s*selectionHint/.test(minimalAgentPanelSource), "Selecting a shot or asset must append context to the Agent message flow");
 assert(/hasBoundSelection && selectionFocusKey[\s\S]*selectionContextMessageId\(selectionFocusKey\)[\s\S]*fullAgentThreadMessages\.push\(minimalAgentMessageFromTimelineEntry\(buildSelectionChangedTimelineEntry\(\{[\s\S]*label:\s*localScopeLabel[\s\S]*facts:\s*liveSelectionChips/.test(minimalAgentPanelSource), "The current selected shot or asset must be projected into the Agent thread even before the persisted timeline write returns");
+assert(/looksLikeScriptLineTitle\(cleaned\)[\s\S]*"新视频草案"/.test(planSummaryTitleForDisplay), "new-video draft titles must fall back instead of showing timecoded shot lines as project titles");
 assert(/if \(!selectionFocusKey \|\| !hasBoundSelection \|\| text\.trim\(\)\) \{[\s\S]*previousSelectionFocusKeyRef\.current = selectionFocusKey/.test(minimalAgentPanelSource) && !/!selectionFocusKey \|\| !hasBoundSelection \|\| workflow \|\| text\.trim\(\)/.test(minimalAgentPanelSource), "Selecting a shot or asset must still append context while an action confirmation card is visible");
 assert(/const restoredEntries = restoredAgentTimelineEntries \|\| \[\][\s\S]*if \(latestNewVideoDraftCommittedForProjection && !restoredEntries\.length\) \{[\s\S]*setAgentTimelineEntries\(\[\]\)[\s\S]*const nextKey = agentTimelineKey\(restoredEntries\)/.test(minimalAgentPanelSource), "After a new-video draft is committed, later Agent timeline entries such as selection changes must restore instead of being cleared");
 assert(/function buildExecutionBoundaryChangedTimelineEntry/.test(minimalAgentPanelSource), "Execution boundary changes must have a dedicated Agent timeline entry builder");
@@ -336,6 +339,7 @@ assert(/if\s*\(latestNewVideoDraftCommittedForProjection\)\s*\{[\s\S]*restoredAg
 assert(/if\s*\(latestNewVideoDraftCommittedForProjection\)\s*\{[\s\S]*restoredAgentTimelineKeyRef\.current = "new_video_draft_committed"[\s\S]*setAgentTimelineEntries\(\[\]\)[\s\S]*return;/.test(minimalAgentPanelSource), "fresh story commits must not restore old project Agent timeline confirmations into the right rail");
 assert(/latestNewVideoDraftCommittedForProjection[\s\S]*restoredEntries\.length > 0[\s\S]*!restoredEntries\.some\(\(entry\) => entry\.id\.startsWith\("new_video_draft_committed_"\)\)[\s\S]*setAgentTimelineEntries\(\[\]\)/.test(minimalAgentPanelSource), "fresh story commits must drop old Agent sidecar history unless the restored timeline belongs to the committed draft");
 assert(/createVibeAgentTimelineDocument\(\{[\s\S]*projectId: result\.project\.manifest\.projectId[\s\S]*new_video_draft_committed_[\s\S]*saveProjectAgentTimeline\(draftTarget,\s*freshTimeline\)[\s\S]*setRestoredAgentTimelineEntries\(freshTimeline\.entries\)/.test(appSource), "confirming a new-video draft must replace the project Agent timeline with a fresh committed-draft result before later selections append to it");
+assert(/(?:\\d\{1,2\}:)?\\d\{1,2\}:\\d\{2\}(?:\\s\*\[-–—\]\\s\*(?:\\d\{1,2\}:)?\\d\{1,2\}:\\d\{2\})?/.test(appSource) && /(?:镜头|画面|场景|主角|角色|字幕|对白|音效|运镜|推近|拉远|切到|特写|全景|中景)/.test(appSource), "new project titles must reject timecoded script lines and shot-description lines");
 assert(/if\s*\(!localProjectReadyForTools\)\s*\{[\s\S]*restoredAgentDraftIdRef\.current = ""[\s\S]*return;[\s\S]*const draft = restoredAgentStagedPlanDraft/.test(minimalAgentPanelSource), "browser drafts must not auto-restore local-project staged Agent plans");
 assert(/setText\(""\)[\s\S]*setAttachments\(\[\]\)[\s\S]*fileInputRef\.current\.value = ""[\s\S]*setWorkflow\(undefined\)/.test(minimalAgentPanelSource), "switching projects must clear stale composer text and files before clearing staged Agent state");
 assert(/setAgentActionEnvelope\(undefined\)[\s\S]*setAgentToolHandoff\(undefined\)[\s\S]*restoredAgentDraftIdRef\.current = ""[\s\S]*项目已切换，重新发送即可/.test(minimalAgentPanelSource), "Agent composer must clear stale staged actions and restored draft markers when the project changes");

@@ -428,6 +428,9 @@ function looksLikeProjectInstruction(value?: string) {
   const text = value?.trim() || "";
   if (!text) return true;
   if (text.length > 64) return true;
+  if (/^(?:\d{1,2}:)?\d{1,2}:\d{2}(?:\s*[-–—]\s*(?:\d{1,2}:)?\d{1,2}:\d{2})?/u.test(text)) return true;
+  if (/^(?:镜头|分镜|画面|场景|时长|字幕|对白|音效|动作|运镜)\s*\d*[-_：:]/u.test(text)) return true;
+  if (/(?:秒|镜头|画面|场景|主角|角色|字幕|对白|音效|运镜|推近|拉远|切到|特写|全景|中景)/u.test(text) && /[，,。；;]/u.test(text)) return true;
   return /^(请|先|帮我|我要|我想|不要|不用|直接|测试|做一个|来一个|生成|跑一轮|开始|确认|上传|参考|风格|脚本|主题|要求)/u.test(text)
     || /(?:不要|不用|先不要|测试|真实生图|提交视频|项目|脚本|参考|分镜|镜头|风格|音频|音乐|素材|AI|Agent|Seedance|Image2|生图|生视频)/iu.test(text);
 }

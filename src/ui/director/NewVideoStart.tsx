@@ -494,13 +494,22 @@ function explicitTitleFromDraftScript(script: string) {
   return cleanText(match?.[1] || match?.[2] || match?.[3]);
 }
 
+function looksLikeScriptLineTitle(value: string) {
+  const text = cleanText(value);
+  if (!text) return true;
+  if (/^(?:\d{1,2}:)?\d{1,2}:\d{2}(?:\s*[-–—]\s*(?:\d{1,2}:)?\d{1,2}:\d{2})?/u.test(text)) return true;
+  if (/^(?:镜头|分镜|画面|场景|时长|字幕|对白|音效|动作|运镜)\s*\d*[-_：:]/u.test(text)) return true;
+  return /(?:秒|镜头|画面|场景|主角|角色|字幕|对白|音效|运镜|推近|拉远|切到|特写|全景|中景)/u.test(text) && /[，,。；;]/u.test(text);
+}
+
 function planSummaryTitleForDisplay(summaryTitle: string, script: string) {
   const explicit = explicitTitleFromDraftScript(script);
   if (explicit) return explicit;
-  return cleanText(summaryTitle)
+  const cleaned = cleanText(summaryTitle)
     .replace(/^(?:标题|片名|故事名|项目名|作品名|Title)\s*[:：]\s*/iu, "")
     .replace(/^《(.{1,64})》$/u, "$1")
-    .trim() || "新视频草案";
+    .trim();
+  return cleaned && !looksLikeScriptLineTitle(cleaned) ? cleaned : "新视频草案";
 }
 
 function safeDraftId(value: string) {
