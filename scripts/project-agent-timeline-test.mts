@@ -166,7 +166,7 @@ const rootTimeline = appendVibeAgentTimelineEntries(
       id: "agent_action_report_relative_root",
       type: "action_result",
       createdAt: generatedAt,
-      title: "结果卡片：项目已更新",
+      title: "完成结果：项目已更新",
       body: "修改已写入项目",
       toolName: "write_project",
       actionKind: "revise_story_or_shot",

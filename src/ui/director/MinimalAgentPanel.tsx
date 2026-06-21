@@ -1367,7 +1367,7 @@ function minimalAgentReferenceBlockedMessageIsStale(messages: MinimalAgentMessag
     message.status === "blocked"
     || message.lifecycle === "needs_user_input"
     || message.lifecycle === "failed"
-    || /参考生成暂时中断|参考生成没有完成|结果卡片：需要处理/.test(text)
+    || /参考生成暂时中断|参考生成没有完成|完成结果：需要处理/.test(text)
   ) && /生成参考|参考生成/.test(text);
   if (!isBlockedReferenceMessage) return false;
   const messageIndex = messages.indexOf(message);

@@ -367,7 +367,7 @@ function projectStatusViewWithPendingAgentConfirmation(
     ...status,
     stage: "等待你确认",
     doing: `右侧消息里有「${label}」`,
-    waitingFor: "先确认当前卡，或继续说明怎么改",
+    waitingFor: "先处理消息里的确认，或继续说明怎么改",
     nextAction: label,
     tone: "waiting",
     issue: undefined,

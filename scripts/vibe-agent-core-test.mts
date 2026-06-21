@@ -1361,7 +1361,7 @@ assert.equal(actualToolExecutionResult?.summary, "参考已生成，去参考区
 assert.equal(actualToolExecutionResult?.next, "去参考复核");
 assert.equal(actualOutcomeEntry.type, "action_result");
 assert.equal(actualOutcomeEntry.toolName, "generate_references");
-assert.equal(actualOutcomeEntry.title, "结果卡片：参考待复核");
+assert.equal(actualOutcomeEntry.title, "完成结果：参考待复核");
 assert.match(actualOutcomeEntry.body, /已完成：生成参考。参考已生成，去参考区复核。/u);
 assert.match(actualOutcomeEntry.body, /查看：参考页。下一步：去参考复核。/u);
 assert.equal(actualOutcomeEntry.status, "done");
@@ -1395,7 +1395,7 @@ const queryReadyOutcomeEntry = buildVibeAgentConfirmedActionReportEntry({
   },
 });
 assert.equal(queryReadyOutcomeEntry.toolName, "query_video");
-assert.equal(queryReadyOutcomeEntry.title, "结果卡片：视频已回流");
+assert.equal(queryReadyOutcomeEntry.title, "完成结果：视频已回流");
 assert.equal(queryReadyOutcomeEntry.lifecycle, "succeeded");
 assert.match(queryReadyOutcomeEntry.body, /已完成：查询视频。视频已回流。项目记录已保留。/u);
 assert.match(queryReadyOutcomeEntry.body, /查看：预览页。下一步：去预览复核。/u);
@@ -1418,7 +1418,7 @@ const videoRunningOutcomeEntry = buildVibeAgentConfirmedActionReportEntry({
   },
 });
 assert.equal(videoRunningOutcomeEntry.toolName, "submit_video");
-assert.equal(videoRunningOutcomeEntry.title, "结果卡片：视频已提交");
+assert.equal(videoRunningOutcomeEntry.title, "完成结果：视频已提交");
 assert.equal(videoRunningOutcomeEntry.lifecycle, "running");
 assert.match(videoRunningOutcomeEntry.body, /已启动：提交视频。视频已发送，即梦排队中。/u);
 assert.match(videoRunningOutcomeEntry.body, /查看：消息流。下一步：等待视频结果。/u);
@@ -1442,7 +1442,7 @@ const skippedOutcomeEntry = buildVibeAgentConfirmedActionReportEntry({
     previewReady: false,
   },
 });
-assert.equal(skippedOutcomeEntry.title, "结果卡片：已取消");
+assert.equal(skippedOutcomeEntry.title, "完成结果：已取消");
 assert.equal(skippedOutcomeEntry.lifecycle, "cancelled");
 assert.equal(skippedOutcomeEntry.status, "done");
 assert.equal(skippedOutcomeEntry.facts?.some((fact) => fact.label === "下一步" && fact.value === "不需要继续执行"), true);
@@ -1471,7 +1471,7 @@ const exportReadyOutcomeEntry = buildVibeAgentConfirmedActionReportEntry({
   },
 });
 assert.equal(exportReadyOutcomeEntry.toolName, "export_showcase");
-assert.equal(exportReadyOutcomeEntry.title, "结果卡片：展示包已导出");
+assert.equal(exportReadyOutcomeEntry.title, "完成结果：展示包已导出");
 assert.match(exportReadyOutcomeEntry.body, /已完成：导出展示包。导出完成/u);
 assert.match(exportReadyOutcomeEntry.body, /查看：交付页。下一步：去交付页查看。/u);
 assert.equal(exportReadyOutcomeEntry.facts?.some((fact) => fact.label === "清单" && fact.value === "exports/demo/export_manifest.json"), true);
@@ -1488,7 +1488,7 @@ const failedOutcomeEntry = buildVibeAgentConfirmedActionReportEntry({
     previewReady: false,
   },
 });
-assert.equal(failedOutcomeEntry.title, "结果卡片：执行失败");
+assert.equal(failedOutcomeEntry.title, "完成结果：执行失败");
 assert.equal(failedOutcomeEntry.status, "blocked");
 assert.equal(failedOutcomeEntry.lifecycle, "failed");
 assert.match(failedOutcomeEntry.body, /执行失败：生成参考。参考生成失败，项目已保留。/u);

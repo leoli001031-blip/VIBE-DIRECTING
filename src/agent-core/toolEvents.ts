@@ -1290,30 +1290,30 @@ function resultCardTitleFor(
   },
   executorTool: string,
 ) {
-  if (outcome.status === "failed") return "结果卡片：执行失败";
-  if (outcome.status === "blocked") return "结果卡片：需要处理";
-  if (outcome.status === "skipped") return "结果卡片：已取消";
+  if (outcome.status === "failed") return "完成结果：执行失败";
+  if (outcome.status === "blocked") return "完成结果：需要处理";
+  if (outcome.status === "skipped") return "完成结果：已取消";
   if (executorTool === "generate_references") {
-    if (outcome.resultStatus === "running") return "结果卡片：参考生成中";
-    if (outcome.waitingReview || outcome.resultStatus === "ready") return "结果卡片：参考待复核";
-    return "结果卡片：参考已处理";
+    if (outcome.resultStatus === "running") return "完成结果：参考生成中";
+    if (outcome.waitingReview || outcome.resultStatus === "ready") return "完成结果：参考待复核";
+    return "完成结果：参考已处理";
   }
   if (executorTool === "submit_video") {
-    if (outcome.resultStatus === "running") return "结果卡片：视频已提交";
-    if (outcome.previewReady || outcome.resultStatus === "ready") return "结果卡片：视频可预览";
-    return "结果卡片：视频已处理";
+    if (outcome.resultStatus === "running") return "完成结果：视频已提交";
+    if (outcome.previewReady || outcome.resultStatus === "ready") return "完成结果：视频可预览";
+    return "完成结果：视频已处理";
   }
   if (executorTool === "query_video") {
-    if (outcome.previewReady || outcome.resultStatus === "ready") return "结果卡片：视频已回流";
-    if (outcome.resultStatus === "running") return "结果卡片：视频仍在队列";
-    return "结果卡片：查询完成";
+    if (outcome.previewReady || outcome.resultStatus === "ready") return "完成结果：视频已回流";
+    if (outcome.resultStatus === "running") return "完成结果：视频仍在队列";
+    return "完成结果：查询完成";
   }
-  if (executorTool === "export_project" || executorTool === "export_showcase") return "结果卡片：展示包已导出";
-  if (executorTool === "compile_video_request") return "结果卡片：视频请求已准备";
-  if (executorTool === "research_style") return "结果卡片：资料已整理";
-  if (executorTool === "save_skill") return "结果卡片：导演经验已保存";
-  if (executorTool === "write_project") return "结果卡片：项目已更新";
-  return "结果卡片：动作完成";
+  if (executorTool === "export_project" || executorTool === "export_showcase") return "完成结果：展示包已导出";
+  if (executorTool === "compile_video_request") return "完成结果：视频请求已准备";
+  if (executorTool === "research_style") return "完成结果：资料已整理";
+  if (executorTool === "save_skill") return "完成结果：导演经验已保存";
+  if (executorTool === "write_project") return "完成结果：项目已更新";
+  return "完成结果：动作完成";
 }
 
 function resultLocationFor(
