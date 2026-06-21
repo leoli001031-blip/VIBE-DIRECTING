@@ -544,6 +544,7 @@ function minimalAgentMessageStageLabel(message: MinimalAgentMessage) {
     return message.status === "blocked" ? "执行受阻" : "执行结果";
   }
   if (message.entryType === "state_change") {
+    if (message.id.startsWith("selection_context_")) return "当前选择";
     return message.lifecycle === "running" || message.title === "执行中" ? "执行状态" : "项目状态";
   }
   if (message.entryType === "tool_call") return "正在处理";
