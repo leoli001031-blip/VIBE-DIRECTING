@@ -2251,8 +2251,13 @@ function videoSubmitBlockerAgentReply(blocker?: string) {
 }
 
 function agentCapabilityGlanceItems(items: ReturnType<typeof agentCapabilityItems>) {
-  const attentionItems = items.filter((item) => item.tone !== "ready");
-  return (attentionItems.length ? attentionItems : items.filter((item) => item.id !== "project")).slice(0, 3);
+  const hierarchyItem = items.find((item) => item.id === "project-hierarchy");
+  const attentionItems = items.filter((item) => item.tone !== "ready" && item.id !== "project-hierarchy");
+  const fallbackItems = items.filter((item) => item.id !== "project" && item.id !== "project-hierarchy");
+  return [
+    ...(hierarchyItem ? [hierarchyItem] : []),
+    ...(attentionItems.length ? attentionItems : fallbackItems),
+  ].slice(0, 3);
 }
 
 function agentKernelCapabilityItem(turn: VibeAgentKernelTurn): ReturnType<typeof agentCapabilityItems>[number] {
@@ -2267,6 +2272,26 @@ function agentKernelCapabilityItem(turn: VibeAgentKernelTurn): ReturnType<typeof
     return { id: "kernel-turn", label: "本轮", value: "执行中", tone: "waiting" };
   }
   return { id: "kernel-turn", label: "本轮", value: "可继续", tone: "ready" };
+}
+
+function projectHierarchyCapabilityItem(input: {
+  sectionCount: number;
+  shotCount: number;
+  assetCount: number;
+  skillCount: number;
+}): ReturnType<typeof agentCapabilityItems>[number] {
+  const storyPart = input.sectionCount > 0
+    ? `${input.sectionCount} 段 / ${input.shotCount} 镜头`
+    : `短片 / ${input.shotCount} 镜头`;
+  const supportPart = input.skillCount > 0
+    ? `${input.assetCount} 素材 / ${input.skillCount} Skills`
+    : `${input.assetCount} 素材`;
+  return {
+    id: "project-hierarchy",
+    label: "层级",
+    value: `${storyPart} · ${supportPart}`,
+    tone: input.shotCount > 0 ? "ready" : "waiting",
+  };
 }
 
 function intentWithQaRevisionHint(intent: string | undefined, feedback?: DirectorQaUserFeedback) {
@@ -5957,12 +5982,21 @@ export function MinimalAgentPanel({
     && !isRetryingTool
     && confirmedResultBlocked,
   );
-  const visibleAgentCapabilityItems = agentCapabilityItems(
-    currentAgentToolAvailability(),
-    videoPermissionContractForUi,
-    projectStatusLabel,
-    localProjectReadyForTools,
-  ).map((item) => {
+  const visibleProjectHierarchyCapability = projectHierarchyCapabilityItem({
+    sectionCount: runtimeState.storyFlow.sections.length,
+    shotCount: runtimeState.storyFlow.shots.length,
+    assetCount: runtimeState.visualMemory.assets.length,
+    skillCount: visibleSavedSkillCount,
+  });
+  const visibleAgentCapabilityItems = [
+    visibleProjectHierarchyCapability,
+    ...agentCapabilityItems(
+      currentAgentToolAvailability(),
+      videoPermissionContractForUi,
+      projectStatusLabel,
+      localProjectReadyForTools,
+    ),
+  ].map((item) => {
     if (videoResultIsPrimary && item.id === "reference") {
       return { ...item, value: "已够用", tone: "ready" as const };
     }

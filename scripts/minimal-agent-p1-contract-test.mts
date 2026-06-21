@@ -705,9 +705,12 @@ assert(/videoResumeFooterAction[\s\S]*\|\| referenceReviewFooterAction[\s\S]*\|\
 assert(!/return item\.promptText/.test(reviewPromptSummary), "reference review details must not expose raw provider prompts in the main UI");
 assert(/生成说明已记录在项目里/.test(reviewPromptSummary), "reference review details should summarize prompt evidence in creator-facing language");
 assert(/aria-label="现在能做"/.test(minimalAgentPanelSource), "Agent details must show a compact current capability list");
+assert(/function projectHierarchyCapabilityItem[\s\S]*短片[\s\S]*段[\s\S]*镜头[\s\S]*素材[\s\S]*Skills/.test(minimalAgentPanelSource), "Agent capability list must expose the light project hierarchy for short and longer projects");
+assert(/const visibleProjectHierarchyCapability = projectHierarchyCapabilityItem\(\{[\s\S]*sectionCount:\s*runtimeState\.storyFlow\.sections\.length[\s\S]*shotCount:\s*runtimeState\.storyFlow\.shots\.length[\s\S]*assetCount:\s*runtimeState\.visualMemory\.assets\.length[\s\S]*skillCount:\s*visibleSavedSkillCount/.test(minimalAgentPanelSource), "Agent project hierarchy chip must be derived from the current Project.vibe runtime state");
 assert(/visibleAgentCapabilityItems\.map/.test(minimalAgentPanelSource), "Agent capability list must be rendered from live availability");
-assert(/const attentionItems = items\.filter\(\(item\) => item\.tone !== "ready"\)/.test(agentCapabilityGlanceItems), "Agent capability glance should prioritize blocked or waiting capabilities");
-assert(/attentionItems\.length \? attentionItems : items\.filter\(\(item\) => item\.id !== "project"\)/.test(agentCapabilityGlanceItems), "Agent capability glance should show useful ready actions when nothing needs attention");
+assert(/const hierarchyItem = items\.find\(\(item\) => item\.id === "project-hierarchy"\)/.test(agentCapabilityGlanceItems), "Agent capability glance must keep project hierarchy visible");
+assert(/const attentionItems = items\.filter\(\(item\) => item\.tone !== "ready" && item\.id !== "project-hierarchy"\)/.test(agentCapabilityGlanceItems), "Agent capability glance should prioritize blocked or waiting capabilities after hierarchy");
+assert(/attentionItems\.length \? attentionItems : fallbackItems/.test(agentCapabilityGlanceItems), "Agent capability glance should show useful ready actions when nothing needs attention");
 assert(/slice\(0,\s*3\)/.test(agentCapabilityGlanceItems), "Agent capability glance must stay compact");
 assert(/visibleAgentCapabilityGlanceItems = agentCapabilityGlanceItems\([\s\S]*latestAgentKernelTurn[\s\S]*agentKernelCapabilityItem\(latestAgentKernelTurn\)[\s\S]*\.\.\.visibleAgentCapabilityItems[\s\S]*visibleAgentCapabilityItems/.test(minimalAgentPanelSource), "Agent capability glance must be derived from live availability plus the current Kernel turn status");
 assert(/aria-label="AI 导演当前能力"/.test(minimalAgentPanelSource), "Agent capability glance must be visible outside the hidden details panel");
