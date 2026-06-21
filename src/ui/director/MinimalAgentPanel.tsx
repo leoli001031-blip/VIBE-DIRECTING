@@ -2894,6 +2894,28 @@ function agentActionLogKey(items: AgentActionLogItem[] | undefined) {
   return (items || []).map((item) => `${item.id}:${item.createdAt}`).join("|");
 }
 
+function minimalAgentMessageFromActionLogItem(item: AgentActionLogItem): MinimalAgentMessage {
+  const displayTitle = creatorFacingActionLogText(item.title, "刚才的动作");
+  const displayScope = creatorFacingActionLogText(item.scope, "当前项目");
+  const displayResult = creatorFacingActionLogText(item.result);
+  const displayNextStep = creatorFacingActionLogText(item.nextStep, "调整后可重试");
+  return {
+    id: `action_log_message_${item.id}_${item.createdAt}`,
+    entryType: "action_result",
+    role: "tool",
+    title: displayTitle,
+    body: displayResult,
+    lifecycle: item.tone === "blocked" ? "needs_user_input" : item.tone === "waiting" ? "running" : "succeeded",
+    status: item.tone === "blocked" ? "blocked" : item.tone === "waiting" ? "waiting" : "done",
+    facts: [
+      { label: "范围", value: displayScope },
+      { label: "下一步", value: displayNextStep },
+    ],
+    resultView: item.resultView?.view,
+    next: displayNextStep,
+  };
+}
+
 function agentTimelineKey(entries: VibeAgentTimelineEntry[] | undefined) {
   return (entries || []).map((entry) => `${entry.id}:${entry.createdAt}`).join("|");
 }
@@ -5952,6 +5974,10 @@ export function MinimalAgentPanel({
   );
   if (footerActionConfirmationMessage && shouldAppendFooterActionConfirmationMessage) {
     fullAgentThreadMessages.push(footerActionConfirmationMessage);
+  }
+  for (const item of visibleAgentActionLog) {
+    if (fullAgentThreadMessages.some((message) => message.actionId === item.id || message.id.includes(item.id))) continue;
+    fullAgentThreadMessages.push(minimalAgentMessageFromActionLogItem(item));
   }
   const threadUserIntent = preparedContext?.userIntent?.trim()
     || ((showAgentNote || showAgentResultNote) && hasComposerInput ? text.trim() : "");
