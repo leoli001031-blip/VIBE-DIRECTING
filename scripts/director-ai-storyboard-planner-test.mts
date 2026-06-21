@@ -119,6 +119,14 @@ assert(!planOnlyBrief.storyText.includes("不生图"), "no-image controls must n
 assert(!planOnlyBrief.storyText.includes("不提交视频"), "no-video controls must not become storyboard story text");
 assert(planOnlyBrief.directiveText.includes("执行边界"), "removed generation controls should be preserved as planning boundary metadata");
 
+const organizeOnlyBrief = splitCreativePlanningText("做一个 8 秒日漫感小短片：雨夜便利店门口，一只黑猫叼着发光车票跑向最后一班电车。只整理故事和镜头，不生成参考，不提交视频。");
+assert(organizeOnlyBrief.storyText.includes("雨夜便利店门口"), "story text should keep the real setting before organize-only controls");
+assert(organizeOnlyBrief.storyText.includes("黑猫叼着发光车票"), "story text should keep the real action before organize-only controls");
+assert(!organizeOnlyBrief.storyText.includes("只整理故事和镜头"), "organize-only controls must not become a storyboard beat");
+assert(!organizeOnlyBrief.storyText.includes("不生成参考"), "no-reference controls must not become storyboard story text");
+assert(!organizeOnlyBrief.storyText.includes("不提交视频"), "no-video controls must not become storyboard story text");
+assert(organizeOnlyBrief.directiveText.includes("只整理故事和镜头"), "organize-only controls should be preserved as planning preference text");
+
 const strategyOnlyBrief = splitCreativePlanningText("做一个 20 秒短片：深夜海边自动售货机旁，一个送报少女发现机器吐出一枚发热的蓝色硬币。她沿着防波堤追着硬币滚动的光，看到远处灯塔像在发送摩斯电码。先做规划和分镜策略，不提交视频。");
 assert(strategyOnlyBrief.storyText.includes("自动售货机旁"), "story text should keep the creative opening before strategy-only controls");
 assert(!strategyOnlyBrief.storyText.includes("先做规划"), "strategy-only controls must not appear in story text");

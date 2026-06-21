@@ -272,6 +272,12 @@ check(
   failures,
 );
 check(
+  (newVideoStartSource.match(/userMessage:\s*userMessageFromNewVideoDraft\(draftToSubmit\)/g) || []).length >= 3
+    && !/userMessage:\s*userMessageFromNewVideoDraft\(planningDraft\)/.test(newVideoStartSource),
+  "NewVideoStart Agent timeline must display the creator's original input while using the cleaned planning draft only for planning.",
+  failures,
+);
+check(
   /export type NewVideoStartStatus/.test(newVideoStartSource)
     && /onStatusChange\?:\s*\(status:\s*NewVideoStartStatus\)\s*=>\s*void/.test(newVideoStartSource)
     && /onStatusChange\?\.\(entryStatus\)/.test(newVideoStartSource),

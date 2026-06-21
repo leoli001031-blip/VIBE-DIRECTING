@@ -2054,7 +2054,7 @@ export function NewVideoStart({
     rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
       createdAt: timelineCreatedAt,
       phase: "planning_started",
-      userMessage: userMessageFromNewVideoDraft(planningDraft),
+      userMessage: userMessageFromNewVideoDraft(draftToSubmit),
       materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
       imageCount: planningDraft.references.length,
       audioCount: planningDraft.audio ? 1 : 0,
@@ -2094,7 +2094,7 @@ export function NewVideoStart({
       rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
         createdAt: timelineCreatedAt,
         phase: "planning_ready",
-        userMessage: userMessageFromNewVideoDraft(planningDraft),
+        userMessage: userMessageFromNewVideoDraft(draftToSubmit),
         materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
         imageCount: planningDraft.references.length,
         audioCount: planningDraft.audio ? 1 : 0,
@@ -2113,7 +2113,7 @@ export function NewVideoStart({
       rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
         createdAt: timelineCreatedAt,
         phase: "planning_blocked",
-        userMessage: userMessageFromNewVideoDraft(planningDraft),
+        userMessage: userMessageFromNewVideoDraft(draftToSubmit),
         materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
         imageCount: planningDraft.references.length,
         audioCount: planningDraft.audio ? 1 : 0,

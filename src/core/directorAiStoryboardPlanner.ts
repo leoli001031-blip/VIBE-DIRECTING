@@ -133,7 +133,7 @@ function isPlanningMetadataLine(line: string): boolean {
   return (/^(?:标题|片名|故事名|项目名|作品名|Title)\s*[:：]/iu.test(trimmed) && trimmed.length <= 120)
     || /^(?:请)?先不要(?:提交)?视频测试/u.test(trimmed)
     || /^请先不要.*(?:真实)?生图/u.test(trimmed)
-    || /^(?:先)?只(?:做|看)?(?:前端|AI|规划|计划|拆分|节奏|参考策略|文本|脚本|分镜)/u.test(trimmed);
+    || /^(?:先)?只(?:做|看|整理)?(?:前端|AI|规划|计划|拆分|节奏|参考策略|文本|脚本|分镜|故事|镜头)/u.test(trimmed);
 }
 
 function isDirectiveOnlyLine(line: string): boolean {
@@ -145,7 +145,7 @@ function isDirectiveOnlyLine(line: string): boolean {
 function isOperationDirectiveClause(clause: string): boolean {
   const text = clean(clause);
   return isDirectorAgentPermissionControlOnlyIntent(text)
-    || /先查|查一下|先做规划|先做计划|先做分镜|先看规划|风格|画风|分镜|镜头|参考|资料|质感|节奏|不要|不用|先不要|先不|先只|只规划|只做计划|只做规划|只看规划|只拆分镜|不生图|不生成图片|不提交视频|不生视频|不跑视频|不走生图|跑到视频前|日漫|动漫|动画|电影|写实|悬疑|喜剧|赛博|anime|style|storyboard|cinematic/i.test(text);
+    || /先查|查一下|先做规划|先做计划|先做分镜|先看规划|风格|画风|分镜|镜头|参考|资料|质感|节奏|不要|不用|先不要|先不|先只|只整理|只规划|只做计划|只做规划|只看规划|只拆分镜|不生图|不生成图片|不提交视频|不生视频|不跑视频|不走生图|跑到视频前|日漫|动漫|动画|电影|写实|悬疑|喜剧|赛博|anime|style|storyboard|cinematic/i.test(text);
 }
 
 function storyBeatInsideDirectiveClause(clause: string): string {
@@ -191,7 +191,7 @@ export function splitCreativePlanningText(value: unknown, maxLength = 24000): { 
         directives.push("执行边界：按用户要求限制生成/提交。");
       }
       const withoutInlineDirectives = prefixed.line.replace(
-        /(^|[，,；;。.!?！？\s])((?:我)?(?:想要|希望|偏向|请先|先查一下|查一下|先做|先看|参考|类似|像|不要|不用|先不要|先不|先只|只要|只做|只看|只拆|不生图|不生成|不提交|不跑|不走生图|跑到视频前|风格|画风|节奏)[^。.!?！？\n]*)/gu,
+        /(^|[，,；;。.!?！？\s])((?:我)?(?:想要|希望|偏向|请先|先查一下|查一下|先做|先看|参考|类似|像|不要|不用|先不要|先不|先只|只要|只做|只看|只拆|只整理|不生图|不生成|不提交|不跑|不走生图|跑到视频前|风格|画风|节奏)[^。.!?！？\n]*)/gu,
         (match, separator: string, clause: string) => {
           if (!isOperationDirectiveClause(clause)) return match;
           directives.push(clean(clause));

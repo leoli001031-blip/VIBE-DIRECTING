@@ -793,7 +793,7 @@ assert(/detectDirectorAgentPermissionIntent/.test(agentPanelProjectionSource), "
 assert(/videoSubmitAllowed:\s*false/.test(detectVideoContract), "plan-only detection must write videoSubmitAllowed=false");
 assert(/referenceGenerationAllowed:\s*false/.test(detectVideoContract), "plan-only detection must lock reference generation too");
 assert(/mode:\s*"reference_allowed"[\s\S]*videoSubmitAllowed:\s*false[\s\S]*referenceGenerationAllowed:\s*true/.test(detectVideoContract), "no-video detection should still allow reference generation");
-for (const phrase of ["先不要生图", "不生图", "不生图不提交视频", "不走生图生视频", "不跑生图生视频", "只拆分镜", "只规划", "只做计划", "只告诉我"]) {
+for (const phrase of ["先不要生图", "不生图", "不生图不提交视频", "不走生图生视频", "不跑生图生视频", "只拆分镜", "只整理故事和镜头", "只规划", "只做计划", "只告诉我"]) {
   assert(directorAgentPermissionIntentSource.includes(phrase), `plan-only phrases must include ${phrase}`);
 }
 for (const phrase of ["不要生成参考", "先不要生成参考", "不要做参考图", "先不要补参考", "先别补参考图"]) {
