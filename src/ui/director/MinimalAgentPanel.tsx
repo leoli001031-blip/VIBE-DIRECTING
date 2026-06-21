@@ -5629,6 +5629,23 @@ export function MinimalAgentPanel({
         },
       };
     }
+    if (visibleTimelineConfirmationMessage && currentTimelineConfirmationLabel && canConfirm) {
+      const disabled = Boolean(hasComposerInput || attachments.length || isPreparingPlan);
+      const disabledReason = isPreparingPlan
+        ? "正在整理，稍等一下。"
+        : hasComposerInput || attachments.length
+          ? "先发送或清空当前输入，再确认当前消息。"
+          : "";
+      return {
+        label: currentTimelineConfirmationLabel,
+        disabled,
+        disabledReason,
+        statusLine: disabled ? disabledReason : `等待确认：${currentTimelineConfirmationLabel}`,
+        perform: () => {
+          void confirmPlan();
+        },
+      };
+    }
     if (projectBlockedWithoutFooterResolver) {
       return {
         label: "发送",
@@ -6949,9 +6966,15 @@ export function MinimalAgentPanel({
                   && agentActionEnvelope?.actionId
                   && message.actionId === agentActionEnvelope.actionId
                 );
+                const confirmationMatchesVisibleTimeline = Boolean(
+                  visibleTimelineConfirmationMessage
+                  && message.id === visibleTimelineConfirmationMessage.id
+                  && canConfirm
+                );
                 const confirmationUsesPrimaryAction = !confirmationIsNewVideoDraftAction
                   && (
                     confirmationMatchesPrimaryAction
+                    || confirmationMatchesVisibleTimeline
                     || (agentNextActionAvailable && confirmationIsFooterAction)
                   );
                 const confirmationDisabled = confirmationIsNewVideoDraftAction
