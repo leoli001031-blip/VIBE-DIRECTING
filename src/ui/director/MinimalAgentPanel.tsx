@@ -5878,7 +5878,7 @@ export function MinimalAgentPanel({
     : agentBoundaryDetail;
   const footerSelectionTargetCopy = hasActiveSelection
     ? agentNextActionAvailable && !hasComposerInput
-      ? `你说“这个”时，我会理解为：${displayedCompactScopeLabel}；确认卡只执行它写明的动作。`
+      ? `你说“这个”时，我会理解为：${displayedCompactScopeLabel}；消息里的确认只会做它写明的事。`
       : `你说“这个”时，我会理解为：${displayedCompactScopeLabel}`
     : "";
   const footerActionIsVideoQuery = agentNextActionAvailable && videoQueryMode;

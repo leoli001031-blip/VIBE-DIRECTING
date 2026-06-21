@@ -651,7 +651,7 @@ export function CreatorDeskPanels({
         : "视频正在处理。";
   const creatorStepHint = projectStatusView
     ? agentConfirmationTakingFocus
-      ? "先处理右侧确认卡；中间只保留项目结果。"
+      ? "先处理右侧消息里的确认；中间只保留项目结果。"
       : "消息流会接着这个状态处理。"
     : !localProjectReady
     ? hasStoryDraftForProject
