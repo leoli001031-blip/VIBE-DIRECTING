@@ -328,15 +328,22 @@ function latestPendingAgentConfirmation(entries?: VibeAgentTimelineEntry[]) {
 
 function pendingAgentConfirmationLabel(entry?: VibeAgentTimelineEntry) {
   if (!entry) return "";
+  if (entry.details?.intakePhase === "planning_ready") return "确认这版故事";
   const copy = [entry.title, entry.body, entry.toolName, entry.actionKind].filter(Boolean).join(" ");
+  const negativeVideoCopy = /不(?:会|要)?(?:提交|发送)视频|不会(?:自动)?(?:提交|发送)视频|不提交视频|不发送视频/.test(copy);
+  const negativeReferenceCopy = /不(?:会|要)?生成参考|不会(?:自动)?生成参考|不生成参考/.test(copy);
+  const negativeExportCopy = /不(?:会|要)?(?:导出|交付)|不会(?:自动)?(?:导出|交付)|不导出|不交付/.test(copy);
   if (/方式|update_shot_strategy/.test(copy)) return "确认方式";
   if (/修改|revise_story_or_shot|write_project/.test(copy)) return "确认修改";
   if (/查询|query_video/.test(copy)) return "确认查询结果";
-  if (/提交视频|发送视频|submit_video|Seedance/.test(copy)) return "确认提交视频";
-  if (/生成参考|参考|generate_references/.test(copy)) return "确认生成参考";
-  if (/导出|交付|export/.test(copy)) return "确认导出";
+  if (/generate_references|prepare_reference_generation/.test(copy)) return "确认生成参考";
+  if (/submit_video|prepare_video_submit/.test(copy)) return "确认提交视频";
+  if (/prepare_export|\bexport\b/.test(copy)) return "确认导出";
   if (/Skill|导演经验|save_skill/.test(copy)) return "确认保存 Skill";
-  if (/草案|故事流|故事/.test(copy)) return "确认故事";
+  if (/草案|故事流|故事/.test(copy)) return "确认这版故事";
+  if (/生成参考|参考/.test(copy) && !negativeReferenceCopy) return "确认生成参考";
+  if (/提交视频|发送视频|Seedance/.test(copy) && !negativeVideoCopy) return "确认提交视频";
+  if (/导出|交付/.test(copy) && !negativeExportCopy) return "确认导出";
   return entry.title?.trim() || "确认当前消息";
 }
 
