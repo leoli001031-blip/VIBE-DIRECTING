@@ -2313,8 +2313,11 @@ function projectHierarchyCapabilityItem(input: {
   shotCount: number;
   assetCount: number;
   skillCount: number;
+  storyLabel?: string;
 }): ReturnType<typeof agentCapabilityItems>[number] {
-  const storyPart = input.sectionCount > 0
+  const storyPart = input.storyLabel
+    ? `${input.storyLabel} / ${input.shotCount} 镜头`
+    : input.sectionCount > 0
     ? `${input.sectionCount} 段 / ${input.shotCount} 镜头`
     : `短片 / ${input.shotCount} 镜头`;
   const supportPart = input.skillCount > 0
@@ -2326,6 +2329,16 @@ function projectHierarchyCapabilityItem(input: {
     value: `${storyPart} · ${supportPart}`,
     tone: input.shotCount > 0 ? "ready" : "waiting",
   };
+}
+
+function pendingDraftShotCountFromMessage(message?: MinimalAgentMessage) {
+  if (!message || !isNewVideoDraftConfirmationLabel(minimalAgentConfirmationAction(message, NEW_VIDEO_DRAFT_CONFIRM_LABEL).label)) return 0;
+  const shotFact = minimalAgentFactValue(message, ["镜头", "分镜", "视频段"]);
+  const match = shotFact.match(/([0-9０-９]{1,3})/);
+  if (!match) return 0;
+  const normalized = match[1].replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xFEE0));
+  const count = Number.parseInt(normalized, 10);
+  return Number.isFinite(count) && count > 0 ? count : 0;
 }
 
 function intentWithQaRevisionHint(intent: string | undefined, feedback?: DirectorQaUserFeedback) {
@@ -3879,7 +3892,6 @@ export function MinimalAgentPanel({
     : baseDisplayedSelectionHint;
   const displayedCompactScopeLabel = compactAgentScopeLabel(displayedScopeLabel);
   const displayedCompactSelectionHint = compactAgentSelectionHint(displayedSelectionHint);
-  const displayedSelectionChips = workflow && preparedSelectionChips.length ? preparedSelectionChips : liveSelectionChips;
   const visibleAgentActionLog = agentActionLog.filter((item) =>
     !agentActionLogItemIsPrematureReferenceReview(item, referenceHasReviewableAssets)
   );
@@ -6072,11 +6084,25 @@ export function MinimalAgentPanel({
     && !isRetryingTool
     && confirmedResultBlocked,
   );
+  const pendingDraftShotCount = pendingDraftShotCountFromMessage(
+    draftContextActive ? visibleTimelineConfirmationMessage : undefined,
+  );
+  const visibleCompactSelectionHint = pendingDraftShotCount
+    ? "草案待确认；确认后才保存到项目。"
+    : displayedCompactSelectionHint;
+  const displayedSelectionChips = pendingDraftShotCount
+    ? [
+        { label: "层级", value: "项目 / 草案" },
+        { label: "范围", value: `${pendingDraftShotCount} 个镜头` },
+        { label: "状态", value: "待确认" },
+      ]
+    : workflow && preparedSelectionChips.length ? preparedSelectionChips : liveSelectionChips;
   const visibleProjectHierarchyCapability = projectHierarchyCapabilityItem({
-    sectionCount: runtimeState.storyFlow.sections.length,
-    shotCount: runtimeState.storyFlow.shots.length,
+    sectionCount: pendingDraftShotCount ? 0 : runtimeState.storyFlow.sections.length,
+    shotCount: pendingDraftShotCount || runtimeState.storyFlow.shots.length,
     assetCount: runtimeState.visualMemory.assets.length,
     skillCount: visibleSavedSkillCount,
+    storyLabel: pendingDraftShotCount ? "草案" : undefined,
   });
   const visibleAgentCapabilityItems = [
     visibleProjectHierarchyCapability,
@@ -6535,7 +6561,7 @@ export function MinimalAgentPanel({
           </div>
           <section className="minimal-agent-selection-context" aria-label="当前选择">
             <span>{exportResultIsPrimary || videoResultIsPrimary ? "当前任务" : hasActiveSelection ? "当前选择" : "怎么用"}</span>
-            <p>{displayedCompactSelectionHint}</p>
+            <p>{visibleCompactSelectionHint}</p>
             {displayedSelectionChips.length > 0 && (
               <div className="minimal-agent-context-chips" aria-label="当前引用内容">
                 {displayedSelectionChips.map((item) => (
