@@ -3345,12 +3345,14 @@ export function MinimalAgentPanel({
   const inputPlaceholder = hasActiveSelection
     ? "说这块怎么改..."
     : "写脚本、提需求，或拖入图片/声音参考/文档。";
-  const liveSelectionChips = selectionContextChips({
-    shot,
-    selectedShots,
-    asset,
-    sectionLabel,
-  });
+  const liveSelectionChips = hasActiveSelection
+    ? selectionContextChips({
+        shot,
+        selectedShots,
+        asset,
+        sectionLabel,
+      })
+    : [];
   const agentShotSwitcherItems = useMemo(() => {
     if (!onSelectShot) return [];
     return runtimeState.storyFlow.shots.slice(0, 12).map((item) => ({

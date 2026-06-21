@@ -285,7 +285,7 @@ assert(/onContinueNewVideoDraftFromAgent=\{continueNewVideoDraftFromAgent\}/.tes
 assert(/onConfirmNewVideoDraftFromAgent=\{confirmNewVideoDraftFromAgent\}/.test(directorModeSource), "Director mode must wire prepared-draft confirmation into the right-side Agent composer");
 assert(/newVideoDraftPendingForAgent=\{showNewVideoStart && newVideoStatus\?\.status === "drafting"\}/.test(directorModeSource), "Director mode must surface prepared-but-not-planned draft state to the Agent composer");
 assert(/const hasActiveSelection = hasBoundSelection \|\| hasSectionSelection/.test(minimalAgentPanelSource), "section selection must count as an active Agent context");
-assert(/const liveSelectionChips = selectionContextChips/.test(minimalAgentPanelSource), "Agent composer must project the current selection into visible context chips");
+assert(/const liveSelectionChips = hasActiveSelection[\s\S]*\? selectionContextChips/.test(minimalAgentPanelSource), "Agent composer must project the current selection into visible context chips only after the user has selected a real scope");
 assert(/const preparedSelectionChips = preparedSelectionContextChips/.test(minimalAgentPanelSource), "Agent composer must keep reviewed plans bound to their prepared selection chips");
 assert(/workflow && preparedSelectionChips\.length \? preparedSelectionChips : liveSelectionChips/.test(minimalAgentPanelSource), "reviewed Agent plans must not show chips from a later live selection");
 assert(/function compactAgentScopeLabel/.test(minimalAgentPanelSource), "bottom Agent header needs a compact creator-facing scope label");
