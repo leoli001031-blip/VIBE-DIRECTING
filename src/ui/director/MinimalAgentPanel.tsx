@@ -5151,6 +5151,19 @@ export function MinimalAgentPanel({
         },
       }
     : undefined;
+  const exportFooterAction = projectStatusStage === "可以导出"
+    ? {
+        label: "导出交付包",
+        disabled: !localProjectReadyForTools || !onRunExport,
+        disabledReason: !localProjectReadyForTools
+          ? "先打开或保存本地项目。"
+          : "当前还不能导出交付包。",
+        perform: () => {
+          void onRunExport?.();
+          setStatus("正在导出交付包。");
+        },
+      }
+    : undefined;
   const openViewAlreadyActive = Boolean(agentCommand && currentView && "targetView" in agentCommand && agentCommand.targetView === currentView);
   const openViewFooterAction = !openViewAlreadyActive && agentCommand && (
     agentCommand.kind === "open_story"
@@ -5188,6 +5201,7 @@ export function MinimalAgentPanel({
       : openViewFooterAction || waitFooterAction;
   const fallbackFooterDirectAction =
     videoResumeFooterAction
+    || exportFooterAction
     || referenceReviewFooterAction
     || videoBlockedRecoveryFooterAction
     || referenceFooterAction
@@ -5207,6 +5221,9 @@ export function MinimalAgentPanel({
     }
     if (videoPermissionBlockedByContract && action.label === videoActionLabel) {
       return "现在我只整理方案；确认这张卡才会提交视频。";
+    }
+    if (action === exportFooterAction) {
+      return "现在我只整理方案；确认这张卡才会导出交付包。";
     }
     return "";
   }
@@ -5960,6 +5977,25 @@ export function MinimalAgentPanel({
           { label: "外部提交", value: "不会重复提交" },
         ],
         next: "确认后查询已有任务结果。",
+      } satisfies MinimalAgentMessage;
+    }
+    if (action === exportFooterAction) {
+      return {
+        id: "footer_action_export",
+        entryType: "confirmation_request",
+        role: "confirmation",
+        title: "建议行动：导出交付包",
+        body: "视频和项目资料已经够用，下一步可以生成交付包。确认前不会写入导出文件。",
+        lifecycle: "waiting_for_confirmation",
+        status: "waiting",
+        toolName: "export_project",
+        actionKind: "prepare_export",
+        facts: [
+          { label: "目标", value: "当前项目" },
+          { label: "执行", value: "导出交付包" },
+          { label: "写入文件", value: "确认后才写入" },
+        ],
+        next: "确认后导出交付包；也可以继续输入修改意见。",
       } satisfies MinimalAgentMessage;
     }
     return undefined;
