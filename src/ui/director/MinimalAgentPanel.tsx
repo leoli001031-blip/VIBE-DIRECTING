@@ -6091,7 +6091,18 @@ export function MinimalAgentPanel({
   );
   const visibleCompactSelectionHint = pendingDraftShotCount
     ? "草案待确认；确认后才保存到项目。"
+    : newVideoDraftBusyForAgent
+      ? "AI 正在整理故事和镜头，完成后再确认。"
     : displayedCompactSelectionHint;
+  const selectionContextTitle = exportResultIsPrimary || videoResultIsPrimary
+    ? "当前任务"
+    : pendingDraftShotCount
+      ? "当前草案"
+      : newVideoDraftBusyForAgent
+        ? "正在整理"
+        : hasActiveSelection
+          ? "当前选择"
+          : "怎么用";
   const displayedSelectionChips = pendingDraftShotCount
     ? [
         { label: "层级", value: "项目 / 草案" },
@@ -6562,7 +6573,7 @@ export function MinimalAgentPanel({
             <strong>{displayedCompactScopeLabel}</strong>
           </div>
           <section className="minimal-agent-selection-context" aria-label="当前选择">
-            <span>{exportResultIsPrimary || videoResultIsPrimary ? "当前任务" : hasActiveSelection ? "当前选择" : "怎么用"}</span>
+            <span>{selectionContextTitle}</span>
             <p>{visibleCompactSelectionHint}</p>
             {displayedSelectionChips.length > 0 && (
               <div className="minimal-agent-context-chips" aria-label="当前引用内容">

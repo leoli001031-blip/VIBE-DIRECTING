@@ -292,7 +292,9 @@ assert(/function compactAgentScopeLabel/.test(minimalAgentPanelSource), "bottom 
 assert(/const displayedCompactScopeLabel = compactAgentScopeLabel\(displayedScopeLabel\)/.test(minimalAgentPanelSource), "bottom Agent header must not render raw project or shot ids");
 assert(/const displayedCompactSelectionHint = compactAgentSelectionHint\(displayedSelectionHint\)/.test(minimalAgentPanelSource), "bottom Agent selection hint must be cleaned before display");
 assert(/<strong>\{displayedCompactScopeLabel\}<\/strong>/.test(minimalAgentPanelSource), "bottom Agent header must use the compact scope label");
-assert(/hasActiveSelection \? "当前选择" : "怎么用"/.test(minimalAgentPanelSource), "selection header must reflect shot, asset, and section context");
+assert(/const selectionContextTitle = exportResultIsPrimary \|\| videoResultIsPrimary[\s\S]*\? "当前任务"[\s\S]*pendingDraftShotCount[\s\S]*\? "当前草案"[\s\S]*newVideoDraftBusyForAgent[\s\S]*\? "正在整理"[\s\S]*hasActiveSelection[\s\S]*\? "当前选择"[\s\S]*: "怎么用"/.test(minimalAgentPanelSource), "selection header must reflect task, draft, planning, shot, asset, and section context");
+assert(/<span>\{selectionContextTitle\}<\/span>/.test(minimalAgentPanelSource), "selection header must use the state-aware title instead of a static help label");
+assert(/newVideoDraftBusyForAgent[\s\S]*\? "AI 正在整理故事和镜头，完成后再确认。"/.test(minimalAgentPanelSource), "planning draft context must explain the live Agent work instead of showing generic help copy");
 assert(/hasActiveSelection[\s\S]*\? "说这块怎么改/.test(minimalAgentPanelSource), "composer placeholder must recognize selected sections as editable context");
 assert(/aria-label="当前引用内容"/.test(minimalAgentPanelSource), "Agent composer must expose selected context chips accessibly");
 assert(/aria-label="切换当前镜头"/.test(minimalAgentPanelSource), "right-side Agent rail must expose a compact shot switcher for selected-shot feedback");

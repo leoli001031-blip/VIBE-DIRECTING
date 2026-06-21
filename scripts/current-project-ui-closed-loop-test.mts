@@ -916,7 +916,8 @@ function assertCreatorPanelContract() {
   assert(/正在看\|正在等\|正在发送/.test(agentPanelSource), "Agent Panel compact scope label should preserve active video focus copy");
   assert(/const displayedScopeLabel = exportResultIsPrimary && exportFocusScopeLabel[\s\S]*\? exportFocusScopeLabel[\s\S]*: videoResultIsPrimary && videoFocusScopeLabel[\s\S]*\? videoFocusScopeLabel[\s\S]*: baseDisplayedScopeLabel/.test(agentPanelSource), "Agent Panel should let export/video primary tasks replace the selected-shot scope in the bottom composer");
   assert(/const displayedSelectionChips = pendingDraftShotCount[\s\S]*: workflow && preparedSelectionChips\.length \? preparedSelectionChips : liveSelectionChips/.test(agentPanelSource), "Agent Panel should keep selected-shot chips visible while video/export is the current primary task, except while an unsaved draft is being confirmed");
-  assert(/<span>\{exportResultIsPrimary \|\| videoResultIsPrimary \? "当前任务" : hasActiveSelection \? "当前选择" : "怎么用"\}<\/span>/.test(agentPanelSource), "Agent Panel should label queued video or export as the current task, not the current selection");
+  assert(/const selectionContextTitle = exportResultIsPrimary \|\| videoResultIsPrimary[\s\S]*\? "当前任务"[\s\S]*pendingDraftShotCount[\s\S]*\? "当前草案"[\s\S]*newVideoDraftBusyForAgent[\s\S]*\? "正在整理"[\s\S]*hasActiveSelection[\s\S]*\? "当前选择"[\s\S]*: "怎么用"/.test(agentPanelSource), "Agent Panel should label queued tasks, drafts, planning, and selections with the current Agent state");
+  assert(/<span>\{selectionContextTitle\}<\/span>/.test(agentPanelSource), "Agent Panel should render the state-aware context title");
   assert(/创作者路径/.test(agentPanelSource), "Agent Panel should label the default creator path");
   assert(/描述修改[\s\S]*生成计划[\s\S]*确认应用/.test(agentPanelSource), "Agent Panel should expose the simplified creator path");
   assert(/修改计划详情/.test(agentPanelSource), "Agent Panel should keep staged plan details behind disclosure");
