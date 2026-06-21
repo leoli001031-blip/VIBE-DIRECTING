@@ -314,6 +314,15 @@ function projectStatusViewWithCommittedDraft(status: ProjectStatusViewModel, com
   };
 }
 
+function pendingNewVideoDraftTitle(status?: NewVideoStartStatus) {
+  if (!status) return "";
+  const title = status.draftTitle?.trim();
+  if (!title || status.status === "empty" || status.status === "confirmed") return "";
+  if (status.status === "planning") return `正在整理：${title}`;
+  if (status.status === "ready") return `待确认故事：${title}`;
+  return `新想法：${title}`;
+}
+
 export function DirectorMode({
   audit,
   view,
@@ -628,7 +637,8 @@ export function DirectorMode({
     ),
     [creatorDesk, latestPrototypeAgentDemo, rawProjectStatusView],
   );
-  const projectRailTitle = runtimeState.project.title || projectScopeLabel || "新视频项目";
+  const pendingDraftRailTitle = showNewVideoStart ? pendingNewVideoDraftTitle(newVideoStatus) : "";
+  const projectRailTitle = pendingDraftRailTitle || runtimeState.project.title || projectScopeLabel || "新视频项目";
   const projectRailVideoLabel = directorProjectRailVideoLabel(creatorDesk?.videoStage);
   const projectRailReferenceGapCount = creatorReferenceGapCount(creatorDesk);
   const projectRailReferenceLabel = directorProjectRailReferenceLabel(

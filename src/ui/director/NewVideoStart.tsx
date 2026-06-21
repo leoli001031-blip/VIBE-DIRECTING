@@ -130,6 +130,7 @@ export type NewVideoStartDraft = {
 export type NewVideoStartStatus = {
   status: "empty" | "drafting" | "planning" | "ready" | "blocked" | "confirmed";
   title: string;
+  draftTitle?: string;
   detail: string;
   nextAction: string;
   draftShotCount?: number;
@@ -1616,6 +1617,12 @@ export function NewVideoStart({
   );
   const hasDraft = Boolean(script.trim() || style.trim() || references.length || audio);
   const draftReferenceCount = references.length + (audio ? 1 : 0);
+  const statusDraftScript = submittedDraft?.script || script;
+  const statusDraftTitle = cleanText(
+    projection
+      ? planSummaryTitleForDisplay(projection.summary.title, statusDraftScript)
+      : storyboardRows[0]?.title || explicitTitleFromDraftScript(statusDraftScript),
+  );
   const entryStatus = useMemo<NewVideoStartStatus>(() => {
     if (confirmed) {
       return {
@@ -1631,6 +1638,7 @@ export function NewVideoStart({
       return {
         status: "planning",
         title: "AI 正在拆镜头",
+        draftTitle: statusDraftTitle || undefined,
         detail: storyboardPlanningElapsedSeconds >= 30
           ? `正在整理故事、节奏和镜头。已等待 ${storyboardPlanningElapsedSeconds} 秒。`
           : "正在整理故事、节奏和镜头，不会生成。",
@@ -1652,6 +1660,7 @@ export function NewVideoStart({
       return {
         status: "ready",
         title: "草案待确认",
+        draftTitle: statusDraftTitle || undefined,
         detail: "AI 已经拆出故事和镜头，确认前不会写入项目。",
         nextAction: "确认这版故事，或直接说修改意见",
         draftShotCount: storyboardRows.length,
@@ -1662,6 +1671,7 @@ export function NewVideoStart({
       return {
         status: "drafting",
         title: "想法已放入",
+        draftTitle: statusDraftTitle || undefined,
         detail: "还没有交给 AI 拆镜头。",
         nextAction: "点发送，让 AI 导演先拆故事和节奏",
         draftReferenceCount,
@@ -1683,6 +1693,7 @@ export function NewVideoStart({
     storyboardPlanningStatus,
     storyboardRows.length,
     submittedDraft,
+    statusDraftTitle,
   ]);
   const effectiveWebSearchReady = webSearchReady ?? webSearchSettings.enabled;
   useEffect(() => {
