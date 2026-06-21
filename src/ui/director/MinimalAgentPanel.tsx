@@ -1114,7 +1114,11 @@ function minimalAgentConfirmationRequestsSameAction(left: MinimalAgentMessage, r
   const leftTarget = minimalAgentFactValue(left, ["目标", "影响"]);
   const rightTarget = minimalAgentFactValue(right, ["目标", "影响"]);
   const targetCompatible = !leftTarget || !rightTarget || leftTarget === rightTarget;
-  const toolCompatible = !left.toolName || !right.toolName || left.toolName === right.toolName;
+  const toolCompatible = !left.toolName
+    || !right.toolName
+    || left.toolName === right.toolName
+    || left.toolName === "request_user_confirmation"
+    || right.toolName === "request_user_confirmation";
   return targetCompatible && toolCompatible;
 }
 
