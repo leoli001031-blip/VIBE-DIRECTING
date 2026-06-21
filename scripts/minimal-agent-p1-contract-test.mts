@@ -287,7 +287,7 @@ assert(/hasActiveSelection[\s\S]*\? "说这块怎么改/.test(minimalAgentPanelS
 assert(/aria-label="当前引用内容"/.test(minimalAgentPanelSource), "Agent composer must expose selected context chips accessibly");
 assert(/aria-label="切换当前镜头"/.test(minimalAgentPanelSource), "right-side Agent rail must expose a compact shot switcher for selected-shot feedback");
 assert(/onSelectShot\?\.\(item\.id\)/.test(minimalAgentPanelSource), "Agent shot switcher must update the active shot before natural-language feedback");
-assert(/<MinimalAgentPanel[\s\S]*onSelectShot=\{projectReady \? onSelectShot : undefined\}/.test(directorMode), "Director shell must wire shot selection into the Agent rail");
+assert(/<MinimalAgentPanel[\s\S]*onSelectShot=\{projectNavReady \? onSelectShot : undefined\}/.test(directorMode), "Director shell must wire shot selection into the Agent rail only for the active project context");
 assert(/const footerSelectionTargetCopy = hasActiveSelection[\s\S]*输入文字会引用：\$\{displayedCompactScopeLabel\}；上方确认按行动卡范围执行。[\s\S]*输入文字会引用：\$\{displayedCompactScopeLabel\}/.test(minimalAgentPanelSource), "Agent composer footer must distinguish typed selection feedback from the current confirmation card scope");
 assert(/minimal-agent-footer-target/.test(stylesSource), "Agent composer selected-reference footer hint needs dedicated styling");
 assert(/scopedShotIds\.length > 1[\s\S]*selectedShotIds:\s*scopedShotIds/.test(currentComposerSelectionOverride), "current Agent selection override must preserve multi-shot context");

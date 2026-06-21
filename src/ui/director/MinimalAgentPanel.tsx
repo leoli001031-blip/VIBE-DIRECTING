@@ -1084,6 +1084,16 @@ function minimalAgentMessageIsSupersededSelectionContextCard(messages: MinimalAg
   ));
 }
 
+function minimalAgentSelectionContextMessageIsOutsideActiveScope(
+  message: MinimalAgentMessage,
+  activeSelectionKey: string,
+  hasBoundSelection: boolean,
+) {
+  if (message.entryType !== "state_change" || !message.id.startsWith("selection_context_")) return false;
+  if (!hasBoundSelection || !activeSelectionKey) return true;
+  return message.id !== selectionContextMessageId(activeSelectionKey);
+}
+
 function visibleMinimalAgentMessages(messages: MinimalAgentMessage[]): {
   messages: MinimalAgentMessage[];
   hiddenCount: number;
@@ -5483,6 +5493,21 @@ export function MinimalAgentPanel({
     || Boolean(visibleTimelineConfirmationMessage && !hasComposerInput && !isPreparingPlan);
   const showFooterNextActionButton = (agentNextActionAvailable && !hasComposerInput) || footerNewVideoDraftConfirmationReady;
   const footerNextLabel = footerNewVideoDraftConfirmationReady ? currentTimelineConfirmationLabel || NEW_VIDEO_DRAFT_CONFIRM_LABEL : primaryLabel;
+  const draftContextActive = Boolean(
+    newVideoDraftBusyForAgent
+      || newVideoDraftPlanningForAgent
+      || newVideoDraftPendingForAgent
+      || newVideoDraftReadyForAgent
+      || footerNewVideoDraftConfirmationReady
+      || visibleNewVideoDraftConfirmation
+      || timelineNewVideoDraftConfirmationReady
+      || statusReadyNewVideoDraftConfirmation
+  );
+  const footerProjectPlanHint = draftContextActive
+    ? "草案出来后，你可以确认，也可以直接说哪里要改。"
+    : videoPermissionBlockedByContract
+      ? "当前只整理故事和镜头；生成参考或提交视频会再等你确认。"
+      : composerProjectObservation.currentTask.plan;
   const footerPrimaryLabel = isPreparingPlan ? "整理中" : "发送";
   const footerPrimaryDisabled = sendDisabled;
   const footerPrimaryDisabledReason = sendDisabledReason;
@@ -5553,9 +5578,9 @@ export function MinimalAgentPanel({
               ? "已选中内容，直接说改法。"
                 : "已选中内容，直接说改法，或说“继续下一步”。"
             : showFooterNextActionButton && currentTimelineConfirmationLabel
-              ? `${composerProjectObservation.currentTask.plan} · 等待你确认`
+              ? `${footerProjectPlanHint} · 等待你确认`
               : showFooterNextActionButton
-                ? `${composerProjectObservation.currentTask.plan} · 也可以继续补充想法`
+                ? `${footerProjectPlanHint} · 也可以继续补充想法`
                 : "先写一句想法，或拖入素材；AI 会先整理故事和镜头。";
   const footerHintCopy = composerHint.trim() === footerStatusCopy.trim() ? "" : composerHint;
   if (isComposerCollapsed) {
@@ -5970,6 +5995,7 @@ export function MinimalAgentPanel({
     && !minimalAgentReferenceGenerationConfirmationIsStale(fullAgentThreadMessages, message, threadReferencesUsableForAgent)
     && !minimalAgentReferenceCompletionMessageIsStale(message, threadReferencesUsableForAgent)
     && !minimalAgentReferenceBlockedMessageIsStale(fullAgentThreadMessages, message)
+    && !minimalAgentSelectionContextMessageIsOutsideActiveScope(message, selectionFocusKey, hasBoundSelection)
   );
   const {
     messages: agentThreadMessages,

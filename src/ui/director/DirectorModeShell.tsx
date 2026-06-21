@@ -4,7 +4,10 @@ import type { ExportActionState } from "../../core/exportAction";
 import type { ExportWorkerState } from "../../core/exportWorker";
 import type { ProjectRuntimeState } from "../../core/projectState";
 import type { ProjectAgentActionLogItem, ProjectAgentStagedPlanDraft } from "../../project";
-import { buildVibeAgentTimelineStatusView } from "../../agent-core";
+import {
+  buildVibeAgentTimelineStatusView,
+  isVibeAgentIntakeTimelineEntry,
+} from "../../agent-core";
 import type { VibeAgentTimelineEntry } from "../../agent-core/types";
 import type { ProjectPreviewExportState } from "../../core/types";
 import type { ProjectFactsStagedApplyPlan } from "../../core/projectTransaction";
@@ -323,6 +326,32 @@ function pendingNewVideoDraftTitle(status?: NewVideoStartStatus) {
   return `新想法：${title}`;
 }
 
+function restoredNewVideoDraftSummary(entries?: VibeAgentTimelineEntry[]) {
+  const intakeEntries = (entries || []).filter(isVibeAgentIntakeTimelineEntry);
+  const latestConfirmation = [...intakeEntries].reverse().find((entry) => (
+    entry.type === "confirmation_request"
+    && entry.status === "waiting"
+    && entry.details?.intakePhase === "planning_ready"
+  ));
+  if (!latestConfirmation) return undefined;
+  const confirmed = intakeEntries.some((entry) => (
+    entry.details?.intakePhase === "draft_confirmed"
+    && entry.createdAt >= latestConfirmation.createdAt
+  ));
+  if (confirmed) return undefined;
+  const userEntry = [...intakeEntries].reverse().find((entry) => (
+    entry.type === "user_message"
+    && entry.createdAt <= latestConfirmation.createdAt
+  ));
+  const userTitle = userEntry?.body.replace(/\s+/g, " ").trim();
+  const shotCountText = latestConfirmation.facts?.find((fact) => fact.label === "镜头")?.value || "";
+  const shotCount = Number.parseInt(shotCountText, 10);
+  return {
+    title: userTitle ? `待确认故事：${userTitle.slice(0, 28)}${userTitle.length > 28 ? "..." : ""}` : "待确认故事",
+    shotCount: Number.isFinite(shotCount) && shotCount > 0 ? shotCount : undefined,
+  };
+}
+
 export function DirectorMode({
   audit,
   view,
@@ -508,7 +537,12 @@ export function DirectorMode({
   const [agentIntakeCommand, setAgentIntakeCommand] = useState<NewVideoStartAgentIntakeCommand | undefined>();
   const [agentNewVideoDraftActive, setAgentNewVideoDraftActive] = useState(false);
   const [agentPendingAction, setAgentPendingAction] = useState(false);
-  const showNewVideoStart = !projectReady || shots.length === 0 || agentNewVideoDraftActive;
+  const restoredNewVideoDraft = useMemo(
+    () => restoredNewVideoDraftSummary(restoredAgentTimelineEntries),
+    [restoredAgentTimelineEntries],
+  );
+  const restoredNewVideoDraftActive = Boolean(restoredNewVideoDraft);
+  const showNewVideoStart = !projectReady || shots.length === 0 || agentNewVideoDraftActive || restoredNewVideoDraftActive;
   const pendingConfirmedVideoPermissionContractRef = useRef<{
     contract: AgentVideoPermissionContract;
     confirmedAt: number;
@@ -654,7 +688,10 @@ export function DirectorMode({
         issue: undefined,
       }
     : projectStatusView;
-  const pendingDraftRailTitle = showNewVideoStart ? pendingNewVideoDraftTitle(newVideoStatus) : "";
+  const pendingDraftRailTitle = showNewVideoStart ? pendingNewVideoDraftTitle(newVideoStatus) || restoredNewVideoDraft?.title || "" : "";
+  const projectNavReady = projectReady && !showNewVideoStart;
+  const projectNavSections = showNewVideoStart ? [] : storySections;
+  const projectNavShotCount = showNewVideoStart ? (newVideoStatus?.draftShotCount || restoredNewVideoDraft?.shotCount || 0) : runtimeState.storyFlow.shots.length;
   const projectRailTitle = pendingDraftRailTitle || runtimeState.project.title || projectScopeLabel || "新视频项目";
   const projectRailVideoLabel = directorProjectRailVideoLabel(creatorDesk?.videoStage);
   const projectRailReferenceGapCount = creatorReferenceGapCount(creatorDesk);
@@ -663,6 +700,18 @@ export function DirectorMode({
     displayableReferenceAssetCount(runtimeState.visualMemory.assets),
     projectRailReferenceGapCount,
   );
+  const projectRailDisplayReferenceLabel = showNewVideoStart
+    ? newVideoStatus?.draftReferenceCount
+      ? `${newVideoStatus.draftReferenceCount} 个素材`
+      : "待确认"
+    : projectRailReferenceLabel;
+  const projectRailDisplayVideoLabel = showNewVideoStart ? "未生成" : projectRailVideoLabel;
+  const agentSelectionReady = projectReady && !showNewVideoStart && agentShotBoundView;
+  const agentScopeLabel = showNewVideoStart
+    ? pendingDraftRailTitle || "新视频草案"
+    : projectReady
+      ? projectScopeLabel
+      : "新视频项目";
   async function confirmNewVideoDraft(draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) {
     const nextContract = draft.agentBoundaryMode
       ? agentVideoPermissionForMode(draft.agentBoundaryMode)
@@ -725,12 +774,12 @@ export function DirectorMode({
         projectTitle={projectRailTitle}
         projectStatus={displayedProjectStatusView}
         directorView={directorView}
-        sections={storySections}
-        activeSectionId={activeSection?.id}
-        totalShots={runtimeState.storyFlow.shots.length}
-        referenceLabel={projectRailReferenceLabel}
-        videoLabel={projectRailVideoLabel}
-        projectReady={projectReady}
+        sections={projectNavSections}
+        activeSectionId={showNewVideoStart ? undefined : activeSection?.id}
+        totalShots={projectNavShotCount}
+        referenceLabel={projectRailDisplayReferenceLabel}
+        videoLabel={projectRailDisplayVideoLabel}
+        projectReady={projectNavReady}
         onOpenDirectorView={onOpenDirectorView}
         onOpenSection={onOpenSection}
       />
@@ -879,18 +928,18 @@ export function DirectorMode({
         <div className="director-agent-rail" aria-label="AI 导演对话区">
           <MinimalAgentPanel
             runtimeState={runtimeState}
-            projectScopeLabel={projectReady ? projectScopeLabel : "新视频项目"}
+            projectScopeLabel={agentScopeLabel}
             projectStatusLabel={agentProjectStatusLabel}
             currentView={directorView}
             localProjectReady={folderReady}
             localProjectBusy={localProjectBusy}
             canCreateLocalProject={canCreateLocalProject}
-            shot={projectReady && agentShotBoundView ? selectedShot : undefined}
-            selectedShots={projectReady && agentShotBoundView ? selectedShots : []}
-            asset={projectReady && directorView === "assets" ? selectedAsset : undefined}
-            onSelectShot={projectReady ? onSelectShot : undefined}
+            shot={agentSelectionReady ? selectedShot : undefined}
+            selectedShots={agentSelectionReady ? selectedShots : []}
+            asset={projectReady && !showNewVideoStart && directorView === "assets" ? selectedAsset : undefined}
+            onSelectShot={projectNavReady ? onSelectShot : undefined}
             sectionLabel={agentSectionLabel}
-            sectionId={projectReady && directorView === "story" && !selectedShot ? activeSection?.id : undefined}
+            sectionId={projectNavReady && directorView === "story" && !selectedShot ? activeSection?.id : undefined}
             onProjectStoreApplyPlanReady={onProjectStoreApplyPlanReady}
             latestPrototypeAgentDemo={latestPrototypeAgentDemo}
             restoredAgentStagedPlanDraft={restoredAgentStagedPlanDraft}
@@ -901,7 +950,7 @@ export function DirectorMode({
             onRememberAgentTimelineEntries={onRememberAgentTimelineEntries}
             onPreviewPrototypeAgentDemo={onPreviewPrototypeAgentDemo}
             agentCommand={visibleAgentCommand}
-            projectObservation={projectReady ? creatorDesk?.projectObservation : undefined}
+            projectObservation={projectNavReady ? creatorDesk?.projectObservation : undefined}
             projectStatusView={displayedProjectStatusView}
             realSampleAction={realSampleAction}
             endFrameAction={endFrameAction}
