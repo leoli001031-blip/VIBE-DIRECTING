@@ -6140,9 +6140,14 @@ export function MinimalAgentPanel({
   ));
   const fullAgentThreadMessages: MinimalAgentMessage[] = agentTimelineEntries.map(minimalAgentMessageFromTimelineEntry);
   const storyFlowMessage = committedNewVideoDraftMessage(latestPrototypeAgentDemo) || storyFlowReadyMessage(runtimeState.storyFlow.shots.length);
+  const storyFlowAlreadyVisible = (message: MinimalAgentMessage) => {
+    const messageText = minimalAgentMessageSearchText(message);
+    return message.id === storyFlowMessage?.id
+      || message.toolName === "write_project"
+      || /草案.*故事流|故事流.*草案|故事流已准备|故事已保存到项目|这版故事和镜头.*保存到项目/.test(messageText);
+  };
   if (storyFlowMessage && !fullAgentThreadMessages.some((message) => (
-    message.id === storyFlowMessage.id
-    || /草案.*故事流|故事流.*草案|故事流已准备/.test(`${message.title} ${message.body}`)
+    storyFlowAlreadyVisible(message)
   ))) {
     fullAgentThreadMessages.unshift(storyFlowMessage);
   }
