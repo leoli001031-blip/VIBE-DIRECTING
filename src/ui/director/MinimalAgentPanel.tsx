@@ -1106,6 +1106,29 @@ function minimalAgentConfirmationRequestsOverlap(left: MinimalAgentMessage, righ
   return Boolean(leftAction && rightAction && leftAction === rightAction && leftTarget && rightTarget && leftTarget === rightTarget);
 }
 
+function minimalAgentConfirmationRequestsSameAction(left: MinimalAgentMessage, right: MinimalAgentMessage) {
+  if (minimalAgentConfirmationRequestsOverlap(left, right)) return true;
+  const leftLabel = minimalAgentConfirmationAction(left, "确认执行").label;
+  const rightLabel = minimalAgentConfirmationAction(right, "确认执行").label;
+  if (!leftLabel || leftLabel !== rightLabel) return false;
+  const leftTarget = minimalAgentFactValue(left, ["目标", "影响"]);
+  const rightTarget = minimalAgentFactValue(right, ["目标", "影响"]);
+  const targetCompatible = !leftTarget || !rightTarget || leftTarget === rightTarget;
+  const toolCompatible = !left.toolName || !right.toolName || left.toolName === right.toolName;
+  return targetCompatible && toolCompatible;
+}
+
+function minimalAgentFooterConfirmationHasExistingVisiblePeer(messages: MinimalAgentMessage[], footerMessage: MinimalAgentMessage) {
+  if (!footerMessage.id.startsWith("footer_action_") || !minimalAgentMessageRequestsActionConfirmation(footerMessage)) return false;
+  return messages.some((candidate) => (
+    candidate.id !== footerMessage.id
+    && !candidate.id.startsWith("footer_action_")
+    && minimalAgentMessageRequestsActionConfirmation(candidate)
+    && (candidate.status === "waiting" || candidate.lifecycle === "waiting_for_confirmation")
+    && minimalAgentConfirmationRequestsSameAction(candidate, footerMessage)
+  ));
+}
+
 function minimalAgentMessageHasLaterConfirmationRequest(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
   const messageIndex = messages.indexOf(message);
   const messageIsConfirmationRequest = minimalAgentMessageRequestsActionConfirmation(message);
@@ -6331,6 +6354,7 @@ export function MinimalAgentPanel({
   })();
   const shouldAppendFooterActionConfirmationMessage = Boolean(
     footerActionConfirmationMessage
+      && !minimalAgentFooterConfirmationHasExistingVisiblePeer(fullAgentThreadMessages, footerActionConfirmationMessage)
       && (
         footerActionConfirmationMessage.id.startsWith("footer_action_new_video_draft")
           ? !fullAgentThreadMessages.some((message) => message.id === footerActionConfirmationMessage.id)
