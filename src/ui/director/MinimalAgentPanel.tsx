@@ -5335,12 +5335,13 @@ export function MinimalAgentPanel({
             startedTitle: "开始导出交付包",
             startedBody: "我会把当前项目资料、视频和报告整理成一个交付包。",
             completedTitle: "交付包已导出",
-            completedBody: "交付包已经生成，可以去交付页查看。",
+            completedBody: "交付包已经生成，交付页会展示视频、项目包和报告。",
             failedTitle: "交付包没有导出",
             next: "去交付页查看结果，或继续告诉我哪里要调整。",
             facts: [
               { label: "目标", value: "当前项目" },
-              { label: "动作", value: "导出交付包" },
+              { label: "包含", value: "视频、项目包、报告" },
+              { label: "保护", value: "确认后才写文件" },
             ],
           };
           runVisibleDirectProductAction(exportTask, () => onRunExport?.());
@@ -6190,7 +6191,7 @@ export function MinimalAgentPanel({
         actionKind: "prepare_export",
         facts: [
           { label: "目标", value: "当前项目" },
-          { label: "执行", value: "导出交付包" },
+          { label: "包含", value: "视频、项目包、报告" },
           { label: "写入文件", value: "确认后才写入" },
         ],
         next: "确认后导出交付包；也可以继续输入修改意见。",
