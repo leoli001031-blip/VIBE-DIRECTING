@@ -1104,6 +1104,34 @@ function minimalAgentMessageIsSupersededSelectionContextCard(messages: MinimalAg
   ));
 }
 
+function minimalAgentMessageIsSelectionContext(message: MinimalAgentMessage) {
+  return message.entryType === "state_change" && message.id.startsWith("selection_context_");
+}
+
+function minimalAgentMessageIsWaitingConfirmation(message: MinimalAgentMessage) {
+  return minimalAgentMessageRequestsActionConfirmation(message)
+    && (message.status === "waiting" || message.lifecycle === "waiting_for_confirmation");
+}
+
+function placeSelectionContextBeforeActiveConfirmation(messages: MinimalAgentMessage[]) {
+  const confirmationIndex = messages.findIndex(minimalAgentMessageIsWaitingConfirmation);
+  if (confirmationIndex < 0) return messages;
+  const selectionAfterConfirmation = messages.filter((message, index) => (
+    index > confirmationIndex && minimalAgentMessageIsSelectionContext(message)
+  ));
+  if (!selectionAfterConfirmation.length) return messages;
+  const withoutMovedSelection = messages.filter((message, index) => (
+    !(index > confirmationIndex && minimalAgentMessageIsSelectionContext(message))
+  ));
+  const updatedConfirmationIndex = withoutMovedSelection.findIndex(minimalAgentMessageIsWaitingConfirmation);
+  if (updatedConfirmationIndex < 0) return messages;
+  return [
+    ...withoutMovedSelection.slice(0, updatedConfirmationIndex),
+    ...selectionAfterConfirmation,
+    ...withoutMovedSelection.slice(updatedConfirmationIndex),
+  ];
+}
+
 function minimalAgentSelectionContextMessageIsOutsideActiveScope(
   message: MinimalAgentMessage,
   activeSelectionKey: string,
@@ -1139,7 +1167,7 @@ function visibleMinimalAgentMessages(messages: MinimalAgentMessage[]): {
     : turnFocusedMessages.slice(-MAX_VISIBLE_AGENT_THREAD_MESSAGES);
   const bounded = visible.length > MAX_VISIBLE_AGENT_THREAD_MESSAGES ? visible.slice(-MAX_VISIBLE_AGENT_THREAD_MESSAGES) : visible;
   return {
-    messages: bounded,
+    messages: placeSelectionContextBeforeActiveConfirmation(bounded),
     hiddenCount: Math.max(0, currentMessages.length - bounded.length),
   };
 }
@@ -6131,6 +6159,7 @@ export function MinimalAgentPanel({
   if (
     footerActionConfirmationMessage
     && !agentThreadMessages.some((message) => message.id === footerActionConfirmationMessage.id)
+    && !agentThreadMessages.some(minimalAgentMessageRequestsActionConfirmation)
     && !hasComposerInput
   ) {
     agentThreadMessages = [...agentThreadMessages, footerActionConfirmationMessage];
@@ -6753,9 +6782,7 @@ export function MinimalAgentPanel({
                       : isPreparingPlan
                         ? "正在整理，稍等一下。"
                         : "";
-                const confirmationButtonLabel = confirmationIsNewVideoDraftAction
-                  ? confirmationAction.label
-                  : confirmationUsesPrimaryAction ? confirmationAction.label : "继续确认";
+                const confirmationButtonLabel = confirmationAction.label;
                 const confirmationButtonHint = confirmationIsNewVideoDraftAction
                   ? confirmationAction.hint
                   : confirmationUsesPrimaryAction
