@@ -378,6 +378,7 @@ export function DirectorMode({
   restoredAgentStagedPlanDraft,
   restoredAgentActionLog,
   restoredAgentTimelineEntries,
+  onNewVideoStatusChange,
   onStagePrototypeAgentPlan,
   onRememberAgentActionLogItem,
   onRememberAgentTimelineEntries,
@@ -460,6 +461,7 @@ export function DirectorMode({
   restoredAgentStagedPlanDraft?: ProjectAgentStagedPlanDraft;
   restoredAgentActionLog?: ProjectAgentActionLogItem[];
   restoredAgentTimelineEntries?: VibeAgentTimelineEntry[];
+  onNewVideoStatusChange?: (status?: NewVideoStartStatus) => void;
   onStagePrototypeAgentPlan?: (input: StagePrototypeAgentPlanInput) => StagePrototypeAgentPlanResult | void | Promise<StagePrototypeAgentPlanResult | void>;
   onRememberAgentActionLogItem?: (item: ProjectAgentActionLogItem) => void | Promise<void>;
   onRememberAgentTimelineEntries?: (entries: VibeAgentTimelineEntry[]) => void | Promise<void>;
@@ -585,8 +587,11 @@ export function DirectorMode({
   const storyDetailLabel = [`${storySections.length} 个段落`, "点击查看分镜、模式和画面状态"].join(" · ");
   const showCreatorDeskPanel = projectReady && creatorDesk && !showNewVideoStart && directorView === "story";
   useEffect(() => {
-    if (!showNewVideoStart && newVideoStatus) setNewVideoStatus(undefined);
-  }, [newVideoStatus, showNewVideoStart]);
+    if (!showNewVideoStart && newVideoStatus) {
+      setNewVideoStatus(undefined);
+      onNewVideoStatusChange?.(undefined);
+    }
+  }, [newVideoStatus, onNewVideoStatusChange, showNewVideoStart]);
   const agentTimelineStatusView = useMemo(
     () => buildVibeAgentTimelineStatusView(restoredAgentTimelineEntries),
     [restoredAgentTimelineEntries],
@@ -697,6 +702,11 @@ export function DirectorMode({
     });
   }
 
+  function handleNewVideoStatusChange(status: NewVideoStartStatus) {
+    setNewVideoStatus(status);
+    onNewVideoStatusChange?.(status);
+  }
+
   return (
     <div className={`minimal-director ${directorView} ${showAgentPanel ? "has-agent-rail" : "composer-only"}`}>
       <DirectorProjectRail
@@ -780,7 +790,7 @@ export function DirectorMode({
                   webSearchSettings={webSearchSettings}
                   webSearchReady={webSearchReady}
                   onSaveResearchAsReference={onSaveResearchAsReference}
-                  onStatusChange={setNewVideoStatus}
+                  onStatusChange={handleNewVideoStatusChange}
                   onDraftConfirmed={confirmNewVideoDraft}
                   videoPermissionContract={videoPermissionContract}
                   onVideoPermissionContractChange={setVideoPermissionContract}

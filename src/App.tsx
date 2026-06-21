@@ -205,7 +205,7 @@ import type {
   StagePrototypeAgentPlanInput,
   StagePrototypeAgentPlanResult,
 } from "./ui/director/agentPanelProjection";
-import type { NewVideoStartConfirmationContext, NewVideoStartDraft } from "./ui/director/NewVideoStart";
+import type { NewVideoStartConfirmationContext, NewVideoStartDraft, NewVideoStartStatus } from "./ui/director/NewVideoStart";
 import type { MinimalAudioPlanDialogueAudioCreated } from "./ui/director/MinimalAudioPlan";
 import { uiStatusToAssetLibraryStatus } from "./ui/director/assetLibraryUi";
 import {
@@ -456,6 +456,14 @@ function projectDisplayNameFromDraft(draft?: NewVideoStartDraft, context?: NewVi
   const firstLine = draft?.script.split(/\r?\n/).map((line) => cleanProjectDisplayNameCandidate(line)).find((line) => line && !looksLikeProjectInstruction(line));
   if (firstLine) return firstLine.slice(0, 36);
   return "新视频";
+}
+
+function pendingDraftTitleForNav(status?: NewVideoStartStatus) {
+  const title = cleanProjectDisplayNameCandidate(status?.draftTitle);
+  if (!status || !title || status.status === "empty" || status.status === "confirmed") return "";
+  if (status.status === "planning") return `正在整理：${title}`;
+  if (status.status === "ready") return `待确认故事：${title}`;
+  return `新想法：${title}`;
 }
 
 function browserRuntimeProjectRootFromDraft(draft?: NewVideoStartDraft, context?: NewVideoStartConfirmationContext) {
@@ -2161,6 +2169,7 @@ function App() {
   const runtimeAgentTimelineRestoreKeyRef = useRef("");
   const [prototypePreviewItems, setPrototypePreviewItems] = useState<PreviewQueueItem[]>([]);
   const [latestPrototypeAgentDemo, setLatestPrototypeAgentDemo] = useState<PrototypeAgentDemoRun | undefined>();
+  const [directorNewVideoStatus, setDirectorNewVideoStatus] = useState<NewVideoStartStatus | undefined>();
   const [restoredAgentStagedPlanDraft, setRestoredAgentStagedPlanDraft] = useState<ProjectAgentStagedPlanDraft | undefined>();
   const [restoredAgentActionLog, setRestoredAgentActionLog] = useState<ProjectAgentActionLogItem[]>([]);
   const [restoredAgentTimelineEntries, setRestoredAgentTimelineEntries] = useState<VibeAgentTimelineEntry[]>([]);
@@ -3308,11 +3317,12 @@ function App() {
     && !(localProjectReadyForUi && hasWorkbenchProjectContent)
   );
   const projectContentReadyForUi = !isEmptyFallbackWorkbench && hasWorkbenchProjectContent;
-  const visibleProjectTitle = selectedProjectHasNoContent
+  const visibleProjectTitleBase = selectedProjectHasNoContent
     ? selectedProjectDisplayName || "空项目"
     : isEmptyFallbackWorkbench
       ? "新视频项目"
       : audit.projectTitle;
+  const visibleProjectTitle = pendingDraftTitleForNav(directorNewVideoStatus) || visibleProjectTitleBase;
   const projectControlRoot = projectFileSelection.status === "selected"
     ? projectFileSelection.projectRoot
     : effectiveRuntimeProjectBinding.status === "bound"
@@ -5537,6 +5547,7 @@ function App() {
           onRememberAgentActionLogItem={rememberConfirmedProjectAgentAction}
           onRememberAgentTimelineEntries={rememberVibeAgentTimelineEntries}
           onPreviewPrototypeAgentDemo={preparePrototypeAgentDemo}
+          onNewVideoStatusChange={setDirectorNewVideoStatus}
         />
         </ErrorBoundary>
       )}
