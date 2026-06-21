@@ -2173,7 +2173,7 @@ export function NewVideoStart({
       materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
       imageCount: planningDraft.references.length,
       audioCount: planningDraft.audio ? 1 : 0,
-      shotCount: localStoryboardRows.length,
+      shotCount: 0,
       permissionMode: vibePermissionModeFromAgentVideoMode(draftToSubmit.agentBoundaryMode),
     }));
     onStart?.(planningDraft);

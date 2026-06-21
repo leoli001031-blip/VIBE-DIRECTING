@@ -409,6 +409,11 @@ check(
   failures,
 );
 check(
+  /createdAt:\s*timelineCreatedAt[\s\S]*phase:\s*"planning_started"[\s\S]*shotCount:\s*0/.test(prepareDraft),
+  "NewVideoStart must show first-pass AI planning shots as pending instead of exposing the local rough split as a final count.",
+  failures,
+);
+check(
   /understandingBody:\s*"你想按这条修改意见重排当前草案/.test(sendDiscussionFeedback),
   "NewVideoStart feedback turns must explicitly tell the user the Agent is revising the current draft, not starting a new project.",
   failures,
