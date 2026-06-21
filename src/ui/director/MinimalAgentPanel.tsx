@@ -764,14 +764,34 @@ function minimalAgentFactValue(message: MinimalAgentMessage, labels: string[]) {
   return cleanMinimalAgentMessageCopy(value);
 }
 
+function minimalAgentConfirmationTargetPhrase(message: MinimalAgentMessage, targetFact: string) {
+  if (!targetFact) return "";
+  if (message.actionKind === "prepare_reference_generation") return `这次只补 ${targetFact}`;
+  if (message.actionKind === "prepare_video_submit") return `这次只提交 ${targetFact}`;
+  if (message.actionKind === "query_video_result") return `这次只查询 ${targetFact}`;
+  if (message.actionKind === "prepare_export") return `这次只导出 ${targetFact}`;
+  if (message.actionKind === "revise_story_or_shot" || message.actionKind === "update_shot_strategy") return `这次只改 ${targetFact}`;
+  if (message.toolName === "write_project") return `这次只保存 ${targetFact}`;
+  return `这次只处理 ${targetFact}`;
+}
+
+function minimalAgentConfirmationCostPhrase(costFact: string) {
+  if (!costFact) return "";
+  if (costFact === "参考生成") return "会生成参考图";
+  if (/Seedance|视频提交/.test(costFact)) return "会提交 Seedance 视频任务";
+  if (/查询/.test(costFact)) return "只查询已有任务";
+  if (/导出/.test(costFact)) return "会生成交付包";
+  return costFact;
+}
+
 function minimalAgentConfirmationBoundary(message: MinimalAgentMessage) {
   const targetFact = minimalAgentFactValue(message, ["目标", "影响"]);
   const costFact = minimalAgentFactValue(message, ["成本", "调用", "执行"]);
   const writeFact = minimalAgentFactValue(message, ["写入", "保存"]);
   const externalFact = minimalAgentFactValue(message, ["外部提交"]);
   const parts = [
-    targetFact ? `这次只补 ${targetFact}` : "",
-    costFact ? (costFact === "参考生成" ? "会生成参考图" : costFact) : "",
+    minimalAgentConfirmationTargetPhrase(message, targetFact),
+    minimalAgentConfirmationCostPhrase(costFact),
     writeFact && writeFact !== "不写文件" ? `结果保存到 ${writeFact}` : "",
     externalFact ? externalFact : "",
   ].filter(Boolean);
