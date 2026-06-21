@@ -314,6 +314,7 @@ function projectInboxAgentMessage(inbox: ProjectInboxProjection): MinimalAgentMe
     facts: [
       { label: "分类", value: assetInboxSummary.kindLabels.join("、") || "待判断" },
       { label: "待确认", value: inbox.needsReviewCount ? `${inbox.needsReviewCount} 个` : "没有" },
+      { label: "保护", value: "确认前不改绑定" },
       examples.length ? { label: "示例", value: examples.join("；") } : undefined,
     ].filter((item): item is { label: string; value: string } => Boolean(item)),
     next: assetInboxSummary.nextAction,
@@ -391,7 +392,7 @@ function minimalAgentAssetActionOverflowFromTimelineEntry(
   if (!remainingCount) return undefined;
   return {
     label: `还有 ${remainingCount} 个素材待确认`,
-    detail: "去参考页可以继续逐个看，不会生成参考或提交视频。",
+    detail: "去参考页可以继续逐个看；不确认前不会改绑定、生成参考或提交视频。",
   };
 }
 
