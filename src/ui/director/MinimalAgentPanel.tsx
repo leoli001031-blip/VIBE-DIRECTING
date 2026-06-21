@@ -1607,6 +1607,7 @@ function buildDirectProductActionTimelineEntry(input: {
       : input.phase === "blocked"
         ? "blocked"
         : "failed";
+  const visibleFacts = (input.facts || []).slice(0, 3);
   return {
     id: `direct_product_${input.toolName}_${phaseLabel}_${suffix}`,
     type: input.phase === "started" ? "tool_call" : input.phase === "running" ? "state_change" : "action_result",
@@ -1625,9 +1626,9 @@ function buildDirectProductActionTimelineEntry(input: {
     toolName: input.toolName,
     status: input.phase === "started" || input.phase === "running" ? "waiting" : input.phase === "completed" ? "done" : "blocked",
     facts: [
-      ...(input.facts || []),
+      ...visibleFacts,
       { label: "下一步", value: input.next },
-    ].slice(0, 4),
+    ],
     details: { next: input.next },
   };
 }
@@ -4091,7 +4092,8 @@ export function MinimalAgentPanel({
       next: "等参考图完成后，到参考页复核。",
       facts: [
         { label: "动作", value: "生成参考" },
-        { label: "范围", value: "当前项目" },
+        { label: "查看", value: "参考页" },
+        { label: "保护", value: "先复核再用于视频" },
       ],
     };
     if (referenceGenerationBlockedByProject) {
@@ -4184,7 +4186,8 @@ export function MinimalAgentPanel({
       next: "等结束画面完成后，到参考页复核。",
       facts: [
         { label: "动作", value: "生成结束画面" },
-        { label: "范围", value: "当前镜头" },
+        { label: "查看", value: "参考页" },
+        { label: "保护", value: "先复核再用于视频" },
       ],
     };
     if (referenceGenerationBlockedByProject) {
@@ -4268,7 +4271,8 @@ export function MinimalAgentPanel({
           next: "等结果完成后，到预览页复核。",
           facts: [
             { label: "动作", value: "查询视频" },
-            { label: "范围", value: "当前视频任务" },
+            { label: "保护", value: "不会重复提交" },
+            { label: "查看", value: "预览页" },
           ],
         }
       : {
@@ -4281,7 +4285,8 @@ export function MinimalAgentPanel({
           next: "等结果回流后，到预览页复核。",
           facts: [
             { label: "动作", value: "发送视频" },
-            { label: "范围", value: "当前镜头" },
+            { label: "方式", value: "串行提交" },
+            { label: "查看", value: "预览页" },
           ],
         };
     if (videoPermissionBlockedByProject) {
@@ -5382,8 +5387,8 @@ export function MinimalAgentPanel({
             failedTitle: "交付包没有导出",
             next: "去交付页查看结果，或继续告诉我哪里要调整。",
             facts: [
-              { label: "目标", value: "当前项目" },
               { label: "包含", value: "视频、项目包、报告" },
+              { label: "查看", value: "交付页" },
               { label: "保护", value: "确认后才写文件" },
             ],
           };
