@@ -1090,6 +1090,7 @@ export function DirectorMode({
             newVideoDraftPendingForAgent={showNewVideoStart && newVideoStatus?.status === "drafting"}
             newVideoDraftPlanningForAgent={showNewVideoStart && newVideoStatus?.status === "planning"}
             newVideoDraftReadyForAgent={showNewVideoStart && newVideoStatus?.status === "ready"}
+            newVideoAgentSelectionContext={showNewVideoStart ? newVideoStatus?.agentSelectionContext : undefined}
             onCreateP6RealSample={onCreateP6RealSample}
             onCreateImage2EndFrame={onCreateImage2EndFrame}
             onSendSeedanceVideo={onSendSeedanceVideo}

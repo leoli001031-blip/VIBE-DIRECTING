@@ -26,7 +26,7 @@ actions, and see the Agent explain what changed.
   suggestions.
 - The composer keeps a visible `发送` button; Command Enter is only a shortcut.
 - The three permission modes are visible in creator language: `先整理`,
-  `生成参考`, and `提交视频`.
+  `可补参考`, and `可发视频`.
 - The Agent can scan a project folder, classify common materials, explain
   reference gaps, and suggest bindings.
 - Detail-only materials such as headlights, wheels, hands, eye direction, rain,
@@ -76,7 +76,7 @@ passed the in-app Codex browser smoke on 2026-06-21:
 - An explicit explain-only message was routed as project reading: no project
   write, no reference generation, and no video submission.
 - The live page still showed the three creator-facing permission modes:
-  `先整理`, `生成参考`, and `提交视频`.
+  `先整理`, `可补参考`, and `可发视频`.
 
 ## Do Not Claim Yet
 
@@ -90,6 +90,7 @@ passed the in-app Codex browser smoke on 2026-06-21:
 
 - Full completion audit: `docs/agent-first-demo-completion-audit.md`
 - Live rehearsal checklist: `docs/demo-final-rehearsal-checklist.md`
+- Frontend rehearsal record: `docs/demo-frontend-rehearsal-record.md`
 - Recording script: `docs/demo-recording-runbook.md`
 - Showcase package index: `showcase-package/DEMO_INDEX.md`
 

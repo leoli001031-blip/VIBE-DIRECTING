@@ -4132,7 +4132,7 @@
 
 .new-video-file-list span {
   display: inline-grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 7px;
   max-width: min(100%, 360px);
@@ -4140,7 +4140,21 @@
   border: 1px solid var(--studio-line);
   border-radius: 7px;
   background: var(--studio-surface);
+  cursor: pointer;
   padding: 4px 5px 4px 9px;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.new-video-file-list span:hover,
+.new-video-file-list span:focus-visible {
+  border-color: rgba(128, 95, 52, 0.5);
+  box-shadow: 0 0 0 3px rgba(128, 95, 52, 0.1);
+  outline: none;
+}
+
+.new-video-file-list span.is-selected {
+  border-color: var(--studio-accent);
+  box-shadow: 0 0 0 3px rgba(128, 95, 52, 0.14);
 }
 
 .new-video-file-list b {
@@ -4156,6 +4170,18 @@
 .new-video-start-footer small {
   color: var(--studio-muted);
   font-size: 11px;
+}
+
+.new-video-file-list em {
+  color: var(--studio-accent);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.new-video-file-list em.is-placeholder {
+  visibility: hidden;
 }
 
 .new-video-file-list button {
@@ -4848,6 +4874,28 @@
   border-radius: 8px;
   background: #ffffff;
   padding: 9px;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.new-video-storyboard-card:hover,
+.new-video-storyboard-card:focus-visible {
+  border-color: rgba(128, 95, 52, 0.5);
+  box-shadow: 0 0 0 3px rgba(128, 95, 52, 0.1);
+  outline: none;
+}
+
+.new-video-storyboard-card.is-selected {
+  border-color: var(--studio-accent);
+  box-shadow: 0 0 0 3px rgba(128, 95, 52, 0.14);
+}
+
+.new-video-storyboard-selected-hint {
+  justify-self: end;
+  white-space: nowrap;
+  color: var(--studio-accent);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .new-video-storyboard-card-head {
@@ -7186,6 +7234,33 @@
   line-height: 1.45;
 }
 
+.current-shot-skill-explain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+  min-width: 0;
+}
+
+.current-shot-skill-explain small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  border-radius: 999px;
+  background: rgba(251, 247, 240, 0.86);
+  color: rgba(84, 58, 42, 0.68);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 680;
+  white-space: nowrap;
+}
+
+.current-shot-skill-explain b {
+  color: rgba(47, 39, 34, 0.82);
+  font-weight: 820;
+}
+
 .current-shot-skill-tags,
 .minimal-agent-skill-tags {
   display: flex;
@@ -8509,6 +8584,15 @@ body:has(.project-control-popover) .new-video-bottom-portal {
   font-weight: 840;
   line-height: 1.42;
   overflow-wrap: anywhere;
+}
+
+.minimal-agent-asset-inbox-summary small.is-boundary {
+  border-color: rgba(53, 104, 95, 0.16);
+  background: rgba(246, 250, 246, 0.58);
+}
+
+.minimal-agent-asset-inbox-summary small.is-boundary strong {
+  color: rgba(53, 104, 95, 0.86);
 }
 
 .minimal-agent-material-suggestions {

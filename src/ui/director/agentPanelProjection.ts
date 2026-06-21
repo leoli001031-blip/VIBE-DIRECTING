@@ -135,8 +135,8 @@ export function agentVideoSubmitContractForUi(
 
 export function agentVideoSubmitContractLabel(contract: AgentVideoSubmitContract) {
   if (contract.mode === "plan_only") return "先整理";
-  if (contract.mode === "reference_allowed") return "生成参考";
-  return "提交视频";
+  if (contract.mode === "reference_allowed") return "可补参考";
+  return "可发视频";
 }
 
 export function agentVideoSubmitContractAllowsVideo(contract: AgentVideoSubmitContract) {
@@ -149,7 +149,7 @@ export function agentVideoSubmitContractAllowsReference(contract: AgentVideoSubm
 
 export function agentVideoSubmitContractDetail(contract: AgentVideoSubmitContract) {
   if (contract.mode === "plan_only") return "我先帮你整理故事和镜头，不会生成或发送。";
-  if (contract.mode === "reference_allowed") return "可以生成参考，视频等你确认后再发送。";
+  if (contract.mode === "reference_allowed") return "可以补参考，视频等你确认后再发送。";
   return "故事和参考通过后，可以发送视频。";
 }
 

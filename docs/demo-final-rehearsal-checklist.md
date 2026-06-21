@@ -5,6 +5,8 @@ Updated: 2026-06-20
 Use this checklist before recording or handing off the current Vibe Director
 demo. It is intentionally operator-facing: every item should be observable in
 the app, a terminal command, a local file, or a returned provider artifact.
+Record the observed run in `docs/demo-frontend-rehearsal-record.md`; do not
+count a source-code gate as a substitute for the visible app rehearsal.
 
 ## Scope
 
@@ -60,7 +62,7 @@ multimodal image QA, or fully automatic batch production.
 - If an action will submit Seedance/Jimeng, the card must say that it submits an
   external video task.
 - The three permission modes must remain visible in creator language:
-  `先整理`, `生成参考`, `提交视频`.
+  `先整理`, `可补参考`, `可发视频`.
 
 ## 4. Check Selection Context
 

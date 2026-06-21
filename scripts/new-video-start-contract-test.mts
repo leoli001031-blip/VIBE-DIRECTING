@@ -425,11 +425,11 @@ check(
   failures,
 );
 check(
-  /inspect_project/.test(newVideoStartSource)
-    && /plan_story/.test(newVideoStartSource)
-    && /write_agent_message/.test(newVideoStartSource)
+  /查看项目/.test(newVideoStartSource)
+    && /拆故事和镜头/.test(newVideoStartSource)
+    && /说明", value: "下一步/.test(newVideoStartSource)
     && /保存到项目/.test(newVideoStartSource)
-    && /生成参考图、提交视频和导出都还要再确认/.test(newVideoStartSource),
+    && /补参考、发视频和导出都等你再说/.test(newVideoStartSource),
   "NewVideoStart Agent thread must explain creator-facing action semantics and confirmation boundaries before generation.",
   failures,
 );

@@ -779,6 +779,20 @@ export function MinimalStoryFlow({
                 <span>Agent 推荐的做法</span>
                 <strong>{currentSkillSummary.label}</strong>
                 <p>{currentSkillSummary.reason}</p>
+                <div className="current-shot-skill-explain" aria-label="推荐原因">
+                  <small>
+                    <b>适合</b>
+                    {currentSkillSummary.appliesTo}
+                  </small>
+                  <small>
+                    <b>避开</b>
+                    {currentSkillSummary.avoidWhen}
+                  </small>
+                  <small>
+                    <b>影响</b>
+                    {currentSkillSummary.affects}
+                  </small>
+                </div>
               </div>
               <div className="current-shot-skill-tags" aria-label="命中的技能标签">
                 {currentSkillSummary.skillTags.slice(0, 6).map((tag) => (

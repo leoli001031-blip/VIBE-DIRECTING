@@ -196,7 +196,7 @@ Live validation:
 - Verified the live page still satisfies the final rehearsal checklist surface:
   left project navigation, center story/reference/video results, and right
   Agent conversation were all visible; the right composer kept a visible
-  `发送` button; `先整理 / 生成参考 / 提交视频` were visible; the selected
+  `发送` button; `先整理 / 可补参考 / 可发视频` were visible; the selected
   context cue included `这句话会引用`; the three Skill groups were visible; the
   long Skill detail was closed; and stale workflow/engineering copy such as
   `底部主按钮`, `对象：`, `成本：`, and `外部：` did not appear.

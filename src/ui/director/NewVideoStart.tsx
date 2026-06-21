@@ -1,5 +1,5 @@
 // This component has many useState hooks; consider extracting a useReducer or custom hook in a future refactor
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDown, ArrowUp, CheckCircle2, ExternalLink, FileAudio2, FolderPlus, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import {
@@ -136,6 +136,13 @@ export type NewVideoStartStatus = {
   nextAction: string;
   draftShotCount?: number;
   draftReferenceCount?: number;
+  agentSelectionContext?: NewVideoStartAgentSelectionContext;
+};
+
+export type NewVideoStartAgentSelectionContext = {
+  title: string;
+  hint: string;
+  chips: Array<{ label: string; value: string }>;
 };
 
 export type NewVideoStoryboardShot = {
@@ -1684,6 +1691,8 @@ export function NewVideoStart({
   const [scriptFileError, setScriptFileError] = useState("");
   const [storyboardRows, setStoryboardRows] = useState<NewVideoStoryboardShot[]>([]);
   const [storyboardBaselineRows, setStoryboardBaselineRows] = useState<NewVideoStoryboardShot[]>([]);
+  const [selectedStoryboardRowId, setSelectedStoryboardRowId] = useState("");
+  const [selectedMaterialId, setSelectedMaterialId] = useState("");
   const [expandedStoryboardRowIds, setExpandedStoryboardRowIds] = useState<Set<string>>(() => new Set());
   const [discussionDetailsOpen, setDiscussionDetailsOpen] = useState(false);
   const [planDetailsOpen, setPlanDetailsOpen] = useState(false);
@@ -1718,6 +1727,50 @@ export function NewVideoStart({
       ? planSummaryTitleForDisplay(projection.summary.title, statusDraftScript)
       : storyboardRows[0]?.title || explicitTitleFromDraftScript(statusDraftScript),
   );
+  const agentSelectionContext = useMemo<NewVideoStartAgentSelectionContext | undefined>(() => {
+    const selectedStoryboardRow = storyboardRows.find((row) => row.id === selectedStoryboardRowId);
+    if (selectedStoryboardRow) {
+      const shotLabel = selectedStoryboardRow.shotNo || selectedStoryboardRow.id || "当前镜头";
+      const title = selectedStoryboardRow.title || selectedStoryboardRow.primaryAction || "这一段草案";
+      return {
+        title: "当前镜头",
+        hint: `已选中 ${shotLabel} · ${title}。直接说“这个”怎么改。`,
+        chips: [
+          { label: "这个指向", value: `${shotLabel} · ${title}` },
+          { label: "状态", value: "草案待确认" },
+          { label: "下一步", value: "直接说改法，或确认这版故事" },
+        ],
+      };
+    }
+
+    const selectedReference = references.find((reference) => reference.id === selectedMaterialId);
+    if (selectedReference) {
+      const purpose = referenceBindingPurposeLabels[selectedReference.binding.purpose] || referenceTypeLabels[selectedReference.type];
+      return {
+        title: "当前素材",
+        hint: `已选中 ${selectedReference.file.name}。直接说这个素材怎么改。`,
+        chips: [
+          { label: "这个指向", value: selectedReference.file.name },
+          { label: "识别为", value: purpose },
+          { label: "下一步", value: "直接说改法，或让我重新判断用途" },
+        ],
+      };
+    }
+
+    if (selectedMaterialId === "audio_reference" && audio) {
+      return {
+        title: "当前声音",
+        hint: `已选中 ${audio.name}。直接说这个声音怎么改。`,
+        chips: [
+          { label: "这个指向", value: audio.name },
+          { label: "识别为", value: audioRoleCopy(audioRole).title },
+          { label: "下一步", value: "直接说要改台词、声线或用途" },
+        ],
+      };
+    }
+
+    return undefined;
+  }, [audio, audioRole, references, selectedMaterialId, selectedStoryboardRowId, storyboardRows]);
   const entryStatus = useMemo<NewVideoStartStatus>(() => {
     if (confirmed) {
       return {
@@ -1727,6 +1780,7 @@ export function NewVideoStart({
         nextAction: "继续在输入框说要改哪里",
         draftShotCount: storyboardRows.length,
         draftReferenceCount,
+        agentSelectionContext,
       };
     }
     if (storyboardPlanningStatus === "running") {
@@ -1739,6 +1793,7 @@ export function NewVideoStart({
           : "正在整理故事、节奏和镜头，不会生成。",
         nextAction: "等草案出来后复核",
         draftReferenceCount,
+        agentSelectionContext,
       };
     }
     if (storyboardPlanningStatus === "blocked") {
@@ -1749,6 +1804,7 @@ export function NewVideoStart({
         nextAction: "修改后重新发送",
         draftShotCount: storyboardRows.length,
         draftReferenceCount,
+        agentSelectionContext,
       };
     }
     if (projection || storyboardRows.length > 0 || submittedDraft) {
@@ -1760,6 +1816,7 @@ export function NewVideoStart({
         nextAction: "确认这版故事，或直接说修改意见",
         draftShotCount: storyboardRows.length,
         draftReferenceCount,
+        agentSelectionContext,
       };
     }
     if (hasDraft) {
@@ -1770,6 +1827,7 @@ export function NewVideoStart({
         detail: "还没有交给 AI 拆镜头。",
         nextAction: "点发送，让 AI 导演先拆故事和节奏",
         draftReferenceCount,
+        agentSelectionContext,
       };
     }
     return {
@@ -1779,6 +1837,7 @@ export function NewVideoStart({
       nextAction: "写一句想法，或拖入脚本/图片/声音参考",
     };
   }, [
+    agentSelectionContext,
     confirmed,
     draftReferenceCount,
     hasDraft,
@@ -1799,6 +1858,7 @@ export function NewVideoStart({
   }, [videoPermissionContract]);
   useEffect(() => {
     const rowIds = new Set(storyboardRows.map((row) => row.id));
+    setSelectedStoryboardRowId((current) => current && rowIds.has(current) ? current : "");
     setExpandedStoryboardRowIds((current) => {
       let changed = false;
       const next = new Set<string>();
@@ -1812,6 +1872,13 @@ export function NewVideoStart({
       return changed ? next : current;
     });
   }, [storyboardRows]);
+  useEffect(() => {
+    const materialIds = new Set([
+      ...references.map((reference) => reference.id),
+      audio ? "audio_reference" : "",
+    ].filter(Boolean));
+    setSelectedMaterialId((current) => current && materialIds.has(current) ? current : "");
+  }, [audio, references]);
   const activeVideoPermissionContract = localVideoPermissionContract;
   const draft = useMemo(
     () => ({
@@ -1854,6 +1921,123 @@ export function NewVideoStart({
     if (!entries.length) return;
     setNewVideoAgentTimelineEntries((current) => mergeNewVideoAgentTimelineEntries(current, entries));
     void onRememberAgentTimelineEntries?.(entries);
+  }
+
+  function selectStoryboardRow(row: NewVideoStoryboardShot) {
+    setSelectedStoryboardRowId(row.id);
+    setSelectedMaterialId("");
+    const shotLabel = row.shotNo || row.id || "当前镜头";
+    const title = row.title || row.primaryAction || "这一段草案";
+    const agentSelectionContext: NewVideoStartAgentSelectionContext = {
+      title: "当前镜头",
+      hint: `已选中 ${shotLabel} · ${title}。直接说“这个”怎么改。`,
+      chips: [
+        { label: "这个指向", value: `${shotLabel} · ${title}` },
+        { label: "状态", value: "草案待确认" },
+        { label: "下一步", value: "直接说改法，或确认这版故事" },
+      ],
+    };
+    onStatusChange?.({ ...entryStatus, agentSelectionContext });
+    rememberNewVideoAgentTimeline([{
+      id: `draft_selection_context_${row.id.replace(/[^a-z0-9]+/gi, "_")}`,
+      type: "state_change",
+      createdAt: new Date().toISOString(),
+      title: "我知道你在说哪段草案了",
+      body: `现在你说“这个”，我会理解为草案镜头 ${shotLabel}「${title}」。直接说哪里不顺，我会先改草案，不会生成参考或提交视频。`,
+      lifecycle: "succeeded",
+      status: "done",
+      facts: [
+        { label: "这个指向", value: `${shotLabel} · ${title}` },
+        { label: "状态", value: "草案待确认" },
+        { label: "下一步", value: "直接说改法，或确认这版故事" },
+      ],
+      details: {
+        next: "直接说改法，或确认这版故事。",
+      },
+    }]);
+  }
+
+  function selectReferenceMaterial(reference: NewVideoReferenceFile) {
+    setSelectedMaterialId(reference.id);
+    setSelectedStoryboardRowId("");
+    const materialLabel = reference.file.name || "这个素材";
+    const purpose = referenceBindingPurposeLabels[reference.binding.purpose] || referenceTypeLabels[reference.type];
+    const agentSelectionContext: NewVideoStartAgentSelectionContext = {
+      title: "当前素材",
+      hint: `已选中 ${materialLabel}。直接说这个素材怎么改。`,
+      chips: [
+        { label: "这个指向", value: materialLabel },
+        { label: "识别为", value: purpose },
+        { label: "下一步", value: "直接说改法，或让我重新判断用途" },
+      ],
+    };
+    onStatusChange?.({ ...entryStatus, agentSelectionContext });
+    rememberNewVideoAgentTimeline([{
+      id: `draft_material_selection_context_${reference.id.replace(/[^a-z0-9]+/gi, "_")}`,
+      type: "state_change",
+      createdAt: new Date().toISOString(),
+      title: "我知道你在说哪个素材了",
+      body: `现在你说“这个素材”或“这张图”，我会理解为「${materialLabel}」。它当前被识别为${purpose}，我会先按这个绑定去改草案。`,
+      lifecycle: "succeeded",
+      status: "done",
+      facts: [
+        { label: "这个指向", value: materialLabel },
+        { label: "识别为", value: purpose },
+        { label: "下一步", value: "直接说改法，或让我重新判断用途" },
+      ],
+      details: {
+        next: "直接说改法，或让我重新判断用途。",
+      },
+    }]);
+  }
+
+  function selectAudioMaterial() {
+    if (!audio) return;
+    setSelectedMaterialId("audio_reference");
+    setSelectedStoryboardRowId("");
+    const agentSelectionContext: NewVideoStartAgentSelectionContext = {
+      title: "当前声音",
+      hint: `已选中 ${audio.name}。直接说这个声音怎么改。`,
+      chips: [
+        { label: "这个指向", value: audio.name },
+        { label: "识别为", value: audioCopy.title },
+        { label: "下一步", value: "直接说要改台词、声线或用途" },
+      ],
+    };
+    onStatusChange?.({ ...entryStatus, agentSelectionContext });
+    rememberNewVideoAgentTimeline([{
+      id: "draft_material_selection_context_audio_reference",
+      type: "state_change",
+      createdAt: new Date().toISOString(),
+      title: "我知道你在说哪段声音了",
+      body: `现在你说“这个音频”或“这个声音”，我会理解为「${audio.name}」。它当前会作为${audioCopy.title}使用。`,
+      lifecycle: "succeeded",
+      status: "done",
+      facts: [
+        { label: "这个指向", value: audio.name },
+        { label: "识别为", value: audioCopy.title },
+        { label: "下一步", value: "直接说要改台词、声线或用途" },
+      ],
+      details: {
+        next: "直接说要改台词、声线或用途。",
+      },
+    }]);
+  }
+
+  function selectableTarget(target: EventTarget | null) {
+    return target instanceof HTMLElement
+      && !target.closest("button,input,textarea,select,summary,a");
+  }
+
+  function handleStoryboardRowClick(event: MouseEvent<HTMLElement>, row: NewVideoStoryboardShot) {
+    if (!selectableTarget(event.target)) return;
+    selectStoryboardRow(row);
+  }
+
+  function handleStoryboardRowKeyDown(event: KeyboardEvent<HTMLElement>, row: NewVideoStoryboardShot) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    selectStoryboardRow(row);
   }
 
   useEffect(() => {
@@ -2852,15 +3036,15 @@ export function NewVideoStart({
           ? "拖入图片、声音或脚本；先拆草案，确认后再选择项目文件夹。"
           : "拖入图片、声音或脚本；现在先整理想法，生成前再选择项目文件夹。";
   const confirmedFlowTitle = activeVideoPermissionContract.mode === "plan_only"
-    ? "保存到项目，不会生成"
+    ? "确认后只保存故事"
     : activeVideoPermissionContract.mode === "reference_allowed"
-      ? "保存到项目，再生成参考"
-      : "保存到项目，参考通过后可发视频";
+      ? "确认后先补参考"
+      : "确认后进入可提交视频";
   const confirmedFlowDetail = activeVideoPermissionContract.mode === "plan_only"
-    ? "确认草案只会保存到项目；生成参考和发送视频都要你再说。"
+    ? "这一步只保存故事；补参考、发视频和导出都等你再说。"
     : activeVideoPermissionContract.mode === "reference_allowed"
-      ? "确认草案不会发送视频；后面会先看参考，再单独确认视频。"
-      : "确认草案不会立刻发送；故事和参考通过后再发送视频。";
+      ? "这一步会先保存故事；参考会单独复核，不会发送视频。"
+      : "这一步先保存故事；参考通过后再按消息确认提交视频。";
   const planSummaryActionHint = storyboardPlanningStatus === "running"
     ? "草案出来后可确认"
     : confirmed
@@ -2955,7 +3139,7 @@ export function NewVideoStart({
         title: "读取项目",
         body: "我先看当前是否已经有故事流、项目文件夹和可继续的任务。",
         facts: [
-          { label: "动作", value: "inspect_project" },
+          { label: "动作", value: "查看项目" },
           { label: "生成", value: "不会生成" },
         ],
       });
@@ -2982,11 +3166,11 @@ export function NewVideoStart({
       messages.push({
         id: "tool-read-input",
         role: "tool",
-        title: "读取输入",
+        title: "整理输入",
         body: "我先把脚本、风格和拖入的素材收进本轮上下文。",
         facts: [
-          { label: "动作", value: "inspect_project" },
-          { label: "范围", value: "只整理，不生成" },
+          { label: "动作", value: "收集脚本和素材" },
+          { label: "范围", value: "只整理" },
         ],
       });
       messages.push({
@@ -3011,7 +3195,7 @@ export function NewVideoStart({
             ? "我已经完成草案规划，现在停在复核和确认这一步。"
             : "下一步会先拆故事、镜头和节奏，不会直接生成参考或视频。",
         facts: [
-          { label: "动作", value: "plan_story" },
+          { label: "动作", value: "拆故事和镜头" },
           { label: "镜头", value: storyboardRows.length ? `${storyboardRows.length} 个` : "待拆分" },
         ],
       });
@@ -3022,7 +3206,7 @@ export function NewVideoStart({
         role: "assistant",
         title: `AI 导演：${agentReply.title}`,
         body: agentReply.body,
-        facts: [{ label: "动作", value: "write_agent_message" }, ...(agentReply.facts || [])],
+        facts: [{ label: "说明", value: "下一步" }, ...(agentReply.facts || [])],
         next: agentReply.next,
       });
     }
@@ -3031,7 +3215,7 @@ export function NewVideoStart({
         id: "confirmation-draft",
         role: "confirmation",
         title: "等待确认",
-        body: "确认后我只会把草案保存到项目；生成参考图、提交视频和导出都还要再确认。",
+        body: "确认后我只会把故事保存到项目；补参考、发视频和导出都等你再说。",
         facts: [
           { label: "确认", value: "保存到项目" },
           { label: "下一步", value: composerConcreteActionLabel },
@@ -3266,18 +3450,49 @@ export function NewVideoStart({
             <summary>已添加素材</summary>
             <div className="new-video-file-list" aria-label="已添加素材">
               {references.map((file, index) => (
-                <span key={file.id}>
-                  <b>{file.file.name}</b>
-                  <small>{referenceTypeLabels[file.type]} · {referenceBindingSummary(file)}</small>
+                <span
+                  key={file.id}
+                  className={selectedMaterialId === file.id ? "is-selected" : ""}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={selectedMaterialId === file.id}
+                  aria-label={`选中素材 ${file.file.name}`}
+                  onClick={(event) => {
+                    if (selectableTarget(event.target)) selectReferenceMaterial(file);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    selectReferenceMaterial(file);
+                  }}
+                  >
+                    <b>{file.file.name}</b>
+                    <small>{referenceTypeLabels[file.type]} · {referenceBindingSummary(file)}</small>
+                  <em className={selectedMaterialId === file.id ? "" : "is-placeholder"}>已选中</em>
                   <button type="button" onClick={() => removeReference(index)} aria-label={`移除 ${file.file.name}`}>
                     <X size={13} aria-hidden="true" />
                   </button>
                 </span>
               ))}
               {audio && (
-                <span>
+                <span
+                  className={selectedMaterialId === "audio_reference" ? "is-selected" : ""}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={selectedMaterialId === "audio_reference"}
+                  aria-label={`选中声音素材 ${audio.name}`}
+                  onClick={(event) => {
+                    if (selectableTarget(event.target)) selectAudioMaterial();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    selectAudioMaterial();
+                  }}
+                >
                   <b>{audioCopy.title}</b>
                   <small>{audioCopy.short}</small>
+                  <em className={selectedMaterialId === "audio_reference" ? "" : "is-placeholder"}>已选中</em>
                   <button type="button" onClick={() => updateAudio(undefined)} aria-label={`移除 ${audio.name}`}>
                     <X size={13} aria-hidden="true" />
                   </button>
@@ -3425,7 +3640,16 @@ export function NewVideoStart({
                 </div>
                 <div className="new-video-storyboard-list">
                   {storyboardRows.map((row, index) => (
-                    <article className="new-video-storyboard-card" key={row.id}>
+                    <article
+                      className={`new-video-storyboard-card ${selectedStoryboardRowId === row.id ? "is-selected" : ""}`}
+                      key={row.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={selectedStoryboardRowId === row.id}
+                      aria-label={`选中草案镜头 ${row.shotNo || index + 1}：${row.title || row.primaryAction || "未命名镜头"}`}
+                      onClick={(event) => handleStoryboardRowClick(event, row)}
+                      onKeyDown={(event) => handleStoryboardRowKeyDown(event, row)}
+                    >
                       <header className="new-video-storyboard-card-head">
                         <div className="new-video-storyboard-card-index">
                           <span>{index + 1}</span>
@@ -3435,6 +3659,9 @@ export function NewVideoStart({
                           <strong>{row.title || `镜头 ${index + 1}`}</strong>
                           <small>{executableVideoDurationSeconds(row.duration)} 秒 · {row.shotSize || "景别待定"} · {DIRECTOR_RHYTHM_PROFILE_LABELS[row.rhythmProfile] || "节奏待定"}</small>
                         </div>
+                        {selectedStoryboardRowId === row.id && (
+                          <span className="new-video-storyboard-selected-hint">已选中，可说“这个”</span>
+                        )}
                       </header>
                       <div className="new-video-storyboard-readable">
                         <p>{row.visualDescription || "画面描述待完善。"}</p>

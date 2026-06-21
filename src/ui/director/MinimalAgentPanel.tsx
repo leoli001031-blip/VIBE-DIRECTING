@@ -178,6 +178,7 @@ type MinimalAgentAssetInboxSummary = {
   needsReviewCount: number;
   kindLabels: string[];
   kindCountLabels: string[];
+  handlingLabels: string[];
   bindingPreviewLabels: string[];
   foldedDetailLabels: string[];
 };
@@ -258,15 +259,32 @@ function minimalAgentAssetInboxBindingPreviewLabels(items: unknown[]) {
     .slice(0, 3);
 }
 
+function minimalAgentAssetInboxItemLooksFoldedDetail(item: Record<string, unknown>) {
+  return /细节|不单独生成参考|并入主体|镜头说明/.test([
+    item.detail,
+    item.suggestedBinding,
+    item.suggestedAction,
+    item.reason,
+  ].map(stringValue).join(" "));
+}
+
+function minimalAgentAssetInboxHandlingLabels(items: unknown[]) {
+  const records = items.filter(isPlainRecord);
+  const foldedDetailCount = records.filter(minimalAgentAssetInboxItemLooksFoldedDetail).length;
+  const standaloneCount = records.filter((item) => {
+    if (minimalAgentAssetInboxItemLooksFoldedDetail(item)) return false;
+    return ["character", "scene", "prop", "storyboard", "voice"].includes(stringValue(item.kind));
+  }).length;
+  return [
+    standaloneCount ? `可独立 ${standaloneCount}` : "",
+    foldedDetailCount ? `并入镜头 ${foldedDetailCount}` : "",
+  ].filter(Boolean);
+}
+
 function minimalAgentAssetInboxFoldedDetailLabels(items: unknown[]) {
   return items
     .filter(isPlainRecord)
-    .filter((item) => /细节|不单独生成参考|并入主体|镜头说明/.test([
-      item.detail,
-      item.suggestedBinding,
-      item.suggestedAction,
-      item.reason,
-    ].map(stringValue).join(" ")))
+    .filter(minimalAgentAssetInboxItemLooksFoldedDetail)
     .map((item) => stringValue(item.label) || "细节参考")
     .filter(Boolean)
     .slice(0, 3);
@@ -292,6 +310,7 @@ function minimalAgentAssetInboxSummaryFromTimelineEntry(entry: VibeAgentTimeline
     needsReviewCount,
     kindLabels,
     kindCountLabels: minimalAgentAssetInboxKindCountLabels(items),
+    handlingLabels: minimalAgentAssetInboxHandlingLabels(items),
     bindingPreviewLabels: minimalAgentAssetInboxBindingPreviewLabels(items),
     foldedDetailLabels: minimalAgentAssetInboxFoldedDetailLabels(items),
   };
@@ -307,6 +326,7 @@ function minimalAgentAssetInboxSummaryFromProjection(inbox: ProjectInboxProjecti
     needsReviewCount: inbox.needsReviewCount,
     kindLabels,
     kindCountLabels: minimalAgentAssetInboxKindCountLabels(inbox.items),
+    handlingLabels: minimalAgentAssetInboxHandlingLabels(inbox.items),
     bindingPreviewLabels: minimalAgentAssetInboxBindingPreviewLabels(inbox.items),
     foldedDetailLabels: minimalAgentAssetInboxFoldedDetailLabels(inbox.items),
   };
@@ -591,6 +611,12 @@ function minimalAgentMessageRequestsActionConfirmation(message: MinimalAgentMess
     );
 }
 
+function isMinimalAgentSelectionContextId(id: string) {
+  return id.startsWith("selection_context_")
+    || id.startsWith("draft_selection_context_")
+    || id.startsWith("draft_material_selection_context_");
+}
+
 function minimalAgentMessageStageLabel(message: MinimalAgentMessage) {
   if (message.role === "user") return "输入";
   if (minimalAgentMessageRequestsActionConfirmation(message)) return "需要确认";
@@ -598,7 +624,7 @@ function minimalAgentMessageStageLabel(message: MinimalAgentMessage) {
     return message.status === "blocked" ? "需要处理" : "完成结果";
   }
   if (message.entryType === "state_change") {
-    if (message.id.startsWith("selection_context_")) return "当前选择";
+    if (isMinimalAgentSelectionContextId(message.id)) return "当前选择";
     return message.lifecycle === "running" || message.title === "执行中" ? "正在处理" : "项目状态";
   }
   if (message.entryType === "tool_call") return "正在处理";
@@ -973,7 +999,7 @@ function minimalAgentMessageMatchesConfirmationAction(message: MinimalAgentMessa
 function minimalAgentMessageInvalidatesConfirmation(message: MinimalAgentMessage, confirmation: MinimalAgentMessage) {
   if (message.id.startsWith("direct_product_")) return minimalAgentMessageMatchesConfirmationAction(message, confirmation);
   if (message.entryType !== "state_change" || message.status !== "done") return false;
-  return message.id.startsWith("selection_context_") || message.id.startsWith("execution_boundary_");
+  return isMinimalAgentSelectionContextId(message.id) || message.id.startsWith("execution_boundary_");
 }
 
 function minimalAgentConfirmationSuperseded(
@@ -1210,17 +1236,17 @@ function minimalAgentRequestConfirmationToolCallIsSuperseded(messages: MinimalAg
 }
 
 function minimalAgentMessageIsSupersededSelectionContextCard(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
-  if (message.entryType !== "state_change" || !message.id.startsWith("selection_context_")) return false;
+  if (message.entryType !== "state_change" || !isMinimalAgentSelectionContextId(message.id)) return false;
   const messageIndex = messages.indexOf(message);
   return messages.some((candidate, index) => (
     index > messageIndex
     && candidate.entryType === "state_change"
-    && candidate.id.startsWith("selection_context_")
+    && isMinimalAgentSelectionContextId(candidate.id)
   ));
 }
 
 function minimalAgentMessageIsSelectionContext(message: MinimalAgentMessage) {
-  return message.entryType === "state_change" && message.id.startsWith("selection_context_");
+  return message.entryType === "state_change" && isMinimalAgentSelectionContextId(message.id);
 }
 
 function minimalAgentMessageIsWaitingConfirmation(message: MinimalAgentMessage) {
@@ -1252,7 +1278,8 @@ function minimalAgentSelectionContextMessageIsOutsideActiveScope(
   activeSelectionKey: string,
   hasBoundSelection: boolean,
 ) {
-  if (message.entryType !== "state_change" || !message.id.startsWith("selection_context_")) return false;
+  if (message.entryType !== "state_change" || !isMinimalAgentSelectionContextId(message.id)) return false;
+  if (message.id.startsWith("draft_selection_context_") || message.id.startsWith("draft_material_selection_context_")) return false;
   if (!hasBoundSelection || !activeSelectionKey) return true;
   return message.id !== selectionContextMessageId(activeSelectionKey);
 }
@@ -1533,6 +1560,40 @@ function selectionContextMessageId(selectionKey: string) {
   return `selection_context_${selectionId}`;
 }
 
+function explicitAgentSelectionContextFromTimeline(entries: VibeAgentTimelineEntry[]) {
+  const entry = [...entries].reverse().find((item) =>
+    item.type === "state_change"
+    && (
+      item.id.startsWith("draft_selection_context_")
+      || item.id.startsWith("draft_material_selection_context_")
+    )
+  );
+  if (!entry) return undefined;
+  const facts = entry.facts || [];
+  const target = facts.find((fact) => fact.label === "这个指向")?.value || "";
+  if (!target) return undefined;
+  const binding = facts.find((fact) => fact.label === "识别为")?.value;
+  const looksLikeVoiceContext = /声|音频|对白|台词|voice|audio/i.test(binding || "");
+  const kind = entry.id.startsWith("draft_material_selection_context_")
+    ? looksLikeVoiceContext ? "voice" : "asset"
+    : "shot";
+  const kindLabel = kind === "shot" ? "当前镜头" : kind === "voice" ? "当前声音" : "当前素材";
+  const status = facts.find((fact) => fact.label === "状态")?.value;
+  const next = typeof entry.details?.next === "string" ? entry.details.next : "";
+  return {
+    title: kindLabel,
+    hint: kind === "shot"
+      ? `已选中 ${target}。直接说“这个”怎么改。`
+      : `已选中 ${target}。直接说这个素材怎么改。`,
+    chips: [
+      { label: "这个指向", value: target },
+      binding ? { label: "识别为", value: binding } : undefined,
+      status ? { label: "状态", value: status } : undefined,
+      next ? { label: "下一步", value: next } : undefined,
+    ].filter((item): item is { label: string; value: string } => Boolean(item)).slice(0, 4),
+  };
+}
+
 function committedNewVideoDraftMessage(run?: PrototypeAgentDemoRun): MinimalAgentMessage | undefined {
   if (!isCommittedNewVideoDraftAgentRun(run)) return undefined;
   const result = run?.result;
@@ -1588,7 +1649,7 @@ function buildExecutionBoundaryChangedTimelineEntry(input: {
     id: `execution_boundary_${input.contract.mode}_${input.createdAt}`,
     type: "state_change",
     createdAt: input.createdAt,
-    title: "可做范围已切换",
+    title: "AI 导演权限已切换",
     body: `已切换为“${label}”。${detail}`,
     lifecycle: "succeeded",
     status: "done",
@@ -3232,6 +3293,7 @@ export function MinimalAgentPanel({
   newVideoDraftPendingForAgent = false,
   newVideoDraftPlanningForAgent = false,
   newVideoDraftReadyForAgent = false,
+  newVideoAgentSelectionContext,
   onSendSeedanceVideo,
   onRunExport,
   onOpenResultView,
@@ -3304,6 +3366,11 @@ export function MinimalAgentPanel({
   newVideoDraftPendingForAgent?: boolean;
   newVideoDraftPlanningForAgent?: boolean;
   newVideoDraftReadyForAgent?: boolean;
+  newVideoAgentSelectionContext?: {
+    title: string;
+    hint: string;
+    chips: Array<{ label: string; value: string }>;
+  };
   onCreateP6RealSample?: (target?: AgentControlledToolInvocationTarget) => unknown | Promise<unknown>;
   onCreateImage2EndFrame?: () => void | Promise<void>;
   onSendSeedanceVideo?: (target?: AgentControlledToolInvocationTarget) => unknown | Promise<unknown>;
@@ -3649,8 +3716,8 @@ export function MinimalAgentPanel({
   const videoPermissionBlockedByProject = !localProjectReadyForTools;
   const videoPermissionModeItems: Array<{ mode: AgentVideoPermissionMode; label: string }> = [
     { mode: "plan_only", label: "先整理" },
-    { mode: "reference_allowed", label: "生成参考" },
-    { mode: "video_allowed", label: "提交视频" },
+    { mode: "reference_allowed", label: "可补参考" },
+    { mode: "video_allowed", label: "可发视频" },
   ];
 
   function clearSkillSaveComposerInput() {
@@ -6131,13 +6198,21 @@ export function MinimalAgentPanel({
   const pendingDraftShotCount = pendingDraftShotCountFromMessage(
     draftContextActive ? visibleTimelineConfirmationMessage : undefined,
   );
+  const explicitTimelineSelectionContext = newVideoAgentSelectionContext || explicitAgentSelectionContextFromTimeline(
+    mergeVibeAgentTimelineEntries(agentTimelineEntries, restoredAgentTimelineEntries || []),
+  );
+  const shouldUseExplicitTimelineSelectionContext = Boolean(explicitTimelineSelectionContext);
   const visibleCompactSelectionHint = pendingDraftShotCount
-    ? "草案待确认；确认后才保存到项目。"
+    ? explicitTimelineSelectionContext?.hint || "草案待确认；确认后才保存到项目。"
     : newVideoDraftBusyForAgent
       ? "AI 正在整理故事和镜头，完成后再确认。"
+    : shouldUseExplicitTimelineSelectionContext
+      ? explicitTimelineSelectionContext?.hint || displayedCompactSelectionHint
     : displayedCompactSelectionHint;
   const selectionContextTitle = exportResultIsPrimary || videoResultIsPrimary
     ? "当前任务"
+    : shouldUseExplicitTimelineSelectionContext
+      ? explicitTimelineSelectionContext?.title || "当前选择"
     : pendingDraftShotCount
       ? "当前草案"
       : newVideoDraftBusyForAgent
@@ -6146,11 +6221,13 @@ export function MinimalAgentPanel({
           ? "当前选择"
           : "怎么用";
   const displayedSelectionChips = pendingDraftShotCount
-    ? [
+    ? explicitTimelineSelectionContext?.chips.length ? explicitTimelineSelectionContext.chips : [
         { label: "层级", value: "项目 / 草案" },
         { label: "范围", value: `${pendingDraftShotCount} 个镜头` },
         { label: "状态", value: "待确认" },
       ]
+    : shouldUseExplicitTimelineSelectionContext
+      ? explicitTimelineSelectionContext?.chips || []
     : workflow && preparedSelectionChips.length ? preparedSelectionChips : liveSelectionChips;
   const visibleProjectHierarchyCapability = projectHierarchyCapabilityItem({
     sectionCount: pendingDraftShotCount ? 0 : runtimeState.storyFlow.sections.length,
@@ -6719,18 +6796,18 @@ export function MinimalAgentPanel({
         onToggle={(event) => setAdvancedControlsOpen(event.currentTarget.open)}
       >
         <summary>
-          <span>我现在会</span>
+          <span>AI 导演权限</span>
           <strong>{displayedAgentBoundarySummaryLabel}</strong>
         </summary>
         {advancedControlsOpen && (
-          <section className="minimal-agent-permission-mode minimal-agent-permission-menu" aria-label="更改 AI 导演可做范围">
-            <span>可做范围</span>
+          <section className="minimal-agent-permission-mode minimal-agent-permission-menu" aria-label="更改 AI 导演权限">
+            <span>选择权限</span>
             {videoPermissionModeItems.map((item) => (
               <button
                 key={item.mode}
                 type="button"
                 className={videoPermissionContractForUi.mode === item.mode ? "is-active" : ""}
-                aria-label={`AI 导演可做范围：${item.label}`}
+                aria-label={`AI 导演权限：${item.label}`}
                 aria-pressed={videoPermissionContractForUi.mode === item.mode}
                 disabled={Boolean(workflow)}
                 title={workflow ? "当前计划已生成，先点再改一下再切换边界。" : agentVideoPermissionDetail(agentVideoPermissionForMode(item.mode))}
@@ -6884,6 +6961,16 @@ export function MinimalAgentPanel({
                         : "没有"}
                     </strong>
                   </small>
+                  <small className="is-boundary">
+                    <span>边界</span>
+                    <strong>先确认再写入项目</strong>
+                  </small>
+                  {message.assetInboxSummary.handlingLabels.length > 0 && (
+                    <small>
+                      <span>处理方式</span>
+                      <strong>{message.assetInboxSummary.handlingLabels.join(" / ")}</strong>
+                    </small>
+                  )}
                   {message.assetInboxSummary.bindingPreviewLabels.length > 0 && (
                     <small>
                       <span>建议绑定</span>

@@ -25,6 +25,7 @@ const agentFirstGoalAudit = read("docs/agent-first-demo-completion-audit.md");
 const agentKernelDemoStatus = read("docs/agent-kernel-v1-demo-status.md");
 const recordingRunbook = read("docs/demo-recording-runbook.md");
 const finalRehearsalChecklist = read("docs/demo-final-rehearsal-checklist.md");
+const frontendRehearsalRecord = read("docs/demo-frontend-rehearsal-record.md");
 const directorModeShell = read("src/ui/director/DirectorModeShell.tsx");
 const agentCoreTypes = read("src/agent-core/types.ts");
 const agentCoreRunner = read("src/agent-core/runAgentTurn.ts");
@@ -113,6 +114,7 @@ assertIncludes(agentKernelDemoStatus, "Bounded Claims", "Agent Kernel status mus
 assertIncludes(agentKernelDemoStatus, "Final Canonical Browser Check", "Agent Kernel status must record the final live-browser verification");
 assertIncludes(agentKernelDemoStatus, "codex-browser-final-smoke-5174", "Agent Kernel status must cite the canonical final browser smoke URL");
 assertIncludes(agentKernelDemoStatus, "demo:artifact-freshness:test", "Agent Kernel status must preserve the live freshness gate");
+assertIncludes(agentKernelDemoStatus, "docs/demo-frontend-rehearsal-record.md", "Agent Kernel status must point to the frontend rehearsal record");
 assertIncludes(agentKernelDemoStatus, "Do Not Claim Yet", "Agent Kernel status must preserve demo boundaries");
 assertIncludes(agentKernelDemoStatus, "docs/agent-first-demo-completion-audit.md", "Agent Kernel status must point to the detailed audit");
 assertIncludes(agentKernelDemoStatus, "showcase-package/DEMO_INDEX.md", "Agent Kernel status must point to showcase evidence");
@@ -144,7 +146,7 @@ assertIncludes(agentFirstGoalAudit, "Skill block height", "agent-first audit mus
 assertIncludes(agentFirstGoalAudit, "Agent thread moved up", "agent-first audit must record the right rail message-flow priority check");
 assertIncludes(agentFirstGoalAudit, "Seedance VIP 720p serial submit", "agent-first audit must record the final rehearsal provider boundary");
 assertIncludes(agentFirstGoalAudit, "final-rehearsal-check", "agent-first audit must record the final rehearsal live UI check");
-assertIncludes(agentFirstGoalAudit, "`先整理 / 生成参考 / 提交视频`", "agent-first audit must record the visible permission modes in the final rehearsal");
+assertIncludes(agentFirstGoalAudit, "`先整理 / 可补参考 / 可发视频`", "agent-first audit must record the visible permission modes in the final rehearsal");
 assertIncludes(agentFirstGoalAudit, "stale workflow/engineering copy", "agent-first audit must record the final rehearsal copy check");
 assertIncludes(agentFirstGoalAudit, "Entry Freshness Recheck", "agent-first audit must record the stale-entry live UI check");
 assertIncludes(agentFirstGoalAudit, "no longer exposes `对象：/成本：/写入：/外部：`", "agent-first audit must record the confirmation boundary wording fix");
@@ -165,7 +167,7 @@ assertIncludes(finalRehearsalChecklist, "The first message should clear after se
 assertIncludes(finalRehearsalChecklist, "If an action will spend generation cost", "final rehearsal checklist must protect provider-cost confirmation boundaries");
 assertIncludes(finalRehearsalChecklist, "这句话会引用：...", "final rehearsal checklist must protect selected-context feedback");
 assertIncludes(finalRehearsalChecklist, "non-first shot such as `镜头 1-2`", "final rehearsal checklist must protect non-first-shot selected-context feedback");
-assertIncludes(finalRehearsalChecklist, "`先整理`, `生成参考`, `提交视频`", "final rehearsal checklist must protect the three permission modes");
+assertIncludes(finalRehearsalChecklist, "`先整理`, `可补参考`, `可发视频`", "final rehearsal checklist must protect the three permission modes");
 assertIncludes(finalRehearsalChecklist, "`当前项目已加载`", "final rehearsal checklist must protect the current-project Skills group");
 assertIncludes(finalRehearsalChecklist, "`Agent 推荐`", "final rehearsal checklist must protect the recommended Skills group");
 assertIncludes(finalRehearsalChecklist, "`我的 Skills`", "final rehearsal checklist must protect the user Skills group");
@@ -176,6 +178,15 @@ assertIncludes(finalRehearsalChecklist, "No music, no BGM, no subtitles.", "fina
 assertIncludes(finalRehearsalChecklist, "show submit id, queue/running/returned state", "final rehearsal checklist must protect video state visibility");
 assertIncludes(finalRehearsalChecklist, "showcase package should include project data, prompts, references", "final rehearsal checklist must protect export evidence coverage");
 assertIncludes(finalRehearsalChecklist, "Do not retry-subscribe or submit duplicate jobs", "final rehearsal checklist must protect slow provider queue behavior");
+assertIncludes(finalRehearsalChecklist, "docs/demo-frontend-rehearsal-record.md", "final rehearsal checklist must require a visible-app rehearsal record");
+assertIncludes(frontendRehearsalRecord, "Required Evidence", "frontend rehearsal record must define the evidence checklist");
+assertIncludes(frontendRehearsalRecord, "Composer cleared after send", "frontend rehearsal record must track composer clearing");
+assertIncludes(frontendRehearsalRecord, "Visible send button stayed present", "frontend rehearsal record must track the send button");
+assertIncludes(frontendRehearsalRecord, "`先整理`, `可补参考`, or `可发视频`", "frontend rehearsal record must track visible permission modes");
+assertIncludes(frontendRehearsalRecord, "这句话会引用：...", "frontend rehearsal record must track selected-context feedback");
+assertIncludes(frontendRehearsalRecord, "Codex in-app browser rejected read access", "frontend rehearsal record must capture the current browser-policy blocker honestly");
+assertIncludes(frontendRehearsalRecord, "do not work around this with raw CDP", "frontend rehearsal record must preserve the no-workaround browser-policy boundary");
+assertIncludes(frontendRehearsalRecord, "npm run demo:ready:test", "frontend rehearsal record must cite the engineering gate that still passed");
 
 assertMatches(projectStatusViewModel, /export interface ProjectStatusViewModel[\s\S]*stage: string[\s\S]*doing: string[\s\S]*waitingFor: string[\s\S]*nextAction: string[\s\S]*issue\?: string/, "P2 status model must expose one human-readable state shape");
 assertMatches(agentCoreTypes, /export interface VibeAgentExecutionBoundary[\s\S]*mutatesProject: boolean[\s\S]*callsProvider: boolean[\s\S]*submitsExternalTask: boolean[\s\S]*requiresConfirmation: boolean[\s\S]*costRisk: VibeAgentExecutionCostRisk[\s\S]*summary: string/, "Agent Kernel v1 must expose a structured execution boundary");
@@ -223,8 +234,8 @@ assert(!minimalAgentPanel.includes("minimal-agent-suggested-button"), "P1 Agent 
 assertIncludes(minimalAgentPanel, "minimal-agent-asset-inbox-summary", "P1 Agent panel must explain material scanning in the message flow");
 assertMatches(minimalAgentPanel, /totalCount <= 0 && needsReviewCount <= 0/, "P1 material-scan summary must not render misleading empty-state cards");
 assertIncludes(agentPanelProjection, "先整理", "P1 visible mode copy should use creator language");
-assertIncludes(agentPanelProjection, "生成参考", "P1 visible mode copy should use reference-generation language");
-assertIncludes(agentPanelProjection, "提交视频", "P1 visible mode copy should use video-submission language");
+assertIncludes(agentPanelProjection, "可补参考", "P1 visible mode copy should use reference permission language");
+assertIncludes(agentPanelProjection, "可发视频", "P1 visible mode copy should use video permission language");
 
 assertIncludes(assetReconciliation, "hasVoiceReferenceSignal", "P3 asset binding must classify voice references");
 assertIncludes(assetReconciliation, "hasMusicReferenceSignal", "P3 asset binding must keep obvious music out of voice references");

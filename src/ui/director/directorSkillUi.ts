@@ -76,6 +76,24 @@ export function referenceStrategyWorkflowHint(strategy: DirectorSkillStrategy) {
   return "不需要额外故事板，生成前仍会等待确认。";
 }
 
+function strategyUseCase(strategy: DirectorSkillStrategy) {
+  if (strategy === "storyboard_narrative") return "适合构图、站位和情绪承接";
+  if (strategy === "storyboard_rapid_cut") return "适合动作顺序和快切节奏";
+  return "适合一个主动作和明确参考";
+}
+
+function strategyAvoidCase(strategy: DirectorSkillStrategy) {
+  if (strategy === "storyboard_narrative") return "不适合塞太多动作";
+  if (strategy === "storyboard_rapid_cut") return "不适合静态情绪长停顿";
+  return "不适合多次切镜和复杂调度";
+}
+
+function strategyAffects(strategy: DirectorSkillStrategy) {
+  if (strategy === "storyboard_narrative") return "故事板、构图、Seedance 顺序";
+  if (strategy === "storyboard_rapid_cut") return "故事板、动作节点、镜头节奏";
+  return "参考图、文字导演提示、QA";
+}
+
 function strategyReason(shot: StrategyShot, strategy: DirectorSkillStrategy) {
   const visibleClips = positiveNumber(shot.visibleClips);
   const storyboardPanels = positiveNumber(shot.storyboardPanels);
@@ -135,6 +153,9 @@ export function directorSkillSummaryForShot(shot: ShotRecord) {
     label: plan.strategyLabel,
     detail: referenceStrategyDetail(strategy),
     reason: plan.reasons[0] || strategyReason(strategyShot, strategy),
+    appliesTo: strategyUseCase(strategy),
+    avoidWhen: strategyAvoidCase(strategy),
+    affects: strategyAffects(strategy),
     skillTags,
   };
 }
