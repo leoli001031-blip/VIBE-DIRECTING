@@ -435,6 +435,23 @@ function looksLikeProjectInstruction(value?: string) {
     || /(?:不要|不用|先不要|测试|真实生图|提交视频|项目|脚本|参考|分镜|镜头|风格|音频|音乐|素材|AI|Agent|Seedance|Image2|生图|生视频)/iu.test(text);
 }
 
+function isGenericProjectDisplayName(value?: string) {
+  const text = cleanProjectDisplayNameCandidate(value) || "";
+  return /^(新视频|新视频项目|新视频草案|当前草案|草案|未命名项目)$/u.test(text);
+}
+
+function naturalProjectTitleFromScript(script?: string) {
+  const source = script?.slice(0, 1600) || "";
+  const colonSummary = source.match(/[：:]\s*([^\n\r。；;]{2,96})/u);
+  const candidate = cleanProjectDisplayNameCandidate(
+    colonSummary?.[1]?.replace(/(?:先只|先不|先别|不要|不用|不生成|不提交|不发送|别生成|别提交)[\s\S]*$/u, ""),
+  );
+  if (candidate && !looksLikeProjectInstruction(candidate) && !isGenericProjectDisplayName(candidate)) {
+    return candidate.slice(0, 36);
+  }
+  return undefined;
+}
+
 function explicitProjectTitleFromScript(script?: string) {
   const source = script?.slice(0, 1600) || "";
   const titleLabelPattern = /(?:^|[\n\r\s])(?:标题|片名|故事名|项目名|作品名|Title)\s*[:：]\s*(?:《([^》\n]{1,64})》|["“「『]([^"”」』\n]{1,64})["”」』]|([^\n\r。；;]{1,64}))/iu;
@@ -452,9 +469,11 @@ function projectDisplayNameFromDraft(draft?: NewVideoStartDraft, context?: NewVi
   const explicitTitle = explicitProjectTitleFromScript(draft?.script);
   if (explicitTitle) return explicitTitle;
   const summaryTitle = cleanProjectDisplayNameCandidate(context?.projection.summary.title);
-  if (summaryTitle && !looksLikeProjectInstruction(summaryTitle)) return summaryTitle;
+  if (summaryTitle && !looksLikeProjectInstruction(summaryTitle) && !isGenericProjectDisplayName(summaryTitle)) return summaryTitle;
+  const naturalTitle = naturalProjectTitleFromScript(draft?.script);
+  if (naturalTitle) return naturalTitle;
   const firstLine = draft?.script.split(/\r?\n/).map((line) => cleanProjectDisplayNameCandidate(line)).find((line) => line && !looksLikeProjectInstruction(line));
-  if (firstLine) return firstLine.slice(0, 36);
+  if (firstLine && !isGenericProjectDisplayName(firstLine)) return firstLine.slice(0, 36);
   return "新视频";
 }
 

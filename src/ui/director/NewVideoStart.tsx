@@ -505,6 +505,22 @@ function looksLikeScriptLineTitle(value: string) {
   return /(?:秒|镜头|画面|场景|主角|角色|字幕|对白|音效|运镜|推近|拉远|切到|特写|全景|中景)/u.test(text) && /[，,。；;]/u.test(text);
 }
 
+function isGenericDraftTitle(value: string) {
+  return /^(新视频|新视频项目|新视频草案|当前草案|草案|未命名项目)$/u.test(cleanText(value));
+}
+
+function naturalTitleFromDraftScript(script: string) {
+  const source = script.slice(0, 1200);
+  const match = source.match(/[：:]\s*([^\n\r。；;]{2,96})/u);
+  const candidate = cleanText(match?.[1])
+    .replace(/(?:先只|先不|先别|不要|不用|不生成|不提交|不发送|别生成|别提交)[\s\S]*$/u, "")
+    .replace(/[。；;，,]\s*$/u, "")
+    .trim();
+  return candidate && !looksLikeScriptLineTitle(candidate) && !isGenericDraftTitle(candidate)
+    ? candidate.slice(0, 36)
+    : "";
+}
+
 function planSummaryTitleForDisplay(summaryTitle: string, script: string) {
   const explicit = explicitTitleFromDraftScript(script);
   if (explicit) return explicit;
@@ -512,7 +528,9 @@ function planSummaryTitleForDisplay(summaryTitle: string, script: string) {
     .replace(/^(?:标题|片名|故事名|项目名|作品名|Title)\s*[:：]\s*/iu, "")
     .replace(/^《(.{1,64})》$/u, "$1")
     .trim();
-  return cleaned && !looksLikeScriptLineTitle(cleaned) ? cleaned : "新视频草案";
+  if (cleaned && !looksLikeScriptLineTitle(cleaned) && !isGenericDraftTitle(cleaned)) return cleaned;
+  const natural = naturalTitleFromDraftScript(script);
+  return natural || "新视频草案";
 }
 
 function safeDraftId(value: string) {
