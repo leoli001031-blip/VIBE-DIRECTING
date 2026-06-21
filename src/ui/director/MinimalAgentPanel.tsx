@@ -1073,8 +1073,14 @@ function minimalAgentRequestConfirmationToolCallIsSuperseded(messages: MinimalAg
   ));
 }
 
-function minimalAgentMessageIsInlineSelectionContextCard(message: MinimalAgentMessage) {
-  return message.entryType === "state_change" && message.id.startsWith("selection_context_");
+function minimalAgentMessageIsSupersededSelectionContextCard(messages: MinimalAgentMessage[], message: MinimalAgentMessage) {
+  if (message.entryType !== "state_change" || !message.id.startsWith("selection_context_")) return false;
+  const messageIndex = messages.indexOf(message);
+  return messages.some((candidate, index) => (
+    index > messageIndex
+    && candidate.entryType === "state_change"
+    && candidate.id.startsWith("selection_context_")
+  ));
 }
 
 function visibleMinimalAgentMessages(messages: MinimalAgentMessage[]): {
@@ -1090,7 +1096,7 @@ function visibleMinimalAgentMessages(messages: MinimalAgentMessage[]): {
     && !minimalAgentMessageIsSupersededConfirmationPrepCard(filteredMessages, message)
     && !minimalAgentConfirmationMessageIsStaleAfterLaterResult(filteredMessages, message)
     && !minimalAgentRequestConfirmationToolCallIsSuperseded(filteredMessages, message)
-    && !minimalAgentMessageIsInlineSelectionContextCard(message)
+    && !minimalAgentMessageIsSupersededSelectionContextCard(filteredMessages, message)
   ));
   const currentMessages = dedupeMinimalAgentMessages(compactedMessages.length ? compactedMessages : filteredMessages);
   const latestUserIndex = currentMessages.map((message) => message.role).lastIndexOf("user");
@@ -3677,12 +3683,12 @@ export function MinimalAgentPanel({
   }, [latestNewVideoDraftCommittedForProjection, localProjectReadyForTools, restoredAgentActionLog]);
 
   useEffect(() => {
-    if (latestNewVideoDraftCommittedForProjection) {
+    const restoredEntries = restoredAgentTimelineEntries || [];
+    if (latestNewVideoDraftCommittedForProjection && !restoredEntries.length) {
       restoredAgentTimelineKeyRef.current = "new_video_draft_committed";
       setAgentTimelineEntries([]);
       return;
     }
-    const restoredEntries = restoredAgentTimelineEntries || [];
     const nextKey = agentTimelineKey(restoredEntries);
     if (!nextKey) {
       restoredAgentTimelineKeyRef.current = "";
@@ -3765,7 +3771,7 @@ export function MinimalAgentPanel({
   ]);
 
   useEffect(() => {
-    if (!selectionFocusKey || !hasBoundSelection || workflow || text.trim()) {
+    if (!selectionFocusKey || !hasBoundSelection || text.trim()) {
       previousSelectionFocusKeyRef.current = selectionFocusKey;
       return;
     }
@@ -3780,7 +3786,7 @@ export function MinimalAgentPanel({
     })]);
     if (!canAutoFocusComposer()) return;
     window.setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 0);
-  }, [asset?.id, hasBoundSelection, localScopeLabel, scopedShotKey, sectionId, selectionFocusKey, selectionHint, shot?.id, text, workflow]);
+  }, [asset?.id, hasBoundSelection, localScopeLabel, scopedShotKey, sectionId, selectionFocusKey, selectionHint, shot?.id, text]);
 
   function updateVideoPermissionContract(nextContract: AgentVideoPermissionContract) {
     setLocalVideoPermissionContract(nextContract);
