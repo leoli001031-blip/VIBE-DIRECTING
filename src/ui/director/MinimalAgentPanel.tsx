@@ -177,6 +177,7 @@ type MinimalAgentAssetInboxSummary = {
   totalCount: number;
   needsReviewCount: number;
   kindLabels: string[];
+  kindCountLabels: string[];
   bindingPreviewLabels: string[];
   foldedDetailLabels: string[];
 };
@@ -230,6 +231,18 @@ function minimalAgentInboxKindLabel(kind: string) {
   return "其他";
 }
 
+function minimalAgentAssetInboxKindCountLabels(items: unknown[]) {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    if (!isPlainRecord(item)) continue;
+    const label = minimalAgentInboxKindLabel(stringValue(item.kind));
+    counts.set(label, (counts.get(label) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([label, count]) => `${label} ${count}`)
+    .slice(0, 6);
+}
+
 function minimalAgentAssetInboxBindingPreviewLabels(items: unknown[]) {
   const records = items.filter(isPlainRecord);
   const reviewRecords = records.filter((item) => item.needsReview === true);
@@ -278,6 +291,7 @@ function minimalAgentAssetInboxSummaryFromTimelineEntry(entry: VibeAgentTimeline
     totalCount,
     needsReviewCount,
     kindLabels,
+    kindCountLabels: minimalAgentAssetInboxKindCountLabels(items),
     bindingPreviewLabels: minimalAgentAssetInboxBindingPreviewLabels(items),
     foldedDetailLabels: minimalAgentAssetInboxFoldedDetailLabels(items),
   };
@@ -292,6 +306,7 @@ function minimalAgentAssetInboxSummaryFromProjection(inbox: ProjectInboxProjecti
     totalCount: inbox.totalCount,
     needsReviewCount: inbox.needsReviewCount,
     kindLabels,
+    kindCountLabels: minimalAgentAssetInboxKindCountLabels(inbox.items),
     bindingPreviewLabels: minimalAgentAssetInboxBindingPreviewLabels(inbox.items),
     foldedDetailLabels: minimalAgentAssetInboxFoldedDetailLabels(inbox.items),
   };
@@ -312,7 +327,7 @@ function projectInboxAgentMessage(inbox: ProjectInboxProjection): MinimalAgentMe
     status: inbox.needsReviewCount ? "waiting" : "done",
     toolName: "classify_assets",
     facts: [
-      { label: "分类", value: assetInboxSummary.kindLabels.join("、") || "待判断" },
+      { label: "分类", value: assetInboxSummary.kindCountLabels.join("、") || assetInboxSummary.kindLabels.join("、") || "待判断" },
       { label: "待确认", value: inbox.needsReviewCount ? `${inbox.needsReviewCount} 个` : "没有" },
       { label: "保护", value: "确认前不改绑定" },
       examples.length ? { label: "示例", value: examples.join("；") } : undefined,
@@ -6738,9 +6753,11 @@ export function MinimalAgentPanel({
                   <small>
                     <span>类型</span>
                     <strong>
-                      {message.assetInboxSummary.kindLabels.length
-                        ? message.assetInboxSummary.kindLabels.join(" / ")
-                        : "待确认"}
+                      {message.assetInboxSummary.kindCountLabels.length
+                        ? message.assetInboxSummary.kindCountLabels.join(" / ")
+                        : message.assetInboxSummary.kindLabels.length
+                          ? message.assetInboxSummary.kindLabels.join(" / ")
+                          : "待确认"}
                     </strong>
                   </small>
                   <small>
