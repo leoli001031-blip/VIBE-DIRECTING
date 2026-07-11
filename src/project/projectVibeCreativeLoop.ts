@@ -27,6 +27,7 @@ import {
   type ProjectTaskEnqueuePlanItem,
   type ProjectTransactionRuntimeState,
 } from "../core/projectTransaction";
+import { requestedStoryboardShotCountFromIntent } from "../core/projectAgentWorkspace";
 import type { BuiltTaskPacket, TaskPacketValidationReceipt } from "../core/taskPacketBuilder";
 import type { AssetRecord } from "../core/types";
 import { applyProjectVibeTransaction, hashProjectVibeFacts } from "./projectVibe";
@@ -886,16 +887,208 @@ function applyAgentProposedSectionChanges(input: ProjectVibeCreativeLoopInput, r
   };
 }
 
+function requestedProjectShotCount(input: ProjectVibeCreativeLoopInput): number | undefined {
+  const action = input.agentActionEnvelope;
+  if (
+    action &&
+    (
+      action.kind !== "revise_story_or_shot" ||
+      action.target.kind !== "project" ||
+      action.toolPlan.toolName !== "project_vibe_patch"
+    )
+  ) {
+    return undefined;
+  }
+  return requestedStoryboardShotCountFromIntent(input.userIntent);
+}
+
+function parseStoryOutlineOrdinal(value: string): number | undefined {
+  const normalized = value.trim().replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
+  if (/^\d{1,3}$/.test(normalized)) return Number.parseInt(normalized, 10);
+  const digitValues: Record<string, number> = {
+    一: 1,
+    二: 2,
+    两: 2,
+    俩: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+  };
+  if (normalized === "十") return 10;
+  const teenMatch = normalized.match(/^十([一二两俩三四五六七八九])$/u);
+  if (teenMatch) return 10 + digitValues[teenMatch[1] || ""]!;
+  const tenMatch = normalized.match(/^([一二两俩三四五六七八九])十([一二两俩三四五六七八九])?$/u);
+  if (tenMatch) return digitValues[tenMatch[1] || ""]! * 10 + (digitValues[tenMatch[2] || ""] || 0);
+  return digitValues[normalized];
+}
+
+function cleanStoryShotOutlineText(value: string): string {
+  return value
+    .replace(/^[\s:：、，,。；;]+/u, "")
+    .replace(/(?:[。；;，,]\s*)?(?:不要|不|别|不用|不必|无需|先不要|先别|先不).{0,48}(?:参考|参考图|角色图|场景图|道具图|故事板|视频|提交|发送|导出).*/u, "")
+    .replace(/[\s。；;，,]+$/u, "")
+    .trim();
+}
+
+function explicitStoryShotOutlinesFromIntent(value: string, requestedCount: number): Map<number, string> {
+  const outlines = new Map<number, string>();
+  const markerPattern = /第([一二两俩三四五六七八九十0-9０-９]{1,3})(?:个)?(?:镜头|镜|分镜|段)\s*[：:、，,]*/gu;
+  const matches = Array.from(value.matchAll(markerPattern));
+  for (let index = 0; index < matches.length; index += 1) {
+    const match = matches[index];
+    if (match.index == null) continue;
+    const ordinal = parseStoryOutlineOrdinal(match[1] || "");
+    if (!ordinal || ordinal < 1 || ordinal > requestedCount) continue;
+    const nextMatch = matches[index + 1];
+    const start = match.index + match[0].length;
+    const end = nextMatch?.index ?? value.length;
+    const outline = cleanStoryShotOutlineText(value.slice(start, end));
+    if (outline) outlines.set(ordinal - 1, outline);
+  }
+  return outlines;
+}
+
+function storyShotOutlineTitle(value: string, fallback: string): string {
+  const normalized = value.replace(/\s+/g, " ").replace(/[\s。；;，,]+$/u, "").trim();
+  if (!normalized) return fallback;
+  return normalized.length > 30 ? `${normalized.slice(0, 30)}...` : normalized;
+}
+
+function explicitStoryShotSectionFor(input: {
+  index: number;
+  requestedCount: number;
+  orderedSections: ProjectVibeStoryFlow["sections"];
+  fallbackSection: ProjectVibeStoryFlow["sections"][number];
+}): ProjectVibeStoryFlow["sections"][number] {
+  if (input.orderedSections.length <= 1) return input.fallbackSection;
+  const sectionIndex = Math.min(
+    input.orderedSections.length - 1,
+    Math.max(0, Math.ceil(((input.index + 1) * input.orderedSections.length) / input.requestedCount) - 1),
+  );
+  return input.orderedSections[sectionIndex] || input.fallbackSection;
+}
+
+function nextStoryShotId(usedIds: Set<string>, index: number): string {
+  let candidate = `shot_${String(index + 1).padStart(3, "0")}`;
+  let suffix = index + 1;
+  while (usedIds.has(candidate)) {
+    suffix += 1;
+    candidate = `shot_${String(suffix).padStart(3, "0")}`;
+  }
+  usedIds.add(candidate);
+  return candidate;
+}
+
+function projectShotCountRestructure(input: ProjectVibeCreativeLoopInput, runReceipt: ProjectVibeRunReceipt, runRef: string): {
+  storyFlow: ProjectVibeStoryFlow;
+  shots: ProjectVibeShot[];
+} | undefined {
+  const requestedCount = requestedProjectShotCount(input);
+  if (!requestedCount) return undefined;
+  const existingShotById = new Map(input.project.shots.map((shot) => [shot.id, shot]));
+  const existingOrder = input.project.storyFlow.shotOrder.length
+    ? input.project.storyFlow.shotOrder
+    : input.project.shots.map((shot) => shot.id);
+  const baseShot =
+    existingOrder.map((shotId) => existingShotById.get(shotId)).find(Boolean) ||
+    input.project.shots[0];
+  if (!baseShot) return undefined;
+  const targetSection =
+    input.project.storyFlow.sections.find((section) => section.shotIds.includes(baseShot.id)) ||
+    input.project.storyFlow.sections[0];
+  if (!targetSection) return undefined;
+  const explicitShotOutlines = explicitStoryShotOutlinesFromIntent(input.userIntent, requestedCount);
+  const hasExplicitShotOutlines = explicitShotOutlines.size > 0;
+  const orderedSections = [...input.project.storyFlow.sections].sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+
+  const nextShotIds = existingOrder.slice(0, requestedCount);
+  const usedShotIds = new Set(input.project.shots.map((shot) => shot.id));
+  while (nextShotIds.length < requestedCount) {
+    nextShotIds.push(nextStoryShotId(usedShotIds, nextShotIds.length));
+  }
+  const retainedShotIds = new Set(nextShotIds);
+
+  const nextShots = nextShotIds.map((shotId, index): ProjectVibeShot => {
+    const existingShot = existingShotById.get(shotId);
+    const sourceShot = existingShot || baseShot;
+    const outline = explicitShotOutlines.get(index);
+    const shotSection = hasExplicitShotOutlines
+      ? explicitStoryShotSectionFor({ index, requestedCount, orderedSections, fallbackSection: targetSection })
+      : input.project.storyFlow.sections.find((section) => section.id === existingShot?.sectionId) || targetSection;
+    const outlineIntent = outline ? `镜头 ${index + 1}：${outline}` : "";
+    return {
+      ...sourceShot,
+      id: shotId,
+      sectionId: shotSection.id,
+      title: outline
+        ? storyShotOutlineTitle(outline, `${shotSection.title || "镜头"} ${index + 1}`)
+        : existingShot?.title || `${shotSection.title || "镜头"} ${index + 1}`,
+      intent: outline
+        ? confirmedCreativeIntent("", outlineIntent)
+        : confirmedCreativeIntent(sourceShot.intent || shotSection.summary, input.userIntent),
+      ...(outline ? { primaryAction: outline } : {}),
+      status: plannedShotStatusForCreativeFact(sourceShot.status),
+      sourceRefs: unique([
+        ...sourceShot.sourceRefs,
+        runRef,
+        `project.vibe#storyFlow`,
+        `project.vibe#shots/${shotId}`,
+      ]),
+    };
+  });
+  const nextShotIdsBySectionId = new Map(input.project.storyFlow.sections.map((section) => [section.id, [] as string[]]));
+  const explicitOutlinesBySectionId = new Map(input.project.storyFlow.sections.map((section) => [section.id, [] as string[]]));
+  for (const shot of nextShots) {
+    nextShotIdsBySectionId.set(shot.sectionId, [...(nextShotIdsBySectionId.get(shot.sectionId) || []), shot.id]);
+    const outline = explicitShotOutlines.get(nextShotIds.indexOf(shot.id));
+    if (outline) {
+      explicitOutlinesBySectionId.set(shot.sectionId, [...(explicitOutlinesBySectionId.get(shot.sectionId) || []), outline]);
+    }
+  }
+
+  const storyFlow: ProjectVibeStoryFlow = {
+    ...input.project.storyFlow,
+    updatedAt: runReceipt.createdAt,
+    sections: input.project.storyFlow.sections.map((item) => {
+      const sectionShotIds = nextShotIdsBySectionId.get(item.id) || [];
+      const sectionOutlines = explicitOutlinesBySectionId.get(item.id) || [];
+      return {
+        ...item,
+        summary: hasExplicitShotOutlines && sectionOutlines.length
+          ? confirmedCreativeSummary(item.summary, sectionOutlines.join("；"))
+          : item.id === targetSection.id
+            ? confirmedCreativeSummary(item.summary, input.userIntent)
+            : item.summary,
+        shotIds: unique(sectionShotIds.filter((shotId) => retainedShotIds.has(shotId))),
+      };
+    }),
+    shotOrder: nextShotIds,
+  };
+
+  return { storyFlow, shots: nextShots };
+}
+
 function patchOperationsFor(input: ProjectVibeCreativeLoopInput, runReceipt: ProjectVibeRunReceipt): ProjectVibePatchOperation[] {
   const runRef = `project.vibe#runs/${runReceipt.id}`;
-  const storyFlow = applyAgentProposedSectionChanges(input, runReceipt);
+  const storyShotCountRestructure = projectShotCountRestructure(input, runReceipt, runRef);
+  const storyFlow = storyShotCountRestructure?.storyFlow || applyAgentProposedSectionChanges(input, runReceipt);
   const writesShotIntentFact = shouldWriteShotIntentFact(input);
   const writesShotFeedbackDirective = shouldWriteShotFeedbackDirective(input);
   const writesProposedShotField = shouldWriteAgentProposedShotFields(input);
+  const restructuredShotIds = new Set(storyShotCountRestructure?.shots.map((shot) => shot.id) || []);
+  const storyShotCountOperations = (storyShotCountRestructure?.shots || []).map((shot) => ({
+    op: "upsert_shot" as const,
+    shot,
+  }));
   const shotOperations = shouldWriteShotPatch(input)
     ? runReceipt.affectedShotIds
       .map((shotId) => input.project.shots.find((shot) => shot.id === shotId))
       .filter((shot): shot is ProjectVibeDocument["shots"][number] => Boolean(shot))
+      .filter((shot) => !restructuredShotIds.has(shot.id))
       .map((shot) => applyAgentProposedShotChanges(shot, input))
       .map((shot) => {
         const directorFeedbackDirectives = confirmedShotFeedbackDirectives(shot.directorFeedbackDirectives, input);
@@ -965,6 +1158,7 @@ function patchOperationsFor(input: ProjectVibeCreativeLoopInput, runReceipt: Pro
 
   return [
     ...(storyFlow ? [{ op: "set_story_flow" as const, storyFlow }] : []),
+    ...storyShotCountOperations,
     ...shotOperations,
     ...assetOperations,
     ...(visualMemoryOperation ? [visualMemoryOperation] : []),

@@ -71,6 +71,9 @@ export interface RunDirectorProductAgentLoopInput {
 	videoCompletedCount?: number;
 	videoReviewCount?: number;
 	videoDetail?: string;
+	referenceReadyCount?: number;
+	referenceReviewCount?: number;
+	referenceMissingCount?: number;
 }
 
 export interface DirectorProductAgentLoopResult {
@@ -102,6 +105,9 @@ function snapshotInputFor(input: RunDirectorProductAgentLoopInput): BuildDirecto
 	    selectedShotIds: input.selection?.selectedShotIds,
 	    selectedAssetId: input.selection?.selectedAssetId,
 	    sectionId: input.selection?.sectionId,
+	    referenceReadyCount: input.referenceReadyCount,
+	    referenceReviewCount: input.referenceReviewCount,
+	    referenceMissingCount: input.referenceMissingCount,
 	    videoStatus: input.videoStatus,
 	    videoCanResume: input.videoCanResume,
 	    videoWaitingCount: input.videoWaitingCount,

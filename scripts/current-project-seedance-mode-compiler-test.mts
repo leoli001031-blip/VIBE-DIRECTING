@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { APIKEY_FUN_RESPONSES_IMAGE_PROVIDER_ID } from "./apikey-fun-responses-image-transport.mts";
 import { createRuntimeApiCurrentProjectSeedanceSubmit } from "./runtime-routes/current-project-seedance-submit.mts";
-import { JIMENG_CLI_VIP_MODEL_VERSION } from "../src/core/jimengVideoCli.ts";
+import { JIMENG_CLI_DEFAULT_MODEL_VERSION, JIMENG_CLI_VIP_MODEL_VERSION } from "../src/core/jimengVideoCli.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -314,23 +314,23 @@ assert(strategyByShot.get("S03") === "storyboard_rapid_cut", "compiler should ho
 assert(manifest.videoResolution === "720p", "video resolution should stay 720p in this lane");
 assert(manifest.modelVersion === "seedance2.0", "model version should stay normal seedance2.0");
 
-const defaultVipRunRootRelativePath = ".vibe-runtime/test-current-project-seedance-mode-compiler-default-vip";
-const defaultVipRunRootPath = path.resolve(repoRoot, defaultVipRunRootRelativePath);
-rmSync(defaultVipRunRootPath, { recursive: true, force: true });
-mkdirSync(defaultVipRunRootPath, { recursive: true });
-const defaultVipSource = {
-  runRootPath: defaultVipRunRootPath,
-  runRootRelativePath: defaultVipRunRootRelativePath,
-  projectVibePath: path.join(defaultVipRunRootPath, "project/project.vibe"),
-  projectVibeRelativePath: `${defaultVipRunRootRelativePath}/project/project.vibe`,
-  previewPlanPath: path.join(defaultVipRunRootPath, "reports/preview_plan.json"),
-  previewPlanRelativePath: `${defaultVipRunRootRelativePath}/reports/preview_plan.json`,
+const defaultSeedanceRunRootRelativePath = ".vibe-runtime/test-current-project-seedance-mode-compiler-default-seedance";
+const defaultSeedanceRunRootPath = path.resolve(repoRoot, defaultSeedanceRunRootRelativePath);
+rmSync(defaultSeedanceRunRootPath, { recursive: true, force: true });
+mkdirSync(defaultSeedanceRunRootPath, { recursive: true });
+const defaultSeedanceSource = {
+  runRootPath: defaultSeedanceRunRootPath,
+  runRootRelativePath: defaultSeedanceRunRootRelativePath,
+  projectVibePath: path.join(defaultSeedanceRunRootPath, "project/project.vibe"),
+  projectVibeRelativePath: `${defaultSeedanceRunRootRelativePath}/project/project.vibe`,
+  previewPlanPath: path.join(defaultSeedanceRunRootPath, "reports/preview_plan.json"),
+  previewPlanRelativePath: `${defaultSeedanceRunRootRelativePath}/reports/preview_plan.json`,
 };
-const defaultVipResponse = await route.currentProjectSeedanceSubmitResponse({
+const defaultSeedanceResponse = await route.currentProjectSeedanceSubmitResponse({
   confirmation: {
     confirmed: true,
     phrase: "submit-seedance-video",
-    receiptId: "receipt_default_vip_test",
+    receiptId: "receipt_default_seedance_test",
     confirmedAt: "2026-05-23T00:00:01.000Z",
   },
   videoResolution: "720p",
@@ -340,14 +340,14 @@ const defaultVipResponse = await route.currentProjectSeedanceSubmitResponse({
   agentTaskEnvelope,
   mockProviderResult: true,
   cliPath: "/bin/echo",
-}, {}, defaultVipSource);
-assert(defaultVipResponse.ok === true, `default VIP mock submit should pass: ${JSON.stringify(defaultVipResponse)}`);
-const defaultVipManifestPath = path.join(path.dirname(path.resolve(repoRoot, defaultVipResponse.promptPath)), "input-manifest.json");
-const defaultVipManifest = JSON.parse(readFileSync(defaultVipManifestPath, "utf8"));
-assert(defaultVipManifest.modelVersion === JIMENG_CLI_VIP_MODEL_VERSION, "real-test submit path should default to Seedance 2.0 VIP");
-assert(defaultVipManifest.videoResolution === "720p", "real-test VIP submit path should still default to 720p");
-assert(defaultVipManifest.submitPolicy?.representativeSegmentsSubmittedThisRequest === 1, "default VIP lane should document representative-only real submits");
-assert(defaultVipResponse.relayQueue?.items?.some((item: { modelVersion: string }) => item.modelVersion === JIMENG_CLI_VIP_MODEL_VERSION), "relay queue should persist the VIP model version");
+}, {}, defaultSeedanceSource);
+assert(defaultSeedanceResponse.ok === true, `default Seedance mock submit should pass: ${JSON.stringify(defaultSeedanceResponse)}`);
+const defaultSeedanceManifestPath = path.join(path.dirname(path.resolve(repoRoot, defaultSeedanceResponse.promptPath)), "input-manifest.json");
+const defaultSeedanceManifest = JSON.parse(readFileSync(defaultSeedanceManifestPath, "utf8"));
+assert(defaultSeedanceManifest.modelVersion === JIMENG_CLI_DEFAULT_MODEL_VERSION, "real-test submit path should default to standard Seedance 2.0");
+assert(defaultSeedanceManifest.videoResolution === "720p", "real-test standard submit path should default to 720p");
+assert(defaultSeedanceManifest.submitPolicy?.representativeSegmentsSubmittedThisRequest === 1, "default standard lane should document representative-only real submits");
+assert(defaultSeedanceResponse.relayQueue?.items?.some((item: { modelVersion: string }) => item.modelVersion === JIMENG_CLI_DEFAULT_MODEL_VERSION), "relay queue should persist the standard model version");
 
 const timeoutRunRootRelativePath = ".vibe-runtime/test-current-project-seedance-mode-compiler-submit-timeout";
 const timeoutRunRootPath = path.resolve(repoRoot, timeoutRunRootRelativePath);

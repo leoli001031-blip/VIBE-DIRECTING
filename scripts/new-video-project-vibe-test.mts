@@ -603,6 +603,26 @@ const stagedWithGenericSession = buildNewVideoProjectVibeStagedTransaction({
 });
 assert(!stagedWithGenericSession.blockedReasons.includes("director_session_project_mismatch"), "generic local_project session id should not block real project confirmation");
 
+const negativeBoundaryStyleStaged = buildNewVideoProjectVibeStagedTransaction({
+  project: createProject(),
+  draft: {
+    script: "清晨天桥上，快递员把旧怀表交给戴耳机的女孩。城市广告牌变成海浪。",
+    style: "我要拍一个 9 秒短片：清晨天桥上，快递员把旧怀表交给戴耳机的女孩，城市广告牌变成海浪。整理成 2 个镜头，不生成参考图，不提交视频。",
+    references: [],
+  },
+  generatedAt,
+});
+const negativeBoundaryStyleAsset = negativeBoundaryStyleStaged.patchOperations
+  .filter((operation) => operation.op === "upsert_asset")
+  .map((operation) => operation.asset)
+  .find((asset) => asset.kind === "style");
+assert(negativeBoundaryStyleAsset, "text-only style asset should still be created when the user gives a style sentence");
+assert(
+  !negativeBoundaryStyleAsset.textConstraints.some((line) => /项目视觉风格：.*[，,]\s*图(?:[，,。；;\s]|$)/u.test(line)),
+  "plan-only reference controls must not leave a dangling 图 inside Project.vibe style constraints",
+);
+assert(!JSON.stringify(negativeBoundaryStyleAsset).includes("不生成参考图"), "style asset must not preserve no-reference-generation control text");
+
 const stagedSerialized = JSON.stringify(staged);
 for (const pattern of [
   /secret/i,

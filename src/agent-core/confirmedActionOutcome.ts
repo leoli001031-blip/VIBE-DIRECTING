@@ -1,4 +1,5 @@
 import type { DirectorQaUserFeedback } from "../core/directorQaUserFeedback";
+import type { AgentVideoExecutionReceipt } from "../core/agentVideoExecutionAdapter";
 
 export type VibeAgentConfirmedToolRunStatus = "skipped" | "completed" | "blocked" | "failed";
 
@@ -27,6 +28,7 @@ interface ToolActionState {
   ruleQaReport?: { status?: string; summary?: string };
   textQaReport?: { status?: string; summary?: string };
   blockers?: string[];
+  executionReceipt?: AgentVideoExecutionReceipt;
 }
 
 function isToolActionState(value: unknown): value is ToolActionState {
@@ -201,8 +203,31 @@ function withResultFacts(resultFacts: VibeAgentConfirmedToolResultFact[] | undef
   return resultFacts?.length ? { resultFacts } : {};
 }
 
+function validatedExecutionOutcome(
+  state: ToolActionState | undefined,
+  fallback: string,
+): VibeAgentConfirmedToolRunOutcome | undefined {
+  const receipt = state?.executionReceipt;
+  if (receipt?.executionMode !== "dry_run" || receipt.status !== "validated") return undefined;
+  return {
+    status: "completed",
+    label: state?.message || fallback,
+    projectRecordPreserved: true,
+    waitingReview: false,
+    previewReady: false,
+    resultFacts: compactFacts([
+      resultFact("任务", receipt.jobId),
+      resultFact("方式", "本地合同验证"),
+      resultFact("Provider", receipt.providerCalled ? "已调用" : "未调用"),
+      resultFact("真实产物", `${receipt.outputAssets.length} 项`),
+    ]),
+  };
+}
+
 export function referenceGenerationToolOutcome(value: unknown): VibeAgentConfirmedToolRunOutcome {
   const state = isToolActionState(value) ? value : undefined;
+  const validated = validatedExecutionOutcome(state, "参考执行合同已验证；未生成真实参考。");
+  if (validated) return validated;
   const resultState = objectValue(value);
   const resultFacts = referenceResultFacts(resultState);
   const hasDisplayableOutput = referenceStateHasDisplayableOutput(resultState);
@@ -251,6 +276,8 @@ export function referenceGenerationToolOutcome(value: unknown): VibeAgentConfirm
 
 export function videoSubmitToolOutcome(value: unknown): VibeAgentConfirmedToolRunOutcome {
   const state = isToolActionState(value) ? value : undefined;
+  const validated = validatedExecutionOutcome(state, "视频执行合同已验证；未提交或生成真实视频。");
+  if (validated) return validated;
   const resultFacts = videoResultFacts(objectValue(value));
   if (state && toolStateIsBlocked(state)) {
     const label = state.qaFeedback?.summary || blockedToolStateLabel(state, "视频暂时不能发送，项目已保留。");
@@ -309,6 +336,8 @@ export function videoSubmitToolOutcome(value: unknown): VibeAgentConfirmedToolRu
 
 export function exportToolOutcome(value: unknown): VibeAgentConfirmedToolRunOutcome {
   const state = isToolActionState(value) ? value : undefined;
+  const validated = validatedExecutionOutcome(state, "导出执行合同已验证；未写入导出文件。");
+  if (validated) return validated;
   const resultFacts = exportResultFacts(objectValue(value));
   if (state?.status === "blocked") {
     return {

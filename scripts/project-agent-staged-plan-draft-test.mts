@@ -216,6 +216,23 @@ try {
   });
   assert(directRestore.ok && directRestore.status === "restored", "pure restore helper should accept a matching draft");
 
+  const privateTmpRestore = restoreProjectAgentStagedPlanDraft({
+    ...draft,
+    projectRoot: `/private${projectRoot}`,
+    action: {
+      ...draft.action!,
+      sourceContext: {
+        ...draft.action!.sourceContext,
+        projectRoot: `/private${projectRoot}`,
+      },
+    },
+  }, {
+    project,
+    projectRoot,
+    now: "2026-05-31T06:00:00.000Z",
+  });
+  assert(privateTmpRestore.ok && privateTmpRestore.status === "restored", "macOS /private/tmp staged roots should restore against /tmp project bindings");
+
   const missingShotArrayRestore = restoreProjectAgentStagedPlanDraft({
     ...draft,
     selectedShotIds: undefined,

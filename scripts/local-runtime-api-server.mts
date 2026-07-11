@@ -136,6 +136,10 @@ const knownProjectFixtureRoots = fixtureRootsFromEnv(runtimeEnv("VIBE_DIRECTOR_K
 ]);
 const currentProjectAgentTimelineEndpoint = `${runtimeBasePath}/projects/current/agent-timeline`;
 const currentProjectAgentTimelineSidecarPath = ".vibe-runtime/agent-timeline.json";
+const currentProjectAgentStagedPlanEndpoint = `${runtimeBasePath}/projects/current/agent-staged-plan`;
+const currentProjectAgentStagedPlanSidecarPath = ".vibe-runtime/agent-staged-plan.json";
+const currentProjectAgentGenerationJobLedgerEndpoint = `${runtimeBasePath}/projects/current/agent-generation-job-ledger`;
+const currentProjectAgentGenerationJobLedgerSidecarPath = ".vibe-runtime/agent-generation-job-ledger.json";
 
 let running = false;
 
@@ -577,6 +581,160 @@ async function handleCurrentProjectAgentTimelineRoute(req, res, url) {
     videoSubmitted: false,
     projectRoot: context.source.runRootRelativePath,
     path: currentProjectAgentTimelineSidecarPath,
+  });
+  return true;
+}
+
+async function handleCurrentProjectAgentStagedPlanRoute(req, res, url) {
+  if (url.pathname !== currentProjectAgentStagedPlanEndpoint) return false;
+  if (req.method !== "GET" && req.method !== "POST") {
+    writeJson(res, 405, {
+      ok: false,
+      ...runtimePolicy(),
+      endpoint: currentProjectAgentStagedPlanEndpoint,
+      status: "method_not_allowed",
+      message: "Method not allowed.",
+    });
+    return true;
+  }
+  const context = await currentProjectRouteContext(req, res, url, currentProjectAgentStagedPlanEndpoint);
+  if (!context) return true;
+  const sidecarPath = path.join(context.source.runRootPath, currentProjectAgentStagedPlanSidecarPath);
+  if (!isPathInsideRealRoot(sidecarPath, context.source.runRootPath)) {
+    writeJson(res, 403, blockedCurrentProjectResponse(currentProjectAgentStagedPlanEndpoint, context.requestContext, {
+      status: "forbidden",
+      message: "Agent staged plan path is outside the current project.",
+    }));
+    return true;
+  }
+
+  if (req.method === "GET") {
+    if (!existsSync(sidecarPath)) {
+      writeJson(res, 404, {
+        ok: false,
+        ...runtimePolicy(),
+        endpoint: currentProjectAgentStagedPlanEndpoint,
+        status: "missing",
+        providerCalled: false,
+        videoSubmitted: false,
+        projectRoot: context.source.runRootRelativePath,
+        path: currentProjectAgentStagedPlanSidecarPath,
+        message: "Agent staged plan sidecar not found.",
+      });
+      return true;
+    }
+    writeJson(res, 200, {
+      ok: true,
+      ...runtimePolicy(),
+      endpoint: currentProjectAgentStagedPlanEndpoint,
+      status: "read",
+      providerCalled: false,
+      videoSubmitted: false,
+      projectRoot: context.source.runRootRelativePath,
+      path: currentProjectAgentStagedPlanSidecarPath,
+      content: readFileSync(sidecarPath, "utf8"),
+    });
+    return true;
+  }
+
+  const content = typeof context.body?.content === "string" ? context.body.content : undefined;
+  if (content == null) {
+    writeJson(res, 400, blockedCurrentProjectResponse(currentProjectAgentStagedPlanEndpoint, context.requestContext, {
+      status: "bad_request",
+      message: "content is required.",
+    }));
+    return true;
+  }
+  mkdirSync(path.dirname(sidecarPath), { recursive: true });
+  const tempPath = `${sidecarPath}.tmp-${process.pid}-${Date.now()}`;
+  writeFileSync(tempPath, content, "utf8");
+  renameSync(tempPath, sidecarPath);
+  writeJson(res, 200, {
+    ok: true,
+    ...runtimePolicy(),
+    endpoint: currentProjectAgentStagedPlanEndpoint,
+    status: "written",
+    providerCalled: false,
+    videoSubmitted: false,
+    projectRoot: context.source.runRootRelativePath,
+    path: currentProjectAgentStagedPlanSidecarPath,
+  });
+  return true;
+}
+
+async function handleCurrentProjectAgentGenerationJobLedgerRoute(req, res, url) {
+  if (url.pathname !== currentProjectAgentGenerationJobLedgerEndpoint) return false;
+  if (req.method !== "GET" && req.method !== "POST") {
+    writeJson(res, 405, {
+      ok: false,
+      ...runtimePolicy(),
+      endpoint: currentProjectAgentGenerationJobLedgerEndpoint,
+      status: "method_not_allowed",
+      message: "Method not allowed.",
+    });
+    return true;
+  }
+  const context = await currentProjectRouteContext(req, res, url, currentProjectAgentGenerationJobLedgerEndpoint);
+  if (!context) return true;
+  const sidecarPath = path.join(context.source.runRootPath, currentProjectAgentGenerationJobLedgerSidecarPath);
+  if (!isPathInsideRealRoot(sidecarPath, context.source.runRootPath)) {
+    writeJson(res, 403, blockedCurrentProjectResponse(currentProjectAgentGenerationJobLedgerEndpoint, context.requestContext, {
+      status: "forbidden",
+      message: "Agent generation ledger path is outside the current project.",
+    }));
+    return true;
+  }
+
+  if (req.method === "GET") {
+    if (!existsSync(sidecarPath)) {
+      writeJson(res, 404, {
+        ok: false,
+        ...runtimePolicy(),
+        endpoint: currentProjectAgentGenerationJobLedgerEndpoint,
+        status: "missing",
+        providerCalled: false,
+        videoSubmitted: false,
+        projectRoot: context.source.runRootRelativePath,
+        path: currentProjectAgentGenerationJobLedgerSidecarPath,
+        message: "Agent generation ledger sidecar not found.",
+      });
+      return true;
+    }
+    writeJson(res, 200, {
+      ok: true,
+      ...runtimePolicy(),
+      endpoint: currentProjectAgentGenerationJobLedgerEndpoint,
+      status: "read",
+      providerCalled: false,
+      videoSubmitted: false,
+      projectRoot: context.source.runRootRelativePath,
+      path: currentProjectAgentGenerationJobLedgerSidecarPath,
+      content: readFileSync(sidecarPath, "utf8"),
+    });
+    return true;
+  }
+
+  const content = typeof context.body?.content === "string" ? context.body.content : undefined;
+  if (content == null) {
+    writeJson(res, 400, blockedCurrentProjectResponse(currentProjectAgentGenerationJobLedgerEndpoint, context.requestContext, {
+      status: "bad_request",
+      message: "content is required.",
+    }));
+    return true;
+  }
+  mkdirSync(path.dirname(sidecarPath), { recursive: true });
+  const tempPath = `${sidecarPath}.tmp-${process.pid}-${Date.now()}`;
+  writeFileSync(tempPath, content, "utf8");
+  renameSync(tempPath, sidecarPath);
+  writeJson(res, 200, {
+    ok: true,
+    ...runtimePolicy(),
+    endpoint: currentProjectAgentGenerationJobLedgerEndpoint,
+    status: "written",
+    providerCalled: false,
+    videoSubmitted: false,
+    projectRoot: context.source.runRootRelativePath,
+    path: currentProjectAgentGenerationJobLedgerSidecarPath,
   });
   return true;
 }
@@ -1255,6 +1413,8 @@ async function handleRequest(req, res) {
   if (await handleCurrentProjectBindingRoute(req, res, url)) return;
   if (await handleCurrentProjectSaveProjectVibeRoute(req, res, url)) return;
   if (await handleCurrentProjectAgentTimelineRoute(req, res, url)) return;
+  if (await handleCurrentProjectAgentStagedPlanRoute(req, res, url)) return;
+  if (await handleCurrentProjectAgentGenerationJobLedgerRoute(req, res, url)) return;
   if (await handleCurrentProjectReadCheckRoute(req, res, url)) return;
   if (await handleCurrentProjectOneShotRoute(req, res, url)) return;
   if (await handleCurrentProjectOneShotReturnRoute(req, res, url)) return;

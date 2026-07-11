@@ -39,6 +39,7 @@ export interface DirectorAiStoryboardPlanInput {
   styleText?: string;
   userPreference?: string;
   targetDurationSeconds?: number;
+  requestedShotCount?: number;
   structuralRows: DirectorAiStoryboardSeedRow[];
 }
 
@@ -80,6 +81,7 @@ export interface DirectorAiStoryboardPlan {
 
 export interface NormalizeDirectorAiStoryboardPlanOptions {
   targetDurationSeconds?: number;
+  requestedShotCount?: number;
 }
 
 const executionModes = new Set<DirectorAiStoryboardExecutionMode>([
@@ -166,7 +168,7 @@ function storyBeatInsideDirectiveClause(clause: string): string {
 }
 
 function stripCreationRequestPrefix(line: string): { line: string; directive?: string } {
-  const match = line.match(/^(?:请)?(?:帮我)?(?:做|生成|制作|来一个|写一个)(?:一个|一段)?\s*(?:(?:\d+(?:\.\d+)?\s*(?:秒|s|S|分钟|分))?\s*[^：:，,\n]{0,40}?(?:短片|视频|片子|项目|故事)|\d+(?:\.\d+)?\s*(?:秒|s|S|分钟|分))\s*[：:，,]\s*/u);
+  const match = line.match(/^(?:(?:请)?(?:帮我)?|我(?:想要|想|希望|要)?|想要?|希望)?(?:做|拍|生成|制作|来一个|写一个)(?:一个|一段)?\s*(?:(?:\d+(?:\.\d+)?\s*(?:秒|s|S|分钟|分))?\s*[^：:，,\n]{0,40}?(?:短片|视频|片子|项目|故事)|\d+(?:\.\d+)?\s*(?:秒|s|S|分钟|分))\s*[：:，,]\s*/u);
   if (!match) return { line };
   return {
     line: line.slice(match[0].length).trim(),
@@ -192,7 +194,7 @@ export function splitCreativePlanningText(value: unknown, maxLength = 24000): { 
         directives.push("执行边界：按用户要求限制生成/提交。");
       }
       const withoutInlineDirectives = prefixed.line.replace(
-        /(^|[，,；;。.!?！？\s])(((?:我)?(?:想要|希望|偏向|请先|先查一下|查一下|先做|先看|先整理|先拆|先规划|参考|类似|像|不要|不用|先不要|先不|先只|只要|只做|只看|只拆|只整理|不生图|不生成|不提交|不跑|不走生图|跑到视频前|风格|画风|节奏)|(?:(?:拆成|分成|分为|切成|规划成|做成)\s*(?:[0-9０-９]{1,3}|一|二|两|俩|三|四|五|六|七|八|九|十|十[一二两俩三四五六七八九]|[一二两俩三四五六七八九]十[一二两俩三四五六七八九]?)\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|视频|短片|片段|段落|shots?|clips?|cuts?)))[^。.!?！？\n]*)/gu,
+        /(^|[，,；;。.!?！？\s])(((?:我)?(?:想要|希望|偏向|请先|先查一下|查一下|先做|先看|先整理|先拆|先规划|参考|类似|像|不要|不用|先不要|先不|先只|只要|只做|只看|只拆|只整理|不生图|不生成|不提交|不跑|不走生图|跑到视频前|风格|画风|节奏)|(?:(?:拆成|分成|分为|切成|规划成|做成|整理成|整理为|重排成|重排为)\s*(?:[0-9０-９]{1,3}|一|二|两|俩|三|四|五|六|七|八|九|十|十[一二两俩三四五六七八九]|[一二两俩三四五六七八九]十[一二两俩三四五六七八九]?)\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|视频|短片|片段|段落|shots?|clips?|cuts?)))[^。.!?！？\n]*)/gu,
         (match, separator: string, clause: string) => {
           if (!isOperationDirectiveClause(clause)) return match;
           directives.push(clean(clause));
@@ -309,15 +311,74 @@ function inferredFunctionalCharacters(record: Record<string, unknown>) {
     /黑猫/u.test(text) ? "黑猫" : "",
     /白猫/u.test(text) ? "白猫" : "",
     !/黑猫|白猫/u.test(text) && /猫/u.test(text) ? "猫" : "",
+    /机器人保安|保安机器人/u.test(text) ? "机器人保安" : "",
     /穿雨衣.{0,4}少女|雨衣.{0,8}少女/u.test(text) ? "穿雨衣的少女" : "",
     !/穿雨衣.{0,4}少女|雨衣.{0,8}少女/u.test(text) && /女高中生|高中女生/u.test(text) ? "女高中生" : "",
-    !/穿雨衣.{0,4}少女|雨衣.{0,8}少女|女高中生|高中女生|少女/u.test(text) && /女生|女孩/u.test(text) ? "女生" : "",
+    !/穿雨衣.{0,4}少女|雨衣.{0,8}少女|女高中生|高中女生|少女/u.test(text) && /女孩/u.test(text) ? "女孩" : "",
+    !/穿雨衣.{0,4}少女|雨衣.{0,8}少女|女高中生|高中女生|少女|女孩/u.test(text) && /女生/u.test(text) ? "女生" : "",
     !/穿雨衣.{0,4}少女|雨衣.{0,8}少女|女高中生|高中女生/u.test(text) && /少女/u.test(text) ? "少女" : "",
     /男生|男孩/u.test(text) ? "男生" : "",
     /少年/u.test(text) ? "少年" : "",
-    /机器人|机甲/u.test(text) ? "机器人" : "",
+    !/机器人保安|保安机器人/u.test(text) && /机器人|机甲/u.test(text) ? "机器人" : "",
   ].filter(Boolean);
   return labels.length ? Array.from(new Set(labels)).join("、") : undefined;
+}
+
+function normalizeCharacterCandidatesFromText(candidates: string[], text: string) {
+  const labels = [...candidates];
+  if (/机器人保安|保安机器人/u.test(text)) {
+    const filtered = labels.filter((label) => !/^(机器人|保安)$/u.test(label));
+    filtered.push("机器人保安");
+    labels.length = 0;
+    labels.push(...filtered);
+  }
+  if (/女孩/u.test(text) && labels.includes("女孩")) {
+    const filtered = labels.filter((label) => label !== "女生");
+    labels.length = 0;
+    labels.push(...filtered);
+  }
+  return Array.from(new Set(labels));
+}
+
+function inferredPropLabels(record: Record<string, unknown>) {
+  const text = inferenceText(record);
+  const labels = [
+    /旧手机/u.test(text) ? "旧手机" : "",
+    /红雨伞/u.test(text) ? "红雨伞" : "",
+    /便利店招牌/u.test(text) ? "便利店招牌" : "",
+    /纸飞机/u.test(text) ? "纸飞机" : "",
+    /发光纸鹤|纸鹤/u.test(text) ? "发光纸鹤" : "",
+    /蓝色电动车|电动车/u.test(text) ? "蓝色电动车" : "",
+    /灯箱/u.test(text) ? "灯箱" : "",
+    /发光(?:的)?鸟|光鸟/u.test(text) ? "发光鸟" : "",
+    /热豆浆|豆浆/u.test(text) ? "热豆浆" : "",
+    /杯盖.{0,8}发光字|发光字.{0,8}杯盖|发光字/u.test(text) ? "发光字" : "",
+  ].filter(Boolean);
+  return labels;
+}
+
+function preferSpecificPropLabels(labels: string[]) {
+  const unique = Array.from(new Set(labels.map(clean).filter(Boolean)));
+  const hasOldPhone = unique.includes("旧手机");
+  const hasRedUmbrella = unique.includes("红雨伞");
+  const hasStoreSign = unique.includes("便利店招牌");
+  return unique.filter((label) =>
+    !(hasOldPhone && label === "手机")
+    && !(hasRedUmbrella && label === "雨伞")
+    && !(hasStoreSign && label === "招牌"));
+}
+
+function inferredSceneSubject(record: Record<string, unknown>, currentScene: string) {
+  const text = inferenceText(record);
+  if (/凌晨.{0,8}玻璃电梯|玻璃电梯.{0,8}凌晨/u.test(text)) return "凌晨玻璃电梯";
+  if (/玻璃电梯/u.test(text)) return "玻璃电梯";
+  if (/黄昏.{0,8}洗衣店|洗衣店.{0,8}黄昏/u.test(text)) return "黄昏洗衣店";
+  if (/凌晨.{0,8}(?:无人)?洗衣店|(?:无人)?洗衣店.{0,8}凌晨/u.test(text)) return /无人洗衣店/u.test(text) ? "凌晨无人洗衣店" : "凌晨洗衣店";
+  if (/无人洗衣店/u.test(text)) return "无人洗衣店";
+  if (/洗衣店/u.test(text) && /待确认|洗衣店/.test(currentScene)) return "洗衣店";
+  if (/雨夜.{0,8}便利店.{0,4}门口|便利店.{0,4}门口.{0,8}雨夜/u.test(text)) return "雨夜便利店门口";
+  if (/便利店.{0,4}门口/u.test(text) && /山脚便利店|便利店|待确认/.test(currentScene)) return "便利店门口";
+  return currentScene;
 }
 
 function normalizedReferenceFields(record: Record<string, unknown>): {
@@ -326,17 +387,20 @@ function normalizedReferenceFields(record: Record<string, unknown>): {
   props: string;
 } {
   const driverless = hasDriverlessCue(inferenceText(record));
-  const rawCharacters = splitReferenceList(record.characters)
+  const text = inferenceText(record);
+  const rawCharacters = normalizeCharacterCandidatesFromText(splitReferenceList(record.characters), text)
     .filter((label) => !(driverless && isGenericDriverLabel(label)));
   const vehicleObjectsFromCharacters = rawCharacters.filter(isVehicleObjectReference);
   const characters = referenceAssetCandidates(rawCharacters, "character");
-  const props = referenceAssetCandidates([
+  const props = preferSpecificPropLabels(referenceAssetCandidates([
+    ...inferredPropLabels(record),
     ...splitReferenceList(record.props),
     ...vehicleObjectsFromCharacters,
-  ], "prop");
+  ], "prop"));
+  const scene = inferredSceneSubject(record, cleanSceneSubject(record.scene) || "待确认");
   return {
     characters: joinReferenceList(characters, driverless ? "无" : inferredFunctionalCharacters(record) || "无"),
-    scene: cleanSceneSubject(record.scene) || "待确认",
+    scene,
     props: joinReferenceList(props, "无"),
   };
 }
@@ -656,9 +720,11 @@ function inheritPendingSubjects(shots: DirectorAiStoryboardShot[]): DirectorAiSt
 function fitShotCountToExecutableDuration(
   shots: DirectorAiStoryboardShot[],
   requestedTotalSeconds: number | undefined,
+  requestedShotCount: number | undefined,
 ): { shots: DirectorAiStoryboardShot[]; warning?: string } {
   const requestedTotal = Number(requestedTotalSeconds || 0);
   if (!shots.length || !Number.isFinite(requestedTotal) || requestedTotal <= 0) return { shots };
+  if (requestedShotCount && shots.length === requestedShotCount) return { shots };
   const maxExecutableShots = Math.max(1, Math.floor(requestedTotal / VIDEO_MODEL_MIN_SHOT_SECONDS));
   if (shots.length <= maxExecutableShots) return { shots };
   const targetCount = Math.max(1, Math.min(maxExecutableShots, shots.length));
@@ -788,8 +854,11 @@ export function normalizeDirectorAiStoryboardPlan(
     1,
     900,
   );
+  const requestedShotCount = Number.isFinite(Number(options.requestedShotCount)) && Number(options.requestedShotCount) > 0
+    ? Math.max(1, Math.min(MAX_AI_STORYBOARD_SHOTS, Math.round(Number(options.requestedShotCount))))
+    : undefined;
   const inheritedShots = inheritPendingSubjects(shots);
-  const executableShotCount = fitShotCountToExecutableDuration(inheritedShots, requestedTotal);
+  const executableShotCount = fitShotCountToExecutableDuration(inheritedShots, requestedTotal, requestedShotCount);
   const durationNormalized = normalizeDurationsToTotal(executableShotCount.shots, requestedTotal);
   return {
     schemaVersion: DIRECTOR_AI_STORYBOARD_PLAN_VERSION,
@@ -811,7 +880,7 @@ export function buildDirectorAiStoryboardPrompt(input: DirectorAiStoryboardPlanI
   const styleText = cleanMultiline(input.styleText, 2000);
   const preference = cleanMultiline([input.userPreference, splitScriptText.directiveText].filter(Boolean).join("\n"), 2000);
   const totalDuration = input.targetDurationSeconds || input.structuralRows.reduce((sum, row) => sum + (row.durationSeconds || 0), 0);
-  const requestedShotCount = extractRequestedShotCount([scriptText, styleText, preference].filter(Boolean).join("\n"));
+  const requestedShotCount = input.requestedShotCount || extractRequestedShotCount([scriptText, styleText, preference].filter(Boolean).join("\n"));
   const structuralRows = input.structuralRows
     .map((row, index) => ({
       rowId: row.id || `row_${index + 1}`,

@@ -42,6 +42,13 @@ export interface ProjectAgentTimelineWriteResult {
   errors: string[];
 }
 
+function isBrowserDraftProjectRoot(projectRoot?: string) {
+  const normalized = projectRoot?.replace(/\\/g, "/").trim() || "";
+  return normalized === ".vibe-runtime/browser-projects"
+    || normalized.startsWith(".vibe-runtime/browser-projects/")
+    || normalized.includes("/.vibe-runtime/browser-projects/");
+}
+
 export async function openProjectAgentTimeline(
   target: ProjectVibeDraftTarget,
   input: {
@@ -51,7 +58,7 @@ export async function openProjectAgentTimeline(
   },
 ): Promise<ProjectAgentTimelineOpenResult> {
   const fallback = createProjectAgentTimeline(input);
-  const runtimeRead = target.projectRoot
+  const runtimeRead = target.projectRoot && !isBrowserDraftProjectRoot(target.projectRoot)
     ? await loadCurrentProjectAgentTimelineTextFromRuntime({
       projectId: input.project.manifest.projectId,
       projectRoot: target.projectRoot,
@@ -100,7 +107,7 @@ export async function saveProjectAgentTimeline(
   let runtimeWriteError: string | undefined;
   let runtimeWriteOk = false;
   let runtimeWritePath: string | undefined;
-  if (target.projectRoot) {
+  if (target.projectRoot && !isBrowserDraftProjectRoot(target.projectRoot)) {
     try {
       const runtimeWrite = await saveCurrentProjectAgentTimelineTextToRuntime({
         projectId: normalizedTimeline.projectId,

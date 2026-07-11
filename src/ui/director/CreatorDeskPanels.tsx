@@ -493,11 +493,17 @@ export function CreatorDeskPanels({
   onSelectInboxItem,
   onOpenView,
   projectStatusView,
+  referencePlanningFocusActive = false,
+  referenceConfirmationEditingFocusActive = false,
+  editingConfirmationLabel = "",
 }: {
   projection: CreatorDeskProjection;
   localProjectReady?: boolean;
   localProjectBusy?: boolean;
   canCreateLocalProject?: boolean;
+  referencePlanningFocusActive?: boolean;
+  referenceConfirmationEditingFocusActive?: boolean;
+  editingConfirmationLabel?: string;
   referenceGenerationAction?: {
     status: "idle" | "running" | "blocked" | "needs_review" | "verified";
     message?: string;
@@ -536,6 +542,7 @@ export function CreatorDeskPanels({
   const currentVideoPosition = videoPosition(videoGeneration);
   const projectStatusStage = projectStatusView?.stage || "";
   const agentConfirmationTakingFocus = projectStatusStage === "等待你确认";
+  const exportConfirmationTakingFocus = projectStatusStage === "等待确认导出";
   const videoSubmitCancelled = videoSendAction?.status === "blocked" && /已取消，本次没有发送/.test(videoSendAction.message || "");
   const projectVideoBlocked = Boolean(
     projectStatusStage.startsWith("视频待处理")
@@ -553,6 +560,7 @@ export function CreatorDeskPanels({
     || projectStatusStage === "视频结果已出";
   const exportFlowTakingFocus = Boolean(
     projectStatusStage === "可以导出"
+      || exportConfirmationTakingFocus
       || projectStatusStage.startsWith("导出")
       || (projectStatusStage === "视频结果已出" && /交付|导出/.test(projectStatusExportCopy)),
   );
@@ -561,9 +569,16 @@ export function CreatorDeskPanels({
       || projectVideoBlocked
       || displayVideoTaskActive
       || videoCanResume
-      || Boolean(projectStatusView?.stage?.startsWith("视频"))
+    || Boolean(projectStatusView?.stage?.startsWith("视频"))
   );
-  const primaryFlowTakingFocus = agentConfirmationTakingFocus || exportFlowTakingFocus || videoFlowTakingFocus;
+  const referenceConfirmationEditingTakingFocus = Boolean(
+    referenceConfirmationEditingFocusActive && !exportFlowTakingFocus && !videoFlowTakingFocus,
+  );
+  const primaryFlowTakingFocus = agentConfirmationTakingFocus
+    || referenceConfirmationEditingTakingFocus
+    || exportFlowTakingFocus
+    || videoFlowTakingFocus;
+  const referencePlanningTakingFocus = Boolean(referencePlanningFocusActive && localProjectReady && !primaryFlowTakingFocus);
   const videoActionRelevant = !videoReturnedForReview && videoGeneration.status !== "completed";
   const referenceGenerationBusy = referenceGenerationAction?.status === "running";
   const projectRequirement = agentProjectRequirementCopy({ localProjectBusy, canCreateLocalProject });
@@ -579,6 +594,12 @@ export function CreatorDeskPanels({
   const statusNextAction = projectStatusView?.nextAction?.trim();
   const statusSummary = projectStatusView?.doing?.trim();
   const statusDetail = projectStatusView?.waitingFor?.trim();
+  const editedConfirmationLabel = editingConfirmationLabel || statusSummary?.match(/正在修改「([^」]+)」/)?.[1] || "当前确认";
+  const editedConfirmationBoundary = /生成参考|参考图|图片/.test(editedConfirmationLabel)
+    ? "确认前不会生成图片，也不会提交视频。"
+    : /重排|修改|方式|草案|故事|镜头/.test(editedConfirmationLabel)
+      ? "确认前不会写入项目、生成参考或提交视频。"
+      : "确认前不会执行。";
   const submitVideoCommandVisible =
     !projectVideoBlocked
     && (commandIsSubmitVideo(displayAgentCommand) || /发送视频|提交视频/.test(normalizedLabel(statusNextAction || "")));
@@ -587,14 +608,25 @@ export function CreatorDeskPanels({
     : statusNextAction || (!localProjectReady
     ? browserDraftLabel
     : displayAgentCommand.label);
+  const localProjectSetupTakingFocus = Boolean(
+    !localProjectReady
+      && hasStoryDraftForProject
+      && /保存位置|本地项目/.test([
+        projectStatusStage,
+        statusNextAction,
+        statusSummary,
+        statusDetail,
+        projectRequirement.label,
+      ].filter(Boolean).join(" ")),
+  );
   const displayPreflight = localProjectReady
     ? preflight
     : {
         ...preflight,
         summary: hasStoryDraftForProject
           ? projectRequirement.detail
-          : "当前还没连接项目文件夹，可以继续整理；生成参考或视频前再打开或新建项目。",
-        nextAction: hasStoryDraftForProject ? projectRequirement.label : "选择本地项目",
+          : "当前还没选择保存位置，可以继续整理；生成参考或视频前再选择保存位置。",
+        nextAction: hasStoryDraftForProject ? projectRequirement.label : "先写想法",
       };
   const referenceNotice = referenceGenerationAction?.message && referenceGenerationAction.status !== "idle"
     ? referenceGenerationAction.status === "blocked"
@@ -625,6 +657,18 @@ export function CreatorDeskPanels({
     : projectInbox.nextAction;
   const referenceGenerationNeedsPermission =
     !submitVideoCommandVisible && displayAgentCommand.kind === "generate_references" && /允许/.test(displayAgentCommand.label);
+  const referenceGenerationDeferredByCreator = Boolean(
+    projectStatusView?.stage === "故事已保存"
+      && /开始补参考|不生成参考|先整理故事/.test(`${projectStatusView.doing} ${projectStatusView.nextAction} ${projectStatusView.waitingFor}`),
+  );
+  const referenceGenerationConfirmationTakingFocus = Boolean(
+    agentConfirmationTakingFocus
+      && /确认生成参考|生成参考/.test(`${projectStatusView?.doing || ""} ${projectStatusView?.nextAction || ""} ${projectStatusView?.waitingFor || ""}`),
+  );
+  const projectEditConfirmationTakingFocus = Boolean(
+    agentConfirmationTakingFocus
+      && /确认修改|确认方式|确认重排/.test(`${projectStatusView?.doing || ""} ${projectStatusView?.nextAction || ""} ${projectStatusView?.waitingFor || ""}`),
+  );
   const activeVideoLineFact = videoGeneration.taskFacts.find((fact) => fact.label === "排队")?.value;
   const activeVideoQueryFact = videoGeneration.taskFacts.find((fact) => fact.label === "查询")?.value;
   const activeVideoProgressParts = [activeVideoLineFact, activeVideoQueryFact].filter(Boolean);
@@ -649,14 +693,24 @@ export function CreatorDeskPanels({
       : videoCanResume
         ? "视频已提交，等待取回结果。"
         : "视频正在处理。";
-  const creatorStepHint = projectStatusView
-    ? agentConfirmationTakingFocus
+  const creatorStepHint = referenceConfirmationEditingTakingFocus
+    ? `发送修改说明后，我会重新判断；${editedConfirmationBoundary}`
+    : referencePlanningTakingFocus
+    ? "参考计划已准备；真正生成前会再让你确认。"
+    : referenceGenerationDeferredByCreator
+    ? "已按你的要求只保存故事；需要参考时再说“开始补参考”。"
+    : projectStatusView
+    ? projectEditConfirmationTakingFocus
+      ? `先处理右侧「${statusNextAction || statusSummary || "确认修改"}」；不确认也可以继续说明怎么改。`
+    : localProjectSetupTakingFocus
+      ? "可以继续改故事；生成参考、发送视频或导出前，先在右侧确认保存位置。"
+      : agentConfirmationTakingFocus
       ? "先处理右侧消息里的确认；中间只保留项目结果。"
       : "消息流会接着这个状态处理。"
     : !localProjectReady
     ? hasStoryDraftForProject
       ? projectRequirement.hint
-      : "可以继续说想法；生成参考、视频或导出前再准备本地项目。"
+      : "可以继续说想法；生成参考、视频或导出前再选择保存位置。"
       : referenceGenerationBusy
         ? "参考正在生成，完成后会进入复核。"
       : videoCanResume
@@ -670,7 +724,19 @@ export function CreatorDeskPanels({
           : displayAgentCommand.kind === "open_review"
             ? "先复核参考；也可以在消息中继续处理。"
           : `在消息中确认「${primaryActionLabel(nextActionCopy)}」继续。`;
-  const displayCurrentTask = agentConfirmationTakingFocus
+  const displayCurrentTask = referenceConfirmationEditingTakingFocus
+    ? {
+        ...projectObservation.currentTask,
+        missing: `正在修改「${editedConfirmationLabel}」。`,
+        plan: "发送右侧输入后，我会重新整理这条确认。",
+        confirmation: {
+          kind: "none" as const,
+          required: false,
+          label: "发送修改说明",
+          detail: `发送后仍会先等待确认「${editedConfirmationLabel}」。`,
+        },
+      }
+    : agentConfirmationTakingFocus
     ? {
         ...projectObservation.currentTask,
         missing: projectStatusView?.doing || "右侧还有一条消息等你确认。",
@@ -682,16 +748,46 @@ export function CreatorDeskPanels({
           detail: projectStatusView?.waitingFor || "确认前不会执行。",
         },
       }
+    : referencePlanningTakingFocus
+      ? {
+          ...projectObservation.currentTask,
+          missing: "参考计划已准备，当前不会生成图片或提交视频。",
+          plan: "要真正生成参考时，说“生成参考”或“允许生成参考”。",
+          confirmation: {
+            kind: "none" as const,
+            required: false,
+            label: "生成前会再确认",
+            detail: "现在不会生成图片，也不会提交视频。",
+          },
+        }
+    : referenceGenerationDeferredByCreator
+      ? {
+          ...projectObservation.currentTask,
+          missing: projectStatusView?.doing || "故事已保存，参考之后再补。",
+          plan: projectStatusView?.nextAction || "继续修改故事，或说“开始补参考”。",
+          confirmation: {
+            kind: "none" as const,
+            required: false,
+            label: "等你指令",
+            detail: "现在不会生成参考；你说“开始补参考”后再确认范围。",
+          },
+        }
     : exportFlowTakingFocus
     ? {
         ...projectObservation.currentTask,
-        missing: "交付内容已经整理好。",
-        plan: projectStatusView?.nextAction || "最后检查交付内容。",
+        missing: exportConfirmationTakingFocus
+          ? projectStatusView?.doing || "本地交付包已整理，等待确认。"
+          : "交付内容已经整理好。",
+        plan: exportConfirmationTakingFocus
+          ? projectStatusView?.nextAction || "在右侧确认导出交付包"
+          : projectStatusView?.nextAction || "最后检查交付内容。",
         confirmation: {
           kind: "none" as const,
-          required: false,
-          label: "交付可看",
-          detail: "继续输入可以修改项目；不需要再重复提交视频。",
+          required: exportConfirmationTakingFocus,
+          label: exportConfirmationTakingFocus ? "确认导出" : "交付可看",
+          detail: exportConfirmationTakingFocus
+            ? projectStatusView?.waitingFor || "确认前不会写入导出文件。"
+            : "继续输入可以修改项目；不需要再重复提交视频。",
         },
       }
     : projectVideoBlocked
@@ -721,13 +817,13 @@ export function CreatorDeskPanels({
     : !localProjectReady
     ? {
         ...projectObservation.currentTask,
-        missing: hasStoryDraftForProject ? "还没有本地项目文件夹。" : "先写想法，或打开本地项目。",
+        missing: hasStoryDraftForProject ? "还没有选择保存位置。" : "先写想法，或打开本地项目。",
         plan: hasStoryDraftForProject ? projectRequirement.label : "先整理故事和镜头。",
         confirmation: {
           kind: "none" as const,
           required: false,
           label: hasStoryDraftForProject ? projectRequirement.label : "可以先整理",
-          detail: hasStoryDraftForProject ? projectRequirement.detail : "生成参考、视频或导出前再准备本地项目。",
+          detail: hasStoryDraftForProject ? projectRequirement.detail : "生成参考、视频或导出前再选择保存位置。",
         },
       }
     : referenceGenerationBusy
@@ -768,6 +864,8 @@ export function CreatorDeskPanels({
     : projectObservation.currentTask;
   const displayIntentLabel = exportFlowTakingFocus
     ? "交付复核"
+    : referenceConfirmationEditingTakingFocus
+    ? "修改确认"
     : agentConfirmationTakingFocus
     ? "等待确认"
     : projectVideoBlocked
@@ -775,24 +873,62 @@ export function CreatorDeskPanels({
     : displayVideoTaskActive
     ? videoCanResume ? "查询视频" : "等待视频"
     : !localProjectReady
-      ? hasStoryDraftForProject ? "准备项目" : "整理想法"
+      ? hasStoryDraftForProject ? "选择保存位置" : "整理想法"
     : referenceGenerationBusy
       ? "等待参考"
-      : submitVideoCommandVisible
+    : referenceGenerationDeferredByCreator
+      ? "等你指令"
+    : submitVideoCommandVisible
         ? "发送视频"
       : defaultIntentRoute.label;
+  const visibleNextActionCopy = referenceConfirmationEditingTakingFocus
+    ? "发送修改说明"
+    : referencePlanningTakingFocus ? "生成参考前再确认" : nextActionCopy;
+  const visibleStatusSummary = referenceConfirmationEditingTakingFocus
+    ? `正在修改「${editedConfirmationLabel}」`
+    : referencePlanningTakingFocus ? "参考计划已准备" : statusSummary;
+  const visibleStatusDetail = referenceConfirmationEditingTakingFocus
+    ? editedConfirmationBoundary
+    : referencePlanningTakingFocus ? "现在不会生成图片，也不会提交视频。" : statusDetail;
+  const agentConfirmationHandoffActive = agentConfirmationTakingFocus && !referenceConfirmationEditingTakingFocus;
+  const agentConfirmationHandoffLabel = projectStatusView?.nextAction || "确认当前消息";
+  const agentConfirmationHandoffDetail = projectStatusView?.waitingFor || "确认前不会执行。";
+  const displayStoryDetail = referenceConfirmationEditingTakingFocus
+    ? `${projectObservation.story.label} · 当前故事`
+    : referencePlanningTakingFocus
+    ? `${projectObservation.story.label} · 当前故事`
+    : referenceGenerationConfirmationTakingFocus
+      ? `${projectObservation.story.label} · 当前故事`
+    : projectEditConfirmationTakingFocus
+      ? `${projectObservation.story.label} · 当前故事`
+    : localProjectSetupTakingFocus
+      ? `${projectObservation.story.label} · 当前故事`
+    : referenceGenerationDeferredByCreator
+      ? `${projectObservation.story.label} · 当前故事`
+    : projectObservation.story.detail;
   const displayPreflightReferenceSummary = referenceGenerationBusy
     ? "参考生成中"
+    : referenceGenerationDeferredByCreator
+      ? "之后补参考"
     : displayPreflight.referenceSummary;
   const reasoningDisclosureLabel = videoFlowTakingFocus ? "视频进度" : "AI 导演怎么判断";
-  const reasoningDisclosureSummary = videoFlowTakingFocus ? activeVideoProgressSubject : displayPreflight.modeSummary;
+  const reasoningDisclosureSummary = videoFlowTakingFocus
+    ? activeVideoProgressSubject
+    : referenceGenerationDeferredByCreator
+      ? "之后补参考"
+      : displayPreflight.modeSummary;
   const reasoningDisclosureDetail = videoFlowTakingFocus
     ? videoReviewTakingFocus
       ? projectStatusView?.waitingFor || "确认视频结果"
       : projectVideoBlocked
         ? projectStatusView?.waitingFor || "按提示处理后再继续"
       : activeVideoProgressParts.join(" · ") || activeVideoProgressSummary || (videoCanResume ? "点右侧确认查询结果" : "等待视频结果")
+    : referenceGenerationDeferredByCreator
+      ? "当前不会生成参考；需要时在右侧说“开始补参考”。"
     : displayPreflightReferenceSummary;
+  const showAgentReasoningDisclosure = !agentConfirmationHandoffActive
+    && !referenceConfirmationEditingTakingFocus
+    && !localProjectSetupTakingFocus;
   const displayPreflightChecks = referenceGenerationBusy
     ? displayPreflight.checks.map((check) => check.id === "references"
       ? {
@@ -805,6 +941,9 @@ export function CreatorDeskPanels({
   const assetReconciliationHasBlockingWork = Boolean(assetReconciliation && (
     assetReconciliation.summary.needsReview > 0 || assetReconciliation.summary.missing > 0
   ));
+  const displayAssetReconciliationNextAction = referenceGenerationDeferredByCreator
+    ? "之后说“开始补参考”"
+    : assetReconciliationNextAction;
   const showAssetReconciliation = Boolean(assetReconciliation && (
     primaryFlowTakingFocus
       ? false
@@ -820,41 +959,49 @@ export function CreatorDeskPanels({
   return (
     <section
       className={`creator-desk-panels compact ${displayPreflight.status} ${agentStage.stage}`}
-      aria-label={`下一步：${nextActionCopy}`}
+      aria-label={`下一步：${visibleNextActionCopy}`}
     >
       <div className="creator-desk-summary">
         <div className="creator-step-copy">
           <span>AI 导演建议</span>
-          <strong>{nextActionCopy}</strong>
-          <small>{statusSummary || (localProjectReady ? agentStage.summary : displayPreflight.summary)}</small>
-          <em>{statusDetail || (localProjectReady ? agentStage.detail : summaryLine(projection))}</em>
+          <strong>{visibleNextActionCopy}</strong>
+          <small>{visibleStatusSummary || (localProjectReady ? agentStage.summary : displayPreflight.summary)}</small>
+          <em>{visibleStatusDetail || (localProjectReady ? agentStage.detail : summaryLine(projection))}</em>
         </div>
         <div className="creator-step-cta" aria-label="当前状态提示">
           <small className="creator-summary-next">{creatorStepHint}</small>
         </div>
       </div>
-      <section className="creator-agent-current-task" aria-label="AI 导演当前任务">
-        <div>
-          <span>理解</span>
-          <strong>{displayCurrentTask.understanding}</strong>
-          <small>{projectObservation.story.detail}</small>
-        </div>
-        <div>
-          <span>缺口</span>
-          <strong>{displayCurrentTask.missing}</strong>
-          <small>参考状态：{projectObservation.references.label}</small>
-        </div>
-        <div>
-          <span>准备</span>
-          <strong>{displayCurrentTask.plan}</strong>
-          <small>现在在做：{displayIntentLabel}</small>
-        </div>
-        <div className={confirmationTone(displayCurrentTask.confirmation.required)}>
-          <span>确认</span>
-          <strong>{displayCurrentTask.confirmation.label}</strong>
-          <small>{displayCurrentTask.confirmation.detail}</small>
-        </div>
-      </section>
+      {agentConfirmationHandoffActive ? (
+        <section className="creator-agent-confirmation-handoff" aria-label="右侧消息等待确认">
+          <span>右侧等待确认</span>
+          <strong>{agentConfirmationHandoffLabel}</strong>
+          <small>{agentConfirmationHandoffDetail}</small>
+        </section>
+      ) : (
+        <section className="creator-agent-current-task" aria-label="AI 导演当前任务">
+          <div>
+            <span>理解</span>
+            <strong>{displayCurrentTask.understanding}</strong>
+            <small>{displayStoryDetail}</small>
+          </div>
+          <div>
+            <span>缺口</span>
+            <strong>{displayCurrentTask.missing}</strong>
+            <small>参考状态：{projectObservation.references.label}</small>
+          </div>
+          <div>
+            <span>准备</span>
+            <strong>{displayCurrentTask.plan}</strong>
+            <small>现在在做：{displayIntentLabel}</small>
+          </div>
+          <div className={confirmationTone(displayCurrentTask.confirmation.required)}>
+            <span>确认</span>
+            <strong>{displayCurrentTask.confirmation.label}</strong>
+            <small>{displayCurrentTask.confirmation.detail}</small>
+          </div>
+        </section>
+      )}
       {showProjectInbox && (
         <details
           key={`project-inbox-${projectInboxDefaultOpen ? "open" : "closed"}`}
@@ -893,7 +1040,7 @@ export function CreatorDeskPanels({
           <summary>
             <span>素材匹配</span>
             <strong>{assetReconciliationSummary}</strong>
-            <small>{assetReconciliationNextAction}</small>
+            <small>{displayAssetReconciliationNextAction}</small>
           </summary>
           <div className="creator-asset-reconciliation-list">
             {assetReconciliationItems.map((item) => (
@@ -986,6 +1133,7 @@ export function CreatorDeskPanels({
         </details>
       )}
 
+      {showAgentReasoningDisclosure && (
       <details className="creator-status-details creator-agent-reasoning" aria-label={reasoningDisclosureLabel}>
         <summary>
           <span>{reasoningDisclosureLabel}</span>
@@ -1259,6 +1407,7 @@ export function CreatorDeskPanels({
         </div>
       </details>
       </details>
+      )}
     </section>
   );
 }

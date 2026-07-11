@@ -358,6 +358,24 @@ function buildInspectProjectResultEntry(
   },
   suffix: string,
 ): VibeAgentTimelineEntry {
+  if (isReferencePlanExplanationAction(input.action)) {
+    return {
+      id: `agent_tool_result_inspect_${suffix}`,
+      type: "tool_result",
+      createdAt: input.generatedAt,
+      title: "参考计划",
+      body: input.action.userFacingMessage,
+      toolName: "inspect_project",
+      status: "done",
+      facts: [
+        { label: "缺参考", value: `${input.projectSnapshot.missingReferences} 个` },
+        { label: "待复核", value: `${input.projectSnapshot.needsReviewReferences} 个` },
+        { label: "已锁定", value: `${input.projectSnapshot.lockedReferences} 个` },
+        { label: "范围", value: input.action.proposedChanges.find((change) => change.field === "referencePlan")?.to || "当前项目缺少的参考" },
+        { label: "保护", value: "只说明，不生成参考" },
+      ],
+    };
+  }
   return {
     id: `agent_tool_result_inspect_${suffix}`,
     type: "tool_result",
@@ -623,7 +641,7 @@ function buildExecutionBoundaryResultEntry(
   const costLabel = externalSubmission
     ? "会提交 Seedance 视频任务"
     : dispatchPlan.executorTool === "generate_references"
-      ? "会调用参考生成"
+      ? "会生成参考图"
       : dispatchPlan.executorTool === "research_style"
         ? "会联网查资料"
         : dispatchPlan.executor.callsProvider
@@ -853,10 +871,7 @@ function buildAssistantMessageEntry(
   },
   suffix: string,
 ): VibeAgentTimelineEntry {
-  const nextActions = directorAgentReadinessActions(input.action.sourceContext.projectReadiness)
-    .slice(0, 3)
-    .map((item) => item.label)
-    .join(" / ");
+  const nextActionFact = assistantNextActionFact(input.action);
   const dispatchPlan = buildVibeAgentDispatchPlan(input.action);
   const completedObservation = input.action.status !== "blocked"
     && !input.permissionDecision.requiresConfirmation
@@ -868,6 +883,7 @@ function buildAssistantMessageEntry(
     title: "AI 导演",
     body: assistantMessageBodyFor({
       actionMessage: input.action.userFacingMessage,
+      referencePlanExplanation: isReferencePlanExplanationAction(input.action),
       completedObservation,
       executorTool: dispatchPlan.executorTool,
     }),
@@ -884,19 +900,48 @@ function buildAssistantMessageEntry(
     status: input.action.status === "blocked" ? "blocked" : "done",
     facts: [
       { label: "下一步", value: input.action.summary },
-      { label: "建议队列", value: nextActions || "继续整理当前项目" },
+      nextActionFact,
       { label: "边界", value: input.permissionDecision.reason },
     ],
   };
 }
 
+function assistantNextActionFact(action: DirectorAgentActionEnvelope): VibeAgentFact {
+  if (action.sourceContext.totalShots > 0 && temporaryProjectNeedsSaveLocation(action.sourceContext.projectRoot)) {
+    return { label: "下一步建议", value: "选择保存位置" };
+  }
+  const nextActions = directorAgentReadinessActions(action.sourceContext.projectReadiness)
+    .slice(0, 3)
+    .map((item) => item.label)
+    .join(" / ");
+  return { label: "下一步建议", value: nextActions || "继续整理当前项目" };
+}
+
+function temporaryProjectNeedsSaveLocation(projectRoot?: string) {
+  const normalized = projectRoot?.replace(/\\/g, "/").trim() || "";
+  return !normalized
+    || normalized === "project_root"
+    || normalized === "user_selected_project_root:unbound"
+    || normalized === ".vibe-runtime/browser-projects"
+    || normalized.startsWith(".vibe-runtime/browser-projects/")
+    || normalized.includes("/.vibe-runtime/browser-projects/")
+    || normalized.startsWith("browser-local:");
+}
+
 function assistantMessageBodyFor(input: {
   actionMessage: string;
+  referencePlanExplanation: boolean;
   completedObservation: boolean;
   executorTool: string;
 }) {
   if (!input.completedObservation) return input.actionMessage;
+  if (input.referencePlanExplanation) return input.actionMessage;
   return `${immediateObservationSummary(input.executorTool)}，结果已经写进上面的消息流。${immediateObservationNextLabel(input.executorTool)}。`;
+}
+
+function isReferencePlanExplanationAction(action: DirectorAgentActionEnvelope) {
+  return action.kind === "inspect_project_status"
+    && action.proposedChanges.some((change) => change.field === "referencePlan");
 }
 
 function buildRequestConfirmationCallEntry(
@@ -989,7 +1034,7 @@ function buildConfirmedActionEntries(
 
 function confirmationBodyFor(action: DirectorAgentActionEnvelope) {
   if (action.kind === "prepare_reference_generation") {
-    return `我准备为 ${directorAgentDisplayTargetLabel(action.target, action.sourceContext)} 生成参考。确认后才会调用 Image2/参考生成链路，结果回来后还需要复核。`;
+    return `我准备为 ${directorAgentDisplayTargetLabel(action.target, action.sourceContext)} 生成参考图。确认后才会开始生成，图片回来后还需要在参考页复核。`;
   }
   if (action.kind === "prepare_video_submit") {
     if (buildVibeAgentDispatchPlan(action).executorTool === "compile_video_request") {
@@ -1030,7 +1075,12 @@ function confirmationDetailsFor(action: DirectorAgentActionEnvelope) {
 }
 
 function affectedScopeLabel(action: DirectorAgentActionEnvelope) {
-  if (action.target.kind === "project") return "整个项目";
+  if (action.target.kind === "project") {
+    const targetLabel = directorAgentDisplayTargetLabel(action.target, action.sourceContext);
+    const projectTitle = action.sourceContext.projectTitle.trim();
+    if (targetLabel && targetLabel !== projectTitle && !/^(当前项目|整个项目)$/u.test(targetLabel)) return targetLabel;
+    return "整个项目";
+  }
   if (action.target.kind === "asset") return "1 个素材";
   if (action.target.kind === "section") return directorAgentDisplayTargetLabel(action.target, action.sourceContext);
   if (action.target.kind === "multi_shot") return `${action.target.ids.length} 个镜头`;
@@ -1042,7 +1092,7 @@ function affectedScopeLabel(action: DirectorAgentActionEnvelope) {
 }
 
 function providerCallLabel(action: DirectorAgentActionEnvelope) {
-	  if (action.toolPlan.toolName === "image2_reference_generation") return "Image2 / 参考生成";
+	  if (action.toolPlan.toolName === "image2_reference_generation") return "生成参考图";
 	  if (action.kind === "query_video_result") return "Seedance / 查询视频结果";
 	  if (action.toolPlan.toolName === "seedance_video_submit") {
     return buildVibeAgentDispatchPlan(action).executorTool === "compile_video_request"
@@ -1070,7 +1120,7 @@ function confirmationActionTitleFor(action: DirectorAgentActionEnvelope) {
 }
 
 function costBoundaryLabel(action: DirectorAgentActionEnvelope) {
-  if (action.toolPlan.toolName === "image2_reference_generation") return "会调用参考生成";
+  if (action.toolPlan.toolName === "image2_reference_generation") return "会生成参考图";
   if (action.toolPlan.toolName === "seedance_video_submit") {
     return buildVibeAgentDispatchPlan(action).executorTool === "compile_video_request"
       ? "只准备视频请求"
@@ -1089,8 +1139,8 @@ function externalSubmissionBoundaryLabel(action: DirectorAgentActionEnvelope) {
   }
   if (action.toolPlan.toolName === "image2_reference_generation") {
     return action.executionContract.videoSubmitAllowed
-      ? "确认后调用参考生成"
-      : "只调用参考生成，不提交视频";
+      ? "确认后生成参考图"
+      : "只生成参考图，不提交视频";
   }
   if (action.toolPlan.toolName === "web_search") return "确认后联网查资料";
   return "不提交视频";
@@ -1269,11 +1319,14 @@ function nextStepLabel(
     waitingReview?: boolean;
     previewReady?: boolean;
     resultStatus?: "ready" | "running";
+    resultFacts?: VibeAgentFact[];
   },
   executorTool: string,
 ) {
   if (outcome.status === "blocked" || outcome.status === "failed") return blockedOrFailedNextStepLabel(executorTool);
   if (outcome.status === "skipped") return "不需要继续执行";
+  const explicitNext = outcome.resultFacts?.find((fact) => fact.label === "下一步")?.value.trim();
+  if (explicitNext) return explicitNext;
   if (outcome.previewReady) return "去预览复核";
   if (outcome.waitingReview) return "去参考复核";
   if (outcome.resultStatus === "running") return executorTool === "submit_video" || executorTool === "query_video" ? "等待视频结果" : "等待结果";

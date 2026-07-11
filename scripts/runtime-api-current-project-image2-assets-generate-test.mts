@@ -400,6 +400,41 @@ function createVendingTicketFixture(fixtureRoot) {
   return shotIds;
 }
 
+function createReferenceFieldBoundaryFixture(fixtureRoot) {
+  const shotId = "B001";
+  writeJson(`${fixtureRoot}/project/project.vibe`, {
+    schemaVersion: "current_project_image2_asset_generate_project_vibe_v1",
+    projectId: "current_project_image2_asset_generate_reference_field_boundary",
+    runId: "image2-assets-generate-reference-field-boundary",
+    title: "Reference Field Boundary",
+  });
+  writeJson(`${fixtureRoot}/project/story_flow.json`, {
+    schemaVersion: "current_project_image2_asset_generate_story_flow_v1",
+    sections: [{ id: "act_boundary", label: "Boundary", shotIds: [shotId] }],
+    shots: [{
+      id: shotId,
+      title: "雨夜发现",
+      sectionId: "act_boundary",
+      storyFunction: "场景：雨夜旧巴士站 角色：戴耳机女高中生 道具：发光车票 参考策略：故事板叙事 主动作：她蹲下接过车票",
+      sceneGuidance: ["雨夜旧巴士站 参考策略：故事板叙事 镜头节奏：慢推"],
+      characterGuidance: ["戴耳机女高中生 参考策略：全能参考 微反应：抬眼"],
+      propGuidance: ["发光车票 参考策略：故事板叙事 主动作：她接过车票"],
+      order: 1,
+    }],
+  });
+  writeJson(`${fixtureRoot}/project/visual_memory.json`, {
+    schemaVersion: "current_project_image2_asset_generate_visual_memory_v1",
+    roles: [],
+    scenes: [],
+    props: [],
+  });
+  writeJson(`${fixtureRoot}/project/source_index.json`, {
+    schemaVersion: "current_project_image2_asset_generate_source_index_v1",
+    refs: [`${fixtureRoot}/project/project.vibe`, `${fixtureRoot}/project/story_flow.json`, `${fixtureRoot}/project/visual_memory.json`],
+  });
+  return shotId;
+}
+
 const fixtureRoot = `real-test-sandbox/current-project-image2-assets-generate/${Date.now()}`;
 const tempRoot = mkdtempSync(path.join(tmpdir(), "vibe-image2-assets-"));
 const bindingPath = path.join(tempRoot, "current-project.local.json");
@@ -773,6 +808,42 @@ try {
   assert(vendingVisualMemory.props.length === 1, "vending-ticket project should dedupe the shared glowing ticket prop");
   assert(vendingVisualMemory.scenes.length === 2, "vending-ticket project should keep only the two real scene baselines");
   assert(vendingVisualMemory.scenes.some((scene) => scene.usedByShotIds.includes("V002")), "relative middle shot should attach to the carried scene baseline");
+
+  const boundaryFixtureRoot = `real-test-sandbox/current-project-image2-assets-generate-reference-boundary/${Date.now()}`;
+  const boundaryShotId = createReferenceFieldBoundaryFixture(boundaryFixtureRoot);
+  const boundarySelect = await fetchJson(`${baseUrl}/api/runtime/projects/select`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ projectRoot: boundaryFixtureRoot, projectId: "current_project_image2_asset_generate_reference_field_boundary", displayName: "Reference Field Boundary" }),
+  });
+  assert(boundarySelect.response.status === 200, "reference-field-boundary fixture should bind");
+  const boundaryGenerated = await fetchJson(`${baseUrl}/api/runtime/projects/current/image2-assets/generate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      selectedShotId: boundaryShotId,
+      selectedShotIds: [boundaryShotId],
+      providerId: "apikey-fun-gpt55-responses-image",
+      assetTypes: ["character", "scene", "prop"],
+      mockProviderResult: true,
+      confirmation: {
+        receiptId: "confirm_assets_reference_field_boundary_mock_ok",
+        confirmedAt: new Date().toISOString(),
+        phrase: "generate-image2-assets",
+        confirmed: true,
+      },
+    }),
+  });
+  assert(boundaryGenerated.response.status === 200, `reference-field-boundary asset generation should pass: ${boundaryGenerated.payload.message}`);
+  assert(boundaryGenerated.payload.generatedAssetCount === 3, "field-boundary generation should create one character, one scene, and one prop");
+  const pollutedFieldPattern = /参考策略|主动作|触发|微反应|镜头节奏/u;
+  assert(!boundaryGenerated.payload.assets.some((asset) => pollutedFieldPattern.test(`${asset.id} ${asset.name}`)), "generated asset identities must strip adjacent planning fields");
+  const boundaryTicketObservation = readProviderObservationByAsset(
+    boundaryFixtureRoot,
+    (observation) => observation.assetType === "prop" && /发光车票/.test(`${observation.assetId} ${observation.assetName}`),
+  );
+  assert(!pollutedFieldPattern.test(`${boundaryTicketObservation.assetId} ${boundaryTicketObservation.assetName}`), "provider observations must store clean prop identity");
+  assert(!pollutedFieldPattern.test(boundaryTicketObservation.requestPromptText), "provider prompt must not include planning field spillover as prop description");
 
   console.log(`runtime-api-current-project-image2-assets-generate-test: ok ${fixtureRoot}`);
 } finally {

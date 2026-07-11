@@ -23,11 +23,15 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
   understandingBody?: string;
   assistantBody?: string;
   assistantNext?: string;
+  draftScript?: string;
+  draftStyle?: string;
+  projectTargetMode?: string;
 }): VibeAgentTimelineEntry[] {
   const suffix = compactId(input.createdAt);
   const userMessage = clean(input.userMessage) || "继续";
   const materialCount = input.materialCount ?? 0;
   const shotCount = input.shotCount ?? 0;
+  const details = intakeDetails(input);
   const entries: VibeAgentTimelineEntry[] = [
     {
       id: `new_video_user_${suffix}`,
@@ -36,7 +40,7 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
       title: "你",
       body: userMessage,
       status: "done",
-      details: { intakePhase: input.phase },
+      details,
     },
     {
       id: `new_video_understanding_${suffix}`,
@@ -51,8 +55,10 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
         { label: "边界", value: "确认前不会生成参考图、提交视频或导出" },
       ],
       details: {
-        intakePhase: input.phase,
-        next: input.phase === "status_inspection" ? "只读取状态，不把这句话当脚本" : "继续检查项目和素材",
+        ...details,
+        next: input.phase === "status_inspection"
+          ? "只读取状态，不把这句话当脚本"
+          : input.assistantNext || assistantNext(input.phase),
       },
     },
     {
@@ -63,7 +69,7 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
       body: "Agent 正在读取脚本、风格、拖入素材和当前项目入口状态。",
       toolName: "inspect_project",
       status: "done",
-      details: { intakePhase: input.phase },
+      details,
     },
     {
       id: `new_video_tool_assets_${suffix}`,
@@ -81,7 +87,7 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
         { label: "图片", value: `${input.imageCount ?? 0} 个` },
         { label: "声音", value: input.audioCount ? `${input.audioCount} 段` : "无" },
       ],
-      details: { intakePhase: input.phase },
+      details,
     },
     {
       id: `new_video_tool_plan_${suffix}`,
@@ -95,7 +101,7 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
         { label: "镜头", value: shotCount ? `${shotCount} 个` : "待拆分" },
         { label: "权限", value: permissionLabel(input.permissionMode) },
       ],
-      details: { intakePhase: input.phase },
+      details,
     },
     {
       id: `new_video_assistant_${suffix}`,
@@ -110,7 +116,7 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
         { label: "生成", value: "不会自动生成" },
       ],
       details: {
-        intakePhase: input.phase,
+        ...details,
         next: input.assistantNext || assistantNext(input.phase),
       },
     },
@@ -122,22 +128,38 @@ export function buildVibeAgentIntakeTimelineEntries(input: {
       type: "confirmation_request",
       createdAt: input.createdAt,
       title: "等待确认",
-      body: "确认后只会把草案保存到项目；生成参考图、提交视频和导出都还要再确认。",
+      body: "确认后只会保存故事；生成参考图、提交视频和导出都还要再确认。",
       toolName: "request_user_confirmation",
       confirmationRequired: true,
       status: "waiting",
       facts: [
-        { label: "确认", value: "保存到项目" },
+        { label: "确认", value: "保存故事" },
         { label: "镜头", value: shotCount ? `${shotCount} 个` : "待确认" },
       ],
       details: {
-        intakePhase: input.phase,
+        ...details,
         next: "可以点确认，也可以直接说要改哪里。",
       },
     });
   }
 
   return entries;
+}
+
+function intakeDetails(input: {
+  phase: VibeAgentIntakeTimelinePhase;
+  draftScript?: string;
+  draftStyle?: string;
+  projectTargetMode?: string;
+}) {
+  const details: Record<string, unknown> = { intakePhase: input.phase };
+  const draftScript = clean(input.draftScript);
+  const draftStyle = clean(input.draftStyle);
+  const projectTargetMode = clean(input.projectTargetMode);
+  if (draftScript) details.draftScript = draftScript;
+  if (draftStyle) details.draftStyle = draftStyle;
+  if (projectTargetMode) details.projectTargetMode = projectTargetMode;
+  return details;
 }
 
 export function isVibeAgentIntakeTimelineEntry(entry: VibeAgentTimelineEntry) {
@@ -184,7 +206,7 @@ function assistantBody(phase: VibeAgentIntakeTimelinePhase, shotCount: number) {
   if (phase === "planning_started") return "我正在整理故事、镜头和节奏。这里只做规划，不会生成参考图，也不会发送视频。";
   if (phase === "planning_ready") return `我拆好了一个草案：${shotCount || "若干"} 个镜头。确认前不会写入项目，也不会生成参考或视频。`;
   if (phase === "planning_blocked") return "我先整理出一版本地草案。你可以直接改，也可以稍后让我重拆镜头。";
-  if (phase === "draft_confirmed") return "我已经把草案放进故事流。接下来可以继续改镜头，或让我开始补参考。";
+  if (phase === "draft_confirmed") return "我已经把草案放进故事流。接下来可以继续改镜头；生成参考或视频前，会先确认保存位置。";
   return "我先看了当前项目状态。下一步先放入脚本或一句故事想法。";
 }
 
@@ -192,7 +214,7 @@ function assistantNext(phase: VibeAgentIntakeTimelinePhase) {
   if (phase === "planning_started") return "草案出来后，你可以确认，也可以直接说哪里要改。";
   if (phase === "planning_ready") return "觉得可以就确认；想改就直接说。";
   if (phase === "planning_blocked") return "直接说哪里要改，或让我重拆镜头。";
-  if (phase === "draft_confirmed") return "继续说你想改哪里，或说“开始补参考”。";
+  if (phase === "draft_confirmed") return "继续说你想改哪里；需要生成前先确认保存位置。";
   return "放入脚本或一句故事想法。";
 }
 
@@ -200,7 +222,7 @@ function assistantNextFact(phase: VibeAgentIntakeTimelinePhase) {
   if (phase === "planning_started") return "等待草案";
   if (phase === "planning_ready") return "等待确认";
   if (phase === "planning_blocked") return "继续修改";
-  if (phase === "draft_confirmed") return "继续推进";
+  if (phase === "draft_confirmed") return "选择保存位置";
   return "放入故事";
 }
 
@@ -210,7 +232,7 @@ function intakeUnderstandingAction(phase: VibeAgentIntakeTimelinePhase) {
   if (phase === "planning_started") return "拆故事和镜头";
   if (phase === "planning_ready") return "复核草案";
   if (phase === "planning_blocked") return "说明当前草案";
-  if (phase === "draft_confirmed") return "保存到项目";
+  if (phase === "draft_confirmed") return "故事已确认";
   return "整理输入";
 }
 
@@ -228,7 +250,7 @@ function intakeUnderstandingBody(phase: VibeAgentIntakeTimelinePhase) {
     return "这次输入还不足以稳定推进。我会说明哪里卡住，并保留当前内容方便你继续改。";
   }
   if (phase === "draft_confirmed") {
-    return "你确认了草案。我会把它保存到项目，但参考生成和视频提交仍然需要单独确认。";
+    return "你确认了草案。我会把它放进故事流，但参考生成和视频提交仍然需要单独确认。";
   }
   return "你想先把想法和素材交给 AI 导演整理。我会先归纳，不会直接执行生成。";
 }

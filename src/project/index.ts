@@ -5,6 +5,7 @@ export * from "./projectVibeCreativeLoop";
 export * from "./projectAgentStagedPlanDraft";
 export * from "./projectAgentActionLog";
 export * from "./projectAgentTimeline";
+export * from "./projectAgentGenerationJobLedger";
 export {
   buildProjectAgentStagedPlanDraft,
   clearProjectAgentStagedPlanDraft,

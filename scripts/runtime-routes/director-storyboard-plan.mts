@@ -616,6 +616,7 @@ export function createRuntimeApiDirectorStoryboardPlanRoute({
       styleText: asString(body.styleText),
       userPreference: asString(body.userPreference),
       targetDurationSeconds: typeof body.targetDurationSeconds === "number" ? body.targetDurationSeconds : undefined,
+      requestedShotCount: typeof body.requestedShotCount === "number" ? body.requestedShotCount : undefined,
       structuralRows,
     });
     const evidenceId = createHash("sha256").update(JSON.stringify({ scriptText, structuralRows, styleText: body.styleText })).digest("hex").slice(0, 16);
@@ -658,6 +659,7 @@ export function createRuntimeApiDirectorStoryboardPlanRoute({
       const recovery = recoverDirectorStoryboardPlanFromText(result.content);
       const plan = normalizeDirectorAiStoryboardPlan(recovery.rawPlan, {
         targetDurationSeconds: typeof body.targetDurationSeconds === "number" ? body.targetDurationSeconds : undefined,
+        requestedShotCount: typeof body.requestedShotCount === "number" ? body.requestedShotCount : undefined,
       });
       writeEvidence(runtimeRoot, path.join(evidenceDir, "plan.json"), plan);
       if (recovery.partialRecovered) {

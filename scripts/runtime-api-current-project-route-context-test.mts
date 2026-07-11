@@ -33,8 +33,8 @@ function createFixture(overrides = {}) {
       calls.requestContexts.push({ req, url, body });
       return requestContext;
     },
-    currentProjectSourceResult: (context) => {
-      calls.sourceResults.push(context);
+    currentProjectSourceResult: (...args) => {
+      calls.sourceResults.push(args);
       return sourceResult;
     },
     writeJson: (res, status, payload) => {
@@ -70,7 +70,7 @@ async function hit(method, fixture) {
   assert(result.body === undefined, "GET result body should be undefined");
   assert(result.requestContext.projectRoot === "project", "GET result should include request context");
   assert(result.source.projectRoot === "/repo/project", "GET result should include source");
-  assert(fixture.calls.sourceResults[0].projectRoot === "project", "GET source resolver should receive request context");
+  assert(fixture.calls.sourceResults[0].length === 0, "GET source resolver must ignore request project overrides and use the current binding");
 }
 
 {

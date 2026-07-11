@@ -1,6 +1,7 @@
 import {
   fetchRuntimeJson,
   hasProjectRuntimeIdentity,
+  isBrowserDraftRuntimeIdentity,
   projectRuntimeRequestPath,
   runtimeErrorMessage,
   type ProjectRuntimeIdentity,
@@ -37,21 +38,33 @@ import type {
   ProjectP6RealImage2SubmitInput,
 } from "./projectImage2Types";
 
-const PROJECT_IMAGE2_ASSET_GENERATION_TIMEOUT_MS = 90_000;
+const PROJECT_IMAGE2_ASSET_GENERATION_TIMEOUT_MS = 10 * 60 * 1000;
 
 async function unavailableImage2BatchState(message: string): Promise<ProjectImage2BatchUiState> {
   return { status: "unavailable", message };
 }
 
-function timeoutSignal(ms: number) {
+function timeoutSignal(ms: number, parentSignal?: AbortSignal) {
   const controller = new AbortController();
+  const abortFromParent = () => controller.abort(parentSignal?.reason);
+  if (parentSignal?.aborted) controller.abort(parentSignal.reason);
+  else parentSignal?.addEventListener("abort", abortFromParent, { once: true });
   const timeout = setTimeout(() => controller.abort(), ms);
-  return { signal: controller.signal, clear: () => clearTimeout(timeout) };
+  return {
+    signal: controller.signal,
+    clear: () => {
+      clearTimeout(timeout);
+      parentSignal?.removeEventListener("abort", abortFromParent);
+    },
+  };
 }
 
 export async function loadProjectImage2BatchPlan(expected?: ProjectRuntimeIdentity): Promise<ProjectImage2BatchUiState> {
   if (!hasProjectRuntimeIdentity(expected)) {
     return unavailableImage2BatchState("未选择项目/未同步。");
+  }
+  if (isBrowserDraftRuntimeIdentity(expected)) {
+    return unavailableImage2BatchState(browserDraftMessage());
   }
 
   try {
@@ -66,13 +79,16 @@ export async function loadProjectImage2BatchPlan(expected?: ProjectRuntimeIdenti
   }
 }
 
-export async function runProjectImage2BatchCheck(expected?: ProjectRuntimeIdentity): Promise<ProjectImage2BatchUiState> {
+export async function runProjectImage2BatchCheck(expected?: ProjectRuntimeIdentity, signal?: AbortSignal): Promise<ProjectImage2BatchUiState> {
   if (!hasProjectRuntimeIdentity(expected)) {
     return unavailableImage2BatchState("未选择项目/未同步。");
   }
+  if (isBrowserDraftRuntimeIdentity(expected)) {
+    return unavailableImage2BatchState(browserDraftMessage());
+  }
 
   try {
-    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2BatchRunCheckEndpoint, expected), { method: "POST" });
+    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2BatchRunCheckEndpoint, expected), { method: "POST", signal });
     const summary = deriveProjectImage2BatchPlanStatus(payload);
     return guardProjectImage2BatchUiStateForCurrentProject({ status: summary.uiStatus, summary }, expected);
   } catch (err) {
@@ -87,6 +103,10 @@ function oneShotUnavailable(message = "未选择项目/未同步。"): ProjectIm
   return { status: "unavailable", message };
 }
 
+function browserDraftMessage() {
+  return "先把故事保存成项目，再生成参考或视频。";
+}
+
 function oneShotPath(endpoint: string, selectedShotId?: string) {
   if (!selectedShotId) return endpoint;
   return `${endpoint}?selectedShotId=${encodeURIComponent(selectedShotId)}`;
@@ -97,6 +117,7 @@ export async function loadProjectImage2OneShotStatus(
   selectedShotId?: string,
 ): Promise<ProjectImage2OneShotUiState> {
   if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
+  if (isBrowserDraftRuntimeIdentity(expected)) return oneShotUnavailable(browserDraftMessage());
   if (!selectedShotId) return { status: "unavailable", message: "选择镜头后可准备小样包。" };
 
   try {
@@ -114,6 +135,7 @@ export async function prepareProjectImage2OneShot(
   selectedShotId?: string,
 ): Promise<ProjectImage2OneShotUiState> {
   if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
+  if (isBrowserDraftRuntimeIdentity(expected)) return oneShotUnavailable(browserDraftMessage());
   if (!selectedShotId) return { status: "blocked", message: "请先选择一个镜头。" };
 
   try {
@@ -139,6 +161,7 @@ export async function confirmProjectImage2OneShot(
   receipt?: ProjectImage2OneShotReceipt,
 ): Promise<ProjectImage2OneShotUiState> {
   if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
+  if (isBrowserDraftRuntimeIdentity(expected)) return oneShotUnavailable(browserDraftMessage());
   if (!receipt?.selectedShotId) return { status: "blocked", message: "请先准备小样包。" };
 
   try {
@@ -167,6 +190,7 @@ export async function prepareProjectImage2OneShotTrigger(
   options?: ProjectImage2OneShotPermissionInput,
 ): Promise<ProjectImage2OneShotUiState> {
   if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
+  if (isBrowserDraftRuntimeIdentity(expected)) return oneShotUnavailable(browserDraftMessage());
   if (!receipt?.selectedShotId) return { status: "blocked", message: "请先确认动作。" };
 
   const requestBody: Record<string, unknown> = {
@@ -223,6 +247,7 @@ export async function executeReturnedProjectImage2OneShot(
   receipt?: ProjectImage2OneShotReceipt,
 ): Promise<ProjectImage2OneShotUiState> {
   if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
+  if (isBrowserDraftRuntimeIdentity(expected)) return oneShotUnavailable(browserDraftMessage());
   if (!receipt?.selectedShotId) return { status: "blocked", message: "请先确认动作。" };
 
   try {
@@ -248,15 +273,19 @@ export async function executeReturnedProjectImage2OneShot(
 export async function submitProjectImage2AssetGeneration(
   expected: ProjectRuntimeIdentity | undefined,
   input: ProjectImage2AssetGenerationInput,
+  signal?: AbortSignal,
 ): Promise<ProjectImage2AssetGenerationResult> {
   if (!hasProjectRuntimeIdentity(expected)) {
     return { ok: false, status: "blocked", uiStatus: "blocked", message: "未选择项目/未同步。" };
+  }
+  if (isBrowserDraftRuntimeIdentity(expected)) {
+    return { ok: false, status: "blocked", uiStatus: "blocked", message: browserDraftMessage() };
   }
   if (input.confirmation.confirmed !== true || input.confirmation.phrase !== "generate-image2-assets") {
     return { ok: false, status: "blocked", uiStatus: "blocked", message: "请先明确确认本次生成。" };
   }
 
-  const timeout = timeoutSignal(PROJECT_IMAGE2_ASSET_GENERATION_TIMEOUT_MS);
+  const timeout = timeoutSignal(PROJECT_IMAGE2_ASSET_GENERATION_TIMEOUT_MS, signal);
   try {
     return await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2AssetGenerateEndpoint, expected), {
       method: "POST",
@@ -292,9 +321,13 @@ export async function submitProjectImage2AssetGeneration(
 export async function submitProjectImage2EndFrame(
   expected: ProjectRuntimeIdentity | undefined,
   input: ProjectImage2EndFrameSubmitInput,
+  signal?: AbortSignal,
 ): Promise<ProjectImage2EndFrameSubmitResult> {
   if (!hasProjectRuntimeIdentity(expected)) {
     return { ok: false, status: "blocked", uiStatus: "blocked", message: "未选择项目/未同步。" };
+  }
+  if (isBrowserDraftRuntimeIdentity(expected)) {
+    return { ok: false, status: "blocked", uiStatus: "blocked", message: browserDraftMessage() };
   }
   if (input.confirmation.confirmed !== true || input.confirmation.phrase !== "generate-image2-end-frame") {
     return { ok: false, status: "blocked", uiStatus: "blocked", message: "请先明确确认本次生成。" };
@@ -304,6 +337,7 @@ export async function submitProjectImage2EndFrame(
     return await fetchRuntimeJson(projectRuntimeRequestPath(projectImage2EndFrameSubmitEndpoint, expected), {
       method: "POST",
       headers: { "content-type": "application/json" },
+      signal,
       body: JSON.stringify({
         selectedShotId: input.selectedShotId,
         selectedShotIds: input.selectedShotIds,
@@ -324,6 +358,7 @@ export async function submitProjectP6RealImage2OneShot(
   input: ProjectP6RealImage2SubmitInput,
 ): Promise<ProjectImage2OneShotUiState> {
   if (!hasProjectRuntimeIdentity(expected)) return oneShotUnavailable();
+  if (isBrowserDraftRuntimeIdentity(expected)) return oneShotUnavailable(browserDraftMessage());
   const receipt = input.receipt;
   const submitPermissionReceipt = input.submitPermissionReceipt;
   if (!receipt?.selectedShotId) return { status: "blocked", message: "请先准备小样包。" };
@@ -363,6 +398,9 @@ export async function submitProjectP6RealImage2SerialBatch(
 ): Promise<Record<string, unknown>> {
   if (!hasProjectRuntimeIdentity(expected)) {
     return { ok: false, status: "unavailable", message: "未选择项目/未同步。" };
+  }
+  if (isBrowserDraftRuntimeIdentity(expected)) {
+    return { ok: false, status: "unavailable", message: browserDraftMessage() };
   }
   const selectedShotIds = Array.isArray(input.selectedShotIds)
     ? input.selectedShotIds.map((shotId) => shotId.trim()).filter(Boolean)

@@ -28,6 +28,13 @@ export type Image2EndFrameActionView = Image2EndFrameActionState & {
   disabled: boolean;
 };
 
+export type Image2EndFrameRunOptions = {
+  skipConfirm?: boolean;
+  confirmationReceiptId?: string;
+  confirmedAt?: string;
+  signal?: AbortSignal;
+};
+
 type UseImage2EndFrameActionInput = {
   runtimeProjectIdentity?: ProjectRuntimeIdentity;
   selectedShotId?: string;
@@ -77,26 +84,30 @@ export function useImage2EndFrameAction({
   const [actionState, setActionState] = useState<Image2EndFrameActionState>({ status: "idle" });
   const keyConfigured = useMemo(() => isEndFrameKeyConfigured(providerConfigStatuses), [providerConfigStatuses]);
 
-  const runImage2EndFrame = useCallback(async () => {
+  const runImage2EndFrame = useCallback(async (options?: Image2EndFrameRunOptions) => {
     if (!runtimeProjectIdentity) {
-      setActionState({ status: "blocked", message: "先选择项目。" });
-      return;
+      const nextState: Image2EndFrameActionState = { status: "blocked", message: "先选择项目。" };
+      setActionState(nextState);
+      return nextState;
     }
     if (!selectedShotId) {
-      setActionState({ status: "blocked", message: "请先选择一个镜头。" });
-      return;
+      const nextState: Image2EndFrameActionState = { status: "blocked", message: "请先选择一个镜头。" };
+      setActionState(nextState);
+      return nextState;
     }
 
     const statuses = await loadProviderConfigStatuses();
     setProviderConfigStatuses(statuses);
     if (!isEndFrameKeyConfigured(statuses)) {
-      setActionState({ status: "blocked", message: "先去设置里连接图片服务。" });
-      return;
+      const nextState: Image2EndFrameActionState = { status: "blocked", message: "先去设置里连接图片服务。" };
+      setActionState(nextState);
+      return nextState;
     }
 
-    if (!confirmAction("要生成特殊结束画面吗？\n\n只适合循环、变身或明确首尾控制。结果先给你看。")) {
-      setActionState({ status: "blocked", message: "已取消，本次没有生成。" });
-      return;
+    if (!options?.skipConfirm && !confirmAction("要生成特殊结束画面吗？\n\n只适合循环、变身或明确首尾控制。结果先给你看。")) {
+      const nextState: Image2EndFrameActionState = { status: "blocked", message: "已取消，本次没有生成。" };
+      setActionState(nextState);
+      return nextState;
     }
 
     setActionState({ status: "running", message: "正在生成特殊结束画面；结果先给你看。" });
@@ -106,22 +117,25 @@ export function useImage2EndFrameAction({
         selectedShotIds: [selectedShotId],
         providerId: IMAGE2_END_FRAME_PROVIDER_ID,
         confirmation: {
-          receiptId: `image2_end_frame_ui_${Date.now()}`,
-          confirmedAt: new Date().toISOString(),
+          receiptId: options?.confirmationReceiptId || `image2_end_frame_ui_${Date.now()}`,
+          confirmedAt: options?.confirmedAt || new Date().toISOString(),
           phrase: IMAGE2_END_FRAME_CONFIRM_PHRASE,
           confirmed: true,
         },
-      });
+      }, options?.signal);
       const nextState = endFrameActionState(submitted);
       setActionState(nextState);
       const refreshed = await loadProjectRealChainStatus(runtimeProjectIdentity);
       setProjectRealChainState(refreshed);
       if (nextState.status === "needs_review" || nextState.status === "verified") openPreview();
+      return { ...submitted, ...nextState };
     } catch (error) {
-      setActionState({
+      const nextState: Image2EndFrameActionState = {
         status: "blocked",
         message: error instanceof Error ? error.message : "特殊结束画面生成失败。",
-      });
+      };
+      setActionState(nextState);
+      return nextState;
     }
   }, [
     confirmAction,

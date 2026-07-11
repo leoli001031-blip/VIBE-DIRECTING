@@ -4,6 +4,16 @@ import {
   buildProjectObservation,
   routeProjectAgentIntent,
 } from "../src/core/projectAgentWorkspace.ts";
+import {
+  buildAgentVideoPipelinePlan,
+  buildDefaultAgentVideoProviderCapabilityRegistry,
+  createAgentVideoGenerationJobLedger,
+  planAgentVideoProductionAction,
+  resolveAgentVideoProviderCapability,
+  selectCurrentAgentVideoPipelineTask,
+  transitionAgentVideoGenerationJob,
+  type AgentVideoProviderCapabilityRegistry,
+} from "../src/core/agentVideoProductionContract.ts";
 import { buildAssetReconciliationProjection } from "../src/core/assetReconciliation.ts";
 import type { AssetRecord, ShotRecord } from "../src/core/types/index.ts";
 
@@ -200,6 +210,8 @@ const folderInbox = buildProjectFolderInboxProjection({
     { path: "scripts/episode-01.md" },
     { path: "videos/returned-shot.mp4" },
     { path: "exports/final-package.zip" },
+    { path: "exports/current-project/export_manifest.json" },
+    { path: "exports/current-project/video-report/summary.md" },
     { path: "assets/generated/character_asset_auto.png" },
     { path: "assets/generated/scene_scene_asset_auto.png" },
     { path: "assets/generated/prop_asset_auto.png" },
@@ -218,10 +230,12 @@ const folderInbox = buildProjectFolderInboxProjection({
 });
 
 assert(folderInbox.discoveredAssetCount === 17, "folder scan should discover supported project files and ignore hidden/outside files");
-assert(folderInbox.ignoredCount === 5, "folder scan should count hidden, out-of-scope, and app-generated files as ignored");
+assert(folderInbox.ignoredCount === 7, "folder scan should count hidden, out-of-scope, and app-generated files as ignored");
 assert(folderInbox.discoveredAssets.every((item) => !item.path.startsWith("/")), "folder scan must keep project-relative paths instead of leaking local absolute paths");
 assert(!folderInbox.discoveredAssets.some((item) => item.path.startsWith("assets/generated/")), "folder scan must not re-ingest app-generated reference outputs as user project materials");
+assert(!folderInbox.discoveredAssets.some((item) => item.path.startsWith("exports/current-project/")), "folder scan must not re-ingest app-generated export bundles as user project materials");
 assert(!folderInbox.items.some((item) => item.label.includes("asset_auto")), "app-generated reference outputs must not appear as extra review cards");
+assert(!folderInbox.items.some((item) => item.label === "export_manifest.json" || item.label === "summary.md"), "app-generated export files must not appear as extra review cards");
 assert(folderInbox.items.some((item) => item.kind === "character" && item.label === "front.png"), "folder scan should classify character folders");
 assert(folderInbox.items.some((item) => item.kind === "character" && item.origin === "project_folder" && item.originLabel === "项目文件夹"), "folder scan inbox items should show they came from the project folder");
 assert(folderInbox.items.some((item) => item.kind === "scene" && item.label === "wide.jpg"), "folder scan should classify scene folders");
@@ -376,6 +390,18 @@ const explicitFirstVideoRoute = routeProjectAgentIntent({
 assert(explicitFirstVideoRoute.kind === "video", "explicit first-segment video permission should route to video preparation");
 assert(explicitFirstVideoRoute.confirmation === "video_submit", "explicit video permission should still keep the confirmation boundary");
 
+const videoBlockedByIntentRoute = routeProjectAgentIntent({
+  text: "现在发送视频。不要生成参考图，先不要提交任何外部生成。",
+  hasSelection: true,
+  hasAttachments: false,
+  observation,
+});
+assert(videoBlockedByIntentRoute.kind === "video", "video request with an explicit no-external boundary should stay in the video lane");
+assert(videoBlockedByIntentRoute.label === "检查视频前提", "blocked video request should be presented as a preflight explanation");
+assert(videoBlockedByIntentRoute.confirmation === "none", "blocked video request must not ask for video, reference, or revision confirmation");
+assert(videoBlockedByIntentRoute.plan.join(" ").includes("不生成参考"), "blocked video request should preserve the no-reference boundary");
+assert(videoBlockedByIntentRoute.plan.join(" ").includes("不提交视频"), "blocked video request should preserve the no-video-submit boundary");
+
 const continueRoute = routeProjectAgentIntent({
   text: "没问题，继续",
   hasSelection: false,
@@ -384,6 +410,15 @@ const continueRoute = routeProjectAgentIntent({
 });
 assert(continueRoute.kind === "reference", "simple continue wording should follow the observed next project action");
 assert(continueRoute.confirmation === observation.currentTask.confirmation.kind, "continue route should preserve the current confirmation boundary");
+
+const continueNextRoute = routeProjectAgentIntent({
+  text: "继续下一步",
+  hasSelection: true,
+  hasAttachments: false,
+  observation,
+});
+assert(continueNextRoute.kind === "reference", "continue-next wording should follow the observed next project action even when a shot is selected");
+assert(continueNextRoute.confirmation === observation.currentTask.confirmation.kind, "continue-next route should preserve the current confirmation boundary");
 
 const explainOnlyRoute = routeProjectAgentIntent({
   text: "继续下一步，但先不要提交视频，只告诉我接下来要做什么。",
@@ -403,6 +438,35 @@ const referenceOnlyRoute = routeProjectAgentIntent({
 });
 assert(referenceOnlyRoute.kind === "reference", "no-video reference-only wording should route to reference preparation");
 assert(referenceOnlyRoute.confirmation === "reference_generation", "reference-only wording should keep video submission blocked");
+
+const startReferenceRoute = routeProjectAgentIntent({
+  text: "开始补参考",
+  hasSelection: true,
+  hasAttachments: false,
+  observation,
+});
+assert(startReferenceRoute.kind === "reference", "start-reference wording should not become a selected-shot revision");
+assert(startReferenceRoute.confirmation === "reference_generation", "start-reference wording should keep a reference-generation confirmation");
+
+const referenceRangePlanRoute = routeProjectAgentIntent({
+  text: "开始补参考。先确认范围，别直接生成。",
+  hasSelection: true,
+  hasAttachments: false,
+  observation,
+});
+assert(referenceRangePlanRoute.kind === "reference", "range-first reference wording should stay in the reference lane");
+assert(referenceRangePlanRoute.label === "准备参考计划", "range-first reference wording should be presented as reference planning");
+assert(referenceRangePlanRoute.confirmation === "none", "range-first reference wording must not stage generation or selected-shot revision");
+
+const referencePlanRoute = routeProjectAgentIntent({
+  text: "开始补参考。先只准备参考计划，不要生成图片，不要提交视频。",
+  hasSelection: true,
+  hasAttachments: false,
+  observation,
+});
+assert(referencePlanRoute.kind === "reference", "plan-only start-reference wording should stay in the reference lane");
+assert(referencePlanRoute.label === "准备参考计划", "plan-only start-reference wording should be presented as reference planning");
+assert(referencePlanRoute.confirmation === "none", "plan-only start-reference wording must not ask to generate images");
 
 const materialBindingRoute = routeProjectAgentIntent({
   text: "只整理一下当前素材绑定建议，不生成参考，不提交视频。",
@@ -503,6 +567,40 @@ const continueToVideoRoute = routeProjectAgentIntent({
 assert(continueToVideoRoute.kind === "video", "continue intent should submit only after observation says video is ready");
 assert(continueToVideoRoute.confirmation === "video_submit", "continue-to-video must still require video confirmation");
 
+const dryReferenceValidatedInput = {
+  localProjectReady: true,
+  projectTitle: "山路短片",
+  sectionCount: 1,
+  shotCount: shots.length,
+  selectedShotCount: 0,
+  referenceMissingCount: 2,
+  referenceReviewCount: 0,
+  referenceReadyCount: 0,
+  videoStatus: "not_generated",
+  videoStatusLabel: "未提交视频",
+  videoDetail: "",
+  videoWaitingCount: 0,
+  videoCompletedCount: 0,
+  videoReviewCount: 0,
+  videoCanResume: false,
+  image2Running: false,
+  referenceExecutionValidated: true,
+};
+const dryReferenceValidatedObservation = buildProjectObservation(dryReferenceValidatedInput);
+assert(dryReferenceValidatedObservation.references.status === "missing", "dry validation must keep real references missing");
+assert(dryReferenceValidatedObservation.references.label === "参考未生成", "dry validation must not relabel missing references as usable");
+assert(dryReferenceValidatedObservation.video.status === "ready", "reference contract validation may advance only the local video-flow validation boundary");
+assert(dryReferenceValidatedObservation.currentTask.confirmation.kind === "video_submit", "dry reference validation should expose the next confirmation boundary without claiming assets exist");
+assert(!/参考可用|已生成/.test(dryReferenceValidatedObservation.summary), "dry reference validation summary must stay truthful");
+
+const dryVideoValidatedObservation = buildProjectObservation({
+  ...dryReferenceValidatedInput,
+  videoExecutionValidated: true,
+});
+assert(dryVideoValidatedObservation.video.status === "idle" && dryVideoValidatedObservation.video.label === "视频未生成", "dry video validation must not create a real video state");
+assert(dryVideoValidatedObservation.currentTask.confirmation.kind === "none", "completed video contract validation should yield to the pipeline export boundary");
+assert(/未生成/.test(dryVideoValidatedObservation.summary), "dry video validation summary must disclose missing real media");
+
 const recoverableVideoObservation = buildProjectObservation({
   localProjectReady: true,
   projectTitle: "山路短片",
@@ -530,5 +628,245 @@ const continueToQueryRoute = routeProjectAgentIntent({
 });
 assert(continueToQueryRoute.kind === "video_status", "continue intent should query recoverable submitted video instead of resubmitting");
 assert(continueToQueryRoute.confirmation === "none", "video result query should not ask for another submit confirmation");
+
+const exportRoute = routeProjectAgentIntent({
+  text: "导出交付包",
+  hasSelection: true,
+  hasAttachments: false,
+  observation: videoReadyObservation,
+});
+assert(exportRoute.kind === "export", "export wording should route to delivery/export");
+assert(exportRoute.confirmation === "export", "export wording must require an export confirmation");
+assert(exportRoute.target === "export", "export wording should focus the export surface");
+
+const exportObservation = {
+  ...videoReadyObservation,
+  currentTask: {
+    ...videoReadyObservation.currentTask,
+    confirmation: {
+      kind: "export" as const,
+      required: true,
+      label: "确认导出",
+      detail: "确认后才写入交付包。",
+    },
+  },
+};
+const continueToExportRoute = routeProjectAgentIntent({
+  text: "没问题，继续",
+  hasSelection: true,
+  hasAttachments: false,
+  observation: exportObservation,
+});
+assert(continueToExportRoute.kind === "export", "continue intent should follow an active export confirmation instead of selected-shot revision");
+assert(continueToExportRoute.confirmation === "export", "continue-to-export must keep the export confirmation boundary");
+
+const agentVideoRegistry = buildDefaultAgentVideoProviderCapabilityRegistry("2026-07-07T00:00:00.000Z");
+const requiredCapabilities = [
+  "text-to-video",
+  "image-to-video",
+  "first-last-frame-to-video",
+  "subject-reference-video",
+  "reference-image-generation",
+  "export",
+];
+for (const capability of requiredCapabilities) {
+  assert(agentVideoRegistry.capabilities.some((item) => item.capability === capability), `agent video registry missing ${capability}`);
+}
+assert(agentVideoRegistry.capabilities.every((item) => item.dryRunOnly === true && item.liveSubmitAllowed === false), "agent video registry must stay dry-run and non-live");
+
+const referenceCapability = resolveAgentVideoProviderCapability({
+  capability: "reference-image-generation",
+  registry: agentVideoRegistry,
+});
+assert(referenceCapability.status === "supported", `reference capability should resolve: ${referenceCapability.blockers.join("; ")}`);
+
+const emptyAgentVideoRegistry: AgentVideoProviderCapabilityRegistry = {
+  schemaVersion: agentVideoRegistry.schemaVersion,
+  registryVersion: "agent-video-provider-registry/empty-test",
+  capabilities: [],
+  notes: [],
+};
+const unsupportedCapability = resolveAgentVideoProviderCapability({
+  capability: "subject-reference-video",
+  registry: emptyAgentVideoRegistry,
+});
+assert(unsupportedCapability.status === "blocked", "unsupported provider capability must block instead of falling back");
+assert(unsupportedCapability.blockers.some((blocker) => /No provider capability/.test(blocker)), "unsupported capability blocker missing");
+
+const baseLedger = createAgentVideoGenerationJobLedger({
+  ledgerId: "agent_video_pipeline_boundary_test",
+  projectId: "agent-video-pipeline-project",
+  projectRoot: "/tmp/agent-video-pipeline-project",
+  projectFactHash: "agent-video-pipeline-facts",
+  createdAt: "2026-07-07T00:00:00.000Z",
+});
+
+const unconfirmedStoryPlan = buildAgentVideoPipelinePlan({
+  planId: "unconfirmed_story",
+  generatedAt: "2026-07-07T00:00:00.000Z",
+  storyDraftPresent: true,
+  storyConfirmed: false,
+  localProjectReady: false,
+  referenceMissingCount: 2,
+  videoSubmitted: false,
+});
+const blockedBeforeStoryConfirm = planAgentVideoProductionAction({
+  plan: unconfirmedStoryPlan,
+  ledger: baseLedger,
+  action: "prepare_references",
+  actionId: "blocked-before-story-confirm",
+  generatedAt: "2026-07-07T00:00:01.000Z",
+});
+assert(blockedBeforeStoryConfirm.status === "blocked", "unconfirmed story must block reference generation");
+assert(blockedBeforeStoryConfirm.ledger.jobs.length === 0, "unconfirmed story must not create reference jobs");
+
+const unsavedStoryPlan = buildAgentVideoPipelinePlan({
+  planId: "unsaved_story",
+  generatedAt: "2026-07-07T00:00:00.000Z",
+  storyDraftPresent: true,
+  storyConfirmed: true,
+  localProjectReady: false,
+  referenceMissingCount: 2,
+  videoSubmitted: false,
+});
+const chooseSaveLocationDecision = planAgentVideoProductionAction({
+  plan: unsavedStoryPlan,
+  ledger: baseLedger,
+  action: "choose_save_location",
+  actionId: "choose-save-location",
+  generatedAt: "2026-07-07T00:00:02.000Z",
+});
+assert(chooseSaveLocationDecision.status === "state_only", "choose save location should be a state-only pipeline action");
+assert(chooseSaveLocationDecision.ledger.jobs.length === 0, "choose save location must not create generation, video, or export jobs");
+
+const blockedBeforeSaveLocation = planAgentVideoProductionAction({
+  plan: unsavedStoryPlan,
+  ledger: baseLedger,
+  action: "submit_video",
+  actionId: "blocked-before-save-location",
+  generatedAt: "2026-07-07T00:00:03.000Z",
+});
+assert(blockedBeforeSaveLocation.status === "blocked", "unsaved story must block video submit");
+assert(blockedBeforeSaveLocation.nextStep === "choose_save_location", "unsaved story should point back to save-location setup");
+assert(blockedBeforeSaveLocation.ledger.jobs.length === 0, "unsaved story must not create video jobs");
+
+const missingReferencesPlan = buildAgentVideoPipelinePlan({
+  planId: "missing_references",
+  generatedAt: "2026-07-07T00:00:00.000Z",
+  storyDraftPresent: true,
+  storyConfirmed: true,
+  localProjectReady: true,
+  referenceMissingCount: 2,
+  videoSubmitted: false,
+});
+const blockedVideoByReferences = planAgentVideoProductionAction({
+  plan: missingReferencesPlan,
+  ledger: baseLedger,
+  action: "submit_video",
+  actionId: "blocked-video-by-references",
+  generatedAt: "2026-07-07T00:00:04.000Z",
+});
+assert(blockedVideoByReferences.status === "blocked", "missing references must block video job creation");
+assert(blockedVideoByReferences.nextStep === "prepare_references", "missing references should route video submit back to reference prep");
+assert(blockedVideoByReferences.ledger.jobs.length === 0, "missing references must not create a video job");
+
+const stagedReferenceDecision = planAgentVideoProductionAction({
+  plan: missingReferencesPlan,
+  ledger: baseLedger,
+  action: "prepare_references",
+  actionId: "prepare-reference-story",
+  generatedAt: "2026-07-07T00:00:05.000Z",
+  sourceConfirmationId: "confirm_reference_story",
+  sourceTimelineId: "timeline_reference_story",
+  prompt: "prepare current-story references",
+  outputAssets: ["assets/generated/references/story"],
+});
+assert(stagedReferenceDecision.status === "staged_job", "reference prep should stage a job after story/save boundaries are satisfied");
+assert(stagedReferenceDecision.job?.status === "staged", "reference job must start staged, not running");
+assert(stagedReferenceDecision.job?.sourceConfirmationId === "confirm_reference_story", "reference job must bind to the source confirmation");
+
+const runningBeforeConfirm = transitionAgentVideoGenerationJob({
+  ledger: stagedReferenceDecision.ledger,
+  jobId: stagedReferenceDecision.job!.jobId,
+  status: "running",
+  generatedAt: "2026-07-07T00:00:06.000Z",
+});
+assert(runningBeforeConfirm.ok === false, "reference job must not run before confirmation");
+assert(runningBeforeConfirm.blockers.some((blocker) => /confirmed/.test(blocker)), "running-before-confirm blocker missing");
+
+const confirmedReference = transitionAgentVideoGenerationJob({
+  ledger: stagedReferenceDecision.ledger,
+  jobId: stagedReferenceDecision.job!.jobId,
+  status: "confirmed",
+  generatedAt: "2026-07-07T00:00:07.000Z",
+});
+assert(confirmedReference.ok === true, "staged reference job should become confirmed after confirmation");
+assert(confirmedReference.job?.status === "confirmed", "confirmed reference job status drifted");
+
+const exportPlan = buildAgentVideoPipelinePlan({
+  planId: "export_ready",
+  generatedAt: "2026-07-07T00:00:00.000Z",
+  storyDraftPresent: true,
+  storyConfirmed: true,
+  localProjectReady: true,
+  referenceMissingCount: 0,
+  videoSubmitted: true,
+});
+const stagedExportDecision = planAgentVideoProductionAction({
+  plan: exportPlan,
+  ledger: baseLedger,
+  action: "export",
+  actionId: "export-current-project",
+  generatedAt: "2026-07-07T00:00:08.000Z",
+  sourceConfirmationId: "confirm_export_project",
+  prompt: "export current project",
+  outputAssets: ["exports/current-project/report.md"],
+});
+assert(stagedExportDecision.status === "staged_job", "export should stage a job behind confirmation");
+assert(stagedExportDecision.job?.kind === "export", "export decision should create an export job");
+assert(stagedExportDecision.job?.status === "staged", "export job must not run or succeed before confirmation");
+const exportSucceededBeforeRun = transitionAgentVideoGenerationJob({
+  ledger: stagedExportDecision.ledger,
+  jobId: stagedExportDecision.job!.jobId,
+  status: "succeeded",
+  generatedAt: "2026-07-07T00:00:09.000Z",
+});
+assert(exportSucceededBeforeRun.ok === false, "export must not succeed before confirmation and running state");
+
+const staleCurrentTask = selectCurrentAgentVideoPipelineTask({
+  plan: missingReferencesPlan,
+  confirmations: [
+    {
+      confirmationId: "old_export_confirmation",
+      stepId: "export",
+      status: "waiting",
+      createdAt: "2026-07-07T00:00:10.000Z",
+    },
+    {
+      confirmationId: "resolved_reference_confirmation",
+      stepId: "prepare_references",
+      status: "resolved",
+      createdAt: "2026-07-07T00:00:11.000Z",
+    },
+  ],
+  ledger: stagedExportDecision.ledger,
+});
+assert(staleCurrentTask.source === "plan", "stale export confirmation/job must not steal the current reference task");
+assert(staleCurrentTask.stepId === "prepare_references", "current task should stay on prepare_references");
+
+const currentReferenceTask = selectCurrentAgentVideoPipelineTask({
+  plan: missingReferencesPlan,
+  confirmations: [
+    {
+      confirmationId: "current_reference_confirmation",
+      stepId: "prepare_references",
+      status: "waiting",
+      createdAt: "2026-07-07T00:00:12.000Z",
+    },
+  ],
+  ledger: stagedReferenceDecision.ledger,
+});
+assert(currentReferenceTask.source === "confirmation", "current waiting confirmation should be the active pipeline task");
+assert(currentReferenceTask.confirmationId === "current_reference_confirmation", "current confirmation id drifted");
 
 console.log("project-agent-workspace-test: ok");

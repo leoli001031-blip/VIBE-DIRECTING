@@ -96,6 +96,7 @@ export type ProjectSeedanceSubmitResult = {
 export async function submitProjectSeedanceVideo(
   expected: ProjectRuntimeIdentity | undefined,
   input: ProjectSeedanceSubmitInput,
+  signal?: AbortSignal,
 ): Promise<ProjectSeedanceSubmitResult> {
   if (!hasProjectRuntimeIdentity(expected)) {
     return { ok: false, status: "blocked", uiStatus: "blocked", message: "未选择项目/未同步。" };
@@ -108,6 +109,7 @@ export async function submitProjectSeedanceVideo(
     const result = await fetchRuntimeJson(projectRuntimeRequestPath(projectSeedanceSubmitEndpoint, expected), {
       method: "POST",
       headers: { "content-type": "application/json" },
+      signal,
       body: JSON.stringify({
         providerId: input.providerId || "apikey-fun-gpt55-responses-image",
         modelVersion: input.modelVersion || JIMENG_CLI_VIP_MODEL_VERSION,
@@ -138,6 +140,7 @@ export async function submitProjectSeedanceVideo(
 export async function resumeProjectSeedanceVideo(
   expected: ProjectRuntimeIdentity | undefined,
   input: ProjectSeedanceResumeInput = {},
+  signal?: AbortSignal,
 ): Promise<ProjectSeedanceSubmitResult> {
   if (!hasProjectRuntimeIdentity(expected)) {
     return { ok: false, status: "blocked", uiStatus: "blocked", message: "未选择项目/未同步。" };
@@ -147,6 +150,7 @@ export async function resumeProjectSeedanceVideo(
     const result = await fetchRuntimeJson(projectRuntimeRequestPath(projectSeedanceResumeEndpoint, expected), {
       method: "POST",
       headers: { "content-type": "application/json" },
+      signal,
       body: JSON.stringify({
         relayQueueItemId: input.relayQueueItemId,
         pollSeconds: input.pollSeconds,

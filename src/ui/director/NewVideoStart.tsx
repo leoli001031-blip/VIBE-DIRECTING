@@ -71,7 +71,11 @@ import {
   type AgentWebSearchSettings,
 } from "../../core/agentWebSearchClient";
 import { classifyDirectorAgentAction } from "../../core/directorAgentAction";
-import { detectDirectorAgentPermissionIntent } from "../../core/directorAgentPermissionIntent";
+import {
+  detectDirectorAgentPermissionIntent,
+  isDirectorAgentPermissionControlOnlyIntent,
+  stripDirectorAgentPermissionControlPhrases,
+} from "../../core/directorAgentPermissionIntent";
 import type { ShotRecord } from "../../core/types";
 
 type IntakeVisualReferenceKind = Extract<IntakeReferenceAssetType, "image" | "style" | "character" | "scene">;
@@ -187,6 +191,7 @@ export type NewVideoStartAgentIntakeCommand = {
   text: string;
   mode?: "replace_draft" | "continue_current_draft" | "confirm_current_draft";
   projectTargetMode?: "new_project" | "current_project";
+  sessionResetKey?: number;
 };
 
 const referenceTypeLabels: Record<NewVideoReferenceKind, string> = {
@@ -319,6 +324,20 @@ function clearStoredNewVideoComposerDraft(storageKey: string) {
   }
 }
 
+function clearAllStoredNewVideoComposerDrafts() {
+  if (typeof window === "undefined") return;
+  try {
+    for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.sessionStorage.key(index);
+      if (key?.startsWith(newVideoComposerDraftStorageKeyPrefix)) {
+        window.sessionStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Best-effort cleanup only.
+  }
+}
+
 function formatFileSize(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "文件";
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -382,8 +401,41 @@ function executableVideoDurationSeconds(value: unknown, fallback = 5) {
   return Math.max(4, Math.min(15, Math.round(safe)));
 }
 
+const localizedShotNumberToken = String.raw`([0-9０-９]{1,3}|一|二|两|俩|三|四|五|六|七|八|九|十|十[一二两俩三四五六七八九]|[一二两俩三四五六七八九]十[一二两俩三四五六七八九]?)`;
+
+function parseLocalizedShotNumber(value: string): number | undefined {
+  const normalized = cleanText(value).replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
+  if (/^\d{1,3}$/u.test(normalized)) return Number.parseInt(normalized, 10);
+  const digitValues: Record<string, number> = {
+    一: 1,
+    二: 2,
+    两: 2,
+    俩: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+  };
+  if (normalized === "十") return 10;
+  const teenMatch = normalized.match(/^十([一二两俩三四五六七八九])$/u);
+  if (teenMatch) return 10 + (digitValues[teenMatch[1] || ""] || 0);
+  const tenMatch = normalized.match(/^([一二两俩三四五六七八九])十([一二两俩三四五六七八九])?$/u);
+  if (tenMatch) return (digitValues[tenMatch[1] || ""] || 0) * 10 + (digitValues[tenMatch[2] || ""] || 0);
+  return digitValues[normalized];
+}
+
+function stripTargetShotOrdinalMentions(text: string) {
+  return cleanText(text).replace(
+    new RegExp(String.raw`第\s*${localizedShotNumberToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕)`, "giu"),
+    "目标镜头",
+  );
+}
+
 function explicitShotCount(text: string) {
-  const count = extractRequestedShotCount(text);
+  const count = extractRequestedShotCount(stripTargetShotOrdinalMentions(text));
   if (count === undefined || !Number.isFinite(count) || count <= 0) return undefined;
   return Math.max(1, Math.min(24, Math.round(count)));
 }
@@ -456,6 +508,20 @@ function latestNewVideoAgentTimelineBatch(entries: VibeAgentTimelineEntry[]) {
     entry.createdAt > latest ? entry.createdAt : latest
   ), intakeEntries[0]!.createdAt);
   return intakeEntries.filter((entry) => entry.createdAt === latestCreatedAt);
+}
+
+function hasPendingReadyDraftTimeline(entries: VibeAgentTimelineEntry[]) {
+  const intakeEntries = entries.filter(isVibeAgentIntakeTimelineEntry);
+  const latestConfirmation = [...intakeEntries].reverse().find((entry) => (
+    entry.type === "confirmation_request"
+    && entry.status === "waiting"
+    && entry.details?.intakePhase === "planning_ready"
+  ));
+  if (!latestConfirmation) return false;
+  return !intakeEntries.some((entry) => (
+    entry.details?.intakePhase === "draft_confirmed"
+    && entry.createdAt >= latestConfirmation.createdAt
+  ));
 }
 
 function vibePermissionModeFromAgentVideoMode(mode?: AgentVideoSubmitMode): VibeAgentPermissionMode {
@@ -614,29 +680,666 @@ function stripSrtMarkup(value: string) {
 
 function enumeratedShotSegments(text: string): string[] {
   const normalized = cleanText(text);
-  const matches = Array.from(normalized.matchAll(
-    /(?:第?\s*(?:[一二三四五六七八九十]|\d{1,2})\s*(?:段|镜|镜头|幕)|镜头\s*\d{1,2})[：:\s]*([^，,。；;\n]{2,80})/gu,
+  const ordinalMarkerPattern = new RegExp(
+    String.raw`(?:第\s*${localizedShotNumberToken}\s*(?:个|条|段)?(?:\s*(?:镜头|分镜|视频段|片段|段落|镜|段|幕))?|镜头\s*([0-9０-９]{1,3}))\s*[：:\s]*`,
+    "giu",
+  );
+  const ordinalMarkers = Array.from(normalized.matchAll(ordinalMarkerPattern))
+    .map((match) => ({
+      start: match.index ?? 0,
+      end: (match.index ?? 0) + match[0].length,
+      order: parseLocalizedShotNumber(match[1] || match[2] || ""),
+    }))
+    .filter((marker) => marker.order !== undefined);
+  if (ordinalMarkers.length >= 2) {
+    return ordinalMarkers
+      .map((marker, index) => {
+        const nextMarker = ordinalMarkers[index + 1];
+        return cleanText(normalized.slice(marker.end, nextMarker ? nextMarker.start : undefined)
+          .replace(/^[：:，,。；;\s]+|[：:，,。；;\s]+$/gu, ""));
+      })
+      .filter(Boolean);
+  }
+  const labelledMatches = Array.from(normalized.matchAll(
+    /(?:第?\s*(?:[一二三四五六七八九十]|\d{1,2})\s*(?:镜头|分镜|视频段|片段|段落|镜|段|幕)|镜头\s*\d{1,2})[：:\s]*([^，,。；;\n]{2,80})/gu,
   ));
-  return matches.map((match) => cleanText(match[1])).filter(Boolean);
+  return labelledMatches.map((match) => cleanText(match[1])).filter(Boolean);
+}
+
+function sequenceCueStoryboardCandidates(scriptText: string) {
+  const source = cleanText(scriptText);
+  return Array.from(source.matchAll(
+    /(?:先|再|然后|接着|随后|最后)([^，,。；;!?！？]{2,60})/gu,
+  )).map((match) => cleanText(match[0])).filter(Boolean);
 }
 
 function mostlyPlanningInstruction(text: string) {
   const normalized = cleanText(text);
   if (!normalized) return true;
-  const startsLikeInstruction = /^(?:做成|希望|需要|请|先不要|不要|风格|时长|总时长|目标|用|使用|走|生成|规划|分成|拆成)/u.test(normalized);
+  const startsLikeInstruction = /^(?:把|做成|改成|调整成|换成|整理成|整理为|重排成|重排为|希望|需要|请|先不要|不要|风格|时长|总时长|目标|用|使用|走|生成|规划|分成|拆成)/u.test(normalized);
   if (!startsLikeInstruction) return false;
   return !/(车|人|猫|少女|男|女|门|手|眼|灯|雨|路|店|房|街|站|电车|书|票|出现|走|跑|看|拿|递|冲|启动|亮起|进入|转身)/u.test(normalized);
 }
 
+function feedbackShouldPreserveCurrentDraftScript(text: string) {
+  return Boolean(explicitShotCount(text))
+    && enumeratedShotSegments(text).length <= 1
+    && mostlyPlanningInstruction(text);
+}
+
+function stripDraftRevisionPromptPrefix(text: string) {
+  return cleanText(text).replace(/^(?:修改这版草案|修改当前草案|继续修改草案|继续改草案)\s*[：:]\s*/u, "");
+}
+
+function currentDraftScriptForFeedback(
+  draft: NewVideoStartDraft,
+  rows: NewVideoStoryboardShot[],
+) {
+  return cleanText(draft.script)
+    || rows.map((row) => cleanText(row.primaryAction || row.visualDescription || row.title)).filter(Boolean).join("。");
+}
+
+function stripShotCountPlanningInstructions(text: string) {
+  const directedShotCountPattern = new RegExp(`(?:^|[，,。；;\\s])(?:拆成|分成|分为|切成|规划成|做成|改成|调整成|换成|整理成|整理为|重排成|重排为|保持|保留)\\s*${localizedShotNumberToken}\\s*(?:个|条|段)?\\s*(?:镜头|分镜|视频段|视频|短片|片段|段落|shots?|clips?|cuts?)`, "giu");
+  const standaloneShotCountPattern = new RegExp(`(?:^|[，,。；;\\s])${localizedShotNumberToken}\\s*(?:个|条|段)?\\s*(?:镜头|分镜|视频段|视频|短片|片段|段落|shots?|clips?|cuts?)(?=$|[，,。；;\\s])`, "giu");
+  return cleanText(text)
+    .replace(directedShotCountPattern, " ")
+    .replace(standaloneShotCountPattern, " ")
+    .trim();
+}
+
+function storyboardStoryText(text: string) {
+  const split = splitCreativePlanningText(text);
+  return split.storyText || stripShotCountPlanningInstructions(cleanText(text)) || cleanText(text);
+}
+
+function targetShotRevisionIndex(text: string, rowCount: number): number | undefined {
+  const cleaned = stripDraftRevisionPromptPrefix(text);
+  const tailMatch = cleaned.match(/(?:把|将|让|请把|请将)?\s*(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)/iu);
+  if (tailMatch && rowCount > 0) return rowCount - 1;
+  const match = cleaned.match(new RegExp(String.raw`(?:把|将|让|把现在的|把当前的)?\s*第\s*${localizedShotNumberToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)`, "iu"));
+  const index = match ? parseLocalizedShotNumber(match[1] || "") : undefined;
+  if (!index || index < 1 || index > rowCount) return undefined;
+  return index - 1;
+}
+
+function feedbackTargetsTailShot(text: string) {
+  return /(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)/iu.test(stripDraftRevisionPromptPrefix(text));
+}
+
+function feedbackTargetsSelectedDraftShot(text: string) {
+  return /(?:这个(?!\s*(?:故事|草案|项目|短片|视频))|这段|这一镜|这镜|这里|当前镜头)\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)?/iu.test(stripDraftRevisionPromptPrefix(text));
+}
+
+function selectedDraftShotIndex(rows: NewVideoStoryboardShot[], selectedRowId?: string) {
+  if (!selectedRowId) return undefined;
+  const selectedIndex = rows.findIndex((row) => row.id === selectedRowId);
+  return selectedIndex >= 0 ? selectedIndex : undefined;
+}
+
+function feedbackRequestsPreserveShotAction(text: string) {
+  return /(?:只改场景|不要改动作|不要改变动作|不改动作|不改变动作|保留动作|动作不变|动作保持不变)/iu.test(text);
+}
+
+function cleanTargetShotRevisionText(text: string) {
+  const targetShotPattern = String.raw`(?:第\s*${localizedShotNumberToken}|(?:最后|末尾|结尾|最终)\s*(?:那|这|那一|这一|一)?)\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)`;
+  const targetPrefixPattern = new RegExp(String.raw`^(?:(?:这个|这段|这一镜|这镜|这里)?\s*(?:不对|不行|不准确|不太对)\s*[，,。；;\s]*)?(?:把|将|让|请把|请将)?\s*${targetShotPattern}\s*(?:放到|放在|移到|移至|挪到|换到|换至|改成|改为|调整成|调整为|换成|替换成|变成|变为|做成)?\s*`, "iu");
+  const selectedTargetPrefixPattern = /^(?:这个(?!\s*(?:故事|草案|项目|短片|视频))|这段|这一镜|这镜|这里|当前镜头)\s*(?:镜头|分镜|视频段|片段|段落|幕|镜)?\s*(?:(?:只改场景不要改动作|只改场景|不要改动作|不要改变动作|不改动作|不改变动作|保留动作|动作不变|动作保持不变)\s*)?[，,。；;\s]*(?:场景|地点|环境)?\s*(?:改到|改为|改成|换到|换至|放到|放在|移到|移至|挪到|调整到|调整为)?\s*/iu;
+  const sceneOnlyControlPattern = /(?:只改场景不要改动作|只改场景|不要改动作|不要改变动作|不改动作|不改变动作|保留动作|动作不变|动作保持不变)/giu;
+  const safetyClausePattern = /(?:先)?(?:不要|别|不|不用|先不要|先别)[^，,。；;]*(?:参考图|参考|视频|提交|发送|生成)[^，,。；;]*/giu;
+  const leftoverVideoSubmitPattern = /(?:或|和|以及)?\s*(?:提交|发送|生成|生)视频/giu;
+  const contentRemovalPattern = /(?:不要|别|不|不用|去掉|移除|删掉|删除|不要再提)[^，,。；;]*(?:怀表|耳机|广告牌|站牌|随身听|小提琴|纸飞机|灯箱|发光鸟|热豆浆|豆浆|发光字|车票|电影票|票根|门票)[^，,。；;]*/giu;
+  const withoutSafetyClauses = stripDraftRevisionPromptPrefix(text)
+    .replace(safetyClausePattern, " ")
+    .replace(leftoverVideoSubmitPattern, " ");
+  return cleanText(stripDirectorAgentPermissionControlPhrases(withoutSafetyClauses))
+    .replace(targetPrefixPattern, " ")
+    .replace(selectedTargetPrefixPattern, " ")
+    .replace(sceneOnlyControlPattern, " ")
+    .replace(/^(?:场景|地点|环境)\s*(?:改到|改为|改成|换到|换至|放到|放在|移到|移至|挪到|调整到|调整为)\s*/iu, " ")
+    .replace(/^(?:改到|改为|改成|换到|换至|放到|放在|移到|移至|挪到|调整到|调整为)\s*/iu, " ")
+    .replace(/^\s*(?:改得|改得更|改得更清楚|改清楚|调整得更清楚)[^：:，,。；;]*[：:，,]?\s*/u, " ")
+    .replace(safetyClausePattern, " ")
+    .replace(leftoverVideoSubmitPattern, " ")
+    .replace(contentRemovalPattern, " ")
+    .replace(/(?:^|[，,。；;\s])(?:图或|参考图或|参考或)(?=$|[，,。；;\s])/giu, " ")
+    .replace(/(?:只)?(?:保留|留下|留下来)\s*/giu, " ")
+    .replace(/(?:仍然|依然|继续)?\s*(?:保持|保留)\s*/giu, " ")
+    .replace(/[，,]\s*[，,]+/gu, "，")
+    .replace(/[，,]\s*([。；;])/gu, "$1")
+    .replace(/[，,。；;]\s*$/u, "")
+    .trim();
+}
+
+function excludedPropLabelsFromFeedback(text: string) {
+  const propLabels: Array<[RegExp, string]> = [
+    [/月亮/u, "月亮"],
+    [/怀表/u, "怀表"],
+    [/耳机/u, "耳机"],
+    [/广告牌/u, "广告牌"],
+    [/站牌/u, "站牌"],
+    [/随身听|Walkman/i, "随身听"],
+    [/小提琴/u, "小提琴"],
+    [/纸飞机/u, "纸飞机"],
+    [/灯箱/u, "灯箱"],
+    [/发光(?:的)?鸟|光鸟/u, "发光鸟"],
+    [/热豆浆|豆浆/u, "热豆浆"],
+    [/发光字/u, "发光字"],
+    [/车票/u, "车票"],
+    [/电影票|票根|门票/u, "电影票"],
+  ];
+  const negativeClauses = cleanText(text)
+    .split(/[，,。；;]/u)
+    .map(cleanText)
+    .filter((clause) => /(?:不要|别|不|不用|去掉|移除|删掉|删除|不要再提)/u.test(clause));
+  return Array.from(new Set(propLabels
+    .filter(([pattern]) => negativeClauses.some((clause) => pattern.test(clause)))
+    .map(([, label]) => label)));
+}
+
+function textMentionsExcludedProps(text: string, excludedProps: string[]) {
+  const source = cleanText(text);
+  return Boolean(source && excludedProps.some((label) => source.includes(label)));
+}
+
+function removeExcludedLabelsFromText(text: string, excludedLabels: string[]) {
+  let next = cleanText(text);
+  for (const label of excludedLabels) {
+    next = next.split(label).join("");
+  }
+  return cleanText(next
+    .replace(/看到\s*像/gu, "看到")
+    .replace(/看见\s*像/gu, "看见")
+    .replace(/抬头\s*看到\s*像/gu, "抬头看到")
+    .replace(/[，,]\s*[，,]+/gu, "，")
+    .replace(/[，,]\s*([。；;])/gu, "$1")
+    .replace(/^[，,。；;\s]+|[，,。；;\s]+$/gu, ""));
+}
+
+function targetShotRevisionIndexForRows(text: string, rows: NewVideoStoryboardShot[], selectedRowId?: string) {
+  const selectedIndex = feedbackTargetsSelectedDraftShot(text) ? selectedDraftShotIndex(rows, selectedRowId) : undefined;
+  const fallbackIndex = selectedIndex ?? targetShotRevisionIndex(text, rows.length);
+  const excludedLabels = excludedPropLabelsFromFeedback(text);
+  if (!feedbackTargetsTailShot(text) || !excludedLabels.length) return fallbackIndex;
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const rowText = [
+      rows[index]?.title,
+      rows[index]?.visualDescription,
+      rows[index]?.primaryAction,
+      rows[index]?.props,
+    ].map(cleanText).filter(Boolean).join(" ");
+    if (excludedLabels.some((label) => rowText.includes(label))) return index;
+  }
+  return fallbackIndex;
+}
+
+function cleanStoryboardFeedbackControlClauses(text: string) {
+  const safetyClausePattern = /(?:仍然|依然|继续)?\s*(?:先)?(?:不要|别|不|不用|先不要|先别)[^，,。；;]*(?:参考图|参考|视频|提交|发送|生成|导出)[^，,。；;]*/giu;
+  const confirmationClausePattern = /(?:先)?(?:不要|别|不|不用|先不要|先别)\s*确认(?:这版|故事|草案)?/giu;
+  const withoutSafetyClauses = stripDraftRevisionPromptPrefix(text)
+    .replace(safetyClausePattern, " ")
+    .replace(confirmationClausePattern, " ");
+  return cleanText(stripDirectorAgentPermissionControlPhrases(withoutSafetyClauses)
+    .replace(/(?:仍然|依然|继续)\s*(?=$|[，,。；;\s])/giu, " ")
+    .replace(/[，,]\s*[，,]+/gu, "，")
+    .replace(/[，,]\s*([。；;])/gu, "$1")
+    .replace(/^[，,。；;\s]+|[，,。；;\s]+$/gu, ""));
+}
+
+function stripEnumeratedShotClauses(text: string) {
+  const enumeratedClausePattern = new RegExp(String.raw`(?:第?\s*(?:[一二三四五六七八九十]|\d{1,2})\s*(?:镜头|分镜|视频段|片段|段落|镜|段|幕)|镜头\s*\d{1,2})[：:\s]*[^，,。；;\n]{2,80}`, "gu");
+  return cleanText(text.replace(enumeratedClausePattern, " "));
+}
+
+function feedbackGlobalRevisionNote(text: string) {
+  return cleanText(stripShotCountPlanningInstructions(stripEnumeratedShotClauses(cleanStoryboardFeedbackControlClauses(text)))
+    .replace(/^(?:修改要求|整体要求|要求)\s*[：:]\s*/u, "")
+    .replace(/^[：:，,。；;\s]+|[：:，,。；;\s]+$/gu, ""));
+}
+
+function finalShotIsolationBeat(text: string) {
+  const cleaned = stripShotCountPlanningInstructions(cleanStoryboardFeedbackControlClauses(text));
+  const resultVerb = "(?:发光|亮起|变成|变为|显现|浮现|出现|驶入|驶出|停住|打开|合上|落下)";
+  const match = cleaned.match(new RegExp(`(?:把|将|让)?\\s*([^，,。；;!?！？]{2,60}?${resultVerb}[^，,。；;!?！？]{0,24}?)\\s*(?:单独|独立)?\\s*(?:放到|放在|挪到|移到|移至|作为|做成)\\s*(?:最后|最终|结尾|末尾)(?:一|1)?\\s*(?:个|条|段)?\\s*(?:镜头|分镜|镜|段|幕)?`, "u"));
+  return cleanText(match?.[1] || "");
+}
+
+function stripFinalShotIsolationBeatFromSegment(segment: string, beat: string) {
+  if (!beat || !segment.includes(beat)) return [cleanText(segment)].filter(Boolean);
+  return segment.split(beat)
+    .map((part) => cleanText(part)
+      .replace(/^[，,。；;\s]+/gu, "")
+      .replace(/[，,。；;\s]+$/gu, "")
+      .replace(/(?:之后|以后|然后|接着|随后|后)\s*$/u, "")
+      .replace(/[，,。；;\s]+$/gu, ""))
+    .filter(Boolean);
+}
+
+function normalizeFinalShotIsolationSegments(
+  segments: string[],
+  requestedCount: number,
+  finalBeat: string,
+) {
+  const middleTarget = Math.max(0, requestedCount - 1);
+  const nextSegments = Array.from(new Set(segments
+    .map(cleanText)
+    .filter((segment) => segment && segment !== finalBeat && !segment.includes(`把${finalBeat}`))));
+  if (middleTarget <= 0) return [finalBeat];
+  while (nextSegments.length > middleTarget) {
+    const overflowStart = Math.max(0, middleTarget - 1);
+    const mergedOverflow = nextSegments.splice(overflowStart).join("，");
+    nextSegments.push(mergedOverflow);
+  }
+  while (nextSegments.length < middleTarget) {
+    const source = nextSegments[nextSegments.length - 1] || finalBeat;
+    nextSegments.push(fallbackStoryboardBeatText(source, nextSegments.length, requestedCount));
+  }
+  return [...nextSegments.slice(0, middleTarget), finalBeat].map(cleanText).filter(Boolean);
+}
+
+function isolateFinalShotFeedbackSegments(
+  rows: NewVideoStoryboardShot[],
+  requestedCount: number,
+  feedbackText: string,
+) {
+  const finalBeat = finalShotIsolationBeat(feedbackText);
+  if (!finalBeat) return undefined;
+  const currentSegments = rows.map((row) => cleanText(row.primaryAction || row.visualDescription || row.title)).filter(Boolean);
+  if (!currentSegments.length) return undefined;
+  const splitSegments = currentSegments.flatMap((segment) => stripFinalShotIsolationBeatFromSegment(segment, finalBeat));
+  return normalizeFinalShotIsolationSegments(splitSegments, requestedCount, finalBeat);
+}
+
+function primaryStoryboardSubjectFromText(text: string) {
+  const source = storyboardStoryText(text);
+  const descriptive = cleanText(source.match(/(?:戴|穿|背|拿)[^，,。；;!?！？]{0,24}(?:女高中生|女生|女孩|少女|男孩|男生|少年|女人|男人|老人|孩子|主角)/u)?.[0]);
+  if (descriptive) return descriptive;
+  return visibleCharacterLabelsFromText(source)[0] || "主角";
+}
+
+function sceneSetupStoryboardSegment(scene: string, sourceText: string) {
+  const sceneText = cleanText(scene);
+  if (!sceneText) return "";
+  return `${primaryStoryboardSubjectFromText(sourceText)}出现在${sceneText}`;
+}
+
+function sceneLabelsFromStoryboardContext(rows: NewVideoStoryboardShot[], sourceText: string) {
+  const existingSceneLabels = rows
+    .map((row) => cleanText(row.scene))
+    .filter((scene) => scene && !/^(待确认|待补|待补充|无|-)$/.test(scene));
+  return Array.from(new Set([
+    ...localSceneLabelsFromText(sourceText),
+    ...existingSceneLabels,
+  ]));
+}
+
+function endingStoryboardCandidate(text: string) {
+  return /(?:最后|最终|结尾|末尾|月亮|抬头|闪烁|亮起|发光)/u.test(cleanText(text));
+}
+
+function trimStoryboardCandidatesToRequestedCount(
+  candidates: string[],
+  requestedCount: number,
+  endingCandidate = "",
+) {
+  if (requestedCount <= 0) return [];
+  const uniqueCandidates = Array.from(new Set(candidates.map(cleanText).filter(Boolean)));
+  const nextCandidates = uniqueCandidates.slice(0, requestedCount);
+  const ending = cleanText(endingCandidate);
+  if (ending && !nextCandidates.some((candidate) => candidate.includes(ending) || ending.includes(candidate))) {
+    if (nextCandidates.length < requestedCount) {
+      nextCandidates.push(ending);
+    } else {
+      const lastIndex = Math.max(0, nextCandidates.length - 1);
+      nextCandidates[lastIndex] = cleanText(`${nextCandidates[lastIndex]}，${ending}`);
+    }
+  }
+  return nextCandidates.slice(0, requestedCount);
+}
+
+function feedbackMultiLocationStoryboardCandidates(
+  source: string,
+  focusedCandidates: string[],
+  requestedCount: number,
+) {
+  const locationCandidates = locationListStoryboardCandidates(source);
+  if (locationCandidates.length < 2 || requestedCount < locationCandidates.length + 1) return [];
+  const splitCandidates = splitScriptIntoStoryboardBeats(source).map(cleanText).filter(Boolean);
+  const endingCandidate = [...splitCandidates, ...focusedCandidates].find(endingStoryboardCandidate) || "";
+  const openingCandidate = [...splitCandidates, ...focusedCandidates]
+    .find((candidate) => (
+      candidate
+      && !endingStoryboardCandidate(candidate)
+      && !sceneOnlyStoryboardSegment(candidate)
+      && !locationCandidates.includes(candidate)
+      && !/(?:各自|分别|同时).*(?:听到|听见|看到|看见|收到|发现)/u.test(candidate)
+    ));
+  return trimStoryboardCandidatesToRequestedCount([
+    openingCandidate || "",
+    ...locationCandidates,
+  ], requestedCount, endingCandidate);
+}
+
+function feedbackSourceStoryboardCandidates(sourceText: string, requestedCount: number) {
+  const source = storyboardStoryText(sourceText);
+  if (!source) return [];
+  const localCandidates = localStoryboardBeatCandidates(source);
+  const sceneCandidate = localCandidates.find(sceneOnlyStoryboardSegment)
+    || localSceneLabelsFromText(source)[0]
+    || "";
+  const focusedCandidates = focusedStoryboardBeatCandidates(source);
+  const multiLocationCandidates = feedbackMultiLocationStoryboardCandidates(source, focusedCandidates, requestedCount);
+  if (multiLocationCandidates.length >= requestedCount) return multiLocationCandidates;
+  const actionableCandidates = focusedCandidates.filter((candidate) => (
+    !sceneOnlyStoryboardSegment(candidate)
+    && !/^(?:我要拍|我想拍|我想做|想做|做一个|拍一个)/u.test(candidate)
+  ));
+  if (sceneCandidate && actionableCandidates.length >= requestedCount - 1) {
+    return [
+      sceneSetupStoryboardSegment(sceneCandidate, source),
+      ...actionableCandidates,
+    ].map(cleanText).filter(Boolean).slice(0, requestedCount);
+  }
+  if (actionableCandidates.length >= requestedCount) return actionableCandidates.slice(0, requestedCount);
+  return [
+    sceneCandidate ? sceneSetupStoryboardSegment(sceneCandidate, source) : "",
+    ...actionableCandidates,
+    ...localCandidates.filter((candidate) => !actionableCandidates.includes(candidate)),
+  ].map(cleanText).filter(Boolean).slice(0, requestedCount);
+}
+
+function feedbackExplicitStoryboardSegments(
+  rows: NewVideoStoryboardShot[],
+  feedbackText: string,
+  requestedCount: number,
+  sourceText = "",
+) {
+  const cleanedFeedback = cleanStoryboardFeedbackControlClauses(feedbackText);
+  const enumerated = enumeratedShotSegments(cleanedFeedback)
+    .map((segment) => stripShotCountPlanningInstructions(cleanStoryboardFeedbackControlClauses(segment)))
+    .map(cleanText)
+    .filter(Boolean);
+  if (enumerated.length >= requestedCount) return enumerated.slice(0, requestedCount);
+
+  const currentSegments = rows.map((row) => cleanText(row.primaryAction || row.visualDescription || row.title)).filter(Boolean);
+  const isolatedFinalSegments = isolateFinalShotFeedbackSegments(rows, requestedCount, cleanedFeedback);
+  if (isolatedFinalSegments?.length) return isolatedFinalSegments;
+
+  const nextSegments = [...enumerated];
+  const sourceCandidates = feedbackSourceStoryboardCandidates(sourceText, requestedCount);
+  for (const candidate of sourceCandidates) {
+    if (nextSegments.length >= requestedCount) break;
+    const duplicate = nextSegments.some((segment) => segment.includes(candidate) || candidate.includes(segment));
+    if (!duplicate) nextSegments.push(candidate);
+  }
+  const storyCandidates = localStoryboardBeatCandidates(stripShotCountPlanningInstructions(cleanedFeedback))
+    .filter((segment) => !mostlyPlanningInstruction(segment));
+  for (const candidate of storyCandidates) {
+    if (nextSegments.length >= requestedCount) break;
+    const duplicate = nextSegments.some((segment) => segment.includes(candidate) || candidate.includes(segment));
+    if (!duplicate) nextSegments.push(candidate);
+  }
+
+  if (nextSegments.length < requestedCount && currentSegments.length > requestedCount) {
+    for (let index = nextSegments.length; index < requestedCount; index += 1) {
+      const start = Math.floor((index * currentSegments.length) / requestedCount);
+      const end = Math.max(start + 1, Math.floor(((index + 1) * currentSegments.length) / requestedCount));
+      nextSegments.push(currentSegments.slice(start, end).join("，"));
+    }
+  }
+  for (const current of currentSegments) {
+    if (nextSegments.length >= requestedCount) break;
+    nextSegments.push(current);
+  }
+  while (nextSegments.length < requestedCount) {
+    const source = nextSegments[nextSegments.length - 1] || currentSegments[currentSegments.length - 1] || cleanedFeedback || "继续当前故事动作";
+    nextSegments.push(fallbackStoryboardBeatText(source, nextSegments.length, requestedCount));
+  }
+  return nextSegments.slice(0, requestedCount).map(cleanText).filter(Boolean);
+}
+
+function applyExplicitShotCountFeedbackRows(
+  rows: NewVideoStoryboardShot[],
+  feedbackText: string,
+  sourceText = "",
+) {
+  const requestedCount = explicitShotCount(feedbackText);
+  if (!requestedCount) return undefined;
+  if (!rows.length) return undefined;
+  const segments = feedbackExplicitStoryboardSegments(rows, feedbackText, requestedCount, sourceText);
+  if (!segments.length) return undefined;
+  const note = feedbackGlobalRevisionNote(feedbackText);
+  const totalDuration = rows.reduce((sum, row) => sum + (Number.parseFloat(row.duration) || 0), 0);
+  const evenDuration = totalDuration ? executableVideoDurationSeconds(totalDuration / requestedCount) : undefined;
+  const sceneLabels = sceneLabelsFromStoryboardContext(rows, sourceText);
+  return segments.map((segment, index) => {
+    const base = rows[Math.min(index, rows.length - 1)]!;
+    const primaryAction = primaryActionFromText(segment);
+    const actionTrigger = actionTriggerFromText(segment);
+    const microReaction = microReactionFromText(segment);
+    const scene = sceneFromShotText(segment, sceneLabels, index);
+    const visualDescription = [
+      `${segment}。`,
+      scene && scene !== base.scene ? `场景落在${scene}。` : "",
+      note ? `整体反馈：${note}。` : "",
+      "保留当前角色、场景和道具连续性。",
+    ].join("");
+    const propContext = [
+      segment,
+      base.visualDescription,
+      base.primaryAction,
+      base.props,
+    ].map(cleanText).filter(Boolean).join(" ");
+    const propLabels = Array.from(new Set([
+      ...splitVisibleReferenceLabels(base.props),
+      ...propsFromShotText(propContext, splitVisibleReferenceLabels(base.props)),
+    ]));
+    return {
+      ...base,
+      id: `feedback_restructure_${index + 1}_${safeDraftId(segment)}`,
+      shotNo: shotNoForIndex(index),
+      duration: String(evenDuration || Number.parseFloat(base.duration) || 5),
+      title: titleFromShotText(segment, index),
+      visualDescription,
+      primaryAction,
+      actionTrigger,
+      microReaction,
+      actionBeats: storyboardActionBeats({
+        primaryAction,
+        actionTrigger,
+        microReaction,
+        visualDescription,
+      }),
+      props: propLabels.join("、") || "无",
+      scene: scene || base.scene,
+      sourceFactId: undefined,
+    };
+  });
+}
+
+function applyTargetedShotRevisionRows(rows: NewVideoStoryboardShot[], feedbackText: string, selectedRowId?: string) {
+  const targetIndex = targetShotRevisionIndexForRows(feedbackText, rows, selectedRowId);
+  if (targetIndex === undefined) return undefined;
+  const revisionText = cleanText(stripShotCountPlanningInstructions(cleanTargetShotRevisionText(feedbackText))
+    .replace(/^[：:，,。；;\s]+|[：:，,。；;\s]+$/gu, "")) || "按反馈更新这一镜头";
+  const excludedProps = excludedPropLabelsFromFeedback(feedbackText);
+  const sceneLabels = rows.map((row) => cleanText(row.scene)).filter(Boolean);
+  return rows.map((row, index) => {
+    if (index !== targetIndex) return row;
+    const cleanedRevisionText = cleanText(revisionText);
+    const removalRequest = Boolean(excludedProps.length)
+      && /(?:不要|别|不|不用|去掉|移除|删掉|删除|不要再提)/u.test(feedbackText);
+    const scene = removalRequest ? "" : sceneFromShotText(revisionText, sceneLabels, index);
+    const sceneOnlyRevision = Boolean(scene)
+      && (sceneOnlyStoryboardSegment(cleanedRevisionText) || cleanedRevisionText === scene);
+    const removalOnlyRevision = removalRequest
+      && !scene
+      && (!cleanedRevisionText || /^不要|^别|^不用|^去掉|^移除|^删掉|^删除/u.test(cleanedRevisionText));
+    const cleanedCurrentAction = removalOnlyRevision
+      ? removeExcludedLabelsFromText(row.primaryAction || row.visualDescription || row.title, excludedProps)
+      : "";
+    const primaryAction = sceneOnlyRevision
+      ? row.primaryAction
+      : removalOnlyRevision
+        ? cleanedCurrentAction || row.primaryAction
+        : primaryActionFromText(revisionText);
+    const actionSourceText = sceneOnlyRevision || removalOnlyRevision ? primaryAction || row.visualDescription : revisionText;
+    const fallbackActionTrigger = actionTriggerFromText(actionSourceText);
+    const actionTrigger = textMentionsExcludedProps(row.actionTrigger, excludedProps)
+      ? fallbackActionTrigger
+      : row.actionTrigger || fallbackActionTrigger;
+    const fallbackMicroReaction = microReactionFromText(actionSourceText);
+    const microReaction = textMentionsExcludedProps(row.microReaction, excludedProps)
+      ? fallbackMicroReaction
+      : row.microReaction || fallbackMicroReaction;
+    const fallbackProps = splitVisibleReferenceLabels(row.props)
+      .filter((label) => !excludedProps.includes(label));
+    const propLabels = Array.from(new Set([
+      ...propsFromShotText(revisionText, fallbackProps),
+      ...fallbackProps,
+    ])).filter((label) => !excludedProps.includes(label));
+    const visualDescription = sceneOnlyRevision
+      ? `${row.primaryAction || row.title}。场景改到${scene}。保留当前角色、动作和未被排除的道具连续性。`
+      : removalOnlyRevision
+        ? `${removeExcludedLabelsFromText(row.visualDescription || primaryAction || row.title, excludedProps) || primaryAction}。保留当前角色、场景和道具连续性。`
+      : `${revisionText}。保留当前角色、场景和未被排除的道具连续性。`;
+    return {
+      ...row,
+      title: removalOnlyRevision
+        ? compactText(removeExcludedLabelsFromText(row.title || primaryAction, excludedProps), 18) || row.title
+        : sceneOnlyRevision
+          ? row.title
+          : compactText(revisionText, 18) || row.title,
+      visualDescription,
+      primaryAction,
+      actionTrigger,
+      microReaction,
+      actionReactionQa: buildActionReactionQa({
+        primaryAction,
+        actionTrigger,
+        microReaction,
+        executionMode: row.executionMode,
+        referenceStrategy: row.referenceStrategy,
+        visibleCutBudget: row.visibleCutBudget,
+      }),
+      actionBeats: storyboardActionBeats({
+        primaryAction,
+        actionTrigger,
+        microReaction,
+        visualDescription,
+      }),
+      props: propLabels.join("、") || "无",
+      scene: scene || row.scene,
+      rhythmReason: textMentionsExcludedProps(row.rhythmReason, excludedProps)
+        ? "按当前修改后的镜头动作重新判断节奏。"
+        : row.rhythmReason,
+    };
+  });
+}
+
+function targetedShotRevisionSummary(rows: NewVideoStoryboardShot[], feedbackText: string, selectedRowId?: string) {
+  const targetIndex = targetShotRevisionIndexForRows(feedbackText, rows, selectedRowId);
+  if (targetIndex === undefined) return undefined;
+  const revisionText = cleanText(stripShotCountPlanningInstructions(cleanTargetShotRevisionText(feedbackText))
+    .replace(/^[：:，,。；;\s]+|[：:，,。；;\s]+$/gu, "")) || "按反馈更新这一镜头";
+  const sceneLabels = rows.map((row) => cleanText(row.scene)).filter(Boolean);
+  const excludedProps = excludedPropLabelsFromFeedback(feedbackText);
+  const removalRequest = Boolean(excludedProps.length)
+    && /(?:不要|别|不|不用|去掉|移除|删掉|删除|不要再提)/u.test(feedbackText);
+  const scene = removalRequest ? "" : sceneFromShotText(revisionText, sceneLabels, targetIndex);
+  const removalChangeLabel = excludedProps.length
+    && removalRequest
+    ? `去掉${excludedProps.join("、")}`
+    : "";
+  const preserveActionLabel = scene && feedbackRequestsPreserveShotAction(feedbackText) ? "，保留原动作" : "";
+  const targetLabel = `第 ${targetIndex + 1} 镜`;
+  const changeLabel = scene
+    ? `场景改到${scene}${preserveActionLabel}`
+    : removalChangeLabel
+      ? removalChangeLabel
+    : compactText(revisionText, 28) || "按反馈更新";
+  return {
+    targetLabel,
+    changeLabel,
+    doneLabel: `已修改${targetLabel}：${changeLabel}`,
+    intentBody: `你要修改${targetLabel}：${changeLabel}。我会先更新这个镜头，不会当成新的项目想法。`,
+    readyBody: `我已按你的要求修改${targetLabel}：${changeLabel}。`,
+  };
+}
+
+function shotCountRevisionSummary(requestedShotCount?: number) {
+  if (!requestedShotCount) return undefined;
+  const countLabel = `${requestedShotCount} 个镜头`;
+  return {
+    countLabel,
+    doneLabel: `已重排为 ${countLabel}`,
+    intentBody: `你要把当前草案重排为 ${countLabel}。我会基于现有镜头调整，不会当成一个全新的项目想法。`,
+    progressBody: `我会把当前草案重排为 ${countLabel}。这里只改分镜规划，不会生成参考图，也不会发送视频。`,
+    readyBody: `我已按你的要求重排为 ${countLabel}。`,
+  };
+}
+
+function applyTargetedFeedbackGuardsToAiRows(
+  rows: NewVideoStoryboardShot[],
+  feedbackText: string,
+  fallbackRows: NewVideoStoryboardShot[],
+  selectedRowId?: string,
+) {
+  const targetIndex = targetShotRevisionIndexForRows(feedbackText, fallbackRows.length ? fallbackRows : rows, selectedRowId);
+  const excludedProps = excludedPropLabelsFromFeedback(feedbackText);
+  if (targetIndex === undefined || !excludedProps.length) return rows;
+  return rows.map((row, index) => {
+    if (index !== targetIndex) return row;
+    const rowText = [
+      row.title,
+      row.visualDescription,
+      row.primaryAction,
+      row.actionTrigger,
+      row.microReaction,
+      row.props,
+      ...row.actionBeats,
+    ].map(cleanText).filter(Boolean).join(" ");
+    const violatesExcludedProps = excludedProps.some((label) => rowText.includes(label));
+    if (!violatesExcludedProps) {
+      const propLabels = splitVisibleReferenceLabels(row.props)
+        .filter((label) => !excludedProps.includes(label));
+      return {
+        ...row,
+        props: propLabels.join("、") || "无",
+      };
+    }
+    const fallback = fallbackRows[index];
+    if (!fallback) {
+      const propLabels = splitVisibleReferenceLabels(row.props)
+        .filter((label) => !excludedProps.includes(label));
+      return {
+        ...row,
+        props: propLabels.join("、") || "无",
+      };
+    }
+    return {
+      ...fallback,
+      id: row.id || fallback.id,
+      shotNo: row.shotNo || fallback.shotNo,
+      duration: row.duration || fallback.duration,
+    };
+  });
+}
+
 function scriptSegments(scriptText: string) {
-  const rawSegments = splitScriptIntoStoryboardBeats(scriptText).map(cleanText).filter(Boolean);
+  const storyText = storyboardStoryText(scriptText);
+  const rawSegments = splitScriptIntoStoryboardBeats(storyText).map(cleanText).filter(Boolean);
   const enumerated = rawSegments.flatMap(enumeratedShotSegments);
   if (enumerated.length >= 2) return enumerated;
+  const sequenceCues = sequenceCueStoryboardCandidates(scriptText);
+  if (explicitShotCount(scriptText) && sequenceCues.length >= 2) return sequenceCues;
+  const focusedCandidates = explicitShotCount(scriptText) ? focusedStoryboardBeatCandidates(storyText) : [];
+  if (focusedCandidates.length >= 2) return focusedCandidates;
   return rawSegments.filter((segment) => !mostlyPlanningInstruction(segment));
 }
 
 function compoundMotionStoryboardCandidates(scriptText: string) {
-  const source = cleanText(scriptText);
+  const source = storyboardStoryText(scriptText);
   const candidates: string[] = [];
   const actor = "(?:戴|穿|背|拿)?[^，,。；;!?！？]{0,24}?(?:女高中生|女生|女孩|少女|男生|男孩|少年|黑猫|白猫|猫|机器人|主角|她|他|它|两人|汽车|电车|车)";
   const pathObject = "[^，,。；;!?！？]{1,28}?";
@@ -656,21 +1359,106 @@ function compoundMotionStoryboardCandidates(scriptText: string) {
   return Array.from(new Set(candidates.map(cleanText).filter(Boolean)));
 }
 
+function transformingPropStoryboardCandidates(scriptText: string) {
+  const source = storyboardStoryText(scriptText);
+  const prop = cleanText(source.match(/车票|电影票|票根|门票|纸条|照片|相片|手机|屏幕|地图|信件/u)?.[0]);
+  const destination = cleanText(source.match(/(?:慢慢|逐渐|一点点)?\s*(?:变成|变为|化成|变作|显示出|显现出|浮现出)\s*([^，,。；;!?！？]{2,40})/u)?.[1]);
+  if (!prop || !destination) return [];
+  const subject = cleanText(source.match(/(?:一个|一位|一名)?(?:人|女孩|女生|少女|男孩|男生|少年|女人|男人|老人|孩子|主角)/u)?.[0]) || "主角";
+  const scene = cleanText(source.match(/在([^，,。；;!?！？]{2,24}?)(?:看到|看见|发现|拿起|打开|望向|看向)/u)?.[1]);
+  const propDetail = cleanText(source.match(new RegExp(`${prop}[^，,。；;!?！？]{0,18}(?:目的地|文字|图案|画面|内容|信息)`, "u"))?.[0]) || `${prop}上的信息`;
+  return Array.from(new Set([
+    scene ? `${subject}在${scene}注意到${prop}` : `${subject}注意到${prop}`,
+    scene ? `${subject}在${scene}看着${propDetail}开始慢慢变化` : `${subject}看着${propDetail}开始慢慢变化`,
+    `${propDetail}变成${destination}，${subject}停住反应`,
+  ].map(cleanText).filter(Boolean)));
+}
+
+const storyboardLocationLabelPattern = "(?:地铁站|便利店|停车场|公交站|洗衣店|天桥|天台|地铁|车站|站台|海边|沙滩|山路)";
+
+function splitStoryboardLocationList(listText: string) {
+  return Array.from(new Set(cleanText(listText)
+    .split(/[、,，]/u)
+    .flatMap((item) => item.split(/(?:和|与)/u))
+    .map(cleanText)
+    .filter((item) => item && new RegExp(`^${storyboardLocationLabelPattern}$`, "u").test(item))));
+}
+
+function locationListStoryboardCandidates(scriptText: string) {
+  const source = storyboardStoryText(scriptText);
+  const sceneListPattern = `${storyboardLocationLabelPattern}(?:(?:[、,，]|和|与)${storyboardLocationLabelPattern})+`;
+  const matches = Array.from(source.matchAll(new RegExp(`([^，,。；;!?！？]{1,24}?)(?:在|位于)(${sceneListPattern})([^，,。；;!?！？]{0,64})`, "gu")));
+  const candidates: string[] = [];
+  for (const match of matches) {
+    const subject = cleanText(match[1]);
+    const sceneLabels = splitStoryboardLocationList(match[2] || "");
+    const tail = cleanText(match[3]).replace(/^(?:各自|分别|同时)\s*/u, "");
+    if (!subject || sceneLabels.length < 2 || !/(?:各自|分别|同时|听到|听见|看到|看见|收到|发现)/u.test(cleanText(match[3]))) continue;
+    if (!/(?:听到|听见|看到|看见|收到|发现)/u.test(tail)) continue;
+    sceneLabels.forEach((scene) => candidates.push(`${subject}在${scene}${tail}`));
+  }
+  return Array.from(new Set(candidates.map(cleanText).filter(Boolean)));
+}
+
 function localStoryboardBeatCandidates(scriptText: string) {
-  const source = cleanText(scriptText);
+  const source = storyboardStoryText(scriptText);
+  const sequenceCueMatches = sequenceCueStoryboardCandidates(source);
   const actionMatches = Array.from(source.matchAll(
-    /(?:发现|看见|捡到|追着|跑向|走向|冲向|递给|推到|打开|掉出|亮起|驶入|驶出|停在)[^，,。；;!?！？]{2,56}/gu,
+    /[^，,。；;!?！？]{0,24}(?:发现|看见|看到|捡到|追着|跑向|走向|冲向|递给|交给|推到|打开|掉出|亮起|变成|变为|显现|浮现|驶入|驶出|停在)[^，,。；;!?！？]{2,56}/gu,
   )).map((match) => match[0]);
   const endingMatches = Array.from(source.matchAll(
-    /(?:最后|结尾|跑向|走向|看见|抵达|进入|停在)[^，,。；;!?！？]{2,56}/gu,
+    /(?:最后|结尾|跑向|走向|看见|看到|变成|变为|抵达|进入|停在)[^，,。；;!?！？]{2,56}/gu,
   )).map((match) => match[0]);
   const candidates = [
+    ...transformingPropStoryboardCandidates(source),
+    ...locationListStoryboardCandidates(source),
     ...splitScriptIntoStoryboardBeats(source),
     ...source.split(/[，,；;]/u),
+    ...sequenceCueMatches,
     ...actionMatches,
     ...endingMatches,
   ];
   return Array.from(new Set(candidates.map(cleanText).filter((segment) => segment && !mostlyPlanningInstruction(segment))));
+}
+
+function sceneOnlyStoryboardSegment(segment: string) {
+  const text = cleanText(segment);
+  if (!text) return false;
+  if (/(?:发现|看见|看到|捡到|追着|跑向|走向|冲向|递给|交给|推到|打开|掉出|亮起|变成|变为|显现|浮现|驶入|驶出|停在)/u.test(text)) return false;
+  return /^(?:清晨|凌晨|黄昏|傍晚|雨夜|夜晚|白天)?[^，,。；;!?！？]{1,18}(?:天桥|天台|公交站|便利店|洗衣店|地铁站|地铁|车站|站台|海边|沙滩|山路|停车场)(?:上|里|内|外|门口|附近)?$/u.test(text);
+}
+
+function focusedStoryboardBeatCandidates(scriptText: string) {
+  const candidates = localStoryboardBeatCandidates(scriptText);
+  const actionableCandidates = candidates.filter((candidate) => !sceneOnlyStoryboardSegment(candidate));
+  const baseCandidates = actionableCandidates.length >= 2 ? actionableCandidates : candidates;
+  return baseCandidates.filter((candidate) => !baseCandidates.some((other) => (
+    other !== candidate
+    && candidate.includes(other)
+    && candidate.length > other.length + 18
+  )));
+}
+
+function fallbackStoryboardBeatLabel(index: number, requestedCount: number) {
+  if (index <= 0) return "开场建立";
+  if (index >= requestedCount - 1) return "结果收束";
+  if (index === 1) return "情势推进";
+  if (index === 2) return "反应转折";
+  return `继续推进 ${index + 1}`;
+}
+
+function storyboardContinuationBaseText(text: string) {
+  let base = sourceTextForShotFact(text) || cleanText(text);
+  for (let index = 0; index < 4; index += 1) {
+    const next = cleanText(base.replace(/^(?:开场建立|情势推进|反应转折|结果收束|继续推进\s*\d+|延续动作)[：:]\s*/u, ""));
+    if (!next || next === base) break;
+    base = next;
+  }
+  return base || "继续当前故事动作";
+}
+
+function fallbackStoryboardBeatText(sourceText: string, index: number, requestedCount: number) {
+  return `${fallbackStoryboardBeatLabel(index, requestedCount)}：${storyboardContinuationBaseText(sourceText)}`;
 }
 
 function expandScriptRowsToRequestedCount(
@@ -679,10 +1467,28 @@ function expandScriptRowsToRequestedCount(
 ) {
   const requestedCount = explicitShotCount(`${draft.script}\n${draft.style}`);
   if (!requestedCount || rows.length >= requestedCount) return rows;
+  const transformingCandidates = transformingPropStoryboardCandidates(draft.script);
+  if (transformingCandidates.length >= requestedCount) {
+    return transformingCandidates.slice(0, requestedCount).map((text, index) => ({
+      id: `requested_transform_segment_${index + 1}_${safeDraftId(text)}`,
+      text,
+      title: undefined,
+      durationSeconds: undefined,
+    }));
+  }
   const compoundCandidates = compoundMotionStoryboardCandidates(draft.script);
   if (compoundCandidates.length >= requestedCount) {
     return compoundCandidates.slice(0, requestedCount).map((text, index) => ({
       id: `requested_compound_segment_${index + 1}_${safeDraftId(text)}`,
+      text,
+      title: undefined,
+      durationSeconds: undefined,
+    }));
+  }
+  const focusedCandidates = focusedStoryboardBeatCandidates(draft.script);
+  if (rows.length <= 1 && focusedCandidates.length >= requestedCount) {
+    return focusedCandidates.slice(0, requestedCount).map((text, index) => ({
+      id: `requested_focused_segment_${index + 1}_${safeDraftId(text)}`,
       text,
       title: undefined,
       durationSeconds: undefined,
@@ -704,7 +1510,95 @@ function expandScriptRowsToRequestedCount(
     const source = nextRows[nextRows.length - 1]!;
     nextRows.push({
       id: `requested_segment_${nextRows.length + 1}_${safeDraftId(source.text)}`,
-      text: `延续动作：${source.text}`,
+      text: fallbackStoryboardBeatText(source.text, nextRows.length, requestedCount),
+    });
+  }
+  return nextRows;
+}
+
+function mergeOverflowStoryboardRowsToRequestedCount(
+  rows: Array<{ id: string; text: string; title?: string; durationSeconds?: number; sourceFactId?: string }>,
+  requestedCount: number,
+) {
+  if (requestedCount <= 0 || rows.length <= requestedCount) return rows;
+  const nextRows = rows.slice(0, requestedCount);
+  const lastRow = nextRows[nextRows.length - 1];
+  if (!lastRow) return nextRows;
+  const overflowRows = rows.slice(requestedCount);
+  const tailSegments = overflowRows
+    .map((row) => cleanText(row.text))
+    .filter((segment) => segment && !cleanText(lastRow.text).includes(segment));
+  const mergedText = Array.from(new Set([
+    cleanText(lastRow.text),
+    ...tailSegments,
+  ].filter(Boolean))).join("，");
+  const mergedDuration = [lastRow, ...overflowRows]
+    .map((row) => row.durationSeconds || 0)
+    .reduce((sum, duration) => sum + duration, 0);
+  return [
+    ...nextRows.slice(0, -1),
+    {
+      ...lastRow,
+      text: mergedText || lastRow.text,
+      title: undefined,
+      durationSeconds: mergedDuration || lastRow.durationSeconds,
+    },
+  ];
+}
+
+function mergeMissingStoryboardCandidatesIntoRequestedRows(
+  rows: Array<{ id: string; text: string; title?: string; durationSeconds?: number; sourceFactId?: string }>,
+  draft: NewVideoStartDraft,
+  requestedCount: number,
+) {
+  if (rows.length !== requestedCount) return rows;
+  const coveredText = rows.map((row) => cleanText(row.text)).join(" ");
+  const missingCandidates = localStoryboardBeatCandidates(draft.script)
+    .filter((candidate) => candidate && !coveredText.includes(candidate))
+    .filter((candidate) => !rows.some((row) => {
+      const rowText = cleanText(row.text);
+      return rowText.includes(candidate) || candidate.includes(rowText);
+    }));
+  if (!missingCandidates.length) return rows;
+  return mergeOverflowStoryboardRowsToRequestedCount([
+    ...rows,
+    ...missingCandidates.map((text, index) => ({
+      id: `requested_missing_segment_${index + 1}_${safeDraftId(text)}`,
+      text,
+    })),
+  ], requestedCount);
+}
+
+function normalizeStoryboardSourceRowsToRequestedCount(
+  rows: Array<{ id: string; text: string; title?: string; durationSeconds?: number; sourceFactId?: string }>,
+  draft: NewVideoStartDraft,
+) {
+  const requestedCount = explicitShotCount(`${draft.script}\n${draft.style}`);
+  if (!requestedCount) return rows;
+  if (rows.length > requestedCount) return mergeOverflowStoryboardRowsToRequestedCount(rows, requestedCount);
+  if (rows.length === requestedCount) return mergeMissingStoryboardCandidatesIntoRequestedRows(rows, draft, requestedCount);
+
+  const nextRows = rows.length ? [...rows] : [{
+    id: "requested_segment_1_seed",
+    text: cleanText(draft.script) || "待补充镜头",
+    title: undefined,
+    durationSeconds: undefined,
+  }];
+  const candidates = localStoryboardBeatCandidates(draft.script);
+  for (const candidate of candidates) {
+    if (nextRows.length >= requestedCount) break;
+    const duplicate = nextRows.some((row) => row.text.includes(candidate) || candidate.includes(row.text));
+    if (duplicate) continue;
+    nextRows.push({
+      id: `requested_segment_${nextRows.length + 1}_${safeDraftId(candidate)}`,
+      text: candidate,
+    });
+  }
+  while (nextRows.length < requestedCount) {
+    const source = nextRows[nextRows.length - 1]!;
+    nextRows.push({
+      id: `requested_segment_${nextRows.length + 1}_${safeDraftId(source.text)}`,
+      text: fallbackStoryboardBeatText(source.text, nextRows.length, requestedCount),
     });
   }
   return nextRows;
@@ -751,61 +1645,166 @@ function visualDescriptionFromText(input: {
   const subject = input.characterLabels[0] || "主角";
   const scene = input.sceneLabels[input.index % Math.max(1, input.sceneLabels.length)] || "当前场景";
   const prop = input.propLabels[0] && input.propLabels[0] !== "无" ? `，手边可见${input.propLabels[0]}` : "";
-  const scenePhrase = /(?:内|外|上空|路面|山路)$/u.test(scene) ? scene : `${scene}内`;
+  const scenePhrase = /(?:内|外|上空|路面|山路|海边|海岸|沙滩|海面)$/u.test(scene) ? scene : `${scene}内`;
   const action = sourceTextForShotFact(input.text) || "完成这个镜头的主要动作";
-  const animeHint = input.styleResearchPreflight?.card.animeCoverageHints[0];
-  return [
-    `${subject}位于${scenePhrase}，身体${input.index === 0 ? "略侧对" : "侧对"}镜头，视线指向画面右侧。${action}${prop}。动作保持单一清楚，带轻微呼吸、眨眼或手部小动作。`,
-    animeHint ? `导演前置：${animeHint}` : "",
-  ].filter(Boolean).join(" ");
+  return `${subject}位于${scenePhrase}，身体${input.index === 0 ? "略侧对" : "侧对"}镜头，视线指向画面右侧。${action}${prop}。动作保持单一清楚，带轻微呼吸、眨眼或手部小动作。`;
 }
 
 function sceneFromShotText(text: string, sceneLabels: string[], index: number) {
+  const contextualScene = sceneLabels[index % Math.max(1, sceneLabels.length)] || "";
+  const previousScene = sceneLabels[index - 1] || sceneLabels[0] || "";
+  const specificParkingScene = /(?:地下|雨后|山顶)停车场/u.test(previousScene) ? previousScene : "";
+  const inheritedScene = contextualScene === "停车场" && specificParkingScene ? specificParkingScene : contextualScene;
+  const inheritedLibraryScene = /图书馆/u.test(inheritedScene || previousScene) ? (inheritedScene || previousScene) : "图书馆";
   const candidates: Array<[RegExp, string]> = [
-    [/便利店/u, "山脚便利店"],
-    [/山顶|停车场/u, "山顶停车场"],
+    [/凌晨.{0,8}玻璃电梯|玻璃电梯.{0,8}凌晨/u, "凌晨玻璃电梯"],
+    [/玻璃电梯/u, "玻璃电梯"],
+    [/深夜.{0,8}图书馆|图书馆.{0,8}深夜/u, "深夜图书馆"],
+    [/图书馆/u, "图书馆"],
+    [/书架|书页/u, inheritedLibraryScene],
+    [/黄昏.{0,8}洗衣店|洗衣店.{0,8}黄昏/u, "黄昏洗衣店"],
+    [/凌晨.{0,8}无人洗衣店|无人洗衣店.{0,8}凌晨/u, "凌晨无人洗衣店"],
+    [/凌晨.{0,8}洗衣店|洗衣店.{0,8}凌晨/u, "凌晨洗衣店"],
+    [/无人洗衣店/u, "无人洗衣店"],
+    [/洗衣店/u, "洗衣店"],
+    [/天桥/u, "天桥"],
+    [/天台/u, "天台"],
+    [/海边|海面|沙滩/u, "海边"],
+    [/地铁口/u, "地铁口"],
+    [/地铁/u, "地铁"],
+    [/雨夜.{0,8}公交站|公交站.{0,8}雨夜/u, "雨夜公交站"],
+    [/公交站/u, "公交站"],
+    [/站牌/u, "公交站"],
+    [/车站|站台/u, "车站"],
+    [/雨夜.{0,8}便利店.{0,4}门口|便利店.{0,4}门口.{0,8}雨夜/u, "雨夜便利店门口"],
+    [/便利店.{0,4}门口/u, "便利店门口"],
+    [/便利店外/u, "便利店外"],
+    [/便利店/u, "便利店"],
+    [/地下.{0,8}停车场|停车场.{0,8}地下/u, "地下停车场"],
+    [/雨后.{0,8}停车场|停车场.{0,8}雨后/u, "雨后停车场"],
+    [/山顶.{0,8}停车场|停车场.{0,8}山顶/u, "山顶停车场"],
+    [/停车场/u, "停车场"],
     [/车内|驾驶舱|方向盘|仪表/u, "车内"],
     [/山路|弯道|发卡弯|护栏/u, "山路"],
     [/天空|航拍|山顶方向/u, "山路上空"],
   ];
   return candidates.find(([pattern]) => pattern.test(text))?.[1]
     || mergeContextualScene(
-      sceneLabels[index % Math.max(1, sceneLabels.length)] || "",
-      sceneLabels[index - 1] || "",
+      previousScene,
+      inheritedScene,
       "",
     )
     || "";
+}
+
+function localSceneLabelsFromText(text: string) {
+  const candidates: Array<[RegExp, string]> = [
+    [/凌晨.{0,8}玻璃电梯|玻璃电梯.{0,8}凌晨/u, "凌晨玻璃电梯"],
+    [/玻璃电梯/u, "玻璃电梯"],
+    [/深夜.{0,8}图书馆|图书馆.{0,8}深夜/u, "深夜图书馆"],
+    [/图书馆/u, "图书馆"],
+    [/书架|书页/u, "图书馆"],
+    [/天桥/u, "天桥"],
+    [/天台/u, "天台"],
+    [/雨夜.{0,8}公交站|公交站.{0,8}雨夜/u, "雨夜公交站"],
+    [/公交站/u, "公交站"],
+    [/地铁口/u, "地铁口"],
+    [/地铁/u, "地铁"],
+    [/车站|站台/u, "车站"],
+    [/雨夜.{0,8}便利店.{0,4}门口|便利店.{0,4}门口.{0,8}雨夜/u, "雨夜便利店门口"],
+    [/便利店.{0,4}门口/u, "便利店门口"],
+    [/便利店外/u, "便利店外"],
+    [/便利店/u, "便利店"],
+    [/黄昏.{0,8}洗衣店|洗衣店.{0,8}黄昏/u, "黄昏洗衣店"],
+    [/凌晨.{0,8}无人洗衣店|无人洗衣店.{0,8}凌晨/u, "凌晨无人洗衣店"],
+    [/无人洗衣店/u, "无人洗衣店"],
+    [/洗衣店/u, "洗衣店"],
+    [/海边|海面|沙滩/u, "海边"],
+    [/地下.{0,8}停车场|停车场.{0,8}地下/u, "地下停车场"],
+    [/雨后.{0,8}停车场|停车场.{0,8}雨后/u, "雨后停车场"],
+    [/山顶.{0,8}停车场|停车场.{0,8}山顶/u, "山顶停车场"],
+    [/停车场/u, "停车场"],
+    [/车内|驾驶舱|方向盘|仪表/u, "车内"],
+    [/山路|弯道|发卡弯|护栏/u, "山路"],
+  ];
+  const labels = Array.from(new Set(candidates
+    .filter(([pattern]) => pattern.test(text))
+    .map(([, label]) => label)));
+  return labels.some((label) => /(?:地下|雨后|山顶)停车场/u.test(label))
+    ? labels.filter((label) => label !== "停车场")
+    : labels;
+}
+
+function preferSpecificPropLabels(labels: string[]) {
+  const unique = Array.from(new Set(labels.map(cleanText).filter(Boolean)));
+  const hasOldPhone = unique.includes("旧手机");
+  const hasRedUmbrella = unique.includes("红雨伞");
+  const hasStoreSign = unique.includes("便利店招牌");
+  return unique.filter((label) =>
+    !(hasOldPhone && label === "手机")
+    && !(hasRedUmbrella && label === "雨伞")
+    && !(hasStoreSign && label === "招牌"));
 }
 
 function propsFromShotText(text: string, fallbackLabels: string[]) {
   const candidates: Array<[RegExp, string]> = [
     [/SU7|Xiaomi|小米/u, "Xiaomi SU7 Ultra"],
     [/Porsche|GT3|保时捷|911/i, "Porsche 911 GT3"],
+    [/旧手机/u, "旧手机"],
+    [/红雨伞/u, "红雨伞"],
+    [/便利店招牌/u, "便利店招牌"],
     [/电影票|票根|门票/u, "电影票"],
     [/车票/u, "车票"],
-    [/旧书|书本/u, "旧书"],
+    [/怀表/u, "怀表"],
+    [/耳机/u, "耳机"],
+    [/广告牌/u, "广告牌"],
+    [/随身听|Walkman/i, "随身听"],
+    [/站牌/u, "站牌"],
+    [/小提琴/u, "小提琴"],
+    [/纸飞机/u, "纸飞机"],
+    [/发光纸鹤|纸鹤/u, "发光纸鹤"],
+    [/蓝色电动车|电动车/u, "蓝色电动车"],
+    [/灯箱/u, "灯箱"],
+    [/发光(?:的)?鸟|光鸟/u, "发光鸟"],
+    [/热豆浆|豆浆/u, "热豆浆"],
+    [/杯盖.{0,8}发光字|发光字.{0,8}杯盖|发光字/u, "发光字"],
+    [/书页|旧书|书本/u, "旧书"],
+    [/书架/u, "书架"],
     [/放映机/u, "老放映机"],
     [/胶片/u, "胶片"],
   ];
-  const labels = candidates.filter(([pattern]) => pattern.test(text)).map(([, label]) => label);
+  const labels = preferSpecificPropLabels(candidates.filter(([pattern]) => pattern.test(text)).map(([, label]) => label));
   if (labels.length) return Array.from(new Set(labels)).slice(0, 4);
-  return referenceAssetCandidates(fallbackLabels.filter((label) => label !== "录音材料"), "prop").slice(0, 3);
+  return preferSpecificPropLabels(referenceAssetCandidates(fallbackLabels.filter((label) => label !== "录音材料"), "prop")).slice(0, 3);
 }
 
 function visibleCharacterLabelsFromText(text: string) {
   const labels = [
+    /一个人|主角/u.test(text) ? "主角" : "",
     /黑猫/u.test(text) ? "黑猫" : "",
     /白猫/u.test(text) ? "白猫" : "",
     !/黑猫|白猫/u.test(text) && /猫/u.test(text) ? "猫" : "",
+    /机器人保安|保安机器人/u.test(text) ? "机器人保安" : "",
     /穿雨衣.{0,4}少女|雨衣.{0,8}少女/u.test(text) ? "穿雨衣的少女" : "",
     !/穿雨衣.{0,4}少女|雨衣.{0,8}少女/u.test(text) && /女高中生|高中女生/u.test(text) ? "女高中生" : "",
     /女车手/u.test(text) ? "女车手" : "",
     /男车手/u.test(text) ? "男车手" : "",
-    !/穿雨衣.{0,4}少女|雨衣.{0,8}少女|女高中生|高中女生|女车手|少女/u.test(text) && /女生|女孩/u.test(text) ? "女生" : "",
+    !/穿雨衣.{0,4}少女|雨衣.{0,8}少女|女高中生|高中女生|女车手|少女/u.test(text) && /女孩/u.test(text) ? "女孩" : "",
+    !/穿雨衣.{0,4}少女|雨衣.{0,8}少女|女高中生|高中女生|女车手|少女|女孩/u.test(text) && /女生/u.test(text) ? "女生" : "",
     !/穿雨衣.{0,4}少女|雨衣.{0,8}少女|女高中生|高中女生/u.test(text) && /少女/u.test(text) ? "少女" : "",
     !/男车手/u.test(text) && /男生|男孩/u.test(text) ? "男生" : "",
     /少年/u.test(text) ? "少年" : "",
-    /机器人|机甲/u.test(text) ? "机器人" : "",
+    /售票员/u.test(text) ? "售票员" : "",
+    !/机器人保安|保安机器人/u.test(text) && /保安/u.test(text) ? "保安" : "",
+    /小提琴手/u.test(text) ? "小提琴手" : "",
+    /店员/u.test(text) ? "店员" : "",
+    /老板/u.test(text) ? "老板" : "",
+    /放映员/u.test(text) ? "放映员" : "",
+    /摄影师/u.test(text) ? "摄影师" : "",
+    /医生/u.test(text) ? "医生" : "",
+    /护士/u.test(text) ? "护士" : "",
+    /老师/u.test(text) ? "老师" : "",
+    !/机器人保安|保安机器人/u.test(text) && /机器人|机甲/u.test(text) ? "机器人" : "",
   ].filter(Boolean);
   return Array.from(new Set(labels));
 }
@@ -817,13 +1816,20 @@ function splitVisibleReferenceLabels(value: unknown) {
     .filter((label) => label && !/^(无|没有|待确认|none|n\/a)$/iu.test(label));
 }
 
+function plausibleCharacterLabel(value: unknown) {
+  const text = cleanText(value);
+  if (!text || text.length > 12) return false;
+  return !/(?:把|给|送给|递给|接过|拿着|最后|旋律|末班|路灯|亮起|变成|变为|跑向|走向|发现|看见|看到)/u.test(text);
+}
+
 function charactersFromShotText(text: string, fallbackLabels: string[]) {
+  const safeFallbackLabels = fallbackLabels.filter(plausibleCharacterLabel);
   const labels = [
     ...visibleCharacterLabelsFromText(text),
-    ...fallbackLabels.filter((label) => text.includes(label) && !(label === "猫" && /黑猫|白猫|橘猫|狸花猫/u.test(text))),
+    ...safeFallbackLabels.filter((label) => text.includes(label) && !(label === "猫" && /黑猫|白猫|橘猫|狸花猫/u.test(text))),
   ].filter(Boolean);
   if (labels.length) return removeDriverlessCharacterLabels(Array.from(new Set(labels)).filter(Boolean), text);
-  return removeDriverlessCharacterLabels(referenceAssetCandidates(fallbackLabels, "character"), text);
+  return removeDriverlessCharacterLabels(referenceAssetCandidates(safeFallbackLabels, "character"), text);
 }
 
 function subtitleFromText(text: string) {
@@ -855,8 +1861,13 @@ function firstActionSentence(text: string) {
 
 function primaryActionFromText(text: string) {
   const sentence = firstActionSentence(text);
-  const actionMatch = sentence.match(/([^，,。！？!?；;]{0,18}(?:递|接|拿|放|推|拉|看|望|抬头|低头|转身|走|跑|冲|停住|握紧|打开|关上|靠近|离开)[^，,。！？!?；;]{0,26})/u);
-  return cleanText(actionMatch?.[1] || sentence).slice(0, 52) || "角色完成一个清楚的主要动作";
+  const actionMatch = sentence.match(/([^，,。！？!?；;]{0,18}(?:听到|听见|看到|看见|收到|发现|递|交给|接|拿|放|推|拉|看|望|抬头|低头|转身|走|跑|冲|停住|握紧|打开|关上|靠近|离开)[^，,。！？!?；;]{0,26})/u);
+  const resultTail = sentence.match(/[，,]\s*([^，,。！？!?；;]{0,28}(?:发光|亮起|变成|变为|显现|浮现)[^，,。！？!?；;]{0,28})/u)?.[1];
+  const action = cleanText(actionMatch?.[1] || sentence);
+  const mergedAction = resultTail && action && !action.includes(resultTail)
+    ? `${action}，${resultTail}`
+    : action;
+  return cleanText(mergedAction).slice(0, 64) || "角色完成一个清楚的主要动作";
 }
 
 function actionTriggerFromText(text: string) {
@@ -1123,8 +2134,14 @@ function buildStoryboardRowsFromSession(
   styleResearchPreflight?: StyleResearchPreflight,
 ): NewVideoStoryboardShot[] {
   const characterLabels = factsByKind(session, "character_candidate").map((fact) => fact.label);
-  const sceneLabels = factsByKind(session, "scene_candidate").map((fact) => fact.label);
-  const propLabels = factsByKind(session, "prop_candidate").map((fact) => fact.label);
+  const sceneLabels = Array.from(new Set([
+    ...localSceneLabelsFromText(draft.script),
+    ...factsByKind(session, "scene_candidate").map((fact) => fact.label),
+  ]));
+  const propLabels = Array.from(new Set([
+    ...propsFromShotText(draft.script, []),
+    ...factsByKind(session, "prop_candidate").map((fact) => fact.label),
+  ]));
   const audioUsage = draft.audio || factsByKind(session, "audio_need").length ? "旁白、对白或声音参考" : "现场声或留空";
   const shotFacts = factsByKind(session, "shot_draft");
   const timecodedBeats = extractTimecodedStoryboardBeats(draft.script);
@@ -1140,9 +2157,10 @@ function buildStoryboardRowsFromSession(
     durationSeconds: undefined,
   })), draft);
   const factRows = shotFacts.map((fact) => ({ id: fact.id, text: fact.summary, title: undefined, durationSeconds: undefined, sourceFactId: fact.id }));
-  const sourceRows: Array<{ id: string; text: string; title?: string; durationSeconds?: number; sourceFactId?: string }> = timecodedBeats.length || scriptRows.length >= factRows.length
+  const sourceRowsBeforeRequestedCount: Array<{ id: string; text: string; title?: string; durationSeconds?: number; sourceFactId?: string }> = timecodedBeats.length || scriptRows.length >= factRows.length
     ? scriptRows
     : factRows;
+  const sourceRows = normalizeStoryboardSourceRowsToRequestedCount(sourceRowsBeforeRequestedCount, draft);
   const scriptRhythmPlan = buildScriptMusicRhythmPlan({
     scriptText: draft.script,
     shotTexts: sourceRows.map((row) => row.text),
@@ -1150,20 +2168,27 @@ function buildStoryboardRowsFromSession(
     desiredTotalDurationSeconds: explicitTargetDurationSeconds(`${draft.script}\n${draft.style}`),
   });
 
-  return sourceRows.map((row, index) => makeStoryboardRow({
-    id: `storyboard_${safeDraftId(row.id)}_${index + 1}`,
-    index,
-    text: row.text,
-    title: row.title,
-    durationSeconds: row.durationSeconds,
-    characterLabels,
-    sceneLabels,
-    propLabels,
-    audioUsage,
-    scriptRhythmSegment: scriptRhythmPlan.segments[index],
-    sourceFactId: row.sourceFactId,
-    styleResearchPreflight,
-  }));
+  const storyboardRows: NewVideoStoryboardShot[] = [];
+  let previousScene = "";
+  sourceRows.forEach((row, index) => {
+    const storyboardRow = makeStoryboardRow({
+      id: `storyboard_${safeDraftId(row.id)}_${index + 1}`,
+      index,
+      text: row.text,
+      title: row.title,
+      durationSeconds: row.durationSeconds,
+      characterLabels,
+      sceneLabels: previousScene ? [previousScene, ...sceneLabels] : sceneLabels,
+      propLabels,
+      audioUsage,
+      scriptRhythmSegment: scriptRhythmPlan.segments[index],
+      sourceFactId: row.sourceFactId,
+      styleResearchPreflight,
+    });
+    storyboardRows.push(storyboardRow);
+    if (!/^(待确认|待补|待补充|无|-)$/.test(storyboardRow.scene)) previousScene = storyboardRow.scene;
+  });
+  return storyboardRows;
 }
 
 function storyboardRowsToAiSeedRows(rows: NewVideoStoryboardShot[]): DirectorAiStoryboardSeedRow[] {
@@ -1225,14 +2250,30 @@ function aiShotToStoryboardRow(
     shot.camera,
     shot.scene,
     shot.characters,
+    shot.props,
+    fallback.title,
+    fallback.visualDescription,
+    fallback.primaryAction,
+    fallback.actionTrigger,
+    fallback.microReaction,
+    fallback.camera,
+    fallback.scene,
+    fallback.characters,
+    fallback.props,
   ].map(cleanText).filter(Boolean).join(" ");
+  const fallbackCharacterLabels = splitVisibleReferenceLabels(fallback.characters).filter(plausibleCharacterLabel);
   const cleanedCharacterLabels = removeDriverlessCharacterLabels(
-    splitVisibleReferenceLabels(shot.characters),
+    splitVisibleReferenceLabels(shot.characters).filter(plausibleCharacterLabel),
     shotContext,
   );
-  const contextCharacterLabels = charactersFromShotText(shotContext, splitVisibleReferenceLabels(fallback.characters));
+  const contextCharacterLabels = charactersFromShotText(shotContext, fallbackCharacterLabels);
   const characters = cleanedCharacterLabels.join("、")
     || (hasDriverlessCue(shotContext) ? "无" : contextCharacterLabels.join("、") || fallback.characters);
+  const cleanedPropLabels = splitVisibleReferenceLabels(shot.props);
+  const contextPropLabels = propsFromShotText(shotContext, splitVisibleReferenceLabels(fallback.props));
+  const mergedPropLabels = Array.from(new Set([...cleanedPropLabels, ...contextPropLabels]));
+  const props = mergedPropLabels.join("、")
+    || fallback.props;
   const scene = mergeContextualScene(
     shot.scene,
     fallbackRows[index - 1]?.scene || fallback.scene,
@@ -1260,7 +2301,7 @@ function aiShotToStoryboardRow(
     title: cleanText(shot.title) || fallback.title,
     characters,
     scene,
-    props: cleanText(shot.props) || fallback.props,
+    props,
     audioUsage: cleanText(shot.audioUsage) || fallback.audioUsage,
     rhythmProfile: shot.rhythmProfile,
     rhythmReason: cleanText(shot.rhythmReason) || fallback.rhythmReason,
@@ -1616,6 +2657,21 @@ function workspaceWithStoryboardTable(
   };
 }
 
+const draftConfirmTimeoutMs = 30_000;
+const storyboardPlanningLocalReleaseMs = 8_000;
+
+function withDraftConfirmTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error("保存位置准备超时。请先选择保存位置，再确认这版故事。"));
+    }, draftConfirmTimeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
 export function NewVideoStart({
   shots,
   projectDraftKey,
@@ -1692,6 +2748,7 @@ export function NewVideoStart({
   const [storyboardRows, setStoryboardRows] = useState<NewVideoStoryboardShot[]>([]);
   const [storyboardBaselineRows, setStoryboardBaselineRows] = useState<NewVideoStoryboardShot[]>([]);
   const [selectedStoryboardRowId, setSelectedStoryboardRowId] = useState("");
+  const selectedStoryboardShotNoRef = useRef("");
   const [selectedMaterialId, setSelectedMaterialId] = useState("");
   const [expandedStoryboardRowIds, setExpandedStoryboardRowIds] = useState<Set<string>>(() => new Set());
   const [discussionDetailsOpen, setDiscussionDetailsOpen] = useState(false);
@@ -1707,6 +2764,11 @@ export function NewVideoStart({
   const [storyboardPlanningMessage, setStoryboardPlanningMessage] = useState("");
   const [storyboardPlanningStartedAt, setStoryboardPlanningStartedAt] = useState<number | undefined>();
   const [storyboardPlanningElapsedSeconds, setStoryboardPlanningElapsedSeconds] = useState(0);
+  const storyboardPlanningStatusRef = useRef(storyboardPlanningStatus);
+  const storyboardAiPlanRunIdRef = useRef(0);
+  const confirmedRef = useRef(confirmed);
+  storyboardPlanningStatusRef.current = storyboardPlanningStatus;
+  confirmedRef.current = confirmed;
   const [submittedDraft, setSubmittedDraft] = useState<NewVideoStartDraft | undefined>();
   const [styleResearchResult, setStyleResearchResult] = useState<AgentWebSearchResult | undefined>();
   const [styleResearchStatus, setStyleResearchStatus] = useState<"idle" | "running" | "ready" | "blocked">("idle");
@@ -1792,6 +2854,7 @@ export function NewVideoStart({
           ? `正在整理故事、节奏和镜头。已等待 ${storyboardPlanningElapsedSeconds} 秒。`
           : "正在整理故事、节奏和镜头，不会生成。",
         nextAction: "等草案出来后复核",
+        draftShotCount: storyboardRows.length,
         draftReferenceCount,
         agentSelectionContext,
       };
@@ -1832,9 +2895,9 @@ export function NewVideoStart({
     }
     return {
       status: "empty",
-      title: "准备开始",
-      detail: "还没有故事想法或素材。",
-      nextAction: "写一句想法，或拖入脚本/图片/声音参考",
+      title: "等待第一条想法",
+      detail: "可以从故事、脚本或素材开始。",
+      nextAction: "AI 会先整理故事和镜头",
     };
   }, [
     agentSelectionContext,
@@ -1858,7 +2921,17 @@ export function NewVideoStart({
   }, [videoPermissionContract]);
   useEffect(() => {
     const rowIds = new Set(storyboardRows.map((row) => row.id));
-    setSelectedStoryboardRowId((current) => current && rowIds.has(current) ? current : "");
+    setSelectedStoryboardRowId((current) => {
+      if (!current) return "";
+      if (rowIds.has(current)) return current;
+      const selectedShotNo = selectedStoryboardShotNoRef.current;
+      const replacement = selectedShotNo
+        ? storyboardRows.find((row) => row.shotNo === selectedShotNo)?.id || ""
+        : "";
+      if (replacement) return replacement;
+      selectedStoryboardShotNoRef.current = "";
+      return "";
+    });
     setExpandedStoryboardRowIds((current) => {
       let changed = false;
       const next = new Set<string>();
@@ -1880,7 +2953,7 @@ export function NewVideoStart({
     setSelectedMaterialId((current) => current && materialIds.has(current) ? current : "");
   }, [audio, references]);
   const activeVideoPermissionContract = localVideoPermissionContract;
-  const draft = useMemo(
+  const draft = useMemo<NewVideoStartDraft>(
     () => ({
       script,
       style,
@@ -1888,10 +2961,85 @@ export function NewVideoStart({
       audio,
       audioRole,
       agentBoundaryMode: activeVideoPermissionContract.mode,
+      projectTargetMode: agentIntakeCommand?.projectTargetMode,
     }),
-    [activeVideoPermissionContract.mode, audio, audioRole, references, script, style],
+    [activeVideoPermissionContract.mode, agentIntakeCommand?.projectTargetMode, audio, audioRole, references, script, style],
   );
   const activeDraft = submittedDraft || draft;
+  type DraftConfirmationState = {
+    draft: NewVideoStartDraft;
+    projection: IntakeStagedPlanProjection;
+    directorSession: ReturnType<typeof buildDirectorSessionFromIntake>;
+    styleResearchPreflight?: StyleResearchPreflight;
+    discussionWorkspace?: StoryDiscussionWorkspace;
+    storyboardRows: NewVideoStoryboardShot[];
+    storyboardBaselineRows: NewVideoStoryboardShot[];
+  };
+  function buildDraftConfirmationState(draftToConfirm: NewVideoStartDraft): DraftConfirmationState {
+    const planningDraft = draftForPlanning(draftToConfirm);
+    const intakeDraft = buildIntakeDraftFromNewVideoDraft(planningDraft);
+    const nextProjection = buildIntakeStagedPlanProjection(intakeDraft);
+    const nextSession = buildDirectorSessionFromIntake({ draft: intakeDraft, projection: nextProjection });
+    const nextStyleResearchPreflight = buildCurrentStyleResearchPreflight({ draftOverride: planningDraft });
+    const nextRows = buildStoryboardRowsFromSession(nextSession, planningDraft, nextStyleResearchPreflight);
+    return {
+      draft: planningDraft,
+      projection: nextProjection,
+      directorSession: nextSession,
+      styleResearchPreflight: nextStyleResearchPreflight,
+      discussionWorkspace: buildStoryDiscussionWorkspace({ session: nextSession }),
+      storyboardRows: nextRows,
+      storyboardBaselineRows: nextRows,
+    };
+  }
+  function timelineDetailText(entry: VibeAgentTimelineEntry | undefined, key: string) {
+    const value = entry?.details?.[key];
+    return typeof value === "string" ? cleanText(value) : "";
+  }
+  function restoredDraftScriptFromTimelineEntry(entry: VibeAgentTimelineEntry | undefined) {
+    return timelineDetailText(entry, "draftScript") || cleanText(entry?.body || "");
+  }
+  function restoredDraftScriptIsConfirmable(scriptText: string) {
+    if (!scriptText) return false;
+    if (isDraftConfirmationIntent(scriptText)) return false;
+    if (shouldHandleNewVideoStatusIntent(scriptText)) return false;
+    if (isDirectorAgentPermissionControlOnlyIntent(scriptText)) return false;
+    return true;
+  }
+  function restoredReadyDraftConfirmationState() {
+    const intakeEntries = (restoredAgentTimelineEntries || []).filter(isVibeAgentIntakeTimelineEntry);
+    const latestConfirmation = [...intakeEntries].reverse().find((entry) => (
+      entry.type === "confirmation_request"
+      && entry.status === "waiting"
+      && entry.details?.intakePhase === "planning_ready"
+    ));
+    if (!latestConfirmation) return undefined;
+    const confirmedAfter = intakeEntries.some((entry) => (
+      entry.details?.intakePhase === "draft_confirmed"
+      && entry.createdAt >= latestConfirmation.createdAt
+    ));
+    if (confirmedAfter) return undefined;
+    const userEntry = [...intakeEntries].reverse().find((entry) => (
+      entry.type === "user_message"
+      && entry.createdAt <= latestConfirmation.createdAt
+    ));
+    const restoredScript = timelineDetailText(latestConfirmation, "draftScript")
+      || restoredDraftScriptFromTimelineEntry(userEntry);
+    if (!restoredDraftScriptIsConfirmable(restoredScript)) return undefined;
+    const restoredStyle = timelineDetailText(latestConfirmation, "draftStyle")
+      || timelineDetailText(userEntry, "draftStyle");
+    const restoredTargetMode = timelineDetailText(latestConfirmation, "projectTargetMode")
+      || timelineDetailText(userEntry, "projectTargetMode");
+    return buildDraftConfirmationState({
+      script: restoredScript,
+      style: restoredStyle,
+      references,
+      audio,
+      audioRole,
+      agentBoundaryMode: activeVideoPermissionContract.mode,
+      projectTargetMode: restoredTargetMode === "new_project" ? "new_project" : "current_project",
+    });
+  }
   useEffect(() => {
     if (storyboardPlanningStatus !== "running" || !storyboardPlanningStartedAt) {
       setStoryboardPlanningElapsedSeconds(0);
@@ -1925,6 +3073,7 @@ export function NewVideoStart({
 
   function selectStoryboardRow(row: NewVideoStoryboardShot) {
     setSelectedStoryboardRowId(row.id);
+    selectedStoryboardShotNoRef.current = row.shotNo || "";
     setSelectedMaterialId("");
     const shotLabel = row.shotNo || row.id || "当前镜头";
     const title = row.title || row.primaryAction || "这一段草案";
@@ -1960,6 +3109,7 @@ export function NewVideoStart({
   function selectReferenceMaterial(reference: NewVideoReferenceFile) {
     setSelectedMaterialId(reference.id);
     setSelectedStoryboardRowId("");
+    selectedStoryboardShotNoRef.current = "";
     const materialLabel = reference.file.name || "这个素材";
     const purpose = referenceBindingPurposeLabels[reference.binding.purpose] || referenceTypeLabels[reference.type];
     const agentSelectionContext: NewVideoStartAgentSelectionContext = {
@@ -1995,6 +3145,7 @@ export function NewVideoStart({
     if (!audio) return;
     setSelectedMaterialId("audio_reference");
     setSelectedStoryboardRowId("");
+    selectedStoryboardShotNoRef.current = "";
     const agentSelectionContext: NewVideoStartAgentSelectionContext = {
       title: "当前声音",
       hint: `已选中 ${audio.name}。直接说这个声音怎么改。`,
@@ -2043,6 +3194,9 @@ export function NewVideoStart({
   useEffect(() => {
     if (!composerResetKey || composerResetKeyRef.current === composerResetKey) return;
     composerResetKeyRef.current = composerResetKey;
+    composerStorageKeyRef.current = composerStorageKey;
+    storyboardAiPlanRunIdRef.current += 1;
+    clearAllStoredNewVideoComposerDrafts();
     clearStoredNewVideoComposerDraft(composerStorageKey);
     setScript("");
     setStyle("");
@@ -2059,14 +3213,24 @@ export function NewVideoStart({
     setDiscussionFeedback("");
     setStoryboardRows([]);
     setStoryboardBaselineRows([]);
+    setSelectedStoryboardRowId("");
+    setSelectedMaterialId("");
+    setExpandedStoryboardRowIds(new Set());
     setStoryboardPlanningSource("none");
     setStoryboardPlanningStatus("idle");
+    setStoryboardPlanningStartedAt(undefined);
+    setStoryboardPlanningElapsedSeconds(0);
     setStoryboardPlanningMessage("");
     setStyleResearchResult(undefined);
     setStyleResearchStatus("idle");
     setStyleReferenceStatus("idle");
     setNewVideoAgentTimelineEntries([]);
+    setDiscussionDetailsOpen(false);
+    setPlanDetailsOpen(false);
+    setEmptyProjectAgentNotice(undefined);
     setConfirmed(false);
+    setConfirmPending(false);
+    setConfirmError("");
     onDraftChange?.({
       script: "",
       style: "",
@@ -2331,6 +3495,10 @@ export function NewVideoStart({
     const nextSession = buildDirectorSessionFromIntake({ draft: intakeDraft, projection: nextProjection });
     const nextStyleResearchPreflight = buildCurrentStyleResearchPreflight({ draftOverride: planningDraft });
     const localStoryboardRows = buildStoryboardRowsFromSession(nextSession, planningDraft, nextStyleResearchPreflight);
+    const localStoryboardSignature = storyboardSignature(localStoryboardRows);
+    const requestedDraftShotCount = explicitShotCount(`${draftToSubmit.script}\n${draftToSubmit.style}`);
+    const planRunId = storyboardAiPlanRunIdRef.current + 1;
+    storyboardAiPlanRunIdRef.current = planRunId;
     setSubmittedDraft(planningDraft);
     setScript("");
     setScriptFileName("");
@@ -2350,10 +3518,16 @@ export function NewVideoStart({
     setConfirmed(false);
     setConfirmError("");
     const timelineCreatedAt = new Date().toISOString();
+    const draftTimelineDetails = {
+      draftScript: draftToSubmit.script,
+      draftStyle: draftToSubmit.style,
+      projectTargetMode: draftToSubmit.projectTargetMode,
+    };
     rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
       createdAt: timelineCreatedAt,
       phase: "planning_started",
       userMessage: userMessageFromNewVideoDraft(draftToSubmit),
+      ...draftTimelineDetails,
       materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
       imageCount: planningDraft.references.length,
       audioCount: planningDraft.audio ? 1 : 0,
@@ -2364,6 +3538,33 @@ export function NewVideoStart({
     window.setTimeout(() => {
       planRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
+    window.setTimeout(() => {
+      if (storyboardAiPlanRunIdRef.current !== planRunId) return;
+      if (storyboardPlanningStatusRef.current !== "running") return;
+      if (storyboardPlanningSourceRef.current !== "local_structure") return;
+      const fallbackRows = storyboardRowsRef.current.length ? storyboardRowsRef.current : localStoryboardRows;
+      if (!fallbackRows.length) return;
+      if (!storyboardRowsRef.current.length) {
+        setStoryboardRows(localStoryboardRows);
+        setStoryboardBaselineRows(localStoryboardRows);
+      }
+      setStoryboardPlanningStatus("fallback");
+      setStoryboardPlanningStartedAt(undefined);
+      setStoryboardPlanningMessage("已先整理成本地草案，可以先确认或继续修改；AI 优化如果完成会自动更新。");
+      rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
+        createdAt: timelineCreatedAt,
+        phase: "planning_ready",
+        userMessage: userMessageFromNewVideoDraft(draftToSubmit),
+        ...draftTimelineDetails,
+        materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
+        imageCount: planningDraft.references.length,
+        audioCount: planningDraft.audio ? 1 : 0,
+        shotCount: fallbackRows.length,
+        permissionMode: vibePermissionModeFromAgentVideoMode(draftToSubmit.agentBoundaryMode),
+        assistantBody: `我先拆出一版本地草案：${fallbackRows.length || "若干"} 个镜头。你可以先确认或继续修改；AI 优化如果完成，我会自动更新这版草案。`,
+        assistantNext: "可以确认这版故事，也可以直接说哪里要改。",
+      }));
+    }, storyboardPlanningLocalReleaseMs);
     try {
       const aiPlan = await requestDirectorAiStoryboardPlan({
         scriptText: planningDraft.script,
@@ -2371,18 +3572,23 @@ export function NewVideoStart({
         userPreference: [
           "请真正按导演逻辑拆分，不要机械沿用本地结构行。",
           agentBoundaryInstruction(draftToSubmit.agentBoundaryMode),
-          explicitShotCount(`${draftToSubmit.script}\n${draftToSubmit.style}`)
-            ? `用户明确要求 ${explicitShotCount(`${draftToSubmit.script}\n${draftToSubmit.style}`)} 个镜头，AI 输出的 shots 数组必须保持这个数量。`
+          requestedDraftShotCount
+            ? `用户明确要求 ${requestedDraftShotCount} 个镜头，AI 输出的 shots 数组必须保持这个数量。`
             : "",
           planningDraft.audio ? "用户放入了声音参考，请把它视为角色声线/语气参考，不要当作配乐、BGM 或节奏音乐。" : "",
         ].filter(Boolean).join("\n"),
         targetDurationSeconds: explicitTargetDurationSeconds(`${draftToSubmit.script}\n${draftToSubmit.style}`)
           || localStoryboardRows.reduce((sum, row) => sum + (Number.parseFloat(row.duration) || 0), 0)
           || undefined,
+        requestedShotCount: requestedDraftShotCount,
         structuralRows: storyboardRowsToAiSeedRows(localStoryboardRows),
       }, {
         timeoutMs: 150_000,
       });
+      if (storyboardAiPlanRunIdRef.current !== planRunId) return;
+      if (confirmedRef.current) return;
+      if (storyboardPlanningSourceRef.current !== "local_structure") return;
+      if (storyboardSignature(storyboardRowsRef.current) !== localStoryboardSignature) return;
       const aiRows = buildStoryboardRowsFromAiPlan(aiPlan, localStoryboardRows);
       setStoryboardRows(aiRows);
       setStoryboardBaselineRows(aiRows);
@@ -2394,6 +3600,7 @@ export function NewVideoStart({
         createdAt: timelineCreatedAt,
         phase: "planning_ready",
         userMessage: userMessageFromNewVideoDraft(draftToSubmit),
+        ...draftTimelineDetails,
         materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
         imageCount: planningDraft.references.length,
         audioCount: planningDraft.audio ? 1 : 0,
@@ -2402,6 +3609,10 @@ export function NewVideoStart({
         assistantBody: `我拆好了一个草案：${aiRows.length || "若干"} 个镜头，并为每段判断了故事板或全能参考策略。确认前不会写入项目，也不会生成参考或视频。`,
       }));
     } catch (error) {
+      if (storyboardAiPlanRunIdRef.current !== planRunId) return;
+      if (confirmedRef.current) return;
+      if (storyboardPlanningSourceRef.current !== "local_structure") return;
+      if (storyboardSignature(storyboardRowsRef.current) !== localStoryboardSignature) return;
       setStoryboardPlanningSource("local_structure");
       setStoryboardPlanningStatus("fallback");
       setStoryboardPlanningStartedAt(undefined);
@@ -2413,12 +3624,26 @@ export function NewVideoStart({
         createdAt: timelineCreatedAt,
         phase: "planning_blocked",
         userMessage: userMessageFromNewVideoDraft(draftToSubmit),
+        ...draftTimelineDetails,
         materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
         imageCount: planningDraft.references.length,
         audioCount: planningDraft.audio ? 1 : 0,
         shotCount: localStoryboardRows.length,
         permissionMode: vibePermissionModeFromAgentVideoMode(draftToSubmit.agentBoundaryMode),
         assistantBody: fallbackMessage,
+      }));
+      rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
+        createdAt: timelineCreatedAt,
+        phase: "planning_ready",
+        userMessage: userMessageFromNewVideoDraft(draftToSubmit),
+        ...draftTimelineDetails,
+        materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
+        imageCount: planningDraft.references.length,
+        audioCount: planningDraft.audio ? 1 : 0,
+        shotCount: localStoryboardRows.length,
+        permissionMode: vibePermissionModeFromAgentVideoMode(draftToSubmit.agentBoundaryMode),
+        assistantBody: fallbackMessage,
+        assistantNext: "可以先确认这版故事，也可以直接说哪里要改。",
       }));
     }
   }
@@ -2481,7 +3706,7 @@ export function NewVideoStart({
   }
 
   async function sendDiscussionFeedback(feedbackOverride?: string) {
-    const feedbackText = (feedbackOverride ?? discussionFeedback).trim();
+    const feedbackText = stripDraftRevisionPromptPrefix(feedbackOverride ?? discussionFeedback);
     if (!discussionWorkspace || !feedbackText) return;
     if (storyboardPlanningStatus === "running") return;
     const stagedWorkspace = stageStoryDiscussionTurn({
@@ -2492,24 +3717,143 @@ export function NewVideoStart({
     setDiscussionWorkspace(stagedWorkspace);
     if (!feedbackOverride) setDiscussionFeedback("");
     const planningDraft = draftForPlanning(activeDraft);
+    const requestedFeedbackShotCount = explicitShotCount(feedbackText);
+    const currentFeedbackScript = currentDraftScriptForFeedback(planningDraft, storyboardRows);
+    const selectedFeedbackStoryboardRowId = selectedStoryboardRowId;
+    const targetedFeedbackStoryboardRows = (!requestedFeedbackShotCount || requestedFeedbackShotCount === storyboardRows.length)
+      ? applyTargetedShotRevisionRows(storyboardRows, feedbackText, selectedFeedbackStoryboardRowId)
+      : undefined;
+    const targetedFeedbackSummary = targetedFeedbackStoryboardRows
+      ? targetedShotRevisionSummary(storyboardRows, feedbackText, selectedFeedbackStoryboardRowId)
+      : undefined;
+    const shotCountFeedbackSummary = targetedFeedbackSummary
+      ? undefined
+      : shotCountRevisionSummary(requestedFeedbackShotCount);
+    const explicitFeedbackStoryboardRows = targetedFeedbackStoryboardRows ? undefined : requestedFeedbackShotCount
+      ? applyExplicitShotCountFeedbackRows(storyboardRows, feedbackText, currentFeedbackScript)
+      : undefined;
+    const feedbackHasLocalStoryboardIntent = Boolean(
+      explicitFeedbackStoryboardRows
+      || targetedFeedbackStoryboardRows
+      || requestedFeedbackShotCount
+      || enumeratedShotSegments(feedbackText).length > 1
+    );
+    const feedbackLocalStoryboardRows = feedbackHasLocalStoryboardIntent ? (() => {
+      if (targetedFeedbackStoryboardRows) return targetedFeedbackStoryboardRows;
+      if (explicitFeedbackStoryboardRows) return explicitFeedbackStoryboardRows;
+      const preserveCurrentDraftScript = feedbackShouldPreserveCurrentDraftScript(feedbackText);
+      const feedbackScript = preserveCurrentDraftScript
+        ? stripShotCountPlanningInstructions(currentFeedbackScript) || currentFeedbackScript || feedbackText
+        : feedbackText;
+      const baseFeedbackStyle = stripShotCountPlanningInstructions(planningDraft.style);
+      const feedbackPlanningDraft: NewVideoStartDraft = {
+        ...planningDraft,
+        script: feedbackScript,
+        style: [
+          preserveCurrentDraftScript ? `修改要求：${feedbackText}` : baseFeedbackStyle,
+          preserveCurrentDraftScript ? baseFeedbackStyle : planningDraft.script ? `原始故事：${planningDraft.script}` : "",
+        ].filter(Boolean).join("\n"),
+      };
+      const feedbackIntakeDraft = buildIntakeDraftFromNewVideoDraft(feedbackPlanningDraft);
+      const feedbackProjection = buildIntakeStagedPlanProjection(feedbackIntakeDraft);
+      const feedbackSession = buildDirectorSessionFromIntake({
+        draft: feedbackIntakeDraft,
+        projection: feedbackProjection,
+      });
+      const feedbackStylePreflight = buildCurrentStyleResearchPreflight({ draftOverride: feedbackPlanningDraft });
+      return buildStoryboardRowsFromSession(feedbackSession, feedbackPlanningDraft, feedbackStylePreflight);
+    })() : [];
+    const rowsForFeedbackPlanning = feedbackLocalStoryboardRows.length ? feedbackLocalStoryboardRows : storyboardRows;
+    const feedbackLocalStoryboardSignature = storyboardSignature(rowsForFeedbackPlanning);
+    const feedbackPlanRunId = storyboardAiPlanRunIdRef.current + 1;
+    const localFeedbackReadyMessage = feedbackLocalStoryboardRows.length
+      ? targetedFeedbackSummary
+        ? `${targetedFeedbackSummary.doneLabel}；当前草案可以确认或继续修改。`
+        : shotCountFeedbackSummary
+          ? `${shotCountFeedbackSummary.doneLabel}；当前草案可以确认或继续修改。`
+        : `已按你的要求整理成 ${feedbackLocalStoryboardRows.length} 个镜头；当前草案可以确认或继续修改。`
+      : "";
+    if (feedbackLocalStoryboardRows.length) {
+      setStoryboardRows(feedbackLocalStoryboardRows);
+      setStoryboardBaselineRows(feedbackLocalStoryboardRows);
+      setStoryboardPlanningSource("local_structure");
+    }
     setStoryboardPlanningStatus("running");
+    storyboardAiPlanRunIdRef.current = feedbackPlanRunId;
     setStoryboardPlanningStartedAt(Date.now());
     setStoryboardPlanningElapsedSeconds(0);
-    setStoryboardPlanningMessage("正在按你的反馈重排分镜。");
+    setStoryboardPlanningMessage(feedbackLocalStoryboardRows.length
+      ? "已先按你的反馈重排成本地草案，正在让 AI 导演继续优化。"
+      : "正在按你的反馈重排分镜。");
     const feedbackTimelineCreatedAt = new Date().toISOString();
+    const feedbackTimelineDetails = {
+      draftScript: currentDraftScriptForFeedback(planningDraft, rowsForFeedbackPlanning) || planningDraft.script || feedbackText,
+      draftStyle: planningDraft.style,
+      projectTargetMode: planningDraft.projectTargetMode,
+    };
     rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
       createdAt: feedbackTimelineCreatedAt,
       phase: "planning_started",
       userMessage: feedbackText,
+      ...feedbackTimelineDetails,
       materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
       imageCount: planningDraft.references.length,
       audioCount: planningDraft.audio ? 1 : 0,
-      shotCount: storyboardRows.length,
+      shotCount: rowsForFeedbackPlanning.length,
       permissionMode: vibePermissionModeFromAgentVideoMode(activeDraft.agentBoundaryMode),
-      understandingBody: "你想按这条修改意见重排当前草案。我会基于现有镜头调整，不会当成一个全新的项目想法。",
-      assistantBody: "我会按这条反馈更新当前草案。这里只改分镜规划，不会生成参考图，也不会发送视频。",
+      understandingBody: targetedFeedbackSummary?.intentBody
+        || shotCountFeedbackSummary?.intentBody
+        || "你想按这条修改意见重排当前草案。我会基于现有镜头调整，不会当成一个全新的项目想法。",
+      assistantBody: targetedFeedbackSummary
+        ? `我会先更新${targetedFeedbackSummary.targetLabel}，不会生成参考图，也不会发送视频。`
+        : shotCountFeedbackSummary?.progressBody
+          || "我会按这条反馈更新当前草案。这里只改分镜规划，不会生成参考图，也不会发送视频。",
       assistantNext: "更新完成后你可以继续确认或再改。",
     }));
+    if (feedbackLocalStoryboardRows.length) {
+      window.setTimeout(() => {
+        if (storyboardAiPlanRunIdRef.current !== feedbackPlanRunId) return;
+        if (storyboardPlanningStatusRef.current !== "running") return;
+        if (storyboardPlanningSourceRef.current !== "local_structure") return;
+        const fallbackRows = storyboardRowsRef.current.length ? storyboardRowsRef.current : feedbackLocalStoryboardRows;
+        if (!fallbackRows.length) return;
+        if (!storyboardRowsRef.current.length) {
+          setStoryboardRows(feedbackLocalStoryboardRows);
+          setStoryboardBaselineRows(feedbackLocalStoryboardRows);
+        }
+        setStoryboardPlanningStatus("fallback");
+        setStoryboardPlanningStartedAt(undefined);
+        setStoryboardPlanningMessage(targetedFeedbackSummary
+          ? `${targetedFeedbackSummary.doneLabel}；可以确认或继续修改。`
+          : shotCountFeedbackSummary
+            ? `${shotCountFeedbackSummary.doneLabel}；可以确认或继续修改。`
+          : `已按你的要求整理成 ${fallbackRows.length} 个镜头；可以确认或继续修改。`);
+        setDiscussionWorkspace(confirmStoryDiscussionDeltas({
+          workspace: stagedWorkspace,
+          createdAt: feedbackTimelineCreatedAt,
+        }));
+        rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
+          createdAt: feedbackTimelineCreatedAt,
+          phase: "planning_ready",
+          userMessage: feedbackText,
+          ...feedbackTimelineDetails,
+          materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
+          imageCount: planningDraft.references.length,
+          audioCount: planningDraft.audio ? 1 : 0,
+          shotCount: fallbackRows.length,
+          permissionMode: vibePermissionModeFromAgentVideoMode(activeDraft.agentBoundaryMode),
+          understandingBody: targetedFeedbackSummary?.readyBody
+            || shotCountFeedbackSummary?.readyBody
+            || "你想按这条修改意见重排当前草案。我已经先按这个结构整理出可确认草案。",
+          assistantBody: targetedFeedbackSummary
+            ? `${targetedFeedbackSummary.doneLabel}。确认前不会写入项目，也不会生成参考或视频。`
+            : shotCountFeedbackSummary
+              ? `${shotCountFeedbackSummary.doneLabel}。确认前不会写入项目，也不会生成参考或视频。`
+            : `我已按你的要求整理成 ${fallbackRows.length} 个镜头。确认前不会写入项目，也不会生成参考或视频。`,
+          assistantNext: "可以确认这版故事，也可以继续说哪里要改。",
+        }));
+      }, storyboardPlanningLocalReleaseMs);
+    }
     try {
       const aiPlan = await requestDirectorAiStoryboardPlan({
         scriptText: planningDraft.script,
@@ -2521,13 +3865,25 @@ export function NewVideoStart({
           planningDraft.audio ? "用户放入了声音参考，请把它视为角色声线/语气参考，不要当作配乐、BGM 或节奏音乐。" : "",
         ].filter(Boolean).join("\n"),
         targetDurationSeconds: explicitTargetDurationSeconds(`${activeDraft.script}\n${activeDraft.style}`)
-          || storyboardRows.reduce((sum, row) => sum + (Number.parseFloat(row.duration) || 0), 0)
+          || rowsForFeedbackPlanning.reduce((sum, row) => sum + (Number.parseFloat(row.duration) || 0), 0)
           || undefined,
-        structuralRows: storyboardRowsToAiSeedRows(storyboardRows),
+        requestedShotCount: requestedFeedbackShotCount,
+        structuralRows: storyboardRowsToAiSeedRows(rowsForFeedbackPlanning),
       }, {
         timeoutMs: 150_000,
       });
-      const aiRows = buildStoryboardRowsFromAiPlan(aiPlan, storyboardRows);
+      if (storyboardAiPlanRunIdRef.current !== feedbackPlanRunId) return;
+      if (confirmedRef.current) return;
+      if (feedbackLocalStoryboardRows.length) {
+        if (storyboardPlanningSourceRef.current !== "local_structure") return;
+        if (storyboardSignature(storyboardRowsRef.current) !== feedbackLocalStoryboardSignature) return;
+      }
+	      const aiRows = applyTargetedFeedbackGuardsToAiRows(
+	        buildStoryboardRowsFromAiPlan(aiPlan, rowsForFeedbackPlanning),
+	        feedbackText,
+	        rowsForFeedbackPlanning,
+	        selectedFeedbackStoryboardRowId,
+	      );
       setStoryboardRows(aiRows);
       setStoryboardBaselineRows(aiRows);
       setStoryboardPlanningSource("ai_director");
@@ -2542,34 +3898,65 @@ export function NewVideoStart({
         createdAt: feedbackTimelineCreatedAt,
         phase: "planning_ready",
         userMessage: feedbackText,
+        ...feedbackTimelineDetails,
         materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
         imageCount: planningDraft.references.length,
         audioCount: planningDraft.audio ? 1 : 0,
         shotCount: aiRows.length,
         permissionMode: vibePermissionModeFromAgentVideoMode(activeDraft.agentBoundaryMode),
-        understandingBody: "你想按这条修改意见重排当前草案。我已经把它应用到新的分镜草案里。",
-        assistantBody: `我按反馈更新好了草案：现在是 ${aiRows.length || "若干"} 个镜头。确认前仍不会写入项目，也不会生成参考或视频。`,
+        understandingBody: targetedFeedbackSummary?.readyBody
+          || shotCountFeedbackSummary?.readyBody
+          || "你想按这条修改意见重排当前草案。我已经把它应用到新的分镜草案里。",
+        assistantBody: targetedFeedbackSummary
+          ? `${targetedFeedbackSummary.doneLabel}。确认前仍不会写入项目，也不会生成参考或视频。`
+          : shotCountFeedbackSummary
+            ? `我按你的要求重排好了草案：现在是 ${aiRows.length || requestedFeedbackShotCount || "若干"} 个镜头。确认前仍不会写入项目，也不会生成参考或视频。`
+          : `我按反馈更新好了草案：现在是 ${aiRows.length || "若干"} 个镜头。确认前仍不会写入项目，也不会生成参考或视频。`,
         assistantNext: "觉得可以就确认；想改就继续说。",
       }));
     } catch (error) {
+      if (storyboardAiPlanRunIdRef.current !== feedbackPlanRunId) return;
+      if (confirmedRef.current) return;
+      if (feedbackLocalStoryboardRows.length) {
+        if (storyboardPlanningSourceRef.current !== "local_structure") return;
+        if (storyboardSignature(storyboardRowsRef.current) !== feedbackLocalStoryboardSignature) return;
+      }
       setStoryboardPlanningStatus("ready");
       setStoryboardPlanningStartedAt(undefined);
       const failedMessage = error instanceof Error && /key|配置|API/i.test(error.message)
         ? "AI 修改还没跑起来：先保留你的反馈，配置好密钥后再试。"
         : "AI 修改这次没有完成，已先保留你的反馈。";
-      setStoryboardPlanningMessage(failedMessage);
+      setStoryboardPlanningMessage(feedbackLocalStoryboardRows.length
+        ? localFeedbackReadyMessage
+        : failedMessage);
+      if (feedbackLocalStoryboardRows.length) {
+        setDiscussionWorkspace(confirmStoryDiscussionDeltas({
+          workspace: stagedWorkspace,
+          createdAt: feedbackTimelineCreatedAt,
+        }));
+      }
       rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
         createdAt: feedbackTimelineCreatedAt,
-        phase: "planning_blocked",
+        phase: feedbackLocalStoryboardRows.length ? "planning_ready" : "planning_blocked",
         userMessage: feedbackText,
+        ...feedbackTimelineDetails,
         materialCount: planningDraft.references.length + (planningDraft.audio ? 1 : 0),
         imageCount: planningDraft.references.length,
         audioCount: planningDraft.audio ? 1 : 0,
-        shotCount: storyboardRows.length,
+        shotCount: rowsForFeedbackPlanning.length,
         permissionMode: vibePermissionModeFromAgentVideoMode(activeDraft.agentBoundaryMode),
-        understandingBody: "你想按这条修改意见重排当前草案。我先保留这条意见，等你重试或继续修改。",
-        assistantBody: failedMessage,
-        assistantNext: "你可以换个说法继续改，或先按当前草案确认。",
+        understandingBody: feedbackLocalStoryboardRows.length
+          ? targetedFeedbackSummary?.readyBody
+            || shotCountFeedbackSummary?.readyBody
+            || "你想按这条修改意见重排当前草案。我已经先把它应用到本地草案里。"
+          : shotCountFeedbackSummary?.intentBody
+            || "你想按这条修改意见重排当前草案。我先保留这条意见，等你重试或继续修改。",
+        assistantBody: feedbackLocalStoryboardRows.length
+          ? localFeedbackReadyMessage
+          : failedMessage,
+        assistantNext: feedbackLocalStoryboardRows.length
+          ? "可以确认这版故事，也可以继续说哪里要改。"
+          : "你可以换个说法继续改，或先按当前草案确认。",
       }));
     }
   }
@@ -2604,7 +3991,12 @@ export function NewVideoStart({
       if (projection && directorSession && !confirmed) {
         void confirmDraft();
       } else {
-        showNoReadyDraftNotice("确认这版故事");
+        const restoredState = restoredReadyDraftConfirmationState();
+        if (restoredState && !confirmed) {
+          void confirmDraft(restoredState);
+        } else {
+          showNoReadyDraftNotice("确认这版故事");
+        }
       }
       return;
     }
@@ -2710,10 +4102,10 @@ export function NewVideoStart({
       userText,
       title: "当前还没有故事流",
       body: localProjectReady
-        ? "项目文件夹已经准备好，但还没有正式故事。先写脚本或拖入脚本文件，我会整理成待确认草案。"
+        ? "保存位置已经准备好，但还没有正式故事。先写脚本或拖入脚本文件，我会整理成待确认草案。"
         : canCreateLocalProject
-          ? "还没有绑定项目文件夹。先写脚本或拖入脚本文件；我会先拆草案，确认时再选择项目文件夹。"
-          : "当前还没连接项目。先写脚本或拖入脚本文件，我会先整理成待确认内容；生成参考前请在桌面 App 选择项目。",
+          ? "还没有选择保存位置。先写脚本或拖入脚本文件；我会先拆草案，确认后再选择保存位置。"
+          : "当前还没选择保存位置。先写脚本或拖入脚本文件，我会先整理成待确认内容；生成参考前请在桌面 App 选择保存位置。",
       next: "下一步：放入脚本或一句故事想法。",
     });
     rememberNewVideoAgentTimeline(buildVibeAgentIntakeTimelineEntries({
@@ -2726,10 +4118,10 @@ export function NewVideoStart({
       shotCount: 0,
       permissionMode: vibePermissionModeFromAgentVideoMode(activeVideoPermissionContract.mode),
       assistantBody: localProjectReady
-        ? "项目文件夹已经准备好，但还没有正式故事。先写脚本或拖入脚本文件，我会整理成待确认草案。"
+        ? "保存位置已经准备好，但还没有正式故事。先写脚本或拖入脚本文件，我会整理成待确认草案。"
         : canCreateLocalProject
-          ? "还没有绑定项目文件夹。先写脚本或拖入脚本文件；我会先拆草案，确认时再选择项目文件夹。"
-          : "当前还没连接项目。先写脚本或拖入脚本文件，我会先整理成待确认内容；生成参考前请在桌面 App 选择项目。",
+          ? "还没有选择保存位置。先写脚本或拖入脚本文件；我会先拆草案，确认后再选择保存位置。"
+          : "当前还没选择保存位置。先写脚本或拖入脚本文件，我会先整理成待确认内容；生成参考前请在桌面 App 选择保存位置。",
       assistantNext: "下一步：放入脚本或一句故事想法。",
     }));
   }
@@ -2769,10 +4161,18 @@ export function NewVideoStart({
     }));
   }
 
-  async function confirmDraft() {
-    if (!projection || !directorSession || confirmPending || confirmed) return;
+  async function confirmDraft(override?: DraftConfirmationState) {
+    const confirmationProjection = override?.projection || projection;
+    const confirmationDirectorSession = override?.directorSession || directorSession;
+    const confirmationDraft = override?.draft || activeDraft;
+    const confirmationStyleResearchPreflight = override?.styleResearchPreflight || styleResearchPreflight;
+    const confirmationDiscussionWorkspace = override?.discussionWorkspace || discussionWorkspace;
+    const confirmationStoryboardRows = override?.storyboardRows || storyboardRows;
+    const confirmationStoryboardBaselineRows = override?.storyboardBaselineRows || storyboardBaselineRows;
+    if (!confirmationProjection || !confirmationDirectorSession || confirmPending || confirmed) return;
+    storyboardAiPlanRunIdRef.current += 1;
     if (isDraftConfirmationIntent(discussionFeedback)) setDiscussionFeedback("");
-    if (discussionWorkspace?.stagedDeltas.some((delta) => delta.status === "staged")) {
+    if (confirmationDiscussionWorkspace?.stagedDeltas.some((delta) => delta.status === "staged")) {
       setConfirmError("先确认待修改。");
       return;
     }
@@ -2782,15 +4182,34 @@ export function NewVideoStart({
     }
     setConfirmPending(true);
     setConfirmError("");
+    if (override) {
+      setSubmittedDraft(confirmationDraft);
+      setProjection(confirmationProjection);
+      setDirectorSession(confirmationDirectorSession);
+      setStyleResearchPreflight(confirmationStyleResearchPreflight);
+      setDiscussionWorkspace(confirmationDiscussionWorkspace);
+      setStoryboardRows(confirmationStoryboardRows);
+      setStoryboardBaselineRows(confirmationStoryboardBaselineRows);
+      setStoryboardPlanningSource("local_structure");
+      setStoryboardPlanningStatus("ready");
+      setStoryboardPlanningStartedAt(undefined);
+      setStoryboardPlanningElapsedSeconds(0);
+      setStoryboardPlanningMessage("已从项目记录恢复待确认草案。");
+      setConfirmed(false);
+    }
     try {
-      const confirmationWorkspace = workspaceWithStoryboardTable(discussionWorkspace, storyboardRows, storyboardBaselineRows);
-      const accepted = await onDraftConfirmed(activeDraft, {
-        projection,
-        directorSession,
-        styleResearchPreflight,
+      const confirmationWorkspace = workspaceWithStoryboardTable(
+        confirmationDiscussionWorkspace,
+        confirmationStoryboardRows,
+        confirmationStoryboardBaselineRows,
+      );
+      const accepted = await withDraftConfirmTimeout(Promise.resolve(onDraftConfirmed(confirmationDraft, {
+        projection: confirmationProjection,
+        directorSession: confirmationDirectorSession,
+        styleResearchPreflight: confirmationStyleResearchPreflight,
         discussionWorkspace: confirmationWorkspace,
-        storyboardDraft: storyboardRows,
-      });
+        storyboardDraft: confirmationStoryboardRows,
+      })));
       if (accepted === false) return;
       clearStoredNewVideoComposerDraft(composerStorageKey);
       setConfirmed(true);
@@ -2798,11 +4217,11 @@ export function NewVideoStart({
         createdAt: new Date().toISOString(),
         phase: "draft_confirmed",
         userMessage: "确认草案",
-        materialCount: activeDraft.references.length + (activeDraft.audio ? 1 : 0),
-        imageCount: activeDraft.references.length,
-        audioCount: activeDraft.audio ? 1 : 0,
-        shotCount: storyboardRows.length,
-        permissionMode: vibePermissionModeFromAgentVideoMode(activeDraft.agentBoundaryMode),
+        materialCount: confirmationDraft.references.length + (confirmationDraft.audio ? 1 : 0),
+        imageCount: confirmationDraft.references.length,
+        audioCount: confirmationDraft.audio ? 1 : 0,
+        shotCount: confirmationStoryboardRows.length,
+        permissionMode: vibePermissionModeFromAgentVideoMode(confirmationDraft.agentBoundaryMode),
       }));
     } catch (error) {
       setConfirmError(error instanceof Error ? error.message : "保存失败，请再试一次。");
@@ -2925,11 +4344,11 @@ export function NewVideoStart({
   const localProjectLabel = storyboardPlanningStatus === "running"
     ? "正在整理"
     : localProjectReady
-      ? "项目文件夹已准备"
-      : localProjectBusy
-        ? "正在选择文件夹"
+      ? "保存位置已准备"
+    : localProjectBusy
+        ? "正在选择保存位置"
       : canCreateLocalProject
-        ? "确认时选文件夹"
+        ? "确认后选保存位置"
         : "先写想法";
   const storyboardPlanningLabel = storyboardPlanningStatus === "running"
     ? "AI 正在拆分"
@@ -2940,8 +4359,27 @@ export function NewVideoStart({
         : "镜头安排";
   const storyboardPlanningRunning = storyboardPlanningStatus === "running";
   const showStoryboardRows = storyboardRows.length > 0 && !storyboardPlanningRunning;
+  const storyboardCandidateAssets = useMemo(() => {
+    const visibleLabels = (values: string[]) => Array.from(new Set(values
+      .flatMap(splitVisibleReferenceLabels)
+      .filter((label) => !/^(待确认|待补|待补充|待填写|无|-)$/.test(label))))
+      .slice(0, 5);
+    return {
+      characters: visibleLabels(storyboardRows.map((row) => row.characters)),
+      scenes: visibleLabels(storyboardRows.map((row) => row.scene)),
+      props: visibleLabels(storyboardRows.map((row) => row.props)),
+    };
+  }, [storyboardRows]);
+  const hasStoryboardCandidateAssets = Boolean(
+    storyboardCandidateAssets.characters.length
+      || storyboardCandidateAssets.scenes.length
+      || storyboardCandidateAssets.props.length,
+  );
+  const pendingDraftOfficialStoryCopy = storyboardRows.length > 0
+    ? `还没有确认故事；确认后这 ${storyboardRows.length} 个镜头会成为正式故事。`
+    : "还没有确认故事；确认后会成为正式故事。";
   const storyboardPlanningDetail = storyboardPlanningMessage || (storyboardPlanningSource === "ai_director"
-    ? "AI 已整理好，确认后才会写入项目，左侧故事数也会随之更新。"
+    ? `AI 已整理好，${pendingDraftOfficialStoryCopy}`
     : storyboardPlanningSource === "local_structure"
       ? "这是本地初步识别，可继续让 AI 拆分。"
       : "");
@@ -2954,7 +4392,7 @@ export function NewVideoStart({
   const composerValue = composerIsFeedback ? discussionFeedback : script;
   const draftConfirmDisabled = requiredMissing || storyboardPlanningRunning || Boolean(pendingDiscussionDeltaCount) || confirmed || confirmPending || Boolean(localProjectBusy && !localProjectReady);
   const draftConfirmDisabledReason = localProjectBusy && !localProjectReady
-    ? "本地项目正在准备，稍等一下就能确认。"
+    ? "保存位置正在准备，稍等一下就能确认。"
     : storyboardPlanningRunning
       ? "AI 正在拆分镜头，等草案出来后再确认。"
     : requiredMissing
@@ -2988,7 +4426,7 @@ export function NewVideoStart({
       ? "继续改草案"
       : "写下你想拍什么";
   const composerConcreteActionLabel = composerConfirmsDraft
-    ? confirmed ? "已保存到项目" : confirmPending ? "正在保存到项目" : "确认这版故事"
+    ? confirmed ? "故事已确认" : confirmPending ? "正在确认故事" : "确认这版故事"
     : composerIsFeedback
       ? "发送修改意见"
       : "发送给 AI 导演";
@@ -3008,8 +4446,8 @@ export function NewVideoStart({
     ? composerDisabledReason
     : composerConfirmsDraft
       ? localProjectReady
-        ? "确认后会保存到项目，不会直接生成。"
-        : "确认前会先让你选择项目文件夹；不会生成参考或发送视频。"
+        ? "确认后会保存故事，不会直接生成。"
+        : "确认后会加入故事草案；不会生成参考或发送视频。"
       : composerIsFeedback
         ? "发送修改意见给 AI 导演。"
         : "先让 AI 导演拆故事、分镜和节奏，不会生成。";
@@ -3033,24 +4471,20 @@ export function NewVideoStart({
       : localProjectReady
         ? "拖入图片、声音或脚本；声音会用于角色声线，不会当作配乐。"
       : canCreateLocalProject
-          ? "拖入图片、声音或脚本；先拆草案，确认后再选择项目文件夹。"
-          : "拖入图片、声音或脚本；现在先整理想法，生成前再选择项目文件夹。";
-  const confirmedFlowTitle = activeVideoPermissionContract.mode === "plan_only"
-    ? "确认后只保存故事"
-    : activeVideoPermissionContract.mode === "reference_allowed"
-      ? "确认后先补参考"
-      : "确认后进入可提交视频";
-  const confirmedFlowDetail = activeVideoPermissionContract.mode === "plan_only"
-    ? "这一步只保存故事；补参考、发视频和导出都等你再说。"
-    : activeVideoPermissionContract.mode === "reference_allowed"
-      ? "这一步会先保存故事；参考会单独复核，不会发送视频。"
-      : "这一步先保存故事；参考通过后再按消息确认提交视频。";
+          ? "拖入图片、声音或脚本；先拆草案，确认后再选择保存位置。"
+          : "拖入图片、声音或脚本；现在先整理想法，生成前再选择保存位置。";
+  const confirmedFlowTitle = "确认后只保存故事";
+  const confirmedFlowDetail = activeVideoPermissionContract.mode === "reference_allowed"
+    ? "这一步只保存故事；之后你可以让 AI 补参考，视频仍要单独确认。"
+    : activeVideoPermissionContract.mode === "video_allowed"
+      ? "这一步只保存故事；参考和视频都要在后续消息里再确认。"
+      : "这一步只保存故事；补参考、发视频和导出都等你再说。";
   const planSummaryActionHint = storyboardPlanningStatus === "running"
     ? "草案出来后可确认"
     : confirmed
-      ? "已保存到项目"
-      : confirmPending
-        ? "正在保存到项目"
+      ? "故事已确认"
+    : confirmPending
+        ? "正在确认故事"
         : "确认这版故事";
   const agentReply = useMemo<NewVideoAgentReply | undefined>(() => {
     const shotCount = storyboardRows.length || entryStatus.draftShotCount || 0;
@@ -3137,7 +4571,7 @@ export function NewVideoStart({
         id: "tool-empty-inspect",
         role: "tool",
         title: "读取项目",
-        body: "我先看当前是否已经有故事流、项目文件夹和可继续的任务。",
+        body: "我先看当前是否已经有故事流、保存位置和可继续的任务。",
         facts: [
           { label: "动作", value: "查看项目" },
           { label: "生成", value: "不会生成" },
@@ -3215,9 +4649,9 @@ export function NewVideoStart({
         id: "confirmation-draft",
         role: "confirmation",
         title: "等待确认",
-        body: "确认后我只会把故事保存到项目；补参考、发视频和导出都等你再说。",
+        body: "确认后我只会保存这版故事；补参考、发视频和导出都等你再说。",
         facts: [
-          { label: "确认", value: "保存到项目" },
+          { label: "确认", value: "保存故事" },
           { label: "下一步", value: composerConcreteActionLabel },
         ],
         next: "可以点确认，也可以直接说要改哪里。",
@@ -3242,8 +4676,10 @@ export function NewVideoStart({
   );
   const visibleTimelineEntries = useMemo(() => {
     if (newVideoAgentTimelineEntries.length) return latestNewVideoAgentTimelineBatch(newVideoAgentTimelineEntries);
+    const restoredBatch = latestNewVideoAgentTimelineBatch(restoredNewVideoAgentTimelineEntries);
+    if (hasPendingReadyDraftTimeline(restoredBatch)) return restoredBatch;
     const hasActiveComposerState = hasDraft || Boolean(projection) || Boolean(submittedDraft) || Boolean(emptyProjectAgentNotice);
-    return hasActiveComposerState ? [] : latestNewVideoAgentTimelineBatch(restoredNewVideoAgentTimelineEntries);
+    return hasActiveComposerState ? [] : restoredBatch;
   }, [
     emptyProjectAgentNotice,
     hasDraft,
@@ -3342,7 +4778,7 @@ export function NewVideoStart({
           disabled={composerDisabled}
           aria-label={composerPrimaryAriaLabel}
           title={composerPrimaryTitle}
-          onClick={composerConfirmsDraft ? confirmDraft : submitComposer}
+          onClick={composerConfirmsDraft ? () => { void confirmDraft(); } : submitComposer}
         >
           {composerConfirmsDraft ? <CheckCircle2 size={15} aria-hidden="true" /> : <Sparkles size={15} aria-hidden="true" />}
           {composerPrimaryLabel}
@@ -3400,6 +4836,13 @@ export function NewVideoStart({
   const projectionTitleForDisplay = projection ? planSummaryTitleForDisplay(projection.summary.title, activeDraft.script) : "";
   const showInlineAgentThread = composerPlacement !== "draft_only" && displayAgentMessages.length > 0;
   const showMiddleDiscussionWorkspace = composerPlacement !== "draft_only" && Boolean(discussionWorkspace);
+  const showAgentEntryHint = !showComposerSurface
+    && !projection
+    && !submittedDraft
+    && storyboardRows.length === 0
+    && !hasDraft
+    && !discussionWorkspace;
+  const showNewVideoWorkspace = showComposerSurface || showAgentEntryHint;
 
   return (
     <details
@@ -3410,7 +4853,7 @@ export function NewVideoStart({
       <summary>
         <span>
           <strong>{isStartingProject ? "从新视频开始" : "新视频"}</strong>
-          <small>{hasDraft ? "内容已准备" : composerPlacement === "draft_only" ? "先和右侧 AI 导演说" : "脚本、素材和修改都放输入框"}</small>
+          <small>{hasDraft ? "内容已准备" : composerPlacement === "draft_only" ? "先整理故事，不生成" : "脚本、素材和修改都放输入框"}</small>
         </span>
         <Sparkles size={16} aria-hidden="true" />
       </summary>
@@ -3419,8 +4862,8 @@ export function NewVideoStart({
           <section className="new-video-start-guide" aria-label="开始方式">
             <div>
               <span>开始方式</span>
-              <strong>{composerPlacement === "draft_only" && !projection ? "在右侧和 AI 导演说" : hasDraft ? "发送后让 AI 导演拆镜头" : "把故事和素材放进输入框"}</strong>
-              <small>{localProjectLabel} · 这里只整理想法，确认前不会生成。</small>
+              <strong>{composerPlacement === "draft_only" && !projection ? "先整理故事和镜头" : hasDraft ? "发送后让 AI 导演拆镜头" : "把故事和素材放进输入框"}</strong>
+              <small>{localProjectLabel} · 确认前只整理故事，不会生成。</small>
             </div>
             <ol>
               <li>写想法</li>
@@ -3429,6 +4872,7 @@ export function NewVideoStart({
             </ol>
           </section>
         )}
+        {showNewVideoWorkspace && (
           <div
             className={`new-video-workspace new-video-codex-composer ${isDraggingFiles ? "is-dragging" : ""}`}
             aria-label="新视频工作区"
@@ -3437,14 +4881,15 @@ export function NewVideoStart({
             onDragLeave={(event) => handleWorkspaceDrag(event, false)}
             onDrop={handleWorkspaceDrop}
           >
-            {showComposerSurface ? composerSurface : (
+            {showComposerSurface ? composerSurface : showAgentEntryHint ? (
               <section className="new-video-agent-entry-hint" aria-label="右侧 Agent 入口">
-              <span>输入入口</span>
-              <strong>右侧和 AI 导演说</strong>
-                <p>把想法、脚本、图片或声音发给右侧 Agent。AI 会先整理故事和镜头，确认前不会生成。</p>
+              <span>工作方式</span>
+              <strong>右侧 Agent 已准备</strong>
+                <p>草案生成后，这里会展开镜头、素材候选和确认边界。</p>
               </section>
-            )}
-        </div>
+            ) : null}
+          </div>
+        )}
         {(references.length > 0 || audio) && (
           <details className="new-video-file-details">
             <summary>已添加素材</summary>
@@ -3552,7 +4997,7 @@ export function NewVideoStart({
                 <div className="new-video-next-flow" aria-label="草案状态">
                   <span>当前状态</span>
                   <strong>{storyboardPlanningRunning ? "正在整理镜头" : "待确认草案"}</strong>
-                  <small>{storyboardPlanningRunning ? "AI 还在整理镜头，完成后再确认。" : "还没有保存到项目；确认后左侧故事数才会更新。"}</small>
+                  <small>{storyboardPlanningRunning ? "AI 还在整理镜头，完成后再确认。" : pendingDraftOfficialStoryCopy}</small>
                 </div>
               )}
               <div className="new-video-next-flow" aria-label="确认后的流程">
@@ -3638,6 +5083,17 @@ export function NewVideoStart({
                   <strong>{storyboardPlanningRowsLabel(storyboardRows.length, storyboardPlanningRunning)}</strong>
                   {storyboardPlanningDetail && <small>{storyboardPlanningDetail}</small>}
                 </div>
+                {hasStoryboardCandidateAssets && (
+                  <div className="new-video-storyboard-assets" aria-label="素材候选">
+                    <span>素材候选</span>
+                    <div>
+                      {storyboardCandidateAssets.characters.length > 0 && <small><b>角色</b>{storyboardCandidateAssets.characters.join("、")}</small>}
+                      {storyboardCandidateAssets.scenes.length > 0 && <small><b>场景</b>{storyboardCandidateAssets.scenes.join("、")}</small>}
+                      {storyboardCandidateAssets.props.length > 0 && <small><b>道具</b>{storyboardCandidateAssets.props.join("、")}</small>}
+                    </div>
+                    <em>可在“更多镜头细节”里修改；确认前不会锁定参考。</em>
+                  </div>
+                )}
                 <div className="new-video-storyboard-list">
                   {storyboardRows.map((row, index) => (
                     <article
@@ -3951,7 +5407,7 @@ export function NewVideoStart({
                 <div className="new-video-plan-detail-body">
                   <div className="new-video-plan-status">
                     <small>{confirmed ? "已确认" : "待确认"}</small>
-                    <small>{requiredMissing ? "先补脚本，再确认。" : "确认后保存到项目，不会直接生成。"}</small>
+                    <small>{requiredMissing ? "先补脚本，再确认。" : "确认后保存故事，不会直接生成。"}</small>
                   </div>
                   <div className="new-video-plan-grid" aria-label="草案材料">
                     <small>{referenceTypeCounts.character} 个主角参考</small>

@@ -7,6 +7,7 @@ import {
 import {
   detectDirectorAgentPermissionIntent,
   isDirectorAgentPermissionControlOnlyIntent,
+  stripDirectorAgentPermissionControlPhrases,
 } from "../src/core/directorAgentPermissionIntent.ts";
 import type { ProjectRuntimeState } from "../src/core/projectState.ts";
 
@@ -95,6 +96,10 @@ const selectedSnapshot = buildDirectorAgentStateSnapshot({
   currentView: "story",
   selectedShotId: "S01",
 });
+const currentStorySnapshot = buildDirectorAgentStateSnapshot({
+  runtimeState,
+  currentView: "story",
+});
 
 assert(selectedSnapshot.projectTitle === "雨夜书店", "snapshot should carry project title");
 assert(selectedSnapshot.selectedShot?.title === "清晨旧书店", "snapshot should resolve selected shot");
@@ -108,6 +113,124 @@ assert(selectedSnapshot.projectReadiness.status === "needs_references", "snapsho
 assert(selectedSnapshot.projectReadiness.nextActionKind === "prepare_reference_generation", "missing references should make continue replenish references");
 assert(selectedSnapshot.projectReadiness.actionQueue[0]?.kind === "prepare_reference_generation", "Agent readiness should expose a concrete next action queue");
 assert(selectedSnapshot.projectReadiness.actionQueue.some((action) => action.kind === "prepare_video_submit" && action.priority === "later"), "Agent readiness should keep later video submit visible without skipping references");
+
+const textOnlyStyleRuntimeState = {
+  ...runtimeState,
+  visualMemory: {
+    assets: [
+      {
+        id: "asset_style_text_only",
+        type: "style",
+        name: "文字风格方向",
+        path: "",
+        status: "planned",
+        lockedStatus: "candidate",
+        safeForFutureReference: false,
+        issues: [],
+        textConstraints: ["项目视觉风格：雨夜霓虹反光"],
+        sourceRefs: ["new_video_reference:style:text"],
+      },
+    ],
+  },
+} as unknown as ProjectRuntimeState;
+const textOnlyStyleSnapshot = buildDirectorAgentStateSnapshot({
+  runtimeState: textOnlyStyleRuntimeState,
+  currentView: "story",
+  selectedShotId: "S01",
+});
+assert(textOnlyStyleSnapshot.assetCounts.candidate === 0, "text-only style placeholders must not count as reviewable visual references");
+assert(textOnlyStyleSnapshot.assetCounts.missing === 2, "text-only style placeholders must leave shot references missing");
+assert(textOnlyStyleSnapshot.projectReadiness.status === "needs_references", "text-only style placeholders must not make the project video-ready");
+const textOnlyStyleReferencePlan = buildDirectorAgentActionEnvelope({
+  userIntent: "先不要生成参考图，只告诉我会补哪些参考，以及为什么需要这些参考。",
+  snapshot: textOnlyStyleSnapshot,
+  generatedAt: "2026-05-31T00:00:01.020Z",
+});
+assert(textOnlyStyleReferencePlan.kind === "inspect_project_status", "reference-plan explanation should stay read-only");
+assert(textOnlyStyleReferencePlan.summary.includes("说明参考计划"), "reference-plan explanation should not look like a generic project check");
+
+const genericExportPlan = buildDirectorAgentActionEnvelope({
+  userIntent: "导出交付包",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:01.021Z",
+});
+assert(genericExportPlan.kind === "prepare_export", "generic export wording should prepare an export");
+assert(genericExportPlan.target.kind === "project", "generic export wording must default to the current project even when a shot is selected");
+assert(genericExportPlan.target.label === "雨夜书店", "generic export target should keep the current project label");
+assert(genericExportPlan.toolPlan.userConfirmationRequired === true, "generic export still requires user confirmation before writing files");
+assert(genericExportPlan.toolPlan.providerSubmitAllowed === false, "generic export must not submit to a provider");
+
+const selectedShotExportPlan = buildDirectorAgentActionEnvelope({
+  userIntent: "导出当前镜头",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:01.022Z",
+});
+assert(selectedShotExportPlan.kind === "prepare_export", "explicit current-shot export wording should still prepare an export");
+assert(selectedShotExportPlan.target.kind === "shot", "explicit current-shot export wording may keep the selected shot scope");
+assert(selectedShotExportPlan.target.ids[0] === "S01", "explicit current-shot export should target the selected shot");
+
+const mentionedShotExportPlan = buildDirectorAgentActionEnvelope({
+  userIntent: "导出镜头 1-1",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:01.023Z",
+});
+assert(mentionedShotExportPlan.target.kind === "shot", "numbered shot export wording should keep shot scope");
+assert(mentionedShotExportPlan.target.ids[0] === "S01", "numbered shot export should resolve the mentioned shot");
+
+const simpleNumberRuntimeState = {
+  ...runtimeState,
+  storyFlow: {
+    sections: [
+      {
+        id: "section_open",
+        label: "开场",
+        shotCount: 2,
+        blockedCount: 0,
+        readyCount: 2,
+        shotIds: ["shot_001", "shot_002"],
+      },
+    ],
+    shots: [
+      {
+        id: "shot_001",
+        sectionId: "section_open",
+        title: "雨夜便利店门口递出纸飞机",
+        status: "ready",
+        gates: {},
+        issues: [],
+        durationSeconds: 4,
+      },
+      {
+        id: "shot_002",
+        sectionId: "section_open",
+        title: "纸飞机在灯箱里亮起来",
+        status: "ready",
+        gates: {},
+        issues: [],
+        durationSeconds: 4,
+      },
+    ],
+  },
+  visualMemory: {
+    assets: [],
+  },
+} as unknown as ProjectRuntimeState;
+const simpleNumberSnapshot = buildDirectorAgentStateSnapshot({
+  runtimeState: simpleNumberRuntimeState,
+  currentView: "story",
+  selectedShotId: "shot_001",
+});
+assert(simpleNumberSnapshot.selectedShot?.displayNumber === "1", "simple shot ids should keep simple display numbers");
+const simpleNumberShotExportPlan = buildDirectorAgentActionEnvelope({
+  userIntent: "导出镜头 1-1",
+  snapshot: simpleNumberSnapshot,
+  generatedAt: "2026-05-31T00:00:01.024Z",
+});
+assert(simpleNumberShotExportPlan.target.kind === "shot", "numbered export should not fall back to project scope for simple shot ids");
+assert(simpleNumberShotExportPlan.target.ids[0] === "shot_001", "numbered export should resolve 1-1 to the first simple shot");
+assert(textOnlyStyleReferencePlan.proposedChanges[0]?.field === "referencePlan", "reference-plan explanation should expose the reference scope first");
+assert(textOnlyStyleReferencePlan.userFacingMessage.includes("只说明范围，不生成参考、不提交视频"), "reference-plan explanation should preserve the no-generation boundary");
+assert(!/待判断/.test(textOnlyStyleReferencePlan.userFacingMessage), "reference-plan explanation must not expose unknown internal strategy summaries");
 
 const sectionSnapshot = buildDirectorAgentStateSnapshot({
   runtimeState,
@@ -226,6 +349,15 @@ assert(continueReference.requiresUserConfirmation === true, "default continue mu
 assert(continueReference.sourceContext.projectReadiness.status === "needs_references", "action should carry readiness context");
 assert(continueReference.sourceContext.selectedShotContexts[0]?.context.primaryAction === "她在清晨旧书店翻开旧书", "action source context should carry the selected shot creative context");
 
+const continueNextReference = buildDirectorAgentActionEnvelope({
+  userIntent: "继续下一步",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:00.510Z",
+});
+assert(continueNextReference.kind === "prepare_reference_generation", "continue-next should route to reference generation when references are missing");
+assert(continueNextReference.toolPlan.toolName === "image2_reference_generation", "continue-next reference route should use reference tool");
+assert(continueNextReference.requiresUserConfirmation === true, "continue-next must still require user confirmation before provider work");
+
 const projectWideReference = buildDirectorAgentActionEnvelope({
   userIntent: "补齐这个项目的参考素材，只生成角色、场景、道具和故事板参考，不要提交视频。",
   snapshot: selectedSnapshot,
@@ -261,6 +393,26 @@ const noSelectionSnapshot = buildDirectorAgentStateSnapshot({
   runtimeState,
   currentView: "story",
 });
+const currentStoryReferencePreflight = buildDirectorAgentActionEnvelope({
+  userIntent: "发送视频；先补齐当前故事参考",
+  snapshot: noSelectionSnapshot,
+  generatedAt: "2026-05-31T00:00:00.575Z",
+});
+assert(currentStoryReferencePreflight.kind === "prepare_reference_generation", "send-video preflight should route to reference generation while references are missing");
+assert(currentStoryReferencePreflight.target.kind === "project", "send-video preflight should stay at story level without selected-shot scope");
+assert(currentStoryReferencePreflight.target.label === "当前故事", "send-video preflight should label the target as the current story");
+assert(currentStoryReferencePreflight.executionContract.mode === "reference_allowed", "send-video preflight should keep video submission disabled while allowing references");
+
+const selectedShotContinueStoryReferencePreflight = buildDirectorAgentActionEnvelope({
+  userIntent: "继续；先补齐当前故事参考",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:00.576Z",
+});
+assert(selectedShotContinueStoryReferencePreflight.kind === "prepare_reference_generation", "continue-reference preflight should route to reference generation while references are missing");
+assert(selectedShotContinueStoryReferencePreflight.target.kind === "project", "continue-reference preflight must not be hijacked by the selected shot");
+assert(selectedShotContinueStoryReferencePreflight.target.label === "当前故事", "continue-reference preflight should label the target as the current story");
+assert(selectedShotContinueStoryReferencePreflight.executionContract.mode === "reference_allowed", "continue-reference preflight should keep video submission disabled while allowing references");
+
 const blockedStrategy = buildDirectorAgentActionEnvelope({
   userIntent: "改成故事板叙事",
   snapshot: noSelectionSnapshot,
@@ -320,6 +472,16 @@ assert(selectedShotFeedback.userFacingMessage.includes("镜头 1-1"), "selected 
 assert(!selectedShotFeedback.userFacingMessage.includes("�"), "selected shot feedback must not show replacement characters in Chinese titles");
 assert(!selectedShotFeedback.summary.includes("�"), "selected shot summary must not show replacement characters in Chinese titles");
 
+const wholeStoryShotCountFeedback = buildDirectorAgentActionEnvelope({
+  userIntent: "把整个故事改成 2 个镜头",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:01.052Z",
+});
+assert(wholeStoryShotCountFeedback.kind === "revise_story_or_shot", "whole-story shot-count feedback should remain a story revision");
+assert(wholeStoryShotCountFeedback.target.kind === "project", "whole-story feedback must override the currently selected shot");
+assert(wholeStoryShotCountFeedback.proposedChanges[0]?.field === "storyShotCount", "whole-story feedback should stage a project-level shot-count draft");
+assert(wholeStoryShotCountFeedback.proposedChanges[0]?.to.includes("2 个镜头"), "whole-story feedback should preserve the requested shot count");
+
 const explainOnlySelectedShotFeedback = buildDirectorAgentActionEnvelope({
   userIntent: "继续下一步，但先不要提交视频，只告诉我接下来要做什么。",
   snapshot: selectedSnapshot,
@@ -352,6 +514,15 @@ assert(newStoryNoVideoFeedback.kind === "revise_story_or_shot", "new story with 
 assert(newStoryNoVideoFeedback.target.kind === "project", "new story wording should override the currently selected shot");
 assert(newStoryNoVideoFeedback.summary.includes("新故事草案"), "new story project draft should be labeled as a new story");
 assert(newStoryNoVideoFeedback.toolPlan.toolName === "project_vibe_patch", "new story plan should only stage a project patch before generation");
+
+const newStorySeedanceSlowNoAutoSubmit = buildDirectorAgentActionEnvelope({
+  userIntent: "做一个 12 秒 90 年代日漫感短片：雨夜旧巴士站，一个戴耳机的女高中生发现长椅下有一只黑猫叼着发光车票。请先整理故事、镜头和节奏，普通 Seedance 会很慢，先不要自动提交视频。",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:01.066Z",
+});
+assert(newStorySeedanceSlowNoAutoSubmit.kind === "revise_story_or_shot", "fresh story with Seedance/no-auto-submit wording must not become video preparation");
+assert(newStorySeedanceSlowNoAutoSubmit.target.kind === "project", "fresh story action envelope should target the project draft");
+assert(newStorySeedanceSlowNoAutoSubmit.toolPlan.toolName === "project_vibe_patch", "fresh story action envelope should not prepare the video queue");
 
 const selectedShotApprovalFeedback = buildDirectorAgentActionEnvelope({
   userIntent: "这个镜头通过了，节奏可以，先保持这个方向",
@@ -479,6 +650,16 @@ assert(defaultBlockedVideo.status === "blocked", "explicit video intent should s
 assert(defaultBlockedVideo.toolPlan.toolName === "seedance_video_submit", "video intent should still be classified as Seedance submit");
 assert(defaultBlockedVideo.requiresUserConfirmation === true, "video submit must still require user confirmation");
 
+const sendVideoBlockedByMissingReference = buildDirectorAgentActionEnvelope({
+  userIntent: "发送视频",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:02.075Z",
+});
+assert(sendVideoBlockedByMissingReference.kind === "prepare_video_submit", "bare send-video wording must not become a selected-shot edit");
+assert(sendVideoBlockedByMissingReference.status === "blocked", "send-video wording should stay blocked while references are missing");
+assert(sendVideoBlockedByMissingReference.toolPlan.toolName === "seedance_video_submit", "send-video wording should route to video submit preflight");
+assert(sendVideoBlockedByMissingReference.blockers.some((item) => item.includes("先生成并复核参考")), "send-video blocker should tell the creator to prepare references first");
+
 const directBoundedReference = buildDirectorAgentActionEnvelope({
   userIntent: "帮我补参考图，但先不要生图，也不要提交视频",
   snapshot: selectedSnapshot,
@@ -500,6 +681,9 @@ assert(detectDirectorAgentPermissionIntent("请先不要提交视频测试，也
 assert(detectDirectorAgentPermissionIntent("只做故事规划，不要生成参考，也不要提交视频。") === "plan_only", "no-reference plus no-video wording should infer plan-only");
 assert(detectDirectorAgentPermissionIntent("只整理故事和镜头，不生成参考，不提交视频。") === "plan_only", "organize-only wording should infer plan-only");
 assert(detectDirectorAgentPermissionIntent("先整理故事和镜头，不生成参考，不提交视频。") === "plan_only", "natural organize-first wording should infer plan-only");
+assert(detectDirectorAgentPermissionIntent("先别生成，只准备计划，继续说明参考怎么安排。") === "plan_only", "revise-confirmation plan-only reference wording should infer plan-only");
+assert(detectDirectorAgentPermissionIntent("不发送视频。") === "reference_allowed", "no-send-video wording should not be mistaken for video permission");
+assert(detectDirectorAgentPermissionIntent("发送视频。") === "video_allowed", "bare send-video wording should infer video intent");
 assert(detectDirectorAgentPermissionIntent("只告诉我接下来要做什么。") === "plan_only", "explain-only wording should infer plan-only");
 assert(isDirectorAgentPermissionControlOnlyIntent("只看规划") === true, "pure planning boundary wording should be treated as a control-only Agent command");
 assert(isDirectorAgentPermissionControlOnlyIntent("先不要提交视频测试") === true, "pure no-video testing wording should be treated as a control-only Agent command");
@@ -508,9 +692,14 @@ assert(detectDirectorAgentPermissionIntent("可做参考") === "reference_allowe
 assert(isDirectorAgentPermissionControlOnlyIntent("可做参考") === true, "pure reference boundary wording should be treated as a control-only Agent command");
 assert(detectDirectorAgentPermissionIntent("可生成参考") === "reference_allowed", "visible reference-generation wording should infer reference-only");
 assert(isDirectorAgentPermissionControlOnlyIntent("可生成参考") === true, "visible reference-generation wording should be treated as a control-only Agent command");
+assert(detectDirectorAgentPermissionIntent("开始补参考") === "reference_allowed", "start-reference wording should infer reference-only");
+assert(stripDirectorAgentPermissionControlPhrases("开始补参考") === "开始补参考", "start-reference wording must not be stripped as a pure boundary command");
+assert(!stripDirectorAgentPermissionControlPhrases("整理成 2 个镜头，不生成参考图，不提交视频。").includes("图"), "control stripping must remove the longest no-reference phrase before shorter overlaps");
 assert(isDirectorAgentPermissionControlOnlyIntent("可提交视频") === true, "pure video permission wording should be treated as a control-only Agent command");
 assert(isDirectorAgentPermissionControlOnlyIntent("提交视频") === false, "bare submit-video wording must remain an Agent action");
+assert(isDirectorAgentPermissionControlOnlyIntent("发送视频") === false, "bare send-video wording must remain an Agent action");
 assert(isDirectorAgentPermissionControlOnlyIntent("先补参考") === false, "bare reference-generation wording must remain an Agent action");
+assert(isDirectorAgentPermissionControlOnlyIntent("开始补参考") === false, "start-reference wording must remain an Agent action");
 assert(isDirectorAgentPermissionControlOnlyIntent("把镜头 1-2 改成故事板叙事，只看规划") === false, "permission wording attached to a creative edit must still stage the creative edit");
 
 const planOnlyStrategyChange = buildDirectorAgentActionEnvelope({
@@ -541,6 +730,25 @@ assert(directNoVideoReference.executionContract.mode === "reference_allowed", "c
 assert(directNoVideoReference.status === "staged", "no-video wording should still allow reference preparation");
 assert(directNoVideoReference.toolPlan.providerSubmitAllowed === true, "reference-only contract can prepare reference generation after confirmation");
 
+const allowedReferenceGeneration = buildDirectorAgentActionEnvelope({
+  userIntent: "允许生成参考",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:02.800Z",
+});
+assert(allowedReferenceGeneration.kind === "prepare_reference_generation", "visible allow-reference wording must stage reference generation instead of a project edit");
+assert(allowedReferenceGeneration.executionContract.mode === "reference_allowed", "allow-reference wording should keep the reference-only boundary");
+assert(allowedReferenceGeneration.toolPlan.providerSubmitAllowed === true, "allow-reference wording can prepare provider submit only behind confirmation");
+
+const currentStoryAllowedReferenceGeneration = buildDirectorAgentActionEnvelope({
+  userIntent: "允许生成参考",
+  snapshot: currentStorySnapshot,
+  generatedAt: "2026-05-31T00:00:02.805Z",
+});
+assert(currentStoryAllowedReferenceGeneration.kind === "prepare_reference_generation", "allow-reference wording without a selected shot must still stage reference generation");
+assert(currentStoryAllowedReferenceGeneration.target.kind === "project", "current-story reference permission still operates on the story-level project scope");
+assert(currentStoryAllowedReferenceGeneration.target.label === "当前故事", "current-story reference permission must not fall back to the project title as the confirmation target");
+assert(currentStoryAllowedReferenceGeneration.summary.includes("为 当前故事 生成参考"), "current-story reference confirmation summary must name the current story");
+
 const broadNoVideoReference = buildDirectorAgentActionEnvelope({
   userIntent: "帮我补参考，视频先不用管",
   snapshot: selectedSnapshot,
@@ -557,6 +765,15 @@ const naturalSceneReference = buildDirectorAgentActionEnvelope({
 assert(naturalSceneReference.kind === "prepare_reference_generation", "natural separated reference wording should classify as reference generation");
 assert(naturalSceneReference.status === "staged", "natural separated reference wording should stage a confirmable reference plan");
 assert(naturalSceneReference.requiresUserConfirmation === true, "natural reference generation must still require confirmation");
+
+const startReference = buildDirectorAgentActionEnvelope({
+  userIntent: "开始补参考",
+  snapshot: selectedSnapshot,
+  generatedAt: "2026-05-31T00:00:02.830Z",
+});
+assert(startReference.kind === "prepare_reference_generation", "start-reference wording should stage reference generation instead of selected-shot edits");
+assert(startReference.status === "staged", "start-reference wording should produce a confirmable reference plan");
+assert(startReference.requiresUserConfirmation === true, "start-reference wording must still require confirmation before generation");
 
 const copyableRecoveryReference = buildDirectorAgentActionEnvelope({
   userIntent: "只补参考，补一张覆盖完整行动范围的场景/天气参考，先不要提交视频",

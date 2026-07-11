@@ -98,17 +98,34 @@ export function createRuntimeApiBoundary({
     return undefined;
   }
 
+  function canonicalAllowedRoot(root) {
+    if (root === repoRoot || root === repoRootRealPath) return repoRootRealPath;
+    return realpathSync(root);
+  }
+
+  function nearestExistingAncestor(filePath) {
+    let candidate = path.resolve(filePath);
+    while (!existsSync(candidate)) {
+      const parent = path.dirname(candidate);
+      if (parent === candidate) return undefined;
+      candidate = parent;
+    }
+    return candidate;
+  }
+
   function assertScopedPath(candidatePath, originalValue) {
     const resolved = path.resolve(candidatePath);
     const allowedRoot = allowedRootForPath(resolved);
     if (!allowedRoot) {
       throw new Error(`Path escapes project root: ${originalValue}`);
     }
-    if (existsSync(resolved)) {
-      const candidateRealPath = realpathSync(resolved);
-      if (!allowedRootForPath(candidateRealPath)) {
-        throw new Error(`Path escapes project root: ${originalValue}`);
-      }
+    const existingAncestor = nearestExistingAncestor(resolved);
+    if (!existingAncestor) {
+      throw new Error(`Path escapes project root: ${originalValue}`);
+    }
+    const candidateRealPath = realpathSync(existingAncestor);
+    if (!isInsideRoot(canonicalAllowedRoot(allowedRoot), candidateRealPath)) {
+      throw new Error(`Path escapes project root: ${originalValue}`);
     }
     return resolved;
   }

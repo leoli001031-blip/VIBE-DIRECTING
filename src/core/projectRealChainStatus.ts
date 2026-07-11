@@ -2,6 +2,7 @@ import {
   currentProjectIdentityMatches,
   fetchRuntimeJson,
   hasProjectRuntimeIdentity,
+  isBrowserDraftRuntimeIdentity,
   isRecord,
   numberOrUndefined,
   projectMismatchMessage,
@@ -597,6 +598,12 @@ export async function loadProjectRealChainStatus(expected?: ProjectRuntimeIdenti
       message: projectMismatchMessage(),
     };
   }
+  if (isBrowserDraftRuntimeIdentity(expected)) {
+    return {
+      status: "unavailable",
+      message: "先把故事保存成项目，再生成参考或视频。",
+    };
+  }
 
   try {
     const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectRealChainStatusEndpoint, expected));
@@ -614,6 +621,12 @@ export async function runProjectRealChainCheck(expected?: ProjectRuntimeIdentity
     return {
       status: "unavailable",
       message: projectMismatchMessage(),
+    };
+  }
+  if (isBrowserDraftRuntimeIdentity(expected)) {
+    return {
+      status: "unavailable",
+      message: "先把故事保存成项目，再生成参考或视频。",
     };
   }
 

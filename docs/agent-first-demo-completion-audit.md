@@ -321,7 +321,7 @@ Live validation:
   The page still had no internal path leak and no console errors.
 - 2026-06-20: tightened Agent Kernel execution-boundary copy so internal cost
   and external-submit risk remains in structured fields, while visible copy
-  says `只读取项目`, `只保存项目修改`, `会调用参考生成`, `会联网查资料`, or
+  says `只读取项目`, `只保存项目修改`, `会生成参考图`, `会联网查资料`, or
   `会提交 Seedance 视频任务`.
 - The visible Agent thread now compacts duplicate internal tool returns once a
   real result card exists. Creators still see running states, confirmation

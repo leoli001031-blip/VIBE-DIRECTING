@@ -175,7 +175,7 @@ function executionBoundaryFor(input: {
   const summary = submitsExternalTask
     ? "会提交 Seedance 视频任务"
     : input.executorTool === "generate_references"
-      ? "会调用参考生成"
+      ? "会生成参考图"
       : input.executorTool === "research_style"
         ? "会联网查资料"
         : input.callsProvider

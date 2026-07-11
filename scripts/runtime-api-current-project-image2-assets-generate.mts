@@ -40,6 +40,67 @@ function textArray(value) {
   return Array.isArray(value) ? value.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim()) : [];
 }
 
+const REFERENCE_FIELD_BOUNDARY_LABELS = [
+  "参考策略",
+  "主动作",
+  "触发",
+  "微反应",
+  "镜头节奏",
+  "行动反应",
+  "剪辑",
+  "声音",
+  "角色",
+  "场景",
+  "道具",
+  "景别",
+  "镜头",
+  "画面",
+  "时长",
+  "节奏判断",
+  "音频用途",
+  "项目视觉风格",
+];
+
+function cleanReferenceCandidateText(value) {
+  return String(value || "")
+    .replace(new RegExp(`(?:\\s+|[。；;，,、])?(?:${REFERENCE_FIELD_BOUNDARY_LABELS.join("|")})[:：][\\s\\S]*$`, "u"), "")
+    .replace(/[。；;，,、/\\s]+$/u, "")
+    .trim();
+}
+
+function cleanReferenceCandidates(values) {
+  return uniqueStrings((values || [])
+    .map((value) => cleanReferenceCandidateText(value))
+    .filter(Boolean));
+}
+
+const PROMPT_CONTEXT_DROP_FIELD_LABELS = [
+  "参考策略",
+  "节奏判断",
+  "音频用途",
+];
+
+const PROMPT_CONTEXT_INLINE_FIELD_LABELS = [
+  "主动作",
+  "触发",
+  "微反应",
+  "镜头节奏",
+  "行动反应",
+  "项目视觉风格",
+];
+
+function cleanPromptContextText(value) {
+  const allLabels = REFERENCE_FIELD_BOUNDARY_LABELS.join("|");
+  const dropLabels = PROMPT_CONTEXT_DROP_FIELD_LABELS.join("|");
+  const inlineLabels = PROMPT_CONTEXT_INLINE_FIELD_LABELS.join("|");
+  return String(value || "")
+    .replace(new RegExp(`(?:\\s+|[。；;，,、])?(?:${dropLabels})[:：][\\s\\S]*?(?=(?:\\s+|[。；;，,、])(?:${allLabels})[:：]|[。；;\\n]|$)`, "gu"), " ")
+    .replace(new RegExp(`(?:\\s+|[。；;，,、])?(?:${inlineLabels})[:：]`, "gu"), " ")
+    .replace(/\s+/g, " ")
+    .replace(/[。；;，,、/\\s]+$/u, "")
+    .trim();
+}
+
 function booleanFlag(value) {
   return value === true;
 }
@@ -350,7 +411,7 @@ function selectedShotFacts(workbenchFacts, projectFacts, selectedShotId) {
     ...textArray(rawShot?.characterIds),
     ...textArray(rawShot?.characterAssetIds),
   ]).filter((value) => !isPlaceholderReferenceText(value));
-  const rawCharacterReferences = (explicitRoleIds.length ? explicitRoleIds : uniqueStrings([
+  const rawCharacterReferences = cleanReferenceCandidates(explicitRoleIds.length ? explicitRoleIds : uniqueStrings([
     ...textArray(rawShot?.characterGuidance),
     ...storyRoleReferences,
   ]))
@@ -363,7 +424,7 @@ function selectedShotFacts(workbenchFacts, projectFacts, selectedShotId) {
     ...textArray(rawShot?.propAssetIds),
   ]).filter((value) => !isPlaceholderReferenceText(value));
   const knownCharacterKeys = projectCharacterIdentityKeys(workbenchFacts, projectFacts);
-  const rawPropReferences = (explicitPropIds.length ? explicitPropIds : uniqueStrings([
+  const rawPropReferences = cleanReferenceCandidates(explicitPropIds.length ? explicitPropIds : uniqueStrings([
     ...textArray(rawShot?.propGuidance),
     ...storyPropReferences,
   ]))
@@ -371,10 +432,10 @@ function selectedShotFacts(workbenchFacts, projectFacts, selectedShotId) {
   const propIdsThatAreCharacters = rawPropReferences.filter((id) => knownCharacterKeys.has(normalizedAssetIdentity(id)));
   const propReferenceCandidates = rawPropReferences.filter((id) => !knownCharacterKeys.has(normalizedAssetIdentity(id)));
   const propBuckets = referenceConstraintBuckets(propReferenceCandidates);
-  const rawSceneReferences = uniqueStrings([
+  const rawSceneReferences = cleanReferenceCandidates(uniqueStrings([
     ...textArray(rawShot?.sceneGuidance),
     storySceneReference,
-  ])
+  ]))
     .filter((value) => !isPlaceholderReferenceText(value));
   const sceneBuckets = referenceConstraintBuckets(rawSceneReferences, "scene");
   const explicitSceneIds = uniqueStrings([
@@ -644,7 +705,7 @@ function nonPhotographicStyleGuard(selected) {
 
 function firstLabeledFact(text, label) {
   const match = String(text || "").match(new RegExp(`${label}[:：]([^。；;\\n]+)`));
-  return match?.[1]?.trim();
+  return cleanReferenceCandidateText(match?.[1]);
 }
 
 function labeledFactItems(text, label) {
@@ -930,16 +991,17 @@ function propContaminationGuard(spec, selected) {
 function assetPrompt(spec, selected) {
   const typeLabel = spec.type === "character" ? "character" : spec.type === "scene" ? "scene" : "prop";
   const styleGuard = nonPhotographicStyleGuard(selected);
-  const textConstraints = Array.isArray(spec.textConstraints) ? spec.textConstraints.slice(0, 6) : [];
+  const textConstraints = uniqueStrings(Array.isArray(spec.textConstraints) ? spec.textConstraints.map(cleanPromptContextText) : []).slice(0, 6);
   const relatedShotTitles = uniqueStrings(Array.isArray(spec.relatedShotTitles) ? spec.relatedShotTitles : []).slice(0, 6);
-  const storyContexts = uniqueStrings(Array.isArray(spec.storyContexts) ? spec.storyContexts : []).slice(0, 6);
+  const storyContexts = uniqueStrings(Array.isArray(spec.storyContexts) ? spec.storyContexts.map(cleanPromptContextText) : []).slice(0, 6);
+  const selectedStoryFunction = cleanPromptContextText(selected.storyFunction);
   return [
     "reference_asset_prompt_v3: create a production reference asset, not a cinematic shot frame, not a storyboard panel, not final key art.",
     `Asset type: ${typeLabel}. Asset name: ${spec.name}. Aspect ratio ${IMAGE2_GENERATE_DEFAULT_ASPECT_RATIO}.`,
     "The asset name and asset constraints are the source of truth for this image.",
     "The shot facts below are context only. Do not copy their full scene composition, actor pose, camera angle, or action as the asset image.",
     relatedShotTitles.length ? `Related shots: ${relatedShotTitles.join(" / ")}.` : selected.title ? `Related shot: ${selected.title}.` : "",
-    storyContexts.length ? `Context facts: ${storyContexts.join(" / ")}.` : selected.storyFunction ? `Context facts: ${selected.storyFunction}.` : "",
+    storyContexts.length ? `Context facts: ${storyContexts.join(" / ")}.` : selectedStoryFunction ? `Context facts: ${selectedStoryFunction}.` : "",
     textConstraints.length ? `Asset constraints: ${textConstraints.join(" / ")}.` : "",
     styleGuard,
     spec.type === "character"

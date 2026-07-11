@@ -29,6 +29,7 @@ import {
 export function MinimalAssetLibrary({
   library,
   readOnlyDetail,
+  referenceGapCount = 0,
   selectedAssetId,
   onSelectAsset,
   onAddAsset,
@@ -38,11 +39,13 @@ export function MinimalAssetLibrary({
   assetGenerationAction,
   onGenerateAssets,
   localProjectReady = true,
+  pendingConfirmationLabel,
   voiceSourceLibrary,
   onLockVoiceSource,
 }: {
   library: AssetLibrarySnapshot;
   readOnlyDetail?: string;
+  referenceGapCount?: number;
   selectedAssetId?: string;
   onSelectAsset: (id: string) => void;
   onAddAsset: (input: AddAssetLibraryAssetInput) => void;
@@ -52,6 +55,7 @@ export function MinimalAssetLibrary({
   assetGenerationAction?: Image2AssetGenerationActionView;
   onGenerateAssets?: () => unknown | Promise<unknown>;
   localProjectReady?: boolean;
+  pendingConfirmationLabel?: string;
   voiceSourceLibrary?: VoiceSourceLibraryState;
   onLockVoiceSource?: (sourceId: string) => void | Promise<void>;
 }) {
@@ -96,12 +100,23 @@ export function MinimalAssetLibrary({
     needsReview: library.assets.filter((asset) => asset.status === "review" || asset.status === "candidate").length,
     missing: library.assets.filter((asset) => asset.status === "missing").length,
   };
+  const visibleReferenceMissingCount = Math.max(reviewCounts.missing, Math.round(referenceGapCount));
   const reviewableAssets = library.assets.filter((asset) => asset.status === "review" || asset.status === "candidate");
   const blockers = assetLibraryUserBlockers(library);
   const blockerLabel = blockers.length
     ? "待复核"
     : "已锁定";
+  const reviewBoundaryCopy = reviewCounts.needsReview > 0
+    ? localProjectReady
+      ? `${reviewCounts.needsReview} 个素材等你确认；确认后才进入故事参考库。`
+      : `${reviewCounts.needsReview} 个素材等你确认；先选择保存位置，确认后才进入故事参考库。`
+    : localProjectReady
+      ? "新素材会先分类，等你确认后才进入故事参考库。"
+      : "新素材会先分类；选择保存位置后再进入故事参考库。";
+  const localDetailBoundaryCopy = "手、眼神、车灯会跟随对应角色、场景或道具说明，不会单独变成新参考项。";
   const isReadOnly = Boolean(readOnlyDetail);
+  const generationBlockedByAgentConfirmation = Boolean(pendingConfirmationLabel);
+  const reviewActionBlockedBySaveLocation = !localProjectReady;
   const [draft, setDraft] = useState<{ assetType: AssetLibraryAssetType; name: string; path: string; constraints: string }>({
     assetType: "character",
     name: "",
@@ -254,36 +269,51 @@ export function MinimalAssetLibrary({
   }
 
   function assetNextStepCopy() {
+    if (!localProjectReady && reviewCounts.needsReview > 0) {
+      return pendingConfirmationLabel
+        ? `先处理右侧「${pendingConfirmationLabel}」，再确认这些参考。`
+        : "先选择保存位置，再确认这些参考。";
+    }
+    if (!localProjectReady && visibleReferenceMissingCount > 0) {
+      return pendingConfirmationLabel
+        ? `先处理右侧「${pendingConfirmationLabel}」，再让 AI 继续补参考。`
+        : "先选择保存位置，再让 AI 继续补参考。";
+    }
     if (reviewCounts.needsReview > 0) return "有参考等你看，先确认能不能继续使用。";
-    if (reviewCounts.missing > 0) return "有参考还没准备好，在消息里让 AI 继续处理。";
+    if (visibleReferenceMissingCount > 0 && pendingConfirmationLabel) return `当前故事还缺 ${visibleReferenceMissingCount} 张参考；先处理右侧确认，或继续说明怎么改。`;
+    if (visibleReferenceMissingCount > 0) return "有参考还没准备好，在消息里让 AI 继续处理。";
     if (workspaceCounts.characters && workspaceCounts.scenes && reviewCounts.locked > 0) return "参考已准备好，可以回到故事页继续。";
-    return "先放脚本和素材，AI 会整理参考。";
+    return "先放脚本和素材，AI 会先分类，采用前等你确认。";
   }
 
-	  function generationStatusCopy(message?: string) {
-	    if (assetGenerationAction?.status === "running") {
-	      return message || "正在生成参考，完成后会在下方待复核。通常需要几十秒到几分钟。";
-	    }
+  function generationStatusCopy(message?: string) {
+    if (generationBlockedByAgentConfirmation) {
+      return `先处理右侧消息里的「${pendingConfirmationLabel}」，确认前不会生成参考。`;
+    }
+    if (assetGenerationAction?.status === "running") {
+      return message || "正在生成参考，完成后会在下方待复核。通常需要几十秒到几分钟。";
+    }
     if (!message) {
-      if (!localProjectReady) return "先创建本地项目";
+      if (!localProjectReady) return "先选择保存位置";
       if (assetGenerationAction?.keyConfigured === false) return "先去设置里连接图片服务";
       if (assetGenerationAction?.disabled) return "正在准备参考";
       if (workspaceCounts.characters && workspaceCounts.scenes && workspaceCounts.props) return "参考已齐，需要重做时再点。";
-	      return "推荐直接在右侧输入框说需求；需要手动操作时再展开这里。";
+      return "推荐直接在右侧输入框说需求；需要手动操作时再展开这里。";
     }
     if (/key|api/i.test(message)) return "先去设置里连接图片服务";
     if (/未选择项目|未同步|连接项目失败|项目文件已打开|请选择|先创建本地项目/i.test(message)) {
-      return localProjectReady ? "正在连接项目" : "先创建本地项目";
+      return localProjectReady ? "正在连接保存位置" : "先选择保存位置";
     }
     return message;
   }
 
   function generationStatusTitle() {
+    if (generationBlockedByAgentConfirmation) return "先处理确认";
     if (assetGenerationAction?.status === "running") return "正在生成";
     if (assetGenerationAction?.status === "blocked") return "生成失败";
     if (assetGenerationAction?.status === "needs_review") return "等你复核";
     if (assetGenerationAction?.status === "verified") return "参考已齐";
-    if (!localProjectReady) return "先选项目";
+    if (!localProjectReady) return "先选保存位置";
     if (assetGenerationAction?.keyConfigured === false) return "待连接";
     if (workspaceCounts.characters && workspaceCounts.scenes && workspaceCounts.props) return "参考已齐";
     return "可生成";
@@ -310,7 +340,7 @@ export function MinimalAssetLibrary({
               <details className="asset-generation-manual">
                 <summary>高级操作</summary>
                 <button
-                  disabled={assetGenerationAction?.disabled}
+                  disabled={assetGenerationAction?.disabled || generationBlockedByAgentConfirmation}
                   onClick={() => { void onGenerateAssets(); }}
                   aria-label="手动生成缺少的参考图和故事板"
                 >
@@ -375,9 +405,15 @@ export function MinimalAssetLibrary({
         </section>
       )}
       <div className="asset-status-strip" aria-label="参考状态">
-        <span><i className="dot warn" /> 待复核</span>
-        <span><i className="dot ok" /> 已锁定</span>
+        <span><i className="dot warn" /> 等你确认 {reviewCounts.needsReview} 个</span>
+        <span><i className="dot ok" /> 已锁定 {reviewCounts.locked} 个</span>
+        <span><i className="dot bad" /> 缺参考 {visibleReferenceMissingCount} 张</span>
       </div>
+      <section className="asset-review-boundary" aria-label="素材确认边界">
+        <span>素材确认边界</span>
+        <strong>{reviewBoundaryCopy}</strong>
+        <small>{localDetailBoundaryCopy}</small>
+      </section>
       <div className="asset-blocker-strip" aria-label="参考提醒">
         <span title={blockerLabel}>{blockerLabel}</span>
       </div>
@@ -390,10 +426,14 @@ export function MinimalAssetLibrary({
           <button
             type="button"
             className="asset-review-all-button"
+            disabled={reviewActionBlockedBySaveLocation}
+            title={reviewActionBlockedBySaveLocation ? "先在右侧选择保存位置，再锁定参考。" : undefined}
             onClick={() => { void onMarkAllReviewAssetsLocked(reviewableAssets.map((asset) => asset.id)); }}
-            aria-label={`全部通过并锁定 ${reviewableAssets.length} 个待复核参考`}
+            aria-label={reviewActionBlockedBySaveLocation
+              ? `先选择保存位置，再锁定 ${reviewableAssets.length} 个待复核参考`
+              : `全部通过并锁定 ${reviewableAssets.length} 个待复核参考`}
           >
-            全部通过
+            {reviewActionBlockedBySaveLocation ? "先选保存位置" : "全部通过"}
           </button>
         )}
       </section>
@@ -446,17 +486,33 @@ export function MinimalAssetLibrary({
               <button
                 key={status}
                 className={assetLibraryStatusToUiStatus(selectedAsset.status) === status ? "active" : ""}
+                disabled={reviewActionBlockedBySaveLocation}
+                title={reviewActionBlockedBySaveLocation ? "先在右侧选择保存位置，再修改参考状态。" : undefined}
                 onClick={() => { void onMarkAssetStatus(selectedAsset.id, status); }}
-                aria-label={`${cleanLabel(selectedAsset.name)}：标记为${assetLibraryStatusLabel(status)}`}
+                aria-label={reviewActionBlockedBySaveLocation
+                  ? `${cleanLabel(selectedAsset.name)}：先选择保存位置，再标记为${assetLibraryStatusLabel(status)}`
+                  : `${cleanLabel(selectedAsset.name)}：标记为${assetLibraryStatusLabel(status)}`}
               >
                 {assetLibraryStatusLabel(status)}
               </button>
             ))}
           </div>
+          {reviewActionBlockedBySaveLocation && <small className="muted-copy">先选择保存位置，再锁定或修改参考。</small>}
           <details className="asset-library-advanced asset-library-selected-advanced">
             <summary>高级</summary>
-            <textarea value={constraintDraft} onChange={(event) => setConstraintDraft(event.target.value)} aria-label="编辑补充说明" />
-            <button onClick={updateSelectedConstraints} aria-label={`${cleanLabel(selectedAsset.name)}：更新补充说明`}>更新说明</button>
+            <textarea
+              value={constraintDraft}
+              disabled={reviewActionBlockedBySaveLocation}
+              onChange={(event) => setConstraintDraft(event.target.value)}
+              aria-label="编辑补充说明"
+            />
+            <button
+              disabled={reviewActionBlockedBySaveLocation}
+              onClick={updateSelectedConstraints}
+              aria-label={`${cleanLabel(selectedAsset.name)}：更新补充说明`}
+            >
+              更新说明
+            </button>
           </details>
         </section>
       )}

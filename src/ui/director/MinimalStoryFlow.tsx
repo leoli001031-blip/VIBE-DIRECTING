@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { AssetRecord, ShotRecord } from "../../core/types";
+import { projectVibeCreatorFacingStoryLabel } from "../../core/projectVibePlanningProjection";
 import { MediaFrame } from "../common/MediaFrame";
 import {
   directorSkillSummaryForShot,
@@ -25,7 +26,7 @@ export function formatShotNumber(id: string) {
 }
 
 export function cleanStoryText(value: string) {
-  return value
+  return projectVibeCreatorFacingStoryLabel(value, "")
     .replace(/\s*\/\s*sec(?:\b|[_\s-]).*$/i, "")
     .replace(/\bshot[_\s-]*[a-f0-9]+[_\s-]*(\d+)\b/gi, "镜头 $1")
     .replace(/\bshot[_\s-]*0*(\d+)(?=$|[_\s-])/gi, "镜头 $1")

@@ -68,6 +68,35 @@ const browserDraftForgedReady = runDirectorProductAgentLoop({
 assert(browserDraftForgedReady.projectVibeWritten === false, "browser-draft Agent loop must ignore forged projectReady availability without a concrete project root");
 assert(browserDraftForgedReady.toolHandoff.blockers.includes("project_not_ready"), "project readiness must require an actual local project folder");
 
+const dryRunMissingReferenceRuntimeState = {
+  ...runtimeState,
+  visualMemory: {
+    ...runtimeState.visualMemory,
+    assets: [],
+  },
+};
+const stagedVideoAfterDryRunReferenceValidation = runDirectorProductAgentLoop({
+  project,
+  runtimeState: dryRunMissingReferenceRuntimeState,
+  userIntent: "发送视频",
+  userConfirmed: false,
+  generatedAt,
+  projectRoot,
+  projectPath: projectVibeFileName,
+  executionContract: videoAllowedExecutionContract,
+  referenceReadyCount: 1,
+  referenceReviewCount: 0,
+  referenceMissingCount: 0,
+  availability: {
+    projectReady: true,
+    videoSubmitReady: true,
+  },
+});
+assert(stagedVideoAfterDryRunReferenceValidation.snapshot.projectReadiness.status === "ready_for_video", "Product Agent Loop must consume structured reference validation overrides while real assets remain missing");
+assert(stagedVideoAfterDryRunReferenceValidation.action.kind === "prepare_video_submit", "explicit video intent after reference validation must remain a video action");
+assert(stagedVideoAfterDryRunReferenceValidation.action.status === "staged", "persisted video action must not be downgraded by raw missing-reference facts after structured validation");
+assert(stagedVideoAfterDryRunReferenceValidation.status === "awaiting_confirmation", "validated video action must reach the normal confirmation boundary");
+
 const stagedPatch = runDirectorProductAgentLoop({
   project,
   runtimeState,

@@ -311,7 +311,68 @@ try {
     "patch-only Agent strategy change should update the selected Project.vibe shot",
   );
 
-  const blockedPatchHandoff = buildDirectorAgentToolHandoff({
+  const explicitShotCountRestructureIntent = "改成 3 个镜头：第一镜保留快递员递出发光旧怀表，第二镜女孩戴着耳机抬头看广告牌，第三镜城市广告牌变成海浪。不要生成参考图，不提交视频。";
+  const shotCountRestructureAction = buildDirectorAgentActionEnvelope({
+    userIntent: explicitShotCountRestructureIntent,
+    snapshot: buildDirectorAgentStateSnapshot({
+      runtimeState: patchOnlyRuntime,
+      selectedShotId: "shot_002",
+      currentView: "story",
+    }),
+    generatedAt,
+  });
+  assert(shotCountRestructureAction.status === "staged", `shot-count restructure should stage: ${shotCountRestructureAction.blockers.join("; ")}`);
+  assert(shotCountRestructureAction.target.kind === "project", "shot-count restructure should target the whole project");
+  assert(shotCountRestructureAction.toolPlan.toolName === "project_vibe_patch", "shot-count restructure should stay in Project.vibe patch lane");
+  assert(
+    shotCountRestructureAction.proposedChanges.some((change) => change.field === "storyShotCount" && change.to === "3 个镜头"),
+    "shot-count restructure action should expose storyShotCount as a confirmable project change",
+  );
+  const shotCountRestructureHandoff = buildDirectorAgentToolHandoff({
+    action: shotCountRestructureAction,
+    userConfirmed: true,
+    confirmedAt: generatedAt,
+    availability: {
+      projectReady: false,
+      webSearchReady: true,
+      referenceGenerationReady: false,
+      videoSubmitReady: false,
+      exportReady: true,
+    },
+  });
+  assert(shotCountRestructureHandoff.status === "handled_by_project_write", "shot-count restructure should be handled by Project.vibe writeback");
+  const confirmedShotCountRestructure = confirmProjectVibeCreativeLoop({
+    project,
+    userIntent: explicitShotCountRestructureIntent,
+    selectedShotId: "shot_002",
+    generatedAt,
+    projectRoot: tempRoot,
+    projectPath: projectVibeFileName,
+    runtimeState: patchOnlyRuntime,
+    userConfirmed: true,
+    agentActionEnvelope: shotCountRestructureAction,
+    agentToolHandoff: shotCountRestructureHandoff,
+  });
+  assert(confirmedShotCountRestructure.status === "project_facts_written", `shot-count restructure should write Project.vibe facts: ${confirmedShotCountRestructure.blockedReasons.join("; ")}`);
+  assert(confirmedShotCountRestructure.nextProject?.storyFlow.shotOrder.length === 3, "shot-count restructure should update the story flow to 3 shots");
+  assert(
+    confirmedShotCountRestructure.nextProject?.storyFlow.sections.flatMap((section) => section.shotIds).length === 3,
+    "shot-count restructure should keep section shot ids aligned with the requested count",
+  );
+  assert(confirmedShotCountRestructure.nextProject?.shots.length === 3, "shot-count restructure should upsert the new Project.vibe shot");
+  assert(
+    confirmedShotCountRestructure.nextProject?.shots.every((shot) => shot.status === "planned"),
+    "shot-count restructure should leave all affected shots in planned status without running generation",
+  );
+  const restructuredShotById = new Map((confirmedShotCountRestructure.nextProject?.shots || []).map((shot) => [shot.id, shot]));
+  const restructuredShots = confirmedShotCountRestructure.nextProject?.storyFlow.shotOrder.map((shotId) => restructuredShotById.get(shotId));
+  assert(restructuredShots?.length === 3 && restructuredShots.every(Boolean), "shot-count restructure should keep all ordered shots addressable");
+  assert(restructuredShots[0]?.primaryAction?.includes("快递员递出发光旧怀表"), "explicit first shot outline should write the first shot action");
+  assert(restructuredShots[1]?.primaryAction?.includes("女孩戴着耳机抬头看广告牌"), "explicit second shot outline should write the second shot action");
+  assert(restructuredShots[2]?.primaryAction?.includes("城市广告牌变成海浪"), "explicit third shot outline should write the third shot action");
+  assert(!restructuredShots[2]?.title.includes("快递员递出发光旧怀表"), "new third shot must not duplicate the first shot title");
+
+  const temporaryProjectPatchHandoff = buildDirectorAgentToolHandoff({
     action: patchOnlyAction,
     userConfirmed: true,
     confirmedAt: generatedAt,
@@ -323,8 +384,9 @@ try {
       exportReady: true,
     },
   });
-  assert(blockedPatchHandoff.status === "blocked", "patch-only handoff should block when no project is ready");
-  const blockedPatchOnly = confirmProjectVibeCreativeLoop({
+  assert(temporaryProjectPatchHandoff.status === "handled_by_project_write", "patch-only handoff should stay writable in a temporary project");
+  assert(!temporaryProjectPatchHandoff.blockers.includes("project_not_ready"), "project patch handoff should not require a local save folder");
+  const temporaryProjectPatchOnly = confirmProjectVibeCreativeLoop({
     project,
     userIntent: "这段改成全能参考，只改项目计划",
     selectedShotId: "shot_002",
@@ -334,14 +396,10 @@ try {
     runtimeState: patchOnlyRuntime,
     userConfirmed: true,
     agentActionEnvelope: patchOnlyAction,
-    agentToolHandoff: blockedPatchHandoff,
+    agentToolHandoff: temporaryProjectPatchHandoff,
   });
-  assert(blockedPatchOnly.status === "blocked", "blocked handoff should prevent Project.vibe writeback");
-  assert(
-    blockedPatchOnly.blockedReasons.includes("agent_tool_handoff_blocked:project_not_ready"),
-    "blocked handoff should preserve project readiness blocker",
-  );
-  assert(blockedPatchOnly.projectVibeWritten === false, "blocked handoff must not write Project.vibe");
+  assert(temporaryProjectPatchOnly.status === "project_facts_written", `temporary project patch should write Project.vibe facts: ${temporaryProjectPatchOnly.blockedReasons.join("; ")}`);
+  assert(temporaryProjectPatchOnly.projectVibeWritten === true, "temporary project patch should update the in-memory Project.vibe");
 
   const referenceAction = buildDirectorAgentActionEnvelope({
     userIntent: "可以先补齐参考素材",

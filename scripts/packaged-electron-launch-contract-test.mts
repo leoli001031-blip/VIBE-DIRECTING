@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -53,6 +53,127 @@ async function stopRuntime(child: ReturnType<typeof spawn>) {
     child.kill("SIGTERM");
     setTimeout(resolve, 1000);
   });
+}
+
+async function runPackagedExecutableSmoke(executablePath: string) {
+  const marker = "__VIBE_ELECTRON_PACKAGED_GUI_SMOKE__";
+  const smokeRoot = mkdtempSync(path.join(tmpdir(), "vibe-packaged-app-smoke-"));
+  const smokeProfile = path.join(smokeRoot, "profile");
+  const smokeProjects = path.join(smokeRoot, "projects");
+  const smokeRuntime = path.join(smokeRoot, "runtime");
+  mkdirSync(smokeProfile, { recursive: true });
+  mkdirSync(smokeProjects, { recursive: true });
+  mkdirSync(smokeRuntime, { recursive: true });
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  const child = spawn(executablePath, [], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      VIBE_ELECTRON_SMOKE: "1",
+      VIBE_DIRECTOR_RUNTIME_API_PORT: "0",
+      VIBE_DIRECTOR_USER_DATA_DIR: smokeProfile,
+      VIBE_DIRECTOR_PROJECTS_ROOT: smokeProjects,
+      VIBE_DIRECTOR_RUNTIME_WORKDIR: smokeRuntime,
+      VIBE_DIRECTOR_CURRENT_PROJECT_BINDING_PATH: path.join(smokeProfile, "current-project.local.json"),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stopChildPromise: Promise<void> | null = null;
+  function stopChild() {
+    if (stopChildPromise) return stopChildPromise;
+    stopChildPromise = new Promise<void>((resolve) => {
+      if (child.exitCode !== null || child.signalCode !== null) {
+        resolve();
+        return;
+      }
+      child.once("exit", () => resolve());
+      child.kill("SIGTERM");
+      setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+        resolve();
+      }, 1000).unref();
+    }).finally(() => {
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+    });
+    return stopChildPromise;
+  }
+
+  try {
+    const resultLine = await new Promise<string>((resolve, reject) => {
+      let settled = false;
+      function output() {
+        return `${stdout.join("")}\n${stderr.join("")}`;
+      }
+      function maybeResolve() {
+        const line = output().split(/\r?\n/).find((candidate) => candidate.startsWith(marker));
+        if (!line || settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        void stopChild();
+        resolve(line);
+      }
+      const timeout = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        void stopChild();
+        reject(new Error(`Packaged executable smoke timed out\nstdout:\n${stdout.join("")}\nstderr:\n${stderr.join("")}`));
+      }, 45_000);
+      child.stdout?.on("data", (chunk: Buffer) => {
+        stdout.push(chunk.toString());
+        maybeResolve();
+      });
+      child.stderr?.on("data", (chunk: Buffer) => {
+        stderr.push(chunk.toString());
+        maybeResolve();
+      });
+      child.on("error", (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        reject(error);
+      });
+      child.on("exit", (code) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        const line = output().split(/\r?\n/).find((candidate) => candidate.startsWith(marker));
+        if (line) {
+          resolve(line);
+          return;
+        }
+        reject(new Error(`Packaged executable smoke exited with ${code} before marker\n${output()}`));
+      });
+    });
+
+    const result = JSON.parse(resultLine.slice(marker.length));
+    const output = `${stdout.join("")}\n${stderr.join("")}`;
+    assert(result.ok === true, `packaged executable smoke failed: ${result.error || output}`);
+    assert(result.packaged === true, "packaged executable smoke must run with app.isPackaged=true");
+    assert(result.renderer?.rootPresent === true, "packaged executable smoke must render the app root");
+    assert((result.renderer?.bodyLength || 0) > 100, "packaged executable smoke must render the real app body");
+    assert(String(result.renderer?.bodyTextSample || "").includes("AI 导演"), "packaged executable smoke must render the Agent-first entry");
+    assert(result.renderer?.hasBridge === true, "packaged executable smoke must expose the preload bridge");
+    assert(Boolean(result.renderer?.bridgeRuntimeApiBaseUrl), "packaged executable smoke must expose the runtime base URL");
+    assert(result.runtimeStartedBeforeRendererLoad === false, "packaged executable must create and load the renderer before Runtime starts");
+    assert(result.runtimeAuthProbe?.tokenPresentBeforeEnsure === false, "packaged preload must not expose a Runtime token before lazy startup");
+    assert(result.runtimeAuthProbe?.tokenPresentAfterEnsure === true, "packaged preload must receive the Runtime token after lazy startup");
+    assert(result.runtimeAuthProbe?.missingTokenStatus === 403, "packaged Runtime must reject mutation without a token");
+    assert(result.runtimeAuthProbe?.wrongTokenStatus === 403, "packaged Runtime must reject mutation with a wrong token");
+    assert(result.runtimeAuthProbe?.correctTokenStatus === 200, "packaged Runtime must accept mutation with the in-memory Electron token");
+    assert(result.runtimeStatus?.tokenRequired === true, "packaged Runtime must report token protection enabled");
+    assert(result.runtimeStatus?.providerCalled === false, "packaged executable smoke must not call providers");
+    assert(result.runtimeStatus?.liveSubmitAllowed === false, "packaged executable smoke must keep live submit blocked");
+    assert(
+      !/(keychain|secret storage|password|系统钥匙串|钥匙串|密码)/i.test(output),
+      "packaged executable smoke should not emit keychain/secret-storage/password prompts during normal launch",
+    );
+  } finally {
+    await stopChild();
+    rmSync(smokeRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  }
 }
 
 async function postJson(url: string, body: unknown) {
@@ -129,6 +250,8 @@ for (const entry of entries.filter((item) => item.startsWith("/dist/assets/") &&
     "node:fs.watch",
     "node:child_process.spawn",
     "pseudoSha256Hex",
+    "VITE_VIBE_DIRECTOR_RUNTIME_API_TOKEN",
+    "VITE_VIBE_CORE_RUNTIME_API_TOKEN",
   ]) {
     assert(!assetSource.includes(forbiddenSnippet), `renderer asset must not bundle Node shim fallback "${forbiddenSnippet}": ${entry}`);
   }
@@ -141,17 +264,38 @@ assert(
   "built Electron main must avoid macOS keychain prompts during normal local use",
 );
 assert(mainSource.includes("runtime:ensureStarted"), "built Electron main must expose lazy runtime startup IPC");
+assert(mainSource.includes("project:currentBinding"), "built Electron main must expose current project binding IPC for desktop restore");
+assert(mainSource.includes("Blocked untrusted IPC sender"), "built Electron main must reject privileged IPC from untrusted senders");
+assert(mainSource.includes("setWindowOpenHandler"), "built Electron main must deny embedded renderer-created windows");
+assert(mainSource.includes("will-navigate"), "built Electron main must guard renderer navigation");
+assert(mainSource.includes("will-redirect"), "built Electron main must guard renderer redirects");
+assert(mainSource.includes("will-attach-webview"), "built Electron main must reject webview attachment");
+assert(mainSource.includes("openExternal"), "built Electron main must delegate safe web links outside the Electron renderer");
+assert(
+  mainSource.includes("--user-data-dir=")
+    && mainSource.includes("VIBE_DIRECTOR_USER_DATA_DIR")
+    && mainSource.includes("setPath(\"userData\""),
+  "built Electron main must align app userData with explicit env or user-data-dir profiles",
+);
 assert(mainSource.includes("ensureRuntimeServer"), "built Electron main must retain idempotent lazy runtime startup");
 assert(
-  !/app\.whenReady\(\)\.then[\s\S]*?startRuntimeServer\(/.test(mainSource),
-  "built Electron main must not start the runtime server during app launch",
+  /app\.whenReady\(\)\.then[\s\S]*?await createWindow\(\)/.test(mainSource),
+  "built Electron main must create the first window without an eager Runtime URL",
 );
+const packagedAppReadyBody = mainSource.slice(mainSource.indexOf("app.whenReady().then"), mainSource.indexOf("}).catch", mainSource.indexOf("app.whenReady().then")));
+assert(!packagedAppReadyBody.includes("ensureRuntimeServer("), "built Electron app startup must not ensure Runtime before the first window");
+assert(mainSource.includes("runtimeStartedBeforeRendererLoad"), "built packaged smoke must verify the lazy Runtime startup order");
+assert(mainSource.includes("currentProjectBindingBootstrapArg"), "built Electron main must provide a current project bootstrap argument");
+assert(mainSource.includes("--vibe-current-project-binding="), "built Electron main must pass current project binding to preload");
 assert(mainSource.includes("preload.cjs"), "built Electron main must target built preload.cjs");
 assert(mainSource.includes("VIBE_DIRECTOR_RUNTIME_API_PORT"), "built Electron main must prefer Vibe Director runtime env names");
 assert(mainSource.includes("VIBE_CORE_RUNTIME_API_PORT"), "built Electron main must keep legacy runtime env compatibility isolated");
 assert(preloadSource.includes("contextBridge"), "built preload must expose a context-isolated bridge");
 assert(preloadSource.includes("vibeRuntime"), "built preload must expose vibeRuntime");
 assert(preloadSource.includes("ensureRuntimeApiBaseUrl"), "built preload must expose lazy runtime startup");
+assert(preloadSource.includes("currentProjectBinding"), "built preload must expose current project binding restore helper");
+assert(preloadSource.includes("__VIBE_CURRENT_PROJECT_BINDING__"), "built preload must expose current project bootstrap binding");
+assert(preloadSource.includes("--vibe-current-project-binding="), "built preload must read current project bootstrap argument");
 assert(indexHtml.includes("<script") && indexHtml.includes("./assets/"), "packaged dist/index.html must reference relative built assets for file:// loading");
 assert(runtimeSource.includes("vibe-director-runtime-api-listening"), "packaged runtime must publish the Vibe Director listen event");
 assert(runtimeSource.includes("VIBE_DIRECTOR_RUNTIME_WORKDIR"), "packaged runtime must prefer Vibe Director writable-root env");
@@ -162,6 +306,7 @@ assert(
   !runtimeSource.includes("await import(\"./local-runtime-api-server.mts\")"),
   "packaged runtime bundle must not import the .mts source wrapper",
 );
+await runPackagedExecutableSmoke(executablePath);
 
 const runtimeCwd = mkdtempSync(path.join(tmpdir(), "vibe-packaged-runtime-"));
 const isolatedHome = path.join(runtimeCwd, "home");

@@ -188,7 +188,7 @@ assert.equal(planOnlyTurn.kernelTurn.executionBoundary.requiresConfirmation, tru
 assert.equal(planOnlyTurn.kernelTurn.executionResult.status, "awaiting_confirmation");
 assert.equal(planOnlyTurn.kernelTurn.executionResult.lifecycle, "waiting_for_confirmation");
 assert.equal(planOnlyTurn.kernelTurn.requiredConfirmation, true);
-assert.match(planOnlyTurn.kernelTurn.executionCost, /参考生成|项目修改|读取项目/u);
+assert.match(planOnlyTurn.kernelTurn.executionCost, /参考生成|生成参考图|项目修改|读取项目/u);
 assert.doesNotMatch(planOnlyTurn.kernelTurn.executionCost, /Project\.vibe/u, "Agent execution cost copy should not expose Project.vibe to the creator-facing message flow");
 assert.match(planOnlyTurn.kernelTurn.externalSubmissionRisk, /生成|联网|不会提交视频/u);
 assert.match(planOnlyTurn.kernelTurn.nextSuggestion, /确认|改哪里/u);
@@ -234,6 +234,44 @@ assert.equal(planOnlyInspectResult?.facts?.some((fact) => fact.label === "层级
 assert.equal(planOnlyInspectResult?.facts?.some((fact) => fact.label === "诊断" && /2 项参考待补/.test(fact.value)), true);
 assert.equal(planOnlyInspectResult?.facts?.some((fact) => fact.label === "视频" && fact.value === "未提交"), true);
 assert.equal(planOnlyInspectResult?.facts?.some((fact) => fact.value === "idle"), false);
+const styleOnlyReferencePlanTurn = runVibeAgentTurn({
+  userMessage: "先不要生成参考图，只告诉我会补哪些参考，以及为什么需要这些参考。",
+  projectId: "agent-core-demo",
+  projectTitle: "Agent Core Demo",
+  projectRoot: "/tmp/vibe-agent-core-demo",
+  snapshot: buildDirectorAgentStateSnapshot({
+    runtimeState: runtimeState({
+      missing: 0,
+      assets: [{
+        id: "asset_style_text_only",
+        type: "style",
+        name: "文字风格方向",
+        path: "",
+        status: "planned",
+        lockedStatus: "candidate",
+        safeForFutureReference: false,
+        issues: [],
+        textConstraints: ["项目视觉风格：雨夜霓虹反光"],
+        sourceRefs: ["new_video_reference:style:text"],
+      }],
+    }),
+    currentView: "story",
+  }),
+  permissionMode: "plan_only",
+  generatedAt: "2026-06-17T08:00:45.000Z",
+});
+assert.equal(styleOnlyReferencePlanTurn.action.kind, "inspect_project_status");
+assert.equal(styleOnlyReferencePlanTurn.projectSnapshot.missingReferences, 3, "text-only style placeholders must not satisfy visual reference gaps");
+assert.equal(styleOnlyReferencePlanTurn.timeline.entries.some((entry) => entry.type === "confirmation_request"), false);
+const styleOnlyReferencePlanInspect = styleOnlyReferencePlanTurn.timeline.entries.find((entry) => entry.type === "tool_result" && entry.toolName === "inspect_project");
+assert.equal(styleOnlyReferencePlanInspect?.title, "参考计划");
+assert.match(styleOnlyReferencePlanInspect?.body || "", /会优先补 3 个画面参考/u);
+assert.doesNotMatch(styleOnlyReferencePlanInspect?.body || "", /待判断/u);
+assert.equal(styleOnlyReferencePlanInspect?.facts?.some((fact) => fact.label === "缺参考" && fact.value === "3 个"), true);
+const styleOnlyReferencePlanAssistant = styleOnlyReferencePlanTurn.timeline.entries.find((entry) => entry.id.startsWith("agent_assistant_"));
+assert.match(styleOnlyReferencePlanAssistant?.body || "", /只说明范围，不生成参考、不提交视频/u);
+assert.doesNotMatch(styleOnlyReferencePlanAssistant?.body || "", /待判断/u);
+assert.doesNotMatch(styleOnlyReferencePlanAssistant?.body || "", /已读取项目状态/u);
 const planOnlyExecutionBoundaryEntry = planOnlyTurn.timeline.entries.find((entry) => entry.id.startsWith("agent_tool_result_execution_boundary_"));
 assert.ok(planOnlyExecutionBoundaryEntry);
 assert.equal(planOnlyExecutionBoundaryEntry?.title, "执行边界");
@@ -293,7 +331,7 @@ const selectedShotProjectReferenceTurn = runVibeAgentTurn({
 const selectedShotProjectReferenceConfirmation = selectedShotProjectReferenceTurn.timeline.entries.find((entry) => entry.type === "confirmation_request");
 assert.equal(selectedShotProjectReferenceTurn.action.target.kind, "project", "whole-project intent must override the current selected shot");
 assert.equal(selectedShotProjectReferenceConfirmation?.facts?.some((fact) => fact.label === "影响" && fact.value === "整个项目"), true);
-assert.equal(selectedShotProjectReferenceConfirmation?.facts?.some((fact) => fact.label === "外部提交" && fact.value === "只调用参考生成，不提交视频"), true);
+assert.equal(selectedShotProjectReferenceConfirmation?.facts?.some((fact) => fact.label === "外部提交" && fact.value === "只生成参考图，不提交视频"), true);
 
 const englishSubmitTurn = runVibeAgentTurn({
   userMessage: "submit video",
@@ -418,12 +456,12 @@ const planNextResultEntry = planOnlyTurn.timeline.entries.find((entry) => entry.
 assert.equal(planNextResultEntry?.lifecycle, "proposed");
 assert.match(planNextResultEntry?.body || "", /我建议先做/);
 assert.match(planNextResultEntry?.body || "", /目标是/);
-assert.match(planNextResultEntry?.body || "", /确认后调用参考生成/);
+assert.match(planNextResultEntry?.body || "", /确认后生成参考图/);
 assert.match(planNextResultEntry?.body || "", /预计保存到 参考结果和运行记录/);
 assert.doesNotMatch(planNextResultEntry?.body || "", /assets\/generated|\.vibe-runtime|Project\.vibe/, "visible Agent plan copy should use creator-facing destinations");
 assert.match(planNextResultEntry?.body || "", /下一步：等你确认/);
-assert.equal(planNextResultEntry?.facts?.some((fact) => fact.label === "成本" && fact.value === "会调用参考生成"), true);
-assert.equal(planNextResultEntry?.facts?.some((fact) => fact.label === "外部提交" && fact.value === "确认后调用参考生成"), true);
+assert.equal(planNextResultEntry?.facts?.some((fact) => fact.label === "成本" && fact.value === "会生成参考图"), true);
+assert.equal(planNextResultEntry?.facts?.some((fact) => fact.label === "外部提交" && fact.value === "确认后生成参考图"), true);
 assert.equal(planNextResultEntry?.facts?.some((fact) => fact.label === "写入" && fact.value === "参考结果和运行记录"), true);
 assert.equal(planNextResultEntry?.facts?.some((fact) => fact.label === "下一步" && fact.value === "等你确认"), true);
 assert.match(String(planNextResultEntry?.details?.permissionBoundary || ""), /当前只允许整理计划|需要你确认|需要你允许/);
@@ -453,8 +491,8 @@ const referenceOnlyTurn = runVibeAgentTurn({
   generatedAt: "2026-06-17T08:00:03.000Z",
 });
 const referenceOnlyPlanEntry = referenceOnlyTurn.timeline.entries.find((entry) => entry.actionId === "reference-only-action" && entry.toolName === "plan_next_action");
-assert.match(referenceOnlyPlanEntry?.body || "", /只调用参考生成，不提交视频/);
-assert.equal(referenceOnlyPlanEntry?.facts?.some((fact) => fact.label === "外部提交" && fact.value === "只调用参考生成，不提交视频"), true);
+assert.match(referenceOnlyPlanEntry?.body || "", /只生成参考图，不提交视频/);
+assert.equal(referenceOnlyPlanEntry?.facts?.some((fact) => fact.label === "外部提交" && fact.value === "只生成参考图，不提交视频"), true);
 assert.equal(planOnlyTurn.timeline.entries.some((entry) => entry.type === "tool_call" && entry.toolName === "write_agent_message"), true);
 assert.equal(planOnlyTurn.timeline.entries.some((entry) => entry.type === "assistant_message" && entry.title === "AI 导演"), true);
 assert.equal(planOnlyTurn.timeline.entries.some((entry) => entry.type === "assistant_message" && entry.lifecycle === "waiting_for_confirmation"), true);
@@ -522,14 +560,31 @@ assert.equal(planOnlyConfirmation?.actionKind, planOnlyTurn.action.kind);
 assert.equal(planOnlyConfirmation?.facts?.some((fact) => fact.label === "动作" && fact.value === planOnlyTurn.action.summary), true);
 assert.equal(planOnlyConfirmation?.facts?.some((fact) => fact.label === "目标" && fact.value === planOnlyTargetLabel), true);
 assert.equal(planOnlyConfirmation?.facts?.some((fact) => fact.label === "影响"), true);
-assert.equal(planOnlyConfirmation?.facts?.some((fact) => fact.label === "执行" && /Image2|Seedance|写入项目|本地导出|联网查资料/.test(fact.value)), true);
-assert.equal(planOnlyConfirmation?.facts?.some((fact) => fact.label === "成本" && /参考生成|Seedance|视频请求|联网|读取项目|项目修改/.test(fact.value)), true);
+assert.equal(planOnlyConfirmation?.facts?.some((fact) => fact.label === "执行" && /生成参考图|Seedance|写入项目|本地导出|联网查资料/.test(fact.value)), true);
+assert.equal(planOnlyConfirmation?.facts?.some((fact) => fact.label === "成本" && /参考生成|生成参考图|Seedance|视频请求|联网|读取项目|项目修改/.test(fact.value)), true);
 assert.equal(planOnlyConfirmation?.facts?.some((fact) => fact.label === "外部提交" && /确认后|不提交视频|Seedance/.test(fact.value)), true);
 assert.equal(planOnlyConfirmation?.facts?.some((fact) => fact.label === "下一步" && fact.value === "等你确认"), true);
 assert.equal(planOnlyConfirmation?.details?.expectedReceipt, planOnlyTurn.action.toolPlan.expectedReceipt);
 assert.equal(planOnlyConfirmation?.details?.toolName, planOnlyTurn.action.toolPlan.toolName);
 assert.match(planOnlyTurn.permissionDecision.reason, /当前只允许整理计划|需要你确认|需要你允许/);
 assert.doesNotMatch(planOnlyTurn.permissionDecision.reason, /plan_only|project_write_allowed|reference_allowed|video_allowed|export_allowed|revise_story_or_shot/);
+
+const currentStoryReferenceTurn = runVibeAgentTurn({
+  userMessage: "允许生成参考",
+  projectId: "agent-core-demo",
+  projectTitle: "Agent Core Demo",
+  projectRoot: "/tmp/vibe-agent-core-demo",
+  snapshot,
+  permissionMode: "reference_allowed",
+  generatedAt: "2026-06-17T08:00:03.000Z",
+});
+const currentStoryReferenceConfirmation = currentStoryReferenceTurn.timeline.entries.find((entry) => entry.type === "confirmation_request");
+assert.equal(currentStoryReferenceTurn.action.target.kind, "project");
+assert.equal(currentStoryReferenceTurn.action.target.label, "当前故事");
+assert.equal(currentStoryReferenceConfirmation?.facts?.some((fact) => fact.label === "目标" && fact.value === "当前故事"), true);
+assert.equal(currentStoryReferenceConfirmation?.facts?.some((fact) => fact.label === "影响" && fact.value === "当前故事"), true);
+assert.equal(currentStoryReferenceConfirmation?.facts?.some((fact) => fact.label === "影响" && fact.value === "整个项目"), false);
+
 const planOnlyTimelineStatus = buildVibeAgentTimelineStatusView(planOnlyTurn.timeline.entries);
 assert.equal(planOnlyTimelineStatus?.stage, "等待确认");
 assert.equal(planOnlyTimelineStatus?.waitingFor, "你的确认");
@@ -1627,6 +1682,9 @@ assert.equal(intakeEntries.some((entry) => entry.type === "tool_call" && entry.t
 assert.equal(intakeEntries.some((entry) => entry.type === "tool_call" && entry.toolName === "plan_next_action"), false);
 assert.equal(intakeEntries.some((entry) => entry.type === "assistant_message" && entry.toolName === "write_agent_message"), true);
 assert.equal(intakeEntries.some((entry) => entry.type === "confirmation_request" && entry.confirmationRequired === true), true);
+const intakeConfirmationEntry = intakeEntries.find((entry) => entry.type === "confirmation_request");
+assert.match(`${intakeConfirmationEntry?.body || ""} ${JSON.stringify(intakeConfirmationEntry?.facts || [])}`, /保存故事/u);
+assert.doesNotMatch(`${intakeConfirmationEntry?.body || ""} ${JSON.stringify(intakeConfirmationEntry?.facts || [])}`, /加入项目计划/u);
 assert.equal(intakeEntries.every(isVibeAgentIntakeTimelineEntry), true);
 const intakeStatusEntries = buildVibeAgentIntakeTimelineEntries({
   createdAt: "2026-06-17T08:02:30.000Z",

@@ -1,0 +1,166 @@
+{
+  "schemaVersion": "vibe_director_product_design_projection_pack/0.1.0",
+  "generatedAt": "2026-07-11T05:20:00+08:00",
+  "sourceType": "real_packaged_app_observation_plus_agent_current_task_contract",
+  "verificationRun": {
+    "root": "/tmp/vibe-director-p4-gui-r3-uLCyaD",
+    "projectRoot": "/private/tmp/vibe-director-p4-gui-r3-uLCyaD/projects/p4-agent-first-final",
+    "providerCredentialsPresent": false,
+    "frontendDevServerUsed": false
+  },
+  "steps": [
+    {
+      "id": "draft_story",
+      "projection": {
+        "source": "new_video_draft",
+        "step": "draft_story",
+        "label": "整理新视频草案",
+        "requiresConfirmation": false,
+        "effect": "none",
+        "blockers": [],
+        "facts": [
+          { "label": "目标", "value": "先整理为 2 个镜头" },
+          { "label": "保护", "value": "不生成参考、不提交视频" }
+        ]
+      },
+      "immutableOutcome": "Only a local draft may be created. No provider call or project export is allowed."
+    },
+    {
+      "id": "confirm_story",
+      "projection": {
+        "source": "timeline_confirmation",
+        "step": "confirm_story",
+        "label": "确认这版故事",
+        "requiresConfirmation": true,
+        "effect": "none",
+        "confirmationKind": "pipeline_action",
+        "blockers": [],
+        "facts": [
+          { "label": "镜头", "value": "2 个" },
+          { "label": "确认", "value": "只保存故事" }
+        ]
+      },
+      "confirmationDisplay": "确认这版故事",
+      "immutableOutcome": "The two shots remain present and the next task becomes choose_save_location.",
+      "evidence": ["evidence/01-story-confirmation.png", "evidence/02-save-location-confirmation.png"]
+    },
+    {
+      "id": "choose_save_location",
+      "projection": {
+        "source": "timeline_confirmation",
+        "step": "choose_save_location",
+        "label": "选择保存位置",
+        "requiresConfirmation": true,
+        "effect": "state_only",
+        "confirmationKind": "pipeline_action",
+        "blockers": [],
+        "facts": [
+          { "label": "目标", "value": "故事保存位置" },
+          { "label": "保护", "value": "不生成参考、不提交视频、不导出" }
+        ]
+      },
+      "confirmationDisplay": "选择保存位置",
+      "immutableOutcome": "Only the canonical local project root is authorized and the confirmed story is persisted.",
+      "evidence": ["evidence/02-save-location-confirmation.png", "evidence/03-story-saved.png"]
+    },
+    {
+      "id": "prepare_references_dry_run",
+      "projection": {
+        "source": "timeline_confirmation",
+        "step": "prepare_references",
+        "label": "补参考",
+        "requiresConfirmation": true,
+        "effect": "generation_job",
+        "confirmationKind": "pipeline_action",
+        "blockers": [],
+        "facts": [
+          { "label": "方式", "value": "本地合同验证" },
+          { "label": "保护", "value": "不调用真实 provider、不生成真实参考" }
+        ]
+      },
+      "confirmationDisplay": "确认验证参考流程",
+      "executionTruth": {
+        "executionMode": "dry_run",
+        "providerCalled": false,
+        "outputAssets": [],
+        "actualReferenceStateAfterExecution": "missing_2"
+      },
+      "evidence": ["evidence/12-reference-dry-run-confirmation.png", "evidence/05-reference-dry-run-complete.png"]
+    },
+    {
+      "id": "submit_video_dry_run",
+      "projection": {
+        "source": "timeline_confirmation",
+        "step": "submit_video",
+        "label": "发送视频",
+        "requiresConfirmation": true,
+        "effect": "generation_job",
+        "confirmationKind": "pipeline_action",
+        "blockers": [],
+        "facts": [
+          { "label": "方式", "value": "本地合同验证" },
+          { "label": "保护", "value": "不调用真实 provider、不提交或生成真实视频" }
+        ]
+      },
+      "confirmationDisplay": "确认验证视频流程",
+      "executionTruth": {
+        "executionMode": "dry_run",
+        "providerCalled": false,
+        "outputAssets": [],
+        "actualVideoStateAfterExecution": "not_generated",
+        "jobId": "agent_video_job_minimal_agent_current_task_submit_video_001",
+        "projectFactHash": "pv_2401af36"
+      },
+      "evidence": ["evidence/13-video-dry-run-confirmation.png", "evidence/08-video-dry-run-complete.png"]
+    },
+    {
+      "id": "export",
+      "projection": {
+        "source": "timeline_confirmation",
+        "step": "export",
+        "label": "导出交付包",
+        "requiresConfirmation": true,
+        "effect": "local_export",
+        "confirmationKind": "pipeline_action",
+        "blockers": [],
+        "facts": [
+          { "label": "范围", "value": "当前项目" },
+          { "label": "保护", "value": "确认前不写文件、不生成缺失视频" }
+        ]
+      },
+      "confirmationDisplay": "导出交付包",
+      "executionTruth": {
+        "executionMode": "live",
+        "providerCalled": false,
+        "outputAssets": ["exports/current-project/export_manifest.json"],
+        "exportedFileCount": 12,
+        "jobId": "agent_video_job_minimal_agent_current_task_export_002",
+        "projectFactHash": "pv_2401af36"
+      },
+      "evidence": ["evidence/09-export-confirmation.png", "evidence/10-export-complete.png"]
+    },
+    {
+      "id": "idle_after_cold_start",
+      "projection": {
+        "source": "project_status",
+        "step": "idle",
+        "label": "继续描述想法",
+        "requiresConfirmation": false,
+        "effect": "none",
+        "blockers": [],
+        "facts": [
+          { "label": "故事", "value": "2 镜头" },
+          { "label": "参考", "value": "缺 2 张" },
+          { "label": "视频", "value": "未生成" },
+          { "label": "现在在做", "value": "等你指令" }
+        ]
+      },
+      "restoreTruth": {
+        "stagedPlanStatus": "cleared",
+        "staleConfirmationVisible": false,
+        "terminalJobOwnsCurrentTask": false
+      },
+      "evidence": ["evidence/11-cold-start-restored.png"]
+    }
+  ]
+}

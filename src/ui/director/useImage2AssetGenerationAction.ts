@@ -54,6 +54,7 @@ export type Image2AssetGenerationRunOptions = {
   confirmationReceiptId?: string;
   confirmedAt?: string;
   agentToolTrace?: DirectorAgentToolTrace;
+  signal?: AbortSignal;
 };
 
 function defaultConfirmAction(message: string) {
@@ -132,7 +133,7 @@ function friendlyAssetGenerationError(error: unknown) {
     return "参考生成暂时中断。已生成的内容会保留，可以稍后重试。";
   }
   if (/未选择项目|未同步|连接项目失败|项目文件已打开|请选择|project/i.test(raw)) {
-    return "先打开或新建本地项目，再生成参考。";
+    return "先选择保存位置，再生成参考。";
   }
   return raw || "参考生成失败，可以稍后重试。";
 }
@@ -319,12 +320,12 @@ export function useImage2AssetGenerationAction({
           phrase: IMAGE2_ASSET_CONFIRM_PHRASE,
           confirmed: true,
         },
-      });
+      }, options?.signal);
       const nextState = assetActionState(submitted);
       setActionState(nextState);
       const refreshed = await loadProjectRealChainStatus(liveRuntimeProjectIdentity);
       setProjectRealChainState(refreshed);
-      return nextState;
+      return { ...submitted, ...nextState };
     } catch (error) {
       const nextState: Image2AssetGenerationActionState = {
         status: "blocked",
@@ -347,8 +348,8 @@ export function useImage2AssetGenerationAction({
     keyConfigured,
     status: actionState.status,
     message: actionState.message,
-    disabled: actionState.status === "running" || !runtimeProjectIdentity || !keyConfigured,
-  }), [actionState.message, actionState.status, keyConfigured, runtimeProjectIdentity]);
+    disabled: actionState.status === "running" || !keyConfigured,
+  }), [actionState.message, actionState.status, keyConfigured]);
 
   return {
     assetGenerationAction,

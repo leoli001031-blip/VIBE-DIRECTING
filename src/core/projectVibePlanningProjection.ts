@@ -1,5 +1,11 @@
 import type { ScriptPlannerResult } from "./scriptPlanner";
 import type { GenerationJob, KeyframePairDerivation, ShotRecord, VideoControlMode } from "./types";
+import {
+  detectDirectorAgentPermissionIntent,
+  directorAgentPermissionIntentDisallowsVideoSubmit,
+  normalizedDirectorAgentPermissionIntent,
+  stripDirectorAgentPermissionControlPhrases,
+} from "./directorAgentPermissionIntent";
 import type { ProjectVibeAsset, ProjectVibeDocument, ProjectVibeShot, ProjectVibeStorySection } from "../project/types";
 
 export const projectVibePlanningProjectionSchemaVersion = "0.1.0";
@@ -105,6 +111,60 @@ function hasStoryIntent(shot: ProjectVibeShot): boolean {
   return Boolean(shot.intent.trim() || shot.title.trim());
 }
 
+const projectVibeExtraPermissionControlPhrases = [
+  "保留参考计划",
+  "保留参考",
+  "保留计划",
+  "不提交视频",
+  "不要提交视频",
+];
+
+const projectVibeGenericPermissionRemainders = new Set([
+  "",
+  "参考",
+  "参考图",
+  "参考计划",
+  "保留参考",
+  "保留参考计划",
+  "计划",
+  "视频",
+  "提交视频",
+]);
+
+function trimProjectVibeControlLabel(value: string) {
+  return value.replace(/^[，。！？、,.!?;；:："'“”‘’`~\s_-]+|[，。！？、,.!?;；:："'“”‘’`~\s_-]+$/g, "").trim();
+}
+
+function stripProjectVibePermissionControlLabel(value: string) {
+  return trimProjectVibeControlLabel(
+    projectVibeExtraPermissionControlPhrases.reduce(
+      (nextValue, phrase) => nextValue.replaceAll(phrase, ""),
+      stripDirectorAgentPermissionControlPhrases(value),
+    ),
+  );
+}
+
+function isProjectVibePermissionControlLabel(value: string) {
+  const normalized = normalizedDirectorAgentPermissionIntent(value);
+  if (!normalized) return false;
+  return Boolean(
+    detectDirectorAgentPermissionIntent(value) ||
+    directorAgentPermissionIntentDisallowsVideoSubmit(value) ||
+    projectVibeExtraPermissionControlPhrases.some((phrase) => normalized.includes(normalizedDirectorAgentPermissionIntent(phrase))),
+  );
+}
+
+export function projectVibeCreatorFacingStoryLabel(value: string | undefined, fallback: string): string {
+  const rawValue = value?.trim();
+  const fallbackValue = fallback.trim();
+  if (!rawValue) return fallbackValue;
+  if (!isProjectVibePermissionControlLabel(rawValue)) return rawValue;
+  const stripped = stripProjectVibePermissionControlLabel(rawValue);
+  const normalizedStripped = normalizedDirectorAgentPermissionIntent(stripped);
+  if (stripped && !projectVibeGenericPermissionRemainders.has(normalizedStripped)) return stripped;
+  return fallbackValue;
+}
+
 function shotRecordFromSource(source: ProjectionShotSource): ShotRecord {
   const startFrame = framePathForShot(source.projectId, source.shot, "start");
   const videoControlMode = videoControlModeForShot(source.shot);
@@ -112,13 +172,18 @@ function shotRecordFromSource(source: ProjectionShotSource): ShotRecord {
   const hasScene = source.shot.sceneAssetIds.length > 0;
   const hasProp = source.shot.propAssetIds.length > 0;
   const blocked = source.shot.status === "blocked";
+  const title = projectVibeCreatorFacingStoryLabel(source.shot.title, `镜头 ${source.sequenceIndex + 1}`);
+  const storyFunction = projectVibeCreatorFacingStoryLabel(source.shot.intent || source.section?.summary || source.shot.title, title);
+  const primaryAction = source.shot.primaryAction
+    ? projectVibeCreatorFacingStoryLabel(source.shot.primaryAction, "")
+    : undefined;
 
   return {
     id: source.shot.id,
     actId: actIdForSequence(source.section?.sequenceIndex ?? source.sequenceIndex),
     sectionId: source.shot.sectionId,
-    title: source.shot.title,
-    storyFunction: source.shot.intent || source.section?.summary || source.shot.title,
+    title,
+    storyFunction,
     narrationText: source.shot.narrationText,
     dialogueLines: source.shot.dialogueLines,
     subtitle: source.shot.subtitle,
@@ -140,7 +205,7 @@ function shotRecordFromSource(source: ProjectionShotSource): ShotRecord {
     rhythmProfile: source.shot.rhythmProfile,
     splitPolicy: source.shot.splitPolicy,
     actionBeats: source.shot.actionBeats,
-    primaryAction: source.shot.primaryAction,
+    primaryAction: primaryAction || undefined,
     actionTrigger: source.shot.actionTrigger,
     microReaction: source.shot.microReaction,
     seedanceDirection: source.shot.seedanceDirection,

@@ -63,11 +63,13 @@ export function buildVibeAgentToolHandoff(input: {
   action: DirectorAgentActionEnvelope | undefined;
   availability: DirectorAgentToolAvailability;
   userConfirmed: boolean;
+  confirmedAt?: string;
 }) {
   if (!input.action) return undefined;
   return buildDirectorAgentToolHandoff({
     action: input.action,
     userConfirmed: input.userConfirmed,
+    confirmedAt: input.confirmedAt,
     availability: input.availability,
   });
 }
@@ -75,6 +77,7 @@ export function buildVibeAgentToolHandoff(input: {
 export function buildConfirmedVibeAgentToolHandoff(input: {
   action: DirectorAgentActionEnvelope | undefined;
   availability: DirectorAgentToolAvailability;
+  confirmedAt?: string;
 }) {
   return buildVibeAgentToolHandoff({
     ...input,

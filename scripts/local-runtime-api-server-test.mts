@@ -527,6 +527,8 @@ const tempRoot = mkdtempSync(path.join(tmpdir(), "vibe-runtime-api-test-"));
 const bindingPath = path.join(tempRoot, "current-project.local.json");
 const outsideRoot = path.join(tempRoot, "outside-project");
 const outsideFile = path.join(tempRoot, "outside-file.txt");
+const agentGenerationLedgerEndpoint = "/api/runtime/projects/current/agent-generation-job-ledger";
+const project005AgentGenerationLedgerPath = `${project005Root}/.vibe-runtime/agent-generation-job-ledger.json`;
 const repoSymlinkRoot = "real-test-sandbox/current-project-runtime-boundary-link";
 const repoSymlinkFile = `${project004Root}/runtime-boundary-file-link.txt`;
 const missingRefsRoot = "real-test-sandbox/current-project-one-shot-missing-refs-test";
@@ -962,6 +964,11 @@ try {
   assert(currentUnbound.payload.status === "unbound", "current project should start unbound");
   assert(!existsSync(bindingPath), "test binding file should not be created before select");
 
+  const unboundAgentGenerationLedger = await fetchJson(`${baseUrl}${agentGenerationLedgerEndpoint}`);
+  assert(unboundAgentGenerationLedger.response.status === 409, "GET generation ledger should fail closed while unbound");
+  assert(unboundAgentGenerationLedger.payload.status === "unbound", "unbound generation ledger status mismatch");
+  assert(unboundAgentGenerationLedger.payload.providerCalled === false, "unbound generation ledger must not call provider");
+
   const project004VibeBeforeRecent = statSync(project004VibePath).mtimeMs;
   const project005VibeBeforeRecent = statSync(project005VibePath).mtimeMs;
   const recentUnbound = await fetchJson(`${baseUrl}/api/runtime/projects/recent`);
@@ -1006,6 +1013,37 @@ try {
   assert(statSync(project005VibePath).mtimeMs === project005VibeBefore, "POST select 005 must not mutate project.vibe");
   assert(existsSync(bindingPath), "POST select should write runtime-local binding");
   assert(JSON.parse(readFileSync(bindingPath, "utf8")).projectRoot === project005Root, "binding file should store 005 root");
+
+  const missingAgentGenerationLedger = await fetchJson(`${baseUrl}${agentGenerationLedgerEndpoint}`);
+  assert(missingAgentGenerationLedger.response.status === 404, "GET missing generation ledger should return 404");
+  assert(missingAgentGenerationLedger.payload.status === "missing", "missing generation ledger status mismatch");
+  assert(missingAgentGenerationLedger.payload.providerCalled === false, "GET missing generation ledger must not call provider");
+
+  const agentGenerationLedgerContent = `${JSON.stringify({
+    schemaVersion: "agent_video_generation_job_ledger/0.2.0",
+    ledgerId: "runtime-api-p2-ledger",
+    projectId: project005Id,
+    projectRoot: project005Root,
+    projectFactHash: "runtime-api-p2-fact-hash",
+    createdAt: "2026-07-11T00:00:00.000Z",
+    updatedAt: "2026-07-11T00:00:00.000Z",
+    jobs: [],
+  }, null, 2)}\n`;
+  const writeAgentGenerationLedger = await fetchJson(`${baseUrl}${agentGenerationLedgerEndpoint}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ content: agentGenerationLedgerContent }),
+  });
+  assert(writeAgentGenerationLedger.response.status === 200, "POST generation ledger should return 200");
+  assert(writeAgentGenerationLedger.payload.status === "written", "POST generation ledger status mismatch");
+  assert(writeAgentGenerationLedger.payload.providerCalled === false, "POST generation ledger must not call provider");
+  assert(existsSync(project005AgentGenerationLedgerPath), "POST generation ledger should write the project sidecar");
+  assert(readFileSync(project005AgentGenerationLedgerPath, "utf8") === agentGenerationLedgerContent, "generation ledger sidecar content mismatch");
+
+  const readAgentGenerationLedger = await fetchJson(`${baseUrl}${agentGenerationLedgerEndpoint}`);
+  assert(readAgentGenerationLedger.response.status === 200, "GET generation ledger should return 200 after write");
+  assert(readAgentGenerationLedger.payload.status === "read", "GET generation ledger status mismatch");
+  assert(readAgentGenerationLedger.payload.content === agentGenerationLedgerContent, "GET generation ledger should return the persisted content");
 
   const project005VibeBeforeStatusRead = statSync(project005VibePath).mtimeMs;
   const project005Status = await fetchJson(`${baseUrl}/api/runtime/projects/current/real-chain/status`);
@@ -1373,6 +1411,10 @@ try {
   assert(select004.payload.projectVibeWritten === false, "POST select 004 must not write project.vibe");
   assert(statSync(project004VibePath).mtimeMs === project004VibeBefore, "POST select 004 must not mutate project.vibe");
   assert(JSON.parse(readFileSync(bindingPath, "utf8")).projectRoot === project004Root, "binding file should store 004 root");
+
+  const project004AgentGenerationLedger = await fetchJson(`${baseUrl}${agentGenerationLedgerEndpoint}`);
+  assert(project004AgentGenerationLedger.response.status === 404, "generation ledger must not leak after switching projects");
+  assert(project004AgentGenerationLedger.payload.status === "missing", "switched project generation ledger should be missing");
 
   const recentAfterSelect004 = await fetchJson(`${baseUrl}/api/runtime/projects/recent`);
   assert(recentAfterSelect004.response.status === 200, "GET recent projects after select 004 should return 200");

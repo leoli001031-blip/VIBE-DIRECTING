@@ -142,6 +142,20 @@ assert(!requestedShotCountBrief.storyText.includes("拆成 3 个镜头"), "reque
 assert(requestedShotCountBrief.directiveText.includes("拆成 3 个镜头"), "requested shot count wording should be preserved as planning preference text");
 assert(extractRequestedShotCount(`${requestedShotCountBrief.storyText}\n${requestedShotCountBrief.directiveText}`) === 3, "requested shot count should remain available to the AI planning prompt after directive split");
 
+const naturalRequestedShotCountBrief = splitCreativePlanningText("做一个 9 秒短片：傍晚的天桥上，一个小提琴手把最后一段旋律送给赶末班车的女孩，路灯随着旋律一盏盏亮起。整理成 3 个镜头，不生成参考图，不提交视频。");
+assert(naturalRequestedShotCountBrief.storyText.includes("傍晚的天桥上"), "natural requested shot count wording should keep the real story setting");
+assert(naturalRequestedShotCountBrief.storyText.includes("路灯随着旋律一盏盏亮起"), "natural requested shot count wording should keep the real story action");
+assert(!naturalRequestedShotCountBrief.storyText.includes("整理成 3 个镜头"), "natural requested shot count wording must not become a storyboard beat");
+assert(naturalRequestedShotCountBrief.directiveText.includes("整理成 3 个镜头"), "natural requested shot count wording should be preserved as planning preference text");
+assert(extractRequestedShotCount(`${naturalRequestedShotCountBrief.storyText}\n${naturalRequestedShotCountBrief.directiveText}`) === 3, "natural requested shot count should remain available after directive split");
+
+const firstPersonCreationBrief = splitCreativePlanningText("我想做一个三镜头短片：一个人在雨夜车站看到车票上的目的地慢慢变成海边。先只整理草案，不要生成参考图，也不要提交视频。");
+assert(firstPersonCreationBrief.storyText.includes("一个人在雨夜车站"), "first-person creation prefixes should not hide the real story setting");
+assert(firstPersonCreationBrief.storyText.includes("车票上的目的地慢慢变成海边"), "first-person creation prefixes should keep the prop transformation story");
+assert(!firstPersonCreationBrief.storyText.includes("我想做一个三镜头短片"), "first-person creation request prefixes must not become storyboard content");
+assert(!firstPersonCreationBrief.storyText.includes("不要生成参考图"), "no-reference controls in first-person requests must not become storyboard content");
+assert(firstPersonCreationBrief.directiveText.includes("我想做一个三镜头短片"), "first-person creation request prefixes should be preserved as planning preference text");
+
 const strategyOnlyBrief = splitCreativePlanningText("做一个 20 秒短片：深夜海边自动售货机旁，一个送报少女发现机器吐出一枚发热的蓝色硬币。她沿着防波堤追着硬币滚动的光，看到远处灯塔像在发送摩斯电码。先做规划和分镜策略，不提交视频。");
 assert(strategyOnlyBrief.storyText.includes("自动售货机旁"), "story text should keep the creative opening before strategy-only controls");
 assert(!strategyOnlyBrief.storyText.includes("先做规划"), "strategy-only controls must not appear in story text");
@@ -305,6 +319,107 @@ const visibleCharacterInferenceNormalized = normalizeDirectorAiStoryboardPlan({
   }],
 });
 assert(visibleCharacterInferenceNormalized.shots[0]!.characters === "女生", "visible human subjects in shot text should override an incorrect 无 character field");
+
+const paperPlaneReferenceNormalized = normalizeDirectorAiStoryboardPlan({
+  totalDurationSeconds: 8,
+  shots: [{
+    title: "递出纸飞机",
+    durationSeconds: 4,
+    visualDescription: "雨夜便利店门口，一个女孩把纸飞机递给机器人保安，灯箱在门口亮着。",
+    primaryAction: "纸飞机飞进灯箱后变成一只发光的鸟。",
+    characters: "女生、保安、机器人、女孩",
+    scene: "山脚便利店",
+    props: "无",
+  }],
+});
+const paperPlaneReferenceShot = paperPlaneReferenceNormalized.shots[0]!;
+assert(paperPlaneReferenceShot.characters === "女孩、机器人保安", "robot guard and girl should become stable character references instead of split duplicates");
+assert(paperPlaneReferenceShot.scene === "雨夜便利店门口", "rainy convenience-store doorway should not fall back to a generic mountain convenience store");
+assert(paperPlaneReferenceShot.props === "纸飞机、灯箱、发光鸟", "paper airplane, lightbox and glowing bird should be recovered as prop references when AI omits props");
+
+const deliveryRobotReferenceNormalized = normalizeDirectorAiStoryboardPlan({
+  totalDurationSeconds: 8,
+  shots: [{
+    title: "递出纸鹤",
+    durationSeconds: 4,
+    visualDescription: "雨夜高架桥下，外卖员女孩站在蓝色电动车旁，把一只发光纸鹤递给机器人保安，车灯反射在积水里。",
+    primaryAction: "第二个镜头给手部特写和眼神停顿。",
+    characters: "外卖员女孩、机器人保安",
+    scene: "雨夜街边",
+    props: "无",
+  }],
+});
+const deliveryRobotReferenceShot = deliveryRobotReferenceNormalized.shots[0]!;
+assert(deliveryRobotReferenceShot.props === "发光纸鹤、蓝色电动车", "paper crane and e-bike should be recovered as prop references while car lights, hands, eyes, and puddles stay contextual details");
+
+const glassElevatorReferenceNormalized = normalizeDirectorAiStoryboardPlan({
+  totalDurationSeconds: 9,
+  shots: [{
+    title: "玻璃电梯里的递手机",
+    durationSeconds: 3,
+    visualDescription: "凌晨玻璃电梯里，女孩撑着红雨伞，拿出一部旧手机给机器人保安看。",
+    primaryAction: "第二个镜头切到便利店招牌在雨水里闪烁，最后旧手机屏幕映出红雨伞的影子。",
+    characters: "女孩、机器人保安",
+    scene: "便利店",
+    props: "手机、雨伞",
+  }],
+});
+const glassElevatorReferenceShot = glassElevatorReferenceNormalized.shots[0]!;
+assert(glassElevatorReferenceShot.scene === "凌晨玻璃电梯", "glass elevator should remain the scene baseline instead of being displaced by the convenience-store sign");
+assert(glassElevatorReferenceShot.props === "旧手机、红雨伞、便利店招牌", "specific props should keep their qualifiers while screen reflections, rain, and shadows stay contextual details");
+
+const soyMilkReferenceNormalized = normalizeDirectorAiStoryboardPlan({
+  totalDurationSeconds: 8,
+  shots: [{
+    title: "豆浆发光字",
+    durationSeconds: 4,
+    visualDescription: "清晨地铁站，外卖员把一杯热豆浆放到睡着的女孩旁边。",
+    primaryAction: "列车进站时杯盖上浮出一行发光字。",
+    characters: "女孩、外卖员",
+    scene: "车站",
+    props: "无",
+  }],
+});
+assert(soyMilkReferenceNormalized.shots[0]!.props === "热豆浆、发光字", "soy milk and glowing text should be recovered as prop references when AI omits props");
+
+const laundromatReferenceNormalized = normalizeDirectorAiStoryboardPlan({
+  totalDurationSeconds: 7,
+  shots: [{
+    title: "黄昏洗衣店",
+    durationSeconds: 4,
+    visualDescription: "黄昏洗衣店，一个女孩把掉色的红围巾放进洗衣机，滚筒转动时玻璃上浮出一张旧车票。",
+    primaryAction: "女孩把掉色的红围巾放进洗衣机。",
+    characters: "女孩",
+    scene: "待确认",
+    props: "车票",
+  }],
+});
+assert(laundromatReferenceNormalized.shots[0]!.scene === "黄昏洗衣店", "explicit laundromat settings should not stay as 待确认 scene references");
+
+const laundromatContinuationNormalized = normalizeDirectorAiStoryboardPlan({
+  totalDurationSeconds: 8,
+  shots: [
+    {
+      title: "黄昏洗衣店",
+      durationSeconds: 4,
+      visualDescription: "黄昏洗衣店里，女孩拿着掉色的红围巾站在洗衣机前。",
+      primaryAction: "女孩看向滚筒玻璃。",
+      characters: "女孩",
+      scene: "黄昏洗衣店",
+      props: "红围巾",
+    },
+    {
+      title: "放入红围巾",
+      durationSeconds: 4,
+      visualDescription: "女孩把掉色的红围巾放进洗衣机，滚筒转动时玻璃上浮出一张旧车票。",
+      primaryAction: "女孩把红围巾放进洗衣机。",
+      characters: "女孩",
+      scene: "待确认",
+      props: "车票",
+    },
+  ],
+});
+assert(laundromatContinuationNormalized.shots[1]!.scene === "黄昏洗衣店", "laundromat continuation shots should inherit the previous explicit setting instead of staying 待确认");
 
 const racingAuthorityNormalized = normalizeDirectorAiStoryboardPlan({
   narrativeGoal: "用雨夜山路快切建立赛车对决，同时保护关键物道具。",
@@ -523,6 +638,20 @@ const authoritativeTargetNormalized = normalizeDirectorAiStoryboardPlan({
 const authoritativeTargetSum = Math.round(authoritativeTargetNormalized.shots.reduce((sum, shot) => sum + shot.durationSeconds, 0) * 10) / 10;
 assert(authoritativeTargetNormalized.shots.length === 2, "explicit user target should override AI-expanded total duration and merge excess shots");
 assert(authoritativeTargetSum === 8, "explicit 8s target should stay 8s after executable-duration normalization");
+
+const requestedShotCountNormalized = normalizeDirectorAiStoryboardPlan({
+  totalDurationSeconds: 12,
+  shots: [
+    { title: "雨夜站台", durationSeconds: 4, primaryAction: "少女在雨夜旧巴士站等车" },
+    { title: "纸鹤微光", durationSeconds: 4, primaryAction: "她发现长椅下的发光纸鹤" },
+    { title: "伸手拾起", durationSeconds: 4, primaryAction: "她伸手拾起纸鹤" },
+  ],
+}, {
+  targetDurationSeconds: 8,
+  requestedShotCount: 3,
+});
+assert(requestedShotCountNormalized.shots.length === 3, "explicit requested story shot count must not be merged into fewer executable video segments during draft planning");
+assert(requestedShotCountNormalized.warnings.some((warning) => warning.includes("最近可执行总时长")), "preserved short story shot counts should still warn when the exact duration is not executable");
 
 const manyShots = normalizeDirectorAiStoryboardPlan({
   totalDurationSeconds: 320,

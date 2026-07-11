@@ -10,8 +10,6 @@ declare global {
     // WARNING: VITE_ prefixed env vars are baked into the build and should not contain secrets.
     env?: {
       VITE_VIBE_RUNTIME_API_BASE_URL?: string;
-      VITE_VIBE_DIRECTOR_RUNTIME_API_TOKEN?: string;
-      VITE_VIBE_CORE_RUNTIME_API_TOKEN?: string;
     };
   }
 }
@@ -112,6 +110,13 @@ export function normalizeIdentityPart(value?: string) {
 
 export function hasProjectRuntimeIdentity(value?: ProjectRuntimeIdentity) {
   return Boolean(String(value?.projectId || "").trim() || String(value?.projectRoot || "").trim());
+}
+
+export function isBrowserDraftRuntimeIdentity(value?: ProjectRuntimeIdentity) {
+  const normalized = value?.projectRoot?.replace(/\\/g, "/").trim() || "";
+  return normalized === ".vibe-runtime/browser-projects"
+    || normalized.startsWith(".vibe-runtime/browser-projects/")
+    || normalized.includes("/.vibe-runtime/browser-projects/");
 }
 
 export function currentProjectIdentityMatches(
@@ -281,9 +286,12 @@ export function toRuntimeUrl(path: string) {
 }
 
 export function runtimeApiToken() {
-  return import.meta.env?.VITE_VIBE_DIRECTOR_RUNTIME_API_TOKEN
-    || import.meta.env?.VITE_VIBE_CORE_RUNTIME_API_TOKEN
-    || "";
+  if (typeof window === "undefined") return "";
+  try {
+    return window.vibeRuntime?.runtimeApiToken?.() || "";
+  } catch {
+    return "";
+  }
 }
 
 export function runtimeRequestInit(init?: RequestInit): RequestInit | undefined {

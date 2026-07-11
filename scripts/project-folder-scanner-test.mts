@@ -30,6 +30,8 @@ write("prompts/shot-01.md", "Seedance prompt");
 write("receipts/shot-01-submit.json", "{\"submitId\":\"demo\"}");
 write("videos/shot-01.mp4");
 write("exports/final-package.zip");
+write("exports/current-project/export_manifest.json", "{\"appGenerated\":true}");
+write("exports/current-project/video-report/summary.md", "# Export Summary");
 write("assets/generated/auto.png");
 write(".vibe-runtime/video-relay-queue.json", "{}");
 write("node_modules/pkg/index.js");
@@ -77,6 +79,7 @@ assert(inbox.items.some((item) => item.kind === "receipt" && item.label === "sho
 assert(inbox.items.some((item) => item.kind === "video" && item.label === "shot-01.mp4"), "inbox should classify returned videos");
 assert(inbox.items.some((item) => item.kind === "export" && item.label === "final-package.zip"), "inbox should classify export packages");
 assert(!inbox.items.some((item) => item.label === "auto.png"), "app-generated assets should not become user review cards");
+assert(!inbox.items.some((item) => item.label === "export_manifest.json" || item.label === "summary.md"), "app-generated export bundle files should not become user review cards");
 assert.match(inbox.summary, /项目文件夹识别/u, "folder scan summary should be creator-facing");
 
 const scopedInbox = buildProjectFolderInboxProjection({

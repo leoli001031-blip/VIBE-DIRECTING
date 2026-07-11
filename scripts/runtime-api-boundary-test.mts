@@ -42,12 +42,14 @@ const workingRepoRoot = path.join(workingRoot, "repo");
 const workingOutsideRoot = path.join(workingRoot, "outside");
 const workingRepoFile = path.join(workingRepoRoot, "project", "image.png");
 const workingOutsideFile = path.join(workingOutsideRoot, "escape.png");
+const workingOutsideDirectoryLink = path.join(workingRepoRoot, "escape-directory");
 
 mkdirSync(path.dirname(workingRepoFile), { recursive: true });
 mkdirSync(workingOutsideRoot, { recursive: true });
 writeFileSync(workingRepoFile, "png-bytes");
 writeFileSync(workingOutsideFile, "outside");
 symlinkSync(workingOutsideFile, path.join(workingRepoRoot, "escape-link.png"));
+symlinkSync(workingOutsideRoot, workingOutsideDirectoryLink, "dir");
 
 const boundary = createRuntimeApiBoundary({
   repoRoot: workingRepoRoot,
@@ -70,11 +72,13 @@ const blockedOrigin = boundary.runtimeRequestSecurity(request("GET", { origin: "
 assert(blockedOrigin.ok === false && blockedOrigin.statusCode === 403, "untrusted origin should be blocked");
 const blockedPost = boundary.runtimeRequestSecurity(request("POST", {}));
 assert(blockedPost.ok === false && blockedPost.message.includes("token"), "POST should require token when configured");
+assert(boundary.runtimeRequestSecurity(request("POST", { "x-vibe-runtime-token": "wrong" })).ok === false, "POST should reject the wrong token");
 assert(boundary.runtimeRequestSecurity(request("POST", { "x-vibe-runtime-token": "secret" })).ok === true, "POST should pass with token");
 
 assertThrows(() => boundary.scopedRepoPath("../escape.png"), "repo-relative path escape should be blocked");
 assertThrows(() => boundary.repoRelativePath(workingOutsideFile), "absolute path outside repo should be blocked");
 assertThrows(() => boundary.resolveRepoInputPath("escape-link.png"), "realpath escape through symlink should be blocked");
+assertThrows(() => boundary.resolveRepoInputPath("escape-directory/new-export.mp4"), "nonexistent targets below an escaping symlink parent should be blocked");
 assert(boundary.runtimeRelativeFromValue(workingRepoFile) === "project/image.png", "absolute repo file should normalize to repo-relative path");
 assert(boundary.runtimeRelativeFromValue(workingOutsideFile) === undefined, "absolute outside file should not normalize into runtime path");
 assert(boundary.runtimePathExists("project/image.png") === true, "runtimePathExists should see files inside repo");

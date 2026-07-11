@@ -88,13 +88,22 @@ assert(result.ok === true, `packaged GUI smoke failed: ${result.error || output}
 assert(result.packaged === true, "packaged GUI smoke must run against app.isPackaged=true");
 assert(result.renderer?.rootPresent === true, "renderer root should be present");
 assert((result.renderer?.bodyLength || 0) > 100, "renderer should render the real app body, not a blank root");
-assert(String(result.renderer?.bodyTextSample || "").includes("本地创作台"), "renderer should show the creator desk copy");
+const bodyTextSample = String(result.renderer?.bodyTextSample || "");
+assert(bodyTextSample.includes("新视频项目") && bodyTextSample.includes("AI 导演"), "renderer should show the Agent-first creator entry");
 assert(result.renderer?.hasBridge === true, "preload bridge should be available");
-assert(result.renderer.bridgeRuntimeApiBaseUrl === result.renderer.exposedRuntimeApiBaseUrl, "runtime base URL bridge mismatch");
-if (result.runtimeStatus) {
-  assert(result.runtimeStatus.providerCalled === false, "packaged GUI smoke must not call providers");
-  assert(result.runtimeStatus.liveSubmitAllowed === false, "packaged GUI smoke must keep live submit blocked");
+assert(Boolean(result.renderer.bridgeRuntimeApiBaseUrl), "runtime base URL bridge should be available");
+assert(result.runtimeStartedBeforeRendererLoad === false, "packaged renderer must load before Runtime starts");
+assert(result.runtimeAuthProbe?.tokenPresentBeforeEnsure === false, "Runtime token must not be exposed before lazy startup");
+assert(result.runtimeAuthProbe?.tokenPresentAfterEnsure === true, "Runtime token must be available after lazy startup");
+assert(result.runtimeAuthProbe?.missingTokenStatus === 403, "Runtime mutation without token must be rejected");
+assert(result.runtimeAuthProbe?.wrongTokenStatus === 403, "Runtime mutation with wrong token must be rejected");
+assert(result.runtimeAuthProbe?.correctTokenStatus === 200, "Runtime mutation with the Electron token must succeed");
+if (result.renderer.exposedRuntimeApiBaseUrl) {
+  assert(result.renderer.bridgeRuntimeApiBaseUrl === result.renderer.exposedRuntimeApiBaseUrl, "runtime base URL bridge mismatch");
 }
+assert(result.runtimeStatus?.tokenRequired === true, "packaged Runtime must report token protection enabled");
+assert(result.runtimeStatus?.providerCalled === false, "packaged GUI smoke must not call providers");
+assert(result.runtimeStatus?.liveSubmitAllowed === false, "packaged GUI smoke must keep live submit blocked");
 assert(
   !/(keychain|secret storage|password|系统钥匙串|钥匙串|密码)/i.test(output),
   "packaged GUI smoke should not emit keychain/secret-storage/password prompts during normal launch",

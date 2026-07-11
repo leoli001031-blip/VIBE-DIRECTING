@@ -2,7 +2,6 @@ import {
   fetchRuntimeJson,
   projectRuntimeBasePath,
   projectRuntimeRequestPath,
-  runtimeRequestInit,
   type ProjectRuntimeIdentity,
 } from "./runtimeApiClient";
 
@@ -36,11 +35,11 @@ export async function submitCurrentProjectReviewDecision(
   request: ProjectReviewDecisionRequest,
 ): Promise<ProjectReviewDecisionStatus> {
   const endpoint = projectRuntimeRequestPath(projectReviewDecisionEndpoint, expected);
-  const payload = await fetchRuntimeJson(endpoint, runtimeRequestInit({
+  const payload = await fetchRuntimeJson(endpoint, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(request),
-  }));
+  });
   if (!isRecord(payload)) return { ok: false, status: "error", message: "复核写入没有返回有效结果。" };
   return {
     ok: payload.ok === true,

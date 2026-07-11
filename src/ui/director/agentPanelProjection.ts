@@ -6,6 +6,7 @@ import type { DirectorQaUserFeedback } from "../../core/directorQaUserFeedback";
 import { detectDirectorAgentPermissionIntent } from "../../core/directorAgentPermissionIntent";
 import { buildMinimalRuntimeProjection, type MinimalRuntimeProjection } from "../../core/minimalRuntimeProjection";
 import type { ProjectRuntimeState } from "../../core/projectState";
+import { projectVibeCreatorFacingStoryLabel } from "../../core/projectVibePlanningProjection";
 import {
   buildProjectStoreApplyPlanForStagedFacts,
   buildProjectTransactionRuntime,
@@ -40,6 +41,7 @@ export type AgentControlledToolInvocationTarget = {
   skipConfirm?: boolean;
   confirmationReceiptId?: string;
   confirmedAt?: string;
+  signal?: AbortSignal;
   videoPermissionContract?: AgentVideoSubmitContract;
   agentToolTrace?: DirectorAgentToolTrace;
 };
@@ -168,6 +170,7 @@ export type PrototypeAgentDemoStatus =
 export type PrototypeAgentDemoResult = {
   projectVibeAdded?: boolean;
   projectRestored?: boolean;
+  projectTemporaryUpdated?: boolean;
   projectSaved?: boolean;
   storageLabel?: string;
   projectRecordLabel?: string;
@@ -209,10 +212,14 @@ export type PreviewPrototypeAgentDemoInput = {
   agentActionEnvelope?: DirectorAgentActionEnvelope;
   agentToolHandoff?: DirectorAgentToolHandoff;
   availability?: Partial<DirectorAgentToolAvailability>;
+  referenceReadyCount?: number;
+  referenceReviewCount?: number;
+  referenceMissingCount?: number;
 };
 
 export type StagePrototypeAgentPlanInput = {
   userIntent: string;
+  agentActionUserIntent?: string;
   scopeLabel: string;
   selectedShotId?: string;
   selectedShotIds?: string[];
@@ -225,6 +232,9 @@ export type StagePrototypeAgentPlanInput = {
 	videoCompletedCount?: number;
 	videoReviewCount?: number;
 	videoDetail?: string;
+	referenceReadyCount?: number;
+	referenceReviewCount?: number;
+	referenceMissingCount?: number;
 	generatedAt?: string;
 	availability?: Partial<DirectorAgentToolAvailability>;
 };
@@ -259,15 +269,16 @@ export type PrototypeAgentDemoProjection = {
   badges: string[];
 };
 
-const PROJECT_PLAN_ADDED_LABEL = "已加入项目计划";
+const PROJECT_PLAN_ADDED_LABEL = "故事已确认";
 const PROJECT_RESTORED_LABEL = "已恢复项目";
+const PROJECT_TEMP_UPDATED_LABEL = "草案已更新";
 const PROJECT_RECORDED_LABEL = "已写入项目";
 const PROJECT_SAVED_LABEL = "已保存到项目";
 const PREVIEW_READY_REVIEW_LABEL = "预览已生成、等待确认";
 const HIGH_STALE_IMPACT_THRESHOLD = 4;
 
 function cleanLabel(value: string) {
-  return value
+  return projectVibeCreatorFacingStoryLabel(value, "")
     .replace(/\bCURRENT_PROJECT\b/g, "当前项目")
     .replace(/\bshot[_\s-]*storyboard[_\s-]*(\d+)[_\s-]+(\d+)\b/gi, "镜头 $1-$2")
     .replace(/^asset_/i, "")
@@ -292,12 +303,15 @@ export function buildPrototypeAgentDemoProjection(run?: PrototypeAgentDemoRun): 
   const status = run.result?.status || run.status || "idle";
   const normalizedStatus = status.toLowerCase();
   const projectRestored = run.result?.projectRestored === true;
+  const projectTemporaryUpdated = run.result?.projectTemporaryUpdated === true;
   const projectVibeAdded = run.result?.projectVibeAdded || ["ready", "needs_review", "review", "preview_ready", "complete"].includes(normalizedStatus);
   const projectSaved = run.result?.projectSaved === true;
   const waitingReview = run.result?.waitingReview || ["running", "needs_review", "review"].includes(normalizedStatus);
   const previewReady = run.result?.previewReady || ["preview_ready", "complete"].includes(normalizedStatus);
   const projectRecordBadge = projectRestored
     ? run.result?.storageLabel || PROJECT_RESTORED_LABEL
+    : projectTemporaryUpdated
+      ? run.result?.storageLabel || PROJECT_TEMP_UPDATED_LABEL
     : projectVibeAdded
       ? PROJECT_PLAN_ADDED_LABEL
       : "";
@@ -357,7 +371,7 @@ export function buildAgentPanelProjection(
 }
 
 export function agentReceiptStatusLabel(receipt: ProjectConfirmedProjectionReceipt) {
-  if (receipt.queuedCount > 0) return "已加入计划".replace("计划", "项目计划");
+  if (receipt.queuedCount > 0) return "已加入故事流";
   if (receipt.status === "blocked_missing_knowledge_trace") return "缺少资产约束，需处理";
   if (receipt.status === "blocked_queue") return "需处理";
   if (receipt.status === "blocked_not_confirmed") return "等待复核";
@@ -473,9 +487,9 @@ export function agentProjectionBadges(projection: MinimalRuntimeProjection, plan
 
 export function agentProjectionNextStep(projection: MinimalRuntimeProjection, planPhase: AgentPlanPhase, canConfirm: boolean) {
   if (planPhase === "confirmed") return `${agentDisplayCountSummary(projection)}，等待复核。`;
-  if (canConfirm) return "确认后只会加入计划，后续结果先复核。".replace("加入计划", "加入项目计划");
+  if (canConfirm) return "确认后只会保存故事，后续结果先复核。";
   if (projection.counts.blocked > 0) return "缺少资产约束，需处理。";
-  return "确认后只会加入计划，后续结果先复核。".replace("加入计划", "加入项目计划");
+  return "确认后只会保存故事，后续结果先复核。";
 }
 
 export function naturalWorkflowScopeLabel(label: string) {

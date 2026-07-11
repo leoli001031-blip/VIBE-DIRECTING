@@ -49,6 +49,23 @@ function unavailableProjectPanelState(message: string) {
   return { status: "unavailable" as const, message };
 }
 
+const browserDraftProjectMessage = "先把故事保存成项目，再生成参考或视频。";
+
+function isBrowserDraftProjectRoot(projectRoot?: string) {
+  const normalized = projectRoot?.replace(/\\/g, "/").trim() || "";
+  return normalized === ".vibe-runtime/browser-projects"
+    || normalized.startsWith(".vibe-runtime/browser-projects/")
+    || normalized.includes("/.vibe-runtime/browser-projects/");
+}
+
+function projectIdentitySupportsRuntimeActions(identity?: ProjectRuntimeIdentity): identity is ProjectRuntimeIdentity {
+  return Boolean(identity?.projectRoot && !isBrowserDraftProjectRoot(identity.projectRoot));
+}
+
+function runtimeActionUnavailableMessage(identity?: ProjectRuntimeIdentity) {
+  return identity ? browserDraftProjectMessage : "未选择项目/未同步。";
+}
+
 const activePreviewRefreshMs = 6_000;
 const idlePreviewRefreshMs = 30_000;
 const hiddenPreviewRefreshMs = 60_000;
@@ -149,7 +166,11 @@ export function useCurrentProjectRuntimePanels({
     let cancelled = false;
     loadCurrentProjectBindingStatus().then((binding) => {
       if (!cancelled) {
-        setRuntimeProjectBinding((current) => current.status === "loading" ? binding : current);
+        setRuntimeProjectBinding((current) => (
+          current.status === "loading" || (binding.status === "bound" && current.status !== "bound")
+            ? binding
+            : current
+        ));
         if (binding.status === "bound" && binding.projectRoot) {
           setProjectPathInput((current) => current.trim() ? current : binding.projectRoot || current);
         }
@@ -182,6 +203,10 @@ export function useCurrentProjectRuntimePanels({
     const identity = currentProjectBindingIdentity(binding);
     if (!identity) {
       setUnavailableProjectPanels("未选择项目/未同步。");
+      return;
+    }
+    if (!projectIdentitySupportsRuntimeActions(identity)) {
+      setUnavailableProjectPanels(browserDraftProjectMessage);
       return;
     }
     const [nextRealChainState, nextImage2BatchState, nextOneShotState] = await Promise.all([
@@ -242,6 +267,12 @@ export function useCurrentProjectRuntimePanels({
         cancelled = true;
       };
     }
+    if (!projectIdentitySupportsRuntimeActions(runtimeProjectIdentity)) {
+      setUnavailableProjectPanels(browserDraftProjectMessage);
+      return () => {
+        cancelled = true;
+      };
+    }
     loadProjectRealChainStatus(runtimeProjectIdentity).then((nextState) => {
       if (!cancelled) setProjectRealChainState(nextState);
     }).catch((error: unknown) => {
@@ -277,6 +308,7 @@ export function useCurrentProjectRuntimePanels({
       && !realChainNeedsActiveRefresh
     ) return undefined;
     if (runtimeProjectBinding.status !== "bound" || !runtimeProjectIdentity) return undefined;
+    if (!projectIdentitySupportsRuntimeActions(runtimeProjectIdentity)) return undefined;
     let cancelled = false;
     let inFlight = false;
     let timeout: number | undefined;
@@ -397,11 +429,11 @@ export function useCurrentProjectRuntimePanels({
     }
   }, [setUnavailableProjectPanels]);
 
-  const runProjectRealChain = useCallback(async () => {
-    if (!runtimeProjectIdentity) {
-      setProjectRealChainState(unavailableProjectPanelState("未选择项目/未同步。"));
-      return;
-    }
+	  const runProjectRealChain = useCallback(async () => {
+	    if (!projectIdentitySupportsRuntimeActions(runtimeProjectIdentity)) {
+	      setProjectRealChainState(unavailableProjectPanelState(runtimeActionUnavailableMessage(runtimeProjectIdentity)));
+	      return;
+	    }
     setProjectRealChainState((current) => ({
       ...current,
       status: "running",
@@ -411,27 +443,27 @@ export function useCurrentProjectRuntimePanels({
     setProjectRealChainState(nextState);
   }, [runtimeProjectIdentity]);
 
-  const runProjectImage2Batch = useCallback(async () => {
-    if (!runtimeProjectIdentity) {
-      const nextState = unavailableProjectPanelState("未选择项目/未同步。");
-      setProjectImage2BatchState(nextState);
-      return nextState;
-    }
+	  const runProjectImage2Batch = useCallback(async (signal?: AbortSignal) => {
+	    if (!projectIdentitySupportsRuntimeActions(runtimeProjectIdentity)) {
+	      const nextState = unavailableProjectPanelState(runtimeActionUnavailableMessage(runtimeProjectIdentity));
+	      setProjectImage2BatchState(nextState);
+	      return nextState;
+	    }
     setProjectImage2BatchState((current) => ({
       ...current,
       status: "running",
       message: "正在检查当前项目复核状态。",
     }));
-    const nextState = await runProjectImage2BatchCheck(runtimeProjectIdentity);
+    const nextState = await runProjectImage2BatchCheck(runtimeProjectIdentity, signal);
     setProjectImage2BatchState(nextState);
     return nextState;
   }, [runtimeProjectIdentity]);
 
-  const prepareStrictEditPreflight = useCallback(async (shotId: string) => {
-    if (!runtimeProjectIdentity) {
-      setStrictEditPreflightState({ status: "unavailable", message: "未选择项目/未同步。" });
-      return;
-    }
+	  const prepareStrictEditPreflight = useCallback(async (shotId: string) => {
+	    if (!projectIdentitySupportsRuntimeActions(runtimeProjectIdentity)) {
+	      setStrictEditPreflightState({ status: "unavailable", message: runtimeActionUnavailableMessage(runtimeProjectIdentity) });
+	      return;
+	    }
     setStrictEditPreflightState({
       status: "running",
       message: shotId ? `正在准备 ${shotId} edit 证据。` : "正在准备 edit 证据。",
@@ -444,11 +476,11 @@ export function useCurrentProjectRuntimePanels({
     }
   }, [runtimeProjectIdentity]);
 
-  const prepareImage2OneShot = useCallback(async (shotId?: string) => {
-    if (!runtimeProjectIdentity) {
-      setProjectImage2OneShotState(unavailableProjectPanelState("未选择项目/未同步。"));
-      return;
-    }
+	  const prepareImage2OneShot = useCallback(async (shotId?: string) => {
+	    if (!projectIdentitySupportsRuntimeActions(runtimeProjectIdentity)) {
+	      setProjectImage2OneShotState(unavailableProjectPanelState(runtimeActionUnavailableMessage(runtimeProjectIdentity)));
+	      return;
+	    }
     setProjectImage2OneShotState((current) => ({
       ...current,
       status: "running",
@@ -458,11 +490,11 @@ export function useCurrentProjectRuntimePanels({
     setProjectImage2OneShotState(nextState);
   }, [runtimeProjectIdentity, selectedShotId]);
 
-  const confirmImage2OneShot = useCallback(async () => {
-    if (!runtimeProjectIdentity) {
-      setProjectImage2OneShotState(unavailableProjectPanelState("未选择项目/未同步。"));
-      return;
-    }
+	  const confirmImage2OneShot = useCallback(async () => {
+	    if (!projectIdentitySupportsRuntimeActions(runtimeProjectIdentity)) {
+	      setProjectImage2OneShotState(unavailableProjectPanelState(runtimeActionUnavailableMessage(runtimeProjectIdentity)));
+	      return;
+	    }
     setProjectImage2OneShotState((current) => ({
       ...current,
       status: "running",
@@ -475,11 +507,11 @@ export function useCurrentProjectRuntimePanels({
     setProjectImage2OneShotState(confirmedState);
   }, [projectImage2OneShotState.receipt, projectImage2OneShotState.summary?.receipt, runtimeProjectIdentity]);
 
-  const prepareImage2OneShotPermissionReceipt = useCallback(async () => {
-    if (!runtimeProjectIdentity) {
-      setProjectImage2OneShotState(unavailableProjectPanelState("未选择项目/未同步。"));
-      return;
-    }
+	  const prepareImage2OneShotPermissionReceipt = useCallback(async () => {
+	    if (!projectIdentitySupportsRuntimeActions(runtimeProjectIdentity)) {
+	      setProjectImage2OneShotState(unavailableProjectPanelState(runtimeActionUnavailableMessage(runtimeProjectIdentity)));
+	      return;
+	    }
     const receipt = projectImage2OneShotState.receipt || projectImage2OneShotState.summary?.receipt;
     if (!receipt) {
       setProjectImage2OneShotState((current) => ({
@@ -503,11 +535,11 @@ export function useCurrentProjectRuntimePanels({
     runtimeProjectIdentity,
   ]);
 
-  const checkImage2OneShotReturn = useCallback(async () => {
-    if (!runtimeProjectIdentity) {
-      setProjectImage2OneShotState(unavailableProjectPanelState("未选择项目/未同步。"));
-      return;
-    }
+	  const checkImage2OneShotReturn = useCallback(async () => {
+	    if (!projectIdentitySupportsRuntimeActions(runtimeProjectIdentity)) {
+	      setProjectImage2OneShotState(unavailableProjectPanelState(runtimeActionUnavailableMessage(runtimeProjectIdentity)));
+	      return;
+	    }
     setProjectImage2OneShotState((current) => ({
       ...current,
       status: "running",

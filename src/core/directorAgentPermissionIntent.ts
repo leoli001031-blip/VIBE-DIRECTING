@@ -13,6 +13,19 @@ const noImageGenerationPhrases = [
   "别执行",
   "不执行",
   "先别执行",
+  "先确认范围",
+  "先确认生成范围",
+  "先确认参考范围",
+  "先确认参考生成范围",
+  "别直接生成",
+  "不要直接生成",
+  "先别直接生成",
+  "先不要直接生成",
+  "先别生成",
+  "先不要生成",
+  "别生成",
+  "不要生成",
+  "暂不生成",
   "先不要写项目",
   "不要写项目",
   "不写项目",
@@ -107,12 +120,28 @@ const noImageGenerationPhrases = [
 
 const noVideoSubmitPhrases = [
   "先不要提交视频",
+  "先不要自动提交视频",
   "先不要提交视频测试",
   "先不提交视频",
   "不要提交视频",
+  "先不要发送视频",
+  "先不发送视频",
+  "不要发送视频",
+  "不发送视频",
+  "不要自动提交视频",
   "不提交视频",
+  "不自动提交视频",
+  "不会自动提交视频",
   "先别提交视频",
   "别提交视频",
+  "先别发送视频",
+  "别发送视频",
+  "先不要提交任何外部生成",
+  "不要提交任何外部生成",
+  "先不提交任何外部生成",
+  "不提交任何外部生成",
+  "先别提交任何外部生成",
+  "别提交任何外部生成",
   "先别提交",
   "先不测试视频",
   "不测试视频",
@@ -149,10 +178,19 @@ const noVideoSubmitPhrases = [
 ];
 
 const referenceAllowedPhrases = [
+  "开始生成参考",
+  "开始做参考",
+  "开始补参考",
   "先生成参考",
   "只生成参考",
   "只做参考",
   "只补参考",
+  "可补参考",
+  "可以补参考",
+  "允许补参考",
+  "可补参考图",
+  "可以补参考图",
+  "允许补参考图",
   "可做参考",
   "可以做参考",
   "允许做参考",
@@ -168,19 +206,27 @@ const videoAllowedPhrases = [
   "可以提交视频",
   "可提交视频",
   "允许提交视频",
+  "可以发送视频",
+  "可发送视频",
+  "允许发送视频",
+  "可以发视频",
+  "可发视频",
+  "允许发视频",
   "开始提交视频",
+  "开始发送视频",
   "提交视频",
-];
-
-const allControlPhrases = [
-  ...noImageGenerationPhrases,
-  ...noVideoSubmitPhrases,
-  ...referenceAllowedPhrases,
-  ...videoAllowedPhrases,
+  "发送视频",
+  "发视频",
 ];
 
 const referenceBoundaryControlPhrases = [
   ...noVideoSubmitPhrases,
+  "可补参考",
+  "可以补参考",
+  "允许补参考",
+  "可补参考图",
+  "可以补参考图",
+  "允许补参考图",
   "可做参考",
   "可以做参考",
   "允许做参考",
@@ -193,7 +239,36 @@ const videoBoundaryControlPhrases = [
   "可以提交视频",
   "可提交视频",
   "允许提交视频",
+  "可以发送视频",
+  "可发送视频",
+  "允许发送视频",
+  "可以发视频",
+  "可发视频",
+  "允许发视频",
 ];
+
+const boundaryConnectorPhrases = [
+  "但是",
+  "不过",
+  "并且",
+  "而且",
+  "以及",
+  "同时",
+  "然后",
+  "但",
+  "和",
+  "及",
+  "且",
+  "也",
+  "再",
+];
+
+const allControlPhrases = Array.from(new Set([
+  ...noImageGenerationPhrases,
+  ...noVideoSubmitPhrases,
+  ...referenceBoundaryControlPhrases,
+  ...videoBoundaryControlPhrases,
+])).sort((left, right) => right.length - left.length);
 
 export function normalizedDirectorAgentPermissionIntent(value: string) {
   return value
@@ -205,10 +280,22 @@ function hasPhrase(normalizedIntent: string, phrases: string[]) {
   return phrases.some((phrase) => normalizedIntent.includes(normalizedDirectorAgentPermissionIntent(phrase)));
 }
 
+function stripPhrases(normalizedIntent: string, phrases: string[]) {
+  return phrases.reduce(
+    (nextIntent, phrase) => nextIntent.replaceAll(normalizedDirectorAgentPermissionIntent(phrase), ""),
+    normalizedIntent,
+  );
+}
+
+function hasNoImageGenerationPhrase(normalizedIntent: string) {
+  const normalizedWithoutVideoSubmitControls = stripPhrases(normalizedIntent, noVideoSubmitPhrases);
+  return hasPhrase(normalizedWithoutVideoSubmitControls, noImageGenerationPhrases);
+}
+
 export function detectDirectorAgentPermissionIntent(userIntent: string): DirectorAgentPermissionIntentMode | undefined {
   const normalizedIntent = normalizedDirectorAgentPermissionIntent(userIntent);
   if (!normalizedIntent) return undefined;
-  if (hasPhrase(normalizedIntent, noImageGenerationPhrases)) return "plan_only";
+  if (hasNoImageGenerationPhrase(normalizedIntent)) return "plan_only";
   if (hasPhrase(normalizedIntent, noVideoSubmitPhrases) || hasPhrase(normalizedIntent, referenceAllowedPhrases)) return "reference_allowed";
   if (hasPhrase(normalizedIntent, videoAllowedPhrases)) return "video_allowed";
   return undefined;
@@ -268,7 +355,11 @@ export function isDirectorAgentPermissionControlOnlyIntent(value: string) {
     (nextValue, phrase) => nextValue.replaceAll(normalizedDirectorAgentPermissionIntent(phrase), ""),
     normalizedValue,
   );
-  const remainder = stripped.replace(/^(先|现在|暂时|这次|本轮)+/g, "").replace(/(一下|吧|啊|哦|测试|看看)$/g, "");
+  const strippedConnectors = boundaryConnectorPhrases.reduce(
+    (nextValue, phrase) => nextValue.replaceAll(normalizedDirectorAgentPermissionIntent(phrase), ""),
+    stripped,
+  );
+  const remainder = strippedConnectors.replace(/^(先|现在|暂时|这次|本轮)+/g, "").replace(/(一下|吧|啊|哦|测试|看看)$/g, "");
   return remainder.length === 0;
 }
 

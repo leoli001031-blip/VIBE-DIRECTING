@@ -611,6 +611,16 @@ async function openProjectVibeDraftThroughRuntime(
   if (!runtimeProjectFileAccessAvailable(target)) return undefined;
   const targetId = projectVibeDraftTargetId(target);
   const projectPath = projectPathForTarget(target);
+  if (!(await runtimeProjectFileAccessMatchesTarget(target))) {
+    if (electronBridge() || isBrowserManagedProjectRoot(target.projectRoot)) return undefined;
+    return {
+      ok: false,
+      status: "error",
+      mode: "runtime_project_file",
+      targetId,
+      errors: ["当前浏览器连接的项目和要打开的项目不一致，请重新打开或选择项目。"],
+    };
+  }
   try {
     const serialized = await readRuntimeCurrentProjectFileText(target, projectPath);
     const result = parseProjectVibeText(serialized);
@@ -641,9 +651,18 @@ async function openProjectVibeDraftThroughRuntime(
 }
 
 function runtimeProjectFileAccessAvailable(target: ProjectVibeDraftTarget) {
-  if (!target.projectRoot || electronBridge()) return false;
+  if (!target.projectRoot) return false;
   try {
     return Boolean(runtimeApiBaseUrl());
+  } catch {
+    return false;
+  }
+}
+
+async function runtimeProjectFileAccessMatchesTarget(target: ProjectVibeDraftTarget) {
+  if (!runtimeProjectFileAccessAvailable(target)) return false;
+  try {
+    return await runtimeProjectFileBindingMatchesTarget(target);
   } catch {
     return false;
   }
@@ -658,6 +677,19 @@ async function saveProjectVibeDraftThroughRuntime(
   const factHash = hashProjectVibeFacts(project);
   const validation = validateProjectVibe(project);
   const targetId = projectVibeDraftTargetId(target);
+  if (!(await runtimeProjectFileAccessMatchesTarget(target))) {
+    if (electronBridge() || isBrowserManagedProjectRoot(target.projectRoot)) return undefined;
+    return {
+      ok: false,
+      status: "error",
+      mode: "runtime_project_file",
+      targetId,
+      path,
+      factHash,
+      validation,
+      errors: ["当前浏览器连接的项目和要保存的项目不一致，请重新打开或选择项目。"],
+    };
+  }
   if (!validation.ok) {
     return {
       ok: false,

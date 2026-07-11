@@ -735,7 +735,7 @@ assert(videoReport.includes("分镜参考：outputs/storyboards/S01-storyboard.p
 assert(videoReport.includes("场景/天气参考：assets/scenes/rainy-rooftop.png"), "video report must explain scene/weather reference in user language");
 assert(videoReport.includes("角色参考：assets/characters/hina.png, assets/characters/ren.png"), "video report must explain character references in user language");
 assert(videoReport.includes("道具参考：assets/props/cassette.png"), "video report must explain prop references in user language");
-assert(videoReport.includes("音频参考：audio/dialogue/S01.wav"), "video report must explain audio reference in user language");
+assert(videoReport.includes("声音参考：audio/dialogue/S01.wav"), "video report must explain audio reference in current user-facing language");
 assert(videoReport.includes("节奏：日漫情绪特写"), "video report must include rhythm label in user language");
 assert(videoReport.includes("已确认修改：") && videoReport.includes("第三个镜头节奏慢一点") && videoReport.includes("最后加一个清晨空镜"), "video report must include confirmed director modifications");
 const finalVideoManifest = JSON.parse(adapter.files.get("reports/exports/current/final-video/composition_manifest.json"));

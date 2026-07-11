@@ -26,6 +26,7 @@ export interface VibeAgentProductToolInvocationTarget<TVideoPermissionContract =
   skipConfirm?: boolean;
   confirmationReceiptId?: string;
   confirmedAt?: string;
+  signal?: AbortSignal;
   videoPermissionContract?: TVideoPermissionContract;
   agentToolTrace?: DirectorAgentToolTrace;
 }

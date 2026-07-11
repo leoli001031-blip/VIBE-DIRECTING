@@ -1,8 +1,9 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { cloneElement, isValidElement, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import type { PreviewQueueItem } from "../../core/previewPlayerQueue";
 import type { ExportActionState } from "../../core/exportAction";
 import type { ExportWorkerState } from "../../core/exportWorker";
 import type { ProjectRuntimeState } from "../../core/projectState";
+import type { AgentVideoGenerationJobLedger } from "../../core/agentVideoProductionContract";
 import type { ProjectAgentActionLogItem, ProjectAgentStagedPlanDraft } from "../../project";
 import {
   buildVibeAgentTimelineStatusView,
@@ -19,8 +20,9 @@ import type { KnowledgePack, KnowledgePackManifest } from "../../core/knowledgeT
 import type { AgentWebSearchResult, AgentWebSearchSettings } from "../../core/agentWebSearchClient";
 import type { DirectorQaUserFeedback } from "../../core/directorQaUserFeedback";
 import { buildProjectStatusViewModel, type ProjectStatusViewModel } from "../app/projectStatusViewModel";
+import { requestedStoryboardShotCountFromIntent } from "../../core/projectAgentWorkspace";
 import { MinimalAgentPanel } from "./MinimalAgentPanel";
-import { MinimalStoryFlow } from "./MinimalStoryFlow";
+import { cleanStoryText, MinimalStoryFlow } from "./MinimalStoryFlow";
 import { CreatorDeskPanels } from "./CreatorDeskPanels";
 import { DirectorWorkflowOverview } from "./DirectorWorkflowOverview";
 import type {
@@ -285,7 +287,7 @@ function projectStatusViewWithActiveVideo(status: ProjectStatusViewModel, creato
   if (!videoStage || (videoStage.status !== "in_progress" && videoStage.status !== "recoverable")) return status;
   const generation = videoStage.generation;
   const canQuery = videoStage.canResume || videoStage.status === "recoverable";
-  const doing = generation.queueSummary || generation.detail || generation.statusLabel || "Seedance 2.0 VIP 已提交，后台等待";
+  const doing = generation.queueSummary || generation.detail || generation.statusLabel || "Seedance 2.0 已提交，后台等待";
   const videoFact = generation.shortSubmitId ? `提交号 ${generation.shortSubmitId}` : generation.statusLabel;
   const facts = [
     ...status.facts.filter((fact) => fact.label !== "AI 导演" && fact.label !== "视频"),
@@ -310,30 +312,87 @@ function projectStatusViewWithCommittedDraft(status: ProjectStatusViewModel, com
   return {
     ...status,
     stage: "项目故事已更新",
-    doing: "故事已保存到项目",
+    doing: "故事已确认",
     waitingFor: "你的下一句指令",
     nextAction: "继续说要改哪里，或让 AI 开始补参考",
     tone: "ready",
   };
 }
 
+function laterUserMessageReplacesPendingConfirmation(entry: VibeAgentTimelineEntry) {
+  const copy = [entry.id, entry.title, entry.body].filter(Boolean).join(" ");
+  if (
+    entry.id.startsWith("local_agent_user_")
+    && /开始补参考|准备参考计划/.test(copy)
+    && !/先别生成|别生成|不要生成了|取消|撤销|继续说明/.test(copy)
+  ) return false;
+  return true;
+}
+
+function agentTimelineEntryClosesPendingConfirmation(entry: VibeAgentTimelineEntry) {
+  if (entry.type !== "action_result" && entry.type !== "tool_result") return false;
+  if (entry.status === "waiting" || entry.lifecycle === "running") return false;
+  return entry.status === "done"
+    || entry.status === "blocked"
+    || entry.lifecycle === "succeeded"
+    || entry.lifecycle === "failed"
+    || entry.lifecycle === "cancelled";
+}
+
+function agentTimelineEntryMatchesPendingConfirmation(
+  entry: VibeAgentTimelineEntry,
+  confirmation: VibeAgentTimelineEntry,
+) {
+  if (entry.actionId && confirmation.actionId) return entry.actionId === confirmation.actionId;
+  return Boolean(entry.toolName && confirmation.toolName && entry.toolName === confirmation.toolName);
+}
+
 function latestPendingAgentConfirmation(entries?: VibeAgentTimelineEntry[]) {
-  return [...(entries || [])].reverse().find((entry) => (
-    entry.type === "confirmation_request"
-    && entry.status !== "done"
-    && entry.lifecycle !== "succeeded"
-    && entry.lifecycle !== "cancelled"
-  ));
+  let seenLaterUserMessage = false;
+  const laterClosedConfirmations: VibeAgentTimelineEntry[] = [];
+  for (const entry of [...(entries || [])].reverse()) {
+    if (entry.type === "user_message") {
+      if (laterUserMessageReplacesPendingConfirmation(entry)) {
+        seenLaterUserMessage = true;
+      }
+      continue;
+    }
+    if (agentTimelineEntryClosesPendingConfirmation(entry)) {
+      laterClosedConfirmations.push(entry);
+      continue;
+    }
+    if (
+      entry.type === "confirmation_request"
+      && entry.status !== "done"
+      && entry.lifecycle !== "succeeded"
+      && entry.lifecycle !== "cancelled"
+    ) {
+      if (laterClosedConfirmations.some((result) => agentTimelineEntryMatchesPendingConfirmation(result, entry))) {
+        continue;
+      }
+      return seenLaterUserMessage ? undefined : entry;
+    }
+  }
+  return undefined;
 }
 
 function pendingAgentConfirmationLabel(entry?: VibeAgentTimelineEntry) {
   if (!entry) return "";
   if (entry.details?.intakePhase === "planning_ready") return "确认这版故事";
-  const copy = [entry.title, entry.body, entry.toolName, entry.actionKind].filter(Boolean).join(" ");
+  const factCopy = (entry.facts || []).map((fact) => `${fact.label} ${fact.value}`).join(" ");
+  const detailCopy = Object.values(entry.details || {})
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+  const copy = [entry.title, entry.body, entry.toolName, entry.actionKind, factCopy, detailCopy].filter(Boolean).join(" ");
   const negativeVideoCopy = /不(?:会|要)?(?:提交|发送)视频|不会(?:自动)?(?:提交|发送)视频|不提交视频|不发送视频/.test(copy);
   const negativeReferenceCopy = /不(?:会|要)?生成参考|不会(?:自动)?生成参考|不生成参考/.test(copy);
   const negativeExportCopy = /不(?:会|要)?(?:导出|交付)|不会(?:自动)?(?:导出|交付)|不导出|不交付/.test(copy);
+  if (/保存位置|项目文件夹/.test(copy)) return "选择保存位置";
   if (/方式|update_shot_strategy/.test(copy)) return "确认方式";
+  const requestedShotCount = requestedStoryboardShotCountFromIntent(copy);
+  if (requestedShotCount && /修改|重排|revise_story_or_shot|write_project|当前故事改成/.test(copy)) {
+    return `确认重排为 ${requestedShotCount} 个镜头`;
+  }
   if (/修改|revise_story_or_shot|write_project/.test(copy)) return "确认修改";
   if (/查询|query_video/.test(copy)) return "确认查询结果";
   if (/generate_references|prepare_reference_generation/.test(copy)) return "确认生成参考";
@@ -347,6 +406,28 @@ function pendingAgentConfirmationLabel(entry?: VibeAgentTimelineEntry) {
   return entry.title?.trim() || "确认当前消息";
 }
 
+function restoredAgentStagedPlanPendingConfirmationLabel(draft?: ProjectAgentStagedPlanDraft) {
+  if (
+    draft?.status !== "active"
+    || draft.action?.status !== "staged"
+    || !draft.action.requiresUserConfirmation
+  ) return "";
+  const copy = [
+    draft.action.kind,
+    draft.action.summary,
+    draft.action.toolPlan.toolName,
+    draft.toolHandoff?.handler,
+  ].filter(Boolean).join(" ");
+  if (/prepare_reference_generation|image2_reference_generation|generate_references/.test(copy)) return "确认生成参考";
+  if (/prepare_video_submit|seedance_video_submit|submit_video/.test(copy)) return "确认提交视频";
+  if (/query_video_result|query_video/.test(copy)) return "确认查询结果";
+  if (/prepare_export|project_export|export/.test(copy)) return "确认导出";
+  if (/request_style_research|web_search|research/.test(copy)) return "确认查资料";
+  if (/save_skill/.test(copy)) return "确认保存 Skill";
+  if (/revise_story_or_shot|update_shot_strategy|write_project/.test(copy)) return "确认修改";
+  return "确认当前消息";
+}
+
 function currentAgentCommandConfirmationLabel(command?: CreatorAgentCommand) {
   if (!command) return "";
   const copy = [command.kind, command.label, command.summary, command.detail].filter(Boolean).join(" ");
@@ -356,6 +437,29 @@ function currentAgentCommandConfirmationLabel(command?: CreatorAgentCommand) {
   if (/submit_video/.test(command.kind || "") || (/提交视频|发送视频|Seedance/.test(copy) && !negativeVideoCopy)) return "确认提交视频";
   if (/open_export|prepare_export|\bexport\b/.test(command.kind || "") || /导出|交付/.test(copy)) return "确认导出";
   return "";
+}
+
+function restoredAgentVideoPermissionContract(
+  draft: ProjectAgentStagedPlanDraft | undefined,
+  fallback: AgentVideoPermissionContract,
+): AgentVideoPermissionContract {
+  if (draft?.status !== "active") return fallback;
+  const mode = draft.videoPermissionContract?.mode;
+  if (mode !== "plan_only" && mode !== "reference_allowed" && mode !== "video_allowed") return fallback;
+  return {
+    ...fallback,
+    mode,
+    referenceGenerationAllowed: Boolean(draft.videoPermissionContract?.referenceGenerationAllowed),
+    videoSubmitAllowed: Boolean(draft.videoPermissionContract?.videoSubmitAllowed),
+    reason: draft.videoPermissionContract?.reason || fallback.reason,
+  };
+}
+
+function sameVideoPermissionContract(left: AgentVideoPermissionContract, right: AgentVideoPermissionContract) {
+  return left.mode === right.mode
+    && left.referenceGenerationAllowed === right.referenceGenerationAllowed
+    && left.videoSubmitAllowed === right.videoSubmitAllowed
+    && left.reason === right.reason;
 }
 
 function projectStatusViewWithPendingAgentConfirmation(
@@ -375,6 +479,24 @@ function projectStatusViewWithPendingAgentConfirmation(
   };
 }
 
+function projectStatusViewWithEditingAgentConfirmation(
+  status: ProjectStatusViewModel,
+  label: string,
+): ProjectStatusViewModel {
+  if (!label) return status;
+  const editingStoryDraftConfirmation = label === "确认这版故事";
+  return {
+    ...status,
+    stage: "继续说明",
+    doing: editingStoryDraftConfirmation ? "正在修改当前草案" : `正在修改「${label}」`,
+    waitingFor: editingStoryDraftConfirmation ? "发送右侧输入，或清空后回到确认故事" : "发送右侧输入，或清空后再回到确认",
+    nextAction: "发送修改说明",
+    tone: "waiting",
+    issue: undefined,
+    facts: status.facts.map((fact) => fact.label === "AI 导演" ? { ...fact, value: editingStoryDraftConfirmation ? "修改草案" : "正在修改确认" } : fact),
+  };
+}
+
 function pendingNewVideoDraftTitle(status?: NewVideoStartStatus) {
   if (!status) return "";
   const title = status.draftTitle?.trim();
@@ -382,6 +504,11 @@ function pendingNewVideoDraftTitle(status?: NewVideoStartStatus) {
   if (status.status === "planning") return `正在整理：${title}`;
   if (status.status === "ready") return `待确认故事：${title}`;
   return `新想法：${title}`;
+}
+
+function timelineDetailText(entry: VibeAgentTimelineEntry | undefined, key: string) {
+  const value = entry?.details?.[key];
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
 }
 
 function restoredNewVideoDraftSummary(entries?: VibeAgentTimelineEntry[]) {
@@ -401,13 +528,35 @@ function restoredNewVideoDraftSummary(entries?: VibeAgentTimelineEntry[]) {
     entry.type === "user_message"
     && entry.createdAt <= latestConfirmation.createdAt
   ));
-  const userTitle = userEntry?.body.replace(/\s+/g, " ").trim();
+  const userTitle = timelineDetailText(latestConfirmation, "draftScript")
+    || timelineDetailText(userEntry, "draftScript")
+    || userEntry?.body.replace(/\s+/g, " ").trim();
   const shotCountText = latestConfirmation.facts?.find((fact) => fact.label === "镜头")?.value || "";
   const shotCount = Number.parseInt(shotCountText, 10);
   return {
     title: userTitle ? `待确认故事：${userTitle.slice(0, 28)}${userTitle.length > 28 ? "..." : ""}` : "待确认故事",
     shotCount: Number.isFinite(shotCount) && shotCount > 0 ? shotCount : undefined,
   };
+}
+
+function restoredNewVideoDraftStatus(restored?: { title: string; shotCount?: number }): NewVideoStartStatus | undefined {
+  if (!restored?.shotCount) return undefined;
+  const draftTitle = restored.title.replace(/^待确认故事：/u, "").trim() || restored.title;
+  return {
+    status: "ready",
+    title: "草案待确认",
+    draftTitle,
+    detail: "草案待确认；确认后会成为故事流。",
+    nextAction: "确认这版故事",
+    draftShotCount: restored.shotCount,
+  };
+}
+
+function isNewVideoSurfaceAgentTimelineEntry(entry: VibeAgentTimelineEntry) {
+  return isVibeAgentIntakeTimelineEntry(entry)
+    || entry.id.startsWith("local_agent_")
+    || entry.id.startsWith("local_project_setup_")
+    || entry.id.startsWith("new_video_draft_committed_");
 }
 
 function newVideoEntryProjectStatusView(
@@ -423,9 +572,10 @@ function newVideoEntryProjectStatusView(
     : restoredDraftActive
       ? "ready"
       : "empty";
-  const statusTitle = rawStatusKind === "empty" && restoredDraftActive ? undefined : status?.title;
-  const statusDetail = rawStatusKind === "empty" && restoredDraftActive ? undefined : status?.detail;
-  const statusNextAction = rawStatusKind === "empty" && restoredDraftActive ? undefined : status?.nextAction;
+  const emptyNewVideoStatus = rawStatusKind === "empty" && !restoredDraftActive;
+  const statusTitle = rawStatusKind === "empty" ? undefined : status?.title;
+  const statusDetail = rawStatusKind === "empty" ? undefined : status?.detail;
+  const statusNextAction = rawStatusKind === "empty" ? undefined : status?.nextAction;
   const stage = statusKind === "planning"
     ? "正在拆镜头"
     : statusKind === "ready"
@@ -442,13 +592,13 @@ function newVideoEntryProjectStatusView(
     : statusKind === "blocked"
       ? "blocked"
       : "waiting";
-  const doing = statusTitle || restored?.title || "先和 AI 导演说你想拍什么";
-  const waitingFor = statusDetail || (restored ? "确认这版故事，或直接说哪里要改" : "一个故事想法、脚本或素材");
-  const nextAction = statusNextAction || (restored ? "确认这版故事，或继续修改" : "在右侧输入，AI 会先拆故事和镜头");
+  const doing = emptyNewVideoStatus ? "AI 会先整理故事和镜头" : statusTitle || restored?.title || "准备整理故事和镜头";
+  const waitingFor = emptyNewVideoStatus ? "故事素材" : statusDetail || (restored ? "确认这版故事，或直接说哪里要改" : "故事素材");
+  const nextAction = emptyNewVideoStatus ? "发送后整理故事和镜头" : statusNextAction || (restored ? "确认这版故事，或继续修改" : "AI 会先整理故事和镜头");
   const facts = [
     { label: "项目", value: "新视频" },
     { label: "镜头", value: draftShotCount > 0 ? `草案 ${draftShotCount} 个` : "0 个" },
-    { label: "参考", value: draftReferenceCount > 0 ? `${draftReferenceCount} 个素材` : "待确认" },
+    { label: "参考", value: draftReferenceCount > 0 ? `${draftReferenceCount} 个素材` : "未开始" },
     { label: "AI 导演", value: statusKind === "planning" ? "正在拆镜头" : "先整理" },
   ];
   return {
@@ -466,6 +616,7 @@ export function DirectorMode({
   audit,
   view,
   runtimeState,
+  projectFactHash,
   projectScopeLabel,
   selectedShot,
   selectedShots,
@@ -493,6 +644,7 @@ export function DirectorMode({
   localProjectBusy,
   canCreateLocalProject,
   newVideoComposerResetKey,
+  newVideoResetKey,
   directorView,
   activeSectionId,
   assetLibraryNode,
@@ -517,15 +669,20 @@ export function DirectorMode({
   restoredAgentStagedPlanDraft,
   restoredAgentActionLog,
   restoredAgentTimelineEntries,
+  restoredAgentGenerationJobLedger,
   onNewVideoStatusChange,
   onStagePrototypeAgentPlan,
+  onClearPrototypeAgentPlan,
+  onRefreshRestoredAgentStagedPlanDraft,
   onRememberAgentActionLogItem,
   onRememberAgentTimelineEntries,
+  onRememberAgentGenerationJobLedger,
   onPreviewPrototypeAgentDemo,
 }: {
   audit: ProjectAudit;
   view: RuntimeView;
   runtimeState: ProjectRuntimeState;
+  projectFactHash?: string;
   projectScopeLabel?: string;
   selectedShot?: ShotRecord;
   selectedShots: ShotRecord[];
@@ -576,6 +733,7 @@ export function DirectorMode({
   localProjectBusy?: boolean;
   canCreateLocalProject?: boolean;
   newVideoComposerResetKey?: string;
+  newVideoResetKey?: number;
   directorView: DirectorView;
   activeSectionId?: string;
   assetLibraryNode: ReactNode;
@@ -585,12 +743,12 @@ export function DirectorMode({
   onProjectStoreApplyPlanReady?: (plan: ProjectFactsStagedApplyPlan) => void;
   onNewVideoDraftConfirmed?: (draft: NewVideoStartDraft, context: NewVideoStartConfirmationContext) => boolean | void | Promise<boolean | void>;
   onCreateLocalProject?: (draft?: NewVideoStartDraft) => unknown | Promise<unknown>;
-  onRunExport?: (target?: Pick<AgentControlledToolInvocationTarget, "agentToolTrace">) => unknown | Promise<unknown>;
+  onRunExport?: (target?: Pick<AgentControlledToolInvocationTarget, "agentToolTrace" | "signal">) => unknown | Promise<unknown>;
   onCreateP6RealSample?: (target?: AgentControlledToolInvocationTarget) => unknown | Promise<unknown>;
-  onCreateImage2EndFrame?: () => void | Promise<void>;
+  onCreateImage2EndFrame?: (target?: Pick<AgentControlledToolInvocationTarget, "skipConfirm" | "confirmationReceiptId" | "confirmedAt" | "signal">) => unknown | Promise<unknown>;
   onSendSeedanceVideo?: (target?: AgentControlledToolInvocationTarget) => unknown | Promise<unknown>;
   onDialogueAudioCreated?: (input: MinimalAudioPlanDialogueAudioCreated) => void | Promise<void>;
-  onRetryMissingBatch?: () => unknown | Promise<unknown>;
+  onRetryMissingBatch?: (target?: Pick<AgentControlledToolInvocationTarget, "signal">) => unknown | Promise<unknown>;
   onRetryReviewItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
   onApproveReviewItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
   onRejectReviewItem?: (item: CreatorReviewTrayItem) => void | Promise<void>;
@@ -600,10 +758,14 @@ export function DirectorMode({
   restoredAgentStagedPlanDraft?: ProjectAgentStagedPlanDraft;
   restoredAgentActionLog?: ProjectAgentActionLogItem[];
   restoredAgentTimelineEntries?: VibeAgentTimelineEntry[];
+  restoredAgentGenerationJobLedger?: AgentVideoGenerationJobLedger;
   onNewVideoStatusChange?: (status?: NewVideoStartStatus) => void;
   onStagePrototypeAgentPlan?: (input: StagePrototypeAgentPlanInput) => StagePrototypeAgentPlanResult | void | Promise<StagePrototypeAgentPlanResult | void>;
+  onClearPrototypeAgentPlan?: () => void | Promise<void>;
+  onRefreshRestoredAgentStagedPlanDraft?: (draft: ProjectAgentStagedPlanDraft) => void | Promise<void>;
   onRememberAgentActionLogItem?: (item: ProjectAgentActionLogItem) => void | Promise<void>;
   onRememberAgentTimelineEntries?: (entries: VibeAgentTimelineEntry[]) => void | Promise<void>;
+  onRememberAgentGenerationJobLedger?: (ledger: AgentVideoGenerationJobLedger) => void | Promise<void>;
   onPreviewPrototypeAgentDemo?: (input: PreviewPrototypeAgentDemoInput) => PreviewPrototypeAgentDemoResult | void | Promise<PreviewPrototypeAgentDemoResult | void>;
 }) {
   const folderReady = Boolean(localProjectReady);
@@ -614,6 +776,7 @@ export function DirectorMode({
       const shotIds = section.shotIds.filter((shotId) => runtimeShotIds.has(shotId));
       return {
         ...section,
+        label: cleanStoryText(section.label) || "当前故事",
         shotIds,
         shotCount: shotIds.length,
       };
@@ -639,20 +802,68 @@ export function DirectorMode({
   const agentProjectStatusLabel = folderReady
     ? "已连接"
     : projectReady
-      ? "先写想法"
-      : "需要本地项目";
+      ? "需要保存位置"
+      : "需要保存位置";
   const agentShotBoundView = directorView === "story" || directorView === "preview" || directorView === "export";
   const [videoPermissionContract, setVideoPermissionContract] = useState<AgentVideoPermissionContract>(defaultAgentVideoPermissionContract);
   const [newVideoStatus, setNewVideoStatus] = useState<NewVideoStartStatus | undefined>();
   const [agentIntakeCommand, setAgentIntakeCommand] = useState<NewVideoStartAgentIntakeCommand | undefined>();
   const [agentNewVideoDraftActive, setAgentNewVideoDraftActive] = useState(false);
   const [agentPendingAction, setAgentPendingAction] = useState(false);
-  const restoredNewVideoDraft = useMemo(
-    () => restoredNewVideoDraftSummary(restoredAgentTimelineEntries),
-    [restoredAgentTimelineEntries],
+  const [agentReferencePlanningFocus, setAgentReferencePlanningFocus] = useState(false);
+  const [agentEditingPendingConfirmation, setAgentEditingPendingConfirmation] = useState(false);
+  const [agentVisiblePendingConfirmationLabel, setAgentVisiblePendingConfirmationLabel] = useState("");
+  const activeNewVideoResetKey = newVideoResetKey || 0;
+  const activeNewVideoResetKeyRef = useRef(activeNewVideoResetKey);
+  activeNewVideoResetKeyRef.current = activeNewVideoResetKey;
+  const effectiveNewVideoComposerResetKey = newVideoResetKey
+    ? `${newVideoComposerResetKey || "project-reset"}:${newVideoResetKey}`
+    : newVideoComposerResetKey;
+  const handleAgentPendingActionChange = useCallback((pending: boolean) => {
+    setAgentPendingAction((current) => current === pending ? current : pending);
+  }, []);
+  const handleAgentReferencePlanningFocusChange = useCallback((active: boolean) => {
+    setAgentReferencePlanningFocus((current) => current === active ? current : active);
+  }, []);
+  const handleAgentEditingPendingConfirmationChange = useCallback((active: boolean) => {
+    setAgentEditingPendingConfirmation((current) => current === active ? current : active);
+  }, []);
+  const handleAgentVisiblePendingConfirmationLabelChange = useCallback((label: string) => {
+    setAgentVisiblePendingConfirmationLabel((current) => current === label ? current : label);
+  }, []);
+  useEffect(() => {
+    if (!newVideoResetKey) return;
+    setNewVideoStatus(undefined);
+    setAgentIntakeCommand(undefined);
+    setAgentNewVideoDraftActive(false);
+    setAgentReferencePlanningFocus(false);
+    setAgentEditingPendingConfirmation(false);
+    setAgentVisiblePendingConfirmationLabel("");
+    onNewVideoStatusChange?.(undefined);
+  }, [newVideoResetKey, onNewVideoStatusChange]);
+  const surfaceAgentIntakeCommand = agentIntakeCommand
+    && (agentIntakeCommand.sessionResetKey ?? 0) === activeNewVideoResetKey
+    ? agentIntakeCommand
+    : undefined;
+  const newVideoSurfaceAgentTimelineEntries = useMemo(
+    () => newVideoResetKey
+      ? []
+      : (restoredAgentTimelineEntries || []).filter(isNewVideoSurfaceAgentTimelineEntry),
+    [newVideoResetKey, restoredAgentTimelineEntries],
   );
-  const restoredNewVideoDraftActive = Boolean(restoredNewVideoDraft);
+  const restoredNewVideoDraft = useMemo(
+    () => restoredNewVideoDraftSummary(newVideoSurfaceAgentTimelineEntries),
+    [newVideoSurfaceAgentTimelineEntries],
+  );
+  const restoredAgentStagedPlanTakingFocus = Boolean(
+    restoredAgentStagedPlanDraft?.status === "active"
+      && restoredAgentStagedPlanDraft.action?.status === "staged",
+  );
+  const restoredNewVideoDraftActive = Boolean(restoredNewVideoDraft) && !restoredAgentStagedPlanTakingFocus;
   const showNewVideoStart = !projectReady || shots.length === 0 || agentNewVideoDraftActive || restoredNewVideoDraftActive;
+  const surfaceAgentTimelineEntries = showNewVideoStart
+    ? newVideoSurfaceAgentTimelineEntries
+    : restoredAgentTimelineEntries;
   const pendingConfirmedVideoPermissionContractRef = useRef<{
     contract: AgentVideoPermissionContract;
     confirmedAt: number;
@@ -675,6 +886,20 @@ export function DirectorMode({
     pendingConfirmedVideoPermissionContractRef.current = undefined;
     setVideoPermissionContract(defaultAgentVideoPermissionContract);
   }, [permissionProjectKey]);
+  useEffect(() => {
+    if (restoredAgentStagedPlanDraft?.status !== "active" || !restoredAgentStagedPlanDraft.videoPermissionContract?.mode) return;
+    setVideoPermissionContract((current) => {
+      const next = restoredAgentVideoPermissionContract(restoredAgentStagedPlanDraft, current);
+      return sameVideoPermissionContract(current, next) ? current : next;
+    });
+  }, [
+    restoredAgentStagedPlanDraft?.draftId,
+    restoredAgentStagedPlanDraft?.status,
+    restoredAgentStagedPlanDraft?.videoPermissionContract?.mode,
+    restoredAgentStagedPlanDraft?.videoPermissionContract?.referenceGenerationAllowed,
+    restoredAgentStagedPlanDraft?.videoPermissionContract?.videoSubmitAllowed,
+    restoredAgentStagedPlanDraft?.videoPermissionContract?.reason,
+  ]);
   const videoPermissionAllowsSend = agentVideoPermissionAllowsVideo(videoPermissionContract);
   const videoPermissionAllowsReference = agentVideoPermissionAllowsReference(videoPermissionContract);
   const sessionVideoSendAction = useMemo(() => {
@@ -701,6 +926,18 @@ export function DirectorMode({
   const visibleAgentCommand = useMemo<CreatorAgentCommand | undefined>(() => {
     const command = creatorDesk?.agentCommand;
     if (!command) return undefined;
+    const referenceGenerationDeferredByCreator = !videoPermissionAllowsReference
+      && videoPermissionContract.mode === "plan_only";
+    if (command.kind === "generate_references" && referenceGenerationDeferredByCreator) {
+      return {
+        ...command,
+        kind: "open_story",
+        label: "之后补参考",
+        summary: "已按你的要求先整理故事。",
+        detail: "需要参考时，在右侧说“开始补参考”。",
+        targetView: "story",
+      };
+    }
     if (command.kind === "generate_references" && !videoPermissionAllowsReference) {
       return {
         ...command,
@@ -728,7 +965,10 @@ export function DirectorMode({
       };
     }
     return command;
-  }, [creatorDesk?.agentCommand, videoPermissionAllowsReference, videoPermissionAllowsSend, videoPermissionContract.mode, videoSendAction?.message, videoSendAction?.status, videoSubmitCancelled]);
+  }, [creatorDesk?.agentCommand, videoPermissionAllowsReference, videoPermissionAllowsSend, videoPermissionContract.mode, videoPermissionContract.reason, videoSendAction?.message, videoSendAction?.status, videoSubmitCancelled]);
+  const surfaceAgentCommand = showNewVideoStart ? undefined : visibleAgentCommand;
+  const referenceGenerationDeferredByCreator = !videoPermissionAllowsReference
+    && videoPermissionContract.mode === "plan_only";
   const storyDetailLabel = [`${storySections.length} 个段落`, "点击查看分镜、模式和画面状态"].join(" · ");
   const showCreatorDeskPanel = projectReady && creatorDesk && !showNewVideoStart && directorView === "story" && !agentPendingAction;
   useEffect(() => {
@@ -737,17 +977,33 @@ export function DirectorMode({
       onNewVideoStatusChange?.(undefined);
     }
   }, [newVideoStatus, onNewVideoStatusChange, showNewVideoStart]);
+  const restoredNewVideoStatus = useMemo(
+    () => restoredNewVideoDraftActive ? restoredNewVideoDraftStatus(restoredNewVideoDraft) : undefined,
+    [restoredNewVideoDraft, restoredNewVideoDraftActive],
+  );
+  useEffect(() => {
+    if (!showNewVideoStart) return;
+    if (!restoredNewVideoStatus) return;
+    if (newVideoStatus && newVideoStatus.status !== "empty") return;
+    onNewVideoStatusChange?.(restoredNewVideoStatus);
+  }, [newVideoStatus, onNewVideoStatusChange, restoredNewVideoStatus, showNewVideoStart]);
   const agentTimelineStatusView = useMemo(
-    () => buildVibeAgentTimelineStatusView(restoredAgentTimelineEntries),
-    [restoredAgentTimelineEntries],
+    () => buildVibeAgentTimelineStatusView(surfaceAgentTimelineEntries),
+    [surfaceAgentTimelineEntries],
   );
   const pendingAgentConfirmation = useMemo(
-    () => latestPendingAgentConfirmation(restoredAgentTimelineEntries),
-    [restoredAgentTimelineEntries],
+    () => latestPendingAgentConfirmation(surfaceAgentTimelineEntries),
+    [surfaceAgentTimelineEntries],
   );
-  const pendingAgentConfirmationCopy = pendingAgentConfirmationLabel(pendingAgentConfirmation);
-  const currentCommandConfirmationCopy = currentAgentCommandConfirmationLabel(visibleAgentCommand);
-  const staleProjectEditConfirmation = /确认方式|确认修改/.test(pendingAgentConfirmationCopy);
+  const restoredAgentStagedPlanConfirmationCopy = restoredAgentStagedPlanPendingConfirmationLabel(restoredAgentStagedPlanDraft);
+  const pendingAgentConfirmationCopy = agentVisiblePendingConfirmationLabel
+    || restoredAgentStagedPlanConfirmationCopy
+    || pendingAgentConfirmationLabel(pendingAgentConfirmation);
+  const currentCommandConfirmationCopy = currentAgentCommandConfirmationLabel(surfaceAgentCommand);
+  const pendingAgentConfirmationHasVisibleCard = Boolean(
+    agentVisiblePendingConfirmationLabel || restoredAgentStagedPlanConfirmationCopy || pendingAgentConfirmation,
+  );
+  const staleProjectEditConfirmation = !pendingAgentConfirmationHasVisibleCard && /确认方式|确认修改/.test(pendingAgentConfirmationCopy);
   const displayedPendingAgentConfirmationCopy = currentCommandConfirmationCopy
     && pendingAgentConfirmationCopy
     && staleProjectEditConfirmation
@@ -761,6 +1017,7 @@ export function DirectorMode({
     localProjectBusy,
     directorView,
     referenceGenerationAction: realSampleAction,
+    referenceGenerationDeferredByCreator,
     endFrameAction,
     videoSendAction: sessionVideoSendAction,
     videoStage: creatorDesk?.videoStage,
@@ -768,7 +1025,7 @@ export function DirectorMode({
     framePlan: creatorDesk?.framePlan,
     referenceGapCount: creatorReferenceGapCount(creatorDesk),
     agentStage: creatorDesk?.agentStage,
-    agentCommand: visibleAgentCommand,
+    agentCommand: surfaceAgentCommand,
     agentTimelineStatus: agentTimelineStatusView,
     newVideoStatus,
     exportAction,
@@ -791,7 +1048,8 @@ export function DirectorMode({
     runtimeState,
     sessionVideoSendAction,
     agentTimelineStatusView,
-    visibleAgentCommand,
+    referenceGenerationDeferredByCreator,
+    surfaceAgentCommand,
   ]);
   const projectStatusView = useMemo(
     () => projectStatusViewWithCommittedDraft(
@@ -805,17 +1063,46 @@ export function DirectorMode({
     [newVideoStatus, restoredNewVideoDraft, showNewVideoStart],
   );
   const activeProjectStatusView = newVideoEntryStatusView || projectStatusView;
-  const displayedProjectStatusView: ProjectStatusViewModel = projectStatusViewWithPendingAgentConfirmation(
-    activeProjectStatusView,
-    agentPendingAction ? "确认当前消息" : displayedPendingAgentConfirmationCopy,
+  const newVideoPlanningTakingFocus = showNewVideoStart && newVideoStatus?.status === "planning";
+  const localProjectTakingFocus = activeProjectStatusView.stage === "需要本地项目" || activeProjectStatusView.stage === "需要保存位置";
+  const projectEditConfirmationCanOverrideLocalProjectSetup = Boolean(
+    localProjectTakingFocus
+    && /确认修改|确认方式|确认重排为\s*\d+\s*个镜头/.test(displayedPendingAgentConfirmationCopy),
   );
+  const displayedPendingAgentConfirmationForStatus = newVideoPlanningTakingFocus
+    ? ""
+    : localProjectTakingFocus && !projectEditConfirmationCanOverrideLocalProjectSetup
+      ? ""
+    : agentPendingAction ? "确认当前消息" : displayedPendingAgentConfirmationCopy;
+  const displayedProjectStatusView: ProjectStatusViewModel = agentEditingPendingConfirmation && displayedPendingAgentConfirmationCopy
+    ? projectStatusViewWithEditingAgentConfirmation(activeProjectStatusView, displayedPendingAgentConfirmationCopy)
+    : projectStatusViewWithPendingAgentConfirmation(
+      activeProjectStatusView,
+      displayedPendingAgentConfirmationForStatus,
+    );
+  const pendingAgentConfirmationForSurfaces = agentEditingPendingConfirmation && displayedPendingAgentConfirmationCopy
+    ? displayedPendingAgentConfirmationCopy
+    : displayedProjectStatusView.stage === "等待你确认"
+      ? displayedProjectStatusView.nextAction
+      : "";
+  const agentEditingConfirmationLabel = agentEditingPendingConfirmation && displayedPendingAgentConfirmationCopy
+    ? displayedPendingAgentConfirmationCopy
+    : "";
+  const projectRailReferenceGapCount = creatorReferenceGapCount(creatorDesk);
+  const displayedAssetLibraryNode = useMemo(() => {
+    if (!isValidElement(assetLibraryNode)) return assetLibraryNode;
+    if (!pendingAgentConfirmationForSurfaces && !projectRailReferenceGapCount) return assetLibraryNode;
+    return cloneElement(assetLibraryNode as ReactElement<{ pendingConfirmationLabel?: string; referenceGapCount?: number }>, {
+      pendingConfirmationLabel: pendingAgentConfirmationForSurfaces,
+      referenceGapCount: projectRailReferenceGapCount,
+    });
+  }, [assetLibraryNode, pendingAgentConfirmationForSurfaces, projectRailReferenceGapCount]);
   const pendingDraftRailTitle = showNewVideoStart ? pendingNewVideoDraftTitle(newVideoStatus) || restoredNewVideoDraft?.title || "" : "";
   const projectNavReady = projectReady && !showNewVideoStart;
   const projectNavSections = showNewVideoStart ? [] : storySections;
   const projectNavShotCount = showNewVideoStart ? (newVideoStatus?.draftShotCount || restoredNewVideoDraft?.shotCount || 0) : runtimeState.storyFlow.shots.length;
   const projectRailTitle = showNewVideoStart ? pendingDraftRailTitle || "新视频项目" : runtimeState.project.title || projectScopeLabel || "新视频项目";
   const projectRailVideoLabel = directorProjectRailVideoLabel(creatorDesk?.videoStage);
-  const projectRailReferenceGapCount = creatorReferenceGapCount(creatorDesk);
   const projectRailReferenceLabel = directorProjectRailReferenceLabel(
     creatorDesk,
     displayableReferenceAssetCount(runtimeState.visualMemory.assets),
@@ -824,7 +1111,7 @@ export function DirectorMode({
   const projectRailDisplayReferenceLabel = showNewVideoStart
     ? newVideoStatus?.draftReferenceCount
       ? `${newVideoStatus.draftReferenceCount} 个素材`
-      : "待确认"
+      : "未开始"
     : projectRailReferenceLabel;
   const projectRailDisplayVideoLabel = showNewVideoStart ? "未生成" : projectRailVideoLabel;
   const agentSelectionReady = projectReady && !showNewVideoStart && agentShotBoundView;
@@ -860,6 +1147,7 @@ export function DirectorMode({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       text,
       projectTargetMode: "new_project",
+      sessionResetKey: activeNewVideoResetKey,
     });
   }
 
@@ -871,24 +1159,26 @@ export function DirectorMode({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       text: "",
       mode: "continue_current_draft",
+      sessionResetKey: activeNewVideoResetKey,
     });
   }
 
   function confirmNewVideoDraftFromAgent() {
     onOpenDirectorView?.("story");
     setAgentNewVideoDraftActive(true);
-    setNewVideoStatus(undefined);
     setAgentIntakeCommand({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       text: "确认这版故事",
       mode: "confirm_current_draft",
+      sessionResetKey: activeNewVideoResetKey,
     });
   }
 
-  function handleNewVideoStatusChange(status: NewVideoStartStatus) {
+  const handleNewVideoStatusChange = useCallback((status: NewVideoStartStatus) => {
+    if (activeNewVideoResetKeyRef.current !== activeNewVideoResetKey) return;
     setNewVideoStatus(status);
     onNewVideoStatusChange?.(status);
-  }
+  }, [activeNewVideoResetKey, onNewVideoStatusChange]);
 
   return (
     <div className={`minimal-director ${directorView} ${showAgentPanel ? "has-agent-rail" : "composer-only"}`}>
@@ -920,6 +1210,9 @@ export function DirectorMode({
             videoSendAction={sessionVideoSendAction}
             agentCommandOverride={visibleAgentCommand}
             projectStatusView={displayedProjectStatusView}
+            referencePlanningFocusActive={agentReferencePlanningFocus && !agentPendingAction && folderReady}
+            referenceConfirmationEditingFocusActive={Boolean(agentEditingConfirmationLabel)}
+            editingConfirmationLabel={agentEditingConfirmationLabel}
             onSendVideo={sessionSendSeedanceVideo}
             onRetryItem={sessionRetryReviewItem}
             onApproveItem={onApproveReviewItem}
@@ -940,7 +1233,9 @@ export function DirectorMode({
         {!showCreatorDeskPanel && !showNewVideoStart && (
           <DirectorDetailDisclosure
             title="流程详情"
-            detail={creatorDesk?.agentStage.summary || (projectReady ? "AI 会带你推进下一步" : "先描述一个想法")}
+            detail={pendingAgentConfirmationForSurfaces
+              ? `先处理右侧消息里的「${pendingAgentConfirmationForSurfaces}」。`
+              : creatorDesk?.agentStage.summary || (projectReady ? "AI 会带你推进下一步" : "先描述一个想法")}
           >
             <DirectorWorkflowOverview
               runtimeState={runtimeState}
@@ -952,7 +1247,7 @@ export function DirectorMode({
             />
           </DirectorDetailDisclosure>
         )}
-        {directorView === "assets" && (projectReady ? assetLibraryNode : (
+        {directorView === "assets" && (projectReady ? displayedAssetLibraryNode : (
             <EmptyProjectSurface
               title="还没有参考资产"
               detail="先在右侧和 AI 导演说清楚项目，确认后参考会出现在这里。"
@@ -963,9 +1258,10 @@ export function DirectorMode({
             {showNewVideoStart && (
               <Suspense fallback={<EmptyProjectSurface title="正在打开新项目入口" detail="稍等一下，输入框马上就好。" />}>
                 <NewVideoStart
+                  key={effectiveNewVideoComposerResetKey || "new-video-start"}
                   shots={shots}
                   projectDraftKey={runtimeState.project.root || runtimeState.sourceIndexSummary.projectId}
-                  composerResetKey={newVideoComposerResetKey}
+                  composerResetKey={effectiveNewVideoComposerResetKey}
                   localProjectReady={folderReady}
                   localProjectBusy={localProjectBusy}
                   canCreateLocalProject={canCreateLocalProject}
@@ -977,9 +1273,9 @@ export function DirectorMode({
                   onDraftConfirmed={confirmNewVideoDraft}
                   videoPermissionContract={videoPermissionContract}
                   onVideoPermissionContractChange={setVideoPermissionContract}
-                  restoredAgentTimelineEntries={restoredAgentTimelineEntries}
+                  restoredAgentTimelineEntries={newVideoSurfaceAgentTimelineEntries}
                   onRememberAgentTimelineEntries={onRememberAgentTimelineEntries}
-                  agentIntakeCommand={agentIntakeCommand}
+                  agentIntakeCommand={surfaceAgentIntakeCommand}
                   composerPlacement="draft_only"
                 />
               </Suspense>
@@ -1010,6 +1306,7 @@ export function DirectorMode({
               currentProjectPreviewItems={currentProjectPreviewItems}
               emptyStateLabel={previewEmptyStateLabel}
               emptyStateDetail={previewEmptyStateDetail}
+              pendingConfirmationLabel={pendingAgentConfirmationForSurfaces}
               sections={storySections}
               shots={audit.shots}
               selectedShotId={selectedShotId}
@@ -1036,6 +1333,7 @@ export function DirectorMode({
               exportWorker={exportWorker}
               exportAction={exportAction}
               localProjectReady={localProjectReady}
+              pendingConfirmationLabel={pendingAgentConfirmationForSurfaces}
               onRunExport={onRunExport}
             />
           </Suspense> : (
@@ -1050,6 +1348,7 @@ export function DirectorMode({
         <div className="director-agent-rail" aria-label="AI 导演对话区">
           <MinimalAgentPanel
             runtimeState={runtimeState}
+            projectFactHash={projectFactHash}
             projectScopeLabel={agentScopeLabel}
             projectStatusLabel={agentProjectStatusLabel}
             currentView={directorView}
@@ -1063,15 +1362,19 @@ export function DirectorMode({
             sectionLabel={agentSectionLabel}
             sectionId={projectNavReady && directorView === "story" && !selectedShot ? activeSection?.id : undefined}
             onProjectStoreApplyPlanReady={onProjectStoreApplyPlanReady}
-            latestPrototypeAgentDemo={latestPrototypeAgentDemo}
-            restoredAgentStagedPlanDraft={restoredAgentStagedPlanDraft}
-            restoredAgentActionLog={restoredAgentActionLog}
-            restoredAgentTimelineEntries={restoredAgentTimelineEntries}
-            onStagePrototypeAgentPlan={onStagePrototypeAgentPlan}
+            latestPrototypeAgentDemo={showNewVideoStart ? undefined : latestPrototypeAgentDemo}
+            restoredAgentStagedPlanDraft={showNewVideoStart ? undefined : restoredAgentStagedPlanDraft}
+            restoredAgentActionLog={showNewVideoStart ? [] : restoredAgentActionLog}
+            restoredAgentTimelineEntries={surfaceAgentTimelineEntries}
+            restoredAgentGenerationJobLedger={restoredAgentGenerationJobLedger}
+            onStagePrototypeAgentPlan={showNewVideoStart ? undefined : onStagePrototypeAgentPlan}
+            onClearPrototypeAgentPlan={onClearPrototypeAgentPlan}
+            onRefreshRestoredAgentStagedPlanDraft={onRefreshRestoredAgentStagedPlanDraft}
             onRememberAgentActionLogItem={onRememberAgentActionLogItem}
             onRememberAgentTimelineEntries={onRememberAgentTimelineEntries}
+            onRememberAgentGenerationJobLedger={onRememberAgentGenerationJobLedger}
             onPreviewPrototypeAgentDemo={onPreviewPrototypeAgentDemo}
-            agentCommand={visibleAgentCommand}
+            agentCommand={surfaceAgentCommand}
             projectObservation={projectNavReady ? creatorDesk?.projectObservation : undefined}
             projectStatusView={displayedProjectStatusView}
             realSampleAction={realSampleAction}
@@ -1087,9 +1390,11 @@ export function DirectorMode({
             onStartNewVideoDraftFromAgent={startNewVideoFromAgent}
             onContinueNewVideoDraftFromAgent={continueNewVideoDraftFromAgent}
             onConfirmNewVideoDraftFromAgent={confirmNewVideoDraftFromAgent}
+            newVideoResetKey={activeNewVideoResetKey}
             newVideoDraftPendingForAgent={showNewVideoStart && newVideoStatus?.status === "drafting"}
             newVideoDraftPlanningForAgent={showNewVideoStart && newVideoStatus?.status === "planning"}
             newVideoDraftReadyForAgent={showNewVideoStart && newVideoStatus?.status === "ready"}
+            newVideoDraftShotCountForAgent={showNewVideoStart ? (newVideoStatus?.draftShotCount || restoredNewVideoDraft?.shotCount || 0) : 0}
             newVideoAgentSelectionContext={showNewVideoStart ? newVideoStatus?.agentSelectionContext : undefined}
             onCreateP6RealSample={onCreateP6RealSample}
             onCreateImage2EndFrame={onCreateImage2EndFrame}
@@ -1099,7 +1404,10 @@ export function DirectorMode({
             onRetryMissingBatch={onRetryMissingBatch}
             videoPermissionContract={videoPermissionContract}
             onVideoPermissionContractChange={setVideoPermissionContract}
-            onPendingAgentActionChange={setAgentPendingAction}
+            onPendingAgentActionChange={handleAgentPendingActionChange}
+            onReferencePlanningFocusChange={handleAgentReferencePlanningFocusChange}
+            onEditingPendingConfirmationChange={handleAgentEditingPendingConfirmationChange}
+            onVisiblePendingConfirmationLabelChange={handleAgentVisiblePendingConfirmationLabelChange}
           />
         </div>
       )}

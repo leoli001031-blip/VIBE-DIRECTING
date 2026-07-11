@@ -8,15 +8,12 @@ const distAssetsRoot = path.join(distRoot, "assets");
 const viteConfigSource = readFileSync(path.join(appRoot, "vite.config.ts"), "utf8");
 const permissionIntentSource = readFileSync(path.join(appRoot, "src/core/directorAgentPermissionIntent.ts"), "utf8");
 const seedanceSubmitHookSource = readFileSync(path.join(appRoot, "src/ui/director/useSeedanceVideoSubmitAction.ts"), "utf8");
+const newVideoStartSource = readFileSync(path.join(appRoot, "src/ui/director/NewVideoStart.tsx"), "utf8");
 
 const staleUiCopies = [
   {
     text: "直接修改",
     reason: "Agent confirmation card now uses “再改一下” so users do not confuse revising with direct project writes.",
-  },
-  {
-    text: "整理草案",
-    reason: "New-video entry should say “发送给 AI 导演” / creator-facing copy, not workflow draft jargon.",
   },
   {
     text: "工作范围",
@@ -48,6 +45,10 @@ assert(
 assert(
   seedanceSubmitHookSource.includes("需要时可以重新确认"),
   "Seedance cancel copy must stay retryable instead of becoming a blocked video state.",
+);
+assert(
+  !newVideoStartSource.includes("整理草案"),
+  "New-video entry should say “发送给 AI 导演” instead of restoring the old draft-organize button copy.",
 );
 
 if (!existsSync(distRoot) || jsFiles.length === 0) {

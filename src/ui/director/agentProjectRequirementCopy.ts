@@ -4,21 +4,21 @@ export function agentProjectRequirementCopy(input: {
 }) {
   if (input.localProjectBusy) {
     return {
-      label: "正在选择项目",
-      detail: "正在选择或创建项目文件夹。",
-      hint: "正在准备项目文件夹。",
+      label: "正在选择保存位置",
+      detail: "正在为这版故事准备保存位置。",
+      hint: "正在准备保存位置。",
     };
   }
   if (input.canCreateLocalProject) {
     return {
-      label: "新建本地项目",
-      detail: "生成参考、视频或导出前，需要先准备本地项目文件夹。",
-      hint: "点下方「新建本地项目」，再继续。",
+      label: "选择保存位置",
+      detail: "生成参考、视频或导出前，需要先选择这版故事的保存位置。",
+      hint: "点下方「选择保存位置」，再继续。",
     };
   }
   return {
-    label: "需要本地项目",
-    detail: "生成参考、视频或导出前，需要在桌面 App 里选择或新建本地项目。",
-    hint: "请在桌面 App 打开或新建本地项目后继续。",
+    label: "需要保存位置",
+    detail: "生成参考、视频或导出前，需要先选择这版故事的保存位置。",
+    hint: "请在桌面 App 选择保存位置后继续。",
   };
 }

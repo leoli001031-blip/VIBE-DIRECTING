@@ -1,14 +1,21 @@
 import * as electron from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import net from "node:net";
 import { createProjectRootScope, spawnAllowed } from "./projectScope.mts";
+import { createRuntimeSessionToken } from "./runtimeSessionToken.mts";
+import { isSafeExternalUrl, isTrustedDocumentUrl, isTrustedRendererSender } from "./securityPolicy.mts";
 
-const { app, BrowserWindow, dialog, ipcMain } = electron;
+const { app, BrowserWindow, dialog, ipcMain, shell } = electron;
 app.setName("Vibe Director Studio");
+const explicitUserDataDirArg = process.argv.find((arg) => arg.startsWith("--user-data-dir="));
+const explicitUserDataDir = (process.env.VIBE_DIRECTOR_USER_DATA_DIR || process.env.VIBE_CORE_USER_DATA_DIR || explicitUserDataDirArg?.split("=").slice(1).join("="))?.trim();
+if (explicitUserDataDir) {
+  app.setPath("userData", path.resolve(explicitUserDataDir));
+}
 if (process.platform === "darwin") {
   // Local-first app: avoid Chromium touching macOS keychain storage during normal use.
   app.commandLine.appendSwitch("use-mock-keychain");
@@ -50,10 +57,12 @@ const openDevToolsInDev = process.env.VIBE_ELECTRON_OPEN_DEVTOOLS === "1";
 const runtimeHost = readEnv("VIBE_DIRECTOR_RUNTIME_API_HOST", "VIBE_CORE_RUNTIME_API_HOST") || "127.0.0.1";
 const smokeMode = process.env.VIBE_ELECTRON_SMOKE === "1";
 const smokeMarker = "__VIBE_ELECTRON_PACKAGED_GUI_SMOKE__";
+const runtimeSessionToken = createRuntimeSessionToken();
 
 let runtimeServer: ChildProcess | null = null;
 let runtimeApiBaseUrl: string | undefined;
 let runtimeServerStarting: Promise<string | undefined> | null = null;
+let trustedRendererWebContentsId: number | undefined;
 const projectRootScope = createProjectRootScope();
 const sandboxWatchers = new Map<string, ReturnType<typeof fs.watch>>();
 const rootToWatchers = new Map<string, Set<string>>();
@@ -146,8 +155,21 @@ function rememberedProjectSelectionPath() {
   return path.join(app.getPath("userData"), "last-project.json");
 }
 
+function currentProjectBindingPath() {
+  return readEnv("VIBE_DIRECTOR_CURRENT_PROJECT_BINDING_PATH", "VIBE_CORE_CURRENT_PROJECT_BINDING_PATH") ||
+    path.join(app.getPath("userData"), "current-project.local.json");
+}
+
+function isTransientBrowserProjectRoot(projectRoot: string) {
+  const normalized = projectRoot.replace(/\\/g, "/").replace(/\/+$/, "");
+  return normalized === ".vibe-runtime/browser-projects"
+    || normalized.startsWith(".vibe-runtime/browser-projects/")
+    || normalized.includes("/.vibe-runtime/browser-projects/");
+}
+
 function writeRememberedProjectSelection(projectRoot: string) {
   try {
+    if (isTransientBrowserProjectRoot(projectRoot)) return;
     fs.mkdirSync(app.getPath("userData"), { recursive: true });
     fs.writeFileSync(rememberedProjectSelectionPath(), JSON.stringify({ projectRoot: path.resolve(projectRoot) }), "utf8");
   } catch {
@@ -175,6 +197,10 @@ function restoreRememberedProjectRootScope() {
     const record = JSON.parse(fs.readFileSync(filePath, "utf8")) as { projectRoot?: string };
     if (!record.projectRoot) return;
     const resolved = path.resolve(record.projectRoot);
+    if (isTransientBrowserProjectRoot(resolved)) {
+      clearRememberedProjectSelection(resolved);
+      return;
+    }
     if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
       projectRootScope.rememberProjectRoot(resolved);
       return;
@@ -185,10 +211,7 @@ function restoreRememberedProjectRootScope() {
   }
 }
 
-function selectionForProjectRoot(projectRoot: string, displayName?: string) {
-  const resolvedProjectRoot = path.resolve(projectRoot);
-  projectRootScope.rememberProjectRoot(resolvedProjectRoot);
-  writeRememberedProjectSelection(resolvedProjectRoot);
+function projectSelection(resolvedProjectRoot: string, displayName?: string) {
   const projectVibePath = projectVibePathForRoot(resolvedProjectRoot);
   return {
     cancelled: false,
@@ -198,6 +221,64 @@ function selectionForProjectRoot(projectRoot: string, displayName?: string) {
     hasProjectVibe: fs.existsSync(projectVibePath),
     displayName: displayName || path.basename(resolvedProjectRoot) || "未命名项目",
   };
+}
+
+function selectionForProjectRoot(projectRoot: string, displayName?: string) {
+  const resolvedProjectRoot = projectRootScope.rememberProjectRoot(projectRoot);
+  writeRememberedProjectSelection(resolvedProjectRoot);
+  return projectSelection(resolvedProjectRoot, displayName);
+}
+
+function selectionForAuthorizedProjectRoot(projectRoot: string) {
+  const resolvedProjectRoot = projectRootScope.resolveAuthorizedProjectRoot(projectRoot, "project:remember");
+  writeRememberedProjectSelection(resolvedProjectRoot);
+  return projectSelection(resolvedProjectRoot);
+}
+
+function currentProjectBindingForRenderer() {
+  try {
+    const bindingPath = currentProjectBindingPath();
+    if (!fs.existsSync(bindingPath)) return undefined;
+    const binding = JSON.parse(fs.readFileSync(bindingPath, "utf8")) as {
+      projectRoot?: string;
+      projectRootRelativePath?: string;
+      projectVibeRelativePath?: string;
+      projectId?: string;
+      displayName?: string;
+    };
+    if (!binding.projectRoot) return undefined;
+    const projectRoot = path.resolve(binding.projectRoot);
+    if (!fs.existsSync(projectRoot) || !fs.statSync(projectRoot).isDirectory()) return undefined;
+    projectRootScope.rememberProjectRoot(projectRoot);
+    const projectVibePath = binding.projectVibeRelativePath || projectVibePathForRoot(projectRoot);
+    return {
+      ok: true,
+      status: "bound",
+      currentProject: {
+        bound: true,
+        binding,
+        bindingPath,
+        projectRoot,
+        projectRootRelativePath: binding.projectRootRelativePath || projectRoot,
+        projectVibeRelativePath: projectVibePath,
+        project: {
+          title: binding.displayName || path.basename(projectRoot) || "未命名项目",
+          projectId: binding.projectId,
+          projectRoot,
+          projectVibePath,
+        },
+      },
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function currentProjectBindingBootstrapArg() {
+  const payload = currentProjectBindingForRenderer();
+  const binding = payload?.currentProject?.binding;
+  if (!binding) return undefined;
+  return `--vibe-current-project-binding=${encodeURIComponent(JSON.stringify(binding))}`;
 }
 
 function safeProjectFolderName(displayName?: string) {
@@ -239,9 +320,7 @@ async function startRuntimeServer() {
     return undefined;
   }
   const runtimePort = await chooseRuntimePort();
-  const currentProjectBindingPath =
-    readEnv("VIBE_DIRECTOR_CURRENT_PROJECT_BINDING_PATH", "VIBE_CORE_CURRENT_PROJECT_BINDING_PATH") ||
-    path.join(app.getPath("userData"), "current-project.local.json");
+  const runtimeCurrentProjectBindingPath = currentProjectBindingPath();
   const rememberedProjectPath = rememberedProjectSelectionPath();
   const allowedProjectRoots = projectRootScope.roots().join(",");
   try {
@@ -254,14 +333,16 @@ async function startRuntimeServer() {
         VIBE_DIRECTOR_RUNTIME_API_HOST: runtimeHost,
         VIBE_DIRECTOR_RUNTIME_API_PORT: String(runtimePort),
         VIBE_DIRECTOR_RUNTIME_WORKDIR: runtimeWorkdir,
-        VIBE_DIRECTOR_CURRENT_PROJECT_BINDING_PATH: currentProjectBindingPath,
+        VIBE_DIRECTOR_RUNTIME_API_TOKEN: runtimeSessionToken,
+        VIBE_DIRECTOR_CURRENT_PROJECT_BINDING_PATH: runtimeCurrentProjectBindingPath,
         VIBE_DIRECTOR_REMEMBERED_PROJECT_SELECTION_PATH: rememberedProjectPath,
         VIBE_DIRECTOR_ALLOWED_PROJECT_ROOTS: allowedProjectRoots,
         // Compatibility for historical runtime scripts; new code should read VIBE_DIRECTOR_* first.
         VIBE_CORE_RUNTIME_API_HOST: runtimeHost,
         VIBE_CORE_RUNTIME_API_PORT: String(runtimePort),
         VIBE_CORE_RUNTIME_WORKDIR: runtimeWorkdir,
-        VIBE_CORE_CURRENT_PROJECT_BINDING_PATH: currentProjectBindingPath,
+        VIBE_CORE_RUNTIME_API_TOKEN: runtimeSessionToken,
+        VIBE_CORE_CURRENT_PROJECT_BINDING_PATH: runtimeCurrentProjectBindingPath,
         VIBE_CORE_REMEMBERED_PROJECT_SELECTION_PATH: rememberedProjectPath,
         VIBE_CORE_ALLOWED_PROJECT_ROOTS: allowedProjectRoots,
       },
@@ -310,12 +391,53 @@ async function ensureRuntimeServer() {
   return runtimeServerStarting;
 }
 
+function trustedRendererDocumentUrl() {
+  return isDev ? devUrl : pathToFileURL(path.join(appRoot, "dist", "index.html")).href;
+}
+
+function assertTrustedIpcSender(event: electron.IpcMainInvokeEvent, channel: string) {
+  const senderFrame = event.senderFrame;
+  const webContentsId = trustedRendererWebContentsId;
+  if (
+    webContentsId === undefined
+    || !senderFrame
+    || !isTrustedRendererSender({
+      webContentsId: event.sender.id,
+      frameUrl: senderFrame.url,
+      isMainFrame: event.senderFrame === event.sender.mainFrame,
+    }, {
+      webContentsId,
+      documentUrl: trustedRendererDocumentUrl(),
+    })
+  ) {
+    throw new Error(`Blocked untrusted IPC sender for ${channel}.`);
+  }
+}
+
+function handleTrustedIpc<Args extends unknown[], Result>(
+  channel: string,
+  listener: (event: electron.IpcMainInvokeEvent, ...args: Args) => Result | Promise<Result>,
+) {
+  ipcMain.handle(channel, (event, ...args) => {
+    assertTrustedIpcSender(event, channel);
+    return listener(event, ...(args as Args));
+  });
+}
+
 function registerIpcHandlers() {
-  ipcMain.handle("runtime:ensureStarted", async () => {
-    return await ensureRuntimeServer();
+  handleTrustedIpc("runtime:ensureStarted", async () => {
+    const baseUrl = await ensureRuntimeServer();
+    return {
+      baseUrl: baseUrl || "",
+      token: baseUrl ? runtimeSessionToken : "",
+    };
   });
 
-  ipcMain.handle("project:chooseRoot", async () => {
+  handleTrustedIpc("project:currentBinding", async () => {
+    return currentProjectBindingForRenderer();
+  });
+
+  handleTrustedIpc("project:chooseRoot", async () => {
     const result = await dialog.showOpenDialog({
       title: "打开项目",
       properties: ["openDirectory", "createDirectory"],
@@ -327,23 +449,23 @@ function registerIpcHandlers() {
     return selectionForProjectRoot(result.filePaths[0]);
   });
 
-  ipcMain.handle("project:createLocal", async (_event, input?: { displayName?: string }) => {
+  handleTrustedIpc("project:createLocal", async (_event, input?: { displayName?: string }) => {
     const projectsRoot = defaultProjectsRoot();
     fs.mkdirSync(projectsRoot, { recursive: true });
-    const result = await dialog.showOpenDialog({
+    const displayName = input?.displayName?.trim() || "未命名项目";
+    const result = await dialog.showSaveDialog({
       title: "新建项目",
-      message: "选择或新建一个文件夹作为这个视频项目。",
+      message: "选择或输入一个文件夹名称作为这个视频项目。",
       buttonLabel: "使用这个文件夹",
-      defaultPath: projectsRoot,
-      properties: ["openDirectory", "createDirectory"],
+      defaultPath: path.join(projectsRoot, safeProjectFolderName(displayName)),
+      properties: ["createDirectory", "showOverwriteConfirmation"],
     });
-    if (result.canceled || !result.filePaths[0]) {
+    if (result.canceled || !result.filePath) {
       return { cancelled: true };
     }
 
-    const selectedRoot = path.resolve(result.filePaths[0]);
+    const selectedRoot = path.resolve(result.filePath);
     const resolvedProjectsRoot = path.resolve(projectsRoot);
-    const displayName = input?.displayName?.trim() || path.basename(selectedRoot) || "未命名项目";
     const projectRoot = selectedRoot === resolvedProjectsRoot
       ? uniqueChildProjectRoot(resolvedProjectsRoot, displayName)
       : selectedRoot;
@@ -351,18 +473,18 @@ function registerIpcHandlers() {
     return selectionForProjectRoot(projectRoot, path.basename(projectRoot) || displayName);
   });
 
-  ipcMain.handle("project:remember", async (_event, projectRoot: string) => {
+  handleTrustedIpc("project:remember", async (_event, projectRoot: string) => {
     if (!projectRoot || typeof projectRoot !== "string") {
       return { cancelled: true };
     }
-    const resolved = path.resolve(projectRoot);
-    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+    try {
+      return selectionForAuthorizedProjectRoot(projectRoot);
+    } catch {
       return { cancelled: true };
     }
-    return selectionForProjectRoot(resolved);
   });
 
-  ipcMain.handle("project:forget", async (_event, projectRoot: string) => {
+  handleTrustedIpc("project:forget", async (_event, projectRoot: string) => {
     if (!projectRoot || typeof projectRoot !== "string") {
       throw new Error("project:forget requires a projectRoot");
     }
@@ -379,7 +501,7 @@ function registerIpcHandlers() {
     return { forgotten: existed };
   });
 
-  ipcMain.handle("sandbox:watch", async (_event, watchDir: string) => {
+  handleTrustedIpc("sandbox:watch", async (_event, watchDir: string) => {
     if (!watchDir || typeof watchDir !== "string") {
       throw new Error("sandbox:watch requires a watchDir path");
     }
@@ -409,22 +531,27 @@ function registerIpcHandlers() {
     };
   });
 
-  ipcMain.handle("sandbox:unwatch", async (_event, watchId: string) => {
+  handleTrustedIpc("sandbox:unwatch", async (_event, watchId: string) => {
     if (!watchId || typeof watchId !== "string") {
       throw new Error("sandbox:unwatch requires a watchId");
     }
     return { unwatched: closeSandboxWatcher(watchId), watchId };
   });
 
-  ipcMain.handle("sandbox:fileExists", async (_event, filePath: string) => {
+  handleTrustedIpc("sandbox:fileExists", async (_event, filePath: string) => {
     if (!filePath || typeof filePath !== "string") {
       throw new Error("sandbox:fileExists requires a filePath");
     }
-    const resolved = projectRootScope.resolveOpenedProjectPath(filePath, "sandbox:fileExists");
+    let resolved = "";
+    try {
+      resolved = projectRootScope.resolveOpenedProjectPath(filePath, "sandbox:fileExists");
+    } catch {
+      return { exists: false, path: "" };
+    }
     return { exists: fs.existsSync(resolved), path: resolved };
   });
 
-  ipcMain.handle("sandbox:readFile", async (_event, filePath: string) => {
+  handleTrustedIpc("sandbox:readFile", async (_event, filePath: string) => {
     if (!filePath || typeof filePath !== "string") {
       throw new Error("sandbox:readFile requires a filePath");
     }
@@ -437,7 +564,7 @@ function registerIpcHandlers() {
     return { content, hash, path: resolved };
   });
 
-  ipcMain.handle("sandbox:writeFile", async (_event, filePath: string, data: string) => {
+  handleTrustedIpc("sandbox:writeFile", async (_event, filePath: string, data: string) => {
     if (!filePath || typeof filePath !== "string") {
       throw new Error("sandbox:writeFile requires a filePath");
     }
@@ -451,7 +578,7 @@ function registerIpcHandlers() {
     return { written: true, path: resolved, hash };
   });
 
-  ipcMain.handle("sandbox:copyFile", async (_event, sourcePath: string, destinationPath: string) => {
+  handleTrustedIpc("sandbox:copyFile", async (_event, sourcePath: string, destinationPath: string) => {
     if (!sourcePath || typeof sourcePath !== "string") {
       throw new Error("sandbox:copyFile requires a sourcePath");
     }
@@ -475,7 +602,7 @@ function registerIpcHandlers() {
     };
   });
 
-  ipcMain.handle("sandbox:spawn", async (_event, command: string, args: string[]) => {
+  handleTrustedIpc("sandbox:spawn", async (_event, command: string, args: string[]) => {
     if (!command || typeof command !== "string") {
       throw new Error("sandbox:spawn requires a command");
     }
@@ -506,7 +633,10 @@ async function waitForRuntimeStatus(runtimeApiBaseUrl: string) {
   let lastError = "";
   while (Date.now() - startedAt < 15000) {
     try {
-      const response = await fetch(statusUrl, { signal: AbortSignal.timeout(5000) });
+      const response = await fetch(statusUrl, {
+        headers: { "x-vibe-runtime-token": runtimeSessionToken },
+        signal: AbortSignal.timeout(5000),
+      });
       if (response.ok) {
         const payload = await response.json();
         if (payload && typeof payload === "object" && (payload as { ok?: unknown }).ok === true) return payload;
@@ -522,9 +652,33 @@ async function waitForRuntimeStatus(runtimeApiBaseUrl: string) {
   throw new Error(`runtime status did not become ready: ${lastError}`);
 }
 
-async function runPackagedSmoke(win: electron.BrowserWindow, runtimeApiBaseUrl?: string) {
+async function runPackagedSmoke(win: electron.BrowserWindow, runtimeStartedBeforeRendererLoad: boolean) {
   try {
-    const runtimeStatus = runtimeApiBaseUrl ? await waitForRuntimeStatus(runtimeApiBaseUrl) : undefined;
+    const runtimeAuthProbe = await win.webContents.executeJavaScript(`
+      (async () => {
+        const tokenPresentBeforeEnsure = Boolean(window.vibeRuntime?.runtimeApiToken?.());
+        const baseUrl = await window.vibeRuntime?.ensureRuntimeApiBaseUrl?.() || "";
+        const token = window.vibeRuntime?.runtimeApiToken?.() || "";
+        const endpoint = baseUrl + "/api/runtime/projects/current/clear";
+        const request = (tokenValue) => fetch(endpoint, {
+          method: "POST",
+          headers: tokenValue === undefined ? {} : { "x-vibe-runtime-token": tokenValue }
+        }).then((response) => response.status);
+        return {
+          baseUrl,
+          tokenPresentBeforeEnsure,
+          tokenPresentAfterEnsure: Boolean(token),
+          missingTokenStatus: await request(undefined),
+          wrongTokenStatus: await request("definitely-wrong-runtime-token"),
+          correctTokenStatus: await request(token)
+        };
+      })()
+    `);
+    const runtimeApiBaseUrl = runtimeAuthProbe?.baseUrl;
+    if (typeof runtimeApiBaseUrl !== "string" || !runtimeApiBaseUrl) {
+      throw new Error("Packaged renderer did not receive a lazy Runtime API URL.");
+    }
+    const runtimeStatus = await waitForRuntimeStatus(runtimeApiBaseUrl);
     let renderer: Record<string, unknown> | undefined;
     const startedAt = Date.now();
     while (Date.now() - startedAt < 15000) {
@@ -545,12 +699,19 @@ async function runPackagedSmoke(win: electron.BrowserWindow, runtimeApiBaseUrl?:
     console.log(`${smokeMarker}${JSON.stringify({
       ok: true,
       packaged: app.isPackaged,
-      runtimeStatus: runtimeStatus
-        ? {
-            providerCalled: runtimeStatus.providerCalled,
-            liveSubmitAllowed: runtimeStatus.liveSubmitAllowed,
-          }
-        : undefined,
+      runtimeStartedBeforeRendererLoad,
+      runtimeAuthProbe: {
+        tokenPresentBeforeEnsure: runtimeAuthProbe.tokenPresentBeforeEnsure,
+        tokenPresentAfterEnsure: runtimeAuthProbe.tokenPresentAfterEnsure,
+        missingTokenStatus: runtimeAuthProbe.missingTokenStatus,
+        wrongTokenStatus: runtimeAuthProbe.wrongTokenStatus,
+        correctTokenStatus: runtimeAuthProbe.correctTokenStatus,
+      },
+      runtimeStatus: {
+        tokenRequired: runtimeStatus.tokenRequired,
+        providerCalled: runtimeStatus.providerCalled,
+        liveSubmitAllowed: runtimeStatus.liveSubmitAllowed,
+      },
       renderer,
     })}`);
     app.exit(0);
@@ -563,7 +724,11 @@ async function runPackagedSmoke(win: electron.BrowserWindow, runtimeApiBaseUrl?:
   }
 }
 
-async function createWindow(runtimeApiBaseUrl?: string) {
+async function createWindow() {
+  const rendererDocumentUrl = trustedRendererDocumentUrl();
+  const additionalArguments = [
+    currentProjectBindingBootstrapArg(),
+  ].filter((argument): argument is string => Boolean(argument));
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -573,9 +738,29 @@ async function createWindow(runtimeApiBaseUrl?: string) {
       contextIsolation: true,
       nodeIntegration: false,
       preload: preloadPath,
-      additionalArguments: runtimeApiBaseUrl ? [`--vibe-runtime-api-base-url=${runtimeApiBaseUrl}`] : [],
+      additionalArguments,
     },
   });
+
+  const rendererWebContentsId = win.webContents.id;
+  trustedRendererWebContentsId = rendererWebContentsId;
+  win.on("closed", () => {
+    if (trustedRendererWebContentsId === rendererWebContentsId) trustedRendererWebContentsId = undefined;
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url).catch((error) => {
+        console.error(`Failed to open external link: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
+    return { action: "deny" };
+  });
+  const blockUntrustedNavigation = (event: electron.Event, url: string) => {
+    if (!isTrustedDocumentUrl(url, rendererDocumentUrl)) event.preventDefault();
+  };
+  win.webContents.on("will-navigate", blockUntrustedNavigation);
+  win.webContents.on("will-redirect", blockUntrustedNavigation);
+  win.webContents.on("will-attach-webview", (event) => event.preventDefault());
 
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     const csp = isDev
@@ -591,6 +776,7 @@ async function createWindow(runtimeApiBaseUrl?: string) {
     });
   });
 
+  const runtimeStartedBeforeRendererLoad = Boolean(runtimeServer || runtimeServerStarting || runtimeApiBaseUrl);
   if (isDev) {
     await win.loadURL(devUrl);
     if (!smokeMode && openDevToolsInDev) win.webContents.openDevTools({ mode: "detach" });
@@ -598,7 +784,7 @@ async function createWindow(runtimeApiBaseUrl?: string) {
     await win.loadFile(path.join(appRoot, "dist", "index.html"));
   }
 
-  if (smokeMode) await runPackagedSmoke(win, runtimeApiBaseUrl);
+  if (smokeMode) await runPackagedSmoke(win, runtimeStartedBeforeRendererLoad);
   return win;
 }
 

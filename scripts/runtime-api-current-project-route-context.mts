@@ -32,7 +32,7 @@ export function createCurrentProjectRouteContext(deps) {
     }
 
     const requestContext = currentProjectRequestContext(req, url, bodyResult.body);
-    const sourceResult = currentProjectSourceResult(requestContext);
+    const sourceResult = currentProjectSourceResult();
     if (sourceResult.error) {
       if (sourceResult.unbound) {
         writeJson(res, 409, unboundCurrentProjectResponse(endpoint, requestContext));

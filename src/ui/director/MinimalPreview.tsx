@@ -126,6 +126,7 @@ export function MinimalPreview({
   currentProjectPreviewItems,
   emptyStateLabel = "还没有可播放内容",
   emptyStateDetail = "故事和参考准备好后，这里会自动显示。",
+  pendingConfirmationLabel,
   sections,
   shots,
   selectedShotId,
@@ -136,6 +137,7 @@ export function MinimalPreview({
   currentProjectPreviewItems?: PreviewQueueItem[];
   emptyStateLabel?: string;
   emptyStateDetail?: string;
+  pendingConfirmationLabel?: string;
   sections: RuntimeView["storySections"];
   shots: ShotRecord[];
   selectedShotId: string;
@@ -301,7 +303,13 @@ export function MinimalPreview({
     if (item.shotId) onSelectShot(item.shotId);
   };
 
-  const missingCopy = previewVideoStageCopy(activeItem);
+  const pendingConfirmationCopy = pendingConfirmationLabel
+    ? {
+      label: "先处理确认",
+      detail: `先处理右侧消息里的「${pendingConfirmationLabel}」，确认前不会生成视频。`,
+    }
+    : undefined;
+  const missingCopy = pendingConfirmationCopy || previewVideoStageCopy(activeItem);
   const missingDiv = (
     <div className="preview-stage-card missing_placeholder">
       {missingCopy.label === "还缺素材" ? <b>等待素材</b> : <b>{missingCopy.label}</b>}

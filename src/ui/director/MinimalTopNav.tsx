@@ -146,31 +146,31 @@ export function MinimalTopNav({
   const projectIsTemporary = storageKind === "temporary";
   const unsavedProjectContent = !projectFolderReady && !isEmptyProject;
   const projectControlButtonLabel = !projectFolderReady && isEmptyProject ? "打开或新建项目" : projectTitleLabel;
-  const projectStorageBadge = projectIsTemporary ? "临时" : projectFolderReady ? "本地" : "未连接";
+  const projectStorageBadge = projectIsTemporary ? "草案" : projectFolderReady ? "本地" : "未连接";
   const [projectControlOpen, setProjectControlOpen] = useState(false);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const projectControlRef = useRef<HTMLDivElement>(null);
-  const projectRootLabel = projectIsTemporary ? "临时演示项目" : compactProjectPathLabel(projectRoot) || "尚未选择本地文件夹";
+  const projectRootLabel = projectIsTemporary ? "待选择保存位置" : compactProjectPathLabel(projectRoot) || "尚未选择保存位置";
   const currentProjectPathLabel = compactProjectPathLabel(currentProjectPath);
   const projectContentSummary = isEmptyProject
     ? projectIsTemporary
-      ? "可以继续整理故事；生成参考、视频或导出前请打开本地项目。"
+      ? "可以继续整理故事；生成参考、视频或导出前请选择保存位置。"
       : projectFolderReady
       ? "下方发送脚本后，会写入这个项目文件夹。"
       : "先在下方发送想法或脚本，或打开已有项目。"
     : `故事流 · ${totalShots} 个镜头 · ${projectPlan.statusLabel}`;
   const projectSaveSummary = projectIsTemporary
-    ? "临时保存，正式生成前请打开本地项目"
+    ? "草案暂存，生成前请选择保存位置"
     : currentProjectPathLabel || (projectFolderReady ? "确认草案后创建项目文件" : "尚未选择保存位置");
   const projectControlStatus = projectFolderReady
     ? projectIsTemporary
-      ? "临时项目已连接"
+      ? "草案未保存"
       : isEmptyProject
       ? "已准备项目文件夹"
       : "项目已连接"
     : "未连接项目";
   const projectPickerDisabled = Boolean(!canCreateProject && !canChooseProjectRoot);
-  const projectPickerDisabledCopy = projectFileStatusDetail || "可以先整理想法；生成参考或视频前，再在桌面 App 选择项目文件夹。";
+  const projectPickerDisabledCopy = projectFileStatusDetail || "可以先整理想法；生成参考或视频前，再在桌面 App 选择保存位置。";
   const createProjectDisplayTitle = unsavedProjectContent
     ? "另开新草稿"
     : createProjectTitle || "新建项目";
@@ -178,8 +178,11 @@ export function MinimalTopNav({
     ? "另开新草稿，不保存当前故事"
     : createProjectAriaLabel || "新建项目";
   const createProjectActionTitle = unsavedProjectContent
-    ? "会开始一个空草稿；当前故事不会保存到本地项目。"
+    ? "会开始一个空草稿；当前故事不会保存到本地。"
     : canCreateProject ? createProjectTitle || "新建项目" : projectPickerDisabledCopy;
+  const forgetProjectActionTitle = projectIsTemporary ? "放弃当前草案，回到空项目" : "退出当前项目，不删除本地文件";
+  const forgetProjectActionAriaLabel = projectIsTemporary ? "放弃当前草案" : "关闭当前项目";
+  const forgetProjectActionLabel = projectIsTemporary ? "放弃草案" : "退出项目";
   const recentProjectItems = (recentProjects || [])
     .filter((project) => project.projectRoot.trim())
     .slice(0, 4);
@@ -191,9 +194,9 @@ export function MinimalTopNav({
   const showWorkspaceTabs = !isEmptyProject;
   const exportDisabled = isEmptyProject || !projectFolderReady || projectIsTemporary;
   const exportDisabledTitle = projectIsTemporary
-    ? "先保存为本地项目，再查看交付。"
+    ? "先选择保存位置，再查看交付。"
     : !projectFolderReady
-      ? "先保存为本地项目，再查看交付。"
+      ? "先选择保存位置，再查看交付。"
       : "先写故事或打开项目，再查看交付。";
   const currentViewLabel = directorView === "assets"
     ? "参考图"
@@ -259,7 +262,7 @@ export function MinimalTopNav({
                 <span>当前项目</span>
                 <strong>{projectTitleLabel}</strong>
                 <small>{projectControlStatus}</small>
-                <p>这里切换本地项目；退出或从列表移除都不会删除文件。</p>
+                <p>这里切换保存位置；退出或从列表移除都不会删除文件。</p>
               </div>
               <div className="project-control-summary" aria-label="项目状态">
                 <span>内容</span>
@@ -307,11 +310,11 @@ export function MinimalTopNav({
                     type="button"
                     className="project-control-danger"
                     onClick={() => performProjectControlAction(onForgetProject)}
-                    title="退出当前项目，不删除本地文件"
-                    aria-label="关闭当前项目"
+                    title={forgetProjectActionTitle}
+                    aria-label={forgetProjectActionAriaLabel}
                   >
                     <Trash2 size={15} aria-hidden="true" />
-                    退出项目
+                    {forgetProjectActionLabel}
                   </button>
                 )}
                 {projectPickerDisabled && (
@@ -319,7 +322,7 @@ export function MinimalTopNav({
                 )}
                 {unsavedProjectContent && (
                   <small className="project-control-action-note">
-                    当前故事还没保存；另开草稿不会保存它。生成参考前请先在桌面 App 选择本地项目文件夹。
+                    当前故事还没保存；另开草稿不会保存它。生成参考前请先在桌面 App 选择保存位置。
                   </small>
                 )}
                 {!projectPickerDisabled && onChooseProjectRoot && !canChooseProjectRoot && (

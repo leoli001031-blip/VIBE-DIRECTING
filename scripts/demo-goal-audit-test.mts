@@ -134,7 +134,7 @@ assertIncludes(agentFirstGoalAudit, "参考结果和运行记录", "agent-first 
 assertIncludes(agentFirstGoalAudit, "Internal files remain traceable", "agent-first audit must record hidden internal project paths");
 assertIncludes(agentFirstGoalAudit, "agent-write-wording-recheck", "agent-first audit must record the project-write wording live check");
 assertIncludes(agentFirstGoalAudit, "`修改项目`, `只保存项目修改`, and `项目草案`", "agent-first audit must record creator-facing project-write wording");
-assertIncludes(agentFirstGoalAudit, "会调用参考生成", "agent-first audit must record creator-facing execution-boundary wording");
+assertIncludes(agentFirstGoalAudit, "会生成参考图", "agent-first audit must record creator-facing execution-boundary wording");
 assertIncludes(agentFirstGoalAudit, "会提交 Seedance 视频任务", "agent-first audit must record creator-facing Seedance boundary wording");
 assertIncludes(agentFirstGoalAudit, "compacts duplicate internal tool returns", "agent-first audit must record visible Agent thread result-card compaction");
 assertIncludes(agentFirstGoalAudit, "agent-message-compaction-check", "agent-first audit must record the message compaction browser check");
@@ -220,10 +220,11 @@ const visibleUiSources = [
 ].map(([name, source]) => ({ name, source }));
 
 for (const { name, source } of visibleUiSources) {
-  for (const forbidden of ["整理草案", "补齐画面", "用底部主按钮", "看主按钮", "底部按钮", "点底部发送", "底部主按钮", "当前是只规划模式", "不能补参考"]) {
+  for (const forbidden of ["补齐画面", "用底部主按钮", "看主按钮", "底部按钮", "点底部发送", "底部主按钮", "当前是只规划模式", "不能补参考"]) {
     assert(!source.includes(forbidden), `${name} should not expose old workflow copy: ${forbidden}`);
   }
 }
+assert(!newVideoStart.includes("整理草案"), "NewVideoStart should not restore the old draft-organize button copy");
 
 assertIncludes(newVideoStart, "添加脚本、图片或声音", "P1 new-video entry must expose add-file as one main input action");
 assertIncludes(newVideoStart, "发送给 AI 导演", "P1 new-video entry must expose a clear send action");

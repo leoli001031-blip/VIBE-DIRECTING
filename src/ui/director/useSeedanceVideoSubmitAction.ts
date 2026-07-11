@@ -21,12 +21,12 @@ import {
   agentVideoSubmitContractAllowsVideo,
   type AgentVideoSubmitContract,
 } from "./agentPanelProjection";
-import { JIMENG_CLI_VIP_MODEL_VERSION } from "../../core/jimengVideoCli";
+import { JIMENG_CLI_DEFAULT_MODEL_VERSION } from "../../core/jimengVideoCli";
 
 const STORYBOARD_PROVIDER_ID = "apikey-fun-gpt55-responses-image";
 const SEEDANCE_SUBMIT_CONFIRM_PHRASE = "submit-seedance-video";
 const SEEDANCE_SUBMIT_UI_TIMEOUT_MS = 300_000;
-const SEEDANCE_TEST_MODEL_LABEL = "Seedance 2.0 VIP 720p";
+const SEEDANCE_TEST_MODEL_LABEL = "Seedance 2.0 720p";
 
 function creatorFacingVideoMessage(value: string | undefined, fallback: string) {
   return (value || fallback)
@@ -74,6 +74,7 @@ export type SeedanceVideoSubmitRunOptions = {
   confirmedAt?: string;
   videoPermissionContract?: AgentVideoSubmitContract;
   agentToolTrace?: DirectorAgentToolTrace;
+  signal?: AbortSignal;
 };
 
 function defaultConfirmAction(message: string) {
@@ -200,10 +201,11 @@ function seedanceActionState(result: ProjectSeedanceSubmitResult): SeedanceVideo
   };
 }
 
-function timeoutAfter(ms: number): Promise<never> {
-  return new Promise((_, reject) => {
-    window.setTimeout(() => reject(new Error("视频已经发送，正在刷新项目状态。")), ms);
-  });
+function videoRequestSignal(parentSignal?: AbortSignal) {
+  if (parentSignal) return { signal: parentSignal, clear: () => undefined };
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), SEEDANCE_SUBMIT_UI_TIMEOUT_MS);
+  return { signal: controller.signal, clear: () => globalThis.clearTimeout(timeout) };
 }
 
 function realChainStillNeedsReview(state: ProjectRealChainUiState) {
@@ -350,17 +352,15 @@ export function useSeedanceVideoSubmitAction({
 
     if (effectiveActionState.status === "submitted" && effectiveActionState.canResume) {
       setActionState({ ...effectiveActionState, status: "running", message: "正在查询当前 Seedance 任务，不会重复提交。" });
+      const request = videoRequestSignal(options?.signal);
       try {
-        const resumed = await Promise.race([
-          resumeProjectSeedanceVideo(runtimeProjectIdentity, { pollSeconds: 90 }),
-          timeoutAfter(SEEDANCE_SUBMIT_UI_TIMEOUT_MS),
-        ]);
+        const resumed = await resumeProjectSeedanceVideo(runtimeProjectIdentity, { pollSeconds: 90 }, request.signal);
         const nextState = seedanceActionState(resumed);
         setActionState(nextState);
         const refreshed = await loadProjectRealChainStatus(runtimeProjectIdentity);
         setProjectRealChainState(refreshed);
         if (nextState.status === "submitted" || nextState.status === "needs_review" || nextState.status === "idle") openPreview();
-        return nextState;
+        return { ...resumed, ...nextState };
       } catch (error) {
         const nextState: SeedanceVideoSubmitActionState = {
           status: "blocked",
@@ -369,6 +369,8 @@ export function useSeedanceVideoSubmitAction({
         };
         setActionState(nextState);
         return nextState;
+      } finally {
+        request.clear();
       }
     }
 
@@ -413,11 +415,11 @@ export function useSeedanceVideoSubmitAction({
     const submitShotIds = scopedTarget.shotIds;
     const confirmedAt = options?.confirmedAt || new Date().toISOString();
     setActionState({ status: "running", message: `正在准备 1 条代表性视频，并发送到 ${SEEDANCE_TEST_MODEL_LABEL}。` });
+    const request = videoRequestSignal(options?.signal);
     try {
-      const submitted = await Promise.race([
-        submitProjectSeedanceVideo(runtimeProjectIdentity, {
+      const submitted = await submitProjectSeedanceVideo(runtimeProjectIdentity, {
           providerId: STORYBOARD_PROVIDER_ID,
-          modelVersion: JIMENG_CLI_VIP_MODEL_VERSION,
+          modelVersion: JIMENG_CLI_DEFAULT_MODEL_VERSION,
           videoResolution: "720p",
             ratio: "16:9",
             pollSeconds: 90,
@@ -429,15 +431,13 @@ export function useSeedanceVideoSubmitAction({
             phrase: SEEDANCE_SUBMIT_CONFIRM_PHRASE,
             confirmed: true,
           },
-        }),
-        timeoutAfter(SEEDANCE_SUBMIT_UI_TIMEOUT_MS),
-      ]);
+        }, request.signal);
       const nextState = seedanceActionState(submitted);
       setActionState(nextState);
       const refreshed = await loadProjectRealChainStatus(runtimeProjectIdentity);
       setProjectRealChainState(refreshed);
       if (nextState.status === "submitted" || nextState.status === "needs_review") openPreview();
-      return nextState;
+      return { ...submitted, ...nextState };
     } catch (error) {
       try {
         const refreshed = await loadProjectRealChainStatus(runtimeProjectIdentity);
@@ -457,6 +457,8 @@ export function useSeedanceVideoSubmitAction({
       };
       setActionState(nextState);
       return nextState;
+    } finally {
+      request.clear();
     }
   }, [
     confirmAction,

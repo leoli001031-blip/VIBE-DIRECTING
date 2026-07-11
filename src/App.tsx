@@ -113,11 +113,14 @@ import {
   buildProjectAgentStagedPlanDraft,
   clearProjectAgentStagedPlanDraft,
   createProjectVibe,
+  hashProjectVibeFacts,
+  openProjectAgentGenerationJobLedger,
   openProjectAgentActionLog,
   openProjectAgentTimeline,
   openProjectAgentStagedPlanDraft,
   refreshProjectVibeSourceIndex,
   saveProjectAgentStagedPlanDraft,
+  saveProjectAgentGenerationJobLedger,
   saveProjectAgentTimeline,
   rememberProjectAgentActionLogItem,
   type ProjectAgentActionLogItem,
@@ -128,6 +131,7 @@ import {
   type ProjectVibeAssetKind,
   type ProjectVibeDocument,
 } from "./project";
+import type { AgentVideoGenerationJobLedger } from "./core/agentVideoProductionContract";
 import { buildProviderReviewPromotionTransaction } from "./core/providerReviewPromotion";
 import {
   forgetBrowserProjectVibeDraft,
@@ -485,6 +489,73 @@ function pendingDraftTitleForNav(status?: NewVideoStartStatus) {
   return `新想法：${title}`;
 }
 
+function activeNewVideoDraftShotCountForTopNav(status?: NewVideoStartStatus) {
+  if (!status || status.status === "empty" || status.status === "confirmed") return 0;
+  return status.draftShotCount && status.draftShotCount > 0 ? status.draftShotCount : 0;
+}
+
+function newVideoDraftSectionsForTopNav(shotCount: number): RuntimeView["storySections"] {
+  if (shotCount <= 0) return [];
+  return [{
+    id: "new_video_draft",
+    label: "待确认草案",
+    shotCount,
+    blockedCount: 0,
+    readyCount: shotCount,
+    shotIds: Array.from({ length: shotCount }, (_, index) => `new_video_draft_${index + 1}`),
+  }];
+}
+
+function timelineEntryTimeMs(entry: Pick<VibeAgentTimelineEntry, "createdAt">) {
+  const time = Date.parse(entry.createdAt);
+  return Number.isFinite(time) ? time : 0;
+}
+
+function agentStagedPlanSupersededByNewVideoDraft(
+  draft: ProjectAgentStagedPlanDraft | undefined,
+  entries: VibeAgentTimelineEntry[],
+) {
+  if (!draft || draft.status !== "active") return false;
+  const draftTime = Date.parse(draft.createdAt);
+  if (!Number.isFinite(draftTime)) return false;
+  return entries.some((entry) => (
+    entry.type === "confirmation_request"
+    && entry.details?.intakePhase === "planning_ready"
+    && timelineEntryTimeMs(entry) > draftTime
+  ));
+}
+
+function agentStagedPlanSupersededBySkillSaveConfirmation(
+  draft: ProjectAgentStagedPlanDraft | undefined,
+  entries: VibeAgentTimelineEntry[],
+) {
+  if (!draft || draft.status !== "active") return false;
+  const draftTime = Date.parse(draft.createdAt);
+  if (!Number.isFinite(draftTime)) return false;
+  return entries.some((entry) => (
+    entry.type === "confirmation_request"
+    && entry.toolName === "save_skill"
+    && (entry.status === "waiting" || entry.lifecycle === "waiting_for_confirmation")
+    && timelineEntryTimeMs(entry) > draftTime
+  ));
+}
+
+function agentStagedPlanRestoreResultForTimeline(
+  result: ProjectAgentStagedPlanRestoreResult,
+  entries: VibeAgentTimelineEntry[],
+): ProjectAgentStagedPlanRestoreResult {
+  if (
+    !agentStagedPlanSupersededByNewVideoDraft(result.draft, entries)
+    && !agentStagedPlanSupersededBySkillSaveConfirmation(result.draft, entries)
+  ) return result;
+  return {
+    ...result,
+    ok: false,
+    status: "cleared",
+    errors: [],
+  };
+}
+
 function browserRuntimeProjectRootFromDraft(draft?: NewVideoStartDraft, context?: NewVideoStartConfirmationContext) {
   const displayName = projectDisplayNameFromDraft(draft, context);
   const slug = displayName
@@ -513,6 +584,23 @@ function normalizeProjectRootForUiCompare(value?: string) {
     ? normalized.slice(runtimeProjectIndex + 1)
     : normalized.replace(/^\.\//, "");
   return comparable.toLowerCase();
+}
+
+function projectAgentGenerationLedgerIdentity(project: ProjectVibeDocument, projectRoot?: string) {
+  return {
+    projectId: project.manifest.projectId,
+    projectRoot,
+    projectFactHash: hashProjectVibeFacts(project),
+  };
+}
+
+function agentGenerationLedgerMatchesIdentity(
+  ledger: AgentVideoGenerationJobLedger,
+  identity: ReturnType<typeof projectAgentGenerationLedgerIdentity>,
+) {
+  return ledger.projectId === identity.projectId
+    && normalizeProjectRootForUiCompare(ledger.projectRoot) === normalizeProjectRootForUiCompare(identity.projectRoot)
+    && ledger.projectFactHash === identity.projectFactHash;
 }
 
 function projectVibeWithNewVideoTitle(
@@ -1908,7 +1996,9 @@ function shouldAutoRestoreRememberedProject() {
   if (typeof window === "undefined") return false;
   try {
     if (isFreshProjectSessionRequested()) return false;
-    return window.localStorage.getItem(autoRestoreRememberedProjectStorageKey) === "true";
+    const value = window.localStorage.getItem(autoRestoreRememberedProjectStorageKey);
+    if (value) return value === "true";
+    return Boolean(readRememberedProjectSelection()?.projectRoot);
   } catch {
     return false;
   }
@@ -1961,6 +2051,7 @@ function writeRememberedProjectSelection(selection: ProjectRootDialogSelection):
       hasProjectVibe: normalized.hasProjectVibe,
       displayName: normalized.displayName,
     }));
+    window.localStorage.setItem(autoRestoreRememberedProjectStorageKey, "true");
   } catch {
     // Best-effort restore hint only.
   }
@@ -1976,8 +2067,10 @@ function clearRememberedProjectRoot(projectRoot?: string): RememberedProjectSele
   if (typeof window === "undefined") return [];
   try {
     const remembered = readRememberedProjectSelection();
-    if (!projectRoot || remembered?.projectRoot === projectRoot) {
+    const shouldClearRemembered = !projectRoot || remembered?.projectRoot === projectRoot;
+    if (shouldClearRemembered) {
       window.localStorage.removeItem(rememberedProjectRootStorageKey);
+      window.localStorage.removeItem(autoRestoreRememberedProjectStorageKey);
     }
     const recent = projectRoot
       ? readRecentProjectSelections().filter((item) => item.projectRoot !== projectRoot)
@@ -2189,10 +2282,14 @@ function App() {
   const [prototypePreviewItems, setPrototypePreviewItems] = useState<PreviewQueueItem[]>([]);
   const [latestPrototypeAgentDemo, setLatestPrototypeAgentDemo] = useState<PrototypeAgentDemoRun | undefined>();
   const [directorNewVideoStatus, setDirectorNewVideoStatus] = useState<NewVideoStartStatus | undefined>();
+  const [newVideoSessionResetNonce, setNewVideoSessionResetNonce] = useState(0);
   const [restoredAgentStagedPlanDraft, setRestoredAgentStagedPlanDraft] = useState<ProjectAgentStagedPlanDraft | undefined>();
   const [restoredAgentActionLog, setRestoredAgentActionLog] = useState<ProjectAgentActionLogItem[]>([]);
   const [restoredAgentTimelineEntries, setRestoredAgentTimelineEntries] = useState<VibeAgentTimelineEntry[]>([]);
+  const [restoredAgentGenerationJobLedger, setRestoredAgentGenerationJobLedger] = useState<AgentVideoGenerationJobLedger | undefined>();
   const agentTimelineWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const agentGenerationLedgerWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const agentTimelineWriteEpochRef = useRef(0);
   const [agentWebSearchSettings, setAgentWebSearchSettings] = useState<AgentWebSearchSettings>(() => loadAgentWebSearchSettings());
   const [projectLocalKnowledgePacks, setProjectLocalKnowledgePacks] = useState<KnowledgePack[]>(() =>
     loadProjectLocalKnowledgePacks(fallbackRuntimeState.sourceIndex.projectId),
@@ -2261,11 +2358,11 @@ function App() {
   const selectedProjectIsBrowserDraft = projectFileSelection.status === "selected" && isBrowserDraftProjectRoot(projectFileSelection.projectRoot);
   const selectedProjectIsLocalProject = projectFileSelection.status === "selected" && !selectedProjectIsBrowserDraft;
   const runtimeBindingIsBrowserDraft = runtimeProjectBinding.status === "bound" && isBrowserDraftProjectRoot(runtimeProjectBinding.projectRoot);
-  const runtimeBindingHasProjectVibe = runtimeProjectBinding.status === "bound" && Boolean(runtimeProjectBinding.projectVibePath);
   const runtimeBindingIsLocalProject = runtimeProjectBinding.status === "bound"
     && Boolean(runtimeProjectBinding.projectRoot)
-    && (!runtimeBindingIsBrowserDraft || runtimeBindingHasProjectVibe)
+    && !runtimeBindingIsBrowserDraft
     && (!freshProjectSessionRequested || projectFileSelection.status === "selected");
+  const freshProjectSessionPendingSelection = freshProjectSessionRequested && projectFileSelection.status !== "selected";
   const selectedProjectMatchesRuntimeBinding = projectFileSelection.status === "selected"
     && normalizeProjectRootForUiCompare(projectFileSelection.projectRoot) === normalizeProjectRootForUiCompare(runtimeProjectBinding.projectRoot);
   const selectedProjectUsesBrowserDraftStorage = selectedProjectIsBrowserDraft
@@ -2342,6 +2439,7 @@ function App() {
     setLatestPrototypeAgentDemo(undefined);
     setRestoredAgentActionLog([]);
     setRestoredAgentTimelineEntries([]);
+    setRestoredAgentGenerationJobLedger(undefined);
     const firstShotId = nextState.storyFlow.shots[0]?.id;
     setSelectedShotId(firstShotId || "");
     setSelectedShotIds(firstShotId ? [firstShotId] : []);
@@ -2444,7 +2542,7 @@ function App() {
       });
       return;
     }
-    if (effectiveRuntimeProjectIdentity) {
+    if (effectiveRuntimeProjectCanUseRuntime) {
       const refreshed = await loadProjectRealChainStatus(effectiveRuntimeProjectIdentity);
       setProjectRealChainState(refreshed);
     }
@@ -2491,7 +2589,7 @@ function App() {
       });
       return;
     }
-    if (effectiveRuntimeProjectIdentity) {
+    if (effectiveRuntimeProjectCanUseRuntime) {
       const refreshed = await loadProjectRealChainStatus(effectiveRuntimeProjectIdentity);
       setProjectRealChainState(refreshed);
     }
@@ -2618,18 +2716,23 @@ function App() {
         : runtimeProjectBinding.status === "bound"
           ? runtimeProjectBinding
           : selectedProjectFallbackRuntimeBinding;
-  const effectiveRuntimeProjectIdentity = effectiveRuntimeProjectBinding.status === "bound"
-    ? {
-      projectId: effectiveRuntimeProjectBinding.projectId,
-      projectRoot: effectiveRuntimeProjectBinding.projectRoot,
-    }
-    : runtimeProjectIdentity;
+	  const effectiveRuntimeProjectIdentity = effectiveRuntimeProjectBinding.status === "bound"
+	    ? {
+	      projectId: effectiveRuntimeProjectBinding.projectId,
+	      projectRoot: effectiveRuntimeProjectBinding.projectRoot,
+	    }
+	    : runtimeProjectIdentity;
+	  const effectiveRuntimeProjectCanUseRuntime = Boolean(
+	    effectiveRuntimeProjectIdentity?.projectRoot
+	    && !isBrowserDraftProjectRoot(effectiveRuntimeProjectIdentity.projectRoot),
+	  );
 
-  useEffect(() => {
-    if (effectiveRuntimeProjectBinding.status !== "bound" || !effectiveRuntimeProjectBinding.projectRoot) return;
-    const currentFactsRoot = projectRealChainState.summary?.projectRoot
-      || projectRealChainState.summary?.workbenchFacts?.projectRoot
-      || projectRealChainState.summary?.workbenchFacts?.project?.projectRoot;
+	  useEffect(() => {
+	    if (effectiveRuntimeProjectBinding.status !== "bound" || !effectiveRuntimeProjectBinding.projectRoot) return;
+	    if (!effectiveRuntimeProjectCanUseRuntime) return;
+	    const currentFactsRoot = projectRealChainState.summary?.projectRoot
+	      || projectRealChainState.summary?.workbenchFacts?.projectRoot
+	      || projectRealChainState.summary?.workbenchFacts?.project?.projectRoot;
     if (
       normalizeProjectRootForUiCompare(currentFactsRoot) === normalizeProjectRootForUiCompare(effectiveRuntimeProjectBinding.projectRoot)
       && projectRealChainState.summary?.workbenchFacts
@@ -2650,10 +2753,11 @@ function App() {
       cancelled = true;
     };
   }, [
-    effectiveRuntimeProjectBinding.projectId,
-    effectiveRuntimeProjectBinding.projectRoot,
-    effectiveRuntimeProjectBinding.status,
-    projectRealChainState.summary?.projectRoot,
+	    effectiveRuntimeProjectBinding.projectId,
+	    effectiveRuntimeProjectBinding.projectRoot,
+	    effectiveRuntimeProjectBinding.status,
+	    effectiveRuntimeProjectCanUseRuntime,
+	    projectRealChainState.summary?.projectRoot,
     projectRealChainState.summary?.workbenchFacts,
     setProjectRealChainState,
   ]);
@@ -2902,6 +3006,14 @@ function App() {
     const rememberedSelection = readRememberedProjectSelection();
     if (!rememberedSelection?.projectRoot) return;
     if (
+      runtimeProjectBinding.status === "bound"
+      && runtimeProjectBinding.projectRoot
+      && normalizeProjectRootForUiCompare(runtimeProjectBinding.projectRoot) === normalizeProjectRootForUiCompare(rememberedSelection.projectRoot)
+    ) {
+      rememberedProjectRestoreAttemptedRef.current = true;
+      return;
+    }
+    if (
       projectFileSelection.status === "selected"
       && projectFileSelection.projectRoot === rememberedSelection.projectRoot
       && runtimeProjectBinding.projectRoot === rememberedSelection.projectRoot
@@ -2966,18 +3078,20 @@ function App() {
     projectFileSelection.projectRoot,
     projectFileSelection.status,
     runtimeProjectBinding.projectRoot,
+    runtimeProjectBinding.status,
   ]);
 
   useEffect(() => {
     if (runtimeProjectBinding.status !== "bound" || !runtimeProjectBinding.projectRoot) return;
     if (freshProjectSessionRequested && projectFileSelection.status !== "selected") return;
+    if (runtimeBindingIsBrowserDraft) return;
     if (selectedProjectIsLocalProject) return;
     const projectPath = projectPathFromRuntimeBinding(runtimeProjectBinding.projectRoot, runtimeProjectBinding.projectVibePath);
     setProjectPathInput(runtimeProjectBinding.projectRoot);
     setProjectFileSelection({
       status: "selected",
       label: "切换项目",
-      detail: runtimeProjectBinding.projectVibePath ? "已连接当前项目" : "本地项目已准备",
+      detail: runtimeProjectBinding.projectVibePath ? "已连接当前项目" : "保存位置已准备",
       projectRoot: runtimeProjectBinding.projectRoot,
       projectPath,
       projectVibePath: runtimeProjectBinding.projectVibePath,
@@ -3012,6 +3126,7 @@ function App() {
     projectFileSelection.status,
     freshProjectSessionRequested,
     selectedProjectIsLocalProject,
+    runtimeBindingIsBrowserDraft,
     runtimeProjectBinding.projectRoot,
     runtimeProjectBinding.projectTitle,
     runtimeProjectBinding.projectVibePath,
@@ -3062,7 +3177,7 @@ function App() {
         status: "saved",
         label: "草案已临时保存",
         targetId: prototypeProjectDraftTargetId,
-        error: "生成参考、视频或导出前请打开本地项目文件夹。",
+        error: "生成参考、视频或导出前请先选择保存位置。",
       });
       setLoadedPrototypeProjectDraftTargetId(prototypeProjectDraftTargetId);
       loadedPrototypeProjectDraftStorageModeRef.current = "browser";
@@ -3089,9 +3204,23 @@ function App() {
           projectRoot: undefined,
         });
         if (cancelled) return;
-        setRestoredAgentStagedPlanDraft(stagedPlanOpen.ok ? stagedPlanOpen.draft : undefined);
+        const generationLedgerOpen = await openProjectAgentGenerationJobLedger(
+          prototypeProjectDraftTarget,
+          projectAgentGenerationLedgerIdentity(browserDraftProject, undefined),
+        );
+        if (cancelled) return;
+        const stagedPlanRestore = agentStagedPlanRestoreResultForTimeline(stagedPlanOpen, timelineOpen.timeline.entries);
+        if (!stagedPlanRestore.ok && stagedPlanRestore.status === "cleared" && stagedPlanOpen.draft) {
+          await clearProjectAgentStagedPlanDraft(prototypeProjectDraftTarget, {
+            project: browserDraftProject,
+            projectRoot: undefined,
+          });
+          if (cancelled) return;
+        }
+        setRestoredAgentStagedPlanDraft(stagedPlanRestore.ok ? stagedPlanRestore.draft : undefined);
         setRestoredAgentActionLog(actionLogOpen.ok ? actionLogOpen.items : []);
         setRestoredAgentTimelineEntries(timelineOpen.timeline.entries);
+        setRestoredAgentGenerationJobLedger(generationLedgerOpen.ok ? generationLedgerOpen.ledger : undefined);
       }
       void restoreBrowserDraftStateAndAgentSidecars();
       return () => {
@@ -3138,9 +3267,24 @@ function App() {
           projectRoot: prototypeProjectDraftTarget.projectRoot,
         });
         if (cancelled) return;
-        setRestoredAgentStagedPlanDraft(stagedPlanOpen.ok ? stagedPlanOpen.draft : undefined);
+        const generationLedgerOpen = await openProjectAgentGenerationJobLedger(
+          prototypeProjectDraftTarget,
+          projectAgentGenerationLedgerIdentity(result.project, prototypeProjectDraftTarget.projectRoot),
+        );
+        if (cancelled) return;
+        const stagedPlanRestore = agentStagedPlanRestoreResultForTimeline(stagedPlanOpen, timelineOpen.timeline.entries);
+        if (!stagedPlanRestore.ok && stagedPlanRestore.status === "cleared" && stagedPlanOpen.draft) {
+          await clearProjectAgentStagedPlanDraft(prototypeProjectDraftTarget, {
+            project: result.project,
+            projectRoot: prototypeProjectDraftTarget.projectRoot,
+            projectPath: prototypeProjectDraftTarget.projectPath,
+          });
+          if (cancelled) return;
+        }
+        setRestoredAgentStagedPlanDraft(stagedPlanRestore.ok ? stagedPlanRestore.draft : undefined);
         setRestoredAgentActionLog(actionLogOpen.ok ? actionLogOpen.items : []);
         setRestoredAgentTimelineEntries(timelineOpen.timeline.entries);
+        setRestoredAgentGenerationJobLedger(generationLedgerOpen.ok ? generationLedgerOpen.ledger : undefined);
         applyProjectVibeProjectState(result.project, prototypeProjectDraftTarget, {
           projectLocalKnowledgePacks: knowledgeOpen.packs,
         });
@@ -3178,7 +3322,7 @@ function App() {
           status: "saved",
           label: "草案已临时保存",
           targetId: prototypeProjectDraftTargetId,
-          error: "生成参考、视频或导出前请打开本地项目文件夹。",
+          error: "生成参考、视频或导出前请先选择保存位置。",
         });
         return;
       }
@@ -3255,6 +3399,12 @@ function App() {
     if (!runtimeBindingIsLocalProject || !runtimeProjectBinding.projectRoot) return undefined;
     if (freshProjectSessionRequested && projectFileSelection.status !== "selected") return undefined;
     const expectedProjectId = runtimeProjectBinding.projectId;
+    const runtimeDraftTarget: ProjectVibeDraftTarget = {
+      projectRoot: runtimeProjectBinding.projectRoot,
+      projectPath: projectPathFromRuntimeBinding(runtimeProjectBinding.projectRoot, runtimeProjectBinding.projectVibePath),
+      storageKey: prototypeProjectDraftStorageKeyValue,
+    };
+    const runtimeDraftTargetId = buildProjectVibeDraftTargetId(runtimeDraftTarget);
     const restoreKey = [
       runtimeProjectBinding.projectRoot,
       expectedProjectId || "",
@@ -3264,20 +3414,66 @@ function App() {
     let cancelled = false;
     async function restoreRuntimeAgentTimeline() {
       try {
-        const timelineOpen = await openProjectAgentTimeline(prototypeProjectDraftTarget, {
-          project: prototypeProjectVibeRef.current,
+        let projectForRestore = prototypeProjectVibeRef.current;
+        const projectOpen = await openProjectVibeDraft(runtimeDraftTarget);
+        if (cancelled) return;
+        if (projectOpen.ok && projectOpen.project) {
+          if (expectedProjectId && projectOpen.project.manifest.projectId !== expectedProjectId) return;
+          projectForRestore = projectOpen.project;
+          applyProjectVibeProjectState(projectOpen.project, runtimeDraftTarget);
+          setLoadedPrototypeProjectDraftTargetId(runtimeDraftTargetId);
+          loadedPrototypeProjectDraftStorageModeRef.current = "local";
+          prototypeProjectDraftStatusRef.current = ({
+            status: "restored",
+            label: projectDraftRestoredLabel(runtimeDraftTarget, projectOpen.mode, false),
+            targetId: projectOpen.targetId,
+            factHash: projectOpen.factHash,
+          });
+        }
+
+        const timelineOpen = await openProjectAgentTimeline(runtimeDraftTarget, {
+          project: projectForRestore,
           projectRoot: runtimeProjectBinding.projectRoot,
         });
-        if (cancelled || !timelineOpen.ok) return;
-        if (expectedProjectId && timelineOpen.timeline.projectId !== expectedProjectId) return;
-        if (
-          timelineOpen.timeline.projectRoot
-          && normalizeProjectRootForUiCompare(timelineOpen.timeline.projectRoot) !== normalizeProjectRootForUiCompare(runtimeProjectBinding.projectRoot)
-        ) {
-          return;
+        if (cancelled) return;
+        if (timelineOpen.ok) {
+          if (expectedProjectId && timelineOpen.timeline.projectId !== expectedProjectId) return;
+          if (
+            timelineOpen.timeline.projectRoot
+            && normalizeProjectRootForUiCompare(timelineOpen.timeline.projectRoot) !== normalizeProjectRootForUiCompare(runtimeProjectBinding.projectRoot)
+          ) {
+            return;
+          }
+        }
+        const stagedPlanOpen = await openProjectAgentStagedPlanDraft(runtimeDraftTarget, {
+          project: projectForRestore,
+          projectRoot: runtimeProjectBinding.projectRoot,
+        });
+        if (cancelled) return;
+        const actionLogOpen = await openProjectAgentActionLog(runtimeDraftTarget, {
+          project: projectForRestore,
+          projectRoot: runtimeProjectBinding.projectRoot,
+        });
+        if (cancelled) return;
+        const generationLedgerOpen = await openProjectAgentGenerationJobLedger(
+          runtimeDraftTarget,
+          projectAgentGenerationLedgerIdentity(projectForRestore, runtimeProjectBinding.projectRoot),
+        );
+        if (cancelled) return;
+        const stagedPlanRestore = agentStagedPlanRestoreResultForTimeline(stagedPlanOpen, timelineOpen.timeline.entries);
+        if (!stagedPlanRestore.ok && stagedPlanRestore.status === "cleared" && stagedPlanOpen.draft) {
+          await clearProjectAgentStagedPlanDraft(runtimeDraftTarget, {
+            project: projectForRestore,
+            projectRoot: runtimeProjectBinding.projectRoot,
+            projectPath: runtimeDraftTarget.projectPath,
+          });
+          if (cancelled) return;
         }
         runtimeAgentTimelineRestoreKeyRef.current = restoreKey;
-        setRestoredAgentTimelineEntries(timelineOpen.timeline.entries);
+        setRestoredAgentStagedPlanDraft(stagedPlanRestore.ok ? stagedPlanRestore.draft : undefined);
+        setRestoredAgentActionLog(actionLogOpen.ok ? actionLogOpen.items : []);
+        setRestoredAgentTimelineEntries(timelineOpen.ok ? timelineOpen.timeline.entries : []);
+        setRestoredAgentGenerationJobLedger(generationLedgerOpen.ok ? generationLedgerOpen.ledger : undefined);
       } catch (error) {
         console.warn("Failed to restore runtime Agent timeline", error);
       }
@@ -3290,7 +3486,7 @@ function App() {
     runtimeBindingIsLocalProject,
     freshProjectSessionRequested,
     projectFileSelection.status,
-    prototypeProjectDraftTarget,
+    prototypeProjectDraftStorageKeyValue,
     runtimeProjectBinding.projectId,
     runtimeProjectBinding.projectRoot,
     runtimeProjectBinding.projectVibePath,
@@ -3327,11 +3523,13 @@ function App() {
   // Trivial computation - useMemo overhead may exceed benefit
   const selectedShot = useMemo(() => audit.shots.find((shot) => shot.id === workbenchSelectedShotId), [audit.shots, workbenchSelectedShotId]);
   const hasWorkbenchProjectContent = audit.shots.length > 0 || view.storySections.length > 0 || audit.assets.length > 0;
-  const selectedProjectDisplayName = projectFileSelection.status === "selected"
-    ? projectFileSelection.displayName || projectFolderName(projectFileSelection.projectRoot)
-    : effectiveRuntimeProjectBinding.status === "bound"
-      ? effectiveRuntimeProjectBinding.projectTitle || projectFolderName(effectiveRuntimeProjectBinding.projectRoot)
-      : undefined;
+  const selectedProjectDisplayName = freshProjectSessionPendingSelection
+    ? undefined
+    : projectFileSelection.status === "selected"
+      ? projectFileSelection.displayName || projectFolderName(projectFileSelection.projectRoot)
+      : effectiveRuntimeProjectBinding.status === "bound"
+        ? effectiveRuntimeProjectBinding.projectTitle || projectFolderName(effectiveRuntimeProjectBinding.projectRoot)
+        : undefined;
   const selectedProjectHasNoContent = localProjectReadyForUi && !hasWorkbenchProjectContent;
   const isFallbackWorkbenchSource = audit.projectTitle === fallbackAudit.projectTitle
     || workbenchRuntimeState.stateSource?.kind === "fallback-audit";
@@ -3346,20 +3544,49 @@ function App() {
     : isEmptyFallbackWorkbench
       ? "新视频项目"
       : audit.projectTitle;
-  const directorNewVideoEntryActive = mode === "director" && Boolean(directorNewVideoStatus);
+  const directorNewVideoResetEntryActive = mode === "director"
+    && newVideoSessionResetNonce > 0
+    && !hasWorkbenchProjectContent
+    && !selectedProjectIsLocalProject;
+  const directorNewVideoEntryActive = mode === "director" && (
+    freshProjectSessionPendingSelection
+    || Boolean(directorNewVideoStatus)
+    || directorNewVideoResetEntryActive
+  );
   const visibleProjectTitle = pendingDraftTitleForNav(directorNewVideoStatus) || (directorNewVideoEntryActive ? "新视频项目" : visibleProjectTitleBase);
-  const projectControlRoot = projectFileSelection.status === "selected"
-    ? projectFileSelection.projectRoot
-    : effectiveRuntimeProjectBinding.status === "bound"
-      ? effectiveRuntimeProjectBinding.projectRoot
-      : undefined;
-  const projectControlStorageKind = projectControlRoot
-    ? runtimeBindingIsLocalProject && normalizeProjectRootForUiCompare(projectControlRoot) === normalizeProjectRootForUiCompare(runtimeProjectBinding.projectRoot)
-      ? "local" as const
-      : isBrowserDraftProjectRoot(projectControlRoot)
-      ? "temporary" as const
-      : "local" as const
-    : "unbound" as const;
+  const hasActiveNewVideoDraftForTopNav = Boolean(directorNewVideoStatus && directorNewVideoStatus.status !== "empty");
+  const activeNewVideoDraftShotCountForNav = activeNewVideoDraftShotCountForTopNav(directorNewVideoStatus);
+  const topNavStorySections = useMemo<RuntimeView["storySections"]>(() => {
+    if (activeNewVideoDraftShotCountForNav > 0) return newVideoDraftSectionsForTopNav(activeNewVideoDraftShotCountForNav);
+    return isEmptyFallbackWorkbench ? [] : view.storySections;
+  }, [activeNewVideoDraftShotCountForNav, isEmptyFallbackWorkbench, view.storySections]);
+  const newVideoDraftPendingProjectSelection = hasActiveNewVideoDraftForTopNav
+    && !hasWorkbenchProjectContent
+    && !localProjectReadyForUi;
+  const storyFlowPendingProjectSelection = projectContentReadyForUi && !localProjectReadyForUi;
+  const projectControlShowsNewVideoEntry = freshProjectSessionPendingSelection
+    || directorNewVideoResetEntryActive
+    || newVideoDraftPendingProjectSelection
+    || storyFlowPendingProjectSelection;
+  const projectControlRoot = projectControlShowsNewVideoEntry
+    ? undefined
+    : projectFileSelection.status === "selected"
+      ? projectFileSelection.projectRoot
+      : effectiveRuntimeProjectBinding.status === "bound"
+        ? effectiveRuntimeProjectBinding.projectRoot
+        : undefined;
+  const projectControlStorageKind = projectControlShowsNewVideoEntry
+    ? "temporary" as const
+    : projectControlRoot
+      ? runtimeBindingIsLocalProject && normalizeProjectRootForUiCompare(projectControlRoot) === normalizeProjectRootForUiCompare(runtimeProjectBinding.projectRoot)
+        ? "local" as const
+        : isBrowserDraftProjectRoot(projectControlRoot)
+        ? "temporary" as const
+        : "local" as const
+      : "unbound" as const;
+  const canForgetProjectFromTopNav = hasActiveNewVideoDraftForTopNav
+    || localProjectReadyForUi
+    || (!isEmptyFallbackWorkbench && hasWorkbenchProjectContent);
   const localStoryPreviewQueue = useMemo(
     () => isEmptyFallbackWorkbench ? [] : buildMissingPreviewQueueFromShots(audit.shots),
     [audit.shots, isEmptyFallbackWorkbench],
@@ -3592,7 +3819,8 @@ function App() {
   }
 
   function prototypeAgentProjectRecordSummary(creativeLoop: ProjectVibeCreativeLoopConfirmResult) {
-    const affectedShotIds = creativeLoop.runReceipt?.affectedShotIds || [];
+    const knownShotIds = new Set(creativeLoop.runtimeState.storyFlow.shots.map((shot) => shot.id));
+    const affectedShotIds = (creativeLoop.runReceipt?.affectedShotIds || []).filter((shotId) => knownShotIds.has(shotId));
     const queuedCount = creativeLoop.queuedTaskRunIds.length;
     const parkedOrBlockedCount = creativeLoop.parkedTaskRunIds.length + creativeLoop.blockedTaskRunIds.length;
     return {
@@ -3612,10 +3840,11 @@ function App() {
 
   function prototypeAgentStageProjectRecordSummary(stage?: ProjectVibeCreativeLoopStageResult) {
     if (!stage) return {};
+    const knownShotIds = new Set(stage.runtimeState.storyFlow.shots.map((shot) => shot.id));
     const affectedShotIds = Array.from(new Set([
       ...(stage.stagedTransaction.sourceFacts.selectedScope.selectedShotIds || []),
       ...(stage.stagedTransaction.artifactInvalidation.affectedShotIds || []),
-    ].filter(Boolean)));
+    ].filter((shotId) => shotId && knownShotIds.has(shotId))));
     const taskSummary = stage.taskEnqueuePlan.summary;
     const parkedOrBlockedCount = taskSummary.parked + taskSummary.blocked + taskSummary.missingKnowledgeTrace;
     return {
@@ -3708,10 +3937,10 @@ function App() {
     try {
       draftTarget = await projectDraftTargetForNewVideoConfirmation(draft, context);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "先新建或打开本地项目，再确认草案。";
+      const message = error instanceof Error ? error.message : "先选择保存位置，再确认草案。";
       prototypeProjectDraftStatusRef.current = ({
         status: "error",
-        label: "先准备本地项目",
+        label: "先选择保存位置",
         targetId: prototypeProjectDraftTargetId,
         error: message,
       });
@@ -3839,22 +4068,34 @@ function App() {
     }
     setMode("director");
     setDirectorView("story");
+    const storyCommittedToLocalProject = Boolean(draftTarget.projectRoot);
+    const storyCommitTitle = storyCommittedToLocalProject ? "故事已保存到本地项目" : "故事已加入草案";
+    const storyCommitStorageLabel = storyCommittedToLocalProject ? "已保存到本地项目" : "待选择保存位置";
+    const storyCommitBody = storyCommittedToLocalProject
+      ? `我已经把这版故事和镜头保存到本地项目：${result.project.shots.length} 个镜头。接下来可以点选镜头继续修改，或确认生成参考。`
+      : `我已经把这版故事和镜头整理成草案：${result.project.shots.length} 个镜头。生成参考、发送视频或导出前，需要先选择保存位置。`;
+    const storyCommitNext = storyCommittedToLocalProject ? "点选镜头修改，或确认生成参考" : "继续修改，或在右侧选择保存位置";
     prototypeProjectDraftStatusRef.current = ({
       status: "saved",
-      label: "草案已写入项目",
+      label: storyCommittedToLocalProject ? "草案已写入本地项目" : "草案已准备",
       targetId: saveResult.targetId,
       factHash: saveResult.factHash,
     });
     setLatestPrototypeAgentDemo({
       status: "ready",
       result: {
-        label: "故事已保存到项目",
+        label: storyCommitTitle,
+        projectRecordLabel: storyCommitBody,
+        projectTaskLabel: storyCommitNext,
         projectVibeAdded: true,
-        projectSaved: true,
-        storageLabel: "已保存到项目",
-        status: "ready",
+        projectTemporaryUpdated: !storyCommittedToLocalProject,
+        projectSaved: storyCommittedToLocalProject,
+        storageLabel: storyCommitStorageLabel,
+        status: "故事已确认",
       },
     });
+    // Stop queued intake timeline writes from resurrecting the pre-confirmation card.
+    agentTimelineWriteEpochRef.current += 1;
     const committedTimeline = createVibeAgentTimelineDocument({
       projectId: result.project.manifest.projectId,
       projectTitle: result.project.manifest.title,
@@ -3865,17 +4106,18 @@ function App() {
       id: `new_video_draft_committed_${generatedAt.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase()}`,
       type: "action_result",
       createdAt: generatedAt,
-      title: "故事已保存到项目",
-      body: `我已经把这版故事和镜头保存到项目：${result.project.shots.length} 个镜头。接下来可以点选镜头继续修改，或确认生成参考。`,
+      title: storyCommitTitle,
+      body: storyCommitBody,
       toolName: "write_project",
       status: "done",
       lifecycle: "succeeded",
       facts: [
+        { label: "项目", value: storyCommittedToLocalProject ? "本地项目" : "待保存草案" },
         { label: "镜头", value: `${result.project.shots.length} 个` },
-        { label: "下一步", value: "点选镜头修改，或确认生成参考" },
+        { label: "下一步", value: storyCommitNext },
       ],
       details: {
-        next: "继续在右侧说要改哪里，或说“开始补参考”。",
+        next: storyCommittedToLocalProject ? "继续在右侧说要改哪里，或说“开始补参考”。" : "继续在右侧说要改哪里，或确认「选择保存位置」。",
       },
     };
     const freshTimeline = appendVibeAgentTimelineEntries(committedTimeline, [committedTimelineEntry], generatedAt);
@@ -3887,7 +4129,7 @@ function App() {
     return true;
   }
 
-  async function runLocalExportAction(input?: { agentToolTrace?: ExportActionState["agentToolTrace"] }) {
+  async function runLocalExportAction(input?: { agentToolTrace?: ExportActionState["agentToolTrace"]; signal?: AbortSignal }) {
     let projection = localPreviewExportProjection;
     if (!projection) {
       const { buildLocalPreviewExportProjection } = await import("./core/localPreviewExportProjection");
@@ -3907,6 +4149,7 @@ function App() {
         worker: projection.exportWorker,
         projectRoot: prototypeProjectDraftTarget.projectRoot || runtimeProjectIdentity?.projectRoot,
         bridge,
+        signal: input?.signal,
         agentToolTrace: input?.agentToolTrace,
       });
       setExportActionState(nextState);
@@ -4119,12 +4362,14 @@ function App() {
             assetLabel,
             usedByShotIds,
           },
-        });
-        if (runtimeReviewResult.ok) {
-          const refreshed = await loadProjectRealChainStatus(effectiveRuntimeProjectIdentity);
-          setProjectRealChainState(refreshed);
-          const reopened = await openProjectVibeDraft(prototypeProjectDraftTarget);
-          if (reopened.ok && reopened.project && reopened.mode === "electron_project_file") {
+	        });
+	        if (runtimeReviewResult.ok) {
+	          if (effectiveRuntimeProjectCanUseRuntime) {
+	            const refreshed = await loadProjectRealChainStatus(effectiveRuntimeProjectIdentity);
+	            setProjectRealChainState(refreshed);
+	          }
+	          const reopened = await openProjectVibeDraft(prototypeProjectDraftTarget);
+	          if (reopened.ok && reopened.project && reopened.mode === "electron_project_file") {
             applyProjectVibeProjectState(reopened.project, prototypeProjectDraftTarget, { generatedAt: now });
           }
           setLatestPrototypeAgentDemo({
@@ -4248,9 +4493,9 @@ function App() {
     setPrototypeProjectVibe(patchResult.project);
     setRuntimeState(nextState);
     setAssetLibrary(createAssetLibraryFromRuntimeState(nextState));
-    if (effectiveRuntimeProjectIdentity) {
-      try {
-        const refreshed = await loadProjectRealChainStatus(effectiveRuntimeProjectIdentity);
+	    if (effectiveRuntimeProjectCanUseRuntime) {
+	      try {
+	        const refreshed = await loadProjectRealChainStatus(effectiveRuntimeProjectIdentity);
         setProjectRealChainState(refreshed);
       } catch (error) {
         console.error("Failed to refresh project workbench after review decision", error);
@@ -4317,10 +4562,11 @@ function App() {
         now,
       ),
     });
+    const agentActionUserIntent = (input.agentActionUserIntent || input.userIntent).trim();
     const productAgentLoopInput = {
       project: sourceProject,
       runtimeState: sourceRuntimeState,
-      userIntent: input.userIntent.trim(),
+      userIntent: agentActionUserIntent,
       userConfirmed: false,
       generatedAt: now,
       projectRoot: prototypeProjectDraftTarget.projectRoot,
@@ -4347,13 +4593,16 @@ function App() {
 	      videoCompletedCount: input.videoCompletedCount,
 	      videoReviewCount: input.videoReviewCount,
 	      videoDetail: input.videoDetail,
+	      referenceReadyCount: input.referenceReadyCount,
+	      referenceReviewCount: input.referenceReviewCount,
+	      referenceMissingCount: input.referenceMissingCount,
 	      availability: input.availability,
 	    };
     let productAgentLoop = runDirectorProductAgentLoop(productAgentLoopInput);
     const textQaReport = await runAgentVideoTextQaPreflight({
       project: sourceProject,
       action: productAgentLoop.action,
-      userIntent: input.userIntent.trim(),
+      userIntent: agentActionUserIntent,
       ruleQaReport: productAgentLoop.ruleQaReport,
     });
     if (textQaReport) {
@@ -4381,6 +4630,9 @@ function App() {
 	        selectedShotIds: input.selectedShotIds,
 	        selectedAssetId: input.selectedAssetId,
 	        sectionId: input.sectionId,
+	        referenceReadyCount: input.referenceReadyCount,
+	        referenceReviewCount: input.referenceReviewCount,
+	        referenceMissingCount: input.referenceMissingCount,
 	        videoStatus: input.videoStatus,
 	        videoCanResume: input.videoCanResume,
 	        videoWaitingCount: input.videoWaitingCount,
@@ -4396,8 +4648,16 @@ function App() {
     await saveAgentTimelineDocumentQueued(vibeAgentTurn.timeline, "Failed to save Agent timeline");
     const projectRecordSummary = prototypeAgentStageProjectRecordSummary(productAgentLoop.stageResult);
     if (productAgentLoop.status === "awaiting_confirmation" || productAgentLoop.status === "blocked") {
+      const stagedPlanProjectOpen = await openProjectVibeDraft(prototypeProjectDraftTarget);
+      const stagedPlanSourceProject = stagedPlanProjectOpen.ok
+        && stagedPlanProjectOpen.project
+        && stagedPlanProjectOpen.project.manifest.projectId === sourceProject.manifest.projectId
+        ? stagedPlanProjectOpen.project
+        : prototypeProjectVibeRef.current.manifest.projectId === sourceProject.manifest.projectId
+        ? prototypeProjectVibeRef.current
+        : sourceProject;
       const draft = buildProjectAgentStagedPlanDraft({
-        project: sourceProject,
+        project: stagedPlanSourceProject,
         projectRoot: prototypeProjectDraftTarget.projectRoot,
         projectPath: prototypeProjectDraftTarget.projectPath,
         generatedAt: now,
@@ -4418,6 +4678,8 @@ function App() {
       const saveDraftResult = await saveProjectAgentStagedPlanDraft(prototypeProjectDraftTarget, draft);
       if (!saveDraftResult.ok) {
         console.warn("Failed to save Agent staged plan draft", saveDraftResult.errors[0]);
+      } else {
+        setRestoredAgentStagedPlanDraft(draft);
       }
     }
     return {
@@ -4432,7 +4694,35 @@ function App() {
     };
   }
 
-  async function recordConfirmedVibeAgentTurn(input: {
+	  async function clearPrototypeAgentPlan(): Promise<void> {
+	    const now = new Date().toISOString();
+	    const projectOpen = await openProjectVibeDraft(prototypeProjectDraftTarget);
+    const sourceProject = projectOpen.ok && projectOpen.project
+      ? projectOpen.project
+      : prototypeProjectVibeRef.current;
+    const clearDraftResult = await clearProjectAgentStagedPlanDraft(prototypeProjectDraftTarget, {
+      project: sourceProject,
+      projectRoot: prototypeProjectDraftTarget.projectRoot,
+      projectPath: prototypeProjectDraftTarget.projectPath,
+      generatedAt: now,
+    });
+    setRestoredAgentStagedPlanDraft(undefined);
+    if (!clearDraftResult.ok) {
+      console.warn("Failed to clear Agent staged plan draft", clearDraftResult.errors[0]);
+	    }
+	  }
+
+	  async function refreshRestoredAgentStagedPlanDraft(draft: ProjectAgentStagedPlanDraft): Promise<void> {
+	    if (restoredAgentStagedPlanDraft?.draftId && restoredAgentStagedPlanDraft.draftId !== draft.draftId) return;
+	    const saveDraftResult = await saveProjectAgentStagedPlanDraft(prototypeProjectDraftTarget, draft);
+	    if (!saveDraftResult.ok) {
+	      console.warn("Failed to refresh Agent staged plan draft", saveDraftResult.errors[0]);
+	      return;
+	    }
+	    setRestoredAgentStagedPlanDraft(draft);
+	  }
+
+	  async function recordConfirmedVibeAgentTurn(input: {
     project: ProjectVibeDocument;
     runtimeState: ProjectRuntimeState;
     userIntent: string;
@@ -4484,7 +4774,9 @@ function App() {
 
   async function rememberVibeAgentTimelineEntries(entries: VibeAgentTimelineEntry[]) {
     if (!entries.length) return;
+    const writeEpoch = agentTimelineWriteEpochRef.current;
     await enqueueAgentTimelineWrite(async () => {
+      if (writeEpoch !== agentTimelineWriteEpochRef.current) return;
       const project = projectForAgentTimeline(prototypeProjectVibeRef.current);
       const generatedAt = entries[entries.length - 1]?.createdAt || new Date().toISOString();
       const existingAgentTimeline = await openProjectAgentTimeline(prototypeProjectDraftTarget, {
@@ -4492,6 +4784,7 @@ function App() {
         projectRoot: prototypeProjectDraftTarget.projectRoot,
         generatedAt,
       });
+      if (writeEpoch !== agentTimelineWriteEpochRef.current) return;
       if (
         existingAgentTimeline.status !== "restored"
         && existingAgentTimeline.timeline.entries.length === 0
@@ -4504,7 +4797,9 @@ function App() {
         entries,
         generatedAt,
       );
+      if (writeEpoch !== agentTimelineWriteEpochRef.current) return;
       const saveAgentTimelineResult = await saveProjectAgentTimeline(prototypeProjectDraftTarget, nextTimeline);
+      if (writeEpoch !== agentTimelineWriteEpochRef.current) return;
       if (!saveAgentTimelineResult.ok) {
         console.warn("Failed to save Agent timeline entries", saveAgentTimelineResult.errors[0]);
       }
@@ -4516,9 +4811,13 @@ function App() {
     timeline: VibeAgentTimelineDocument,
     failureMessage: string,
   ) {
+    const writeEpoch = agentTimelineWriteEpochRef.current;
     await enqueueAgentTimelineWrite(async () => {
+      if (writeEpoch !== agentTimelineWriteEpochRef.current) return;
       const currentTimeline = timelineForCurrentProject(timeline);
+      if (writeEpoch !== agentTimelineWriteEpochRef.current) return;
       const saveAgentTimelineResult = await saveProjectAgentTimeline(prototypeProjectDraftTarget, currentTimeline);
+      if (writeEpoch !== agentTimelineWriteEpochRef.current) return;
       if (!saveAgentTimelineResult.ok) {
         console.warn(failureMessage, saveAgentTimelineResult.errors[0]);
       }
@@ -4529,6 +4828,31 @@ function App() {
   async function enqueueAgentTimelineWrite(write: () => Promise<void>) {
     const nextWrite = agentTimelineWriteQueueRef.current.then(write, write);
     agentTimelineWriteQueueRef.current = nextWrite.catch(() => undefined);
+    await nextWrite;
+  }
+
+  async function rememberAgentGenerationJobLedger(ledger: AgentVideoGenerationJobLedger) {
+    const writeEpoch = agentTimelineWriteEpochRef.current;
+    const currentIdentity = projectAgentGenerationLedgerIdentity(
+      prototypeProjectVibeRef.current,
+      prototypeProjectDraftTarget.projectRoot,
+    );
+    if (!agentGenerationLedgerMatchesIdentity(ledger, currentIdentity)) return;
+    setRestoredAgentGenerationJobLedger(ledger);
+    const write = async () => {
+      if (writeEpoch !== agentTimelineWriteEpochRef.current) return;
+      const latestIdentity = projectAgentGenerationLedgerIdentity(
+        prototypeProjectVibeRef.current,
+        prototypeProjectDraftTarget.projectRoot,
+      );
+      if (!agentGenerationLedgerMatchesIdentity(ledger, latestIdentity)) return;
+      const saveResult = await saveProjectAgentGenerationJobLedger(prototypeProjectDraftTarget, ledger);
+      if (!saveResult.ok) {
+        console.warn("Failed to save Agent generation job ledger", saveResult.errors[0]);
+      }
+    };
+    const nextWrite = agentGenerationLedgerWriteQueueRef.current.then(write, write);
+    agentGenerationLedgerWriteQueueRef.current = nextWrite.catch(() => undefined);
     await nextWrite;
   }
 
@@ -4615,6 +4939,9 @@ function App() {
         agentActionEnvelope: input.agentActionEnvelope,
         agentToolHandoff: input.agentToolHandoff,
         knowledgeManifest: productAgentKnowledgeManifest,
+        referenceReadyCount: input.referenceReadyCount,
+        referenceReviewCount: input.referenceReviewCount,
+        referenceMissingCount: input.referenceMissingCount,
       };
       let productAgentLoop = runDirectorProductAgentLoop(productAgentLoopInput);
       const textQaReport = await runAgentVideoTextQaPreflight({
@@ -4728,6 +5055,11 @@ function App() {
         };
       }
       if (confirmedAgentToolHandoff.status === "handled_by_project_write") {
+        const projectWriteSavedToLocalProject = Boolean(
+          confirmedSaveResult.ok
+          && !projectDraftUsesBrowserStorage(prototypeProjectDraftTarget, confirmedSaveResult.mode)
+        );
+        const projectWriteTemporaryUpdated = Boolean(confirmedSaveResult.ok && !projectWriteSavedToLocalProject);
         setRuntimeState(confirmedRuntimeState);
         setAssetLibrary(createAssetLibraryFromRuntimeState(confirmedRuntimeState));
         setProjectRealChainState((current) =>
@@ -4745,11 +5077,21 @@ function App() {
         setLatestPrototypeAgentDemo({
           status: "ready",
           result: {
-            label: confirmedSaveResult.ok ? "修改已写入项目" : "修改已暂存，保存待重试",
+            label: projectWriteSavedToLocalProject
+              ? "修改已写入项目"
+              : confirmedSaveResult.ok
+                ? "草案已更新"
+                : "修改已暂存，保存待重试",
             projectVibeAdded: true,
-            projectSaved: confirmedSaveResult.ok,
-            storageLabel: confirmedSaveResult.ok ? "已保存到项目" : "项目保存待重试",
+            projectTemporaryUpdated: projectWriteTemporaryUpdated,
+            projectSaved: projectWriteSavedToLocalProject,
+            storageLabel: projectWriteSavedToLocalProject
+              ? "已保存到项目"
+              : confirmedSaveResult.ok
+                ? "草案已更新"
+                : "项目保存待重试",
             ...projectRecordSummary,
+            projectTaskLabel: projectRecordSummary.projectTaskLabel || (projectWriteTemporaryUpdated ? "选择保存位置" : undefined),
             waitingReview: false,
             status: "ready",
           },
@@ -4889,6 +5231,21 @@ function App() {
     }
 
     const saveResult = await saveProjectVibeDraft(prototypeProjectDraftTarget, applied.project);
+    const feedbackSavedToLocalProject = Boolean(
+      saveResult.ok
+      && !projectDraftUsesBrowserStorage(prototypeProjectDraftTarget, saveResult.mode)
+    );
+    const feedbackTemporaryUpdated = Boolean(saveResult.ok && !feedbackSavedToLocalProject);
+    const feedbackResultLabel = feedbackSavedToLocalProject
+      ? "修改计划已写入项目"
+      : saveResult.ok
+        ? "修改已加入草案"
+        : "修改计划保存待重试";
+    const feedbackStorageLabel = feedbackSavedToLocalProject
+      ? "已保存到项目"
+      : saveResult.ok
+        ? "待选择保存位置"
+        : "项目保存待重试";
     const nextState = buildProjectRuntimeStateFromProjectVibe({
       project: applied.project,
       projectRoot: prototypeProjectDraftTarget.projectRoot,
@@ -4909,7 +5266,7 @@ function App() {
     createImage2GateForShot(recompile.feedbackIntent.targetShotId);
     prototypeProjectDraftStatusRef.current = ({
       status: saveResult.status,
-      label: saveResult.ok ? "修改计划已写入项目" : "修改计划保存待重试",
+      label: feedbackResultLabel,
       targetId: saveResult.targetId,
       factHash: saveResult.factHash,
       error: saveResult.errors[0],
@@ -4917,11 +5274,13 @@ function App() {
     setLatestPrototypeAgentDemo({
       status: saveResult.ok ? "ready" : "error",
       result: {
-        label: saveResult.ok ? "修改计划已写入项目" : "修改计划保存待重试",
+        label: feedbackResultLabel,
         projectVibeAdded: applied.projectVibeWritten,
-        projectSaved: saveResult.ok,
-        storageLabel: saveResult.ok ? "已保存到项目" : "项目保存待重试",
-        waitingReview: true,
+        projectTemporaryUpdated: feedbackTemporaryUpdated,
+        projectSaved: feedbackSavedToLocalProject,
+        storageLabel: feedbackStorageLabel,
+        projectTaskLabel: feedbackTemporaryUpdated ? "选择保存位置" : undefined,
+        waitingReview: !saveResult.ok,
         status: saveResult.ok ? "ready" : "error",
       },
     });
@@ -4981,6 +5340,143 @@ function App() {
     };
   }
 
+  function shouldBindCurrentDraftToLocalProject() {
+    if (prototypeProjectDraftTarget.projectRoot && !isBrowserDraftProjectRoot(prototypeProjectDraftTarget.projectRoot)) return false;
+    const currentProject = currentProjectVibeForSaveLocationMigration();
+    return projectVibeHasStoryContent(currentProject);
+  }
+
+  function projectVibeHasStoryContent(project: ProjectVibeDocument) {
+    return project.shots.length > 0
+      || project.storyFlow.shotOrder.length > 0
+      || project.storyFlow.sections.some((section) => section.shotIds.length > 0);
+  }
+
+  function runtimeStateHasStoryContentForSaveLocation(state: ProjectRuntimeState) {
+    return state.storyFlow.shots.length > 0
+      || state.storyFlow.sections.some((section) => section.shotIds.length > 0);
+  }
+
+  function currentProjectVibeForSaveLocationMigration() {
+    const currentProject = prototypeProjectVibeRef.current;
+    if (projectVibeHasStoryContent(currentProject)) return currentProject;
+    if (runtimeStateHasStoryContentForSaveLocation(workbenchRuntimeState)) {
+      return createProjectVibeFromRuntimeState(workbenchRuntimeState);
+    }
+    if (runtimeStateHasStoryContentForSaveLocation(runtimeState)) {
+      return createProjectVibeFromRuntimeState(runtimeState);
+    }
+    return currentProject;
+  }
+
+  async function bindCurrentDraftToLocalProjectSelection(
+    selection: ProjectRootDialogSelection,
+    options: { loadedTargetId?: string } = {},
+  ): Promise<ProjectVibeDraftTarget | undefined> {
+    if (selection.cancelled || !selection.projectRoot) return undefined;
+    const generatedAt = new Date().toISOString();
+    const currentProject = currentProjectVibeForSaveLocationMigration();
+    const fallbackDisplayName = selection.displayName || selection.projectRoot.split(/[\\/]/).filter(Boolean).at(-1) || "未命名项目";
+    const displayName = currentProject.manifest.title || fallbackDisplayName;
+    const projectPath = selection.projectPath || "project.vibe";
+    const projectVibePath = selection.projectVibePath || `${selection.projectRoot}/${projectPath}`;
+    const target: ProjectVibeDraftTarget = {
+      projectRoot: selection.projectRoot,
+      projectPath,
+      storageKey: prototypeProjectDraftStorageKeyValue,
+    };
+    const saveResult = await saveProjectVibeDraft(target, currentProject);
+    if (!saveResult.ok) {
+      throw new Error(saveResult.errors[0] || "故事保存位置没有准备成功。");
+    }
+
+    setProjectPathInput(selection.projectRoot);
+    setLoadedPrototypeProjectDraftTargetId(options.loadedTargetId || buildProjectVibeDraftTargetId(target));
+    loadedPrototypeProjectDraftStorageModeRef.current = "local";
+    setProjectFileSelection({
+      status: "selected",
+      label: "切换项目",
+      detail: "故事已保存到本地项目",
+      projectRoot: selection.projectRoot,
+      projectPath,
+      projectVibePath,
+      hasProjectVibe: true,
+      displayName,
+    });
+    setRecentProjectSelections(writeRememberedProjectSelection({
+      ...selection,
+      projectPath,
+      projectVibePath,
+      hasProjectVibe: true,
+      displayName,
+    }));
+    prototypeProjectDraftStatusRef.current = ({
+      status: saveResult.status,
+      label: "草案已写入本地项目",
+      targetId: saveResult.targetId,
+      factHash: saveResult.factHash,
+      error: saveResult.errors[0],
+    });
+    applyProjectVibeProjectState(currentProject, target, { generatedAt });
+    const firstShotId = currentProject.storyFlow.shotOrder[0] || currentProject.shots[0]?.id;
+    const firstSection = currentProject.storyFlow.sections.find((section) => firstShotId && section.shotIds.includes(firstShotId))
+      || currentProject.storyFlow.sections[0];
+    if (firstSection) setActiveSectionId(firstSection.id);
+    if (firstShotId) {
+      setSelectedShotId(firstShotId);
+      setSelectedShotIds([firstShotId]);
+    }
+    setProjectRealChainState({ status: "unavailable", message: "正在同步当前项目。" });
+    setProjectImage2BatchState({ status: "unavailable", message: "正在同步当前项目复核状态。" });
+    setProjectImage2OneShotState({ status: "unavailable", message: "正在同步当前项目小样状态。" });
+    setDirectorView("story");
+    setLatestPrototypeAgentDemo({
+      status: "ready",
+      result: {
+        label: "故事已保存到本地项目",
+        projectRecordLabel: `已把当前故事保存到本地项目：${currentProject.shots.length} 个镜头。`,
+        projectTaskLabel: "检查参考和视频下一步",
+        projectVibeAdded: true,
+        projectTemporaryUpdated: false,
+        projectSaved: true,
+        storageLabel: saveResult.path ? `已保存到 ${saveResult.path}` : "已保存到本地项目",
+        waitingReview: false,
+        status: "ready",
+      },
+    });
+
+    if (restoredAgentTimelineEntries.length > 0) {
+      const migratedTimeline = appendVibeAgentTimelineEntries(
+        createVibeAgentTimelineDocument({
+          projectId: currentProject.manifest.projectId,
+          projectTitle: currentProject.manifest.title,
+          projectRoot: selection.projectRoot,
+          generatedAt,
+        }),
+        restoredAgentTimelineEntries,
+        generatedAt,
+      );
+      const saveAgentTimelineResult = await saveProjectAgentTimeline(target, migratedTimeline);
+      if (!saveAgentTimelineResult.ok) {
+        console.warn("Failed to migrate Agent timeline to selected project folder", saveAgentTimelineResult.errors[0]);
+      } else {
+        setRestoredAgentTimelineEntries(migratedTimeline.entries);
+      }
+    }
+
+    try {
+      await connectCurrentProject({
+        projectRoot: selection.projectRoot,
+        projectId: currentProject.manifest.projectId,
+        displayName,
+      }, { projectFileRootSelected: true });
+    } catch {
+      setProjectSelectionStatus("error");
+    }
+
+    return target;
+  }
+
   async function createNewVideoLocalProject(
     draft?: NewVideoStartDraft,
     context?: NewVideoStartConfirmationContext,
@@ -4992,8 +5488,8 @@ function App() {
     const previousProjectFileSelection = projectFileSelection;
     setProjectFileSelection({
       status: "choosing",
-      label: "选择文件夹",
-      detail: "选择或新建一个项目文件夹",
+      label: "选择保存位置",
+      detail: "选择这版故事的保存位置",
     });
 
     try {
@@ -5013,15 +5509,20 @@ function App() {
         storageKey: prototypeProjectDraftStorageKeyValue,
       };
       const targetId = options.reserveForImmediateSave ? buildProjectVibeDraftTargetId(target) : undefined;
+      if (!draft && shouldBindCurrentDraftToLocalProject()) {
+        return bindCurrentDraftToLocalProjectSelection(selection, {
+          loadedTargetId: targetId,
+        });
+      }
       return bindProjectFileRootSelection(selection, {
-        detail: "本地项目已准备，确认后会保存",
+        detail: "保存位置已准备，确认后会保存",
         loadedTargetId: targetId,
       });
     } catch (error) {
       setProjectFileSelection({
         status: "error",
         label: "选择失败",
-        detail: error instanceof Error ? error.message : "项目文件夹选择失败",
+        detail: error instanceof Error ? error.message : "保存位置选择失败",
       });
       setProjectSelectionStatus("error");
       return undefined;
@@ -5126,8 +5627,8 @@ function App() {
         status: "unavailable",
         label: "先写想法",
         detail: error instanceof Error
-          ? "当前浏览器不能创建项目；请在桌面 App 选择项目文件夹。"
-          : "当前浏览器不能创建项目；请在桌面 App 选择项目文件夹。",
+          ? "当前浏览器不能创建项目；请在桌面 App 选择保存位置。"
+          : "当前浏览器不能创建项目；请在桌面 App 选择保存位置。",
       });
       return undefined;
     }
@@ -5139,7 +5640,7 @@ function App() {
   ): Promise<ProjectVibeDraftTarget> {
     const shouldUseSelectedProject = draft.projectTargetMode !== "new_project";
     if (shouldUseSelectedProject && projectFileSelection.status === "selected") {
-      if (selectedProjectIsBrowserDraft && !canChooseProjectRootFromDialog) {
+      if (selectedProjectIsBrowserDraft) {
         return {
           storageKey: browserProjectDraftStorageKeyRef.current || prototypeProjectDraftStorageKeyValue,
         };
@@ -5172,6 +5673,11 @@ function App() {
         return prototypeProjectDraftTarget;
       }
     }
+    if (draft.projectTargetMode === "new_project") {
+      return {
+        storageKey: browserProjectDraftStorageKeyRef.current || prototypeProjectDraftStorageKeyValue,
+      };
+    }
     if (canCreateLocalProjectFromDialog) {
       const createdTarget = await createNewVideoLocalProject(draft, context, { reserveForImmediateSave: true });
       if (createdTarget) return createdTarget;
@@ -5198,7 +5704,7 @@ function App() {
     setProjectFileSelection({
       status: "choosing",
       label: "选择中",
-      detail: "等待选择项目文件夹",
+      detail: "等待选择保存位置",
     });
 
     try {
@@ -5241,6 +5747,7 @@ function App() {
   }
 
   function resetAllProjectState() {
+    agentTimelineWriteEpochRef.current += 1;
     setRuntimeState(fallbackRuntimeState);
     setAssetLibrary(createAssetLibraryFromRuntimeState(fallbackRuntimeState));
     setPrototypeProjectVibe(createProjectVibeFromRuntimeState(fallbackRuntimeState));
@@ -5248,11 +5755,14 @@ function App() {
     setRestoredAgentStagedPlanDraft(undefined);
     setRestoredAgentActionLog([]);
     setRestoredAgentTimelineEntries([]);
+    setRestoredAgentGenerationJobLedger(undefined);
     setPrototypePreviewItems([]);
     setLatestPrototypeAgentDemo(undefined);
+    setDirectorNewVideoStatus(undefined);
     setAgentWebSearchSettings(loadAgentWebSearchSettings());
     setProjectLocalKnowledgePacks(loadProjectLocalKnowledgePacks(fallbackRuntimeState.sourceIndex.projectId));
     newVideoStagedTransactionRef.current = (undefined);
+    setNewVideoSessionResetNonce((nonce) => nonce + 1);
     setProjectFactsMode("save");
     setLatestProjectStoreApplyPlan(undefined);
     setExportActionState({ status: "idle", label: "导出待准备" });
@@ -5304,8 +5814,15 @@ function App() {
   ]);
 
   async function forgetProjectFileRoot() {
+    agentTimelineWriteEpochRef.current += 1;
     const projectRootToForget = projectFileSelection.status === "selected" ? projectFileSelection.projectRoot : undefined;
-    await forgetCurrentProject();
+    const draftTargetToForget = prototypeProjectDraftTarget;
+    resetAllProjectState();
+    try {
+      await forgetCurrentProject();
+    } catch {
+      // The visible project has already been abandoned; keep the UI reset as source of truth.
+    }
     if (projectRootToForget) {
       try {
         await window.vibeRuntime?.forgetProject?.(projectRootToForget);
@@ -5313,10 +5830,9 @@ function App() {
         // Runtime binding and local remembered state are still cleared below.
       }
     } else {
-      forgetBrowserProjectVibeDraft(prototypeProjectDraftTarget);
+      forgetBrowserProjectVibeDraft(draftTargetToForget);
     }
     setRecentProjectSelections(clearRememberedProjectRoot(projectRootToForget));
-    resetAllProjectState();
   }
 
   async function removeRecentProjectRecord(projectRoot: string) {
@@ -5344,14 +5860,14 @@ function App() {
     setProviderConfigStatuses,
     setProjectRealChainState,
   });
-  async function runMissingVisualsFromStory() {
+  async function runMissingVisualsFromStory(input?: { signal?: AbortSignal }) {
     const batch = projectImage2BatchState.summary;
     const retryCount = batch?.retrySummary?.nextRunnableCount || batch?.retrySummary?.retryScheduled || 0;
     const hasRunnableBatch = retryCount > 0;
     if (hasRunnableBatch) {
-      return await runProjectImage2Batch();
+      return await runProjectImage2Batch(input?.signal);
     }
-    return await runImage2AssetGeneration({ skipConfirm: true });
+    return await runImage2AssetGeneration({ skipConfirm: true, signal: input?.signal });
   }
   const { endFrameAction, runImage2EndFrame } = useImage2EndFrameAction({
     runtimeProjectIdentity,
@@ -5458,13 +5974,13 @@ function App() {
         projectPlan={projectPlan}
         mode={mode}
         directorView={directorView}
-        sections={isEmptyFallbackWorkbench ? [] : view.storySections}
-        activeSectionId={isEmptyFallbackWorkbench ? undefined : resolvedActiveSectionId}
+        sections={topNavStorySections}
+        activeSectionId={activeNewVideoDraftShotCountForNav > 0 ? undefined : isEmptyFallbackWorkbench ? undefined : resolvedActiveSectionId}
         projectFileStatusLabel={projectFileStatusLabel}
         projectFileStatusDetail={projectFileStatusDetail}
         projectRoot={projectControlRoot}
         projectStorageKind={projectControlStorageKind}
-        currentProjectPath={projectFileSelection.status === "selected" ? projectFileSelection.projectPath : effectiveRuntimeProjectBinding.projectVibePath}
+        currentProjectPath={projectControlShowsNewVideoEntry ? undefined : projectFileSelection.status === "selected" ? projectFileSelection.projectPath : effectiveRuntimeProjectBinding.projectVibePath}
         recentProjects={recentProjectSelections.map((selection) => ({
           projectRoot: selection.projectRoot || "",
           displayName: selection.displayName || projectFolderName(selection.projectRoot),
@@ -5478,7 +5994,7 @@ function App() {
         onCreateProject={() => { void createNewVideoLocalProject(undefined, undefined); }}
         canChooseProjectRoot={canChooseProjectRootFromDialog && projectFileSelection.status !== "choosing"}
         onChooseProjectRoot={chooseProjectFileRoot}
-        canForgetProject={localProjectReadyForUi || (!isEmptyFallbackWorkbench && hasWorkbenchProjectContent)}
+        canForgetProject={canForgetProjectFromTopNav}
         onForgetProject={() => { void forgetProjectFileRoot(); }}
         onOpenRecentProject={(selection) => { void openRecentProject({ ...selection, cancelled: false }); }}
         onRemoveRecentProject={removeRecentProjectRecord}
@@ -5500,6 +6016,7 @@ function App() {
           audit={audit}
           view={view}
           runtimeState={workbenchRuntimeState}
+          projectFactHash={hashProjectVibeFacts(prototypeProjectVibe)}
           projectScopeLabel={workbenchProjectScopeLabel}
           selectedShot={visibleSelectedShot}
           selectedShots={visibleSelectedShots}
@@ -5562,16 +6079,21 @@ function App() {
           localProjectBusy={localProjectBusyForUi}
           canCreateLocalProject={canCreateLocalProjectFromDialog && projectFileSelection.status !== "choosing"}
           newVideoComposerResetKey={newVideoComposerResetKeyFromUrl()}
+          newVideoResetKey={newVideoSessionResetNonce}
           onProjectStoreApplyPlanReady={(plan) => {
             setLatestProjectStoreApplyPlan(plan);
           }}
           latestPrototypeAgentDemo={latestPrototypeAgentDemo}
           restoredAgentStagedPlanDraft={restoredAgentStagedPlanDraft}
           restoredAgentActionLog={restoredAgentActionLog}
-          restoredAgentTimelineEntries={restoredAgentTimelineEntries}
-          onStagePrototypeAgentPlan={stagePrototypeAgentPlan}
-          onRememberAgentActionLogItem={rememberConfirmedProjectAgentAction}
+	          restoredAgentTimelineEntries={restoredAgentTimelineEntries}
+	          restoredAgentGenerationJobLedger={restoredAgentGenerationJobLedger}
+	          onStagePrototypeAgentPlan={stagePrototypeAgentPlan}
+	          onClearPrototypeAgentPlan={clearPrototypeAgentPlan}
+	          onRefreshRestoredAgentStagedPlanDraft={refreshRestoredAgentStagedPlanDraft}
+	          onRememberAgentActionLogItem={rememberConfirmedProjectAgentAction}
           onRememberAgentTimelineEntries={rememberVibeAgentTimelineEntries}
+          onRememberAgentGenerationJobLedger={rememberAgentGenerationJobLedger}
           onPreviewPrototypeAgentDemo={preparePrototypeAgentDemo}
           onNewVideoStatusChange={setDirectorNewVideoStatus}
         />

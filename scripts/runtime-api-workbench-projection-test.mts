@@ -189,6 +189,9 @@ try {
   writeFileSync(path.join(runRootPath, "prompts/S01_seedance.md"), "seedance prompt");
   mkdirSync(path.join(runRootPath, "receipts"), { recursive: true });
   writeJson(path.join(runRootPath, "receipts/S01_submit.json"), { submitId: "submit-s01" });
+  writeJson(path.join(runRootPath, "exports/current-project/export_manifest.json"), { appGenerated: true });
+  mkdirSync(path.join(runRootPath, "exports/current-project/video-report"), { recursive: true });
+  writeFileSync(path.join(runRootPath, "exports/current-project/video-report/summary.md"), "app-generated export summary");
   mkdirSync(path.join(runRootPath, "reports"), { recursive: true });
   writeFileSync(path.join(runRootPath, "reports/not-user-reference.png"), "internal-report-png");
 
@@ -267,6 +270,7 @@ try {
   const folderReceipt = workbenchFacts.visualMemory.assets.find((asset) => asset.path === "receipts/S01_submit.json");
   assert(folderReceipt?.roleBinding?.role === "generation_receipt", "runtime workbench should classify project receipt folders as generation receipts");
   assert(!workbenchFacts.visualMemory.assets.some((asset) => asset.path?.includes("reports/not-user-reference")), "project folder scan must ignore internal report files");
+  assert(!workbenchFacts.visualMemory.assets.some((asset) => asset.path?.startsWith("exports/current-project/")), "project folder scan must ignore app-generated export bundles");
   assert(workbenchFacts.providerCalled === false && workbenchFacts.projectVibeWritten === false, "workbench facts must stay read-only");
 } finally {
   rmSync(workingRoot, { recursive: true, force: true });

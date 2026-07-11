@@ -188,6 +188,26 @@ assert(view.storySections[0].label === "Opening", "runtime view should expose re
 assert(view.storySections[0].shotIds.join(",") === "S001", "first runtime section should bind S001");
 assert(hashProjectVibeFacts(project).startsWith("pv_"), "fixture Project.vibe should stay hashable");
 
+const permissionControlLabel = "先不要生成参考，保留参考计划，不提交视频";
+const permissionPollutedProject = createFixtureProject();
+permissionPollutedProject.storyFlow.sections = permissionPollutedProject.storyFlow.sections.map((section, index) => index === 0
+  ? { ...section, title: permissionControlLabel, summary: permissionControlLabel }
+  : section);
+permissionPollutedProject.shots = permissionPollutedProject.shots.map((shot, index) => index === 0
+  ? { ...shot, title: permissionControlLabel, intent: permissionControlLabel, primaryAction: permissionControlLabel }
+  : shot);
+const permissionPollutedRuntimeState = buildProjectRuntimeStateFromProjectVibe({
+  project: permissionPollutedProject,
+  projectRoot: "/tmp/project-vibe-runtime-state",
+  projectPath: "project/project.vibe",
+  generatedAt: "2026-05-16T03:06:00.000Z",
+});
+
+assert(permissionPollutedRuntimeState.storyFlow.sections[0]?.label === "当前故事", "permission-control text should not become a creator-facing section label");
+assert(permissionPollutedRuntimeState.storyFlow.shots[0]?.title === "镜头 1", "permission-control text should not become a creator-facing shot title");
+assert(permissionPollutedRuntimeState.storyFlow.shots[0]?.storyFunction === "镜头 1", "permission-control text should not become a creator-facing story function");
+assert(!permissionPollutedRuntimeState.storyFlow.shots[0]?.primaryAction, "permission-control text should not become a creator-facing primary action");
+
 console.log(
   `project-vibe-runtime-state-test: project=${runtimeState.sourceIndex.projectId}, shots=${runtimeState.storyFlow.shots.length}, assets=${runtimeState.visualMemory.assets.length}, sections=${view.storySections.length}.`,
 );

@@ -95,6 +95,7 @@ export interface ProjectStatusViewModelInput {
   localProjectBusy?: boolean;
   directorView: DirectorView;
   referenceGenerationAction?: ReferenceActionState;
+  referenceGenerationDeferredByCreator?: boolean;
   endFrameAction?: ReferenceActionState;
   videoSendAction?: VideoActionState;
   videoStage?: CreatorVideoStageLike;
@@ -264,6 +265,7 @@ function assetWaitingLabel(input: ProjectStatusViewModelInput) {
   if (input.referenceGenerationAction?.status === "running") return progress ? `参考正在生成：${progress}` : "参考图正在生成";
   if (input.referenceGenerationAction?.status === "blocked") return actionMessage(input.referenceGenerationAction, "参考生成被拦住");
   if (review > 0 && displayedMissing > 0) return `${review} 张待看，${displayedMissing} 张待补`;
+  if (input.referenceGenerationDeferredByCreator && displayedMissing > 0) return "已按你的要求先整理故事，不生成参考";
   if (input.referenceGenerationAction?.status === "ready" && displayedMissing > 0) return `还缺 ${displayedMissing} 张画面参考`;
   if (review > 0) return "参考待看";
   if (displayedMissing > 0) return `还缺 ${displayedMissing} 张画面参考`;
@@ -320,12 +322,13 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
   const currentAssetWaiting = assetWaitingLabel(input);
   const audioFact = audioFactLabel(runtimeState);
   const rawAgentFact = input.agentCommand?.label?.trim() || input.agentStage?.summary?.trim() || "";
+  const localProjectSetupRequired = !input.folderReady && input.projectReady && shotCount > 0;
   const agentFact = browserDraftActive
     ? newVideoAgentFact(input.newVideoStatus)
     : videoTaskActive
       ? ""
-    : !input.folderReady && input.projectReady && /生成|提交|导出/.test(rawAgentFact)
-      ? "先保存项目"
+    : localProjectSetupRequired
+      ? "选择保存位置"
       : rawAgentFact;
   const hasReferenceEvidence = draftReferenceCount > 0
     || displayAssetSummary.locked > 0
@@ -344,7 +347,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     : browserDraftActive
       ? newVideoProjectFact(input.newVideoStatus)
       : input.projectReady && shotCount > 0
-        ? "临时项目"
+        ? "待保存草案"
         : "先写想法";
   const facts = [
     { label: "项目", value: projectFact },
@@ -407,8 +410,8 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     }
     return {
       stage: "准备开始",
-      doing: "还没有连接本地项目",
-      waitingFor: "一个想法、脚本，或一个项目文件夹",
+      doing: "还没有故事想法",
+      waitingFor: "一个想法、脚本，或一份素材",
       nextAction: "在右侧输入想法，或点左上角打开项目",
       tone: "waiting",
       facts,
@@ -418,7 +421,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
   if (shotCount === 0) {
     return {
       stage: "准备故事",
-      doing: input.folderReady ? "项目文件夹已连接" : "正在整理想法",
+      doing: input.folderReady ? "保存位置已准备" : "正在整理想法",
       waitingFor: "故事想法、脚本或素材",
       nextAction: "把想法写进右侧输入框，AI 导演会先拆镜头",
       tone: "waiting",
@@ -428,10 +431,10 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
 
   if (!input.folderReady && input.projectReady) {
     return {
-      stage: "需要本地项目",
+      stage: "需要保存位置",
       doing: "故事已经拆好",
-      waitingFor: "一个本地项目文件夹",
-      nextAction: "点左上角项目，选择本地文件夹",
+      waitingFor: "故事保存位置",
+      nextAction: "在右侧选择保存位置",
       tone: "waiting",
       facts,
     };
@@ -485,11 +488,11 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
 
   if (input.directorView === "export" && exportWorkerCanPrepareDelivery(input.exportWorker)) {
     return {
-      stage: "可以导出",
-      doing: "视频和项目资料已经可以打包",
-      waitingFor: "确认导出",
-      nextAction: "去交付页导出",
-      tone: "ready",
+      stage: "等待确认导出",
+      doing: "本地交付包已整理，确认后才会写入文件",
+      waitingFor: "右侧确认导出交付包",
+      nextAction: "在右侧确认导出交付包",
+      tone: "waiting",
       facts,
     };
   }
@@ -529,6 +532,7 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
     const referencesNeedReview = input.runtimeState.visualMemory.summary.needsReview > 0;
     const shouldGenerateReferences = missingReferences && !referencesNeedReview;
     const shouldReviewAndGenerateReferences = missingReferences && referencesNeedReview;
+    const referenceGenerationDeferredByCreator = Boolean(input.referenceGenerationDeferredByCreator && shouldGenerateReferences);
     const missingReferenceNextAction = input.agentCommand?.kind === "generate_references"
       ? input.agentCommand.label || "生成参考"
       : "生成参考";
@@ -537,6 +541,8 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
       ? "参考待处理"
       : input.referenceGenerationAction?.status === "running"
         ? "参考生成中"
+      : referenceGenerationDeferredByCreator
+        ? "故事已保存"
       : shouldReviewAndGenerateReferences
         ? "参考待看，也有待生成"
       : shouldGenerateReferences
@@ -546,6 +552,8 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
       ? "按提示处理条件"
       : input.referenceGenerationAction?.status === "running"
         ? "图片结果"
+      : referenceGenerationDeferredByCreator
+        ? "你的下一句指令"
       : shouldGenerateReferences
         ? referenceGenerationNeedsPermission ? "等待你确认生成参考" : "确认生成参考范围"
       : shouldReviewAndGenerateReferences
@@ -559,6 +567,8 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
         ? actionMessage(input.referenceGenerationAction, "调整后重试")
         : input.referenceGenerationAction?.status === "running"
           ? "去参考页看进度"
+          : referenceGenerationDeferredByCreator
+            ? "继续修改故事，或说“开始补参考”"
           : missingReferences
             ? missingReferenceNextAction
             : "去参考页确认可用素材",
@@ -582,11 +592,11 @@ export function buildProjectStatusViewModel(input: ProjectStatusViewModelInput):
 
   if (input.exportWorker?.readiness === "ready") {
     return {
-      stage: "可以导出",
-      doing: "视频和项目资料已经可以打包",
-      waitingFor: "确认生成交付包",
-      nextAction: "去交付页导出",
-      tone: "ready",
+      stage: "等待确认导出",
+      doing: "本地交付包已整理，确认后才会写入文件",
+      waitingFor: "右侧确认导出交付包",
+      nextAction: "在右侧确认导出交付包",
+      tone: "waiting",
       facts,
     };
   }

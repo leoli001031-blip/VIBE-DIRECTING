@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
 import {
   extractDreaminaTaskInfo,
+  JIMENG_CLI_DEFAULT_MODEL_VERSION,
   JIMENG_CLI_DEFAULT_VIDEO_RESOLUTION,
   JIMENG_CLI_SUPPORTED_MODEL_VERSIONS,
   JIMENG_CLI_VIP_MODEL_VERSION,
@@ -38,7 +39,7 @@ import {
 } from "../../src/core/referenceAssetStrategy.ts";
 
 const CONFIRM_PHRASE = "submit-seedance-video";
-const DEFAULT_MODEL_VERSION = JIMENG_CLI_VIP_MODEL_VERSION;
+const DEFAULT_MODEL_VERSION = JIMENG_CLI_DEFAULT_MODEL_VERSION;
 const DEFAULT_RATIO = "16:9";
 const DEFAULT_POLL_SECONDS = 90;
 const MAX_REFERENCE_IMAGE_BYTES = 50 * 1024 * 1024; // 50MB
@@ -1548,7 +1549,10 @@ function runCommand(command, args, options) {
     const child = spawn(command, args, {
       cwd: options.cwd,
       stdio: ["ignore", "pipe", "pipe"],
-      env: process.env,
+      env: {
+        ...process.env,
+        ...(options.env || {}),
+      },
     });
     let stdout = "";
     let stderr = "";
@@ -1578,6 +1582,35 @@ function runCommand(command, args, options) {
       resolve({ exitCode: code, stdout, stderr, timedOut, durationMs: Date.now() - startedAt });
     });
   });
+}
+
+function dreaminaSandboxHome(repoRoot) {
+  const sourceHome = process.env.HOME || "";
+  const sourceDreaminaDir = sourceHome ? path.join(sourceHome, ".dreamina_cli") : "";
+  const sandboxHome = path.join(repoRoot, ".vibe-runtime", "dreamina-home");
+  const sandboxDreaminaDir = path.join(sandboxHome, ".dreamina_cli");
+  mkdirSync(sandboxDreaminaDir, { recursive: true });
+  mkdirSync(path.join(sandboxDreaminaDir, "logs"), { recursive: true });
+
+  if (sourceDreaminaDir && existsSync(sourceDreaminaDir)) {
+    for (const entry of readdirSync(sourceDreaminaDir)) {
+      if (entry === "logs") continue;
+      const sourcePath = path.join(sourceDreaminaDir, entry);
+      const targetPath = path.join(sandboxDreaminaDir, entry);
+      cpSync(sourcePath, targetPath, {
+        recursive: true,
+        force: true,
+        errorOnExist: false,
+      });
+    }
+  }
+
+  return sandboxHome;
+}
+
+function dreaminaCommandEnv(repoRoot) {
+  if (process.env.VIBE_DREAMINA_USE_PROJECT_HOME !== "1") return undefined;
+  return { HOME: dreaminaSandboxHome(repoRoot) };
 }
 
 function findVideoFiles(dir) {
@@ -2279,7 +2312,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
           attempted: true,
           promptPath: promptRelPath,
           referencePaths: activeReferencePaths,
-          note: "本段正在提交给 Seedance 2.0 VIP，等待任务号。",
+          note: "本段正在提交给 Seedance 2.0，等待任务号。",
         },
       });
       writeCurrentProjectRuntimeJson(relayQueueRelPath, queueingRelayQueue, source);
@@ -2298,6 +2331,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
       // The backend queue may take up to 50 minutes but the CLI returns a task ID after accepting the job.
       const submit = await runCommandDep(input.cliPath, args, {
         cwd: repoRoot,
+        env: dreaminaCommandEnv(repoRoot),
         timeoutMs: Math.max(300, input.pollSeconds + 60) * 1000,
       });
       writeCurrentProjectRuntimeJson(submitLogRelPath, {
@@ -2396,7 +2430,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
           outputVideoPath,
           outputVideoSha256,
           localMediaPaths: outputVideoPath ? [outputVideoPath] : [],
-	          note: outputVideoPath ? "本段视频已返回，仍需复核。" : "本段已提交给 Seedance 2.0 VIP，后台排队或生成中。",
+	          note: outputVideoPath ? "本段视频已返回，仍需复核。" : "本段已提交给 Seedance 2.0，后台排队或生成中。",
         },
       });
       writeCurrentProjectRuntimeJson(relayQueueRelPath, relayQueue, source);
@@ -2521,8 +2555,8 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
 	            ? "本段视频已返回；后续段已准备好，需要你明确确认后再提交。"
 	            : "视频已返回，等待复核。"
           : referenceSegments.length > 1
-	            ? `Seedance 2.0 VIP 已提交代表性第 ${referenceSegments.findIndex((segment) => segment.id === activeSegment?.id) + 1}/${referenceSegments.length} 段；本轮不批量提交，后台等待结果即可。`
-            : "Seedance 2.0 VIP 已提交，后台排队或生成中；可以稍后查询结果。",
+	            ? `Seedance 2.0 已提交代表性第 ${referenceSegments.findIndex((segment) => segment.id === activeSegment?.id) + 1}/${referenceSegments.length} 段；本轮不批量提交，后台等待结果即可。`
+            : "Seedance 2.0 已提交，后台排队或生成中；可以稍后查询结果。",
       };
       writeCurrentProjectRuntimeJson(reportRelPath, report, source);
       return report;
@@ -2630,6 +2664,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
         `--download_dir=${videoDir}`,
       ], {
         cwd: repoRoot,
+        env: dreaminaCommandEnv(repoRoot),
         timeoutMs: Math.max(300, input.pollSeconds + 60) * 1000,
       });
     }
@@ -2799,7 +2834,7 @@ export function createRuntimeApiCurrentProjectSeedanceSubmit(deps) {
 	          : "视频已返回，等待复核。"
         : relayStatus === "failed"
           ? `即梦生成失败：${failureReason}`
-          : "Seedance 2.0 VIP 还在排队或生成中，已保留恢复查询入口。",
+          : "Seedance 2.0 还在排队或生成中，已保留恢复查询入口。",
       ...extra,
     };
     writeCurrentProjectRuntimeJson(reportRelPath, report, source);

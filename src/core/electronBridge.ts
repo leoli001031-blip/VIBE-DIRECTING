@@ -1,6 +1,8 @@
 export interface ElectronBridge {
   runtimeApiBaseUrl?(): string;
+  runtimeApiToken?(): string;
   ensureRuntimeApiBaseUrl?(): Promise<string>;
+  currentProjectBinding?(): Promise<unknown>;
   chooseProjectRoot?(): Promise<{
     cancelled: boolean;
     projectRoot?: string;

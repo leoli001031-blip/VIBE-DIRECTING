@@ -108,6 +108,26 @@ export interface ProjectIntentRoute {
   target: "story" | "assets" | "preview" | "export";
 }
 
+function isPositiveReferencePreparationIntent(text: string) {
+  const value = compact(text);
+  if (!value) return false;
+  const negativeReferencePattern = /(?:不要|不|别|不用|不必|无需|先不要|先别)(?:再|去|自动|直接|马上|立刻|先)?(?:补|补齐|补全|生成|做)?.{0,4}(?:参考|参考图|角色图|场景图|道具图|故事板)/g;
+  const referenceIntentText = value.replace(negativeReferencePattern, "");
+  if (!referenceIntentText.trim()) return false;
+  const explicitReferenceStart = /(?:开始|继续|先|只|可以|允许|帮我|请|要|去).{0,8}(?:补|补齐|补全|生成|做).{0,4}(?:参考|参考图|角色图|场景图|道具图|故事板)/.test(referenceIntentText);
+  if (explicitReferenceStart) return true;
+  return /(?:补|补齐|补全|生成|做).{0,16}(?:参考|参考图|角色图|场景图|道具图|故事板)|(?:参考|参考图).{0,8}(?:计划|范围|清单|方案)/.test(referenceIntentText);
+}
+
+function isVideoSubmitRequestIntent(text: string) {
+  const value = compact(text);
+  if (!value) return false;
+  const negativeVideoPattern = /(?:不要|不|别|不用|不必|无需|先不要|先别|先不)(?:再|去|自动|直接|马上|立刻|先)?(?:提交|发送|生成|生|跑|测|测试|调用)?.{0,6}(?:视频|即梦|seedance|外部生成)|(?:视频|即梦|seedance).{0,6}(?:先不用|先别|不用管|别跑|不用跑)/gi;
+  const positiveVideoText = value.replace(negativeVideoPattern, "");
+  if (!positiveVideoText.trim()) return false;
+  return /发送视频|生成视频|生视频|(?:提交|发送).{0,6}(?:视频|即梦|seedance)|seedance|即梦/i.test(positiveVideoText);
+}
+
 export interface BuildProjectInboxInput {
   assets: AssetRecord[];
   reconciliation?: AssetReconciliationProjection;
@@ -148,6 +168,8 @@ export interface BuildProjectObservationInput {
   videoReviewCount: number;
   videoCanResume: boolean;
   image2Running: boolean;
+  referenceExecutionValidated?: boolean;
+  videoExecutionValidated?: boolean;
   inbox?: ProjectInboxProjection;
 }
 
@@ -172,7 +194,7 @@ function routeContinueFromObservation(observation: ProjectObservationProjection)
 }
 
 export function isContinueIntent(text: string) {
-  return /^(好|好的|可以|行|没问题|没毛病|ok|OK|确认|通过|继续|下一步|就这样|就按这个)(了|吧|啊|呀|，|。|！|!|,|\s)*$/u.test(text)
+  return /^(好|好的|可以|行|没问题|没毛病|ok|OK|确认|通过|继续下一步|继续下步|继续|下一步|就这样|就按这个)(了|吧|啊|呀|，|。|！|!|,|\s)*$/u.test(text)
     || /(没问题|可以|确认|通过).{0,8}(继续|下一步)/u.test(text)
     || /(继续|下一步).{0,8}(没问题|可以|确认|通过)/u.test(text);
 }
@@ -206,6 +228,51 @@ function unique(values: Array<string | undefined>) {
 
 function compact(value: unknown) {
   return clean(value).toLowerCase();
+}
+
+function parseLocalizedInteger(value: string): number | undefined {
+  const normalized = clean(value).replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
+  if (/^\d{1,3}$/.test(normalized)) return Number.parseInt(normalized, 10);
+  const digitValues: Record<string, number> = {
+    一: 1,
+    二: 2,
+    两: 2,
+    俩: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+  };
+  if (normalized === "十") return 10;
+  const teenMatch = normalized.match(/^十([一二两俩三四五六七八九])$/u);
+  if (teenMatch) return 10 + digitValues[teenMatch[1] || ""]!;
+  const tenMatch = normalized.match(/^([一二两俩三四五六七八九])十([一二两俩三四五六七八九])?$/u);
+  if (tenMatch) return digitValues[tenMatch[1] || ""]! * 10 + (digitValues[tenMatch[2] || ""] || 0);
+  return digitValues[normalized];
+}
+
+const localizedShotCountToken = String.raw`([0-9０-９]{1,3}|一|二|两|俩|三|四|五|六|七|八|九|十|十[一二两俩三四五六七八九]|[一二两俩三四五六七八九]十[一二两俩三四五六七八九]?)`;
+
+export function requestedStoryboardShotCountFromIntent(value: string): number | undefined {
+  const text = clean(value);
+  if (!text) return undefined;
+  const patterns = [
+    new RegExp(String.raw`(?:拆成|分成|分为|切成|规划成|做成|改成|调整成|换成|整理成|整理为|重排成|重排为)\s*${localizedShotCountToken}\s*(?:个|条|段)?\s*(?:镜头|分镜|视频段|视频|短片|片段|段落|shots?|clips?|cuts?)`, "iu"),
+    new RegExp(String.raw`(?:镜头|分镜|视频段|片段|段落)\s*(?:改成|调整成|换成|变成|拆成|分成|整理成|整理为|重排成|重排为)\s*${localizedShotCountToken}\s*(?:个|条|段)?`, "iu"),
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const count = match ? parseLocalizedInteger(match[1] || "") : undefined;
+    if (count && count >= 1 && count <= 80) return count;
+  }
+  return undefined;
+}
+
+export function isStoryShotCountRestructureIntent(value: string) {
+  return Boolean(requestedStoryboardShotCountFromIntent(value));
 }
 
 function pathExtension(value: unknown) {
@@ -251,7 +318,8 @@ function isSystemManagedProjectFolderPath(value: string) {
     .replace(/\\/g, "/")
     .replace(/^\.\//, "")
     .toLowerCase();
-  return normalized.startsWith("assets/generated/");
+  return normalized.startsWith("assets/generated/")
+    || normalized.startsWith("exports/current-project/");
 }
 
 function hasVoiceReferenceSignal(value: string) {
@@ -721,6 +789,12 @@ function observationVideoStatus(input: BuildProjectObservationInput): ProjectObs
   if (/failed/.test(input.videoStatus)) {
     return { status: "failed", label: "视频失败", detail: input.videoDetail || "需要检查失败原因后重试。" };
   }
+  if (input.videoExecutionValidated) {
+    return { status: "idle", label: "视频未生成", detail: "本地执行合同已验证；没有提交或生成真实视频。" };
+  }
+  if (input.referenceExecutionValidated && input.shotCount > 0) {
+    return { status: "ready", label: "可验证视频流程", detail: "参考执行合同已验证；真实参考仍未生成，因此只允许继续本地验证。" };
+  }
   if (input.referenceMissingCount === 0 && input.referenceReviewCount === 0 && input.shotCount > 0) {
     return { status: "ready", label: "可准备视频", detail: "故事和参考基本就绪，提交前会再检查。" };
   }
@@ -744,6 +818,12 @@ export function buildProjectObservation(input: BuildProjectObservationInput): Pr
         label: "参考生成中",
         detail: "参考正在生成，完成后会进入复核。",
       }
+    : input.referenceExecutionValidated && (input.referenceMissingCount > 0 || input.referenceReviewCount > 0)
+      ? {
+          status: "missing" as const,
+          label: "参考未生成",
+          detail: "本地执行合同已验证；没有生成或锁定真实参考。",
+        }
     : input.referenceMissingCount > 0
     ? {
         status: "missing" as const,
@@ -763,8 +843,8 @@ export function buildProjectObservation(input: BuildProjectObservationInput): Pr
         };
   const video = observationVideoStatus(input);
   const needsProject = !input.localProjectReady;
-  const needsReferenceGeneration = !input.image2Running && input.referenceMissingCount > 0;
-  const needsAssetReview = !input.image2Running && (input.referenceReviewCount > 0 || Boolean(input.inbox?.needsReviewCount));
+  const needsReferenceGeneration = !input.referenceExecutionValidated && !input.image2Running && input.referenceMissingCount > 0;
+  const needsAssetReview = !input.referenceExecutionValidated && !input.image2Running && (input.referenceReviewCount > 0 || Boolean(input.inbox?.needsReviewCount));
   const needsVideoSubmit = !input.image2Running && video.status === "ready";
   const confirmationKind: ProjectAgentConfirmationKind = needsProject
     ? "project"
@@ -799,7 +879,9 @@ export function buildProjectObservation(input: BuildProjectObservationInput): Pr
             ? "提交前做一次检查，通过后串行提交视频。"
             : video.status === "recoverable"
               ? "先查询已提交的视频结果。"
-              : input.shotCount
+        : input.videoExecutionValidated
+          ? "真实视频仍未生成；可以继续验证导出边界，或连接服务后实际执行。"
+        : input.shotCount
                 ? "继续按当前故事推进。"
                 : "先拆故事和镜头。";
   const confirmationLabel = confirmationKind === "project"
@@ -841,6 +923,11 @@ export function routeProjectAgentIntent(input: {
   const text = compact(input.text);
   const permissionIntent = detectDirectorAgentPermissionIntent(text);
   const referenceGenerationDisallowed = permissionIntent === "plan_only";
+  const requestedShotCount = requestedStoryboardShotCountFromIntent(text);
+  const explicitCurrentStoryShotCountRestructure = Boolean(
+    requestedShotCount
+      && /^(?:把|将|请把|请将)?\s*(?:当前|这个|这版)?\s*(?:故事|草案|项目|短片|视频|分镜|镜头)?\s*(?:改成|改为|调整成|调整为|换成|变成|重排成|重排为|拆成|分成|分为|整理成|整理为)/u.test(text),
+  );
   const newStoryIntent = directorIntentStartsFreshVideoDraft(text)
     || /完整项目|整个短片|整支片/.test(text);
   if (isDirectorAgentExplainOnlyIntent(text)) {
@@ -858,13 +945,27 @@ export function routeProjectAgentIntent(input: {
   if (/查询|回来|结果|回流|状态/.test(text) && /视频|即梦|seedance/.test(text)) {
     return { kind: "video_status", label: "查询视频", target: "preview", confirmation: "none", plan: ["读取已提交任务", "查询回流状态", "更新预览"] };
   }
-  if (!directorAgentPermissionIntentDisallowsVideoSubmit(text) && /提交|生成视频|生视频|seedance|即梦/.test(text)) {
+  const videoSubmitRequested = isVideoSubmitRequestIntent(text);
+  if (videoSubmitRequested && directorAgentPermissionIntentDisallowsVideoSubmit(text)) {
+    return {
+      kind: "video",
+      label: "检查视频前提",
+      target: "preview",
+      confirmation: "none",
+      plan: ["识别到视频请求", "当前指令禁止外部提交", "不生成参考、不提交视频"],
+    };
+  }
+  if (videoSubmitRequested) {
     return { kind: "video", label: "准备视频", target: "preview", confirmation: "video_submit", plan: ["检查故事和参考", "编译视频提示词", "确认后串行提交"] };
   }
   if (/查资料|查一下|搜一下|搜索|参考.*风格|研究|((分镜|风格|镜头|节奏).{0,8}怎么做)/.test(text)) {
     return { kind: "research", label: "查资料", target: "story", confirmation: "none", plan: ["整理检索问题", "保存可用资料", "等你确认后写入项目"] };
   }
-  if (!referenceGenerationDisallowed && /补.*参考|生成.*参考|角色图|场景图|道具图|故事板/.test(text)) {
+  const referencePreparationRequested = isPositiveReferencePreparationIntent(text);
+  if (referencePreparationRequested && referenceGenerationDisallowed) {
+    return { kind: "reference", label: "准备参考计划", target: "assets", confirmation: "none", plan: ["判断缺少的角色、场景或道具参考", "整理参考范围和优先级", "不生成图片、不提交视频"] };
+  }
+  if (referencePreparationRequested) {
     return { kind: "reference", label: "生成参考", target: "assets", confirmation: "reference_generation", plan: ["判断缺少的角色、场景或道具参考", "确认生成范围", "生成后进入复核"] };
   }
   if (/(?:素材|文件|参考素材|项目材料|拖入文件).{0,16}(?:整理|分类|归类|绑定|匹配|建议|识别)|(?:整理|分类|归类|绑定|匹配|识别).{0,16}(?:素材|文件|参考素材|项目材料|拖入文件)|绑定建议/.test(text)) {
@@ -879,8 +980,26 @@ export function routeProjectAgentIntent(input: {
   if (isContinueIntent(text)) {
     return routeContinueFromObservation(input.observation);
   }
+  if (explicitCurrentStoryShotCountRestructure && requestedShotCount) {
+    return {
+      kind: "revision",
+      label: `重排为 ${requestedShotCount} 个镜头`,
+      target: "story",
+      confirmation: "none",
+      plan: ["读取当前故事", `按要求重排为 ${requestedShotCount} 个镜头`, "确认后才写入项目"],
+    };
+  }
   if (newStoryIntent) {
     return { kind: "story", label: "整理新故事", target: "story", confirmation: "none", plan: ["理解新片方向", "重拆故事段落和镜头", "生成前先给你看草案"] };
+  }
+  if (requestedShotCount) {
+    return {
+      kind: "revision",
+      label: `重排为 ${requestedShotCount} 个镜头`,
+      target: "story",
+      confirmation: "none",
+      plan: ["读取当前故事", `按要求重排为 ${requestedShotCount} 个镜头`, "确认后才写入项目"],
+    };
   }
   if (input.hasSelection || isShotRevisionIntent(text) || /改|调整|重写|替换|删|加|优化/.test(text)) {
     return { kind: "revision", label: "修改当前内容", target: "story", confirmation: "none", plan: ["读取当前选中内容", "整理成可确认修改", "确认后写入项目"] };

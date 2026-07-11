@@ -1,6 +1,7 @@
 import {
   fetchRuntimeJson,
   hasProjectRuntimeIdentity,
+  isBrowserDraftRuntimeIdentity,
   isRecord,
   prepareRuntimeApiRequest,
   projectMismatchMessage,
@@ -23,6 +24,8 @@ export const projectCurrentSelectEndpoint = `${projectRuntimeBasePath}/projects/
 export const projectCurrentChoicesEndpoint = `${projectRuntimeBasePath}/projects/recent`;
 export const projectCurrentSaveProjectVibeEndpoint = `${projectRuntimeBasePath}/projects/current/project-vibe/save`;
 export const projectCurrentAgentTimelineEndpoint = `${projectRuntimeBasePath}/projects/current/agent-timeline`;
+export const projectCurrentAgentStagedPlanEndpoint = `${projectRuntimeBasePath}/projects/current/agent-staged-plan`;
+export const projectCurrentAgentGenerationJobLedgerEndpoint = `${projectRuntimeBasePath}/projects/current/agent-generation-job-ledger`;
 
 export type ProjectCurrentBindingStatus = {
   status: "loading" | "bound" | "unbound";
@@ -146,6 +149,20 @@ export function currentProjectBindingStatusFromBootstrap(): ProjectCurrentBindin
   });
 }
 
+async function currentProjectBindingStatusFromElectronBridge(): Promise<ProjectCurrentBindingStatus | undefined> {
+  if (typeof window === "undefined") return undefined;
+  const currentProjectBinding = window.vibeRuntime?.currentProjectBinding;
+  if (!currentProjectBinding) return undefined;
+  try {
+    const payload = await currentProjectBinding();
+    if (!payload) return undefined;
+    const binding = deriveCurrentProjectBindingStatus(payload);
+    return binding.status === "bound" ? binding : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function currentProjectBindingFromMeta(): Record<string, unknown> | undefined {
   if (typeof document === "undefined") return undefined;
   const encoded = document.querySelector<HTMLMetaElement>('meta[name="vibe-current-project-binding"]')?.content;
@@ -180,6 +197,8 @@ export function deriveCurrentProjectChoices(payload: unknown): ProjectCurrentCho
 }
 
 export async function loadCurrentProjectBindingStatus(): Promise<ProjectCurrentBindingStatus> {
+  const bridged = await currentProjectBindingStatusFromElectronBridge();
+  if (bridged) return bridged;
   try {
     const payload = await fetchRuntimeJson(projectCurrentBindingEndpoint);
     return deriveCurrentProjectBindingStatus(payload);
@@ -285,6 +304,9 @@ export async function loadCurrentProjectAgentTimelineTextFromRuntime(
   if (!hasProjectRuntimeIdentity(expected)) {
     return { ok: false, status: "blocked", message: projectMismatchMessage() };
   }
+  if (isBrowserDraftRuntimeIdentity(expected)) {
+    return { ok: false, status: "unavailable", message: "先把故事保存成项目，再生成参考或视频。" };
+  }
   try {
     const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectCurrentAgentTimelineEndpoint, expected));
     if (!isRecord(payload)) return { ok: false, status: "blocked", message: "Agent timeline 读取失败。" };
@@ -315,12 +337,139 @@ export async function saveCurrentProjectAgentTimelineTextToRuntime(
   if (!hasProjectRuntimeIdentity(expected)) {
     return { ok: false, status: "blocked", message: projectMismatchMessage() };
   }
+  if (isBrowserDraftRuntimeIdentity(expected)) {
+    return { ok: false, status: "unavailable", message: "先把故事保存成项目，再生成参考或视频。" };
+  }
   const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectCurrentAgentTimelineEndpoint, expected), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ content }),
   });
   if (!isRecord(payload)) return { ok: false, status: "blocked", message: "Agent timeline 保存失败。" };
+  return {
+    ok: payload.ok === true,
+    status: stringRecordValue(payload, ["status"]),
+    path: stringRecordValue(payload, ["path"]),
+    message: stringRecordValue(payload, ["message"]),
+  };
+}
+
+export async function loadCurrentProjectAgentStagedPlanTextFromRuntime(
+  expected: ProjectRuntimeIdentity | undefined,
+): Promise<{
+  ok: boolean;
+  status?: string;
+  path?: string;
+  content?: string;
+  message?: string;
+}> {
+  if (!hasProjectRuntimeIdentity(expected)) {
+    return { ok: false, status: "blocked", message: projectMismatchMessage() };
+  }
+  if (isBrowserDraftRuntimeIdentity(expected)) {
+    return { ok: false, status: "unavailable", message: "先把故事保存成项目，再生成参考或视频。" };
+  }
+  try {
+    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectCurrentAgentStagedPlanEndpoint, expected));
+    if (!isRecord(payload)) return { ok: false, status: "blocked", message: "Agent staged plan 读取失败。" };
+    return {
+      ok: payload.ok === true,
+      status: stringRecordValue(payload, ["status"]),
+      path: stringRecordValue(payload, ["path"]),
+      content: stringRecordValue(payload, ["content"]),
+      message: stringRecordValue(payload, ["message"]),
+    };
+  } catch (error) {
+    if (error instanceof RuntimeHttpError && error.status === 404) {
+      return { ok: false, status: "missing", message: error.detail };
+    }
+    return { ok: false, status: "error", message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export async function saveCurrentProjectAgentStagedPlanTextToRuntime(
+  expected: ProjectRuntimeIdentity | undefined,
+  content: string,
+): Promise<{
+  ok: boolean;
+  status?: string;
+  path?: string;
+  message?: string;
+}> {
+  if (!hasProjectRuntimeIdentity(expected)) {
+    return { ok: false, status: "blocked", message: projectMismatchMessage() };
+  }
+  if (isBrowserDraftRuntimeIdentity(expected)) {
+    return { ok: false, status: "unavailable", message: "先把故事保存成项目，再生成参考或视频。" };
+  }
+  const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectCurrentAgentStagedPlanEndpoint, expected), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  if (!isRecord(payload)) return { ok: false, status: "blocked", message: "Agent staged plan 保存失败。" };
+  return {
+    ok: payload.ok === true,
+    status: stringRecordValue(payload, ["status"]),
+    path: stringRecordValue(payload, ["path"]),
+    message: stringRecordValue(payload, ["message"]),
+  };
+}
+
+export async function loadCurrentProjectAgentGenerationJobLedgerTextFromRuntime(
+  expected: ProjectRuntimeIdentity | undefined,
+): Promise<{
+  ok: boolean;
+  status?: string;
+  path?: string;
+  content?: string;
+  message?: string;
+}> {
+  if (!hasProjectRuntimeIdentity(expected)) {
+    return { ok: false, status: "blocked", message: projectMismatchMessage() };
+  }
+  if (isBrowserDraftRuntimeIdentity(expected)) {
+    return { ok: false, status: "unavailable", message: "先把故事保存成项目，再生成参考或视频。" };
+  }
+  try {
+    const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectCurrentAgentGenerationJobLedgerEndpoint, expected));
+    if (!isRecord(payload)) return { ok: false, status: "blocked", message: "Agent generation ledger 读取失败。" };
+    return {
+      ok: payload.ok === true,
+      status: stringRecordValue(payload, ["status"]),
+      path: stringRecordValue(payload, ["path"]),
+      content: stringRecordValue(payload, ["content"]),
+      message: stringRecordValue(payload, ["message"]),
+    };
+  } catch (error) {
+    if (error instanceof RuntimeHttpError && error.status === 404) {
+      return { ok: false, status: "missing", message: error.detail };
+    }
+    return { ok: false, status: "error", message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export async function saveCurrentProjectAgentGenerationJobLedgerTextToRuntime(
+  expected: ProjectRuntimeIdentity | undefined,
+  content: string,
+): Promise<{
+  ok: boolean;
+  status?: string;
+  path?: string;
+  message?: string;
+}> {
+  if (!hasProjectRuntimeIdentity(expected)) {
+    return { ok: false, status: "blocked", message: projectMismatchMessage() };
+  }
+  if (isBrowserDraftRuntimeIdentity(expected)) {
+    return { ok: false, status: "unavailable", message: "先把故事保存成项目，再生成参考或视频。" };
+  }
+  const payload = await fetchRuntimeJson(projectRuntimeRequestPath(projectCurrentAgentGenerationJobLedgerEndpoint, expected), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  if (!isRecord(payload)) return { ok: false, status: "blocked", message: "Agent generation ledger 保存失败。" };
   return {
     ok: payload.ok === true,
     status: stringRecordValue(payload, ["status"]),

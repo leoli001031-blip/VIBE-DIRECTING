@@ -243,7 +243,7 @@ function handoffBlockers(input: BuildDirectorAgentToolHandoffInput): string[] {
 	return uniqueStrings([
     action.status === "blocked" ? "agent_action_blocked" : "",
     userConfirmed ? "" : "user_confirmation_required",
-    availability.projectReady ? "" : "project_not_ready",
+    handler === "project_vibe_patch" || availability.projectReady ? "" : "project_not_ready",
     handler === "web_search" && !availability.webSearchReady ? "web_search_not_ready" : "",
 	    handler === "image2_reference_generation" && !availability.referenceGenerationReady ? "reference_generation_not_ready" : "",
 	    handler === "image2_reference_generation" && !action.toolPlan.providerSubmitAllowed ? "reference_generation_not_allowed" : "",

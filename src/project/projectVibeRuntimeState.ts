@@ -1,6 +1,6 @@
 import { buildProjectRuntimeState, emptyKnowledgeManifest } from "../core/projectStateBuilder";
 import type { ProjectRuntimeState, RuntimeStateSource } from "../core/projectState";
-import { buildProjectVibePlanningProjection } from "../core/projectVibePlanningProjection";
+import { buildProjectVibePlanningProjection, projectVibeCreatorFacingStoryLabel } from "../core/projectVibePlanningProjection";
 import type { KnowledgePackManifest } from "../core/knowledgeTypes";
 import type { AssetRecord, ProjectAudit, ProjectMetrics, ProjectSourceIndex } from "../core/types";
 import { hashProjectVibeFacts } from "./projectVibe";
@@ -263,7 +263,10 @@ export function buildProjectRuntimeStateFromProjectVibe(input: BuildProjectRunti
       note: "Rebuilt from the opened Project.vibe document.",
     },
   });
-  const sectionTitleById = new Map(input.project.storyFlow.sections.map((section) => [section.id, section.title]));
+  const sectionTitleById = new Map(input.project.storyFlow.sections.map((section) => [
+    section.id,
+    projectVibeCreatorFacingStoryLabel(section.title, "当前故事"),
+  ]));
   const restoredSections = runtimeState.storyFlow.sections.map((section) => ({
     ...section,
     label: sectionTitleById.get(section.id) || section.label,

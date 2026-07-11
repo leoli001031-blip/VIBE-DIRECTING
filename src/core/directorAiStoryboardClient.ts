@@ -43,5 +43,6 @@ export async function requestDirectorAiStoryboardPlan(
   const planSource = isRecord(payload.plan) ? payload.plan : payload;
   return normalizeDirectorAiStoryboardPlan(planSource, {
     targetDurationSeconds: input.targetDurationSeconds,
+    requestedShotCount: input.requestedShotCount,
   });
 }

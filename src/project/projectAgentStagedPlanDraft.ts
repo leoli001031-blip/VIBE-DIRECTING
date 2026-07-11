@@ -10,6 +10,10 @@ import {
   type ProjectVibeSidecarTextResult,
 } from "./projectVibeDraftStore";
 import type { ProjectVibeDocument } from "./types";
+import {
+  loadCurrentProjectAgentStagedPlanTextFromRuntime,
+  saveCurrentProjectAgentStagedPlanTextToRuntime,
+} from "../core/projectCurrentRuntimeClient";
 
 export const PROJECT_AGENT_STAGED_PLAN_DRAFT_SCHEMA_VERSION = "director_agent_staged_plan/0.1.0";
 export const projectAgentStagedPlanDraftPath = ".vibe-runtime/agent-staged-plan.json";
@@ -141,11 +145,48 @@ export async function saveProjectAgentStagedPlanDraft(
   target: ProjectVibeDraftTarget,
   draft: ProjectAgentStagedPlanDraft,
 ): Promise<ProjectVibeSidecarTextResult> {
-  return writeProjectVibeSidecarText(
+  const serialized = `${JSON.stringify(draft, null, 2)}\n`;
+  let runtimeWriteError: string | undefined;
+  let runtimeWriteOk = false;
+  let runtimeWritePath: string | undefined;
+  if (target.projectRoot && !isBrowserDraftProjectRoot(target.projectRoot)) {
+    try {
+      const runtimeWrite = await saveCurrentProjectAgentStagedPlanTextToRuntime({
+        projectId: draft.projectId,
+        projectRoot: target.projectRoot,
+      }, serialized);
+      if (runtimeWrite.ok) {
+        runtimeWriteOk = true;
+        runtimeWritePath = runtimeWrite.path || projectAgentStagedPlanDraftPath;
+      } else {
+        runtimeWriteError = runtimeWrite.message || runtimeWrite.status;
+      }
+    } catch (error) {
+      runtimeWriteError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  const writeResult = await writeProjectVibeSidecarText(
     target,
     projectAgentStagedPlanDraftPath,
-    `${JSON.stringify(draft, null, 2)}\n`,
+    serialized,
   );
+  if (runtimeWriteOk && !writeResult.ok) {
+    return {
+      ...writeResult,
+      ok: true,
+      status: "written",
+      path: runtimeWritePath || writeResult.path,
+      content: serialized,
+      errors: [],
+    };
+  }
+  if (!writeResult.ok && runtimeWriteError) {
+    return {
+      ...writeResult,
+      errors: [runtimeWriteError, ...writeResult.errors],
+    };
+  }
+  return writeResult;
 }
 
 export async function clearProjectAgentStagedPlanDraft(
@@ -186,7 +227,33 @@ export async function openProjectAgentStagedPlanDraft(
     now?: string | Date;
   },
 ): Promise<ProjectAgentStagedPlanRestoreResult> {
+  const runtimeRead = target.projectRoot && !isBrowserDraftProjectRoot(target.projectRoot)
+    ? await loadCurrentProjectAgentStagedPlanTextFromRuntime({
+      projectId: input.project.manifest.projectId,
+      projectRoot: target.projectRoot,
+    })
+    : undefined;
+  const runtimeOpen = runtimeRead?.ok && runtimeRead.content != null
+    ? openProjectAgentStagedPlanDraftText(runtimeRead.content, {
+      project: input.project,
+      projectRoot: input.projectRoot || target.projectRoot,
+      now: input.now,
+      path: runtimeRead.path || projectAgentStagedPlanDraftPath,
+    })
+    : undefined;
   const readResult = await readProjectVibeSidecarText(target, projectAgentStagedPlanDraftPath);
+  const sidecarOpen = readResult.ok && readResult.content != null
+    ? openProjectAgentStagedPlanDraftText(readResult.content, {
+      project: input.project,
+      projectRoot: input.projectRoot || target.projectRoot,
+      now: input.now,
+      path: readResult.path,
+    })
+    : undefined;
+  const restored = selectLatestProjectAgentStagedPlanRestoreResult(runtimeOpen, sidecarOpen);
+  if (restored) return restored;
+  if (runtimeOpen) return runtimeOpen;
+  if (sidecarOpen) return sidecarOpen;
   if (!readResult.ok || readResult.content == null) {
     return {
       ok: false,
@@ -195,21 +262,52 @@ export async function openProjectAgentStagedPlanDraft(
       errors: readResult.errors,
     };
   }
+  return openProjectAgentStagedPlanDraftText(readResult.content, {
+    project: input.project,
+    projectRoot: input.projectRoot || target.projectRoot,
+    now: input.now,
+    path: readResult.path,
+  });
+}
+
+function openProjectAgentStagedPlanDraftText(
+  content: string,
+  input: {
+    project: ProjectVibeDocument;
+    projectRoot?: string;
+    now?: string | Date;
+    path: string;
+  },
+): ProjectAgentStagedPlanRestoreResult {
   try {
-    return restoreProjectAgentStagedPlanDraft(JSON.parse(readResult.content), {
+    return restoreProjectAgentStagedPlanDraft(JSON.parse(content), {
       project: input.project,
-      projectRoot: input.projectRoot || target.projectRoot,
+      projectRoot: input.projectRoot,
       now: input.now,
-      path: readResult.path,
+      path: input.path,
     });
   } catch (error) {
     return {
       ok: false,
       status: "invalid",
-      path: readResult.path,
+      path: input.path,
       errors: [error instanceof Error ? error.message : String(error)],
     };
   }
+}
+
+function selectLatestProjectAgentStagedPlanRestoreResult(
+  first?: ProjectAgentStagedPlanRestoreResult,
+  second?: ProjectAgentStagedPlanRestoreResult,
+) {
+  const candidates = [first, second].filter((item): item is ProjectAgentStagedPlanRestoreResult => Boolean(item));
+  if (!candidates.length) return undefined;
+  return candidates.sort((left, right) => draftCreatedAtMs(left.draft) - draftCreatedAtMs(right.draft)).at(-1);
+}
+
+function draftCreatedAtMs(draft?: ProjectAgentStagedPlanDraft) {
+  const time = Date.parse(draft?.createdAt || "");
+  return Number.isFinite(time) ? time : 0;
 }
 
 export function restoreProjectAgentStagedPlanDraft(
@@ -303,7 +401,18 @@ function textValue(value: unknown): string | undefined {
 }
 
 function normalizeProjectRoot(value?: string) {
-  return value?.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+  return value
+    ?.trim()
+    .replace(/\\/g, "/")
+    .replace(/\/+$/g, "")
+    .replace(/^\/private\/tmp(?=\/|$)/, "/tmp");
+}
+
+function isBrowserDraftProjectRoot(projectRoot?: string) {
+  const normalized = projectRoot?.replace(/\\/g, "/").trim() || "";
+  return normalized === ".vibe-runtime/browser-projects"
+    || normalized.startsWith(".vibe-runtime/browser-projects/")
+    || normalized.includes("/.vibe-runtime/browser-projects/");
 }
 
 function compactId(value: string) {

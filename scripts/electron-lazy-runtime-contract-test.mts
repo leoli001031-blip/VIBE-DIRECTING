@@ -33,16 +33,26 @@ const createWindowBody = functionBody(mainSource, "createWindow");
 const startRuntimeServerBody = functionBody(mainSource, "startRuntimeServer");
 const ensureRuntimeServerBody = functionBody(mainSource, "ensureRuntimeServer");
 const runtimeEnsureHandler = mainSource.slice(
-  mainSource.indexOf("ipcMain.handle(\"runtime:ensureStarted\""),
-  mainSource.indexOf("ipcMain.handle(\"project:chooseRoot\""),
+  mainSource.indexOf("handleTrustedIpc(\"runtime:ensureStarted\""),
+  mainSource.indexOf("handleTrustedIpc(\"project:currentBinding\""),
+);
+const currentBindingHandler = mainSource.slice(
+  mainSource.indexOf("handleTrustedIpc(\"project:currentBinding\""),
+  mainSource.indexOf("handleTrustedIpc(\"project:chooseRoot\""),
 );
 
 assert(mainSource.includes("runtime:ensureStarted"), "Electron main must expose lazy runtime startup IPC");
 assert(mainSource.includes("ensureRuntimeServer"), "Electron main must keep runtime startup behind an idempotent ensure function");
 assert(!appReadyBeforeCatch.includes("startRuntimeServer("), "Electron app launch must not start the runtime server immediately");
+assert(!appReadyBeforeCatch.includes("ensureRuntimeServer("), "Electron app launch must not ensure the runtime before creating the first window");
 assert(appReadyBeforeCatch.includes("await createWindow()"), "Electron app launch should create the window without a runtime URL");
 assert(!createWindowBody.includes("startRuntimeServer("), "window creation must not start the runtime server");
+assert(!createWindowBody.includes("ensureRuntimeServer("), "window creation must not ensure the runtime server");
+assert(!createWindowBody.includes("--vibe-runtime-api-base-url="), "window creation must not bake a Runtime API URL into preload arguments");
+assert(createWindowBody.includes("currentProjectBindingBootstrapArg()"), "window creation must bootstrap the current binding without starting Runtime");
 assert(!runtimeEnsureHandler.includes("isDev"), "runtime ensure IPC must start the lazy runtime in Electron dev and packaged modes");
+assert(!currentBindingHandler.includes("ensureRuntimeServer("), "current project binding IPC must not start Runtime as a side effect");
+assert(currentBindingHandler.includes("currentProjectBindingForRenderer()"), "current project binding IPC must read the local binding directly");
 assert(startRuntimeServerBody.includes("await waitForRuntimeStatus(nextRuntimeApiBaseUrl)"), "runtime startup must wait for status readiness before returning a base URL");
 assert(startRuntimeServerBody.indexOf("await waitForRuntimeStatus(nextRuntimeApiBaseUrl)") < startRuntimeServerBody.indexOf("runtimeApiBaseUrl = nextRuntimeApiBaseUrl"), "runtime base URL must not be cached before status readiness");
 assert(ensureRuntimeServerBody.indexOf("runtimeServerStarting") < ensureRuntimeServerBody.indexOf("runtimeServer && runtimeApiBaseUrl"), "concurrent ensure calls must wait for the in-flight readiness check");
@@ -50,6 +60,7 @@ assert(ensureRuntimeServerBody.indexOf("runtimeServerStarting") < ensureRuntimeS
 assert(preloadSource.includes("ensureRuntimeApiBaseUrl"), "preload must expose a lazy runtime API starter");
 assert(preloadSource.includes("ipcRenderer.invoke(\"runtime:ensureStarted\")"), "preload lazy runtime starter must call the runtime IPC");
 assert(preloadSource.includes("runtimeApiBaseUrlStarting"), "preload must dedupe concurrent lazy runtime startup calls");
+assert(preloadSource.includes("currentProjectBindingBootstrap"), "preload must decode current project binding independently from Runtime");
 assert(runtimeClientSource.includes("ensureRuntimeApiBaseUrl"), "renderer runtime client must know how to lazily request runtime startup");
 assert(runtimeClientSource.includes("window.vibeRuntime?.runtimeApiBaseUrl"), "renderer runtime client must read the bridge runtime URL");
 assert(runtimeClientSource.includes("await ensureRuntimeApiBaseUrl()"), "runtime requests must ensure runtime startup before fetch");

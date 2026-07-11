@@ -111,10 +111,10 @@ status = view({
   referenceGenerationAction: { status: "ready", message: "准备生成参考。" },
   agentCommand: { kind: "generate_references", label: "生成参考" },
 });
-assert.equal(status.stage, "需要本地项目", "confirmed story should not generate references before a local project folder is bound");
-assert.equal(status.nextAction, "点左上角项目，选择本地文件夹", "unbound confirmed story should point to project selection");
-assert.equal(factValue(status, "项目"), "临时项目", "unbound confirmed story should show it is a temporary project instead of asking for another idea");
-assert.equal(factValue(status, "AI 导演"), "先保存项目", "blocked generation should be translated into save-project guidance");
+assert.equal(status.stage, "需要保存位置", "confirmed story should not generate references before a save location is chosen");
+assert.equal(status.nextAction, "在右侧选择保存位置", "unbound confirmed story should point to Agent save-location setup");
+assert.equal(factValue(status, "项目"), "待保存草案", "unbound confirmed story should show the current draft-save contract instead of asking for another idea");
+assert.equal(factValue(status, "AI 导演"), "选择保存位置", "blocked generation should expose the concrete save-location action");
 
 status = view({
   runtimeState: runtimeState({ shotCount: 3, summary: { locked: 0, needsReview: 0, missing: 3 } }),
@@ -224,8 +224,8 @@ status = view({
   directorView: "export",
   exportWorker: { readiness: "ready", blockers: [] } as any,
 });
-assert.equal(status.stage, "可以导出", "ready export worker should expose a delivery-ready state");
-assert.equal(status.nextAction, "去交付页导出", "ready export worker should expose the export action");
+assert.equal(status.stage, "等待确认导出", "ready export worker should remain behind the export confirmation boundary");
+assert.equal(status.nextAction, "在右侧确认导出交付包", "ready export worker should expose the concrete confirmation action");
 
 status = view({
   runtimeState: runtimeState({ shotCount: 3, summary: { locked: 3, needsReview: 0, missing: 0 } }),
