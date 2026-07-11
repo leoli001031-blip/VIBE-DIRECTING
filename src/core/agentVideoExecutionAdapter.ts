@@ -298,6 +298,49 @@ function blockedResult(input: RunAgentVideoExecutionInput, status: "blocked" | "
   };
 }
 
+function ledgerPersistenceFailureResult(input: {
+  executionInput: RunAgentVideoExecutionInput;
+  ledger: AgentVideoGenerationJobLedger;
+  snapshots: AgentVideoGenerationJobLedger[];
+  timelineEntries: VibeAgentTimelineEntry[];
+  generatedAt: string;
+  jobId?: string;
+  error: unknown;
+  providerMayHaveRun: boolean;
+  providerCalled?: boolean;
+  rawResult?: unknown;
+}): AgentVideoExecutionAdapterResult {
+  const message = input.error instanceof Error ? input.error.message : String(input.error || "Unknown persistence error.");
+  const blocker = input.providerMayHaveRun
+    ? `Execution returned, but the generation job ledger could not persist the result: ${message}`
+    : `Execution was blocked because the generation job ledger could not be persisted: ${message}`;
+  const job = input.jobId ? input.ledger.jobs.find((item) => item.jobId === input.jobId) : undefined;
+  const status = input.providerMayHaveRun ? "failed" : "blocked";
+  const executionReceipt = receipt(input.executionInput, status, input.generatedAt, job, [blocker]);
+  executionReceipt.providerCalled = input.providerCalled === true || job?.providerCalled === true;
+  executionReceipt.outputAssets = [];
+  const resultEntry = timelineEntry({
+    executionInput: input.executionInput,
+    receipt: executionReceipt,
+    createdAt: timestamp(),
+    phase: "result",
+  });
+  return {
+    status,
+    dryRunOnly: input.executionInput.executionMode === "dry_run",
+    liveSubmitAllowed: input.providerMayHaveRun && input.executionInput.executionMode === "live",
+    providerCalled: executionReceipt.providerCalled,
+    ledger: input.ledger,
+    ledgerSnapshots: input.snapshots,
+    job,
+    receipt: executionReceipt,
+    blockers: [blocker],
+    statusTrace: statusTrace(job),
+    timelineEntries: [...input.timelineEntries, resultEntry],
+    rawResult: input.rawResult,
+  };
+}
+
 function text(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
@@ -401,8 +444,8 @@ async function executeWithBoundary(input: RunAgentVideoExecutionInput, context: 
 }
 
 async function persistSnapshot(input: RunAgentVideoExecutionInput, ledger: AgentVideoGenerationJobLedger, snapshots: AgentVideoGenerationJobLedger[]) {
-  snapshots.push(ledger);
   await input.onLedgerSnapshot?.(ledger);
+  snapshots.push(ledger);
 }
 
 async function rememberTimeline(input: RunAgentVideoExecutionInput, entries: VibeAgentTimelineEntry[], allEntries: VibeAgentTimelineEntry[]) {
@@ -421,6 +464,7 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
     if (input.liveExecutionAllowed !== true) return blockedResult(input, "blocked", ["Live execution was not explicitly allowed."], generatedAt);
     if (!input.liveCapability) return blockedResult(input, "blocked", ["Live execution requires an explicit provider capability."], generatedAt);
     if (!input.execute) return blockedResult(input, "blocked", ["Live execution has no executor."], generatedAt);
+    if (!input.onLedgerSnapshot) return blockedResult(input, "blocked", ["Live execution requires durable generation job persistence."], generatedAt);
   }
 
   const staged = planAgentVideoProductionAction({
@@ -444,15 +488,37 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
 
   const snapshots: AgentVideoGenerationJobLedger[] = [];
   const timelineEntries: VibeAgentTimelineEntry[] = [];
+  let durableLedger = input.ledger;
   let ledger = staged.ledger;
   let job = staged.job;
+  async function persistCurrentSnapshot(providerMayHaveRun = false, providerCalled = false, rawResult?: unknown) {
+    try {
+      await persistSnapshot(input, ledger, snapshots);
+      durableLedger = ledger;
+      return undefined;
+    } catch (error) {
+      return ledgerPersistenceFailureResult({
+        executionInput: input,
+        ledger: durableLedger,
+        snapshots,
+        timelineEntries,
+        generatedAt,
+        jobId: job.jobId,
+        error,
+        providerMayHaveRun,
+        providerCalled,
+        rawResult,
+      });
+    }
+  }
   if (job.executionMode !== input.executionMode) {
     return blockedResult(input, "blocked", ["Existing job execution mode does not match this request."], generatedAt);
   }
   if (terminalJobStatuses.has(job.status)) {
     return blockedResult(input, "blocked", [`Agent action already has a terminal job: ${job.jobId}.`], generatedAt);
   }
-  await persistSnapshot(input, ledger, snapshots);
+  let persistenceFailure = await persistCurrentSnapshot();
+  if (persistenceFailure) return persistenceFailure;
 
   if (job.status === "running") {
     const runningReceipt = receipt(input, "running", generatedAt, job);
@@ -481,7 +547,8 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
     if (!confirmed.ok || !confirmed.job) return blockedResult(input, "blocked", confirmed.blockers, generatedAt);
     ledger = confirmed.ledger;
     job = confirmed.job;
-    await persistSnapshot(input, ledger, snapshots);
+    persistenceFailure = await persistCurrentSnapshot();
+    if (persistenceFailure) return persistenceFailure;
   }
 
   if (job.status === "confirmed") {
@@ -494,7 +561,8 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
     if (!running.ok || !running.job) return blockedResult(input, "blocked", running.blockers, generatedAt);
     ledger = running.ledger;
     job = running.job;
-    await persistSnapshot(input, ledger, snapshots);
+    persistenceFailure = await persistCurrentSnapshot();
+    if (persistenceFailure) return persistenceFailure;
   }
 
   const runningReceipt = receipt(input, "running", generatedAt, job);
@@ -512,7 +580,8 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
     if (!succeeded.ok || !succeeded.job) return blockedResult(input, "blocked", succeeded.blockers, generatedAt);
     ledger = succeeded.ledger;
     job = succeeded.job;
-    await persistSnapshot(input, ledger, snapshots);
+    persistenceFailure = await persistCurrentSnapshot();
+    if (persistenceFailure) return persistenceFailure;
     const validatedReceipt = receipt(input, "validated", generatedAt, job);
     await rememberTimeline(input, [timelineEntry({ executionInput: input, receipt: validatedReceipt, createdAt: job.updatedAt, phase: "result" })], timelineEntries);
     return {
@@ -554,7 +623,8 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
       if (recorded.ok && recorded.job) {
         ledger = recorded.ledger;
         job = recorded.job;
-        await persistSnapshot(input, ledger, snapshots);
+        persistenceFailure = await persistCurrentSnapshot(true, providerCalled);
+        if (persistenceFailure) return persistenceFailure;
       }
       const timedOutReceipt = receipt(input, "timed_out", generatedAt, job, [message]);
       await rememberTimeline(input, [timelineEntry({ executionInput: input, receipt: timedOutReceipt, createdAt: timedOutReceipt.updatedAt, phase: "result" })], timelineEntries);
@@ -584,7 +654,8 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
     if (transitioned.ok && transitioned.job) {
       ledger = transitioned.ledger;
       job = transitioned.job;
-      await persistSnapshot(input, ledger, snapshots);
+      persistenceFailure = await persistCurrentSnapshot(true, providerCalled);
+      if (persistenceFailure) return persistenceFailure;
     }
     const failureStatus = cancelled ? "cancelled" : "failed";
     const failureReceipt = receipt(input, failureStatus, generatedAt, job, [message]);
@@ -624,7 +695,8 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
     if (recorded.ok && recorded.job) {
       ledger = recorded.ledger;
       job = recorded.job;
-      await persistSnapshot(input, ledger, snapshots);
+      persistenceFailure = await persistCurrentSnapshot(true, providerCalled, rawResult);
+      if (persistenceFailure) return persistenceFailure;
     }
   } else {
     const transitioned = transitionAgentVideoGenerationJob({
@@ -640,7 +712,8 @@ export async function runAgentVideoExecution(input: RunAgentVideoExecutionInput)
     if (transitioned.ok && transitioned.job) {
       ledger = transitioned.ledger;
       job = transitioned.job;
-      await persistSnapshot(input, ledger, snapshots);
+      persistenceFailure = await persistCurrentSnapshot(true, providerCalled, rawResult);
+      if (persistenceFailure) return persistenceFailure;
     }
   }
 

@@ -163,6 +163,9 @@ async function runPackagedExecutableSmoke(executablePath: string) {
     assert(result.runtimeAuthProbe?.missingTokenStatus === 403, "packaged Runtime must reject mutation without a token");
     assert(result.runtimeAuthProbe?.wrongTokenStatus === 403, "packaged Runtime must reject mutation with a wrong token");
     assert(result.runtimeAuthProbe?.correctTokenStatus === 200, "packaged Runtime must accept mutation with the in-memory Electron token");
+    assert(result.runtimeAuthProbe?.missingReadTokenStatus === 403, "packaged Runtime must reject reads without a token");
+    assert(result.runtimeAuthProbe?.wrongReadTokenStatus === 403, "packaged Runtime must reject reads with a wrong token");
+    assert(result.runtimeAuthProbe?.correctReadTokenStatus === 200, "packaged Runtime must accept reads with the in-memory Electron token");
     assert(result.runtimeStatus?.tokenRequired === true, "packaged Runtime must report token protection enabled");
     assert(result.runtimeStatus?.providerCalled === false, "packaged executable smoke must not call providers");
     assert(result.runtimeStatus?.liveSubmitAllowed === false, "packaged executable smoke must keep live submit blocked");

@@ -98,6 +98,9 @@ assert(result.runtimeAuthProbe?.tokenPresentAfterEnsure === true, "Runtime token
 assert(result.runtimeAuthProbe?.missingTokenStatus === 403, "Runtime mutation without token must be rejected");
 assert(result.runtimeAuthProbe?.wrongTokenStatus === 403, "Runtime mutation with wrong token must be rejected");
 assert(result.runtimeAuthProbe?.correctTokenStatus === 200, "Runtime mutation with the Electron token must succeed");
+assert(result.runtimeAuthProbe?.missingReadTokenStatus === 403, "Runtime read without token must be rejected");
+assert(result.runtimeAuthProbe?.wrongReadTokenStatus === 403, "Runtime read with wrong token must be rejected");
+assert(result.runtimeAuthProbe?.correctReadTokenStatus === 200, "Runtime read with the Electron token must succeed");
 if (result.renderer.exposedRuntimeApiBaseUrl) {
   assert(result.renderer.bridgeRuntimeApiBaseUrl === result.renderer.exposedRuntimeApiBaseUrl, "runtime base URL bridge mismatch");
 }

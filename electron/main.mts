@@ -7,7 +7,7 @@ import crypto from "node:crypto";
 import net from "node:net";
 import { createProjectRootScope, spawnAllowed } from "./projectScope.mts";
 import { createRuntimeSessionToken } from "./runtimeSessionToken.mts";
-import { isSafeExternalUrl, isTrustedDocumentUrl, isTrustedRendererSender } from "./securityPolicy.mts";
+import { isSafeExternalUrl, isTrustedDocumentUrl, isTrustedRendererSender, runtimeLoopbackHost } from "./securityPolicy.mts";
 
 const { app, BrowserWindow, dialog, ipcMain, shell } = electron;
 app.setName("Vibe Director Studio");
@@ -54,7 +54,7 @@ const preloadPath = process.env.VIBE_ELECTRON_PRELOAD
 const devUrl = process.env.VIBE_ELECTRON_DEV_URL || "http://127.0.0.1:5174";
 const isDev = !app.isPackaged;
 const openDevToolsInDev = process.env.VIBE_ELECTRON_OPEN_DEVTOOLS === "1";
-const runtimeHost = readEnv("VIBE_DIRECTOR_RUNTIME_API_HOST", "VIBE_CORE_RUNTIME_API_HOST") || "127.0.0.1";
+const runtimeHost = runtimeLoopbackHost(readEnv("VIBE_DIRECTOR_RUNTIME_API_HOST", "VIBE_CORE_RUNTIME_API_HOST"));
 const smokeMode = process.env.VIBE_ELECTRON_SMOKE === "1";
 const smokeMarker = "__VIBE_ELECTRON_PACKAGED_GUI_SMOKE__";
 const runtimeSessionToken = createRuntimeSessionToken();
@@ -660,17 +660,24 @@ async function runPackagedSmoke(win: electron.BrowserWindow, runtimeStartedBefor
         const baseUrl = await window.vibeRuntime?.ensureRuntimeApiBaseUrl?.() || "";
         const token = window.vibeRuntime?.runtimeApiToken?.() || "";
         const endpoint = baseUrl + "/api/runtime/projects/current/clear";
-        const request = (tokenValue) => fetch(endpoint, {
+        const statusEndpoint = baseUrl + "/api/runtime/status";
+        const mutationRequest = (tokenValue) => fetch(endpoint, {
           method: "POST",
+          headers: tokenValue === undefined ? {} : { "x-vibe-runtime-token": tokenValue }
+        }).then((response) => response.status);
+        const readRequest = (tokenValue) => fetch(statusEndpoint, {
           headers: tokenValue === undefined ? {} : { "x-vibe-runtime-token": tokenValue }
         }).then((response) => response.status);
         return {
           baseUrl,
           tokenPresentBeforeEnsure,
           tokenPresentAfterEnsure: Boolean(token),
-          missingTokenStatus: await request(undefined),
-          wrongTokenStatus: await request("definitely-wrong-runtime-token"),
-          correctTokenStatus: await request(token)
+          missingTokenStatus: await mutationRequest(undefined),
+          wrongTokenStatus: await mutationRequest("definitely-wrong-runtime-token"),
+          correctTokenStatus: await mutationRequest(token),
+          missingReadTokenStatus: await readRequest(undefined),
+          wrongReadTokenStatus: await readRequest("definitely-wrong-runtime-token"),
+          correctReadTokenStatus: await readRequest(token)
         };
       })()
     `);
@@ -706,6 +713,9 @@ async function runPackagedSmoke(win: electron.BrowserWindow, runtimeStartedBefor
         missingTokenStatus: runtimeAuthProbe.missingTokenStatus,
         wrongTokenStatus: runtimeAuthProbe.wrongTokenStatus,
         correctTokenStatus: runtimeAuthProbe.correctTokenStatus,
+        missingReadTokenStatus: runtimeAuthProbe.missingReadTokenStatus,
+        wrongReadTokenStatus: runtimeAuthProbe.wrongReadTokenStatus,
+        correctReadTokenStatus: runtimeAuthProbe.correctReadTokenStatus,
       },
       runtimeStatus: {
         tokenRequired: runtimeStatus.tokenRequired,

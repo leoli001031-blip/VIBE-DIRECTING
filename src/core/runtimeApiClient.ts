@@ -279,10 +279,25 @@ export async function prepareRuntimeApiRequest() {
 }
 
 export function toRuntimeUrl(path: string) {
-  if (/^(?:https?:|data:|blob:)/.test(path)) return path;
+  const token = runtimeApiToken();
+  let runtimePath = path;
+  if (token) {
+    try {
+      const parsed = new URL(path, runtimeApiBaseUrl() || defaultRuntimeApiBaseUrl);
+      if (parsed.pathname === `${projectRuntimeBasePath}/files`) {
+        parsed.searchParams.set("runtimeToken", token);
+        runtimePath = /^(?:https?:)/.test(path)
+          ? parsed.toString()
+          : `${parsed.pathname}${parsed.search}${parsed.hash}`;
+      }
+    } catch {
+      runtimePath = path;
+    }
+  }
+  if (/^(?:https?:|data:|blob:)/.test(runtimePath)) return runtimePath;
   const baseUrl = runtimeApiBaseUrl();
-  if (!baseUrl) return path;
-  return path.startsWith("/") ? `${baseUrl}${path}` : `${baseUrl}/${path}`;
+  if (!baseUrl) return runtimePath;
+  return runtimePath.startsWith("/") ? `${baseUrl}${runtimePath}` : `${baseUrl}/${runtimePath}`;
 }
 
 export function runtimeApiToken() {

@@ -17,6 +17,7 @@ const preloadSource = readFileSync("electron/preload.mts", "utf8");
 const bridgeSource = readFileSync("src/core/electronBridge.ts", "utf8");
 const runtimeClientSource = readFileSync("src/core/runtimeApiClient.ts", "utf8");
 const reviewDecisionSource = readFileSync("src/core/projectReviewDecisionClient.ts", "utf8");
+const runtimeBoundarySource = readFileSync("scripts/runtime-api-boundary.mts", "utf8");
 
 assert(mainSource.includes("createRuntimeSessionToken()"), "Electron main must generate a Runtime token at process startup");
 assert(mainSource.includes("VIBE_DIRECTOR_RUNTIME_API_TOKEN: runtimeSessionToken"), "Electron main must inject the session token into the Runtime child");
@@ -26,8 +27,12 @@ assert(preloadSource.includes("runtimeApiToken: () => runtimeApiToken"), "preloa
 assert(preloadSource.includes('typeof payload?.token === "string"'), "preload must validate the token payload type");
 assert(bridgeSource.includes("runtimeApiToken?(): string"), "renderer bridge types must expose the in-memory token getter");
 assert(runtimeClientSource.includes("window.vibeRuntime?.runtimeApiToken?.()"), "Runtime requests must read the token from the Electron bridge");
+assert(/toRuntimeUrl\(path: string\)[\s\S]*parsed\.pathname === `\$\{projectRuntimeBasePath\}\/files`[\s\S]*parsed\.searchParams\.set\("runtimeToken", token\)/.test(runtimeClientSource), "Runtime media URLs must carry the in-memory session token without baking it into Vite");
 assert(!runtimeClientSource.includes("VITE_VIBE_DIRECTOR_RUNTIME_API_TOKEN"), "Runtime token must not come from a Vite environment variable");
 assert(!runtimeClientSource.includes("VITE_VIBE_CORE_RUNTIME_API_TOKEN"), "legacy Runtime token must not come from a Vite environment variable");
 assert(!reviewDecisionSource.includes("fetchRuntimeJson(endpoint, runtimeRequestInit("), "fetchRuntimeJson callers must not freeze headers before lazy Runtime startup");
+assert(/req\.method !== "OPTIONS" && token/.test(runtimeBoundarySource), "configured Runtime tokens must protect reads as well as mutations");
+assert(!/req\.method !== "GET" && req\.method !== "OPTIONS"/.test(runtimeBoundarySource), "Runtime GET routes must not bypass the configured session token");
+assert(mainSource.includes("runtimeLoopbackHost(readEnv("), "Electron Runtime must validate host overrides as loopback-only");
 
 console.log("electron-runtime-token-contract-test: ok");

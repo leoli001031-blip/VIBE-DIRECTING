@@ -1557,10 +1557,24 @@ const tokenChild = spawnRuntimeServer({
 
 try {
   const { baseUrl: tokenBaseUrl } = await waitForServer(tokenChild);
-  const tokenStatus = await fetchJson(`${tokenBaseUrl}/api/runtime/status`, {
+  const missingTokenStatus = await fetchJson(`${tokenBaseUrl}/api/runtime/status`, {
     headers: { origin: "http://localhost:5176" },
   });
-  assert(tokenStatus.response.status === 200, "trusted localhost origin should read token-protected status");
+  assert(missingTokenStatus.response.status === 403, "token-protected status should reject a missing token");
+  const wrongTokenStatus = await fetchJson(`${tokenBaseUrl}/api/runtime/status`, {
+    headers: {
+      origin: "http://localhost:5176",
+      "x-vibe-runtime-token": "wrong-token",
+    },
+  });
+  assert(wrongTokenStatus.response.status === 403, "token-protected status should reject a wrong token");
+  const tokenStatus = await fetchJson(`${tokenBaseUrl}/api/runtime/status`, {
+    headers: {
+      origin: "http://localhost:5176",
+      "x-vibe-runtime-token": "test-runtime-token",
+    },
+  });
+  assert(tokenStatus.response.status === 200, "trusted localhost origin and token should read token-protected status");
   assert(tokenStatus.response.headers.get("access-control-allow-origin") === "http://localhost:5176", "token-protected status should echo trusted origin");
   assert(tokenStatus.payload.security?.tokenRequired === true, "token-protected status should expose tokenRequired=true");
 

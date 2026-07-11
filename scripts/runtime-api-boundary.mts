@@ -190,8 +190,20 @@ export function createRuntimeApiBoundary({
     }
 
     const token = readRuntimeToken();
-    if (req.method !== "GET" && req.method !== "OPTIONS" && token) {
-      const suppliedToken = typeof req.headers["x-vibe-runtime-token"] === "string" ? req.headers["x-vibe-runtime-token"] : "";
+    if (req.method !== "OPTIONS" && token) {
+      const headerToken = typeof req.headers["x-vibe-runtime-token"] === "string" ? req.headers["x-vibe-runtime-token"] : "";
+      let mediaQueryToken = "";
+      if (req.method === "GET" && typeof req.url === "string") {
+        try {
+          const requestUrl = new URL(req.url, "http://127.0.0.1");
+          if (requestUrl.pathname === `${runtimeBasePath}/files`) {
+            mediaQueryToken = requestUrl.searchParams.get("runtimeToken") || "";
+          }
+        } catch {
+          mediaQueryToken = "";
+        }
+      }
+      const suppliedToken = headerToken || mediaQueryToken;
       if (suppliedToken !== token) {
         return {
           ok: false,

@@ -17,8 +17,8 @@ function assertThrows(fn, message) {
   assert(threw, message);
 }
 
-function request(method, headers = {}) {
-  return { method, headers };
+function request(method, headers = {}, url = "/api/runtime/status") {
+  return { method, headers, url };
 }
 
 function response() {
@@ -66,14 +66,24 @@ assert(boundary.isTrustedLocalOrigin("http://[::1]:5173") === true, "IPv6 localh
 assert(boundary.isTrustedLocalOrigin("https://localhost:5173") === false, "https localhost should not change the local http-only policy");
 assert(boundary.isTrustedLocalOrigin("http://example.com") === false, "remote origins should be untrusted");
 
-assert(boundary.runtimeRequestSecurity(request("GET", {})).ok === true, "GET should not require token");
-assert(boundary.runtimeRequestSecurity(request("GET", { origin: "http://localhost:5173" })).ok === true, "trusted GET origin should pass");
+assert(boundary.runtimeRequestSecurity(request("GET", {})).ok === false, "GET should require the configured token");
+assert(boundary.runtimeRequestSecurity(request("GET", { "x-vibe-runtime-token": "wrong" })).ok === false, "GET should reject the wrong token");
+assert(boundary.runtimeRequestSecurity(request("GET", { origin: "http://localhost:5173", "x-vibe-runtime-token": "secret" })).ok === true, "trusted GET origin and token should pass");
+assert(boundary.runtimeRequestSecurity(request("GET", {}, "/api/runtime/status?runtimeToken=secret")).ok === false, "non-media reads must not accept a token in the URL");
+assert(boundary.runtimeRequestSecurity(request("GET", {}, "/api/runtime/files?path=image.png&runtimeToken=secret")).ok === true, "media elements should be able to authenticate scoped file reads through the session URL");
+assert(boundary.runtimeRequestSecurity(request("OPTIONS", { origin: "http://localhost:5173" })).ok === true, "CORS preflight should not require a token");
 const blockedOrigin = boundary.runtimeRequestSecurity(request("GET", { origin: "http://example.com" }));
 assert(blockedOrigin.ok === false && blockedOrigin.statusCode === 403, "untrusted origin should be blocked");
 const blockedPost = boundary.runtimeRequestSecurity(request("POST", {}));
 assert(blockedPost.ok === false && blockedPost.message.includes("token"), "POST should require token when configured");
 assert(boundary.runtimeRequestSecurity(request("POST", { "x-vibe-runtime-token": "wrong" })).ok === false, "POST should reject the wrong token");
 assert(boundary.runtimeRequestSecurity(request("POST", { "x-vibe-runtime-token": "secret" })).ok === true, "POST should pass with token");
+
+const tokenlessBoundary = createRuntimeApiBoundary({
+  repoRoot: workingRepoRoot,
+  repoRootRealPath: realpathSync(workingRepoRoot),
+});
+assert(tokenlessBoundary.runtimeRequestSecurity(request("GET", {})).ok === true, "development Runtime without a configured token should remain available");
 
 assertThrows(() => boundary.scopedRepoPath("../escape.png"), "repo-relative path escape should be blocked");
 assertThrows(() => boundary.repoRelativePath(workingOutsideFile), "absolute path outside repo should be blocked");

@@ -4837,19 +4837,25 @@ function App() {
       prototypeProjectVibeRef.current,
       prototypeProjectDraftTarget.projectRoot,
     );
-    if (!agentGenerationLedgerMatchesIdentity(ledger, currentIdentity)) return;
-    setRestoredAgentGenerationJobLedger(ledger);
+    if (!agentGenerationLedgerMatchesIdentity(ledger, currentIdentity)) {
+      throw new Error("Agent generation job ledger no longer matches the active project.");
+    }
     const write = async () => {
-      if (writeEpoch !== agentTimelineWriteEpochRef.current) return;
+      if (writeEpoch !== agentTimelineWriteEpochRef.current) {
+        throw new Error("Agent generation job ledger write was superseded before persistence.");
+      }
       const latestIdentity = projectAgentGenerationLedgerIdentity(
         prototypeProjectVibeRef.current,
         prototypeProjectDraftTarget.projectRoot,
       );
-      if (!agentGenerationLedgerMatchesIdentity(ledger, latestIdentity)) return;
+      if (!agentGenerationLedgerMatchesIdentity(ledger, latestIdentity)) {
+        throw new Error("Agent generation job ledger project changed before persistence.");
+      }
       const saveResult = await saveProjectAgentGenerationJobLedger(prototypeProjectDraftTarget, ledger);
       if (!saveResult.ok) {
-        console.warn("Failed to save Agent generation job ledger", saveResult.errors[0]);
+        throw new Error(saveResult.errors[0] || "Failed to save Agent generation job ledger.");
       }
+      setRestoredAgentGenerationJobLedger(ledger);
     };
     const nextWrite = agentGenerationLedgerWriteQueueRef.current.then(write, write);
     agentGenerationLedgerWriteQueueRef.current = nextWrite.catch(() => undefined);

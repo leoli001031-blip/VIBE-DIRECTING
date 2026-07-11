@@ -4,10 +4,20 @@ import {
   isSafeExternalUrl,
   isTrustedDocumentUrl,
   isTrustedRendererSender,
+  runtimeLoopbackHost,
 } from "../electron/securityPolicy.mts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
+}
+
+function assertThrows(run: () => unknown, message: string) {
+  try {
+    run();
+  } catch {
+    return;
+  }
+  throw new Error(`FAIL: ${message}`);
 }
 
 const packagedUrl = "file:///Applications/Vibe%20Director%20Studio.app/Contents/Resources/app.asar/dist/index.html";
@@ -35,6 +45,12 @@ assert(!isSafeExternalUrl("file:///tmp/secret"), "file links must not be opened 
 assert(!isSafeExternalUrl("javascript:alert(1)"), "script URLs must not be opened externally");
 assert(!isSafeExternalUrl("data:text/html,hostile"), "data URLs must not be opened externally");
 
+assert(runtimeLoopbackHost() === "127.0.0.1", "Runtime must default to the IPv4 loopback address");
+assert(runtimeLoopbackHost("localhost") === "127.0.0.1", "localhost must normalize to the pinned loopback address");
+assert(runtimeLoopbackHost("[::1]") === "127.0.0.1", "IPv6 loopback must normalize to the pinned loopback address");
+assertThrows(() => runtimeLoopbackHost("0.0.0.0"), "wildcard Runtime binding must fail closed");
+assertThrows(() => runtimeLoopbackHost("192.168.1.10"), "LAN Runtime binding must fail closed");
+
 const mainSource = readFileSync("electron/main.mts", "utf8");
 for (const channel of [
   "runtime:ensureStarted",
@@ -60,5 +76,6 @@ assert(mainSource.includes('win.webContents.on("will-navigate"'), "renderer wind
 assert(mainSource.includes('win.webContents.on("will-redirect"'), "renderer windows must guard redirects");
 assert(mainSource.includes('win.webContents.on("will-attach-webview"'), "renderer windows must reject webview attachment");
 assert(/isSafeExternalUrl\(url\)[\s\S]{0,160}shell\.openExternal\(url\)/.test(mainSource), "only safe web URLs may be delegated to the system browser");
+assert(/const runtimeHost = runtimeLoopbackHost\(readEnv\("VIBE_DIRECTOR_RUNTIME_API_HOST", "VIBE_CORE_RUNTIME_API_HOST"\)\)/.test(mainSource), "Electron Runtime host overrides must stay loopback-only");
 
 console.log("electron-security-policy-test: ok");

@@ -36,6 +36,7 @@ const videoPlan = buildAgentVideoPipelinePlan({
   referenceMissingCount: 0,
   videoSubmitted: false,
 });
+const persistLedgerSnapshot = () => undefined;
 
 let ledger = createAgentVideoGenerationJobLedger({
   ledgerId: "p3-execution-adapter-ledger",
@@ -99,6 +100,58 @@ const unauthorized = await runAgentVideoExecution({
 assert(unauthorized.status === "blocked", "live execution must block without explicit live authorization");
 assert(unauthorizedCalls === 0 && unauthorized.ledger.jobs.length === ledger.jobs.length, "blocked live execution must not call or stage provider work");
 
+let missingPersistenceExecutorCalls = 0;
+const missingPersistence = await runAgentVideoExecution({
+  plan: referencePlan,
+  ledger,
+  action: "prepare_references",
+  actionId: "p3-live-without-persistence",
+  sourceConfirmationId: "p3-live-without-persistence-confirmation",
+  executionMode: "live",
+  liveExecutionAllowed: true,
+  liveCapability: {
+    providerId: "mock-image-provider",
+    providerName: "Mock Image Provider",
+    modelId: "mock-image-model",
+  },
+  execute: () => {
+    missingPersistenceExecutorCalls += 1;
+    return { status: "needs_review", providerCalled: true };
+  },
+});
+assert(missingPersistence.status === "blocked", "live execution must require a durable ledger callback");
+assert(missingPersistenceExecutorCalls === 0, "missing durable persistence must block before calling the provider executor");
+
+let failingPersistenceExecutorCalls = 0;
+const failingPersistenceSnapshots: string[] = [];
+const failingPersistence = await runAgentVideoExecution({
+  plan: referencePlan,
+  ledger,
+  action: "prepare_references",
+  actionId: "p3-live-persistence-failure",
+  sourceConfirmationId: "p3-live-persistence-failure-confirmation",
+  executionMode: "live",
+  liveExecutionAllowed: true,
+  liveCapability: {
+    providerId: "mock-image-provider",
+    providerName: "Mock Image Provider",
+    modelId: "mock-image-model",
+  },
+  execute: () => {
+    failingPersistenceExecutorCalls += 1;
+    return { status: "needs_review", providerCalled: true };
+  },
+  onLedgerSnapshot: (snapshot) => {
+    const status = snapshot.jobs.at(-1)?.status || "missing";
+    if (status === "running") throw new Error("mock durable ledger failure");
+    failingPersistenceSnapshots.push(status);
+  },
+});
+assert(failingPersistence.status === "blocked", "live execution must fail closed when the running job cannot be persisted");
+assert(failingPersistenceExecutorCalls === 0 && failingPersistence.providerCalled === false, "ledger failure must happen before any provider call");
+assert(failingPersistenceSnapshots.join(">") === "staged>confirmed", "only successfully persisted snapshots may be reported as durable");
+assert(failingPersistence.job?.status === "confirmed", "the adapter must return the last durable job state after persistence failure");
+
 const liveReferenceSnapshots: string[] = [];
 const liveReference = await runAgentVideoExecution({
   plan: referencePlan,
@@ -148,6 +201,7 @@ const liveWithoutProviderEvidence = await runAgentVideoExecution({
     modelId: "mock-image-model",
   },
   execute: () => ({ status: "needs_review", assets: [{ path: "/tmp/p3-evidence-only-reference.png" }] }),
+  onLedgerSnapshot: persistLedgerSnapshot,
 });
 assert(liveWithoutProviderEvidence.status === "completed", "a live callback may complete from returned product state");
 assert(liveWithoutProviderEvidence.providerCalled === false, "live success without explicit provider evidence must not infer an external call");
@@ -166,6 +220,7 @@ const runningVideo = await runAgentVideoExecution({
     modelId: "mock-video-model",
   },
   execute: () => ({ status: "submitted", providerCalled: true, submitId: "mock-submit-p3" }),
+  onLedgerSnapshot: persistLedgerSnapshot,
 });
 assert(runningVideo.status === "running" && runningVideo.job?.status === "running", "submitted live video must remain recoverable instead of becoming a fake success");
 assert(runningVideo.receipt.externalTaskId === "mock-submit-p3", "running receipt must retain the external task id");
@@ -191,6 +246,7 @@ const timeoutResult = await runAgentVideoExecution({
       reject(new Error("mock executor aborted"));
     }, { once: true });
   }),
+  onLedgerSnapshot: persistLedgerSnapshot,
 });
 assert(timeoutResult.status === "timed_out" && timeoutResult.receipt.status === "timed_out", "timeout must be explicit in the receipt");
 assert(timeoutResult.job?.status === "running", "timed-out live work must stay recoverable instead of becoming succeeded");
@@ -220,6 +276,7 @@ const cancelPromise = runAgentVideoExecution({
       reject(new Error("mock executor cancelled"));
     }, { once: true });
   }),
+  onLedgerSnapshot: persistLedgerSnapshot,
 });
 setTimeout(() => cancelController.abort(), 1);
 const cancelled = await cancelPromise;
@@ -245,6 +302,7 @@ const failed = await runAgentVideoExecution({
     failedCalls += 1;
     return { ok: false, status: "blocked", providerCalled: false, message: "mock failure" };
   },
+  onLedgerSnapshot: persistLedgerSnapshot,
 });
 assert(failed.status === "blocked" && failed.job?.status === "failed", "blocked live result must be terminal and retryable only by a new action");
 const duplicateTerminal = await runAgentVideoExecution({
@@ -264,6 +322,7 @@ const duplicateTerminal = await runAgentVideoExecution({
     failedCalls += 1;
     return { status: "needs_review", providerCalled: true };
   },
+  onLedgerSnapshot: persistLedgerSnapshot,
 });
 assert(duplicateTerminal.status === "blocked" && failedCalls === 1, "same terminal action must not auto-retry or call the executor twice");
 const retried = await runAgentVideoExecution({
@@ -281,6 +340,7 @@ const retried = await runAgentVideoExecution({
     modelId: "mock-image-model",
   },
   execute: () => ({ status: "needs_review", providerCalled: true, assets: [{ path: "/tmp/p3-retry-reference.png" }] }),
+  onLedgerSnapshot: persistLedgerSnapshot,
 });
 assert(retried.status === "completed" && retried.receipt.attempt === 2, "explicit retry must create a second successful attempt");
 assert(retried.ledger.jobs.filter((job) => job.actionId.startsWith("p3-manual-retry")).length === 2, "explicit retry should retain both attempt records");

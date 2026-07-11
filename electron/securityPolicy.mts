@@ -9,6 +9,14 @@ export interface RendererSenderDescriptor {
   isMainFrame: boolean;
 }
 
+export function runtimeLoopbackHost(candidate = "127.0.0.1") {
+  const normalized = candidate.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  if (normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1") {
+    return "127.0.0.1";
+  }
+  throw new Error(`Runtime API host must be loopback-only: ${candidate}`);
+}
+
 export function isTrustedDocumentUrl(candidateUrl: string, trustedDocumentUrl: string) {
   try {
     const candidate = new URL(candidateUrl);

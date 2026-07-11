@@ -4616,6 +4616,15 @@ function agentCurrentTaskStepFromMessage(message: MinimalAgentMessage): AgentCur
   return agentCurrentTaskStepFromStructuredAction(message);
 }
 
+function agentCurrentTaskMessageIsStructuredNewVideoDraftConfirmation(message: MinimalAgentMessage) {
+  return minimalAgentMessageIsWaitingConfirmation(message)
+    && agentCurrentTaskStepFromMessage(message) === "confirm_story"
+    && (
+      message.id.startsWith("footer_action_new_video_draft")
+      || message.id.startsWith("new_video_confirmation_")
+    );
+}
+
 function agentCurrentTaskConfirmationMessage(
   projection: AgentCurrentTaskProjection,
   messages: MinimalAgentMessage[],
@@ -5702,28 +5711,10 @@ export function MinimalAgentPanel({
   );
   const agentCommandKind = agentCommand?.kind;
   const projectStatusExportCopy = `${projectStatusView?.nextAction || ""} ${projectStatusView?.waitingFor || ""}`;
-  const newVideoDraftStatusCopy = [
-    projectStatusView?.stage,
-    projectStatusView?.doing,
-    projectStatusView?.nextAction,
-    projectStatusView?.waitingFor,
-  ].filter(Boolean).join(" ");
-  const newVideoDraftTimelineCopy = visibleAgentTimelineEntries.slice(-6).map((entry) => [
-    entry.title,
-    entry.body,
-    typeof entry.details?.next === "string" ? entry.details.next : "",
-    ...(entry.facts || []).map((fact) => `${fact.label}:${fact.value}`),
-  ].filter(Boolean).join(" ")).join(" ");
   const readyNewVideoDraftForAgent = Boolean(
     runtimeState.storyFlow.shots.length === 0
       && !newVideoDraftBusyForAgent
-      && (
-        newVideoDraftReadyForAgent
-        || (
-          !localProjectReadyForTools
-          && /等待确认|草案|确认.*故事流/.test(`${newVideoDraftStatusCopy} ${newVideoDraftTimelineCopy}`)
-        )
-      ),
+      && newVideoDraftReadyForAgent,
   );
   const activeNewVideoDraftConfirmation = readyNewVideoDraftForAgent;
   const exportReadyForConfirmation = projectStatusStage === "等待确认导出" || projectStatusStage === "可以导出";
@@ -7705,9 +7696,12 @@ export function MinimalAgentPanel({
       timeoutMs: input.timeoutMs,
       perform: input.perform,
       onLedgerSnapshot: async (ledgerSnapshot) => {
+        if (input.executionMode === "live" && !onRememberAgentGenerationJobLedger) {
+          throw new Error("Live execution requires project-backed generation job persistence.");
+        }
+        await onRememberAgentGenerationJobLedger?.(ledgerSnapshot);
         agentVideoExecutionLedgerRef.current = ledgerSnapshot;
         setAgentVideoDryRunLedger(ledgerSnapshot);
-        await onRememberAgentGenerationJobLedger?.(ledgerSnapshot);
       },
       onTimelineEntries: (entries) => {
         rememberAgentTimelineEntries(entries);
@@ -8421,29 +8415,9 @@ export function MinimalAgentPanel({
       && !projectStoryAlreadyCommittedForDraftConfirmation
       && !newVideoDraftBusyForAgent
       && visibleTimelineConfirmationMessage
-      && currentTimelineConfirmationLabel
-      && isNewVideoDraftConfirmationLabel(currentTimelineConfirmationLabel)
-      && /等待确认|草案|确认|故事流/.test([
-        agentTimelineStatusLine,
-        agentTimelineNextLine,
-        visibleTimelineConfirmationMessage?.body,
-        visibleTimelineConfirmationMessage?.next,
-      ].filter(Boolean).join(" ")),
+      && agentCurrentTaskMessageIsStructuredNewVideoDraftConfirmation(visibleTimelineConfirmationMessage),
   );
-  const visibleNewVideoDraftConfirmation = Boolean(
-    !latestNewVideoDraftCommitted
-      && !projectStoryAlreadyCommittedForDraftConfirmation
-      && !newVideoDraftBusyForAgent
-      && visibleTimelineConfirmationMessage
-      && currentTimelineConfirmationLabel
-      && isNewVideoDraftConfirmationLabel(currentTimelineConfirmationLabel)
-      && /等待确认|草案|确认|故事流/.test([
-        agentTimelineStatusLine,
-        agentTimelineNextLine,
-        visibleTimelineConfirmationMessage?.body,
-        visibleTimelineConfirmationMessage?.next,
-      ].filter(Boolean).join(" ")),
-  );
+  const visibleNewVideoDraftConfirmation = timelineNewVideoDraftConfirmationReady;
   const composerPrimaryIsFresh = hasComposerInput || !workflow || planPhase === "idle" || planPhase === "confirmed";
   const composerProjectInbox = useMemo(
     () => buildProjectInboxProjection({
@@ -8899,18 +8873,12 @@ export function MinimalAgentPanel({
       && !projectStoryAlreadyCommittedForDraftConfirmation
       && !newVideoDraftBusyForAgent
       && !visibleTimelineConfirmationMessage
-      && (
-        newVideoDraftReadyForAgent
-        || (
-          (projectStatusView?.stage === "等待确认" || projectStatusView?.stage === "草案待确认")
-          && /确认|草案|故事流|写入故事流|保存到项目|加入项目计划/.test(`${newVideoDraftStatusCopy} ${newVideoDraftTimelineCopy}`)
-        )
-      ),
+      && newVideoDraftReadyForAgent,
   );
   const footerNewVideoDraftConfirmationReady = Boolean(
     !latestNewVideoDraftCommitted
       && (
-        (isNewVideoDraftConfirmationLabel(currentTimelineConfirmationLabel) && timelineNewVideoDraftConfirmationReady)
+        timelineNewVideoDraftConfirmationReady
         || statusReadyNewVideoDraftConfirmation
       ),
   );
@@ -8970,7 +8938,7 @@ export function MinimalAgentPanel({
   const agentCurrentTaskProjection = useMemo(
     () => buildAgentCurrentTaskProjection({
       newVideoDraft: {
-        status: footerNewVideoDraftConfirmationReady || statusReadyNewVideoDraftConfirmation || newVideoDraftReadyForAgent
+        status: newVideoDraftReadyForAgent
           ? "ready"
           : newVideoDraftPlanningForAgent || newVideoDraftPendingForAgent
             ? "planning"
@@ -9011,7 +8979,6 @@ export function MinimalAgentPanel({
       composerIntentRoute.plan,
       composerProjectObservation,
       footerNewVideoDraftConfirmationLabel,
-      footerNewVideoDraftConfirmationReady,
       latestNewVideoDraftCommitted,
       newVideoDraftPendingForAgent,
       newVideoDraftPlanningForAgent,
@@ -9022,7 +8989,6 @@ export function MinimalAgentPanel({
       runtimeState.project.root,
       runtimeState.sourceIndex.projectId,
       restoredAgentStagedPlanDraft,
-      statusReadyNewVideoDraftConfirmation,
       visibleTimelineConfirmationMessage?.id,
       visibleNewVideoDraftConfirmation,
     ],
@@ -9927,7 +9893,7 @@ export function MinimalAgentPanel({
     })));
   }
   const latestAgentTimelineUserEntryId = [...visibleAgentTimelineEntries].reverse().find((entry) => entry.type === "user_message")?.id || "";
-  const footerNewVideoDraftConfirmationId = `footer_action_new_video_draft_${(latestAgentTimelineUserEntryId || newVideoDraftStatusCopy || "current")
+  const footerNewVideoDraftConfirmationId = `footer_action_new_video_draft_${(latestAgentTimelineUserEntryId || `${newVideoResetKey}_${newVideoDraftShotCountForAgent}`)
     .replace(/[^a-z0-9_-]+/gi, "_")
     .slice(0, 80)}`;
   const footerActionConfirmationMessage = (() => {
